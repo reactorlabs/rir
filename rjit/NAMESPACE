@@ -1,0 +1,2 @@
+useDynLib(rjit)
+exportPattern("^[[:alpha:]]+")
