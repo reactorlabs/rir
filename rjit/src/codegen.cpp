@@ -396,7 +396,15 @@ public:
 
     rjit::RFunctionPtr jit() {
         assert(f != nullptr and "compile must be called before");
-        ExecutionEngine * engine = EngineBuilder(std::unique_ptr<Module>(module)).create();
+        std::string err;
+        ExecutionEngine * engine = EngineBuilder(std::unique_ptr<Module>(module))
+          .setErrorStr(&err)
+          .setEngineKind(EngineKind::JIT)
+          .create();
+        if (!engine) {
+          fprintf(stderr, "Could not create ExecutionEngine: %s\n", err.c_str());
+          DIE;
+        }
         engine->finalizeObject();
         return reinterpret_cast<rjit::RFunctionPtr>(engine->getPointerToFunction(f));
     }

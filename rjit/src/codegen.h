@@ -5,6 +5,9 @@
 #include <R.h>
 #include <Rinternals.h>
 
+
+#define DIE asm("int3")
+
 namespace rjit {
 
 /** Pointer to evaluation function.
