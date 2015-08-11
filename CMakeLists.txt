@@ -38,6 +38,10 @@ target_link_libraries(${PROJECT_NAME} ${llvm_libs})
 
 # now creating the package
 
+add_custom_target(eval_bc
+    COMMAND ${LLVM_TOOLS_BINARY_DIR}/clang --std=gnu99 -DHAVE_CONFIG_H -I${R_HOME}/src/include -c -emit-llvm ${R_HOME}/src/main/eval.c -o rjit/eval.bc)
+
+
 set(PACKAGE_NAME "rjit_0.1.tar.gz")
 add_custom_target(package
     COMMAND ${R_COMMAND} CMD build rjit WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}

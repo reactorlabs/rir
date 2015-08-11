@@ -10,8 +10,11 @@
 #include "llvm/ExecutionEngine/ExecutionEngine.h"
 #include "llvm/ExecutionEngine/MCJIT.h"
 #include "llvm/ExecutionEngine/SectionMemoryManager.h"
+#include "llvm/Support/DataStream.h"
+#include "llvm/Bitcode/ReaderWriter.h"
 
 #include <sstream>
+#include <iostream>
 
 #include "codegen.h"
 
@@ -26,11 +29,6 @@ using namespace llvm;
 
 namespace {
 
-StructType * initializeTypes();
-
-StructType * t_SEXPREC = initializeTypes();
-PointerType * t_SEXP;
-IntegerType * t_Rboolean;
 StructType * t_InterpreterContext;
 PointerType * p_InterpreterContext;
 FunctionType * t_InterpreterLoop;
@@ -51,137 +49,6 @@ FunctionType * t_intInstruction3;
 FunctionType * t_intInstruction4;
 
 
-/** Creates the types for the codegen.
-
-  Since the types do not depend on modules, but on the context, we can pregenerate them and use in all modules that will be created by the jit.
-  */
-StructType * initializeTypes() {
-    LLVMContext & context = getGlobalContext();
-    std::vector<Type*> fields;
-    StructType * t_sxpinfo_struct = StructType::create(context, "struct.sxpinfo_struct");
-    t_SEXPREC = StructType::create(context, "struct.SEXPREC");
-    // SEXP
-    t_SEXP = PointerType::get(t_SEXPREC, 0);
-    // sxpinfo_struct is just int32 in a structure, the bitmasking is not a concern of the type
-    fields.push_back(IntegerType::get(context, 32));
-    t_sxpinfo_struct->setBody(fields, false);
-    // primsxp
-    fields.clear();
-    // SEXPREC, first the union
-    fields.clear();
-    StructType * u1 = StructType::create(context,"union.SEXP_SEXP_SEXP");
-    fields.push_back(t_SEXP);
-    fields.push_back(t_SEXP);
-    fields.push_back(t_SEXP);
-    u1->setBody(fields, false);
-    // now the real SEXPREC
-    fields.clear();
-    fields.push_back(t_sxpinfo_struct);
-    fields.push_back(t_SEXP);
-    fields.push_back(t_SEXP);
-    fields.push_back(t_SEXP);
-    fields.push_back(u1);
-    t_SEXPREC->setBody(fields, false);
-    //  Pointer to R_bcStack_t, first the union
-    StructType * u2 = StructType::create(context, "union.INT_DOUBLE_SEXP");
-    fields.clear();
-    fields.push_back(Type::getDoubleTy(context));
-    u2->setBody(fields, false);
-    // then the type
-    StructType * t_R_bcstack_t = StructType::create(context, "struct.R_bcstack_t");
-    fields.clear();
-    fields.push_back(IntegerType::get(context, 32));
-    fields.push_back(u2);
-    t_R_bcstack_t->setBody(fields);
-    // and now the pointer
-    PointerType * bcStackPtr = PointerType::get(t_R_bcstack_t, 0);
-    // RBoolean
-    t_Rboolean = IntegerType::get(context, 32);
-    // InterpreterContext
-    t_InterpreterContext = StructType::create(context, "struct.InterpreterContext");
-    fields.clear();
-    fields.push_back(t_SEXP);
-    fields.push_back(t_SEXP);
-    fields.push_back(t_Rboolean);
-    fields.push_back(t_SEXP);
-    fields.push_back(t_SEXP);
-    fields.push_back(bcStackPtr);
-    fields.push_back(bcStackPtr);
-    fields.push_back(t_Rboolean);
-    t_InterpreterContext->setBody(fields);
-    p_InterpreterContext = PointerType::get(t_InterpreterContext, 0);
-    // Interpreter function
-    fields.clear();
-    fields.push_back(t_SEXP);
-    fields.push_back(t_SEXP);
-    fields.push_back(t_Rboolean);
-    t_InterpreterLoop = FunctionType::get(t_SEXP, fields, false);
-    // instruction types
-    std::vector<Type*> args;
-    // interpreter initializer
-    args.clear();
-    args.push_back(p_InterpreterContext);
-    args.push_back(t_SEXP);
-    args.push_back(t_SEXP);
-    args.push_back(t_Rboolean);
-    args.push_back(IntegerType::get(context, 32));
-    t_InitializeInterpreter = FunctionType::get(Type::getVoidTy(context), args, false);
-    // interpreter finalizer
-    args.clear();
-    args.push_back(p_InterpreterContext);
-    t_FinalizeInterpreter = FunctionType::get(t_SEXP, args, false);
-    // instruction types
-    args.clear();
-    args.push_back(p_InterpreterContext);
-    t_voidInstruction0 = FunctionType::get(Type::getVoidTy(context), args, false);
-    args.clear();
-    args.push_back(p_InterpreterContext);
-    args.push_back(IntegerType::get(context, 32));
-    t_voidInstruction1 = FunctionType::get(Type::getVoidTy(context), args, false);
-    args.clear();
-    args.push_back(p_InterpreterContext);
-    args.push_back(IntegerType::get(context, 32));
-    args.push_back(IntegerType::get(context, 32));
-    t_voidInstruction2 = FunctionType::get(Type::getVoidTy(context), args, false);
-    args.clear();
-    args.push_back(p_InterpreterContext);
-    args.push_back(IntegerType::get(context, 32));
-    args.push_back(IntegerType::get(context, 32));
-    args.push_back(IntegerType::get(context, 32));
-    t_voidInstruction3 = FunctionType::get(Type::getVoidTy(context), args, false);
-    args.clear();
-    args.push_back(p_InterpreterContext);
-    args.push_back(IntegerType::get(context, 32));
-    args.push_back(IntegerType::get(context, 32));
-    args.push_back(IntegerType::get(context, 32));
-    args.push_back(IntegerType::get(context, 32));
-    t_voidInstruction4 = FunctionType::get(Type::getVoidTy(context), args, false);
-    args.clear();
-    args.push_back(p_InterpreterContext);
-    t_intInstruction0 = FunctionType::get(IntegerType::get(context, 32), args, false);
-    args.clear();
-    args.push_back(p_InterpreterContext);
-    args.push_back(IntegerType::get(context, 32));
-    t_intInstruction1 = FunctionType::get(IntegerType::get(context, 32), args, false);
-    args.clear();
-    args.push_back(p_InterpreterContext);
-    args.push_back(IntegerType::get(context, 32));
-    args.push_back(IntegerType::get(context, 32));
-    t_intInstruction2 = FunctionType::get(IntegerType::get(context, 32), args, false);
-    args.clear();
-    args.push_back(p_InterpreterContext);
-    args.push_back(IntegerType::get(context, 32));
-    args.push_back(IntegerType::get(context, 32));
-    args.push_back(IntegerType::get(context, 32));
-    t_intInstruction3 = FunctionType::get(IntegerType::get(context, 32), args, false);
-    args.clear();
-    args.push_back(p_InterpreterContext);
-    args.push_back(IntegerType::get(context, 32));
-    args.push_back(IntegerType::get(context, 32));
-    args.push_back(IntegerType::get(context, 32));
-    args.push_back(IntegerType::get(context, 32));
-    t_intInstruction4 = FunctionType::get(IntegerType::get(context, 32), args, false);
-}
 
 /** Simple class that encapsulates a LLVM module used to compile R's function. Contains the module itself and all declarations of functions that the JIT may use - the R bytecode opcodes and evaluation helpers.
  */
@@ -370,6 +237,147 @@ private:
     std::vector<BasicBlock *> blocks_;
 
 };
+
+
+class JitHelper {
+public:
+    JitHelper() : context(getGlobalContext()) {
+        std::string err;
+        // TODO: hardcoded path is not the best idea...
+        DataStreamer *streamer = getDataFileStreamer("rjit/eval.bc", &err);
+        if (!streamer) {
+            std::cout << err << std::endl;
+            DIE;
+        }
+        ErrorOr<std::unique_ptr<Module>> m =
+            getStreamedBitcodeModule("eval", streamer, context);
+        evalM = std::move(*m);
+        evalM->materializeAllPermanently();
+
+        t = std::unique_ptr<T>(new T(evalM.get(), context));
+    }
+
+    std::unique_ptr<Module> evalM;
+    LLVMContext & context;
+
+    class T {
+    public:
+        T(Module * m, LLVMContext & context) {
+            t_SEXPREC     = m->getTypeByName("struct.SEXPREC");
+            t_SEXP        = PointerType::get(t_SEXPREC, 0);
+            t_R_bcstack_t = m->getTypeByName("struct.R_bcstack_t");
+            bcStackPtr    = PointerType::get(t_R_bcstack_t, 0);
+            t_Rboolean = IntegerType::get(context, 32);
+        }
+
+        StructType * t_SEXPREC;
+        PointerType * t_SEXP;
+        StructType * t_R_bcstack_t;
+        PointerType * bcStackPtr;
+        IntegerType * t_Rboolean;
+    };
+
+    std::unique_ptr<T> t;
+};
+
+static JitHelper helper;
+
+
+/** Creates the types for the codegen.
+
+  Since the types do not depend on modules, but on the context, we can pregenerate them and use in all modules that will be created by the jit.
+  */
+void * initializeTypes(JitHelper & helper) {
+    LLVMContext & context = getGlobalContext();
+    std::vector<Type*> fields;
+
+    // InterpreterContext
+    t_InterpreterContext = StructType::create(context, "struct.InterpreterContext");
+    fields.clear();
+    fields.push_back(helper.t->t_SEXP);
+    fields.push_back(helper.t->t_SEXP);
+    fields.push_back(helper.t->t_Rboolean);
+    fields.push_back(helper.t->t_SEXP);
+    fields.push_back(helper.t->t_SEXP);
+    fields.push_back(helper.t->bcStackPtr);
+    fields.push_back(helper.t->bcStackPtr);
+    fields.push_back(helper.t->t_Rboolean);
+    t_InterpreterContext->setBody(fields);
+    p_InterpreterContext = PointerType::get(t_InterpreterContext, 0);
+    // Interpreter function
+    fields.clear();
+    fields.push_back(helper.t->t_SEXP);
+    fields.push_back(helper.t->t_SEXP);
+    fields.push_back(helper.t->t_Rboolean);
+    t_InterpreterLoop = FunctionType::get(helper.t->t_SEXP, fields, false);
+    // instruction types
+    std::vector<Type*> args;
+    // interpreter initializer
+    args.clear();
+    args.push_back(p_InterpreterContext);
+    args.push_back(helper.t->t_SEXP);
+    args.push_back(helper.t->t_SEXP);
+    args.push_back(helper.t->t_Rboolean);
+    args.push_back(IntegerType::get(context, 32));
+    t_InitializeInterpreter = FunctionType::get(Type::getVoidTy(context), args, false);
+    // interpreter finalizer
+    args.clear();
+    args.push_back(p_InterpreterContext);
+    t_FinalizeInterpreter = FunctionType::get(helper.t->t_SEXP, args, false);
+    // instruction types
+    args.clear();
+    args.push_back(p_InterpreterContext);
+    t_voidInstruction0 = FunctionType::get(Type::getVoidTy(context), args, false);
+    args.clear();
+    args.push_back(p_InterpreterContext);
+    args.push_back(IntegerType::get(context, 32));
+    t_voidInstruction1 = FunctionType::get(Type::getVoidTy(context), args, false);
+    args.clear();
+    args.push_back(p_InterpreterContext);
+    args.push_back(IntegerType::get(context, 32));
+    args.push_back(IntegerType::get(context, 32));
+    t_voidInstruction2 = FunctionType::get(Type::getVoidTy(context), args, false);
+    args.clear();
+    args.push_back(p_InterpreterContext);
+    args.push_back(IntegerType::get(context, 32));
+    args.push_back(IntegerType::get(context, 32));
+    args.push_back(IntegerType::get(context, 32));
+    t_voidInstruction3 = FunctionType::get(Type::getVoidTy(context), args, false);
+    args.clear();
+    args.push_back(p_InterpreterContext);
+    args.push_back(IntegerType::get(context, 32));
+    args.push_back(IntegerType::get(context, 32));
+    args.push_back(IntegerType::get(context, 32));
+    args.push_back(IntegerType::get(context, 32));
+    t_voidInstruction4 = FunctionType::get(Type::getVoidTy(context), args, false);
+    args.clear();
+    args.push_back(p_InterpreterContext);
+    t_intInstruction0 = FunctionType::get(IntegerType::get(context, 32), args, false);
+    args.clear();
+    args.push_back(p_InterpreterContext);
+    args.push_back(IntegerType::get(context, 32));
+    t_intInstruction1 = FunctionType::get(IntegerType::get(context, 32), args, false);
+    args.clear();
+    args.push_back(p_InterpreterContext);
+    args.push_back(IntegerType::get(context, 32));
+    args.push_back(IntegerType::get(context, 32));
+    t_intInstruction2 = FunctionType::get(IntegerType::get(context, 32), args, false);
+    args.clear();
+    args.push_back(p_InterpreterContext);
+    args.push_back(IntegerType::get(context, 32));
+    args.push_back(IntegerType::get(context, 32));
+    args.push_back(IntegerType::get(context, 32));
+    t_intInstruction3 = FunctionType::get(IntegerType::get(context, 32), args, false);
+    args.clear();
+    args.push_back(p_InterpreterContext);
+    args.push_back(IntegerType::get(context, 32));
+    args.push_back(IntegerType::get(context, 32));
+    args.push_back(IntegerType::get(context, 32));
+    args.push_back(IntegerType::get(context, 32));
+    t_intInstruction4 = FunctionType::get(IntegerType::get(context, 32), args, false);
+}
+
+void * unused = initializeTypes(helper);
 
 
 
@@ -680,10 +688,7 @@ private:
     BasicBlock * lastBB;
     Value * context;
     int pc;
-
-
-
-
+    JitHelper h;
 };
 
 
