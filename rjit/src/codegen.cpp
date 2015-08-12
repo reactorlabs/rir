@@ -29,101 +29,7 @@ using namespace llvm;
 
 namespace {
 
-StructType * t_InterpreterContext;
-PointerType * p_InterpreterContext;
-FunctionType * t_InterpreterLoop;
 
-FunctionType * t_InitializeInterpreter;
-FunctionType * t_FinalizeInterpreter;
-
-FunctionType * t_voidInstruction0;
-FunctionType * t_voidInstruction1;
-FunctionType * t_voidInstruction2;
-FunctionType * t_voidInstruction3;
-FunctionType * t_voidInstruction4;
-
-FunctionType * t_intInstruction0;
-FunctionType * t_intInstruction1;
-FunctionType * t_intInstruction2;
-FunctionType * t_intInstruction3;
-FunctionType * t_intInstruction4;
-
-
-
-/** Simple class that encapsulates a LLVM module used to compile R's function. Contains the module itself and all declarations of functions that the JIT may use - the R bytecode opcodes and evaluation helpers.
- */
-class JITModule {
-public:
-
-    operator Module * () {
-        return module;
-    }
-
-    ConstantInt * constant(int value) {
-        return ConstantInt::get(getGlobalContext(), APInt(32, value));
-    }
-
-    /** Creates new LLVM module and populates it with declarations of the helper and opcode functions.
-      */
-    JITModule() {
-        // create new module
-        module = new Module("", getGlobalContext());
-        // generate the function declarations
-        // interpreter initialization & finalization
-        initializeInterpreter = Function::Create(t_InitializeInterpreter, Function::ExternalLinkage, "initializeInterpreter", module);
-        finalizeInterpreter = Function::Create(t_FinalizeInterpreter, Function::ExternalLinkage, "finalizeInterpreter", module);
-        // switch special instructions
-        SWITCH_OP_start = Function::Create(t_intInstruction4, Function::ExternalLinkage, "instructionSWITCH_OP_start", module);
-        SWITCH_OP_character = Function::Create(t_intInstruction4, Function::ExternalLinkage, "instructionSWITCH_OP_character", module);
-        SWITCH_OP_integral = Function::Create(t_intInstruction4, Function::ExternalLinkage, "instructionSWITCH_OP_integral", module);
-        // handle the normal instructions
-        #define SCONCAT(a) #a
-        #define INSTRUCTION0(name, opcode) name = Function::Create(t_voidInstruction0, Function::ExternalLinkage, SCONCAT(instruction ## name), module);
-        #define INSTRUCTION1(name, opcode) name = Function::Create(t_voidInstruction1, Function::ExternalLinkage, SCONCAT(instruction ## name), module);
-        #define INSTRUCTION2(name, opcode) name = Function::Create(t_voidInstruction2, Function::ExternalLinkage, SCONCAT(instruction ## name), module);
-        #define INSTRUCTION3(name, opcode) name = Function::Create(t_voidInstruction3, Function::ExternalLinkage, SCONCAT(instruction ## name), module);
-        #define SPECIAL0(name, opcode) name = Function::Create(t_voidInstruction0, Function::ExternalLinkage, SCONCAT(instruction ## name), module);
-        #define SPECIAL1(name, opcode) name = Function::Create(t_voidInstruction1, Function::ExternalLinkage, SCONCAT(instruction ## name), module);
-        #define SPECIAL2(name, opcode) name = Function::Create(t_intInstruction2, Function::ExternalLinkage, SCONCAT(instruction ## name), module);
-        #define SPECIAL3(name, opcode) name = Function::Create(t_voidInstruction3, Function::ExternalLinkage, SCONCAT(instruction ## name), module);
-        #define SPECIAL4(name, opcode)
-        RBC
-        #undef INSTRUCTION0
-        #undef INSTRUCTION1
-        #undef INSTRUCTION2
-        #undef INSTRUCTION3
-        #undef SPECIAL0
-        #undef SPECIAL1
-        #undef SPECIAL2
-        #undef SPECIAL3
-        #undef SPECIAL4
-    }
-
-    Module * module;
-    Function * initializeInterpreter;
-    Function * finalizeInterpreter;
-    // pregenerated instruction functions
-    #define INSTRUCTION0(name, opcode) Function * name;
-    #define INSTRUCTION1(name, opcode) Function * name;
-    #define INSTRUCTION2(name, opcode) Function * name;
-    #define INSTRUCTION3(name, opcode) Function * name;
-    #define SPECIAL0(name, opcode) Function * name;
-    #define SPECIAL1(name, opcode) Function * name;
-    #define SPECIAL2(name, opcode) Function * name;
-    #define SPECIAL3(name, opcode) Function * name;
-    #define SPECIAL4(name, opcode) Function * name;
-        RBC
-    #undef INSTRUCTION0
-    #undef INSTRUCTION1
-    #undef INSTRUCTION2
-    #undef INSTRUCTION3
-    #undef SPECIAL0
-    #undef SPECIAL1
-    #undef SPECIAL2
-    #undef SPECIAL3
-    #undef SPECIAL4
-
-};
 
 
 /** Given R bytecode and LLVM function, creates basic blocks for it appropriately.
@@ -267,7 +173,14 @@ public:
             t_SEXP        = PointerType::get(t_SEXPREC, 0);
             t_R_bcstack_t = m->getTypeByName("struct.R_bcstack_t");
             bcStackPtr    = PointerType::get(t_R_bcstack_t, 0);
-            t_Rboolean = IntegerType::get(context, 32);
+            t_Rboolean    = IntegerType::get(context, 32);
+            t_InterpreterContext =
+                m->getTypeByName("struct.InterpreterContext");
+            p_InterpreterContext = PointerType::get(t_InterpreterContext, 0);
+            t_InitializeInterpreter =
+                m->getFunction("initializeInterpreter")->getFunctionType();
+            t_FinalizeInterpreter =
+                m->getFunction("finalizeInterpreter")->getFunctionType();
         }
 
         StructType * t_SEXPREC;
@@ -275,12 +188,30 @@ public:
         StructType * t_R_bcstack_t;
         PointerType * bcStackPtr;
         IntegerType * t_Rboolean;
+        StructType * t_InterpreterContext;
+        PointerType * p_InterpreterContext;
+        FunctionType * t_InitializeInterpreter;
+        FunctionType * t_FinalizeInterpreter;
     };
 
     std::unique_ptr<T> t;
 };
 
 static JitHelper helper;
+
+FunctionType * t_InterpreterLoop;
+
+FunctionType * t_voidInstruction0;
+FunctionType * t_voidInstruction1;
+FunctionType * t_voidInstruction2;
+FunctionType * t_voidInstruction3;
+FunctionType * t_voidInstruction4;
+
+FunctionType * t_intInstruction0;
+FunctionType * t_intInstruction1;
+FunctionType * t_intInstruction2;
+FunctionType * t_intInstruction3;
+FunctionType * t_intInstruction4;
 
 
 /** Creates the types for the codegen.
@@ -291,19 +222,6 @@ void * initializeTypes(JitHelper & helper) {
     LLVMContext & context = getGlobalContext();
     std::vector<Type*> fields;
 
-    // InterpreterContext
-    t_InterpreterContext = StructType::create(context, "struct.InterpreterContext");
-    fields.clear();
-    fields.push_back(helper.t->t_SEXP);
-    fields.push_back(helper.t->t_SEXP);
-    fields.push_back(helper.t->t_Rboolean);
-    fields.push_back(helper.t->t_SEXP);
-    fields.push_back(helper.t->t_SEXP);
-    fields.push_back(helper.t->bcStackPtr);
-    fields.push_back(helper.t->bcStackPtr);
-    fields.push_back(helper.t->t_Rboolean);
-    t_InterpreterContext->setBody(fields);
-    p_InterpreterContext = PointerType::get(t_InterpreterContext, 0);
     // Interpreter function
     fields.clear();
     fields.push_back(helper.t->t_SEXP);
@@ -312,64 +230,51 @@ void * initializeTypes(JitHelper & helper) {
     t_InterpreterLoop = FunctionType::get(helper.t->t_SEXP, fields, false);
     // instruction types
     std::vector<Type*> args;
-    // interpreter initializer
     args.clear();
-    args.push_back(p_InterpreterContext);
-    args.push_back(helper.t->t_SEXP);
-    args.push_back(helper.t->t_SEXP);
-    args.push_back(helper.t->t_Rboolean);
-    args.push_back(IntegerType::get(context, 32));
-    t_InitializeInterpreter = FunctionType::get(Type::getVoidTy(context), args, false);
-    // interpreter finalizer
-    args.clear();
-    args.push_back(p_InterpreterContext);
-    t_FinalizeInterpreter = FunctionType::get(helper.t->t_SEXP, args, false);
-    // instruction types
-    args.clear();
-    args.push_back(p_InterpreterContext);
+    args.push_back(helper.t->p_InterpreterContext);
     t_voidInstruction0 = FunctionType::get(Type::getVoidTy(context), args, false);
     args.clear();
-    args.push_back(p_InterpreterContext);
+    args.push_back(helper.t->p_InterpreterContext);
     args.push_back(IntegerType::get(context, 32));
     t_voidInstruction1 = FunctionType::get(Type::getVoidTy(context), args, false);
     args.clear();
-    args.push_back(p_InterpreterContext);
+    args.push_back(helper.t->p_InterpreterContext);
     args.push_back(IntegerType::get(context, 32));
     args.push_back(IntegerType::get(context, 32));
     t_voidInstruction2 = FunctionType::get(Type::getVoidTy(context), args, false);
     args.clear();
-    args.push_back(p_InterpreterContext);
+    args.push_back(helper.t->p_InterpreterContext);
     args.push_back(IntegerType::get(context, 32));
     args.push_back(IntegerType::get(context, 32));
     args.push_back(IntegerType::get(context, 32));
     t_voidInstruction3 = FunctionType::get(Type::getVoidTy(context), args, false);
     args.clear();
-    args.push_back(p_InterpreterContext);
+    args.push_back(helper.t->p_InterpreterContext);
     args.push_back(IntegerType::get(context, 32));
     args.push_back(IntegerType::get(context, 32));
     args.push_back(IntegerType::get(context, 32));
     args.push_back(IntegerType::get(context, 32));
     t_voidInstruction4 = FunctionType::get(Type::getVoidTy(context), args, false);
     args.clear();
-    args.push_back(p_InterpreterContext);
+    args.push_back(helper.t->p_InterpreterContext);
     t_intInstruction0 = FunctionType::get(IntegerType::get(context, 32), args, false);
     args.clear();
-    args.push_back(p_InterpreterContext);
+    args.push_back(helper.t->p_InterpreterContext);
     args.push_back(IntegerType::get(context, 32));
     t_intInstruction1 = FunctionType::get(IntegerType::get(context, 32), args, false);
     args.clear();
-    args.push_back(p_InterpreterContext);
+    args.push_back(helper.t->p_InterpreterContext);
     args.push_back(IntegerType::get(context, 32));
     args.push_back(IntegerType::get(context, 32));
     t_intInstruction2 = FunctionType::get(IntegerType::get(context, 32), args, false);
     args.clear();
-    args.push_back(p_InterpreterContext);
+    args.push_back(helper.t->p_InterpreterContext);
     args.push_back(IntegerType::get(context, 32));
     args.push_back(IntegerType::get(context, 32));
     args.push_back(IntegerType::get(context, 32));
     t_intInstruction3 = FunctionType::get(IntegerType::get(context, 32), args, false);
     args.clear();
-    args.push_back(p_InterpreterContext);
+    args.push_back(helper.t->p_InterpreterContext);
     args.push_back(IntegerType::get(context, 32));
     args.push_back(IntegerType::get(context, 32));
     args.push_back(IntegerType::get(context, 32));
@@ -378,6 +283,91 @@ void * initializeTypes(JitHelper & helper) {
 }
 
 void * unused = initializeTypes(helper);
+
+
+/** Simple class that encapsulates a LLVM module used to compile R's function. Contains the module itself and all declarations of functions that the JIT may use - the R bytecode opcodes and evaluation helpers.
+ */
+class JITModule {
+public:
+
+    operator Module * () {
+        return module;
+    }
+
+    ConstantInt * constant(int value) {
+        return ConstantInt::get(getGlobalContext(), APInt(32, value));
+    }
+
+    /** Creates new LLVM module and populates it with declarations of the helper and opcode functions.
+      */
+    JITModule() {
+        // create new module
+        module = new Module("", getGlobalContext());
+        // generate the function declarations
+        // interpreter initialization & finalization
+        initializeInterpreter = Function::Create(
+                helper.t->t_InitializeInterpreter,
+                Function::ExternalLinkage,
+                "initializeInterpreter",
+                module);
+        finalizeInterpreter = Function::Create(
+                helper.t->t_FinalizeInterpreter,
+                Function::ExternalLinkage,
+                "finalizeInterpreter",
+                module);
+
+        // switch special instructions
+        SWITCH_OP_start = Function::Create(t_intInstruction4, Function::ExternalLinkage, "instructionSWITCH_OP_start", module);
+        SWITCH_OP_character = Function::Create(t_intInstruction4, Function::ExternalLinkage, "instructionSWITCH_OP_character", module);
+        SWITCH_OP_integral = Function::Create(t_intInstruction4, Function::ExternalLinkage, "instructionSWITCH_OP_integral", module);
+        // handle the normal instructions
+        #define SCONCAT(a) #a
+        #define INSTRUCTION0(name, opcode) name = Function::Create(t_voidInstruction0, Function::ExternalLinkage, SCONCAT(instruction ## name), module);
+        #define INSTRUCTION1(name, opcode) name = Function::Create(t_voidInstruction1, Function::ExternalLinkage, SCONCAT(instruction ## name), module);
+        #define INSTRUCTION2(name, opcode) name = Function::Create(t_voidInstruction2, Function::ExternalLinkage, SCONCAT(instruction ## name), module);
+        #define INSTRUCTION3(name, opcode) name = Function::Create(t_voidInstruction3, Function::ExternalLinkage, SCONCAT(instruction ## name), module);
+        #define SPECIAL0(name, opcode) name = Function::Create(t_voidInstruction0, Function::ExternalLinkage, SCONCAT(instruction ## name), module);
+        #define SPECIAL1(name, opcode) name = Function::Create(t_voidInstruction1, Function::ExternalLinkage, SCONCAT(instruction ## name), module);
+        #define SPECIAL2(name, opcode) name = Function::Create(t_intInstruction2, Function::ExternalLinkage, SCONCAT(instruction ## name), module);
+        #define SPECIAL3(name, opcode) name = Function::Create(t_voidInstruction3, Function::ExternalLinkage, SCONCAT(instruction ## name), module);
+        #define SPECIAL4(name, opcode)
+        RBC
+        #undef INSTRUCTION0
+        #undef INSTRUCTION1
+        #undef INSTRUCTION2
+        #undef INSTRUCTION3
+        #undef SPECIAL0
+        #undef SPECIAL1
+        #undef SPECIAL2
+        #undef SPECIAL3
+        #undef SPECIAL4
+    }
+
+    Module * module;
+    Function * initializeInterpreter;
+    Function * finalizeInterpreter;
+    // pregenerated instruction functions
+    #define INSTRUCTION0(name, opcode) Function * name;
+    #define INSTRUCTION1(name, opcode) Function * name;
+    #define INSTRUCTION2(name, opcode) Function * name;
+    #define INSTRUCTION3(name, opcode) Function * name;
+    #define SPECIAL0(name, opcode) Function * name;
+    #define SPECIAL1(name, opcode) Function * name;
+    #define SPECIAL2(name, opcode) Function * name;
+    #define SPECIAL3(name, opcode) Function * name;
+    #define SPECIAL4(name, opcode) Function * name;
+        RBC
+    #undef INSTRUCTION0
+    #undef INSTRUCTION1
+    #undef INSTRUCTION2
+    #undef INSTRUCTION3
+    #undef SPECIAL0
+    #undef SPECIAL1
+    #undef SPECIAL2
+    #undef SPECIAL3
+    #undef SPECIAL4
+
+};
 
 
 
@@ -426,7 +416,7 @@ private:
         // split the bytecode into basic blocks
         bbs.analyze(body, consts, f);
         // create context struct on the stack
-        context = new AllocaInst(t_InterpreterContext, "context", current);
+        context = new AllocaInst(helper.t->t_InterpreterContext, "context", current);
         // call the initializer
         Function::arg_iterator args = f->arg_begin();
         Value * body = args++;
