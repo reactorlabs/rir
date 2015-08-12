@@ -163,6 +163,10 @@ public:
         t = std::unique_ptr<T>(new T(evalM.get(), context));
     }
 
+    Function * getFunction(const std::string name) {
+        return evalM->getFunction(name);
+    }
+
     std::unique_ptr<Module> evalM;
     LLVMContext & context;
 
@@ -174,13 +178,12 @@ public:
             t_R_bcstack_t = m->getTypeByName("struct.R_bcstack_t");
             bcStackPtr    = PointerType::get(t_R_bcstack_t, 0);
             t_Rboolean    = IntegerType::get(context, 32);
-            t_InterpreterContext =
-                m->getTypeByName("struct.InterpreterContext");
+            t_InterpreterContext = m->getTypeByName("struct.InterpreterContext");
             p_InterpreterContext = PointerType::get(t_InterpreterContext, 0);
-            t_InitializeInterpreter =
-                m->getFunction("initializeInterpreter")->getFunctionType();
-            t_FinalizeInterpreter =
-                m->getFunction("finalizeInterpreter")->getFunctionType();
+            t_RCNTXT = m->getTypeByName("struct.RCNTXT");
+            p_RCNTXT = PointerType::get(t_RCNTXT, 0);
+            t_applyClosure = m->getFunction("Rf_applyClosure")->getFunctionType();
+            t_listsxp = m->getTypeByName("struct.listsxp_struct");
         }
 
         StructType * t_SEXPREC;
@@ -190,16 +193,16 @@ public:
         IntegerType * t_Rboolean;
         StructType * t_InterpreterContext;
         PointerType * p_InterpreterContext;
-        FunctionType * t_InitializeInterpreter;
-        FunctionType * t_FinalizeInterpreter;
+        StructType * t_RCNTXT;
+        PointerType * p_RCNTXT;
+        FunctionType * t_applyClosure;
+        StructType * t_listsxp; 
     };
 
     std::unique_ptr<T> t;
 };
 
 static JitHelper helper;
-
-FunctionType * t_InterpreterLoop;
 
 FunctionType * t_voidInstruction0;
 FunctionType * t_voidInstruction1;
@@ -222,12 +225,6 @@ void * initializeTypes(JitHelper & helper) {
     LLVMContext & context = getGlobalContext();
     std::vector<Type*> fields;
 
-    // Interpreter function
-    fields.clear();
-    fields.push_back(helper.t->t_SEXP);
-    fields.push_back(helper.t->t_SEXP);
-    fields.push_back(helper.t->t_Rboolean);
-    t_InterpreterLoop = FunctionType::get(helper.t->t_SEXP, fields, false);
     // instruction types
     std::vector<Type*> args;
     args.clear();
@@ -298,23 +295,27 @@ public:
         return ConstantInt::get(getGlobalContext(), APInt(32, value));
     }
 
+    Function * getFunction(const std::string name) {
+        auto known = module->getFunction(name);
+        if (known) return known;
+
+        auto lib = helper.getFunction(name);
+        if (!lib) {
+            std::cout << "I can't find the function " << name << std::endl;
+            DIE;
+        }
+        return Function::Create(
+                lib->getFunctionType(),
+                Function::ExternalLinkage,
+                name,
+                module);
+    }
+
     /** Creates new LLVM module and populates it with declarations of the helper and opcode functions.
       */
     JITModule() {
         // create new module
         module = new Module("", getGlobalContext());
-        // generate the function declarations
-        // interpreter initialization & finalization
-        initializeInterpreter = Function::Create(
-                helper.t->t_InitializeInterpreter,
-                Function::ExternalLinkage,
-                "initializeInterpreter",
-                module);
-        finalizeInterpreter = Function::Create(
-                helper.t->t_FinalizeInterpreter,
-                Function::ExternalLinkage,
-                "finalizeInterpreter",
-                module);
 
         // switch special instructions
         SWITCH_OP_start = Function::Create(t_intInstruction4, Function::ExternalLinkage, "instructionSWITCH_OP_start", module);
@@ -344,8 +345,7 @@ public:
     }
 
     Module * module;
-    Function * initializeInterpreter;
-    Function * finalizeInterpreter;
+
     // pregenerated instruction functions
     #define INSTRUCTION0(name, opcode) Function * name;
     #define INSTRUCTION1(name, opcode) Function * name;
@@ -379,7 +379,11 @@ public:
         code = INTEGER(body);
         consts = BCODE_CONSTS(bytecode);
         // create the function
-        f = Function::Create(t_InterpreterLoop, Function::ExternalLinkage, name, module);
+        f = Function::Create(
+                helper.t->t_applyClosure,
+                Function::ExternalLinkage,
+                name,
+                module);
         // initialize the evaluation context
         initialize();
         // compile the bytecode into its own
@@ -413,20 +417,60 @@ private:
 
     void initialize() {
         current = BasicBlock::Create(getGlobalContext(), "start", f, nullptr);
+
+        Function::arg_iterator args = f->arg_begin();
+        Value * call = args++;
+        call->setName("call");
+        Value * op = args++;
+        op->setName("op");
+        Value * arglist = args++;
+        arglist->setName("arglist");
+        Value * sysparent = args++;
+        sysparent->setName("sysparent");
+        Value * suppliedvars = args++;
+        suppliedvars->setName("suppliedvars");
+
+        // Get consts out of closure
+        // TODO: directly access struct
+
+        Value * cons = CallInst::Create(
+                module.getFunction("getConstsFromClosure"),
+                std::vector<Value *>({{op}}),
+                "consts",
+                current);
+
+        Value * rho = CallInst::Create(
+                module.getFunction("closureArgumentAdaptor"),
+                std::vector<Value *>({{call, op, arglist, sysparent, suppliedvars}}),
+                "rho",
+                current);
+
+        cntxt = new AllocaInst(helper.t->t_RCNTXT, "cntxt", current);
+        CallInst::Create(
+                module.getFunction("initClosureContext"),
+                std::vector<Value *>({{
+                    cntxt, call, rho, sysparent, arglist, op}}),
+                "",
+                current);
+        
+        /* todo setjmp/longjmp */
+
         // split the bytecode into basic blocks
         bbs.analyze(body, consts, f);
+
         // create context struct on the stack
-        context = new AllocaInst(helper.t->t_InterpreterContext, "context", current);
+        context = new AllocaInst(
+                helper.t->t_InterpreterContext, "context", current);
+
         // call the initializer
-        Function::arg_iterator args = f->arg_begin();
-        Value * body = args++;
-        body->setName("body");
-        Value * rho = args++;
-        rho->setName("rho");
-        Value * useCache = args++;
-        useCache->setName("useCache");
-        std::vector<Value *> params({context, body, rho, useCache, module.constant(code[0])});
-        CallInst::Create(module.initializeInterpreter, params, "", current);
+        CallInst::Create(
+                module.getFunction("initializeInterpreter"),
+                std::vector<Value *>({{
+                    context, cons, rho,
+                    module.constant(1), module.constant(code[0])}}),
+                "",
+                current);
+
         // create last basic block
         lastBB = BasicBlock::Create(getGlobalContext(), "end", f, nullptr);
         // jump to pc1 basic block from the initial basic block
@@ -434,7 +478,13 @@ private:
     }
 
     void finalize() {
-        Value * result = CallInst::Create(module.finalizeInterpreter, context, "result", lastBB);
+        Value * result = CallInst::Create(
+                module.getFunction("finalizeInterpreter"), context, "result", lastBB);
+        CallInst::Create(
+                module.getFunction("endClosureContext"),
+                std::vector<Value *>({{cntxt, result}}),
+                "",
+                lastBB);
         ReturnInst::Create(getGlobalContext(), result, lastBB);
     }
 
@@ -677,6 +727,7 @@ private:
     BasicBlock * current;
     BasicBlock * lastBB;
     Value * context;
+    Value * cntxt;
     int pc;
     JitHelper h;
 };
