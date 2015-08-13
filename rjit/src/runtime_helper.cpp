@@ -34,7 +34,7 @@ RuntimeHelper::T::T(Module * m, LLVMContext & context) {
     p_InterpreterContext = PointerType::get(t_InterpreterContext, 0);
     t_RCNTXT = m->getTypeByName("struct.RCNTXT");
     p_RCNTXT = PointerType::get(t_RCNTXT, 0);
-    t_applyClosure = m->getFunction("Rf_applyClosure")->getFunctionType();
+    t_execClosure = m->getFunction("R_execClosure")->getFunctionType();
     t_listsxp = m->getTypeByName("struct.listsxp_struct");
 }
 

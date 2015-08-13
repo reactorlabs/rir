@@ -159,7 +159,7 @@ public:
         consts = BCODE_CONSTS(bytecode);
         // create the function
         f = Function::Create(
-                runtime.t->t_applyClosure,
+                runtime.t->t_execClosure,
                 Function::ExternalLinkage,
                 name,
                 module);
@@ -206,22 +206,15 @@ private:
         arglist->setName("arglist");
         Value * sysparent = args++;
         sysparent->setName("sysparent");
-        Value * suppliedvars = args++;
-        suppliedvars->setName("suppliedvars");
+        Value * rho = args++;
+        rho->setName("rho");
 
         // Get consts out of closure
         // TODO: directly access struct
-
         Value * cons = CallInst::Create(
                 module.getFunction("getConstsFromClosure"),
                 std::vector<Value *>({{op}}),
                 "consts",
-                current);
-
-        Value * rho = CallInst::Create(
-                module.getFunction("closureArgumentAdaptor"),
-                std::vector<Value *>({{call, op, arglist, sysparent, suppliedvars}}),
-                "rho",
                 current);
 
         cntxt = new AllocaInst(runtime.t->t_RCNTXT, "cntxt", current);

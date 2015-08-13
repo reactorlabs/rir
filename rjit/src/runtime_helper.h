@@ -24,7 +24,7 @@ public:
         llvm::PointerType * p_InterpreterContext;
         llvm::StructType * t_RCNTXT;
         llvm::PointerType * p_RCNTXT;
-        llvm::FunctionType * t_applyClosure;
+        llvm::FunctionType * t_execClosure;
         llvm::StructType * t_listsxp; 
     };
 
