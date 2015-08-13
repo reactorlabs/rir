@@ -152,8 +152,9 @@ public:
     }
 
 
-    Function * compile(SEXP bytecode, Twine const & name) {
+    Function * compile(SEXP bytecode, Twine const & name, SEXP rho_) {
         assert(TYPEOF(bytecode) == BCODESXP and "Only bytecode allowed here");
+        rho = rho_;
         body = R_bcDecode(BCODE_CODE(bytecode));
         code = INTEGER(body);
         consts = BCODE_CONSTS(bytecode);
@@ -224,7 +225,7 @@ private:
                     cntxt, call, rho, sysparent, arglist, op}}),
                 "",
                 current);
-        
+
         /* todo setjmp/longjmp */
 
         // split the bytecode into basic blocks
@@ -278,12 +279,16 @@ private:
     pc += 3; \
     break; }
 
+
     /** Compiles R bytecode into LLVM IR representation.
      */
     void compileBytecode() {
         using namespace rjit;
         pc = 1;
         int l = length(body);
+
+        bool callNative = false;
+
         while (pc < l) {
             current = bbs.blockForPc(pc);
             switch (static_cast<Opcode>(code[pc])) {
@@ -323,7 +328,19 @@ private:
             INSTRUCTION1(GETVAR_OP);
             INSTRUCTION1(DDVAL_OP);
             INSTRUCTION1(SETVAR_OP);
-            INSTRUCTION1(GETFUN_OP);
+            case Opcode::GETFUN_OP: {
+                SEXP name = VECTOR_ELT(consts, code[pc+1]);
+                SEXP fun = Rf_findFun(name, rho);
+                if (fun && TYPEOF(fun) == CLOSXP) {
+                    SEXP code = CDR(fun);
+                    if (TYPEOF(code) == NATIVESXP) {
+                        callNative = true;
+                    }
+                }
+                instruction1(module.GETFUN_OP);
+                pc += 2;
+                break;
+            }
             INSTRUCTION1(GETGLOBFUN_OP);
             INSTRUCTION1(GETSYMFUN_OP);
             INSTRUCTION1(GETBUILTIN_OP);
@@ -331,14 +348,35 @@ private:
             INSTRUCTION0(CHECKFUN_OP);
             INSTRUCTION1(MAKEPROM_OP);
             INSTRUCTION0(DOMISSING_OP);
-            INSTRUCTION1(SETTAG_OP);
-            INSTRUCTION0(DODOTS_OP);
+            case Opcode::SETTAG_OP: {
+                callNative = false;
+                instruction1(module.SETTAG_OP);
+                pc += 2;
+                break;
+            }
+            case Opcode::DODOTS_OP: {
+                callNative = false;
+                instruction0(module.DODOTS_OP);
+                pc += 1;
+                break;
+            }
             INSTRUCTION0(PUSHARG_OP);
             INSTRUCTION1(PUSHCONSTARG_OP);
             INSTRUCTION0(PUSHNULLARG_OP);
             INSTRUCTION0(PUSHTRUEARG_OP);
             INSTRUCTION0(PUSHFALSEARG_OP);
-            INSTRUCTION1(CALL_OP);
+            case Opcode::CALL_OP: {
+                if (callNative) {
+                    // TODO of course this is not guaranteed to be native
+                    instruction1(module.CALL_NATIVE_OP);
+                    pc += 2;
+                    callNative = false;
+                    break;
+                }
+                instruction1(module.CALL_OP);
+                pc += 2;
+                break;
+            }
             INSTRUCTION1(CALLBUILTIN_OP);
             INSTRUCTION1(CALLSPECIAL_OP);
             INSTRUCTION1(MAKECLOSURE_OP);
@@ -496,6 +534,7 @@ private:
     int * code;
     SEXP body;
     SEXP consts;
+    SEXP rho;
     BasicBlock * current;
     BasicBlock * lastBB;
     Value * context;
@@ -516,9 +555,9 @@ void initializeJIT() {
     Compiler::initializeJIT();
 }
 
-SEXP compile(SEXP bytecode) {
+SEXP compile(SEXP bytecode, SEXP rho) {
     Compiler c;
-    Function * f = c.compile(bytecode, "rjitf");
+    Function * f = c.compile(bytecode, "rjitf", rho);
     RFunctionPtr fptr = c.jit();
     SEXP result = CONS(reinterpret_cast<SEXP>(fptr), BCODE_CONSTS(bytecode));
     assert(TAG(result) == R_NilValue);

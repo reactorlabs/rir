@@ -6,7 +6,7 @@ jit.initialize <- function() {
 jit <- function(what) {
     if (typeof(what) == "closure") {
         bc = .Internal(bodyCode(what))
-        native = .Call("jit", bc)
+        native = .Call("jit", bc, environment(what))
         f = .Internal(bcClose(formals(what), native, environment(what)))
         attrs = attributes(what)
         if (!is.null(attrs))
@@ -15,7 +15,7 @@ jit <- function(what) {
             f = asS4(f)
         f
     } else if (typeof(what) == "bytecode") {
-        .Call("jit", what)
+        .Call("jit", what, globalenv())
    } else {
        stop("Only bytecode expressions and compiled functions can be jitted.")
    }

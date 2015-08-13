@@ -7,4 +7,8 @@ jit.initialize()
 f <- jit(cmpfun(function(a, b) a+b))
 f(1,2)
 
+
+a <- jit(cmpfun(function(a, b) f(a, b)))
+a(1,2)
+
 source("rjit/tests/simple.R")

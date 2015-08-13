@@ -12,6 +12,7 @@ public:
     operator llvm::Module * ();
     llvm::ConstantInt * constant(int value);
     llvm::Function * getFunction(const std::string name);
+    llvm::Function * getFunction(const std::string, llvm::Function *);
 
     /** Creates new LLVM module and populates it with declarations of the helper and opcode functions.
       */

@@ -39,9 +39,9 @@ REXPORT SEXP initializeRJIT() {
     return R_NilValue;
 }
 
-REXPORT SEXP jit(SEXP expression) {
+REXPORT SEXP jit(SEXP expression, SEXP rho) {
     assert(TYPEOF(expression) == BCODESXP and "Only raw bytecode is allowed as an argument to jitExpression");
-    return compile(expression);
+    return compile(expression, rho);
 }
 
 REXPORT SEXP jitConstants(SEXP expression) {

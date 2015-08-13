@@ -14,6 +14,17 @@ ConstantInt * JITModule::constant(int value) {
     return ConstantInt::get(getGlobalContext(), APInt(32, value));
 }
 
+Function * JITModule::getFunction(const std::string name, Function * foreign) {
+    auto known = module->getFunction(name);
+    if (known) return known;
+
+    return Function::Create(
+            foreign->getFunctionType(),
+            Function::ExternalLinkage,
+            name,
+            module);
+}
+
 Function * JITModule::getFunction(const std::string name) {
     auto known = module->getFunction(name);
     if (known) return known;
@@ -23,11 +34,8 @@ Function * JITModule::getFunction(const std::string name) {
         std::cout << "I can't find the function " << name << std::endl;
         DIE;
     }
-    return Function::Create(
-            lib->getFunctionType(),
-            Function::ExternalLinkage,
-            name,
-            module);
+
+    return getFunction(name, lib);
 }
 
 /** Creates new LLVM module and populates it with declarations of the helper and opcode functions.
