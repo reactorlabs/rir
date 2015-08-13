@@ -1,24 +1,14 @@
-#include <llvm/IR/Verifier.h>
-#include <llvm/IR/DerivedTypes.h>
-#include <llvm/IR/IRBuilder.h>
-#include <llvm/IR/LLVMContext.h>
-#include <llvm/IR/Module.h>
-#include <llvm/IR/DerivedTypes.h>
-#include <llvm/Support/raw_ostream.h>
-#include "llvm/Analysis/Passes.h"
-
-#include "llvm/ExecutionEngine/ExecutionEngine.h"
-#include "llvm/ExecutionEngine/MCJIT.h"
-#include "llvm/ExecutionEngine/SectionMemoryManager.h"
-#include "llvm/Support/DataStream.h"
-#include "llvm/Bitcode/ReaderWriter.h"
-
 #include <sstream>
 #include <iostream>
 
+#include "llvm_includes.h"
 #include "codegen.h"
 
 #include "rbc.h"
+
+#include "runtime_helper.h"
+#include "jit_module.h"
+#include "jit_types.h"
 
 #define STR(WHAT)                                                              \
   ((static_cast<std::ostringstream &>(                                         \
@@ -145,234 +135,23 @@ private:
 };
 
 
-class JitHelper {
-public:
-    JitHelper() : context(getGlobalContext()) {
-        std::string err;
-        // TODO: hardcoded path is not the best idea...
-        DataStreamer *streamer = getDataFileStreamer("rjit/eval.bc", &err);
-        if (!streamer) {
-            std::cout << err << std::endl;
-            DIE;
-        }
-        ErrorOr<std::unique_ptr<Module>> m =
-            getStreamedBitcodeModule("eval", streamer, context);
-        evalM = std::move(*m);
-        evalM->materializeAllPermanently();
-
-        t = std::unique_ptr<T>(new T(evalM.get(), context));
-    }
-
-    Function * getFunction(const std::string name) {
-        return evalM->getFunction(name);
-    }
-
-    std::unique_ptr<Module> evalM;
-    LLVMContext & context;
-
-    class T {
-    public:
-        T(Module * m, LLVMContext & context) {
-            t_SEXPREC     = m->getTypeByName("struct.SEXPREC");
-            t_SEXP        = PointerType::get(t_SEXPREC, 0);
-            t_R_bcstack_t = m->getTypeByName("struct.R_bcstack_t");
-            bcStackPtr    = PointerType::get(t_R_bcstack_t, 0);
-            t_Rboolean    = IntegerType::get(context, 32);
-            t_InterpreterContext = m->getTypeByName("struct.InterpreterContext");
-            p_InterpreterContext = PointerType::get(t_InterpreterContext, 0);
-            t_RCNTXT = m->getTypeByName("struct.RCNTXT");
-            p_RCNTXT = PointerType::get(t_RCNTXT, 0);
-            t_applyClosure = m->getFunction("Rf_applyClosure")->getFunctionType();
-            t_listsxp = m->getTypeByName("struct.listsxp_struct");
-        }
-
-        StructType * t_SEXPREC;
-        PointerType * t_SEXP;
-        StructType * t_R_bcstack_t;
-        PointerType * bcStackPtr;
-        IntegerType * t_Rboolean;
-        StructType * t_InterpreterContext;
-        PointerType * p_InterpreterContext;
-        StructType * t_RCNTXT;
-        PointerType * p_RCNTXT;
-        FunctionType * t_applyClosure;
-        StructType * t_listsxp; 
-    };
-
-    std::unique_ptr<T> t;
-};
-
-static JitHelper helper;
-
-FunctionType * t_voidInstruction0;
-FunctionType * t_voidInstruction1;
-FunctionType * t_voidInstruction2;
-FunctionType * t_voidInstruction3;
-FunctionType * t_voidInstruction4;
-
-FunctionType * t_intInstruction0;
-FunctionType * t_intInstruction1;
-FunctionType * t_intInstruction2;
-FunctionType * t_intInstruction3;
-FunctionType * t_intInstruction4;
-
-
-/** Creates the types for the codegen.
-
-  Since the types do not depend on modules, but on the context, we can pregenerate them and use in all modules that will be created by the jit.
-  */
-void * initializeTypes(JitHelper & helper) {
-    LLVMContext & context = getGlobalContext();
-    std::vector<Type*> fields;
-
-    // instruction types
-    std::vector<Type*> args;
-    args.clear();
-    args.push_back(helper.t->p_InterpreterContext);
-    t_voidInstruction0 = FunctionType::get(Type::getVoidTy(context), args, false);
-    args.clear();
-    args.push_back(helper.t->p_InterpreterContext);
-    args.push_back(IntegerType::get(context, 32));
-    t_voidInstruction1 = FunctionType::get(Type::getVoidTy(context), args, false);
-    args.clear();
-    args.push_back(helper.t->p_InterpreterContext);
-    args.push_back(IntegerType::get(context, 32));
-    args.push_back(IntegerType::get(context, 32));
-    t_voidInstruction2 = FunctionType::get(Type::getVoidTy(context), args, false);
-    args.clear();
-    args.push_back(helper.t->p_InterpreterContext);
-    args.push_back(IntegerType::get(context, 32));
-    args.push_back(IntegerType::get(context, 32));
-    args.push_back(IntegerType::get(context, 32));
-    t_voidInstruction3 = FunctionType::get(Type::getVoidTy(context), args, false);
-    args.clear();
-    args.push_back(helper.t->p_InterpreterContext);
-    args.push_back(IntegerType::get(context, 32));
-    args.push_back(IntegerType::get(context, 32));
-    args.push_back(IntegerType::get(context, 32));
-    args.push_back(IntegerType::get(context, 32));
-    t_voidInstruction4 = FunctionType::get(Type::getVoidTy(context), args, false);
-    args.clear();
-    args.push_back(helper.t->p_InterpreterContext);
-    t_intInstruction0 = FunctionType::get(IntegerType::get(context, 32), args, false);
-    args.clear();
-    args.push_back(helper.t->p_InterpreterContext);
-    args.push_back(IntegerType::get(context, 32));
-    t_intInstruction1 = FunctionType::get(IntegerType::get(context, 32), args, false);
-    args.clear();
-    args.push_back(helper.t->p_InterpreterContext);
-    args.push_back(IntegerType::get(context, 32));
-    args.push_back(IntegerType::get(context, 32));
-    t_intInstruction2 = FunctionType::get(IntegerType::get(context, 32), args, false);
-    args.clear();
-    args.push_back(helper.t->p_InterpreterContext);
-    args.push_back(IntegerType::get(context, 32));
-    args.push_back(IntegerType::get(context, 32));
-    args.push_back(IntegerType::get(context, 32));
-    t_intInstruction3 = FunctionType::get(IntegerType::get(context, 32), args, false);
-    args.clear();
-    args.push_back(helper.t->p_InterpreterContext);
-    args.push_back(IntegerType::get(context, 32));
-    args.push_back(IntegerType::get(context, 32));
-    args.push_back(IntegerType::get(context, 32));
-    args.push_back(IntegerType::get(context, 32));
-    t_intInstruction4 = FunctionType::get(IntegerType::get(context, 32), args, false);
-}
-
-void * unused = initializeTypes(helper);
-
-
-/** Simple class that encapsulates a LLVM module used to compile R's function. Contains the module itself and all declarations of functions that the JIT may use - the R bytecode opcodes and evaluation helpers.
- */
-class JITModule {
-public:
-
-    operator Module * () {
-        return module;
-    }
-
-    ConstantInt * constant(int value) {
-        return ConstantInt::get(getGlobalContext(), APInt(32, value));
-    }
-
-    Function * getFunction(const std::string name) {
-        auto known = module->getFunction(name);
-        if (known) return known;
-
-        auto lib = helper.getFunction(name);
-        if (!lib) {
-            std::cout << "I can't find the function " << name << std::endl;
-            DIE;
-        }
-        return Function::Create(
-                lib->getFunctionType(),
-                Function::ExternalLinkage,
-                name,
-                module);
-    }
-
-    /** Creates new LLVM module and populates it with declarations of the helper and opcode functions.
-      */
-    JITModule() {
-        // create new module
-        module = new Module("", getGlobalContext());
-
-        // switch special instructions
-        SWITCH_OP_start = Function::Create(t_intInstruction4, Function::ExternalLinkage, "instructionSWITCH_OP_start", module);
-        SWITCH_OP_character = Function::Create(t_intInstruction4, Function::ExternalLinkage, "instructionSWITCH_OP_character", module);
-        SWITCH_OP_integral = Function::Create(t_intInstruction4, Function::ExternalLinkage, "instructionSWITCH_OP_integral", module);
-        // handle the normal instructions
-        #define SCONCAT(a) #a
-        #define INSTRUCTION0(name, opcode) name = Function::Create(t_voidInstruction0, Function::ExternalLinkage, SCONCAT(instruction ## name), module);
-        #define INSTRUCTION1(name, opcode) name = Function::Create(t_voidInstruction1, Function::ExternalLinkage, SCONCAT(instruction ## name), module);
-        #define INSTRUCTION2(name, opcode) name = Function::Create(t_voidInstruction2, Function::ExternalLinkage, SCONCAT(instruction ## name), module);
-        #define INSTRUCTION3(name, opcode) name = Function::Create(t_voidInstruction3, Function::ExternalLinkage, SCONCAT(instruction ## name), module);
-        #define SPECIAL0(name, opcode) name = Function::Create(t_voidInstruction0, Function::ExternalLinkage, SCONCAT(instruction ## name), module);
-        #define SPECIAL1(name, opcode) name = Function::Create(t_voidInstruction1, Function::ExternalLinkage, SCONCAT(instruction ## name), module);
-        #define SPECIAL2(name, opcode) name = Function::Create(t_intInstruction2, Function::ExternalLinkage, SCONCAT(instruction ## name), module);
-        #define SPECIAL3(name, opcode) name = Function::Create(t_voidInstruction3, Function::ExternalLinkage, SCONCAT(instruction ## name), module);
-        #define SPECIAL4(name, opcode)
-        RBC
-        #undef INSTRUCTION0
-        #undef INSTRUCTION1
-        #undef INSTRUCTION2
-        #undef INSTRUCTION3
-        #undef SPECIAL0
-        #undef SPECIAL1
-        #undef SPECIAL2
-        #undef SPECIAL3
-        #undef SPECIAL4
-    }
-
-    Module * module;
-
-    // pregenerated instruction functions
-    #define INSTRUCTION0(name, opcode) Function * name;
-    #define INSTRUCTION1(name, opcode) Function * name;
-    #define INSTRUCTION2(name, opcode) Function * name;
-    #define INSTRUCTION3(name, opcode) Function * name;
-    #define SPECIAL0(name, opcode) Function * name;
-    #define SPECIAL1(name, opcode) Function * name;
-    #define SPECIAL2(name, opcode) Function * name;
-    #define SPECIAL3(name, opcode) Function * name;
-    #define SPECIAL4(name, opcode) Function * name;
-        RBC
-    #undef INSTRUCTION0
-    #undef INSTRUCTION1
-    #undef INSTRUCTION2
-    #undef INSTRUCTION3
-    #undef SPECIAL0
-    #undef SPECIAL1
-    #undef SPECIAL2
-    #undef SPECIAL3
-    #undef SPECIAL4
-
-};
-
-
-
 class Compiler {
 public:
+    Compiler() : runtime(RuntimeHelper::helper) {
+        assert(initialized and
+               "Call initializeJIT before instantiating compiler");
+    }
+
+    static bool initialized;
+    static void initializeJIT() {
+        LLVMInitializeNativeTarget();
+        LLVMInitializeNativeAsmPrinter();
+        LLVMInitializeNativeAsmParser();
+        T::initialize(RuntimeHelper::helper);
+        initialized = true;
+    }
+
+
     Function * compile(SEXP bytecode, Twine const & name) {
         assert(TYPEOF(bytecode) == BCODESXP and "Only bytecode allowed here");
         body = R_bcDecode(BCODE_CODE(bytecode));
@@ -380,7 +159,7 @@ public:
         consts = BCODE_CONSTS(bytecode);
         // create the function
         f = Function::Create(
-                helper.t->t_applyClosure,
+                runtime.t->t_applyClosure,
                 Function::ExternalLinkage,
                 name,
                 module);
@@ -445,7 +224,7 @@ private:
                 "rho",
                 current);
 
-        cntxt = new AllocaInst(helper.t->t_RCNTXT, "cntxt", current);
+        cntxt = new AllocaInst(runtime.t->t_RCNTXT, "cntxt", current);
         CallInst::Create(
                 module.getFunction("initClosureContext"),
                 std::vector<Value *>({{
@@ -460,7 +239,7 @@ private:
 
         // create context struct on the stack
         context = new AllocaInst(
-                helper.t->t_InterpreterContext, "context", current);
+                runtime.t->t_InterpreterContext, "context", current);
 
         // call the initializer
         CallInst::Create(
@@ -729,8 +508,9 @@ private:
     Value * context;
     Value * cntxt;
     int pc;
-    JitHelper h;
+    RuntimeHelper & runtime;
 };
+bool Compiler::initialized = false;
 
 
 } // namespace
@@ -739,6 +519,9 @@ private:
 
 namespace rjit {
 
+void initializeJIT() {
+    Compiler::initializeJIT();
+}
 
 SEXP compile(SEXP bytecode) {
     Compiler c;

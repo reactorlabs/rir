@@ -35,9 +35,7 @@ using namespace rjit;
 #define REXPORT extern "C"
 
 REXPORT SEXP initializeRJIT() {
-    LLVMInitializeNativeTarget();
-    LLVMInitializeNativeAsmPrinter();
-    LLVMInitializeNativeAsmParser();
+    initializeJIT();
     return R_NilValue;
 }
 

@@ -6,8 +6,6 @@
 #include <Rinternals.h>
 
 
-#define DIE asm("int3")
-
 namespace rjit {
 
 /** Pointer to evaluation function.
@@ -19,6 +17,8 @@ typedef SEXP (*RFunctionPtr)(SEXP, SEXP, Rboolean);
 /** Compiles given bytecode into its evaluation function and returns the pointer to it.
  */
 SEXP compile(SEXP bytecode);
+
+void initializeJIT();
 
 }
 
