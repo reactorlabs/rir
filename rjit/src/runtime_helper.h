@@ -1,8 +1,9 @@
 #ifndef JIT_HELPER_H
 #define JIT_HELPER_H
 
-#include "llvm_includes.h"
+#include <Rinternals.h>
 
+#include "llvm_includes.h"
 
 class RuntimeHelper {
 public:
@@ -10,6 +11,12 @@ public:
 
     std::unique_ptr<llvm::Module> evalM;
     llvm::LLVMContext & context;
+
+    llvm::Constant * asConst(SEXP s) {
+        llvm::Constant* constInt = llvm::ConstantInt::get(
+                 llvm::IntegerType::get(context, 64), (uint64_t)s);
+        return llvm::ConstantExpr::getIntToPtr(constInt, t->t_SEXP);
+    }
 
     class T {
     public:
@@ -24,7 +31,6 @@ public:
         llvm::PointerType * p_InterpreterContext;
         llvm::StructType * t_RCNTXT;
         llvm::PointerType * p_RCNTXT;
-        llvm::FunctionType * t_execClosure;
         llvm::StructType * t_listsxp; 
     };
 

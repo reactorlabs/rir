@@ -19,6 +19,8 @@ public:
     static llvm::FunctionType * t_intInstruction3;
     static llvm::FunctionType * t_intInstruction4;
 
+    static llvm::FunctionType * t_jitFun;
+
     static void initialize(RuntimeHelper & runtime);
 };
 

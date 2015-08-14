@@ -15,6 +15,8 @@ FunctionType * T::t_intInstruction2;
 FunctionType * T::t_intInstruction3;
 FunctionType * T::t_intInstruction4;
 
+FunctionType * T::t_jitFun;
+
 
 void T::initialize(RuntimeHelper & helper) {
     LLVMContext & context = getGlobalContext();
@@ -72,5 +74,11 @@ void T::initialize(RuntimeHelper & helper) {
     args.push_back(IntegerType::get(context, 32));
     args.push_back(IntegerType::get(context, 32));
     t_intInstruction4 = FunctionType::get(IntegerType::get(context, 32), args, false);
+
+    args.clear();
+    args.push_back(helper.t->t_SEXP);
+    args.push_back(helper.t->t_SEXP);
+    t_jitFun = FunctionType::get(
+            helper.t->t_SEXP, args, false);
 }
 

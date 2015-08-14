@@ -1,6 +1,7 @@
 #include "jit_module.h"
 #include "runtime_helper.h"
 #include "jit_types.h"
+#include "r_intrinsics.h"
 
 #include <iostream>
 
@@ -28,6 +29,9 @@ Function * JITModule::getFunction(const std::string name, Function * foreign) {
 Function * JITModule::getFunction(const std::string name) {
     auto known = module->getFunction(name);
     if (known) return known;
+
+    auto intrinsic = Intrinsics::get(name, module);
+    if (intrinsic) return intrinsic;
 
     auto lib = RuntimeHelper::helper.getFunction(name);
     if (!lib) {

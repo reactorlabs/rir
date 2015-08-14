@@ -9,6 +9,7 @@
 #include "runtime_helper.h"
 #include "jit_module.h"
 #include "jit_types.h"
+#include "memory_manager.h"
 
 #define STR(WHAT)                                                              \
   ((static_cast<std::ostringstream &>(                                         \
@@ -160,7 +161,7 @@ public:
         consts = BCODE_CONSTS(bytecode);
         // create the function
         f = Function::Create(
-                runtime.t->t_execClosure,
+                T::t_jitFun,
                 Function::ExternalLinkage,
                 name,
                 module);
@@ -182,6 +183,8 @@ public:
         ExecutionEngine * engine = EngineBuilder(std::unique_ptr<Module>(module))
           .setErrorStr(&err)
           .setEngineKind(EngineKind::JIT)
+          .setMCJITMemoryManager(
+                    std::unique_ptr<RTDyldMemoryManager>(&MemoryManager::manager))
           .create();
         if (!engine) {
           fprintf(stderr, "Could not create ExecutionEngine: %s\n", err.c_str());
@@ -199,32 +202,24 @@ private:
         current = BasicBlock::Create(getGlobalContext(), "start", f, nullptr);
 
         Function::arg_iterator args = f->arg_begin();
-        Value * call = args++;
-        call->setName("call");
-        Value * op = args++;
-        op->setName("op");
-        Value * arglist = args++;
-        arglist->setName("arglist");
-        Value * sysparent = args++;
-        sysparent->setName("sysparent");
-        Value * rho = args++;
-        rho->setName("rho");
+        Value * bod = args++;
+        bod->setName("body");
+        native_rho = args++;
+        native_rho->setName("rho");
 
-        // Get consts out of closure
-        // TODO: directly access struct
-        Value * cons = CallInst::Create(
-                module.getFunction("getConstsFromClosure"),
-                std::vector<Value *>({{op}}),
+        native_consts = CallInst::Create(
+                module.getFunction("__jit__cdr"),
+                std::vector<Value *>({{bod}}),
                 "consts",
                 current);
 
-        cntxt = new AllocaInst(runtime.t->t_RCNTXT, "cntxt", current);
-        CallInst::Create(
-                module.getFunction("initClosureContext"),
-                std::vector<Value *>({{
-                    cntxt, call, rho, sysparent, arglist, op}}),
-                "",
-                current);
+//        cntxt = new AllocaInst(runtime.t->t_RCNTXT, "cntxt", current);
+//        CallInst::Create(
+//                module.getFunction("initClosureContext"),
+//                std::vector<Value *>({{
+//                    cntxt, call, rho, sysparent, arglist, op}}),
+//                "",
+//                current);
 
         /* todo setjmp/longjmp */
 
@@ -239,7 +234,7 @@ private:
         CallInst::Create(
                 module.getFunction("initializeInterpreter"),
                 std::vector<Value *>({{
-                    context, cons, rho,
+                    context, native_consts, native_rho,
                     module.constant(1), module.constant(code[0])}}),
                 "",
                 current);
@@ -253,11 +248,11 @@ private:
     void finalize() {
         Value * result = CallInst::Create(
                 module.getFunction("finalizeInterpreter"), context, "result", lastBB);
-        CallInst::Create(
-                module.getFunction("endClosureContext"),
-                std::vector<Value *>({{cntxt, result}}),
-                "",
-                lastBB);
+//        CallInst::Create(
+//                module.getFunction("endClosureContext"),
+//                std::vector<Value *>({{cntxt, result}}),
+//                "",
+//                lastBB);
         ReturnInst::Create(getGlobalContext(), result, lastBB);
     }
 
@@ -287,7 +282,9 @@ private:
         pc = 1;
         int l = length(body);
 
-        bool callNative = false;
+        SEXP nativeCall = nullptr;
+        std::string nativeName;
+        std::vector<Value*> args;
 
         while (pc < l) {
             current = bbs.blockForPc(pc);
@@ -334,7 +331,12 @@ private:
                 if (fun && TYPEOF(fun) == CLOSXP) {
                     SEXP code = CDR(fun);
                     if (TYPEOF(code) == NATIVESXP) {
-                        callNative = true;
+                        nativeCall = fun;
+                        nativeName = "__native__";
+                        nativeName.append(CHAR(PRINTNAME(name)));
+                        MemoryManager::manager.addSymbol(nativeName, (uint64_t)CAR(code));
+                        pc += 2;
+                        break;
                     }
                 }
                 instruction1(module.GETFUN_OP);
@@ -346,16 +348,38 @@ private:
             INSTRUCTION1(GETBUILTIN_OP);
             INSTRUCTION1(GETINTLBUILTIN_OP);
             INSTRUCTION0(CHECKFUN_OP);
-            INSTRUCTION1(MAKEPROM_OP);
+            case Opcode::MAKEPROM_OP: {
+                if (nativeCall) {
+                    Value * arg = CallInst::Create(
+                            module.getFunction("__jit__vectorElt"),
+                            std::vector<Value *>({{native_consts, module.constant(code[pc+1])}}),
+                            "arg",
+                            current);
+                    args.push_back(
+                       arg
+                    // TODO expose mkPROMISE
+                    //   CallInst::Create(
+                    //       module.getFunction("Rf_mkPROMISE"),
+                    //       std::vector<Value *>({{arg, native_rho}}),
+                    //       "promise",
+                    //       current)
+                    );
+                    pc += 2;
+                    break;
+                }
+                instruction1(module.MAKEPROM_OP);
+                pc += 2;
+                break;
+            }
             INSTRUCTION0(DOMISSING_OP);
             case Opcode::SETTAG_OP: {
-                callNative = false;
+                assert(!nativeCall);
                 instruction1(module.SETTAG_OP);
                 pc += 2;
                 break;
             }
             case Opcode::DODOTS_OP: {
-                callNative = false;
+                assert(!nativeCall);
                 instruction0(module.DODOTS_OP);
                 pc += 1;
                 break;
@@ -366,11 +390,55 @@ private:
             INSTRUCTION0(PUSHTRUEARG_OP);
             INSTRUCTION0(PUSHFALSEARG_OP);
             case Opcode::CALL_OP: {
-                if (callNative) {
-                    // TODO of course this is not guaranteed to be native
-                    instruction1(module.CALL_NATIVE_OP);
+                if (nativeCall) {
+                    Value * call =  CallInst::Create(
+                            module.getFunction("__jit__vectorElt"),
+                            std::vector<Value *>({{native_consts, module.constant(code[pc+1])}}),
+                            "call", current);
+                    Value * op = RuntimeHelper::helper.asConst(nativeCall);
+
+                    // TODO use R_NilValue
+                    Value * arglist = RuntimeHelper::helper.asConst(R_NilValue);
+                    for (auto arg : args) {
+                        arglist = CallInst::Create(
+                                module.getFunction("CONS_NR"),
+                                std::vector<Value *>({{arg, arglist}}),
+                                "arg", current);
+                    }
+
+                    // TODO do inline
+                    Value * newrho = CallInst::Create(
+                            module.getFunction("closureQuickArgumentAdaptor"),
+                            std::vector<Value *>({{op, arglist}}),
+                            "newrho",
+                            current);
+                    Value * cntxt = new AllocaInst(runtime.t->t_RCNTXT, "cntxt", current);
+                    CallInst::Create(
+                            module.getFunction("initClosureContext"),
+                            std::vector<Value *>({{
+                                cntxt, call, newrho, native_rho, arglist, op}}),
+                            "", current);
+
+                    // TODO setup longjump target
+
+                    Value * b = CallInst::Create(
+                         module.getFunction("__jit__cdr"),
+                         std::vector<Value *>({{op}}),
+                         "body", current);
+
+                    Function * llvmFun = (Function*)TAG(CDR(nativeCall));
+                    Value * res = CallInst::Create(
+                        module.getFunction(nativeName, llvmFun),
+                        std::vector<Value *>({{b, newrho}}),
+                        "res", current);
+       
+                    CallInst::Create(
+                            module.getFunction("endClosureContext"),
+                            std::vector<Value *>({{cntxt, res}}),
+                            "", current);
+
                     pc += 2;
-                    callNative = false;
+                    nativeCall = nullptr;
                     break;
                 }
                 instruction1(module.CALL_OP);
@@ -538,7 +606,8 @@ private:
     BasicBlock * current;
     BasicBlock * lastBB;
     Value * context;
-    Value * cntxt;
+    Value * native_rho;
+    Value * native_consts;
     int pc;
     RuntimeHelper & runtime;
 };
