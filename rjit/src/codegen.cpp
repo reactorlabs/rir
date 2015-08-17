@@ -390,7 +390,12 @@ private:
             }
             case Opcode::PUSHCONSTARG_OP: {
                 if (nativeCall) {
-                    appendArg(&arglist, module.constant(code[pc+1]));
+                    Value * c =  CallInst::Create(
+                            module.getFunction("__jit__vectorElt"),
+                            std::vector<Value *>({{
+                                native_consts, module.constant(code[pc+1])}}),
+                            "c", current);
+                    appendArg(&arglist, c);
                 } else {
                     instruction1(module.PUSHCONSTARG_OP);
                 }
