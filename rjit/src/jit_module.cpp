@@ -1,7 +1,7 @@
 #include "jit_module.h"
 #include "runtime_helper.h"
 #include "jit_types.h"
-#include "r_intrinsics.h"
+#include "llvm_includes.h"
 
 #include <iostream>
 
@@ -30,9 +30,6 @@ Function * JITModule::getFunction(const std::string name) {
     auto known = module->getFunction(name);
     if (known) return known;
 
-    auto intrinsic = Intrinsics::get(name, module);
-    if (intrinsic) return intrinsic;
-
     auto lib = RuntimeHelper::helper.getFunction(name);
     if (!lib) {
         std::cout << "I can't find the function " << name << std::endl;
@@ -44,9 +41,30 @@ Function * JITModule::getFunction(const std::string name) {
 
 /** Creates new LLVM module and populates it with declarations of the helper and opcode functions.
   */
+
 JITModule::JITModule() {
     // create new module
-    module = new Module("", getGlobalContext());
+    module = new Module("jit", getGlobalContext());
+
+    // This is a hack to make SEXPREC known in the new module to make sure that
+    // linking in r_instrinsics.bc does not duplicte the type. 
+    module->getOrInsertGlobal("foo", RuntimeHelper::helper.t->t_SEXPREC);
+
+    // TODO: load only once the ModuleCopy -- but this segv atm...
+    //
+    std::string err;
+    // TODO: hardcoded path is not the best idea...
+    DataStreamer *streamer = getDataFileStreamer("rjit/intrinsics.bc", &err);
+    if (!streamer) {
+        std::cout << err << std::endl;
+        DIE;
+    }
+    ErrorOr<std::unique_ptr<Module>> m =
+        getStreamedBitcodeModule("intrinsics", streamer, getGlobalContext());
+    Module * intr = std::move(*m).get();
+    intr->materializeAllPermanently();
+
+    Linker::LinkModules(module, intr);
 
     // switch special instructions
     SWITCH_OP_start = Function::Create(

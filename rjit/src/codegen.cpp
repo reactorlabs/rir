@@ -136,6 +136,8 @@ private:
 };
 
 
+SEXP R_LogicalNAValue, R_TrueValue, R_FalseValue;
+
 class Compiler {
 public:
     Compiler() : runtime(RuntimeHelper::helper) {
@@ -213,16 +215,6 @@ private:
                 "consts",
                 current);
 
-//        cntxt = new AllocaInst(runtime.t->t_RCNTXT, "cntxt", current);
-//        CallInst::Create(
-//                module.getFunction("initClosureContext"),
-//                std::vector<Value *>({{
-//                    cntxt, call, rho, sysparent, arglist, op}}),
-//                "",
-//                current);
-
-        /* todo setjmp/longjmp */
-
         // split the bytecode into basic blocks
         bbs.analyze(body, consts, f);
 
@@ -248,11 +240,7 @@ private:
     void finalize() {
         Value * result = CallInst::Create(
                 module.getFunction("finalizeInterpreter"), context, "result", lastBB);
-//        CallInst::Create(
-//                module.getFunction("endClosureContext"),
-//                std::vector<Value *>({{cntxt, result}}),
-//                "",
-//                lastBB);
+
         ReturnInst::Create(getGlobalContext(), result, lastBB);
     }
 
@@ -274,6 +262,12 @@ private:
     pc += 3; \
     break; }
 
+   void appendArg(Value ** arglist, Value * arg) {
+       *arglist = CallInst::Create(
+               module.getFunction("CONS_NR"),
+               std::vector<Value *>({{arg, *arglist}}),
+               "arglist", current);
+   }
 
     /** Compiles R bytecode into LLVM IR representation.
      */
@@ -284,7 +278,7 @@ private:
 
         SEXP nativeCall = nullptr;
         std::string nativeName;
-        std::vector<Value*> args;
+        Value * arglist;
 
         while (pc < l) {
             current = bbs.blockForPc(pc);
@@ -332,6 +326,7 @@ private:
                     SEXP code = CDR(fun);
                     if (TYPEOF(code) == NATIVESXP) {
                         nativeCall = fun;
+                        arglist = RuntimeHelper::helper.asConst(R_NilValue); 
                         nativeName = "__native__";
                         nativeName.append(CHAR(PRINTNAME(name)));
                         MemoryManager::manager.addSymbol(nativeName, (uint64_t)CAR(code));
@@ -352,74 +347,107 @@ private:
                 if (nativeCall) {
                     Value * arg = CallInst::Create(
                             module.getFunction("__jit__vectorElt"),
-                            std::vector<Value *>({{native_consts, module.constant(code[pc+1])}}),
-                            "arg",
-                            current);
-                    args.push_back(
-                       arg
-                    // TODO expose mkPROMISE
-                    //   CallInst::Create(
-                    //       module.getFunction("Rf_mkPROMISE"),
-                    //       std::vector<Value *>({{arg, native_rho}}),
-                    //       "promise",
-                    //       current)
-                    );
-                    pc += 2;
-                    break;
+                            std::vector<Value *>({{
+                                native_consts, module.constant(code[pc+1])}}),
+                            "prom_code", current);
+                    Value * prom_arg = CallInst::Create(
+                           module.getFunction("Rf_mkPROMISE"),
+                           std::vector<Value *>({{arg, native_rho}}),
+                           "prom_arg", current);
+                    appendArg(&arglist, prom_arg);
+                } else {
+                    instruction1(module.MAKEPROM_OP);
                 }
-                instruction1(module.MAKEPROM_OP);
                 pc += 2;
                 break;
             }
-            INSTRUCTION0(DOMISSING_OP);
+            case Opcode::DOMISSING_OP: {
+                assert(!nativeCall &&
+                        "Cannot handle missing args for native calls yet");
+                instruction1(module.DOMISSING_OP);
+                pc += 2;
+                break;
+            }
             case Opcode::SETTAG_OP: {
-                assert(!nativeCall);
+                assert(!nativeCall &&
+                        "Cannot handle named args for native calls yet");
                 instruction1(module.SETTAG_OP);
                 pc += 2;
                 break;
             }
             case Opcode::DODOTS_OP: {
-                assert(!nativeCall);
+                assert(!nativeCall &&
+                        "Cannot handle dotdot args for native calls yet");
                 instruction0(module.DODOTS_OP);
                 pc += 1;
                 break;
             }
-            INSTRUCTION0(PUSHARG_OP);
-            INSTRUCTION1(PUSHCONSTARG_OP);
-            INSTRUCTION0(PUSHNULLARG_OP);
-            INSTRUCTION0(PUSHTRUEARG_OP);
-            INSTRUCTION0(PUSHFALSEARG_OP);
+            case Opcode::PUSHARG_OP: {
+                assert(!nativeCall && "cannot compile pusharg for native call");
+                instruction1(module.PUSHARG_OP);
+                pc += 2;
+                break;
+            }
+            case Opcode::PUSHCONSTARG_OP: {
+                if (nativeCall) {
+                    appendArg(&arglist, module.constant(code[pc+1]));
+                } else {
+                    instruction1(module.PUSHCONSTARG_OP);
+                }
+                pc += 2;
+                break;
+            }
+            case Opcode::PUSHNULLARG_OP: {
+                if (nativeCall) {
+                    appendArg(&arglist,
+                              RuntimeHelper::helper.asConst(R_NilValue));
+                } else {
+                    instruction1(module.PUSHNULLARG_OP);
+                }
+                break;
+            }
+            case Opcode::PUSHTRUEARG_OP: {
+                if (nativeCall) {
+                    appendArg(&arglist,
+                              RuntimeHelper::helper.asConst(R_TrueValue));
+                } else {
+                    instruction1(module.PUSHTRUEARG_OP);
+                }
+                pc += 2;
+                break;
+            }
+            case Opcode::PUSHFALSEARG_OP: {
+                if (nativeCall) {
+                    appendArg(&arglist,
+                              RuntimeHelper::helper.asConst(R_FalseValue));
+                } else {
+                    instruction1(module.PUSHFALSEARG_OP);
+                }
+                pc += 2;
+                break;
+            }
             case Opcode::CALL_OP: {
                 if (nativeCall) {
                     Value * call =  CallInst::Create(
                             module.getFunction("__jit__vectorElt"),
-                            std::vector<Value *>({{native_consts, module.constant(code[pc+1])}}),
+                            std::vector<Value *>({{
+                                native_consts, module.constant(code[pc+1])}}),
                             "call", current);
                     Value * op = RuntimeHelper::helper.asConst(nativeCall);
 
-                    // TODO use R_NilValue
-                    Value * arglist = RuntimeHelper::helper.asConst(R_NilValue);
-                    for (auto arg : args) {
-                        arglist = CallInst::Create(
-                                module.getFunction("CONS_NR"),
-                                std::vector<Value *>({{arg, arglist}}),
-                                "arg", current);
-                    }
-
-                    // TODO do inline
+                    // TODO do this inline
                     Value * newrho = CallInst::Create(
                             module.getFunction("closureQuickArgumentAdaptor"),
                             std::vector<Value *>({{op, arglist}}),
                             "newrho",
                             current);
-                    Value * cntxt = new AllocaInst(runtime.t->t_RCNTXT, "cntxt", current);
+                    Value * cntxt = new AllocaInst(runtime.t->t_RCNTXT,
+                            "cntxt", current);
                     CallInst::Create(
                             module.getFunction("initClosureContext"),
                             std::vector<Value *>({{
                                 cntxt, call, newrho, native_rho, arglist, op}}),
                             "", current);
-
-                    // TODO setup longjump target
 
                     Value * b = CallInst::Create(
                          module.getFunction("__jit__cdr"),
@@ -428,20 +456,26 @@ private:
 
                     Function * llvmFun = (Function*)TAG(CDR(nativeCall));
                     Value * res = CallInst::Create(
-                        module.getFunction(nativeName, llvmFun),
-                        std::vector<Value *>({{b, newrho}}),
+                        module.getFunction("closureNativeCallTrampoline"),
+                        std::vector<Value *>({{
+                            module.getFunction(nativeName, llvmFun),
+                            cntxt, b, newrho}}),
                         "res", current);
+
+                    CallInst::Create(
+                        module.getFunction("bcnpush"),
+                        std::vector<Value *>({{res}}),
+                        "", current);
        
                     CallInst::Create(
                             module.getFunction("endClosureContext"),
                             std::vector<Value *>({{cntxt, res}}),
                             "", current);
 
-                    pc += 2;
                     nativeCall = nullptr;
-                    break;
+                } else {
+                    instruction1(module.CALL_OP);
                 }
-                instruction1(module.CALL_OP);
                 pc += 2;
                 break;
             }

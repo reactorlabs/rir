@@ -1,5 +1,4 @@
 #include "memory_manager.h"
-#include "r_intrinsics.h"
 
 MemoryManager MemoryManager::manager;
 

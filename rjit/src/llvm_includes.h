@@ -16,6 +16,14 @@
 #include "llvm/Support/DataStream.h"
 #include "llvm/Bitcode/ReaderWriter.h"
 
+#include "llvm/Transforms/Utils/Cloning.h"
+#include "llvm/Linker/Linker.h"
+
+#include "llvm/IR/PassManager.h"
+#include "llvm/Transforms/IPO.h"
+#include "llvm/IR/LegacyPassManager.h"
+#include "llvm/Transforms/IPO/PassManagerBuilder.h"
+
 #define DIE asm("int3")
 
 
