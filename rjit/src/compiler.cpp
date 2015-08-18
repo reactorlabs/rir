@@ -285,7 +285,14 @@ private:
         return result;
     }
 
+    /** Compiles an expression.
+
+      The expression as a result is always visible by default, which can be changed in the respective compiling functions.
+
+      An expression is either a constant, or symbol (variable read), or a function call.
+      */
     Value * compileExpression(SEXP value) {
+        context->visibleResult = true;
         switch (TYPEOF(value)) {
         case SYMSXP:
             return compileSymbol(value);
@@ -302,20 +309,27 @@ private:
         }
     }
 
+    /** Compiles user constant, which is SEXP constant marked with userConstant intrinsic.
+      */
     Value * compileConstant(SEXP value) {
-        context->visibleResult = true;
         Value * result = constant(value);
         INTRINSIC(m.userConstant, result);
         return result;
     }
 
+    /** Compiles a symbol, which reads as variable read using genericGetVar intrinsic.
+      */
     Value * compileSymbol(SEXP value) {
-        context->visibleResult = true;
         return INTRINSIC(m.genericGetVar, constant(value), context->rho);
     }
 
+    /** Compiles a call expressed in the AST.
+
+      For simple calls checks if these can be compiled using intrinsics and does so, if possible. For others emits the function getting / checking code and then generates the arguments and calls the function.
+
+      This differs depending on the function type. Special functions do not evaluate their arguments at all, builtin functions are always eager and normal functions are lazy.
+     */
     Value * compileCall(SEXP call) {
-        context->visibleResult = true;
         Value * f;
         if (TYPEOF(CAR(call)) != SYMSXP) {
             // it is a complex function, first get the value of the function and then check it
@@ -364,6 +378,10 @@ private:
         return phi;
     }
 
+    /** Compiles arguments for given function.
+
+      Creates the pairlist of arguments used in R from the arguments and their names.
+      */
     Value * compileArguments(SEXP args, bool eager) {
         // if there are no arguments
         if (args == R_NilValue)
@@ -387,6 +405,10 @@ private:
         return result;
     }
 
+    /** Compiles a single argument.
+
+      Self evaluating literals are always returned as SEXP constants, anything else is either evaluated directly if eager is true, or they are compiled as new promises.
+     */
     Value * compileArgument(SEXP arg, bool eager) {
         switch (TYPEOF(arg)) {
         case LGLSXP:
@@ -745,10 +767,22 @@ private:
         return ConstantInt::get(getGlobalContext(), APInt(32, value));
     }
 
+    /** Current compilation module.
+
+      The module contains the intrinsic function declarations as well as all compiled functions.
+     */
     JITModule m;
 
+    /** The context of current compilation.
+
+      Each compiled function (including promises) has its own context. The context contains information about current return condition and visibility, break and next targets, R objects required and so on.
+     */
     Context * context;
 
+    /** List of relocations to be done when compiling.
+
+      When a function is compiled, it is first translated to bitcode and a native SXP is created for it using nullptr for the native code. The function's SXP is added to the list of relocations here. When the compilation is done, the module is finalized and all SEXPs in the relocation lists are patched so that they point to correct native functions.
+      */
     std::vector<SEXP> relocations;
 
 

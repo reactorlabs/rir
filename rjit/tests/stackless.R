@@ -77,7 +77,6 @@ fx <- jit.compile(function(a) if (a) 1)
 stopifnot(fx(10) == 1)
 stopifnot(fx(0) == NULL);
 
-
 # repeat loop w/o context
 fx <- jit.compile(function(a) {
     b = 0
