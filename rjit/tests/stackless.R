@@ -1,0 +1,115 @@
+require("compiler")
+# ignore the package for now
+#require("rjit")
+
+# simple constant
+ex <- jit.compile(quote(1))
+stopifnot(eval(ex) == 1)
+
+# simple variable
+ex <- jit.compile(quote(a))
+a <- 10
+stopifnot(eval(ex) == 10)
+a <- 45
+stopifnot(eval(ex) == 45)
+
+# simple function call - builtin consts
+ex <- jit.compile(quote(1 + 2))
+stopifnot(eval(ex) == 3)
+
+# simple function call - builtin vars
+ex <- jit.compile(quote(a + b))
+a <- 20
+b <- 10
+stopifnot(eval(ex) == 30)
+
+# simple function call - user function
+f <- function(a, b) a + b
+ex <- jit.compile(quote(f(3, 4)))
+stopifnot(eval(ex) == 7)
+
+# blocks
+ex <- jit.compile(quote({ 1 ; 2; 3; }))
+stopifnot(eval(ex) == 3)
+
+# creating a function compiles it
+ex <- jit.compile(quote(function(a, b) a + b))
+f = eval(ex)
+stopifnot(typeof(.Internal(bodyCode(f))) == "native")
+
+# created function can be evaluated
+stopifnot(f(1, 2) == 3)
+
+# a function can be compiled
+ex <- jit.compile(function(a, b) a + b)
+stopifnot(typeof(.Internal(bodyCode(ex))) == "native")
+stopifnot(ex(10, -2) == 8)
+
+# return statement works
+f <- jit.compile(function(a, b) { return(1); 2 })
+stopifnot(f(1, 2) == 1)
+
+# empty return returns NULL
+f <- jit.compile(function(a, b) return())
+stopifnot(f() == NULL)
+
+# return in a promise
+f <- function(a) {
+    if (a) ptest <<- 10;
+    100;
+}
+fx <- jit.compile(function(a) {
+    f(if(a) TRUE else return(66))
+})
+stopifnot(fx(0) == 66)
+stopifnot(! exists("ptest"))
+stopifnot(fx(1) == 100)
+stopifnot(exists("ptest"))
+stopifnot(ptest == 10)
+
+# condition
+fx <- jit.compile(function(a) if (a) 1 else 2)
+stopifnot(fx(10) == 1)
+stopifnot(fx(0) == 2);
+
+# condition, no else
+fx <- jit.compile(function(a) if (a) 1)
+stopifnot(fx(10) == 1)
+stopifnot(fx(0) == NULL);
+
+
+# repeat loop w/o context
+fx <- jit.compile(function(a) {
+    b = 0
+    repeat {
+      a = a - 1
+      if (a == 0)
+          break
+      if (a == 2)
+          next
+      b = b + a
+    }
+    b
+})
+stopifnot(fx(4) == 4)
+
+# while loop w/o context
+fx <- jit.compile(function(a) {
+    b = 0
+    while (a > 0) {
+      a = a - 1
+      if (a == 2)
+          next
+      b = b + a
+    }
+    b
+})
+stopifnot(fx(4) == 4)
+
+
+
+
+
+
+
+
