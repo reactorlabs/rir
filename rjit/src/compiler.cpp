@@ -68,6 +68,8 @@ PointerType * initializeTypes();
 
 namespace t {
 
+Type * Int;
+
 PointerType * SEXP = initializeTypes();
 
 StructType * SEXPREC;
@@ -90,10 +92,10 @@ FunctionType * int_sexpsexp;
 PointerType * initializeTypes() {
     LLVMContext & context = getGlobalContext();
     std::vector<Type*> fields;
-    Type * t_Int = IntegerType::get(context, 32);
+    t::Int = IntegerType::get(context, 32);
     StructType * t_sxpinfo_struct = StructType::create(context, "struct.sxpinfo_struct");
     // sxpinfo_struct is just int32 in a structure, the bitmasking is not a concern of the type
-    fields = { t_Int };
+    fields = { t::Int };
     t_sxpinfo_struct->setBody(fields, false);
     // SEXPREC
     t::SEXPREC = StructType::create(context, "struct.SEXPREC");
@@ -117,9 +119,9 @@ PointerType * initializeTypes() {
     DECLARE(sexp_sexpsexp, t::SEXP, t::SEXP, t::SEXP);
     DECLARE(sexp_sexpsexpsexp, t::SEXP, t::SEXP, t::SEXP, t::SEXP);
     DECLARE(sexp_sexpsexpsexpsexp, t::SEXP, t::SEXP, t::SEXP, t::SEXP, t::SEXP);
-    DECLARE(sexp_sexpsexpint, t::SEXP, t::SEXP, t::SEXP, t_Int);
-    DECLARE(int_sexp, t_Int, t::SEXP);
-    DECLARE(int_sexpsexp, t_Int, t::SEXP, t::SEXP);
+    DECLARE(sexp_sexpsexpint, t::SEXP, t::SEXP, t::SEXP, t::Int);
+    DECLARE(int_sexp, t::Int, t::SEXP);
+    DECLARE(int_sexpsexp, t::Int, t::SEXP, t::SEXP);
 #undef DECLARE
     // initialize LLVM backend
     LLVMInitializeNativeTarget();
@@ -169,6 +171,10 @@ public:
     DECLARE(convertToLogicalNoNA, int_sexpsexp);
     DECLARE(createClosure, sexp_sexpsexpsexp);
     DECLARE(returnJump, void_sexpsexp);
+    DECLARE(startFor, sexp_sexpsexp);
+    DECLARE(loopSequenceLength, int_sexpsexp);
+    DECLARE(initialLoopControlValue, sexp_sexp);
+    DECLARE(getForLoopValue, sexp_sexpsexpint);
 
     JITModule(std::string const & name):
         m(new Module(name, getGlobalContext())) {}
@@ -642,7 +648,7 @@ private:
         BasicBlock * oldNext = context->nextBlock;
         // create the body and next basic blocks
         context->nextBlock = BasicBlock::Create(getGlobalContext(), "repeatBody", context->f, nullptr);
-        context->breakBlock = BasicBlock::Create(getGlobalContext(), "repeatNext", context->f, nullptr);
+        context->breakBlock = BasicBlock::Create(getGlobalContext(), "repeatBreak", context->f, nullptr);
         JUMP(context->nextBlock);
         context->b = context->nextBlock;
         compileExpression(bodyAst);
@@ -670,7 +676,7 @@ private:
         BasicBlock * oldNext = context->nextBlock;
         // create the body and next basic blocks
         context->nextBlock = BasicBlock::Create(getGlobalContext(), "whileCond", context->f, nullptr);
-        context->breakBlock = BasicBlock::Create(getGlobalContext(), "whileNext", context->f, nullptr);
+        context->breakBlock = BasicBlock::Create(getGlobalContext(), "whileBreak", context->f, nullptr);
         JUMP(context->nextBlock);
         context->b = context->nextBlock;
         // compile the condition
@@ -693,7 +699,51 @@ private:
     }
 
     Value * compileForLoop(SEXP ast) {
-        return nullptr;
+        SEXP controlAst = CAR(CDR(ast));
+        assert(TYPEOF(controlAst) == SYMSXP and "Only symbols allowed as loop control variables");
+        SEXP seqAst = CAR(CDR(CDR(ast)));
+        SEXP bodyAst = CAR(CDR(CDR(CDR(ast))));
+        if (not canSkipLoopContext(bodyAst))
+            return nullptr;
+        // save old loop pointers from the context
+        BasicBlock * oldBreak = context->breakBlock;
+        BasicBlock * oldNext = context->nextBlock;
+        // create the body and next basic blocks
+        context->nextBlock = BasicBlock::Create(getGlobalContext(), "forNext", context->f, nullptr);
+        context->breakBlock = BasicBlock::Create(getGlobalContext(), "forBreak", context->f, nullptr);
+        // This is a simple basic block to which all next's jump and which then jumps to forCond so that there is a simpler phi node at forCond.
+        BasicBlock * forCond = BasicBlock::Create(getGlobalContext(), "forCond", context->f, nullptr);
+        BasicBlock * forBody = BasicBlock::Create(getGlobalContext(), "forBody", context->f, nullptr);
+        // now initialize the loop control structures
+        Value * seq2 = compileExpression(seqAst);
+        Value * seq = INTRINSIC(m.startFor, seq2, context->rho);
+        Value * seqLength = INTRINSIC(m.loopSequenceLength, seq, constant(ast));
+        Value * initial = INTRINSIC(m.initialLoopControlValue, seq);
+        BasicBlock * forStart = context->b;
+        JUMP(context->nextBlock);
+        context->b = context->nextBlock;
+        PHINode * control = PHINode::Create(t::Int, 2, "loopControl", context->b);
+        control->addIncoming(constant(0), forStart);
+        // now check if control is smaller than length
+        ICmpInst * test = new ICmpInst(*(context->b), ICmpInst::ICMP_ULT, control, seqLength, "condition");
+        BranchInst::Create(forBody, context->breakBlock, test, context->b);
+        // move to the for loop body, where we have to get the control variable value and
+        context->b = forBody;
+
+
+
+
+
+
+        JUMP(context->nextBlock);
+        context->b = context->breakBlock;
+        // restore the old loop pointers in the context
+        context->breakBlock = oldBreak;
+        context->nextBlock = oldNext;
+        // return R_NilValue
+        context->visibleResult = false;
+        return constant(R_NilValue);
+
     }
 
     /** Determines whether we can skip creation of the loop context or not. The code is taken from Luke's bytecode compiler.

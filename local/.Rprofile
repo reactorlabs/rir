@@ -17,10 +17,13 @@ packageTests <- function() {
     cat("IM IN UR DLLZ\n")
     source("../rjit/R/rjit.R")
     cat("IM IN UR PACKAGE\n")
-    packageTests()
+    #packageTests()
     cat("AWSHUM\n")
     f <<- function(a, b) a - b
-    x <<- jit.compile(quote(a * b))
+    x <<- jit.compile(function(a, b) {
+    while (a < 10) b = b + a;
+    b;
+    })
 }
 
 .Last <- function() {
