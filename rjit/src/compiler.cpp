@@ -83,6 +83,7 @@ FunctionType * sexp_sexpsexp;
 FunctionType * sexp_sexpsexpsexp;
 FunctionType * sexp_sexpsexpsexpsexp;
 
+FunctionType * sexp_sexpint;
 FunctionType * sexp_sexpsexpint;
 FunctionType * int_sexp;
 FunctionType * int_sexpsexp;
@@ -119,6 +120,7 @@ PointerType * initializeTypes() {
     DECLARE(sexp_sexpsexp, t::SEXP, t::SEXP, t::SEXP);
     DECLARE(sexp_sexpsexpsexp, t::SEXP, t::SEXP, t::SEXP, t::SEXP);
     DECLARE(sexp_sexpsexpsexpsexp, t::SEXP, t::SEXP, t::SEXP, t::SEXP, t::SEXP);
+    DECLARE(sexp_sexpint, t::SEXP, t::SEXP, t::Int);
     DECLARE(sexp_sexpsexpint, t::SEXP, t::SEXP, t::SEXP, t::Int);
     DECLARE(int_sexp, t::Int, t::SEXP);
     DECLARE(int_sexpsexp, t::Int, t::SEXP, t::SEXP);
@@ -173,8 +175,7 @@ public:
     DECLARE(returnJump, void_sexpsexp);
     DECLARE(startFor, sexp_sexpsexp);
     DECLARE(loopSequenceLength, int_sexpsexp);
-    DECLARE(initialLoopControlValue, sexp_sexp);
-    DECLARE(getForLoopValue, sexp_sexpsexpint);
+    DECLARE(getForLoopValue, sexp_sexpint);
 
     JITModule(std::string const & name):
         m(new Module(name, getGlobalContext())) {}
@@ -698,6 +699,25 @@ private:
         return constant(R_NilValue);
     }
 
+    /** For loop is compiled into the following structure:
+
+          get the sequence
+          length = sequence length
+          index = 0
+          goto forCond
+      forCond:
+          goto (index < length) ? forBody : forBreak
+      forBody:
+          setVar(controlVar, getForLoopValue(seq, index)
+          body of the loop
+          goto forNext
+      forNext:
+          index += 1
+          goto forCond
+      forBreak:
+
+      This uses a jump too many, but it simplifies the SSA considerations and will be optimized by LLVM anyhow when we go for LLVM optimizations.
+      */
     Value * compileForLoop(SEXP ast) {
         SEXP controlAst = CAR(CDR(ast));
         assert(TYPEOF(controlAst) == SYMSXP and "Only symbols allowed as loop control variables");
@@ -718,24 +738,26 @@ private:
         Value * seq2 = compileExpression(seqAst);
         Value * seq = INTRINSIC(m.startFor, seq2, context->rho);
         Value * seqLength = INTRINSIC(m.loopSequenceLength, seq, constant(ast));
-        Value * initial = INTRINSIC(m.initialLoopControlValue, seq);
         BasicBlock * forStart = context->b;
-        JUMP(context->nextBlock);
-        context->b = context->nextBlock;
+        JUMP(forCond);
+        context->b = forCond;
         PHINode * control = PHINode::Create(t::Int, 2, "loopControl", context->b);
         control->addIncoming(constant(0), forStart);
         // now check if control is smaller than length
         ICmpInst * test = new ICmpInst(*(context->b), ICmpInst::ICMP_ULT, control, seqLength, "condition");
         BranchInst::Create(forBody, context->breakBlock, test, context->b);
-        // move to the for loop body, where we have to get the control variable value and
+        // move to the for loop body, where we have to set the control variable properly
         context->b = forBody;
-
-
-
-
-
-
+        Value * controlValue = INTRINSIC(m.getForLoopValue, seq, control);
+        INTRINSIC(m.genericSetVar, constant(controlAst), controlValue, context->rho);
+        // now compile the body of the loop
+        compileExpression(bodyAst);
         JUMP(context->nextBlock);
+        // in the next block, increment the internal control variable and jump to forCond
+        context->b = context->nextBlock;
+        Value * control1 = BinaryOperator::Create(Instruction::Add, control, constant(1), "", context->b);
+        control->addIncoming(control1, context->nextBlock);
+        JUMP(forCond);
         context->b = context->breakBlock;
         // restore the old loop pointers in the context
         context->breakBlock = oldBreak;
@@ -743,7 +765,6 @@ private:
         // return R_NilValue
         context->visibleResult = false;
         return constant(R_NilValue);
-
     }
 
     /** Determines whether we can skip creation of the loop context or not. The code is taken from Luke's bytecode compiler.
