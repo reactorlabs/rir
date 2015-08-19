@@ -105,9 +105,21 @@ fx <- jit.compile(function(a) {
 })
 stopifnot(fx(4) == 4)
 
+# for loop w/o context
 
-
-
+fx <- jit.compile(function(a) {
+    b = 0
+    for (i in a) {
+        if (i == 3)
+            break
+        if (i == 7)
+            next
+        b = b + i
+    }
+    b
+})
+stopifnot(fx(c(3,2,1)) == 0);
+stopifnot(fx(c(2, 7, 1)) == 3);
 
 
 
