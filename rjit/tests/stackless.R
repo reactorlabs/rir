@@ -121,6 +121,47 @@ fx <- jit.compile(function(a) {
 stopifnot(fx(c(3,2,1)) == 0);
 stopifnot(fx(c(2, 7, 1)) == 3);
 
+#integral switch
+fx <- jit.compile(function(a) {
+    switch(a, 1,2,3,4,5,6)
+    })
+stopifnot(fx(1) == 1)
+stopifnot(fx(10) == 6)
+stopifnot(fx(0) == 6)
+stopifnot(fx(3) == 3)
+
+#character switch
+fx <- jit.compile(function(a) {
+    switch(a, a = 1, b = 2, c = 3, d = 4)
+    })
+stopifnot(fx("a") == 1)
+stopifnot(fx("b") == 2)
+stopifnot(fx("c") == 3)
+stopifnot(fx("d") == 4)
+stopifnot(fx("df") == 4)
+stopifnot(fx(1) == 1)
+stopifnot(fx(2) == 2)
+stopifnot(fx(3) == 3)
+stopifnot(fx(4) == 4)
+stopifnot(fx(5) == 4)
+
+#character switch default value not last
+fx <- jit.compile(function(a) {
+    switch(a, a = 1, b = 2, 10, c = 3, d = 4)
+    })
+stopifnot(fx("a") == 1)
+stopifnot(fx("b") == 2)
+stopifnot(fx("c") == 3)
+stopifnot(fx("d") == 4)
+stopifnot(fx("df") == 10)
+stopifnot(fx(1) == 1)
+stopifnot(fx(2) == 2)
+stopifnot(fx(3) == 10)
+stopifnot(fx(4) == 3)
+stopifnot(fx(5) == 4)
+stopifnot(fx(6) == 4)
+
+
 
 
 

@@ -21,9 +21,8 @@ packageTests <- function() {
     cat("AWSHUM\n")
     f <<- function(a, b) a - b
     x <<- jit.compile(function(a) {
-        b <- 0;
-        for (i in a) b <- b + i;
-        b;
+#        switch(a, 1,2,3,4,5,6,7,8,9,10)
+         switch(a, a = 1, b = 2, c= 3, d = 4)
     })
 }
 

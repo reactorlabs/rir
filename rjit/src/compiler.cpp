@@ -31,6 +31,8 @@ namespace symbol {
 DECLARE(Block, "{");
 DECLARE(Parenthesis, "(");
 DECLARE(Assign, "<-");
+DECLARE(Assign2, "=");
+DECLARE(SuperAssign, "<<-");
 DECLARE(If, "if");
 DECLARE(Function, "function");
 DECLARE(Return, "return");
@@ -39,6 +41,7 @@ DECLARE(While, "while");
 DECLARE(Repeat, "repeat");
 DECLARE(Break, "break");
 DECLARE(Next, "next");
+DECLARE(Switch, "switch");
 DECLARE(Add, "+");
 DECLARE(Sub, "-");
 DECLARE(Mul, "*");
@@ -87,6 +90,8 @@ FunctionType * sexp_sexpint;
 FunctionType * sexp_sexpsexpint;
 FunctionType * int_sexp;
 FunctionType * int_sexpsexp;
+FunctionType * int_sexpsexpsexp;
+FunctionType * int_sexpint;
 
 }
 
@@ -124,6 +129,8 @@ PointerType * initializeTypes() {
     DECLARE(sexp_sexpsexpint, t::SEXP, t::SEXP, t::SEXP, t::Int);
     DECLARE(int_sexp, t::Int, t::SEXP);
     DECLARE(int_sexpsexp, t::Int, t::SEXP, t::SEXP);
+    DECLARE(int_sexpsexpsexp, t::Int, t::SEXP, t::SEXP, t::SEXP);
+    DECLARE(int_sexpint, t::Int, t::SEXP, t::Int);
 #undef DECLARE
     // initialize LLVM backend
     LLVMInitializeNativeTarget();
@@ -170,12 +177,16 @@ public:
     DECLARE(genericBitOr, sexp_sexpsexpsexpsexp);
     DECLARE(genericNot, sexp_sexpsexpsexp);
     DECLARE(genericSetVar, void_sexpsexpsexp);
+    DECLARE(genericSetVarParent, void_sexpsexpsexp);
     DECLARE(convertToLogicalNoNA, int_sexpsexp);
     DECLARE(createClosure, sexp_sexpsexpsexp);
     DECLARE(returnJump, void_sexpsexp);
     DECLARE(startFor, sexp_sexpsexp);
     DECLARE(loopSequenceLength, int_sexpsexp);
     DECLARE(getForLoopValue, sexp_sexpint);
+    DECLARE(checkSwitchControl, void_sexpsexp);
+    DECLARE(switchControlInteger, int_sexpint);
+    DECLARE(switchControlCharacter, int_sexpsexpsexp);
 
     JITModule(std::string const & name):
         m(new Module(name, getGlobalContext())) {}
@@ -454,6 +465,10 @@ private:
         }
         CASE(symbol::Assign)
             return compileAssignment(call);
+        CASE(symbol::Assign2)
+            return compileAssignment(call);
+        CASE(symbol::SuperAssign)
+            return compileSuperAssignment(call);
         CASE(symbol::If)
             return compileCondition(call);
         CASE(symbol::Break)
@@ -466,6 +481,8 @@ private:
             return compileWhileLoop(call);
         CASE(symbol::For)
             return compileForLoop(call);
+        CASE(symbol::Switch)
+            return compileSwitch(call);
         CASE(symbol::Add)
             return compileBinaryOrUnary(m.genericAdd, m.genericUnaryPlus, call);
         CASE(symbol::Sub)
@@ -549,6 +566,19 @@ private:
             return nullptr;
         Value * v = compileExpression(CAR(CDR(e)));
         INTRINSIC(m.genericSetVar, constant(CAR(e)), v, context->rho);
+        context->visibleResult = false;
+        return v;
+    }
+
+    /** Super assignment is compiled as genericSetVarParentIntrinsic
+     */
+    Value * compileSuperAssignment(SEXP e) {
+        e = CDR(e);
+        // intrinsic only handles simple assignments
+        if (TYPEOF(CAR(e)) != SYMSXP)
+            return nullptr;
+        Value * v = compileExpression(CAR(CDR(e)));
+        INTRINSIC(m.genericSetVarParent, constant(CAR(e)), v, context->rho);
         context->visibleResult = false;
         return v;
     }
@@ -795,6 +825,104 @@ private:
             ast = CDR(ast);
         }
         return true;
+    }
+
+    /** Compiles the switch statement.
+
+      There are two kinds of switch - integral and character one and they differ in what they are doing. The integral switch can be used always, and in its case the control variable is simple index to the cases. Contrary to the
+
+          ctrl = evaluate switch control
+          checkSwitchControl()
+          goto sexptype() == STRSXP ? switchCharacter : switchIntegral
+      switchIntegral:
+          t = switchControlInteger(ctrl, numCases)
+          switch (t):
+      switchCharacter:
+          t = switchControlCharacter(ctrl, call, caseStrings)
+          switch (t):
+      switchCase1:
+          ...
+          goto switchNext
+      switchCaseN:
+          ...
+          goto switchNext
+      switchNext:
+          phi for the cases
+
+
+     */
+    Value * compileSwitch(SEXP call) {
+        SEXP x = CDR(call);
+        SEXP condAst = CAR(x);
+        x = CDR(x);
+        std::vector<SEXP> caseAsts;
+        std::vector<SEXP> caseNames;
+        int defaultIdx = -1;
+        int i = 0;
+        while (x != R_NilValue) {
+            caseAsts.push_back(CAR(x));
+            SEXP name = TAG(x);
+            if (name == R_NilValue)
+                if (defaultIdx == -1)
+                    defaultIdx = i;
+                else
+                    defaultIdx = -2;
+            else
+                caseNames.push_back(name);
+            x = CDR(x);
+            ++i;
+        }
+        // actual switch compilation - get the control value and check it
+        Value * control = compileExpression(condAst);
+        INTRINSIC(m.checkSwitchControl, control, constant(call));
+        Value * ctype = INTRINSIC(m.sexpType, control);
+        ICmpInst* cond = new ICmpInst(*context->b, ICmpInst::ICMP_EQ, ctype, constant(STRSXP), "");
+        BasicBlock * switchIntegral = BasicBlock::Create(getGlobalContext(), "switchIntegral", context->f, nullptr);
+        BasicBlock * switchCharacter = BasicBlock::Create(getGlobalContext(), "switchCharacter", context->f, nullptr);
+        BasicBlock * switchNext = BasicBlock::Create(getGlobalContext(), "switchNext", context->f, nullptr);
+        BranchInst::Create(switchCharacter, switchIntegral, cond, context->b);
+        // integral switch is simple
+        context->b = switchIntegral;
+        Value * caseIntegral = INTRINSIC(m.switchControlInteger, control, constant(caseAsts.size()));
+        SwitchInst * swInt = SwitchInst::Create(caseIntegral, switchNext, caseAsts.size(), context->b);
+        // for character switch we need to construct the vector,
+        context->b = switchCharacter;
+        SEXP cases;
+        if (defaultIdx != -2 ) {
+            cases = allocVector(STRSXP, caseNames.size());
+            for (size_t i = 0; i < caseNames.size(); ++i)
+                SET_STRING_ELT(cases, i, PRINTNAME(caseNames[i]));
+        } else {
+            cases = R_NilValue;
+        }
+        context->addObject(cases);
+        Value * caseCharacter = INTRINSIC(m.switchControlCharacter, control, constant(call), constant(cases));
+        SwitchInst * swChar = SwitchInst::Create(caseCharacter, switchNext, caseAsts.size(), context->b);
+        // create the phi node at the end
+        context->b = switchNext;
+        PHINode * result = PHINode::Create(t::SEXP, caseAsts.size(), "", context->b);
+        // walk the cases and create their blocks, add them to switches and their results to the phi node
+        BasicBlock * last;
+        for (int i = 0; i < caseAsts.size(); ++i) {
+            context->b = last = BasicBlock::Create(getGlobalContext(), "switchCase", context->f, nullptr);
+            swInt->addCase(constant(i), last);
+            if (defaultIdx == -1 or defaultIdx > i) {
+                swChar->addCase(constant(i), last);
+            } else if (defaultIdx < i) {
+                swChar->addCase(constant(i - 1), last);
+            } else {
+                swChar->addCase(constant(caseAsts.size() -1), last);
+                swChar->setDefaultDest(last);
+            }
+            Value * caseResult = compileExpression(caseAsts[i]);
+            JUMP(switchNext);
+            result->addIncoming(caseResult, context->b);
+        }
+        if (swChar->getDefaultDest() == switchNext)
+            swChar->setDefaultDest(last);
+        swInt->setDefaultDest(last);
+        context->b = switchNext;
+        return result;
     }
 
     /** Compiles operators that can be either binary, or unary, based on the number of call arguments. Takes the binary and unary intrinsics to be used and the full call ast.
