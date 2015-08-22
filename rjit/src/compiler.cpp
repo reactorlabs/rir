@@ -77,6 +77,9 @@ PointerType * SEXP = initializeTypes();
 
 StructType * SEXPREC;
 
+StructType * CallArgs;
+PointerType * CallArgsPtr;
+
 FunctionType * void_void;
 FunctionType * void_sexp;
 FunctionType * void_sexpsexp;
@@ -92,6 +95,10 @@ FunctionType * int_sexp;
 FunctionType * int_sexpsexp;
 FunctionType * int_sexpsexpsexp;
 FunctionType * int_sexpint;
+
+FunctionType * void_argssexp;
+FunctionType * void_argssexpsexp;
+FunctionType * void_argssexpint;
 
 }
 
@@ -114,6 +121,11 @@ PointerType * initializeTypes() {
     // now the real SEXPREC
     fields = { t_sxpinfo_struct, t::SEXP, t::SEXP, t::SEXP, u1 };
     t::SEXPREC->setBody(fields, false);
+    // call header and pointer
+    t::CallArgs = StructType::create(context, "struct.CallHeader");
+    fields = { t::SEXP, t::SEXP };
+    t::CallArgs->setBody(fields);
+    t::CallArgsPtr = PointerType::get(t::CallArgs, 0);
     // API function types
     Type * t_void = Type::getVoidTy(context);
 #define DECLARE(name, ret, ...) fields = { __VA_ARGS__ }; t::name = FunctionType::get(ret, fields, false)
@@ -131,6 +143,9 @@ PointerType * initializeTypes() {
     DECLARE(int_sexpsexp, t::Int, t::SEXP, t::SEXP);
     DECLARE(int_sexpsexpsexp, t::Int, t::SEXP, t::SEXP, t::SEXP);
     DECLARE(int_sexpint, t::Int, t::SEXP, t::Int);
+    DECLARE(void_argssexp, t_void, t::CallArgsPtr, t::SEXP);
+    DECLARE(void_argssexpsexp, t_void, t::CallArgsPtr, t::SEXP, t::SEXP);
+    DECLARE(void_argssexpint, t_void, t::CallArgsPtr, t::SEXP, t::Int);
 #undef DECLARE
     // initialize LLVM backend
     LLVMInitializeNativeTarget();
@@ -154,10 +169,10 @@ public:
     DECLARE(sexpType, int_sexp);
     DECLARE(call, sexp_sexpsexpsexpsexp);
     DECLARE(createPromise, sexp_sexpsexp);
-    DECLARE(createArgument, sexp_sexp);
-    DECLARE(createKeywordArgument, sexp_sexpsexp);
-    DECLARE(addArgument, sexp_sexpsexp);
-    DECLARE(addKeywordArgument, sexp_sexpsexpsexp);
+//    DECLARE(createArgument, sexp_sexp);
+//    DECLARE(createKeywordArgument, sexp_sexpsexp);
+//    DECLARE(addArgument, sexp_sexpsexp);
+//    DECLARE(addKeywordArgument, sexp_sexpsexpsexp);
     DECLARE(genericUnaryMinus, sexp_sexpsexpsexp);
     DECLARE(genericUnaryPlus, sexp_sexpsexpsexp);
     DECLARE(genericAdd, sexp_sexpsexpsexpsexp);
@@ -187,6 +202,9 @@ public:
     DECLARE(checkSwitchControl, void_sexpsexp);
     DECLARE(switchControlInteger, int_sexpint);
     DECLARE(switchControlCharacter, int_sexpsexpsexp);
+    DECLARE(addArgument, void_argssexp);
+    DECLARE(addKeywordArgument, void_argssexpsexp);
+    DECLARE(addEllipsisArgument, void_argssexpint);
 
     JITModule(std::string const & name):
         m(new Module(name, getGlobalContext())) {}
@@ -341,6 +359,116 @@ private:
         return INTRINSIC(m.genericGetVar, constant(value), context->rho);
     }
 
+    Value * compileCall(SEXP call) {
+        Value * f;
+        if (TYPEOF(CAR(call)) != SYMSXP) {
+            // it is a complex function, first get the value of the function and then check it
+            f = compileExpression(CAR(call));
+            INTRINSIC(m.checkFunction, f);
+        } else {
+            // it is simple function - try compiling it with intrinsics
+            f = compileIntrinsic(call);
+            if (f != nullptr)
+                return f;
+            // otherwise just do get function
+            f = INTRINSIC(m.getFunction, constant(CAR(call)), context->rho);
+        }
+        // now create the CallArgs structure as local variable
+        Value * callArgs = new AllocaInst(t::CallArgs, "callArgs", context->b);
+        // set first to R_NilValue
+        std::vector<Value*> callArgsIndices = { constant(0), constant(0) };
+        Value * callArgsFirst = GetElementPtrInst::Create(callArgs, callArgsIndices, "", context->b);
+        // now we must compile the arguments, this depends on the actual type of the function - promises by default, eager for builtins and no evaluation for specials
+        Value * ftype = INTRINSIC(m.sexpType, f);
+        // switch the function call execution based on the function type
+        BasicBlock * special = BasicBlock::Create(getGlobalContext(), "special", context->f, nullptr);
+        BasicBlock * builtin = BasicBlock::Create(getGlobalContext(), "builtin", context->f, nullptr);
+
+        BasicBlock * closure = BasicBlock::Create(getGlobalContext(), "closure", context->f, nullptr);
+        BasicBlock * next = BasicBlock::Create(getGlobalContext(), "next", context->f, nullptr);
+        SwitchInst * sw = SwitchInst::Create(ftype, closure, 2, context->b);
+        sw->addCase(constant(SPECIALSXP), special);
+        sw->addCase(constant(BUILTINSXP), builtin);
+        // in special case, do not evaluate arguments and just call the function
+        context->b = special;
+        Value * specialResult = INTRINSIC(m.call, constant(call), f, constant(R_NilValue), context->rho);
+        JUMP(next);
+        // in builtin mode evaluate all arguments eagerly
+        context->b = builtin;
+        Value * args = compileArguments(callArgs, callArgsFirst, CDR(call), /*eager=*/ true);
+        Value * builtinResult = INTRINSIC(m.call, constant(call), f, args, context->rho);
+        builtin = context->b; // bb might have changed during arg evaluation
+        JUMP(next);
+        // in general closure case the arguments will become promises
+        context->b = closure;
+        args = compileArguments(callArgs, callArgsFirst, CDR(call), /*eager=*/ false);
+        Value * closureResult = INTRINSIC(m.call, constant(call), f, args, context->rho);
+        JUMP(next);
+        // add a phi node for the call result
+        context->b = next;
+        PHINode * phi = PHINode::Create(t::SEXP, 3, "", context->b);
+        phi->addIncoming(specialResult, special);
+        phi->addIncoming(builtinResult, builtin);
+        phi->addIncoming(closureResult, closure);
+        return phi;
+    }
+
+    /** Compiles arguments for given function.
+
+      Creates the pairlist of arguments used in R from the arguments and their names.
+      */
+    Value * compileArguments(Value * args, Value * first, SEXP argAsts, bool eager) {
+        // set first argument to R_NilValue
+        new StoreInst(constant(R_NilValue), first, context->b);
+        // if there are no arguments
+        while (argAsts != R_NilValue) {
+            compileArgument(args, argAsts, eager);
+            argAsts = CDR(argAsts);
+        }
+        return new LoadInst(first, "", context->b);
+    }
+
+
+    /** Compiles a single argument.
+
+      Self evaluating literals are always returned as SEXP constants, anything else is either evaluated directly if eager is true, or they are compiled as new promises.
+     */
+    void compileArgument(Value * args, SEXP argAst, bool eager) {
+        SEXP arg = CAR(argAst);
+        Value * result;
+        switch (TYPEOF(arg)) {
+        case LGLSXP:
+        case INTSXP:
+        case REALSXP:
+        case CPLXSXP:
+        case STRSXP:
+            // literals are self-evaluating
+            result = constant(arg);
+            break;
+        case SYMSXP:
+            if (arg == R_DotsSymbol) {
+                INTRINSIC(m.addEllipsisArgument, args, context->rho, eager ? constant(TRUE) : constant(FALSE));
+                return;
+            }
+        default:
+            if (eager) {
+                result = compileExpression(arg);
+            } else {
+                // we must create a promise out of the argument
+                SEXP code = compileFunction("promise", arg, /*isPromise=*/ true);
+                context->addObject(code);
+                result = INTRINSIC(m.createPromise, constant(code), context->rho);
+            }
+        }
+        SEXP name = TAG(argAst);
+        if (name != R_NilValue)
+            INTRINSIC(m.addKeywordArgument, args, result, constant(name));
+        else
+            INTRINSIC(m.addArgument, args, result);
+    }
+
+
+#ifdef HAHA
     /** Compiles a call expressed in the AST.
 
       For simple calls checks if these can be compiled using intrinsics and does so, if possible. For others emits the function getting / checking code and then generates the arguments and calls the function.
@@ -396,55 +524,8 @@ private:
         return phi;
     }
 
-    /** Compiles arguments for given function.
+#endif
 
-      Creates the pairlist of arguments used in R from the arguments and their names.
-      */
-    Value * compileArguments(SEXP args, bool eager) {
-        // if there are no arguments
-        if (args == R_NilValue)
-            return constant(R_NilValue);
-        Value * av = compileArgument(CAR(args), eager);
-        Value * result;
-        if (TAG(args) == R_NilValue)
-            result = INTRINSIC(m.createArgument, av);
-        else
-            result = INTRINSIC(m.createKeywordArgument, av, constant(TAG(args)));
-        Value * last = result;
-        args = CDR(args);
-        while (args != R_NilValue) {
-            av = compileArgument(CAR(args), eager);
-            if (TAG(args) == R_NilValue)
-                last = INTRINSIC(m.addArgument, av, last);
-            else
-                last = INTRINSIC(m.addKeywordArgument, av, constant(TAG(args)), last);
-            args = CDR(args);
-        }
-        return result;
-    }
-
-    /** Compiles a single argument.
-
-      Self evaluating literals are always returned as SEXP constants, anything else is either evaluated directly if eager is true, or they are compiled as new promises.
-     */
-    Value * compileArgument(SEXP arg, bool eager) {
-        switch (TYPEOF(arg)) {
-        case LGLSXP:
-        case INTSXP:
-        case REALSXP:
-        case CPLXSXP:
-        case STRSXP:
-            // literals are self-evaluating
-            return constant(arg);
-        default:
-            if (eager)
-                return compileExpression(arg);
-            // we must create a promise out of the argument
-            SEXP code = compileFunction("promise", arg, /*isPromise=*/ true);
-            context->addObject(code);
-            return INTRINSIC(m.createPromise, constant(code), context->rho);
-        }
-    }
 
     /** Many function calls may be compiled using intrinsics directly and not the R calling mechanism itself.
 
