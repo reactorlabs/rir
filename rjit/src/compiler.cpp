@@ -3,6 +3,7 @@
 
 #include <cstdint>
 #include <sstream>
+#include <iostream>
 
 #include <llvm/IR/Verifier.h>
 #include <llvm/IR/DerivedTypes.h>
@@ -19,6 +20,7 @@
 
 
 #include "compiler.h"
+#include "stack_map.h"
 
 using namespace llvm;
 
@@ -67,6 +69,13 @@ DECLARE(Ellipsis, "...");
 PointerType * initializeTypes();
 
 
+static void printType(Value * v) {
+    Type * t = v->getType();
+    std::string type_str;
+    llvm::raw_string_ostream rso(type_str);
+    t->print(rso);
+    std::cout << "Type: " << rso.str() << std::endl;
+}
 
 
 namespace t {
@@ -79,6 +88,8 @@ StructType * SEXPREC;
 
 StructType * CallArgs;
 PointerType * CallArgsPtr;
+
+PointerType * i8ptr;
 
 FunctionType * void_void;
 FunctionType * void_sexp;
@@ -128,6 +139,8 @@ PointerType * initializeTypes() {
     t::CallArgsPtr = PointerType::get(t::CallArgs, 0);
     // API function types
     Type * t_void = Type::getVoidTy(context);
+
+    t::i8ptr = PointerType::get(IntegerType::get(context, 8), 0);
 #define DECLARE(name, ret, ...) fields = { __VA_ARGS__ }; t::name = FunctionType::get(ret, fields, false)
     DECLARE(void_void, t_void);
     DECLARE(void_sexp, t_void, t::SEXP);
@@ -147,12 +160,43 @@ PointerType * initializeTypes() {
     DECLARE(void_argssexpsexp, t_void, t::CallArgsPtr, t::SEXP, t::SEXP);
     DECLARE(void_argssexpint, t_void, t::CallArgsPtr, t::SEXP, t::Int);
 #undef DECLARE
+
     // initialize LLVM backend
     LLVMInitializeNativeTarget();
     LLVMInitializeNativeAsmPrinter();
     LLVMInitializeNativeAsmParser();
     return t::SEXP;
 }
+
+
+std::vector<std::pair<uint8_t*, uintptr_t> > stackmaps;
+
+class JITMemoryManager : public llvm::SectionMemoryManager {
+private:
+    JITMemoryManager(const JITMemoryManager&) LLVM_DELETED_FUNCTION;
+    void operator=(const JITMemoryManager&) LLVM_DELETED_FUNCTION;
+
+public:
+    JITMemoryManager() {};
+
+    uint64_t getSymbolAddress(const std::string &name) override {
+        return SectionMemoryManager::getSymbolAddress(name);
+    }
+
+    uint8_t * allocateDataSection(
+            uintptr_t size, unsigned alignment, unsigned sectionID,
+            StringRef sectionName, bool readonly) override {
+
+        auto res = SectionMemoryManager::allocateDataSection(
+                size, alignment, sectionID, sectionName, readonly);
+
+        if (sectionName.str() == ".llvm_stackmaps")
+            stackmaps.push_back(std::pair<uint8_t*, uintptr_t>(res, size));
+
+        return res;
+    }
+};
+
 
 #define DECLARE(name, type) Function * name = Function::Create(t::type, Function::ExternalLinkage, #name, m)
 
@@ -168,11 +212,13 @@ public:
     DECLARE(getFunction, sexp_sexpsexp);
     DECLARE(sexpType, int_sexp);
     DECLARE(call, sexp_sexpsexpsexpsexp);
+    DECLARE(callNative, sexp_sexpsexp);
     DECLARE(createPromise, sexp_sexpsexp);
 //    DECLARE(createArgument, sexp_sexp);
 //    DECLARE(createKeywordArgument, sexp_sexpsexp);
-//    DECLARE(addArgument, sexp_sexpsexp);
-//    DECLARE(addKeywordArgument, sexp_sexpsexpsexp);
+    DECLARE(addEllipsisArgument, sexp_sexpsexp);
+    DECLARE(addArgument, sexp_sexpsexp);
+    DECLARE(addKeywordArgument, sexp_sexpsexpsexp);
     DECLARE(genericUnaryMinus, sexp_sexpsexpsexp);
     DECLARE(genericUnaryPlus, sexp_sexpsexpsexp);
     DECLARE(genericAdd, sexp_sexpsexpsexpsexp);
@@ -202,16 +248,51 @@ public:
     DECLARE(checkSwitchControl, void_sexpsexp);
     DECLARE(switchControlInteger, int_sexpint);
     DECLARE(switchControlCharacter, int_sexpsexpsexp);
-    DECLARE(addArgument, void_argssexp);
-    DECLARE(addKeywordArgument, void_argssexpsexp);
-    DECLARE(addEllipsisArgument, void_argssexpint);
 
-    JITModule(std::string const & name):
-        m(new Module(name, getGlobalContext())) {}
+    Function * patchpoint;
+
+    JITModule(std::string const & name): m(new Module(name, getGlobalContext())) {
+        auto mod = m;
+        {
+            /* declare i64 @llvm.experimental.patchpoint.i64(i64, i32, i8*, i32, ...) */
+
+            // Type Definitions
+            std::vector<Type*>FuncTy_0_args;
+            FuncTy_0_args.push_back(IntegerType::get(mod->getContext(), 64));
+            FuncTy_0_args.push_back(IntegerType::get(mod->getContext(), 32));
+            
+            FuncTy_0_args.push_back(t::i8ptr);
+            FuncTy_0_args.push_back(IntegerType::get(mod->getContext(), 32));
+            FunctionType* FuncTy_0 = FunctionType::get(
+             /*Result=*/IntegerType::get(mod->getContext(), 64),
+             /*Params=*/FuncTy_0_args,
+             /*isVarArg=*/true);
+            
+            // Function Declarations
+            
+            Function* func_llvm_experimental_patchpoint_i64 = mod->getFunction("llvm.experimental.patchpoint.i64");
+            if (!func_llvm_experimental_patchpoint_i64) {
+            func_llvm_experimental_patchpoint_i64 = Function::Create(
+             /*Type=*/FuncTy_0,
+             /*Linkage=*/GlobalValue::ExternalLinkage,
+             /*Name=*/"llvm.experimental.patchpoint.i64", mod); // (external, no body)
+            func_llvm_experimental_patchpoint_i64->setCallingConv(CallingConv::C);
+            }
+            AttributeSet func_llvm_experimental_patchpoint_i64_PAL;
+            func_llvm_experimental_patchpoint_i64->setAttributes(func_llvm_experimental_patchpoint_i64_PAL);
+
+            patchpoint = func_llvm_experimental_patchpoint_i64;
+        }
+    }
 
     operator Module * () {
         return m;
     }
+
+    LLVMContext & getContext() {
+        return m->getContext();
+    }
+
 };
 
 #undef DECLARE
@@ -236,6 +317,9 @@ SEXP createNativeSXP(RFunctionPtr fptr, SEXP ast, std::vector<SEXP> const & obje
 #define JUMP(block) BranchInst::Create(block, context->b);
 
 
+static void * CallICStub0(SEXP, SEXP, SEXP, uintptr_t, uint32_t);
+static void * CallICStub1(SEXP, SEXP, SEXP, SEXP, uintptr_t, uint32_t);
+static void * CallICStub2(SEXP, SEXP, SEXP, SEXP, SEXP, uintptr_t, uint32_t);
 
 class Compiler {
 public:
@@ -245,12 +329,30 @@ public:
 
     SEXP compile(std::string const & name, SEXP bytecode) {
         SEXP result = compileFunction(name, bytecode);
+
+        auto memoryManager = new JITMemoryManager();
         // create execution engine and finalize the module
-        ExecutionEngine * engine = EngineBuilder(std::unique_ptr<Module>(m)).create();
+        std::string err;
+        ExecutionEngine *engine = EngineBuilder(std::unique_ptr<Module>(m))
+            .setErrorStr(&err)
+            .setMCJITMemoryManager(
+                      std::unique_ptr<RTDyldMemoryManager>(memoryManager))
+            .setEngineKind(EngineKind::JIT)
+            .create();
+
+        if (!engine) {
+          fprintf(stderr, "Could not create ExecutionEngine: %s\n", err.c_str());
+          exit(1);
+        }
+
         engine->finalizeObject();
+
         // perform all the relocations
-        for (SEXP s : relocations)
-            SETCAR(s, reinterpret_cast<SEXP>(engine->getPointerToFunction(reinterpret_cast<Function*>(TAG(s)))));
+        for (SEXP s : relocations) {
+            auto f = reinterpret_cast<Function*>(TAG(s));
+            f->dump();
+            SETCAR(s, reinterpret_cast<SEXP>(engine->getPointerToFunction(f)));
+        }
         return result;
     }
 
@@ -301,6 +403,61 @@ private:
         std::vector<SEXP> objects;
 
     };
+
+    uint32_t _id = 1;
+
+    Value * insertICCallStub(
+            std::vector<Value*> & callArgs, Value * function, Value * call) {
+
+        uint32_t id = _id++;;
+        auto mod = &m;
+
+        /*  %result = call i64 (i64, i32, i8*, i32, ...)*
+         *            @llvm.experimental.patchpoint.i64(i64 id, i32 15, i8* %target, i32 2, i64 %arg1, i64 %arg2)
+         */
+
+        ConstantInt* const_int_id       = ConstantInt::get(mod->getContext(), APInt(64, (uint64_t)id, false));
+        ConstantInt* const_int_bs       = ConstantInt::get(mod->getContext(), APInt(32, StringRef("15"), 10));
+
+        uint64_t targetAddr;
+        switch(callArgs.size()) {
+            case 0: targetAddr = (uint64_t)&CallICStub0; break;
+            case 1: targetAddr = (uint64_t)&CallICStub1; break;
+            case 2: targetAddr = (uint64_t)&CallICStub2; break;
+        }
+        ConstantInt* const_int64_target = ConstantInt::get(mod->getContext(), APInt(64, targetAddr, false));
+        CastInst* ptr_target            = new IntToPtrInst(const_int64_target, t::i8ptr, "target", context->b);
+
+        ConstantInt* const_int32_numarg = ConstantInt::get(mod->getContext(), APInt(32, callArgs.size() + 3, false));
+
+        std::vector<Value*> int64_result_params;
+        // Patchpoint argumenst (compiled away)
+        int64_result_params.push_back(const_int_id);
+        int64_result_params.push_back(const_int_bs);
+        int64_result_params.push_back(ptr_target);
+        int64_result_params.push_back(const_int32_numarg);
+
+        // Closure arguments
+        for (auto arg : callArgs) {
+            int64_result_params.push_back(arg);
+        }
+
+        // Additional IC arguments
+        int64_result_params.push_back(call);
+        int64_result_params.push_back(function);
+        int64_result_params.push_back(context->rho);
+        int64_result_params.push_back(context->f);
+        int64_result_params.push_back(const_int_id);
+
+        CallInst* int64_result = CallInst::Create(m.patchpoint, int64_result_params, "", context->b);
+        int64_result->setCallingConv(CallingConv::C);
+        int64_result->setTailCall(false);
+        AttributeSet int64_result_PAL;
+        int64_result->setAttributes(int64_result_PAL);
+
+        return new IntToPtrInst(int64_result, t::SEXP, "res", context->b);
+    }
+
 
     SEXP compileFunction(std::string const & name, SEXP ast, bool isPromise = false) {
         Context * old = context;
@@ -361,10 +518,10 @@ private:
 
     Value * compileCall(SEXP call) {
         Value * f;
+
         if (TYPEOF(CAR(call)) != SYMSXP) {
             // it is a complex function, first get the value of the function and then check it
             f = compileExpression(CAR(call));
-            INTRINSIC(m.checkFunction, f);
         } else {
             // it is simple function - try compiling it with intrinsics
             f = compileIntrinsic(call);
@@ -373,68 +530,22 @@ private:
             // otherwise just do get function
             f = INTRINSIC(m.getFunction, constant(CAR(call)), context->rho);
         }
-        // now create the CallArgs structure as local variable
-        Value * callArgs = new AllocaInst(t::CallArgs, "callArgs", context->b);
-        // set first to R_NilValue
-        std::vector<Value*> callArgsIndices = { constant(0), constant(0) };
-        Value * callArgsFirst = GetElementPtrInst::Create(callArgs, callArgsIndices, "", context->b);
-        // now we must compile the arguments, this depends on the actual type of the function - promises by default, eager for builtins and no evaluation for specials
-        Value * ftype = INTRINSIC(m.sexpType, f);
-        // switch the function call execution based on the function type
-        BasicBlock * special = BasicBlock::Create(getGlobalContext(), "special", context->f, nullptr);
-        BasicBlock * builtin = BasicBlock::Create(getGlobalContext(), "builtin", context->f, nullptr);
 
-        BasicBlock * closure = BasicBlock::Create(getGlobalContext(), "closure", context->f, nullptr);
-        BasicBlock * next = BasicBlock::Create(getGlobalContext(), "next", context->f, nullptr);
-        SwitchInst * sw = SwitchInst::Create(ftype, closure, 2, context->b);
-        sw->addCase(constant(SPECIALSXP), special);
-        sw->addCase(constant(BUILTINSXP), builtin);
-        // in special case, do not evaluate arguments and just call the function
-        context->b = special;
-        Value * specialResult = INTRINSIC(m.call, constant(call), f, constant(R_NilValue), context->rho);
-        JUMP(next);
-        // in builtin mode evaluate all arguments eagerly
-        context->b = builtin;
-        Value * args = compileArguments(callArgs, callArgsFirst, CDR(call), /*eager=*/ true);
-        Value * builtinResult = INTRINSIC(m.call, constant(call), f, args, context->rho);
-        builtin = context->b; // bb might have changed during arg evaluation
-        JUMP(next);
-        // in general closure case the arguments will become promises
-        context->b = closure;
-        args = compileArguments(callArgs, callArgsFirst, CDR(call), /*eager=*/ false);
-        Value * closureResult = INTRINSIC(m.call, constant(call), f, args, context->rho);
-        JUMP(next);
-        // add a phi node for the call result
-        context->b = next;
-        PHINode * phi = PHINode::Create(t::SEXP, 3, "", context->b);
-        phi->addIncoming(specialResult, special);
-        phi->addIncoming(builtinResult, builtin);
-        phi->addIncoming(closureResult, closure);
-        return phi;
+        std::vector<Value*> args;
+        compileArguments(CDR(call), args);
+
+        return insertICCallStub(args, f, constant(call));
     }
 
-    /** Compiles arguments for given function.
-
-      Creates the pairlist of arguments used in R from the arguments and their names.
-      */
-    Value * compileArguments(Value * args, Value * first, SEXP argAsts, bool eager) {
-        // set first argument to R_NilValue
-        new StoreInst(constant(R_NilValue), first, context->b);
-        // if there are no arguments
-        while (argAsts != R_NilValue) {
-            compileArgument(args, argAsts, eager);
-            argAsts = CDR(argAsts);
-        }
-        return new LoadInst(first, "", context->b);
+    void compileArguments(SEXP argAsts, std::vector<Value*> & res) {
+         while (argAsts != R_NilValue) {
+             res.push_back(
+                     compileArgument(CAR(argAsts), TAG(argAsts)));
+             argAsts = CDR(argAsts);
+         }
     }
 
-
-    /** Compiles a single argument.
-
-      Self evaluating literals are always returned as SEXP constants, anything else is either evaluated directly if eager is true, or they are compiled as new promises.
-     */
-    void compileArgument(Value * args, SEXP argAst, bool eager) {
-        SEXP arg = CAR(argAst);
+    Value * compileArgument(SEXP arg, SEXP name) {
         Value * result;
         switch (TYPEOF(arg)) {
         case LGLSXP:
@@ -443,29 +554,20 @@ private:
         case CPLXSXP:
         case STRSXP:
             // literals are self-evaluating
-            result = constant(arg);
+            return constant(arg);
             break;
         case SYMSXP:
             if (arg == R_DotsSymbol) {
-                INTRINSIC(m.addEllipsisArgument, args, context->rho, eager ? constant(TRUE) : constant(FALSE));
-                return;
+                return constant(arg);
             }
-        default:
-            if (eager) {
-                result = compileExpression(arg);
-            } else {
-                // we must create a promise out of the argument
+        default: {
                 SEXP code = compileFunction("promise", arg, /*isPromise=*/ true);
                 context->addObject(code);
-                result = INTRINSIC(m.createPromise, constant(code), context->rho);
+                return constant(code);
             }
         }
-        SEXP name = TAG(argAst);
-        if (name != R_NilValue)
-            INTRINSIC(m.addKeywordArgument, args, result, constant(name));
-        else
-            INTRINSIC(m.addArgument, args, result);
     }
+
 
 
 #ifdef HAHA
@@ -1067,6 +1169,199 @@ private:
 
 
 };
+#undef INTRINSIC
+
+#define INTRINSIC(name, ...) CallInst::Create(name, ARGS(__VA_ARGS__), "", b)
+class ICCompiler  {
+public:
+
+    ICCompiler() : m("ic") {}
+
+    void * compile(SEXP inCall, SEXP inFun, SEXP inRho,
+            uint64_t callee, uint32_t stackmapId,
+            std::initializer_list<SEXP> inArgs) {
+
+        // TODO: stackmaps are not yet needed, since we do not patch inline
+        for (auto s : stackmaps) {
+            ArrayRef<uint8_t> sm(s.first, s.second);
+            // TODO: find target endianness
+            StackMapV1Parser<llvm::support::little> p(sm);
+            for (auto f = p.functions_begin(); f != p.functions_end(); f++) {
+                if (f->getFunctionAddress() == callee) {
+                    // std::cout << "found stackmap" << std::endl;
+                }
+            }
+        }
+
+        std::vector<Type*> argT;
+        for (int i = 0; i < inArgs.size() + 2; i++) {
+            argT.push_back(t::SEXP);
+        }
+        auto funT = FunctionType::get(t::SEXP, argT, false);
+
+        f = Function::Create(funT, Function::ExternalLinkage, "callIC", m);
+
+        Function::arg_iterator argI = f->arg_begin();
+        for (auto a : inArgs) {
+            icArgs.push_back(argI++);
+        }
+        fun = argI++;
+        fun->setName("op");
+        rho = argI++;
+        rho->setName("rho");
+
+        b = BasicBlock::Create(getGlobalContext(), "start", f, nullptr);
+
+        Value * call = compileCall(inCall, inFun);
+        ReturnInst::Create(getGlobalContext(), call, b);
+
+        std::cout << "generic call IC created:" << std::endl;
+        f->dump();
+
+        ExecutionEngine * engine = EngineBuilder(std::unique_ptr<Module>(m)).create();
+        engine->finalizeObject();
+        return engine->getPointerToFunction(f);
+    }
+
+private:
+
+    Value * compileCall(SEXP call, SEXP op) {
+        // now we must compile the arguments, this depends on the actual type of the function - promises by default, eager for builtins and no evaluation for specials
+        Value * ftype = INTRINSIC(m.sexpType, fun);
+        // switch the function call execution based on the function type
+        BasicBlock * special = BasicBlock::Create(getGlobalContext(), "special", f, nullptr);
+        BasicBlock * builtin = BasicBlock::Create(getGlobalContext(), "builtin", f, nullptr);
+
+        BasicBlock * closure = BasicBlock::Create(getGlobalContext(), "closure", f, nullptr);
+        BasicBlock * next = BasicBlock::Create(getGlobalContext(), "next", f, nullptr);
+        SwitchInst * sw = SwitchInst::Create(ftype, closure, 2, b);
+        sw->addCase(constant(SPECIALSXP), special);
+        sw->addCase(constant(BUILTINSXP), builtin);
+        // in special case, do not evaluate arguments and just call the function
+        b = special;
+        Value * specialResult = INTRINSIC(m.call, constant(call), fun, constant(R_NilValue), rho);
+        BranchInst::Create(next, b);
+        // in builtin mode evaluate all arguments eagerly
+        b = builtin;
+        Value * args = compileArguments(CDR(call), /*eager=*/ true);
+        Value * builtinResult = INTRINSIC(m.call, constant(call), fun, args, rho);
+        builtin = b; // bb might have changed during arg evaluation
+        BranchInst::Create(next, b);
+        // in general closure case the arguments will become promises
+        b = closure;
+        args = compileArguments(CDR(call), /*eager=*/ false);
+        Value * closureResult = INTRINSIC(m.call, constant(call), fun, args, rho);
+        BranchInst::Create(next, b);
+        // add a phi node for the call result
+        b = next;
+        PHINode * phi = PHINode::Create(t::SEXP, 3, "", b);
+        phi->addIncoming(specialResult, special);
+        phi->addIncoming(builtinResult, builtin);
+        phi->addIncoming(closureResult, closure);
+        return phi;
+    }
+
+    /** Compiles arguments for given function.
+
+      Creates the pairlist of arguments used in R from the arguments and their names.
+      */
+    Value * compileArguments(SEXP argAsts, bool eager) {
+        if (argAsts == R_NilValue) return constant(R_NilValue);
+
+        Value * first = nullptr;
+        Value * args  = constant(R_NilValue);
+
+        int argnum = 0;
+        while (argAsts != R_NilValue) {
+            args = compileArgument(args, argAsts, argnum++, eager);
+            if (!first) first = args;
+            argAsts = CDR(argAsts);
+        }
+        return first;
+    }
+
+
+    /** Compiles a single argument.
+
+      Self evaluating literals are always returned as SEXP constants, anything else is either evaluated directly if eager is true, or they are compiled as new promises.
+     */
+    Value * compileArgument(Value * args, SEXP argAst, int argnum, bool eager) {
+        SEXP arg = CAR(argAst);
+        Value * result;
+        switch (TYPEOF(arg)) {
+        case LGLSXP:
+        case INTSXP:
+        case REALSXP:
+        case CPLXSXP:
+        case STRSXP:
+            // literals are self-evaluating
+            result = icArgs[argnum];
+            break;
+        case SYMSXP:
+            if (arg == R_DotsSymbol) {
+                return INTRINSIC(m.addEllipsisArgument, args, rho, eager ? constant(TRUE) : constant(FALSE));
+            }
+        default:
+            if (eager) {
+                // TODO make this more efficient?
+                result = INTRINSIC(m.callNative, icArgs[argnum], rho);
+            } else {
+                // we must create a promise out of the argument
+                result = INTRINSIC(m.createPromise, icArgs[argnum], rho);
+            }
+        }
+        SEXP name = TAG(argAst);
+        if (name != R_NilValue)
+            return INTRINSIC(m.addKeywordArgument, result, constant(name), args);
+        else
+            return INTRINSIC(m.addArgument, result, args);
+    }
+
+    // TODO: Pull up
+    Value * constant(SEXP value) {
+        return ConstantExpr::getCast(Instruction::IntToPtr, ConstantInt::get(getGlobalContext(), APInt(64, (std::uint64_t)value)), t::SEXP);
+    }
+    ConstantInt * constant(int value) {
+        return ConstantInt::get(getGlobalContext(), APInt(32, value));
+    }
+
+
+    Function * f;
+    BasicBlock * b;
+
+    Value * rho;
+    Value * fun;
+    std::vector<Value*> icArgs;
+
+    JITModule m;
+};
+#undef INTRINSIC
+
+static void * CallICStub0(
+        SEXP call, SEXP fun, SEXP rho, uintptr_t callee, uint32_t stackmapId) {
+
+    ICCompiler compiler;
+    void * ic = compiler.compile(call, fun, rho, callee, stackmapId, {});
+    return ((SEXP (*) (SEXP, SEXP))ic)(fun, rho);
+}
+
+static void * CallICStub1(SEXP a1,
+        SEXP call, SEXP fun, SEXP rho, uintptr_t callee, uint32_t stackmapId) {
+
+    ICCompiler compiler;
+    void * ic = compiler.compile(call, fun, rho, callee, stackmapId, {a1});
+    return ((SEXP (*) (SEXP, SEXP, SEXP))ic)(a1, fun, rho);
+}
+
+static void * CallICStub2(SEXP a1, SEXP a2,
+        SEXP call, SEXP fun, SEXP rho, uintptr_t callee, uint32_t stackmapId) {
+
+    ICCompiler compiler;
+    void * ic = compiler.compile(call, fun, rho, callee, stackmapId, {a1, a2});
+    return ((SEXP (*) (SEXP, SEXP, SEXP, SEXP))ic)(a1, a2, fun, rho);
+}
+
+
 
 
 } // namespace
