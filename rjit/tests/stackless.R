@@ -166,11 +166,7 @@ f <- function(a, b) a + b
 fx <- jit.compile(function(x, y) f(x, y))
 stopifnot(fx(1,2) == 3)
 
-# functio call with missing args
+# function call with missing args
 f <- function(a) missing(a)
 fx <- jit.compile(function() f())
 stopifnot(fx() == TRUE)
-
-
-
-
