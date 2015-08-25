@@ -5,7 +5,6 @@
 #include <R.h>
 #include <Rinternals.h>
 
-
 namespace rjit {
 
 /** Pointer to evaluation function.
@@ -16,9 +15,7 @@ typedef SEXP (*RFunctionPtr)(SEXP, SEXP, Rboolean);
 
 /** Compiles given bytecode into its evaluation function and returns the pointer to it.
  */
-SEXP compile(SEXP bytecode, SEXP rho);
-
-void initializeJIT();
+SEXP compile(SEXP bytecode);
 
 }
 

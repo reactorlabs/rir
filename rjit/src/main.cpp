@@ -35,13 +35,15 @@ using namespace rjit;
 #define REXPORT extern "C"
 
 REXPORT SEXP initializeRJIT() {
-    initializeJIT();
+    LLVMInitializeNativeTarget();
+    LLVMInitializeNativeAsmPrinter();
+    LLVMInitializeNativeAsmParser();
     return R_NilValue;
 }
 
-REXPORT SEXP jit(SEXP expression, SEXP rho) {
+REXPORT SEXP jit(SEXP expression) {
     assert(TYPEOF(expression) == BCODESXP and "Only raw bytecode is allowed as an argument to jitExpression");
-    return compile(expression, rho);
+    return compile(expression);
 }
 
 REXPORT SEXP jitConstants(SEXP expression) {

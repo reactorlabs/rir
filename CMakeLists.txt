@@ -24,15 +24,10 @@ include_directories(${CMAKE_SOURCE_DIR}/rjit/src)
 # TODO for now, make all builds debug
 set(CMAKE_BUILD_TYPE Debug)
 
-set(BC_FILE_EVAL rjit/eval.bc)
-set(BC_FILE_INTRINSICS rjit/intrinsics.bc)
 
 # build the shared library for the JIT
 file(GLOB_RECURSE SRC "rjit/src/*.cpp" "rjit/src/*.h" "local/.Rprofile" "rjit/R/*.R" "rjit/tests/*.R")
 add_library(${PROJECT_NAME} SHARED ${SRC})
-
-add_dependencies(${PROJECT_NAME} bc_file_eval)
-add_dependencies(${PROJECT_NAME} bc_file_intrinsics)
 
 # Find the libraries that correspond to the LLVM components
 # that we wish to use
@@ -42,11 +37,6 @@ llvm_map_components_to_libnames(llvm_libs support core mcjit native irreader lin
 target_link_libraries(${PROJECT_NAME} ${llvm_libs})
 
 # now creating the package
-add_custom_target(bc_file_eval
-    COMMAND ${LLVM_TOOLS_BINARY_DIR}/clang --std=gnu99 -DHAVE_CONFIG_H -I${R_HOME}/src/include -c -emit-llvm rjit/src/r_intrinsics.c -o ${BC_FILE_INTRINSICS})
-add_custom_target(bc_file_intrinsics
-    COMMAND ${LLVM_TOOLS_BINARY_DIR}/clang --std=gnu99 -DHAVE_CONFIG_H -I${R_HOME}/src/include -c -emit-llvm ${R_HOME}/src/main/eval.c -o ${BC_FILE_EVAL})
-
 
 set(PACKAGE_NAME "rjit_0.1.tar.gz")
 add_custom_target(package

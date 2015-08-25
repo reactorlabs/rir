@@ -1,15 +1,21 @@
-#include <sstream>
-#include <iostream>
+#include <llvm/IR/Verifier.h>
+#include <llvm/IR/DerivedTypes.h>
+#include <llvm/IR/IRBuilder.h>
+#include <llvm/IR/LLVMContext.h>
+#include <llvm/IR/Module.h>
+#include <llvm/IR/DerivedTypes.h>
+#include <llvm/Support/raw_ostream.h>
+#include "llvm/Analysis/Passes.h"
 
-#include "llvm_includes.h"
+#include "llvm/ExecutionEngine/ExecutionEngine.h"
+#include "llvm/ExecutionEngine/MCJIT.h"
+#include "llvm/ExecutionEngine/SectionMemoryManager.h"
+
+#include <sstream>
+
 #include "codegen.h"
 
 #include "rbc.h"
-
-#include "runtime_helper.h"
-#include "jit_module.h"
-#include "jit_types.h"
-#include "memory_manager.h"
 
 #define STR(WHAT)                                                              \
   ((static_cast<std::ostringstream &>(                                         \
@@ -20,7 +26,237 @@ using namespace llvm;
 
 namespace {
 
+StructType * initializeTypes();
 
+StructType * t_SEXPREC = initializeTypes();
+PointerType * t_SEXP;
+IntegerType * t_Rboolean;
+StructType * t_InterpreterContext;
+PointerType * p_InterpreterContext;
+FunctionType * t_InterpreterLoop;
+
+FunctionType * t_InitializeInterpreter;
+FunctionType * t_FinalizeInterpreter;
+
+FunctionType * t_voidInstruction0;
+FunctionType * t_voidInstruction1;
+FunctionType * t_voidInstruction2;
+FunctionType * t_voidInstruction3;
+FunctionType * t_voidInstruction4;
+
+FunctionType * t_intInstruction0;
+FunctionType * t_intInstruction1;
+FunctionType * t_intInstruction2;
+FunctionType * t_intInstruction3;
+FunctionType * t_intInstruction4;
+
+
+/** Creates the types for the codegen.
+
+  Since the types do not depend on modules, but on the context, we can pregenerate them and use in all modules that will be created by the jit.
+  */
+StructType * initializeTypes() {
+    LLVMContext & context = getGlobalContext();
+    std::vector<Type*> fields;
+    StructType * t_sxpinfo_struct = StructType::create(context, "struct.sxpinfo_struct");
+    t_SEXPREC = StructType::create(context, "struct.SEXPREC");
+    // SEXP
+    t_SEXP = PointerType::get(t_SEXPREC, 0);
+    // sxpinfo_struct is just int32 in a structure, the bitmasking is not a concern of the type
+    fields.push_back(IntegerType::get(context, 32));
+    t_sxpinfo_struct->setBody(fields, false);
+    // primsxp
+    fields.clear();
+    // SEXPREC, first the union
+    fields.clear();
+    StructType * u1 = StructType::create(context,"union.SEXP_SEXP_SEXP");
+    fields.push_back(t_SEXP);
+    fields.push_back(t_SEXP);
+    fields.push_back(t_SEXP);
+    u1->setBody(fields, false);
+    // now the real SEXPREC
+    fields.clear();
+    fields.push_back(t_sxpinfo_struct);
+    fields.push_back(t_SEXP);
+    fields.push_back(t_SEXP);
+    fields.push_back(t_SEXP);
+    fields.push_back(u1);
+    t_SEXPREC->setBody(fields, false);
+    //  Pointer to R_bcStack_t, first the union
+    StructType * u2 = StructType::create(context, "union.INT_DOUBLE_SEXP");
+    fields.clear();
+    fields.push_back(Type::getDoubleTy(context));
+    u2->setBody(fields, false);
+    // then the type
+    StructType * t_R_bcstack_t = StructType::create(context, "struct.R_bcstack_t");
+    fields.clear();
+    fields.push_back(IntegerType::get(context, 32));
+    fields.push_back(u2);
+    t_R_bcstack_t->setBody(fields);
+    // and now the pointer
+    PointerType * bcStackPtr = PointerType::get(t_R_bcstack_t, 0);
+    // RBoolean
+    t_Rboolean = IntegerType::get(context, 32);
+    // InterpreterContext
+    t_InterpreterContext = StructType::create(context, "struct.InterpreterContext");
+    fields.clear();
+    fields.push_back(t_SEXP);
+    fields.push_back(t_SEXP);
+    fields.push_back(t_Rboolean);
+    fields.push_back(t_SEXP);
+    fields.push_back(t_SEXP);
+    fields.push_back(bcStackPtr);
+    fields.push_back(bcStackPtr);
+    fields.push_back(t_Rboolean);
+    t_InterpreterContext->setBody(fields);
+    p_InterpreterContext = PointerType::get(t_InterpreterContext, 0);
+    // Interpreter function
+    fields.clear();
+    fields.push_back(t_SEXP);
+    fields.push_back(t_SEXP);
+    fields.push_back(t_Rboolean);
+    t_InterpreterLoop = FunctionType::get(t_SEXP, fields, false);
+    // instruction types
+    std::vector<Type*> args;
+    // interpreter initializer
+    args.clear();
+    args.push_back(p_InterpreterContext);
+    args.push_back(t_SEXP);
+    args.push_back(t_SEXP);
+    args.push_back(t_Rboolean);
+    args.push_back(IntegerType::get(context, 32));
+    t_InitializeInterpreter = FunctionType::get(Type::getVoidTy(context), args, false);
+    // interpreter finalizer
+    args.clear();
+    args.push_back(p_InterpreterContext);
+    t_FinalizeInterpreter = FunctionType::get(t_SEXP, args, false);
+    // instruction types
+    args.clear();
+    args.push_back(p_InterpreterContext);
+    t_voidInstruction0 = FunctionType::get(Type::getVoidTy(context), args, false);
+    args.clear();
+    args.push_back(p_InterpreterContext);
+    args.push_back(IntegerType::get(context, 32));
+    t_voidInstruction1 = FunctionType::get(Type::getVoidTy(context), args, false);
+    args.clear();
+    args.push_back(p_InterpreterContext);
+    args.push_back(IntegerType::get(context, 32));
+    args.push_back(IntegerType::get(context, 32));
+    t_voidInstruction2 = FunctionType::get(Type::getVoidTy(context), args, false);
+    args.clear();
+    args.push_back(p_InterpreterContext);
+    args.push_back(IntegerType::get(context, 32));
+    args.push_back(IntegerType::get(context, 32));
+    args.push_back(IntegerType::get(context, 32));
+    t_voidInstruction3 = FunctionType::get(Type::getVoidTy(context), args, false);
+    args.clear();
+    args.push_back(p_InterpreterContext);
+    args.push_back(IntegerType::get(context, 32));
+    args.push_back(IntegerType::get(context, 32));
+    args.push_back(IntegerType::get(context, 32));
+    args.push_back(IntegerType::get(context, 32));
+    t_voidInstruction4 = FunctionType::get(Type::getVoidTy(context), args, false);
+    args.clear();
+    args.push_back(p_InterpreterContext);
+    t_intInstruction0 = FunctionType::get(IntegerType::get(context, 32), args, false);
+    args.clear();
+    args.push_back(p_InterpreterContext);
+    args.push_back(IntegerType::get(context, 32));
+    t_intInstruction1 = FunctionType::get(IntegerType::get(context, 32), args, false);
+    args.clear();
+    args.push_back(p_InterpreterContext);
+    args.push_back(IntegerType::get(context, 32));
+    args.push_back(IntegerType::get(context, 32));
+    t_intInstruction2 = FunctionType::get(IntegerType::get(context, 32), args, false);
+    args.clear();
+    args.push_back(p_InterpreterContext);
+    args.push_back(IntegerType::get(context, 32));
+    args.push_back(IntegerType::get(context, 32));
+    args.push_back(IntegerType::get(context, 32));
+    t_intInstruction3 = FunctionType::get(IntegerType::get(context, 32), args, false);
+    args.clear();
+    args.push_back(p_InterpreterContext);
+    args.push_back(IntegerType::get(context, 32));
+    args.push_back(IntegerType::get(context, 32));
+    args.push_back(IntegerType::get(context, 32));
+    args.push_back(IntegerType::get(context, 32));
+    t_intInstruction4 = FunctionType::get(IntegerType::get(context, 32), args, false);
+}
+
+/** Simple class that encapsulates a LLVM module used to compile R's function. Contains the module itself and all declarations of functions that the JIT may use - the R bytecode opcodes and evaluation helpers.
+ */
+class JITModule {
+public:
+
+    operator Module * () {
+        return module;
+    }
+
+    ConstantInt * constant(int value) {
+        return ConstantInt::get(getGlobalContext(), APInt(32, value));
+    }
+
+    /** Creates new LLVM module and populates it with declarations of the helper and opcode functions.
+      */
+    JITModule() {
+        // create new module
+        module = new Module("", getGlobalContext());
+        // generate the function declarations
+        // interpreter initialization & finalization
+        initializeInterpreter = Function::Create(t_InitializeInterpreter, Function::ExternalLinkage, "initializeInterpreter", module);
+        finalizeInterpreter = Function::Create(t_FinalizeInterpreter, Function::ExternalLinkage, "finalizeInterpreter", module);
+        // switch special instructions
+        SWITCH_OP_start = Function::Create(t_intInstruction4, Function::ExternalLinkage, "instructionSWITCH_OP_start", module);
+        SWITCH_OP_character = Function::Create(t_intInstruction4, Function::ExternalLinkage, "instructionSWITCH_OP_character", module);
+        SWITCH_OP_integral = Function::Create(t_intInstruction4, Function::ExternalLinkage, "instructionSWITCH_OP_integral", module);
+        // handle the normal instructions
+        #define SCONCAT(a) #a
+        #define INSTRUCTION0(name, opcode) name = Function::Create(t_voidInstruction0, Function::ExternalLinkage, SCONCAT(instruction ## name), module);
+        #define INSTRUCTION1(name, opcode) name = Function::Create(t_voidInstruction1, Function::ExternalLinkage, SCONCAT(instruction ## name), module);
+        #define INSTRUCTION2(name, opcode) name = Function::Create(t_voidInstruction2, Function::ExternalLinkage, SCONCAT(instruction ## name), module);
+        #define INSTRUCTION3(name, opcode) name = Function::Create(t_voidInstruction3, Function::ExternalLinkage, SCONCAT(instruction ## name), module);
+        #define SPECIAL0(name, opcode) name = Function::Create(t_voidInstruction0, Function::ExternalLinkage, SCONCAT(instruction ## name), module);
+        #define SPECIAL1(name, opcode) name = Function::Create(t_voidInstruction1, Function::ExternalLinkage, SCONCAT(instruction ## name), module);
+        #define SPECIAL2(name, opcode) name = Function::Create(t_intInstruction2, Function::ExternalLinkage, SCONCAT(instruction ## name), module);
+        #define SPECIAL3(name, opcode) name = Function::Create(t_voidInstruction3, Function::ExternalLinkage, SCONCAT(instruction ## name), module);
+        #define SPECIAL4(name, opcode)
+        RBC
+        #undef INSTRUCTION0
+        #undef INSTRUCTION1
+        #undef INSTRUCTION2
+        #undef INSTRUCTION3
+        #undef SPECIAL0
+        #undef SPECIAL1
+        #undef SPECIAL2
+        #undef SPECIAL3
+        #undef SPECIAL4
+    }
+
+    Module * module;
+    Function * initializeInterpreter;
+    Function * finalizeInterpreter;
+    // pregenerated instruction functions
+    #define INSTRUCTION0(name, opcode) Function * name;
+    #define INSTRUCTION1(name, opcode) Function * name;
+    #define INSTRUCTION2(name, opcode) Function * name;
+    #define INSTRUCTION3(name, opcode) Function * name;
+    #define SPECIAL0(name, opcode) Function * name;
+    #define SPECIAL1(name, opcode) Function * name;
+    #define SPECIAL2(name, opcode) Function * name;
+    #define SPECIAL3(name, opcode) Function * name;
+    #define SPECIAL4(name, opcode) Function * name;
+        RBC
+    #undef INSTRUCTION0
+    #undef INSTRUCTION1
+    #undef INSTRUCTION2
+    #undef INSTRUCTION3
+    #undef SPECIAL0
+    #undef SPECIAL1
+    #undef SPECIAL2
+    #undef SPECIAL3
+    #undef SPECIAL4
+
+};
 
 
 /** Given R bytecode and LLVM function, creates basic blocks for it appropriately.
@@ -136,37 +372,16 @@ private:
 };
 
 
-SEXP R_LogicalNAValue, R_TrueValue, R_FalseValue;
 
 class Compiler {
 public:
-    Compiler() : runtime(RuntimeHelper::helper) {
-        assert(initialized and
-               "Call initializeJIT before instantiating compiler");
-    }
-
-    static bool initialized;
-    static void initializeJIT() {
-        LLVMInitializeNativeTarget();
-        LLVMInitializeNativeAsmPrinter();
-        LLVMInitializeNativeAsmParser();
-        T::initialize(RuntimeHelper::helper);
-        initialized = true;
-    }
-
-
-    Function * compile(SEXP bytecode, Twine const & name, SEXP rho_) {
+    Function * compile(SEXP bytecode, Twine const & name) {
         assert(TYPEOF(bytecode) == BCODESXP and "Only bytecode allowed here");
-        rho = rho_;
         body = R_bcDecode(BCODE_CODE(bytecode));
         code = INTEGER(body);
         consts = BCODE_CONSTS(bytecode);
         // create the function
-        f = Function::Create(
-                T::t_jitFun,
-                Function::ExternalLinkage,
-                name,
-                module);
+        f = Function::Create(t_InterpreterLoop, Function::ExternalLinkage, name, module);
         // initialize the evaluation context
         initialize();
         // compile the bytecode into its own
@@ -181,17 +396,7 @@ public:
 
     rjit::RFunctionPtr jit() {
         assert(f != nullptr and "compile must be called before");
-        std::string err;
-        ExecutionEngine * engine = EngineBuilder(std::unique_ptr<Module>(module))
-          .setErrorStr(&err)
-          .setEngineKind(EngineKind::JIT)
-          .setMCJITMemoryManager(
-                    std::unique_ptr<RTDyldMemoryManager>(&MemoryManager::manager))
-          .create();
-        if (!engine) {
-          fprintf(stderr, "Could not create ExecutionEngine: %s\n", err.c_str());
-          DIE;
-        }
+        ExecutionEngine * engine = EngineBuilder(std::unique_ptr<Module>(module)).create();
         engine->finalizeObject();
         return reinterpret_cast<rjit::RFunctionPtr>(engine->getPointerToFunction(f));
     }
@@ -202,35 +407,20 @@ private:
 
     void initialize() {
         current = BasicBlock::Create(getGlobalContext(), "start", f, nullptr);
-
-        Function::arg_iterator args = f->arg_begin();
-        Value * bod = args++;
-        bod->setName("body");
-        native_rho = args++;
-        native_rho->setName("rho");
-
-        native_consts = CallInst::Create(
-                module.getFunction("__jit__cdr"),
-                std::vector<Value *>({{bod}}),
-                "consts",
-                current);
-
         // split the bytecode into basic blocks
         bbs.analyze(body, consts, f);
-
         // create context struct on the stack
-        context = new AllocaInst(
-                runtime.t->t_InterpreterContext, "context", current);
-
+        context = new AllocaInst(t_InterpreterContext, "context", current);
         // call the initializer
-        CallInst::Create(
-                module.getFunction("initializeInterpreter"),
-                std::vector<Value *>({{
-                    context, native_consts, native_rho,
-                    module.constant(1), module.constant(code[0])}}),
-                "",
-                current);
-
+        Function::arg_iterator args = f->arg_begin();
+        Value * body = args++;
+        body->setName("body");
+        Value * rho = args++;
+        rho->setName("rho");
+        Value * useCache = args++;
+        useCache->setName("useCache");
+        std::vector<Value *> params({context, body, rho, useCache, module.constant(code[0])});
+        CallInst::Create(module.initializeInterpreter, params, "", current);
         // create last basic block
         lastBB = BasicBlock::Create(getGlobalContext(), "end", f, nullptr);
         // jump to pc1 basic block from the initial basic block
@@ -238,9 +428,7 @@ private:
     }
 
     void finalize() {
-        Value * result = CallInst::Create(
-                module.getFunction("finalizeInterpreter"), context, "result", lastBB);
-
+        Value * result = CallInst::Create(module.finalizeInterpreter, context, "result", lastBB);
         ReturnInst::Create(getGlobalContext(), result, lastBB);
     }
 
@@ -262,24 +450,12 @@ private:
     pc += 3; \
     break; }
 
-   void appendArg(Value ** arglist, Value * arg) {
-       *arglist = CallInst::Create(
-               module.getFunction("CONS_NR"),
-               std::vector<Value *>({{arg, *arglist}}),
-               "arglist", current);
-   }
-
     /** Compiles R bytecode into LLVM IR representation.
      */
     void compileBytecode() {
         using namespace rjit;
         pc = 1;
         int l = length(body);
-
-        SEXP nativeCall = nullptr;
-        std::string nativeName;
-        Value * arglist;
-
         while (pc < l) {
             current = bbs.blockForPc(pc);
             switch (static_cast<Opcode>(code[pc])) {
@@ -319,171 +495,22 @@ private:
             INSTRUCTION1(GETVAR_OP);
             INSTRUCTION1(DDVAL_OP);
             INSTRUCTION1(SETVAR_OP);
-            case Opcode::GETFUN_OP: {
-                SEXP name = VECTOR_ELT(consts, code[pc+1]);
-                SEXP fun = Rf_findFun(name, rho);
-                if (fun && TYPEOF(fun) == CLOSXP) {
-                    SEXP code = CDR(fun);
-                    if (TYPEOF(code) == NATIVESXP) {
-                        nativeCall = fun;
-                        arglist = RuntimeHelper::helper.asConst(R_NilValue); 
-                        nativeName = "__native__";
-                        nativeName.append(CHAR(PRINTNAME(name)));
-                        MemoryManager::manager.addSymbol(nativeName, (uint64_t)CAR(code));
-                        pc += 2;
-                        break;
-                    }
-                }
-                instruction1(module.GETFUN_OP);
-                pc += 2;
-                break;
-            }
+            INSTRUCTION1(GETFUN_OP);
             INSTRUCTION1(GETGLOBFUN_OP);
             INSTRUCTION1(GETSYMFUN_OP);
             INSTRUCTION1(GETBUILTIN_OP);
             INSTRUCTION1(GETINTLBUILTIN_OP);
             INSTRUCTION0(CHECKFUN_OP);
-            case Opcode::MAKEPROM_OP: {
-                if (nativeCall) {
-                    Value * arg = CallInst::Create(
-                            module.getFunction("__jit__vectorElt"),
-                            std::vector<Value *>({{
-                                native_consts, module.constant(code[pc+1])}}),
-                            "prom_code", current);
-                    Value * prom_arg = CallInst::Create(
-                           module.getFunction("Rf_mkPROMISE"),
-                           std::vector<Value *>({{arg, native_rho}}),
-                           "prom_arg", current);
-                    appendArg(&arglist, prom_arg);
-                } else {
-                    instruction1(module.MAKEPROM_OP);
-                }
-                pc += 2;
-                break;
-            }
-            case Opcode::DOMISSING_OP: {
-                assert(!nativeCall &&
-                        "Cannot handle missing args for native calls yet");
-                instruction1(module.DOMISSING_OP);
-                pc += 2;
-                break;
-            }
-            case Opcode::SETTAG_OP: {
-                assert(!nativeCall &&
-                        "Cannot handle named args for native calls yet");
-                instruction1(module.SETTAG_OP);
-                pc += 2;
-                break;
-            }
-            case Opcode::DODOTS_OP: {
-                assert(!nativeCall &&
-                        "Cannot handle dotdot args for native calls yet");
-                instruction0(module.DODOTS_OP);
-                pc += 1;
-                break;
-            }
-            case Opcode::PUSHARG_OP: {
-                assert(!nativeCall && "cannot compile pusharg for native call");
-                instruction1(module.PUSHARG_OP);
-                pc += 2;
-                break;
-            }
-            case Opcode::PUSHCONSTARG_OP: {
-                if (nativeCall) {
-                    Value * c =  CallInst::Create(
-                            module.getFunction("__jit__vectorElt"),
-                            std::vector<Value *>({{
-                                native_consts, module.constant(code[pc+1])}}),
-                            "c", current);
-                    appendArg(&arglist, c);
-                } else {
-                    instruction1(module.PUSHCONSTARG_OP);
-                }
-                pc += 2;
-                break;
-            }
-            case Opcode::PUSHNULLARG_OP: {
-                if (nativeCall) {
-                    appendArg(&arglist,
-                              RuntimeHelper::helper.asConst(R_NilValue));
-                } else {
-                    instruction1(module.PUSHNULLARG_OP);
-                }
-                break;
-            }
-            case Opcode::PUSHTRUEARG_OP: {
-                if (nativeCall) {
-                    appendArg(&arglist,
-                              RuntimeHelper::helper.asConst(R_TrueValue));
-                } else {
-                    instruction1(module.PUSHTRUEARG_OP);
-                }
-                pc += 2;
-                break;
-            }
-            case Opcode::PUSHFALSEARG_OP: {
-                if (nativeCall) {
-                    appendArg(&arglist,
-                              RuntimeHelper::helper.asConst(R_FalseValue));
-                } else {
-                    instruction1(module.PUSHFALSEARG_OP);
-                }
-                pc += 2;
-                break;
-            }
-            case Opcode::CALL_OP: {
-                if (nativeCall) {
-                    Value * call =  CallInst::Create(
-                            module.getFunction("__jit__vectorElt"),
-                            std::vector<Value *>({{
-                                native_consts, module.constant(code[pc+1])}}),
-                            "call", current);
-                    Value * op = RuntimeHelper::helper.asConst(nativeCall);
-
-                    // TODO do this inline
-                    Value * newrho = CallInst::Create(
-                            module.getFunction("closureQuickArgumentAdaptor"),
-                            std::vector<Value *>({{op, arglist}}),
-                            "newrho",
-                            current);
-                    Value * cntxt = new AllocaInst(runtime.t->t_RCNTXT,
-                            "cntxt", current);
-                    CallInst::Create(
-                            module.getFunction("initClosureContext"),
-                            std::vector<Value *>({{
-                                cntxt, call, newrho, native_rho, arglist, op}}),
-                            "", current);
-
-                    Value * b = CallInst::Create(
-                         module.getFunction("__jit__cdr"),
-                         std::vector<Value *>({{op}}),
-                         "body", current);
-
-                    Function * llvmFun = (Function*)TAG(CDR(nativeCall));
-                    Value * res = CallInst::Create(
-                        module.getFunction("closureNativeCallTrampoline"),
-                        std::vector<Value *>({{
-                            module.getFunction(nativeName, llvmFun),
-                            cntxt, b, newrho}}),
-                        "res", current);
-
-                    CallInst::Create(
-                        module.getFunction("bcnpush"),
-                        std::vector<Value *>({{res}}),
-                        "", current);
-       
-                    CallInst::Create(
-                            module.getFunction("endClosureContext"),
-                            std::vector<Value *>({{cntxt, res}}),
-                            "", current);
-
-                    nativeCall = nullptr;
-                } else {
-                    instruction1(module.CALL_OP);
-                }
-                pc += 2;
-                break;
-            }
+            INSTRUCTION1(MAKEPROM_OP);
+            INSTRUCTION0(DOMISSING_OP);
+            INSTRUCTION1(SETTAG_OP);
+            INSTRUCTION0(DODOTS_OP);
+            INSTRUCTION0(PUSHARG_OP);
+            INSTRUCTION1(PUSHCONSTARG_OP);
+            INSTRUCTION0(PUSHNULLARG_OP);
+            INSTRUCTION0(PUSHTRUEARG_OP);
+            INSTRUCTION0(PUSHFALSEARG_OP);
+            INSTRUCTION1(CALL_OP);
             INSTRUCTION1(CALLBUILTIN_OP);
             INSTRUCTION1(CALLSPECIAL_OP);
             INSTRUCTION1(MAKECLOSURE_OP);
@@ -641,16 +668,15 @@ private:
     int * code;
     SEXP body;
     SEXP consts;
-    SEXP rho;
     BasicBlock * current;
     BasicBlock * lastBB;
     Value * context;
-    Value * native_rho;
-    Value * native_consts;
     int pc;
-    RuntimeHelper & runtime;
+
+
+
+
 };
-bool Compiler::initialized = false;
 
 
 } // namespace
@@ -659,13 +685,10 @@ bool Compiler::initialized = false;
 
 namespace rjit {
 
-void initializeJIT() {
-    Compiler::initializeJIT();
-}
 
-SEXP compile(SEXP bytecode, SEXP rho) {
+SEXP compile(SEXP bytecode) {
     Compiler c;
-    Function * f = c.compile(bytecode, "rjitf", rho);
+    Function * f = c.compile(bytecode, "rjitf");
     RFunctionPtr fptr = c.jit();
     SEXP result = CONS(reinterpret_cast<SEXP>(fptr), BCODE_CONSTS(bytecode));
     assert(TAG(result) == R_NilValue);
