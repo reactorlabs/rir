@@ -352,7 +352,7 @@ public:
         // perform all the relocations
         for (SEXP s : relocations) {
             auto f = reinterpret_cast<Function*>(TAG(s));
-            f->dump();
+//            f->dump();
             SETCAR(s, reinterpret_cast<SEXP>(engine->getPointerToFunction(f)));
         }
         return result;
@@ -1218,8 +1218,8 @@ public:
         Value * call = compileCall(inCall, inFun);
         ReturnInst::Create(getGlobalContext(), call, b);
 
-        std::cout << "generic call IC created:" << std::endl;
-        f->dump();
+//        std::cout << "generic call IC created:" << std::endl;
+//        f->dump();
 
         ExecutionEngine * engine = EngineBuilder(std::unique_ptr<Module>(m)).create();
         engine->finalizeObject();
