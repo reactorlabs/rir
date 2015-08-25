@@ -70,12 +70,15 @@ PointerType * initializeTypes();
 
 
 // Functions to call in the debugger:
-static void printType(Value * v) {
-    Type * t = v->getType();
+static void printType(Type * t) {
     std::string type_str;
     llvm::raw_string_ostream rso(type_str);
     t->print(rso);
     std::cout << "Type: " << rso.str() << std::endl;
+}
+static void printTypeOf(Value * v) {
+    Type * t = v->getType();
+    printType(t);
 }
 static void disassNative(SEXP native) {
     ((Function*)TAG(native))->dump();
@@ -89,6 +92,9 @@ Type * Int;
 PointerType * SEXP = initializeTypes();
 
 StructType * SEXPREC;
+
+StructType * cntxt;
+PointerType * cntxtPtr;
 
 StructType * CallArgs;
 PointerType * CallArgsPtr;
@@ -115,6 +121,9 @@ FunctionType * void_argssexp;
 FunctionType * void_argssexpsexp;
 FunctionType * void_argssexpint;
 
+FunctionType * void_cntxtsexpsexpsexpsexpsexp;
+FunctionType * void_cntxtsexp;
+FunctionType * sexp_contxtsexpsexp;
 }
 
 PointerType * initializeTypes() {
@@ -144,6 +153,12 @@ PointerType * initializeTypes() {
     // API function types
     Type * t_void = Type::getVoidTy(context);
 
+    // TODO: probably not the best idea...
+    t::cntxt = StructType::create(context, "struct.RCNTXT");
+    std::vector<Type*> cntxtbod(360 /* sizeof(RCNTXT) */, IntegerType::get(context, 8)); 
+    t::cntxt->setBody(cntxtbod);
+    t::cntxtPtr = PointerType::get(t::cntxt, 0);
+
     t::i8ptr = PointerType::get(IntegerType::get(context, 8), 0);
 #define DECLARE(name, ret, ...) fields = { __VA_ARGS__ }; t::name = FunctionType::get(ret, fields, false)
     DECLARE(void_void, t_void);
@@ -163,6 +178,9 @@ PointerType * initializeTypes() {
     DECLARE(void_argssexp, t_void, t::CallArgsPtr, t::SEXP);
     DECLARE(void_argssexpsexp, t_void, t::CallArgsPtr, t::SEXP, t::SEXP);
     DECLARE(void_argssexpint, t_void, t::CallArgsPtr, t::SEXP, t::Int);
+    DECLARE(void_cntxtsexpsexpsexpsexpsexp, t_void, t::cntxtPtr, t::SEXP, t::SEXP, t::SEXP, t::SEXP, t::SEXP);
+    DECLARE(void_cntxtsexp, t_void, t::cntxtPtr, t::SEXP);
+    DECLARE(sexp_contxtsexpsexp, t::SEXP, t::cntxtPtr, t::SEXP, t::SEXP);
 #undef DECLARE
 
     // initialize LLVM backend
@@ -364,6 +382,11 @@ public:
     DECLARE(addArgument, void_argssexp);
     DECLARE(addKeywordArgument, void_argssexpsexp);
     DECLARE(addEllipsisArgument, void_argssexpint);
+    DECLARE(CONS_NR, sexp_sexpsexp);
+    DECLARE(closureQuickArgumentAdaptor, sexp_sexpsexp);
+    DECLARE(initClosureContext, void_cntxtsexpsexpsexpsexpsexp);
+    DECLARE(endClosureContext, void_cntxtsexp);
+    DECLARE(closureNativeCallTrampoline, sexp_contxtsexpsexp);
 
     Function * patchpoint;
 
@@ -466,7 +489,7 @@ public:
         // perform all the relocations
         for (SEXP s : relocations) {
             auto f = reinterpret_cast<Function*>(TAG(s));
-//            f->dump();
+            f->dump();
             SETCAR(s, reinterpret_cast<SEXP>(engine->getPointerToFunction(f)));
         }
         return result;
@@ -1335,6 +1358,7 @@ public:
         auto funT = FunctionType::get(t::SEXP, argT, false);
 
         f = Function::Create(funT, Function::ExternalLinkage, "callIC", m);
+        b = BasicBlock::Create(getGlobalContext(), "start", f, nullptr);
 
         // Load the args in the same order as the stub
         Function::arg_iterator argI = f->arg_begin();
@@ -1353,7 +1377,12 @@ public:
         stackmapId = argI++;
         stackmapId->setName("stackmapId");
 
-        auto ic = compileGenericIc(inCall, inFun);
+        if (!compileIc(inCall, inFun))
+            compileGenericIc(inCall, inFun);
+
+        ExecutionEngine * engine = EngineBuilder(std::unique_ptr<Module>(m)).create();
+        engine->finalizeObject();
+        auto ic = engine->getPointerToFunction(f);
 
         // TODO: This directly patches the argument of the movabs,
         // clearly we need sth more stable
@@ -1365,18 +1394,76 @@ public:
 
 
 private:
-    void * compileGenericIc(SEXP inCall, SEXP inFun) {
-        b = BasicBlock::Create(getGlobalContext(), "start", f, nullptr);
+    bool compileIc(SEXP inCall, SEXP inFun) {
+        std::vector<bool> promarg(icArgs.size(), false);
 
+        // Check for named args or ...
+        SEXP arg = CDR(inCall);
+        int i = 0;
+        while (arg != R_NilValue) {
+            if (TAG(arg) != R_NilValue)
+                return false;
+            if (CAR(arg) == R_DotsSymbol)
+                return false;
+
+            switch (TYPEOF(CAR(arg))) {
+                case LGLSXP:
+                case INTSXP:
+                case REALSXP:
+                case CPLXSXP:
+                case STRSXP:
+                    break;
+                default:
+                    promarg[i] = true;
+            }
+            i++;
+            arg = CDR(arg);
+        }
+
+        if (TYPEOF(inFun) == CLOSXP) {
+            SEXP body = CDR(inFun);
+            if (TYPEOF(body) == NATIVESXP) {
+                // TODO add guard for fun!!!
+                
+                Value * arglist = constant(R_NilValue);
+
+                // This reverses the arglist, but quick argumentAdapter
+                // reverses again
+                for (int i = 0; i < icArgs.size(); ++i) {
+                    Value * arg = icArgs[i];
+                    if (promarg[i])
+                        arg = INTRINSIC(m.createPromise, arg, rho);
+                    arglist = INTRINSIC(m.CONS_NR, arg, arglist);
+                }
+
+                Value * newrho = INTRINSIC(m.closureQuickArgumentAdaptor,
+                        fun, arglist);
+
+                Value * cntxt = new AllocaInst(
+                        t::cntxt, "", b);
+
+                INTRINSIC(m.initClosureContext,
+                        cntxt, call, newrho, rho, arglist, fun);
+
+                Value * res = INTRINSIC(m.closureNativeCallTrampoline,
+                        cntxt, constant(body), newrho);
+
+                INTRINSIC(m.endClosureContext, cntxt, res);
+
+                ReturnInst::Create(getGlobalContext(), res, b);
+
+                f->dump();
+                return true;
+            }
+        }
+        return false;
+    }
+
+    bool compileGenericIc(SEXP inCall, SEXP inFun) {
         Value * call = compileCall(inCall, inFun);
         ReturnInst::Create(getGlobalContext(), call, b);
 
-//        std::cout << "generic call IC created:" << std::endl;
-//        f->dump();
-
-        ExecutionEngine * engine = EngineBuilder(std::unique_ptr<Module>(m)).create();
-        engine->finalizeObject();
-        return engine->getPointerToFunction(f);
+        return true;
     }
 
     Value * compileCall(SEXP call, SEXP op) {

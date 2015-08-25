@@ -182,3 +182,31 @@ stopifnot(fx(1,2) == 3)
 f <- function(a) missing(a)
 fx <- jit.compile(function() f())
 stopifnot(fx() == TRUE)
+
+# native call ic
+g <- jit.compile(function() 1)
+f <- jit.compile(function() g())
+stopifnot(f() == 1)
+stopifnot(f() == 1)
+stopifnot(f() == 1)
+
+# native call ic args
+g <- jit.compile(function(a) a)
+f <- jit.compile(function(a) g(a))
+stopifnot(f(1) == 1)
+stopifnot(f(1) == 1)
+stopifnot(f(1) == 1)
+
+# native call ic args order
+g <- jit.compile(function(a, b) {print(c(a,b)); a - b})
+f <- jit.compile(function(a, b) g(a, b))
+stopifnot(f(2,1) == 1)
+stopifnot(f(2,1) == 1)
+stopifnot(f(2,1) == 1)
+
+# native call ic args order
+g <- jit.compile(function(a, b) {print(c(a,b)); a - b})
+f <- jit.compile(function(a) g(a, 1))
+stopifnot(f(2) == 1)
+stopifnot(f(2) == 1)
+stopifnot(f(2) == 1)
