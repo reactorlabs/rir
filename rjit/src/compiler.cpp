@@ -69,12 +69,16 @@ DECLARE(Ellipsis, "...");
 PointerType * initializeTypes();
 
 
+// Functions to call in the debugger:
 static void printType(Value * v) {
     Type * t = v->getType();
     std::string type_str;
     llvm::raw_string_ostream rso(type_str);
     t->print(rso);
     std::cout << "Type: " << rso.str() << std::endl;
+}
+static void disassNative(SEXP native) {
+    ((Function*)TAG(native))->dump();
 }
 
 
@@ -176,6 +180,12 @@ private:
     JITMemoryManager(const JITMemoryManager&) LLVM_DELETED_FUNCTION;
     void operator=(const JITMemoryManager&) LLVM_DELETED_FUNCTION;
 
+    struct MemoryGroup {
+           SmallVector<sys::MemoryBlock, 16> AllocatedMem;
+           SmallVector<sys::MemoryBlock, 16> FreeMem;
+           sys::MemoryBlock Near;
+    };
+
 public:
     JITMemoryManager() {};
 
@@ -195,6 +205,110 @@ public:
 
         return res;
     }
+
+    uint8_t * allocateCodeSection(uintptr_t Size,
+                                  unsigned Alignment,
+                                  unsigned SectionID,
+                                  StringRef SectionName) {
+      return allocateSection(CodeMem, Size, Alignment);
+    }
+    
+private:
+    uint8_t * allocateSection(MemoryGroup &MemGroup,
+                              uintptr_t Size,
+                              unsigned Alignment) {
+
+        if (!Alignment)
+          Alignment = 16;
+
+        assert(!(Alignment & (Alignment - 1)) && "Alignment must be a power of two.");
+
+        uintptr_t RequiredSize = Alignment * ((Size + Alignment - 1)/Alignment + 1);
+        uintptr_t Addr = 0;
+
+        // Look in the list of free memory regions and use a block there if one
+        // is available.
+        for (int i = 0, e = MemGroup.FreeMem.size(); i != e; ++i) {
+          sys::MemoryBlock &MB = MemGroup.FreeMem[i];
+          if (MB.size() >= RequiredSize) {
+            Addr = (uintptr_t)MB.base();
+            uintptr_t EndOfBlock = Addr + MB.size();
+            // Align the address.
+            Addr = (Addr + Alignment - 1) & ~(uintptr_t)(Alignment - 1);
+            // Store cutted free memory block.
+            MemGroup.FreeMem[i] = sys::MemoryBlock((void*)(Addr + Size),
+                                                   EndOfBlock - Addr - Size);
+            return (uint8_t*)Addr;
+          }
+        }
+
+        // No pre-allocated free block was large enough. Allocate a new memory region.
+        // Note that all sections get allocated as read-write.  The permissions will
+        // be updated later based on memory group.
+        //
+        // FIXME: It would be useful to define a default allocation size (or add
+        // it as a constructor parameter) to minimize the number of allocations.
+        //
+        // FIXME: Initialize the Near member for each memory group to avoid
+        // interleaving.
+        std::error_code ec;
+        sys::MemoryBlock MB = sys::Memory::allocateMappedMemory(RequiredSize,
+                                                                &MemGroup.Near,
+                                                                sys::Memory::MF_READ |
+                                                                  sys::Memory::MF_WRITE,
+                                                                ec);
+        if (ec) {
+          // FIXME: Add error propagation to the interface.
+          return nullptr;
+        }
+
+        // Save this address as the basis for our next request
+        MemGroup.Near = MB;
+
+        MemGroup.AllocatedMem.push_back(MB);
+        Addr = (uintptr_t)MB.base();
+        uintptr_t EndOfBlock = Addr + MB.size();
+
+        // Align the address.
+        Addr = (Addr + Alignment - 1) & ~(uintptr_t)(Alignment - 1);
+
+        // The allocateMappedMemory may allocate much more memory than we need. In
+        // this case, we store the unused memory as a free memory block.
+        unsigned FreeSize = EndOfBlock-Addr-Size;
+        if (FreeSize > 16)
+          MemGroup.FreeMem.push_back(sys::MemoryBlock((void*)(Addr + Size), FreeSize));
+
+        // Return aligned address
+        return (uint8_t*)Addr;
+    }
+
+    bool finalizeMemory(std::string *ErrMsg) override {
+        if (SectionMemoryManager::finalizeMemory(ErrMsg))
+            return true;
+
+        for (int i = 0, e = CodeMem.AllocatedMem.size(); i != e; ++i) {
+            std::error_code ec = 
+                sys::Memory::protectMappedMemory(
+                        CodeMem.AllocatedMem[i],
+                        sys::Memory::MF_READ | sys::Memory::MF_EXEC |
+                        sys::Memory::MF_WRITE);
+            if (ec) {
+                if (ErrMsg) {
+                    *ErrMsg = ec.message();
+                }
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    ~JITMemoryManager() {
+      for (unsigned i = 0, e = CodeMem.AllocatedMem.size(); i != e; ++i)
+        sys::Memory::releaseMappedMemory(CodeMem.AllocatedMem[i]);
+    }
+     
+    MemoryGroup CodeMem;
 };
 
 
@@ -319,9 +433,9 @@ SEXP createNativeSXP(RFunctionPtr fptr, SEXP ast, std::vector<SEXP> const & obje
 #define JUMP(block) BranchInst::Create(block, context->b);
 
 
-static void * CallICStub0(SEXP, SEXP, SEXP, uintptr_t, uint32_t);
-static void * CallICStub1(SEXP, SEXP, SEXP, SEXP, uintptr_t, uint32_t);
-static void * CallICStub2(SEXP, SEXP, SEXP, SEXP, SEXP, uintptr_t, uint32_t);
+static void * CallICStub0(SEXP, SEXP, SEXP, uintptr_t, uintptr_t);
+static void * CallICStub1(SEXP, SEXP, SEXP, SEXP, uintptr_t, uintptr_t);
+static void * CallICStub2(SEXP, SEXP, SEXP, SEXP, SEXP, uintptr_t, uintptr_t);
 
 class Compiler {
 public:
@@ -406,12 +520,12 @@ private:
 
     };
 
-    uint32_t _id = 1;
+    static uint32_t stackMapId;
 
     Value * insertICCallStub(
             std::vector<Value*> & callArgs, Value * function, Value * call) {
 
-        uint32_t id = _id++;;
+        uint32_t id = stackMapId++;;
         auto mod = &m;
 
         /*  %result = call i64 (i64, i32, i8*, i32, ...)*
@@ -426,11 +540,12 @@ private:
             case 0: targetAddr = (uint64_t)&CallICStub0; break;
             case 1: targetAddr = (uint64_t)&CallICStub1; break;
             case 2: targetAddr = (uint64_t)&CallICStub2; break;
+            default: asm("int3"); //TODO Generate the icStubs!
         }
         ConstantInt* const_int64_target = ConstantInt::get(mod->getContext(), APInt(64, targetAddr, false));
         CastInst* ptr_target            = new IntToPtrInst(const_int64_target, t::i8ptr, "target", context->b);
 
-        ConstantInt* const_int32_numarg = ConstantInt::get(mod->getContext(), APInt(32, callArgs.size() + 3, false));
+        ConstantInt* const_int32_numarg = ConstantInt::get(mod->getContext(), APInt(32, callArgs.size() + 5, false));
 
         std::vector<Value*> int64_result_params;
         // Patchpoint argumenst (compiled away)
@@ -1170,50 +1285,87 @@ private:
       */
     std::vector<SEXP> relocations;
 
-
 };
+
+uint32_t Compiler::stackMapId = 1;
+
 #undef INTRINSIC
 
 #define INTRINSIC(name, ...) CallInst::Create(name, ARGS(__VA_ARGS__), "", b)
+
+// TODO: find target endianness
+typedef StackMapV1Parser<llvm::support::little> StackMapParserT;
+
 class ICCompiler  {
 public:
 
     ICCompiler() : m("ic") {}
 
     void * compile(SEXP inCall, SEXP inFun, SEXP inRho,
-            uint64_t callee, uint32_t stackmapId,
+            uintptr_t inCallee, uintptr_t inStackmapId,
             std::initializer_list<SEXP> inArgs) {
 
+        uintptr_t patchAddr = 0;
 
-        // TODO: stackmaps are not yet needed, since we do not patch inline
         for (auto s : stackmaps) {
             ArrayRef<uint8_t> sm(s.first, s.second);
-            // TODO: find target endianness
-            StackMapV1Parser<llvm::support::little> p(sm);
-            for (auto f = p.functions_begin(); f != p.functions_end(); f++) {
-                if (f->getFunctionAddress() == callee) {
-                    // std::cout << "found stackmap" << std::endl;
+            StackMapParserT p(sm);
+
+            for (const auto &r : p.records()) {
+                if (inStackmapId == r.getID()) {
+                    patchAddr = inCallee + r.getInstructionOffset();
+                    break;
                 }
             }
         }
+        if (patchAddr == 0) {
+            std::cout << "something went very wrong, "
+                      << "cannot find stackmap for patchpoint " << inStackmapId
+                      << std::endl;
+            asm("int3");
+        }
 
+        // Set up a function type which corresponds to the ICStub signature
         std::vector<Type*> argT;
-        for (int i = 0; i < inArgs.size() + 2; i++) {
+        for (int i = 0; i < inArgs.size() + 3; i++) {
             argT.push_back(t::SEXP);
         }
+        argT.push_back(IntegerType::get(getGlobalContext(), 64));
+        argT.push_back(IntegerType::get(getGlobalContext(), 64));
         auto funT = FunctionType::get(t::SEXP, argT, false);
 
         f = Function::Create(funT, Function::ExternalLinkage, "callIC", m);
 
+        // Load the args in the same order as the stub
         Function::arg_iterator argI = f->arg_begin();
         for (auto a : inArgs) {
             icArgs.push_back(argI++);
         }
+
+        call = argI++;
+        call->setName("call");
         fun = argI++;
         fun->setName("op");
         rho = argI++;
         rho->setName("rho");
+        callee = argI++;
+        callee->setName("callee");
+        stackmapId = argI++;
+        stackmapId->setName("stackmapId");
 
+        auto ic = compileGenericIc(inCall, inFun);
+
+        // TODO: This directly patches the argument of the movabs,
+        // clearly we need sth more stable
+        *(void**)(patchAddr+2) = ic;
+
+        return ic;
+    }
+
+
+
+private:
+    void * compileGenericIc(SEXP inCall, SEXP inFun) {
         b = BasicBlock::Create(getGlobalContext(), "start", f, nullptr);
 
         Value * call = compileCall(inCall, inFun);
@@ -1226,8 +1378,6 @@ public:
         engine->finalizeObject();
         return engine->getPointerToFunction(f);
     }
-
-private:
 
     Value * compileCall(SEXP call, SEXP op) {
         // now create the CallArgs structure as local variable
@@ -1338,6 +1488,9 @@ private:
 
     Value * rho;
     Value * fun;
+    Value * callee;
+    Value * stackmapId;
+    Value * call;
     std::vector<Value*> icArgs;
 
     JITModule m;
@@ -1345,27 +1498,27 @@ private:
 #undef INTRINSIC
 
 static void * CallICStub0(
-        SEXP call, SEXP fun, SEXP rho, uintptr_t callee, uint32_t stackmapId) {
-
+        SEXP call, SEXP fun, SEXP rho, uintptr_t callee, uintptr_t stackmapId) {
     ICCompiler compiler;
     void * ic = compiler.compile(call, fun, rho, callee, stackmapId, {});
-    return ((SEXP (*) (SEXP, SEXP))ic)(fun, rho);
+    return ((SEXP (*) (SEXP, SEXP, SEXP, uintptr_t, uintptr_t))ic)(
+            call, fun, rho, callee, stackmapId);
 }
 
 static void * CallICStub1(SEXP a1,
-        SEXP call, SEXP fun, SEXP rho, uintptr_t callee, uint32_t stackmapId) {
-
+        SEXP call, SEXP fun, SEXP rho, uintptr_t callee, uintptr_t stackmapId) {
     ICCompiler compiler;
     void * ic = compiler.compile(call, fun, rho, callee, stackmapId, {a1});
-    return ((SEXP (*) (SEXP, SEXP, SEXP))ic)(a1, fun, rho);
+    return ((SEXP (*) (SEXP, SEXP, SEXP, SEXP, uintptr_t, uintptr_t))ic)(
+            a1, call, fun, rho, callee, stackmapId);
 }
 
 static void * CallICStub2(SEXP a1, SEXP a2,
-        SEXP call, SEXP fun, SEXP rho, uintptr_t callee, uint32_t stackmapId) {
-
+        SEXP call, SEXP fun, SEXP rho, uintptr_t callee, uintptr_t stackmapId) {
     ICCompiler compiler;
     void * ic = compiler.compile(call, fun, rho, callee, stackmapId, {a1, a2});
-    return ((SEXP (*) (SEXP, SEXP, SEXP, SEXP))ic)(a1, a2, fun, rho);
+    return ((SEXP (*) (SEXP, SEXP, SEXP, SEXP, SEXP, uintptr_t, uintptr_t))ic)(
+            a1, a2, call, fun, rho, callee, stackmapId);
 }
 
 

@@ -27,17 +27,22 @@ stopifnot(eval(ex) == 30)
 f <- function(a, b) a + b
 ex <- jit.compile(quote(f(3, 4)))
 stopifnot(eval(ex) == 7)
+# call again to test ic
+stopifnot(eval(ex) == 7)
 
 # blocks
 ex <- jit.compile(quote({ 1 ; 2; 3; }))
+stopifnot(eval(ex) == 3)
 stopifnot(eval(ex) == 3)
 
 # creating a function compiles it
 ex <- jit.compile(quote(function(a, b) a + b))
 f = eval(ex)
 stopifnot(typeof(.Internal(bodyCode(f))) == "native")
+stopifnot(typeof(.Internal(bodyCode(f))) == "native")
 
 # created function can be evaluated
+stopifnot(f(1, 2) == 3)
 stopifnot(f(1, 2) == 3)
 
 # a function can be compiled
@@ -48,9 +53,11 @@ stopifnot(ex(10, -2) == 8)
 # return statement works
 f <- jit.compile(function(a, b) { return(1); 2 })
 stopifnot(f(1, 2) == 1)
+stopifnot(f(1, 2) == 1)
 
 # empty return returns NULL
 f <- jit.compile(function(a, b) return())
+stopifnot(f() == NULL)
 stopifnot(f() == NULL)
 
 # return in a promise
@@ -62,9 +69,14 @@ fx <- jit.compile(function(a) {
     f(if(a) TRUE else return(66))
 })
 stopifnot(fx(0) == 66)
+stopifnot(fx(0) == 66)
+stopifnot(! exists("ptest"))
 stopifnot(! exists("ptest"))
 stopifnot(fx(1) == 100)
+stopifnot(fx(1) == 100)
 stopifnot(exists("ptest"))
+stopifnot(exists("ptest"))
+stopifnot(ptest == 10)
 stopifnot(ptest == 10)
 
 # condition
