@@ -524,6 +524,7 @@ private:
         if (TYPEOF(CAR(call)) != SYMSXP) {
             // it is a complex function, first get the value of the function and then check it
             f = compileExpression(CAR(call));
+            INTRINSIC(m.checkFunction, f);
         } else {
             // it is simple function - try compiling it with intrinsics
             f = compileIntrinsic(call);
