@@ -1,8 +1,23 @@
 
-jit.initialize <- function() {
-    .Call("initializeRJIT")
+jit.compile <- function(what) {
+    if (typeof(what) == "closure") {
+        bc = .Internal(bodyCode(what))
+        native = .Call("compile", bc)
+        f = .Internal(bcClose(formals(what), native, environment(what)))
+        attrs = attributes(what)
+        if (!is.null(attrs))
+            attributes(f) = attrs
+        if (isS4(what))
+            f = asS4(f)
+        f
+    } else if (typeof(what) %in% c("language", "symbol", "logical", "integer", "double", "complex", "character")) {
+        .Call("compile", what)
+    } else {
+       stop("Only bytecode expressions and asts can be jitted.")
+    }
 }
 
+# stack based jit - this should be deprecated big time soon
 jit <- function(what) {
     if (typeof(what) == "closure") {
         bc = .Internal(bodyCode(what))

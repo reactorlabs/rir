@@ -389,7 +389,7 @@ public:
         // call the finalizer in last basic block
         finalize();
         // verify the function we have
-        f->dump();
+        //f->dump();
         verifyFunction(*f);
         return f;
     }
