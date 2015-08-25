@@ -450,15 +450,65 @@ SEXP createNativeSXP(RFunctionPtr fptr, SEXP ast, std::vector<SEXP> const & obje
     return result;
 }
 
+static void * CallICStub0(SEXP, SEXP, SEXP, uintptr_t, uintptr_t);
+static void * CallICStub1(SEXP, SEXP, SEXP, SEXP, uintptr_t, uintptr_t);
+static void * CallICStub2(SEXP, SEXP, SEXP, SEXP, SEXP, uintptr_t, uintptr_t);
+
+Value * insertICCallStub(
+        std::vector<Value*> & callArgs, Value * function, Value * call, Value * rho, JITModule & m, BasicBlock * b, Value * f, uint32_t id) {
+
+    /*  %result = call i64 (i64, i32, i8*, i32, ...)*
+     *            @llvm.experimental.patchpoint.i64(i64 id, i32 15, i8* %target, i32 2, i64 %arg1, i64 %arg2)
+     */
+
+    ConstantInt* const_int_id       = ConstantInt::get(m.getContext(), APInt(64, (uint64_t)id, false));
+    ConstantInt* const_int_bs       = ConstantInt::get(m.getContext(), APInt(32, StringRef("15"), 10));
+
+    uint64_t targetAddr;
+    switch(callArgs.size()) {
+        case 0: targetAddr = (uint64_t)&CallICStub0; break;
+        case 1: targetAddr = (uint64_t)&CallICStub1; break;
+        case 2: targetAddr = (uint64_t)&CallICStub2; break;
+        default: asm("int3"); //TODO Generate the icStubs!
+    }
+    ConstantInt* const_int64_target = ConstantInt::get(m.getContext(), APInt(64, targetAddr, false));
+    CastInst* ptr_target            = new IntToPtrInst(const_int64_target, t::i8ptr, "target", b);
+
+    ConstantInt* const_int32_numarg = ConstantInt::get(m.getContext(), APInt(32, callArgs.size() + 5, false));
+
+    std::vector<Value*> int64_result_params;
+    // Patchpoint argumenst (compiled away)
+    int64_result_params.push_back(const_int_id);
+    int64_result_params.push_back(const_int_bs);
+    int64_result_params.push_back(ptr_target);
+    int64_result_params.push_back(const_int32_numarg);
+
+    // Closure arguments
+    for (auto arg : callArgs) {
+        int64_result_params.push_back(arg);
+    }
+
+    // Additional IC arguments
+    int64_result_params.push_back(call);
+    int64_result_params.push_back(function);
+    int64_result_params.push_back(rho);
+    int64_result_params.push_back(f);
+    int64_result_params.push_back(const_int_id);
+
+    CallInst* int64_result = CallInst::Create(m.patchpoint, int64_result_params, "", b);
+    int64_result->setCallingConv(CallingConv::C);
+    int64_result->setTailCall(false);
+    AttributeSet int64_result_PAL;
+    int64_result->setAttributes(int64_result_PAL);
+
+    return new IntToPtrInst(int64_result, t::SEXP, "res", b);
+}
+
 
 #define ARGS(...) std::vector<Value *>({ __VA_ARGS__ })
 #define INTRINSIC(name, ...) CallInst::Create(name, ARGS(__VA_ARGS__), "", context->b)
 #define JUMP(block) BranchInst::Create(block, context->b);
 
-
-static void * CallICStub0(SEXP, SEXP, SEXP, uintptr_t, uintptr_t);
-static void * CallICStub1(SEXP, SEXP, SEXP, SEXP, uintptr_t, uintptr_t);
-static void * CallICStub2(SEXP, SEXP, SEXP, SEXP, SEXP, uintptr_t, uintptr_t);
 
 class Compiler {
 public:
@@ -489,7 +539,7 @@ public:
         // perform all the relocations
         for (SEXP s : relocations) {
             auto f = reinterpret_cast<Function*>(TAG(s));
-            f->dump();
+//            f->dump();
             SETCAR(s, reinterpret_cast<SEXP>(engine->getPointerToFunction(f)));
         }
         return result;
@@ -542,62 +592,6 @@ private:
         std::vector<SEXP> objects;
 
     };
-
-    static uint32_t stackMapId;
-
-    Value * insertICCallStub(
-            std::vector<Value*> & callArgs, Value * function, Value * call) {
-
-        uint32_t id = stackMapId++;;
-        auto mod = &m;
-
-        /*  %result = call i64 (i64, i32, i8*, i32, ...)*
-         *            @llvm.experimental.patchpoint.i64(i64 id, i32 15, i8* %target, i32 2, i64 %arg1, i64 %arg2)
-         */
-
-        ConstantInt* const_int_id       = ConstantInt::get(mod->getContext(), APInt(64, (uint64_t)id, false));
-        ConstantInt* const_int_bs       = ConstantInt::get(mod->getContext(), APInt(32, StringRef("15"), 10));
-
-        uint64_t targetAddr;
-        switch(callArgs.size()) {
-            case 0: targetAddr = (uint64_t)&CallICStub0; break;
-            case 1: targetAddr = (uint64_t)&CallICStub1; break;
-            case 2: targetAddr = (uint64_t)&CallICStub2; break;
-            default: asm("int3"); //TODO Generate the icStubs!
-        }
-        ConstantInt* const_int64_target = ConstantInt::get(mod->getContext(), APInt(64, targetAddr, false));
-        CastInst* ptr_target            = new IntToPtrInst(const_int64_target, t::i8ptr, "target", context->b);
-
-        ConstantInt* const_int32_numarg = ConstantInt::get(mod->getContext(), APInt(32, callArgs.size() + 5, false));
-
-        std::vector<Value*> int64_result_params;
-        // Patchpoint argumenst (compiled away)
-        int64_result_params.push_back(const_int_id);
-        int64_result_params.push_back(const_int_bs);
-        int64_result_params.push_back(ptr_target);
-        int64_result_params.push_back(const_int32_numarg);
-
-        // Closure arguments
-        for (auto arg : callArgs) {
-            int64_result_params.push_back(arg);
-        }
-
-        // Additional IC arguments
-        int64_result_params.push_back(call);
-        int64_result_params.push_back(function);
-        int64_result_params.push_back(context->rho);
-        int64_result_params.push_back(context->f);
-        int64_result_params.push_back(const_int_id);
-
-        CallInst* int64_result = CallInst::Create(m.patchpoint, int64_result_params, "", context->b);
-        int64_result->setCallingConv(CallingConv::C);
-        int64_result->setTailCall(false);
-        AttributeSet int64_result_PAL;
-        int64_result->setAttributes(int64_result_PAL);
-
-        return new IntToPtrInst(int64_result, t::SEXP, "res", context->b);
-    }
-
 
     SEXP compileFunction(std::string const & name, SEXP ast, bool isPromise = false) {
         Context * old = context;
@@ -675,7 +669,7 @@ private:
         std::vector<Value*> args;
         compileArguments(CDR(call), args);
 
-        return insertICCallStub(args, f, constant(call));
+        return insertICCallStub(args, f, constant(call), context->rho, m, context->b, context->f, stackMapId++);
     }
 
     void compileArguments(SEXP argAsts, std::vector<Value*> & res) {
@@ -1308,9 +1302,11 @@ private:
       */
     std::vector<SEXP> relocations;
 
+    static uint32_t stackMapId;
 };
 
 uint32_t Compiler::stackMapId = 1;
+
 
 #undef INTRINSIC
 
@@ -1377,7 +1373,7 @@ public:
         stackmapId = argI++;
         stackmapId->setName("stackmapId");
 
-        if (!compileIc(inCall, inFun))
+        if (!compileIc(inCall, inFun, inStackmapId))
             compileGenericIc(inCall, inFun);
 
         ExecutionEngine * engine = EngineBuilder(std::unique_ptr<Module>(m)).create();
@@ -1394,7 +1390,7 @@ public:
 
 
 private:
-    bool compileIc(SEXP inCall, SEXP inFun) {
+    bool compileIc(SEXP inCall, SEXP inFun, uint64_t inStackMapId) {
         std::vector<bool> promarg(icArgs.size(), false);
 
         // Check for named args or ...
@@ -1423,8 +1419,20 @@ private:
         if (TYPEOF(inFun) == CLOSXP) {
             SEXP body = CDR(inFun);
             if (TYPEOF(body) == NATIVESXP) {
-                // TODO add guard for fun!!!
                 
+                BasicBlock * icMatch = BasicBlock::Create(
+                        getGlobalContext(), "icMatch", f, nullptr);
+                BasicBlock * icMiss = BasicBlock::Create(
+                        getGlobalContext(), "icMiss", f, nullptr);
+                BasicBlock * end = BasicBlock::Create(
+                        getGlobalContext(), "end", f, nullptr);
+
+                ICmpInst * test = new ICmpInst(*b,
+                        ICmpInst::ICMP_EQ, fun, constant(inFun), "guard");
+                BranchInst::Create(icMatch, icMiss, test, b);
+
+                b = icMatch;
+
                 Value * arglist = constant(R_NilValue);
 
                 // This reverses the arglist, but quick argumentAdapter
@@ -1450,9 +1458,21 @@ private:
 
                 INTRINSIC(m.endClosureContext, cntxt, res);
 
-                ReturnInst::Create(getGlobalContext(), res, b);
+                BranchInst::Create(end, b);
+                b = icMiss;
 
-                f->dump();
+                Value * missRes = insertICCallStub(
+                        icArgs, fun, constant(inCall), rho, m, b, callee, inStackMapId);
+
+                BranchInst::Create(end, b);
+                b = end;
+
+                PHINode * phi = PHINode::Create(t::SEXP, 2, "", b);
+                phi->addIncoming(res, icMatch);
+                phi->addIncoming(missRes, icMiss);
+                ReturnInst::Create(getGlobalContext(), phi, b);
+
+//                f->dump();
                 return true;
             }
         }

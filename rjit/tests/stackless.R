@@ -198,15 +198,25 @@ stopifnot(f(1) == 1)
 stopifnot(f(1) == 1)
 
 # native call ic args order
-g <- jit.compile(function(a, b) {print(c(a,b)); a - b})
+g <- jit.compile(function(a, b) a - b)
 f <- jit.compile(function(a, b) g(a, b))
 stopifnot(f(2,1) == 1)
 stopifnot(f(2,1) == 1)
 stopifnot(f(2,1) == 1)
 
 # native call ic args order
-g <- jit.compile(function(a, b) {print(c(a,b)); a - b})
+g <- jit.compile(function(a, b) a - b)
 f <- jit.compile(function(a) g(a, 1))
 stopifnot(f(2) == 1)
 stopifnot(f(2) == 1)
 stopifnot(f(2) == 1)
+
+# native call ic miss
+g <- jit.compile(function() 1)
+f <- jit.compile(function() g())
+stopifnot(f() == 1)
+stopifnot(f() == 1)
+g <- jit.compile(function() 2)
+stopifnot(f() == 2)
+stopifnot(f() == 2)
+
