@@ -216,9 +216,8 @@ public:
     DECLARE(createPromise, sexp_sexpsexp);
 //    DECLARE(createArgument, sexp_sexp);
 //    DECLARE(createKeywordArgument, sexp_sexpsexp);
-    DECLARE(addEllipsisArgument, sexp_sexpsexp);
-    DECLARE(addArgument, sexp_sexpsexp);
-    DECLARE(addKeywordArgument, sexp_sexpsexpsexp);
+//    DECLARE(addArgument, sexp_sexpsexp);
+//    DECLARE(addKeywordArgument, sexp_sexpsexpsexp);
     DECLARE(genericUnaryMinus, sexp_sexpsexpsexp);
     DECLARE(genericUnaryPlus, sexp_sexpsexpsexp);
     DECLARE(genericAdd, sexp_sexpsexpsexpsexp);
@@ -248,6 +247,9 @@ public:
     DECLARE(checkSwitchControl, void_sexpsexp);
     DECLARE(switchControlInteger, int_sexpint);
     DECLARE(switchControlCharacter, int_sexpsexpsexp);
+    DECLARE(addArgument, void_argssexp);
+    DECLARE(addKeywordArgument, void_argssexpsexp);
+    DECLARE(addEllipsisArgument, void_argssexpint);
 
     Function * patchpoint;
 
@@ -1181,6 +1183,7 @@ public:
             uint64_t callee, uint32_t stackmapId,
             std::initializer_list<SEXP> inArgs) {
 
+
         // TODO: stackmaps are not yet needed, since we do not patch inline
         for (auto s : stackmaps) {
             ArrayRef<uint8_t> sm(s.first, s.second);
@@ -1226,6 +1229,12 @@ public:
 private:
 
     Value * compileCall(SEXP call, SEXP op) {
+        // now create the CallArgs structure as local variable
+        Value * callArgs = new AllocaInst(t::CallArgs, "callArgs", b);
+        // set first to R_NilValue
+        std::vector<Value*> callArgsIndices = { constant(0), constant(0) };
+        Value * callArgsFirst = GetElementPtrInst::Create(callArgs, callArgsIndices, "", b);
+
         // now we must compile the arguments, this depends on the actual type of the function - promises by default, eager for builtins and no evaluation for specials
         Value * ftype = INTRINSIC(m.sexpType, fun);
         // switch the function call execution based on the function type
@@ -1243,13 +1252,13 @@ private:
         BranchInst::Create(next, b);
         // in builtin mode evaluate all arguments eagerly
         b = builtin;
-        Value * args = compileArguments(CDR(call), /*eager=*/ true);
+        Value * args = compileArguments(callArgs, callArgsFirst, CDR(call), /*eager=*/ true);
         Value * builtinResult = INTRINSIC(m.call, constant(call), fun, args, rho);
         builtin = b; // bb might have changed during arg evaluation
         BranchInst::Create(next, b);
         // in general closure case the arguments will become promises
         b = closure;
-        args = compileArguments(CDR(call), /*eager=*/ false);
+        args = compileArguments(callArgs, callArgsFirst, CDR(call), /*eager=*/ false);
         Value * closureResult = INTRINSIC(m.call, constant(call), fun, args, rho);
         BranchInst::Create(next, b);
         // add a phi node for the call result
@@ -1265,27 +1274,23 @@ private:
 
       Creates the pairlist of arguments used in R from the arguments and their names.
       */
-    Value * compileArguments(SEXP argAsts, bool eager) {
-        if (argAsts == R_NilValue) return constant(R_NilValue);
-
-        Value * first = nullptr;
-        Value * args  = constant(R_NilValue);
-
+    Value * compileArguments(Value * args, Value * first, SEXP argAsts, bool eager) {
+        // set first argument to R_NilValue
+        new StoreInst(constant(R_NilValue), first, b);
+        // if there are no arguments
         int argnum = 0;
         while (argAsts != R_NilValue) {
-            args = compileArgument(args, argAsts, argnum++, eager);
-            if (!first) first = args;
+            compileArgument(args, argAsts, argnum++, eager);
             argAsts = CDR(argAsts);
         }
-        return first;
+        return new LoadInst(first, "", b);
     }
-
 
     /** Compiles a single argument.
 
       Self evaluating literals are always returned as SEXP constants, anything else is either evaluated directly if eager is true, or they are compiled as new promises.
      */
-    Value * compileArgument(Value * args, SEXP argAst, int argnum, bool eager) {
+    void compileArgument(Value * args, SEXP argAst, int argnum, bool eager) {
         SEXP arg = CAR(argAst);
         Value * result;
         switch (TYPEOF(arg)) {
@@ -1299,7 +1304,8 @@ private:
             break;
         case SYMSXP:
             if (arg == R_DotsSymbol) {
-                return INTRINSIC(m.addEllipsisArgument, args, rho, eager ? constant(TRUE) : constant(FALSE));
+                INTRINSIC(m.addEllipsisArgument, args, rho, eager ? constant(TRUE) : constant(FALSE));
+                return;
             }
         default:
             if (eager) {
@@ -1312,9 +1318,9 @@ private:
         }
         SEXP name = TAG(argAst);
         if (name != R_NilValue)
-            return INTRINSIC(m.addKeywordArgument, result, constant(name), args);
+            INTRINSIC(m.addKeywordArgument, args, result, constant(name));
         else
-            return INTRINSIC(m.addArgument, result, args);
+            INTRINSIC(m.addArgument, args, result);
     }
 
     // TODO: Pull up
