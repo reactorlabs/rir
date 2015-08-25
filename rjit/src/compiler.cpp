@@ -464,12 +464,13 @@ Value * insertICCallStub(
     ConstantInt* const_int_id       = ConstantInt::get(m.getContext(), APInt(64, (uint64_t)id, false));
     ConstantInt* const_int_bs       = ConstantInt::get(m.getContext(), APInt(32, StringRef("15"), 10));
 
+    //TODO Generate the icStubs and support more than 2 args!!
     uint64_t targetAddr;
     switch(callArgs.size()) {
         case 0: targetAddr = (uint64_t)&CallICStub0; break;
         case 1: targetAddr = (uint64_t)&CallICStub1; break;
         case 2: targetAddr = (uint64_t)&CallICStub2; break;
-        default: asm("int3"); //TODO Generate the icStubs!
+        default: asm("int3");
     }
     ConstantInt* const_int64_target = ConstantInt::get(m.getContext(), APInt(64, targetAddr, false));
     CastInst* ptr_target            = new IntToPtrInst(const_int64_target, t::i8ptr, "target", b);
@@ -1326,6 +1327,7 @@ public:
 
         uintptr_t patchAddr = 0;
 
+        // TODO: use some sane data structure for the stackMaps
         for (auto s : stackmaps) {
             ArrayRef<uint8_t> sm(s.first, s.second);
             StackMapParserT p(sm);
@@ -1376,6 +1378,7 @@ public:
         if (!compileIc(inCall, inFun, inStackmapId))
             compileGenericIc(inCall, inFun);
 
+        // TODO: Collect function pointer and so on...
         ExecutionEngine * engine = EngineBuilder(std::unique_ptr<Module>(m)).create();
         engine->finalizeObject();
         auto ic = engine->getPointerToFunction(f);
@@ -1397,8 +1400,12 @@ private:
         SEXP arg = CDR(inCall);
         int i = 0;
         while (arg != R_NilValue) {
+            // We do not yet do the static version of match.c, thus cannot
+            // support named args
             if (TAG(arg) != R_NilValue)
                 return false;
+
+            // We cannot inline ellipsis
             if (CAR(arg) == R_DotsSymbol)
                 return false;
 
@@ -1416,8 +1423,13 @@ private:
             arg = CDR(arg);
         }
 
+        // number of args != number of formal args, fallback to generic
+        if (i != icArgs.size())
+            return false;
+
         if (TYPEOF(inFun) == CLOSXP) {
             SEXP body = CDR(inFun);
+            // TODO: If the body is not native we could jit it here
             if (TYPEOF(body) == NATIVESXP) {
                 
                 BasicBlock * icMatch = BasicBlock::Create(
@@ -1427,16 +1439,21 @@ private:
                 BasicBlock * end = BasicBlock::Create(
                         getGlobalContext(), "end", f, nullptr);
 
+                // Insert a guard to check if the incomming function matches
+                // the one we got this time
                 ICmpInst * test = new ICmpInst(*b,
                         ICmpInst::ICMP_EQ, fun, constant(inFun), "guard");
                 BranchInst::Create(icMatch, icMiss, test, b);
 
                 b = icMatch;
 
+                // This is an inlined version of applyNativeClosure
                 Value * arglist = constant(R_NilValue);
 
-                // This reverses the arglist, but quick argumentAdapter
+                // This reverses the arglist, but quickArgumentAdapter
                 // reverses again
+                // TODO: construct the environment in one go,
+                // without using quickArgumentAdapter
                 for (int i = 0; i < icArgs.size(); ++i) {
                     Value * arg = icArgs[i];
                     if (promarg[i])
@@ -1447,8 +1464,7 @@ private:
                 Value * newrho = INTRINSIC(m.closureQuickArgumentAdaptor,
                         fun, arglist);
 
-                Value * cntxt = new AllocaInst(
-                        t::cntxt, "", b);
+                Value * cntxt = new AllocaInst(t::cntxt, "", b);
 
                 INTRINSIC(m.initClosureContext,
                         cntxt, call, newrho, rho, arglist, fun);
@@ -1461,8 +1477,11 @@ private:
                 BranchInst::Create(end, b);
                 b = icMiss;
 
-                Value * missRes = insertICCallStub(
-                        icArgs, fun, constant(inCall), rho, m, b, callee, inStackMapId);
+                // Probably we should have a different mechanism here which
+                // reverts back to generic version, to avoid rewriting call ic
+                // all the time
+                Value * missRes = insertICCallStub(icArgs, fun,
+                        constant(inCall), rho, m, b, callee, inStackMapId);
 
                 BranchInst::Create(end, b);
                 b = end;
@@ -1487,6 +1506,8 @@ private:
     }
 
     Value * compileCall(SEXP call, SEXP op) {
+        // TODO: only emit one branch depending on the type we currently see
+
         // now create the CallArgs structure as local variable
         Value * callArgs = new AllocaInst(t::CallArgs, "callArgs", b);
         // set first to R_NilValue
