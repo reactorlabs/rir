@@ -220,3 +220,7 @@ g <- jit.compile(function() 2)
 stopifnot(f() == 2)
 stopifnot(f() == 2)
 
+# test if temp objects are found by the gc
+fib <- function(n) if (n < 2) 1 else fib(n - 1) + fib(n - 2)
+fib <- jit.compile(fib)
+fib(32)

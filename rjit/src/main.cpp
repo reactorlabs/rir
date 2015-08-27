@@ -28,18 +28,12 @@
 #include "ir.h"
 
 #include "codegen.h"
+#include "stack_map.h"
 
 using namespace llvm;
 using namespace rjit;
 
 #define REXPORT extern "C"
-
-REXPORT SEXP initializeRJIT() {
-    LLVMInitializeNativeTarget();
-    LLVMInitializeNativeAsmPrinter();
-    LLVMInitializeNativeAsmParser();
-    return R_NilValue;
-}
 
 REXPORT SEXP jit(SEXP expression) {
     assert(TYPEOF(expression) == BCODESXP and "Only raw bytecode is allowed as an argument to jitExpression");
