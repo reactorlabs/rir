@@ -6,7 +6,6 @@
 #include <iostream>
 
 #include <llvm/IR/Verifier.h>
-#include <llvm/IR/DerivedTypes.h>
 #include <llvm/IR/IRBuilder.h>
 #include <llvm/IR/LLVMContext.h>
 #include <llvm/IR/Module.h>
@@ -17,7 +16,17 @@
 #include "llvm/ExecutionEngine/ExecutionEngine.h"
 #include "llvm/ExecutionEngine/MCJIT.h"
 #include "llvm/ExecutionEngine/SectionMemoryManager.h"
+#include "llvm/CodeGen/GCStrategy.h"
+#include "llvm/CodeGen/GCs.h"
 
+#include "llvm/IR/LegacyPassManager.h"
+#include "llvm/Transforms/IPO/PassManagerBuilder.h"
+#include "llvm/Transforms/Scalar.h"
+#include "llvm/Analysis/TargetLibraryInfo.h"
+#include "llvm/Analysis/TargetTransformInfo.h"
+
+
+#include "llvm/IR/Intrinsics.h"
 
 #include "compiler.h"
 #include "stack_map.h"
@@ -80,6 +89,12 @@ static void printTypeOf(Value * v) {
     Type * t = v->getType();
     printType(t);
 }
+static void printAllTypeOf(std::vector<Value*> vs) {
+    for (auto v : vs) {
+        Type * t = v->getType();
+        printType(t);
+    }
+}
 static void disassNative(SEXP native) {
     ((Function*)TAG(native))->dump();
 }
@@ -99,6 +114,9 @@ PointerType * cntxtPtr;
 StructType * CallArgs;
 PointerType * CallArgsPtr;
 
+Type * t_void;
+Type * voidPtr;
+Type * t_i64;
 PointerType * i8ptr;
 
 FunctionType * void_void;
@@ -123,7 +141,14 @@ FunctionType * void_argssexpint;
 
 FunctionType * void_cntxtsexpsexpsexpsexpsexp;
 FunctionType * void_cntxtsexp;
+FunctionType * void_cntxtsexpsexp;
 FunctionType * sexp_contxtsexpsexp;
+
+FunctionType * patchIC_t;
+FunctionType * compileIC_t;
+
+FunctionType * nativeFunction_t;
+Type * nativeFunctionPtr_t;
 }
 
 PointerType * initializeTypes() {
@@ -137,7 +162,8 @@ PointerType * initializeTypes() {
     // SEXPREC
     t::SEXPREC = StructType::create(context, "struct.SEXPREC");
     // SEXP
-    t::SEXP = PointerType::get(t::SEXPREC, 0);
+    // Addrspace == 1 -> GC managed pointer
+    t::SEXP = PointerType::get(t::SEXPREC, 1);
     // SEXPREC, first the union
     StructType * u1 = StructType::create(context,"union.SEXP_SEXP_SEXP");
     fields = { t::SEXP, t::SEXP, t::SEXP };
@@ -152,6 +178,9 @@ PointerType * initializeTypes() {
     t::CallArgsPtr = PointerType::get(t::CallArgs, 0);
     // API function types
     Type * t_void = Type::getVoidTy(context);
+    t::t_void = t_void;
+
+    t::t_i64 = IntegerType::get(context, 64);
 
     // TODO: probably not the best idea...
     t::cntxt = StructType::create(context, "struct.RCNTXT");
@@ -160,7 +189,14 @@ PointerType * initializeTypes() {
     t::cntxtPtr = PointerType::get(t::cntxt, 0);
 
     t::i8ptr = PointerType::get(IntegerType::get(context, 8), 0);
+
+    // FIXME
+    t::voidPtr = PointerType::get(t::t_i64, 0);
+
+
 #define DECLARE(name, ret, ...) fields = { __VA_ARGS__ }; t::name = FunctionType::get(ret, fields, false)
+    DECLARE(nativeFunction_t, t::SEXP, t::SEXP, t::SEXP, t::Int);
+    t::nativeFunctionPtr_t = PointerType::get(t::nativeFunction_t, 0);
     DECLARE(void_void, t_void);
     DECLARE(void_sexp, t_void, t::SEXP);
     DECLARE(void_sexpsexp, t_void, t::SEXP, t::SEXP);
@@ -180,24 +216,32 @@ PointerType * initializeTypes() {
     DECLARE(void_argssexpint, t_void, t::CallArgsPtr, t::SEXP, t::Int);
     DECLARE(void_cntxtsexpsexpsexpsexpsexp, t_void, t::cntxtPtr, t::SEXP, t::SEXP, t::SEXP, t::SEXP, t::SEXP);
     DECLARE(void_cntxtsexp, t_void, t::cntxtPtr, t::SEXP);
+    DECLARE(void_cntxtsexpsexp, t_void, t::cntxtPtr, t::SEXP, t::SEXP);
     DECLARE(sexp_contxtsexpsexp, t::SEXP, t::cntxtPtr, t::SEXP, t::SEXP);
+
+    DECLARE(patchIC_t, t::t_void, t::voidPtr, t::t_i64, t::nativeFunctionPtr_t);
+    DECLARE(compileIC_t, t::voidPtr, t::t_i64, t::SEXP, t::SEXP, t::SEXP, t::t_i64);
 #undef DECLARE
 
     // initialize LLVM backend
     LLVMInitializeNativeTarget();
     LLVMInitializeNativeAsmPrinter();
     LLVMInitializeNativeAsmParser();
+    linkStatepointExampleGC();
+
+    registerGcCallback(&StackMap::stackScanner);
+
     return t::SEXP;
 }
 
+extern "C" void * compileIC(uint64_t numargs, SEXP call, SEXP fun, SEXP rho, uint64_t stackmapId);
+extern "C" void patchIC(void * ic, uint64_t stackmapId, void * caller);
 
-std::vector<std::pair<uint8_t*, uintptr_t> > stackmaps;
+uint8_t* new_stackmap_addr = nullptr;
+uintptr_t new_stackmap_size;
 
 class JITMemoryManager : public llvm::SectionMemoryManager {
 private:
-    JITMemoryManager(const JITMemoryManager&) LLVM_DELETED_FUNCTION;
-    void operator=(const JITMemoryManager&) LLVM_DELETED_FUNCTION;
-
     struct MemoryGroup {
            SmallVector<sys::MemoryBlock, 16> AllocatedMem;
            SmallVector<sys::MemoryBlock, 16> FreeMem;
@@ -208,7 +252,12 @@ public:
     JITMemoryManager() {};
 
     uint64_t getSymbolAddress(const std::string &name) override {
-        return SectionMemoryManager::getSymbolAddress(name);
+        auto res = SectionMemoryManager::getSymbolAddress(name);
+        if (!res) {
+            if (name == "compileIC") return (uint64_t)&compileIC;
+            if (name == "patchIC") return (uint64_t)&patchIC;
+        }
+        return res;
     }
 
     uint8_t * allocateDataSection(
@@ -218,8 +267,11 @@ public:
         auto res = SectionMemoryManager::allocateDataSection(
                 size, alignment, sectionID, sectionName, readonly);
 
-        if (sectionName.str() == ".llvm_stackmaps")
-            stackmaps.push_back(std::pair<uint8_t*, uintptr_t>(res, size));
+        if (sectionName.str() == ".llvm_stackmaps") {
+            assert (!new_stackmap_addr);
+            new_stackmap_addr = res;
+            new_stackmap_size = size;
+        }
 
         return res;
     }
@@ -387,41 +439,82 @@ public:
     DECLARE(initClosureContext, void_cntxtsexpsexpsexpsexpsexp);
     DECLARE(endClosureContext, void_cntxtsexp);
     DECLARE(closureNativeCallTrampoline, sexp_contxtsexpsexp);
+    
+    DECLARE(compileIC, compileIC_t);
+    DECLARE(patchIC, patchIC_t);
 
-    Function * patchpoint;
+    Function * getGcStatepointFor(Value * call) {
+        Type * callTy = call->getType();
+
+        std::vector<Type*>statepointArgs;
+        statepointArgs.push_back(IntegerType::get(getContext(), 64));
+        statepointArgs.push_back(IntegerType::get(getContext(), 32));
+        statepointArgs.push_back(callTy);
+        statepointArgs.push_back(IntegerType::get(getContext(), 32));
+        statepointArgs.push_back(IntegerType::get(getContext(), 32));
+        FunctionType* statepointTy = FunctionType::get(
+                IntegerType::get(getContext(), 32),
+                statepointArgs,
+                true);
+
+        std::string name = Intrinsic::getName(
+                Intrinsic::experimental_gc_statepoint, {{callTy}});
+
+        auto f = m->getFunction(name);
+        if (f) return f;
+     
+        return Function::Create(
+                statepointTy, GlobalValue::ExternalLinkage, name, m);
+    }
+
+    Function * getGcResultFor(Value * call) {
+        FunctionType * funTy = nullptr;
+        if (isa<Function>(call))
+            funTy = cast<Function>(call)->getFunctionType();
+        if (isa<PointerType>(call->getType())) {
+            funTy = cast<FunctionType>(
+                    cast<PointerType>(call->getType())->getElementType());
+        }
+        assert(funTy);
+
+        Type * retTy = funTy->getReturnType();
+
+        if (retTy->isVoidTy()) return nullptr;
+
+        FunctionType* resultTy = FunctionType::get(
+                retTy,
+                {{IntegerType::get(getContext(), 32)}},
+                false);
+
+        std::string name = Intrinsic::getName(
+                retTy->isPointerTy() ?
+                    Intrinsic::experimental_gc_result_ptr : (
+                    retTy->isFloatTy() ?
+                        Intrinsic::experimental_gc_result_float :
+                        Intrinsic::experimental_gc_result_int),
+                {{retTy}});
+
+        auto f = m->getFunction(name);
+        if (f) return f;
+
+        return Function::Create(
+                resultTy, GlobalValue::ExternalLinkage, name, m);
+    }
+
+    Function * stackmap;
 
     JITModule(std::string const & name): m(new Module(name, getGlobalContext())) {
-        auto mod = m;
-        {
-            /* declare i64 @llvm.experimental.patchpoint.i64(i64, i32, i8*, i32, ...) */
-
-            // Type Definitions
-            std::vector<Type*>FuncTy_0_args;
-            FuncTy_0_args.push_back(IntegerType::get(mod->getContext(), 64));
-            FuncTy_0_args.push_back(IntegerType::get(mod->getContext(), 32));
-            
-            FuncTy_0_args.push_back(t::i8ptr);
-            FuncTy_0_args.push_back(IntegerType::get(mod->getContext(), 32));
-            FunctionType* FuncTy_0 = FunctionType::get(
-             /*Result=*/IntegerType::get(mod->getContext(), 64),
-             /*Params=*/FuncTy_0_args,
-             /*isVarArg=*/true);
-            
-            // Function Declarations
-            
-            Function* func_llvm_experimental_patchpoint_i64 = mod->getFunction("llvm.experimental.patchpoint.i64");
-            if (!func_llvm_experimental_patchpoint_i64) {
-            func_llvm_experimental_patchpoint_i64 = Function::Create(
-             /*Type=*/FuncTy_0,
-             /*Linkage=*/GlobalValue::ExternalLinkage,
-             /*Name=*/"llvm.experimental.patchpoint.i64", mod); // (external, no body)
-            func_llvm_experimental_patchpoint_i64->setCallingConv(CallingConv::C);
-            }
-            AttributeSet func_llvm_experimental_patchpoint_i64_PAL;
-            func_llvm_experimental_patchpoint_i64->setAttributes(func_llvm_experimental_patchpoint_i64_PAL);
-
-            patchpoint = func_llvm_experimental_patchpoint_i64;
-        }
+        FunctionType * stackmapTy = FunctionType::get(
+                t::t_void,
+                std::vector<Type*>({{
+                    IntegerType::get(m->getContext(), 64),
+                    IntegerType::get(m->getContext(), 32)}}),
+                true);
+        stackmap = Function::Create(
+                stackmapTy,
+                GlobalValue::ExternalLinkage,
+                "llvm.experimental.stackmap",
+                m);
     }
 
     operator Module * () {
@@ -432,10 +525,17 @@ public:
         return m->getContext();
     }
 
+    void dump() {
+        m->dump();
+    }
+
+    Module * getM() {
+        return m;
+    }
+
 };
 
 #undef DECLARE
-
 
 SEXP createNativeSXP(RFunctionPtr fptr, SEXP ast, std::vector<SEXP> const & objects, Function * f) {
     SEXP objs = allocVector(VECSXP, objects.size() + 1);
@@ -450,66 +550,192 @@ SEXP createNativeSXP(RFunctionPtr fptr, SEXP ast, std::vector<SEXP> const & obje
     return result;
 }
 
-static void * CallICStub0(SEXP, SEXP, SEXP, uintptr_t, uintptr_t);
-static void * CallICStub1(SEXP, SEXP, SEXP, SEXP, uintptr_t, uintptr_t);
-static void * CallICStub2(SEXP, SEXP, SEXP, SEXP, SEXP, uintptr_t, uintptr_t);
+void emitStackmap(uint64_t id, std::vector<Value*> values, JITModule & m, BasicBlock * b) {
+    ConstantInt* const_num_bytes =
+        ConstantInt::get(m.getContext(),  APInt(32, StringRef("0"), 10));
+    ConstantInt* const_id =
+        ConstantInt::get(m.getContext(), APInt(64, id, false));
 
-Value * insertICCallStub(
-        std::vector<Value*> & callArgs, Value * function, Value * call, Value * rho, JITModule & m, BasicBlock * b, Value * f, uint32_t id) {
+    std::vector<Value*> sm_args;
 
-    /*  %result = call i64 (i64, i32, i8*, i32, ...)*
-     *            @llvm.experimental.patchpoint.i64(i64 id, i32 15, i8* %target, i32 2, i64 %arg1, i64 %arg2)
-     */
+    // Args to the stackmap
+    sm_args.push_back(const_id);
+    sm_args.push_back(const_num_bytes);
 
-    ConstantInt* const_int_id       = ConstantInt::get(m.getContext(), APInt(64, (uint64_t)id, false));
-    ConstantInt* const_int_bs       = ConstantInt::get(m.getContext(), APInt(32, StringRef("15"), 10));
-
-    //TODO Generate the icStubs and support more than 2 args!!
-    uint64_t targetAddr;
-    switch(callArgs.size()) {
-        case 0: targetAddr = (uint64_t)&CallICStub0; break;
-        case 1: targetAddr = (uint64_t)&CallICStub1; break;
-        case 2: targetAddr = (uint64_t)&CallICStub2; break;
-        default: asm("int3");
-    }
-    ConstantInt* const_int64_target = ConstantInt::get(m.getContext(), APInt(64, targetAddr, false));
-    CastInst* ptr_target            = new IntToPtrInst(const_int64_target, t::i8ptr, "target", b);
-
-    ConstantInt* const_int32_numarg = ConstantInt::get(m.getContext(), APInt(32, callArgs.size() + 5, false));
-
-    std::vector<Value*> int64_result_params;
-    // Patchpoint argumenst (compiled away)
-    int64_result_params.push_back(const_int_id);
-    int64_result_params.push_back(const_int_bs);
-    int64_result_params.push_back(ptr_target);
-    int64_result_params.push_back(const_int32_numarg);
-
-    // Closure arguments
-    for (auto arg : callArgs) {
-        int64_result_params.push_back(arg);
+    // Values to record
+    for (auto arg : values) {
+        sm_args.push_back(arg);
     }
 
-    // Additional IC arguments
-    int64_result_params.push_back(call);
-    int64_result_params.push_back(function);
-    int64_result_params.push_back(rho);
-    int64_result_params.push_back(f);
-    int64_result_params.push_back(const_int_id);
-
-    CallInst* int64_result = CallInst::Create(m.patchpoint, int64_result_params, "", b);
-    int64_result->setCallingConv(CallingConv::C);
-    int64_result->setTailCall(false);
-    AttributeSet int64_result_PAL;
-    int64_result->setAttributes(int64_result_PAL);
-
-    return new IntToPtrInst(int64_result, t::SEXP, "res", b);
+    CallInst::Create(m.stackmap, sm_args, "", b);
 }
 
 
-#define ARGS(...) std::vector<Value *>({ __VA_ARGS__ })
-#define INTRINSIC(name, ...) CallInst::Create(name, ARGS(__VA_ARGS__), "", context->b)
-#define JUMP(block) BranchInst::Create(block, context->b);
+// stackmap records of all functions of a module end up in the same
+// stackmap memory section. To be able to associate them to their
+// corresponding functions the caller is responsible to provide a
+// function id -- unique per module -- which must be identical to
+// the one given in registerStatepoint.
+Value * emitGcStatepoint(
+        Value * call, std::vector<Value*> args,
+        JITModule & m, BasicBlock * b, uint64_t function_id,
+        std::vector<Value*> live = {}) {
 
+    ConstantInt* const_int_id =
+        ConstantInt::get(m.getContext(),  APInt(64, function_id, false));
+    ConstantInt* const_int_0 =
+        ConstantInt::get(m.getContext(),  APInt(32, StringRef("0"), 10));
+    ConstantInt* const_int_1 =
+        ConstantInt::get(m.getContext(),  APInt(32, StringRef("1"), 10));
+    ConstantInt* const_int_666 =
+        ConstantInt::get(m.getContext(),  APInt(32, StringRef("666"), 10));
+    ConstantInt* const_numarg =
+        ConstantInt::get(m.getContext(), APInt(32, args.size(), false));
+    ConstantInt* const_numlive =
+        ConstantInt::get(m.getContext(), APInt(32, live.size(), false));
+
+    // This is a hack for stackMap format V1, see function comment above.
+    Value * fun_id = ConstantInt::get(m.getContext(), APInt(32, function_id));
+
+    std::vector<Value*> statepoint_args;
+
+    // Args to the statepoint
+    statepoint_args.push_back(const_int_id);  // id
+    statepoint_args.push_back(const_int_0);   // shadow bytes
+    statepoint_args.push_back(call);          // target
+    statepoint_args.push_back(const_numarg);  // number of args of target
+    statepoint_args.push_back(const_int_0);   // flags
+
+    // Add normal call args
+    statepoint_args.insert(statepoint_args.end(), args.begin(), args.end());
+
+    // Transition Args
+    statepoint_args.push_back(const_int_0);
+
+    // Deopt Args
+    statepoint_args.push_back(const_numlive);
+    statepoint_args.insert(statepoint_args.end(), live.begin(), live.end());
+
+    // GC Args
+    auto statepoint = m.getGcStatepointFor(call);
+
+    CallInst* res = CallInst::Create(statepoint, statepoint_args, "", b);
+
+    auto gc_result = m.getGcResultFor(call);
+    if (!gc_result) return nullptr;
+
+    return CallInst::Create(gc_result, std::vector<Value*>({{res}}), "", b);
+}
+
+
+// record stackmaps will parse the stackmap section of the current module and
+// index all entries.
+void recordStackmaps(std::vector<uint64_t> functionIds) {
+    if (new_stackmap_addr) {
+        int i = 0;
+
+        ArrayRef<uint8_t> sm(new_stackmap_addr, new_stackmap_size);
+        StackMapParserT p(sm);
+
+        for (const auto &r : p.records()) {
+            auto function_id = std::find(functionIds.begin(), functionIds.end(), r.getID());
+
+            if (function_id == functionIds.end()) {
+                // No such function id -> must be patchpoint
+                StackMap::registerPatchpoint(r.getID(), sm, i);
+            } else {
+                auto pos = function_id - functionIds.begin();
+                // We have a statepoint entry, lets find the corresponding
+                // function entry. The assumption here is, that the order
+                // of functionIds recorded by the compiler has to be the
+                // same as the order of function entries in the stackmap seciton
+                uintptr_t function = p.getFunction(pos).getFunctionAddress();
+                StackMap::registerStatepoint(
+                        function, r.getInstructionOffset(), sm, i);
+
+            }
+            i++;
+        }
+    }
+
+}
+
+/** Converts given SEXP to a bitcode constant.
+ * The SEXP address is taken as an integer constant into LLVM which is then
+ * converted to SEXP.
+ * NOTE that this approach assumes that any GC used is non-moving.
+ * We are using it because it removes one level of indirection when reading
+ * it from the constants vector as R bytecode compiler does.
+ *
+ * FIXME: loading the const is wrapped in a call to hide the const -- otherwise
+ * rewriteStatepointsForGC pass will fail, since it cannot create relocation
+ * for a constant. The underlying problem is, that the pass assumes all
+ * values of type SEXP to be moving GC pointers and there is no other more
+ * fine grained method of specifying which values to spill.
+ */
+static Value * loadConstant(SEXP value, Module * m, BasicBlock * b) {
+    auto f = Function::Create(
+            FunctionType::get(
+                t::SEXP,
+                std::vector<Type*>(),
+                false),
+            Function::ExternalLinkage, "ldConst", m);
+    auto bb = BasicBlock::Create(getGlobalContext(), "start", f, nullptr);
+
+    auto con = ConstantExpr::getCast(
+            Instruction::IntToPtr,
+            ConstantInt::get(
+                getGlobalContext(), APInt(64, (std::uint64_t)value)),
+            t::SEXP);
+
+    ReturnInst::Create(getGlobalContext(), con, bb);
+
+    return CallInst::Create(f, {}, "const", b); 
+}
+
+static ExecutionEngine * jitModule(Module * m) {
+
+    auto memoryManager = new JITMemoryManager();
+
+    legacy::PassManager pm;
+
+    pm.add(createTargetTransformInfoWrapperPass(TargetIRAnalysis()));
+
+    // TODO: maybe place automatically?
+//    pm.add(createPlaceSafepointsPass());
+
+    PassManagerBuilder PMBuilder;
+    PMBuilder.OptLevel = 0;  // Set optimization level to -O0
+    PMBuilder.SizeLevel = 0; // so that no additional phases are run.
+    PMBuilder.populateModulePassManager(pm);
+
+    pm.add(createRewriteStatepointsForGCPass());
+    pm.run(*m);
+
+    // create execution engine and finalize the module
+    std::string err;
+    ExecutionEngine *engine = EngineBuilder(std::unique_ptr<Module>(m))
+        .setErrorStr(&err)
+        .setMCJITMemoryManager(
+                  std::unique_ptr<RTDyldMemoryManager>(memoryManager))
+        .setEngineKind(EngineKind::JIT)
+        .create();
+
+    if (!engine) {
+      fprintf(stderr, "Could not create ExecutionEngine: %s\n", err.c_str());
+      exit(1);
+    }
+
+    engine->finalizeObject();
+
+    return engine;
+}
+
+#define ARGS(...) std::vector<Value *>({ __VA_ARGS__ })
+#define INTRINSIC(name, ...) emitGcStatepoint(name, {__VA_ARGS__}, m, context->b, context->function_id)
+#define JUMP(block) BranchInst::Create(block, context->b)
+
+static uint64_t nextStackmapId = 0;
 
 class Compiler {
 public:
@@ -520,29 +746,18 @@ public:
     SEXP compile(std::string const & name, SEXP bytecode) {
         SEXP result = compileFunction(name, bytecode);
 
-        auto memoryManager = new JITMemoryManager();
-        // create execution engine and finalize the module
-        std::string err;
-        ExecutionEngine *engine = EngineBuilder(std::unique_ptr<Module>(m))
-            .setErrorStr(&err)
-            .setMCJITMemoryManager(
-                      std::unique_ptr<RTDyldMemoryManager>(memoryManager))
-            .setEngineKind(EngineKind::JIT)
-            .create();
-
-        if (!engine) {
-          fprintf(stderr, "Could not create ExecutionEngine: %s\n", err.c_str());
-          exit(1);
-        }
-
-        engine->finalizeObject();
+        ExecutionEngine * engine = jitModule(m.getM());
 
         // perform all the relocations
         for (SEXP s : relocations) {
             auto f = reinterpret_cast<Function*>(TAG(s));
-//            f->dump();
-            SETCAR(s, reinterpret_cast<SEXP>(engine->getPointerToFunction(f)));
+            auto fp = engine->getPointerToFunction(f);
+            SETCAR(s, reinterpret_cast<SEXP>(fp));
         }
+        recordStackmaps(functionIds);
+        new_stackmap_addr = nullptr;
+        functionIds.clear();
+
         return result;
     }
 
@@ -552,6 +767,7 @@ private:
 
         Context(std::string const & name, Module * m) {
             f = Function::Create(t::sexp_sexpsexpint, Function::ExternalLinkage, name, m);
+            f->setGC("statepoint-example");
             Function::arg_iterator args = f->arg_begin();
             Value * body = args++;
             body->setName("body");
@@ -592,11 +808,14 @@ private:
 
         std::vector<SEXP> objects;
 
+        unsigned function_id;
     };
 
     SEXP compileFunction(std::string const & name, SEXP ast, bool isPromise = false) {
         Context * old = context;
         context = new Context(name, m);
+        context->function_id = nextStackmapId++;
+        functionIds.push_back(context->function_id);
         if (isPromise)
             context->returnJump = true;
         Value * last = compileExpression(ast);
@@ -651,6 +870,8 @@ private:
         return INTRINSIC(m.genericGetVar, constant(value), context->rho);
     }
 
+    Value * compileICCallStub(Value * call, Value * op, std::vector<Value*> & callArgs);
+
     Value * compileCall(SEXP call) {
         Value * f;
 
@@ -670,7 +891,7 @@ private:
         std::vector<Value*> args;
         compileArguments(CDR(call), args);
 
-        return insertICCallStub(args, f, constant(call), context->rho, m, context->b, context->f, stackMapId++);
+        return compileICCallStub(constant(call), f, args);
     }
 
     void compileArguments(SEXP argAsts, std::vector<Value*> & res) {
@@ -703,66 +924,6 @@ private:
             }
         }
     }
-
-
-
-#ifdef HAHA
-    /** Compiles a call expressed in the AST.
-
-      For simple calls checks if these can be compiled using intrinsics and does so, if possible. For others emits the function getting / checking code and then generates the arguments and calls the function.
-
-      This differs depending on the function type. Special functions do not evaluate their arguments at all, builtin functions are always eager and normal functions are lazy.
-     */
-    Value * compileCall(SEXP call) {
-        Value * f;
-        if (TYPEOF(CAR(call)) != SYMSXP) {
-            // it is a complex function, first get the value of the function and then check it
-            f = compileExpression(CAR(call));
-            INTRINSIC(m.checkFunction, f);
-        } else {
-            // it is simple function - try compiling it with intrinsics
-            f = compileIntrinsic(call);
-            if (f != nullptr)
-                return f;
-            // otherwise just do get function
-            f = INTRINSIC(m.getFunction, constant(CAR(call)), context->rho);
-        }
-        // now we must compile the arguments, this depends on the actual type of the function - promises by default, eager for builtins and no evaluation for specials
-        Value * ftype = INTRINSIC(m.sexpType, f);
-        // switch the function call execution based on the function type
-        BasicBlock * special = BasicBlock::Create(getGlobalContext(), "special", context->f, nullptr);
-        BasicBlock * builtin = BasicBlock::Create(getGlobalContext(), "builtin", context->f, nullptr);
-
-        BasicBlock * closure = BasicBlock::Create(getGlobalContext(), "closure", context->f, nullptr);
-        BasicBlock * next = BasicBlock::Create(getGlobalContext(), "next", context->f, nullptr);
-        SwitchInst * sw = SwitchInst::Create(ftype, closure, 2, context->b);
-        sw->addCase(constant(SPECIALSXP), special);
-        sw->addCase(constant(BUILTINSXP), builtin);
-        // in special case, do not evaluate arguments and just call the function
-        context->b = special;
-        Value * specialResult = INTRINSIC(m.call, constant(call), f, constant(R_NilValue), context->rho);
-        JUMP(next);
-        // in builtin mode evaluate all arguments eagerly
-        context->b = builtin;
-        Value * args = compileArguments(CDR(call), /*eager=*/ true);
-        Value * builtinResult = INTRINSIC(m.call, constant(call), f, args, context->rho);
-        builtin = context->b; // bb might have changed during arg evaluation
-        JUMP(next);
-        // in general closure case the arguments will become promises
-        context->b = closure;
-        args = compileArguments(CDR(call), /*eager=*/ false);
-        Value * closureResult = INTRINSIC(m.call, constant(call), f, args, context->rho);
-        JUMP(next);
-        // add a phi node for the call result
-        context->b = next;
-        PHINode * phi = PHINode::Create(t::SEXP, 3, "", context->b);
-        phi->addIncoming(specialResult, special);
-        phi->addIncoming(builtinResult, builtin);
-        phi->addIncoming(closureResult, closure);
-        return phi;
-    }
-
-#endif
 
 
     /** Many function calls may be compiled using intrinsics directly and not the R calling mechanism itself.
@@ -937,11 +1098,13 @@ private:
         BasicBlock * next = BasicBlock::Create(getGlobalContext(), "next", context->f, nullptr);
         ICmpInst * test = new ICmpInst(*(context->b), ICmpInst::ICMP_EQ, cond, constant(TRUE), "condition");
         BranchInst::Create(ifTrue, ifFalse, test, context->b);
+
         // true case has to be always present
         context->b = ifTrue;
         Value * trueResult = compileExpression(trueAst);
         JUMP(next);
         ifTrue = context->b;
+
         // false case may not be present in which case invisible R_NilValue should be returned
         context->b = ifFalse;
         Value * falseResult;
@@ -953,6 +1116,7 @@ private:
             ifFalse = context->b;
         }
         JUMP(next);
+
         // add a phi node for the result
         context->b = next;
         PHINode * phi = PHINode::Create(t::SEXP, 2, "", context->b);
@@ -1248,12 +1412,14 @@ private:
       */
     Value * compileBinaryOrUnary(Function * b, Function * u, SEXP call) {
         Value * lhs = compileExpression(CAR(CDR(call)));
+        Value * res;
         if (CDR(CDR(call)) != R_NilValue) {
             Value * rhs = compileExpression(CAR(CDR(CDR(call))));
-            return INTRINSIC(b, lhs, rhs, constant(call), context->rho);
+            res = INTRINSIC(b, lhs, rhs, constant(call), context->rho);
         } else {
-            return INTRINSIC(u, lhs, constant(call), context->rho);
+            res = INTRINSIC(u, lhs, constant(call), context->rho);
         }
+        return res;
     }
 
     /** Compiles binary operator using the given intrinsic and full call ast.
@@ -1271,17 +1437,13 @@ private:
         return INTRINSIC(f, op, constant(call), context->rho);
     }
 
-    /** Converts given SEXP to a bitcode constant. The SEXP address is taken as an integer constant into LLVM which is then converted to SEXP.
-
-      NOTE that this approach assumes that any GC used is non-moving. We are using it because it removes one level of indirection when reading it from the constants vector as R bytecode compiler does.
-      */
     Value * constant(SEXP value) {
-        return ConstantExpr::getCast(Instruction::IntToPtr, ConstantInt::get(getGlobalContext(), APInt(64, (std::uint64_t)value)), t::SEXP);
+        return loadConstant(value, m.getM(), context->b);
     }
 
     /** Converts given integer to bitcode value. This is just a simple shorthand function, no magic here.
       */
-    ConstantInt * constant(int value) {
+    static ConstantInt * constant(int value) {
         return ConstantInt::get(getGlobalContext(), APInt(32, value));
     }
 
@@ -1303,64 +1465,35 @@ private:
       */
     std::vector<SEXP> relocations;
 
-    static uint32_t stackMapId;
+    std::vector<uint64_t> functionIds;
 };
-
-uint32_t Compiler::stackMapId = 1;
-
 
 #undef INTRINSIC
 
-#define INTRINSIC(name, ...) CallInst::Create(name, ARGS(__VA_ARGS__), "", b)
 
-// TODO: find target endianness
-typedef StackMapV1Parser<llvm::support::little> StackMapParserT;
+#define INTRINSIC(name, ...) emitGcStatepoint(name, {__VA_ARGS__}, m, b, 1)
 
 class ICCompiler  {
 public:
-
-    ICCompiler() : m("ic") {}
-
-    void * compile(SEXP inCall, SEXP inFun, SEXP inRho,
-            uintptr_t inCallee, uintptr_t inStackmapId,
-            std::initializer_list<SEXP> inArgs) {
-
-        uintptr_t patchAddr = 0;
-
-        // TODO: use some sane data structure for the stackMaps
-        for (auto s : stackmaps) {
-            ArrayRef<uint8_t> sm(s.first, s.second);
-            StackMapParserT p(sm);
-
-            for (const auto &r : p.records()) {
-                if (inStackmapId == r.getID()) {
-                    patchAddr = inCallee + r.getInstructionOffset();
-                    break;
-                }
-            }
-        }
-        if (patchAddr == 0) {
-            std::cout << "something went very wrong, "
-                      << "cannot find stackmap for patchpoint " << inStackmapId
-                      << std::endl;
-            asm("int3");
-        }
-
+    ICCompiler(uint64_t stackmapIdC, int size, JITModule & m, unsigned fid) :
+            m(m), size(size), functionId(fid) {
         // Set up a function type which corresponds to the ICStub signature
         std::vector<Type*> argT;
-        for (int i = 0; i < inArgs.size() + 3; i++) {
+        for (int i = 0; i < size + 3; i++) {
             argT.push_back(t::SEXP);
         }
-        argT.push_back(IntegerType::get(getGlobalContext(), 64));
-        argT.push_back(IntegerType::get(getGlobalContext(), 64));
+        argT.push_back(t::nativeFunctionPtr_t);
+
         auto funT = FunctionType::get(t::SEXP, argT, false);
+        ic_t = funT;
 
         f = Function::Create(funT, Function::ExternalLinkage, "callIC", m);
+        f->setGC("statepoint-example");
         b = BasicBlock::Create(getGlobalContext(), "start", f, nullptr);
 
         // Load the args in the same order as the stub
         Function::arg_iterator argI = f->arg_begin();
-        for (auto a : inArgs) {
+        for (int i = 0; i < size; i++) {
             icArgs.push_back(argI++);
         }
 
@@ -1370,30 +1503,61 @@ public:
         fun->setName("op");
         rho = argI++;
         rho->setName("rho");
-        callee = argI++;
-        callee->setName("callee");
-        stackmapId = argI++;
-        stackmapId->setName("stackmapId");
+        caller = argI++;
+        caller->setName("caller");
 
-        if (!compileIc(inCall, inFun, inStackmapId))
+        stackmapId = ConstantInt::get(m.getContext(), APInt(64, stackmapIdC, false));
+    }
+
+    Function * compileStub() {
+        Value * res = compileCallStub();
+
+        ReturnInst::Create(getGlobalContext(), res, b);
+
+        return f;
+    }
+
+    void * compile(SEXP inCall, SEXP inFun, SEXP inRho) {
+
+        if (!compileIc(inCall, inFun))
             compileGenericIc(inCall, inFun);
 
-        // TODO: Collect function pointer and so on...
-        ExecutionEngine * engine = EngineBuilder(std::unique_ptr<Module>(m)).create();
-        engine->finalizeObject();
-        auto ic = engine->getPointerToFunction(f);
+        return finalize();
+    }
 
-        // TODO: This directly patches the argument of the movabs,
-        // clearly we need sth more stable
-        *(void**)(patchAddr+2) = ic;
+private:
+    void * finalize() {
+        // FIXME: Allocate a NATIVESXP, or link it to the caller??
+        
+        ExecutionEngine * engine = jitModule(m.getM());
+        void * ic = engine->getPointerToFunction(f);
+
+        recordStackmaps({functionId});
+        new_stackmap_addr = nullptr;
 
         return ic;
     }
 
+    Value * compileCallStub() {
+        Value * icAddr = INTRINSIC(m.compileIC,
+                ConstantInt::get(getGlobalContext(), APInt(64, size)),
+                call, fun, rho, stackmapId);
 
+        INTRINSIC(m.patchIC, icAddr, stackmapId, caller);
 
-private:
-    bool compileIc(SEXP inCall, SEXP inFun, uint64_t inStackMapId) {
+        Value * ic = new BitCastInst(icAddr, PointerType::get(ic_t, 0), "", b);
+
+        std::vector<Value*> allArgs;
+        allArgs.insert(allArgs.end(), icArgs.begin(), icArgs.end());
+        allArgs.push_back(call);
+        allArgs.push_back(fun);
+        allArgs.push_back(rho);
+        allArgs.push_back(caller);
+
+        return INTRINSIC(ic, allArgs);
+    }
+
+    bool compileIc(SEXP inCall, SEXP inFun) {
         std::vector<bool> promarg(icArgs.size(), false);
 
         // Check for named args or ...
@@ -1477,11 +1641,7 @@ private:
                 BranchInst::Create(end, b);
                 b = icMiss;
 
-                // Probably we should have a different mechanism here which
-                // reverts back to generic version, to avoid rewriting call ic
-                // all the time
-                Value * missRes = insertICCallStub(icArgs, fun,
-                        constant(inCall), rho, m, b, callee, inStackMapId);
+                Value * missRes = compileCallStub();
 
                 BranchInst::Create(end, b);
                 b = end;
@@ -1491,7 +1651,6 @@ private:
                 phi->addIncoming(missRes, icMiss);
                 ReturnInst::Create(getGlobalContext(), phi, b);
 
-//                f->dump();
                 return true;
             }
         }
@@ -1512,7 +1671,7 @@ private:
         Value * callArgs = new AllocaInst(t::CallArgs, "callArgs", b);
         // set first to R_NilValue
         std::vector<Value*> callArgsIndices = { constant(0), constant(0) };
-        Value * callArgsFirst = GetElementPtrInst::Create(callArgs, callArgsIndices, "", b);
+        Value * callArgsFirst = GetElementPtrInst::Create(t::CallArgs, callArgs, callArgsIndices, "", b);
 
         // now we must compile the arguments, this depends on the actual type of the function - promises by default, eager for builtins and no evaluation for specials
         Value * ftype = INTRINSIC(m.sexpType, fun);
@@ -1527,18 +1686,21 @@ private:
         sw->addCase(constant(BUILTINSXP), builtin);
         // in special case, do not evaluate arguments and just call the function
         b = special;
-        Value * specialResult = INTRINSIC(m.call, constant(call), fun, constant(R_NilValue), rho);
+        Value * specialResult = INTRINSIC(m.call,
+                constant(call), fun, constant(R_NilValue), rho);
         BranchInst::Create(next, b);
         // in builtin mode evaluate all arguments eagerly
         b = builtin;
         Value * args = compileArguments(callArgs, callArgsFirst, CDR(call), /*eager=*/ true);
-        Value * builtinResult = INTRINSIC(m.call, constant(call), fun, args, rho);
+        Value * builtinResult = INTRINSIC(m.call,
+                constant(call), fun, args, rho);
         builtin = b; // bb might have changed during arg evaluation
         BranchInst::Create(next, b);
         // in general closure case the arguments will become promises
         b = closure;
         args = compileArguments(callArgs, callArgsFirst, CDR(call), /*eager=*/ false);
-        Value * closureResult = INTRINSIC(m.call, constant(call), fun, args, rho);
+        Value * closureResult = INTRINSIC(m.call,
+                constant(call), fun, args, rho);
         BranchInst::Create(next, b);
         // add a phi node for the call result
         b = next;
@@ -1602,51 +1764,79 @@ private:
             INTRINSIC(m.addArgument, args, result);
     }
 
-    // TODO: Pull up
-    Value * constant(SEXP value) {
-        return ConstantExpr::getCast(Instruction::IntToPtr, ConstantInt::get(getGlobalContext(), APInt(64, (std::uint64_t)value)), t::SEXP);
-    }
-    ConstantInt * constant(int value) {
+    /** Converts given integer to bitcode value. This is just a simple shorthand function, no magic here.
+      */
+    static ConstantInt * constant(int value) {
         return ConstantInt::get(getGlobalContext(), APInt(32, value));
     }
 
+    Value * constant(SEXP value) {
+        return loadConstant(value, m.getM(), b);
+    }
+
+    Type * ic_t;
 
     Function * f;
     BasicBlock * b;
 
     Value * rho;
     Value * fun;
-    Value * callee;
+    Value * caller;
     Value * stackmapId;
     Value * call;
     std::vector<Value*> icArgs;
 
-    JITModule m;
+    JITModule & m;
+    unsigned size;
+    unsigned functionId;
 };
 #undef INTRINSIC
 
-static void * CallICStub0(
-        SEXP call, SEXP fun, SEXP rho, uintptr_t callee, uintptr_t stackmapId) {
-    ICCompiler compiler;
-    void * ic = compiler.compile(call, fun, rho, callee, stackmapId, {});
-    return ((SEXP (*) (SEXP, SEXP, SEXP, uintptr_t, uintptr_t))ic)(
-            call, fun, rho, callee, stackmapId);
+
+Value * Compiler::compileICCallStub(Value * call, Value * op, std::vector<Value*> & callArgs) {
+    uint64_t smid = nextStackmapId++;
+
+    auto ic_function_id = nextStackmapId++;
+    functionIds.push_back(ic_function_id);
+    ICCompiler ic(smid, callArgs.size(), m, ic_function_id);
+    auto ic_stub = ic.compileStub();
+
+    std::vector<Value*> ic_args;
+    // Closure arguments
+    for (auto arg : callArgs) {
+        ic_args.push_back(arg);
+    }
+
+    // Additional IC arguments
+    ic_args.push_back(call);
+    ic_args.push_back(op);
+    ic_args.push_back(context->rho);
+    ic_args.push_back(context->f);
+
+    // Record a patch point
+    emitStackmap(smid, {{ic_stub}}, m, context->b);
+
+    return emitGcStatepoint(ic_stub, ic_args, m, context->b, context->function_id);
 }
 
-static void * CallICStub1(SEXP a1,
-        SEXP call, SEXP fun, SEXP rho, uintptr_t callee, uintptr_t stackmapId) {
-    ICCompiler compiler;
-    void * ic = compiler.compile(call, fun, rho, callee, stackmapId, {a1});
-    return ((SEXP (*) (SEXP, SEXP, SEXP, SEXP, uintptr_t, uintptr_t))ic)(
-            a1, call, fun, rho, callee, stackmapId);
+
+
+void patchIC(void * ic, uint64_t stackmapId, void * caller) {
+    auto r = StackMap::getPatchpoint(stackmapId);
+
+    uintptr_t patchAddr = (uintptr_t)caller + r.getInstructionOffset();
+
+    // TODO: This directly patches the argument of the movabs,
+    // clearly we need sth more stable
+    *(void**)(patchAddr-8) = ic;
 }
 
-static void * CallICStub2(SEXP a1, SEXP a2,
-        SEXP call, SEXP fun, SEXP rho, uintptr_t callee, uintptr_t stackmapId) {
-    ICCompiler compiler;
-    void * ic = compiler.compile(call, fun, rho, callee, stackmapId, {a1, a2});
-    return ((SEXP (*) (SEXP, SEXP, SEXP, SEXP, SEXP, uintptr_t, uintptr_t))ic)(
-            a1, a2, call, fun, rho, callee, stackmapId);
+void * compileIC(uint64_t numargs, SEXP call, SEXP fun, SEXP rho, uint64_t stackmapId) {
+    JITModule m("ic");
+
+    ICCompiler compiler(stackmapId, numargs, m, nextStackmapId++);
+
+    return compiler.compile(call, fun, rho);
 }
 
 SEXP compile(SEXP ast) {

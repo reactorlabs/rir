@@ -6,6 +6,7 @@ if("rjit" %in% rownames(installed.packages())) {
 }
 
 dyn.load("librjit.so")
+
 source("rjit/R/rjit.R")
 library(compiler)
 
