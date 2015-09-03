@@ -25,6 +25,7 @@
 #include "llvm/Analysis/TargetLibraryInfo.h"
 #include "llvm/Analysis/TargetTransformInfo.h"
 
+#include "gc_pass.h"
 
 #include "llvm/IR/Intrinsics.h"
 
@@ -443,64 +444,6 @@ public:
     DECLARE(compileIC, compileIC_t);
     DECLARE(patchIC, patchIC_t);
 
-    Function * getGcStatepointFor(Value * call) {
-        Type * callTy = call->getType();
-
-        std::vector<Type*>statepointArgs;
-        statepointArgs.push_back(IntegerType::get(getContext(), 64));
-        statepointArgs.push_back(IntegerType::get(getContext(), 32));
-        statepointArgs.push_back(callTy);
-        statepointArgs.push_back(IntegerType::get(getContext(), 32));
-        statepointArgs.push_back(IntegerType::get(getContext(), 32));
-        FunctionType* statepointTy = FunctionType::get(
-                IntegerType::get(getContext(), 32),
-                statepointArgs,
-                true);
-
-        std::string name = Intrinsic::getName(
-                Intrinsic::experimental_gc_statepoint, {{callTy}});
-
-        auto f = m->getFunction(name);
-        if (f) return f;
-     
-        return Function::Create(
-                statepointTy, GlobalValue::ExternalLinkage, name, m);
-    }
-
-    Function * getGcResultFor(Value * call) {
-        FunctionType * funTy = nullptr;
-        if (isa<Function>(call))
-            funTy = cast<Function>(call)->getFunctionType();
-        if (isa<PointerType>(call->getType())) {
-            funTy = cast<FunctionType>(
-                    cast<PointerType>(call->getType())->getElementType());
-        }
-        assert(funTy);
-
-        Type * retTy = funTy->getReturnType();
-
-        if (retTy->isVoidTy()) return nullptr;
-
-        FunctionType* resultTy = FunctionType::get(
-                retTy,
-                {{IntegerType::get(getContext(), 32)}},
-                false);
-
-        std::string name = Intrinsic::getName(
-                retTy->isPointerTy() ?
-                    Intrinsic::experimental_gc_result_ptr : (
-                    retTy->isFloatTy() ?
-                        Intrinsic::experimental_gc_result_float :
-                        Intrinsic::experimental_gc_result_int),
-                {{retTy}});
-
-        auto f = m->getFunction(name);
-        if (f) return f;
-
-        return Function::Create(
-                resultTy, GlobalValue::ExternalLinkage, name, m);
-    }
-
     Function * stackmap;
 
     JITModule(std::string const & name): m(new Module(name, getGlobalContext())) {
@@ -569,64 +512,6 @@ void emitStackmap(uint64_t id, std::vector<Value*> values, JITModule & m, BasicB
 
     CallInst::Create(m.stackmap, sm_args, "", b);
 }
-
-
-// stackmap records of all functions of a module end up in the same
-// stackmap memory section. To be able to associate them to their
-// corresponding functions the caller is responsible to provide a
-// function id -- unique per module -- which must be identical to
-// the one given in registerStatepoint.
-Value * emitGcStatepoint(
-        Value * call, std::vector<Value*> args,
-        JITModule & m, BasicBlock * b, uint64_t function_id,
-        std::vector<Value*> live = {}) {
-
-    ConstantInt* const_int_id =
-        ConstantInt::get(m.getContext(),  APInt(64, function_id, false));
-    ConstantInt* const_int_0 =
-        ConstantInt::get(m.getContext(),  APInt(32, StringRef("0"), 10));
-    ConstantInt* const_int_1 =
-        ConstantInt::get(m.getContext(),  APInt(32, StringRef("1"), 10));
-    ConstantInt* const_int_666 =
-        ConstantInt::get(m.getContext(),  APInt(32, StringRef("666"), 10));
-    ConstantInt* const_numarg =
-        ConstantInt::get(m.getContext(), APInt(32, args.size(), false));
-    ConstantInt* const_numlive =
-        ConstantInt::get(m.getContext(), APInt(32, live.size(), false));
-
-    // This is a hack for stackMap format V1, see function comment above.
-    Value * fun_id = ConstantInt::get(m.getContext(), APInt(32, function_id));
-
-    std::vector<Value*> statepoint_args;
-
-    // Args to the statepoint
-    statepoint_args.push_back(const_int_id);  // id
-    statepoint_args.push_back(const_int_0);   // shadow bytes
-    statepoint_args.push_back(call);          // target
-    statepoint_args.push_back(const_numarg);  // number of args of target
-    statepoint_args.push_back(const_int_0);   // flags
-
-    // Add normal call args
-    statepoint_args.insert(statepoint_args.end(), args.begin(), args.end());
-
-    // Transition Args
-    statepoint_args.push_back(const_int_0);
-
-    // Deopt Args
-    statepoint_args.push_back(const_numlive);
-    statepoint_args.insert(statepoint_args.end(), live.begin(), live.end());
-
-    // GC Args
-    auto statepoint = m.getGcStatepointFor(call);
-
-    CallInst* res = CallInst::Create(statepoint, statepoint_args, "", b);
-
-    auto gc_result = m.getGcResultFor(call);
-    if (!gc_result) return nullptr;
-
-    return CallInst::Create(gc_result, std::vector<Value*>({{res}}), "", b);
-}
-
 
 // record stackmaps will parse the stackmap section of the current module and
 // index all entries.
@@ -701,14 +586,14 @@ static ExecutionEngine * jitModule(Module * m) {
 
     pm.add(createTargetTransformInfoWrapperPass(TargetIRAnalysis()));
 
-    // TODO: maybe place automatically?
-//    pm.add(createPlaceSafepointsPass());
+    pm.add(createPlaceRJITSafepointsPass());
 
     PassManagerBuilder PMBuilder;
     PMBuilder.OptLevel = 0;  // Set optimization level to -O0
     PMBuilder.SizeLevel = 0; // so that no additional phases are run.
     PMBuilder.populateModulePassManager(pm);
 
+    // TODO: maybe have our own version which is not relocating?
     pm.add(createRewriteStatepointsForGCPass());
     pm.run(*m);
 
@@ -731,8 +616,6 @@ static ExecutionEngine * jitModule(Module * m) {
     return engine;
 }
 
-#define ARGS(...) std::vector<Value *>({ __VA_ARGS__ })
-#define INTRINSIC(name, ...) emitGcStatepoint(name, {__VA_ARGS__}, m, context->b, context->function_id)
 #define JUMP(block) BranchInst::Create(block, context->b)
 
 static uint64_t nextStackmapId = 0;
@@ -1447,6 +1330,32 @@ private:
         return ConstantInt::get(getGlobalContext(), APInt(32, value));
     }
 
+    template <typename ...Values>
+    Value * INTRINSIC(Value * fun, Values... args) {
+        return INTRINSIC(fun, std::vector<Value*>({args...}));
+    }
+
+    Value * INTRINSIC(Value * fun, std::vector<Value*> args) {
+        auto res = CallInst::Create(fun, args, "", context->b);
+        AttributeSet PAL;
+        {
+            SmallVector<AttributeSet, 4> Attrs;
+            AttributeSet PAS;
+            {
+                AttrBuilder B;
+                B.addAttribute("statepoint-id",
+                               std::to_string(context->function_id));
+                PAS = AttributeSet::get(m.getContext(), ~0U, B);
+            }
+            Attrs.push_back(PAS);
+            PAL = AttributeSet::get(m.getContext(), Attrs);
+        }
+        res->setAttributes(PAL);
+
+        return res;
+    }
+
+
     /** Current compilation module.
 
       The module contains the intrinsic function declarations as well as all compiled functions.
@@ -1467,11 +1376,6 @@ private:
 
     std::vector<uint64_t> functionIds;
 };
-
-#undef INTRINSIC
-
-
-#define INTRINSIC(name, ...) emitGcStatepoint(name, {__VA_ARGS__}, m, b, 1)
 
 class ICCompiler  {
 public:
@@ -1774,6 +1678,32 @@ private:
         return loadConstant(value, m.getM(), b);
     }
 
+    template <typename ...Values>
+    Value * INTRINSIC(Value * fun, Values... args) {
+        return INTRINSIC(fun, std::vector<Value*>({args...}));
+    }
+
+    Value * INTRINSIC(Value * fun, std::vector<Value*> args) {
+        auto res = CallInst::Create(fun, args, "", b);
+
+        AttributeSet PAL;
+        {
+            SmallVector<AttributeSet, 4> Attrs;
+            AttributeSet PAS;
+            {
+                AttrBuilder B;
+                B.addAttribute("statepoint-id",
+                               std::to_string(1));
+                PAS = AttributeSet::get(m.getContext(), ~0U, B);
+            }
+            Attrs.push_back(PAS);
+            PAL = AttributeSet::get(m.getContext(), Attrs);
+        }
+        res->setAttributes(PAL);
+
+        return res;
+    }
+
     Type * ic_t;
 
     Function * f;
@@ -1790,7 +1720,6 @@ private:
     unsigned size;
     unsigned functionId;
 };
-#undef INTRINSIC
 
 
 Value * Compiler::compileICCallStub(Value * call, Value * op, std::vector<Value*> & callArgs) {
@@ -1816,7 +1745,7 @@ Value * Compiler::compileICCallStub(Value * call, Value * op, std::vector<Value*
     // Record a patch point
     emitStackmap(smid, {{ic_stub}}, m, context->b);
 
-    return emitGcStatepoint(ic_stub, ic_args, m, context->b, context->function_id);
+    return INTRINSIC(ic_stub, ic_args);
 }
 
 
