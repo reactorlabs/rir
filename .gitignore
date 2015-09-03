@@ -1,0 +1,10 @@
+*.swp
+CMakeCache.txt
+CMakeFiles/
+Makefile
+cmake_install.cmake
+gnur/
+librjit.so
+perf.data
+perf.data.old
+rjit_0.1.tar.gz
