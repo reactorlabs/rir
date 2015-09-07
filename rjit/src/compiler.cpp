@@ -480,6 +480,8 @@ public:
 
 #undef DECLARE
 
+static uint64_t nextStackmapId = 3;
+
 SEXP createNativeSXP(RFunctionPtr fptr, SEXP ast, std::vector<SEXP> const & objects, Function * f) {
     SEXP objs = allocVector(VECSXP, objects.size() + 1);
     PROTECT(objs);
@@ -513,6 +515,34 @@ void emitStackmap(uint64_t id, std::vector<Value*> values, JITModule & m, BasicB
     CallInst::Create(m.stackmap, sm_args, "", b);
 }
 
+static Value * insertCall(Value * fun, std::vector<Value*> args,
+      BasicBlock * b, JITModule & m, uint64_t function_id) {
+
+    auto res = CallInst::Create(fun, args, "", b);
+
+    if (function_id != -1) {
+        assert(function_id > 1);
+        assert(function_id < nextStackmapId);
+
+        AttributeSet PAL;
+        {
+            SmallVector<AttributeSet, 4> Attrs;
+            AttributeSet PAS;
+            {
+                AttrBuilder B;
+                B.addAttribute("statepoint-id",
+                               std::to_string(function_id));
+                PAS = AttributeSet::get(m.getContext(), ~0U, B);
+            }
+            Attrs.push_back(PAS);
+            PAL = AttributeSet::get(m.getContext(), Attrs);
+        }
+        res->setAttributes(PAL);
+    }
+
+    return res;
+}
+
 // record stackmaps will parse the stackmap section of the current module and
 // index all entries.
 void recordStackmaps(std::vector<uint64_t> functionIds) {
@@ -523,6 +553,8 @@ void recordStackmaps(std::vector<uint64_t> functionIds) {
         StackMapParserT p(sm);
 
         for (const auto &r : p.records()) {
+            assert(r.getID() != -1 && r.getID() != statepointID);
+
             auto function_id = std::find(functionIds.begin(), functionIds.end(), r.getID());
 
             if (function_id == functionIds.end()) {
@@ -617,8 +649,6 @@ static ExecutionEngine * jitModule(Module * m) {
 }
 
 #define JUMP(block) BranchInst::Create(block, context->b)
-
-static uint64_t nextStackmapId = 0;
 
 class Compiler {
 public:
@@ -1336,23 +1366,7 @@ private:
     }
 
     Value * INTRINSIC(Value * fun, std::vector<Value*> args) {
-        auto res = CallInst::Create(fun, args, "", context->b);
-        AttributeSet PAL;
-        {
-            SmallVector<AttributeSet, 4> Attrs;
-            AttributeSet PAS;
-            {
-                AttrBuilder B;
-                B.addAttribute("statepoint-id",
-                               std::to_string(context->function_id));
-                PAS = AttributeSet::get(m.getContext(), ~0U, B);
-            }
-            Attrs.push_back(PAS);
-            PAL = AttributeSet::get(m.getContext(), Attrs);
-        }
-        res->setAttributes(PAL);
-
-        return res;
+        return insertCall(fun, args, context->b, m, context->function_id);
     }
 
 
@@ -1458,7 +1472,7 @@ private:
         allArgs.push_back(rho);
         allArgs.push_back(caller);
 
-        return INTRINSIC(ic, allArgs);
+        return INTRINSIC_NO_SAFEPOINT(ic, allArgs);
     }
 
     bool compileIc(SEXP inCall, SEXP inFun) {
@@ -1537,7 +1551,8 @@ private:
                 INTRINSIC(m.initClosureContext,
                         cntxt, call, newrho, rho, arglist, fun);
 
-                Value * res = INTRINSIC(m.closureNativeCallTrampoline,
+                Value * res = INTRINSIC_NO_SAFEPOINT(
+                        m.closureNativeCallTrampoline,
                         cntxt, constant(body), newrho);
 
                 INTRINSIC(m.endClosureContext, cntxt, res);
@@ -1679,29 +1694,21 @@ private:
     }
 
     template <typename ...Values>
+    Value * INTRINSIC_NO_SAFEPOINT(Value * fun, Values... args) {
+        return INTRINSIC_NO_SAFEPOINT(fun, std::vector<Value*>({args...}));
+    }
+
+    Value * INTRINSIC_NO_SAFEPOINT(Value * fun, std::vector<Value*> args) {
+        return insertCall(fun, args, b, m, -1);
+    }
+
+    template <typename ...Values>
     Value * INTRINSIC(Value * fun, Values... args) {
         return INTRINSIC(fun, std::vector<Value*>({args...}));
     }
 
     Value * INTRINSIC(Value * fun, std::vector<Value*> args) {
-        auto res = CallInst::Create(fun, args, "", b);
-
-        AttributeSet PAL;
-        {
-            SmallVector<AttributeSet, 4> Attrs;
-            AttributeSet PAS;
-            {
-                AttrBuilder B;
-                B.addAttribute("statepoint-id",
-                               std::to_string(1));
-                PAS = AttributeSet::get(m.getContext(), ~0U, B);
-            }
-            Attrs.push_back(PAS);
-            PAL = AttributeSet::get(m.getContext(), Attrs);
-        }
-        res->setAttributes(PAL);
-
-        return res;
+        return insertCall(fun, args, b, m, functionId);
     }
 
     Type * ic_t;
