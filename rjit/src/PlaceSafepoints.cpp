@@ -686,7 +686,17 @@ bool PlaceSafepoints::runOnFunction(Function &F) {
     std::vector<CallSite> Calls;
     findCallSafepoints(F, Calls);
     NumCallSafepoints += Calls.size();
-    ParsePointNeeded.insert(ParsePointNeeded.end(), Calls.begin(), Calls.end());
+    for (auto c : Calls) {
+        // Calls not tagged with id do not need to be parseable
+        uint64_t id = -1;
+        auto attrs = c.getAttributes();
+        Attribute attr_id =
+        attrs.getAttribute(AttributeSet::FunctionIndex, "statepoint-id");
+        bool has_id = attr_id.isStringAttribute() &&
+                      !attr_id.getValueAsString().getAsInteger(10, id);
+        if (has_id)
+            ParsePointNeeded.push_back(c);
+    }
   }
 
   // Unique the vectors since we can end up with duplicates if we scan the call
@@ -906,10 +916,7 @@ static Value *ReplaceWithStatepoint(const CallSite &CS, /* to replace */
   bool HasID = AttrID.isStringAttribute() &&
                !AttrID.getValueAsString().getAsInteger(10, ID);
 
-  if (HasID)
-    AttrsToRemove.addAttribute("statepoint-id");
-  else
-    ID = 0xABCDEF00;
+  assert(HasID && ID != -1);
 
   bool HasNumPatchBytes =
       AttrNumPatchBytes.isStringAttribute() &&
