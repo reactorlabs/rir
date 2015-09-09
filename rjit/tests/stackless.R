@@ -1,6 +1,5 @@
 require("compiler")
-# ignore the package for now
-#require("rjit")
+require("rjit")
 
 # simple constant
 ex <- jit.compile(quote(1))
