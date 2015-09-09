@@ -24,7 +24,7 @@
 
 using namespace llvm;
 
-namespace {
+namespace rjit {
 
 
 namespace symbol {
@@ -637,7 +637,7 @@ private:
         }
     }
 
-    /** Compiles user constant, which is SEXP constant marked with userConstant intrinsic.
+    /** Compiles user constant, which constant marked with userConstant intrinsic.
       */
     Value * compileConstant(SEXP value) {
         Value * result = constant(value);
@@ -1649,27 +1649,12 @@ static void * CallICStub2(SEXP a1, SEXP a2,
             a1, a2, call, fun, rho, callee, stackmapId);
 }
 
-
-
-
-} // namespace
-
-
-
-
-REXPORT SEXP compile(SEXP ast) {
+SEXP compile(SEXP ast) {
     return Compiler("module").compile("rfunction", ast);
 }
 
-REXPORT SEXP printBitcode(SEXP ast) {
 
-}
-
-REXPORT SEXP nativeAST(SEXP ast) {
-
-}
-
-
+} // namespace
 
 #endif // COMPILER_CPP
 

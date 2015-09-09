@@ -26,8 +26,7 @@
 
 
 #include "ir.h"
-
-#include "codegen.h"
+#include "compiler.h"
 
 using namespace llvm;
 using namespace rjit;
@@ -42,7 +41,6 @@ REXPORT SEXP initializeRJIT() {
 }
 
 REXPORT SEXP jit(SEXP expression) {
-    assert(TYPEOF(expression) == BCODESXP and "Only raw bytecode is allowed as an argument to jitExpression");
     return compile(expression);
 }
 

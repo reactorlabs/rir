@@ -13,6 +13,8 @@
 namespace rjit {
     typedef SEXP (*RFunctionPtr)(SEXP, SEXP, Rboolean);
 
+    SEXP compile(SEXP ast);
+
     /** NATIVESXP type
 
       Has the 3-SEXP style of a pairlist, where:
