@@ -659,6 +659,7 @@ public:
     SEXP compile(std::string const & name, SEXP bytecode) {
         SEXP result = compileFunction(name, bytecode);
 
+//        m.dump();
         ExecutionEngine * engine = jitModule(m.getM());
 
         // perform all the relocations
@@ -763,7 +764,10 @@ private:
         case REALSXP:
         case CPLXSXP:
         case STRSXP:
+        case NILSXP:
             return compileConstant(value);
+        case BCODESXP:
+            return compileExpression(VECTOR_ELT(CDR(value), 0));
         default:
             assert(false && "Unknown SEXP type in compiled ast.");
         }
@@ -823,6 +827,7 @@ private:
         case REALSXP:
         case CPLXSXP:
         case STRSXP:
+        case NILSXP:
             // literals are self-evaluating
             return constant(arg);
             break;
@@ -1446,7 +1451,8 @@ public:
 private:
     void * finalize() {
         // FIXME: Allocate a NATIVESXP, or link it to the caller??
-        
+
+//        m.dump();
         ExecutionEngine * engine = jitModule(m.getM());
         void * ic = engine->getPointerToFunction(f);
 
@@ -1653,12 +1659,17 @@ private:
     void compileArgument(Value * args, SEXP argAst, int argnum, bool eager) {
         SEXP arg = CAR(argAst);
         Value * result;
+        // This list has to stay in sync with Compiler::compileArgument
+        // note: typeof(arg) does not correspond to the runtime type of the ic
+        // arg, since the caller already converts non self evaluating arguments
+        // to promises or native code.
         switch (TYPEOF(arg)) {
         case LGLSXP:
         case INTSXP:
         case REALSXP:
         case CPLXSXP:
         case STRSXP:
+        case NILSXP:
             // literals are self-evaluating
             result = icArgs[argnum];
             break;
@@ -1667,6 +1678,7 @@ private:
                 INTRINSIC(m.addEllipsisArgument, args, rho, eager ? constant(TRUE) : constant(FALSE));
                 return;
             }
+            // Fall through:
         default:
             if (eager) {
                 // TODO make this more efficient?
@@ -1675,6 +1687,7 @@ private:
                 // we must create a promise out of the argument
                 result = INTRINSIC(m.createPromise, icArgs[argnum], rho);
             }
+            break;
         }
         SEXP name = TAG(argAst);
         if (name != R_NilValue)
