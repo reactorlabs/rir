@@ -445,6 +445,7 @@ public:
     DECLARE(patchIC, patchIC_t);
 
     Function * stackmap;
+    Function * patchpoint;
 
     JITModule(std::string const & name): m(new Module(name, getGlobalContext())) {
         FunctionType * stackmapTy = FunctionType::get(
@@ -457,6 +458,20 @@ public:
                 stackmapTy,
                 GlobalValue::ExternalLinkage,
                 "llvm.experimental.stackmap",
+                m);
+
+        FunctionType * patchpointTy = FunctionType::get(
+                t::t_void,
+                std::vector<Type*>({{
+                    IntegerType::get(m->getContext(), 64),
+                    IntegerType::get(m->getContext(), 32),
+                    t::i8ptr,
+                    IntegerType::get(m->getContext(), 32)}}),
+                true);
+        patchpoint = Function::Create(
+                patchpointTy,
+                GlobalValue::ExternalLinkage,
+                "llvm.experimental.patchpoint.void",
                 m);
     }
 
@@ -495,9 +510,15 @@ SEXP createNativeSXP(RFunctionPtr fptr, SEXP ast, std::vector<SEXP> const & obje
     return result;
 }
 
+const static int patchpointSize = 10;
+
 void emitStackmap(uint64_t id, std::vector<Value*> values, JITModule & m, BasicBlock * b) {
-    ConstantInt* const_num_bytes =
+    ConstantInt* const_0 =
         ConstantInt::get(m.getContext(),  APInt(32, StringRef("0"), 10));
+    Constant* const_null = ConstantExpr::getCast(
+            Instruction::IntToPtr, const_0, t::i8ptr);
+    ConstantInt* const_num_bytes =
+        ConstantInt::get(m.getContext(),  APInt(32, patchpointSize, false));
     ConstantInt* const_id =
         ConstantInt::get(m.getContext(), APInt(64, id, false));
 
@@ -506,13 +527,15 @@ void emitStackmap(uint64_t id, std::vector<Value*> values, JITModule & m, BasicB
     // Args to the stackmap
     sm_args.push_back(const_id);
     sm_args.push_back(const_num_bytes);
+    sm_args.push_back(const_null);
+    sm_args.push_back(const_0);
 
     // Values to record
     for (auto arg : values) {
         sm_args.push_back(arg);
     }
 
-    CallInst::Create(m.stackmap, sm_args, "", b);
+    CallInst::Create(m.patchpoint, sm_args, "", b);
 }
 
 static Value * insertCall(Value * fun, std::vector<Value*> args,
@@ -765,8 +788,11 @@ private:
         case CPLXSXP:
         case STRSXP:
         case NILSXP:
+        case CLOSXP:
             return compileConstant(value);
         case BCODESXP:
+        //TODO: reuse the compiled fun
+        case NATIVESXP:
             return compileExpression(VECTOR_ELT(CDR(value), 0));
         default:
             assert(false && "Unknown SEXP type in compiled ast.");
@@ -1772,12 +1798,21 @@ Value * Compiler::compileICCallStub(Value * call, Value * op, std::vector<Value*
 
 void patchIC(void * ic, uint64_t stackmapId, void * caller) {
     auto r = StackMap::getPatchpoint(stackmapId);
+    assert(r.getNumLocations() == 1);
 
-    uintptr_t patchAddr = (uintptr_t)caller + r.getInstructionOffset();
+    uint8_t * patchAddr = (uint8_t*) ((uintptr_t)caller + r.getInstructionOffset());
 
-    // TODO: This directly patches the argument of the movabs,
-    // clearly we need sth more stable
-    *(void**)(patchAddr-8) = ic;
+    int reg = r.getLocation(0).getDwarfRegNum();
+
+    uint8_t prefix = reg > 7 ? 0x49 : 0x48;
+    uint8_t movinst = 0xb8 + (reg%8);
+
+    static_assert(patchpointSize == 10, "requre 10 bytes to patch call");
+
+    *patchAddr++ = prefix;
+    *patchAddr++ = movinst;
+
+    *(void**)(patchAddr) = ic;
 }
 
 void * compileIC(uint64_t numargs, SEXP call, SEXP fun, SEXP rho, uint64_t stackmapId) {
