@@ -5,7 +5,12 @@ if("rjit" %in% rownames(installed.packages())) {
     exit()
 }
 
-dyn.load("librjit.so")
+if (Sys.info()["sysname"] == "Darwin") {
+    # osx
+    dyn.load("librjit.dylib")
+} else {
+    dyn.load("librjit.so")
+}
 source("rjit/R/rjit.R")
 library(compiler)
 

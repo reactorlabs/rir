@@ -24,6 +24,14 @@ include_directories(${CMAKE_SOURCE_DIR}/rjit/src)
 # TODO for now, make all builds debug
 set(CMAKE_BUILD_TYPE Debug)
 
+if (APPLE) 
+    find_library(libr 
+                NAMES libR.dylib
+                PATHS ${CMAKE_SOURCE_DIR}/gnur/lib
+                )
+    message(STATUS "libR is found at ${libr}")
+endif(APPLE)
+
 set(LLVM_COMPONENTS_USED support core mcjit native irreader linker ipo)
 
 
@@ -44,8 +52,11 @@ add_library(${PROJECT_NAME} SHARED ${SRC})
 llvm_map_components_to_libnames(llvm_libs ${LLVM_COMPONENTS_USED})
 
 # Link against LLVM libraries
-target_link_libraries(${PROJECT_NAME} ${llvm_libs})
-
+if(libr)
+    target_link_libraries(${PROJECT_NAME} ${llvm_libs} ${libr})
+else(libr)
+    target_link_libraries(${PROJECT_NAME} ${llvm_libs})
+endif(libr)
 # now creating the package
 
 set(PACKAGE_NAME "rjit_0.1.tar.gz")
