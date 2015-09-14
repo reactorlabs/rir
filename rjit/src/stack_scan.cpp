@@ -26,7 +26,7 @@ void StackMap::stackScanner(void (*forward_node) (SEXP)) {
     void * _bp = __builtin_frame_address(0);
 
     struct layout *bp = (struct layout *) _bp;
- 
+
     unsigned num = 0;
 
     while(true) {
@@ -38,6 +38,8 @@ void StackMap::stackScanner(void (*forward_node) (SEXP)) {
         uintptr_t pos = (uintptr_t)bp->ret;
 
         if (isStatepoint(pos)) {
+            uintptr_t frame = (uintptr_t)(bp+1);
+
             const auto &R = getStatepoint(pos);
             for (const auto &Loc : R.locations()) {
                 switch (Loc.getKind()) {
@@ -46,12 +48,11 @@ void StackMap::stackScanner(void (*forward_node) (SEXP)) {
                     // reg is == 7 (rsp)
                     assert(Loc.getDwarfRegNum() == 7);
 
-                    void ** frame = (void**)(bp+1);
-                    SEXP value = (SEXP)frame[Loc.getOffset()/8];
+                    uintptr_t value = frame +  Loc.getOffset();
 
-                    assert(*(int*)value);
+                    assert(!value || *(int*)value);
 
-                    forward_node(value);
+                    forward_node(*(SEXP*)value);
                     break;
                 }
             }

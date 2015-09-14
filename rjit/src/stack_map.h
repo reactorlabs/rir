@@ -64,6 +64,17 @@ public:
         return r;
     }
 
+    static unsigned getStackSize(uintptr_t pc) {
+      StatepointRecord & e = statepoint.at(pc);
+      StackMapParserT p(e.stackmap);
+      for (auto &f : p.functions()) {
+        if (f.getFunctionAddress() == e.fun)
+          return f.getStackSize();
+      }
+      assert(false);
+      return 0;
+    }
+
     static void stackScanner(void (*forward_node)(SEXP));
 
     static StackMapParserT::RecordAccessor getPatchpoint(uint64_t id) {

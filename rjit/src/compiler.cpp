@@ -495,6 +495,14 @@ public:
 
 #undef DECLARE
 
+static void setupFunction(Function & f) {
+    f.setGC("statepoint-example");
+    auto attrs = f.getAttributes();
+    attrs = attrs.addAttribute(f.getContext(), AttributeSet::FunctionIndex,
+                               "no-frame-pointer-elim", "true");
+    f.setAttributes(attrs);
+}
+
 static uint64_t nextStackmapId = 3;
 
 SEXP createNativeSXP(RFunctionPtr fptr, SEXP ast, std::vector<SEXP> const & objects, Function * f) {
@@ -682,8 +690,8 @@ public:
     SEXP compile(std::string const & name, SEXP bytecode) {
         SEXP result = compileFunction(name, bytecode);
 
-//        m.dump();
         ExecutionEngine * engine = jitModule(m.getM());
+        //m.dump();
 
         // perform all the relocations
         for (SEXP s : relocations) {
@@ -704,7 +712,7 @@ private:
 
         Context(std::string const & name, Module * m) {
             f = Function::Create(t::sexp_sexpsexpint, Function::ExternalLinkage, name, m);
-            f->setGC("statepoint-example");
+            setupFunction(*f);
             Function::arg_iterator args = f->arg_begin();
             Value * body = args++;
             body->setName("body");
@@ -1437,7 +1445,7 @@ public:
         ic_t = funT;
 
         f = Function::Create(funT, Function::ExternalLinkage, "callIC", m);
-        f->setGC("statepoint-example");
+        setupFunction(*f);
         b = BasicBlock::Create(getGlobalContext(), "start", f, nullptr);
 
         // Load the args in the same order as the stub
@@ -1478,8 +1486,8 @@ private:
     void * finalize() {
         // FIXME: Allocate a NATIVESXP, or link it to the caller??
 
-//        m.dump();
         ExecutionEngine * engine = jitModule(m.getM());
+        // m.dump();
         void * ic = engine->getPointerToFunction(f);
 
         recordStackmaps({functionId});
