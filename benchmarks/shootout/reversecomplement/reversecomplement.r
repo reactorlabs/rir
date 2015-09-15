@@ -30,7 +30,7 @@ reversecomplement <- function(args) {
 }
 
 
-execute <- function(n = "shootout/fasta/fasta100.txt") {
+execute <- function(n = "shootout/fasta/fasta300000.txt") {
     reversecomplement(n)
 }
 

@@ -183,11 +183,12 @@ calculateSpeedup <- function(series1, series2) {
     result
 }
 
-plotSpeedup <- function(speedup, colorFaster = "#0000ff", colorSlower = "#ff0000") {
-    png(paste(paste(attr$title, attr$name, attr$gitBranch, attr$gitCommit, sep="_"),".png", sep=""), width = width, height = height)
-    orig = par()
-    barplot(zmean - 1, ylim = c(-1, max(zmean) - 1), col = sapply(zmean, function(x) if (x >= 1) "#0000ff" else "#ff0000"))
-}
+
+#plotSpeedup <- function(speedup, colorFaster = "#0000ff", colorSlower = "#ff0000") {
+#    png(paste(paste(attr$title, attr$name, attr$gitBranch, attr$gitCommit, sep="_"),".png", sep=""), width = width, height = height)
+#    orig = par()
+#    barplot(zmean - 1, ylim = c(-1, max(zmean) - 1), col = sapply(zmean, function(x) if (x >= 1) "#0000ff" else "#ff0000"))
+#}
 
 
 
@@ -200,6 +201,7 @@ library(graphics)
 
 width = 1366L
 height = 768L
+verbose = TRUE
 
 # returns name of the current branch
 getGitBranch <- function() {
@@ -532,12 +534,12 @@ error <- function(message) {
 
 args = commandArgs(trailingOnly = TRUE)
 
-#args = c("test", "name", "small", "n", "1", "shootout/binarytrees")
+#args = c("test", "name", "xyz", "n", "1", "shootout/spectralnorm")
 #args = c("times", "test_peta_1673921.rds")
 
 #args = c("comparison", "test_peta_1673921.rds", "test_peta_1673921.rds")
-args = c("series", "test")
-
+#args = c("series", "test")
+print(args)
 if (length(args) < 1)
     error("Command argument missing")
 command = args[[1]]

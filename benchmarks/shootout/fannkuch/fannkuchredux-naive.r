@@ -69,6 +69,6 @@ fannkuchredux_naive <- function(args) {
     cat("Pfannkuchen(", n, ") = ", fannkuch(n), "\n", sep="")
 }
 
-execute <- function(n = 8L) {
+execute <- function(n = 9L) {
     fannkuchredux_naive(n)
 }

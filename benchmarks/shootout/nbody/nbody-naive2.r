@@ -113,6 +113,6 @@ nbody_naive2 <- function(args) {
     cat(energy(), "\n")
 }
 
-execute <- function(n = 1000L) {
+execute <- function(n = 50000L) {
     nbody_naive2(n)
 }

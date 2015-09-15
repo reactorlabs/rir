@@ -90,7 +90,7 @@ paste. <- function (..., digits=16, sep=" ", collapse=NULL) {
         .Internal(paste(args, sep, collapse))
     }
 }
-execute <- function(n = "shootout/fasta/fasta100.txt") {
+execute <- function(n = "shootout/fasta/fasta3000.txt") {
     knucleotide_brute2(n)
 }
 

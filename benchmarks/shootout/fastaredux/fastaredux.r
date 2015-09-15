@@ -110,6 +110,6 @@ fastaredux <- function(args) {
     random_fasta(homosapiens, 5L * n)
 }
 
-execute <- function(n = 1000L) {
+execute <- function(n = 150000L) {
     fastaredux(n)
 }

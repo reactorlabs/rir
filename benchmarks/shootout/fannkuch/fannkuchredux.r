@@ -71,7 +71,7 @@ fannkuchredux <- function(args) {
 }
 
 
-execute <- function(n = 8L) {
+execute <- function(n = 9L) {
     fannkuchredux(n)
 }
 
