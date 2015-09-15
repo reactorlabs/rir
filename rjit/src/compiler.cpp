@@ -1516,40 +1516,42 @@ private:
     }
 
     bool compileIc(SEXP inCall, SEXP inFun) {
-        std::vector<bool> promarg(icArgs.size(), false);
-
-        // Check for named args or ...
-        SEXP arg = CDR(inCall);
-        int i = 0;
-        while (arg != R_NilValue) {
-            // We do not yet do the static version of match.c, thus cannot
-            // support named args
-            if (TAG(arg) != R_NilValue)
-                return false;
-
-            // We cannot inline ellipsis
-            if (CAR(arg) == R_DotsSymbol)
-                return false;
-
-            switch (TYPEOF(CAR(arg))) {
-                case LGLSXP:
-                case INTSXP:
-                case REALSXP:
-                case CPLXSXP:
-                case STRSXP:
-                    break;
-                default:
-                    promarg[i] = true;
-            }
-            i++;
-            arg = CDR(arg);
-        }
-
-        // number of args != number of formal args, fallback to generic
-        if (i != icArgs.size())
-            return false;
-
         if (TYPEOF(inFun) == CLOSXP) {
+            std::vector<bool> promarg(icArgs.size(), false);
+
+            // Check for named args or ...
+            SEXP arg = CDR(inCall);
+            SEXP form = FORMALS(inFun);
+            int i = 0;
+            while (arg != R_NilValue && form != R_NilValue) {
+                // We do not yet do the static version of match.c, thus cannot
+                // support named args
+                if (TAG(arg) != R_NilValue)
+                    return false;
+
+                // We cannot inline ellipsis
+                if (CAR(arg) == R_DotsSymbol)
+                    return false;
+
+                switch (TYPEOF(CAR(arg))) {
+                    case LGLSXP:
+                    case INTSXP:
+                    case REALSXP:
+                    case CPLXSXP:
+                    case STRSXP:
+                        break;
+                    default:
+                        promarg[i] = true;
+                }
+                i++;
+                arg = CDR(arg);
+                form = CDR(form);
+            }
+
+            // number of args != number of formal args, fallback to generic
+            if (form != R_NilValue || i != icArgs.size())
+                return false;
+
             SEXP body = CDR(inFun);
             // TODO: If the body is not native we could jit it here
             if (TYPEOF(body) == NATIVESXP) {
