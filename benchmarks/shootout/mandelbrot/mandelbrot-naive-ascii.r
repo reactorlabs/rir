@@ -36,7 +36,7 @@ mandelbrot_naive <- function(args) {
 }
 
 
-execute <- function(n = 3000L) {
+execute <- function(n = 400L) {
     mandelbrot_naive(n)
 }
 

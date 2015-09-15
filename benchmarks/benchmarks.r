@@ -249,6 +249,7 @@ runTestsInRoot<- function(testroot, n, compile) {
         )
         info("\n", override = TRUE)
     }
+    print(results)
     results
 }
 
@@ -302,7 +303,7 @@ test <- function(args) {
     saveRDS(results, filename)
 }
 
-plotSeries <-function(series, means, boxes, width, height, barsColor, legendColor) {
+plotTimesGraph <-function(series, means, boxes, width, height, barsColor, legendColor) {
     attr = attributes(series)
     unit = attr$unit
     title = attr$title
@@ -358,11 +359,11 @@ plotTimes <- function(args) {
     for (name in names) {
         data = readRDS(name)
         times = getExecutionTimeSeries(data)
-        plotSeries(times, means, boxes, width, height, barsColor, legendColor)
+        plotTimesGraph(times, means, boxes, width, height, barsColor, legendColor)
         # check if we have compilation times data
         times = getCompilationTimeSeries(data)
         if (! is.na(times[[1]]))
-           plotSeries(times, means, boxes, width, height, barsColor, legendColor)
+           plotTimesGraph(times, means, boxes, width, height, barsColor, legendColor)
     }
 }
 
@@ -469,6 +470,7 @@ plotSeries = function(args) {
                 series[[n]][[i]] = mean(sapply(j$executionTime, function(x) x[[1]]))
             }
         }
+        print(series)
         # and now, for each series, print the result
         names(series) = simplifyNames(names(series))
         runs = sapply(data, function(x) attributes(x)$gitCommit)
@@ -534,8 +536,8 @@ error <- function(message) {
 
 args = commandArgs(trailingOnly = TRUE)
 
-#args = c("test", "name", "xyz", "n", "1", "shootout/spectralnorm")
-#args = c("times", "test_peta_1673921.rds")
+args = c("test", "name", "rjit", "n", "1", "compile", "shootout")
+#args = c("times", "baseline.rds")
 
 #args = c("comparison", "test_peta_1673921.rds", "test_peta_1673921.rds")
 #args = c("series", "test")

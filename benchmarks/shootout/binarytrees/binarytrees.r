@@ -45,7 +45,7 @@ binarytrees <- function(args) {
         check(long_lived_tree), "\n")
 }
 
-execute <- function(n = 10L) {
+execute <- function(n = 13L) {
     binarytrees(n)
 }
 
