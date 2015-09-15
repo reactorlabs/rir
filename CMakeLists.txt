@@ -55,7 +55,12 @@ add_custom_target(package_install
 )
 
 
+file(GLOB_RECURSE BENCHMARKS "benchmarks/*.R" "benchmarks/*.r")
 
+add_custom_target(benchmarks SOURCES ${BENCHMARKS})
+
+file(GLOB SCRIPTS "local/*.sh")
+add_custom_target(scripts SOURCES ${SCRIPTS})
 
 
 # Ubuntu comments
