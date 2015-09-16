@@ -223,3 +223,19 @@ stopifnot(f() == 2)
 fib <- function(n) if (n < 2) 1 else fib(n - 1) + fib(n - 2)
 fib <- jit.compile(fib)
 fib(32)
+
+# compiling more functions
+f1 <- function(a, b) { a + b }
+f2 <- function(c, d) { f1(c, d) }
+jit.compileFunctions("testModule", as.pairlist(list(f1 = f1, f2 = f2)))
+stopifnot(typeof(.Internal(bodyCode(f1))) == "native")
+stopifnot(typeof(.Internal(bodyCode(f2))) == "native")
+stopifnot(f2(1,2) == 3)
+
+# compiling environments
+env = new.env()
+env$f1 <- function(a, b) { a + b }
+env$f2 <- function(c, d) { f1(c, d) }
+jit.compileEnvironment(env)
+stopifnot(typeof(.Internal(bodyCode(env$f1))) == "native")
+stopifnot(typeof(.Internal(bodyCode(env$f2))) == "native")

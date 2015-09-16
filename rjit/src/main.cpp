@@ -38,6 +38,10 @@ REXPORT SEXP jit(SEXP expression) {
     return compile(expression);
 }
 
+REXPORT SEXP jitFunctions(SEXP moduleName, SEXP functions) {
+    return compileFunctions(moduleName, functions);
+}
+
 REXPORT SEXP jitConstants(SEXP expression) {
     assert(TYPEOF(expression) == NATIVESXP and "JIT constants can only be extracted from a NATIVESXP argument");
     return CDR(expression);

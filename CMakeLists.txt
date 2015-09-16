@@ -77,6 +77,12 @@ add_custom_target(package_install
 
 set_directory_properties(PROPERTIES ADDITIONAL_MAKE_CLEAN_FILES "${R_HOME}/library/rjit;${R_LIBRARY_TREE}/rjit")
 
+file(GLOB_RECURSE BENCHMARKS "benchmarks/*.R" "benchmarks/*.r")
+
+add_custom_target(benchmarks SOURCES ${BENCHMARKS})
+
+file(GLOB SCRIPTS "local/*.sh")
+add_custom_target(scripts SOURCES ${SCRIPTS})
 
 
 # Ubuntu comments

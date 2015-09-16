@@ -11,7 +11,7 @@
 #include <execinfo.h>
 #include <stdlib.h>
 #include <unwind.h>
- 
+
 extern void *__libc_stack_end;
 
 // FIXME: we need robust stack scanning with markers on stack instead of this

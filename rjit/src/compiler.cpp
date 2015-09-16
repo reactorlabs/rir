@@ -689,9 +689,33 @@ public:
 
     SEXP compile(std::string const & name, SEXP bytecode) {
         SEXP result = compileFunction(name, bytecode);
+        return result;
+    }
+
+    SEXP compileFunction(std::string const & name, SEXP ast, bool isPromise = false) {
+        Context * old = context;
+        context = new Context(name, m);
+        context->function_id = nextStackmapId++;
+        functionIds.push_back(context->function_id);
+        if (isPromise)
+            context->returnJump = true;
+        Value * last = compileExpression(ast);
+        // since we are going to insert implicit return, which is a simple return even from a promise
+        context->returnJump = false;
+        if (last != nullptr)
+            compileReturn(last, /*tail=*/ true);
+        // now we create the NATIVESXP
+        SEXP result = createNativeSXP(nullptr, ast, context->objects, context->f);
+        // add the non-jitted SEXP to relocations
+        relocations.push_back(result);
+        delete context;
+        context = old;
+        return result;
+    }
+
+    void jitAll() {
 
         ExecutionEngine * engine = jitModule(m.getM());
-        //m.dump();
 
         // perform all the relocations
         for (SEXP s : relocations) {
@@ -702,8 +726,6 @@ public:
         recordStackmaps(functionIds);
         new_stackmap_addr = nullptr;
         functionIds.clear();
-
-        return result;
     }
 
 private:
@@ -755,27 +777,6 @@ private:
 
         unsigned function_id;
     };
-
-    SEXP compileFunction(std::string const & name, SEXP ast, bool isPromise = false) {
-        Context * old = context;
-        context = new Context(name, m);
-        context->function_id = nextStackmapId++;
-        functionIds.push_back(context->function_id);
-        if (isPromise)
-            context->returnJump = true;
-        Value * last = compileExpression(ast);
-        // since we are going to insert implicit return, which is a simple return even from a promise
-        context->returnJump = false;
-        if (last != nullptr)
-            compileReturn(last, /*tail=*/ true);
-        // now we create the NATIVESXP
-        SEXP result = createNativeSXP(nullptr, ast, context->objects, context->f);
-        // add the non-jitted SEXP to relocations
-        relocations.push_back(result);
-        delete context;
-        context = old;
-        return result;
-    }
 
     /** Compiles an expression.
 
@@ -1555,7 +1556,7 @@ private:
             SEXP body = CDR(inFun);
             // TODO: If the body is not native we could jit it here
             if (TYPEOF(body) == NATIVESXP) {
-                
+
                 BasicBlock * icMatch = BasicBlock::Create(
                         getGlobalContext(), "icMatch", f, nullptr);
                 BasicBlock * icMiss = BasicBlock::Create(
@@ -1778,6 +1779,7 @@ private:
 };
 
 
+
 Value * Compiler::compileICCallStub(Value * call, Value * op, std::vector<Value*> & callArgs) {
     uint64_t smid = nextStackmapId++;
 
@@ -1833,10 +1835,38 @@ void * compileIC(uint64_t numargs, SEXP call, SEXP fun, SEXP rho, uint64_t stack
     return compiler.compile(call, fun, rho);
 }
 
-SEXP compile(SEXP ast) {
-    return Compiler("module").compile("rfunction", ast);
+/** More complex compilation method that compiles multiple functions into a specified module name.
+
+  The module name is expected to be a STRSXP and the functions is expected to be a pairlist. If pairlist has tags associated with the elements, they will be used as function names.
+ */
+SEXP compileFunctions(SEXP moduleName, SEXP functions) {
+    char const * mName = CHAR(STRING_ELT(moduleName, 0));
+    Compiler c(mName);
+    while (functions != R_NilValue) {
+        SEXP f = CAR(functions);
+        // get the function ast
+        SEXP body = BODY(f);
+        SEXP name = TAG(functions);
+        char const * fName = (name == R_NilValue) ? "unnamed function" : CHAR(PRINTNAME(name));
+        if (TYPEOF(body) == BCODESXP)
+            std::cout << "Ignoring " << fName << " because it is in bytecode" << std::endl;
+        else if (TYPEOF(body) == NATIVESXP)
+            std::cout << "Ignoring " << fName << " because it is already compiled" << std::endl;
+        else
+            SET_BODY(f, c.compileFunction(fName, body));
+        // move to next function
+        functions = CDR(functions);
+    }
+    c.jitAll();
+    return moduleName;
 }
 
+SEXP compile(SEXP ast) {
+    Compiler c("module");
+    SEXP result = c.compile("rfunction", ast);
+    c.jitAll();
+    return result;
+}
 
 } // namespace
 
