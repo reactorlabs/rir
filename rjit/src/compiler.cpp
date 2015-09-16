@@ -116,9 +116,6 @@ StructType * SEXPREC;
 StructType * cntxt;
 PointerType * cntxtPtr;
 
-StructType * CallArgs;
-PointerType * CallArgsPtr;
-
 Type * t_void;
 Type * voidPtr;
 Type * t_i64;
@@ -176,11 +173,6 @@ PointerType * initializeTypes() {
     // now the real SEXPREC
     fields = { t_sxpinfo_struct, t::SEXP, t::SEXP, t::SEXP, u1 };
     t::SEXPREC->setBody(fields, false);
-    // call header and pointer
-    t::CallArgs = StructType::create(context, "struct.CallHeader");
-    fields = { t::SEXP, t::SEXP };
-    t::CallArgs->setBody(fields);
-    t::CallArgsPtr = PointerType::get(t::CallArgs, 0);
     // API function types
     Type * t_void = Type::getVoidTy(context);
     t::t_void = t_void;
@@ -216,9 +208,6 @@ PointerType * initializeTypes() {
     DECLARE(int_sexpsexp, t::Int, t::SEXP, t::SEXP);
     DECLARE(int_sexpsexpsexp, t::Int, t::SEXP, t::SEXP, t::SEXP);
     DECLARE(int_sexpint, t::Int, t::SEXP, t::Int);
-    DECLARE(void_argssexp, t_void, t::CallArgsPtr, t::SEXP);
-    DECLARE(void_argssexpsexp, t_void, t::CallArgsPtr, t::SEXP, t::SEXP);
-    DECLARE(void_argssexpint, t_void, t::CallArgsPtr, t::SEXP, t::Int);
     DECLARE(void_cntxtsexpsexpsexpsexpsexp, t_void, t::cntxtPtr, t::SEXP, t::SEXP, t::SEXP, t::SEXP, t::SEXP);
     DECLARE(void_cntxtsexp, t_void, t::cntxtPtr, t::SEXP);
     DECLARE(void_cntxtsexpsexp, t_void, t::cntxtPtr, t::SEXP, t::SEXP);
@@ -436,9 +425,9 @@ public:
     DECLARE(checkSwitchControl, void_sexpsexp);
     DECLARE(switchControlInteger, int_sexpint);
     DECLARE(switchControlCharacter, int_sexpsexpsexp);
-    DECLARE(addArgument, void_argssexp);
-    DECLARE(addKeywordArgument, void_argssexpsexp);
-    DECLARE(addEllipsisArgument, void_argssexpint);
+    DECLARE(addArgument, sexp_sexpsexp);
+    DECLARE(addKeywordArgument, sexp_sexpsexpsexp);
+    DECLARE(addEllipsisArgument, sexp_sexpsexpint);
     DECLARE(CONS_NR, sexp_sexpsexp);
     DECLARE(closureQuickArgumentAdaptor, sexp_sexpsexp);
     DECLARE(initClosureContext, void_cntxtsexpsexpsexpsexpsexp);
@@ -1492,8 +1481,8 @@ private:
     void * finalize() {
         // FIXME: Allocate a NATIVESXP, or link it to the caller??
 
-        ExecutionEngine * engine = jitModule(m.getM());
         // m.dump();
+        ExecutionEngine * engine = jitModule(m.getM());
         void * ic = engine->getPointerToFunction(f);
 
         recordStackmaps({functionId});
@@ -1634,12 +1623,6 @@ private:
     Value * compileCall(SEXP call, SEXP op) {
         // TODO: only emit one branch depending on the type we currently see
 
-        // now create the CallArgs structure as local variable
-        Value * callArgs = new AllocaInst(t::CallArgs, "callArgs", b);
-        // set first to R_NilValue
-        std::vector<Value*> callArgsIndices = { constant(0), constant(0) };
-        Value * callArgsFirst = GetElementPtrInst::Create(t::CallArgs, callArgs, callArgsIndices, "", b);
-
         // now we must compile the arguments, this depends on the actual type of the function - promises by default, eager for builtins and no evaluation for specials
         Value * ftype = INTRINSIC(m.sexpType, fun);
         // switch the function call execution based on the function type
@@ -1658,14 +1641,14 @@ private:
         BranchInst::Create(next, b);
         // in builtin mode evaluate all arguments eagerly
         b = builtin;
-        Value * args = compileArguments(callArgs, callArgsFirst, CDR(call), /*eager=*/ true);
+        Value * args = compileArguments(CDR(call), /*eager=*/ true);
         Value * builtinResult = INTRINSIC(m.call,
                 constant(call), fun, args, rho);
         builtin = b; // bb might have changed during arg evaluation
         BranchInst::Create(next, b);
         // in general closure case the arguments will become promises
         b = closure;
-        args = compileArguments(callArgs, callArgsFirst, CDR(call), /*eager=*/ false);
+        args = compileArguments(CDR(call), /*eager=*/ false);
         Value * closureResult = INTRINSIC(m.call,
                 constant(call), fun, args, rho);
         BranchInst::Create(next, b);
@@ -1682,23 +1665,26 @@ private:
 
       Creates the pairlist of arguments used in R from the arguments and their names.
       */
-    Value * compileArguments(Value * args, Value * first, SEXP argAsts, bool eager) {
-        // set first argument to R_NilValue
-        new StoreInst(constant(R_NilValue), first, b);
+    Value * compileArguments(SEXP argAsts, bool eager) {
+        Value * arglistHead = nullptr;
+        Value * arglist = constant(R_NilValue);
+
         // if there are no arguments
         int argnum = 0;
         while (argAsts != R_NilValue) {
-            compileArgument(args, argAsts, argnum++, eager);
+            arglist = compileArgument(arglist, argAsts, argnum++, eager);
+            if (!arglistHead) arglistHead = arglist;
             argAsts = CDR(argAsts);
         }
-        return new LoadInst(first, "", b);
+        if (arglistHead) return arglistHead;
+        return constant(R_NilValue);
     }
 
     /** Compiles a single argument.
 
       Self evaluating literals are always returned as SEXP constants, anything else is either evaluated directly if eager is true, or they are compiled as new promises.
      */
-    void compileArgument(Value * args, SEXP argAst, int argnum, bool eager) {
+    Value * compileArgument(Value * arglist, SEXP argAst, int argnum, bool eager) {
         SEXP arg = CAR(argAst);
         Value * result;
         // This list has to stay in sync with Compiler::compileArgument
@@ -1717,8 +1703,7 @@ private:
             break;
         case SYMSXP:
             if (arg == R_DotsSymbol) {
-                INTRINSIC(m.addEllipsisArgument, args, rho, eager ? constant(TRUE) : constant(FALSE));
-                return;
+                return INTRINSIC(m.addEllipsisArgument, arglist, rho, eager ? constant(TRUE) : constant(FALSE));
             }
             // Fall through:
         default:
@@ -1733,9 +1718,9 @@ private:
         }
         SEXP name = TAG(argAst);
         if (name != R_NilValue)
-            INTRINSIC(m.addKeywordArgument, args, result, constant(name));
-        else
-            INTRINSIC(m.addArgument, args, result);
+            return INTRINSIC(m.addKeywordArgument, arglist, result, constant(name));
+
+        return INTRINSIC(m.addArgument, arglist, result);
     }
 
     /** Converts given integer to bitcode value. This is just a simple shorthand function, no magic here.
