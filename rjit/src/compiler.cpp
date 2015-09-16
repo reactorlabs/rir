@@ -389,7 +389,9 @@ public:
     DECLARE(checkFunction, void_sexp);
     DECLARE(getFunction, sexp_sexpsexp);
     DECLARE(sexpType, int_sexp);
-    DECLARE(call, sexp_sexpsexpsexpsexp);
+    DECLARE(callBuiltin, sexp_sexpsexpsexpsexp);
+    DECLARE(callSpecial, sexp_sexpsexpsexpsexp);
+    DECLARE(callClosure, sexp_sexpsexpsexpsexp);
     DECLARE(callNative, sexp_sexpsexp);
     DECLARE(createPromise, sexp_sexpsexp);
 //    DECLARE(createArgument, sexp_sexp);
@@ -1623,41 +1625,73 @@ private:
     Value * compileCall(SEXP call, SEXP op) {
         // TODO: only emit one branch depending on the type we currently see
 
-        // now we must compile the arguments, this depends on the actual type of the function - promises by default, eager for builtins and no evaluation for specials
-        Value * ftype = INTRINSIC(m.sexpType, fun);
-        // switch the function call execution based on the function type
-        BasicBlock * special = BasicBlock::Create(getGlobalContext(), "special", f, nullptr);
-        BasicBlock * builtin = BasicBlock::Create(getGlobalContext(), "builtin", f, nullptr);
+        BasicBlock * icTestType = BasicBlock::Create(
+                getGlobalContext(), "icTypeTest", f, nullptr);
+        BasicBlock * icMatch = BasicBlock::Create(
+                getGlobalContext(), "icMatch", f, nullptr);
+        BasicBlock * icMiss = BasicBlock::Create(
+                getGlobalContext(), "icMiss", f, nullptr);
+        BasicBlock * end = BasicBlock::Create(
+                getGlobalContext(), "end", f, nullptr);
 
-        BasicBlock * closure = BasicBlock::Create(getGlobalContext(), "closure", f, nullptr);
-        BasicBlock * next = BasicBlock::Create(getGlobalContext(), "next", f, nullptr);
-        SwitchInst * sw = SwitchInst::Create(ftype, closure, 2, b);
-        sw->addCase(constant(SPECIALSXP), special);
-        sw->addCase(constant(BUILTINSXP), builtin);
-        // in special case, do not evaluate arguments and just call the function
-        b = special;
-        Value * specialResult = INTRINSIC(m.call,
-                constant(call), fun, constant(R_NilValue), rho);
-        BranchInst::Create(next, b);
-        // in builtin mode evaluate all arguments eagerly
-        b = builtin;
-        Value * args = compileArguments(CDR(call), /*eager=*/ true);
-        Value * builtinResult = INTRINSIC(m.call,
-                constant(call), fun, args, rho);
-        builtin = b; // bb might have changed during arg evaluation
-        BranchInst::Create(next, b);
-        // in general closure case the arguments will become promises
-        b = closure;
-        args = compileArguments(CDR(call), /*eager=*/ false);
-        Value * closureResult = INTRINSIC(m.call,
-                constant(call), fun, args, rho);
-        BranchInst::Create(next, b);
-        // add a phi node for the call result
-        b = next;
-        PHINode * phi = PHINode::Create(t::SEXP, 3, "", b);
-        phi->addIncoming(specialResult, special);
-        phi->addIncoming(builtinResult, builtin);
-        phi->addIncoming(closureResult, closure);
+        ICmpInst * test = new ICmpInst(*b,
+                ICmpInst::ICMP_EQ, fun, constant(op), "guard");
+        BranchInst::Create(icMatch, icTestType, test, b);
+
+        b = icTestType;
+
+        Value * ftype = INTRINSIC(m.sexpType, fun);
+        switch(TYPEOF(op)) {
+            case SPECIALSXP:
+                test = new ICmpInst(*b,
+                        ICmpInst::ICMP_EQ, ftype, constant(SPECIALSXP), "guard");
+                break;
+            case BUILTINSXP:
+                test = new ICmpInst(*b,
+                        ICmpInst::ICMP_EQ, ftype, constant(BUILTINSXP), "guard");
+                break;
+            case CLOSXP:
+                test = new ICmpInst(*b,
+                        ICmpInst::ICMP_EQ, ftype, constant(CLOSXP), "guard");
+                break;
+            default: assert(false);
+        }
+
+        BranchInst::Create(icMatch, icMiss, test, b);
+
+        b = icMatch;
+
+        Value * res;
+        switch(TYPEOF(op)) {
+            case SPECIALSXP:
+                res = INTRINSIC(m.callSpecial,
+                        constant(call), fun, constant(R_NilValue), rho);
+                break;
+            case BUILTINSXP: {
+                Value * args = compileArguments(CDR(call), /*eager=*/ true);
+                res = INTRINSIC(m.callBuiltin, constant(call), fun, args, rho);
+                break;
+            }
+            case CLOSXP: {
+                Value * args = compileArguments(CDR(call), /*eager=*/ false);
+                res = INTRINSIC(m.callClosure, constant(call), fun, args, rho);
+                break;
+            }
+            default: assert(false);
+        }
+        BranchInst::Create(end, b);
+
+        b = icMiss;
+
+        Value * missRes = compileCallStub();
+
+        BranchInst::Create(end, b);
+        b = end;
+
+        PHINode * phi = PHINode::Create(t::SEXP, 2, "", b);
+        phi->addIncoming(res, icMatch);
+        phi->addIncoming(missRes, icMiss);
+
         return phi;
     }
 
