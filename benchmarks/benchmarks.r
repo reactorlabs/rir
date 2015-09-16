@@ -42,7 +42,7 @@ command.executeSingleBenchmark <- function(file, n, compile) {
         e = new.env()
         source(file, local = e)
         if (compile)
-            append(compileTime, system.time(rjit.compileEnvironment(e)))
+            append(compileTime, system.time(jit.compileEnvironment(e)))
         capture.output({
             executionTime[[length(executionTime) + 1]] <- system.time(e$execute())
         })
@@ -255,6 +255,10 @@ runTestsInRoot<- function(testroot, n, compile) {
 
 
 runTests <- function(roots, name, n, compile) {
+    if (compile) {
+        dyn.load("../build/librjit.so")
+        source("../rjit/R/rjit.R")
+    }
     results = c()
     attributes(results)$date <- Sys.time()
     totalTime = system.time({
@@ -470,7 +474,6 @@ plotSeries = function(args) {
                 series[[n]][[i]] = mean(sapply(j$executionTime, function(x) x[[1]]))
             }
         }
-        print(series)
         # and now, for each series, print the result
         names(series) = simplifyNames(names(series))
         runs = sapply(data, function(x) attributes(x)$gitCommit)
@@ -536,7 +539,7 @@ error <- function(message) {
 
 args = commandArgs(trailingOnly = TRUE)
 
-args = c("test", "name", "rjit", "n", "1", "compile", "shootout")
+args = c("test", "name", "rjit", "n", "0", "compile", "shootout")
 #args = c("times", "baseline.rds")
 
 #args = c("comparison", "test_peta_1673921.rds", "test_peta_1673921.rds")
