@@ -80,23 +80,27 @@ PointerType * initializeTypes();
 
 
 // Functions to call in the debugger:
-static void printType(Type * t) {
+extern void printType(Type * t);
+void printType(Type * t) {
     std::string type_str;
     llvm::raw_string_ostream rso(type_str);
     t->print(rso);
     std::cout << "Type: " << rso.str() << std::endl;
 }
-static void printTypeOf(Value * v) {
+extern void printTypeOf(Value * v);
+void printTypeOf(Value * v) {
     Type * t = v->getType();
     printType(t);
 }
-static void printAllTypeOf(std::vector<Value*> vs) {
+extern void printAllTypeOf(std::vector<Value*> vs);
+void printAllTypeOf(std::vector<Value*> vs) {
     for (auto v : vs) {
         Type * t = v->getType();
         printType(t);
     }
 }
-static void disassNative(SEXP native) {
+extern void disassNative(SEXP native);
+void disassNative(SEXP native) {
     ((Function*)TAG(native))->dump();
 }
 
@@ -551,7 +555,7 @@ static Value * insertCall(Value * fun, std::vector<Value*> args,
 
     auto res = CallInst::Create(fun, args, "", b);
 
-    if (function_id != -1) {
+    if (function_id != (uint64_t)-1) {
         assert(function_id > 1);
         assert(function_id < nextStackmapId);
 
@@ -584,7 +588,7 @@ void recordStackmaps(std::vector<uint64_t> functionIds) {
         StackMapParserT p(sm);
 
         for (const auto &r : p.records()) {
-            assert(r.getID() != -1 && r.getID() != statepointID);
+            assert(r.getID() != (uint64_t)-1 && r.getID() != statepointID);
 
             auto function_id = std::find(functionIds.begin(), functionIds.end(), r.getID());
 
@@ -855,7 +859,6 @@ private:
     }
 
     Value * compileArgument(SEXP arg, SEXP name) {
-        Value * result;
         switch (TYPEOF(arg)) {
         case LGLSXP:
         case INTSXP:
@@ -1238,15 +1241,17 @@ private:
     bool canSkipLoopContext(SEXP ast, bool breakOK = true) {
         if (TYPEOF(ast) == LANGSXP) {
             SEXP cs = CAR(ast);
-            if (TYPEOF(cs) == SYMSXP)
-                if (not breakOK and (cs == symbol::Break or cs == symbol::Next))
+            if (TYPEOF(cs) == SYMSXP) {
+                if (not breakOK and (cs == symbol::Break or cs == symbol::Next)) {
                     return false;
-                else if (cs == symbol::Function or cs == symbol::For or cs == symbol::While or cs == symbol::Repeat)
+                } else if (cs == symbol::Function or cs == symbol::For or cs == symbol::While or cs == symbol::Repeat) {
                     return true;
-                else if (cs == symbol::Parenthesis or cs == symbol::Block or cs == symbol::If)
+                } else if (cs == symbol::Parenthesis or cs == symbol::Block or cs == symbol::If) {
                     return canSkipLoopContextList(CDR(ast), breakOK);
-                else
+                } else {
                     return canSkipLoopContextList(CDR(ast), false);
+                }
+            }
             // this is change to Luke's code - I believe that whatever will return us the function to call might be compiled using intrinsics and therefore should follow the breakOK rules, not the rules for promises the arguments of user functions do
             return canSkipLoopContext(CAR(ast), breakOK) and canSkipLoopContextList(CDR(ast), false);
         } else {
@@ -1339,7 +1344,7 @@ private:
         PHINode * result = PHINode::Create(t::SEXP, caseAsts.size(), "", context->b);
         // walk the cases and create their blocks, add them to switches and their results to the phi node
         BasicBlock * last;
-        for (int i = 0; i < caseAsts.size(); ++i) {
+        for (unsigned i = 0; i < caseAsts.size(); ++i) {
             context->b = last = BasicBlock::Create(getGlobalContext(), "switchCase", context->f, nullptr);
             swInt->addCase(constant(i), last);
             if (defaultIdx == -1 or defaultIdx > i) {

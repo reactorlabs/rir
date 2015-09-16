@@ -42,8 +42,7 @@ void StackMap::stackScanner(void (*forward_node) (SEXP)) {
 
             const auto &R = getStatepoint(pos);
             for (const auto &Loc : R.locations()) {
-                switch (Loc.getKind()) {
-                case StackMapParserT::LocationKind::Direct:
+                if (Loc.getKind() == StackMapParserT::LocationKind::Direct) {
                     // Statepoint args should be spilled =>
                     // reg is == 7 (rsp)
                     assert(Loc.getDwarfRegNum() == 7);
@@ -53,7 +52,6 @@ void StackMap::stackScanner(void (*forward_node) (SEXP)) {
                     assert(!value || *(int*)value);
 
                     forward_node(*(SEXP*)value);
-                    break;
                 }
             }
         }

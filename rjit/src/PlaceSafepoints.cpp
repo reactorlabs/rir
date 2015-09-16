@@ -916,7 +916,7 @@ static Value *ReplaceWithStatepoint(const CallSite &CS, /* to replace */
   bool HasID = AttrID.isStringAttribute() &&
                !AttrID.getValueAsString().getAsInteger(10, ID);
 
-  assert(HasID && ID != -1);
+  assert(HasID && ID != (uint64_t)-1);
 
   bool HasNumPatchBytes =
       AttrNumPatchBytes.isStringAttribute() &&
