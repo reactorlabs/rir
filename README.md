@@ -6,7 +6,7 @@ TL;DR - complete script to get everything needed is available at [Etherpad](http
 
 ## Building llvm
 
-LLVM is used for compiling R bytecode and we will build it from the source code (it sould be possible to use LLVM installed by package manager, but that has not been tested). 
+LLVM is used for compiling R bytecode and we will build it from the source code (it should be possible to use LLVM installed by package manager, but that has not been tested). 
 
 ```bash
 svn co https://llvm.org/svn/llvm-project/llvm/tags/RELEASE_370/final/ llvm-src
