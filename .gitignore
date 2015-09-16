@@ -10,3 +10,5 @@ perf.data.old
 rjit_0.1.tar.gz
 rjit.Rcheck
 rjit/src/Makevars
+.gdbinit
+packages/

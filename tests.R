@@ -11,6 +11,7 @@ if (Sys.info()["sysname"] == "Darwin") {
 } else {
     dyn.load("librjit.so")
 }
+
 source("rjit/R/rjit.R")
 library(compiler)
 

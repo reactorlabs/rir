@@ -27,18 +27,12 @@
 
 #include "ir.h"
 #include "compiler.h"
+#include "stack_map.h"
 
 using namespace llvm;
 using namespace rjit;
 
 #define REXPORT extern "C"
-
-REXPORT SEXP initializeRJIT() {
-    LLVMInitializeNativeTarget();
-    LLVMInitializeNativeAsmPrinter();
-    LLVMInitializeNativeAsmParser();
-    return R_NilValue;
-}
 
 REXPORT SEXP jit(SEXP expression) {
     return compile(expression);
