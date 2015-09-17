@@ -609,31 +609,13 @@ void recordStackmaps(std::vector<uint64_t> functionIds) {
  * NOTE that this approach assumes that any GC used is non-moving.
  * We are using it because it removes one level of indirection when reading
  * it from the constants vector as R bytecode compiler does.
- *
- * FIXME: loading the const is wrapped in a call to hide the const -- otherwise
- * rewriteStatepointsForGC pass will fail, since it cannot create relocation
- * for a constant. The underlying problem is, that the pass assumes all
- * values of type SEXP to be moving GC pointers and there is no other more
- * fine grained method of specifying which values to spill.
  */
 static Value * loadConstant(SEXP value, Module * m, BasicBlock * b) {
-    auto f = Function::Create(
-            FunctionType::get(
-                t::SEXP,
-                std::vector<Type*>(),
-                false),
-            Function::ExternalLinkage, "ldConst", m);
-    auto bb = BasicBlock::Create(getGlobalContext(), "start", f, nullptr);
-
-    auto con = ConstantExpr::getCast(
+    return ConstantExpr::getCast(
             Instruction::IntToPtr,
             ConstantInt::get(
                 getGlobalContext(), APInt(64, (std::uint64_t)value)),
             t::SEXP);
-
-    ReturnInst::Create(getGlobalContext(), con, bb);
-
-    return CallInst::Create(f, {}, "const", b); 
 }
 
 static ExecutionEngine * jitModule(Module * m) {
@@ -652,7 +634,7 @@ static ExecutionEngine * jitModule(Module * m) {
     PMBuilder.populateModulePassManager(pm);
 
     // TODO: maybe have our own version which is not relocating?
-    pm.add(createRewriteStatepointsForGCPass());
+    pm.add(createRJITRewriteStatepointsForGCPass());
     pm.run(*m);
 
     // create execution engine and finalize the module

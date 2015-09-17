@@ -757,7 +757,7 @@ bool PlaceSafepoints::runOnFunction(Function &F) {
 char PlaceBackedgeSafepointsImpl::ID = 0;
 char PlaceSafepoints::ID = 0;
 
-FunctionPass * createPlaceRJITSafepointsPass() {
+FunctionPass * rjit::createPlaceRJITSafepointsPass() {
   return new PlaceSafepoints();
 }
 
