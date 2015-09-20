@@ -6,7 +6,10 @@
 #include <R.h>
 #include <Rinternals.h>
 
+#ifndef __APPLE__
 #include <bits/libc-lock.h>
+#endif
+
 #include <dlfcn.h>
 #include <execinfo.h>
 #include <stdlib.h>
@@ -31,7 +34,9 @@ void StackMap::stackScanner(void (*forward_node) (SEXP)) {
 
     while(true) {
         if ((void *) bp < _bp ||
+#ifndef __APPLE__
             (void *) bp > __libc_stack_end ||
+#endif
             ((long) bp & 3))
            break;
 

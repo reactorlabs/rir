@@ -6,13 +6,12 @@ if("rjit" %in% rownames(installed.packages())) {
 }
 
 if (Sys.info()["sysname"] == "Darwin") {
-    # osx
     dyn.load("librjit.dylib")
 } else {
     dyn.load("librjit.so")
 }
 
-source("rjit/R/rjit.R")
+source("rjit/R/rjit.R", verbose = TRUE)
 library(compiler)
 
-source("rjit/tests/stackless.R")
+source("rjit/tests/stackless.R", verbose = TRUE)
