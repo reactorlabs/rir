@@ -6,6 +6,6 @@ cd $2
 make -j8 tests
 
 if test "$?" -ne 0; then
-  echo "make test_all failed. Please fix first."
+  echo "make tests failed. Please fix first."
   exit 1
 fi
