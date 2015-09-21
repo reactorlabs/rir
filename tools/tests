@@ -6,8 +6,7 @@ SCRIPTPATH=$(dirname "$SCRIPT")
 # Run install script to deploy new hooks
 $SCRIPTPATH/install_hooks.sh
 
-ROOT_DIR=`cd $SCRIPTPATH/../ && pwd`
-BUILD_DIR=`grep rjit_BINARY_DIR $ROOT_DIR/CMakeCache.txt | sed 's/rjit_BINARY_DIR:STATIC=//'`
+. "${SCRIPTPATH}/../.local.config"
 
 TESTS_PATH="${ROOT_DIR}/rjit/tests"
 R="${ROOT_DIR}/gnur/bin/R"

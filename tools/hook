@@ -4,15 +4,13 @@ set -e
 
 TYPE=$1
 
-
 SCRIPT=$(readlink -f "$0")
 SCRIPTPATH=$(dirname "$SCRIPT")
 
 # Run install script to deploy new hooks
 $SCRIPTPATH/install_hooks.sh
 
-ROOT_DIR=`cd $SCRIPTPATH/../ && pwd`
-BUILD_DIR=`grep rjit_BINARY_DIR $ROOT_DIR/CMakeCache.txt | sed 's/rjit_BINARY_DIR:STATIC=//'`
+. "${SCRIPTPATH}/../.local.config"
 
 HOOKS_PATH="${SCRIPTPATH}/${TYPE}.d"
 
