@@ -26,12 +26,14 @@
 #include "gc_pass.h"
 #include "ICCompiler.h"
 #include "symbols.h"
+#include "runtime.h"
+
 
 using namespace llvm;
 
-namespace {
 
-const static int patchpointSize = 10;
+
+namespace {
 
 void emitStackmap(uint64_t id, std::vector<Value*> values, rjit::JITModule & m, BasicBlock * b) {
     ConstantInt* const_0 =
@@ -39,7 +41,7 @@ void emitStackmap(uint64_t id, std::vector<Value*> values, rjit::JITModule & m, 
     Constant* const_null = ConstantExpr::getCast(
             Instruction::IntToPtr, const_0, rjit::t::i8ptr);
     ConstantInt* const_num_bytes =
-        ConstantInt::get(m.getContext(),  APInt(32, patchpointSize, false));
+        ConstantInt::get(m.getContext(),  APInt(32, rjit::patchpointSize, false));
     ConstantInt* const_id =
         ConstantInt::get(m.getContext(), APInt(64, id, false));
 
