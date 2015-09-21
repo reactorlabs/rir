@@ -1,9 +1,14 @@
+benchmarks/*.png
+benchmarks/*.rds
+local/*
+*.Rprofile
+build/*
+gnur/*
 *.swp
 CMakeCache.txt
 CMakeFiles/
 Makefile
 cmake_install.cmake
-gnur/
 librjit.so
 perf.data
 perf.data.old
