@@ -1,0 +1,60 @@
+#!/bin/bash -e
+
+ROOT_DIR=$1
+
+
+NAME=`git config user.name`
+PRIVATE="^private\/${NAME}\/"
+PRIVATE_S="private/${NAME}/"
+
+current_branch=$(git symbolic-ref HEAD | sed -e 's,refs/heads/,,')
+
+if [[ $current_branch =~ $PRIVATE ]]; then
+    exit 0;
+fi
+
+
+protected_branch='master'
+
+policy='Force push or delete on $current_branch is not allowed! Use git revert to undo changes.'
+
+push_command=$(ps -ocommand= -p $PPID)
+
+is_destructive='force|delete|\-f'
+
+will_remove_protected_branch=':'$protected_branch
+
+do_exit(){
+  echo $policy
+  exit 1
+}
+
+if [[ $push_command =~ $is_destructive ]] && [[ $current_branch =~ $protected_branch ]]; then
+  do_exit
+fi
+
+if [[ $push_command =~ $is_destructive ]] && [[ $push_command =~ $protected_branch ]]; then
+  do_exit
+fi
+
+if [[ $push_command =~ $will_remove_protected_branch ]]; then
+  do_exit
+fi
+
+if [[ $current_branch =~ $protected_branch ]]; then
+    echo "$current_branch is protected. Making sure pre-commit-hooks are clean too"
+    $ROOT_DIR/tools/pre-commit-hook
+    
+    read -p "You're about to push to ${current_branch}, is that what you intended? [yN] " -n 1 -r < /dev/tty
+    echo
+    if test -z `echo $REPLY | grep 'y' > /dev/null`; then
+        exit 1
+    fi
+    
+    exit 0
+fi
+
+echo "Please only push to $protected_branch and branches prefixed with $PRIVATE_S"
+echo "To create a new branch add to protected_branch in pre-push.d/branch-policies"
+
+exit 1

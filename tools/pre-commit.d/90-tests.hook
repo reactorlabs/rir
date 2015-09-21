@@ -1,0 +1,8 @@
+#!/bin/sh
+
+cmake --build $2 --target tests
+
+if test "$?" -ne 0; then
+  echo "make tests failed. Please fix first."
+  exit 1
+fi

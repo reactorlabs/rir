@@ -1,0 +1,21 @@
+#!/bin/sh
+
+cd $1
+
+STATUS=`git status --porcelain | grep "^[ \?]" | grep -v "^ M gnur"`
+if test "$?" -eq 0; then
+
+    STATUS2=`git status --porcelain | grep "^[ \?]" | grep -v "^ M gnur" | grep " rjit/"`
+    if test "$?" -eq 0; then
+
+        echo "ERROR: You have unstaged changes in:"
+        echo $STATUS2
+        echo "Hook assume a clean repository!"
+        echo ""
+        exit 1
+    fi
+
+    echo "WARNING: You have unstaged changes in:"
+    echo $STATUS
+    echo ""
+fi

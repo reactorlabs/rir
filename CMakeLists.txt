@@ -24,6 +24,8 @@ include_directories(${CMAKE_SOURCE_DIR}/rjit/src)
 # TODO for now, make all builds debug
 set(CMAKE_BUILD_TYPE Debug)
 
+file(WRITE ${CMAKE_SOURCE_DIR}/.local.config  "BUILD_DIR=${CMAKE_BINARY_DIR}\nROOT_DIR=${CMAKE_SOURCE_DIR}\n")
+
 if (APPLE) 
     find_library(libr 
                 NAMES libR.dylib
@@ -41,11 +43,16 @@ function(JOIN VALUES GLUE OUTPUT)
 endfunction()
 JOIN("${LLVM_COMPONENTS_USED}" " " LLVM_COMPONENTS_USED_STRING)
 set(LLVM_CONFIG_BIN ${LLVM_TOOLS_BINARY_DIR}/llvm-config)
-file(WRITE rjit/src/Makevars  "PKG_CXXFLAGS = `${LLVM_CONFIG_BIN} --cxxflags | sed 's/-Wcovered-switch-default//' | sed 's/-fcolor-diagnostics//'` -UNDEBUG\nPKG_LIBS = `${LLVM_CONFIG_BIN} --ldflags --system-libs --libs ${LLVM_COMPONENTS_USED_STRING}`\n")
+file(WRITE ${CMAKE_SOURCE_DIR}/rjit/src/Makevars  "PKG_CXXFLAGS = `${LLVM_CONFIG_BIN} --cxxflags | sed 's/-Wcovered-switch-default//' | sed 's/-fcolor-diagnostics//'` -UNDEBUG\nPKG_LIBS = `${LLVM_CONFIG_BIN} --ldflags --system-libs --libs ${LLVM_COMPONENTS_USED_STRING}`\n")
 
 # build the shared library for the JIT
 file(GLOB_RECURSE SRC "rjit/src/*.cpp" "rjit/src/*.h" "local/.Rprofile" "rjit/R/*.R" "rjit/tests/*.R")
 add_library(${PROJECT_NAME} SHARED ${SRC})
+
+add_custom_target(tests
+    DEPENDS ${PROJECT_NAME})
+add_custom_command(TARGET tests
+    COMMAND ${CMAKE_SOURCE_DIR}/tools/tests)
 
 # Find the libraries that correspond to the LLVM components
 # that we wish to use

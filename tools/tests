@@ -1,0 +1,36 @@
+#!/bin/sh
+
+SCRIPT=$(readlink -f "$0")
+SCRIPTPATH=$(dirname "$SCRIPT")
+
+# Run install script to deploy new hooks
+$SCRIPTPATH/install_hooks.sh
+
+. "${SCRIPTPATH}/../.local.config"
+
+TESTS_PATH="${ROOT_DIR}/rjit/tests"
+R="${ROOT_DIR}/gnur/bin/R"
+
+if test "$(uname)" = "Darwin"; then
+    LIB="dyn.load('${BUILD_DIR}/librjit.dylib')"
+else
+    LIB="dyn.load('${BUILD_DIR}/librjit.so')"
+fi
+
+for test in `ls ${TESTS_PATH}/*.R`; do
+    name=`basename $test`
+    echo "~> $name"
+
+    TEST=$(mktemp /tmp/r-test.XXXXXX.R)
+    echo ${LIB} > $TEST
+    echo "source('${ROOT_DIR}/rjit/R/rjit.R')" >> $TEST
+    grep -v 'require("rjit")' ${test} >> $TEST
+
+    $R -f $TEST > /dev/null
+    if test $? -ne 0; then
+        echo "failed test:"
+        echo $R -f $TEST
+        exit 1
+    fi
+    rm $TEST
+done
