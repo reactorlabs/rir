@@ -5,10 +5,9 @@
 #include "ICCompiler.h"
 #include "stack_map.h"
 
-namespace rjit {
+using namespace rjit;
 
-
-void patchIC(void * ic, uint64_t stackmapId, void * caller) {
+extern "C" void patchIC(void * ic, uint64_t stackmapId, void * caller) {
     auto r = StackMap::getPatchpoint(stackmapId);
     assert(r.getNumLocations() == 1);
 
@@ -26,7 +25,7 @@ void patchIC(void * ic, uint64_t stackmapId, void * caller) {
     *(void**)(patchAddr) = ic;
 }
 
-void * compileIC(uint64_t numargs, SEXP call, SEXP fun, SEXP rho, uint64_t stackmapId) {
+extern "C" void * compileIC(uint64_t numargs, SEXP call, SEXP fun, SEXP rho, uint64_t stackmapId) {
     JITModule m("ic");
 
     ICCompiler compiler(stackmapId, numargs, m, nextStackmapId++);
@@ -34,4 +33,3 @@ void * compileIC(uint64_t numargs, SEXP call, SEXP fun, SEXP rho, uint64_t stack
     return compiler.compile(call, fun, rho);
 }
 
-}

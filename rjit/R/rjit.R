@@ -2,7 +2,7 @@
 jit.compile <- function(what) {
     if (typeof(what) == "closure") {
         bc = .Internal(bodyCode(what))
-        native = .Call("jit", bc)
+        native = .Call("jitAst", bc)
         f = .Internal(bcClose(formals(what), native, environment(what)))
         attrs = attributes(what)
         if (!is.null(attrs))
