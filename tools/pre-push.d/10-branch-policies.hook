@@ -47,7 +47,7 @@ if [[ $current_branch =~ $protected_branch ]]; then
     
     read -p "You're about to push to ${current_branch}, is that what you intended? [yN] " -n 1 -r < /dev/tty
     echo
-    if test -z `echo $REPLY | grep 'y' > /dev/null`; then
+    if test -z `echo $REPLY | grep 'y'`; then
         exit 1
     fi
     
