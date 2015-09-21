@@ -16,7 +16,7 @@ fi
 
 protected_branch='master'
 
-policy='[Policy] Never force push or delete the '$protected_branch' branch! (Prevented with pre-push hook.)'
+policy='Force push or delete on $current_branch is not allowed! Use git revert to undo changes.'
 
 push_command=$(ps -ocommand= -p $PPID)
 
