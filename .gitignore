@@ -18,3 +18,7 @@ rjit/src/Makevars
 .gdbinit
 packages/
 .local.config
+.ninja_deps
+.ninja_log
+build.ninja
+rules.ninja
