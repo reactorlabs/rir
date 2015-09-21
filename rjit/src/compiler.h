@@ -9,11 +9,6 @@
 
 
 namespace rjit {
-    typedef SEXP (*RFunctionPtr)(SEXP, SEXP, Rboolean);
-
-    SEXP compileFunctions(SEXP moduleName, SEXP functions);
-
-    SEXP compile(SEXP ast);
 
     /** NATIVESXP type
 
