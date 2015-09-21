@@ -3,7 +3,7 @@
 cd $2
 
 # should be fixed to run without package
-make -j8 package_check
+make -j8 tests
 
 if test "$?" -ne 0; then
   echo "make test_all failed. Please fix first."

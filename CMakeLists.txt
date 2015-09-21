@@ -47,6 +47,11 @@ file(WRITE rjit/src/Makevars  "PKG_CXXFLAGS = `${LLVM_CONFIG_BIN} --cxxflags | s
 file(GLOB_RECURSE SRC "rjit/src/*.cpp" "rjit/src/*.h" "local/.Rprofile" "rjit/R/*.R" "rjit/tests/*.R")
 add_library(${PROJECT_NAME} SHARED ${SRC})
 
+add_custom_target(tests
+    DEPENDS ${PROJECT_NAME})
+add_custom_command(TARGET tests
+    COMMAND ${CMAKE_SOURCE_DIR}/tools/tests)
+
 # Find the libraries that correspond to the LLVM components
 # that we wish to use
 llvm_map_components_to_libnames(llvm_libs ${LLVM_COMPONENTS_USED})

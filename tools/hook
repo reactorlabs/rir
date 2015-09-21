@@ -21,9 +21,9 @@ echo "#   please do not skip them on public branches"
 echo "################################################"
 echo ""
 
-for script in `ls -v $HOOKS_PATH`; do
-    name=`echo $script | sed 's/[0-9][0-9]-//'`
+for script in `ls -v ${HOOKS_PATH}/*.hook`; do
+    name=`basename $script | sed 's/[0-9][0-9]-//'`
     echo "-> running $name"
-    $HOOKS_PATH/$script $ROOT_DIR $BUILD_DIR
+    $script $ROOT_DIR $BUILD_DIR
     echo ""
 done
