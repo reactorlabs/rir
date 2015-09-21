@@ -2,10 +2,7 @@
 #define COMPILER_H
 
 #include "R.h"
-#include "Rinternals.h"
-
-// bool is a keyword!!!!!
-#undef bool
+#include "rint.h"
 
 
 namespace rjit {

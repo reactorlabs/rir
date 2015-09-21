@@ -1,6 +1,6 @@
 #include "JITModule.h"
 
-#include <Rinternals.h>
+#include "rint.h"
 
 
 namespace rjit {

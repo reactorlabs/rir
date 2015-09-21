@@ -2,7 +2,7 @@
 
 set -e
 
-TARGET=$1
+TARGET=`cd $1 && pwd`
 OPT="-O0"
 
 BUILD_DIR=`pwd`
@@ -83,7 +83,7 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
 else
     CXXFLAGS="$OPT -fno-omit-frame-pointer -gdwarf-2 -g3" CFLAGS="$OPT -fno-omit-frame-pointer -gdwarf-2 -g3" ./configure --with-blas --with-lapack --with-ICU=no --with-system-xz=no --with-system-zlib=no --with-x=no --with-readline=no --without-recommended-packages
 fi
-#sed -i -e "s/exit 1/\$(ECHO) \"I am feeling lucky\"/g" Makefile
+touch doc/FAQ
 echo "Revision: -99" > SVN-REVISION
 rm -f non-tarball
 

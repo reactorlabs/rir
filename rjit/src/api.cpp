@@ -1,4 +1,4 @@
-#include <Rinternals.h>
+#include "rint.h"
 #include <llvm/IR/Module.h>
 
 #include "Compiler.h"

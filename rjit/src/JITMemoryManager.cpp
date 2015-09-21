@@ -12,8 +12,10 @@ uintptr_t new_stackmap_size;
 uint64_t JITMemoryManager::getSymbolAddress(const std::string &name) {
     auto res = SectionMemoryManager::getSymbolAddress(name);
     if (!res) {
-        if (name == "compileIC") return (uint64_t)&compileIC;
-        if (name == "patchIC") return (uint64_t)&patchIC;
+        if (name == "compileIC" || name == "_compileIC")
+            return (uint64_t)&compileIC;
+        if (name == "patchIC" || name == "_patchIC")
+            return (uint64_t)&patchIC;
     }
     return res;
 }

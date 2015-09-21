@@ -18,7 +18,7 @@
 #include "llvm/Analysis/TargetLibraryInfo.h"
 #include "llvm/Analysis/TargetTransformInfo.h"
 
-#include <Rinternals.h>
+#include "rint.h"
 
 #include "runtime.h"
 

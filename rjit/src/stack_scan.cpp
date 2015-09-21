@@ -4,7 +4,7 @@
 #include <iostream>
 
 #include <R.h>
-#include <Rinternals.h>
+#include "rint.h"
 
 #ifndef __APPLE__
 #include <bits/libc-lock.h>
