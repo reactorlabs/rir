@@ -20,13 +20,12 @@
 
 #include <Rinternals.h>
 
+#include "runtime.h"
 
 using namespace llvm;
 
 namespace rjit {
 
-extern "C" void * compileIC(uint64_t numargs, SEXP call, SEXP fun, SEXP rho, uint64_t stackmapId);
-extern "C" void patchIC(void * ic, uint64_t stackmapId, void * caller);
 
 extern  uint8_t* new_stackmap_addr;
 extern uintptr_t new_stackmap_size;
