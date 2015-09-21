@@ -4,8 +4,11 @@ set -e
 
 TYPE=$1
 
-SCRIPT=$(readlink -f "$0")
-SCRIPTPATH=$(dirname "$SCRIPT")
+SCRIPTPATH=`cd $(dirname "$0") && pwd`
+if [ ! -d $SCRIPTPATH ]; then
+    echo "Could not determine absolute dir of $0"
+    echo "Maybe accessed with symlink"
+fi
 
 # Run install script to deploy new hooks
 $SCRIPTPATH/install_hooks.sh

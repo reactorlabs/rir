@@ -1,7 +1,10 @@
 #!/bin/sh
 
-SCRIPT=$(readlink -f "$0")
-SCRIPTPATH=$(dirname "$SCRIPT")
+SCRIPTPATH=`cd $(dirname "$0") && pwd`
+if [ ! -d $SCRIPTPATH ]; then
+    echo "Could not determine absolute dir of $0"
+    echo "Maybe accessed with symlink"
+fi
 
 cd $SCRIPTPATH/..
 
