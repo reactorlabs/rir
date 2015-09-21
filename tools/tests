@@ -24,6 +24,7 @@ for test in `ls ${TESTS_PATH}/*.R`; do
     name=`basename $test`
     echo "~> $name"
 
+    rm -f /tmp/r-test.XXXXXX.R
     TEST=$(mktemp /tmp/r-test.XXXXXX.R)
     echo ${LIB} > $TEST
     echo "source('${ROOT_DIR}/rjit/R/rjit.R')" >> $TEST
