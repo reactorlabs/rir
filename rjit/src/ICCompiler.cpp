@@ -43,9 +43,6 @@ ExecutionEngine * jitModule(Module * m);
 
 void recordStackmaps(std::vector<uint64_t> functionIds);
 
-extern uint64_t nextStackmapId;
-
-
 ICCompiler::ICCompiler(uint64_t stackmapIdC, int size, JITModule & m, unsigned fid) :
         m(m), size(size), functionId(fid) {
     // Set up a function type which corresponds to the ICStub signature
