@@ -1,10 +1,10 @@
-#include "stack_map.h"
+#include "StackScan.h"
+#include "StackMap.h"
 
 #include <execinfo.h>
 #include <iostream>
 
-#include <R.h>
-#include "rint.h"
+#include "RIntlns.h"
 
 #ifndef __APPLE__
 #include <bits/libc-lock.h>
@@ -17,9 +17,11 @@
 
 extern void *__libc_stack_end;
 
+using namespace rjit;
+
 // FIXME: we need robust stack scanning with markers on stack instead of this
 //        hack
-void StackMap::stackScanner(void (*forward_node) (SEXP)) {
+void StackScan::stackScanner(void (*forward_node) (SEXP)) {
 
     struct layout {
         struct layout *bp;
@@ -42,10 +44,10 @@ void StackMap::stackScanner(void (*forward_node) (SEXP)) {
 
         uintptr_t pos = (uintptr_t)bp->ret;
 
-        if (isStatepoint(pos)) {
+        if (StackMap::isStatepoint(pos)) {
             uintptr_t frame = (uintptr_t)(bp+1);
 
-            const auto &R = getStatepoint(pos);
+            const auto &R = StackMap::getStatepoint(pos);
             for (const auto &Loc : R.locations()) {
                 if (Loc.getKind() == StackMapParserT::LocationKind::Direct) {
                     // Statepoint args should be spilled =>
@@ -64,6 +66,3 @@ void StackMap::stackScanner(void (*forward_node) (SEXP)) {
         bp = bp->bp;
     }
 }
-
-std::unordered_map<uintptr_t, StackMap::StatepointRecord> StackMap::statepoint;
-std::unordered_map<uint64_t, StackMap::PatchpointRecord> StackMap::patchpoint;

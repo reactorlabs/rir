@@ -3,7 +3,7 @@
 
 #include "runtime.h"
 #include "ICCompiler.h"
-#include "stack_map.h"
+#include "StackMap.h"
 
 using namespace rjit;
 

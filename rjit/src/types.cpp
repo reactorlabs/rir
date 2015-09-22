@@ -3,8 +3,9 @@
 #include "llvm/CodeGen/GCStrategy.h"
 #include "llvm/CodeGen/GCs.h"
 
+#include "StackScan.h"
 
-#include "stack_map.h"
+#include "RIntlns.h"
 
 using namespace llvm;
 
@@ -81,7 +82,7 @@ PointerType * initializeTypes() {
     LLVMInitializeNativeAsmParser();
     linkStatepointExampleGC();
 
-    registerGcCallback(&StackMap::stackScanner);
+    registerGcCallback(&StackScan::stackScanner);
 
     return t::SEXP;
 }

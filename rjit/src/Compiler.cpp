@@ -21,13 +21,14 @@
 
 #include "Compiler.h"
 #include "JITMemoryManager.h"
-#include "stack_map.h"
-#include "stack_map_parser.h"
-#include "gc_pass.h"
+#include "StackMap.h"
+#include "StackMapParser.h"
+#include "GCPassApi.h"
 #include "ICCompiler.h"
 #include "symbols.h"
 #include "runtime.h"
 
+#include "RIntlns.h"
 
 using namespace llvm;
 
@@ -82,7 +83,6 @@ SEXP createNativeSXP(RFunctionPtr fptr, SEXP ast, std::vector<SEXP> const & obje
 
 
 namespace rjit {
-
 
 uint64_t nextStackmapId = 3;
 
@@ -185,7 +185,7 @@ void recordStackmaps(std::vector<uint64_t> functionIds) {
         StackMapParserT p(sm);
 
         for (const auto &r : p.records()) {
-            assert(r.getID() != (uint64_t)-1 && r.getID() != statepointID);
+            assert(r.getID() != (uint64_t)-1 && r.getID() != StackMap::genericStatepointID);
 
             auto function_id = std::find(functionIds.begin(), functionIds.end(), r.getID());
 
@@ -210,6 +210,11 @@ void recordStackmaps(std::vector<uint64_t> functionIds) {
 }
 
 
+
+void Compiler::Context::addObject(SEXP object) {
+    PROTECT(object);
+    objects.push_back(object);
+}
 
 
 Compiler::Context::Context(std::string const & name, llvm::Module * m) {

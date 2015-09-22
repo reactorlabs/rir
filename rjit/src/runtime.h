@@ -2,7 +2,8 @@
 #define RUNTIME_H_
 
 #include <cinttypes>
-#include "rint.h"
+
+#include "RDefs.h"
 
 namespace rjit {
 

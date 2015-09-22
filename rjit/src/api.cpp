@@ -1,9 +1,10 @@
-#include "rint.h"
 #include <llvm/IR/Module.h>
 
 #include "Compiler.h"
 
 #include "api.h"
+
+#include "RIntlns.h"
 
 using namespace rjit;
 

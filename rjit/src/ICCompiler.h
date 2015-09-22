@@ -1,6 +1,6 @@
-#include "rint.h"
-
 #include "JITModule.h"
+
+#include "RDefs.h"
 
 namespace rjit {
 class ICCompiler  {

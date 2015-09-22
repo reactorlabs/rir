@@ -12,7 +12,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "gc_pass.h"
+#include "GCPassApi.h"
 
 #include "llvm/Pass.h"
 #include "llvm/Analysis/CFG.h"

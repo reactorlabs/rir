@@ -18,8 +18,6 @@
 #include "llvm/Analysis/TargetLibraryInfo.h"
 #include "llvm/Analysis/TargetTransformInfo.h"
 
-#include "rint.h"
-
 #include "runtime.h"
 
 using namespace llvm;

@@ -22,11 +22,12 @@
 
 #include "Compiler.h"
 #include "JITMemoryManager.h"
-#include "stack_map.h"
-#include "stack_map_parser.h"
-#include "gc_pass.h"
+#include "StackMap.h"
+#include "StackMapParser.h"
 
 #include "ICCompiler.h"
+
+#include "RIntlns.h"
 
 using namespace llvm;
 

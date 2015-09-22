@@ -1,7 +1,6 @@
 #include "JITModule.h"
 
-#include "rint.h"
-
+#include "RDefs.h"
 
 namespace rjit {
 
@@ -28,10 +27,7 @@ private:
 
         Context(std::string const & name, llvm::Module * m);
 
-        void addObject(SEXP object) {
-            PROTECT(object);
-            objects.push_back(object);
-        }
+        void addObject(SEXP object);
 
         /** True if return jump is needed instead of return - this happens in promises
          */
