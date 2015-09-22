@@ -6,10 +6,9 @@
 namespace rjit {
 
 class StackScan {
-public:
+  public:
     static void stackScanner(void (*forward_node)(SEXP));
 };
-
 }
 
 #endif

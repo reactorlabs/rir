@@ -3,15 +3,15 @@
 
 #include "Types.h"
 
-
 namespace rjit {
 
-#define DECLARE(name, type) llvm::Function * name = llvm::Function::Create(t::type, llvm::Function::ExternalLinkage, #name, m)
-
+#define DECLARE(name, type)                                                    \
+    llvm::Function* name = llvm::Function::Create(                             \
+        t::type, llvm::Function::ExternalLinkage, #name, m)
 
 class JITModule {
-public:
-    llvm::Module * m;
+  public:
+    llvm::Module* m;
     DECLARE(markVisible, void_void);
     DECLARE(markInvisible, void_void);
     DECLARE(userConstant, void_sexp);
@@ -24,10 +24,10 @@ public:
     DECLARE(callClosure, sexp_sexpsexpsexpsexp);
     DECLARE(callNative, sexp_sexpsexp);
     DECLARE(createPromise, sexp_sexpsexp);
-//    DECLARE(createArgument, sexp_sexp);
-//    DECLARE(createKeywordArgument, sexp_sexpsexp);
-//    DECLARE(addArgument, sexp_sexpsexp);
-//    DECLARE(addKeywordArgument, sexp_sexpsexpsexp);
+    //    DECLARE(createArgument, sexp_sexp);
+    //    DECLARE(createKeywordArgument, sexp_sexpsexp);
+    //    DECLARE(addArgument, sexp_sexpsexp);
+    //    DECLARE(addKeywordArgument, sexp_sexpsexpsexp);
     DECLARE(genericUnaryMinus, sexp_sexpsexpsexp);
     DECLARE(genericUnaryPlus, sexp_sexpsexpsexp);
     DECLARE(genericAdd, sexp_sexpsexpsexpsexp);
@@ -69,32 +69,21 @@ public:
     DECLARE(compileIC, compileIC_t);
     DECLARE(patchIC, patchIC_t);
 
-    llvm::Function * stackmap;
-    llvm::Function * patchpoint;
+    llvm::Function* stackmap;
+    llvm::Function* patchpoint;
 
-    JITModule(std::string const & name);
+    JITModule(std::string const& name);
 
-    operator llvm::Module * () {
-        return m;
-    }
+    operator llvm::Module*() { return m; }
 
-    llvm::LLVMContext & getContext() {
-        return m->getContext();
-    }
+    llvm::LLVMContext& getContext() { return m->getContext(); }
 
-    void dump() {
-        m->dump();
-    }
+    void dump() { m->dump(); }
 
-    llvm::Module * getM() {
-        return m;
-    }
-
+    llvm::Module* getM() { return m; }
 };
 
 #undef DECLARE
-
-
 }
 
 #endif // JIT_MODULE_H_

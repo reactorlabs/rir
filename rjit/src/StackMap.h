@@ -16,7 +16,7 @@ typedef llvm::ArrayRef<uint8_t> stackmap_t;
 typedef llvm::StackMapV1Parser<llvm::support::little> StackMapParserT;
 
 class StackMap {
-public:
+  public:
     struct StatepointRecord {
         stackmap_t stackmap;
         unsigned idx;
@@ -30,14 +30,12 @@ public:
 
     // Statepoints are identified by their pc address as seen on the runtime
     // stack while scanning for roots.
-    static void registerStatepoint(uintptr_t function,
-                                   uintptr_t offset,
+    static void registerStatepoint(uintptr_t function, uintptr_t offset,
                                    stackmap_t stackmap,
                                    unsigned stackmapOffset);
 
     // Patchpoints are identified by their unique id given at compile time
-    static void registerPatchpoint(uintptr_t id,
-                                   stackmap_t stackmap,
+    static void registerPatchpoint(uintptr_t id, stackmap_t stackmap,
                                    unsigned stackmapOffset);
 
     static bool isStatepoint(uintptr_t pc);
@@ -50,12 +48,11 @@ public:
 
     static unsigned genericStatepointID;
 
-private:
+  private:
     static std::unordered_map<uintptr_t, StatepointRecord> statepoint;
-    
+
     static std::unordered_map<uint64_t, PatchpointRecord> patchpoint;
 };
-
 }
 
 #endif

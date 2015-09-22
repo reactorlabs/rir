@@ -12,57 +12,53 @@ namespace rjit {
 
 namespace t {
 
-extern llvm::Type * Int;
+extern llvm::Type* Int;
 
-extern llvm::PointerType * SEXP;
+extern llvm::PointerType* SEXP;
 
-extern llvm::StructType * SEXPREC;
+extern llvm::StructType* SEXPREC;
 
-extern llvm::StructType * cntxt;
-extern llvm::PointerType * cntxtPtr;
+extern llvm::StructType* cntxt;
+extern llvm::PointerType* cntxtPtr;
 
-extern llvm::Type * t_void;
-extern llvm::Type * voidPtr;
-extern llvm::Type * t_i64;
-extern llvm::PointerType * i8ptr;
+extern llvm::Type* t_void;
+extern llvm::Type* voidPtr;
+extern llvm::Type* t_i64;
+extern llvm::PointerType* i8ptr;
 
-extern llvm::FunctionType * void_void;
-extern llvm::FunctionType * void_sexp;
-extern llvm::FunctionType * void_sexpsexp;
-extern llvm::FunctionType * void_sexpsexpsexp;
-extern llvm::FunctionType * sexp_sexp;
-extern llvm::FunctionType * sexp_sexpsexp;
-extern llvm::FunctionType * sexp_sexpsexpsexp;
-extern llvm::FunctionType * sexp_sexpsexpsexpsexp;
+extern llvm::FunctionType* void_void;
+extern llvm::FunctionType* void_sexp;
+extern llvm::FunctionType* void_sexpsexp;
+extern llvm::FunctionType* void_sexpsexpsexp;
+extern llvm::FunctionType* sexp_sexp;
+extern llvm::FunctionType* sexp_sexpsexp;
+extern llvm::FunctionType* sexp_sexpsexpsexp;
+extern llvm::FunctionType* sexp_sexpsexpsexpsexp;
 
-extern llvm::FunctionType * sexp_sexpint;
-extern llvm::FunctionType * sexp_sexpsexpint;
-extern llvm::FunctionType * int_sexp;
-extern llvm::FunctionType * int_sexpsexp;
-extern llvm::FunctionType * int_sexpsexpsexp;
-extern llvm::FunctionType * int_sexpint;
+extern llvm::FunctionType* sexp_sexpint;
+extern llvm::FunctionType* sexp_sexpsexpint;
+extern llvm::FunctionType* int_sexp;
+extern llvm::FunctionType* int_sexpsexp;
+extern llvm::FunctionType* int_sexpsexpsexp;
+extern llvm::FunctionType* int_sexpint;
 
-extern llvm::FunctionType * void_argssexp;
-extern llvm::FunctionType * void_argssexpsexp;
-extern llvm::FunctionType * void_argssexpint;
+extern llvm::FunctionType* void_argssexp;
+extern llvm::FunctionType* void_argssexpsexp;
+extern llvm::FunctionType* void_argssexpint;
 
-extern llvm::FunctionType * void_cntxtsexpsexpsexpsexpsexp;
-extern llvm::FunctionType * void_cntxtsexp;
-extern llvm::FunctionType * void_cntxtsexpsexp;
-extern llvm::FunctionType * sexp_contxtsexpsexp;
+extern llvm::FunctionType* void_cntxtsexpsexpsexpsexpsexp;
+extern llvm::FunctionType* void_cntxtsexp;
+extern llvm::FunctionType* void_cntxtsexpsexp;
+extern llvm::FunctionType* sexp_contxtsexpsexp;
 
-extern llvm::FunctionType * patchIC_t;
-extern llvm::FunctionType * compileIC_t;
+extern llvm::FunctionType* patchIC_t;
+extern llvm::FunctionType* compileIC_t;
 
-extern llvm::FunctionType * nativeFunction_t;
-extern llvm::Type * nativeFunctionPtr_t;
+extern llvm::FunctionType* nativeFunction_t;
+extern llvm::Type* nativeFunctionPtr_t;
 
 } // namespace t
 
 } // namespace rjit
 
 #endif // TYPES_H_
-
-
-
-

@@ -6,9 +6,8 @@
 
 namespace rjit {
 
-llvm::FunctionPass * createPlaceRJITSafepointsPass();
-llvm::ModulePass * createRJITRewriteStatepointsForGCPass();
-
+llvm::FunctionPass* createPlaceRJITSafepointsPass();
+llvm::ModulePass* createRJITRewriteStatepointsForGCPass();
 }
 
 #endif

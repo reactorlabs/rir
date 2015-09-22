@@ -4,11 +4,12 @@
 
 using namespace rjit;
 
-extern "C" void patchIC(void * ic, uint64_t stackmapId, void * caller) {
+extern "C" void patchIC(void* ic, uint64_t stackmapId, void* caller) {
     auto r = StackMap::getPatchpoint(stackmapId);
     assert(r.getNumLocations() == 1);
 
-    uint8_t * patchAddr = (uint8_t*) ((uintptr_t) caller + r.getInstructionOffset());
+    uint8_t* patchAddr =
+        (uint8_t*)((uintptr_t)caller + r.getInstructionOffset());
 
     int reg = r.getLocation(0).getDwarfRegNum();
 
@@ -22,11 +23,11 @@ extern "C" void patchIC(void * ic, uint64_t stackmapId, void * caller) {
     *(void**)(patchAddr) = ic;
 }
 
-extern "C" void * compileIC(uint64_t numargs, SEXP call, SEXP fun, SEXP rho, uint64_t stackmapId) {
+extern "C" void* compileIC(uint64_t numargs, SEXP call, SEXP fun, SEXP rho,
+                           uint64_t stackmapId) {
     JITModule m("ic");
 
     ICCompiler compiler(stackmapId, numargs, m, nextStackmapId++);
 
     return compiler.compile(call, fun, rho);
 }
-

@@ -40,7 +40,6 @@ DECLARE(BitOr, "|");
 DECLARE(Not, "!");
 DECLARE(Ellipsis, "...");
 
-
 #undef DECLARE
 } // namespace symbol
 

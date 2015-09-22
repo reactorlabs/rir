@@ -13,9 +13,9 @@ extern uint64_t nextStackmapId;
 
 } // namespace rjit
 
-extern "C" void patchIC(void * ic, uint64_t stackmapId, void * caller);
+extern "C" void patchIC(void* ic, uint64_t stackmapId, void* caller);
 
-extern "C" void * compileIC(uint64_t numargs, SEXP call, SEXP fun, SEXP rho, uint64_t stackmapId);
-
+extern "C" void* compileIC(uint64_t numargs, SEXP call, SEXP fun, SEXP rho,
+                           uint64_t stackmapId);
 
 #endif // RUNTIME_H_

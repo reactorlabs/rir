@@ -2,8 +2,8 @@
 #define RDEF
 
 struct SEXPREC;
-typedef SEXPREC * SEXP;
+typedef SEXPREC* SEXP;
 
-extern "C" SEXP Rf_install(const char *);
+extern "C" SEXP Rf_install(const char*);
 
 #endif
