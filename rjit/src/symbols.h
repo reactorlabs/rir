@@ -1,3 +1,6 @@
+#ifndef SYMBOLS_H_
+#define SYMBOLS_H_
+
 #include "rint.h"
 
 namespace rjit {
@@ -42,3 +45,5 @@ DECLARE(Ellipsis, "...");
 } // namespace symbol
 
 } // namespace rjit
+
+#endif // SYMBOLS_H_
