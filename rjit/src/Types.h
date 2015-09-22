@@ -1,3 +1,6 @@
+#ifndef TYPES_H_
+#define TYPES_H_
+
 #include <llvm/IR/Verifier.h>
 #include <llvm/IR/IRBuilder.h>
 #include <llvm/IR/LLVMContext.h>
@@ -58,6 +61,7 @@ extern llvm::Type * nativeFunctionPtr_t;
 
 } // namespace rjit
 
+#endif // TYPES_H_
 
 
 

@@ -1,6 +1,11 @@
+#ifndef COMPILER_H_
+#define COMPILER_H_
+
 #include "JITModule.h"
 
 #include "RDefs.h"
+
+
 
 namespace rjit {
 
@@ -249,3 +254,5 @@ private:
 
 
 } // namespace rjit
+
+#endif // COMPILER_H_
