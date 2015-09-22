@@ -2,10 +2,10 @@
 
 cd $1
 
-STATUS=`git status --porcelain | grep "^[ \?]" | grep -v "^ M gnur"`
+STATUS=`git status --porcelain | grep "^[ \?]"`
 if test "$?" -eq 0; then
 
-    STATUS2=`git status --porcelain | grep "^[ \?]" | grep -v "^ M gnur" | grep " rjit/"`
+    STATUS2=`git status --porcelain | grep "^[ \?]" | grep " rjit/"`
     if test "$?" -eq 0; then
 
         echo "ERROR: You have unstaged changes in:"

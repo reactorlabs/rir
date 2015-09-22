@@ -67,15 +67,16 @@ cd $LLVM_BUILD_DIR
 cmake -G "$GEN" -DLLVM_ENABLE_RTTI=1 --enable-debug-symbols --with-oprofile ${LLVM_SRC}
 $M
 
-cd $SRC_DIR
+R_HOME=${TARGET}/gnur
 
-if [ ! -d gnur ]; then
+if [ ! -d $R_HOME ]; then
+    cd $TARGET
     echo "-> checking out gnur" 
     git clone https://bitbucket.org/reactorl/gnur
 fi
 
 echo "-> git reset gnur to rllvm" 
-cd gnur
+cd $R_HOME
 git checkout rllvm
 
 echo "-> configure gnur"
@@ -95,7 +96,7 @@ make -j${CORES}
 cd $BUILD_DIR
 echo "-> cmake rjit"
 rm -f CMakeCache.txt
-cmake -G "$GEN" -DLLVM_DIR=${LLVM_BUILD_DIR}/share/llvm/cmake $SRC_DIR
+cmake -G "$GEN" -DLLVM_DIR=${LLVM_BUILD_DIR}/share/llvm/cmake -DR_HOME=$R_HOME $SRC_DIR
 $M
 
 echo "-> install hooks"
