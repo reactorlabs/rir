@@ -172,58 +172,6 @@ stopifnot(fx(4) == 3)
 stopifnot(fx(5) == 4)
 stopifnot(fx(6) == 4)
 
-# function call
-f <- function(a, b) a + b
-fx <- jit.compile(function(x, y) f(x, y))
-stopifnot(fx(1,2) == 3)
-
-# function call with missing args
-f <- function(a) missing(a)
-fx <- jit.compile(function() f())
-stopifnot(fx() == TRUE)
-
-# native call ic
-g <- jit.compile(function() 1)
-f <- jit.compile(function() g())
-stopifnot(f() == 1)
-stopifnot(f() == 1)
-stopifnot(f() == 1)
-
-# native call ic args
-g <- jit.compile(function(a) a)
-f <- jit.compile(function(a) g(a))
-stopifnot(f(1) == 1)
-stopifnot(f(1) == 1)
-stopifnot(f(1) == 1)
-
-# native call ic args order
-g <- jit.compile(function(a, b) a - b)
-f <- jit.compile(function(a, b) g(a, b))
-stopifnot(f(2,1) == 1)
-stopifnot(f(2,1) == 1)
-stopifnot(f(2,1) == 1)
-
-# native call ic args order
-g <- jit.compile(function(a, b) a - b)
-f <- jit.compile(function(a) g(a, 1))
-stopifnot(f(2) == 1)
-stopifnot(f(2) == 1)
-stopifnot(f(2) == 1)
-
-# native call ic miss
-g <- jit.compile(function() 1)
-f <- jit.compile(function() g())
-stopifnot(f() == 1)
-stopifnot(f() == 1)
-g <- jit.compile(function() 2)
-stopifnot(f() == 2)
-stopifnot(f() == 2)
-
-# test if temp objects are found by the gc
-fib <- function(n) if (n < 2) 1 else fib(n - 1) + fib(n - 2)
-fib <- jit.compile(fib)
-fib(32)
-
 # compiling more functions
 f1 <- function(a, b) { a + b }
 f2 <- function(c, d) { f1(c, d) }
