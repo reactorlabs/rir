@@ -18,7 +18,7 @@
 #include "llvm/Analysis/TargetLibraryInfo.h"
 #include "llvm/Analysis/TargetTransformInfo.h"
 
-#include "runtime.h"
+#include "Runtime.h"
 
 using namespace llvm;
 

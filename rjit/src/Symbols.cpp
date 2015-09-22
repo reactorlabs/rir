@@ -1,4 +1,4 @@
-#include "symbols.h"
+#include "Symbols.h"
 
 namespace rjit {
 

@@ -1,6 +1,6 @@
 #include "StackMap.h"
 
-using namespace rjit;
+namespace rjit {
 
 // Statepoints are identified by their pc address as seen on the runtime
 // stack while scanning for roots.
@@ -60,3 +60,5 @@ StackMapParserT::RecordAccessor StackMap::getPatchpoint(uint64_t id) {
 unsigned StackMap::genericStatepointID = 0xABCDEF00;
 std::unordered_map<uintptr_t, StackMap::StatepointRecord> StackMap::statepoint;
 std::unordered_map<uint64_t, StackMap::PatchpointRecord> StackMap::patchpoint;
+
+}

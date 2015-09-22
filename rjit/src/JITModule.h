@@ -1,7 +1,7 @@
 #ifndef JIT_MODULE_H_
 #define JIT_MODULE_H_
 
-#include "types.h"
+#include "Types.h"
 
 
 namespace rjit {

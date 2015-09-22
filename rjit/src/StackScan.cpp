@@ -17,7 +17,7 @@
 
 extern void *__libc_stack_end;
 
-using namespace rjit;
+namespace rjit {
 
 // FIXME: we need robust stack scanning with markers on stack instead of this
 //        hack
@@ -65,4 +65,6 @@ void StackScan::stackScanner(void (*forward_node) (SEXP)) {
         num++;
         bp = bp->bp;
     }
+}
+
 }

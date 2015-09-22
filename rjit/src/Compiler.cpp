@@ -25,8 +25,8 @@
 #include "StackMapParser.h"
 #include "GCPassApi.h"
 #include "ICCompiler.h"
-#include "symbols.h"
-#include "runtime.h"
+#include "Symbols.h"
+#include "Runtime.h"
 
 #include "RIntlns.h"
 
