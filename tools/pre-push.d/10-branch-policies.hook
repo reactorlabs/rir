@@ -45,12 +45,6 @@ if [[ $current_branch =~ $protected_branch ]]; then
     echo "$current_branch is protected. Making sure pre-commit-hooks are clean too"
     $ROOT_DIR/tools/pre-commit-hook
     
-    read -p "You're about to push to ${current_branch}, is that what you intended? [yN] " -n 1 -r < /dev/tty
-    echo
-    if test -z `echo $REPLY | grep 'y'`; then
-        exit 1
-    fi
-    
     exit 0
 fi
 

@@ -1,7 +1,7 @@
 #ifndef SYMBOLS_H_
 #define SYMBOLS_H_
 
-#include "rint.h"
+#include "RDefs.h"
 
 namespace rjit {
 
@@ -39,7 +39,6 @@ DECLARE(BitAnd, "&");
 DECLARE(BitOr, "|");
 DECLARE(Not, "!");
 DECLARE(Ellipsis, "...");
-
 
 #undef DECLARE
 } // namespace symbol

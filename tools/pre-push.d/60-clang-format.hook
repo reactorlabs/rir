@@ -102,8 +102,10 @@ patch="/tmp/$prefix-$suffix.patch"
 # clean up any older clang-format patches
 $DELETE_OLD_PATCHES && rm -f /tmp/$prefix*.patch
 
+CPP=`find $1/rjit/src -name '*.cpp'`
+HH=`find $1/rjit/src -name '*.h'`
 # create one patch containing all changes to the files
-find $1/rjit/src -name '*.[cpp|h]' | while read file;
+for file in $CPP$HH 
 do
     # ignore file if we do check for file extensions and the file
     # does not match any of the extensions specified in $FILE_EXTS

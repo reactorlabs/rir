@@ -3,4 +3,4 @@
 
 #define REXPORT extern "C"
 
-#endif //API_H_
+#endif // API_H_

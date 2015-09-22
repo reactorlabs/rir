@@ -1,0 +1,15 @@
+#!/bin/bash -e
+
+current_branch=$(git symbolic-ref HEAD | sed -e 's,refs/heads/,,')
+
+if [[ $current_branch =~ 'master' ]]; then
+    read -p "You're about to push to ${current_branch}, is that what you intended? [yN] " -n 1 -r < /dev/tty
+    echo
+    if test -z `echo $REPLY | grep 'y'`; then
+        exit 1
+    fi
+    
+    exit 0
+fi
+
+exit 1
