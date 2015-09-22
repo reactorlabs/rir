@@ -1,5 +1,7 @@
 #include "StackMap.h"
 
+using namespace rjit;
+
 // Statepoints are identified by their pc address as seen on the runtime
 // stack while scanning for roots.
 void StackMap::registerStatepoint(uintptr_t function,

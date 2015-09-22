@@ -133,7 +133,7 @@ bool ICCompiler::compileIc(SEXP inCall, SEXP inFun) {
         // Check for named args or ...
         SEXP arg = CDR(inCall);
         SEXP form = FORMALS(inFun);
-        int i = 0;
+        unsigned i = 0;
         while (arg != R_NilValue && form != R_NilValue) {
             // We do not yet do the static version of match.c, thus cannot
             // support named args
@@ -189,7 +189,7 @@ bool ICCompiler::compileIc(SEXP inCall, SEXP inFun) {
             // reverses again
             // TODO: construct the environment in one go,
             // without using quickArgumentAdapter
-            for (int i = 0; i < icArgs.size(); ++i) {
+            for (unsigned i = 0; i < icArgs.size(); ++i) {
                 Value * arg = icArgs[i];
                 if (promarg[i])
                     arg = INTRINSIC(m.createPromise, arg, rho);

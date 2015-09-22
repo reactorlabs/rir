@@ -8,6 +8,8 @@
 #include <unordered_map>
 #include <iostream>
 
+namespace rjit {
+
 typedef llvm::ArrayRef<uint8_t> stackmap_t;
 
 // TODO: find target endianness
@@ -53,5 +55,7 @@ private:
     
     static std::unordered_map<uint64_t, PatchpointRecord> patchpoint;
 };
+
+}
 
 #endif
