@@ -62,7 +62,7 @@ LLVM_BUILD_DIR=${LLVM_TARGET}/${LLVM_BUILD_DIR_F}
 echo "-> building llvm to ${LLVM_BUILD_DIR}"
 mkdir -p $LLVM_BUILD_DIR
 cd $LLVM_BUILD_DIR
-cmake -G "$GEN" -DLLVM_ENABLE_RTTI=1 --enable-debug-symbols --with-oprofile ${LLVM_SRC}
+cmake -G "$GEN" -DLLVM_ENABLE_RTTI=1 --enable-debug-symbols --with-oprofile -DLLVM_TARGETS_TO_BUILD="X86;CppBackend" -DCMAKE_BUILD_TYPE=Debug ${LLVM_SRC}
 $M
 
 cd $SRC_DIR
