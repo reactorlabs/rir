@@ -1,4 +1,3 @@
-
 #include <llvm/IR/Verifier.h>
 #include <llvm/IR/IRBuilder.h>
 #include <llvm/IR/LLVMContext.h>
@@ -43,8 +42,7 @@ ExecutionEngine* jitModule(Module* m);
 
 void recordStackmaps(std::vector<uint64_t> functionIds);
 
-ICCompiler::ICCompiler(uint64_t stackmapIdC, int size, JITModule& m,
-                       unsigned fid)
+ICCompiler::ICCompiler(int size, JITModule& m, unsigned fid)
     : m(m), size(size), functionId(fid) {
     // Set up a function type which corresponds to the ICStub signature
     std::vector<Type*> argT;
@@ -52,6 +50,7 @@ ICCompiler::ICCompiler(uint64_t stackmapIdC, int size, JITModule& m,
         argT.push_back(t::SEXP);
     }
     argT.push_back(t::nativeFunctionPtr_t);
+    argT.push_back(t::t_i64);
 
     auto funT = FunctionType::get(t::SEXP, argT, false);
     ic_t = funT;
@@ -74,9 +73,8 @@ ICCompiler::ICCompiler(uint64_t stackmapIdC, int size, JITModule& m,
     rho->setName("rho");
     caller = argI++;
     caller->setName("caller");
-
-    stackmapId =
-        ConstantInt::get(m.getContext(), APInt(64, stackmapIdC, false));
+    stackmapId = argI++;
+    stackmapId->setName("stackmapId");
 }
 
 Function* ICCompiler::compileStub() {
@@ -123,6 +121,7 @@ Value* ICCompiler::compileCallStub() {
     allArgs.push_back(fun);
     allArgs.push_back(rho);
     allArgs.push_back(caller);
+    allArgs.push_back(stackmapId);
 
     return INTRINSIC_NO_SAFEPOINT(ic, allArgs);
 }

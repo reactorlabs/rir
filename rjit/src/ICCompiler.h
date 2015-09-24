@@ -5,7 +5,7 @@
 namespace rjit {
 class ICCompiler {
   public:
-    ICCompiler(uint64_t stackmapIdC, int size, JITModule& m, unsigned fid);
+    ICCompiler(int size, JITModule& m, unsigned fid);
 
     llvm::Function* compileStub();
 
