@@ -5,14 +5,18 @@ cd $1
 STATUS=`git status --porcelain | grep "^[ \?]"`
 if test "$?" -eq 0; then
 
-    STATUS2=`git status --porcelain | grep "^[ \?]" | grep " rjit/"`
-    if test "$?" -eq 0; then
+    if [ "$GIT_IGNORE_DIRTY" != "1" ]; then
+        STATUS2=`git status --porcelain | grep "^[ \?]" | grep " rjit/"`
+        if test "$?" -eq 0; then
 
-        echo "ERROR: You have unstaged changes in:"
-        echo $STATUS2
-        echo "Hook assume a clean repository!"
-        echo ""
-        exit 1
+            echo "ERROR: You have unstaged changes in:"
+            echo $STATUS2
+            echo
+            echo "Hook assume a clean repository!"
+            echo "Cleanup repo or set env GIT_IGNORE_DIRTY=1"
+            echo ""
+            exit 1
+        fi
     fi
 
     echo "WARNING: You have unstaged changes in:"
