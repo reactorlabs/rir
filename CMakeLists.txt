@@ -23,7 +23,7 @@ include_directories(${CMAKE_SOURCE_DIR}/rjit/src)
 # TODO for now, make all builds debug
 set(CMAKE_BUILD_TYPE Debug)
 
-file(WRITE ${CMAKE_SOURCE_DIR}/.local.config  "BUILD_DIR=${CMAKE_BINARY_DIR}\nROOT_DIR=${CMAKE_SOURCE_DIR}\nR_HOME=${R_HOME}\n")
+file(WRITE ${CMAKE_SOURCE_DIR}/.local.config  "BUILD_DIR=${CMAKE_BINARY_DIR}\nROOT_DIR=${CMAKE_SOURCE_DIR}\nR_HOME=${R_HOME}\nLLVM_CMAKE=${LLVM_DIR}\n")
 
 if (APPLE) 
     find_library(libr 
