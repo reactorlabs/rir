@@ -1,0 +1,13 @@
+#!/bin/bash
+
+PRIVATE=`git symbolic-ref HEAD | grep private > /dev/null`
+
+if [ -z $PRIVATE ]; then
+    echo "   branch is public. Running pre pre-commit-hooks"
+
+    $1/tools/pre-commit-hook
+    if test "$?" -ne 0; then
+        echo "Pre commit hooks are not clean. Cannot push."
+        exit 1
+    fi
+fi

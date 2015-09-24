@@ -92,7 +92,6 @@ done
 
 # if no patch has been generated all is ok, clean up the file stub and exit
 if [ ! -s "$patch" ] ; then
-    printf "Files in this commit comply with the clang-format rules.\n"
     rm -f "$patch"
     exit 0
 fi
