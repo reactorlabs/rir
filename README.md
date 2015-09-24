@@ -1,5 +1,7 @@
 # R + LLVM
 
+[![wercker status](https://app.wercker.com/status/ba5d6ebd4d90bb4d6a4a9b1f12894063/m "wercker status")](https://app.wercker.com/project/bykey/ba5d6ebd4d90bb4d6a4a9b1f12894063)
+
 # Installation
 
 TL;DR - complete script to get everything needed is
