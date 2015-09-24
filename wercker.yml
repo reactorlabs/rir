@@ -1,13 +1,10 @@
 box: reactorl/gnur-rllvm
 build:
-    # Steps make up the actions in your pipeline
-    # Read more about steps on our dev center:
-    # http://devcenter.wercker.com/docs/steps/index.html
   steps:
     - script:
         name: Configure rjit with cmake
         code: |
-            cmake -G "Unix Makefiles" -DLLVM_DIR=${LLVM_BUILD_DIR}/share/llvm/cmake -DR_HOME=../gnur/ .
+            cmake -G "Unix Makefiles" -DLLVM_DIR=${LLVM_BUILD_DIR}/share/llvm/cmake -DR_HOME=${R_DIR} .
     - script: 
         name: Build rjit
         code: |
