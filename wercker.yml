@@ -13,3 +13,8 @@ build:
         name: Run Tests
         code: |
             tools/tests
+  after-steps:
+    - wantedly/pretty-slack-notify:
+        webhook_url: https://hooks.slack.com/services/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
+        channel: r-on-llvm
+        username: cibot
