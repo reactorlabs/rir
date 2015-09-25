@@ -315,7 +315,7 @@ Value* Compiler::compileICCallStub(Value* call, Value* op,
 
     auto ic_function_id = nextStackmapId++;
     functionIds.push_back(ic_function_id);
-    ICCompiler ic(smid, callArgs.size(), m, ic_function_id);
+    ICCompiler ic(callArgs.size(), m, ic_function_id);
     auto ic_stub = ic.compileStub();
 
     std::vector<Value*> ic_args;
@@ -329,6 +329,7 @@ Value* Compiler::compileICCallStub(Value* call, Value* op,
     ic_args.push_back(op);
     ic_args.push_back(context->rho);
     ic_args.push_back(context->f);
+    ic_args.push_back(ConstantInt::get(getGlobalContext(), APInt(64, smid)));
 
     // Record a patch point
     emitStackmap(smid, {{ic_stub}}, m, context->b);

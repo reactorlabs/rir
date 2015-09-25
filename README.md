@@ -1,26 +1,28 @@
 # R + LLVM
 
+[![wercker status](https://app.wercker.com/status/ba5d6ebd4d90bb4d6a4a9b1f12894063/m "wercker status")](https://app.wercker.com/project/bykey/ba5d6ebd4d90bb4d6a4a9b1f12894063)
+
 # Installation
 
 TL;DR - complete script to get everything needed is
 ```
-tools/setup.sh ..
+tools/setup.sh
 ```
 
-To install llvm to a different place
+To install dependencies to a different place
 ```
-tools/setup.sh some/source/folder
+tools/setup.sh -d some/source/folder
 ```
 
 To build off tree
 ```
 mkdir build && cd build
-../tools/setup.sh ../..
+../tools/setup.sh
 ```
 
-To build using ninja
+More options see
 ```
-tools/setup.sh .. ninja
+tools/setup.sh -h
 ```
 
 Subsections are meant to be possibly clear out some details about [buildin llvm](#building-llvm), [buildin GNUR and rjit](#building-modified-gnur-and-rjit) and [running tests](#running-tests). 

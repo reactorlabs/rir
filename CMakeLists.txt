@@ -13,7 +13,6 @@ add_definitions(--std=c++11 -Wall)
 
 # set R
 
-set(R_HOME ${CMAKE_SOURCE_DIR}/gnur)
 set(R_LIBRARY_TREE ${CMAKE_SOURCE_DIR}/packages)
 set(R_ROOT_DIR ${R_HOME})
 set(R_INCLUDE_DIR ${R_HOME}/include)
@@ -24,12 +23,12 @@ include_directories(${CMAKE_SOURCE_DIR}/rjit/src)
 # TODO for now, make all builds debug
 set(CMAKE_BUILD_TYPE Debug)
 
-file(WRITE ${CMAKE_SOURCE_DIR}/.local.config  "BUILD_DIR=${CMAKE_BINARY_DIR}\nROOT_DIR=${CMAKE_SOURCE_DIR}\n")
+file(WRITE ${CMAKE_SOURCE_DIR}/.local.config  "BUILD_DIR=${CMAKE_BINARY_DIR}\nROOT_DIR=${CMAKE_SOURCE_DIR}\nR_HOME=${R_HOME}\nLLVM_CMAKE=${LLVM_DIR}\n")
 
 if (APPLE) 
     find_library(libr 
                 NAMES libR.dylib
-                PATHS ${CMAKE_SOURCE_DIR}/gnur/lib
+                PATHS ${R_ROOT_DIR}/lib
                 )
     message(STATUS "libR is found at ${libr}")
 endif(APPLE)

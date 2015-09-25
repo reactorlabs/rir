@@ -16,7 +16,7 @@
 ##################################################################
 # SETTINGS
 # set path to clang-format binary
-CLANG_FORMAT=`which clang-format-3.5`
+CLANG_FORMAT=`which clang-format-3.5 2> /dev/null || which clang-format`
 
 # remove any older patches from previous commits. Set to true or false.
 # DELETE_OLD_PATCHES=false
@@ -34,37 +34,6 @@ FILE_EXTS=".c .h .cpp .hpp .cc .hh .cxx .m"
 
 ##################################################################
 # There should be no need to change anything below this line.
-
-# Reference: http://stackoverflow.com/questions/1055671/how-can-i-get-the-behavior-of-gnus-readlink-f-on-a-mac
-canonicalize_filename () {
-    local target_file=$1
-    local physical_directory=""
-    local result=""
-
-    # Need to restore the working directory after work.
-    pushd `pwd` > /dev/null
-
-    cd "$(dirname "$target_file")"
-    target_file=`basename $target_file`
-
-    # Iterate down a (possible) chain of symlinks
-    while [ -L "$target_file" ]
-    do
-        target_file=$(readlink "$target_file")
-        cd "$(dirname "$target_file")"
-        target_file=$(basename "$target_file")
-    done
-
-    # Compute the canonicalized name by finding the physical path
-    # for the directory we're in and appending the target file.
-    physical_directory=`pwd -P`
-    result="$physical_directory"/"$target_file"
-
-    # restore the working directory after work.
-    popd > /dev/null
-
-    echo "$result"
-}
 
 # exit on error
 set -e
@@ -90,7 +59,6 @@ fi
 
 if [ ! -x "$CLANG_FORMAT" ] ; then
     printf "Error: clang-format executable not found.\n"
-    printf "Set the correct path in $(canonicalize_filename "$0").\n"
     exit 1
 fi
 
@@ -102,10 +70,8 @@ patch="/tmp/$prefix-$suffix.patch"
 # clean up any older clang-format patches
 $DELETE_OLD_PATCHES && rm -f /tmp/$prefix*.patch
 
-CPP=`find $1/rjit/src -name '*.cpp'`
-HH=`find $1/rjit/src -name '*.h'`
 # create one patch containing all changes to the files
-for file in $CPP$HH 
+find $1/rjit/src -name '*.h' -o -name '*.cpp' | while read file;
 do
     # ignore file if we do check for file extensions and the file
     # does not match any of the extensions specified in $FILE_EXTS
@@ -126,7 +92,6 @@ done
 
 # if no patch has been generated all is ok, clean up the file stub and exit
 if [ ! -s "$patch" ] ; then
-    printf "Files in this commit comply with the clang-format rules.\n"
     rm -f "$patch"
     exit 0
 fi

@@ -2,104 +2,197 @@
 
 set -e
 
-OPT="-O0"
-
-BUILD_DIR=`pwd`
-
+CURRENT_DIR=`pwd`
 SCRIPTPATH=`cd $(dirname "$0") && pwd`
 if [ ! -d $SCRIPTPATH ]; then
     echo "Could not determine absolute dir of $0"
     echo "Maybe accessed with symlink"
 fi
-
 SRC_DIR=`cd ${SCRIPTPATH}/.. && pwd`
 
-TARGET=$1
-if [ -z $TARGET ]; then
-  echo "usage: ./${0} target_directory [ninja]"
+
+# Defaults
+
+GEN="Unix Makefiles"
+M="make -j${CORES}"
+OPT="-O0"
+TARGET="${SRC_DIR}/.."
+SKIP_LLVM=0
+SKIP_GNUR=0
+SKIP_GNUR_CONFIG=0
+SKIP_BUILD=0
+CORES=`nproc || echo 8`
+LLVM_VERS="370"
+
+function usage() {
+  echo "usage: ./${0} [options]"
+  echo
+  echo "Options:"
+  echo
+  echo "-n|--ninja                Use ninja instead of make"
+  echo "-f|--gnur-flags  aflag    Pass aflag as CFLAGS to gnur    Default: -O0"
+  echo "-d|--deps-target path     Directory to checkout deps      Default: .."        
+  echo "-l|--skip-llvm            Skip llvm"
+  echo "-g|--skip-gnur            Skip gnur"
+  echo "-o|--skip-gnur-conf       Skip gnur configure"
+  echo "-c|--cmake-only           Only run cmake in rjit"
+  echo "-j num                    Number of cores"
+  echo
   exit 1
-fi
+}
+
+while [[ $# > 0 ]]
+do
+key="$1"
+
+case $key in
+    -c|--cmake-only)
+    SKIP_GNUR=1
+    SKIP_LLVM=1
+    SKIP_BUILD=1
+    ;;
+    -o|--skip-gnur-conf)
+    SKIP_GNUR_CONFIG=1
+    ;;
+    -g|--skip-gnur)
+    SKIP_GNUR=1
+    ;;
+    -l|--skip-llvm)
+    SKIP_LLVM=1
+    ;;
+    -h|--help)
+    usage
+    ;;
+    -n|--ninja)
+    GEN="Ninja"
+    M="ninja"
+    ;;
+    -f|--gnur-flags)
+    OPT="$2"
+    shift # past argument
+    ;;
+    -j)
+    CORES="$2"
+    shift # past argument
+    ;;
+    -d|--deps-target)
+    TARGET="$2"
+    shift # past argument
+    ;;
+    *)
+    echo "Flag $key unknown"
+    usage
+    ;;
+esac
+shift # past argument or value
+done
+
 TARGET=`cd $TARGET && pwd`
 
 LLVM_TARGET=${TARGET}/llvm
-
-if [ ! -d $TARGET ]; then
-  echo "-> creating ${TARGET}"
-  mkdir $TARGET
-fi
-
-CORES=`nproc || echo 8`
-
-if [[ $2 == "ninja" ]]; then
-    GEN="Ninja"
-    M="ninja"
-else
-    GEN="Unix Makefiles"
-    M="make -j${CORES}"
-fi
-
-LLVM_VERS="370"
-
-if [ ! -d ${LLVM_TARGET} ]; then
-    mkdir ${LLVM_TARGET}
-fi
-cd ${LLVM_TARGET}
-
-LLVM_SRC_F=llvm-src-${LLVM_VERS}
-LLVM_SRC=${LLVM_TARGET}/${LLVM_SRC_F}
-
-echo $LLVM_SRC
-if [ ! -d ${LLVM_SRC} ]; then
-    echo "-> checking out llvm ${LLVM_VERS} to ${LLVM_SRC}"
-
-    svn co http://llvm.org/svn/llvm-project/llvm/tags/RELEASE_${LLVM_VERS}/final/ llvm-src-${LLVM_VERS}
-else
-    echo "-> svn revert ${LLVM_SRC}"
-    cd ${LLVM_SRC}
-    svn revert .
-fi
-
 LLVM_BUILD_DIR_F=llvm-build-${LLVM_VERS}
 LLVM_BUILD_DIR=${LLVM_TARGET}/${LLVM_BUILD_DIR_F}
-echo "-> building llvm to ${LLVM_BUILD_DIR}"
-mkdir -p $LLVM_BUILD_DIR
-cd $LLVM_BUILD_DIR
-cmake -G "$GEN" -DLLVM_ENABLE_RTTI=1 --enable-debug-symbols --with-oprofile -DLLVM_TARGETS_TO_BUILD="X86;CppBackend" -DCMAKE_BUILD_TYPE=Debug ${LLVM_SRC}
-$M
 
-cd $SRC_DIR
+R_DIR=${TARGET}/gnur
 
-if [ ! -d gnur ]; then
-    echo "-> checking out gnur" 
-    git clone https://bitbucket.org/reactorl/gnur
+. ${SRC_DIR}/.local.config
+if [ -n "$BUILD_DIR" ] && [ $BUILD_DIR != $CURRENT_DIR ]; then
+    echo "ERROR: Build directory changed from $BUILD_DIR to $CURRENT_DIR"
+    echo "remove .local.config if this really is what you want."
+    exit 1
+fi
+if [ -n "$R_HOME" ] && [ $R_HOME != $R_DIR ]; then
+    echo "ERROR: gnur directory changed from $R_HOME to $R_DIR"
+    echo "remove .local.config if this really is what you want."
+    exit 1
+fi
+if [ -n "$LLVM_CMAKE" ] && [[ $LLVM_BUILD_DIR =~ $LLVM_CMAKE ]]; then
+    echo "ERROR: llvm directory changed to $LLVM_BUILD_DIR"
+    echo "remove .local.config if this really is what you want."
+    exit 1
 fi
 
-echo "-> git reset gnur to rllvm" 
-cd gnur
-git checkout rllvm
-
-echo "-> configure gnur"
-if [[ "$OSTYPE" == "darwin"* ]]; then
-  # Mac OSX
-  F77="gfortran -arch x86_64" FC="gfortran -arch x86_64" CXXFLAGS="$OPT -fno-omit-frame-pointer -gdwarf-2 -g3 -arch x86_64" CFLAGS="$OPT -fno-omit-frame-pointer -gdwarf-2 -g3 -arch x86_64" ./configure --with-blas --with-lapack --with-ICU=no --with-system-xz=no --with-system-zlib=no --with-x=no --with-readline=no --without-recommended-packages
-else
-    CXXFLAGS="$OPT -fno-omit-frame-pointer -gdwarf-2 -g3" CFLAGS="$OPT -fno-omit-frame-pointer -gdwarf-2 -g3" ./configure --with-blas --with-lapack --with-ICU=no --with-system-xz=no --with-system-zlib=no --with-x=no --without-recommended-packages
+if [ ! -d $TARGET ]; then
+    echo "-> creating ${TARGET}"
+    mkdir $TARGET
 fi
-touch doc/FAQ
-echo "Revision: -99" > SVN-REVISION
-rm -f non-tarball
 
-echo "-> build gnur"
-make -j${CORES}
+if [ $SKIP_LLVM -eq 0 ]; then
+    if [ ! -d ${LLVM_TARGET} ]; then
+        mkdir ${LLVM_TARGET}
+    fi
+    cd ${LLVM_TARGET}
+    
+    LLVM_SRC_F=llvm-src-${LLVM_VERS}
+    LLVM_SRC=${LLVM_TARGET}/${LLVM_SRC_F}
+    
+    echo $LLVM_SRC
+    if [ ! -d ${LLVM_SRC} ]; then
+        echo "-> checking out llvm ${LLVM_VERS} to ${LLVM_SRC}"
+    
+        svn co http://llvm.org/svn/llvm-project/llvm/tags/RELEASE_${LLVM_VERS}/final/ llvm-src-${LLVM_VERS}
+    else
+        echo "-> svn revert ${LLVM_SRC}"
+        cd ${LLVM_SRC}
+        svn revert .
+    fi
+    
+    echo "-> building llvm to ${LLVM_BUILD_DIR}"
+    mkdir -p $LLVM_BUILD_DIR
+    cd $LLVM_BUILD_DIR
+    cmake -G "$GEN" -DLLVM_ENABLE_RTTI=1 -DLLVM_TARGETS_TO_BUILD="X86;CppBackend" -DCMAKE_BUILD_TYPE=Debug --enable-debug-symbols --with-oprofile ${LLVM_SRC}
+    $M
+fi
 
-cd $BUILD_DIR
-echo "-> cmake rjit"
-rm -f CMakeCache.txt
-cmake -G "$GEN" -DLLVM_DIR=${LLVM_BUILD_DIR}/share/llvm/cmake $SRC_DIR
-$M
+if [ $SKIP_GNUR -eq 0 ]; then
+    if [ $SKIP_GNUR_CONFIG -eq 0 ]; then
+        if [ ! -d $R_DIR ]; then
+            cd $TARGET
+            echo "-> checking out gnur" 
+            git clone https://bitbucket.org/reactorl/gnur
+        fi
+        
+        echo "-> git checkout gnur branch rllvm" 
+        cd $R_DIR
+        git checkout rllvm
+        
+        echo "-> configure gnur"
+        if [[ "$OSTYPE" == "darwin"* ]]; then
+          # Mac OSX
+          F77="gfortran -arch x86_64" FC="gfortran -arch x86_64" CXXFLAGS="$OPT -fno-omit-frame-pointer -gdwarf-2 -g3 -arch x86_64" CFLAGS="$OPT -fno-omit-frame-pointer -gdwarf-2 -g3 -arch x86_64" ./configure --with-blas --with-lapack --with-ICU=no --with-system-xz=no --with-system-zlib=no --with-x=no --with-readline=no --without-recommended-packages
+        else
+            CXXFLAGS="$OPT -fno-omit-frame-pointer -gdwarf-2 -g3" CFLAGS="$OPT -fno-omit-frame-pointer -gdwarf-2 -g3" ./configure --with-blas --with-lapack --with-ICU=no --with-system-xz=no --with-system-zlib=no --with-x=no --without-recommended-packages
+        fi
+    fi
 
-echo "-> install hooks"
+    cd $R_DIR
+
+    touch doc/FAQ
+    echo "Revision: -99" > SVN-REVISION
+    rm -f non-tarball
+    
+    echo "-> build gnur"
+    make -j${CORES}
+fi
+
+echo "-> update hooks"
 ${SRC_DIR}/tools/install_hooks.sh
 
-echo "-> running tests"
-${SRC_DIR}/tools/tests
+cd $CURRENT_DIR
+
+if [ "$GEN" == "Unix Makefiles" ] && [ -f ${BUILD_DIR}/build.ninja ]; then
+    echo "ERROR: switch from ninja to make?"
+    echo "add '-n' to use ninja or remove build.ninja to proceed"
+    exit 1
+fi
+
+echo "-> cmake rjit"
+rm -f CMakeCache.txt
+cmake -G "$GEN" -DLLVM_DIR=${LLVM_BUILD_DIR}/share/llvm/cmake -DR_HOME=$R_DIR $SRC_DIR
+
+if [ $SKIP_BUILD -eq 0 ]; then
+    $M
+
+    echo "-> running tests"
+    ${SRC_DIR}/tools/tests
+fi

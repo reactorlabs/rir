@@ -42,9 +42,6 @@ if [[ $push_command =~ $will_remove_protected_branch ]]; then
 fi
 
 if [[ $current_branch =~ $protected_branch ]]; then
-    echo "$current_branch is protected. Making sure pre-commit-hooks are clean too"
-    $ROOT_DIR/tools/pre-commit-hook
-    
     exit 0
 fi
 

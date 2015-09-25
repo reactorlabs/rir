@@ -12,7 +12,7 @@ $SCRIPTPATH/install_hooks.sh
 . "${SCRIPTPATH}/../.local.config"
 
 TESTS_PATH="${ROOT_DIR}/rjit/tests"
-R="${ROOT_DIR}/gnur/bin/R"
+R="${R_HOME}/bin/R"
 
 if test "$(uname)" = "Darwin"; then
     LIB="dyn.load('${BUILD_DIR}/librjit.dylib')"

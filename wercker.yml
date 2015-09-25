@@ -1,0 +1,20 @@
+box: reactorl/gnur-rllvm
+build:
+  steps:
+    - script:
+        name: Configure rjit with cmake
+        code: |
+            cmake -G "Unix Makefiles" -DLLVM_DIR=${LLVM_BUILD_DIR}/share/llvm/cmake -DR_HOME=${R_DIR} .
+    - script: 
+        name: Build rjit
+        code: |
+            make
+    - script:
+        name: Run Tests
+        code: |
+            tools/tests
+  after-steps:
+    - wantedly/pretty-slack-notify:
+        webhook_url: https://hooks.slack.com/services/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
+        channel: r-on-llvm
+        username: cibot

@@ -27,7 +27,7 @@ extern "C" void* compileIC(uint64_t numargs, SEXP call, SEXP fun, SEXP rho,
                            uint64_t stackmapId) {
     JITModule m("ic");
 
-    ICCompiler compiler(stackmapId, numargs, m, nextStackmapId++);
+    ICCompiler compiler(numargs, m, nextStackmapId++);
 
     return compiler.compile(call, fun, rho);
 }

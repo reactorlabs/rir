@@ -17,14 +17,8 @@ $SCRIPTPATH/install_hooks.sh
 
 HOOKS_PATH="${SCRIPTPATH}/${TYPE}.d"
 
-echo "# running $TYPE hooks in tools/${TYPE}.d"
-echo "#   please do not skip them on public branches"
-echo "################################################"
-echo ""
-
 for script in `ls -v ${HOOKS_PATH}/*.hook`; do
-    name=`basename $script | sed 's/[0-9][0-9]-//'`
-    echo "-> running $name"
+    name=`basename $script | sed 's/[0-9][0-9]-//' | sed 's/\.hook$//'`
+    echo "-> $name"
     $script $ROOT_DIR $BUILD_DIR
-    echo ""
 done
