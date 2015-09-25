@@ -87,8 +87,14 @@ file(GLOB_RECURSE BENCHMARKS "benchmarks/*.R" "benchmarks/*.r")
 
 add_custom_target(benchmarks SOURCES ${BENCHMARKS})
 
+# dummy target so that IDEs show the local folder in solution explorers. The local
+# folder is ignored by git and can be used for local scripts and stuff
 file(GLOB SCRIPTS "local/*.sh")
 add_custom_target(scripts SOURCES ${SCRIPTS})
+
+# dummy target so that IDEs show the tools folder in solution explorers
+file(GLOB TOOLS "tools/*.*")
+add_custom_target(tools SOURCES ${TOOLS})
 
 
 # Ubuntu comments
