@@ -56,7 +56,7 @@ class Compiler {
 
         std::vector<SEXP> objects;
 
-        unsigned function_id;
+        unsigned functionId;
     };
 
     /** Compiles an expression.
@@ -287,8 +287,6 @@ class Compiler {
       functions.
       */
     std::vector<SEXP> relocations;
-
-    std::vector<uint64_t> functionIds;
 };
 
 } // namespace rjit

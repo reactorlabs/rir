@@ -18,14 +18,19 @@
 #include "llvm/Analysis/TargetLibraryInfo.h"
 #include "llvm/Analysis/TargetTransformInfo.h"
 
+#include "ICCompiler.h"
+
 #include "Compiler.h"
 #include "JITMemoryManager.h"
+#include "JITCompileLayer.h"
 #include "StackMap.h"
 #include "StackMapParser.h"
 
-#include "ICCompiler.h"
+#include "JITCompileLayer.h"
 
 #include "RIntlns.h"
+
+#include <sstream>
 
 using namespace llvm;
 
@@ -36,14 +41,11 @@ Value* loadConstant(SEXP value, Module* m, BasicBlock* b);
 Value* insertCall(Value* fun, std::vector<Value*> args, BasicBlock* b,
                   rjit::JITModule& m, uint64_t function_id);
 
-void setupFunction(Function& f);
+void setupFunction(Function& f, uint64_t functionId);
 
-ExecutionEngine* jitModule(Module* m);
+std::vector<bool> ICCompiler::hasStub;
 
-void recordStackmaps(std::vector<uint64_t> functionIds);
-
-ICCompiler::ICCompiler(int size, JITModule& m, unsigned fid)
-    : m(m), size(size), functionId(fid) {
+ICCompiler::ICCompiler(int size, JITModule& m) : m(m), size(size) {
     // Set up a function type which corresponds to the ICStub signature
     std::vector<Type*> argT;
     for (int i = 0; i < size + 3; i++) {
@@ -55,8 +57,9 @@ ICCompiler::ICCompiler(int size, JITModule& m, unsigned fid)
     auto funT = FunctionType::get(t::SEXP, argT, false);
     ic_t = funT;
 
+    functionId = StackMap::nextStackmapId++;
     f = Function::Create(funT, Function::ExternalLinkage, "callIC", m);
-    setupFunction(*f);
+    setupFunction(*f, functionId);
     b = BasicBlock::Create(getGlobalContext(), "start", f, nullptr);
 
     // Load the args in the same order as the stub
@@ -78,6 +81,29 @@ ICCompiler::ICCompiler(int size, JITModule& m, unsigned fid)
 }
 
 Function* ICCompiler::compileStub() {
+    std::ostringstream os;
+    os << "icStub_" << size;
+    std::string name = os.str();
+
+    if (hasStub.size() > size && hasStub[size]) {
+        auto here = m.getM()->getFunction(name);
+        if (here) {
+            std::cout << "Reusing " << name << "\n";
+            return here;
+        }
+
+        std::cout << "Importing " << name << "\n";
+        f = Function::Create(ic_t, GlobalValue::ExternalLinkage, name, m);
+        return f;
+    }
+
+    std::cout << "Creating " << name << "\n";
+    if (size >= hasStub.size()) {
+        hasStub.resize(size+1);
+    }
+    hasStub[size] = true;
+    f->setName(name);
+
     Value* res = compileCallStub();
 
     ReturnInst::Create(getGlobalContext(), res, b);
@@ -97,11 +123,8 @@ void* ICCompiler::finalize() {
     // FIXME: Allocate a NATIVESXP, or link it to the caller??
 
     // m.dump();
-    ExecutionEngine* engine = jitModule(m.getM());
-    void* ic = engine->getPointerToFunction(f);
-
-    recordStackmaps({functionId});
-    new_stackmap_addr = nullptr;
+    auto handle = JITCompileLayer::getHandle(m.getM());
+    auto ic = JITCompileLayer::get(handle, f->getName());
 
     return ic;
 }

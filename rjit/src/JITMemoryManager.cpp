@@ -6,14 +6,7 @@ uint8_t* new_stackmap_addr = nullptr;
 uintptr_t new_stackmap_size;
 
 uint64_t JITMemoryManager::getSymbolAddress(const std::string& name) {
-    auto res = SectionMemoryManager::getSymbolAddress(name);
-    if (!res) {
-        if (name == "compileIC" || name == "_compileIC")
-            return (uint64_t)&compileIC;
-        if (name == "patchIC" || name == "_patchIC")
-            return (uint64_t)&patchIC;
-    }
-    return res;
+    assert(false);
 }
 
 uint8_t* JITMemoryManager::allocateDataSection(uintptr_t size,
@@ -26,9 +19,8 @@ uint8_t* JITMemoryManager::allocateDataSection(uintptr_t size,
         size, alignment, sectionID, sectionName, readonly);
 
     if (sectionName.str() == ".llvm_stackmaps") {
-        assert(!new_stackmap_addr);
-        new_stackmap_addr = res;
-        new_stackmap_size = size;
+        stackmapAddr_ = res;
+        stackmapSize_ = size;
     }
 
     return res;

@@ -33,7 +33,7 @@ if (APPLE)
     message(STATUS "libR is found at ${libr}")
 endif(APPLE)
 
-set(LLVM_COMPONENTS_USED support core mcjit native irreader linker ipo)
+set(LLVM_COMPONENTS_USED support core mcjit orcjit native irreader linker ipo)
 
 
 function(JOIN VALUES GLUE OUTPUT)

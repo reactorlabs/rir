@@ -6,28 +6,23 @@
 #include <llvm/Support/raw_ostream.h>
 #include "llvm/Analysis/Passes.h"
 
-#include "llvm/ExecutionEngine/ExecutionEngine.h"
-#include "llvm/ExecutionEngine/MCJIT.h"
-#include "llvm/ExecutionEngine/SectionMemoryManager.h"
+#include "llvm/Support/TargetSelect.h"
+#include "llvm/Support/Host.h"
+
 #include "llvm/CodeGen/GCStrategy.h"
 #include "llvm/CodeGen/GCs.h"
 
-#include "llvm/IR/LegacyPassManager.h"
-#include "llvm/Transforms/IPO/PassManagerBuilder.h"
-#include "llvm/Transforms/Scalar.h"
-#include "llvm/Analysis/TargetLibraryInfo.h"
-#include "llvm/Analysis/TargetTransformInfo.h"
-
 #include "Compiler.h"
-#include "JITMemoryManager.h"
+#include "JITCompileLayer.h"
 #include "StackMap.h"
 #include "StackMapParser.h"
-#include "GCPassApi.h"
 #include "ICCompiler.h"
 #include "Symbols.h"
 #include "Runtime.h"
 
 #include "RIntlns.h"
+
+#include <memory>
 
 using namespace llvm;
 
@@ -80,8 +75,6 @@ SEXP createNativeSXP(RFunctionPtr fptr, SEXP ast,
 
 namespace rjit {
 
-uint64_t nextStackmapId = 3;
-
 /** Converts given SEXP to a bitcode constant.
  * The SEXP address is taken as an integer constant into LLVM which is then
  * converted to SEXP.
@@ -103,7 +96,7 @@ Value* insertCall(Value* fun, std::vector<Value*> args, BasicBlock* b,
 
     if (function_id != (uint64_t)-1) {
         assert(function_id > 1);
-        assert(function_id < nextStackmapId);
+        assert(function_id < StackMap::nextStackmapId);
 
         AttributeSet PAL;
         {
@@ -123,85 +116,15 @@ Value* insertCall(Value* fun, std::vector<Value*> args, BasicBlock* b,
     return res;
 }
 
-void setupFunction(Function& f) {
+void setupFunction(Function& f, uint64_t functionId) {
     f.setGC("statepoint-example");
     auto attrs = f.getAttributes();
     attrs = attrs.addAttribute(f.getContext(), AttributeSet::FunctionIndex,
                                "no-frame-pointer-elim", "true");
+    attrs = attrs.addAttribute(f.getContext(), AttributeSet::FunctionIndex,
+                               "statepoint-id", std::to_string(functionId));
+
     f.setAttributes(attrs);
-}
-
-ExecutionEngine* jitModule(Module* m) {
-
-    auto memoryManager = new rjit::JITMemoryManager();
-
-    legacy::PassManager pm;
-
-    pm.add(createTargetTransformInfoWrapperPass(TargetIRAnalysis()));
-
-    pm.add(rjit::createPlaceRJITSafepointsPass());
-
-    PassManagerBuilder PMBuilder;
-    PMBuilder.OptLevel = 0;  // Set optimization level to -O0
-    PMBuilder.SizeLevel = 0; // so that no additional phases are run.
-    PMBuilder.populateModulePassManager(pm);
-
-    // TODO: maybe have our own version which is not relocating?
-    pm.add(rjit::createRJITRewriteStatepointsForGCPass());
-    pm.run(*m);
-
-    // create execution engine and finalize the module
-    std::string err;
-    ExecutionEngine* engine =
-        EngineBuilder(std::unique_ptr<Module>(m))
-            .setErrorStr(&err)
-            .setMCJITMemoryManager(
-                 std::unique_ptr<RTDyldMemoryManager>(memoryManager))
-            .setEngineKind(EngineKind::JIT)
-            .create();
-
-    if (!engine) {
-        fprintf(stderr, "Could not create ExecutionEngine: %s\n", err.c_str());
-        exit(1);
-    }
-
-    engine->finalizeObject();
-
-    return engine;
-}
-
-// record stackmaps will parse the stackmap section of the current module and
-// index all entries.
-void recordStackmaps(std::vector<uint64_t> functionIds) {
-    if (rjit::new_stackmap_addr) {
-        int i = 0;
-
-        ArrayRef<uint8_t> sm(rjit::new_stackmap_addr, rjit::new_stackmap_size);
-        StackMapParserT p(sm);
-
-        for (const auto& r : p.records()) {
-            assert(r.getID() != (uint64_t)-1 &&
-                   r.getID() != StackMap::genericStatepointID);
-
-            auto function_id =
-                std::find(functionIds.begin(), functionIds.end(), r.getID());
-
-            if (function_id == functionIds.end()) {
-                // No such function id -> must be patchpoint
-                StackMap::registerPatchpoint(r.getID(), sm, i);
-            } else {
-                auto pos = function_id - functionIds.begin();
-                // We have a statepoint entry, lets find the corresponding
-                // function entry. The assumption here is, that the order
-                // of functionIds recorded by the compiler has to be the
-                // same as the order of function entries in the stackmap seciton
-                uintptr_t function = p.getFunction(pos).getFunctionAddress();
-                StackMap::registerStatepoint(function, r.getInstructionOffset(),
-                                             sm, i);
-            }
-            i++;
-        }
-    }
 }
 
 void Compiler::Context::addObject(SEXP object) {
@@ -212,7 +135,8 @@ void Compiler::Context::addObject(SEXP object) {
 Compiler::Context::Context(std::string const& name, llvm::Module* m) {
     f = llvm::Function::Create(t::sexp_sexpsexpint,
                                llvm::Function::ExternalLinkage, name, m);
-    setupFunction(*f);
+    functionId = StackMap::nextStackmapId++;
+    setupFunction(*f, functionId);
     llvm::Function::arg_iterator args = f->arg_begin();
     llvm::Value* body = args++;
     body->setName("body");
@@ -228,8 +152,6 @@ SEXP Compiler::compileFunction(std::string const& name, SEXP ast,
                                bool isPromise) {
     Context* old = context;
     context = new Context(name, m);
-    context->function_id = nextStackmapId++;
-    functionIds.push_back(context->function_id);
     if (isPromise)
         context->returnJump = true;
     Value* last = compileExpression(ast);
@@ -249,17 +171,14 @@ SEXP Compiler::compileFunction(std::string const& name, SEXP ast,
 
 void Compiler::jitAll() {
 
-    ExecutionEngine* engine = jitModule(m.getM());
+    auto handle = JITCompileLayer::getHandle(m.getM());
 
     // perform all the relocations
     for (SEXP s : relocations) {
         auto f = reinterpret_cast<Function*>(TAG(s));
-        auto fp = engine->getPointerToFunction(f);
+        auto fp = JITCompileLayer::get(handle, f->getName());
         SETCAR(s, reinterpret_cast<SEXP>(fp));
     }
-    recordStackmaps(functionIds);
-    new_stackmap_addr = nullptr;
-    functionIds.clear();
 }
 
 /** Compiles an expression.
@@ -311,11 +230,9 @@ Value* Compiler::compileSymbol(SEXP value) {
 
 Value* Compiler::compileICCallStub(Value* call, Value* op,
                                    std::vector<Value*>& callArgs) {
-    uint64_t smid = nextStackmapId++;
+    uint64_t smid = StackMap::nextStackmapId++;
 
-    auto ic_function_id = nextStackmapId++;
-    functionIds.push_back(ic_function_id);
-    ICCompiler ic(callArgs.size(), m, ic_function_id);
+    ICCompiler ic(callArgs.size(), m);
     auto ic_stub = ic.compileStub();
 
     std::vector<Value*> ic_args;
@@ -981,6 +898,6 @@ Value* Compiler::constant(SEXP value) {
 }
 
 Value* Compiler::INTRINSIC(llvm::Value* fun, std::vector<Value*> args) {
-    return insertCall(fun, args, context->b, m, context->function_id);
+    return insertCall(fun, args, context->b, m, context->functionId);
 }
 }

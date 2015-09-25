@@ -9,8 +9,6 @@ namespace rjit {
 
 const uint64_t patchpointSize = 10;
 
-extern uint64_t nextStackmapId;
-
 } // namespace rjit
 
 extern "C" void patchIC(void* ic, uint64_t stackmapId, void* caller);

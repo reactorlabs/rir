@@ -5,7 +5,7 @@
 namespace rjit {
 class ICCompiler {
   public:
-    ICCompiler(int size, JITModule& m, unsigned fid);
+    ICCompiler(int size, JITModule& m);
 
     llvm::Function* compileStub();
 
@@ -64,7 +64,7 @@ class ICCompiler {
 
     llvm::Value* INTRINSIC(llvm::Value* fun, std::vector<llvm::Value*> args);
 
-    llvm::Type* ic_t;
+    llvm::FunctionType* ic_t;
 
     llvm::Function* f;
     llvm::BasicBlock* b;
@@ -78,7 +78,10 @@ class ICCompiler {
 
     JITModule& m;
     unsigned size;
+
     unsigned functionId;
+
+    static std::vector<bool> hasStub;
 };
 
 } // namespace rjit

@@ -1,3 +1,6 @@
+#ifndef JIT_MEMORY_MANAGER_H
+#define JIT_MEMORY_MANAGER_H
+
 #include <llvm/IR/Verifier.h>
 #include <llvm/IR/IRBuilder.h>
 #include <llvm/IR/LLVMContext.h>
@@ -24,9 +27,6 @@ using namespace llvm;
 
 namespace rjit {
 
-extern uint8_t* new_stackmap_addr;
-extern uintptr_t new_stackmap_size;
-
 class JITMemoryManager : public llvm::SectionMemoryManager {
   private:
     struct MemoryGroup {
@@ -51,6 +51,9 @@ class JITMemoryManager : public llvm::SectionMemoryManager {
         return allocateSection(CodeMem, Size, Alignment);
     }
 
+    uint8_t* stackmapAddr() { return stackmapAddr_; }
+    uintptr_t stackmapSize() { return stackmapSize_; }
+
   private:
     uint8_t* allocateSection(MemoryGroup& MemGroup, uintptr_t Size,
                              unsigned Alignment);
@@ -62,7 +65,12 @@ class JITMemoryManager : public llvm::SectionMemoryManager {
             sys::Memory::releaseMappedMemory(CodeMem.AllocatedMem[i]);
     }
 
+    uint8_t* stackmapAddr_;
+    uintptr_t stackmapSize_;
+
     MemoryGroup CodeMem;
 };
 }
 // namespace rjit
+
+#endif

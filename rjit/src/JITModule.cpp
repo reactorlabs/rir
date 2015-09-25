@@ -1,5 +1,9 @@
 #include "JITModule.h"
 
+#include "llvm/ExecutionEngine/ExecutionEngine.h"
+#include "llvm/Support/TargetSelect.h"
+#include "llvm/Support/Host.h"
+
 using namespace llvm;
 
 namespace rjit {
@@ -22,6 +26,7 @@ JITModule::JITModule(std::string const& name)
         true);
     patchpoint = Function::Create(patchpointTy, GlobalValue::ExternalLinkage,
                                   "llvm.experimental.patchpoint.void", m);
+    m->setDataLayout(*EngineBuilder().selectTarget()->getDataLayout());
 }
 
 } // namespace rjit
