@@ -14,15 +14,15 @@ class JITCompileLayer {
     typedef CompileLayer::ModuleSetHandleT ModuleHandle;
 
     static ModuleHandle getHandle(llvm::Module* m);
-    static void* get(ModuleHandle handle, std::string name) {
-        return (void*)compileLayer->findSymbolIn(handle, name, false)
-            .getAddress();
-    }
-    static uint64_t getSymbol(std::string name) {
+    static void* getFunctionPointer(ModuleHandle handle, std::string name);
+    static uint64_t findSymbolAddress(std::string name) {
         return compileLayer->findSymbol(name, false).getAddress();
     }
 
   private:
+    static void recordStackmaps(ModuleHandle handle, llvm::Module* m,
+                                JITMemoryManager* mm);
+
     static ObjLayer objectLayer;
     static std::unique_ptr<CompileLayer> compileLayer;
 };

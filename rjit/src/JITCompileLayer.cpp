@@ -22,6 +22,11 @@ namespace rjit {
 JITCompileLayer::ObjLayer JITCompileLayer::objectLayer;
 std::unique_ptr<JITCompileLayer::CompileLayer> JITCompileLayer::compileLayer;
 
+void* JITCompileLayer::getFunctionPointer(JITCompileLayer::ModuleHandle handle,
+                                          std::string name) {
+    return (void*)compileLayer->findSymbolIn(handle, name, false).getAddress();
+}
+
 JITCompileLayer::ModuleHandle JITCompileLayer::getHandle(Module* m) {
 
     legacy::PassManager pm;
@@ -44,15 +49,25 @@ JITCompileLayer::ModuleHandle JITCompileLayer::getHandle(Module* m) {
         objectLayer, llvm::orc::SimpleCompiler(*targetMachine)));
     std::vector<llvm::Module*> moduleSet;
     moduleSet.push_back(m);
+
     // Make sure we can resolve symbols in the program as well. The zero arg
     // to the function tells DynamicLibrary to load the program, not a library.
     std::string err;
     sys::DynamicLibrary::LoadLibraryPermanently(nullptr, &err);
+
     auto mm = new JITMemoryManager();
     auto handle = compileLayer->addModuleSet(
         moduleSet, std::unique_ptr<SectionMemoryManager>(mm),
         &JITSymbolResolver::singleton);
 
+    recordStackmaps(handle, m, mm);
+
+    return handle;
+}
+
+void JITCompileLayer::recordStackmaps(JITCompileLayer::ModuleHandle handle,
+                                      Module* m, JITMemoryManager* mm) {
+    // TODO: maybe we could record the statepoints lazily in getFunctionPointer
     std::unordered_map<uint64_t, uintptr_t> fids;
     for (llvm::Function& f : m->getFunctionList()) {
         auto attrs = f.getAttributes();
@@ -62,12 +77,11 @@ JITCompileLayer::ModuleHandle JITCompileLayer::getHandle(Module* m) {
         bool has_id = attr_id.isStringAttribute() &&
                       !attr_id.getValueAsString().getAsInteger(10, id);
         if (has_id)
-            fids[id] = (uintptr_t)JITCompileLayer::get(handle, f.getName());
+            fids[id] = (uintptr_t)JITCompileLayer::getFunctionPointer(
+                handle, f.getName());
     }
 
     ArrayRef<uint8_t> sm(mm->stackmapAddr(), mm->stackmapSize());
     StackMap::recordStackmaps(sm, fids);
-
-    return handle;
 }
 }

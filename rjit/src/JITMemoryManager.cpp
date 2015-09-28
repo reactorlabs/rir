@@ -2,13 +2,15 @@
 
 namespace rjit {
 
-uint8_t* new_stackmap_addr = nullptr;
-uintptr_t new_stackmap_size;
-
 uint64_t JITMemoryManager::getSymbolAddress(const std::string& name) {
+    // In orcjit this is split into two classes. Symbol resolution should only
+    // happen in JITSymbolResolver.
     assert(false);
 }
 
+// This is mostly a 1:1 copy from DynldMemoryManager which additionally exports
+// stackmapAddr
+// TODO: maybe find a better allocation strategy, which keeps data together?
 uint8_t* JITMemoryManager::allocateDataSection(uintptr_t size,
                                                unsigned alignment,
                                                unsigned sectionID,

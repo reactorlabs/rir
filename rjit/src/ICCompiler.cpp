@@ -116,7 +116,7 @@ void* ICCompiler::finalize() {
 
     // m.dump();
     auto handle = JITCompileLayer::getHandle(m.getM());
-    auto ic = JITCompileLayer::get(handle, f->getName());
+    auto ic = JITCompileLayer::getFunctionPointer(handle, f->getName());
 
     return ic;
 }

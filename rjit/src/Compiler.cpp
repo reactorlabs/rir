@@ -176,7 +176,7 @@ void Compiler::jitAll() {
     // perform all the relocations
     for (SEXP s : relocations) {
         auto f = reinterpret_cast<Function*>(TAG(s));
-        auto fp = JITCompileLayer::get(handle, f->getName());
+        auto fp = JITCompileLayer::getFunctionPointer(handle, f->getName());
         SETCAR(s, reinterpret_cast<SEXP>(fp));
     }
 }

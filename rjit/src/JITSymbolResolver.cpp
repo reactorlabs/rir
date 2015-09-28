@@ -16,9 +16,12 @@ void* JITSymbolResolver::getSymbolAddress(const std::string& name) const {
 }
 
 RuntimeDyld::SymbolInfo JITSymbolResolver::findSymbol(const std::string& name) {
+    // Unmangle mach-o symbols
     int st = (name[0] == '_') ? 1 : 0;
+
     uint64_t res = 0;
 
+    // Add your global symbols that you want to use in jitted functions
     do {
 
 #define check(sym)                                                             \
@@ -31,18 +34,22 @@ RuntimeDyld::SymbolInfo JITSymbolResolver::findSymbol(const std::string& name) {
 
     } while (false);
 
+    // Look for jited functions with that name
     if (!res)
-        res = JITCompileLayer::getSymbol(name);
+        res = JITCompileLayer::findSymbolAddress(name);
+
+    // Look for symbols in the current process with that name
     if (!res)
         res = (uint64_t)sys::DynamicLibrary::SearchForAddressOfSymbol(
             name.c_str() + st);
 
-    assert(res);
+    assert(res && "Could not resolve a symbol");
     return RuntimeDyld::SymbolInfo(res, JITSymbolFlags::Exported);
 }
 
 RuntimeDyld::SymbolInfo
 JITSymbolResolver::findSymbolInLogicalDylib(const std::string& name) {
+    // TODO what is this used for anyways?
     assert(false);
 }
 }
