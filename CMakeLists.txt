@@ -44,9 +44,16 @@ JOIN("${LLVM_COMPONENTS_USED}" " " LLVM_COMPONENTS_USED_STRING)
 set(LLVM_CONFIG_BIN ${LLVM_TOOLS_BINARY_DIR}/llvm-config)
 file(WRITE ${CMAKE_SOURCE_DIR}/rjit/src/Makevars  "PKG_CXXFLAGS = `${LLVM_CONFIG_BIN} --cxxflags | sed 's/-Wcovered-switch-default//' | sed 's/-fcolor-diagnostics//'` -UNDEBUG\nPKG_LIBS = `${LLVM_CONFIG_BIN} --ldflags --system-libs --libs ${LLVM_COMPONENTS_USED_STRING}`\n")
 
+# code generation
+add_custom_target(codegen
+    COMMAND python3 intrinsicsGenerator.py ${R_ROOT_DIR}/src/main/eval.c WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/tools
+)
+
 # build the shared library for the JIT
 file(GLOB_RECURSE SRC "rjit/src/*.cpp" "rjit/src/*.h" "local/.Rprofile" "rjit/R/*.R" "rjit/tests/*.R")
 add_library(${PROJECT_NAME} SHARED ${SRC})
+
+add_dependencies(${PROJECT_NAME} codegen)
 
 add_custom_target(tests
     DEPENDS ${PROJECT_NAME})

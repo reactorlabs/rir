@@ -15,6 +15,8 @@ PointerType* initializeTypes() {
     LLVMContext& context = getGlobalContext();
     std::vector<Type*> fields;
     t::Int = IntegerType::get(context, 32);
+    // for now, bool is the same as integer
+    t::Bool = t::Int;
     StructType* t_sxpinfo_struct =
         StructType::create(context, "struct.sxpinfo_struct");
     // sxpinfo_struct is just int32 in a structure, the bitmasking is not a
@@ -36,6 +38,7 @@ PointerType* initializeTypes() {
     // API function types
     Type* t_void = Type::getVoidTy(context);
     t::t_void = t_void;
+    t::Void = t_void;
 
     t::t_i64 = IntegerType::get(context, 64);
 
@@ -97,7 +100,9 @@ namespace rjit {
 
 namespace t {
 
-Type* Int;
+Type * Int;
+Type * Void;
+Type * Bool;
 
 PointerType* SEXP = initializeTypes();
 

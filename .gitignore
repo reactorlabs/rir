@@ -23,3 +23,5 @@ packages/
 build.ninja
 rules.ninja
 .gdb_history
+rjit/src/intrinsics.cpp
+rjit/src/intrinsics.h
