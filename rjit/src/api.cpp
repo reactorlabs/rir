@@ -6,6 +6,9 @@
 
 #include "RIntlns.h"
 
+
+#include "wrappers.h"
+
 using namespace rjit;
 
 /** Compiles given ast and returns the NATIVESXP for it.

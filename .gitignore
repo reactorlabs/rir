@@ -24,3 +24,5 @@ rules.ninja
 .gdb_history
 .clang_complete
 index.db
+rjit/src/intrinsics.cpp
+rjit/src/intrinsics.h

@@ -47,9 +47,16 @@ execute_process(COMMAND ${LLVM_CONFIG_BIN} --cxxflags
     OUTPUT_VARIABLE LLVM_CXX_FLAGS)
 file(WRITE ${CMAKE_SOURCE_DIR}/.clang_complete "-I${CMAKE_SOURCE_DIR}/rjit/src\n${LLVM_CXX_FLAGS}--std=c++11\n-Wall\n")
 
+# code generation
+add_custom_target(codegen
+    COMMAND python3 intrinsicsGenerator.py ${R_ROOT_DIR}/src/main/eval.c WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/tools
+)
+
 # build the shared library for the JIT
 file(GLOB_RECURSE SRC "rjit/src/*.cpp" "rjit/src/*.h" "local/.Rprofile" "rjit/R/*.R" "rjit/tests/*.R")
 add_library(${PROJECT_NAME} SHARED ${SRC})
+
+add_dependencies(${PROJECT_NAME} codegen)
 
 add_custom_target(tests
     DEPENDS ${PROJECT_NAME})

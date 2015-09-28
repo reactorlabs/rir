@@ -856,9 +856,9 @@ Value* Compiler::compileSwitch(SEXP call) {
         context->b = last;
 
         swInt->addCase(constant(i), last);
-        if (defaultIdx == -1 or defaultIdx > i) {
+        if (defaultIdx == -1 or defaultIdx > static_cast<int>(i)) {
             swChar->addCase(constant(i), last);
-        } else if (defaultIdx < i) {
+        } else if (defaultIdx < static_cast<int>(i)) {
             swChar->addCase(constant(i - 1), last);
         } else {
             swChar->addCase(constant(caseAsts.size() - 1), last);
