@@ -21,7 +21,11 @@ SKIP_LLVM=0
 SKIP_GNUR=0
 SKIP_GNUR_CONFIG=0
 SKIP_BUILD=0
-CORES=`nproc || echo 8`
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    CORES=`sysctl -n hw.ncpu || echo 8`
+else
+    CORES=`nproc || echo 8`
+fi
 LLVM_VERS="370"
 
 function usage() {
@@ -95,7 +99,11 @@ LLVM_BUILD_DIR=${LLVM_TARGET}/${LLVM_BUILD_DIR_F}
 
 R_DIR=${TARGET}/gnur
 
-. ${SRC_DIR}/.local.config
+
+if [ -e ${SRC_DIR}/.local.config ]; then
+    . ${SRC_DIR}/.local.config
+fi
+
 if [ -n "$BUILD_DIR" ] && [ $BUILD_DIR != $CURRENT_DIR ]; then
     echo "ERROR: Build directory changed from $BUILD_DIR to $CURRENT_DIR"
     echo "remove .local.config if this really is what you want."
