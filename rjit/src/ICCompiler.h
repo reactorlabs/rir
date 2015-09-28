@@ -5,16 +5,21 @@
 namespace rjit {
 class ICCompiler {
   public:
-    ICCompiler(int size, JITModule& m);
+    ICCompiler(unsigned size, JITModule& m);
 
-    llvm::Function* compileStub();
+    static llvm::Function* getStub(unsigned size, JITModule& m);
 
     void* compile(SEXP inCall, SEXP inFun, SEXP inRho);
 
   private:
+    void initFunction(std::string name);
+
+    static std::string stubName(unsigned size);
+
     void* finalize();
 
-    llvm::Value* compileCallStub();
+    llvm::Function* compileCallStub();
+    llvm::Value* callMyStub();
 
     bool compileIc(SEXP inCall, SEXP inFun);
 
@@ -66,7 +71,7 @@ class ICCompiler {
 
     llvm::FunctionType* ic_t;
 
-    llvm::Function* f;
+    llvm::Function* f = nullptr;
     llvm::BasicBlock* b;
 
     llvm::Value* rho;

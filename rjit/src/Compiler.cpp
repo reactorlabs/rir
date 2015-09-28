@@ -232,8 +232,7 @@ Value* Compiler::compileICCallStub(Value* call, Value* op,
                                    std::vector<Value*>& callArgs) {
     uint64_t smid = StackMap::nextStackmapId++;
 
-    ICCompiler ic(callArgs.size(), m);
-    auto ic_stub = ic.compileStub();
+    auto ic_stub = ICCompiler::getStub(callArgs.size(), m);
 
     std::vector<Value*> ic_args;
     // Closure arguments

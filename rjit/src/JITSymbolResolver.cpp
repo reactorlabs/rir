@@ -1,3 +1,5 @@
+#include "JITCompileLayer.h"
+
 #include "JITSymbolResolver.h"
 #include "llvm/Support/DynamicLibrary.h"
 #include "Runtime.h"
@@ -27,14 +29,15 @@ RuntimeDyld::SymbolInfo JITSymbolResolver::findSymbol(const std::string& name) {
         check(patchIC);
         check(compileIC);
 
+    } while (false);
+
+    if (!res)
+        res = JITCompileLayer::getSymbol(name);
+    if (!res)
         res = (uint64_t)sys::DynamicLibrary::SearchForAddressOfSymbol(
             name.c_str() + st);
 
-    } while (false);
-
-    if (res == 0) {
-        std::cout << "Ext symbol " << name << " not found\n";
-    }
+    assert(res);
     return RuntimeDyld::SymbolInfo(res, JITSymbolFlags::Exported);
 }
 

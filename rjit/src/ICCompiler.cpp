@@ -25,6 +25,7 @@
 #include "JITCompileLayer.h"
 #include "StackMap.h"
 #include "StackMapParser.h"
+#include "CodeCache.h"
 
 #include "JITCompileLayer.h"
 
@@ -45,10 +46,10 @@ void setupFunction(Function& f, uint64_t functionId);
 
 std::vector<bool> ICCompiler::hasStub;
 
-ICCompiler::ICCompiler(int size, JITModule& m) : m(m), size(size) {
+ICCompiler::ICCompiler(unsigned size, JITModule& m) : m(m), size(size) {
     // Set up a function type which corresponds to the ICStub signature
     std::vector<Type*> argT;
-    for (int i = 0; i < size + 3; i++) {
+    for (unsigned i = 0; i < size + 3; i++) {
         argT.push_back(t::SEXP);
     }
     argT.push_back(t::nativeFunctionPtr_t);
@@ -58,13 +59,18 @@ ICCompiler::ICCompiler(int size, JITModule& m) : m(m), size(size) {
     ic_t = funT;
 
     functionId = StackMap::nextStackmapId++;
-    f = Function::Create(funT, Function::ExternalLinkage, "callIC", m);
+}
+
+void ICCompiler::initFunction(std::string name) {
+    assert(!f);
+
+    f = Function::Create(ic_t, Function::ExternalLinkage, name, m);
     setupFunction(*f, functionId);
     b = BasicBlock::Create(getGlobalContext(), "start", f, nullptr);
 
     // Load the args in the same order as the stub
     Function::arg_iterator argI = f->arg_begin();
-    for (int i = 0; i < size; i++) {
+    for (unsigned i = 0; i < size; i++) {
         icArgs.push_back(argI++);
     }
 
@@ -80,38 +86,24 @@ ICCompiler::ICCompiler(int size, JITModule& m) : m(m), size(size) {
     stackmapId->setName("stackmapId");
 }
 
-Function* ICCompiler::compileStub() {
+std::string ICCompiler::stubName(unsigned size) {
     std::ostringstream os;
     os << "icStub_" << size;
-    std::string name = os.str();
+    return os.str();
+}
 
-    if (hasStub.size() > size && hasStub[size]) {
-        auto here = m.getM()->getFunction(name);
-        if (here) {
-            std::cout << "Reusing " << name << "\n";
-            return here;
-        }
+Function* ICCompiler::getStub(unsigned size, JITModule& m) {
 
-        std::cout << "Importing " << name << "\n";
-        f = Function::Create(ic_t, GlobalValue::ExternalLinkage, name, m);
-        return f;
-    }
-
-    std::cout << "Creating " << name << "\n";
-    if (size >= hasStub.size()) {
-        hasStub.resize(size+1);
-    }
-    hasStub[size] = true;
-    f->setName(name);
-
-    Value* res = compileCallStub();
-
-    ReturnInst::Create(getGlobalContext(), res, b);
-
-    return f;
+    return CodeCache::get(stubName(size),
+                          [size, &m]() {
+                              ICCompiler stubCompiler(size, m);
+                              return stubCompiler.compileCallStub();
+                          },
+                          m);
 }
 
 void* ICCompiler::compile(SEXP inCall, SEXP inFun, SEXP inRho) {
+    initFunction("callIC");
 
     if (!compileIc(inCall, inFun))
         compileGenericIc(inCall, inFun);
@@ -129,7 +121,9 @@ void* ICCompiler::finalize() {
     return ic;
 }
 
-Value* ICCompiler::compileCallStub() {
+Function* ICCompiler::compileCallStub() {
+    initFunction(stubName(size));
+
     Value* icAddr = INTRINSIC(
         m.compileIC, ConstantInt::get(getGlobalContext(), APInt(64, size)),
         call, fun, rho, stackmapId);
@@ -146,7 +140,10 @@ Value* ICCompiler::compileCallStub() {
     allArgs.push_back(caller);
     allArgs.push_back(stackmapId);
 
-    return INTRINSIC_NO_SAFEPOINT(ic, allArgs);
+    auto res = INTRINSIC_NO_SAFEPOINT(ic, allArgs);
+    ReturnInst::Create(getGlobalContext(), res, b);
+
+    return f;
 }
 
 bool ICCompiler::compileIc(SEXP inCall, SEXP inFun) {
@@ -186,9 +183,9 @@ bool ICCompiler::compileIc(SEXP inCall, SEXP inFun) {
         if (form != R_NilValue || i != icArgs.size())
             return false;
 
-        SEXP body = CDR(inFun);
+        SEXP inBody = CDR(inFun);
         // TODO: If the body is not native we could jit it here
-        if (TYPEOF(body) == NATIVESXP) {
+        if (TYPEOF(inBody) == NATIVESXP) {
 
             BasicBlock* icMatch =
                 BasicBlock::Create(getGlobalContext(), "icMatch", f, nullptr);
@@ -227,15 +224,15 @@ bool ICCompiler::compileIc(SEXP inCall, SEXP inFun) {
             INTRINSIC(m.initClosureContext, cntxt, call, newrho, rho, arglist,
                       fun);
 
-            Value* res = INTRINSIC_NO_SAFEPOINT(m.closureNativeCallTrampoline,
-                                                cntxt, constant(body), newrho);
+            Value* res = INTRINSIC_NO_SAFEPOINT(
+                m.closureNativeCallTrampoline, cntxt, constant(inBody), newrho);
 
             INTRINSIC(m.endClosureContext, cntxt, res);
 
             BranchInst::Create(end, b);
             b = icMiss;
 
-            Value* missRes = compileCallStub();
+            Value* missRes = callMyStub();
 
             BranchInst::Create(end, b);
             b = end;
@@ -249,6 +246,24 @@ bool ICCompiler::compileIc(SEXP inCall, SEXP inFun) {
         }
     }
     return false;
+}
+
+Value* ICCompiler::callMyStub() {
+    auto stub = getStub(size, m);
+
+    std::vector<Value*> ic_args;
+    // Closure arguments
+    for (auto arg : icArgs) {
+        ic_args.push_back(arg);
+    }
+    // Additional IC arguments
+    ic_args.push_back(call);
+    ic_args.push_back(fun);
+    ic_args.push_back(rho);
+    ic_args.push_back(caller);
+    ic_args.push_back(stackmapId);
+
+    return INTRINSIC_NO_SAFEPOINT(stub, ic_args);
 }
 
 bool ICCompiler::compileGenericIc(SEXP inCall, SEXP inFun) {
@@ -320,7 +335,7 @@ Value* ICCompiler::compileCall(SEXP call, SEXP op) {
 
     b = icMiss;
 
-    Value* missRes = compileCallStub();
+    Value* missRes = callMyStub();
 
     BranchInst::Create(end, b);
     b = end;

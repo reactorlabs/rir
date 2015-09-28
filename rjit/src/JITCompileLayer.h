@@ -18,6 +18,9 @@ class JITCompileLayer {
         return (void*)compileLayer->findSymbolIn(handle, name, false)
             .getAddress();
     }
+    static uint64_t getSymbol(std::string name) {
+        return compileLayer->findSymbol(name, false).getAddress();
+    }
 
   private:
     static ObjLayer objectLayer;
