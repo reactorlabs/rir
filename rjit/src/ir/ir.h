@@ -8,12 +8,14 @@
 #include "Builder.h"
 
 namespace rjit {
-
 namespace ir {
 
 enum class Type {
-
-
+#include "irTypes.h"
+    ret,
+    br,
+    cbr,
+    cmp,
 };
 
 /** Generic class for all IR objects.
@@ -24,8 +26,6 @@ class Instruction {
 public:
 
     Type match(llvm::BasicBlock::iterator & i) {
-
-
     }
 
 
@@ -77,10 +77,10 @@ protected:
 
       It is assumed that this method will be called by the respective intrinsics when they are being created.
      */
-    void setIRType(Type t) {
-        std::vector<llvm::Metadata *> v = { llvm::ValueAsMetadata::get(llvm::ConstantInt::get(ins()->getContext(), llvm::APInt(32, static_cast<int>(t)))) };
-        llvm::MDNode * m = llvm::MDNode::get(ins()->getContext(), v);
-        ins()->setMetadata(MD_NAME, m);
+    static void setIRType(llvm::CallInst * ins, Type t) {
+        std::vector<llvm::Metadata *> v = { llvm::ValueAsMetadata::get(llvm::ConstantInt::get(ins->getContext(), llvm::APInt(32, static_cast<int>(t)))) };
+        llvm::MDNode * m = llvm::MDNode::get(ins->getContext(), v);
+        ins->setMetadata(MD_NAME, m);
     }
 
     llvm::Value * getValue(unsigned argIndex) {
