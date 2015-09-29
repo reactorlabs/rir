@@ -32,6 +32,12 @@ public:
     static Type match(llvm::BasicBlock::iterator & i);
 
 
+    /** Each ir instruction can typecast to the underlying llvm bitcode.
+     */
+    operator llvm::Instruction * () {
+        return ins_;
+    }
+
 protected:
     Instruction(llvm::Instruction * ins):
         ins_(ins) {
@@ -98,7 +104,8 @@ public:
         llvm::MDNode * m = ins->getMetadata(MD_NAME);
         if (m == nullptr)
             return Type::unknown;
-        llvm::APInt const & ap = llvm::cast<llvm::ConstantInt>(llvm::cast<llvm::ValueAsMetadata>(m)->getValue())->getUniqueInteger();
+        llvm::Metadata * mx = m->getOperand(0);
+        llvm::APInt const & ap = llvm::cast<llvm::ConstantInt>(llvm::cast<llvm::ValueAsMetadata>(mx)->getValue())->getUniqueInteger();
         assert(ap.isIntN(32) and "Expected 32bit integer");
         return static_cast<Type>(ap.getSExtValue());
     }
