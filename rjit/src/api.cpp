@@ -7,7 +7,7 @@
 #include "RIntlns.h"
 
 
-#include "wrappers.h"
+#include "ir/ir.h"
 
 using namespace rjit;
 
