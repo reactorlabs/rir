@@ -55,6 +55,11 @@ void emitStackmap(uint64_t id, std::vector<Value*> values, rjit::JITModule& m,
     CallInst::Create(m.patchpoint, sm_args, "", b);
 }
 
+
+} // namespace
+
+namespace rjit {
+
 SEXP createNativeSXP(RFunctionPtr fptr, SEXP ast,
                      std::vector<SEXP> const& objects, Function* f) {
     SEXP objs = allocVector(VECSXP, objects.size() + 1);
@@ -71,9 +76,7 @@ SEXP createNativeSXP(RFunctionPtr fptr, SEXP ast,
     return result;
 }
 
-} // namespace
 
-namespace rjit {
 
 /** Converts given SEXP to a bitcode constant.
  * The SEXP address is taken as an integer constant into LLVM which is then
@@ -164,6 +167,8 @@ SEXP Compiler::compileFunction(std::string const& name, SEXP ast,
     SEXP result = createNativeSXP(nullptr, ast, context->objects, context->f);
     // add the non-jitted SEXP to relocations
     relocations.push_back(result);
+    // dump the function IR before wwe add statepoints
+    context->f->dump();
     delete context;
     context = old;
     return result;

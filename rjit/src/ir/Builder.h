@@ -1,13 +1,19 @@
 #ifndef BUILDER_H
 #define BUILDER_H
 
-#include "RIntlns.h"
 #include "llvm.h"
+
+#include "RIntlns.h"
 
 #include "Types.h"
 #include "StackMap.h"
 
 namespace rjit {
+
+// TODO This should be static of builder
+// TODO this guy also unprotects the objects - perhaps the caller should do this so that it is more explicit and consistent
+SEXP createNativeSXP(RFunctionPtr fptr, SEXP ast, std::vector<SEXP> const& objects, llvm::Function* f);
+
 namespace ir {
 
 /** Helper class that aids with building and modifying LLVM IR for functions.
@@ -18,20 +24,6 @@ namespace ir {
 class Builder {
 public:
 
-
-
-
-    /** Returns the llvm::Function corresponding to the intrinsic of given name. If such intrinsic is not present in the module yet, it is declared using the given type.
-
-      NOTE that this function assumes that the intrinsic does not use varargs.
-     */
-    llvm::Function * intrinsic(char const * name, llvm::FunctionType * type) {
-        llvm::Function * result = m_->getFunction(name);
-        // if the intrinsic has not been declared, declare it
-        if (result == nullptr)
-            result = llvm::Function::Create(type, llvm::GlobalValue::ExternalLinkage, name, m_);
-        return result;
-    }
 
     /** Builder can typecast to the current module.
      */
@@ -49,6 +41,94 @@ public:
      */
     operator llvm::BasicBlock * () {
         return c_->b;
+    }
+
+    /** Returns the current break target.
+     */
+    llvm::BasicBlock * breakTarget() {
+        assert(c_ != nullptr and c_->breakTarget != nullptr and "Not in loop context");
+        return c_->breakTarget;
+    }
+
+    /** Returns the current next target.
+     */
+    llvm::BasicBlock * nextTarget() {
+        assert(c_ != nullptr and c_->nextTarget != nullptr and "Not in loop context");
+        return c_->nextTarget;
+    }
+
+    llvm::BasicBlock * createBasicBlock() {
+        return llvm::BasicBlock::Create(m_->getContext(), "", c_->f);
+    }
+
+    llvm::BasicBlock * createBasicBlock(std::string const & name) {
+        return llvm::BasicBlock::Create(m_->getContext(), name, c_->f);
+    }
+
+    /** Creates new context for given function name.
+
+      Creates the llvm Function and initial basic block objects, sets the function attributes and context's rho value.
+
+      Adds the ast of the function as first argument to the function's constant pool.
+     */
+    void openFunction(std::string const & name, SEXP ast, bool isPromise) {
+        if (c_ != nullptr)
+            contextStack_.push(c_);
+        c_ = new Context(name, m_, isPromise);
+        c_->addConstantPoolObject(ast);
+    }
+
+    /** Creates new context for a loop. Initializes the basic blocks for break and next targets. */
+    void openLoop() {
+        assert(c_ != nullptr and "Cannot open loop context when not in function");
+        contextStack_.push(c_);
+        c_ = new Context(c_);
+        c_->breakTarget = createBasicBlock("break");
+        c_->nextTarget = createBasicBlock("next");
+    }
+
+    /** Closes the open loop and pops its context.
+     */
+    void closeLoop() {
+        assert(not contextStack_.empty() and (contextStack_.top()->f == c_->f) and "Cannot close loop w/o loop context");
+        // we are guaranteed to have a previous context and the context is from same function
+        Context * x = contextStack_.top();
+        contextStack_.pop();
+        // update the current basic block and objects from popped context to the next current one
+        x->b = c_->b;
+        x->cp = std::move(c_->cp);
+        delete c_;
+        c_ = x;
+    }
+
+    /** Closes a function context.
+
+      Returns the SEXP corresponding to that function w/o the native code, which will be added at the time the module is jitted. The function's SEXP is therefore automatically added to the relocations for the module.
+     */
+    SEXP closeFunction() {
+        assert((contextStack_.empty() or (contextStack_.top()->f != c_->f)) and "Not a function context");
+        SEXP result = createNativeSXP(nullptr, c_->cp[0], c_->cp, c_->f);
+        relocations_.push_back(result);
+        delete c_;
+        if (contextStack_.empty()) {
+            c_ = nullptr;
+        } else {
+            c_ = contextStack_.top();
+            contextStack_.pop();
+        }
+        return result;
+    }
+
+    /** Returns the llvm::Function corresponding to the intrinsic of given name. If such intrinsic is not present in the module yet, it is declared using the given type.
+
+      NOTE that this function assumes that the intrinsic does not use varargs.
+     */
+    llvm::Function * intrinsic(char const * name, llvm::FunctionType * type) {
+        llvm::Function * result = m_->getFunction(name);
+        // if the intrinsic has not been declared, declare it
+        if (result == nullptr)
+            result = llvm::Function::Create(type, llvm::GlobalValue::ExternalLinkage, name, m_);
+        return result;
     }
 
     /** Returns a llvm::Value created from a constant pool value.
@@ -115,12 +195,25 @@ private:
     class Context {
     public:
 
+        Context(std::string const & name, llvm::Module * m, bool isPromise);
+
+        Context(Context * from):
+            isReturnJumpNeeded(from->isReturnJumpNeeded),
+            isResultVisible(from->isResultVisible),
+            f(from->f),
+            b(from->b),
+            breakTarget(from->breakTarget),
+            nextTarget(from->nextTarget),
+            rho(from->rho),
+            functionId(from->functionId),
+            cp(std::move(from->cp)) {
+        }
 
         /** Adds the given object into the constant pool served by the objects field.
          */
-        void addObject(SEXP object) {
+        void addConstantPoolObject(SEXP object) {
             PROTECT(object);
-            objects.push_back(object);
+            cp.push_back(object);
         }
 
         bool isReturnJumpNeeded;
@@ -136,14 +229,36 @@ private:
 
         unsigned functionId;
 
-        std::vector<SEXP> objects;
+        /** Constant pool of the function.
+
+          The constant pool always starts with the AST of the function being compiled, followed by any additional constants (notably created promises).
+         */
+        std::vector<SEXP> cp;
     };
 
     /** The module into which we are currently building.
      */
     llvm::Module * m_;
 
+    /** Current context.
+     */
     Context * c_;
+
+    /** Stack of active contexts.
+     */
+    std::stack<Context *> contextStack_;
+
+    /** List of relocations to be done when compiling.
+
+      When a function is compiled, it is first translated to bitcode and a
+      native SXP is created for it using nullptr for the native code. The
+      function's SXP is added to the list of relocations here. When the
+      compilation is done, the module is finalized and all SEXPs in the
+      relocation lists are patched so that they point to correct native
+      functions.
+      */
+    std::vector<SEXP> relocations_;
+
 
 };
 

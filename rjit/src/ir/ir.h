@@ -10,12 +10,15 @@
 namespace rjit {
 namespace ir {
 
+/** Type of the IR.
+ */
 enum class Type {
 #include "irTypes.h"
     ret,
     br,
     cbr,
     cmp,
+    unknown,
 };
 
 /** Generic class for all IR objects.
@@ -25,8 +28,9 @@ enum class Type {
 class Instruction {
 public:
 
-    Type match(llvm::BasicBlock::iterator & i) {
-    }
+    /** Returns the IR type of the instruction sequence starting at i and advances i past it. Returns Type::unknown if the sequence start cannot be matched and advances one instruction further.
+     */
+    static Type match(llvm::BasicBlock::iterator & i);
 
 
 protected:
@@ -44,6 +48,10 @@ private:
 
 };
 
+class Return : public Instruction {
+
+};
+
 /** Base class for all intrinsics.
 
  */
@@ -55,8 +63,11 @@ public:
 
     /** Returns the IR type of the intrinsic call for faster matching.
      */
-    Type getIRType() {
-        llvm::APInt const & ap = llvm::cast<llvm::ConstantInt>(llvm::cast<llvm::ValueAsMetadata>(ins()->getMetadata(MD_NAME))->getValue())->getUniqueInteger();
+    static Type getIRType(llvm::Instruction * ins) {
+        llvm::MDNode * m = ins->getMetadata(MD_NAME);
+        if (m == nullptr)
+            return Type::unknown;
+        llvm::APInt const & ap = llvm::cast<llvm::ConstantInt>(llvm::cast<llvm::ValueAsMetadata>(m)->getValue())->getUniqueInteger();
         assert(ap.isIntN(32) and "Expected 32bit integer");
         return static_cast<Type>(ap.getSExtValue());
     }
@@ -95,7 +106,6 @@ protected:
     int getValueInt(unsigned argIndex) {
         return Builder::integer(ins()->getArgOperand(argIndex));
     }
-
 
 };
 
