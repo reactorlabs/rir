@@ -52,6 +52,38 @@ class Return : public Instruction {
 
 };
 
+/** Conditional branch.
+
+  Takes three arguments, the condition on which it jumps (this can be any integer) and true and false blocks.
+
+  Conditional branch consists of ICmpInst followed by BranchInst internally.
+
+  TODO We might want to change this in the future and get the comparison out of the branch, but for now, this is the only branch we have and it is a showcase for matching multiple llvm bitcodes to single ir.
+ */
+class Cbr : public Instruction {
+public:
+    llvm::Value * cond() {
+        return ins<llvm::ICmpInst>()->getOperand(0);
+    }
+
+    llvm::BasicBlock * trueCase() {
+        llvm::BranchInst * b = llvm::cast<llvm::BranchInst>(ins<llvm::ICmpInst>());
+        return b->getSuccessor(1);
+    }
+
+    llvm::BasicBlock * falseCase() {
+        llvm::BranchInst * b = llvm::cast<llvm::BranchInst>(ins<llvm::ICmpInst>());
+        return b->getSuccessor(0);
+    }
+
+    Cbr(llvm::Instruction * ins):
+        Instruction(ins) {
+    }
+
+    static void create(Builder * b, llvm::Value * cond, llvm::BasicBlock * trueCase, llvm::BasicBlock * falseCase);
+
+};
+
 /** Base class for all intrinsics.
 
  */

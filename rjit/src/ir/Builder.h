@@ -43,6 +43,12 @@ public:
         return c_->b;
     }
 
+    /** Returns the current basic block.
+     */
+    llvm::BasicBlock * block() {
+        return c_->b;
+    }
+
     /** Returns the current break target.
      */
     llvm::BasicBlock * breakTarget() {
