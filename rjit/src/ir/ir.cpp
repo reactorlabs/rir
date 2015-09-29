@@ -6,7 +6,6 @@ namespace rjit {
 namespace ir {
 
 
-// TODO change CBR to match compare and branch
 Type Instruction::match(BasicBlock::iterator & i) {
     llvm::Instruction * ins = i;
     ++i; // move to next instruction
@@ -18,10 +17,12 @@ Type Instruction::match(BasicBlock::iterator & i) {
     } else if (isa<ReturnInst>(ins)) {
         return Type::ret;
     } else if (isa<BranchInst>(ins)) {
-        BranchInst * b = cast<BranchInst>(ins);
-        return b->isConditional() ? Type::cbr : Type::br;
+        assert(cast<BranchInst>(ins)->isUnconditional() and "Conditional branch instruction should start with ICmpInst");
+        return Type::br;
     } else if (isa<ICmpInst>(ins)) {
-        return Type::cmp;
+        assert(isa<BranchInst>(ins->getNextNode()) and "ICmpInst can only be followed by branch for now.");
+        ++i; // move past the branch as well
+        return Type::cbr;
     }
     return Type::unknown;
 }

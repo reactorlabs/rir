@@ -17,7 +17,6 @@ enum class Type {
     ret,
     br,
     cbr,
-    cmp,
     unknown,
 };
 
@@ -67,12 +66,12 @@ public:
     }
 
     llvm::BasicBlock * trueCase() {
-        llvm::BranchInst * b = llvm::cast<llvm::BranchInst>(ins<llvm::ICmpInst>());
+        llvm::BranchInst * b = llvm::cast<llvm::BranchInst>(ins<llvm::ICmpInst>()->getNextNode());
         return b->getSuccessor(1);
     }
 
     llvm::BasicBlock * falseCase() {
-        llvm::BranchInst * b = llvm::cast<llvm::BranchInst>(ins<llvm::ICmpInst>());
+        llvm::BranchInst * b = llvm::cast<llvm::BranchInst>(ins<llvm::ICmpInst>()->getNextNode());
         return b->getSuccessor(0);
     }
 
