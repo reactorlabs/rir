@@ -138,6 +138,7 @@ class Intrinsic:
             result +="        args_.push_back({0});\n".format(self.convertArgumentToValue(i))
         result += "        llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic(Name, Type), args_, \"\", b);\n"
         result += "        b.insertCall(ins);\n" # deal with GC
+        result += "        setIRType(ins, ::rjit::ir::Type::{0});\n".format(self.name) # set type in metadata
         result += "        return ins;\n"
         result += "    }\n"
         return result
@@ -159,18 +160,23 @@ def emit(intrinsics, targetDir):
     """ Extracts all intrinsics that we have into specified header and cpp files. """
     header = open(os.path.join(targetDir, "intrinsics.h"), "w")
     cpp = open(os.path.join(targetDir, "intrinsics.cpp"), "w")
+    irt = open(os.path.join(targetDir, "irTypes.h"), "w")
     print(generatedMessage, file = header)
     print("#ifndef INTRINSICS_H_\n#define INTRINSICS_H_\n\n#include \"ir.h\"\n#include \"Builder.h\"\n\nnamespace rjit {\nnamespace ir {\n", file = header)
     print(generatedMessage, file = cpp)
     print("#include \"intrinsics.h\"\n\nnamespace rjit {\nnamespace ir {\n\n", file = cpp)
+    print(generatedMessage, file = irt)
     for i in intrinsics:
         print(i.headerCode(), file = header)
         print(i.cppCode(), file = cpp)
+        print("{0}, ".format(i.name), file = irt)
 
     print("} // namespace ir\n} // namespace rjit\n#endif // INTRINSICS_H_\n", file = header)
     print("} // namespace ir\n} // namespace rjit\n", file = cpp)
     header.close()
     cpp.close()
+    irt.close()
+
 
 
 def extractIntrinsics(file, intrinsics):
@@ -250,5 +256,5 @@ for f in sys.argv[1:]:
 print("Found {0} intrinsic(s) in {1} files...".format(len(intrinsics), len(sys.argv) - 1))
 # now create the header and cpp files with the intrinsic definitions
 emit(intrinsics, "../rjit/src/ir")
-print("intrinsics.cpp and intrinsics.h generated")
+print("intrinsics.cpp, intrinsics.h and irTypes.h generated")
 

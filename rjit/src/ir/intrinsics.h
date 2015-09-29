@@ -29,6 +29,7 @@ public:
         args_.push_back(Builder::constantPoolSexp(call));
         llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic(Name, Type), args_, "", b);
         b.insertCall(ins);
+        setIRType(ins, ::rjit::ir::Type::ConvertToLogicalNoNA);
         return ins;
     }
 };
@@ -44,6 +45,7 @@ public:
         args_.push_back(value);
         llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic(Name, Type), args_, "", b);
         b.insertCall(ins);
+        setIRType(ins, ::rjit::ir::Type::PrintValue);
         return ins;
     }
 };
@@ -63,6 +65,7 @@ public:
         args_.push_back(rho);
         llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic(Name, Type), args_, "", b);
         b.insertCall(ins);
+        setIRType(ins, ::rjit::ir::Type::StartFor);
         return ins;
     }
 };
@@ -81,6 +84,7 @@ public:
         args_.push_back(Builder::constantPoolSexp(call));
         llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic(Name, Type), args_, "", b);
         b.insertCall(ins);
+        setIRType(ins, ::rjit::ir::Type::LoopSequenceLength);
         return ins;
     }
 };
@@ -100,6 +104,7 @@ public:
         args_.push_back(Builder::integer(index));
         llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic(Name, Type), args_, "", b);
         b.insertCall(ins);
+        setIRType(ins, ::rjit::ir::Type::GetForLoopValue);
         return ins;
     }
 };
@@ -113,6 +118,7 @@ public:
         std::vector<llvm::Value *> args_;
         llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic(Name, Type), args_, "", b);
         b.insertCall(ins);
+        setIRType(ins, ::rjit::ir::Type::MarkVisible);
         return ins;
     }
 };
@@ -126,6 +132,7 @@ public:
         std::vector<llvm::Value *> args_;
         llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic(Name, Type), args_, "", b);
         b.insertCall(ins);
+        setIRType(ins, ::rjit::ir::Type::MarkInvisible);
         return ins;
     }
 };
@@ -143,6 +150,7 @@ public:
         args_.push_back(value);
         llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic(Name, Type), args_, "", b);
         b.insertCall(ins);
+        setIRType(ins, ::rjit::ir::Type::UserConstant);
         return ins;
     }
 };
@@ -162,6 +170,7 @@ public:
         args_.push_back(rho);
         llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic(Name, Type), args_, "", b);
         b.insertCall(ins);
+        setIRType(ins, ::rjit::ir::Type::GenericGetVar);
         return ins;
     }
 };
@@ -179,6 +188,7 @@ public:
         args_.push_back(rho);
         llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic(Name, Type), args_, "", b);
         b.insertCall(ins);
+        setIRType(ins, ::rjit::ir::Type::GenericGetEllipsisArg);
         return ins;
     }
 };
@@ -198,6 +208,7 @@ public:
         args_.push_back(rho);
         llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic(Name, Type), args_, "", b);
         b.insertCall(ins);
+        setIRType(ins, ::rjit::ir::Type::GenericSetVar);
         return ins;
     }
 };
@@ -217,6 +228,7 @@ public:
         args_.push_back(rho);
         llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic(Name, Type), args_, "", b);
         b.insertCall(ins);
+        setIRType(ins, ::rjit::ir::Type::GenericSetVarParent);
         return ins;
     }
 };
@@ -234,6 +246,7 @@ public:
         args_.push_back(rho);
         llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic(Name, Type), args_, "", b);
         b.insertCall(ins);
+        setIRType(ins, ::rjit::ir::Type::GetFunction);
         return ins;
     }
 };
@@ -249,6 +262,7 @@ public:
         args_.push_back(Builder::constantPoolSexp(symbol));
         llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic(Name, Type), args_, "", b);
         b.insertCall(ins);
+        setIRType(ins, ::rjit::ir::Type::GetGlobalFunction);
         return ins;
     }
 };
@@ -264,6 +278,7 @@ public:
         args_.push_back(Builder::constantPoolSexp(name));
         llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic(Name, Type), args_, "", b);
         b.insertCall(ins);
+        setIRType(ins, ::rjit::ir::Type::GetSymFunction);
         return ins;
     }
 };
@@ -279,6 +294,7 @@ public:
         args_.push_back(Builder::constantPoolSexp(name));
         llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic(Name, Type), args_, "", b);
         b.insertCall(ins);
+        setIRType(ins, ::rjit::ir::Type::GetBuiltinFunction);
         return ins;
     }
 };
@@ -294,6 +310,7 @@ public:
         args_.push_back(Builder::constantPoolSexp(name));
         llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic(Name, Type), args_, "", b);
         b.insertCall(ins);
+        setIRType(ins, ::rjit::ir::Type::GetInternalBuiltinFunction);
         return ins;
     }
 };
@@ -309,6 +326,7 @@ public:
         args_.push_back(f);
         llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic(Name, Type), args_, "", b);
         b.insertCall(ins);
+        setIRType(ins, ::rjit::ir::Type::CheckFunction);
         return ins;
     }
 };
@@ -327,6 +345,7 @@ public:
         args_.push_back(rho);
         llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic(Name, Type), args_, "", b);
         b.insertCall(ins);
+        setIRType(ins, ::rjit::ir::Type::CreatePromise);
         return ins;
     }
 };
@@ -344,6 +363,7 @@ public:
         args_.push_back(value);
         llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic(Name, Type), args_, "", b);
         b.insertCall(ins);
+        setIRType(ins, ::rjit::ir::Type::SexpType);
         return ins;
     }
 };
@@ -361,6 +381,7 @@ public:
         args_.push_back(arg);
         llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic(Name, Type), args_, "", b);
         b.insertCall(ins);
+        setIRType(ins, ::rjit::ir::Type::AddArgument);
         return ins;
     }
 };
@@ -380,6 +401,7 @@ public:
         args_.push_back(name);
         llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic(Name, Type), args_, "", b);
         b.insertCall(ins);
+        setIRType(ins, ::rjit::ir::Type::AddKeywordArgument);
         return ins;
     }
 };
@@ -399,6 +421,7 @@ public:
         args_.push_back(eager);
         llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic(Name, Type), args_, "", b);
         b.insertCall(ins);
+        setIRType(ins, ::rjit::ir::Type::AddEllipsisArgument);
         return ins;
     }
 };
@@ -420,6 +443,7 @@ public:
         args_.push_back(rho);
         llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic(Name, Type), args_, "", b);
         b.insertCall(ins);
+        setIRType(ins, ::rjit::ir::Type::CallBuiltin);
         return ins;
     }
 };
@@ -441,6 +465,7 @@ public:
         args_.push_back(rho);
         llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic(Name, Type), args_, "", b);
         b.insertCall(ins);
+        setIRType(ins, ::rjit::ir::Type::CallSpecial);
         return ins;
     }
 };
@@ -462,6 +487,7 @@ public:
         args_.push_back(rho);
         llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic(Name, Type), args_, "", b);
         b.insertCall(ins);
+        setIRType(ins, ::rjit::ir::Type::CallClosure);
         return ins;
     }
 };
@@ -481,6 +507,7 @@ public:
         args_.push_back(rho);
         llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic(Name, Type), args_, "", b);
         b.insertCall(ins);
+        setIRType(ins, ::rjit::ir::Type::CreateClosure);
         return ins;
     }
 };
@@ -500,6 +527,7 @@ public:
         args_.push_back(rho);
         llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic(Name, Type), args_, "", b);
         b.insertCall(ins);
+        setIRType(ins, ::rjit::ir::Type::GenericUnaryMinus);
         return ins;
     }
 };
@@ -519,6 +547,7 @@ public:
         args_.push_back(rho);
         llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic(Name, Type), args_, "", b);
         b.insertCall(ins);
+        setIRType(ins, ::rjit::ir::Type::GenericUnaryPlus);
         return ins;
     }
 };
@@ -540,6 +569,7 @@ public:
         args_.push_back(rho);
         llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic(Name, Type), args_, "", b);
         b.insertCall(ins);
+        setIRType(ins, ::rjit::ir::Type::GenericAdd);
         return ins;
     }
 };
@@ -561,6 +591,7 @@ public:
         args_.push_back(rho);
         llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic(Name, Type), args_, "", b);
         b.insertCall(ins);
+        setIRType(ins, ::rjit::ir::Type::GenericSub);
         return ins;
     }
 };
@@ -582,6 +613,7 @@ public:
         args_.push_back(rho);
         llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic(Name, Type), args_, "", b);
         b.insertCall(ins);
+        setIRType(ins, ::rjit::ir::Type::GenericMul);
         return ins;
     }
 };
@@ -603,6 +635,7 @@ public:
         args_.push_back(rho);
         llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic(Name, Type), args_, "", b);
         b.insertCall(ins);
+        setIRType(ins, ::rjit::ir::Type::GenericDiv);
         return ins;
     }
 };
@@ -624,6 +657,7 @@ public:
         args_.push_back(rho);
         llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic(Name, Type), args_, "", b);
         b.insertCall(ins);
+        setIRType(ins, ::rjit::ir::Type::GenericPow);
         return ins;
     }
 };
@@ -643,6 +677,7 @@ public:
         args_.push_back(rho);
         llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic(Name, Type), args_, "", b);
         b.insertCall(ins);
+        setIRType(ins, ::rjit::ir::Type::GenericSqrt);
         return ins;
     }
 };
@@ -662,6 +697,7 @@ public:
         args_.push_back(rho);
         llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic(Name, Type), args_, "", b);
         b.insertCall(ins);
+        setIRType(ins, ::rjit::ir::Type::GenericExp);
         return ins;
     }
 };
@@ -683,6 +719,7 @@ public:
         args_.push_back(rho);
         llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic(Name, Type), args_, "", b);
         b.insertCall(ins);
+        setIRType(ins, ::rjit::ir::Type::GenericEq);
         return ins;
     }
 };
@@ -704,6 +741,7 @@ public:
         args_.push_back(rho);
         llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic(Name, Type), args_, "", b);
         b.insertCall(ins);
+        setIRType(ins, ::rjit::ir::Type::GenericNe);
         return ins;
     }
 };
@@ -725,6 +763,7 @@ public:
         args_.push_back(rho);
         llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic(Name, Type), args_, "", b);
         b.insertCall(ins);
+        setIRType(ins, ::rjit::ir::Type::GenericLt);
         return ins;
     }
 };
@@ -746,6 +785,7 @@ public:
         args_.push_back(rho);
         llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic(Name, Type), args_, "", b);
         b.insertCall(ins);
+        setIRType(ins, ::rjit::ir::Type::GenericLe);
         return ins;
     }
 };
@@ -767,6 +807,7 @@ public:
         args_.push_back(rho);
         llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic(Name, Type), args_, "", b);
         b.insertCall(ins);
+        setIRType(ins, ::rjit::ir::Type::GenericGe);
         return ins;
     }
 };
@@ -788,6 +829,7 @@ public:
         args_.push_back(rho);
         llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic(Name, Type), args_, "", b);
         b.insertCall(ins);
+        setIRType(ins, ::rjit::ir::Type::GenericGt);
         return ins;
     }
 };
@@ -809,6 +851,7 @@ public:
         args_.push_back(rho);
         llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic(Name, Type), args_, "", b);
         b.insertCall(ins);
+        setIRType(ins, ::rjit::ir::Type::GenericBitAnd);
         return ins;
     }
 };
@@ -830,6 +873,7 @@ public:
         args_.push_back(rho);
         llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic(Name, Type), args_, "", b);
         b.insertCall(ins);
+        setIRType(ins, ::rjit::ir::Type::GenericBitOr);
         return ins;
     }
 };
@@ -849,6 +893,7 @@ public:
         args_.push_back(rho);
         llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic(Name, Type), args_, "", b);
         b.insertCall(ins);
+        setIRType(ins, ::rjit::ir::Type::GenericNot);
         return ins;
     }
 };
@@ -866,6 +911,7 @@ public:
         args_.push_back(rho);
         llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic(Name, Type), args_, "", b);
         b.insertCall(ins);
+        setIRType(ins, ::rjit::ir::Type::GenericGetVarMissOK);
         return ins;
     }
 };
@@ -883,6 +929,7 @@ public:
         args_.push_back(rho);
         llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic(Name, Type), args_, "", b);
         b.insertCall(ins);
+        setIRType(ins, ::rjit::ir::Type::GenericGetEllipsisValueMissOK);
         return ins;
     }
 };
@@ -900,6 +947,7 @@ public:
         args_.push_back(Builder::constantPoolSexp(call));
         llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic(Name, Type), args_, "", b);
         b.insertCall(ins);
+        setIRType(ins, ::rjit::ir::Type::CheckSwitchControl);
         return ins;
     }
 };
@@ -919,6 +967,7 @@ public:
         args_.push_back(Builder::constantPoolSexp(cases));
         llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic(Name, Type), args_, "", b);
         b.insertCall(ins);
+        setIRType(ins, ::rjit::ir::Type::SwitchControlCharacter);
         return ins;
     }
 };
@@ -936,6 +985,7 @@ public:
         args_.push_back(Builder::integer(numCases));
         llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic(Name, Type), args_, "", b);
         b.insertCall(ins);
+        setIRType(ins, ::rjit::ir::Type::SwitchControlInteger);
         return ins;
     }
 };
@@ -953,6 +1003,7 @@ public:
         args_.push_back(rho);
         llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic(Name, Type), args_, "", b);
         b.insertCall(ins);
+        setIRType(ins, ::rjit::ir::Type::ReturnJump);
         return ins;
     }
 };
