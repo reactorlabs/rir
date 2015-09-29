@@ -56,7 +56,8 @@ add_custom_target(codegen
 file(GLOB_RECURSE SRC "rjit/src/*.cpp" "rjit/src/*.h" "local/.Rprofile" "rjit/R/*.R" "rjit/tests/*.R")
 add_library(${PROJECT_NAME} SHARED ${SRC})
 
-add_dependencies(${PROJECT_NAME} codegen)
+#codegen is no longer dependency as the eval.c intrinsics are not going to stay and we want to impose order on intrinsics.h in terms of inheritance
+#add_dependencies(${PROJECT_NAME} codegen)
 
 add_custom_target(tests
     DEPENDS ${PROJECT_NAME})
