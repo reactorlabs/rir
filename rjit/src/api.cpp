@@ -8,6 +8,8 @@
 
 
 #include "ir/ir.h"
+#include "ir/Builder.h"
+#include "ir/intrinsics.h"
 
 using namespace rjit;
 
@@ -83,4 +85,21 @@ REXPORT SEXP jitDisable(SEXP expression) {
 REXPORT SEXP jitEnable(SEXP expression) {
     RJIT_COMPILE = true;
     return R_NilValue;
+}
+
+using namespace llvm;
+
+REXPORT SEXP jittest(SEXP expression) {
+    ir::Builder b("someName");
+    b.openFunction("f1", expression, false);
+    llvm::Value * lhs = ir::GenericGetVar::create(b, CAR(CDR(expression)), b.rho());
+    llvm::Value * rhs = ir::GenericGetVar::create(b, CAR(CDR(CDR(expression))), b.rho());
+    llvm::Value * ret = ir::GenericAdd::create(b, lhs, rhs, expression, b.rho());
+    llvm::ReturnInst::Create(llvm::getGlobalContext(), ret, b);
+    static_cast<llvm::Function*>(b)->dump();
+
+    BasicBlock::iterator i= b.block()->begin();
+    while (i != b.block()->end())
+        std::cout << (int)ir::Instruction::match(i) << std::endl;
+    return expression;
 }

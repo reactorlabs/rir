@@ -24,6 +24,9 @@ namespace ir {
 class Builder {
 public:
 
+    Builder(std::string const & moduleName):
+        m_(new llvm::Module(moduleName, llvm::getGlobalContext())) {
+    }
 
     /** Builder can typecast to the current module.
      */
@@ -69,6 +72,12 @@ public:
 
     llvm::BasicBlock * createBasicBlock(std::string const & name) {
         return llvm::BasicBlock::Create(m_->getContext(), name, c_->f);
+    }
+
+    /** Returns the environment of the current context.
+     */
+    llvm::Value * rho() {
+        return c_->rho;
     }
 
     /** Creates new context for given function name.
@@ -129,11 +138,12 @@ public:
 
       NOTE that this function assumes that the intrinsic does not use varargs.
      */
-    llvm::Function * intrinsic(char const * name, llvm::FunctionType * type) {
-        llvm::Function * result = m_->getFunction(name);
+    template<typename INTRINSIC>
+    llvm::Function * intrinsic() {
+        llvm::Function * result = m_->getFunction(INTRINSIC::intrinsicName());
         // if the intrinsic has not been declared, declare it
         if (result == nullptr)
-            result = llvm::Function::Create(type, llvm::GlobalValue::ExternalLinkage, name, m_);
+            result = llvm::Function::Create(INTRINSIC::intrinsicType(), llvm::GlobalValue::ExternalLinkage, INTRINSIC::intrinsicName(), m_);
         return result;
     }
 
