@@ -5,6 +5,8 @@
 #include <Rinternals.h>
 
 #undef length
+#undef match
+#undef PrintValue
 #undef bool
 
 #endif

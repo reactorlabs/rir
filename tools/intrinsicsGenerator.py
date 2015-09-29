@@ -16,6 +16,8 @@ class Intrinsic:
         """ Creates the intrinsic from the annotations and declaration lines. """
         self.returnType, declaration = declaration.split(" ", 1)
         self.name, args = declaration.strip()[:-1].split("(")
+        # CamelCase the name
+        self.name = self.name[0].upper() + self.name[1:]
         if (args):
             args = [ x.strip() for x in args.split(",") ]
             self.argTypes = [ x.split(" ")[0].strip() for x in args]
