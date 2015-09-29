@@ -22,7 +22,7 @@
 
 #include "Types.h"
 
-#include "Rinternals.h"
+#include "RIntlns.h"
 
 #include "StackMap.h"
 
@@ -98,7 +98,7 @@ public:
     /** Given an llvm::Value * that is a constant integer, returns the constant integer associated with it.
      */
     static int integer(llvm::Value * value) {
-        llvm::APInt const & ap = reinterpret_cast<llvm::ConstantInt*>(value)->getUniqueInteger();
+        llvm::APInt const & ap = llvm::cast<llvm::ConstantInt>(value)->getUniqueInteger();
         assert(ap.isIntN(32) and "Expected 32bit integer");
         return ap.getSExtValue();
     }

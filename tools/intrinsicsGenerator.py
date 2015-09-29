@@ -158,15 +158,15 @@ def emit(intrinsics, targetDir):
     header = open(os.path.join(targetDir, "intrinsics.h"), "w")
     cpp = open(os.path.join(targetDir, "intrinsics.cpp"), "w")
     print(generatedMessage, file = header)
-    print("#ifndef INTRINSICS_H_\n#define INTRINSICS_H_\n\n#include \"wrappers.h\"\n\nnamespace rjit {\n", file = header)
+    print("#ifndef INTRINSICS_H_\n#define INTRINSICS_H_\n\n#include \"ir.h\"\n#include \"Builder.h\"\n\nnamespace rjit {\nnamespace ir {\n", file = header)
     print(generatedMessage, file = cpp)
-    print("#include \"intrinsics.h\"\n\nnamespace rjit {\n\n", file = cpp)
+    print("#include \"intrinsics.h\"\n\nnamespace rjit {\nnamespace ir {\n\n", file = cpp)
     for i in intrinsics:
         print(i.headerCode(), file = header)
         print(i.cppCode(), file = cpp)
 
-    print("} // namespace rjit\n#endif // INTRINSICS_H_\n", file = header)
-    print("} // namespace rjit\n", file = cpp)
+    print("} // namespace ir\n} // namespace rjit\n#endif // INTRINSICS_H_\n", file = header)
+    print("} // namespace ir\n} // namespace rjit\n", file = cpp)
     header.close()
     cpp.close()
 
@@ -247,6 +247,6 @@ for f in sys.argv[1:]:
     intrinsics = extractIntrinsics(f, intrinsics)
 print("Found {0} intrinsic(s) in {1} files...".format(len(intrinsics), len(sys.argv) - 1))
 # now create the header and cpp files with the intrinsic definitions
-emit(intrinsics, "../rjit/src")
+emit(intrinsics, "../rjit/src/ir")
 print("intrinsics.cpp and intrinsics.h generated")
 
