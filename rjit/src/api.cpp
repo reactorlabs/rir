@@ -10,6 +10,7 @@
 #include "ir/ir.h"
 #include "ir/Builder.h"
 #include "ir/intrinsics.h"
+#include "ir/Handler.h"
 
 using namespace rjit;
 
@@ -103,3 +104,5 @@ REXPORT SEXP jittest(SEXP expression) {
         std::cout << (int)ir::Instruction::match(i) << std::endl;
     return expression;
 }
+
+
