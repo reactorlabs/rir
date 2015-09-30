@@ -160,9 +160,14 @@ public:
 
     /** Given a llvm::Value *, returns the SEXP from constant pool it points to.
      */
-    static SEXP * constantPoolSexp(llvm::Value * value) {
-        // TODO this is not working yet
-        return nullptr;
+    static SEXP constantPoolSexp(llvm::Value * value) {
+        // get the value
+        llvm::Value * v = llvm::cast<llvm::ConstantExpr>(value)->getOperand(0);
+        // get the ap out of the value
+        llvm::APInt const & ap = llvm::cast<llvm::ConstantInt>(v)->getUniqueInteger();
+        assert(ap.isIntN(64) and "Expected 64bit address");
+        // convert the int to sexp addr
+        return reinterpret_cast<SEXP>(ap.getSExtValue());
     }
 
     /** Converts integer constant to a llvm::Value.

@@ -95,13 +95,16 @@ REXPORT SEXP jittest(SEXP expression) {
     b.openFunction("f1", expression, false);
     llvm::Value * lhs = ir::GenericGetVar::create(b, CAR(CDR(expression)), b.rho());
     llvm::Value * rhs = ir::GenericGetVar::create(b, CAR(CDR(CDR(expression))), b.rho());
-    llvm::Value * ret = ir::GenericAdd::create(b, lhs, rhs, expression, b.rho());
+    llvm::Value * ret = ir::GenericSub::create(b, lhs, rhs, expression, b.rho());
     llvm::ReturnInst::Create(llvm::getGlobalContext(), ret, b);
     static_cast<llvm::Function*>(b)->dump();
 
     BasicBlock::iterator i= b.block()->begin();
-    while (i != b.block()->end())
-        std::cout << (int)ir::Instruction::match(i) << std::endl;
+    ir::MyHandler mh;
+    while (i != b.block()->end()) {
+        Instruction * ins = i;
+        mh.dispatch(ins, ir::Instruction::match(i));
+    }
     return expression;
 }
 

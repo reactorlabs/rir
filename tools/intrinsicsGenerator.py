@@ -96,7 +96,7 @@ class Intrinsic:
             result += "    " + self.argumentGetterCode(i)
             result += "\n\n"
         # constructor from existing llvm::CallInst instruction
-        result += "    {0}(llvm::CallInst * ins):\n        Intrinsic(ins) {{\n    }}\n\n".format(self.className)
+        result += "    {0}(llvm::Instruction * ins):\n        Intrinsic(ins) {{\n    }}\n\n".format(self.className)
         # static constructor
         result += self.staticConstructor()
         # name as returned from static function

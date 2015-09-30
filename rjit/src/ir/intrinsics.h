@@ -16,7 +16,7 @@ public:
 
     SEXP call() { return getValueSEXP(1); }
 
-    ConvertToLogicalNoNA(llvm::CallInst * ins):
+    ConvertToLogicalNoNA(llvm::Instruction * ins):
         Intrinsic(ins) {
     }
 
@@ -44,7 +44,7 @@ class PrintValue: public Intrinsic {
 public:
     llvm::Value * value() { return getValue(0); }
 
-    PrintValue(llvm::CallInst * ins):
+    PrintValue(llvm::Instruction * ins):
         Intrinsic(ins) {
     }
 
@@ -75,7 +75,7 @@ public:
 
     llvm::Value * rho() { return getValue(1); }
 
-    StartFor(llvm::CallInst * ins):
+    StartFor(llvm::Instruction * ins):
         Intrinsic(ins) {
     }
 
@@ -106,7 +106,7 @@ public:
 
     SEXP call() { return getValueSEXP(1); }
 
-    LoopSequenceLength(llvm::CallInst * ins):
+    LoopSequenceLength(llvm::Instruction * ins):
         Intrinsic(ins) {
     }
 
@@ -138,7 +138,7 @@ public:
 
     int index() { return getValueInt(1); }
 
-    GetForLoopValue(llvm::CallInst * ins):
+    GetForLoopValue(llvm::Instruction * ins):
         Intrinsic(ins) {
     }
 
@@ -164,7 +164,7 @@ public:
 
 class MarkVisible: public Intrinsic {
 public:
-    MarkVisible(llvm::CallInst * ins):
+    MarkVisible(llvm::Instruction * ins):
         Intrinsic(ins) {
     }
 
@@ -188,7 +188,7 @@ public:
 
 class MarkInvisible: public Intrinsic {
 public:
-    MarkInvisible(llvm::CallInst * ins):
+    MarkInvisible(llvm::Instruction * ins):
         Intrinsic(ins) {
     }
 
@@ -216,7 +216,7 @@ class UserConstant: public Intrinsic {
 public:
     llvm::Value * value() { return getValue(0); }
 
-    UserConstant(llvm::CallInst * ins):
+    UserConstant(llvm::Instruction * ins):
         Intrinsic(ins) {
     }
 
@@ -247,7 +247,7 @@ public:
 
     llvm::Value * rho() { return getValue(1); }
 
-    GenericGetVar(llvm::CallInst * ins):
+    GenericGetVar(llvm::Instruction * ins):
         Intrinsic(ins) {
     }
 
@@ -277,7 +277,7 @@ public:
 
     llvm::Value * rho() { return getValue(1); }
 
-    GenericGetEllipsisArg(llvm::CallInst * ins):
+    GenericGetEllipsisArg(llvm::Instruction * ins):
         Intrinsic(ins) {
     }
 
@@ -309,7 +309,7 @@ public:
 
     llvm::Value * rho() { return getValue(2); }
 
-    GenericSetVar(llvm::CallInst * ins):
+    GenericSetVar(llvm::Instruction * ins):
         Intrinsic(ins) {
     }
 
@@ -342,7 +342,7 @@ public:
 
     llvm::Value * rho() { return getValue(2); }
 
-    GenericSetVarParent(llvm::CallInst * ins):
+    GenericSetVarParent(llvm::Instruction * ins):
         Intrinsic(ins) {
     }
 
@@ -373,7 +373,7 @@ public:
 
     llvm::Value * rho() { return getValue(1); }
 
-    GetFunction(llvm::CallInst * ins):
+    GetFunction(llvm::Instruction * ins):
         Intrinsic(ins) {
     }
 
@@ -401,7 +401,7 @@ class GetGlobalFunction: public Intrinsic {
 public:
     SEXP symbol() { return getValueSEXP(0); }
 
-    GetGlobalFunction(llvm::CallInst * ins):
+    GetGlobalFunction(llvm::Instruction * ins):
         Intrinsic(ins) {
     }
 
@@ -428,7 +428,7 @@ class GetSymFunction: public Intrinsic {
 public:
     SEXP name() { return getValueSEXP(0); }
 
-    GetSymFunction(llvm::CallInst * ins):
+    GetSymFunction(llvm::Instruction * ins):
         Intrinsic(ins) {
     }
 
@@ -455,7 +455,7 @@ class GetBuiltinFunction: public Intrinsic {
 public:
     SEXP name() { return getValueSEXP(0); }
 
-    GetBuiltinFunction(llvm::CallInst * ins):
+    GetBuiltinFunction(llvm::Instruction * ins):
         Intrinsic(ins) {
     }
 
@@ -482,7 +482,7 @@ class GetInternalBuiltinFunction: public Intrinsic {
 public:
     SEXP name() { return getValueSEXP(0); }
 
-    GetInternalBuiltinFunction(llvm::CallInst * ins):
+    GetInternalBuiltinFunction(llvm::Instruction * ins):
         Intrinsic(ins) {
     }
 
@@ -509,7 +509,7 @@ class CheckFunction: public Intrinsic {
 public:
     llvm::Value * f() { return getValue(0); }
 
-    CheckFunction(llvm::CallInst * ins):
+    CheckFunction(llvm::Instruction * ins):
         Intrinsic(ins) {
     }
 
@@ -539,7 +539,7 @@ public:
 
     llvm::Value * rho() { return getValue(1); }
 
-    CreatePromise(llvm::CallInst * ins):
+    CreatePromise(llvm::Instruction * ins):
         Intrinsic(ins) {
     }
 
@@ -569,7 +569,7 @@ class SexpType: public Intrinsic {
 public:
     llvm::Value * value() { return getValue(0); }
 
-    SexpType(llvm::CallInst * ins):
+    SexpType(llvm::Instruction * ins):
         Intrinsic(ins) {
     }
 
@@ -598,7 +598,7 @@ public:
 
     llvm::Value * arg() { return getValue(1); }
 
-    AddArgument(llvm::CallInst * ins):
+    AddArgument(llvm::Instruction * ins):
         Intrinsic(ins) {
     }
 
@@ -630,7 +630,7 @@ public:
 
     llvm::Value * name() { return getValue(2); }
 
-    AddKeywordArgument(llvm::CallInst * ins):
+    AddKeywordArgument(llvm::Instruction * ins):
         Intrinsic(ins) {
     }
 
@@ -663,7 +663,7 @@ public:
 
     llvm::Value * eager() { return getValue(2); }
 
-    AddEllipsisArgument(llvm::CallInst * ins):
+    AddEllipsisArgument(llvm::Instruction * ins):
         Intrinsic(ins) {
     }
 
@@ -698,7 +698,7 @@ public:
 
     llvm::Value * rho() { return getValue(3); }
 
-    CallBuiltin(llvm::CallInst * ins):
+    CallBuiltin(llvm::Instruction * ins):
         Intrinsic(ins) {
     }
 
@@ -734,7 +734,7 @@ public:
 
     llvm::Value * rho() { return getValue(3); }
 
-    CallSpecial(llvm::CallInst * ins):
+    CallSpecial(llvm::Instruction * ins):
         Intrinsic(ins) {
     }
 
@@ -770,7 +770,7 @@ public:
 
     llvm::Value * rho() { return getValue(3); }
 
-    CallClosure(llvm::CallInst * ins):
+    CallClosure(llvm::Instruction * ins):
         Intrinsic(ins) {
     }
 
@@ -804,7 +804,7 @@ public:
 
     llvm::Value * rho() { return getValue(2); }
 
-    CreateClosure(llvm::CallInst * ins):
+    CreateClosure(llvm::Instruction * ins):
         Intrinsic(ins) {
     }
 
@@ -837,7 +837,7 @@ public:
 
     llvm::Value * rho() { return getValue(2); }
 
-    GenericUnaryMinus(llvm::CallInst * ins):
+    GenericUnaryMinus(llvm::Instruction * ins):
         Intrinsic(ins) {
     }
 
@@ -870,7 +870,7 @@ public:
 
     llvm::Value * rho() { return getValue(2); }
 
-    GenericUnaryPlus(llvm::CallInst * ins):
+    GenericUnaryPlus(llvm::Instruction * ins):
         Intrinsic(ins) {
     }
 
@@ -905,7 +905,7 @@ public:
 
     llvm::Value * rho() { return getValue(3); }
 
-    GenericAdd(llvm::CallInst * ins):
+    GenericAdd(llvm::Instruction * ins):
         Intrinsic(ins) {
     }
 
@@ -941,7 +941,7 @@ public:
 
     llvm::Value * rho() { return getValue(3); }
 
-    GenericSub(llvm::CallInst * ins):
+    GenericSub(llvm::Instruction * ins):
         Intrinsic(ins) {
     }
 
@@ -977,7 +977,7 @@ public:
 
     llvm::Value * rho() { return getValue(3); }
 
-    GenericMul(llvm::CallInst * ins):
+    GenericMul(llvm::Instruction * ins):
         Intrinsic(ins) {
     }
 
@@ -1013,7 +1013,7 @@ public:
 
     llvm::Value * rho() { return getValue(3); }
 
-    GenericDiv(llvm::CallInst * ins):
+    GenericDiv(llvm::Instruction * ins):
         Intrinsic(ins) {
     }
 
@@ -1049,7 +1049,7 @@ public:
 
     llvm::Value * rho() { return getValue(3); }
 
-    GenericPow(llvm::CallInst * ins):
+    GenericPow(llvm::Instruction * ins):
         Intrinsic(ins) {
     }
 
@@ -1083,7 +1083,7 @@ public:
 
     llvm::Value * rho() { return getValue(2); }
 
-    GenericSqrt(llvm::CallInst * ins):
+    GenericSqrt(llvm::Instruction * ins):
         Intrinsic(ins) {
     }
 
@@ -1116,7 +1116,7 @@ public:
 
     llvm::Value * rho() { return getValue(2); }
 
-    GenericExp(llvm::CallInst * ins):
+    GenericExp(llvm::Instruction * ins):
         Intrinsic(ins) {
     }
 
@@ -1151,7 +1151,7 @@ public:
 
     llvm::Value * rho() { return getValue(3); }
 
-    GenericEq(llvm::CallInst * ins):
+    GenericEq(llvm::Instruction * ins):
         Intrinsic(ins) {
     }
 
@@ -1187,7 +1187,7 @@ public:
 
     llvm::Value * rho() { return getValue(3); }
 
-    GenericNe(llvm::CallInst * ins):
+    GenericNe(llvm::Instruction * ins):
         Intrinsic(ins) {
     }
 
@@ -1223,7 +1223,7 @@ public:
 
     llvm::Value * rho() { return getValue(3); }
 
-    GenericLt(llvm::CallInst * ins):
+    GenericLt(llvm::Instruction * ins):
         Intrinsic(ins) {
     }
 
@@ -1259,7 +1259,7 @@ public:
 
     llvm::Value * rho() { return getValue(3); }
 
-    GenericLe(llvm::CallInst * ins):
+    GenericLe(llvm::Instruction * ins):
         Intrinsic(ins) {
     }
 
@@ -1295,7 +1295,7 @@ public:
 
     llvm::Value * rho() { return getValue(3); }
 
-    GenericGe(llvm::CallInst * ins):
+    GenericGe(llvm::Instruction * ins):
         Intrinsic(ins) {
     }
 
@@ -1331,7 +1331,7 @@ public:
 
     llvm::Value * rho() { return getValue(3); }
 
-    GenericGt(llvm::CallInst * ins):
+    GenericGt(llvm::Instruction * ins):
         Intrinsic(ins) {
     }
 
@@ -1367,7 +1367,7 @@ public:
 
     llvm::Value * rho() { return getValue(3); }
 
-    GenericBitAnd(llvm::CallInst * ins):
+    GenericBitAnd(llvm::Instruction * ins):
         Intrinsic(ins) {
     }
 
@@ -1403,7 +1403,7 @@ public:
 
     llvm::Value * rho() { return getValue(3); }
 
-    GenericBitOr(llvm::CallInst * ins):
+    GenericBitOr(llvm::Instruction * ins):
         Intrinsic(ins) {
     }
 
@@ -1437,7 +1437,7 @@ public:
 
     llvm::Value * rho() { return getValue(2); }
 
-    GenericNot(llvm::CallInst * ins):
+    GenericNot(llvm::Instruction * ins):
         Intrinsic(ins) {
     }
 
@@ -1468,7 +1468,7 @@ public:
 
     llvm::Value * rho() { return getValue(1); }
 
-    GenericGetVarMissOK(llvm::CallInst * ins):
+    GenericGetVarMissOK(llvm::Instruction * ins):
         Intrinsic(ins) {
     }
 
@@ -1498,7 +1498,7 @@ public:
 
     llvm::Value * rho() { return getValue(1); }
 
-    GenericGetEllipsisValueMissOK(llvm::CallInst * ins):
+    GenericGetEllipsisValueMissOK(llvm::Instruction * ins):
         Intrinsic(ins) {
     }
 
@@ -1528,7 +1528,7 @@ public:
 
     SEXP call() { return getValueSEXP(1); }
 
-    CheckSwitchControl(llvm::CallInst * ins):
+    CheckSwitchControl(llvm::Instruction * ins):
         Intrinsic(ins) {
     }
 
@@ -1560,7 +1560,7 @@ public:
 
     SEXP cases() { return getValueSEXP(2); }
 
-    SwitchControlCharacter(llvm::CallInst * ins):
+    SwitchControlCharacter(llvm::Instruction * ins):
         Intrinsic(ins) {
     }
 
@@ -1591,7 +1591,7 @@ public:
 
     int numCases() { return getValueInt(1); }
 
-    SwitchControlInteger(llvm::CallInst * ins):
+    SwitchControlInteger(llvm::Instruction * ins):
         Intrinsic(ins) {
     }
 
@@ -1621,7 +1621,7 @@ public:
 
     llvm::Value * rho() { return getValue(1); }
 
-    ReturnJump(llvm::CallInst * ins):
+    ReturnJump(llvm::Instruction * ins):
         Intrinsic(ins) {
     }
 
