@@ -88,10 +88,11 @@ public:
         return ins_;
     }
 
-protected:
     Instruction(llvm::Instruction * ins):
         ins_(ins) {
     }
+
+protected:
 
     template<typename T>
     T * ins() {
@@ -104,7 +105,11 @@ private:
 };
 
 class Return : public Instruction {
-
+public:
+    Return(llvm::Instruction * ins):
+        Instruction(ins) {
+        assert(llvm::isa<llvm::ReturnInst>(ins) and "Return expected");
+    }
 };
 
 /** Conditional branch.
@@ -168,8 +173,9 @@ public:
 
 protected:
 
-    Intrinsic(llvm::CallInst * ins):
+    Intrinsic(llvm::Instruction * ins):
         Instruction(ins) {
+        assert(llvm::isa<llvm::CallInst>(ins) and "Intrinsics must be llvm calls");
     }
 
     /** Sets the ir kind for the CallInst.
@@ -187,8 +193,7 @@ protected:
     }
 
     SEXP getValueSEXP(unsigned argIndex) {
-        return nullptr;
-
+        return Builder::constantPoolSexp(ins()->getArgOperand(argIndex));
     }
 
     int getValueInt(unsigned argIndex) {
