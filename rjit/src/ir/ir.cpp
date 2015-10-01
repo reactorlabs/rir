@@ -31,9 +31,9 @@ Type Instruction::match(BasicBlock::iterator & i) {
 
 
 
-void Cbr::create(Builder * b, Value * cond, BasicBlock * trueCase, BasicBlock * falseCase) {
-    ICmpInst * test = new ICmpInst(*b->block(), ICmpInst::ICMP_NE, cond, b->integer(0), "condition" );
-    BranchInst::Create(falseCase, trueCase, test, *b);
+void Cbr::create(Builder & b, Value * cond, BasicBlock * trueCase, BasicBlock * falseCase) {
+    ICmpInst * test = new ICmpInst(*b.block(), ICmpInst::ICMP_NE, cond, b.integer(0), "condition" );
+    BranchInst::Create(falseCase, trueCase, test, b);
 }
 
 
