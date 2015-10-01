@@ -114,10 +114,32 @@ public:
         assert(llvm::isa<llvm::ReturnInst>(ins) and "Return expected");
     }
 
+    llvm::Value * result() {
+        return ins<llvm::ReturnInst>()->getOperand(0);
+    }
+
     static Return create(Builder & b, llvm::Value * value) {
         llvm::ReturnInst::Create(llvm::getGlobalContext(),value, b);
     }
 };
+
+class Branch : public Instruction {
+public:
+    Branch(llvm::Instruction * ins):
+        Instruction(ins) {
+        assert(llvm::isa<llvm::BranchInst>(ins) and "Branch instruction expected");
+        assert(not llvm::cast<llvm::BranchInst>(ins)->isConditional() and "Branch must be unconditional");
+    }
+
+    llvm::BasicBlock * target() {
+        return ins<llvm::BranchInst>()->getSuccessor(0);
+    }
+
+    static Branch create(Builder & b, llvm::BasicBlock * target) {
+        return llvm::BranchInst::Create(target, b);
+    }
+};
+
 
 /** Conditional branch.
 
@@ -147,7 +169,7 @@ public:
         Instruction(ins) {
     }
 
-    static void create(Builder * b, llvm::Value * cond, llvm::BasicBlock * trueCase, llvm::BasicBlock * falseCase);
+    static void create(Builder & b, llvm::Value * cond, llvm::BasicBlock * trueCase, llvm::BasicBlock * falseCase);
 
 };
 
