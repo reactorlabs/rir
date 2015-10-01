@@ -7,6 +7,9 @@
 
 #include "Builder.h"
 
+/** \file "rjit/src/ir/ir.h"
+ */
+
 namespace rjit {
 namespace ir {
 
@@ -64,9 +67,9 @@ enum class Type {
     SwitchControlCharacter,
     SwitchControlInteger,
     ReturnJump,
-    ret,
-    br,
-    cbr,
+    Return,
+    Branch,
+    Cbr,
     unknown,
 };
 
@@ -109,6 +112,10 @@ public:
     Return(llvm::Instruction * ins):
         Instruction(ins) {
         assert(llvm::isa<llvm::ReturnInst>(ins) and "Return expected");
+    }
+
+    static Return create(Builder & b, llvm::Value * value) {
+        llvm::ReturnInst::Create(llvm::getGlobalContext(),value, b);
     }
 };
 

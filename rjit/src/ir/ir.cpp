@@ -15,14 +15,14 @@ Type Instruction::match(BasicBlock::iterator & i) {
             return t;
         }
     } else if (isa<ReturnInst>(ins)) {
-        return Type::ret;
+        return Type::Return;
     } else if (isa<BranchInst>(ins)) {
         assert(cast<BranchInst>(ins)->isUnconditional() and "Conditional branch instruction should start with ICmpInst");
-        return Type::br;
+        return Type::Branch;
     } else if (isa<ICmpInst>(ins)) {
         assert(isa<BranchInst>(ins->getNextNode()) and "ICmpInst can only be followed by branch for now.");
         ++i; // move past the branch as well
-        return Type::cbr;
+        return Type::Cbr;
     }
     return Type::unknown;
 }

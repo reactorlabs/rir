@@ -87,8 +87,7 @@ REXPORT SEXP jittest(SEXP expression) {
     BasicBlock::iterator i= b.block()->begin();
     ir::MyHandler mh;
     while (i != b.block()->end()) {
-        Instruction * ins = i;
-        mh.dispatch(ins, ir::Instruction::match(i));
+        mh.dispatch(i);
     }
     return expression;
 }
