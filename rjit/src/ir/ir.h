@@ -140,6 +140,73 @@ public:
     }
 };
 
+class IntegerComparison: public Instruction {
+public:
+    typedef llvm::ICmpInst::Predicate Predicate;
+
+    IntegerComparison(llvm::Instruction * ins):
+        Instruction(ins) {
+        assert(llvm::isa<llvm::ICmpInst>(ins) and "ICmpInst expected");
+    }
+
+    Predicate predicate() {
+        return ins<llvm::ICmpInst>()->getSignedPredicate();
+    }
+
+    llvm::Value * lhs() {
+        return ins<llvm::ICmpInst>()->getOperand(0);
+    }
+
+    llvm::Value * rhs() {
+        return ins<llvm::ICmpInst>()->getOperand(1);
+    }
+
+};
+
+class IntegerLessThan: public IntegerComparison {
+public:
+    IntegerLessThan(llvm::Instruction * ins):
+        IntegerComparison(ins) {
+        assert(llvm::cast<llvm::ICmpInst>(ins)->getSignedPredicate() == Predicate::ICMP_SLT and "Less than comparison expected");
+    }
+
+    static IntegerLessThan create(Builder & b, llvm::Value * lhs, llvm::Value * rhs) {
+        return new llvm::ICmpInst(*b.block(), Predicate::ICMP_SLT, lhs, rhs);
+
+    }
+};
+
+// TODO the hierarchy of this is wrong, but actual thought is required to fix it
+class BinaryOperator: public Instruction {
+public:
+    BinaryOperator(llvm::Instruction * ins):
+        Instruction(ins) {
+    }
+};
+
+// TODO the hierarchy here should be better as well
+class IntegerAdd: public BinaryOperator {
+public:
+    IntegerAdd(llvm::Instruction * ins):
+        BinaryOperator(ins) {
+        assert(llvm::isa<llvm::BinaryOperator>(ins) and "Binary operator expected");
+        assert(llvm::cast<llvm::BinaryOperator>(ins)->getOpcode() == llvm::Instruction::Add and "Add opcode expected");
+    }
+
+    llvm::Value * lhs() {
+        return ins<llvm::ICmpInst>()->getOperand(0);
+    }
+
+    llvm::Value * rhs() {
+        return ins<llvm::ICmpInst>()->getOperand(1);
+    }
+
+    static IntegerAdd create(Builder & b, llvm::Value * lhs, llvm::Value * rhs) {
+        return llvm::BinaryOperator::Create(llvm::Instruction::Add, lhs, rhs, "", b);
+    }
+
+};
+
 
 /** Conditional branch.
 
