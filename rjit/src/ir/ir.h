@@ -240,6 +240,28 @@ public:
 
 };
 
+/** Interface to llvm's switch instruction
+  */
+class Switch : public Instruction {
+public:
+    Switch(llvm::Instruction * ins):
+        Instruction(ins) {
+        assert(llvm::isa<llvm::SwitchInst>(ins) and "Expecting llvm's switch instruction");
+    }
+
+    void addCase(int i, llvm::BasicBlock * target) {
+        ins<llvm::SwitchInst>()->addCase(Builder::integer(i), target);
+    }
+
+    // TODO add meaningful accessors
+
+    static Switch create(Builder & b, llvm::Value * cond, llvm::BasicBlock * defaultTarget, int numCases) {
+        return llvm::SwitchInst::Create(cond, defaultTarget, numCases, b);
+    }
+
+};
+
+
 /** Base class for all intrinsics.
 
  */
