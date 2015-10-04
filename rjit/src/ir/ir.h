@@ -182,6 +182,7 @@ public:
     BinaryOperator(llvm::Instruction * ins):
         Instruction(ins) {
     }
+
 };
 
 // TODO the hierarchy here should be better as well
