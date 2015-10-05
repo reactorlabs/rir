@@ -225,6 +225,7 @@ Value* Compiler::compileConstant(SEXP value) {
  * intrinsic.
   */
 Value* Compiler::compileSymbol(SEXP value) {
+    assert(strlen(CHAR(PRINTNAME(value))));
     return INTRINSIC(m.genericGetVar, constant(value), context->rho);
 }
 
@@ -293,9 +294,11 @@ Value* Compiler::compileArgument(SEXP arg, SEXP name) {
     case NILSXP:
         // literals are self-evaluating
         return constant(arg);
-        break;
     case SYMSXP:
         if (arg == R_DotsSymbol) {
+            return constant(arg);
+        }
+        if (arg == R_MissingArg) {
             return constant(arg);
         }
     default: {
@@ -838,9 +841,16 @@ Value* Compiler::compileSwitch(SEXP call) {
     // walk the cases and create their blocks, add them to switches and their
     // results to the phi node
     BasicBlock* last;
+    BasicBlock* fallThrough = nullptr;
     for (unsigned i = 0; i < caseAsts.size(); ++i) {
-        context->b = last = BasicBlock::Create(getGlobalContext(), "switchCase",
-                                               context->f, nullptr);
+        last = BasicBlock::Create(getGlobalContext(), "switchCase", context->f,
+                                  nullptr);
+        if (fallThrough != nullptr) {
+            JUMP(last);
+            fallThrough = nullptr;
+        }
+        context->b = last;
+
         swInt->addCase(constant(i), last);
         if (defaultIdx == -1 or defaultIdx > i) {
             swChar->addCase(constant(i), last);
@@ -850,13 +860,22 @@ Value* Compiler::compileSwitch(SEXP call) {
             swChar->addCase(constant(caseAsts.size() - 1), last);
             swChar->setDefaultDest(last);
         }
-        Value* caseResult = compileExpression(caseAsts[i]);
-        JUMP(switchNext);
-        result->addIncoming(caseResult, context->b);
+        SEXP value = caseAsts[i];
+        if (TYPEOF(value) == SYMSXP && !strlen(CHAR(PRINTNAME(value)))) {
+            fallThrough = context->b;
+        } else {
+            Value* caseResult = compileExpression(caseAsts[i]);
+            JUMP(switchNext);
+            result->addIncoming(caseResult, context->b);
+        }
     }
     if (swChar->getDefaultDest() == switchNext)
         swChar->setDefaultDest(last);
     swInt->setDefaultDest(last);
+    if (fallThrough != nullptr) {
+        result->addIncoming(constant(R_NilValue), context->b);
+        JUMP(switchNext);
+    }
     context->b = switchNext;
     return result;
 }

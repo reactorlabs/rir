@@ -161,7 +161,10 @@ bool ICCompiler::compileIc(SEXP inCall, SEXP inFun) {
                 return false;
 
             // We cannot inline ellipsis
-            if (CAR(arg) == R_DotsSymbol)
+            if (CAR(arg) == R_DotsSymbol || CAR(form) == R_DotsSymbol)
+                return false;
+            // TODO: figure out how to handle those
+            if (CAR(arg) == R_MissingArg)
                 return false;
 
             switch (TYPEOF(CAR(arg))) {
@@ -378,6 +381,7 @@ Value* ICCompiler::compileArguments(SEXP argAsts, bool eager) {
 Value* ICCompiler::compileArgument(Value* arglist, SEXP argAst, int argnum,
                                    bool eager) {
     SEXP arg = CAR(argAst);
+    SEXP name = TAG(argAst);
     Value* result;
     // This list has to stay in sync with Compiler::compileArgument
     // note: typeof(arg) does not correspond to the runtime type of the ic
@@ -398,6 +402,10 @@ Value* ICCompiler::compileArgument(Value* arglist, SEXP argAst, int argnum,
             return INTRINSIC(m.addEllipsisArgument, arglist, rho,
                              eager ? constant(TRUE) : constant(FALSE));
         }
+        if (arg == R_MissingArg) {
+            return INTRINSIC(m.addKeywordArgument, arglist,
+                             constant(R_MissingArg), constant(name));
+        }
     // Fall through:
     default:
         if (eager) {
@@ -409,7 +417,6 @@ Value* ICCompiler::compileArgument(Value* arglist, SEXP argAst, int argnum,
         }
         break;
     }
-    SEXP name = TAG(argAst);
     if (name != R_NilValue)
         return INTRINSIC(m.addKeywordArgument, arglist, result, constant(name));
 
