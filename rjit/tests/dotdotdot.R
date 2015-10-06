@@ -1,4 +1,3 @@
-require("compiler")
 require("rjit")
 
 f <- jit.compile(function(...) {
