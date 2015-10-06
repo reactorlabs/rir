@@ -225,8 +225,11 @@ Value* Compiler::compileConstant(SEXP value) {
  * intrinsic.
   */
 Value* Compiler::compileSymbol(SEXP value) {
-    assert(strlen(CHAR(PRINTNAME(value))));
-    return INTRINSIC(m.genericGetVar, constant(value), context->rho);
+    auto name = CHAR(PRINTNAME(value));
+    assert(strlen(name));
+    auto res = INTRINSIC(m.genericGetVar, constant(value), context->rho);
+    res->setName(name);
+    return res;
 }
 
 Value* Compiler::compileICCallStub(Value* call, Value* op,
@@ -269,6 +272,7 @@ Value* Compiler::compileCall(SEXP call) {
             return f;
         // otherwise just do get function
         f = INTRINSIC(m.getFunction, constant(CAR(call)), context->rho);
+        f->setName(CHAR(PRINTNAME(CAR(call))));
     }
 
     std::vector<Value*> args;
