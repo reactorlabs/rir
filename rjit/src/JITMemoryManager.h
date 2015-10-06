@@ -65,7 +65,7 @@ class JITMemoryManager : public llvm::SectionMemoryManager {
             sys::Memory::releaseMappedMemory(CodeMem.AllocatedMem[i]);
     }
 
-    uint8_t* stackmapAddr_;
+    uint8_t* stackmapAddr_ = nullptr;
     uintptr_t stackmapSize_;
 
     MemoryGroup CodeMem;
