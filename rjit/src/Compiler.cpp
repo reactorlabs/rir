@@ -505,8 +505,8 @@ Value* Compiler::compileCondition(SEXP e) {
         BasicBlock::Create(getGlobalContext(), "ifFalse", context->f, nullptr);
     BasicBlock* next =
         BasicBlock::Create(getGlobalContext(), "next", context->f, nullptr);
-    ICmpInst* test = new ICmpInst(*(context->b), ICmpInst::ICMP_EQ, cond,
-                                  constant(TRUE), "condition");
+    ICmpInst* test = new ICmpInst(*(context->b), ICmpInst::ICMP_NE, cond,
+                                  constant(FALSE), "condition");
     BranchInst::Create(ifTrue, ifFalse, test, context->b);
 
     // true case has to be always present
@@ -619,8 +619,8 @@ Value* Compiler::compileWhileLoop(SEXP ast) {
     Value* cond = INTRINSIC(m.convertToLogicalNoNA, cond2, constant(condAst));
     BasicBlock* whileBody = BasicBlock::Create(getGlobalContext(), "whileBody",
                                                context->f, nullptr);
-    ICmpInst* test = new ICmpInst(*(context->b), ICmpInst::ICMP_EQ, cond,
-                                  constant(TRUE), "condition");
+    ICmpInst* test = new ICmpInst(*(context->b), ICmpInst::ICMP_NE, cond,
+                                  constant(FALSE), "condition");
     BranchInst::Create(whileBody, context->breakBlock, test, context->b);
     // compile the body
     context->b = whileBody;
