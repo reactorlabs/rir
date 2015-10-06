@@ -64,3 +64,26 @@ res <- pdfFonts(Helvetica = Type1Font("Helvetica",
 
 print(res)
 stopifnot(length(res) > 1)
+
+
+a <- jit.compile(function(...) {
+  b(...)
+})
+
+b <- jit.compile(function(...) {
+  list(...)
+})
+
+print(a(3,4))
+stopifnot(a(3,4) == c(3,4))
+
+a <- jit.compile(function(..., a) {
+  b(..., a + 1)
+})
+
+b <- jit.compile(function(...) {
+  paste(...)
+})
+
+print(a(a=1,1,2,3,4))
+stopifnot(a(a=1,1,2,3,4) == "1 2 3 4 2")

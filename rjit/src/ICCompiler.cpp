@@ -163,6 +163,7 @@ bool ICCompiler::compileIc(SEXP inCall, SEXP inFun) {
             // We cannot inline ellipsis
             if (CAR(arg) == R_DotsSymbol || CAR(form) == R_DotsSymbol)
                 return false;
+
             // TODO: figure out how to handle those
             if (CAR(arg) == R_MissingArg)
                 return false;
@@ -362,9 +363,22 @@ Value* ICCompiler::compileArguments(SEXP argAsts, bool eager) {
     // if there are no arguments
     int argnum = 0;
     while (argAsts != R_NilValue) {
-        arglist = compileArgument(arglist, argAsts, argnum++, eager);
-        if (!arglistHead)
-            arglistHead = arglist;
+        if (CAR(argAsts) == R_DotsSymbol) {
+            // first only get the first dots arg to get the top of the list
+            arglist = INTRINSIC(m.addEllipsisArgumentHead, arglist, rho,
+                                eager ? constant(TRUE) : constant(FALSE));
+            if (!arglistHead)
+                arglistHead = arglist;
+
+            // then add the rest
+            arglist = INTRINSIC(m.addEllipsisArgumentTail, arglist, rho,
+                                eager ? constant(TRUE) : constant(FALSE));
+            argnum++;
+        } else {
+            arglist = compileArgument(arglist, argAsts, argnum++, eager);
+            if (!arglistHead)
+                arglistHead = arglist;
+        }
         argAsts = CDR(argAsts);
     }
     if (arglistHead)
@@ -398,10 +412,7 @@ Value* ICCompiler::compileArgument(Value* arglist, SEXP argAst, int argnum,
         result = icArgs[argnum];
         break;
     case SYMSXP:
-        if (arg == R_DotsSymbol) {
-            return INTRINSIC(m.addEllipsisArgument, arglist, rho,
-                             eager ? constant(TRUE) : constant(FALSE));
-        }
+        assert(arg != R_DotsSymbol);
         if (arg == R_MissingArg) {
             return INTRINSIC(m.addKeywordArgument, arglist,
                              constant(R_MissingArg), constant(name));
