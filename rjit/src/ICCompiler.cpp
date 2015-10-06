@@ -161,7 +161,7 @@ bool ICCompiler::compileIc(SEXP inCall, SEXP inFun) {
                 return false;
 
             // We cannot inline ellipsis
-            if (CAR(arg) == R_DotsSymbol || CAR(form) == R_DotsSymbol)
+            if (CAR(arg) == R_DotsSymbol || TAG(form) == R_DotsSymbol)
                 return false;
 
             // TODO: figure out how to handle those

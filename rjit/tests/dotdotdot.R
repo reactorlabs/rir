@@ -76,6 +76,7 @@ b <- jit.compile(function(...) {
 
 print(a(3,4))
 stopifnot(a(3,4) == c(3,4))
+stopifnot(a(3,4) == c(3,4))
 
 a <- jit.compile(function(..., a) {
   b(..., a + 1)
@@ -85,5 +86,34 @@ b <- jit.compile(function(...) {
   paste(...)
 })
 
-print(a(a=1,1,2,3,4))
 stopifnot(a(a=1,1,2,3,4) == "1 2 3 4 2")
+stopifnot(a(a=1,1,2,3,4) == "1 2 3 4 2")
+stopifnot(a(a=1,1,2,3,4) == "1 2 3 4 2")
+
+a <- jit.compile(function(b, ..., a, d) {
+  c(..., a + b, b+d, d+a)
+})
+
+c <- jit.compile(function(x, ...) {
+  b(..., x)
+})
+
+b <- jit.compile(function(...) {
+  paste(...)
+})
+
+print(a(a=10,20,33,895,-1,d=99))
+stopifnot(a(a=10,20,33,895,-1,d=99) == "895 -1 30 119 109 33")
+stopifnot(a(a=10,20,33,895,-1,d=99) == "895 -1 30 119 109 33")
+stopifnot(a(a=10,20,33,895,-1,d=99) == "895 -1 30 119 109 33")
+
+a <- jit.compile(function(...) {
+    cat(...)
+})
+b <- jit.compile(function(...) {
+    a(1)
+})
+stopifnot(b() == 1)
+stopifnot(b() == 1)
+stopifnot(b() == 1)
+stopifnot(b() == 1)
