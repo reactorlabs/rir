@@ -117,7 +117,7 @@ Value* insertCall(Value* fun, std::vector<Value*> args, BasicBlock* b,
 }
 
 void setupFunction(Function& f, uint64_t functionId) {
-    f.setGC("statepoint-example");
+    f.setGC("rjit");
     auto attrs = f.getAttributes();
     attrs = attrs.addAttribute(f.getContext(), AttributeSet::FunctionIndex,
                                "no-frame-pointer-elim", "true");
