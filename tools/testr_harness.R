@@ -24,8 +24,10 @@ compare_results <- function (a, b)
 }
 
 test <- function(id, code, o, e, w) {
-    if (length(args) > 0 && args[1] == "compile")
+    if (length(args) > 0 && args[1] == "compile") {
         code <- jit.compile(substitute(code))
+        jit.enable()
+    }
 
     if (!doTest(id, code, o, e, w)) {
         quit(save="no",status=3)
