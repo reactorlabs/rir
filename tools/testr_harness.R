@@ -1,3 +1,5 @@
+args <- commandArgs(TRUE)
+
 compare_results <- function (a, b) 
 {
     if (is.language(a)) 
@@ -22,15 +24,11 @@ compare_results <- function (a, b)
 }
 
 test <- function(id, code, o, e, w) {
-    compiled_code <- jit.compile(substitute(code))
-    if (!doTest(id, compiled_code, o, e, w)) {
-        if (!doTest(id, code, o, e, w)) {
-            print("test is broken");
-            quit(3)
-        } else {
-            print("test failed");
-            quit(1)
-        }
+    if (length(args) > 0 && args[1] == "compile")
+        code <- jit.compile(substitute(code))
+
+    if (!doTest(id, code, o, e, w)) {
+        quit(save="no",status=3)
     }
 }
 

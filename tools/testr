@@ -37,15 +37,19 @@ for test in `find ${TESTS_PATH} -name '*.R'`; do
     cat "${ROOT_DIR}/tools/testr_harness.R" >> $TEST
     cat "${test}" >> $TEST
 
-    $R -f $TEST &> /dev/null
-    if test $? -ne 0; then
-        if test $? -eq 3; then
-            echo "~> broken $name"
-        else
-            echo "~> failed $name"
+    $R -f $TEST --args compile &> /dev/null
+    res=$?
+    if [ $res -ne 0 ]; then
+        $R -f $TEST &> /dev/null
+        orig_res=$?
+
+        if [ $res -ne $orig_res ]; then
+            echo "=> failed $name : compiled version returned $res vs. original version $orig_res"
+            echo "   $R -f $TEST --args compile"
             let I=$I+1
+        else
+            rm $TEST
         fi
-        echo "   $R -f $TEST"
     else
         rm $TEST
     fi
