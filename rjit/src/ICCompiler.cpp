@@ -188,7 +188,6 @@ bool ICCompiler::compileIc(SEXP inCall, SEXP inFun) {
             return false;
 
         SEXP inBody = CDR(inFun);
-        // TODO: If the body is not native we could jit it here
         if (TYPEOF(inBody) == NATIVESXP) {
 
             BasicBlock* icMatch =

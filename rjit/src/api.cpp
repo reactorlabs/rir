@@ -64,3 +64,15 @@ REXPORT SEXP jitLLVM(SEXP expression) {
     f->dump();
     return R_NilValue;
 }
+
+int RJIT_ENABLE = getenv("RJIT_ENABLE") ? atoi(getenv("RJIT_ENABLE")) : 0;
+
+REXPORT SEXP jitDisable(SEXP expression) {
+    RJIT_ENABLE = false;
+    return R_NilValue;
+}
+
+REXPORT SEXP jitEnable(SEXP expression) {
+    RJIT_ENABLE = true;
+    return R_NilValue;
+}

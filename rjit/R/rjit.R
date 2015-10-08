@@ -45,3 +45,6 @@ jit.compileEnvironment <- function(environment, moduleName ="rjit module") {
         jit.compileFunctions(moduleName, as.pairlist(fns))
     invisible(NULL)
 }
+
+jit.enable <- function() .Call("jitEnable");
+jit.disable <- function() .Call("jitDisable");

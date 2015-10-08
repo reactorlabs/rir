@@ -1,6 +1,9 @@
 #include "Runtime.h"
 #include "ICCompiler.h"
 #include "StackMap.h"
+#include "RIntlns.h"
+#include "Compiler.h"
+#include "api.h"
 
 using namespace rjit;
 
@@ -25,6 +28,16 @@ extern "C" void patchIC(void* ic, uint64_t stackmapId, void* caller) {
 
 extern "C" void* compileIC(uint64_t numargs, SEXP call, SEXP fun, SEXP rho,
                            uint64_t stackmapId) {
+    SEXP body = CDR(fun);
+
+    if (RJIT_ENABLE > 0 &&
+        (TYPEOF(body) == LANGSXP || TYPEOF(body) == BCODESXP)) {
+        Compiler c("module");
+        SEXP result = c.compile("rfunction", body);
+        c.jitAll();
+        SETCDR(fun, result);
+    }
+
     JITModule m("ic");
 
     ICCompiler compiler(numargs, m);
