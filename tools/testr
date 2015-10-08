@@ -1,0 +1,54 @@
+#!/bin/bash
+
+TESTR=$1
+if [ -z "$TESTR" ]; then
+    echo "usage: $0 path/to/testr/samples"
+    exit 1
+fi
+
+SCRIPTPATH=`cd $(dirname "$0") && pwd`
+if [ ! -d $SCRIPTPATH ]; then
+    echo "Could not determine absolute dir of $0"
+    echo "Maybe accessed with symlink"
+fi
+
+. "${SCRIPTPATH}/../.local.config"
+
+TESTS_PATH="${ROOT_DIR}/rjit/tests"
+R="${R_HOME}/bin/R"
+
+if test "$(uname)" = "Darwin"; then
+    LIB="dyn.load('${BUILD_DIR}/librjit.dylib')"
+else
+    LIB="dyn.load('${BUILD_DIR}/librjit.so')"
+fi
+
+I=0
+echo "~> running testr samples from $TESTR"
+TESTS_PATH="${TESTR}"
+for test in `find ${TESTS_PATH} -name '*.R'`; do
+    name=`basename $test`
+
+    rm -f /tmp/r-test.XXXXXX.R
+    TEST=$(mktemp /tmp/r-test.XXXXXX.R)
+
+    echo ${LIB} > $TEST
+    echo "source('${ROOT_DIR}/rjit/R/rjit.R')" >> $TEST
+    cat "${ROOT_DIR}/tools/testr_harness.R" >> $TEST
+    cat "${test}" >> $TEST
+
+    $R -f $TEST &> /dev/null
+    if test $? -ne 0; then
+        if test $? -eq 3; then
+            echo "~> broken $name"
+        else
+            echo "~> failed $name"
+            let I=$I+1
+        fi
+        echo "   $R -f $TEST"
+    else
+        rm $TEST
+    fi
+done
+
+echo "$I tests failed"
