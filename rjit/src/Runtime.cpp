@@ -30,17 +30,27 @@ extern "C" void* compileIC(uint64_t numargs, SEXP call, SEXP fun, SEXP rho,
                            uint64_t stackmapId) {
     SEXP body = CDR(fun);
 
+    std::string name = "rfunction";
+    if (TYPEOF(CAR(call)) == SYMSXP) {
+        name = CHAR(PRINTNAME(CAR(call)));
+    }
+
     if (RJIT_ENABLE > 0 &&
         (TYPEOF(body) == LANGSXP || TYPEOF(body) == BCODESXP)) {
         Compiler c("module");
-        SEXP result = c.compile("rfunction", body);
+        SEXP result = c.compile(name, body);
         c.jitAll();
+        // std::cout << "Compiled " << name << " @ " << (void*)result << "\n";
         SETCDR(fun, result);
+    } else {
+        // std::cout << "Calling " << name << " @ " << (void*)fun << "\n";
     }
 
     JITModule m("ic");
 
-    ICCompiler compiler(numargs, m);
+    name.append("IC");
+    ICCompiler compiler(numargs, m, name);
+    void* res = compiler.compile(call, fun, rho);
 
-    return compiler.compile(call, fun, rho);
+    return res;
 }

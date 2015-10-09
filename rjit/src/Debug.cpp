@@ -36,4 +36,6 @@ void printAllTypeOf(std::vector<Value*> vs) {
 }
 extern void disassNative(SEXP native);
 void disassNative(SEXP native) { ((Function*)TAG(native))->dump(); }
+extern void disassLLVM(Function* f);
+void disassLLVM(Function* f) { f->dump(); }
 }

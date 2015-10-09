@@ -46,7 +46,11 @@ void setupFunction(Function& f, uint64_t functionId);
 
 std::vector<bool> ICCompiler::hasStub;
 
-ICCompiler::ICCompiler(unsigned size, JITModule& m) : m(m), size(size) {
+ICCompiler::ICCompiler(unsigned size, JITModule& m)
+    : ICCompiler(size, m, stubName(size)) {}
+
+ICCompiler::ICCompiler(unsigned size, JITModule& m, std::string name)
+    : name(name), m(m), size(size) {
     // Set up a function type which corresponds to the ICStub signature
     std::vector<Type*> argT;
     for (unsigned i = 0; i < size + 3; i++) {
@@ -61,7 +65,7 @@ ICCompiler::ICCompiler(unsigned size, JITModule& m) : m(m), size(size) {
     functionId = StackMap::nextStackmapId++;
 }
 
-void ICCompiler::initFunction(std::string name) {
+void ICCompiler::initFunction() {
     assert(!f);
 
     f = Function::Create(ic_t, Function::ExternalLinkage, name, m);
@@ -103,7 +107,10 @@ Function* ICCompiler::getStub(unsigned size, JITModule& m) {
 }
 
 void* ICCompiler::compile(SEXP inCall, SEXP inFun, SEXP inRho) {
-    initFunction("callIC");
+    initFunction();
+
+    // std::cout << "Compiling IC " << f->getName().str() << " @ " << (void*)f
+    //           << "\n";
 
     if (!compileIc(inCall, inFun))
         compileGenericIc(inCall, inFun);
@@ -122,7 +129,7 @@ void* ICCompiler::finalize() {
 }
 
 Function* ICCompiler::compileCallStub() {
-    initFunction(stubName(size));
+    initFunction();
 
     Value* icAddr = INTRINSIC(
         m.compileIC, ConstantInt::get(getGlobalContext(), APInt(64, size)),
@@ -279,34 +286,35 @@ bool ICCompiler::compileGenericIc(SEXP inCall, SEXP inFun) {
 Value* ICCompiler::compileCall(SEXP call, SEXP op) {
     // TODO: only emit one branch depending on the type we currently see
 
-    BasicBlock* icTestType =
-        BasicBlock::Create(getGlobalContext(), "icTypeTest", f, nullptr);
+    BasicBlock* icTest2 =
+        BasicBlock::Create(getGlobalContext(), "icTest2", f, nullptr);
     BasicBlock* icMatch =
         BasicBlock::Create(getGlobalContext(), "icMatch", f, nullptr);
     BasicBlock* icMiss =
         BasicBlock::Create(getGlobalContext(), "icMiss", f, nullptr);
     BasicBlock* end = BasicBlock::Create(getGlobalContext(), "end", f, nullptr);
 
-    ICmpInst* test =
-        new ICmpInst(*b, ICmpInst::ICMP_EQ, fun, constant(op), "guard");
-    BranchInst::Create(icMatch, icTestType, test, b);
+    // TODO: Do we really have to test for ast changes all the time?
+    Value* test = new ICmpInst(*b, ICmpInst::ICMP_EQ, this->call,
+                               constant(call), "guard");
+    BranchInst::Create(icTest2, icMiss, test, b);
 
-    b = icTestType;
+    b = icTest2;
 
-    Value* ftype = INTRINSIC(m.sexpType, fun);
     switch (TYPEOF(op)) {
-    case SPECIALSXP:
+    case SPECIALSXP: {
+        // Specials only care about the ast, so we can call any special through
+        // this ic
+        Value* ftype = INTRINSIC(m.sexpType, fun);
         test = new ICmpInst(*b, ICmpInst::ICMP_EQ, ftype, constant(SPECIALSXP),
                             "guard");
         break;
+    }
     case BUILTINSXP:
-        test = new ICmpInst(*b, ICmpInst::ICMP_EQ, ftype, constant(BUILTINSXP),
-                            "guard");
+    case CLOSXP: {
+        test = new ICmpInst(*b, ICmpInst::ICMP_EQ, fun, constant(op), "guard");
         break;
-    case CLOSXP:
-        test = new ICmpInst(*b, ICmpInst::ICMP_EQ, ftype, constant(CLOSXP),
-                            "guard");
-        break;
+    }
     default:
         assert(false);
     }
@@ -361,8 +369,18 @@ Value* ICCompiler::compileArguments(SEXP argAsts, bool eager) {
 
     // if there are no arguments
     int argnum = 0;
+    bool seendots = false;
     while (argAsts != R_NilValue) {
+        // printf("%s : %s\n",
+        //        TAG(argAsts) == R_NilValue ? "." :
+        //        CHAR(PRINTNAME(TAG(argAsts))),
+        //        CAR(argAsts) == R_DotsSymbol
+        //            ? "..."
+        //            : Rf_type2char(TYPEOF(TAG(argAsts))));
         if (CAR(argAsts) == R_DotsSymbol) {
+            assert(!seendots);
+            seendots = true;
+
             // first only get the first dots arg to get the top of the list
             arglist = INTRINSIC(m.addEllipsisArgumentHead, arglist, rho,
                                 eager ? constant(TRUE) : constant(FALSE));

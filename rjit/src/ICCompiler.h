@@ -5,6 +5,7 @@
 namespace rjit {
 class ICCompiler {
   public:
+    ICCompiler(unsigned size, JITModule& m, std::string name);
     ICCompiler(unsigned size, JITModule& m);
 
     static llvm::Function* getStub(unsigned size, JITModule& m);
@@ -12,7 +13,7 @@ class ICCompiler {
     void* compile(SEXP inCall, SEXP inFun, SEXP inRho);
 
   private:
-    void initFunction(std::string name);
+    void initFunction();
 
     static std::string stubName(unsigned size);
 
@@ -80,6 +81,8 @@ class ICCompiler {
     llvm::Value* stackmapId;
     llvm::Value* call;
     std::vector<llvm::Value*> icArgs;
+
+    std::string name;
 
     JITModule& m;
     unsigned size;
