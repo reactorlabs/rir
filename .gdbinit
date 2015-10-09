@@ -1,5 +1,9 @@
 directory rjit/src
 
+define berr
+    b errors.c:707
+end
+
 set history save
 set print pretty on
 set print array off
