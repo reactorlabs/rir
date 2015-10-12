@@ -1,5 +1,7 @@
 benchmarks/*.png
 benchmarks/*.rds
+xml/*
+rjit/src/handlers/codegen/*
 local/*
 *.Rprofile
 build/*

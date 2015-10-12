@@ -51,6 +51,7 @@ add_custom_target(codegen_intrinsic
 
 add_custom_target(codegen
     COMMAND doxygen rjit/Doxyfile WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_SOURCE_DIR}/rjit/src/handlers/codegen
     COMMAND python3 tools/codegen_handlers.py xml rjit/src/handlers/codegen WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
 )
 
@@ -94,7 +95,7 @@ add_custom_target(package_install
     COMMAND ${R_COMMAND} CMD INSTALL -l ${R_LIBRARY_TREE} ${PACKAGE_NAME} WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
 )
 
-set_directory_properties(PROPERTIES ADDITIONAL_MAKE_CLEAN_FILES "${R_HOME}/library/rjit;${R_LIBRARY_TREE}/rjit")
+set_directory_properties(PROPERTIES ADDITIONAL_MAKE_CLEAN_FILES "${R_HOME}/library/rjit;${R_LIBRARY_TREE}/rjit;${CMAKE_SOURCE_DIR}/rjit/src/handlers/codegen;${CMAKE_SOURCE_DIR}/xml")
 
 file(GLOB_RECURSE BENCHMARKS "benchmarks/*.R" "benchmarks/*.r")
 
