@@ -65,14 +65,17 @@ REXPORT SEXP jitLLVM(SEXP expression) {
     return R_NilValue;
 }
 
-int RJIT_ENABLE = getenv("RJIT_ENABLE") ? atoi(getenv("RJIT_ENABLE")) : 0;
+// Should rjit code recompile uncompiled functions before calling them
+int RJIT_COMPILE = getenv("RJIT_COMPILE") ? atoi(getenv("RJIT_COMPILE")) : 0;
+// The status of R_ENABLE_JIT variable used by gnur
+int R_ENABLE_JIT = getenv("R_ENABLE_JIT") ? atoi(getenv("R_ENABLE_JIT")) : 0;
 
 REXPORT SEXP jitDisable(SEXP expression) {
-    RJIT_ENABLE = false;
+    RJIT_COMPILE = false;
     return R_NilValue;
 }
 
 REXPORT SEXP jitEnable(SEXP expression) {
-    RJIT_ENABLE = true;
+    RJIT_COMPILE = true;
     return R_NilValue;
 }
