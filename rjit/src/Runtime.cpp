@@ -51,10 +51,12 @@ extern "C" void* compileIC(uint64_t numargs, SEXP call, SEXP fun, SEXP rho,
         Compiler c("module");
         SEXP result = c.compile(name, body);
         c.jitAll();
-        // std::cout << "Compiled " << name << " @ " << (void*)result << "\n";
+        if (RJIT_DEBUG)
+            std::cout << "Compiled " << name << " @ " << (void*)result << "\n";
         SETCDR(fun, result);
     } else {
-        // std::cout << "Calling " << name << " @ " << (void*)fun << "\n";
+        if (RJIT_DEBUG)
+            std::cout << "Calling " << name << " @ " << (void*)fun << "\n";
     }
 
     JITModule m("ic");

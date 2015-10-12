@@ -28,6 +28,7 @@
 #include "CodeCache.h"
 
 #include "JITCompileLayer.h"
+#include "api.h"
 
 #include "RIntlns.h"
 
@@ -109,8 +110,9 @@ Function* ICCompiler::getStub(unsigned size, JITModule& m) {
 void* ICCompiler::compile(SEXP inCall, SEXP inFun, SEXP inRho) {
     initFunction();
 
-    // std::cout << "Compiling IC " << f->getName().str() << " @ " << (void*)f
-    //           << "\n";
+    if (RJIT_DEBUG)
+        std::cout << " Compiling IC " << f->getName().str() << " @ " << (void*)f
+                  << "\n";
 
     if (!compileIc(inCall, inFun))
         compileGenericIc(inCall, inFun);
@@ -371,12 +373,6 @@ Value* ICCompiler::compileArguments(SEXP argAsts, bool eager) {
     int argnum = 0;
     bool seendots = false;
     while (argAsts != R_NilValue) {
-        // printf("%s : %s\n",
-        //        TAG(argAsts) == R_NilValue ? "." :
-        //        CHAR(PRINTNAME(TAG(argAsts))),
-        //        CAR(argAsts) == R_DotsSymbol
-        //            ? "..."
-        //            : Rf_type2char(TYPEOF(TAG(argAsts))));
         if (CAR(argAsts) == R_DotsSymbol) {
             assert(!seendots);
             seendots = true;
