@@ -1,7 +1,7 @@
 #ifndef COMPILER_H_
 #define COMPILER_H_
 
-#include "JITModule.h"
+#include "ir/Builder.h"
 
 #include "RDefs.h"
 
@@ -11,7 +11,7 @@ namespace rjit {
 
 class Compiler {
   public:
-    Compiler(std::string const& moduleName) : m(moduleName) {}
+    Compiler(std::string const& moduleName) : b(moduleName) {}
 
     SEXP compile(std::string const& name, SEXP bytecode) {
         SEXP result = compileFunction(name, bytecode);
@@ -24,32 +24,33 @@ class Compiler {
     void jitAll();
 
   private:
+    /**
     class Context {
       public:
         Context(std::string const& name, llvm::Module* m);
 
         void addObject(SEXP object);
 
-        /** True if return jump is needed instead of return - this happens in
-         * promises
-         */
+         True if return jump is needed instead of return - this happens in
+          promises
+         
         bool returnJump;
 
-        /** True if result of the expression should be visible, false otherwise.
-         * Each expression resets the visibleResult to true.
-         */
+        True if result of the expression should be visible, false otherwise.
+         Each expression resets the visibleResult to true.
+        
         bool visibleResult;
 
         llvm::Function* f;
 
         llvm::BasicBlock* b;
 
-        /** Basic block to which break() statements should jump.
-         */
+        Basic block to which break() statements should jump.
+        
         llvm::BasicBlock* breakBlock;
 
-        /** Basic block to which next() statements should jump.
-         */
+        Basic block to which next() statements should jump.
+        
         llvm::BasicBlock* nextBlock;
 
         llvm::Value* rho;
@@ -58,7 +59,8 @@ class Compiler {
 
         unsigned functionId;
     };
-
+    */
+    
     /** Compiles an expression.
 
       The expression as a result is always visible by default, which can be
@@ -245,29 +247,43 @@ class Compiler {
       */
     llvm::Value* compileUnary(llvm::Function* f, SEXP call);
 
-    llvm::Value* constant(SEXP value);
-
-    /** Converts given integer to bitcode value. This is just a simple shorthand
-     * function, no magic here.
-      */
-    static llvm::ConstantInt* constant(int value) {
-        return llvm::ConstantInt::get(llvm::getGlobalContext(),
-                                      llvm::APInt(32, value));
+    template<typename B, typename U>
+    llvm::Value * compileBinaryOrUnary(SEXP call) {
+      llvm::Value* lhs = compileExpression(CAR(CDR(call)));
+      if (CDR(CDR(call)) != R_NilValue) {
+        llvm::Value* rhs = compileExpression(CAR(CDR(CDR(call))));
+        return B::create(b, lhs, rhs, call, b.rho());
+      } else {
+        return U::create(b, lhs, call, b.rho());
+      }
     }
 
-    template <typename... Values>
-    llvm::Value* INTRINSIC(llvm::Value* fun, Values... args) {
-        return INTRINSIC(fun, std::vector<llvm::Value*>({args...}));
+
+
+    template<typename B> 
+    llvm::Value * compileBinary(SEXP call){
+      llvm::Value* lhs = compileExpression(CAR(CDR(call)));
+      llvm::Value* rhs = compileExpression(CAR(CDR(CDR(call))));
+      return B::create(b, lhs, rhs, call, b.rho());
     }
 
-    llvm::Value* INTRINSIC(llvm::Value* fun, std::vector<llvm::Value*> args);
+    template<typename U>
+    llvm::Value * compileUnary(SEXP call){
+      llvm::Value* op = compileExpression(CAR(CDR(call)));
+      return U::create(b, op, call, b.rho());
+    }
+
+
+    //llvm::Value* INTRINSIC(llvm::Value* fun, std::vector<llvm::Value*> args);
 
     /** Current compilation module.
 
       The module contains the intrinsic function declarations as well as all
       compiled functions.
      */
-    JITModule m;
+    //JITModule m;
+
+    ir::Builder b;
 
     /** The context of current compilation.
 
@@ -275,7 +291,7 @@ class Compiler {
       context contains information about current return condition and
       visibility, break and next targets, R objects required and so on.
      */
-    Context* context;
+    //Context* context;
 
     /** List of relocations to be done when compiling.
 

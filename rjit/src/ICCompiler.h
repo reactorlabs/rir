@@ -1,19 +1,26 @@
-#include "JITModule.h"
+#ifndef IC_COMPILER_H
+#define IC_COMPILER_H
+
+#include "ir/Builder.h"
 
 #include "RDefs.h"
 
 namespace rjit {
 class ICCompiler {
   public:
-    ICCompiler(unsigned size, JITModule& m, std::string name);
-    ICCompiler(unsigned size, JITModule& m);
+    ICCompiler(unsigned size, ir::Builder& b, std::string name);
+    ICCompiler(unsigned size, ir::Builder& b);
 
-    static llvm::Function* getStub(unsigned size, JITModule& m);
+    static llvm::Function* getStub(unsigned size, ir::Builder& b);
 
     void* compile(SEXP inCall, SEXP inFun, SEXP inRho);
 
   private:
-    void initFunction();
+    llvm::Value * call() { return b.args().at(size); }
+    llvm::Value * fun() { return b.args().at(size+1); }
+    llvm::Value * rho() { return b.rho(); }
+    llvm::Value * caller() { return b.args().at(size+3); }
+    llvm::Value * stackmapId() { return b.args().at(size+4); }
 
     static std::string stubName(unsigned size);
 
@@ -44,14 +51,7 @@ class ICCompiler {
     llvm::Value* compileArgument(llvm::Value* arglist, SEXP argAst, int argnum,
                                  bool eager);
 
-    /** Converts given integer to bitcode value. This is just a simple shorthand
-     * function, no magic here.
-      */
-    static llvm::ConstantInt* constant(int value) {
-        return llvm::ConstantInt::get(llvm::getGlobalContext(),
-                                      llvm::APInt(32, value));
-    }
-
+  
     llvm::Value* constant(SEXP value);
 
     template <typename... Values>
@@ -69,27 +69,26 @@ class ICCompiler {
     }
 
     llvm::Value* INTRINSIC(llvm::Value* fun, std::vector<llvm::Value*> args);
-
+    
     llvm::FunctionType* ic_t;
 
-    llvm::Function* f = nullptr;
-    llvm::BasicBlock* b;
-
-    llvm::Value* rho;
-    llvm::Value* fun;
-    llvm::Value* caller;
-    llvm::Value* stackmapId;
-    llvm::Value* call;
-    std::vector<llvm::Value*> icArgs;
-
     std::string name;
-
-    JITModule& m;
+    ir::Builder &b;
     unsigned size;
 
-    unsigned functionId;
+    #define DECLARE(name) llvm::Function * name
+    DECLARE(CONS_NR);
+    DECLARE(closureQuickArgumentAdaptor);
+    DECLARE(initClosureContext);
+    DECLARE(endClosureContext);
+    DECLARE(closureNativeCallTrampoline);
+    DECLARE(compileIC);
+    DECLARE(patchIC);
+    DECLARE(callNative);
+    #undef DECLARE
 
-    static std::vector<bool> hasStub;
 };
 
 } // namespace rjit
+
+#endif

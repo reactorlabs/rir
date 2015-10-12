@@ -7,6 +7,12 @@
 
 #include "Types.h"
 #include "StackMap.h"
+#include "JITCompileLayer.h"
+
+#include "llvm/ExecutionEngine/ExecutionEngine.h"
+#include "llvm/Support/TargetSelect.h"
+#include "llvm/Support/Host.h"
+
 
 namespace rjit {
 
@@ -24,9 +30,22 @@ namespace ir {
 class Builder {
 public:
 
-    Builder(std::string const & moduleName):
-        m_(new llvm::Module(moduleName, llvm::getGlobalContext())) {
+    Builder(const Builder&) = delete;
+
+    llvm::Function* patchpoint;
+    llvm::Function* stackmap;
+
+    Builder(std::string const & moduleName) : Builder(new llvm::Module(moduleName, llvm::getGlobalContext())) {
+        stackmap = Function::Create(t::stackmap_t, GlobalValue::ExternalLinkage,
+                                "llvm.experimental.stackmap", m_);
+
+        patchpoint = Function::Create(t::patchpoint_t, GlobalValue::ExternalLinkage,
+                                  "llvm.experimental.patchpoint.void", m_);
+        
+        m_->setDataLayout(*EngineBuilder().selectTarget()->getDataLayout());
     }
+
+    Builder(llvm::Module * m) : m_(m) {}
 
     /** Builder can typecast to the current module.
      */
@@ -77,8 +96,13 @@ public:
     /** Returns the environment of the current context.
      */
     llvm::Value * rho() {
-        return c_->rho;
+        return c_->rho();
     }
+
+    const std::vector<llvm::Value *> & args() {
+        return c_->args();
+    }
+
 
     /** Creates new context for given function name.
 
@@ -89,15 +113,25 @@ public:
     void openFunction(std::string const & name, SEXP ast, bool isPromise) {
         if (c_ != nullptr)
             contextStack_.push(c_);
-        c_ = new Context(name, m_, isPromise);
+        if (isPromise) {
+            c_ = new PromiseContext(name, m_);
+        } else {
+            c_ = new ClosureContext(name, m_);
+        }
         c_->addConstantPoolObject(ast);
+    }
+    
+    void openIC(std::string const & name, FunctionType * ty) {
+        if (c_ != nullptr)
+            contextStack_.push(c_);
+        c_ = new ICContext(name, m_, ty);
     }
 
     /** Creates new context for a loop. Initializes the basic blocks for break and next targets. */
     void openLoop() {
         assert(c_ != nullptr and "Cannot open loop context when not in function");
         contextStack_.push(c_);
-        c_ = new Context(c_);
+        c_ = c_->clone();
         c_->breakTarget = createBasicBlock("break");
         c_->nextTarget = createBasicBlock("next");
     }
@@ -149,7 +183,12 @@ public:
 
     /** Returns a llvm::Value created from a constant pool value.
 
-      Note that we do not need to add the constant to the constant pool because the first constant pool element is the whole AST and the understanding is that any constants used are just subtrees of the original AST. In the rare cases when this is not true (new promises being created), they must be inserted to the constant pool explicitly.
+      Note that we do not need to add the constant to the constant 
+      pool because the first constant pool element is the whole AST 
+      and the understanding is that any constants used are just subtrees 
+      of the original AST. In the rare cases when this is not true 
+      (new promises being created), they must be inserted to the constant 
+      pool explicitly.
      */
     static llvm::Value * constantPoolSexp(SEXP value) {
         return llvm::ConstantExpr::getCast(
@@ -187,48 +226,88 @@ public:
     /** Given a call instruction, sets its attributes wrt stack map statepoints.
      */
     llvm::CallInst * insertCall(llvm::CallInst * f) {
-        if (c_->functionId != (uint64_t)-1) {
-            assert(c_->functionId > 1);
-            assert(c_->functionId < StackMap::nextStackmapId);
+        assert(c_->functionId > 1);
+        assert(c_->functionId < StackMap::nextStackmapId);
 
-            llvm::AttributeSet PAL;
+        llvm::AttributeSet PAL;
+        {
+            llvm::SmallVector<llvm::AttributeSet, 4> Attrs;
+            llvm::AttributeSet PAS;
             {
-                llvm::SmallVector<llvm::AttributeSet, 4> Attrs;
-                llvm::AttributeSet PAS;
-                {
-                    llvm::AttrBuilder B;
-                    B.addAttribute("statepoint-id", std::to_string(c_->functionId));
-                    PAS = llvm::AttributeSet::get(m_->getContext(), ~0U, B);
-                }
-                Attrs.push_back(PAS);
-                PAL = llvm::AttributeSet::get(m_->getContext(), Attrs);
+                llvm::AttrBuilder B;
+                B.addAttribute("statepoint-id", std::to_string(c_->functionId));
+                PAS = llvm::AttributeSet::get(m_->getContext(), ~0U, B);
             }
-            f->setAttributes(PAL);
+            Attrs.push_back(PAS);
+            PAL = llvm::AttributeSet::get(m_->getContext(), Attrs);
         }
+        f->setAttributes(PAL);
         return f;
     }
 
 
+
+    // Getter for context function and environment
+    llvm::Function * f(){
+        return c_->f;
+    }
+
+    /**  Setters for Jump and Visible
+     */
+    void setResultJump(bool value){
+       c_->isReturnJumpNeeded = value;
+    }
+
+    bool getResultJump(){
+        return c_->isReturnJumpNeeded;
+    }
+
+    void setResultVisible(bool value){
+       c_->isResultVisible = value;
+    }
+
+    bool getResultVisible(){
+        return c_->isResultVisible;
+    }
+
+    void addConstantPoolObject(SEXP object){
+        c_->addConstantPoolObject(object);
+    }
+
+    void setBlock(llvm::BasicBlock * block){
+        c_->b = block;
+    }
+
+    /** Set the breakTarget.
+     */
+    void setBreakTarget(llvm::BasicBlock * block){
+        c_->breakTarget = block;
+    }
+
+    /** Set the nextTarget.
+     */
+    void setNextTarget(llvm::BasicBlock * block){
+        c_->nextTarget = block;
+    }
+
+    llvm::Module * module() {
+        return m_;
+    }
+
+    llvm::LLVMContext& getContext (){
+        return m_->getContext();
+    }
+
+    llvm::Function* getStackmap(){
+        return stackmap;   
+    }
 
 
 
 private:
     class Context {
     public:
-
-        Context(std::string const & name, llvm::Module * m, bool isPromise);
-
-        Context(Context * from):
-            isReturnJumpNeeded(from->isReturnJumpNeeded),
-            isResultVisible(from->isResultVisible),
-            f(from->f),
-            b(from->b),
-            breakTarget(from->breakTarget),
-            nextTarget(from->nextTarget),
-            rho(from->rho),
-            functionId(from->functionId),
-            cp(std::move(from->cp)) {
-        }
+        virtual ~Context() {}
 
         /** Adds the given object into the constant pool served by the objects field.
          */
@@ -237,8 +316,8 @@ private:
             cp.push_back(object);
         }
 
-        bool isReturnJumpNeeded;
-        bool isResultVisible;
+        bool isReturnJumpNeeded = false;
+        bool isResultVisible = true;
 
         llvm::Function * f;
         llvm::BasicBlock * b;
@@ -246,7 +325,16 @@ private:
         llvm::BasicBlock * breakTarget;
         llvm::BasicBlock * nextTarget;
 
-        llvm::Value * rho;
+        const std::vector<llvm::Value *> & args() {
+            return args_;
+        }
+
+        virtual llvm::Value * rho() = 0;
+        virtual Context * clone() {
+            assert(false);
+            return nullptr;
+        };
+
 
         unsigned functionId;
 
@@ -255,15 +343,65 @@ private:
           The constant pool always starts with the AST of the function being compiled, followed by any additional constants (notably created promises).
          */
         std::vector<SEXP> cp;
+
+    protected:
+        std::vector<llvm::Value *> args_;
+
+        Context(Context * from):
+            isReturnJumpNeeded(from->isReturnJumpNeeded),
+            isResultVisible(from->isResultVisible),
+            f(from->f),
+            b(from->b),
+            breakTarget(from->breakTarget),
+            nextTarget(from->nextTarget),
+            functionId(from->functionId),
+            cp(std::move(from->cp)),
+            args_(from->args_) { }
+
+        Context(std::string const & name, llvm::Module * m, llvm::FunctionType * ty, bool isReturnJumpNeeded);
     };
 
+    class ClosureContext : public Context {
+    public:
+        ClosureContext(std::string name, llvm::Module * m, bool isReturnJumpNeeded = false);
+        
+        llvm::Value * rho() override {
+            return args_.at(1);
+        }
+        
+        ClosureContext(Context * from): Context(from) {}
+
+        Context * clone() override {
+            return new ClosureContext(this);
+        }
+    };
+
+    class PromiseContext : public ClosureContext {
+    public:
+        PromiseContext(std::string name, llvm::Module * m) : ClosureContext(name, m) {}
+        PromiseContext(Context * from): ClosureContext(from) {}
+
+        Context * clone() override {
+            return new PromiseContext(this);
+        }
+    };
+    
+    class ICContext : public Context {
+    public:
+        ICContext(std::string name, llvm::Module * m, llvm::FunctionType * ty);
+        ICContext(Context * from) = delete;
+        llvm::Value * rho() override {
+            return args_.at(args_.size() - 3);
+        }
+    };
+    
     /** The module into which we are currently building.
      */
     llvm::Module * m_;
 
     /** Current context.
      */
-    Context * c_;
+    Context * c_ = nullptr;
 
     /** Stack of active contexts.
      */

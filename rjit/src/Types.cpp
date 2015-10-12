@@ -54,6 +54,20 @@ PointerType* initializeTypes() {
     // FIXME
     t::voidPtr = PointerType::get(t::t_i64, 0);
 
+    t::stackmap_t = FunctionType::get( t::t_void,
+        std::vector<Type*>({{IntegerType::get(context, 64),
+                             IntegerType::get(context, 32)}}),
+        true);
+
+
+    t::patchpoint_t = FunctionType::get(
+        t::t_void,
+        std::vector<Type*>({{IntegerType::get(context, 64),
+                             IntegerType::get(context, 32), t::i8ptr,
+                             IntegerType::get(context, 32)}}),
+        true);
+
+
 #define DECLARE(name, ret, ...)                                                \
     fields = {__VA_ARGS__};                                                    \
     t::name = FunctionType::get(ret, fields, false)
@@ -146,6 +160,9 @@ FunctionType* compileIC_t;
 
 FunctionType* nativeFunction_t;
 Type* nativeFunctionPtr_t;
+
+FunctionType* patchpoint_t;
+FunctionType* stackmap_t;
 
 } // namespace t
 

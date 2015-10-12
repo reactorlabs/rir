@@ -4,6 +4,7 @@
 #include "RIntlns.h"
 #include "Compiler.h"
 #include "api.h"
+#include "ir/Builder.h"
 
 using namespace rjit;
 
@@ -59,10 +60,10 @@ extern "C" void* compileIC(uint64_t numargs, SEXP call, SEXP fun, SEXP rho,
             std::cout << "Calling " << name << " @ " << (void*)fun << "\n";
     }
 
-    JITModule m("ic");
+    ir::Builder b("ic");
 
     name.append("IC");
-    ICCompiler compiler(numargs, m, name);
+    ICCompiler compiler(numargs, b, name);
     void* res = compiler.compile(call, fun, rho);
 
     return res;

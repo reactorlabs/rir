@@ -59,6 +59,9 @@ extern llvm::FunctionType* compileIC_t;
 extern llvm::FunctionType* nativeFunction_t;
 extern llvm::Type* nativeFunctionPtr_t;
 
+extern llvm::FunctionType* patchpoint_t;
+extern llvm::FunctionType* stackmap_t;
+
 } // namespace t
 
 } // namespace rjit

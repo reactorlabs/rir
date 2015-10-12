@@ -26,6 +26,9 @@
 #include "StackMap.h"
 #include "StackMapParser.h"
 #include "CodeCache.h"
+#include "ir/Builder.h"
+#include "ir/intrinsics.h"
+#include "ir/ir.h"
 
 #include "JITCompileLayer.h"
 #include "api.h"
@@ -38,20 +41,23 @@ using namespace llvm;
 
 namespace rjit {
 
-Value* loadConstant(SEXP value, Module* m, BasicBlock* b);
+ICCompiler::ICCompiler(unsigned size, ir::Builder & b) : ICCompiler(size, b, stubName(size)) {}
 
-Value* insertCall(Value* fun, std::vector<Value*> args, BasicBlock* b,
-                  rjit::JITModule& m, uint64_t function_id);
+ICCompiler::ICCompiler(unsigned size, ir::Builder& b, std::string name) : b(b), size(size), name(name) {
+#define DECLARE(name, type)                                                    \
+    name = llvm::Function::Create(                             \
+        t::type, llvm::Function::ExternalLinkage, #name, b.module())
 
-void setupFunction(Function& f, uint64_t functionId);
+    DECLARE(CONS_NR, sexp_sexpsexp);
+    DECLARE(closureQuickArgumentAdaptor, sexp_sexpsexp);
+    DECLARE(initClosureContext, void_cntxtsexpsexpsexpsexpsexp);
+    DECLARE(endClosureContext, void_cntxtsexp);
+    DECLARE(closureNativeCallTrampoline, sexp_contxtsexpsexp);
+    DECLARE(compileIC, compileIC_t);
+    DECLARE(patchIC, patchIC_t);
+    DECLARE(callNative, sexp_sexpsexp);
+#undef DECLARE
 
-std::vector<bool> ICCompiler::hasStub;
-
-ICCompiler::ICCompiler(unsigned size, JITModule& m)
-    : ICCompiler(size, m, stubName(size)) {}
-
-ICCompiler::ICCompiler(unsigned size, JITModule& m, std::string name)
-    : name(name), m(m), size(size) {
     // Set up a function type which corresponds to the ICStub signature
     std::vector<Type*> argT;
     for (unsigned i = 0; i < size + 3; i++) {
@@ -62,33 +68,6 @@ ICCompiler::ICCompiler(unsigned size, JITModule& m, std::string name)
 
     auto funT = FunctionType::get(t::SEXP, argT, false);
     ic_t = funT;
-
-    functionId = StackMap::nextStackmapId++;
-}
-
-void ICCompiler::initFunction() {
-    assert(!f);
-
-    f = Function::Create(ic_t, Function::ExternalLinkage, name, m);
-    setupFunction(*f, functionId);
-    b = BasicBlock::Create(getGlobalContext(), "start", f, nullptr);
-
-    // Load the args in the same order as the stub
-    Function::arg_iterator argI = f->arg_begin();
-    for (unsigned i = 0; i < size; i++) {
-        icArgs.push_back(argI++);
-    }
-
-    call = argI++;
-    call->setName("call");
-    fun = argI++;
-    fun->setName("op");
-    rho = argI++;
-    rho->setName("rho");
-    caller = argI++;
-    caller->setName("caller");
-    stackmapId = argI++;
-    stackmapId->setName("stackmapId");
 }
 
 std::string ICCompiler::stubName(unsigned size) {
@@ -97,21 +76,21 @@ std::string ICCompiler::stubName(unsigned size) {
     return os.str();
 }
 
-Function* ICCompiler::getStub(unsigned size, JITModule& m) {
+Function* ICCompiler::getStub(unsigned size, ir::Builder& b) {
 
     return CodeCache::get(stubName(size),
-                          [size, &m]() {
-                              ICCompiler stubCompiler(size, m);
+                          [size, &b]() {
+                              ICCompiler stubCompiler(size, b);
                               return stubCompiler.compileCallStub();
                           },
-                          m);
+                          b.module());
 }
 
 void* ICCompiler::compile(SEXP inCall, SEXP inFun, SEXP inRho) {
-    initFunction();
+    b.openIC(name, ic_t);
 
     if (RJIT_DEBUG)
-        std::cout << " Compiling IC " << f->getName().str() << " @ " << (void*)f
+        std::cout << " Compiling IC " << b.f()->getName().str() << " @ " << (void*)b.f()
                   << "\n";
 
     if (!compileIc(inCall, inFun))
@@ -124,40 +103,35 @@ void* ICCompiler::finalize() {
     // FIXME: Allocate a NATIVESXP, or link it to the caller??
 
     // m.dump();
-    auto handle = JITCompileLayer::getHandle(m.getM());
-    auto ic = JITCompileLayer::getFunctionPointer(handle, f->getName());
+    auto handle = JITCompileLayer::getHandle(b.module());
+    auto ic = JITCompileLayer::getFunctionPointer(handle, b.f()->getName());
 
     return ic;
 }
 
 Function* ICCompiler::compileCallStub() {
-    initFunction();
+    b.openIC(name, ic_t);
 
     Value* icAddr = INTRINSIC(
-        m.compileIC, ConstantInt::get(getGlobalContext(), APInt(64, size)),
-        call, fun, rho, stackmapId);
+        compileIC, ConstantInt::get(getGlobalContext(), APInt(64, size)),
+        call(), fun(), rho(), stackmapId());
 
-    INTRINSIC(m.patchIC, icAddr, stackmapId, caller);
+    INTRINSIC(patchIC, icAddr, stackmapId(), caller());
+    //create new intrinics function for patchIC (maybe?)
 
     Value* ic = new BitCastInst(icAddr, PointerType::get(ic_t, 0), "", b);
 
-    std::vector<Value*> allArgs;
-    allArgs.insert(allArgs.end(), icArgs.begin(), icArgs.end());
-    allArgs.push_back(call);
-    allArgs.push_back(fun);
-    allArgs.push_back(rho);
-    allArgs.push_back(caller);
-    allArgs.push_back(stackmapId);
-
-    auto res = INTRINSIC_NO_SAFEPOINT(ic, allArgs);
+    auto res = INTRINSIC_NO_SAFEPOINT(ic, b.args());
     ReturnInst::Create(getGlobalContext(), res, b);
 
-    return f;
+    return b.f();
 }
 
 bool ICCompiler::compileIc(SEXP inCall, SEXP inFun) {
+    auto f = b.f();
+
     if (TYPEOF(inFun) == CLOSXP) {
-        std::vector<bool> promarg(icArgs.size(), false);
+        std::vector<bool> promarg(size, false);
 
         // Check for named args or ...
         SEXP arg = CDR(inCall);
@@ -193,7 +167,7 @@ bool ICCompiler::compileIc(SEXP inCall, SEXP inFun) {
         }
 
         // number of args != number of formal args, fallback to generic
-        if (form != R_NilValue || i != icArgs.size())
+        if (form != R_NilValue || i != size)
             return false;
 
         SEXP inBody = CDR(inFun);
@@ -208,51 +182,50 @@ bool ICCompiler::compileIc(SEXP inCall, SEXP inFun) {
 
             // Insert a guard to check if the incomming function matches
             // the one we got this time
-            ICmpInst* test = new ICmpInst(*b, ICmpInst::ICMP_EQ, fun,
-                                          constant(inFun), "guard");
-            BranchInst::Create(icMatch, icMiss, test, b);
-
-            b = icMatch;
+            ICmpInst* test = new ICmpInst(*b.block(), ICmpInst::ICMP_EQ, fun(),
+                                          b.constantPoolSexp(inFun), "guard");
+            BranchInst::Create(icMatch, icMiss, test, b.block());
+            b.setBlock(icMatch);
 
             // This is an inlined version of applyNativeClosure
-            Value* arglist = constant(R_NilValue);
+            Value* arglist = b.constantPoolSexp(R_NilValue);
 
             // This reverses the arglist, but quickArgumentAdapter
             // reverses again
             // TODO: construct the environment in one go,
             // without using quickArgumentAdapter
-            for (unsigned i = 0; i < icArgs.size(); ++i) {
-                Value* arg = icArgs[i];
+            for (unsigned i = 0; i < size; ++i) {
+                Value* arg = b.args()[i];
                 if (promarg[i])
-                    arg = INTRINSIC(m.createPromise, arg, rho);
-                arglist = INTRINSIC(m.CONS_NR, arg, arglist);
+                    arg = INTRINSIC(b.intrinsic<ir::CreatePromise>(), arg, rho());
+                arglist = INTRINSIC(CONS_NR, arg, arglist);
             }
 
-            Value* newrho =
-                INTRINSIC(m.closureQuickArgumentAdaptor, fun, arglist);
+            Value* newrho = 
+                INTRINSIC(closureQuickArgumentAdaptor, fun(), arglist);
 
-            Value* cntxt = new AllocaInst(t::cntxt, "", b);
+            Value* cntxt = new AllocaInst(t::cntxt, "", b.block());
 
-            INTRINSIC(m.initClosureContext, cntxt, call, newrho, rho, arglist,
-                      fun);
+            INTRINSIC(initClosureContext, cntxt, call(), newrho, rho(), arglist,
+                      fun());
 
             Value* res = INTRINSIC_NO_SAFEPOINT(
-                m.closureNativeCallTrampoline, cntxt, constant(inBody), newrho);
+                closureNativeCallTrampoline, cntxt, b.constantPoolSexp(inBody), newrho);
 
-            INTRINSIC(m.endClosureContext, cntxt, res);
 
-            BranchInst::Create(end, b);
-            b = icMiss;
+            INTRINSIC(endClosureContext, cntxt, res);
+
+            ir::Branch::create(b, end);
+            b.setBlock(icMiss);
 
             Value* missRes = callMyStub();
-
-            BranchInst::Create(end, b);
-            b = end;
+            ir::Branch::create(b, end);
+            b.setBlock(end);
 
             PHINode* phi = PHINode::Create(t::SEXP, 2, "", b);
             phi->addIncoming(res, icMatch);
             phi->addIncoming(missRes, icMiss);
-            ReturnInst::Create(getGlobalContext(), phi, b);
+            ir::Return::create(b, phi);
 
             return true;
         }
@@ -261,99 +234,78 @@ bool ICCompiler::compileIc(SEXP inCall, SEXP inFun) {
 }
 
 Value* ICCompiler::callMyStub() {
-    auto stub = getStub(size, m);
-
-    std::vector<Value*> ic_args;
-    // Closure arguments
-    for (auto arg : icArgs) {
-        ic_args.push_back(arg);
-    }
-    // Additional IC arguments
-    ic_args.push_back(call);
-    ic_args.push_back(fun);
-    ic_args.push_back(rho);
-    ic_args.push_back(caller);
-    ic_args.push_back(stackmapId);
-
-    return INTRINSIC_NO_SAFEPOINT(stub, ic_args);
+    auto stub = getStub(size, b);
+    return INTRINSIC_NO_SAFEPOINT(stub, b.args());
 }
 
 bool ICCompiler::compileGenericIc(SEXP inCall, SEXP inFun) {
     Value* call = compileCall(inCall, inFun);
-    ReturnInst::Create(getGlobalContext(), call, b);
+    ir::Return::create(b, call);
 
     return true;
 }
 
 Value* ICCompiler::compileCall(SEXP call, SEXP op) {
     // TODO: only emit one branch depending on the type we currently see
-
-    BasicBlock* icTest2 =
-        BasicBlock::Create(getGlobalContext(), "icTest2", f, nullptr);
-    BasicBlock* icMatch =
-        BasicBlock::Create(getGlobalContext(), "icMatch", f, nullptr);
-    BasicBlock* icMiss =
-        BasicBlock::Create(getGlobalContext(), "icMiss", f, nullptr);
-    BasicBlock* end = BasicBlock::Create(getGlobalContext(), "end", f, nullptr);
+    BasicBlock* icTest2 = b.createBasicBlock("icTest2");
+    BasicBlock* icMatch = b.createBasicBlock("icMatch");
+    BasicBlock* icMiss = b.createBasicBlock("icMiss");
+    BasicBlock* end = b.createBasicBlock("end");
 
     // TODO: Do we really have to test for ast changes all the time?
-    Value* test = new ICmpInst(*b, ICmpInst::ICMP_EQ, this->call,
-                               constant(call), "guard");
-    BranchInst::Create(icTest2, icMiss, test, b);
+    ICmpInst * test = new ICmpInst(*b.block(), ICmpInst::ICMP_EQ, b.constantPoolSexp(call), 
+                                        this->call(), "guard");
+    BranchInst::Create(icTest2, icMiss, test, b.block());
 
-    b = icTest2;
-
+    b.setBlock(icTest2);
     switch (TYPEOF(op)) {
     case SPECIALSXP: {
         // Specials only care about the ast, so we can call any special through
         // this ic
-        Value* ftype = INTRINSIC(m.sexpType, fun);
-        test = new ICmpInst(*b, ICmpInst::ICMP_EQ, ftype, constant(SPECIALSXP),
+        Value* ftype = ir::SexpType::create(b, fun());
+        test = new ICmpInst(*b.block(), ICmpInst::ICMP_EQ, ftype, b.integer(SPECIALSXP),
                             "guard");
         break;
     }
     case BUILTINSXP:
     case CLOSXP: {
-        test = new ICmpInst(*b, ICmpInst::ICMP_EQ, fun, constant(op), "guard");
+        test = new ICmpInst(*b.block(), ICmpInst::ICMP_EQ, fun(), b.constantPoolSexp(op), "guard");
         break;
     }
     default:
         assert(false);
     }
 
-    BranchInst::Create(icMatch, icMiss, test, b);
-
-    b = icMatch;
+    BranchInst::Create(icMatch, icMiss, test, b.block());
+    b.setBlock(icMatch);
 
     Value* res;
     switch (TYPEOF(op)) {
     case SPECIALSXP:
-        res = INTRINSIC(m.callSpecial, constant(call), fun,
-                        constant(R_NilValue), rho);
+        res = ir::CallSpecial::create(b, b.constantPoolSexp(call), fun(), b.constantPoolSexp(R_NilValue), b.rho());
         break;
     case BUILTINSXP: {
         Value* args = compileArguments(CDR(call), /*eager=*/true);
-        res = INTRINSIC(m.callBuiltin, constant(call), fun, args, rho);
+        res = ir::CallBuiltin::create(b, b.constantPoolSexp(call), fun(), args, rho());
         break;
     }
     case CLOSXP: {
         Value* args = compileArguments(CDR(call), /*eager=*/false);
-        res = INTRINSIC(m.callClosure, constant(call), fun, args, rho);
+        res = ir::CallClosure::create(b, b.constantPoolSexp(call), fun(), args, rho());
         break;
     }
     default:
         assert(false);
     }
-    BranchInst::Create(end, b);
-
-    b = icMiss;
+    ir::Branch::create(b, end);
+    b.setBlock(icMiss);
 
     Value* missRes = callMyStub();
 
-    BranchInst::Create(end, b);
-    b = end;
+    ir::Branch::create(b, end);
+    b.setBlock(end);
 
-    PHINode* phi = PHINode::Create(t::SEXP, 2, "", b);
+    PHINode* phi = PHINode::Create(t::SEXP, 2, "", b.block());
     phi->addIncoming(res, icMatch);
     phi->addIncoming(missRes, icMiss);
 
@@ -367,7 +319,7 @@ Value* ICCompiler::compileCall(SEXP call, SEXP op) {
   */
 Value* ICCompiler::compileArguments(SEXP argAsts, bool eager) {
     Value* arglistHead = nullptr;
-    Value* arglist = constant(R_NilValue);
+    Value* arglist = b.constantPoolSexp(R_NilValue);
 
     // if there are no arguments
     int argnum = 0;
@@ -378,14 +330,14 @@ Value* ICCompiler::compileArguments(SEXP argAsts, bool eager) {
             seendots = true;
 
             // first only get the first dots arg to get the top of the list
-            arglist = INTRINSIC(m.addEllipsisArgumentHead, arglist, rho,
-                                eager ? constant(TRUE) : constant(FALSE));
+            arglist = ir::AddEllipsisArgumentHead::create(b, arglist, rho(),
+                                eager ? b.integer(TRUE) : b.integer(FALSE));
             if (!arglistHead)
                 arglistHead = arglist;
 
             // then add the rest
-            arglist = INTRINSIC(m.addEllipsisArgumentTail, arglist, rho,
-                                eager ? constant(TRUE) : constant(FALSE));
+            arglist = ir::AddEllipsisArgumentTail::create(b, arglist, rho(),
+                                eager ? b.integer(TRUE) : b.integer(FALSE));
             argnum++;
         } else {
             arglist = compileArgument(arglist, argAsts, argnum++, eager);
@@ -396,7 +348,7 @@ Value* ICCompiler::compileArguments(SEXP argAsts, bool eager) {
     }
     if (arglistHead)
         return arglistHead;
-    return constant(R_NilValue);
+    return b.constantPoolSexp(R_NilValue);
 }
 
 /** Compiles a single argument.
@@ -422,42 +374,38 @@ Value* ICCompiler::compileArgument(Value* arglist, SEXP argAst, int argnum,
     case STRSXP:
     case NILSXP:
         // literals are self-evaluating
-        result = icArgs[argnum];
+        result = b.args()[argnum];
         break;
     case SYMSXP:
         assert(arg != R_DotsSymbol);
         if (arg == R_MissingArg) {
-            return INTRINSIC(m.addKeywordArgument, arglist,
-                             constant(R_MissingArg), constant(name));
+            return ir::AddKeywordArgument::create(b, arglist, b.constantPoolSexp(R_MissingArg), b.constantPoolSexp(name));
         }
     // Fall through:
     default:
         if (eager) {
             // TODO make this more efficient?
-            result = INTRINSIC(m.callNative, icArgs[argnum], rho);
+            result = INTRINSIC(callNative, b.args()[argnum], rho());
         } else {
             // we must create a promise out of the argument
-            result = INTRINSIC(m.createPromise, icArgs[argnum], rho);
+            result = INTRINSIC(b.intrinsic<ir::CreatePromise>(),  b.args()[argnum], rho());
         }
         break;
     }
     if (name != R_NilValue)
-        return INTRINSIC(m.addKeywordArgument, arglist, result, constant(name));
+        return ir::AddKeywordArgument::create(b, arglist, result, b.constantPoolSexp(name));
 
-    return INTRINSIC(m.addArgument, arglist, result);
-}
-
-Value* ICCompiler::constant(SEXP value) {
-    return loadConstant(value, m.getM(), b);
+    return ir::AddArgument::create(b, arglist, result);
 }
 
 Value* ICCompiler::INTRINSIC_NO_SAFEPOINT(llvm::Value* fun,
                                           std::vector<Value*> args) {
-    return insertCall(fun, args, b, m, -1);
+    return llvm::CallInst::Create(fun, args, fun->getName(), b.block());
 }
 
 Value* ICCompiler::INTRINSIC(llvm::Value* fun, std::vector<Value*> args) {
-    return insertCall(fun, args, b, m, functionId);
+    llvm::CallInst * ins = llvm::CallInst::Create(fun, args, "", b.block());
+    return b.insertCall(ins);
 }
 
 } // namespace rjit

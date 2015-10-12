@@ -136,16 +136,16 @@ class GetForLoopValue: public Intrinsic {
 public:
     llvm::Value * seq() { return getValue(0); }
 
-    int index() { return getValueInt(1); }
+    llvm::Value * index() { return getValue(1); }
 
     GetForLoopValue(llvm::Instruction * ins):
         Intrinsic(ins) {
     }
 
-    static GetForLoopValue create(Builder & b, llvm::Value * seq, int index) {
+    static GetForLoopValue create(Builder & b, llvm::Value * seq, llvm::Value * index) {
         std::vector<llvm::Value *> args_;
         args_.push_back(seq);
-        args_.push_back(Builder::integer(index));
+        args_.push_back(index);
         llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic<GetForLoopValue>(), args_, "", b);
         b.insertCall(ins);
         setIRType(ins, ::rjit::ir::Type::GetForLoopValue);
@@ -655,7 +655,7 @@ public:
 
 };
 
-class AddEllipsisArgument: public Intrinsic {
+class AddEllipsisArgumentHead: public Intrinsic {
 public:
     llvm::Value * args() { return getValue(0); }
 
@@ -663,23 +663,57 @@ public:
 
     llvm::Value * eager() { return getValue(2); }
 
-    AddEllipsisArgument(llvm::Instruction * ins):
+    AddEllipsisArgumentHead(llvm::Instruction * ins):
         Intrinsic(ins) {
     }
 
-    static AddEllipsisArgument create(Builder & b, llvm::Value * args, llvm::Value * rho, llvm::Value * eager) {
+    static AddEllipsisArgumentHead create(Builder & b, llvm::Value * args, llvm::Value * rho, llvm::Value * eager) {
         std::vector<llvm::Value *> args_;
         args_.push_back(args);
         args_.push_back(rho);
         args_.push_back(eager);
-        llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic<AddEllipsisArgument>(), args_, "", b);
+        llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic<AddEllipsisArgumentHead>(), args_, "", b);
         b.insertCall(ins);
-        setIRType(ins, ::rjit::ir::Type::AddEllipsisArgument);
+        setIRType(ins, ::rjit::ir::Type::AddEllipsisArgumentHead);
         return ins;
     }
 
     static char const * intrinsicName() {
-        return "addEllipsisArgument";
+        return "addEllipsisArgumentHead";
+    }
+
+    static llvm::FunctionType * intrinsicType() { 
+        return llvm::FunctionType::get(t::SEXP, { t::SEXP, t::SEXP, t::Bool }, false);
+    }
+
+};
+
+
+class AddEllipsisArgumentTail: public Intrinsic {
+public:
+    llvm::Value * args() { return getValue(0); }
+
+    llvm::Value * rho() { return getValue(1); }
+
+    llvm::Value * eager() { return getValue(2); }
+
+    AddEllipsisArgumentTail(llvm::Instruction * ins):
+        Intrinsic(ins) {
+    }
+
+    static AddEllipsisArgumentTail create(Builder & b, llvm::Value * args, llvm::Value * rho, llvm::Value * eager) {
+        std::vector<llvm::Value *> args_;
+        args_.push_back(args);
+        args_.push_back(rho);
+        args_.push_back(eager);
+        llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic<AddEllipsisArgumentTail>(), args_, "", b);
+        b.insertCall(ins);
+        setIRType(ins, ::rjit::ir::Type::AddEllipsisArgumentTail);
+        return ins;
+    }
+
+    static char const * intrinsicName() {
+        return "addEllipsisArgumentTail";
     }
 
     static llvm::FunctionType * intrinsicType() { 
