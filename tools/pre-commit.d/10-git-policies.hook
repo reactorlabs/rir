@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 cd $1
 
@@ -19,7 +19,7 @@ if test "$?" -eq 0; then
         fi
     fi
 
-    echo -e "\e[31mWARNING:\e[0m You have unstaged changes in:"
+    echo -e '\e[31mWARNING:\e[0m You have unstaged changes in:'
     git status --porcelain | grep "^[M \?A][M\?D]"
     echo ""
 fi

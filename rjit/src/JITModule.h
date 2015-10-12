@@ -59,7 +59,8 @@ class JITModule {
     DECLARE(switchControlCharacter, int_sexpsexpsexp);
     DECLARE(addArgument, sexp_sexpsexp);
     DECLARE(addKeywordArgument, sexp_sexpsexpsexp);
-    DECLARE(addEllipsisArgument, sexp_sexpsexpint);
+    DECLARE(addEllipsisArgumentHead, sexp_sexpsexpint);
+    DECLARE(addEllipsisArgumentTail, sexp_sexpsexpint);
     DECLARE(CONS_NR, sexp_sexpsexp);
     DECLARE(closureQuickArgumentAdaptor, sexp_sexpsexp);
     DECLARE(initClosureContext, void_cntxtsexpsexpsexpsexpsexp);

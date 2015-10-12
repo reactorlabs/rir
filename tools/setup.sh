@@ -93,10 +93,6 @@ done
 
 TARGET=`cd $TARGET && pwd`
 
-LLVM_TARGET=${TARGET}/llvm
-LLVM_BUILD_DIR_F=llvm-build-${LLVM_VERS}
-LLVM_BUILD_DIR=${LLVM_TARGET}/${LLVM_BUILD_DIR_F}
-
 R_DIR=${TARGET}/gnur
 
 
@@ -126,6 +122,10 @@ if [ ! -d $TARGET ]; then
 fi
 
 if [ $SKIP_LLVM -eq 0 ]; then
+    LLVM_TARGET=${TARGET}/llvm
+    LLVM_BUILD_DIR_F=llvm-build-${LLVM_VERS}
+    LLVM_BUILD_DIR=${LLVM_TARGET}/${LLVM_BUILD_DIR_F}
+
     if [ ! -d ${LLVM_TARGET} ]; then
         mkdir ${LLVM_TARGET}
     fi

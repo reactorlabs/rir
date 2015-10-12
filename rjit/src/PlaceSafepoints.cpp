@@ -54,6 +54,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "GCPassApi.h"
+#include "JITGCStrategy.h"
 
 #include "llvm/Pass.h"
 #include "llvm/IR/LegacyPassManager.h"
@@ -537,10 +538,7 @@ static bool shouldRewriteFunction(Function& F) {
     // TODO: This should check the GCStrategy
     if (F.hasGC()) {
         const char* FunctionGCName = F.getGC();
-        const StringRef StatepointExampleName("statepoint-example");
-        const StringRef CoreCLRName("coreclr");
-        return (StatepointExampleName == FunctionGCName) ||
-               (CoreCLRName == FunctionGCName);
+        return FunctionGCName == rjit::JITStatepointGC::name();
     } else
         return false;
 }

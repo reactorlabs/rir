@@ -2,6 +2,7 @@ benchmarks/*.png
 benchmarks/*.rds
 xml/*
 rjit/src/handlers/codegen/*
+rjit/src/sandbox.cpp
 local/*
 *.Rprofile
 build/*
@@ -17,7 +18,6 @@ perf.data.old
 rjit_0.1.tar.gz
 rjit.Rcheck
 rjit/src/Makevars
-.gdbinit
 packages/
 .local.config
 .ninja_deps
@@ -25,3 +25,5 @@ packages/
 build.ninja
 rules.ninja
 .gdb_history
+.clang_complete
+index.db

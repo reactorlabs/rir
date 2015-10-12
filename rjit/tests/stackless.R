@@ -187,3 +187,7 @@ env$f2 <- function(c, d) { f1(c, d) }
 jit.compileEnvironment(env)
 stopifnot(typeof(.Internal(bodyCode(env$f1))) == "native")
 stopifnot(typeof(.Internal(bodyCode(env$f2))) == "native")
+
+#empty fun
+jit.compile(function(a) {})
+stopifnot(f(1) == NULL)

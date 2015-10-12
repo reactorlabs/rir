@@ -81,7 +81,9 @@ void JITCompileLayer::recordStackmaps(JITCompileLayer::ModuleHandle handle,
                 handle, f.getName());
     }
 
-    ArrayRef<uint8_t> sm(mm->stackmapAddr(), mm->stackmapSize());
-    StackMap::recordStackmaps(sm, fids);
+    if (mm->stackmapAddr()) {
+        ArrayRef<uint8_t> sm(mm->stackmapAddr(), mm->stackmapSize());
+        StackMap::recordStackmaps(sm, fids);
+    }
 }
 }

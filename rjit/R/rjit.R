@@ -1,9 +1,9 @@
 
-jit.compile <- function(what) {
+jit.compile <- function(what, env = environment(what)) {
     if (typeof(what) == "closure") {
         bc = .Internal(bodyCode(what))
         native = .Call("jitAst", bc)
-        f = .Internal(bcClose(formals(what), native, environment(what)))
+        f = .Internal(bcClose(formals(what), native, env))
         attrs = attributes(what)
         if (!is.null(attrs))
             attributes(f) = attrs
@@ -45,3 +45,6 @@ jit.compileEnvironment <- function(environment, moduleName ="rjit module") {
         jit.compileFunctions(moduleName, as.pairlist(fns))
     invisible(NULL)
 }
+
+jit.enable <- function() .Call("jitEnable");
+jit.disable <- function() .Call("jitDisable");

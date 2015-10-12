@@ -3,4 +3,6 @@
 
 #define REXPORT extern "C"
 
+extern int RJIT_ENABLE;
+
 #endif // API_H_

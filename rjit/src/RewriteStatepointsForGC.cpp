@@ -13,6 +13,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "GCPassApi.h"
+#include "JITGCStrategy.h"
 
 #include "llvm/Pass.h"
 #include "llvm/Analysis/CFG.h"
@@ -199,59 +200,9 @@ static void computeLiveInValues(DominatorTree& DT, Function& F,
 static void findLiveSetAtInst(Instruction* inst, GCPtrLivenessData& Data,
                               StatepointLiveSetTy& out);
 
-// TODO: Once we can get to the GCStrategy, this becomes
-// Optional<bool> isGCManagedPointer(const Value *V) const override {
-
-static bool isGCPointerType(const Type* T) {
-    if (const PointerType* PT = dyn_cast<PointerType>(T))
-        // For the sake of this example GC, we arbitrarily pick addrspace(1) as
-        // our
-        // GC managed heap.  We know that a pointer into this heap needs to be
-        // updated and that no other pointer does.
-        return (1 == PT->getAddressSpace());
-    return false;
+static bool isGCPointer(const Value* value) {
+    return rjit::JITStatepointGC::isGCManaged(value);
 }
-
-// Return true if this type is one which a) is a gc pointer or contains a GC
-// pointer and b) is of a type this code expects to encounter as a live value.
-// (The insertion code will assert that a type which matches (a) and not (b)
-// is not encountered.)
-static bool isHandledGCPointerType(Type* T) {
-    // We fully support gc pointers
-    if (isGCPointerType(T))
-        return true;
-    // We partially support vectors of gc pointers. The code will assert if it
-    // can't handle something.
-    if (auto VT = dyn_cast<VectorType>(T))
-        if (isGCPointerType(VT->getElementType()))
-            return true;
-    return false;
-}
-
-#ifndef NDEBUG
-/// Returns true if this type contains a gc pointer whether we know how to
-/// handle that type or not.
-static bool containsGCPtrType(Type* Ty) {
-    if (isGCPointerType(Ty))
-        return true;
-    if (VectorType* VT = dyn_cast<VectorType>(Ty))
-        return isGCPointerType(VT->getScalarType());
-    if (ArrayType* AT = dyn_cast<ArrayType>(Ty))
-        return containsGCPtrType(AT->getElementType());
-    if (StructType* ST = dyn_cast<StructType>(Ty))
-        return std::any_of(
-            ST->subtypes().begin(), ST->subtypes().end(),
-            [](Type* SubType) { return containsGCPtrType(SubType); });
-    return false;
-}
-
-// Returns true if this is a type which a) is a gc pointer or contains a GC
-// pointer and b) is of a type which the code doesn't expect (i.e. first class
-// aggregates).  Used to trip assertions.
-static bool isUnhandledGCPointerType(Type* Ty) {
-    return containsGCPtrType(Ty) && !isHandledGCPointerType(Ty);
-}
-#endif
 
 static bool order_by_name(llvm::Value* a, llvm::Value* b) {
     if (a->hasName() && b->hasName()) {
@@ -480,9 +431,9 @@ static Value* findBaseDefiningValue(Value* I) {
         // off a potentially null value and have proven it null.  We also use
         // null pointers in dead paths of relocation phis (which we might later
         // want to find a base pointer for).
-        // TODO: Fix this pass to not include constants in the safepoints...
+        // TODO: find out why this is still not true in all cases
         // assert(isa<ConstantPointerNull>(Con) &&
-        //       "null is the only case which makes sense");
+        //        "null is the only case which makes sense");
         return Con;
     }
 
@@ -2207,9 +2158,7 @@ static bool insertParsePoints(Function& F, DominatorTree& DT, Pass* P,
         SmallVector<Value*, 64> DeoptValues;
         for (Use& U : StatepointCS.vm_state_args()) {
             Value* Arg = cast<Value>(&U);
-            assert(!isUnhandledGCPointerType(Arg->getType()) &&
-                   "support for FCA unimplemented");
-            if (isHandledGCPointerType(Arg->getType()))
+            if (isGCPointer(Arg))
                 DeoptValues.push_back(Arg);
         }
         insertUseHolderAfter(CS, DeoptValues, holders);
@@ -2370,7 +2319,7 @@ static bool insertParsePoints(Function& F, DominatorTree& DT, Pass* P,
 #ifndef NDEBUG
     // sanity check
     for (auto ptr : live) {
-        assert(isGCPointerType(ptr->getType()) && "must be a gc pointer type");
+        assert(isGCPointer(ptr) && "must be a gc pointer type");
     }
 #endif
 
@@ -2450,10 +2399,7 @@ static bool shouldRewriteStatepointsIn(Function& F) {
     // TODO: This should check the GCStrategy
     if (F.hasGC()) {
         const char* FunctionGCName = F.getGC();
-        const StringRef StatepointExampleName("statepoint-example");
-        const StringRef CoreCLRName("coreclr");
-        return (StatepointExampleName == FunctionGCName) ||
-               (CoreCLRName == FunctionGCName);
+        return FunctionGCName == rjit::JITStatepointGC::name();
     } else
         return false;
 }
@@ -2550,9 +2496,7 @@ static void computeLiveInValues(BasicBlock::reverse_iterator rbegin,
 
         // USE - Add to the LiveIn set for this instruction
         for (Value* V : I->operands()) {
-            assert(!isUnhandledGCPointerType(V->getType()) &&
-                   "support for FCA unimplemented");
-            if (isHandledGCPointerType(V->getType()) && !isa<Constant>(V)) {
+            if (isGCPointer(V) && !isa<Constant>(V)) {
                 // The choice to exclude all things constant here is slightly
                 // subtle.
                 // There are two idependent reasons:
@@ -2581,9 +2525,7 @@ static void computeLiveOutSeed(BasicBlock* BB, DenseSet<Value*>& LiveTmp) {
         for (BasicBlock::iterator I = Succ->begin(); I != E; I++) {
             PHINode* Phi = cast<PHINode>(&*I);
             Value* V = Phi->getIncomingValueForBlock(BB);
-            assert(!isUnhandledGCPointerType(V->getType()) &&
-                   "support for FCA unimplemented");
-            if (isHandledGCPointerType(V->getType()) && !isa<Constant>(V)) {
+            if (isGCPointer(V) && !isa<Constant>(V)) {
                 LiveTmp.insert(V);
             }
         }
@@ -2593,7 +2535,7 @@ static void computeLiveOutSeed(BasicBlock* BB, DenseSet<Value*>& LiveTmp) {
 static DenseSet<Value*> computeKillSet(BasicBlock* BB) {
     DenseSet<Value*> KillSet;
     for (Instruction& I : *BB)
-        if (isHandledGCPointerType(I.getType()))
+        if (isGCPointer(&I))
             KillSet.insert(&I);
     return KillSet;
 }

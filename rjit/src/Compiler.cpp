@@ -120,7 +120,7 @@ Value* insertCall(Value* fun, std::vector<Value*> args, BasicBlock* b,
 }
 
 void setupFunction(Function& f, uint64_t functionId) {
-    f.setGC("statepoint-example");
+    f.setGC("rjit");
     auto attrs = f.getAttributes();
     attrs = attrs.addAttribute(f.getContext(), AttributeSet::FunctionIndex,
                                "no-frame-pointer-elim", "true");
@@ -230,7 +230,11 @@ Value* Compiler::compileConstant(SEXP value) {
  * intrinsic.
   */
 Value* Compiler::compileSymbol(SEXP value) {
-    return INTRINSIC(m.genericGetVar, constant(value), context->rho);
+    auto name = CHAR(PRINTNAME(value));
+    assert(strlen(name));
+    auto res = INTRINSIC(m.genericGetVar, constant(value), context->rho);
+    res->setName(name);
+    return res;
 }
 
 Value* Compiler::compileICCallStub(Value* call, Value* op,
@@ -273,6 +277,7 @@ Value* Compiler::compileCall(SEXP call) {
             return f;
         // otherwise just do get function
         f = INTRINSIC(m.getFunction, constant(CAR(call)), context->rho);
+        f->setName(CHAR(PRINTNAME(CAR(call))));
     }
 
     std::vector<Value*> args;
@@ -298,9 +303,11 @@ Value* Compiler::compileArgument(SEXP arg, SEXP name) {
     case NILSXP:
         // literals are self-evaluating
         return constant(arg);
-        break;
     case SYMSXP:
         if (arg == R_DotsSymbol) {
+            return constant(arg);
+        }
+        if (arg == R_MissingArg) {
             return constant(arg);
         }
     default: {
@@ -507,8 +514,8 @@ Value* Compiler::compileCondition(SEXP e) {
         BasicBlock::Create(getGlobalContext(), "ifFalse", context->f, nullptr);
     BasicBlock* next =
         BasicBlock::Create(getGlobalContext(), "next", context->f, nullptr);
-    ICmpInst* test = new ICmpInst(*(context->b), ICmpInst::ICMP_EQ, cond,
-                                  constant(TRUE), "condition");
+    ICmpInst* test = new ICmpInst(*(context->b), ICmpInst::ICMP_NE, cond,
+                                  constant(FALSE), "condition");
     BranchInst::Create(ifTrue, ifFalse, test, context->b);
 
     // true case has to be always present
@@ -621,8 +628,8 @@ Value* Compiler::compileWhileLoop(SEXP ast) {
     Value* cond = INTRINSIC(m.convertToLogicalNoNA, cond2, constant(condAst));
     BasicBlock* whileBody = BasicBlock::Create(getGlobalContext(), "whileBody",
                                                context->f, nullptr);
-    ICmpInst* test = new ICmpInst(*(context->b), ICmpInst::ICMP_EQ, cond,
-                                  constant(TRUE), "condition");
+    ICmpInst* test = new ICmpInst(*(context->b), ICmpInst::ICMP_NE, cond,
+                                  constant(FALSE), "condition");
     BranchInst::Create(whileBody, context->breakBlock, test, context->b);
     // compile the body
     context->b = whileBody;
@@ -843,9 +850,16 @@ Value* Compiler::compileSwitch(SEXP call) {
     // walk the cases and create their blocks, add them to switches and their
     // results to the phi node
     BasicBlock* last;
+    BasicBlock* fallThrough = nullptr;
     for (unsigned i = 0; i < caseAsts.size(); ++i) {
-        context->b = last = BasicBlock::Create(getGlobalContext(), "switchCase",
-                                               context->f, nullptr);
+        last = BasicBlock::Create(getGlobalContext(), "switchCase", context->f,
+                                  nullptr);
+        if (fallThrough != nullptr) {
+            JUMP(last);
+            fallThrough = nullptr;
+        }
+        context->b = last;
+
         swInt->addCase(constant(i), last);
         if (defaultIdx == -1 or defaultIdx > static_cast<int>(i)) {
             swChar->addCase(constant(i), last);
@@ -855,13 +869,22 @@ Value* Compiler::compileSwitch(SEXP call) {
             swChar->addCase(constant(caseAsts.size() - 1), last);
             swChar->setDefaultDest(last);
         }
-        Value* caseResult = compileExpression(caseAsts[i]);
-        JUMP(switchNext);
-        result->addIncoming(caseResult, context->b);
+        SEXP value = caseAsts[i];
+        if (TYPEOF(value) == SYMSXP && !strlen(CHAR(PRINTNAME(value)))) {
+            fallThrough = context->b;
+        } else {
+            Value* caseResult = compileExpression(caseAsts[i]);
+            JUMP(switchNext);
+            result->addIncoming(caseResult, context->b);
+        }
     }
     if (swChar->getDefaultDest() == switchNext)
         swChar->setDefaultDest(last);
     swInt->setDefaultDest(last);
+    if (fallThrough != nullptr) {
+        result->addIncoming(constant(R_NilValue), context->b);
+        JUMP(switchNext);
+    }
     context->b = switchNext;
     return result;
 }

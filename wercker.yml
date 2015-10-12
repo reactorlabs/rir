@@ -1,18 +1,10 @@
-box: reactorl/gnur-rllvm
+box: reactorl/llvm
 build:
   steps:
     - script:
-        name: Configure rjit with cmake
+        name: setup (without llvm) and run tests
         code: |
-            cmake -G "Unix Makefiles" -DLLVM_DIR=${LLVM_BUILD_DIR}/share/llvm/cmake -DR_HOME=${R_DIR} .
-    - script: 
-        name: Build rjit
-        code: |
-            make
-    - script:
-        name: Run Tests
-        code: |
-            tools/tests
+            ${WERCKER_SOURCE_DIR}/tools/setup.sh -l -d . 
   after-steps:
     - wantedly/pretty-slack-notify:
         webhook_url: https://hooks.slack.com/services/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
