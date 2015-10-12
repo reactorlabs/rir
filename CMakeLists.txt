@@ -45,16 +45,21 @@ set(LLVM_CONFIG_BIN ${LLVM_TOOLS_BINARY_DIR}/llvm-config)
 file(WRITE ${CMAKE_SOURCE_DIR}/rjit/src/Makevars  "PKG_CXXFLAGS = `${LLVM_CONFIG_BIN} --cxxflags | sed 's/-Wcovered-switch-default//' | sed 's/-fcolor-diagnostics//'` -UNDEBUG\nPKG_LIBS = `${LLVM_CONFIG_BIN} --ldflags --system-libs --libs ${LLVM_COMPONENTS_USED_STRING}`\n")
 
 # code generation
-add_custom_target(codegen
+add_custom_target(codegen_intrinsic
     COMMAND python3 intrinsicsGenerator.py ${R_ROOT_DIR}/src/main/eval.c WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/tools
+)
+
+add_custom_target(codegen
+    COMMAND doxygen rjit/Doxyfile WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    COMMAND python3 tools/codegen_handlers.py xml rjit/src/handlers/codegen WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
 )
 
 # build the shared library for the JIT
 file(GLOB_RECURSE SRC "rjit/src/*.cpp" "rjit/src/*.h" "local/.Rprofile" "rjit/R/*.R" "rjit/tests/*.R")
 add_library(${PROJECT_NAME} SHARED ${SRC})
 
-#codegen is no longer dependency as the eval.c intrinsics are not going to stay and we want to impose order on intrinsics.h in terms of inheritance
-#add_dependencies(${PROJECT_NAME} codegen)
+#codegen is a dependency
+add_dependencies(${PROJECT_NAME} codegen)
 
 add_custom_target(tests
     DEPENDS ${PROJECT_NAME})

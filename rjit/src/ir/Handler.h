@@ -18,7 +18,6 @@ namespace ir {
 /** Base class for all predicates.
  */
 class Predicate {
-
 };
 
 class MockupPredicateA: public Predicate {
@@ -125,126 +124,8 @@ public:
         std::cout << "HahaBaba" << std::endl;
     }
 public:
-    /*
-    void dispatch(llvm::Instruction * ins, Type type) override {
-        switch (type) {
-        case Type::GenericAdd:
-            genericAdd(GenericAdd(ins));
-            break;
-        case Type::GenericGetVar:
-            MockupPredicateA pa;
-            MockupPredicateB pb;
-            if (pa.match(ins))
-                genericGetVar(ins, pa);
-            else if (pb.match(ins))
-                genericGetVar(ins, pb);
-            else
-                genericGetVar(GenericGetVar(ins));
-            break;
-        case Type::Return:
-            ret(Return(ins));
-            break;
-        default:
-            Handler::dispatch(ins, type);
-        }
-    } */
 
-
-    /** returns true if matched, false otherwise.
-     */
-   /* bool dispatch(llvm::BasicBlock::iterator & i) override {
-        llvm::BasicBlock::iterator j = i;
-        Type t = Instruction::match(j);
-        switch (t) {
-        case Type::GenericGetVar: {
-            // recursion when matching sequence
-            if (! i->isTerminator()) {
-                llvm::BasicBlock::iterator k = j;
-                Type t2 = Instruction::match(k);
-                switch (t2) {
-                case Type::GenericGetVar:
-                    genericGetVar2x(GenericGetVar(i), GenericGetVar(j));
-                    i = k;
-                    return true;
-                }
-            }
-            // now the normal matching continues
-            MockupPredicateA pa;
-            MockupPredicateB pb;
-            if (pa.match(&*i))
-                genericGetVar(&*i, pa);
-            else if (pb.match(&*i))
-                genericGetVar(&*i, pb);
-            else
-                genericGetVar(&*i);
-            i = j;
-            return true;
-        }
-        case Type::GenericAdd: {
-            genericAdd(&*i);
-            i = j;
-            return true;
-        }
-        case Type::Return: {
-            ret(&*i);
-            i = j;
-            break;
-        }
-        default:
-            Handler::dispatch(i);
-       }
-    } */
-#pragma GCC diagnostic ignored "-Wall"
-bool dispatch(llvm::BasicBlock::iterator & i) {
-    llvm::BasicBlock::iterator ii = i;
-    rjit::ir::Type t = rjit::ir::Instruction::match(ii);
-    switch (t) {
-    case rjit::ir::Type::GenericAdd: {
-        genericAdd(&*i);
-        i = ii;
-        return true;
-    }
-    case rjit::ir::Type::GenericGetVar: {
-        if (not i->isTerminator()) {
-            llvm::BasicBlock::iterator iii = ii;
-            rjit::ir::Type t = rjit::ir::Instruction::match(iii);
-            switch (t) {
-            case rjit::ir::Type::GenericGetVar: {
-                genericGetVar2x(&*i, &*ii);
-                i = iii;
-                return true;
-            }
-            }
-        }
-        {
-            rjit::ir::MockupPredicateA p;
-            if (p.match(&*i)) {
-                genericGetVar(&*i);
-                return true;
-            }
-        }
-        {
-            rjit::ir::MockupPredicateB p;
-            if (p.match(&*i)) {
-                genericGetVar(&*i);
-                return true;
-            }
-        }
-        genericGetVar(&*i);
-        i = ii;
-        return true;
-    }
-    case rjit::ir::Type::Return: {
-        ret(&*i);
-        i = ii;
-        return true;
-    }
-    }
-    if (rjit::ir::Handler::dispatch(i))
-        return true;
-
-    return false;
-}
+    bool dispatch(llvm::BasicBlock::iterator & i) override;
 
 
 };

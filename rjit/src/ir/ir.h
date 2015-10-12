@@ -119,7 +119,7 @@ public:
     }
 
     static Return create(Builder & b, llvm::Value * value) {
-        llvm::ReturnInst::Create(llvm::getGlobalContext(),value, b);
+        return llvm::ReturnInst::Create(llvm::getGlobalContext(),value, b);
     }
 };
 
