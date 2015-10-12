@@ -177,6 +177,32 @@ public:
     }
 };
 
+class IntegerEquals : public IntegerComparison{
+public:
+    IntegerEquals(llvm::Instruction * ins):
+        IntegerComparison(ins) {
+        assert(llvm::cast<llvm::ICmpInst>(ins)->getSignedPredicate() == Predicate::ICMP_EQ and "Less than comparison expected");
+    }
+
+    static llvm::ICmpInst* create(Builder & b, llvm::Value * lhs, llvm::Value * rhs) {
+        return new llvm::ICmpInst(*b.block(), Predicate::ICMP_EQ, lhs, rhs);
+
+    }
+};
+
+class UnsignedIntegerLessThan: public IntegerComparison {
+public:
+    UnsignedIntegerLessThan(llvm::Instruction * ins):
+        IntegerComparison(ins) {
+        assert(llvm::cast<llvm::ICmpInst>(ins)->getSignedPredicate() == Predicate::ICMP_ULT and "Less than comparison expected");
+    }
+
+    static llvm::ICmpInst* create(Builder & b, llvm::Value * lhs, llvm::Value * rhs) {
+        return new llvm::ICmpInst(*b.block(), Predicate::ICMP_ULT, lhs, rhs);
+
+    }
+};
+
 // TODO the hierarchy of this is wrong, but actual thought is required to fix it
 class BinaryOperator: public Instruction {
 public:
