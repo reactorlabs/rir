@@ -255,12 +255,12 @@ public:
 
     llvm::BasicBlock * trueCase() {
         llvm::BranchInst * b = llvm::cast<llvm::BranchInst>(ins<llvm::ICmpInst>()->getNextNode());
-        return b->getSuccessor(1);
+        return b->getSuccessor(0);
     }
 
     llvm::BasicBlock * falseCase() {
         llvm::BranchInst * b = llvm::cast<llvm::BranchInst>(ins<llvm::ICmpInst>()->getNextNode());
-        return b->getSuccessor(0);
+        return b->getSuccessor(1);
     }
 
     Cbr(llvm::Instruction * ins):

@@ -378,7 +378,7 @@ private:
 
     class PromiseContext : public ClosureContext {
     public:
-        PromiseContext(std::string name, llvm::Module * m) : ClosureContext(name, m) {}
+        PromiseContext(std::string name, llvm::Module * m) : ClosureContext(name, m, true) {}
         PromiseContext(Context * from): ClosureContext(from) {}
 
         Context * clone() override {

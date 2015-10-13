@@ -478,8 +478,8 @@ Value* Compiler::compileCondition(SEXP e) {
         b.setResultVisible(false);
     } else {
         falseResult = compileExpression(falseAst);
-        ifFalse = b.block();
     }
+    ifFalse = b.block();
     ir::Branch::create(b, next);
 
     // add a phi node for the result
@@ -568,7 +568,7 @@ Value* Compiler::compileWhileLoop(SEXP ast) {
     // compile the body
     b.setBlock(whileBody);
     compileExpression(bodyAst);
-    ir::Branch::create(b, b.breakTarget());
+    ir::Branch::create(b, b.nextTarget());
     b.setBlock(b.breakTarget());
     // restore the old loop pointers in the context
     b.closeLoop();
