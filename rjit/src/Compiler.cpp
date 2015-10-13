@@ -741,7 +741,7 @@ Value* Compiler::compileSwitch(SEXP call) {
    
     ir::CheckSwitchControl::create(b, control, call);
     Value* ctype = ir::SexpType::create(b, control);
-    ICmpInst* cond = ir::IntegerEquals::create(b, ctype, constant(STRSXP));
+    ICmpInst* cond = ir::IntegerEquals::create(b, ctype, b.integer(STRSXP));
     BasicBlock* switchIntegral = b.createBasicBlock("switchIntegral");
     BasicBlock* switchCharacter = b.createBasicBlock("switchCharacter");
     BasicBlock* switchNext = b.createBasicBlock("switchNext");
