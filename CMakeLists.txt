@@ -48,8 +48,8 @@ execute_process(COMMAND ${LLVM_CONFIG_BIN} --cxxflags
 file(WRITE ${CMAKE_SOURCE_DIR}/.clang_complete "-I${CMAKE_SOURCE_DIR}/rjit/src\n${LLVM_CXX_FLAGS}--std=c++11\n-Wall\n")
 
 # code generation
-add_custom_target(codegen_intrinsic
-    COMMAND python3 intrinsicsGenerator.py ${R_ROOT_DIR}/src/main/eval.c WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/tools
+add_custom_target(codegen_intrinsics
+    COMMAND python3 intrinsics_intrinsics.py ${R_ROOT_DIR}/src/main/eval.c WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/tools
 )
 
 add_custom_target(codegen
