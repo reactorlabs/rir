@@ -18,6 +18,8 @@ class Manager:
                 result += "_1"
             elif (c.isupper()):
                 result += "_" + c.lower()
+            elif (c == "_"):
+                result += "__"
             else:
                 result += c
         return result
@@ -51,16 +53,17 @@ class Manager:
     def _pathFor(self, name):
         """ Given a class name (including definition namespaces), returns the filename of that class' definition under the manager's root path. 
         """
-        return os.path.join(self._rootPath, "{0}.xml".format(Manager.mangle(name)))
+        return os.path.join(self._rootPath, "{0}.xml".format(name))
 
     def getClass(self, name):
         """ Loads the class with given name and all its children classes as well. If the class is already loaded, just returns it. """
         if (name in self._classes.keys()):
             return self._classes[name]
-        fname = self._pathFor("class{0}".format(Manager.mangle(name)))
+        fname = os.path.join(self._rootPath, "class{0}.xml".format(Manager.mangle(name)))
         if (os.path.isfile(fname)):
             c = CppClass(name, et.parse(fname))
             self._classes[name] = c
+            print(name)
             c.load(self)
             return c
         else:
@@ -90,6 +93,7 @@ class Manager:
                 # now if the refid is actually a filename, then load the corresponding class
                 # otherwise use it as type
                 fname = self._pathFor(xml.attrib["refid"])
+                print(">>>>" + fname)
                 if (os.path.isfile(fname)):
                     return self.getClass(Manager.demangle(xml.attrib["refid"][5:])) #[5:] to strip the leading class
                 else:
@@ -126,6 +130,7 @@ class CppClass:
             elif (child.tag == "derivedcompoundref"):
                 c = manager.getClass(child.text)
                 self.subclasses.append(c)
+                print(c.name)
                 c.addParent(self)
             elif (child.tag == "sectiondef"):
                 if (child.get("kind") in ("public-func", "private-func", "protected-func")):
@@ -184,7 +189,14 @@ class CppMethod:
     def matchSequence(self):
         """ Returns a list of Instruction types that the method, assuming it is a handler matches. """
         result = []
+        print("!!!")
+        print(self.args)
+        print(ir_ins)
+        print(ir_ins.name)
         for a in self.args:
+            print(a.type)
+            print(a.type.name)
+            print(a.type.isSubclassOf(ir_ins))
             if (a.type.isSubclassOf(ir_ins)):
                 result.append(a.type)
         return result;
@@ -257,7 +269,7 @@ class Handler:
                         if (not self.unconditionalMatchLength or mss < self.unconditionalMatchLength):
                             self.unconditionalMatchLength = mss
                             self.unconditional = handlerMethod
-                        elif (mss == self.uncodinitioalMatchLength):
+                        elif (mss == self.unconditionalMatchLength):
                             print("Ambiguous handler for {0}".format(self.type))
                             sys.exit(-1)
                 else:
@@ -336,6 +348,8 @@ class Handler:
 
         def _addHandlerMethod(self, handlerMethod, matchSequence):
             """ Adds given handler method and all it matches into the dispatch table. Takes the match signature of the handler method as well as an index to the signature - this is for recursive matching to determine how deep in the recursion we are. """
+            print(matchSequence)
+            print(handlerMethod.name)
             ir = matchSequence[0]
             for m in ir.matchSet:
                 self._getOrCreateEntry(m)._addHandlerMethod(handlerMethod, matchSequence)

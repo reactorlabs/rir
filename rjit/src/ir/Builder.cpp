@@ -1,11 +1,12 @@
 #include "Builder.h"
+#include "intrinsics.h"
 
 using namespace llvm;
 
 namespace rjit {
 namespace ir {
 
-Builder::Context::Context(std::string const & name, Module * m, bool isPromise) {
+Builder::Context::Context(Builder & builder, std::string const & name, Module * m, bool isPromise) {
     // TODO the type is ugly
     f = Function::Create(t::sexp_sexpsexpint, Function::ExternalLinkage, name, m);
 
@@ -21,7 +22,7 @@ Builder::Context::Context(std::string const & name, Module * m, bool isPromise) 
 
     // get rho value into context->rho for easier access
     llvm::Function::arg_iterator args = f->arg_begin();
-    llvm::Value* body = args++;
+    body = args++;
     body->setName("body");
     rho = args++;
     rho->setName("rho");
@@ -30,6 +31,7 @@ Builder::Context::Context(std::string const & name, Module * m, bool isPromise) 
 
     // create first basic block
     b = llvm::BasicBlock::Create(llvm::getGlobalContext(), "start", f, nullptr);
+    consts = ExtractConstantPool::create(builder, body);
 
     isReturnJumpNeeded = isPromise;
 }

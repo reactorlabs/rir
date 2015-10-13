@@ -22,15 +22,17 @@ class Predicate {
 
 class MockupPredicateA: public Predicate {
 public:
-    bool match(GenericGetVar ins) {
-        return ins.symbol() == Rf_install("a");
+    bool match(GenericGetVar_ ins) {
+        return true;
+        //return ins.symbol() == Rf_install("a");
     }
 };
 
 class MockupPredicateB : public Predicate {
 public:
-    bool match(GenericGetVar ins) {
-        return ins.symbol() == Rf_install("b");
+    bool match(GenericGetVar_ ins) {
+        return true;
+        //return ins.symbol() == Rf_install("b");
     }
 };
 
@@ -96,23 +98,23 @@ public:
 
     /** Handlers are identified by their return type handler - this is void typedef that allows the codegen easily spot handlers.
      */
-    handler genericGetVar(GenericGetVar ins, MockupPredicateA p) {
+    handler genericGetVar(GenericGetVar_ ins, MockupPredicateA p) {
         std::cout << "GenericGetVar of A" << std::endl;
     }
 
-    handler genericGetVar2x(GenericGetVar i1, GenericGetVar i2) {
+    handler genericGetVar2x(GenericGetVar_ i1, GenericGetVar_ i2) {
         std::cout << "Two getvars!!!!" << std::endl;
     }
 
-    handler genericGetVar(GenericGetVar ins, MockupPredicateB p) {
+    handler genericGetVar(GenericGetVar_ ins, MockupPredicateB p) {
         std::cout << "GenericGetVar of B" << std::endl;
     }
 
-    handler genericGetVar(GenericGetVar ins) {
+    handler genericGetVar(GenericGetVar_ ins) {
         std::cout << "GenericGetVar" << std::endl;
     }
 
-    handler genericAdd(GenericAdd ins) {
+    handler genericAdd(GenericAdd_ ins) {
         std::cout << "GenericAdd" << std::endl;
     }
 

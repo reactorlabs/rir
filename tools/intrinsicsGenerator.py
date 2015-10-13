@@ -30,25 +30,45 @@ class Intrinsic:
         self.comment = comment
         a = [ x.strip() for x in annotations.split(" ") ]
         i = 1
+        state = ""
         while (i < len(a)):
-            if (a[i] == "cp"):
-                self.markAsConstantPool(a[i + 1])
-                i = i + 2
+            if (state == ""):
+                if (a[i] == "cp"):
+                    state = "consts"
+                    i += 1
+                    continue
+                else:
+                    print("Unknown intrinsic annotation modifier {0}".format(a[i]))
+                    exit()
+            elif (state == "consts"):
+                self.markAsConstants(a[i])
+                i += 1
+                state = "cindex"
                 continue
-            else:
-                print("Unknown intrinsic annotation modifier {0}".format(a[i]))
-                exit()
+            elif (state == "cindex"):
+                self.markAsConstantIndex(a[i])
+                i += 1
+                continue
 
-    def markAsConstantPool(self, argName):
+    def markAsConstants(self, argName):
         for i in range(0, len(self.argNames)):
             if (self.argNames[i] == argName):
-                self.argTypes[i] = "cp " + self.argTypes[i]
+                self.argTypes[i] = "cp"
+                break;
+
+
+    def markAsConstantIndex(self, argName):
+        for i in range(0, len(self.argNames)):
+            if (self.argNames[i] == argName):
+                self.argTypes[i] = "ci"
                 break;
 
     def outputArgType(self, index):
         x = self.argTypes[index]
-        if (x == "cp SEXP"):
-            return "SEXP"
+        if (x == "cp"):
+            return "llvm::Value *"
+        elif (x == "ci"):
+            return "int"
         elif (x == "int"):
             return "int"
         else:
@@ -64,14 +84,12 @@ class Intrinsic:
             return "getValue"
 
     def typeToIr(self, type):
-        if (type == "SEXP" or type == "cp SEXP"):
+        if (type in ("SEXP", "cp")):
             return "t::SEXP"
-        elif (type == "int"):
+        elif (type in ("ci", "int", "Rboolean")):
             return "t::Int"
         elif (type == "void"):
             return "t::Void";
-        elif (type == "Rboolean"):
-            return "t::Int"
         elif (type == "bool"):
             return "t::Bool"
         else:
@@ -110,23 +128,40 @@ class Intrinsic:
         return result
 
     
+    def staticConstructorArgType(self, index):
+        x = self.argTypes[index]
+        if (x == "cp"):
+            return False
+        elif (x == "ci"):
+            return "SEXP"
+        elif (x == "int"):
+            return "int"
+        else:
+            return "llvm::Value *"
+
     def convertArgumentToValue(self, index):
         x = self.argTypes[index]
-        if (x == "cp SEXP"):
-            return "Builder::constantPoolSexp({0})".format(self.argNames[index])
+        if (x == "cp"):
+            return "b.consts()"
+        elif (x == "ci"):
+            return "Builder::integer(b.constantPoolIndex({0}))".format(self.argNames[index])
         elif (x == "int"):
             return "Builder::integer({0})".format(self.argNames[index])
         else:
             return self.argNames[index];
 
-
     def staticConstructor(self):
-        """ Returns the c++ code for the static constructor method for the intrinsic call."""
+        """ Returns the c++ code for the static constructor method for the intrinsic call.
+
+        Takes constants from builder and SEXPs as constants, these are added to the constant pool.
+        """
         result = "    static {0} create(Builder & b".format(self.className)
         # signature
         for i in range(0, len(self.argNames)):
-            result += ", "
-            result += self.outputArgType(i) + " " + self.argNames[i]
+            x = self.staticConstructorArgType(i)
+            if (x):
+                result += ", "
+                result += x + " " + self.argNames[i]
         result += ") {\n"
         # any argument that is not llvm::Value must be converted to llvm::Value
         result += "        std::vector<llvm::Value *> args_;\n"
@@ -140,6 +175,20 @@ class Intrinsic:
         return result
 
     def argumentGetterCode(self, index):
+        t = self.argTypes[index]
+        if (t == "SEXP"):
+            return "llvm::Value * {name}() {{ return getValue({index}); }}".format(name = self.argNames[index], index = index)
+        elif (t == "int"):
+            return "int {name}() {{ return getValueInt({index}); }}".format(name = self.argNames[index], index = index)
+        elif (t == "cp"):
+            return "llvm::Value * constantPool() {{ return getValue({index}); }}".format(index = index)
+        elif (t == "ci"):
+            return """
+int {name}() {{ return getValueInt({index}); }}
+SEXP {name}(SEXP constantPool) {{ return VECTOR_ELT(constantPool, {name}()); }}
+SEXP {name}(Builder const & b) {{ return b.constantPool({name}()); }}
+        """.format(name = self.argNames[index], index = index)
+
         return "{0} {1}() {{ return {2}({3}); }}".format(self.outputArgType(index), self.argNames[index], self.argGetterFunction(index), index)
 
 

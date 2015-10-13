@@ -68,9 +68,8 @@ SEXP createNativeSXP(RFunctionPtr fptr, SEXP ast,
     for (size_t i = 0; i < objects.size(); ++i)
         SET_VECTOR_ELT(objs, i + 1, objects[i]);
     SEXP result = CONS(reinterpret_cast<SEXP>(fptr), objs);
-    UNPROTECT(
-        objects.size() +
-        1); // all objects in objects + objs itself which is now part of result
+    // all objects in objects + objs itself (now part of result)
+    UNPROTECT(objects.size() + 1);
     SET_TAG(result, reinterpret_cast<SEXP>(f));
     SET_TYPEOF(result, NATIVESXP);
     return result;
@@ -168,7 +167,7 @@ SEXP Compiler::compileFunction(std::string const& name, SEXP ast,
     // add the non-jitted SEXP to relocations
     relocations.push_back(result);
     // dump the function IR before wwe add statepoints
-    context->f->dump();
+    //context->f->dump();
     delete context;
     context = old;
     return result;

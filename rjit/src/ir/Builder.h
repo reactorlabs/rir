@@ -80,6 +80,10 @@ public:
         return c_->rho;
     }
 
+    llvm::Value * consts() {
+        return c_->consts;
+    }
+
     /** Creates new context for given function name.
 
       Creates the llvm Function and initial basic block objects, sets the function attributes and context's rho value.
@@ -89,7 +93,7 @@ public:
     void openFunction(std::string const & name, SEXP ast, bool isPromise) {
         if (c_ != nullptr)
             contextStack_.push(c_);
-        c_ = new Context(name, m_, isPromise);
+        c_ = new Context(*this, name, m_, isPromise);
         c_->addConstantPoolObject(ast);
     }
 
@@ -146,6 +150,8 @@ public:
             result = llvm::Function::Create(INTRINSIC::intrinsicType(), llvm::GlobalValue::ExternalLinkage, INTRINSIC::intrinsicName(), m_);
         return result;
     }
+
+
 
     /** Returns a llvm::Value created from a constant pool value.
 
@@ -208,6 +214,23 @@ public:
         return f;
     }
 
+    /** Takes the given SEXP, stores it to the constant pool and returns the index under which it is stored.
+
+      In a trivial way (O(n)) checks whether such constant already exists to avoid duplicates in the constant pool.
+     */
+    int constantPoolIndex(SEXP object) {
+        for (unsigned i = 0; i < c_->cp.size(); ++i)
+            if (c_->cp[i] == object)
+                return i;
+        c_->cp.push_back(object);
+        return c_->cp.size() - 1;
+    }
+
+    /** Returns the index-th object in the constant pool.
+     */
+    SEXP constantPool(int index) const {
+        return c_->cp[index];
+    }
 
 
 
@@ -216,7 +239,7 @@ private:
     class Context {
     public:
 
-        Context(std::string const & name, llvm::Module * m, bool isPromise);
+        Context(Builder & builder, std::string const & name, llvm::Module * m, bool isPromise);
 
         Context(Context * from):
             isReturnJumpNeeded(from->isReturnJumpNeeded),
@@ -226,6 +249,8 @@ private:
             breakTarget(from->breakTarget),
             nextTarget(from->nextTarget),
             rho(from->rho),
+            body(from->body),
+            consts(from->consts),
             functionId(from->functionId),
             cp(std::move(from->cp)) {
         }
@@ -247,6 +272,8 @@ private:
         llvm::BasicBlock * nextTarget;
 
         llvm::Value * rho;
+        llvm::Value * body;
+        llvm::Value * consts;
 
         unsigned functionId;
 

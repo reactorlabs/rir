@@ -7,58 +7,93 @@
 namespace rjit {
 namespace ir {
 
-/** Replacement for GETSTACK_LOGICAL_NO_NA_PTR
-The call is used only for error reporting.
+/** Given a body object (assumed to be nativeSXP, returns its constant pool.
 */
-class ConvertToLogicalNoNA: public Intrinsic {
+class ExtractConstantPool: public Intrinsic {
 public:
-    llvm::Value * what() { return getValue(0); }
+    llvm::Value * f() { return getValue(0); }
 
-    SEXP call() { return getValueSEXP(1); }
-
-    ConvertToLogicalNoNA(llvm::Instruction * ins):
+    ExtractConstantPool(llvm::Instruction * ins):
         Intrinsic(ins) {
     }
 
-    static ConvertToLogicalNoNA create(Builder & b, llvm::Value * what, SEXP call) {
+    static ExtractConstantPool create(Builder & b, llvm::Value * f) {
         std::vector<llvm::Value *> args_;
-        args_.push_back(what);
-        args_.push_back(Builder::constantPoolSexp(call));
-        llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic<ConvertToLogicalNoNA>(), args_, "", b);
+        args_.push_back(f);
+        llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic<ExtractConstantPool>(), args_, "", b);
         b.insertCall(ins);
-        setIRType(ins, ::rjit::ir::Type::ConvertToLogicalNoNA);
+        setIRType(ins, ::rjit::ir::Type::ExtractConstantPool);
         return ins;
     }
 
     static char const * intrinsicName() {
-        return "convertToLogicalNoNA";
+        return "extractConstantPool";
     }
 
     static llvm::FunctionType * intrinsicType() { 
-        return llvm::FunctionType::get(t::Int, { t::SEXP, t::SEXP }, false);
+        return llvm::FunctionType::get(t::SEXP, { t::SEXP }, false);
+    }
+
+};
+/** Replacement for GETSTACK_LOGICAL_NO_NA_PTR
+The call is used only for error reporting.
+*/
+class ConvertToLogicalNoNA_: public Intrinsic {
+public:
+    llvm::Value * what() { return getValue(0); }
+
+    llvm::Value * constantPool() { return getValue(1); }
+
+    
+int call() { return getValueInt(2); }
+SEXP call(SEXP constantPool) { return VECTOR_ELT(constantPool, call()); }
+SEXP call(Builder const & b) { return b.constantPool(call()); }
+        
+
+    ConvertToLogicalNoNA_(llvm::Instruction * ins):
+        Intrinsic(ins) {
+    }
+
+    static ConvertToLogicalNoNA_ create(Builder & b, llvm::Value * what, SEXP call) {
+        std::vector<llvm::Value *> args_;
+        args_.push_back(what);
+        args_.push_back(b.consts());
+        args_.push_back(Builder::integer(b.constantPoolIndex(call)));
+        llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic<ConvertToLogicalNoNA_>(), args_, "", b);
+        b.insertCall(ins);
+        setIRType(ins, ::rjit::ir::Type::ConvertToLogicalNoNA_);
+        return ins;
+    }
+
+    static char const * intrinsicName() {
+        return "convertToLogicalNoNA_";
+    }
+
+    static llvm::FunctionType * intrinsicType() { 
+        return llvm::FunctionType::get(t::Int, { t::SEXP, t::SEXP, t::Int }, false);
     }
 
 };
 
-class PrintValue: public Intrinsic {
+class PrintValue_: public Intrinsic {
 public:
     llvm::Value * value() { return getValue(0); }
 
-    PrintValue(llvm::Instruction * ins):
+    PrintValue_(llvm::Instruction * ins):
         Intrinsic(ins) {
     }
 
-    static PrintValue create(Builder & b, llvm::Value * value) {
+    static PrintValue_ create(Builder & b, llvm::Value * value) {
         std::vector<llvm::Value *> args_;
         args_.push_back(value);
-        llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic<PrintValue>(), args_, "", b);
+        llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic<PrintValue_>(), args_, "", b);
         b.insertCall(ins);
-        setIRType(ins, ::rjit::ir::Type::PrintValue);
+        setIRType(ins, ::rjit::ir::Type::PrintValue_);
         return ins;
     }
 
     static char const * intrinsicName() {
-        return "printValue";
+        return "printValue_";
     }
 
     static llvm::FunctionType * intrinsicType() { 
@@ -69,28 +104,28 @@ public:
 /** startFor returns the sequence over which the loop will iterate.
 No need for all the other things here because we do not support other than generic variable loads and stores.
 */
-class StartFor: public Intrinsic {
+class StartFor_: public Intrinsic {
 public:
     llvm::Value * seq() { return getValue(0); }
 
     llvm::Value * rho() { return getValue(1); }
 
-    StartFor(llvm::Instruction * ins):
+    StartFor_(llvm::Instruction * ins):
         Intrinsic(ins) {
     }
 
-    static StartFor create(Builder & b, llvm::Value * seq, llvm::Value * rho) {
+    static StartFor_ create(Builder & b, llvm::Value * seq, llvm::Value * rho) {
         std::vector<llvm::Value *> args_;
         args_.push_back(seq);
         args_.push_back(rho);
-        llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic<StartFor>(), args_, "", b);
+        llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic<StartFor_>(), args_, "", b);
         b.insertCall(ins);
-        setIRType(ins, ::rjit::ir::Type::StartFor);
+        setIRType(ins, ::rjit::ir::Type::StartFor_);
         return ins;
     }
 
     static char const * intrinsicName() {
-        return "startFor";
+        return "startFor_";
     }
 
     static llvm::FunctionType * intrinsicType() { 
@@ -100,60 +135,67 @@ public:
 };
 /** Loop sequence length returns the length of the sequence the loop will iterate over and errors if the sequence is of wrong type.
 */
-class LoopSequenceLength: public Intrinsic {
+class LoopSequenceLength_: public Intrinsic {
 public:
     llvm::Value * seq() { return getValue(0); }
 
-    SEXP call() { return getValueSEXP(1); }
+    llvm::Value * constantPool() { return getValue(1); }
 
-    LoopSequenceLength(llvm::Instruction * ins):
+    
+int call() { return getValueInt(2); }
+SEXP call(SEXP constantPool) { return VECTOR_ELT(constantPool, call()); }
+SEXP call(Builder const & b) { return b.constantPool(call()); }
+        
+
+    LoopSequenceLength_(llvm::Instruction * ins):
         Intrinsic(ins) {
     }
 
-    static LoopSequenceLength create(Builder & b, llvm::Value * seq, SEXP call) {
+    static LoopSequenceLength_ create(Builder & b, llvm::Value * seq, SEXP call) {
         std::vector<llvm::Value *> args_;
         args_.push_back(seq);
-        args_.push_back(Builder::constantPoolSexp(call));
-        llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic<LoopSequenceLength>(), args_, "", b);
+        args_.push_back(b.consts());
+        args_.push_back(Builder::integer(b.constantPoolIndex(call)));
+        llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic<LoopSequenceLength_>(), args_, "", b);
         b.insertCall(ins);
-        setIRType(ins, ::rjit::ir::Type::LoopSequenceLength);
+        setIRType(ins, ::rjit::ir::Type::LoopSequenceLength_);
         return ins;
     }
 
     static char const * intrinsicName() {
-        return "loopSequenceLength";
+        return "loopSequenceLength_";
     }
 
     static llvm::FunctionType * intrinsicType() { 
-        return llvm::FunctionType::get(t::Int, { t::SEXP, t::SEXP }, false);
+        return llvm::FunctionType::get(t::Int, { t::SEXP, t::SEXP, t::Int }, false);
     }
 
 };
 /** Given the for loop sequence, and index, returns the index-th value of the sequence.
 TODO Note that this always allocates for vectors.
 */
-class GetForLoopValue: public Intrinsic {
+class GetForLoopValue_: public Intrinsic {
 public:
     llvm::Value * seq() { return getValue(0); }
 
     int index() { return getValueInt(1); }
 
-    GetForLoopValue(llvm::Instruction * ins):
+    GetForLoopValue_(llvm::Instruction * ins):
         Intrinsic(ins) {
     }
 
-    static GetForLoopValue create(Builder & b, llvm::Value * seq, int index) {
+    static GetForLoopValue_ create(Builder & b, llvm::Value * seq, int index) {
         std::vector<llvm::Value *> args_;
         args_.push_back(seq);
         args_.push_back(Builder::integer(index));
-        llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic<GetForLoopValue>(), args_, "", b);
+        llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic<GetForLoopValue_>(), args_, "", b);
         b.insertCall(ins);
-        setIRType(ins, ::rjit::ir::Type::GetForLoopValue);
+        setIRType(ins, ::rjit::ir::Type::GetForLoopValue_);
         return ins;
     }
 
     static char const * intrinsicName() {
-        return "getForLoopValue";
+        return "getForLoopValue_";
     }
 
     static llvm::FunctionType * intrinsicType() { 
@@ -162,22 +204,22 @@ public:
 
 };
 
-class MarkVisible: public Intrinsic {
+class MarkVisible_: public Intrinsic {
 public:
-    MarkVisible(llvm::Instruction * ins):
+    MarkVisible_(llvm::Instruction * ins):
         Intrinsic(ins) {
     }
 
-    static MarkVisible create(Builder & b) {
+    static MarkVisible_ create(Builder & b) {
         std::vector<llvm::Value *> args_;
-        llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic<MarkVisible>(), args_, "", b);
+        llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic<MarkVisible_>(), args_, "", b);
         b.insertCall(ins);
-        setIRType(ins, ::rjit::ir::Type::MarkVisible);
+        setIRType(ins, ::rjit::ir::Type::MarkVisible_);
         return ins;
     }
 
     static char const * intrinsicName() {
-        return "markVisible";
+        return "markVisible_";
     }
 
     static llvm::FunctionType * intrinsicType() { 
@@ -186,22 +228,22 @@ public:
 
 };
 
-class MarkInvisible: public Intrinsic {
+class MarkInvisible_: public Intrinsic {
 public:
-    MarkInvisible(llvm::Instruction * ins):
+    MarkInvisible_(llvm::Instruction * ins):
         Intrinsic(ins) {
     }
 
-    static MarkInvisible create(Builder & b) {
+    static MarkInvisible_ create(Builder & b) {
         std::vector<llvm::Value *> args_;
-        llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic<MarkInvisible>(), args_, "", b);
+        llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic<MarkInvisible_>(), args_, "", b);
         b.insertCall(ins);
-        setIRType(ins, ::rjit::ir::Type::MarkInvisible);
+        setIRType(ins, ::rjit::ir::Type::MarkInvisible_);
         return ins;
     }
 
     static char const * intrinsicName() {
-        return "markInvisible";
+        return "markInvisible_";
     }
 
     static llvm::FunctionType * intrinsicType() { 
@@ -212,25 +254,25 @@ public:
 /** When LLVM IR creates user visible constant, this function contains all the code required to make the constant.
 Currently this means marking it as not mutable only.
 */
-class UserConstant: public Intrinsic {
+class UserConstant_: public Intrinsic {
 public:
     llvm::Value * value() { return getValue(0); }
 
-    UserConstant(llvm::Instruction * ins):
+    UserConstant_(llvm::Instruction * ins):
         Intrinsic(ins) {
     }
 
-    static UserConstant create(Builder & b, llvm::Value * value) {
+    static UserConstant_ create(Builder & b, llvm::Value * value) {
         std::vector<llvm::Value *> args_;
         args_.push_back(value);
-        llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic<UserConstant>(), args_, "", b);
+        llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic<UserConstant_>(), args_, "", b);
         b.insertCall(ins);
-        setIRType(ins, ::rjit::ir::Type::UserConstant);
+        setIRType(ins, ::rjit::ir::Type::UserConstant_);
         return ins;
     }
 
     static char const * intrinsicName() {
-        return "userConstant";
+        return "userConstant_";
     }
 
     static llvm::FunctionType * intrinsicType() { 
@@ -241,289 +283,352 @@ public:
 /** Generic getvar does not use any caches whatsoever.
 TODO this means we can get rid of the checks in getvar(), and reduce its code to this. We definitely want faster versions.
 */
-class GenericGetVar: public Intrinsic {
+class GenericGetVar_: public Intrinsic {
 public:
-    SEXP symbol() { return getValueSEXP(0); }
+    llvm::Value * rho() { return getValue(0); }
 
-    llvm::Value * rho() { return getValue(1); }
+    llvm::Value * constantPool() { return getValue(1); }
 
-    GenericGetVar(llvm::Instruction * ins):
+    
+int symbol() { return getValueInt(2); }
+SEXP symbol(SEXP constantPool) { return VECTOR_ELT(constantPool, symbol()); }
+SEXP symbol(Builder const & b) { return b.constantPool(symbol()); }
+        
+
+    GenericGetVar_(llvm::Instruction * ins):
         Intrinsic(ins) {
     }
 
-    static GenericGetVar create(Builder & b, SEXP symbol, llvm::Value * rho) {
+    static GenericGetVar_ create(Builder & b, llvm::Value * rho, SEXP symbol) {
         std::vector<llvm::Value *> args_;
-        args_.push_back(Builder::constantPoolSexp(symbol));
         args_.push_back(rho);
-        llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic<GenericGetVar>(), args_, "", b);
+        args_.push_back(b.consts());
+        args_.push_back(Builder::integer(b.constantPoolIndex(symbol)));
+        llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic<GenericGetVar_>(), args_, "", b);
         b.insertCall(ins);
-        setIRType(ins, ::rjit::ir::Type::GenericGetVar);
+        setIRType(ins, ::rjit::ir::Type::GenericGetVar_);
         return ins;
     }
 
     static char const * intrinsicName() {
-        return "genericGetVar";
+        return "genericGetVar_";
     }
 
     static llvm::FunctionType * intrinsicType() { 
-        return llvm::FunctionType::get(t::SEXP, { t::SEXP, t::SEXP }, false);
+        return llvm::FunctionType::get(t::SEXP, { t::SEXP, t::SEXP, t::Int }, false);
     }
 
 };
 
-class GenericGetEllipsisArg: public Intrinsic {
+class GenericGetEllipsisArg_: public Intrinsic {
 public:
-    SEXP symbol() { return getValueSEXP(0); }
+    llvm::Value * rho() { return getValue(0); }
 
-    llvm::Value * rho() { return getValue(1); }
+    llvm::Value * constantPool() { return getValue(1); }
 
-    GenericGetEllipsisArg(llvm::Instruction * ins):
+    
+int symbol() { return getValueInt(2); }
+SEXP symbol(SEXP constantPool) { return VECTOR_ELT(constantPool, symbol()); }
+SEXP symbol(Builder const & b) { return b.constantPool(symbol()); }
+        
+
+    GenericGetEllipsisArg_(llvm::Instruction * ins):
         Intrinsic(ins) {
     }
 
-    static GenericGetEllipsisArg create(Builder & b, SEXP symbol, llvm::Value * rho) {
+    static GenericGetEllipsisArg_ create(Builder & b, llvm::Value * rho, SEXP symbol) {
         std::vector<llvm::Value *> args_;
-        args_.push_back(Builder::constantPoolSexp(symbol));
         args_.push_back(rho);
-        llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic<GenericGetEllipsisArg>(), args_, "", b);
+        args_.push_back(b.consts());
+        args_.push_back(Builder::integer(b.constantPoolIndex(symbol)));
+        llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic<GenericGetEllipsisArg_>(), args_, "", b);
         b.insertCall(ins);
-        setIRType(ins, ::rjit::ir::Type::GenericGetEllipsisArg);
+        setIRType(ins, ::rjit::ir::Type::GenericGetEllipsisArg_);
         return ins;
     }
 
     static char const * intrinsicName() {
-        return "genericGetEllipsisArg";
+        return "genericGetEllipsisArg_";
     }
 
     static llvm::FunctionType * intrinsicType() { 
-        return llvm::FunctionType::get(t::SEXP, { t::SEXP, t::SEXP }, false);
+        return llvm::FunctionType::get(t::SEXP, { t::SEXP, t::SEXP, t::Int }, false);
     }
 
 };
 
-class GenericSetVar: public Intrinsic {
+class GenericSetVar_: public Intrinsic {
 public:
-    SEXP symbol() { return getValueSEXP(0); }
+    llvm::Value * value() { return getValue(0); }
 
-    llvm::Value * value() { return getValue(1); }
+    llvm::Value * rho() { return getValue(1); }
 
-    llvm::Value * rho() { return getValue(2); }
+    llvm::Value * constantPool() { return getValue(2); }
 
-    GenericSetVar(llvm::Instruction * ins):
+    
+int symbol() { return getValueInt(3); }
+SEXP symbol(SEXP constantPool) { return VECTOR_ELT(constantPool, symbol()); }
+SEXP symbol(Builder const & b) { return b.constantPool(symbol()); }
+        
+
+    GenericSetVar_(llvm::Instruction * ins):
         Intrinsic(ins) {
     }
 
-    static GenericSetVar create(Builder & b, SEXP symbol, llvm::Value * value, llvm::Value * rho) {
+    static GenericSetVar_ create(Builder & b, llvm::Value * value, llvm::Value * rho, SEXP symbol) {
         std::vector<llvm::Value *> args_;
-        args_.push_back(Builder::constantPoolSexp(symbol));
         args_.push_back(value);
         args_.push_back(rho);
-        llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic<GenericSetVar>(), args_, "", b);
+        args_.push_back(b.consts());
+        args_.push_back(Builder::integer(b.constantPoolIndex(symbol)));
+        llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic<GenericSetVar_>(), args_, "", b);
         b.insertCall(ins);
-        setIRType(ins, ::rjit::ir::Type::GenericSetVar);
+        setIRType(ins, ::rjit::ir::Type::GenericSetVar_);
         return ins;
     }
 
     static char const * intrinsicName() {
-        return "genericSetVar";
+        return "genericSetVar_";
     }
 
     static llvm::FunctionType * intrinsicType() { 
-        return llvm::FunctionType::get(t::Void, { t::SEXP, t::SEXP, t::SEXP }, false);
+        return llvm::FunctionType::get(t::Void, { t::SEXP, t::SEXP, t::SEXP, t::Int }, false);
     }
 
 };
 
-class GenericSetVarParent: public Intrinsic {
+class GenericSetVarParent_: public Intrinsic {
 public:
-    SEXP symbol() { return getValueSEXP(0); }
-
-    llvm::Value * value() { return getValue(1); }
-
-    llvm::Value * rho() { return getValue(2); }
-
-    GenericSetVarParent(llvm::Instruction * ins):
-        Intrinsic(ins) {
-    }
-
-    static GenericSetVarParent create(Builder & b, SEXP symbol, llvm::Value * value, llvm::Value * rho) {
-        std::vector<llvm::Value *> args_;
-        args_.push_back(Builder::constantPoolSexp(symbol));
-        args_.push_back(value);
-        args_.push_back(rho);
-        llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic<GenericSetVarParent>(), args_, "", b);
-        b.insertCall(ins);
-        setIRType(ins, ::rjit::ir::Type::GenericSetVarParent);
-        return ins;
-    }
-
-    static char const * intrinsicName() {
-        return "genericSetVarParent";
-    }
-
-    static llvm::FunctionType * intrinsicType() { 
-        return llvm::FunctionType::get(t::Void, { t::SEXP, t::SEXP, t::SEXP }, false);
-    }
-
-};
-
-class GetFunction: public Intrinsic {
-public:
-    SEXP symbol() { return getValueSEXP(0); }
+    llvm::Value * value() { return getValue(0); }
 
     llvm::Value * rho() { return getValue(1); }
 
-    GetFunction(llvm::Instruction * ins):
+    llvm::Value * constantPool() { return getValue(2); }
+
+    
+int symbol() { return getValueInt(3); }
+SEXP symbol(SEXP constantPool) { return VECTOR_ELT(constantPool, symbol()); }
+SEXP symbol(Builder const & b) { return b.constantPool(symbol()); }
+        
+
+    GenericSetVarParent_(llvm::Instruction * ins):
         Intrinsic(ins) {
     }
 
-    static GetFunction create(Builder & b, SEXP symbol, llvm::Value * rho) {
+    static GenericSetVarParent_ create(Builder & b, llvm::Value * value, llvm::Value * rho, SEXP symbol) {
         std::vector<llvm::Value *> args_;
-        args_.push_back(Builder::constantPoolSexp(symbol));
+        args_.push_back(value);
         args_.push_back(rho);
-        llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic<GetFunction>(), args_, "", b);
+        args_.push_back(b.consts());
+        args_.push_back(Builder::integer(b.constantPoolIndex(symbol)));
+        llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic<GenericSetVarParent_>(), args_, "", b);
         b.insertCall(ins);
-        setIRType(ins, ::rjit::ir::Type::GetFunction);
+        setIRType(ins, ::rjit::ir::Type::GenericSetVarParent_);
         return ins;
     }
 
     static char const * intrinsicName() {
-        return "getFunction";
+        return "genericSetVarParent_";
     }
 
     static llvm::FunctionType * intrinsicType() { 
-        return llvm::FunctionType::get(t::SEXP, { t::SEXP, t::SEXP }, false);
+        return llvm::FunctionType::get(t::Void, { t::SEXP, t::SEXP, t::SEXP, t::Int }, false);
     }
 
 };
 
-class GetGlobalFunction: public Intrinsic {
+class GetFunction_: public Intrinsic {
 public:
-    SEXP symbol() { return getValueSEXP(0); }
+    llvm::Value * rho() { return getValue(0); }
 
-    GetGlobalFunction(llvm::Instruction * ins):
+    llvm::Value * constantPool() { return getValue(1); }
+
+    
+int symbol() { return getValueInt(2); }
+SEXP symbol(SEXP constantPool) { return VECTOR_ELT(constantPool, symbol()); }
+SEXP symbol(Builder const & b) { return b.constantPool(symbol()); }
+        
+
+    GetFunction_(llvm::Instruction * ins):
         Intrinsic(ins) {
     }
 
-    static GetGlobalFunction create(Builder & b, SEXP symbol) {
+    static GetFunction_ create(Builder & b, llvm::Value * rho, SEXP symbol) {
         std::vector<llvm::Value *> args_;
-        args_.push_back(Builder::constantPoolSexp(symbol));
-        llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic<GetGlobalFunction>(), args_, "", b);
+        args_.push_back(rho);
+        args_.push_back(b.consts());
+        args_.push_back(Builder::integer(b.constantPoolIndex(symbol)));
+        llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic<GetFunction_>(), args_, "", b);
         b.insertCall(ins);
-        setIRType(ins, ::rjit::ir::Type::GetGlobalFunction);
+        setIRType(ins, ::rjit::ir::Type::GetFunction_);
         return ins;
     }
 
     static char const * intrinsicName() {
-        return "getGlobalFunction";
+        return "getFunction_";
     }
 
     static llvm::FunctionType * intrinsicType() { 
-        return llvm::FunctionType::get(t::SEXP, { t::SEXP }, false);
+        return llvm::FunctionType::get(t::SEXP, { t::SEXP, t::SEXP, t::Int }, false);
     }
 
 };
 
-class GetSymFunction: public Intrinsic {
+class GetGlobalFunction_: public Intrinsic {
 public:
-    SEXP name() { return getValueSEXP(0); }
+    llvm::Value * constantPool() { return getValue(0); }
 
-    GetSymFunction(llvm::Instruction * ins):
+    
+int symbol() { return getValueInt(1); }
+SEXP symbol(SEXP constantPool) { return VECTOR_ELT(constantPool, symbol()); }
+SEXP symbol(Builder const & b) { return b.constantPool(symbol()); }
+        
+
+    GetGlobalFunction_(llvm::Instruction * ins):
         Intrinsic(ins) {
     }
 
-    static GetSymFunction create(Builder & b, SEXP name) {
+    static GetGlobalFunction_ create(Builder & b, SEXP symbol) {
         std::vector<llvm::Value *> args_;
-        args_.push_back(Builder::constantPoolSexp(name));
-        llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic<GetSymFunction>(), args_, "", b);
+        args_.push_back(b.consts());
+        args_.push_back(Builder::integer(b.constantPoolIndex(symbol)));
+        llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic<GetGlobalFunction_>(), args_, "", b);
         b.insertCall(ins);
-        setIRType(ins, ::rjit::ir::Type::GetSymFunction);
+        setIRType(ins, ::rjit::ir::Type::GetGlobalFunction_);
         return ins;
     }
 
     static char const * intrinsicName() {
-        return "getSymFunction";
+        return "getGlobalFunction_";
     }
 
     static llvm::FunctionType * intrinsicType() { 
-        return llvm::FunctionType::get(t::SEXP, { t::SEXP }, false);
+        return llvm::FunctionType::get(t::SEXP, { t::SEXP, t::Int }, false);
     }
 
 };
 
-class GetBuiltinFunction: public Intrinsic {
+class GetSymFunction_: public Intrinsic {
 public:
-    SEXP name() { return getValueSEXP(0); }
+    llvm::Value * constantPool() { return getValue(0); }
 
-    GetBuiltinFunction(llvm::Instruction * ins):
+    
+int name() { return getValueInt(1); }
+SEXP name(SEXP constantPool) { return VECTOR_ELT(constantPool, name()); }
+SEXP name(Builder const & b) { return b.constantPool(name()); }
+        
+
+    GetSymFunction_(llvm::Instruction * ins):
         Intrinsic(ins) {
     }
 
-    static GetBuiltinFunction create(Builder & b, SEXP name) {
+    static GetSymFunction_ create(Builder & b, SEXP name) {
         std::vector<llvm::Value *> args_;
-        args_.push_back(Builder::constantPoolSexp(name));
-        llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic<GetBuiltinFunction>(), args_, "", b);
+        args_.push_back(b.consts());
+        args_.push_back(Builder::integer(b.constantPoolIndex(name)));
+        llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic<GetSymFunction_>(), args_, "", b);
         b.insertCall(ins);
-        setIRType(ins, ::rjit::ir::Type::GetBuiltinFunction);
+        setIRType(ins, ::rjit::ir::Type::GetSymFunction_);
         return ins;
     }
 
     static char const * intrinsicName() {
-        return "getBuiltinFunction";
+        return "getSymFunction_";
     }
 
     static llvm::FunctionType * intrinsicType() { 
-        return llvm::FunctionType::get(t::SEXP, { t::SEXP }, false);
+        return llvm::FunctionType::get(t::SEXP, { t::SEXP, t::Int }, false);
     }
 
 };
 
-class GetInternalBuiltinFunction: public Intrinsic {
+class GetBuiltinFunction_: public Intrinsic {
 public:
-    SEXP name() { return getValueSEXP(0); }
+    llvm::Value * constantPool() { return getValue(0); }
 
-    GetInternalBuiltinFunction(llvm::Instruction * ins):
+    
+int name() { return getValueInt(1); }
+SEXP name(SEXP constantPool) { return VECTOR_ELT(constantPool, name()); }
+SEXP name(Builder const & b) { return b.constantPool(name()); }
+        
+
+    GetBuiltinFunction_(llvm::Instruction * ins):
         Intrinsic(ins) {
     }
 
-    static GetInternalBuiltinFunction create(Builder & b, SEXP name) {
+    static GetBuiltinFunction_ create(Builder & b, SEXP name) {
         std::vector<llvm::Value *> args_;
-        args_.push_back(Builder::constantPoolSexp(name));
-        llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic<GetInternalBuiltinFunction>(), args_, "", b);
+        args_.push_back(b.consts());
+        args_.push_back(Builder::integer(b.constantPoolIndex(name)));
+        llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic<GetBuiltinFunction_>(), args_, "", b);
         b.insertCall(ins);
-        setIRType(ins, ::rjit::ir::Type::GetInternalBuiltinFunction);
+        setIRType(ins, ::rjit::ir::Type::GetBuiltinFunction_);
         return ins;
     }
 
     static char const * intrinsicName() {
-        return "getInternalBuiltinFunction";
+        return "getBuiltinFunction_";
     }
 
     static llvm::FunctionType * intrinsicType() { 
-        return llvm::FunctionType::get(t::SEXP, { t::SEXP }, false);
+        return llvm::FunctionType::get(t::SEXP, { t::SEXP, t::Int }, false);
     }
 
 };
 
-class CheckFunction: public Intrinsic {
+class GetInternalBuiltinFunction_: public Intrinsic {
+public:
+    llvm::Value * constantPool() { return getValue(0); }
+
+    
+int name() { return getValueInt(1); }
+SEXP name(SEXP constantPool) { return VECTOR_ELT(constantPool, name()); }
+SEXP name(Builder const & b) { return b.constantPool(name()); }
+        
+
+    GetInternalBuiltinFunction_(llvm::Instruction * ins):
+        Intrinsic(ins) {
+    }
+
+    static GetInternalBuiltinFunction_ create(Builder & b, SEXP name) {
+        std::vector<llvm::Value *> args_;
+        args_.push_back(b.consts());
+        args_.push_back(Builder::integer(b.constantPoolIndex(name)));
+        llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic<GetInternalBuiltinFunction_>(), args_, "", b);
+        b.insertCall(ins);
+        setIRType(ins, ::rjit::ir::Type::GetInternalBuiltinFunction_);
+        return ins;
+    }
+
+    static char const * intrinsicName() {
+        return "getInternalBuiltinFunction_";
+    }
+
+    static llvm::FunctionType * intrinsicType() { 
+        return llvm::FunctionType::get(t::SEXP, { t::SEXP, t::Int }, false);
+    }
+
+};
+
+class CheckFunction_: public Intrinsic {
 public:
     llvm::Value * f() { return getValue(0); }
 
-    CheckFunction(llvm::Instruction * ins):
+    CheckFunction_(llvm::Instruction * ins):
         Intrinsic(ins) {
     }
 
-    static CheckFunction create(Builder & b, llvm::Value * f) {
+    static CheckFunction_ create(Builder & b, llvm::Value * f) {
         std::vector<llvm::Value *> args_;
         args_.push_back(f);
-        llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic<CheckFunction>(), args_, "", b);
+        llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic<CheckFunction_>(), args_, "", b);
         b.insertCall(ins);
-        setIRType(ins, ::rjit::ir::Type::CheckFunction);
+        setIRType(ins, ::rjit::ir::Type::CheckFunction_);
         return ins;
     }
 
     static char const * intrinsicName() {
-        return "checkFunction";
+        return "checkFunction_";
     }
 
     static llvm::FunctionType * intrinsicType() { 
@@ -533,57 +638,64 @@ public:
 };
 /** Creates a promise out of the given code and environment and returns its value.
 */
-class CreatePromise: public Intrinsic {
+class CreatePromise_: public Intrinsic {
 public:
-    SEXP code() { return getValueSEXP(0); }
+    llvm::Value * rho() { return getValue(0); }
 
-    llvm::Value * rho() { return getValue(1); }
+    llvm::Value * constantPool() { return getValue(1); }
 
-    CreatePromise(llvm::Instruction * ins):
+    
+int code() { return getValueInt(2); }
+SEXP code(SEXP constantPool) { return VECTOR_ELT(constantPool, code()); }
+SEXP code(Builder const & b) { return b.constantPool(code()); }
+        
+
+    CreatePromise_(llvm::Instruction * ins):
         Intrinsic(ins) {
     }
 
-    static CreatePromise create(Builder & b, SEXP code, llvm::Value * rho) {
+    static CreatePromise_ create(Builder & b, llvm::Value * rho, SEXP code) {
         std::vector<llvm::Value *> args_;
-        args_.push_back(Builder::constantPoolSexp(code));
         args_.push_back(rho);
-        llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic<CreatePromise>(), args_, "", b);
+        args_.push_back(b.consts());
+        args_.push_back(Builder::integer(b.constantPoolIndex(code)));
+        llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic<CreatePromise_>(), args_, "", b);
         b.insertCall(ins);
-        setIRType(ins, ::rjit::ir::Type::CreatePromise);
+        setIRType(ins, ::rjit::ir::Type::CreatePromise_);
         return ins;
     }
 
     static char const * intrinsicName() {
-        return "createPromise";
+        return "createPromise_";
     }
 
     static llvm::FunctionType * intrinsicType() { 
-        return llvm::FunctionType::get(t::SEXP, { t::SEXP, t::SEXP }, false);
+        return llvm::FunctionType::get(t::SEXP, { t::SEXP, t::SEXP, t::Int }, false);
     }
 
 };
 /** Given a SEXP, returns its type.
 We can perfectly do this in LLVM, but having an function for it simplifies the analysis on our end.
 */
-class SexpType: public Intrinsic {
+class SexpType_: public Intrinsic {
 public:
     llvm::Value * value() { return getValue(0); }
 
-    SexpType(llvm::Instruction * ins):
+    SexpType_(llvm::Instruction * ins):
         Intrinsic(ins) {
     }
 
-    static SexpType create(Builder & b, llvm::Value * value) {
+    static SexpType_ create(Builder & b, llvm::Value * value) {
         std::vector<llvm::Value *> args_;
         args_.push_back(value);
-        llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic<SexpType>(), args_, "", b);
+        llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic<SexpType_>(), args_, "", b);
         b.insertCall(ins);
-        setIRType(ins, ::rjit::ir::Type::SexpType);
+        setIRType(ins, ::rjit::ir::Type::SexpType_);
         return ins;
     }
 
     static char const * intrinsicName() {
-        return "sexpType";
+        return "sexpType_";
     }
 
     static llvm::FunctionType * intrinsicType() { 
@@ -592,28 +704,28 @@ public:
 
 };
 
-class AddArgument: public Intrinsic {
+class AddArgument_: public Intrinsic {
 public:
     llvm::Value * args() { return getValue(0); }
 
     llvm::Value * arg() { return getValue(1); }
 
-    AddArgument(llvm::Instruction * ins):
+    AddArgument_(llvm::Instruction * ins):
         Intrinsic(ins) {
     }
 
-    static AddArgument create(Builder & b, llvm::Value * args, llvm::Value * arg) {
+    static AddArgument_ create(Builder & b, llvm::Value * args, llvm::Value * arg) {
         std::vector<llvm::Value *> args_;
         args_.push_back(args);
         args_.push_back(arg);
-        llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic<AddArgument>(), args_, "", b);
+        llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic<AddArgument_>(), args_, "", b);
         b.insertCall(ins);
-        setIRType(ins, ::rjit::ir::Type::AddArgument);
+        setIRType(ins, ::rjit::ir::Type::AddArgument_);
         return ins;
     }
 
     static char const * intrinsicName() {
-        return "addArgument";
+        return "addArgument_";
     }
 
     static llvm::FunctionType * intrinsicType() { 
@@ -622,7 +734,7 @@ public:
 
 };
 
-class AddKeywordArgument: public Intrinsic {
+class AddKeywordArgument_: public Intrinsic {
 public:
     llvm::Value * args() { return getValue(0); }
 
@@ -630,23 +742,23 @@ public:
 
     llvm::Value * name() { return getValue(2); }
 
-    AddKeywordArgument(llvm::Instruction * ins):
+    AddKeywordArgument_(llvm::Instruction * ins):
         Intrinsic(ins) {
     }
 
-    static AddKeywordArgument create(Builder & b, llvm::Value * args, llvm::Value * arg, llvm::Value * name) {
+    static AddKeywordArgument_ create(Builder & b, llvm::Value * args, llvm::Value * arg, llvm::Value * name) {
         std::vector<llvm::Value *> args_;
         args_.push_back(args);
         args_.push_back(arg);
         args_.push_back(name);
-        llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic<AddKeywordArgument>(), args_, "", b);
+        llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic<AddKeywordArgument_>(), args_, "", b);
         b.insertCall(ins);
-        setIRType(ins, ::rjit::ir::Type::AddKeywordArgument);
+        setIRType(ins, ::rjit::ir::Type::AddKeywordArgument_);
         return ins;
     }
 
     static char const * intrinsicName() {
-        return "addKeywordArgument";
+        return "addKeywordArgument_";
     }
 
     static llvm::FunctionType * intrinsicType() { 
@@ -655,7 +767,7 @@ public:
 
 };
 
-class AddEllipsisArgument: public Intrinsic {
+class AddEllipsisArgumentHead_: public Intrinsic {
 public:
     llvm::Value * args() { return getValue(0); }
 
@@ -663,23 +775,23 @@ public:
 
     llvm::Value * eager() { return getValue(2); }
 
-    AddEllipsisArgument(llvm::Instruction * ins):
+    AddEllipsisArgumentHead_(llvm::Instruction * ins):
         Intrinsic(ins) {
     }
 
-    static AddEllipsisArgument create(Builder & b, llvm::Value * args, llvm::Value * rho, llvm::Value * eager) {
+    static AddEllipsisArgumentHead_ create(Builder & b, llvm::Value * args, llvm::Value * rho, llvm::Value * eager) {
         std::vector<llvm::Value *> args_;
         args_.push_back(args);
         args_.push_back(rho);
         args_.push_back(eager);
-        llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic<AddEllipsisArgument>(), args_, "", b);
+        llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic<AddEllipsisArgumentHead_>(), args_, "", b);
         b.insertCall(ins);
-        setIRType(ins, ::rjit::ir::Type::AddEllipsisArgument);
+        setIRType(ins, ::rjit::ir::Type::AddEllipsisArgumentHead_);
         return ins;
     }
 
     static char const * intrinsicName() {
-        return "addEllipsisArgument";
+        return "addEllipsisArgumentHead_";
     }
 
     static llvm::FunctionType * intrinsicType() { 
@@ -688,7 +800,40 @@ public:
 
 };
 
-class CallBuiltin: public Intrinsic {
+class AddEllipsisArgumentTail_: public Intrinsic {
+public:
+    llvm::Value * args() { return getValue(0); }
+
+    llvm::Value * rho() { return getValue(1); }
+
+    llvm::Value * eager() { return getValue(2); }
+
+    AddEllipsisArgumentTail_(llvm::Instruction * ins):
+        Intrinsic(ins) {
+    }
+
+    static AddEllipsisArgumentTail_ create(Builder & b, llvm::Value * args, llvm::Value * rho, llvm::Value * eager) {
+        std::vector<llvm::Value *> args_;
+        args_.push_back(args);
+        args_.push_back(rho);
+        args_.push_back(eager);
+        llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic<AddEllipsisArgumentTail_>(), args_, "", b);
+        b.insertCall(ins);
+        setIRType(ins, ::rjit::ir::Type::AddEllipsisArgumentTail_);
+        return ins;
+    }
+
+    static char const * intrinsicName() {
+        return "addEllipsisArgumentTail_";
+    }
+
+    static llvm::FunctionType * intrinsicType() { 
+        return llvm::FunctionType::get(t::SEXP, { t::SEXP, t::SEXP, t::Bool }, false);
+    }
+
+};
+
+class CallBuiltin_: public Intrinsic {
 public:
     llvm::Value * call() { return getValue(0); }
 
@@ -698,24 +843,24 @@ public:
 
     llvm::Value * rho() { return getValue(3); }
 
-    CallBuiltin(llvm::Instruction * ins):
+    CallBuiltin_(llvm::Instruction * ins):
         Intrinsic(ins) {
     }
 
-    static CallBuiltin create(Builder & b, llvm::Value * call, llvm::Value * closure, llvm::Value * arguments, llvm::Value * rho) {
+    static CallBuiltin_ create(Builder & b, llvm::Value * call, llvm::Value * closure, llvm::Value * arguments, llvm::Value * rho) {
         std::vector<llvm::Value *> args_;
         args_.push_back(call);
         args_.push_back(closure);
         args_.push_back(arguments);
         args_.push_back(rho);
-        llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic<CallBuiltin>(), args_, "", b);
+        llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic<CallBuiltin_>(), args_, "", b);
         b.insertCall(ins);
-        setIRType(ins, ::rjit::ir::Type::CallBuiltin);
+        setIRType(ins, ::rjit::ir::Type::CallBuiltin_);
         return ins;
     }
 
     static char const * intrinsicName() {
-        return "callBuiltin";
+        return "callBuiltin_";
     }
 
     static llvm::FunctionType * intrinsicType() { 
@@ -724,7 +869,7 @@ public:
 
 };
 
-class CallSpecial: public Intrinsic {
+class CallSpecial_: public Intrinsic {
 public:
     llvm::Value * call() { return getValue(0); }
 
@@ -734,24 +879,24 @@ public:
 
     llvm::Value * rho() { return getValue(3); }
 
-    CallSpecial(llvm::Instruction * ins):
+    CallSpecial_(llvm::Instruction * ins):
         Intrinsic(ins) {
     }
 
-    static CallSpecial create(Builder & b, llvm::Value * call, llvm::Value * closure, llvm::Value * arguments, llvm::Value * rho) {
+    static CallSpecial_ create(Builder & b, llvm::Value * call, llvm::Value * closure, llvm::Value * arguments, llvm::Value * rho) {
         std::vector<llvm::Value *> args_;
         args_.push_back(call);
         args_.push_back(closure);
         args_.push_back(arguments);
         args_.push_back(rho);
-        llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic<CallSpecial>(), args_, "", b);
+        llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic<CallSpecial_>(), args_, "", b);
         b.insertCall(ins);
-        setIRType(ins, ::rjit::ir::Type::CallSpecial);
+        setIRType(ins, ::rjit::ir::Type::CallSpecial_);
         return ins;
     }
 
     static char const * intrinsicName() {
-        return "callSpecial";
+        return "callSpecial_";
     }
 
     static llvm::FunctionType * intrinsicType() { 
@@ -760,7 +905,7 @@ public:
 
 };
 
-class CallClosure: public Intrinsic {
+class CallClosure_: public Intrinsic {
 public:
     llvm::Value * call() { return getValue(0); }
 
@@ -770,24 +915,24 @@ public:
 
     llvm::Value * rho() { return getValue(3); }
 
-    CallClosure(llvm::Instruction * ins):
+    CallClosure_(llvm::Instruction * ins):
         Intrinsic(ins) {
     }
 
-    static CallClosure create(Builder & b, llvm::Value * call, llvm::Value * closure, llvm::Value * arguments, llvm::Value * rho) {
+    static CallClosure_ create(Builder & b, llvm::Value * call, llvm::Value * closure, llvm::Value * arguments, llvm::Value * rho) {
         std::vector<llvm::Value *> args_;
         args_.push_back(call);
         args_.push_back(closure);
         args_.push_back(arguments);
         args_.push_back(rho);
-        llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic<CallClosure>(), args_, "", b);
+        llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic<CallClosure_>(), args_, "", b);
         b.insertCall(ins);
-        setIRType(ins, ::rjit::ir::Type::CallClosure);
+        setIRType(ins, ::rjit::ir::Type::CallClosure_);
         return ins;
     }
 
     static char const * intrinsicName() {
-        return "callClosure";
+        return "callClosure_";
     }
 
     static llvm::FunctionType * intrinsicType() { 
@@ -796,7 +941,7 @@ public:
 
 };
 
-class CreateClosure: public Intrinsic {
+class CreateClosure_: public Intrinsic {
 public:
     llvm::Value * forms() { return getValue(0); }
 
@@ -804,23 +949,23 @@ public:
 
     llvm::Value * rho() { return getValue(2); }
 
-    CreateClosure(llvm::Instruction * ins):
+    CreateClosure_(llvm::Instruction * ins):
         Intrinsic(ins) {
     }
 
-    static CreateClosure create(Builder & b, llvm::Value * forms, llvm::Value * body, llvm::Value * rho) {
+    static CreateClosure_ create(Builder & b, llvm::Value * forms, llvm::Value * body, llvm::Value * rho) {
         std::vector<llvm::Value *> args_;
         args_.push_back(forms);
         args_.push_back(body);
         args_.push_back(rho);
-        llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic<CreateClosure>(), args_, "", b);
+        llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic<CreateClosure_>(), args_, "", b);
         b.insertCall(ins);
-        setIRType(ins, ::rjit::ir::Type::CreateClosure);
+        setIRType(ins, ::rjit::ir::Type::CreateClosure_);
         return ins;
     }
 
     static char const * intrinsicName() {
-        return "createClosure";
+        return "createClosure_";
     }
 
     static llvm::FunctionType * intrinsicType() { 
@@ -829,661 +974,787 @@ public:
 
 };
 
-class GenericUnaryMinus: public Intrinsic {
+class GenericUnaryMinus_: public Intrinsic {
 public:
     llvm::Value * op() { return getValue(0); }
 
-    SEXP call() { return getValueSEXP(1); }
+    llvm::Value * rho() { return getValue(1); }
 
-    llvm::Value * rho() { return getValue(2); }
+    llvm::Value * constantPool() { return getValue(2); }
 
-    GenericUnaryMinus(llvm::Instruction * ins):
+    
+int call() { return getValueInt(3); }
+SEXP call(SEXP constantPool) { return VECTOR_ELT(constantPool, call()); }
+SEXP call(Builder const & b) { return b.constantPool(call()); }
+        
+
+    GenericUnaryMinus_(llvm::Instruction * ins):
         Intrinsic(ins) {
     }
 
-    static GenericUnaryMinus create(Builder & b, llvm::Value * op, SEXP call, llvm::Value * rho) {
+    static GenericUnaryMinus_ create(Builder & b, llvm::Value * op, llvm::Value * rho, SEXP call) {
         std::vector<llvm::Value *> args_;
         args_.push_back(op);
-        args_.push_back(Builder::constantPoolSexp(call));
         args_.push_back(rho);
-        llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic<GenericUnaryMinus>(), args_, "", b);
+        args_.push_back(b.consts());
+        args_.push_back(Builder::integer(b.constantPoolIndex(call)));
+        llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic<GenericUnaryMinus_>(), args_, "", b);
         b.insertCall(ins);
-        setIRType(ins, ::rjit::ir::Type::GenericUnaryMinus);
+        setIRType(ins, ::rjit::ir::Type::GenericUnaryMinus_);
         return ins;
     }
 
     static char const * intrinsicName() {
-        return "genericUnaryMinus";
+        return "genericUnaryMinus_";
     }
 
     static llvm::FunctionType * intrinsicType() { 
-        return llvm::FunctionType::get(t::SEXP, { t::SEXP, t::SEXP, t::SEXP }, false);
+        return llvm::FunctionType::get(t::SEXP, { t::SEXP, t::SEXP, t::SEXP, t::Int }, false);
     }
 
 };
 
-class GenericUnaryPlus: public Intrinsic {
+class GenericUnaryPlus_: public Intrinsic {
 public:
     llvm::Value * op() { return getValue(0); }
 
-    SEXP call() { return getValueSEXP(1); }
+    llvm::Value * rho() { return getValue(1); }
+
+    llvm::Value * constantPool() { return getValue(2); }
+
+    
+int call() { return getValueInt(3); }
+SEXP call(SEXP constantPool) { return VECTOR_ELT(constantPool, call()); }
+SEXP call(Builder const & b) { return b.constantPool(call()); }
+        
+
+    GenericUnaryPlus_(llvm::Instruction * ins):
+        Intrinsic(ins) {
+    }
+
+    static GenericUnaryPlus_ create(Builder & b, llvm::Value * op, llvm::Value * rho, SEXP call) {
+        std::vector<llvm::Value *> args_;
+        args_.push_back(op);
+        args_.push_back(rho);
+        args_.push_back(b.consts());
+        args_.push_back(Builder::integer(b.constantPoolIndex(call)));
+        llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic<GenericUnaryPlus_>(), args_, "", b);
+        b.insertCall(ins);
+        setIRType(ins, ::rjit::ir::Type::GenericUnaryPlus_);
+        return ins;
+    }
+
+    static char const * intrinsicName() {
+        return "genericUnaryPlus_";
+    }
+
+    static llvm::FunctionType * intrinsicType() { 
+        return llvm::FunctionType::get(t::SEXP, { t::SEXP, t::SEXP, t::SEXP, t::Int }, false);
+    }
+
+};
+
+class GenericAdd_: public Intrinsic {
+public:
+    llvm::Value * lhs() { return getValue(0); }
+
+    llvm::Value * rhs() { return getValue(1); }
 
     llvm::Value * rho() { return getValue(2); }
 
-    GenericUnaryPlus(llvm::Instruction * ins):
+    llvm::Value * constantPool() { return getValue(3); }
+
+    
+int call() { return getValueInt(4); }
+SEXP call(SEXP constantPool) { return VECTOR_ELT(constantPool, call()); }
+SEXP call(Builder const & b) { return b.constantPool(call()); }
+        
+
+    GenericAdd_(llvm::Instruction * ins):
         Intrinsic(ins) {
     }
 
-    static GenericUnaryPlus create(Builder & b, llvm::Value * op, SEXP call, llvm::Value * rho) {
+    static GenericAdd_ create(Builder & b, llvm::Value * lhs, llvm::Value * rhs, llvm::Value * rho, SEXP call) {
         std::vector<llvm::Value *> args_;
-        args_.push_back(op);
-        args_.push_back(Builder::constantPoolSexp(call));
+        args_.push_back(lhs);
+        args_.push_back(rhs);
         args_.push_back(rho);
-        llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic<GenericUnaryPlus>(), args_, "", b);
+        args_.push_back(b.consts());
+        args_.push_back(Builder::integer(b.constantPoolIndex(call)));
+        llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic<GenericAdd_>(), args_, "", b);
         b.insertCall(ins);
-        setIRType(ins, ::rjit::ir::Type::GenericUnaryPlus);
+        setIRType(ins, ::rjit::ir::Type::GenericAdd_);
         return ins;
     }
 
     static char const * intrinsicName() {
-        return "genericUnaryPlus";
+        return "genericAdd_";
     }
 
     static llvm::FunctionType * intrinsicType() { 
-        return llvm::FunctionType::get(t::SEXP, { t::SEXP, t::SEXP, t::SEXP }, false);
+        return llvm::FunctionType::get(t::SEXP, { t::SEXP, t::SEXP, t::SEXP, t::SEXP, t::Int }, false);
     }
 
 };
 
-class GenericAdd: public Intrinsic {
+class GenericSub_: public Intrinsic {
 public:
     llvm::Value * lhs() { return getValue(0); }
 
     llvm::Value * rhs() { return getValue(1); }
 
-    SEXP call() { return getValueSEXP(2); }
+    llvm::Value * rho() { return getValue(2); }
 
-    llvm::Value * rho() { return getValue(3); }
+    llvm::Value * constantPool() { return getValue(3); }
 
-    GenericAdd(llvm::Instruction * ins):
+    
+int call() { return getValueInt(4); }
+SEXP call(SEXP constantPool) { return VECTOR_ELT(constantPool, call()); }
+SEXP call(Builder const & b) { return b.constantPool(call()); }
+        
+
+    GenericSub_(llvm::Instruction * ins):
         Intrinsic(ins) {
     }
 
-    static GenericAdd create(Builder & b, llvm::Value * lhs, llvm::Value * rhs, SEXP call, llvm::Value * rho) {
+    static GenericSub_ create(Builder & b, llvm::Value * lhs, llvm::Value * rhs, llvm::Value * rho, SEXP call) {
         std::vector<llvm::Value *> args_;
         args_.push_back(lhs);
         args_.push_back(rhs);
-        args_.push_back(Builder::constantPoolSexp(call));
         args_.push_back(rho);
-        llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic<GenericAdd>(), args_, "", b);
+        args_.push_back(b.consts());
+        args_.push_back(Builder::integer(b.constantPoolIndex(call)));
+        llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic<GenericSub_>(), args_, "", b);
         b.insertCall(ins);
-        setIRType(ins, ::rjit::ir::Type::GenericAdd);
+        setIRType(ins, ::rjit::ir::Type::GenericSub_);
         return ins;
     }
 
     static char const * intrinsicName() {
-        return "genericAdd";
+        return "genericSub_";
     }
 
     static llvm::FunctionType * intrinsicType() { 
-        return llvm::FunctionType::get(t::SEXP, { t::SEXP, t::SEXP, t::SEXP, t::SEXP }, false);
+        return llvm::FunctionType::get(t::SEXP, { t::SEXP, t::SEXP, t::SEXP, t::SEXP, t::Int }, false);
     }
 
 };
 
-class GenericSub: public Intrinsic {
+class GenericMul_: public Intrinsic {
 public:
     llvm::Value * lhs() { return getValue(0); }
 
     llvm::Value * rhs() { return getValue(1); }
 
-    SEXP call() { return getValueSEXP(2); }
+    llvm::Value * rho() { return getValue(2); }
 
-    llvm::Value * rho() { return getValue(3); }
+    llvm::Value * constantPool() { return getValue(3); }
 
-    GenericSub(llvm::Instruction * ins):
+    
+int call() { return getValueInt(4); }
+SEXP call(SEXP constantPool) { return VECTOR_ELT(constantPool, call()); }
+SEXP call(Builder const & b) { return b.constantPool(call()); }
+        
+
+    GenericMul_(llvm::Instruction * ins):
         Intrinsic(ins) {
     }
 
-    static GenericSub create(Builder & b, llvm::Value * lhs, llvm::Value * rhs, SEXP call, llvm::Value * rho) {
+    static GenericMul_ create(Builder & b, llvm::Value * lhs, llvm::Value * rhs, llvm::Value * rho, SEXP call) {
         std::vector<llvm::Value *> args_;
         args_.push_back(lhs);
         args_.push_back(rhs);
-        args_.push_back(Builder::constantPoolSexp(call));
         args_.push_back(rho);
-        llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic<GenericSub>(), args_, "", b);
+        args_.push_back(b.consts());
+        args_.push_back(Builder::integer(b.constantPoolIndex(call)));
+        llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic<GenericMul_>(), args_, "", b);
         b.insertCall(ins);
-        setIRType(ins, ::rjit::ir::Type::GenericSub);
+        setIRType(ins, ::rjit::ir::Type::GenericMul_);
         return ins;
     }
 
     static char const * intrinsicName() {
-        return "genericSub";
+        return "genericMul_";
     }
 
     static llvm::FunctionType * intrinsicType() { 
-        return llvm::FunctionType::get(t::SEXP, { t::SEXP, t::SEXP, t::SEXP, t::SEXP }, false);
+        return llvm::FunctionType::get(t::SEXP, { t::SEXP, t::SEXP, t::SEXP, t::SEXP, t::Int }, false);
     }
 
 };
 
-class GenericMul: public Intrinsic {
+class GenericDiv_: public Intrinsic {
 public:
     llvm::Value * lhs() { return getValue(0); }
 
     llvm::Value * rhs() { return getValue(1); }
 
-    SEXP call() { return getValueSEXP(2); }
+    llvm::Value * rho() { return getValue(2); }
 
-    llvm::Value * rho() { return getValue(3); }
+    llvm::Value * constantPool() { return getValue(3); }
 
-    GenericMul(llvm::Instruction * ins):
+    
+int call() { return getValueInt(4); }
+SEXP call(SEXP constantPool) { return VECTOR_ELT(constantPool, call()); }
+SEXP call(Builder const & b) { return b.constantPool(call()); }
+        
+
+    GenericDiv_(llvm::Instruction * ins):
         Intrinsic(ins) {
     }
 
-    static GenericMul create(Builder & b, llvm::Value * lhs, llvm::Value * rhs, SEXP call, llvm::Value * rho) {
+    static GenericDiv_ create(Builder & b, llvm::Value * lhs, llvm::Value * rhs, llvm::Value * rho, SEXP call) {
         std::vector<llvm::Value *> args_;
         args_.push_back(lhs);
         args_.push_back(rhs);
-        args_.push_back(Builder::constantPoolSexp(call));
         args_.push_back(rho);
-        llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic<GenericMul>(), args_, "", b);
+        args_.push_back(b.consts());
+        args_.push_back(Builder::integer(b.constantPoolIndex(call)));
+        llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic<GenericDiv_>(), args_, "", b);
         b.insertCall(ins);
-        setIRType(ins, ::rjit::ir::Type::GenericMul);
+        setIRType(ins, ::rjit::ir::Type::GenericDiv_);
         return ins;
     }
 
     static char const * intrinsicName() {
-        return "genericMul";
+        return "genericDiv_";
     }
 
     static llvm::FunctionType * intrinsicType() { 
-        return llvm::FunctionType::get(t::SEXP, { t::SEXP, t::SEXP, t::SEXP, t::SEXP }, false);
+        return llvm::FunctionType::get(t::SEXP, { t::SEXP, t::SEXP, t::SEXP, t::SEXP, t::Int }, false);
     }
 
 };
 
-class GenericDiv: public Intrinsic {
+class GenericPow_: public Intrinsic {
 public:
     llvm::Value * lhs() { return getValue(0); }
 
     llvm::Value * rhs() { return getValue(1); }
 
-    SEXP call() { return getValueSEXP(2); }
+    llvm::Value * rho() { return getValue(2); }
 
-    llvm::Value * rho() { return getValue(3); }
+    llvm::Value * constantPool() { return getValue(3); }
 
-    GenericDiv(llvm::Instruction * ins):
+    
+int call() { return getValueInt(4); }
+SEXP call(SEXP constantPool) { return VECTOR_ELT(constantPool, call()); }
+SEXP call(Builder const & b) { return b.constantPool(call()); }
+        
+
+    GenericPow_(llvm::Instruction * ins):
         Intrinsic(ins) {
     }
 
-    static GenericDiv create(Builder & b, llvm::Value * lhs, llvm::Value * rhs, SEXP call, llvm::Value * rho) {
+    static GenericPow_ create(Builder & b, llvm::Value * lhs, llvm::Value * rhs, llvm::Value * rho, SEXP call) {
         std::vector<llvm::Value *> args_;
         args_.push_back(lhs);
         args_.push_back(rhs);
-        args_.push_back(Builder::constantPoolSexp(call));
         args_.push_back(rho);
-        llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic<GenericDiv>(), args_, "", b);
+        args_.push_back(b.consts());
+        args_.push_back(Builder::integer(b.constantPoolIndex(call)));
+        llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic<GenericPow_>(), args_, "", b);
         b.insertCall(ins);
-        setIRType(ins, ::rjit::ir::Type::GenericDiv);
+        setIRType(ins, ::rjit::ir::Type::GenericPow_);
         return ins;
     }
 
     static char const * intrinsicName() {
-        return "genericDiv";
+        return "genericPow_";
     }
 
     static llvm::FunctionType * intrinsicType() { 
-        return llvm::FunctionType::get(t::SEXP, { t::SEXP, t::SEXP, t::SEXP, t::SEXP }, false);
+        return llvm::FunctionType::get(t::SEXP, { t::SEXP, t::SEXP, t::SEXP, t::SEXP, t::Int }, false);
     }
 
 };
 
-class GenericPow: public Intrinsic {
-public:
-    llvm::Value * lhs() { return getValue(0); }
-
-    llvm::Value * rhs() { return getValue(1); }
-
-    SEXP call() { return getValueSEXP(2); }
-
-    llvm::Value * rho() { return getValue(3); }
-
-    GenericPow(llvm::Instruction * ins):
-        Intrinsic(ins) {
-    }
-
-    static GenericPow create(Builder & b, llvm::Value * lhs, llvm::Value * rhs, SEXP call, llvm::Value * rho) {
-        std::vector<llvm::Value *> args_;
-        args_.push_back(lhs);
-        args_.push_back(rhs);
-        args_.push_back(Builder::constantPoolSexp(call));
-        args_.push_back(rho);
-        llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic<GenericPow>(), args_, "", b);
-        b.insertCall(ins);
-        setIRType(ins, ::rjit::ir::Type::GenericPow);
-        return ins;
-    }
-
-    static char const * intrinsicName() {
-        return "genericPow";
-    }
-
-    static llvm::FunctionType * intrinsicType() { 
-        return llvm::FunctionType::get(t::SEXP, { t::SEXP, t::SEXP, t::SEXP, t::SEXP }, false);
-    }
-
-};
-
-class GenericSqrt: public Intrinsic {
+class GenericSqrt_: public Intrinsic {
 public:
     llvm::Value * op() { return getValue(0); }
 
-    SEXP call() { return getValueSEXP(1); }
+    llvm::Value * rho() { return getValue(1); }
 
-    llvm::Value * rho() { return getValue(2); }
+    llvm::Value * constantPool() { return getValue(2); }
 
-    GenericSqrt(llvm::Instruction * ins):
+    
+int call() { return getValueInt(3); }
+SEXP call(SEXP constantPool) { return VECTOR_ELT(constantPool, call()); }
+SEXP call(Builder const & b) { return b.constantPool(call()); }
+        
+
+    GenericSqrt_(llvm::Instruction * ins):
         Intrinsic(ins) {
     }
 
-    static GenericSqrt create(Builder & b, llvm::Value * op, SEXP call, llvm::Value * rho) {
+    static GenericSqrt_ create(Builder & b, llvm::Value * op, llvm::Value * rho, SEXP call) {
         std::vector<llvm::Value *> args_;
         args_.push_back(op);
-        args_.push_back(Builder::constantPoolSexp(call));
         args_.push_back(rho);
-        llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic<GenericSqrt>(), args_, "", b);
+        args_.push_back(b.consts());
+        args_.push_back(Builder::integer(b.constantPoolIndex(call)));
+        llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic<GenericSqrt_>(), args_, "", b);
         b.insertCall(ins);
-        setIRType(ins, ::rjit::ir::Type::GenericSqrt);
+        setIRType(ins, ::rjit::ir::Type::GenericSqrt_);
         return ins;
     }
 
     static char const * intrinsicName() {
-        return "genericSqrt";
+        return "genericSqrt_";
     }
 
     static llvm::FunctionType * intrinsicType() { 
-        return llvm::FunctionType::get(t::SEXP, { t::SEXP, t::SEXP, t::SEXP }, false);
+        return llvm::FunctionType::get(t::SEXP, { t::SEXP, t::SEXP, t::SEXP, t::Int }, false);
     }
 
 };
 
-class GenericExp: public Intrinsic {
+class GenericExp_: public Intrinsic {
 public:
     llvm::Value * op() { return getValue(0); }
 
-    SEXP call() { return getValueSEXP(1); }
+    llvm::Value * rho() { return getValue(1); }
+
+    llvm::Value * constantPool() { return getValue(2); }
+
+    
+int call() { return getValueInt(3); }
+SEXP call(SEXP constantPool) { return VECTOR_ELT(constantPool, call()); }
+SEXP call(Builder const & b) { return b.constantPool(call()); }
+        
+
+    GenericExp_(llvm::Instruction * ins):
+        Intrinsic(ins) {
+    }
+
+    static GenericExp_ create(Builder & b, llvm::Value * op, llvm::Value * rho, SEXP call) {
+        std::vector<llvm::Value *> args_;
+        args_.push_back(op);
+        args_.push_back(rho);
+        args_.push_back(b.consts());
+        args_.push_back(Builder::integer(b.constantPoolIndex(call)));
+        llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic<GenericExp_>(), args_, "", b);
+        b.insertCall(ins);
+        setIRType(ins, ::rjit::ir::Type::GenericExp_);
+        return ins;
+    }
+
+    static char const * intrinsicName() {
+        return "genericExp_";
+    }
+
+    static llvm::FunctionType * intrinsicType() { 
+        return llvm::FunctionType::get(t::SEXP, { t::SEXP, t::SEXP, t::SEXP, t::Int }, false);
+    }
+
+};
+
+class GenericEq_: public Intrinsic {
+public:
+    llvm::Value * lhs() { return getValue(0); }
+
+    llvm::Value * rhs() { return getValue(1); }
 
     llvm::Value * rho() { return getValue(2); }
 
-    GenericExp(llvm::Instruction * ins):
+    llvm::Value * constantPool() { return getValue(3); }
+
+    
+int call() { return getValueInt(4); }
+SEXP call(SEXP constantPool) { return VECTOR_ELT(constantPool, call()); }
+SEXP call(Builder const & b) { return b.constantPool(call()); }
+        
+
+    GenericEq_(llvm::Instruction * ins):
         Intrinsic(ins) {
     }
 
-    static GenericExp create(Builder & b, llvm::Value * op, SEXP call, llvm::Value * rho) {
+    static GenericEq_ create(Builder & b, llvm::Value * lhs, llvm::Value * rhs, llvm::Value * rho, SEXP call) {
         std::vector<llvm::Value *> args_;
-        args_.push_back(op);
-        args_.push_back(Builder::constantPoolSexp(call));
+        args_.push_back(lhs);
+        args_.push_back(rhs);
         args_.push_back(rho);
-        llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic<GenericExp>(), args_, "", b);
+        args_.push_back(b.consts());
+        args_.push_back(Builder::integer(b.constantPoolIndex(call)));
+        llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic<GenericEq_>(), args_, "", b);
         b.insertCall(ins);
-        setIRType(ins, ::rjit::ir::Type::GenericExp);
+        setIRType(ins, ::rjit::ir::Type::GenericEq_);
         return ins;
     }
 
     static char const * intrinsicName() {
-        return "genericExp";
+        return "genericEq_";
     }
 
     static llvm::FunctionType * intrinsicType() { 
-        return llvm::FunctionType::get(t::SEXP, { t::SEXP, t::SEXP, t::SEXP }, false);
+        return llvm::FunctionType::get(t::SEXP, { t::SEXP, t::SEXP, t::SEXP, t::SEXP, t::Int }, false);
     }
 
 };
 
-class GenericEq: public Intrinsic {
+class GenericNe_: public Intrinsic {
 public:
     llvm::Value * lhs() { return getValue(0); }
 
     llvm::Value * rhs() { return getValue(1); }
 
-    SEXP call() { return getValueSEXP(2); }
+    llvm::Value * rho() { return getValue(2); }
 
-    llvm::Value * rho() { return getValue(3); }
+    llvm::Value * constantPool() { return getValue(3); }
 
-    GenericEq(llvm::Instruction * ins):
+    
+int call() { return getValueInt(4); }
+SEXP call(SEXP constantPool) { return VECTOR_ELT(constantPool, call()); }
+SEXP call(Builder const & b) { return b.constantPool(call()); }
+        
+
+    GenericNe_(llvm::Instruction * ins):
         Intrinsic(ins) {
     }
 
-    static GenericEq create(Builder & b, llvm::Value * lhs, llvm::Value * rhs, SEXP call, llvm::Value * rho) {
+    static GenericNe_ create(Builder & b, llvm::Value * lhs, llvm::Value * rhs, llvm::Value * rho, SEXP call) {
         std::vector<llvm::Value *> args_;
         args_.push_back(lhs);
         args_.push_back(rhs);
-        args_.push_back(Builder::constantPoolSexp(call));
         args_.push_back(rho);
-        llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic<GenericEq>(), args_, "", b);
+        args_.push_back(b.consts());
+        args_.push_back(Builder::integer(b.constantPoolIndex(call)));
+        llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic<GenericNe_>(), args_, "", b);
         b.insertCall(ins);
-        setIRType(ins, ::rjit::ir::Type::GenericEq);
+        setIRType(ins, ::rjit::ir::Type::GenericNe_);
         return ins;
     }
 
     static char const * intrinsicName() {
-        return "genericEq";
+        return "genericNe_";
     }
 
     static llvm::FunctionType * intrinsicType() { 
-        return llvm::FunctionType::get(t::SEXP, { t::SEXP, t::SEXP, t::SEXP, t::SEXP }, false);
+        return llvm::FunctionType::get(t::SEXP, { t::SEXP, t::SEXP, t::SEXP, t::SEXP, t::Int }, false);
     }
 
 };
 
-class GenericNe: public Intrinsic {
+class GenericLt_: public Intrinsic {
 public:
     llvm::Value * lhs() { return getValue(0); }
 
     llvm::Value * rhs() { return getValue(1); }
 
-    SEXP call() { return getValueSEXP(2); }
+    llvm::Value * rho() { return getValue(2); }
 
-    llvm::Value * rho() { return getValue(3); }
+    llvm::Value * constantPool() { return getValue(3); }
 
-    GenericNe(llvm::Instruction * ins):
+    
+int call() { return getValueInt(4); }
+SEXP call(SEXP constantPool) { return VECTOR_ELT(constantPool, call()); }
+SEXP call(Builder const & b) { return b.constantPool(call()); }
+        
+
+    GenericLt_(llvm::Instruction * ins):
         Intrinsic(ins) {
     }
 
-    static GenericNe create(Builder & b, llvm::Value * lhs, llvm::Value * rhs, SEXP call, llvm::Value * rho) {
+    static GenericLt_ create(Builder & b, llvm::Value * lhs, llvm::Value * rhs, llvm::Value * rho, SEXP call) {
         std::vector<llvm::Value *> args_;
         args_.push_back(lhs);
         args_.push_back(rhs);
-        args_.push_back(Builder::constantPoolSexp(call));
         args_.push_back(rho);
-        llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic<GenericNe>(), args_, "", b);
+        args_.push_back(b.consts());
+        args_.push_back(Builder::integer(b.constantPoolIndex(call)));
+        llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic<GenericLt_>(), args_, "", b);
         b.insertCall(ins);
-        setIRType(ins, ::rjit::ir::Type::GenericNe);
+        setIRType(ins, ::rjit::ir::Type::GenericLt_);
         return ins;
     }
 
     static char const * intrinsicName() {
-        return "genericNe";
+        return "genericLt_";
     }
 
     static llvm::FunctionType * intrinsicType() { 
-        return llvm::FunctionType::get(t::SEXP, { t::SEXP, t::SEXP, t::SEXP, t::SEXP }, false);
+        return llvm::FunctionType::get(t::SEXP, { t::SEXP, t::SEXP, t::SEXP, t::SEXP, t::Int }, false);
     }
 
 };
 
-class GenericLt: public Intrinsic {
+class GenericLe_: public Intrinsic {
 public:
     llvm::Value * lhs() { return getValue(0); }
 
     llvm::Value * rhs() { return getValue(1); }
 
-    SEXP call() { return getValueSEXP(2); }
+    llvm::Value * rho() { return getValue(2); }
 
-    llvm::Value * rho() { return getValue(3); }
+    llvm::Value * constantPool() { return getValue(3); }
 
-    GenericLt(llvm::Instruction * ins):
+    
+int call() { return getValueInt(4); }
+SEXP call(SEXP constantPool) { return VECTOR_ELT(constantPool, call()); }
+SEXP call(Builder const & b) { return b.constantPool(call()); }
+        
+
+    GenericLe_(llvm::Instruction * ins):
         Intrinsic(ins) {
     }
 
-    static GenericLt create(Builder & b, llvm::Value * lhs, llvm::Value * rhs, SEXP call, llvm::Value * rho) {
+    static GenericLe_ create(Builder & b, llvm::Value * lhs, llvm::Value * rhs, llvm::Value * rho, SEXP call) {
         std::vector<llvm::Value *> args_;
         args_.push_back(lhs);
         args_.push_back(rhs);
-        args_.push_back(Builder::constantPoolSexp(call));
         args_.push_back(rho);
-        llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic<GenericLt>(), args_, "", b);
+        args_.push_back(b.consts());
+        args_.push_back(Builder::integer(b.constantPoolIndex(call)));
+        llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic<GenericLe_>(), args_, "", b);
         b.insertCall(ins);
-        setIRType(ins, ::rjit::ir::Type::GenericLt);
+        setIRType(ins, ::rjit::ir::Type::GenericLe_);
         return ins;
     }
 
     static char const * intrinsicName() {
-        return "genericLt";
+        return "genericLe_";
     }
 
     static llvm::FunctionType * intrinsicType() { 
-        return llvm::FunctionType::get(t::SEXP, { t::SEXP, t::SEXP, t::SEXP, t::SEXP }, false);
+        return llvm::FunctionType::get(t::SEXP, { t::SEXP, t::SEXP, t::SEXP, t::SEXP, t::Int }, false);
     }
 
 };
 
-class GenericLe: public Intrinsic {
+class GenericGe_: public Intrinsic {
 public:
     llvm::Value * lhs() { return getValue(0); }
 
     llvm::Value * rhs() { return getValue(1); }
 
-    SEXP call() { return getValueSEXP(2); }
+    llvm::Value * rho() { return getValue(2); }
 
-    llvm::Value * rho() { return getValue(3); }
+    llvm::Value * constantPool() { return getValue(3); }
 
-    GenericLe(llvm::Instruction * ins):
+    
+int call() { return getValueInt(4); }
+SEXP call(SEXP constantPool) { return VECTOR_ELT(constantPool, call()); }
+SEXP call(Builder const & b) { return b.constantPool(call()); }
+        
+
+    GenericGe_(llvm::Instruction * ins):
         Intrinsic(ins) {
     }
 
-    static GenericLe create(Builder & b, llvm::Value * lhs, llvm::Value * rhs, SEXP call, llvm::Value * rho) {
+    static GenericGe_ create(Builder & b, llvm::Value * lhs, llvm::Value * rhs, llvm::Value * rho, SEXP call) {
         std::vector<llvm::Value *> args_;
         args_.push_back(lhs);
         args_.push_back(rhs);
-        args_.push_back(Builder::constantPoolSexp(call));
         args_.push_back(rho);
-        llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic<GenericLe>(), args_, "", b);
+        args_.push_back(b.consts());
+        args_.push_back(Builder::integer(b.constantPoolIndex(call)));
+        llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic<GenericGe_>(), args_, "", b);
         b.insertCall(ins);
-        setIRType(ins, ::rjit::ir::Type::GenericLe);
+        setIRType(ins, ::rjit::ir::Type::GenericGe_);
         return ins;
     }
 
     static char const * intrinsicName() {
-        return "genericLe";
+        return "genericGe_";
     }
 
     static llvm::FunctionType * intrinsicType() { 
-        return llvm::FunctionType::get(t::SEXP, { t::SEXP, t::SEXP, t::SEXP, t::SEXP }, false);
+        return llvm::FunctionType::get(t::SEXP, { t::SEXP, t::SEXP, t::SEXP, t::SEXP, t::Int }, false);
     }
 
 };
 
-class GenericGe: public Intrinsic {
+class GenericGt_: public Intrinsic {
 public:
     llvm::Value * lhs() { return getValue(0); }
 
     llvm::Value * rhs() { return getValue(1); }
 
-    SEXP call() { return getValueSEXP(2); }
+    llvm::Value * rho() { return getValue(2); }
 
-    llvm::Value * rho() { return getValue(3); }
+    llvm::Value * constantPool() { return getValue(3); }
 
-    GenericGe(llvm::Instruction * ins):
+    
+int call() { return getValueInt(4); }
+SEXP call(SEXP constantPool) { return VECTOR_ELT(constantPool, call()); }
+SEXP call(Builder const & b) { return b.constantPool(call()); }
+        
+
+    GenericGt_(llvm::Instruction * ins):
         Intrinsic(ins) {
     }
 
-    static GenericGe create(Builder & b, llvm::Value * lhs, llvm::Value * rhs, SEXP call, llvm::Value * rho) {
+    static GenericGt_ create(Builder & b, llvm::Value * lhs, llvm::Value * rhs, llvm::Value * rho, SEXP call) {
         std::vector<llvm::Value *> args_;
         args_.push_back(lhs);
         args_.push_back(rhs);
-        args_.push_back(Builder::constantPoolSexp(call));
         args_.push_back(rho);
-        llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic<GenericGe>(), args_, "", b);
+        args_.push_back(b.consts());
+        args_.push_back(Builder::integer(b.constantPoolIndex(call)));
+        llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic<GenericGt_>(), args_, "", b);
         b.insertCall(ins);
-        setIRType(ins, ::rjit::ir::Type::GenericGe);
+        setIRType(ins, ::rjit::ir::Type::GenericGt_);
         return ins;
     }
 
     static char const * intrinsicName() {
-        return "genericGe";
+        return "genericGt_";
     }
 
     static llvm::FunctionType * intrinsicType() { 
-        return llvm::FunctionType::get(t::SEXP, { t::SEXP, t::SEXP, t::SEXP, t::SEXP }, false);
+        return llvm::FunctionType::get(t::SEXP, { t::SEXP, t::SEXP, t::SEXP, t::SEXP, t::Int }, false);
     }
 
 };
 
-class GenericGt: public Intrinsic {
+class GenericBitAnd_: public Intrinsic {
 public:
     llvm::Value * lhs() { return getValue(0); }
 
     llvm::Value * rhs() { return getValue(1); }
 
-    SEXP call() { return getValueSEXP(2); }
+    llvm::Value * rho() { return getValue(2); }
 
-    llvm::Value * rho() { return getValue(3); }
+    llvm::Value * constantPool() { return getValue(3); }
 
-    GenericGt(llvm::Instruction * ins):
+    
+int call() { return getValueInt(4); }
+SEXP call(SEXP constantPool) { return VECTOR_ELT(constantPool, call()); }
+SEXP call(Builder const & b) { return b.constantPool(call()); }
+        
+
+    GenericBitAnd_(llvm::Instruction * ins):
         Intrinsic(ins) {
     }
 
-    static GenericGt create(Builder & b, llvm::Value * lhs, llvm::Value * rhs, SEXP call, llvm::Value * rho) {
+    static GenericBitAnd_ create(Builder & b, llvm::Value * lhs, llvm::Value * rhs, llvm::Value * rho, SEXP call) {
         std::vector<llvm::Value *> args_;
         args_.push_back(lhs);
         args_.push_back(rhs);
-        args_.push_back(Builder::constantPoolSexp(call));
         args_.push_back(rho);
-        llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic<GenericGt>(), args_, "", b);
+        args_.push_back(b.consts());
+        args_.push_back(Builder::integer(b.constantPoolIndex(call)));
+        llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic<GenericBitAnd_>(), args_, "", b);
         b.insertCall(ins);
-        setIRType(ins, ::rjit::ir::Type::GenericGt);
+        setIRType(ins, ::rjit::ir::Type::GenericBitAnd_);
         return ins;
     }
 
     static char const * intrinsicName() {
-        return "genericGt";
+        return "genericBitAnd_";
     }
 
     static llvm::FunctionType * intrinsicType() { 
-        return llvm::FunctionType::get(t::SEXP, { t::SEXP, t::SEXP, t::SEXP, t::SEXP }, false);
+        return llvm::FunctionType::get(t::SEXP, { t::SEXP, t::SEXP, t::SEXP, t::SEXP, t::Int }, false);
     }
 
 };
 
-class GenericBitAnd: public Intrinsic {
+class GenericBitOr_: public Intrinsic {
 public:
     llvm::Value * lhs() { return getValue(0); }
 
     llvm::Value * rhs() { return getValue(1); }
 
-    SEXP call() { return getValueSEXP(2); }
+    llvm::Value * rho() { return getValue(2); }
 
-    llvm::Value * rho() { return getValue(3); }
+    llvm::Value * constantPool() { return getValue(3); }
 
-    GenericBitAnd(llvm::Instruction * ins):
+    
+int call() { return getValueInt(4); }
+SEXP call(SEXP constantPool) { return VECTOR_ELT(constantPool, call()); }
+SEXP call(Builder const & b) { return b.constantPool(call()); }
+        
+
+    GenericBitOr_(llvm::Instruction * ins):
         Intrinsic(ins) {
     }
 
-    static GenericBitAnd create(Builder & b, llvm::Value * lhs, llvm::Value * rhs, SEXP call, llvm::Value * rho) {
+    static GenericBitOr_ create(Builder & b, llvm::Value * lhs, llvm::Value * rhs, llvm::Value * rho, SEXP call) {
         std::vector<llvm::Value *> args_;
         args_.push_back(lhs);
         args_.push_back(rhs);
-        args_.push_back(Builder::constantPoolSexp(call));
         args_.push_back(rho);
-        llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic<GenericBitAnd>(), args_, "", b);
+        args_.push_back(b.consts());
+        args_.push_back(Builder::integer(b.constantPoolIndex(call)));
+        llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic<GenericBitOr_>(), args_, "", b);
         b.insertCall(ins);
-        setIRType(ins, ::rjit::ir::Type::GenericBitAnd);
+        setIRType(ins, ::rjit::ir::Type::GenericBitOr_);
         return ins;
     }
 
     static char const * intrinsicName() {
-        return "genericBitAnd";
+        return "genericBitOr_";
     }
 
     static llvm::FunctionType * intrinsicType() { 
-        return llvm::FunctionType::get(t::SEXP, { t::SEXP, t::SEXP, t::SEXP, t::SEXP }, false);
+        return llvm::FunctionType::get(t::SEXP, { t::SEXP, t::SEXP, t::SEXP, t::SEXP, t::Int }, false);
     }
 
 };
 
-class GenericBitOr: public Intrinsic {
-public:
-    llvm::Value * lhs() { return getValue(0); }
-
-    llvm::Value * rhs() { return getValue(1); }
-
-    SEXP call() { return getValueSEXP(2); }
-
-    llvm::Value * rho() { return getValue(3); }
-
-    GenericBitOr(llvm::Instruction * ins):
-        Intrinsic(ins) {
-    }
-
-    static GenericBitOr create(Builder & b, llvm::Value * lhs, llvm::Value * rhs, SEXP call, llvm::Value * rho) {
-        std::vector<llvm::Value *> args_;
-        args_.push_back(lhs);
-        args_.push_back(rhs);
-        args_.push_back(Builder::constantPoolSexp(call));
-        args_.push_back(rho);
-        llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic<GenericBitOr>(), args_, "", b);
-        b.insertCall(ins);
-        setIRType(ins, ::rjit::ir::Type::GenericBitOr);
-        return ins;
-    }
-
-    static char const * intrinsicName() {
-        return "genericBitOr";
-    }
-
-    static llvm::FunctionType * intrinsicType() { 
-        return llvm::FunctionType::get(t::SEXP, { t::SEXP, t::SEXP, t::SEXP, t::SEXP }, false);
-    }
-
-};
-
-class GenericNot: public Intrinsic {
+class GenericNot_: public Intrinsic {
 public:
     llvm::Value * op() { return getValue(0); }
 
-    SEXP call() { return getValueSEXP(1); }
+    llvm::Value * rho() { return getValue(1); }
 
-    llvm::Value * rho() { return getValue(2); }
+    llvm::Value * constantPool() { return getValue(2); }
 
-    GenericNot(llvm::Instruction * ins):
+    
+int call() { return getValueInt(3); }
+SEXP call(SEXP constantPool) { return VECTOR_ELT(constantPool, call()); }
+SEXP call(Builder const & b) { return b.constantPool(call()); }
+        
+
+    GenericNot_(llvm::Instruction * ins):
         Intrinsic(ins) {
     }
 
-    static GenericNot create(Builder & b, llvm::Value * op, SEXP call, llvm::Value * rho) {
+    static GenericNot_ create(Builder & b, llvm::Value * op, llvm::Value * rho, SEXP call) {
         std::vector<llvm::Value *> args_;
         args_.push_back(op);
-        args_.push_back(Builder::constantPoolSexp(call));
         args_.push_back(rho);
-        llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic<GenericNot>(), args_, "", b);
+        args_.push_back(b.consts());
+        args_.push_back(Builder::integer(b.constantPoolIndex(call)));
+        llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic<GenericNot_>(), args_, "", b);
         b.insertCall(ins);
-        setIRType(ins, ::rjit::ir::Type::GenericNot);
+        setIRType(ins, ::rjit::ir::Type::GenericNot_);
         return ins;
     }
 
     static char const * intrinsicName() {
-        return "genericNot";
+        return "genericNot_";
     }
 
     static llvm::FunctionType * intrinsicType() { 
-        return llvm::FunctionType::get(t::SEXP, { t::SEXP, t::SEXP, t::SEXP }, false);
+        return llvm::FunctionType::get(t::SEXP, { t::SEXP, t::SEXP, t::SEXP, t::Int }, false);
     }
 
 };
 
-class GenericGetVarMissOK: public Intrinsic {
+class GenericGetVarMissOK_: public Intrinsic {
 public:
     llvm::Value * symbol() { return getValue(0); }
 
     llvm::Value * rho() { return getValue(1); }
 
-    GenericGetVarMissOK(llvm::Instruction * ins):
+    GenericGetVarMissOK_(llvm::Instruction * ins):
         Intrinsic(ins) {
     }
 
-    static GenericGetVarMissOK create(Builder & b, llvm::Value * symbol, llvm::Value * rho) {
+    static GenericGetVarMissOK_ create(Builder & b, llvm::Value * symbol, llvm::Value * rho) {
         std::vector<llvm::Value *> args_;
         args_.push_back(symbol);
         args_.push_back(rho);
-        llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic<GenericGetVarMissOK>(), args_, "", b);
+        llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic<GenericGetVarMissOK_>(), args_, "", b);
         b.insertCall(ins);
-        setIRType(ins, ::rjit::ir::Type::GenericGetVarMissOK);
+        setIRType(ins, ::rjit::ir::Type::GenericGetVarMissOK_);
         return ins;
     }
 
     static char const * intrinsicName() {
-        return "genericGetVarMissOK";
+        return "genericGetVarMissOK_";
     }
 
     static llvm::FunctionType * intrinsicType() { 
@@ -1492,28 +1763,28 @@ public:
 
 };
 
-class GenericGetEllipsisValueMissOK: public Intrinsic {
+class GenericGetEllipsisValueMissOK_: public Intrinsic {
 public:
     llvm::Value * symbol() { return getValue(0); }
 
     llvm::Value * rho() { return getValue(1); }
 
-    GenericGetEllipsisValueMissOK(llvm::Instruction * ins):
+    GenericGetEllipsisValueMissOK_(llvm::Instruction * ins):
         Intrinsic(ins) {
     }
 
-    static GenericGetEllipsisValueMissOK create(Builder & b, llvm::Value * symbol, llvm::Value * rho) {
+    static GenericGetEllipsisValueMissOK_ create(Builder & b, llvm::Value * symbol, llvm::Value * rho) {
         std::vector<llvm::Value *> args_;
         args_.push_back(symbol);
         args_.push_back(rho);
-        llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic<GenericGetEllipsisValueMissOK>(), args_, "", b);
+        llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic<GenericGetEllipsisValueMissOK_>(), args_, "", b);
         b.insertCall(ins);
-        setIRType(ins, ::rjit::ir::Type::GenericGetEllipsisValueMissOK);
+        setIRType(ins, ::rjit::ir::Type::GenericGetEllipsisValueMissOK_);
         return ins;
     }
 
     static char const * intrinsicName() {
-        return "genericGetEllipsisValueMissOK";
+        return "genericGetEllipsisValueMissOK_";
     }
 
     static llvm::FunctionType * intrinsicType() { 
@@ -1522,91 +1793,109 @@ public:
 
 };
 
-class CheckSwitchControl: public Intrinsic {
+class CheckSwitchControl_: public Intrinsic {
 public:
     llvm::Value * ctrl() { return getValue(0); }
 
-    SEXP call() { return getValueSEXP(1); }
+    llvm::Value * constantPool() { return getValue(1); }
 
-    CheckSwitchControl(llvm::Instruction * ins):
+    
+int call() { return getValueInt(2); }
+SEXP call(SEXP constantPool) { return VECTOR_ELT(constantPool, call()); }
+SEXP call(Builder const & b) { return b.constantPool(call()); }
+        
+
+    CheckSwitchControl_(llvm::Instruction * ins):
         Intrinsic(ins) {
     }
 
-    static CheckSwitchControl create(Builder & b, llvm::Value * ctrl, SEXP call) {
+    static CheckSwitchControl_ create(Builder & b, llvm::Value * ctrl, SEXP call) {
         std::vector<llvm::Value *> args_;
         args_.push_back(ctrl);
-        args_.push_back(Builder::constantPoolSexp(call));
-        llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic<CheckSwitchControl>(), args_, "", b);
+        args_.push_back(b.consts());
+        args_.push_back(Builder::integer(b.constantPoolIndex(call)));
+        llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic<CheckSwitchControl_>(), args_, "", b);
         b.insertCall(ins);
-        setIRType(ins, ::rjit::ir::Type::CheckSwitchControl);
+        setIRType(ins, ::rjit::ir::Type::CheckSwitchControl_);
         return ins;
     }
 
     static char const * intrinsicName() {
-        return "checkSwitchControl";
+        return "checkSwitchControl_";
     }
 
     static llvm::FunctionType * intrinsicType() { 
-        return llvm::FunctionType::get(t::Void, { t::SEXP, t::SEXP }, false);
+        return llvm::FunctionType::get(t::Void, { t::SEXP, t::SEXP, t::Int }, false);
     }
 
 };
 
-class SwitchControlCharacter: public Intrinsic {
+class SwitchControlCharacter_: public Intrinsic {
 public:
     llvm::Value * ctrl() { return getValue(0); }
 
-    SEXP call() { return getValueSEXP(1); }
+    llvm::Value * consts() { return getValue(1); }
 
-    SEXP cases() { return getValueSEXP(2); }
+    
+int call() { return getValueInt(2); }
+SEXP call(SEXP constantPool) { return VECTOR_ELT(constantPool, call()); }
+SEXP call(Builder const & b) { return b.constantPool(call()); }
+        
 
-    SwitchControlCharacter(llvm::Instruction * ins):
+    
+int cases() { return getValueInt(3); }
+SEXP cases(SEXP constantPool) { return VECTOR_ELT(constantPool, cases()); }
+SEXP cases(Builder const & b) { return b.constantPool(cases()); }
+        
+
+    SwitchControlCharacter_(llvm::Instruction * ins):
         Intrinsic(ins) {
     }
 
-    static SwitchControlCharacter create(Builder & b, llvm::Value * ctrl, SEXP call, SEXP cases) {
+    static SwitchControlCharacter_ create(Builder & b, llvm::Value * ctrl, llvm::Value * consts, SEXP call, SEXP cases) {
         std::vector<llvm::Value *> args_;
         args_.push_back(ctrl);
-        args_.push_back(Builder::constantPoolSexp(call));
-        args_.push_back(Builder::constantPoolSexp(cases));
-        llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic<SwitchControlCharacter>(), args_, "", b);
+        args_.push_back(consts);
+        args_.push_back(Builder::integer(b.constantPoolIndex(call)));
+        args_.push_back(Builder::integer(b.constantPoolIndex(cases)));
+        llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic<SwitchControlCharacter_>(), args_, "", b);
         b.insertCall(ins);
-        setIRType(ins, ::rjit::ir::Type::SwitchControlCharacter);
+        setIRType(ins, ::rjit::ir::Type::SwitchControlCharacter_);
         return ins;
     }
 
     static char const * intrinsicName() {
-        return "switchControlCharacter";
+        return "switchControlCharacter_";
     }
 
     static llvm::FunctionType * intrinsicType() { 
-        return llvm::FunctionType::get(t::Int, { t::SEXP, t::SEXP, t::SEXP }, false);
+        return llvm::FunctionType::get(t::Int, { t::SEXP, t::SEXP, t::Int, t::Int }, false);
     }
 
 };
 
-class SwitchControlInteger: public Intrinsic {
+class SwitchControlInteger_: public Intrinsic {
 public:
     llvm::Value * ctrl() { return getValue(0); }
 
     int numCases() { return getValueInt(1); }
 
-    SwitchControlInteger(llvm::Instruction * ins):
+    SwitchControlInteger_(llvm::Instruction * ins):
         Intrinsic(ins) {
     }
 
-    static SwitchControlInteger create(Builder & b, llvm::Value * ctrl, int numCases) {
+    static SwitchControlInteger_ create(Builder & b, llvm::Value * ctrl, int numCases) {
         std::vector<llvm::Value *> args_;
         args_.push_back(ctrl);
         args_.push_back(Builder::integer(numCases));
-        llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic<SwitchControlInteger>(), args_, "", b);
+        llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic<SwitchControlInteger_>(), args_, "", b);
         b.insertCall(ins);
-        setIRType(ins, ::rjit::ir::Type::SwitchControlInteger);
+        setIRType(ins, ::rjit::ir::Type::SwitchControlInteger_);
         return ins;
     }
 
     static char const * intrinsicName() {
-        return "switchControlInteger";
+        return "switchControlInteger_";
     }
 
     static llvm::FunctionType * intrinsicType() { 
@@ -1615,28 +1904,28 @@ public:
 
 };
 
-class ReturnJump: public Intrinsic {
+class ReturnJump_: public Intrinsic {
 public:
     llvm::Value * value() { return getValue(0); }
 
     llvm::Value * rho() { return getValue(1); }
 
-    ReturnJump(llvm::Instruction * ins):
+    ReturnJump_(llvm::Instruction * ins):
         Intrinsic(ins) {
     }
 
-    static ReturnJump create(Builder & b, llvm::Value * value, llvm::Value * rho) {
+    static ReturnJump_ create(Builder & b, llvm::Value * value, llvm::Value * rho) {
         std::vector<llvm::Value *> args_;
         args_.push_back(value);
         args_.push_back(rho);
-        llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic<ReturnJump>(), args_, "", b);
+        llvm::CallInst * ins = llvm::CallInst::Create(b.intrinsic<ReturnJump_>(), args_, "", b);
         b.insertCall(ins);
-        setIRType(ins, ::rjit::ir::Type::ReturnJump);
+        setIRType(ins, ::rjit::ir::Type::ReturnJump_);
         return ins;
     }
 
     static char const * intrinsicName() {
-        return "returnJump";
+        return "returnJump_";
     }
 
     static llvm::FunctionType * intrinsicType() { 
