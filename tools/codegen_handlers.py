@@ -189,14 +189,7 @@ class CppMethod:
     def matchSequence(self):
         """ Returns a list of Instruction types that the method, assuming it is a handler matches. """
         result = []
-        print("!!!")
-        print(self.args)
-        print(ir_ins)
-        print(ir_ins.name)
         for a in self.args:
-            print(a.type)
-            print(a.type.name)
-            print(a.type.isSubclassOf(ir_ins))
             if (a.type.isSubclassOf(ir_ins)):
                 result.append(a.type)
         return result;
@@ -282,6 +275,13 @@ class Handler:
                 result += ")"
                 return result
 
+            def emitPredicateCall(self, iterators):
+                result = "(*this, &*" + iterators[0]
+                for i in iterators[1:-1]:
+                    result += ", &*" + i
+                result += ")"
+                return result
+
 
 
             def emitUnconditional(self, iterators):
@@ -293,11 +293,11 @@ class Handler:
                 predicate = conditional.predicate()
                 return """{{
         {ptype} p;
-        if (p.match{sig}) {{
+        if (p.match{sigP}) {{
             {hname}{sig};
             return true;
         }}
-    }}""".format(ptype = predicate.name, sig = self.emitUnconditionalCall(iterators), hname = conditional.name)
+    }}""".format(ptype = predicate.name, sigP = self.emitPredicateCall(iterators), sig = self.emitUnconditionalCall(iterators), hname = conditional.name)
 
             def emit(self, iterators):
                 """ Emits C++ code for the dispatch table entry. 
