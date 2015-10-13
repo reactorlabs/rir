@@ -3,9 +3,12 @@ import sys
 import xml.etree.ElementTree as et
 
 
-def error(file, line, message):
+def error(file, line, message, fail = True):
+    """ Displays an error with proper formatting and exits the application immediately, unless fail == False.
+    """
     print("{file}:{line}: error: {message}".format(file = file, line = line, message = message), file = sys.stderr)
-    sys.exit(-1)
+    if (fail):
+        sys.exit(-1)
 
 class Manager:
     """ Manages the doxygen generated xml classes for header files documentation. 
@@ -207,13 +210,15 @@ class CppMethod:
                         if (m.type.name != "bool"):
                             error(m.file, m.line, "Predicate {0} method match must return bool.".format(p.name))
                         if (len(m.args) != len(self.args)):
-                            error(m.file, m.line, "Predicate {0} method match does not have proper signature - invalid number of arguments.\n{1}:{2}: error: when used at handler {3}".format(p.name, self.file, self.line, self.name))
+                            error(m.file, m.line, "Predicate {0} method match does not have proper signature - invalid number of arguments.", fail = False)
+                            error(self.file, self.line, "when used at handler {0}".format(self.name))
                         # first argument must be handler
                         if (m.args[0].type != ir_handler):
                             error(m.file, m.line, "Predicate {0} match method's first argument must be a rjit::ir::Handler &.".format(p.name))
                         for i in range(1, len(m.args)):
                             if (m.args[i].type != self.args[i-1].type):
-                                error(m.file, m.line, "Predicate {0} match method's signature must follow the handler, difference at argument {1}.\n{2}:{3}: error: when used at handler {4}.".format(p.name, m.args[i].name, self.file, self.line, self.name))
+                                error(m.file, m.line, "Predicate {0} match method's signature must follow the handler, difference at argument {1}", fail = False)
+                                error(self.file, self.line, "when used at handler {0}.".format(self.name))
                         return # all good
 
                 error(p.file, p.line, "Predicate {0} does not define public method match.".format(p.name))
@@ -303,7 +308,7 @@ class Handler:
                             self.unconditionalMatchLength = mss
                             self.unconditional = handlerMethod
                         elif (mss == self.unconditionalMatchLength):
-                            print("{0}:{1}: error: Ambiguous handler for instruction type {2}".format(handlerMethod.file, handlerMethod.line, self.type), file = sys.stderr)
+                            error(handlerMethod.file, handlerMethod.line, "Ambiguous handler for instruction type {0}".format(self.type), fail = False)
                             error(self.unconditional.file, self.unconditional.line, "Previous match in handler method {0}".format(self.unconditional.name))
                 else:
                     self.recursive._addHandlerMethod(handlerMethod, matchSequence[1:]) 
