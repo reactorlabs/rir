@@ -71,6 +71,8 @@ public:
     }
 };
 
+
+
 namespace predicate {
 
 template<typename T, typename W, typename... MATCH_SEQ>
@@ -100,8 +102,6 @@ public:
 
 
 class MyHandler: public Handler {
-
-
 
 public:
 

@@ -3,6 +3,10 @@ import sys
 import xml.etree.ElementTree as et
 
 
+def error(file, line, message):
+    print("{file}:{line}: error: {message}".format(file = file, line = line, message = message), file = sys.stderr)
+    sys.exit(-1)
+
 class Manager:
     """ Manages the doxygen generated xml classes for header files documentation. 
     """
@@ -63,7 +67,6 @@ class Manager:
         if (os.path.isfile(fname)):
             c = CppClass(name, et.parse(fname))
             self._classes[name] = c
-            print(name)
             c.load(self)
             return c
         else:
@@ -93,7 +96,6 @@ class Manager:
                 # now if the refid is actually a filename, then load the corresponding class
                 # otherwise use it as type
                 fname = self._pathFor(xml.attrib["refid"])
-                print(">>>>" + fname)
                 if (os.path.isfile(fname)):
                     return self.getClass(Manager.demangle(xml.attrib["refid"][5:])) #[5:] to strip the leading class
                 else:
@@ -130,7 +132,6 @@ class CppClass:
             elif (child.tag == "derivedcompoundref"):
                 c = manager.getClass(child.text)
                 self.subclasses.append(c)
-                print(c.name)
                 c.addParent(self)
             elif (child.tag == "sectiondef"):
                 if (child.get("kind") in ("public-func", "private-func", "protected-func")):
@@ -178,6 +179,50 @@ class CppMethod:
         """
         return self.type == handler_t
 
+    def checkHandler(self):
+        """ Checks that the method as a handler is fine. This means to 1) check that its instructions come before predicates and that there are no other arguments. It also checks that all predicates conform to the handler's signature.
+        """
+        # at least one argument
+        if (len(self.args) == 0):
+            error(self.file, self.line, "Handler method {0} is not allowed to take no arguments.".format(self.name))
+        # the argument must be instruction
+        if (not self.args[0].type.isSubclassOf(ir_ins)):
+            error(self.file, self.line, "Handler method {0}, argument {1}: handler's first argument must inherit from rjit::ir::Instruction.".format(self.name, self.args[0].name))
+        # all other but last must be instructions
+        for a in self.args[1:-1]:
+            if (not a.type.isSubclassOf(ir_ins)):
+                error(self.file, self.line, "Handler method {0}, argument {1}: handler's non-last arguments must inherit from rjit::ir::Instruction.".format(self.name, a.name))
+        # last argument can either be instruction or predicate
+        if (len(self.args) > 1):
+            a = self.args[-1]
+            if (a.type.isSubclassOf(ir_ins)):
+                return # all good
+            elif (a.type.isSubclassOf(ir_predicate)):
+                p = a.type
+                # find predicate has static method named match
+                for m in p.methods:
+                    if (m.name == "match"):
+                        if (m.isStatic()):
+                            error(m.file, m.line, "Predicate {0} method match must not be static".format(p.name))
+                        if (m.type.name != "bool"):
+                            error(m.file, m.line, "Predicate {0} method match must return bool.".format(p.name))
+                        if (len(m.args) != len(self.args)):
+                            error(m.file, m.line, "Predicate {0} method match does not have proper signature - invalid number of arguments.\n{1}:{2}: error: when used at handler {3}".format(p.name, self.file, self.line, self.name))
+                        # first argument must be handler
+                        if (m.args[0].type != ir_handler):
+                            error(m.file, m.line, "Predicate {0} match method's first argument must be a rjit::ir::Handler &.".format(p.name))
+                        for i in range(1, len(m.args)):
+                            if (m.args[i].type != self.args[i-1].type):
+                                error(m.file, m.line, "Predicate {0} match method's signature must follow the handler, difference at argument {1}.\n{2}:{3}: error: when used at handler {4}.".format(p.name, m.args[i].name, self.file, self.line, self.name))
+                        return # all good
+
+                error(p.file, p.line, "Predicate {0} does not define public method match.".format(p.name))
+
+                pass # check the predicate's signature to follow
+            else:
+                error(self.file, self.line, "Handler method {0}, argument {1}: handler last arguments must inherit from either rjit::ir::Instruction or rjit::ir::Predicate.".format(self.name, a.name))
+
+
     def isVirtual(self):
         """ Returns true if the method is virtual. """
         return self._xml.attrib["virt"] == "virtual"
@@ -201,12 +246,6 @@ class CppMethod:
                 return a.type
         return False
 
-    def checkHandler(self):
-        """ Checks that the method as a handler is fine. This means to 1) check that its instructions come before predicates and that there are no other arguments. It also checks that all predicates conform to the handler's signature. 
-        """
-        # TODO fix this
-        pass
-
 class CppType:
     """ An unknown cpp type outside the doxygen documentation. 
     """
@@ -222,6 +261,7 @@ class CppVariable:
     """
     def __init__(self, xml, manager):
         self._xml = xml
+        self.text = ""
         for child in xml:
             if (child.tag == "declname"):
                 self.name = child.text
@@ -263,8 +303,8 @@ class Handler:
                             self.unconditionalMatchLength = mss
                             self.unconditional = handlerMethod
                         elif (mss == self.unconditionalMatchLength):
-                            print("Ambiguous handler for {0}".format(self.type))
-                            sys.exit(-1)
+                            print("{0}:{1}: error: Ambiguous handler for instruction type {2}".format(handlerMethod.file, handlerMethod.line, self.type), file = sys.stderr)
+                            error(self.unconditional.file, self.unconditional.line, "Previous match in handler method {0}".format(self.unconditional.name))
                 else:
                     self.recursive._addHandlerMethod(handlerMethod, matchSequence[1:]) 
 
@@ -348,8 +388,7 @@ class Handler:
 
         def _addHandlerMethod(self, handlerMethod, matchSequence):
             """ Adds given handler method and all it matches into the dispatch table. Takes the match signature of the handler method as well as an index to the signature - this is for recursive matching to determine how deep in the recursion we are. """
-            print(matchSequence)
-            print(handlerMethod.name)
+            handlerMethod.checkHandler()
             ir = matchSequence[0]
             for m in ir.matchSet:
                 self._getOrCreateEntry(m)._addHandlerMethod(handlerMethod, matchSequence)
@@ -387,9 +426,6 @@ switch (t) {{
         for m in handlerClass.methods:
             if (m.isHandler() and not m.overrides):
                 self.handlerMethods.append(m)
-                if (m.isStatic()):
-                    print("Handler cannot be static!!!")
-                    sys.exit(-1)
 
     def hasHandlers(self):
         return len(self.handlerMethods) > 0

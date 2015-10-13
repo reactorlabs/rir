@@ -73,6 +73,9 @@ enum class Type {
     Return,
     Branch,
     Cbr,
+    IntegerLessThan,
+    Switch,
+    IntegerAdd,
     unknown,
 };
 
