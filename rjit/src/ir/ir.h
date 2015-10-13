@@ -317,10 +317,6 @@ protected:
         return ins()->getArgOperand(argIndex);
     }
 
-    SEXP getValueSEXP(unsigned argIndex) {
-        return Builder::constantPoolSexp(ins()->getArgOperand(argIndex));
-    }
-
     int getValueInt(unsigned argIndex) {
         return Builder::integer(ins()->getArgOperand(argIndex));
     }
