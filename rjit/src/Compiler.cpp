@@ -171,12 +171,12 @@ SEXP Compiler::compileFunction(std::string const& name, SEXP ast,
 
 void Compiler::jitAll() {
 
-    auto handle = JITCompileLayer::getHandle(m.getM());
+    auto engine = JITCompileLayer::getEngine(m.getM());
 
     // perform all the relocations
     for (SEXP s : relocations) {
         auto f = reinterpret_cast<Function*>(TAG(s));
-        auto fp = JITCompileLayer::getFunctionPointer(handle, f->getName());
+        auto fp = engine->getPointerToFunction(f);
         SETCAR(s, reinterpret_cast<SEXP>(fp));
     }
 }

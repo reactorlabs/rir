@@ -1,11 +1,11 @@
 #include "JITMemoryManager.h"
+#include "JITSymbolResolver.h"
 
 namespace rjit {
 
 uint64_t JITMemoryManager::getSymbolAddress(const std::string& name) {
-    // In orcjit this is split into two classes. Symbol resolution should only
-    // happen in JITSymbolResolver.
-    assert(false);
+    // For future transition to orcjit we use a symbolResolver for this:
+    return JITSymbolResolver::singleton.findSymbol(name).getAddress();
 }
 
 // This is mostly a 1:1 copy from DynldMemoryManager which additionally exports

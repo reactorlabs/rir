@@ -124,8 +124,8 @@ void* ICCompiler::finalize() {
     // FIXME: Allocate a NATIVESXP, or link it to the caller??
 
     // m.dump();
-    auto handle = JITCompileLayer::getHandle(m.getM());
-    auto ic = JITCompileLayer::getFunctionPointer(handle, f->getName());
+    auto engine = JITCompileLayer::getEngine(m.getM());
+    auto ic = engine->getPointerToFunction(f);
 
     return ic;
 }
