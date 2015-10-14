@@ -190,16 +190,14 @@ class Builder {
     /** Given a call instruction, sets its attributes wrt stack map statepoints.
      */
     llvm::CallInst* insertCall(llvm::CallInst* f) {
-        assert(c_->functionId > 1);
-        assert(c_->functionId < StackMap::nextStackmapId);
-
         llvm::AttributeSet PAL;
         {
             llvm::SmallVector<llvm::AttributeSet, 4> Attrs;
             llvm::AttributeSet PAS;
             {
                 llvm::AttrBuilder B;
-                B.addAttribute("statepoint-id", std::to_string(c_->functionId));
+                auto id = JITCompileLayer::singleton.getSafepointId(this->f());
+                B.addAttribute("statepoint-id", std::to_string(id));
                 PAS = llvm::AttributeSet::get(m_->getContext(), ~0U, B);
             }
             Attrs.push_back(PAS);
@@ -306,8 +304,6 @@ class Builder {
             return nullptr;
         }
 
-        unsigned functionId;
-
         /** Constant pool of the function.
 
           The constant pool always starts with the AST of the function being
@@ -324,8 +320,7 @@ class Builder {
             : isReturnJumpNeeded(from->isReturnJumpNeeded),
               isResultVisible(from->isResultVisible), f(from->f), b(from->b),
               breakTarget(from->breakTarget), nextTarget(from->nextTarget),
-              functionId(from->functionId), cp(std::move(from->cp)),
-              args_(from->args_) {}
+              cp(std::move(from->cp)), args_(from->args_) {}
 
         Context(std::string const& name, llvm::Module* m,
                 llvm::FunctionType* ty, bool isReturnJumpNeeded);

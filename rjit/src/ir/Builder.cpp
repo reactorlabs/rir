@@ -12,14 +12,10 @@ Builder::Context::Context(std::string const& name, Module* m, FunctionType* ty,
     // TODO the type is ugly
     f = Function::Create(ty, Function::ExternalLinkage, name, m);
 
-    functionId = StackMap::nextStackmapId++;
-
     f->setGC("rjit");
     auto attrs = f->getAttributes();
     attrs = attrs.addAttribute(f->getContext(), AttributeSet::FunctionIndex,
                                "no-frame-pointer-elim", "true");
-    attrs = attrs.addAttribute(f->getContext(), AttributeSet::FunctionIndex,
-                               "statepoint-id", std::to_string(functionId));
     f->setAttributes(attrs);
 
     // create first basic block

@@ -8,7 +8,7 @@
 
 namespace rjit {
 
-const uint64_t patchpointSize = 10;
+const uint64_t patchpointSize = 12;
 
 } // namespace rjit
 

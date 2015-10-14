@@ -105,7 +105,7 @@ void* ICCompiler::finalize() {
     // FIXME: Allocate a NATIVESXP, or link it to the caller??
 
     // m.dump();
-    auto engine = JITCompileLayer::getEngine(b.module());
+    auto engine = JITCompileLayer::singleton.getEngine(b.module());
     auto ic = engine->getPointerToFunction(b.f());
 
     return ic;

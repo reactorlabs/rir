@@ -15,14 +15,14 @@ class ICCompiler {
 
     void* compile(SEXP inCall, SEXP inFun, SEXP inRho);
 
+    static std::string stubName(unsigned size);
+
   private:
     llvm::Value * call() { return b.args().at(size); }
     llvm::Value * fun() { return b.args().at(size+1); }
     llvm::Value * rho() { return b.rho(); }
     llvm::Value * caller() { return b.args().at(size+3); }
     llvm::Value * stackmapId() { return b.args().at(size+4); }
-
-    static std::string stubName(unsigned size);
 
     void* finalize();
 

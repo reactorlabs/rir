@@ -24,7 +24,6 @@ class Compiler {
     void jitAll();
 
   private:
-    
     /** Compiles an expression.
 
       The expression as a result is always visible by default, which can be

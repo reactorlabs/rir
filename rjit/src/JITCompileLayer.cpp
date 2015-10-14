@@ -2,6 +2,7 @@
 
 #include "GCPassApi.h"
 
+#include "ICCompiler.h"
 #include "JITMemoryManager.h"
 #include "JITSymbolResolver.h"
 #include "StackMap.h"
@@ -60,8 +61,7 @@ ExecutionEngine* JITCompileLayer::getEngine(Module* m) {
 
     engine->finalizeObject();
 
-    recordStackmaps(engine, m, mm);
-
+    // Fill in addresses for cached code
     for (llvm::Function& f : m->getFunctionList()) {
         if (CodeCache::missingAddress(f.getName())) {
             CodeCache::setAddress(f.getName(),
@@ -69,27 +69,50 @@ ExecutionEngine* JITCompileLayer::getEngine(Module* m) {
         }
     }
 
+    recordStackmaps(engine, m, mm);
+
+    // patch initial icStubs
+    for (auto p : safepoints) {
+        auto f = (uintptr_t)engine->getPointerToFunction(std::get<0>(p));
+        for (auto i : std::get<1>(p)) {
+            if (StackMap::isPatchpoint(i)) {
+                std::string name = ICCompiler::stubName(patchpoints.at(i));
+                patchIC((void*)CodeCache::getAddress(name), i, (void*)f);
+            }
+        }
+    }
+
+    safepoints.clear();
+    patchpoints.clear();
+
     return engine;
 }
 
 void JITCompileLayer::recordStackmaps(ExecutionEngine* engine, Module* m,
                                       JITMemoryManager* mm) {
-    // TODO: maybe we could record the statepoints lazily in getFunctionPointer
-    std::unordered_map<uint64_t, uintptr_t> fids;
-    for (llvm::Function& f : m->getFunctionList()) {
-        auto attrs = f.getAttributes();
-        uint64_t id = -1;
-        Attribute attr_id =
-            attrs.getAttribute(AttributeSet::FunctionIndex, "statepoint-id");
-        bool has_id = attr_id.isStringAttribute() &&
-                      !attr_id.getValueAsString().getAsInteger(10, id);
-        if (has_id)
-            fids[id] = (uintptr_t)engine->getPointerToFunction(&f);
+
+    // Pass one: collect all stackmap ids and construct a mapping to the
+    // correspondig native function addresses
+    StackMap::StackmapToFunction sp;
+    for (auto p : safepoints) {
+        auto f = (uintptr_t)engine->getPointerToFunction(std::get<0>(p));
+        for (auto i : std::get<1>(p)) {
+            sp[i] = f;
+        }
     }
 
+    // Pass two: parse the current stackmap
     if (mm->stackmapAddr()) {
         ArrayRef<uint8_t> sm(mm->stackmapAddr(), mm->stackmapSize());
-        StackMap::recordStackmaps(sm, fids);
+        StackMap::recordStackmaps(sm, sp, patchpoints);
     }
 }
+
+uint64_t JITCompileLayer::getSafepointId(llvm::Function* f) {
+    auto n = ++nextStackmapId;
+    safepoints[f].push_back(n);
+    return n;
+}
+
+JITCompileLayer JITCompileLayer::singleton;
 }
