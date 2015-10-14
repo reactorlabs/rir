@@ -94,6 +94,7 @@ done
 TARGET=`cd $TARGET && pwd`
 
 R_DIR=${TARGET}/gnur
+TESTR_DIR=${TARGET}/testr
 
 
 if [ -e ${SRC_DIR}/.local.config ]; then
@@ -183,6 +184,15 @@ if [ $SKIP_GNUR -eq 0 ]; then
     make -j${CORES}
 fi
 
+if [ ! -d $TESTR_DIR ]; then
+    cd $TARGET
+    echo "-> checking out testr" 
+    git clone https://github.com/allr/testr.git testr
+else
+    cd $TESTR_DIR
+    git pull
+fi
+
 echo "-> update hooks"
 ${SRC_DIR}/tools/install_hooks.sh
 
@@ -196,7 +206,7 @@ fi
 
 echo "-> cmake rjit"
 rm -f CMakeCache.txt
-cmake -G "$GEN" -DLLVM_DIR=${LLVM_BUILD_DIR}/share/llvm/cmake -DR_HOME=$R_DIR $SRC_DIR
+cmake -G "$GEN" -DTESTR_DIR=$TESTR_DIR -DLLVM_DIR=${LLVM_BUILD_DIR}/share/llvm/cmake -DR_HOME=$R_DIR $SRC_DIR
 
 if [ $SKIP_BUILD -eq 0 ]; then
     $M
