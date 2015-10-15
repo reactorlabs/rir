@@ -28,7 +28,7 @@ echo "~> running testr samples from $TESTR"
 TESTS_PATH="${TESTR}"
 for test in `find ${TESTS_PATH} -name '*.R'`; do
     name=`basename $test`
-
+    echo "\t~> $test"
     rm -f /tmp/r-test.XXXXXX.R
     TEST=$(mktemp /tmp/r-test.XXXXXX.R)
 
