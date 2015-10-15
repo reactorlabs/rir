@@ -72,9 +72,9 @@ class ICCompiler {
     
     llvm::FunctionType* ic_t;
 
-    std::string name;
     ir::Builder &b;
     unsigned size;
+    std::string name;
 
     #define DECLARE(name) llvm::Function * name
     DECLARE(CONS_NR);

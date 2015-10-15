@@ -184,12 +184,6 @@ public:
         return result;
     }
 
-    /** Converts integer constant to a llvm::Value.
-     */
-    static llvm::ConstantInt * integer(int value) {
-        return llvm::ConstantInt::get(llvm::getGlobalContext(), llvm::APInt(32, value));
-    }
-
     /** Given an llvm::Value * that is a constant integer, returns the constant integer associated with it.
      */
     static int integer(llvm::Value * value) {
@@ -295,7 +289,20 @@ public:
         return c_->cp[index];
     }
 
+    static llvm::ConstantInt * integer(int value) {
+        return llvm::ConstantInt::get(llvm::getGlobalContext(), llvm::APInt(32, value));
+    }
 
+
+
+    /** Converts the given SEXP to a pointer to it.
+     */
+    static llvm::Value *  convertToPointer(SEXP what) {
+        return llvm::ConstantExpr::getCast(
+            llvm::Instruction::IntToPtr,
+            llvm::ConstantInt::get(llvm::getGlobalContext(), llvm::APInt(64, (std::uint64_t)what)),
+            t::SEXP);
+    }
 
 
 private:

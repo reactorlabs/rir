@@ -183,12 +183,12 @@ bool ICCompiler::compileIc(SEXP inCall, SEXP inFun) {
             // Insert a guard to check if the incomming function matches
             // the one we got this time
             ICmpInst* test = new ICmpInst(*b.block(), ICmpInst::ICMP_EQ, fun(),
-                                          b.constantPoolSexp(inFun), "guard");
+                                          ir::Constant::create(b, inFun), "guard");
             BranchInst::Create(icMatch, icMiss, test, b.block());
             b.setBlock(icMatch);
 
             // This is an inlined version of applyNativeClosure
-            Value* arglist = b.constantPoolSexp(R_NilValue);
+            Value* arglist = ir::Constant::create(b, R_NilValue);
 
             // This reverses the arglist, but quickArgumentAdapter
             // reverses again
@@ -210,7 +210,7 @@ bool ICCompiler::compileIc(SEXP inCall, SEXP inFun) {
                       fun());
 
             Value* res = INTRINSIC_NO_SAFEPOINT(
-                closureNativeCallTrampoline, cntxt, b.constantPoolSexp(inBody), newrho);
+                closureNativeCallTrampoline, cntxt, b.convertToPointer(inBody), newrho);
 
 
             INTRINSIC(endClosureContext, cntxt, res);
@@ -253,7 +253,7 @@ Value* ICCompiler::compileCall(SEXP call, SEXP op) {
     BasicBlock* end = b.createBasicBlock("end");
 
     // TODO: Do we really have to test for ast changes all the time?
-    ICmpInst * test = new ICmpInst(*b.block(), ICmpInst::ICMP_EQ, b.constantPoolSexp(call), 
+    ICmpInst * test = new ICmpInst(*b.block(), ICmpInst::ICMP_EQ, b.convertToPointer(call),
                                         this->call(), "guard");
     BranchInst::Create(icTest2, icMiss, test, b.block());
 
@@ -269,7 +269,7 @@ Value* ICCompiler::compileCall(SEXP call, SEXP op) {
     }
     case BUILTINSXP:
     case CLOSXP: {
-        test = new ICmpInst(*b.block(), ICmpInst::ICMP_EQ, fun(), b.constantPoolSexp(op), "guard");
+        test = new ICmpInst(*b.block(), ICmpInst::ICMP_EQ, fun(), b.convertToPointer(op), "guard");
         break;
     }
     default:
@@ -282,16 +282,16 @@ Value* ICCompiler::compileCall(SEXP call, SEXP op) {
     Value* res;
     switch (TYPEOF(op)) {
     case SPECIALSXP:
-        res = ir::CallSpecial::create(b, b.constantPoolSexp(call), fun(), b.constantPoolSexp(R_NilValue), b.rho());
+        res = ir::CallSpecial::create(b, b.convertToPointer(call), fun(), b.convertToPointer(R_NilValue), b.rho());
         break;
     case BUILTINSXP: {
         Value* args = compileArguments(CDR(call), /*eager=*/true);
-        res = ir::CallBuiltin::create(b, b.constantPoolSexp(call), fun(), args, rho());
+        res = ir::CallBuiltin::create(b, b.convertToPointer(call), fun(), args, rho());
         break;
     }
     case CLOSXP: {
         Value* args = compileArguments(CDR(call), /*eager=*/false);
-        res = ir::CallClosure::create(b, b.constantPoolSexp(call), fun(), args, rho());
+        res = ir::CallClosure::create(b, b.convertToPointer(call), fun(), args, rho());
         break;
     }
     default:
@@ -319,7 +319,7 @@ Value* ICCompiler::compileCall(SEXP call, SEXP op) {
   */
 Value* ICCompiler::compileArguments(SEXP argAsts, bool eager) {
     Value* arglistHead = nullptr;
-    Value* arglist = b.constantPoolSexp(R_NilValue);
+    Value* arglist = b.convertToPointer(R_NilValue);
 
     // if there are no arguments
     int argnum = 0;
@@ -348,7 +348,7 @@ Value* ICCompiler::compileArguments(SEXP argAsts, bool eager) {
     }
     if (arglistHead)
         return arglistHead;
-    return b.constantPoolSexp(R_NilValue);
+    return b.convertToPointer(R_NilValue);
 }
 
 /** Compiles a single argument.
@@ -379,7 +379,7 @@ Value* ICCompiler::compileArgument(Value* arglist, SEXP argAst, int argnum,
     case SYMSXP:
         assert(arg != R_DotsSymbol);
         if (arg == R_MissingArg) {
-            return ir::AddKeywordArgument::create(b, arglist, b.constantPoolSexp(R_MissingArg), b.constantPoolSexp(name));
+            return ir::AddKeywordArgument::create(b, arglist, b.convertToPointer(R_MissingArg), b.convertToPointer(name));
         }
     // Fall through:
     default:
@@ -393,7 +393,7 @@ Value* ICCompiler::compileArgument(Value* arglist, SEXP argAst, int argnum,
         break;
     }
     if (name != R_NilValue)
-        return ir::AddKeywordArgument::create(b, arglist, result, b.constantPoolSexp(name));
+        return ir::AddKeywordArgument::create(b, arglist, result, b.convertToPointer(name));
 
     return ir::AddArgument::create(b, arglist, result);
 }

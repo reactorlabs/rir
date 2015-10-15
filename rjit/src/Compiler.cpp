@@ -134,7 +134,7 @@ Value* Compiler::compileExpression(SEXP value) {
     case STRSXP:
     case NILSXP:
     case CLOSXP:
-        return compileConstant(value);
+        return ir::UserLiteral::create(b, value);
     case BCODESXP:
     // TODO: reuse the compiled fun
     case NATIVESXP:
@@ -145,14 +145,6 @@ Value* Compiler::compileExpression(SEXP value) {
     return nullptr;
 }
 
-/** Compiles user constant, which constant marked with userConstant intrinsic.
-  */
-Value* Compiler::compileConstant(SEXP value) {
-    Value* result = b.constantPoolSexp(value);
-    ir::UserConstant::create(b, result);
-    return result;
-}
-
 /** Compiles a symbol, which reads as variable read using genericGetVar
  * intrinsic.
   */
@@ -160,7 +152,7 @@ Value* Compiler::compileSymbol(SEXP value) {
     assert(TYPEOF(value) == SYMSXP);
     auto name = CHAR(PRINTNAME(value));
     assert(strlen(name));
-    Value* res = ir::GenericGetVar::create(b, value, b.rho());
+    Value* res = ir::GenericGetVar::create(b, b.rho(), value);
     res->setName(name);
     return res;
 }
@@ -211,14 +203,14 @@ Value* Compiler::compileCall(SEXP call) {
         if (f != nullptr)
             return f;
         // otherwise just do get function
-        f = ir::GetFunction::create(b, CAR(call), b.rho());
+        f = ir::GetFunction::create(b, b.rho(), CAR(call));
         f->setName(CHAR(PRINTNAME(CAR(call))));
     }
 
     std::vector<Value*> args;
     compileArguments(CDR(call), args);
 
-    return compileICCallStub(b.constantPoolSexp(call), f, args);
+    return compileICCallStub(ir::Constant::create(b, call), f, args);
 }
 
 void Compiler::compileArguments(SEXP argAsts, std::vector<Value*>& res) {
@@ -237,19 +229,20 @@ Value* Compiler::compileArgument(SEXP arg, SEXP name) {
     case STRSXP:
     case NILSXP:
         // literals are self-evaluating
-        return b.constantPoolSexp(arg);
+        return ir::UserLiteral::create(b, arg);
     case SYMSXP:
         if (arg == R_DotsSymbol) {
-            return b.constantPoolSexp(arg);
+            return ir::Constant::create(b, arg);
         }
         if (arg == R_MissingArg) {
-            return b.constantPoolSexp(arg);
+            return ir::Constant::create(b, arg);
         }
     default: {
         SEXP code = compileFunction("promise", arg, /*isPromise=*/true);
         //Should the objects be inside the builder?
-        b.addConstantPoolObject(code);
-        return b.constantPoolSexp(code);
+        // not needed with new API, compile constant adds automaatically if not present yet
+        //b.addConstantPoolObject(code);
+        return ir::UserLiteral::create(b, code);
     }
     }
 }
@@ -276,7 +269,7 @@ Value* Compiler::compileIntrinsic(SEXP call) {
     return compileFunctionDefinition(CDR(call));
     CASE(symbol::Return) {
         return (CDR(call) == R_NilValue)
-                   ? compileReturn(b.constantPoolSexp(R_NilValue))
+                   ? compileReturn(ir::Constant::create(b, R_NilValue))
                    : compileReturn(compileExpression(CAR(CDR(call))));
     }
     CASE(symbol::Assign)
@@ -347,7 +340,7 @@ Value* Compiler::compileBlock(SEXP block) {
         block = CDR(block);
     }
     if (result == nullptr)
-        result = b.constantPoolSexp(R_NilValue);
+        result = ir::Constant::create(b, R_NilValue);
     return result;
 }
 
@@ -374,8 +367,7 @@ Value* Compiler::compileParenthesis(SEXP arg) {
 Value* Compiler::compileFunctionDefinition(SEXP fdef) {
     SEXP forms = CAR(fdef);
     SEXP body = compileFunction("function", CAR(CDR(fdef)));
-    return ir::CreateClosure::create(b, b.constantPoolSexp(forms), 
-        b.constantPoolSexp(body), b.rho());
+    return ir::CreateClosure::create(b, b.rho(), forms, body);
 }
 
 /** Simple assignments (that is to a symbol) are compiled using the
@@ -387,7 +379,7 @@ Value* Compiler::compileAssignment(SEXP e) {
     if (TYPEOF(CAR(e)) != SYMSXP)
         return nullptr;
     Value* v = compileExpression(CAR(CDR(e)));
-    ir::GenericSetVar::create(b, CAR(e), v, b.rho());
+    ir::GenericSetVar::create(b, v, b.rho(), CAR(e));
     b.setResultVisible(false);
     return v;
 }
@@ -413,7 +405,7 @@ Value* Compiler::compileSuperAssignment(SEXP e) {
     if (TYPEOF(CAR(e)) != SYMSXP)
         return nullptr;
     Value* v = compileExpression(CAR(CDR(e)));
-    ir::GenericSetVarParent::create(b, CAR(e), v, b.rho());
+    ir::GenericSetVarParent::create(b, v, b.rho(), CAR(e));
     b.setResultVisible(false);
     return v;
 }
@@ -429,7 +421,7 @@ Value* Compiler::compileReturn(Value* value, bool tail) {
         ir::ReturnJump::create(b, value, b.rho());
         // we need to have a return instruction as well to fool LLVM into
         // believing the basic block has a terminating instruction
-        ir::Return::create(b, b.constantPoolSexp(R_NilValue));
+        ir::Return::create(b, ir::Constant::create(b, R_NilValue));
     } else {
         ir::Return::create(b, value);
     }
@@ -469,7 +461,7 @@ Value* Compiler::compileCondition(SEXP e) {
     b.setBlock(ifFalse);
     Value* falseResult;
     if (falseAst == nullptr) {
-        falseResult = b.constantPoolSexp(R_NilValue);
+        falseResult = ir::Constant::create(b, R_NilValue);
         b.setResultVisible(false);
     } else {
         falseResult = compileExpression(falseAst);
@@ -497,7 +489,7 @@ Value* Compiler::compileBreak(SEXP ast) {
     // TODO this is really simple, but fine for us - dead code elimination will
     // remove the block if required
     b.setBlock(b.createBasicBlock("deadcode"));
-    return b.constantPoolSexp(R_NilValue);
+    return ir::Constant::create(b, R_NilValue);
 }
 
 /** Compiles next. Whenever we see next in the compiler, we know it is for a
@@ -512,7 +504,7 @@ Value* Compiler::compileNext(SEXP ast) {
     // TODO this is really simple, but fine for us - dead code elimination will
     // remove the block if required
     b.setBlock(b.createBasicBlock("deadcode"));
-    return b.constantPoolSexp(R_NilValue);
+    return ir::Constant::create(b, R_NilValue);
 }
 
 /** Compiles repeat loop. This is simple infinite loop. Only break can exit it.
@@ -537,7 +529,7 @@ Value* Compiler::compileRepeatLoop(SEXP ast) {
     b.closeLoop();
     // return R_NilValue
     b.setResultVisible(false);
-    return b.constantPoolSexp(R_NilValue);
+    return ir::Constant::create(b, R_NilValue);
 }
 
 /** Compiles while loop.
@@ -569,7 +561,7 @@ Value* Compiler::compileWhileLoop(SEXP ast) {
     b.closeLoop();
     // return R_NilValue
     b.setResultVisible(false);
-    return b.constantPoolSexp(R_NilValue);
+    return ir::Constant::create(b, R_NilValue);
 }
 
 /** For loop is compiled into the following structure:
@@ -624,7 +616,7 @@ Value* Compiler::compileForLoop(SEXP ast) {
     // properly
     b.setBlock(forBody);
     Value* controlValue = ir::GetForLoopValue::create(b, seq, control);
-    ir::GenericSetVar::create(b, controlAst, controlValue, b.rho());
+    ir::GenericSetVar::create(b, controlValue, b.rho(), controlAst);
     // now compile the body of the loop
     compileExpression(bodyAst);
     ir::Branch::create(b,b.nextTarget());
@@ -642,7 +634,7 @@ Value* Compiler::compileForLoop(SEXP ast) {
     b.closeLoop();
     // return R_NilValue
     b.setResultVisible(false);
-    return b.constantPoolSexp(R_NilValue);
+    return ir::Constant::create(b, R_NilValue);
 }
 
 /** Determines whether we can skip creation of the loop context or not. The code
@@ -801,7 +793,7 @@ Value* Compiler::compileSwitch(SEXP call) {
         swChar.setDefaultDest(last);
     swInt.setDefaultDest(last);
     if (fallThrough != nullptr) {
-        result->addIncoming(b.constantPoolSexp(R_NilValue), b.block());
+        result->addIncoming(ir::Constant::create(b, R_NilValue), b.block());
         ir::Branch::create(b, switchNext);
     }
     b.setBlock(switchNext);

@@ -24,42 +24,6 @@ class Compiler {
     void jitAll();
 
   private:
-    /**
-    class Context {
-      public:
-        Context(std::string const& name, llvm::Module* m);
-
-        void addObject(SEXP object);
-
-         True if return jump is needed instead of return - this happens in
-          promises
-         
-        bool returnJump;
-
-        True if result of the expression should be visible, false otherwise.
-         Each expression resets the visibleResult to true.
-        
-        bool visibleResult;
-
-        llvm::Function* f;
-
-        llvm::BasicBlock* b;
-
-        Basic block to which break() statements should jump.
-        
-        llvm::BasicBlock* breakBlock;
-
-        Basic block to which next() statements should jump.
-        
-        llvm::BasicBlock* nextBlock;
-
-        llvm::Value* rho;
-
-        std::vector<SEXP> objects;
-
-        unsigned functionId;
-    };
-    */
     
     /** Compiles an expression.
 
@@ -70,11 +34,6 @@ class Compiler {
       function call.
       */
     llvm::Value* compileExpression(SEXP value);
-
-    /** Compiles user constant, which constant marked with userConstant
-     * intrinsic.
-      */
-    llvm::Value* compileConstant(SEXP value);
 
     /** Compiles a symbol, which reads as variable read using genericGetVar
      * intrinsic.
@@ -252,9 +211,9 @@ class Compiler {
       llvm::Value* lhs = compileExpression(CAR(CDR(call)));
       if (CDR(CDR(call)) != R_NilValue) {
         llvm::Value* rhs = compileExpression(CAR(CDR(CDR(call))));
-        return B::create(b, lhs, rhs, call, b.rho());
+        return B::create(b, lhs, rhs, b.rho(), call);
       } else {
-        return U::create(b, lhs, call, b.rho());
+        return U::create(b, lhs, b.rho(), call);
       }
     }
 
@@ -264,13 +223,13 @@ class Compiler {
     llvm::Value * compileBinary(SEXP call){
       llvm::Value* lhs = compileExpression(CAR(CDR(call)));
       llvm::Value* rhs = compileExpression(CAR(CDR(CDR(call))));
-      return B::create(b, lhs, rhs, call, b.rho());
+      return B::create(b, lhs, rhs, b.rho(), call);
     }
 
     template<typename U>
     llvm::Value * compileUnary(SEXP call){
       llvm::Value* op = compileExpression(CAR(CDR(call)));
-      return U::create(b, op, call, b.rho());
+      return U::create(b, op, b.rho(), call);
     }
 
 

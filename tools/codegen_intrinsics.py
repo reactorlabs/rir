@@ -39,6 +39,10 @@ class Intrinsic:
                     state = "consts"
                     i += 1
                     continue
+                elif(a[i] == "int"):
+                    state = "int"
+                    i += 1
+                    continue
                 else:
                     print("Unknown intrinsic annotation modifier {0}".format(a[i]))
                     exit()
@@ -49,6 +53,10 @@ class Intrinsic:
                 continue
             elif (state == "cindex"):
                 self.markAsConstantIndex(a[i])
+                i += 1
+                continue
+            elif (state == "int"):
+                self.markAsConstInt(a[i])
                 i += 1
                 continue
 
@@ -65,13 +73,17 @@ class Intrinsic:
                 self.argTypes[i] = "ci"
                 break;
 
+    def markAsConstInt(self, argName):
+        for i in range(0, len(self.argNames)):
+            if (self.argNames[i] == argName):
+                self.argTypes[i] = "constint"
+                break;
+
     def outputArgType(self, index):
         x = self.argTypes[index]
         if (x == "cp"):
             return "llvm::Value *"
-        elif (x == "ci"):
-            return "int"
-        elif (x == "int"):
+        elif (x in ("ci", "int", "constint")):
             return "int"
         else:
             return "llvm::Value *"
@@ -80,7 +92,7 @@ class Intrinsic:
         x = self.argTypes[index]
         if (x == "cp SEXP"):
             return "getValueSEXP"
-        elif (x == "int"):
+        elif (x == "constint"):
             return "getValueInt"
         else:
             return "getValue"
@@ -88,7 +100,7 @@ class Intrinsic:
     def typeToIr(self, type):
         if (type in ("SEXP", "cp")):
             return "t::SEXP"
-        elif (type in ("ci", "int", "Rboolean")):
+        elif (type in ("ci", "int", "Rboolean", "constint")):
             return "t::Int"
         elif (type == "void"):
             return "t::Void";
@@ -136,7 +148,7 @@ class Intrinsic:
             return False
         elif (x == "ci"):
             return "SEXP"
-        elif (x == "int"):
+        elif (x == "constint"):
             return "int"
         else:
             return "llvm::Value *"
@@ -147,7 +159,7 @@ class Intrinsic:
             return "b.consts()"
         elif (x == "ci"):
             return "Builder::integer(b.constantPoolIndex({0}))".format(self.argNames[index])
-        elif (x == "int"):
+        elif (x == "constint"):
             return "Builder::integer({0})".format(self.argNames[index])
         else:
             return self.argNames[index];
@@ -178,12 +190,12 @@ class Intrinsic:
 
     def argumentGetterCode(self, index):
         t = self.argTypes[index]
-        if (t == "SEXP"):
+        if (t in ("SEXP", "int")):
             return "llvm::Value * {name}() {{ return getValue({index}); }}".format(name = self.argNames[index], index = index)
-        elif (t == "int"):
-            return "int {name}() {{ return getValueInt({index}); }}".format(name = self.argNames[index], index = index)
         elif (t == "cp"):
             return "llvm::Value * constantPool() {{ return getValue({index}); }}".format(index = index)
+        elif (t == "constint"):
+            return "int {name}() {{ return getValueInt({index}); }}".format(name = self.argNames[index], index = index)
         elif (t == "ci"):
             return """
 int {name}() {{ return getValueInt({index}); }}
