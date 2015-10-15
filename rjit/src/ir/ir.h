@@ -16,61 +16,66 @@ namespace ir {
 /** Type of the IR.
  */
 enum class Type {
-    ConvertToLogicalNoNA,
-    PrintValue,
-    StartFor,
-    LoopSequenceLength,
-    GetForLoopValue,
-    MarkVisible,
-    MarkInvisible,
-    UserConstant,
-    GenericGetVar,
-    GenericGetEllipsisArg,
-    GenericSetVar,
-    GenericSetVarParent,
-    GetFunction,
-    GetGlobalFunction,
-    GetSymFunction,
-    GetBuiltinFunction,
-    GetInternalBuiltinFunction,
-    CheckFunction,
-    CreatePromise,
-    SexpType,
-    AddArgument,
-    AddKeywordArgument,
-    AddEllipsisArgumentHead,
-    AddEllipsisArgumentTail,
-    CallBuiltin,
-    CallSpecial,
-    CallClosure,
-    CreateClosure,
-    GenericUnaryMinus,
-    GenericUnaryPlus,
-    GenericAdd,
-    GenericSub,
-    GenericMul,
-    GenericDiv,
-    GenericPow,
-    GenericSqrt,
-    GenericExp,
-    GenericEq,
-    GenericNe,
-    GenericLt,
-    GenericLe,
-    GenericGe,
-    GenericGt,
-    GenericBitAnd,
-    GenericBitOr,
-    GenericNot,
-    GenericGetVarMissOK,
-    GenericGetEllipsisValueMissOK,
-    CheckSwitchControl,
-    SwitchControlCharacter,
-    SwitchControlInteger,
-    ReturnJump,
+    ExtractConstantPool,
+    ConvertToLogicalNoNA_,
+    PrintValue_,
+    StartFor_,
+    LoopSequenceLength_,
+    GetForLoopValue_,
+    MarkVisible_,
+    MarkInvisible_,
+    UserConstant_,
+    GenericGetVar_,
+    GenericGetEllipsisArg_,
+    GenericSetVar_,
+    GenericSetVarParent_,
+    GetFunction_,
+    GetGlobalFunction_,
+    GetSymFunction_,
+    GetBuiltinFunction_,
+    GetInternalBuiltinFunction_,
+    CheckFunction_,
+    CreatePromise_,
+    SexpType_,
+    AddArgument_,
+    AddKeywordArgument_,
+    AddEllipsisArgument_,
+    AddEllipsisArgumentHead_,
+    AddEllipsisArgumentTail_,
+    CallBuiltin_,
+    CallSpecial_,
+    CallClosure_,
+    CreateClosure_,
+    GenericUnaryMinus_,
+    GenericUnaryPlus_,
+    GenericAdd_,
+    GenericSub_,
+    GenericMul_,
+    GenericDiv_,
+    GenericPow_,
+    GenericSqrt_,
+    GenericExp_,
+    GenericEq_,
+    GenericNe_,
+    GenericLt_,
+    GenericLe_,
+    GenericGe_,
+    GenericGt_,
+    GenericBitAnd_,
+    GenericBitOr_,
+    GenericNot_,
+    GenericGetVarMissOK_,
+    GenericGetEllipsisValueMissOK_,
+    CheckSwitchControl_,
+    SwitchControlCharacter_,
+    SwitchControlInteger_,
+    ReturnJump_,
     Return,
     Branch,
     Cbr,
+    IntegerLessThan,
+    Switch,
+    IntegerAdd,
     unknown,
 };
 
@@ -177,11 +182,11 @@ public:
     }
 };
 
-class IntegerEquals : public IntegerComparison{
+class IntegerEquals : public IntegerComparison {
 public:
     IntegerEquals(llvm::Instruction * ins):
         IntegerComparison(ins) {
-        assert(llvm::cast<llvm::ICmpInst>(ins)->getSignedPredicate() == Predicate::ICMP_EQ and "Less than comparison expected");
+        assert(llvm::cast<llvm::ICmpInst>(ins)->getSignedPredicate() == Predicate::ICMP_EQ and "Equality comparison expected");
     }
 
     static llvm::ICmpInst* create(Builder & b, llvm::Value * lhs, llvm::Value * rhs) {
@@ -194,7 +199,7 @@ class UnsignedIntegerLessThan: public IntegerComparison {
 public:
     UnsignedIntegerLessThan(llvm::Instruction * ins):
         IntegerComparison(ins) {
-        assert(llvm::cast<llvm::ICmpInst>(ins)->getSignedPredicate() == Predicate::ICMP_ULT and "Less than comparison expected");
+        assert(llvm::cast<llvm::ICmpInst>(ins)->getSignedPredicate() == Predicate::ICMP_ULT and "Unsigned less than comparison expected");
     }
 
     static llvm::ICmpInst* create(Builder & b, llvm::Value * lhs, llvm::Value * rhs) {
@@ -292,13 +297,11 @@ public:
 
     void setDefaultDest(llvm::BasicBlock* target){
         ins<llvm::SwitchInst>()->setDefaultDest(target);
-
     }
 
     llvm::BasicBlock* getDefaultDest(){
         return ins<llvm::SwitchInst>()->getDefaultDest(); 
     }
-
 };
 
 
@@ -351,7 +354,7 @@ protected:
     }
 
     SEXP getValueSEXP(unsigned argIndex) {
-        return Builder::constantPoolSexp(ins()->getArgOperand(argIndex));
+        assert(false and "NOT IMPLEMENTED");
     }
 
     int getValueInt(unsigned argIndex) {

@@ -13,7 +13,6 @@
 #include "llvm/Support/TargetSelect.h"
 #include "llvm/Support/Host.h"
 
-
 namespace rjit {
 
 // TODO This should be static of builder
@@ -100,9 +99,13 @@ public:
     }
 
     const std::vector<llvm::Value *> & args() {
+        // FIXME check what this does
         return c_->args();
     }
 
+    llvm::Value * consts() {
+        return c_->consts;
+    }
 
     /** Creates new context for given function name.
 
@@ -179,34 +182,6 @@ public:
         if (result == nullptr)
             result = llvm::Function::Create(INTRINSIC::intrinsicType(), llvm::GlobalValue::ExternalLinkage, INTRINSIC::intrinsicName(), m_);
         return result;
-    }
-
-    /** Returns a llvm::Value created from a constant pool value.
-
-      Note that we do not need to add the constant to the constant 
-      pool because the first constant pool element is the whole AST 
-      and the understanding is that any constants used are just subtrees 
-      of the original AST. In the rare cases when this is not true 
-      (new promises being created), they must be inserted to the constant 
-      pool explicitly.
-     */
-    static llvm::Value * constantPoolSexp(SEXP value) {
-        return llvm::ConstantExpr::getCast(
-            llvm::Instruction::IntToPtr,
-            llvm::ConstantInt::get(llvm::getGlobalContext(), llvm::APInt(64, (std::uint64_t)value)),
-            t::SEXP);
-    }
-
-    /** Given a llvm::Value *, returns the SEXP from constant pool it points to.
-     */
-    static SEXP constantPoolSexp(llvm::Value * value) {
-        // get the value
-        llvm::Value * v = llvm::cast<llvm::ConstantExpr>(value)->getOperand(0);
-        // get the ap out of the value
-        llvm::APInt const & ap = llvm::cast<llvm::ConstantInt>(v)->getUniqueInteger();
-        assert(ap.isIntN(64) and "Expected 64bit address");
-        // convert the int to sexp addr
-        return reinterpret_cast<SEXP>(ap.getSExtValue());
     }
 
     /** Converts integer constant to a llvm::Value.
@@ -302,6 +277,25 @@ public:
         return stackmap;   
     }
 
+    /** Takes the given SEXP, stores it to the constant pool and returns the index under which it is stored.
+
+      In a trivial way (O(n)) checks whether such constant already exists to avoid duplicates in the constant pool.
+     */
+    int constantPoolIndex(SEXP object) {
+        for (unsigned i = 0; i < c_->cp.size(); ++i)
+            if (c_->cp[i] == object)
+                return i;
+        c_->cp.push_back(object);
+        return c_->cp.size() - 1;
+    }
+
+    /** Returns the index-th object in the constant pool.
+     */
+    SEXP constantPool(int index) const {
+        return c_->cp[index];
+    }
+
+
 
 
 private:
@@ -335,6 +329,7 @@ private:
             return nullptr;
         };
 
+        llvm::Value * consts;
 
         unsigned functionId;
 
@@ -345,6 +340,7 @@ private:
         std::vector<SEXP> cp;
 
     protected:
+        // TODO check contexts - the rho handling seems to be
         std::vector<llvm::Value *> args_;
 
         Context(Context * from):

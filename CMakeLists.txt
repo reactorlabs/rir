@@ -48,16 +48,22 @@ execute_process(COMMAND ${LLVM_CONFIG_BIN} --cxxflags
 file(WRITE ${CMAKE_SOURCE_DIR}/.clang_complete "-I${CMAKE_SOURCE_DIR}/rjit/src\n${LLVM_CXX_FLAGS}--std=c++11\n-Wall\n")
 
 # code generation
+add_custom_target(codegen_intrinsics
+    COMMAND python3 codegen_intrinsics.py ${R_ROOT_DIR}/src/main/eval.c WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/tools
+)
+
 add_custom_target(codegen
-    COMMAND python3 intrinsicsGenerator.py ${R_ROOT_DIR}/src/main/eval.c WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/tools
+    COMMAND doxygen rjit/Doxyfile WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_SOURCE_DIR}/rjit/src/handlers/codegen
+    COMMAND python3 tools/codegen_handlers.py xml rjit/src/handlers/codegen WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
 )
 
 # build the shared library for the JIT
 file(GLOB_RECURSE SRC "rjit/src/*.cpp" "rjit/src/*.h" "local/.Rprofile" "rjit/R/*.R" "rjit/tests/*.R")
 add_library(${PROJECT_NAME} SHARED ${SRC})
 
-#codegen is no longer dependency as the eval.c intrinsics are not going to stay and we want to impose order on intrinsics.h in terms of inheritance
-#add_dependencies(${PROJECT_NAME} codegen)
+#codegen is a dependency
+add_dependencies(${PROJECT_NAME} codegen)
 
 add_custom_target(tests
     DEPENDS ${PROJECT_NAME})
@@ -92,7 +98,7 @@ add_custom_target(package_install
     COMMAND ${R_COMMAND} CMD INSTALL -l ${R_LIBRARY_TREE} ${PACKAGE_NAME} WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
 )
 
-set_directory_properties(PROPERTIES ADDITIONAL_MAKE_CLEAN_FILES "${R_HOME}/library/rjit;${R_LIBRARY_TREE}/rjit")
+set_directory_properties(PROPERTIES ADDITIONAL_MAKE_CLEAN_FILES "${R_HOME}/library/rjit;${R_LIBRARY_TREE}/rjit;${CMAKE_SOURCE_DIR}/rjit/src/handlers/codegen;${CMAKE_SOURCE_DIR}/xml")
 
 file(GLOB_RECURSE BENCHMARKS "benchmarks/*.R" "benchmarks/*.r")
 

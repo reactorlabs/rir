@@ -1,4 +1,5 @@
 #include "Builder.h"
+#include "intrinsics.h"
 
 using namespace llvm;
 
@@ -62,7 +63,6 @@ Builder::ICContext::ICContext(std::string name, llvm::Module * m, llvm::Function
     stackmapId->setName("stackmapId");
     args_.push_back(stackmapId);
 }
-
 
 } // namespace ir
 } //namespace rjit

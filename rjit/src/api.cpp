@@ -87,24 +87,3 @@ REXPORT SEXP jitEnable(SEXP expression) {
     RJIT_COMPILE = true;
     return R_NilValue;
 }
-
-using namespace llvm;
-
-REXPORT SEXP jittest(SEXP expression) {
-    ir::Builder b("someName");
-    b.openFunction("f1", expression, false);
-    llvm::Value * lhs = ir::GenericGetVar::create(b, CAR(CDR(expression)), b.rho());
-    llvm::Value * rhs = ir::GenericGetVar::create(b, CAR(CDR(CDR(expression))), b.rho());
-    llvm::Value * ret = ir::GenericSub::create(b, lhs, rhs, expression, b.rho());
-    llvm::ReturnInst::Create(llvm::getGlobalContext(), ret, b);
-    static_cast<llvm::Function*>(b)->dump();
-
-    BasicBlock::iterator i= b.block()->begin();
-    ir::MyHandler mh;
-    while (i != b.block()->end()) {
-        mh.dispatch(i);
-    }
-    return expression;
-}
-
-

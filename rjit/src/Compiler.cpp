@@ -72,9 +72,8 @@ SEXP createNativeSXP(RFunctionPtr fptr, SEXP ast,
     for (size_t i = 0; i < objects.size(); ++i)
         SET_VECTOR_ELT(objs, i + 1, objects[i]);
     SEXP result = CONS(reinterpret_cast<SEXP>(fptr), objs);
-    UNPROTECT(
-        objects.size() +
-        1); // all objects in objects + objs itself which is now part of result
+    // all objects in objects + objs itself (now part of result)
+    UNPROTECT(objects.size() + 1);
     SET_TAG(result, reinterpret_cast<SEXP>(f));
     SET_TYPEOF(result, NATIVESXP);
     return result;
@@ -82,11 +81,7 @@ SEXP createNativeSXP(RFunctionPtr fptr, SEXP ast,
 
 SEXP Compiler::compileFunction(std::string const& name, SEXP ast,
                                bool isPromise) {
-
-    
     b.openFunction(name, ast, isPromise);
-
-    //Context * old = b.getContext();
 
     Value* last = compileExpression(ast);
 
