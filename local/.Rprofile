@@ -1,10 +1,16 @@
+require("tools")
+
 packageTests <- function() {
     testsHome = "../rjit/tests"
     for (file in list.files(testsHome)) {
-        cat("    ")
-        cat(file)
-        cat("\n")
-        source(paste(testsHome, file, sep="/"))
+        if (file_ext(file) == "R") {
+            cat("    ")
+            cat(file)
+            cat("\n")
+            oldc = c
+            source(paste(testsHome, file, sep="/"))
+            c <<- oldc
+        }
     }
     cat("IM IN UR TESTZ\n")
 }
@@ -17,12 +23,14 @@ packageTests <- function() {
     cat("IM IN UR DLLZ\n")
     source("../rjit/R/rjit.R")
     cat("IM IN UR PACKAGE\n")
-    #packageTests()
+    packageTests()
+    #f <<- function(a, b)  a + b
+    #fc <<- jit.compile(f)
     cat("AWSHUM\n")
-    test <<- function(x) {
-        .Call("jittest", x)
-    }
-    test(quote(a + b))
+#    test <<- function(x) {
+#        .Call("jittest", x)
+#    }
+#    test(quote(a + b))
 }
 
 .Last <- function() {

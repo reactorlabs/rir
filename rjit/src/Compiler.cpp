@@ -32,13 +32,14 @@ using namespace llvm;
 
 namespace {
 
-void emitStackmap(uint64_t id, std::vector<Value*> values, rjit::ir::Builder& b) {
+void emitStackmap(uint64_t id, std::vector<Value*> values,
+                  rjit::ir::Builder& b) {
     ConstantInt* const_0 =
         ConstantInt::get(b.getContext(), APInt(32, StringRef("0"), 10));
     Constant* const_null =
         ConstantExpr::getCast(Instruction::IntToPtr, const_0, rjit::t::i8ptr);
     ConstantInt* const_num_bytes = ConstantInt::get(
-       b.getContext(), APInt(32, rjit::patchpointSize, false));
+        b.getContext(), APInt(32, rjit::patchpointSize, false));
     ConstantInt* const_id =
         ConstantInt::get(b.getContext(), APInt(64, id, false));
 
@@ -58,26 +59,9 @@ void emitStackmap(uint64_t id, std::vector<Value*> values, rjit::ir::Builder& b)
     CallInst::Create(b.patchpoint, sm_args, "", b.block());
 }
 
-
 } // namespace
 
 namespace rjit {
-
-SEXP createNativeSXP(RFunctionPtr fptr, SEXP ast,
-                     std::vector<SEXP> const& objects, Function* f) {
-
-    SEXP objs = allocVector(VECSXP, objects.size() + 1);
-    PROTECT(objs);
-    SET_VECTOR_ELT(objs, 0, ast);
-    for (size_t i = 0; i < objects.size(); ++i)
-        SET_VECTOR_ELT(objs, i + 1, objects[i]);
-    SEXP result = CONS(reinterpret_cast<SEXP>(fptr), objs);
-    // all objects in objects + objs itself (now part of result)
-    UNPROTECT(objects.size() + 1);
-    SET_TAG(result, reinterpret_cast<SEXP>(f));
-    SET_TYPEOF(result, NATIVESXP);
-    return result;
-}
 
 SEXP Compiler::compileFunction(std::string const& name, SEXP ast,
                                bool isPromise) {
@@ -91,7 +75,7 @@ SEXP Compiler::compileFunction(std::string const& name, SEXP ast,
     if (last != nullptr)
         compileReturn(last, /*tail=*/true);
     // now we create the NATIVESXP
-    // NATIVESXP should be a static builder, but this is not how it works 
+    // NATIVESXP should be a static builder, but this is not how it works
     // at the moment
     SEXP result = b.closeFunction();
     // add the non-jitted SEXP to relocations
@@ -165,7 +149,7 @@ Value* Compiler::compileICCallStub(Value* call, Value* op,
                                    std::vector<Value*>& callArgs) {
     uint64_t smid = StackMap::nextStackmapId++;
 
-    llvm::Function * ic_stub;
+    llvm::Function* ic_stub;
     {
         ir::Builder b_(b.module());
         ic_stub = ICCompiler::getStub(callArgs.size(), b_);
@@ -239,9 +223,10 @@ Value* Compiler::compileArgument(SEXP arg, SEXP name) {
         }
     default: {
         SEXP code = compileFunction("promise", arg, /*isPromise=*/true);
-        //Should the objects be inside the builder?
-        // not needed with new API, compile constant adds automaatically if not present yet
-        //b.addConstantPoolObject(code);
+        // Should the objects be inside the builder?
+        // not needed with new API, compile constant adds automaatically if not
+        // present yet
+        // b.addConstantPoolObject(code);
         return ir::UserLiteral::create(b, code);
     }
     }
@@ -428,7 +413,7 @@ Value* Compiler::compileReturn(Value* value, bool tail) {
     // this is here to allow compilation of wrong code where statements are even
     // after return
     if (not tail)
-       b.setBlock(b.createBasicBlock("deadcode"));
+        b.setBlock(b.createBasicBlock("deadcode"));
     return nullptr;
 }
 
@@ -484,7 +469,7 @@ Value* Compiler::compileCondition(SEXP e) {
   TODO The error is probably not right.
    */
 Value* Compiler::compileBreak(SEXP ast) {
-    llvm::BasicBlock * bb = b.breakTarget();
+    llvm::BasicBlock* bb = b.breakTarget();
     ir::Branch::create(b, bb);
     // TODO this is really simple, but fine for us - dead code elimination will
     // remove the block if required
@@ -499,7 +484,7 @@ Value* Compiler::compileBreak(SEXP ast) {
   TODO The error is probably not right.
    */
 Value* Compiler::compileNext(SEXP ast) {
-    llvm::BasicBlock * bb = b.nextTarget();
+    llvm::BasicBlock* bb = b.nextTarget();
     ir::Branch::create(b, bb);
     // TODO this is really simple, but fine for us - dead code elimination will
     // remove the block if required
@@ -521,7 +506,7 @@ Value* Compiler::compileRepeatLoop(SEXP ast) {
 
     ir::Branch::create(b, b.nextTarget());
     b.setBlock(b.nextTarget());
-    
+
     compileExpression(bodyAst);
     ir::Branch::create(b, b.nextTarget());
     b.setBlock(b.breakTarget());
@@ -549,7 +534,7 @@ Value* Compiler::compileWhileLoop(SEXP ast) {
     b.setBlock(b.nextTarget());
     // compile the condition
     Value* cond2 = compileExpression(condAst);
-    Value* cond = ir::ConvertToLogicalNoNA::create(b , cond2, condAst);
+    Value* cond = ir::ConvertToLogicalNoNA::create(b, cond2, condAst);
     BasicBlock* whileBody = b.createBasicBlock("whileBody");
     ir::Cbr::create(b, cond, whileBody, b.breakTarget());
     // compile the body
@@ -598,7 +583,7 @@ Value* Compiler::compileForLoop(SEXP ast) {
     // This is a simple basic block to which all next's jump and which then
     // jumps to forCond so that there is a simpler phi node at forCond.
     BasicBlock* forCond = b.createBasicBlock("forCond");
-    BasicBlock* forBody =b.createBasicBlock("forBody");
+    BasicBlock* forBody = b.createBasicBlock("forBody");
     // now initialize the loop control structures
     Value* seq2 = compileExpression(seqAst);
     Value* seq = ir::StartFor::create(b, seq2, b.rho());
@@ -619,12 +604,12 @@ Value* Compiler::compileForLoop(SEXP ast) {
     ir::GenericSetVar::create(b, controlValue, b.rho(), controlAst);
     // now compile the body of the loop
     compileExpression(bodyAst);
-    ir::Branch::create(b,b.nextTarget());
+    ir::Branch::create(b, b.nextTarget());
     // in the next block, increment the internal control variable and jump to
     // forCond
     b.setBlock(b.nextTarget());
 
-    //TODO: Need an intrinsic function for BinaryOperator
+    // TODO: Need an intrinsic function for BinaryOperator
     Value* control1 = ir::IntegerAdd::create(b, control, b.integer(1));
     control->addIncoming(control1, b.nextTarget());
 
@@ -725,7 +710,7 @@ Value* Compiler::compileSwitch(SEXP call) {
     }
     // actual switch compilation - get the control value and check it
     Value* control = compileExpression(condAst);
-   
+
     ir::CheckSwitchControl::create(b, control, call);
     Value* ctype = ir::SexpType::create(b, control);
     ICmpInst* cond = ir::IntegerEquals::create(b, ctype, b.integer(STRSXP));
@@ -737,10 +722,11 @@ Value* Compiler::compileSwitch(SEXP call) {
 
     // integral switch is simple
     b.setBlock(switchIntegral);
-    
-    Value* caseIntegral = ir::SwitchControlInteger::create(b, control, caseAsts.size());
-    auto swInt = ir::Switch::create(b, caseIntegral, switchNext,
-                                           caseAsts.size());
+
+    Value* caseIntegral =
+        ir::SwitchControlInteger::create(b, control, caseAsts.size());
+    auto swInt =
+        ir::Switch::create(b, caseIntegral, switchNext, caseAsts.size());
     // for character switch we need to construct the vector,
     b.setBlock(switchCharacter);
     SEXP cases;
@@ -753,10 +739,11 @@ Value* Compiler::compileSwitch(SEXP call) {
     }
     //
     b.addConstantPoolObject(cases);
-    Value* caseCharacter = ir::SwitchControlCharacter::create(b, control, call, cases);
+    Value* caseCharacter =
+        ir::SwitchControlCharacter::create(b, control, call, cases);
 
-    auto swChar = ir::Switch::create(b, caseCharacter, switchNext,
-                                            caseAsts.size());
+    auto swChar =
+        ir::Switch::create(b, caseCharacter, switchNext, caseAsts.size());
     // create the phi node at the end
     b.setBlock(switchNext);
     PHINode* result = PHINode::Create(t::SEXP, caseAsts.size(), "", b.block());
@@ -806,7 +793,7 @@ Value* Compiler::compileSwitch(SEXP call) {
   */
 
 /** Compiles binary operator using the given intrinsic and full call ast.
-  
+
 Value* Compiler::compileBinary(Function* f, SEXP call) {
     Value* lhs = compileExpression(CAR(CDR(call)));
     Value* rhs = compileExpression(CAR(CDR(CDR(call))));
@@ -815,7 +802,7 @@ Value* Compiler::compileBinary(Function* f, SEXP call) {
 
 
 // Compiles unary operator using the given intrinsic and full call ast.
-  
+
 Value* Compiler::compileUnary(Function* f, SEXP call) {
     Value* op = compileExpression(CAR(CDR(call)));
     return INTRINSIC(f, op, constant(call), context->rho);
@@ -829,5 +816,4 @@ Value* Compiler::INTRINSIC(llvm::Value* fun, std::vector<Value*> args) {
     return insertCall(fun, args, context->b, m, context->functionId);
 }
 */
-
 }

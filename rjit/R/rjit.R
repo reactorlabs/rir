@@ -10,7 +10,7 @@ jit.compile <- function(what, env = environment(what)) {
         if (isS4(what))
             f = asS4(f)
         f
-    } else if (typeof(what) %in% c("language", "symbol", "logical", "integer", "double", "complex", "character")) {
+    } else if (any(c("language", "symbol", "logical", "integer", "double", "complex", "character") == typeof(what))) {
         .Call("jitAst", what)
     } else {
        stop("Only bytecode expressions and asts can be jitted.")
