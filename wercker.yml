@@ -1,4 +1,6 @@
 box: reactorl/llvm
+no-response-timeout: 10
+command-timeout: 120
 build:
   steps:
     - script:
