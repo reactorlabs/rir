@@ -65,7 +65,7 @@ add_custom_target(all_tests
 add_custom_target(integration_tests
     DEPENDS ${PROJECT_NAME})
 add_custom_command(TARGET integration_tests
-    COMMAND ${CMAKE_SOURCE_DIR}/tools/integration_tests)
+    COMMAND ${CMAKE_SOURCE_DIR}/tools/integration_tests.sh)
 
 # Find the libraries that correspond to the LLVM components
 # that we wish to use

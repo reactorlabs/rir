@@ -1,5 +1,7 @@
 #!/bin/bash
 
+EXPECTED_FAIL=23
+
 TESTR=$1
 if [ -z "$TESTR" ]; then
     echo "usage: $0 path/to/testr/samples"
@@ -7,6 +9,7 @@ if [ -z "$TESTR" ]; then
 fi
 
 SCRIPTPATH=`cd $(dirname "$0") && pwd`
+export SCRIPTPATH
 if [ ! -d $SCRIPTPATH ]; then
     echo "Could not determine absolute dir of $0"
     echo "Maybe accessed with symlink"
@@ -14,45 +17,109 @@ fi
 
 . "${SCRIPTPATH}/../.local.config"
 
-TESTS_PATH="${ROOT_DIR}/rjit/tests"
-R="${R_HOME}/bin/R"
+rm -f /tmp/r-test-failed-status.XXXXXX.R
+FAILED_STATUS=$(mktemp /tmp/r-test-failed-status.XXXXXX.R)
+touch $FAILED_STATUS
+export FAILED_STATUS
+rm -f /tmp/r-test-status.XXXXXX.R
+STATUS=$(mktemp /tmp/r-test-status.XXXXXX.R)
+touch $STATUS
+export STATUS
 
-if test "$(uname)" = "Darwin"; then
-    LIB="dyn.load('${BUILD_DIR}/librjit.dylib')"
-else
-    LIB="dyn.load('${BUILD_DIR}/librjit.so')"
-fi
+PARENT=$$
+export PARENT
 
-I=0
-echo "~> running testr samples from $TESTR"
-TESTS_PATH="${TESTR}"
-for test in `find ${TESTS_PATH} -name '*.R'`; do
-    name=`basename $test`
-    echo "\t~> $test"
-    rm -f /tmp/r-test.XXXXXX.R
-    TEST=$(mktemp /tmp/r-test.XXXXXX.R)
+function run_tests {
+    TESTS_PATH=$0
 
-    echo ${LIB} > $TEST
-    echo "source('${ROOT_DIR}/rjit/R/rjit.R')" >> $TEST
-    cat "${ROOT_DIR}/tools/testr_harness.R" >> $TEST
-    cat "${test}" >> $TEST
+    folder_name=`basename $TESTS_PATH`
+    export folder_name
 
-    $R -f $TEST --args compile &> /dev/null
-    res=$?
-    if [ $res -ne 0 ]; then
-        $R -f $TEST &> /dev/null
-        orig_res=$?
+    NUM_SUBTEST=`find ${TESTS_PATH} -name '*.R' | wc -l`
+    export NUM_SUBTEST
 
-        if [ $res -ne $orig_res ]; then
-            echo "=> failed $name : compiled version returned $res vs. original version $orig_res"
-            echo "   $R -f $TEST --args compile"
-            let I=$I+1
+    rm -f /tmp/r-test-sub-status.XXXXXX.R
+    SUB_STATUS=$(mktemp /tmp/r-test-status.XXXXXX.R)
+    touch $SUB_STATUS
+    export SUB_STATUS
+
+    function status {
+        done=`wc -l < $STATUS`
+        failed=`wc -l < $FAILED_STATUS`
+        subdone=`wc -l < $SUB_STATUS`
+        echo -ne "\e[0K\rFolders [${done}/${NUM_TESTS}] | Failed [$failed] | $folder_name [$subdone/$NUM_SUBTEST]"
+    }
+    export -f status
+    status
+
+    function run_test {
+        test=$0
+        name=`basename $test`
+
+        . "${SCRIPTPATH}/../.local.config"
+        R="${R_HOME}/bin/R"
+        
+        if test "$(uname)" = "Darwin"; then
+            LIB="dyn.load('${BUILD_DIR}/librjit.dylib')"
+        else
+            LIB="dyn.load('${BUILD_DIR}/librjit.so')"
+        fi
+
+        rm -f /tmp/r-test.XXXXXX.R
+        TEST=$(mktemp /tmp/r-test.XXXXXX.R)
+    
+        echo ${LIB} > $TEST
+        echo "source('${ROOT_DIR}/rjit/R/rjit.R')" >> $TEST
+        cat "${ROOT_DIR}/tools/testr_harness.R" >> $TEST
+        cat "${test}" >> $TEST
+    
+        $( $R -f $TEST --args compile &> /dev/null || false)
+        res=$?
+
+        ps -p $PARENT &> /dev/null
+        if [ $? -ne 0 ]; then
+            exit
+        fi
+
+        if [ $res -ne 0 ]; then
+            $( $R -f $TEST &> /dev/null || false)
+            orig_res=$?
+    
+            if [ $res -ne $orig_res ]; then
+                echo -e "\n=> $folder_name/$name : compiled version failed\n   $R -f $TEST --args compile"
+                echo $TEST >> $FAILED_STATUS
+            else
+                rm $TEST
+            fi
         else
             rm $TEST
         fi
-    else
-        rm $TEST
-    fi
-done
+        echo "." >> $SUB_STATUS
+        status
+    }
+    export -f run_test
+    let N=`nproc`/4
+    find ${TESTS_PATH} -name '*.R' | xargs -n 1 -P $N bash -c 'run_test $@'
 
-echo "$I tests failed"
+    echo $TESTS_PATH >> $STATUS
+    status
+
+    rm -rf $SUB_STATUS
+}
+export -f run_tests
+
+NUM_TESTS=`find ${TESTR} -maxdepth 1 -type d | tail -n +2 | wc -l`
+export NUM_TESTS
+
+find ${TESTR} -maxdepth 1 -type d | tail -n +2 | xargs -n 1 -P 4 bash -c 'run_tests $@'
+
+echo ""
+failed=`wc -l < $FAILED_STATUS`
+
+rm -rf $STATUS
+rm -rf $FAILED_STATUS
+
+echo "$failed tests (of $EXPECTED_FAIL expected) failed"
+if [ $failed -gt $EXPECTED_FAIL ]; then
+    exit 1
+fi

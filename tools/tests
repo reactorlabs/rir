@@ -1,40 +1,77 @@
-#!/bin/sh
+#!/bin/bash -e
 
 SCRIPTPATH=`cd $(dirname "$0") && pwd`
 if [ ! -d $SCRIPTPATH ]; then
     echo "Could not determine absolute dir of $0"
     echo "Maybe accessed with symlink"
 fi
+export SCRIPTPATH
 
 # Run install script to deploy new hooks
 $SCRIPTPATH/install_hooks.sh
 
 . "${SCRIPTPATH}/../.local.config"
 
+rm -f /tmp/r-test-status.XXXXXX.R
+STATUS=$(mktemp /tmp/r-test-status.XXXXXX.R)
+touch $STATUS
+export STATUS
+
+PARENT=$$
+export PARENT
+
+function run_test {
+  test=$0
+
+  . "${SCRIPTPATH}/../.local.config"
+  R="${R_HOME}/bin/R"
+  
+  if test "$(uname)" = "Darwin"; then
+      LIB="dyn.load('${BUILD_DIR}/librjit.dylib')"
+  else
+      LIB="dyn.load('${BUILD_DIR}/librjit.so')"
+  fi
+  
+  name=`basename $test`
+  
+  function status {
+    done=`wc -l < $STATUS`
+    echo -ne "\e[0K\r[${done}/${NUM_TESTS}] ${name} "
+  }
+  status
+  
+  rm -f /tmp/r-test.XXXXXX.R
+  TEST=$(mktemp /tmp/r-test.XXXXXX.R)
+  echo ${LIB} > $TEST
+  echo "source('${ROOT_DIR}/rjit/R/rjit.R')" >> $TEST
+  grep -v 'require("rjit")' ${test} >> $TEST
+  
+  $R -f $TEST &> /dev/null
+  res=$?
+
+  ps -p $PARENT &> /dev/null
+  if [ $? -ne 0 ]; then
+      rm $TEST
+      exit
+  fi
+
+  if [ $res -ne 0 ]; then
+      echo -e "\nfailed test $name:\n   $R -f $TEST"
+      exit 255
+  fi
+  rm $TEST
+  echo $name >> $STATUS
+
+  status
+}
+export -f run_test
+
 TESTS_PATH="${ROOT_DIR}/rjit/tests"
-R="${R_HOME}/bin/R"
 
-if test "$(uname)" = "Darwin"; then
-    LIB="dyn.load('${BUILD_DIR}/librjit.dylib')"
-else
-    LIB="dyn.load('${BUILD_DIR}/librjit.so')"
-fi
+NUM_TESTS=`find ${TESTS_PATH} -name '*.R' | wc -l`
+export NUM_TESTS
 
-for test in `ls ${TESTS_PATH}/*.R`; do
-    name=`basename $test`
-    echo "~> $name"
+find ${TESTS_PATH} -name '*.R' | xargs -n 1 -P `nproc` bash -c 'run_test $@'
 
-    rm -f /tmp/r-test.XXXXXX.R
-    TEST=$(mktemp /tmp/r-test.XXXXXX.R)
-    echo ${LIB} > $TEST
-    echo "source('${ROOT_DIR}/rjit/R/rjit.R')" >> $TEST
-    grep -v 'require("rjit")' ${test} >> $TEST
-
-    $R -f $TEST > /dev/null
-    if test $? -ne 0; then
-        echo "failed test:"
-        echo $R -f $TEST
-        exit 1
-    fi
-    rm $TEST
-done
+rm -rf $STATUS
+echo ""
