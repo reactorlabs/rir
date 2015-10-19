@@ -164,6 +164,14 @@ if [ $SKIP_GNUR -eq 0 ]; then
         echo "-> git checkout gnur branch rllvm" 
         cd $R_DIR
         git checkout rllvm
+
+        echo "-> pulling gnur changes"
+        dirty=`git status --porcelain | wc -l`
+        if [ $dirty -ne 0 ]; then
+            echo -e "\e[31mWARNING:\e[0m You have unstaged changes in ${R_DIR}. Skipping git pull."
+        else
+            git pull
+        fi
         
         echo "-> configure gnur"
         if [[ "$OSTYPE" == "darwin"* ]]; then
