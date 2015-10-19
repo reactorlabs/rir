@@ -13,12 +13,12 @@ export R="${R_HOME}/bin/R"
 cd "${SCRIPTPATH}/.."
 
 echo "==> Testing R CMD check"
-cmake --build $BUILD_DIR --target package_check
+time -p cmake --build $BUILD_DIR --target package_check
 
 echo ""
 echo "==> Running selected gnur tests"
-tools/gnur_tests.sh
+time -p tools/gnur_tests.sh
 
 echo ""
 echo "==> Running testr samples"
-tools/testr_tests.sh
+time -p tools/testr_tests.sh
