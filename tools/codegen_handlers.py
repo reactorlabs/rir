@@ -428,9 +428,10 @@ switch (t) {{
         """
         self.handlerClass = handlerClass  
         self.handlerMethods = []
-        for m in handlerClass.methods:
-            if (m.isHandler() and not m.overrides):
-                self.handlerMethods.append(m)
+        if hasattr(handlerClass, 'methods'):
+            for m in handlerClass.methods:
+                if (m.isHandler() and not m.overrides):
+                    self.handlerMethods.append(m)
 
     def hasHandlers(self):
         return len(self.handlerMethods) > 0
@@ -499,7 +500,7 @@ def analyzeMatchSets(c):
     # calculate the match set   
     m = set()
     # if the class is a leaf in the hierarchy, its matchset is its own name
-    if (not c.subclasses):
+    if (not hasattr(c, 'subclasses') or not c.subclasses):
         m.add(c.name.split("::")[-1])
         c.matchSet = m
         return m
@@ -518,8 +519,9 @@ def analyzeHandlers(c, dest):
         # check that we should emit the handler
         if (h.shouldEmit(dest)):
             handlers.append(h)
-    for child in c.subclasses:
-        analyzeHandlers(child, dest)
+    if hasattr(c, 'subclass'):
+        for child in c.subclasses:
+            analyzeHandlers(child, dest)
 
 
 
