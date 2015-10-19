@@ -5,7 +5,6 @@
 
 #include "RDefs.h"
 
-
 namespace rjit {
 
 const uint64_t patchpointSize = 12;

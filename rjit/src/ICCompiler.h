@@ -18,11 +18,11 @@ class ICCompiler {
     static std::string stubName(unsigned size);
 
   private:
-    llvm::Value * call() { return b.args().at(size); }
-    llvm::Value * fun() { return b.args().at(size+1); }
-    llvm::Value * rho() { return b.rho(); }
-    llvm::Value * caller() { return b.args().at(size+3); }
-    llvm::Value * stackmapId() { return b.args().at(size+4); }
+    llvm::Value* call() { return b.args().at(size); }
+    llvm::Value* fun() { return b.args().at(size + 1); }
+    llvm::Value* rho() { return b.rho(); }
+    llvm::Value* caller() { return b.args().at(size + 3); }
+    llvm::Value* stackmapId() { return b.args().at(size + 4); }
 
     void* finalize();
 
@@ -51,7 +51,6 @@ class ICCompiler {
     llvm::Value* compileArgument(llvm::Value* arglist, SEXP argAst, int argnum,
                                  bool eager);
 
-  
     llvm::Value* constant(SEXP value);
 
     template <typename... Values>
@@ -69,14 +68,14 @@ class ICCompiler {
     }
 
     llvm::Value* INTRINSIC(llvm::Value* fun, std::vector<llvm::Value*> args);
-    
+
     llvm::FunctionType* ic_t;
 
-    ir::Builder &b;
+    ir::Builder& b;
     unsigned size;
     std::string name;
 
-    #define DECLARE(name) llvm::Function * name
+#define DECLARE(name) llvm::Function* name
     DECLARE(CONS_NR);
     DECLARE(closureQuickArgumentAdaptor);
     DECLARE(initClosureContext);
@@ -85,8 +84,7 @@ class ICCompiler {
     DECLARE(compileIC);
     DECLARE(patchIC);
     DECLARE(callNative);
-    #undef DECLARE
-
+#undef DECLARE
 };
 
 } // namespace rjit

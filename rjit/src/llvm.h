@@ -22,4 +22,3 @@
 #include "llvm/Analysis/TargetTransformInfo.h"
 
 #endif // LLVM_H
-

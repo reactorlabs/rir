@@ -12,11 +12,10 @@ namespace rjit {
 
 namespace t {
 
-extern llvm::PointerType * SEXP;
-extern llvm::Type * Int;
-extern llvm::Type * Void;
-extern llvm::Type * Bool;
-
+extern llvm::PointerType* SEXP;
+extern llvm::Type* Int;
+extern llvm::Type* Void;
+extern llvm::Type* Bool;
 
 extern llvm::StructType* SEXPREC;
 

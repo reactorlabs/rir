@@ -54,19 +54,16 @@ PointerType* initializeTypes() {
     // FIXME
     t::voidPtr = PointerType::get(t::t_i64, 0);
 
-    t::stackmap_t = FunctionType::get( t::t_void,
-        std::vector<Type*>({{IntegerType::get(context, 64),
-                             IntegerType::get(context, 32)}}),
+    t::stackmap_t = FunctionType::get(
+        t::t_void, std::vector<Type*>({{IntegerType::get(context, 64),
+                                        IntegerType::get(context, 32)}}),
         true);
-
 
     t::patchpoint_t = FunctionType::get(
-        t::t_void,
-        std::vector<Type*>({{IntegerType::get(context, 64),
-                             IntegerType::get(context, 32), t::i8ptr,
-                             IntegerType::get(context, 32)}}),
+        t::t_void, std::vector<Type*>({{IntegerType::get(context, 64),
+                                        IntegerType::get(context, 32), t::i8ptr,
+                                        IntegerType::get(context, 32)}}),
         true);
-
 
 #define DECLARE(name, ret, ...)                                                \
     fields = {__VA_ARGS__};                                                    \
@@ -114,9 +111,9 @@ namespace rjit {
 
 namespace t {
 
-Type * Int;
-Type * Void;
-Type * Bool;
+Type* Int;
+Type* Void;
+Type* Bool;
 
 PointerType* SEXP = initializeTypes();
 

@@ -205,51 +205,29 @@ class Compiler {
       */
     llvm::Value* compileUnary(llvm::Function* f, SEXP call);
 
-    template<typename B, typename U>
-    llvm::Value * compileBinaryOrUnary(SEXP call) {
-      llvm::Value* lhs = compileExpression(CAR(CDR(call)));
-      if (CDR(CDR(call)) != R_NilValue) {
+    template <typename B, typename U>
+    llvm::Value* compileBinaryOrUnary(SEXP call) {
+        llvm::Value* lhs = compileExpression(CAR(CDR(call)));
+        if (CDR(CDR(call)) != R_NilValue) {
+            llvm::Value* rhs = compileExpression(CAR(CDR(CDR(call))));
+            return B::create(b, lhs, rhs, b.rho(), call);
+        } else {
+            return U::create(b, lhs, b.rho(), call);
+        }
+    }
+
+    template <typename B> llvm::Value* compileBinary(SEXP call) {
+        llvm::Value* lhs = compileExpression(CAR(CDR(call)));
         llvm::Value* rhs = compileExpression(CAR(CDR(CDR(call))));
         return B::create(b, lhs, rhs, b.rho(), call);
-      } else {
-        return U::create(b, lhs, b.rho(), call);
-      }
     }
 
-
-
-    template<typename B> 
-    llvm::Value * compileBinary(SEXP call){
-      llvm::Value* lhs = compileExpression(CAR(CDR(call)));
-      llvm::Value* rhs = compileExpression(CAR(CDR(CDR(call))));
-      return B::create(b, lhs, rhs, b.rho(), call);
+    template <typename U> llvm::Value* compileUnary(SEXP call) {
+        llvm::Value* op = compileExpression(CAR(CDR(call)));
+        return U::create(b, op, b.rho(), call);
     }
-
-    template<typename U>
-    llvm::Value * compileUnary(SEXP call){
-      llvm::Value* op = compileExpression(CAR(CDR(call)));
-      return U::create(b, op, b.rho(), call);
-    }
-
-
-    //llvm::Value* INTRINSIC(llvm::Value* fun, std::vector<llvm::Value*> args);
-
-    /** Current compilation module.
-
-      The module contains the intrinsic function declarations as well as all
-      compiled functions.
-     */
-    //JITModule m;
 
     ir::Builder b;
-
-    /** The context of current compilation.
-
-      Each compiled function (including promises) has its own context. The
-      context contains information about current return condition and
-      visibility, break and next targets, R objects required and so on.
-     */
-    //Context* context;
 
     /** List of relocations to be done when compiling.
 
