@@ -17,7 +17,8 @@ cmake --build $BUILD_DIR --target package_check
 
 echo ""
 echo "==> Running selected gnur tests"
-tools/gnur_tests.sh
+echo "    skipped"
+#tools/gnur_tests.sh
 
 echo ""
 echo "==> Running testr samples"
