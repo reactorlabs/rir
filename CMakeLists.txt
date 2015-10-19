@@ -108,7 +108,8 @@ add_custom_target(package
 
 add_custom_target(package_check
     DEPENDS package
-    COMMAND ${R_COMMAND} CMD check ${PACKAGE_NAME} WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    COMMAND ${R_COMMAND} CMD check ${PACKAGE_NAME} --no-manual --no-vignettes
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
 )
 
 add_custom_target(package_install
