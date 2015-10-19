@@ -2219,6 +2219,7 @@ static bool insertParsePoints(Function& F, DominatorTree& DT, Pass* P,
     // By selecting base pointers, we've effectively inserted new uses. Thus, we
     // need to rerun liveness.  We may *also* have inserted new defs, but that's
     // not the key issue.
+    assert(toUpdate.size() < 1024);
     recomputeLiveInValues(F, DT, P, toUpdate, records);
 
     if (PrintBasePointers) {
