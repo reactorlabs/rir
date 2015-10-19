@@ -33,6 +33,7 @@ if (APPLE)
     message(STATUS "libR is found at ${libr}")
 endif(APPLE)
 
+set(MAKEVARS_SRC "SOURCES = $(wildcard *.cpp ir/*.cpp)\nOBJECTS = $(SOURCES:.cpp=.o)")
 set(LLVM_COMPONENTS_USED support core mcjit native irreader linker ipo)
 
 
@@ -42,7 +43,9 @@ function(JOIN VALUES GLUE OUTPUT)
 endfunction()
 JOIN("${LLVM_COMPONENTS_USED}" " " LLVM_COMPONENTS_USED_STRING)
 set(LLVM_CONFIG_BIN ${LLVM_TOOLS_BINARY_DIR}/llvm-config)
-file(WRITE ${CMAKE_SOURCE_DIR}/rjit/src/Makevars  "PKG_CXXFLAGS = `${LLVM_CONFIG_BIN} --cxxflags | sed 's/-Wcovered-switch-default//' | sed 's/-fcolor-diagnostics//'` -UNDEBUG\nPKG_LIBS = `${LLVM_CONFIG_BIN} --ldflags --system-libs --libs ${LLVM_COMPONENTS_USED_STRING}`\n")
+
+file(WRITE ${CMAKE_SOURCE_DIR}/rjit/src/Makevars  "${MAKEVARS_SRC}\nPKG_CXXFLAGS = `${LLVM_CONFIG_BIN} --cxxflags | sed 's/-Wcovered-switch-default//' | sed 's/-fcolor-diagnostics//'` -UNDEBUG -I.\nPKG_LIBS = `${LLVM_CONFIG_BIN} --ldflags --system-libs --libs ${LLVM_COMPONENTS_USED_STRING}`\n")
+
 execute_process(COMMAND ${LLVM_CONFIG_BIN} --cxxflags
     OUTPUT_VARIABLE LLVM_CXX_FLAGS)
 file(WRITE ${CMAKE_SOURCE_DIR}/.clang_complete "-I${CMAKE_SOURCE_DIR}/rjit/src\n${LLVM_CXX_FLAGS}--std=c++11\n-Wall\n")
