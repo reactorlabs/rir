@@ -73,16 +73,21 @@ add_custom_target(tests
 add_custom_command(TARGET tests
     COMMAND ${CMAKE_SOURCE_DIR}/tools/tests)
 
-add_custom_target(all_tests
-    DEPENDS ${PROJECT_NAME}
-    DEPENDS package_check
-    DEPENDS tests
-    DEPENDS integration_tests)
-
 add_custom_target(integration_tests
     DEPENDS ${PROJECT_NAME})
 add_custom_command(TARGET integration_tests
     COMMAND ${CMAKE_SOURCE_DIR}/tools/integration_tests.sh)
+
+add_custom_target(gnur_tests
+    DEPENDS ${PROJECT_NAME}
+    DEPENDS package_install)
+add_custom_command(TARGET gnur_tests
+    COMMAND ${CMAKE_SOURCE_DIR}/tools/gnur_tests.sh)
+
+add_custom_target(testr_tests
+    DEPENDS ${PROJECT_NAME})
+add_custom_command(TARGET testr_tests
+    COMMAND ${CMAKE_SOURCE_DIR}/tools/testr_tests.sh)
 
 # Find the libraries that correspond to the LLVM components
 # that we wish to use

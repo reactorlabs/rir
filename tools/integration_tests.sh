@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/sh -e
 
 SCRIPTPATH=`cd $(dirname "$0") && pwd`
 if [ ! -d $SCRIPTPATH ]; then
@@ -8,15 +8,17 @@ fi
 
 . "${SCRIPTPATH}/../.local.config"
 
+export R="${R_HOME}/bin/R"
+
 cd "${SCRIPTPATH}/.."
 
-tools/testr $TESTR_DIR/filtered-test-suite 2>&1 | tee /tmp/testr.out
+echo "==> Testing R CMD check"
+cmake --build $BUILD_DIR --target package_check
 
-NUM_FAILED=`tail -n 1 /tmp/testr.out | sed 's/\([0-9]*\).*/\1/'`
+echo ""
+echo "==> Running selected gnur tests"
+tools/gnur_tests.sh
 
-if [ $NUM_FAILED -gt 25 ]; then
-    echo "more than 25 testr failures"
-    exit 1;
-fi
-
-exit 0
+echo ""
+echo "==> Running testr samples"
+tools/testr_tests.sh
