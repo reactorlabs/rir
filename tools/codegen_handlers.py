@@ -428,10 +428,9 @@ switch (t) {{
         """
         self.handlerClass = handlerClass  
         self.handlerMethods = []
-        if hasattr(handlerClass, 'methods'):
-            for m in handlerClass.methods:
-                if (m.isHandler() and not m.overrides):
-                    self.handlerMethods.append(m)
+        for m in handlerClass.methods:
+            if (m.isHandler() and not m.overrides):
+                self.handlerMethods.append(m)
 
     def hasHandlers(self):
         return len(self.handlerMethods) > 0
@@ -499,8 +498,12 @@ def analyzeMatchSets(c):
         return c.matchSet
     # calculate the match set   
     m = set()
+    if (not hasattr(c, 'subclasses')):
+        print("cannot extract subclasses: probably doxygen command failed to generate output")
+        sys.exit(-1)
+
     # if the class is a leaf in the hierarchy, its matchset is its own name
-    if (not hasattr(c, 'subclasses') or not c.subclasses):
+    if (not c.subclasses):
         m.add(c.name.split("::")[-1])
         c.matchSet = m
         return m
@@ -519,19 +522,22 @@ def analyzeHandlers(c, dest):
         # check that we should emit the handler
         if (h.shouldEmit(dest)):
             handlers.append(h)
-    if hasattr(c, 'subclass'):
-        for child in c.subclasses:
-            analyzeHandlers(child, dest)
+    for child in c.subclasses:
+        analyzeHandlers(child, dest)
 
 
 
+def usage(err = ""):
+    print("usage: " + str(sys.argv[0]) + " doxygen_out_dir target_dir")
+    print(err)
+    sys.exit(-1)
 
 
 
 # we take two arguments - where to look for the doxygen xmls and where to put the codegens
 if (len(sys.argv) < 3):
-    print("Bad arguments")
-    sys.exit(-1)
+    usage()
+
 force = False
 cppBase = os.path.abspath(str(sys.argv[0]))
 cppBase = cppBase[:cppBase.find("/tools/codegen_handlers.py")]
@@ -542,11 +548,11 @@ if (len(sys.argv) == 4 and sys.argv[3] == "force"):
     force = True
 
 if (not os.path.isdir(sources)):
-    print("Sources directory does not exist")
-    sys.exit(-1)
+    usage("Sources directory does not exist")
+
 if (not os.path.isdir(dest)):
-    print("Dest directory does not exist")
-    sys.exit(-1)
+    usage("Dest directory does not exist")
+
 # now we know we have both source and dest dirs. initialize the sources manager
 print("initializing...")
 m = Manager(sources)
