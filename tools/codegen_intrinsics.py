@@ -1,4 +1,4 @@
-﻿# Note this file will be soon removed as soon as we start adding hierarchy to the intrinsic classes. For now, it serves the purpose of quickly creating the instruction classes fro the eval.c file.
+# Note this file will be soon removed as soon as we start adding hierarchy to the intrinsic classes. For now, it serves the purpose of quickly creating the instruction classes fro the eval.c file.
 
 import os
 import sys
