@@ -19,6 +19,7 @@ void* JITSymbolResolver::getSymbolAddress(const std::string& name) const {
 RuntimeDyld::SymbolInfo JITSymbolResolver::findSymbol(const std::string& name) {
     // Unmangle mach-o symbols
     int st = (name[0] == '_') ? 1 : 0;
+    auto unmangled = name.c_str() + st;
 
     uint64_t res = 0;
 
@@ -37,12 +38,12 @@ RuntimeDyld::SymbolInfo JITSymbolResolver::findSymbol(const std::string& name) {
 
     // Look for jited functions with that name
     if (!res)
-        res = CodeCache::getAddress(name);
+        res = CodeCache::getAddress(unmangled);
 
     // Look for symbols in the current process with that name
     if (!res)
-        res = (uint64_t)sys::DynamicLibrary::SearchForAddressOfSymbol(
-            name.c_str() + st);
+        res =
+            (uint64_t)sys::DynamicLibrary::SearchForAddressOfSymbol(unmangled);
 
     assert(res && "Could not resolve a symbol");
     return RuntimeDyld::SymbolInfo(res, JITSymbolFlags::Exported);
