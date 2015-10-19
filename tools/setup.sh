@@ -94,6 +94,7 @@ done
 TARGET=`cd $TARGET && pwd`
 
 R_DIR=${TARGET}/gnur
+TESTR_DIR=${TARGET}/testr
 
 
 if [ -e ${SRC_DIR}/.local.config ]; then
@@ -121,11 +122,11 @@ if [ ! -d $TARGET ]; then
     mkdir $TARGET
 fi
 
-if [ $SKIP_LLVM -eq 0 ]; then
-    LLVM_TARGET=${TARGET}/llvm
-    LLVM_BUILD_DIR_F=llvm-build-${LLVM_VERS}
-    LLVM_BUILD_DIR=${LLVM_TARGET}/${LLVM_BUILD_DIR_F}
+LLVM_TARGET=${TARGET}/llvm
+LLVM_BUILD_DIR_F=llvm-build-${LLVM_VERS}
+LLVM_BUILD_DIR=${LLVM_TARGET}/${LLVM_BUILD_DIR_F}
 
+if [ $SKIP_LLVM -eq 0 ]; then
     if [ ! -d ${LLVM_TARGET} ]; then
         mkdir ${LLVM_TARGET}
     fi
@@ -167,7 +168,7 @@ if [ $SKIP_GNUR -eq 0 ]; then
         echo "-> configure gnur"
         if [[ "$OSTYPE" == "darwin"* ]]; then
           # Mac OSX
-          F77="gfortran -arch x86_64" FC="gfortran -arch x86_64" CXXFLAGS="$OPT -fno-omit-frame-pointer -gdwarf-2 -g3 -arch x86_64" CFLAGS="$OPT -fno-omit-frame-pointer -gdwarf-2 -g3 -arch x86_64" ./configure --with-blas --with-lapack --with-ICU=no --with-system-xz=no --with-system-zlib=no --with-x=no --with-readline=no --without-recommended-packages
+          F77="gfortran -arch x86_64" FC="gfortran -arch x86_64" CXXFLAGS="$OPT -fno-omit-frame-pointer -gdwarf-2 -g3 -arch x86_64" CFLAGS="$OPT -fno-omit-frame-pointer -gdwarf-2 -g3 -arch x86_64" ./configure --with-blas --with-lapack --with-ICU=no --with-system-xz=no --with-system-zlib=no --with-x=no --without-recommended-packages
         else
             CXXFLAGS="$OPT -fno-omit-frame-pointer -gdwarf-2 -g3" CFLAGS="$OPT -fno-omit-frame-pointer -gdwarf-2 -g3" ./configure --with-blas --with-lapack --with-ICU=no --with-system-xz=no --with-system-zlib=no --with-x=no --without-recommended-packages
         fi
@@ -183,6 +184,15 @@ if [ $SKIP_GNUR -eq 0 ]; then
     make -j${CORES}
 fi
 
+if [ ! -d $TESTR_DIR ]; then
+    cd $TARGET
+    echo "-> checking out testr" 
+    git clone https://github.com/allr/testr.git testr
+else
+    cd $TESTR_DIR
+    git pull
+fi
+
 echo "-> update hooks"
 ${SRC_DIR}/tools/install_hooks.sh
 
@@ -196,7 +206,7 @@ fi
 
 echo "-> cmake rjit"
 rm -f CMakeCache.txt
-cmake -G "$GEN" -DLLVM_DIR=${LLVM_BUILD_DIR}/share/llvm/cmake -DR_HOME=$R_DIR $SRC_DIR
+cmake -G "$GEN" -DTESTR_DIR=$TESTR_DIR -DLLVM_DIR=${LLVM_BUILD_DIR}/share/llvm/cmake -DR_HOME=$R_DIR $SRC_DIR
 
 if [ $SKIP_BUILD -eq 0 ]; then
     $M

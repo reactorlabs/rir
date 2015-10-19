@@ -1,6 +1,6 @@
 #!/bin/bash
 
-PRIVATE=`git symbolic-ref HEAD | grep private > /dev/null`
+PRIVATE=`git symbolic-ref HEAD | grep private`
 
 if [ -z $PRIVATE ]; then
     echo "   branch is public. Running pre pre-commit-hooks"

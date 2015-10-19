@@ -80,10 +80,12 @@ std::string ICCompiler::stubName(unsigned size) {
 
 Function* ICCompiler::getStub(unsigned size, ir::Builder& b) {
 
-    return CodeCache::get(stubName(size), [size, &b]() {
-        ICCompiler stubCompiler(size, b);
-        return stubCompiler.compileCallStub();
-    }, b.module());
+    return CodeCache::get(stubName(size),
+                          [size, &b]() {
+                              ICCompiler stubCompiler(size, b);
+                              return stubCompiler.compileCallStub();
+                          },
+                          b.module());
 }
 
 void* ICCompiler::compile(SEXP inCall, SEXP inFun, SEXP inRho) {
@@ -103,8 +105,8 @@ void* ICCompiler::finalize() {
     // FIXME: Allocate a NATIVESXP, or link it to the caller??
 
     // m.dump();
-    auto handle = JITCompileLayer::getHandle(b.module());
-    auto ic = JITCompileLayer::getFunctionPointer(handle, b.f()->getName());
+    auto engine = JITCompileLayer::getEngine(b.module());
+    auto ic = engine->getPointerToFunction(b.f());
 
     return ic;
 }

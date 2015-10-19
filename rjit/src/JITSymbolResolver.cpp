@@ -1,5 +1,6 @@
 #include "JITCompileLayer.h"
 
+#include "CodeCache.h"
 #include "JITSymbolResolver.h"
 #include "llvm/Support/DynamicLibrary.h"
 #include "Runtime.h"
@@ -36,7 +37,7 @@ RuntimeDyld::SymbolInfo JITSymbolResolver::findSymbol(const std::string& name) {
 
     // Look for jited functions with that name
     if (!res)
-        res = JITCompileLayer::findSymbolAddress(name);
+        res = CodeCache::getAddress(name);
 
     // Look for symbols in the current process with that name
     if (!res)

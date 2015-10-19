@@ -5,8 +5,12 @@
 #include "JITMemoryManager.h"
 #include "JITSymbolResolver.h"
 #include "StackMap.h"
+#include "CodeCache.h"
 
-#include "llvm/ExecutionEngine/Orc/CompileUtils.h"
+#include "llvm/ExecutionEngine/ExecutionEngine.h"
+#include "llvm/ExecutionEngine/MCJIT.h"
+#include "llvm/ExecutionEngine/SectionMemoryManager.h"
+
 #include "llvm/IR/LegacyPassManager.h"
 #include "llvm/Transforms/IPO/PassManagerBuilder.h"
 #include "llvm/Transforms/Scalar.h"
@@ -19,15 +23,7 @@ using namespace llvm;
 
 namespace rjit {
 
-JITCompileLayer::ObjLayer JITCompileLayer::objectLayer;
-std::unique_ptr<JITCompileLayer::CompileLayer> JITCompileLayer::compileLayer;
-
-void* JITCompileLayer::getFunctionPointer(JITCompileLayer::ModuleHandle handle,
-                                          std::string name) {
-    return (void*)compileLayer->findSymbolIn(handle, name, false).getAddress();
-}
-
-JITCompileLayer::ModuleHandle JITCompileLayer::getHandle(Module* m) {
+ExecutionEngine* JITCompileLayer::getEngine(Module* m) {
 
     legacy::PassManager pm;
 
@@ -44,29 +40,40 @@ JITCompileLayer::ModuleHandle JITCompileLayer::getHandle(Module* m) {
     pm.add(rjit::createRJITRewriteStatepointsForGCPass());
     pm.run(*m);
 
-    auto targetMachine = EngineBuilder().selectTarget();
-    compileLayer = std::unique_ptr<CompileLayer>(new CompileLayer(
-        objectLayer, llvm::orc::SimpleCompiler(*targetMachine)));
-    std::vector<llvm::Module*> moduleSet;
-    moduleSet.push_back(m);
-
     // Make sure we can resolve symbols in the program as well. The zero arg
     // to the function tells DynamicLibrary to load the program, not a library.
-    std::string err;
-    sys::DynamicLibrary::LoadLibraryPermanently(nullptr, &err);
-
     auto mm = new JITMemoryManager();
-    auto handle = compileLayer->addModuleSet(
-        moduleSet, std::unique_ptr<SectionMemoryManager>(mm),
-        &JITSymbolResolver::singleton);
 
-    recordStackmaps(handle, m, mm);
+    // create execution engine and finalize the module
+    std::string err;
+    ExecutionEngine* engine =
+        EngineBuilder(std::unique_ptr<Module>(m))
+            .setErrorStr(&err)
+            .setMCJITMemoryManager(std::unique_ptr<RTDyldMemoryManager>(mm))
+            .setEngineKind(EngineKind::JIT)
+            .create();
 
-    return handle;
+    if (!engine) {
+        fprintf(stderr, "Could not create ExecutionEngine: %s\n", err.c_str());
+        exit(1);
+    }
+
+    engine->finalizeObject();
+
+    recordStackmaps(engine, m, mm);
+
+    for (llvm::Function& f : m->getFunctionList()) {
+        if (CodeCache::missingAddress(f.getName())) {
+            CodeCache::setAddress(f.getName(),
+                                  (uint64_t)engine->getPointerToFunction(&f));
+        }
+    }
+
+    return engine;
 }
 
-void JITCompileLayer::recordStackmaps(JITCompileLayer::ModuleHandle handle,
-                                      Module* m, JITMemoryManager* mm) {
+void JITCompileLayer::recordStackmaps(ExecutionEngine* engine, Module* m,
+                                      JITMemoryManager* mm) {
     // TODO: maybe we could record the statepoints lazily in getFunctionPointer
     std::unordered_map<uint64_t, uintptr_t> fids;
     for (llvm::Function& f : m->getFunctionList()) {
@@ -77,8 +84,7 @@ void JITCompileLayer::recordStackmaps(JITCompileLayer::ModuleHandle handle,
         bool has_id = attr_id.isStringAttribute() &&
                       !attr_id.getValueAsString().getAsInteger(10, id);
         if (has_id)
-            fids[id] = (uintptr_t)JITCompileLayer::getFunctionPointer(
-                handle, f.getName());
+            fids[id] = (uintptr_t)engine->getPointerToFunction(&f);
     }
 
     if (mm->stackmapAddr()) {

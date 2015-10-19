@@ -23,7 +23,7 @@ include_directories(${CMAKE_SOURCE_DIR}/rjit/src)
 # TODO for now, make all builds debug
 set(CMAKE_BUILD_TYPE Debug)
 
-file(WRITE ${CMAKE_SOURCE_DIR}/.local.config  "BUILD_DIR=${CMAKE_BINARY_DIR}\nROOT_DIR=${CMAKE_SOURCE_DIR}\nR_HOME=${R_HOME}\nLLVM_CMAKE=${LLVM_DIR}\n")
+file(WRITE ${CMAKE_SOURCE_DIR}/.local.config  "BUILD_DIR=${CMAKE_BINARY_DIR}\nROOT_DIR=${CMAKE_SOURCE_DIR}\nR_HOME=${R_HOME}\nLLVM_CMAKE=${LLVM_DIR}\nTESTR_DIR=${TESTR_DIR}")
 
 if (APPLE) 
     find_library(libr 
@@ -33,7 +33,7 @@ if (APPLE)
     message(STATUS "libR is found at ${libr}")
 endif(APPLE)
 
-set(LLVM_COMPONENTS_USED support core mcjit orcjit native irreader linker ipo)
+set(LLVM_COMPONENTS_USED support core mcjit native irreader linker ipo)
 
 
 function(JOIN VALUES GLUE OUTPUT)
@@ -69,6 +69,17 @@ add_custom_target(tests
     DEPENDS ${PROJECT_NAME})
 add_custom_command(TARGET tests
     COMMAND ${CMAKE_SOURCE_DIR}/tools/tests)
+
+add_custom_target(all_tests
+    DEPENDS ${PROJECT_NAME}
+    DEPENDS package_check
+    DEPENDS tests
+    DEPENDS integration_tests)
+
+add_custom_target(integration_tests
+    DEPENDS ${PROJECT_NAME})
+add_custom_command(TARGET integration_tests
+    COMMAND ${CMAKE_SOURCE_DIR}/tools/integration_tests.sh)
 
 # Find the libraries that correspond to the LLVM components
 # that we wish to use
