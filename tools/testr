@@ -86,6 +86,7 @@ function run_tests {
             orig_res=$?
     
             if [ $res -ne $orig_res ]; then
+                echo ""
                 echo -e "\n=> $folder_name/$name : compiled version failed\n   $R -f $TEST --args compile"
                 echo $TEST >> $FAILED_STATUS
             else
