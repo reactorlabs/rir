@@ -122,9 +122,11 @@ if [ ! -d $TARGET ]; then
     mkdir $TARGET
 fi
 
-LLVM_TARGET=${TARGET}/llvm
-LLVM_BUILD_DIR_F=llvm-build-${LLVM_VERS}
-LLVM_BUILD_DIR=${LLVM_TARGET}/${LLVM_BUILD_DIR_F}
+if [ -z "$LLVM_BUILD_DIR" ]; then
+    LLVM_TARGET=${TARGET}/llvm
+    LLVM_BUILD_DIR_F=llvm-build-${LLVM_VERS}
+    LLVM_BUILD_DIR=${LLVM_TARGET}/${LLVM_BUILD_DIR_F}
+fi
 
 if [ $SKIP_LLVM -eq 0 ]; then
     if [ ! -d ${LLVM_TARGET} ]; then
