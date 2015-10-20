@@ -15,10 +15,13 @@ cd "${SCRIPTPATH}/.."
 echo "==> Testing R CMD check"
 cmake --build $BUILD_DIR --target package_check
 
+echo "==> Installing package"
+cmake --build $BUILD_DIR --target package_install
+
 echo ""
 echo "==> Running selected gnur tests"
 echo "    skipped"
-#tools/gnur_tests.sh
+tools/gnur_tests.sh
 
 echo ""
 echo "==> Running testr samples"
