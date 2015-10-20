@@ -68,6 +68,11 @@ add_library(${PROJECT_NAME} SHARED ${SRC})
 #codegen is a dependency
 add_dependencies(${PROJECT_NAME} codegen)
 
+add_dependencies(${PROJECT_NAME} check_gnur)
+add_custom_target(check_gnur)
+add_custom_command(TARGET check_gnur
+    COMMAND ${CMAKE_SOURCE_DIR}/tools/check_gnur)
+
 add_custom_target(tests
     DEPENDS ${PROJECT_NAME})
 add_custom_command(TARGET tests

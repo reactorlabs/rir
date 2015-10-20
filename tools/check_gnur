@@ -1,0 +1,30 @@
+#!/bin/bash -e
+
+SCRIPTPATH=`cd $(dirname "$0") && pwd`
+if [ ! -d $SCRIPTPATH ]; then
+    echo "Could not determine absolute dir of $0"
+    echo "Maybe accessed with symlink"
+fi
+export SCRIPTPATH
+
+# Run install script to deploy new hooks
+$SCRIPTPATH/install_hooks.sh
+
+. "${SCRIPTPATH}/../.local.config"
+
+cd $R_HOME
+
+ACTUAL=`git rev-parse HEAD`
+DEPENDENCY=`cat "${SCRIPTPATH}/../.gnur_head"`
+
+if [ -n $DEPENDENCY ] && [ $DEPENDENCY != $ACTUAL ]; then
+    echo -e '\e[31mError:\e[0m This Version of rjit is supposed to be built against version'
+    echo "$DEPENDENCY of gnur!"
+    echo "However your gnur repo is currently checked out at $ACTUAL!"
+    echo
+    echo "You probably have to update gnur. The simplest way is to rerun tools/setup.sh"
+    echo
+    echo "If you committed changes to gnur please update the .gnur_head file"
+    echo
+    exit 1
+fi
