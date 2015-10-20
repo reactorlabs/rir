@@ -128,6 +128,13 @@ if [ -z "$LLVM_BUILD_DIR" ]; then
     LLVM_BUILD_DIR=${LLVM_TARGET}/${LLVM_BUILD_DIR_F}
 fi
 
+if [ "$GEN" == "Unix Makefiles" ] && [ -f ${BUILD_DIR}/build.ninja ]; then
+    echo "ERROR: switch from ninja to make?"
+    echo "add '-n' to use ninja or remove build.ninja to proceed"
+    exit 1
+fi
+
+
 if [ $SKIP_LLVM -eq 0 ]; then
     if [ ! -d ${LLVM_TARGET} ]; then
         mkdir ${LLVM_TARGET}
@@ -207,12 +214,6 @@ echo "-> update hooks"
 ${SRC_DIR}/tools/install_hooks.sh
 
 cd $CURRENT_DIR
-
-if [ "$GEN" == "Unix Makefiles" ] && [ -f ${BUILD_DIR}/build.ninja ]; then
-    echo "ERROR: switch from ninja to make?"
-    echo "add '-n' to use ninja or remove build.ninja to proceed"
-    exit 1
-fi
 
 echo "-> cmake rjit"
 rm -f CMakeCache.txt
