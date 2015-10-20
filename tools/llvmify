@@ -1,0 +1,17 @@
+#!/bin/sh -e
+
+[ $# -ge 1 -a -f "$1" ] && in="$1" || in="-"
+
+TMP=`tempfile`
+
+clang -S -x c -emit-llvm $in -o $TMP
+
+echo "=======================  BITCODE  =========================="
+cat $TMP
+
+echo
+echo
+echo "=======================  CPP  =============================="
+llc -march=cpp $TMP -o -
+
+rm -f $TMP
