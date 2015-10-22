@@ -52,7 +52,7 @@ file(WRITE ${CMAKE_SOURCE_DIR}/.clang_complete "-I${CMAKE_SOURCE_DIR}/rjit/src\n
 
 # code generation
 add_custom_target(codegen_intrinsics
-    COMMAND python3 codegen_intrinsics.py ${R_ROOT_DIR}/src/main/eval.c WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/tools
+    COMMAND python3 codegen_intrinsics.py ${R_ROOT_DIR}/src/main/eval.c ${CMAKE_SOURCE_DIR}/rjit/src/ir WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/tools
 )
 
 add_custom_target(codegen
@@ -67,6 +67,7 @@ add_library(${PROJECT_NAME} SHARED ${SRC})
 
 #codegen is a dependency
 add_dependencies(${PROJECT_NAME} codegen)
+add_dependencies(${PROJECT_NAME} codegen_intrinsics)
 
 add_dependencies(${PROJECT_NAME} check_gnur)
 add_custom_target(check_gnur)
