@@ -47,7 +47,7 @@ class JITMemoryManager : public llvm::SectionMemoryManager {
 
     uint8_t* allocateCodeSection(uintptr_t Size, unsigned Alignment,
                                  unsigned SectionID,
-                                 llvm::StringRef SectionName) {
+                                 llvm::StringRef SectionName) override {
         return allocateSection(CodeMem, Size, Alignment);
     }
 
