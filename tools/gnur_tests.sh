@@ -7,6 +7,7 @@ if [ ! -d $SCRIPTPATH ]; then
 fi
 
 . "${SCRIPTPATH}/../.local.config"
+. "${SCRIPTPATH}/script_include.sh"
 
 export R="${R_HOME}/bin/R"
 
@@ -33,7 +34,7 @@ function run_test {
 }
 export -f run_test
 
-echo ${TESTS[@]} | xargs -n 1 -P `nproc` bash -c run_test $@
+echo ${TESTS[@]} | xargs -n 1 -P `ncores` bash -c run_test $@
 
 unset R_LIBS_USER
 unset R_ENABLE_JIT

@@ -16,13 +16,13 @@ if [ ! -d $SCRIPTPATH ]; then
 fi
 
 . "${SCRIPTPATH}/../.local.config"
+. "${SCRIPTPATH}/script_include.sh"
+export -f ncores
 
-rm -f /tmp/r-test-failed-status.XXXXXX.R
-FAILED_STATUS=$(mktemp /tmp/r-test-failed-status.XXXXXX.R)
+FAILED_STATUS=$(mktemp /tmp/r-test-failed-status.XXXXXX)
 touch $FAILED_STATUS
 export FAILED_STATUS
-rm -f /tmp/r-test-status.XXXXXX.R
-STATUS=$(mktemp /tmp/r-test-status.XXXXXX.R)
+STATUS=$(mktemp /tmp/r-test-status.XXXXXX)
 touch $STATUS
 export STATUS
 
@@ -38,8 +38,7 @@ function run_tests {
     NUM_SUBTEST=`find ${TESTS_PATH} -name '*.R' | wc -l`
     export NUM_SUBTEST
 
-    rm -f /tmp/r-test-sub-status.XXXXXX.R
-    SUB_STATUS=$(mktemp /tmp/r-test-status.XXXXXX.R)
+    SUB_STATUS=$(mktemp /tmp/r-test-status.XXXXXX)
     touch $SUB_STATUS
     export SUB_STATUS
 
@@ -65,8 +64,7 @@ function run_tests {
             LIB="dyn.load('${BUILD_DIR}/librjit.so')"
         fi
 
-        rm -f /tmp/r-test.XXXXXX.R
-        TEST=$(mktemp /tmp/r-test.XXXXXX.R)
+        TEST=$(mktemp /tmp/r-test.XXXXXX)
     
         echo ${LIB} > $TEST
         echo "source('${ROOT_DIR}/rjit/R/rjit.R')" >> $TEST
@@ -99,7 +97,7 @@ function run_tests {
         status
     }
     export -f run_test
-    let N=`nproc`/4
+    let N=`ncores`/4
     find ${TESTS_PATH} -name '*.R' | xargs -n 1 -P $N bash -c 'run_test $@'
 
     echo $TESTS_PATH >> $STATUS

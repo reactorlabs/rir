@@ -9,6 +9,7 @@ if [ ! -d $SCRIPTPATH ]; then
     echo "Maybe accessed with symlink"
 fi
 SRC_DIR=`cd ${SCRIPTPATH}/.. && pwd`
+. "${SCRIPTPATH}/script_include.sh"
 
 
 # Defaults
@@ -21,11 +22,7 @@ SKIP_LLVM=0
 SKIP_GNUR=0
 SKIP_GNUR_CONFIG=0
 SKIP_BUILD=0
-if [[ "$OSTYPE" == "darwin"* ]]; then
-    CORES=`sysctl -n hw.ncpu || echo 8`
-else
-    CORES=`nproc || echo 8`
-fi
+CORES=`ncores`
 LLVM_VERS="370"
 
 function usage() {
