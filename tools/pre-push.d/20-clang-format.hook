@@ -31,6 +31,7 @@ PARSE_EXTS=true
 # file types to parse. Only effective when PARSE_EXTS is true.
 # FILE_EXTS=".c .h .cpp .hpp"
 FILE_EXTS=".c .h .cpp .hpp .cc .hh .cxx .m"
+FILE_IGNORE="src/ir/intrinsics.h"
 
 ##################################################################
 # There should be no need to change anything below this line.
@@ -48,6 +49,16 @@ matches_extension() {
 
     return 1
 }
+
+is_ignored() {
+    local filename=$1
+    local i
+
+    for i in $FILE_IGNORE; do [[ "$filename" =~ .*$i ]] && return 0; done
+
+    return 1
+}
+
 
 # necessary check for initial commit
 if git rev-parse --verify HEAD >/dev/null 2>&1 ; then
@@ -76,6 +87,10 @@ do
     # ignore file if we do check for file extensions and the file
     # does not match any of the extensions specified in $FILE_EXTS
     if $PARSE_EXTS && ! matches_extension "$file"; then
+        continue;
+    fi
+
+    if is_ignored "$file"; then
         continue;
     fi
 

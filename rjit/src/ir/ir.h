@@ -76,8 +76,13 @@ enum class Type {
     Branch,
     Cbr,
     IntegerLessThan,
+    InitClosureContext,
     Switch,
     IntegerAdd,
+    EndClosureContext,
+    ClosureQuickArgumentAdaptor,
+    ClosureNativeCallTrampoline,
+    CallNative,
     unknown,
 };
 

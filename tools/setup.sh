@@ -15,15 +15,16 @@ SRC_DIR=`cd ${SCRIPTPATH}/.. && pwd`
 # Defaults
 
 GEN="Unix Makefiles"
-M="make -j${CORES}"
+M="make"
 OPT="-O0"
 TARGET="${SRC_DIR}/.."
 SKIP_LLVM=0
 SKIP_GNUR=0
 SKIP_GNUR_CONFIG=0
 SKIP_BUILD=0
-CORES=`ncores`
+CORES=-1
 LLVM_VERS="370"
+CLANG=0
 
 function usage() {
   echo "usage: ./${0} [options]"
@@ -34,6 +35,7 @@ function usage() {
   echo "-f|--gnur-flags  aflag    Pass aflag as CFLAGS to gnur    Default: -O0"
   echo "-d|--deps-target path     Directory to checkout deps      Default: .."        
   echo "-l|--skip-llvm            Skip llvm"
+  echo "--add-clang               additionally build clang"
   echo "-g|--skip-gnur            Skip gnur"
   echo "-o|--skip-gnur-conf       Skip gnur configure"
   echo "-c|--cmake-only           Only run cmake in rjit"
@@ -64,6 +66,9 @@ case $key in
     -h|--help)
     usage
     ;;
+    --add-clang)
+    CLANG=1
+    ;;
     -n|--ninja)
     GEN="Ninja"
     M="ninja"
@@ -87,6 +92,19 @@ case $key in
 esac
 shift # past argument or value
 done
+
+# in the case of ninja only manual job argument overrides num of cores
+if [ $M == "ninja" ] && [ $CORES -ne -1 ]; then
+    M="$M -j${CORES}"
+fi
+
+if [ $CORES -eq -1 ]; then
+    CORES=`ncores`
+fi
+
+if [ $M != "ninja" ]; then
+    M="$M -j${CORES}"
+fi
 
 TARGET=`cd $TARGET && pwd`
 
@@ -131,6 +149,20 @@ if [ "$GEN" == "Unix Makefiles" ] && [ -f ${BUILD_DIR}/build.ninja ]; then
     exit 1
 fi
 
+if [ "$GEN" == "Ninja" ]; then
+    if [ -z `which ninja` ]; then
+        echo "ERROR: ninja could not be found. please install"
+        exit 1
+    fi
+fi
+if [ -z `which python3` ]; then
+    echo "ERROR: python3 could not be found. please install"
+    exit 1
+fi
+if [ -z `which doxygen` ]; then
+    echo "ERROR: doxygen could not be found. please install"
+    exit 1
+fi
 
 if [ $SKIP_LLVM -eq 0 ]; then
     if [ ! -d ${LLVM_TARGET} ]; then
@@ -141,7 +173,6 @@ if [ $SKIP_LLVM -eq 0 ]; then
     LLVM_SRC_F=llvm-src-${LLVM_VERS}
     LLVM_SRC=${LLVM_TARGET}/${LLVM_SRC_F}
     
-    echo $LLVM_SRC
     if [ ! -d ${LLVM_SRC} ]; then
         echo "-> checking out llvm ${LLVM_VERS} to ${LLVM_SRC}"
     
@@ -151,11 +182,21 @@ if [ $SKIP_LLVM -eq 0 ]; then
         cd ${LLVM_SRC}
         svn revert .
     fi
+ 
+    if [ $CLANG -eq 1 ]; then
+        if [ ! -d ${LLVM_SRC}/tools/clang ]; then
+            echo "-> checking out clang"
+            cd ${LLVM_SRC}/tools
+            svn co http://llvm.org/svn/llvm-project/cfe/tags/RELEASE_${LLVM_VERS}/final/ clang
+        fi
+    fi
     
     echo "-> building llvm to ${LLVM_BUILD_DIR}"
     mkdir -p $LLVM_BUILD_DIR
     cd $LLVM_BUILD_DIR
-    cmake -G "$GEN" -DLLVM_ENABLE_RTTI=1 -DLLVM_TARGETS_TO_BUILD="X86;CppBackend" -DCMAKE_BUILD_TYPE=Debug --enable-debug-symbols --with-oprofile ${LLVM_SRC}
+    cmake -G "$GEN" -DLLVM_OPTIMIZED_TABLEGEN=1 -DLLVM_ENABLE_RTTI=1 -DLLVM_TARGETS_TO_BUILD="X86;CppBackend" -DCMAKE_BUILD_TYPE=Debug --enable-debug-symbols --with-oprofile ${LLVM_SRC}
+
+    echo "Building llvm now -- this might take quite a while.... (if it fails rerun setup with fewer threads (-j))"
     $M
 fi
 
