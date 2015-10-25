@@ -31,7 +31,7 @@ PARSE_EXTS=true
 # file types to parse. Only effective when PARSE_EXTS is true.
 # FILE_EXTS=".c .h .cpp .hpp"
 FILE_EXTS=".c .h .cpp .hpp .cc .hh .cxx .m"
-FILE_IGNORE="src/ir/intrinsics.h"
+FILE_IGNORE="src/ir/intrinsics.h src/handlers/codegen/.*"
 
 ##################################################################
 # There should be no need to change anything below this line.
