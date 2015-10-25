@@ -152,6 +152,20 @@ if [ "$GEN" == "Unix Makefiles" ] && [ -f ${BUILD_DIR}/build.ninja ]; then
     exit 1
 fi
 
+if [ "$GEN" == "Ninja" ]; then
+    if [ -z `which ninja` ]; then
+        echo "ERROR: ninja could not be found. please install"
+        exit 1
+    fi
+fi
+if [ -z `which python3` ]; then
+    echo "ERROR: python3 could not be found. please install"
+    exit 1
+fi
+if [ -z `which doxygen` ]; then
+    echo "ERROR: doxygen could not be found. please install"
+    exit 1
+fi
 
 if [ $SKIP_LLVM -eq 0 ]; then
     if [ ! -d ${LLVM_TARGET} ]; then
