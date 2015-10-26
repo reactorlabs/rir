@@ -20,7 +20,8 @@ uint8_t* JITMemoryManager::allocateDataSection(uintptr_t size,
     auto res = SectionMemoryManager::allocateDataSection(
         size, alignment, sectionID, sectionName, readonly);
 
-    if (sectionName.str() == ".llvm_stackmaps") {
+    if (sectionName.str() == ".llvm_stackmaps" ||
+        sectionName.str() == "__llvm_stackmaps") {
         stackmapAddr_ = res;
         stackmapSize_ = size;
     }
