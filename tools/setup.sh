@@ -111,6 +111,8 @@ TARGET=`cd $TARGET && pwd`
 R_DIR=${TARGET}/gnur
 TESTR_DIR=${TARGET}/testr
 
+test -d ${SRC_DIR}/.git
+IS_GIT_CHECKOUT=$?
 
 if [ -e ${SRC_DIR}/.local.config ]; then
     . ${SRC_DIR}/.local.config
@@ -162,6 +164,12 @@ fi
 if [ -z `which doxygen` ]; then
     echo "ERROR: doxygen could not be found. please install"
     exit 1
+fi
+if [ $IS_GIT_CHECKOUT -eq 0 ]; then
+    if [ -z `which clang-format` ] && [ -z `which clang-format-3.5` ]; then
+        echo "ERROR: you need clang-format installed. please install"
+        exit 1
+    fi
 fi
 
 if [ $SKIP_LLVM -eq 0 ]; then
@@ -248,7 +256,7 @@ else
     git pull
 fi
 
-if [ -d ${SRC_DIR}/.git ]; then
+if [ $IS_GIT_CHECKOUT -eq 0 ]; then
     echo "-> update hooks"
     ${SRC_DIR}/tools/install_hooks.sh
 fi
