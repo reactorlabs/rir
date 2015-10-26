@@ -165,7 +165,7 @@ if [ -z `which doxygen` ]; then
     echo "ERROR: doxygen could not be found. please install"
     exit 1
 fi
-if [ $IS_GIT_CHECKOUT -eq 0 ]; then
+if [ $IS_GIT_CHECKOUT -eq 0 ] && [ "$CI" != "true" ]; then
     if [ -z `which clang-format` ] && [ -z `which clang-format-3.5` ]; then
         echo "ERROR: you need clang-format installed. please install"
         exit 1
