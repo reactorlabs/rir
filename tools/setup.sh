@@ -258,9 +258,9 @@ cd $CURRENT_DIR
 echo "-> cmake rjit"
 rm -f CMakeCache.txt
 cmake -G "$GEN" -DTESTR_DIR=$TESTR_DIR -DLLVM_DIR=${LLVM_BUILD_DIR}/share/llvm/cmake -DR_HOME=$R_DIR $SRC_DIR
-
 if [ $SKIP_BUILD -eq 0 ]; then
-    $M codegen
+    #TODO: fix first build
+    if [ -z `$M codegen` ]; then echo ""; fi
     $M
 
     echo "-> running tests"
