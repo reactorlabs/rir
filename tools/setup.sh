@@ -251,8 +251,10 @@ else
     git pull
 fi
 
-echo "-> update hooks"
-${SRC_DIR}/tools/install_hooks.sh
+if [ -d ${SRC_DIR}/.git ]; then
+    echo "-> update hooks"
+    ${SRC_DIR}/tools/install_hooks.sh
+fi
 
 cd $CURRENT_DIR
 
