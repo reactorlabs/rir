@@ -124,7 +124,18 @@ add_custom_target(package_install
     COMMAND ${R_COMMAND} CMD INSTALL -l ${R_LIBRARY_TREE} ${PACKAGE_NAME} WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
 )
 
-set_directory_properties(PROPERTIES ADDITIONAL_MAKE_CLEAN_FILES "${R_HOME}/library/rjit;${R_LIBRARY_TREE}/rjit;${CMAKE_SOURCE_DIR}/rjit/src/handlers/codegen;${CMAKE_SOURCE_DIR}/xml;${CMAKE_SOURCE_DIR}/.local.config")
+
+add_custom_target(distclean
+    DEPENDS clean
+    COMMAND rm -rf ${R_HOME}/library/rjit
+    COMMAND rm -rf ${R_LIBRARY_TREE}/rjit
+    COMMAND rm -rf ${CMAKE_SOURCE_DIR}/rjit/src/handlers/codegen
+    COMMAND rm -rf ${CMAKE_SOURCE_DIR}/rjit/src/ir/intrinsics.h
+    COMMAND rm -rf ${CMAKE_SOURCE_DIR}/xml
+    COMMAND rm -rf ${CMAKE_SOURCE_DIR}/doxygen_sqlite3.db
+    COMMAND rm -rf ${CMAKE_SOURCE_DIR}/index.db
+    COMMAND rm -rf ${CMAKE_SOURCE_DIR}/packages/rjit
+)
 
 file(GLOB_RECURSE BENCHMARKS "benchmarks/*.R" "benchmarks/*.r")
 
