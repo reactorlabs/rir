@@ -35,12 +35,20 @@ error: failed to push some refs to 'https://janvitek@bitbucket.org/reactorl/rjit
 
 # Installation
 
-TL;DR - complete script to get everything needed and build with ninja
+TL;DR - complete script to get everything needed and build with ninja (-n)
 ```
 tools/setup.sh -n
 ```
 
-# Installation variants
+## Running tests
+
+To run the basic test, just execute:
+
+```
+cmake --build . --target tests
+```
+
+## Alternative installation variants
 
 To install dependencies to a different place
 ```
@@ -70,10 +78,3 @@ LLVM is used for compiling R bytecode and we will build it from the source code 
 
 Running `rjit` requres a modified version of [GNU-R](https://bitbucket.org/reactorl/gnur), so next step is to build it from source. Note that on Mac OSX, you will need to install `fortan` compiler separately from [here](https://gcc.gnu.org/wiki/GFortranBinaries#MacOS) or using [brew](http://brew.sh/) `brew install gcc` (which will also install `gfortran`).
 
-## Running tests
-
-To run the basic test, just execute:
-
-```
-make tests
-```
