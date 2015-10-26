@@ -1,5 +1,36 @@
 # R + LLVM
 
+TODO --  (from Jan)
+
+  * Installation -- depencies should check for ninja and doxygen
+                 -- how do we install? 
+                 -- why are we using "setup" after the setup?
+                 -- the default should be something that builds on all platforms. (For me following the instructions to the letter does not work)
+
+  * Clean  --  how do we clean everything (including CMake)?
+
+  * Run -- how do we run?  
+        -- how do we know we are running compiled code?
+
+  * Why?  I have only changed the README
+
+  * When dowloading from BB, there are missing .git files / dirs
+ 
+git push
+Password for 'https://janvitek@bitbucket.org': 
+-> branch-policies
+-> clang-format
+Error: clang-format executable not found.
+error: failed to push some refs to 'https://janvitek@bitbucket.org/reactorl/rjit.git'
+41 % 
+
+
+-j  
+
+
+
+
+
 [![wercker status](https://app.wercker.com/status/ba5d6ebd4d90bb4d6a4a9b1f12894063/m "wercker status")](https://app.wercker.com/project/bykey/ba5d6ebd4d90bb4d6a4a9b1f12894063)
 
 # Installation
