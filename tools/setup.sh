@@ -9,6 +9,7 @@ if [ ! -d $SCRIPTPATH ]; then
     echo "Maybe accessed with symlink"
 fi
 SRC_DIR=`cd ${SCRIPTPATH}/.. && pwd`
+. "${SCRIPTPATH}/script_include.sh"
 
 
 # Defaults
@@ -98,11 +99,7 @@ if [ $M == "ninja" ] && [ $CORES -ne -1 ]; then
 fi
 
 if [ $CORES -eq -1 ]; then
-    if [[ "$OSTYPE" == "darwin"* ]]; then
-        CORES=`sysctl -n hw.ncpu || echo 8`
-    else
-        CORES=`nproc || echo 8`
-    fi
+    CORES=`ncores`
 fi
 
 if [ $M != "ninja" ]; then

@@ -11,9 +11,9 @@ export SCRIPTPATH
 $SCRIPTPATH/install_hooks.sh
 
 . "${SCRIPTPATH}/../.local.config"
+. "${SCRIPTPATH}/script_include.sh"
 
-rm -f /tmp/r-test-status.XXXXXX.R
-STATUS=$(mktemp /tmp/r-test-status.XXXXXX.R)
+STATUS=$(mktemp /tmp/r-test-status.XXXXXX)
 touch $STATUS
 export STATUS
 
@@ -40,8 +40,7 @@ function run_test {
   }
   status
   
-  rm -f /tmp/r-test.XXXXXX.R
-  TEST=$(mktemp /tmp/r-test.XXXXXX.R)
+  TEST=$(mktemp /tmp/r-test.XXXXXX)
   echo ${LIB} > $TEST
   echo "source('${ROOT_DIR}/rjit/R/rjit.R')" >> $TEST
   grep -v 'require("rjit")' ${test} >> $TEST
@@ -71,7 +70,7 @@ TESTS_PATH="${ROOT_DIR}/rjit/tests"
 NUM_TESTS=`find ${TESTS_PATH} -name '*.R' | wc -l`
 export NUM_TESTS
 
-find ${TESTS_PATH} -name '*.R' | xargs -n 1 -P `nproc` bash -c 'run_test $@'
+find ${TESTS_PATH} -name '*.R' | xargs -n 1 -P `ncores` bash -c 'run_test $@'
 
 rm -rf $STATUS
 echo ""
