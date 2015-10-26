@@ -35,10 +35,12 @@ error: failed to push some refs to 'https://janvitek@bitbucket.org/reactorl/rjit
 
 # Installation
 
-TL;DR - complete script to get everything needed is
+TL;DR - complete script to get everything needed and build with ninja
 ```
-tools/setup.sh
+tools/setup.sh -n
 ```
+
+# Installation variants
 
 To install dependencies to a different place
 ```

@@ -56,16 +56,26 @@ add_custom_target(codegen_intrinsics
 )
 
 add_custom_target(codegen
-    COMMAND doxygen rjit/Doxyfile WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-    COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_SOURCE_DIR}/rjit/src/handlers/codegen
-    COMMAND python3 tools/codegen_handlers.py xml rjit/src/handlers/codegen WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-)
+    DEPENDS codegen_handlers)
+add_custom_target(codegen_handlers_doxygen
+    COMMAND doxygen rjit/Doxyfile WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+add_custom_target(codegen_handlers_dir
+    DEPENDS codegen_handlers_doxygen
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_SOURCE_DIR}/rjit/src/handlers/codegen)
+add_custom_target(codegen_handlers
+    DEPENDS codegen_intrinsics
+    DEPENDS codegen_handlers_dir
+    COMMAND python3 tools/codegen_handlers.py xml rjit/src/handlers/codegen WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
 # build the shared library for the JIT
 file(GLOB_RECURSE SRC "rjit/src/*.cpp" "rjit/src/*.h" "local/.Rprofile" "rjit/R/*.R" "rjit/tests/*.R")
 add_library(${PROJECT_NAME} SHARED ${SRC})
 
+add_custom_target(codegen_was_run_before
+    COMMAND test -f ${CMAKE_SOURCE_DIR}/rjit/src/ir/intrinsics.h || $(echo && echo && echo "Error" && echo "Please run codegen target before the first build" && echo && echo && exit 1))
+
 #codegen is a dependency
+add_dependencies(${PROJECT_NAME} codegen_was_run_before)
 add_dependencies(${PROJECT_NAME} codegen)
 add_dependencies(${PROJECT_NAME} codegen_intrinsics)
 
