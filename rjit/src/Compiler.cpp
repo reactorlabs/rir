@@ -66,9 +66,11 @@ void Compiler::jitAll() {
         SETCAR(s, reinterpret_cast<SEXP>(fp));
     }
 
-    // Keep the llvm ir around
-    engine->removeModule(b.module());
-    delete engine;
+    if (!RJIT_DEBUG) {
+        // Keep the llvm ir around
+        engine->removeModule(b.module());
+        delete engine;
+    }
 }
 
 /** Compiles an expression.

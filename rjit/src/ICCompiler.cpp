@@ -107,7 +107,8 @@ void* ICCompiler::finalize() {
     auto engine = JITCompileLayer::singleton.getEngine(b.module());
     auto ic = engine->getPointerToFunction(b.f());
 
-    delete engine;
+    if (!RJIT_DEBUG)
+        delete engine;
 
     return ic;
 }
