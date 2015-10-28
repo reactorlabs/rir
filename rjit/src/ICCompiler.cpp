@@ -104,7 +104,6 @@ void* ICCompiler::compile(SEXP inCall, SEXP inFun, SEXP inRho) {
 void* ICCompiler::finalize() {
     // FIXME: Allocate a NATIVESXP, or link it to the caller??
 
-    // m.dump();
     auto engine = JITCompileLayer::singleton.getEngine(b.module());
     auto ic = engine->getPointerToFunction(b.f());
 
@@ -179,8 +178,6 @@ bool ICCompiler::compileIc(SEXP inCall, SEXP inFun) {
                 BasicBlock::Create(getGlobalContext(), "icMatch", f, nullptr);
             BasicBlock* icMiss =
                 BasicBlock::Create(getGlobalContext(), "icMiss", f, nullptr);
-            BasicBlock* end =
-                BasicBlock::Create(getGlobalContext(), "end", f, nullptr);
 
             // Insert a guard to check if the incomming function matches
             // the one we got this time
@@ -218,18 +215,10 @@ bool ICCompiler::compileIc(SEXP inCall, SEXP inFun) {
                                        b.convertToPointer(inBody), newrho);
 
             INTRINSIC(endClosureContext, cntxt, res);
+            ir::Return::create(b, res);
 
-            ir::Branch::create(b, end);
             b.setBlock(icMiss);
-
-            Value* missRes = callMyStub();
-            ir::Branch::create(b, end);
-            b.setBlock(end);
-
-            PHINode* phi = PHINode::Create(t::SEXP, 2, "", b);
-            phi->addIncoming(res, icMatch);
-            phi->addIncoming(missRes, icMiss);
-            ir::Return::create(b, phi);
+            callIcMiss();
 
             return true;
         }
@@ -237,26 +226,23 @@ bool ICCompiler::compileIc(SEXP inCall, SEXP inFun) {
     return false;
 }
 
-Value* ICCompiler::callMyStub() {
+void ICCompiler::callIcMiss() {
+    // auto d = llvm::Function::Create(
+    //         FunctionType::get(t::t_void,{},false),
+    //         llvm::Function::ExternalLinkage, "debugBreak", b.module());
+    // INTRINSIC_NO_SAFEPOINT(d,{});
     auto stub = getStub(size, b);
-    return INTRINSIC_NO_SAFEPOINT(stub, b.args());
+    auto res = INTRINSIC_NO_SAFEPOINT(stub, b.args());
+    ir::Return::create(b, res);
 }
 
 bool ICCompiler::compileGenericIc(SEXP inCall, SEXP inFun) {
-    Value* call = compileCall(inCall, inFun);
-    ir::Return::create(b, call);
-
-    return true;
-}
-
-Value* ICCompiler::compileCall(SEXP call, SEXP op) {
     // TODO: only emit one branch depending on the type we currently see
     BasicBlock* icMatch = b.createBasicBlock("icMatch");
     BasicBlock* icMiss = b.createBasicBlock("icMiss");
-    BasicBlock* end = b.createBasicBlock("end");
 
     Value* test;
-    switch (TYPEOF(op)) {
+    switch (TYPEOF(inFun)) {
     case SPECIALSXP: {
         // Specials only care about the ast, so we can call any special through
         // this ic
@@ -268,7 +254,7 @@ Value* ICCompiler::compileCall(SEXP call, SEXP op) {
     case BUILTINSXP:
     case CLOSXP: {
         test = new ICmpInst(*b.block(), ICmpInst::ICMP_EQ, fun(),
-                            b.convertToPointer(op), "guard");
+                            b.convertToPointer(inFun), "guard");
         break;
     }
     default:
@@ -279,39 +265,32 @@ Value* ICCompiler::compileCall(SEXP call, SEXP op) {
     b.setBlock(icMatch);
 
     Value* res;
-    switch (TYPEOF(op)) {
+    switch (TYPEOF(inFun)) {
     case SPECIALSXP:
-        res = ir::CallSpecial::create(b, b.convertToPointer(call), fun(),
+        res = ir::CallSpecial::create(b, b.convertToPointer(inCall), fun(),
                                       b.convertToPointer(R_NilValue), b.rho());
         break;
     case BUILTINSXP: {
-        Value* args = compileArguments(CDR(call), /*eager=*/true);
-        res = ir::CallBuiltin::create(b, b.convertToPointer(call), fun(), args,
+        Value* args = compileArguments(CDR(inCall), /*eager=*/true);
+        res = ir::CallBuiltin::create(b, b.convertToPointer(inCall), fun(), args,
                                       rho());
         break;
     }
     case CLOSXP: {
-        Value* args = compileArguments(CDR(call), /*eager=*/false);
-        res = ir::CallClosure::create(b, b.convertToPointer(call), fun(), args,
+        Value* args = compileArguments(CDR(inCall), /*eager=*/false);
+        res = ir::CallClosure::create(b, b.convertToPointer(inCall), fun(), args,
                                       rho());
         break;
     }
     default:
         assert(false);
     }
-    ir::Branch::create(b, end);
+    ir::Return::create(b, res);
+
     b.setBlock(icMiss);
+    callIcMiss();
 
-    Value* missRes = callMyStub();
-
-    ir::Branch::create(b, end);
-    b.setBlock(end);
-
-    PHINode* phi = PHINode::Create(t::SEXP, 2, "", b.block());
-    phi->addIncoming(res, icMatch);
-    phi->addIncoming(missRes, icMiss);
-
-    return phi;
+    return true;
 }
 
 /** Compiles arguments for given function.
@@ -406,7 +385,7 @@ Value* ICCompiler::compileArgument(Value* arglist, SEXP argAst, int argnum,
 
 Value* ICCompiler::INTRINSIC_NO_SAFEPOINT(llvm::Value* fun,
                                           std::vector<Value*> args) {
-    return llvm::CallInst::Create(fun, args, fun->getName(), b.block());
+    return llvm::CallInst::Create(fun, args, "", b.block());
 }
 
 Value* ICCompiler::INTRINSIC(llvm::Value* fun, std::vector<Value*> args) {

@@ -27,13 +27,11 @@ class ICCompiler {
     void* finalize();
 
     llvm::Function* compileCallStub();
-    llvm::Value* callMyStub();
+    void callIcMiss();
 
     bool compileIc(SEXP inCall, SEXP inFun);
 
     bool compileGenericIc(SEXP inCall, SEXP inFun);
-
-    llvm::Value* compileCall(SEXP call, SEXP op);
 
     /** Compiles arguments for given function.
 
