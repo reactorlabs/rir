@@ -14,6 +14,7 @@
 
 #include "llvm/IR/LegacyPassManager.h"
 #include "llvm/Transforms/IPO/PassManagerBuilder.h"
+#include "llvm/Transforms/IPO.h"
 #include "llvm/Transforms/Scalar.h"
 #include "llvm/Analysis/TargetLibraryInfo.h"
 #include "llvm/Analysis/TargetTransformInfo.h"
@@ -26,6 +27,29 @@ namespace rjit {
 
 ExecutionEngine* JITCompileLayer::getEngine(Module* m) {
 
+    // to the function tells DynamicLibrary to load the program, not a library.
+    auto mm = new JITMemoryManager();
+
+    // create execution engine and finalize the module
+    std::string err;
+
+    TargetOptions opts;
+    // TODO: breaks gcstatepoint
+    // opts.EnableFastISel = true;
+    ExecutionEngine* engine =
+        EngineBuilder(std::unique_ptr<Module>(m))
+            .setErrorStr(&err)
+            .setMCJITMemoryManager(std::unique_ptr<RTDyldMemoryManager>(mm))
+            .setEngineKind(EngineKind::JIT)
+            .setTargetOptions(opts)
+            .create();
+
+    if (!engine) {
+        fprintf(stderr, "Could not create ExecutionEngine: %s\n", err.c_str());
+        exit(1);
+    }
+
+    // Make sure we can resolve symbols in the program as well. The zero arg
     legacy::PassManager pm;
 
     pm.add(createTargetTransformInfoWrapperPass(TargetIRAnalysis()));
@@ -40,24 +64,6 @@ ExecutionEngine* JITCompileLayer::getEngine(Module* m) {
     // TODO: maybe have our own version which is not relocating?
     pm.add(rjit::createRJITRewriteStatepointsForGCPass());
     pm.run(*m);
-
-    // Make sure we can resolve symbols in the program as well. The zero arg
-    // to the function tells DynamicLibrary to load the program, not a library.
-    auto mm = new JITMemoryManager();
-
-    // create execution engine and finalize the module
-    std::string err;
-    ExecutionEngine* engine =
-        EngineBuilder(std::unique_ptr<Module>(m))
-            .setErrorStr(&err)
-            .setMCJITMemoryManager(std::unique_ptr<RTDyldMemoryManager>(mm))
-            .setEngineKind(EngineKind::JIT)
-            .create();
-
-    if (!engine) {
-        fprintf(stderr, "Could not create ExecutionEngine: %s\n", err.c_str());
-        exit(1);
-    }
 
     engine->finalizeObject();
 

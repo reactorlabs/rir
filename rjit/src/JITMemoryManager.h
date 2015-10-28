@@ -60,15 +60,21 @@ class JITMemoryManager : public llvm::SectionMemoryManager {
 
     bool finalizeMemory(std::string* ErrMsg) override;
 
+    std::error_code applyMemoryGroupPermissions(MemoryGroup& MemGroup,
+                                                unsigned Permissions);
     ~JITMemoryManager() {
-        for (unsigned i = 0, e = CodeMem.AllocatedMem.size(); i != e; ++i)
-            sys::Memory::releaseMappedMemory(CodeMem.AllocatedMem[i]);
+        // TODO: for now our memory manager leaks CodeMem, RODataMem and
+        // RWDataMem, since we currently never collect code memory.
+        // This allows us to safely delete the memory manager instance, without
+        // deleting all the code.
     }
 
     uint8_t* stackmapAddr_ = nullptr;
     uintptr_t stackmapSize_;
 
     MemoryGroup CodeMem;
+    MemoryGroup RODataMem;
+    MemoryGroup RWDataMem;
 };
 }
 // namespace rjit

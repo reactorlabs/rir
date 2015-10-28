@@ -24,6 +24,8 @@
 #include "ir/ir.h"
 #include "ir/Handler.h"
 
+#include "api.h"
+
 #include "RIntlns.h"
 
 #include <memory>
@@ -63,6 +65,10 @@ void Compiler::jitAll() {
         assert(fp);
         SETCAR(s, reinterpret_cast<SEXP>(fp));
     }
+
+    // Keep the llvm ir around
+    engine->removeModule(b.module());
+    delete engine;
 }
 
 /** Compiles an expression.

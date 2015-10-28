@@ -107,6 +107,8 @@ void* ICCompiler::finalize() {
     auto engine = JITCompileLayer::singleton.getEngine(b.module());
     auto ic = engine->getPointerToFunction(b.f());
 
+    delete engine;
+
     return ic;
 }
 
@@ -272,14 +274,14 @@ bool ICCompiler::compileGenericIc(SEXP inCall, SEXP inFun) {
         break;
     case BUILTINSXP: {
         Value* args = compileArguments(CDR(inCall), /*eager=*/true);
-        res = ir::CallBuiltin::create(b, b.convertToPointer(inCall), fun(), args,
-                                      rho());
+        res = ir::CallBuiltin::create(b, b.convertToPointer(inCall), fun(),
+                                      args, rho());
         break;
     }
     case CLOSXP: {
         Value* args = compileArguments(CDR(inCall), /*eager=*/false);
-        res = ir::CallClosure::create(b, b.convertToPointer(inCall), fun(), args,
-                                      rho());
+        res = ir::CallClosure::create(b, b.convertToPointer(inCall), fun(),
+                                      args, rho());
         break;
     }
     default:

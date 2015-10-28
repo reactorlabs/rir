@@ -4,7 +4,7 @@ using namespace llvm;
 
 namespace rjit {
 
-std::unordered_map<std::string, std::pair<llvm::Function*, uint64_t>>
+std::unordered_map<std::string, std::pair<llvm::FunctionType*, uint64_t>>
     CodeCache::cache;
 
 void CodeCache::setAddress(std::string name, uint64_t addr) {
@@ -31,13 +31,12 @@ llvm::Function* CodeCache::get(std::string name,
         return here;
 
     if (cache.count(name)) {
-        auto f = std::get<0>(cache.at(name));
-        return Function::Create(f->getFunctionType(),
-                                GlobalValue::ExternalLinkage, name, m);
+        auto ty = std::get<0>(cache.at(name));
+        return Function::Create(ty, GlobalValue::ExternalLinkage, name, m);
     }
 
     auto f = function();
-    cache[name] = std::pair<Function*, uint64_t>(f, 0);
+    cache[name] = std::pair<FunctionType*, uint64_t>(f->getFunctionType(), 0);
     return f;
 }
 }

@@ -37,8 +37,6 @@ class Builder {
         patchpoint =
             Function::Create(t::patchpoint_t, GlobalValue::ExternalLinkage,
                              "llvm.experimental.patchpoint.void", m_);
-
-        m_->setDataLayout(*EngineBuilder().selectTarget()->getDataLayout());
     }
 
     Builder(llvm::Module* m) : m_(m) {}

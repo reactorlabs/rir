@@ -1,5 +1,7 @@
 #include "JITMemoryManager.h"
 #include "JITSymbolResolver.h"
+#include <iostream>
+#include <unordered_map>
 
 namespace rjit {
 
@@ -17,8 +19,11 @@ uint8_t* JITMemoryManager::allocateDataSection(uintptr_t size,
                                                llvm::StringRef sectionName,
                                                bool readonly) {
 
-    auto res = SectionMemoryManager::allocateDataSection(
-        size, alignment, sectionID, sectionName, readonly);
+    uint8_t* res;
+    if (readonly)
+        res = allocateSection(RODataMem, size, alignment);
+    else
+        res = allocateSection(RWDataMem, size, alignment);
 
     if (sectionName.str() == ".llvm_stackmaps" ||
         sectionName.str() == "__llvm_stackmaps") {
@@ -98,22 +103,59 @@ uint8_t* JITMemoryManager::allocateSection(MemoryGroup& MemGroup,
     return (uint8_t*)Addr;
 }
 
-bool JITMemoryManager::finalizeMemory(std::string* ErrMsg) {
-    if (SectionMemoryManager::finalizeMemory(ErrMsg))
-        return true;
+std::error_code
+JITMemoryManager::applyMemoryGroupPermissions(MemoryGroup& MemGroup,
+                                              unsigned Permissions) {
 
-    for (int i = 0, e = CodeMem.AllocatedMem.size(); i != e; ++i) {
-        std::error_code ec = llvm::sys::Memory::protectMappedMemory(
-            CodeMem.AllocatedMem[i], llvm::sys::Memory::MF_READ |
-                                         sys::Memory::MF_EXEC |
-                                         llvm::sys::Memory::MF_WRITE);
+    for (int i = 0, e = MemGroup.AllocatedMem.size(); i != e; ++i) {
+        std::error_code ec;
+        ec = sys::Memory::protectMappedMemory(MemGroup.AllocatedMem[i],
+                                              Permissions);
         if (ec) {
-            if (ErrMsg) {
-                *ErrMsg = ec.message();
-            }
-            return true;
+            return ec;
         }
     }
+
+    return std::error_code();
+}
+
+bool JITMemoryManager::finalizeMemory(std::string* ErrMsg) {
+    // FIXME: Should in-progress permissions be reverted if an error occurs?
+    std::error_code ec;
+
+    // Don't allow free memory blocks to be used after setting protection flags.
+    CodeMem.FreeMem.clear();
+
+    // Make code memory executable.
+    ec = applyMemoryGroupPermissions(CodeMem, sys::Memory::MF_WRITE |
+                                                  sys::Memory::MF_READ |
+                                                  sys::Memory::MF_EXEC);
+    if (ec) {
+        if (ErrMsg) {
+            *ErrMsg = ec.message();
+        }
+        return true;
+    }
+
+    // Don't allow free memory blocks to be used after setting protection flags.
+    RODataMem.FreeMem.clear();
+
+    // Make read-only data memory read-only.
+    ec = applyMemoryGroupPermissions(RODataMem, sys::Memory::MF_READ |
+                                                    sys::Memory::MF_EXEC);
+    if (ec) {
+        if (ErrMsg) {
+            *ErrMsg = ec.message();
+        }
+        return true;
+    }
+
+    // Read-write data memory already has the correct permissions
+
+    // Some platforms with separate data cache and instruction cache require
+    // explicit cache flush, otherwise JIT code manipulations (like resolved
+    // relocations) will get to the data cache but not to the instruction cache.
+    invalidateInstructionCache();
 
     return false;
 }

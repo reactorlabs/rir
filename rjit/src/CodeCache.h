@@ -19,8 +19,8 @@ class CodeCache {
     static bool contains(std::string name) { return cache.count(name); }
 
   private:
-    static std::unordered_map<std::string, std::pair<llvm::Function*, uint64_t>>
-        cache;
+    static std::unordered_map<std::string,
+                              std::pair<llvm::FunctionType*, uint64_t>> cache;
 };
 }
 

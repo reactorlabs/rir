@@ -49,10 +49,13 @@ extern "C" void* compileIC(uint64_t numargs, SEXP call, SEXP fun, SEXP rho,
     // recompiles already compiled bytecode expressions (used for testing
     // purposes), level 4 compiles ast expressions, level 5 compiles ast &
     // bytecode expressions.
-    if ((RJIT_COMPILE > 0 &&
+    bool compile =
+        (RJIT_COMPILE > 0 &&
          (TYPEOF(body) == LANGSXP || TYPEOF(body) == BCODESXP)) ||
         (TYPEOF(body) == LANGSXP && R_ENABLE_JIT > 3) ||
-        (TYPEOF(body) == BCODESXP && (R_ENABLE_JIT == 3 || R_ENABLE_JIT > 4))) {
+        (TYPEOF(body) == BCODESXP && (R_ENABLE_JIT == 3 || R_ENABLE_JIT > 4));
+
+    if (compile) {
         Compiler c("module");
         SEXP result = c.compile(name, body);
         c.jitAll();
