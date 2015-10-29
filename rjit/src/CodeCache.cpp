@@ -23,6 +23,17 @@ bool CodeCache::missingAddress(std::string name) {
     return cache.count(name) && !std::get<1>(cache.at(name));
 }
 
+uint64_t CodeCache::getAddress(std::string name,
+                               std::function<uint64_t()> function) {
+    if (cache.count(name)) {
+        return getAddress(name);
+    }
+
+    auto a = function();
+    cache[name] = std::pair<FunctionType*, uint64_t>(nullptr, a);
+    return a;
+}
+
 llvm::Function* CodeCache::get(std::string name,
                                std::function<llvm::Function*()> function,
                                llvm::Module* m) {
@@ -32,6 +43,7 @@ llvm::Function* CodeCache::get(std::string name,
 
     if (cache.count(name)) {
         auto ty = std::get<0>(cache.at(name));
+        assert(ty);
         return Function::Create(ty, GlobalValue::ExternalLinkage, name, m);
     }
 

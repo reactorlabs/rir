@@ -12,10 +12,12 @@ class ICCompiler {
     ICCompiler(unsigned size, ir::Builder& b);
 
     static llvm::Function* getStub(unsigned size, ir::Builder& b);
+    static void* getSpecialIC(unsigned size);
 
     void* compile(SEXP inCall, SEXP inFun, SEXP inRho);
 
     static std::string stubName(unsigned size);
+    static std::string specialName(unsigned size);
 
   private:
     llvm::Value* call() { return b.args().at(size); }
@@ -32,6 +34,8 @@ class ICCompiler {
     bool compileIc(SEXP inCall, SEXP inFun);
 
     bool compileGenericIc(SEXP inCall, SEXP inFun);
+
+    void compileSpecialIC();
 
     /** Compiles arguments for given function.
 

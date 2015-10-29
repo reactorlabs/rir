@@ -13,6 +13,8 @@ class CodeCache {
     static llvm::Function* get(std::string name,
                                std::function<llvm::Function*()> function,
                                llvm::Module* m);
+    static uint64_t getAddress(std::string name,
+                               std::function<uint64_t()> function);
     static void setAddress(std::string name, uint64_t addr);
     static uint64_t getAddress(std::string name);
     static bool missingAddress(std::string name);

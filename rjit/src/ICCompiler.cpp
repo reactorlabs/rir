@@ -88,7 +88,18 @@ Function* ICCompiler::getStub(unsigned size, ir::Builder& b) {
                           b.module());
 }
 
+void* ICCompiler::getSpecialIC(unsigned size) {
+    return (void*)CodeCache::getAddress(specialName(size), [size]() {
+        ir::Builder b("ic");
+        ICCompiler compiler(size, b, specialName(size));
+        compiler.compileSpecialIC();
+        return (uint64_t)compiler.finalize();
+    });
+}
+
 void* ICCompiler::compile(SEXP inCall, SEXP inFun, SEXP inRho) {
+    assert(TYPEOF(inFun) != SPECIALSXP);
+
     b.openIC(name, ic_t);
 
     if (RJIT_DEBUG)
@@ -239,50 +250,57 @@ void ICCompiler::callIcMiss() {
     ir::Return::create(b, res);
 }
 
+std::string ICCompiler::specialName(unsigned size) {
+    std::ostringstream os;
+    os << "callSpecialIC_" << size;
+    return os.str();
+}
+
+void ICCompiler::compileSpecialIC() {
+    b.openIC(name, ic_t);
+
+    // TODO: only emit one branch depending on the type we currently see
+    BasicBlock* icMatch = b.createBasicBlock("icMatch");
+    BasicBlock* icMiss = b.createBasicBlock("icMiss");
+
+    // Specials only care about the ast, so we can call any special through
+    // this ic
+    Value* ftype = ir::SexpType::create(b, fun());
+    Value* test = new ICmpInst(*b.block(), ICmpInst::ICMP_EQ, ftype,
+                               b.integer(SPECIALSXP), "guard");
+
+    BranchInst::Create(icMatch, icMiss, test, b.block());
+    b.setBlock(icMatch);
+
+    Value* res = ir::CallSpecial::create(
+        b, call(), fun(), b.convertToPointer(R_NilValue), b.rho());
+    ir::Return::create(b, res);
+
+    b.setBlock(icMiss);
+    callIcMiss();
+}
+
 bool ICCompiler::compileGenericIc(SEXP inCall, SEXP inFun) {
     // TODO: only emit one branch depending on the type we currently see
     BasicBlock* icMatch = b.createBasicBlock("icMatch");
     BasicBlock* icMiss = b.createBasicBlock("icMiss");
 
-    Value* test;
-    switch (TYPEOF(inFun)) {
-    case SPECIALSXP: {
-        // Specials only care about the ast, so we can call any special through
-        // this ic
-        Value* ftype = ir::SexpType::create(b, fun());
-        test = new ICmpInst(*b.block(), ICmpInst::ICMP_EQ, ftype,
-                            b.integer(SPECIALSXP), "guard");
-        break;
-    }
-    case BUILTINSXP:
-    case CLOSXP: {
-        test = new ICmpInst(*b.block(), ICmpInst::ICMP_EQ, fun(),
-                            b.convertToPointer(inFun), "guard");
-        break;
-    }
-    default:
-        assert(false);
-    }
+    Value* test = new ICmpInst(*b.block(), ICmpInst::ICMP_EQ, fun(),
+                               b.convertToPointer(inFun), "guard");
 
     BranchInst::Create(icMatch, icMiss, test, b.block());
     b.setBlock(icMatch);
 
     Value* res;
     switch (TYPEOF(inFun)) {
-    case SPECIALSXP:
-        res = ir::CallSpecial::create(b, b.convertToPointer(inCall), fun(),
-                                      b.convertToPointer(R_NilValue), b.rho());
-        break;
     case BUILTINSXP: {
         Value* args = compileArguments(CDR(inCall), /*eager=*/true);
-        res = ir::CallBuiltin::create(b, b.convertToPointer(inCall), fun(),
-                                      args, rho());
+        res = ir::CallBuiltin::create(b, call(), fun(), args, rho());
         break;
     }
     case CLOSXP: {
         Value* args = compileArguments(CDR(inCall), /*eager=*/false);
-        res = ir::CallClosure::create(b, b.convertToPointer(inCall), fun(),
-                                      args, rho());
+        res = ir::CallClosure::create(b, call(), fun(), args, rho());
         break;
     }
     default:

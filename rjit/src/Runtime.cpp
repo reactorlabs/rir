@@ -67,6 +67,10 @@ extern "C" void* compileIC(uint64_t numargs, SEXP call, SEXP fun, SEXP rho,
             std::cout << "Calling " << name << " @ " << (void*)fun << "\n";
     }
 
+    if (TYPEOF(fun) == SPECIALSXP) {
+        return ICCompiler::getSpecialIC(numargs);
+    }
+
     ir::Builder b("ic");
 
     name.append("IC");
