@@ -26,3 +26,5 @@ tools/gnur_tests.sh
 echo ""
 echo "==> Running testr samples"
 tools/testr_tests.sh
+# save success result for CI
+echo "INTEGRATION_TESTS_SUCCESS=1" >> "${SCRIPTPATH}/../.test_results"
