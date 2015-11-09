@@ -274,3 +274,5 @@ if [ $SKIP_BUILD -eq 0 ]; then
     echo "-> running tests"
     ${SRC_DIR}/tools/tests
 fi
+# save success result for CI
+echo "SETUP_SUCCESS=1\n" > "${SRC_DIR}/.test_results"
