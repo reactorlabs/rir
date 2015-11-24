@@ -39,9 +39,7 @@ REXPORT SEXP jitFunctions(SEXP moduleName, SEXP functions) {
         SEXP name = TAG(functions);
         char const* fName =
             (name == R_NilValue) ? "unnamed function" : CHAR(PRINTNAME(name));
-        if (TYPEOF(body) == BCODESXP)
-            warning("Ignoring %s because it is in bytecode", fName);
-        else if (TYPEOF(body) == NATIVESXP)
+        if (TYPEOF(body) == NATIVESXP)
             warning("Ignoring %s because it is already compiled", fName);
         else
             SET_BODY(f, c.compileFunction(fName, body));
