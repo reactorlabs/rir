@@ -12,6 +12,11 @@ $SCRIPTPATH/install_hooks.sh
 . "${SCRIPTPATH}/../.local.config"
 . "${SCRIPTPATH}/script_include.sh"
 
+if [ -d "$1" ]; then
+    BUILD_DIR=$1
+    echo "Using non-default build dir $BUILD_DIR"
+fi
+
 STATUS=$(mktemp /tmp/r-test-status.XXXXXX)
 
 COMPILE_JOB="
@@ -25,8 +30,7 @@ system.time({
 })"
 
 
-. "${SCRIPTPATH}/../.local.config"
-R="${R_HOME}/bin/R"
+R="${R_HOME}/bin/R -q --slave"
 
 if test "$(uname)" = "Darwin"; then
     LIB="dyn.load('${BUILD_DIR}/librjit.dylib')"

@@ -13,6 +13,15 @@ $SCRIPTPATH/install_hooks.sh
 . "${SCRIPTPATH}/../.local.config"
 . "${SCRIPTPATH}/script_include.sh"
 
+if [ -d "$1" ]; then
+    BUILD_DIR=$1
+    echo "Using non-default build dir $BUILD_DIR"
+fi
+
+export BUILD_DIR
+export R_HOME
+export ROOT_DIR
+
 STATUS=$(mktemp /tmp/r-test-status.XXXXXX)
 touch $STATUS
 export STATUS
@@ -23,7 +32,6 @@ export PARENT
 function run_test {
   test=$0
 
-  . "${SCRIPTPATH}/../.local.config"
   R="${R_HOME}/bin/R"
   
   if test "$(uname)" = "Darwin"; then

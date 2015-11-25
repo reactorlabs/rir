@@ -136,17 +136,18 @@ LLVM_BUILD_DIR=${LLVM_TARGET}/${LLVM_BUILD_DIR_F}${LLVM_TYPE}
 
 if [ -n "$BUILD_DIR" ] && [ $BUILD_DIR != $CURRENT_DIR ]; then
     echo "ERROR: Build directory changed from $BUILD_DIR to $CURRENT_DIR"
-    echo "remove .local.config if this really is what you want."
+    echo "remove .local.config and CMakeCache if this really is what you want."
     exit 1
 fi
+BUILD_DIR=$CURRENT_DIR
 if [ -n "$R_HOME" ] && [ $R_HOME != $R_DIR ]; then
     echo "ERROR: gnur directory changed from $R_HOME to $R_DIR"
-    echo "remove .local.config if this really is what you want."
+    echo "remove .local.config and CMakeCache if this really is what you want."
     exit 1
 fi
 if [ -n "$LLVM_CMAKE" ] && [[ $LLVM_BUILD_DIR =~ $LLVM_CMAKE ]]; then
     echo "ERROR: llvm directory changed to $LLVM_BUILD_DIR"
-    echo "remove .local.config if this really is what you want."
+    echo "remove .local.config and CMakeCache if this really is what you want."
     exit 1
 fi
 
