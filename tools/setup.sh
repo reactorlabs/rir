@@ -25,6 +25,8 @@ SKIP_BUILD=0
 CORES=-1
 LLVM_VERS="370"
 CLANG=0
+LLVM_TYPE=""
+LLVM_BUILD_TYPE="Debug"
 
 function usage() {
   echo "usage: ./${0} [options]"
@@ -35,6 +37,7 @@ function usage() {
   echo "-f|--gnur-flags  aflag    Pass aflag as CFLAGS to gnur    Default: -O0"
   echo "-d|--deps-target path     Directory to checkout deps      Default: .."        
   echo "-l|--skip-llvm            Skip llvm"
+  echo "--llvm-release            Build llvm in release mode"
   echo "--add-clang               additionally build clang"
   echo "-g|--skip-gnur            Skip gnur"
   echo "-o|--skip-gnur-conf       Skip gnur configure"
@@ -85,6 +88,10 @@ case $key in
     TARGET="$2"
     shift # past argument
     ;;
+    --llvm-release)
+    LLVM_TYPE="-nodebug"
+    LLVM_BUILD_TYPE="Release"
+    ;;
     *)
     echo "Flag $key unknown"
     usage
@@ -118,6 +125,10 @@ if [ -e ${SRC_DIR}/.local.config ]; then
     . ${SRC_DIR}/.local.config
 fi
 
+LLVM_TARGET=${TARGET}/llvm
+LLVM_BUILD_DIR_F=llvm-build-${LLVM_VERS}
+LLVM_BUILD_DIR=${LLVM_TARGET}/${LLVM_BUILD_DIR_F}${LLVM_TYPE}
+
 if [ -n "$BUILD_DIR" ] && [ $BUILD_DIR != $CURRENT_DIR ]; then
     echo "ERROR: Build directory changed from $BUILD_DIR to $CURRENT_DIR"
     echo "remove .local.config if this really is what you want."
@@ -137,12 +148,6 @@ fi
 if [ ! -d $TARGET ]; then
     echo "-> creating ${TARGET}"
     mkdir $TARGET
-fi
-
-if [ -z "$LLVM_BUILD_DIR" ]; then
-    LLVM_TARGET=${TARGET}/llvm
-    LLVM_BUILD_DIR_F=llvm-build-${LLVM_VERS}
-    LLVM_BUILD_DIR=${LLVM_TARGET}/${LLVM_BUILD_DIR_F}
 fi
 
 if [ "$GEN" == "Unix Makefiles" ] && [ -f ${BUILD_DIR}/build.ninja ]; then
@@ -202,7 +207,7 @@ if [ $SKIP_LLVM -eq 0 ]; then
     echo "-> building llvm to ${LLVM_BUILD_DIR}"
     mkdir -p $LLVM_BUILD_DIR
     cd $LLVM_BUILD_DIR
-    cmake -G "$GEN" -DLLVM_OPTIMIZED_TABLEGEN=1 -DLLVM_ENABLE_RTTI=1 -DLLVM_TARGETS_TO_BUILD="X86;CppBackend" -DCMAKE_BUILD_TYPE=Debug --enable-debug-symbols --with-oprofile ${LLVM_SRC}
+    cmake -G "$GEN" -DLLVM_OPTIMIZED_TABLEGEN=1 -DLLVM_ENABLE_RTTI=1 -DLLVM_TARGETS_TO_BUILD="X86;CppBackend" -DCMAKE_BUILD_TYPE=${LLVM_BUILD_TYPE} --enable-debug-symbols --with-oprofile ${LLVM_SRC}
 
     echo "Building llvm now -- this might take quite a while.... (if it fails rerun setup with fewer threads (-j))"
     $M
