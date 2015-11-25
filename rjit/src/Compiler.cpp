@@ -703,8 +703,17 @@ Value* Compiler::compileSwitch(SEXP call) {
         x = CDR(x);
         ++i;
     }
+
+    if (condAst == R_NilValue) {
+        return nullptr;
+    }
+
     // actual switch compilation - get the control value and check it
     Value* control = compileExpression(condAst);
+
+    if (caseAsts.size() == 0) {
+        return compileExpression(R_NilValue);
+    }
 
     ir::CheckSwitchControl::create(b, control, call);
     Value* ctype = ir::SexpType::create(b, control);
@@ -744,7 +753,8 @@ Value* Compiler::compileSwitch(SEXP call) {
     PHINode* result = PHINode::Create(t::SEXP, caseAsts.size(), "", b.block());
     // walk the cases and create their blocks, add them to switches and their
     // results to the phi node
-    BasicBlock* last;
+    // TODO: fix empty switch
+    BasicBlock* last = nullptr;
     BasicBlock* fallThrough = nullptr;
     for (unsigned i = 0; i < caseAsts.size(); ++i) {
         last = b.createBasicBlock("switchCase");

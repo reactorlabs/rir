@@ -7,6 +7,9 @@ t <- function(exp) {
     stopifnot(a == b)
 }
 
+tryCatch(eval(jit.compile(quote(switch()))), error=function(e){})
+t(quote(switch("test")))
+t(quote(switch(2)))
 t(quote(switch("test", t=1, test=3, bla=5)))
 t(quote(switch("test", t=1, test=, bla=5)))
 t(quote(switch("test", t=1, test=)))
