@@ -34,8 +34,6 @@ ExecutionEngine* JITCompileLayer::getEngine(Module* m) {
     std::string err;
 
     TargetOptions opts;
-    // TODO: breaks gcstatepoint
-    // opts.EnableFastISel = true;
     ExecutionEngine* engine =
         EngineBuilder(std::unique_ptr<Module>(m))
             .setErrorStr(&err)
@@ -58,11 +56,12 @@ ExecutionEngine* JITCompileLayer::getEngine(Module* m) {
 
     PassManagerBuilder PMBuilder;
     PMBuilder.OptLevel = 0;  // Set optimization level to -O0
-    PMBuilder.SizeLevel = 0; // so that no additional phases are run.
+    PMBuilder.SizeLevel = 1; // so that no additional phases are run.
     PMBuilder.populateModulePassManager(pm);
 
     // TODO: maybe have our own version which is not relocating?
     pm.add(rjit::createRJITRewriteStatepointsForGCPass());
+
     pm.run(*m);
 
     engine->finalizeObject();
