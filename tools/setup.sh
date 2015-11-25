@@ -25,6 +25,7 @@ SKIP_BUILD=0
 CORES=-1
 LLVM_VERS="370"
 CLANG=0
+RJIT_BUILD_TYPE="Debug"
 LLVM_TYPE=""
 LLVM_BUILD_TYPE="Debug"
 
@@ -38,6 +39,7 @@ function usage() {
   echo "-d|--deps-target path     Directory to checkout deps      Default: .."        
   echo "-l|--skip-llvm            Skip llvm"
   echo "--llvm-release            Build llvm in release mode"
+  echo "--rjit-release            Build rjit in release mode"
   echo "--add-clang               additionally build clang"
   echo "-g|--skip-gnur            Skip gnur"
   echo "-o|--skip-gnur-conf       Skip gnur configure"
@@ -91,6 +93,9 @@ case $key in
     --llvm-release)
     LLVM_TYPE="-nodebug"
     LLVM_BUILD_TYPE="Release"
+    ;;
+    --rjit-release)
+    RJIT_BUILD_TYPE="Release"
     ;;
     *)
     echo "Flag $key unknown"
@@ -270,7 +275,7 @@ cd $CURRENT_DIR
 
 echo "-> cmake rjit"
 rm -f CMakeCache.txt
-cmake -G "$GEN" -DTESTR_DIR=$TESTR_DIR -DLLVM_DIR=${LLVM_BUILD_DIR}/share/llvm/cmake -DR_HOME=$R_DIR $SRC_DIR
+cmake -G "$GEN" -DTESTR_DIR=$TESTR_DIR -DLLVM_DIR=${LLVM_BUILD_DIR}/share/llvm/cmake -DR_HOME=$R_DIR -DCMAKE_BUILD_TYPE=${RJIT_BUILD_TYPE} $SRC_DIR
 if [ $SKIP_BUILD -eq 0 ]; then
     #TODO: fix first build
     if [ -z `$M codegen` ]; then echo ""; fi

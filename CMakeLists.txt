@@ -20,8 +20,7 @@ set(R_COMMAND ${R_HOME}/bin/R)
 include_directories(${R_INCLUDE_DIR})
 include_directories(${CMAKE_SOURCE_DIR}/rjit/src)
 
-# TODO for now, make all builds debug
-set(CMAKE_BUILD_TYPE Debug)
+set(CMAKE_CXX_FLAGS_RELEASE -O2)
 
 file(WRITE ${CMAKE_SOURCE_DIR}/.local.config  "BUILD_DIR=${CMAKE_BINARY_DIR}\nROOT_DIR=${CMAKE_SOURCE_DIR}\nR_HOME=${R_HOME}\nLLVM_CMAKE=${LLVM_DIR}\nTESTR_DIR=${TESTR_DIR}")
 
