@@ -130,9 +130,11 @@ if [ -e ${SRC_DIR}/.local.config ]; then
     . ${SRC_DIR}/.local.config
 fi
 
-LLVM_TARGET=${TARGET}/llvm
-LLVM_BUILD_DIR_F=llvm-build-${LLVM_VERS}
-LLVM_BUILD_DIR=${LLVM_TARGET}/${LLVM_BUILD_DIR_F}${LLVM_TYPE}
+if [ -z "$LLVM_BUILD_DIR" ]; then
+    LLVM_TARGET=${TARGET}/llvm
+    LLVM_BUILD_DIR_F=llvm-build-${LLVM_VERS}
+    LLVM_BUILD_DIR=${LLVM_TARGET}/${LLVM_BUILD_DIR_F}${LLVM_TYPE}
+fi
 
 if [ -n "$BUILD_DIR" ] && [ $BUILD_DIR != $CURRENT_DIR ]; then
     echo "ERROR: Build directory changed from $BUILD_DIR to $CURRENT_DIR"
