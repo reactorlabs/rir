@@ -57,7 +57,8 @@ add_custom_target(codegen_intrinsics
 add_custom_target(codegen
     DEPENDS codegen_handlers)
 add_custom_target(codegen_handlers_doxygen
-    COMMAND doxygen rjit/Doxyfile WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+    COMMAND doxygen rjit/Doxyfile WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    DEPENDS codegen_intrinsics)
 add_custom_target(codegen_handlers_dir
     DEPENDS codegen_handlers_doxygen
     COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_SOURCE_DIR}/rjit/src/handlers/codegen)

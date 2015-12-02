@@ -483,8 +483,10 @@ bool {handler}::dispatch(llvm::BasicBlock::iterator & i) {{
     return false;
 }}""".format(header = header, handler=self.handlerClass.name, code = self._table.emit(["i"]).replace("\n", "\n    "), parents = parents)
         
-        with open(self.destFile(dest), 'r') as f:
-            content = f.read()
+        content = ""
+        if os.path.isfile(self.destFile(dest)):
+            with open(self.destFile(dest), 'r') as f:
+                content = f.read()
         if not content == code:
             print(self.destFile(dest), "updated")
             with open(self.destFile(dest), "w") as f:

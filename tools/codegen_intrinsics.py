@@ -291,7 +291,9 @@ def emit(intrinsics, targetDir):
 
     newHeader = fileTemplate.substitute(content=res)
 
-    with open(targetName, 'r') as f:
+    content = ""
+    if os.path.isfile(targetName):
+        with open(targetName, 'r') as f:
             content = f.read()
     if not content == newHeader:
         print(targetName, "updated")
