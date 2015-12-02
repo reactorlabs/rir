@@ -28,8 +28,6 @@
 
 #include "RIntlns.h"
 
-#include <memory>
-
 using namespace llvm;
 
 namespace rjit {
@@ -55,8 +53,7 @@ SEXP Compiler::compileFunction(std::string const& name, SEXP ast,
 }
 
 void Compiler::jitAll() {
-
-    auto engine = JITCompileLayer::singleton.getEngine(b.module());
+    auto engine = JITCompileLayer::singleton.getEngine(b);
 
     // perform all the relocations
     for (SEXP s : relocations) {

@@ -88,7 +88,6 @@ template <typename T, typename W, typename... MATCH_SEQ> class Or {
 }
 
 class MyHandler : public Handler {
-
   public:
     MyHandler(Builder& builder) : Handler(builder) {}
 

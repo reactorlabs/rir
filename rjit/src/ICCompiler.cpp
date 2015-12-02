@@ -115,7 +115,7 @@ void* ICCompiler::compile(SEXP inCall, SEXP inFun, SEXP inRho) {
 void* ICCompiler::finalize() {
     // FIXME: Allocate a NATIVESXP, or link it to the caller??
 
-    auto engine = JITCompileLayer::singleton.getEngine(b.module());
+    auto engine = JITCompileLayer::singleton.getEngine(b);
     auto ic = engine->getPointerToFunction(b.f());
 
     if (!RJIT_DEBUG)

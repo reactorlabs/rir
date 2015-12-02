@@ -21,11 +21,15 @@
 
 #include "llvm/Support/DynamicLibrary.h"
 
+#include "ir/Handler.h"
+#include "ir/HandlerPassWrapper.h"
+
 using namespace llvm;
 
 namespace rjit {
 
-ExecutionEngine* JITCompileLayer::getEngine(Module* m) {
+ExecutionEngine* JITCompileLayer::getEngine(ir::Builder& builder) {
+    Module* m = builder.module();
 
     // to the function tells DynamicLibrary to load the program, not a library.
     auto mm = new JITMemoryManager();
@@ -49,6 +53,8 @@ ExecutionEngine* JITCompileLayer::getEngine(Module* m) {
 
     // Make sure we can resolve symbols in the program as well. The zero arg
     legacy::PassManager pm;
+
+    // pm.add(createHandlerPassWrapper<ir::MyHandler>(builder));
 
     pm.add(createTargetTransformInfoWrapperPass(TargetIRAnalysis()));
 
