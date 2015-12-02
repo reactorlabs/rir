@@ -12,10 +12,12 @@ namespace ir {
 
 namespace {
 
-template <typename Handler> struct HandlerPassWrapper : public FunctionPass {
+template <typename Handler>
+struct HandlerPassWrapper : public FunctionPass {
     static char ID;
 
-    template <typename T> struct RegisterMe {
+    template <typename T>
+    struct RegisterMe {
         RegisterMe() : X(Handler::getPassName(), "", false, false) {
             std::cout << Handler::getPassName() << "Registered\n";
         }
@@ -47,7 +49,8 @@ template <typename Handler> struct HandlerPassWrapper : public FunctionPass {
     Handler handler;
 };
 
-template <typename Handler> char HandlerPassWrapper<Handler>::ID = 0;
+template <typename Handler>
+char HandlerPassWrapper<Handler>::ID = 0;
 
 template <typename Handler>
 HandlerPassWrapper<Handler>::RegisterMe<HandlerPassWrapper<Handler>>

@@ -216,13 +216,15 @@ class Compiler {
         }
     }
 
-    template <typename B> llvm::Value* compileBinary(SEXP call) {
+    template <typename B>
+    llvm::Value* compileBinary(SEXP call) {
         llvm::Value* lhs = compileExpression(CAR(CDR(call)));
         llvm::Value* rhs = compileExpression(CAR(CDR(CDR(call))));
         return B::create(b, lhs, rhs, b.rho(), call);
     }
 
-    template <typename U> llvm::Value* compileUnary(SEXP call) {
+    template <typename U>
+    llvm::Value* compileUnary(SEXP call) {
         llvm::Value* op = compileExpression(CAR(CDR(call)));
         return U::create(b, op, b.rho(), call);
     }

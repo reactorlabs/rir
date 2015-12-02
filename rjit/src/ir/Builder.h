@@ -165,7 +165,8 @@ class Builder {
 
       NOTE that this function assumes that the intrinsic does not use varargs.
      */
-    template <typename INTRINSIC> llvm::Function* intrinsic() {
+    template <typename INTRINSIC>
+    llvm::Function* intrinsic() {
         llvm::Function* result = m_->getFunction(INTRINSIC::intrinsicName());
         // if the intrinsic has not been declared, declare it
         if (result == nullptr)

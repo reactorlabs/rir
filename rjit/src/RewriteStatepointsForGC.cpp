@@ -724,7 +724,8 @@ makeStatepointExplicit(DominatorTree& DT, const CallSite& CS, Pass* P,
 /// Implement a unique function which doesn't require we sort the input
 /// vector.  Doing so has the effect of changing the output of a couple of
 /// tests in ways which make them less useful in testing fused safepoints.
-template <typename T> static void unique_unsorted(SmallVectorImpl<T>& Vec) {
+template <typename T>
+static void unique_unsorted(SmallVectorImpl<T>& Vec) {
     SmallSet<T, 8> Seen;
     Vec.erase(std::remove_if(Vec.begin(), Vec.end(), [&](const T& V) {
                   return !Seen.insert(V).second;

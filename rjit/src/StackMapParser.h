@@ -17,9 +17,11 @@
 
 namespace llvm {
 
-template <support::endianness Endianness> class StackMapV1Parser {
+template <support::endianness Endianness>
+class StackMapV1Parser {
   public:
-    template <typename AccessorT> class AccessorIterator {
+    template <typename AccessorT>
+    class AccessorIterator {
       public:
         AccessorIterator(AccessorT A) : A(A) {}
         AccessorIterator& operator++() {
@@ -410,7 +412,8 @@ template <support::endianness Endianness> class StackMapV1Parser {
     }
 
   private:
-    template <typename T> static T read(const uint8_t* P) {
+    template <typename T>
+    static T read(const uint8_t* P) {
         return support::endian::read<T, Endianness, 1>(P);
     }
 

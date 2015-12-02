@@ -513,7 +513,8 @@ static void findCallSafepoints(Function& F,
 /// Implement a unique function which doesn't require we sort the input
 /// vector.  Doing so has the effect of changing the output of a couple of
 /// tests in ways which make them less useful in testing fused safepoints.
-template <typename T> static void unique_unsorted(std::vector<T>& vec) {
+template <typename T>
+static void unique_unsorted(std::vector<T>& vec) {
     std::set<T> seen;
     std::vector<T> tmp;
     vec.reserve(vec.size());

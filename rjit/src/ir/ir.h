@@ -105,7 +105,10 @@ class Instruction {
     Instruction(llvm::Instruction* ins) : ins_(ins) {}
 
   protected:
-    template <typename T> T* ins() { return llvm::cast<T>(ins_); }
+    template <typename T>
+    T* ins() {
+        return llvm::cast<T>(ins_);
+    }
 
   private:
     llvm::Instruction* ins_;

@@ -68,7 +68,8 @@ class MockupPredicateB : public Predicate {
 
 namespace predicate {
 
-template <typename T, typename W, typename... MATCH_SEQ> class And {
+template <typename T, typename W, typename... MATCH_SEQ>
+class And {
   public:
     T lhs;
     W rhs;
@@ -77,7 +78,8 @@ template <typename T, typename W, typename... MATCH_SEQ> class And {
     }
 };
 
-template <typename T, typename W, typename... MATCH_SEQ> class Or {
+template <typename T, typename W, typename... MATCH_SEQ>
+class Or {
   public:
     T lhs;
     W rhs;
