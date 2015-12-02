@@ -4,6 +4,10 @@ import os
 import sys
 import xml.etree.ElementTree as et
 
+def debug(aStr):
+    # Change to debug
+    if (False):
+        print(aStr)
 
 def error(file, line, message, fail = True):
     """ Displays an error with proper formatting and exits the application immediately, unless fail == False.
@@ -478,15 +482,13 @@ bool {handler}::dispatch(llvm::BasicBlock::iterator & i) {{
     {parents}
     return false;
 }}""".format(header = header, handler=self.handlerClass.name, code = self._table.emit(["i"]).replace("\n", "\n    "), parents = parents)
-        f = open(self.destFile(dest), "w")
-        print(code, file = f)
-        f.close()
         
-
-
-
-
-
+        with open(self.destFile(dest), 'r') as f:
+            content = f.read()
+        if not content == code:
+            print(self.destFile(dest), "updated")
+            with open(self.destFile(dest), "w") as f:
+                f.write(code)
 
 def analyzeMatchSets(c):
     """ Analyzes the match sets of all subclasses of the given class.
@@ -556,27 +558,27 @@ if (not os.path.isdir(dest)):
     usage("Dest directory does not exist")
 
 # now we know we have both source and dest dirs. initialize the sources manager
-print("initializing...")
+debug("initializing...")
 m = Manager(sources)
 # load the classes we required
-print("loading...")
-print("    instructions")
+debug("loading...")
+debug("    instructions")
 ir_ins = m.getClass("rjit::ir::Instruction")
-print("    handlers")
+debug("    handlers")
 ir_handler = m.getClass("rjit::ir::Handler")
-print("    predicates")
+debug("    predicates")
 ir_predicate = m.getClass("rjit::ir::Predicate")
 
 handler_t = m.getClass("handler")
 
 # analyze the data - create match sets and handlers
-print("analyzing...")
-print("    instruction match sets...")
+debug("analyzing...")
+debug("    instruction match sets...")
 analyzeMatchSets(ir_ins)
-print("    handlers...")
+debug("    handlers...")
 handlers = []
 analyzeHandlers(ir_handler, dest)
-print("    handler dispatch tables...")
+debug("    handler dispatch tables...")
 # create handler dispatch tables
 for h in handlers:
     h.buildDispatchTable()

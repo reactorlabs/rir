@@ -280,7 +280,8 @@ class Intrinsic:
 
 def emit(intrinsics, targetDir):
     """ Extracts all intrinsics that we have into specified header and cpp files. """
-    header = open(os.path.join(targetDir, "intrinsics.h"), "w")
+    targetName = os.path.join(targetDir, "intrinsics.h")
+
     # irt = open(os.path.join(targetDir, "irTypes.h"), "w")
 
     res = ""
@@ -288,11 +289,14 @@ def emit(intrinsics, targetDir):
         res += i.headerCode();
         # print("{0}, ".format(i.className), file = irt)
 
-    print(fileTemplate.substitute(content=res), file = header)
-    header.close()
-    # irt.close()
+    newHeader = fileTemplate.substitute(content=res)
 
-
+    with open(targetName, 'r') as f:
+            content = f.read()
+    if not content == newHeader:
+        print(targetName, "updated")
+        with open(targetName, 'w') as f:
+            f.write(newHeader)
 
 def extractIntrinsics(file, intrinsics):
     """ Extracts the C intrinsic functions from given file, together with their types and any other annotations. 
@@ -368,8 +372,8 @@ if (len(sys.argv) != 3):
 intrinsics = []
 for f in sys.argv[1:-1]:
     intrinsics = extractIntrinsics(f, intrinsics)
-print("Found {0} intrinsic(s) in {1} files...".format(len(intrinsics), len(sys.argv) - 2))
+# print("Found {0} intrinsic(s) in {1} files...".format(len(intrinsics), len(sys.argv) - 2))
 # now create the header and cpp files with the intrinsic definitions
 emit(intrinsics, sys.argv[-1])
-print("intrinsics.cpp, intrinsics.h and irTypes.h generated")
+# print("intrinsics.cpp, intrinsics.h and irTypes.h generated")
 
