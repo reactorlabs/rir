@@ -28,9 +28,7 @@ using namespace llvm;
 
 namespace rjit {
 
-ExecutionEngine* JITCompileLayer::getEngine(ir::Builder& builder) {
-    Module* m = builder.module();
-
+ExecutionEngine* JITCompileLayer::getEngine(JITModule* m) {
     // to the function tells DynamicLibrary to load the program, not a library.
     auto mm = new JITMemoryManager();
 
@@ -54,7 +52,7 @@ ExecutionEngine* JITCompileLayer::getEngine(ir::Builder& builder) {
     // Make sure we can resolve symbols in the program as well. The zero arg
     legacy::PassManager pm;
 
-    // pm.add(createHandlerPassWrapper<ir::MyHandler>(builder));
+    pm.add(createHandlerPassWrapper<ir::DummyHandler>());
 
     pm.add(createTargetTransformInfoWrapperPass(TargetIRAnalysis()));
 
@@ -71,6 +69,7 @@ ExecutionEngine* JITCompileLayer::getEngine(ir::Builder& builder) {
     pm.run(*m);
 
     engine->finalizeObject();
+    m->finalizeNativeSEXPs(engine);
 
     // Fill in addresses for cached code
     for (llvm::Function& f : m->getFunctionList()) {

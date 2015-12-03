@@ -278,8 +278,12 @@ class Intrinsic:
         elif (t == "ci"):
             return """
     int {name}() {{ return getValueInt({index}); }}
-    SEXP {name}(SEXP constantPool) {{ return VECTOR_ELT(constantPool, {name}()); }}
-    SEXP {name}(Builder const & b) {{ return b.constantPool({name}()); }}""".format(name=self.argNames[index], index=index)
+    SEXP {name}Value() {{
+        llvm::Function * f = ins()->getParent()->getParent();
+        JITModule * m = static_cast<JITModule*>(f->getParent());
+        return VECTOR_ELT(m->constPool(f), {name}());
+    }}
+    SEXP {name}(Builder const & b) {{ return b.constantPool({name}()); }}""".format(name = self.argNames[index], index = index)
 
         return "{0} {1}() {{ return {2}({3}); }}".format(self.outputArgType(index), self.argNames[index], self.argGetterFunction(index), index)
 

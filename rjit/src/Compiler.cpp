@@ -47,21 +47,11 @@ SEXP Compiler::compileFunction(std::string const& name, SEXP ast,
     // NATIVESXP should be a static builder, but this is not how it works
     // at the moment
     SEXP result = b.closeFunction();
-    // add the non-jitted SEXP to relocations
-    relocations.push_back(result);
     return result;
 }
 
 void Compiler::jitAll() {
     auto engine = JITCompileLayer::singleton.getEngine(b);
-
-    // perform all the relocations
-    for (SEXP s : relocations) {
-        auto f = reinterpret_cast<Function*>(TAG(s));
-        auto fp = engine->getPointerToFunction(f);
-        assert(fp);
-        SETCAR(s, reinterpret_cast<SEXP>(fp));
-    }
 
     if (!RJIT_DEBUG) {
         // Keep the llvm ir around

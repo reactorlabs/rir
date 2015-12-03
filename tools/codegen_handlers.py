@@ -194,8 +194,10 @@ class CppMethod:
                 self.args.append(CppVariable(child, manager))
             elif (child.tag == "reimplements"):
                 self.overrides = True
-        self.isHandler = self.type == manager.getClass("handler")
-        # print("    method {0}".format(self.name))
+        self.manager = manager
+
+    def isHandler(self):
+        return self.type == self.manager.getClass("handler")
 
     def checkHandler(self):
         """ Checks that the method as a handler is fine. This means to 1) check
@@ -208,20 +210,20 @@ class CppMethod:
             error(self.file, self.line,
                   "Handler method {0} is not allowed to take no arguments.".format(self.name))
         # the argument must be instruction
-        if (not self.args[0].isInstruction):
+        if (not self.args[0].isInstruction()):
             error(self.file, self.line, "Handler method {0}, argument {1}: handler's first argument must inherit from rjit::ir::Instruction.".format(
                 self.name, self.args[0].name))
         # all other but last must be instructions
         for a in self.args[1:-1]:
-            if (not a.isInstruction):
+            if (not a.isInstruction()):
                 error(
                     self.file, self.line, "Handler method {0}, argument {1}: handler's non-last arguments must inherit from rjit::ir::Instruction.".format(self.name, a.name))
         # last argument can either be instruction or predicate
         if (len(self.args) > 1):
             a = self.args[-1]
-            if (a.isInstruction):
+            if (a.isInstruction()):
                 return  # all good
-            elif a.isPredicate:
+            elif a.isPredicate():
                 p = a.type
                 # find predicate has static method named match
                 for m in p.methods:
@@ -238,7 +240,7 @@ class CppMethod:
                             error(
                                 self.file, self.line, "when used at handler {0}".format(self.name))
                         # first argument must be handler
-                        if (m.args[0].type != ir_handler):
+                        if (not m.args[0].isHandler()):
                             error(
                                 m.file, m.line, "Predicate {0} match method's first argument must be a rjit::ir::Handler &.".format(p.name))
                         for i in range(1, len(m.args)):
@@ -269,14 +271,14 @@ class CppMethod:
         """ Returns a list of Instruction types that the method, assuming it is a handler matches. """
         result = []
         for a in self.args:
-            if (a.isInstruction):
+            if a.isInstruction():
                 result.append(a.type)
         return result
 
     def predicate(self):
         """ Returns the predicate associated with the handler, or False if the handler is unconditional. """
         for a in self.args:
-            if a.isPredicate:
+            if a.isPredicate():
                 return a.type
         return False
 
@@ -306,11 +308,20 @@ class CppVariable:
                 self.name = child.text
             elif (child.tag == "type"):
                 self.type = manager.getTypeFromXML(child)
-        self.isInstruction = self.type.isSubclassOf(
-                manager.getClass("rjit::ir::Instruction"))
-        self.isHandler = self.type == manager.getClass("rjit::ir::Handler")
-        self.isPredicate = self.type.isSubclassOf(
-                manager.getClass("rjit::ir::Predicate"))
+        self.manager = manager
+
+    def isInstruction(self):
+        return self.type.isSubclassOf(
+                self.manager.getClass("rjit::ir::Instruction"))
+
+    def isPredicate(self):
+        return self.type.isSubclassOf(
+                self.manager.getClass("rjit::ir::Predicate"))
+    
+    def isHandler(self):
+        return self.type.isSubclassOf(
+                self.manager.getClass("rjit::ir::Handler"))
+
 
 
 class Handler:
@@ -480,7 +491,7 @@ switch (t) {{
         self.handlerClass = handlerClass
         self.handlerMethods = []
         for m in handlerClass.methods:
-            if (m.isHandler and not m.overrides):
+            if (m.isHandler() and not m.overrides):
                 self.handlerMethods.append(m)
 
     def hasHandlers(self):
@@ -516,7 +527,7 @@ switch (t) {{
         td = os.path.getmtime(df)
         return ts > td
 
-    def emit(self, dest):
+    def emit(self, dest, cppBase):
         parents = ""
         header = self.handlerClass.file[len(cppBase) + 1:]
         for p in self.handlerClass.parents:
@@ -639,10 +650,9 @@ def main():
     # create handler dispatch tables
     for h in handlers:
         h.buildDispatchTable()
-        # print(h.handlerClass.name)
         # print(h._table)
         if (h.handlerClass != ir_handler):
-            h.emit(dest)
+            h.emit(dest, cppBase)
 
 if __name__ == "__main__":
     main()

@@ -6,8 +6,8 @@ using namespace llvm;
 namespace rjit {
 namespace ir {
 
-Builder::Context::Context(std::string const& name, Module* m, FunctionType* ty,
-                          bool isReturnJumpNeeded)
+Builder::Context::Context(std::string const& name, JITModule* m,
+                          FunctionType* ty, bool isReturnJumpNeeded)
     : isReturnJumpNeeded(isReturnJumpNeeded) {
     // TODO the type is ugly
     f = Function::Create(ty, Function::ExternalLinkage, name, m);
@@ -22,7 +22,7 @@ Builder::Context::Context(std::string const& name, Module* m, FunctionType* ty,
     b = llvm::BasicBlock::Create(llvm::getGlobalContext(), "start", f, nullptr);
 }
 
-Builder::ClosureContext::ClosureContext(std::string name, llvm::Module* m,
+Builder::ClosureContext::ClosureContext(std::string name, JITModule* m,
                                         bool isReturnJumpNeeded)
     : Builder::Context(name, m, t::sexp_sexpsexpint, isReturnJumpNeeded) {
     // get rho value into context->rho for easier access
@@ -38,7 +38,7 @@ Builder::ClosureContext::ClosureContext(std::string name, llvm::Module* m,
     args_.push_back(useCache);
 }
 
-Builder::ICContext::ICContext(std::string name, llvm::Module* m,
+Builder::ICContext::ICContext(std::string name, JITModule* m,
                               llvm::FunctionType* ty)
     : Builder::Context(name, m, ty, false) {
     auto size = ty->getNumParams() - 5;
@@ -74,21 +74,6 @@ void Builder::openFunction(std::string const& name, SEXP ast, bool isPromise) {
     else
         c_ = new ClosureContext(name, m_);
     c_->addConstantPoolObject(ast);
-}
-
-SEXP Builder::createNativeSXP(RFunctionPtr fptr, SEXP ast,
-                              std::vector<SEXP> const& objects, Function* f) {
-
-    SEXP objs = allocVector(VECSXP, objects.size());
-    PROTECT(objs);
-    for (size_t i = 0; i < objects.size(); ++i)
-        SET_VECTOR_ELT(objs, i, objects[i]);
-    SEXP result = CONS(reinterpret_cast<SEXP>(fptr), objs);
-    // all objects in objects + objs itself (now part of result)
-    UNPROTECT(objects.size() + 1);
-    SET_TAG(result, reinterpret_cast<SEXP>(f));
-    SET_TYPEOF(result, NATIVESXP);
-    return result;
 }
 
 } // namespace ir

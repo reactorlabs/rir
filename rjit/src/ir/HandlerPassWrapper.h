@@ -25,12 +25,11 @@ struct HandlerPassWrapper : public FunctionPass {
     };
     static RegisterMe<HandlerPassWrapper<Handler>> Registered;
 
-    HandlerPassWrapper() = delete;
-    HandlerPassWrapper(Builder& builder)
-        : FunctionPass(ID), builder(builder), handler(builder) {}
+    HandlerPassWrapper() : FunctionPass(ID) {}
 
     bool runOnFunction(Function& F) override {
-        for (llvm::Function& f : builder.module()->getFunctionList()) {
+        llvm::Module* m = F.getParent();
+        for (llvm::Function& f : m->getFunctionList()) {
             if (f.isDeclaration() || f.empty())
                 continue;
 
@@ -45,7 +44,6 @@ struct HandlerPassWrapper : public FunctionPass {
 
     void getAnalysisUsage(AnalysisUsage& AU) const override {}
 
-    Builder& builder;
     Handler handler;
 };
 
@@ -59,8 +57,8 @@ HandlerPassWrapper<Handler>::RegisterMe<HandlerPassWrapper<Handler>>
 }
 
 template <typename Handler>
-FunctionPass* createHandlerPassWrapper(ir::Builder& b) {
-    return new ir::HandlerPassWrapper<Handler>(b);
+FunctionPass* createHandlerPassWrapper() {
+    return new ir::HandlerPassWrapper<Handler>();
 }
 }
 

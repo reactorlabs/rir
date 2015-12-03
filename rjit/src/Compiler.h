@@ -230,17 +230,6 @@ class Compiler {
     }
 
     ir::Builder b;
-
-    /** List of relocations to be done when compiling.
-
-      When a function is compiled, it is first translated to bitcode and a
-      native SXP is created for it using nullptr for the native code. The
-      function's SXP is added to the list of relocations here. When the
-      compilation is done, the module is finalized and all SEXPs in the
-      relocation lists are patched so that they point to correct native
-      functions.
-      */
-    std::vector<SEXP> relocations;
 };
 
 } // namespace rjit

@@ -2,6 +2,7 @@
 #define COMPILER_LAYER_H
 
 #include "JITMemoryManager.h"
+#include "JITModule.h"
 
 #include "llvm/ExecutionEngine/ExecutionEngine.h"
 #include "llvm/ExecutionEngine/MCJIT.h"
@@ -23,7 +24,7 @@ class JITCompileLayer {
 
     static JITCompileLayer singleton;
 
-    ExecutionEngine* getEngine(ir::Builder& builder);
+    ExecutionEngine* getEngine(JITModule* m);
     uint64_t getSafepointId(llvm::Function* f);
     void setPatchpoint(uint64_t i, unsigned stubSize) {
         patchpoints[i] = stubSize;
