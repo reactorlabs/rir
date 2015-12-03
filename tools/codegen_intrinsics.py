@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 
-# Note this file will be soon removed as soon as we start adding hierarchy to the intrinsic classes. For now, it serves the purpose of quickly creating the instruction classes fro the eval.c file.
+# Note this file will be soon removed as soon as we start adding hierarchy
+# to the intrinsic classes. For now, it serves the purpose of quickly
+# creating the instruction classes fro the eval.c file.
 
 import os
 import sys
@@ -66,14 +68,15 @@ $args_load
 
 
 class Intrinsic:
-    """ Single intrinsic. 
 
-    Contains the intrinsic name, argument names and argument types and comments to the intrinsic if any. 
+    """ Single intrinsic.
 
-    TODO in the future, it also contains the annotations used with the intrinsic so that we can fine-tune its behavior. 
+    Contains the intrinsic name, argument names and argument types and comments to the intrinsic if any.
+
+    TODO in the future, it also contains the annotations used with the intrinsic so that we can fine-tune its behavior.
     """
 
-    def __init__(self, annotations, declaration, comment = ""):
+    def __init__(self, annotations, declaration, comment=""):
         """ Creates the intrinsic from the annotations and declaration lines. """
         self.returnType, declaration = declaration.split(" ", 1)
         if self.returnType == "extern":
@@ -82,16 +85,17 @@ class Intrinsic:
         # CamelCase the name
         self.className = self.name[0].upper() + self.name[1:]
         if (args):
-            args = [ x.strip() for x in args.split(",") ]
-            self.argTypes = [ x.split(" ")[0].strip() for x in args]
-            self.argNames = [ x.split(" ")[-1].strip() for x in args]
+            args = [x.strip() for x in args.split(",")]
+            self.argTypes = [x.split(" ")[0].strip() for x in args]
+            self.argNames = [x.split(" ")[-1].strip() for x in args]
         else:
             self.argTypes = []
             self.argNames = []
         # ignore the annotation for now as it does not tell us anything atm
-        # keep the comment, if any, we will add it to the C++ wrapper classfor better clarity
+        # keep the comment, if any, we will add it to the C++ wrapper classfor
+        # better clarity
         self.comment = comment
-        a = [ x.strip() for x in annotations.split(" ") ]
+        a = [x.strip() for x in annotations.split(" ")]
         i = 1
         state = ""
         while (i < len(a)):
@@ -105,7 +109,8 @@ class Intrinsic:
                     i += 1
                     continue
                 else:
-                    print("Unknown intrinsic annotation modifier {0}".format(a[i]))
+                    print(
+                        "Unknown intrinsic annotation modifier {0}".format(a[i]))
                     exit()
             elif (state == "consts"):
                 self.markAsConstants(a[i])
@@ -125,20 +130,19 @@ class Intrinsic:
         for i in range(0, len(self.argNames)):
             if (self.argNames[i] == argName):
                 self.argTypes[i] = "cp"
-                break;
-
+                break
 
     def markAsConstantIndex(self, argName):
         for i in range(0, len(self.argNames)):
             if (self.argNames[i] == argName):
                 self.argTypes[i] = "ci"
-                break;
+                break
 
     def markAsConstInt(self, argName):
         for i in range(0, len(self.argNames)):
             if (self.argNames[i] == argName):
                 self.argTypes[i] = "constint"
-                break;
+                break
 
     def outputArgType(self, index):
         x = self.argTypes[index]
@@ -164,7 +168,7 @@ class Intrinsic:
         elif (type in ("ci", "int", "Rboolean", "constint")):
             return "t::Int"
         elif (type == "void"):
-            return "t::Void";
+            return "t::Void"
         elif (type == "bool"):
             return "t::Bool"
         elif (type == "RCNTXT"):
@@ -182,7 +186,6 @@ class Intrinsic:
             result += self.typeToIr(t)
         return result
 
-
     def headerCode(self):
         """ Emits the C++ code for the intrinsic that is to be placed in the header - the intrinsic class definition and methods. """
 
@@ -194,7 +197,7 @@ class Intrinsic:
         # static constructor
         staticCtr = self.staticConstructor()
 
-        c=""
+        c = ""
         if self.comment:
             c = re.sub(r"(^//( )?)|(/\*)|(\*/)", "", self.comment)
             c = re.sub(r"^( )?\* ", "", c, 0, re.M)
@@ -204,7 +207,7 @@ class Intrinsic:
             c = "\n" + c
 
         return classTemplate.substitute(
-                comment=c,
+            comment=c,
                 class_name=self.className,
                 getters=getters,
                 static_ctr=staticCtr,
@@ -212,7 +215,6 @@ class Intrinsic:
                 return_type=self.typeToIr(self.returnType),
                 arg_types=self.irArgTypes())
 
-    
     def staticConstructorArgType(self, index):
         x = self.argTypes[index]
         if (x == "cp"):
@@ -233,7 +235,7 @@ class Intrinsic:
         elif (x == "constint"):
             return "Builder::integer({0})".format(self.argNames[index])
         else:
-            return self.argNames[index];
+            return self.argNames[index]
 
     def staticConstructor(self):
         """ Returns the c++ code for the static constructor method for the intrinsic call.
@@ -252,30 +254,29 @@ class Intrinsic:
 
         load = ""
         for i in range(0, len(self.argNames)):
-            load +="        args_.push_back({0});\n".format(self.convertArgumentToValue(i))
+            load += "        args_.push_back({0});\n".format(
+                self.convertArgumentToValue(i))
 
         return staticCtrTemplate.substitute(
-                class_name=self.className,
+            class_name=self.className,
                 args=sig,
                 args_load=load)
 
     def argumentGetterCode(self, index):
         t = self.argTypes[index]
         if (t in ("SEXP", "int")):
-            return "llvm::Value* {name}() {{ return getValue({index}); }}".format(name = self.argNames[index], index = index)
+            return "llvm::Value* {name}() {{ return getValue({index}); }}".format(name=self.argNames[index], index=index)
         elif (t == "cp"):
-            return "llvm::Value* constantPool() {{ return getValue({index}); }}".format(index = index)
+            return "llvm::Value* constantPool() {{ return getValue({index}); }}".format(index=index)
         elif (t == "constint"):
-            return "int {name}() {{ return getValueInt({index}); }}".format(name = self.argNames[index], index = index)
+            return "int {name}() {{ return getValueInt({index}); }}".format(name=self.argNames[index], index=index)
         elif (t == "ci"):
             return """
     int {name}() {{ return getValueInt({index}); }}
     SEXP {name}(SEXP constantPool) {{ return VECTOR_ELT(constantPool, {name}()); }}
-    SEXP {name}(Builder const & b) {{ return b.constantPool({name}()); }}""".format(name = self.argNames[index], index = index)
+    SEXP {name}(Builder const & b) {{ return b.constantPool({name}()); }}""".format(name=self.argNames[index], index=index)
 
         return "{0} {1}() {{ return {2}({3}); }}".format(self.outputArgType(index), self.argNames[index], self.argGetterFunction(index), index)
-
-
 
 
 def emit(intrinsics, targetDir):
@@ -286,7 +287,7 @@ def emit(intrinsics, targetDir):
 
     res = ""
     for i in intrinsics:
-        res += i.headerCode();
+        res += i.headerCode()
         # print("{0}, ".format(i.className), file = irt)
 
     newHeader = fileTemplate.substitute(content=res)
@@ -300,12 +301,13 @@ def emit(intrinsics, targetDir):
         with open(targetName, 'w') as f:
             f.write(newHeader)
 
+
 def extractIntrinsics(file, intrinsics):
-    """ Extracts the C intrinsic functions from given file, together with their types and any other annotations. 
-    
+    """ Extracts the C intrinsic functions from given file, together with their types and any other annotations.
+
     All annotations are given in C comments blocks starting with /*@ and as of now the following annotations are allowed:
 
-    intrinsic - an intrinsic to be analyzed. 
+    intrinsic - an intrinsic to be analyzed.
 
     """
     with open(file, "r") as f:
@@ -315,11 +317,9 @@ def extractIntrinsics(file, intrinsics):
         PARSE_COMMENT = 2
         PARSE_DECLARATION = 3
 
-
         intrinsic = ""
         comment = ""
         declaration = ""
-
 
         state = SEARCH
 
@@ -329,7 +329,8 @@ def extractIntrinsics(file, intrinsics):
                 continue
             if (state == SEARCH):
                 if (line.find("/*@intrinsic") == 0):
-                    # we have found the intrinsic marker, the coments and the function follows
+                    # we have found the intrinsic marker, the coments and the
+                    # function follows
                     state = PARSE_INTRINSIC
                     intrinsic = ""
                 elif (line.find("//@intrinsic") == 0):
@@ -362,7 +363,8 @@ def extractIntrinsics(file, intrinsics):
                     line = line[:line.find("{")]
                     state = SEARCH
                     declaration = declaration + line + " "
-                    intrinsics.append(Intrinsic(intrinsic, declaration, comment.strip()))
+                    intrinsics.append(
+                        Intrinsic(intrinsic, declaration, comment.strip()))
                 else:
                     declaration = declaration + line
         return intrinsics
@@ -378,4 +380,3 @@ for f in sys.argv[1:-1]:
 # now create the header and cpp files with the intrinsic definitions
 emit(intrinsics, sys.argv[-1])
 # print("intrinsics.cpp, intrinsics.h and irTypes.h generated")
-
