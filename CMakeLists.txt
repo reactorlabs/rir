@@ -32,7 +32,7 @@ if (APPLE)
     message(STATUS "libR is found at ${libr}")
 endif(APPLE)
 
-set(MAKEVARS_SRC "SOURCES = $(wildcard *.cpp ir/*.cpp)\nOBJECTS = $(SOURCES:.cpp=.o)")
+set(MAKEVARS_SRC "SOURCES = $(wildcard *.cpp ir/*.cpp handlers/codegen/*.cpp)\nOBJECTS = $(SOURCES:.cpp=.o)")
 set(LLVM_COMPONENTS_USED support core mcjit native irreader linker ipo)
 
 
