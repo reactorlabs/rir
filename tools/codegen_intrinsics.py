@@ -10,7 +10,7 @@ import textwrap
 import re
 from string import Template
 
-fileTemplate = Template("""#ifndef INTRINSICS_H_
+FILE_TEMPLATE = Template("""#ifndef INTRINSICS_H_
 #define INTRINSICS_H_
 
 #include "ir.h"
@@ -25,7 +25,7 @@ $content
 #endif  // INTRINSICS_H_
 """)
 
-classTemplate = Template("""
+CLASS_TEMPLATE = Template("""
 $comment
 class $class_name : public Intrinsic {
   public:
@@ -50,7 +50,7 @@ $static_ctr
     }
 };""")
 
-staticCtrTemplate = Template("""    static $class_name create(
+STATIC_CTR_TEMPLATE = Template("""    static $class_name create(
             Builder & b$args) {
 
         std::vector<llvm::Value*> args_;
@@ -71,13 +71,15 @@ class Intrinsic:
 
     """ Single intrinsic.
 
-    Contains the intrinsic name, argument names and argument types and comments to the intrinsic if any.
+    Contains the intrinsic name, argument names and argument types and comments
+    to the intrinsic if any.
 
-    TODO in the future, it also contains the annotations used with the intrinsic so that we can fine-tune its behavior.
-    """
+    TODO in the future, it also contains the annotations used with the
+    intrinsic so that we can fine-tune its behavior.  """
 
     def __init__(self, annotations, declaration, comment=""):
-        """ Creates the intrinsic from the annotations and declaration lines. """
+        """ Creates the intrinsic from the annotations and declaration lines.
+        """
         self.returnType, declaration = declaration.split(" ", 1)
         if self.returnType == "extern":
             self.returnType, declaration = declaration.split(" ", 1)
@@ -187,7 +189,8 @@ class Intrinsic:
         return result
 
     def headerCode(self):
-        """ Emits the C++ code for the intrinsic that is to be placed in the header - the intrinsic class definition and methods. """
+        """ Emits the C++ code for the intrinsic that is to be placed in the
+        header - the intrinsic class definition and methods. """
 
         getters = ""
         # argument getters
@@ -206,7 +209,7 @@ class Intrinsic:
             c = re.sub(r"^", "// ", c, 0, re.M)
             c = "\n" + c
 
-        return classTemplate.substitute(
+        return CLASS_TEMPLATE.substitute(
             comment=c,
                 class_name=self.className,
                 getters=getters,
@@ -238,9 +241,11 @@ class Intrinsic:
             return self.argNames[index]
 
     def staticConstructor(self):
-        """ Returns the c++ code for the static constructor method for the intrinsic call.
+        """ Returns the c++ code for the static constructor method for the
+        intrinsic call.
 
-        Takes constants from builder and SEXPs as constants, these are added to the constant pool.
+        Takes constants from builder and SEXPs as constants, these are added to
+        the constant pool.
         """
         # signature
         sig = ""
@@ -257,7 +262,7 @@ class Intrinsic:
             load += "        args_.push_back({0});\n".format(
                 self.convertArgumentToValue(i))
 
-        return staticCtrTemplate.substitute(
+        return STATIC_CTR_TEMPLATE.substitute(
             class_name=self.className,
                 args=sig,
                 args_load=load)
@@ -290,7 +295,7 @@ def emit(intrinsics, targetDir):
         res += i.headerCode()
         # print("{0}, ".format(i.className), file = irt)
 
-    newHeader = fileTemplate.substitute(content=res)
+    newHeader = FILE_TEMPLATE.substitute(content=res)
 
     content = ""
     if os.path.isfile(targetName):
@@ -303,9 +308,11 @@ def emit(intrinsics, targetDir):
 
 
 def extractIntrinsics(file, intrinsics):
-    """ Extracts the C intrinsic functions from given file, together with their types and any other annotations.
+    """ Extracts the C intrinsic functions from given file, together with their
+    types and any other annotations.
 
-    All annotations are given in C comments blocks starting with /*@ and as of now the following annotations are allowed:
+    All annotations are given in C comments blocks starting with /*@ and as of
+    now the following annotations are allowed:
 
     intrinsic - an intrinsic to be analyzed.
 
@@ -369,14 +376,18 @@ def extractIntrinsics(file, intrinsics):
                     declaration = declaration + line
         return intrinsics
 
-if (len(sys.argv) != 3):
-    print("usage: " + sys.argv[0] + " inFile.c [inFileN.c +] out/dir")
-    sys.exit(-1)
-# load intrinsics from the files specified.
-intrinsics = []
-for f in sys.argv[1:-1]:
-    intrinsics = extractIntrinsics(f, intrinsics)
-# print("Found {0} intrinsic(s) in {1} files...".format(len(intrinsics), len(sys.argv) - 2))
-# now create the header and cpp files with the intrinsic definitions
-emit(intrinsics, sys.argv[-1])
-# print("intrinsics.cpp, intrinsics.h and irTypes.h generated")
+def main():
+    if (len(sys.argv) != 3):
+        print("usage: " + sys.argv[0] + " inFile.c [inFileN.c +] out/dir")
+        sys.exit(-1)
+
+    # load intrinsics from the files specified.
+    intrinsics = []
+    for f in sys.argv[1:-1]:
+        intrinsics = extractIntrinsics(f, intrinsics)
+
+    # now create the header and cpp files with the intrinsic definitions
+    emit(intrinsics, sys.argv[-1])
+
+if __name__ == "__main__":
+    main()

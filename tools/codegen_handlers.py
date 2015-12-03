@@ -4,6 +4,8 @@ import os
 import sys
 import xml.etree.ElementTree as et
 
+HANDLER_T = None
+FORCE = False
 
 def debug(aStr):
     # Change to debug
@@ -12,7 +14,8 @@ def debug(aStr):
 
 
 def error(file, line, message, fail=True):
-    """ Displays an error with proper formatting and exits the application immediately, unless fail == False.
+    """ Displays an error with proper formatting and exits the application
+    immediately, unless fail == False.
     """
     print("{file}:{line}: error: {message}".format(
         file=file, line=line, message=message), file=sys.stderr)
@@ -22,14 +25,14 @@ def error(file, line, message, fail=True):
 
 class Manager:
 
-    """ Manages the doxygen generated xml classes for header files documentation.
-    """
+    """ Manages the doxygen generated xml classes for header files
+    documentation.  """
 
     # TODO how to deal with underscores? __ perhaps - I need to check this
     @staticmethod
     def mangle(name):
-        """ Mangles the given cpp name into doxygen filename format (:: == _1_1 and capital leters == _lowercase).
-        """
+        """ Mangles the given cpp name into doxygen filename format (:: == _1_1
+        and capital leters == _lowercase).  """
         result = ""
         for c in name:
             if (c == ":"):
@@ -60,7 +63,8 @@ class Manager:
         return result
 
     def __init__(self, rootPath):
-        """ Initializes the manager and sets the root path where the xml files are to be found.
+        """ Initializes the manager and sets the root path where the xml files
+        are to be found.
 
         """
         self._rootPath = rootPath
@@ -68,12 +72,14 @@ class Manager:
         self._classes = {}
 
     def _pathFor(self, name):
-        """ Given a class name (including definition namespaces), returns the filename of that class' definition under the manager's root path.
+        """ Given a class name (including definition namespaces), returns the
+        filename of that class' definition under the manager's root path.
         """
         return os.path.join(self._rootPath, "{0}.xml".format(name))
 
     def getClass(self, name):
-        """ Loads the class with given name and all its children classes as well. If the class is already loaded, just returns it. """
+        """ Loads the class with given name and all its children classes as
+        well. If the class is already loaded, just returns it. """
         if (name in self._classes.keys()):
             return self._classes[name]
         fname = os.path.join(
@@ -125,8 +131,8 @@ class CppClass:
     def __init__(self, name, xml):
         """ Creates the class with given xml.
 
-        Does not yet load and analyze the data as this will be done in the second step to prevent circular definitions.
-        """
+        Does not yet load and analyze the data as this will be done in the
+        second step to prevent circular definitions.  """
         self.name = name
         self._xml = xml.getroot()[0]  # compounddef
         if (self._xml.attrib["kind"] != "class"):
@@ -188,35 +194,34 @@ class CppMethod:
                 self.args.append(CppVariable(child, manager))
             elif (child.tag == "reimplements"):
                 self.overrides = True
+        self.isHandler = self.type == manager.getClass("handler")
         # print("    method {0}".format(self.name))
 
-    def isHandler(self):
-        """ Returns true if the method is a handler. Handler methods are identified by the fact that their return type is handler.
-        """
-        return self.type == handler_t
-
     def checkHandler(self):
-        """ Checks that the method as a handler is fine. This means to 1) check that its instructions come before predicates and that there are no other arguments. It also checks that all predicates conform to the handler's signature.
+        """ Checks that the method as a handler is fine. This means to 1) check
+        that its instructions come before predicates and that there are no
+        other arguments. It also checks that all predicates conform to the
+        handler's signature.
         """
         # at least one argument
         if (len(self.args) == 0):
             error(self.file, self.line,
                   "Handler method {0} is not allowed to take no arguments.".format(self.name))
         # the argument must be instruction
-        if (not self.args[0].type.isSubclassOf(ir_ins)):
+        if (not self.args[0].isInstruction):
             error(self.file, self.line, "Handler method {0}, argument {1}: handler's first argument must inherit from rjit::ir::Instruction.".format(
                 self.name, self.args[0].name))
         # all other but last must be instructions
         for a in self.args[1:-1]:
-            if (not a.type.isSubclassOf(ir_ins)):
+            if (not a.isInstruction):
                 error(
                     self.file, self.line, "Handler method {0}, argument {1}: handler's non-last arguments must inherit from rjit::ir::Instruction.".format(self.name, a.name))
         # last argument can either be instruction or predicate
         if (len(self.args) > 1):
             a = self.args[-1]
-            if (a.type.isSubclassOf(ir_ins)):
+            if (a.isInstruction):
                 return  # all good
-            elif (a.type.isSubclassOf(ir_predicate)):
+            elif a.isPredicate:
                 p = a.type
                 # find predicate has static method named match
                 for m in p.methods:
@@ -264,14 +269,14 @@ class CppMethod:
         """ Returns a list of Instruction types that the method, assuming it is a handler matches. """
         result = []
         for a in self.args:
-            if (a.type.isSubclassOf(ir_ins)):
+            if (a.isInstruction):
                 result.append(a.type)
         return result
 
     def predicate(self):
         """ Returns the predicate associated with the handler, or False if the handler is unconditional. """
         for a in self.args:
-            if (a.type.isSubclassOf(ir_predicate)):
+            if a.isPredicate:
                 return a.type
         return False
 
@@ -301,13 +306,20 @@ class CppVariable:
                 self.name = child.text
             elif (child.tag == "type"):
                 self.type = manager.getTypeFromXML(child)
+        self.isInstruction = self.type.isSubclassOf(
+                manager.getClass("rjit::ir::Instruction"))
+        self.isHandler = self.type == manager.getClass("rjit::ir::Handler")
+        self.isPredicate = self.type.isSubclassOf(
+                manager.getClass("rjit::ir::Predicate"))
 
 
 class Handler:
 
     """ Handler information.
 
-    Each child of ir::Handler that has at least one non overriding handler must have its dispatch method overriden. This class keeps record of each such class.
+    Each child of ir::Handler that has at least one non overriding handler must
+    have its dispatch method overriden. This class keeps record of each such
+    class.
     """
     class DispatchTable:
 
@@ -430,7 +442,10 @@ class Handler:
             return x
 
         def _addHandlerMethod(self, handlerMethod, matchSequence):
-            """ Adds given handler method and all it matches into the dispatch table. Takes the match signature of the handler method as well as an index to the signature - this is for recursive matching to determine how deep in the recursion we are. """
+            """ Adds given handler method and all it matches into the dispatch
+            table. Takes the match signature of the handler method as well as
+            an index to the signature - this is for recursive matching to
+            determine how deep in the recursion we are. """
             handlerMethod.checkHandler()
             ir = matchSequence[0]
             for m in ir.matchSet:
@@ -438,7 +453,10 @@ class Handler:
                     handlerMethod, matchSequence)
 
         def emit(self, incomingIterators):
-            """ Emits the C++ code for the given dispatch table, taking the name of the incomming iterator storing the current instruction for sequential matching. The outgoing iterator is always i as per the dispatch function signature.
+            """ Emits the C++ code for the given dispatch table, taking the
+            name of the incomming iterator storing the current instruction for
+            sequential matching. The outgoing iterator is always i as per the
+            dispatch function signature.
             """
             # last iterator is the iterator on which we should call the match
             # function to get the type of instruction to dispatch on
@@ -457,12 +475,12 @@ switch (t) {{
             return result
 
     def __init__(self, handlerClass):
-        """ Initializes the handler from given class. It is assumed that the class is a ir::Handler child. Fills in the handler's list.
-        """
+        """ Initializes the handler from given class. It is assumed that the
+        class is a ir::Handler child. Fills in the handler's list.  """
         self.handlerClass = handlerClass
         self.handlerMethods = []
         for m in handlerClass.methods:
-            if (m.isHandler() and not m.overrides):
+            if (m.isHandler and not m.overrides):
                 self.handlerMethods.append(m)
 
     def hasHandlers(self):
@@ -474,13 +492,18 @@ switch (t) {{
             self._table._addHandlerMethod(h, h.matchSequence())
 
     def destFile(self, dest):
-        """ Returns the target file for the codegen. This consists of the name of the handler class wih :: replaced by _ in the given destination directory. """
+        """ Returns the target file for the codegen. This consists of the name
+        of the handler class wih :: replaced by _ in the given destination
+        directory. """
         return os.path.join(dest, self.handlerClass.name.replace("::", "_") + ".cpp")
 
     def shouldEmit(self, dest):
-        """ Returns true if the particular handler should be created. This happens if either the source of the handler's class file is newer than the handler's autogenerated code, or if the handler's autogenerated code cannot be found at all.
+        """ Returns true if the particular handler should be created. This
+        happens if either the source of the handler's class file is newer than
+        the handler's autogenerated code, or if the handler's autogenerated
+        code cannot be found at all.
         """
-        if (force):
+        if (FORCE):
             return True
         if (not os.path.isfile(self.handlerClass.file)):
             print(
@@ -524,9 +547,11 @@ bool {handler}::dispatch(llvm::BasicBlock::iterator & i) {{
 def analyzeMatchSets(c):
     """ Analyzes the match sets of all subclasses of the given class.
 
-    A set of string names XXX for the ir::Type::XXX will be added to each subclass of rjit::ir::Instruction as matchSet attribute.
+    A set of string names XXX for the ir::Type::XXX will be added to each
+    subclass of rjit::ir::Instruction as matchSet attribute.
 
-    It is expected that main program only calls this function with the rjit::ir::Instruction as argument.
+    It is expected that main program only calls this function with the
+    rjit::ir::Instruction as argument.
     """
     # if the match set has already been calculated, return it
     if (hasattr(c, "matchSet")):
@@ -554,14 +579,18 @@ def analyzeMatchSets(c):
 
 def analyzeHandlers(c, dest):
     """ Analyzes the handler classes and extracts their handler methods. """
-    global handlers
+    handlers = []
+
     h = Handler(c)
     if (h.hasHandlers()):
         # check that we should emit the handler
         if (h.shouldEmit(dest)):
             handlers.append(h)
+
     for child in c.subclasses:
-        analyzeHandlers(child, dest)
+        handlers += analyzeHandlers(child, dest)
+
+    return handlers
 
 
 def usage(err=""):
@@ -570,52 +599,50 @@ def usage(err=""):
     sys.exit(-1)
 
 
-# we take two arguments - where to look for the doxygen xmls and where to
-# put the codegens
-if (len(sys.argv) < 3):
-    usage()
+def main():
+    # we take two arguments - where to look for the doxygen xmls and where to
+    # put the codegens
+    if (len(sys.argv) < 3):
+        usage()
+    
+    cppBase = os.path.abspath(str(sys.argv[0]))
+    cppBase = cppBase[:cppBase.find("/tools/codegen_handlers.py")]
+    cppBase = os.path.join(cppBase, "rjit", "src")
+    sources = str(sys.argv[1])
+    dest = str(sys.argv[2])
+    if (len(sys.argv) == 4 and sys.argv[3] == "force"):
+        FORCE = True
+    
+    if (not os.path.isdir(sources)):
+        usage("Sources directory does not exist")
+    
+    if (not os.path.isdir(dest)):
+        usage("Dest directory does not exist")
+    
+    # now we know we have both source and dest dirs. initialize the sources manager
+    debug("initializing...")
+    m = Manager(sources)
+    # load the classes we required
+    debug("loading...")
+    debug("    instructions")
+    ir_ins = m.getClass("rjit::ir::Instruction")
+    debug("    handlers")
+    ir_handler = m.getClass("rjit::ir::Handler")
+    
+    # analyze the data - create match sets and handlers
+    debug("analyzing...")
+    debug("    instruction match sets...")
+    analyzeMatchSets(ir_ins)
+    debug("    handlers...")
+    handlers = analyzeHandlers(ir_handler, dest)
+    debug("    handler dispatch tables...")
+    # create handler dispatch tables
+    for h in handlers:
+        h.buildDispatchTable()
+        # print(h.handlerClass.name)
+        # print(h._table)
+        if (h.handlerClass != ir_handler):
+            h.emit(dest)
 
-force = False
-cppBase = os.path.abspath(str(sys.argv[0]))
-cppBase = cppBase[:cppBase.find("/tools/codegen_handlers.py")]
-cppBase = os.path.join(cppBase, "rjit", "src")
-sources = str(sys.argv[1])
-dest = str(sys.argv[2])
-if (len(sys.argv) == 4 and sys.argv[3] == "force"):
-    force = True
-
-if (not os.path.isdir(sources)):
-    usage("Sources directory does not exist")
-
-if (not os.path.isdir(dest)):
-    usage("Dest directory does not exist")
-
-# now we know we have both source and dest dirs. initialize the sources manager
-debug("initializing...")
-m = Manager(sources)
-# load the classes we required
-debug("loading...")
-debug("    instructions")
-ir_ins = m.getClass("rjit::ir::Instruction")
-debug("    handlers")
-ir_handler = m.getClass("rjit::ir::Handler")
-debug("    predicates")
-ir_predicate = m.getClass("rjit::ir::Predicate")
-
-handler_t = m.getClass("handler")
-
-# analyze the data - create match sets and handlers
-debug("analyzing...")
-debug("    instruction match sets...")
-analyzeMatchSets(ir_ins)
-debug("    handlers...")
-handlers = []
-analyzeHandlers(ir_handler, dest)
-debug("    handler dispatch tables...")
-# create handler dispatch tables
-for h in handlers:
-    h.buildDispatchTable()
-    # print(h.handlerClass.name)
-    # print(h._table)
-    if (h.handlerClass != ir_handler):
-        h.emit(dest)
+if __name__ == "__main__":
+    main()
