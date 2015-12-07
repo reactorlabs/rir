@@ -3,7 +3,7 @@
 
 #include "llvm.h"
 #include "RIntlns.h"
-#include "intrinsics.h"
+#include "Intrinsics.h"
 #include "JITModule.h"
 
 namespace rjit {

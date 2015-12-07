@@ -20,8 +20,8 @@
 #include "Symbols.h"
 #include "Runtime.h"
 #include "ir/Builder.h"
-#include "ir/intrinsics.h"
-#include "ir/ir.h"
+#include "ir/Intrinsics.h"
+#include "ir/Ir.h"
 #include "ir/Handler.h"
 
 #include "api.h"

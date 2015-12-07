@@ -536,7 +536,7 @@ switch (t) {{
         code = """#include "{header}"
 #include "llvm.h"
 #include "RIntlns.h"
-#include "ir/intrinsics.h"
+#include "ir/Intrinsics.h"
 
 #pragma GCC diagnostic ignored "-Wswitch"
 bool {handler}::dispatch(llvm::BasicBlock::iterator & i) {{

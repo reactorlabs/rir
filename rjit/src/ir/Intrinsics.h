@@ -1,7 +1,7 @@
 #ifndef INTRINSICS_H_
 #define INTRINSICS_H_
 
-#include "ir.h"
+#include "Ir.h"
 #include "Builder.h"
 
 namespace rjit {
