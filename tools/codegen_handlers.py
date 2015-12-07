@@ -398,7 +398,7 @@ class Handler:
         {ptype} p;
         if (p.match{sigP}) {{
             {hname}{sig};
-            return true;
+            goto DONE;
         }}
     }}""".format(ptype=predicate.name, sigP=self.emitPredicateCall(iterators), sig=self.emitUnconditionalCall(iterators), hname=conditional.name)
 
@@ -531,8 +531,7 @@ switch (t) {{
         parents = ""
         header = self.handlerClass.file[len(cppBase) + 1:]
         for p in self.handlerClass.parents:
-            parents += "if ({0}::dispatch(i))\n        return true;\n".format(
-                p.name)
+            parents += "if ({0}::dispatch(i))\n            goto DONE;\n".format(p.name)
         code = """#include "{header}"
 #include "llvm.h"
 #include "RIntlns.h"
@@ -540,9 +539,15 @@ switch (t) {{
 
 #pragma GCC diagnostic ignored "-Wswitch"
 bool {handler}::dispatch(llvm::BasicBlock::iterator & i) {{
+    bool success = true;
+
     {code}
     {parents}
-    return false;
+
+    success = false;
+DONE:
+    i = ii;
+    return success;
 }}""".format(header=header, handler=self.handlerClass.name, code=self._table.emit(["i"]).replace("\n", "\n    "), parents=parents)
 
         content = ""

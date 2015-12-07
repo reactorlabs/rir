@@ -35,7 +35,9 @@ struct HandlerPassWrapper : public FunctionPass {
 
             for (auto& b : f) {
                 BasicBlock::iterator i = b.begin();
-                handler.dispatch(i);
+                while (i != b.end()) {
+                    handler.dispatch(i);
+                }
             }
         }
 
