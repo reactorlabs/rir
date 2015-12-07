@@ -28,4 +28,3 @@ rules.ninja
 .clang_complete
 index.db
 doxygen_sqlite3.db
-rjit/src/ir/intrinsics.h
