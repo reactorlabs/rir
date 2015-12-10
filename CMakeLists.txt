@@ -2,6 +2,9 @@ cmake_minimum_required(VERSION 2.8.8)
 
 project(rjit)
 
+# first look for any local configuration, and include it, if found
+include(${CMAKE_SOURCE_DIR}/local/cmake.cmake OPTIONAL)
+
 # set LLVM
 
 find_package(LLVM REQUIRED CONFIG)
@@ -19,6 +22,7 @@ set(R_INCLUDE_DIR ${R_HOME}/include)
 set(R_COMMAND ${R_HOME}/bin/R)
 include_directories(${R_INCLUDE_DIR})
 include_directories(${CMAKE_SOURCE_DIR}/rjit/src)
+message(STATUS "Found R ${R_ROOT_DIR}")
 
 set(CMAKE_CXX_FLAGS_RELEASE -O2)
 
@@ -62,7 +66,7 @@ add_custom_target(codegen_handlers
     COMMAND python3 tools/codegen_handlers.py xml rjit/src/handlers/codegen WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
 # build the shared library for the JIT
-file(GLOB_RECURSE SRC "rjit/src/*.cpp" "rjit/src/*.h" "local/.Rprofile" "rjit/R/*.R" "rjit/tests/*.R")
+file(GLOB_RECURSE SRC "rjit/src/*.cpp" "rjit/src/*.h" "local/*" "rjit/R/*.R" "rjit/tests/*.R")
 add_library(${PROJECT_NAME} SHARED ${SRC})
 
 add_custom_target(codegen_was_run_before
