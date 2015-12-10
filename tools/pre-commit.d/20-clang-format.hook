@@ -16,7 +16,8 @@
 ##################################################################
 # SETTINGS
 # set path to clang-format binary
-CLANG_FORMAT=`which clang-format-3.5 2> /dev/null || which clang-format`
+. "$1/.local.config"
+CLANG_FORMAT="${LLVM_CMAKE}/../../../bin/clang-format"
 
 # remove any older patches from previous commits. Set to true or false.
 # DELETE_OLD_PATCHES=false

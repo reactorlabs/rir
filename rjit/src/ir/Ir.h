@@ -312,8 +312,9 @@ class Intrinsic : public Instruction {
             return Type::unknown;
         llvm::Metadata* mx = m->getOperand(0);
         llvm::APInt const& ap =
-            llvm::cast<llvm::ConstantInt>(llvm::cast<llvm::ValueAsMetadata>(mx)
-                                              ->getValue())->getUniqueInteger();
+            llvm::cast<llvm::ConstantInt>(
+                llvm::cast<llvm::ValueAsMetadata>(mx)->getValue())
+                ->getUniqueInteger();
         assert(ap.isIntN(32) and "Expected 32bit integer");
         return static_cast<Type>(ap.getSExtValue());
     }
