@@ -3,8 +3,9 @@
 
 #include "llvm.h"
 #include "RIntlns.h"
-#include "intrinsics.h"
+#include "Intrinsics.h"
 #include "JITModule.h"
+#include "Tags.h"
 
 namespace rjit {
 namespace ir {
@@ -25,7 +26,7 @@ class Handler {
         return true;
     }
 
-    virtual handler defaultHandler(Instruction ins) {
+    virtual void defaultHandler(Instruction ins) {
         std::cout << "default instruction handler" << std::endl;
     }
 };
@@ -88,11 +89,22 @@ class DummyHandler : public Handler {
   public:
     DummyHandler() : Handler() {}
 
-    handler genericGetVar(GenericGetVar ins) {}
+    handler noRead(NoEnvAccess ins) {}
 
-    handler defaultHandler(Instruction ins) override {}
+    handler gv(GenericGetVar ins) {
+        getVar = true;
+        read = true;
+    }
+
+    handler noWrite(NoEnvWrite ins) { read = true; }
+
+    void defaultHandler(Instruction ins) override { write = true; }
 
   public:
+    bool getVar = false;
+    bool read = false;
+    bool write = false;
+
     bool dispatch(llvm::BasicBlock::iterator& i) override;
 };
 
@@ -125,7 +137,7 @@ class MyHandler : public Handler {
 
     handler ret(Return ins) { std::cout << "Return" << std::endl; }
 
-    handler defaultHandler(Instruction ins) override {
+    void defaultHandler(Instruction ins) override {
         std::cout << "HahaBaba" << std::endl;
     }
 

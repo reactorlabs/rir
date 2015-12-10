@@ -1,5 +1,5 @@
 #include "Builder.h"
-#include "intrinsics.h"
+#include "Intrinsics.h"
 
 using namespace llvm;
 

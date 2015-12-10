@@ -7,7 +7,7 @@
 
 #include "Builder.h"
 
-/** \file "rjit/src/ir/ir.h"
+/** \file "rjit/src/ir/Ir.h"
  */
 
 namespace rjit {

@@ -1,8 +1,9 @@
 #ifndef INTRINSICS_H_
 #define INTRINSICS_H_
 
-#include "ir.h"
+#include "Ir.h"
 #include "Builder.h"
+#include "Tags.h"
 
 namespace rjit {
 namespace ir {
@@ -164,7 +165,7 @@ class ClosureNativeCallTrampoline : public Intrinsic {
 
 // Replacement for GETSTACK_LOGICAL_NO_NA_PTR The call is used only for
 // error reporting.
-class ConvertToLogicalNoNA : public Intrinsic {
+class ConvertToLogicalNoNA : public Intrinsic, NoEnvAccess::Tag {
   public:
     llvm::Value* what() { return getValue(0); }
     llvm::Value* constantPool() { return getValue(1); }
@@ -331,7 +332,7 @@ class GetForLoopValue : public Intrinsic {
     }
 };
 
-class MarkVisible : public Intrinsic {
+class MarkVisible : public Intrinsic, NoEnvAccess::Tag {
   public:
     MarkVisible(llvm::Instruction* ins) : Intrinsic(ins) {}
 
@@ -357,7 +358,7 @@ class MarkVisible : public Intrinsic {
     }
 };
 
-class MarkInvisible : public Intrinsic {
+class MarkInvisible : public Intrinsic, NoEnvAccess::Tag {
   public:
     MarkInvisible(llvm::Instruction* ins) : Intrinsic(ins) {}
 
@@ -386,7 +387,7 @@ class MarkInvisible : public Intrinsic {
 // When LLVM IR creates user visible constant, this function contains all
 // the code required to make the constant. Currently this means taking
 // the value from the constant pool and marking it as not mutable.
-class UserLiteral : public Intrinsic {
+class UserLiteral : public Intrinsic, NoEnvAccess::Tag {
   public:
     llvm::Value* constantPool() { return getValue(0); }
 
@@ -422,7 +423,7 @@ class UserLiteral : public Intrinsic {
 };
 
 // Just returns the index-th constant from the constant pool.
-class Constant : public Intrinsic {
+class Constant : public Intrinsic, NoEnvAccess::Tag {
   public:
     llvm::Value* constantPool() { return getValue(0); }
 
@@ -460,7 +461,7 @@ class Constant : public Intrinsic {
 // Generic getvar does not use any caches whatsoever. TODO this means we
 // can get rid of the checks in getvar(), and reduce its code to this. We
 // definitely want faster versions.
-class GenericGetVar : public Intrinsic {
+class GenericGetVar : public Intrinsic, NoEnvWrite::Tag {
   public:
     llvm::Value* rho() { return getValue(0); }
     llvm::Value* constantPool() { return getValue(1); }
@@ -498,7 +499,7 @@ class GenericGetVar : public Intrinsic {
     }
 };
 
-class GenericGetEllipsisArg : public Intrinsic {
+class GenericGetEllipsisArg : public Intrinsic, NoEnvWrite::Tag {
   public:
     llvm::Value* rho() { return getValue(0); }
     llvm::Value* constantPool() { return getValue(1); }
@@ -537,7 +538,7 @@ class GenericGetEllipsisArg : public Intrinsic {
     }
 };
 
-class GenericSetVar : public Intrinsic {
+class GenericSetVar : public Intrinsic, NoParentEnvWrite::Tag {
   public:
     llvm::Value* value() { return getValue(0); }
     llvm::Value* rho() { return getValue(1); }
@@ -856,7 +857,7 @@ class CreatePromise : public Intrinsic {
 
 // Given a SEXP, returns its type. We can perfectly do this in LLVM, but
 // having an function for it simplifies the analysis on our end.
-class SexpType : public Intrinsic {
+class SexpType : public Intrinsic, NoEnvAccess::Tag {
   public:
     llvm::Value* value() { return getValue(0); }
 
@@ -1161,7 +1162,7 @@ class CreateClosure : public Intrinsic {
     }
 };
 
-class GenericUnaryMinus : public Intrinsic {
+class GenericUnaryMinus : public Intrinsic, NoEnvAccess::Tag {
   public:
     llvm::Value* op() { return getValue(0); }
     llvm::Value* rho() { return getValue(1); }
@@ -1202,7 +1203,7 @@ class GenericUnaryMinus : public Intrinsic {
     }
 };
 
-class GenericUnaryPlus : public Intrinsic {
+class GenericUnaryPlus : public Intrinsic, NoEnvAccess::Tag {
   public:
     llvm::Value* op() { return getValue(0); }
     llvm::Value* rho() { return getValue(1); }
@@ -1243,7 +1244,7 @@ class GenericUnaryPlus : public Intrinsic {
     }
 };
 
-class GenericAdd : public Intrinsic {
+class GenericAdd : public Intrinsic, NoEnvAccess::Tag {
   public:
     llvm::Value* lhs() { return getValue(0); }
     llvm::Value* rhs() { return getValue(1); }
@@ -1286,7 +1287,7 @@ class GenericAdd : public Intrinsic {
     }
 };
 
-class GenericSub : public Intrinsic {
+class GenericSub : public Intrinsic, NoEnvAccess::Tag {
   public:
     llvm::Value* lhs() { return getValue(0); }
     llvm::Value* rhs() { return getValue(1); }
@@ -1329,7 +1330,7 @@ class GenericSub : public Intrinsic {
     }
 };
 
-class GenericMul : public Intrinsic {
+class GenericMul : public Intrinsic, NoEnvAccess::Tag {
   public:
     llvm::Value* lhs() { return getValue(0); }
     llvm::Value* rhs() { return getValue(1); }
@@ -1372,7 +1373,7 @@ class GenericMul : public Intrinsic {
     }
 };
 
-class GenericDiv : public Intrinsic {
+class GenericDiv : public Intrinsic, NoEnvAccess::Tag {
   public:
     llvm::Value* lhs() { return getValue(0); }
     llvm::Value* rhs() { return getValue(1); }
@@ -1415,7 +1416,7 @@ class GenericDiv : public Intrinsic {
     }
 };
 
-class GenericPow : public Intrinsic {
+class GenericPow : public Intrinsic, NoEnvAccess::Tag {
   public:
     llvm::Value* lhs() { return getValue(0); }
     llvm::Value* rhs() { return getValue(1); }
@@ -1458,7 +1459,7 @@ class GenericPow : public Intrinsic {
     }
 };
 
-class GenericSqrt : public Intrinsic {
+class GenericSqrt : public Intrinsic, NoEnvAccess::Tag {
   public:
     llvm::Value* op() { return getValue(0); }
     llvm::Value* rho() { return getValue(1); }
@@ -1499,7 +1500,7 @@ class GenericSqrt : public Intrinsic {
     }
 };
 
-class GenericExp : public Intrinsic {
+class GenericExp : public Intrinsic, NoEnvAccess::Tag {
   public:
     llvm::Value* op() { return getValue(0); }
     llvm::Value* rho() { return getValue(1); }
@@ -1540,7 +1541,7 @@ class GenericExp : public Intrinsic {
     }
 };
 
-class GenericEq : public Intrinsic {
+class GenericEq : public Intrinsic, NoEnvAccess::Tag {
   public:
     llvm::Value* lhs() { return getValue(0); }
     llvm::Value* rhs() { return getValue(1); }
@@ -1583,7 +1584,7 @@ class GenericEq : public Intrinsic {
     }
 };
 
-class GenericNe : public Intrinsic {
+class GenericNe : public Intrinsic, NoEnvAccess::Tag {
   public:
     llvm::Value* lhs() { return getValue(0); }
     llvm::Value* rhs() { return getValue(1); }
@@ -1626,7 +1627,7 @@ class GenericNe : public Intrinsic {
     }
 };
 
-class GenericLt : public Intrinsic {
+class GenericLt : public Intrinsic, NoEnvAccess::Tag {
   public:
     llvm::Value* lhs() { return getValue(0); }
     llvm::Value* rhs() { return getValue(1); }
@@ -1669,7 +1670,7 @@ class GenericLt : public Intrinsic {
     }
 };
 
-class GenericLe : public Intrinsic {
+class GenericLe : public Intrinsic, NoEnvAccess::Tag {
   public:
     llvm::Value* lhs() { return getValue(0); }
     llvm::Value* rhs() { return getValue(1); }
@@ -1712,7 +1713,7 @@ class GenericLe : public Intrinsic {
     }
 };
 
-class GenericGe : public Intrinsic {
+class GenericGe : public Intrinsic, NoEnvAccess::Tag {
   public:
     llvm::Value* lhs() { return getValue(0); }
     llvm::Value* rhs() { return getValue(1); }
@@ -1755,7 +1756,7 @@ class GenericGe : public Intrinsic {
     }
 };
 
-class GenericGt : public Intrinsic {
+class GenericGt : public Intrinsic, NoEnvAccess::Tag {
   public:
     llvm::Value* lhs() { return getValue(0); }
     llvm::Value* rhs() { return getValue(1); }
@@ -1798,7 +1799,7 @@ class GenericGt : public Intrinsic {
     }
 };
 
-class GenericBitAnd : public Intrinsic {
+class GenericBitAnd : public Intrinsic, NoEnvAccess::Tag {
   public:
     llvm::Value* lhs() { return getValue(0); }
     llvm::Value* rhs() { return getValue(1); }
@@ -1841,7 +1842,7 @@ class GenericBitAnd : public Intrinsic {
     }
 };
 
-class GenericBitOr : public Intrinsic {
+class GenericBitOr : public Intrinsic, NoEnvAccess::Tag {
   public:
     llvm::Value* lhs() { return getValue(0); }
     llvm::Value* rhs() { return getValue(1); }
@@ -1884,7 +1885,7 @@ class GenericBitOr : public Intrinsic {
     }
 };
 
-class GenericNot : public Intrinsic {
+class GenericNot : public Intrinsic, NoEnvAccess::Tag {
   public:
     llvm::Value* op() { return getValue(0); }
     llvm::Value* rho() { return getValue(1); }
@@ -1925,7 +1926,7 @@ class GenericNot : public Intrinsic {
     }
 };
 
-class GenericGetVarMissOK : public Intrinsic {
+class GenericGetVarMissOK : public Intrinsic, NoEnvWrite::Tag {
   public:
     llvm::Value* symbol() { return getValue(0); }
     llvm::Value* rho() { return getValue(1); }
@@ -1954,7 +1955,7 @@ class GenericGetVarMissOK : public Intrinsic {
     }
 };
 
-class GenericGetEllipsisValueMissOK : public Intrinsic {
+class GenericGetEllipsisValueMissOK : public Intrinsic, NoEnvWrite::Tag {
   public:
     llvm::Value* symbol() { return getValue(0); }
     llvm::Value* rho() { return getValue(1); }
@@ -2100,7 +2101,7 @@ class SwitchControlInteger : public Intrinsic {
     }
 };
 
-class ReturnJump : public Intrinsic {
+class ReturnJump : public Intrinsic, NoEnvAccess::Tag {
   public:
     llvm::Value* value() { return getValue(0); }
     llvm::Value* rho() { return getValue(1); }

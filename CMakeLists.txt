@@ -70,7 +70,7 @@ file(GLOB_RECURSE SRC "rjit/src/*.cpp" "rjit/src/*.h" "local/*" "rjit/R/*.R" "rj
 add_library(${PROJECT_NAME} SHARED ${SRC})
 
 add_custom_target(codegen_was_run_before
-    COMMAND test -f ${CMAKE_SOURCE_DIR}/rjit/src/ir/intrinsics.h || $(echo && echo && echo "Error" && echo "Please run codegen target before the first build" && echo && echo && exit 1))
+    COMMAND ls ${CMAKE_SOURCE_DIR}/rjit/src/handlers/codegen/* || $(echo && echo && echo "Error" && echo "Please run codegen and then cmake again before the first build" && echo && echo && exit 1))
 
 #codegen is a dependency
 add_dependencies(${PROJECT_NAME} codegen_was_run_before)
