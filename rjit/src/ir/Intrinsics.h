@@ -353,8 +353,7 @@ class MarkVisible : public Intrinsic, NoEnvAccess::Tag {
     static llvm::FunctionType* intrinsicType() {
         return llvm::FunctionType::get(t::Void, {
 
-                                                },
-                                       false);
+                                                }, false);
     }
 };
 
@@ -379,8 +378,7 @@ class MarkInvisible : public Intrinsic, NoEnvAccess::Tag {
     static llvm::FunctionType* intrinsicType() {
         return llvm::FunctionType::get(t::Void, {
 
-                                                },
-                                       false);
+                                                }, false);
     }
 };
 
