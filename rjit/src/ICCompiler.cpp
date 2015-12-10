@@ -80,12 +80,10 @@ std::string ICCompiler::stubName(unsigned size) {
 
 Function* ICCompiler::getStub(unsigned size, ir::Builder& b) {
 
-    return CodeCache::get(stubName(size),
-                          [size, &b]() {
-                              ICCompiler stubCompiler(size, b);
-                              return stubCompiler.compileCallStub();
-                          },
-                          b.module());
+    return CodeCache::get(stubName(size), [size, &b]() {
+        ICCompiler stubCompiler(size, b);
+        return stubCompiler.compileCallStub();
+    }, b.module());
 }
 
 void* ICCompiler::getSpecialIC(unsigned size) {

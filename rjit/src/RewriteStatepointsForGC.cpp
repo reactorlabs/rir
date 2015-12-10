@@ -728,9 +728,8 @@ template <typename T>
 static void unique_unsorted(SmallVectorImpl<T>& Vec) {
     SmallSet<T, 8> Seen;
     Vec.erase(std::remove_if(Vec.begin(), Vec.end(), [&](const T& V) {
-                  return !Seen.insert(V).second;
-              }),
-              Vec.end());
+        return !Seen.insert(V).second;
+    }), Vec.end());
 }
 
 /// Insert holders so that each Value is obviously live through the entire
@@ -868,8 +867,8 @@ static void RemoveDerefAttrAtIndex(LLVMContext& Ctx, AttrHolder& AH,
             Ctx, Index, AttributeSet::get(Ctx, Index, R)));
 }
 
-void
-RewriteStatepointsForGC::stripDereferenceabilityInfoFromPrototype(Function& F) {
+void RewriteStatepointsForGC::stripDereferenceabilityInfoFromPrototype(
+    Function& F) {
     LLVMContext& Ctx = F.getContext();
 
     for (Argument& A : F.args())
