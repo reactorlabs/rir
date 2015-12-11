@@ -728,8 +728,8 @@ template <typename T>
 static void unique_unsorted(SmallVectorImpl<T>& Vec) {
     SmallSet<T, 8> Seen;
     Vec.erase(std::remove_if(Vec.begin(), Vec.end(), [&](const T& V) {
-        return !Seen.insert(V).second;
-    }), Vec.end());
+                  return !Seen.insert(V).second;
+              }), Vec.end());
 }
 
 /// Insert holders so that each Value is obviously live through the entire
@@ -889,9 +889,10 @@ void RewriteStatepointsForGC::stripDereferenceabilityInfoFromBody(Function& F) {
     for (Instruction& I : inst_range(F)) {
         if (const MDNode* MD = I.getMetadata(LLVMContext::MD_tbaa)) {
             assert(MD->getNumOperands() < 5 && "unrecognized metadata shape!");
-            bool IsImmutableTBAA = MD->getNumOperands() == 4 &&
-                                   mdconst::extract<ConstantInt>(
-                                       MD->getOperand(3))->getValue() == 1;
+            bool IsImmutableTBAA =
+                MD->getNumOperands() == 4 &&
+                mdconst::extract<ConstantInt>(MD->getOperand(3))->getValue() ==
+                    1;
 
             if (!IsImmutableTBAA)
                 continue; // no work to do, MD_tbaa is already marked mutable
