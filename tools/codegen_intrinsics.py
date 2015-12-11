@@ -13,7 +13,7 @@ from string import Template
 FILE_TEMPLATE = Template("""#ifndef INTRINSICS_H_
 #define INTRINSICS_H_
 
-#include "ir.h"
+#include "Ir.h"
 #include "Builder.h"
 
 namespace rjit {
@@ -32,7 +32,7 @@ class $class_name : public Intrinsic {
 
 $getters
     $class_name (llvm::Instruction* ins) :
-        Intrinsic(ins) { }
+        Intrinsic(ins, InstructionKind::$class_name) { }
 
 $static_ctr
 
@@ -48,6 +48,10 @@ $static_ctr
             },
             false);
     }
+
+    static bool classof(Instruction const * s) {
+        return s->getKind() == InstructionKind::$class_name;
+    }
 };""")
 
 STATIC_CTR_TEMPLATE = Template("""    static $class_name create(
@@ -62,7 +66,7 @@ $args_load
             b);
 
         b.insertCall(ins);
-        setIRType(ins, ::rjit::ir::Type::$class_name);
+        setIRType(ins, InstructionKind::$class_name);
         return ins;
     }""")
 
@@ -290,7 +294,7 @@ class Intrinsic:
 
 def emit(intrinsics, targetDir):
     """ Extracts all intrinsics that we have into specified header and cpp files. """
-    targetName = os.path.join(targetDir, "intrinsics.h")
+    targetName = os.path.join(targetDir, "Intrinsics.h")
 
     # irt = open(os.path.join(targetDir, "irTypes.h"), "w")
 

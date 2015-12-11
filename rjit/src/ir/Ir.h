@@ -15,94 +15,104 @@ namespace ir {
 
 /** Type of the IR.
  */
-enum class Type {
-    ExtractConstantPool,
-    UserLiteral,
-    Constant,
-    ConvertToLogicalNoNA,
-    PrintValue,
-    StartFor,
-    LoopSequenceLength,
-    GetForLoopValue,
-    MarkVisible,
-    MarkInvisible,
-    UserConstant,
-    GenericGetVar,
-    GenericGetEllipsisArg,
-    GenericSetVar,
-    GenericSetVarParent,
-    GetFunction,
-    GetGlobalFunction,
-    GetSymFunction,
-    GetBuiltinFunction,
-    GetInternalBuiltinFunction,
-    CheckFunction,
-    CreatePromise,
-    SexpType,
-    AddArgument,
-    AddKeywordArgument,
-    AddEllipsisArgument,
-    AddEllipsisArgumentHead,
-    AddEllipsisArgumentTail,
-    CallBuiltin,
-    CallSpecial,
-    CallClosure,
-    CreateClosure,
-    GenericUnaryMinus,
-    GenericUnaryPlus,
-    GenericAdd,
-    GenericSub,
-    GenericMul,
-    GenericDiv,
-    GenericPow,
-    GenericSqrt,
-    GenericExp,
-    GenericEq,
-    GenericNe,
-    GenericLt,
-    GenericLe,
-    GenericGe,
-    GenericGt,
-    GenericBitAnd,
-    GenericBitOr,
-    GenericNot,
-    GenericGetVarMissOK,
-    GenericGetEllipsisValueMissOK,
-    CheckSwitchControl,
-    SwitchControlCharacter,
-    SwitchControlInteger,
-    ReturnJump,
-    Return,
-    Branch,
-    Cbr,
-    IntegerLessThan,
-    InitClosureContext,
-    Switch,
-    IntegerAdd,
-    EndClosureContext,
-    ClosureQuickArgumentAdaptor,
-    ClosureNativeCallTrampoline,
-    CallNative,
-    unknown,
-};
-
 /** Generic class for all IR objects.
 
   They all must point to an existing llvm value.
  */
 class Instruction {
   public:
+    /** Depending on how we want the RTTI to behave, either put only leaves
+     * (that is actual instructions the user might see) in here, or put them
+     * all. I would be in favour of the first option. THe thing we want is not a
+     * real RTTI in the end.
+     */
+    enum InstructionKind {
+        ExtractConstantPool,
+        UserLiteral,
+        Constant,
+        ConvertToLogicalNoNA,
+        PrintValue,
+        StartFor,
+        LoopSequenceLength,
+        GetForLoopValue,
+        MarkVisible,
+        MarkInvisible,
+        UserConstant,
+        GenericGetVar,
+        GenericGetEllipsisArg,
+        GenericSetVar,
+        GenericSetVarParent,
+        GetFunction,
+        GetGlobalFunction,
+        GetSymFunction,
+        GetBuiltinFunction,
+        GetInternalBuiltinFunction,
+        CheckFunction,
+        CreatePromise,
+        SexpType,
+        AddArgument,
+        AddKeywordArgument,
+        AddEllipsisArgument,
+        AddEllipsisArgumentHead,
+        AddEllipsisArgumentTail,
+        CallBuiltin,
+        CallSpecial,
+        CallClosure,
+        CreateClosure,
+        GenericUnaryMinus,
+        GenericUnaryPlus,
+        GenericAdd,
+        GenericSub,
+        GenericMul,
+        GenericDiv,
+        GenericPow,
+        GenericSqrt,
+        GenericExp,
+        GenericEq,
+        GenericNe,
+        GenericLt,
+        GenericLe,
+        GenericGe,
+        GenericGt,
+        GenericBitAnd,
+        GenericBitOr,
+        GenericNot,
+        GenericGetVarMissOK,
+        GenericGetEllipsisValueMissOK,
+        CheckSwitchControl,
+        SwitchControlCharacter,
+        SwitchControlInteger,
+        ReturnJump,
+        Return,
+        Branch,
+        Cbr,
+        IntegerLessThan,
+        IntegerEquals,
+        UnsignedIntegerLessThan,
+        InitClosureContext,
+        Switch,
+        IntegerAdd,
+        EndClosureContext,
+        ClosureQuickArgumentAdaptor,
+        ClosureNativeCallTrampoline,
+        CallNative,
+        unknown,
+    };
+
     /** Returns the IR type of the instruction sequence starting at i and
      * advances i past it. Returns Type::unknown if the sequence start cannot be
      * matched and advances one instruction further.
      */
-    static Type match(llvm::BasicBlock::iterator& i);
+    static InstructionKind match(llvm::BasicBlock::iterator& i);
 
     /** Each ir instruction can typecast to the underlying llvm bitcode.
      */
     operator llvm::Instruction*() { return ins_; }
 
-    Instruction(llvm::Instruction* ins) : ins_(ins) {}
+    Instruction(llvm::Instruction* ins, InstructionKind kind)
+        : ins_(ins), kind_(kind) {}
+
+    InstructionKind getKind() const { return kind_; }
 
   protected:
     template <typename T>
@@ -112,11 +122,12 @@ class Instruction {
 
   private:
     llvm::Instruction* ins_;
+    InstructionKind kind_;
 };
 
 class Return : public Instruction {
   public:
-    Return(llvm::Instruction* ins) : Instruction(ins) {
+    Return(llvm::Instruction* ins) : Instruction(ins, InstructionKind::Return) {
         assert(llvm::isa<llvm::ReturnInst>(ins) and "Return expected");
     }
 
@@ -125,11 +136,15 @@ class Return : public Instruction {
     static Return create(Builder& b, llvm::Value* value) {
         return llvm::ReturnInst::Create(llvm::getGlobalContext(), value, b);
     }
+
+    static bool classof(Instruction const* s) {
+        return s->getKind() == InstructionKind::Return;
+    }
 };
 
 class Branch : public Instruction {
   public:
-    Branch(llvm::Instruction* ins) : Instruction(ins) {
+    Branch(llvm::Instruction* ins) : Instruction(ins, InstructionKind::Branch) {
         assert(llvm::isa<llvm::BranchInst>(ins) and
                "Branch instruction expected");
         assert(not llvm::cast<llvm::BranchInst>(ins)->isConditional() and
@@ -143,13 +158,18 @@ class Branch : public Instruction {
     static Branch create(Builder& b, llvm::BasicBlock* target) {
         return llvm::BranchInst::Create(target, b);
     }
+
+    static bool classof(Instruction const* s) {
+        return s->getKind() == InstructionKind::Branch;
+    }
 };
 
 class IntegerComparison : public Instruction {
   public:
     typedef llvm::ICmpInst::Predicate Predicate;
 
-    IntegerComparison(llvm::Instruction* ins) : Instruction(ins) {
+    IntegerComparison(llvm::Instruction* ins, InstructionKind kind)
+        : Instruction(ins, kind) {
         assert(llvm::isa<llvm::ICmpInst>(ins) and "ICmpInst expected");
     }
 
@@ -164,7 +184,8 @@ class IntegerComparison : public Instruction {
 
 class IntegerLessThan : public IntegerComparison {
   public:
-    IntegerLessThan(llvm::Instruction* ins) : IntegerComparison(ins) {
+    IntegerLessThan(llvm::Instruction* ins)
+        : IntegerComparison(ins, InstructionKind::IntegerLessThan) {
         assert(llvm::cast<llvm::ICmpInst>(ins)->getSignedPredicate() ==
                    Predicate::ICMP_SLT and
                "Less than comparison expected");
@@ -174,11 +195,16 @@ class IntegerLessThan : public IntegerComparison {
                                   llvm::Value* rhs) {
         return new llvm::ICmpInst(*b.block(), Predicate::ICMP_SLT, lhs, rhs);
     }
+
+    static bool classof(Instruction const* s) {
+        return s->getKind() == InstructionKind::IntegerLessThan;
+    }
 };
 
 class IntegerEquals : public IntegerComparison {
   public:
-    IntegerEquals(llvm::Instruction* ins) : IntegerComparison(ins) {
+    IntegerEquals(llvm::Instruction* ins)
+        : IntegerComparison(ins, InstructionKind::IntegerEquals) {
         assert(llvm::cast<llvm::ICmpInst>(ins)->getSignedPredicate() ==
                    Predicate::ICMP_EQ and
                "Equality comparison expected");
@@ -188,11 +214,16 @@ class IntegerEquals : public IntegerComparison {
                                   llvm::Value* rhs) {
         return new llvm::ICmpInst(*b.block(), Predicate::ICMP_EQ, lhs, rhs);
     }
+
+    static bool classof(Instruction const* s) {
+        return s->getKind() == InstructionKind::IntegerEquals;
+    }
 };
 
 class UnsignedIntegerLessThan : public IntegerComparison {
   public:
-    UnsignedIntegerLessThan(llvm::Instruction* ins) : IntegerComparison(ins) {
+    UnsignedIntegerLessThan(llvm::Instruction* ins)
+        : IntegerComparison(ins, InstructionKind::UnsignedIntegerLessThan) {
         assert(llvm::cast<llvm::ICmpInst>(ins)->getSignedPredicate() ==
                    Predicate::ICMP_ULT and
                "Unsigned less than comparison expected");
@@ -202,18 +233,24 @@ class UnsignedIntegerLessThan : public IntegerComparison {
                                   llvm::Value* rhs) {
         return new llvm::ICmpInst(*b.block(), Predicate::ICMP_ULT, lhs, rhs);
     }
+
+    static bool classof(Instruction const* s) {
+        return s->getKind() == InstructionKind::UnsignedIntegerLessThan;
+    }
 };
 
 // TODO the hierarchy of this is wrong, but actual thought is required to fix it
 class BinaryOperator : public Instruction {
   public:
-    BinaryOperator(llvm::Instruction* ins) : Instruction(ins) {}
+    BinaryOperator(llvm::Instruction* ins, InstructionKind kind)
+        : Instruction(ins, kind) {}
 };
 
 // TODO the hierarchy here should be better as well
 class IntegerAdd : public BinaryOperator {
   public:
-    IntegerAdd(llvm::Instruction* ins) : BinaryOperator(ins) {
+    IntegerAdd(llvm::Instruction* ins)
+        : BinaryOperator(ins, InstructionKind::IntegerAdd) {
         assert(llvm::isa<llvm::BinaryOperator>(ins) and
                "Binary operator expected");
         assert(llvm::cast<llvm::BinaryOperator>(ins)->getOpcode() ==
@@ -228,6 +265,10 @@ class IntegerAdd : public BinaryOperator {
     static IntegerAdd create(Builder& b, llvm::Value* lhs, llvm::Value* rhs) {
         return llvm::BinaryOperator::Create(llvm::Instruction::Add, lhs, rhs,
                                             "", b);
+    }
+
+    static bool classof(Instruction const* s) {
+        return s->getKind() == InstructionKind::IntegerAdd;
     }
 };
 
@@ -259,17 +300,21 @@ class Cbr : public Instruction {
         return b->getSuccessor(1);
     }
 
-    Cbr(llvm::Instruction* ins) : Instruction(ins) {}
+    Cbr(llvm::Instruction* ins) : Instruction(ins, InstructionKind::Cbr) {}
 
     static void create(Builder& b, llvm::Value* cond,
                        llvm::BasicBlock* trueCase, llvm::BasicBlock* falseCase);
+
+    static bool classof(Instruction const* s) {
+        return s->getKind() == InstructionKind::Cbr;
+    }
 };
 
 /** Interface to llvm's switch instruction
   */
 class Switch : public Instruction {
   public:
-    Switch(llvm::Instruction* ins) : Instruction(ins) {
+    Switch(llvm::Instruction* ins) : Instruction(ins, InstructionKind::Switch) {
         assert(llvm::isa<llvm::SwitchInst>(ins) and
                "Expecting llvm's switch instruction");
     }
@@ -292,6 +337,10 @@ class Switch : public Instruction {
     llvm::BasicBlock* getDefaultDest() {
         return ins<llvm::SwitchInst>()->getDefaultDest();
     }
+
+    static bool classof(Instruction const* s) {
+        return s->getKind() == InstructionKind::Switch;
+    }
 };
 
 /** Base class for all intrinsics.
@@ -306,16 +355,16 @@ class Intrinsic : public Instruction {
 
     /** Returns the IR type of the intrinsic call for faster matching.
      */
-    static Type getIRType(llvm::Instruction* ins) {
+    static InstructionKind getIRType(llvm::Instruction* ins) {
         llvm::MDNode* m = ins->getMetadata(MD_NAME);
         if (m == nullptr)
-            return Type::unknown;
+            return InstructionKind::unknown;
         llvm::Metadata* mx = m->getOperand(0);
         llvm::APInt const& ap =
             llvm::cast<llvm::ConstantInt>(llvm::cast<llvm::ValueAsMetadata>(mx)
                                               ->getValue())->getUniqueInteger();
         assert(ap.isIntN(32) and "Expected 32bit integer");
-        return static_cast<Type>(ap.getSExtValue());
+        return static_cast<InstructionKind>(ap.getSExtValue());
     }
 
     /** Returns the CallInst associated with the intrinsic.
@@ -323,7 +372,8 @@ class Intrinsic : public Instruction {
     llvm::CallInst* ins() { return Instruction::ins<llvm::CallInst>(); }
 
   protected:
-    Intrinsic(llvm::Instruction* ins) : Instruction(ins) {
+    Intrinsic(llvm::Instruction* ins, InstructionKind kind)
+        : Instruction(ins, kind) {
         assert(llvm::isa<llvm::CallInst>(ins) and
                "Intrinsics must be llvm calls");
     }
@@ -333,7 +383,7 @@ class Intrinsic : public Instruction {
       It is assumed that this method will be called by the respective intrinsics
       when they are being created.
      */
-    static void setIRType(llvm::CallInst* ins, Type t) {
+    static void setIRType(llvm::CallInst* ins, InstructionKind t) {
         std::vector<llvm::Metadata*> v = {
             llvm::ValueAsMetadata::get(llvm::ConstantInt::get(
                 ins->getContext(), llvm::APInt(32, static_cast<int>(t))))};

@@ -415,7 +415,7 @@ class Handler:
 
                 The incoming iterators contains all iterators that were used in the dispatch so far,
                 """
-                result = "case rjit::ir::Type::{0}: {{\n".format(self.type)
+                result = "case Instruction::InstructionKind::{0}: {{\n".format(self.type)
                 if (self.recursive):
                     result += """    if (not {matched}->isTerminator()) {{
         {dispatch}
@@ -485,7 +485,7 @@ class Handler:
             # will find it
             incomingIterators.append(it)
             result = """llvm::BasicBlock::iterator {it} = {incoming};
-rjit::ir::Type t = rjit::ir::Instruction::match({it});
+Instruction::InstructionKind t = rjit::ir::Instruction::match({it});
 switch (t) {{
 """.format(it=it, incoming=lastIterator)
             for entry in self._table.values():

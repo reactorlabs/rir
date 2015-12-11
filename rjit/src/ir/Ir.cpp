@@ -5,27 +5,27 @@ using namespace llvm;
 namespace rjit {
 namespace ir {
 
-Type Instruction::match(BasicBlock::iterator& i) {
+Instruction::InstructionKind Instruction::match(BasicBlock::iterator& i) {
     llvm::Instruction* ins = i;
     ++i; // move to next instruction
     if (isa<CallInst>(ins)) {
-        Type t = Intrinsic::getIRType(ins);
-        if (t != Type::unknown) {
+        InstructionKind t = Intrinsic::getIRType(ins);
+        if (t != InstructionKind::unknown) {
             return t;
         }
     } else if (isa<ReturnInst>(ins)) {
-        return Type::Return;
+        return InstructionKind::Return;
     } else if (isa<BranchInst>(ins)) {
         assert(cast<BranchInst>(ins)->isUnconditional() and
                "Conditional branch instruction should start with ICmpInst");
-        return Type::Branch;
+        return InstructionKind::Branch;
     } else if (isa<ICmpInst>(ins)) {
         assert(isa<BranchInst>(ins->getNextNode()) and
                "ICmpInst can only be followed by branch for now.");
         ++i; // move past the branch as well
-        return Type::Cbr;
+        return InstructionKind::Cbr;
     }
-    return Type::unknown;
+    return InstructionKind::unknown;
 }
 
 void Cbr::create(Builder& b, Value* cond, BasicBlock* trueCase,
