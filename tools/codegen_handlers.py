@@ -218,7 +218,7 @@ class CppMethod:
         # all args but last must be instructions
         for a in self.args[0:-1]:
             if not a.isMatcher():
-                error(self.file, self.line, "Handler method {0}, argument {1}: handler's non-last arguments must be instructions matchers, i.e. inherit from ir::Instruction or ir::Tag.".format(self.name, a.name))
+                error(self.file, self.line, "Handler method {0}, argument {1}: handler's non-last arguments must be instructions matchers, i.e. inherit from ir::Instruction".format(self.name, a.name))
         # last argument can either be instruction or predicate
         if (len(self.args) > 1):
             a = self.args[-1]
@@ -272,7 +272,11 @@ class CppMethod:
         """ Returns a list of Instruction types that the method, assuming it is a handler matches. """
         result = []
         for a in self.args:
-            if a.isMatcher():
+            if not a.isMatcher():
+                if not a.isPredicate():
+                    print("Argument {0} {1} to {2} is not a valid matcher".format(a.type.name, a.name, self.name))
+                    sys.exit(1)
+            else:
                 result.append(a.type)
         return result
 
@@ -312,15 +316,11 @@ class CppVariable:
         self.manager = manager
 
     def isMatcher(self):
-        return self.isInstruction() or self.isTaggedInstruction()
+        return self.isInstruction()
 
     def isInstruction(self):
         return self.type.isSubclassOf(
                 self.manager.getClass("rjit::ir::Instruction"))
-
-    def isTaggedInstruction(self):
-        return self.type.isSubclassOf(
-                self.manager.getClass("rjit::ir::TaggedInstruction"))
 
     def isPredicate(self):
         return self.type.isSubclassOf(
@@ -569,7 +569,7 @@ DONE:
                 f.write(code)
 
 
-def analyzeMatchSets(klass, manager):
+def analyzeMatchSets(klass):
     """ Analyzes the match sets of all subclasses of the given class.
 
     A set of string names XXX for the ir::Type::XXX will be added to each
@@ -590,9 +590,6 @@ def analyzeMatchSets(klass, manager):
         sys.exit(-1)
 
     subclasses = set(klass.subclasses)
-    tagclass = manager.getClass(klass.name + "::Tag")
-    if hasattr(tagclass, "subclasses"):
-        subclasses = subclasses.union(tagclass.subclasses)
 
     # if the class is a leaf in the hierarchy, its matchset is its own name
     if not subclasses and klass.isInstruction():
@@ -603,7 +600,7 @@ def analyzeMatchSets(klass, manager):
     # otherwise the matchset of the class is union of all match sets of its
     # children
     for child in subclasses:
-        m = m.union(analyzeMatchSets(child, manager))
+        m = m.union(analyzeMatchSets(child))
 
     klass.matchSet = m
     return m
@@ -666,17 +663,13 @@ def main():
     debug("loading...")
     debug("    instructions")
     ir_ins = m.getClass("rjit::ir::Instruction")
-    ir_tag = m.getClass("rjit::ir::TaggedInstruction")
     debug("    handlers")
     ir_handler = m.getClass("rjit::ir::Handler")
     
     # analyze the data - create match sets and handlers
     debug("analyzing...")
     debug("    instruction match sets...")
-    def id_(c): return c
-    def stripTag(c): return m.getClass(c.name[:-5]) if c.name[-5:] == "::Tag" else c
-    analyzeMatchSets(ir_ins, m)
-    analyzeMatchSets(ir_tag, m)
+    analyzeMatchSets(ir_ins)
     debug("    handlers...")
     handlers = analyzeHandlers(ir_handler, dest)
     debug("    handler dispatch tables...")

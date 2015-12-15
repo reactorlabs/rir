@@ -5,7 +5,6 @@
 #include "RIntlns.h"
 #include "Intrinsics.h"
 #include "JITModule.h"
-#include "Tags.h"
 
 namespace rjit {
 namespace ir {
@@ -91,21 +90,12 @@ class DummyHandler : public Handler {
   public:
     DummyHandler() : Handler() {}
 
-    handler noRead(NoEnvAccess ins) {}
+    handler gv(GenericGetVar ins) { getVar = true; }
 
-    handler gv(GenericGetVar ins) {
-        getVar = true;
-        read = true;
-    }
-
-    handler noWrite(NoEnvWrite ins) { read = true; }
-
-    void defaultHandler(Instruction ins) override { write = true; }
+    void defaultHandler(Instruction ins) override {}
 
   public:
     bool getVar = false;
-    bool read = false;
-    bool write = false;
 
     bool dispatch(llvm::BasicBlock::iterator& i) override;
 };
