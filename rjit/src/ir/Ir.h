@@ -3,6 +3,8 @@
 
 #include "llvm.h"
 
+#include <cstdint>
+
 #include "RIntlns.h"
 
 #include "Builder.h"
@@ -21,6 +23,11 @@ namespace ir {
  */
 class Instruction {
   public:
+    /** LLVM metadata kind for the ir type associated with the CallInsts for
+     * faster matching.
+     */
+    static char const* const MD_NAME;
+
     /** Depending on how we want the RTTI to behave, either put only leaves
      * (that is actual instructions the user might see) in here, or put them
      * all. I would be in favour of the first option. THe thing we want is not a
@@ -99,6 +106,10 @@ class Instruction {
         unknown,
     };
 
+    /** Returns the IR type of the intrinsic call for faster matching.
+     */
+    static Instruction* getIR(llvm::Instruction* ins);
+
     /** Returns the IR type of the instruction sequence starting at i and
      * advances i past it. Returns Type::unknown if the sequence start cannot be
      * matched and advances one instruction further.
@@ -118,6 +129,18 @@ class Instruction {
     template <typename T>
     T* ins() {
         return llvm::cast<T>(ins_);
+    }
+
+    /** Sets the ir kind.
+     */
+    static void setIR(llvm::Instruction* llvmIns,
+                      rjit::ir::Instruction* rjitIns) {
+        std::vector<llvm::Metadata*> v = {
+            llvm::ValueAsMetadata::get(llvm::ConstantInt::get(
+                llvmIns->getContext(),
+                llvm::APInt(64, reinterpret_cast<std::uintptr_t>(rjitIns))))};
+        llvm::MDNode* m = llvm::MDNode::get(llvmIns->getContext(), v);
+        llvmIns->setMetadata(MD_NAME, m);
     }
 
   private:
@@ -348,26 +371,6 @@ class Switch : public Instruction {
  */
 class Intrinsic : public Instruction {
   public:
-    /** LLVM metadata kind for the ir type associated with the CallInsts for
-     * faster matching.
-     */
-    static char const* const MD_NAME;
-
-    /** Returns the IR type of the intrinsic call for faster matching.
-     */
-    static InstructionKind getIRType(llvm::Instruction* ins) {
-        llvm::MDNode* m = ins->getMetadata(MD_NAME);
-        if (m == nullptr)
-            return InstructionKind::unknown;
-        llvm::Metadata* mx = m->getOperand(0);
-        llvm::APInt const& ap =
-            llvm::cast<llvm::ConstantInt>(
-                llvm::cast<llvm::ValueAsMetadata>(mx)->getValue())
-                ->getUniqueInteger();
-        assert(ap.isIntN(32) and "Expected 32bit integer");
-        return static_cast<InstructionKind>(ap.getSExtValue());
-    }
-
     /** Returns the CallInst associated with the intrinsic.
      */
     llvm::CallInst* ins() { return Instruction::ins<llvm::CallInst>(); }
@@ -377,19 +380,6 @@ class Intrinsic : public Instruction {
         : Instruction(ins, kind) {
         assert(llvm::isa<llvm::CallInst>(ins) and
                "Intrinsics must be llvm calls");
-    }
-
-    /** Sets the ir kind for the CallInst.
-
-      It is assumed that this method will be called by the respective intrinsics
-      when they are being created.
-     */
-    static void setIRType(llvm::CallInst* ins, InstructionKind t) {
-        std::vector<llvm::Metadata*> v = {
-            llvm::ValueAsMetadata::get(llvm::ConstantInt::get(
-                ins->getContext(), llvm::APInt(32, static_cast<int>(t))))};
-        llvm::MDNode* m = llvm::MDNode::get(ins->getContext(), v);
-        ins->setMetadata(MD_NAME, m);
     }
 
     llvm::Value* getValue(unsigned argIndex) {

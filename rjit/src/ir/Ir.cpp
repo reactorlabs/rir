@@ -5,27 +5,42 @@ using namespace llvm;
 namespace rjit {
 namespace ir {
 
+char const* const Instruction::MD_NAME = "r_ir_type";
+
+/** Returns the IR type of the intrinsic call for faster matching.
+ */
+Instruction* Instruction::getIR(llvm::Instruction* ins) {
+    llvm::MDNode* m = ins->getMetadata(MD_NAME);
+    if (m == nullptr)
+        return nullptr;
+    llvm::Metadata* mx = m->getOperand(0);
+    llvm::APInt const& ap =
+        llvm::cast<llvm::ConstantInt>(
+            llvm::cast<llvm::ValueAsMetadata>(mx)->getValue())
+            ->getUniqueInteger();
+    assert(ap.isIntN(64) and "Expected 32bit integer");
+    return reinterpret_cast<Instruction*>(ap.getZExtValue());
+}
+
+/** TODO the match should return the IR type pointer itself.
+  */
 Instruction::InstructionKind Instruction::match(BasicBlock::iterator& i) {
     llvm::Instruction* ins = i;
     ++i; // move to next instruction
-    if (isa<CallInst>(ins)) {
-        InstructionKind t = Intrinsic::getIRType(ins);
-        if (t != InstructionKind::unknown) {
-            return t;
-        }
-    } else if (isa<ReturnInst>(ins)) {
-        return InstructionKind::Return;
-    } else if (isa<BranchInst>(ins)) {
-        assert(cast<BranchInst>(ins)->isUnconditional() and
-               "Conditional branch instruction should start with ICmpInst");
-        return InstructionKind::Branch;
-    } else if (isa<ICmpInst>(ins)) {
+    Instruction* rjitIns = Instruction::getIR(ins);
+    if (rjitIns == nullptr)
+        return InstructionKind::unknown;
+    switch (rjitIns->getKind()) {
+    case Instruction::InstructionKind::Cbr:
         assert(isa<BranchInst>(ins->getNextNode()) and
                "ICmpInst can only be followed by branch for now.");
         ++i; // move past the branch as well
-        return InstructionKind::Cbr;
+        break;
+    default:
+        // pass
+        break;
     }
-    return InstructionKind::unknown;
+    return rjitIns->getKind();
 }
 
 void Cbr::create(Builder& b, Value* cond, BasicBlock* trueCase,
@@ -34,8 +49,6 @@ void Cbr::create(Builder& b, Value* cond, BasicBlock* trueCase,
                                   b.integer(0), "condition");
     BranchInst::Create(trueCase, falseCase, test, b);
 }
-
-char const* const Intrinsic::MD_NAME = "r_ir_type";
 
 } // namespace ir
 

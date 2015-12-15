@@ -54,7 +54,7 @@ $static_ctr
     }
 };""")
 
-STATIC_CTR_TEMPLATE = Template("""    static $class_name create(
+STATIC_CTR_TEMPLATE = Template("""    static $class_name & create(
             Builder & b$args) {
 
         std::vector<llvm::Value*> args_;
@@ -66,8 +66,10 @@ $args_load
             b);
 
         b.insertCall(ins);
-        setIRType(ins, InstructionKind::$class_name);
-        return ins;
+        $class_name * result = new $class_name(ins);
+        setIR(ins, result);
+        //setIRType(ins, InstructionKind::$class_name);
+        return *result;
     }""")
 
 

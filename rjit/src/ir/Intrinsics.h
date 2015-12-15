@@ -17,9 +17,9 @@ class InitClosureContext : public Intrinsic {
     InitClosureContext(llvm::Instruction* ins)
         : Intrinsic(ins, InstructionKind::InitClosureContext) {}
 
-    static InitClosureContext create(Builder& b, llvm::Value* cntxt,
-                                     llvm::Value* call, llvm::Value* rho,
-                                     llvm::Value* sysparen) {
+    static InitClosureContext& create(Builder& b, llvm::Value* cntxt,
+                                      llvm::Value* call, llvm::Value* rho,
+                                      llvm::Value* sysparen) {
 
         std::vector<llvm::Value*> args_;
         args_.push_back(cntxt);
@@ -31,8 +31,10 @@ class InitClosureContext : public Intrinsic {
             b.intrinsic<InitClosureContext>(), args_, "", b);
 
         b.insertCall(ins);
-        setIRType(ins, InstructionKind::InitClosureContext);
-        return ins;
+        InitClosureContext* result = new InitClosureContext(ins);
+        setIR(ins, result);
+        // setIRType(ins, InstructionKind::InitClosureContext);
+        return *result;
     }
 
     static char const* intrinsicName() { return "initClosureContext"; }
@@ -55,8 +57,8 @@ class EndClosureContext : public Intrinsic {
     EndClosureContext(llvm::Instruction* ins)
         : Intrinsic(ins, InstructionKind::EndClosureContext) {}
 
-    static EndClosureContext create(Builder& b, llvm::Value* cntxt,
-                                    llvm::Value* resul) {
+    static EndClosureContext& create(Builder& b, llvm::Value* cntxt,
+                                     llvm::Value* resul) {
 
         std::vector<llvm::Value*> args_;
         args_.push_back(cntxt);
@@ -66,8 +68,10 @@ class EndClosureContext : public Intrinsic {
             b.intrinsic<EndClosureContext>(), args_, "", b);
 
         b.insertCall(ins);
-        setIRType(ins, InstructionKind::EndClosureContext);
-        return ins;
+        EndClosureContext* result = new EndClosureContext(ins);
+        setIR(ins, result);
+        // setIRType(ins, InstructionKind::EndClosureContext);
+        return *result;
     }
 
     static char const* intrinsicName() { return "endClosureContext"; }
@@ -89,8 +93,8 @@ class ClosureQuickArgumentAdaptor : public Intrinsic {
     ClosureQuickArgumentAdaptor(llvm::Instruction* ins)
         : Intrinsic(ins, InstructionKind::ClosureQuickArgumentAdaptor) {}
 
-    static ClosureQuickArgumentAdaptor create(Builder& b, llvm::Value* op,
-                                              llvm::Value* arglis) {
+    static ClosureQuickArgumentAdaptor& create(Builder& b, llvm::Value* op,
+                                               llvm::Value* arglis) {
 
         std::vector<llvm::Value*> args_;
         args_.push_back(op);
@@ -100,8 +104,11 @@ class ClosureQuickArgumentAdaptor : public Intrinsic {
             b.intrinsic<ClosureQuickArgumentAdaptor>(), args_, "", b);
 
         b.insertCall(ins);
-        setIRType(ins, InstructionKind::ClosureQuickArgumentAdaptor);
-        return ins;
+        ClosureQuickArgumentAdaptor* result =
+            new ClosureQuickArgumentAdaptor(ins);
+        setIR(ins, result);
+        // setIRType(ins, InstructionKind::ClosureQuickArgumentAdaptor);
+        return *result;
     }
 
     static char const* intrinsicName() { return "closureQuickArgumentAdaptor"; }
@@ -123,8 +130,8 @@ class CallNative : public Intrinsic {
     CallNative(llvm::Instruction* ins)
         : Intrinsic(ins, InstructionKind::CallNative) {}
 
-    static CallNative create(Builder& b, llvm::Value* native,
-                             llvm::Value* rho) {
+    static CallNative& create(Builder& b, llvm::Value* native,
+                              llvm::Value* rho) {
 
         std::vector<llvm::Value*> args_;
         args_.push_back(native);
@@ -134,8 +141,10 @@ class CallNative : public Intrinsic {
             llvm::CallInst::Create(b.intrinsic<CallNative>(), args_, "", b);
 
         b.insertCall(ins);
-        setIRType(ins, InstructionKind::CallNative);
-        return ins;
+        CallNative* result = new CallNative(ins);
+        setIR(ins, result);
+        // setIRType(ins, InstructionKind::CallNative);
+        return *result;
     }
 
     static char const* intrinsicName() { return "callNative"; }
@@ -158,9 +167,9 @@ class ClosureNativeCallTrampoline : public Intrinsic {
     ClosureNativeCallTrampoline(llvm::Instruction* ins)
         : Intrinsic(ins, InstructionKind::ClosureNativeCallTrampoline) {}
 
-    static ClosureNativeCallTrampoline create(Builder& b, llvm::Value* cntxt,
-                                              llvm::Value* native,
-                                              llvm::Value* rh) {
+    static ClosureNativeCallTrampoline& create(Builder& b, llvm::Value* cntxt,
+                                               llvm::Value* native,
+                                               llvm::Value* rh) {
 
         std::vector<llvm::Value*> args_;
         args_.push_back(cntxt);
@@ -171,8 +180,11 @@ class ClosureNativeCallTrampoline : public Intrinsic {
             b.intrinsic<ClosureNativeCallTrampoline>(), args_, "", b);
 
         b.insertCall(ins);
-        setIRType(ins, InstructionKind::ClosureNativeCallTrampoline);
-        return ins;
+        ClosureNativeCallTrampoline* result =
+            new ClosureNativeCallTrampoline(ins);
+        setIR(ins, result);
+        // setIRType(ins, InstructionKind::ClosureNativeCallTrampoline);
+        return *result;
     }
 
     static char const* intrinsicName() { return "closureNativeCallTrampoline"; }
@@ -205,8 +217,8 @@ class ConvertToLogicalNoNA : public Intrinsic {
     ConvertToLogicalNoNA(llvm::Instruction* ins)
         : Intrinsic(ins, InstructionKind::ConvertToLogicalNoNA) {}
 
-    static ConvertToLogicalNoNA create(Builder& b, llvm::Value* what,
-                                       SEXP call) {
+    static ConvertToLogicalNoNA& create(Builder& b, llvm::Value* what,
+                                        SEXP call) {
 
         std::vector<llvm::Value*> args_;
         args_.push_back(what);
@@ -217,8 +229,10 @@ class ConvertToLogicalNoNA : public Intrinsic {
             b.intrinsic<ConvertToLogicalNoNA>(), args_, "", b);
 
         b.insertCall(ins);
-        setIRType(ins, InstructionKind::ConvertToLogicalNoNA);
-        return ins;
+        ConvertToLogicalNoNA* result = new ConvertToLogicalNoNA(ins);
+        setIR(ins, result);
+        // setIRType(ins, InstructionKind::ConvertToLogicalNoNA);
+        return *result;
     }
 
     static char const* intrinsicName() { return "convertToLogicalNoNA"; }
@@ -240,7 +254,7 @@ class PrintValue : public Intrinsic {
     PrintValue(llvm::Instruction* ins)
         : Intrinsic(ins, InstructionKind::PrintValue) {}
 
-    static PrintValue create(Builder& b, llvm::Value* value) {
+    static PrintValue& create(Builder& b, llvm::Value* value) {
 
         std::vector<llvm::Value*> args_;
         args_.push_back(value);
@@ -249,8 +263,10 @@ class PrintValue : public Intrinsic {
             llvm::CallInst::Create(b.intrinsic<PrintValue>(), args_, "", b);
 
         b.insertCall(ins);
-        setIRType(ins, InstructionKind::PrintValue);
-        return ins;
+        PrintValue* result = new PrintValue(ins);
+        setIR(ins, result);
+        // setIRType(ins, InstructionKind::PrintValue);
+        return *result;
     }
 
     static char const* intrinsicName() { return "printValue"; }
@@ -275,7 +291,7 @@ class StartFor : public Intrinsic {
     StartFor(llvm::Instruction* ins)
         : Intrinsic(ins, InstructionKind::StartFor) {}
 
-    static StartFor create(Builder& b, llvm::Value* seq, llvm::Value* rho) {
+    static StartFor& create(Builder& b, llvm::Value* seq, llvm::Value* rho) {
 
         std::vector<llvm::Value*> args_;
         args_.push_back(seq);
@@ -285,8 +301,10 @@ class StartFor : public Intrinsic {
             llvm::CallInst::Create(b.intrinsic<StartFor>(), args_, "", b);
 
         b.insertCall(ins);
-        setIRType(ins, InstructionKind::StartFor);
-        return ins;
+        StartFor* result = new StartFor(ins);
+        setIR(ins, result);
+        // setIRType(ins, InstructionKind::StartFor);
+        return *result;
     }
 
     static char const* intrinsicName() { return "startFor"; }
@@ -318,7 +336,7 @@ class LoopSequenceLength : public Intrinsic {
     LoopSequenceLength(llvm::Instruction* ins)
         : Intrinsic(ins, InstructionKind::LoopSequenceLength) {}
 
-    static LoopSequenceLength create(Builder& b, llvm::Value* seq, SEXP call) {
+    static LoopSequenceLength& create(Builder& b, llvm::Value* seq, SEXP call) {
 
         std::vector<llvm::Value*> args_;
         args_.push_back(seq);
@@ -329,8 +347,10 @@ class LoopSequenceLength : public Intrinsic {
             b.intrinsic<LoopSequenceLength>(), args_, "", b);
 
         b.insertCall(ins);
-        setIRType(ins, InstructionKind::LoopSequenceLength);
-        return ins;
+        LoopSequenceLength* result = new LoopSequenceLength(ins);
+        setIR(ins, result);
+        // setIRType(ins, InstructionKind::LoopSequenceLength);
+        return *result;
     }
 
     static char const* intrinsicName() { return "loopSequenceLength"; }
@@ -355,8 +375,8 @@ class GetForLoopValue : public Intrinsic {
     GetForLoopValue(llvm::Instruction* ins)
         : Intrinsic(ins, InstructionKind::GetForLoopValue) {}
 
-    static GetForLoopValue create(Builder& b, llvm::Value* seq,
-                                  llvm::Value* index) {
+    static GetForLoopValue& create(Builder& b, llvm::Value* seq,
+                                   llvm::Value* index) {
 
         std::vector<llvm::Value*> args_;
         args_.push_back(seq);
@@ -366,8 +386,10 @@ class GetForLoopValue : public Intrinsic {
             b.intrinsic<GetForLoopValue>(), args_, "", b);
 
         b.insertCall(ins);
-        setIRType(ins, InstructionKind::GetForLoopValue);
-        return ins;
+        GetForLoopValue* result = new GetForLoopValue(ins);
+        setIR(ins, result);
+        // setIRType(ins, InstructionKind::GetForLoopValue);
+        return *result;
     }
 
     static char const* intrinsicName() { return "getForLoopValue"; }
@@ -386,7 +408,7 @@ class MarkVisible : public Intrinsic {
     MarkVisible(llvm::Instruction* ins)
         : Intrinsic(ins, InstructionKind::MarkVisible) {}
 
-    static MarkVisible create(Builder& b) {
+    static MarkVisible& create(Builder& b) {
 
         std::vector<llvm::Value*> args_;
 
@@ -394,8 +416,10 @@ class MarkVisible : public Intrinsic {
             llvm::CallInst::Create(b.intrinsic<MarkVisible>(), args_, "", b);
 
         b.insertCall(ins);
-        setIRType(ins, InstructionKind::MarkVisible);
-        return ins;
+        MarkVisible* result = new MarkVisible(ins);
+        setIR(ins, result);
+        // setIRType(ins, InstructionKind::MarkVisible);
+        return *result;
     }
 
     static char const* intrinsicName() { return "markVisible"; }
@@ -416,7 +440,7 @@ class MarkInvisible : public Intrinsic {
     MarkInvisible(llvm::Instruction* ins)
         : Intrinsic(ins, InstructionKind::MarkInvisible) {}
 
-    static MarkInvisible create(Builder& b) {
+    static MarkInvisible& create(Builder& b) {
 
         std::vector<llvm::Value*> args_;
 
@@ -424,8 +448,10 @@ class MarkInvisible : public Intrinsic {
             llvm::CallInst::Create(b.intrinsic<MarkInvisible>(), args_, "", b);
 
         b.insertCall(ins);
-        setIRType(ins, InstructionKind::MarkInvisible);
-        return ins;
+        MarkInvisible* result = new MarkInvisible(ins);
+        setIR(ins, result);
+        // setIRType(ins, InstructionKind::MarkInvisible);
+        return *result;
     }
 
     static char const* intrinsicName() { return "markInvisible"; }
@@ -459,7 +485,7 @@ class UserLiteral : public Intrinsic {
     UserLiteral(llvm::Instruction* ins)
         : Intrinsic(ins, InstructionKind::UserLiteral) {}
 
-    static UserLiteral create(Builder& b, SEXP index) {
+    static UserLiteral& create(Builder& b, SEXP index) {
 
         std::vector<llvm::Value*> args_;
         args_.push_back(b.consts());
@@ -469,8 +495,10 @@ class UserLiteral : public Intrinsic {
             llvm::CallInst::Create(b.intrinsic<UserLiteral>(), args_, "", b);
 
         b.insertCall(ins);
-        setIRType(ins, InstructionKind::UserLiteral);
-        return ins;
+        UserLiteral* result = new UserLiteral(ins);
+        setIR(ins, result);
+        // setIRType(ins, InstructionKind::UserLiteral);
+        return *result;
     }
 
     static char const* intrinsicName() { return "userLiteral"; }
@@ -500,7 +528,7 @@ class Constant : public Intrinsic {
     Constant(llvm::Instruction* ins)
         : Intrinsic(ins, InstructionKind::Constant) {}
 
-    static Constant create(Builder& b, SEXP index) {
+    static Constant& create(Builder& b, SEXP index) {
 
         std::vector<llvm::Value*> args_;
         args_.push_back(b.consts());
@@ -510,8 +538,10 @@ class Constant : public Intrinsic {
             llvm::CallInst::Create(b.intrinsic<Constant>(), args_, "", b);
 
         b.insertCall(ins);
-        setIRType(ins, InstructionKind::Constant);
-        return ins;
+        Constant* result = new Constant(ins);
+        setIR(ins, result);
+        // setIRType(ins, InstructionKind::Constant);
+        return *result;
     }
 
     static char const* intrinsicName() { return "constant"; }
@@ -544,7 +574,7 @@ class GenericGetVar : public Intrinsic {
     GenericGetVar(llvm::Instruction* ins)
         : Intrinsic(ins, InstructionKind::GenericGetVar) {}
 
-    static GenericGetVar create(Builder& b, llvm::Value* rho, SEXP symbol) {
+    static GenericGetVar& create(Builder& b, llvm::Value* rho, SEXP symbol) {
 
         std::vector<llvm::Value*> args_;
         args_.push_back(rho);
@@ -555,8 +585,10 @@ class GenericGetVar : public Intrinsic {
             llvm::CallInst::Create(b.intrinsic<GenericGetVar>(), args_, "", b);
 
         b.insertCall(ins);
-        setIRType(ins, InstructionKind::GenericGetVar);
-        return ins;
+        GenericGetVar* result = new GenericGetVar(ins);
+        setIR(ins, result);
+        // setIRType(ins, InstructionKind::GenericGetVar);
+        return *result;
     }
 
     static char const* intrinsicName() { return "genericGetVar"; }
@@ -587,8 +619,8 @@ class GenericGetEllipsisArg : public Intrinsic {
     GenericGetEllipsisArg(llvm::Instruction* ins)
         : Intrinsic(ins, InstructionKind::GenericGetEllipsisArg) {}
 
-    static GenericGetEllipsisArg create(Builder& b, llvm::Value* rho,
-                                        SEXP symbol) {
+    static GenericGetEllipsisArg& create(Builder& b, llvm::Value* rho,
+                                         SEXP symbol) {
 
         std::vector<llvm::Value*> args_;
         args_.push_back(rho);
@@ -599,8 +631,10 @@ class GenericGetEllipsisArg : public Intrinsic {
             b.intrinsic<GenericGetEllipsisArg>(), args_, "", b);
 
         b.insertCall(ins);
-        setIRType(ins, InstructionKind::GenericGetEllipsisArg);
-        return ins;
+        GenericGetEllipsisArg* result = new GenericGetEllipsisArg(ins);
+        setIR(ins, result);
+        // setIRType(ins, InstructionKind::GenericGetEllipsisArg);
+        return *result;
     }
 
     static char const* intrinsicName() { return "genericGetEllipsisArg"; }
@@ -632,8 +666,8 @@ class GenericSetVar : public Intrinsic {
     GenericSetVar(llvm::Instruction* ins)
         : Intrinsic(ins, InstructionKind::GenericSetVar) {}
 
-    static GenericSetVar create(Builder& b, llvm::Value* value,
-                                llvm::Value* rho, SEXP symbol) {
+    static GenericSetVar& create(Builder& b, llvm::Value* value,
+                                 llvm::Value* rho, SEXP symbol) {
 
         std::vector<llvm::Value*> args_;
         args_.push_back(value);
@@ -645,8 +679,10 @@ class GenericSetVar : public Intrinsic {
             llvm::CallInst::Create(b.intrinsic<GenericSetVar>(), args_, "", b);
 
         b.insertCall(ins);
-        setIRType(ins, InstructionKind::GenericSetVar);
-        return ins;
+        GenericSetVar* result = new GenericSetVar(ins);
+        setIR(ins, result);
+        // setIRType(ins, InstructionKind::GenericSetVar);
+        return *result;
     }
 
     static char const* intrinsicName() { return "genericSetVar"; }
@@ -678,8 +714,8 @@ class GenericSetVarParent : public Intrinsic {
     GenericSetVarParent(llvm::Instruction* ins)
         : Intrinsic(ins, InstructionKind::GenericSetVarParent) {}
 
-    static GenericSetVarParent create(Builder& b, llvm::Value* value,
-                                      llvm::Value* rho, SEXP symbol) {
+    static GenericSetVarParent& create(Builder& b, llvm::Value* value,
+                                       llvm::Value* rho, SEXP symbol) {
 
         std::vector<llvm::Value*> args_;
         args_.push_back(value);
@@ -691,8 +727,10 @@ class GenericSetVarParent : public Intrinsic {
             b.intrinsic<GenericSetVarParent>(), args_, "", b);
 
         b.insertCall(ins);
-        setIRType(ins, InstructionKind::GenericSetVarParent);
-        return ins;
+        GenericSetVarParent* result = new GenericSetVarParent(ins);
+        setIR(ins, result);
+        // setIRType(ins, InstructionKind::GenericSetVarParent);
+        return *result;
     }
 
     static char const* intrinsicName() { return "genericSetVarParent"; }
@@ -723,7 +761,7 @@ class GetFunction : public Intrinsic {
     GetFunction(llvm::Instruction* ins)
         : Intrinsic(ins, InstructionKind::GetFunction) {}
 
-    static GetFunction create(Builder& b, llvm::Value* rho, SEXP symbol) {
+    static GetFunction& create(Builder& b, llvm::Value* rho, SEXP symbol) {
 
         std::vector<llvm::Value*> args_;
         args_.push_back(rho);
@@ -734,8 +772,10 @@ class GetFunction : public Intrinsic {
             llvm::CallInst::Create(b.intrinsic<GetFunction>(), args_, "", b);
 
         b.insertCall(ins);
-        setIRType(ins, InstructionKind::GetFunction);
-        return ins;
+        GetFunction* result = new GetFunction(ins);
+        setIR(ins, result);
+        // setIRType(ins, InstructionKind::GetFunction);
+        return *result;
     }
 
     static char const* intrinsicName() { return "getFunction"; }
@@ -765,7 +805,7 @@ class GetGlobalFunction : public Intrinsic {
     GetGlobalFunction(llvm::Instruction* ins)
         : Intrinsic(ins, InstructionKind::GetGlobalFunction) {}
 
-    static GetGlobalFunction create(Builder& b, SEXP symbol) {
+    static GetGlobalFunction& create(Builder& b, SEXP symbol) {
 
         std::vector<llvm::Value*> args_;
         args_.push_back(b.consts());
@@ -775,8 +815,10 @@ class GetGlobalFunction : public Intrinsic {
             b.intrinsic<GetGlobalFunction>(), args_, "", b);
 
         b.insertCall(ins);
-        setIRType(ins, InstructionKind::GetGlobalFunction);
-        return ins;
+        GetGlobalFunction* result = new GetGlobalFunction(ins);
+        setIR(ins, result);
+        // setIRType(ins, InstructionKind::GetGlobalFunction);
+        return *result;
     }
 
     static char const* intrinsicName() { return "getGlobalFunction"; }
@@ -805,7 +847,7 @@ class GetSymFunction : public Intrinsic {
     GetSymFunction(llvm::Instruction* ins)
         : Intrinsic(ins, InstructionKind::GetSymFunction) {}
 
-    static GetSymFunction create(Builder& b, SEXP name) {
+    static GetSymFunction& create(Builder& b, SEXP name) {
 
         std::vector<llvm::Value*> args_;
         args_.push_back(b.consts());
@@ -815,8 +857,10 @@ class GetSymFunction : public Intrinsic {
             llvm::CallInst::Create(b.intrinsic<GetSymFunction>(), args_, "", b);
 
         b.insertCall(ins);
-        setIRType(ins, InstructionKind::GetSymFunction);
-        return ins;
+        GetSymFunction* result = new GetSymFunction(ins);
+        setIR(ins, result);
+        // setIRType(ins, InstructionKind::GetSymFunction);
+        return *result;
     }
 
     static char const* intrinsicName() { return "getSymFunction"; }
@@ -845,7 +889,7 @@ class GetBuiltinFunction : public Intrinsic {
     GetBuiltinFunction(llvm::Instruction* ins)
         : Intrinsic(ins, InstructionKind::GetBuiltinFunction) {}
 
-    static GetBuiltinFunction create(Builder& b, SEXP name) {
+    static GetBuiltinFunction& create(Builder& b, SEXP name) {
 
         std::vector<llvm::Value*> args_;
         args_.push_back(b.consts());
@@ -855,8 +899,10 @@ class GetBuiltinFunction : public Intrinsic {
             b.intrinsic<GetBuiltinFunction>(), args_, "", b);
 
         b.insertCall(ins);
-        setIRType(ins, InstructionKind::GetBuiltinFunction);
-        return ins;
+        GetBuiltinFunction* result = new GetBuiltinFunction(ins);
+        setIR(ins, result);
+        // setIRType(ins, InstructionKind::GetBuiltinFunction);
+        return *result;
     }
 
     static char const* intrinsicName() { return "getBuiltinFunction"; }
@@ -885,7 +931,7 @@ class GetInternalBuiltinFunction : public Intrinsic {
     GetInternalBuiltinFunction(llvm::Instruction* ins)
         : Intrinsic(ins, InstructionKind::GetInternalBuiltinFunction) {}
 
-    static GetInternalBuiltinFunction create(Builder& b, SEXP name) {
+    static GetInternalBuiltinFunction& create(Builder& b, SEXP name) {
 
         std::vector<llvm::Value*> args_;
         args_.push_back(b.consts());
@@ -895,8 +941,11 @@ class GetInternalBuiltinFunction : public Intrinsic {
             b.intrinsic<GetInternalBuiltinFunction>(), args_, "", b);
 
         b.insertCall(ins);
-        setIRType(ins, InstructionKind::GetInternalBuiltinFunction);
-        return ins;
+        GetInternalBuiltinFunction* result =
+            new GetInternalBuiltinFunction(ins);
+        setIR(ins, result);
+        // setIRType(ins, InstructionKind::GetInternalBuiltinFunction);
+        return *result;
     }
 
     static char const* intrinsicName() { return "getInternalBuiltinFunction"; }
@@ -917,7 +966,7 @@ class CheckFunction : public Intrinsic {
     CheckFunction(llvm::Instruction* ins)
         : Intrinsic(ins, InstructionKind::CheckFunction) {}
 
-    static CheckFunction create(Builder& b, llvm::Value* f) {
+    static CheckFunction& create(Builder& b, llvm::Value* f) {
 
         std::vector<llvm::Value*> args_;
         args_.push_back(f);
@@ -926,8 +975,10 @@ class CheckFunction : public Intrinsic {
             llvm::CallInst::Create(b.intrinsic<CheckFunction>(), args_, "", b);
 
         b.insertCall(ins);
-        setIRType(ins, InstructionKind::CheckFunction);
-        return ins;
+        CheckFunction* result = new CheckFunction(ins);
+        setIR(ins, result);
+        // setIRType(ins, InstructionKind::CheckFunction);
+        return *result;
     }
 
     static char const* intrinsicName() { return "checkFunction"; }
@@ -951,8 +1002,8 @@ class CreatePromise : public Intrinsic {
     CreatePromise(llvm::Instruction* ins)
         : Intrinsic(ins, InstructionKind::CreatePromise) {}
 
-    static CreatePromise create(Builder& b, llvm::Value* fun,
-                                llvm::Value* rho) {
+    static CreatePromise& create(Builder& b, llvm::Value* fun,
+                                 llvm::Value* rho) {
 
         std::vector<llvm::Value*> args_;
         args_.push_back(fun);
@@ -962,8 +1013,10 @@ class CreatePromise : public Intrinsic {
             llvm::CallInst::Create(b.intrinsic<CreatePromise>(), args_, "", b);
 
         b.insertCall(ins);
-        setIRType(ins, InstructionKind::CreatePromise);
-        return ins;
+        CreatePromise* result = new CreatePromise(ins);
+        setIR(ins, result);
+        // setIRType(ins, InstructionKind::CreatePromise);
+        return *result;
     }
 
     static char const* intrinsicName() { return "createPromise"; }
@@ -986,7 +1039,7 @@ class SexpType : public Intrinsic {
     SexpType(llvm::Instruction* ins)
         : Intrinsic(ins, InstructionKind::SexpType) {}
 
-    static SexpType create(Builder& b, llvm::Value* value) {
+    static SexpType& create(Builder& b, llvm::Value* value) {
 
         std::vector<llvm::Value*> args_;
         args_.push_back(value);
@@ -995,8 +1048,10 @@ class SexpType : public Intrinsic {
             llvm::CallInst::Create(b.intrinsic<SexpType>(), args_, "", b);
 
         b.insertCall(ins);
-        setIRType(ins, InstructionKind::SexpType);
-        return ins;
+        SexpType* result = new SexpType(ins);
+        setIR(ins, result);
+        // setIRType(ins, InstructionKind::SexpType);
+        return *result;
     }
 
     static char const* intrinsicName() { return "sexpType"; }
@@ -1018,7 +1073,8 @@ class AddArgument : public Intrinsic {
     AddArgument(llvm::Instruction* ins)
         : Intrinsic(ins, InstructionKind::AddArgument) {}
 
-    static AddArgument create(Builder& b, llvm::Value* args, llvm::Value* arg) {
+    static AddArgument& create(Builder& b, llvm::Value* args,
+                               llvm::Value* arg) {
 
         std::vector<llvm::Value*> args_;
         args_.push_back(args);
@@ -1028,8 +1084,10 @@ class AddArgument : public Intrinsic {
             llvm::CallInst::Create(b.intrinsic<AddArgument>(), args_, "", b);
 
         b.insertCall(ins);
-        setIRType(ins, InstructionKind::AddArgument);
-        return ins;
+        AddArgument* result = new AddArgument(ins);
+        setIR(ins, result);
+        // setIRType(ins, InstructionKind::AddArgument);
+        return *result;
     }
 
     static char const* intrinsicName() { return "addArgument"; }
@@ -1052,8 +1110,8 @@ class AddKeywordArgument : public Intrinsic {
     AddKeywordArgument(llvm::Instruction* ins)
         : Intrinsic(ins, InstructionKind::AddKeywordArgument) {}
 
-    static AddKeywordArgument create(Builder& b, llvm::Value* args,
-                                     llvm::Value* arg, llvm::Value* name) {
+    static AddKeywordArgument& create(Builder& b, llvm::Value* args,
+                                      llvm::Value* arg, llvm::Value* name) {
 
         std::vector<llvm::Value*> args_;
         args_.push_back(args);
@@ -1064,8 +1122,10 @@ class AddKeywordArgument : public Intrinsic {
             b.intrinsic<AddKeywordArgument>(), args_, "", b);
 
         b.insertCall(ins);
-        setIRType(ins, InstructionKind::AddKeywordArgument);
-        return ins;
+        AddKeywordArgument* result = new AddKeywordArgument(ins);
+        setIR(ins, result);
+        // setIRType(ins, InstructionKind::AddKeywordArgument);
+        return *result;
     }
 
     static char const* intrinsicName() { return "addKeywordArgument"; }
@@ -1089,9 +1149,9 @@ class AddEllipsisArgumentHead : public Intrinsic {
     AddEllipsisArgumentHead(llvm::Instruction* ins)
         : Intrinsic(ins, InstructionKind::AddEllipsisArgumentHead) {}
 
-    static AddEllipsisArgumentHead create(Builder& b, llvm::Value* args,
-                                          llvm::Value* rho,
-                                          llvm::Value* eager) {
+    static AddEllipsisArgumentHead& create(Builder& b, llvm::Value* args,
+                                           llvm::Value* rho,
+                                           llvm::Value* eager) {
 
         std::vector<llvm::Value*> args_;
         args_.push_back(args);
@@ -1102,8 +1162,10 @@ class AddEllipsisArgumentHead : public Intrinsic {
             b.intrinsic<AddEllipsisArgumentHead>(), args_, "", b);
 
         b.insertCall(ins);
-        setIRType(ins, InstructionKind::AddEllipsisArgumentHead);
-        return ins;
+        AddEllipsisArgumentHead* result = new AddEllipsisArgumentHead(ins);
+        setIR(ins, result);
+        // setIRType(ins, InstructionKind::AddEllipsisArgumentHead);
+        return *result;
     }
 
     static char const* intrinsicName() { return "addEllipsisArgumentHead"; }
@@ -1127,9 +1189,9 @@ class AddEllipsisArgumentTail : public Intrinsic {
     AddEllipsisArgumentTail(llvm::Instruction* ins)
         : Intrinsic(ins, InstructionKind::AddEllipsisArgumentTail) {}
 
-    static AddEllipsisArgumentTail create(Builder& b, llvm::Value* args,
-                                          llvm::Value* rho,
-                                          llvm::Value* eager) {
+    static AddEllipsisArgumentTail& create(Builder& b, llvm::Value* args,
+                                           llvm::Value* rho,
+                                           llvm::Value* eager) {
 
         std::vector<llvm::Value*> args_;
         args_.push_back(args);
@@ -1140,8 +1202,10 @@ class AddEllipsisArgumentTail : public Intrinsic {
             b.intrinsic<AddEllipsisArgumentTail>(), args_, "", b);
 
         b.insertCall(ins);
-        setIRType(ins, InstructionKind::AddEllipsisArgumentTail);
-        return ins;
+        AddEllipsisArgumentTail* result = new AddEllipsisArgumentTail(ins);
+        setIR(ins, result);
+        // setIRType(ins, InstructionKind::AddEllipsisArgumentTail);
+        return *result;
     }
 
     static char const* intrinsicName() { return "addEllipsisArgumentTail"; }
@@ -1166,9 +1230,9 @@ class CallBuiltin : public Intrinsic {
     CallBuiltin(llvm::Instruction* ins)
         : Intrinsic(ins, InstructionKind::CallBuiltin) {}
 
-    static CallBuiltin create(Builder& b, llvm::Value* call,
-                              llvm::Value* closure, llvm::Value* arguments,
-                              llvm::Value* rho) {
+    static CallBuiltin& create(Builder& b, llvm::Value* call,
+                               llvm::Value* closure, llvm::Value* arguments,
+                               llvm::Value* rho) {
 
         std::vector<llvm::Value*> args_;
         args_.push_back(call);
@@ -1180,8 +1244,10 @@ class CallBuiltin : public Intrinsic {
             llvm::CallInst::Create(b.intrinsic<CallBuiltin>(), args_, "", b);
 
         b.insertCall(ins);
-        setIRType(ins, InstructionKind::CallBuiltin);
-        return ins;
+        CallBuiltin* result = new CallBuiltin(ins);
+        setIR(ins, result);
+        // setIRType(ins, InstructionKind::CallBuiltin);
+        return *result;
     }
 
     static char const* intrinsicName() { return "callBuiltin"; }
@@ -1206,9 +1272,9 @@ class CallSpecial : public Intrinsic {
     CallSpecial(llvm::Instruction* ins)
         : Intrinsic(ins, InstructionKind::CallSpecial) {}
 
-    static CallSpecial create(Builder& b, llvm::Value* call,
-                              llvm::Value* closure, llvm::Value* arguments,
-                              llvm::Value* rho) {
+    static CallSpecial& create(Builder& b, llvm::Value* call,
+                               llvm::Value* closure, llvm::Value* arguments,
+                               llvm::Value* rho) {
 
         std::vector<llvm::Value*> args_;
         args_.push_back(call);
@@ -1220,8 +1286,10 @@ class CallSpecial : public Intrinsic {
             llvm::CallInst::Create(b.intrinsic<CallSpecial>(), args_, "", b);
 
         b.insertCall(ins);
-        setIRType(ins, InstructionKind::CallSpecial);
-        return ins;
+        CallSpecial* result = new CallSpecial(ins);
+        setIR(ins, result);
+        // setIRType(ins, InstructionKind::CallSpecial);
+        return *result;
     }
 
     static char const* intrinsicName() { return "callSpecial"; }
@@ -1246,9 +1314,9 @@ class CallClosure : public Intrinsic {
     CallClosure(llvm::Instruction* ins)
         : Intrinsic(ins, InstructionKind::CallClosure) {}
 
-    static CallClosure create(Builder& b, llvm::Value* call,
-                              llvm::Value* closure, llvm::Value* arguments,
-                              llvm::Value* rho) {
+    static CallClosure& create(Builder& b, llvm::Value* call,
+                               llvm::Value* closure, llvm::Value* arguments,
+                               llvm::Value* rho) {
 
         std::vector<llvm::Value*> args_;
         args_.push_back(call);
@@ -1260,8 +1328,10 @@ class CallClosure : public Intrinsic {
             llvm::CallInst::Create(b.intrinsic<CallClosure>(), args_, "", b);
 
         b.insertCall(ins);
-        setIRType(ins, InstructionKind::CallClosure);
-        return ins;
+        CallClosure* result = new CallClosure(ins);
+        setIR(ins, result);
+        // setIRType(ins, InstructionKind::CallClosure);
+        return *result;
     }
 
     static char const* intrinsicName() { return "callClosure"; }
@@ -1300,8 +1370,8 @@ class CreateClosure : public Intrinsic {
     CreateClosure(llvm::Instruction* ins)
         : Intrinsic(ins, InstructionKind::CreateClosure) {}
 
-    static CreateClosure create(Builder& b, llvm::Value* rho, SEXP forms,
-                                SEXP body) {
+    static CreateClosure& create(Builder& b, llvm::Value* rho, SEXP forms,
+                                 SEXP body) {
 
         std::vector<llvm::Value*> args_;
         args_.push_back(rho);
@@ -1313,8 +1383,10 @@ class CreateClosure : public Intrinsic {
             llvm::CallInst::Create(b.intrinsic<CreateClosure>(), args_, "", b);
 
         b.insertCall(ins);
-        setIRType(ins, InstructionKind::CreateClosure);
-        return ins;
+        CreateClosure* result = new CreateClosure(ins);
+        setIR(ins, result);
+        // setIRType(ins, InstructionKind::CreateClosure);
+        return *result;
     }
 
     static char const* intrinsicName() { return "createClosure"; }
@@ -1346,8 +1418,8 @@ class GenericUnaryMinus : public Intrinsic {
     GenericUnaryMinus(llvm::Instruction* ins)
         : Intrinsic(ins, InstructionKind::GenericUnaryMinus) {}
 
-    static GenericUnaryMinus create(Builder& b, llvm::Value* op,
-                                    llvm::Value* rho, SEXP call) {
+    static GenericUnaryMinus& create(Builder& b, llvm::Value* op,
+                                     llvm::Value* rho, SEXP call) {
 
         std::vector<llvm::Value*> args_;
         args_.push_back(op);
@@ -1359,8 +1431,10 @@ class GenericUnaryMinus : public Intrinsic {
             b.intrinsic<GenericUnaryMinus>(), args_, "", b);
 
         b.insertCall(ins);
-        setIRType(ins, InstructionKind::GenericUnaryMinus);
-        return ins;
+        GenericUnaryMinus* result = new GenericUnaryMinus(ins);
+        setIR(ins, result);
+        // setIRType(ins, InstructionKind::GenericUnaryMinus);
+        return *result;
     }
 
     static char const* intrinsicName() { return "genericUnaryMinus"; }
@@ -1392,8 +1466,8 @@ class GenericUnaryPlus : public Intrinsic {
     GenericUnaryPlus(llvm::Instruction* ins)
         : Intrinsic(ins, InstructionKind::GenericUnaryPlus) {}
 
-    static GenericUnaryPlus create(Builder& b, llvm::Value* op,
-                                   llvm::Value* rho, SEXP call) {
+    static GenericUnaryPlus& create(Builder& b, llvm::Value* op,
+                                    llvm::Value* rho, SEXP call) {
 
         std::vector<llvm::Value*> args_;
         args_.push_back(op);
@@ -1405,8 +1479,10 @@ class GenericUnaryPlus : public Intrinsic {
             b.intrinsic<GenericUnaryPlus>(), args_, "", b);
 
         b.insertCall(ins);
-        setIRType(ins, InstructionKind::GenericUnaryPlus);
-        return ins;
+        GenericUnaryPlus* result = new GenericUnaryPlus(ins);
+        setIR(ins, result);
+        // setIRType(ins, InstructionKind::GenericUnaryPlus);
+        return *result;
     }
 
     static char const* intrinsicName() { return "genericUnaryPlus"; }
@@ -1439,8 +1515,8 @@ class GenericAdd : public Intrinsic {
     GenericAdd(llvm::Instruction* ins)
         : Intrinsic(ins, InstructionKind::GenericAdd) {}
 
-    static GenericAdd create(Builder& b, llvm::Value* lhs, llvm::Value* rhs,
-                             llvm::Value* rho, SEXP call) {
+    static GenericAdd& create(Builder& b, llvm::Value* lhs, llvm::Value* rhs,
+                              llvm::Value* rho, SEXP call) {
 
         std::vector<llvm::Value*> args_;
         args_.push_back(lhs);
@@ -1453,8 +1529,10 @@ class GenericAdd : public Intrinsic {
             llvm::CallInst::Create(b.intrinsic<GenericAdd>(), args_, "", b);
 
         b.insertCall(ins);
-        setIRType(ins, InstructionKind::GenericAdd);
-        return ins;
+        GenericAdd* result = new GenericAdd(ins);
+        setIR(ins, result);
+        // setIRType(ins, InstructionKind::GenericAdd);
+        return *result;
     }
 
     static char const* intrinsicName() { return "genericAdd"; }
@@ -1487,8 +1565,8 @@ class GenericSub : public Intrinsic {
     GenericSub(llvm::Instruction* ins)
         : Intrinsic(ins, InstructionKind::GenericSub) {}
 
-    static GenericSub create(Builder& b, llvm::Value* lhs, llvm::Value* rhs,
-                             llvm::Value* rho, SEXP call) {
+    static GenericSub& create(Builder& b, llvm::Value* lhs, llvm::Value* rhs,
+                              llvm::Value* rho, SEXP call) {
 
         std::vector<llvm::Value*> args_;
         args_.push_back(lhs);
@@ -1501,8 +1579,10 @@ class GenericSub : public Intrinsic {
             llvm::CallInst::Create(b.intrinsic<GenericSub>(), args_, "", b);
 
         b.insertCall(ins);
-        setIRType(ins, InstructionKind::GenericSub);
-        return ins;
+        GenericSub* result = new GenericSub(ins);
+        setIR(ins, result);
+        // setIRType(ins, InstructionKind::GenericSub);
+        return *result;
     }
 
     static char const* intrinsicName() { return "genericSub"; }
@@ -1535,8 +1615,8 @@ class GenericMul : public Intrinsic {
     GenericMul(llvm::Instruction* ins)
         : Intrinsic(ins, InstructionKind::GenericMul) {}
 
-    static GenericMul create(Builder& b, llvm::Value* lhs, llvm::Value* rhs,
-                             llvm::Value* rho, SEXP call) {
+    static GenericMul& create(Builder& b, llvm::Value* lhs, llvm::Value* rhs,
+                              llvm::Value* rho, SEXP call) {
 
         std::vector<llvm::Value*> args_;
         args_.push_back(lhs);
@@ -1549,8 +1629,10 @@ class GenericMul : public Intrinsic {
             llvm::CallInst::Create(b.intrinsic<GenericMul>(), args_, "", b);
 
         b.insertCall(ins);
-        setIRType(ins, InstructionKind::GenericMul);
-        return ins;
+        GenericMul* result = new GenericMul(ins);
+        setIR(ins, result);
+        // setIRType(ins, InstructionKind::GenericMul);
+        return *result;
     }
 
     static char const* intrinsicName() { return "genericMul"; }
@@ -1583,8 +1665,8 @@ class GenericDiv : public Intrinsic {
     GenericDiv(llvm::Instruction* ins)
         : Intrinsic(ins, InstructionKind::GenericDiv) {}
 
-    static GenericDiv create(Builder& b, llvm::Value* lhs, llvm::Value* rhs,
-                             llvm::Value* rho, SEXP call) {
+    static GenericDiv& create(Builder& b, llvm::Value* lhs, llvm::Value* rhs,
+                              llvm::Value* rho, SEXP call) {
 
         std::vector<llvm::Value*> args_;
         args_.push_back(lhs);
@@ -1597,8 +1679,10 @@ class GenericDiv : public Intrinsic {
             llvm::CallInst::Create(b.intrinsic<GenericDiv>(), args_, "", b);
 
         b.insertCall(ins);
-        setIRType(ins, InstructionKind::GenericDiv);
-        return ins;
+        GenericDiv* result = new GenericDiv(ins);
+        setIR(ins, result);
+        // setIRType(ins, InstructionKind::GenericDiv);
+        return *result;
     }
 
     static char const* intrinsicName() { return "genericDiv"; }
@@ -1631,8 +1715,8 @@ class GenericPow : public Intrinsic {
     GenericPow(llvm::Instruction* ins)
         : Intrinsic(ins, InstructionKind::GenericPow) {}
 
-    static GenericPow create(Builder& b, llvm::Value* lhs, llvm::Value* rhs,
-                             llvm::Value* rho, SEXP call) {
+    static GenericPow& create(Builder& b, llvm::Value* lhs, llvm::Value* rhs,
+                              llvm::Value* rho, SEXP call) {
 
         std::vector<llvm::Value*> args_;
         args_.push_back(lhs);
@@ -1645,8 +1729,10 @@ class GenericPow : public Intrinsic {
             llvm::CallInst::Create(b.intrinsic<GenericPow>(), args_, "", b);
 
         b.insertCall(ins);
-        setIRType(ins, InstructionKind::GenericPow);
-        return ins;
+        GenericPow* result = new GenericPow(ins);
+        setIR(ins, result);
+        // setIRType(ins, InstructionKind::GenericPow);
+        return *result;
     }
 
     static char const* intrinsicName() { return "genericPow"; }
@@ -1678,8 +1764,8 @@ class GenericSqrt : public Intrinsic {
     GenericSqrt(llvm::Instruction* ins)
         : Intrinsic(ins, InstructionKind::GenericSqrt) {}
 
-    static GenericSqrt create(Builder& b, llvm::Value* op, llvm::Value* rho,
-                              SEXP call) {
+    static GenericSqrt& create(Builder& b, llvm::Value* op, llvm::Value* rho,
+                               SEXP call) {
 
         std::vector<llvm::Value*> args_;
         args_.push_back(op);
@@ -1691,8 +1777,10 @@ class GenericSqrt : public Intrinsic {
             llvm::CallInst::Create(b.intrinsic<GenericSqrt>(), args_, "", b);
 
         b.insertCall(ins);
-        setIRType(ins, InstructionKind::GenericSqrt);
-        return ins;
+        GenericSqrt* result = new GenericSqrt(ins);
+        setIR(ins, result);
+        // setIRType(ins, InstructionKind::GenericSqrt);
+        return *result;
     }
 
     static char const* intrinsicName() { return "genericSqrt"; }
@@ -1724,8 +1812,8 @@ class GenericExp : public Intrinsic {
     GenericExp(llvm::Instruction* ins)
         : Intrinsic(ins, InstructionKind::GenericExp) {}
 
-    static GenericExp create(Builder& b, llvm::Value* op, llvm::Value* rho,
-                             SEXP call) {
+    static GenericExp& create(Builder& b, llvm::Value* op, llvm::Value* rho,
+                              SEXP call) {
 
         std::vector<llvm::Value*> args_;
         args_.push_back(op);
@@ -1737,8 +1825,10 @@ class GenericExp : public Intrinsic {
             llvm::CallInst::Create(b.intrinsic<GenericExp>(), args_, "", b);
 
         b.insertCall(ins);
-        setIRType(ins, InstructionKind::GenericExp);
-        return ins;
+        GenericExp* result = new GenericExp(ins);
+        setIR(ins, result);
+        // setIRType(ins, InstructionKind::GenericExp);
+        return *result;
     }
 
     static char const* intrinsicName() { return "genericExp"; }
@@ -1771,8 +1861,8 @@ class GenericEq : public Intrinsic {
     GenericEq(llvm::Instruction* ins)
         : Intrinsic(ins, InstructionKind::GenericEq) {}
 
-    static GenericEq create(Builder& b, llvm::Value* lhs, llvm::Value* rhs,
-                            llvm::Value* rho, SEXP call) {
+    static GenericEq& create(Builder& b, llvm::Value* lhs, llvm::Value* rhs,
+                             llvm::Value* rho, SEXP call) {
 
         std::vector<llvm::Value*> args_;
         args_.push_back(lhs);
@@ -1785,8 +1875,10 @@ class GenericEq : public Intrinsic {
             llvm::CallInst::Create(b.intrinsic<GenericEq>(), args_, "", b);
 
         b.insertCall(ins);
-        setIRType(ins, InstructionKind::GenericEq);
-        return ins;
+        GenericEq* result = new GenericEq(ins);
+        setIR(ins, result);
+        // setIRType(ins, InstructionKind::GenericEq);
+        return *result;
     }
 
     static char const* intrinsicName() { return "genericEq"; }
@@ -1819,8 +1911,8 @@ class GenericNe : public Intrinsic {
     GenericNe(llvm::Instruction* ins)
         : Intrinsic(ins, InstructionKind::GenericNe) {}
 
-    static GenericNe create(Builder& b, llvm::Value* lhs, llvm::Value* rhs,
-                            llvm::Value* rho, SEXP call) {
+    static GenericNe& create(Builder& b, llvm::Value* lhs, llvm::Value* rhs,
+                             llvm::Value* rho, SEXP call) {
 
         std::vector<llvm::Value*> args_;
         args_.push_back(lhs);
@@ -1833,8 +1925,10 @@ class GenericNe : public Intrinsic {
             llvm::CallInst::Create(b.intrinsic<GenericNe>(), args_, "", b);
 
         b.insertCall(ins);
-        setIRType(ins, InstructionKind::GenericNe);
-        return ins;
+        GenericNe* result = new GenericNe(ins);
+        setIR(ins, result);
+        // setIRType(ins, InstructionKind::GenericNe);
+        return *result;
     }
 
     static char const* intrinsicName() { return "genericNe"; }
@@ -1867,8 +1961,8 @@ class GenericLt : public Intrinsic {
     GenericLt(llvm::Instruction* ins)
         : Intrinsic(ins, InstructionKind::GenericLt) {}
 
-    static GenericLt create(Builder& b, llvm::Value* lhs, llvm::Value* rhs,
-                            llvm::Value* rho, SEXP call) {
+    static GenericLt& create(Builder& b, llvm::Value* lhs, llvm::Value* rhs,
+                             llvm::Value* rho, SEXP call) {
 
         std::vector<llvm::Value*> args_;
         args_.push_back(lhs);
@@ -1881,8 +1975,10 @@ class GenericLt : public Intrinsic {
             llvm::CallInst::Create(b.intrinsic<GenericLt>(), args_, "", b);
 
         b.insertCall(ins);
-        setIRType(ins, InstructionKind::GenericLt);
-        return ins;
+        GenericLt* result = new GenericLt(ins);
+        setIR(ins, result);
+        // setIRType(ins, InstructionKind::GenericLt);
+        return *result;
     }
 
     static char const* intrinsicName() { return "genericLt"; }
@@ -1915,8 +2011,8 @@ class GenericLe : public Intrinsic {
     GenericLe(llvm::Instruction* ins)
         : Intrinsic(ins, InstructionKind::GenericLe) {}
 
-    static GenericLe create(Builder& b, llvm::Value* lhs, llvm::Value* rhs,
-                            llvm::Value* rho, SEXP call) {
+    static GenericLe& create(Builder& b, llvm::Value* lhs, llvm::Value* rhs,
+                             llvm::Value* rho, SEXP call) {
 
         std::vector<llvm::Value*> args_;
         args_.push_back(lhs);
@@ -1929,8 +2025,10 @@ class GenericLe : public Intrinsic {
             llvm::CallInst::Create(b.intrinsic<GenericLe>(), args_, "", b);
 
         b.insertCall(ins);
-        setIRType(ins, InstructionKind::GenericLe);
-        return ins;
+        GenericLe* result = new GenericLe(ins);
+        setIR(ins, result);
+        // setIRType(ins, InstructionKind::GenericLe);
+        return *result;
     }
 
     static char const* intrinsicName() { return "genericLe"; }
@@ -1963,8 +2061,8 @@ class GenericGe : public Intrinsic {
     GenericGe(llvm::Instruction* ins)
         : Intrinsic(ins, InstructionKind::GenericGe) {}
 
-    static GenericGe create(Builder& b, llvm::Value* lhs, llvm::Value* rhs,
-                            llvm::Value* rho, SEXP call) {
+    static GenericGe& create(Builder& b, llvm::Value* lhs, llvm::Value* rhs,
+                             llvm::Value* rho, SEXP call) {
 
         std::vector<llvm::Value*> args_;
         args_.push_back(lhs);
@@ -1977,8 +2075,10 @@ class GenericGe : public Intrinsic {
             llvm::CallInst::Create(b.intrinsic<GenericGe>(), args_, "", b);
 
         b.insertCall(ins);
-        setIRType(ins, InstructionKind::GenericGe);
-        return ins;
+        GenericGe* result = new GenericGe(ins);
+        setIR(ins, result);
+        // setIRType(ins, InstructionKind::GenericGe);
+        return *result;
     }
 
     static char const* intrinsicName() { return "genericGe"; }
@@ -2011,8 +2111,8 @@ class GenericGt : public Intrinsic {
     GenericGt(llvm::Instruction* ins)
         : Intrinsic(ins, InstructionKind::GenericGt) {}
 
-    static GenericGt create(Builder& b, llvm::Value* lhs, llvm::Value* rhs,
-                            llvm::Value* rho, SEXP call) {
+    static GenericGt& create(Builder& b, llvm::Value* lhs, llvm::Value* rhs,
+                             llvm::Value* rho, SEXP call) {
 
         std::vector<llvm::Value*> args_;
         args_.push_back(lhs);
@@ -2025,8 +2125,10 @@ class GenericGt : public Intrinsic {
             llvm::CallInst::Create(b.intrinsic<GenericGt>(), args_, "", b);
 
         b.insertCall(ins);
-        setIRType(ins, InstructionKind::GenericGt);
-        return ins;
+        GenericGt* result = new GenericGt(ins);
+        setIR(ins, result);
+        // setIRType(ins, InstructionKind::GenericGt);
+        return *result;
     }
 
     static char const* intrinsicName() { return "genericGt"; }
@@ -2059,8 +2161,8 @@ class GenericBitAnd : public Intrinsic {
     GenericBitAnd(llvm::Instruction* ins)
         : Intrinsic(ins, InstructionKind::GenericBitAnd) {}
 
-    static GenericBitAnd create(Builder& b, llvm::Value* lhs, llvm::Value* rhs,
-                                llvm::Value* rho, SEXP call) {
+    static GenericBitAnd& create(Builder& b, llvm::Value* lhs, llvm::Value* rhs,
+                                 llvm::Value* rho, SEXP call) {
 
         std::vector<llvm::Value*> args_;
         args_.push_back(lhs);
@@ -2073,8 +2175,10 @@ class GenericBitAnd : public Intrinsic {
             llvm::CallInst::Create(b.intrinsic<GenericBitAnd>(), args_, "", b);
 
         b.insertCall(ins);
-        setIRType(ins, InstructionKind::GenericBitAnd);
-        return ins;
+        GenericBitAnd* result = new GenericBitAnd(ins);
+        setIR(ins, result);
+        // setIRType(ins, InstructionKind::GenericBitAnd);
+        return *result;
     }
 
     static char const* intrinsicName() { return "genericBitAnd"; }
@@ -2107,8 +2211,8 @@ class GenericBitOr : public Intrinsic {
     GenericBitOr(llvm::Instruction* ins)
         : Intrinsic(ins, InstructionKind::GenericBitOr) {}
 
-    static GenericBitOr create(Builder& b, llvm::Value* lhs, llvm::Value* rhs,
-                               llvm::Value* rho, SEXP call) {
+    static GenericBitOr& create(Builder& b, llvm::Value* lhs, llvm::Value* rhs,
+                                llvm::Value* rho, SEXP call) {
 
         std::vector<llvm::Value*> args_;
         args_.push_back(lhs);
@@ -2121,8 +2225,10 @@ class GenericBitOr : public Intrinsic {
             llvm::CallInst::Create(b.intrinsic<GenericBitOr>(), args_, "", b);
 
         b.insertCall(ins);
-        setIRType(ins, InstructionKind::GenericBitOr);
-        return ins;
+        GenericBitOr* result = new GenericBitOr(ins);
+        setIR(ins, result);
+        // setIRType(ins, InstructionKind::GenericBitOr);
+        return *result;
     }
 
     static char const* intrinsicName() { return "genericBitOr"; }
@@ -2154,8 +2260,8 @@ class GenericNot : public Intrinsic {
     GenericNot(llvm::Instruction* ins)
         : Intrinsic(ins, InstructionKind::GenericNot) {}
 
-    static GenericNot create(Builder& b, llvm::Value* op, llvm::Value* rho,
-                             SEXP call) {
+    static GenericNot& create(Builder& b, llvm::Value* op, llvm::Value* rho,
+                              SEXP call) {
 
         std::vector<llvm::Value*> args_;
         args_.push_back(op);
@@ -2167,8 +2273,10 @@ class GenericNot : public Intrinsic {
             llvm::CallInst::Create(b.intrinsic<GenericNot>(), args_, "", b);
 
         b.insertCall(ins);
-        setIRType(ins, InstructionKind::GenericNot);
-        return ins;
+        GenericNot* result = new GenericNot(ins);
+        setIR(ins, result);
+        // setIRType(ins, InstructionKind::GenericNot);
+        return *result;
     }
 
     static char const* intrinsicName() { return "genericNot"; }
@@ -2191,8 +2299,8 @@ class GenericGetVarMissOK : public Intrinsic {
     GenericGetVarMissOK(llvm::Instruction* ins)
         : Intrinsic(ins, InstructionKind::GenericGetVarMissOK) {}
 
-    static GenericGetVarMissOK create(Builder& b, llvm::Value* symbol,
-                                      llvm::Value* rho) {
+    static GenericGetVarMissOK& create(Builder& b, llvm::Value* symbol,
+                                       llvm::Value* rho) {
 
         std::vector<llvm::Value*> args_;
         args_.push_back(symbol);
@@ -2202,8 +2310,10 @@ class GenericGetVarMissOK : public Intrinsic {
             b.intrinsic<GenericGetVarMissOK>(), args_, "", b);
 
         b.insertCall(ins);
-        setIRType(ins, InstructionKind::GenericGetVarMissOK);
-        return ins;
+        GenericGetVarMissOK* result = new GenericGetVarMissOK(ins);
+        setIR(ins, result);
+        // setIRType(ins, InstructionKind::GenericGetVarMissOK);
+        return *result;
     }
 
     static char const* intrinsicName() { return "genericGetVarMissOK"; }
@@ -2225,8 +2335,8 @@ class GenericGetEllipsisValueMissOK : public Intrinsic {
     GenericGetEllipsisValueMissOK(llvm::Instruction* ins)
         : Intrinsic(ins, InstructionKind::GenericGetEllipsisValueMissOK) {}
 
-    static GenericGetEllipsisValueMissOK create(Builder& b, llvm::Value* symbol,
-                                                llvm::Value* rho) {
+    static GenericGetEllipsisValueMissOK&
+    create(Builder& b, llvm::Value* symbol, llvm::Value* rho) {
 
         std::vector<llvm::Value*> args_;
         args_.push_back(symbol);
@@ -2236,8 +2346,11 @@ class GenericGetEllipsisValueMissOK : public Intrinsic {
             b.intrinsic<GenericGetEllipsisValueMissOK>(), args_, "", b);
 
         b.insertCall(ins);
-        setIRType(ins, InstructionKind::GenericGetEllipsisValueMissOK);
-        return ins;
+        GenericGetEllipsisValueMissOK* result =
+            new GenericGetEllipsisValueMissOK(ins);
+        setIR(ins, result);
+        // setIRType(ins, InstructionKind::GenericGetEllipsisValueMissOK);
+        return *result;
     }
 
     static char const* intrinsicName() {
@@ -2269,7 +2382,8 @@ class CheckSwitchControl : public Intrinsic {
     CheckSwitchControl(llvm::Instruction* ins)
         : Intrinsic(ins, InstructionKind::CheckSwitchControl) {}
 
-    static CheckSwitchControl create(Builder& b, llvm::Value* ctrl, SEXP call) {
+    static CheckSwitchControl& create(Builder& b, llvm::Value* ctrl,
+                                      SEXP call) {
 
         std::vector<llvm::Value*> args_;
         args_.push_back(ctrl);
@@ -2280,8 +2394,10 @@ class CheckSwitchControl : public Intrinsic {
             b.intrinsic<CheckSwitchControl>(), args_, "", b);
 
         b.insertCall(ins);
-        setIRType(ins, InstructionKind::CheckSwitchControl);
-        return ins;
+        CheckSwitchControl* result = new CheckSwitchControl(ins);
+        setIR(ins, result);
+        // setIRType(ins, InstructionKind::CheckSwitchControl);
+        return *result;
     }
 
     static char const* intrinsicName() { return "checkSwitchControl"; }
@@ -2320,8 +2436,8 @@ class SwitchControlCharacter : public Intrinsic {
     SwitchControlCharacter(llvm::Instruction* ins)
         : Intrinsic(ins, InstructionKind::SwitchControlCharacter) {}
 
-    static SwitchControlCharacter create(Builder& b, llvm::Value* ctrl,
-                                         SEXP call, SEXP cases) {
+    static SwitchControlCharacter& create(Builder& b, llvm::Value* ctrl,
+                                          SEXP call, SEXP cases) {
 
         std::vector<llvm::Value*> args_;
         args_.push_back(ctrl);
@@ -2333,8 +2449,10 @@ class SwitchControlCharacter : public Intrinsic {
             b.intrinsic<SwitchControlCharacter>(), args_, "", b);
 
         b.insertCall(ins);
-        setIRType(ins, InstructionKind::SwitchControlCharacter);
-        return ins;
+        SwitchControlCharacter* result = new SwitchControlCharacter(ins);
+        setIR(ins, result);
+        // setIRType(ins, InstructionKind::SwitchControlCharacter);
+        return *result;
     }
 
     static char const* intrinsicName() { return "switchControlCharacter"; }
@@ -2357,8 +2475,8 @@ class SwitchControlInteger : public Intrinsic {
     SwitchControlInteger(llvm::Instruction* ins)
         : Intrinsic(ins, InstructionKind::SwitchControlInteger) {}
 
-    static SwitchControlInteger create(Builder& b, llvm::Value* ctrl,
-                                       int numCases) {
+    static SwitchControlInteger& create(Builder& b, llvm::Value* ctrl,
+                                        int numCases) {
 
         std::vector<llvm::Value*> args_;
         args_.push_back(ctrl);
@@ -2368,8 +2486,10 @@ class SwitchControlInteger : public Intrinsic {
             b.intrinsic<SwitchControlInteger>(), args_, "", b);
 
         b.insertCall(ins);
-        setIRType(ins, InstructionKind::SwitchControlInteger);
-        return ins;
+        SwitchControlInteger* result = new SwitchControlInteger(ins);
+        setIR(ins, result);
+        // setIRType(ins, InstructionKind::SwitchControlInteger);
+        return *result;
     }
 
     static char const* intrinsicName() { return "switchControlInteger"; }
@@ -2391,7 +2511,8 @@ class ReturnJump : public Intrinsic {
     ReturnJump(llvm::Instruction* ins)
         : Intrinsic(ins, InstructionKind::ReturnJump) {}
 
-    static ReturnJump create(Builder& b, llvm::Value* value, llvm::Value* rho) {
+    static ReturnJump& create(Builder& b, llvm::Value* value,
+                              llvm::Value* rho) {
 
         std::vector<llvm::Value*> args_;
         args_.push_back(value);
@@ -2401,8 +2522,10 @@ class ReturnJump : public Intrinsic {
             llvm::CallInst::Create(b.intrinsic<ReturnJump>(), args_, "", b);
 
         b.insertCall(ins);
-        setIRType(ins, InstructionKind::ReturnJump);
-        return ins;
+        ReturnJump* result = new ReturnJump(ins);
+        setIR(ins, result);
+        // setIRType(ins, InstructionKind::ReturnJump);
+        return *result;
     }
 
     static char const* intrinsicName() { return "returnJump"; }
