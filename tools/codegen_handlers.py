@@ -89,26 +89,19 @@ class Manager:
             self._classes[name] = c
             c.load(self)
             return c
-        else:
-            return self.getType(name)
-
-    def getType(self, name):
-
-        if (name in self._classes.keys()):
-            return self._classes[name]
-        t = CppType(name)
-        self._classes[name] = t
-        return t
+        assert(False)
 
     def getTypeFromXML(self, xml):
         if (xml.text):
-            return self.getType(xml.text)
+            return CppUnknownType(xml.text)
+
         # or it is a known type in which case we load it through the manager
         else:
             if (len(xml) == 0):
                 # it's a constructor or destructor, we are not interested in
                 # these
                 return None
+
             else:
                 xml = xml[0]
                 if (xml.tag != "ref"):
@@ -117,11 +110,70 @@ class Manager:
                 # now if the refid is actually a filename, then load the corresponding class
                 # otherwise use it as type
                 fname = self._pathFor(xml.attrib["refid"])
-                if (os.path.isfile(fname)):
-                    return self.getClass(Manager.demangle(xml.attrib["refid"][5:]))  # [5:] to strip the leading class
-                else:
-                    return self.getClass(xml.text)
+                if (not os.path.isfile(fname)):
+                    return CppUnknownType(xml.text)
+                
+                klass = self.getClass(Manager.demangle(xml.attrib["refid"][5:]))  # [5:] to strip the leading class
+                return CppClassType(klass, xml.tail)
 
+class CppType(object):
+    def isHandler(self):
+        return self.name() == "handler"
+
+    def isBool(self):
+        return self.name() == "bool"
+
+    def isSubclassOf(self, base):
+        return False
+    
+    def name(self):
+        raise NotImplementedError("")
+
+
+class CppUnknownType(CppType):
+    """ An unknown cpp type outside the doxygen documentation.
+    """
+    def __init__(self, name):
+        self.name_ = name
+
+    def name(self):
+        return self.name_
+    
+    def __str__(self):
+        return self.name()
+
+
+class CppClassType(CppType):
+    def __init__(self, klass, storageType):
+        if storageType:
+            self.storageType = storageType.replace(" ", "")
+        else:
+            self.storageType = ""
+        self.klass = klass
+
+    def isHandler(self):
+        return False
+
+    def isPointerType(self):
+        return self.storageType == "*"
+
+    def isSubclassOf(self, base):
+        return self.klass.isSubclassOf(base)
+
+    def name(self):
+        return self.klass.name
+
+    def matchSet(self):
+        return self.klass.matchSet
+
+    def methods(self):
+        return self.klass.methods
+
+    def __str__(self):
+        return "{0} {1}".format(self.name(), self.storageType)
+
+    def equals(self, other):
+        return self.klass == other.klass and self.storageType == other.storageType
 
 class CppClass:
 
@@ -177,7 +229,6 @@ class CppClass:
                 self.manager.getClass("rjit::ir::Instruction"))
 
 
-
 class CppMethod:
 
     """ C++ method
@@ -200,10 +251,14 @@ class CppMethod:
                 self.args.append(CppVariable(child, manager))
             elif (child.tag == "reimplements"):
                 self.overrides = True
+
         self.manager = manager
 
+    def __str__(self):
+        return "{0} {1}".format(self.type, self.name)
+
     def isHandler(self):
-        return self.type == self.manager.getClass("handler")
+        return self.type and self.type.isHandler()
 
     def checkHandler(self):
         """ Checks that the method as a handler is fine. This means to 1) check
@@ -214,11 +269,11 @@ class CppMethod:
         # at least one argument
         if (len(self.args) == 0):
             error(self.file, self.line,
-                  "Handler method {0} is not allowed to take no arguments.".format(self.name))
+                  "Handler method {0} is not allowed to take no arguments.".format(self))
         # all args but last must be instructions
         for a in self.args[0:-1]:
             if not a.isMatcher():
-                error(self.file, self.line, "Handler method {0}, argument {1}: handler's non-last arguments must be instructions matchers, i.e. inherit from ir::Instruction".format(self.name, a.name))
+                error(self.file, self.line, "Handler method {0}, argument {1}: handler's non-last arguments must be instructions matchers, i.e. inherit from ir::Instruction".format(self, a))
         # last argument can either be instruction or predicate
         if (len(self.args) > 1):
             a = self.args[-1]
@@ -227,38 +282,38 @@ class CppMethod:
             elif a.isPredicate():
                 p = a.type
                 # find predicate has static method named match
-                for m in p.methods:
+                for m in p.methods():
                     if (m.name == "match"):
                         if (m.isStatic()):
                             error(
-                                m.file, m.line, "Predicate {0} method match must not be static".format(p.name))
-                        if (m.type.name != "bool"):
+                                m.file, m.line, "Predicate '{0}' match method '{1}' must not be static".format(p, m))
+                        if (not m.type.isBool()):
                             error(
-                                m.file, m.line, "Predicate {0} method match must return bool.".format(p.name))
+                                m.file, m.line, "Predicate '{0}' match method '{1}' must return bool.".format(p, m))
                         if (len(m.args) != len(self.args)):
                             error(
-                                m.file, m.line, "Predicate {0} method match does not have proper signature - invalid number of arguments.", fail=False)
+                                m.file, m.line, "Predicate '{0}' match method '{1}' does not have proper signature - invalid number of arguments.".format(p, m), fail=False)
                             error(
-                                self.file, self.line, "when used at handler {0}".format(self.name))
+                                self.file, self.line, "when used at handler {0}".format(self))
                         # first argument must be handler
                         if (not m.args[0].isHandler()):
                             error(
-                                m.file, m.line, "Predicate {0} match method's first argument must be a rjit::ir::Handler &.".format(p.name))
+                                m.file, m.line, "Predicate {0} match method's first argument must be a rjit::ir::Handler &.".format(p))
                         for i in range(1, len(m.args)):
-                            if (m.args[i].type != self.args[i - 1].type):
+                            if (not m.args[i].type.equals(self.args[i - 1].type)):
                                 error(
-                                    m.file, m.line, "Predicate {0} match method's signature must follow the handler, difference at argument {1}", fail=False)
+                                    m.file, m.line, "Predicate '{0}' match method's signature must follow the handler, difference at argument '{1}'".format(p, m.args[i]), fail=False)
                                 error(
-                                    self.file, self.line, "when used at handler {0}.".format(self.name))
+                                    self.file, self.line, "when used at handler {0}.".format(self))
                         return  # all good
 
                 error(
-                    p.file, p.line, "Predicate {0} does not define public method match.".format(p.name))
+                    p.file, p.line, "Predicate {0} does not define public method match.".format(p))
 
                 pass  # check the predicate's signature to follow
             else:
                 error(
-                    self.file, self.line, "Handler method {0}, argument {1}: handler last arguments must inherit from either rjit::ir::Instruction or rjit::ir::Predicate.".format(self.name, a.name))
+                    self.file, self.line, "Handler method {0}, argument {1}: handler last arguments must inherit from either rjit::ir::Instruction or rjit::ir::Predicate.".format(self, a))
 
     def isVirtual(self):
         """ Returns true if the method is virtual. """
@@ -274,7 +329,7 @@ class CppMethod:
         for a in self.args:
             if not a.isMatcher():
                 if not a.isPredicate():
-                    print("Argument {0} {1} to {2} is not a valid matcher".format(a.type.name, a.name, self.name))
+                    print("Argument '{0}' to '{1}' is not a valid matcher".format(a, self))
                     sys.exit(1)
             else:
                 result.append(a.type)
@@ -285,18 +340,6 @@ class CppMethod:
         for a in self.args:
             if a.isPredicate():
                 return a.type
-        return False
-
-
-class CppType:
-
-    """ An unknown cpp type outside the doxygen documentation.
-    """
-
-    def __init__(self, name):
-        self.name = name
-
-    def isSubclassOf(self, base):
         return False
 
 
@@ -315,8 +358,11 @@ class CppVariable:
                 self.type = manager.getTypeFromXML(child)
         self.manager = manager
 
+    def __str__(self):
+        return "{0} {1}".format(self.type, self.name)
+
     def isMatcher(self):
-        return self.isInstruction()
+        return self.isInstruction() and self.type.isPointerType()
 
     def isInstruction(self):
         return self.type.isSubclassOf(
@@ -366,7 +412,7 @@ class Handler:
                     if (handlerMethod.predicate()):
                         self.conditional.append(handlerMethod)
                     else:
-                        mss = len(matchSequence[0].matchSet)
+                        mss = len(matchSequence[0].matchSet())
                         if (not self.unconditionalMatchLength or mss < self.unconditionalMatchLength):
                             self.unconditionalMatchLength = mss
                             self.unconditional = handlerMethod
@@ -381,16 +427,22 @@ class Handler:
                         handlerMethod, matchSequence[1:])
 
             def emitUnconditionalCall(self, iterators):
-                result = "(&*" + iterators[0]
-                for i in iterators[1:-1]:
-                    result += ", &*" + i
+                result = "("
+                for i in range(0, len(iterators)-1):
+                    result += "static_cast<{0}>(".format(self.unconditional.matchSequence()[i])
+                    result += "Instruction::getIR("+iterators[i]+"))"
+                    if i < len(iterators) - 2:
+                        result += ","
                 result += ")"
                 return result
 
-            def emitPredicateCall(self, iterators):
-                result = "(*this, &*" + iterators[0]
-                for i in iterators[1:-1]:
-                    result += ", &*" + i
+            def emitPredicateCall(self, conditional, iterators):
+                result = "(*this, "
+                for i in range(1, len(iterators)):
+                    result += "static_cast<{0}>(".format(conditional.matchSequence()[i-1])
+                    result += "Instruction::getIR("+iterators[i]+"))"
+                    if i < len(iterators) - 1:
+                        result += ","
                 result += ")"
                 return result
 
@@ -408,7 +460,7 @@ class Handler:
             {hname}{sig};
             goto DONE;
         }}
-    }}""".format(ptype=predicate.name, sigP=self.emitPredicateCall(iterators), sig=self.emitUnconditionalCall(iterators), hname=conditional.name)
+    }}""".format(ptype=predicate.name(), sigP=self.emitPredicateCall(conditional, iterators), sig=self.emitUnconditionalCall(iterators), hname=conditional.name)
 
             def emit(self, iterators):
                 """ Emits C++ code for the dispatch table entry.
@@ -467,7 +519,7 @@ class Handler:
             determine how deep in the recursion we are. """
             handlerMethod.checkHandler()
             ir = matchSequence[0]
-            for m in ir.matchSet:
+            for m in ir.matchSet():
                 self._getOrCreateEntry(m)._addHandlerMethod(
                     handlerMethod, matchSequence)
 
@@ -485,8 +537,8 @@ class Handler:
             # will find it
             incomingIterators.append(it)
             result = """llvm::BasicBlock::iterator {it} = {incoming};
-Instruction::InstructionKind t = rjit::ir::Instruction::match({it});
-switch (t) {{
+Instruction* instruction = rjit::ir::Instruction::match({it});
+switch (instruction->getKind()) {{
 """.format(it=it, incoming=lastIterator)
             for entry in self._table.values():
                 result += entry.emit(incomingIterators)

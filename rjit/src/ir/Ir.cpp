@@ -11,25 +11,27 @@ char const* const Instruction::MD_NAME = "r_ir_type";
  */
 Instruction* Instruction::getIR(llvm::Instruction* ins) {
     llvm::MDNode* m = ins->getMetadata(MD_NAME);
+    // TODO: Get rid of bare llvm insts and make this an assert
     if (m == nullptr)
-        return nullptr;
+        return Unknown::singleton();
     llvm::Metadata* mx = m->getOperand(0);
     llvm::APInt const& ap =
         llvm::cast<llvm::ConstantInt>(
             llvm::cast<llvm::ValueAsMetadata>(mx)->getValue())
             ->getUniqueInteger();
-    assert(ap.isIntN(64) and "Expected 32bit integer");
-    return reinterpret_cast<Instruction*>(ap.getZExtValue());
+    assert(ap.isIntN(64) and "Expected 64bit integer");
+    Instruction* res = reinterpret_cast<Instruction*>(ap.getZExtValue());
+    assert(res);
+    return res;
 }
 
 /** TODO the match should return the IR type pointer itself.
   */
-Instruction::InstructionKind Instruction::match(BasicBlock::iterator& i) {
-    llvm::Instruction* ins = i;
+Instruction* Instruction::match(BasicBlock::iterator& i) {
+    llvm::Instruction* ins = &*i;
     ++i; // move to next instruction
     Instruction* rjitIns = Instruction::getIR(ins);
-    if (rjitIns == nullptr)
-        return InstructionKind::unknown;
+    assert(rjitIns);
     switch (rjitIns->getKind()) {
     case Instruction::InstructionKind::Cbr:
         assert(isa<BranchInst>(ins->getNextNode()) and
@@ -40,7 +42,7 @@ Instruction::InstructionKind Instruction::match(BasicBlock::iterator& i) {
         // pass
         break;
     }
-    return rjitIns->getKind();
+    return rjitIns;
 }
 
 void Cbr::create(Builder& b, Value* cond, BasicBlock* trueCase,

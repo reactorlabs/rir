@@ -23,9 +23,6 @@ namespace ir {
  */
 class Instruction {
   public:
-    /** LLVM metadata kind for the ir type associated with the CallInsts for
-     * faster matching.
-     */
     static char const* const MD_NAME;
 
     /** Depending on how we want the RTTI to behave, either put only leaves
@@ -114,7 +111,7 @@ class Instruction {
      * advances i past it. Returns Type::unknown if the sequence start cannot be
      * matched and advances one instruction further.
      */
-    static InstructionKind match(llvm::BasicBlock::iterator& i);
+    static Instruction* match(llvm::BasicBlock::iterator& i);
 
     /** Each ir instruction can typecast to the underlying llvm bitcode.
      */
@@ -135,17 +132,28 @@ class Instruction {
      */
     static void setIR(llvm::Instruction* llvmIns,
                       rjit::ir::Instruction* rjitIns) {
+        assert(rjitIns);
         std::vector<llvm::Metadata*> v = {
             llvm::ValueAsMetadata::get(llvm::ConstantInt::get(
                 llvmIns->getContext(),
                 llvm::APInt(64, reinterpret_cast<std::uintptr_t>(rjitIns))))};
         llvm::MDNode* m = llvm::MDNode::get(llvmIns->getContext(), v);
         llvmIns->setMetadata(MD_NAME, m);
+        assert(getIR(llvmIns));
     }
 
   private:
     llvm::Instruction* ins_;
     InstructionKind kind_;
+};
+
+class Unknown : public Instruction {
+  public:
+    Unknown() : Instruction(nullptr, InstructionKind::unknown) {}
+    static Unknown* singleton() {
+        static Unknown u;
+        return &u;
+    }
 };
 
 class Return : public Instruction {
