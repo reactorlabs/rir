@@ -10,10 +10,9 @@
 namespace rjit {
 namespace ir {
 
-namespace {
-
 template <typename Handler>
 struct HandlerPassWrapper : public FunctionPass {
+  public:
     static char ID;
 
     template <typename T>
@@ -27,26 +26,7 @@ struct HandlerPassWrapper : public FunctionPass {
 
     HandlerPassWrapper() : FunctionPass(ID) {}
 
-    bool runOnFunction(Function& F) override {
-        llvm::Module* m = F.getParent();
-        for (llvm::Function& f : m->getFunctionList()) {
-            if (f.isDeclaration() || f.empty())
-                continue;
-
-            for (auto& b : f) {
-                BasicBlock::iterator i = b.begin();
-                while (i != b.end()) {
-                    handler.dispatch(i);
-                }
-            }
-        }
-
-        return false;
-    };
-
     void getAnalysisUsage(AnalysisUsage& AU) const override {}
-
-    Handler handler;
 };
 
 template <typename Handler>
@@ -55,12 +35,6 @@ char HandlerPassWrapper<Handler>::ID = 0;
 template <typename Handler>
 HandlerPassWrapper<Handler>::RegisterMe<HandlerPassWrapper<Handler>>
     HandlerPassWrapper<Handler>::Registered;
-}
-}
-
-template <typename Handler>
-FunctionPass* createHandlerPassWrapper() {
-    return new ir::HandlerPassWrapper<Handler>();
 }
 }
 

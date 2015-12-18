@@ -13,13 +13,15 @@ class Compiler {
   public:
     Compiler(std::string const& moduleName) : b(moduleName) {}
 
-    SEXP compile(std::string const& name, SEXP bytecode) {
-        SEXP result = compileFunction(name, bytecode);
+    SEXP compile(std::string const& name, SEXP bytecode, SEXP formals) {
+        SEXP result = compileFunction(name, bytecode, formals);
         return result;
     }
 
-    SEXP compileFunction(std::string const& name, SEXP ast,
-                         bool isPromise = false);
+    SEXP compilePromise(std::string const& name, SEXP ast);
+    SEXP compileFunction(std::string const& name, SEXP ast, SEXP formals);
+
+    SEXP finalizeCompile(SEXP ast);
 
     void jitAll();
 

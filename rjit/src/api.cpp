@@ -15,9 +15,9 @@ using namespace rjit;
 
 /** Compiles given ast and returns the NATIVESXP for it.
  */
-REXPORT SEXP jitAst(SEXP ast) {
+REXPORT SEXP jitAst(SEXP ast, SEXP formals) {
     Compiler c("module");
-    SEXP result = c.compile("rfunction", ast);
+    SEXP result = c.compile("rfunction", ast, formals);
     c.jitAll();
     return result;
 }
@@ -36,13 +36,14 @@ REXPORT SEXP jitFunctions(SEXP moduleName, SEXP functions) {
         SEXP f = CAR(functions);
         // get the function ast
         SEXP body = BODY(f);
+        SEXP formals = FORMALS(f);
         SEXP name = TAG(functions);
         char const* fName =
             (name == R_NilValue) ? "unnamed function" : CHAR(PRINTNAME(name));
         if (TYPEOF(body) == NATIVESXP)
             warning("Ignoring %s because it is already compiled", fName);
         else
-            SET_BODY(f, c.compileFunction(fName, body));
+            SET_BODY(f, c.compileFunction(fName, body, formals));
         // move to next function
         functions = CDR(functions);
     }

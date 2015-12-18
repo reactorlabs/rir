@@ -2,9 +2,10 @@
 
 using namespace llvm;
 
-SEXP JITModule::getNativeSXP(SEXP ast, std::vector<SEXP> const& objects,
-                             Function* f) {
+SEXP JITModule::getNativeSXP(SEXP formals, SEXP ast,
+                             std::vector<SEXP> const& objects, Function* f) {
 
+    formals_[f] = formals;
     SEXP objs = allocVector(VECSXP, objects.size());
     PROTECT(objs);
     for (size_t i = 0; i < objects.size(); ++i)

@@ -21,8 +21,7 @@
 
 #include "llvm/Support/DynamicLibrary.h"
 
-#include "ir/Handler.h"
-#include "ir/HandlerPassWrapper.h"
+#include "ir/Analysis/VariableAnalysis.h"
 
 using namespace llvm;
 
@@ -52,7 +51,8 @@ ExecutionEngine* JITCompileLayer::getEngine(JITModule* m) {
     // Make sure we can resolve symbols in the program as well. The zero arg
     legacy::PassManager pm;
 
-    pm.add(createHandlerPassWrapper<ir::DummyHandler>());
+    auto a = new ir::VariableAnalysis();
+    pm.add(a);
 
     pm.add(createTargetTransformInfoWrapperPass(TargetIRAnalysis()));
 

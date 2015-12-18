@@ -15,13 +15,15 @@
 namespace rjit {
 namespace ir {
 
+class Matcher {};
+
 /** Type of the IR.
  */
 /** Generic class for all IR objects.
 
   They all must point to an existing llvm value.
  */
-class Instruction {
+class Instruction : public Matcher {
   public:
     static char const* const MD_NAME;
 

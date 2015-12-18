@@ -23,8 +23,9 @@ Builder::Context::Context(std::string const& name, JITModule* m,
 }
 
 Builder::ClosureContext::ClosureContext(std::string name, JITModule* m,
-                                        bool isReturnJumpNeeded)
-    : Builder::Context(name, m, t::sexp_sexpsexpint, isReturnJumpNeeded) {
+                                        SEXP formals, bool isReturnJumpNeeded)
+    : Builder::Context(name, m, t::sexp_sexpsexpint, isReturnJumpNeeded),
+      formals(formals) {
     // get rho value into context->rho for easier access
     llvm::Function::arg_iterator args = f->arg_begin();
     llvm::Value* consts = args++;
@@ -66,13 +67,17 @@ Builder::ICContext::ICContext(std::string name, JITModule* m,
     args_.push_back(stackmapId);
 }
 
-void Builder::openFunction(std::string const& name, SEXP ast, bool isPromise) {
+void Builder::openFunction(std::string const& name, SEXP ast, SEXP formals) {
     if (c_ != nullptr)
         contextStack_.push(c_);
-    if (isPromise)
-        c_ = new PromiseContext(name, m_);
-    else
-        c_ = new ClosureContext(name, m_);
+    c_ = new ClosureContext(name, m_, formals);
+    c_->addConstantPoolObject(ast);
+}
+
+void Builder::openPromise(std::string const& name, SEXP ast) {
+    if (c_ != nullptr)
+        contextStack_.push(c_);
+    c_ = new PromiseContext(name, m_);
     c_->addConstantPoolObject(ast);
 }
 

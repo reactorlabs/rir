@@ -32,10 +32,18 @@ using namespace llvm;
 
 namespace rjit {
 
-SEXP Compiler::compileFunction(std::string const& name, SEXP ast,
-                               bool isPromise) {
-    b.openFunction(name, ast, isPromise);
+SEXP Compiler::compilePromise(std::string const& name, SEXP ast) {
+    b.openPromise(name, ast);
+    return finalizeCompile(ast);
+}
 
+SEXP Compiler::compileFunction(std::string const& name, SEXP ast,
+                               SEXP formals) {
+    b.openFunction(name, ast, formals);
+    return finalizeCompile(ast);
+}
+
+SEXP Compiler::finalizeCompile(SEXP ast) {
     Value* last = compileExpression(ast);
 
     // since we are going to insert implicit return, which is a simple return
@@ -204,7 +212,7 @@ Value* Compiler::compileArgument(SEXP arg, SEXP name) {
             return ir::Constant::create(b, arg);
         }
     default: {
-        SEXP code = compileFunction("promise", arg, /*isPromise=*/true);
+        SEXP code = compilePromise("promise", arg);
         // Should the objects be inside the builder?
         // not needed with new API, compile constant adds automaatically if not
         // present yet
@@ -333,7 +341,7 @@ Value* Compiler::compileParenthesis(SEXP arg) {
  */
 Value* Compiler::compileFunctionDefinition(SEXP fdef) {
     SEXP forms = CAR(fdef);
-    SEXP body = compileFunction("function", CAR(CDR(fdef)));
+    SEXP body = compileFunction("function", CAR(CDR(fdef)), forms);
     return ir::CreateClosure::create(b, b.rho(), forms, body);
 }
 

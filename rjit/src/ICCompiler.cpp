@@ -111,10 +111,11 @@ void* ICCompiler::compile(SEXP inCall, SEXP inFun, SEXP inRho) {
 }
 
 void* ICCompiler::finalize() {
-    // FIXME: Allocate a NATIVESXP, or link it to the caller??
+    // FIXME: return nativesxp and not naked ptr?
+    auto f = b.f();
 
     auto engine = JITCompileLayer::singleton.getEngine(b);
-    auto ic = engine->getPointerToFunction(b.f());
+    auto ic = engine->getPointerToFunction(f);
 
     if (!RJIT_DEBUG)
         delete engine;
@@ -137,7 +138,9 @@ Function* ICCompiler::compileCallStub() {
     auto res = INTRINSIC_NO_SAFEPOINT(ic, b.args());
     ReturnInst::Create(getGlobalContext(), res, b);
 
-    return b.f();
+    auto stub = b.f();
+
+    return stub;
 }
 
 bool ICCompiler::compileIc(SEXP inCall, SEXP inFun) {

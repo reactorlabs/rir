@@ -224,9 +224,9 @@ class CppClass:
                 return True
         return False
 
-    def isInstruction(self):
+    def isMatcher(self):
         return self.isSubclassOf(
-                self.manager.getClass("rjit::ir::Instruction"))
+                self.manager.getClass("rjit::ir::Matcher"))
 
 
 class CppMethod:
@@ -351,6 +351,7 @@ class CppVariable:
     def __init__(self, xml, manager):
         self._xml = xml
         self.text = ""
+        self.name = ""
         for child in xml:
             if (child.tag == "declname"):
                 self.name = child.text
@@ -362,11 +363,9 @@ class CppVariable:
         return "{0} {1}".format(self.type, self.name)
 
     def isMatcher(self):
-        return self.isInstruction() and self.type.isPointerType()
-
-    def isInstruction(self):
         return self.type.isSubclassOf(
-                self.manager.getClass("rjit::ir::Instruction"))
+                self.manager.getClass("rjit::ir::Matcher")) and \
+                        self.type.isPointerType()
 
     def isPredicate(self):
         return self.type.isSubclassOf(
@@ -644,7 +643,7 @@ def analyzeMatchSets(klass):
     subclasses = set(klass.subclasses)
 
     # if the class is a leaf in the hierarchy, its matchset is its own name
-    if not subclasses and klass.isInstruction():
+    if not subclasses and klass.isMatcher():
         m.add(klass.name.split("::")[-1])
         klass.matchSet = m
         return m
@@ -714,7 +713,7 @@ def main():
     # load the classes we required
     debug("loading...")
     debug("    instructions")
-    ir_ins = m.getClass("rjit::ir::Instruction")
+    ir_ins = m.getClass("rjit::ir::Matcher")
     debug("    handlers")
     ir_handler = m.getClass("rjit::ir::Handler")
     

@@ -12,12 +12,15 @@ class JITModule : public llvm::Module {
     JITModule(const std::string& name, llvm::LLVMContext& ctx)
         : llvm::Module(name, ctx) {}
 
-    SEXP getNativeSXP(SEXP ast, std::vector<SEXP> const& objects,
+    SEXP getNativeSXP(SEXP formals, SEXP ast, std::vector<SEXP> const& objects,
                       llvm::Function* f);
 
     void finalizeNativeSEXPs(llvm::ExecutionEngine* engine);
 
     SEXP constPool(llvm::Function* f) { return CDR(relocations.at(f)); }
+    SEXP formals(llvm::Function* f) {
+        return formals_.count(f) ? formals_.at(f) : R_NilValue;
+    }
 
   private:
     /** List of relocations to be done when compiling.
@@ -30,6 +33,7 @@ class JITModule : public llvm::Module {
       functions.
       */
     std::unordered_map<llvm::Function*, SEXP> relocations;
+    std::unordered_map<llvm::Function*, SEXP> formals_;
 };
 
 #endif

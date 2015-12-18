@@ -34,6 +34,7 @@ extern "C" void patchIC(void* ic, uint64_t stackmapId, void* caller) {
 extern "C" void* compileIC(uint64_t numargs, SEXP call, SEXP fun, SEXP rho,
                            uint64_t stackmapId) {
     SEXP body = CDR(fun);
+    SEXP formals = CAR(fun);
 
     std::string name = "rfunction";
     if (TYPEOF(CAR(call)) == SYMSXP) {
@@ -57,7 +58,7 @@ extern "C" void* compileIC(uint64_t numargs, SEXP call, SEXP fun, SEXP rho,
 
     if (compile) {
         Compiler c("module");
-        SEXP result = c.compile(name, body);
+        SEXP result = c.compile(name, body, formals);
         c.jitAll();
         if (RJIT_DEBUG)
             std::cout << "Compiled " << name << " @ " << (void*)result << "\n";

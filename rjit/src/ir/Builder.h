@@ -91,7 +91,8 @@ class Builder {
       Adds the ast of the function as first argument to the function's constant
       pool.
      */
-    void openFunction(std::string const& name, SEXP ast, bool isPromise);
+    void openPromise(std::string const& name, SEXP ast);
+    void openFunction(std::string const& name, SEXP ast, SEXP formals);
 
     void openIC(std::string const& name, FunctionType* ty) {
         if (c_ != nullptr)
@@ -138,7 +139,9 @@ class Builder {
         assert((contextStack_.empty() or (contextStack_.top()->f != c_->f)) and
                "Not a function context");
 
-        SEXP result = module()->getNativeSXP(c_->cp[0], c_->cp, c_->f);
+        ClosureContext* cc = dynamic_cast<ClosureContext*>(c_);
+        SEXP result =
+            module()->getNativeSXP(cc->formals, c_->cp[0], c_->cp, c_->f);
         // c_->f->dump();
         delete c_;
         if (contextStack_.empty()) {
@@ -316,7 +319,7 @@ class Builder {
 
     class ClosureContext : public Context {
       public:
-        ClosureContext(std::string name, JITModule* m,
+        ClosureContext(std::string name, JITModule* m, SEXP formals,
                        bool isReturnJumpNeeded = false);
 
         llvm::Value* rho() override {
@@ -334,12 +337,14 @@ class Builder {
         ClosureContext(Context* from) : Context(from) {}
 
         Context* clone() override { return new ClosureContext(this); }
+
+        SEXP formals;
     };
 
     class PromiseContext : public ClosureContext {
       public:
         PromiseContext(std::string name, JITModule* m)
-            : ClosureContext(name, m, true) {}
+            : ClosureContext(name, m, R_NilValue, true) {}
         PromiseContext(Context* from) : ClosureContext(from) {}
 
         Context* clone() override { return new PromiseContext(this); }
