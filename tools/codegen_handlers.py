@@ -536,6 +536,7 @@ class Handler:
             # will find it
             incomingIterators.append(it)
             result = """llvm::BasicBlock::iterator {it} = {incoming};
+if (!rjit::ir::Instruction::isInstruction({it})) return false;
 Instruction* instruction = rjit::ir::Instruction::match({it});
 switch (instruction->getKind()) {{
 """.format(it=it, incoming=lastIterator)

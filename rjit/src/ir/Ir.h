@@ -115,6 +115,8 @@ class Instruction : public Matcher {
      */
     static Instruction* match(llvm::BasicBlock::iterator& i);
 
+    static bool isInstruction(llvm::Instruction* i);
+
     /** Each ir instruction can typecast to the underlying llvm bitcode.
      */
     operator llvm::Instruction*() { return ins_; }
@@ -147,15 +149,6 @@ class Instruction : public Matcher {
   private:
     llvm::Instruction* ins_;
     InstructionKind kind_;
-};
-
-class Unknown : public Instruction {
-  public:
-    Unknown() : Instruction(nullptr, InstructionKind::unknown) {}
-    static Unknown* singleton() {
-        static Unknown u;
-        return &u;
-    }
 };
 
 class Return : public Instruction {

@@ -7,13 +7,15 @@ namespace ir {
 
 char const* const Instruction::MD_NAME = "r_ir_type";
 
+bool Instruction::isInstruction(llvm::Instruction* ins) {
+    return ins->getMetadata(MD_NAME) ? true : false;
+}
+
 /** Returns the IR type of the intrinsic call for faster matching.
  */
 Instruction* Instruction::getIR(llvm::Instruction* ins) {
     llvm::MDNode* m = ins->getMetadata(MD_NAME);
-    // TODO: Get rid of bare llvm insts and make this an assert
-    if (m == nullptr)
-        return Unknown::singleton();
+    assert(m);
     llvm::Metadata* mx = m->getOperand(0);
     llvm::APInt const& ap =
         llvm::cast<llvm::ConstantInt>(

@@ -24,7 +24,8 @@ class ForwardAnalysis : public HandlerPassWrapper<Handler> {
         for (auto& b : f) {
             BasicBlock::iterator i = b.begin();
             while (i != b.end()) {
-                handler.dispatch(i);
+                if (!handler.dispatch(i))
+                    i++;
             }
         }
 
