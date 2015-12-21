@@ -335,7 +335,7 @@ if [ $SKIP_BUILD -eq 0 ]; then
     $M
 
     echo "-> running tests"
-    #${SRC_DIR}/tools/tests
+    ${SRC_DIR}/tools/tests
 fi
 
 # freshr will be in the same directory as llvm and gnur
