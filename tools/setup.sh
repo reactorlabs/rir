@@ -331,7 +331,8 @@ rm -f CMakeCache.txt
 cmake -G "$GEN" -DTESTR_DIR=$TESTR_DIR -DLLVM_DIR=${LLVM_BUILD_DIR}/share/llvm/cmake -DR_HOME=$R_DIR -DCMAKE_BUILD_TYPE=${RJIT_BUILD_TYPE} $SRC_DIR
 if [ $SKIP_BUILD -eq 0 ]; then
     #TODO: fix first build
-    if [ -z `$M codegen` ]; then echo ""; fi
+    $M codegen
+    cmake .
     $M
 
     echo "-> running tests"
