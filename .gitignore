@@ -29,3 +29,5 @@ rules.ninja
 index.db
 doxygen_sqlite3.db
 Rplots.pdf
+.test_results
+benchmarks/
