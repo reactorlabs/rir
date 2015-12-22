@@ -16,7 +16,7 @@ SRC_DIR=`cd ${SCRIPTPATH}/.. && pwd`
 
 GEN="Unix Makefiles"
 M="make"
-OPT="-O2"
+OPT="-O0"
 TARGET="${SRC_DIR}/.."
 SKIP_LLVM=0
 SKIP_GNUR=0
@@ -125,8 +125,6 @@ case $key in
     LLVM_BUILD_TYPE="Release"
     OPT="-O2"
     BENCH_RUN=1
-    GEN="Ninja"
-    M="ninja"
     BENCH_RUN_NUM="$2"
     shift # past argument
     ;;
@@ -219,10 +217,6 @@ if [ -z `which python3` ]; then
 fi
 if [ -z `which doxygen` ]; then
     echo "ERROR: doxygen could not be found. please install"
-    exit 1
-fi
-if [ -z `which java` ]; then
-    echo "ERROR: java could not be found. please install"
     exit 1
 fi
 if [ $IS_GIT_CHECKOUT -eq 0 ] && [ "$CI" != "true" ]; then
@@ -420,7 +414,9 @@ if [ $BENCH_RUN -eq 1 ]; then
         echo "-> start running the shootout benchmark "    
         for x in ` find ${SHOOT_DIR} -name "*.r" `; do 
             echo "-> running $x"
-            R_LIBS_USER=${TARGET}/rjit/packages R_ENABLE_JIT=5 ${TARGET}/gnur/bin/R -e "source(\"${SRC_DIR}/benchmarks/run.r\");runbench(\"$x\", \"${LOG_FILE}\", \"rjit\", ${BENCH_RUN_NUM})" > /dev/null
+
+            R_LIBS_USER=${CURRENT_DIR}/packages R_ENABLE_JIT=5 ${TARGET}/gnur/bin/R -e "source(\"${SRC_DIR}/benchmarks/run.r\");runbench(\"$x\", \"${LOG_FILE}\", \"rjit\", ${BENCH_RUN_NUM})" > /dev/null
+
             R_ENABLE_JIT=3 ${FRESH_R_BIN} -e "source(\"${SRC_DIR}/benchmarks/run.r\");runbench(\"$x\", \"${LOG_FILE}\", \"gnur\", ${BENCH_RUN_NUM})" > /dev/null
         done
     fi
