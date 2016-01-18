@@ -58,7 +58,6 @@ case $STARTED_BY in
     SLACK_NOTIFIER_CHANNEL="@aghosn"
     ;;
     *)
-    SLACK_NOTIFIER_CHANNEL="#r-on-llvm"
     ;;
 esac
 
@@ -85,7 +84,9 @@ json=$json"
 }"
 
 # post the result to the slack webhook
-RESULT=$(curl -d "payload=$json" -s "$SLACK_WEBHOOK_URL" --output "slack_result.txt" -w "%{http_code}")
+if ! [[ -z "$SLACK_NOTIFIER_CHANNEL" ]]; then
+  RESULT=$(curl -d "payload=$json" -s "$SLACK_WEBHOOK_URL" --output "slack_result.txt" -w "%{http_code}")
+fi
 
 if [ "$RESULT" = "500" ]; then
   if grep -Fqx "No token" "slack_result.txt"; then

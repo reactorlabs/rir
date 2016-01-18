@@ -16,3 +16,7 @@ build:
         name: Slack Notifications
         code: |
             ${WERCKER_SOURCE_DIR}/tools/ci.sh
+    - script:
+        name: Compilation benchmarks
+        code: |
+            ${WERCKER_SOURCE_DIR}/tools/compile_time.sh
