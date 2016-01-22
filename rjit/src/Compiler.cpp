@@ -83,13 +83,17 @@ Value* Compiler::compileExpression(SEXP value) {
     case LANGSXP:
         return compileCall(value);
     case LGLSXP:
-    case INTSXP:
     case REALSXP:
     case CPLXSXP:
     case STRSXP:
     case NILSXP:
     case CLOSXP:
-        return ir::UserLiteral::create(b, value);
+    case INTSXP: {
+        Value* res = ir::VectorGetElement::create(
+            b, b.consts(), ir::Builder::integer(b.constantPoolIndex(value)));
+        ir::MarkNotMutable::create(b, res);
+        return res;
+    }
     case BCODESXP:
     // TODO: reuse the compiled fun
     case NATIVESXP:

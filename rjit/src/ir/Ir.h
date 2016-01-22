@@ -90,6 +90,8 @@ class Pattern {
         Return,
         Branch,
         Cbr,
+        VectorGetElement,
+        MarkNotMutable,
         IntegerLessThan,
         IntegerEquals,
         UnsignedIntegerLessThan,
@@ -330,6 +332,31 @@ class Cbr : public Pattern {
 
     static bool classof(Pattern const* s) {
         return s->getKind() == PatternKind::Cbr;
+    }
+};
+
+class MarkNotMutable : public Pattern {
+  public:
+    MarkNotMutable(llvm::Instruction* ins)
+        : Pattern(ins, PatternKind::MarkNotMutable) {}
+
+    static void create(Builder& b, llvm::Value* val);
+
+    static bool classof(Pattern const* s) {
+        return s->getKind() == PatternKind::MarkNotMutable;
+    }
+};
+
+class VectorGetElement : public Pattern {
+  public:
+    VectorGetElement(llvm::Instruction* ins)
+        : Pattern(ins, PatternKind::VectorGetElement) {}
+
+    static VectorGetElement create(Builder& b, llvm::Value* vector,
+                                   llvm::Value* index);
+
+    static bool classof(Pattern const* s) {
+        return s->getKind() == PatternKind::VectorGetElement;
     }
 };
 

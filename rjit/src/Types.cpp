@@ -35,6 +35,16 @@ PointerType* initializeTypes() {
     // now the real SEXPREC
     fields = {t_sxpinfo_struct, t::SEXP, t::SEXP, t::SEXP, u1};
     t::SEXPREC->setBody(fields, false);
+
+    StructType* t_vecsxp_struct =
+        StructType::create(context, "struct.vecsxp_struct");
+    fields = {t::Int, t::Int};
+    t_vecsxp_struct->setBody(fields, false);
+
+    fields = {t_sxpinfo_struct, t_vecsxp_struct, t::SEXP, t::SEXP, t::SEXP};
+    t::VECTOR_SEXPREC = StructType::create(context, "struct.VECTOR_SEXPREC");
+    t::VECTOR_SEXPREC->setBody(fields, false);
+
     // API function types
     Type* t_void = Type::getVoidTy(context);
     t::t_void = t_void;
@@ -118,6 +128,7 @@ Type* Bool;
 PointerType* SEXP = initializeTypes();
 
 StructType* SEXPREC;
+StructType* VECTOR_SEXPREC;
 
 StructType* cntxt;
 PointerType* cntxtPtr;

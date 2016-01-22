@@ -18,6 +18,7 @@ extern llvm::Type* Void;
 extern llvm::Type* Bool;
 
 extern llvm::StructType* SEXPREC;
+extern llvm::StructType* VECTOR_SEXPREC;
 
 extern llvm::StructType* cntxt;
 extern llvm::PointerType* cntxtPtr;
