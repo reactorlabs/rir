@@ -22,7 +22,6 @@
 #include "ir/Builder.h"
 #include "ir/Intrinsics.h"
 #include "ir/Ir.h"
-#include "ir/Handler.h"
 
 #include "api.h"
 

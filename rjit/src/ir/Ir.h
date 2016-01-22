@@ -15,15 +15,13 @@
 namespace rjit {
 namespace ir {
 
-class Matcher {};
-
 /** Type of the IR.
  */
 /** Generic class for all IR objects.
 
   They all must point to an existing llvm value.
  */
-class Instruction : public Matcher {
+class Pattern {
   public:
     static char const* const MD_NAME;
 
@@ -32,7 +30,7 @@ class Instruction : public Matcher {
      * all. I would be in favour of the first option. THe thing we want is not a
      * real RTTI in the end.
      */
-    enum InstructionKind {
+    enum PatternKind {
         ExtractConstantPool,
         UserLiteral,
         Constant,
@@ -107,13 +105,13 @@ class Instruction : public Matcher {
 
     /** Returns the IR type of the intrinsic call for faster matching.
      */
-    static Instruction* getIR(llvm::Instruction* ins);
+    static Pattern* getIR(llvm::Instruction* ins);
 
     /** Returns the IR type of the instruction sequence starting at i and
      * advances i past it. Returns Type::unknown if the sequence start cannot be
      * matched and advances one instruction further.
      */
-    static Instruction* match(llvm::BasicBlock::iterator& i);
+    static Pattern* match(llvm::BasicBlock::iterator& i);
 
     static bool isInstruction(llvm::Instruction* i);
 
@@ -121,10 +119,10 @@ class Instruction : public Matcher {
      */
     operator llvm::Instruction*() { return ins_; }
 
-    Instruction(llvm::Instruction* ins, InstructionKind kind)
+    Pattern(llvm::Instruction* ins, PatternKind kind)
         : ins_(ins), kind_(kind) {}
 
-    InstructionKind getKind() const { return kind_; }
+    PatternKind getKind() const { return kind_; }
 
   protected:
     template <typename T>
@@ -134,8 +132,7 @@ class Instruction : public Matcher {
 
     /** Sets the ir kind.
      */
-    static void setIR(llvm::Instruction* llvmIns,
-                      rjit::ir::Instruction* rjitIns) {
+    static void setIR(llvm::Instruction* llvmIns, rjit::ir::Pattern* rjitIns) {
         assert(rjitIns);
         std::vector<llvm::Metadata*> v = {
             llvm::ValueAsMetadata::get(llvm::ConstantInt::get(
@@ -148,12 +145,12 @@ class Instruction : public Matcher {
 
   private:
     llvm::Instruction* ins_;
-    InstructionKind kind_;
+    PatternKind kind_;
 };
 
-class Return : public Instruction {
+class Return : public Pattern {
   public:
-    Return(llvm::Instruction* ins) : Instruction(ins, InstructionKind::Return) {
+    Return(llvm::Instruction* ins) : Pattern(ins, PatternKind::Return) {
         assert(llvm::isa<llvm::ReturnInst>(ins) and "Return expected");
     }
 
@@ -163,14 +160,14 @@ class Return : public Instruction {
         return llvm::ReturnInst::Create(llvm::getGlobalContext(), value, b);
     }
 
-    static bool classof(Instruction const* s) {
-        return s->getKind() == InstructionKind::Return;
+    static bool classof(Pattern const* s) {
+        return s->getKind() == PatternKind::Return;
     }
 };
 
-class Branch : public Instruction {
+class Branch : public Pattern {
   public:
-    Branch(llvm::Instruction* ins) : Instruction(ins, InstructionKind::Branch) {
+    Branch(llvm::Instruction* ins) : Pattern(ins, PatternKind::Branch) {
         assert(llvm::isa<llvm::BranchInst>(ins) and
                "Branch instruction expected");
         assert(not llvm::cast<llvm::BranchInst>(ins)->isConditional() and
@@ -185,17 +182,17 @@ class Branch : public Instruction {
         return llvm::BranchInst::Create(target, b);
     }
 
-    static bool classof(Instruction const* s) {
-        return s->getKind() == InstructionKind::Branch;
+    static bool classof(Pattern const* s) {
+        return s->getKind() == PatternKind::Branch;
     }
 };
 
-class IntegerComparison : public Instruction {
+class IntegerComparison : public Pattern {
   public:
     typedef llvm::ICmpInst::Predicate Predicate;
 
-    IntegerComparison(llvm::Instruction* ins, InstructionKind kind)
-        : Instruction(ins, kind) {
+    IntegerComparison(llvm::Instruction* ins, PatternKind kind)
+        : Pattern(ins, kind) {
         assert(llvm::isa<llvm::ICmpInst>(ins) and "ICmpInst expected");
     }
 
@@ -211,7 +208,7 @@ class IntegerComparison : public Instruction {
 class IntegerLessThan : public IntegerComparison {
   public:
     IntegerLessThan(llvm::Instruction* ins)
-        : IntegerComparison(ins, InstructionKind::IntegerLessThan) {
+        : IntegerComparison(ins, PatternKind::IntegerLessThan) {
         assert(llvm::cast<llvm::ICmpInst>(ins)->getSignedPredicate() ==
                    Predicate::ICMP_SLT and
                "Less than comparison expected");
@@ -222,15 +219,15 @@ class IntegerLessThan : public IntegerComparison {
         return new llvm::ICmpInst(*b.block(), Predicate::ICMP_SLT, lhs, rhs);
     }
 
-    static bool classof(Instruction const* s) {
-        return s->getKind() == InstructionKind::IntegerLessThan;
+    static bool classof(Pattern const* s) {
+        return s->getKind() == PatternKind::IntegerLessThan;
     }
 };
 
 class IntegerEquals : public IntegerComparison {
   public:
     IntegerEquals(llvm::Instruction* ins)
-        : IntegerComparison(ins, InstructionKind::IntegerEquals) {
+        : IntegerComparison(ins, PatternKind::IntegerEquals) {
         assert(llvm::cast<llvm::ICmpInst>(ins)->getSignedPredicate() ==
                    Predicate::ICMP_EQ and
                "Equality comparison expected");
@@ -241,15 +238,15 @@ class IntegerEquals : public IntegerComparison {
         return new llvm::ICmpInst(*b.block(), Predicate::ICMP_EQ, lhs, rhs);
     }
 
-    static bool classof(Instruction const* s) {
-        return s->getKind() == InstructionKind::IntegerEquals;
+    static bool classof(Pattern const* s) {
+        return s->getKind() == PatternKind::IntegerEquals;
     }
 };
 
 class UnsignedIntegerLessThan : public IntegerComparison {
   public:
     UnsignedIntegerLessThan(llvm::Instruction* ins)
-        : IntegerComparison(ins, InstructionKind::UnsignedIntegerLessThan) {
+        : IntegerComparison(ins, PatternKind::UnsignedIntegerLessThan) {
         assert(llvm::cast<llvm::ICmpInst>(ins)->getSignedPredicate() ==
                    Predicate::ICMP_ULT and
                "Unsigned less than comparison expected");
@@ -260,23 +257,23 @@ class UnsignedIntegerLessThan : public IntegerComparison {
         return new llvm::ICmpInst(*b.block(), Predicate::ICMP_ULT, lhs, rhs);
     }
 
-    static bool classof(Instruction const* s) {
-        return s->getKind() == InstructionKind::UnsignedIntegerLessThan;
+    static bool classof(Pattern const* s) {
+        return s->getKind() == PatternKind::UnsignedIntegerLessThan;
     }
 };
 
 // TODO the hierarchy of this is wrong, but actual thought is required to fix it
-class BinaryOperator : public Instruction {
+class BinaryOperator : public Pattern {
   public:
-    BinaryOperator(llvm::Instruction* ins, InstructionKind kind)
-        : Instruction(ins, kind) {}
+    BinaryOperator(llvm::Instruction* ins, PatternKind kind)
+        : Pattern(ins, kind) {}
 };
 
 // TODO the hierarchy here should be better as well
 class IntegerAdd : public BinaryOperator {
   public:
     IntegerAdd(llvm::Instruction* ins)
-        : BinaryOperator(ins, InstructionKind::IntegerAdd) {
+        : BinaryOperator(ins, PatternKind::IntegerAdd) {
         assert(llvm::isa<llvm::BinaryOperator>(ins) and
                "Binary operator expected");
         assert(llvm::cast<llvm::BinaryOperator>(ins)->getOpcode() ==
@@ -293,8 +290,8 @@ class IntegerAdd : public BinaryOperator {
                                             "", b);
     }
 
-    static bool classof(Instruction const* s) {
-        return s->getKind() == InstructionKind::IntegerAdd;
+    static bool classof(Pattern const* s) {
+        return s->getKind() == PatternKind::IntegerAdd;
     }
 };
 
@@ -310,7 +307,7 @@ class IntegerAdd : public BinaryOperator {
   only branch we have and it is a showcase for matching multiple
   llvm bitcodes to single ir.
  */
-class Cbr : public Instruction {
+class Cbr : public Pattern {
   public:
     llvm::Value* cond() { return ins<llvm::ICmpInst>()->getOperand(0); }
 
@@ -326,21 +323,21 @@ class Cbr : public Instruction {
         return b->getSuccessor(1);
     }
 
-    Cbr(llvm::Instruction* ins) : Instruction(ins, InstructionKind::Cbr) {}
+    Cbr(llvm::Instruction* ins) : Pattern(ins, PatternKind::Cbr) {}
 
     static void create(Builder& b, llvm::Value* cond,
                        llvm::BasicBlock* trueCase, llvm::BasicBlock* falseCase);
 
-    static bool classof(Instruction const* s) {
-        return s->getKind() == InstructionKind::Cbr;
+    static bool classof(Pattern const* s) {
+        return s->getKind() == PatternKind::Cbr;
     }
 };
 
 /** Interface to llvm's switch instruction
   */
-class Switch : public Instruction {
+class Switch : public Pattern {
   public:
-    Switch(llvm::Instruction* ins) : Instruction(ins, InstructionKind::Switch) {
+    Switch(llvm::Instruction* ins) : Pattern(ins, PatternKind::Switch) {
         assert(llvm::isa<llvm::SwitchInst>(ins) and
                "Expecting llvm's switch instruction");
     }
@@ -364,23 +361,22 @@ class Switch : public Instruction {
         return ins<llvm::SwitchInst>()->getDefaultDest();
     }
 
-    static bool classof(Instruction const* s) {
-        return s->getKind() == InstructionKind::Switch;
+    static bool classof(Pattern const* s) {
+        return s->getKind() == PatternKind::Switch;
     }
 };
 
 /** Base class for all intrinsics.
 
  */
-class Intrinsic : public Instruction {
+class Intrinsic : public Pattern {
   public:
     /** Returns the CallInst associated with the intrinsic.
      */
-    llvm::CallInst* ins() { return Instruction::ins<llvm::CallInst>(); }
+    llvm::CallInst* ins() { return Pattern::ins<llvm::CallInst>(); }
 
   protected:
-    Intrinsic(llvm::Instruction* ins, InstructionKind kind)
-        : Instruction(ins, kind) {
+    Intrinsic(llvm::Instruction* ins, PatternKind kind) : Pattern(ins, kind) {
         assert(llvm::isa<llvm::CallInst>(ins) and
                "Intrinsics must be llvm calls");
     }

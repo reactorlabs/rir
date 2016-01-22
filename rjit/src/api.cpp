@@ -9,7 +9,6 @@
 #include "ir/Ir.h"
 #include "ir/Builder.h"
 #include "ir/Intrinsics.h"
-#include "ir/Handler.h"
 
 using namespace rjit;
 

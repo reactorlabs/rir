@@ -15,7 +15,7 @@ class InitClosureContext : public Intrinsic {
     llvm::Value* sysparen() { return getValue(3); }
 
     InitClosureContext(llvm::Instruction* ins)
-        : Intrinsic(ins, InstructionKind::InitClosureContext) {}
+        : Intrinsic(ins, PatternKind::InitClosureContext) {}
 
     static InitClosureContext& create(Builder& b, llvm::Value* cntxt,
                                       llvm::Value* call, llvm::Value* rho,
@@ -33,7 +33,7 @@ class InitClosureContext : public Intrinsic {
         b.insertCall(ins);
         InitClosureContext* result = new InitClosureContext(ins);
         setIR(ins, result);
-        // setIRType(ins, InstructionKind::InitClosureContext);
+        // setIRType(ins, PatternKind::InitClosureContext);
         return *result;
     }
 
@@ -44,8 +44,8 @@ class InitClosureContext : public Intrinsic {
             t::Void, {t::cntxt, t::SEXP, t::SEXP, t::SEXP}, false);
     }
 
-    static bool classof(Instruction const* s) {
-        return s->getKind() == InstructionKind::InitClosureContext;
+    static bool classof(Pattern const* s) {
+        return s->getKind() == PatternKind::InitClosureContext;
     }
 };
 
@@ -55,7 +55,7 @@ class EndClosureContext : public Intrinsic {
     llvm::Value* resul() { return getValue(1); }
 
     EndClosureContext(llvm::Instruction* ins)
-        : Intrinsic(ins, InstructionKind::EndClosureContext) {}
+        : Intrinsic(ins, PatternKind::EndClosureContext) {}
 
     static EndClosureContext& create(Builder& b, llvm::Value* cntxt,
                                      llvm::Value* resul) {
@@ -70,7 +70,7 @@ class EndClosureContext : public Intrinsic {
         b.insertCall(ins);
         EndClosureContext* result = new EndClosureContext(ins);
         setIR(ins, result);
-        // setIRType(ins, InstructionKind::EndClosureContext);
+        // setIRType(ins, PatternKind::EndClosureContext);
         return *result;
     }
 
@@ -80,8 +80,8 @@ class EndClosureContext : public Intrinsic {
         return llvm::FunctionType::get(t::Void, {t::cntxt, t::SEXP}, false);
     }
 
-    static bool classof(Instruction const* s) {
-        return s->getKind() == InstructionKind::EndClosureContext;
+    static bool classof(Pattern const* s) {
+        return s->getKind() == PatternKind::EndClosureContext;
     }
 };
 
@@ -91,7 +91,7 @@ class ClosureQuickArgumentAdaptor : public Intrinsic {
     llvm::Value* arglis() { return getValue(1); }
 
     ClosureQuickArgumentAdaptor(llvm::Instruction* ins)
-        : Intrinsic(ins, InstructionKind::ClosureQuickArgumentAdaptor) {}
+        : Intrinsic(ins, PatternKind::ClosureQuickArgumentAdaptor) {}
 
     static ClosureQuickArgumentAdaptor& create(Builder& b, llvm::Value* op,
                                                llvm::Value* arglis) {
@@ -107,7 +107,7 @@ class ClosureQuickArgumentAdaptor : public Intrinsic {
         ClosureQuickArgumentAdaptor* result =
             new ClosureQuickArgumentAdaptor(ins);
         setIR(ins, result);
-        // setIRType(ins, InstructionKind::ClosureQuickArgumentAdaptor);
+        // setIRType(ins, PatternKind::ClosureQuickArgumentAdaptor);
         return *result;
     }
 
@@ -117,8 +117,8 @@ class ClosureQuickArgumentAdaptor : public Intrinsic {
         return llvm::FunctionType::get(t::SEXP, {t::SEXP, t::SEXP}, false);
     }
 
-    static bool classof(Instruction const* s) {
-        return s->getKind() == InstructionKind::ClosureQuickArgumentAdaptor;
+    static bool classof(Pattern const* s) {
+        return s->getKind() == PatternKind::ClosureQuickArgumentAdaptor;
     }
 };
 
@@ -128,7 +128,7 @@ class CallNative : public Intrinsic {
     llvm::Value* rho() { return getValue(1); }
 
     CallNative(llvm::Instruction* ins)
-        : Intrinsic(ins, InstructionKind::CallNative) {}
+        : Intrinsic(ins, PatternKind::CallNative) {}
 
     static CallNative& create(Builder& b, llvm::Value* native,
                               llvm::Value* rho) {
@@ -143,7 +143,7 @@ class CallNative : public Intrinsic {
         b.insertCall(ins);
         CallNative* result = new CallNative(ins);
         setIR(ins, result);
-        // setIRType(ins, InstructionKind::CallNative);
+        // setIRType(ins, PatternKind::CallNative);
         return *result;
     }
 
@@ -153,8 +153,8 @@ class CallNative : public Intrinsic {
         return llvm::FunctionType::get(t::SEXP, {t::SEXP, t::SEXP}, false);
     }
 
-    static bool classof(Instruction const* s) {
-        return s->getKind() == InstructionKind::CallNative;
+    static bool classof(Pattern const* s) {
+        return s->getKind() == PatternKind::CallNative;
     }
 };
 
@@ -165,7 +165,7 @@ class ClosureNativeCallTrampoline : public Intrinsic {
     llvm::Value* rh() { return getValue(2); }
 
     ClosureNativeCallTrampoline(llvm::Instruction* ins)
-        : Intrinsic(ins, InstructionKind::ClosureNativeCallTrampoline) {}
+        : Intrinsic(ins, PatternKind::ClosureNativeCallTrampoline) {}
 
     static ClosureNativeCallTrampoline& create(Builder& b, llvm::Value* cntxt,
                                                llvm::Value* native,
@@ -183,7 +183,7 @@ class ClosureNativeCallTrampoline : public Intrinsic {
         ClosureNativeCallTrampoline* result =
             new ClosureNativeCallTrampoline(ins);
         setIR(ins, result);
-        // setIRType(ins, InstructionKind::ClosureNativeCallTrampoline);
+        // setIRType(ins, PatternKind::ClosureNativeCallTrampoline);
         return *result;
     }
 
@@ -194,8 +194,8 @@ class ClosureNativeCallTrampoline : public Intrinsic {
                                        false);
     }
 
-    static bool classof(Instruction const* s) {
-        return s->getKind() == InstructionKind::ClosureNativeCallTrampoline;
+    static bool classof(Pattern const* s) {
+        return s->getKind() == PatternKind::ClosureNativeCallTrampoline;
     }
 };
 
@@ -215,7 +215,7 @@ class ConvertToLogicalNoNA : public Intrinsic {
     SEXP call(Builder const& b) { return b.constantPool(call()); }
 
     ConvertToLogicalNoNA(llvm::Instruction* ins)
-        : Intrinsic(ins, InstructionKind::ConvertToLogicalNoNA) {}
+        : Intrinsic(ins, PatternKind::ConvertToLogicalNoNA) {}
 
     static ConvertToLogicalNoNA& create(Builder& b, llvm::Value* what,
                                         SEXP call) {
@@ -231,7 +231,7 @@ class ConvertToLogicalNoNA : public Intrinsic {
         b.insertCall(ins);
         ConvertToLogicalNoNA* result = new ConvertToLogicalNoNA(ins);
         setIR(ins, result);
-        // setIRType(ins, InstructionKind::ConvertToLogicalNoNA);
+        // setIRType(ins, PatternKind::ConvertToLogicalNoNA);
         return *result;
     }
 
@@ -242,8 +242,8 @@ class ConvertToLogicalNoNA : public Intrinsic {
                                        false);
     }
 
-    static bool classof(Instruction const* s) {
-        return s->getKind() == InstructionKind::ConvertToLogicalNoNA;
+    static bool classof(Pattern const* s) {
+        return s->getKind() == PatternKind::ConvertToLogicalNoNA;
     }
 };
 
@@ -252,7 +252,7 @@ class PrintValue : public Intrinsic {
     llvm::Value* value() { return getValue(0); }
 
     PrintValue(llvm::Instruction* ins)
-        : Intrinsic(ins, InstructionKind::PrintValue) {}
+        : Intrinsic(ins, PatternKind::PrintValue) {}
 
     static PrintValue& create(Builder& b, llvm::Value* value) {
 
@@ -265,7 +265,7 @@ class PrintValue : public Intrinsic {
         b.insertCall(ins);
         PrintValue* result = new PrintValue(ins);
         setIR(ins, result);
-        // setIRType(ins, InstructionKind::PrintValue);
+        // setIRType(ins, PatternKind::PrintValue);
         return *result;
     }
 
@@ -275,8 +275,8 @@ class PrintValue : public Intrinsic {
         return llvm::FunctionType::get(t::Void, {t::SEXP}, false);
     }
 
-    static bool classof(Instruction const* s) {
-        return s->getKind() == InstructionKind::PrintValue;
+    static bool classof(Pattern const* s) {
+        return s->getKind() == PatternKind::PrintValue;
     }
 };
 
@@ -288,8 +288,7 @@ class StartFor : public Intrinsic {
     llvm::Value* seq() { return getValue(0); }
     llvm::Value* rho() { return getValue(1); }
 
-    StartFor(llvm::Instruction* ins)
-        : Intrinsic(ins, InstructionKind::StartFor) {}
+    StartFor(llvm::Instruction* ins) : Intrinsic(ins, PatternKind::StartFor) {}
 
     static StartFor& create(Builder& b, llvm::Value* seq, llvm::Value* rho) {
 
@@ -303,7 +302,7 @@ class StartFor : public Intrinsic {
         b.insertCall(ins);
         StartFor* result = new StartFor(ins);
         setIR(ins, result);
-        // setIRType(ins, InstructionKind::StartFor);
+        // setIRType(ins, PatternKind::StartFor);
         return *result;
     }
 
@@ -313,8 +312,8 @@ class StartFor : public Intrinsic {
         return llvm::FunctionType::get(t::SEXP, {t::SEXP, t::SEXP}, false);
     }
 
-    static bool classof(Instruction const* s) {
-        return s->getKind() == InstructionKind::StartFor;
+    static bool classof(Pattern const* s) {
+        return s->getKind() == PatternKind::StartFor;
     }
 };
 
@@ -334,7 +333,7 @@ class LoopSequenceLength : public Intrinsic {
     SEXP call(Builder const& b) { return b.constantPool(call()); }
 
     LoopSequenceLength(llvm::Instruction* ins)
-        : Intrinsic(ins, InstructionKind::LoopSequenceLength) {}
+        : Intrinsic(ins, PatternKind::LoopSequenceLength) {}
 
     static LoopSequenceLength& create(Builder& b, llvm::Value* seq, SEXP call) {
 
@@ -349,7 +348,7 @@ class LoopSequenceLength : public Intrinsic {
         b.insertCall(ins);
         LoopSequenceLength* result = new LoopSequenceLength(ins);
         setIR(ins, result);
-        // setIRType(ins, InstructionKind::LoopSequenceLength);
+        // setIRType(ins, PatternKind::LoopSequenceLength);
         return *result;
     }
 
@@ -360,8 +359,8 @@ class LoopSequenceLength : public Intrinsic {
                                        false);
     }
 
-    static bool classof(Instruction const* s) {
-        return s->getKind() == InstructionKind::LoopSequenceLength;
+    static bool classof(Pattern const* s) {
+        return s->getKind() == PatternKind::LoopSequenceLength;
     }
 };
 
@@ -373,7 +372,7 @@ class GetForLoopValue : public Intrinsic {
     llvm::Value* index() { return getValue(1); }
 
     GetForLoopValue(llvm::Instruction* ins)
-        : Intrinsic(ins, InstructionKind::GetForLoopValue) {}
+        : Intrinsic(ins, PatternKind::GetForLoopValue) {}
 
     static GetForLoopValue& create(Builder& b, llvm::Value* seq,
                                    llvm::Value* index) {
@@ -388,7 +387,7 @@ class GetForLoopValue : public Intrinsic {
         b.insertCall(ins);
         GetForLoopValue* result = new GetForLoopValue(ins);
         setIR(ins, result);
-        // setIRType(ins, InstructionKind::GetForLoopValue);
+        // setIRType(ins, PatternKind::GetForLoopValue);
         return *result;
     }
 
@@ -398,15 +397,15 @@ class GetForLoopValue : public Intrinsic {
         return llvm::FunctionType::get(t::SEXP, {t::SEXP, t::Int}, false);
     }
 
-    static bool classof(Instruction const* s) {
-        return s->getKind() == InstructionKind::GetForLoopValue;
+    static bool classof(Pattern const* s) {
+        return s->getKind() == PatternKind::GetForLoopValue;
     }
 };
 
 class MarkVisible : public Intrinsic {
   public:
     MarkVisible(llvm::Instruction* ins)
-        : Intrinsic(ins, InstructionKind::MarkVisible) {}
+        : Intrinsic(ins, PatternKind::MarkVisible) {}
 
     static MarkVisible& create(Builder& b) {
 
@@ -418,7 +417,7 @@ class MarkVisible : public Intrinsic {
         b.insertCall(ins);
         MarkVisible* result = new MarkVisible(ins);
         setIR(ins, result);
-        // setIRType(ins, InstructionKind::MarkVisible);
+        // setIRType(ins, PatternKind::MarkVisible);
         return *result;
     }
 
@@ -430,15 +429,15 @@ class MarkVisible : public Intrinsic {
                                                 }, false);
     }
 
-    static bool classof(Instruction const* s) {
-        return s->getKind() == InstructionKind::MarkVisible;
+    static bool classof(Pattern const* s) {
+        return s->getKind() == PatternKind::MarkVisible;
     }
 };
 
 class MarkInvisible : public Intrinsic {
   public:
     MarkInvisible(llvm::Instruction* ins)
-        : Intrinsic(ins, InstructionKind::MarkInvisible) {}
+        : Intrinsic(ins, PatternKind::MarkInvisible) {}
 
     static MarkInvisible& create(Builder& b) {
 
@@ -450,7 +449,7 @@ class MarkInvisible : public Intrinsic {
         b.insertCall(ins);
         MarkInvisible* result = new MarkInvisible(ins);
         setIR(ins, result);
-        // setIRType(ins, InstructionKind::MarkInvisible);
+        // setIRType(ins, PatternKind::MarkInvisible);
         return *result;
     }
 
@@ -462,8 +461,8 @@ class MarkInvisible : public Intrinsic {
                                                 }, false);
     }
 
-    static bool classof(Instruction const* s) {
-        return s->getKind() == InstructionKind::MarkInvisible;
+    static bool classof(Pattern const* s) {
+        return s->getKind() == PatternKind::MarkInvisible;
     }
 };
 
@@ -483,7 +482,7 @@ class UserLiteral : public Intrinsic {
     SEXP index(Builder const& b) { return b.constantPool(index()); }
 
     UserLiteral(llvm::Instruction* ins)
-        : Intrinsic(ins, InstructionKind::UserLiteral) {}
+        : Intrinsic(ins, PatternKind::UserLiteral) {}
 
     static UserLiteral& create(Builder& b, SEXP index) {
 
@@ -497,7 +496,7 @@ class UserLiteral : public Intrinsic {
         b.insertCall(ins);
         UserLiteral* result = new UserLiteral(ins);
         setIR(ins, result);
-        // setIRType(ins, InstructionKind::UserLiteral);
+        // setIRType(ins, PatternKind::UserLiteral);
         return *result;
     }
 
@@ -507,8 +506,8 @@ class UserLiteral : public Intrinsic {
         return llvm::FunctionType::get(t::SEXP, {t::SEXP, t::Int}, false);
     }
 
-    static bool classof(Instruction const* s) {
-        return s->getKind() == InstructionKind::UserLiteral;
+    static bool classof(Pattern const* s) {
+        return s->getKind() == PatternKind::UserLiteral;
     }
 };
 
@@ -525,8 +524,7 @@ class Constant : public Intrinsic {
     }
     SEXP index(Builder const& b) { return b.constantPool(index()); }
 
-    Constant(llvm::Instruction* ins)
-        : Intrinsic(ins, InstructionKind::Constant) {}
+    Constant(llvm::Instruction* ins) : Intrinsic(ins, PatternKind::Constant) {}
 
     static Constant& create(Builder& b, SEXP index) {
 
@@ -540,7 +538,7 @@ class Constant : public Intrinsic {
         b.insertCall(ins);
         Constant* result = new Constant(ins);
         setIR(ins, result);
-        // setIRType(ins, InstructionKind::Constant);
+        // setIRType(ins, PatternKind::Constant);
         return *result;
     }
 
@@ -550,8 +548,8 @@ class Constant : public Intrinsic {
         return llvm::FunctionType::get(t::SEXP, {t::SEXP, t::Int}, false);
     }
 
-    static bool classof(Instruction const* s) {
-        return s->getKind() == InstructionKind::Constant;
+    static bool classof(Pattern const* s) {
+        return s->getKind() == PatternKind::Constant;
     }
 };
 
@@ -572,7 +570,7 @@ class GenericGetVar : public Intrinsic {
     SEXP symbol(Builder const& b) { return b.constantPool(symbol()); }
 
     GenericGetVar(llvm::Instruction* ins)
-        : Intrinsic(ins, InstructionKind::GenericGetVar) {}
+        : Intrinsic(ins, PatternKind::GenericGetVar) {}
 
     static GenericGetVar& create(Builder& b, llvm::Value* rho, SEXP symbol) {
 
@@ -587,7 +585,7 @@ class GenericGetVar : public Intrinsic {
         b.insertCall(ins);
         GenericGetVar* result = new GenericGetVar(ins);
         setIR(ins, result);
-        // setIRType(ins, InstructionKind::GenericGetVar);
+        // setIRType(ins, PatternKind::GenericGetVar);
         return *result;
     }
 
@@ -598,8 +596,8 @@ class GenericGetVar : public Intrinsic {
                                        false);
     }
 
-    static bool classof(Instruction const* s) {
-        return s->getKind() == InstructionKind::GenericGetVar;
+    static bool classof(Pattern const* s) {
+        return s->getKind() == PatternKind::GenericGetVar;
     }
 };
 
@@ -617,7 +615,7 @@ class GenericGetEllipsisArg : public Intrinsic {
     SEXP symbol(Builder const& b) { return b.constantPool(symbol()); }
 
     GenericGetEllipsisArg(llvm::Instruction* ins)
-        : Intrinsic(ins, InstructionKind::GenericGetEllipsisArg) {}
+        : Intrinsic(ins, PatternKind::GenericGetEllipsisArg) {}
 
     static GenericGetEllipsisArg& create(Builder& b, llvm::Value* rho,
                                          SEXP symbol) {
@@ -633,7 +631,7 @@ class GenericGetEllipsisArg : public Intrinsic {
         b.insertCall(ins);
         GenericGetEllipsisArg* result = new GenericGetEllipsisArg(ins);
         setIR(ins, result);
-        // setIRType(ins, InstructionKind::GenericGetEllipsisArg);
+        // setIRType(ins, PatternKind::GenericGetEllipsisArg);
         return *result;
     }
 
@@ -644,8 +642,8 @@ class GenericGetEllipsisArg : public Intrinsic {
                                        false);
     }
 
-    static bool classof(Instruction const* s) {
-        return s->getKind() == InstructionKind::GenericGetEllipsisArg;
+    static bool classof(Pattern const* s) {
+        return s->getKind() == PatternKind::GenericGetEllipsisArg;
     }
 };
 
@@ -664,7 +662,7 @@ class GenericSetVar : public Intrinsic {
     SEXP symbol(Builder const& b) { return b.constantPool(symbol()); }
 
     GenericSetVar(llvm::Instruction* ins)
-        : Intrinsic(ins, InstructionKind::GenericSetVar) {}
+        : Intrinsic(ins, PatternKind::GenericSetVar) {}
 
     static GenericSetVar& create(Builder& b, llvm::Value* value,
                                  llvm::Value* rho, SEXP symbol) {
@@ -681,7 +679,7 @@ class GenericSetVar : public Intrinsic {
         b.insertCall(ins);
         GenericSetVar* result = new GenericSetVar(ins);
         setIR(ins, result);
-        // setIRType(ins, InstructionKind::GenericSetVar);
+        // setIRType(ins, PatternKind::GenericSetVar);
         return *result;
     }
 
@@ -692,8 +690,8 @@ class GenericSetVar : public Intrinsic {
             t::Void, {t::SEXP, t::SEXP, t::SEXP, t::Int}, false);
     }
 
-    static bool classof(Instruction const* s) {
-        return s->getKind() == InstructionKind::GenericSetVar;
+    static bool classof(Pattern const* s) {
+        return s->getKind() == PatternKind::GenericSetVar;
     }
 };
 
@@ -712,7 +710,7 @@ class GenericSetVarParent : public Intrinsic {
     SEXP symbol(Builder const& b) { return b.constantPool(symbol()); }
 
     GenericSetVarParent(llvm::Instruction* ins)
-        : Intrinsic(ins, InstructionKind::GenericSetVarParent) {}
+        : Intrinsic(ins, PatternKind::GenericSetVarParent) {}
 
     static GenericSetVarParent& create(Builder& b, llvm::Value* value,
                                        llvm::Value* rho, SEXP symbol) {
@@ -729,7 +727,7 @@ class GenericSetVarParent : public Intrinsic {
         b.insertCall(ins);
         GenericSetVarParent* result = new GenericSetVarParent(ins);
         setIR(ins, result);
-        // setIRType(ins, InstructionKind::GenericSetVarParent);
+        // setIRType(ins, PatternKind::GenericSetVarParent);
         return *result;
     }
 
@@ -740,8 +738,8 @@ class GenericSetVarParent : public Intrinsic {
             t::Void, {t::SEXP, t::SEXP, t::SEXP, t::Int}, false);
     }
 
-    static bool classof(Instruction const* s) {
-        return s->getKind() == InstructionKind::GenericSetVarParent;
+    static bool classof(Pattern const* s) {
+        return s->getKind() == PatternKind::GenericSetVarParent;
     }
 };
 
@@ -759,7 +757,7 @@ class GetFunction : public Intrinsic {
     SEXP symbol(Builder const& b) { return b.constantPool(symbol()); }
 
     GetFunction(llvm::Instruction* ins)
-        : Intrinsic(ins, InstructionKind::GetFunction) {}
+        : Intrinsic(ins, PatternKind::GetFunction) {}
 
     static GetFunction& create(Builder& b, llvm::Value* rho, SEXP symbol) {
 
@@ -774,7 +772,7 @@ class GetFunction : public Intrinsic {
         b.insertCall(ins);
         GetFunction* result = new GetFunction(ins);
         setIR(ins, result);
-        // setIRType(ins, InstructionKind::GetFunction);
+        // setIRType(ins, PatternKind::GetFunction);
         return *result;
     }
 
@@ -785,8 +783,8 @@ class GetFunction : public Intrinsic {
                                        false);
     }
 
-    static bool classof(Instruction const* s) {
-        return s->getKind() == InstructionKind::GetFunction;
+    static bool classof(Pattern const* s) {
+        return s->getKind() == PatternKind::GetFunction;
     }
 };
 
@@ -803,7 +801,7 @@ class GetGlobalFunction : public Intrinsic {
     SEXP symbol(Builder const& b) { return b.constantPool(symbol()); }
 
     GetGlobalFunction(llvm::Instruction* ins)
-        : Intrinsic(ins, InstructionKind::GetGlobalFunction) {}
+        : Intrinsic(ins, PatternKind::GetGlobalFunction) {}
 
     static GetGlobalFunction& create(Builder& b, SEXP symbol) {
 
@@ -817,7 +815,7 @@ class GetGlobalFunction : public Intrinsic {
         b.insertCall(ins);
         GetGlobalFunction* result = new GetGlobalFunction(ins);
         setIR(ins, result);
-        // setIRType(ins, InstructionKind::GetGlobalFunction);
+        // setIRType(ins, PatternKind::GetGlobalFunction);
         return *result;
     }
 
@@ -827,8 +825,8 @@ class GetGlobalFunction : public Intrinsic {
         return llvm::FunctionType::get(t::SEXP, {t::SEXP, t::Int}, false);
     }
 
-    static bool classof(Instruction const* s) {
-        return s->getKind() == InstructionKind::GetGlobalFunction;
+    static bool classof(Pattern const* s) {
+        return s->getKind() == PatternKind::GetGlobalFunction;
     }
 };
 
@@ -845,7 +843,7 @@ class GetSymFunction : public Intrinsic {
     SEXP name(Builder const& b) { return b.constantPool(name()); }
 
     GetSymFunction(llvm::Instruction* ins)
-        : Intrinsic(ins, InstructionKind::GetSymFunction) {}
+        : Intrinsic(ins, PatternKind::GetSymFunction) {}
 
     static GetSymFunction& create(Builder& b, SEXP name) {
 
@@ -859,7 +857,7 @@ class GetSymFunction : public Intrinsic {
         b.insertCall(ins);
         GetSymFunction* result = new GetSymFunction(ins);
         setIR(ins, result);
-        // setIRType(ins, InstructionKind::GetSymFunction);
+        // setIRType(ins, PatternKind::GetSymFunction);
         return *result;
     }
 
@@ -869,8 +867,8 @@ class GetSymFunction : public Intrinsic {
         return llvm::FunctionType::get(t::SEXP, {t::SEXP, t::Int}, false);
     }
 
-    static bool classof(Instruction const* s) {
-        return s->getKind() == InstructionKind::GetSymFunction;
+    static bool classof(Pattern const* s) {
+        return s->getKind() == PatternKind::GetSymFunction;
     }
 };
 
@@ -887,7 +885,7 @@ class GetBuiltinFunction : public Intrinsic {
     SEXP name(Builder const& b) { return b.constantPool(name()); }
 
     GetBuiltinFunction(llvm::Instruction* ins)
-        : Intrinsic(ins, InstructionKind::GetBuiltinFunction) {}
+        : Intrinsic(ins, PatternKind::GetBuiltinFunction) {}
 
     static GetBuiltinFunction& create(Builder& b, SEXP name) {
 
@@ -901,7 +899,7 @@ class GetBuiltinFunction : public Intrinsic {
         b.insertCall(ins);
         GetBuiltinFunction* result = new GetBuiltinFunction(ins);
         setIR(ins, result);
-        // setIRType(ins, InstructionKind::GetBuiltinFunction);
+        // setIRType(ins, PatternKind::GetBuiltinFunction);
         return *result;
     }
 
@@ -911,8 +909,8 @@ class GetBuiltinFunction : public Intrinsic {
         return llvm::FunctionType::get(t::SEXP, {t::SEXP, t::Int}, false);
     }
 
-    static bool classof(Instruction const* s) {
-        return s->getKind() == InstructionKind::GetBuiltinFunction;
+    static bool classof(Pattern const* s) {
+        return s->getKind() == PatternKind::GetBuiltinFunction;
     }
 };
 
@@ -929,7 +927,7 @@ class GetInternalBuiltinFunction : public Intrinsic {
     SEXP name(Builder const& b) { return b.constantPool(name()); }
 
     GetInternalBuiltinFunction(llvm::Instruction* ins)
-        : Intrinsic(ins, InstructionKind::GetInternalBuiltinFunction) {}
+        : Intrinsic(ins, PatternKind::GetInternalBuiltinFunction) {}
 
     static GetInternalBuiltinFunction& create(Builder& b, SEXP name) {
 
@@ -944,7 +942,7 @@ class GetInternalBuiltinFunction : public Intrinsic {
         GetInternalBuiltinFunction* result =
             new GetInternalBuiltinFunction(ins);
         setIR(ins, result);
-        // setIRType(ins, InstructionKind::GetInternalBuiltinFunction);
+        // setIRType(ins, PatternKind::GetInternalBuiltinFunction);
         return *result;
     }
 
@@ -954,8 +952,8 @@ class GetInternalBuiltinFunction : public Intrinsic {
         return llvm::FunctionType::get(t::SEXP, {t::SEXP, t::Int}, false);
     }
 
-    static bool classof(Instruction const* s) {
-        return s->getKind() == InstructionKind::GetInternalBuiltinFunction;
+    static bool classof(Pattern const* s) {
+        return s->getKind() == PatternKind::GetInternalBuiltinFunction;
     }
 };
 
@@ -964,7 +962,7 @@ class CheckFunction : public Intrinsic {
     llvm::Value* f() { return getValue(0); }
 
     CheckFunction(llvm::Instruction* ins)
-        : Intrinsic(ins, InstructionKind::CheckFunction) {}
+        : Intrinsic(ins, PatternKind::CheckFunction) {}
 
     static CheckFunction& create(Builder& b, llvm::Value* f) {
 
@@ -977,7 +975,7 @@ class CheckFunction : public Intrinsic {
         b.insertCall(ins);
         CheckFunction* result = new CheckFunction(ins);
         setIR(ins, result);
-        // setIRType(ins, InstructionKind::CheckFunction);
+        // setIRType(ins, PatternKind::CheckFunction);
         return *result;
     }
 
@@ -987,8 +985,8 @@ class CheckFunction : public Intrinsic {
         return llvm::FunctionType::get(t::Void, {t::SEXP}, false);
     }
 
-    static bool classof(Instruction const* s) {
-        return s->getKind() == InstructionKind::CheckFunction;
+    static bool classof(Pattern const* s) {
+        return s->getKind() == PatternKind::CheckFunction;
     }
 };
 
@@ -1000,7 +998,7 @@ class CreatePromise : public Intrinsic {
     llvm::Value* rho() { return getValue(1); }
 
     CreatePromise(llvm::Instruction* ins)
-        : Intrinsic(ins, InstructionKind::CreatePromise) {}
+        : Intrinsic(ins, PatternKind::CreatePromise) {}
 
     static CreatePromise& create(Builder& b, llvm::Value* fun,
                                  llvm::Value* rho) {
@@ -1015,7 +1013,7 @@ class CreatePromise : public Intrinsic {
         b.insertCall(ins);
         CreatePromise* result = new CreatePromise(ins);
         setIR(ins, result);
-        // setIRType(ins, InstructionKind::CreatePromise);
+        // setIRType(ins, PatternKind::CreatePromise);
         return *result;
     }
 
@@ -1025,8 +1023,8 @@ class CreatePromise : public Intrinsic {
         return llvm::FunctionType::get(t::SEXP, {t::SEXP, t::SEXP}, false);
     }
 
-    static bool classof(Instruction const* s) {
-        return s->getKind() == InstructionKind::CreatePromise;
+    static bool classof(Pattern const* s) {
+        return s->getKind() == PatternKind::CreatePromise;
     }
 };
 
@@ -1036,8 +1034,7 @@ class SexpType : public Intrinsic {
   public:
     llvm::Value* value() { return getValue(0); }
 
-    SexpType(llvm::Instruction* ins)
-        : Intrinsic(ins, InstructionKind::SexpType) {}
+    SexpType(llvm::Instruction* ins) : Intrinsic(ins, PatternKind::SexpType) {}
 
     static SexpType& create(Builder& b, llvm::Value* value) {
 
@@ -1050,7 +1047,7 @@ class SexpType : public Intrinsic {
         b.insertCall(ins);
         SexpType* result = new SexpType(ins);
         setIR(ins, result);
-        // setIRType(ins, InstructionKind::SexpType);
+        // setIRType(ins, PatternKind::SexpType);
         return *result;
     }
 
@@ -1060,8 +1057,8 @@ class SexpType : public Intrinsic {
         return llvm::FunctionType::get(t::Int, {t::SEXP}, false);
     }
 
-    static bool classof(Instruction const* s) {
-        return s->getKind() == InstructionKind::SexpType;
+    static bool classof(Pattern const* s) {
+        return s->getKind() == PatternKind::SexpType;
     }
 };
 
@@ -1071,7 +1068,7 @@ class AddArgument : public Intrinsic {
     llvm::Value* arg() { return getValue(1); }
 
     AddArgument(llvm::Instruction* ins)
-        : Intrinsic(ins, InstructionKind::AddArgument) {}
+        : Intrinsic(ins, PatternKind::AddArgument) {}
 
     static AddArgument& create(Builder& b, llvm::Value* args,
                                llvm::Value* arg) {
@@ -1086,7 +1083,7 @@ class AddArgument : public Intrinsic {
         b.insertCall(ins);
         AddArgument* result = new AddArgument(ins);
         setIR(ins, result);
-        // setIRType(ins, InstructionKind::AddArgument);
+        // setIRType(ins, PatternKind::AddArgument);
         return *result;
     }
 
@@ -1096,8 +1093,8 @@ class AddArgument : public Intrinsic {
         return llvm::FunctionType::get(t::SEXP, {t::SEXP, t::SEXP}, false);
     }
 
-    static bool classof(Instruction const* s) {
-        return s->getKind() == InstructionKind::AddArgument;
+    static bool classof(Pattern const* s) {
+        return s->getKind() == PatternKind::AddArgument;
     }
 };
 
@@ -1108,7 +1105,7 @@ class AddKeywordArgument : public Intrinsic {
     llvm::Value* name() { return getValue(2); }
 
     AddKeywordArgument(llvm::Instruction* ins)
-        : Intrinsic(ins, InstructionKind::AddKeywordArgument) {}
+        : Intrinsic(ins, PatternKind::AddKeywordArgument) {}
 
     static AddKeywordArgument& create(Builder& b, llvm::Value* args,
                                       llvm::Value* arg, llvm::Value* name) {
@@ -1124,7 +1121,7 @@ class AddKeywordArgument : public Intrinsic {
         b.insertCall(ins);
         AddKeywordArgument* result = new AddKeywordArgument(ins);
         setIR(ins, result);
-        // setIRType(ins, InstructionKind::AddKeywordArgument);
+        // setIRType(ins, PatternKind::AddKeywordArgument);
         return *result;
     }
 
@@ -1135,8 +1132,8 @@ class AddKeywordArgument : public Intrinsic {
                                        false);
     }
 
-    static bool classof(Instruction const* s) {
-        return s->getKind() == InstructionKind::AddKeywordArgument;
+    static bool classof(Pattern const* s) {
+        return s->getKind() == PatternKind::AddKeywordArgument;
     }
 };
 
@@ -1147,7 +1144,7 @@ class AddEllipsisArgumentHead : public Intrinsic {
     llvm::Value* eager() { return getValue(2); }
 
     AddEllipsisArgumentHead(llvm::Instruction* ins)
-        : Intrinsic(ins, InstructionKind::AddEllipsisArgumentHead) {}
+        : Intrinsic(ins, PatternKind::AddEllipsisArgumentHead) {}
 
     static AddEllipsisArgumentHead& create(Builder& b, llvm::Value* args,
                                            llvm::Value* rho,
@@ -1164,7 +1161,7 @@ class AddEllipsisArgumentHead : public Intrinsic {
         b.insertCall(ins);
         AddEllipsisArgumentHead* result = new AddEllipsisArgumentHead(ins);
         setIR(ins, result);
-        // setIRType(ins, InstructionKind::AddEllipsisArgumentHead);
+        // setIRType(ins, PatternKind::AddEllipsisArgumentHead);
         return *result;
     }
 
@@ -1175,8 +1172,8 @@ class AddEllipsisArgumentHead : public Intrinsic {
                                        false);
     }
 
-    static bool classof(Instruction const* s) {
-        return s->getKind() == InstructionKind::AddEllipsisArgumentHead;
+    static bool classof(Pattern const* s) {
+        return s->getKind() == PatternKind::AddEllipsisArgumentHead;
     }
 };
 
@@ -1187,7 +1184,7 @@ class AddEllipsisArgumentTail : public Intrinsic {
     llvm::Value* eager() { return getValue(2); }
 
     AddEllipsisArgumentTail(llvm::Instruction* ins)
-        : Intrinsic(ins, InstructionKind::AddEllipsisArgumentTail) {}
+        : Intrinsic(ins, PatternKind::AddEllipsisArgumentTail) {}
 
     static AddEllipsisArgumentTail& create(Builder& b, llvm::Value* args,
                                            llvm::Value* rho,
@@ -1204,7 +1201,7 @@ class AddEllipsisArgumentTail : public Intrinsic {
         b.insertCall(ins);
         AddEllipsisArgumentTail* result = new AddEllipsisArgumentTail(ins);
         setIR(ins, result);
-        // setIRType(ins, InstructionKind::AddEllipsisArgumentTail);
+        // setIRType(ins, PatternKind::AddEllipsisArgumentTail);
         return *result;
     }
 
@@ -1215,8 +1212,8 @@ class AddEllipsisArgumentTail : public Intrinsic {
                                        false);
     }
 
-    static bool classof(Instruction const* s) {
-        return s->getKind() == InstructionKind::AddEllipsisArgumentTail;
+    static bool classof(Pattern const* s) {
+        return s->getKind() == PatternKind::AddEllipsisArgumentTail;
     }
 };
 
@@ -1228,7 +1225,7 @@ class CallBuiltin : public Intrinsic {
     llvm::Value* rho() { return getValue(3); }
 
     CallBuiltin(llvm::Instruction* ins)
-        : Intrinsic(ins, InstructionKind::CallBuiltin) {}
+        : Intrinsic(ins, PatternKind::CallBuiltin) {}
 
     static CallBuiltin& create(Builder& b, llvm::Value* call,
                                llvm::Value* closure, llvm::Value* arguments,
@@ -1246,7 +1243,7 @@ class CallBuiltin : public Intrinsic {
         b.insertCall(ins);
         CallBuiltin* result = new CallBuiltin(ins);
         setIR(ins, result);
-        // setIRType(ins, InstructionKind::CallBuiltin);
+        // setIRType(ins, PatternKind::CallBuiltin);
         return *result;
     }
 
@@ -1257,8 +1254,8 @@ class CallBuiltin : public Intrinsic {
             t::SEXP, {t::SEXP, t::SEXP, t::SEXP, t::SEXP}, false);
     }
 
-    static bool classof(Instruction const* s) {
-        return s->getKind() == InstructionKind::CallBuiltin;
+    static bool classof(Pattern const* s) {
+        return s->getKind() == PatternKind::CallBuiltin;
     }
 };
 
@@ -1270,7 +1267,7 @@ class CallSpecial : public Intrinsic {
     llvm::Value* rho() { return getValue(3); }
 
     CallSpecial(llvm::Instruction* ins)
-        : Intrinsic(ins, InstructionKind::CallSpecial) {}
+        : Intrinsic(ins, PatternKind::CallSpecial) {}
 
     static CallSpecial& create(Builder& b, llvm::Value* call,
                                llvm::Value* closure, llvm::Value* arguments,
@@ -1288,7 +1285,7 @@ class CallSpecial : public Intrinsic {
         b.insertCall(ins);
         CallSpecial* result = new CallSpecial(ins);
         setIR(ins, result);
-        // setIRType(ins, InstructionKind::CallSpecial);
+        // setIRType(ins, PatternKind::CallSpecial);
         return *result;
     }
 
@@ -1299,8 +1296,8 @@ class CallSpecial : public Intrinsic {
             t::SEXP, {t::SEXP, t::SEXP, t::SEXP, t::SEXP}, false);
     }
 
-    static bool classof(Instruction const* s) {
-        return s->getKind() == InstructionKind::CallSpecial;
+    static bool classof(Pattern const* s) {
+        return s->getKind() == PatternKind::CallSpecial;
     }
 };
 
@@ -1312,7 +1309,7 @@ class CallClosure : public Intrinsic {
     llvm::Value* rho() { return getValue(3); }
 
     CallClosure(llvm::Instruction* ins)
-        : Intrinsic(ins, InstructionKind::CallClosure) {}
+        : Intrinsic(ins, PatternKind::CallClosure) {}
 
     static CallClosure& create(Builder& b, llvm::Value* call,
                                llvm::Value* closure, llvm::Value* arguments,
@@ -1330,7 +1327,7 @@ class CallClosure : public Intrinsic {
         b.insertCall(ins);
         CallClosure* result = new CallClosure(ins);
         setIR(ins, result);
-        // setIRType(ins, InstructionKind::CallClosure);
+        // setIRType(ins, PatternKind::CallClosure);
         return *result;
     }
 
@@ -1341,8 +1338,8 @@ class CallClosure : public Intrinsic {
             t::SEXP, {t::SEXP, t::SEXP, t::SEXP, t::SEXP}, false);
     }
 
-    static bool classof(Instruction const* s) {
-        return s->getKind() == InstructionKind::CallClosure;
+    static bool classof(Pattern const* s) {
+        return s->getKind() == PatternKind::CallClosure;
     }
 };
 
@@ -1368,7 +1365,7 @@ class CreateClosure : public Intrinsic {
     SEXP body(Builder const& b) { return b.constantPool(body()); }
 
     CreateClosure(llvm::Instruction* ins)
-        : Intrinsic(ins, InstructionKind::CreateClosure) {}
+        : Intrinsic(ins, PatternKind::CreateClosure) {}
 
     static CreateClosure& create(Builder& b, llvm::Value* rho, SEXP forms,
                                  SEXP body) {
@@ -1385,7 +1382,7 @@ class CreateClosure : public Intrinsic {
         b.insertCall(ins);
         CreateClosure* result = new CreateClosure(ins);
         setIR(ins, result);
-        // setIRType(ins, InstructionKind::CreateClosure);
+        // setIRType(ins, PatternKind::CreateClosure);
         return *result;
     }
 
@@ -1396,8 +1393,8 @@ class CreateClosure : public Intrinsic {
             t::SEXP, {t::SEXP, t::SEXP, t::Int, t::Int}, false);
     }
 
-    static bool classof(Instruction const* s) {
-        return s->getKind() == InstructionKind::CreateClosure;
+    static bool classof(Pattern const* s) {
+        return s->getKind() == PatternKind::CreateClosure;
     }
 };
 
@@ -1416,7 +1413,7 @@ class GenericUnaryMinus : public Intrinsic {
     SEXP call(Builder const& b) { return b.constantPool(call()); }
 
     GenericUnaryMinus(llvm::Instruction* ins)
-        : Intrinsic(ins, InstructionKind::GenericUnaryMinus) {}
+        : Intrinsic(ins, PatternKind::GenericUnaryMinus) {}
 
     static GenericUnaryMinus& create(Builder& b, llvm::Value* op,
                                      llvm::Value* rho, SEXP call) {
@@ -1433,7 +1430,7 @@ class GenericUnaryMinus : public Intrinsic {
         b.insertCall(ins);
         GenericUnaryMinus* result = new GenericUnaryMinus(ins);
         setIR(ins, result);
-        // setIRType(ins, InstructionKind::GenericUnaryMinus);
+        // setIRType(ins, PatternKind::GenericUnaryMinus);
         return *result;
     }
 
@@ -1444,8 +1441,8 @@ class GenericUnaryMinus : public Intrinsic {
             t::SEXP, {t::SEXP, t::SEXP, t::SEXP, t::Int}, false);
     }
 
-    static bool classof(Instruction const* s) {
-        return s->getKind() == InstructionKind::GenericUnaryMinus;
+    static bool classof(Pattern const* s) {
+        return s->getKind() == PatternKind::GenericUnaryMinus;
     }
 };
 
@@ -1464,7 +1461,7 @@ class GenericUnaryPlus : public Intrinsic {
     SEXP call(Builder const& b) { return b.constantPool(call()); }
 
     GenericUnaryPlus(llvm::Instruction* ins)
-        : Intrinsic(ins, InstructionKind::GenericUnaryPlus) {}
+        : Intrinsic(ins, PatternKind::GenericUnaryPlus) {}
 
     static GenericUnaryPlus& create(Builder& b, llvm::Value* op,
                                     llvm::Value* rho, SEXP call) {
@@ -1481,7 +1478,7 @@ class GenericUnaryPlus : public Intrinsic {
         b.insertCall(ins);
         GenericUnaryPlus* result = new GenericUnaryPlus(ins);
         setIR(ins, result);
-        // setIRType(ins, InstructionKind::GenericUnaryPlus);
+        // setIRType(ins, PatternKind::GenericUnaryPlus);
         return *result;
     }
 
@@ -1492,8 +1489,8 @@ class GenericUnaryPlus : public Intrinsic {
             t::SEXP, {t::SEXP, t::SEXP, t::SEXP, t::Int}, false);
     }
 
-    static bool classof(Instruction const* s) {
-        return s->getKind() == InstructionKind::GenericUnaryPlus;
+    static bool classof(Pattern const* s) {
+        return s->getKind() == PatternKind::GenericUnaryPlus;
     }
 };
 
@@ -1513,7 +1510,7 @@ class GenericAdd : public Intrinsic {
     SEXP call(Builder const& b) { return b.constantPool(call()); }
 
     GenericAdd(llvm::Instruction* ins)
-        : Intrinsic(ins, InstructionKind::GenericAdd) {}
+        : Intrinsic(ins, PatternKind::GenericAdd) {}
 
     static GenericAdd& create(Builder& b, llvm::Value* lhs, llvm::Value* rhs,
                               llvm::Value* rho, SEXP call) {
@@ -1531,7 +1528,7 @@ class GenericAdd : public Intrinsic {
         b.insertCall(ins);
         GenericAdd* result = new GenericAdd(ins);
         setIR(ins, result);
-        // setIRType(ins, InstructionKind::GenericAdd);
+        // setIRType(ins, PatternKind::GenericAdd);
         return *result;
     }
 
@@ -1542,8 +1539,8 @@ class GenericAdd : public Intrinsic {
             t::SEXP, {t::SEXP, t::SEXP, t::SEXP, t::SEXP, t::Int}, false);
     }
 
-    static bool classof(Instruction const* s) {
-        return s->getKind() == InstructionKind::GenericAdd;
+    static bool classof(Pattern const* s) {
+        return s->getKind() == PatternKind::GenericAdd;
     }
 };
 
@@ -1563,7 +1560,7 @@ class GenericSub : public Intrinsic {
     SEXP call(Builder const& b) { return b.constantPool(call()); }
 
     GenericSub(llvm::Instruction* ins)
-        : Intrinsic(ins, InstructionKind::GenericSub) {}
+        : Intrinsic(ins, PatternKind::GenericSub) {}
 
     static GenericSub& create(Builder& b, llvm::Value* lhs, llvm::Value* rhs,
                               llvm::Value* rho, SEXP call) {
@@ -1581,7 +1578,7 @@ class GenericSub : public Intrinsic {
         b.insertCall(ins);
         GenericSub* result = new GenericSub(ins);
         setIR(ins, result);
-        // setIRType(ins, InstructionKind::GenericSub);
+        // setIRType(ins, PatternKind::GenericSub);
         return *result;
     }
 
@@ -1592,8 +1589,8 @@ class GenericSub : public Intrinsic {
             t::SEXP, {t::SEXP, t::SEXP, t::SEXP, t::SEXP, t::Int}, false);
     }
 
-    static bool classof(Instruction const* s) {
-        return s->getKind() == InstructionKind::GenericSub;
+    static bool classof(Pattern const* s) {
+        return s->getKind() == PatternKind::GenericSub;
     }
 };
 
@@ -1613,7 +1610,7 @@ class GenericMul : public Intrinsic {
     SEXP call(Builder const& b) { return b.constantPool(call()); }
 
     GenericMul(llvm::Instruction* ins)
-        : Intrinsic(ins, InstructionKind::GenericMul) {}
+        : Intrinsic(ins, PatternKind::GenericMul) {}
 
     static GenericMul& create(Builder& b, llvm::Value* lhs, llvm::Value* rhs,
                               llvm::Value* rho, SEXP call) {
@@ -1631,7 +1628,7 @@ class GenericMul : public Intrinsic {
         b.insertCall(ins);
         GenericMul* result = new GenericMul(ins);
         setIR(ins, result);
-        // setIRType(ins, InstructionKind::GenericMul);
+        // setIRType(ins, PatternKind::GenericMul);
         return *result;
     }
 
@@ -1642,8 +1639,8 @@ class GenericMul : public Intrinsic {
             t::SEXP, {t::SEXP, t::SEXP, t::SEXP, t::SEXP, t::Int}, false);
     }
 
-    static bool classof(Instruction const* s) {
-        return s->getKind() == InstructionKind::GenericMul;
+    static bool classof(Pattern const* s) {
+        return s->getKind() == PatternKind::GenericMul;
     }
 };
 
@@ -1663,7 +1660,7 @@ class GenericDiv : public Intrinsic {
     SEXP call(Builder const& b) { return b.constantPool(call()); }
 
     GenericDiv(llvm::Instruction* ins)
-        : Intrinsic(ins, InstructionKind::GenericDiv) {}
+        : Intrinsic(ins, PatternKind::GenericDiv) {}
 
     static GenericDiv& create(Builder& b, llvm::Value* lhs, llvm::Value* rhs,
                               llvm::Value* rho, SEXP call) {
@@ -1681,7 +1678,7 @@ class GenericDiv : public Intrinsic {
         b.insertCall(ins);
         GenericDiv* result = new GenericDiv(ins);
         setIR(ins, result);
-        // setIRType(ins, InstructionKind::GenericDiv);
+        // setIRType(ins, PatternKind::GenericDiv);
         return *result;
     }
 
@@ -1692,8 +1689,8 @@ class GenericDiv : public Intrinsic {
             t::SEXP, {t::SEXP, t::SEXP, t::SEXP, t::SEXP, t::Int}, false);
     }
 
-    static bool classof(Instruction const* s) {
-        return s->getKind() == InstructionKind::GenericDiv;
+    static bool classof(Pattern const* s) {
+        return s->getKind() == PatternKind::GenericDiv;
     }
 };
 
@@ -1713,7 +1710,7 @@ class GenericPow : public Intrinsic {
     SEXP call(Builder const& b) { return b.constantPool(call()); }
 
     GenericPow(llvm::Instruction* ins)
-        : Intrinsic(ins, InstructionKind::GenericPow) {}
+        : Intrinsic(ins, PatternKind::GenericPow) {}
 
     static GenericPow& create(Builder& b, llvm::Value* lhs, llvm::Value* rhs,
                               llvm::Value* rho, SEXP call) {
@@ -1731,7 +1728,7 @@ class GenericPow : public Intrinsic {
         b.insertCall(ins);
         GenericPow* result = new GenericPow(ins);
         setIR(ins, result);
-        // setIRType(ins, InstructionKind::GenericPow);
+        // setIRType(ins, PatternKind::GenericPow);
         return *result;
     }
 
@@ -1742,8 +1739,8 @@ class GenericPow : public Intrinsic {
             t::SEXP, {t::SEXP, t::SEXP, t::SEXP, t::SEXP, t::Int}, false);
     }
 
-    static bool classof(Instruction const* s) {
-        return s->getKind() == InstructionKind::GenericPow;
+    static bool classof(Pattern const* s) {
+        return s->getKind() == PatternKind::GenericPow;
     }
 };
 
@@ -1762,7 +1759,7 @@ class GenericSqrt : public Intrinsic {
     SEXP call(Builder const& b) { return b.constantPool(call()); }
 
     GenericSqrt(llvm::Instruction* ins)
-        : Intrinsic(ins, InstructionKind::GenericSqrt) {}
+        : Intrinsic(ins, PatternKind::GenericSqrt) {}
 
     static GenericSqrt& create(Builder& b, llvm::Value* op, llvm::Value* rho,
                                SEXP call) {
@@ -1779,7 +1776,7 @@ class GenericSqrt : public Intrinsic {
         b.insertCall(ins);
         GenericSqrt* result = new GenericSqrt(ins);
         setIR(ins, result);
-        // setIRType(ins, InstructionKind::GenericSqrt);
+        // setIRType(ins, PatternKind::GenericSqrt);
         return *result;
     }
 
@@ -1790,8 +1787,8 @@ class GenericSqrt : public Intrinsic {
             t::SEXP, {t::SEXP, t::SEXP, t::SEXP, t::Int}, false);
     }
 
-    static bool classof(Instruction const* s) {
-        return s->getKind() == InstructionKind::GenericSqrt;
+    static bool classof(Pattern const* s) {
+        return s->getKind() == PatternKind::GenericSqrt;
     }
 };
 
@@ -1810,7 +1807,7 @@ class GenericExp : public Intrinsic {
     SEXP call(Builder const& b) { return b.constantPool(call()); }
 
     GenericExp(llvm::Instruction* ins)
-        : Intrinsic(ins, InstructionKind::GenericExp) {}
+        : Intrinsic(ins, PatternKind::GenericExp) {}
 
     static GenericExp& create(Builder& b, llvm::Value* op, llvm::Value* rho,
                               SEXP call) {
@@ -1827,7 +1824,7 @@ class GenericExp : public Intrinsic {
         b.insertCall(ins);
         GenericExp* result = new GenericExp(ins);
         setIR(ins, result);
-        // setIRType(ins, InstructionKind::GenericExp);
+        // setIRType(ins, PatternKind::GenericExp);
         return *result;
     }
 
@@ -1838,8 +1835,8 @@ class GenericExp : public Intrinsic {
             t::SEXP, {t::SEXP, t::SEXP, t::SEXP, t::Int}, false);
     }
 
-    static bool classof(Instruction const* s) {
-        return s->getKind() == InstructionKind::GenericExp;
+    static bool classof(Pattern const* s) {
+        return s->getKind() == PatternKind::GenericExp;
     }
 };
 
@@ -1859,7 +1856,7 @@ class GenericEq : public Intrinsic {
     SEXP call(Builder const& b) { return b.constantPool(call()); }
 
     GenericEq(llvm::Instruction* ins)
-        : Intrinsic(ins, InstructionKind::GenericEq) {}
+        : Intrinsic(ins, PatternKind::GenericEq) {}
 
     static GenericEq& create(Builder& b, llvm::Value* lhs, llvm::Value* rhs,
                              llvm::Value* rho, SEXP call) {
@@ -1877,7 +1874,7 @@ class GenericEq : public Intrinsic {
         b.insertCall(ins);
         GenericEq* result = new GenericEq(ins);
         setIR(ins, result);
-        // setIRType(ins, InstructionKind::GenericEq);
+        // setIRType(ins, PatternKind::GenericEq);
         return *result;
     }
 
@@ -1888,8 +1885,8 @@ class GenericEq : public Intrinsic {
             t::SEXP, {t::SEXP, t::SEXP, t::SEXP, t::SEXP, t::Int}, false);
     }
 
-    static bool classof(Instruction const* s) {
-        return s->getKind() == InstructionKind::GenericEq;
+    static bool classof(Pattern const* s) {
+        return s->getKind() == PatternKind::GenericEq;
     }
 };
 
@@ -1909,7 +1906,7 @@ class GenericNe : public Intrinsic {
     SEXP call(Builder const& b) { return b.constantPool(call()); }
 
     GenericNe(llvm::Instruction* ins)
-        : Intrinsic(ins, InstructionKind::GenericNe) {}
+        : Intrinsic(ins, PatternKind::GenericNe) {}
 
     static GenericNe& create(Builder& b, llvm::Value* lhs, llvm::Value* rhs,
                              llvm::Value* rho, SEXP call) {
@@ -1927,7 +1924,7 @@ class GenericNe : public Intrinsic {
         b.insertCall(ins);
         GenericNe* result = new GenericNe(ins);
         setIR(ins, result);
-        // setIRType(ins, InstructionKind::GenericNe);
+        // setIRType(ins, PatternKind::GenericNe);
         return *result;
     }
 
@@ -1938,8 +1935,8 @@ class GenericNe : public Intrinsic {
             t::SEXP, {t::SEXP, t::SEXP, t::SEXP, t::SEXP, t::Int}, false);
     }
 
-    static bool classof(Instruction const* s) {
-        return s->getKind() == InstructionKind::GenericNe;
+    static bool classof(Pattern const* s) {
+        return s->getKind() == PatternKind::GenericNe;
     }
 };
 
@@ -1959,7 +1956,7 @@ class GenericLt : public Intrinsic {
     SEXP call(Builder const& b) { return b.constantPool(call()); }
 
     GenericLt(llvm::Instruction* ins)
-        : Intrinsic(ins, InstructionKind::GenericLt) {}
+        : Intrinsic(ins, PatternKind::GenericLt) {}
 
     static GenericLt& create(Builder& b, llvm::Value* lhs, llvm::Value* rhs,
                              llvm::Value* rho, SEXP call) {
@@ -1977,7 +1974,7 @@ class GenericLt : public Intrinsic {
         b.insertCall(ins);
         GenericLt* result = new GenericLt(ins);
         setIR(ins, result);
-        // setIRType(ins, InstructionKind::GenericLt);
+        // setIRType(ins, PatternKind::GenericLt);
         return *result;
     }
 
@@ -1988,8 +1985,8 @@ class GenericLt : public Intrinsic {
             t::SEXP, {t::SEXP, t::SEXP, t::SEXP, t::SEXP, t::Int}, false);
     }
 
-    static bool classof(Instruction const* s) {
-        return s->getKind() == InstructionKind::GenericLt;
+    static bool classof(Pattern const* s) {
+        return s->getKind() == PatternKind::GenericLt;
     }
 };
 
@@ -2009,7 +2006,7 @@ class GenericLe : public Intrinsic {
     SEXP call(Builder const& b) { return b.constantPool(call()); }
 
     GenericLe(llvm::Instruction* ins)
-        : Intrinsic(ins, InstructionKind::GenericLe) {}
+        : Intrinsic(ins, PatternKind::GenericLe) {}
 
     static GenericLe& create(Builder& b, llvm::Value* lhs, llvm::Value* rhs,
                              llvm::Value* rho, SEXP call) {
@@ -2027,7 +2024,7 @@ class GenericLe : public Intrinsic {
         b.insertCall(ins);
         GenericLe* result = new GenericLe(ins);
         setIR(ins, result);
-        // setIRType(ins, InstructionKind::GenericLe);
+        // setIRType(ins, PatternKind::GenericLe);
         return *result;
     }
 
@@ -2038,8 +2035,8 @@ class GenericLe : public Intrinsic {
             t::SEXP, {t::SEXP, t::SEXP, t::SEXP, t::SEXP, t::Int}, false);
     }
 
-    static bool classof(Instruction const* s) {
-        return s->getKind() == InstructionKind::GenericLe;
+    static bool classof(Pattern const* s) {
+        return s->getKind() == PatternKind::GenericLe;
     }
 };
 
@@ -2059,7 +2056,7 @@ class GenericGe : public Intrinsic {
     SEXP call(Builder const& b) { return b.constantPool(call()); }
 
     GenericGe(llvm::Instruction* ins)
-        : Intrinsic(ins, InstructionKind::GenericGe) {}
+        : Intrinsic(ins, PatternKind::GenericGe) {}
 
     static GenericGe& create(Builder& b, llvm::Value* lhs, llvm::Value* rhs,
                              llvm::Value* rho, SEXP call) {
@@ -2077,7 +2074,7 @@ class GenericGe : public Intrinsic {
         b.insertCall(ins);
         GenericGe* result = new GenericGe(ins);
         setIR(ins, result);
-        // setIRType(ins, InstructionKind::GenericGe);
+        // setIRType(ins, PatternKind::GenericGe);
         return *result;
     }
 
@@ -2088,8 +2085,8 @@ class GenericGe : public Intrinsic {
             t::SEXP, {t::SEXP, t::SEXP, t::SEXP, t::SEXP, t::Int}, false);
     }
 
-    static bool classof(Instruction const* s) {
-        return s->getKind() == InstructionKind::GenericGe;
+    static bool classof(Pattern const* s) {
+        return s->getKind() == PatternKind::GenericGe;
     }
 };
 
@@ -2109,7 +2106,7 @@ class GenericGt : public Intrinsic {
     SEXP call(Builder const& b) { return b.constantPool(call()); }
 
     GenericGt(llvm::Instruction* ins)
-        : Intrinsic(ins, InstructionKind::GenericGt) {}
+        : Intrinsic(ins, PatternKind::GenericGt) {}
 
     static GenericGt& create(Builder& b, llvm::Value* lhs, llvm::Value* rhs,
                              llvm::Value* rho, SEXP call) {
@@ -2127,7 +2124,7 @@ class GenericGt : public Intrinsic {
         b.insertCall(ins);
         GenericGt* result = new GenericGt(ins);
         setIR(ins, result);
-        // setIRType(ins, InstructionKind::GenericGt);
+        // setIRType(ins, PatternKind::GenericGt);
         return *result;
     }
 
@@ -2138,8 +2135,8 @@ class GenericGt : public Intrinsic {
             t::SEXP, {t::SEXP, t::SEXP, t::SEXP, t::SEXP, t::Int}, false);
     }
 
-    static bool classof(Instruction const* s) {
-        return s->getKind() == InstructionKind::GenericGt;
+    static bool classof(Pattern const* s) {
+        return s->getKind() == PatternKind::GenericGt;
     }
 };
 
@@ -2159,7 +2156,7 @@ class GenericBitAnd : public Intrinsic {
     SEXP call(Builder const& b) { return b.constantPool(call()); }
 
     GenericBitAnd(llvm::Instruction* ins)
-        : Intrinsic(ins, InstructionKind::GenericBitAnd) {}
+        : Intrinsic(ins, PatternKind::GenericBitAnd) {}
 
     static GenericBitAnd& create(Builder& b, llvm::Value* lhs, llvm::Value* rhs,
                                  llvm::Value* rho, SEXP call) {
@@ -2177,7 +2174,7 @@ class GenericBitAnd : public Intrinsic {
         b.insertCall(ins);
         GenericBitAnd* result = new GenericBitAnd(ins);
         setIR(ins, result);
-        // setIRType(ins, InstructionKind::GenericBitAnd);
+        // setIRType(ins, PatternKind::GenericBitAnd);
         return *result;
     }
 
@@ -2188,8 +2185,8 @@ class GenericBitAnd : public Intrinsic {
             t::SEXP, {t::SEXP, t::SEXP, t::SEXP, t::SEXP, t::Int}, false);
     }
 
-    static bool classof(Instruction const* s) {
-        return s->getKind() == InstructionKind::GenericBitAnd;
+    static bool classof(Pattern const* s) {
+        return s->getKind() == PatternKind::GenericBitAnd;
     }
 };
 
@@ -2209,7 +2206,7 @@ class GenericBitOr : public Intrinsic {
     SEXP call(Builder const& b) { return b.constantPool(call()); }
 
     GenericBitOr(llvm::Instruction* ins)
-        : Intrinsic(ins, InstructionKind::GenericBitOr) {}
+        : Intrinsic(ins, PatternKind::GenericBitOr) {}
 
     static GenericBitOr& create(Builder& b, llvm::Value* lhs, llvm::Value* rhs,
                                 llvm::Value* rho, SEXP call) {
@@ -2227,7 +2224,7 @@ class GenericBitOr : public Intrinsic {
         b.insertCall(ins);
         GenericBitOr* result = new GenericBitOr(ins);
         setIR(ins, result);
-        // setIRType(ins, InstructionKind::GenericBitOr);
+        // setIRType(ins, PatternKind::GenericBitOr);
         return *result;
     }
 
@@ -2238,8 +2235,8 @@ class GenericBitOr : public Intrinsic {
             t::SEXP, {t::SEXP, t::SEXP, t::SEXP, t::SEXP, t::Int}, false);
     }
 
-    static bool classof(Instruction const* s) {
-        return s->getKind() == InstructionKind::GenericBitOr;
+    static bool classof(Pattern const* s) {
+        return s->getKind() == PatternKind::GenericBitOr;
     }
 };
 
@@ -2258,7 +2255,7 @@ class GenericNot : public Intrinsic {
     SEXP call(Builder const& b) { return b.constantPool(call()); }
 
     GenericNot(llvm::Instruction* ins)
-        : Intrinsic(ins, InstructionKind::GenericNot) {}
+        : Intrinsic(ins, PatternKind::GenericNot) {}
 
     static GenericNot& create(Builder& b, llvm::Value* op, llvm::Value* rho,
                               SEXP call) {
@@ -2275,7 +2272,7 @@ class GenericNot : public Intrinsic {
         b.insertCall(ins);
         GenericNot* result = new GenericNot(ins);
         setIR(ins, result);
-        // setIRType(ins, InstructionKind::GenericNot);
+        // setIRType(ins, PatternKind::GenericNot);
         return *result;
     }
 
@@ -2286,8 +2283,8 @@ class GenericNot : public Intrinsic {
             t::SEXP, {t::SEXP, t::SEXP, t::SEXP, t::Int}, false);
     }
 
-    static bool classof(Instruction const* s) {
-        return s->getKind() == InstructionKind::GenericNot;
+    static bool classof(Pattern const* s) {
+        return s->getKind() == PatternKind::GenericNot;
     }
 };
 
@@ -2297,7 +2294,7 @@ class GenericGetVarMissOK : public Intrinsic {
     llvm::Value* rho() { return getValue(1); }
 
     GenericGetVarMissOK(llvm::Instruction* ins)
-        : Intrinsic(ins, InstructionKind::GenericGetVarMissOK) {}
+        : Intrinsic(ins, PatternKind::GenericGetVarMissOK) {}
 
     static GenericGetVarMissOK& create(Builder& b, llvm::Value* symbol,
                                        llvm::Value* rho) {
@@ -2312,7 +2309,7 @@ class GenericGetVarMissOK : public Intrinsic {
         b.insertCall(ins);
         GenericGetVarMissOK* result = new GenericGetVarMissOK(ins);
         setIR(ins, result);
-        // setIRType(ins, InstructionKind::GenericGetVarMissOK);
+        // setIRType(ins, PatternKind::GenericGetVarMissOK);
         return *result;
     }
 
@@ -2322,8 +2319,8 @@ class GenericGetVarMissOK : public Intrinsic {
         return llvm::FunctionType::get(t::SEXP, {t::SEXP, t::SEXP}, false);
     }
 
-    static bool classof(Instruction const* s) {
-        return s->getKind() == InstructionKind::GenericGetVarMissOK;
+    static bool classof(Pattern const* s) {
+        return s->getKind() == PatternKind::GenericGetVarMissOK;
     }
 };
 
@@ -2333,7 +2330,7 @@ class GenericGetEllipsisValueMissOK : public Intrinsic {
     llvm::Value* rho() { return getValue(1); }
 
     GenericGetEllipsisValueMissOK(llvm::Instruction* ins)
-        : Intrinsic(ins, InstructionKind::GenericGetEllipsisValueMissOK) {}
+        : Intrinsic(ins, PatternKind::GenericGetEllipsisValueMissOK) {}
 
     static GenericGetEllipsisValueMissOK&
     create(Builder& b, llvm::Value* symbol, llvm::Value* rho) {
@@ -2349,7 +2346,7 @@ class GenericGetEllipsisValueMissOK : public Intrinsic {
         GenericGetEllipsisValueMissOK* result =
             new GenericGetEllipsisValueMissOK(ins);
         setIR(ins, result);
-        // setIRType(ins, InstructionKind::GenericGetEllipsisValueMissOK);
+        // setIRType(ins, PatternKind::GenericGetEllipsisValueMissOK);
         return *result;
     }
 
@@ -2361,8 +2358,8 @@ class GenericGetEllipsisValueMissOK : public Intrinsic {
         return llvm::FunctionType::get(t::SEXP, {t::SEXP, t::SEXP}, false);
     }
 
-    static bool classof(Instruction const* s) {
-        return s->getKind() == InstructionKind::GenericGetEllipsisValueMissOK;
+    static bool classof(Pattern const* s) {
+        return s->getKind() == PatternKind::GenericGetEllipsisValueMissOK;
     }
 };
 
@@ -2380,7 +2377,7 @@ class CheckSwitchControl : public Intrinsic {
     SEXP call(Builder const& b) { return b.constantPool(call()); }
 
     CheckSwitchControl(llvm::Instruction* ins)
-        : Intrinsic(ins, InstructionKind::CheckSwitchControl) {}
+        : Intrinsic(ins, PatternKind::CheckSwitchControl) {}
 
     static CheckSwitchControl& create(Builder& b, llvm::Value* ctrl,
                                       SEXP call) {
@@ -2396,7 +2393,7 @@ class CheckSwitchControl : public Intrinsic {
         b.insertCall(ins);
         CheckSwitchControl* result = new CheckSwitchControl(ins);
         setIR(ins, result);
-        // setIRType(ins, InstructionKind::CheckSwitchControl);
+        // setIRType(ins, PatternKind::CheckSwitchControl);
         return *result;
     }
 
@@ -2407,8 +2404,8 @@ class CheckSwitchControl : public Intrinsic {
                                        false);
     }
 
-    static bool classof(Instruction const* s) {
-        return s->getKind() == InstructionKind::CheckSwitchControl;
+    static bool classof(Pattern const* s) {
+        return s->getKind() == PatternKind::CheckSwitchControl;
     }
 };
 
@@ -2434,7 +2431,7 @@ class SwitchControlCharacter : public Intrinsic {
     SEXP cases(Builder const& b) { return b.constantPool(cases()); }
 
     SwitchControlCharacter(llvm::Instruction* ins)
-        : Intrinsic(ins, InstructionKind::SwitchControlCharacter) {}
+        : Intrinsic(ins, PatternKind::SwitchControlCharacter) {}
 
     static SwitchControlCharacter& create(Builder& b, llvm::Value* ctrl,
                                           SEXP call, SEXP cases) {
@@ -2451,7 +2448,7 @@ class SwitchControlCharacter : public Intrinsic {
         b.insertCall(ins);
         SwitchControlCharacter* result = new SwitchControlCharacter(ins);
         setIR(ins, result);
-        // setIRType(ins, InstructionKind::SwitchControlCharacter);
+        // setIRType(ins, PatternKind::SwitchControlCharacter);
         return *result;
     }
 
@@ -2462,8 +2459,8 @@ class SwitchControlCharacter : public Intrinsic {
             t::Int, {t::SEXP, t::SEXP, t::Int, t::Int}, false);
     }
 
-    static bool classof(Instruction const* s) {
-        return s->getKind() == InstructionKind::SwitchControlCharacter;
+    static bool classof(Pattern const* s) {
+        return s->getKind() == PatternKind::SwitchControlCharacter;
     }
 };
 
@@ -2473,7 +2470,7 @@ class SwitchControlInteger : public Intrinsic {
     int numCases() { return getValueInt(1); }
 
     SwitchControlInteger(llvm::Instruction* ins)
-        : Intrinsic(ins, InstructionKind::SwitchControlInteger) {}
+        : Intrinsic(ins, PatternKind::SwitchControlInteger) {}
 
     static SwitchControlInteger& create(Builder& b, llvm::Value* ctrl,
                                         int numCases) {
@@ -2488,7 +2485,7 @@ class SwitchControlInteger : public Intrinsic {
         b.insertCall(ins);
         SwitchControlInteger* result = new SwitchControlInteger(ins);
         setIR(ins, result);
-        // setIRType(ins, InstructionKind::SwitchControlInteger);
+        // setIRType(ins, PatternKind::SwitchControlInteger);
         return *result;
     }
 
@@ -2498,8 +2495,8 @@ class SwitchControlInteger : public Intrinsic {
         return llvm::FunctionType::get(t::Int, {t::SEXP, t::Int}, false);
     }
 
-    static bool classof(Instruction const* s) {
-        return s->getKind() == InstructionKind::SwitchControlInteger;
+    static bool classof(Pattern const* s) {
+        return s->getKind() == PatternKind::SwitchControlInteger;
     }
 };
 
@@ -2509,7 +2506,7 @@ class ReturnJump : public Intrinsic {
     llvm::Value* rho() { return getValue(1); }
 
     ReturnJump(llvm::Instruction* ins)
-        : Intrinsic(ins, InstructionKind::ReturnJump) {}
+        : Intrinsic(ins, PatternKind::ReturnJump) {}
 
     static ReturnJump& create(Builder& b, llvm::Value* value,
                               llvm::Value* rho) {
@@ -2524,7 +2521,7 @@ class ReturnJump : public Intrinsic {
         b.insertCall(ins);
         ReturnJump* result = new ReturnJump(ins);
         setIR(ins, result);
-        // setIRType(ins, InstructionKind::ReturnJump);
+        // setIRType(ins, PatternKind::ReturnJump);
         return *result;
     }
 
@@ -2534,8 +2531,8 @@ class ReturnJump : public Intrinsic {
         return llvm::FunctionType::get(t::Void, {t::SEXP, t::SEXP}, false);
     }
 
-    static bool classof(Instruction const* s) {
-        return s->getKind() == InstructionKind::ReturnJump;
+    static bool classof(Pattern const* s) {
+        return s->getKind() == PatternKind::ReturnJump;
     }
 };
 

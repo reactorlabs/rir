@@ -36,7 +36,7 @@ if (APPLE)
     message(STATUS "libR is found at ${libr}")
 endif(APPLE)
 
-set(MAKEVARS_SRC "SOURCES = $(wildcard *.cpp ir/*.cpp handlers/codegen/*.cpp)\nOBJECTS = $(SOURCES:.cpp=.o)")
+set(MAKEVARS_SRC "SOURCES = $(wildcard *.cpp ir/*.cpp passes/codegen/*.cpp)\nOBJECTS = $(SOURCES:.cpp=.o)")
 set(LLVM_COMPONENTS_USED support core mcjit native irreader linker ipo)
 
 
@@ -55,22 +55,22 @@ file(WRITE ${CMAKE_SOURCE_DIR}/.clang_complete "-I${CMAKE_SOURCE_DIR}/rjit/src\n
 
 # code generation
 add_custom_target(codegen
-    DEPENDS codegen_handlers)
-add_custom_target(codegen_handlers_doxygen
+    DEPENDS codegen_passes)
+add_custom_target(codegen_passes_doxygen
     COMMAND doxygen rjit/Doxyfile WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
-add_custom_target(codegen_handlers_dir
-    DEPENDS codegen_handlers_doxygen
-    COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_SOURCE_DIR}/rjit/src/handlers/codegen)
-add_custom_target(codegen_handlers
-    DEPENDS codegen_handlers_dir
-    COMMAND python3 tools/codegen_handlers.py xml rjit/src/handlers/codegen WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+add_custom_target(codegen_passes_dir
+    DEPENDS codegen_passes_doxygen
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_SOURCE_DIR}/rjit/src/passes/codegen)
+add_custom_target(codegen_passes
+    DEPENDS codegen_passes_dir
+    COMMAND python3 tools/codegen_passes.py xml rjit/src/passes/codegen WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
 # build the shared library for the JIT
 file(GLOB_RECURSE SRC "rjit/src/*.cpp" "rjit/src/*.h" "local/*" "rjit/R/*.R" "rjit/tests/*.R")
 add_library(${PROJECT_NAME} SHARED ${SRC})
 
 add_custom_target(codegen_was_run_before
-    COMMAND ls ${CMAKE_SOURCE_DIR}/rjit/src/handlers/codegen/* || $(echo && echo && echo "Error" && echo "Please run codegen and then cmake again before the first build" && echo && echo && exit 1))
+    COMMAND ls ${CMAKE_SOURCE_DIR}/rjit/src/passes/codegen/* || $(echo && echo && echo "Error" && echo "Please run codegen and then cmake again before the first build" && echo && echo && exit 1))
 
 #codegen is a dependency
 add_dependencies(${PROJECT_NAME} codegen_was_run_before)
@@ -136,7 +136,7 @@ add_custom_target(distclean
     DEPENDS clean
     COMMAND rm -rf ${R_HOME}/library/rjit
     COMMAND rm -rf ${R_LIBRARY_TREE}/rjit
-    COMMAND rm -rf ${CMAKE_SOURCE_DIR}/rjit/src/handlers/codegen
+    COMMAND rm -rf ${CMAKE_SOURCE_DIR}/rjit/src/passes/codegen
     COMMAND rm -rf ${CMAKE_SOURCE_DIR}/rjit/src/ir/intrinsics.h
     COMMAND rm -rf ${CMAKE_SOURCE_DIR}/xml
     COMMAND rm -rf ${CMAKE_SOURCE_DIR}/doxygen_sqlite3.db

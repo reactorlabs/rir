@@ -1,8 +1,8 @@
 #ifndef VARIABLE_ANALYSIS_H
 #define VARIABLE_ANALYSIS_H
 
-#include "ir/Handler.h"
-#include "ir/Analysis.h"
+#include "ir/Pass.h"
+#include "ir/PassDriver.h"
 
 #include "api.h"
 
@@ -13,7 +13,7 @@
 namespace rjit {
 namespace ir {
 
-class VariableHandler : public Handler {
+class VariablePass : public Pass {
   public:
     JITModule* m;
 
@@ -21,16 +21,16 @@ class VariableHandler : public Handler {
 
     std::unordered_map<SEXP, Type> locals;
 
-    VariableHandler() : Handler() {}
+    VariablePass() : Pass() {}
 
-    handler gv(GenericGetVar* var) {
+    match gv(GenericGetVar* var) {
         auto s = var->symbolValue();
         if (!locals.count(s)) {
             locals[s] = Type::Parent;
         }
     }
 
-    handler sv(GenericSetVar* var) {
+    match sv(GenericSetVar* var) {
         auto s = var->symbolValue();
         if (!locals.count(s)) {
             locals[s] = Type::Local;
@@ -42,37 +42,35 @@ class VariableHandler : public Handler {
         }
     }
 
-    handler defaultHandler(Instruction* ins) override {}
-
     bool dispatch(llvm::BasicBlock::iterator& i) override;
 };
 
-class VariableAnalysis : public ForwardAnalysis<VariableHandler> {
+class VariableAnalysis : public ForwardDriver<VariablePass> {
   public:
     bool runOnFunction_(Function& f) override {
-        handler.m = static_cast<JITModule*>(f.getParent());
-        SEXP formals = handler.m->formals(&f);
+        pass.m = static_cast<JITModule*>(f.getParent());
+        SEXP formals = pass.m->formals(&f);
         while (formals != R_NilValue) {
-            handler.locals[TAG(formals)] = VariableHandler::Type::Argument;
+            pass.locals[TAG(formals)] = VariablePass::Type::Argument;
             formals = CDR(formals);
         }
         bool res = dispatch_(f);
 
         if (RJIT_DEBUG) {
             std::cout << &f << " Vars: ";
-            for (auto v : handler.locals) {
+            for (auto v : pass.locals) {
                 std::cout << CHAR(PRINTNAME(std::get<0>(v))) << ": ";
                 switch (std::get<1>(v)) {
-                case VariableHandler::Type::Argument:
+                case VariablePass::Type::Argument:
                     std::cout << "Arg";
                     break;
-                case VariableHandler::Type::Local:
+                case VariablePass::Type::Local:
                     std::cout << "Loc";
                     break;
-                case VariableHandler::Type::Parent:
+                case VariablePass::Type::Parent:
                     std::cout << "Par";
                     break;
-                case VariableHandler::Type::Any:
+                case VariablePass::Type::Any:
                     std::cout << "Any";
                     break;
                 }

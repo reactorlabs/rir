@@ -1,7 +1,7 @@
 benchmarks/*.png
 benchmarks/*.rds
 xml/*
-rjit/src/handlers/codegen/*
+rjit/src/passes/codegen/*
 rjit/src/sandbox.cpp
 local/*
 *.Rprofile
