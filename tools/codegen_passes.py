@@ -112,7 +112,7 @@ class Manager:
                 fname = self._pathFor(xml.attrib["refid"])
                 if (not os.path.isfile(fname)):
                     return CppUnknownType(xml.text)
-                
+
                 klass = self.getClass(Manager.demangle(xml.attrib["refid"][5:]))  # [5:] to strip the leading class
                 return CppClassType(klass, xml.tail)
 
@@ -125,7 +125,7 @@ class CppType(object):
 
     def isSubclassOf(self, base):
         return False
-    
+
     def name(self):
         raise NotImplementedError("")
 
@@ -138,7 +138,7 @@ class CppUnknownType(CppType):
 
     def name(self):
         return self.name_
-    
+
     def __str__(self):
         return self.name()
 
@@ -371,7 +371,7 @@ class CppVariable:
     def isPredicate(self):
         return self.type.isSubclassOf(
                 self.manager.getClass("rjit::ir::Predicate"))
-    
+
     def isPass(self):
         return self.type.isSubclassOf(
                 self.manager.getClass("rjit::ir::Pass"))
@@ -688,7 +688,7 @@ def main():
     # put the codegens
     if (len(sys.argv) < 3):
         usage()
-    
+
     cppBase = os.path.abspath(str(sys.argv[0]))
     cppBase = cppBase[:cppBase.find("/tools/codegen_passes.py")]
     cppBase = os.path.join(cppBase, "rjit", "src")
@@ -696,13 +696,13 @@ def main():
     dest = str(sys.argv[2])
     if (len(sys.argv) == 4 and sys.argv[3] == "force"):
         FORCE = True
-    
+
     if (not os.path.isdir(sources)):
         usage("Sources directory does not exist")
-    
+
     if (not os.path.isdir(dest)):
         usage("Dest directory does not exist")
-    
+
 
     lastUpdate = os.path.getmtime(dest)
     codeGenChanged = os.path.getmtime(os.path.realpath(__file__))
@@ -718,7 +718,7 @@ def main():
     ir_ins = m.getClass("rjit::ir::Pattern")
     debug("    passes")
     ir_pass = m.getClass("rjit::ir::Pass")
-    
+
     # analyze the data - create match sets and passes
     debug("analyzing...")
     debug("    pattern match sets...")

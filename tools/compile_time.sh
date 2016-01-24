@@ -74,10 +74,7 @@ saveRDS(compile_time, filename);
 run_code $COMPILE_TIME_FUNCTION
 run_code $COMPILE_TIME_PACKAGE
 
-FOLDER="wercker"
-if [ -z "$WERCKER_ROOT"]; then
-  FOLDER="temp"
-fi
+FOLDER="teamcity/compilation"
 
 ${SCRIPTPATH}/dropbox_uploader.sh -f ${SCRIPTPATH}/.dropbox_uploader upload $PACKAGE\_functions_$COMMIT_ID\.Rds $FOLDER/
 ${SCRIPTPATH}/dropbox_uploader.sh -f ${SCRIPTPATH}/.dropbox_uploader upload $PACKAGE\_package\_$COMMIT_ID\.Rds $FOLDER/

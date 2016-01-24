@@ -11,6 +11,7 @@ fi
 
 SLACK_WEBHOOK_URL="https://hooks.slack.com/services/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"
 SLACK_NOTIFIER_USERNAME=cibot
+SLACK_NOTIFIER_CHANNEL=""
 APPLICATION_NAME="rjit"
 CI="TeamCity"
 BITBUCKET="https://bitbucket.org/reactorl/rjit/commits/"
