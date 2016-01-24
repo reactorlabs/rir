@@ -17,7 +17,6 @@
 # SETTINGS
 # set path to clang-format binary
 . "$1/.local.config"
-CLANG_FORMAT="${LLVM_CMAKE}/../../../bin/clang-format"
 
 # remove any older patches from previous commits. Set to true or false.
 # DELETE_OLD_PATCHES=false
@@ -59,8 +58,12 @@ else
 fi
 
 if [ ! -x "$CLANG_FORMAT" ] ; then
-    printf "Error: clang-format executable not found.\n"
-    exit 1
+    if [ ! clang-format --version >/dev/null 2>&1 ] ; then
+        printf "Error: clang-format executable not found neither in ${LLVM_CMAKE} or system.\n"
+        printf "Error: consider either rebuilding llvm with debug flag or\n".
+        printf "Error: or installing clang-format - sudo apt-get clang-format (linux) or brew install clang-format (osx)\n"
+        exit 1
+    fi
 fi
 
 # create a random filename to store our generated patch
