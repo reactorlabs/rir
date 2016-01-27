@@ -16,7 +16,6 @@ namespace ir {
 class VariablePass : public Pass {
   public:
     JITModule* m;
-
     enum Type : int { Argument, Local, Parent, Any };
 
     std::unordered_map<SEXP, Type> locals;

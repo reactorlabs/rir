@@ -120,7 +120,7 @@ class Pattern {
 
     llvm::Instruction* start() { return start_; }
     virtual llvm::Instruction* end() { return start(); }
-    virtual llvm::Value* r() { return start(); }
+    virtual llvm::Instruction* r() { return start(); }
 
     PatternKind getKind() const {
         assert(kind_ != PatternKind::Invalid);
@@ -163,7 +163,9 @@ class MultiPattern : public Pattern {
   public:
     llvm::Instruction* end() override { return end_; }
 
-    llvm::Value* r() override { assert(false and "missing implementation"); }
+    llvm::Instruction* r() override {
+        assert(false and "missing implementation");
+    }
 
   protected:
     MultiPattern(llvm::Instruction* start, llvm::Instruction* end,
@@ -367,7 +369,8 @@ class MarkNotMutable : public MultiPattern {
     MarkNotMutable(llvm::Instruction* start, llvm::Instruction* end)
         : MultiPattern(start, end, PatternKind::MarkNotMutable) {}
 
-    static void create(Builder& b, llvm::Value* val);
+    static void create(llvm::Instruction* insert, LLVMContext& c,
+                       llvm::Value* val);
 
     static bool classof(Pattern const* s) {
         return s->getKind() == PatternKind::MarkNotMutable;
@@ -379,10 +382,10 @@ class VectorGetElement : public MultiPattern {
     VectorGetElement(llvm::Instruction* start, llvm::Instruction* result)
         : MultiPattern(start, result, PatternKind::VectorGetElement) {}
 
-    static VectorGetElement* create(Builder& b, llvm::Value* vector,
-                                    llvm::Value* index);
+    static VectorGetElement* create(llvm::Instruction* insert, LLVMContext& c,
+                                    llvm::Value* vector, llvm::Value* index);
 
-    llvm::Value* r() override { return end(); }
+    llvm::Instruction* r() override { return end(); }
 
     static bool classof(Pattern const* s) {
         return s->getKind() == PatternKind::VectorGetElement;

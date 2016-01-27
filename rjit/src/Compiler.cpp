@@ -89,12 +89,7 @@ Value* Compiler::compileExpression(SEXP value) {
     case NILSXP:
     case CLOSXP:
     case INTSXP: {
-        Value* res =
-            ir::VectorGetElement::create(
-                b, b.consts(), ir::Builder::integer(b.constantPoolIndex(value)))
-                ->r();
-        ir::MarkNotMutable::create(b, res);
-        return res;
+        return ir::UserLiteral::create(b, value)->r();
     }
     case BCODESXP:
     // TODO: reuse the compiled fun

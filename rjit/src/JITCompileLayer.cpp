@@ -22,6 +22,7 @@
 #include "llvm/Support/DynamicLibrary.h"
 
 #include "ir/Analysis/VariableAnalysis.h"
+#include "ir/Optimization/ConstantLoad.h"
 
 using namespace llvm;
 
@@ -51,8 +52,9 @@ ExecutionEngine* JITCompileLayer::getEngine(JITModule* m) {
     // Make sure we can resolve symbols in the program as well. The zero arg
     legacy::PassManager pm;
 
-    auto a = new ir::VariableAnalysis();
-    pm.add(a);
+    pm.add(new ir::VariableAnalysis());
+
+    pm.add(new ir::ConstantLoadOptimization());
 
     pm.add(createTargetTransformInfoWrapperPass(TargetIRAnalysis()));
 

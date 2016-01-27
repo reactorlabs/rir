@@ -48,43 +48,40 @@ void Cbr::create(Builder& b, Value* cond, BasicBlock* trueCase,
     new Cbr(test, branch);
 }
 
-VectorGetElement* VectorGetElement::create(Builder& b, llvm::Value* vector,
+VectorGetElement* VectorGetElement::create(llvm::Instruction* insert,
+                                           LLVMContext& c, llvm::Value* vector,
                                            llvm::Value* index) {
-    ConstantInt* int64_1 =
-        ConstantInt::get(b.getContext(), APInt(64, StringRef("1"), 10));
+    ConstantInt* int64_1 = ConstantInt::get(c, APInt(64, StringRef("1"), 10));
     auto realVector = new BitCastInst(
-        vector, PointerType::get(t::VECTOR_SEXPREC, 1), "", b.block());
-    auto payload = GetElementPtrInst::Create(t::VECTOR_SEXPREC, realVector,
-                                             std::vector<Value*>({int64_1}), "",
-                                             b.block());
+        vector, PointerType::get(t::VECTOR_SEXPREC, 1), "", insert);
+    auto payload =
+        GetElementPtrInst::Create(t::VECTOR_SEXPREC, realVector,
+                                  std::vector<Value*>({int64_1}), "", insert);
     auto payloadPtr =
-        new BitCastInst(payload, PointerType::get(t::SEXP, 1), "", b.block());
+        new BitCastInst(payload, PointerType::get(t::SEXP, 1), "", insert);
     GetElementPtrInst* el_ptr =
-        GetElementPtrInst::Create(t::SEXP, payloadPtr, index, "", b.block());
-    auto res = new LoadInst(el_ptr, "", false, b.block());
+        GetElementPtrInst::Create(t::SEXP, payloadPtr, index, "", insert);
+    auto res = new LoadInst(el_ptr, "", false, insert);
     res->setAlignment(8);
     return new VectorGetElement(realVector, res);
 }
 
-void MarkNotMutable::create(Builder& b, llvm::Value* val) {
-    ConstantInt* int32_0 =
-        ConstantInt::get(b.getContext(), APInt(32, StringRef("0"), 10));
-    ConstantInt* c1 =
-        ConstantInt::get(b.getContext(), APInt(32, StringRef("-193"), 10));
-    ConstantInt* c2 =
-        ConstantInt::get(b.getContext(), APInt(32, StringRef("128"), 10));
+void MarkNotMutable::create(llvm::Instruction* insert, LLVMContext& c,
+                            llvm::Value* val) {
+    ConstantInt* int32_0 = ConstantInt::get(c, APInt(32, StringRef("0"), 10));
+    ConstantInt* c1 = ConstantInt::get(c, APInt(32, StringRef("-193"), 10));
+    ConstantInt* c2 = ConstantInt::get(c, APInt(32, StringRef("128"), 10));
     auto sexpinfo = GetElementPtrInst::Create(
-        t::SEXPREC, val, std::vector<Value*>({int32_0, int32_0}), "",
-        b.block());
+        t::SEXPREC, val, std::vector<Value*>({int32_0, int32_0}), "", insert);
     auto sexpint =
-        new BitCastInst(sexpinfo, PointerType::get(t::Int, 1), "", b.block());
-    auto sexpval = new LoadInst(sexpint, "", false, b.block());
+        new BitCastInst(sexpinfo, PointerType::get(t::Int, 1), "", insert);
+    auto sexpval = new LoadInst(sexpint, "", false, insert);
     sexpval->setAlignment(4);
-    auto c = llvm::BinaryOperator::Create(llvm::Instruction::And, sexpval, c1,
-                                          "", b.block());
-    auto s = llvm::BinaryOperator::Create(llvm::Instruction::Or, c, c2, "",
-                                          b.block());
-    auto store = new StoreInst(s, sexpint, b.block());
+    auto clear = llvm::BinaryOperator::Create(llvm::Instruction::And, sexpval,
+                                              c1, "", insert);
+    auto set = llvm::BinaryOperator::Create(llvm::Instruction::Or, clear, c2,
+                                            "", insert);
+    auto store = new StoreInst(set, sexpint, insert);
     store->setAlignment(4);
     new MarkNotMutable(sexpinfo, store);
 }
