@@ -31,19 +31,12 @@ Pattern* Pattern::getIR(llvm::Instruction* ins) {
   */
 Pattern* Pattern::match(BasicBlock::iterator& i) {
     llvm::Instruction* ins = &*i;
-    ++i; // move to next instruction
     Pattern* rjitIns = Pattern::getIR(ins);
-    assert(rjitIns);
-    switch (rjitIns->getKind()) {
-    case Pattern::PatternKind::Cbr:
-        assert(isa<BranchInst>(ins->getNextNode()) and
-               "ICmpInst can only be followed by branch for now.");
-        ++i; // move past the branch as well
-        break;
-    default:
-        // pass
-        break;
-    }
+    assert(rjitIns->start() == ins);
+    while (&*i && &*i != rjitIns->end())
+        i++;
+    assert(rjitIns->end() == &*i);
+    ++i; // move to next instruction
     return rjitIns;
 }
 
@@ -51,11 +44,12 @@ void Cbr::create(Builder& b, Value* cond, BasicBlock* trueCase,
                  BasicBlock* falseCase) {
     ICmpInst* test = new ICmpInst(*b.block(), ICmpInst::ICMP_NE, cond,
                                   b.integer(0), "condition");
-    BranchInst::Create(trueCase, falseCase, test, b);
+    auto branch = BranchInst::Create(trueCase, falseCase, test, b);
+    new Cbr(test, branch);
 }
 
-VectorGetElement VectorGetElement::create(Builder& b, llvm::Value* vector,
-                                          llvm::Value* index) {
+VectorGetElement* VectorGetElement::create(Builder& b, llvm::Value* vector,
+                                           llvm::Value* index) {
     ConstantInt* int64_1 =
         ConstantInt::get(b.getContext(), APInt(64, StringRef("1"), 10));
     auto realVector = new BitCastInst(
@@ -69,7 +63,7 @@ VectorGetElement VectorGetElement::create(Builder& b, llvm::Value* vector,
         GetElementPtrInst::Create(t::SEXP, payloadPtr, index, "", b.block());
     auto res = new LoadInst(el_ptr, "", false, b.block());
     res->setAlignment(8);
-    return res;
+    return new VectorGetElement(realVector, res);
 }
 
 void MarkNotMutable::create(Builder& b, llvm::Value* val) {
@@ -92,6 +86,7 @@ void MarkNotMutable::create(Builder& b, llvm::Value* val) {
                                           b.block());
     auto store = new StoreInst(s, sexpint, b.block());
     store->setAlignment(4);
+    new MarkNotMutable(sexpinfo, store);
 }
 
 } // namespace ir

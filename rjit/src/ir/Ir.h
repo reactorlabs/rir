@@ -31,6 +31,7 @@ class Pattern {
      * real RTTI in the end.
      */
     enum PatternKind {
+        Invalid,
         ExtractConstantPool,
         UserLiteral,
         Constant,
@@ -117,21 +118,28 @@ class Pattern {
 
     static bool isInstruction(llvm::Instruction* i);
 
-    /** Each ir instruction can typecast to the underlying llvm bitcode.
-     */
-    operator llvm::Instruction*() { return ins_; }
+    llvm::Instruction* start() { return start_; }
+    virtual llvm::Instruction* end() { return start(); }
+    virtual llvm::Value* r() { return start(); }
 
-    Pattern(llvm::Instruction* ins, PatternKind kind)
-        : ins_(ins), kind_(kind) {}
-
-    PatternKind getKind() const { return kind_; }
+    PatternKind getKind() const {
+        assert(kind_ != PatternKind::Invalid);
+        return kind_;
+    }
 
   protected:
     template <typename T>
     T* ins() {
-        return llvm::cast<T>(ins_);
+        return llvm::cast<T>(start());
     }
 
+    Pattern(llvm::Instruction* start, PatternKind kind)
+        : start_(start), kind_(kind) {
+        assert(kind != PatternKind::Invalid);
+        setIR(start, this);
+    }
+
+  private:
     /** Sets the ir kind.
      */
     static void setIR(llvm::Instruction* llvmIns, rjit::ir::Pattern* rjitIns) {
@@ -145,9 +153,25 @@ class Pattern {
         assert(getIR(llvmIns));
     }
 
-  private:
-    llvm::Instruction* ins_;
+    Pattern(const Pattern&) = delete;
+
+    llvm::Instruction* start_;
     PatternKind kind_;
+};
+
+class MultiPattern : public Pattern {
+  public:
+    llvm::Instruction* end() override { return end_; }
+
+    llvm::Value* r() override { assert(false and "missing implementation"); }
+
+  protected:
+    MultiPattern(llvm::Instruction* start, llvm::Instruction* end,
+                 PatternKind kind)
+        : Pattern(start, kind), end_(end) {}
+
+  private:
+    llvm::Instruction* end_;
 };
 
 class Return : public Pattern {
@@ -156,10 +180,11 @@ class Return : public Pattern {
         assert(llvm::isa<llvm::ReturnInst>(ins) and "Return expected");
     }
 
-    llvm::Value* result() { return ins<llvm::ReturnInst>()->getOperand(0); }
+    llvm::Value* value() { return ins<llvm::ReturnInst>()->getOperand(0); }
 
-    static Return create(Builder& b, llvm::Value* value) {
-        return llvm::ReturnInst::Create(llvm::getGlobalContext(), value, b);
+    static Return* create(Builder& b, llvm::Value* value) {
+        return new Return(
+            llvm::ReturnInst::Create(llvm::getGlobalContext(), value, b));
     }
 
     static bool classof(Pattern const* s) {
@@ -180,8 +205,8 @@ class Branch : public Pattern {
         return ins<llvm::BranchInst>()->getSuccessor(0);
     }
 
-    static Branch create(Builder& b, llvm::BasicBlock* target) {
-        return llvm::BranchInst::Create(target, b);
+    static Branch* create(Builder& b, llvm::BasicBlock* target) {
+        return new Branch(llvm::BranchInst::Create(target, b));
     }
 
     static bool classof(Pattern const* s) {
@@ -216,9 +241,10 @@ class IntegerLessThan : public IntegerComparison {
                "Less than comparison expected");
     }
 
-    static IntegerLessThan create(Builder& b, llvm::Value* lhs,
-                                  llvm::Value* rhs) {
-        return new llvm::ICmpInst(*b.block(), Predicate::ICMP_SLT, lhs, rhs);
+    static IntegerLessThan* create(Builder& b, llvm::Value* lhs,
+                                   llvm::Value* rhs) {
+        return new IntegerLessThan(
+            new llvm::ICmpInst(*b.block(), Predicate::ICMP_SLT, lhs, rhs));
     }
 
     static bool classof(Pattern const* s) {
@@ -287,9 +313,9 @@ class IntegerAdd : public BinaryOperator {
 
     llvm::Value* rhs() { return ins<llvm::ICmpInst>()->getOperand(1); }
 
-    static IntegerAdd create(Builder& b, llvm::Value* lhs, llvm::Value* rhs) {
-        return llvm::BinaryOperator::Create(llvm::Instruction::Add, lhs, rhs,
-                                            "", b);
+    static IntegerAdd* create(Builder& b, llvm::Value* lhs, llvm::Value* rhs) {
+        return new IntegerAdd(llvm::BinaryOperator::Create(
+            llvm::Instruction::Add, lhs, rhs, "", b));
     }
 
     static bool classof(Pattern const* s) {
@@ -309,7 +335,7 @@ class IntegerAdd : public BinaryOperator {
   only branch we have and it is a showcase for matching multiple
   llvm bitcodes to single ir.
  */
-class Cbr : public Pattern {
+class Cbr : public MultiPattern {
   public:
     llvm::Value* cond() { return ins<llvm::ICmpInst>()->getOperand(0); }
 
@@ -325,7 +351,8 @@ class Cbr : public Pattern {
         return b->getSuccessor(1);
     }
 
-    Cbr(llvm::Instruction* ins) : Pattern(ins, PatternKind::Cbr) {}
+    Cbr(llvm::Instruction* cond, llvm::Instruction* branch)
+        : MultiPattern(cond, branch, PatternKind::Cbr) {}
 
     static void create(Builder& b, llvm::Value* cond,
                        llvm::BasicBlock* trueCase, llvm::BasicBlock* falseCase);
@@ -335,10 +362,10 @@ class Cbr : public Pattern {
     }
 };
 
-class MarkNotMutable : public Pattern {
+class MarkNotMutable : public MultiPattern {
   public:
-    MarkNotMutable(llvm::Instruction* ins)
-        : Pattern(ins, PatternKind::MarkNotMutable) {}
+    MarkNotMutable(llvm::Instruction* start, llvm::Instruction* end)
+        : MultiPattern(start, end, PatternKind::MarkNotMutable) {}
 
     static void create(Builder& b, llvm::Value* val);
 
@@ -347,13 +374,15 @@ class MarkNotMutable : public Pattern {
     }
 };
 
-class VectorGetElement : public Pattern {
+class VectorGetElement : public MultiPattern {
   public:
-    VectorGetElement(llvm::Instruction* ins)
-        : Pattern(ins, PatternKind::VectorGetElement) {}
+    VectorGetElement(llvm::Instruction* start, llvm::Instruction* result)
+        : MultiPattern(start, result, PatternKind::VectorGetElement) {}
 
-    static VectorGetElement create(Builder& b, llvm::Value* vector,
-                                   llvm::Value* index);
+    static VectorGetElement* create(Builder& b, llvm::Value* vector,
+                                    llvm::Value* index);
+
+    llvm::Value* r() override { return end(); }
 
     static bool classof(Pattern const* s) {
         return s->getKind() == PatternKind::VectorGetElement;
@@ -375,9 +404,10 @@ class Switch : public Pattern {
 
     // TODO add meaningful accessors
 
-    static Switch create(Builder& b, llvm::Value* cond,
-                         llvm::BasicBlock* defaultTarget, int numCases) {
-        return llvm::SwitchInst::Create(cond, defaultTarget, numCases, b);
+    static Switch* create(Builder& b, llvm::Value* cond,
+                          llvm::BasicBlock* defaultTarget, int numCases) {
+        return new Switch(
+            llvm::SwitchInst::Create(cond, defaultTarget, numCases, b));
     }
 
     void setDefaultDest(llvm::BasicBlock* target) {
