@@ -224,9 +224,9 @@ class CppClass:
                 return True
         return False
 
-    def isPass(self):
+    def isMatchable(self):
         return self.isSubclassOf(
-                self.manager.getClass("rjit::ir::Pass"))
+                self.manager.getClass("rjit::ir::Pattern"))
 
 
 class CppMethod:
@@ -645,7 +645,7 @@ def analyzeMatchSets(klass):
     subclasses = set(klass.subclasses)
 
     # if the class is a leaf in the hierarchy, its matchset is its own name
-    if not subclasses and klass.isPass():
+    if not subclasses and klass.isMatchable():
         m.add(klass.name.split("::")[-1])
         klass.matchSet = m
         return m
