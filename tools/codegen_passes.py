@@ -591,7 +591,8 @@ switch (pattern->getKind()) {{
 
     def emit(self, dest, cppBase):
         parents = ""
-        header = self.passClass.file[len(cppBase) + 1:]
+        filename = os.path.abspath(self.passClass.file)
+        header = filename[len(cppBase) + 1:]
         for p in self.passClass.parents:
             parents += "if ({0}::dispatch(i))\n            goto DONE;\n".format(p.name)
         code = """#include "{header}"
