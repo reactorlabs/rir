@@ -70,11 +70,14 @@ else
 fi
 
 if [ ! -x "$CLANG_FORMAT" ] ; then
-    if [  clang-format --version >/dev/null 2>&1 ] ; then
-        printf "Error: clang-format executable not found neither in ${LLVM_CMAKE} or system.\n"
-        printf "Error: consider either rebuilding llvm with debug flag or\n".
-        printf "Error: installing clang-format - sudo apt-get clang-format (linux) or brew install clang-format (osx)\n"
+    clang-format --version | grep -q RELEASE_370
+    if [ $? -ne 0 ]; then
+        printf "Error: clang-format executable version 3.7 not found neither in ${LLVM_CMAKE} or system.\n"
+        printf "Error: consider either building clang (--with-clang flag) or\n".
+        printf "Error: installing clang-format version 3.7 and make it available on your system path\n"
         exit 1
+    else
+        CLANG_FORMAT=`which clang-format`
     fi
 fi
 
