@@ -29,11 +29,11 @@ PointerType* initializeTypes() {
     // Addrspace == 1 -> GC managed pointer
     t::SEXP = PointerType::get(t::SEXPREC, 1);
     // SEXPREC, first the union
-    StructType* u1 = StructType::create(context, "union.SEXP_SEXP_SEXP");
+    t::SEXP_u1 = StructType::create(context, "union.SEXP_SEXP_SEXP");
     fields = {t::SEXP, t::SEXP, t::SEXP};
-    u1->setBody(fields, false);
+    t::SEXP_u1->setBody(fields, false);
     // now the real SEXPREC
-    fields = {t_sxpinfo_struct, t::SEXP, t::SEXP, t::SEXP, u1};
+    fields = {t_sxpinfo_struct, t::SEXP, t::SEXP, t::SEXP, t::SEXP_u1};
     t::SEXPREC->setBody(fields, false);
 
     StructType* t_vecsxp_struct =
@@ -127,6 +127,7 @@ Type* Bool;
 
 PointerType* SEXP = initializeTypes();
 
+StructType* SEXP_u1;
 StructType* SEXPREC;
 StructType* VECTOR_SEXPREC;
 

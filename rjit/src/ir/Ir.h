@@ -103,6 +103,9 @@ class Pattern {
         ClosureQuickArgumentAdaptor,
         ClosureNativeCallTrampoline,
         CallNative,
+        CAR,
+        CDR,
+        TAG,
         unknown,
     };
 
@@ -374,6 +377,48 @@ class MarkNotMutable : public MultiPattern {
 
     static bool classof(Pattern const* s) {
         return s->getKind() == PatternKind::MarkNotMutable;
+    }
+};
+
+class Car : public MultiPattern {
+  public:
+    Car(llvm::Instruction* start, llvm::Instruction* result)
+        : MultiPattern(start, result, PatternKind::CAR) {}
+
+    static Car* create(Builder& b, llvm::Value* sexp);
+
+    llvm::Instruction* r() override { return end(); }
+
+    static bool classof(Pattern const* s) {
+        return s->getKind() == PatternKind::CAR;
+    }
+};
+
+class Cdr : public MultiPattern {
+  public:
+    Cdr(llvm::Instruction* start, llvm::Instruction* result)
+        : MultiPattern(start, result, PatternKind::CAR) {}
+
+    static Cdr* create(Builder& b, llvm::Value* sexp);
+
+    llvm::Instruction* r() override { return end(); }
+
+    static bool classof(Pattern const* s) {
+        return s->getKind() == PatternKind::CDR;
+    }
+};
+
+class Tag : public MultiPattern {
+  public:
+    Tag(llvm::Instruction* start, llvm::Instruction* result)
+        : MultiPattern(start, result, PatternKind::TAG) {}
+
+    static Tag* create(Builder& b, llvm::Value* sexp);
+
+    llvm::Instruction* r() override { return end(); }
+
+    static bool classof(Pattern const* s) {
+        return s->getKind() == PatternKind::TAG;
     }
 };
 

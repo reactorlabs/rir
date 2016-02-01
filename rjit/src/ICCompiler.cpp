@@ -196,9 +196,10 @@ bool ICCompiler::compileIc(SEXP inCall, SEXP inFun) {
 
             // Insert a guard to check if the incomming function matches
             // the one we got this time
-            ICmpInst* test =
-                new ICmpInst(*b.block(), ICmpInst::ICMP_EQ, fun(),
-                             ir::Builder::convertToPointer(inFun), "guard");
+            Value* nativeFun = ir::Cdr::create(b, fun())->r();
+            ICmpInst* test = new ICmpInst(
+                *b.block(), ICmpInst::ICMP_EQ, nativeFun,
+                ir::Builder::convertToPointer(BODY(inFun)), "guard");
             BranchInst::Create(icMatch, icMiss, test, b.block());
             b.setBlock(icMatch);
 
@@ -287,8 +288,10 @@ bool ICCompiler::compileGenericIc(SEXP inCall, SEXP inFun) {
     BasicBlock* icMatch = b.createBasicBlock("icMatch");
     BasicBlock* icMiss = b.createBasicBlock("icMiss");
 
-    Value* test = new ICmpInst(*b.block(), ICmpInst::ICMP_EQ, fun(),
-                               b.convertToPointer(inFun), "guard");
+    Value* body = ir::Cdr::create(b, fun())->r();
+    Value* test =
+        new ICmpInst(*b.block(), ICmpInst::ICMP_EQ, body,
+                     ir::Builder::convertToPointer(BODY(inFun)), "guard");
 
     BranchInst::Create(icMatch, icMiss, test, b.block());
     b.setBlock(icMatch);
