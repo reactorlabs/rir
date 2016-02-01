@@ -58,14 +58,12 @@ ExecutionEngine* JITCompileLayer::getEngine(JITModule* m) {
 
     pm.add(createTargetTransformInfoWrapperPass(TargetIRAnalysis()));
 
-    pm.add(rjit::createPlaceRJITSafepointsPass());
-
     PassManagerBuilder PMBuilder;
-    PMBuilder.OptLevel = 0;  // Set optimization level to -O0
+    PMBuilder.OptLevel = 1;  // Set optimization level to -O0
     PMBuilder.SizeLevel = 1; // so that no additional phases are run.
     PMBuilder.populateModulePassManager(pm);
 
-    // TODO: maybe have our own version which is not relocating?
+    pm.add(rjit::createPlaceRJITSafepointsPass());
     pm.add(rjit::createRJITRewriteStatepointsForGCPass());
 
     pm.run(*m);
