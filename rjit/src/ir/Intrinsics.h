@@ -485,6 +485,69 @@ class UserLiteral : public Intrinsic {
     }
 };
 
+// Call NewEnvironment
+class NewEnv : public Intrinsic {
+  public:
+    NewEnv(llvm::Instruction* ins) : Intrinsic(ins, PatternKind::NewEnv) {}
+
+    static NewEnv* create(Builder& b, llvm::Value* names, llvm::Value* values,
+                          llvm::Value* parent) {
+
+        std::vector<llvm::Value*> args_;
+        args_.push_back(names);
+        args_.push_back(values);
+        args_.push_back(parent);
+
+        llvm::CallInst* ins =
+            llvm::CallInst::Create(b.intrinsic<NewEnv>(), args_, "", b);
+
+        b.insertCall(ins);
+        NewEnv* result = new NewEnv(ins);
+        return result;
+    }
+
+    static char const* intrinsicName() { return "Rf_NewEnvironment"; }
+
+    static llvm::FunctionType* intrinsicType() {
+        return llvm::FunctionType::get(t::SEXP, {t::SEXP, t::SEXP, t::SEXP},
+                                       false);
+    }
+
+    static bool classof(Pattern const* s) {
+        return s->getKind() == PatternKind::NewEnv;
+    }
+};
+
+// Call CONS_NR
+class ConsNr : public Intrinsic {
+  public:
+    ConsNr(llvm::Instruction* ins) : Intrinsic(ins, PatternKind::ConsNr) {}
+
+    static ConsNr* create(Builder& b, llvm::Value* car, llvm::Value* cdr) {
+
+        std::vector<llvm::Value*> args_;
+        args_.push_back(car);
+        args_.push_back(cdr);
+
+        llvm::CallInst* ins =
+            llvm::CallInst::Create(b.intrinsic<ConsNr>(), args_, "", b);
+
+        b.insertCall(ins);
+        ConsNr* result = new ConsNr(ins);
+        return result;
+    }
+
+    static char const* intrinsicName() { return "CONS_NR"; }
+
+    static llvm::FunctionType* intrinsicType() {
+        return llvm::FunctionType::get(t::SEXP, {t::SEXP, t::SEXP}, false);
+    }
+
+    static bool classof(Pattern const* s) {
+        return s->getKind() == PatternKind::ConsNr;
+    }
+};
+
 // Just returns the index-th constant from the constant pool.
 class Constant : public Intrinsic {
   public:

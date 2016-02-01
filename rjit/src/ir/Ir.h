@@ -106,6 +106,8 @@ class Pattern {
         CAR,
         CDR,
         TAG,
+        ConsNr,
+        NewEnv,
         unknown,
     };
 
