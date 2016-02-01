@@ -1,0 +1,59 @@
+sudo: required
+dist: trusty
+
+branches:
+  except:
+    - gh-pages
+
+language: cpp
+
+os:
+  - linux
+  - osx
+
+compiler:
+  - clang
+  - gcc
+
+addons:
+  apt:
+    sources:
+      - ubuntu-toolchain-r-test
+      - llvm-toolchain-precise-3.7
+      - kalakris-cmake
+    packages:
+      - ninja-build
+      - doxygen
+      - python3
+      - xdg-utils
+      - gfortran
+      - subversion
+      - make
+      - r-base-dev
+      - liblzma-dev
+      - sed
+      - binutils
+      - curl
+      - ruby
+      - openjdk-7-jdk
+      - doxygen
+      - rsync
+      - xorg-dev
+      - clang-3.7
+
+before_install:
+  - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then ./ci/before_install-osx.sh; fi
+  - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then ./ci/before_install-linux.sh; fi
+  - export LLVM_BUILD_DIR=${TRAVIS_BUILD_DIR}\llvm
+
+matrix:
+  exclude:
+    - os: linux
+    - os: osx
+      compiler: gcc
+
+install:
+  - ./tools/setup.sh -l -d .
+
+script:
+  - ./tools/integration_tests.sh
