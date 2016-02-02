@@ -103,9 +103,9 @@ class Pattern {
         ClosureQuickArgumentAdaptor,
         ClosureNativeCallTrampoline,
         CallNative,
-        CAR,
-        CDR,
-        TAG,
+        Car,
+        Cdr,
+        Tag,
         ConsNr,
         NewEnv,
         unknown,
@@ -385,42 +385,42 @@ class MarkNotMutable : public MultiPattern {
 class Car : public MultiPattern {
   public:
     Car(llvm::Instruction* start, llvm::Instruction* result)
-        : MultiPattern(start, result, PatternKind::CAR) {}
+        : MultiPattern(start, result, PatternKind::Car) {}
 
     static Car* create(Builder& b, llvm::Value* sexp);
 
     llvm::Instruction* r() override { return end(); }
 
     static bool classof(Pattern const* s) {
-        return s->getKind() == PatternKind::CAR;
+        return s->getKind() == PatternKind::Car;
     }
 };
 
 class Cdr : public MultiPattern {
   public:
     Cdr(llvm::Instruction* start, llvm::Instruction* result)
-        : MultiPattern(start, result, PatternKind::CAR) {}
+        : MultiPattern(start, result, PatternKind::Car) {}
 
     static Cdr* create(Builder& b, llvm::Value* sexp);
 
     llvm::Instruction* r() override { return end(); }
 
     static bool classof(Pattern const* s) {
-        return s->getKind() == PatternKind::CDR;
+        return s->getKind() == PatternKind::Cdr;
     }
 };
 
 class Tag : public MultiPattern {
   public:
     Tag(llvm::Instruction* start, llvm::Instruction* result)
-        : MultiPattern(start, result, PatternKind::TAG) {}
+        : MultiPattern(start, result, PatternKind::Tag) {}
 
     static Tag* create(Builder& b, llvm::Value* sexp);
 
     llvm::Instruction* r() override { return end(); }
 
     static bool classof(Pattern const* s) {
-        return s->getKind() == PatternKind::TAG;
+        return s->getKind() == PatternKind::Tag;
     }
 };
 
