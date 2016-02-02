@@ -14,7 +14,7 @@ using namespace rjit;
 
 /** Compiles given ast and returns the NATIVESXP for it.
  */
-REXPORT SEXP jitAst(SEXP ast, SEXP formals) {
+REXPORT SEXP jitAst(SEXP ast, SEXP formals, SEXP rho) {
     Compiler c("module");
     SEXP result = c.compile("rfunction", ast, formals);
     c.jitAll();
@@ -74,6 +74,9 @@ int RJIT_COMPILE = getenv("RJIT_COMPILE") ? atoi(getenv("RJIT_COMPILE")) : 0;
 int R_ENABLE_JIT = getenv("R_ENABLE_JIT") ? atoi(getenv("R_ENABLE_JIT")) : 0;
 
 int RJIT_DEBUG = getenv("RJIT_DEBUG") ? atoi(getenv("RJIT_DEBUG")) : 0;
+
+// TODO aghosn
+int OSR_INLINE = getenv("OSR_INLINE") ? atoi(getenv("OSR_INLINE")) : 0;
 
 REXPORT SEXP jitDisable(SEXP expression) {
     RJIT_COMPILE = false;
