@@ -204,26 +204,24 @@ bool ICCompiler::compileIc(SEXP inCall, SEXP inFun) {
             b.setBlock(icMatch);
 
             // This is an inlined version of applyNativeClosure
-            Value* arglist = ir::Builder::convertToPointer(R_NilValue);
-
-            // This reverses the arglist, but quickArgumentAdapter
-            // reverses again
-            // TODO: construct the environment in one go,
-            // without using quickArgumentAdapter
-            for (unsigned i = 0; i < size; ++i) {
-                Value* arg = b.args()[i];
-                if (promarg[i])
-                    arg =
-                        INTRINSIC(b.intrinsic<ir::CreatePromise>(), arg, rho());
-                arglist = INTRINSIC(CONS_NR, arg, arglist);
+            Value* actuals = ir::Builder::convertToPointer(R_NilValue);
+            for (unsigned i = size; i > 0; --i) {
+                Value* arg = b.args()[i - 1];
+                if (promarg[i - 1])
+                    arg = ir::CreatePromise::create(b, arg, rho())->r();
+                actuals = ir::ConsNr::create(b, arg, actuals)->r();
+                // TODO:
+                // ir::EnableRefcnt(actuals);
             }
 
             Value* newrho =
-                INTRINSIC(closureQuickArgumentAdaptor, fun(), arglist);
+                ir::NewEnv::create(b, ir::Car::create(b, fun())->r(), actuals,
+                                   ir::Tag::create(b, fun())->r())
+                    ->r();
 
             Value* cntxt = new AllocaInst(t::cntxt, "", b.block());
 
-            INTRINSIC(initClosureContext, cntxt, call(), newrho, rho(), arglist,
+            INTRINSIC(initClosureContext, cntxt, call(), newrho, rho(), actuals,
                       fun());
 
             Value* res =
@@ -243,10 +241,6 @@ bool ICCompiler::compileIc(SEXP inCall, SEXP inFun) {
 }
 
 void ICCompiler::callIcMiss() {
-    // auto d = llvm::Function::Create(
-    //         FunctionType::get(t::t_void,{},false),
-    //         llvm::Function::ExternalLinkage, "debugBreak", b.module());
-    // INTRINSIC_NO_SAFEPOINT(d,{});
     auto stub = getStub(size, b);
     auto res = INTRINSIC_NO_SAFEPOINT(stub, b.args());
     ir::Return::create(b, res);
