@@ -75,9 +75,6 @@ int R_ENABLE_JIT = getenv("R_ENABLE_JIT") ? atoi(getenv("R_ENABLE_JIT")) : 0;
 
 int RJIT_DEBUG = getenv("RJIT_DEBUG") ? atoi(getenv("RJIT_DEBUG")) : 0;
 
-// TODO aghosn
-int OSR_INLINE = getenv("OSR_INLINE") ? atoi(getenv("OSR_INLINE")) : 0;
-
 REXPORT SEXP jitDisable(SEXP expression) {
     RJIT_COMPILE = false;
     return R_NilValue;
