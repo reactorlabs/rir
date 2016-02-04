@@ -1,6 +1,8 @@
 #include "Builder.h"
 #include "Intrinsics.h"
 
+#include "Verifier.h"
+
 using namespace llvm;
 
 namespace rjit {
@@ -73,6 +75,26 @@ void Builder::openFunction(std::string const& name, SEXP ast, SEXP formals) {
     c_ = new ClosureContext(name, m_, formals);
     c_->addConstantPoolObject(ast);
 }
+
+SEXP Builder::closeFunction() {
+    assert((contextStack_.empty() or (contextStack_.top()->f != c_->f)) and
+           "Not a function context");
+
+    ClosureContext* cc = dynamic_cast<ClosureContext*>(c_);
+    SEXP result =
+        module()->getNativeSXP(cc->formals, c_->cp[0], c_->cp, c_->f);
+    // c_->f->dump();
+    ir::Verifier::check(c_->f);
+    delete c_;
+    if (contextStack_.empty()) {
+        c_ = nullptr;
+    } else {
+        c_ = contextStack_.top();
+        contextStack_.pop();
+    }
+    return result;
+}
+
 
 void Builder::openPromise(std::string const& name, SEXP ast) {
     if (c_ != nullptr)

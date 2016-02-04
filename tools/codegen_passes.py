@@ -436,7 +436,7 @@ class CppClass:
         td = os.path.getmtime(filename)
         if (ts > td):
             emit_ = True
-            return true
+            return True
         ts = os.path.getmtime(sys.argv[0])
         if (ts > td):
             emit_ = True

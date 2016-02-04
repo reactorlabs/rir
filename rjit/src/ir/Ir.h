@@ -15,6 +15,8 @@
 namespace rjit {
 namespace ir {
 
+class Verifier;
+
 /** Instruction Pattern
 
   Each llvm instruction can be part of a pattern. Pattern identifies a high
@@ -45,6 +47,14 @@ class Pattern {
     /** Pattern kind for fast RTTI.
      */
     Kind const kind;
+
+    /** Returns the length of the pattern, i.e. how many consecutive llvm instructions it contains.
+
+      TODO this returns 1 by default, which is plainly wrong.
+     */
+    virtual size_t length() const {
+        return 1;
+    }
 
     /** Every pattern should return its first and last instruction.
 
@@ -110,6 +120,9 @@ class Pattern {
     Kind getKind() const { return kind; }
 
   protected:
+
+    friend class Verifier;
+
     /** Each pattern must know the llvm::instruction that is its result.
 
       This instruction should not be used publicly, rather result() method
@@ -304,23 +317,30 @@ class IntegerAdd : public BinaryOperator {
  */
 class Cbr : public Pattern {
   public:
-    llvm::Value* cond() { return ins<llvm::ICmpInst>()->getOperand(0); }
+
+    llvm::Instruction * first() const override {
+        return ins_->getPrevNode();
+    }
+
+    size_t length() const override {
+        return 2;
+    }
+
+    llvm::Value* cond() {
+        return ins_->getPrevNode()->getOperand(0);
+    }
 
     llvm::BasicBlock* trueCase() {
-        llvm::BranchInst* b =
-            llvm::cast<llvm::BranchInst>(ins<llvm::ICmpInst>()->getNextNode());
-        return b->getSuccessor(0);
+        return ins<llvm::BranchInst>()->getSuccessor(0);
     }
 
     llvm::BasicBlock* falseCase() {
-        llvm::BranchInst* b =
-            llvm::cast<llvm::BranchInst>(ins<llvm::ICmpInst>()->getNextNode());
-        return b->getSuccessor(1);
+        return ins<llvm::BranchInst>()->getSuccessor(1);
     }
 
     Cbr(llvm::Instruction* cond, llvm::Instruction* branch)
-        : Pattern(cond, Kind::Cbr) {
-        attach(branch);
+        : Pattern(branch, Kind::Cbr) {
+        attach(cond);
     }
 
     static void create(Builder& b, llvm::Value* cond,

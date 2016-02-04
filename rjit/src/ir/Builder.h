@@ -135,23 +135,7 @@ class Builder {
       will be added at the time the module is jitted. The function's SEXP is
       therefore automatically added to the relocations for the module.
      */
-    SEXP closeFunction() {
-        assert((contextStack_.empty() or (contextStack_.top()->f != c_->f)) and
-               "Not a function context");
-
-        ClosureContext* cc = dynamic_cast<ClosureContext*>(c_);
-        SEXP result =
-            module()->getNativeSXP(cc->formals, c_->cp[0], c_->cp, c_->f);
-        // c_->f->dump();
-        delete c_;
-        if (contextStack_.empty()) {
-            c_ = nullptr;
-        } else {
-            c_ = contextStack_.top();
-            contextStack_.pop();
-        }
-        return result;
-    }
+    SEXP closeFunction();
 
     /** Returns the llvm::Function corresponding to the intrinsic of given name.
       If such intrinsic is not present in the module yet, it is declared using
