@@ -17,6 +17,14 @@ jit.compile <- function(what, env = environment(what)) {
     }
 }
 
+jit.compileInPlace <- function(what, env = environment(what)) {
+    #nat = .Internal(bodyCode(jit.compile(what, env)))
+    nat = jit.compile(what, env)
+    invisible(.Call("jitSwapForNative", what, nat))
+}
+
+jit.compileInPlace
+
 jit.constants <- function(what) {
     if (typeof(what) == "closure")
         what = .Internal(bodyCode(what));

@@ -1,3 +1,8 @@
+/** Enables the use of R internals for us so that we can manipulate R structures in low level.
+ */
+#define USE_RINTERNALS 1
+
+
 #include <llvm/IR/Module.h>
 
 #include "Compiler.h"
@@ -19,6 +24,13 @@ REXPORT SEXP jitAst(SEXP ast, SEXP formals, SEXP rho) {
     SEXP result = c.compile("rfunction", ast, formals);
     c.jitAll();
     return result;
+}
+
+REXPORT SEXP jitSwapForNative(SEXP original, SEXP native) {
+    CAR(original) = CAR(native);
+    CDR(original) = CDR(native);
+    TAG(original) = TAG(native);
+    return original;
 }
 
 /** More complex compilation method that compiles multiple functions into a
