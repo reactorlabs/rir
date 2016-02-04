@@ -33,13 +33,9 @@ class Verifier;
 class Pattern {
   public:
     enum class Kind {
+        Invalid = 0, // Will catch uninitialized metadata
         unknown,
-        Invalid,
 #include "ir/pattern_kinds.inc"
-        // TODO these do not have corresponding patterns, we should remove them!
-        ExtractConstantPool,
-        UserConstant,
-        AddEllipsisArgument,
     };
 
     static char const* const MD_NAME;
