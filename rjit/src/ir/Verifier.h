@@ -81,7 +81,7 @@ class Verifier {
                 << std::endl;
         }
 
-        int length = 0;
+        size_t length = 0;
         while (true) {
             if (Pattern::get(i) != p) {
                 std::cout << "Instruction inside pattern not attached:"
