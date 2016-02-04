@@ -15,7 +15,7 @@ class InitClosureContext : public Intrinsic {
     llvm::Value* sysparen() { return getValue(3); }
 
     InitClosureContext(llvm::Instruction* ins)
-        : Intrinsic(ins, PatternKind::InitClosureContext) {}
+        : Intrinsic(ins, Kind::InitClosureContext) {}
 
     static InitClosureContext* create(Builder& b, llvm::Value* cntxt,
                                       llvm::Value* call, llvm::Value* rho,
@@ -43,7 +43,7 @@ class InitClosureContext : public Intrinsic {
     }
 
     static bool classof(Pattern const* s) {
-        return s->getKind() == PatternKind::InitClosureContext;
+        return s->getKind() == Kind::InitClosureContext;
     }
 };
 
@@ -53,7 +53,7 @@ class EndClosureContext : public Intrinsic {
     llvm::Value* resul() { return getValue(1); }
 
     EndClosureContext(llvm::Instruction* ins)
-        : Intrinsic(ins, PatternKind::EndClosureContext) {}
+        : Intrinsic(ins, Kind::EndClosureContext) {}
 
     static EndClosureContext* create(Builder& b, llvm::Value* cntxt,
                                      llvm::Value* resul) {
@@ -77,7 +77,7 @@ class EndClosureContext : public Intrinsic {
     }
 
     static bool classof(Pattern const* s) {
-        return s->getKind() == PatternKind::EndClosureContext;
+        return s->getKind() == Kind::EndClosureContext;
     }
 };
 
@@ -87,7 +87,7 @@ class ClosureQuickArgumentAdaptor : public Intrinsic {
     llvm::Value* arglis() { return getValue(1); }
 
     ClosureQuickArgumentAdaptor(llvm::Instruction* ins)
-        : Intrinsic(ins, PatternKind::ClosureQuickArgumentAdaptor) {}
+        : Intrinsic(ins, Kind::ClosureQuickArgumentAdaptor) {}
 
     static ClosureQuickArgumentAdaptor* create(Builder& b, llvm::Value* op,
                                                llvm::Value* arglis) {
@@ -112,7 +112,7 @@ class ClosureQuickArgumentAdaptor : public Intrinsic {
     }
 
     static bool classof(Pattern const* s) {
-        return s->getKind() == PatternKind::ClosureQuickArgumentAdaptor;
+        return s->getKind() == Kind::ClosureQuickArgumentAdaptor;
     }
 };
 
@@ -122,7 +122,7 @@ class CallNative : public Intrinsic {
     llvm::Value* rho() { return getValue(1); }
 
     CallNative(llvm::Instruction* ins)
-        : Intrinsic(ins, PatternKind::CallNative) {}
+        : Intrinsic(ins, Kind::CallNative) {}
 
     static CallNative* create(Builder& b, llvm::Value* native,
                               llvm::Value* rho) {
@@ -146,7 +146,7 @@ class CallNative : public Intrinsic {
     }
 
     static bool classof(Pattern const* s) {
-        return s->getKind() == PatternKind::CallNative;
+        return s->getKind() == Kind::CallNative;
     }
 };
 
@@ -157,7 +157,7 @@ class ClosureNativeCallTrampoline : public Intrinsic {
     llvm::Value* rh() { return getValue(2); }
 
     ClosureNativeCallTrampoline(llvm::Instruction* ins)
-        : Intrinsic(ins, PatternKind::ClosureNativeCallTrampoline) {}
+        : Intrinsic(ins, Kind::ClosureNativeCallTrampoline) {}
 
     static ClosureNativeCallTrampoline* create(Builder& b, llvm::Value* cntxt,
                                                llvm::Value* native,
@@ -185,7 +185,7 @@ class ClosureNativeCallTrampoline : public Intrinsic {
     }
 
     static bool classof(Pattern const* s) {
-        return s->getKind() == PatternKind::ClosureNativeCallTrampoline;
+        return s->getKind() == Kind::ClosureNativeCallTrampoline;
     }
 };
 
@@ -205,7 +205,7 @@ class ConvertToLogicalNoNA : public Intrinsic {
     SEXP call(Builder const& b) { return b.constantPool(call()); }
 
     ConvertToLogicalNoNA(llvm::Instruction* ins)
-        : Intrinsic(ins, PatternKind::ConvertToLogicalNoNA) {}
+        : Intrinsic(ins, Kind::ConvertToLogicalNoNA) {}
 
     static ConvertToLogicalNoNA* create(Builder& b, llvm::Value* what,
                                         SEXP call) {
@@ -231,7 +231,7 @@ class ConvertToLogicalNoNA : public Intrinsic {
     }
 
     static bool classof(Pattern const* s) {
-        return s->getKind() == PatternKind::ConvertToLogicalNoNA;
+        return s->getKind() == Kind::ConvertToLogicalNoNA;
     }
 };
 
@@ -240,7 +240,7 @@ class PrintValue : public Intrinsic {
     llvm::Value* value() { return getValue(0); }
 
     PrintValue(llvm::Instruction* ins)
-        : Intrinsic(ins, PatternKind::PrintValue) {}
+        : Intrinsic(ins, Kind::PrintValue) {}
 
     static PrintValue* create(Builder& b, llvm::Value* value) {
 
@@ -262,7 +262,7 @@ class PrintValue : public Intrinsic {
     }
 
     static bool classof(Pattern const* s) {
-        return s->getKind() == PatternKind::PrintValue;
+        return s->getKind() == Kind::PrintValue;
     }
 };
 
@@ -274,7 +274,7 @@ class StartFor : public Intrinsic {
     llvm::Value* seq() { return getValue(0); }
     llvm::Value* rho() { return getValue(1); }
 
-    StartFor(llvm::Instruction* ins) : Intrinsic(ins, PatternKind::StartFor) {}
+    StartFor(llvm::Instruction* ins) : Intrinsic(ins, Kind::StartFor) {}
 
     static StartFor* create(Builder& b, llvm::Value* seq, llvm::Value* rho) {
 
@@ -297,7 +297,7 @@ class StartFor : public Intrinsic {
     }
 
     static bool classof(Pattern const* s) {
-        return s->getKind() == PatternKind::StartFor;
+        return s->getKind() == Kind::StartFor;
     }
 };
 
@@ -317,7 +317,7 @@ class LoopSequenceLength : public Intrinsic {
     SEXP call(Builder const& b) { return b.constantPool(call()); }
 
     LoopSequenceLength(llvm::Instruction* ins)
-        : Intrinsic(ins, PatternKind::LoopSequenceLength) {}
+        : Intrinsic(ins, Kind::LoopSequenceLength) {}
 
     static LoopSequenceLength* create(Builder& b, llvm::Value* seq, SEXP call) {
 
@@ -342,7 +342,7 @@ class LoopSequenceLength : public Intrinsic {
     }
 
     static bool classof(Pattern const* s) {
-        return s->getKind() == PatternKind::LoopSequenceLength;
+        return s->getKind() == Kind::LoopSequenceLength;
     }
 };
 
@@ -354,7 +354,7 @@ class GetForLoopValue : public Intrinsic {
     llvm::Value* index() { return getValue(1); }
 
     GetForLoopValue(llvm::Instruction* ins)
-        : Intrinsic(ins, PatternKind::GetForLoopValue) {}
+        : Intrinsic(ins, Kind::GetForLoopValue) {}
 
     static GetForLoopValue* create(Builder& b, llvm::Value* seq,
                                    llvm::Value* index) {
@@ -378,14 +378,14 @@ class GetForLoopValue : public Intrinsic {
     }
 
     static bool classof(Pattern const* s) {
-        return s->getKind() == PatternKind::GetForLoopValue;
+        return s->getKind() == Kind::GetForLoopValue;
     }
 };
 
 class MarkVisible : public Intrinsic {
   public:
     MarkVisible(llvm::Instruction* ins)
-        : Intrinsic(ins, PatternKind::MarkVisible) {}
+        : Intrinsic(ins, Kind::MarkVisible) {}
 
     static MarkVisible* create(Builder& b) {
 
@@ -408,14 +408,14 @@ class MarkVisible : public Intrinsic {
     }
 
     static bool classof(Pattern const* s) {
-        return s->getKind() == PatternKind::MarkVisible;
+        return s->getKind() == Kind::MarkVisible;
     }
 };
 
 class MarkInvisible : public Intrinsic {
   public:
     MarkInvisible(llvm::Instruction* ins)
-        : Intrinsic(ins, PatternKind::MarkInvisible) {}
+        : Intrinsic(ins, Kind::MarkInvisible) {}
 
     static MarkInvisible* create(Builder& b) {
 
@@ -438,7 +438,7 @@ class MarkInvisible : public Intrinsic {
     }
 
     static bool classof(Pattern const* s) {
-        return s->getKind() == PatternKind::MarkInvisible;
+        return s->getKind() == Kind::MarkInvisible;
     }
 };
 
@@ -458,7 +458,7 @@ class UserLiteral : public Intrinsic {
     SEXP index(Builder const& b) { return b.constantPool(index()); }
 
     UserLiteral(llvm::Instruction* ins)
-        : Intrinsic(ins, PatternKind::UserLiteral) {}
+        : Intrinsic(ins, Kind::UserLiteral) {}
 
     static UserLiteral* create(Builder& b, SEXP index) {
 
@@ -481,14 +481,14 @@ class UserLiteral : public Intrinsic {
     }
 
     static bool classof(Pattern const* s) {
-        return s->getKind() == PatternKind::UserLiteral;
+        return s->getKind() == Kind::UserLiteral;
     }
 };
 
 // Call NewEnvironment
 class NewEnv : public Intrinsic {
   public:
-    NewEnv(llvm::Instruction* ins) : Intrinsic(ins, PatternKind::NewEnv) {}
+    NewEnv(llvm::Instruction* ins) : Intrinsic(ins, Kind::NewEnv) {}
 
     static NewEnv* create(Builder& b, llvm::Value* names, llvm::Value* values,
                           llvm::Value* parent) {
@@ -514,14 +514,14 @@ class NewEnv : public Intrinsic {
     }
 
     static bool classof(Pattern const* s) {
-        return s->getKind() == PatternKind::NewEnv;
+        return s->getKind() == Kind::NewEnv;
     }
 };
 
 // Call CONS_NR
 class ConsNr : public Intrinsic {
   public:
-    ConsNr(llvm::Instruction* ins) : Intrinsic(ins, PatternKind::ConsNr) {}
+    ConsNr(llvm::Instruction* ins) : Intrinsic(ins, Kind::ConsNr) {}
 
     static ConsNr* create(Builder& b, llvm::Value* car, llvm::Value* cdr) {
 
@@ -544,7 +544,7 @@ class ConsNr : public Intrinsic {
     }
 
     static bool classof(Pattern const* s) {
-        return s->getKind() == PatternKind::ConsNr;
+        return s->getKind() == Kind::ConsNr;
     }
 };
 
@@ -561,7 +561,7 @@ class Constant : public Intrinsic {
     }
     SEXP index(Builder const& b) { return b.constantPool(index()); }
 
-    Constant(llvm::Instruction* ins) : Intrinsic(ins, PatternKind::Constant) {}
+    Constant(llvm::Instruction* ins) : Intrinsic(ins, Kind::Constant) {}
 
     static Constant* create(Builder& b, SEXP index) {
 
@@ -584,7 +584,7 @@ class Constant : public Intrinsic {
     }
 
     static bool classof(Pattern const* s) {
-        return s->getKind() == PatternKind::Constant;
+        return s->getKind() == Kind::Constant;
     }
 };
 
@@ -605,7 +605,7 @@ class GenericGetVar : public Intrinsic {
     SEXP symbol(Builder const& b) { return b.constantPool(symbol()); }
 
     GenericGetVar(llvm::Instruction* ins)
-        : Intrinsic(ins, PatternKind::GenericGetVar) {}
+        : Intrinsic(ins, Kind::GenericGetVar) {}
 
     static GenericGetVar* create(Builder& b, llvm::Value* rho, SEXP symbol) {
 
@@ -630,7 +630,7 @@ class GenericGetVar : public Intrinsic {
     }
 
     static bool classof(Pattern const* s) {
-        return s->getKind() == PatternKind::GenericGetVar;
+        return s->getKind() == Kind::GenericGetVar;
     }
 };
 
@@ -648,7 +648,7 @@ class GenericGetEllipsisArg : public Intrinsic {
     SEXP symbol(Builder const& b) { return b.constantPool(symbol()); }
 
     GenericGetEllipsisArg(llvm::Instruction* ins)
-        : Intrinsic(ins, PatternKind::GenericGetEllipsisArg) {}
+        : Intrinsic(ins, Kind::GenericGetEllipsisArg) {}
 
     static GenericGetEllipsisArg* create(Builder& b, llvm::Value* rho,
                                          SEXP symbol) {
@@ -674,7 +674,7 @@ class GenericGetEllipsisArg : public Intrinsic {
     }
 
     static bool classof(Pattern const* s) {
-        return s->getKind() == PatternKind::GenericGetEllipsisArg;
+        return s->getKind() == Kind::GenericGetEllipsisArg;
     }
 };
 
@@ -693,7 +693,7 @@ class GenericSetVar : public Intrinsic {
     SEXP symbol(Builder const& b) { return b.constantPool(symbol()); }
 
     GenericSetVar(llvm::Instruction* ins)
-        : Intrinsic(ins, PatternKind::GenericSetVar) {}
+        : Intrinsic(ins, Kind::GenericSetVar) {}
 
     static GenericSetVar* create(Builder& b, llvm::Value* value,
                                  llvm::Value* rho, SEXP symbol) {
@@ -720,7 +720,7 @@ class GenericSetVar : public Intrinsic {
     }
 
     static bool classof(Pattern const* s) {
-        return s->getKind() == PatternKind::GenericSetVar;
+        return s->getKind() == Kind::GenericSetVar;
     }
 };
 
@@ -739,7 +739,7 @@ class GenericSetVarParent : public Intrinsic {
     SEXP symbol(Builder const& b) { return b.constantPool(symbol()); }
 
     GenericSetVarParent(llvm::Instruction* ins)
-        : Intrinsic(ins, PatternKind::GenericSetVarParent) {}
+        : Intrinsic(ins, Kind::GenericSetVarParent) {}
 
     static GenericSetVarParent* create(Builder& b, llvm::Value* value,
                                        llvm::Value* rho, SEXP symbol) {
@@ -766,7 +766,7 @@ class GenericSetVarParent : public Intrinsic {
     }
 
     static bool classof(Pattern const* s) {
-        return s->getKind() == PatternKind::GenericSetVarParent;
+        return s->getKind() == Kind::GenericSetVarParent;
     }
 };
 
@@ -784,7 +784,7 @@ class GetFunction : public Intrinsic {
     SEXP symbol(Builder const& b) { return b.constantPool(symbol()); }
 
     GetFunction(llvm::Instruction* ins)
-        : Intrinsic(ins, PatternKind::GetFunction) {}
+        : Intrinsic(ins, Kind::GetFunction) {}
 
     static GetFunction* create(Builder& b, llvm::Value* rho, SEXP symbol) {
 
@@ -809,7 +809,7 @@ class GetFunction : public Intrinsic {
     }
 
     static bool classof(Pattern const* s) {
-        return s->getKind() == PatternKind::GetFunction;
+        return s->getKind() == Kind::GetFunction;
     }
 };
 
@@ -826,7 +826,7 @@ class GetGlobalFunction : public Intrinsic {
     SEXP symbol(Builder const& b) { return b.constantPool(symbol()); }
 
     GetGlobalFunction(llvm::Instruction* ins)
-        : Intrinsic(ins, PatternKind::GetGlobalFunction) {}
+        : Intrinsic(ins, Kind::GetGlobalFunction) {}
 
     static GetGlobalFunction* create(Builder& b, SEXP symbol) {
 
@@ -849,7 +849,7 @@ class GetGlobalFunction : public Intrinsic {
     }
 
     static bool classof(Pattern const* s) {
-        return s->getKind() == PatternKind::GetGlobalFunction;
+        return s->getKind() == Kind::GetGlobalFunction;
     }
 };
 
@@ -866,7 +866,7 @@ class GetSymFunction : public Intrinsic {
     SEXP name(Builder const& b) { return b.constantPool(name()); }
 
     GetSymFunction(llvm::Instruction* ins)
-        : Intrinsic(ins, PatternKind::GetSymFunction) {}
+        : Intrinsic(ins, Kind::GetSymFunction) {}
 
     static GetSymFunction* create(Builder& b, SEXP name) {
 
@@ -889,7 +889,7 @@ class GetSymFunction : public Intrinsic {
     }
 
     static bool classof(Pattern const* s) {
-        return s->getKind() == PatternKind::GetSymFunction;
+        return s->getKind() == Kind::GetSymFunction;
     }
 };
 
@@ -906,7 +906,7 @@ class GetBuiltinFunction : public Intrinsic {
     SEXP name(Builder const& b) { return b.constantPool(name()); }
 
     GetBuiltinFunction(llvm::Instruction* ins)
-        : Intrinsic(ins, PatternKind::GetBuiltinFunction) {}
+        : Intrinsic(ins, Kind::GetBuiltinFunction) {}
 
     static GetBuiltinFunction* create(Builder& b, SEXP name) {
 
@@ -929,7 +929,7 @@ class GetBuiltinFunction : public Intrinsic {
     }
 
     static bool classof(Pattern const* s) {
-        return s->getKind() == PatternKind::GetBuiltinFunction;
+        return s->getKind() == Kind::GetBuiltinFunction;
     }
 };
 
@@ -946,7 +946,7 @@ class GetInternalBuiltinFunction : public Intrinsic {
     SEXP name(Builder const& b) { return b.constantPool(name()); }
 
     GetInternalBuiltinFunction(llvm::Instruction* ins)
-        : Intrinsic(ins, PatternKind::GetInternalBuiltinFunction) {}
+        : Intrinsic(ins, Kind::GetInternalBuiltinFunction) {}
 
     static GetInternalBuiltinFunction* create(Builder& b, SEXP name) {
 
@@ -970,7 +970,7 @@ class GetInternalBuiltinFunction : public Intrinsic {
     }
 
     static bool classof(Pattern const* s) {
-        return s->getKind() == PatternKind::GetInternalBuiltinFunction;
+        return s->getKind() == Kind::GetInternalBuiltinFunction;
     }
 };
 
@@ -979,7 +979,7 @@ class CheckFunction : public Intrinsic {
     llvm::Value* f() { return getValue(0); }
 
     CheckFunction(llvm::Instruction* ins)
-        : Intrinsic(ins, PatternKind::CheckFunction) {}
+        : Intrinsic(ins, Kind::CheckFunction) {}
 
     static CheckFunction* create(Builder& b, llvm::Value* f) {
 
@@ -1001,7 +1001,7 @@ class CheckFunction : public Intrinsic {
     }
 
     static bool classof(Pattern const* s) {
-        return s->getKind() == PatternKind::CheckFunction;
+        return s->getKind() == Kind::CheckFunction;
     }
 };
 
@@ -1013,7 +1013,7 @@ class CreatePromise : public Intrinsic {
     llvm::Value* rho() { return getValue(1); }
 
     CreatePromise(llvm::Instruction* ins)
-        : Intrinsic(ins, PatternKind::CreatePromise) {}
+        : Intrinsic(ins, Kind::CreatePromise) {}
 
     static CreatePromise* create(Builder& b, llvm::Value* fun,
                                  llvm::Value* rho) {
@@ -1037,7 +1037,7 @@ class CreatePromise : public Intrinsic {
     }
 
     static bool classof(Pattern const* s) {
-        return s->getKind() == PatternKind::CreatePromise;
+        return s->getKind() == Kind::CreatePromise;
     }
 };
 
@@ -1047,7 +1047,7 @@ class SexpType : public Intrinsic {
   public:
     llvm::Value* value() { return getValue(0); }
 
-    SexpType(llvm::Instruction* ins) : Intrinsic(ins, PatternKind::SexpType) {}
+    SexpType(llvm::Instruction* ins) : Intrinsic(ins, Kind::SexpType) {}
 
     static SexpType* create(Builder& b, llvm::Value* value) {
 
@@ -1069,7 +1069,7 @@ class SexpType : public Intrinsic {
     }
 
     static bool classof(Pattern const* s) {
-        return s->getKind() == PatternKind::SexpType;
+        return s->getKind() == Kind::SexpType;
     }
 };
 
@@ -1079,7 +1079,7 @@ class AddArgument : public Intrinsic {
     llvm::Value* arg() { return getValue(1); }
 
     AddArgument(llvm::Instruction* ins)
-        : Intrinsic(ins, PatternKind::AddArgument) {}
+        : Intrinsic(ins, Kind::AddArgument) {}
 
     static AddArgument* create(Builder& b, llvm::Value* args,
                                llvm::Value* arg) {
@@ -1103,7 +1103,7 @@ class AddArgument : public Intrinsic {
     }
 
     static bool classof(Pattern const* s) {
-        return s->getKind() == PatternKind::AddArgument;
+        return s->getKind() == Kind::AddArgument;
     }
 };
 
@@ -1114,7 +1114,7 @@ class AddKeywordArgument : public Intrinsic {
     llvm::Value* name() { return getValue(2); }
 
     AddKeywordArgument(llvm::Instruction* ins)
-        : Intrinsic(ins, PatternKind::AddKeywordArgument) {}
+        : Intrinsic(ins, Kind::AddKeywordArgument) {}
 
     static AddKeywordArgument* create(Builder& b, llvm::Value* args,
                                       llvm::Value* arg, llvm::Value* name) {
@@ -1140,7 +1140,7 @@ class AddKeywordArgument : public Intrinsic {
     }
 
     static bool classof(Pattern const* s) {
-        return s->getKind() == PatternKind::AddKeywordArgument;
+        return s->getKind() == Kind::AddKeywordArgument;
     }
 };
 
@@ -1151,7 +1151,7 @@ class AddEllipsisArgumentHead : public Intrinsic {
     llvm::Value* eager() { return getValue(2); }
 
     AddEllipsisArgumentHead(llvm::Instruction* ins)
-        : Intrinsic(ins, PatternKind::AddEllipsisArgumentHead) {}
+        : Intrinsic(ins, Kind::AddEllipsisArgumentHead) {}
 
     static AddEllipsisArgumentHead* create(Builder& b, llvm::Value* args,
                                            llvm::Value* rho,
@@ -1178,7 +1178,7 @@ class AddEllipsisArgumentHead : public Intrinsic {
     }
 
     static bool classof(Pattern const* s) {
-        return s->getKind() == PatternKind::AddEllipsisArgumentHead;
+        return s->getKind() == Kind::AddEllipsisArgumentHead;
     }
 };
 
@@ -1189,7 +1189,7 @@ class AddEllipsisArgumentTail : public Intrinsic {
     llvm::Value* eager() { return getValue(2); }
 
     AddEllipsisArgumentTail(llvm::Instruction* ins)
-        : Intrinsic(ins, PatternKind::AddEllipsisArgumentTail) {}
+        : Intrinsic(ins, Kind::AddEllipsisArgumentTail) {}
 
     static AddEllipsisArgumentTail* create(Builder& b, llvm::Value* args,
                                            llvm::Value* rho,
@@ -1216,7 +1216,7 @@ class AddEllipsisArgumentTail : public Intrinsic {
     }
 
     static bool classof(Pattern const* s) {
-        return s->getKind() == PatternKind::AddEllipsisArgumentTail;
+        return s->getKind() == Kind::AddEllipsisArgumentTail;
     }
 };
 
@@ -1228,7 +1228,7 @@ class CallBuiltin : public Intrinsic {
     llvm::Value* rho() { return getValue(3); }
 
     CallBuiltin(llvm::Instruction* ins)
-        : Intrinsic(ins, PatternKind::CallBuiltin) {}
+        : Intrinsic(ins, Kind::CallBuiltin) {}
 
     static CallBuiltin* create(Builder& b, llvm::Value* call,
                                llvm::Value* closure, llvm::Value* arguments,
@@ -1256,7 +1256,7 @@ class CallBuiltin : public Intrinsic {
     }
 
     static bool classof(Pattern const* s) {
-        return s->getKind() == PatternKind::CallBuiltin;
+        return s->getKind() == Kind::CallBuiltin;
     }
 };
 
@@ -1268,7 +1268,7 @@ class CallSpecial : public Intrinsic {
     llvm::Value* rho() { return getValue(3); }
 
     CallSpecial(llvm::Instruction* ins)
-        : Intrinsic(ins, PatternKind::CallSpecial) {}
+        : Intrinsic(ins, Kind::CallSpecial) {}
 
     static CallSpecial* create(Builder& b, llvm::Value* call,
                                llvm::Value* closure, llvm::Value* arguments,
@@ -1296,7 +1296,7 @@ class CallSpecial : public Intrinsic {
     }
 
     static bool classof(Pattern const* s) {
-        return s->getKind() == PatternKind::CallSpecial;
+        return s->getKind() == Kind::CallSpecial;
     }
 };
 
@@ -1308,7 +1308,7 @@ class CallClosure : public Intrinsic {
     llvm::Value* rho() { return getValue(3); }
 
     CallClosure(llvm::Instruction* ins)
-        : Intrinsic(ins, PatternKind::CallClosure) {}
+        : Intrinsic(ins, Kind::CallClosure) {}
 
     static CallClosure* create(Builder& b, llvm::Value* call,
                                llvm::Value* closure, llvm::Value* arguments,
@@ -1336,7 +1336,7 @@ class CallClosure : public Intrinsic {
     }
 
     static bool classof(Pattern const* s) {
-        return s->getKind() == PatternKind::CallClosure;
+        return s->getKind() == Kind::CallClosure;
     }
 };
 
@@ -1362,7 +1362,7 @@ class CreateClosure : public Intrinsic {
     SEXP body(Builder const& b) { return b.constantPool(body()); }
 
     CreateClosure(llvm::Instruction* ins)
-        : Intrinsic(ins, PatternKind::CreateClosure) {}
+        : Intrinsic(ins, Kind::CreateClosure) {}
 
     static CreateClosure* create(Builder& b, llvm::Value* rho, SEXP forms,
                                  SEXP body) {
@@ -1389,7 +1389,7 @@ class CreateClosure : public Intrinsic {
     }
 
     static bool classof(Pattern const* s) {
-        return s->getKind() == PatternKind::CreateClosure;
+        return s->getKind() == Kind::CreateClosure;
     }
 };
 
@@ -1408,7 +1408,7 @@ class GenericUnaryMinus : public Intrinsic {
     SEXP call(Builder const& b) { return b.constantPool(call()); }
 
     GenericUnaryMinus(llvm::Instruction* ins)
-        : Intrinsic(ins, PatternKind::GenericUnaryMinus) {}
+        : Intrinsic(ins, Kind::GenericUnaryMinus) {}
 
     static GenericUnaryMinus* create(Builder& b, llvm::Value* op,
                                      llvm::Value* rho, SEXP call) {
@@ -1435,7 +1435,7 @@ class GenericUnaryMinus : public Intrinsic {
     }
 
     static bool classof(Pattern const* s) {
-        return s->getKind() == PatternKind::GenericUnaryMinus;
+        return s->getKind() == Kind::GenericUnaryMinus;
     }
 };
 
@@ -1454,7 +1454,7 @@ class GenericUnaryPlus : public Intrinsic {
     SEXP call(Builder const& b) { return b.constantPool(call()); }
 
     GenericUnaryPlus(llvm::Instruction* ins)
-        : Intrinsic(ins, PatternKind::GenericUnaryPlus) {}
+        : Intrinsic(ins, Kind::GenericUnaryPlus) {}
 
     static GenericUnaryPlus* create(Builder& b, llvm::Value* op,
                                     llvm::Value* rho, SEXP call) {
@@ -1481,7 +1481,7 @@ class GenericUnaryPlus : public Intrinsic {
     }
 
     static bool classof(Pattern const* s) {
-        return s->getKind() == PatternKind::GenericUnaryPlus;
+        return s->getKind() == Kind::GenericUnaryPlus;
     }
 };
 
@@ -1501,7 +1501,7 @@ class GenericAdd : public Intrinsic {
     SEXP call(Builder const& b) { return b.constantPool(call()); }
 
     GenericAdd(llvm::Instruction* ins)
-        : Intrinsic(ins, PatternKind::GenericAdd) {}
+        : Intrinsic(ins, Kind::GenericAdd) {}
 
     static GenericAdd* create(Builder& b, llvm::Value* lhs, llvm::Value* rhs,
                               llvm::Value* rho, SEXP call) {
@@ -1529,7 +1529,7 @@ class GenericAdd : public Intrinsic {
     }
 
     static bool classof(Pattern const* s) {
-        return s->getKind() == PatternKind::GenericAdd;
+        return s->getKind() == Kind::GenericAdd;
     }
 };
 
@@ -1549,7 +1549,7 @@ class GenericSub : public Intrinsic {
     SEXP call(Builder const& b) { return b.constantPool(call()); }
 
     GenericSub(llvm::Instruction* ins)
-        : Intrinsic(ins, PatternKind::GenericSub) {}
+        : Intrinsic(ins, Kind::GenericSub) {}
 
     static GenericSub* create(Builder& b, llvm::Value* lhs, llvm::Value* rhs,
                               llvm::Value* rho, SEXP call) {
@@ -1577,7 +1577,7 @@ class GenericSub : public Intrinsic {
     }
 
     static bool classof(Pattern const* s) {
-        return s->getKind() == PatternKind::GenericSub;
+        return s->getKind() == Kind::GenericSub;
     }
 };
 
@@ -1597,7 +1597,7 @@ class GenericMul : public Intrinsic {
     SEXP call(Builder const& b) { return b.constantPool(call()); }
 
     GenericMul(llvm::Instruction* ins)
-        : Intrinsic(ins, PatternKind::GenericMul) {}
+        : Intrinsic(ins, Kind::GenericMul) {}
 
     static GenericMul* create(Builder& b, llvm::Value* lhs, llvm::Value* rhs,
                               llvm::Value* rho, SEXP call) {
@@ -1625,7 +1625,7 @@ class GenericMul : public Intrinsic {
     }
 
     static bool classof(Pattern const* s) {
-        return s->getKind() == PatternKind::GenericMul;
+        return s->getKind() == Kind::GenericMul;
     }
 };
 
@@ -1645,7 +1645,7 @@ class GenericDiv : public Intrinsic {
     SEXP call(Builder const& b) { return b.constantPool(call()); }
 
     GenericDiv(llvm::Instruction* ins)
-        : Intrinsic(ins, PatternKind::GenericDiv) {}
+        : Intrinsic(ins, Kind::GenericDiv) {}
 
     static GenericDiv* create(Builder& b, llvm::Value* lhs, llvm::Value* rhs,
                               llvm::Value* rho, SEXP call) {
@@ -1673,7 +1673,7 @@ class GenericDiv : public Intrinsic {
     }
 
     static bool classof(Pattern const* s) {
-        return s->getKind() == PatternKind::GenericDiv;
+        return s->getKind() == Kind::GenericDiv;
     }
 };
 
@@ -1693,7 +1693,7 @@ class GenericPow : public Intrinsic {
     SEXP call(Builder const& b) { return b.constantPool(call()); }
 
     GenericPow(llvm::Instruction* ins)
-        : Intrinsic(ins, PatternKind::GenericPow) {}
+        : Intrinsic(ins, Kind::GenericPow) {}
 
     static GenericPow* create(Builder& b, llvm::Value* lhs, llvm::Value* rhs,
                               llvm::Value* rho, SEXP call) {
@@ -1721,7 +1721,7 @@ class GenericPow : public Intrinsic {
     }
 
     static bool classof(Pattern const* s) {
-        return s->getKind() == PatternKind::GenericPow;
+        return s->getKind() == Kind::GenericPow;
     }
 };
 
@@ -1740,7 +1740,7 @@ class GenericSqrt : public Intrinsic {
     SEXP call(Builder const& b) { return b.constantPool(call()); }
 
     GenericSqrt(llvm::Instruction* ins)
-        : Intrinsic(ins, PatternKind::GenericSqrt) {}
+        : Intrinsic(ins, Kind::GenericSqrt) {}
 
     static GenericSqrt* create(Builder& b, llvm::Value* op, llvm::Value* rho,
                                SEXP call) {
@@ -1767,7 +1767,7 @@ class GenericSqrt : public Intrinsic {
     }
 
     static bool classof(Pattern const* s) {
-        return s->getKind() == PatternKind::GenericSqrt;
+        return s->getKind() == Kind::GenericSqrt;
     }
 };
 
@@ -1786,7 +1786,7 @@ class GenericExp : public Intrinsic {
     SEXP call(Builder const& b) { return b.constantPool(call()); }
 
     GenericExp(llvm::Instruction* ins)
-        : Intrinsic(ins, PatternKind::GenericExp) {}
+        : Intrinsic(ins, Kind::GenericExp) {}
 
     static GenericExp* create(Builder& b, llvm::Value* op, llvm::Value* rho,
                               SEXP call) {
@@ -1813,7 +1813,7 @@ class GenericExp : public Intrinsic {
     }
 
     static bool classof(Pattern const* s) {
-        return s->getKind() == PatternKind::GenericExp;
+        return s->getKind() == Kind::GenericExp;
     }
 };
 
@@ -1833,7 +1833,7 @@ class GenericEq : public Intrinsic {
     SEXP call(Builder const& b) { return b.constantPool(call()); }
 
     GenericEq(llvm::Instruction* ins)
-        : Intrinsic(ins, PatternKind::GenericEq) {}
+        : Intrinsic(ins, Kind::GenericEq) {}
 
     static GenericEq* create(Builder& b, llvm::Value* lhs, llvm::Value* rhs,
                              llvm::Value* rho, SEXP call) {
@@ -1861,7 +1861,7 @@ class GenericEq : public Intrinsic {
     }
 
     static bool classof(Pattern const* s) {
-        return s->getKind() == PatternKind::GenericEq;
+        return s->getKind() == Kind::GenericEq;
     }
 };
 
@@ -1881,7 +1881,7 @@ class GenericNe : public Intrinsic {
     SEXP call(Builder const& b) { return b.constantPool(call()); }
 
     GenericNe(llvm::Instruction* ins)
-        : Intrinsic(ins, PatternKind::GenericNe) {}
+        : Intrinsic(ins, Kind::GenericNe) {}
 
     static GenericNe* create(Builder& b, llvm::Value* lhs, llvm::Value* rhs,
                              llvm::Value* rho, SEXP call) {
@@ -1909,7 +1909,7 @@ class GenericNe : public Intrinsic {
     }
 
     static bool classof(Pattern const* s) {
-        return s->getKind() == PatternKind::GenericNe;
+        return s->getKind() == Kind::GenericNe;
     }
 };
 
@@ -1929,7 +1929,7 @@ class GenericLt : public Intrinsic {
     SEXP call(Builder const& b) { return b.constantPool(call()); }
 
     GenericLt(llvm::Instruction* ins)
-        : Intrinsic(ins, PatternKind::GenericLt) {}
+        : Intrinsic(ins, Kind::GenericLt) {}
 
     static GenericLt* create(Builder& b, llvm::Value* lhs, llvm::Value* rhs,
                              llvm::Value* rho, SEXP call) {
@@ -1957,7 +1957,7 @@ class GenericLt : public Intrinsic {
     }
 
     static bool classof(Pattern const* s) {
-        return s->getKind() == PatternKind::GenericLt;
+        return s->getKind() == Kind::GenericLt;
     }
 };
 
@@ -1977,7 +1977,7 @@ class GenericLe : public Intrinsic {
     SEXP call(Builder const& b) { return b.constantPool(call()); }
 
     GenericLe(llvm::Instruction* ins)
-        : Intrinsic(ins, PatternKind::GenericLe) {}
+        : Intrinsic(ins, Kind::GenericLe) {}
 
     static GenericLe* create(Builder& b, llvm::Value* lhs, llvm::Value* rhs,
                              llvm::Value* rho, SEXP call) {
@@ -2005,7 +2005,7 @@ class GenericLe : public Intrinsic {
     }
 
     static bool classof(Pattern const* s) {
-        return s->getKind() == PatternKind::GenericLe;
+        return s->getKind() == Kind::GenericLe;
     }
 };
 
@@ -2025,7 +2025,7 @@ class GenericGe : public Intrinsic {
     SEXP call(Builder const& b) { return b.constantPool(call()); }
 
     GenericGe(llvm::Instruction* ins)
-        : Intrinsic(ins, PatternKind::GenericGe) {}
+        : Intrinsic(ins, Kind::GenericGe) {}
 
     static GenericGe* create(Builder& b, llvm::Value* lhs, llvm::Value* rhs,
                              llvm::Value* rho, SEXP call) {
@@ -2053,7 +2053,7 @@ class GenericGe : public Intrinsic {
     }
 
     static bool classof(Pattern const* s) {
-        return s->getKind() == PatternKind::GenericGe;
+        return s->getKind() == Kind::GenericGe;
     }
 };
 
@@ -2073,7 +2073,7 @@ class GenericGt : public Intrinsic {
     SEXP call(Builder const& b) { return b.constantPool(call()); }
 
     GenericGt(llvm::Instruction* ins)
-        : Intrinsic(ins, PatternKind::GenericGt) {}
+        : Intrinsic(ins, Kind::GenericGt) {}
 
     static GenericGt* create(Builder& b, llvm::Value* lhs, llvm::Value* rhs,
                              llvm::Value* rho, SEXP call) {
@@ -2101,7 +2101,7 @@ class GenericGt : public Intrinsic {
     }
 
     static bool classof(Pattern const* s) {
-        return s->getKind() == PatternKind::GenericGt;
+        return s->getKind() == Kind::GenericGt;
     }
 };
 
@@ -2121,7 +2121,7 @@ class GenericBitAnd : public Intrinsic {
     SEXP call(Builder const& b) { return b.constantPool(call()); }
 
     GenericBitAnd(llvm::Instruction* ins)
-        : Intrinsic(ins, PatternKind::GenericBitAnd) {}
+        : Intrinsic(ins, Kind::GenericBitAnd) {}
 
     static GenericBitAnd* create(Builder& b, llvm::Value* lhs, llvm::Value* rhs,
                                  llvm::Value* rho, SEXP call) {
@@ -2149,7 +2149,7 @@ class GenericBitAnd : public Intrinsic {
     }
 
     static bool classof(Pattern const* s) {
-        return s->getKind() == PatternKind::GenericBitAnd;
+        return s->getKind() == Kind::GenericBitAnd;
     }
 };
 
@@ -2169,7 +2169,7 @@ class GenericBitOr : public Intrinsic {
     SEXP call(Builder const& b) { return b.constantPool(call()); }
 
     GenericBitOr(llvm::Instruction* ins)
-        : Intrinsic(ins, PatternKind::GenericBitOr) {}
+        : Intrinsic(ins, Kind::GenericBitOr) {}
 
     static GenericBitOr* create(Builder& b, llvm::Value* lhs, llvm::Value* rhs,
                                 llvm::Value* rho, SEXP call) {
@@ -2197,7 +2197,7 @@ class GenericBitOr : public Intrinsic {
     }
 
     static bool classof(Pattern const* s) {
-        return s->getKind() == PatternKind::GenericBitOr;
+        return s->getKind() == Kind::GenericBitOr;
     }
 };
 
@@ -2216,7 +2216,7 @@ class GenericNot : public Intrinsic {
     SEXP call(Builder const& b) { return b.constantPool(call()); }
 
     GenericNot(llvm::Instruction* ins)
-        : Intrinsic(ins, PatternKind::GenericNot) {}
+        : Intrinsic(ins, Kind::GenericNot) {}
 
     static GenericNot* create(Builder& b, llvm::Value* op, llvm::Value* rho,
                               SEXP call) {
@@ -2243,7 +2243,7 @@ class GenericNot : public Intrinsic {
     }
 
     static bool classof(Pattern const* s) {
-        return s->getKind() == PatternKind::GenericNot;
+        return s->getKind() == Kind::GenericNot;
     }
 };
 
@@ -2253,7 +2253,7 @@ class GenericGetVarMissOK : public Intrinsic {
     llvm::Value* rho() { return getValue(1); }
 
     GenericGetVarMissOK(llvm::Instruction* ins)
-        : Intrinsic(ins, PatternKind::GenericGetVarMissOK) {}
+        : Intrinsic(ins, Kind::GenericGetVarMissOK) {}
 
     static GenericGetVarMissOK* create(Builder& b, llvm::Value* symbol,
                                        llvm::Value* rho) {
@@ -2277,7 +2277,7 @@ class GenericGetVarMissOK : public Intrinsic {
     }
 
     static bool classof(Pattern const* s) {
-        return s->getKind() == PatternKind::GenericGetVarMissOK;
+        return s->getKind() == Kind::GenericGetVarMissOK;
     }
 };
 
@@ -2287,7 +2287,7 @@ class GenericGetEllipsisValueMissOK : public Intrinsic {
     llvm::Value* rho() { return getValue(1); }
 
     GenericGetEllipsisValueMissOK(llvm::Instruction* ins)
-        : Intrinsic(ins, PatternKind::GenericGetEllipsisValueMissOK) {}
+        : Intrinsic(ins, Kind::GenericGetEllipsisValueMissOK) {}
 
     static GenericGetEllipsisValueMissOK*
     create(Builder& b, llvm::Value* symbol, llvm::Value* rho) {
@@ -2314,7 +2314,7 @@ class GenericGetEllipsisValueMissOK : public Intrinsic {
     }
 
     static bool classof(Pattern const* s) {
-        return s->getKind() == PatternKind::GenericGetEllipsisValueMissOK;
+        return s->getKind() == Kind::GenericGetEllipsisValueMissOK;
     }
 };
 
@@ -2332,7 +2332,7 @@ class CheckSwitchControl : public Intrinsic {
     SEXP call(Builder const& b) { return b.constantPool(call()); }
 
     CheckSwitchControl(llvm::Instruction* ins)
-        : Intrinsic(ins, PatternKind::CheckSwitchControl) {}
+        : Intrinsic(ins, Kind::CheckSwitchControl) {}
 
     static CheckSwitchControl* create(Builder& b, llvm::Value* ctrl,
                                       SEXP call) {
@@ -2358,7 +2358,7 @@ class CheckSwitchControl : public Intrinsic {
     }
 
     static bool classof(Pattern const* s) {
-        return s->getKind() == PatternKind::CheckSwitchControl;
+        return s->getKind() == Kind::CheckSwitchControl;
     }
 };
 
@@ -2384,7 +2384,7 @@ class SwitchControlCharacter : public Intrinsic {
     SEXP cases(Builder const& b) { return b.constantPool(cases()); }
 
     SwitchControlCharacter(llvm::Instruction* ins)
-        : Intrinsic(ins, PatternKind::SwitchControlCharacter) {}
+        : Intrinsic(ins, Kind::SwitchControlCharacter) {}
 
     static SwitchControlCharacter* create(Builder& b, llvm::Value* ctrl,
                                           SEXP call, SEXP cases) {
@@ -2411,7 +2411,7 @@ class SwitchControlCharacter : public Intrinsic {
     }
 
     static bool classof(Pattern const* s) {
-        return s->getKind() == PatternKind::SwitchControlCharacter;
+        return s->getKind() == Kind::SwitchControlCharacter;
     }
 };
 
@@ -2421,7 +2421,7 @@ class SwitchControlInteger : public Intrinsic {
     int numCases() { return getValueInt(1); }
 
     SwitchControlInteger(llvm::Instruction* ins)
-        : Intrinsic(ins, PatternKind::SwitchControlInteger) {}
+        : Intrinsic(ins, Kind::SwitchControlInteger) {}
 
     static SwitchControlInteger* create(Builder& b, llvm::Value* ctrl,
                                         int numCases) {
@@ -2445,7 +2445,7 @@ class SwitchControlInteger : public Intrinsic {
     }
 
     static bool classof(Pattern const* s) {
-        return s->getKind() == PatternKind::SwitchControlInteger;
+        return s->getKind() == Kind::SwitchControlInteger;
     }
 };
 
@@ -2455,7 +2455,7 @@ class ReturnJump : public Intrinsic {
     llvm::Value* rho() { return getValue(1); }
 
     ReturnJump(llvm::Instruction* ins)
-        : Intrinsic(ins, PatternKind::ReturnJump) {}
+        : Intrinsic(ins, Kind::ReturnJump) {}
 
     static ReturnJump* create(Builder& b, llvm::Value* value,
                               llvm::Value* rho) {
@@ -2479,7 +2479,7 @@ class ReturnJump : public Intrinsic {
     }
 
     static bool classof(Pattern const* s) {
-        return s->getKind() == PatternKind::ReturnJump;
+        return s->getKind() == Kind::ReturnJump;
     }
 };
 

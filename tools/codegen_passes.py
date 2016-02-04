@@ -430,7 +430,7 @@ class Pass:
                 result = "("
                 for i in range(0, len(iterators)-1):
                     result += "static_cast<{0}>(".format(self.unconditional.matchSequence()[i])
-                    result += "Pattern::getIR("+iterators[i]+"))"
+                    result += "Pattern::get("+iterators[i]+"))"
                     if i < len(iterators) - 2:
                         result += ","
                 result += ")"
@@ -440,7 +440,7 @@ class Pass:
                 result = "(*this, "
                 for i in range(1, len(iterators)):
                     result += "static_cast<{0}>(".format(conditional.matchSequence()[i-1])
-                    result += "Pattern::getIR("+iterators[i]+"))"
+                    result += "Pattern::get("+iterators[i]+"))"
                     if i < len(iterators) - 1:
                         result += ","
                 result += ")"
@@ -467,7 +467,7 @@ class Pass:
 
                 The incoming iterators contains all iterators that were used in the dispatch so far,
                 """
-                result = "case Pattern::PatternKind::{0}: {{\n".format(self.type)
+                result = "case Pattern::Kind::{0}: {{\n".format(self.type)
                 if (self.recursive):
                     result += """    if (not {matched}->isTerminator()) {{
         {dispatch}
@@ -537,8 +537,10 @@ class Pass:
             # will find it
             incomingIterators.append(it)
             result = """llvm::BasicBlock::iterator {it} = {incoming};
-if (!rjit::ir::Pattern::isInstruction({it})) return false;
-Pattern* pattern = rjit::ir::Pattern::match({it});
+Pattern * pattern = rjit::ir::Pattern::get({it});
+if (pattern == nullptr)
+    return false;
+pattern->advance({it});
 switch (pattern->getKind()) {{
 """.format(it=it, incoming=lastIterator)
             for entry in self._table.values():

@@ -196,7 +196,7 @@ bool ICCompiler::compileIc(SEXP inCall, SEXP inFun) {
 
             // Insert a guard to check if the incomming function matches
             // the one we got this time
-            Value* nativeFun = ir::Cdr::create(b, fun())->r();
+            Value* nativeFun = ir::Cdr::create(b, fun())->result();
             ICmpInst* test = new ICmpInst(
                 *b.block(), ICmpInst::ICMP_EQ, nativeFun,
                 ir::Builder::convertToPointer(BODY(inFun)), "guard");
@@ -208,16 +208,16 @@ bool ICCompiler::compileIc(SEXP inCall, SEXP inFun) {
             for (unsigned i = size; i > 0; --i) {
                 Value* arg = b.args()[i - 1];
                 if (promarg[i - 1])
-                    arg = ir::CreatePromise::create(b, arg, rho())->r();
-                actuals = ir::ConsNr::create(b, arg, actuals)->r();
+                    arg = ir::CreatePromise::create(b, arg, rho())->result();
+                actuals = ir::ConsNr::create(b, arg, actuals)->result();
                 // TODO:
                 // ir::EnableRefcnt(actuals);
             }
 
             Value* newrho =
-                ir::NewEnv::create(b, ir::Car::create(b, fun())->r(), actuals,
-                                   ir::Tag::create(b, fun())->r())
-                    ->r();
+                ir::NewEnv::create(b, ir::Car::create(b, fun())->result(), actuals,
+                                   ir::Tag::create(b, fun())->result())
+                    ->result();
 
             Value* cntxt = new AllocaInst(t::cntxt, "", b.block());
 
@@ -261,7 +261,7 @@ void ICCompiler::compileSpecialIC() {
 
     // Specials only care about the ast, so we can call any special through
     // this ic
-    Value* ftype = ir::SexpType::create(b, fun())->r();
+    Value* ftype = ir::SexpType::create(b, fun())->result();
     Value* test = new ICmpInst(*b.block(), ICmpInst::ICMP_EQ, ftype,
                                b.integer(SPECIALSXP), "guard");
 
@@ -270,7 +270,7 @@ void ICCompiler::compileSpecialIC() {
 
     Value* res = ir::CallSpecial::create(
                      b, call(), fun(), b.convertToPointer(R_NilValue), b.rho())
-                     ->r();
+                     ->result();
     ir::Return::create(b, res);
 
     b.setBlock(icMiss);
@@ -282,7 +282,7 @@ bool ICCompiler::compileGenericIc(SEXP inCall, SEXP inFun) {
     BasicBlock* icMatch = b.createBasicBlock("icMatch");
     BasicBlock* icMiss = b.createBasicBlock("icMiss");
 
-    Value* body = ir::Cdr::create(b, fun())->r();
+    Value* body = ir::Cdr::create(b, fun())->result();
     Value* test =
         new ICmpInst(*b.block(), ICmpInst::ICMP_EQ, body,
                      ir::Builder::convertToPointer(BODY(inFun)), "guard");
@@ -294,12 +294,12 @@ bool ICCompiler::compileGenericIc(SEXP inCall, SEXP inFun) {
     switch (TYPEOF(inFun)) {
     case BUILTINSXP: {
         Value* args = compileArguments(CDR(inCall), /*eager=*/true);
-        res = ir::CallBuiltin::create(b, call(), fun(), args, rho())->r();
+        res = ir::CallBuiltin::create(b, call(), fun(), args, rho())->result();
         break;
     }
     case CLOSXP: {
         Value* args = compileArguments(CDR(inCall), /*eager=*/false);
-        res = ir::CallClosure::create(b, call(), fun(), args, rho())->r();
+        res = ir::CallClosure::create(b, call(), fun(), args, rho())->result();
         break;
     }
     default:
@@ -334,7 +334,7 @@ Value* ICCompiler::compileArguments(SEXP argAsts, bool eager) {
             arglist = ir::AddEllipsisArgumentHead::create(
                           b, arglist, rho(),
                           eager ? b.integer(TRUE) : b.integer(FALSE))
-                          ->r();
+                          ->result();
             if (!arglistHead)
                 arglistHead = arglist;
 
@@ -342,7 +342,7 @@ Value* ICCompiler::compileArguments(SEXP argAsts, bool eager) {
             arglist = ir::AddEllipsisArgumentTail::create(
                           b, arglist, rho(),
                           eager ? b.integer(TRUE) : b.integer(FALSE))
-                          ->r();
+                          ->result();
             argnum++;
         } else {
             arglist = compileArgument(arglist, argAsts, argnum++, eager);
@@ -387,7 +387,7 @@ Value* ICCompiler::compileArgument(Value* arglist, SEXP argAst, int argnum,
             return ir::AddKeywordArgument::create(
                        b, arglist, b.convertToPointer(R_MissingArg),
                        b.convertToPointer(name))
-                ->r();
+                ->result();
         }
     // Fall through:
     default:
@@ -404,9 +404,9 @@ Value* ICCompiler::compileArgument(Value* arglist, SEXP argAst, int argnum,
     if (name != R_NilValue)
         return ir::AddKeywordArgument::create(b, arglist, result,
                                               b.convertToPointer(name))
-            ->r();
+            ->result();
 
-    return ir::AddArgument::create(b, arglist, result)->r();
+    return ir::AddArgument::create(b, arglist, result)->result();
 }
 
 Value* ICCompiler::INTRINSIC_NO_SAFEPOINT(llvm::Value* fun,
