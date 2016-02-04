@@ -26,6 +26,7 @@ class Pattern {
 public:
 
     enum class Kind {
+        // TODO we should really codegen this
         Invalid,
         ExtractConstantPool,
         UserLiteral,
@@ -112,6 +113,12 @@ public:
      */
     Kind const kind;
 
+    /** Every pattern should return its first and last instruction.
+
+      Note that the implementation of these instructions IS WRONG in general case and will only work for single instruction patterns at the moment.
+
+      TODO Originally I had a single instruction base class which implemented this and it was left abstract here. However after careful consideration I am strongly against having the length of the pattern part of the hierarchy - consider patterns like BinaryOperator - they may be a call, a call + sth, the acrual unrolled loop, and so on, all are binary operators of different lengths.
+      */
     virtual llvm::Instruction * first() const {
         return ins_;
     }
@@ -120,6 +127,10 @@ public:
         return ins_;
     }
 
+    /** A pattern returns always the result insruction.
+
+      TODO change this when hierarchy stabilizes.
+     */
     virtual llvm::Instruction * result() const {
         return ins_;
     }
