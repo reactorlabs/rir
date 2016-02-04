@@ -14,7 +14,7 @@ using namespace rjit;
 
 /** Compiles given ast and returns the NATIVESXP for it.
  */
-REXPORT SEXP jitAst(SEXP ast, SEXP formals) {
+REXPORT SEXP jitAst(SEXP ast, SEXP formals, SEXP rho) {
     Compiler c("module");
     SEXP result = c.compile("rfunction", ast, formals);
     c.jitAll();
