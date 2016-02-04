@@ -81,8 +81,7 @@ SEXP Builder::closeFunction() {
            "Not a function context");
 
     ClosureContext* cc = dynamic_cast<ClosureContext*>(c_);
-    SEXP result =
-        module()->getNativeSXP(cc->formals, c_->cp[0], c_->cp, c_->f);
+    SEXP result = module()->getNativeSXP(cc->formals, c_->cp[0], c_->cp, c_->f);
     // c_->f->dump();
     ir::Verifier::check(c_->f);
     delete c_;
@@ -94,7 +93,6 @@ SEXP Builder::closeFunction() {
     }
     return result;
 }
-
 
 void Builder::openPromise(std::string const& name, SEXP ast) {
     if (c_ != nullptr)

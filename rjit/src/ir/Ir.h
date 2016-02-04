@@ -48,13 +48,12 @@ class Pattern {
      */
     Kind const kind;
 
-    /** Returns the length of the pattern, i.e. how many consecutive llvm instructions it contains.
+    /** Returns the length of the pattern, i.e. how many consecutive llvm
+      instructions it contains.
 
       TODO this returns 1 by default, which is plainly wrong.
      */
-    virtual size_t length() const {
-        return 1;
-    }
+    virtual size_t length() const { return 1; }
 
     /** Every pattern should return its first and last instruction.
 
@@ -120,7 +119,6 @@ class Pattern {
     Kind getKind() const { return kind; }
 
   protected:
-
     friend class Verifier;
 
     /** Each pattern must know the llvm::instruction that is its result.
@@ -317,18 +315,11 @@ class IntegerAdd : public BinaryOperator {
  */
 class Cbr : public Pattern {
   public:
+    llvm::Instruction* first() const override { return ins_->getPrevNode(); }
 
-    llvm::Instruction * first() const override {
-        return ins_->getPrevNode();
-    }
+    size_t length() const override { return 2; }
 
-    size_t length() const override {
-        return 2;
-    }
-
-    llvm::Value* cond() {
-        return ins_->getPrevNode()->getOperand(0);
-    }
+    llvm::Value* cond() { return ins_->getPrevNode()->getOperand(0); }
 
     llvm::BasicBlock* trueCase() {
         return ins<llvm::BranchInst>()->getSuccessor(0);
