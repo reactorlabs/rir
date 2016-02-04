@@ -215,8 +215,8 @@ bool ICCompiler::compileIc(SEXP inCall, SEXP inFun) {
             }
 
             Value* newrho =
-                ir::NewEnv::create(b, ir::Car::create(b, fun())->result(), actuals,
-                                   ir::Tag::create(b, fun())->result())
+                ir::NewEnv::create(b, ir::Car::create(b, fun())->result(),
+                                   actuals, ir::Tag::create(b, fun())->result())
                     ->result();
 
             Value* cntxt = new AllocaInst(t::cntxt, "", b.block());

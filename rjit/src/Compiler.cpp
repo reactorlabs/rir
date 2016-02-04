@@ -244,7 +244,8 @@ Value* Compiler::compileIntrinsic(SEXP call) {
     return compileFunctionDefinition(CDR(call));
     CASE(symbol::Return) {
         return (CDR(call) == R_NilValue)
-                   ? compileReturn(ir::Constant::create(b, R_NilValue)->result())
+                   ? compileReturn(
+                         ir::Constant::create(b, R_NilValue)->result())
                    : compileReturn(compileExpression(CAR(CDR(call))));
     }
     CASE(symbol::Assign)
@@ -590,7 +591,8 @@ Value* Compiler::compileForLoop(SEXP ast) {
     // move to the for loop body, where we have to set the control variable
     // properly
     b.setBlock(forBody);
-    Value* controlValue = ir::GetForLoopValue::create(b, seq, control)->result();
+    Value* controlValue =
+        ir::GetForLoopValue::create(b, seq, control)->result();
     ir::GenericSetVar::create(b, controlValue, b.rho(), controlAst);
     // now compile the body of the loop
     compileExpression(bodyAst);
@@ -600,7 +602,8 @@ Value* Compiler::compileForLoop(SEXP ast) {
     b.setBlock(b.nextTarget());
 
     // TODO: Need an intrinsic function for BinaryOperator
-    Value* control1 = ir::IntegerAdd::create(b, control, b.integer(1))->result();
+    Value* control1 =
+        ir::IntegerAdd::create(b, control, b.integer(1))->result();
     control->addIncoming(control1, b.nextTarget());
 
     ir::Branch::create(b, forCond);

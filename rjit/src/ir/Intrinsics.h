@@ -121,8 +121,7 @@ class CallNative : public Intrinsic {
     llvm::Value* native() { return getValue(0); }
     llvm::Value* rho() { return getValue(1); }
 
-    CallNative(llvm::Instruction* ins)
-        : Intrinsic(ins, Kind::CallNative) {}
+    CallNative(llvm::Instruction* ins) : Intrinsic(ins, Kind::CallNative) {}
 
     static CallNative* create(Builder& b, llvm::Value* native,
                               llvm::Value* rho) {
@@ -239,8 +238,7 @@ class PrintValue : public Intrinsic {
   public:
     llvm::Value* value() { return getValue(0); }
 
-    PrintValue(llvm::Instruction* ins)
-        : Intrinsic(ins, Kind::PrintValue) {}
+    PrintValue(llvm::Instruction* ins) : Intrinsic(ins, Kind::PrintValue) {}
 
     static PrintValue* create(Builder& b, llvm::Value* value) {
 
@@ -384,8 +382,7 @@ class GetForLoopValue : public Intrinsic {
 
 class MarkVisible : public Intrinsic {
   public:
-    MarkVisible(llvm::Instruction* ins)
-        : Intrinsic(ins, Kind::MarkVisible) {}
+    MarkVisible(llvm::Instruction* ins) : Intrinsic(ins, Kind::MarkVisible) {}
 
     static MarkVisible* create(Builder& b) {
 
@@ -457,8 +454,7 @@ class UserLiteral : public Intrinsic {
     }
     SEXP index(Builder const& b) { return b.constantPool(index()); }
 
-    UserLiteral(llvm::Instruction* ins)
-        : Intrinsic(ins, Kind::UserLiteral) {}
+    UserLiteral(llvm::Instruction* ins) : Intrinsic(ins, Kind::UserLiteral) {}
 
     static UserLiteral* create(Builder& b, SEXP index) {
 
@@ -783,8 +779,7 @@ class GetFunction : public Intrinsic {
     }
     SEXP symbol(Builder const& b) { return b.constantPool(symbol()); }
 
-    GetFunction(llvm::Instruction* ins)
-        : Intrinsic(ins, Kind::GetFunction) {}
+    GetFunction(llvm::Instruction* ins) : Intrinsic(ins, Kind::GetFunction) {}
 
     static GetFunction* create(Builder& b, llvm::Value* rho, SEXP symbol) {
 
@@ -1078,8 +1073,7 @@ class AddArgument : public Intrinsic {
     llvm::Value* args() { return getValue(0); }
     llvm::Value* arg() { return getValue(1); }
 
-    AddArgument(llvm::Instruction* ins)
-        : Intrinsic(ins, Kind::AddArgument) {}
+    AddArgument(llvm::Instruction* ins) : Intrinsic(ins, Kind::AddArgument) {}
 
     static AddArgument* create(Builder& b, llvm::Value* args,
                                llvm::Value* arg) {
@@ -1227,8 +1221,7 @@ class CallBuiltin : public Intrinsic {
     llvm::Value* arguments() { return getValue(2); }
     llvm::Value* rho() { return getValue(3); }
 
-    CallBuiltin(llvm::Instruction* ins)
-        : Intrinsic(ins, Kind::CallBuiltin) {}
+    CallBuiltin(llvm::Instruction* ins) : Intrinsic(ins, Kind::CallBuiltin) {}
 
     static CallBuiltin* create(Builder& b, llvm::Value* call,
                                llvm::Value* closure, llvm::Value* arguments,
@@ -1267,8 +1260,7 @@ class CallSpecial : public Intrinsic {
     llvm::Value* arguments() { return getValue(2); }
     llvm::Value* rho() { return getValue(3); }
 
-    CallSpecial(llvm::Instruction* ins)
-        : Intrinsic(ins, Kind::CallSpecial) {}
+    CallSpecial(llvm::Instruction* ins) : Intrinsic(ins, Kind::CallSpecial) {}
 
     static CallSpecial* create(Builder& b, llvm::Value* call,
                                llvm::Value* closure, llvm::Value* arguments,
@@ -1307,8 +1299,7 @@ class CallClosure : public Intrinsic {
     llvm::Value* arguments() { return getValue(2); }
     llvm::Value* rho() { return getValue(3); }
 
-    CallClosure(llvm::Instruction* ins)
-        : Intrinsic(ins, Kind::CallClosure) {}
+    CallClosure(llvm::Instruction* ins) : Intrinsic(ins, Kind::CallClosure) {}
 
     static CallClosure* create(Builder& b, llvm::Value* call,
                                llvm::Value* closure, llvm::Value* arguments,
@@ -1500,8 +1491,7 @@ class GenericAdd : public Intrinsic {
     }
     SEXP call(Builder const& b) { return b.constantPool(call()); }
 
-    GenericAdd(llvm::Instruction* ins)
-        : Intrinsic(ins, Kind::GenericAdd) {}
+    GenericAdd(llvm::Instruction* ins) : Intrinsic(ins, Kind::GenericAdd) {}
 
     static GenericAdd* create(Builder& b, llvm::Value* lhs, llvm::Value* rhs,
                               llvm::Value* rho, SEXP call) {
@@ -1548,8 +1538,7 @@ class GenericSub : public Intrinsic {
     }
     SEXP call(Builder const& b) { return b.constantPool(call()); }
 
-    GenericSub(llvm::Instruction* ins)
-        : Intrinsic(ins, Kind::GenericSub) {}
+    GenericSub(llvm::Instruction* ins) : Intrinsic(ins, Kind::GenericSub) {}
 
     static GenericSub* create(Builder& b, llvm::Value* lhs, llvm::Value* rhs,
                               llvm::Value* rho, SEXP call) {
@@ -1596,8 +1585,7 @@ class GenericMul : public Intrinsic {
     }
     SEXP call(Builder const& b) { return b.constantPool(call()); }
 
-    GenericMul(llvm::Instruction* ins)
-        : Intrinsic(ins, Kind::GenericMul) {}
+    GenericMul(llvm::Instruction* ins) : Intrinsic(ins, Kind::GenericMul) {}
 
     static GenericMul* create(Builder& b, llvm::Value* lhs, llvm::Value* rhs,
                               llvm::Value* rho, SEXP call) {
@@ -1644,8 +1632,7 @@ class GenericDiv : public Intrinsic {
     }
     SEXP call(Builder const& b) { return b.constantPool(call()); }
 
-    GenericDiv(llvm::Instruction* ins)
-        : Intrinsic(ins, Kind::GenericDiv) {}
+    GenericDiv(llvm::Instruction* ins) : Intrinsic(ins, Kind::GenericDiv) {}
 
     static GenericDiv* create(Builder& b, llvm::Value* lhs, llvm::Value* rhs,
                               llvm::Value* rho, SEXP call) {
@@ -1692,8 +1679,7 @@ class GenericPow : public Intrinsic {
     }
     SEXP call(Builder const& b) { return b.constantPool(call()); }
 
-    GenericPow(llvm::Instruction* ins)
-        : Intrinsic(ins, Kind::GenericPow) {}
+    GenericPow(llvm::Instruction* ins) : Intrinsic(ins, Kind::GenericPow) {}
 
     static GenericPow* create(Builder& b, llvm::Value* lhs, llvm::Value* rhs,
                               llvm::Value* rho, SEXP call) {
@@ -1739,8 +1725,7 @@ class GenericSqrt : public Intrinsic {
     }
     SEXP call(Builder const& b) { return b.constantPool(call()); }
 
-    GenericSqrt(llvm::Instruction* ins)
-        : Intrinsic(ins, Kind::GenericSqrt) {}
+    GenericSqrt(llvm::Instruction* ins) : Intrinsic(ins, Kind::GenericSqrt) {}
 
     static GenericSqrt* create(Builder& b, llvm::Value* op, llvm::Value* rho,
                                SEXP call) {
@@ -1785,8 +1770,7 @@ class GenericExp : public Intrinsic {
     }
     SEXP call(Builder const& b) { return b.constantPool(call()); }
 
-    GenericExp(llvm::Instruction* ins)
-        : Intrinsic(ins, Kind::GenericExp) {}
+    GenericExp(llvm::Instruction* ins) : Intrinsic(ins, Kind::GenericExp) {}
 
     static GenericExp* create(Builder& b, llvm::Value* op, llvm::Value* rho,
                               SEXP call) {
@@ -1832,8 +1816,7 @@ class GenericEq : public Intrinsic {
     }
     SEXP call(Builder const& b) { return b.constantPool(call()); }
 
-    GenericEq(llvm::Instruction* ins)
-        : Intrinsic(ins, Kind::GenericEq) {}
+    GenericEq(llvm::Instruction* ins) : Intrinsic(ins, Kind::GenericEq) {}
 
     static GenericEq* create(Builder& b, llvm::Value* lhs, llvm::Value* rhs,
                              llvm::Value* rho, SEXP call) {
@@ -1880,8 +1863,7 @@ class GenericNe : public Intrinsic {
     }
     SEXP call(Builder const& b) { return b.constantPool(call()); }
 
-    GenericNe(llvm::Instruction* ins)
-        : Intrinsic(ins, Kind::GenericNe) {}
+    GenericNe(llvm::Instruction* ins) : Intrinsic(ins, Kind::GenericNe) {}
 
     static GenericNe* create(Builder& b, llvm::Value* lhs, llvm::Value* rhs,
                              llvm::Value* rho, SEXP call) {
@@ -1928,8 +1910,7 @@ class GenericLt : public Intrinsic {
     }
     SEXP call(Builder const& b) { return b.constantPool(call()); }
 
-    GenericLt(llvm::Instruction* ins)
-        : Intrinsic(ins, Kind::GenericLt) {}
+    GenericLt(llvm::Instruction* ins) : Intrinsic(ins, Kind::GenericLt) {}
 
     static GenericLt* create(Builder& b, llvm::Value* lhs, llvm::Value* rhs,
                              llvm::Value* rho, SEXP call) {
@@ -1976,8 +1957,7 @@ class GenericLe : public Intrinsic {
     }
     SEXP call(Builder const& b) { return b.constantPool(call()); }
 
-    GenericLe(llvm::Instruction* ins)
-        : Intrinsic(ins, Kind::GenericLe) {}
+    GenericLe(llvm::Instruction* ins) : Intrinsic(ins, Kind::GenericLe) {}
 
     static GenericLe* create(Builder& b, llvm::Value* lhs, llvm::Value* rhs,
                              llvm::Value* rho, SEXP call) {
@@ -2024,8 +2004,7 @@ class GenericGe : public Intrinsic {
     }
     SEXP call(Builder const& b) { return b.constantPool(call()); }
 
-    GenericGe(llvm::Instruction* ins)
-        : Intrinsic(ins, Kind::GenericGe) {}
+    GenericGe(llvm::Instruction* ins) : Intrinsic(ins, Kind::GenericGe) {}
 
     static GenericGe* create(Builder& b, llvm::Value* lhs, llvm::Value* rhs,
                              llvm::Value* rho, SEXP call) {
@@ -2072,8 +2051,7 @@ class GenericGt : public Intrinsic {
     }
     SEXP call(Builder const& b) { return b.constantPool(call()); }
 
-    GenericGt(llvm::Instruction* ins)
-        : Intrinsic(ins, Kind::GenericGt) {}
+    GenericGt(llvm::Instruction* ins) : Intrinsic(ins, Kind::GenericGt) {}
 
     static GenericGt* create(Builder& b, llvm::Value* lhs, llvm::Value* rhs,
                              llvm::Value* rho, SEXP call) {
@@ -2168,8 +2146,7 @@ class GenericBitOr : public Intrinsic {
     }
     SEXP call(Builder const& b) { return b.constantPool(call()); }
 
-    GenericBitOr(llvm::Instruction* ins)
-        : Intrinsic(ins, Kind::GenericBitOr) {}
+    GenericBitOr(llvm::Instruction* ins) : Intrinsic(ins, Kind::GenericBitOr) {}
 
     static GenericBitOr* create(Builder& b, llvm::Value* lhs, llvm::Value* rhs,
                                 llvm::Value* rho, SEXP call) {
@@ -2215,8 +2192,7 @@ class GenericNot : public Intrinsic {
     }
     SEXP call(Builder const& b) { return b.constantPool(call()); }
 
-    GenericNot(llvm::Instruction* ins)
-        : Intrinsic(ins, Kind::GenericNot) {}
+    GenericNot(llvm::Instruction* ins) : Intrinsic(ins, Kind::GenericNot) {}
 
     static GenericNot* create(Builder& b, llvm::Value* op, llvm::Value* rho,
                               SEXP call) {
@@ -2454,8 +2430,7 @@ class ReturnJump : public Intrinsic {
     llvm::Value* value() { return getValue(0); }
     llvm::Value* rho() { return getValue(1); }
 
-    ReturnJump(llvm::Instruction* ins)
-        : Intrinsic(ins, Kind::ReturnJump) {}
+    ReturnJump(llvm::Instruction* ins) : Intrinsic(ins, Kind::ReturnJump) {}
 
     static ReturnJump* create(Builder& b, llvm::Value* value,
                               llvm::Value* rho) {

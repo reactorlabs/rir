@@ -15,16 +15,21 @@
 namespace rjit {
 namespace ir {
 
-
 /** Instruction Pattern
 
-  Each llvm instruction can be part of a pattern. Pattern identifies a high level view on the instructions. A pattern may contain 1..n consecutive llvm instructions that all belong to the same basic block. All instructions that form a pattern must be attached to that pattern (i.e. they must hold the pattern pointer in their metadata.
+  Each llvm instruction can be part of a pattern. Pattern identifies a high
+  level view on the instructions. A pattern may contain 1..n consecutive llvm
+  instructions that all belong to the same basic block. All instructions that
+  form a pattern must be attached to that pattern (i.e. they must hold the
+  pattern pointer in their metadata.
 
-  This is important for when we want to delete or move an instruction that is part of a pattern. This operation is perfectly legal, but results in destroying the pattern and the attachment allows for relatively fast identification whether any instruction is part of a pattern or not.
+  This is important for when we want to delete or move an instruction that is
+  part of a pattern. This operation is perfectly legal, but results in
+  destroying the pattern and the attachment allows for relatively fast
+  identification whether any instruction is part of a pattern or not.
  */
 class Pattern {
-public:
-
+  public:
     enum class Kind {
         unknown,
         Invalid,
@@ -35,7 +40,7 @@ public:
         AddEllipsisArgument,
     };
 
-    static char const * const MD_NAME;
+    static char const* const MD_NAME;
 
     /** Pattern kind for fast RTTI.
      */
@@ -43,31 +48,31 @@ public:
 
     /** Every pattern should return its first and last instruction.
 
-      Note that the implementation of these instructions IS WRONG in general case and will only work for single instruction patterns at the moment.
+      Note that the implementation of these instructions IS WRONG in general
+      case and will only work for single instruction patterns at the moment.
 
-      TODO Originally I had a single instruction base class which implemented this and it was left abstract here. However after careful consideration I am strongly against having the length of the pattern part of the hierarchy - consider patterns like BinaryOperator - they may be a call, a call + sth, the acrual unrolled loop, and so on, all are binary operators of different lengths.
+      TODO Originally I had a single instruction base class which implemented
+      this and it was left abstract here. However after careful consideration I
+      am strongly against having the length of the pattern part of the hierarchy
+      - consider patterns like BinaryOperator - they may be a call, a call +
+      sth, the acrual unrolled loop, and so on, all are binary operators of
+      different lengths.
       */
-    virtual llvm::Instruction * first() const {
-        return ins_;
-    }
+    virtual llvm::Instruction* first() const { return ins_; }
 
-    virtual llvm::Instruction * last() const {
-        return ins_;
-    }
+    virtual llvm::Instruction* last() const { return ins_; }
 
     /** A pattern returns always the result insruction.
 
       TODO change this when hierarchy stabilizes.
      */
-    virtual llvm::Instruction * result() const {
-        return ins_;
-    }
+    virtual llvm::Instruction* result() const { return ins_; }
 
     /** Returns the pattern associated with current llvm instruction.
 
       If the instruction is not part of any pattern, returns nullptr.
       */
-    static Pattern * get(llvm::Instruction * ins) {
+    static Pattern* get(llvm::Instruction* ins) {
         llvm::MDNode* m = ins->getMetadata(MD_NAME);
         // return nullptr if the instruction is not part of any pattern
         if (m == nullptr)
@@ -78,16 +83,20 @@ public:
                 llvm::cast<llvm::ValueAsMetadata>(mx)->getValue())
                 ->getUniqueInteger();
         assert(ap.isIntN(64) and "Expected 64bit integer");
-        Pattern * res = reinterpret_cast<Pattern*>(ap.getZExtValue());
+        Pattern* res = reinterpret_cast<Pattern*>(ap.getZExtValue());
         return res;
     }
 
     /** Advances given iterator past the pattern.
 
-      This is the generic version of the functionality which increases the iterator for as long as the current instruction's pattern is the same as current pattern. Other patterns may actually override this method to provide specialized versions based on the knowledge of their length.
+      This is the generic version of the functionality which increases the
+      iterator for as long as the current instruction's pattern is the same as
+      current pattern. Other patterns may actually override this method to
+      provide specialized versions based on the knowledge of their length.
      */
-    virtual void advance(llvm::BasicBlock::iterator & i) const {
-        assert(get(i) == this and "advance of pattern is called on instruction that is not part of it");
+    virtual void advance(llvm::BasicBlock::iterator& i) const {
+        assert(get(i) == this and "advance of pattern is called on instruction "
+                                  "that is not part of it");
         while (get(i) == this) {
             if (i->isTerminator()) {
                 ++i;
@@ -98,38 +107,34 @@ public:
     }
 
     // TODO deprecated, perhaps needed for llvm
-    Kind getKind() const {
-        return kind;
-    }
+    Kind getKind() const { return kind; }
 
-protected:
-
+  protected:
     /** Each pattern must know the llvm::instruction that is its result.
 
-      This instruction should not be used publicly, rather result() method should be called, which gives the pattern creator option to error if pattern's result should never be used.
+      This instruction should not be used publicly, rather result() method
+      should be called, which gives the pattern creator option to error if
+      pattern's result should never be used.
      */
-    llvm::Instruction * const ins_;
+    llvm::Instruction* const ins_;
 
-    Pattern(llvm::Instruction * result, Kind kind):
-        kind(kind),
-        ins_(result) {
+    Pattern(llvm::Instruction* result, Kind kind) : kind(kind), ins_(result) {
         // attach the pattern to the result instruction
         attach(result);
     }
 
-    // TODO create destructor that detaches itself from all instructions forming it
+    // TODO create destructor that detaches itself from all instructions forming
+    // it
 
-    template<typename LLVM_INS>
-    LLVM_INS * ins() const {
-        return static_cast<LLVM_INS *>(ins_);
+    template <typename LLVM_INS>
+    LLVM_INS* ins() const {
+        return static_cast<LLVM_INS*>(ins_);
     }
-
-
 
     /** Attaches the pattern to given llvm instruction.
      */
-    void attach(llvm::Instruction * ins) {
-        assert (get(ins) == nullptr and "Instruction already has a pattern");
+    void attach(llvm::Instruction* ins) {
+        assert(get(ins) == nullptr and "Instruction already has a pattern");
         std::vector<llvm::Metadata*> v = {
             llvm::ValueAsMetadata::get(llvm::ConstantInt::get(
                 ins->getContext(),
@@ -137,8 +142,6 @@ protected:
         llvm::MDNode* m = llvm::MDNode::get(ins->getContext(), v);
         ins->setMetadata(MD_NAME, m);
     }
-
-
 };
 
 class Return : public Pattern {
@@ -185,8 +188,7 @@ class IntegerComparison : public Pattern {
   public:
     typedef llvm::ICmpInst::Predicate Predicate;
 
-    IntegerComparison(llvm::Instruction* ins, Kind kind)
-        : Pattern(ins, kind) {
+    IntegerComparison(llvm::Instruction* ins, Kind kind) : Pattern(ins, kind) {
         assert(llvm::isa<llvm::ICmpInst>(ins) and "ICmpInst expected");
     }
 
@@ -260,15 +262,13 @@ class UnsignedIntegerLessThan : public IntegerComparison {
 // TODO the hierarchy of this is wrong, but actual thought is required to fix it
 class BinaryOperator : public Pattern {
   public:
-    BinaryOperator(llvm::Instruction* ins, Kind kind)
-        : Pattern(ins, kind) {}
+    BinaryOperator(llvm::Instruction* ins, Kind kind) : Pattern(ins, kind) {}
 };
 
 // TODO the hierarchy here should be better as well
 class IntegerAdd : public BinaryOperator {
   public:
-    IntegerAdd(llvm::Instruction* ins)
-        : BinaryOperator(ins, Kind::IntegerAdd) {
+    IntegerAdd(llvm::Instruction* ins) : BinaryOperator(ins, Kind::IntegerAdd) {
         assert(llvm::isa<llvm::BinaryOperator>(ins) and
                "Binary operator expected");
         assert(llvm::cast<llvm::BinaryOperator>(ins)->getOpcode() ==
@@ -318,45 +318,48 @@ class Cbr : public Pattern {
         return b->getSuccessor(1);
     }
 
-    Cbr(llvm::Instruction* cond, llvm::Instruction* branch):
-        Pattern(cond, Kind::Cbr) {
+    Cbr(llvm::Instruction* cond, llvm::Instruction* branch)
+        : Pattern(cond, Kind::Cbr) {
         attach(branch);
     }
 
     static void create(Builder& b, llvm::Value* cond,
-                       llvm::BasicBlock* trueCase, llvm::BasicBlock* falseCase) {
+                       llvm::BasicBlock* trueCase,
+                       llvm::BasicBlock* falseCase) {
         ICmpInst* test = new ICmpInst(*b.block(), ICmpInst::ICMP_NE, cond,
                                       b.integer(0), "condition");
         auto branch = BranchInst::Create(trueCase, falseCase, test, b);
         new Cbr(test, branch);
-
     }
 
-    static bool classof(Pattern const* s) {
-        return s->getKind() == Kind::Cbr;
-    }
+    static bool classof(Pattern const* s) { return s->getKind() == Kind::Cbr; }
 };
 
 class MarkNotMutable : public Pattern {
-public:
-    static void create(llvm::Instruction * insert, LLVMContext & c, llvm::Value * val) {
-        ConstantInt* int32_0 = ConstantInt::get(c, APInt(32, StringRef("0"), 10));
+  public:
+    static void create(llvm::Instruction* insert, LLVMContext& c,
+                       llvm::Value* val) {
+        ConstantInt* int32_0 =
+            ConstantInt::get(c, APInt(32, StringRef("0"), 10));
         ConstantInt* c1 = ConstantInt::get(c, APInt(32, StringRef("-193"), 10));
         ConstantInt* c2 = ConstantInt::get(c, APInt(32, StringRef("128"), 10));
         auto sexpinfo = GetElementPtrInst::Create(
-            t::SEXPREC, val, std::vector<Value*>({int32_0, int32_0}), "", insert);
+            t::SEXPREC, val, std::vector<Value*>({int32_0, int32_0}), "",
+            insert);
         auto sexpint =
             new BitCastInst(sexpinfo, PointerType::get(t::Int, 1), "", insert);
         auto sexpval = new LoadInst(sexpint, "", false, insert);
         sexpval->setAlignment(4);
-        auto clear = llvm::BinaryOperator::Create(llvm::Instruction::And, sexpval,
-                                                  c1, "", insert);
-        auto set = llvm::BinaryOperator::Create(llvm::Instruction::Or, clear, c2,
-                                                "", insert);
+        auto clear = llvm::BinaryOperator::Create(llvm::Instruction::And,
+                                                  sexpval, c1, "", insert);
+        auto set = llvm::BinaryOperator::Create(llvm::Instruction::Or, clear,
+                                                c2, "", insert);
         auto store = new StoreInst(set, sexpint, insert);
         store->setAlignment(4);
-        // TODO if I understand it correctly, MarkNotMutable does not really have usable result? The attachments will be better off in the constructor as they are for others?
-        MarkNotMutable * p = new MarkNotMutable(sexpinfo);
+        // TODO if I understand it correctly, MarkNotMutable does not really
+        // have usable result? The attachments will be better off in the
+        // constructor as they are for others?
+        MarkNotMutable* p = new MarkNotMutable(sexpinfo);
         p->attach(sexpint);
         p->attach(sexpval);
         p->attach(clear);
@@ -368,63 +371,57 @@ public:
         return s->getKind() == Kind::MarkNotMutable;
     }
 
-private:
-    MarkNotMutable(llvm::Instruction * ins):
-        Pattern(ins, Kind::MarkNotMutable) {
-    }
-
+  private:
+    MarkNotMutable(llvm::Instruction* ins)
+        : Pattern(ins, Kind::MarkNotMutable) {}
 };
 
 class Car : public Pattern {
   public:
-    Car(llvm::Instruction* consValuePtr, llvm::Instruction * ptr, llvm::Instruction* result):
-        Pattern(result, Kind::Car) {
+    Car(llvm::Instruction* consValuePtr, llvm::Instruction* ptr,
+        llvm::Instruction* result)
+        : Pattern(result, Kind::Car) {
         attach(consValuePtr);
         attach(ptr);
     }
 
     static Car* create(Builder& b, llvm::Value* sexp);
 
-    static bool classof(Pattern const* s) {
-        return s->getKind() == Kind::Car;
-    }
+    static bool classof(Pattern const* s) { return s->getKind() == Kind::Car; }
 };
 
 class Cdr : public Pattern {
   public:
-    Cdr(llvm::Instruction* consValuePtr, llvm::Instruction * ptr, llvm::Instruction* result):
-        Pattern(result, Kind::Cdr) {
+    Cdr(llvm::Instruction* consValuePtr, llvm::Instruction* ptr,
+        llvm::Instruction* result)
+        : Pattern(result, Kind::Cdr) {
         attach(consValuePtr);
         attach(ptr);
     }
 
     static Cdr* create(Builder& b, llvm::Value* sexp);
 
-    static bool classof(Pattern const* s) {
-        return s->getKind() == Kind::Cdr;
-    }
+    static bool classof(Pattern const* s) { return s->getKind() == Kind::Cdr; }
 };
 
 class Tag : public Pattern {
   public:
-    Tag(llvm::Instruction* consValuePtr, llvm::Instruction * ptr, llvm::Instruction* result):
-        Pattern(result, Kind::Tag) {
+    Tag(llvm::Instruction* consValuePtr, llvm::Instruction* ptr,
+        llvm::Instruction* result)
+        : Pattern(result, Kind::Tag) {
         attach(consValuePtr);
         attach(ptr);
     }
 
     static Tag* create(Builder& b, llvm::Value* sexp);
 
-    static bool classof(Pattern const* s) {
-        return s->getKind() == Kind::Tag;
-    }
+    static bool classof(Pattern const* s) { return s->getKind() == Kind::Tag; }
 };
 
 class VectorGetElement : public Pattern {
   public:
-    VectorGetElement(llvm::Instruction* result):
-        Pattern(result, Kind::VectorGetElement) {
-    }
+    VectorGetElement(llvm::Instruction* result)
+        : Pattern(result, Kind::VectorGetElement) {}
 
     static VectorGetElement* create(llvm::Instruction* insert, LLVMContext& c,
                                     llvm::Value* vector, llvm::Value* index);
@@ -433,8 +430,9 @@ class VectorGetElement : public Pattern {
         return s->getKind() == Kind::VectorGetElement;
     }
 
-    virtual llvm::Instruction * first() const override {
-        llvm::Instruction * r = ins_->getPrevNode()->getPrevNode()->getPrevNode()->getPrevNode();
+    virtual llvm::Instruction* first() const override {
+        llvm::Instruction* r =
+            ins_->getPrevNode()->getPrevNode()->getPrevNode()->getPrevNode();
         // TODO better check for start
         assert(Pattern::get(r) == this);
         return r;

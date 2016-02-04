@@ -36,8 +36,8 @@ class Pass {
         // std::cout << "default instruction match" << std::endl;
     }
 
-    virtual match defaultMatch(llvm::Instruction * ins) {
-        //ins->dump();
+    virtual match defaultMatch(llvm::Instruction* ins) {
+        // ins->dump();
     }
 };
 
