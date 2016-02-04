@@ -16,6 +16,8 @@ force = False
 verbose = False
 cppRoot = ""
 clangFormat = ""
+# global flag to see if we have emited anything
+emit_ = False
 
 
 """ Dictionary for all classes loaded from the documentation.
@@ -419,19 +421,27 @@ class CppClass:
         This happens either if force is true, the generated file does not exist, or its time is older than the original, or the codegen script.
         """
         global force
+        global emit_
         if (force):
+            emit_ = True
             return True
         if (not os.path.isfile(self.file)):
             D("Unable to locate source file {0}".format(self.file))
+            emit_ = True
             return True
         ts = os.path.getmtime(self.file)
         if (not os.path.isfile(filename)):
+            emit_ = True
             return True
         td = os.path.getmtime(filename)
         if (ts > td):
+            emit_ = True
             return true
         ts = os.path.getmtime(sys.argv[0])
-        return ts > td
+        if (ts > td):
+            emit_ = True
+            return True
+        return False
 
 
     def emit(self):
@@ -589,6 +599,15 @@ def emit():
     for h in passes.values():
         h.emit()
 
+def emitPatternKinds():
+    D("emitting pattern kinds")
+    if (not emit_):
+        D("  skipped")
+    else:
+        with open(cppRoot + "/ir/pattern_kinds.inc", "w") as f:
+            print("/* This file has been automatically generated. Do not hand-edit. */", file = f)
+            for p in patterns:
+                print("{0}, ".format(p.split("::")[-1]), file = f)
 
 # ---------------------------------------------------------------------------------------------------------------------
 
@@ -650,8 +669,9 @@ def main():
     checkPredicates()
     # for each pass, we need to build a match table and error if the match table is ambiguous
     buildDispatchTables()
-    # emit generated dispatch methods
+    # emit the generated code
     emit()
+    emitPatternKinds()
 
     D("DONE")
 
