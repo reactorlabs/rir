@@ -1,7 +1,7 @@
-/** Enables the use of R internals for us so that we can manipulate R structures in low level.
+/** Enables the use of R internals for us so that we can manipulate R structures
+ * in low level.
  */
 #define USE_RINTERNALS 1
-
 
 #include <llvm/IR/Module.h>
 
