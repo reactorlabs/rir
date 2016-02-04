@@ -63,7 +63,9 @@ add_custom_target(codegen_passes_dir
     COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_SOURCE_DIR}/rjit/src/passes/codegen)
 add_custom_target(codegen_passes
     DEPENDS codegen_passes_dir
-    COMMAND python3 tools/codegen_passes.py xml rjit/src/passes/codegen ${LLVM_DIR}/../../../bin/clang-format WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+#    COMMAND python3 tools/codegen_passes.py xml rjit/src/passes/codegen ${LLVM_DIR}/../../../bin/clang-format WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    COMMAND python3 tools/codegen_passes.py xml rjit/src/passes/codegen noformat WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
 
 # build the shared library for the JIT
 file(GLOB_RECURSE SRC "rjit/src/*.cpp" "rjit/src/*.h" "local/*" "rjit/R/*.R" "rjit/tests/*.R")

@@ -56,7 +56,21 @@ passes = {}
 
 
 def help():
-    print("Blablablabla")
+    print("""
+    Code generation for pass dispatchers and pattern kinds. Usage:
+
+    codegen_passes.py doxygen_root dest_dir clang_format [force] [verbose]
+
+    doxygen_root is path to doxygen xml files which document the ir patterns and passes.
+
+    dest_dir is directory to which the generated cpp files should be put.
+
+    clang_format is path to proper clang_format executable for beautification of the generated code. If this is not required, use noformat as the value.
+
+    if force is specified all files will be regenerated even if the script would think it is not needed
+
+    if verbose is specified, a lot of mostly useless stuff will be printed.
+    """)
 
 def error(file, line, message, fail=True):
     """ Displays an error with proper formatting and exits the application
@@ -478,7 +492,8 @@ class CppClass:
                     break
             print("}", file = f)
         # now we must do clang-format on the file so that it does not look too ugly
-        subprocess.call([clangFormat, "-i", "-style=file", ".clang_format", filename])
+        if (clangFormat != "noformat"):
+            subprocess.call([clangFormat, "-i", "-style=file", ".clang_format", filename])
         #clang-format -i -style=LLVM
 # ---------------------------------------------------------------------------------------------------------------------
 
