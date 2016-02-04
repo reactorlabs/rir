@@ -22,13 +22,22 @@ class Pass {
      */
     virtual bool dispatch(llvm::BasicBlock::iterator& i) {
         Pattern* ins = rjit::ir::Pattern::get(i);
-        ins->advance(i);
-        defaultMatch(ins);
+        if (ins != nullptr) {
+            ins->advance(i);
+            defaultMatch(ins);
+        } else {
+            defaultMatch(i);
+            ++i;
+        }
         return true;
     }
 
     virtual match defaultMatch(Pattern* ins) {
         // std::cout << "default instruction match" << std::endl;
+    }
+
+    virtual match defaultMatch(llvm::Instruction * ins) {
+        //ins->dump();
     }
 };
 

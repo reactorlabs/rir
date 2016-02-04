@@ -4,14 +4,57 @@ import time
 import os
 import sys
 import xml.etree.ElementTree as et
+import subprocess
 
-FORCE = False
+# configuration variables
 
-def debug(aStr):
-    # Change to debug
-    if (False):
-        print(aStr)
+""" Root directory where the doxygen files are found.
+"""
+doxygenRoot = ""
+destDir = ""
+force = False
+verbose = False
+cppRoot = ""
+clangFormat = ""
 
+
+""" Dictionary for all classes loaded from the documentation.
+
+Gives class names to their class objects. This is a shortcut if we only have a class name and are not sure where to look (notably we are not sure if we are dealing with properties or patterns). There are of course more optimal ways to do this (i.e. linking classes to each other instead of using names as we do now, but that leads to more complex code).
+"""
+classes = {}
+""" Dictionary of all Pattern classes that were extracted from the documentation.
+
+These are extracted by taking the PATTERN_BASE class and loading all its children.
+"""
+PATTERN_BASE = "rjit::ir::Pattern"
+patterns = {}
+""" Dictionary of all property classes that were extracted from the documentation.
+
+A class is considered a property class if there is at least one pattern class that inherits from it and the class itself is not a pattern.
+"""
+properties = {}
+""" Set of all llvm instructions that were extracted from the documentation.
+
+We do not scan llvm documentation to obtain the instructions, but rather assume that any argument to a match method that is not pattern, property or predicate must be llvm instruction. Instruction names stored here include the llvm:: prefix.
+"""
+instructions = set()
+""" Dictionary of all predicates used for the matching.
+
+A predicate is any child of the PREDICATE_BASE class.
+"""
+PREDICATE_BASE = "rjit::ir::Predicate"
+predicates = {}
+""" Dictionary of all passes for which their dispatch methods must be generated.
+
+A pass is any class that inherits from PASS_BASE class.
+"""
+PASS_BASE = "rjit::ir::Pass"
+passes = {}
+
+
+def help():
+    print("Blablablabla")
 
 def error(file, line, message, fail=True):
     """ Displays an error with proper formatting and exits the application
@@ -22,32 +65,229 @@ def error(file, line, message, fail=True):
     if (fail):
         sys.exit(-1)
 
+def D(message):
+    if (verbose):
+        print(message)
 
-class Manager:
 
-    """ Manages the doxygen generated xml classes for header files
-    documentation.  """
-
-    # TODO how to deal with underscores? __ perhaps - I need to check this
-    @staticmethod
-    def mangle(name):
-        """ Mangles the given cpp name into doxygen filename format (:: == _1_1
-        and capital leters == _lowercase).  """
-        result = ""
-        for c in name:
-            if (c == ":"):
-                result += "_1"
-            elif (c.isupper()):
-                result += "_" + c.lower()
-            elif (c == "_"):
-                result += "__"
-            else:
-                result += c
+def typeFromXML(xml):
+    if (xml.text):
+        # it isundocumented type (primitive, ...)
+        result = xml.text
+        # strip pointer or reference marks
+        if (result[-2:] in  (" *", " &")):
+            result = result[:-2]
         return result
+    elif (len(xml) == 0):
+        # it is constructor or destructor return type, i.e. no type
+        return ""
+    else:
+        # it is a reference to known type, obtain the type name from the reference
+        refid = xml[0].attrib["refid"] + ".xml"
+        if (os.path.isfile(os.path.join(doxygenRoot, refid))):
+            # it is a known class, get the class name from the
+            return CppClass.demangle(refid)
+        else:
+            return xml[0].text
+
+# ---------------------------------------------------------------------------------------------------------------------
+
+
+
+
+class DispatchRecord:
+    """ A dispatch record contains information about the unconditional matcher (there can be only one per record) and conditional matchers (more conditional matchers are possible, they will be tested in the order they appear in the source code), as well as next dispatch table, in case that matchers match sequence of patterns / properties / instructions.
+    """
+    def __init__(self):
+        self.nextPatterns = {}
+        self.nextLLVM = {}
+        self.unconditional = False
+        self.conditional = []
+
+    def arguments(self):
+        """ Returns the arguments string for calling predicates and match methods. Contains typecasted instructions, or patterns/properties as they should appear in the invocations. """
+        # first determine where to get the argument types from
+        if (self.unconditional):
+            args = self.unconditional.args
+        elif (self.conditional):
+            args = self.conditional[0].args[1:]
+        else:
+            return False
+        # now for each argument, if it is in llvm Instructions, it is llvm instruction, and we will use itertor, otherwise we use pattern
+        result = []
+        for i in range(len(args)):
+            if (args[i] in instructions):
+                result.append("static_cast<{iType} *>(&*it{i})".format(iType = args[i], i = i))
+            else:
+                result.append("static_cast<{pType} *>(p{i})".format(pType = args[i], i = i))
+        return ", ".join(result)
+
+
+    def emit(self, f, current):
+        """ Emits code for the dispatch record.
+
+        F is the file to write the result to, current is effectively the name of the iterator that holds the instruction to be matched.
+        """
+        # iterator to instruction that we are going to match
+        it = "it{0}".format(current)
+        # iterator to the instruction after the one we try to match
+        itNext = "it{0}".format(current + 1)
+        # create the next iterator if we are going to match
+        if (self.nextPatterns or self.nextLLVM):
+            print("llvm::BasicBlock::iterator {itNext} = {it};".format(itNext = itNext, it = it), file = f)
+        # check the patterns first
+        if (self.nextPatterns):
+            p = "p{0}".format(current)
+            print("""
+            Pattern * {p} = Pattern::get({it});
+            if ({p} != nullptr)
+                switch ({p}->kind) {{""".format(p = p, it = it), file = f)
+            # now switch on the arguments
+            for pName, dr in self.nextPatterns.items():
+                print("""
+                case Pattern::Kind::{pName}: {{
+                    {p}->advance({itNext});""".format(pName = pName.split("::")[-1], p = p, itNext = itNext), file = f)
+                dr.emit(f, current + 1)
+                print("break; }", file = f)
+            print("}", file = f)
+        # now llvm instructions matching
+        if (self.nextLLVM):
+            # next iterator will just be next instruction
+            print("++{itNext};".format(itNext = itNext), file = f);
+            for iName, dr in self.nextLLVM.items():
+                print("if (llvm::isa<{iName}>({it})) {{".format(iName = iName, it = it), file = f)
+                dr.emit(f, current + 1)
+                print("}", file = f)
+        # create the sequence of iterators for the calls, we know there has to be at least one
+        args = self.arguments()
+        # finally, check if we have any predicated match functions
+        for mm in self.conditional:
+            print("""{{
+            {pType} p = {pType}();
+            if (p.match(*this, {args})) {{
+                {mm}({args}, p);
+                it0 = {it};
+                return true;
+            }} }}""".format(pType = mm.predicate, args = args, mm = mm.name, it = it), file = f)
+        # finally, if we have nonpredicated match, execute it
+        if (self.unconditional):
+            print("""
+            {mm}({args});
+            it0 = {it};
+            return true;
+            """.format(mm = self.unconditional.name, args = args, it = it), file = f)
+
+    def _addMatch(self, matcher, index):
+        # first see if there is anything left in the match sequence, and if not, add the matcher method to the dispatch record directly.
+        seq = matcher.matchSequence
+        if (index == len(seq)):
+            if (not matcher.predicate):
+                if (self.unconditional):
+                   if (self.unconditional.matchsetSize() == matcher.matchsetSize()):
+                        error(matcher.file, matcher.line, "Dispatch table ambiguity - collision with match method at {0}, {1}".format(self.unconditional.file, self.unconditional.line))
+                    # don't do anything if new matcher is more general than existing one
+                   if (matcher.matchsetSize() > self.unconditional.matchsetSize()):
+                       return
+                   # otherwise overwrite the existing one with the more specific
+                # or just write if not written yet
+                self.unconditional = matcher
+            else:
+                # conditional matchers are always fine, we can have as many of them as we like.
+                self.conditional.append(matcher)
+        else:
+            # get type we are going to match now
+            t = seq[index]
+            if (t in instructions):
+                # llvm instructions are simpler, there is always only the instrcuction in the matchset, see if we have a dispatch record for it and create one if not
+                if (t not in self.nextLLVM):
+                    self.nextLLVM[t] = DispatchRecord()
+                # add the matcher and remaining sequence to the record
+                self.nextLLVM[t]._addMatch(matcher, index + 1)
+            else:
+                # t must be either a pattern or a property, and we have to deal with matchsets, first obtain the class object rather than the type
+                if (t in patterns):
+                    t = patterns[t]
+                else:
+                    t = properties[t]
+                # now for each pattern in t's matchset, do the addition
+                for tt in t.matchset:
+                    if (tt not in self.nextPatterns):
+                        self.nextPatterns[tt] = DispatchRecord()
+                    self.nextPatterns[tt]._addMatch(matcher, index + 1)
+
+# ---------------------------------------------------------------------------------------------------------------------
+
+class CppMethod:
+    """ Information about a C++ method from doxygen files. """
+
+    def __init__(self, xml):
+        """ Creates the method from given xml. """
+        self.xml = xml
+        self.args = []
+        self.type = ""
+        for child in xml:
+            if (child.tag == "name"):
+                self.name = child.text
+            elif (child.tag == "type"):
+                self.type = typeFromXML(child)
+            elif (child.tag == "location"):
+                self.file = child.get("file")
+                self.line = child.get("line")
+            elif (child.tag == "param"):
+                for x in child:
+                    if (x.tag == "type"):
+                        self.args.append(typeFromXML(x));
+
+    def isMatchMethod(self):
+        """ Returns true if given method is a match method.
+
+        Match method should have reported return type of match, where match is a void typecast defined in rjit::ir::Pass.
+        """
+        return self.type == "match"
+
+    def matchsetSize(self):
+        """ Returns the matchset size, assuming the method is unconditional matcher. """
+        x = self.args[-1]
+        if (x in patterns):
+            return len(patterns[x].matchset)
+        if (x in properties):
+            return len(properties[x].matchset)
+        return 1
+
+    def checkMatchMethod(self):
+        """ Checks that given method conforms to the match method signature.
+
+        A match method has at least one instruction, pattern or property argument and may have at most one predicate as last argument.
+
+        Also sets the predicate field with the typename of the predicate, or "" if no predicate is used and finally initializes the matchSequence list containing all predicates, properties and instructiosn the method handles.
+        """
+        if (not self.args):
+            error("Matcher method {0} expected to have at least one argument.".format(self.name))
+        self.predicate = ""
+        self.matchSequence = []
+        for i in range(len(self.args)):
+            name = self.args[i]
+            if (name in predicates):
+                if (self.predicate):
+                    error(self.file, self.line, "Matcher method {0} can have only one predicate.".format(self.name))
+                if (i != len(self.args) - 1):
+                    error(self.file, self.line, "Matcher method {0} predicate must be last argument.".format(self.name))
+                self.predicate = name
+            else:
+                # we know it has to be pattern, property, or instruction because instruction is anything but pattern & property
+                self.matchSequence.append(name)
+        if (not self.matchSequence):
+            error(self.file, self.line, "Matcher method {0} does not match any instructions or patterns".format(self.name))
+
+# ---------------------------------------------------------------------------------------------------------------------
+
+class CppClass:
 
     @staticmethod
-    def demangle(name):
-        """ Reconstructs C++ style name from doxygen mangled one. """
+    def demangle(filename):
+        """ Returns the class name corresponding to the given filename. Does not expect the filename to contain the doxygenRoot path prefix. """
+        # get rid of leading class and trailing .xml
+        name = filename[5:-4]
         result = ""
         i = 0
         while (i < len(name)):
@@ -62,681 +302,358 @@ class Manager:
             i += 1
         return result
 
-    def __init__(self, rootPath):
-        """ Initializes the manager and sets the root path where the xml files
-        are to be found.
+    @staticmethod
+    def doxygenFilename(className):
+        """ Returns the class xml filename under which the specified class' documentation should be found.
 
+        The manging changes :: to _1_1 and capital leters to _lowercase.
         """
-        self._rootPath = rootPath
-        # dictitionary with already created classes
-        self._classes = {}
-
-    def _pathFor(self, name):
-        """ Given a class name (including definition namespaces), returns the
-        filename of that class' definition under the manager's root path.
-        """
-        return os.path.join(self._rootPath, "{0}.xml".format(name))
-
-    def getClass(self, name):
-        """ Loads the class with given name and all its children classes as
-        well. If the class is already loaded, just returns it. """
-        if (name in self._classes.keys()):
-            return self._classes[name]
-        fname = os.path.join(
-            self._rootPath, "class{0}.xml".format(Manager.mangle(name)))
-        if (os.path.isfile(fname)):
-            c = CppClass(name, et.parse(fname), self)
-            self._classes[name] = c
-            c.load(self)
-            return c
-        assert(False)
-
-    def getTypeFromXML(self, xml):
-        if (xml.text):
-            return CppUnknownType(xml.text)
-
-        # or it is a known type in which case we load it through the manager
-        else:
-            if (len(xml) == 0):
-                # it's a constructor or destructor, we are not interested in
-                # these
-                return None
-
+        result = os.path.join(doxygenRoot, "class")
+        for c in className:
+            if (c == ":"):
+                result += "_1"
+            elif (c.isupper()):
+                result += "_" + c.lower()
+            elif (c == "_"):
+                result += "__"
             else:
-                xml = xml[0]
-                if (xml.tag != "ref"):
-                    print("Expected ref section in method argument type")
-                    sys.exit(-1)
-                # now if the refid is actually a filename, then load the corresponding class
-                # otherwise use it as type
-                fname = self._pathFor(xml.attrib["refid"])
-                if (not os.path.isfile(fname)):
-                    return CppUnknownType(xml.text)
-                
-                klass = self.getClass(Manager.demangle(xml.attrib["refid"][5:]))  # [5:] to strip the leading class
-                return CppClassType(klass, xml.tail)
-
-class CppType(object):
-    def isMatchSequence(self):
-        return self.name() == "match"
-
-    def isBool(self):
-        return self.name() == "bool"
-
-    def isSubclassOf(self, base):
-        return False
-    
-    def name(self):
-        raise NotImplementedError("")
+                result += c
+        return result+".xml"
 
 
-class CppUnknownType(CppType):
-    """ An unknown cpp type outside the doxygen documentation.
-    """
     def __init__(self, name):
-        self.name_ = name
-
-    def name(self):
-        return self.name_
-    
-    def __str__(self):
-        return self.name()
-
-
-class CppClassType(CppType):
-    def __init__(self, klass, storageType):
-        if storageType:
-            self.storageType = storageType.replace(" ", "")
-        else:
-            self.storageType = ""
-        self.klass = klass
-
-    def isPass(self):
-        return False
-
-    def isPointerType(self):
-        return self.storageType == "*"
-
-    def isSubclassOf(self, base):
-        return self.klass.isSubclassOf(base)
-
-    def name(self):
-        return self.klass.name
-
-    def matchSet(self):
-        return self.klass.matchSet
-
-    def methods(self):
-        return self.klass.methods
-
-    def __str__(self):
-        return "{0} {1}".format(self.name(), self.storageType)
-
-    def equals(self, other):
-        return self.klass == other.klass and self.storageType == other.storageType
-
-class CppClass:
-
-    """ C++ class
-    """
-
-    def __init__(self, name, xml, manager):
-        """ Creates the class with given xml.
-
-        Does not yet load and analyze the data as this will be done in the
-        second step to prevent circular definitions.  """
+        """ Initializes the cpp class and loads the xml documentation. """
+        global classes
+        classes[name] = self
         self.name = name
-        self._xml = xml.getroot()[0]  # compounddef
-        if (self._xml.attrib["kind"] != "class"):
-            print("Error: {0} is not a class".format(name))
-            exit(-1)
-        self.parents = []
-        self.manager = manager
-        # print("Class {0} initialized from xml".format(name))
-
-    def addParent(self, c):
-        """ Adds given class to the list of parents of the class. """
-        self.parents.append(c)
-
-    def load(self, manager):
+        self.filename = CppClass.doxygenFilename(name)
         self.subclasses = []
-        self.methods = []
+        self.parentClasses = []
+        if (not os.path.isfile(self.filename)):
+            D("Documentation for class {0} not found (expected filename {1})".format(name, self.filename))
+            self._xml = False
+        else:
+            self._xml = et.parse(self.filename).getroot()[0]
+            # get the subclasses
+            for child in self._xml:
+                if (child.tag == "derivedcompoundref"):
+                    self.subclasses.append(child.text)
+                elif (child.tag == "basecompoundref"):
+                    self.parentClasses.append(child.text)
+                elif (child.tag == "location"):
+                    self.file = child.get("file")
+                    self.line = child.get("line")
+
+    def includePath(self):
+        """ Returns the include path of this file, i.e. what should go in the include statement. """
+        return self.file[len(cppRoot) + 1:]
+
+    def isLeaf(self):
+        """ Returns True if the class has no subclasses. """
+        return not self.subclasses
+
+    def addToMatchset(self, name):
+        """ Appends given class to the matchset and creates the matchset if it does not yet exist for the class. """
+        if (not hasattr(self, "matchset")):
+            self.matchset = set()
+        self.matchset.add(name)
+        for p in self.parentClasses:
+            classes[p].addToMatchset(name)
+
+    def extractMatchMethods(self):
+        self.matchMethods = []
+        D("  pass {0}".format(self.name))
         for child in self._xml:
-            if (child.tag == "location"):
-                self.file = child.get("file")
-                self.line = child.get("line")
-            elif (child.tag == "derivedcompoundref"):
-                c = manager.getClass(child.text)
-                self.subclasses.append(c)
-                c.addParent(self)
-            elif (child.tag == "sectiondef"):
+            if (child.tag == "sectiondef"):
                 if (child.get("kind") in ("public-func", "private-func", "protected-func")):
                     for method in child:
-                        self.methods.append(CppMethod(method, manager))
+                        m = CppMethod(method)
+                        if (m.isMatchMethod()):
+                            self.matchMethods.append(m)
+                            D("    {0}".format(m.name))
 
-    def isSubclassOf(self, base):
-        if (base == self):
-            return True
-        if (base in self.parents):
-            return True
-        for p in self.parents:
-            if (p.isSubclassOf(base)):
-                return True
-        return False
+    def checkPredicateAgainstMatchMethod(self, mm):
+        """ Assumes class is a predicate and checks that it has the necessary interface to be used in given matcher.
 
-    def isMatchable(self):
-        return self.isSubclassOf(
-                self.manager.getClass("rjit::ir::Pattern"))
+        This means that the predicate must have a method named match which returns bool and has the following arguments:
 
-
-class CppMethod:
-
-    """ C++ method
-    """
-
-    def __init__(self, xml, manager):
-        """ Initializes the method from the given xml. """
-        self._xml = xml
-        self.args = []
-        self.overrides = False
-        for child in xml:
-            if (child.tag == "type"):
-                self.type = manager.getTypeFromXML(child)
-            elif (child.tag == "name"):
-                self.name = child.text
-            elif (child.tag == "location"):
-                self.file = child.get("file")
-                self.line = child.get("line")
-            elif (child.tag == "param"):
-                self.args.append(CppVariable(child, manager))
-            elif (child.tag == "reimplements"):
-                self.overrides = True
-
-        self.manager = manager
-
-    def __str__(self):
-        return "{0} {1}".format(self.type, self.name)
-
-    def isMatchSequence(self):
-        return self.type and self.type.isMatchSequence()
-
-    def checkMatchSequence(self):
-        """ Checks that the method as a matcher is fine. This means to 1) check
-        that its patterns come before predicates and that there are no
-        other arguments. It also checks that all predicates conform to the
-        matchers' signature.
+        First argument is a pass (PASS_BASE), other arguments are the instructions which the match method matches in the same order.
         """
-        # at least one argument
-        if (len(self.args) == 0):
-            error(self.file, self.line,
-                  "Matcher method {0} is not allowed to take no arguments.".format(self))
-        # all args but last must be patterns
-        for a in self.args[0:-1]:
-            if not a.isMatchable():
-                error(self.file, self.line, "Matcher method {0}, argument {1}: matchers' non-last arguments must be matchable".format(self, a))
-        # last argument can either be patterns or predicate
-        if (len(self.args) > 1):
-            a = self.args[-1]
-            if (a.isMatchable()):
-                return  # all good
-            elif a.isPredicate():
-                p = a.type
-                # find predicate has static method named match
-                for m in p.methods():
-                    if (m.name == "match"):
-                        if (m.isStatic()):
-                            error(
-                                m.file, m.line, "Predicate '{0}' match method '{1}' must not be static".format(p, m))
-                        if (not m.type.isBool()):
-                            error(
-                                m.file, m.line, "Predicate '{0}' match method '{1}' must return bool.".format(p, m))
-                        if (len(m.args) != len(self.args)):
-                            error(
-                                m.file, m.line, "Predicate '{0}' match method '{1}' does not have proper signature - invalid number of arguments.".format(p, m), fail=False)
-                            error(
-                                self.file, self.line, "when used at match {0}".format(self))
-                        # first argument must be matcher method
-                        if (not m.args[0].isPass()):
-                            error(
-                                m.file, m.line, "Predicate {0} match method's first argument must be a rjit::ir::Pass &.".format(p))
-                        for i in range(1, len(m.args)):
-                            if (not m.args[i].type.equals(self.args[i - 1].type)):
-                                error(
-                                    m.file, m.line, "Predicate '{0}' match method's signature must follow the matcher, difference at argument '{1}'".format(p, m.args[i]), fail=False)
-                                error(
-                                    self.file, self.line, "when used at match {0}.".format(self))
-                        return  # all good
-
-                error(
-                    p.file, p.line, "Predicate {0} does not define public method match.".format(p))
-
-                pass  # check the predicate's signature to follow
-            else:
-                error(
-                    self.file, self.line, "Matcher method {0}, argument {1}: match last arguments must inherit from either rjit::ir::Pattern or rjit::ir::Predicate.".format(self, a))
-
-    def isVirtual(self):
-        """ Returns true if the method is virtual. """
-        return self._xml.attrib["virt"] == "virtual"
-
-    def isStatic(self):
-        """ Returns true if the method is static. """
-        return self._xml.attrib["static"] != "no"
-
-    def matchSequence(self):
-        """ Returns a list of Pattern types that the method. """
-        result = []
-        for a in self.args:
-            if not a.isMatchable():
-                if not a.isPredicate():
-                    print("Argument '{0}' to {1}' is not a valid matcher".format(a, self))
-                    sys.exit(1)
-            else:
-                result.append(a.type)
-        return result
-
-    def predicate(self):
-        """ Returns the predicate associated with the matcher, or False if the matcher is unconditional. """
-        for a in self.args:
-            if a.isPredicate():
-                return a.type
-        return False
-
-
-class CppVariable:
-
-    """ C++ variable
-    """
-
-    def __init__(self, xml, manager):
-        self._xml = xml
-        self.text = ""
-        self.name = ""
-        for child in xml:
-            if (child.tag == "declname"):
-                self.name = child.text
-            elif (child.tag == "type"):
-                self.type = manager.getTypeFromXML(child)
-        self.manager = manager
-
-    def __str__(self):
-        return "{0} {1}".format(self.type, self.name)
-
-    def isMatchable(self):
-        # FIXME: could also be llvm::Instruction or other combined attrs?
-        return self.type.isSubclassOf(
-                self.manager.getClass("rjit::ir::Pattern")) and \
-                        self.type.isPointerType()
-
-    def isPredicate(self):
-        return self.type.isSubclassOf(
-                self.manager.getClass("rjit::ir::Predicate"))
-    
-    def isPass(self):
-        return self.type.isSubclassOf(
-                self.manager.getClass("rjit::ir::Pass"))
+        # if the predicate does not yet have a match method, find it
+        if (not hasattr(self, "matchMethod")):
+            for child in self._xml:
+                if (child.tag == "sectiondef"):
+                    if (child.get("kind") in ("public-func", "private-func", "protected-func")):
+                        for method in child:
+                            m = CppMethod(method)
+                            if (m.name == "match" and m.type == "bool" and m.args[0] == PASS_BASE):
+                                self.matchMethod = m
+                                break
+            if (not hasattr(self, "matchMethod")):
+                error(self.file, self.line, "Predicate {0} does not have a match method or the method has wrong signature for match method {1} (file: {2}, line {3})".format(self.name, mm.name, mm.file, mm.line))
+        # check that the match method of the predicate corresponds to the match method of the pass
+        if (len(self.matchMethod.args) != len(mm.args)):
+            error(self.file, self.line, "Predicate {0} match method matched different length of instructions than matcher method {1}".format(self.name, mm.name))
+        # check that the arguments are of same types
+        for i in range(len(mm.args)-1):
+            if (self.matchMethod.args[i + 1] != mm.args[i]):
+                error("Predicate {0} matches different set of instructions than matcher {1} (index {2}, expected {3}, got {4})".format(self.name, mm.name, i + 1, mm.args[i], self.matchMethod.args[i + 1]))
+        # all is fine
 
 
 
-class Pass:
+    def createDispatchTable(self):
+        """ Creates the dispatch table for the pass. Errors if there are any ambiguities found when creating the table.
 
-    """ Pass information.
-
-    Each child of ir::Pass that has at least one non overriding matcher must
-    have its dispatch method overriden. This class keeps record of each such
-    class.
-    """
-    class DispatchTable:
-
-        class Entry:
-
-            def __init__(self, type):
-                self.type = type
-                self.conditional = []
-                self.unconditional = False
-                self.unconditionalMatchLength = False
-                self.recursive = Pass.DispatchTable()
-
-            def __str__(self):
-                result = "{0}: {1} or ".format(
-                    self.type, self.unconditional.name if self.unconditional else "nodefault")
-                for m in self.conditional:
-                    result += m.name + " "
-                if (self.recursive):
-                    result += "\n    " + \
-                        self.recursive.__repr__().replace("\n", "\n    ")
-                return result
-
-            def _addMatcherMethod(self, matcherMethod, matchSequence):
-                if (len(matchSequence) == 1):
-                    if (matcherMethod.predicate()):
-                        self.conditional.append(matcherMethod)
-                    else:
-                        mss = len(matchSequence[0].matchSet())
-                        if (not self.unconditionalMatchLength or mss < self.unconditionalMatchLength):
-                            self.unconditionalMatchLength = mss
-                            self.unconditional = matcherMethod
-                        elif (mss == self.unconditionalMatchLength):
-                            error(matcherMethod.file, matcherMethod.line,
-                                  "Ambiguous match for pattern type {0}".format(self.type), fail=False)
-                            error(
-                                self.unconditional.file, self.unconditional.line,
-                                  "Previous match in matcher method {0}".format(self.unconditional.name))
-                else:
-                    self.recursive._addMatcherMethod(
-                        matcherMethod, matchSequence[1:])
-
-            def emitUnconditionalCall(self, iterators):
-                result = "("
-                for i in range(0, len(iterators)-1):
-                    result += "static_cast<{0}>(".format(self.unconditional.matchSequence()[i])
-                    result += "Pattern::get("+iterators[i]+"))"
-                    if i < len(iterators) - 2:
-                        result += ","
-                result += ")"
-                return result
-
-            def emitPredicateCall(self, conditional, iterators):
-                result = "(*this, "
-                for i in range(1, len(iterators)):
-                    result += "static_cast<{0}>(".format(conditional.matchSequence()[i-1])
-                    result += "Pattern::get("+iterators[i]+"))"
-                    if i < len(iterators) - 1:
-                        result += ","
-                result += ")"
-                return result
-
-            def emitUnconditional(self, iterators):
-                if (self.unconditional):
-                    result = self.unconditional.name + \
-                        self.emitUnconditionalCall(iterators)
-                    return result
-
-            def emitConditional(self, iterators, conditional):
-                predicate = conditional.predicate()
-                return """{{
-        {ptype} p;
-        if (p.match{sigP}) {{
-            {hname}{sig};
-            goto DONE;
-        }}
-    }}""".format(ptype=predicate.name(), sigP=self.emitPredicateCall(conditional, iterators), sig=self.emitUnconditionalCall(iterators), hname=conditional.name)
-
-            def emit(self, iterators):
-                """ Emits C++ code for the dispatch table entry.
-
-                The incoming iterators contains all iterators that were used in the dispatch so far,
-                """
-                result = "case Pattern::Kind::{0}: {{\n".format(self.type)
-                if (self.recursive):
-                    result += """    if (not {matched}->isTerminator()) {{
-        {dispatch}
-    }}
-""".format(matched=iterators[-2], dispatch=self.recursive.emit(iterators[:]).replace("\n", "\n        "))
-
-                # first check the conditional ones
-                for h in self.conditional:
-                    result += "    {0}\n".format(
-                        self.emitConditional(iterators, h))
-
-                # then go for the single non-conditional one
-                if (self.unconditional):
-                    result += "    {0};\n".format(
-                        self.emitUnconditional(iterators))
-                    # assign the last iterator to the first one (first one is
-                    # ref arg)
-                    result += "    {first} = {last};\n    return true;\n".format(
-                        first=iterators[0], last=iterators[-1])
-
-                result += "}\n"
-                return result
-                pass
-
-        def __init__(self):
-            self._table = {}
-
-        def __bool__(self):
-            return True if (self._table) else False
-
-        def __str__(self):
-            result = "\n".join([x.__str__() for x in self._table.values()])
-            return result
-
-        def __repr__(self):
-            return self.__str__()
-
-        def _getOrCreateEntry(self, type):
-            if (type in self._table.keys()):
-                return self._table[type]
-            x = Pass.DispatchTable.Entry(type)
-            self._table[type] = x
-            return x
-
-        def _addMatcherMethod(self, matcherMethod, matchSequence):
-            """ Adds given match method and all it matches into the dispatch
-            table. Takes the match signature of the match method as well as
-            an index to the signature - this is for recursive matching to
-            determine how deep in the recursion we are. """
-            matcherMethod.checkMatchSequence()
-            ir = matchSequence[0]
-            for m in ir.matchSet():
-                self._getOrCreateEntry(m)._addMatcherMethod(
-                    matcherMethod, matchSequence)
-
-        def emit(self, incomingIterators):
-            """ Emits the C++ code for the given dispatch table, taking the
-            name of the incomming iterator storing the current pattern for
-            sequential matching. The outgoing iterator is always i as per the
-            dispatch function signature.
-            """
-            # last iterator is the iterator on which we should call the match
-            # function to get the type of pattern to dispatch on
-            lastIterator = incomingIterators[-1]
-            it = lastIterator + lastIterator[0]
-            # add the last iterator to incoming iterators so that entry's emits
-            # will find it
-            incomingIterators.append(it)
-            result = """llvm::BasicBlock::iterator {it} = {incoming};
-Pattern * pattern = rjit::ir::Pattern::get({it});
-if (pattern == nullptr)
-    return false;
-pattern->advance({it});
-switch (pattern->getKind()) {{
-""".format(it=it, incoming=lastIterator)
-            for entry in self._table.values():
-                result += entry.emit(incomingIterators)
-            result += "}"
-            return result
-
-    def __init__(self, passClass):
-        """ Initializes the Pass from given class. It is assumed that the
-        class is a ir::Pass child. Fills in the matcher list.  """
-        self.passClass = passClass
-        self.matcherMethods = []
-        for m in passClass.methods:
-            if (m.isMatchSequence() and not m.overrides):
-                self.matcherMethods.append(m)
-
-    def hasMatchers(self):
-        return len(self.matcherMethods) > 0
-
-    def buildDispatchTable(self):
-        self._table = Pass.DispatchTable()
-        for h in self.matcherMethods:
-            self._table._addMatcherMethod(h, h.matchSequence())
-
-    def destFile(self, dest):
-        """ Returns the target file for the codegen. This consists of the name
-        of the Pass wih :: replaced by _ in the given destination
-        directory. """
-        return os.path.join(dest, self.passClass.name.replace("::", "_") + ".cpp")
-
-    def shouldEmit(self, dest):
-        global FORCE
-        """ Returns true if the particular Pass should be created. This
-        happens if either the source of the Pass' class file is newer than
-        the autogenerated code, or if the Pass' autogenerated
-        code cannot be found at all.
+        The dispatch table is a dicttionary with keys being propeties & patterns and values being the dispatch Records (see above).
         """
-        if (FORCE):
+        self.dispatchTable = DispatchRecord()
+        # for each match method, fill in the appropriate tables
+        for m in self.matchMethods:
+            self.dispatchTable._addMatch(m, 0)
+
+
+    def shouldEmit(self, filename):
+        """ Returns true if the particular pass should be created.
+
+        This happens either if force is true, the generated file does not exist, or its time is older than the original, or the codegen script.
+        """
+        global force
+        if (force):
             return True
-        if (not os.path.isfile(self.passClass.file)):
-            print(
-                "Unable to locate source file {0}".format(self.passClass.file))
+        if (not os.path.isfile(self.file)):
+            D("Unable to locate source file {0}".format(self.file))
             return True
-        ts = os.path.getmtime(self.passClass.file)
-        df = self.destFile(dest)
-        if (not os.path.isfile(df)):
+        ts = os.path.getmtime(self.file)
+        if (not os.path.isfile(filename)):
             return True
-        td = os.path.getmtime(df)
+        td = os.path.getmtime(filename)
+        if (ts > td):
+            return true
+        ts = os.path.getmtime(sys.argv[0])
         return ts > td
 
-    def emit(self, dest, cppBase):
-        parents = ""
-        filename = os.path.abspath(self.passClass.file)
-        header = filename[len(cppBase) + 1:]
-        for p in self.passClass.parents:
-            parents += "if ({0}::dispatch(i))\n            goto DONE;\n".format(p.name)
-        code = """#include "{header}"
-#include "llvm.h"
-#include "RIntlns.h"
-#include "ir/Intrinsics.h"
 
-#pragma GCC diagnostic ignored "-Wswitch"
-bool {pass_}::dispatch(llvm::BasicBlock::iterator & i) {{
-    bool success = true;
+    def emit(self):
+        """ Emits the dispatcher's code.
 
-    {code}
-    {parents}
+        """
+        # don't emit the base pass
+        if (self.name == PASS_BASE):
+            return
+        filename = os.path.join(destDir, self.name.replace("::", "_") + ".cpp")
+        D("  {0}".format(filename))
+        if (not self.shouldEmit(filename)):
+            D("    skipping")
+            return
+        with open(filename, "w") as f:
+            # first of all output the headers and general stuff
+            print("""
+            /* This file has been automatically generated. Do not hand-edit. */
+            #include <llvm.h>
+            #include "RIntlns.h"
+            #include "ir/Ir.h"
+            #include "ir/Intrinsics.h"
+            #include "{header}"
 
-    success = false;
-DONE:
-    i = ii;
-    return success;
-}}""".format(header=header, pass_=self.passClass.name, code=self._table.emit(["i"]).replace("\n", "\n    "), parents=parents)
+            #pragma GCC diagnostic ignored "-Wswitch"
+            bool {className}::dispatch(llvm::BasicBlock::iterator & it0) {{
+            """.format(className = self.name, header = self.includePath()), file = f)
+            # emit the dispatch table
+            self.dispatchTable.emit(f, 0)
+            # if the emitted code get here, the match was not successful, delegate to a parent
+            for parent in self.parentClasses:
+                if (parent in passes):
+                    print("return {parentClass}::dispatch(it0);".format(parentClass = parent), file = f)
+                    break
+            print("}", file = f)
+        # now we must do clang-format on the file so that it does not look too ugly
+        subprocess.call([clangFormat, "-i", "-style=file", ".clang_format", filename])
+        #clang-format -i -style=LLVM
+# ---------------------------------------------------------------------------------------------------------------------
 
-        content = ""
-        if os.path.isfile(self.destFile(dest)):
-            with open(self.destFile(dest), 'r') as f:
-                content = f.read()
-        if not content == code:
-            print(self.destFile(dest), "updated")
-            with open(self.destFile(dest), "w") as f:
-                f.write(code)
+def loadClassHierarchy(baseClass, result):
+    """ Starts with the baseClass and loads it together with all its subclasses (transitively). Returns a dict containing the name of the class as key and its documentation xml as value. """
+    D("Loading class hierarchy for {0}".format(baseClass))
+    # load the classes
+    q = [ baseClass ]
+    while (q):
+        key = q.pop()
+        if (not key in result):
+            D("  loading class {0}".format(key))
+            value = CppClass(key)
+            result[key] = value
+            # check if the class has any children and add them to the queue
+            for child in value.subclasses:
+                q.append(child)
 
-
-def analyzeMatchSets(klass):
-    """ Analyzes the match sets of all subclasses of the given class.
-
-    A set of string names XXX for the ir::Type::XXX will be added to each
-    subclass of rjit::ir::Pattern as matchSet attribute.
-
-    It is expected that main program only calls this function with the
-    rjit::ir::Pattern as argument.
+def loadClassParents(child, result):
+    """ Recursively loads all parents of the given class into the result dictionary if they are not present yet.
     """
+    q = child.parentClasses[:]
+    while (q):
+        key = q.pop()
+        if (not key in result):
+            D("  loading class {0}".format(key))
+            value = CppClass(key)
+            result[key] = value
+            for parent in value.parentClasses:
+                q.append(parent)
 
-    # if the match set has already been calculated, return it
-    if (hasattr(klass, "matchSet")):
-        return klass.matchSet
+def loadProperties():
+    """ Returns a dictionary of property classes inferred from the patterns.
 
-    # calculate the match set
-    m = set()
-    if (not hasattr(klass, 'subclasses')):
-        print("cannot extract subclasses: probably doxygen command failed to generate output")
-        sys.exit(-1)
+    Note that property is any class that is parent of any pattern that is not child of pattern itself.
+    """
+    global properties
+    D("loading properties")
+    for p in patterns.values():
+        # get properties of current pattern, i.e. all its parents that are not patterns themselves
+        props = [ x for x in p.parentClasses if x not in patterns ]
+        # for each property, add it to the result, if it has not been added yet
+        for pp in props:
+            if (pp not in properties):
+                value = CppClass(pp)
+                properties[pp] = value
+                # properties may inherit from each other and the inner properties do not necessarily have to appear in the pattern hierarchy, we must check and add them too
+                loadClassParents(value, properties)
 
-    subclasses = set(klass.subclasses)
+def calculateMatchsets():
+    """ Loops over the pattern classes and if a leaf is found, its value is propagated to all its parents matchsets.
 
-    # if the class is a leaf in the hierarchy, its matchset is its own name
-    if not subclasses and klass.isMatchable():
-        m.add(klass.name.split("::")[-1])
-        klass.matchSet = m
-        return m
+    Because parents of patterns can be either patterns themselves, or properties, this takes care of matchsets for both properties and patterns at the same time.
+    """
+    D("Calculating matchsets")
+    for p in patterns.values():
+        if p.isLeaf():
+            p.addToMatchset(p.name)
 
-    # otherwise the matchset of the class is union of all match sets of its
-    # children
-    for child in subclasses:
-        m = m.union(analyzeMatchSets(child))
+def extractMatchMethods():
+    """ Extracts the match methods in the pass. """
+    D("extracting match methods")
+    for h in passes.values():
+        h.extractMatchMethods()
 
-    klass.matchSet = m
-    return m
+def calculateLLVMInstructions():
+    """ Calculates used LLVM instruction names by scanning the match methods of known passes.
+
+    Any argument to a match method that is not pattern, property or predicate is considered to be an LLVM instruction.
+    """
+    D("extracting llvm instructions")
+    for h in passes.values():
+        for m in h.matchMethods:
+            for i in range(len(m.args)):
+                argName = m.args[i]
+                if (argName not in classes):
+                    # check if the name is in proper format with llvm namespace attached, attach if not
+                    if (not argName.startswith("llvm::")):
+                        argName = "llvm::" + argName
+                        m.args[i] = argName
+                    instructions.add(argName)
 
 
-def analyzePasses(c, dest):
-    """ Analyzes the Pass classes and extracts their match methods. """
-    passes = []
+def checkMatchMethodSignatures():
+    """ Checks that all match methods have proper signatures.
 
-    h = Pass(c)
-    if (h.hasMatchers()):
-        # check that we should emit the code
-        if (h.shouldEmit(dest)):
-            passes.append(h)
+    This means that the match method must contain at least one instruction, pattern or property argument and may contain at most one predicate as last argument.
+    """
+    D("checking match methods signatures")
+    for h in passes.values():
+        for m in h.matchMethods:
+            m.checkMatchMethod()
 
-    for child in c.subclasses:
-        passes += analyzePasses(child, dest)
+def checkPredicates():
+    """ Checks that any predicates used in the matchers contain proper methods and signatures.
 
-    return passes
+    A predicate must contain a method named match which returns bool and has a pass as its first argument, followed by the same arguments as the match method without the predicate itself.
+    """
+    D("checking predicate match methods signatures")
+    for h in passes.values():
+        for m in h.matchMethods:
+            if (m.predicate):
+                predicates[m.predicate].checkPredicateAgainstMatchMethod(m)
 
 
-def usage(err=""):
-    print("usage: " + str(sys.argv[0]) + " doxygen_out_dir target_dir")
-    print(err)
-    sys.exit(-1)
+def buildDispatchTables():
+    """ For each pass, builds a dispatch table to guide the dispatching. Errors upon ambiguous dispatch table.
 
+    The dispatch table for each pass is filled. When ambiguities appear, they are reported as errors.
+    """
+    D("generating dispatch tables")
+    for h in passes.values():
+        h.createDispatchTable()
+    pass
+
+def emit():
+    D("emitting code for dispatch methods")
+    for h in passes.values():
+        h.emit()
+
+
+# ---------------------------------------------------------------------------------------------------------------------
 
 def main():
-    global FORCE
+    """ Does the codegen. """
+    global doxygenRoot
+    global patterns
+    global properties
+    global instructions
+    global predicates
+    global passes
+    global destDir
+    global cppRoot
+    global clangFormat
+    global force
+    global verbose
 
-    # we take two arguments - where to look for the doxygen xmls and where to
-    # put the codegens
-    if (len(sys.argv) < 3):
-        usage()
-    
-    cppBase = os.path.abspath(str(sys.argv[0]))
-    cppBase = cppBase[:cppBase.find("/tools/codegen_passes.py")]
-    cppBase = os.path.join(cppBase, "rjit", "src")
-    sources = str(sys.argv[1])
-    dest = str(sys.argv[2])
-    if (len(sys.argv) == 4 and sys.argv[3] == "force"):
-        FORCE = True
-    
-    if (not os.path.isdir(sources)):
-        usage("Sources directory does not exist")
-    
-    if (not os.path.isdir(dest)):
-        usage("Dest directory does not exist")
-    
 
-    lastUpdate = os.path.getmtime(dest)
-    codeGenChanged = os.path.getmtime(os.path.realpath(__file__))
-    if lastUpdate < codeGenChanged:
-        FORCE = True
+    # parse arguments, first three are given
+    doxygenRoot = str(sys.argv[1])
+    destDir = str(sys.argv[2])
+    clangFormat = str(sys.argv[3])
 
-    # now we know we have both source and dest dirs. initialize the sources manager
-    debug("initializing...")
-    m = Manager(sources)
-    # load the classes we required
-    debug("loading...")
-    debug("    patterns")
-    ir_ins = m.getClass("rjit::ir::Pattern")
-    debug("    passes")
-    ir_pass = m.getClass("rjit::ir::Pass")
-    
-    # analyze the data - create match sets and passes
-    debug("analyzing...")
-    debug("    pattern match sets...")
-    analyzeMatchSets(ir_ins)
-    debug("    passes...")
-    passes = analyzePasses(ir_pass, dest)
-    debug("    pass dispatch tables...")
-    # create pass dispatch tables
-    for h in passes:
-        h.buildDispatchTable()
-        if (h.passClass != ir_pass):
-            h.emit(dest, cppBase)
-    # update mtime of the folder
-    now = time.time()
-    os.utime(dest, (now, now))
+    # parse additional args
+    for i in sys.argv[4:]:
+        if (i == "force"):
+            force = True
+        elif (i == "verbose"):
+            verbose = True
+        else:
+            error("","","Unknown argument {0}".format(i))
+
+    if (not os.path.isdir(doxygenRoot)):
+        error("","","Doxygen xml output directory {0} does not exist.".format(doxygenRoot))
+
+
+    cppRoot = os.path.abspath(str(sys.argv[0]))
+    cppRoot = cppRoot[:cppRoot.find("/tools/codegen_passes.py")]
+    cppRoot = os.path.join(cppRoot, "rjit", "src")
+    D("cppRoot set to {0}".format(cppRoot))
+
+    # load all patterns
+    loadClassHierarchy(PATTERN_BASE, patterns)
+    # determine property classes by looking at the patterns
+    loadProperties()
+    # calculate matchsets for patterns & properties
+    calculateMatchsets()
+    # load all predicates
+    loadClassHierarchy(PREDICATE_BASE, predicates)
+    # load all passes
+    loadClassHierarchy(PASS_BASE, passes)
+    # extracts match methods from loaded passes
+    extractMatchMethods()
+    # when we have all match methods, we will use their arguments to check for llvm instruction types used (because we know arguments can be pattern, properties, predicates, or llvm insns)
+    calculateLLVMInstructions()
+    # now when we know all classes and types, check for coherence
+    checkMatchMethodSignatures()
+    # check predicate match methods correspond to the pass match methods where used
+    checkPredicates()
+    # for each pass, we need to build a match table and error if the match table is ambiguous
+    buildDispatchTables()
+    # emit generated dispatch methods
+    emit()
+
+    D("DONE")
 
 if __name__ == "__main__":
     main()
