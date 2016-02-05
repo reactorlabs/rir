@@ -392,6 +392,15 @@ class Car : public Pattern {
         attach(ptr);
     }
 
+    virtual llvm::Instruction* first() const override {
+        llvm::Instruction* r = ins_->getPrevNode()->getPrevNode();
+        // TODO better check for start
+        assert(Pattern::get(r) == this);
+        return r;
+    }
+
+    size_t length() const override { return 3; }
+
     static Car* create(Builder& b, llvm::Value* sexp);
 
     static bool classof(Pattern const* s) { return s->getKind() == Kind::Car; }
@@ -406,6 +415,15 @@ class Cdr : public Pattern {
         attach(ptr);
     }
 
+    virtual llvm::Instruction* first() const override {
+        llvm::Instruction* r = ins_->getPrevNode()->getPrevNode();
+        // TODO better check for start
+        assert(Pattern::get(r) == this);
+        return r;
+    }
+
+    size_t length() const override { return 3; }
+
     static Cdr* create(Builder& b, llvm::Value* sexp);
 
     static bool classof(Pattern const* s) { return s->getKind() == Kind::Cdr; }
@@ -419,6 +437,15 @@ class Tag : public Pattern {
         attach(consValuePtr);
         attach(ptr);
     }
+
+    virtual llvm::Instruction* first() const override {
+        llvm::Instruction* r = ins_->getPrevNode()->getPrevNode();
+        // TODO better check for start
+        assert(Pattern::get(r) == this);
+        return r;
+    }
+
+    size_t length() const override { return 3; }
 
     static Tag* create(Builder& b, llvm::Value* sexp);
 

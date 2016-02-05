@@ -83,7 +83,7 @@ SEXP Builder::closeFunction() {
     ClosureContext* cc = dynamic_cast<ClosureContext*>(c_);
     SEXP result = module()->getNativeSXP(cc->formals, c_->cp[0], c_->cp, c_->f);
     // c_->f->dump();
-    ir::Verifier::check(c_->f);
+    assert(ir::Verifier::check(c_->f));
     delete c_;
     if (contextStack_.empty()) {
         c_ = nullptr;
@@ -96,7 +96,7 @@ SEXP Builder::closeFunction() {
 
 llvm::Function* Builder::closeIC() {
     assert(contextStack_.empty());
-    ir::Verifier::check(c_->f);
+    assert(ir::Verifier::check(c_->f));
     llvm::Function* f = c_->f;
     delete c_;
     c_ = nullptr;

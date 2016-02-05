@@ -33,7 +33,7 @@ class EndClosureContext : public PrimitiveCall {
     static char const* intrinsicName() { return "endClosureContext"; }
 
     static llvm::FunctionType* intrinsicType() {
-        return llvm::FunctionType::get(t::Void, {t::cntxt, t::SEXP}, false);
+        return llvm::FunctionType::get(t::Void, {t::cntxtPtr, t::SEXP}, false);
     }
 
     static bool classof(Pattern const* s) {
@@ -138,7 +138,7 @@ class ClosureNativeCallTrampoline : public PrimitiveCall {
     static char const* intrinsicName() { return "closureNativeCallTrampoline"; }
 
     static llvm::FunctionType* intrinsicType() {
-        return llvm::FunctionType::get(t::SEXP, {t::cntxt, t::SEXP, t::SEXP},
+        return llvm::FunctionType::get(t::SEXP, {t::cntxtPtr, t::SEXP, t::SEXP},
                                        false);
     }
 
@@ -539,7 +539,7 @@ class InitClosureContext : public PrimitiveCall {
 
     static llvm::FunctionType* intrinsicType() {
         return llvm::FunctionType::get(
-            t::Void, {t::cntxt, t::SEXP, t::SEXP, t::SEXP, t::SEXP, t::SEXP},
+            t::Void, {t::cntxtPtr, t::SEXP, t::SEXP, t::SEXP, t::SEXP, t::SEXP},
             false);
     }
 
