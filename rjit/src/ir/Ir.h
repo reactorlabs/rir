@@ -485,7 +485,7 @@ class Switch : public Pattern {
  */
 class CallToAddress : public Pattern {
   public:
-    /** Returns the CallInst associated with the intrinsic.
+    /** Returns the CallInst associated with the pattern.
      */
     llvm::CallInst* ins() { return Pattern::ins<llvm::CallInst>(); }
 
@@ -503,23 +503,23 @@ class CallToAddress : public Pattern {
 
     CallToAddress(Instruction* ins) : Pattern(ins, Kind::CallToAddress) {
         assert(llvm::isa<llvm::CallInst>(ins) and
-               "Intrinsics must be llvm calls");
+               "CallToAddress must be llvm calls");
     }
 };
 
-/** Base class for all intrinsics.
+/** Base class for all primitive calls.
 
  */
-class Intrinsic : public Pattern {
+class PrimitiveCall : public Pattern {
   public:
-    /** Returns the CallInst associated with the intrinsic.
+    /** Returns the CallInst associated with the primitive call.
      */
     llvm::CallInst* ins() { return Pattern::ins<llvm::CallInst>(); }
 
   protected:
-    Intrinsic(llvm::Instruction* ins, Kind kind) : Pattern(ins, kind) {
+    PrimitiveCall(llvm::Instruction* ins, Kind kind) : Pattern(ins, kind) {
         assert(llvm::isa<llvm::CallInst>(ins) and
-               "Intrinsics must be llvm calls");
+               "Primitive calls must be llvm call instructions");
     }
 
     llvm::Value* getValue(unsigned argIndex) {

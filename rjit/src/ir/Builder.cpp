@@ -1,5 +1,5 @@
 #include "Builder.h"
-#include "Intrinsics.h"
+#include "primitive_calls.h"
 
 #include "Verifier.h"
 

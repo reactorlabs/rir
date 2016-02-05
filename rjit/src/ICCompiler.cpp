@@ -27,7 +27,7 @@
 #include "StackMapParser.h"
 #include "CodeCache.h"
 #include "ir/Builder.h"
-#include "ir/Intrinsics.h"
+#include "ir/primitive_calls.h"
 #include "ir/Ir.h"
 
 #include "JITCompileLayer.h"

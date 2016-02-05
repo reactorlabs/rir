@@ -466,7 +466,7 @@ class CppClass:
             #include <llvm.h>
             #include "RIntlns.h"
             #include "ir/Ir.h"
-            #include "ir/Intrinsics.h"
+            #include "ir/primitive_calls.h"
             #include "{header}"
 
             #pragma GCC diagnostic ignored "-Wswitch"

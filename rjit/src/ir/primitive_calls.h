@@ -7,13 +7,13 @@
 namespace rjit {
 namespace ir {
 
-class EndClosureContext : public Intrinsic {
+class EndClosureContext : public PrimitiveCall {
   public:
     llvm::Value* cntxt() { return getValue(0); }
     llvm::Value* resul() { return getValue(1); }
 
     EndClosureContext(llvm::Instruction* ins)
-        : Intrinsic(ins, Kind::EndClosureContext) {}
+        : PrimitiveCall(ins, Kind::EndClosureContext) {}
 
     static EndClosureContext* create(Builder& b, llvm::Value* cntxt,
                                      llvm::Value* resul) {
@@ -41,13 +41,13 @@ class EndClosureContext : public Intrinsic {
     }
 };
 
-class ClosureQuickArgumentAdaptor : public Intrinsic {
+class ClosureQuickArgumentAdaptor : public PrimitiveCall {
   public:
     llvm::Value* op() { return getValue(0); }
     llvm::Value* arglis() { return getValue(1); }
 
     ClosureQuickArgumentAdaptor(llvm::Instruction* ins)
-        : Intrinsic(ins, Kind::ClosureQuickArgumentAdaptor) {}
+        : PrimitiveCall(ins, Kind::ClosureQuickArgumentAdaptor) {}
 
     static ClosureQuickArgumentAdaptor* create(Builder& b, llvm::Value* op,
                                                llvm::Value* arglis) {
@@ -76,12 +76,12 @@ class ClosureQuickArgumentAdaptor : public Intrinsic {
     }
 };
 
-class CallNative : public Intrinsic {
+class CallNative : public PrimitiveCall {
   public:
     llvm::Value* native() { return getValue(0); }
     llvm::Value* rho() { return getValue(1); }
 
-    CallNative(llvm::Instruction* ins) : Intrinsic(ins, Kind::CallNative) {}
+    CallNative(llvm::Instruction* ins) : PrimitiveCall(ins, Kind::CallNative) {}
 
     static CallNative* create(Builder& b, llvm::Value* native,
                               llvm::Value* rho) {
@@ -109,14 +109,14 @@ class CallNative : public Intrinsic {
     }
 };
 
-class ClosureNativeCallTrampoline : public Intrinsic {
+class ClosureNativeCallTrampoline : public PrimitiveCall {
   public:
     llvm::Value* cntxt() { return getValue(0); }
     llvm::Value* native() { return getValue(1); }
     llvm::Value* rh() { return getValue(2); }
 
     ClosureNativeCallTrampoline(llvm::Instruction* ins)
-        : Intrinsic(ins, Kind::ClosureNativeCallTrampoline) {}
+        : PrimitiveCall(ins, Kind::ClosureNativeCallTrampoline) {}
 
     static ClosureNativeCallTrampoline* create(Builder& b, llvm::Value* cntxt,
                                                llvm::Value* native,
@@ -149,7 +149,7 @@ class ClosureNativeCallTrampoline : public Intrinsic {
 
 // Replacement for GETSTACK_LOGICAL_NO_NA_PTR The call is used only for
 // error reporting.
-class ConvertToLogicalNoNA : public Intrinsic {
+class ConvertToLogicalNoNA : public PrimitiveCall {
   public:
     llvm::Value* what() { return getValue(0); }
     llvm::Value* constantPool() { return getValue(1); }
@@ -163,7 +163,7 @@ class ConvertToLogicalNoNA : public Intrinsic {
     SEXP call(Builder const& b) { return b.constantPool(call()); }
 
     ConvertToLogicalNoNA(llvm::Instruction* ins)
-        : Intrinsic(ins, Kind::ConvertToLogicalNoNA) {}
+        : PrimitiveCall(ins, Kind::ConvertToLogicalNoNA) {}
 
     static ConvertToLogicalNoNA* create(Builder& b, llvm::Value* what,
                                         SEXP call) {
@@ -193,11 +193,11 @@ class ConvertToLogicalNoNA : public Intrinsic {
     }
 };
 
-class PrintValue : public Intrinsic {
+class PrintValue : public PrimitiveCall {
   public:
     llvm::Value* value() { return getValue(0); }
 
-    PrintValue(llvm::Instruction* ins) : Intrinsic(ins, Kind::PrintValue) {}
+    PrintValue(llvm::Instruction* ins) : PrimitiveCall(ins, Kind::PrintValue) {}
 
     static PrintValue* create(Builder& b, llvm::Value* value) {
 
@@ -226,12 +226,12 @@ class PrintValue : public Intrinsic {
 // startFor returns the sequence over which the loop will iterate. No
 // need for all the other things here because we do not support other
 // than generic variable loads and stores.
-class StartFor : public Intrinsic {
+class StartFor : public PrimitiveCall {
   public:
     llvm::Value* seq() { return getValue(0); }
     llvm::Value* rho() { return getValue(1); }
 
-    StartFor(llvm::Instruction* ins) : Intrinsic(ins, Kind::StartFor) {}
+    StartFor(llvm::Instruction* ins) : PrimitiveCall(ins, Kind::StartFor) {}
 
     static StartFor* create(Builder& b, llvm::Value* seq, llvm::Value* rho) {
 
@@ -260,7 +260,7 @@ class StartFor : public Intrinsic {
 
 // Loop sequence length returns the length of the sequence the loop will
 // iterate over and errors if the sequence is of wrong type.
-class LoopSequenceLength : public Intrinsic {
+class LoopSequenceLength : public PrimitiveCall {
   public:
     llvm::Value* seq() { return getValue(0); }
     llvm::Value* constantPool() { return getValue(1); }
@@ -274,7 +274,7 @@ class LoopSequenceLength : public Intrinsic {
     SEXP call(Builder const& b) { return b.constantPool(call()); }
 
     LoopSequenceLength(llvm::Instruction* ins)
-        : Intrinsic(ins, Kind::LoopSequenceLength) {}
+        : PrimitiveCall(ins, Kind::LoopSequenceLength) {}
 
     static LoopSequenceLength* create(Builder& b, llvm::Value* seq, SEXP call) {
 
@@ -305,13 +305,13 @@ class LoopSequenceLength : public Intrinsic {
 
 // Given the for loop sequence, and index, returns the index-th value of
 // the sequence. TODO Note that this always allocates for vectors.
-class GetForLoopValue : public Intrinsic {
+class GetForLoopValue : public PrimitiveCall {
   public:
     llvm::Value* seq() { return getValue(0); }
     llvm::Value* index() { return getValue(1); }
 
     GetForLoopValue(llvm::Instruction* ins)
-        : Intrinsic(ins, Kind::GetForLoopValue) {}
+        : PrimitiveCall(ins, Kind::GetForLoopValue) {}
 
     static GetForLoopValue* create(Builder& b, llvm::Value* seq,
                                    llvm::Value* index) {
@@ -339,9 +339,9 @@ class GetForLoopValue : public Intrinsic {
     }
 };
 
-class MarkVisible : public Intrinsic {
+class MarkVisible : public PrimitiveCall {
   public:
-    MarkVisible(llvm::Instruction* ins) : Intrinsic(ins, Kind::MarkVisible) {}
+    MarkVisible(llvm::Instruction* ins) : PrimitiveCall(ins, Kind::MarkVisible) {}
 
     static MarkVisible* create(Builder& b) {
 
@@ -368,10 +368,10 @@ class MarkVisible : public Intrinsic {
     }
 };
 
-class MarkInvisible : public Intrinsic {
+class MarkInvisible : public PrimitiveCall {
   public:
     MarkInvisible(llvm::Instruction* ins)
-        : Intrinsic(ins, Kind::MarkInvisible) {}
+        : PrimitiveCall(ins, Kind::MarkInvisible) {}
 
     static MarkInvisible* create(Builder& b) {
 
@@ -401,7 +401,7 @@ class MarkInvisible : public Intrinsic {
 // When LLVM IR creates user visible constant, this function contains all
 // the code required to make the constant. Currently this means taking
 // the value from the constant pool and marking it as not mutable.
-class UserLiteral : public Intrinsic {
+class UserLiteral : public PrimitiveCall {
   public:
     llvm::Value* constantPool() { return getValue(0); }
 
@@ -413,7 +413,7 @@ class UserLiteral : public Intrinsic {
     }
     SEXP index(Builder const& b) { return b.constantPool(index()); }
 
-    UserLiteral(llvm::Instruction* ins) : Intrinsic(ins, Kind::UserLiteral) {}
+    UserLiteral(llvm::Instruction* ins) : PrimitiveCall(ins, Kind::UserLiteral) {}
 
     static UserLiteral* create(Builder& b, SEXP index) {
 
@@ -440,9 +440,9 @@ class UserLiteral : public Intrinsic {
     }
 };
 
-class PatchIC : public Intrinsic {
+class PatchIC : public PrimitiveCall {
   public:
-    PatchIC(llvm::Instruction* ins) : Intrinsic(ins, Kind::PatchIC) {}
+    PatchIC(llvm::Instruction* ins) : PrimitiveCall(ins, Kind::PatchIC) {}
 
     static PatchIC* create(Builder& b, llvm::Value* addr,
                            llvm::Value* stackmapId, llvm::Value* caller) {
@@ -472,9 +472,9 @@ class PatchIC : public Intrinsic {
     }
 };
 
-class CompileIC : public Intrinsic {
+class CompileIC : public PrimitiveCall {
   public:
-    CompileIC(llvm::Instruction* ins) : Intrinsic(ins, Kind::CompileIC) {}
+    CompileIC(llvm::Instruction* ins) : PrimitiveCall(ins, Kind::CompileIC) {}
 
     static CompileIC* create(Builder& b, llvm::Value* size, llvm::Value* call,
                              llvm::Value* fun, llvm::Value* rho,
@@ -507,10 +507,10 @@ class CompileIC : public Intrinsic {
     }
 };
 
-class InitClosureContext : public Intrinsic {
+class InitClosureContext : public PrimitiveCall {
   public:
     InitClosureContext(llvm::Instruction* ins)
-        : Intrinsic(ins, Kind::InitClosureContext) {}
+        : PrimitiveCall(ins, Kind::InitClosureContext) {}
 
     static InitClosureContext* create(Builder& b, llvm::Value* context,
                                       llvm::Value* call, llvm::Value* newrho,
@@ -547,9 +547,9 @@ class InitClosureContext : public Intrinsic {
 };
 
 // Call NewEnvironment
-class NewEnv : public Intrinsic {
+class NewEnv : public PrimitiveCall {
   public:
-    NewEnv(llvm::Instruction* ins) : Intrinsic(ins, Kind::NewEnv) {}
+    NewEnv(llvm::Instruction* ins) : PrimitiveCall(ins, Kind::NewEnv) {}
 
     static NewEnv* create(Builder& b, llvm::Value* names, llvm::Value* values,
                           llvm::Value* parent) {
@@ -580,9 +580,9 @@ class NewEnv : public Intrinsic {
 };
 
 // Call CONS_NR
-class ConsNr : public Intrinsic {
+class ConsNr : public PrimitiveCall {
   public:
-    ConsNr(llvm::Instruction* ins) : Intrinsic(ins, Kind::ConsNr) {}
+    ConsNr(llvm::Instruction* ins) : PrimitiveCall(ins, Kind::ConsNr) {}
 
     static ConsNr* create(Builder& b, llvm::Value* car, llvm::Value* cdr) {
 
@@ -610,7 +610,7 @@ class ConsNr : public Intrinsic {
 };
 
 // Just returns the index-th constant from the constant pool.
-class Constant : public Intrinsic {
+class Constant : public PrimitiveCall {
   public:
     llvm::Value* constantPool() { return getValue(0); }
 
@@ -622,7 +622,7 @@ class Constant : public Intrinsic {
     }
     SEXP index(Builder const& b) { return b.constantPool(index()); }
 
-    Constant(llvm::Instruction* ins) : Intrinsic(ins, Kind::Constant) {}
+    Constant(llvm::Instruction* ins) : PrimitiveCall(ins, Kind::Constant) {}
 
     static Constant* create(Builder& b, SEXP index) {
 
@@ -652,7 +652,7 @@ class Constant : public Intrinsic {
 // Generic getvar does not use any caches whatsoever. TODO this means we
 // can get rid of the checks in getvar(), and reduce its code to this. We
 // definitely want faster versions.
-class GenericGetVar : public Intrinsic {
+class GenericGetVar : public PrimitiveCall {
   public:
     llvm::Value* rho() { return getValue(0); }
     llvm::Value* constantPool() { return getValue(1); }
@@ -666,7 +666,7 @@ class GenericGetVar : public Intrinsic {
     SEXP symbol(Builder const& b) { return b.constantPool(symbol()); }
 
     GenericGetVar(llvm::Instruction* ins)
-        : Intrinsic(ins, Kind::GenericGetVar) {}
+        : PrimitiveCall(ins, Kind::GenericGetVar) {}
 
     static GenericGetVar* create(Builder& b, llvm::Value* rho, SEXP symbol) {
 
@@ -695,7 +695,7 @@ class GenericGetVar : public Intrinsic {
     }
 };
 
-class GenericGetEllipsisArg : public Intrinsic {
+class GenericGetEllipsisArg : public PrimitiveCall {
   public:
     llvm::Value* rho() { return getValue(0); }
     llvm::Value* constantPool() { return getValue(1); }
@@ -709,7 +709,7 @@ class GenericGetEllipsisArg : public Intrinsic {
     SEXP symbol(Builder const& b) { return b.constantPool(symbol()); }
 
     GenericGetEllipsisArg(llvm::Instruction* ins)
-        : Intrinsic(ins, Kind::GenericGetEllipsisArg) {}
+        : PrimitiveCall(ins, Kind::GenericGetEllipsisArg) {}
 
     static GenericGetEllipsisArg* create(Builder& b, llvm::Value* rho,
                                          SEXP symbol) {
@@ -739,7 +739,7 @@ class GenericGetEllipsisArg : public Intrinsic {
     }
 };
 
-class GenericSetVar : public Intrinsic {
+class GenericSetVar : public PrimitiveCall {
   public:
     llvm::Value* value() { return getValue(0); }
     llvm::Value* rho() { return getValue(1); }
@@ -754,7 +754,7 @@ class GenericSetVar : public Intrinsic {
     SEXP symbol(Builder const& b) { return b.constantPool(symbol()); }
 
     GenericSetVar(llvm::Instruction* ins)
-        : Intrinsic(ins, Kind::GenericSetVar) {}
+        : PrimitiveCall(ins, Kind::GenericSetVar) {}
 
     static GenericSetVar* create(Builder& b, llvm::Value* value,
                                  llvm::Value* rho, SEXP symbol) {
@@ -785,7 +785,7 @@ class GenericSetVar : public Intrinsic {
     }
 };
 
-class GenericSetVarParent : public Intrinsic {
+class GenericSetVarParent : public PrimitiveCall {
   public:
     llvm::Value* value() { return getValue(0); }
     llvm::Value* rho() { return getValue(1); }
@@ -800,7 +800,7 @@ class GenericSetVarParent : public Intrinsic {
     SEXP symbol(Builder const& b) { return b.constantPool(symbol()); }
 
     GenericSetVarParent(llvm::Instruction* ins)
-        : Intrinsic(ins, Kind::GenericSetVarParent) {}
+        : PrimitiveCall(ins, Kind::GenericSetVarParent) {}
 
     static GenericSetVarParent* create(Builder& b, llvm::Value* value,
                                        llvm::Value* rho, SEXP symbol) {
@@ -831,7 +831,7 @@ class GenericSetVarParent : public Intrinsic {
     }
 };
 
-class GetFunction : public Intrinsic {
+class GetFunction : public PrimitiveCall {
   public:
     llvm::Value* rho() { return getValue(0); }
     llvm::Value* constantPool() { return getValue(1); }
@@ -844,7 +844,7 @@ class GetFunction : public Intrinsic {
     }
     SEXP symbol(Builder const& b) { return b.constantPool(symbol()); }
 
-    GetFunction(llvm::Instruction* ins) : Intrinsic(ins, Kind::GetFunction) {}
+    GetFunction(llvm::Instruction* ins) : PrimitiveCall(ins, Kind::GetFunction) {}
 
     static GetFunction* create(Builder& b, llvm::Value* rho, SEXP symbol) {
 
@@ -873,7 +873,7 @@ class GetFunction : public Intrinsic {
     }
 };
 
-class GetGlobalFunction : public Intrinsic {
+class GetGlobalFunction : public PrimitiveCall {
   public:
     llvm::Value* constantPool() { return getValue(0); }
 
@@ -886,7 +886,7 @@ class GetGlobalFunction : public Intrinsic {
     SEXP symbol(Builder const& b) { return b.constantPool(symbol()); }
 
     GetGlobalFunction(llvm::Instruction* ins)
-        : Intrinsic(ins, Kind::GetGlobalFunction) {}
+        : PrimitiveCall(ins, Kind::GetGlobalFunction) {}
 
     static GetGlobalFunction* create(Builder& b, SEXP symbol) {
 
@@ -913,7 +913,7 @@ class GetGlobalFunction : public Intrinsic {
     }
 };
 
-class GetSymFunction : public Intrinsic {
+class GetSymFunction : public PrimitiveCall {
   public:
     llvm::Value* constantPool() { return getValue(0); }
 
@@ -926,7 +926,7 @@ class GetSymFunction : public Intrinsic {
     SEXP name(Builder const& b) { return b.constantPool(name()); }
 
     GetSymFunction(llvm::Instruction* ins)
-        : Intrinsic(ins, Kind::GetSymFunction) {}
+        : PrimitiveCall(ins, Kind::GetSymFunction) {}
 
     static GetSymFunction* create(Builder& b, SEXP name) {
 
@@ -953,7 +953,7 @@ class GetSymFunction : public Intrinsic {
     }
 };
 
-class GetBuiltinFunction : public Intrinsic {
+class GetBuiltinFunction : public PrimitiveCall {
   public:
     llvm::Value* constantPool() { return getValue(0); }
 
@@ -966,7 +966,7 @@ class GetBuiltinFunction : public Intrinsic {
     SEXP name(Builder const& b) { return b.constantPool(name()); }
 
     GetBuiltinFunction(llvm::Instruction* ins)
-        : Intrinsic(ins, Kind::GetBuiltinFunction) {}
+        : PrimitiveCall(ins, Kind::GetBuiltinFunction) {}
 
     static GetBuiltinFunction* create(Builder& b, SEXP name) {
 
@@ -993,7 +993,7 @@ class GetBuiltinFunction : public Intrinsic {
     }
 };
 
-class GetInternalBuiltinFunction : public Intrinsic {
+class GetInternalBuiltinFunction : public PrimitiveCall {
   public:
     llvm::Value* constantPool() { return getValue(0); }
 
@@ -1006,7 +1006,7 @@ class GetInternalBuiltinFunction : public Intrinsic {
     SEXP name(Builder const& b) { return b.constantPool(name()); }
 
     GetInternalBuiltinFunction(llvm::Instruction* ins)
-        : Intrinsic(ins, Kind::GetInternalBuiltinFunction) {}
+        : PrimitiveCall(ins, Kind::GetInternalBuiltinFunction) {}
 
     static GetInternalBuiltinFunction* create(Builder& b, SEXP name) {
 
@@ -1034,12 +1034,12 @@ class GetInternalBuiltinFunction : public Intrinsic {
     }
 };
 
-class CheckFunction : public Intrinsic {
+class CheckFunction : public PrimitiveCall {
   public:
     llvm::Value* f() { return getValue(0); }
 
     CheckFunction(llvm::Instruction* ins)
-        : Intrinsic(ins, Kind::CheckFunction) {}
+        : PrimitiveCall(ins, Kind::CheckFunction) {}
 
     static CheckFunction* create(Builder& b, llvm::Value* f) {
 
@@ -1067,13 +1067,13 @@ class CheckFunction : public Intrinsic {
 
 // Creates a promise out of the given code and environment and returns
 // its value.
-class CreatePromise : public Intrinsic {
+class CreatePromise : public PrimitiveCall {
   public:
     llvm::Value* fun() { return getValue(0); }
     llvm::Value* rho() { return getValue(1); }
 
     CreatePromise(llvm::Instruction* ins)
-        : Intrinsic(ins, Kind::CreatePromise) {}
+        : PrimitiveCall(ins, Kind::CreatePromise) {}
 
     static CreatePromise* create(Builder& b, llvm::Value* fun,
                                  llvm::Value* rho) {
@@ -1103,11 +1103,11 @@ class CreatePromise : public Intrinsic {
 
 // Given a SEXP, returns its type. We can perfectly do this in LLVM, but
 // having an function for it simplifies the analysis on our end.
-class SexpType : public Intrinsic {
+class SexpType : public PrimitiveCall {
   public:
     llvm::Value* value() { return getValue(0); }
 
-    SexpType(llvm::Instruction* ins) : Intrinsic(ins, Kind::SexpType) {}
+    SexpType(llvm::Instruction* ins) : PrimitiveCall(ins, Kind::SexpType) {}
 
     static SexpType* create(Builder& b, llvm::Value* value) {
 
@@ -1133,12 +1133,12 @@ class SexpType : public Intrinsic {
     }
 };
 
-class AddArgument : public Intrinsic {
+class AddArgument : public PrimitiveCall {
   public:
     llvm::Value* args() { return getValue(0); }
     llvm::Value* arg() { return getValue(1); }
 
-    AddArgument(llvm::Instruction* ins) : Intrinsic(ins, Kind::AddArgument) {}
+    AddArgument(llvm::Instruction* ins) : PrimitiveCall(ins, Kind::AddArgument) {}
 
     static AddArgument* create(Builder& b, llvm::Value* args,
                                llvm::Value* arg) {
@@ -1166,14 +1166,14 @@ class AddArgument : public Intrinsic {
     }
 };
 
-class AddKeywordArgument : public Intrinsic {
+class AddKeywordArgument : public PrimitiveCall {
   public:
     llvm::Value* args() { return getValue(0); }
     llvm::Value* arg() { return getValue(1); }
     llvm::Value* name() { return getValue(2); }
 
     AddKeywordArgument(llvm::Instruction* ins)
-        : Intrinsic(ins, Kind::AddKeywordArgument) {}
+        : PrimitiveCall(ins, Kind::AddKeywordArgument) {}
 
     static AddKeywordArgument* create(Builder& b, llvm::Value* args,
                                       llvm::Value* arg, llvm::Value* name) {
@@ -1203,14 +1203,14 @@ class AddKeywordArgument : public Intrinsic {
     }
 };
 
-class AddEllipsisArgumentHead : public Intrinsic {
+class AddEllipsisArgumentHead : public PrimitiveCall {
   public:
     llvm::Value* args() { return getValue(0); }
     llvm::Value* rho() { return getValue(1); }
     llvm::Value* eager() { return getValue(2); }
 
     AddEllipsisArgumentHead(llvm::Instruction* ins)
-        : Intrinsic(ins, Kind::AddEllipsisArgumentHead) {}
+        : PrimitiveCall(ins, Kind::AddEllipsisArgumentHead) {}
 
     static AddEllipsisArgumentHead* create(Builder& b, llvm::Value* args,
                                            llvm::Value* rho,
@@ -1241,14 +1241,14 @@ class AddEllipsisArgumentHead : public Intrinsic {
     }
 };
 
-class AddEllipsisArgumentTail : public Intrinsic {
+class AddEllipsisArgumentTail : public PrimitiveCall {
   public:
     llvm::Value* args() { return getValue(0); }
     llvm::Value* rho() { return getValue(1); }
     llvm::Value* eager() { return getValue(2); }
 
     AddEllipsisArgumentTail(llvm::Instruction* ins)
-        : Intrinsic(ins, Kind::AddEllipsisArgumentTail) {}
+        : PrimitiveCall(ins, Kind::AddEllipsisArgumentTail) {}
 
     static AddEllipsisArgumentTail* create(Builder& b, llvm::Value* args,
                                            llvm::Value* rho,
@@ -1279,14 +1279,14 @@ class AddEllipsisArgumentTail : public Intrinsic {
     }
 };
 
-class CallBuiltin : public Intrinsic {
+class CallBuiltin : public PrimitiveCall {
   public:
     llvm::Value* call() { return getValue(0); }
     llvm::Value* closure() { return getValue(1); }
     llvm::Value* arguments() { return getValue(2); }
     llvm::Value* rho() { return getValue(3); }
 
-    CallBuiltin(llvm::Instruction* ins) : Intrinsic(ins, Kind::CallBuiltin) {}
+    CallBuiltin(llvm::Instruction* ins) : PrimitiveCall(ins, Kind::CallBuiltin) {}
 
     static CallBuiltin* create(Builder& b, llvm::Value* call,
                                llvm::Value* closure, llvm::Value* arguments,
@@ -1318,14 +1318,14 @@ class CallBuiltin : public Intrinsic {
     }
 };
 
-class CallSpecial : public Intrinsic {
+class CallSpecial : public PrimitiveCall {
   public:
     llvm::Value* call() { return getValue(0); }
     llvm::Value* closure() { return getValue(1); }
     llvm::Value* arguments() { return getValue(2); }
     llvm::Value* rho() { return getValue(3); }
 
-    CallSpecial(llvm::Instruction* ins) : Intrinsic(ins, Kind::CallSpecial) {}
+    CallSpecial(llvm::Instruction* ins) : PrimitiveCall(ins, Kind::CallSpecial) {}
 
     static CallSpecial* create(Builder& b, llvm::Value* call,
                                llvm::Value* closure, llvm::Value* arguments,
@@ -1357,14 +1357,14 @@ class CallSpecial : public Intrinsic {
     }
 };
 
-class CallClosure : public Intrinsic {
+class CallClosure : public PrimitiveCall {
   public:
     llvm::Value* call() { return getValue(0); }
     llvm::Value* closure() { return getValue(1); }
     llvm::Value* arguments() { return getValue(2); }
     llvm::Value* rho() { return getValue(3); }
 
-    CallClosure(llvm::Instruction* ins) : Intrinsic(ins, Kind::CallClosure) {}
+    CallClosure(llvm::Instruction* ins) : PrimitiveCall(ins, Kind::CallClosure) {}
 
     static CallClosure* create(Builder& b, llvm::Value* call,
                                llvm::Value* closure, llvm::Value* arguments,
@@ -1396,7 +1396,7 @@ class CallClosure : public Intrinsic {
     }
 };
 
-class CreateClosure : public Intrinsic {
+class CreateClosure : public PrimitiveCall {
   public:
     llvm::Value* rho() { return getValue(0); }
     llvm::Value* constantPool() { return getValue(1); }
@@ -1418,7 +1418,7 @@ class CreateClosure : public Intrinsic {
     SEXP body(Builder const& b) { return b.constantPool(body()); }
 
     CreateClosure(llvm::Instruction* ins)
-        : Intrinsic(ins, Kind::CreateClosure) {}
+        : PrimitiveCall(ins, Kind::CreateClosure) {}
 
     static CreateClosure* create(Builder& b, llvm::Value* rho, SEXP forms,
                                  SEXP body) {
@@ -1449,7 +1449,7 @@ class CreateClosure : public Intrinsic {
     }
 };
 
-class GenericUnaryMinus : public Intrinsic {
+class GenericUnaryMinus : public PrimitiveCall {
   public:
     llvm::Value* op() { return getValue(0); }
     llvm::Value* rho() { return getValue(1); }
@@ -1464,7 +1464,7 @@ class GenericUnaryMinus : public Intrinsic {
     SEXP call(Builder const& b) { return b.constantPool(call()); }
 
     GenericUnaryMinus(llvm::Instruction* ins)
-        : Intrinsic(ins, Kind::GenericUnaryMinus) {}
+        : PrimitiveCall(ins, Kind::GenericUnaryMinus) {}
 
     static GenericUnaryMinus* create(Builder& b, llvm::Value* op,
                                      llvm::Value* rho, SEXP call) {
@@ -1495,7 +1495,7 @@ class GenericUnaryMinus : public Intrinsic {
     }
 };
 
-class GenericUnaryPlus : public Intrinsic {
+class GenericUnaryPlus : public PrimitiveCall {
   public:
     llvm::Value* op() { return getValue(0); }
     llvm::Value* rho() { return getValue(1); }
@@ -1510,7 +1510,7 @@ class GenericUnaryPlus : public Intrinsic {
     SEXP call(Builder const& b) { return b.constantPool(call()); }
 
     GenericUnaryPlus(llvm::Instruction* ins)
-        : Intrinsic(ins, Kind::GenericUnaryPlus) {}
+        : PrimitiveCall(ins, Kind::GenericUnaryPlus) {}
 
     static GenericUnaryPlus* create(Builder& b, llvm::Value* op,
                                     llvm::Value* rho, SEXP call) {
@@ -1541,7 +1541,7 @@ class GenericUnaryPlus : public Intrinsic {
     }
 };
 
-class GenericAdd : public Intrinsic {
+class GenericAdd : public PrimitiveCall {
   public:
     llvm::Value* lhs() { return getValue(0); }
     llvm::Value* rhs() { return getValue(1); }
@@ -1556,7 +1556,7 @@ class GenericAdd : public Intrinsic {
     }
     SEXP call(Builder const& b) { return b.constantPool(call()); }
 
-    GenericAdd(llvm::Instruction* ins) : Intrinsic(ins, Kind::GenericAdd) {}
+    GenericAdd(llvm::Instruction* ins) : PrimitiveCall(ins, Kind::GenericAdd) {}
 
     static GenericAdd* create(Builder& b, llvm::Value* lhs, llvm::Value* rhs,
                               llvm::Value* rho, SEXP call) {
@@ -1588,7 +1588,7 @@ class GenericAdd : public Intrinsic {
     }
 };
 
-class GenericSub : public Intrinsic {
+class GenericSub : public PrimitiveCall {
   public:
     llvm::Value* lhs() { return getValue(0); }
     llvm::Value* rhs() { return getValue(1); }
@@ -1603,7 +1603,7 @@ class GenericSub : public Intrinsic {
     }
     SEXP call(Builder const& b) { return b.constantPool(call()); }
 
-    GenericSub(llvm::Instruction* ins) : Intrinsic(ins, Kind::GenericSub) {}
+    GenericSub(llvm::Instruction* ins) : PrimitiveCall(ins, Kind::GenericSub) {}
 
     static GenericSub* create(Builder& b, llvm::Value* lhs, llvm::Value* rhs,
                               llvm::Value* rho, SEXP call) {
@@ -1635,7 +1635,7 @@ class GenericSub : public Intrinsic {
     }
 };
 
-class GenericMul : public Intrinsic {
+class GenericMul : public PrimitiveCall {
   public:
     llvm::Value* lhs() { return getValue(0); }
     llvm::Value* rhs() { return getValue(1); }
@@ -1650,7 +1650,7 @@ class GenericMul : public Intrinsic {
     }
     SEXP call(Builder const& b) { return b.constantPool(call()); }
 
-    GenericMul(llvm::Instruction* ins) : Intrinsic(ins, Kind::GenericMul) {}
+    GenericMul(llvm::Instruction* ins) : PrimitiveCall(ins, Kind::GenericMul) {}
 
     static GenericMul* create(Builder& b, llvm::Value* lhs, llvm::Value* rhs,
                               llvm::Value* rho, SEXP call) {
@@ -1682,7 +1682,7 @@ class GenericMul : public Intrinsic {
     }
 };
 
-class GenericDiv : public Intrinsic {
+class GenericDiv : public PrimitiveCall {
   public:
     llvm::Value* lhs() { return getValue(0); }
     llvm::Value* rhs() { return getValue(1); }
@@ -1697,7 +1697,7 @@ class GenericDiv : public Intrinsic {
     }
     SEXP call(Builder const& b) { return b.constantPool(call()); }
 
-    GenericDiv(llvm::Instruction* ins) : Intrinsic(ins, Kind::GenericDiv) {}
+    GenericDiv(llvm::Instruction* ins) : PrimitiveCall(ins, Kind::GenericDiv) {}
 
     static GenericDiv* create(Builder& b, llvm::Value* lhs, llvm::Value* rhs,
                               llvm::Value* rho, SEXP call) {
@@ -1729,7 +1729,7 @@ class GenericDiv : public Intrinsic {
     }
 };
 
-class GenericPow : public Intrinsic {
+class GenericPow : public PrimitiveCall {
   public:
     llvm::Value* lhs() { return getValue(0); }
     llvm::Value* rhs() { return getValue(1); }
@@ -1744,7 +1744,7 @@ class GenericPow : public Intrinsic {
     }
     SEXP call(Builder const& b) { return b.constantPool(call()); }
 
-    GenericPow(llvm::Instruction* ins) : Intrinsic(ins, Kind::GenericPow) {}
+    GenericPow(llvm::Instruction* ins) : PrimitiveCall(ins, Kind::GenericPow) {}
 
     static GenericPow* create(Builder& b, llvm::Value* lhs, llvm::Value* rhs,
                               llvm::Value* rho, SEXP call) {
@@ -1776,7 +1776,7 @@ class GenericPow : public Intrinsic {
     }
 };
 
-class GenericSqrt : public Intrinsic {
+class GenericSqrt : public PrimitiveCall {
   public:
     llvm::Value* op() { return getValue(0); }
     llvm::Value* rho() { return getValue(1); }
@@ -1790,7 +1790,7 @@ class GenericSqrt : public Intrinsic {
     }
     SEXP call(Builder const& b) { return b.constantPool(call()); }
 
-    GenericSqrt(llvm::Instruction* ins) : Intrinsic(ins, Kind::GenericSqrt) {}
+    GenericSqrt(llvm::Instruction* ins) : PrimitiveCall(ins, Kind::GenericSqrt) {}
 
     static GenericSqrt* create(Builder& b, llvm::Value* op, llvm::Value* rho,
                                SEXP call) {
@@ -1821,7 +1821,7 @@ class GenericSqrt : public Intrinsic {
     }
 };
 
-class GenericExp : public Intrinsic {
+class GenericExp : public PrimitiveCall {
   public:
     llvm::Value* op() { return getValue(0); }
     llvm::Value* rho() { return getValue(1); }
@@ -1835,7 +1835,7 @@ class GenericExp : public Intrinsic {
     }
     SEXP call(Builder const& b) { return b.constantPool(call()); }
 
-    GenericExp(llvm::Instruction* ins) : Intrinsic(ins, Kind::GenericExp) {}
+    GenericExp(llvm::Instruction* ins) : PrimitiveCall(ins, Kind::GenericExp) {}
 
     static GenericExp* create(Builder& b, llvm::Value* op, llvm::Value* rho,
                               SEXP call) {
@@ -1866,7 +1866,7 @@ class GenericExp : public Intrinsic {
     }
 };
 
-class GenericEq : public Intrinsic {
+class GenericEq : public PrimitiveCall {
   public:
     llvm::Value* lhs() { return getValue(0); }
     llvm::Value* rhs() { return getValue(1); }
@@ -1881,7 +1881,7 @@ class GenericEq : public Intrinsic {
     }
     SEXP call(Builder const& b) { return b.constantPool(call()); }
 
-    GenericEq(llvm::Instruction* ins) : Intrinsic(ins, Kind::GenericEq) {}
+    GenericEq(llvm::Instruction* ins) : PrimitiveCall(ins, Kind::GenericEq) {}
 
     static GenericEq* create(Builder& b, llvm::Value* lhs, llvm::Value* rhs,
                              llvm::Value* rho, SEXP call) {
@@ -1913,7 +1913,7 @@ class GenericEq : public Intrinsic {
     }
 };
 
-class GenericNe : public Intrinsic {
+class GenericNe : public PrimitiveCall {
   public:
     llvm::Value* lhs() { return getValue(0); }
     llvm::Value* rhs() { return getValue(1); }
@@ -1928,7 +1928,7 @@ class GenericNe : public Intrinsic {
     }
     SEXP call(Builder const& b) { return b.constantPool(call()); }
 
-    GenericNe(llvm::Instruction* ins) : Intrinsic(ins, Kind::GenericNe) {}
+    GenericNe(llvm::Instruction* ins) : PrimitiveCall(ins, Kind::GenericNe) {}
 
     static GenericNe* create(Builder& b, llvm::Value* lhs, llvm::Value* rhs,
                              llvm::Value* rho, SEXP call) {
@@ -1960,7 +1960,7 @@ class GenericNe : public Intrinsic {
     }
 };
 
-class GenericLt : public Intrinsic {
+class GenericLt : public PrimitiveCall {
   public:
     llvm::Value* lhs() { return getValue(0); }
     llvm::Value* rhs() { return getValue(1); }
@@ -1975,7 +1975,7 @@ class GenericLt : public Intrinsic {
     }
     SEXP call(Builder const& b) { return b.constantPool(call()); }
 
-    GenericLt(llvm::Instruction* ins) : Intrinsic(ins, Kind::GenericLt) {}
+    GenericLt(llvm::Instruction* ins) : PrimitiveCall(ins, Kind::GenericLt) {}
 
     static GenericLt* create(Builder& b, llvm::Value* lhs, llvm::Value* rhs,
                              llvm::Value* rho, SEXP call) {
@@ -2007,7 +2007,7 @@ class GenericLt : public Intrinsic {
     }
 };
 
-class GenericLe : public Intrinsic {
+class GenericLe : public PrimitiveCall {
   public:
     llvm::Value* lhs() { return getValue(0); }
     llvm::Value* rhs() { return getValue(1); }
@@ -2022,7 +2022,7 @@ class GenericLe : public Intrinsic {
     }
     SEXP call(Builder const& b) { return b.constantPool(call()); }
 
-    GenericLe(llvm::Instruction* ins) : Intrinsic(ins, Kind::GenericLe) {}
+    GenericLe(llvm::Instruction* ins) : PrimitiveCall(ins, Kind::GenericLe) {}
 
     static GenericLe* create(Builder& b, llvm::Value* lhs, llvm::Value* rhs,
                              llvm::Value* rho, SEXP call) {
@@ -2054,7 +2054,7 @@ class GenericLe : public Intrinsic {
     }
 };
 
-class GenericGe : public Intrinsic {
+class GenericGe : public PrimitiveCall {
   public:
     llvm::Value* lhs() { return getValue(0); }
     llvm::Value* rhs() { return getValue(1); }
@@ -2069,7 +2069,7 @@ class GenericGe : public Intrinsic {
     }
     SEXP call(Builder const& b) { return b.constantPool(call()); }
 
-    GenericGe(llvm::Instruction* ins) : Intrinsic(ins, Kind::GenericGe) {}
+    GenericGe(llvm::Instruction* ins) : PrimitiveCall(ins, Kind::GenericGe) {}
 
     static GenericGe* create(Builder& b, llvm::Value* lhs, llvm::Value* rhs,
                              llvm::Value* rho, SEXP call) {
@@ -2101,7 +2101,7 @@ class GenericGe : public Intrinsic {
     }
 };
 
-class GenericGt : public Intrinsic {
+class GenericGt : public PrimitiveCall {
   public:
     llvm::Value* lhs() { return getValue(0); }
     llvm::Value* rhs() { return getValue(1); }
@@ -2116,7 +2116,7 @@ class GenericGt : public Intrinsic {
     }
     SEXP call(Builder const& b) { return b.constantPool(call()); }
 
-    GenericGt(llvm::Instruction* ins) : Intrinsic(ins, Kind::GenericGt) {}
+    GenericGt(llvm::Instruction* ins) : PrimitiveCall(ins, Kind::GenericGt) {}
 
     static GenericGt* create(Builder& b, llvm::Value* lhs, llvm::Value* rhs,
                              llvm::Value* rho, SEXP call) {
@@ -2148,7 +2148,7 @@ class GenericGt : public Intrinsic {
     }
 };
 
-class GenericBitAnd : public Intrinsic {
+class GenericBitAnd : public PrimitiveCall {
   public:
     llvm::Value* lhs() { return getValue(0); }
     llvm::Value* rhs() { return getValue(1); }
@@ -2164,7 +2164,7 @@ class GenericBitAnd : public Intrinsic {
     SEXP call(Builder const& b) { return b.constantPool(call()); }
 
     GenericBitAnd(llvm::Instruction* ins)
-        : Intrinsic(ins, Kind::GenericBitAnd) {}
+        : PrimitiveCall(ins, Kind::GenericBitAnd) {}
 
     static GenericBitAnd* create(Builder& b, llvm::Value* lhs, llvm::Value* rhs,
                                  llvm::Value* rho, SEXP call) {
@@ -2196,7 +2196,7 @@ class GenericBitAnd : public Intrinsic {
     }
 };
 
-class GenericBitOr : public Intrinsic {
+class GenericBitOr : public PrimitiveCall {
   public:
     llvm::Value* lhs() { return getValue(0); }
     llvm::Value* rhs() { return getValue(1); }
@@ -2211,7 +2211,7 @@ class GenericBitOr : public Intrinsic {
     }
     SEXP call(Builder const& b) { return b.constantPool(call()); }
 
-    GenericBitOr(llvm::Instruction* ins) : Intrinsic(ins, Kind::GenericBitOr) {}
+    GenericBitOr(llvm::Instruction* ins) : PrimitiveCall(ins, Kind::GenericBitOr) {}
 
     static GenericBitOr* create(Builder& b, llvm::Value* lhs, llvm::Value* rhs,
                                 llvm::Value* rho, SEXP call) {
@@ -2243,7 +2243,7 @@ class GenericBitOr : public Intrinsic {
     }
 };
 
-class GenericNot : public Intrinsic {
+class GenericNot : public PrimitiveCall {
   public:
     llvm::Value* op() { return getValue(0); }
     llvm::Value* rho() { return getValue(1); }
@@ -2257,7 +2257,7 @@ class GenericNot : public Intrinsic {
     }
     SEXP call(Builder const& b) { return b.constantPool(call()); }
 
-    GenericNot(llvm::Instruction* ins) : Intrinsic(ins, Kind::GenericNot) {}
+    GenericNot(llvm::Instruction* ins) : PrimitiveCall(ins, Kind::GenericNot) {}
 
     static GenericNot* create(Builder& b, llvm::Value* op, llvm::Value* rho,
                               SEXP call) {
@@ -2288,13 +2288,13 @@ class GenericNot : public Intrinsic {
     }
 };
 
-class GenericGetVarMissOK : public Intrinsic {
+class GenericGetVarMissOK : public PrimitiveCall {
   public:
     llvm::Value* symbol() { return getValue(0); }
     llvm::Value* rho() { return getValue(1); }
 
     GenericGetVarMissOK(llvm::Instruction* ins)
-        : Intrinsic(ins, Kind::GenericGetVarMissOK) {}
+        : PrimitiveCall(ins, Kind::GenericGetVarMissOK) {}
 
     static GenericGetVarMissOK* create(Builder& b, llvm::Value* symbol,
                                        llvm::Value* rho) {
@@ -2322,13 +2322,13 @@ class GenericGetVarMissOK : public Intrinsic {
     }
 };
 
-class GenericGetEllipsisValueMissOK : public Intrinsic {
+class GenericGetEllipsisValueMissOK : public PrimitiveCall {
   public:
     llvm::Value* symbol() { return getValue(0); }
     llvm::Value* rho() { return getValue(1); }
 
     GenericGetEllipsisValueMissOK(llvm::Instruction* ins)
-        : Intrinsic(ins, Kind::GenericGetEllipsisValueMissOK) {}
+        : PrimitiveCall(ins, Kind::GenericGetEllipsisValueMissOK) {}
 
     static GenericGetEllipsisValueMissOK*
     create(Builder& b, llvm::Value* symbol, llvm::Value* rho) {
@@ -2359,7 +2359,7 @@ class GenericGetEllipsisValueMissOK : public Intrinsic {
     }
 };
 
-class CheckSwitchControl : public Intrinsic {
+class CheckSwitchControl : public PrimitiveCall {
   public:
     llvm::Value* ctrl() { return getValue(0); }
     llvm::Value* constantPool() { return getValue(1); }
@@ -2373,7 +2373,7 @@ class CheckSwitchControl : public Intrinsic {
     SEXP call(Builder const& b) { return b.constantPool(call()); }
 
     CheckSwitchControl(llvm::Instruction* ins)
-        : Intrinsic(ins, Kind::CheckSwitchControl) {}
+        : PrimitiveCall(ins, Kind::CheckSwitchControl) {}
 
     static CheckSwitchControl* create(Builder& b, llvm::Value* ctrl,
                                       SEXP call) {
@@ -2403,7 +2403,7 @@ class CheckSwitchControl : public Intrinsic {
     }
 };
 
-class SwitchControlCharacter : public Intrinsic {
+class SwitchControlCharacter : public PrimitiveCall {
   public:
     llvm::Value* ctrl() { return getValue(0); }
     llvm::Value* constantPool() { return getValue(1); }
@@ -2425,7 +2425,7 @@ class SwitchControlCharacter : public Intrinsic {
     SEXP cases(Builder const& b) { return b.constantPool(cases()); }
 
     SwitchControlCharacter(llvm::Instruction* ins)
-        : Intrinsic(ins, Kind::SwitchControlCharacter) {}
+        : PrimitiveCall(ins, Kind::SwitchControlCharacter) {}
 
     static SwitchControlCharacter* create(Builder& b, llvm::Value* ctrl,
                                           SEXP call, SEXP cases) {
@@ -2456,13 +2456,13 @@ class SwitchControlCharacter : public Intrinsic {
     }
 };
 
-class SwitchControlInteger : public Intrinsic {
+class SwitchControlInteger : public PrimitiveCall {
   public:
     llvm::Value* ctrl() { return getValue(0); }
     int numCases() { return getValueInt(1); }
 
     SwitchControlInteger(llvm::Instruction* ins)
-        : Intrinsic(ins, Kind::SwitchControlInteger) {}
+        : PrimitiveCall(ins, Kind::SwitchControlInteger) {}
 
     static SwitchControlInteger* create(Builder& b, llvm::Value* ctrl,
                                         int numCases) {
@@ -2490,12 +2490,12 @@ class SwitchControlInteger : public Intrinsic {
     }
 };
 
-class ReturnJump : public Intrinsic {
+class ReturnJump : public PrimitiveCall {
   public:
     llvm::Value* value() { return getValue(0); }
     llvm::Value* rho() { return getValue(1); }
 
-    ReturnJump(llvm::Instruction* ins) : Intrinsic(ins, Kind::ReturnJump) {}
+    ReturnJump(llvm::Instruction* ins) : PrimitiveCall(ins, Kind::ReturnJump) {}
 
     static ReturnJump* create(Builder& b, llvm::Value* value,
                               llvm::Value* rho) {

@@ -13,7 +13,7 @@
 
 #include "ir/Ir.h"
 #include "ir/Builder.h"
-#include "ir/Intrinsics.h"
+#include "ir/primitive_calls.h"
 
 using namespace rjit;
 
