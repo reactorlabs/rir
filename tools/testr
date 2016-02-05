@@ -98,6 +98,9 @@ function run_tests {
     }
     export -f run_test
     let N=`ncores`/4
+    if [ "$N" -lt "1" ]; then
+        N=1
+    fi
     find ${TESTS_PATH} -name '*.R' | xargs -n 1 -P $N bash -c 'run_test $@'
 
     echo $TESTS_PATH >> $STATUS

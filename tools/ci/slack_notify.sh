@@ -6,21 +6,22 @@ if [ ! -d $SCRIPTPATH ]; then
     echo "Maybe accessed with symlink"
 fi
 
-. "${SCRIPTPATH}/../.local.config"
-. "${SCRIPTPATH}/../.test_results"
+. "${SCRIPTPATH}/../../.local.config"
+. "${SCRIPTPATH}/../../.test_results"
 
 SLACK_WEBHOOK_URL="https://hooks.slack.com/services/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"
 SLACK_NOTIFIER_USERNAME=cibot
 SLACK_NOTIFIER_CHANNEL=""
 APPLICATION_NAME="rjit"
 CI="TeamCity"
-BITBUCKET="https://bitbucket.org/reactorl/rjit/commits/"
+GITHUB="https://github.com/reactorlabs/rjit/compare/"
 STATUS="passed"
+COLOR="#006400"
 
-if [ -z "$WERCKER_ROOT"]; then
+if [ -z "$TRAVIS" ]; then
   # since teamcity doesn't track step, we need special way to test it
   # those variables come from local.config
-  if [ -z "$SETUP_SUCCESS"] || [ -z "$INTEGRATION_TESTS_SUCCESS" ]; then
+  if [ -z "$SETUP_SUCCESS" ] || [ -z "$INTEGRATION_TESTS_SUCCESS" ]; then
     STATUS="failed"
   fi
   COMMIT_ID=$BUILD_VCS_NUMBER
@@ -28,34 +29,40 @@ if [ -z "$WERCKER_ROOT"]; then
   SLACK_NOTIFIER_ICON_URL="https://secure.gravatar.com/avatar/a08fc43441db4c2df2cef96e0cc8c045?s=140"
   BUILD_URL="https://reactor.ccs.neu.edu:8111/"
 else
-# running at wercker
-  CI="Wercker"
-  GIT_BRANCH=$WERCKER_GIT_BRANCH
+  # running at travis
+  CI="Travis (Ubuntu)"
+  if [ "$TRAVIS_OS_NAME" == "osx" ]; then
+      CI="Travis (OSX)"
+  fi
+  GIT_BRANCH=$TRAVIS_BRANCH
   SLACK_NOTIFIER_ICON_URL="https://secure.gravatar.com/avatar/a08fc43441db4c2df2cef96e0cc8c045?s=140"
-  STATUS=$WERCKER_RESULT
-  COMMIT_ID=$WERCKER_GIT_COMMIT
-  BUILD_URL=$WERCKER_BUILD_URL
+  if [ "$TRAVIS_TEST_RESULT" != "0" ]; then
+      STATUS="*failed*"
+      COLOR="#FF0000"
+  fi
+  COMMIT_ID=$TRAVIS_COMMIT
+  BUILD_URL="https://travis-ci.org/reactorlabs/rjit/jobs/$TRAVIS_JOB_ID"
 fi
 
-STARTED_BY=`git --no-pager show -s --format="%aN" $COMMIT_ID`
+STARTED_BY=`git --no-pager show -s --format="%ae" $COMMIT_ID`
 
 case $STARTED_BY in
-    RomanTsegelskyi|"Roman Tsegelskyi")
+    "roman.tsegelskyi@gmail.com")
     SLACK_NOTIFIER_CHANNEL="@romantsegelskyi"
     ;;
-    "jan vitek")
+    "janvite@yahoo.com")
     SLACK_NOTIFIER_CHANNEL="@j.vitek"
     ;;
-    o--)
+    "o@o1o.ch")
     SLACK_NOTIFIER_CHANNEL="@o-"
     ;;
-    peta)
+    "peta.maj82@gmail.com")
     SLACK_NOTIFIER_CHANNEL="@peta"
     ;;
-    Pales|"Paley Li")
+    "paleysandbuckets@gmail.com")
     SLACK_NOTIFIER_CHANNEL="@paley"
     ;;
-    "Adrien Ghosn")
+    "ghosn.adrien@gmail.com")
     SLACK_NOTIFIER_CHANNEL="@aghosn"
     ;;
     *)
@@ -63,93 +70,60 @@ case $STARTED_BY in
 esac
 
 COMMIT_ID_SHORT=${COMMIT_ID:0:7}
-MESSAGE="$CI: <$BUILD_URL|build> for <$BITBUCKET$COMMIT_ID|$COMMIT_ID_SHORT> on branch $GIT_BRANCH - $STATUS"
+MESSAGE="<$BUILD_URL|build> for <$GITHUB$TRAVIS_COMMIT_RANGE|$TRAVIS_COMMIT_RANGE> on branch \`$GIT_BRANCH\` - $STATUS"
 
-# construct the json
-json="{"
+send_notification() {
+    CHANNEL=$1
+    # construct the json
+    json="{"
 
-# channels are optional, dont send one if it wasnt specified
-if [ -n "$SLACK_NOTIFIER_CHANNEL" ]; then 
-    json=$json"\"channel\": \"$SLACK_NOTIFIER_CHANNEL\","
-fi
+    if [ ! -z "$CHANNEL" ]; then
+        json=$json"\"channel\": \"$CHANNEL\","
+    fi
 
-json=$json"
+    json=$json"
     \"username\": \"$SLACK_NOTIFIER_USERNAME\",
     \"icon_url\":\"$SLACK_NOTIFIER_ICON_URL\",
     \"attachments\":[
       {
+        \"title\":\"$CI\",
+        \"color\": \"$COLOR\",
         \"text\": \"$MESSAGE\",
-        \"color\": \"$COLOR\"
+        \"mrkdwn_in\": [\"text\"]
       }
     ]
-}"
+   }"
 
-# post the result to the slack webhook
-if ! [[ -z "$SLACK_NOTIFIER_CHANNEL" ]]; then
-  RESULT=$(curl -d "payload=$json" -s "$SLACK_WEBHOOK_URL" --output "slack_result.txt" -w "%{http_code}")
-fi
+    # post the result to the slack webhook
+    if ! [[ -z "$SLACK_NOTIFIER_CHANNEL" ]]; then
+        RESULT=$(curl -d "payload=$json" -s "$SLACK_WEBHOOK_URL" --output "slack_result.txt" -w "%{http_code}")
+    fi
 
-if [ "$RESULT" = "500" ]; then
-  if grep -Fqx "No token" "slack_result.txt"; then
-    fail "No token is specified."
-  fi
+    if [ "$RESULT" = "500" ]; then
+        if grep -Fqx "No token" "slack_result.txt"; then
+            fail "No token is specified."
+        fi
 
-  if grep -Fqx "No hooks" "slack_result.txt"; then
-    fail "No hook can be found for specified subdomain/token"
-  fi
+        if grep -Fqx "No hooks" "slack_result.txt"; then
+            fail "No hook can be found for specified subdomain/token"
+        fi
 
-  if grep -Fqx "Invalid channel specified" "slack_result.txt"; then
-    fail "Could not find specified channel for subdomain/token."
-  fi
+        if grep -Fqx "Invalid channel specified" "slack_result.txt"; then
+            fail "Could not find specified channel for subdomain/token."
+        fi
 
-  if grep -Fqx "No text specified" "slack_result.txt"; then
-    fail "No text specified."
-  fi
-fi
+        if grep -Fqx "No text specified" "slack_result.txt"; then
+            fail "No text specified."
+        fi
+    fi
 
-if [ "$RESULT" = "404" ]; then
-  fail "Subdomain or token not found."
-fi
+    if [ "$RESULT" = "404" ]; then
+        fail "Subdomain or token not found."
+    fi
+}
 
-if [ "$GIT_BRANCH" != "master" ]; then
-  exit 0;
-fi
+send_notification $SLACK_NOTIFIER_CHANNEL
 
-MESSAGE="$CI: <$BUILD_URL|build> for <$BITBUCKET$COMMIT_ID|$COMMIT_ID_SHORT> on branch $GIT_BRANCH by $SLACK_NOTIFIER_CHANNEL- $STATUS"
-
-# construct the json
-json="{
-    \"username\": \"$SLACK_NOTIFIER_USERNAME\",
-    \"icon_url\":\"$SLACK_NOTIFIER_ICON_URL\",
-    \"attachments\":[
-      {
-        \"text\": \"$MESSAGE\",
-        \"color\": \"$COLOR\"
-      }
-    ]
-}"
-
-# post the result to the slack webhook
-RESULT=$(curl -d "payload=$json" -s "$SLACK_WEBHOOK_URL" --output "slack_result.txt" -w "%{http_code}")
-
-if [ "$RESULT" = "500" ]; then
-  if grep -Fqx "No token" "slack_result.txt"; then
-    fail "No token is specified."
-  fi
-
-  if grep -Fqx "No hooks" "slack_result.txt"; then
-    fail "No hook can be found for specified subdomain/token"
-  fi
-
-  if grep -Fqx "Invalid channel specified" "slack_result.txt"; then
-    fail "Could not find specified channel for subdomain/token."
-  fi
-
-  if grep -Fqx "No text specified" "slack_result.txt"; then
-    fail "No text specified."
-  fi
-fi
-
-if [ "$RESULT" = "404" ]; then
-  fail "Subdomain or token not found."
+if [ "$GIT_BRANCH" == "master" ]; then
+    send_notification "#r-on-llvm"
 fi

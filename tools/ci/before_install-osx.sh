@@ -4,9 +4,11 @@ echo
 echo Running before_install-osx.sh...
 echo
 
-brew update
+echo Installing python3
+brew install python3 >> brew.log
 
-echo Installing cmake
-brew install cmake
+echo Installing doxygen
+brew install doxygen >> brew.log
 
-git clone https://github.com/RomanTsegelskyi/llvm llvm
+echo Installing ninja
+brew install ninja >> brew.log

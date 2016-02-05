@@ -1,15 +1,11 @@
 sudo: required
 dist: trusty
 
-branches:
-  except:
-    - gh-pages
-
 language: cpp
 
 os:
-  - linux
   - osx
+  - linux
 
 compiler:
   - clang
@@ -41,19 +37,26 @@ addons:
       - xorg-dev
       - clang-3.7
 
-before_install:
-  - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then ./ci/before_install-osx.sh; fi
-  - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then ./ci/before_install-linux.sh; fi
-  - export LLVM_BUILD_DIR=${TRAVIS_BUILD_DIR}\llvm
-
 matrix:
   exclude:
-    - os: linux
     - os: osx
       compiler: gcc
+    - os: linux
+      compiler: clang
 
-install:
-  - ./tools/setup.sh -l -d .
+before_install:
+  - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then . ./tools/ci/before_install-osx.sh; fi
+  - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then . ./tools/ci/before_install-linux.sh; fi
+  - git clone https://github.com/RomanTsegelskyi/llvm llvm >> git_clone.log
+  - export LLVM_BUILD_DIR=${TRAVIS_BUILD_DIR}/llvm
+  - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then export LLVM_BUILD_DIR=${TRAVIS_BUILD_DIR}/llvm/llvm-install-osx; fi
+  - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then export LLVM_BUILD_DIR=${TRAVIS_BUILD_DIR}/llvm/llvm-install-linux; fi
+
+before_script:
+  - ./tools/setup.sh -n -l -f -O2
 
 script:
   - ./tools/integration_tests.sh
+
+after_script:
+  - bash -x ./tools/ci/slack_notify.sh
