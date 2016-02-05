@@ -7,46 +7,6 @@
 namespace rjit {
 namespace ir {
 
-class InitClosureContext : public Intrinsic {
-  public:
-    llvm::Value* cntxt() { return getValue(0); }
-    llvm::Value* call() { return getValue(1); }
-    llvm::Value* rho() { return getValue(2); }
-    llvm::Value* sysparen() { return getValue(3); }
-
-    InitClosureContext(llvm::Instruction* ins)
-        : Intrinsic(ins, Kind::InitClosureContext) {}
-
-    static InitClosureContext* create(Builder& b, llvm::Value* cntxt,
-                                      llvm::Value* call, llvm::Value* rho,
-                                      llvm::Value* sysparen) {
-
-        std::vector<llvm::Value*> args_;
-        args_.push_back(cntxt);
-        args_.push_back(call);
-        args_.push_back(rho);
-        args_.push_back(sysparen);
-
-        llvm::CallInst* ins = llvm::CallInst::Create(
-            b.intrinsic<InitClosureContext>(), args_, "", b);
-
-        b.insertCall(ins);
-        InitClosureContext* result = new InitClosureContext(ins);
-        return result;
-    }
-
-    static char const* intrinsicName() { return "initClosureContext"; }
-
-    static llvm::FunctionType* intrinsicType() {
-        return llvm::FunctionType::get(
-            t::Void, {t::cntxt, t::SEXP, t::SEXP, t::SEXP}, false);
-    }
-
-    static bool classof(Pattern const* s) {
-        return s->getKind() == Kind::InitClosureContext;
-    }
-};
-
 class EndClosureContext : public Intrinsic {
   public:
     llvm::Value* cntxt() { return getValue(0); }
@@ -65,7 +25,7 @@ class EndClosureContext : public Intrinsic {
         llvm::CallInst* ins = llvm::CallInst::Create(
             b.intrinsic<EndClosureContext>(), args_, "", b);
 
-        b.insertCall(ins);
+        b.markSafepoint(ins);
         EndClosureContext* result = new EndClosureContext(ins);
         return result;
     }
@@ -99,7 +59,7 @@ class ClosureQuickArgumentAdaptor : public Intrinsic {
         llvm::CallInst* ins = llvm::CallInst::Create(
             b.intrinsic<ClosureQuickArgumentAdaptor>(), args_, "", b);
 
-        b.insertCall(ins);
+        b.markSafepoint(ins);
         ClosureQuickArgumentAdaptor* result =
             new ClosureQuickArgumentAdaptor(ins);
         return result;
@@ -133,7 +93,7 @@ class CallNative : public Intrinsic {
         llvm::CallInst* ins =
             llvm::CallInst::Create(b.intrinsic<CallNative>(), args_, "", b);
 
-        b.insertCall(ins);
+        b.markSafepoint(ins);
         CallNative* result = new CallNative(ins);
         return result;
     }
@@ -170,7 +130,6 @@ class ClosureNativeCallTrampoline : public Intrinsic {
         llvm::CallInst* ins = llvm::CallInst::Create(
             b.intrinsic<ClosureNativeCallTrampoline>(), args_, "", b);
 
-        b.insertCall(ins);
         ClosureNativeCallTrampoline* result =
             new ClosureNativeCallTrampoline(ins);
         return result;
@@ -217,7 +176,7 @@ class ConvertToLogicalNoNA : public Intrinsic {
         llvm::CallInst* ins = llvm::CallInst::Create(
             b.intrinsic<ConvertToLogicalNoNA>(), args_, "", b);
 
-        b.insertCall(ins);
+        b.markSafepoint(ins);
         ConvertToLogicalNoNA* result = new ConvertToLogicalNoNA(ins);
         return result;
     }
@@ -248,7 +207,7 @@ class PrintValue : public Intrinsic {
         llvm::CallInst* ins =
             llvm::CallInst::Create(b.intrinsic<PrintValue>(), args_, "", b);
 
-        b.insertCall(ins);
+        b.markSafepoint(ins);
         PrintValue* result = new PrintValue(ins);
         return result;
     }
@@ -283,7 +242,7 @@ class StartFor : public Intrinsic {
         llvm::CallInst* ins =
             llvm::CallInst::Create(b.intrinsic<StartFor>(), args_, "", b);
 
-        b.insertCall(ins);
+        b.markSafepoint(ins);
         StartFor* result = new StartFor(ins);
         return result;
     }
@@ -327,7 +286,7 @@ class LoopSequenceLength : public Intrinsic {
         llvm::CallInst* ins = llvm::CallInst::Create(
             b.intrinsic<LoopSequenceLength>(), args_, "", b);
 
-        b.insertCall(ins);
+        b.markSafepoint(ins);
         LoopSequenceLength* result = new LoopSequenceLength(ins);
         return result;
     }
@@ -364,7 +323,7 @@ class GetForLoopValue : public Intrinsic {
         llvm::CallInst* ins = llvm::CallInst::Create(
             b.intrinsic<GetForLoopValue>(), args_, "", b);
 
-        b.insertCall(ins);
+        b.markSafepoint(ins);
         GetForLoopValue* result = new GetForLoopValue(ins);
         return result;
     }
@@ -391,7 +350,7 @@ class MarkVisible : public Intrinsic {
         llvm::CallInst* ins =
             llvm::CallInst::Create(b.intrinsic<MarkVisible>(), args_, "", b);
 
-        b.insertCall(ins);
+        b.markSafepoint(ins);
         MarkVisible* result = new MarkVisible(ins);
         return result;
     }
@@ -421,7 +380,7 @@ class MarkInvisible : public Intrinsic {
         llvm::CallInst* ins =
             llvm::CallInst::Create(b.intrinsic<MarkInvisible>(), args_, "", b);
 
-        b.insertCall(ins);
+        b.markSafepoint(ins);
         MarkInvisible* result = new MarkInvisible(ins);
         return result;
     }
@@ -465,7 +424,7 @@ class UserLiteral : public Intrinsic {
         llvm::CallInst* ins =
             llvm::CallInst::Create(b.intrinsic<UserLiteral>(), args_, "", b);
 
-        b.insertCall(ins);
+        b.markSafepoint(ins);
         UserLiteral* result = new UserLiteral(ins);
         return result;
     }
@@ -478,6 +437,112 @@ class UserLiteral : public Intrinsic {
 
     static bool classof(Pattern const* s) {
         return s->getKind() == Kind::UserLiteral;
+    }
+};
+
+class PatchIC : public Intrinsic {
+  public:
+    PatchIC(llvm::Instruction* ins) : Intrinsic(ins, Kind::PatchIC) {}
+
+    static PatchIC* create(Builder& b, llvm::Value* addr,
+                           llvm::Value* stackmapId, llvm::Value* caller) {
+
+        std::vector<llvm::Value*> args_;
+        args_.push_back(addr);
+        args_.push_back(stackmapId);
+        args_.push_back(caller);
+
+        llvm::CallInst* ins =
+            llvm::CallInst::Create(b.intrinsic<PatchIC>(), args_, "", b);
+
+        b.markSafepoint(ins);
+        PatchIC* result = new PatchIC(ins);
+        return result;
+    }
+
+    static char const* intrinsicName() { return "patchIC"; }
+
+    static llvm::FunctionType* intrinsicType() {
+        return llvm::FunctionType::get(
+            t::Void, {t::voidPtr, t::t_i64, t::nativeFunctionPtr_t}, false);
+    }
+
+    static bool classof(Pattern const* s) {
+        return s->getKind() == Kind::PatchIC;
+    }
+};
+
+class CompileIC : public Intrinsic {
+  public:
+    CompileIC(llvm::Instruction* ins) : Intrinsic(ins, Kind::CompileIC) {}
+
+    static CompileIC* create(Builder& b, llvm::Value* size, llvm::Value* call,
+                             llvm::Value* fun, llvm::Value* rho,
+                             llvm::Value* stackmapId) {
+
+        std::vector<llvm::Value*> args_;
+        args_.push_back(size);
+        args_.push_back(call);
+        args_.push_back(fun);
+        args_.push_back(rho);
+        args_.push_back(stackmapId);
+
+        llvm::CallInst* ins =
+            llvm::CallInst::Create(b.intrinsic<CompileIC>(), args_, "", b);
+
+        b.markSafepoint(ins);
+        CompileIC* result = new CompileIC(ins);
+        return result;
+    }
+
+    static char const* intrinsicName() { return "compileIC"; }
+
+    static llvm::FunctionType* intrinsicType() {
+        return llvm::FunctionType::get(
+            t::voidPtr, {t::t_i64, t::SEXP, t::SEXP, t::SEXP, t::t_i64}, false);
+    }
+
+    static bool classof(Pattern const* s) {
+        return s->getKind() == Kind::CompileIC;
+    }
+};
+
+class InitClosureContext : public Intrinsic {
+  public:
+    InitClosureContext(llvm::Instruction* ins)
+        : Intrinsic(ins, Kind::InitClosureContext) {}
+
+    static InitClosureContext* create(Builder& b, llvm::Value* context,
+                                      llvm::Value* call, llvm::Value* newrho,
+                                      llvm::Value* rho, llvm::Value* actuals,
+                                      llvm::Value* fun) {
+
+        std::vector<llvm::Value*> args_;
+        args_.push_back(context);
+        args_.push_back(call);
+        args_.push_back(newrho);
+        args_.push_back(rho);
+        args_.push_back(actuals);
+        args_.push_back(fun);
+
+        llvm::CallInst* ins = llvm::CallInst::Create(
+            b.intrinsic<InitClosureContext>(), args_, "", b);
+
+        b.markSafepoint(ins);
+        InitClosureContext* result = new InitClosureContext(ins);
+        return result;
+    }
+
+    static char const* intrinsicName() { return "initClosureContext"; }
+
+    static llvm::FunctionType* intrinsicType() {
+        return llvm::FunctionType::get(
+            t::Void, {t::cntxt, t::SEXP, t::SEXP, t::SEXP, t::SEXP, t::SEXP},
+            false);
+    }
+
+    static bool classof(Pattern const* s) {
+        return s->getKind() == Kind::InitClosureContext;
     }
 };
 
@@ -497,7 +562,7 @@ class NewEnv : public Intrinsic {
         llvm::CallInst* ins =
             llvm::CallInst::Create(b.intrinsic<NewEnv>(), args_, "", b);
 
-        b.insertCall(ins);
+        b.markSafepoint(ins);
         NewEnv* result = new NewEnv(ins);
         return result;
     }
@@ -528,7 +593,7 @@ class ConsNr : public Intrinsic {
         llvm::CallInst* ins =
             llvm::CallInst::Create(b.intrinsic<ConsNr>(), args_, "", b);
 
-        b.insertCall(ins);
+        b.markSafepoint(ins);
         ConsNr* result = new ConsNr(ins);
         return result;
     }
@@ -568,7 +633,7 @@ class Constant : public Intrinsic {
         llvm::CallInst* ins =
             llvm::CallInst::Create(b.intrinsic<Constant>(), args_, "", b);
 
-        b.insertCall(ins);
+        b.markSafepoint(ins);
         Constant* result = new Constant(ins);
         return result;
     }
@@ -613,7 +678,7 @@ class GenericGetVar : public Intrinsic {
         llvm::CallInst* ins =
             llvm::CallInst::Create(b.intrinsic<GenericGetVar>(), args_, "", b);
 
-        b.insertCall(ins);
+        b.markSafepoint(ins);
         GenericGetVar* result = new GenericGetVar(ins);
         return result;
     }
@@ -657,7 +722,7 @@ class GenericGetEllipsisArg : public Intrinsic {
         llvm::CallInst* ins = llvm::CallInst::Create(
             b.intrinsic<GenericGetEllipsisArg>(), args_, "", b);
 
-        b.insertCall(ins);
+        b.markSafepoint(ins);
         GenericGetEllipsisArg* result = new GenericGetEllipsisArg(ins);
         return result;
     }
@@ -703,7 +768,7 @@ class GenericSetVar : public Intrinsic {
         llvm::CallInst* ins =
             llvm::CallInst::Create(b.intrinsic<GenericSetVar>(), args_, "", b);
 
-        b.insertCall(ins);
+        b.markSafepoint(ins);
         GenericSetVar* result = new GenericSetVar(ins);
         return result;
     }
@@ -749,7 +814,7 @@ class GenericSetVarParent : public Intrinsic {
         llvm::CallInst* ins = llvm::CallInst::Create(
             b.intrinsic<GenericSetVarParent>(), args_, "", b);
 
-        b.insertCall(ins);
+        b.markSafepoint(ins);
         GenericSetVarParent* result = new GenericSetVarParent(ins);
         return result;
     }
@@ -791,7 +856,7 @@ class GetFunction : public Intrinsic {
         llvm::CallInst* ins =
             llvm::CallInst::Create(b.intrinsic<GetFunction>(), args_, "", b);
 
-        b.insertCall(ins);
+        b.markSafepoint(ins);
         GetFunction* result = new GetFunction(ins);
         return result;
     }
@@ -832,7 +897,7 @@ class GetGlobalFunction : public Intrinsic {
         llvm::CallInst* ins = llvm::CallInst::Create(
             b.intrinsic<GetGlobalFunction>(), args_, "", b);
 
-        b.insertCall(ins);
+        b.markSafepoint(ins);
         GetGlobalFunction* result = new GetGlobalFunction(ins);
         return result;
     }
@@ -872,7 +937,7 @@ class GetSymFunction : public Intrinsic {
         llvm::CallInst* ins =
             llvm::CallInst::Create(b.intrinsic<GetSymFunction>(), args_, "", b);
 
-        b.insertCall(ins);
+        b.markSafepoint(ins);
         GetSymFunction* result = new GetSymFunction(ins);
         return result;
     }
@@ -912,7 +977,7 @@ class GetBuiltinFunction : public Intrinsic {
         llvm::CallInst* ins = llvm::CallInst::Create(
             b.intrinsic<GetBuiltinFunction>(), args_, "", b);
 
-        b.insertCall(ins);
+        b.markSafepoint(ins);
         GetBuiltinFunction* result = new GetBuiltinFunction(ins);
         return result;
     }
@@ -952,7 +1017,7 @@ class GetInternalBuiltinFunction : public Intrinsic {
         llvm::CallInst* ins = llvm::CallInst::Create(
             b.intrinsic<GetInternalBuiltinFunction>(), args_, "", b);
 
-        b.insertCall(ins);
+        b.markSafepoint(ins);
         GetInternalBuiltinFunction* result =
             new GetInternalBuiltinFunction(ins);
         return result;
@@ -984,7 +1049,7 @@ class CheckFunction : public Intrinsic {
         llvm::CallInst* ins =
             llvm::CallInst::Create(b.intrinsic<CheckFunction>(), args_, "", b);
 
-        b.insertCall(ins);
+        b.markSafepoint(ins);
         CheckFunction* result = new CheckFunction(ins);
         return result;
     }
@@ -1020,7 +1085,7 @@ class CreatePromise : public Intrinsic {
         llvm::CallInst* ins =
             llvm::CallInst::Create(b.intrinsic<CreatePromise>(), args_, "", b);
 
-        b.insertCall(ins);
+        b.markSafepoint(ins);
         CreatePromise* result = new CreatePromise(ins);
         return result;
     }
@@ -1052,7 +1117,7 @@ class SexpType : public Intrinsic {
         llvm::CallInst* ins =
             llvm::CallInst::Create(b.intrinsic<SexpType>(), args_, "", b);
 
-        b.insertCall(ins);
+        b.markSafepoint(ins);
         SexpType* result = new SexpType(ins);
         return result;
     }
@@ -1085,7 +1150,7 @@ class AddArgument : public Intrinsic {
         llvm::CallInst* ins =
             llvm::CallInst::Create(b.intrinsic<AddArgument>(), args_, "", b);
 
-        b.insertCall(ins);
+        b.markSafepoint(ins);
         AddArgument* result = new AddArgument(ins);
         return result;
     }
@@ -1121,7 +1186,7 @@ class AddKeywordArgument : public Intrinsic {
         llvm::CallInst* ins = llvm::CallInst::Create(
             b.intrinsic<AddKeywordArgument>(), args_, "", b);
 
-        b.insertCall(ins);
+        b.markSafepoint(ins);
         AddKeywordArgument* result = new AddKeywordArgument(ins);
         return result;
     }
@@ -1159,7 +1224,7 @@ class AddEllipsisArgumentHead : public Intrinsic {
         llvm::CallInst* ins = llvm::CallInst::Create(
             b.intrinsic<AddEllipsisArgumentHead>(), args_, "", b);
 
-        b.insertCall(ins);
+        b.markSafepoint(ins);
         AddEllipsisArgumentHead* result = new AddEllipsisArgumentHead(ins);
         return result;
     }
@@ -1197,7 +1262,7 @@ class AddEllipsisArgumentTail : public Intrinsic {
         llvm::CallInst* ins = llvm::CallInst::Create(
             b.intrinsic<AddEllipsisArgumentTail>(), args_, "", b);
 
-        b.insertCall(ins);
+        b.markSafepoint(ins);
         AddEllipsisArgumentTail* result = new AddEllipsisArgumentTail(ins);
         return result;
     }
@@ -1236,7 +1301,7 @@ class CallBuiltin : public Intrinsic {
         llvm::CallInst* ins =
             llvm::CallInst::Create(b.intrinsic<CallBuiltin>(), args_, "", b);
 
-        b.insertCall(ins);
+        b.markSafepoint(ins);
         CallBuiltin* result = new CallBuiltin(ins);
         return result;
     }
@@ -1275,7 +1340,7 @@ class CallSpecial : public Intrinsic {
         llvm::CallInst* ins =
             llvm::CallInst::Create(b.intrinsic<CallSpecial>(), args_, "", b);
 
-        b.insertCall(ins);
+        b.markSafepoint(ins);
         CallSpecial* result = new CallSpecial(ins);
         return result;
     }
@@ -1314,7 +1379,7 @@ class CallClosure : public Intrinsic {
         llvm::CallInst* ins =
             llvm::CallInst::Create(b.intrinsic<CallClosure>(), args_, "", b);
 
-        b.insertCall(ins);
+        b.markSafepoint(ins);
         CallClosure* result = new CallClosure(ins);
         return result;
     }
@@ -1367,7 +1432,7 @@ class CreateClosure : public Intrinsic {
         llvm::CallInst* ins =
             llvm::CallInst::Create(b.intrinsic<CreateClosure>(), args_, "", b);
 
-        b.insertCall(ins);
+        b.markSafepoint(ins);
         CreateClosure* result = new CreateClosure(ins);
         return result;
     }
@@ -1413,7 +1478,7 @@ class GenericUnaryMinus : public Intrinsic {
         llvm::CallInst* ins = llvm::CallInst::Create(
             b.intrinsic<GenericUnaryMinus>(), args_, "", b);
 
-        b.insertCall(ins);
+        b.markSafepoint(ins);
         GenericUnaryMinus* result = new GenericUnaryMinus(ins);
         return result;
     }
@@ -1459,7 +1524,7 @@ class GenericUnaryPlus : public Intrinsic {
         llvm::CallInst* ins = llvm::CallInst::Create(
             b.intrinsic<GenericUnaryPlus>(), args_, "", b);
 
-        b.insertCall(ins);
+        b.markSafepoint(ins);
         GenericUnaryPlus* result = new GenericUnaryPlus(ins);
         return result;
     }
@@ -1506,7 +1571,7 @@ class GenericAdd : public Intrinsic {
         llvm::CallInst* ins =
             llvm::CallInst::Create(b.intrinsic<GenericAdd>(), args_, "", b);
 
-        b.insertCall(ins);
+        b.markSafepoint(ins);
         GenericAdd* result = new GenericAdd(ins);
         return result;
     }
@@ -1553,7 +1618,7 @@ class GenericSub : public Intrinsic {
         llvm::CallInst* ins =
             llvm::CallInst::Create(b.intrinsic<GenericSub>(), args_, "", b);
 
-        b.insertCall(ins);
+        b.markSafepoint(ins);
         GenericSub* result = new GenericSub(ins);
         return result;
     }
@@ -1600,7 +1665,7 @@ class GenericMul : public Intrinsic {
         llvm::CallInst* ins =
             llvm::CallInst::Create(b.intrinsic<GenericMul>(), args_, "", b);
 
-        b.insertCall(ins);
+        b.markSafepoint(ins);
         GenericMul* result = new GenericMul(ins);
         return result;
     }
@@ -1647,7 +1712,7 @@ class GenericDiv : public Intrinsic {
         llvm::CallInst* ins =
             llvm::CallInst::Create(b.intrinsic<GenericDiv>(), args_, "", b);
 
-        b.insertCall(ins);
+        b.markSafepoint(ins);
         GenericDiv* result = new GenericDiv(ins);
         return result;
     }
@@ -1694,7 +1759,7 @@ class GenericPow : public Intrinsic {
         llvm::CallInst* ins =
             llvm::CallInst::Create(b.intrinsic<GenericPow>(), args_, "", b);
 
-        b.insertCall(ins);
+        b.markSafepoint(ins);
         GenericPow* result = new GenericPow(ins);
         return result;
     }
@@ -1739,7 +1804,7 @@ class GenericSqrt : public Intrinsic {
         llvm::CallInst* ins =
             llvm::CallInst::Create(b.intrinsic<GenericSqrt>(), args_, "", b);
 
-        b.insertCall(ins);
+        b.markSafepoint(ins);
         GenericSqrt* result = new GenericSqrt(ins);
         return result;
     }
@@ -1784,7 +1849,7 @@ class GenericExp : public Intrinsic {
         llvm::CallInst* ins =
             llvm::CallInst::Create(b.intrinsic<GenericExp>(), args_, "", b);
 
-        b.insertCall(ins);
+        b.markSafepoint(ins);
         GenericExp* result = new GenericExp(ins);
         return result;
     }
@@ -1831,7 +1896,7 @@ class GenericEq : public Intrinsic {
         llvm::CallInst* ins =
             llvm::CallInst::Create(b.intrinsic<GenericEq>(), args_, "", b);
 
-        b.insertCall(ins);
+        b.markSafepoint(ins);
         GenericEq* result = new GenericEq(ins);
         return result;
     }
@@ -1878,7 +1943,7 @@ class GenericNe : public Intrinsic {
         llvm::CallInst* ins =
             llvm::CallInst::Create(b.intrinsic<GenericNe>(), args_, "", b);
 
-        b.insertCall(ins);
+        b.markSafepoint(ins);
         GenericNe* result = new GenericNe(ins);
         return result;
     }
@@ -1925,7 +1990,7 @@ class GenericLt : public Intrinsic {
         llvm::CallInst* ins =
             llvm::CallInst::Create(b.intrinsic<GenericLt>(), args_, "", b);
 
-        b.insertCall(ins);
+        b.markSafepoint(ins);
         GenericLt* result = new GenericLt(ins);
         return result;
     }
@@ -1972,7 +2037,7 @@ class GenericLe : public Intrinsic {
         llvm::CallInst* ins =
             llvm::CallInst::Create(b.intrinsic<GenericLe>(), args_, "", b);
 
-        b.insertCall(ins);
+        b.markSafepoint(ins);
         GenericLe* result = new GenericLe(ins);
         return result;
     }
@@ -2019,7 +2084,7 @@ class GenericGe : public Intrinsic {
         llvm::CallInst* ins =
             llvm::CallInst::Create(b.intrinsic<GenericGe>(), args_, "", b);
 
-        b.insertCall(ins);
+        b.markSafepoint(ins);
         GenericGe* result = new GenericGe(ins);
         return result;
     }
@@ -2066,7 +2131,7 @@ class GenericGt : public Intrinsic {
         llvm::CallInst* ins =
             llvm::CallInst::Create(b.intrinsic<GenericGt>(), args_, "", b);
 
-        b.insertCall(ins);
+        b.markSafepoint(ins);
         GenericGt* result = new GenericGt(ins);
         return result;
     }
@@ -2114,7 +2179,7 @@ class GenericBitAnd : public Intrinsic {
         llvm::CallInst* ins =
             llvm::CallInst::Create(b.intrinsic<GenericBitAnd>(), args_, "", b);
 
-        b.insertCall(ins);
+        b.markSafepoint(ins);
         GenericBitAnd* result = new GenericBitAnd(ins);
         return result;
     }
@@ -2161,7 +2226,7 @@ class GenericBitOr : public Intrinsic {
         llvm::CallInst* ins =
             llvm::CallInst::Create(b.intrinsic<GenericBitOr>(), args_, "", b);
 
-        b.insertCall(ins);
+        b.markSafepoint(ins);
         GenericBitOr* result = new GenericBitOr(ins);
         return result;
     }
@@ -2206,7 +2271,7 @@ class GenericNot : public Intrinsic {
         llvm::CallInst* ins =
             llvm::CallInst::Create(b.intrinsic<GenericNot>(), args_, "", b);
 
-        b.insertCall(ins);
+        b.markSafepoint(ins);
         GenericNot* result = new GenericNot(ins);
         return result;
     }
@@ -2241,7 +2306,7 @@ class GenericGetVarMissOK : public Intrinsic {
         llvm::CallInst* ins = llvm::CallInst::Create(
             b.intrinsic<GenericGetVarMissOK>(), args_, "", b);
 
-        b.insertCall(ins);
+        b.markSafepoint(ins);
         GenericGetVarMissOK* result = new GenericGetVarMissOK(ins);
         return result;
     }
@@ -2275,7 +2340,7 @@ class GenericGetEllipsisValueMissOK : public Intrinsic {
         llvm::CallInst* ins = llvm::CallInst::Create(
             b.intrinsic<GenericGetEllipsisValueMissOK>(), args_, "", b);
 
-        b.insertCall(ins);
+        b.markSafepoint(ins);
         GenericGetEllipsisValueMissOK* result =
             new GenericGetEllipsisValueMissOK(ins);
         return result;
@@ -2321,7 +2386,7 @@ class CheckSwitchControl : public Intrinsic {
         llvm::CallInst* ins = llvm::CallInst::Create(
             b.intrinsic<CheckSwitchControl>(), args_, "", b);
 
-        b.insertCall(ins);
+        b.markSafepoint(ins);
         CheckSwitchControl* result = new CheckSwitchControl(ins);
         return result;
     }
@@ -2374,7 +2439,7 @@ class SwitchControlCharacter : public Intrinsic {
         llvm::CallInst* ins = llvm::CallInst::Create(
             b.intrinsic<SwitchControlCharacter>(), args_, "", b);
 
-        b.insertCall(ins);
+        b.markSafepoint(ins);
         SwitchControlCharacter* result = new SwitchControlCharacter(ins);
         return result;
     }
@@ -2409,7 +2474,7 @@ class SwitchControlInteger : public Intrinsic {
         llvm::CallInst* ins = llvm::CallInst::Create(
             b.intrinsic<SwitchControlInteger>(), args_, "", b);
 
-        b.insertCall(ins);
+        b.markSafepoint(ins);
         SwitchControlInteger* result = new SwitchControlInteger(ins);
         return result;
     }
@@ -2442,7 +2507,7 @@ class ReturnJump : public Intrinsic {
         llvm::CallInst* ins =
             llvm::CallInst::Create(b.intrinsic<ReturnJump>(), args_, "", b);
 
-        b.insertCall(ins);
+        b.markSafepoint(ins);
         ReturnJump* result = new ReturnJump(ins);
         return result;
     }

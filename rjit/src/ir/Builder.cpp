@@ -94,6 +94,15 @@ SEXP Builder::closeFunction() {
     return result;
 }
 
+llvm::Function* Builder::closeIC() {
+    assert(contextStack_.empty());
+    ir::Verifier::check(c_->f);
+    llvm::Function* f = c_->f;
+    delete c_;
+    c_ = nullptr;
+    return f;
+}
+
 void Builder::openPromise(std::string const& name, SEXP ast) {
     if (c_ != nullptr)
         contextStack_.push(c_);

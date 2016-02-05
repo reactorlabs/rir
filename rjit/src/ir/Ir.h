@@ -33,13 +33,9 @@ class Verifier;
 class Pattern {
   public:
     enum class Kind {
+        Invalid = 0, // Will catch uninitialized metadata
         unknown,
-        Invalid,
 #include "ir/pattern_kinds.inc"
-        // TODO these do not have corresponding patterns, we should remove them!
-        ExtractConstantPool,
-        UserConstant,
-        AddEllipsisArgument,
     };
 
     static char const* const MD_NAME;
@@ -481,6 +477,33 @@ class Switch : public Pattern {
 
     static bool classof(Pattern const* s) {
         return s->getKind() == Kind::Switch;
+    }
+};
+
+/** Anonymous native call.
+
+ */
+class CallToAddress : public Pattern {
+  public:
+    /** Returns the CallInst associated with the intrinsic.
+     */
+    llvm::CallInst* ins() { return Pattern::ins<llvm::CallInst>(); }
+
+    static CallToAddress* create(Builder& b, llvm::Value* fun,
+                                 std::vector<Value*> args) {
+        return new CallToAddress(
+            llvm::CallInst::Create(fun, args, "", b.block()));
+    }
+
+    static CallToAddress* create(Builder& b, llvm::Value* fun,
+                                 std::initializer_list<Value*> args) {
+        return new CallToAddress(
+            llvm::CallInst::Create(fun, args, "", b.block()));
+    }
+
+    CallToAddress(Instruction* ins) : Pattern(ins, Kind::CallToAddress) {
+        assert(llvm::isa<llvm::CallInst>(ins) and
+               "Intrinsics must be llvm calls");
     }
 };
 

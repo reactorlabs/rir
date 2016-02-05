@@ -95,10 +95,11 @@ class Builder {
     void openFunction(std::string const& name, SEXP ast, SEXP formals);
 
     void openIC(std::string const& name, FunctionType* ty) {
-        if (c_ != nullptr)
-            contextStack_.push(c_);
+        assert(contextStack_.empty());
         c_ = new ICContext(name, m_, ty);
     }
+
+    llvm::Function* closeIC();
 
     /** Creates new context for a loop. Initializes the basic blocks for break
      * and next targets. */
@@ -166,7 +167,7 @@ class Builder {
 
     /** Given a call instruction, sets its attributes wrt stack map statepoints.
      */
-    llvm::CallInst* insertCall(llvm::CallInst* f) {
+    llvm::CallInst* markSafepoint(llvm::CallInst* f) {
         llvm::AttributeSet PAL;
         {
             llvm::SmallVector<llvm::AttributeSet, 4> Attrs;

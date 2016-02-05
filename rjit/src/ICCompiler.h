@@ -76,17 +76,6 @@ class ICCompiler {
     ir::Builder& b;
     unsigned size;
     std::string name;
-
-#define DECLARE(name) llvm::Function* name
-    DECLARE(CONS_NR);
-    DECLARE(closureQuickArgumentAdaptor);
-    DECLARE(initClosureContext);
-    DECLARE(endClosureContext);
-    DECLARE(closureNativeCallTrampoline);
-    DECLARE(compileIC);
-    DECLARE(patchIC);
-    DECLARE(callNative);
-#undef DECLARE
 };
 
 } // namespace rjit
