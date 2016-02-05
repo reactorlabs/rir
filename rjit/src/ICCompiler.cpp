@@ -137,16 +137,22 @@ bool ICCompiler::compileIc(SEXP inCall, SEXP inFun) {
 
     if (TYPEOF(inFun) == CLOSXP) {
         std::vector<bool> promarg(size, false);
+        std::vector<long> positionalArg;
+        std::unordered_map<long, SEXP> namedArg;
+        std::unordered_map<SEXP, long> formals;
 
         // Check for named args or ...
         SEXP arg = CDR(inCall);
         SEXP form = FORMALS(inFun);
+
         unsigned i = 0;
         while (arg != R_NilValue && form != R_NilValue) {
-            // We do not yet do the static version of match.c, thus cannot
-            // support named args
-            if (TAG(arg) != R_NilValue)
-                return false;
+            if (TAG(arg) != R_NilValue) {
+                namedArg[i] = TAG(arg);
+            } else {
+                positionalArg.push_back(i);
+            }
+            formals[TAG(form)] = i;
 
             // We cannot inline ellipsis
             if (CAR(arg) == R_DotsSymbol || TAG(form) == R_DotsSymbol)
@@ -175,6 +181,27 @@ bool ICCompiler::compileIc(SEXP inCall, SEXP inFun) {
         if (form != R_NilValue || i != size)
             return false;
 
+        // Static version of gnur match.c : mapping given arguments to formal
+        // arguments by exact match.
+        std::vector<long> argOrder(size, -1);
+        for (auto p : namedArg) {
+            long argnum = std::get<0>(p);
+            SEXP name = std::get<1>(p);
+            if (!formals.count(name)) {
+                // Named argument does not match formal, drop to generic case
+                return false;
+            }
+            long pos = formals[name];
+            argOrder[pos] = argnum;
+        }
+        unsigned position = 0;
+        for (long argnum : positionalArg) {
+            while (position < size && argOrder[position] != -1)
+                ++position;
+            assert(position < size);
+            argOrder[position] = argnum;
+        }
+
         SEXP inBody = CDR(inFun);
         if (TYPEOF(inBody) == NATIVESXP) {
 
@@ -194,9 +221,11 @@ bool ICCompiler::compileIc(SEXP inCall, SEXP inFun) {
 
             // This is an inlined version of applyNativeClosure
             Value* actuals = ir::Builder::convertToPointer(R_NilValue);
+
             for (unsigned i = size; i > 0; --i) {
-                Value* arg = b.args()[i - 1];
-                if (promarg[i - 1])
+                long pos = argOrder[i - 1];
+                Value* arg = b.args()[pos];
+                if (promarg[pos])
                     arg = ir::CreatePromise::create(b, arg, rho())->result();
                 actuals = ir::ConsNr::create(b, arg, actuals)->result();
                 // TODO:
