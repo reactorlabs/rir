@@ -497,9 +497,10 @@ class CppClass:
         #clang-format -i -style=LLVM
 # ---------------------------------------------------------------------------------------------------------------------
 
-def loadClassHierarchy(baseClass, result):
+def loadClassHierarchy(baseClass):
     """ Starts with the baseClass and loads it together with all its subclasses (transitively). Returns a dict containing the name of the class as key and its documentation xml as value. """
     D("Loading class hierarchy for {0}".format(baseClass))
+    result = {}
     # load the classes
     q = [ baseClass ]
     while (q):
@@ -511,8 +512,9 @@ def loadClassHierarchy(baseClass, result):
             # check if the class has any children and add them to the queue
             for child in value.subclasses:
                 q.append(child)
+    return result
 
-def loadClassParents(child, result):
+def loadClassParents(child, into):
     """ Recursively loads all parents of the given class into the result dictionary if they are not present yet.
     """
     q = child.parentClasses[:]
@@ -521,7 +523,7 @@ def loadClassParents(child, result):
         if (not key in result):
             D("  loading class {0}".format(key))
             value = CppClass(key)
-            result[key] = value
+            into[key] = value
             for parent in value.parentClasses:
                 q.append(parent)
 
@@ -665,15 +667,15 @@ def main():
     D("cppRoot set to {0}".format(cppRoot))
 
     # load all patterns
-    loadClassHierarchy(PATTERN_BASE, patterns)
+    patterns = loadClassHierarchy(PATTERN_BASE)
     # determine property classes by looking at the patterns
     loadProperties()
     # calculate matchsets for patterns & properties
     calculateMatchsets()
     # load all predicates
-    loadClassHierarchy(PREDICATE_BASE, predicates)
+    predicates = loadClassHierarchy(PREDICATE_BASE)
     # load all passes
-    loadClassHierarchy(PASS_BASE, passes)
+    passes = loadClassHierarchy(PASS_BASE)
     # extracts match methods from loaded passes
     extractMatchMethods()
     # when we have all match methods, we will use their arguments to check for llvm instruction types used (because we know arguments can be pattern, properties, predicates, or llvm insns)
