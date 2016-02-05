@@ -341,7 +341,8 @@ class GetForLoopValue : public PrimitiveCall {
 
 class MarkVisible : public PrimitiveCall {
   public:
-    MarkVisible(llvm::Instruction* ins) : PrimitiveCall(ins, Kind::MarkVisible) {}
+    MarkVisible(llvm::Instruction* ins)
+        : PrimitiveCall(ins, Kind::MarkVisible) {}
 
     static MarkVisible* create(Builder& b) {
 
@@ -413,7 +414,8 @@ class UserLiteral : public PrimitiveCall {
     }
     SEXP index(Builder const& b) { return b.constantPool(index()); }
 
-    UserLiteral(llvm::Instruction* ins) : PrimitiveCall(ins, Kind::UserLiteral) {}
+    UserLiteral(llvm::Instruction* ins)
+        : PrimitiveCall(ins, Kind::UserLiteral) {}
 
     static UserLiteral* create(Builder& b, SEXP index) {
 
@@ -844,7 +846,8 @@ class GetFunction : public PrimitiveCall {
     }
     SEXP symbol(Builder const& b) { return b.constantPool(symbol()); }
 
-    GetFunction(llvm::Instruction* ins) : PrimitiveCall(ins, Kind::GetFunction) {}
+    GetFunction(llvm::Instruction* ins)
+        : PrimitiveCall(ins, Kind::GetFunction) {}
 
     static GetFunction* create(Builder& b, llvm::Value* rho, SEXP symbol) {
 
@@ -1138,7 +1141,8 @@ class AddArgument : public PrimitiveCall {
     llvm::Value* args() { return getValue(0); }
     llvm::Value* arg() { return getValue(1); }
 
-    AddArgument(llvm::Instruction* ins) : PrimitiveCall(ins, Kind::AddArgument) {}
+    AddArgument(llvm::Instruction* ins)
+        : PrimitiveCall(ins, Kind::AddArgument) {}
 
     static AddArgument* create(Builder& b, llvm::Value* args,
                                llvm::Value* arg) {
@@ -1286,7 +1290,8 @@ class CallBuiltin : public PrimitiveCall {
     llvm::Value* arguments() { return getValue(2); }
     llvm::Value* rho() { return getValue(3); }
 
-    CallBuiltin(llvm::Instruction* ins) : PrimitiveCall(ins, Kind::CallBuiltin) {}
+    CallBuiltin(llvm::Instruction* ins)
+        : PrimitiveCall(ins, Kind::CallBuiltin) {}
 
     static CallBuiltin* create(Builder& b, llvm::Value* call,
                                llvm::Value* closure, llvm::Value* arguments,
@@ -1325,7 +1330,8 @@ class CallSpecial : public PrimitiveCall {
     llvm::Value* arguments() { return getValue(2); }
     llvm::Value* rho() { return getValue(3); }
 
-    CallSpecial(llvm::Instruction* ins) : PrimitiveCall(ins, Kind::CallSpecial) {}
+    CallSpecial(llvm::Instruction* ins)
+        : PrimitiveCall(ins, Kind::CallSpecial) {}
 
     static CallSpecial* create(Builder& b, llvm::Value* call,
                                llvm::Value* closure, llvm::Value* arguments,
@@ -1364,7 +1370,8 @@ class CallClosure : public PrimitiveCall {
     llvm::Value* arguments() { return getValue(2); }
     llvm::Value* rho() { return getValue(3); }
 
-    CallClosure(llvm::Instruction* ins) : PrimitiveCall(ins, Kind::CallClosure) {}
+    CallClosure(llvm::Instruction* ins)
+        : PrimitiveCall(ins, Kind::CallClosure) {}
 
     static CallClosure* create(Builder& b, llvm::Value* call,
                                llvm::Value* closure, llvm::Value* arguments,
@@ -1790,7 +1797,8 @@ class GenericSqrt : public PrimitiveCall {
     }
     SEXP call(Builder const& b) { return b.constantPool(call()); }
 
-    GenericSqrt(llvm::Instruction* ins) : PrimitiveCall(ins, Kind::GenericSqrt) {}
+    GenericSqrt(llvm::Instruction* ins)
+        : PrimitiveCall(ins, Kind::GenericSqrt) {}
 
     static GenericSqrt* create(Builder& b, llvm::Value* op, llvm::Value* rho,
                                SEXP call) {
@@ -2211,7 +2219,8 @@ class GenericBitOr : public PrimitiveCall {
     }
     SEXP call(Builder const& b) { return b.constantPool(call()); }
 
-    GenericBitOr(llvm::Instruction* ins) : PrimitiveCall(ins, Kind::GenericBitOr) {}
+    GenericBitOr(llvm::Instruction* ins)
+        : PrimitiveCall(ins, Kind::GenericBitOr) {}
 
     static GenericBitOr* create(Builder& b, llvm::Value* lhs, llvm::Value* rhs,
                                 llvm::Value* rho, SEXP call) {
