@@ -46,19 +46,6 @@ ICCompiler::ICCompiler(unsigned size, ir::Builder& b)
 
 ICCompiler::ICCompiler(unsigned size, ir::Builder& b, std::string name)
     : b(b), size(size), name(name) {
-#define DECLARE(name, type)                                                    \
-    name = llvm::Function::Create(t::type, llvm::Function::ExternalLinkage,    \
-                                  #name, b.module())
-
-    DECLARE(CONS_NR, sexp_sexpsexp);
-    DECLARE(closureQuickArgumentAdaptor, sexp_sexpsexp);
-    DECLARE(initClosureContext, void_cntxtsexpsexpsexpsexpsexp);
-    DECLARE(endClosureContext, void_cntxtsexp);
-    DECLARE(closureNativeCallTrampoline, sexp_contxtsexpsexp);
-    DECLARE(compileIC, compileIC_t);
-    DECLARE(patchIC, patchIC_t);
-    DECLARE(callNative, sexp_sexpsexp);
-#undef DECLARE
 
     // Set up a function type which corresponds to the ICStub signature
     std::vector<Type*> argT;
@@ -112,7 +99,7 @@ void* ICCompiler::compile(SEXP inCall, SEXP inFun, SEXP inRho) {
 
 void* ICCompiler::finalize() {
     // FIXME: return nativesxp and not naked ptr?
-    auto f = b.f();
+    auto f = b.closeIC();
 
     auto engine = JITCompileLayer::singleton.getEngine(b);
     auto ic = engine->getPointerToFunction(f);
@@ -126,16 +113,18 @@ void* ICCompiler::finalize() {
 Function* ICCompiler::compileCallStub() {
     b.openIC(name, ic_t);
 
-    Value* icAddr = INTRINSIC(
-        compileIC, ConstantInt::get(getGlobalContext(), APInt(64, size)),
-        call(), fun(), rho(), stackmapId());
+    Value* icAddr =
+        ir::CompileIC::create(
+            b, ConstantInt::get(getGlobalContext(), APInt(64, size)), call(),
+            fun(), rho(), stackmapId())
+            ->result();
 
-    INTRINSIC(patchIC, icAddr, stackmapId(), caller());
+    ir::PatchIC::create(b, icAddr, stackmapId(), caller());
     // create new intrinics function for patchIC (maybe?)
 
     Value* ic = new BitCastInst(icAddr, PointerType::get(ic_t, 0), "", b);
 
-    auto res = INTRINSIC_NO_SAFEPOINT(ic, b.args());
+    auto res = ir::CallToAddress::create(b, ic, b.args())->result();
     ReturnInst::Create(getGlobalContext(), res, b);
 
     auto stub = b.f();
@@ -221,14 +210,14 @@ bool ICCompiler::compileIc(SEXP inCall, SEXP inFun) {
 
             Value* cntxt = new AllocaInst(t::cntxt, "", b.block());
 
-            INTRINSIC(initClosureContext, cntxt, call(), newrho, rho(), actuals,
-                      fun());
+            ir::InitClosureContext::create(b, cntxt, call(), newrho, rho(),
+                                           actuals, fun());
 
-            Value* res =
-                INTRINSIC_NO_SAFEPOINT(closureNativeCallTrampoline, cntxt,
-                                       b.convertToPointer(inBody), newrho);
+            Value* res = ir::ClosureNativeCallTrampoline::create(
+                             b, cntxt, b.convertToPointer(inBody), newrho)
+                             ->result();
 
-            INTRINSIC(endClosureContext, cntxt, res);
+            ir::EndClosureContext::create(b, cntxt, res);
             ir::Return::create(b, res);
 
             b.setBlock(icMiss);
@@ -242,7 +231,7 @@ bool ICCompiler::compileIc(SEXP inCall, SEXP inFun) {
 
 void ICCompiler::callIcMiss() {
     auto stub = getStub(size, b);
-    auto res = INTRINSIC_NO_SAFEPOINT(stub, b.args());
+    auto res = ir::CallToAddress::create(b, stub, b.args())->result();
     ir::Return::create(b, res);
 }
 
@@ -393,11 +382,12 @@ Value* ICCompiler::compileArgument(Value* arglist, SEXP argAst, int argnum,
     default:
         if (eager) {
             // TODO make this more efficient?
-            result = INTRINSIC(callNative, b.args()[argnum], rho());
+            result =
+                ir::CallNative::create(b, b.args()[argnum], rho())->result();
         } else {
             // we must create a promise out of the argument
-            result = INTRINSIC(b.intrinsic<ir::CreatePromise>(),
-                               b.args()[argnum], rho());
+            result =
+                ir::CreatePromise::create(b, b.args()[argnum], rho())->result();
         }
         break;
     }
@@ -407,16 +397,6 @@ Value* ICCompiler::compileArgument(Value* arglist, SEXP argAst, int argnum,
             ->result();
 
     return ir::AddArgument::create(b, arglist, result)->result();
-}
-
-Value* ICCompiler::INTRINSIC_NO_SAFEPOINT(llvm::Value* fun,
-                                          std::vector<Value*> args) {
-    return llvm::CallInst::Create(fun, args, "", b.block());
-}
-
-Value* ICCompiler::INTRINSIC(llvm::Value* fun, std::vector<Value*> args) {
-    llvm::CallInst* ins = llvm::CallInst::Create(fun, args, "", b.block());
-    return b.insertCall(ins);
 }
 
 } // namespace rjit

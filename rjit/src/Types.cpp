@@ -64,17 +64,6 @@ PointerType* initializeTypes() {
     // FIXME
     t::voidPtr = PointerType::get(t::t_i64, 0);
 
-    t::stackmap_t = FunctionType::get(
-        t::t_void, std::vector<Type*>({{IntegerType::get(context, 64),
-                                        IntegerType::get(context, 32)}}),
-        true);
-
-    t::patchpoint_t = FunctionType::get(
-        t::t_void, std::vector<Type*>({{IntegerType::get(context, 64),
-                                        IntegerType::get(context, 32), t::i8ptr,
-                                        IntegerType::get(context, 32)}}),
-        true);
-
 #define DECLARE(name, ret, ...)                                                \
     fields = {__VA_ARGS__};                                                    \
     t::name = FunctionType::get(ret, fields, false)
@@ -99,10 +88,6 @@ PointerType* initializeTypes() {
     DECLARE(void_cntxtsexp, t_void, t::cntxtPtr, t::SEXP);
     DECLARE(void_cntxtsexpsexp, t_void, t::cntxtPtr, t::SEXP, t::SEXP);
     DECLARE(sexp_contxtsexpsexp, t::SEXP, t::cntxtPtr, t::SEXP, t::SEXP);
-
-    DECLARE(patchIC_t, t::t_void, t::voidPtr, t::t_i64, t::nativeFunctionPtr_t);
-    DECLARE(compileIC_t, t::voidPtr, t::t_i64, t::SEXP, t::SEXP, t::SEXP,
-            t::t_i64);
 #undef DECLARE
 
     // initialize LLVM backend
@@ -164,14 +149,8 @@ FunctionType* void_cntxtsexp;
 FunctionType* void_cntxtsexpsexp;
 FunctionType* sexp_contxtsexpsexp;
 
-FunctionType* patchIC_t;
-FunctionType* compileIC_t;
-
 FunctionType* nativeFunction_t;
 Type* nativeFunctionPtr_t;
-
-FunctionType* patchpoint_t;
-FunctionType* stackmap_t;
 
 } // namespace t
 

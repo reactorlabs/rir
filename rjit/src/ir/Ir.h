@@ -480,6 +480,33 @@ class Switch : public Pattern {
     }
 };
 
+/** Anonymous native call.
+
+ */
+class CallToAddress : public Pattern {
+  public:
+    /** Returns the CallInst associated with the intrinsic.
+     */
+    llvm::CallInst* ins() { return Pattern::ins<llvm::CallInst>(); }
+
+    static CallToAddress* create(Builder& b, llvm::Value* fun,
+                                 std::vector<Value*> args) {
+        return new CallToAddress(
+            llvm::CallInst::Create(fun, args, "", b.block()));
+    }
+
+    static CallToAddress* create(Builder& b, llvm::Value* fun,
+                                 std::initializer_list<Value*> args) {
+        return new CallToAddress(
+            llvm::CallInst::Create(fun, args, "", b.block()));
+    }
+
+    CallToAddress(Instruction* ins) : Pattern(ins, Kind::CallToAddress) {
+        assert(llvm::isa<llvm::CallInst>(ins) and
+               "Intrinsics must be llvm calls");
+    }
+};
+
 /** Base class for all intrinsics.
 
  */
