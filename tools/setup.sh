@@ -35,6 +35,10 @@ RJIT_BUILD_TYPE="Debug"
 LLVM_TYPE=""
 LLVM_BUILD_TYPE="Debug"
 LOG_FILE_NAME="log"
+USING_OSX=0
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    USING_OSX=1
+fi
 
 function usage() {
   echo "usage: ./${0} [options]"
@@ -43,11 +47,11 @@ function usage() {
   echo
   echo "-n|--ninja                Use ninja instead of make"
   echo "-f|--gnur-flags  aflag    Pass aflag as CFLAGS to gnur     Default: -O0"
-  echo "-d|--deps-target path     Directory to checkout deps       Default: .."        
+  echo "-d|--deps-target path     Directory to checkout deps       Default: .."
   echo "-l|--skip-llvm            Skip llvm"
   echo "-r|--skip-freshr          Skip R-3-2"
   echo "-b|--skip-run             Skip running the benchmark"
-  echo "-p|--skip-package         Skip creating the Rjit package"  
+  echo "-p|--skip-package         Skip creating the Rjit package"
   echo "--llvm-release            Build llvm in release mode"
   echo "--rjit-release            Build rjit in release mode"
   echo "--add-clang               additionally build clang"
@@ -126,7 +130,10 @@ case $key in
     OPT="-O2"
     BENCH_RUN=1
     BENCH_RUN_NUM="$2"
-    shift # past argument
+    shift;
+    if [[ "$BENCH_RUN_NUMBER" == "" ]]; then
+        BENCH_RUN_NUM=10
+    fi
     ;;
     *)
     echo "Flag $key unknown"
@@ -157,10 +164,10 @@ R_DIR=${TARGET}/gnur
 TESTR_DIR=${TARGET}/testr
 FRESH_R_DIR=${TARGET}/freshr
 
-# the location of the benchmark directory 
+# the location of the benchmark directory
 BENCH_DIR=${SRC_DIR}/benchmarks
 
-# check the .git of the rjit directory 
+# check the .git of the rjit directory
 test -d ${SRC_DIR}/.git
 IS_GIT_CHECKOUT=$?
 
@@ -233,20 +240,20 @@ if [ $SKIP_LLVM -eq 0 ]; then
     fi
 
     cd ${LLVM_TARGET}
-    
+
     LLVM_SRC_F=llvm-src-${LLVM_VERS}
     LLVM_SRC=${LLVM_TARGET}/${LLVM_SRC_F}
-    
+
     if [ ! -d ${LLVM_SRC} ]; then
         echo "-> checking out llvm ${LLVM_VERS} to ${LLVM_SRC}"
-    
+
         svn co http://llvm.org/svn/llvm-project/llvm/tags/RELEASE_${LLVM_VERS}/final/ llvm-src-${LLVM_VERS}
     else
         echo "-> svn revert ${LLVM_SRC}"
         cd ${LLVM_SRC}
         svn revert .
     fi
- 
+
     if [ $CLANG -eq 1 ]; then
         if [ ! -d ${LLVM_SRC}/tools/clang ]; then
             echo "-> checking out clang"
@@ -254,7 +261,7 @@ if [ $SKIP_LLVM -eq 0 ]; then
             svn co http://llvm.org/svn/llvm-project/cfe/tags/RELEASE_${LLVM_VERS}/final/ clang
         fi
     fi
-    
+
     echo "-> building llvm to ${LLVM_BUILD_DIR}"
     mkdir -p $LLVM_BUILD_DIR
     cd $LLVM_BUILD_DIR
@@ -264,16 +271,16 @@ if [ $SKIP_LLVM -eq 0 ]; then
     $M
 fi
 
-# build gnur if SKIP_GNUR is 0 
+# build gnur if SKIP_GNUR is 0
 if [ $SKIP_GNUR -eq 0 ]; then
     if [ $SKIP_GNUR_CONFIG -eq 0 ]; then
         if [ ! -d $R_DIR ]; then
             cd $TARGET
-            echo "-> checking out gnur" 
+            echo "-> checking out gnur"
             git clone https://bitbucket.org/reactorl/gnur
         fi
-        
-        echo "-> git checkout gnur branch rllvm" 
+
+        echo "-> git checkout gnur branch rllvm"
         cd $R_DIR
         git checkout rllvm
 
@@ -284,9 +291,9 @@ if [ $SKIP_GNUR -eq 0 ]; then
         else
             git pull
         fi
-        
+
         echo "-> configure gnur"
-        if [[ "$OSTYPE" == "darwin"* ]]; then
+        if [ $USING_OSX -eq 1 ]; then
           # Mac OSX
           F77="gfortran -arch x86_64" FC="gfortran -arch x86_64" CXXFLAGS="$OPT -fno-omit-frame-pointer -gdwarf-2 -g3 -arch x86_64" CFLAGS="$OPT -fno-omit-frame-pointer -gdwarf-2 -g3 -arch x86_64" ./configure --with-blas --with-lapack --with-ICU=no --with-system-xz=no --with-system-zlib=no --with-x=no --without-recommended-packages
         else
@@ -299,14 +306,14 @@ if [ $SKIP_GNUR -eq 0 ]; then
     touch doc/FAQ
     echo "Revision: -99" > SVN-REVISION
     rm -f non-tarball
-    
+
     echo "-> build gnur"
     make -j${CORES}
 fi
 
 if [ ! -d $TESTR_DIR ]; then
     cd $TARGET
-    echo "-> checking out testr" 
+    echo "-> checking out testr"
     git clone https://github.com/allr/testr.git testr
 else
     cd $TESTR_DIR
@@ -342,40 +349,13 @@ if [ $BENCH_RUN -eq 1 ]; then
 
         # install the rjit package
         echo "-> create the rjit packages"
-        ninja package_install
+        $M package_install
     fi
 
     if [ $SKIP_FRESHR -eq 0 ]; then
         cd ${TARGET}
 
-        # create the freshr directory 
-        if [ ! -d ${FRESH_R_DIR} ]; then
-            mkdir ${FRESH_R_DIR}
-        fi
-
-        cd ${FRESH_R_DIR}
-    
-        FRESH_R_VERS_F=R-${FRESH_R_VERS}-branch
-        FRESH_R_SRC=${FRESH_R_DIR}/${FRESH_R_VERS_F}/
-
-        # checkout R-3-2 from svn
-        if [ ! -d ${FRESH_R_SRC} ]; then    
-            echo "-> checking out ${FRESH_R_VERS_F} to ${FRESH_R_SRC}"
-            svn co https://svn.r-project.org/R/branches/${FRESH_R_VERS_F}/ ${FRESH_R_SRC}
-        fi
-        cd ${FRESH_R_SRC}
-
-        # download the set of recommended packages for R-3-2
-        echo "-> checking out the recommended packages"
-        ./tools/rsync-recommended
-
-        # configure the make file
-        echo "-> building the config file"
-        ./configure
-
-        # make the R-3-2
-        echo "-> building a fresh copy of ${FRESH_R_VERS_F} to ${FRESH_R_DIR}"
-        make
+        build_freshr ${FRESH_R_DIR} ${FRESH_R_VERSION} ${OPT}
     fi
 
     SHOOT_DIR=${BENCH_DIR}/shootout/
@@ -387,8 +367,8 @@ if [ $BENCH_RUN -eq 1 ]; then
 
     # Once everything is built, run the benchmark -> calculate the median -> print the graph
     # runbench -> calclog -> graphlog
-    
-    # set up the first line in the log.txt file: type, file name, run_1, ..., run_n. 
+
+    # set up the first line in the log.txt file: type, file name, run_1, ..., run_n.
     # this is required if the log.txt is loaded as a csv file, since the first line is the names of the df.
 
 
@@ -396,7 +376,7 @@ if [ $BENCH_RUN -eq 1 ]; then
     # cd into a directory that will be scp to Jan's machine.
     # so this shouldn't be the benchmark directory
 
-    TIMEN=$(date +"%I-%M-%S_%F")
+    TIMEN=$(date +"%H-%M-%S_%F")
     MACHINEN=$(whoami)@$(hostname)
 
     BENCH_NAME=benchmark-${MACHINEN}-${TIMEN}
@@ -411,8 +391,8 @@ if [ $BENCH_RUN -eq 1 ]; then
 
     if [ $SKIP_RUN -eq 0 ]; then
     # runbench
-        echo "-> start running the shootout benchmark "    
-        for x in ` find ${SHOOT_DIR} -name "*.r" `; do 
+        echo "-> start running the shootout benchmark "
+        for x in ` find ${SHOOT_DIR} -name "*.r" `; do
             echo "-> running $x"
 
             R_LIBS_USER=${CURRENT_DIR}/packages R_ENABLE_JIT=5 ${TARGET}/gnur/bin/R -e "source(\"${SRC_DIR}/benchmarks/run.r\");runbench(\"$x\", \"${LOG_FILE}\", \"rjit\", ${BENCH_RUN_NUM})" > /dev/null
@@ -421,17 +401,17 @@ if [ $BENCH_RUN -eq 1 ]; then
         done
     fi
 
-    # there seems to be a bug when I try to graph with R_ENABLE_JIT=3 
+    # there seems to be a bug when I try to graph with R_ENABLE_JIT=3
     # calclog and graphlog
     echo "-> graphing ${LOG_FILE}"
     ${FRESH_R_BIN} -e "source(\"${SRC_DIR}/benchmarks/run.r\");source(\"${SRC_DIR}/benchmarks/graphlog.r\");graphlog(calclog(\"${LOG_FILE}\"),\"${RESULT_DIR}/log-graph\")" > /dev/null
- 
+
     # print config file this should include:
     # ------- the flags used to be build LLVM, GNUR, RJIT, R-3-2-Branch
     # ------- the R_ENABLE_JIT flag for both the GNUR and RJIT runs of the benchmark
     # ------- the time and date of the day
     # ------- the OS
-    # ------- detail/spec of the machine 
+    # ------- detail/spec of the machine
     CONFIG_FILE=${RESULT_DIR}/config.txt
 
     cd ${RESULT_DIR}
@@ -439,51 +419,53 @@ if [ $BENCH_RUN -eq 1 ]; then
     # gcc --version
     gcc --version >> ${CONFIG_FILE}
 
-    # fortran version 
+    # fortran version
     gfortran --version >> ${CONFIG_FILE}
 
     # rjit build flags
     echo "-> RJIT build flags: -G \"$GEN\" -DTESTR_DIR=$TESTR_DIR -DLLVM_DIR=\"${LLVM_BUILD_DIR}\"/share/llvm/cmake -DR_HOME=\"$R_DIR\" -DCMAKE_BUILD_TYPE=\"${RJIT_BUILD_TYPE}\" \"$SRC_DIR\"" >> ${CONFIG_FILE}
 
     # gnur build flags
-    echo "-> GNUR build flags: CXXFLAGS=\"$OPT\" -fno-omit-frame-pointer -gdwarf-2 -g3 CFLAGS=\"$OPT\" -fno-omit-frame-pointer -gdwarf-2 -g3 ./configure --with-blas --with-lapack --with-ICU=no --with-system-xz=no --with-system-zlib=no --with-x=no --without-recommended-packages" >> ${CONFIG_FILE}    
+    echo "-> GNUR build flags: CXXFLAGS=\"$OPT\" -fno-omit-frame-pointer -gdwarf-2 -g3 CFLAGS=\"$OPT\" -fno-omit-frame-pointer -gdwarf-2 -g3 ./configure --with-blas --with-lapack --with-ICU=no --with-system-xz=no --with-system-zlib=no --with-x=no --without-recommended-packages" >> ${CONFIG_FILE}
 
     # llvm build flags
     echo "-> LLVM build flags: -G \"$GEN\" -DLLVM_OPTIMIZED_TABLEGEN=1 -DLLVM_ENABLE_RTTI=1 -DLLVM_TARGETS_TO_BUILD=X86;CppBackend -DCMAKE_BUILD_TYPE=\"${LLVM_BUILD_TYPE}\" --enable-debug-symbols --with-oprofile \"${LLVM_SRC}\"" >> ${CONFIG_FILE}
 
     # additional packages
-    echo "-> Additional packages for R-3-2: ggplots2" >> ${CONFIG_FILE}    
+    echo "-> Additional packages for R-3-2: ggplots2" >> ${CONFIG_FILE}
 
-    # date 
+    # date
     date >> ${CONFIG_FILE}
 
-    # cat /etc/debian_version 
+    # cat /etc/debian_version
     cat /etc/debian_version >> ${CONFIG_FILE}
 
     # cat /proc/version
     cat /proc/version >> ${CONFIG_FILE}
 
-    # cat /etc/lsb-release 
+    # cat /etc/lsb-release
     cat /etc/lsb-release >> ${CONFIG_FILE}
 
-    # lscpu
-    lscpu >> ${CONFIG_FILE}
-
-    # lshw
-    lshw >> ${CONFIG_FILE}
+    # lscpu/lshw or sysctl hw
+    if [ $USING_OSX eq 1]; then
+        lscpu >> ${CONFIG_FILE}
+        lshw >> ${CONFIG_FILE}
+    else
+        system_profiles >> ${CONFIG_FILE}
+    fi
 
     # tar the result directory and scp the tar into Jan's machine
     cd ${BENCH_DIR}
 
     echo "-> Storing the benchmark data and graph to remote site (please put up your tray table,"
     echo "store your any carry on luggage underneath the seat in front of you, and have your password ready)"
-    
+
     # Jan's machine must be on the list of known hosts, a ssh-keygen for Jan's machine should have been setup
     tar cvzf ${RESULT_DIR}.tar ${RESULT_DIR}
     scp -p ${RESULT_DIR}.tar teamcity@reactor.ccs.neu.edu:/Users/teamcity/reactorl/benchmark_result
 
     # Possibly delete everything created once the result are sent off?
-fi 
+fi
 
 
 
