@@ -21,25 +21,16 @@ class ConstantLoadPass : public Pass {
     ConstantLoadPass() : Pass() {}
 
     match u(UserLiteral* var) {
-        // TODO This is ugly, make getModule() in pattern, or in the builder, in
-        // fact TODO make the builder:)
-        Module* m = var->result()->getParent()->getParent()->getParent();
-        auto res = ir::VectorGetElement::create(
-            var->first(), m->getContext(), var->constantPool(),
-            ir::Builder::integer(var->index()));
-        ir::MarkNotMutable::create(var->first(), m->getContext(),
-                                   res->result());
-        var->result()->replaceAllUsesWith(res->result());
-        var->result()->removeFromParent();
+        auto ve = VectorGetElement::insertBefore(var, var->constantPool(), Builder::integer(var->index()));
+        MarkNotMutable::insertBefore(var, ve->result());
+        replaceAllUsesWith(var, ve);
+        eraseFromParent(var);
     }
 
     match c(Constant* var) {
-        Module* m = var->result()->getParent()->getParent()->getParent();
-        auto res = ir::VectorGetElement::create(
-            var->first(), m->getContext(), var->constantPool(),
-            ir::Builder::integer(var->index()));
-        var->result()->replaceAllUsesWith(res->result());
-        var->result()->removeFromParent();
+        auto ve = VectorGetElement::insertBefore(var, var->constantPool(), Builder::integer(var->index()));
+        replaceAllUsesWith(var, ve);
+        eraseFromParent(var);
     }
 
     bool dispatch(llvm::BasicBlock::iterator& i) override;

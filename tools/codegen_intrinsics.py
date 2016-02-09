@@ -35,6 +35,7 @@ $getters
         Intrinsic(ins, InstructionKind::$class_name) { }
 
 $static_ctr
+$static_insert
 
     static char const* intrinsicName() {
         return "$intrinsic_name";
@@ -59,18 +60,37 @@ STATIC_CTR_TEMPLATE = Template("""    static $class_name & create(
 
         std::vector<llvm::Value*> args_;
 $args_load
-        llvm::CallInst* ins = llvm::CallInst::Create(
+        llvm::CallInst* i = llvm::CallInst::Create(
             b.intrinsic<$class_name>(),
             args_,
             "",
             b);
 
-        b.insertCall(ins);
-        $class_name * result = new $class_name(ins);
-        setIR(ins, result);
-        //setIRType(ins, InstructionKind::$class_name);
-        return *result;
+        Builder::markSafepoint(i);
+        return new $class_name(i);
     }""")
+
+STATIC_INSERT_TEMPLATE = Template("""    static $class_name * insertBefore (
+            llvm::Instruction * ins$args) {
+
+        std::vector<llvm::Value*> args_;
+$args_load
+        llvm::CallInst* i = llvm::CallInst::Create(
+            primitiveFunction<$class_name>(ins->getModule()),
+            args_,
+            "",
+            ins);
+
+        Builder::markSafepoint(i);
+        return new $class_name(i);
+    }
+
+    static $class_name * insertBefore(Pattern * p$args) {
+        return insertBefore(p->first()$args_names);
+    }
+    """)
+
+
 
 
 class Intrinsic:
@@ -205,6 +225,7 @@ class Intrinsic:
             getters += "\n"
         # static constructor
         staticCtr = self.staticConstructor()
+        staticInsert = self.staticInsert()
 
         c = ""
         if self.comment:
@@ -220,6 +241,7 @@ class Intrinsic:
                 class_name=self.className,
                 getters=getters,
                 static_ctr=staticCtr,
+                static_insert=staticInsert,
                 intrinsic_name=self.name,
                 return_type=self.typeToIr(self.returnType),
                 arg_types=self.irArgTypes())
@@ -233,7 +255,7 @@ class Intrinsic:
         elif (x == "constint"):
             return "int"
         else:
-            return "llvm::Value*"
+            return "ir::Value"
 
     def convertArgumentToValue(self, index):
         x = self.argTypes[index]
@@ -272,6 +294,39 @@ class Intrinsic:
             class_name=self.className,
                 args=sig,
                 args_load=load)
+
+    def staticInsert(self):
+        """ Returns the c++ code for the static insertBefore method for the
+        intrinsic call.
+
+        Takes constants from builder and SEXPs as constants, these are added to
+        the constant pool.
+        """
+        # signature
+        sig = ""
+        if len(self.argNames) > 0:
+            sig = ",\n"
+        for i in range(0, len(self.argNames)):
+            x = self.staticConstructorArgType(i)
+            if (x):
+                sig += "            " + x + " " + self.argNames[i] + ",\n"
+        sig = sig[0:-2]
+
+        load = ""
+        for i in range(0, len(self.argNames)):
+            load += "        args_.push_back({0});\n".format(
+                self.convertArgumentToValue(i))
+
+
+        argsNames = "," if self.argNames else ""
+        argsNames += ",".join(self.argNames)
+
+        return STATIC_INSERT_TEMPLATE.substitute(
+            class_name=self.className,
+                args=sig,
+                args_names=argsNames,
+                args_load=load)
+
 
     def argumentGetterCode(self, index):
         t = self.argTypes[index]

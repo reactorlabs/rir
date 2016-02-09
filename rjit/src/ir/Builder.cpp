@@ -69,12 +69,24 @@ Builder::ICContext::ICContext(std::string name, JITModule* m,
     args_.push_back(stackmapId);
 }
 
+llvm::BasicBlock* Builder::createBasicBlock() {
+    return llvm::BasicBlock::Create(m_->getContext(), "", c_->f);
+}
+
+
+llvm::BasicBlock* Builder::createBasicBlock(std::string const& name) {
+    return llvm::BasicBlock::Create(m_->getContext(), name, c_->f);
+}
+
+
 void Builder::openFunction(std::string const& name, SEXP ast, SEXP formals) {
     if (c_ != nullptr)
         contextStack_.push(c_);
     c_ = new ClosureContext(name, m_, formals);
     c_->addConstantPoolObject(ast);
 }
+
+
 
 SEXP Builder::closeFunction() {
     assert((contextStack_.empty() or (contextStack_.top()->f != c_->f)) and

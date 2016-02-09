@@ -66,6 +66,11 @@ ExecutionEngine* JITCompileLayer::getEngine(JITModule* m) {
     pm.add(rjit::createPlaceRJITSafepointsPass());
     pm.add(rjit::createRJITRewriteStatepointsForGCPass());
 
+    /*for (llvm::Function& f : m->getFunctionList()) {
+        std::cerr << "--------------------------------------" << std::endl;
+        f.dump();
+    }*/
+
     pm.run(*m);
 
     engine->finalizeObject();

@@ -39,6 +39,46 @@ class Pass {
     virtual match defaultMatch(llvm::Instruction* ins) {
         // ins->dump();
     }
+
+protected:
+    void replaceAllUsesWith(llvm::Instruction * o, llvm::Instruction * n) {
+        o->replaceAllUsesWith(n);
+    }
+
+    void replaceAllUsesWith(llvm::Instruction * o, Pattern * n) {
+        o->replaceAllUsesWith(n->ins_);
+    }
+
+    void replaceAllUsesWith(Pattern * o, llvm::Instruction * n) {
+        o->ins_->replaceAllUsesWith(n);
+    }
+
+    void replaceAllUsesWith(Pattern * o, Pattern * n) {
+        o->ins_->replaceAllUsesWith(n->ins_);
+    }
+
+    void removeFromParent(llvm::Instruction * ins) {
+        ins->removeFromParent();
+    }
+
+    void eraseFromParent(llvm::Instruction * ins) {
+        ins->eraseFromParent();
+    }
+
+    void eraseFromParent(Pattern * p) {
+        llvm::Instruction * last = p->last();
+        llvm::Instruction * i = p->first();
+        while (true) {
+            if (i == last) {
+                i->eraseFromParent();
+                delete p;
+                return;
+            }
+            llvm::Instruction * ii = i;
+            i= i->getNextNode();
+            ii->eraseFromParent();
+        }
+    }
 };
 
 /** Predicates mockup

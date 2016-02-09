@@ -143,7 +143,7 @@ Value* Compiler::compileICCallStub(Value* call, Value* op,
     ic_args.push_back(b.f());
     ic_args.push_back(ConstantInt::get(getGlobalContext(), APInt(64, smid)));
 
-    auto res = CallInst::Create(ic_stub, ic_args, "", b.block());
+    auto res = CallInst::Create(ic_stub, ic_args, "", b);
     AttributeSet PAL;
     {
         SmallVector<AttributeSet, 4> Attrs;
@@ -582,11 +582,11 @@ Value* Compiler::compileForLoop(SEXP ast) {
     BasicBlock* forStart = b.block();
     ir::Branch::create(b, forCond);
     b.setBlock(forCond);
-    PHINode* control = PHINode::Create(t::Int, 2, "loopControl", b.block());
+    PHINode* control = PHINode::Create(t::Int, 2, "loopControl", b);
     control->addIncoming(b.integer(0), forStart);
     // now check if control is smaller than length
-    ICmpInst* test = ir::UnsignedIntegerLessThan::create(b, control, seqLength);
-    BranchInst::Create(forBody, b.breakTarget(), test, b.block());
+    auto test = ir::UnsignedIntegerLessThan::create(b, control, seqLength);
+    BranchInst::Create(forBody, b.breakTarget(), test->result(), b);
 
     // move to the for loop body, where we have to set the control variable
     // properly
@@ -715,12 +715,12 @@ Value* Compiler::compileSwitch(SEXP call) {
 
     ir::CheckSwitchControl::create(b, control, call);
     Value* ctype = ir::SexpType::create(b, control)->result();
-    ICmpInst* cond = ir::IntegerEquals::create(b, ctype, b.integer(STRSXP));
+    auto cond = ir::IntegerEquals::create(b, ctype, b.integer(STRSXP));
     BasicBlock* switchIntegral = b.createBasicBlock("switchIntegral");
     BasicBlock* switchCharacter = b.createBasicBlock("switchCharacter");
     BasicBlock* switchNext = b.createBasicBlock("switchNext");
 
-    BranchInst::Create(switchCharacter, switchIntegral, cond, b.block());
+    BranchInst::Create(switchCharacter, switchIntegral, cond->result(), b);
 
     // integral switch is simple
     b.setBlock(switchIntegral);
@@ -748,7 +748,7 @@ Value* Compiler::compileSwitch(SEXP call) {
         ir::Switch::create(b, caseCharacter, switchNext, caseAsts.size());
     // create the phi node at the end
     b.setBlock(switchNext);
-    PHINode* result = PHINode::Create(t::SEXP, caseAsts.size(), "", b.block());
+    PHINode* result = PHINode::Create(t::SEXP, caseAsts.size(), "", b);
     // walk the cases and create their blocks, add them to switches and their
     // results to the phi node
     // TODO: fix empty switch
