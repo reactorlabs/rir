@@ -359,8 +359,8 @@ class CppClass:
                     self.line = child.get("line")
 
     def includePath(self):
-        """ Returns the include path of this file, i.e. what should go in the include statement. """
-        return self.file[len(cppRoot) + 1:]
+        """ Returns the include path of this file, i.e. what should go in the include statement.Some versions of doxygen don't generate absolute path, in that case rjit/src just need to be removed from the path."""
+        return self.file[len(cppRoot) + 1:] if cppRoot in self.file else self.file[9:]
 
     def isLeaf(self):
         """ Returns True if the class has no subclasses. """
