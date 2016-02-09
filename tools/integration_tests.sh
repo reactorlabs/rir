@@ -12,6 +12,8 @@ export R="${R_HOME}/bin/R"
 
 cd "${SCRIPTPATH}/.."
 
+cmake --build $BUILD_DIR --target tests
+
 echo "==> Testing R CMD check"
 cmake --build $BUILD_DIR --target package_check
 
