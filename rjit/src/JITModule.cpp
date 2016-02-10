@@ -1,6 +1,13 @@
 #include "JITModule.h"
+#include "RIntlns.h"
 
 using namespace llvm;
+
+SEXP JITModule::formals(llvm::Function* f) {
+    return formals_.count(f) ? formals_.at(f) : R_NilValue;
+}
+
+SEXP JITModule::constPool(llvm::Function* f) { return CDR(relocations.at(f)); }
 
 SEXP JITModule::getNativeSXP(SEXP formals, SEXP ast,
                              std::vector<SEXP> const& objects, Function* f) {

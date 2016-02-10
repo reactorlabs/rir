@@ -193,9 +193,7 @@ class Builder {
             llvm::AttributeSet PAS;
             {
                 llvm::AttrBuilder B;
-                auto id = JITCompileLayer::singleton.getSafepointId(
-                    f->getParent()->getParent());
-                B.addAttribute("statepoint-id", std::to_string(id));
+                B.addAttribute("needs-statepoint");
                 PAS = llvm::AttributeSet::get(m_->getContext(), ~0U, B);
             }
             Attrs.push_back(PAS);

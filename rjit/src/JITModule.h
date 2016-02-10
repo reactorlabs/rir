@@ -3,7 +3,7 @@
 
 #include "llvm.h"
 
-#include "RIntlns.h"
+#include "RDefs.h"
 
 #include <unordered_map>
 
@@ -17,10 +17,8 @@ class JITModule : public llvm::Module {
 
     void finalizeNativeSEXPs(llvm::ExecutionEngine* engine);
 
-    SEXP constPool(llvm::Function* f) { return CDR(relocations.at(f)); }
-    SEXP formals(llvm::Function* f) {
-        return formals_.count(f) ? formals_.at(f) : R_NilValue;
-    }
+    SEXP constPool(llvm::Function* f);
+    SEXP formals(llvm::Function* f);
 
   private:
     /** List of relocations to be done when compiling.

@@ -119,8 +119,6 @@ Value* Compiler::compileSymbol(SEXP value) {
 
 Value* Compiler::compileICCallStub(Value* call, Value* op,
                                    std::vector<Value*>& callArgs) {
-    uint64_t smid = JITCompileLayer::singleton.getSafepointId(b.f());
-
     auto size = callArgs.size();
 
     Function* ic_stub;
@@ -128,7 +126,6 @@ Value* Compiler::compileICCallStub(Value* call, Value* op,
         ir::Builder b_(b.module());
         ic_stub = ICCompiler::getStub(callArgs.size(), b_);
     }
-    JITCompileLayer::singleton.setPatchpoint(smid, size);
 
     std::vector<Value*> ic_args;
     // Closure arguments
@@ -141,7 +138,7 @@ Value* Compiler::compileICCallStub(Value* call, Value* op,
     ic_args.push_back(op);
     ic_args.push_back(b.rho());
     ic_args.push_back(b.f());
-    ic_args.push_back(ConstantInt::get(getGlobalContext(), APInt(64, smid)));
+    ic_args.push_back(ConstantInt::get(getGlobalContext(), APInt(64, 0)));
 
     auto res = CallInst::Create(ic_stub, ic_args, "", b);
     AttributeSet PAL;
@@ -150,9 +147,7 @@ Value* Compiler::compileICCallStub(Value* call, Value* op,
         AttributeSet PAS;
         {
             AttrBuilder B;
-            B.addAttribute("statepoint-id", std::to_string(smid));
-            B.addAttribute("statepoint-num-patch-bytes",
-                           std::to_string(patchpointSize));
+            B.addAttribute("ic-stub", std::to_string(size));
             PAS = AttributeSet::get(b.getContext(), ~0U, B);
         }
         Attrs.push_back(PAS);
