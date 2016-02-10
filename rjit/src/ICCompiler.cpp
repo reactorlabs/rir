@@ -136,7 +136,7 @@ Function* ICCompiler::compileCallStub() {
 }
 
 bool ICCompiler::compileIc(SEXP inCall, SEXP inFun) {
-    //auto f = b.f();
+    // auto f = b.f();
 
     if (TYPEOF(inFun) == CLOSXP) {
         std::vector<bool> promarg(size, false);
@@ -287,7 +287,8 @@ void ICCompiler::compileSpecialIC() {
     BranchInst::Create(icMatch, icMiss, test, b);
     b.setBlock(icMatch);
 
-    Value* res = ir::CallSpecial::create(b, call(), fun(), b.convertToPointer(R_NilValue), b.rho())
+    Value* res = ir::CallSpecial::create(
+                     b, call(), fun(), b.convertToPointer(R_NilValue), b.rho())
                      ->result();
     ir::Return::create(b, res);
 

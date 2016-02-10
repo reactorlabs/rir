@@ -21,14 +21,16 @@ class ConstantLoadPass : public Pass {
     ConstantLoadPass() : Pass() {}
 
     match u(UserLiteral* var) {
-        auto ve = VectorGetElement::insertBefore(var, var->constantPool(), Builder::integer(var->index()));
+        auto ve = VectorGetElement::insertBefore(
+            var, var->constantPool(), Builder::integer(var->index()));
         MarkNotMutable::insertBefore(var, ve->result());
         replaceAllUsesWith(var, ve);
         eraseFromParent(var);
     }
 
     match c(Constant* var) {
-        auto ve = VectorGetElement::insertBefore(var, var->constantPool(), Builder::integer(var->index()));
+        auto ve = VectorGetElement::insertBefore(
+            var, var->constantPool(), Builder::integer(var->index()));
         replaceAllUsesWith(var, ve);
         eraseFromParent(var);
     }

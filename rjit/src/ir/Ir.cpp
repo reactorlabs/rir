@@ -7,7 +7,8 @@ namespace ir {
 
 char const* const Pattern::MD_NAME = "r_ir_type";
 
-llvm::Instruction * const ir::Pattern::Sentinel::singleton = (new ir::Nop())->ins_;
+llvm::Instruction* const ir::Pattern::Sentinel::singleton =
+    (new ir::Nop())->ins_;
 
 } // namespace ir
 

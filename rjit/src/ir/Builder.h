@@ -26,11 +26,21 @@ class Nop;
 
   <b>Sentinels</b>
 
-  The builder inserts a sentinel (ir::Nop) to each basic block when they are created. The sentinel is then used by create() methods of all patterns so that they can route to insertBefore() methods and we do not have to deal with code duplication in these two methods (create effectively becomes insertBefore sentinel).
+  The builder inserts a sentinel (ir::Nop) to each basic block when they are
+  created. The sentinel is then used by create() methods of all patterns so that
+  they can route to insertBefore() methods and we do not have to deal with code
+  duplication in these two methods (create effectively becomes insertBefore
+  sentinel).
 
-  However adding the sentinels creates problems for llvm as it means that terminators are not last instructions in a bb. So closing functions for ICs and functions now call removeSentinels() which removes the sentinels from all basic blocks in the function. Of course after this, the create methods may no longer be used on the function.
+  However adding the sentinels creates problems for llvm as it means that
+  terminators are not last instructions in a bb. So closing functions for ICs
+  and functions now call removeSentinels() which removes the sentinels from all
+  basic blocks in the function. Of course after this, the create methods may no
+  longer be used on the function.
 
-  When adding llvm instructions manually one has to be aware of this and instead of llvm::BasicBlock * atEnd functions, insertBefore ones should be used, where Builder.blockSentinel()->first() gives the instruction to insert before.
+  When adding llvm instructions manually one has to be aware of this and instead
+  of llvm::BasicBlock * atEnd functions, insertBefore ones should be used, where
+  Builder.blockSentinel()->first() gives the instruction to insert before.
 
   */
 class Builder {
@@ -176,14 +186,15 @@ class Builder {
     /** Given a call instruction, sets its attributes wrt stack map statepoints.
      */
     static llvm::CallInst* markSafepoint(llvm::CallInst* f) {
-        llvm::Module * m_ = f->getModule();
+        llvm::Module* m_ = f->getModule();
         llvm::AttributeSet PAL;
         {
             llvm::SmallVector<llvm::AttributeSet, 4> Attrs;
             llvm::AttributeSet PAS;
             {
                 llvm::AttrBuilder B;
-                auto id = JITCompileLayer::singleton.getSafepointId(f->getParent()->getParent());
+                auto id = JITCompileLayer::singleton.getSafepointId(
+                    f->getParent()->getParent());
                 B.addAttribute("statepoint-id", std::to_string(id));
                 PAS = llvm::AttributeSet::get(m_->getContext(), ~0U, B);
             }

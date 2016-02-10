@@ -9,24 +9,13 @@
 
   */
 
-
 #include "llvm.h"
 #include "RIntlns.h"
 
-
-
-
-class Value {
-
-
-
-
-};
-
-
+class Value {};
 
 class Shape {
-public:
+  public:
     enum class Type {
         scalarDouble,
         scalarInteger,
@@ -35,20 +24,12 @@ public:
     };
 };
 
-
-
 /** This is a simple state that cares about registers and variables.
  */
-template<typename VALUE>
+template <typename VALUE>
 class State {
-public:
-
-
-
-protected:
-    std::map<llvm::Instruction *, VALUE> registers_;
+  public:
+  protected:
+    std::map<llvm::Instruction*, VALUE> registers_;
     std::map<SEXP, VALUE> variables_;
-
-
-
 };
