@@ -411,7 +411,7 @@ static Value* ReplaceWithStatepoint(const CallSite& CS, /* to replace */
             ConstantInt::get(CS->getParent()->getParent()->getContext(),
                              APInt(64, ID)));
 
-        AttrsToRemove.addAttribute("icStub");
+        AttrsToRemove.addAttribute("ic-stub");
     }
 
     OriginalAttrs = OriginalAttrs.removeAttributes(
