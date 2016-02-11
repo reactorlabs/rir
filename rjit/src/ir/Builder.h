@@ -47,6 +47,8 @@ class Builder {
   public:
     Builder(const Builder&) = delete;
 
+    void doGcCallback(void (*forward_node)(SEXP));
+
     explicit Builder(std::string const& moduleName)
         : Builder(new JITModule(moduleName, llvm::getGlobalContext())) {}
 
@@ -122,7 +124,7 @@ class Builder {
     void openLoop() {
         assert(c_ != nullptr and
                "Cannot open loop context when not in function");
-        contextStack_.push(c_);
+        contextStack_.push_back(c_);
         c_ = c_->clone();
         c_->breakTarget = createBasicBlock("break");
         c_->nextTarget = createBasicBlock("next");
@@ -132,12 +134,12 @@ class Builder {
      */
     void closeLoop() {
         assert(not contextStack_.empty() and
-               (contextStack_.top()->f == c_->f) and
+               (contextStack_.back()->f == c_->f) and
                "Cannot close loop w/o loop context");
         // we are guaranteed to have a previous context and the context is from
         // same function
-        Context* x = contextStack_.top();
-        contextStack_.pop();
+        Context* x = contextStack_.back();
+        contextStack_.pop_back();
         // update the current basic block and objects from popped context to the
         // next current one
         x->b = c_->b;
@@ -275,7 +277,6 @@ class Builder {
          * field.
          */
         unsigned addConstantPoolObject(SEXP object) {
-            PROTECT(object);
             cp.push_back(object);
             return cp.size() - 1;
         }
@@ -378,7 +379,7 @@ class Builder {
 
     /** Stack of active contexts.
      */
-    std::stack<Context*> contextStack_;
+    std::deque<Context*> contextStack_;
 
     /** List of relocations to be done when compiling.
 

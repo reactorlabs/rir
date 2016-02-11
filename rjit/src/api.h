@@ -7,4 +7,6 @@ extern int RJIT_COMPILE;
 extern int R_ENABLE_JIT;
 extern int RJIT_DEBUG;
 
+extern int rjit_startup;
+
 #endif // API_H_

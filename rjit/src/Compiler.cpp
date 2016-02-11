@@ -786,6 +786,18 @@ Value* Compiler::compileSwitch(SEXP call) {
     return result;
 }
 
+std::set<Compiler*> Compiler::_instances;
+
+void Compiler::gcCallback(void (*forward_node)(SEXP)) {
+    for (Compiler* c : _instances) {
+        c->doGcCallback(forward_node);
+    }
+};
+
+void Compiler::doGcCallback(void (*forward_node)(SEXP)) {
+    b.doGcCallback(forward_node);
+};
+
 /** Compiles operators that can be either binary, or unary, based on the number
  * of call arguments. Takes the binary and unary intrinsics to be used and the
  * full call ast.

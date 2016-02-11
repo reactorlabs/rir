@@ -5,13 +5,23 @@
 
 #include "RDefs.h"
 
+#include <set>
+
 namespace rjit {
 
 #define JUMP(block) BranchInst::Create(block, context->b)
 
 class Compiler {
   public:
-    Compiler(std::string const& moduleName) : b(moduleName) {}
+    Compiler(std::string const& moduleName) : b(moduleName) {
+        _instances.insert(this);
+    }
+
+    ~Compiler() { _instances.erase(this); }
+
+    static std::set<Compiler*> _instances;
+    static void gcCallback(void (*forward_node)(SEXP));
+    void doGcCallback(void (*forward_node)(SEXP));
 
     SEXP compile(std::string const& name, SEXP bytecode, SEXP formals) {
         SEXP result = compileFunction(name, bytecode, formals);

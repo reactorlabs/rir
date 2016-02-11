@@ -3,8 +3,6 @@
 #include "llvm/CodeGen/GCStrategy.h"
 #include "llvm/CodeGen/GCs.h"
 
-#include "StackScan.h"
-
 #include "RIntlns.h"
 
 using namespace llvm;
@@ -89,14 +87,6 @@ PointerType* initializeTypes() {
     DECLARE(void_cntxtsexpsexp, t_void, t::cntxtPtr, t::SEXP, t::SEXP);
     DECLARE(sexp_contxtsexpsexp, t::SEXP, t::cntxtPtr, t::SEXP, t::SEXP);
 #undef DECLARE
-
-    // initialize LLVM backend
-    LLVMInitializeNativeTarget();
-    LLVMInitializeNativeAsmPrinter();
-    LLVMInitializeNativeAsmParser();
-    linkStatepointExampleGC();
-
-    registerGcCallback(&StackScan::stackScanner);
 
     return t::SEXP;
 }

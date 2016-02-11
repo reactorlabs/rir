@@ -12,6 +12,8 @@ class JITModule : public llvm::Module {
     JITModule(const std::string& name, llvm::LLVMContext& ctx)
         : llvm::Module(name, ctx) {}
 
+    void doGcCallback(void (*forward_node)(SEXP));
+
     SEXP getNativeSXP(SEXP formals, SEXP ast, std::vector<SEXP> const& objects,
                       llvm::Function* f);
 

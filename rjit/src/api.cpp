@@ -15,6 +15,8 @@
 #include "ir/Builder.h"
 #include "ir/primitive_calls.h"
 
+#include "StackScan.h"
+
 using namespace rjit;
 
 /** Compiles given ast and returns the NATIVESXP for it.
@@ -96,3 +98,24 @@ REXPORT SEXP jitEnable(SEXP expression) {
     RJIT_COMPILE = true;
     return R_NilValue;
 }
+
+namespace {
+
+void rjit_gcCallback(void (*forward_node)(SEXP)) {
+    StackScan::stackScanner(forward_node);
+}
+
+int rjitStartup() {
+    // initialize LLVM backend
+    LLVMInitializeNativeTarget();
+    LLVMInitializeNativeAsmPrinter();
+    LLVMInitializeNativeAsmParser();
+    linkStatepointExampleGC();
+
+    registerGcCallback(&rjit_gcCallback);
+
+    return 1;
+}
+}
+
+int rjit_startup = rjitStartup();
