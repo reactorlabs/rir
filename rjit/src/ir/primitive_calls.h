@@ -3224,6 +3224,45 @@ class ReturnJump : public PrimitiveCall {
     }
 };
 
+class RecordType : public PrimitiveCall {
+  public:
+    RecordType(llvm::Instruction* ins) : PrimitiveCall(ins, Kind::RecordType) {}
+
+    static RecordType* create(Builder& b, ir::Value value) {
+        Sentinel s(b);
+        ir::Value store =
+            UserLiteral::insertBefore(s, b.consts(), Builder::integer(1));
+        int idx = b.getNextInstrumentationIndex();
+        return insertBefore(s, value, store, idx);
+    }
+
+    static RecordType* insertBefore(llvm::Instruction* ins, ir::Value value,
+                                    ir::Value store, int idx) {
+
+        std::vector<llvm::Value*> args_;
+        args_.push_back(value);
+        args_.push_back(store);
+        args_.push_back(Builder::integer(idx));
+
+        llvm::CallInst* i = llvm::CallInst::Create(
+            primitiveFunction<RecordType>(ins->getModule()), args_, "", ins);
+
+        Builder::markSafepoint(i);
+        return new RecordType(i);
+    }
+
+    static char const* intrinsicName() { return "recordType"; }
+
+    static llvm::FunctionType* intrinsicType() {
+        return llvm::FunctionType::get(t::Void, {t::SEXP, t::SEXP, t::Int},
+                                       false);
+    }
+
+    static bool classof(Pattern const* s) {
+        return s->getKind() == Kind::RecordType;
+    }
+};
+
 } // namespace ir
 } // namespace rjit
 #endif // INTRINSICS_H_

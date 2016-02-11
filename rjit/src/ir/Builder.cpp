@@ -5,6 +5,10 @@
 
 using namespace llvm;
 
+#include "RIntlns.h"
+#include "Protect.h"
+#include "TypeInfo.h"
+
 namespace rjit {
 namespace ir {
 
@@ -81,12 +85,30 @@ void Builder::openFunction(std::string const& name, SEXP ast, SEXP formals) {
     if (c_ != nullptr)
         contextStack_.push_back(c_);
     c_ = new ClosureContext(name, m_, formals);
-    c_->addConstantPoolObject(ast);
+    openFunctionOrPromise(ast);
 }
 
-SEXP Builder::closeFunction() {
+void Builder::openFunctionOrPromise(SEXP ast) {
+    // First entry in the const pool needs to be the ast
+    c_->addConstantPoolObject(ast);
+    // Add nil as a placeholder. Runtime type feedback will be stored in a
+    // vector allocated at the second constant pool slot.
+    c_->addConstantPoolObject(R_NilValue);
+}
+
+SEXP Builder::closeFunctionOrPromise() {
     assert((contextStack_.empty() or (contextStack_.back()->f != c_->f)) and
            "Not a function context");
+
+    // Replace slot 1 with a vector to hold runtime type feedback
+    assert(c_->cp[1] == R_NilValue);
+
+    SEXP typeFeedback = allocVector(INTSXP, c_->instrumentationIndex);
+    Protect p(typeFeedback);
+    for (int i = 0; i < c_->instrumentationIndex; ++i) {
+        INTEGER(typeFeedback)[i] = TypeInfo();
+    }
+    c_->cp[1] = typeFeedback;
 
     ClosureContext* cc = dynamic_cast<ClosureContext*>(c_);
     SEXP result = module()->getNativeSXP(cc->formals, c_->cp[0], c_->cp, c_->f);
@@ -114,7 +136,7 @@ void Builder::openPromise(std::string const& name, SEXP ast) {
     if (c_ != nullptr)
         contextStack_.push_back(c_);
     c_ = new PromiseContext(name, m_);
-    c_->addConstantPoolObject(ast);
+    openFunctionOrPromise(ast);
 }
 
 void Builder::doGcCallback(void (*forward_node)(SEXP)) {

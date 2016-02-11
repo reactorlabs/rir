@@ -24,7 +24,7 @@ class JITCompileLayer {
 
     static JITCompileLayer singleton;
 
-    ExecutionEngine* getEngine(JITModule* m);
+    ExecutionEngine* finalize(JITModule* m);
     uint64_t getSafepointId(llvm::Function* f);
     void setPatchpoint(uint64_t i, unsigned stubSize) {
         patchpoints[i] = stubSize;

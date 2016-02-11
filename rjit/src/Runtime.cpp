@@ -59,7 +59,7 @@ extern "C" void* compileIC(uint64_t numargs, SEXP call, SEXP fun, SEXP rho,
     if (compile) {
         Compiler c("module");
         SEXP result = c.compile(name, body, formals);
-        c.jitAll();
+        c.finalize();
         if (RJIT_DEBUG)
             std::cout << "Compiled " << name << " @ " << (void*)result << "\n";
         SETCDR(fun, result);

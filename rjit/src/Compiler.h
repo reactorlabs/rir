@@ -33,7 +33,7 @@ class Compiler {
 
     SEXP finalizeCompile(SEXP ast);
 
-    void jitAll();
+    void finalize();
 
   private:
     /** Compiles an expression.

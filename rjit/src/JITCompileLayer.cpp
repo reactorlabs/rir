@@ -28,7 +28,7 @@ using namespace llvm;
 
 namespace rjit {
 
-ExecutionEngine* JITCompileLayer::getEngine(JITModule* m) {
+ExecutionEngine* JITCompileLayer::finalize(JITModule* m) {
     // to the function tells DynamicLibrary to load the program, not a library.
     auto mm = new JITMemoryManager();
 

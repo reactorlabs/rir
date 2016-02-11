@@ -24,7 +24,7 @@ using namespace rjit;
 REXPORT SEXP jitAst(SEXP ast, SEXP formals, SEXP rho) {
     Compiler c("module");
     SEXP result = c.compile("rfunction", ast, formals);
-    c.jitAll();
+    c.finalize();
     return result;
 }
 
@@ -60,7 +60,7 @@ REXPORT SEXP jitFunctions(SEXP moduleName, SEXP functions) {
         // move to next function
         functions = CDR(functions);
     }
-    c.jitAll();
+    c.finalize();
     return moduleName;
 }
 

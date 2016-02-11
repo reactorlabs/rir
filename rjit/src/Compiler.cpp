@@ -53,12 +53,12 @@ SEXP Compiler::finalizeCompile(SEXP ast) {
     // now we create the NATIVESXP
     // NATIVESXP should be a static builder, but this is not how it works
     // at the moment
-    SEXP result = b.closeFunction();
+    SEXP result = b.closeFunctionOrPromise();
     return result;
 }
 
-void Compiler::jitAll() {
-    auto engine = JITCompileLayer::singleton.getEngine(b);
+void Compiler::finalize() {
+    auto engine = JITCompileLayer::singleton.finalize(b);
 
     if (!RJIT_DEBUG) {
         // Keep the llvm ir around
@@ -350,6 +350,7 @@ Value* Compiler::compileAssignment(SEXP e) {
     if (TYPEOF(CAR(e)) != SYMSXP)
         return nullptr;
     Value* v = compileExpression(CAR(CDR(e)));
+    ir::RecordType::create(b, v);
     ir::GenericSetVar::create(b, v, b.rho(), CAR(e));
     b.setResultVisible(false);
     return v;
@@ -797,34 +798,4 @@ void Compiler::gcCallback(void (*forward_node)(SEXP)) {
 void Compiler::doGcCallback(void (*forward_node)(SEXP)) {
     b.doGcCallback(forward_node);
 };
-
-/** Compiles operators that can be either binary, or unary, based on the number
- * of call arguments. Takes the binary and unary intrinsics to be used and the
- * full call ast.
-  */
-
-/** Compiles binary operator using the given intrinsic and full call ast.
-
-Value* Compiler::compileBinary(Function* f, SEXP call) {
-    Value* lhs = compileExpression(CAR(CDR(call)));
-    Value* rhs = compileExpression(CAR(CDR(CDR(call))));
-    return INTRINSIC(f, lhs, rhs, constant(call), context->rho);
-}
-
-
-// Compiles unary operator using the given intrinsic and full call ast.
-
-Value* Compiler::compileUnary(Function* f, SEXP call) {
-    Value* op = compileExpression(CAR(CDR(call)));
-    return INTRINSIC(f, op, constant(call), context->rho);
-}
-
-Value* Compiler::constant(SEXP value) {
-    return loadConstant(value, m.getM(), b);
-}
-
-Value* Compiler::INTRINSIC(llvm::Value* fun, std::vector<Value*> args) {
-    return insertCall(fun, args, context->f, context->b, m, true);
-}
-*/
 }

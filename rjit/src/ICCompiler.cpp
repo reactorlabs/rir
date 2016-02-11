@@ -101,7 +101,7 @@ void* ICCompiler::finalize() {
     // FIXME: return nativesxp and not naked ptr?
     auto f = b.closeIC();
 
-    auto engine = JITCompileLayer::singleton.getEngine(b);
+    auto engine = JITCompileLayer::singleton.finalize(b);
     auto ic = engine->getPointerToFunction(f);
 
     if (!RJIT_DEBUG)
@@ -120,7 +120,6 @@ Function* ICCompiler::compileCallStub() {
             ->result();
 
     ir::PatchIC::create(b, icAddr, stackmapId(), caller());
-    // create new intrinics function for patchIC (maybe?)
 
     // TODO adding llvm instruction directly w/o builder is not such a good idea
     Value* ic = new BitCastInst(icAddr, PointerType::get(ic_t, 0), "", b);

@@ -111,6 +111,7 @@ class Builder {
      */
     void openPromise(std::string const& name, SEXP ast);
     void openFunction(std::string const& name, SEXP ast, SEXP formals);
+    void openFunctionOrPromise(SEXP ast);
 
     void openIC(std::string const& name, FunctionType* ty) {
         assert(contextStack_.empty());
@@ -144,6 +145,7 @@ class Builder {
         // next current one
         x->b = c_->b;
         x->cp = std::move(c_->cp);
+        x->instrumentationIndex = c_->instrumentationIndex;
         delete c_;
         c_ = x;
     }
@@ -154,7 +156,7 @@ class Builder {
       will be added at the time the module is jitted. The function's SEXP is
       therefore automatically added to the relocations for the module.
      */
-    SEXP closeFunction();
+    SEXP closeFunctionOrPromise();
 
     /** Returns the llvm::Function corresponding to the intrinsic of given name.
       If such intrinsic is not present in the module yet, it is declared using
@@ -243,11 +245,14 @@ class Builder {
       avoid duplicates in the constant pool.
      */
     int constantPoolIndex(SEXP object) {
-        for (unsigned i = 0; i < c_->cp.size(); ++i)
+        for (unsigned i = 2; // first two slots for ast and typefeedback
+             i < c_->cp.size(); ++i)
             if (c_->cp[i] == object)
                 return i;
         return c_->addConstantPoolObject(object);
     }
+
+    int getNextInstrumentationIndex() { return c_->instrumentationIndex++; }
 
     /** Returns the index-th object in the constant pool.
      */
@@ -281,6 +286,8 @@ class Builder {
             return cp.size() - 1;
         }
 
+        int instrumentationIndex = 0;
+
         bool isReturnJumpNeeded = false;
         bool isResultVisible = true;
 
@@ -312,7 +319,8 @@ class Builder {
         std::vector<llvm::Value*> args_;
 
         Context(Context* from)
-            : isReturnJumpNeeded(from->isReturnJumpNeeded),
+            : instrumentationIndex(from->instrumentationIndex),
+              isReturnJumpNeeded(from->isReturnJumpNeeded),
               isResultVisible(from->isResultVisible), f(from->f), b(from->b),
               breakTarget(from->breakTarget), nextTarget(from->nextTarget),
               cp(std::move(from->cp)), args_(from->args_) {}

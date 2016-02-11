@@ -4,6 +4,7 @@
 #include "JITSymbolResolver.h"
 #include "llvm/Support/DynamicLibrary.h"
 #include "Runtime.h"
+#include "Instrumentation.h"
 #include <iostream>
 
 using namespace llvm;
@@ -33,6 +34,7 @@ RuntimeDyld::SymbolInfo JITSymbolResolver::findSymbol(const std::string& name) {
     }
         check(patchIC);
         check(compileIC);
+        check(recordType);
 
     } while (false);
 
