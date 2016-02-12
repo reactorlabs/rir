@@ -4,38 +4,38 @@
 namespace rjit {
 
 const EnumBitset<TypeInfo::Type> TypeInfo::addType(int sexpType) {
-    EnumBitset<TypeInfo::Type> b(store.type_);
+    Type t = Type::Any;
     switch (sexpType) {
     case INTSXP:
-        b.insert(Type::Integer);
+        t = Type::Integer;
         break;
     case REALSXP:
-        b.insert(Type::Float);
+        t = Type::Float;
         break;
     case STRSXP:
-        b.insert(Type::String);
+        t = Type::String;
         break;
     case VECSXP:
-        b.insert(Type::Vector);
+        t = Type::Vector;
         break;
     case LGLSXP:
-        b.insert(Type::Bool);
+        t = Type::Bool;
         break;
     default:
-        b.insert(Type::Any);
         break;
     }
-    store.type_ = b;
-    return b;
+    addType(t);
+    assert(!types().empty());
+    return types();
 }
 
-void TypeInfo::addAttrib(SEXP value) {
+void TypeInfo::mergeAttrib(SEXP value) {
+    // TODO: find out if value is an object
     Attrib a = ATTRIB(value) == R_NilValue ? Attrib::Absent : Attrib::Present;
-    if (a > attrib())
-        attrib(a);
+    mergeAttrib(a);
 }
 
-void TypeInfo::addSize(SEXP value) {
+void TypeInfo::mergeSize(SEXP value) {
     Size s = Size::Unknown;
     switch (TYPEOF(value)) {
     case INTSXP:
@@ -50,16 +50,12 @@ void TypeInfo::addSize(SEXP value) {
     default:
         break;
     }
-    if (s > size())
-        size(s);
+    mergeSize(s);
 }
 
 std::ostream& operator<<(std::ostream& out, TypeInfo& info) {
-    out << "TypeInfo [";
-
-    auto t = info.type();
-
-    out << "(";
+    auto t = info.types();
+    out << "[(";
     if (t.has(TypeInfo::Type::Any)) {
         out << "any";
     } else {
@@ -71,6 +67,8 @@ std::ostream& operator<<(std::ostream& out, TypeInfo& info) {
             out << "string,";
         if (t.has(TypeInfo::Type::Vector))
             out << "vector,";
+        if (t.has(TypeInfo::Type::Bool))
+            out << "bool,";
     }
     out << ") ";
     switch (info.size()) {
@@ -93,12 +91,12 @@ std::ostream& operator<<(std::ostream& out, TypeInfo& info) {
         out << "??";
         break;
     case TypeInfo::Attrib::Absent:
-        out << "~attr";
+        out << "~";
         break;
     case TypeInfo::Attrib::Present:
         out << "attr";
         break;
-    case TypeInfo::Attrib::Class:
+    case TypeInfo::Attrib::Object:
         out << "obj";
         break;
     default:

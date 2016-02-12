@@ -19,8 +19,8 @@ void TypeFeedback::record(SEXP value, int idx) {
     TypeInfo info(INTEGER(store)[idx]);
 
     info.addType(TYPEOF(value));
-    info.addAttrib(value);
-    info.addSize(value);
+    info.mergeAttrib(value);
+    info.mergeSize(value);
 
     if (old_info != info) {
         INTEGER(store)[idx] = info;

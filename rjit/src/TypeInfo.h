@@ -13,17 +13,21 @@ class TypeInfo {
   public:
     enum class Type : int { Integer, Float, String, Vector, Bool, Any };
 
-    enum class Attrib : int { Unknown, Absent, Class, Present };
+    enum class Attrib : int { Unknown, Absent, Object, Present };
 
     enum class Size : int { Unknown, Scalar, Any };
 
-    TypeInfo() { *reinterpret_cast<int*>(&store) = 0; }
+    TypeInfo() {
+        store.types_ = EnumBitset<Type>();
+        store.size_ = Size::Unknown;
+        store.attrib_ = Attrib::Unknown;
+    }
 
     TypeInfo(int base) { *reinterpret_cast<int*>(&store) = base; }
 
     operator int() { return *reinterpret_cast<int*>(&store); }
 
-    const EnumBitset<Type> type() { return EnumBitset<Type>(store.type_); }
+    const EnumBitset<Type> types() { return EnumBitset<Type>(store.types_); }
 
     const Attrib attrib() { return store.attrib_; }
 
@@ -32,31 +36,52 @@ class TypeInfo {
     const EnumBitset<Type> addType(int sexpType);
 
     const EnumBitset<Type> addType(Type type) {
-        EnumBitset<Type> b(store.type_);
-        b.insert(type);
-        store.type_ = b;
-        return b;
+        auto t = types();
+        t.insert(type);
+        return types(t);
     }
 
-    void addAttrib(SEXP v);
+    void mergeTypes(EnumBitset<Type> t) { types(t | types()); }
+    void mergeTypes(TypeInfo other) { mergeTypes(other.types()); }
 
-    void addSize(SEXP v);
+    bool hasType(Type t) { return types().has(t) || types().has(Type::Any); }
 
-  private:
-    const void size(Size s) {
+    void mergeAttrib(SEXP v);
+    void mergeAttrib(Attrib a) {
+        if (a > attrib())
+            attrib(a);
+    }
+    void mergeAttrib(TypeInfo other) { mergeAttrib(other.attrib()); }
+
+    void mergeSize(SEXP v);
+    void mergeSize(Size s) {
+        if (s > size())
+            size(s);
+    }
+    void mergeSize(TypeInfo other) { mergeSize(other.size()); }
+
+    const EnumBitset<Type> types(EnumBitset<Type> t) {
+        store.types_ = t;
+        return t;
+    }
+
+    Size size(Size s) {
         assert(s > Size::Unknown && s <= Size::Any);
         store.size_ = s;
+        return s;
     }
 
-    const void attrib(Attrib a) {
+    Attrib attrib(Attrib a) {
         assert(a > Attrib::Unknown && a <= Attrib::Present);
         store.attrib_ = a;
+        return a;
     }
 
+  private:
     friend std::ostream& operator<<(std::ostream& out, TypeInfo& t);
 
     struct Store {
-        int type_ : (int)Type::Any;
+        int types_ : (int)Type::Any + 1;
         Attrib attrib_ : 3;
         Size size_ : 3;
     };

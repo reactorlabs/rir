@@ -20,6 +20,8 @@ class EnumBitset {
   public:
     operator BASE() { return set; }
 
+    EnumBitset() : set(0) {}
+
     EnumBitset(BASE init) : set(init) {}
 
     EnumBitset(Enum init) : set(toI(init)) {}
