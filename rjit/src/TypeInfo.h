@@ -23,15 +23,20 @@ class TypeInfo {
         store.attrib_ = Attrib::Unknown;
     }
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wstrict-aliasing"
+
     TypeInfo(int base) { *reinterpret_cast<int*>(&store) = base; }
 
     operator int() { return *reinterpret_cast<int*>(&store); }
 
+#pragma GCC diagnostic pop
+
     const EnumBitset<Type> types() { return EnumBitset<Type>(store.types_); }
 
-    const Attrib attrib() { return store.attrib_; }
+    Attrib attrib() { return store.attrib_; }
 
-    const Size size() { return store.size_; }
+    Size size() { return store.size_; }
 
     const EnumBitset<Type> addType(int sexpType);
 
