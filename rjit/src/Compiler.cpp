@@ -793,9 +793,9 @@ void Compiler::gcCallback(void (*forward_node)(SEXP)) {
     for (Compiler* c : _instances) {
         c->doGcCallback(forward_node);
     }
-};
+}
 
 void Compiler::doGcCallback(void (*forward_node)(SEXP)) {
     b.doGcCallback(forward_node);
-};
+}
 }

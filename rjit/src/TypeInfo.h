@@ -13,9 +13,9 @@ class TypeInfo {
   public:
     enum class Type : int { Integer, Float, String, Vector, Bool, Any };
 
-    enum class Attrib : int { Unknown, Absent, Object, Present };
+    enum class Attrib : uint8_t { Unknown, Absent, Object, Present };
 
-    enum class Size : int { Unknown, Scalar, Any };
+    enum class Size : uint8_t { Unknown, Scalar, Any };
 
     TypeInfo() {
         store.types_ = EnumBitset<Type>();
@@ -82,8 +82,8 @@ class TypeInfo {
 
     struct Store {
         int types_ : (int)Type::Any + 1;
-        Attrib attrib_ : 3;
-        Size size_ : 3;
+        Attrib attrib_ : 8;
+        Size size_ : 8;
     };
 
     static_assert(sizeof(Store) == sizeof(int), "Store must fit into int");
