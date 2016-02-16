@@ -3,6 +3,12 @@
 
 namespace rjit {
 
+void TypeInfo::mergeAll(SEXP value) {
+    addType(TYPEOF(value));
+    mergeAttrib(value);
+    mergeSize(value);
+}
+
 const EnumBitset<TypeInfo::Type> TypeInfo::addType(int sexpType) {
     Type t = Type::Any;
     switch (sexpType) {

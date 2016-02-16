@@ -18,14 +18,10 @@ void TypeFeedback::record(SEXP value, int idx) {
     TypeInfo old_info(INTEGER(store)[idx]);
     TypeInfo info(INTEGER(store)[idx]);
 
-    info.addType(TYPEOF(value));
-    info.mergeAttrib(value);
-    info.mergeSize(value);
+    info.mergeAll(value);
 
     if (old_info != info) {
         INTEGER(store)[idx] = info;
-        std::cout << "found " << (void*)value << " was " << old_info
-                  << " but now " << info << "\n";
     }
 }
 }
