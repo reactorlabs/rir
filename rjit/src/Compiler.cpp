@@ -109,6 +109,7 @@ Value* Compiler::compileSymbol(SEXP value) {
     auto name = CHAR(PRINTNAME(value));
     assert(strlen(name));
     Value* res = ir::GenericGetVar::create(b, b.rho(), value)->result();
+    ir::RecordType::create(b, res);
     res->setName(name);
     return res;
 }
@@ -350,7 +351,6 @@ Value* Compiler::compileAssignment(SEXP e) {
     if (TYPEOF(CAR(e)) != SYMSXP)
         return nullptr;
     Value* v = compileExpression(CAR(CDR(e)));
-    ir::RecordType::create(b, v);
     ir::GenericSetVar::create(b, v, b.rho(), CAR(e));
     b.setResultVisible(false);
     return v;
