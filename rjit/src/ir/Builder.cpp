@@ -92,7 +92,8 @@ void Builder::openFunctionOrPromise(SEXP ast) {
     // First entry in the const pool needs to be the ast
     c_->addConstantPoolObject(ast);
     // Add nil as a placeholder. Runtime type feedback will be stored in a
-    // vector allocated at the second constant pool slot.
+    // vector allocated at the second and third constant pool slot.
+    c_->addConstantPoolObject(R_NilValue);
     c_->addConstantPoolObject(R_NilValue);
 }
 
@@ -102,13 +103,20 @@ SEXP Builder::closeFunctionOrPromise() {
 
     // Replace slot 1 with a vector to hold runtime type feedback
     assert(c_->cp[1] == R_NilValue);
+    assert(c_->cp[2] == R_NilValue);
 
-    SEXP typeFeedback = allocVector(INTSXP, c_->instrumentationIndex);
-    Protect p(typeFeedback);
-    for (int i = 0; i < c_->instrumentationIndex; ++i) {
-        INTEGER(typeFeedback)[i] = TypeInfo();
+    SEXP typeFeedback = allocVector(INTSXP, c_->instrumentationIndex.size());
+    SEXP typeFeedbackName =
+        allocVector(VECSXP, c_->instrumentationIndex.size());
+    Protect p;
+    p(typeFeedback);
+    p(typeFeedbackName);
+    for (auto e : c_->instrumentationIndex) {
+        INTEGER(typeFeedback)[e.second] = TypeInfo();
+        SET_VECTOR_ELT(typeFeedbackName, e.second, e.first);
     }
     c_->cp[1] = typeFeedback;
+    c_->cp[2] = typeFeedbackName;
 
     ClosureContext* cc = dynamic_cast<ClosureContext*>(c_);
     SEXP result = module()->getNativeSXP(cc->formals, c_->cp[0], c_->cp, c_->f);

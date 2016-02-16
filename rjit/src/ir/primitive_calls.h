@@ -3228,11 +3228,11 @@ class RecordType : public PrimitiveCall {
   public:
     RecordType(llvm::Instruction* ins) : PrimitiveCall(ins, Kind::RecordType) {}
 
-    static RecordType* create(Builder& b, ir::Value value) {
+    static RecordType* create(Builder& b, SEXP sym, ir::Value value) {
         Sentinel s(b);
         ir::Value store =
             UserLiteral::insertBefore(s, b.consts(), Builder::integer(1));
-        int idx = b.getNextInstrumentationIndex();
+        int idx = b.getInstrumentationIndex(sym);
         return insertBefore(s, value, store, idx);
     }
 

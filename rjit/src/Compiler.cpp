@@ -109,7 +109,7 @@ Value* Compiler::compileSymbol(SEXP value) {
     auto name = CHAR(PRINTNAME(value));
     assert(strlen(name));
     Value* res = ir::GenericGetVar::create(b, b.rho(), value)->result();
-    ir::RecordType::create(b, res);
+    ir::RecordType::create(b, value, res);
     res->setName(name);
     return res;
 }

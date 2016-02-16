@@ -145,7 +145,7 @@ class Builder {
         // next current one
         x->b = c_->b;
         x->cp = std::move(c_->cp);
-        x->instrumentationIndex = c_->instrumentationIndex;
+        x->instrumentationIndex = std::move(c_->instrumentationIndex);
         delete c_;
         c_ = x;
     }
@@ -245,14 +245,16 @@ class Builder {
       avoid duplicates in the constant pool.
      */
     int constantPoolIndex(SEXP object) {
-        for (unsigned i = 2; // first two slots for ast and typefeedback
+        for (unsigned i = 3; // first 3 slots for ast and typefeedback
              i < c_->cp.size(); ++i)
             if (c_->cp[i] == object)
                 return i;
         return c_->addConstantPoolObject(object);
     }
 
-    int getNextInstrumentationIndex() { return c_->instrumentationIndex++; }
+    int getInstrumentationIndex(SEXP sym) {
+        return c_->getInstrumentationIndex(sym);
+    }
 
     /** Returns the index-th object in the constant pool.
      */
@@ -286,7 +288,14 @@ class Builder {
             return cp.size() - 1;
         }
 
-        int instrumentationIndex = 0;
+        std::unordered_map<SEXP, int> instrumentationIndex;
+        int getInstrumentationIndex(SEXP sym) {
+            if (instrumentationIndex.count(sym))
+                return instrumentationIndex.at(sym);
+            int next = instrumentationIndex.size();
+            instrumentationIndex[sym] = next;
+            return next;
+        }
 
         bool isReturnJumpNeeded = false;
         bool isResultVisible = true;
@@ -319,7 +328,7 @@ class Builder {
         std::vector<llvm::Value*> args_;
 
         Context(Context* from)
-            : instrumentationIndex(from->instrumentationIndex),
+            : instrumentationIndex(std::move(from->instrumentationIndex)),
               isReturnJumpNeeded(from->isReturnJumpNeeded),
               isResultVisible(from->isResultVisible), f(from->f), b(from->b),
               breakTarget(from->breakTarget), nextTarget(from->nextTarget),
