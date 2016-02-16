@@ -14,6 +14,7 @@
 #include "ir/Ir.h"
 #include "ir/Builder.h"
 #include "ir/primitive_calls.h"
+#include "TypeInfo.h"
 
 #include "StackScan.h"
 
@@ -26,6 +27,28 @@ REXPORT SEXP jitAst(SEXP ast, SEXP formals, SEXP rho) {
     SEXP result = c.compile("rfunction", ast, formals);
     c.finalize();
     return result;
+}
+
+REXPORT SEXP jitPrintTypefeedback(SEXP f) {
+    if (TYPEOF(f) == CLOSXP)
+        f = BODY(f);
+    if (TYPEOF(f) != NATIVESXP) {
+        warning("No nativesxp passed");
+        return R_NilValue;
+    }
+
+    SEXP consts = CDR(f);
+    SEXP typefeedback = VECTOR_ELT(consts, 1);
+    SEXP typefeedbackName = VECTOR_ELT(consts, 2);
+    assert(XLENGTH(typefeedback) == XLENGTH(typefeedbackName));
+
+    for (int i = 0; i < XLENGTH(typefeedback); ++i) {
+        TypeInfo info(INTEGER(typefeedback)[i]);
+        SEXP sym = VECTOR_ELT(typefeedbackName, i);
+        std::cout << CHAR(PRINTNAME(sym)) << ": " << info << "\n";
+    }
+
+    return R_NilValue;
 }
 
 REXPORT SEXP jitSwapForNative(SEXP original, SEXP native) {

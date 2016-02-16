@@ -23,7 +23,9 @@ jit.compileInPlace <- function(what, env = environment(what)) {
     invisible(.Call("jitSwapForNative", what, nat))
 }
 
-jit.compileInPlace
+jit.printTypefeedback <- function(what) {
+    invisible(.Call("jitPrintTypefeedback", what))
+}
 
 jit.constants <- function(what) {
     if (typeof(what) == "closure")
