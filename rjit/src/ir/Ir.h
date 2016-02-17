@@ -488,12 +488,57 @@ class IntegerAdd : public Pattern, public BinaryOperator {
   only branch we have and it is a showcase for matching multiple
   llvm bitcodes to single ir.
  */
-class Cbr : public Pattern {
+class CbrZero : public Pattern {
   public:
     llvm::Instruction* first() const override { return ins_->getPrevNode(); }
 
     size_t length() const override { return 2; }
 
+    llvm::Value* cond() { return ins_->getPrevNode()->getOperand(0); }
+
+    llvm::BasicBlock* trueCase() {
+        return ins<llvm::BranchInst>()->getSuccessor(0);
+    }
+
+    llvm::BasicBlock* falseCase() {
+        return ins<llvm::BranchInst>()->getSuccessor(1);
+    }
+
+    static CbrZero* create(Builder& b, ir::Value cond,
+                           llvm::BasicBlock* trueCase,
+                           llvm::BasicBlock* falseCase) {
+        Sentinel s(b);
+        return insertBefore(s, cond, trueCase, falseCase);
+    }
+
+    static CbrZero* insertBefore(llvm::Instruction* ins, ir::Value cond,
+                                 llvm::BasicBlock* trueCase,
+                                 llvm::BasicBlock* falseCase) {
+        ICmpInst* test = new ICmpInst(ins, ICmpInst::ICMP_NE, cond,
+                                      Builder::integer(0), "condition");
+        auto branch = BranchInst::Create(trueCase, falseCase, test, ins);
+        return new CbrZero(test, branch);
+    }
+
+    static CbrZero* insertBefore(Pattern* p, ir::Value cond,
+                                 llvm::BasicBlock* trueCase,
+                                 llvm::BasicBlock* falseCase) {
+        return insertBefore(p->first(), cond, trueCase, falseCase);
+    }
+
+    static bool classof(Pattern const* s) {
+        return s->getKind() == Kind::CbrZero;
+    }
+
+  protected:
+    CbrZero(llvm::Instruction* cond, llvm::Instruction* branch)
+        : Pattern(branch, Kind::CbrZero) {
+        attach(cond);
+    }
+};
+
+class Cbr : public Pattern {
+  public:
     llvm::Value* cond() { return ins_->getPrevNode()->getOperand(0); }
 
     llvm::BasicBlock* trueCase() {
@@ -510,13 +555,11 @@ class Cbr : public Pattern {
         return insertBefore(s, cond, trueCase, falseCase);
     }
 
-    static Cbr* insertBefore(llvm::Instruction* ins, ir::Value cond,
+    static Cbr* insertBefore(llvm::Instruction* ins, ir::Value test,
                              llvm::BasicBlock* trueCase,
                              llvm::BasicBlock* falseCase) {
-        ICmpInst* test = new ICmpInst(ins, ICmpInst::ICMP_NE, cond,
-                                      Builder::integer(0), "condition");
         auto branch = BranchInst::Create(trueCase, falseCase, test, ins);
-        return new Cbr(test, branch);
+        return new Cbr(branch);
     }
 
     static Cbr* insertBefore(Pattern* p, ir::Value cond,
@@ -528,10 +571,7 @@ class Cbr : public Pattern {
     static bool classof(Pattern const* s) { return s->getKind() == Kind::Cbr; }
 
   protected:
-    Cbr(llvm::Instruction* cond, llvm::Instruction* branch)
-        : Pattern(branch, Kind::Cbr) {
-        attach(cond);
-    }
+    Cbr(llvm::Instruction* branch) : Pattern(branch, Kind::Cbr) {}
 };
 
 class MarkNotMutable : public Pattern {

@@ -5,6 +5,7 @@
 #include "Compiler.h"
 #include "api.h"
 #include "ir/Builder.h"
+#include "Instrumentation.h"
 
 using namespace rjit;
 
@@ -79,4 +80,29 @@ extern "C" void* compileIC(uint64_t numargs, SEXP call, SEXP fun, SEXP rho,
     void* res = compiler.compile(call, fun, rho);
 
     return res;
+}
+
+REXPORT SEXP jitPrintTypefeedback(SEXP f);
+extern "C" void* recompileFunction(SEXP closure,
+                                   SEXP (*caller)(SEXP, SEXP, SEXP),
+                                   SEXP consts, SEXP rho) {
+    assert(closure && TYPEOF(closure) == CLOSXP);
+
+    if (RJIT_DEBUG) {
+        std::cout << "Recompiling closure " << (void*)closure
+                  << "  Typefeedback gathered :\n";
+        jitPrintTypefeedback(closure);
+    }
+
+    SEXP body = BODY(closure);
+
+    Compiler c("optimized module");
+    SEXP result = c.compile("rOptFunction", body, FORMALS(closure));
+    c.finalize();
+
+    SEXP(*newCaller)(SEXP, SEXP, SEXP) = (SEXP(*)(SEXP, SEXP, SEXP))CAR(result);
+    SEXP newConsts = CDR(result);
+    SETCDR(closure, result);
+
+    return newCaller(newConsts, rho, closure);
 }

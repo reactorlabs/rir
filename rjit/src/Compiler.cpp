@@ -23,6 +23,7 @@
 #include "ir/primitive_calls.h"
 #include "ir/Ir.h"
 
+#include "Instrumentation.h"
 #include "api.h"
 
 #include "RIntlns.h"
@@ -33,18 +34,49 @@ namespace rjit {
 
 SEXP Compiler::compilePromise(std::string const& name, SEXP ast) {
     b.openPromise(name, ast);
-    ir::InvocationCount::create(b);
-    return finalizeCompile(ast);
+    finalizeCompile(ast);
+    return b.closePromise();
 }
 
 SEXP Compiler::compileFunction(std::string const& name, SEXP ast,
                                SEXP formals) {
-    b.openFunction(name, ast, formals);
-    ir::InvocationCount::create(b);
-    return finalizeCompile(ast);
+
+    if (TYPEOF(ast) == NATIVESXP) {
+        SEXP native = ast;
+        ast = VECTOR_ELT(CDR(ast), 0);
+        TypeFeedback* tf = new TypeFeedback(native);
+        tf->clearInvocationCount();
+
+        b.openFunction(name, ast, formals, tf);
+
+    } else {
+        b.openFunction(name, ast, formals);
+
+        // Check the invocation count and recompile the function if it is hot.
+        auto limit =
+            ConstantInt::get(b.getContext(), APInt(32, StringRef("200"), 10));
+        auto invocations = ir::InvocationCount::create(b);
+        auto condition = ir::IntegerLessThan::create(b, invocations, limit);
+        BasicBlock* bRecompile = b.createBasicBlock("recompile");
+        BasicBlock* next = b.createBasicBlock("functionBegin");
+
+        // TODO set weight to mark that the branch is unlikely
+        ir::Cbr::create(b, condition, next, bRecompile);
+
+        b.setBlock(bRecompile);
+        auto res =
+            ir::Recompile::create(b, b.closure(), b.f(), b.consts(), b.rho());
+        ir::Return::create(b, res);
+
+        b.setBlock(next);
+    }
+
+    finalizeCompile(ast);
+
+    return b.closeFunction();
 }
 
-SEXP Compiler::finalizeCompile(SEXP ast) {
+void Compiler::finalizeCompile(SEXP ast) {
     Value* last = compileExpression(ast);
 
     // since we are going to insert implicit return, which is a simple return
@@ -52,11 +84,6 @@ SEXP Compiler::finalizeCompile(SEXP ast) {
     b.setResultJump(false);
     if (last != nullptr)
         compileReturn(last, /*tail=*/true);
-    // now we create the NATIVESXP
-    // NATIVESXP should be a static builder, but this is not how it works
-    // at the moment
-    SEXP result = b.closeFunctionOrPromise();
-    return result;
 }
 
 void Compiler::finalize() {
@@ -94,8 +121,6 @@ Value* Compiler::compileExpression(SEXP value) {
         return ir::UserLiteral::create(b, value)->result();
     }
     case BCODESXP:
-    // TODO: reuse the compiled fun
-    case NATIVESXP:
         return compileExpression(VECTOR_ELT(CDR(value), 0));
     default:
         assert(false && "Unknown SEXP type in compiled ast.");
@@ -111,7 +136,8 @@ Value* Compiler::compileSymbol(SEXP value) {
     auto name = CHAR(PRINTNAME(value));
     assert(strlen(name));
     Value* res = ir::GenericGetVar::create(b, b.rho(), value)->result();
-    ir::RecordType::create(b, value, res);
+    if (b.isFunction() && !TypeFeedback::get(b.f()))
+        ir::RecordType::create(b, value, res);
     res->setName(name);
     return res;
 }
@@ -407,7 +433,7 @@ Value* Compiler::compileCondition(SEXP e) {
     BasicBlock* ifTrue = b.createBasicBlock("ifTrue");
     BasicBlock* ifFalse = b.createBasicBlock("ifFalse");
     BasicBlock* next = b.createBasicBlock("next");
-    ir::Cbr::create(b, cond, ifTrue, ifFalse);
+    ir::CbrZero::create(b, cond, ifTrue, ifFalse);
 
     // true case has to be always present
     b.setBlock(ifTrue);
@@ -510,7 +536,7 @@ Value* Compiler::compileWhileLoop(SEXP ast) {
     Value* cond2 = compileExpression(condAst);
     Value* cond = ir::ConvertToLogicalNoNA::create(b, cond2, condAst)->result();
     BasicBlock* whileBody = b.createBasicBlock("whileBody");
-    ir::Cbr::create(b, cond, whileBody, b.breakTarget());
+    ir::CbrZero::create(b, cond, whileBody, b.breakTarget());
     // compile the body
     b.setBlock(whileBody);
     compileExpression(bodyAst);

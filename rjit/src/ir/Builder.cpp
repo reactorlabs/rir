@@ -81,24 +81,51 @@ llvm::BasicBlock* Builder::createBasicBlock(std::string const& name) {
     return llvm::BasicBlock::Create(m_->getContext(), name, c_->f);
 }
 
-void Builder::openFunction(std::string const& name, SEXP ast, SEXP formals) {
+void Builder::openFunction(std::string const& name, SEXP ast, SEXP formals,
+                           TypeFeedback* tf) {
     if (c_ != nullptr)
         contextStack_.push_back(c_);
     c_ = new ClosureContext(name, m_, formals);
     openFunctionOrPromise(ast);
-}
-
-void Builder::openFunctionOrPromise(SEXP ast) {
-    // First entry in the const pool needs to be the ast
-    c_->addConstantPoolObject(ast);
     // Add nil as a placeholder. Runtime type feedback will be stored in a
     // vector allocated at the second and third constant pool slot.
     c_->addConstantPoolObject(R_NilValue);
     c_->addConstantPoolObject(R_NilValue);
     c_->addConstantPoolObject(R_NilValue);
+
+    if (tf) {
+        tf->attach(c_->f);
+    }
+}
+
+void Builder::openFunctionOrPromise(SEXP ast) {
+    // First entry in the const pool needs to be the ast
+    c_->addConstantPoolObject(ast);
+}
+
+SEXP Builder::closePromise() {
+    assert(dynamic_cast<PromiseContext*>(c_) and "Not a promise context");
+    return closeFunctionOrPromise();
 }
 
 SEXP Builder::closeFunctionOrPromise() {
+    assert((contextStack_.empty() or (contextStack_.back()->f != c_->f)) and
+           "Not a function context");
+    ClosureContext* cc = dynamic_cast<ClosureContext*>(c_);
+    SEXP result = module()->getNativeSXP(cc->formals, c_->cp[0], c_->cp, c_->f);
+    assert(ir::Verifier::check(c_->f));
+    delete c_;
+    if (contextStack_.empty()) {
+        c_ = nullptr;
+    } else {
+        c_ = contextStack_.back();
+        contextStack_.pop_back();
+    }
+    return result;
+}
+
+SEXP Builder::closeFunction() {
+    assert(dynamic_cast<ClosureContext*>(c_) and "Not a closure context");
     assert((contextStack_.empty() or (contextStack_.back()->f != c_->f)) and
            "Not a function context");
 
@@ -124,17 +151,7 @@ SEXP Builder::closeFunctionOrPromise() {
     INTEGER(invocationCount)[0] = 0;
     c_->cp[3] = invocationCount;
 
-    ClosureContext* cc = dynamic_cast<ClosureContext*>(c_);
-    SEXP result = module()->getNativeSXP(cc->formals, c_->cp[0], c_->cp, c_->f);
-    assert(ir::Verifier::check(c_->f));
-    delete c_;
-    if (contextStack_.empty()) {
-        c_ = nullptr;
-    } else {
-        c_ = contextStack_.back();
-        contextStack_.pop_back();
-    }
-    return result;
+    return closeFunctionOrPromise();
 }
 
 llvm::Function* Builder::closeIC() {

@@ -7,6 +7,7 @@
 #include "JITSymbolResolver.h"
 #include "StackMap.h"
 #include "CodeCache.h"
+#include "Instrumentation.h"
 
 #include "llvm/ExecutionEngine/ExecutionEngine.h"
 #include "llvm/ExecutionEngine/MCJIT.h"
@@ -28,6 +29,8 @@
 #include "ir/Optimization/Scalars.h"
 #include "ir/Optimization/BoxingRemoval.h"
 #include "ir/Optimization/DeadAllocationRemoval.h"
+
+#include "llvm/IR/IRPrintingPasses.h"
 
 using namespace llvm;
 
@@ -54,6 +57,9 @@ ExecutionEngine* JITCompileLayer::finalize(JITModule* m) {
         exit(1);
     }
 
+    std::string str;
+    llvm::raw_string_ostream rso(str);
+
     // Make sure we can resolve symbols in the program as well. The zero arg
     legacy::PassManager pm;
 
@@ -62,6 +68,8 @@ ExecutionEngine* JITCompileLayer::finalize(JITModule* m) {
     pm.add(new analysis::ScalarsTracking());
     pm.add(new optimization::BoxingRemoval());
     pm.add(new optimization::DeadAllocationRemoval());
+
+    // pm.add(createPrintModulePass(rso));
 
     pm.add(new ir::VariableAnalysis());
     pm.add(new ir::ConstantLoadOptimization());
@@ -76,35 +84,19 @@ ExecutionEngine* JITCompileLayer::finalize(JITModule* m) {
     pm.add(rjit::createPlaceRJITSafepointsPass());
     pm.add(rjit::createRJITRewriteStatepointsForGCPass());
 
-    /*    std::cerr << "--------------------------------------" << std::endl;
-        std::cerr << "--------------------------------------" << std::endl;
-        std::cerr << "--------------------------------------" << std::endl;
-        std::cerr << "--------------------------------------" << std::endl;
-        std::cerr << "--------------------------------------" << std::endl;
-        std::cerr << "--------------------------------------" << std::endl;
-
-        for (llvm::Function& f : m->getFunctionList()) {
-            if (not f.isDeclaration()) {
-                std::cerr << "--------------------------------------" <<
-       std::endl;
-                f.dump();
-            }
-        }*/
-
     pm.run(*m);
 
-    /*for (llvm::Function& f : m->getFunctionList()) {
-        if (not f.isDeclaration()) {
-            std::cerr << "--------------------------------------" << std::endl;
-            f.dump();
-        }
-    } */
+    std::cout << rso.str();
 
     engine->finalizeObject();
     m->finalizeNativeSEXPs(engine);
 
     // Fill in addresses for cached code
     for (llvm::Function& f : m->getFunctionList()) {
+        TypeFeedback* tf = TypeFeedback::get(&f);
+        if (tf)
+            delete tf;
+
         if (CodeCache::missingAddress(f.getName())) {
             CodeCache::setAddress(f.getName(),
                                   (uint64_t)engine->getPointerToFunction(&f));

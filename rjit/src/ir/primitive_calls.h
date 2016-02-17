@@ -3233,6 +3233,45 @@ class ReturnJump : public PrimitiveCall {
     }
 };
 
+class Recompile : public PrimitiveCall {
+  public:
+    Recompile(llvm::Instruction* ins) : PrimitiveCall(ins, Kind::Recompile) {}
+
+    static Recompile* create(Builder& b, ir::Value closure, ir::Value caller,
+                             ir::Value consts, ir::Value rho) {
+        Sentinel s(b);
+        return insertBefore(s, closure, caller, consts, rho);
+    }
+
+    static Recompile* insertBefore(llvm::Instruction* ins, ir::Value closure,
+                                   ir::Value caller, ir::Value consts,
+                                   ir::Value rho) {
+        std::vector<llvm::Value*> args_;
+        args_.push_back(closure);
+        args_.push_back(caller);
+        args_.push_back(consts);
+        args_.push_back(rho);
+
+        llvm::CallInst* i = llvm::CallInst::Create(
+            primitiveFunction<Recompile>(ins->getModule()), args_, "", ins);
+
+        Builder::markSafepoint(i);
+        return new Recompile(i);
+    }
+
+    static char const* intrinsicName() { return "recompileFunction"; }
+
+    static llvm::FunctionType* intrinsicType() {
+        return llvm::FunctionType::get(
+            t::SEXP, {t::SEXP, t::nativeFunctionPtr_t, t::SEXP, t::SEXP},
+            false);
+    }
+
+    static bool classof(Pattern const* s) {
+        return s->getKind() == Kind::Recompile;
+    }
+};
+
 class RecordType : public PrimitiveCall {
   public:
     RecordType(llvm::Instruction* ins) : PrimitiveCall(ins, Kind::RecordType) {}

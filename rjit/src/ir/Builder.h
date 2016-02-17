@@ -9,6 +9,7 @@
 #include "StackMap.h"
 #include "JITCompileLayer.h"
 #include "JITModule.h"
+#include "Instrumentation.h"
 
 #include "llvm/ExecutionEngine/ExecutionEngine.h"
 #include "llvm/Support/TargetSelect.h"
@@ -108,7 +109,8 @@ class Builder {
       pool.
      */
     void openPromise(std::string const& name, SEXP ast);
-    void openFunction(std::string const& name, SEXP ast, SEXP formals);
+    void openFunction(std::string const& name, SEXP ast, SEXP formals,
+                      TypeFeedback* tf = nullptr);
     void openFunctionOrPromise(SEXP ast);
 
     void openIC(std::string const& name, FunctionType* ty) {
@@ -155,6 +157,10 @@ class Builder {
       therefore automatically added to the relocations for the module.
      */
     SEXP closeFunctionOrPromise();
+    SEXP closeFunction();
+    SEXP closePromise();
+
+    bool isFunction() { return c_->isFunction(); }
 
     /** Returns the llvm::Function corresponding to the intrinsic of given name.
       If such intrinsic is not present in the module yet, it is declared using
@@ -243,9 +249,8 @@ class Builder {
       avoid duplicates in the constant pool.
      */
     int constantPoolIndex(SEXP object) {
-        for (unsigned i = 0; i < c_->cp.size(); ++i)
-            // slots 1-3 for typefeedback
-            if ((i < 1 || i > 3) && c_->cp[i] == object)
+        for (unsigned i = c_->reserved(); i < c_->cp.size(); ++i)
+            if (c_->cp[i] == object)
                 return i;
         return c_->addConstantPoolObject(object);
     }
@@ -298,6 +303,8 @@ class Builder {
         bool isReturnJumpNeeded = false;
         bool isResultVisible = true;
 
+        virtual bool isFunction() { return false; }
+
         llvm::Function* f;
         llvm::BasicBlock* b;
 
@@ -312,6 +319,11 @@ class Builder {
         virtual Context* clone() {
             assert(false);
             return nullptr;
+        }
+
+        virtual unsigned reserved() {
+            // slots 0-3 for ast and typefeedback
+            return 4;
         }
 
         /** Constant pool of the function.
@@ -360,6 +372,8 @@ class Builder {
             return args_[2];
         }
 
+        bool isFunction() override { return true; }
+
         ClosureContext(Context* from) : Context(from) {}
 
         Context* clone() override { return new ClosureContext(this); }
@@ -374,6 +388,13 @@ class Builder {
         PromiseContext(Context* from) : ClosureContext(from) {}
 
         Context* clone() override { return new PromiseContext(this); }
+
+        bool isFunction() override { return false; }
+
+        unsigned reserved() override {
+            // slots 0 for ast
+            return 1;
+        }
     };
 
     class ICContext : public Context {

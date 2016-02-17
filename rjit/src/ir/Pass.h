@@ -51,6 +51,7 @@ class Pass {
     virtual void setFunction(llvm::Function* f) {
         this->f = f;
         constantPool = f->arg_begin();
+        typeFeedback = TypeFeedback::get(f);
     }
 
   protected:
@@ -61,6 +62,8 @@ class Pass {
     llvm::Value* constantPool;
 
     llvm::Function* f;
+
+    TypeFeedback* typeFeedback;
 };
 
 /** A fixpoint pass.

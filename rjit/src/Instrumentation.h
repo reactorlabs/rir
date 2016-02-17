@@ -2,16 +2,34 @@
 #define INSTRUMENTATION_H
 
 #include "RDefs.h"
+#include "TypeInfo.h"
+
+#include <llvm/IR/Function.h>
 
 namespace rjit {
 
-class TypeFeedback {
+class TypeRecorder {
   public:
-    TypeFeedback(SEXP store);
+    TypeRecorder(SEXP store);
     void record(SEXP value, int idx);
 
   private:
     SEXP store;
+};
+
+class TypeFeedback {
+  public:
+    TypeFeedback(SEXP native);
+
+    void clearInvocationCount();
+    TypeInfo get(SEXP symbol);
+
+    void attach(llvm::Function* f);
+    static TypeFeedback* get(llvm::Function* f);
+
+  private:
+    SEXP cp();
+    SEXP native;
 };
 }
 

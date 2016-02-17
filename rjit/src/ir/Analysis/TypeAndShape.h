@@ -6,6 +6,7 @@
 #include "ir/PassDriver.h"
 
 #include "TypeInfo.h"
+#include "Instrumentation.h"
 
 namespace rjit {
 namespace analysis {
