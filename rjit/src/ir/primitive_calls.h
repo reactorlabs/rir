@@ -104,17 +104,19 @@ class CallNative : public PrimitiveCall {
 
     CallNative(llvm::Instruction* ins) : PrimitiveCall(ins, Kind::CallNative) {}
 
-    static CallNative* create(Builder& b, ir::Value native, ir::Value rho) {
+    static CallNative* create(Builder& b, ir::Value native, ir::Value rho,
+                              ir::Value closure) {
         Sentinel s(b);
-        return insertBefore(s, native, rho);
+        return insertBefore(s, native, rho, closure);
     }
 
     static CallNative* insertBefore(llvm::Instruction* ins, ir::Value native,
-                                    ir::Value rho) {
+                                    ir::Value rho, ir::Value closure) {
 
         std::vector<llvm::Value*> args_;
         args_.push_back(native);
         args_.push_back(rho);
+        args_.push_back(closure);
 
         llvm::CallInst* i = llvm::CallInst::Create(
             primitiveFunction<CallNative>(ins->getModule()), args_, "", ins);
@@ -127,7 +129,8 @@ class CallNative : public PrimitiveCall {
     static char const* intrinsicName() { return "callNative"; }
 
     static llvm::FunctionType* intrinsicType() {
-        return llvm::FunctionType::get(t::SEXP, {t::SEXP, t::SEXP}, false);
+        return llvm::FunctionType::get(t::SEXP, {t::SEXP, t::SEXP, t::SEXP},
+                                       false);
     }
 
     static bool classof(Pattern const* s) {
@@ -140,26 +143,28 @@ class ClosureNativeCallTrampoline : public PrimitiveCall {
     llvm::Value* cntxt() { return getValue(0); }
     llvm::Value* native() { return getValue(1); }
     llvm::Value* rh() { return getValue(2); }
+    llvm::Value* closure() { return getValue(3); }
 
     ClosureNativeCallTrampoline(llvm::Instruction* ins)
         : PrimitiveCall(ins, Kind::ClosureNativeCallTrampoline) {}
 
     static ClosureNativeCallTrampoline* create(Builder& b, ir::Value cntxt,
-                                               ir::Value native, ir::Value rh) {
+                                               ir::Value native, ir::Value rh,
+                                               ir::Value closure) {
 
         Sentinel s(b);
-        return insertBefore(s, cntxt, native, rh);
+        return insertBefore(s, cntxt, native, rh, closure);
     }
 
-    static ClosureNativeCallTrampoline* insertBefore(llvm::Instruction* ins,
-                                                     ir::Value cntxt,
-                                                     ir::Value native,
-                                                     ir::Value rh) {
+    static ClosureNativeCallTrampoline*
+    insertBefore(llvm::Instruction* ins, ir::Value cntxt, ir::Value native,
+                 ir::Value rh, ir::Value closure) {
 
         std::vector<llvm::Value*> args_;
         args_.push_back(cntxt);
         args_.push_back(native);
         args_.push_back(rh);
+        args_.push_back(closure);
 
         llvm::CallInst* i = llvm::CallInst::Create(
             primitiveFunction<ClosureNativeCallTrampoline>(ins->getModule()),
@@ -171,8 +176,8 @@ class ClosureNativeCallTrampoline : public PrimitiveCall {
     static char const* intrinsicName() { return "closureNativeCallTrampoline"; }
 
     static llvm::FunctionType* intrinsicType() {
-        return llvm::FunctionType::get(t::SEXP, {t::cntxtPtr, t::SEXP, t::SEXP},
-                                       false);
+        return llvm::FunctionType::get(
+            t::SEXP, {t::cntxtPtr, t::SEXP, t::SEXP, t::SEXP}, false);
     }
 
     static bool classof(Pattern const* s) {

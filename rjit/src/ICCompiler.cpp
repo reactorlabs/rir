@@ -242,9 +242,10 @@ bool ICCompiler::compileIc(SEXP inCall, SEXP inFun) {
             ir::InitClosureContext::create(b, cntxt, call(), newrho, rho(),
                                            actuals, fun());
 
-            Value* res = ir::ClosureNativeCallTrampoline::create(
-                             b, cntxt, b.convertToPointer(inBody), newrho)
-                             ->result();
+            Value* res =
+                ir::ClosureNativeCallTrampoline::create(
+                    b, cntxt, b.convertToPointer(inBody), newrho, b.closure())
+                    ->result();
 
             ir::EndClosureContext::create(b, cntxt, res);
             ir::Return::create(b, res);
@@ -411,8 +412,9 @@ Value* ICCompiler::compileArgument(Value* arglist, SEXP argAst, int argnum,
     default:
         if (eager) {
             // TODO make this more efficient?
-            result =
-                ir::CallNative::create(b, b.args()[argnum], rho())->result();
+            result = ir::CallNative::create(b, b.args()[argnum], rho(),
+                                            b.convertToPointer(R_NilValue))
+                         ->result();
         } else {
             // we must create a promise out of the argument
             result =

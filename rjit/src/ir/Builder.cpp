@@ -30,7 +30,7 @@ Builder::Context::Context(std::string const& name, JITModule* m,
 
 Builder::ClosureContext::ClosureContext(std::string name, JITModule* m,
                                         SEXP formals, bool isReturnJumpNeeded)
-    : Builder::Context(name, m, t::sexp_sexpsexpint, isReturnJumpNeeded),
+    : Builder::Context(name, m, t::nativeFunction_t, isReturnJumpNeeded),
       formals(formals) {
     // get rho value into context->rho for easier access
     llvm::Function::arg_iterator args = f->arg_begin();
@@ -41,7 +41,7 @@ Builder::ClosureContext::ClosureContext(std::string name, JITModule* m,
     rho->setName("rho");
     args_.push_back(rho);
     llvm::Value* useCache = args++;
-    useCache->setName("useCache");
+    useCache->setName("closure");
     args_.push_back(useCache);
 }
 

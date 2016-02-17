@@ -94,12 +94,10 @@ class Builder {
      */
     llvm::Value* rho() { return c_->rho(); }
 
-    const std::vector<llvm::Value*>& args() {
-        // FIXME check what this does
-        return c_->args();
-    }
+    const std::vector<llvm::Value*>& args() { return c_->args(); }
 
     llvm::Value* consts() { return c_->consts(); }
+    llvm::Value* closure() { return c_->closure(); }
 
     /** Creates new context for given function name.
 
@@ -310,6 +308,7 @@ class Builder {
 
         virtual llvm::Value* rho() = 0;
         virtual llvm::Value* consts() = 0;
+        virtual llvm::Value* closure() = 0;
         virtual Context* clone() {
             assert(false);
             return nullptr;
@@ -345,14 +344,20 @@ class Builder {
 
         llvm::Value* rho() override {
             assert(args_.size() == 3 and "Code assumes the signature of native "
-                                         "function is (consts, rho, useCache)");
+                                         "function is (consts, rho, closure)");
             return args_[1];
         }
 
         llvm::Value* consts() override {
             assert(args_.size() == 3 and "Code assumes the signature of native "
-                                         "function is (consts, rho, useCache)");
+                                         "function is (consts, rho, closure)");
             return args_[0];
+        }
+
+        llvm::Value* closure() override {
+            assert(args_.size() == 3 and "Code assumes the signature of native "
+                                         "function is (consts, rho, closure)");
+            return args_[2];
         }
 
         ClosureContext(Context* from) : Context(from) {}
@@ -376,12 +381,17 @@ class Builder {
         ICContext(std::string name, JITModule* m, llvm::FunctionType* ty);
         ICContext(Context* from) = delete;
         llvm::Value* rho() override {
-            // TODO why is this size() - 3??
+            // Environment is third last argument to call ICS
             return args_.at(args_.size() - 3);
         }
+
+        llvm::Value* closure() override {
+            // Closure is 4th last argument to call ICs
+            return args_.at(args_.size() - 4);
+        }
+
         llvm::Value* consts() override {
             assert(false and "NOT IMPLEMENTED");
-            // return args_.at(args_.size() -2);
             return nullptr;
         }
     };

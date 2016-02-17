@@ -65,7 +65,7 @@ PointerType* initializeTypes() {
 #define DECLARE(name, ret, ...)                                                \
     fields = {__VA_ARGS__};                                                    \
     t::name = FunctionType::get(ret, fields, false)
-    DECLARE(nativeFunction_t, t::SEXP, t::SEXP, t::SEXP, t::Int);
+    DECLARE(nativeFunction_t, t::SEXP, t::SEXP, t::SEXP, t::SEXP);
     t::nativeFunctionPtr_t = PointerType::get(t::nativeFunction_t, 0);
     DECLARE(void_void, t_void);
     DECLARE(void_sexp, t_void, t::SEXP);
