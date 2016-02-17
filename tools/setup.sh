@@ -277,7 +277,7 @@ if [ $SKIP_GNUR -eq 0 ]; then
         if [ ! -d $R_DIR ]; then
             cd $TARGET
             echo "-> checking out gnur"
-            git clone https://bitbucket.org/reactorl/gnur
+            git clone https://github.com/reactorlabs/gnur.git
         fi
 
         echo "-> git checkout gnur branch rllvm"
