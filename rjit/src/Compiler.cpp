@@ -33,12 +33,14 @@ namespace rjit {
 
 SEXP Compiler::compilePromise(std::string const& name, SEXP ast) {
     b.openPromise(name, ast);
+    ir::InvocationCount::create(b);
     return finalizeCompile(ast);
 }
 
 SEXP Compiler::compileFunction(std::string const& name, SEXP ast,
                                SEXP formals) {
     b.openFunction(name, ast, formals);
+    ir::InvocationCount::create(b);
     return finalizeCompile(ast);
 }
 

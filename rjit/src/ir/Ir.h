@@ -679,6 +679,110 @@ class Tag : public Pattern {
     }
 };
 
+class InvocationCount : public Pattern {
+  public:
+    static InvocationCount* create(Builder& b) {
+        Sentinel s(b);
+        return insertBefore(s, b.consts());
+    }
+
+    static InvocationCount* insertBefore(llvm::Instruction* ins,
+                                         llvm::Value* consts) {
+        LLVMContext& c = ins->getContext();
+        ConstantInt* int64_0 =
+            ConstantInt::get(c, APInt(64, StringRef("0"), 10));
+        ConstantInt* int64_1 =
+            ConstantInt::get(c, APInt(64, StringRef("1"), 10));
+        ConstantInt* int64_3 =
+            ConstantInt::get(c, APInt(64, StringRef("3"), 10));
+        ConstantInt* int32_1 =
+            ConstantInt::get(c, APInt(32, StringRef("1"), 10));
+
+        auto constVector = new BitCastInst(
+            consts, PointerType::get(t::VECTOR_SEXPREC, 1), "", ins);
+        auto payloadBegin = GetElementPtrInst::Create(
+            t::VECTOR_SEXPREC, constVector,
+            std::vector<llvm::Value*>({int64_1}), "", ins);
+        auto payloadPtr = new BitCastInst(
+            payloadBegin, PointerType::get(t::SEXP, 1), "", ins);
+
+        auto invocationcountPtr =
+            GetElementPtrInst::Create(t::SEXP, payloadPtr, {int64_3}, "", ins);
+
+        auto invocationcount = new LoadInst(invocationcountPtr, "", false, ins);
+        invocationcount->setAlignment(8);
+
+        auto invocationcountVector = new BitCastInst(
+            invocationcount, PointerType::get(t::VECTOR_SEXPREC, 1), "", ins);
+        auto invocationcountPayloadBegin = GetElementPtrInst::Create(
+            t::VECTOR_SEXPREC, invocationcountVector,
+            std::vector<llvm::Value*>({int64_1}), "", ins);
+        auto invocationcountPayloadPtr = new BitCastInst(
+            invocationcountPayloadBegin, PointerType::get(t::Int, 1), "", ins);
+
+        auto invocationCountPtr = GetElementPtrInst::Create(
+            t::Int, invocationcountPayloadPtr, {int64_0}, "", ins);
+
+        auto invocationCount = new LoadInst(invocationCountPtr, "", false, ins);
+        invocationCount->setAlignment(8);
+
+        auto invocationCountUpd = llvm::BinaryOperator::Create(
+            Instruction::Add, invocationCount, int32_1, "", ins);
+        auto invocationCountUpdStore =
+            new StoreInst(invocationCountUpd, invocationCountPtr, ins);
+        invocationCountUpdStore->setAlignment(8);
+
+        InvocationCount* p = new InvocationCount(
+            {constVector, payloadBegin, payloadPtr, invocationcountPtr,
+             invocationcount, invocationcountVector,
+             invocationcountPayloadBegin, invocationcountPayloadPtr,
+             invocationCountPtr, invocationCount, invocationCountUpdStore},
+            invocationCountUpd);
+        return p;
+    }
+
+    static InvocationCount* insertBefore(Pattern* p, ir::Value consts) {
+        return insertBefore(p->first(), consts);
+    }
+
+    static bool classof(Pattern const* s) {
+        return s->getKind() == Kind::InvocationCount;
+    }
+
+    virtual llvm::Instruction* first() const override {
+        llvm::Instruction* r = ins_->getPrevNode()
+                                   ->getPrevNode()
+                                   ->getPrevNode()
+                                   ->getPrevNode()
+                                   ->getPrevNode()
+                                   ->getPrevNode()
+                                   ->getPrevNode()
+                                   ->getPrevNode()
+                                   ->getPrevNode()
+                                   ->getPrevNode();
+        // TODO better check for start
+        assert(Pattern::get(r) == this);
+        return r;
+    }
+
+    virtual llvm::Instruction* last() const override {
+        llvm::Instruction* r = ins_->getNextNode();
+        assert(Pattern::get(r) == this);
+        return r;
+    }
+
+    size_t length() const override { return 12; }
+
+  private:
+    InvocationCount(std::initializer_list<llvm::Instruction*> insts,
+                    llvm::Instruction* result)
+        : Pattern(result, Kind::InvocationCount) {
+        for (auto i : insts) {
+            attach(i);
+        }
+    }
+};
+
 class VectorGetElement : public Pattern {
   public:
     static VectorGetElement* create(Builder& b, ir::Value vector,

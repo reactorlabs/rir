@@ -95,6 +95,7 @@ void Builder::openFunctionOrPromise(SEXP ast) {
     // vector allocated at the second and third constant pool slot.
     c_->addConstantPoolObject(R_NilValue);
     c_->addConstantPoolObject(R_NilValue);
+    c_->addConstantPoolObject(R_NilValue);
 }
 
 SEXP Builder::closeFunctionOrPromise() {
@@ -104,6 +105,7 @@ SEXP Builder::closeFunctionOrPromise() {
     // Replace slot 1 with a vector to hold runtime type feedback
     assert(c_->cp[1] == R_NilValue);
     assert(c_->cp[2] == R_NilValue);
+    assert(c_->cp[3] == R_NilValue);
 
     SEXP typeFeedback = allocVector(INTSXP, c_->instrumentationIndex.size());
     SEXP typeFeedbackName =
@@ -117,6 +119,10 @@ SEXP Builder::closeFunctionOrPromise() {
     }
     c_->cp[1] = typeFeedback;
     c_->cp[2] = typeFeedbackName;
+    SEXP invocationCount = allocVector(INTSXP, 1);
+    p(invocationCount);
+    INTEGER(invocationCount)[0] = 0;
+    c_->cp[3] = invocationCount;
 
     ClosureContext* cc = dynamic_cast<ClosureContext*>(c_);
     SEXP result = module()->getNativeSXP(cc->formals, c_->cp[0], c_->cp, c_->f);

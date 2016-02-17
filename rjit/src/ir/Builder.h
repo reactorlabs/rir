@@ -245,9 +245,9 @@ class Builder {
       avoid duplicates in the constant pool.
      */
     int constantPoolIndex(SEXP object) {
-        for (unsigned i = 3; // first 3 slots for ast and typefeedback
-             i < c_->cp.size(); ++i)
-            if (c_->cp[i] == object)
+        for (unsigned i = 0; i < c_->cp.size(); ++i)
+            // slots 1-3 for typefeedback
+            if ((i < 1 || i > 3) && c_->cp[i] == object)
                 return i;
         return c_->addConstantPoolObject(object);
     }

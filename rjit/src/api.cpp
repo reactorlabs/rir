@@ -42,6 +42,9 @@ REXPORT SEXP jitPrintTypefeedback(SEXP f) {
     SEXP typefeedbackName = VECTOR_ELT(consts, 2);
     assert(XLENGTH(typefeedback) == XLENGTH(typefeedbackName));
 
+    SEXP invocationCount = VECTOR_ELT(consts, 3);
+    std::cout << "Invocation count: " << INTEGER(invocationCount)[0] << "\n";
+
     for (int i = 0; i < XLENGTH(typefeedback); ++i) {
         TypeInfo info(INTEGER(typefeedback)[i]);
         SEXP sym = VECTOR_ELT(typefeedbackName, i);
