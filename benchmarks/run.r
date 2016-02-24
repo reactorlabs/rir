@@ -1,9 +1,15 @@
 
 runbench <- function(benchmark, output="log.txt", version="rjit", repeats=10){
-	source(benchmark)
+        e <- (function () {
+                source(benchmark, local=TRUE);
+                return (function() {
+                        execute()
+                });
+        })()
+
 	result = paste(version, ",", benchmark)
 	for(i in 1:repeats){
-		result  <- paste(result, "," , round(system.time(execute())[3]*1000))
+		result  <- paste(result, "," , round(system.time(e())[3]*1000))
 	}
 
 	write(result, file=output, append=TRUE)
