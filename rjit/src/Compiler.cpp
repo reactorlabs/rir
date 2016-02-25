@@ -149,7 +149,7 @@ Value* Compiler::compileSymbol(SEXP value) {
             ir::RecordType::create(b, value, res);
         } else {
             TypeInfo inf = tf->get(value);
-            if (!inf.any()) {
+            if (!inf.any() && inf != TypeInfo()) {
                 ir::CheckType::create(b, res,
                                       TypeFeedback::get(b.f())->get(value));
             }

@@ -88,7 +88,7 @@ extern "C" void* recompileFunction(SEXP closure,
                                    SEXP consts, SEXP rho) {
     assert(closure && TYPEOF(closure) == CLOSXP);
 
-    if (RJIT_DEBUG) {
+    if (true || RJIT_DEBUG) {
         std::cout << "Recompiling closure " << (void*)closure
                   << "  Typefeedback gathered :\n";
         jitPrintTypefeedback(closure);

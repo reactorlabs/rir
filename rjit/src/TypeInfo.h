@@ -26,19 +26,20 @@ class TypeInfo {
 
     // -- Constructors
 
-    TypeInfo() {
+    TypeInfo() : TypeInfo(0) {
         store.types_ = EnumBitset<Type>();
         store.size_ = Size::Unknown;
         store.attrib_ = Attrib::Unknown;
     }
 
-    TypeInfo(Type type, Size s = Size::Any, Attrib attributes = Attrib::Any) {
+    TypeInfo(Type type, Size s = Size::Any, Attrib attributes = Attrib::Any)
+        : TypeInfo(0) {
         store.types_ = EnumBitset<Type>(type);
         store.size_ = s;
         store.attrib_ = attributes;
     }
 
-    TypeInfo(SEXP from) {
+    TypeInfo(SEXP from) : TypeInfo(0) {
         store.types_ = EnumBitset<Type>();
         store.size_ = Size::Unknown;
         store.attrib_ = Attrib::Unknown;
@@ -94,7 +95,7 @@ class TypeInfo {
 
     // -- record a new runtime type instance
 
-    const EnumBitset<Type> addType(int sexpType);
+    const EnumBitset<Type> addType(SEXP value);
     void mergeAttrib(SEXP v);
     void mergeSize(SEXP v);
     void mergeAll(SEXP s);

@@ -4,12 +4,13 @@
 namespace rjit {
 
 void TypeInfo::mergeAll(SEXP value) {
-    addType(TYPEOF(value));
+    addType(value);
     mergeAttrib(value);
     mergeSize(value);
 }
 
-const EnumBitset<TypeInfo::Type> TypeInfo::addType(int sexpType) {
+const EnumBitset<TypeInfo::Type> TypeInfo::addType(SEXP value) {
+    int sexpType = TYPEOF(value);
     Type t = Type::Any;
     switch (sexpType) {
     case INTSXP:
@@ -42,17 +43,23 @@ void TypeInfo::mergeAttrib(SEXP value) {
 }
 
 void TypeInfo::mergeSize(SEXP value) {
-    Size s = Size::Unknown;
+    Size s = Size::Any;
     switch (TYPEOF(value)) {
-    case INTSXP:
     case REALSXP:
     case STRSXP:
     case VECSXP:
+        if (XLENGTH(value) == 1)
+            s = Size::Scalar;
+        break;
+    case INTSXP:
+        // TODO: we need na overflow check to make this possible
+        // if (XLENGTH(value) == 1)
+        //     s = Size::Scalar;
+        break;
     case LGLSXP:
         if (XLENGTH(value) == 1)
             s = Size::Scalar;
-        else
-            s = Size::Any;
+        break;
     default:
         break;
     }
