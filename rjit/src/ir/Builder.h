@@ -419,7 +419,7 @@ class Builder {
 
     /** The module into which we are currently building.
      */
-    JITModule* m_;
+    JITModule* m_ = nullptr;
 
     /** Current context.
      */

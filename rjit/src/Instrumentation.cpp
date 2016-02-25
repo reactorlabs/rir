@@ -78,6 +78,14 @@ TypeFeedback* TypeFeedback::get(llvm::Function* f) {
     TypeFeedback* res = reinterpret_cast<TypeFeedback*>(ap.getZExtValue());
     return res;
 }
+
+void TypeFeedback::detach(llvm::Function* f) {
+    TypeFeedback* tf = get(f);
+    if (tf) {
+        f->setMetadata(MD_NAME, nullptr);
+        delete tf;
+    }
+}
 }
 
 extern "C" void recordType(SEXP value, SEXP store, int idx) {

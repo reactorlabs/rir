@@ -17,7 +17,10 @@ class Compiler {
         _instances.insert(this);
     }
 
-    ~Compiler() { _instances.erase(this); }
+    ~Compiler() {
+        assert(finalized);
+        _instances.erase(this);
+    }
 
     static std::set<Compiler*> _instances;
     static void gcCallback(void (*forward_node)(SEXP));
@@ -36,6 +39,9 @@ class Compiler {
     void finalize();
 
   private:
+    // Keeps track when finalize was called
+    bool finalized = false;
+
     /** Compiles an expression.
 
       The expression as a result is always visible by default, which can be

@@ -96,9 +96,12 @@ extern "C" void* recompileFunction(SEXP closure,
 
     SEXP body = BODY(closure);
 
-    Compiler c("optimized module");
-    SEXP result = c.compile("rOptFunction", body, FORMALS(closure));
-    c.finalize();
+    SEXP result;
+    {
+        Compiler c("optimized module");
+        result = c.compile("rOptFunction", body, FORMALS(closure));
+        c.finalize();
+    }
 
     SEXP(*newCaller)(SEXP, SEXP, SEXP) = (SEXP(*)(SEXP, SEXP, SEXP))CAR(result);
     SEXP newConsts = CDR(result);

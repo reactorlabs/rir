@@ -87,6 +87,8 @@ void Compiler::finalizeCompile(SEXP ast) {
 }
 
 void Compiler::finalize() {
+    assert(!finalized);
+
     auto engine = JITCompileLayer::singleton.finalize(b);
 
     if (!RJIT_DEBUG) {
@@ -94,6 +96,8 @@ void Compiler::finalize() {
         engine->removeModule(b.module());
         delete engine;
     }
+
+    finalized = true;
 }
 
 /** Compiles an expression.
@@ -804,7 +808,12 @@ std::set<Compiler*> Compiler::_instances;
 
 void Compiler::gcCallback(void (*forward_node)(SEXP)) {
     for (Compiler* c : _instances) {
-        c->doGcCallback(forward_node);
+        // if this happens gc triggered after finalize() but before dtr
+        // please restrict lifetime of Compiler such that dtr is called right
+        // after finalize
+        assert(!c->finalized);
+        if (!c->finalized)
+            c->doGcCallback(forward_node);
     }
 }
 

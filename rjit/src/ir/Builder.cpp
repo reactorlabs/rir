@@ -171,6 +171,8 @@ void Builder::openPromise(std::string const& name, SEXP ast) {
 }
 
 void Builder::doGcCallback(void (*forward_node)(SEXP)) {
+    if (m_ == nullptr)
+        return;
     m_->doGcCallback(forward_node);
     for (Context* c : contextStack_) {
         for (SEXP el : c->cp) {

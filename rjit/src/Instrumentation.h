@@ -26,6 +26,7 @@ class TypeFeedback {
 
     void attach(llvm::Function* f);
     static TypeFeedback* get(llvm::Function* f);
+    static void detach(llvm::Function* f);
 
   private:
     SEXP cp();

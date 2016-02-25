@@ -93,9 +93,7 @@ ExecutionEngine* JITCompileLayer::finalize(JITModule* m) {
 
     // Fill in addresses for cached code
     for (llvm::Function& f : m->getFunctionList()) {
-        TypeFeedback* tf = TypeFeedback::get(&f);
-        if (tf)
-            delete tf;
+        TypeFeedback::detach(&f);
 
         if (CodeCache::missingAddress(f.getName())) {
             CodeCache::setAddress(f.getName(),
