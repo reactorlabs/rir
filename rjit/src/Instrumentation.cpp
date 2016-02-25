@@ -88,6 +88,12 @@ void TypeFeedback::detach(llvm::Function* f) {
 }
 }
 
+extern "C" void checkType(SEXP value, rjit::TypeInfo expected) {
+    rjit::TypeInfo changed = expected;
+    changed.mergeAll(value);
+    assert(changed == expected);
+}
+
 extern "C" void recordType(SEXP value, SEXP store, int idx) {
     rjit::TypeRecorder record(store);
     record.record(value, idx);

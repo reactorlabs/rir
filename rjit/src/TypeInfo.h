@@ -56,6 +56,11 @@ class TypeInfo {
 
     // -- getters
 
+    bool any() {
+        return types().has(Type::Any) && attrib() == Attrib::Any &&
+               size() == Size::Any;
+    }
+
     const EnumBitset<Type> types() { return EnumBitset<Type>(store.types_); }
 
     Attrib attrib() { return store.attrib_; }

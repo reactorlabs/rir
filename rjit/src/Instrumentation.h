@@ -35,5 +35,6 @@ class TypeFeedback {
 }
 
 extern "C" void recordType(SEXP value, SEXP store, int idx);
+extern "C" void checkType(SEXP value, rjit::TypeInfo idx);
 
 #endif

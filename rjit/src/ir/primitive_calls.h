@@ -3272,6 +3272,40 @@ class Recompile : public PrimitiveCall {
     }
 };
 
+class CheckType : public PrimitiveCall {
+  public:
+    CheckType(llvm::Instruction* ins) : PrimitiveCall(ins, Kind::CheckType) {}
+
+    static CheckType* create(Builder& b, ir::Value value, TypeInfo expected) {
+        Sentinel s(b);
+        return insertBefore(s, value, expected);
+    }
+
+    static CheckType* insertBefore(llvm::Instruction* ins, ir::Value value,
+                                   TypeInfo expected) {
+
+        std::vector<llvm::Value*> args_;
+        args_.push_back(value);
+        args_.push_back(Builder::integer(expected));
+
+        llvm::CallInst* i = llvm::CallInst::Create(
+            primitiveFunction<CheckType>(ins->getModule()), args_, "", ins);
+
+        Builder::markSafepoint(i);
+        return new CheckType(i);
+    }
+
+    static char const* intrinsicName() { return "checkType"; }
+
+    static llvm::FunctionType* intrinsicType() {
+        return llvm::FunctionType::get(t::Void, {t::SEXP, t::Int}, false);
+    }
+
+    static bool classof(Pattern const* s) {
+        return s->getKind() == Kind::CheckType;
+    }
+};
+
 class RecordType : public PrimitiveCall {
   public:
     RecordType(llvm::Instruction* ins) : PrimitiveCall(ins, Kind::RecordType) {}
