@@ -50,6 +50,9 @@ SEXP Compiler::compileFunction(std::string const& name, SEXP ast,
         b.openFunction(name, ast, formals, tf);
 
     } else {
+        if (TYPEOF(ast) == BCODESXP) {
+            ast = VECTOR_ELT(CDR(ast), 0);
+        }
         b.openFunction(name, ast, formals);
 
         // Check the invocation count and recompile the function if it is hot.
