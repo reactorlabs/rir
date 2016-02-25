@@ -57,7 +57,7 @@ SEXP Compiler::compileFunction(std::string const& name, SEXP ast,
 
         // Check the invocation count and recompile the function if it is hot.
         auto limit =
-            ConstantInt::get(b.getContext(), APInt(32, StringRef("500"), 10));
+            ConstantInt::get(b.getContext(), APInt(32, StringRef("800"), 10));
         auto invocations = ir::InvocationCount::create(b);
         auto condition = ir::IntegerLessThan::create(b, invocations, limit);
         BasicBlock* bRecompile = b.createBasicBlock("recompile");

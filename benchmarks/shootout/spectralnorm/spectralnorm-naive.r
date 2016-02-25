@@ -10,6 +10,9 @@ spectralnorm_naive <- function(args) {
     options(digits=10)
 
     eval_A <- function(i, j) 1 / ((i + j) * (i + j + 1) / 2 + i + 1)
+    # TODO: get rid of this hack
+    eval_A_2 <- function(i, j) 1 / ((i + j) * (i + j + 1) / 2 + i + 1)
+
     eval_A_times_u <- function(u) {
         ret <- rep(0, n)
         for (i in 1:n)
@@ -21,7 +24,7 @@ spectralnorm_naive <- function(args) {
         ret <- rep(0, n)
         for (i in 1:n)
 	    for (j in 0:n1)
-                ret[[i]] <- ret[[i]] + u[[j + 1]] * eval_A(j, i - 1)
+                ret[[i]] <- ret[[i]] + u[[j + 1]] * eval_A_2(j, i - 1)
         return(ret)
     }
     eval_AtA_times_u <- function(u) eval_At_times_u(eval_A_times_u(u))
