@@ -88,7 +88,7 @@ extern "C" void* recompileFunction(SEXP closure,
                                    SEXP consts, SEXP rho) {
     assert(closure && TYPEOF(closure) == CLOSXP);
 
-    if (true || RJIT_DEBUG) {
+    if (RJIT_DEBUG) {
         std::cout << "Recompiling closure " << (void*)closure
                   << "  Typefeedback gathered :\n";
         jitPrintTypefeedback(closure);
@@ -99,7 +99,8 @@ extern "C" void* recompileFunction(SEXP closure,
     SEXP result;
     {
         Compiler c("optimized module");
-        result = c.compile("rOptFunction", body, FORMALS(closure));
+        result =
+            c.compileFunction("rOptFunction", body, FORMALS(closure), true);
         c.finalize();
     }
 

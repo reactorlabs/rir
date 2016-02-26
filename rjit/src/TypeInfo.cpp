@@ -1,5 +1,6 @@
 #include "TypeInfo.h"
 #include "RIntlns.h"
+#include "Flags.h"
 
 namespace rjit {
 
@@ -53,12 +54,14 @@ void TypeInfo::mergeSize(SEXP value) {
         break;
     case INTSXP:
         // TODO: we need na overflow check to make this possible
-        // if (XLENGTH(value) == 1)
-        //     s = Size::Scalar;
+        if (Flag::singleton().unsafeNA)
+            if (XLENGTH(value) == 1)
+                s = Size::Scalar;
         break;
     case LGLSXP:
-        if (XLENGTH(value) == 1)
-            s = Size::Scalar;
+        if (Flag::singleton().unsafeNA)
+            if (XLENGTH(value) == 1)
+                s = Size::Scalar;
         break;
     default:
         break;

@@ -32,7 +32,8 @@ class Compiler {
     }
 
     SEXP compilePromise(std::string const& name, SEXP ast);
-    SEXP compileFunction(std::string const& name, SEXP ast, SEXP formals);
+    SEXP compileFunction(std::string const& name, SEXP ast, SEXP formals,
+                         bool optimize = false);
 
     void finalizeCompile(SEXP ast);
 

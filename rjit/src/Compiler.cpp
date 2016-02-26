@@ -26,6 +26,8 @@
 #include "Instrumentation.h"
 #include "api.h"
 
+#include "Flags.h"
+
 #include "RIntlns.h"
 
 using namespace llvm;
@@ -38,26 +40,30 @@ SEXP Compiler::compilePromise(std::string const& name, SEXP ast) {
     return b.closePromise();
 }
 
-SEXP Compiler::compileFunction(std::string const& name, SEXP ast,
-                               SEXP formals) {
+SEXP Compiler::compileFunction(std::string const& name, SEXP ast, SEXP formals,
+                               bool optimize) {
 
     if (TYPEOF(ast) == NATIVESXP) {
         SEXP native = ast;
         ast = VECTOR_ELT(CDR(ast), 0);
-        TypeFeedback* tf = new TypeFeedback(native);
-        tf->clearInvocationCount();
-
-        b.openFunction(name, ast, formals, tf);
-
+        if (optimize) {
+            TypeFeedback* tf = new TypeFeedback(native);
+            tf->clearInvocationCount();
+            b.openFunction(name, ast, formals, tf);
+        } else {
+            b.openFunction(name, ast, formals);
+        }
     } else {
         if (TYPEOF(ast) == BCODESXP) {
             ast = VECTOR_ELT(CDR(ast), 0);
         }
         b.openFunction(name, ast, formals);
+    }
 
+    if (!optimize && Flag::singleton().recompileHot) {
         // Check the invocation count and recompile the function if it is hot.
         auto limit =
-            ConstantInt::get(b.getContext(), APInt(32, StringRef("800"), 10));
+            ConstantInt::get(b.getContext(), APInt(32, StringRef("500"), 10));
         auto invocations = ir::InvocationCount::create(b);
         auto condition = ir::IntegerLessThan::create(b, invocations, limit);
         BasicBlock* bRecompile = b.createBasicBlock("recompile");
@@ -143,13 +149,14 @@ Value* Compiler::compileSymbol(SEXP value) {
     auto name = CHAR(PRINTNAME(value));
     assert(strlen(name));
     Value* res = ir::GenericGetVar::create(b, b.rho(), value)->result();
-    if (b.isFunction()) {
+    if (Flag::singleton().recordTypes && b.isFunction()) {
         auto tf = TypeFeedback::get(b.f());
         if (!tf) {
             ir::RecordType::create(b, value, res);
         } else {
             TypeInfo inf = tf->get(value);
-            if (!inf.any() && inf != TypeInfo()) {
+            if (!Flag::singleton().unsafeOpt && !inf.any() &&
+                inf != TypeInfo()) {
                 ir::CheckType::create(b, res,
                                       TypeFeedback::get(b.f())->get(value));
             }

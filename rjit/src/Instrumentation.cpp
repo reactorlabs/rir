@@ -4,6 +4,7 @@
 
 #include "RIntlns.h"
 #include "TypeInfo.h"
+#include "Flags.h"
 
 #include <iostream>
 #include <cassert>

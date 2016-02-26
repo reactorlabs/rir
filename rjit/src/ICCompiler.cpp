@@ -33,6 +33,7 @@
 #include "JITCompileLayer.h"
 #include "api.h"
 
+#include "Flags.h"
 #include "RIntlns.h"
 
 #include <sstream>
@@ -150,6 +151,8 @@ bool ICCompiler::compileIc(SEXP inCall, SEXP inFun) {
         unsigned i = 0;
         while (arg != R_NilValue && form != R_NilValue) {
             if (TAG(arg) != R_NilValue) {
+                if (!Flag::singleton().staticNamedArgMatch)
+                    return false;
                 namedArg[i] = TAG(arg);
             } else {
                 positionalArg.push_back(i);

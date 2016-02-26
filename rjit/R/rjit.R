@@ -58,3 +58,5 @@ jit.compileEnvironment <- function(environment, moduleName ="rjit module") {
 
 jit.enable <- function() .Call("jitEnable");
 jit.disable <- function() .Call("jitDisable");
+
+jit.setFlag <- function(flag, value) .Call("setFlag", flag, value)

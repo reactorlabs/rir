@@ -15,6 +15,7 @@
 #include "ir/Builder.h"
 #include "ir/primitive_calls.h"
 #include "TypeInfo.h"
+#include "Flags.h"
 
 #include "StackScan.h"
 
@@ -122,6 +123,54 @@ REXPORT SEXP jitDisable(SEXP expression) {
 
 REXPORT SEXP jitEnable(SEXP expression) {
     RJIT_COMPILE = true;
+    return R_NilValue;
+}
+
+REXPORT SEXP setFlag(SEXP name, SEXP value) {
+    if (TYPEOF(value) != LGLSXP || XLENGTH(value) < 1) {
+        std::cout << "value not a bool\n";
+        return R_NilValue;
+    }
+    if (TYPEOF(name) != STRSXP || XLENGTH(name) < 1) {
+        std::cout << "flag not a string\n";
+        return R_NilValue;
+    }
+    SEXP c = VECTOR_ELT(name, 0);
+    if (TYPEOF(c) != CHARSXP)
+        return R_NilValue;
+    const char* flag = CHAR(c);
+    bool val = LOGICAL(value)[0];
+    if (strcmp("recordTypes", flag) == 0) {
+        rjit::Flag::singleton().recordTypes = val;
+        return R_NilValue;
+    }
+    if (strcmp("recompileHot", flag) == 0) {
+        rjit::Flag::singleton().recompileHot = val;
+        return R_NilValue;
+    }
+    if (strcmp("staticNamedMatch", flag) == 0) {
+        rjit::Flag::singleton().staticNamedArgMatch = val;
+        return R_NilValue;
+    }
+    if (strcmp("unsafeOpt", flag) == 0) {
+        rjit::Flag::singleton().unsafeOpt = val;
+        return R_NilValue;
+    }
+    if (strcmp("unsafeNA", flag) == 0) {
+        rjit::Flag::singleton().unsafeNA = val;
+        return R_NilValue;
+    }
+    if (strcmp("printIR", flag) == 0) {
+        rjit::Flag::singleton().printIR = val;
+        return R_NilValue;
+    }
+    if (strcmp("printOptIR", flag) == 0) {
+        rjit::Flag::singleton().printOptIR = val;
+        return R_NilValue;
+    }
+    std::cout << "Unknown flag : " << flag << "\n";
+    std::cout << " Valid flags are: recordTypes, recompileHot, "
+              << "staticNamedMatch, unsafeNA, printIR, printOptIR\n";
     return R_NilValue;
 }
 
