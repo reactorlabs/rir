@@ -24,7 +24,7 @@ void TypeRecorder::record(SEXP value, int idx) {
     info.mergeAll(value);
 
     if (old_info != info) {
-        INTEGER(store)[idx] = info;
+        INTEGER(store)[idx] = static_cast<int>(info);
     }
 }
 
@@ -54,7 +54,7 @@ TypeInfo TypeFeedback::get(SEXP sym) {
             return TypeInfo(INTEGER(store)[i]);
         }
     }
-    return TypeInfo();
+    return TypeInfo::any();
 }
 
 void TypeFeedback::attach(llvm::Function* f) {

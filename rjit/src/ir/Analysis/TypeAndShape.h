@@ -38,7 +38,7 @@ class TypeAndShapePass : public ir::Fixpoint<ir::AState<TypeInfo>> {
         if (state.has(symbol))
             state[dest] = state[symbol];
         else
-            state[dest] = Value(Value::Type::Any);
+            state[dest] = Value::any();
     }
 
     /** If we have incomming type & shape information, store it in the variable
@@ -70,7 +70,7 @@ class TypeAndShapePass : public ir::Fixpoint<ir::AState<TypeInfo>> {
     /** A call to ICStub invalidates all variables.
      */
     match call(ir::ICStub* ins) {
-        state.invalidateVariables(Value(Value::Type::Any));
+        state.invalidateVariables(Value(Value::any()));
     }
 
     bool dispatch(llvm::BasicBlock::iterator& i) override;

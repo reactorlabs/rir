@@ -141,7 +141,7 @@ SEXP Builder::closeFunction() {
     p(typeFeedback);
     p(typeFeedbackName);
     for (auto e : c_->instrumentationIndex) {
-        INTEGER(typeFeedback)[e.second] = TypeInfo();
+        INTEGER(typeFeedback)[e.second] = static_cast<int>(TypeInfo());
         SET_VECTOR_ELT(typeFeedbackName, e.second, e.first);
     }
     c_->cp[1] = typeFeedback;

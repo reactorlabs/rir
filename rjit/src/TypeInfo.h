@@ -26,38 +26,54 @@ class TypeInfo {
 
     // -- Constructors
 
+    // Init unused bits to zero
     TypeInfo() : TypeInfo(0) {
         store.types_ = EnumBitset<Type>();
         store.size_ = Size::Unknown;
         store.attrib_ = Attrib::Unknown;
     }
 
-    TypeInfo(Type type, Size s = Size::Any, Attrib attributes = Attrib::Any)
-        : TypeInfo(0) {
+    TypeInfo(Type type, Size size, Attrib attrib) : TypeInfo(0) {
         store.types_ = EnumBitset<Type>(type);
-        store.size_ = s;
-        store.attrib_ = attributes;
+        store.size_ = size;
+        store.attrib_ = attrib;
     }
 
-    TypeInfo(SEXP from) : TypeInfo(0) {
-        store.types_ = EnumBitset<Type>();
-        store.size_ = Size::Unknown;
-        store.attrib_ = Attrib::Unknown;
-        mergeAll(from);
-    }
+    TypeInfo(SEXP from) : TypeInfo() { mergeAll(from); }
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wstrict-aliasing"
 
     TypeInfo(int base) { *reinterpret_cast<int*>(&store) = base; }
 
-    operator int() { return *reinterpret_cast<int*>(&store); }
+    explicit operator int() { return *reinterpret_cast<int*>(&store); }
 
 #pragma GCC diagnostic pop
 
-    // -- getters
+    // This only works if we make sure to zero initialize the unused values!
+    bool operator!=(TypeInfo& other) {
+        return static_cast<int>(*this) != static_cast<int>(other);
+    }
 
-    bool any() {
+    bool operator==(TypeInfo& other) {
+        return static_cast<int>(*this) == static_cast<int>(other);
+    }
+
+    // -- getters
+    static TypeInfo any() {
+        TypeInfo any;
+        any.addType(Type::Any);
+        any.store.size_ = Size::Any;
+        any.store.attrib_ = Attrib::Any;
+        return any;
+    }
+
+    bool isBottom() {
+        return types().empty() && attrib() == Attrib::Unknown &&
+               size() == Size::Unknown;
+    }
+
+    bool isAny() {
         return types().has(Type::Any) && attrib() == Attrib::Any &&
                size() == Size::Any;
     }

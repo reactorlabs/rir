@@ -3286,7 +3286,7 @@ class CheckType : public PrimitiveCall {
 
         std::vector<llvm::Value*> args_;
         args_.push_back(value);
-        args_.push_back(Builder::integer(expected));
+        args_.push_back(Builder::integer(static_cast<int>(expected)));
 
         llvm::CallInst* i = llvm::CallInst::Create(
             primitiveFunction<CheckType>(ins->getModule()), args_, "", ins);
