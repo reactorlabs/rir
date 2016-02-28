@@ -143,22 +143,7 @@ Value* Compiler::compileICCallStub(Value* call, Value* op,
     ic_args.push_back(b.f());
     ic_args.push_back(ConstantInt::get(getGlobalContext(), APInt(64, 0)));
 
-    auto res = CallInst::Create(ic_stub, ic_args, "", b);
-    AttributeSet PAL;
-    {
-        SmallVector<AttributeSet, 4> Attrs;
-        AttributeSet PAS;
-        {
-            AttrBuilder B;
-            B.addAttribute("ic-stub", std::to_string(size));
-            PAS = AttributeSet::get(b.getContext(), ~0U, B);
-        }
-        Attrs.push_back(PAS);
-        PAL = AttributeSet::get(b.getContext(), Attrs);
-    }
-    res->setAttributes(PAL);
-
-    return res;
+    return ir::ICStub::create(b, ic_stub, ic_args, size)->result();
 }
 
 Value* Compiler::compileCall(SEXP call) {

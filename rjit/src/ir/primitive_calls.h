@@ -1,8 +1,13 @@
 #ifndef INTRINSICS_H_
 #define INTRINSICS_H_
 
+#include <iostream>
+
 #include "Ir.h"
 #include "Builder.h"
+#include "Properties.h"
+
+#include "ir/IrScalars.h"
 
 namespace rjit {
 namespace ir {
@@ -517,11 +522,13 @@ class UserLiteral : public PrimitiveCall {
     llvm::Value* constantPool() { return getValue(0); }
 
     int index() { return getValueInt(1); }
+
     SEXP indexValue() {
         llvm::Function* f = ins()->getParent()->getParent();
         JITModule* m = static_cast<JITModule*>(f->getParent());
         return VECTOR_ELT(m->constPool(f), index());
     }
+
     SEXP index(Builder const& b) { return b.constantPool(index()); }
 
     UserLiteral(llvm::Instruction* ins)
@@ -1969,22 +1976,49 @@ class GenericUnaryPlus : public PrimitiveCall {
     }
 };
 
-class GenericAdd : public PrimitiveCall {
-  public:
-    llvm::Value* lhs() { return getValue(0); }
-    llvm::Value* rhs() { return getValue(1); }
+/** Binary operator represented by a primitive call.
+ */
+class PrimitiveBinaryOperator : public PrimitiveCall, public ir::BinaryOperator {
+public:
+    llvm::Instruction * first() const override {
+        return Pattern::first();
+    }
+
+    llvm::Instruction * last() const override {
+        return Pattern::last();
+    }
+
+    llvm::Value* lhs() override {
+        return getValue(0);
+    }
+    llvm::Value* rhs() override {
+        return getValue(1);
+    }
     llvm::Value* rho() { return getValue(2); }
     llvm::Value* constantPool() { return getValue(3); }
 
     int call() { return getValueInt(4); }
+
     SEXP callValue() {
         llvm::Function* f = ins()->getParent()->getParent();
         JITModule* m = static_cast<JITModule*>(f->getParent());
         return VECTOR_ELT(m->constPool(f), call());
     }
+
     SEXP call(Builder const& b) { return b.constantPool(call()); }
 
-    GenericAdd(llvm::Instruction* ins) : PrimitiveCall(ins, Kind::GenericAdd) {}
+protected:
+
+    PrimitiveBinaryOperator(llvm::Instruction* ins, Kind k) : PrimitiveCall(ins, k) {}
+
+};
+
+
+
+class GenericAdd : public ir::PrimitiveBinaryOperator {
+  public:
+    typedef ir::FAdd ScalarDouble;
+    typedef ir::Add ScalarInt;
 
     static GenericAdd* create(Builder& b, ir::Value lhs, ir::Value rhs,
                               llvm::Value* rho, SEXP call) {
@@ -2027,24 +2061,17 @@ class GenericAdd : public PrimitiveCall {
     static bool classof(Pattern const* s) {
         return s->getKind() == Kind::GenericAdd;
     }
+
+protected:
+    GenericAdd(llvm::Instruction * ins):
+        PrimitiveBinaryOperator(ins, Kind::GenericAdd) {
+    }
 };
 
-class GenericSub : public PrimitiveCall {
+class GenericSub : public ir::PrimitiveBinaryOperator {
   public:
-    llvm::Value* lhs() { return getValue(0); }
-    llvm::Value* rhs() { return getValue(1); }
-    llvm::Value* rho() { return getValue(2); }
-    llvm::Value* constantPool() { return getValue(3); }
-
-    int call() { return getValueInt(4); }
-    SEXP callValue() {
-        llvm::Function* f = ins()->getParent()->getParent();
-        JITModule* m = static_cast<JITModule*>(f->getParent());
-        return VECTOR_ELT(m->constPool(f), call());
-    }
-    SEXP call(Builder const& b) { return b.constantPool(call()); }
-
-    GenericSub(llvm::Instruction* ins) : PrimitiveCall(ins, Kind::GenericSub) {}
+    typedef ir::FSub ScalarDouble;
+    typedef ir::Sub ScalarInt;
 
     static GenericSub* create(Builder& b, ir::Value lhs, ir::Value rhs,
                               llvm::Value* rho, SEXP call) {
@@ -2087,24 +2114,17 @@ class GenericSub : public PrimitiveCall {
     static bool classof(Pattern const* s) {
         return s->getKind() == Kind::GenericSub;
     }
+
+protected:
+    GenericSub(llvm::Instruction * ins):
+        PrimitiveBinaryOperator(ins, Kind::GenericSub) {
+    }
 };
 
-class GenericMul : public PrimitiveCall {
+class GenericMul : public ir::PrimitiveBinaryOperator {
   public:
-    llvm::Value* lhs() { return getValue(0); }
-    llvm::Value* rhs() { return getValue(1); }
-    llvm::Value* rho() { return getValue(2); }
-    llvm::Value* constantPool() { return getValue(3); }
-
-    int call() { return getValueInt(4); }
-    SEXP callValue() {
-        llvm::Function* f = ins()->getParent()->getParent();
-        JITModule* m = static_cast<JITModule*>(f->getParent());
-        return VECTOR_ELT(m->constPool(f), call());
-    }
-    SEXP call(Builder const& b) { return b.constantPool(call()); }
-
-    GenericMul(llvm::Instruction* ins) : PrimitiveCall(ins, Kind::GenericMul) {}
+    typedef ir::FMul ScalarDouble;
+    typedef ir::Mul ScalarInt;
 
     static GenericMul* create(Builder& b, ir::Value lhs, ir::Value rhs,
                               llvm::Value* rho, SEXP call) {
@@ -2147,24 +2167,18 @@ class GenericMul : public PrimitiveCall {
     static bool classof(Pattern const* s) {
         return s->getKind() == Kind::GenericMul;
     }
+protected:
+    GenericMul(llvm::Instruction * ins):
+        PrimitiveBinaryOperator(ins, Kind::GenericMul) {
+    }
 };
 
-class GenericDiv : public PrimitiveCall {
+class GenericDiv : public ir::PrimitiveBinaryOperator {
   public:
-    llvm::Value* lhs() { return getValue(0); }
-    llvm::Value* rhs() { return getValue(1); }
-    llvm::Value* rho() { return getValue(2); }
-    llvm::Value* constantPool() { return getValue(3); }
 
-    int call() { return getValueInt(4); }
-    SEXP callValue() {
-        llvm::Function* f = ins()->getParent()->getParent();
-        JITModule* m = static_cast<JITModule*>(f->getParent());
-        return VECTOR_ELT(m->constPool(f), call());
-    }
-    SEXP call(Builder const& b) { return b.constantPool(call()); }
+    typedef ir::FDiv ScalarDouble;
+    typedef ir::Div ScalarInt;
 
-    GenericDiv(llvm::Instruction* ins) : PrimitiveCall(ins, Kind::GenericDiv) {}
 
     static GenericDiv* create(Builder& b, ir::Value lhs, ir::Value rhs,
                               llvm::Value* rho, SEXP call) {
@@ -2206,6 +2220,11 @@ class GenericDiv : public PrimitiveCall {
 
     static bool classof(Pattern const* s) {
         return s->getKind() == Kind::GenericDiv;
+    }
+
+protected:
+    GenericDiv(llvm::Instruction * ins):
+        PrimitiveBinaryOperator(ins, Kind::GenericDiv) {
     }
 };
 

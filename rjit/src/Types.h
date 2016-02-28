@@ -15,8 +15,13 @@ namespace t {
 extern llvm::PointerType* SEXP;
 extern llvm::StructType* SEXP_u1;
 extern llvm::Type* Int;
+extern llvm::Type * Double;
 extern llvm::Type* Void;
 extern llvm::Type* Bool;
+
+/** Vector length in R. This is equivalent to ptrdiff_t type.
+ */
+extern llvm::Type * VectorLength;
 
 extern llvm::StructType* SEXPREC;
 extern llvm::StructType* VECTOR_SEXPREC;

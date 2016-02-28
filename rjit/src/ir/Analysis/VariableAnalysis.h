@@ -3,7 +3,7 @@
 
 #include "ir/Pass.h"
 #include "ir/PassDriver.h"
-
+#include "ir/primitive_calls.h"
 #include "api.h"
 
 #include "RIntlns.h"
@@ -44,7 +44,7 @@ class VariablePass : public Pass {
     bool dispatch(llvm::BasicBlock::iterator& i) override;
 };
 
-class VariableAnalysis : public ForwardDriver<VariablePass> {
+class VariableAnalysis : public LinearDriver<VariablePass> {
   public:
     bool runOnFunction_(Function& f) override {
         pass.m = static_cast<JITModule*>(f.getParent());

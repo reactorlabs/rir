@@ -2,6 +2,8 @@ cmake_minimum_required(VERSION 2.8.8)
 
 project(rjit)
 
+set(CODEGEN_ARGS "noformat")
+
 # first look for any local configuration, and include it, if found
 include(${CMAKE_SOURCE_DIR}/local/cmake.cmake OPTIONAL)
 
@@ -63,8 +65,7 @@ add_custom_target(codegen_passes_dir
     COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_SOURCE_DIR}/rjit/src/passes/codegen)
 add_custom_target(codegen_passes
     DEPENDS codegen_passes_dir
-#    COMMAND python3 tools/codegen_passes.py xml rjit/src/passes/codegen ${LLVM_DIR}/../../../bin/clang-format WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-    COMMAND python3 tools/codegen_passes.py xml rjit/src/passes/codegen noformat WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    COMMAND python3 tools/codegen_passes.py xml rjit/src/passes/codegen ${CODEGEN_ARGS} WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
 )
 
 # build the shared library for the JIT

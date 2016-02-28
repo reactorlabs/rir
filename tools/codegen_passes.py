@@ -124,16 +124,17 @@ class DispatchRecord:
         if (self.unconditional):
             args = self.unconditional.args
         elif (self.conditional):
-            args = self.conditional[0].args[1:]
+            args = self.conditional[0].args[0:-1]
         else:
             return False
         # now for each argument, if it is in llvm Instructions, it is llvm instruction, and we will use itertor, otherwise we use pattern
         result = []
         for i in range(len(args)):
             if (args[i] in instructions):
-                result.append("static_cast<{iType} *>(&*it{i})".format(iType = args[i], i = i))
+                result.append("dyn_cast<{iType}>(&*it{i})".format(iType = args[i], i = i))
             else:
-                result.append("static_cast<{pType} *>(p{i})".format(pType = args[i], i = i))
+                # dynamic cast for now, deal with efficiency in the new IR
+                result.append("dynamic_cast<{pType} *>(p{i})".format(pType = args[i], i = i))
         return ", ".join(result)
 
 
@@ -153,13 +154,13 @@ class DispatchRecord:
         if (self.nextPatterns):
             p = "p{0}".format(current)
             print("""
-            Pattern * {p} = Pattern::get({it});
+            rjit::ir::Pattern * {p} = rjit::ir::Pattern::get({it});
             if ({p} != nullptr)
                 switch ({p}->kind) {{""".format(p = p, it = it), file = f)
             # now switch on the arguments
             for pName, dr in self.nextPatterns.items():
                 print("""
-                case Pattern::Kind::{pName}: {{
+                case rjit::ir::Pattern::Kind::{pName}: {{
                     {p}->advance({itNext});""".format(pName = pName.split("::")[-1], p = p, itNext = itNext), file = f)
                 dr.emit(f, current + 1)
                 print("break; }", file = f)
@@ -358,6 +359,21 @@ class CppClass:
                     self.file = child.get("file")
                     self.line = child.get("line")
 
+    def checkForSubclasses(self):
+        """ Looks at all classes in the doxygen directory and identifies all that are subclasses. This is important because doxygen won't report derivedcompoundrefs of template classes. """
+        for f in os.listdir(doxygenRoot):
+            if (f[0:5] != "class"):
+                continue
+            x = et.parse(os.path.join(doxygenRoot, f)).getroot()[0]
+            name = ""
+            for child in x:
+                if (child.tag == "compoundname"):
+                    name = child.text
+                if (child.tag == "basecompoundref"):
+                    if (child.text.split("<")[0] == self.name):
+                        self.subclasses.append(name)
+                        break
+
     def includePath(self):
         """ Returns the include path of this file, i.e. what should go in the include statement.Some versions of doxygen don't generate absolute path, in that case rjit/src just need to be removed from the path."""
         return self.file[len(cppRoot) + 1:] if cppRoot in self.file else self.file[9:]
@@ -451,8 +467,8 @@ class CppClass:
         """ Emits the dispatcher's code.
 
         """
-        # don't emit the base pass
-        if (self.name == PASS_BASE):
+        # don't emit the base pass or any templated pass
+        if (self.name == PASS_BASE or self.template):
             return
         filename = os.path.join(destDir, self.name.replace("::", "_") + ".cpp")
         D("  {0}".format(filename))
@@ -475,15 +491,23 @@ class CppClass:
             # emit the dispatch table
             self.dispatchTable.emit(f, 0)
             # if the emitted code get here, the match was not successful, delegate to a parent
-            for parent in self.parentClasses:
-                if (parent in passes):
-                    print("return {parentClass}::dispatch(it0);".format(parentClass = parent), file = f)
-                    break
-            print("}", file = f)
-        # now we must do clang-format on the file so that it does not look too ugly
+            x = self
+            while (x):
+                for parent in x.parentClasses:
+                    parent = parent.split("<")[0]
+                    if (parent in passes):
+                        x = passes[parent]
+                        if (not x.template):
+                            print("return {parentClass}::dispatch(it0);".format(parentClass = parent), file = f)
+                            print("}", file = f)
+                            # now we must do clang-format on the file so that it does not look too ugly
+                            x = False
+                            break
+
         if (clangFormat != "noformat"):
             subprocess.call([clangFormat, "-i", "-style=file", ".clang_format", filename])
-        #clang-format -i -style=LLVM
+            #clang-format -i -style=LLVM
+
 # ---------------------------------------------------------------------------------------------------------------------
 
 def loadClassHierarchy(baseClass):
@@ -494,13 +518,33 @@ def loadClassHierarchy(baseClass):
     q = [ baseClass, ]
     while (q):
         key = q.pop()
-        if (not key in result):
+        # if the class is a template, load it, but do not emit any code for it
+        k = key.split("<")[0]
+        if (not k in result):
             D("  loading class {0}".format(key))
-            value = CppClass(key)
-            result[key] = value
+            value = CppClass(k)
+            value.template = (k != key)
+            if (value.template):
+                D("    template")
+            if (value.template):
+                # if it is template, doxygen won't create derivedcompoundrefs for us to see subclasses, so we just load all classes and check for base classes.
+                value.checkForSubclasses()
+            result[k] = value
             # check if the class has any children and add them to the queue
             for child in value.subclasses:
                 q.append(child)
+
+
+
+
+        # do not deal with templated passes as they are not allowed as leaves anyways.
+#        if (not key in result and "<" not in key):
+#            D("  loading class {0}".format(key))
+#            value = CppClass(key)
+#            result[key] = value
+#            # check if the class has any children and add them to the queue
+#            for child in value.subclasses:
+#                q.append(child)
     return result
 
 def loadClassParents(child, into):
@@ -509,7 +553,7 @@ def loadClassParents(child, into):
     q = child.parentClasses[:]
     while (q):
         key = q.pop()
-        if (not key in result):
+        if (not key in into):
             D("  loading class {0}".format(key))
             value = CppClass(key)
             into[key] = value
@@ -601,12 +645,8 @@ def buildDispatchTables():
         h.createDispatchTable()
     pass
 
-def emit():
-    D("emitting code for dispatch methods")
-    for h in passes.values():
-        h.emit()
-
 def emitPatternKinds():
+    global force
     D("emitting pattern kinds")
     filename = cppRoot + "/ir/pattern_kinds.inc"
     pks = set([ i.split("::")[-1] for i in patterns ])
@@ -625,10 +665,18 @@ def emitPatternKinds():
             D("  skipping")
             return
     # emit
+    # set force to true because we might need to redo all matches as they might have used the changed Pattern kind names
+    force = True
     with open(filename, "w") as f:
         print("/* This file has been automatically generated. Do not hand-edit. */", file = f)
         for pk in pks:
             print("{0},".format(pk), file = f)
+
+def emit():
+    D("emitting code for dispatch methods")
+    for h in passes.values():
+        h.emit()
+
 
 # ---------------------------------------------------------------------------------------------------------------------
 
@@ -691,8 +739,8 @@ def main():
     # for each pass, we need to build a match table and error if the match table is ambiguous
     buildDispatchTables()
     # emit the generated code
-    emit()
     emitPatternKinds()
+    emit()
 
     D("DONE")
 

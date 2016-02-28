@@ -37,7 +37,7 @@ const EnumBitset<TypeInfo::Type> TypeInfo::addType(int sexpType) {
 
 void TypeInfo::mergeAttrib(SEXP value) {
     // TODO: find out if value is an object
-    Attrib a = ATTRIB(value) == R_NilValue ? Attrib::Absent : Attrib::Present;
+    Attrib a = ATTRIB(value) == R_NilValue ? Attrib::Absent : Attrib::Any;
     mergeAttrib(a);
 }
 
@@ -99,7 +99,7 @@ std::ostream& operator<<(std::ostream& out, TypeInfo& info) {
     case TypeInfo::Attrib::Absent:
         out << "~";
         break;
-    case TypeInfo::Attrib::Present:
+    case TypeInfo::Attrib::Any:
         out << "attr";
         break;
     case TypeInfo::Attrib::Object:

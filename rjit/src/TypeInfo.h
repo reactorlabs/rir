@@ -20,9 +20,9 @@ class TypeInfo {
 
     enum class Type : int { Integer, Float, String, Vector, Bool, Any };
 
-    enum class Attrib : uint8_t { Unknown, Absent, Object, Present };
-
     enum class Size : uint8_t { Unknown, Scalar, Any };
+
+    enum class Attrib : uint8_t { Unknown, Absent, Object, Any };
 
     // -- Constructors
 
@@ -30,6 +30,19 @@ class TypeInfo {
         store.types_ = EnumBitset<Type>();
         store.size_ = Size::Unknown;
         store.attrib_ = Attrib::Unknown;
+    }
+
+    TypeInfo(Type type, Size s = Size::Any, Attrib attributes = Attrib::Any) {
+        store.types_ = EnumBitset<Type>(type);
+        store.size_ = s;
+        store.attrib_ = attributes;
+    }
+
+    TypeInfo(SEXP from) {
+        store.types_ = EnumBitset<Type>();
+        store.size_ = Size::Unknown;
+        store.attrib_ = Attrib::Unknown;
+        mergeAll(from);
     }
 
 #pragma GCC diagnostic push
@@ -53,10 +66,15 @@ class TypeInfo {
 
     bool hasType(Type t) { return types().has(t) || types().has(Type::Any); }
 
+    bool hasOnlyType(Type t) const {
+        return store.types_ == 1 << static_cast<int>(t);
+    }
+
     const EnumBitset<Type> types(EnumBitset<Type> t) {
         store.types_ = t;
         return t;
     }
+
 
     Size size(Size s) {
         assert(s > Size::Unknown && s <= Size::Any);
@@ -65,7 +83,7 @@ class TypeInfo {
     }
 
     Attrib attrib(Attrib a) {
-        assert(a > Attrib::Unknown && a <= Attrib::Present);
+        assert(a > Attrib::Unknown && a <= Attrib::Any);
         store.attrib_ = a;
         return a;
     }
@@ -79,24 +97,51 @@ class TypeInfo {
 
     // -- merge two typeinfos
 
-    void mergeTypes(TypeInfo other) { mergeTypes(other.types()); }
-    void mergeAttrib(TypeInfo other) { mergeAttrib(other.attrib()); }
-    void mergeSize(TypeInfo other) { mergeSize(other.size()); }
+    bool mergeTypes(TypeInfo other) { return mergeTypes(other.types()); }
+    bool mergeAttrib(TypeInfo other) { return mergeAttrib(other.attrib()); }
+    bool mergeSize(TypeInfo other) { return mergeSize(other.size()); }
+
+    bool mergeWith(TypeInfo other) {
+        bool result = mergeTypes(other);
+        result = mergeAttrib(other) or result;
+        return mergeSize(other) or result;
+    }
+
+    static TypeInfo merge(TypeInfo l, TypeInfo r) {
+        TypeInfo result(l);
+        result.mergeWith(r);
+        return result;
+    }
 
   private:
     // -- merge helpers
 
-    void mergeAttrib(Attrib a) {
-        if (a > attrib())
+    bool mergeAttrib(Attrib a) {
+        if (a > attrib()) {
             attrib(a);
+            return true;
+        } else {
+            return false;
+        }
     }
 
-    void mergeSize(Size s) {
-        if (s > size())
+    bool mergeSize(Size s) {
+        if (s > size()) {
             size(s);
+            return true;
+        } else {
+            return false;
+        }
     }
 
-    void mergeTypes(EnumBitset<Type> t) { types(t | types()); }
+    bool mergeTypes(EnumBitset<Type> t) {
+        if ((t | types()) != types()) {
+            types(t | types());
+            return true;
+        } else {
+            return false;
+        }
+    }
 
     const EnumBitset<Type> addType(Type type) {
         auto t = types();

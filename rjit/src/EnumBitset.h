@@ -38,6 +38,10 @@ class EnumBitset {
 
     bool operator==(const EnumBitset<Enum>& o) const { return set == o.set; }
 
+    bool operator != (EnumBitset<Enum> const & o) const {
+        return set != o.set;
+    }
+
     EnumBitset operator|(const EnumBitset<Enum>& o) const {
         return set | o.set;
     }
