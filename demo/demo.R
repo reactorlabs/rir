@@ -8,7 +8,7 @@ h <- function(a, b, c, d, e, f) {
 g <- function(f, e, d, c, b, a) {
     res <- 0
     for (i in 1:40) {
-        h(a=b, b=c, c=d, d=e, e=f, f=a)
+        res <- res + h(a=b, b=c, c=d, d=e, e=f, f=a)
     }
     res
 }
@@ -31,6 +31,12 @@ print(system.time(f()))
 # Now lets see rjit
 source("loadRjit")
 
+jit.setFlag("recordTypes", FALSE);
+jit.setFlag("recompileHot", FALSE);
+jit.setFlag("useTypefeedback", FALSE);
+jit.setFlag("unsafeOpt", FALSE);
+jit.setFlag("staticNamedMatch", FALSE);
+
 # a helper function
 recompile <- function() {
     f <<- jit.compile(f)
@@ -52,6 +58,7 @@ jit.printTypefeedback(h)
 jit.printTypefeedback(g)
 
 # now let put this to use
+jit.setFlag("useTypefeedback", TRUE)
 jit.setFlag("recompileHot", TRUE)
 recompile()
 print(system.time(f()))
