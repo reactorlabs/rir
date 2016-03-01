@@ -134,6 +134,12 @@ class TypeInfo {
         return result;
     }
 
+    const EnumBitset<Type> addType(Type type) {
+        auto t = types();
+        t.insert(type);
+        return types(t);
+    }
+
   private:
     // -- merge helpers
 
@@ -162,12 +168,6 @@ class TypeInfo {
         } else {
             return false;
         }
-    }
-
-    const EnumBitset<Type> addType(Type type) {
-        auto t = types();
-        t.insert(type);
-        return types(t);
     }
 
     friend std::ostream& operator<<(std::ostream& out, TypeInfo& t);

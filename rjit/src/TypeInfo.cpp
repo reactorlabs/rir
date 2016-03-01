@@ -49,19 +49,10 @@ void TypeInfo::mergeSize(SEXP value) {
     case REALSXP:
     case STRSXP:
     case VECSXP:
+    case INTSXP:
+    case LGLSXP:
         if (XLENGTH(value) == 1)
             s = Size::Scalar;
-        break;
-    case INTSXP:
-        // TODO: we need na overflow check to make this possible
-        if (Flag::singleton().unsafeNA)
-            if (XLENGTH(value) == 1)
-                s = Size::Scalar;
-        break;
-    case LGLSXP:
-        if (Flag::singleton().unsafeNA)
-            if (XLENGTH(value) == 1)
-                s = Size::Scalar;
         break;
     default:
         break;

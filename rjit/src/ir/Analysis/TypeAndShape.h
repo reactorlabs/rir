@@ -7,6 +7,7 @@
 
 #include "TypeInfo.h"
 #include "Instrumentation.h"
+#include "Flags.h"
 
 namespace rjit {
 namespace analysis {
@@ -35,10 +36,25 @@ class TypeAndShapePass : public ir::Fixpoint<ir::AState<TypeInfo>> {
     match genericGetVar(ir::GenericGetVar* p) {
         llvm::Value* dest = p->result();
         SEXP symbol = p->symbolValue();
-        if (state.has(symbol))
+        if (state.has(symbol)) {
             state[dest] = state[symbol];
-        else
-            state[dest] = Value::any();
+            return;
+        }
+        if (Flag::singleton().useTypefeedback && typeFeedback) {
+            TypeInfo inf = typeFeedback->get(symbol);
+
+            // We cannot guard integer overflow to NA yet:
+            if (!Flag::singleton().unsafeNA &&
+                (inf.hasOnlyType(TypeInfo::Type::Integer) ||
+                 inf.hasOnlyType(TypeInfo::Type::Bool))) {
+                inf.addType(TypeInfo::Type::Any);
+            }
+
+            state[dest] = inf;
+            return;
+        }
+
+        state[dest] = Value::any();
     }
 
     /** If we have incomming type & shape information, store it in the variable
@@ -69,9 +85,7 @@ class TypeAndShapePass : public ir::Fixpoint<ir::AState<TypeInfo>> {
 
     /** A call to ICStub invalidates all variables.
      */
-    match call(ir::ICStub* ins) {
-        state.invalidateVariables(Value(Value::any()));
-    }
+    match call(ir::ICStub* ins) { state.invalidateVariables(Value::any()); }
 
     bool dispatch(llvm::BasicBlock::iterator& i) override;
 };

@@ -22,7 +22,8 @@ class BoxingRemovalPass : public ir::Pass, public ir::Optimization {
         Value& v = st()[p->vector()];
         if (v.ptr() != nullptr and v.ptr() != p->result()) {
             replaceAllUsesWith(p, v.ptr());
-            eraseFromParent(p);
+            // TODO: this seems broken....
+            // eraseFromParent(p);
         }
     }
 

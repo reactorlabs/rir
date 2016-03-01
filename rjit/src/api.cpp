@@ -164,6 +164,10 @@ REXPORT SEXP setFlag(SEXP name, SEXP value) {
         rjit::Flag::singleton().printIR = val;
         return R_NilValue;
     }
+    if (strcmp("useTypefeedback", flag) == 0) {
+        rjit::Flag::singleton().useTypefeedback = val;
+        return R_NilValue;
+    }
     if (strcmp("printOptIR", flag) == 0) {
         rjit::Flag::singleton().printOptIR = val;
         return R_NilValue;
