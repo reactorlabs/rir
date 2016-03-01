@@ -4,10 +4,8 @@
 namespace rjit {
 namespace ir {
 
-ir::Pattern * ir::Property::pattern() {
-    return dynamic_cast<ir::Pattern *>(this);
-
+ir::Pattern* ir::Property::pattern() {
+    return dynamic_cast<ir::Pattern*>(this);
 }
-
 }
 }

@@ -1978,22 +1978,15 @@ class GenericUnaryPlus : public PrimitiveCall {
 
 /** Binary operator represented by a primitive call.
  */
-class PrimitiveBinaryOperator : public PrimitiveCall, public ir::BinaryOperator {
-public:
-    llvm::Instruction * first() const override {
-        return Pattern::first();
-    }
+class PrimitiveBinaryOperator : public PrimitiveCall,
+                                public ir::BinaryOperator {
+  public:
+    llvm::Instruction* first() const override { return Pattern::first(); }
 
-    llvm::Instruction * last() const override {
-        return Pattern::last();
-    }
+    llvm::Instruction* last() const override { return Pattern::last(); }
 
-    llvm::Value* lhs() override {
-        return getValue(0);
-    }
-    llvm::Value* rhs() override {
-        return getValue(1);
-    }
+    llvm::Value* lhs() override { return getValue(0); }
+    llvm::Value* rhs() override { return getValue(1); }
     llvm::Value* rho() { return getValue(2); }
     llvm::Value* constantPool() { return getValue(3); }
 
@@ -2007,13 +2000,10 @@ public:
 
     SEXP call(Builder const& b) { return b.constantPool(call()); }
 
-protected:
-
-    PrimitiveBinaryOperator(llvm::Instruction* ins, Kind k) : PrimitiveCall(ins, k) {}
-
+  protected:
+    PrimitiveBinaryOperator(llvm::Instruction* ins, Kind k)
+        : PrimitiveCall(ins, k) {}
 };
-
-
 
 class GenericAdd : public ir::PrimitiveBinaryOperator {
   public:
@@ -2062,10 +2052,9 @@ class GenericAdd : public ir::PrimitiveBinaryOperator {
         return s->getKind() == Kind::GenericAdd;
     }
 
-protected:
-    GenericAdd(llvm::Instruction * ins):
-        PrimitiveBinaryOperator(ins, Kind::GenericAdd) {
-    }
+  protected:
+    GenericAdd(llvm::Instruction* ins)
+        : PrimitiveBinaryOperator(ins, Kind::GenericAdd) {}
 };
 
 class GenericSub : public ir::PrimitiveBinaryOperator {
@@ -2115,10 +2104,9 @@ class GenericSub : public ir::PrimitiveBinaryOperator {
         return s->getKind() == Kind::GenericSub;
     }
 
-protected:
-    GenericSub(llvm::Instruction * ins):
-        PrimitiveBinaryOperator(ins, Kind::GenericSub) {
-    }
+  protected:
+    GenericSub(llvm::Instruction* ins)
+        : PrimitiveBinaryOperator(ins, Kind::GenericSub) {}
 };
 
 class GenericMul : public ir::PrimitiveBinaryOperator {
@@ -2167,18 +2155,16 @@ class GenericMul : public ir::PrimitiveBinaryOperator {
     static bool classof(Pattern const* s) {
         return s->getKind() == Kind::GenericMul;
     }
-protected:
-    GenericMul(llvm::Instruction * ins):
-        PrimitiveBinaryOperator(ins, Kind::GenericMul) {
-    }
+
+  protected:
+    GenericMul(llvm::Instruction* ins)
+        : PrimitiveBinaryOperator(ins, Kind::GenericMul) {}
 };
 
 class GenericDiv : public ir::PrimitiveBinaryOperator {
   public:
-
     typedef ir::FDiv ScalarDouble;
     typedef ir::Div ScalarInt;
-
 
     static GenericDiv* create(Builder& b, ir::Value lhs, ir::Value rhs,
                               llvm::Value* rho, SEXP call) {
@@ -2222,10 +2208,9 @@ class GenericDiv : public ir::PrimitiveBinaryOperator {
         return s->getKind() == Kind::GenericDiv;
     }
 
-protected:
-    GenericDiv(llvm::Instruction * ins):
-        PrimitiveBinaryOperator(ins, Kind::GenericDiv) {
-    }
+  protected:
+    GenericDiv(llvm::Instruction* ins)
+        : PrimitiveBinaryOperator(ins, Kind::GenericDiv) {}
 };
 
 class GenericPow : public PrimitiveCall {

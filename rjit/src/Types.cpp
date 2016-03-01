@@ -17,7 +17,7 @@ PointerType* initializeTypes() {
     t::Bool = IntegerType::get(context, 1);
     t::VectorLength = IntegerType::get(context, sizeof(ptrdiff_t) * 8);
     // for now, bool is the same as integer
-    //t::Bool = t::Int;
+    // t::Bool = t::Int;
     StructType* t_sxpinfo_struct =
         StructType::create(context, "struct.sxpinfo_struct");
     // sxpinfo_struct is just int32 in a structure, the bitmasking is not a
@@ -100,10 +100,10 @@ namespace rjit {
 namespace t {
 
 Type* Int;
-Type * Double;
+Type* Double;
 Type* Void;
 Type* Bool;
-Type * VectorLength;
+Type* VectorLength;
 
 PointerType* SEXP = initializeTypes();
 

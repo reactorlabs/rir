@@ -16,12 +16,12 @@ bool Pass::dispatch(llvm::BasicBlock::iterator& i) {
     return true;
 }
 
-void Optimization::replaceAllUsesWith(llvm::Value * o, Pattern* n) {
+void Optimization::replaceAllUsesWith(llvm::Value* o, Pattern* n) {
     changed_ = true;
     o->replaceAllUsesWith(n->ins_);
 }
 
-void Optimization::replaceAllUsesWith(Pattern* o, llvm::Value * n) {
+void Optimization::replaceAllUsesWith(Pattern* o, llvm::Value* n) {
     changed_ = true;
     o->ins_->replaceAllUsesWith(n);
 }
@@ -46,8 +46,5 @@ void Optimization::eraseFromParent(Pattern* p) {
         ii->eraseFromParent();
     }
 }
-
-
-
 }
 }

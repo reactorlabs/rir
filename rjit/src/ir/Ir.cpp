@@ -11,14 +11,12 @@ char const* const Pattern::MD_NAME = "r_ir_type";
 llvm::Instruction* const ir::Pattern::Sentinel::singleton =
     (new ir::Nop())->ins_;
 
-llvm::Value * Predicate::constantPool(ir::Pass & p) {
-    return p.constantPool;
-}
+llvm::Value* Predicate::constantPool(ir::Pass& p) { return p.constantPool; }
 
-
-
-bool GetVectorElement::FromConstantPool::match(ir::Pass & p, GetVectorElement * vge) {
-    if (vge->vector() == constantPool(p) and llvm::isa<llvm::ConstantInt>(vge->index())) {
+bool GetVectorElement::FromConstantPool::match(ir::Pass& p,
+                                               GetVectorElement* vge) {
+    if (vge->vector() == constantPool(p) and
+        llvm::isa<llvm::ConstantInt>(vge->index())) {
         index_ = Builder::integer(vge->index());
         llvm::Function* f = vge->first()->getParent()->getParent();
         JITModule* m = static_cast<JITModule*>(f->getParent());
@@ -27,9 +25,7 @@ bool GetVectorElement::FromConstantPool::match(ir::Pass & p, GetVectorElement * 
     } else {
         return false;
     }
-
 }
-
 
 } // namespace ir
 

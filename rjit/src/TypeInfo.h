@@ -75,7 +75,6 @@ class TypeInfo {
         return t;
     }
 
-
     Size size(Size s) {
         assert(s > Size::Unknown && s <= Size::Any);
         store.size_ = s;

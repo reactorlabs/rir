@@ -57,17 +57,14 @@ ExecutionEngine* JITCompileLayer::finalize(JITModule* m) {
     // Make sure we can resolve symbols in the program as well. The zero arg
     legacy::PassManager pm;
 
-
     pm.add(new analysis::TypeAndShape());
     pm.add(new optimization::Scalars());
     pm.add(new analysis::ScalarsTracking());
     pm.add(new optimization::BoxingRemoval());
     pm.add(new optimization::DeadAllocationRemoval());
 
-
     pm.add(new ir::VariableAnalysis());
     pm.add(new ir::ConstantLoadOptimization());
-
 
     pm.add(createTargetTransformInfoWrapperPass(TargetIRAnalysis()));
 
@@ -79,21 +76,20 @@ ExecutionEngine* JITCompileLayer::finalize(JITModule* m) {
     pm.add(rjit::createPlaceRJITSafepointsPass());
     pm.add(rjit::createRJITRewriteStatepointsForGCPass());
 
+    /*    std::cerr << "--------------------------------------" << std::endl;
+        std::cerr << "--------------------------------------" << std::endl;
+        std::cerr << "--------------------------------------" << std::endl;
+        std::cerr << "--------------------------------------" << std::endl;
+        std::cerr << "--------------------------------------" << std::endl;
+        std::cerr << "--------------------------------------" << std::endl;
 
-/*    std::cerr << "--------------------------------------" << std::endl;
-    std::cerr << "--------------------------------------" << std::endl;
-    std::cerr << "--------------------------------------" << std::endl;
-    std::cerr << "--------------------------------------" << std::endl;
-    std::cerr << "--------------------------------------" << std::endl;
-    std::cerr << "--------------------------------------" << std::endl;
-
-    for (llvm::Function& f : m->getFunctionList()) {
-        if (not f.isDeclaration()) {
-            std::cerr << "--------------------------------------" << std::endl;
-            f.dump();
-        }
-    }*/
-
+        for (llvm::Function& f : m->getFunctionList()) {
+            if (not f.isDeclaration()) {
+                std::cerr << "--------------------------------------" <<
+       std::endl;
+                f.dump();
+            }
+        }*/
 
     pm.run(*m);
 
@@ -103,7 +99,6 @@ ExecutionEngine* JITCompileLayer::finalize(JITModule* m) {
             f.dump();
         }
     } */
-
 
     engine->finalizeObject();
     m->finalizeNativeSEXPs(engine);

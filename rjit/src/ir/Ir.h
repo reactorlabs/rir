@@ -194,11 +194,10 @@ class Pattern {
 /** Base class for all predicates.
  */
 class Predicate {
-public:
+  public:
     /** Returns the constant pool value for currently analyzed function.
      */
-    llvm::Value * constantPool(ir::Pass & p);
-
+    llvm::Value* constantPool(ir::Pass& p);
 };
 
 namespace predicate {
@@ -444,13 +443,9 @@ class IntegerAdd : public Pattern, public BinaryOperator {
 
     llvm::Value* rhs() override { return ins<llvm::ICmpInst>()->getOperand(1); }
 
-    llvm::Instruction * first() const override {
-        return Pattern::first();
-    }
+    llvm::Instruction* first() const override { return Pattern::first(); }
 
-    llvm::Instruction * last() const override {
-        return Pattern::last();
-    }
+    llvm::Instruction* last() const override { return Pattern::last(); }
 
     static IntegerAdd* create(Builder& b, ir::Value lhs, ir::Value rhs) {
         Sentinel s(b);
@@ -833,47 +828,37 @@ class InvocationCount : public Pattern {
 };
 
 class GetVectorElement : public Pattern {
-public:
+  public:
     /** Predicate for reading from a constant pool.
 
       Matches when a constant index is being read from a constant pool vector.
      */
     class FromConstantPool : public Predicate {
-    public:
-        SEXP value() const {
-            return value_;
-        }
+      public:
+        SEXP value() const { return value_; }
 
-        int index() const {
-            return index_;
-        }
+        int index() const { return index_; }
 
-        bool match(ir::Pass & p, GetVectorElement * vge);
+        bool match(ir::Pass& p, GetVectorElement* vge);
 
-    private:
-
+      private:
         SEXP value_ = nullptr;
         int index_ = 0;
     };
 
     /** Returns the vector being read.
      */
-    llvm::Value * vector() {
-        return first()->getOperand(0);
-    }
+    llvm::Value* vector() { return first()->getOperand(0); }
 
     /** Returns the index being read.
      */
-    llvm::Value * index() {
-        return ins_->getPrevNode()->getOperand(1);
-    }
+    llvm::Value* index() { return ins_->getPrevNode()->getOperand(1); }
 
-    llvm::Type * type() {
-        return ins_->getType();
-    }
+    llvm::Type* type() { return ins_->getType(); }
 
     static GetVectorElement* insertBefore(llvm::Instruction* ins,
-                                          ir::Value vector, ir::Value index, llvm::Type * elementType) {
+                                          ir::Value vector, ir::Value index,
+                                          llvm::Type* elementType) {
         LLVMContext& c = ins->getContext();
         ConstantInt* int64_1 =
             ConstantInt::get(c, APInt(64, StringRef("1"), 10));
@@ -884,23 +869,28 @@ public:
             "", ins);
         auto payloadPtr =
             new BitCastInst(payload, PointerType::get(elementType, 1), "", ins);
-        GetElementPtrInst* el_ptr =
-            GetElementPtrInst::Create(elementType, payloadPtr, {index}, "", ins);
+        GetElementPtrInst* el_ptr = GetElementPtrInst::Create(
+            elementType, payloadPtr, {index}, "", ins);
         auto res = new LoadInst(el_ptr, "", false, ins);
         res->setAlignment(8);
-        return new GetVectorElement(realVector, payload, payloadPtr, el_ptr, res);
+        return new GetVectorElement(realVector, payload, payloadPtr, el_ptr,
+                                    res);
     }
 
-    static GetVectorElement * insertBefore(ir::Pattern * p, ir::Value vector, ir::Value index, llvm::Type * elementType) {
+    static GetVectorElement* insertBefore(ir::Pattern* p, ir::Value vector,
+                                          ir::Value index,
+                                          llvm::Type* elementType) {
         return insertBefore(p->first(), vector, index, elementType);
     }
 
-    static GetVectorElement * insertBefore(ir::Pattern * p, ir::Value vector, int index, llvm::Type * elementType) {
-        return insertBefore(p->first(), vector, Builder::integer(index), elementType);
+    static GetVectorElement* insertBefore(ir::Pattern* p, ir::Value vector,
+                                          int index, llvm::Type* elementType) {
+        return insertBefore(p->first(), vector, Builder::integer(index),
+                            elementType);
     }
 
     static GetVectorElement* create(Builder& b, ir::Value vector,
-                                    ir::Value index, llvm::Type * elementType) {
+                                    ir::Value index, llvm::Type* elementType) {
         Sentinel s(b);
         return insertBefore(s, vector, index, elementType);
     }
@@ -919,7 +909,7 @@ public:
     size_t length() const override { return 5; }
 
   private:
-     GetVectorElement(llvm::Instruction* realVector, llvm::Instruction* payload,
+    GetVectorElement(llvm::Instruction* realVector, llvm::Instruction* payload,
                      llvm::Instruction* payloadPtr, llvm::Instruction* el_ptr,
                      llvm::Instruction* result)
         : Pattern(result, Kind::GetVectorElement) {
@@ -928,61 +918,65 @@ public:
         attach(payloadPtr);
         attach(el_ptr);
     }
-
-
 };
 
 class SetVectorElement : public Pattern {
-public:
+  public:
+    llvm::Value* vector() { return first()->getOperand(0); }
 
-    llvm::Value * vector() {
-        return first()->getOperand(0);
-    }
+    llvm::Value* index() { return ins_->getPrevNode()->getOperand(1); }
 
-    llvm::Value * index() {
-        return ins_->getPrevNode()->getOperand(1);
-    }
+    llvm::Value* value() { return ins_->getOperand(0); }
 
-    llvm::Value * value() {
-        return ins_->getOperand(0);
-    }
+    llvm::Type* type() { return value()->getType(); }
 
-    llvm::Type * type() {
-        return value()->getType();
-    }
-
-    static SetVectorElement * insertBefore(llvm::Instruction * ins, ir::Value vector, ir::Value index, ir::Value value, llvm::Type * elementType) {
-        LLVMContext & c = ins->getContext();
+    static SetVectorElement* insertBefore(llvm::Instruction* ins,
+                                          ir::Value vector, ir::Value index,
+                                          ir::Value value,
+                                          llvm::Type* elementType) {
+        LLVMContext& c = ins->getContext();
         ConstantInt* int64_1 = ConstantInt::get(c, APInt(64, 1));
-        auto realVector = new BitCastInst(vector, PointerType::get(t::VECTOR_SEXPREC, 1), "", ins);
-        auto payload = GetElementPtrInst::Create(t::VECTOR_SEXPREC, realVector, std::vector<llvm::Value*>({int64_1}), "", ins);
-        auto payloadPtr = new BitCastInst(payload, PointerType::get(elementType, 1), "", ins);
-        GetElementPtrInst* el_ptr = GetElementPtrInst::Create(elementType, payloadPtr, {index}, "", ins);
+        auto realVector = new BitCastInst(
+            vector, PointerType::get(t::VECTOR_SEXPREC, 1), "", ins);
+        auto payload = GetElementPtrInst::Create(
+            t::VECTOR_SEXPREC, realVector, std::vector<llvm::Value*>({int64_1}),
+            "", ins);
+        auto payloadPtr =
+            new BitCastInst(payload, PointerType::get(elementType, 1), "", ins);
+        GetElementPtrInst* el_ptr = GetElementPtrInst::Create(
+            elementType, payloadPtr, {index}, "", ins);
         auto store = new StoreInst(value, el_ptr, ins);
         store->setAlignment(8);
-        return new SetVectorElement(realVector, payload, payloadPtr, el_ptr, store);
+        return new SetVectorElement(realVector, payload, payloadPtr, el_ptr,
+                                    store);
     }
 
-    static SetVectorElement * create(Builder & b, ir::Value vector, ir::Value index, ir::Value value, llvm::Type * elementType) {
+    static SetVectorElement* create(Builder& b, ir::Value vector,
+                                    ir::Value index, ir::Value value,
+                                    llvm::Type* elementType) {
         Sentinel s(b);
         return insertBefore(s, vector, index, value, elementType);
     }
 
-    static SetVectorElement * insertBefore(Pattern * p, ir::Value vector, int index, ir::Value value, llvm::Type * elementType) {
-        return insertBefore(p->first(), vector, Builder::integer(index), value, elementType);
+    static SetVectorElement* insertBefore(Pattern* p, ir::Value vector,
+                                          int index, ir::Value value,
+                                          llvm::Type* elementType) {
+        return insertBefore(p->first(), vector, Builder::integer(index), value,
+                            elementType);
     }
 
     static bool classof(Pattern const* s) {
         return s->kind == Kind::SetVectorElement;
     }
 
-    llvm::Instruction * result() const override {
+    llvm::Instruction* result() const override {
         assert(false and "VectorSetElement result is not expected to be used");
         return nullptr;
     }
 
     size_t length() const override { return 5; }
-protected:
+
+  protected:
     SetVectorElement(llvm::Instruction* realVector, llvm::Instruction* payload,
                      llvm::Instruction* payloadPtr, llvm::Instruction* el_ptr,
                      llvm::Instruction* store)
@@ -993,10 +987,6 @@ protected:
         attach(el_ptr);
     }
 };
-
-
-
-
 
 /** Interface to llvm's switch instruction
   */
@@ -1129,41 +1119,38 @@ class PrimitiveCall : public Pattern {
 /** Call to a user function call stub.
  */
 class ICStub : public ir::Pattern {
-public:
-    static ICStub * insertBefore(llvm::Instruction * ins, llvm::Function * f, llvm::ArrayRef<llvm::Value*> arguments, size_t size) {
-       auto i = CallInst::Create(f, arguments, "", ins);
-       llvm::AttributeSet PAL;
-       {
-           SmallVector<AttributeSet, 4> Attrs;
-           AttributeSet PAS;
-           {
-               AttrBuilder B;
-               B.addAttribute("ic-stub", std::to_string(size));
-               PAS = AttributeSet::get(ins->getContext(), ~0U, B);
-           }
-           Attrs.push_back(PAS);
-           PAL = AttributeSet::get(ins->getContext(), Attrs);
-       }
-       i->setAttributes(PAL);
-       return new ICStub(i);
+  public:
+    static ICStub* insertBefore(llvm::Instruction* ins, llvm::Function* f,
+                                llvm::ArrayRef<llvm::Value*> arguments,
+                                size_t size) {
+        auto i = CallInst::Create(f, arguments, "", ins);
+        llvm::AttributeSet PAL;
+        {
+            SmallVector<AttributeSet, 4> Attrs;
+            AttributeSet PAS;
+            {
+                AttrBuilder B;
+                B.addAttribute("ic-stub", std::to_string(size));
+                PAS = AttributeSet::get(ins->getContext(), ~0U, B);
+            }
+            Attrs.push_back(PAS);
+            PAL = AttributeSet::get(ins->getContext(), Attrs);
+        }
+        i->setAttributes(PAL);
+        return new ICStub(i);
     }
 
-    static ICStub * create(Builder & b, llvm::Function * f, llvm::ArrayRef<llvm::Value*> arguments, size_t size) {
+    static ICStub* create(Builder& b, llvm::Function* f,
+                          llvm::ArrayRef<llvm::Value*> arguments, size_t size) {
         Sentinel s(b);
         return insertBefore(s, f, arguments, size);
     }
 
-    static bool classof(Pattern const* s) {
-        return s->kind == Kind::ICStub;
-    }
+    static bool classof(Pattern const* s) { return s->kind == Kind::ICStub; }
 
-protected:
-    ICStub(llvm::Instruction* call):
-        Pattern(call, Kind::ICStub) {
-    }
+  protected:
+    ICStub(llvm::Instruction* call) : Pattern(call, Kind::ICStub) {}
 };
-
-
 
 } // namespace ir
 
