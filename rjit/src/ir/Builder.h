@@ -258,9 +258,9 @@ class Builder {
      */
     SEXP constantPool(int index) const { return c_->cp[index]; }
 
-    static llvm::ConstantInt* integer(int value) {
+    static llvm::ConstantInt* integer(int value, unsigned precision = 32) {
         return llvm::ConstantInt::get(llvm::getGlobalContext(),
-                                      llvm::APInt(32, value));
+                                      llvm::APInt(precision, value));
     }
 
     /** Converts the given SEXP to a pointer to it.

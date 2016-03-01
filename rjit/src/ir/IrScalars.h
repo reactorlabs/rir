@@ -85,7 +85,7 @@ class CreateAndSetScalar : public ir::Pattern {
                                        ins->getModule());
         // allocate the memory
         llvm::CallInst* alloc = llvm::CallInst::Create(
-            a, {Builder::integer(type), Builder::integer(1)}, "", ins);
+            a, {Builder::integer(type), Builder::integer(1, 64)}, "", ins);
         // determine the proper scalar type
         assert((type == INTSXP or type == REALSXP) and
                "Only doubles and integers are supported so far");

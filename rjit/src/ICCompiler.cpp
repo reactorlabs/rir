@@ -352,7 +352,7 @@ Value* ICCompiler::compileArguments(SEXP argAsts, bool eager) {
             // first only get the first dots arg to get the top of the list
             arglist = ir::AddEllipsisArgumentHead::create(
                           b, arglist, rho(),
-                          eager ? b.integer(TRUE) : b.integer(FALSE))
+                          eager ? b.integer(TRUE, 1) : b.integer(FALSE, 1))
                           ->result();
             if (!arglistHead)
                 arglistHead = arglist;
@@ -360,7 +360,7 @@ Value* ICCompiler::compileArguments(SEXP argAsts, bool eager) {
             // then add the rest
             arglist = ir::AddEllipsisArgumentTail::create(
                           b, arglist, rho(),
-                          eager ? b.integer(TRUE) : b.integer(FALSE))
+                          eager ? b.integer(TRUE, 1) : b.integer(FALSE, 1))
                           ->result();
             argnum++;
         } else {
