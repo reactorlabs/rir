@@ -109,6 +109,14 @@ REXPORT SEXP jitLLVM(SEXP expression) {
     return R_NilValue;
 }
 
+REXPORT SEXP printWithoutSP(SEXP expr, SEXP formals) {
+    Compiler c("module");
+    SEXP result = c.compile("rfunction", expr, formals);
+    llvm::Function* rfunction = reinterpret_cast<llvm::Function*>(TAG(result));
+    rfunction->dump();
+    return result;
+}
+
 // Should rjit code recompile uncompiled functions before calling them
 int RJIT_COMPILE = getenv("RJIT_COMPILE") ? atoi(getenv("RJIT_COMPILE")) : 0;
 // The status of R_ENABLE_JIT variable used by gnur
