@@ -30,7 +30,9 @@ LLVM_VERS="370"
 FRESH_R_VERS="3-2"
 CLANG=0
 BENCH_RUN=0
-BENCH_RUN_NUM=10
+BENCH_TEST=0
+BENCH_TEST_NUM=1
+BENCH_RUN_NUM=5
 RJIT_BUILD_TYPE="Debug"
 LLVM_TYPE=""
 LLVM_BUILD_TYPE="Debug"
@@ -62,6 +64,9 @@ function usage() {
   echo "--build-run-bench repeat  Build llvm, gnur, rjit, and R-3-2,"
   echo "                          then run and graph the shootout benchmark"
   echo "                          for 'repeat' amount of times     Default: 10"
+  echo "--test-bench              Run RJIT once over the shootout benchmark"
+  echo "                          with the performance build, a log will "
+  echo "                          be produced but not the graph."
   echo
   exit 1
 }
@@ -124,6 +129,8 @@ case $key in
     RJIT_BUILD_TYPE="Release"
     ;;
     --build-run-bench)
+    GEN="Ninja"
+    M="ninja"
     RJIT_BUILD_TYPE="Release"
     LLVM_TYPE="-nodebug"
     LLVM_BUILD_TYPE="Release"
@@ -131,6 +138,15 @@ case $key in
     BENCH_RUN=1
     BENCH_RUN_NUM="$2"
     shift;
+    ;;
+    --test-bench)
+    GEN="Ninja"
+    M="ninja"
+    RJIT_BUILD_TYPE="Release"
+    LLVM_TYPE="-nodebug"
+    LLVM_BUILD_TYPE="Release"
+    OPT="-O2"
+    BENCH_TEST=1
     ;;
     *)
     echo "Flag $key unknown"
@@ -337,6 +353,45 @@ if [ $SKIP_BUILD -eq 0 ]; then
     ${SRC_DIR}/tools/tests
 fi
 
+if [ $BENCH_TEST -eq 1 ]; then
+
+    if [ $SKIP_PKG -eq 0 ]; then
+        cd $CURRENT_DIR
+
+        # install the rjit package
+        echo "-> create the rjit packages"
+        $M package_install
+    fi
+
+    TIMEN=$(date +"%H-%M-%S_%F")
+    MACHINEN=$(whoami)@$(hostname)
+
+    BENCH_NAME=benchmark-${MACHINEN}-${TIMEN}
+    RESULT_DIR=${BENCH_DIR}/${BENCH_NAME}
+    LOG_FILE=${RESULT_DIR}/${LOG_FILE_NAME}.txt
+    SHOOT_DIR=${BENCH_DIR}/shootout/
+    FRESH_R_BIN=${TARGET}/freshr/R-${FRESH_R_VERS}-branch/bin/R
+
+    if [ ! -d ${RESULT_DIR} ]; then
+        mkdir ${RESULT_DIR}
+    fi
+
+    echo "-> installing ggplot2 to ${FRESH_R_VERS_F}"
+    ${FRESH_R_BIN} -e "install.packages(\"ggplot2\", repos=\"http://cran.rstudio.com/\")"
+
+    cd ${BENCH_DIR}
+
+    if [ $SKIP_RUN -eq 0 ]; then
+    # runbench
+        echo "-> start running the shootout benchmark "
+        for x in ` find ${SHOOT_DIR} -name "*.r" `; do
+            echo "-> running $x"
+            R_LIBS_USER=${CURRENT_DIR}/packages R_ENABLE_JIT=5 ${TARGET}/gnur/bin/R -e "source(\"${SRC_DIR}/benchmarks/run.r\");runbench(\"$x\", \"${LOG_FILE}\", \"rjit\", ${BENCH_TEST_NUM})" > /dev/null
+        done
+    fi
+fi
+
+
 # freshr will be in the same directory as llvm and gnur
 # Checking out a fresh version of R
 if [ $BENCH_RUN -eq 1 ]; then
@@ -348,11 +403,37 @@ if [ $BENCH_RUN -eq 1 ]; then
         echo "-> create the rjit packages"
         $M package_install
     fi
-
     if [ $SKIP_FRESHR -eq 0 ]; then
         cd ${TARGET}
 
-        build_freshr ${FRESH_R_DIR} ${FRESH_R_VERSION} ${OPT}
+        # create the freshr directory 
+        if [ ! -d ${FRESH_R_DIR} ]; then
+            mkdir ${FRESH_R_DIR}
+        fi
+
+        cd ${FRESH_R_DIR}
+    
+        FRESH_R_VERS_F=R-${FRESH_R_VERS}-branch
+        FRESH_R_SRC=${FRESH_R_DIR}/${FRESH_R_VERS_F}/
+
+        # checkout R-3-2 from svn
+        if [ ! -d ${FRESH_R_SRC} ]; then    
+            echo "-> checking out ${FRESH_R_VERS_F} to ${FRESH_R_SRC}"
+            svn co https://svn.r-project.org/R/branches/${FRESH_R_VERS_F}/ ${FRESH_R_SRC}
+        fi
+        cd ${FRESH_R_SRC}
+
+        # download the set of recommended packages for R-3-2
+        echo "-> checking out the recommended packages"
+        ./tools/rsync-recommended
+
+        # configure the make file
+        echo "-> building the config file"
+        ./configure
+
+        # make the R-3-2
+        echo "-> building a fresh copy of ${FRESH_R_VERS_F} to ${FRESH_R_DIR}"
+        make
     fi
 
     SHOOT_DIR=${BENCH_DIR}/shootout/
@@ -444,7 +525,7 @@ if [ $BENCH_RUN -eq 1 ]; then
     cat /etc/lsb-release >> ${CONFIG_FILE}
 
     # lscpu/lshw or sysctl hw
-    if [ $USING_OSX eq 1]; then
+    if [ $USING_OSX -eq 1 ]; then
         lscpu >> ${CONFIG_FILE}
         lshw >> ${CONFIG_FILE}
     else
@@ -458,8 +539,8 @@ if [ $BENCH_RUN -eq 1 ]; then
     echo "store your any carry on luggage underneath the seat in front of you, and have your password ready)"
 
     # Jan's machine must be on the list of known hosts, a ssh-keygen for Jan's machine should have been setup
-    tar cvzf ${RESULT_DIR}.tar ${RESULT_DIR}
-    scp -p ${RESULT_DIR}.tar teamcity@reactor.ccs.neu.edu:/Users/teamcity/reactorl/benchmark_result
+    #tar cvzf ${RESULT_DIR}.tar ${RESULT_DIR}
+    #scp -p ${RESULT_DIR}.tar teamcity@reactor.ccs.neu.edu:/Users/teamcity/reactorl/benchmark_result
 
     # Possibly delete everything created once the result are sent off?
 fi

@@ -56,6 +56,24 @@ jit.compileEnvironment <- function(environment, moduleName ="rjit module") {
     invisible(NULL)
 }
 
+jit.printWithoutSP <- function(what) {
+    if(typeof(what) == "closure") {
+        bc = .Internal(bodyCode(what))
+        native = .Call("printWithoutSP", bc, formals(what))
+        f = .Internal(bcClose(formals(what), native, env))
+        attrs = attributes(what)
+        if (!is.null(attrs))
+            attributes(f) = attrs
+        if (isS4(what))
+            f = asS4(f)
+        f
+    }else if (any(c("language", "symbol", "logical", "integer", "double", "complex", "character") == typeof(what))) {
+        .Call("printWithoutSP", what)
+    } else {
+       stop("Only bytecode expressions and asts can be jitted.")
+    }
+}
+
 jit.enable <- function() .Call("jitEnable");
 jit.disable <- function() .Call("jitDisable");
 

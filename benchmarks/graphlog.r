@@ -20,7 +20,7 @@ graphlog <- function(medNR, graphDir="benchGraph"){
 						 annotate("point", x=medNR$graph_CT, y=max(medNR$compilation_time, na.rm=TRUE)+0.13, shape=94, size=5, color="red") + 
 						 annotate("point", x=medNR$name, y=medNR$compilation_time, color="red") +
 						 expand_limits(y=0) + 
-						 ggtitle("RJIT performance against R 3-2 (R_ENABLE_JIT=0) for \n the shootout benchmark")
+						 ggtitle("RJIT performance against R 3-2 (R_ENABLE_JIT=3) for \n the shootout benchmark")
 	print(graphn)
 	dev.off()
 	print("done")

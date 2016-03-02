@@ -95,6 +95,38 @@ class Compiler {
       */
     llvm::Value* compileParenthesis(SEXP arg);
 
+    /** Index operator for retrieval for vector access of single bracket [].
+     *
+     */
+    llvm::Value* compileBracket(SEXP call);
+
+    /** Index operator for retrieval for vector access of double bracket [[]].
+     *
+     */
+    llvm::Value* compileDoubleBracket(SEXP call);
+
+    /** Index operator for assignment for vector access of double bracket [[]].
+     *
+     */
+    llvm::Value* compileAssignBracket(SEXP call, SEXP vector, SEXP index,
+                                      SEXP value, bool super);
+
+    /** Index operator for assignment for vector access of double bracket [[]].
+     *
+     */
+    // llvm::Value* compileAssignBracket2(SEXP call, SEXP value);
+
+    /** Index operator for assignment for vector access of double bracket [[]].
+     *
+     */
+    llvm::Value* compileAssignDoubleBracket(SEXP call, SEXP vector, SEXP index,
+                                            SEXP value, bool super);
+
+    /** Index operator for assignment for vector access of double bracket [[]].
+     *
+     */
+    // llvm::Value* compileAssignDoubleBracket2(SEXP call, SEXP value);
+
     /** Similar to R bytecode compiler, only the body of the created function is
       compiled, the default arguments are left in their ast forms for now.
 
@@ -181,6 +213,11 @@ class Compiler {
 
     bool canSkipLoopContextList(SEXP ast, bool breakOK);
 
+    /** Helper function to determine which case store assignment and retrieval
+        can handle.
+    */
+    bool caseHandled(SEXP store, SEXP vector, SEXP index);
+
     /** Compiles the switch statement.
 
       There are two kinds of switch - integral and character one and they differ
@@ -223,6 +260,10 @@ class Compiler {
     /** Compiles unary operator using the given intrinsic and full call ast.
       */
     llvm::Value* compileUnary(llvm::Function* f, SEXP call);
+
+    /** Compile a fast version of store retrieval
+    */
+    llvm::Value* vectorRetr(SEXP vector, SEXP index);
 
     template <typename B, typename U>
     llvm::Value* compileBinaryOrUnary(SEXP call) {

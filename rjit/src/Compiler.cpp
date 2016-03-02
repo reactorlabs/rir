@@ -268,9 +268,14 @@ Value* Compiler::compileArgument(SEXP arg, SEXP name) {
   want to.
   */
 Value* Compiler::compileIntrinsic(SEXP call) {
+
 #define CASE(sym) if (CAR(call) == sym)
     CASE(symbol::Block)
     return compileBlock(CDR(call));
+    CASE(symbol::Bracket)
+    return compileBracket(call);
+    CASE(symbol::DoubleBracket)
+    return compileDoubleBracket(call);
     CASE(symbol::Parenthesis)
     return compileParenthesis(CDR(call));
     CASE(symbol::Function)
@@ -281,12 +286,9 @@ Value* Compiler::compileIntrinsic(SEXP call) {
                          ir::Constant::create(b, R_NilValue)->result())
                    : compileReturn(compileExpression(CAR(CDR(call))));
     }
-    CASE(symbol::Assign)
-    return compileAssignment(call);
-    CASE(symbol::Assign2)
-    return compileAssignment(call);
-    CASE(symbol::SuperAssign)
-    return compileSuperAssignment(call);
+    CASE(symbol::Assign) { return compileAssignment(call); }
+    CASE(symbol::Assign2) { return compileAssignment(call); }
+    CASE(symbol::SuperAssign) { return compileSuperAssignment(call); }
     CASE(symbol::If)
     return compileCondition(call);
     CASE(symbol::Break)
@@ -368,6 +370,98 @@ Value* Compiler::compileParenthesis(SEXP arg) {
     return result;
 }
 
+/** Compiles an index operator for single brackets.
+  */
+Value* Compiler::compileBracket(SEXP call) {
+
+    SEXP expression = CDR(call);
+    SEXP vector = CAR(expression);
+    SEXP index = CAR(CDR(expression));
+
+    if (caseHandled(expression, vector, index)) {
+        Value* resultVector = compileExpression(vector);
+        assert(vector);
+
+        Value* resultIndex = compileExpression(index);
+        b.setResultVisible(true);
+        return ir::GetDispatchValue::create(b, resultVector, resultIndex,
+                                            b.rho(), call)
+            ->result();
+    } else {
+        return nullptr;
+    }
+}
+
+/** Compiles an index operator (double bracket).
+*
+*/
+Value* Compiler::compileDoubleBracket(SEXP call) {
+
+    SEXP expression = CDR(call);
+    SEXP vector = CAR(expression);
+    SEXP index = CAR(CDR(expression));
+
+    if (caseHandled(expression, vector, index)) {
+        Value* resultVector = compileExpression(vector);
+        assert(resultVector);
+
+        Value* resultIndex = compileExpression(index);
+        b.setResultVisible(true);
+        return ir::GetDispatchValue2::create(b, resultVector, resultIndex,
+                                             b.rho(), call)
+            ->result();
+    } else {
+        return nullptr;
+    }
+}
+
+Value* Compiler::compileAssignBracket(SEXP call, SEXP vector, SEXP index,
+                                      SEXP value, bool super) {
+
+    Value* resultVal = compileExpression(value);
+    Value* resultIndex = compileExpression(index);
+    Value* resultVector = compileExpression(vector);
+    assert(resultVector);
+
+    if (super) {
+        ir::SuperAssignDispatch::create(b, resultVector, resultIndex, resultVal,
+                                        b.rho(), call)
+            ->result();
+        b.setResultVisible(false);
+        return resultVal;
+    }
+
+    b.setResultVisible(false);
+    ir::AssignDispatchValue::create(b, resultVector, resultIndex, resultVal,
+                                    b.rho(), call)
+        ->result();
+    b.setResultVisible(false);
+    return resultVal;
+}
+
+Value* Compiler::compileAssignDoubleBracket(SEXP call, SEXP vector, SEXP index,
+                                            SEXP value, bool super) {
+
+    Value* resultVal = compileExpression(value);
+    Value* resultIndex = compileExpression(index);
+    Value* resultVector = compileExpression(vector);
+    assert(resultVector);
+
+    if (super) {
+        ir::SuperAssignDispatch2::create(b, resultVector, resultIndex,
+                                         resultVal, b.rho(), call)
+            ->result();
+        b.setResultVisible(false);
+        return resultVal;
+    }
+
+    ir::AssignDispatchValue2::create(b, resultVector, resultIndex, resultVal,
+                                     b.rho(), call)
+        ->result();
+    b.setResultVisible(false);
+    return resultVal;
+}
+
 /** Similar to R bytecode compiler, only the body of the created function is
   compiled, the default arguments are left in their ast forms for now.
 
@@ -379,42 +473,135 @@ Value* Compiler::compileFunctionDefinition(SEXP fdef) {
     return ir::CreateClosure::create(b, b.rho(), forms, body)->result();
 }
 
+bool Compiler::caseHandled(SEXP store, SEXP vector, SEXP index) {
+
+    // The index for [[ must have a single element, it can't have
+    // cases where the index has multiple arguments, ie. "..." or ":".
+    // the case when the index is a language object is really weird,
+    // and it's something that I should handle
+    if (CDDR(store) != R_NilValue) {
+        printf("%s\n", "Multiple arguments index.");
+        return false;
+    }
+
+    // this case should not be hard to handle
+    // the index should simply be evaluated
+    if (TYPEOF(index) == LANGSXP) {
+        printf("%s\n", "Index is language object.");
+        return false;
+    }
+
+    if (TYPEOF(vector) == LANGSXP) {
+        printf("%s\n", "Vector is language object.");
+        return false;
+    }
+
+    if (vector == R_NilValue) {
+        printf("%s\n", "Null vector.");
+        return false;
+    }
+
+    // TODO handle the case when the index is null.
+    if (index == R_NilValue) {
+        printf("%s\n", "Null index.");
+        return false;
+    }
+
+    // TODO handle indexing on the result of a function call.
+    if (CAR(vector) == symbol::Function) {
+        printf("%s\n", "Vector is a function.");
+        return false;
+    }
+
+    // TODO handle the case when the index is empty.
+    // In this case the vec is returned, using genericGetVar and only the
+    // "relevant" attributes of vec are retained.
+    if (TYPEOF(index) == SYMSXP && !strlen(CHAR(PRINTNAME(index)))) {
+        printf("%s\n", "Empty index.");
+        return false;
+    }
+
+    return true;
+}
+
 /** Simple assignments (that is to a symbol) are compiled using the
  * genericSetVar intrinsic.
   */
 Value* Compiler::compileAssignment(SEXP e) {
-    e = CDR(e);
+
+    // printf("%s\n", "compile assignment");
+    SEXP expr = CDR(e);
+    SEXP lhs = CAR(expr);
+    SEXP vector = CAR(CDR(lhs));
+    SEXP index = CAR(CDDR(lhs));
+    SEXP rhs = CAR(CDDR(e));
+
+    if (TYPEOF(lhs) == LANGSXP) {
+        if (CAR(lhs) == symbol::Bracket) {
+            if (caseHandled(CDR(lhs), vector, index)) {
+                return compileAssignBracket(lhs, vector, index, rhs, false);
+            } else {
+                return nullptr;
+            }
+        } else if (CAR(lhs) == symbol::DoubleBracket) {
+            if (caseHandled(CDR(lhs), vector, index)) {
+                return compileAssignDoubleBracket(lhs, vector, index, rhs,
+                                                  false);
+            } else {
+                return nullptr;
+            }
+        } else {
+            return nullptr;
+        }
+    }
+
     // intrinsic only handles simple assignments
-    if (TYPEOF(CAR(e)) != SYMSXP)
+    if (TYPEOF(CAR(expr)) != SYMSXP) {
         return nullptr;
-    Value* v = compileExpression(CAR(CDR(e)));
-    ir::GenericSetVar::create(b, v, b.rho(), CAR(e));
+    }
+
+    Value* v = compileExpression(CAR(CDR(expr)));
+    ir::GenericSetVar::create(b, v, b.rho(), CAR(expr));
     b.setResultVisible(false);
     return v;
 }
 
-/**
-Value* Compiler::compileAssignment(SEXP e) {
-    e = CDR(e);
-    // intrinsic only handles simple assignments
-    if (TYPEOF(CAR(e)) != SYMSXP)
-        return nullptr;
-    Value* v = compileExpression(CAR(CDR(e)));
-    genericSetVar::create(b, constant(CAR(e)), v, rho);
-    isResultVisible = false;
-    return v;
-}
-*/
-
 /** Super assignment is compiled as genericSetVarParentIntrinsic
  */
 Value* Compiler::compileSuperAssignment(SEXP e) {
-    e = CDR(e);
+
+    SEXP expr = CDR(e);
+    SEXP lhs = CAR(expr);
+    SEXP vector = CAR(CDR(lhs));
+    SEXP index = CAR(CDDR(lhs));
+    SEXP rhs = CAR(CDDR(e));
+
+    if (TYPEOF(lhs) == LANGSXP) {
+        if (CAR(lhs) == symbol::Bracket) {
+            if (caseHandled(CDR(lhs), vector, index)) {
+                return compileAssignBracket(lhs, vector, index, rhs, true);
+            } else {
+                return nullptr;
+            }
+        } else if (CAR(lhs) == symbol::DoubleBracket) {
+            if (caseHandled(CDR(lhs), vector, index)) {
+                return compileAssignDoubleBracket(lhs, vector, index, rhs,
+                                                  true);
+            } else {
+                return nullptr;
+            }
+        } else {
+            return nullptr;
+        }
+    }
+
     // intrinsic only handles simple assignments
-    if (TYPEOF(CAR(e)) != SYMSXP)
+    if (TYPEOF(CAR(expr)) != SYMSXP) {
         return nullptr;
-    Value* v = compileExpression(CAR(CDR(e)));
-    ir::GenericSetVarParent::create(b, v, b.rho(), CAR(e));
+    }
+
+    Value* v = compileExpression(CAR(CDR(expr)));
+    ir::GenericSetVarParent::create(b, v, b.rho(), CAR(expr));
     b.setResultVisible(false);
     return v;
 }
@@ -612,11 +799,17 @@ Value* Compiler::compileForLoop(SEXP ast) {
     Value* seq2 = compileExpression(seqAst);
     Value* seq = ir::StartFor::create(b, seq2, b.rho())->result();
     Value* seqLength = ir::LoopSequenceLength::create(b, seq, ast)->result();
+    Value* cInit = ir::Constant::create(b, R_NilValue)->result();
+
     BasicBlock* forStart = b.block();
     ir::Branch::create(b, forCond);
     b.setBlock(forCond);
     PHINode* control = PHINode::Create(t::Int, 2, "loopControl", b);
+    PHINode* index = PHINode::Create(t::SEXP, 2, "index", b.block());
+
     control->addIncoming(b.integer(0), forStart);
+    index->addIncoming(cInit, forStart);
+
     // now check if control is smaller than length
     auto test = ir::UnsignedIntegerLessThan::create(b, control, seqLength);
     BranchInst::Create(forBody, b.breakTarget(), test->result(), b);
@@ -625,7 +818,7 @@ Value* Compiler::compileForLoop(SEXP ast) {
     // properly
     b.setBlock(forBody);
     Value* controlValue =
-        ir::GetForLoopValue::create(b, seq, control)->result();
+        ir::GetForLoopValue::create(b, seq, control, index)->result();
     ir::GenericSetVar::create(b, controlValue, b.rho(), controlAst);
     // now compile the body of the loop
     compileExpression(bodyAst);
@@ -638,6 +831,7 @@ Value* Compiler::compileForLoop(SEXP ast) {
     Value* control1 =
         ir::IntegerAdd::create(b, control, b.integer(1))->result();
     control->addIncoming(control1, b.nextTarget());
+    index->addIncoming(controlValue, b.nextTarget());
 
     ir::Branch::create(b, forCond);
     b.setBlock(b.breakTarget());
@@ -840,4 +1034,12 @@ void Compiler::gcCallback(void (*forward_node)(SEXP)) {
 void Compiler::doGcCallback(void (*forward_node)(SEXP)) {
     b.doGcCallback(forward_node);
 }
+
+/** The fast functions for vector (store) retrieval (x[a]).
+    If we know statically the type of x and a, and if a has
+    the correct type, then generate the LLVM native that
+    access the memory location of x at a.
+*/
+
+Value* vectorRetr(SEXP vector, SEXP index) { return nullptr; }
 }
