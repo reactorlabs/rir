@@ -9,7 +9,7 @@ h <- function(a, b, c, d, e, f) {
 
 g <- function(f, e, d, c, b, a) {
     res <- 0
-    for (i in 1:15) {
+    for (i in 1:2) {
         res <- res + h(a=b, b=c, c=d, d=e, e=f, f=a)
     }
     res
@@ -17,7 +17,7 @@ g <- function(f, e, d, c, b, a) {
 
 f <- function() {
     res <- 0
-    for (i in 1:10000) {
+    for (i in 1:600) {
         res <- res + g(4, 5, 6, a=1, b=2, c=3)
     }
     res
