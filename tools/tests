@@ -51,7 +51,7 @@ function run_test {
   TEST=$(mktemp /tmp/r-test.XXXXXX)
   echo ${LIB} > $TEST
   echo "source('${ROOT_DIR}/rjit/R/rjit.R')" >> $TEST
-  grep -v 'require("rjit")' ${test} >> $TEST
+  grep -v 'require("rjit")' ${test} | grep -v 'require(rjit)'  >> $TEST
   
   $R -f $TEST &> /dev/null
   res=$?
