@@ -366,7 +366,7 @@ if [ $BENCH_TEST -eq 1 ]; then
     TIMEN=$(date +"%H-%M-%S_%F")
     MACHINEN=$(whoami)@$(hostname)
 
-    BENCH_NAME=benchmark-${MACHINEN}-${TIMEN}
+    BENCH_NAME=TESTRUNbenchmark-${MACHINEN}-${TIMEN}
     RESULT_DIR=${BENCH_DIR}/${BENCH_NAME}
     LOG_FILE=${RESULT_DIR}/${LOG_FILE_NAME}.txt
     SHOOT_DIR=${BENCH_DIR}/shootout/

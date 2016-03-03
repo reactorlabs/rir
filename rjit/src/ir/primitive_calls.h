@@ -508,6 +508,73 @@ class GetDispatchValue : public PrimitiveCall {
     }
 };
 
+class GetMatrixValue : public PrimitiveCall {
+  public:
+    llvm::Value* vec() { return getValue(0); }
+    llvm::Value* row() { return getValue(1); }
+    llvm::Value* col() { return getValue(2); }
+    llvm::Value* rho() { return getValue(3); }
+    llvm::Value* constantPool() { return getValue(4); }
+
+    int call() { return getValueInt(5); }
+    SEXP callValue() {
+        llvm::Function* f = ins()->getParent()->getParent();
+        JITModule* m = static_cast<JITModule*>(f->getParent());
+        return VECTOR_ELT(m->constPool(f), call());
+    }
+    SEXP call(Builder const& b) { return b.constantPool(call()); }
+
+    GetMatrixValue(llvm::Instruction* ins)
+        : PrimitiveCall(ins, Kind::GetMatrixValue) {}
+
+    static GetMatrixValue* create(Builder& b, ir::Value vec, ir::Value row,
+                                  ir::Value col, ir::Value rho, SEXP call) {
+        Sentinel s(b);
+        return insertBefore(s, vec, row, col, rho, b.consts(),
+                            Builder::integer(b.constantPoolIndex(call)));
+    }
+
+    static GetMatrixValue* insertBefore(llvm::Instruction* ins, ir::Value vec,
+                                        ir::Value row, ir::Value col,
+                                        ir::Value rho, ir::Value constantPool,
+                                        ir::Value call) {
+
+        std::vector<llvm::Value*> args_;
+        args_.push_back(vec);
+        args_.push_back(row);
+        args_.push_back(col);
+        args_.push_back(rho);
+        args_.push_back(constantPool);
+        args_.push_back(call);
+        llvm::CallInst* i = llvm::CallInst::Create(
+            primitiveFunction<GetMatrixValue>(ins->getModule()), args_, "",
+            ins);
+
+        Builder::markSafepoint(i);
+        return new GetMatrixValue(i);
+    }
+
+    static GetMatrixValue* insertBefore(Pattern* p, ir::Value vec,
+                                        ir::Value row, ir::Value col,
+                                        ir::Value rho, ir::Value constantPool,
+                                        ir::Value call) {
+
+        return insertBefore(p->first(), vec, row, col, rho, constantPool, call);
+    }
+
+    static char const* intrinsicName() { return "getMatrixValue"; }
+
+    static llvm::FunctionType* intrinsicType() {
+        return llvm::FunctionType::get(
+            t::SEXP, {t::SEXP, t::SEXP, t::SEXP, t::SEXP, t::SEXP, t::Int},
+            false);
+    }
+
+    static bool classof(Pattern const* s) {
+        return s->getKind() == Kind::GetMatrixValue;
+    }
+};
+
 /** Read and retrieves the value of a vector index for double bracket.
  */
 
@@ -572,6 +639,73 @@ class GetDispatchValue2 : public PrimitiveCall {
 
     static bool classof(Pattern const* s) {
         return s->getKind() == Kind::GetDispatchValue2;
+    }
+};
+
+class GetMatrixValue2 : public PrimitiveCall {
+  public:
+    llvm::Value* vec() { return getValue(0); }
+    llvm::Value* row() { return getValue(1); }
+    llvm::Value* col() { return getValue(2); }
+    llvm::Value* rho() { return getValue(3); }
+    llvm::Value* constantPool() { return getValue(4); }
+
+    int call() { return getValueInt(5); }
+    SEXP callValue() {
+        llvm::Function* f = ins()->getParent()->getParent();
+        JITModule* m = static_cast<JITModule*>(f->getParent());
+        return VECTOR_ELT(m->constPool(f), call());
+    }
+    SEXP call(Builder const& b) { return b.constantPool(call()); }
+
+    GetMatrixValue2(llvm::Instruction* ins)
+        : PrimitiveCall(ins, Kind::GetMatrixValue2) {}
+
+    static GetMatrixValue2* create(Builder& b, ir::Value vec, ir::Value row,
+                                   ir::Value col, ir::Value rho, SEXP call) {
+        Sentinel s(b);
+        return insertBefore(s, vec, row, col, rho, b.consts(),
+                            Builder::integer(b.constantPoolIndex(call)));
+    }
+
+    static GetMatrixValue2* insertBefore(llvm::Instruction* ins, ir::Value vec,
+                                         ir::Value row, ir::Value col,
+                                         ir::Value rho, ir::Value constantPool,
+                                         ir::Value call) {
+
+        std::vector<llvm::Value*> args_;
+        args_.push_back(vec);
+        args_.push_back(row);
+        args_.push_back(col);
+        args_.push_back(rho);
+        args_.push_back(constantPool);
+        args_.push_back(call);
+        llvm::CallInst* i = llvm::CallInst::Create(
+            primitiveFunction<GetMatrixValue2>(ins->getModule()), args_, "",
+            ins);
+
+        Builder::markSafepoint(i);
+        return new GetMatrixValue2(i);
+    }
+
+    static GetMatrixValue2* insertBefore(Pattern* p, ir::Value vec,
+                                         ir::Value row, ir::Value col,
+                                         ir::Value rho, ir::Value constantPool,
+                                         ir::Value call) {
+
+        return insertBefore(p->first(), vec, row, col, rho, constantPool, call);
+    }
+
+    static char const* intrinsicName() { return "getMatrixValue2"; }
+
+    static llvm::FunctionType* intrinsicType() {
+        return llvm::FunctionType::get(
+            t::SEXP, {t::SEXP, t::SEXP, t::SEXP, t::SEXP, t::SEXP, t::Int},
+            false);
+    }
+
+    static bool classof(Pattern const* s) {
+        return s->getKind() == Kind::GetMatrixValue2;
     }
 };
 
