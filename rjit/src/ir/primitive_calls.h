@@ -393,29 +393,26 @@ class LoopSequenceLength : public PrimitiveCall {
 };
 
 // Given the for loop sequence, and index, returns the index-th value of
-// the sequence. TODO Note that this always allocates for vectors.
+// the sequence.
 class GetForLoopValue : public PrimitiveCall {
   public:
     llvm::Value* seq() { return getValue(0); }
     llvm::Value* index() { return getValue(1); }
-    llvm::Value* store() { return getValue(2); }
 
     GetForLoopValue(llvm::Instruction* ins)
         : PrimitiveCall(ins, Kind::GetForLoopValue) {}
 
-    static GetForLoopValue* create(Builder& b, ir::Value seq, ir::Value index,
-                                   ir::Value store) {
+    static GetForLoopValue* create(Builder& b, ir::Value seq, ir::Value index) {
         Sentinel s(b);
-        return insertBefore(s, seq, index, store);
+        return insertBefore(s, seq, index);
     }
 
     static GetForLoopValue* insertBefore(llvm::Instruction* ins, ir::Value seq,
-                                         ir::Value index, ir::Value store) {
+                                         ir::Value index) {
 
         std::vector<llvm::Value*> args_;
         args_.push_back(seq);
         args_.push_back(index);
-        args_.push_back(store);
 
         llvm::CallInst* i = llvm::CallInst::Create(
             primitiveFunction<GetForLoopValue>(ins->getModule()), args_, "",
@@ -426,15 +423,14 @@ class GetForLoopValue : public PrimitiveCall {
     }
 
     static GetForLoopValue* insertBefore(Pattern* p, ir::Value seq,
-                                         ir::Value index, ir::Value store) {
-        return insertBefore(p->first(), seq, index, store);
+                                         ir::Value index) {
+        return insertBefore(p->first(), seq, index);
     }
 
     static char const* intrinsicName() { return "getForLoopValue"; }
 
     static llvm::FunctionType* intrinsicType() {
-        return llvm::FunctionType::get(t::SEXP, {t::SEXP, t::Int, t::SEXP},
-                                       false);
+        return llvm::FunctionType::get(t::SEXP, {t::SEXP, t::Int}, false);
     }
 
     static bool classof(Pattern const* s) {

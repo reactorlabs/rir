@@ -1,4 +1,4 @@
-require(rjit)
+require("rjit")
 require(compiler)
 
 t0 <- function(theCompiler) {

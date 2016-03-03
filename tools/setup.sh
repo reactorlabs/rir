@@ -388,6 +388,7 @@ if [ $BENCH_TEST -eq 1 ]; then
             echo "-> running $x"
             R_LIBS_USER=${CURRENT_DIR}/packages R_ENABLE_JIT=5 ${TARGET}/gnur/bin/R -e "source(\"${SRC_DIR}/benchmarks/run.r\");runbench(\"$x\", \"${LOG_FILE}\", \"rjit\", ${BENCH_TEST_NUM})" > /dev/null
         done
+        echo "-> Finished running the shootout benchmark "
     fi
 fi
 
@@ -542,7 +543,7 @@ if [ $BENCH_RUN -eq 1 ]; then
     #tar cvzf ${RESULT_DIR}.tar ${RESULT_DIR}
     #scp -p ${RESULT_DIR}.tar teamcity@reactor.ccs.neu.edu:/Users/teamcity/reactorl/benchmark_result
 
-    # Possibly delete everything created once the result are sent off?
+    # TODO Possibly delete everything created once the result are sent off?
 fi
 
 

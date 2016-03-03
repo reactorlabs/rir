@@ -1,8 +1,4 @@
-dyn.load('/home/compile/f/src/rjit/librjit.so')
-source('/home/compile/f/src/rjit/rjit/R/rjit.R')
-
-jit.enable()
-
+require("rjit")
 require(graphics)
 
 jit.compile(function() {

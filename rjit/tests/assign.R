@@ -1,4 +1,4 @@
-require(rjit)
+require("rjit")
 
 f <- jit.compile(function() {
 	a <- c(2:5)
