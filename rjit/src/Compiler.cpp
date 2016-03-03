@@ -799,12 +799,16 @@ Value* Compiler::compileForLoop(SEXP ast) {
     Value* seq2 = compileExpression(seqAst);
     Value* seq = ir::StartFor::create(b, seq2, b.rho())->result();
     Value* seqLength = ir::LoopSequenceLength::create(b, seq, ast)->result();
+    Value* cInit = ir::Constant::create(b, R_NilValue)->result();
 
     BasicBlock* forStart = b.block();
     ir::Branch::create(b, forCond);
     b.setBlock(forCond);
     PHINode* control = PHINode::Create(t::Int, 2, "loopControl", b);
+    PHINode* index = PHINode::Create(t::SEXP, 2, "index", b.block());
+
     control->addIncoming(b.integer(0), forStart);
+    index->addIncoming(cInit, forStart);
     // now check if control is smaller than length
     auto test = ir::UnsignedIntegerLessThan::create(b, control, seqLength);
     BranchInst::Create(forBody, b.breakTarget(), test->result(), b);
@@ -813,7 +817,7 @@ Value* Compiler::compileForLoop(SEXP ast) {
     // properly
     b.setBlock(forBody);
     Value* controlValue =
-        ir::GetForLoopValue::create(b, seq, control)->result();
+        ir::GetForLoopValue::create(b, seq, control, index)->result();
     ir::GenericSetVar::create(b, controlValue, b.rho(), controlAst);
     // now compile the body of the loop
     compileExpression(bodyAst);
@@ -826,6 +830,7 @@ Value* Compiler::compileForLoop(SEXP ast) {
     Value* control1 =
         ir::IntegerAdd::create(b, control, b.integer(1))->result();
     control->addIncoming(control1, b.nextTarget());
+    index->addIncoming(controlValue, b.nextTarget());
 
     ir::Branch::create(b, forCond);
     b.setBlock(b.breakTarget());

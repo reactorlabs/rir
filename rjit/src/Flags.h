@@ -10,14 +10,14 @@ class Flag {
         return flag;
     }
 
-    bool recordTypes = true;
-    bool recompileHot = true;
-    bool useTypefeedback = true;
+    bool recordTypes = false;
+    bool recompileHot = false;
+    bool useTypefeedback = false;
     bool unsafeNA = false;
     bool unsafeOpt = false;
     bool printIR = false;
     bool printOptIR = false;
-    bool staticNamedArgMatch = true;
+    bool staticNamedArgMatch = false;
 };
 }
 
