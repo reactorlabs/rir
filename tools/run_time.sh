@@ -59,4 +59,6 @@ FOLDER="teamcity/execution"
 
 COMMIT_ID=`git rev-parse HEAD`
 
-# ${SCRIPTPATH}/dropbox_uploader.sh -f ${SCRIPTPATH}/.dropbox_uploader upload ${LOG_FILE} $FOLDER/${TIMEN}_${COMMIT_ID}.txt
+if [ ! -z "$TEAMCITY_VERSION" ]; then
+  ${SCRIPTPATH}/dropbox_uploader.sh -f ${SCRIPTPATH}/.dropbox_uploader upload ${LOG_FILE} $FOLDER/${TIMEN}_${COMMIT_ID}.txt
+fi
