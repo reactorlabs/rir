@@ -32,7 +32,9 @@ if [ ! -d ${RESULT_DIR} ]; then
    mkdir ${RESULT_DIR}
 fi
 
-# build_freshr $FRESH_R_DIR $FRESH_R_VERSION "-O2"
+if [ ! -d "$FRESH_R_DIR" ]; then
+  build_freshr $FRESH_R_DIR $FRESH_R_VERSION "-O2"
+fi
 
 FRESH_R_BIN=${FRESH_R_DIR}/R-${FRESH_R_VERS}-branch/bin/R
 
