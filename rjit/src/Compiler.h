@@ -103,7 +103,7 @@ class Compiler {
     /** Index operator for retrieval for single bracket matrix access.
      *
      */
-    llvm::Value* compileMatrix(SEXP call, SEXP vector, SEXP index);
+    llvm::Value* compileMatrix(SEXP call, SEXP vector, SEXP row, SEXP col);
 
     /** Index operator for retrieval for vector access of double bracket [[]].
      *
@@ -113,7 +113,8 @@ class Compiler {
     /** Index operator for retrieval for double bracket matrix access.
      *
      */
-    llvm::Value* compileDoubleMatrix(SEXP call, SEXP vector, SEXP index);
+    llvm::Value* compileDoubleMatrix(SEXP call, SEXP vector, SEXP row,
+                                     SEXP col);
     /** Index operator for assignment for vector access of double bracket [[]].
      *
      */

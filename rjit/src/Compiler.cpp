@@ -381,7 +381,8 @@ Value* Compiler::compileBracket(SEXP call) {
     SEXP index = CAR(CDR(expression));
 
     if (CDDR(expression) != R_NilValue) {
-        return compileMatrix(call, vector, index);
+        SEXP col = CAR(CDDR(expression));
+        return compileMatrix(call, vector, index, col);
     }
 
     if (caseHandled(expression, vector, index)) {
@@ -401,11 +402,7 @@ Value* Compiler::compileBracket(SEXP call) {
 
 /** Compiling matrix retrieval (single bracket).
 */
-Value* Compiler::compileMatrix(SEXP call, SEXP vector, SEXP index) {
-    return nullptr;
-
-    SEXP row = CAR(CDR(index));
-    SEXP col = CAR(CDDR(index));
+Value* Compiler::compileMatrix(SEXP call, SEXP vector, SEXP row, SEXP col) {
 
     if (caseHandledMatrix(call, vector, row, col)) {
         Value* resultVector = compileExpression(vector);
@@ -413,7 +410,6 @@ Value* Compiler::compileMatrix(SEXP call, SEXP vector, SEXP index) {
         Value* resultRow = compileExpression(row);
         Value* resultCol = compileExpression(col);
         b.setResultVisible(true);
-
         return ir::GetMatrixValue::create(b, resultVector, resultRow, resultCol,
                                           b.rho(), call)
             ->result();
@@ -432,7 +428,8 @@ Value* Compiler::compileDoubleBracket(SEXP call) {
     SEXP index = CAR(CDR(expression));
 
     if (CDDR(expression) != R_NilValue) {
-        return compileDoubleMatrix(call, vector, index);
+        SEXP col = CAR(CDDR(expression));
+        return compileDoubleMatrix(call, vector, index, col);
     }
 
     if (caseHandled(expression, vector, index)) {
@@ -451,11 +448,8 @@ Value* Compiler::compileDoubleBracket(SEXP call) {
 /** Compiling matrix retrieval (double bracket).
 *
 */
-Value* Compiler::compileDoubleMatrix(SEXP call, SEXP vector, SEXP index) {
-    return nullptr;
-
-    SEXP row = CAR(CDR(index));
-    SEXP col = CAR(CDDR(index));
+Value* Compiler::compileDoubleMatrix(SEXP call, SEXP vector, SEXP row,
+                                     SEXP col) {
 
     if (caseHandledMatrix(call, vector, row, col)) {
         Value* resultVector = compileExpression(vector);
@@ -471,6 +465,9 @@ Value* Compiler::compileDoubleMatrix(SEXP call, SEXP vector, SEXP index) {
         return nullptr;
     }
 }
+
+/** Compiling single bracket for normal and super assignment
+*/
 
 Value* Compiler::compileAssignBracket(SEXP call, SEXP vector, SEXP index,
                                       SEXP value, bool super) {
@@ -495,6 +492,9 @@ Value* Compiler::compileAssignBracket(SEXP call, SEXP vector, SEXP index,
     b.setResultVisible(false);
     return resultVal;
 }
+
+/** Compiling double bracket for normal and super assignment
+*/
 
 Value* Compiler::compileAssignDoubleBracket(SEXP call, SEXP vector, SEXP index,
                                             SEXP value, bool super) {
