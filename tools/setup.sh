@@ -32,7 +32,7 @@ CLANG=0
 BENCH_RUN=0
 BENCH_TEST=0
 BENCH_TEST_NUM=1
-BENCH_RUN_NUM=5
+BENCH_RUN_NUM=2
 RJIT_BUILD_TYPE="Debug"
 LLVM_TYPE=""
 LLVM_BUILD_TYPE="Debug"
@@ -388,7 +388,7 @@ if [ $BENCH_TEST -eq 1 ]; then
             echo "-> running $x"
             R_LIBS_USER=${CURRENT_DIR}/packages R_ENABLE_JIT=5 ${TARGET}/gnur/bin/R -e "source(\"${SRC_DIR}/benchmarks/run.r\");runbench(\"$x\", \"${LOG_FILE}\", \"rjit\", ${BENCH_TEST_NUM})" > /dev/null
         done
-        echo "-> Finished running the shootout benchmark "
+    echo "-> Finished running the shootout benchmark "
     fi
 fi
 
@@ -410,31 +410,31 @@ if [ $BENCH_RUN -eq 1 ]; then
         # create the freshr directory 
         if [ ! -d ${FRESH_R_DIR} ]; then
             mkdir ${FRESH_R_DIR}
+
+            cd ${FRESH_R_DIR}
+        
+            FRESH_R_VERS_F=R-${FRESH_R_VERS}-branch
+            FRESH_R_SRC=${FRESH_R_DIR}/${FRESH_R_VERS_F}/
+
+            # checkout R-3-2 from svn
+            if [ ! -d ${FRESH_R_SRC} ]; then    
+                echo "-> checking out ${FRESH_R_VERS_F} to ${FRESH_R_SRC}"
+                svn co https://svn.r-project.org/R/branches/${FRESH_R_VERS_F}/ ${FRESH_R_SRC}
+            fi
+            cd ${FRESH_R_SRC}
+
+            # download the set of recommended packages for R-3-2
+            echo "-> checking out the recommended packages"
+            ./tools/rsync-recommended
+
+            # configure the make file
+            echo "-> building the config file"
+            ./configure
+
+            # make the R-3-2
+            echo "-> building a fresh copy of ${FRESH_R_VERS_F} to ${FRESH_R_DIR}"
+            make
         fi
-
-        cd ${FRESH_R_DIR}
-    
-        FRESH_R_VERS_F=R-${FRESH_R_VERS}-branch
-        FRESH_R_SRC=${FRESH_R_DIR}/${FRESH_R_VERS_F}/
-
-        # checkout R-3-2 from svn
-        if [ ! -d ${FRESH_R_SRC} ]; then    
-            echo "-> checking out ${FRESH_R_VERS_F} to ${FRESH_R_SRC}"
-            svn co https://svn.r-project.org/R/branches/${FRESH_R_VERS_F}/ ${FRESH_R_SRC}
-        fi
-        cd ${FRESH_R_SRC}
-
-        # download the set of recommended packages for R-3-2
-        echo "-> checking out the recommended packages"
-        ./tools/rsync-recommended
-
-        # configure the make file
-        echo "-> building the config file"
-        ./configure
-
-        # make the R-3-2
-        echo "-> building a fresh copy of ${FRESH_R_VERS_F} to ${FRESH_R_DIR}"
-        make
     fi
 
     SHOOT_DIR=${BENCH_DIR}/shootout/

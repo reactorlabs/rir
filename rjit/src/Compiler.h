@@ -95,37 +95,15 @@ class Compiler {
       */
     llvm::Value* compileParenthesis(SEXP arg);
 
-    /** Index operator for retrieval for vector access of single bracket [].
+    /** Compiling vector access on single bracket.
      *
      */
     llvm::Value* compileBracket(SEXP call);
 
-    /** Index operator for retrieval for single bracket matrix access.
-     *
-     */
-    llvm::Value* compileMatrix(SEXP call, SEXP vector, SEXP row, SEXP col);
-
-    /** Index operator for retrieval for vector access of double bracket [[]].
+    /** Compiling vector access on double bracket.
      *
      */
     llvm::Value* compileDoubleBracket(SEXP call);
-
-    /** Index operator for retrieval for double bracket matrix access.
-     *
-     */
-    llvm::Value* compileDoubleMatrix(SEXP call, SEXP vector, SEXP row,
-                                     SEXP col);
-    /** Index operator for assignment for vector access of double bracket [[]].
-     *
-     */
-    llvm::Value* compileAssignBracket(SEXP call, SEXP vector, SEXP index,
-                                      SEXP value, bool super);
-
-    /** Index operator for assignment for vector access of double bracket [[]].
-     *
-     */
-    llvm::Value* compileAssignDoubleBracket(SEXP call, SEXP vector, SEXP index,
-                                            SEXP value, bool super);
 
     /** Similar to R bytecode compiler, only the body of the created function is
       compiled, the default arguments are left in their ast forms for now.
@@ -216,9 +194,9 @@ class Compiler {
     /** Helper function to determine which case store assignment and retrieval
         can handle.
     */
-    bool caseHandled(SEXP store, SEXP vector, SEXP index);
+    bool caseHandled(SEXP vector);
 
-    bool caseHandledMatrix(SEXP store, SEXP vector, SEXP row, SEXP col);
+    bool caseHandledIndex(SEXP index);
 
     /** Compiles the switch statement.
 

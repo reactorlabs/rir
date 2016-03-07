@@ -224,6 +224,10 @@ class Builder {
 
     bool getResultVisible() { return c_->isResultVisible; }
 
+    void setAssignmentLHS(bool value) { c_->assignmentLHS = value; }
+
+    bool getAssignmentLHS() { return c_->assignmentLHS; }
+
     void addConstantPoolObject(SEXP object) {
         c_->addConstantPoolObject(object);
     }
@@ -302,6 +306,7 @@ class Builder {
 
         bool isReturnJumpNeeded = false;
         bool isResultVisible = true;
+        bool assignmentLHS = false;
 
         virtual bool isFunction() { return false; }
 
@@ -341,7 +346,8 @@ class Builder {
         Context(Context* from)
             : instrumentationIndex(std::move(from->instrumentationIndex)),
               isReturnJumpNeeded(from->isReturnJumpNeeded),
-              isResultVisible(from->isResultVisible), f(from->f), b(from->b),
+              isResultVisible(from->isResultVisible),
+              assignmentLHS(from->assignmentLHS), f(from->f), b(from->b),
               breakTarget(from->breakTarget), nextTarget(from->nextTarget),
               cp(std::move(from->cp)), args_(from->args_) {}
 

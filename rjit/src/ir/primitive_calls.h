@@ -786,6 +786,86 @@ class AssignDispatchValue : public PrimitiveCall {
     }
 };
 
+/** Single bracket matrix assignment.
+*/
+
+class AssignMatrixValue : public PrimitiveCall {
+  public:
+    // llvm::Value* lhs() { return getValue(0); }
+    llvm::Value* vector() { return getValue(0); }
+    llvm::Value* row() { return getValue(1); }
+    llvm::Value* col() { return getValue(1); }
+    llvm::Value* val() { return getValue(2); }
+
+    llvm::Value* rho() { return getValue(3); }
+    llvm::Value* constantPool() { return getValue(4); }
+
+    int call() { return getValueInt(5); }
+    SEXP callValue() {
+        llvm::Function* f = ins()->getParent()->getParent();
+        JITModule* m = static_cast<JITModule*>(f->getParent());
+        return VECTOR_ELT(m->constPool(f), call());
+    }
+    SEXP call(Builder const& b) { return b.constantPool(call()); }
+
+    AssignMatrixValue(llvm::Instruction* ins)
+        : PrimitiveCall(ins, Kind::AssignMatrixValue) {}
+
+    static AssignMatrixValue* create(Builder& b, ir::Value vector,
+                                     ir::Value row, ir::Value col,
+                                     ir::Value val, ir::Value rho, SEXP call) {
+        Sentinel s(b);
+        return insertBefore(s, vector, row, col, val, rho, b.consts(),
+                            Builder::integer(b.constantPoolIndex(call)));
+    }
+
+    static AssignMatrixValue*
+    insertBefore(llvm::Instruction* ins, ir::Value vector, ir::Value row,
+                 ir::Value col, ir::Value val, ir::Value rho,
+                 ir::Value constantPool, ir::Value call) {
+
+        std::vector<llvm::Value*> args_;
+        // args_.push_back(lhs);
+        args_.push_back(vector);
+        args_.push_back(row);
+        args_.push_back(col);
+        args_.push_back(val);
+        args_.push_back(rho);
+        args_.push_back(constantPool);
+        args_.push_back(call);
+
+        llvm::CallInst* i = llvm::CallInst::Create(
+            primitiveFunction<AssignMatrixValue>(ins->getModule()), args_, "",
+            ins);
+
+        Builder::markSafepoint(i);
+        return new AssignMatrixValue(i);
+    }
+
+    static AssignMatrixValue* insertBefore(Pattern* p, ir::Value vector,
+                                           ir::Value row, ir::Value col,
+                                           ir::Value val, ir::Value rho,
+                                           ir::Value constantPool,
+                                           ir::Value call) {
+
+        return insertBefore(p->first(), vector, row, col, val, rho,
+                            constantPool, call);
+    }
+
+    static char const* intrinsicName() { return "assignMatrixValue"; }
+
+    static llvm::FunctionType* intrinsicType() {
+        return llvm::FunctionType::get(
+            t::SEXP,
+            {t::SEXP, t::SEXP, t::SEXP, t::SEXP, t::SEXP, t::SEXP, t::Int},
+            false);
+    }
+
+    static bool classof(Pattern const* s) {
+        return s->getKind() == Kind::AssignMatrixValue;
+    }
+};
+
 /** Assign a value into the vector for single bracket.
  *
  */
@@ -863,6 +943,83 @@ class AssignDispatchValue2 : public PrimitiveCall {
     }
 };
 
+class AssignMatrixValue2 : public PrimitiveCall {
+  public:
+    // llvm::Value* lhs() { return getValue(0); }
+    llvm::Value* vector() { return getValue(0); }
+    llvm::Value* row() { return getValue(1); }
+    llvm::Value* col() { return getValue(1); }
+    llvm::Value* val() { return getValue(2); }
+
+    llvm::Value* rho() { return getValue(3); }
+    llvm::Value* constantPool() { return getValue(4); }
+
+    int call() { return getValueInt(5); }
+    SEXP callValue() {
+        llvm::Function* f = ins()->getParent()->getParent();
+        JITModule* m = static_cast<JITModule*>(f->getParent());
+        return VECTOR_ELT(m->constPool(f), call());
+    }
+    SEXP call(Builder const& b) { return b.constantPool(call()); }
+
+    AssignMatrixValue2(llvm::Instruction* ins)
+        : PrimitiveCall(ins, Kind::AssignMatrixValue2) {}
+
+    static AssignMatrixValue2* create(Builder& b, ir::Value vector,
+                                      ir::Value row, ir::Value col,
+                                      ir::Value val, ir::Value rho, SEXP call) {
+        Sentinel s(b);
+        return insertBefore(s, vector, row, col, val, rho, b.consts(),
+                            Builder::integer(b.constantPoolIndex(call)));
+    }
+
+    static AssignMatrixValue2*
+    insertBefore(llvm::Instruction* ins, ir::Value vector, ir::Value row,
+                 ir::Value col, ir::Value val, ir::Value rho,
+                 ir::Value constantPool, ir::Value call) {
+
+        std::vector<llvm::Value*> args_;
+        // args_.push_back(lhs);
+        args_.push_back(vector);
+        args_.push_back(row);
+        args_.push_back(col);
+        args_.push_back(val);
+        args_.push_back(rho);
+        args_.push_back(constantPool);
+        args_.push_back(call);
+
+        llvm::CallInst* i = llvm::CallInst::Create(
+            primitiveFunction<AssignMatrixValue2>(ins->getModule()), args_, "",
+            ins);
+
+        Builder::markSafepoint(i);
+        return new AssignMatrixValue2(i);
+    }
+
+    static AssignMatrixValue2* insertBefore(Pattern* p, ir::Value vector,
+                                            ir::Value row, ir::Value col,
+                                            ir::Value val, ir::Value rho,
+                                            ir::Value constantPool,
+                                            ir::Value call) {
+
+        return insertBefore(p->first(), vector, row, col, val, rho,
+                            constantPool, call);
+    }
+
+    static char const* intrinsicName() { return "assignMatrixValue2"; }
+
+    static llvm::FunctionType* intrinsicType() {
+        return llvm::FunctionType::get(
+            t::SEXP,
+            {t::SEXP, t::SEXP, t::SEXP, t::SEXP, t::SEXP, t::SEXP, t::Int},
+            false);
+    }
+
+    static bool classof(Pattern const* s) {
+        return s->getKind() == Kind::AssignMatrixValue2;
+    }
+};
+
 class SuperAssignDispatch : public PrimitiveCall {
   public:
     // llvm::Value* lhs() { return getValue(0); }
@@ -936,6 +1093,83 @@ class SuperAssignDispatch : public PrimitiveCall {
     }
 };
 
+class SuperAssignMatrix : public PrimitiveCall {
+  public:
+    // llvm::Value* lhs() { return getValue(0); }
+    llvm::Value* vector() { return getValue(0); }
+    llvm::Value* row() { return getValue(1); }
+    llvm::Value* col() { return getValue(1); }
+    llvm::Value* val() { return getValue(2); }
+
+    llvm::Value* rho() { return getValue(3); }
+    llvm::Value* constantPool() { return getValue(4); }
+
+    int call() { return getValueInt(5); }
+    SEXP callValue() {
+        llvm::Function* f = ins()->getParent()->getParent();
+        JITModule* m = static_cast<JITModule*>(f->getParent());
+        return VECTOR_ELT(m->constPool(f), call());
+    }
+    SEXP call(Builder const& b) { return b.constantPool(call()); }
+
+    SuperAssignMatrix(llvm::Instruction* ins)
+        : PrimitiveCall(ins, Kind::SuperAssignMatrix) {}
+
+    static SuperAssignMatrix* create(Builder& b, ir::Value vector,
+                                     ir::Value row, ir::Value col,
+                                     ir::Value val, ir::Value rho, SEXP call) {
+        Sentinel s(b);
+        return insertBefore(s, vector, row, col, val, rho, b.consts(),
+                            Builder::integer(b.constantPoolIndex(call)));
+    }
+
+    static SuperAssignMatrix*
+    insertBefore(llvm::Instruction* ins, ir::Value vector, ir::Value row,
+                 ir::Value col, ir::Value val, ir::Value rho,
+                 ir::Value constantPool, ir::Value call) {
+
+        std::vector<llvm::Value*> args_;
+        // args_.push_back(lhs);
+        args_.push_back(vector);
+        args_.push_back(row);
+        args_.push_back(col);
+        args_.push_back(val);
+        args_.push_back(rho);
+        args_.push_back(constantPool);
+        args_.push_back(call);
+
+        llvm::CallInst* i = llvm::CallInst::Create(
+            primitiveFunction<SuperAssignMatrix>(ins->getModule()), args_, "",
+            ins);
+
+        Builder::markSafepoint(i);
+        return new SuperAssignMatrix(i);
+    }
+
+    static SuperAssignMatrix* insertBefore(Pattern* p, ir::Value vector,
+                                           ir::Value row, ir::Value col,
+                                           ir::Value val, ir::Value rho,
+                                           ir::Value constantPool,
+                                           ir::Value call) {
+
+        return insertBefore(p->first(), vector, row, col, val, rho,
+                            constantPool, call);
+    }
+
+    static char const* intrinsicName() { return "superAssignMatrix"; }
+
+    static llvm::FunctionType* intrinsicType() {
+        return llvm::FunctionType::get(
+            t::SEXP,
+            {t::SEXP, t::SEXP, t::SEXP, t::SEXP, t::SEXP, t::SEXP, t::Int},
+            false);
+    }
+
+    static bool classof(Pattern const* s) {
+        return s->getKind() == Kind::SuperAssignMatrix;
+    }
+};
+
 class SuperAssignDispatch2 : public PrimitiveCall {
   public:
     // llvm::Value* lhs() { return getValue(0); }
@@ -1006,6 +1240,83 @@ class SuperAssignDispatch2 : public PrimitiveCall {
 
     static bool classof(Pattern const* s) {
         return s->getKind() == Kind::SuperAssignDispatch2;
+    }
+};
+
+class SuperAssignMatrix2 : public PrimitiveCall {
+  public:
+    // llvm::Value* lhs() { return getValue(0); }
+    llvm::Value* vector() { return getValue(0); }
+    llvm::Value* row() { return getValue(1); }
+    llvm::Value* col() { return getValue(1); }
+    llvm::Value* val() { return getValue(2); }
+
+    llvm::Value* rho() { return getValue(3); }
+    llvm::Value* constantPool() { return getValue(4); }
+
+    int call() { return getValueInt(5); }
+    SEXP callValue() {
+        llvm::Function* f = ins()->getParent()->getParent();
+        JITModule* m = static_cast<JITModule*>(f->getParent());
+        return VECTOR_ELT(m->constPool(f), call());
+    }
+    SEXP call(Builder const& b) { return b.constantPool(call()); }
+
+    SuperAssignMatrix2(llvm::Instruction* ins)
+        : PrimitiveCall(ins, Kind::SuperAssignMatrix2) {}
+
+    static SuperAssignMatrix2* create(Builder& b, ir::Value vector,
+                                      ir::Value row, ir::Value col,
+                                      ir::Value val, ir::Value rho, SEXP call) {
+        Sentinel s(b);
+        return insertBefore(s, vector, row, col, val, rho, b.consts(),
+                            Builder::integer(b.constantPoolIndex(call)));
+    }
+
+    static SuperAssignMatrix2*
+    insertBefore(llvm::Instruction* ins, ir::Value vector, ir::Value row,
+                 ir::Value col, ir::Value val, ir::Value rho,
+                 ir::Value constantPool, ir::Value call) {
+
+        std::vector<llvm::Value*> args_;
+        // args_.push_back(lhs);
+        args_.push_back(vector);
+        args_.push_back(row);
+        args_.push_back(col);
+        args_.push_back(val);
+        args_.push_back(rho);
+        args_.push_back(constantPool);
+        args_.push_back(call);
+
+        llvm::CallInst* i = llvm::CallInst::Create(
+            primitiveFunction<SuperAssignMatrix2>(ins->getModule()), args_, "",
+            ins);
+
+        Builder::markSafepoint(i);
+        return new SuperAssignMatrix2(i);
+    }
+
+    static SuperAssignMatrix2* insertBefore(Pattern* p, ir::Value vector,
+                                            ir::Value row, ir::Value col,
+                                            ir::Value val, ir::Value rho,
+                                            ir::Value constantPool,
+                                            ir::Value call) {
+
+        return insertBefore(p->first(), vector, row, col, val, rho,
+                            constantPool, call);
+    }
+
+    static char const* intrinsicName() { return "superAssignMatrix2"; }
+
+    static llvm::FunctionType* intrinsicType() {
+        return llvm::FunctionType::get(
+            t::SEXP,
+            {t::SEXP, t::SEXP, t::SEXP, t::SEXP, t::SEXP, t::SEXP, t::Int},
+            false);
+    }
+
+    static bool classof(Pattern const* s) {
+        return s->getKind() == Kind::SuperAssignMatrix2;
     }
 };
 

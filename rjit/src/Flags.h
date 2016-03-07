@@ -17,7 +17,7 @@ class Flag {
     bool unsafeOpt = false;
     bool printIR = false;
     bool printOptIR = false;
-    bool staticNamedArgMatch = false;
+    bool staticNamedArgMatch = true;
 };
 }
 

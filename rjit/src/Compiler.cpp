@@ -380,39 +380,23 @@ Value* Compiler::compileBracket(SEXP call) {
     SEXP vector = CAR(expression);
     SEXP index = CAR(CDR(expression));
 
-    if (CDDR(expression) != R_NilValue) {
-        SEXP col = CAR(CDDR(expression));
-        return compileMatrix(call, vector, index, col);
-    }
+    if (caseHandled(vector) && caseHandledIndex(index)) {
+        if (CDDR(expression) != R_NilValue) {
+            return nullptr;
+        } else if (CDDR(expression) == R_NilValue) {
+            Value* resultVector = compileExpression(vector);
+            assert(vector);
 
-    if (caseHandled(expression, vector, index)) {
-        Value* resultVector = compileExpression(vector);
-        assert(vector);
+            Value* resultIndex = compileExpression(index);
+            b.setResultVisible(true);
 
-        Value* resultIndex = compileExpression(index);
-
-        b.setResultVisible(true);
-        return ir::GetDispatchValue::create(b, resultVector, resultIndex,
-                                            b.rho(), call)
-            ->result();
-    } else {
-        return nullptr;
-    }
-}
-
-/** Compiling matrix retrieval (single bracket).
-*/
-Value* Compiler::compileMatrix(SEXP call, SEXP vector, SEXP row, SEXP col) {
-
-    if (caseHandledMatrix(call, vector, row, col)) {
-        Value* resultVector = compileExpression(vector);
-        assert(vector);
-        Value* resultRow = compileExpression(row);
-        Value* resultCol = compileExpression(col);
-        b.setResultVisible(true);
-        return ir::GetMatrixValue::create(b, resultVector, resultRow, resultCol,
-                                          b.rho(), call)
-            ->result();
+            printf("%s\n", "Compiled single brackets");
+            return ir::GetDispatchValue::create(b, resultVector, resultIndex,
+                                                b.rho(), call)
+                ->result();
+        } else {
+            return nullptr;
+        }
     } else {
         return nullptr;
     }
@@ -427,203 +411,29 @@ Value* Compiler::compileDoubleBracket(SEXP call) {
     SEXP vector = CAR(expression);
     SEXP index = CAR(CDR(expression));
 
-    if (CDDR(expression) != R_NilValue) {
-        SEXP col = CAR(CDDR(expression));
-        return compileDoubleMatrix(call, vector, index, col);
-    }
+    if (caseHandled(vector) && caseHandledIndex(index)) {
+        if (CDDR(expression) != R_NilValue) {
+            return nullptr;
+        } else if (CDDR(expression) == R_NilValue) {
+            Value* resultVector = compileExpression(vector);
+            assert(resultVector);
 
-    if (caseHandled(expression, vector, index)) {
-        Value* resultVector = compileExpression(vector);
-        assert(resultVector);
+            Value* resultIndex = compileExpression(index);
+            b.setResultVisible(true);
 
-        Value* resultIndex = compileExpression(index);
-        b.setResultVisible(true);
-        return ir::GetDispatchValue2::create(b, resultVector, resultIndex,
-                                             b.rho(), call)
-            ->result();
-    } else {
-        return nullptr;
-    }
-}
-/** Compiling matrix retrieval (double bracket).
-*
-*/
-Value* Compiler::compileDoubleMatrix(SEXP call, SEXP vector, SEXP row,
-                                     SEXP col) {
-
-    if (caseHandledMatrix(call, vector, row, col)) {
-        Value* resultVector = compileExpression(vector);
-        assert(vector);
-        Value* resultRow = compileExpression(row);
-        Value* resultCol = compileExpression(col);
-        b.setResultVisible(true);
-
-        return ir::GetMatrixValue2::create(b, resultVector, resultRow,
-                                           resultCol, b.rho(), call)
-            ->result();
+            printf("%s\n", "Compiled double brackets");
+            return ir::GetDispatchValue2::create(b, resultVector, resultIndex,
+                                                 b.rho(), call)
+                ->result();
+        } else {
+            return nullptr;
+        }
     } else {
         return nullptr;
     }
 }
 
-/** Compiling single bracket for normal and super assignment
-*/
-
-Value* Compiler::compileAssignBracket(SEXP call, SEXP vector, SEXP index,
-                                      SEXP value, bool super) {
-
-    Value* resultVal = compileExpression(value);
-    Value* resultIndex = compileExpression(index);
-    Value* resultVector = compileExpression(vector);
-    assert(resultVector);
-
-    if (super) {
-        ir::SuperAssignDispatch::create(b, resultVector, resultIndex, resultVal,
-                                        b.rho(), call)
-            ->result();
-        b.setResultVisible(false);
-        return resultVal;
-    }
-
-    b.setResultVisible(false);
-    ir::AssignDispatchValue::create(b, resultVector, resultIndex, resultVal,
-                                    b.rho(), call)
-        ->result();
-    b.setResultVisible(false);
-    return resultVal;
-}
-
-/** Compiling double bracket for normal and super assignment
-*/
-
-Value* Compiler::compileAssignDoubleBracket(SEXP call, SEXP vector, SEXP index,
-                                            SEXP value, bool super) {
-
-    Value* resultVal = compileExpression(value);
-    Value* resultIndex = compileExpression(index);
-    Value* resultVector = compileExpression(vector);
-    assert(resultVector);
-
-    if (super) {
-        ir::SuperAssignDispatch2::create(b, resultVector, resultIndex,
-                                         resultVal, b.rho(), call)
-            ->result();
-        b.setResultVisible(false);
-        return resultVal;
-    }
-
-    ir::AssignDispatchValue2::create(b, resultVector, resultIndex, resultVal,
-                                     b.rho(), call)
-        ->result();
-    b.setResultVisible(false);
-    return resultVal;
-}
-
-/** Similar to R bytecode compiler, only the body of the created function is
-  compiled, the default arguments are left in their ast forms for now.
-
-  TODO this should change.
- */
-Value* Compiler::compileFunctionDefinition(SEXP fdef) {
-    SEXP forms = CAR(fdef);
-    SEXP body = compileFunction("function", CAR(CDR(fdef)), forms);
-    return ir::CreateClosure::create(b, b.rho(), forms, body)->result();
-}
-
-bool Compiler::caseHandledMatrix(SEXP store, SEXP vector, SEXP row, SEXP col) {
-    // The index for [[ must have a single element, it can't have
-    // cases where the index has multiple arguments, ie. "..." or ":".
-    // the case when the index is a language object is really weird,
-    // and it's something that I should handle
-    // if (CDDR(store) != R_NilValue) {
-    //     printf("%s\n", "Multiple arguments index.");
-    //     return false;
-    // }
-
-    // this case should not be hard to handle
-    // the index should simply be evaluated
-    if (TYPEOF(row) == LANGSXP || TYPEOF(row) == LANGSXP) {
-        printf("%s\n", "Index is language object.");
-        return false;
-    }
-
-    if (TYPEOF(vector) == LANGSXP) {
-        printf("%s\n", "Vector is language object.");
-        return false;
-    }
-
-    if (vector == R_NilValue) {
-        printf("%s\n", "Null vector.");
-        return false;
-    }
-
-    // TODO handle the case when the index is null.
-    if (row == R_NilValue || col == R_NilValue) {
-        printf("%s\n", "Null index.");
-        return false;
-    }
-
-    // TODO handle indexing on the result of a function call.
-    if (CAR(vector) == symbol::Function) {
-        printf("%s\n", "Vector is a function.");
-        return false;
-    }
-
-    // TODO handle the case when the index is empty.
-    // In this case the vec is returned, using genericGetVar and only the
-    // "relevant" attributes of vec are retained.
-    if (TYPEOF(row) == SYMSXP && !strlen(CHAR(PRINTNAME(row)))) {
-        printf("%s\n", "Empty index.");
-        return false;
-    }
-
-    if (TYPEOF(col) == SYMSXP && !strlen(CHAR(PRINTNAME(col)))) {
-        printf("%s\n", "Empty index.");
-        return false;
-    }
-
-    return true;
-}
-
-bool Compiler::caseHandled(SEXP store, SEXP vector, SEXP index) {
-
-    // The index for [[ must have a single element, it can't have
-    // cases where the index has multiple arguments, ie. "..." or ":".
-    // the case when the index is a language object is really weird,
-    // and it's something that I should handle
-    // if (CDDR(store) != R_NilValue) {
-    //     printf("%s\n", "Multiple arguments index.");
-    //     return false;
-    // }
-
-    // this case should not be hard to handle
-    // the index should simply be evaluated
-    if (TYPEOF(index) == LANGSXP) {
-        printf("%s\n", "Index is language object.");
-        return false;
-    }
-
-    if (TYPEOF(vector) == LANGSXP) {
-        printf("%s\n", "Vector is language object.");
-        return false;
-    }
-
-    if (vector == R_NilValue) {
-        printf("%s\n", "Null vector.");
-        return false;
-    }
-
-    // TODO handle the case when the index is null.
-    if (index == R_NilValue) {
-        printf("%s\n", "Null index.");
-        return false;
-    }
-
-    // TODO handle indexing on the result of a function call.
-    if (CAR(vector) == symbol::Function) {
-        printf("%s\n", "Vector is a function.");
-        return false;
-    }
+bool Compiler::caseHandledIndex(SEXP index) {
 
     // TODO handle the case when the index is empty.
     // In this case the vec is returned, using genericGetVar and only the
@@ -636,36 +446,23 @@ bool Compiler::caseHandled(SEXP store, SEXP vector, SEXP index) {
     return true;
 }
 
+bool Compiler::caseHandled(SEXP vector) {
+
+    // TODO handle the case when the vector is NULL
+    if (vector == R_NilValue) {
+        printf("%s\n", "Null vector.");
+        return false;
+    }
+
+    return true;
+}
+
 /** Simple assignments (that is to a symbol) are compiled using the
  * genericSetVar intrinsic.
   */
 Value* Compiler::compileAssignment(SEXP e) {
 
-    // printf("%s\n", "compile assignment");
     SEXP expr = CDR(e);
-    // SEXP lhs = CAR(expr);
-    // SEXP vector = CAR(CDR(lhs));
-    // SEXP index = CAR(CDDR(lhs));
-    //   SEXP rhs = CAR(CDDR(e));
-
-    // if (TYPEOF(lhs) == LANGSXP) {
-    //     if (CAR(lhs) == symbol::Bracket) {
-    //         if (caseHandled(CDR(lhs), vector, index)) {
-    //             return compileAssignBracket(lhs, vector, index, rhs, false);
-    //         } else {
-    //             return nullptr;
-    //         }
-    //     } else if (CAR(lhs) == symbol::DoubleBracket) {
-    //         if (caseHandled(CDR(lhs), vector, index)) {
-    //             return compileAssignDoubleBracket(lhs, vector, index, rhs,
-    //                                               false);
-    //         } else {
-    //             return nullptr;
-    //         }
-    //     } else {
-    //         return nullptr;
-    //     }
-    // }
 
     // intrinsic only handles simple assignments
     if (TYPEOF(CAR(expr)) != SYMSXP) {
@@ -683,29 +480,6 @@ Value* Compiler::compileAssignment(SEXP e) {
 Value* Compiler::compileSuperAssignment(SEXP e) {
 
     SEXP expr = CDR(e);
-    // SEXP lhs = CAR(expr);
-    // SEXP vector = CAR(CDR(lhs));
-    // SEXP index = CAR(CDDR(lhs));
-    // SEXP rhs = CAR(CDDR(e));
-
-    // if (TYPEOF(lhs) == LANGSXP) {
-    //     if (CAR(lhs) == symbol::Bracket) {
-    //         if (caseHandled(CDR(lhs), vector, index)) {
-    //             return compileAssignBracket(lhs, vector, index, rhs, true);
-    //         } else {
-    //             return nullptr;
-    //         }
-    //     } else if (CAR(lhs) == symbol::DoubleBracket) {
-    //         if (caseHandled(CDR(lhs), vector, index)) {
-    //             return compileAssignDoubleBracket(lhs, vector, index, rhs,
-    //                                               true);
-    //         } else {
-    //             return nullptr;
-    //         }
-    //     } else {
-    //         return nullptr;
-    //     }
-    // }
 
     // intrinsic only handles simple assignments
     if (TYPEOF(CAR(expr)) != SYMSXP) {
@@ -716,6 +490,17 @@ Value* Compiler::compileSuperAssignment(SEXP e) {
     ir::GenericSetVarParent::create(b, v, b.rho(), CAR(expr));
     b.setResultVisible(false);
     return v;
+}
+
+/** Similar to R bytecode compiler, only the body of the created function is
+  compiled, the default arguments are left in their ast forms for now.
+
+  TODO this should change.
+ */
+Value* Compiler::compileFunctionDefinition(SEXP fdef) {
+    SEXP forms = CAR(fdef);
+    SEXP body = compileFunction("function", CAR(CDR(fdef)), forms);
+    return ir::CreateClosure::create(b, b.rho(), forms, body)->result();
 }
 
 /** Return calls or returns in general are compiled depending on the context.
