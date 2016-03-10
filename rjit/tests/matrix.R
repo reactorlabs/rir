@@ -1,6 +1,6 @@
 require("rjit")
 
-### Single brackets 
+############ Single brackets ############
 
 f <- jit.compile(function() {
 	a <- matrix(c(2:5),2,2)
@@ -28,12 +28,34 @@ stopifnot(matrix(c(2:5),2,2) == f())
 
 f <- jit.compile(function() {
 	a <- matrix(c(2:5),2,2)
-	a[1,1] <- 10
-	a[1,1]
+	b <- a[1,1]
+	b
 })
-stopifnot(10 == f())
+stopifnot(2 == f())
 
-### Double brackets 
+f <- jit.compile(function() {
+	a <- matrix(c(2:5),2,2)
+	a[TRUE,TRUE]
+})
+stopifnot(matrix(c(2:5),2,2) == f())
+
+f <- jit.compile(function() {
+	a <- matrix(c(2:5),2,2)
+	g <- function(x){x}
+	g(a)[g(1),g(1)]
+})
+stopifnot(2 == f())
+
+f <- jit.compile(function() {
+	a <- matrix(c(2:5),2,2)
+	g <- function(){a[1,1] <-10}
+	g()
+	a
+})
+stopifnot(matrix(c(2:5),2,2) == f())
+
+
+############ Double brackets ############
 
 f <- jit.compile(function() {
 	a <- matrix(c(2:5),2,2)
@@ -62,7 +84,20 @@ stopifnot(5 == f())
 
 f <- jit.compile(function() {
 	a <- matrix(c(2:5),2,2)
-	a[[1,1]] <- 10
-	a[[1,1]]
+	b <- a[[1,1]]
+	b
 })
-stopifnot(10 == f())
+stopifnot(2 == f())
+
+f <- jit.compile(function() {
+	a <- matrix(c(2:5),2,2)
+	g <- function(x){x}
+	g(a)[[g(1),g(1)]]
+})
+stopifnot(2 == f())
+
+f <- jit.compile(function() {
+	a <- matrix(c(2:5),2,2)
+	a[[TRUE,TRUE]]
+})
+stopifnot(2 == f())

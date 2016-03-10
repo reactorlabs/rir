@@ -3,10 +3,27 @@ require("rjit")
 # single backets
 
 f <- jit.compile(function() {
+	2[1]
+})
+stopifnot(2 == f())
+
+f <- jit.compile(function() {
+	2[2]
+})
+stopifnot(is.na(f()))
+
+f <- jit.compile(function() {
 	a <- c(2:5)
 	a[1L]
 })
 stopifnot(2 == f())
+
+f <- jit.compile(function() {
+	a <- c(2:5)
+	a[1]
+})
+stopifnot(2 == f())
+
 
 f <- jit.compile(function() {
 	a <- c(2:5)
@@ -32,10 +49,33 @@ f <- jit.compile(function() {
 })
 stopifnot(3 == f())
 
+f <- jit.compile(function() {
+        a <- c(c(1,2))
+        a[1]
+})
+stopifnot(1 == f())
+
+f <- jit.compile(function() {
+        a <- c(c(1,2))
+        a[2][1]
+})
+stopifnot(2 == f())
+
+f <- jit.compile(function() {
+	2[2]
+})
+stopifnot(is.na(f()))
+
 # Null index
 
 f <- jit.compile(function() {
 	a <- c("a", "b", "c", "d")
+	a[NULL]
+})
+stopifnot(integer(0) == f())
+
+f <- jit.compile(function() {
+	a <- c(TRUE, FALSE, FALSE, FALSE)
 	a[NULL]
 })
 stopifnot(integer(0) == f())
@@ -47,6 +87,12 @@ f <- jit.compile(function() {
 	a[1]
 })
 stopifnot(TRUE == f())
+
+f <- jit.compile(function() {
+	a <- c("a", "b", "c", "d")
+	a[1]
+})
+stopifnot("a" == f())
 
 # Logical index
 
@@ -95,6 +141,11 @@ stopifnot(2 == f())
 ################################ double brackets ################################
 
 f <- jit.compile(function() {
+	2[[1]]
+})
+stopifnot(2 == f())
+
+f <- jit.compile(function() {
 	a <- c(2:5)
 	a[[1L]]
 })
@@ -123,6 +174,30 @@ f <- jit.compile(function() {
 	a[[4 / 2]]
 })
 stopifnot(3 == f())
+
+f <- jit.compile(function() {
+        a <- c(c(1,2))
+        a[[1]]
+})
+stopifnot(1 == f())
+
+f <- jit.compile(function() {
+        a <- c(c(1,2))
+        a[[2]][[1]]
+})
+stopifnot(2 == f())
+
+f <- jit.compile(function() {
+	2[[1]]
+})
+stopifnot(2 == f())
+
+# f <- jit.compile(function() {
+# 	2[[2]]
+# })
+# stopifnot(is.na(f()))
+# Error in 2[[2]] : subscript out of bounds
+
 
 
 # Null index

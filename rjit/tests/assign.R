@@ -8,6 +8,15 @@ f <- jit.compile(function() {
 stopifnot(c(5,3,4,5) == f())
 
 f <- jit.compile(function() {
+        a <- 2
+        g <- function(){a[1] <-3}
+        a
+})
+f()
+stopifnot(2 == f())
+
+# We are not handling this fast case at the moment.
+f <- jit.compile(function() {
         a <- c(c(1,2))
         a[1][1] <- 5
         a
@@ -37,33 +46,6 @@ f <- jit.compile(function(){
 	x
 })
 
-stopifnot(c(1,2,14) == f())
-
-f <- jit.compile(function(){
-	x <- c(1:5)
-	y <- x
-	g <- function(){
-		y[2] <<- 5
-	}
-	g()
-	y
-})
-
-stopifnot(c(1,5,3,4,5) == f())
-
-
-f <- jit.compile(function(){
-	x <- c(1:5)
-	y <- x
-	g <- function(){
-		y[2] <<- 5
-	}
-	g()
-	x
-})
-stopifnot(c(1:5) == f())
-
-
 f <- jit.compile(function() {
 	x <- c(1:3)
 	t <- x[[1]]; x[[1]] <- x[[2]]; x[[2]] <- t
@@ -92,5 +74,58 @@ f <- jit.compile(function(){
 	}
 	y
 })
+stopifnot(c(1:5) == f())
 
+
+f <- jit.compile(function() {
+	a <- c(1,2)
+	g <- function(){a <- c(10,10); a[1] <-2}
+	g()
+	a
+})
+stopifnot(c(1,2) == f())
+
+
+f <- jit.compile(function() {
+	a <- c(1,2)
+	g <- function(){a[1] <-2}
+	g()
+	a
+})
+stopifnot(c(1,2) == f())
+
+
+f <- jit.compile(function() {
+	a <- c(c(1,2))
+	g <- function(){a[1] <-2}
+	g()
+	a
+})
+stopifnot(c(1,2) == f())
+
+
+######################### SUPER ASSIGNMENT #########################
+
+f <- jit.compile(function(){
+	x <- c(1:5)
+	y <- x
+	g <- function(){
+		y[2] <<- 5
+	}
+	g()
+	y
+})
+
+stopifnot(c(1,5,3,4,5) == f())
+
+
+f <- jit.compile(function(){
+	x <- c(1:5)
+	y <- x
+	g <- function(){
+		y[2] <<- 5
+	}
+	g()
+	x
+})
 stopifnot(c(1:5) == f())
