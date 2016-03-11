@@ -623,7 +623,7 @@ Value* Compiler::compileAssignDoubleMatrix(SEXP call, SEXP vector, SEXP row,
     return resultVal;
 }
 
-/**
+/** The index of a vector can not be empty.
 */
 bool Compiler::caseHandledIndex(SEXP index) {
 
@@ -636,7 +636,7 @@ bool Compiler::caseHandledIndex(SEXP index) {
     return true;
 }
 
-/**
+/** We only handle vectors that are symbols for vector assignment.
 */
 bool Compiler::caseHandledVector(SEXP vector) {
 
