@@ -128,6 +128,18 @@ class Compiler {
     llvm::Value* compileAssignMatrix(SEXP call, SEXP vector, SEXP row, SEXP col,
                                      SEXP value, bool super);
 
+    /** Compiling vector assignment on double bracket.
+     *
+     */
+    llvm::Value* compileAssignDoubleBracket(SEXP call, SEXP vector, SEXP index,
+                                            SEXP value, bool super);
+
+    /** Compiling matrix assignment on double bracket.
+     *
+     */
+    llvm::Value* compileAssignDoubleMatrix(SEXP call, SEXP vector, SEXP row,
+                                           SEXP col, SEXP value, bool super);
+
     /** Similar to R bytecode compiler, only the body of the created function is
       compiled, the default arguments are left in their ast forms for now.
 

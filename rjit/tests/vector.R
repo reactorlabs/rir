@@ -24,7 +24,6 @@ f <- jit.compile(function() {
 })
 stopifnot(2 == f())
 
-
 f <- jit.compile(function() {
 	a <- c(2:5)
 	a[2 - 1]
@@ -65,6 +64,12 @@ f <- jit.compile(function() {
 	2[2]
 })
 stopifnot(is.na(f()))
+
+f <- jit.compile(function() {
+        a <- c(1,2)
+        a[0]
+})
+stopifnot(integer(0) == f())
 
 # Null index
 
@@ -192,21 +197,24 @@ f <- jit.compile(function() {
 })
 stopifnot(2 == f())
 
-# f <- jit.compile(function() {
-# 	2[[2]]
-# })
-# stopifnot(is.na(f()))
-# Error in 2[[2]] : subscript out of bounds
+f <- jit.compile(function() {
+	2[[2]]
+})
+stopifnot("subscript out of bounds" == tryCatch(f(), error = function(e) e$message))
 
-
+f <- jit.compile(function() {
+	a <- c(1:5)
+	a[[0]]
+})
+stopifnot("attempt to select less than one element" == tryCatch(f(), error = function(e) e$message))
 
 # Null index
 
-# f <- jit.compile(function() {
-# 	a <- c("a", "b", "c", "d")
-# 	a[[NULL]]
-# })
-# Throws an error: attempt to select less than one element
+f <- jit.compile(function() {
+	a <- c("a", "b", "c", "d")
+	a[[NULL]]
+})
+stopifnot("attempt to select less than one element" == tryCatch(f(), error = function(e) e$message))
 
 
 # Non-integer vectors

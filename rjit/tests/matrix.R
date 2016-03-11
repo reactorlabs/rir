@@ -46,15 +46,6 @@ f <- jit.compile(function() {
 })
 stopifnot(2 == f())
 
-f <- jit.compile(function() {
-	a <- matrix(c(2:5),2,2)
-	g <- function(){a[1,1] <-10}
-	g()
-	a
-})
-stopifnot(matrix(c(2:5),2,2) == f())
-
-
 ############ Double brackets ############
 
 f <- jit.compile(function() {
@@ -76,16 +67,22 @@ f <- jit.compile(function() {
 stopifnot(5 == f())
 
 # Gives an error
-# f <- jit.compile(function() {
-# 	a <- matrix(c(2:5),2,2)
-# 	a[[,]]
-# })
-# stopifnot(matrix(c(2:5),2,2) == f())
+f <- jit.compile(function() {
+	a <- matrix(c(2:5),2,2)
+	a[[,]]
+})
+stopifnot("invalid subscript type 'symbol'" == tryCatch(f(), error = function(e) e$message))
 
 f <- jit.compile(function() {
 	a <- matrix(c(2:5),2,2)
 	b <- a[[1,1]]
 	b
+})
+stopifnot(2 == f())
+
+f <- jit.compile(function() {
+	a <- matrix(c(2:5),2,2)
+	a[[TRUE,TRUE]]
 })
 stopifnot(2 == f())
 
@@ -98,6 +95,11 @@ stopifnot(2 == f())
 
 f <- jit.compile(function() {
 	a <- matrix(c(2:5),2,2)
-	a[[TRUE,TRUE]]
+	g <- function(){a[[1,1]] <-10}
+	g()
+	a
 })
-stopifnot(2 == f())
+stopifnot(matrix(c(2:5),2,2) == f())
+
+
+######################### SUPER ASSIGNMENT #########################

@@ -17,6 +17,14 @@ t1 <- function(theCompiler) {
     res <- theCompiler(function() a[13])()
     stopifnot(res == 4)
 }
+
+t1a <- function(theCompiler) {
+    `[.bla1` <- function(a,b) 4   # do nothing to b
+    a <- 1
+    attr(a, "class") <- "bla2"
+    res <- theCompiler(function() a[1])()
+    stopifnot(res == 1)
+}
     
     
 t2 <- function(theCompiler) {
@@ -53,6 +61,7 @@ t4 <- function(theCompiler) {
 # Make sure the test make sense
 t0(cmpfun)
 t1(cmpfun)
+t1a(cmpfun)
 t2(cmpfun)
 t3(cmpfun)
 t4(cmpfun)
@@ -60,6 +69,7 @@ t4(cmpfun)
 # TODO Fix those
 t0(jit.compile)
 t1(jit.compile)
+t1a(jit.compile)
 # t2(jit.compile)
 # t3(jit.compile)
 # t4(jit.compile)

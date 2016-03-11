@@ -372,29 +372,43 @@ Value* Compiler::compileParenthesis(SEXP arg) {
     return result;
 }
 
-/** Compiling vector retrieval (single bracket).
+/** Compile vector access (single bracket).
+    The cases that we are not currently handling for vector access is when the
+    index being accessed is empty.
+    We do not handle array access, i.e. x[a,b,c,...,n]
+    To compile matrices the compileMatrix flag in Flag.h need to be set to true.
   */
 Value* Compiler::compileBracket(SEXP call) {
 
+    // This flag is used to determine if compileBracket was called
+    // after a failed attempt at compiling assignment.
+    // If the compilation for assignment to a vector failed then
+    // we can not use this primitive function, otherwise the assignment
+    // will be performed on the value inside the vector instead of on
+    // the vector.
     if (b.getAssignmentLHS()) {
         return nullptr;
     }
 
+    // Retrieving the vector and index from the AST.
     SEXP expression = CDR(call);
     SEXP vector = CAR(expression);
     SEXP indexArg = CDR(expression);
     SEXP index = CAR(indexArg);
 
+    // return nullptr for the cases of the index we do not handle.
     if (!caseHandledIndex(indexArg)) {
         return nullptr;
     }
 
-    // Matrix access for single bracket.
-    if (CDDR(expression) != R_NilValue && CDDDR(expression) == R_NilValue) {
+    // Checks the AST is matrix access (and not array access).
+    if (CDDR(expression) != R_NilValue && CDDDR(expression) == R_NilValue &&
+        Flag::singleton().compileMatrix) {
 
         SEXP colArg = CDDR(expression);
         SEXP col = CAR(colArg);
 
+        // Ensure we handle the column value of the matrix.
         if (!caseHandledIndex(colArg)) {
             return nullptr;
         }
@@ -408,9 +422,8 @@ Value* Compiler::compileBracket(SEXP call) {
         assert(vector);
 
         Value* resultIndex = compileExpression(index);
-        b.setResultVisible(true);
 
-        // printf("%s\n", "Compiled single brackets");
+        b.setResultVisible(true);
         return ir::GetDispatchValue::create(b, resultVector, resultIndex,
                                             b.rho(), call)
             ->result();
@@ -421,30 +434,42 @@ Value* Compiler::compileBracket(SEXP call) {
     }
 }
 
-/** Compiling vector retrieval (double bracket).
-*
+/** Compile vector access (double bracket).
+    In compilation there is no difference between the semantics for double
+    bracket vector access and single backet vector access.
 */
 Value* Compiler::compileDoubleBracket(SEXP call) {
 
+    // This flag is used to determine if compileBracket was called
+    // after a failed attempt at compiling assignment.
+    // If the compilation for assignment to a vector failed then
+    // we can not use this primitive function, otherwise the assignment
+    // will be performed on the value inside the vector instead of on
+    // the vector.
     if (b.getAssignmentLHS()) {
         return nullptr;
     }
 
+    // Retrieving the vector and index from the AST.
     SEXP expression = CDR(call);
     SEXP vector = CAR(expression);
     SEXP indexArg = CDR(expression);
     SEXP index = CAR(indexArg);
 
+    // return nullptr for the cases of the index we do not handle.
     if (!caseHandledIndex(indexArg)) {
         return nullptr;
     }
 
-    // Matrix access for double bracket.
-    if (CDDR(expression) != R_NilValue && CDDDR(expression) == R_NilValue) {
+    // Checks the AST that the expression is matrix access (and not array
+    // access).
+    if (CDDR(expression) != R_NilValue && CDDDR(expression) == R_NilValue &&
+        Flag::singleton().compileMatrix) {
 
         SEXP colArg = CDDR(expression);
         SEXP col = CAR(colArg);
 
+        // MAke sure we handle the column value of the matrix.
         if (!caseHandledIndex(colArg)) {
             return nullptr;
         }
@@ -458,9 +483,8 @@ Value* Compiler::compileDoubleBracket(SEXP call) {
         assert(vector);
 
         Value* resultIndex = compileExpression(index);
-        b.setResultVisible(true);
 
-        // printf("%s\n", "Compiled double brackets");
+        b.setResultVisible(true);
         return ir::GetDispatchValue2::create(b, resultVector, resultIndex,
                                              b.rho(), call)
             ->result();
@@ -471,12 +495,12 @@ Value* Compiler::compileDoubleBracket(SEXP call) {
     }
 }
 
-/** Compiling matrix retrieval (single bracket).
+/** Compiling matrix access (single bracket).
+    To access this case set the compileMatrix flag in Flag.h to true.
+    All the checks are done, this method simply creates the
+    primtive function.
 */
 Value* Compiler::compileMatrix(SEXP call, SEXP vector, SEXP row, SEXP col) {
-    if (b.getAssignmentLHS()) {
-        return nullptr;
-    }
 
     Value* resultVector = compileExpression(vector);
     assert(vector);
@@ -485,20 +509,18 @@ Value* Compiler::compileMatrix(SEXP call, SEXP vector, SEXP row, SEXP col) {
     Value* resultCol = compileExpression(col);
     b.setResultVisible(true);
 
-    // printf("%s\n", "Compiled single matrix.");
     return ir::GetMatrixValue::create(b, resultVector, resultRow, resultCol,
                                       b.rho(), call)
         ->result();
 }
 
-/** Compiling matrix retrieval (double bracket).
-*
+/** Compiling matrix access (double bracket).
+    To access this case set the compileMatrix flag in Flag.h to true.
+    All the checks are done, this method simply creates the
+    primtive function.
 */
 Value* Compiler::compileDoubleMatrix(SEXP call, SEXP vector, SEXP row,
                                      SEXP col) {
-    if (b.getAssignmentLHS()) {
-        return nullptr;
-    }
 
     Value* resultVector = compileExpression(vector);
     assert(vector);
@@ -506,13 +528,12 @@ Value* Compiler::compileDoubleMatrix(SEXP call, SEXP vector, SEXP row,
     Value* resultCol = compileExpression(col);
     b.setResultVisible(true);
 
-    // printf("%s\n", "Compiled double matrix.");
     return ir::GetMatrixValue2::create(b, resultVector, resultRow, resultCol,
                                        b.rho(), call)
         ->result();
 }
 
-/** Compiling single bracket for normal and super assignment
+/** Compiling single bracket vector assignment ( and super assignment).
 */
 
 Value* Compiler::compileAssignBracket(SEXP call, SEXP vector, SEXP index,
@@ -523,17 +544,10 @@ Value* Compiler::compileAssignBracket(SEXP call, SEXP vector, SEXP index,
     Value* resultVal = compileExpression(value);
     Value* resultIndex = compileExpression(index);
 
+    // Create the primitive function for super assignment.
+    // Super assignment is currently not being handled.
     assert(!super);
-    // if (super) {
-    //     ir::SuperAssignDispatch::create(b, resultVector, resultIndex,
-    //     resultVal,
-    //                                     b.rho(), call)
-    //         ->result();
-    //     b.setResultVisible(false);
-    //     return resultVal;
-    // }
 
-    // printf("%s\n", "Compiled assign single.");
     ir::AssignDispatchValue::create(b, resultVector, resultIndex, resultVal,
                                     b.rho(), call)
         ->result();
@@ -541,7 +555,8 @@ Value* Compiler::compileAssignBracket(SEXP call, SEXP vector, SEXP index,
     return resultVal;
 }
 
-/** Compiling matrix over single bracket for normal and super assignment
+/** Compiling matrix over single bracket for normal and super assignment.
+    Matrices assignment is not being handled in this release.
 */
 Value* Compiler::compileAssignMatrix(SEXP call, SEXP vector, SEXP row, SEXP col,
                                      SEXP value, bool super) {
@@ -552,16 +567,9 @@ Value* Compiler::compileAssignMatrix(SEXP call, SEXP vector, SEXP row, SEXP col,
     Value* resultRow = compileExpression(row);
     Value* resultCol = compileExpression(row);
 
+    // Super assignment for matrices (not being handled in this release).
     assert(!super);
-    // if (super) {
-    //     ir::SuperAssignMatrix::create(b, resultVector, resultRow, resultCol,
-    //                                 resultVal, b.rho(), call)
-    //         ->result();
-    //     b.setResultVisible(false);
-    //     return resultVal;
-    // }
 
-    // printf("%s\n", "Compiled assign matrix.");
     ir::AssignMatrixValue::create(b, resultVector, resultRow, resultCol,
                                   resultVal, b.rho(), call)
         ->result();
@@ -569,27 +577,70 @@ Value* Compiler::compileAssignMatrix(SEXP call, SEXP vector, SEXP row, SEXP col,
     return resultVal;
 }
 
+/** Compiling double bracket for normal and super assignment.
+*/
+
+Value* Compiler::compileAssignDoubleBracket(SEXP call, SEXP vector, SEXP index,
+                                            SEXP value, bool super) {
+
+    Value* resultVector = compileExpression(vector);
+    assert(resultVector);
+    Value* resultVal = compileExpression(value);
+    Value* resultIndex = compileExpression(index);
+
+    // Create the primitive function for super assignment.
+    // Super assignment is currently not being handled.
+    assert(!super);
+
+    ir::AssignDispatchValue2::create(b, resultVector, resultIndex, resultVal,
+                                     b.rho(), call)
+        ->result();
+    b.setResultVisible(false);
+    return resultVal;
+}
+
+/** Compiling matrix over single bracket for normal and super assignment.
+    Matrices assignment over double brackets is not being handled in this
+   release.
+*/
+Value* Compiler::compileAssignDoubleMatrix(SEXP call, SEXP vector, SEXP row,
+                                           SEXP col, SEXP value, bool super) {
+
+    Value* resultVector = compileExpression(vector);
+    assert(resultVector);
+    Value* resultVal = compileExpression(value);
+    Value* resultRow = compileExpression(row);
+    Value* resultCol = compileExpression(row);
+
+    // Super assignment for double bracket matrices (not being handled in this
+    // release).
+    assert(!super);
+
+    ir::AssignMatrixValue2::create(b, resultVector, resultRow, resultCol,
+                                   resultVal, b.rho(), call)
+        ->result();
+    b.setResultVisible(false);
+    return resultVal;
+}
+
+/**
+*/
 bool Compiler::caseHandledIndex(SEXP index) {
 
-    // TODO disable the case when a name attribute is used.
-    // if (TAG(index) != R_NilValue){
-    //     return nullptr;
-    // }
-
     // TODO handle the case when the index is empty.
-    // In this case the vec is returned, using genericGetVar and only the
-    // "relevant" attributes of vec are retained.
+    // In this case only the "relevant" attributes of vector are retained.
     if (TYPEOF(CAR(index)) == SYMSXP && !strlen(CHAR(PRINTNAME(CAR(index))))) {
-        printf("%s\n", "Empty index.");
         return false;
     }
 
     return true;
 }
 
+/**
+*/
 bool Compiler::caseHandledVector(SEXP vector) {
 
-    // TODO for assignments, only vectors that are symbols are handled.
+    // For vector assignment only vectors that are symbols are handled.
     if (TYPEOF(vector) != SYMSXP) {
         return false;
     }
@@ -597,8 +648,10 @@ bool Compiler::caseHandledVector(SEXP vector) {
     return true;
 }
 
-/** Simple assignments (that is to a symbol) are compiled using the
- * genericSetVar intrinsic.
+/** Compiling assignments (<-).
+    The genericSetVar primitive function is created when the LHS is a symbol.
+    Otherwise primitive functions for vector and matrix assignment is created
+    if the LHS is a vector or matrix.
   */
 Value* Compiler::compileAssignment(SEXP e) {
 
@@ -615,50 +668,54 @@ Value* Compiler::compileAssignment(SEXP e) {
         return v;
     }
 
+    // Retrieve the LHS and RHS of the assignment from the AST.
     SEXP lhs = CAR(expr);
     SEXP rhs = CAR(CDR(expr));
 
-    if (TYPEOF(lhs) != LANGSXP) {
-        return nullptr;
-    }
-
+    // Check if the LHS is a language object
     if (TYPEOF(lhs) == LANGSXP && CDR(lhs) && CDDR(lhs)) {
         SEXP vector = CAR(CDR(lhs));
         SEXP indexArg = CDDR(lhs);
         SEXP index = CAR(indexArg);
 
-        if (!caseHandledIndex(indexArg) || !caseHandledVector(vector)) {
-            return nullptr;
-        }
+        // Check we handle the index and vector.
+        if (caseHandledIndex(indexArg) && caseHandledVector(vector)) {
 
-        if (CDDDR(lhs) != R_NilValue && CDR(CDDDR(lhs)) == R_NilValue) {
-            SEXP colArg = CDDDR(lhs);
+            // Matrix assignment (NOT being handled in this release).
+            if (CDDDR(lhs) != R_NilValue && CDR(CDDDR(lhs)) == R_NilValue &&
+                Flag::singleton().compileMatrix) {
+                SEXP colArg = CDDDR(lhs);
 
-            if (!caseHandledIndex(colArg)) {
-                return nullptr;
+                if (caseHandledIndex(colArg)) {
+
+                    SEXP col = CAR(colArg);
+
+                    // Single bracket matrix assignment
+                    if (CAR(lhs) == symbol::Bracket) {
+                        return compileAssignMatrix(lhs, vector, index, col, rhs,
+                                                   false);
+                    }
+
+                    // Double bracket matrix assignment
+                    if (CAR(lhs) == symbol::DoubleBracket) {
+                        return compileAssignDoubleMatrix(lhs, vector, index,
+                                                         col, rhs, false);
+                    }
+                }
             }
 
-            SEXP col = CAR(colArg);
-            if (CAR(lhs) == symbol::Bracket) {
-                return compileAssignMatrix(lhs, vector, index, col, rhs, false);
+            // Vector assignmnt
+            if (CDDDR(lhs) == R_NilValue) {
+
+                if (CAR(lhs) == symbol::Bracket) {
+                    return compileAssignBracket(lhs, vector, index, rhs, false);
+                }
+
+                if (CAR(lhs) == symbol::DoubleBracket) {
+                    return compileAssignDoubleBracket(lhs, vector, index, rhs,
+                                                      false);
+                }
             }
-
-            // if (CAR(lhs) == symbol::DoubleBracket) {
-            //     return compileAssignDoubleMatrix(lhs, vector, index, col,
-            //     rhs, false);
-            // }
-        }
-
-        if (CDDDR(lhs) == R_NilValue) {
-
-            if (CAR(lhs) == symbol::Bracket) {
-                return compileAssignBracket(lhs, vector, index, rhs, false);
-            }
-
-            // if (CAR(lhs) == symbol::DoubleBracket) {
-            //     return compileAssignDoubleBracket(lhs, vector, index, rhs,
-            //     false);
-            // }
         }
     }
 
@@ -668,21 +725,30 @@ Value* Compiler::compileAssignment(SEXP e) {
     return result;
 }
 
-/** Super assignment is compiled as genericSetVarParentIntrinsic
+/** Super assignment for vectors and matrices are not being handled
+    in this release.
  */
 Value* Compiler::compileSuperAssignment(SEXP e) {
 
-    SEXP expr = CDR(e);
-
-    // intrinsic only handles simple assignments
-    if (TYPEOF(CAR(expr)) != SYMSXP) {
+    if (b.getAssignmentLHS()) {
         return nullptr;
     }
 
-    Value* v = compileExpression(CAR(CDR(expr)));
-    ir::GenericSetVarParent::create(b, v, b.rho(), CAR(expr));
-    b.setResultVisible(false);
-    return v;
+    SEXP expr = CDR(e);
+
+    if (TYPEOF(CAR(expr)) == SYMSXP) {
+        Value* v = compileExpression(CAR(CDR(expr)));
+        ir::GenericSetVarParent::create(b, v, b.rho(), CAR(expr));
+        b.setResultVisible(false);
+        return v;
+    }
+
+    // When our assignment primitive function is not created, we must ensure
+    // any vector read on the LHS is also not handled by our primitive function.
+    b.setAssignmentLHS(true);
+    Value* result = compileExpression(e);
+    b.setAssignmentLHS(false);
+    return result;
 }
 
 /** Similar to R bytecode compiler, only the body of the created function is
