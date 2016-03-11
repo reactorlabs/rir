@@ -376,7 +376,8 @@ Value* Compiler::compileParenthesis(SEXP arg) {
     The cases that we are not currently handling for vector access is when the
     index being accessed is empty.
     We do not handle array access, i.e. x[a,b,c,...,n]
-    To compile matrices the compileMatrix flag in Flag.h need to be set to true.
+    To compile matrices the compileMatrixRead flag in Flag.h need to be set to
+   true.
   */
 Value* Compiler::compileBracket(SEXP call) {
 
@@ -403,7 +404,7 @@ Value* Compiler::compileBracket(SEXP call) {
 
     // Checks the AST is matrix access (and not array access).
     if (CDDR(expression) != R_NilValue && CDDDR(expression) == R_NilValue &&
-        Flag::singleton().compileMatrix) {
+        Flag::singleton().compileMatrixRead) {
 
         SEXP colArg = CDDR(expression);
         SEXP col = CAR(colArg);
@@ -464,7 +465,7 @@ Value* Compiler::compileDoubleBracket(SEXP call) {
     // Checks the AST that the expression is matrix access (and not array
     // access).
     if (CDDR(expression) != R_NilValue && CDDDR(expression) == R_NilValue &&
-        Flag::singleton().compileMatrix) {
+        Flag::singleton().compileMatrixRead) {
 
         SEXP colArg = CDDR(expression);
         SEXP col = CAR(colArg);
@@ -496,7 +497,7 @@ Value* Compiler::compileDoubleBracket(SEXP call) {
 }
 
 /** Compiling matrix access (single bracket).
-    To access this case set the compileMatrix flag in Flag.h to true.
+    To access this case set the compileMatrixRead/Write flag in Flag.h to true.
     All the checks are done, this method simply creates the
     primtive function.
 */
@@ -515,7 +516,7 @@ Value* Compiler::compileMatrix(SEXP call, SEXP vector, SEXP row, SEXP col) {
 }
 
 /** Compiling matrix access (double bracket).
-    To access this case set the compileMatrix flag in Flag.h to true.
+    To access this case set the compileMatrixRead/Write flag in Flag.h to true.
     All the checks are done, this method simply creates the
     primtive function.
 */
@@ -683,7 +684,7 @@ Value* Compiler::compileAssignment(SEXP e) {
 
             // Matrix assignment (NOT being handled in this release).
             if (CDDDR(lhs) != R_NilValue && CDR(CDDDR(lhs)) == R_NilValue &&
-                Flag::singleton().compileMatrix) {
+                Flag::singleton().compileMatrixWrite) {
                 SEXP colArg = CDDDR(lhs);
 
                 if (caseHandledIndex(colArg)) {
