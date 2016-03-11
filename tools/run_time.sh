@@ -32,7 +32,9 @@ if [ ! -d ${RESULT_DIR} ]; then
    mkdir ${RESULT_DIR}
 fi
 
-# build_freshr $FRESH_R_DIR $FRESH_R_VERSION "-O2"
+if [ ! -d "$FRESH_R_DIR" ]; then
+  build_freshr $FRESH_R_DIR $FRESH_R_VERSION "-O2"
+fi
 
 FRESH_R_BIN=${FRESH_R_DIR}/R-${FRESH_R_VERS}-branch/bin/R
 
@@ -59,4 +61,6 @@ FOLDER="teamcity/execution"
 
 COMMIT_ID=`git rev-parse HEAD`
 
-# ${SCRIPTPATH}/dropbox_uploader.sh -f ${SCRIPTPATH}/.dropbox_uploader upload ${LOG_FILE} $FOLDER/${TIMEN}_${COMMIT_ID}.txt
+if [ ! -z "$TEAMCITY_VERSION" ]; then
+  ${SCRIPTPATH}/dropbox_uploader.sh -f ${SCRIPTPATH}/.dropbox_uploader upload ${LOG_FILE} $FOLDER/${TIMEN}_${COMMIT_ID}.txt
+fi
