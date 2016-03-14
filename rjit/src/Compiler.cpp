@@ -409,7 +409,7 @@ Value* Compiler::compileBracket(SEXP call) {
         SEXP colArg = CDDR(expression);
         SEXP col = CAR(colArg);
 
-        // Ensure we handle the column value of the matrix.
+        // Ensuring we handle the column value of the matrix.
         if (!caseHandledIndex(colArg)) {
             return nullptr;
         }
@@ -470,7 +470,7 @@ Value* Compiler::compileDoubleBracket(SEXP call) {
         SEXP colArg = CDDR(expression);
         SEXP col = CAR(colArg);
 
-        // MAke sure we handle the column value of the matrix.
+        // Making sure we handle the column value of the matrix.
         if (!caseHandledIndex(colArg)) {
             return nullptr;
         }
@@ -546,8 +546,14 @@ Value* Compiler::compileAssignBracket(SEXP call, SEXP vector, SEXP index,
     Value* resultIndex = compileExpression(index);
 
     // Create the primitive function for super assignment.
-    // Super assignment is currently not being handled.
-    assert(!super);
+    if (super) {
+        ir::SuperAssignDispatch::create(b, resultVector, resultIndex, resultVal,
+                                        b.rho(), call)
+            ->result();
+        b.setResultVisible(false);
+
+        return resultVal;
+    }
 
     ir::AssignDispatchValue::create(b, resultVector, resultIndex, resultVal,
                                     b.rho(), call)
@@ -590,8 +596,14 @@ Value* Compiler::compileAssignDoubleBracket(SEXP call, SEXP vector, SEXP index,
     Value* resultIndex = compileExpression(index);
 
     // Create the primitive function for super assignment.
-    // Super assignment is currently not being handled.
-    assert(!super);
+    if (super) {
+        ir::SuperAssignDispatch2::create(b, resultVector, resultIndex,
+                                         resultVal, b.rho(), call)
+            ->result();
+
+        b.setResultVisible(false);
+        return resultVal;
+    }
 
     ir::AssignDispatchValue2::create(b, resultVector, resultIndex, resultVal,
                                      b.rho(), call)
@@ -682,7 +694,7 @@ Value* Compiler::compileAssignment(SEXP e) {
         // Check we handle the index and vector.
         if (caseHandledIndex(indexArg) && caseHandledVector(vector)) {
 
-            // Matrix assignment (NOT being handled in this release).
+            // Matrix assignment
             if (CDDDR(lhs) != R_NilValue && CDR(CDDDR(lhs)) == R_NilValue &&
                 Flag::singleton().compileMatrixWrite) {
                 SEXP colArg = CDDDR(lhs);
@@ -742,6 +754,57 @@ Value* Compiler::compileSuperAssignment(SEXP e) {
         ir::GenericSetVarParent::create(b, v, b.rho(), CAR(expr));
         b.setResultVisible(false);
         return v;
+    }
+
+    // Retrieve the LHS and RHS of the assignment from the AST.
+    SEXP lhs = CAR(expr);
+    SEXP rhs = CAR(CDR(expr));
+
+    // Check if the LHS is a language object
+    if (TYPEOF(lhs) == LANGSXP && CDR(lhs) && CDDR(lhs)) {
+        SEXP vector = CAR(CDR(lhs));
+        SEXP indexArg = CDDR(lhs);
+        SEXP index = CAR(indexArg);
+
+        // Check we handle the index and vector.
+        if (caseHandledIndex(indexArg) && caseHandledVector(vector)) {
+
+            // Matrix assignment (NOT being handled in this release).
+            if (CDDDR(lhs) != R_NilValue && CDR(CDDDR(lhs)) == R_NilValue &&
+                Flag::singleton().compileSuperMatrixWrite) {
+                SEXP colArg = CDDDR(lhs);
+
+                if (caseHandledIndex(colArg)) {
+
+                    SEXP col = CAR(colArg);
+
+                    // Single bracket matrix assignment
+                    if (CAR(lhs) == symbol::Bracket) {
+                        return compileAssignMatrix(lhs, vector, index, col, rhs,
+                                                   true);
+                    }
+
+                    // Double bracket matrix assignment
+                    if (CAR(lhs) == symbol::DoubleBracket) {
+                        return compileAssignDoubleMatrix(lhs, vector, index,
+                                                         col, rhs, true);
+                    }
+                }
+            }
+
+            // Vector assignmnt
+            if (CDDDR(lhs) == R_NilValue) {
+
+                if (CAR(lhs) == symbol::Bracket) {
+                    return compileAssignBracket(lhs, vector, index, rhs, true);
+                }
+
+                if (CAR(lhs) == symbol::DoubleBracket) {
+                    return compileAssignDoubleBracket(lhs, vector, index, rhs,
+                                                      true);
+                }
+            }
+        }
     }
 
     // When our assignment primitive function is not created, we must ensure

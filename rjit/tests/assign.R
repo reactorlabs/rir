@@ -106,16 +106,6 @@ f <- jit.compile(function() {
 stopifnot(c(1,2) == f())
 
 
-######################### SINGLE BRACKET MATRIX ASSIGNMENT #########################
-
-f <- jit.compile(function() {
-	a <- matrix(c(2:5),2,2)
-	g <- function(){a[1,1] <-10}
-	g()
-	a
-})
-stopifnot(matrix(c(2:5),2,2) == f())
-
 ######################### DOUBLE BRACKET ASSIGNMENT #########################
 
 f <- jit.compile(function() {
@@ -224,6 +214,16 @@ stopifnot(c(1,2) == f())
 
 ######################### SUPER ASSIGNMENT #########################
 
+################################### SINGLE BRACKETS ###################################
+
+f <- jit.compile(function(){
+	x <- c(1:5)
+	x[1] <<- 5
+	x
+})
+stopifnot("object 'x' not found" == tryCatch(f(), error = function(e) e$message))
+
+
 f <- jit.compile(function(){
 	x <- c(1:5)
 	y <- x
@@ -233,7 +233,74 @@ f <- jit.compile(function(){
 	g()
 	y
 })
+f()
+stopifnot(c(1,5,3,4,5) == f())
 
+f <- jit.compile(function(){
+	x <- c(1:5)
+	y <- x
+	g <- function(){
+		x[2] <<- 5
+	}
+	g()
+	y
+})
+stopifnot(c(1:5) == f())
+
+
+f <- jit.compile(function(){
+	x <- c(1:5)
+	y <- x
+	h <- function(){
+		g <- function(){
+			y[2] <<- 5
+		}
+		g()
+	}
+	h()
+	y
+})
+stopifnot(c(1,5,3,4,5) == f())
+
+f <- jit.compile(function(){
+	x <- c(1:5)
+	y <- x
+	h <- function(){
+		g <- function(){
+			x[2] <<- 5
+		}
+		g()
+	}
+	h()
+	y
+})
+stopifnot(c(1:5) == f())
+
+
+f <- jit.compile(function(){
+	x <- c(1:5)
+	y <- x
+	h <- function(){
+		g <- function(){
+			y[2] <<- 5
+		}
+		g()
+	}
+	h()
+	x
+})
+stopifnot(c(1:5) == f())
+
+
+f <- jit.compile(function(){
+	x <- c(1:5)
+	y <- x
+	g <- function(){
+		x[2] <<- 5L
+	}
+	g()
+	x
+})
 stopifnot(c(1,5,3,4,5) == f())
 
 
@@ -241,9 +308,192 @@ f <- jit.compile(function(){
 	x <- c(1:5)
 	y <- x
 	g <- function(){
-		y[2] <<- 5
+		y[2] <<- 5L
 	}
 	g()
 	x
 })
 stopifnot(c(1:5) == f())
+
+
+f <- jit.compile(function(){
+	x <- c(1:5)
+	y <- x
+	h <- function(){
+		g <- function(){
+			x[2] <<- 5
+		}
+		g()
+	}
+	h()
+	x
+})
+stopifnot(c(1,5,3,4,5) == f())
+
+f <- jit.compile(function(){
+	x <- c(1:5)
+	x[TRUE] <<- 5
+	x
+})
+stopifnot("object 'x' not found" == tryCatch(f(), error = function(e) e$message))
+
+f <- jit.compile(function(){
+	x <- c(1:5)
+	x[NULL] <<- 5
+	x
+})
+stopifnot("object 'x' not found" == tryCatch(f(), error = function(e) e$message))
+
+f <- jit.compile(function(){
+	x <- c(1:5)
+	x[] <<- 5
+	x
+})
+stopifnot("object 'x' not found" == tryCatch(f(), error = function(e) e$message))
+
+################################### DOUBLE BRACKETS ###################################
+
+f <- jit.compile(function(){
+	x <- c(1:5)
+	x[[1]] <<- 5
+	x
+})
+stopifnot("object 'x' not found" == tryCatch(f(), error = function(e) e$message))
+
+
+f <- jit.compile(function(){
+	x <- c(1:5)
+	y <- x
+	g <- function(){
+		y[[2]] <<- 5
+	}
+	g()
+	y
+})
+stopifnot(c(1,5,3,4,5) == f())
+
+f <- jit.compile(function(){
+	x <- c(1:5)
+	y <- x
+	g <- function(){
+		x[[2]] <<- 5
+	}
+	g()
+	y
+})
+stopifnot(c(1:5) == f())
+
+
+f <- jit.compile(function(){
+	x <- c(1:5)
+	y <- x
+	h <- function(){
+		g <- function(){
+			y[[2]] <<- 5
+		}
+		g()
+	}
+	h()
+	y
+})
+stopifnot(c(1,5,3,4,5) == f())
+
+f <- jit.compile(function(){
+	x <- c(1:5)
+	y <- x
+	h <- function(){
+		g <- function(){
+			x[[2]] <<- 5
+		}
+		g()
+	}
+	h()
+	y
+})
+stopifnot(c(1:5) == f())
+
+
+f <- jit.compile(function(){
+	x <- c(1:5)
+	y <- x
+	h <- function(){
+		g <- function(){
+			y[[2]] <<- 5
+		}
+		g()
+	}
+	h()
+	x
+})
+stopifnot(c(1:5) == f())
+
+
+f <- jit.compile(function(){
+	x <- c(1:5)
+	y <- x
+	g <- function(){
+		x[[2]] <<- 5L
+	}
+	g()
+	x
+})
+stopifnot(c(1,5,3,4,5) == f())
+
+
+f <- jit.compile(function(){
+	x <- c(1:5)
+	y <- x
+	g <- function(){
+		y[[2]] <<- 5L
+	}
+	g()
+	x
+})
+stopifnot(c(1:5) == f())
+
+
+f <- jit.compile(function(){
+	x <- c(1:5)
+	y <- x
+	h <- function(){
+		g <- function(){
+			x[[2]] <<- 5
+		}
+		g()
+	}
+	h()
+	x
+})
+stopifnot(c(1,5,3,4,5) == f())
+
+f <- jit.compile(function(){
+	x <- c(1:5)
+	x[[TRUE]] <<- 5
+	x
+})
+stopifnot("object 'x' not found" == tryCatch(f(), error = function(e) e$message))
+
+f <- jit.compile(function(){
+	x <- c(1:5)
+	x[[NULL]] <<- 5
+	x
+})
+stopifnot("object 'x' not found" == tryCatch(f(), error = function(e) e$message))
+
+f <- jit.compile(function(){
+	x <- c(1:5)
+	x[[]] <<- 5
+	x
+})
+stopifnot("object 'x' not found" == tryCatch(f(), error = function(e) e$message))
+
+
+f <- jit.compile(function(){
+	x <- c(1:5)
+	g <- function(){
+		x[[]] <<- 5
+	}
+	g()
+	x
+})
+stopifnot("[[ ]] with missing subscript" == tryCatch(f(), error = function(e) e$message))

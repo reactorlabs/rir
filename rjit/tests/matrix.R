@@ -146,6 +146,15 @@ stopifnot(matrix(c(2:5),2,2) == f())
 
 f <- jit.compile(function() {
 	a <- matrix(c(2:5),2,2)
+	g <- function(){a[1,1] <-10}
+	g()
+	a
+})
+stopifnot(matrix(c(2:5),2,2) == f())
+
+
+f <- jit.compile(function() {
+	a <- matrix(c(2:5),2,2)
 	a[2,2] <- 10
 	a
 })
