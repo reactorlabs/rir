@@ -19,7 +19,7 @@ class Flag {
     bool printOptIR = false;
     bool staticNamedArgMatch = true;
     bool compileMatrixRead = true;
-    bool compileMatrixWrite = false;
+    bool compileMatrixWrite = true;
 };
 }
 

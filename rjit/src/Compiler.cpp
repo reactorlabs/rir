@@ -566,7 +566,7 @@ Value* Compiler::compileAssignMatrix(SEXP call, SEXP vector, SEXP row, SEXP col,
     assert(resultVector);
     Value* resultVal = compileExpression(value);
     Value* resultRow = compileExpression(row);
-    Value* resultCol = compileExpression(row);
+    Value* resultCol = compileExpression(col);
 
     // Super assignment for matrices (not being handled in this release).
     assert(!super);
@@ -611,7 +611,7 @@ Value* Compiler::compileAssignDoubleMatrix(SEXP call, SEXP vector, SEXP row,
     assert(resultVector);
     Value* resultVal = compileExpression(value);
     Value* resultRow = compileExpression(row);
-    Value* resultCol = compileExpression(row);
+    Value* resultCol = compileExpression(col);
 
     // Super assignment for double bracket matrices (not being handled in this
     // release).

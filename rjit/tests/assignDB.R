@@ -38,6 +38,8 @@ f <- jit.compile(function(){
 })
 stopifnot(c(1,2,4) == f())
 
+######################## SUPERASSIGNMENT ########################
+
 f <- jit.compile(function(){
 	x <- c(1:5)
 	y <- x
