@@ -218,7 +218,7 @@ stopifnot(c(1,2) == f())
 
 f <- jit.compile(function(){
 	x <- c(1:5)
-	x[1] <<- 5
+	x[1] <<- 5L
 	x
 })
 stopifnot("object 'x' not found" == tryCatch(f(), error = function(e) e$message))
@@ -233,7 +233,6 @@ f <- jit.compile(function(){
 	g()
 	y
 })
-f()
 stopifnot(c(1,5,3,4,5) == f())
 
 f <- jit.compile(function(){

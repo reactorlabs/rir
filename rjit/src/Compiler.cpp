@@ -551,7 +551,6 @@ Value* Compiler::compileAssignBracket(SEXP call, SEXP vector, SEXP index,
                                         b.rho(), call)
             ->result();
         b.setResultVisible(false);
-
         return resultVal;
     }
 
@@ -574,8 +573,15 @@ Value* Compiler::compileAssignMatrix(SEXP call, SEXP vector, SEXP row, SEXP col,
     Value* resultRow = compileExpression(row);
     Value* resultCol = compileExpression(col);
 
-    // Super assignment for matrices (not being handled in this release).
-    assert(!super);
+    // Super assignment for matrices
+    if (super) {
+        ir::SuperAssignMatrix::create(b, resultVector, resultRow, resultCol,
+                                      resultVal, b.rho(), call)
+            ->result();
+
+        b.setResultVisible(false);
+        return resultVal;
+    }
 
     ir::AssignMatrixValue::create(b, resultVector, resultRow, resultCol,
                                   resultVal, b.rho(), call)
@@ -625,9 +631,15 @@ Value* Compiler::compileAssignDoubleMatrix(SEXP call, SEXP vector, SEXP row,
     Value* resultRow = compileExpression(row);
     Value* resultCol = compileExpression(col);
 
-    // Super assignment for double bracket matrices (not being handled in this
-    // release).
-    assert(!super);
+    // Super assignment for double bracket matrices
+    if (super) {
+        ir::SuperAssignMatrix2::create(b, resultVector, resultRow, resultCol,
+                                       resultVal, b.rho(), call)
+            ->result();
+
+        b.setResultVisible(false);
+        return resultVal;
+    }
 
     ir::AssignMatrixValue2::create(b, resultVector, resultRow, resultCol,
                                    resultVal, b.rho(), call)
@@ -667,6 +679,8 @@ bool Compiler::caseHandledVector(SEXP vector) {
     if the LHS is a vector or matrix.
   */
 Value* Compiler::compileAssignment(SEXP e) {
+
+    // return nullptr;
 
     if (b.getAssignmentLHS()) {
         return nullptr;
@@ -738,9 +752,11 @@ Value* Compiler::compileAssignment(SEXP e) {
     return result;
 }
 
-/** Super assignment for vectors and matrices are not being handled
-    in this release.
- */
+/** Compiling super assignments (<<-).
+    The genericSetVar primitive function is created when the LHS is a symbol.
+    Otherwise primitive functions for vector and matrix assignment is created
+    if the LHS is a vector or matrix.
+  */
 Value* Compiler::compileSuperAssignment(SEXP e) {
 
     if (b.getAssignmentLHS()) {
@@ -775,7 +791,6 @@ Value* Compiler::compileSuperAssignment(SEXP e) {
                 SEXP colArg = CDDDR(lhs);
 
                 if (caseHandledIndex(colArg)) {
-
                     SEXP col = CAR(colArg);
 
                     // Single bracket matrix assignment

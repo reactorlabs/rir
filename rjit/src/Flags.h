@@ -20,7 +20,7 @@ class Flag {
     bool staticNamedArgMatch = true;
     bool compileMatrixRead = true;
     bool compileMatrixWrite = true;
-    bool compileSuperMatrixWrite = false;
+    bool compileSuperMatrixWrite = true;
 };
 }
 
