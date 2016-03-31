@@ -91,6 +91,14 @@ class TypeAndShapePass : public ir::Fixpoint<ir::AState<TypeInfo>> {
             Value(Value::Type::Any, Value::Size::Any, Value::Attrib::Any);
     }
 
+    /** If we see a pattern we don't match otherwise, assume its result is
+     * top.
+     */
+    void defaultMatch(ir::Pattern * p) override {
+        state[p] =
+            Value(Value::Type::Any, Value::Size::Any, Value::Attrib::Any);
+    }
+
     bool dispatch(llvm::BasicBlock::iterator& i) override;
 };
 
