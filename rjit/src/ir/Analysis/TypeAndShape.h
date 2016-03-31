@@ -87,7 +87,8 @@ class TypeAndShapePass : public ir::Fixpoint<ir::AState<TypeInfo>> {
      */
     match call(ir::ICStub* ins) {
         state.invalidateVariables(Value::any());
-        state[ins] = Value(Value::Type::Any, Value::Size::Any, Value::Attrib::Any);
+        state[ins] =
+            Value(Value::Type::Any, Value::Size::Any, Value::Attrib::Any);
     }
 
     bool dispatch(llvm::BasicBlock::iterator& i) override;
