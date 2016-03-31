@@ -85,7 +85,10 @@ class TypeAndShapePass : public ir::Fixpoint<ir::AState<TypeInfo>> {
 
     /** A call to ICStub invalidates all variables.
      */
-    match call(ir::ICStub* ins) { state.invalidateVariables(Value::any()); }
+    match call(ir::ICStub* ins) {
+        state.invalidateVariables(Value::any());
+        state[ins] = Value(Value::Type::Any, Value::Size::Any, Value::Attrib::Any);
+    }
 
     bool dispatch(llvm::BasicBlock::iterator& i) override;
 };
