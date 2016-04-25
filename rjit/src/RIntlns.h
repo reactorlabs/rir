@@ -9,4 +9,6 @@
 #undef PrintValue
 #undef bool
 
+#include <RDefs.h>
+
 #endif

@@ -16,10 +16,17 @@
 #include "ir/primitive_calls.h"
 #include "TypeInfo.h"
 #include "Flags.h"
+#include "rir/Compiler.h"
 
 #include "StackScan.h"
+#include "Protect.h"
 
 using namespace rjit;
+
+REXPORT SEXP jitRir(SEXP exp) {
+    rir::Compiler c(exp);
+    return c.finalize();
+}
 
 /** Compiles given ast and returns the NATIVESXP for it.
  */
@@ -189,9 +196,9 @@ REXPORT SEXP setFlag(SEXP name, SEXP value) {
 namespace {
 
 void rjit_gcCallback(void (*forward_node)(SEXP)) {
-    Compiler::gcCallback(forward_node);
     StackScan::stackScanner(forward_node);
     Compiler::gcCallback(forward_node);
+    Precious::gcCallback(forward_node);
 }
 
 int rjitStartup() {

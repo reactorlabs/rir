@@ -1,6 +1,2 @@
-tryCatch({
-    library(rjit)
-}, error = function(e) {
-    dyn.load('librjit.so')
-    source('rjit/R/rjit.R')
-})
+dyn.load('librjit.so')
+source('rjit/R/rjit.R')
