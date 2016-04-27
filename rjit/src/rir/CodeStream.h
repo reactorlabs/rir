@@ -3,7 +3,10 @@
 
 #include <vector>
 #include <cstring>
+
 #include "Pool.h"
+#include "Function.h"
+#include "BC.h"
 
 namespace rjit {
 namespace rir {
@@ -14,20 +17,33 @@ class CodeStream {
     unsigned pos = 0;
     unsigned size = 1024;
 
+    Function& fun;
+    size_t insertPoint;
+
   public:
-    CodeStream() { code = new std::vector<char>(1024); }
+    CodeStream(Function& fun) : fun(fun), insertPoint(fun.next()) {
+        code = new std::vector<char>(1024);
+    }
 
-    CodeStream& operator<<(BC b) {
-        insert(b);
+    CodeStream& operator<<(const BC& b) {
+        insert(b.bc);
         return *this;
     }
 
-    CodeStream& operator<<(SEXP e) {
-        auto idx = Pool::instance().insert(e);
-        insert(idx);
+    CodeStream& operator<<(const BC1& b) {
+        insert(b.bc);
+        insert(b.immediate);
         return *this;
     }
 
+    unsigned length() { return pos; }
+
+    size_t finalize() {
+        fun.addCode(insertPoint, toCode());
+        return insertPoint;
+    }
+
+  private:
     template <typename T>
     void insert(T val) {
         size_t s = sizeof(T);
@@ -39,19 +55,17 @@ class CodeStream {
         pos += s;
     }
 
-    unsigned length() { return pos; }
-
-    BC* to_bc() {
-        BC* res = (BC*)new char[pos];
+    BC_t* toBc() {
+        BC_t* res = (BC_t*)new char[pos];
         memcpy((void*)res, (void*)&(*code)[0], pos);
         code->clear();
         pos = 0;
         return res;
     }
 
-    Code* to_code() {
+    Code* toCode() {
         size_t size = pos;
-        return new Code(size, to_bc());
+        return new Code(size, toBc());
     }
 
     CodeStream& operator<<(CodeStream& cs) {

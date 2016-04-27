@@ -16,6 +16,11 @@ class Compiler {
     ~Compiler() { Precious::remove(exp); }
 
     SEXP finalize();
+
+    static SEXP compile(SEXP ast) {
+        Compiler c(ast);
+        return c.finalize();
+    }
 };
 }
 }

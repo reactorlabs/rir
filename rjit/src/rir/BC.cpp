@@ -9,37 +9,43 @@ namespace rjit {
 namespace rir {
 
 void Code::print() {
-    BC* pc = bc;
+    BC_t* pc = bc;
+
+    auto immediatei = [&pc]() {
+        immediate_t i = *(immediate_t*)pc;
+        pc = (BC_t*)((uintptr_t)pc + sizeof(immediate_t));
+        return i;
+    };
 
     auto immediate = [&pc]() {
-        Pool::idx i = *(Pool::idx*)pc;
-        pc = (BC*)((uintptr_t)pc + sizeof(Pool::idx));
+        immediate_t i = *(immediate_t*)pc;
+        pc = (BC_t*)((uintptr_t)pc + sizeof(immediate_t));
         return Pool::instance().get(i);
     };
 
     while ((uintptr_t)pc < (uintptr_t)bc + size) {
-        switch (*pc++) {
-        case BC::invalid:
+        switch ((BC_t)*pc++) {
+        case BC_t::invalid:
             assert(false);
             break;
-        case BC::push:
+        case BC_t::push:
             std::cout << "push ";
             Rf_PrintValue(immediate());
             break;
-        case BC::getfun:
-            std::cout << "getfun\n";
+        case BC_t::getfun:
+            std::cout << "getfun " << CHAR(PRINTNAME((immediate()))) << "\n";
             break;
-        case BC::getvar:
-            std::cout << "getvar\n";
+        case BC_t::getvar:
+            std::cout << "getvar " << CHAR(PRINTNAME((immediate()))) << "\n";
             break;
-        case BC::call:
+        case BC_t::call:
             std::cout << "call\n";
             break;
-        case BC::mkprom:
-            std::cout << "mkprom\n";
+        case BC_t::mkprom:
+            std::cout << "mkprom " << immediatei() << "\n";
             break;
-        case BC::mkclosure:
-            std::cout << "mkclosure\n";
+        case BC_t::mkclosure:
+            std::cout << "mkclosure " << immediatei() << "\n";
             break;
         }
     }

@@ -8,19 +8,22 @@ namespace rjit {
 namespace rir {
 
 class Function {
+  public:
     std::vector<Code*> code;
 
-  public:
-    Function() { code.push_back(nullptr); }
+    Function() {}
 
-    unsigned addCode(Code* c) {
-        code.push_back(c);
-        return code.size() - 1;
+    void addCode(size_t pos, Code* c) {
+        if (pos >= code.size()) {
+            code.resize(pos + 1);
+        }
+        code[pos] = c;
     }
 
-    void setFun(Code* c) { code[0] = c; }
-
-    Code* getFun() { return code[0]; }
+    size_t next() {
+        code.push_back(nullptr);
+        return code.size() - 1;
+    }
 };
 }
 }
