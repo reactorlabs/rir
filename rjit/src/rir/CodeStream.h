@@ -18,7 +18,7 @@ class CodeStream {
     unsigned size = 1024;
 
     Function& fun;
-    size_t insertPoint;
+    fun_idx_t insertPoint;
 
   public:
     CodeStream(Function& fun) : fun(fun), insertPoint(fun.next()) {
@@ -26,24 +26,15 @@ class CodeStream {
     }
 
     CodeStream& operator<<(const BC& b) {
-        insert(b.bc);
+        b.write(*this);
         return *this;
     }
 
-    CodeStream& operator<<(const BC1& b) {
-        insert(b.bc);
-        insert(b.immediate);
-        return *this;
-    }
-
-    unsigned length() { return pos; }
-
-    size_t finalize() {
+    fun_idx_t finalize() {
         fun.addCode(insertPoint, toCode());
         return insertPoint;
     }
 
-  private:
     template <typename T>
     void insert(T val) {
         size_t s = sizeof(T);
@@ -55,6 +46,7 @@ class CodeStream {
         pos += s;
     }
 
+  private:
     BC_t* toBc() {
         BC_t* res = (BC_t*)new char[pos];
         memcpy((void*)res, (void*)&(*code)[0], pos);

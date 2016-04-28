@@ -9,32 +9,36 @@
 #include "../RList.h"
 
 #include "Pool.h"
+#include "Interpreter.h"
 
 namespace rjit {
 namespace rir {
 
 namespace {
 
-size_t compileExpression(Function& f, SEXP exp);
+fun_idx_t compileExpression(Function& f, SEXP exp);
 void compileExpression(Function& f, CodeStream& cs, SEXP exp);
 
 void compileCall(Function& f, CodeStream& cs, SEXP ast, SEXP fun, SEXP args) {
     Match(fun) {
-        Case(SYMSXP) { cs << BC1::getfun(fun); }
+        Case(SYMSXP) { cs << BC::getfun(fun); }
         Else(compileExpression(f, cs, fun));
     }
 
+    size_t numArgs = 0;
     for (auto arg : RList(args)) {
+        numArgs++;
         size_t prom = compileExpression(f, arg);
-        cs << BC1::mkprom(prom);
+        cs << BC::mkprom(prom);
     }
+    assert(numArgs < MAX_NUM_ARGS);
 
-    cs << BC::call();
+    cs << BC::call(numArgs);
 }
 
-void compileGetvar(CodeStream& cs, SEXP name) { cs << BC1::getvar(name); }
+void compileGetvar(CodeStream& cs, SEXP name) { cs << BC::getvar(name); }
 
-void compileConst(CodeStream& cs, SEXP constant) { cs << BC1::push(constant); }
+void compileConst(CodeStream& cs, SEXP constant) { cs << BC::push(constant); }
 
 void compileExpression(Function& f, CodeStream& cs, SEXP exp) {
     Match(exp) {
@@ -44,7 +48,7 @@ void compileExpression(Function& f, CodeStream& cs, SEXP exp) {
     }
 }
 
-size_t compileExpression(Function& f, SEXP exp) {
+fun_idx_t compileExpression(Function& f, SEXP exp) {
     CodeStream cs(f);
     compileExpression(f, cs, exp);
     return cs.finalize();
@@ -64,7 +68,8 @@ SEXP Compiler::finalize() {
     }
     std::cout << "===========\n";
 
-    return R_NilValue;
+    Interpreter interp(f);
+    return interp.run();
 }
 }
 }

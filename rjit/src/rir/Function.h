@@ -13,15 +13,14 @@ class Function {
 
     Function() {}
 
-    void addCode(size_t pos, Code* c) {
-        if (pos >= code.size()) {
-            code.resize(pos + 1);
-        }
+    void addCode(fun_idx_t pos, Code* c) {
+        assert(pos < code.size());
         code[pos] = c;
     }
 
-    size_t next() {
+    fun_idx_t next() {
         code.push_back(nullptr);
+        assert(code.size() < MAX_FUN_IDX);
         return code.size() - 1;
     }
 };

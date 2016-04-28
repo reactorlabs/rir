@@ -7,6 +7,7 @@
 #include <cassert>
 
 #include "BC_inc.h"
+#include "RDefs.h"
 
 namespace rjit {
 namespace rir {
@@ -15,21 +16,19 @@ class Pool {
     RVector storage;
 
   public:
-    typedef immediate_t idx_t;
-
     static Pool& instance() {
         static Pool pool;
         return pool;
     }
 
-    idx_t insert(SEXP e) {
+    pool_idx_t insert(SEXP e) {
         // TODO: replace the linear search by something faster
         size_t i = storage.insert(e);
-        assert(i < (1L << 32));
+        assert(i < MAX_POOL_IDX);
         return i;
     }
 
-    SEXP get(idx_t i) { return storage.at(i); }
+    SEXP get(pool_idx_t i) { return storage.at(i); }
 };
 }
 }
