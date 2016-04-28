@@ -49,12 +49,14 @@ class BC {
     void write(CodeStream& cs) const;
 
     SEXP immediateConst();
-    fun_idx_t immediateFunIdx();
+    inline fun_idx_t immediateFunIdx() { return immediate.fun; }
+    inline fun_idx_t immediateNumArgs() { return immediate.numArgs; }
 
     inline const static BC read(BC_t* pc);
     inline const static BC advance(BC_t** pc);
 
     inline const static BC call(num_args_t numArgs);
+    inline const static BC call_name(SEXP names);
     inline const static BC push(SEXP constant);
     inline const static BC getfun(SEXP sym);
     inline const static BC getvar(SEXP sym);

@@ -26,14 +26,26 @@ void compileCall(Function& f, CodeStream& cs, SEXP ast, SEXP fun, SEXP args) {
     }
 
     size_t numArgs = 0;
-    for (auto arg : RList(args)) {
+    RVector names;
+    bool hasNames = false;
+    for (auto arg = RList(args).begin(); arg != RList::end(); ++arg) {
         numArgs++;
-        size_t prom = compileExpression(f, arg);
+        size_t prom = compileExpression(f, *arg);
+        if (arg.hasTag()) {
+            hasNames = true;
+            names.append(arg.tag());
+        } else {
+            names.append(R_NilValue);
+        }
         cs << BC::mkprom(prom);
     }
     assert(numArgs < MAX_NUM_ARGS);
 
-    cs << BC::call(numArgs);
+    if (hasNames) {
+        cs << BC::call_name(names);
+    } else {
+        cs << BC::call(numArgs);
+    }
 }
 
 void compileGetvar(CodeStream& cs, SEXP name) { cs << BC::getvar(name); }

@@ -20,15 +20,16 @@ immediate_t readImmediate(BC_t bc, BC_t* pc) {
     case BC_t::push:
     case BC_t::getfun:
     case BC_t::getvar:
+    case BC_t::call_name:
         immediate.pool = *(pool_idx_t*)pc;
         break;
     case BC_t::call:
+        immediate.numArgs = *(num_args_t*)pc;
         break;
     case BC_t::mkprom:
     case BC_t::mkclosure:
         immediate.fun = *(fun_idx_t*)pc;
         break;
-    case BC_t::call_name:
     case BC_t::invalid:
     case BC_t::num_of:
         assert(false);
@@ -46,7 +47,7 @@ static size_t immediate_size[(size_t)BC_t::num_of] = {
     sizeof(pool_idx_t), // getfun
     sizeof(pool_idx_t), // getvar
     sizeof(num_args_t), // call
-    (size_t)-1,         // call_name
+    sizeof(pool_idx_t), // call_name
     sizeof(fun_idx_t),  // mkprom
     sizeof(fun_idx_t),  // mkclosure
 };
@@ -66,6 +67,9 @@ const BC BC::advance(BC_t** pc) {
 size_t BC::size() const { return sizeof(BC_t) + immediate_size[(size_t)bc]; }
 
 const BC BC::call(num_args_t numArgs) { return BC(BC_t::call, {numArgs}); }
+const BC BC::call_name(SEXP names) {
+    return BC(BC_t::call_name, {Pool::instance().insert(names)});
+}
 const BC BC::push(SEXP constant) {
     return BC(BC_t::push, {Pool::instance().insert(constant)});
 }

@@ -6,8 +6,24 @@
 
 namespace rjit {
 
+class RVector;
+class RVectorIter {
+  public:
+    SEXP operator*();
+    void operator++() { pos++; }
+    bool operator!=(RVectorIter& other) {
+        return vector != other.vector || pos != other.pos;
+    }
+    RVectorIter(RVector* vector, size_t pos) : vector(vector), pos(pos) {}
+
+  private:
+    RVector* vector;
+    size_t pos;
+};
+
 class RVector {
   public:
+    RVector(SEXP vector);
     RVector(size_t init_size = slack);
 
     ~RVector() { Precious::remove(vector); }
@@ -19,6 +35,12 @@ class RVector {
     SEXP at(size_t i);
 
     size_t size();
+
+    operator SEXP() { return vector; }
+
+    RVectorIter begin() { return RVectorIter(this, 0); }
+
+    RVectorIter end() { return RVectorIter(this, size_); }
 
   private:
     constexpr static size_t slack = 8;

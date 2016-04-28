@@ -11,9 +11,12 @@ class RListIter {
 
     RListIter(SEXP pos) : pos(pos) {}
 
-    SEXP operator*() { return CAR(pos); }
+    SEXP tag();
+    bool hasTag();
 
-    void operator++() { pos = CDR(pos); }
+    SEXP operator*();
+
+    void operator++();
 
     bool operator!=(RListIter& other) { return pos != other.pos; }
 };
@@ -22,11 +25,11 @@ class RList {
     SEXP list;
 
   public:
-    RList(SEXP list) : list(list) {}
+    RList(SEXP list);
 
     RListIter begin() { return RListIter(list); }
 
-    RListIter& end() {
+    static RListIter& end() {
         static RListIter end(R_NilValue);
         return end;
     }

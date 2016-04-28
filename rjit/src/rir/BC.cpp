@@ -5,6 +5,7 @@
 
 #include "CodeStream.h"
 #include "RIntlns.h"
+#include "../RList.h"
 
 namespace rjit {
 namespace rir {
@@ -15,15 +16,16 @@ void BC::write(CodeStream& cs) const {
     case BC_t::push:
     case BC_t::getfun:
     case BC_t::getvar:
+    case BC_t::call_name:
         cs.insert(immediate.pool);
         return;
     case BC_t::call:
+        cs.insert(immediate.numArgs);
         return;
     case BC_t::mkprom:
     case BC_t::mkclosure:
         cs.insert(immediate.fun);
         return;
-    case BC_t::call_name:
     case BC_t::invalid:
     case BC_t::num_of:
         assert(false);
@@ -32,8 +34,6 @@ void BC::write(CodeStream& cs) const {
 }
 
 SEXP BC::immediateConst() { return Pool::instance().get(immediate.pool); }
-
-fun_idx_t BC::immediateFunIdx() { return immediate.fun; }
 
 void Code::print() {
     BC_t* pc = bc;
@@ -44,8 +44,14 @@ void Code::print() {
         switch (bc.bc) {
         case BC_t::invalid:
         case BC_t::num_of:
-        case BC_t::call_name:
             assert(false);
+            break;
+        case BC_t::call_name:
+            std::cout << "call_name ";
+            for (auto n : RVector(bc.immediateConst())) {
+                std::cout << CHAR(PRINTNAME(n)) << " ";
+            }
+            std::cout << "\n";
             break;
         case BC_t::push:
             std::cout << "push ";
@@ -60,7 +66,7 @@ void Code::print() {
                       << "\n";
             break;
         case BC_t::call:
-            std::cout << "call\n";
+            std::cout << "call " << bc.immediateNumArgs() << "\n";
             break;
         case BC_t::mkprom:
             std::cout << "mkprom " << bc.immediateFunIdx() << "\n";
