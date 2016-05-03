@@ -26,6 +26,10 @@ void BC::write(CodeStream& cs) const {
     case BC_t::mkclosure:
         cs.insert(immediate.fun);
         return;
+    case BC_t::ret:
+    case BC_t::force:
+    case BC_t::drop:
+        return;
     case BC_t::invalid:
     case BC_t::num_of:
         assert(false);
@@ -37,6 +41,8 @@ SEXP BC::immediateConst() { return Pool::instance().get(immediate.pool); }
 
 void Code::print() {
     BC_t* pc = bc;
+
+    std::cout << "-------------------\n";
 
     while ((uintptr_t)pc < (uintptr_t)bc + size) {
         BC bc = BC::advance(&pc);
@@ -64,6 +70,15 @@ void Code::print() {
         case BC_t::getvar:
             std::cout << "getvar " << CHAR(PRINTNAME((bc.immediateConst())))
                       << "\n";
+            break;
+        case BC_t::force:
+            std::cout << "force\n";
+            break;
+        case BC_t::drop:
+            std::cout << "drop\n";
+            break;
+        case BC_t::ret:
+            std::cout << "ret\n";
             break;
         case BC_t::call:
             std::cout << "call " << bc.immediateNumArgs() << "\n";

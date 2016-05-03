@@ -7,6 +7,7 @@
 namespace rjit {
 namespace rir {
 
+class Function;
 class Compiler {
     SEXP exp;
 
@@ -15,9 +16,9 @@ class Compiler {
 
     ~Compiler() { Precious::remove(exp); }
 
-    SEXP finalize();
+    Function* finalize();
 
-    static SEXP compile(SEXP ast) {
+    static Function* compile(SEXP ast) {
         Compiler c(ast);
         return c.finalize();
     }

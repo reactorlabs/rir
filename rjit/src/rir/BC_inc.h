@@ -52,6 +52,10 @@ enum class BC_t : uint8_t {
     // S: +1
     mkclosure,
 
+    ret,
+    force,
+    drop,
+
     num_of
 };
 
@@ -107,6 +111,9 @@ class BC {
     inline const static BC getfun(SEXP sym);
     inline const static BC getvar(SEXP sym);
     inline const static BC mkprom(fun_idx_t prom);
+    inline const static BC ret();
+    inline const static BC drop();
+    inline const static BC force();
 };
 
 } // rir

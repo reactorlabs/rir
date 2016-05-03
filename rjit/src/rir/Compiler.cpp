@@ -84,26 +84,18 @@ void compileExpression(Function& f, CodeStream& cs, SEXP exp) {
 fun_idx_t compileExpression(Function& f, SEXP exp) {
     CodeStream cs(f);
     compileExpression(f, cs, exp);
+    cs << BC::ret();
     return cs.finalize();
 }
 }
 
-SEXP Compiler::finalize() {
-    Function f;
+Function* Compiler::finalize() {
+    Protect p;
+    Function* f = new Function;
 
-    compileExpression(f, exp);
+    compileExpression(*f, exp);
 
-    // TODO...
-    size_t i = 0;
-    std::cout << "===========\n";
-    for (auto c : f.code) {
-        std::cout << "== " << i++ << " ======\n";
-        c->print();
-    }
-    std::cout << "===========\n";
-
-    Interpreter interp(f);
-    return interp.run();
+    return f;
 }
 }
 }

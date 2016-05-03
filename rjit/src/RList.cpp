@@ -4,7 +4,9 @@
 
 namespace rjit {
 
-RList::RList(SEXP list) : list(list) { assert(TYPEOF(list) == LISTSXP); }
+RList::RList(SEXP list) : list(list) {
+    assert(TYPEOF(list) == LISTSXP || TYPEOF(list) == NILSXP);
+}
 
 SEXP RListIter::tag() { return TAG(pos); }
 bool RListIter::hasTag() { return tag() != R_NilValue; }

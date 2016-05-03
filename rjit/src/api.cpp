@@ -16,7 +16,9 @@
 #include "ir/primitive_calls.h"
 #include "TypeInfo.h"
 #include "Flags.h"
+
 #include "rir/Compiler.h"
+#include "rir/Interpreter.h"
 
 #include "StackScan.h"
 #include "Protect.h"
@@ -25,7 +27,11 @@ using namespace rjit;
 
 REXPORT SEXP jitRir(SEXP exp) {
     rir::Compiler c(exp);
-    return c.finalize();
+    rir::Function* f = c.finalize();
+
+    SEXP env = Rf_NewEnvironment(R_NilValue, R_NilValue, R_GlobalEnv);
+    rir::Interpreter i(f);
+    return i.run(env);
 }
 
 /** Compiles given ast and returns the NATIVESXP for it.

@@ -11,4 +11,11 @@
 
 #include <RDefs.h>
 
+// TODO: where would this stuff actually come from?
+extern "C" {
+extern SEXP Rf_NewEnvironment(SEXP, SEXP, SEXP);
+extern Rboolean R_Visible;
+extern SEXP forcePromise(SEXP);
+}
+
 #endif

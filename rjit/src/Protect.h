@@ -6,9 +6,6 @@
 #include <set>
 #include <cstddef>
 
-SEXP PROTECT(SEXP);
-void UNPROTECT(int);
-
 namespace rjit {
 
 class Protect {
@@ -18,13 +15,8 @@ class Protect {
     Protect(){};
     Protect(SEXP initial) { this->operator()(initial); };
 
-    SEXP operator()(SEXP value) {
-        PROTECT(value);
-        ++protectedValues_;
-        return value;
-    }
-
-    ~Protect() { UNPROTECT(protectedValues_); }
+    SEXP operator()(SEXP value);
+    ~Protect();
 
   private:
     /* Prevents heap allocation. */

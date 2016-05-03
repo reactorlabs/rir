@@ -2,17 +2,18 @@
 #define RIR_INTERPRETER_H
 
 #include "Function.h"
+#include "RDefs.h"
 
 namespace rjit {
 namespace rir {
 
 class Interpreter {
-    Function& fun;
+    Function* fun;
 
   public:
-    Interpreter(Function& fun) : fun(fun) {}
+    Interpreter(Function* fun) : fun(fun) {}
 
-    SEXP run();
+    SEXP run(SEXP env);
 };
 }
 }
