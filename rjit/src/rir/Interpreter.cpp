@@ -95,8 +95,9 @@ BCClosure* getBuiltin(SEXP fun, num_args_t nargs) {
             }
         } else if (idx == 8) {
             // do_set
-            assert(nargs == 0);
-            assert(false);
+            assert(nargs == 2);
+            cs << BC::load_arg(0) << BC::get_ast() << BC::load_arg(1)
+               << BC::force() << BC::setvar();
         } else if (idx == 30) {
             // substitute
             assert(nargs == 1);
@@ -261,6 +262,16 @@ SEXP evalFunction(Function* f, SEXP env) {
             assert(TYPEOF(t) == BCProm::type);
             BCProm* p = (BCProm*)t;
             stack.push(p->ast());
+            break;
+        }
+
+        case BC_t::setvar: {
+            SEXP val = stack.pop();
+            SEXP sym = stack.pop();
+            // TODO: complex assign
+            assert(TYPEOF(sym) == SYMSXP);
+            defineVar(sym, val, env);
+            stack.push(val);
             break;
         }
 

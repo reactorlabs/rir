@@ -31,6 +31,7 @@ void BC::write(CodeStream& cs) const {
     case BC_t::force:
     case BC_t::pop:
     case BC_t::get_ast:
+    case BC_t::setvar:
         return;
     case BC_t::invalid:
     case BC_t::num_of:
@@ -78,6 +79,9 @@ void Code::print() {
             break;
         case BC_t::pop:
             std::cout << "pop\n";
+            break;
+        case BC_t::setvar:
+            std::cout << "setvar\n";
             break;
         case BC_t::ret:
             std::cout << "ret\n";
