@@ -34,6 +34,7 @@ immediate_t readImmediate(BC_t bc, BC_t* pc) {
     case BC_t::ret:
     case BC_t::pop:
     case BC_t::force:
+    case BC_t::get_ast:
         break;
     case BC_t::invalid:
     case BC_t::num_of:
@@ -59,6 +60,7 @@ static size_t immediate_size[(size_t)BC_t::num_of] = {
     0,                  // force
     0,                  // pop
     sizeof(num_args_t), // load_arg
+    0,                  // get_ast
 };
 
 const BC BC::read(BC_t* pc) {
@@ -93,6 +95,7 @@ const BC BC::getvar(SEXP sym) {
 }
 const BC BC::mkprom(fun_idx_t prom) { return BC(BC_t::mkprom, {prom}); }
 const BC BC::load_arg(num_args_t arg) { return BC(BC_t::load_arg, {arg}); }
+const BC BC::get_ast() { return BC(BC_t::get_ast); }
 
 class Code {
   public:

@@ -56,6 +56,7 @@ enum class BC_t : uint8_t {
     force,
     pop,
     load_arg,
+    get_ast,
 
     num_of
 };
@@ -117,6 +118,7 @@ class BC {
     inline const static BC pop();
     inline const static BC force();
     inline const static BC load_arg(num_args_t);
+    inline const static BC get_ast();
 };
 
 } // rir

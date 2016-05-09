@@ -30,8 +30,8 @@ class CodeStream {
         return *this;
     }
 
-    fun_idx_t finalize() {
-        fun.addCode(insertPoint, toCode());
+    fun_idx_t finalize(SEXP ast) {
+        fun.addCode(insertPoint, toCode(), ast);
         return insertPoint;
     }
 

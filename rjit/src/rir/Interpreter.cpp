@@ -40,6 +40,8 @@ struct BCProm {
     fun_idx_t idx;
     Function* fun;
     SEXP env;
+
+    SEXP ast() { return fun->ast[idx]; }
 };
 
 struct BCClosure {
@@ -97,8 +99,8 @@ BCClosure* getBuiltin(SEXP fun, num_args_t nargs) {
             assert(false);
         } else if (idx == 30) {
             // substitute
-            assert(nargs == 0);
-            assert(false);
+            assert(nargs == 1);
+            cs << BC::load_arg(0) << BC::get_ast();
         } else {
             assert(false);
         }
@@ -108,7 +110,7 @@ BCClosure* getBuiltin(SEXP fun, num_args_t nargs) {
         assert(false);
     }
     cs << BC::ret();
-    cs.finalize();
+    cs.finalize(fun);
     BCClosure* cls = new BCClosure;
     cls->env = CLOENV(fun);
     cls->fun = f;
@@ -251,6 +253,14 @@ SEXP evalFunction(Function* f, SEXP env) {
         case BC_t::load_arg: {
             num_args_t a = bc.immediateNumArgs();
             stack.push(arg[a]);
+            break;
+        }
+
+        case BC_t::get_ast: {
+            SEXP t = stack.top();
+            assert(TYPEOF(t) == BCProm::type);
+            BCProm* p = (BCProm*)t;
+            stack.push(p->ast());
             break;
         }
 

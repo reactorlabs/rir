@@ -85,7 +85,7 @@ fun_idx_t compileExpression(Function& f, SEXP exp) {
     CodeStream cs(f);
     compileExpression(f, cs, exp);
     cs << BC::ret();
-    return cs.finalize();
+    return cs.finalize(exp);
 }
 }
 

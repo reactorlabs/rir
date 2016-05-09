@@ -30,6 +30,7 @@ void BC::write(CodeStream& cs) const {
     case BC_t::ret:
     case BC_t::force:
     case BC_t::pop:
+    case BC_t::get_ast:
         return;
     case BC_t::invalid:
     case BC_t::num_of:
@@ -83,6 +84,9 @@ void Code::print() {
             break;
         case BC_t::call:
             std::cout << "call " << bc.immediateNumArgs() << "\n";
+            break;
+        case BC_t::get_ast:
+            std::cout << "get_ast\n";
             break;
         case BC_t::load_arg:
             std::cout << "load_arg " << bc.immediateNumArgs() << "\n";
