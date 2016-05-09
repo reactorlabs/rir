@@ -24,6 +24,7 @@ immediate_t readImmediate(BC_t bc, BC_t* pc) {
         immediate.pool = *(pool_idx_t*)pc;
         break;
     case BC_t::call:
+    case BC_t::load_arg:
         immediate.numArgs = *(num_args_t*)pc;
         break;
     case BC_t::mkprom:
@@ -31,7 +32,7 @@ immediate_t readImmediate(BC_t bc, BC_t* pc) {
         immediate.fun = *(fun_idx_t*)pc;
         break;
     case BC_t::ret:
-    case BC_t::drop:
+    case BC_t::pop:
     case BC_t::force:
         break;
     case BC_t::invalid:
@@ -56,7 +57,8 @@ static size_t immediate_size[(size_t)BC_t::num_of] = {
     sizeof(fun_idx_t),  // mkclosure
     0,                  // ret
     0,                  // force
-    0,                  // drop
+    0,                  // pop
+    sizeof(num_args_t), // load_arg
 };
 
 const BC BC::read(BC_t* pc) {
@@ -75,7 +77,7 @@ size_t BC::size() const { return sizeof(BC_t) + immediate_size[(size_t)bc]; }
 
 const BC BC::ret() { return BC(BC_t::ret); }
 const BC BC::force() { return BC(BC_t::force); }
-const BC BC::drop() { return BC(BC_t::drop); }
+const BC BC::pop() { return BC(BC_t::pop); }
 const BC BC::call(num_args_t numArgs) { return BC(BC_t::call, {numArgs}); }
 const BC BC::call_name(SEXP names) {
     return BC(BC_t::call_name, {Pool::instance().insert(names)});
@@ -90,6 +92,7 @@ const BC BC::getvar(SEXP sym) {
     return BC(BC_t::getvar, {Pool::instance().insert(sym)});
 }
 const BC BC::mkprom(fun_idx_t prom) { return BC(BC_t::mkprom, {prom}); }
+const BC BC::load_arg(num_args_t arg) { return BC(BC_t::load_arg, {arg}); }
 
 class Code {
   public:

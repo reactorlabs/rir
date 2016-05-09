@@ -6,6 +6,7 @@
 
 #include <iostream>
 #include <deque>
+#include <array>
 
 namespace rjit {
 namespace rir {
@@ -83,13 +84,20 @@ BCClosure* getBuiltin(SEXP fun, num_args_t nargs) {
             if (nargs == 0) {
                 cs << BC::push(R_NilValue);
             } else {
-                while (--nargs > 0)
-                    cs << BC::force() << BC::drop();
-                cs << BC::force();
+                for (num_args_t i = 0; i < nargs; ++i) {
+                    cs << BC::load_arg(i) << BC::force();
+                    // leave the last arg on the stack to return
+                    if (i != nargs - 1)
+                        cs << BC::pop();
+                }
             }
         } else if (idx == 8) {
             // do_set
-            // TODO
+            assert(nargs == 0);
+            assert(false);
+        } else if (idx == 30) {
+            // substitute
+            assert(nargs == 0);
             assert(false);
         } else {
             assert(false);
@@ -146,8 +154,7 @@ SEXP evalFunction(Function* f, SEXP env) {
     Code* cur;
     BC_t* pc;
 
-    register SEXP tmp1;
-    register SEXP tmp2;
+    std::array<SEXP, MAX_NUM_ARGS> arg;
 
     auto setState = [&f, &cur, &pc, &env](Function* fun, Code* code, SEXP env) {
         f = fun;
@@ -169,40 +176,44 @@ SEXP evalFunction(Function* f, SEXP env) {
     };
 
     setState(f, f->code[0], env);
-    cur->print();
+    for (auto c : f->code) {
+        c->print();
+    }
 
     while (true) {
         BC bc = BC::advance(&pc);
 
         switch (bc.bc) {
-        case BC_t::push:
-            tmp1 = bc.immediateConst();
-            stack.push(tmp1);
+        case BC_t::push: {
+            SEXP c = bc.immediateConst();
+            stack.push(c);
             break;
+        }
 
         case BC_t::getfun:
         // TODO
-        case BC_t::getvar:
-            tmp1 = bc.immediateConst();
-            tmp2 = findVar(tmp1, env);
+        case BC_t::getvar: {
+            SEXP sym = bc.immediateConst();
+            SEXP val = findVar(sym, env);
             R_Visible = TRUE;
 
-            if (tmp2 == R_UnboundValue)
+            if (val == R_UnboundValue)
                 assert(false and "Unbound var");
-            else if (tmp2 == R_MissingArg)
+            else if (val == R_MissingArg)
                 assert(false and "Missing argument");
 
-            assert(TYPEOF(tmp2) != PROMSXP);
-            if (TYPEOF(tmp2) == BCProm::type) {
+            assert(TYPEOF(val) != PROMSXP);
+            if (TYPEOF(val) == BCProm::type) {
                 // TODO
                 assert(false);
             }
 
-            if (NAMED(tmp2) == 0 && tmp2 != R_NilValue)
-                SET_NAMED(tmp2, 1);
+            if (NAMED(val) == 0 && val != R_NilValue)
+                SET_NAMED(val, 1);
 
-            stack.push(tmp2);
+            stack.push(val);
             break;
+        }
 
         case BC_t::mkprom: {
             auto prom = makePromise(f, bc.immediateFunIdx(), env);
@@ -212,8 +223,10 @@ SEXP evalFunction(Function* f, SEXP env) {
 
         case BC_t::call: {
             num_args_t nargs = bc.immediateNumArgs();
+
             SEXP fun = stack.at(nargs);
             BCClosure* cls;
+
             if (TYPEOF(fun) == CLOSXP) {
                 cls = jit(fun);
             } else if (TYPEOF(fun) == SPECIALSXP) {
@@ -223,9 +236,21 @@ SEXP evalFunction(Function* f, SEXP env) {
                 cls = (BCClosure*)fun;
             }
 
+            arg.fill(nullptr);
+            for (int i = nargs - 1; i >= 0; --i) {
+                arg[i] = stack.pop();
+            }
+            stack.pop();
+
             storeCont();
             setState(cls->fun, cls->fun->code[0], cls->env);
             cur->print();
+            break;
+        }
+
+        case BC_t::load_arg: {
+            num_args_t a = bc.immediateNumArgs();
+            stack.push(arg[a]);
             break;
         }
 
@@ -246,7 +271,7 @@ SEXP evalFunction(Function* f, SEXP env) {
             break;
         }
 
-        case BC_t::drop:
+        case BC_t::pop:
             stack.pop();
             break;
 

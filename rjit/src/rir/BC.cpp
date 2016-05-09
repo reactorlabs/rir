@@ -19,6 +19,7 @@ void BC::write(CodeStream& cs) const {
     case BC_t::call_name:
         cs.insert(immediate.pool);
         return;
+    case BC_t::load_arg:
     case BC_t::call:
         cs.insert(immediate.numArgs);
         return;
@@ -28,7 +29,7 @@ void BC::write(CodeStream& cs) const {
         return;
     case BC_t::ret:
     case BC_t::force:
-    case BC_t::drop:
+    case BC_t::pop:
         return;
     case BC_t::invalid:
     case BC_t::num_of:
@@ -74,14 +75,17 @@ void Code::print() {
         case BC_t::force:
             std::cout << "force\n";
             break;
-        case BC_t::drop:
-            std::cout << "drop\n";
+        case BC_t::pop:
+            std::cout << "pop\n";
             break;
         case BC_t::ret:
             std::cout << "ret\n";
             break;
         case BC_t::call:
             std::cout << "call " << bc.immediateNumArgs() << "\n";
+            break;
+        case BC_t::load_arg:
+            std::cout << "load_arg " << bc.immediateNumArgs() << "\n";
             break;
         case BC_t::mkprom:
             std::cout << "mkprom " << bc.immediateFunIdx() << "\n";

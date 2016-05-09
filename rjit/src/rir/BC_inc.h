@@ -54,7 +54,8 @@ enum class BC_t : uint8_t {
 
     ret,
     force,
-    drop,
+    pop,
+    load_arg,
 
     num_of
 };
@@ -64,6 +65,7 @@ enum class BC_t : uint8_t {
 //
 typedef uint32_t pool_idx_t;
 typedef uint16_t fun_idx_t;
+typedef uint16_t arg_idx_t;
 typedef uint16_t num_args_t;
 
 union immediate_t {
@@ -98,7 +100,7 @@ class BC {
     // Getters for the immediate arguments
     SEXP immediateConst();
     inline fun_idx_t immediateFunIdx() { return immediate.fun; }
-    inline fun_idx_t immediateNumArgs() { return immediate.numArgs; }
+    inline num_args_t immediateNumArgs() { return immediate.numArgs; }
 
     // Decode BC from bytecode stream
     inline const static BC read(BC_t* pc);
@@ -112,8 +114,9 @@ class BC {
     inline const static BC getvar(SEXP sym);
     inline const static BC mkprom(fun_idx_t prom);
     inline const static BC ret();
-    inline const static BC drop();
+    inline const static BC pop();
     inline const static BC force();
+    inline const static BC load_arg(num_args_t);
 };
 
 } // rir
