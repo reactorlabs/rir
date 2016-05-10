@@ -39,9 +39,16 @@ class Stack {
         return res;
     }
 
-    T at(size_t offset) { return stack[stack.size() - 1 - offset]; }
+    T peek(size_t offset) { return stack[stack.size() - 1 - offset]; }
+    T set(size_t offset, T val) {
+        return stack[stack.size() - 1 - offset] = val;
+    }
+
+    T at(size_t pos) { return stack[pos]; }
 
     T top() { return stack.back(); }
+
+    size_t size() { return stack.size(); }
 };
 
 struct Continuation {
@@ -50,43 +57,57 @@ struct Continuation {
     Code* code;
     BC_t* pc;
     SEXP env;
-    Continuation(Function* fun, Code* code, BC_t* pc, SEXP env)
-        : fun(fun), code(code), pc(pc), env(env) {}
+    size_t sp;
+    num_args_t numArgs;
+
+    Continuation(Function* fun, Code* code, BC_t* pc, SEXP env, size_t sp,
+                 num_args_t numArgs)
+        : fun(fun), code(code), pc(pc), env(env), sp(sp), numArgs(numArgs) {}
 };
 
-SEXP evalFunction(Function* f, SEXP env) {
+SEXP evalFunction(Function* fun_, SEXP env) {
 
     Stack<SEXP> stack;
     Stack<Continuation> cont;
 
+    Function* fun = fun_;
     Code* cur;
     BC_t* pc;
 
-    std::array<SEXP, MAX_NUM_ARGS> arg;
+    num_args_t numArgs;
+    size_t sp;
 
-    auto setState = [&f, &cur, &pc, &env](Function* fun, Code* code, SEXP env) {
-        f = fun;
+    auto setState = [&fun, &cur, &pc, &env, &sp, &numArgs, &stack](
+        Function* fun_, Code* code, SEXP env, num_args_t a) {
+        fun = fun_;
         cur = code;
         pc = cur->bc;
         env = env;
+        numArgs = a;
+        sp = stack.size() - numArgs;
+
     };
 
-    auto storeCont = [&cont, &f, &cur, &pc, &env]() {
-        cont.push(Continuation(f, cur, pc, env));
+    auto storeCont = [&cont, &fun, &cur, &pc, &env, &sp, &numArgs]() {
+        cont.push(Continuation(fun, cur, pc, env, sp, numArgs));
     };
 
-    auto restoreCont = [&cont, &f, &cur, &pc, &env]() {
+    auto restoreCont = [&cont, &fun, &cur, &pc, &env, &sp, &numArgs]() {
         Continuation c = cont.pop();
-        f = c.fun;
+        fun = c.fun;
         cur = c.code;
         pc = c.pc;
         env = c.env;
+        sp = c.sp;
+        numArgs = c.numArgs;
     };
 
-    setState(f, f->code[0], env);
-    for (auto c : f->code) {
+    setState(fun, fun->code[0], env, 0);
+    std::cout << "====  Function ========\n";
+    for (auto c : fun->code) {
         c->print();
     }
+    std::cout << "==== /Function ========\n\n";
 
     while (true) {
         BC bc = BC::advance(&pc);
@@ -124,7 +145,7 @@ SEXP evalFunction(Function* f, SEXP env) {
         }
 
         case BC_t::mkprom: {
-            auto prom = new BCProm(f, bc.immediateFunIdx(), env);
+            auto prom = new BCProm(fun, bc.immediateFunIdx(), env);
             stack.push((SEXP)prom);
             break;
         }
@@ -132,38 +153,45 @@ SEXP evalFunction(Function* f, SEXP env) {
         case BC_t::call: {
             num_args_t nargs = bc.immediateNumArgs();
 
-            SEXP fun = stack.at(nargs);
-            BCClosure* cls;
+            SEXP cls = stack.peek(nargs);
+            BCClosure* bcls;
 
-            if (TYPEOF(fun) == CLOSXP) {
-                cls = jit(fun);
-            } else if (TYPEOF(fun) == SPECIALSXP) {
-                cls = Primitives::compilePrimitive(fun, nargs);
+            if (TYPEOF(cls) == CLOSXP) {
+                bcls = jit(cls);
+            } else if (TYPEOF(cls) == SPECIALSXP) {
+                bcls = Primitives::compilePrimitive(cls, nargs);
             } else {
-                assert(TYPEOF(fun) == BCClosure::type);
-                cls = (BCClosure*)fun;
+                assert(TYPEOF(cls) == BCClosure::type);
+                bcls = (BCClosure*)cls;
             }
-
-            arg.fill(nullptr);
-            for (int i = nargs - 1; i >= 0; --i) {
-                arg[i] = stack.pop();
-            }
-            stack.pop();
+            stack.set(nargs, (SEXP)bcls);
 
             storeCont();
-            setState(cls->fun, cls->fun->code[0], cls->env);
-            cur->print();
+            setState(bcls->fun, bcls->fun->code[0], bcls->env, nargs);
+
+            std::cout << "====  Function ========\n";
+            for (auto c : fun->code) {
+                c->print();
+            }
+            std::cout << "==== /Function ========\n\n";
+
             break;
         }
 
         case BC_t::load_arg: {
             num_args_t a = bc.immediateNumArgs();
-            stack.push(arg[a]);
+            stack.push(stack.at(sp + a));
+            break;
+        }
+
+        case BC_t::check_numarg: {
+            num_args_t a = bc.immediateNumArgs();
+            assert(numArgs == a);
             break;
         }
 
         case BC_t::get_ast: {
-            SEXP t = stack.top();
+            SEXP t = stack.pop();
             assert(TYPEOF(t) == BCProm::type);
             BCProm* p = (BCProm*)t;
             stack.push(p->ast());
@@ -186,14 +214,17 @@ SEXP evalFunction(Function* f, SEXP env) {
         }
 
         case BC_t::force: {
-            SEXP val = stack.pop();
+            SEXP val = stack.top();
             assert(TYPEOF(val) == BCProm::type);
 
             BCProm* prom = (BCProm*)val;
 
             storeCont();
-            setState(prom->fun, prom->fun->code[prom->idx], prom->env);
+            setState(prom->fun, prom->fun->code[prom->idx], prom->env, 0);
+
+            std::cout << "====  Promise ========\n";
             cur->print();
+            std::cout << "==== /Promise ========\n\n";
             break;
         }
 
@@ -201,12 +232,24 @@ SEXP evalFunction(Function* f, SEXP env) {
             stack.pop();
             break;
 
-        case BC_t::ret:
-            if (!cont.empty())
+        case BC_t::ret: {
+            SEXP res = stack.pop();
+            for (num_args_t i = 0; i < numArgs; ++i) {
+                stack.pop();
+            }
+
+            if (!cont.empty()) {
+                assert(TYPEOF(stack.top()) == BCClosure::type ||
+                       TYPEOF(stack.top()) == BCProm::type);
+                stack.pop();
+                stack.push(res);
                 restoreCont();
-            else
+            } else {
+                stack.push(res);
                 goto done;
+            }
             break;
+        }
 
         case BC_t::mkclosure:
         case BC_t::num_of:

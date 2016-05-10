@@ -21,6 +21,7 @@ void BC::write(CodeStream& cs) const {
         return;
     case BC_t::load_arg:
     case BC_t::call:
+    case BC_t::check_numarg:
         cs.insert(immediate.numArgs);
         return;
     case BC_t::mkprom:
@@ -91,6 +92,9 @@ void Code::print() {
             break;
         case BC_t::get_ast:
             std::cout << "get_ast\n";
+            break;
+        case BC_t::check_numarg:
+            std::cout << "check_numarg " << bc.immediateNumArgs() << "\n";
             break;
         case BC_t::load_arg:
             std::cout << "load_arg " << bc.immediateNumArgs() << "\n";

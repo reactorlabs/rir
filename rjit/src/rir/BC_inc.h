@@ -58,6 +58,7 @@ enum class BC_t : uint8_t {
     load_arg,
     get_ast,
     setvar,
+    check_numarg,
 
     num_of
 };
@@ -67,7 +68,6 @@ enum class BC_t : uint8_t {
 //
 typedef uint32_t pool_idx_t;
 typedef uint16_t fun_idx_t;
-typedef uint16_t arg_idx_t;
 typedef uint16_t num_args_t;
 
 union immediate_t {
@@ -121,6 +121,7 @@ class BC {
     inline const static BC load_arg(num_args_t);
     inline const static BC get_ast();
     inline const static BC setvar();
+    inline const static BC check_numarg(num_args_t);
 };
 
 } // rir

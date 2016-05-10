@@ -23,15 +23,13 @@ void compileSpecial(CodeStream& cs, long special_id, num_args_t nargs) {
     }
 
     if (special_id == Primitives::do_set_id) {
-        assert(nargs == 2);
-        cs << BC::load_arg(0) << BC::get_ast() << BC::load_arg(1) << BC::force()
-           << BC::setvar();
+        cs << BC::check_numarg(2) << BC::load_arg(0) << BC::get_ast()
+           << BC::load_arg(1) << BC::force() << BC::setvar();
         return;
     }
 
     if (special_id == Primitives::substitute_id) {
-        assert(nargs == 1);
-        cs << BC::load_arg(0) << BC::get_ast();
+        cs << BC::check_numarg(1) << BC::load_arg(0) << BC::get_ast();
         return;
     }
 
