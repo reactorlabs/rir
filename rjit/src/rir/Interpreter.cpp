@@ -3,6 +3,8 @@
 #include "Function.h"
 #include "Compiler.h"
 #include "CodeStream.h"
+#include "Runtime.h"
+#include "Primitives.h"
 
 #include <iostream>
 #include <deque>
@@ -13,108 +15,11 @@ namespace rir {
 
 namespace {
 
-struct sxpinfo_struct {
-    SEXPTYPE type : TYPE_BITS; /* ==> (FUNSXP == 99) %% 2^5 == 3 == CLOSXP
->------->------->-------     * -> warning: `type' is narrower than values
->------->------->-------     *              of its type
->------->------->-------     * when SEXPTYPE was an enum */
-    unsigned int obj : 1;
-    unsigned int named : 2;
-    unsigned int gp : 16;
-    unsigned int mark : 1;
-    unsigned int debug : 1;
-    unsigned int trace : 1; /* functions and memory tracing */
-    unsigned int spare : 1; /* currently unused */
-    unsigned int gcgen : 1; /* old generation number */
-    unsigned int gccls : 3; /* node class */
-};                          /*>-->-------    Tot: 32 */
-
-struct BCProm {
-    static constexpr SEXPTYPE type = 27;
-    BCProm() { sxpinfo.type = type; }
-
-    sxpinfo_struct sxpinfo = {0};
-    SEXP attrib = R_NilValue;
-    SEXP gengc_next_node, gengc_prev_node;
-
-    fun_idx_t idx;
-    Function* fun;
-    SEXP env;
-
-    SEXP ast() { return fun->ast[idx]; }
-};
-
-struct BCClosure {
-    static constexpr SEXPTYPE type = 28;
-    BCClosure() { sxpinfo.type = type; }
-
-    sxpinfo_struct sxpinfo = {0};
-    SEXP attrib = R_NilValue;
-    SEXP gengc_next_node, gengc_prev_node;
-
-    Function* fun;
-    SEXP env;
-    SEXP formals;
-};
-
-BCProm* makePromise(Function* fun, fun_idx_t idx, SEXP env) {
-    BCProm* prom = new BCProm;
-    prom->idx = idx;
-    prom->fun = fun;
-    prom->env = env;
-    return prom;
-}
-
 BCClosure* jit(SEXP fun) {
     Compiler c(BODY(fun));
     BCClosure* cls = new BCClosure;
     cls->env = CLOENV(fun);
     cls->fun = c.finalize();
-    cls->formals = FORMALS(fun);
-    return cls;
-}
-
-BCClosure* getBuiltin(SEXP fun, num_args_t nargs) {
-    Function* f = new Function;
-    CodeStream cs(*f);
-    switch (TYPEOF(fun)) {
-    case SPECIALSXP: {
-        long idx = (long)CAR(fun);
-
-        if (idx == 11) {
-            // do_begin
-            if (nargs == 0) {
-                cs << BC::push(R_NilValue);
-            } else {
-                for (num_args_t i = 0; i < nargs; ++i) {
-                    cs << BC::load_arg(i) << BC::force();
-                    // leave the last arg on the stack to return
-                    if (i != nargs - 1)
-                        cs << BC::pop();
-                }
-            }
-        } else if (idx == 8) {
-            // do_set
-            assert(nargs == 2);
-            cs << BC::load_arg(0) << BC::get_ast() << BC::load_arg(1)
-               << BC::force() << BC::setvar();
-        } else if (idx == 30) {
-            // substitute
-            assert(nargs == 1);
-            cs << BC::load_arg(0) << BC::get_ast();
-        } else {
-            assert(false);
-        }
-        break;
-    }
-    default:
-        assert(false);
-    }
-    cs << BC::ret();
-    cs.finalize(fun);
-    BCClosure* cls = new BCClosure;
-    cls->env = CLOENV(fun);
-    cls->fun = f;
     cls->formals = FORMALS(fun);
     return cls;
 }
@@ -219,7 +124,7 @@ SEXP evalFunction(Function* f, SEXP env) {
         }
 
         case BC_t::mkprom: {
-            auto prom = makePromise(f, bc.immediateFunIdx(), env);
+            auto prom = new BCProm(f, bc.immediateFunIdx(), env);
             stack.push((SEXP)prom);
             break;
         }
@@ -233,7 +138,7 @@ SEXP evalFunction(Function* f, SEXP env) {
             if (TYPEOF(fun) == CLOSXP) {
                 cls = jit(fun);
             } else if (TYPEOF(fun) == SPECIALSXP) {
-                cls = getBuiltin(fun, nargs);
+                cls = Primitives::compilePrimitive(fun, nargs);
             } else {
                 assert(TYPEOF(fun) == BCClosure::type);
                 cls = (BCClosure*)fun;
