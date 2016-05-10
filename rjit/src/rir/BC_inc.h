@@ -59,6 +59,9 @@ enum class BC_t : uint8_t {
     get_ast,
     setvar,
     check_numarg,
+    to_bool,
+    jmp_true,
+    jmp,
 
     num_of
 };
@@ -69,16 +72,20 @@ enum class BC_t : uint8_t {
 typedef uint32_t pool_idx_t;
 typedef uint16_t fun_idx_t;
 typedef uint16_t num_args_t;
+typedef int16_t jmp_t;
 
 union immediate_t {
     pool_idx_t pool;
     fun_idx_t fun;
     num_args_t numArgs;
+    jmp_t offset;
 };
 
 static constexpr size_t MAX_NUM_ARGS = 1L << (8 * sizeof(num_args_t));
 static constexpr size_t MAX_FUN_IDX = 1L << (8 * sizeof(fun_idx_t));
 static constexpr size_t MAX_POOL_IDX = 1L << (8 * sizeof(pool_idx_t));
+static constexpr size_t MAX_JMP = (1L << ((8 * sizeof(jmp_t)) - 1)) - 1;
+static constexpr size_t MIN_JMP = -(1L << ((8 * sizeof(jmp_t)) - 1));
 
 // ============================================================
 // ==== Creation and decoding of Bytecodes
@@ -103,6 +110,7 @@ class BC {
     SEXP immediateConst();
     inline fun_idx_t immediateFunIdx() { return immediate.fun; }
     inline num_args_t immediateNumArgs() { return immediate.numArgs; }
+    inline jmp_t immediateOffset() { return immediate.offset; }
 
     // Decode BC from bytecode stream
     inline const static BC read(BC_t* pc);
@@ -122,6 +130,9 @@ class BC {
     inline const static BC get_ast();
     inline const static BC setvar();
     inline const static BC check_numarg(num_args_t);
+    inline const static BC to_bool();
+    inline const static BC jmp_true(jmp_t);
+    inline const static BC jmp(jmp_t);
 };
 
 } // rir

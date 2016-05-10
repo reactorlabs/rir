@@ -10,6 +10,8 @@
 #include <deque>
 #include <array>
 
+extern "C" Rboolean convertToLogicalNoNA(SEXP what, SEXP consts, int call);
+
 namespace rjit {
 namespace rir {
 
@@ -113,6 +115,49 @@ SEXP evalFunction(Function* fun_, SEXP env) {
         BC bc = BC::advance(&pc);
 
         switch (bc.bc) {
+        case BC_t::to_bool: {
+            SEXP t = stack.pop();
+            int cond = NA_LOGICAL;
+
+            // TODO
+            assert(Rf_length(t) <= 2);
+
+            if (Rf_length(t) > 0) {
+                /* inline common cases for efficiency */
+                switch (TYPEOF(t)) {
+                case BCProm::type:
+                    assert(false);
+                    break;
+                case LGLSXP:
+                    cond = LOGICAL(t)[0];
+                    break;
+                case INTSXP:
+                    cond =
+                        INTEGER(t)[0]; /* relies on NA_INTEGER == NA_LOGICAL */
+                    break;
+                default:
+                    cond = asLogical(t);
+                }
+            }
+
+            std::cout << cond << "\n";
+            if (cond) {
+                stack.push(R_TrueValue);
+            } else {
+                stack.push(R_FalseValue);
+            }
+            break;
+        }
+
+        case BC_t::jmp:
+            pc = (BC_t*)((uintptr_t)pc + bc.immediateOffset());
+            break;
+
+        case BC_t::jmp_true:
+            if (stack.pop() == R_TrueValue)
+                pc = (BC_t*)((uintptr_t)pc + bc.immediateOffset());
+            break;
+
         case BC_t::push: {
             SEXP c = bc.immediateConst();
             stack.push(c);
@@ -180,6 +225,7 @@ SEXP evalFunction(Function* fun_, SEXP env) {
 
         case BC_t::load_arg: {
             num_args_t a = bc.immediateNumArgs();
+            assert(a < numArgs);
             stack.push(stack.at(sp + a));
             break;
         }

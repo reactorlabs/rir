@@ -28,8 +28,20 @@ void compileSpecial(CodeStream& cs, long special_id, num_args_t nargs) {
         return;
     }
 
-    if (special_id == Primitives::substitute_id) {
+    if (special_id == Primitives::do_substitute_id) {
         cs << BC::check_numarg(1) << BC::load_arg(0) << BC::get_ast();
+        return;
+    }
+
+    if (special_id == Primitives::do_if_id) {
+        Label trueBranch = cs.mkLabel();
+        Label nextBranch = cs.mkLabel();
+
+        cs << BC::load_arg(0) << BC::force() << BC::to_bool()
+           << BC::jmp_true(trueBranch) << BC::load_arg(2) << BC::force()
+           << BC::jmp(nextBranch) << trueBranch << BC::load_arg(1)
+           << BC::force() << nextBranch;
+
         return;
     }
 

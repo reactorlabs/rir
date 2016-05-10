@@ -28,11 +28,16 @@ void BC::write(CodeStream& cs) const {
     case BC_t::mkclosure:
         cs.insert(immediate.fun);
         return;
+    case BC_t::jmp:
+    case BC_t::jmp_true:
+        cs.patchpoint(immediate.offset);
+        return;
     case BC_t::ret:
     case BC_t::force:
     case BC_t::pop:
     case BC_t::get_ast:
     case BC_t::setvar:
+    case BC_t::to_bool:
         return;
     case BC_t::invalid:
     case BC_t::num_of:
@@ -93,6 +98,9 @@ void Code::print() {
         case BC_t::get_ast:
             std::cout << "get_ast\n";
             break;
+        case BC_t::to_bool:
+            std::cout << "to_bool\n";
+            break;
         case BC_t::check_numarg:
             std::cout << "check_numarg " << bc.immediateNumArgs() << "\n";
             break;
@@ -104,6 +112,12 @@ void Code::print() {
             break;
         case BC_t::mkclosure:
             std::cout << "mkclosure " << bc.immediateFunIdx() << "\n";
+            break;
+        case BC_t::jmp_true:
+            std::cout << "jmp_true " << bc.immediateOffset() << "\n";
+            break;
+        case BC_t::jmp:
+            std::cout << "jmp " << bc.immediateOffset() << "\n";
             break;
         }
     }

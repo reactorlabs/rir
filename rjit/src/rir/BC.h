@@ -32,11 +32,16 @@ immediate_t readImmediate(BC_t bc, BC_t* pc) {
     case BC_t::mkclosure:
         immediate.fun = *(fun_idx_t*)pc;
         break;
+    case BC_t::jmp:
+    case BC_t::jmp_true:
+        immediate.offset = *(jmp_t*)pc;
+        break;
     case BC_t::ret:
     case BC_t::pop:
     case BC_t::force:
     case BC_t::get_ast:
     case BC_t::setvar:
+    case BC_t::to_bool:
         break;
     case BC_t::invalid:
     case BC_t::num_of:
@@ -65,6 +70,9 @@ static size_t immediate_size[(size_t)BC_t::num_of] = {
     0,                  // get_ast
     0,                  // setvar
     sizeof(num_args_t), // check_numarg
+    0,                  // to_bool
+    sizeof(jmp_t),      // jmp_true
+    sizeof(jmp_t),      // jmp
 };
 
 const BC BC::read(BC_t* pc) {
@@ -103,6 +111,17 @@ const BC BC::get_ast() { return BC(BC_t::get_ast); }
 const BC BC::setvar() { return BC(BC_t::setvar); }
 const BC BC::check_numarg(num_args_t arg) {
     return BC(BC_t::check_numarg, {arg});
+}
+const BC BC::to_bool() { return BC(BC_t::to_bool); }
+const BC BC::jmp(jmp_t j) {
+    immediate_t i;
+    i.offset = j;
+    return BC(BC_t::jmp, i);
+}
+const BC BC::jmp_true(jmp_t j) {
+    immediate_t i;
+    i.offset = j;
+    return BC(BC_t::jmp_true, i);
 }
 
 class Code {
