@@ -80,11 +80,11 @@ SEXP evalFunction(Function* fun_, SEXP env) {
     size_t sp;
 
     auto setState = [&fun, &cur, &pc, &env, &sp, &numArgs, &stack](
-        Function* fun_, Code* code, SEXP env, num_args_t a) {
+        Function* fun_, Code* code, SEXP env_, num_args_t a) {
         fun = fun_;
         cur = code;
         pc = cur->bc;
-        env = env;
+        env = env_;
         numArgs = a;
         sp = stack.size() - numArgs;
 
