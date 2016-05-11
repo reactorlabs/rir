@@ -30,7 +30,7 @@ class CodeStream {
   public:
     Label mkLabel() {
         assert(nextLabel < MAX_JMP);
-        label2pos.resize(nextLabel);
+        label2pos.resize(nextLabel + 1);
         return nextLabel++;
     }
 
