@@ -1,6 +1,8 @@
 #include "Primitives.h"
 #include "CodeStream.h"
 
+#include <iostream>
+
 namespace rjit {
 namespace rir {
 
@@ -59,6 +61,7 @@ void compileSpecial(CodeStream& cs, long special_id, num_args_t nargs) {
         return;
     }
 
+    std::cout << "Unknow special " << special_id << "\n";
     assert(false);
 }
 
