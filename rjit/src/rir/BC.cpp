@@ -21,7 +21,6 @@ void BC::write(CodeStream& cs) const {
         return;
     case BC_t::load_arg:
     case BC_t::call:
-    case BC_t::check_numarg:
         cs.insert(immediate.numArgs);
         return;
     case BC_t::mkprom:
@@ -30,6 +29,7 @@ void BC::write(CodeStream& cs) const {
         return;
     case BC_t::jmp:
     case BC_t::jmp_true:
+    case BC_t::jmp_false:
         cs.patchpoint(immediate.offset);
         return;
     case BC_t::ret:
@@ -38,6 +38,9 @@ void BC::write(CodeStream& cs) const {
     case BC_t::get_ast:
     case BC_t::setvar:
     case BC_t::to_bool:
+    case BC_t::numarg:
+    case BC_t::lt:
+    case BC_t::eq:
         return;
     case BC_t::invalid:
     case BC_t::num_of:
@@ -89,6 +92,12 @@ void Code::print() {
         case BC_t::setvar:
             std::cout << "setvar\n";
             break;
+        case BC_t::lt:
+            std::cout << "lt\n";
+            break;
+        case BC_t::eq:
+            std::cout << "eq\n";
+            break;
         case BC_t::ret:
             std::cout << "ret\n";
             break;
@@ -101,8 +110,8 @@ void Code::print() {
         case BC_t::to_bool:
             std::cout << "to_bool\n";
             break;
-        case BC_t::check_numarg:
-            std::cout << "check_numarg " << bc.immediateNumArgs() << "\n";
+        case BC_t::numarg:
+            std::cout << "numarg\n";
             break;
         case BC_t::load_arg:
             std::cout << "load_arg " << bc.immediateNumArgs() << "\n";
@@ -115,6 +124,9 @@ void Code::print() {
             break;
         case BC_t::jmp_true:
             std::cout << "jmp_true " << bc.immediateOffset() << "\n";
+            break;
+        case BC_t::jmp_false:
+            std::cout << "jmp_false " << bc.immediateOffset() << "\n";
             break;
         case BC_t::jmp:
             std::cout << "jmp " << bc.immediateOffset() << "\n";

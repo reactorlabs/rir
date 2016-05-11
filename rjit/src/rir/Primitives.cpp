@@ -8,6 +8,7 @@ namespace {
 
 void compileSpecial(CodeStream& cs, long special_id, num_args_t nargs) {
     if (special_id == Primitives::do_begin_id) {
+        // TODO have a loop
         if (nargs == 0) {
             cs << BC::push(R_NilValue);
             return;
@@ -23,22 +24,35 @@ void compileSpecial(CodeStream& cs, long special_id, num_args_t nargs) {
     }
 
     if (special_id == Primitives::do_set_id) {
-        cs << BC::check_numarg(2) << BC::load_arg(0) << BC::get_ast()
-           << BC::load_arg(1) << BC::force() << BC::setvar();
+        // TODO check numargs
+        cs << BC::load_arg(0) << BC::get_ast() << BC::load_arg(1) << BC::force()
+           << BC::setvar();
         return;
     }
 
     if (special_id == Primitives::do_substitute_id) {
-        cs << BC::check_numarg(1) << BC::load_arg(0) << BC::get_ast();
+        cs << BC::load_arg(0) << BC::get_ast();
         return;
     }
 
     if (special_id == Primitives::do_if_id) {
         Label trueBranch = cs.mkLabel();
+        Label falseBranch = cs.mkLabel();
         Label nextBranch = cs.mkLabel();
 
+        SEXP n = Rf_allocVector(INTSXP, 1);
+        INTEGER(n)[0] = 3;
+
         cs << BC::load_arg(0) << BC::force() << BC::to_bool()
-           << BC::jmp_true(trueBranch) << BC::load_arg(2) << BC::force()
+           << BC::jmp_true(trueBranch)
+
+           << BC::numarg() << BC::push(n) << BC::lt()
+           << BC::jmp_false(falseBranch)
+
+           << BC::push(R_NilValue) << BC::jmp(nextBranch)
+
+           << falseBranch << BC::load_arg(2) << BC::force()
+
            << BC::jmp(nextBranch) << trueBranch << BC::load_arg(1)
            << BC::force() << nextBranch;
 

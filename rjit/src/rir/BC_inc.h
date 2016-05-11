@@ -58,10 +58,13 @@ enum class BC_t : uint8_t {
     load_arg,
     get_ast,
     setvar,
-    check_numarg,
+    numarg,
     to_bool,
     jmp_true,
+    jmp_false,
     jmp,
+    lt,
+    eq,
 
     num_of
 };
@@ -129,10 +132,13 @@ class BC {
     inline const static BC load_arg(num_args_t);
     inline const static BC get_ast();
     inline const static BC setvar();
-    inline const static BC check_numarg(num_args_t);
+    inline const static BC numarg();
     inline const static BC to_bool();
     inline const static BC jmp_true(jmp_t);
+    inline const static BC jmp_false(jmp_t);
     inline const static BC jmp(jmp_t);
+    inline const static BC lt();
+    inline const static BC eq();
 };
 
 } // rir

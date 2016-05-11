@@ -140,7 +140,16 @@ SEXP evalFunction(Function* fun_, SEXP env) {
                 }
             }
 
-            std::cout << cond << "\n";
+            if (cond == NA_LOGICAL) {
+                const char* msg =
+                    Rf_length(t)
+                        ? (Rf_isLogical(t)
+                               ? ("missing value where TRUE/FALSE needed")
+                               : ("argument is not interpretable as logical"))
+                        : ("argument is of length zero");
+                Rf_error(msg);
+            }
+
             if (cond) {
                 stack.push(R_TrueValue);
             } else {
@@ -158,9 +167,34 @@ SEXP evalFunction(Function* fun_, SEXP env) {
                 pc = (BC_t*)((uintptr_t)pc + bc.immediateOffset());
             break;
 
+        case BC_t::jmp_false:
+            if (stack.pop() == R_FalseValue)
+                pc = (BC_t*)((uintptr_t)pc + bc.immediateOffset());
+            break;
+
         case BC_t::push: {
             SEXP c = bc.immediateConst();
             stack.push(c);
+            break;
+        }
+
+        case BC_t::lt: {
+            SEXP b = stack.pop();
+            SEXP a = stack.pop();
+            assert(TYPEOF(a) == INTSXP && Rf_length(a) == 1);
+            assert(TYPEOF(b) == INTSXP && Rf_length(b) == 1);
+            stack.push(INTEGER(a)[0] < INTEGER(b)[0] ? R_TrueValue
+                                                     : R_FalseValue);
+            break;
+        }
+
+        case BC_t::eq: {
+            SEXP b = stack.pop();
+            SEXP a = stack.pop();
+            assert(TYPEOF(a) == INTSXP && Rf_length(a) == 1);
+            assert(TYPEOF(b) == INTSXP && Rf_length(b) == 1);
+            stack.push(INTEGER(a)[0] == INTEGER(b)[0] ? R_TrueValue
+                                                      : R_FalseValue);
             break;
         }
 
@@ -230,9 +264,10 @@ SEXP evalFunction(Function* fun_, SEXP env) {
             break;
         }
 
-        case BC_t::check_numarg: {
-            num_args_t a = bc.immediateNumArgs();
-            assert(numArgs == a);
+        case BC_t::numarg: {
+            SEXP n = Rf_allocVector(INTSXP, 1);
+            INTEGER(n)[0] = numArgs;
+            stack.push(n);
             break;
         }
 

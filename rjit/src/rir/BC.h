@@ -25,7 +25,6 @@ immediate_t readImmediate(BC_t bc, BC_t* pc) {
         break;
     case BC_t::call:
     case BC_t::load_arg:
-    case BC_t::check_numarg:
         immediate.numArgs = *(num_args_t*)pc;
         break;
     case BC_t::mkprom:
@@ -34,6 +33,7 @@ immediate_t readImmediate(BC_t bc, BC_t* pc) {
         break;
     case BC_t::jmp:
     case BC_t::jmp_true:
+    case BC_t::jmp_false:
         immediate.offset = *(jmp_t*)pc;
         break;
     case BC_t::ret:
@@ -42,6 +42,9 @@ immediate_t readImmediate(BC_t bc, BC_t* pc) {
     case BC_t::get_ast:
     case BC_t::setvar:
     case BC_t::to_bool:
+    case BC_t::numarg:
+    case BC_t::lt:
+    case BC_t::eq:
         break;
     case BC_t::invalid:
     case BC_t::num_of:
@@ -69,10 +72,13 @@ static size_t immediate_size[(size_t)BC_t::num_of] = {
     sizeof(num_args_t), // load_arg
     0,                  // get_ast
     0,                  // setvar
-    sizeof(num_args_t), // check_numarg
+    0,                  // numarg
     0,                  // to_bool
     sizeof(jmp_t),      // jmp_true
+    sizeof(jmp_t),      // jmp_false
     sizeof(jmp_t),      // jmp
+    0,                  // lt
+    0,                  // eq
 };
 
 const BC BC::read(BC_t* pc) {
@@ -109,9 +115,9 @@ const BC BC::mkprom(fun_idx_t prom) { return BC(BC_t::mkprom, {prom}); }
 const BC BC::load_arg(num_args_t arg) { return BC(BC_t::load_arg, {arg}); }
 const BC BC::get_ast() { return BC(BC_t::get_ast); }
 const BC BC::setvar() { return BC(BC_t::setvar); }
-const BC BC::check_numarg(num_args_t arg) {
-    return BC(BC_t::check_numarg, {arg});
-}
+const BC BC::lt() { return BC(BC_t::lt); }
+const BC BC::eq() { return BC(BC_t::eq); }
+const BC BC::numarg() { return BC(BC_t::numarg); }
 const BC BC::to_bool() { return BC(BC_t::to_bool); }
 const BC BC::jmp(jmp_t j) {
     immediate_t i;
@@ -122,6 +128,11 @@ const BC BC::jmp_true(jmp_t j) {
     immediate_t i;
     i.offset = j;
     return BC(BC_t::jmp_true, i);
+}
+const BC BC::jmp_false(jmp_t j) {
+    immediate_t i;
+    i.offset = j;
+    return BC(BC_t::jmp_false, i);
 }
 
 class Code {
