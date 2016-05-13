@@ -1,5 +1,6 @@
 #include "Primitives.h"
 #include "CodeStream.h"
+#include "RIntlns.h"
 
 #include <iostream>
 
@@ -8,7 +9,7 @@ namespace rir {
 
 namespace {
 
-void compileSpecial(CodeStream& cs, uintptr_t special_id, num_args_t nargs) {
+void compileSpecial(CodeStream& cs, int special_id, num_args_t nargs) {
     if (special_id == Primitives::do_begin_id) {
         // TODO have a loop
         if (nargs == 0) {
@@ -73,7 +74,7 @@ BCClosure* Primitives::compilePrimitive(SEXP fun, num_args_t nargs) {
 
     switch (TYPEOF(fun)) {
     case SPECIALSXP: {
-        uintptr_t idx = (uintptr_t)(CAR(fun));
+        int idx = fun->u.primsxp.offset;
         compileSpecial(cs, idx, nargs);
         break;
     }

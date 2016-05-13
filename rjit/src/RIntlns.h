@@ -1,6 +1,7 @@
-#ifndef RINT
-#define RINT
+#ifndef RINT_H
+#define RINT_H
 
+#define USE_RINTERNALS
 #include <R.h>
 #include <Rinternals.h>
 

@@ -143,7 +143,7 @@ SEXP evalFunction(Function* fun_, SEXP env) {
             if (cond == NA_LOGICAL) {
                 const char* msg =
                     Rf_length(t)
-                        ? (Rf_isLogical(t)
+                        ? (isLogical(t)
                                ? ("missing value where TRUE/FALSE needed")
                                : ("argument is not interpretable as logical"))
                         : ("argument is of length zero");
