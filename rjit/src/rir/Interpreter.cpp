@@ -41,14 +41,14 @@ class Stack {
         return res;
     }
 
-    T peek(size_t offset) { return stack[stack.size() - 1 - offset]; }
+    T& peek(size_t offset) { return stack[stack.size() - 1 - offset]; }
     T set(size_t offset, T val) {
         return stack[stack.size() - 1 - offset] = val;
     }
 
-    T at(size_t pos) { return stack[pos]; }
+    T& at(size_t pos) { return stack[pos]; }
 
-    T top() { return stack.back(); }
+    T& top() { return stack.back(); }
 
     size_t size() { return stack.size(); }
 };
@@ -84,7 +84,8 @@ SEXP evalFunction(Function* fun_, SEXP env) {
         fun = fun_;
         cur = code;
         pc = cur->bc;
-        env = env_;
+        if (env_)
+            env = env_;
         numArgs = a;
         sp = stack.size() - numArgs;
 
@@ -115,6 +116,58 @@ SEXP evalFunction(Function* fun_, SEXP env) {
         BC bc = BC::advance(&pc);
 
         switch (bc.bc) {
+        case BC_t::call_special: {
+            // call, op, args, rho
+            SEXP (*primfun)(SEXP, SEXP, SEXP, SEXP) = 
+                R_FunTab[bc.immediate.prim].cfun;
+
+            Code* caller_code = cont.top().code;
+            BC_t* caller_pc = cont.top().pc;
+            SEXP call = caller_code->getAst(caller_pc);
+
+            SEXP op = fun->code[0]->ast;
+
+            // Collect unchanged arg asts
+            SEXP arglist = R_NilValue;
+            for (num_args_t i = numArgs; i > 0; --i) {
+                SEXP t = stack.at(sp + i - 1);
+                assert(TYPEOF(t) == BCProm::type);
+                BCProm* p = (BCProm*)t;
+                arglist = CONS_NR(p->ast(), arglist);
+            }
+            Protect prot;
+            prot(arglist);
+
+            SEXP res = primfun(call, op, arglist, env);
+            stack.push(res);
+        }
+
+        case BC_t::call_builtin: {
+            // call, op, args, rho
+            SEXP (*primfun)(SEXP, SEXP, SEXP, SEXP) = 
+                R_FunTab[bc.immediate.prim].cfun;
+
+            Code* caller_code = cont.top().code;
+            BC_t* caller_pc = cont.top().pc;
+            SEXP call = caller_code->getAst(caller_pc);
+
+            SEXP op = fun->code[0]->ast;
+
+            // args are expected to be on the stack
+            SEXP arglist = R_NilValue;
+            for (num_args_t i = 0; i < numArgs; ++i) {
+                SEXP t = stack.pop();
+                assert(TYPEOF(t) != BCProm::type);
+                arglist = CONS_NR(t, arglist);
+            }
+            Protect prot;
+            prot(arglist);
+
+            SEXP res = primfun(call, op, arglist, env);
+            stack.push(res);
+            break;
+        }
+
         case BC_t::to_bool: {
             SEXP t = stack.pop();
             int cond = NA_LOGICAL;
@@ -237,7 +290,7 @@ SEXP evalFunction(Function* fun_, SEXP env) {
 
             if (TYPEOF(cls) == CLOSXP) {
                 bcls = jit(cls);
-            } else if (TYPEOF(cls) == SPECIALSXP) {
+            } else if (TYPEOF(cls) == SPECIALSXP || TYPEOF(cls) == BUILTINSXP) {
                 bcls = Primitives::compilePrimitive(cls, nargs);
             } else {
                 assert(TYPEOF(cls) == BCClosure::type);
@@ -291,6 +344,26 @@ SEXP evalFunction(Function* fun_, SEXP env) {
 
         case BC_t::call_name: {
             assert(false);
+            break;
+        }
+
+        case BC_t::force_all: {
+            unsigned forced = stack.size() - sp - numArgs;
+            if (forced == numArgs)
+                break;
+
+            SEXP val = stack.at(sp + forced);
+            stack.push(val);
+            assert(TYPEOF(val) == BCProm::type);
+            BCProm* prom = (BCProm*)val;
+
+            storeCont();
+            cont.top().pc--;
+
+            setState(prom->fun, prom->fun->code[prom->idx], prom->env, 0);
+            std::cout << "====  Promise ========\n";
+            cur->print();
+            std::cout << "==== /Promise ========\n\n";
             break;
         }
 

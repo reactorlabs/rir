@@ -9,6 +9,12 @@ namespace rir {
 
 namespace {
 
+void compileBuiltin(CodeStream& cs, int builtin_id, num_args_t nargs) {
+    std::cout << "Unknow builtin " << builtin_id << "\n";
+
+    cs << BC::force_all() << BC::call_builtin(builtin_id);
+}
+
 void compileSpecial(CodeStream& cs, int special_id, num_args_t nargs) {
     if (special_id == Primitives::do_begin_id) {
         // TODO have a loop
@@ -63,19 +69,24 @@ void compileSpecial(CodeStream& cs, int special_id, num_args_t nargs) {
     }
 
     std::cout << "Unknow special " << special_id << "\n";
-    assert(false);
+    cs << BC::call_special(special_id);
 }
 
 } // namespace
 
 BCClosure* Primitives::compilePrimitive(SEXP fun, num_args_t nargs) {
     Function* f = new Function;
-    CodeStream cs(*f);
+    CodeStream cs(*f, fun);
 
     switch (TYPEOF(fun)) {
     case SPECIALSXP: {
         int idx = fun->u.primsxp.offset;
         compileSpecial(cs, idx, nargs);
+        break;
+    }
+    case BUILTINSXP: {
+        int idx = fun->u.primsxp.offset;
+        compileBuiltin(cs, idx, nargs);
         break;
     }
     default:
@@ -85,7 +96,7 @@ BCClosure* Primitives::compilePrimitive(SEXP fun, num_args_t nargs) {
     cs << BC::ret();
     cs.finalize(fun);
     BCClosure* cls = new BCClosure;
-    cls->env = CLOENV(fun);
+    cls->env = nullptr;
     cls->fun = f;
     cls->formals = FORMALS(fun);
     return cls;

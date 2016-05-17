@@ -3,6 +3,7 @@
 
 #include <cstdint>
 #include <cstddef>
+#include <map>
 
 #include "Pool.h"
 #include "RDefs.h"
@@ -36,9 +37,14 @@ immediate_t readImmediate(BC_t bc, BC_t* pc) {
     case BC_t::jmp_false:
         immediate.offset = *(jmp_t*)pc;
         break;
+    case BC_t::call_builtin:
+    case BC_t::call_special:
+        immediate.prim = *(primitive_t*)pc;
+        break;
     case BC_t::ret:
     case BC_t::pop:
     case BC_t::force:
+    case BC_t::force_all:
     case BC_t::get_ast:
     case BC_t::setvar:
     case BC_t::to_bool:
@@ -58,27 +64,30 @@ immediate_t readImmediate(BC_t bc, BC_t* pc) {
 class CodeStream;
 
 static size_t immediate_size[(size_t)BC_t::num_of] = {
-    (size_t)-1,         // invalid
-    sizeof(pool_idx_t), // push
-    sizeof(pool_idx_t), // getfun
-    sizeof(pool_idx_t), // getvar
-    sizeof(num_args_t), // call
-    sizeof(pool_idx_t), // call_name
-    sizeof(fun_idx_t),  // mkprom
-    sizeof(fun_idx_t),  // mkclosure
-    0,                  // ret
-    0,                  // force
-    0,                  // pop
-    sizeof(num_args_t), // load_arg
-    0,                  // get_ast
-    0,                  // setvar
-    0,                  // numarg
-    0,                  // to_bool
-    sizeof(jmp_t),      // jmp_true
-    sizeof(jmp_t),      // jmp_false
-    sizeof(jmp_t),      // jmp
-    0,                  // lt
-    0,                  // eq
+    (size_t)-1,          // invalid
+    sizeof(pool_idx_t),  // push
+    sizeof(pool_idx_t),  // getfun
+    sizeof(pool_idx_t),  // getvar
+    sizeof(num_args_t),  // call
+    sizeof(pool_idx_t),  // call_name
+    sizeof(fun_idx_t),   // mkprom
+    sizeof(fun_idx_t),   // mkclosure
+    0,                   // ret
+    0,                   // force
+    0,                   // pop
+    sizeof(num_args_t),  // load_arg
+    0,                   // get_ast
+    0,                   // setvar
+    0,                   // numarg
+    0,                   // to_bool
+    sizeof(jmp_t),       // jmp_true
+    sizeof(jmp_t),       // jmp_false
+    sizeof(jmp_t),       // jmp
+    0,                   // lt
+    0,                   // eq
+    sizeof(primitive_t), // call_builtin
+    sizeof(primitive_t), // call_special
+    0,                   // force_all
 };
 
 const BC BC::read(BC_t* pc) {
@@ -97,6 +106,7 @@ size_t BC::size() const { return sizeof(BC_t) + immediate_size[(size_t)bc]; }
 
 const BC BC::ret() { return BC(BC_t::ret); }
 const BC BC::force() { return BC(BC_t::force); }
+const BC BC::force_all() { return BC(BC_t::force_all); }
 const BC BC::pop() { return BC(BC_t::pop); }
 const BC BC::call(num_args_t numArgs) { return BC(BC_t::call, {numArgs}); }
 const BC BC::call_name(SEXP names) {
@@ -134,18 +144,68 @@ const BC BC::jmp_false(jmp_t j) {
     i.offset = j;
     return BC(BC_t::jmp_false, i);
 }
+const BC BC::call_special(primitive_t prim) {
+    immediate_t i;
+    i.prim = prim;
+    return BC(BC_t::call_special, i);
+}
+const BC BC::call_builtin(primitive_t prim) {
+    immediate_t i;
+    i.prim = prim;
+    return BC(BC_t::call_builtin, i);
+}
+
+class AstMap {
+    size_t size;
+    unsigned* pos;
+    SEXP* ast;
+
+  public:
+    AstMap(std::map<unsigned, SEXP>& astMap) {
+        size = astMap.size();
+        pos = new unsigned[size];
+        ast = new SEXP[size];
+        unsigned i = 0;
+        for (auto e : astMap) {
+            pos[i] = e.first;
+            ast[i] = e.second;
+            i++;
+        }
+    }
+
+    ~AstMap() {
+        delete pos;
+        delete ast;
+    }
+
+    SEXP at(unsigned p) {
+        size_t f = 0;
+
+        while (f < size && pos[f] < p)
+            f++;
+
+        assert(pos[f] == p);
+
+        return ast[f];
+    }
+};
 
 class Code {
   public:
     size_t size;
     BC_t* bc;
+    SEXP ast;
+    AstMap astMap;
 
-    Code(size_t size, BC_t* bc) : size(size), bc(bc){};
+    Code(size_t size, BC_t* bc, SEXP ast, std::map<unsigned, SEXP>& astMap)
+        : size(size), bc(bc), ast(ast), astMap(astMap){};
     ~Code() { delete bc; }
 
     void print();
 
     BC_t* end() { return (BC_t*)((uintptr_t)bc + size); }
+
+    SEXP getAst(BC_t* pc) { return astMap.at((uintptr_t)pc - (uintptr_t)bc); }
 };
 
 } // rir

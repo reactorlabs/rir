@@ -16,17 +16,28 @@ void BC::write(CodeStream& cs) const {
     case BC_t::push:
     case BC_t::getfun:
     case BC_t::getvar:
-    case BC_t::call_name:
         cs.insert(immediate.pool);
         return;
+
     case BC_t::load_arg:
     case BC_t::call:
         cs.insert(immediate.numArgs);
         return;
+
     case BC_t::mkprom:
     case BC_t::mkclosure:
         cs.insert(immediate.fun);
         return;
+
+    case BC_t::call_name:
+        cs.insert(immediate.pool);
+        return;
+
+    case BC_t::call_builtin:
+    case BC_t::call_special:
+        cs.insert(immediate.prim);
+        return;
+
     case BC_t::jmp:
     case BC_t::jmp_true:
     case BC_t::jmp_false:
@@ -34,6 +45,7 @@ void BC::write(CodeStream& cs) const {
         return;
     case BC_t::ret:
     case BC_t::force:
+    case BC_t::force_all:
     case BC_t::pop:
     case BC_t::get_ast:
     case BC_t::setvar:
@@ -71,6 +83,14 @@ void Code::print() {
             }
             std::cout << "\n";
             break;
+        case BC_t::call_special:
+            std::cout << "call_special " << R_FunTab[bc.immediate.prim].name
+                      << "\n";
+            break;
+        case BC_t::call_builtin:
+            std::cout << "call_builtin " << R_FunTab[bc.immediate.prim].name
+                      << "\n";
+            break;
         case BC_t::push:
             std::cout << "push ";
             Rf_PrintValue(bc.immediateConst());
@@ -82,6 +102,9 @@ void Code::print() {
         case BC_t::getvar:
             std::cout << "getvar " << CHAR(PRINTNAME((bc.immediateConst())))
                       << "\n";
+            break;
+        case BC_t::force_all:
+            std::cout << "force_all\n";
             break;
         case BC_t::force:
             std::cout << "force\n";

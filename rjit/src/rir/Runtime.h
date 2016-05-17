@@ -25,7 +25,7 @@ struct BCProm {
     Function* fun;
     SEXP env;
 
-    SEXP ast() { return fun->ast[idx]; }
+    SEXP ast() { return fun->code[idx]->ast; }
 };
 
 struct BCClosure {

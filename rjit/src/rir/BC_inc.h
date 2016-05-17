@@ -65,6 +65,9 @@ enum class BC_t : uint8_t {
     jmp,
     lt,
     eq,
+    call_builtin,
+    call_special,
+    force_all,
 
     num_of
 };
@@ -76,12 +79,14 @@ typedef uint32_t pool_idx_t;
 typedef uint16_t fun_idx_t;
 typedef uint16_t num_args_t;
 typedef int16_t jmp_t;
+typedef int primitive_t;
 
 union immediate_t {
     pool_idx_t pool;
     fun_idx_t fun;
     num_args_t numArgs;
     jmp_t offset;
+    primitive_t prim;
 };
 
 static constexpr size_t MAX_NUM_ARGS = 1L << (8 * sizeof(num_args_t));
@@ -139,6 +144,9 @@ class BC {
     inline const static BC jmp(jmp_t);
     inline const static BC lt();
     inline const static BC eq();
+    inline const static BC call_special(primitive_t);
+    inline const static BC call_builtin(primitive_t);
+    inline const static BC force_all();
 };
 
 } // rir

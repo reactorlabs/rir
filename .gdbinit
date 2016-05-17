@@ -98,7 +98,7 @@ define dumpsxp
     # REALSXP
     if $sexptype==14
         print_veclen $arg0
-        print_double $arg0
+        #print_double $arg0
     end
 
     # STRSXP || VECSXP

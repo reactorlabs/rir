@@ -61,6 +61,8 @@ void compileCall(Function& f, CodeStream& cs, SEXP ast, SEXP fun, SEXP args) {
     } else {
         cs << BC::call(numArgs);
     }
+
+    cs.addAst(ast);
 }
 
 // Lookup
@@ -82,7 +84,7 @@ void compileExpression(Function& f, CodeStream& cs, SEXP exp) {
 }
 
 fun_idx_t compileExpression(Function& f, SEXP exp) {
-    CodeStream cs(f);
+    CodeStream cs(f, exp);
     compileExpression(f, cs, exp);
     cs << BC::ret();
     return cs.finalize(exp);

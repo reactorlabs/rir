@@ -21,7 +21,10 @@ class CodeStream {
     unsigned size = 1024;
 
     Function& fun;
+    SEXP ast;
     fun_idx_t insertPoint;
+
+    std::map<unsigned, SEXP> astMap;
 
     unsigned nextLabel = 0;
     std::map<unsigned, Label> patchpoints;
@@ -39,7 +42,8 @@ class CodeStream {
         insert((jmp_t)0);
     }
 
-    CodeStream(Function& fun) : fun(fun), insertPoint(fun.next()) {
+    CodeStream(Function& fun, SEXP ast)
+        : fun(fun), ast(ast), insertPoint(fun.next()) {
         code = new std::vector<char>(1024);
     }
 
@@ -54,7 +58,7 @@ class CodeStream {
     }
 
     fun_idx_t finalize(SEXP ast) {
-        fun.addCode(insertPoint, toCode(), ast);
+        fun.addCode(insertPoint, toCode());
         return insertPoint;
     }
 
@@ -68,6 +72,8 @@ class CodeStream {
         *reinterpret_cast<T*>(&(*code)[pos]) = val;
         pos += s;
     }
+
+    void addAst(SEXP ast) { astMap[pos] = ast; }
 
   private:
     BC_t* toBc() {
@@ -92,7 +98,10 @@ class CodeStream {
 
     Code* toCode() {
         size_t size = pos;
-        return new Code(size, toBc());
+        Code* res = new Code(size, toBc(), ast, astMap);
+        ast = nullptr;
+        astMap.clear();
+        return res;
     }
 
     CodeStream& operator<<(CodeStream& cs) {
