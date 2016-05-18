@@ -9,7 +9,7 @@ namespace rir {
 
 namespace {
 
-void compileBuiltin(CodeStream& cs, int builtin_id, num_args_t nargs) {
+void compileBuiltin(CodeStream& cs, int builtin_id) {
     const std::string name = R_FunTab[builtin_id].name;
 
     if (name.compare("for") == 0) {
@@ -21,7 +21,7 @@ void compileBuiltin(CodeStream& cs, int builtin_id, num_args_t nargs) {
     cs << BC::force_all() << BC::call_builtin(builtin_id);
 }
 
-void compileSpecial(CodeStream& cs, int special_id, num_args_t nargs) {
+void compileSpecial(CodeStream& cs, int special_id) {
     const std::string name = R_FunTab[special_id].name;
 
     if (name.compare("function") == 0) {
@@ -120,10 +120,10 @@ BCClosure* Primitives::compilePrimitive(SEXP fun, num_args_t nargs) {
 
     switch (TYPEOF(fun)) {
     case SPECIALSXP:
-        compileSpecial(cs, idx, nargs);
+        compileSpecial(cs, idx);
         break;
     case BUILTINSXP:
-        compileBuiltin(cs, idx, nargs);
+        compileBuiltin(cs, idx);
         break;
     }
 
