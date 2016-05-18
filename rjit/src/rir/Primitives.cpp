@@ -24,6 +24,12 @@ void compileBuiltin(CodeStream& cs, int builtin_id, num_args_t nargs) {
 void compileSpecial(CodeStream& cs, int special_id, num_args_t nargs) {
     const std::string name = R_FunTab[special_id].name;
 
+    if (name.compare("function") == 0) {
+        cs << BC::load_arg(0) << BC::get_ast() << BC::load_arg(1)
+           << BC::get_ast() << BC::mkclosure();
+        return;
+    }
+
     if (name.compare("{") == 0) {
         Label doneL = cs.mkLabel();
         Label nextL = cs.mkLabel();

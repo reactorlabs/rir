@@ -23,7 +23,18 @@ BCClosure* jit(SEXP fun) {
     BCClosure* cls = new BCClosure;
     cls->env = CLOENV(fun);
     cls->fun = c.finalize();
+    // TODO: compile default args
     cls->formals = FORMALS(fun);
+    return cls;
+}
+
+BCClosure* jit(SEXP ast, SEXP formals, SEXP env) {
+    Compiler c(ast);
+    BCClosure* cls = new BCClosure;
+    cls->env = env;
+    cls->fun = c.finalize();
+    // TODO: compile default args
+    cls->formals = formals;
     return cls;
 }
 
@@ -420,7 +431,15 @@ SEXP evalFunction(Function* fun_, SEXP env) {
             break;
         }
 
-        case BC_t::mkclosure:
+        case BC_t::mkclosure: {
+            SEXP body = stack.pop();
+            SEXP arglist = stack.pop();
+
+            BCClosure* bcls = jit(body, arglist, env);
+            stack.push((SEXP)bcls);
+            break;
+        }
+
         case BC_t::num_of:
         case BC_t::invalid:
             assert(false);

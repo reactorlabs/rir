@@ -156,6 +156,7 @@ class BC {
     inline const static BC load_argi();
     inline const static BC dupi();
     inline const static BC inci();
+    inline const static BC mkclosure();
 };
 
 } // rir

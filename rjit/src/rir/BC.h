@@ -172,6 +172,7 @@ const BC BC::pushi(int i) {
     im.i = i;
     return BC(BC_t::pushi, im);
 }
+const BC BC::mkclosure() { return BC(BC_t::mkclosure); }
 
 class AstMap {
     size_t size;
