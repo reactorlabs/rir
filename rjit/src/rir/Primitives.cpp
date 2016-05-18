@@ -10,52 +10,70 @@ namespace rir {
 namespace {
 
 void compileBuiltin(CodeStream& cs, int builtin_id, num_args_t nargs) {
-    std::cout << "Unknow builtin " << builtin_id << "\n";
+    const std::string name = R_FunTab[builtin_id].name;
+
+    if (name.compare("for") == 0) {
+        // TODO
+    }
+
+    std::cout << "Unknow builtin '" << R_FunTab[builtin_id].name << "'\n";
 
     cs << BC::force_all() << BC::call_builtin(builtin_id);
 }
 
 void compileSpecial(CodeStream& cs, int special_id, num_args_t nargs) {
-    if (special_id == Primitives::do_begin_id) {
-        // TODO have a loop
-        if (nargs == 0) {
-            cs << BC::push(R_NilValue);
-            return;
-        }
+    const std::string name = R_FunTab[special_id].name;
 
-        for (num_args_t i = 0; i < nargs; ++i) {
-            cs << BC::load_arg(i) << BC::force();
-            // leave the last arg on the stack to return
-            if (i != nargs - 1)
-                cs << BC::pop();
-        }
+    if (name.compare("{") == 0) {
+        Label doneL = cs.mkLabel();
+        Label nextL = cs.mkLabel();
+        Label beginL = cs.mkLabel();
+
+        cs << BC::numargi() << BC::pushi(0) << BC::eqi()
+           << BC::jmp_false(beginL) << BC::push(R_NilValue) << BC::ret()
+
+           << beginL
+
+           << BC::pushi(0)
+
+           << nextL
+
+           << BC::dupi() << BC::inci() << BC::numargi() << BC::eqi()
+           << BC::jmp_true(doneL)
+
+           << BC::dupi() << BC::load_argi() << BC::force() << BC::pop()
+           << BC::inci()
+
+           << BC::jmp(nextL)
+
+           << doneL
+
+           << BC::load_argi() << BC::force();
+
         return;
     }
 
-    if (special_id == Primitives::do_set_id) {
+    if (name.compare("<-") == 0) {
         // TODO check numargs
         cs << BC::load_arg(0) << BC::get_ast() << BC::load_arg(1) << BC::force()
            << BC::setvar();
         return;
     }
 
-    if (special_id == Primitives::do_substitute_id) {
+    if (name.compare("substitute") == 0) {
         cs << BC::load_arg(0) << BC::get_ast();
         return;
     }
 
-    if (special_id == Primitives::do_if_id) {
+    if (name.compare("if") == 0) {
         Label trueBranch = cs.mkLabel();
         Label falseBranch = cs.mkLabel();
         Label nextBranch = cs.mkLabel();
 
-        SEXP n = Rf_allocVector(INTSXP, 1);
-        INTEGER(n)[0] = 3;
-
         cs << BC::load_arg(0) << BC::force() << BC::to_bool()
            << BC::jmp_true(trueBranch)
 
-           << BC::numarg() << BC::push(n) << BC::lt()
+           << BC::numargi() << BC::pushi(3) << BC::lti()
            << BC::jmp_false(falseBranch)
 
            << BC::push(R_NilValue) << BC::jmp(nextBranch)
@@ -68,29 +86,39 @@ void compileSpecial(CodeStream& cs, int special_id, num_args_t nargs) {
         return;
     }
 
-    std::cout << "Unknow special " << special_id << "\n";
+    std::cout << "Unknow special '" << R_FunTab[special_id].name << "'\n";
+
     cs << BC::call_special(special_id);
 }
+
+static std::map<unsigned, BCClosure*> PrimitivesCache;
 
 } // namespace
 
 BCClosure* Primitives::compilePrimitive(SEXP fun, num_args_t nargs) {
+    int idx;
+
+    switch (TYPEOF(fun)) {
+    case SPECIALSXP:
+    case BUILTINSXP:
+        idx = fun->u.primsxp.offset;
+        if (PrimitivesCache.count(idx))
+            return PrimitivesCache.at(idx);
+        break;
+    default:
+        assert(false);
+    }
+
     Function* f = new Function;
     CodeStream cs(*f, fun);
 
     switch (TYPEOF(fun)) {
-    case SPECIALSXP: {
-        int idx = fun->u.primsxp.offset;
+    case SPECIALSXP:
         compileSpecial(cs, idx, nargs);
         break;
-    }
-    case BUILTINSXP: {
-        int idx = fun->u.primsxp.offset;
+    case BUILTINSXP:
         compileBuiltin(cs, idx, nargs);
         break;
-    }
-    default:
-        assert(false);
     }
 
     cs << BC::ret();
@@ -99,6 +127,9 @@ BCClosure* Primitives::compilePrimitive(SEXP fun, num_args_t nargs) {
     cls->env = nullptr;
     cls->fun = f;
     cls->formals = FORMALS(fun);
+
+    PrimitivesCache[idx] = cls;
+
     return cls;
 }
 

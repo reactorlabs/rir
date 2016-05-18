@@ -43,6 +43,11 @@ void BC::write(CodeStream& cs) const {
     case BC_t::jmp_false:
         cs.patchpoint(immediate.offset);
         return;
+
+    case BC_t::pushi:
+        cs.insert(immediate.i);
+        return;
+
     case BC_t::ret:
     case BC_t::force:
     case BC_t::force_all:
@@ -50,10 +55,14 @@ void BC::write(CodeStream& cs) const {
     case BC_t::get_ast:
     case BC_t::setvar:
     case BC_t::to_bool:
-    case BC_t::numarg:
-    case BC_t::lt:
-    case BC_t::eq:
+    case BC_t::numargi:
+    case BC_t::lti:
+    case BC_t::eqi:
+    case BC_t::dupi:
+    case BC_t::inci:
+    case BC_t::load_argi:
         return;
+
     case BC_t::invalid:
     case BC_t::num_of:
         assert(false);
@@ -115,14 +124,26 @@ void Code::print() {
         case BC_t::setvar:
             std::cout << "setvar\n";
             break;
-        case BC_t::lt:
-            std::cout << "lt\n";
+        case BC_t::lti:
+            std::cout << "lti\n";
             break;
-        case BC_t::eq:
-            std::cout << "eq\n";
+        case BC_t::eqi:
+            std::cout << "eqi\n";
             break;
         case BC_t::ret:
             std::cout << "ret\n";
+            break;
+        case BC_t::dupi:
+            std::cout << "dupi\n";
+            break;
+        case BC_t::inci:
+            std::cout << "inci\n";
+            break;
+        case BC_t::load_argi:
+            std::cout << "load_argi\n";
+            break;
+        case BC_t::pushi:
+            std::cout << "pushi " << bc.immediate.i << "\n";
             break;
         case BC_t::call:
             std::cout << "call " << bc.immediateNumArgs() << "\n";
@@ -133,8 +154,8 @@ void Code::print() {
         case BC_t::to_bool:
             std::cout << "to_bool\n";
             break;
-        case BC_t::numarg:
-            std::cout << "numarg\n";
+        case BC_t::numargi:
+            std::cout << "numargi\n";
             break;
         case BC_t::load_arg:
             std::cout << "load_arg " << bc.immediateNumArgs() << "\n";

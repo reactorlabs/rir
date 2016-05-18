@@ -41,6 +41,9 @@ immediate_t readImmediate(BC_t bc, BC_t* pc) {
     case BC_t::call_special:
         immediate.prim = *(primitive_t*)pc;
         break;
+    case BC_t::pushi:
+        immediate.i = *(int*)pc;
+        break;
     case BC_t::ret:
     case BC_t::pop:
     case BC_t::force:
@@ -48,9 +51,12 @@ immediate_t readImmediate(BC_t bc, BC_t* pc) {
     case BC_t::get_ast:
     case BC_t::setvar:
     case BC_t::to_bool:
-    case BC_t::numarg:
-    case BC_t::lt:
-    case BC_t::eq:
+    case BC_t::numargi:
+    case BC_t::lti:
+    case BC_t::eqi:
+    case BC_t::dupi:
+    case BC_t::inci:
+    case BC_t::load_argi:
         break;
     case BC_t::invalid:
     case BC_t::num_of:
@@ -78,16 +84,20 @@ static size_t immediate_size[(size_t)BC_t::num_of] = {
     sizeof(num_args_t),  // load_arg
     0,                   // get_ast
     0,                   // setvar
-    0,                   // numarg
+    0,                   // numargi
     0,                   // to_bool
     sizeof(jmp_t),       // jmp_true
     sizeof(jmp_t),       // jmp_false
     sizeof(jmp_t),       // jmp
-    0,                   // lt
-    0,                   // eq
+    0,                   // lti
+    0,                   // eqi
     sizeof(primitive_t), // call_builtin
     sizeof(primitive_t), // call_special
     0,                   // force_all
+    sizeof(int),         // pushi
+    0,                   // dupi
+    0,                   // load_argi
+    0,                   // inci
 };
 
 const BC BC::read(BC_t* pc) {
@@ -125,9 +135,9 @@ const BC BC::mkprom(fun_idx_t prom) { return BC(BC_t::mkprom, {prom}); }
 const BC BC::load_arg(num_args_t arg) { return BC(BC_t::load_arg, {arg}); }
 const BC BC::get_ast() { return BC(BC_t::get_ast); }
 const BC BC::setvar() { return BC(BC_t::setvar); }
-const BC BC::lt() { return BC(BC_t::lt); }
-const BC BC::eq() { return BC(BC_t::eq); }
-const BC BC::numarg() { return BC(BC_t::numarg); }
+const BC BC::lti() { return BC(BC_t::lti); }
+const BC BC::eqi() { return BC(BC_t::eqi); }
+const BC BC::numargi() { return BC(BC_t::numargi); }
 const BC BC::to_bool() { return BC(BC_t::to_bool); }
 const BC BC::jmp(jmp_t j) {
     immediate_t i;
@@ -153,6 +163,14 @@ const BC BC::call_builtin(primitive_t prim) {
     immediate_t i;
     i.prim = prim;
     return BC(BC_t::call_builtin, i);
+}
+const BC BC::dupi() { return BC(BC_t::dupi); }
+const BC BC::inci() { return BC(BC_t::inci); }
+const BC BC::load_argi() { return BC(BC_t::load_argi); }
+const BC BC::pushi(int i) {
+    immediate_t im;
+    im.i = i;
+    return BC(BC_t::pushi, im);
 }
 
 class AstMap {

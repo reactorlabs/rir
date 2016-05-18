@@ -18,6 +18,7 @@ namespace rir {
 namespace {
 
 BCClosure* jit(SEXP fun) {
+    std::cout << "JIT Compiling a function to BC\n";
     Compiler c(BODY(fun));
     BCClosure* cls = new BCClosure;
     cls->env = CLOENV(fun);
@@ -70,6 +71,7 @@ struct Continuation {
 SEXP evalFunction(Function* fun_, SEXP env) {
 
     Stack<SEXP> stack;
+    Stack<int> stacki;
     Stack<Continuation> cont;
 
     Function* fun = fun_;
@@ -232,23 +234,17 @@ SEXP evalFunction(Function* fun_, SEXP env) {
             break;
         }
 
-        case BC_t::lt: {
-            SEXP b = stack.pop();
-            SEXP a = stack.pop();
-            assert(TYPEOF(a) == INTSXP && Rf_length(a) == 1);
-            assert(TYPEOF(b) == INTSXP && Rf_length(b) == 1);
-            stack.push(INTEGER(a)[0] < INTEGER(b)[0] ? R_TrueValue
-                                                     : R_FalseValue);
+        case BC_t::lti: {
+            int b = stacki.pop();
+            int a = stacki.pop();
+            stack.push(a < b ? R_TrueValue : R_FalseValue);
             break;
         }
 
-        case BC_t::eq: {
-            SEXP b = stack.pop();
-            SEXP a = stack.pop();
-            assert(TYPEOF(a) == INTSXP && Rf_length(a) == 1);
-            assert(TYPEOF(b) == INTSXP && Rf_length(b) == 1);
-            stack.push(INTEGER(a)[0] == INTEGER(b)[0] ? R_TrueValue
-                                                      : R_FalseValue);
+        case BC_t::eqi: {
+            int b = stacki.pop();
+            int a = stacki.pop();
+            stack.push(a == b ? R_TrueValue : R_FalseValue);
             break;
         }
 
@@ -318,10 +314,8 @@ SEXP evalFunction(Function* fun_, SEXP env) {
             break;
         }
 
-        case BC_t::numarg: {
-            SEXP n = Rf_allocVector(INTSXP, 1);
-            INTEGER(n)[0] = numArgs;
-            stack.push(n);
+        case BC_t::numargi: {
+            stacki.push(numArgs);
             break;
         }
 
@@ -403,6 +397,26 @@ SEXP evalFunction(Function* fun_, SEXP env) {
                 stack.push(res);
                 goto done;
             }
+            break;
+        }
+
+        case BC_t::pushi: {
+            stacki.push(bc.immediate.i);
+            break;
+        }
+
+        case BC_t::dupi:
+            stacki.push(stacki.top());
+            break;
+
+        case BC_t::load_argi: {
+            int pos = stacki.pop();
+            stack.push(stack.at(sp + pos));
+            break;
+        }
+
+        case BC_t::inci: {
+            stacki.top()++;
             break;
         }
 
