@@ -140,6 +140,7 @@ SEXP evalFunction(Function* fun_, SEXP env) {
 
             SEXP res = primfun(call, op, arglist, env);
             stack.push(res);
+            break;
         }
 
         case BC_t::call_builtin: {
