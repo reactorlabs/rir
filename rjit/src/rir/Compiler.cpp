@@ -7,6 +7,7 @@
 #include "../Sexp.h"
 #include "../RIntlns.h"
 #include "../RList.h"
+#include "../Symbols.h"
 
 #include "Pool.h"
 #include "Interpreter.h"
@@ -16,7 +17,7 @@ namespace rir {
 
 namespace {
 
-fun_idx_t compileExpression(Function& f, SEXP exp);
+fun_idx_t compilePromise(Function& f, SEXP exp);
 void compileExpression(Function& f, CodeStream& cs, SEXP exp);
 
 // function application
@@ -41,7 +42,7 @@ void compileCall(Function& f, CodeStream& cs, SEXP ast, SEXP fun, SEXP args) {
 
         // (1) Arguments are wrapped as Promises:
         //     create a new Code object for the promise
-        size_t prom = compileExpression(f, *arg);
+        size_t prom = compilePromise(f, *arg);
 
         // (2) remember if the argument had a name associated
         if (arg.hasTag()) {
@@ -83,11 +84,33 @@ void compileExpression(Function& f, CodeStream& cs, SEXP exp) {
     }
 }
 
-fun_idx_t compileExpression(Function& f, SEXP exp) {
+void compileFormals(CodeStream& cs, SEXP formals) {
+    size_t narg = 0;
+    for (auto arg = RList(formals).begin(); arg != RList::end(); ++arg) {
+        // TODO support default args
+        assert(*arg == R_MissingArg);
+
+        SEXP name = arg.tag();
+        assert(name && name != R_NilValue);
+
+        // TODO
+        assert(name != symbol::Ellipsis);
+
+        cs << BC::push(name) << BC::load_arg(narg) << BC::setvar() << BC::pop();
+    }
+}
+
+fun_idx_t compileFunction(Function& f, SEXP exp, SEXP formals) {
     CodeStream cs(f, exp);
+    if (formals)
+        compileFormals(cs, formals);
     compileExpression(f, cs, exp);
     cs << BC::ret();
     return cs.finalize(exp);
+}
+
+fun_idx_t compilePromise(Function& f, SEXP exp) {
+    return compileFunction(f, exp, nullptr);
 }
 }
 
@@ -95,7 +118,7 @@ Function* Compiler::finalize() {
     Protect p;
     Function* f = new Function;
 
-    compileExpression(*f, exp);
+    compileFunction(*f, exp, formals);
 
     return f;
 }

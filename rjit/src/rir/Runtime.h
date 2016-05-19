@@ -24,6 +24,7 @@ struct BCProm {
     fun_idx_t idx;
     Function* fun;
     SEXP env;
+    SEXP val = nullptr;
 
     SEXP ast() { return fun->code[idx]->ast; }
 };
@@ -39,6 +40,7 @@ struct BCClosure {
     Function* fun;
     SEXP env;
     SEXP formals;
+    num_args_t nargs;
 };
 
 } // rir

@@ -5,6 +5,7 @@
 #include "CodeStream.h"
 #include "Runtime.h"
 #include "Primitives.h"
+#include "../RList.h"
 
 #include <iostream>
 #include <deque>
@@ -19,7 +20,7 @@ namespace {
 
 BCClosure* jit(SEXP fun) {
     std::cout << "JIT Compiling a function to BC\n";
-    Compiler c(BODY(fun));
+    Compiler c(BODY(fun), FORMALS(fun));
     BCClosure* cls = new BCClosure;
     cls->env = CLOENV(fun);
     cls->fun = c.finalize();
@@ -29,12 +30,13 @@ BCClosure* jit(SEXP fun) {
 }
 
 BCClosure* jit(SEXP ast, SEXP formals, SEXP env) {
-    Compiler c(ast);
+    Compiler c(ast, formals);
     BCClosure* cls = new BCClosure;
     cls->env = env;
     cls->fun = c.finalize();
     // TODO: compile default args
     cls->formals = formals;
+    cls->nargs = RList(formals).length();
     return cls;
 }
 
@@ -104,10 +106,6 @@ SEXP evalFunction(Function* fun_, SEXP env) {
 
     };
 
-    auto storeCont = [&cont, &fun, &cur, &pc, &env, &sp, &numArgs]() {
-        cont.push(Continuation(fun, cur, pc, env, sp, numArgs));
-    };
-
     auto restoreCont = [&cont, &fun, &cur, &pc, &env, &sp, &numArgs]() {
         Continuation c = cont.pop();
         fun = c.fun;
@@ -127,6 +125,9 @@ SEXP evalFunction(Function* fun_, SEXP env) {
 
     while (true) {
         BC bc = BC::advance(&pc);
+
+        //        bc.print();
+        //        std::cout << " (" << stack.size() << ")\n";
 
         switch (bc.bc) {
         case BC_t::call_special: {
@@ -273,10 +274,29 @@ SEXP evalFunction(Function* fun_, SEXP env) {
 
             assert(TYPEOF(val) != PROMSXP);
             if (TYPEOF(val) == BCProm::type) {
-                // TODO
-                assert(false);
+                BCProm* prom = (BCProm*)val;
+
+                if (prom->val) {
+                    val = prom->val;
+                } else {
+                    // force promise
+                    stack.push(val);
+
+                    cont.push(Continuation(fun, cur, BC::rewind(pc, bc), env,
+                                           sp, numArgs));
+
+                    //                    std::cout << "+++ force prom " << prom
+                    //                    << "\n";
+                    setState(prom->fun, prom->fun->code[prom->idx], prom->env,
+                             0);
+                    std::cout << "====  Promise ========\n";
+                    cur->print();
+                    std::cout << "==== /Promise ========\n\n";
+                    break;
+                }
             }
 
+            // WTF? is this just defensive programming or what?
             if (NAMED(val) == 0 && val != R_NilValue)
                 SET_NAMED(val, 1);
 
@@ -304,9 +324,12 @@ SEXP evalFunction(Function* fun_, SEXP env) {
                 assert(TYPEOF(cls) == BCClosure::type);
                 bcls = (BCClosure*)cls;
             }
+            // TODO missing:
+            assert(bcls->nargs == VARIADIC_ARGS || bcls->nargs == nargs);
+
             stack.set(nargs, (SEXP)bcls);
 
-            storeCont();
+            cont.push(Continuation(fun, cur, pc, env, sp, numArgs));
             setState(bcls->fun, bcls->fun->code[0], bcls->env, nargs);
 
             std::cout << "====  Function ========\n";
@@ -363,9 +386,10 @@ SEXP evalFunction(Function* fun_, SEXP env) {
             assert(TYPEOF(val) == BCProm::type);
             BCProm* prom = (BCProm*)val;
 
-            storeCont();
-            cont.top().pc--;
+            cont.push(
+                Continuation(fun, cur, BC::rewind(pc, bc), env, sp, numArgs));
 
+            //            std::cout << "+++ force prom " << prom << "\n";
             setState(prom->fun, prom->fun->code[prom->idx], prom->env, 0);
             std::cout << "====  Promise ========\n";
             cur->print();
@@ -379,9 +403,10 @@ SEXP evalFunction(Function* fun_, SEXP env) {
 
             BCProm* prom = (BCProm*)val;
 
-            storeCont();
+            cont.push(Continuation(fun, cur, pc, env, sp, numArgs));
             setState(prom->fun, prom->fun->code[prom->idx], prom->env, 0);
 
+            //            std::cout << "+++ force prom " << prom << "\n";
             std::cout << "====  Promise ========\n";
             cur->print();
             std::cout << "==== /Promise ========\n\n";
@@ -398,12 +423,33 @@ SEXP evalFunction(Function* fun_, SEXP env) {
                 stack.pop();
             }
 
+            assert(stack.size() == sp);
+
             if (!cont.empty()) {
-                assert(TYPEOF(stack.top()) == BCClosure::type ||
-                       TYPEOF(stack.top()) == BCProm::type);
-                stack.pop();
-                stack.push(res);
-                restoreCont();
+                SEXP cls = stack.pop();
+                if (TYPEOF(cls) == BCProm::type) {
+                    //                    std::cout << "+++ ret from prom " <<
+                    //                    cls << "\n";
+                    BCProm* prom = (BCProm*)cls;
+                    assert(prom->fun->code[prom->idx] == cur);
+                    assert(!prom->val);
+                    prom->val = res;
+
+                    // TODO: this is a bit of a hack and we need to find a
+                    // better way. Since getvar and getfun implicitly forces
+                    // promises, we need to not leave anything on the stack upon
+                    // returning
+                    if (*cont.top().pc != BC_t::getvar &&
+                        *cont.top().pc != BC_t::getfun)
+                        stack.push(res);
+                    restoreCont();
+                } else {
+                    assert(TYPEOF(cls) == BCClosure::type);
+                    BCClosure* bcls = (BCClosure*)cls;
+                    assert(bcls->fun->code[0] == cur);
+                    stack.push(res);
+                    restoreCont();
+                }
             } else {
                 stack.push(res);
                 goto done;
@@ -415,6 +461,10 @@ SEXP evalFunction(Function* fun_, SEXP env) {
             stacki.push(bc.immediate.i);
             break;
         }
+
+        case BC_t::dup:
+            stack.push(stack.top());
+            break;
 
         case BC_t::dupi:
             stacki.push(stacki.top());

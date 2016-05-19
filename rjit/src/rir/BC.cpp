@@ -59,6 +59,7 @@ void BC::write(CodeStream& cs) const {
     case BC_t::lti:
     case BC_t::eqi:
     case BC_t::dupi:
+    case BC_t::dup:
     case BC_t::inci:
     case BC_t::load_argi:
         return;
@@ -79,103 +80,105 @@ void Code::print() {
 
     while ((uintptr_t)pc < (uintptr_t)bc + size) {
         BC bc = BC::advance(&pc);
+        bc.print();
+    }
+}
 
-        switch (bc.bc) {
-        case BC_t::invalid:
-        case BC_t::num_of:
-            assert(false);
-            break;
-        case BC_t::call_name:
-            std::cout << "call_name ";
-            for (auto n : RVector(bc.immediateConst())) {
-                std::cout << CHAR(PRINTNAME(n)) << " ";
-            }
-            std::cout << "\n";
-            break;
-        case BC_t::call_special:
-            std::cout << "call_special " << R_FunTab[bc.immediate.prim].name
-                      << "\n";
-            break;
-        case BC_t::call_builtin:
-            std::cout << "call_builtin " << R_FunTab[bc.immediate.prim].name
-                      << "\n";
-            break;
-        case BC_t::push:
-            std::cout << "push ";
-            Rf_PrintValue(bc.immediateConst());
-            break;
-        case BC_t::getfun:
-            std::cout << "getfun " << CHAR(PRINTNAME((bc.immediateConst())))
-                      << "\n";
-            break;
-        case BC_t::getvar:
-            std::cout << "getvar " << CHAR(PRINTNAME((bc.immediateConst())))
-                      << "\n";
-            break;
-        case BC_t::force_all:
-            std::cout << "force_all\n";
-            break;
-        case BC_t::force:
-            std::cout << "force\n";
-            break;
-        case BC_t::pop:
-            std::cout << "pop\n";
-            break;
-        case BC_t::setvar:
-            std::cout << "setvar\n";
-            break;
-        case BC_t::lti:
-            std::cout << "lti\n";
-            break;
-        case BC_t::eqi:
-            std::cout << "eqi\n";
-            break;
-        case BC_t::ret:
-            std::cout << "ret\n";
-            break;
-        case BC_t::dupi:
-            std::cout << "dupi\n";
-            break;
-        case BC_t::inci:
-            std::cout << "inci\n";
-            break;
-        case BC_t::load_argi:
-            std::cout << "load_argi\n";
-            break;
-        case BC_t::pushi:
-            std::cout << "pushi " << bc.immediate.i << "\n";
-            break;
-        case BC_t::call:
-            std::cout << "call " << bc.immediateNumArgs() << "\n";
-            break;
-        case BC_t::get_ast:
-            std::cout << "get_ast\n";
-            break;
-        case BC_t::to_bool:
-            std::cout << "to_bool\n";
-            break;
-        case BC_t::numargi:
-            std::cout << "numargi\n";
-            break;
-        case BC_t::load_arg:
-            std::cout << "load_arg " << bc.immediateNumArgs() << "\n";
-            break;
-        case BC_t::mkprom:
-            std::cout << "mkprom " << bc.immediateFunIdx() << "\n";
-            break;
-        case BC_t::mkclosure:
-            std::cout << "mkclosure " << bc.immediateFunIdx() << "\n";
-            break;
-        case BC_t::jmp_true:
-            std::cout << "jmp_true " << bc.immediateOffset() << "\n";
-            break;
-        case BC_t::jmp_false:
-            std::cout << "jmp_false " << bc.immediateOffset() << "\n";
-            break;
-        case BC_t::jmp:
-            std::cout << "jmp " << bc.immediateOffset() << "\n";
-            break;
+void BC::print() {
+    switch (bc) {
+    case BC_t::invalid:
+    case BC_t::num_of:
+        assert(false);
+        break;
+    case BC_t::call_name:
+        std::cout << "call_name ";
+        for (auto n : RVector(immediateConst())) {
+            std::cout << CHAR(PRINTNAME(n)) << " ";
         }
+        std::cout << "\n";
+        break;
+    case BC_t::call_special:
+        std::cout << "call_special " << R_FunTab[immediate.prim].name << "\n";
+        break;
+    case BC_t::call_builtin:
+        std::cout << "call_builtin " << R_FunTab[immediate.prim].name << "\n";
+        break;
+    case BC_t::push:
+        std::cout << "push ";
+        Rf_PrintValue(immediateConst());
+        break;
+    case BC_t::getfun:
+        std::cout << "getfun " << CHAR(PRINTNAME((immediateConst()))) << "\n";
+        break;
+    case BC_t::getvar:
+        std::cout << "getvar " << CHAR(PRINTNAME((immediateConst()))) << "\n";
+        break;
+    case BC_t::force_all:
+        std::cout << "force_all\n";
+        break;
+    case BC_t::force:
+        std::cout << "force\n";
+        break;
+    case BC_t::pop:
+        std::cout << "pop\n";
+        break;
+    case BC_t::setvar:
+        std::cout << "setvar\n";
+        break;
+    case BC_t::lti:
+        std::cout << "lti\n";
+        break;
+    case BC_t::eqi:
+        std::cout << "eqi\n";
+        break;
+    case BC_t::ret:
+        std::cout << "ret\n";
+        break;
+    case BC_t::dup:
+        std::cout << "dup\n";
+        break;
+    case BC_t::dupi:
+        std::cout << "dupi\n";
+        break;
+    case BC_t::inci:
+        std::cout << "inci\n";
+        break;
+    case BC_t::load_argi:
+        std::cout << "load_argi\n";
+        break;
+    case BC_t::pushi:
+        std::cout << "pushi " << immediate.i << "\n";
+        break;
+    case BC_t::call:
+        std::cout << "call " << immediateNumArgs() << "\n";
+        break;
+    case BC_t::get_ast:
+        std::cout << "get_ast\n";
+        break;
+    case BC_t::to_bool:
+        std::cout << "to_bool\n";
+        break;
+    case BC_t::numargi:
+        std::cout << "numargi\n";
+        break;
+    case BC_t::load_arg:
+        std::cout << "load_arg " << immediateNumArgs() << "\n";
+        break;
+    case BC_t::mkprom:
+        std::cout << "mkprom " << immediateFunIdx() << "\n";
+        break;
+    case BC_t::mkclosure:
+        std::cout << "mkclosure " << immediateFunIdx() << "\n";
+        break;
+    case BC_t::jmp_true:
+        std::cout << "jmp_true " << immediateOffset() << "\n";
+        break;
+    case BC_t::jmp_false:
+        std::cout << "jmp_false " << immediateOffset() << "\n";
+        break;
+    case BC_t::jmp:
+        std::cout << "jmp " << immediateOffset() << "\n";
+        break;
     }
 }
 }

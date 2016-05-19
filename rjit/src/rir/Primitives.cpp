@@ -1,6 +1,7 @@
 #include "Primitives.h"
 #include "CodeStream.h"
-#include "RIntlns.h"
+#include "../RIntlns.h"
+#include "../RList.h"
 
 #include <iostream>
 
@@ -135,6 +136,8 @@ BCClosure* Primitives::compilePrimitive(SEXP fun, num_args_t nargs) {
     cls->formals = FORMALS(fun);
 
     PrimitivesCache[idx] = cls;
+
+    cls->nargs = VARIADIC_ARGS;
 
     return cls;
 }

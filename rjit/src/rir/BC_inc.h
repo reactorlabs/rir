@@ -72,6 +72,7 @@ enum class BC_t : uint8_t {
     dupi,
     load_argi,
     inci,
+    dup,
 
     num_of
 };
@@ -94,7 +95,9 @@ union immediate_t {
     int i;
 };
 
-static constexpr size_t MAX_NUM_ARGS = 1L << (8 * sizeof(num_args_t));
+static constexpr num_args_t VARIADIC_ARGS =
+    (1L << (8 * sizeof(num_args_t))) - 1;
+static constexpr size_t MAX_NUM_ARGS = VARIADIC_ARGS - 1;
 static constexpr size_t MAX_FUN_IDX = 1L << (8 * sizeof(fun_idx_t));
 static constexpr size_t MAX_POOL_IDX = 1L << (8 * sizeof(pool_idx_t));
 static constexpr size_t MAX_JMP = (1L << ((8 * sizeof(jmp_t)) - 1)) - 1;
@@ -119,6 +122,8 @@ class BC {
     inline size_t size() const;
     void write(CodeStream& cs) const;
 
+    void print();
+
     // Getters for the immediate arguments
     SEXP immediateConst();
     inline fun_idx_t immediateFunIdx() { return immediate.fun; }
@@ -128,6 +133,7 @@ class BC {
     // Decode BC from bytecode stream
     inline const static BC read(BC_t* pc);
     inline const static BC advance(BC_t** pc);
+    inline static BC_t* rewind(BC_t* pc, BC cur);
 
     // Create a new BC instance
     inline const static BC call(num_args_t numArgs);
@@ -155,6 +161,7 @@ class BC {
     inline const static BC pushi(int);
     inline const static BC load_argi();
     inline const static BC dupi();
+    inline const static BC dup();
     inline const static BC inci();
     inline const static BC mkclosure();
 };

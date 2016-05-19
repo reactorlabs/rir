@@ -10,11 +10,21 @@ namespace rir {
 class Function;
 class Compiler {
     SEXP exp;
+    SEXP formals;
 
   public:
-    Compiler(SEXP exp) : exp(exp) { Precious::add(exp); }
+    Compiler(SEXP exp) : exp(exp), formals(nullptr) { Precious::add(exp); }
 
-    ~Compiler() { Precious::remove(exp); }
+    Compiler(SEXP exp, SEXP formals) : exp(exp), formals(formals) {
+        Precious::add(exp);
+        Precious::add(formals);
+    }
+
+    ~Compiler() {
+        if (formals)
+            Precious::remove(formals);
+        Precious::remove(exp);
+    }
 
     Function* finalize();
 

@@ -55,6 +55,7 @@ immediate_t readImmediate(BC_t bc, BC_t* pc) {
     case BC_t::lti:
     case BC_t::eqi:
     case BC_t::dupi:
+    case BC_t::dup:
     case BC_t::inci:
     case BC_t::load_argi:
         break;
@@ -98,11 +99,16 @@ static size_t immediate_size[(size_t)BC_t::num_of] = {
     0,                   // dupi
     0,                   // load_argi
     0,                   // inci
+    0,                   // dup
 };
 
 const BC BC::read(BC_t* pc) {
     BC_t bc = *pc;
     return BC(bc, readImmediate(bc, pc + 1));
+}
+
+BC_t* BC::rewind(BC_t* pc, BC cur) {
+    return (BC_t*)((uintptr_t)pc - cur.size());
 }
 
 const BC BC::advance(BC_t** pc) {
@@ -165,6 +171,7 @@ const BC BC::call_builtin(primitive_t prim) {
     return BC(BC_t::call_builtin, i);
 }
 const BC BC::dupi() { return BC(BC_t::dupi); }
+const BC BC::dup() { return BC(BC_t::dup); }
 const BC BC::inci() { return BC(BC_t::inci); }
 const BC BC::load_argi() { return BC(BC_t::load_argi); }
 const BC BC::pushi(int i) {
