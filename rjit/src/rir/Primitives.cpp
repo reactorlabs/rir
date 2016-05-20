@@ -35,9 +35,9 @@ bool compileBuiltin(CodeStream& cs, int builtin_id) {
 
     std::cout << "Unknow builtin '" << R_FunTab[builtin_id].name << "'\n";
 
-    cs << BC::force_all() << BC::call_builtin(builtin_id);
+    // cs << BC::force_all() << BC::call_builtin(builtin_id);
 
-    return true;
+    return false;
 }
 
 bool compileSpecial(CodeStream& cs, int special_id) {
@@ -114,10 +114,10 @@ bool compileSpecial(CodeStream& cs, int special_id) {
     std::cout << "Unknow special '" << R_FunTab[special_id].name << "'\n";
 
     // cs << BC::call_special(special_id);
-    return true;
+    return false;
 }
 
-static BCClosure* PrimitivesCache[1024];
+static std::unordered_map<int, BCClosure*> PrimitivesCache;
 
 } // namespace
 
@@ -128,8 +128,8 @@ BCClosure* Primitives::compilePrimitive(SEXP fun) {
     case SPECIALSXP:
     case BUILTINSXP:
         idx = fun->u.primsxp.offset;
-        if (PrimitivesCache[idx])
-            return PrimitivesCache[idx];
+        if (PrimitivesCache.count(idx))
+            return PrimitivesCache.at(idx);
         break;
     default:
         assert(false);
@@ -138,22 +138,28 @@ BCClosure* Primitives::compilePrimitive(SEXP fun) {
     Function* f = new Function;
     CodeStream cs(*f, fun);
 
+    bool success = false;
+
     switch (TYPEOF(fun)) {
     case SPECIALSXP:
-        compileSpecial(cs, idx);
+        success = compileSpecial(cs, idx);
         break;
     case BUILTINSXP:
-        compileBuiltin(cs, idx);
+        success = compileBuiltin(cs, idx);
         break;
     }
 
-    cs << BC::ret();
-    cs.finalize(fun);
-    BCClosure* cls = new BCClosure;
-    cls->env = nullptr;
-    cls->fun = f;
-    cls->formals = FORMALS(fun);
-    cls->nargs = VARIADIC_ARGS;
+    BCClosure* cls = nullptr;
+
+    if (success) {
+        cs << BC::ret();
+        cs.finalize(fun);
+        cls = new BCClosure;
+        cls->env = nullptr;
+        cls->fun = f;
+        cls->formals = FORMALS(fun);
+        cls->nargs = VARIADIC_ARGS;
+    }
 
     PrimitivesCache[idx] = cls;
 

@@ -153,6 +153,7 @@ class Stack {
     bool empty() { return size_ == 0; }
 
     T pop() { return stack[--size_]; }
+    void pop(size_t n) { size_ -= n; }
 
     T& peek(size_t offset) { return stack[size_ - 1 - offset]; }
 
@@ -193,6 +194,7 @@ struct Continuation {
 static Stack<SEXP> stack;
 static Stack<Continuation> cont;
 Stack<int> stacki;
+Stack<fun_idx_t> callArgs;
 
 // The internal state of the interpreter
 
@@ -445,7 +447,8 @@ SEXP evalFunction(Function* fun_, SEXP env_) {
             case SPECIALSXP:
             case BUILTINSXP: {
                 BCClosure* prim = Primitives::compilePrimitive(val);
-                val = (SEXP)prim;
+                if (prim)
+                    val = (SEXP)prim;
                 break;
             }
             default:
@@ -494,31 +497,103 @@ SEXP evalFunction(Function* fun_, SEXP env_) {
             break;
         }
 
+        case BC_t::push_arg: {
+            callArgs.push(bc.immediateFunIdx());
+            break;
+        }
+
         case BC_t::mkprom: {
             auto prom = new BCProm(fun, bc.immediateFunIdx(), env);
             stack.push((SEXP)prom);
             break;
         }
 
+        case BC_t::internal_call_builtin: {
+            SEXP op = stack.at(bp - 1);
+            SEXP call = stack.at(bp - 2);
+            SEXP cls = stack.at(bp - 3);
+
+            SEXP (*primfun)(SEXP, SEXP, SEXP, SEXP) = 
+                            R_FunTab[cls->u.primsxp.offset].cfun;
+
+            SEXP res = callPrimitive(primfun, call, op, env, stack.size() - bp);
+
+            stack.pop(3);
+            stack.push(res);
+            restoreCont();
+            break;
+        }
+
         case BC_t::call: {
             num_args_t nargs = bc.immediateNumArgs();
 
-            SEXP cls = stack.peek(nargs);
+            SEXP cls = stack.top();
 
-            assert(TYPEOF(cls) == BCClosure::type);
+            switch (TYPEOF(cls)) {
+            case SPECIALSXP: {
+                callArgs.pop(nargs);
 
-            BCClosure* bcls = (BCClosure*)cls;
-            // TODO missing:
-            assert(bcls->nargs == VARIADIC_ARGS || bcls->nargs == nargs);
+                // call, op, args, rho
+                SEXP (*primfun)(SEXP, SEXP, SEXP, SEXP) = 
+                            R_FunTab[cls->u.primsxp.offset].cfun;
 
-            cont.push(Continuation(fun, cur, pc, env, bp, numArgs));
+                SEXP call = cur->getAst(pc);
+                SEXP op = cls;
 
-            SEXP e;
-            if (bcls->env)
-                e = Rf_NewEnvironment(R_NilValue, R_NilValue, bcls->env);
-            else
-                e = env;
-            setState(bcls->fun, bcls->fun->code[0], e, nargs);
+                SEXP res = primfun(call, op, CDR(call), env);
+                stack.push(res);
+                break;
+            }
+            case BUILTINSXP: {
+                SEXP call = cur->getAst(pc);
+                SEXP op = cls;
+                stack.push(call);
+                stack.push(op);
+
+                // TODO: change prom to not return a value!
+                //
+                cont.push(Continuation(fun, cur, pc, env, bp, numArgs));
+
+                static BC_t callBuiltinTrampoline[] = {
+                    BC_t::internal_call_builtin};
+
+                cont.push(Continuation(fun, cur, &callBuiltinTrampoline[0], env,
+                                       stack.size(), 0));
+
+                for (int i = 0; i < nargs; ++i) {
+                    fun_idx_t idx = callArgs.pop();
+                    Code* arg = fun->code[idx];
+                    cont.push(Continuation(fun, arg, arg->bc, env,
+                                           bp + nargs - i - 1, 0));
+                }
+
+                restoreCont();
+
+                break;
+            }
+            case BCClosure::type: {
+                for (int i = 0; i < nargs; ++i) {
+                    auto prom =
+                        new BCProm(fun, callArgs.peek(nargs - 1 - i), env);
+                    stack.push((SEXP)prom);
+                }
+                callArgs.pop(nargs);
+
+                BCClosure* bcls = (BCClosure*)cls;
+                // TODO missing:
+                assert(bcls->nargs == VARIADIC_ARGS || bcls->nargs == nargs);
+
+                cont.push(Continuation(fun, cur, pc, env, bp, numArgs));
+
+                SEXP e;
+                if (bcls->env)
+                    e = Rf_NewEnvironment(R_NilValue, R_NilValue, bcls->env);
+                else
+                    e = env;
+                setState(bcls->fun, bcls->fun->code[0], e, nargs);
+                break;
+            }
+            }
             break;
         }
 

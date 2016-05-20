@@ -53,7 +53,7 @@ void compileCall(Function& f, CodeStream& cs, SEXP ast, SEXP fun, SEXP args) {
         }
 
         // (3) insert promise creation instruction into current CodeStream
-        cs << BC::mkprom(prom);
+        cs << BC::push_arg(prom);
     }
     assert(numArgs < MAX_NUM_ARGS);
 

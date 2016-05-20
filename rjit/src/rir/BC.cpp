@@ -25,7 +25,7 @@ void BC::write(CodeStream& cs) const {
         return;
 
     case BC_t::mkprom:
-    case BC_t::mkclosure:
+    case BC_t::push_arg:
         cs.insert(immediate.fun);
         return;
 
@@ -48,6 +48,7 @@ void BC::write(CodeStream& cs) const {
         cs.insert(immediate.i);
         return;
 
+    case BC_t::mkclosure:
     case BC_t::ret:
     case BC_t::force:
     case BC_t::force_all:
@@ -67,6 +68,7 @@ void BC::write(CodeStream& cs) const {
     case BC_t::lt:
         return;
 
+    case BC_t::internal_call_builtin:
     case BC_t::invalid:
     case BC_t::num_of:
         assert(false);
@@ -167,6 +169,9 @@ void BC::print() {
     case BC_t::load_arg:
         std::cout << "load_arg " << immediateNumArgs() << "\n";
         break;
+    case BC_t::push_arg:
+        std::cout << "push_arg " << immediateFunIdx() << "\n";
+        break;
     case BC_t::mkprom:
         std::cout << "mkprom " << immediateFunIdx() << "\n";
         break;
@@ -187,6 +192,9 @@ void BC::print() {
         break;
     case BC_t::sub:
         std::cout << "sub\n";
+        break;
+    case BC_t::internal_call_builtin:
+        std::cout << "internal_call_builtin\n";
         break;
     case BC_t::lt:
         std::cout << "lt\n";

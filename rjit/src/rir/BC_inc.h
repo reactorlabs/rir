@@ -77,6 +77,10 @@ enum class BC_t : uint8_t {
     sub,
     lt,
 
+    push_arg,
+
+    internal_call_builtin,
+
     num_of
 };
 
@@ -145,6 +149,7 @@ class BC {
     inline const static BC getfun(SEXP sym);
     inline const static BC getvar(SEXP sym);
     inline const static BC mkprom(fun_idx_t prom);
+    inline const static BC push_arg(fun_idx_t prom);
     inline const static BC ret();
     inline const static BC pop();
     inline const static BC force();
