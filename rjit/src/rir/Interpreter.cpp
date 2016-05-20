@@ -305,24 +305,10 @@ SEXP evalFunction(Function* fun_, SEXP env_) {
             SEXP (*primfun)(SEXP, SEXP, SEXP, SEXP) = 
                 R_FunTab[bc.immediate.prim].cfun;
 
-            Code* caller_code = cont.top().code;
-            BC_t* caller_pc = cont.top().pc;
-            SEXP call = caller_code->getAst(caller_pc);
-
+            SEXP call = getCallFromContext();
             SEXP op = fun->code[0]->ast;
 
-            // Collect unchanged arg asts
-            SEXP arglist = R_NilValue;
-            for (num_args_t i = numArgs; i > 0; --i) {
-                SEXP t = stack.at(bp + i - 1);
-                assert(TYPEOF(t) == BCProm::type);
-                BCProm* p = (BCProm*)t;
-                arglist = CONS_NR(p->ast(), arglist);
-            }
-            Protect prot;
-            prot(arglist);
-
-            SEXP res = primfun(call, op, arglist, env);
+            SEXP res = primfun(call, op, CDR(call), env);
             stack.push(res);
             break;
         }
@@ -417,8 +403,60 @@ SEXP evalFunction(Function* fun_, SEXP env_) {
             break;
         }
 
-        case BC_t::getfun:
-        // TODO
+        case BC_t::getfun: {
+            SEXP sym = bc.immediateConst();
+            SEXP val = findVar(sym, env);
+            R_Visible = TRUE;
+
+            if (val == R_UnboundValue)
+                assert(false and "Unbound var");
+            else if (val == R_MissingArg)
+                assert(false and "Missing argument");
+
+            assert(TYPEOF(val) != PROMSXP);
+            if (TYPEOF(val) == BCProm::type) {
+                BCProm* prom = (BCProm*)val;
+
+                if (prom->val) {
+                    val = prom->val;
+                } else {
+                    // force promise
+                    stack.push(val);
+
+                    cont.push(Continuation(fun, cur, BC::rewind(pc, bc), env,
+                                           bp, numArgs));
+
+                    setState(prom->fun, prom->fun->code[prom->idx], prom->env,
+                             0);
+                    break;
+                }
+            }
+
+            // WTF? is this just defensive programming or what?
+            if (NAMED(val) == 0 && val != R_NilValue)
+                SET_NAMED(val, 1);
+
+            switch (TYPEOF(val)) {
+            case BCClosure::type:
+                break;
+            case CLOSXP:
+                val = (SEXP)jit(val);
+                break;
+            case SPECIALSXP:
+            case BUILTINSXP: {
+                BCClosure* prim = Primitives::compilePrimitive(val);
+                val = (SEXP)prim;
+                break;
+            }
+            default:
+                // TODO!
+                assert(false);
+            }
+
+            stack.push(val);
+            break;
+        }
+
         case BC_t::getvar: {
             SEXP sym = bc.immediateConst();
             SEXP val = findVar(sym, env);
@@ -442,13 +480,8 @@ SEXP evalFunction(Function* fun_, SEXP env_) {
                     cont.push(Continuation(fun, cur, BC::rewind(pc, bc), env,
                                            bp, numArgs));
 
-                    //                    std::cout << "+++ force prom " << prom
-                    //                    << "\n";
                     setState(prom->fun, prom->fun->code[prom->idx], prom->env,
                              0);
-                    // std::cout << "====  Promise ========\n";
-                    // cur->print();
-                    // std::cout << "==== /Promise ========\n\n";
                     break;
                 }
             }
@@ -472,59 +505,20 @@ SEXP evalFunction(Function* fun_, SEXP env_) {
 
             SEXP cls = stack.peek(nargs);
 
-            if (TYPEOF(cls) == CLOSXP) {
-                cls = (SEXP)jit(cls);
-                stack.set(nargs, (SEXP)cls);
-            }
+            assert(TYPEOF(cls) == BCClosure::type);
 
-            // bcls = Primitives::compilePrimitive(cls, nargs);
+            BCClosure* bcls = (BCClosure*)cls;
+            // TODO missing:
+            assert(bcls->nargs == VARIADIC_ARGS || bcls->nargs == nargs);
 
-            switch (TYPEOF(cls)) {
-            case SPECIALSXP: {
-                // call, op, args, rho
-                SEXP (*primfun)(SEXP, SEXP, SEXP, SEXP) = 
-                R_FunTab[cls->u.primsxp.offset].cfun;
+            cont.push(Continuation(fun, cur, pc, env, bp, numArgs));
 
-                SEXP call = cur->getAst(pc);
-
-                for (int i = 0; i < nargs; ++i)
-                    stack.pop();
-                SEXP res = primfun(call, cls, CDR(call), env);
-                stack.pop();
-                stack.push(res);
-                break;
-            }
-            case BUILTINSXP: {
-
-                // call, op, args, rho
-                SEXP (*primfun)(SEXP, SEXP, SEXP, SEXP) = 
-                R_FunTab[cls->u.primsxp.offset].cfun;
-
-                SEXP call = cur->getAst(pc);
-
-                SEXP res = callPrimitive(primfun, call, cls, env, nargs);
-                stack.pop();
-                stack.push(res);
-
-                break;
-            }
-            case BCClosure::type: {
-
-                BCClosure* bcls = (BCClosure*)cls;
-                // TODO missing:
-                assert(bcls->nargs == VARIADIC_ARGS || bcls->nargs == nargs);
-
-                cont.push(Continuation(fun, cur, pc, env, bp, numArgs));
-
-                SEXP e = Rf_NewEnvironment(R_NilValue, R_NilValue, bcls->env);
-                setState(bcls->fun, bcls->fun->code[0], e, nargs);
-                break;
-            }
-
-            default:
-                assert(false);
-            }
-
+            SEXP e;
+            if (bcls->env)
+                e = Rf_NewEnvironment(R_NilValue, R_NilValue, bcls->env);
+            else
+                e = env;
+            setState(bcls->fun, bcls->fun->code[0], e, nargs);
             break;
         }
 
@@ -679,26 +673,42 @@ SEXP evalFunction(Function* fun_, SEXP env_) {
 
         case BC_t::add: {
             // TODO
-            assert(false);
-            //            SEXP rhs = stack.pop();
-            //            SEXP lhs = stack.pop();
-            //            SEXP call = cur->getAst(pc);
-            //            SEXP res = callPrimitive2(prim::add, call, op::add,
-            //            env, lhs, rhs);
-            //            stack.push(res);
-
+            SEXP rhs = stack.pop();
+            SEXP lhs = stack.pop();
+            if (TYPEOF(lhs) == REALSXP && TYPEOF(lhs) == REALSXP &&
+                Rf_length(lhs) == 1 && Rf_length(rhs) == 1) {
+                SEXP res = Rf_allocVector(REALSXP, 1);
+                REAL(res)[0] = REAL(lhs)[0] + REAL(rhs)[0];
+                stack.push(res);
+            } else
+                assert(false);
             break;
         }
 
         case BC_t::sub: {
             // TODO
-            assert(false);
+            SEXP rhs = stack.pop();
+            SEXP lhs = stack.pop();
+            if (TYPEOF(lhs) == REALSXP && TYPEOF(lhs) == REALSXP &&
+                Rf_length(lhs) == 1 && Rf_length(rhs) == 1) {
+                SEXP res = Rf_allocVector(REALSXP, 1);
+                REAL(res)[0] = REAL(lhs)[0] - REAL(rhs)[0];
+                stack.push(res);
+            } else
+                assert(false);
             break;
         }
 
         case BC_t::lt: {
             // TODO
-            assert(false);
+            SEXP rhs = stack.pop();
+            SEXP lhs = stack.pop();
+            if (TYPEOF(lhs) == REALSXP && TYPEOF(lhs) == REALSXP &&
+                Rf_length(lhs) == 1 && Rf_length(rhs) == 1) {
+                stack.push(REAL(lhs)[0] < REAL(rhs)[0] ? R_TrueValue
+                                                       : R_FalseValue);
+            } else
+                assert(false);
             break;
         }
 

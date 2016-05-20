@@ -11,8 +11,23 @@ namespace rir {
 
 namespace {
 
-void compileBuiltin(CodeStream& cs, int builtin_id) {
+bool compileBuiltin(CodeStream& cs, int builtin_id) {
     const std::string name = R_FunTab[builtin_id].name;
+
+    if (name.compare("<") == 0) {
+        cs << BC::force_all() << BC::lt();
+        return true;
+    }
+
+    if (name.compare("+") == 0) {
+        cs << BC::force_all() << BC::add();
+        return true;
+    }
+
+    if (name.compare("-") == 0) {
+        cs << BC::force_all() << BC::sub();
+        return true;
+    }
 
     if (name.compare("for") == 0) {
         // TODO
@@ -21,15 +36,17 @@ void compileBuiltin(CodeStream& cs, int builtin_id) {
     std::cout << "Unknow builtin '" << R_FunTab[builtin_id].name << "'\n";
 
     cs << BC::force_all() << BC::call_builtin(builtin_id);
+
+    return true;
 }
 
-void compileSpecial(CodeStream& cs, int special_id) {
+bool compileSpecial(CodeStream& cs, int special_id) {
     const std::string name = R_FunTab[special_id].name;
 
     if (name.compare("function") == 0) {
         cs << BC::load_arg(0) << BC::get_ast() << BC::load_arg(1)
            << BC::get_ast() << BC::mkclosure();
-        return;
+        return true;
     }
 
     if (name.compare("{") == 0) {
@@ -58,19 +75,19 @@ void compileSpecial(CodeStream& cs, int special_id) {
 
            << BC::load_argi() << BC::force();
 
-        return;
+        return true;
     }
 
     if (name.compare("<-") == 0) {
         // TODO check numargs
         cs << BC::load_arg(0) << BC::get_ast() << BC::load_arg(1) << BC::force()
            << BC::setvar();
-        return;
+        return true;
     }
 
     if (name.compare("substitute") == 0) {
         cs << BC::load_arg(0) << BC::get_ast();
-        return;
+        return true;
     }
 
     if (name.compare("if") == 0) {
@@ -91,19 +108,20 @@ void compileSpecial(CodeStream& cs, int special_id) {
            << BC::jmp(nextBranch) << trueBranch << BC::load_arg(1)
            << BC::force() << nextBranch;
 
-        return;
+        return true;
     }
 
     std::cout << "Unknow special '" << R_FunTab[special_id].name << "'\n";
 
-    cs << BC::call_special(special_id);
+    // cs << BC::call_special(special_id);
+    return true;
 }
 
 static BCClosure* PrimitivesCache[1024];
 
 } // namespace
 
-BCClosure* Primitives::compilePrimitive(SEXP fun, num_args_t nargs) {
+BCClosure* Primitives::compilePrimitive(SEXP fun) {
     int idx;
 
     switch (TYPEOF(fun)) {
@@ -135,10 +153,9 @@ BCClosure* Primitives::compilePrimitive(SEXP fun, num_args_t nargs) {
     cls->env = nullptr;
     cls->fun = f;
     cls->formals = FORMALS(fun);
+    cls->nargs = VARIADIC_ARGS;
 
     PrimitivesCache[idx] = cls;
-
-    cls->nargs = VARIADIC_ARGS;
 
     return cls;
 }

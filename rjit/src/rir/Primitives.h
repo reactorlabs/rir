@@ -9,7 +9,7 @@ namespace rir {
 
 class Primitives {
   public:
-    static BCClosure* compilePrimitive(SEXP fun, num_args_t nargs);
+    static BCClosure* compilePrimitive(SEXP fun);
 
     static constexpr long do_if_id = 0;
     static constexpr long do_begin_id = 11;
