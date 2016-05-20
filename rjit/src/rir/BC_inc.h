@@ -73,6 +73,9 @@ enum class BC_t : uint8_t {
     load_argi,
     inci,
     dup,
+    add,
+    sub,
+    lt,
 
     num_of
 };
@@ -164,6 +167,9 @@ class BC {
     inline const static BC dup();
     inline const static BC inci();
     inline const static BC mkclosure();
+    inline const static BC add();
+    inline const static BC sub();
+    inline const static BC lt();
 };
 
 } // rir

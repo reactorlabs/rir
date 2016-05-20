@@ -4,6 +4,7 @@
 #include "../RList.h"
 
 #include <iostream>
+#include <unordered_map>
 
 namespace rjit {
 namespace rir {
@@ -98,7 +99,7 @@ void compileSpecial(CodeStream& cs, int special_id) {
     cs << BC::call_special(special_id);
 }
 
-static std::map<unsigned, BCClosure*> PrimitivesCache;
+static BCClosure* PrimitivesCache[1024];
 
 } // namespace
 
@@ -109,8 +110,8 @@ BCClosure* Primitives::compilePrimitive(SEXP fun, num_args_t nargs) {
     case SPECIALSXP:
     case BUILTINSXP:
         idx = fun->u.primsxp.offset;
-        if (PrimitivesCache.count(idx))
-            return PrimitivesCache.at(idx);
+        if (PrimitivesCache[idx])
+            return PrimitivesCache[idx];
         break;
     default:
         assert(false);

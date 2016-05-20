@@ -15,6 +15,7 @@ struct BCProm {
     BCProm(Function* fun, fun_idx_t idx, SEXP env)
         : idx(idx), fun(fun), env(env) {
         sxpinfo.type = type;
+        sxpinfo.mark = 1;
     }
 
     sxpinfo_struct sxpinfo = {0};
@@ -31,7 +32,10 @@ struct BCProm {
 
 struct BCClosure {
     static constexpr SEXPTYPE type = 28;
-    BCClosure() { sxpinfo.type = type; }
+    BCClosure() {
+        sxpinfo.type = type;
+        sxpinfo.mark = 1;
+    }
 
     sxpinfo_struct sxpinfo = {0};
     SEXP attrib = R_NilValue;

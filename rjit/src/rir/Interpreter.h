@@ -14,6 +14,8 @@ class Interpreter {
     Interpreter(Function* fun) : fun(fun) {}
 
     SEXP run(SEXP env);
+
+    static void gcCallback(void (*forward_node)(SEXP));
 };
 }
 }

@@ -70,7 +70,10 @@ void compileCall(Function& f, CodeStream& cs, SEXP ast, SEXP fun, SEXP args) {
 void compileGetvar(CodeStream& cs, SEXP name) { cs << BC::getvar(name); }
 
 // Constant
-void compileConst(CodeStream& cs, SEXP constant) { cs << BC::push(constant); }
+void compileConst(CodeStream& cs, SEXP constant) {
+    SET_NAMED(constant, 2);
+    cs << BC::push(constant);
+}
 
 void compileExpression(Function& f, CodeStream& cs, SEXP exp) {
     // Dispatch on the current type of AST node

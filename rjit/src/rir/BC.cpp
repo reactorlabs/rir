@@ -62,6 +62,9 @@ void BC::write(CodeStream& cs) const {
     case BC_t::dup:
     case BC_t::inci:
     case BC_t::load_argi:
+    case BC_t::add:
+    case BC_t::sub:
+    case BC_t::lt:
         return;
 
     case BC_t::invalid:
@@ -178,6 +181,15 @@ void BC::print() {
         break;
     case BC_t::jmp:
         std::cout << "jmp " << immediateOffset() << "\n";
+        break;
+    case BC_t::add:
+        std::cout << "add\n";
+        break;
+    case BC_t::sub:
+        std::cout << "sub\n";
+        break;
+    case BC_t::lt:
+        std::cout << "lt\n";
         break;
     }
 }

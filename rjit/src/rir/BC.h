@@ -58,6 +58,9 @@ immediate_t readImmediate(BC_t bc, BC_t* pc) {
     case BC_t::dup:
     case BC_t::inci:
     case BC_t::load_argi:
+    case BC_t::add:
+    case BC_t::sub:
+    case BC_t::lt:
         break;
     case BC_t::invalid:
     case BC_t::num_of:
@@ -100,6 +103,9 @@ static size_t immediate_size[(size_t)BC_t::num_of] = {
     0,                   // load_argi
     0,                   // inci
     0,                   // dup
+    0,                   // add
+    0,                   // sub
+    0,                   // lt
 };
 
 const BC BC::read(BC_t* pc) {
@@ -180,6 +186,9 @@ const BC BC::pushi(int i) {
     return BC(BC_t::pushi, im);
 }
 const BC BC::mkclosure() { return BC(BC_t::mkclosure); }
+const BC BC::add() { return BC(BC_t::add); }
+const BC BC::sub() { return BC(BC_t::sub); }
+const BC BC::lt() { return BC(BC_t::lt); }
 
 class AstMap {
     size_t size;
