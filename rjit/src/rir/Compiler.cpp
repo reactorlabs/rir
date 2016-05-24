@@ -31,6 +31,8 @@ void compileCall(Function& f, CodeStream& cs, SEXP ast, SEXP fun, SEXP args) {
         Else(compileExpression(f, cs, fun));
     }
 
+    CodeStream eager(f, args);
+
     // Process arguments:
     // Arguments can be optionally named
     size_t numArgs = 0;
@@ -64,6 +66,12 @@ void compileCall(Function& f, CodeStream& cs, SEXP ast, SEXP fun, SEXP args) {
     }
 
     cs.addAst(ast);
+
+    for (auto arg = RList(args).begin(); arg != RList::end(); ++arg) {
+        compileExpression(f, eager, *arg);
+    }
+    eager << BC::tail_call();
+    eager.finalize();
 }
 
 // Lookup
@@ -87,7 +95,7 @@ void compileExpression(Function& f, CodeStream& cs, SEXP exp) {
     }
 }
 
-void compileFormals(CodeStream& cs, SEXP formals) {
+size_t compileFormals(CodeStream& cs, SEXP formals) {
     size_t narg = 0;
     for (auto arg = RList(formals).begin(); arg != RList::end(); ++arg) {
         // TODO support default args
@@ -101,6 +109,7 @@ void compileFormals(CodeStream& cs, SEXP formals) {
 
         cs << BC::push(name) << BC::load_arg(narg) << BC::setvar() << BC::pop();
     }
+    return narg;
 }
 
 fun_idx_t compileFunction(Function& f, SEXP exp, SEXP formals) {
@@ -108,12 +117,15 @@ fun_idx_t compileFunction(Function& f, SEXP exp, SEXP formals) {
     if (formals)
         compileFormals(cs, formals);
     compileExpression(f, cs, exp);
-    cs << BC::ret();
-    return cs.finalize(exp);
+    cs << BC::leave();
+    return cs.finalize();
 }
 
 fun_idx_t compilePromise(Function& f, SEXP exp) {
-    return compileFunction(f, exp, nullptr);
+    CodeStream cs(f, exp);
+    compileExpression(f, cs, exp);
+    cs << BC::leave_prom();
+    return cs.finalize();
 }
 }
 

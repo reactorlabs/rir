@@ -16,11 +16,12 @@ struct BCProm {
         : idx(idx), fun(fun), env(env) {
         sxpinfo.type = type;
         sxpinfo.mark = 1;
+        assert(fun->code.size() > idx);
     }
 
     sxpinfo_struct sxpinfo = {0};
-    SEXP attrib = R_NilValue;
-    SEXP gengc_next_node, gengc_prev_node;
+    //    SEXP attrib = R_NilValue;
+    //    SEXP gengc_next_node, gengc_prev_node;
 
     fun_idx_t idx;
     Function* fun;
@@ -32,7 +33,7 @@ struct BCProm {
 
 struct BCClosure {
     static constexpr SEXPTYPE type = 28;
-    BCClosure() {
+    BCClosure() : eager(false) {
         sxpinfo.type = type;
         sxpinfo.mark = 1;
     }
@@ -44,7 +45,9 @@ struct BCClosure {
     Function* fun;
     SEXP env;
     SEXP formals;
+
     num_args_t nargs;
+    bool eager;
 };
 
 } // rir

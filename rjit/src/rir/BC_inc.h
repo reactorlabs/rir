@@ -79,7 +79,10 @@ enum class BC_t : uint8_t {
 
     push_arg,
 
-    internal_call_builtin,
+    tail_call,
+
+    leave,
+    leave_prom,
 
     num_of
 };
@@ -175,6 +178,9 @@ class BC {
     inline const static BC add();
     inline const static BC sub();
     inline const static BC lt();
+    inline const static BC tail_call();
+    inline const static BC leave();
+    inline const static BC leave_prom();
 };
 
 } // rir

@@ -48,6 +48,9 @@ void BC::write(CodeStream& cs) const {
         cs.insert(immediate.i);
         return;
 
+    case BC_t::tail_call:
+    case BC_t::leave:
+    case BC_t::leave_prom:
     case BC_t::mkclosure:
     case BC_t::ret:
     case BC_t::force:
@@ -68,7 +71,6 @@ void BC::write(CodeStream& cs) const {
     case BC_t::lt:
         return;
 
-    case BC_t::internal_call_builtin:
     case BC_t::invalid:
     case BC_t::num_of:
         assert(false);
@@ -193,8 +195,14 @@ void BC::print() {
     case BC_t::sub:
         std::cout << "sub\n";
         break;
-    case BC_t::internal_call_builtin:
-        std::cout << "internal_call_builtin\n";
+    case BC_t::leave:
+        std::cout << "leave\n";
+        break;
+    case BC_t::leave_prom:
+        std::cout << "leave_prom\n";
+        break;
+    case BC_t::tail_call:
+        std::cout << "tail_call\n";
         break;
     case BC_t::lt:
         std::cout << "lt\n";

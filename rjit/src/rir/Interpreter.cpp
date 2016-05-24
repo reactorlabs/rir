@@ -137,7 +137,7 @@ template <typename T>
 class Stack {
     std::vector<T> stack;
     size_t size_ = 0;
-    size_t capacity = 1024;
+    size_t capacity = 2048;
 
   public:
     Stack() { stack.resize(capacity); }
@@ -213,21 +213,45 @@ size_t bp;
 
 // =============================================================================
 
-// Gets the ast of the current call from the caller
-SEXP getCallFromContext() {
-    Code* caller_code = cont.top().code;
-    BC_t* caller_pc = cont.top().pc;
-    return caller_code->getAst(caller_pc);
+SEXP getClosure() { return stack.at(bp - 1); }
+
+SEXP getArg(size_t idx) { return stack.at(bp + idx); }
+
+void storeCurrentState() {
+    cont.push(Continuation(fun, cur, pc, env, bp, numArgs));
 }
 
-void setState(Function* fun_, Code* code, SEXP env_, num_args_t a) {
-    fun = fun_;
-    cur = code;
+void setInternalState(Function* f, Code* c, SEXP e, num_args_t a, size_t b) {
+    fun = f;
+    cur = c;
     pc = cur->bc;
-    if (env_)
-        env = env_;
+    env = e;
     numArgs = a;
-    bp = stack.size() - numArgs;
+    bp = b;
+}
+
+void tailCallFunction(BCClosure* bcls) {
+    fun = bcls->fun;
+    cur = bcls->fun->code[0];
+    pc = cur->bc;
+}
+
+void beginFunction(BCClosure* bcls, num_args_t a = 0) {
+    assert(stack.top() == (SEXP)bcls);
+
+    SEXP e = env;
+    if (bcls->env)
+        e = Rf_NewEnvironment(R_NilValue, R_NilValue, bcls->env);
+
+    setInternalState(bcls->fun, bcls->fun->code[0], e, a, stack.size());
+}
+
+void beginPromise(BCProm* prom) {
+    assert(stack.top() == (SEXP)prom);
+    assert(prom->fun->code.size() > prom->idx);
+
+    setInternalState(prom->fun, prom->fun->code[prom->idx], prom->env, 0,
+                     stack.size());
 }
 
 void restoreCont() {
@@ -288,7 +312,11 @@ SEXP evalFunction(Function* fun_, SEXP env_) {
     fun = fun_;
     env = env_;
 
-    setState(fun, fun->code[0], env, 0);
+    // TODO: the top level is not a closure!
+    stack.push(R_NilValue);
+
+    setInternalState(fun, fun->code[0], env_, 0, 1);
+
     // std::cout << "====  Function ========\n";
     // for (auto c : fun->code) {
     //     c->print();
@@ -303,28 +331,12 @@ SEXP evalFunction(Function* fun_, SEXP env_) {
 
         switch (bc.bc) {
         case BC_t::call_special: {
-            // call, op, args, rho
-            SEXP (*primfun)(SEXP, SEXP, SEXP, SEXP) = 
-                R_FunTab[bc.immediate.prim].cfun;
-
-            SEXP call = getCallFromContext();
-            SEXP op = fun->code[0]->ast;
-
-            SEXP res = primfun(call, op, CDR(call), env);
-            stack.push(res);
+            assert(false);
             break;
         }
 
         case BC_t::call_builtin: {
-            // call, op, args, rho
-            SEXP (*primfun)(SEXP, SEXP, SEXP, SEXP) = 
-                R_FunTab[bc.immediate.prim].cfun;
-
-            SEXP call = getCallFromContext();
-            SEXP op = fun->code[0]->ast;
-
-            SEXP res = callPrimitive(primfun, call, op, env, numArgs);
-            stack.push(res);
+            assert(false);
             break;
         }
 
@@ -428,8 +440,7 @@ SEXP evalFunction(Function* fun_, SEXP env_) {
                     cont.push(Continuation(fun, cur, BC::rewind(pc, bc), env,
                                            bp, numArgs));
 
-                    setState(prom->fun, prom->fun->code[prom->idx], prom->env,
-                             0);
+                    beginPromise(prom);
                     break;
                 }
             }
@@ -483,8 +494,7 @@ SEXP evalFunction(Function* fun_, SEXP env_) {
                     cont.push(Continuation(fun, cur, BC::rewind(pc, bc), env,
                                            bp, numArgs));
 
-                    setState(prom->fun, prom->fun->code[prom->idx], prom->env,
-                             0);
+                    beginPromise(prom);
                     break;
                 }
             }
@@ -504,23 +514,42 @@ SEXP evalFunction(Function* fun_, SEXP env_) {
 
         case BC_t::mkprom: {
             auto prom = new BCProm(fun, bc.immediateFunIdx(), env);
+            assert(fun->code.size() > bc.immediateFunIdx());
             stack.push((SEXP)prom);
             break;
         }
 
-        case BC_t::internal_call_builtin: {
-            SEXP op = stack.at(bp - 1);
-            SEXP call = stack.at(bp - 2);
-            SEXP cls = stack.at(bp - 3);
+        case BC_t::tail_call: {
+            SEXP cls = getClosure();
 
-            SEXP (*primfun)(SEXP, SEXP, SEXP, SEXP) = 
+            switch (TYPEOF(cls)) {
+            case SPECIALSXP:
+                assert(false);
+                break;
+            case BUILTINSXP: {
+                num_args_t nargs = stack.size() - bp;
+                SEXP op = stack.peek(nargs + 1);
+                SEXP call = stack.peek(nargs + 2);
+
+                SEXP (*primfun)(SEXP, SEXP, SEXP, SEXP) = 
                             R_FunTab[cls->u.primsxp.offset].cfun;
 
-            SEXP res = callPrimitive(primfun, call, op, env, stack.size() - bp);
+                SEXP res = callPrimitive(primfun, call, op, env, nargs);
 
-            stack.pop(3);
-            stack.push(res);
-            restoreCont();
+                stack.pop(3);
+                stack.push(res);
+                restoreCont();
+                break;
+            }
+            case BCClosure::type: {
+                BCClosure* bcls = (BCClosure*)cls;
+                tailCallFunction(bcls);
+                break;
+            }
+            default:
+                assert(false);
+                break;
+            }
             break;
         }
 
@@ -545,54 +574,61 @@ SEXP evalFunction(Function* fun_, SEXP env_) {
                 break;
             }
             case BUILTINSXP: {
+                stack.pop();
                 SEXP call = cur->getAst(pc);
                 SEXP op = cls;
+
+                // This is a bit of a hack:
+                // We compile an additional code object for eager argument
+                // evaluation right before the first argument. For Builtins we
+                // call into that instead. This Code object must end with
+                // tail_call_eager.
+                storeCurrentState();
+
                 stack.push(call);
                 stack.push(op);
+                stack.push(cls);
 
-                // TODO: change prom to not return a value!
-                //
-                cont.push(Continuation(fun, cur, pc, env, bp, numArgs));
-
-                static BC_t callBuiltinTrampoline[] = {
-                    BC_t::internal_call_builtin};
-
-                cont.push(Continuation(fun, cur, &callBuiltinTrampoline[0], env,
-                                       stack.size(), 0));
-
-                for (int i = 0; i < nargs; ++i) {
-                    fun_idx_t idx = callArgs.pop();
-                    Code* arg = fun->code[idx];
-                    cont.push(Continuation(fun, arg, arg->bc, env,
-                                           bp + nargs - i - 1, 0));
-                }
-
-                restoreCont();
+                callArgs.pop(nargs - 1);
+                fun_idx_t idx = callArgs.pop() - 1;
+                Code* args = fun->code[idx];
+                setInternalState(fun, args, env, nargs, stack.size());
 
                 break;
             }
             case BCClosure::type: {
-                for (int i = 0; i < nargs; ++i) {
-                    auto prom =
-                        new BCProm(fun, callArgs.peek(nargs - 1 - i), env);
-                    stack.push((SEXP)prom);
-                }
-                callArgs.pop(nargs);
-
                 BCClosure* bcls = (BCClosure*)cls;
+
                 // TODO missing:
                 assert(bcls->nargs == VARIADIC_ARGS || bcls->nargs == nargs);
 
-                cont.push(Continuation(fun, cur, pc, env, bp, numArgs));
+                if (bcls->eager == true) {
+                    // explanation, see case BUILTINSXP above
+                    storeCurrentState();
+                    callArgs.pop(nargs - 1);
+                    fun_idx_t idx = callArgs.pop() - 1;
+                    Code* args = fun->code[idx];
+                    setInternalState(fun, args, env, nargs, stack.size());
+                    break;
+                }
 
-                SEXP e;
-                if (bcls->env)
-                    e = Rf_NewEnvironment(R_NilValue, R_NilValue, bcls->env);
-                else
-                    e = env;
-                setState(bcls->fun, bcls->fun->code[0], e, nargs);
+                storeCurrentState();
+                Function* curFun = fun;
+                SEXP curEnv = env;
+
+                beginFunction(bcls, nargs);
+
+                for (int i = 0; i < nargs; ++i) {
+                    auto prom = new BCProm(curFun, callArgs.peek(nargs - 1 - i),
+                                           curEnv);
+                    stack.push((SEXP)prom);
+                }
+                callArgs.pop(nargs);
                 break;
             }
+            default:
+                assert(false);
+                break;
             }
             break;
         }
@@ -600,7 +636,7 @@ SEXP evalFunction(Function* fun_, SEXP env_) {
         case BC_t::load_arg: {
             num_args_t a = bc.immediateNumArgs();
             assert(a < numArgs);
-            stack.push(stack.at(bp + a));
+            stack.push(getArg(a));
             break;
         }
 
@@ -637,16 +673,15 @@ SEXP evalFunction(Function* fun_, SEXP env_) {
             if (forced == numArgs)
                 break;
 
-            SEXP val = stack.at(bp + forced);
+            SEXP val = getArg(forced);
             stack.push(val);
             assert(TYPEOF(val) == BCProm::type);
             BCProm* prom = (BCProm*)val;
 
             cont.push(
                 Continuation(fun, cur, BC::rewind(pc, bc), env, bp, numArgs));
+            beginPromise(prom);
 
-            //            std::cout << "+++ force prom " << prom << "\n";
-            setState(prom->fun, prom->fun->code[prom->idx], prom->env, 0);
             // std::cout << "====  Promise ========\n";
             // cur->print();
             // std::cout << "==== /Promise ========\n\n";
@@ -658,9 +693,10 @@ SEXP evalFunction(Function* fun_, SEXP env_) {
             assert(TYPEOF(val) == BCProm::type);
 
             BCProm* prom = (BCProm*)val;
+            assert(prom->fun->code.size() > prom->idx);
 
-            cont.push(Continuation(fun, cur, pc, env, bp, numArgs));
-            setState(prom->fun, prom->fun->code[prom->idx], prom->env, 0);
+            storeCurrentState();
+            beginPromise(prom);
 
             //            std::cout << "+++ force prom " << prom << "\n";
             // std::cout << "====  Promise ========\n";
@@ -673,43 +709,51 @@ SEXP evalFunction(Function* fun_, SEXP env_) {
             stack.pop();
             break;
 
-        case BC_t::ret: {
+        case BC_t::leave_prom: {
             SEXP res = stack.pop();
-            for (num_args_t i = 0; i < numArgs; ++i) {
-                stack.pop();
+            SEXP cls = stack.pop();
+            assert(TYPEOF(cls) == BCProm::type);
+            BCProm* prom = (BCProm*)cls;
+            assert(prom->fun->code[prom->idx] == cur);
+            assert(!prom->val);
+            prom->val = res;
+
+            // TODO: this is a bit of a hack and we need to find a
+            // better way. Since getvar and getfun implicitly forces
+            // promises, we need to not leave anything on the stack upon
+            // returning
+            if (*cont.top().pc != BC_t::getvar &&
+                *cont.top().pc != BC_t::getfun)
+                stack.push(res);
+
+            goto ret;
+        }
+
+        case BC_t::leave: {
+            SEXP res = stack.pop();
+            size_t frameSize = stack.size() - bp;
+            stack.pop(frameSize);
+            SEXP cls = stack.pop();
+
+            if (cls != R_NilValue) {
+                assert(TYPEOF(cls) == BCClosure::type);
+                BCClosure* bcls = (BCClosure*)cls;
+                assert(bcls->fun->code[0] == cur);
             }
 
-            assert(stack.size() == bp);
+            stack.push(res);
+            goto ret;
+        }
 
-            if (!cont.empty()) {
-                SEXP cls = stack.pop();
-                if (TYPEOF(cls) == BCProm::type) {
-                    //                    std::cout << "+++ ret from prom " <<
-                    //                    cls << "\n";
-                    BCProm* prom = (BCProm*)cls;
-                    assert(prom->fun->code[prom->idx] == cur);
-                    assert(!prom->val);
-                    prom->val = res;
-
-                    // TODO: this is a bit of a hack and we need to find a
-                    // better way. Since getvar and getfun implicitly forces
-                    // promises, we need to not leave anything on the stack upon
-                    // returning
-                    if (*cont.top().pc != BC_t::getvar &&
-                        *cont.top().pc != BC_t::getfun)
-                        stack.push(res);
-                    restoreCont();
-                } else {
-                    assert(TYPEOF(cls) == BCClosure::type);
-                    BCClosure* bcls = (BCClosure*)cls;
-                    assert(bcls->fun->code[0] == cur);
-                    stack.push(res);
-                    restoreCont();
-                }
-            } else {
-                stack.push(res);
+        case BC_t::ret: {
+        ret:
+            if (cont.empty()) {
+                assert(stack.size() == 1);
+                assert(bp == 1);
                 goto done;
             }
+
+            restoreCont();
             break;
         }
 
@@ -728,7 +772,7 @@ SEXP evalFunction(Function* fun_, SEXP env_) {
 
         case BC_t::load_argi: {
             int pos = stacki.pop();
-            stack.push(stack.at(bp + pos));
+            stack.push(getArg(pos));
             break;
         }
 

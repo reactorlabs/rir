@@ -44,6 +44,9 @@ immediate_t readImmediate(BC_t bc, BC_t* pc) {
     case BC_t::pushi:
         immediate.i = *(int*)pc;
         break;
+    case BC_t::tail_call:
+    case BC_t::leave:
+    case BC_t::leave_prom:
     case BC_t::mkclosure:
     case BC_t::ret:
     case BC_t::pop:
@@ -62,7 +65,6 @@ immediate_t readImmediate(BC_t bc, BC_t* pc) {
     case BC_t::add:
     case BC_t::sub:
     case BC_t::lt:
-    case BC_t::internal_call_builtin:
         break;
     case BC_t::invalid:
     case BC_t::num_of:
@@ -109,7 +111,9 @@ static size_t immediate_size[(size_t)BC_t::num_of] = {
     0,                   // sub
     0,                   // lt
     sizeof(fun_idx_t),   // push_arg
-    0,                   // internal_call_builtin
+    0,                   // tail_call
+    0,                   // leave
+    0,                   // leave_prom
 };
 
 const BC BC::read(BC_t* pc) {
@@ -194,6 +198,9 @@ const BC BC::mkclosure() { return BC(BC_t::mkclosure); }
 const BC BC::add() { return BC(BC_t::add); }
 const BC BC::sub() { return BC(BC_t::sub); }
 const BC BC::lt() { return BC(BC_t::lt); }
+const BC BC::tail_call() { return BC(BC_t::tail_call); }
+const BC BC::leave() { return BC(BC_t::leave); }
+const BC BC::leave_prom() { return BC(BC_t::leave_prom); }
 
 class AstMap {
     size_t size;

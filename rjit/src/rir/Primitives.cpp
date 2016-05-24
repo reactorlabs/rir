@@ -15,17 +15,17 @@ bool compileBuiltin(CodeStream& cs, int builtin_id) {
     const std::string name = R_FunTab[builtin_id].name;
 
     if (name.compare("<") == 0) {
-        cs << BC::force_all() << BC::lt();
+        cs << BC::lt() << BC::leave();
         return true;
     }
 
     if (name.compare("+") == 0) {
-        cs << BC::force_all() << BC::add();
+        cs << BC::add() << BC::leave();
         return true;
     }
 
     if (name.compare("-") == 0) {
-        cs << BC::force_all() << BC::sub();
+        cs << BC::sub() << BC::leave();
         return true;
     }
 
@@ -45,7 +45,7 @@ bool compileSpecial(CodeStream& cs, int special_id) {
 
     if (name.compare("function") == 0) {
         cs << BC::load_arg(0) << BC::get_ast() << BC::load_arg(1)
-           << BC::get_ast() << BC::mkclosure();
+           << BC::get_ast() << BC::mkclosure() << BC::leave();
         return true;
     }
 
@@ -55,7 +55,7 @@ bool compileSpecial(CodeStream& cs, int special_id) {
         Label beginL = cs.mkLabel();
 
         cs << BC::numargi() << BC::pushi(0) << BC::eqi()
-           << BC::jmp_false(beginL) << BC::push(R_NilValue) << BC::ret()
+           << BC::jmp_false(beginL) << BC::push(R_NilValue) << BC::leave()
 
            << beginL
 
@@ -117,7 +117,8 @@ bool compileSpecial(CodeStream& cs, int special_id) {
     return false;
 }
 
-static std::unordered_map<int, BCClosure*> PrimitivesCache;
+static std::array<bool, 1024> PrimitivesCacheOccupied;
+static std::array<BCClosure*, 1024> PrimitivesCache;
 
 } // namespace
 
@@ -128,8 +129,8 @@ BCClosure* Primitives::compilePrimitive(SEXP fun) {
     case SPECIALSXP:
     case BUILTINSXP:
         idx = fun->u.primsxp.offset;
-        if (PrimitivesCache.count(idx))
-            return PrimitivesCache.at(idx);
+        if (PrimitivesCacheOccupied[idx])
+            return PrimitivesCache[idx];
         break;
     default:
         assert(false);
@@ -152,16 +153,18 @@ BCClosure* Primitives::compilePrimitive(SEXP fun) {
     BCClosure* cls = nullptr;
 
     if (success) {
-        cs << BC::ret();
-        cs.finalize(fun);
+        cs << BC::leave();
+        cs.finalize();
         cls = new BCClosure;
         cls->env = nullptr;
         cls->fun = f;
         cls->formals = FORMALS(fun);
         cls->nargs = VARIADIC_ARGS;
+        cls->eager = TYPEOF(fun) == BUILTINSXP;
+        PrimitivesCache[idx] = cls;
     }
 
-    PrimitivesCache[idx] = cls;
+    PrimitivesCacheOccupied[idx] = true;
 
     return cls;
 }
