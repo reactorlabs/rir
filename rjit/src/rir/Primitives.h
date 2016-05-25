@@ -1,8 +1,9 @@
 #ifndef RIR_PRIMITIVES_H
 #define RIR_PRIMITIVES_H
 
-#include "RDefs.h"
+#include "RIntlns_inc.h"
 #include "Runtime.h"
+#include "RDefs.h"
 
 namespace rjit {
 namespace rir {
@@ -24,7 +25,7 @@ class Primitives {
 
     inline BCClosure* cachedCompilePrimitive(SEXP fun) {
         if (TYPEOF(fun) == SPECIALSXP || TYPEOF(fun) == BUILTINSXP) {
-            int idx = fun->u.primsxp.offset;
+            int idx = Rinternals::primoffset(fun);
             if (PrimitivesCacheOccupied[idx])
                 return PrimitivesCache[idx];
         }

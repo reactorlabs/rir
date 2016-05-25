@@ -501,7 +501,7 @@ SEXP evalFunction(Function* fun_, SEXP env_) {
                 SEXP call = stack.peek(nargs + 2);
 
                 SEXP (*primfun)(SEXP, SEXP, SEXP, SEXP) = 
-                            R_FunTab[cls->u.primsxp.offset].cfun;
+                            R_FunTab[Rinternals::primoffset(cls)].cfun;
 
                 SEXP res = callPrimitive(primfun, call, op, env, nargs);
 
@@ -533,7 +533,7 @@ SEXP evalFunction(Function* fun_, SEXP env_) {
 
                 // call, op, args, rho
                 SEXP (*primfun)(SEXP, SEXP, SEXP, SEXP) = 
-                            R_FunTab[cls->u.primsxp.offset].cfun;
+                            R_FunTab[Rinternals::primoffset(cls)].cfun;
 
                 SEXP call = cur->getAst(pc);
                 SEXP op = cls;

@@ -1,7 +1,19 @@
 #ifndef RINT_H
 #define RINT_H
 
-#define USE_RINTERNALS
+/*
+ * This header is a wrapper around the notorious Rinternals.h
+ *
+ * Please:
+ *   Never include this file in other headers
+ *   Never include Rinternals directly
+ *
+ * Think twice:
+ *   If you need a feature behind USE_RINTERNAL or
+ *   if you need an rinternal feature in a header
+ *                          -> add a wrapper to RIntlns_inc
+ */
+
 #include <R.h>
 #include <Rinternals.h>
 

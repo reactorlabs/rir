@@ -123,7 +123,7 @@ BCClosure* Primitives::doCompilePrimitive(SEXP fun) {
     Function* f = new Function;
     CodeStream cs(*f, fun);
 
-    int idx = fun->u.primsxp.offset;
+    int idx = Rinternals::primoffset(fun);
     bool success = false;
 
     switch (TYPEOF(fun)) {

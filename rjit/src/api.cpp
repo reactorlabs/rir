@@ -68,9 +68,9 @@ REXPORT SEXP jitPrintTypefeedback(SEXP f) {
 }
 
 REXPORT SEXP jitSwapForNative(SEXP original, SEXP native) {
-    CAR(original) = CAR(native);
-    CDR(original) = CDR(native);
-    TAG(original) = TAG(native);
+    SETCAR(original, native);
+    SETCDR(original, native);
+    SET_TAG(original, native);
     return original;
 }
 
