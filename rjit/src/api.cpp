@@ -155,7 +155,7 @@ REXPORT SEXP setFlag(SEXP name, SEXP value) {
         std::cout << "flag not a string\n";
         return R_NilValue;
     }
-    SEXP c = VECTOR_ELT(name, 0);
+    SEXP c = STRING_ELT(name, 0);
     if (TYPEOF(c) != CHARSXP)
         return R_NilValue;
     const char* flag = CHAR(c);
