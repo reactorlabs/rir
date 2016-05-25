@@ -134,11 +134,11 @@ SEXP Builder::closeFunction() {
     assert(c_->cp[2] == R_NilValue);
     assert(c_->cp[3] == R_NilValue);
 
+    Protect p;
     SEXP typeFeedback = allocVector(INTSXP, c_->instrumentationIndex.size());
+    p(typeFeedback);
     SEXP typeFeedbackName =
         allocVector(VECSXP, c_->instrumentationIndex.size());
-    Protect p;
-    p(typeFeedback);
     p(typeFeedbackName);
     for (auto e : c_->instrumentationIndex) {
         INTEGER(typeFeedback)[e.second] = static_cast<int>(TypeInfo());

@@ -1,5 +1,6 @@
 #include "RIntlns.h"
 #include "RVector.h"
+#include "Protect.h"
 #include <cassert>
 
 namespace rjit {
@@ -20,8 +21,7 @@ RVector::RVector(size_t init_size) : size_(0), capacity_(slack) {
 
 void RVector::append(SEXP e) {
     if (size_ == capacity_) {
-        Protect p;
-        p(e);
+        Protect p(e);
         capacity_ *= grow;
         SEXP new_vector = Rf_allocVector(VECSXP, capacity_);
         for (size_t i = 0; i < size_; ++i) {

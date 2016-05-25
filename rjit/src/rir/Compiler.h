@@ -2,7 +2,7 @@
 #define RIR_COMPILER_H
 
 #include "../RDefs.h"
-#include "../Protect.h"
+#include "../Precious.h"
 
 namespace rjit {
 namespace rir {

@@ -20,7 +20,6 @@
 #include "rir/Interpreter.h"
 
 #include "StackScan.h"
-#include "Protect.h"
 
 using namespace rjit;
 

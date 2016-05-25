@@ -130,7 +130,6 @@ fun_idx_t compilePromise(Function& f, SEXP exp) {
 }
 
 Function* Compiler::finalize() {
-    Protect p;
     Function* f = new Function;
 
     compileFunction(*f, exp, formals);

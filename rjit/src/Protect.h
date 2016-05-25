@@ -3,7 +3,6 @@
 
 #include "RDefs.h"
 
-#include <set>
 #include <cstddef>
 
 namespace rjit {
@@ -13,10 +12,18 @@ class Protect {
     Protect(const Protect& other) = delete;
 
     Protect(){};
-    Protect(SEXP initial) { this->operator()(initial); };
+    Protect(SEXP init) {
+        Rf_protect(init);
+        ++protectedValues_;
+    };
 
-    SEXP operator()(SEXP value);
-    ~Protect();
+    SEXP operator()(SEXP value) {
+        Rf_protect(value);
+        ++protectedValues_;
+        return value;
+    }
+
+    ~Protect() { Rf_unprotect(protectedValues_); }
 
   private:
     /* Prevents heap allocation. */
@@ -26,35 +33,6 @@ class Protect {
     void operator delete[](void*);
 
     unsigned protectedValues_ = 0;
-};
-
-class Precious {
-  public:
-    static void add(SEXP s) { singleton().add_(s); }
-
-    static void remove(SEXP s) { singleton().remove_(s); }
-
-    static void gcCallback(void (*forward_node)(SEXP)) {
-        singleton().doGcCallback(forward_node);
-    }
-
-  private:
-    static Precious& singleton() {
-        static Precious p;
-        return p;
-    }
-
-    void add_(SEXP s) { precious.insert(s); }
-
-    void remove_(SEXP s) { precious.erase(s); }
-
-    void doGcCallback(void (*forward_node)(SEXP)) {
-        for (SEXP e : precious) {
-            forward_node(e);
-        }
-    }
-
-    std::set<SEXP> precious;
 };
 }
 

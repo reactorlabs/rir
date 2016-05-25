@@ -7,6 +7,7 @@
 #include "Primitives.h"
 #include "../RList.h"
 #include "../Symbols.h"
+#include "../Protect.h"
 
 #include <iostream>
 #include <deque>
@@ -267,8 +268,8 @@ SEXP callPrimitive(SEXP (*primfun)(SEXP, SEXP, SEXP, SEXP), SEXP call, SEXP op,
         assert(TYPEOF(t) != BCProm::type);
         arglist = CONS_NR(t, arglist);
     }
-    Protect prot;
-    prot(arglist);
+
+    Protect prot(arglist);
 
     return primfun(call, op, arglist, env);
 }
