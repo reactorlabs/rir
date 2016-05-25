@@ -42,49 +42,10 @@ BCClosure* jit(SEXP ast, SEXP formals, SEXP env) {
     return cls;
 }
 
-// size_t findPrimIdx(std::string name) {
-//     for (int i = 0;; ++i) {
-//         if (name.compare(R_FunTab[i].name) == 0)
-//             return i;
-//     }
-//     return -1;
-// }
-//
-// SEXP getPrimitive(const char * sym, int type) {
-//     SEXP p = findVar(Rf_install(sym), R_BaseEnv);
-//     assert(TYPEOF(p) == type);
-//     return p;
-// }
-//
-// namespace op {
-//     static SEXP add;
-//     static SEXP sub;
-//     static SEXP lt;
-// }
-//
-// namespace prim {
-//     static CCODE add;
-//     static CCODE sub;
-//     static CCODE lt;
-// }
-//
-// static int lookupPrimFun() {
-//
-//     prim::add = R_FunTab[findPrimIdx("+")].cfun;
-//     op::add = getPrimitive("+", BUILTINSXP);
-//
-//     prim::sub = R_FunTab[findPrimIdx("-")].cfun;
-//     op::sub = getPrimitive("-", BUILTINSXP);
-//
-//     prim::lt = R_FunTab[findPrimIdx("<")].cfun;
-//     op::lt = getPrimitive("<", BUILTINSXP);
-//
-//     return 1;
-// }
-// static int lookupPrimFunInit = lookupPrimFun();
-
+// ============================================================================
 // Recycle argument lists. This is a bit of a premature optimization, but I
 // wanted to experiment with it....
+
 template <int size>
 class ArglistCache {
     static constexpr int poolSize = 2;
@@ -132,7 +93,9 @@ class ArglistCache {
 static ArglistCache<1> ArglistCache1;
 static ArglistCache<2> ArglistCache2;
 
+// ============================================================================
 // Common container class for various stacks in the interpreter
+
 template <typename T>
 class Stack {
     std::vector<T> stack;
@@ -144,7 +107,7 @@ class Stack {
 
     void push(T s) {
         if (size_ == capacity) {
-            capacity *= 1.5;
+            capacity *= 2;
             stack.resize(capacity);
         }
         stack[size_++] = s;
@@ -166,10 +129,14 @@ class Stack {
     size_t size() { return size_; }
 };
 
+// ============================================================================
 // Continuation is similar to R notion of Context.
 // When we force a promise of call a function, all internal state of the
 // interpreter is bundled in a continuation and pushed on the continuation
 // stack
+
+#pragma pack(push)
+#pragma pack(0)
 struct Continuation {
   public:
     Continuation() {}
@@ -179,12 +146,14 @@ struct Continuation {
     BC_t* pc;
     SEXP env;
     size_t bp;
-    num_args_t numArgs;
+    num_args_t argsPassed;
 
     Continuation(Function* fun, Code* code, BC_t* pc, SEXP env, size_t bp,
-                 num_args_t numArgs)
-        : fun(fun), code(code), pc(pc), env(env), bp(bp), numArgs(numArgs) {}
+                 num_args_t argsPassed)
+        : fun(fun), code(code), pc(pc), env(env), bp(bp),
+          argsPassed(argsPassed) {}
 };
+#pragma pack(pop)
 
 // =============================================================================
 // === Interpreter Datastructures
@@ -207,7 +176,7 @@ Code* cur;
 // Current pc
 BC_t* pc;
 // number of args of the current function
-num_args_t numArgs;
+num_args_t argsPassed;
 // base pointer
 size_t bp;
 
@@ -218,7 +187,7 @@ SEXP getClosure() { return stack.at(bp - 1); }
 SEXP getArg(size_t idx) { return stack.at(bp + idx); }
 
 void storeCurrentState() {
-    cont.push(Continuation(fun, cur, pc, env, bp, numArgs));
+    cont.push(Continuation(fun, cur, pc, env, bp, argsPassed));
 }
 
 void setInternalState(Function* f, Code* c, SEXP e, num_args_t a, size_t b) {
@@ -226,7 +195,7 @@ void setInternalState(Function* f, Code* c, SEXP e, num_args_t a, size_t b) {
     cur = c;
     pc = cur->bc;
     env = e;
-    numArgs = a;
+    argsPassed = a;
     bp = b;
 }
 
@@ -261,7 +230,7 @@ void restoreCont() {
     pc = c.pc;
     env = c.env;
     bp = c.bp;
-    numArgs = c.numArgs;
+    argsPassed = c.argsPassed;
 }
 
 SEXP callPrimitive1(SEXP (*primfun)(SEXP, SEXP, SEXP, SEXP), SEXP call, SEXP op,
@@ -293,7 +262,7 @@ SEXP callPrimitive(SEXP (*primfun)(SEXP, SEXP, SEXP, SEXP), SEXP call, SEXP op,
 
     // args are expected to be on the stack
     SEXP arglist = R_NilValue;
-    for (num_args_t i = 0; i < numArgs; ++i) {
+    for (num_args_t i = 0; i < numargs; ++i) {
         SEXP t = stack.pop();
         assert(TYPEOF(t) != BCProm::type);
         arglist = CONS_NR(t, arglist);
@@ -438,7 +407,7 @@ SEXP evalFunction(Function* fun_, SEXP env_) {
                     stack.push(val);
 
                     cont.push(Continuation(fun, cur, BC::rewind(pc, bc), env,
-                                           bp, numArgs));
+                                           bp, argsPassed));
 
                     beginPromise(prom);
                     break;
@@ -492,7 +461,7 @@ SEXP evalFunction(Function* fun_, SEXP env_) {
                     stack.push(val);
 
                     cont.push(Continuation(fun, cur, BC::rewind(pc, bc), env,
-                                           bp, numArgs));
+                                           bp, argsPassed));
 
                     beginPromise(prom);
                     break;
@@ -635,13 +604,13 @@ SEXP evalFunction(Function* fun_, SEXP env_) {
 
         case BC_t::load_arg: {
             num_args_t a = bc.immediateNumArgs();
-            assert(a < numArgs);
+            assert(a < argsPassed);
             stack.push(getArg(a));
             break;
         }
 
         case BC_t::numargi: {
-            stacki.push(numArgs);
+            stacki.push(argsPassed);
             break;
         }
 
@@ -669,8 +638,8 @@ SEXP evalFunction(Function* fun_, SEXP env_) {
         }
 
         case BC_t::force_all: {
-            unsigned forced = stack.size() - bp - numArgs;
-            if (forced == numArgs)
+            unsigned forced = stack.size() - bp - argsPassed;
+            if (forced == argsPassed)
                 break;
 
             SEXP val = getArg(forced);
@@ -678,8 +647,8 @@ SEXP evalFunction(Function* fun_, SEXP env_) {
             assert(TYPEOF(val) == BCProm::type);
             BCProm* prom = (BCProm*)val;
 
-            cont.push(
-                Continuation(fun, cur, BC::rewind(pc, bc), env, bp, numArgs));
+            cont.push(Continuation(fun, cur, BC::rewind(pc, bc), env, bp,
+                                   argsPassed));
             beginPromise(prom);
 
             // std::cout << "====  Promise ========\n";

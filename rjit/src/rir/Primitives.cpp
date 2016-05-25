@@ -117,28 +117,13 @@ bool compileSpecial(CodeStream& cs, int special_id) {
     return false;
 }
 
-static std::array<bool, 1024> PrimitivesCacheOccupied;
-static std::array<BCClosure*, 1024> PrimitivesCache;
-
 } // namespace
 
-BCClosure* Primitives::compilePrimitive(SEXP fun) {
-    int idx;
-
-    switch (TYPEOF(fun)) {
-    case SPECIALSXP:
-    case BUILTINSXP:
-        idx = fun->u.primsxp.offset;
-        if (PrimitivesCacheOccupied[idx])
-            return PrimitivesCache[idx];
-        break;
-    default:
-        assert(false);
-    }
-
+BCClosure* Primitives::doCompilePrimitive(SEXP fun) {
     Function* f = new Function;
     CodeStream cs(*f, fun);
 
+    int idx = fun->u.primsxp.offset;
     bool success = false;
 
     switch (TYPEOF(fun)) {

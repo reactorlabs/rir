@@ -9,12 +9,30 @@ namespace rir {
 
 class Primitives {
   public:
-    static BCClosure* compilePrimitive(SEXP fun);
+    static BCClosure* compilePrimitive(SEXP fun) {
+        return instance().cachedCompilePrimitive(fun);
+    }
 
-    static constexpr long do_if_id = 0;
-    static constexpr long do_begin_id = 11;
-    static constexpr long do_set_id = 8;
-    static constexpr long do_substitute_id = 30;
+  private:
+    std::array<bool, 1024> PrimitivesCacheOccupied;
+    std::array<BCClosure*, 1024> PrimitivesCache;
+
+    static Primitives& instance() {
+        static Primitives singleton;
+        return singleton;
+    }
+
+    inline BCClosure* cachedCompilePrimitive(SEXP fun) {
+        if (TYPEOF(fun) == SPECIALSXP || TYPEOF(fun) == BUILTINSXP) {
+            int idx = fun->u.primsxp.offset;
+            if (PrimitivesCacheOccupied[idx])
+                return PrimitivesCache[idx];
+        }
+
+        return doCompilePrimitive(fun);
+    }
+
+    BCClosure* doCompilePrimitive(SEXP fun);
 };
 
 } // rir
