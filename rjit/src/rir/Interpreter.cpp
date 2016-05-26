@@ -7,7 +7,6 @@
 #include "Primitives.h"
 #include "../RList.h"
 #include "../Symbols.h"
-#include "../Protect.h"
 
 #include <iostream>
 #include <deque>
@@ -108,9 +107,10 @@ static INLINE SEXP callPrimitive(SEXP (*primfun)(SEXP, SEXP, SEXP, SEXP),
         arglist = CONS_NR(t, arglist);
     }
 
-    Protect prot(arglist);
-
-    return primfun(call, op, arglist, env);
+    stack.push(arglist);
+    SEXP res = primfun(call, op, arglist, env);
+    stack.pop();
+    return res;
 }
 
 // =============================================================================
