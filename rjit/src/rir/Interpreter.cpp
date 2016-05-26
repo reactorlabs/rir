@@ -43,6 +43,8 @@ BCClosure* jit(SEXP ast, SEXP formals, SEXP env) {
     return cls;
 }
 
+#define INLINE __attribute__((always_inline)) inline
+
 // ============================================================================
 // Common container class for various stacks in the interpreter
 
@@ -52,31 +54,36 @@ class Stack {
     size_t size_ = 0;
     size_t capacity = 2048;
 
+    void grow() {
+        capacity *= 2;
+        stack.resize(capacity);
+    }
+
   public:
     Stack() { stack.resize(capacity); }
 
-    void push(T s) {
-        if (size_ == capacity) {
-            capacity *= 2;
-            stack.resize(capacity);
-        }
+    INLINE void push(T s) {
+        if (size_ == capacity)
+            grow();
         stack[size_++] = s;
     }
 
-    bool empty() { return size_ == 0; }
+    INLINE bool empty() { return size_ == 0; }
 
-    T pop() { return stack[--size_]; }
-    void pop(size_t n) { size_ -= n; }
+    INLINE T pop() { return stack[--size_]; }
+    INLINE void pop(size_t n) { size_ -= n; }
 
-    T& peek(size_t offset) { return stack[size_ - 1 - offset]; }
+    INLINE T& peek(size_t offset) { return stack[size_ - 1 - offset]; }
 
-    T set(size_t offset, T val) { return stack[size_ - 1 - offset] = val; }
+    INLINE T set(size_t offset, T val) {
+        return stack[size_ - 1 - offset] = val;
+    }
 
-    T& at(size_t pos) { return stack[pos]; }
+    INLINE T& at(size_t pos) { return stack[pos]; }
 
-    T& top() { return stack[size_ - 1]; }
+    INLINE T& top() { return stack[size_ - 1]; }
 
-    size_t size() { return size_; }
+    INLINE size_t size() { return size_; }
 };
 
 // =============================================================================
@@ -90,8 +97,9 @@ Stack<fun_idx_t> callArgs;
 
 // =============================================================================
 
-SEXP callPrimitive(SEXP (*primfun)(SEXP, SEXP, SEXP, SEXP), SEXP call, SEXP op,
-                   SEXP env, num_args_t numargs) {
+static INLINE SEXP callPrimitive(SEXP (*primfun)(SEXP, SEXP, SEXP, SEXP),
+                                 SEXP call, SEXP op, SEXP env,
+                                 num_args_t numargs) {
     // args are expected to be on the stack
     SEXP arglist = R_NilValue;
     for (num_args_t i = 0; i < numargs; ++i) {
@@ -109,20 +117,20 @@ SEXP callPrimitive(SEXP (*primfun)(SEXP, SEXP, SEXP, SEXP), SEXP call, SEXP op,
 // == Interpreter loop
 //
 
-SEXP eval(Function* fun, fun_idx_t c, SEXP env, num_args_t numArgs);
+static SEXP rirEval(Function* fun, fun_idx_t c, SEXP env, num_args_t numArgs);
 
-void evalCallArgs(Function* fun, num_args_t nargs, SEXP env) {
+static INLINE void evalCallArgs(Function* fun, num_args_t nargs, SEXP env) {
 
     for (size_t i = 0; i < nargs; ++i) {
         fun_idx_t idx = callArgs.peek(nargs - i - 1);
-        SEXP arg = eval(fun, idx, env, 0);
+        SEXP arg = rirEval(fun, idx, env, 0);
         stack.push(arg);
     }
 
     callArgs.pop(nargs);
 }
 
-SEXP callSpecial(SEXP call, SEXP op, SEXP env) {
+static INLINE SEXP callSpecial(SEXP call, SEXP op, SEXP env) {
     // call, op, args, rho
     SEXP (*primfun)(SEXP, SEXP, SEXP, SEXP) = 
                         R_FunTab[Rinternals::primoffset(op)].cfun;
@@ -130,8 +138,8 @@ SEXP callSpecial(SEXP call, SEXP op, SEXP env) {
     return primfun(call, op, CDR(call), env);
 }
 
-SEXP callBuiltin(Function* caller, SEXP call, SEXP op, num_args_t nargs,
-                 SEXP env) {
+static INLINE SEXP callBuiltin(Function* caller, SEXP call, SEXP op,
+                               num_args_t nargs, SEXP env) {
 
     evalCallArgs(caller, nargs, env);
 
@@ -142,13 +150,13 @@ SEXP callBuiltin(Function* caller, SEXP call, SEXP op, num_args_t nargs,
     return callPrimitive(primfun, call, op, env, nargs);
 }
 
-SEXP callClosure(Function* caller, BCClosure* cls, num_args_t nargs, SEXP env,
-                 SEXP newEnv) {
+static INLINE SEXP callClosure(Function* caller, BCClosure* cls,
+                               num_args_t nargs, SEXP env, SEXP newEnv) {
     assert(cls->nargs == VARIADIC_ARGS || cls->nargs == nargs);
 
     if (cls->eager == true) {
         evalCallArgs(caller, nargs, env);
-        return eval(cls->fun, 0, newEnv, nargs);
+        return rirEval(cls->fun, 0, newEnv, nargs);
     }
 
     for (int i = 0; i < nargs; ++i) {
@@ -157,13 +165,14 @@ SEXP callClosure(Function* caller, BCClosure* cls, num_args_t nargs, SEXP env,
     }
     callArgs.pop(nargs);
 
-    SEXP res = eval(cls->fun, 0, newEnv, nargs);
+    SEXP res = rirEval(cls->fun, 0, newEnv, nargs);
 
     stack.pop(nargs);
     return res;
 }
 
-SEXP callClosure(Function* caller, BCClosure* cls, num_args_t nargs, SEXP env) {
+static INLINE SEXP callClosure(Function* caller, BCClosure* cls,
+                               num_args_t nargs, SEXP env) {
 
     if (cls->env) {
         SEXP newEnv = Rf_NewEnvironment(R_NilValue, R_NilValue, env);
@@ -176,8 +185,8 @@ SEXP callClosure(Function* caller, BCClosure* cls, num_args_t nargs, SEXP env) {
     return callClosure(caller, cls, nargs, env, env);
 }
 
-SEXP doCall(Function* caller, SEXP call, SEXP callee, num_args_t nargs,
-            SEXP env) {
+static INLINE SEXP doCall(Function* caller, SEXP call, SEXP callee,
+                          num_args_t nargs, SEXP env) {
     size_t bp = stack.size();
     size_t bpi = stacki.size();
 
@@ -201,14 +210,14 @@ SEXP doCall(Function* caller, SEXP call, SEXP callee, num_args_t nargs,
     return res;
 }
 
-SEXP forcePromise(BCProm* prom) {
+static INLINE SEXP forcePromise(BCProm* prom) {
     assert(!prom->val);
-    SEXP res = eval(prom->fun, prom->idx, prom->env, 0);
+    SEXP res = rirEval(prom->fun, prom->idx, prom->env, 0);
     prom->val = res;
     return res;
 }
 
-SEXP eval(Function* fun, fun_idx_t c, SEXP env, num_args_t numArgs) {
+static SEXP rirEval(Function* fun, fun_idx_t c, SEXP env, num_args_t numArgs) {
     assert(fun->code.size() > c);
 
     // Current Code Object (from the function) being evaluated
@@ -663,7 +672,7 @@ done:
 }
 } // namespace
 
-SEXP Interpreter::run(SEXP env) { return eval(fun, 0, env, 0); }
+SEXP Interpreter::run(SEXP env) { return rirEval(fun, 0, env, 0); }
 
 void Interpreter::gcCallback(void (*forward_node)(SEXP)) {
     for (size_t i = 0; i < stack.size(); ++i) {
