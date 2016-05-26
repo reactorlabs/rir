@@ -31,8 +31,6 @@ void compileCall(Function& f, CodeStream& cs, SEXP ast, SEXP fun, SEXP args) {
         Else(compileExpression(f, cs, fun));
     }
 
-    CodeStream eager(f, args);
-
     // Process arguments:
     // Arguments can be optionally named
     size_t numArgs = 0;
@@ -60,18 +58,12 @@ void compileCall(Function& f, CodeStream& cs, SEXP ast, SEXP fun, SEXP args) {
     assert(numArgs < MAX_NUM_ARGS);
 
     if (hasNames) {
-        cs << BC::call_name(names);
+        cs << BC::call_name(static_cast<SEXP>(names));
     } else {
         cs << BC::call(numArgs);
     }
 
     cs.addAst(ast);
-
-    for (auto arg = RList(args).begin(); arg != RList::end(); ++arg) {
-        compileExpression(f, eager, *arg);
-    }
-    eager << BC::tail_call();
-    eager.finalize();
 }
 
 // Lookup
@@ -117,14 +109,14 @@ fun_idx_t compileFunction(Function& f, SEXP exp, SEXP formals) {
     if (formals)
         compileFormals(cs, formals);
     compileExpression(f, cs, exp);
-    cs << BC::leave();
+    cs << BC::ret();
     return cs.finalize();
 }
 
 fun_idx_t compilePromise(Function& f, SEXP exp) {
     CodeStream cs(f, exp);
     compileExpression(f, cs, exp);
-    cs << BC::leave_prom();
+    cs << BC::ret();
     return cs.finalize();
 }
 }

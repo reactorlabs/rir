@@ -51,4 +51,6 @@ SEXP RVector::at(size_t i) {
 }
 
 size_t RVector::size() { return size_; }
+
+SEXP RVector::operator[](size_t idx) { return VECTOR_ELT(vector, idx); }
 }

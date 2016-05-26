@@ -79,11 +79,6 @@ enum class BC_t : uint8_t {
 
     push_arg,
 
-    tail_call,
-
-    leave,
-    leave_prom,
-
     num_of
 };
 
@@ -140,10 +135,10 @@ class BC {
     inline num_args_t immediateNumArgs() { return immediate.numArgs; }
     inline jmp_t immediateOffset() { return immediate.offset; }
 
-    // Decode BC from bytecode stream
-    inline const static BC read(BC_t* pc);
     inline const static BC advance(BC_t** pc);
-    inline static BC_t* rewind(BC_t* pc, BC cur);
+    template <typename T>
+    inline static T readImmediate(BC_t** pc);
+    inline static BC_t readBC(BC_t** pc);
 
     // Create a new BC instance
     inline const static BC call(num_args_t numArgs);
@@ -178,9 +173,6 @@ class BC {
     inline const static BC add();
     inline const static BC sub();
     inline const static BC lt();
-    inline const static BC tail_call();
-    inline const static BC leave();
-    inline const static BC leave_prom();
 };
 
 } // rir

@@ -15,17 +15,17 @@ bool compileBuiltin(CodeStream& cs, int builtin_id) {
     const std::string name = R_FunTab[builtin_id].name;
 
     if (name.compare("<") == 0) {
-        cs << BC::lt() << BC::leave();
+        cs << BC::lt() << BC::ret();
         return true;
     }
 
     if (name.compare("+") == 0) {
-        cs << BC::add() << BC::leave();
+        cs << BC::add() << BC::ret();
         return true;
     }
 
     if (name.compare("-") == 0) {
-        cs << BC::sub() << BC::leave();
+        cs << BC::sub() << BC::ret();
         return true;
     }
 
@@ -45,7 +45,7 @@ bool compileSpecial(CodeStream& cs, int special_id) {
 
     if (name.compare("function") == 0) {
         cs << BC::load_arg(0) << BC::get_ast() << BC::load_arg(1)
-           << BC::get_ast() << BC::mkclosure() << BC::leave();
+           << BC::get_ast() << BC::mkclosure() << BC::ret();
         return true;
     }
 
@@ -55,7 +55,7 @@ bool compileSpecial(CodeStream& cs, int special_id) {
         Label beginL = cs.mkLabel();
 
         cs << BC::numargi() << BC::pushi(0) << BC::eqi()
-           << BC::jmp_false(beginL) << BC::push(R_NilValue) << BC::leave()
+           << BC::jmp_false(beginL) << BC::push(R_NilValue) << BC::ret()
 
            << beginL
 
@@ -138,7 +138,7 @@ BCClosure* Primitives::doCompilePrimitive(SEXP fun) {
     BCClosure* cls = nullptr;
 
     if (success) {
-        cs << BC::leave();
+        cs << BC::ret();
         cs.finalize();
         cls = new BCClosure;
         cls->env = nullptr;

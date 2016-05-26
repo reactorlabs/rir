@@ -36,7 +36,9 @@ class RVector {
 
     size_t size();
 
-    operator SEXP() { return vector; }
+    explicit operator SEXP() { return vector; }
+
+    SEXP operator[](size_t idx);
 
     RVectorIter begin() { return RVectorIter(this, 0); }
 

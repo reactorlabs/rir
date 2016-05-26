@@ -15,7 +15,7 @@ namespace rir {
 
 namespace {
 
-immediate_t readImmediate(BC_t bc, BC_t* pc) {
+immediate_t decodeImmediate(BC_t bc, BC_t* pc) {
     immediate_t immediate = {0};
     switch (bc) {
     case BC_t::push:
@@ -44,9 +44,6 @@ immediate_t readImmediate(BC_t bc, BC_t* pc) {
     case BC_t::pushi:
         immediate.i = *(int*)pc;
         break;
-    case BC_t::tail_call:
-    case BC_t::leave:
-    case BC_t::leave_prom:
     case BC_t::mkclosure:
     case BC_t::ret:
     case BC_t::pop:
@@ -73,6 +70,13 @@ immediate_t readImmediate(BC_t bc, BC_t* pc) {
     }
     return immediate;
 }
+}
+
+const BC BC::advance(BC_t** pc) {
+    BC_t bc = **pc;
+    BC cur(bc, decodeImmediate(bc, (*pc) + 1));
+    *pc = (BC_t*)((uintptr_t)(*pc) + cur.size());
+    return cur;
 }
 
 class CodeStream;
@@ -111,25 +115,19 @@ static size_t immediate_size[(size_t)BC_t::num_of] = {
     0,                   // sub
     0,                   // lt
     sizeof(fun_idx_t),   // push_arg
-    0,                   // tail_call
-    0,                   // leave
-    0,                   // leave_prom
 };
 
-const BC BC::read(BC_t* pc) {
-    BC_t bc = *pc;
-    return BC(bc, readImmediate(bc, pc + 1));
+template <typename T>
+T BC::readImmediate(BC_t** pc) {
+    T res = *(T*)*pc;
+    *pc = (BC_t*)((uintptr_t)*pc + sizeof(T));
+    return res;
 }
 
-BC_t* BC::rewind(BC_t* pc, BC cur) {
-    return (BC_t*)((uintptr_t)pc - cur.size());
-}
-
-const BC BC::advance(BC_t** pc) {
+BC_t BC::readBC(BC_t** pc) {
     BC_t bc = **pc;
-    BC cur(bc, readImmediate(bc, (*pc) + 1));
-    *pc = (BC_t*)((uintptr_t)(*pc) + cur.size());
-    return cur;
+    *pc += 1;
+    return bc;
 }
 
 size_t BC::size() const { return sizeof(BC_t) + immediate_size[(size_t)bc]; }
@@ -198,9 +196,6 @@ const BC BC::mkclosure() { return BC(BC_t::mkclosure); }
 const BC BC::add() { return BC(BC_t::add); }
 const BC BC::sub() { return BC(BC_t::sub); }
 const BC BC::lt() { return BC(BC_t::lt); }
-const BC BC::tail_call() { return BC(BC_t::tail_call); }
-const BC BC::leave() { return BC(BC_t::leave); }
-const BC BC::leave_prom() { return BC(BC_t::leave_prom); }
 
 class AstMap {
     size_t size;
