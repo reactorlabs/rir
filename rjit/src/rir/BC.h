@@ -37,10 +37,6 @@ immediate_t decodeImmediate(BC_t bc, BC_t* pc) {
     case BC_t::jmp_false:
         immediate.offset = *(jmp_t*)pc;
         break;
-    case BC_t::call_builtin:
-    case BC_t::call_special:
-        immediate.prim = *(primitive_t*)pc;
-        break;
     case BC_t::pushi:
         immediate.i = *(int*)pc;
         break;
@@ -82,39 +78,37 @@ const BC BC::advance(BC_t** pc) {
 class CodeStream;
 
 static size_t immediate_size[(size_t)BC_t::num_of] = {
-    (size_t)-1,          // invalid
-    sizeof(pool_idx_t),  // push
-    sizeof(pool_idx_t),  // getfun
-    sizeof(pool_idx_t),  // getvar
-    sizeof(num_args_t),  // call
-    sizeof(pool_idx_t),  // call_name
-    sizeof(fun_idx_t),   // mkprom
-    0,                   // mkclosure
-    0,                   // ret
-    0,                   // force
-    0,                   // pop
-    sizeof(num_args_t),  // load_arg
-    0,                   // get_ast
-    0,                   // setvar
-    0,                   // numargi
-    0,                   // to_bool
-    sizeof(jmp_t),       // jmp_true
-    sizeof(jmp_t),       // jmp_false
-    sizeof(jmp_t),       // jmp
-    0,                   // lti
-    0,                   // eqi
-    sizeof(primitive_t), // call_builtin
-    sizeof(primitive_t), // call_special
-    0,                   // force_all
-    sizeof(int),         // pushi
-    0,                   // dupi
-    0,                   // load_argi
-    0,                   // inci
-    0,                   // dup
-    0,                   // add
-    0,                   // sub
-    0,                   // lt
-    sizeof(fun_idx_t),   // push_arg
+    (size_t)-1,         // invalid
+    sizeof(pool_idx_t), // push
+    sizeof(pool_idx_t), // getfun
+    sizeof(pool_idx_t), // getvar
+    sizeof(num_args_t), // call
+    sizeof(pool_idx_t), // call_name
+    sizeof(fun_idx_t),  // mkprom
+    0,                  // mkclosure
+    0,                  // ret
+    0,                  // force
+    0,                  // pop
+    sizeof(num_args_t), // load_arg
+    0,                  // get_ast
+    0,                  // setvar
+    0,                  // numargi
+    0,                  // to_bool
+    sizeof(jmp_t),      // jmp_true
+    sizeof(jmp_t),      // jmp_false
+    sizeof(jmp_t),      // jmp
+    0,                  // lti
+    0,                  // eqi
+    0,                  // force_all
+    sizeof(int),        // pushi
+    0,                  // dupi
+    0,                  // load_argi
+    0,                  // inci
+    0,                  // dup
+    0,                  // add
+    0,                  // sub
+    0,                  // lt
+    sizeof(fun_idx_t),  // push_arg
 };
 
 template <typename T>
@@ -172,16 +166,6 @@ const BC BC::jmp_false(jmp_t j) {
     immediate_t i;
     i.offset = j;
     return BC(BC_t::jmp_false, i);
-}
-const BC BC::call_special(primitive_t prim) {
-    immediate_t i;
-    i.prim = prim;
-    return BC(BC_t::call_special, i);
-}
-const BC BC::call_builtin(primitive_t prim) {
-    immediate_t i;
-    i.prim = prim;
-    return BC(BC_t::call_builtin, i);
 }
 const BC BC::dupi() { return BC(BC_t::dupi); }
 const BC BC::dup() { return BC(BC_t::dup); }

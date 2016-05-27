@@ -119,7 +119,7 @@ bool compileSpecial(CodeStream& cs, int special_id) {
 
 } // namespace
 
-BCClosure* Primitives::doCompilePrimitive(SEXP fun) {
+SEXP Primitives::doCompilePrimitive(SEXP fun) {
     Function* f = new Function;
     CodeStream cs(*f, fun);
 
@@ -135,17 +135,13 @@ BCClosure* Primitives::doCompilePrimitive(SEXP fun) {
         break;
     }
 
-    BCClosure* cls = nullptr;
+    SEXP cls = nullptr;
 
     if (success) {
         cs << BC::ret();
         cs.finalize();
-        cls = new BCClosure;
-        cls->env = nullptr;
-        cls->fun = f;
-        cls->formals = FORMALS(fun);
-        cls->nargs = VARIADIC_ARGS;
-        cls->eager = TYPEOF(fun) == BUILTINSXP;
+        cls = mkBCCls(f, FORMALS(fun), VARIADIC_ARGS, TYPEOF(fun) == BUILTINSXP,
+                      nullptr);
         PrimitivesCache[idx] = cls;
     }
 

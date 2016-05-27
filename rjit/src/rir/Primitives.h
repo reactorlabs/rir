@@ -10,20 +10,20 @@ namespace rir {
 
 class Primitives {
   public:
-    static BCClosure* compilePrimitive(SEXP fun) {
+    static SEXP compilePrimitive(SEXP fun) {
         return instance().cachedCompilePrimitive(fun);
     }
 
   private:
     std::array<bool, 1024> PrimitivesCacheOccupied;
-    std::array<BCClosure*, 1024> PrimitivesCache;
+    std::array<SEXP, 1024> PrimitivesCache;
 
     static Primitives& instance() {
         static Primitives singleton;
         return singleton;
     }
 
-    inline BCClosure* cachedCompilePrimitive(SEXP fun) {
+    inline SEXP cachedCompilePrimitive(SEXP fun) {
         if (TYPEOF(fun) == SPECIALSXP || TYPEOF(fun) == BUILTINSXP) {
             int idx = Rinternals::primoffset(fun);
             if (PrimitivesCacheOccupied[idx])
@@ -33,7 +33,7 @@ class Primitives {
         return doCompilePrimitive(fun);
     }
 
-    BCClosure* doCompilePrimitive(SEXP fun);
+    SEXP doCompilePrimitive(SEXP fun);
 };
 
 } // rir

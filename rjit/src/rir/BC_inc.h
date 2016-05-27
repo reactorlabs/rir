@@ -65,8 +65,6 @@ enum class BC_t : uint8_t {
     jmp,
     lti,
     eqi,
-    call_builtin,
-    call_special,
     force_all,
     pushi,
     dupi,
@@ -161,8 +159,6 @@ class BC {
     inline const static BC jmp(jmp_t);
     inline const static BC lti();
     inline const static BC eqi();
-    inline const static BC call_special(primitive_t);
-    inline const static BC call_builtin(primitive_t);
     inline const static BC force_all();
     inline const static BC pushi(int);
     inline const static BC load_argi();

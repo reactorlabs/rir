@@ -19,27 +19,20 @@ namespace rir {
 
 namespace {
 
-BCClosure* jit(SEXP fun) {
+SEXP jit(SEXP fun) {
     std::cout << "JIT Compiling a function to BC\n";
     Compiler c(BODY(fun), FORMALS(fun));
-    BCClosure* cls = new BCClosure;
-    cls->env = CLOENV(fun);
-    cls->fun = c.finalize();
-    // TODO: compile default args
-    cls->formals = FORMALS(fun);
-    cls->nargs = RList(cls->formals).length();
-    return cls;
+
+    SEXP bc = mkBCCls(c.finalize(), FORMALS(fun), RList(FORMALS(fun)).length(),
+                      false, CLOENV(fun));
+    return bc;
 }
 
-BCClosure* jit(SEXP ast, SEXP formals, SEXP env) {
+SEXP jit(SEXP ast, SEXP formals, SEXP env) {
     Compiler c(ast, formals);
-    BCClosure* cls = new BCClosure;
-    cls->env = env;
-    cls->fun = c.finalize();
-    // TODO: compile default args
-    cls->formals = formals;
-    cls->nargs = RList(formals).length();
-    return cls;
+    SEXP bc =
+        mkBCCls(c.finalize(), formals, RList(formals).length(), false, env);
+    return bc;
 }
 
 #define INLINE __attribute__((always_inline)) inline
@@ -103,7 +96,7 @@ static INLINE SEXP callPrimitive(SEXP (*primfun)(SEXP, SEXP, SEXP, SEXP),
     SEXP arglist = R_NilValue;
     for (num_args_t i = 0; i < numargs; ++i) {
         SEXP t = stack.pop();
-        assert(TYPEOF(t) != BCProm::type);
+        assert(isBCProm(t));
         arglist = CONS_NR(t, arglist);
     }
 
@@ -119,10 +112,12 @@ static INLINE SEXP callPrimitive(SEXP (*primfun)(SEXP, SEXP, SEXP, SEXP),
 
 static SEXP rirEval(Function* fun, fun_idx_t c, SEXP env, num_args_t numArgs);
 
+static int level = 0;
 static INLINE void evalCallArgs(Function* fun, num_args_t nargs, SEXP env) {
 
     for (size_t i = 0; i < nargs; ++i) {
-        fun_idx_t idx = callArgs.peek(nargs - i - 1);
+        size_t off = nargs - i - 1;
+        fun_idx_t idx = callArgs.peek(off);
         SEXP arg = rirEval(fun, idx, env, 0);
         stack.push(arg);
     }
@@ -151,38 +146,48 @@ static INLINE SEXP callBuiltin(Function* caller, SEXP call, SEXP op,
 }
 
 static INLINE SEXP callClosure(Function* caller, BCClosure* cls,
-                               num_args_t nargs, SEXP env, SEXP newEnv) {
-    assert(cls->nargs == VARIADIC_ARGS || cls->nargs == nargs);
-
-    if (cls->eager == true) {
-        evalCallArgs(caller, nargs, env);
-        return rirEval(cls->fun, 0, newEnv, nargs);
-    }
-
-    for (int i = 0; i < nargs; ++i) {
-        auto prom = new BCProm(caller, callArgs.peek(nargs - 1 - i), env);
-        stack.push((SEXP)prom);
-    }
-    callArgs.pop(nargs);
-
-    SEXP res = rirEval(cls->fun, 0, newEnv, nargs);
-
-    stack.pop(nargs);
-    return res;
-}
-
-static INLINE SEXP callClosure(Function* caller, BCClosure* cls,
                                num_args_t nargs, SEXP env) {
 
+    assert(cls->nargs == VARIADIC_ARGS || cls->nargs == nargs);
+
+    if (cls->eager) {
+        assert(!cls->env);
+        evalCallArgs(caller, nargs, env);
+        return rirEval(cls->fun, 0, env, nargs);
+    }
+
     if (cls->env) {
-        SEXP newEnv = Rf_NewEnvironment(R_NilValue, R_NilValue, env);
+        SEXP args = R_NilValue;
+
+        // SEXP newEnv = Rf_NewEnvironment(R_NilValue, R_NilValue, cls->env);
+        // stack.push(newEnv);
+
+        for (size_t i = 0; i < nargs; ++i) {
+            SEXP prom = mkBCProm(caller, callArgs.peek(nargs - 1 - i), env);
+            args = CONS_NR(prom, args);
+            // stack.push((SEXP)prom);
+        }
+
+        callArgs.pop(nargs);
+
+        SEXP newEnv = Rf_NewEnvironment(cls->formals, args, cls->env);
         stack.push(newEnv);
-        SEXP res = callClosure(caller, cls, nargs, env, newEnv);
+
+        SEXP res = rirEval(cls->fun, 0, newEnv, nargs);
+        // stack.pop(nargs);
         stack.pop();
         return res;
     }
 
-    return callClosure(caller, cls, nargs, env, env);
+    for (size_t i = 0; i < nargs; ++i) {
+        SEXP prom = mkBCProm(caller, callArgs.peek(nargs - 1 - i), env);
+        stack.push(prom);
+    }
+    callArgs.pop(nargs);
+
+    SEXP res = rirEval(cls->fun, 0, env, nargs);
+    stack.pop(nargs);
+    return res;
 }
 
 static INLINE SEXP doCall(Function* caller, SEXP call, SEXP callee,
@@ -198,8 +203,9 @@ static INLINE SEXP doCall(Function* caller, SEXP call, SEXP callee,
     case BUILTINSXP:
         res = callBuiltin(caller, call, callee, nargs, env);
         break;
-    case BCClosure::type:
-        res = callClosure(caller, (BCClosure*)callee, nargs, env);
+    case BCCodeType:
+        assert(isBCCls(callee));
+        res = callClosure(caller, getBCCls(callee), nargs, env);
         break;
     default:
         assert(false);
@@ -210,14 +216,15 @@ static INLINE SEXP doCall(Function* caller, SEXP call, SEXP callee,
     return res;
 }
 
-static INLINE SEXP forcePromise(BCProm* prom) {
-    assert(!prom->val);
+static INLINE SEXP forcePromise(BCProm* prom, SEXP wrapper) {
+    assert(!prom->val());
     SEXP res = rirEval(prom->fun, prom->idx, prom->env, 0);
-    prom->val = res;
+    prom->val(wrapper, res);
     return res;
 }
 
 static SEXP rirEval(Function* fun, fun_idx_t c, SEXP env, num_args_t numArgs) {
+    level += 2;
     assert(fun->code.size() > c);
 
     // Current Code Object (from the function) being evaluated
@@ -239,19 +246,7 @@ static SEXP rirEval(Function* fun, fun_idx_t c, SEXP env, num_args_t numArgs) {
 
     // Main loop
     while (true) {
-        BC_t bc = BC::readBC(&pc);
-
-        switch (bc) {
-        case BC_t::call_special: {
-            assert(false);
-            break;
-        }
-
-        case BC_t::call_builtin: {
-            assert(false);
-            break;
-        }
-
+        switch (BC::readBC(&pc)) {
         case BC_t::to_bool: {
             SEXP t = stack.pop();
             int cond = NA_LOGICAL;
@@ -262,7 +257,7 @@ static SEXP rirEval(Function* fun, fun_idx_t c, SEXP env, num_args_t numArgs) {
             if (Rf_length(t) > 0) {
                 /* inline common cases for efficiency */
                 switch (TYPEOF(t)) {
-                case BCProm::type:
+                case BCCodeType:
                     assert(false);
                     break;
                 case LGLSXP:
@@ -344,13 +339,13 @@ static SEXP rirEval(Function* fun, fun_idx_t c, SEXP env, num_args_t numArgs) {
                 assert(false and "Missing argument");
 
             assert(TYPEOF(val) != PROMSXP);
-            if (TYPEOF(val) == BCProm::type) {
-                BCProm* prom = (BCProm*)val;
+            if (isBCProm(val)) {
+                BCProm* prom = getBCProm(val);
 
-                if (prom->val) {
-                    val = prom->val;
+                if (prom->val()) {
+                    val = prom->val();
                 } else {
-                    val = forcePromise(prom);
+                    val = forcePromise(prom, val);
                 }
             }
 
@@ -359,16 +354,16 @@ static SEXP rirEval(Function* fun, fun_idx_t c, SEXP env, num_args_t numArgs) {
                 SET_NAMED(val, 1);
 
             switch (TYPEOF(val)) {
-            case BCClosure::type:
+            case BCCodeType:
                 break;
             case CLOSXP:
                 val = (SEXP)jit(val);
                 break;
             case SPECIALSXP:
             case BUILTINSXP: {
-                BCClosure* prim = Primitives::compilePrimitive(val);
+                SEXP prim = Primitives::compilePrimitive(val);
                 if (prim)
-                    val = (SEXP)prim;
+                    val = prim;
                 break;
             }
 
@@ -392,13 +387,13 @@ static SEXP rirEval(Function* fun, fun_idx_t c, SEXP env, num_args_t numArgs) {
                 assert(false and "Missing argument");
 
             assert(TYPEOF(val) != PROMSXP);
-            if (TYPEOF(val) == BCProm::type) {
-                BCProm* prom = (BCProm*)val;
+            if (isBCProm(val)) {
+                BCProm* prom = getBCProm(val);
 
-                if (prom->val) {
-                    val = prom->val;
+                if (prom->val()) {
+                    val = prom->val();
                 } else {
-                    val = forcePromise(prom);
+                    val = forcePromise(prom, val);
                 }
             }
 
@@ -417,7 +412,7 @@ static SEXP rirEval(Function* fun, fun_idx_t c, SEXP env, num_args_t numArgs) {
 
         case BC_t::mkprom: {
             fun_idx_t idx = BC::readImmediate<fun_idx_t>(&pc);
-            auto prom = new BCProm(fun, idx, env);
+            SEXP prom = mkBCProm(fun, idx, env);
             assert(fun->code.size() > idx);
             stack.push((SEXP)prom);
             break;
@@ -433,9 +428,11 @@ static SEXP rirEval(Function* fun, fun_idx_t c, SEXP env, num_args_t numArgs) {
             case SPECIALSXP:
             case BUILTINSXP:
                 break;
-            case BCClosure::type: {
+            case BCCodeType: {
+                assert(isBCCls(cls));
+                BCClosure* bcls = getBCCls(cls);
                 RVector names(n);
-                RList formals(((BCClosure*)cls)->formals);
+                RList formals(bcls->formals);
 
                 std::vector<int> matched(formals.length());
                 std::vector<bool> used(formals.length());
@@ -517,8 +514,8 @@ static SEXP rirEval(Function* fun, fun_idx_t c, SEXP env, num_args_t numArgs) {
         case BC_t::call: {
             SEXP cls = stack.pop();
             num_args_t nargs = BC::readImmediate<num_args_t>(&pc);
-            if (TYPEOF(cls) == BCClosure::type) {
-                // TODO missing
+            if (isBCCls(cls)) {
+                // TODO check for missing
             }
             SEXP res = doCall(fun, cur->getAst(pc), cls, nargs, env);
             stack.push(res);
@@ -539,8 +536,8 @@ static SEXP rirEval(Function* fun, fun_idx_t c, SEXP env, num_args_t numArgs) {
 
         case BC_t::get_ast: {
             SEXP t = stack.pop();
-            assert(TYPEOF(t) == BCProm::type);
-            BCProm* p = (BCProm*)t;
+            assert(isBCProm(t));
+            BCProm* p = getBCProm(t);
             stack.push(p->ast());
             break;
         }
@@ -558,8 +555,9 @@ static SEXP rirEval(Function* fun, fun_idx_t c, SEXP env, num_args_t numArgs) {
         case BC_t::force_all: {
             for (size_t a = 0; a < numArgs; ++a) {
                 SEXP arg = getArg(a);
-                if (TYPEOF(arg) == BCProm::type) {
-                    SEXP val = forcePromise((BCProm*)arg);
+                if (isBCProm(arg)) {
+                    BCProm* prom = getBCProm(arg);
+                    SEXP val = forcePromise(prom, arg);
                     stack.push(val);
                 } else {
                     stack.push(arg);
@@ -570,9 +568,9 @@ static SEXP rirEval(Function* fun, fun_idx_t c, SEXP env, num_args_t numArgs) {
 
         case BC_t::force: {
             SEXP tos = stack.pop();
-            assert(TYPEOF(tos) == BCProm::type);
-            BCProm* prom = (BCProm*)tos;
-            SEXP val = forcePromise(prom);
+            assert(isBCProm(tos));
+            BCProm* prom = getBCProm(tos);
+            SEXP val = forcePromise(prom, tos);
             stack.push(val);
             break;
         }
@@ -613,8 +611,8 @@ static SEXP rirEval(Function* fun, fun_idx_t c, SEXP env, num_args_t numArgs) {
             SEXP body = stack.pop();
             SEXP arglist = stack.pop();
 
-            BCClosure* bcls = jit(body, arglist, env);
-            stack.push((SEXP)bcls);
+            SEXP bcls = jit(body, arglist, env);
+            stack.push(bcls);
             break;
         }
 
@@ -668,6 +666,7 @@ static SEXP rirEval(Function* fun, fun_idx_t c, SEXP env, num_args_t numArgs) {
     }
 
 done:
+    level -= 2;
     return stack.pop();
 }
 } // namespace
@@ -677,11 +676,7 @@ SEXP Interpreter::run(SEXP env) { return rirEval(fun, 0, env, 0); }
 void Interpreter::gcCallback(void (*forward_node)(SEXP)) {
     for (size_t i = 0; i < stack.size(); ++i) {
         SEXP e = stack.at(i);
-        // TODO: that's a bit of a hack, we should fix it
-        if (TYPEOF(e) == BCProm::type)
-            forward_node(((BCProm*)e)->val);
-        else if (TYPEOF(e) != BCClosure::type)
-            forward_node(stack.at(i));
+        forward_node(e);
     }
 }
 

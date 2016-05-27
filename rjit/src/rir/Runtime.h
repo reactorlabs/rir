@@ -3,68 +3,65 @@
 
 #include "Function.h"
 #include "BC.h"
+#include "../RDefs.h"
 
-#define TYPE_BITS 5
-struct sxpinfo_struct {
-    SEXPTYPE type : TYPE_BITS; /* ==> (FUNSXP == 99) %% 2^5 == 3 == CLOSXP
-                        * -> warning: `type' is narrower than values
-                        *              of its type
-                        * when SEXPTYPE was an enum */
-    unsigned int obj : 1;
-    unsigned int named : 2;
-    unsigned int gp : 16;
-    unsigned int mark : 1;
-    unsigned int debug : 1;
-    unsigned int trace : 1; /* functions and memory tracing */
-    unsigned int spare : 1; /* currently unused */
-    unsigned int gcgen : 1; /* old generation number */
-    unsigned int gccls : 3; /* node class */
-};                          /*		    Tot: 32 */
+extern "C" unsigned char* RAW(SEXP);
 
 namespace rjit {
 namespace rir {
 
+constexpr static int BCCodeType = 24; // EXTPTRSXP
+
+#pragma pack(push)
+#pragma pack(0)
 struct BCProm {
-    static constexpr SEXPTYPE type = 27;
-
-    BCProm() { sxpinfo.type = type; }
-    BCProm(Function* fun, fun_idx_t idx, SEXP env)
-        : idx(idx), fun(fun), env(env) {
-        sxpinfo.type = type;
-        sxpinfo.mark = 1;
-        assert(fun->code.size() > idx);
-    }
-
-    sxpinfo_struct sxpinfo = {0};
-    //    SEXP attrib = R_NilValue;
-    //    SEXP gengc_next_node, gengc_prev_node;
-
-    fun_idx_t idx;
+  public:
+    static constexpr unsigned char type = 1;
+    unsigned char t = type;
     Function* fun;
+    fun_idx_t idx;
     SEXP env;
-    SEXP val = nullptr;
-
     SEXP ast() { return fun->code[idx]->ast; }
+    SEXP val() { return _val; }
+    void val(SEXP wrapper, SEXP aVal);
+    BCProm(Function* fun, fun_idx_t idx, SEXP env)
+        : fun(fun), idx(idx), env(env) {}
+
+  private:
+    SEXP _val = nullptr;
 };
 
 struct BCClosure {
-    static constexpr SEXPTYPE type = 28;
-    BCClosure() : eager(false) {
-        sxpinfo.type = type;
-        sxpinfo.mark = 1;
-    }
-
-    sxpinfo_struct sxpinfo = {0};
-    SEXP attrib = R_NilValue;
-    SEXP gengc_next_node, gengc_prev_node;
-
+  public:
+    static constexpr unsigned char type = 2;
+    unsigned char t = type;
     Function* fun;
-    SEXP env;
     SEXP formals;
-
     num_args_t nargs;
     bool eager;
+    SEXP env;
+    BCClosure(Function* fun, SEXP formals, num_args_t nargs, bool eager,
+              SEXP env)
+        : fun(fun), formals(formals), nargs(nargs), eager(eager), env(env) {}
 };
+
+#pragma pack(pop)
+
+SEXP mkBCProm(Function* fun, fun_idx_t idx, SEXP env);
+SEXP mkBCCls(Function* fun, SEXP formals, num_args_t nargs, bool eager,
+             SEXP env);
+
+inline BCProm* getBCProm(SEXP s) { return (BCProm*)RAW(s); }
+
+inline BCClosure* getBCCls(SEXP s) { return (BCClosure*)RAW(s); }
+
+inline bool isBCProm(SEXP s) {
+    return TYPEOF(s) == BCCodeType && getBCProm(s)->t == BCProm::type;
+}
+
+inline bool isBCCls(SEXP s) {
+    return TYPEOF(s) == BCCodeType && getBCCls(s)->t == BCClosure::type;
+}
 
 } // rir
 } // rjit

@@ -25,6 +25,10 @@ int TYPEOF(SEXP);
 
 void Rf_unprotect(int);
 SEXP Rf_protect(SEXP);
+
+SEXP TAG(SEXP);
+SEXP CAR(SEXP);
+SEXP CDR(SEXP);
 }
 
 #define SPECIALSXP 7 /* special forms */

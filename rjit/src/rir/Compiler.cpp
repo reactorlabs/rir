@@ -87,7 +87,7 @@ void compileExpression(Function& f, CodeStream& cs, SEXP exp) {
     }
 }
 
-size_t compileFormals(CodeStream& cs, SEXP formals) {
+void compileFormals(CodeStream& cs, SEXP formals) {
     size_t narg = 0;
     for (auto arg = RList(formals).begin(); arg != RList::end(); ++arg) {
         // TODO support default args
@@ -99,9 +99,10 @@ size_t compileFormals(CodeStream& cs, SEXP formals) {
         // TODO
         assert(name != symbol::Ellipsis);
 
-        cs << BC::push(name) << BC::load_arg(narg) << BC::setvar() << BC::pop();
+        // cs << BC::push(name) << BC::load_arg(narg) << BC::setvar() <<
+        // BC::pop();
+        narg++;
     }
-    return narg;
 }
 
 fun_idx_t compileFunction(Function& f, SEXP exp, SEXP formals) {

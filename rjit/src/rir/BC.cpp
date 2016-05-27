@@ -33,11 +33,6 @@ void BC::write(CodeStream& cs) const {
         cs.insert(immediate.pool);
         return;
 
-    case BC_t::call_builtin:
-    case BC_t::call_special:
-        cs.insert(immediate.prim);
-        return;
-
     case BC_t::jmp:
     case BC_t::jmp_true:
     case BC_t::jmp_false:
@@ -100,12 +95,6 @@ void BC::print() {
             std::cout << CHAR(PRINTNAME(n)) << " ";
         }
         std::cout << "\n";
-        break;
-    case BC_t::call_special:
-        std::cout << "call_special " << R_FunTab[immediate.prim].name << "\n";
-        break;
-    case BC_t::call_builtin:
-        std::cout << "call_builtin " << R_FunTab[immediate.prim].name << "\n";
         break;
     case BC_t::push:
         std::cout << "push ";
