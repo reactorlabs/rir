@@ -196,7 +196,7 @@ static INLINE SEXP doCall(Function* caller, SEXP call, SEXP callee,
     size_t bpi = stacki.size();
 
     SEXP res = nullptr;
-    switch (TYPEOF(callee)) {
+    switch (Rinternals::typeof(callee)) {
     case SPECIALSXP:
         res = callSpecial(call, callee, env);
         break;
@@ -217,7 +217,7 @@ static INLINE SEXP doCall(Function* caller, SEXP call, SEXP callee,
 }
 
 static INLINE SEXP forcePromise(BCProm* prom, SEXP wrapper) {
-    assert(!prom->val());
+    assert(!prom->val(wrapper));
     SEXP res = rirEval(prom->fun, prom->idx, prom->env, 0);
     prom->val(wrapper, res);
     return res;
@@ -256,7 +256,7 @@ static SEXP rirEval(Function* fun, fun_idx_t c, SEXP env, num_args_t numArgs) {
 
             if (Rf_length(t) > 0) {
                 /* inline common cases for efficiency */
-                switch (TYPEOF(t)) {
+                switch (Rinternals::typeof(t)) {
                 case BCCodeType:
                     assert(false);
                     break;
@@ -338,12 +338,12 @@ static SEXP rirEval(Function* fun, fun_idx_t c, SEXP env, num_args_t numArgs) {
             else if (val == R_MissingArg)
                 assert(false and "Missing argument");
 
-            assert(TYPEOF(val) != PROMSXP);
+            assert(Rinternals::typeof(val) != PROMSXP);
             if (isBCProm(val)) {
                 BCProm* prom = getBCProm(val);
 
-                if (prom->val()) {
-                    val = prom->val();
+                if (prom->val(val)) {
+                    val = prom->val(val);
                 } else {
                     val = forcePromise(prom, val);
                 }
@@ -353,7 +353,7 @@ static SEXP rirEval(Function* fun, fun_idx_t c, SEXP env, num_args_t numArgs) {
             if (NAMED(val) == 0 && val != R_NilValue)
                 SET_NAMED(val, 1);
 
-            switch (TYPEOF(val)) {
+            switch (Rinternals::typeof(val)) {
             case BCCodeType:
                 break;
             case CLOSXP:
@@ -386,12 +386,12 @@ static SEXP rirEval(Function* fun, fun_idx_t c, SEXP env, num_args_t numArgs) {
             else if (val == R_MissingArg)
                 assert(false and "Missing argument");
 
-            assert(TYPEOF(val) != PROMSXP);
+            assert(Rinternals::typeof(val) != PROMSXP);
             if (isBCProm(val)) {
                 BCProm* prom = getBCProm(val);
 
-                if (prom->val()) {
-                    val = prom->val();
+                if (prom->val(val)) {
+                    val = prom->val(val);
                 } else {
                     val = forcePromise(prom, val);
                 }
@@ -423,7 +423,7 @@ static SEXP rirEval(Function* fun, fun_idx_t c, SEXP env, num_args_t numArgs) {
             SEXP cls = stack.pop();
             num_args_t nargs = RVector(n).size();
 
-            switch (TYPEOF(cls)) {
+            switch (Rinternals::typeof(cls)) {
             // Primitives do not care about names
             case SPECIALSXP:
             case BUILTINSXP:
@@ -546,7 +546,7 @@ static SEXP rirEval(Function* fun, fun_idx_t c, SEXP env, num_args_t numArgs) {
             SEXP val = stack.pop();
             SEXP sym = stack.pop();
             // TODO: complex assign
-            assert(TYPEOF(sym) == SYMSXP);
+            assert(Rinternals::typeof(sym) == SYMSXP);
             defineVar(sym, val, env);
             stack.push(val);
             break;
@@ -620,8 +620,9 @@ static SEXP rirEval(Function* fun, fun_idx_t c, SEXP env, num_args_t numArgs) {
             // TODO
             SEXP rhs = stack.pop();
             SEXP lhs = stack.pop();
-            if (TYPEOF(lhs) == REALSXP && TYPEOF(lhs) == REALSXP &&
-                Rf_length(lhs) == 1 && Rf_length(rhs) == 1) {
+            if (Rinternals::typeof(lhs) == REALSXP &&
+                Rinternals::typeof(lhs) == REALSXP && Rf_length(lhs) == 1 &&
+                Rf_length(rhs) == 1) {
                 SEXP res = Rf_allocVector(REALSXP, 1);
                 SET_NAMED(res, 1);
                 REAL(res)[0] = REAL(lhs)[0] + REAL(rhs)[0];
@@ -635,8 +636,9 @@ static SEXP rirEval(Function* fun, fun_idx_t c, SEXP env, num_args_t numArgs) {
             // TODO
             SEXP rhs = stack.pop();
             SEXP lhs = stack.pop();
-            if (TYPEOF(lhs) == REALSXP && TYPEOF(lhs) == REALSXP &&
-                Rf_length(lhs) == 1 && Rf_length(rhs) == 1) {
+            if (Rinternals::typeof(lhs) == REALSXP &&
+                Rinternals::typeof(lhs) == REALSXP && Rf_length(lhs) == 1 &&
+                Rf_length(rhs) == 1) {
                 SEXP res = Rf_allocVector(REALSXP, 1);
                 SET_NAMED(res, 1);
                 REAL(res)[0] = REAL(lhs)[0] - REAL(rhs)[0];
@@ -650,8 +652,9 @@ static SEXP rirEval(Function* fun, fun_idx_t c, SEXP env, num_args_t numArgs) {
             // TODO
             SEXP rhs = stack.pop();
             SEXP lhs = stack.pop();
-            if (TYPEOF(lhs) == REALSXP && TYPEOF(lhs) == REALSXP &&
-                Rf_length(lhs) == 1 && Rf_length(rhs) == 1) {
+            if (Rinternals::typeof(lhs) == REALSXP &&
+                Rinternals::typeof(lhs) == REALSXP && Rf_length(lhs) == 1 &&
+                Rf_length(rhs) == 1) {
                 stack.push(REAL(lhs)[0] < REAL(rhs)[0] ? R_TrueValue
                                                        : R_FalseValue);
             } else

@@ -1,6 +1,7 @@
 #include "Runtime.h"
 #include "RIntlns.h"
 #include "../Precious.h"
+#include "../Protect.h"
 
 #include <iostream>
 
@@ -11,15 +12,13 @@ namespace rjit {
 namespace rir {
 
 void BCProm::val(SEXP wrapper, SEXP aVal) {
-    _val = aVal;
-    // Ensures the value is reachable for the gc
     SET_ATTRIB(wrapper, CONS_NR(aVal, R_NilValue));
+    _val = aVal;
 }
 
 SEXP mkBCProm(Function* fun, fun_idx_t idx, SEXP env) {
-    SEXP s = Rf_allocVector(BCCodeType, 1 + sizeof(BCProm));
+    SEXP s = Rf_allocVector(BCCodeType, sizeof(BCProm));
     *getBCProm(s) = BCProm(fun, idx, env);
-
     return s;
 }
 

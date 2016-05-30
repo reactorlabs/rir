@@ -24,7 +24,8 @@ class Primitives {
     }
 
     inline SEXP cachedCompilePrimitive(SEXP fun) {
-        if (TYPEOF(fun) == SPECIALSXP || TYPEOF(fun) == BUILTINSXP) {
+        if (Rinternals::typeof(fun) == SPECIALSXP ||
+            Rinternals::typeof(fun) == BUILTINSXP) {
             int idx = Rinternals::primoffset(fun);
             if (PrimitivesCacheOccupied[idx])
                 return PrimitivesCache[idx];

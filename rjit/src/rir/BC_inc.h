@@ -127,11 +127,7 @@ class BC {
 
     void print();
 
-    // Getters for the immediate arguments
     SEXP immediateConst();
-    inline fun_idx_t immediateFunIdx() { return immediate.fun; }
-    inline num_args_t immediateNumArgs() { return immediate.numArgs; }
-    inline jmp_t immediateOffset() { return immediate.offset; }
 
     inline const static BC advance(BC_t** pc);
     template <typename T>

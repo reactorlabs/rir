@@ -4,28 +4,26 @@
 #include "Function.h"
 #include "BC.h"
 #include "../RDefs.h"
-
-extern "C" unsigned char* RAW(SEXP);
+#include "../RIntlns_inc.h"
 
 namespace rjit {
 namespace rir {
 
-constexpr static int BCCodeType = 24; // EXTPTRSXP
+constexpr static int BCCodeType = 24; // RAWSXP
 
-#pragma pack(push)
-#pragma pack(0)
 struct BCProm {
   public:
-    static constexpr unsigned char type = 1;
-    unsigned char t = type;
+    static constexpr unsigned type = 0x9703;
+    unsigned t : 16;
+    fun_idx_t idx : 16;
+
     Function* fun;
-    fun_idx_t idx;
     SEXP env;
     SEXP ast() { return fun->code[idx]->ast; }
-    SEXP val() { return _val; }
+    SEXP val(SEXP wrapper) { return _val; }
     void val(SEXP wrapper, SEXP aVal);
     BCProm(Function* fun, fun_idx_t idx, SEXP env)
-        : fun(fun), idx(idx), env(env) {}
+        : t(type), idx(idx), fun(fun), env(env) {}
 
   private:
     SEXP _val = nullptr;
@@ -33,8 +31,8 @@ struct BCProm {
 
 struct BCClosure {
   public:
-    static constexpr unsigned char type = 2;
-    unsigned char t = type;
+    static constexpr unsigned type = 0xc105;
+    unsigned t : 16;
     Function* fun;
     SEXP formals;
     num_args_t nargs;
@@ -42,25 +40,26 @@ struct BCClosure {
     SEXP env;
     BCClosure(Function* fun, SEXP formals, num_args_t nargs, bool eager,
               SEXP env)
-        : fun(fun), formals(formals), nargs(nargs), eager(eager), env(env) {}
+        : t(type), fun(fun), formals(formals), nargs(nargs), eager(eager),
+          env(env) {}
 };
-
-#pragma pack(pop)
 
 SEXP mkBCProm(Function* fun, fun_idx_t idx, SEXP env);
 SEXP mkBCCls(Function* fun, SEXP formals, num_args_t nargs, bool eager,
              SEXP env);
 
-inline BCProm* getBCProm(SEXP s) { return (BCProm*)RAW(s); }
+inline BCProm* getBCProm(SEXP s) { return (BCProm*)Rinternals::raw(s); }
 
-inline BCClosure* getBCCls(SEXP s) { return (BCClosure*)RAW(s); }
+inline BCClosure* getBCCls(SEXP s) { return (BCClosure*)Rinternals::raw(s); }
 
 inline bool isBCProm(SEXP s) {
-    return TYPEOF(s) == BCCodeType && getBCProm(s)->t == BCProm::type;
+    return Rinternals::typeof(s) == BCCodeType &&
+           getBCProm(s)->t == BCProm::type;
 }
 
 inline bool isBCCls(SEXP s) {
-    return TYPEOF(s) == BCCodeType && getBCCls(s)->t == BCClosure::type;
+    return Rinternals::typeof(s) == BCCodeType &&
+           getBCCls(s)->t == BCClosure::type;
 }
 
 } // rir

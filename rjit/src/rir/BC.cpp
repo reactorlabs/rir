@@ -143,7 +143,7 @@ void BC::print() {
         std::cout << "pushi " << immediate.i << "\n";
         break;
     case BC_t::call:
-        std::cout << "call " << immediateNumArgs() << "\n";
+        std::cout << "call " << immediate.numArgs << "\n";
         break;
     case BC_t::get_ast:
         std::cout << "get_ast\n";
@@ -155,25 +155,25 @@ void BC::print() {
         std::cout << "numargi\n";
         break;
     case BC_t::load_arg:
-        std::cout << "load_arg " << immediateNumArgs() << "\n";
+        std::cout << "load_arg " << immediate.numArgs << "\n";
         break;
     case BC_t::push_arg:
-        std::cout << "push_arg " << immediateFunIdx() << "\n";
+        std::cout << "push_arg " << immediate.fun << "\n";
         break;
     case BC_t::mkprom:
-        std::cout << "mkprom " << immediateFunIdx() << "\n";
+        std::cout << "mkprom " << immediate.fun << "\n";
         break;
     case BC_t::mkclosure:
-        std::cout << "mkclosure " << immediateFunIdx() << "\n";
+        std::cout << "mkclosure " << immediate.fun << "\n";
         break;
     case BC_t::jmp_true:
-        std::cout << "jmp_true " << immediateOffset() << "\n";
+        std::cout << "jmp_true " << immediate.offset << "\n";
         break;
     case BC_t::jmp_false:
-        std::cout << "jmp_false " << immediateOffset() << "\n";
+        std::cout << "jmp_false " << immediate.offset << "\n";
         break;
     case BC_t::jmp:
-        std::cout << "jmp " << immediateOffset() << "\n";
+        std::cout << "jmp " << immediate.offset << "\n";
         break;
     case BC_t::add:
         std::cout << "add\n";
