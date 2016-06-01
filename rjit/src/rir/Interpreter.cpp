@@ -144,7 +144,6 @@ static INLINE SEXP callPrimitive(SEXP (*primfun)(SEXP, SEXP, SEXP, SEXP),
 static SEXP rirEval(Function* fun, fun_idx_t c, SEXP env, num_args_t numArgs,
                     SEXP call);
 
-static int level = 0;
 static INLINE void evalCallArgs(Function* fun, num_args_t nargs, SEXP env) {
 
     for (size_t i = 0; i < nargs; ++i) {
@@ -257,7 +256,6 @@ static INLINE SEXP forcePromise(BCProm* prom, SEXP wrapper) {
 
 static SEXP rirEval(Function* fun, fun_idx_t c, SEXP env, num_args_t numArgs,
                     SEXP call) {
-    level += 2;
     assert(fun->code.size() > c);
 
     // Current Code Object (from the function) being evaluated
@@ -725,7 +723,6 @@ static SEXP rirEval(Function* fun, fun_idx_t c, SEXP env, num_args_t numArgs,
     }
 
 done:
-    level -= 2;
     return stack.pop();
 }
 } // namespace
