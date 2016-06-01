@@ -3,6 +3,8 @@
 
 #include "RDefs.h"
 
+#include <cassert>
+
 namespace rjit {
 
 class RListIter {
@@ -28,6 +30,8 @@ class RList {
     RList(SEXP list);
 
     RListIter begin() { return RListIter(list); }
+
+    SEXP operator[](size_t idx);
 
     static RListIter& end() {
         static RListIter end(R_NilValue);

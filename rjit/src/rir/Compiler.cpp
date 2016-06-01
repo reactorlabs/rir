@@ -79,7 +79,68 @@ void compileExpression(Function& f, CodeStream& cs, SEXP exp) {
     // Dispatch on the current type of AST node
     Match(exp) {
         // Function application
-        Case(LANGSXP, fun, args) { compileCall(f, cs, exp, fun, args); }
+        Case(LANGSXP, fun, args) {
+
+            // TODO: Those are unsound. Lets reimplement them as an optimization
+            //       pass, which should also take care of the necessary checks.
+            //
+            // if (TYPEOF(fun) == SYMSXP) {
+            //     std::string name(CHAR(PRINTNAME(fun)));
+
+            //     if (name.compare("{") == 0) {
+            //         for (auto a : RList(args)) {
+            //             compileExpression(f, cs, a);
+            //         }
+            //         return;
+            //     }
+
+            //     if (name.compare("if") == 0) {
+            //         Label trueBranch = cs.mkLabel();
+            //         Label nextBranch = cs.mkLabel();
+
+            //         RList a(args);
+            //         compileExpression(f, cs, a[0]);
+            //         cs << BC::to_bool() << BC::jmp_true(trueBranch);
+
+            //         if (a.length() < 2) {
+            //             cs << BC::push(R_NilValue);
+            //         } else {
+            //             compileExpression(f, cs, a[2]);
+            //         }
+            //         cs << BC::jmp(nextBranch);
+
+            //         cs << trueBranch;
+            //         compileExpression(f, cs, a[1]);
+
+            //         cs << nextBranch;
+            //         return;
+            //     }
+
+            //     if (name.compare("<") == 0) {
+            //         RList a(args);
+            //         compileExpression(f, cs, a[0]);
+            //         compileExpression(f, cs, a[1]);
+            //         cs << BC::lt();
+            //         return;
+            //     }
+            //     if (name.compare("+") == 0) {
+            //         RList a(args);
+            //         compileExpression(f, cs, a[0]);
+            //         compileExpression(f, cs, a[1]);
+            //         cs << BC::add();
+            //         return;
+            //     }
+            //     if (name.compare("-") == 0) {
+            //         RList a(args);
+            //         compileExpression(f, cs, a[0]);
+            //         compileExpression(f, cs, a[1]);
+            //         cs << BC::sub();
+            //         return;
+            //     }
+            // }
+
+            compileCall(f, cs, exp, fun, args);
+        }
         // Variable lookup
         Case(SYMSXP) { compileGetvar(cs, exp); }
         // Constant
@@ -99,8 +160,6 @@ void compileFormals(CodeStream& cs, SEXP formals) {
         // TODO
         assert(name != symbol::Ellipsis);
 
-        // cs << BC::push(name) << BC::load_arg(narg) << BC::setvar() <<
-        // BC::pop();
         narg++;
     }
 }

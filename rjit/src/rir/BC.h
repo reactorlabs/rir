@@ -205,12 +205,16 @@ class AstMap {
     }
 
     SEXP at(unsigned p) {
+        if (size == 0)
+            return nullptr;
+
         size_t f = 0;
 
         while (f < size && pos[f] < p)
             f++;
 
-        assert(pos[f] == p);
+        if (pos[f] != p)
+            return nullptr;
 
         return ast[f];
     }

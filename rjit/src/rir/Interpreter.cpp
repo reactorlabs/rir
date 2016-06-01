@@ -12,12 +12,29 @@
 #include <deque>
 #include <array>
 
-extern "C" Rboolean convertToLogicalNoNA(SEXP what, SEXP consts, int call);
+extern "C" {
+Rboolean convertToLogicalNoNA(SEXP what, SEXP consts, int call);
+}
 
 namespace rjit {
 namespace rir {
 
 namespace {
+
+static CCODE getPrimfun(std::string symbol) {
+    for (size_t i = 0;; ++i) {
+        if (symbol.compare(R_FunTab[i].name) == 0)
+            return R_FunTab[i].cfun;
+    }
+    assert(false);
+    return nullptr;
+}
+
+static SEXP getPrimitive(const char* name) {
+    SEXP value = SYMVALUE(Rf_install(name));
+    assert(TYPEOF(value) == SPECIALSXP || TYPEOF(value) == BUILTINSXP);
+    return value;
+}
 
 SEXP jit(SEXP fun) {
     std::cout << "JIT Compiling a function to BC\n";
@@ -96,8 +113,22 @@ static INLINE SEXP callPrimitive(SEXP (*primfun)(SEXP, SEXP, SEXP, SEXP),
     SEXP arglist = R_NilValue;
     for (num_args_t i = 0; i < numargs; ++i) {
         SEXP t = stack.pop();
-        assert(isBCProm(t));
         arglist = CONS_NR(t, arglist);
+    }
+
+    stack.push(arglist);
+    SEXP res = primfun(call, op, arglist, env);
+    stack.pop();
+    return res;
+}
+
+static INLINE SEXP callPrimitive(SEXP (*primfun)(SEXP, SEXP, SEXP, SEXP),
+                                 SEXP call, SEXP op, SEXP env,
+                                 std::vector<SEXP> args) {
+    // args are expected to be on the stack
+    SEXP arglist = R_NilValue;
+    for (auto i = args.rbegin(); i != args.rend(); ++i) {
+        arglist = CONS_NR(*i, arglist);
     }
 
     stack.push(arglist);
@@ -110,7 +141,8 @@ static INLINE SEXP callPrimitive(SEXP (*primfun)(SEXP, SEXP, SEXP, SEXP),
 // == Interpreter loop
 //
 
-static SEXP rirEval(Function* fun, fun_idx_t c, SEXP env, num_args_t numArgs);
+static SEXP rirEval(Function* fun, fun_idx_t c, SEXP env, num_args_t numArgs,
+                    SEXP call);
 
 static int level = 0;
 static INLINE void evalCallArgs(Function* fun, num_args_t nargs, SEXP env) {
@@ -118,7 +150,7 @@ static INLINE void evalCallArgs(Function* fun, num_args_t nargs, SEXP env) {
     for (size_t i = 0; i < nargs; ++i) {
         size_t off = nargs - i - 1;
         fun_idx_t idx = callArgs.peek(off);
-        SEXP arg = rirEval(fun, idx, env, 0);
+        SEXP arg = rirEval(fun, idx, env, 0, fun->code[idx]->ast);
         stack.push(arg);
     }
 
@@ -146,14 +178,14 @@ static INLINE SEXP callBuiltin(Function* caller, SEXP call, SEXP op,
 }
 
 static INLINE SEXP callClosure(Function* caller, BCClosure* cls,
-                               num_args_t nargs, SEXP env) {
+                               num_args_t nargs, SEXP env, SEXP call) {
 
     assert(cls->nargs == VARIADIC_ARGS || cls->nargs == nargs);
 
     if (cls->eager) {
         assert(!cls->env);
         evalCallArgs(caller, nargs, env);
-        return rirEval(cls->fun, 0, env, nargs);
+        return rirEval(cls->fun, 0, env, nargs, call);
     }
 
     if (cls->env) {
@@ -173,7 +205,7 @@ static INLINE SEXP callClosure(Function* caller, BCClosure* cls,
         SEXP newEnv = Rf_NewEnvironment(cls->formals, args, cls->env);
         stack.push(newEnv);
 
-        SEXP res = rirEval(cls->fun, 0, newEnv, nargs);
+        SEXP res = rirEval(cls->fun, 0, newEnv, nargs, call);
         // stack.pop(nargs);
         stack.pop();
         return res;
@@ -185,7 +217,7 @@ static INLINE SEXP callClosure(Function* caller, BCClosure* cls,
     }
     callArgs.pop(nargs);
 
-    SEXP res = rirEval(cls->fun, 0, env, nargs);
+    SEXP res = rirEval(cls->fun, 0, env, nargs, call);
     stack.pop(nargs);
     return res;
 }
@@ -205,7 +237,7 @@ static INLINE SEXP doCall(Function* caller, SEXP call, SEXP callee,
         break;
     case BCCodeType:
         assert(isBCCls(callee));
-        res = callClosure(caller, getBCCls(callee), nargs, env);
+        res = callClosure(caller, getBCCls(callee), nargs, env, call);
         break;
     default:
         assert(false);
@@ -218,12 +250,13 @@ static INLINE SEXP doCall(Function* caller, SEXP call, SEXP callee,
 
 static INLINE SEXP forcePromise(BCProm* prom, SEXP wrapper) {
     assert(!prom->val(wrapper));
-    SEXP res = rirEval(prom->fun, prom->idx, prom->env, 0);
+    SEXP res = rirEval(prom->fun, prom->idx, prom->env, 0, prom->ast());
     prom->val(wrapper, res);
     return res;
 }
 
-static SEXP rirEval(Function* fun, fun_idx_t c, SEXP env, num_args_t numArgs) {
+static SEXP rirEval(Function* fun, fun_idx_t c, SEXP env, num_args_t numArgs,
+                    SEXP call) {
     level += 2;
     assert(fun->code.size() > c);
 
@@ -234,6 +267,13 @@ static SEXP rirEval(Function* fun, fun_idx_t c, SEXP env, num_args_t numArgs) {
 
     // base pointer
     size_t bp = stack.size();
+
+    auto getCurrentCall = [cur, pc, call]() {
+        SEXP c = cur->getAst(pc);
+        if (c)
+            return c;
+        return call;
+    };
 
     // some helpers
     auto getArg = [numArgs, bp](size_t idx) {
@@ -248,11 +288,15 @@ static SEXP rirEval(Function* fun, fun_idx_t c, SEXP env, num_args_t numArgs) {
     while (true) {
         switch (BC::readBC(&pc)) {
         case BC_t::to_bool: {
-            SEXP t = stack.pop();
+            SEXP t = stack.top();
             int cond = NA_LOGICAL;
 
-            // TODO
-            assert(Rf_length(t) <= 2);
+            if (Rf_length(t) > 1) {
+                warningcall(getCurrentCall(),
+                            ("the condition has length > 1 and only the first "
+                             "element will be used"));
+            }
+            stack.pop();
 
             if (Rf_length(t) > 0) {
                 /* inline common cases for efficiency */
@@ -279,7 +323,7 @@ static SEXP rirEval(Function* fun, fun_idx_t c, SEXP env, num_args_t numArgs) {
                                ? ("missing value where TRUE/FALSE needed")
                                : ("argument is not interpretable as logical"))
                         : ("argument is of length zero");
-                Rf_error(msg);
+                errorcall(getCurrentCall(), msg);
             }
 
             if (cond) {
@@ -617,7 +661,6 @@ static SEXP rirEval(Function* fun, fun_idx_t c, SEXP env, num_args_t numArgs) {
         }
 
         case BC_t::add: {
-            // TODO
             SEXP rhs = stack.pop();
             SEXP lhs = stack.pop();
             if (Rinternals::typeof(lhs) == REALSXP &&
@@ -627,13 +670,17 @@ static SEXP rirEval(Function* fun, fun_idx_t c, SEXP env, num_args_t numArgs) {
                 SET_NAMED(res, 1);
                 REAL(res)[0] = REAL(lhs)[0] + REAL(rhs)[0];
                 stack.push(res);
-            } else
-                assert(false);
+            } else {
+                static SEXP op = getPrimitive("+");
+                static CCODE primfun = getPrimfun("+");
+                SEXP res = callPrimitive(primfun, getCurrentCall(), op, env,
+                                         {lhs, rhs});
+                stack.push(res);
+            }
             break;
         }
 
         case BC_t::sub: {
-            // TODO
             SEXP rhs = stack.pop();
             SEXP lhs = stack.pop();
             if (Rinternals::typeof(lhs) == REALSXP &&
@@ -643,13 +690,17 @@ static SEXP rirEval(Function* fun, fun_idx_t c, SEXP env, num_args_t numArgs) {
                 SET_NAMED(res, 1);
                 REAL(res)[0] = REAL(lhs)[0] - REAL(rhs)[0];
                 stack.push(res);
-            } else
-                assert(false);
+            } else {
+                static SEXP op = getPrimitive("-");
+                static CCODE primfun = getPrimfun("-");
+                SEXP res = callPrimitive(primfun, getCurrentCall(), op, env,
+                                         {lhs, rhs});
+                stack.push(res);
+            }
             break;
         }
 
         case BC_t::lt: {
-            // TODO
             SEXP rhs = stack.pop();
             SEXP lhs = stack.pop();
             if (Rinternals::typeof(lhs) == REALSXP &&
@@ -657,8 +708,13 @@ static SEXP rirEval(Function* fun, fun_idx_t c, SEXP env, num_args_t numArgs) {
                 Rf_length(rhs) == 1) {
                 stack.push(REAL(lhs)[0] < REAL(rhs)[0] ? R_TrueValue
                                                        : R_FalseValue);
-            } else
-                assert(false);
+            } else {
+                static SEXP op = getPrimitive("<");
+                static CCODE primfun = getPrimfun("<");
+                SEXP res = callPrimitive(primfun, getCurrentCall(), op, env,
+                                         {lhs, rhs});
+                stack.push(res);
+            }
             break;
         }
 
@@ -674,7 +730,7 @@ done:
 }
 } // namespace
 
-SEXP Interpreter::run(SEXP env) { return rirEval(fun, 0, env, 0); }
+SEXP Interpreter::run(SEXP env) { return rirEval(fun, 0, env, 0, R_NilValue); }
 
 void Interpreter::gcCallback(void (*forward_node)(SEXP)) {
     for (size_t i = 0; i < stack.size(); ++i) {
