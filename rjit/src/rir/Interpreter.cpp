@@ -190,29 +190,34 @@ static INLINE SEXP callClosure(Function* caller, BCClosure* cls,
     if (cls->env) {
         SEXP args = R_NilValue;
 
-        // SEXP newEnv = Rf_NewEnvironment(R_NilValue, R_NilValue, cls->env);
-        // stack.push(newEnv);
-
         for (size_t i = 0; i < nargs; ++i) {
-            SEXP prom = mkBCProm(caller, callArgs.peek(nargs - 1 - i), env);
-            args = CONS_NR(prom, args);
-            // stack.push((SEXP)prom);
+            fun_idx_t idx = callArgs.peek(nargs - 1 - i);
+            if (idx == MISSING_ARG_IDX) {
+                args = CONS_NR(R_MissingArg, args);
+            } else {
+                SEXP prom = mkBCProm(caller, idx, env);
+                args = CONS_NR(prom, args);
+            }
         }
-
         callArgs.pop(nargs);
 
         SEXP newEnv = Rf_NewEnvironment(cls->formals, args, cls->env);
         stack.push(newEnv);
 
         SEXP res = rirEval(cls->fun, 0, newEnv, nargs, call);
-        // stack.pop(nargs);
         stack.pop();
+
         return res;
     }
 
     for (size_t i = 0; i < nargs; ++i) {
-        SEXP prom = mkBCProm(caller, callArgs.peek(nargs - 1 - i), env);
-        stack.push(prom);
+        fun_idx_t idx = callArgs.peek(nargs - 1 - i);
+        if (idx == MISSING_ARG_IDX) {
+            stack.push(R_MissingArg);
+        } else {
+            SEXP prom = mkBCProm(caller, callArgs.peek(nargs - 1 - i), env);
+            stack.push(prom);
+        }
     }
     callArgs.pop(nargs);
 
@@ -482,64 +487,100 @@ static SEXP rirEval(Function* fun, fun_idx_t c, SEXP env, num_args_t numArgs,
                 int finger = 0;
                 int positional = 0;
 
+                // TODO dotdotdot
+
+                // Match given arguments to formal arguments:
+                // Go through all the formal arguments
                 for (auto formal = formals.begin(); formal != RList::end();
-                     ++formal) {
+                     ++formal, ++finger) {
                     bool found = false;
 
-                    // TODO dotdotdot
+                    // Check if any of the supplied args has a matching tag
                     {
                         int current = 0;
                         for (auto supplied : names) {
-                            if (!used[current] && formal.tag() == supplied) {
-                                // TODO err
-                                assert(!found);
-                                found = true;
-                                matched[finger] =
-                                    callArgs.peek(nargs - current - 1);
-                            }
+                            if (used[current] || supplied == R_NilValue)
+                                continue;
+                            if (formal.tag() != supplied)
+                                continue;
+
+                            // TODO err: same name given twice!
+                            assert(!found);
+
+                            // std::cout << "Arg " <<
+                            // CHAR(PRINTNAME(formal.tag()))
+                            //           << " matched at pos " << current <<
+                            //           "\n";
+
+                            found = true;
+                            matched[finger] =
+                                callArgs.peek(nargs - current - 1);
+                            used[current] = 1;
+
                             current++;
                         }
                     }
 
+                    // Check if any of the supplied args has a partially
+                    // matching tag
                     if (!found) {
                         int current = 0;
                         for (auto supplied : names) {
-                            if (!used[current] && supplied != R_NilValue) {
-                                std::string given(CHAR(PRINTNAME(supplied)));
-                                std::string f(CHAR(PRINTNAME(formal.tag())));
-                                if (f.compare(0, given.length(), given) == 0) {
-                                    assert(!found);
-                                    found = true;
-                                    matched[finger] =
-                                        callArgs.peek(nargs - current - 1);
-                                    break;
-                                }
-                            }
+                            if (used[current] || supplied == R_NilValue)
+                                continue;
+
+                            std::string given(CHAR(PRINTNAME(supplied)));
+                            std::string f(CHAR(PRINTNAME(formal.tag())));
+                            if (f.compare(0, given.length(), given) != 0)
+                                continue;
+
+                            // TODO err: same name given twice!
+                            assert(!found);
+
+                            // std::cout << "Arg " <<
+                            // CHAR(PRINTNAME(formal.tag()))
+                            //           << " partially matched at pos " <<
+                            //           current << "\n";
+
+                            found = true;
+                            matched[finger] =
+                                callArgs.peek(nargs - current - 1);
+                            used[current] = 1;
+
                             current++;
                         }
                     }
 
+                    // No match -> find the next untagged (ie. positional)
+                    // argument
                     if (!found)
                         while (positional < nargs) {
                             if (names[positional++] == R_NilValue) {
+                                // std::cout << "Arg " <<
+                                // CHAR(PRINTNAME(formal.tag()))
+                                //           << " at pos " << positional - 1 <<
+                                //           "\n";
+
                                 found = true;
                                 matched[finger] =
                                     callArgs.peek(nargs - positional);
+                                used[positional - 1] = 1;
                                 break;
                             }
                         }
 
+                    // No more positional args left?
                     if (!found) {
-                        assert(false);
-                        // TODO need some way to load R_MissingArgs
-                        // matched[finger] = -1;
+                        // std::cout << "Arg " << CHAR(PRINTNAME(formal.tag()))
+                        //           << " is missing\n";
+                        matched[finger] = MISSING_ARG_IDX;
                     }
-
-                    finger++;
                 }
+
+                // Replace call args on the stack by the reordered match
                 callArgs.pop(nargs);
-                for (auto i : matched) {
-                    callArgs.push(i);
+                for (auto i = matched.rbegin(); i != matched.rend(); ++i) {
+                    callArgs.push(*i);
                 }
                 nargs = matched.size();
                 break;
@@ -557,7 +598,11 @@ static SEXP rirEval(Function* fun, fun_idx_t c, SEXP env, num_args_t numArgs,
             SEXP cls = stack.pop();
             num_args_t nargs = BC::readImmediate<num_args_t>(&pc);
             if (isBCCls(cls)) {
-                // TODO check for missing
+                size_t expected = getBCCls(cls)->nargs;
+                while (nargs < expected) {
+                    nargs++;
+                    callArgs.push(MISSING_ARG_IDX);
+                }
             }
             SEXP res = doCall(fun, cur->getAst(pc), cls, nargs, env);
             stack.push(res);
