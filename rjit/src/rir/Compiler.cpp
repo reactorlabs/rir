@@ -11,17 +11,18 @@
 
 #include "Pool.h"
 #include "Interpreter.h"
+#include "Optimizer.h"
 
 namespace rjit {
 namespace rir {
 
 namespace {
 
-fun_idx_t compilePromise(Function& f, SEXP exp);
-void compileExpression(Function& f, CodeStream& cs, SEXP exp);
+fun_idx_t compilePromise(Function* f, SEXP exp);
+void compileExpression(Function* f, CodeStream& cs, SEXP exp);
 
 // function application
-void compileCall(Function& f, CodeStream& cs, SEXP ast, SEXP fun, SEXP args) {
+void compileCall(Function* f, CodeStream& cs, SEXP ast, SEXP fun, SEXP args) {
     // application has the form:
     // LHS ( ARGS )
 
@@ -75,7 +76,7 @@ void compileConst(CodeStream& cs, SEXP constant) {
     cs << BC::push(constant);
 }
 
-void compileExpression(Function& f, CodeStream& cs, SEXP exp) {
+void compileExpression(Function* f, CodeStream& cs, SEXP exp) {
     // Dispatch on the current type of AST node
     Match(exp) {
         // Function application
@@ -102,7 +103,7 @@ void compileExpression(Function& f, CodeStream& cs, SEXP exp) {
             //         compileExpression(f, cs, a[0]);
             //         cs << BC::to_bool() << BC::jmp_true(trueBranch);
 
-            //         if (a.length() < 2) {
+            //         if (a.length() < 3) {
             //             cs << BC::push(R_NilValue);
             //         } else {
             //             compileExpression(f, cs, a[2]);
@@ -164,7 +165,7 @@ void compileFormals(CodeStream& cs, SEXP formals) {
     }
 }
 
-fun_idx_t compileFunction(Function& f, SEXP exp, SEXP formals) {
+fun_idx_t compileFunction(Function* f, SEXP exp, SEXP formals) {
     CodeStream cs(f, exp);
     if (formals)
         compileFormals(cs, formals);
@@ -173,7 +174,7 @@ fun_idx_t compileFunction(Function& f, SEXP exp, SEXP formals) {
     return cs.finalize();
 }
 
-fun_idx_t compilePromise(Function& f, SEXP exp) {
+fun_idx_t compilePromise(Function* f, SEXP exp) {
     CodeStream cs(f, exp);
     compileExpression(f, cs, exp);
     cs << BC::ret();
@@ -184,7 +185,8 @@ fun_idx_t compilePromise(Function& f, SEXP exp) {
 Function* Compiler::finalize() {
     Function* f = new Function;
 
-    compileFunction(*f, exp, formals);
+    compileFunction(f, exp, formals);
+    Optimizer::optimize(f);
 
     return f;
 }

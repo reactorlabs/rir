@@ -375,6 +375,13 @@ static SEXP rirEval(Function* fun, fun_idx_t c, SEXP env, num_args_t numArgs,
             break;
         }
 
+        case BC_t::check_special: {
+            SEXP sym = loadConst();
+            SEXP val = findVar(sym, env);
+            assert(TYPEOF(val) == SPECIALSXP);
+            break;
+        }
+
         case BC_t::getfun: {
             SEXP sym = loadConst();
             SEXP val = findVar(sym, env);
@@ -599,10 +606,11 @@ static SEXP rirEval(Function* fun, fun_idx_t c, SEXP env, num_args_t numArgs,
             num_args_t nargs = BC::readImmediate<num_args_t>(&pc);
             if (isBCCls(cls)) {
                 size_t expected = getBCCls(cls)->nargs;
-                while (nargs < expected) {
-                    nargs++;
-                    callArgs.push(MISSING_ARG_IDX);
-                }
+                if (expected != VARIADIC_ARGS)
+                    while (nargs < expected) {
+                        nargs++;
+                        callArgs.push(MISSING_ARG_IDX);
+                    }
             }
             SEXP res = doCall(fun, cur->getAst(pc), cls, nargs, env);
             stack.push(res);

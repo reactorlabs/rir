@@ -20,7 +20,7 @@ class CodeStream {
     unsigned pos = 0;
     unsigned size = 1024;
 
-    Function& fun;
+    Function* fun;
     SEXP ast;
     fun_idx_t insertPoint;
 
@@ -42,8 +42,12 @@ class CodeStream {
         insert((jmp_t)0);
     }
 
-    CodeStream(Function& fun, SEXP ast)
-        : fun(fun), ast(ast), insertPoint(fun.next()) {
+    CodeStream(Function* fun, SEXP ast)
+        : fun(fun), ast(ast), insertPoint(fun->next()) {
+        code = new std::vector<char>(1024);
+    }
+
+    CodeStream(SEXP ast) : fun(nullptr), ast(ast), insertPoint(-1) {
         code = new std::vector<char>(1024);
     }
 
@@ -58,7 +62,8 @@ class CodeStream {
     }
 
     fun_idx_t finalize() {
-        fun.addCode(insertPoint, toCode());
+        assert(fun);
+        fun->addCode(insertPoint, toCode());
         return insertPoint;
     }
 
@@ -74,6 +79,14 @@ class CodeStream {
     }
 
     void addAst(SEXP ast) { astMap[pos] = ast; }
+
+    Code* toCode() {
+        size_t size = pos;
+        Code* res = new Code(size, toBc(), ast, astMap);
+        ast = nullptr;
+        astMap.clear();
+        return res;
+    }
 
   private:
     BC_t* toBc() {
@@ -93,14 +106,6 @@ class CodeStream {
 
         code->clear();
         pos = 0;
-        return res;
-    }
-
-    Code* toCode() {
-        size_t size = pos;
-        Code* res = new Code(size, toBc(), ast, astMap);
-        ast = nullptr;
-        astMap.clear();
         return res;
     }
 

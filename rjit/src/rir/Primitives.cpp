@@ -121,7 +121,7 @@ bool compileSpecial(CodeStream& cs, int special_id) {
 
 SEXP Primitives::doCompilePrimitive(SEXP fun) {
     Function* f = new Function;
-    CodeStream cs(*f, fun);
+    CodeStream cs(f, fun);
 
     int idx = Rinternals::primoffset(fun);
     bool success = false;

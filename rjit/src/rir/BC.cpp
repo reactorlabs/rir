@@ -16,6 +16,7 @@ void BC::write(CodeStream& cs) const {
     case BC_t::push:
     case BC_t::getfun:
     case BC_t::getvar:
+    case BC_t::check_special:
         cs.insert(immediate.pool);
         return;
 
@@ -92,13 +93,17 @@ void BC::print() {
     case BC_t::call_name:
         std::cout << "call_name ";
         for (auto n : RVector(immediateConst())) {
-            std::cout << CHAR(PRINTNAME(n)) << " ";
+            std::cout << (n == R_NilValue ? "_" : CHAR(PRINTNAME(n))) << " ";
         }
         std::cout << "\n";
         break;
     case BC_t::push:
         std::cout << "push ";
         Rf_PrintValue(immediateConst());
+        break;
+    case BC_t::check_special:
+        std::cout << "check_special " << CHAR(PRINTNAME((immediateConst())))
+                  << "\n";
         break;
     case BC_t::getfun:
         std::cout << "getfun " << CHAR(PRINTNAME((immediateConst()))) << "\n";

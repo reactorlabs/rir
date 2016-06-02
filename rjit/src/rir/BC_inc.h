@@ -77,6 +77,8 @@ enum class BC_t : uint8_t {
 
     push_arg,
 
+    check_special,
+
     num_of
 };
 
@@ -166,6 +168,7 @@ class BC {
     inline const static BC add();
     inline const static BC sub();
     inline const static BC lt();
+    inline const static BC check_special(SEXP sym);
 };
 
 } // rir
