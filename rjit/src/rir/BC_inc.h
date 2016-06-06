@@ -190,7 +190,9 @@ static constexpr size_t MIN_JMP = -(1L << ((8 * sizeof(jmp_t)) - 1));
 class CodeStream;
 class BC {
   public:
-    // This is only used internally
+    // This is only used internally in the BC handle objects
+    // On the bytecode stream each immediate argument uses only the actual
+    // space required.
     union immediate_t {
         call_args_t call_args;
         pool_idx_t pool;
@@ -211,21 +213,35 @@ class BC {
     immediate_t immediate;
 
     inline size_t size() const;
+
+    // Used to serialize bc to CodeStream
     void write(CodeStream& cs) const;
 
+    // Print it to stdout
     void print();
 
+    // Accessors to load immediate constant from the pool
     SEXP immediateConst();
-
     SEXP immediateCallArgs();
     SEXP immediateCallNames();
 
+    // ==== BC decoding logic
+    // There are two interfaces:
+    //
+    // 1. Slow but convenient:
+    //    Decode one BC from stream and advance pc accordingly
     inline static BC advance(BC_t** pc);
+
+    // 2. Fast but dangerous:
+    //    Read bytecodes and immediates directly from the stream, without
+    //    creating BC object wrapper. Dispatching on BC_t needs handle
+    //    different sizes of immediate argument.
     template <typename T>
     inline static T readImmediate(BC_t** pc);
     inline static BC_t readBC(BC_t** pc);
 
-    // Create a new BC instance
+    // ==== Factory methods
+    // to create new BC objects, which can be streamed to a CodeStream
     const static BC call(std::vector<fun_idx_t> args, std::vector<SEXP> names);
     inline const static BC push(SEXP constant);
     inline const static BC getfun(SEXP sym);
