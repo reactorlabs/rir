@@ -12,6 +12,9 @@ namespace rir {
 
 namespace {
 
+// ============================================================================
+// ==== Thats just a toy example of how to compile away a call to some specials
+//
 void optimize_(Function* fun, fun_idx_t idx);
 void optimize(CodeStream& cs, Function* fun, Code* cur);
 

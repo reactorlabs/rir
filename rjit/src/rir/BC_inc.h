@@ -11,12 +11,28 @@
 namespace rjit {
 namespace rir {
 
+/* ============================================================================
+ * ==== Bytecode
+ *
+ * This file contains all definitions concerning Bytecodes.
+ * Bytecodes are variable length, they all start with a BC_t type tag which is
+ * followed by a variable sized immediate argument.
+ *
+ * The BC class contains constructor methods and all the infrastructure needed
+ * to decode/write bytecodes to/from a byte stream.
+ *
+ * To add a bytecode:
+ * 1. add it to BC_t
+ * 2. add a constructor method to class BC
+ * 3. add an entry to immediate_size in BC.h
+ * 4. implement it (ie. resolve all switch statement warnings)
+ */
+
 // ============================================================
-// ==== Bytecode Layout:
-//
-// [ uint8_t bytecode | optional immediate argument ]
+// ==== BC types
 //
 enum class BC_t : uint8_t {
+    // This is only here to trap accidentally calling zero initialized memory
     invalid,
 
     // Push a constant to the stack
@@ -25,6 +41,7 @@ enum class BC_t : uint8_t {
     push,
 
     // Function lookup
+    // Pushes a closure (or primitive) to the stack
     // I: symbol (via Pool)
     // S: +1
     getfun,
@@ -35,43 +52,98 @@ enum class BC_t : uint8_t {
     getvar,
 
     // Call function
-    // I: N - number of arguments
+    // Immediate arguments are the arguments to the call (given as a list of
+    //  code object indices) and a list of name tags of the arguments.
+    // I: {arguments, names}
     // S: -N
     call,
 
     // Create a promise
-    // I: promise index
+    // I: promise code object index
     // S: +1
     mkprom,
 
     // Create a closure
-    // I: closure index
+    // I: closure code object index
     // S: +1
     mkclosure,
 
+    // Return
+    // return value is tos
     ret,
+
+    // Force the promise on tos
+    // Leaves promise on tos
     force,
+
+    // Pop one value from stack
     pop,
+
+    // Load a specific function argument to the stack
+    // argument# is immediate
+    // Only valid for CallingConventions CC::*Stack
     load_arg,
+
+    // Expects a promise tos, replaces it by its ast
     get_ast,
+
+    // name and value from stack
+    // value left on stack
     setvar,
+
+    // push the number of arguments given to a CC::*Stack function
     numargi,
+
+    // converts tos to a bool scalar
     to_bool,
+
+    // pc += offset iff tos == true
     jmp_true,
+
+    // pc += offset iff tos == false
     jmp_false,
+
+    // unconditional jump
     jmp,
+
+    // less than on unboxed integers
     lti,
+
+    // equality on unboxed integers
     eqi,
+
+    // force all promise arguments to this function passed on the stack
+    // (currently unused)
     force_all,
+
+    // push unboxed integer
     pushi,
+
+    // duplicate unboxed integer
     dupi,
+
+    // Load a specific function argument to the stack
+    // unboxed integer argument# expected
+    // Only valid for CallingConventions CC::*Stack
     load_argi,
+
+    // Increment tos unboxed integer
     inci,
+
+    // duplicate tos
     dup,
+
+    // +
     add,
+
+    // -
     sub,
+
+    // <
     lt,
 
+    // Immediate symbol of a special as argument. Checks whether special is
+    // overwritten. Currently asserts(). TODO: osr
     check_special,
 
     num_of
@@ -82,25 +154,21 @@ enum class BC_t : uint8_t {
 //
 #pragma pack(push)
 #pragma pack(0)
+
+// index into the constant pool
 typedef uint32_t pool_idx_t;
+// index into a functions array of code objects
 typedef uint16_t fun_idx_t;
+// number of arguments
 typedef uint16_t num_args_t;
+// jmp offset
 typedef int16_t jmp_t;
-typedef int primitive_t;
+// immediate arguments to call
 typedef struct {
     pool_idx_t args;
     pool_idx_t names;
 } call_args_t;
 
-union immediate_t {
-    call_args_t call_args;
-    pool_idx_t pool;
-    fun_idx_t fun;
-    num_args_t numArgs;
-    jmp_t offset;
-    primitive_t prim;
-    int i;
-};
 #pragma pack(pop)
 
 static constexpr num_args_t VARIADIC_ARGS =
@@ -121,10 +189,17 @@ static constexpr size_t MIN_JMP = -(1L << ((8 * sizeof(jmp_t)) - 1));
 //
 class CodeStream;
 class BC {
-    BC(BC_t bc) : bc(bc), immediate({0}) {}
-    BC(BC_t bc, immediate_t immediate) : bc(bc), immediate(immediate) {}
-
   public:
+    // This is only used internally
+    union immediate_t {
+        call_args_t call_args;
+        pool_idx_t pool;
+        fun_idx_t fun;
+        num_args_t numArgs;
+        jmp_t offset;
+        int i;
+    };
+
     BC() : bc(BC_t::invalid), immediate({0}) {}
     BC operator=(BC other) {
         bc = other.bc;
@@ -181,6 +256,10 @@ class BC {
     inline const static BC sub();
     inline const static BC lt();
     inline const static BC check_special(SEXP sym);
+
+  private:
+    BC(BC_t bc) : bc(bc), immediate({0}) {}
+    BC(BC_t bc, immediate_t immediate) : bc(bc), immediate(immediate) {}
 };
 
 } // rir

@@ -96,7 +96,7 @@ class Stack {
 };
 
 // =============================================================================
-// === Interpreter Datastructures
+// ==== Interpreter Datastructures
 
 // The stacks
 
@@ -104,6 +104,7 @@ static Stack<SEXP> stack;
 Stack<int> stacki;
 
 // =============================================================================
+// ==== Helper : for not yet implemented primitives we call the gnur ones
 
 static INLINE SEXP callPrimitive(SEXP (*primfun)(SEXP, SEXP, SEXP, SEXP),
                                  SEXP call, SEXP op, SEXP env,
@@ -137,7 +138,7 @@ static INLINE SEXP callPrimitive(SEXP (*primfun)(SEXP, SEXP, SEXP, SEXP),
 }
 
 // =============================================================================
-// == Interpreter loop
+// ==== Interpreter call wrappers
 //
 
 static SEXP rirEval(Function* fun, fun_idx_t c, SEXP env, num_args_t numArgs,
@@ -263,6 +264,10 @@ static INLINE SEXP forcePromise(BCProm* prom, SEXP wrapper) {
     return res;
 }
 
+// =============================================================================
+// ==== Interpreter main loop
+//
+
 static SEXP rirEval(Function* fun, fun_idx_t c, SEXP env, num_args_t numArgs,
                     SEXP call) {
     assert(fun->code.size() > c);
@@ -291,7 +296,7 @@ static SEXP rirEval(Function* fun, fun_idx_t c, SEXP env, num_args_t numArgs,
         return Pool::instance().get(i);
     };
 
-    // Main loop
+    // Main BC_t dispatch
     while (true) {
         switch (BC::readBC(&pc)) {
         case BC_t::to_bool: {
@@ -518,11 +523,6 @@ static SEXP rirEval(Function* fun, fun_idx_t c, SEXP env, num_args_t numArgs,
                                 // TODO err: same name given twice!
                                 assert(!found);
 
-                                // std::cout << "Arg " <<
-                                // CHAR(PRINTNAME(formal.tag()))
-                                //           << " matched at pos " << current <<
-                                //           "\n";
-
                                 found = true;
                                 matched[finger] = args[current];
                                 used[current] = 1;
@@ -547,11 +547,6 @@ static SEXP rirEval(Function* fun, fun_idx_t c, SEXP env, num_args_t numArgs,
                                 // TODO err: same name given twice!
                                 assert(!found);
 
-                                // std::cout << "Arg " <<
-                                // CHAR(PRINTNAME(formal.tag()))
-                                //           << " partially matched at pos " <<
-                                //           current << "\n";
-
                                 found = true;
                                 matched[finger] = args[current];
                                 used[current] = 1;
@@ -565,12 +560,6 @@ static SEXP rirEval(Function* fun, fun_idx_t c, SEXP env, num_args_t numArgs,
                         if (!found)
                             while (positional < nargs) {
                                 if (names[positional++] == R_NilValue) {
-                                    // std::cout << "Arg " <<
-                                    // CHAR(PRINTNAME(formal.tag()))
-                                    //           << " at pos " << positional - 1
-                                    //           <<
-                                    //           "\n";
-
                                     found = true;
                                     matched[finger] = args[positional - 1];
                                     used[positional - 1] = 1;
@@ -580,9 +569,6 @@ static SEXP rirEval(Function* fun, fun_idx_t c, SEXP env, num_args_t numArgs,
 
                         // No more positional args left?
                         if (!found) {
-                            // std::cout << "Arg " <<
-                            // CHAR(PRINTNAME(formal.tag()))
-                            //           << " is missing\n";
                             matched[finger] = MISSING_ARG_IDX;
                         }
                     }
