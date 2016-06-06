@@ -133,16 +133,24 @@ const BC BC::force() { return BC(BC_t::force); }
 const BC BC::force_all() { return BC(BC_t::force_all); }
 const BC BC::pop() { return BC(BC_t::pop); }
 const BC BC::push(SEXP constant) {
-    return BC(BC_t::push, {Pool::instance().insert(constant)});
+    immediate_t i;
+    i.pool = Pool::instance().insert(constant);
+    return BC(BC_t::push, i);
 }
 const BC BC::getfun(SEXP sym) {
-    return BC(BC_t::getfun, {Pool::instance().insert(sym)});
+    immediate_t i;
+    i.pool = Pool::instance().insert(sym);
+    return BC(BC_t::getfun, i);
 }
 const BC BC::getvar(SEXP sym) {
-    return BC(BC_t::getvar, {Pool::instance().insert(sym)});
+    immediate_t i;
+    i.pool = Pool::instance().insert(sym);
+    return BC(BC_t::getvar, i);
 }
 const BC BC::check_special(SEXP sym) {
-    return BC(BC_t::check_special, {Pool::instance().insert(sym)});
+    immediate_t i;
+    i.pool = Pool::instance().insert(sym);
+    return BC(BC_t::check_special, i);
 }
 const BC BC::mkprom(fun_idx_t prom) { return BC(BC_t::mkprom, {prom}); }
 const BC BC::load_arg(num_args_t arg) { return BC(BC_t::load_arg, {arg}); }

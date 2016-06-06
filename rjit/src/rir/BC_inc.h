@@ -80,6 +80,8 @@ enum class BC_t : uint8_t {
 // ============================================================
 // ==== immediate argument types
 //
+#pragma pack(push)
+#pragma pack(0)
 typedef uint32_t pool_idx_t;
 typedef uint16_t fun_idx_t;
 typedef uint16_t num_args_t;
@@ -99,6 +101,7 @@ union immediate_t {
     primitive_t prim;
     int i;
 };
+#pragma pack(pop)
 
 static constexpr num_args_t VARIADIC_ARGS =
     (1L << (8 * sizeof(num_args_t))) - 1;

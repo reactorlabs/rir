@@ -463,15 +463,16 @@ static SEXP rirEval(Function* fun, fun_idx_t c, SEXP env, num_args_t numArgs,
         }
 
         case BC_t::call: {
-            SEXP args_ = loadConst();
-            int* args = INTEGER(args_);
-            SEXP n = loadConst();
-            SEXP cls = stack.pop();
-            num_args_t nargs = Rf_length(args_);
-            bool hasNames = n != R_NilValue;
+            call_args_t callArgs = BC::readImmediate<call_args_t>(&pc);
 
-            if (hasNames) {
-                RVector names(n);
+            SEXP args_ = Pool::instance().get(callArgs.args);
+            int* args = INTEGER(args_);
+            int nargs = Rf_length(args_);
+
+            SEXP cls = stack.pop();
+
+            if (callArgs.names) {
+                RVector names(Pool::instance().get(callArgs.names));
                 switch (Rinternals::typeof(cls)) {
                 // Primitives do not care about names
                 case SPECIALSXP:
@@ -589,7 +590,7 @@ static SEXP rirEval(Function* fun, fun_idx_t c, SEXP env, num_args_t numArgs,
                 }
             } else {
                 if (isBCCls(cls)) {
-                    size_t expected = getBCCls(cls)->nargs;
+                    num_args_t expected = getBCCls(cls)->nargs;
                     if (expected != VARIADIC_ARGS) {
                         if (nargs < expected) {
                             std::vector<int> allArgs(expected, MISSING_ARG_IDX);

@@ -74,7 +74,9 @@ SEXP BC::immediateCallArgs() {
     return Pool::instance().get(immediate.call_args.args);
 }
 SEXP BC::immediateCallNames() {
-    return Pool::instance().get(immediate.call_args.names);
+    return immediate.call_args.names
+               ? Pool::instance().get(immediate.call_args.names)
+               : nullptr;
 }
 
 void Code::print() {
@@ -197,6 +199,7 @@ void BC::print() {
 
 const BC BC::call(std::vector<fun_idx_t> args, std::vector<SEXP> names) {
     assert(args.size() == names.size());
+    assert(args.size() < MAX_NUM_ARGS);
 
     Protect p;
     SEXP a = Rf_allocVector(INTSXP, args.size());
@@ -220,14 +223,14 @@ const BC BC::call(std::vector<fun_idx_t> args, std::vector<SEXP> names) {
         for (size_t i = 0; i < args.size(); ++i) {
             SET_VECTOR_ELT(n, i, names[i]);
         }
-    } else {
-        n = R_NilValue;
+        call_args_t args_ = {Pool::instance().insert(a),
+                             Pool::instance().insert(n)};
+        immediate_t i;
+        i.call_args = args_;
+        return BC(BC_t::call, i);
     }
 
-    p(n);
-
-    call_args_t args_ = {Pool::instance().insert(a),
-                         Pool::instance().insert(n)};
+    call_args_t args_ = {Pool::instance().insert(a), 0};
     immediate_t i;
     i.call_args = args_;
     return BC(BC_t::call, i);
