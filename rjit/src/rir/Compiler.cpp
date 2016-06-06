@@ -34,35 +34,21 @@ void compileCall(Function* f, CodeStream& cs, SEXP ast, SEXP fun, SEXP args) {
 
     // Process arguments:
     // Arguments can be optionally named
-    size_t numArgs = 0;
-    RVector names;
-    bool hasNames = false;
+    std::vector<fun_idx_t> callArgs;
+    std::vector<SEXP> names;
 
     for (auto arg = RList(args).begin(); arg != RList::end(); ++arg) {
-        numArgs++;
-
         // (1) Arguments are wrapped as Promises:
         //     create a new Code object for the promise
         size_t prom = compilePromise(f, *arg);
+        callArgs.push_back(prom);
 
         // (2) remember if the argument had a name associated
-        if (arg.hasTag()) {
-            hasNames = true;
-            names.append(arg.tag());
-        } else {
-            names.append(R_NilValue);
-        }
-
-        // (3) insert promise creation instruction into current CodeStream
-        cs << BC::push_arg(prom);
+        names.push_back(arg.hasTag() ? arg.tag() : R_NilValue);
     }
-    assert(numArgs < MAX_NUM_ARGS);
+    assert(callArgs.size() < MAX_NUM_ARGS);
 
-    if (hasNames) {
-        cs << BC::call_name(static_cast<SEXP>(names));
-    } else {
-        cs << BC::call(numArgs);
-    }
+    cs << BC::call(callArgs, names);
 
     cs.addAst(ast);
 }
@@ -80,68 +66,7 @@ void compileExpression(Function* f, CodeStream& cs, SEXP exp) {
     // Dispatch on the current type of AST node
     Match(exp) {
         // Function application
-        Case(LANGSXP, fun, args) {
-
-            // TODO: Those are unsound. Lets reimplement them as an optimization
-            //       pass, which should also take care of the necessary checks.
-            //
-            // if (TYPEOF(fun) == SYMSXP) {
-            //     std::string name(CHAR(PRINTNAME(fun)));
-
-            //     if (name.compare("{") == 0) {
-            //         for (auto a : RList(args)) {
-            //             compileExpression(f, cs, a);
-            //         }
-            //         return;
-            //     }
-
-            //     if (name.compare("if") == 0) {
-            //         Label trueBranch = cs.mkLabel();
-            //         Label nextBranch = cs.mkLabel();
-
-            //         RList a(args);
-            //         compileExpression(f, cs, a[0]);
-            //         cs << BC::to_bool() << BC::jmp_true(trueBranch);
-
-            //         if (a.length() < 3) {
-            //             cs << BC::push(R_NilValue);
-            //         } else {
-            //             compileExpression(f, cs, a[2]);
-            //         }
-            //         cs << BC::jmp(nextBranch);
-
-            //         cs << trueBranch;
-            //         compileExpression(f, cs, a[1]);
-
-            //         cs << nextBranch;
-            //         return;
-            //     }
-
-            //     if (name.compare("<") == 0) {
-            //         RList a(args);
-            //         compileExpression(f, cs, a[0]);
-            //         compileExpression(f, cs, a[1]);
-            //         cs << BC::lt();
-            //         return;
-            //     }
-            //     if (name.compare("+") == 0) {
-            //         RList a(args);
-            //         compileExpression(f, cs, a[0]);
-            //         compileExpression(f, cs, a[1]);
-            //         cs << BC::add();
-            //         return;
-            //     }
-            //     if (name.compare("-") == 0) {
-            //         RList a(args);
-            //         compileExpression(f, cs, a[0]);
-            //         compileExpression(f, cs, a[1]);
-            //         cs << BC::sub();
-            //         return;
-            //     }
-            // }
-
-            compileCall(f, cs, exp, fun, args);
-        }
+        Case(LANGSXP, fun, args) { compileCall(f, cs, exp, fun, args); }
         // Variable lookup
         Case(SYMSXP) { compileGetvar(cs, exp); }
         // Constant

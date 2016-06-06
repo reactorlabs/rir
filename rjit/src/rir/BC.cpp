@@ -20,18 +20,16 @@ void BC::write(CodeStream& cs) const {
         cs.insert(immediate.pool);
         return;
 
-    case BC_t::load_arg:
     case BC_t::call:
+        cs.insert(immediate.call_args);
+        break;
+
+    case BC_t::load_arg:
         cs.insert(immediate.numArgs);
         return;
 
     case BC_t::mkprom:
-    case BC_t::push_arg:
         cs.insert(immediate.fun);
-        return;
-
-    case BC_t::call_name:
-        cs.insert(immediate.pool);
         return;
 
     case BC_t::jmp:
@@ -72,6 +70,12 @@ void BC::write(CodeStream& cs) const {
 }
 
 SEXP BC::immediateConst() { return Pool::instance().get(immediate.pool); }
+SEXP BC::immediateCallArgs() {
+    return Pool::instance().get(immediate.call_args.args);
+}
+SEXP BC::immediateCallNames() {
+    return Pool::instance().get(immediate.call_args.names);
+}
 
 void Code::print() {
     BC_t* pc = bc;
@@ -90,11 +94,16 @@ void BC::print() {
     case BC_t::num_of:
         assert(false);
         break;
-    case BC_t::call_name:
-        std::cout << "call_name ";
-        for (auto n : RVector(immediateConst())) {
-            std::cout << (n == R_NilValue ? "_" : CHAR(PRINTNAME(n))) << " ";
+    case BC_t::call:
+        std::cout << "call ";
+        for (int i = 0; i < Rf_length(immediateCallArgs()); ++i) {
+            std::cout << INTEGER(immediateCallArgs())[i] << " ";
         }
+        if (immediateCallNames() != R_NilValue)
+            for (auto n : RVector(immediateCallNames())) {
+                std::cout << (n == R_NilValue ? "_" : CHAR(PRINTNAME(n)))
+                          << " ";
+            }
         std::cout << "\n";
         break;
     case BC_t::push:
@@ -147,9 +156,6 @@ void BC::print() {
     case BC_t::pushi:
         std::cout << "pushi " << immediate.i << "\n";
         break;
-    case BC_t::call:
-        std::cout << "call " << immediate.numArgs << "\n";
-        break;
     case BC_t::get_ast:
         std::cout << "get_ast\n";
         break;
@@ -161,9 +167,6 @@ void BC::print() {
         break;
     case BC_t::load_arg:
         std::cout << "load_arg " << immediate.numArgs << "\n";
-        break;
-    case BC_t::push_arg:
-        std::cout << "push_arg " << immediate.fun << "\n";
         break;
     case BC_t::mkprom:
         std::cout << "mkprom " << immediate.fun << "\n";
@@ -190,6 +193,44 @@ void BC::print() {
         std::cout << "lt\n";
         break;
     }
+}
+
+const BC BC::call(std::vector<fun_idx_t> args, std::vector<SEXP> names) {
+    assert(args.size() == names.size());
+
+    Protect p;
+    SEXP a = Rf_allocVector(INTSXP, args.size());
+    p(a);
+    for (size_t i = 0; i < args.size(); ++i) {
+        INTEGER(a)[i] = args[i];
+    }
+
+    bool hasNames = false;
+    for (auto n : names) {
+        if (n != R_NilValue) {
+            hasNames = true;
+            break;
+        }
+    }
+
+    SEXP n;
+    if (hasNames) {
+        n = Rf_allocVector(VECSXP, names.size());
+        p(n);
+        for (size_t i = 0; i < args.size(); ++i) {
+            SET_VECTOR_ELT(n, i, names[i]);
+        }
+    } else {
+        n = R_NilValue;
+    }
+
+    p(n);
+
+    call_args_t args_ = {Pool::instance().insert(a),
+                         Pool::instance().insert(n)};
+    immediate_t i;
+    i.call_args = args_;
+    return BC(BC_t::call, i);
 }
 }
 }

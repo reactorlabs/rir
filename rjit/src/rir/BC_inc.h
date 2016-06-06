@@ -6,6 +6,8 @@
 
 #include "RDefs.h"
 
+#include <vector>
+
 namespace rjit {
 namespace rir {
 
@@ -36,11 +38,6 @@ enum class BC_t : uint8_t {
     // I: N - number of arguments
     // S: -N
     call,
-
-    // Call function with named arguments
-    // I: list of names (via Pool)
-    // S: - #names
-    call_name,
 
     // Create a promise
     // I: promise index
@@ -75,8 +72,6 @@ enum class BC_t : uint8_t {
     sub,
     lt,
 
-    push_arg,
-
     check_special,
 
     num_of
@@ -90,8 +85,13 @@ typedef uint16_t fun_idx_t;
 typedef uint16_t num_args_t;
 typedef int16_t jmp_t;
 typedef int primitive_t;
+typedef struct {
+    pool_idx_t args;
+    pool_idx_t names;
+} call_args_t;
 
 union immediate_t {
+    call_args_t call_args;
     pool_idx_t pool;
     fun_idx_t fun;
     num_args_t numArgs;
@@ -122,8 +122,15 @@ class BC {
     BC(BC_t bc, immediate_t immediate) : bc(bc), immediate(immediate) {}
 
   public:
-    const BC_t bc;
-    const immediate_t immediate;
+    BC() : bc(BC_t::invalid), immediate({0}) {}
+    BC operator=(BC other) {
+        bc = other.bc;
+        immediate = other.immediate;
+        return other;
+    }
+
+    BC_t bc;
+    immediate_t immediate;
 
     inline size_t size() const;
     void write(CodeStream& cs) const;
@@ -132,14 +139,16 @@ class BC {
 
     SEXP immediateConst();
 
-    inline const static BC advance(BC_t** pc);
+    SEXP immediateCallArgs();
+    SEXP immediateCallNames();
+
+    inline static BC advance(BC_t** pc);
     template <typename T>
     inline static T readImmediate(BC_t** pc);
     inline static BC_t readBC(BC_t** pc);
 
     // Create a new BC instance
-    inline const static BC call(num_args_t numArgs);
-    inline const static BC call_name(SEXP names);
+    const static BC call(std::vector<fun_idx_t> args, std::vector<SEXP> names);
     inline const static BC push(SEXP constant);
     inline const static BC getfun(SEXP sym);
     inline const static BC getvar(SEXP sym);

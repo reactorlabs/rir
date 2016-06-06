@@ -20,44 +20,50 @@ BC_t* doInlineIf(CodeStream& cs, Function* fun, Code* cur, BC_t* pc,
 
     cs << BC::check_special(symbol::If);
 
-    std::vector<fun_idx_t> args;
+    BC bc = BC::advance(&pc);
 
-    while (pc != end) {
-        BC bc = BC::advance(&pc);
+    assert(bc.bc == BC_t::call);
+    SEXP args_ = bc.immediateCallArgs();
+    int* args = INTEGER(args_);
+    int nargs = Rf_length(args_);
 
-        switch (bc.bc) {
-        case BC_t::push_arg:
-            args.push_back(bc.immediate.fun);
-            break;
+    Label trueBranch = cs.mkLabel();
+    Label nextBranch = cs.mkLabel();
 
-        case BC_t::call: {
-            Label trueBranch = cs.mkLabel();
-            Label nextBranch = cs.mkLabel();
+    optimize(cs, fun, fun->code[args[0]]);
+    cs << BC::to_bool() << BC::jmp_true(trueBranch);
 
-            optimize(cs, fun, fun->code[args[0]]);
-            cs << BC::to_bool() << BC::jmp_true(trueBranch);
-
-            if (args.size() < 3) {
-                cs << BC::push(R_NilValue);
-            } else {
-                optimize(cs, fun, fun->code[args[2]]);
-            }
-            cs << BC::jmp(nextBranch);
-
-            cs << trueBranch;
-            optimize(cs, fun, fun->code[args[1]]);
-
-            cs << nextBranch;
-            goto done;
-        }
-
-        default:
-            bc.print();
-            std::cout << "Unexpected bc seq in call to if function\n";
-            assert(false);
-        }
+    if (nargs < 3) {
+        cs << BC::push(R_NilValue);
+    } else {
+        optimize(cs, fun, fun->code[args[2]]);
     }
-done:
+    cs << BC::jmp(nextBranch);
+
+    cs << trueBranch;
+    optimize(cs, fun, fun->code[args[1]]);
+
+    cs << nextBranch;
+
+    return pc;
+}
+
+BC_t* doInlineBlock(CodeStream& cs, Function* fun, Code* cur, BC_t* pc,
+                    BC_t* end) {
+
+    cs << BC::check_special(symbol::Block);
+
+    BC bc = BC::advance(&pc);
+
+    assert(bc.bc == BC_t::call);
+    SEXP args_ = bc.immediateCallArgs();
+    int* args = INTEGER(args_);
+    int nargs = Rf_length(args_);
+
+    for (int i = 0; i < nargs; ++i) {
+        optimize(cs, fun, fun->code[args[i]]);
+    }
+
     return pc;
 }
 
@@ -74,14 +80,22 @@ void optimize(CodeStream& cs, Function* fun, Code* cur) {
                 pc = doInlineIf(cs, fun, cur, pc, end);
                 continue;
             }
+            if (bc.immediateConst() == symbol::Block) {
+                pc = doInlineBlock(cs, fun, cur, pc, end);
+                continue;
+            }
             break;
 
         case BC_t::ret:
             continue;
 
-        case BC_t::push_arg:
-            optimize_(fun, bc.immediate.fun);
+        case BC_t::call: {
+            SEXP args = bc.immediateCallArgs();
+            for (int i = 0; i < Rf_length(args); ++i) {
+                optimize_(fun, INTEGER(args)[i]);
+            }
             break;
+        }
 
         default:
             break;
