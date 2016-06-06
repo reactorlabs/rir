@@ -144,7 +144,7 @@ enum class BC_t : uint8_t {
 
     // Immediate symbol of a special as argument. Checks whether special is
     // overwritten. Currently asserts(). TODO: osr
-    check_special,
+    check_primitive,
 
     // Checks that the top of the stack is a function (closure, builtin or
     // special)
@@ -275,8 +275,8 @@ class BC {
     inline const static BC add();
     inline const static BC sub();
     inline const static BC lt();
-    inline const static BC check_special(SEXP sym);
     static inline BC check_function();
+    inline const static BC check_primitive(SEXP sym);
 
   private:
     BC(BC_t bc) : bc(bc), immediate({0}) {}

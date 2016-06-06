@@ -23,7 +23,7 @@ BC::immediate_t decodeImmediate(BC_t bc, BC_t* pc) {
     case BC_t::push:
     case BC_t::getfun:
     case BC_t::getvar:
-    case BC_t::check_special:
+    case BC_t::check_primitive:
         immediate.pool = *(pool_idx_t*)pc;
         break;
     case BC_t::call:
@@ -112,7 +112,7 @@ static size_t immediate_size[(size_t)BC_t::num_of] = {
     0,                   // add
     0,                   // sub
     0,                   // lt
-    sizeof(pool_idx_t),  // check_special
+    sizeof(pool_idx_t),  // check_primitive
 };
 
 template <typename T>
@@ -149,10 +149,10 @@ const BC BC::getvar(SEXP sym) {
     i.pool = Pool::instance().insert(sym);
     return BC(BC_t::getvar, i);
 }
-const BC BC::check_special(SEXP sym) {
+const BC BC::check_primitive(SEXP sym) {
     immediate_t i;
     i.pool = Pool::instance().insert(sym);
-    return BC(BC_t::check_special, i);
+    return BC(BC_t::check_primitive, i);
 }
 const BC BC::mkprom(fun_idx_t prom) { return BC(BC_t::mkprom, {prom}); }
 const BC BC::load_arg(num_args_t arg) { return BC(BC_t::load_arg, {arg}); }

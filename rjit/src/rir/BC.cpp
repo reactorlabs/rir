@@ -16,7 +16,7 @@ void BC::write(CodeStream& cs) const {
     case BC_t::push:
     case BC_t::getfun:
     case BC_t::getvar:
-    case BC_t::check_special:
+    case BC_t::check_primitive:
         cs.insert(immediate.pool);
         return;
 
@@ -113,8 +113,8 @@ void BC::print() {
         std::cout << "push ";
         Rf_PrintValue(immediateConst());
         break;
-    case BC_t::check_special:
-        std::cout << "check_special " << CHAR(PRINTNAME((immediateConst())))
+    case BC_t::check_primitive:
+        std::cout << "check_primitive " << CHAR(PRINTNAME((immediateConst())))
                   << "\n";
         break;
     case BC_t::getfun:

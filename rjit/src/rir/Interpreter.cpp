@@ -160,7 +160,7 @@ static INLINE void evalCallArgs(Code* fun, int args[], num_args_t nargs,
 
 static INLINE SEXP callSpecial(SEXP call, SEXP op, SEXP env) {
     // call, op, args, rho
-    SEXP (*primfun)
+    SEXP(*primfun)
     (SEXP, SEXP, SEXP, SEXP) = R_FunTab[Rinternals::primoffset(op)].cfun;
 
     return primfun(call, op, CDR(call), env);
@@ -172,7 +172,7 @@ static INLINE SEXP callBuiltin(Code* caller, SEXP call, SEXP op, int args[],
     evalCallArgs(caller, args, nargs, env);
 
     // call, op, args, rho
-    SEXP (*primfun)
+    SEXP(*primfun)
     (SEXP, SEXP, SEXP, SEXP) = R_FunTab[Rinternals::primoffset(op)].cfun;
 
     return callPrimitive(primfun, call, op, env, nargs);
@@ -382,10 +382,11 @@ static SEXP rirEval(Code* cur, SEXP env, num_args_t numArgs) {
             break;
         }
 
-        case BC_t::check_special: {
+        case BC_t::check_primitive: {
             SEXP sym = loadConst();
             SEXP val = findVar(sym, env);
-            assert(TYPEOF(val) == SPECIALSXP);
+            // TODO better check
+            assert(TYPEOF(val) == SPECIALSXP || TYPEOF(val) == BUILTINSXP);
             break;
         }
 
