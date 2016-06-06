@@ -41,14 +41,14 @@ SEXP jit(SEXP fun) {
     Compiler c(BODY(fun), FORMALS(fun));
 
     SEXP bc = mkBCCls(c.finalize(), FORMALS(fun), RList(FORMALS(fun)).length(),
-                      false, CLOENV(fun));
+                      BCClosure::CC::envLazy, CLOENV(fun));
     return bc;
 }
 
 SEXP jit(SEXP ast, SEXP formals, SEXP env) {
     Compiler c(ast, formals);
-    SEXP bc =
-        mkBCCls(c.finalize(), formals, RList(formals).length(), false, env);
+    SEXP bc = mkBCCls(c.finalize(), formals, RList(formals).length(),
+                      BCClosure::CC::envLazy, env);
     return bc;
 }
 
@@ -148,8 +148,12 @@ static INLINE void evalCallArgs(Function* fun, int args[], num_args_t nargs,
 
     for (size_t i = 0; i < nargs; ++i) {
         fun_idx_t idx = args[i];
-        SEXP arg = rirEval(fun, idx, env, 0, fun->code[idx]->ast);
-        stack.push(arg);
+        if (idx == MISSING_ARG_IDX) {
+            stack.push(R_MissingArg);
+        } else {
+            SEXP arg = rirEval(fun, idx, env, 0, fun->code[idx]->ast);
+            stack.push(arg);
+        }
     }
 }
 
@@ -178,13 +182,29 @@ static INLINE SEXP callClosure(Function* caller, BCClosure* cls, int args[],
 
     assert(cls->nargs == VARIADIC_ARGS || cls->nargs == nargs);
 
-    if (cls->eager) {
+    switch (cls->cc) {
+    case BCClosure::CC::stackEager: {
         assert(!cls->env);
         evalCallArgs(caller, args, nargs, env);
         return rirEval(cls->fun, 0, env, nargs, call);
     }
 
-    if (cls->env) {
+    case BCClosure::CC::stackLazy: {
+        for (size_t i = 0; i < nargs; ++i) {
+            fun_idx_t idx = args[i];
+            if (idx == MISSING_ARG_IDX) {
+                stack.push(R_MissingArg);
+            } else {
+                SEXP prom = mkBCProm(caller, idx, env);
+                stack.push(prom);
+            }
+        }
+        SEXP res = rirEval(cls->fun, 0, env, nargs, call);
+        stack.pop(nargs);
+        return res;
+    }
+
+    case BCClosure::CC::envLazy: {
         SEXP argslist = R_NilValue;
 
         for (size_t i = 0; i < nargs; ++i) {
@@ -205,20 +225,9 @@ static INLINE SEXP callClosure(Function* caller, BCClosure* cls, int args[],
 
         return res;
     }
-
-    for (size_t i = 0; i < nargs; ++i) {
-        fun_idx_t idx = args[i];
-        if (idx == MISSING_ARG_IDX) {
-            stack.push(R_MissingArg);
-        } else {
-            SEXP prom = mkBCProm(caller, idx, env);
-            stack.push(prom);
-        }
     }
-
-    SEXP res = rirEval(cls->fun, 0, env, nargs, call);
-    stack.pop(nargs);
-    return res;
+    assert(false);
+    return nullptr;
 }
 
 static INLINE SEXP doCall(Function* caller, SEXP call, SEXP callee, int args[],

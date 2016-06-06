@@ -101,7 +101,7 @@ void BC::print() {
         for (int i = 0; i < Rf_length(immediateCallArgs()); ++i) {
             std::cout << INTEGER(immediateCallArgs())[i] << " ";
         }
-        if (immediateCallNames() != R_NilValue)
+        if (immediateCallNames())
             for (auto n : RVector(immediateCallNames())) {
                 std::cout << (n == R_NilValue ? "_" : CHAR(PRINTNAME(n)))
                           << " ";

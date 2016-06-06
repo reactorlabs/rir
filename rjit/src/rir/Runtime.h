@@ -11,11 +11,13 @@ namespace rir {
 
 constexpr static int BCCodeType = 24; // RAWSXP
 
+#pragma pack(push)
+#pragma pack(0)
 struct BCProm {
   public:
-    static constexpr unsigned type = 0x9703;
-    unsigned t : 16;
-    fun_idx_t idx : 16;
+    static constexpr short type = 0x9703;
+    short t;
+    fun_idx_t idx;
 
     Function* fun;
     SEXP env;
@@ -31,21 +33,28 @@ struct BCProm {
 
 struct BCClosure {
   public:
-    static constexpr unsigned type = 0xc105;
-    unsigned t : 16;
+    static constexpr short type = 0xc105;
+
+    enum class CC : char {
+        envLazy,
+        stackLazy,
+        stackEager,
+    };
+
+    short t;
+    CC cc;
+    num_args_t nargs;
+
     Function* fun;
     SEXP formals;
-    num_args_t nargs;
-    bool eager;
     SEXP env;
-    BCClosure(Function* fun, SEXP formals, num_args_t nargs, bool eager,
-              SEXP env)
-        : t(type), fun(fun), formals(formals), nargs(nargs), eager(eager),
-          env(env) {}
+    BCClosure(Function* fun, SEXP formals, num_args_t nargs, CC cc, SEXP env)
+        : t(type), cc(cc), nargs(nargs), fun(fun), formals(formals), env(env) {}
 };
+#pragma pack(pop)
 
 SEXP mkBCProm(Function* fun, fun_idx_t idx, SEXP env);
-SEXP mkBCCls(Function* fun, SEXP formals, num_args_t nargs, bool eager,
+SEXP mkBCCls(Function* fun, SEXP formals, num_args_t nargs, BCClosure::CC cc,
              SEXP env);
 
 inline BCProm* getBCProm(SEXP s) { return (BCProm*)Rinternals::raw(s); }

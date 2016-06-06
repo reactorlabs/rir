@@ -140,7 +140,9 @@ SEXP Primitives::doCompilePrimitive(SEXP fun) {
     if (success) {
         cs << BC::ret();
         cs.finalize();
-        cls = mkBCCls(f, FORMALS(fun), VARIADIC_ARGS, TYPEOF(fun) == BUILTINSXP,
+        cls = mkBCCls(f, FORMALS(fun), VARIADIC_ARGS,
+                      TYPEOF(fun) == BUILTINSXP ? BCClosure::CC::stackEager
+                                                : BCClosure::CC::stackLazy,
                       nullptr);
         PrimitivesCache[idx] = cls;
     }
