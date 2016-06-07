@@ -388,9 +388,30 @@ static SEXP rirEval(Code* cur, SEXP env, num_args_t numArgs) {
         }
 
         case BC_t::check_function: {
-            SEXP f = stack.top();
-            assert(TYPEOF(f) == CLOSXP or TYPEOF(f) == BUILTINSXP or
-                   TYPEOF(f) == SPECIALSXP);
+            SEXP val = stack.pop();
+
+            switch (Rinternals::typeof(val)) {
+            case BCCodeType:
+                assert(isBCCls(val));
+                break;
+            case CLOSXP:
+                val = (SEXP)jit(val);
+                break;
+            case SPECIALSXP:
+            case BUILTINSXP: {
+                SEXP prim = Primitives::compilePrimitive(val);
+                if (prim)
+                    val = prim;
+                break;
+            }
+
+            default:
+                // TODO: error not a function!
+                assert(false);
+            }
+
+            stack.push(val);
+            break;
         }
 
         case BC_t::getfun: {

@@ -82,7 +82,7 @@ BC BC::advance(BC_t** pc) {
 class CodeStream;
 
 // list of individual bytecode sizes
-static size_t immediate_size[(size_t)BC_t::num_of] = {
+static size_t immediate_size[] = {
     (size_t)-1,          // invalid
     sizeof(pool_idx_t),  // push
     sizeof(pool_idx_t),  // getfun
@@ -113,7 +113,10 @@ static size_t immediate_size[(size_t)BC_t::num_of] = {
     0,                   // sub
     0,                   // lt
     sizeof(pool_idx_t),  // check_primitive
+    0,                   // check_function
 };
+static_assert(sizeof(immediate_size) / sizeof(size_t) == (unsigned)BC_t::num_of,
+              "Please add an entry for the size of the bytecode");
 
 template <typename T>
 T BC::readImmediate(BC_t** pc) {
