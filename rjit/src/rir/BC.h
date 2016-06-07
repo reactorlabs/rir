@@ -61,6 +61,7 @@ BC::immediate_t decodeImmediate(BC_t bc, BC_t* pc) {
     case BC_t::add:
     case BC_t::sub:
     case BC_t::lt:
+    case BC_t::check_function:
         break;
     case BC_t::invalid:
     case BC_t::num_of:
@@ -161,6 +162,12 @@ const BC BC::lti() { return BC(BC_t::lti); }
 const BC BC::eqi() { return BC(BC_t::eqi); }
 const BC BC::numargi() { return BC(BC_t::numargi); }
 const BC BC::to_bool() { return BC(BC_t::to_bool); }
+
+
+BC BC::check_function() {
+    return BC(BC_t::check_function);
+}
+
 const BC BC::jmp(jmp_t j) {
     immediate_t i;
     i.offset = j;

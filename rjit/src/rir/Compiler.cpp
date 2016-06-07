@@ -29,7 +29,10 @@ void compileCall(Function* f, CodeStream& cs, SEXP ast, SEXP fun, SEXP args) {
     // LHS can either be an identifier or an expression
     Match(fun) {
         Case(SYMSXP) { cs << BC::getfun(fun); }
-        Else(compileExpression(f, cs, fun));
+        Else({
+             compileExpression(f, cs, fun);
+             cs << BC::check_function();
+        });
     }
 
     // Process arguments:

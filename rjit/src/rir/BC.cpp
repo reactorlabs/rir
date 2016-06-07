@@ -60,6 +60,7 @@ void BC::write(CodeStream& cs) const {
     case BC_t::add:
     case BC_t::sub:
     case BC_t::lt:
+    case BC_t::check_function:
         return;
 
     case BC_t::invalid:
@@ -193,6 +194,9 @@ void BC::print() {
         break;
     case BC_t::lt:
         std::cout << "lt\n";
+        break;
+    case BC_t::check_function:
+        std::cout << "check_function" << std::endl;
         break;
     }
 }

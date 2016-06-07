@@ -25,6 +25,7 @@ SKIP_BUILD=0
 SKIP_FRESHR=0
 SKIP_PKG=0
 SKIP_RUN=0
+SKIP_CLANG_FORMAT=0
 CORES=-1
 LLVM_VERS="370"
 FRESH_R_VERS="3-2"
@@ -54,6 +55,7 @@ function usage() {
   echo "-r|--skip-freshr          Skip R-3-2"
   echo "-b|--skip-run             Skip running the benchmark"
   echo "-p|--skip-package         Skip creating the Rjit package"
+  echo "-cf|--skip-clang-format   Skips clang format as dependency check"
   echo "--llvm-release            Build llvm in release mode"
   echo "--rjit-release            Build rjit in release mode"
   echo "--add-clang               additionally build clang"
@@ -98,6 +100,9 @@ case $key in
     ;;
     -p|--skip-package)
     SKIP_PKG=1
+    ;;
+    -cf|--skip-clang-format)
+    SKIP_CLANG_FORMAT=1
     ;;
     -h|--help)
     usage
@@ -239,10 +244,12 @@ if [ -z `which doxygen` ]; then
     echo "ERROR: doxygen could not be found. please install"
     exit 1
 fi
-if [ $IS_GIT_CHECKOUT -eq 0 ] && [ "$CI" != "true" ]; then
-    if [ -z `which clang-format` ] && [ -z `which clang-format-3.5` ]; then
-        echo "ERROR: you need clang-format installed. please install"
-        exit 1
+if [ $SKIP_CLANG_FORMAT -eq 0 ]; then
+    if [ $IS_GIT_CHECKOUT -eq 0 ] && [ "$CI" != "true" ]; then
+        if [ -z `which clang-format` ] && [ -z `which clang-format-3.5` ]; then
+            echo "ERROR: you need clang-format installed. please install"
+            exit 1
+        fi
     fi
 fi
 

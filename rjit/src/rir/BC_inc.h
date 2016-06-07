@@ -146,6 +146,9 @@ enum class BC_t : uint8_t {
     // overwritten. Currently asserts(). TODO: osr
     check_special,
 
+    // Checks that the top of the stack is a function (closure, builtin or special)
+    check_function,
+
     num_of
 };
 
@@ -272,6 +275,7 @@ class BC {
     inline const static BC sub();
     inline const static BC lt();
     inline const static BC check_special(SEXP sym);
+    static inline BC check_function();
 
   private:
     BC(BC_t bc) : bc(bc), immediate({0}) {}

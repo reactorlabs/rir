@@ -391,6 +391,11 @@ static SEXP rirEval(Function* fun, fun_idx_t c, SEXP env, num_args_t numArgs,
             break;
         }
 
+        case BC_t::check_function: {
+            SEXP f = stack.top();
+            assert(TYPEOF(f) == CLOSXP or TYPEOF(f) == BUILTINSXP or TYPEOF(f) == SPECIALSXP);
+        }
+
         case BC_t::getfun: {
             SEXP sym = loadConst();
             SEXP val = findVar(sym, env);
