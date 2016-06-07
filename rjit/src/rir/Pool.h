@@ -9,11 +9,14 @@
 #include "BC_inc.h"
 #include "RDefs.h"
 
+#include <unordered_map>
+
 namespace rjit {
 namespace rir {
 
 class Pool {
     RVector storage;
+    std::unordered_map<double, pool_idx_t> numbers;
 
   public:
     static Pool& instance() {
@@ -27,6 +30,8 @@ class Pool {
         assert(i < MAX_POOL_IDX);
         return i;
     }
+
+    pool_idx_t getNum(double n);
 
     SEXP get(pool_idx_t i) { return storage.at(i); }
 };

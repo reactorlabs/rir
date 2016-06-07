@@ -139,6 +139,11 @@ const BC BC::push(SEXP constant) {
     i.pool = Pool::instance().insert(constant);
     return BC(BC_t::push, i);
 }
+const BC BC::push(double constant) {
+    immediate_t i;
+    i.pool = Pool::instance().getNum(constant);
+    return BC(BC_t::push, i);
+}
 const BC BC::getfun(SEXP sym) {
     immediate_t i;
     i.pool = Pool::instance().insert(sym);

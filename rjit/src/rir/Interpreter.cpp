@@ -709,7 +709,7 @@ static SEXP rirEval(Code* cur, SEXP env, num_args_t numArgs) {
             SEXP rhs = stack.pop();
             SEXP lhs = stack.pop();
             if (Rinternals::typeof(lhs) == REALSXP &&
-                Rinternals::typeof(lhs) == REALSXP && Rf_length(lhs) == 1 &&
+                Rinternals::typeof(rhs) == REALSXP && Rf_length(lhs) == 1 &&
                 Rf_length(rhs) == 1) {
                 SEXP res = Rf_allocVector(REALSXP, 1);
                 SET_NAMED(res, 1);
@@ -729,7 +729,7 @@ static SEXP rirEval(Code* cur, SEXP env, num_args_t numArgs) {
             SEXP rhs = stack.pop();
             SEXP lhs = stack.pop();
             if (Rinternals::typeof(lhs) == REALSXP &&
-                Rinternals::typeof(lhs) == REALSXP && Rf_length(lhs) == 1 &&
+                Rinternals::typeof(rhs) == REALSXP && Rf_length(lhs) == 1 &&
                 Rf_length(rhs) == 1) {
                 SEXP res = Rf_allocVector(REALSXP, 1);
                 SET_NAMED(res, 1);
@@ -749,7 +749,7 @@ static SEXP rirEval(Code* cur, SEXP env, num_args_t numArgs) {
             SEXP rhs = stack.pop();
             SEXP lhs = stack.pop();
             if (Rinternals::typeof(lhs) == REALSXP &&
-                Rinternals::typeof(lhs) == REALSXP && Rf_length(lhs) == 1 &&
+                Rinternals::typeof(rhs) == REALSXP && Rf_length(lhs) == 1 &&
                 Rf_length(rhs) == 1) {
                 stack.push(REAL(lhs)[0] < REAL(rhs)[0] ? R_TrueValue
                                                        : R_FalseValue);

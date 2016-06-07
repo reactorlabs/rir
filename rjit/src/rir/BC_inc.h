@@ -249,6 +249,7 @@ class BC {
     // to create new BC objects, which can be streamed to a CodeStream
     const static BC call(std::vector<fun_idx_t> args, std::vector<SEXP> names);
     inline const static BC push(SEXP constant);
+    inline const static BC push(double constant);
     inline const static BC getfun(SEXP sym);
     inline const static BC getvar(SEXP sym);
     inline const static BC mkprom(fun_idx_t prom);
