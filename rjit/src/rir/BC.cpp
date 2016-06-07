@@ -71,8 +71,14 @@ void BC::write(CodeStream& cs) const {
 }
 
 SEXP BC::immediateConst() { return Pool::instance().get(immediate.pool); }
-SEXP BC::immediateCallArgs() {
-    return Pool::instance().get(immediate.call_args.args);
+fun_idx_t* BC::immediateCallArgs() {
+    return (fun_idx_t*)RAW(Pool::instance().get(immediate.call_args.args));
+}
+num_args_t BC::immediateCallNargs() {
+    size_t nargs = Rf_length(Pool::instance().get(immediate.call_args.args)) /
+                   sizeof(fun_idx_t);
+    assert(nargs < MAX_NUM_ARGS);
+    return (num_args_t)nargs;
 }
 SEXP BC::immediateCallNames() {
     return immediate.call_args.names
@@ -97,10 +103,12 @@ void BC::print() {
     case BC_t::num_of:
         assert(false);
         break;
-    case BC_t::call:
+    case BC_t::call: {
         std::cout << "call ";
-        for (int i = 0; i < Rf_length(immediateCallArgs()); ++i) {
-            std::cout << INTEGER(immediateCallArgs())[i] << " ";
+        fun_idx_t* args = immediateCallArgs();
+        num_args_t nargs = immediateCallNargs();
+        for (int i = 0; i < nargs; ++i) {
+            std::cout << args[i] << " ";
         }
         if (immediateCallNames())
             for (auto n : RVector(immediateCallNames())) {
@@ -109,6 +117,7 @@ void BC::print() {
             }
         std::cout << "\n";
         break;
+    }
     case BC_t::push:
         std::cout << "push ";
         Rf_PrintValue(immediateConst());
@@ -206,10 +215,12 @@ const BC BC::call(std::vector<fun_idx_t> args, std::vector<SEXP> names) {
     assert(args.size() < MAX_NUM_ARGS);
 
     Protect p;
-    SEXP a = Rf_allocVector(INTSXP, args.size());
+    SEXP a = Rf_allocVector(RAWSXP, sizeof(fun_idx_t) * args.size());
     p(a);
+
+    fun_idx_t* argsArray = (fun_idx_t*)RAW(a);
     for (size_t i = 0; i < args.size(); ++i) {
-        INTEGER(a)[i] = args[i];
+        argsArray[i] = args[i];
     }
 
     bool hasNames = false;

@@ -226,7 +226,8 @@ class BC {
 
     // Accessors to load immediate constant from the pool
     SEXP immediateConst();
-    SEXP immediateCallArgs();
+    fun_idx_t* immediateCallArgs();
+    num_args_t immediateCallNargs();
     SEXP immediateCallNames();
 
     // ==== BC decoding logic
