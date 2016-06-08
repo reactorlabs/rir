@@ -41,14 +41,14 @@ SEXP jit(SEXP fun) {
     Compiler c(BODY(fun), FORMALS(fun));
 
     SEXP bc = mkBCCls(c.finalize(), FORMALS(fun), RList(FORMALS(fun)).length(),
-                      BCClosure::CC::envLazy, CLOENV(fun));
+                      Function::CC::envLazy, CLOENV(fun));
     return bc;
 }
 
 SEXP jit(SEXP ast, SEXP formals, SEXP env) {
     Compiler c(ast, formals);
     SEXP bc = mkBCCls(c.finalize(), formals, RList(formals).length(),
-                      BCClosure::CC::envLazy, env);
+                      Function::CC::envLazy, env);
     return bc;
 }
 
@@ -184,13 +184,13 @@ static INLINE SEXP callClosure(Function* caller, BCClosure* cls, int args[],
     assert(cls->nargs == VARIADIC_ARGS || cls->nargs == nargs);
 
     switch (cls->cc) {
-    case BCClosure::CC::stackEager: {
+    case Function::CC::stackEager: {
         assert(!cls->env);
         evalCallArgs(caller, args, nargs, env);
         return rirEval(cls->fun, 0, env, nargs, call);
     }
 
-    case BCClosure::CC::stackLazy: {
+    case Function::CC::stackLazy: {
         for (size_t i = 0; i < nargs; ++i) {
             fun_idx_t idx = args[i];
             if (idx == MISSING_ARG_IDX) {
@@ -205,7 +205,7 @@ static INLINE SEXP callClosure(Function* caller, BCClosure* cls, int args[],
         return res;
     }
 
-    case BCClosure::CC::envLazy: {
+    case Function::CC::envLazy: {
         SEXP argslist = R_NilValue;
 
         for (size_t i = 0; i < nargs; ++i) {

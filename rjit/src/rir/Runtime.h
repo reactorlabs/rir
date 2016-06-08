@@ -35,26 +35,21 @@ struct BCClosure {
   public:
     static constexpr short type = 0xc105;
 
-    enum class CC : char {
-        envLazy,
-        stackLazy,
-        stackEager,
-    };
 
     short t;
-    CC cc;
+    Function::CC cc;
     num_args_t nargs;
 
     Function* fun;
     SEXP formals;
     SEXP env;
-    BCClosure(Function* fun, SEXP formals, num_args_t nargs, CC cc, SEXP env)
+    BCClosure(Function* fun, SEXP formals, num_args_t nargs, Function::CC cc, SEXP env)
         : t(type), cc(cc), nargs(nargs), fun(fun), formals(formals), env(env) {}
 };
 #pragma pack(pop)
 
 SEXP mkBCProm(Function* fun, fun_idx_t idx, SEXP env);
-SEXP mkBCCls(Function* fun, SEXP formals, num_args_t nargs, BCClosure::CC cc,
+SEXP mkBCCls(Function* fun, SEXP formals, num_args_t nargs, Function::CC cc,
              SEXP env);
 
 inline BCProm* getBCProm(SEXP s) { return (BCProm*)Rinternals::raw(s); }
@@ -70,6 +65,9 @@ inline bool isBCCls(SEXP s) {
     return Rinternals::typeof(s) == BCCodeType &&
            getBCCls(s)->t == BCClosure::type;
 }
+
+
+
 
 } // rir
 } // rjit

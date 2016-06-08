@@ -8,6 +8,7 @@ namespace rir {
 // Use CodeStream to build bytecode
 //
 class Code {
+public:
   private:
     class AstMap {
         size_t size;
@@ -63,6 +64,7 @@ class Code {
     BC_t* end() { return (BC_t*)((uintptr_t)bc + size); }
 
     SEXP getAst(BC_t* pc) { return astMap.at((uintptr_t)pc - (uintptr_t)bc); }
+
 };
 }
 }

@@ -22,7 +22,7 @@ SEXP mkBCProm(Function* fun, fun_idx_t idx, SEXP env) {
     return s;
 }
 
-SEXP mkBCCls(Function* fun, SEXP formals, num_args_t nargs, BCClosure::CC cc,
+SEXP mkBCCls(Function* fun, SEXP formals, num_args_t nargs, Function::CC cc,
              SEXP env) {
     SEXP s = Rf_allocVector(BCCodeType, sizeof(BCClosure));
     *getBCCls(s) = BCClosure(fun, formals, nargs, cc, env);
