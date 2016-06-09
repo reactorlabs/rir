@@ -127,10 +127,10 @@ public:
             astMap for promise x (positions)
      */
     static RBytecode serialize(Function * f, CallingConvention cc) {
-        // ast + promise bytecodes & their asts
-        size_t constsSize = 1 + f->code.size() * 2 ;
+        // ast + promise bytecodes & their asts, no promise slot for function
+        size_t constsSize = f->code.size() * 2 - 1;
         // version + header
-        size_t codeSize = 1 + sizeof(Header);
+        size_t codeSize = 1 + sizeof(Header) / sizeof(int);
 
         for (size_t i = 0, e = f->code.size(); i != e; ++i) {
             // astMap
@@ -142,7 +142,7 @@ public:
         }
 
         // create the code and consts objects
-        SEXP code = allocVector(INTSXP, codeSize / sizeof(int));
+        SEXP code = allocVector(INTSXP, codeSize);
         PROTECT(code);
         SEXP consts = allocVector(VECSXP, constsSize);
         PROTECT(consts);
@@ -151,7 +151,6 @@ public:
         PROTECT(result);
 
         int * rawCode = INTEGER(code);
-
 
         // add function's ast to constant pool
         SET_VECTOR_ELT(consts, 0, f->code[0]->ast);
@@ -185,7 +184,7 @@ public:
                 SET_VECTOR_ELT(consts, constsOffset++, c->astMap.ast[i]);
         }
 
-        assert(constsOffset == constsSize and "Weirness in serialized constants");
+        assert(constsOffset == (constsSize + 1) and "Weirness in serialized constants");
         assert(rawCode - INTEGER(code) == static_cast<int>(codeSize) and "Weirdness in serialized code");
 
         UNPROTECT(1);
