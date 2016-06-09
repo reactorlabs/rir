@@ -11,6 +11,14 @@
 namespace rjit {
 namespace rir {
 
+/** TODO We basically want the functionality of mkPROMSXP, line 2333 memory.c.
+
+  As a hack I am just using one of the old rjit bytecodes which did exactly the same.
+*/
+extern "C" SEXP createPromise(SEXP code, SEXP rho);
+
+
+
 enum class CallingConvention : int {
     envLazy,
     stackLazy,
@@ -47,27 +55,47 @@ public:
         Header(CallingConvention cc, int nchildren, int codeSize):
             cc(cc),
             nchildren(nchildren),
-            codeSie(codeSize) {
+            codeSize(codeSize) {
         }
+
     };
 
     static_assert(sizeof(Header) == 4 * sizeof(int), "Header should not have any padding");
     static_assert(sizeof(Header) % sizeof(BC_t) == 0, "To make sure alignment won't cause us trouble");
 
-    RBytecode(Bytecode const &) = default;
+    RBytecode(SEXP from):
+        data_(from) {
+        assert(TYPEOF(from) == BCODESXP and "Creating RBytecode from something that is not bytecode");
+        assert(version() == MAGIC_VERSION and "Invalid version - perhaps not rir bytecode");
+    }
 
-    RBytecode & operator = (Bytecode const &) = default;
+    RBytecode(RBytecode const &) = default;
+
+    RBytecode & operator = (RBytecode const &) = default;
+
+    /** RBytecode automatically converts to SEXP.
+     */
+    operator SEXP() {
+        return data_;
+    }
 
     /** Returns the header of the bytecode object.
      */
     Header const & header() const {
-        return * reinterpret_cast<Header*>(INTEGER(code_()));
+        return * reinterpret_cast<Header *>(INTEGER(code_()));
+    }
+
+    /** Returns the version of the bytecode.
+     */
+    int version() const {
+        // not using the header so that we do not assume anything about the underlying sexp
+        return INTEGER(code_())[0];
     }
 
     /** Returns the code part of the bytecode object.
      */
     BC_t const * code() const {
-        return reinterpret_cast<BC_t *>(reinterpret_cast<Header*>(INTEGER(code_())) + 1);
+        return reinterpret_cast<BC_t *>(reinterpret_cast<Header *>(INTEGER(code_())) + 1);
     }
 
     /** Returns the index-th code object in the RBytecode.
@@ -77,10 +105,10 @@ public:
     RBytecode child(size_t index) {
         if (index == 0) {
             assert(false and "This should probably not happen");
-            return this;
+            return *this;
         }
-        assert(index <= header().nchildren and "Not enough children");
-        return RBytecode(GET_VECTOR_ELT(asts_, index));
+        assert(index <= static_cast<size_t>(header().nchildren) and "Not enough children");
+        return RBytecode(VECTOR_ELT(asts_(), index));
     }
 
     /** Serializes a code object into RBytecode.
@@ -89,7 +117,7 @@ public:
         return serialize_(code, cc, 0);
     }
 
-    RBytecode serialize(Function * f, CallingConvention cc) {
+    static RBytecode serialize(Function * f, CallingConvention cc) {
         // serialize the main bytecode and prepare room for the promises
         RBytecode result(serialize_(f->code[0], cc, f->code.size() -1));
         PROTECT(result.data_);
@@ -99,21 +127,15 @@ public:
         for (size_t i = 1, e = f->code.size(); i != e; ++i)
             SET_VECTOR_ELT(asts, i, serialize_(f->code[i], cc, 0));
 
-        UNPROTECT(result.data_);
+        UNPROTECT(1);
         return result;
-    }
-
-    /** Returns a pointer to the actual rir bytecode array contained in the RBytecode object
-     */
-    BC_t const * code() const {
-        return reinterpret_cast<BC_t *>(reinterpret_cast<uint8_t *>(INTEGER(code_())) + sizeof(Header));
     }
 
 private:
 
-    static RBytecode serialize_(Code * code, CallingConvention cc, int nchildren) {
+    static RBytecode serialize_(Code * c, CallingConvention cc, int nchildren) {
         // compute the required code size in bytes
-        int size = sizeof(Header) + code->size + code->astMap.size;
+        int size = sizeof(Header) + c->size + c->astMap.size;
         if (size % 4 != 0)
             size += 4 - (size % 4);
 
@@ -121,35 +143,33 @@ private:
         SEXP code = allocVector(INTSXP, size / 4);
         PROTECT(code);
         Header * hdr = reinterpret_cast<Header*>(INTEGER(code));
-        *hdr = Header(cc, nchildren, code->size);
+        new (hdr) Header(cc, nchildren, c->size);
         // move past header
         hdr += 1;
         // copy the code
-        memcpy(hdr, code->bc, code->size);
+        memcpy(hdr, c->bc, c->size);
         // get pointer to the area right after the code and copy the positions
-        uint8_t * astpos = reinterpret_cast<uint8_t *>(hdr) + code->size;
-        memcpy(astpos, code->ast->pos, code->ast->size);
+        uint8_t * astpos = reinterpret_cast<uint8_t *>(hdr) + c->size;
+        memcpy(astpos, c->astMap.pos, c->astMap.size);
 
         // serialize the constant pool part
-        SEXP consts = allocVector(VECSXP, 1 + nchildren + code->astMap.size);
+        SEXP consts = allocVector(VECSXP, 1 + nchildren + c->astMap.size);
         PROTECT(consts);
         // first item is the ast itself
-        SET_VECTOR_ELT(consts_, 0, code->ast);
+        SET_VECTOR_ELT(consts, 0, c->ast);
         // no promises in single code object
         // serialize the ast parts of the ast map into the constant pool right after the default ast
-        for (size_t i = 0, e = code->ast->size; i < e; ++i)
-            SET_VECTOR_ELT(consts, i + 1 + nchildren, code->astMap->ast[i]);
+        for (size_t i = 0, e = c->astMap.size; i < e; ++i)
+            SET_VECTOR_ELT(consts, i + 1 + nchildren, c->astMap.ast[i]);
 
         // create the bytecode object
-        SEXP result = Bytecode(code, consts);
+        SEXP result = RBytecode(code, consts);
         UNPROTECT(2);
         return result;
     }
 
 
     RBytecode(SEXP code, SEXP asts) {
-        SEXP cs = p(constants);
-        SEXP bc = p(code);
         // note that R_bcEncode is not required as threaded code makes no difference to us
         data_ = cons(code, asts);
         SET_TYPEOF(data_, BCODESXP);
@@ -157,11 +177,11 @@ private:
 
 
 
-    SEXP code_() {
+    SEXP code_() const {
         return BCODE_CODE(data_);
     }
 
-    SEXP asts_() {
+    SEXP asts_() const {
         return BCODE_CONSTS(data_);
     }
 
@@ -170,13 +190,76 @@ private:
 };
 
 
+/** Wrapper around CLOSXP.
+ */
 class RFunction {
+public:
 
+
+    RFunction(SEXP from):
+        data_(from) {
+        assert(TYPEOF(from) == CLOSXP and "Function can only be created from Closure SEXPs");
+    }
+
+    /** Creates the closure from given body, formals and environment.
+     */
+    static RFunction create(RBytecode body, SEXP formals, SEXP env = nullptr) {
+        PROTECT(body);
+        PROTECT(formals);
+        PROTECT(env);
+        SEXP closure = allocSExp(CLOSXP);
+        SET_FORMALS(closure, formals);
+        SET_BODY(closure, body);
+        if (env == nullptr)
+            SET_CLOENV(closure, R_GlobalEnv);
+        else
+            SET_CLOENV(closure, env);
+        UNPROTECT(3);
+        return RFunction(closure);
+    }
+
+    operator SEXP() {
+        return data_;
+    }
+
+    /** Returns the calling convention of the function.
+     */
+    CallingConvention callingConvention() const {
+        return RBytecode(body_()).header().cc;
+    }
+
+
+
+private:
+
+    SEXP body_() const {
+        return BODY(data_);
+    }
+
+    SEXP formals_() const {
+        return FORMALS(data_);
+    }
 
     SEXP data_;
 };
 
+/** Wrapper around PROMSXP
+ */
 class RPromise {
+public:
+
+    RPromise(SEXP from):
+        data_(from) {
+        assert(TYPEOF(from) == PROMSXP and "Can only be created from promises");
+    }
+
+    /** Creates a promise from given RBytecode and environment.
+     */
+    static RPromise create(RFunction code, SEXP env) {
+        return RPromise(createPromise(code, env));
+    }
+
+private:
 
     SEXP data_;
 };

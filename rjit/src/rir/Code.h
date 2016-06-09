@@ -19,6 +19,9 @@ public:
     friend class RBytecode;
 
     class AstMap {
+
+        friend class RBytecode;
+
         size_t size;
         unsigned* pos;
         SEXP* ast;
@@ -55,6 +58,7 @@ public:
 
             return ast[f];
         }
+
     };
 
   public:

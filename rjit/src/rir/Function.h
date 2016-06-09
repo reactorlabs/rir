@@ -15,10 +15,6 @@ namespace rir {
 class Function {
   public:
 
-    /** Bytecode version used in BCODESXPs to distinguish rir bytecodes from gnu-r ones.
-     */
-    static constexpr int RIR_MAGIC_VERSION = 0xff;
-
     /** Calling convention.
      */
     enum class CC : char {
@@ -42,25 +38,6 @@ class Function {
         code.push_back(nullptr);
         assert(code.size() < MAX_FUN_IDX);
         return code.size() - 1;
-    }
-
-    /** Serializes the function into a bytecode SEXP.
-
-
-
-     */
-    SEXP serialize(SEXP formals, num_args_t nargs, CC cc) {
-        // calculate the size
-        unsigned size = 2; // version + calling convention + code size
-        unsigned codeSize = 0;
-        for (Code * c : code) {
-            codeSize += c->size();
-
-        }
-
-
-        return nullptr;
-
     }
 
 };

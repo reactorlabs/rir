@@ -8,6 +8,8 @@
 #include "../RList.h"
 #include "../Symbols.h"
 
+#include "RBytecode.h"
+
 #include <iostream>
 #include <deque>
 #include <array>

@@ -1,3 +1,8 @@
+jit.rbc <- function(what) {
+    .Call("jitrbc", what)
+}
+
+
 jit.rir <- function(what) .Call("jitRir", what)
 
 jit.compile <- function(what, env = environment(what)) {

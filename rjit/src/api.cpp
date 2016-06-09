@@ -18,10 +18,23 @@
 
 #include "rir/Compiler.h"
 #include "rir/Interpreter.h"
+#include "rir/RBytecode.h"
 
 #include "StackScan.h"
 
 using namespace rjit;
+
+REXPORT SEXP jitrbc(SEXP exp) {
+    rir::Compiler c(exp);
+    rir::Function* f = c.finalize();
+    return rir::RBytecode::serialize(f, rir::CallingConvention::envLazy);
+}
+
+REXPORT SEXP jitf(SEXP exp) {
+    rir::Compiler c(exp);
+    //rir::Function * f = c.finalize();
+    return nullptr;
+}
 
 REXPORT SEXP jitRir(SEXP exp) {
     rir::Compiler c(exp);
