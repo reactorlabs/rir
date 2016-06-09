@@ -4,12 +4,20 @@
 namespace rjit {
 namespace rir {
 
+
+
+
 // CodeObject, holds a bytecode array and the associated debug information
 // Use CodeStream to build bytecode
 //
 class Code {
 public:
+
+
   private:
+
+    friend class RBytecode;
+
     class AstMap {
         size_t size;
         unsigned* pos;
@@ -64,6 +72,8 @@ public:
     BC_t* end() { return (BC_t*)((uintptr_t)bc + size); }
 
     SEXP getAst(BC_t* pc) { return astMap.at((uintptr_t)pc - (uintptr_t)bc); }
+
+
 
 };
 }

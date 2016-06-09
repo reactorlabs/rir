@@ -44,7 +44,20 @@ class Function {
         return code.size() - 1;
     }
 
+    /** Serializes the function into a bytecode SEXP.
+
+
+
+     */
     SEXP serialize(SEXP formals, num_args_t nargs, CC cc) {
+        // calculate the size
+        unsigned size = 2; // version + calling convention + code size
+        unsigned codeSize = 0;
+        for (Code * c : code) {
+            codeSize += c->size();
+
+        }
+
 
         return nullptr;
 
