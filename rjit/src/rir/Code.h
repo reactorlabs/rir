@@ -26,7 +26,15 @@ public:
         unsigned* pos;
         SEXP* ast;
 
+
+
       public:
+        AstMap(int size, unsigned *pos, SEXP * ast):
+            size(size),
+            pos(pos),
+            ast(ast) {
+        }
+
         AstMap(std::map<unsigned, SEXP>& astMap) {
             size = astMap.size();
             pos = new unsigned[size];
@@ -60,6 +68,13 @@ public:
         }
 
     };
+
+    Code(size_t size, BC_t* bc, SEXP ast, size_t astSize, unsigned * astPos, SEXP * astAst):
+        size(size),
+        bc(bc),
+        ast(ast),
+        astMap(astSize, astPos, astAst) {
+    }
 
   public:
     size_t size;

@@ -95,16 +95,6 @@ public:
         return reinterpret_cast<BC_t const *>(INTEGER(code_())[offset]);
     }
 
-    /** Deserializes the code object into a Function.
-
-      It is only possible to deserialize the master
-
-     */
-    Function * deserialize() {
-
-        return nullptr;
-    }
-
     /** Serializes a function into RBytecode.
 
         in consts:
@@ -117,6 +107,7 @@ public:
         in code:
             magic version function
             calling convention
+            offset for ast positions
             size of funcion code (in bytes, not rounded to ints)
             function code (align to sizeof int)
             size of promise x
@@ -131,15 +122,21 @@ public:
         size_t constsSize = f->code.size() * 2 - 1;
         // version + header
         size_t codeSize = 1 + sizeof(Header) / sizeof(int);
-
+        // size of the debug data
+        size_t astSize = 0;
+        // calculate code and ast sizes for all code segments
         for (size_t i = 0, e = f->code.size(); i != e; ++i) {
             // astMap
             constsSize += f->code[i]->astMap.size;
             // code size + actual code
             codeSize += 1 + toIntSize(f->code[i]->size);
             // ast size + ast positions
-            codeSize += 1 + f->code[i]->astMap.size;
+            astSize += 1 + f->code[i]->astMap.size;
         }
+        // store the offset to the ast part of the code buffer
+        int astOffset = codeSize;
+        // total code buffer length is the code buffer + ast buffer
+        codeSize += astSize;
 
         // create the code and consts objects
         SEXP code = allocVector(INTSXP, codeSize);
@@ -157,7 +154,7 @@ public:
 
         // serialize the version, header and main function code
         *(rawCode++) = MAGIC_VERSION_FUNCTION;
-        new (reinterpret_cast<Header*>(rawCode)) Header(cc, f->code.size());
+        new (reinterpret_cast<Header*>(rawCode)) Header(cc, f->code.size(), astOffset);
         rawCode += sizeof(Header) / sizeof(int);
         *(rawCode++) = f->code[0]->size;
         memcpy(rawCode, f->code[0]->bc, f->code[0]->size);
@@ -178,7 +175,7 @@ public:
         // serialize the astMaps for the function and promises
         for (Code * c : f->code) {
             *(rawCode++) = c->astMap.size;
-            memcpy(rawCode, c->astMap.pos, c->astMap.size);
+            memcpy(rawCode, c->astMap.pos, c->astMap.size * sizeof(int));
             rawCode += c->astMap.size;
             for (size_t i = 0, e = c->astMap.size; i != e; ++i)
                 SET_VECTOR_ELT(consts, constsOffset++, c->astMap.ast[i]);
@@ -190,6 +187,38 @@ public:
         UNPROTECT(1);
         return result;
     }
+
+    /** Deserializes the code object into a Function.
+
+      It is only possible to deserialize the master
+
+     */
+    Function * deserialize() {
+        assert(isFunctionBytecode() and "Only function bytecodes can be deserialized");
+        Function * result = new Function();
+        size_t ncode = header_().ncode;
+        result->code.resize(ncode);
+
+        // deserialize the function code object and its ast map
+        size_t codeOffset = 1 + sizeof(Header) / sizeof(int);
+        size_t astPosOffset = header_().astOffset;
+        size_t astAstIndex = ncode * 2 - 1; // all promises and asts
+        result->code[0] = deserializeCode(codeOffset, astPosOffset, 0, astAstIndex);
+
+        int * code = INTEGER(code_());
+
+        // deserialize the promises
+        size_t i = 1;
+        while (i < ncode) {
+            codeOffset += toIntSize(code[codeOffset]) + 1;
+            astAstIndex += code[astPosOffset];
+            astPosOffset += code[astPosOffset];
+            result->code[i] = deserializeCode(codeOffset, astPosOffset, i, astAstIndex);
+            ++i;
+        }
+        return result;
+    }
+
 
 private:
 
@@ -207,14 +236,18 @@ private:
         /** Number code objects stored in the code buffer. */
         int ncode;
 
-        Header(CallingConvention cc, int ncode):
+        /** Offset for ast positions (i.e. after all codes were serialized */
+        int astOffset;
+
+        Header(CallingConvention cc, int ncode, int astOffset):
             cc(cc),
-            ncode(ncode) {
+            ncode(ncode),
+            astOffset(astOffset) {
         }
 
     };
 
-    static_assert(sizeof(Header) == 2 * sizeof(int), "Header should not have any padding");
+    static_assert(sizeof(Header) == 3 * sizeof(int), "Header should not have any padding");
     static_assert(sizeof(Header) % sizeof(BC_t) == 0, "To make sure alignment won't cause us trouble");
 
 
@@ -240,6 +273,31 @@ private:
         UNPROTECT(1);
         return result;
     }
+
+    Code * deserializeCode(size_t codeOffset, size_t astPosOffset, size_t astIndex, size_t astAstIndex) {
+        SEXP consts = consts_();
+
+        int * code = INTEGER(code_()) + codeOffset;
+        size_t codeSize = *(code++);
+
+        BC_t * bc = new BC_t[codeSize];
+        memcpy(bc, code, codeSize);
+
+        int * codeAst = INTEGER(code_()) + astPosOffset;
+        size_t astSize = *(codeAst++);
+
+        unsigned * pos = new unsigned[astSize];
+        memcpy(pos, codeAst, astSize * sizeof(unsigned));
+
+        SEXP * ast = new SEXP[astSize];
+        for (size_t i = 0; i < astSize; ++i)
+            ast[i] = VECTOR_ELT(consts, astAstIndex++);
+
+        return new Code(codeSize, bc, VECTOR_ELT(consts, astIndex), astSize, pos, ast);
+    }
+
+
+
 
     RBytecode(SEXP code, SEXP asts) {
         // note that R_bcEncode is not required as threaded code makes no difference to us
