@@ -5,7 +5,6 @@
 #include <map>
 
 #include "BC_inc.h"
-#include "RIntlns.h"
 
 namespace rjit {
 namespace rir {
@@ -126,6 +125,7 @@ class Code {
         bc = from.bc;
         ast = from.ast;
         astMap = std::move(from.astMap);
+        children = std::move(from.children);
         from.size = 0;
         from.bc = nullptr;
         return *this;

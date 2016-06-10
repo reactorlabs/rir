@@ -2,6 +2,7 @@
 
 #include "Pool.h"
 #include <iostream>
+#include <iomanip>
 
 #include "../RList.h"
 #include "CodeStream.h"
@@ -65,6 +66,7 @@ void BC::write(CodeStream& cs) const {
 
     case BC_t::invalid:
     case BC_t::num_of:
+    case BC_t::label:
         assert(false);
         return;
     }
@@ -92,12 +94,16 @@ void Code::print() {
     std::cout << "-------------------\n";
 
     while ((uintptr_t)pc < (uintptr_t)bc + size) {
+        std::cout << std::setw(3) << ((uintptr_t)pc - (uintptr_t)bc) << " ";
         BC bc = BC::advance(&pc);
         bc.print();
     }
 }
 
 void BC::print() {
+    if (bc != BC_t::label)
+        std::cout << "   ";
+
     switch (bc) {
     case BC_t::invalid:
     case BC_t::num_of:
@@ -207,6 +213,8 @@ void BC::print() {
     case BC_t::check_function:
         std::cout << "check_function" << std::endl;
         break;
+    case BC_t::label:
+        std::cout << immediate.offset << ":\n";
     }
 }
 

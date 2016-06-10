@@ -13,8 +13,6 @@
 namespace rjit {
 namespace rir {
 
-typedef jmp_t Label;
-
 class CodeStream {
 
     friend class Compiler;
@@ -45,6 +43,11 @@ class CodeStream {
         return nextLabel++;
     }
 
+    void setNumLabels(size_t n) {
+        label2pos.resize(n);
+        nextLabel = n;
+    }
+
     void patchpoint(Label l) {
         patchpoints[pos] = l;
         insert((jmp_t)0);
@@ -62,6 +65,9 @@ class CodeStream {
     }
 
     CodeStream& operator<<(const BC& b) {
+        if (b.bc == BC_t::label) {
+            return *this << b.immediate.offset;
+        }
         b.write(*this);
         return *this;
     }

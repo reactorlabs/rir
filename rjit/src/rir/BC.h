@@ -38,6 +38,7 @@ BC::immediate_t decodeImmediate(BC_t bc, BC_t* pc) {
     case BC_t::jmp:
     case BC_t::jmp_true:
     case BC_t::jmp_false:
+    case BC_t::label:
         immediate.offset = *(jmp_t*)pc;
         break;
     case BC_t::pushi:
@@ -114,6 +115,7 @@ static size_t immediate_size[] = {
     0,                   // lt
     sizeof(pool_idx_t),  // check_primitive
     0,                   // check_function
+    sizeof(jmp_t),       // label
 };
 static_assert(sizeof(immediate_size) / sizeof(size_t) == (unsigned)BC_t::num_of,
               "Please add an entry for the size of the bytecode");
@@ -129,6 +131,10 @@ BC_t BC::readBC(BC_t** pc) {
     BC_t bc = **pc;
     *pc += 1;
     return bc;
+}
+
+bool BC::isJmp() {
+    return bc == BC_t::jmp || bc == BC_t::jmp_true || bc == BC_t::jmp_false;
 }
 
 size_t BC::size() const { return sizeof(BC_t) + immediate_size[(size_t)bc]; }
@@ -173,6 +179,11 @@ const BC BC::to_bool() { return BC(BC_t::to_bool); }
 
 BC BC::check_function() { return BC(BC_t::check_function); }
 
+const BC BC::label(jmp_t j) {
+    immediate_t i;
+    i.offset = j;
+    return BC(BC_t::label, i);
+}
 const BC BC::jmp(jmp_t j) {
     immediate_t i;
     i.offset = j;

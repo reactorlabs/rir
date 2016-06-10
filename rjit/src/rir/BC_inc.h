@@ -150,6 +150,9 @@ enum class BC_t : uint8_t {
     // special)
     check_function,
 
+    // A label/jump target (used internally by CodeEditor only!)
+    label,
+
     num_of
 };
 
@@ -167,6 +170,7 @@ typedef uint16_t fun_idx_t;
 typedef uint16_t num_args_t;
 // jmp offset
 typedef int16_t jmp_t;
+typedef jmp_t Label;
 // immediate arguments to call
 typedef struct {
     pool_idx_t args;
@@ -230,6 +234,8 @@ class BC {
     num_args_t immediateCallNargs();
     SEXP immediateCallNames();
 
+    inline bool isJmp();
+
     // ==== BC decoding logic
     // There are two interfaces:
     //
@@ -265,6 +271,7 @@ class BC {
     inline const static BC jmp_true(jmp_t);
     inline const static BC jmp_false(jmp_t);
     inline const static BC jmp(jmp_t);
+    inline const static BC label(jmp_t);
     inline const static BC lti();
     inline const static BC eqi();
     inline const static BC force_all();

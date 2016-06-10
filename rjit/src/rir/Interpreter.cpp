@@ -786,6 +786,7 @@ static SEXP rirEval(Code* cur, SEXP env, num_args_t numArgs) {
 
         case BC_t::num_of:
         case BC_t::invalid:
+        case BC_t::label:
             assert(false);
         }
     }
