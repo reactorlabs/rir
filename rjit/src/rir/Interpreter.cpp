@@ -264,43 +264,6 @@ static INLINE SEXP forcePromise(BCProm* prom, SEXP wrapper) {
     return res;
 }
 
-// TODO get rid of the lambdas...
-
-static SEXP bcEval(RBytecode fun, SEXP env, num_args_t numArgs, SEXP call) {
-
-    static_assert(
-        sizeof(BC_t) == 1,
-        "Jumps have to be updated as they assume BC_t array is bytes");
-
-    BC_t* pc = fun.bytecode();
-    size_t bp = stack.size();
-
-    while (true) {
-        switch (BC::readBC(&pc)) {
-        case BC_t::jmp:
-            pc += BC::readImmediate<jmp_t>(&pc);
-            break;
-        case BC_t::jmp_true: {
-            jmp_t j = BC::readImmediate<jmp_t>(&pc);
-            if (stack.pop() == R_TrueValue)
-                pc += j;
-            break;
-        }
-        case BC_t::jmp_false: {
-            jmp_t j = BC::readImmediate<jmp_t>(&pc);
-            if (stack.pop() == R_FalseValue)
-                pc += j;
-            break;
-        }
-
-        default:
-            assert(false and "Invalid opcode");
-        }
-    }
-
-    return nullptr;
-}
-
 // =============================================================================
 // ==== Interpreter main loop
 //
