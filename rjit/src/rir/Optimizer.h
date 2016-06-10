@@ -1,8 +1,8 @@
 #ifndef RIR_OPTIMIZER_H
 #define RIR_OPTIMIZER_H
 
-#include "BC.h"
 #include "../Symbols.h"
+#include "BC.h"
 #include "CodeStream.h"
 #include <cassert>
 
@@ -14,11 +14,10 @@ namespace {
 // ============================================================================
 // ==== Thats just a toy example of how to compile away a call to some specials
 //
-void optimize_(Code * c);
+void optimize_(Code* c);
 void optimize(CodeStream& cs, Code* cur);
 
-BC_t* doInlineIf(CodeStream& cs, Code* cur, BC_t* pc,
-                 BC_t* end) {
+BC_t* doInlineIf(CodeStream& cs, Code* cur, BC_t* pc, BC_t* end) {
 
     cs << BC::check_special(symbol::If);
 
@@ -50,8 +49,7 @@ BC_t* doInlineIf(CodeStream& cs, Code* cur, BC_t* pc,
     return pc;
 }
 
-BC_t* doInlineBlock(CodeStream& cs, Code* cur, BC_t* pc,
-                    BC_t* end) {
+BC_t* doInlineBlock(CodeStream& cs, Code* cur, BC_t* pc, BC_t* end) {
 
     cs << BC::check_special(symbol::Block);
 
@@ -119,7 +117,7 @@ void optimize_(Code* c) {
 
 class Optimizer {
   public:
-    static void optimize(Code * fun) { optimize_(fun); }
+    static void optimize(Code* fun) { optimize_(fun); }
 };
 
 } // rir

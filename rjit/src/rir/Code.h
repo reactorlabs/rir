@@ -1,24 +1,20 @@
 #ifndef RIR_CODE
 #define RIR_CODE
 
-#include <map>
 #include <cassert>
+#include <map>
 
-
-#include "RIntlns.h"
 #include "BC_inc.h"
-
+#include "RIntlns.h"
 
 namespace rjit {
 namespace rir {
-
-
 
 // CodeObject, holds a bytecode array and the associated debug information
 // Use CodeStream to build bytecode
 //
 class Code {
-public:
+  public:
     /** Calling convention.
      */
     enum class CC : char {
@@ -27,9 +23,7 @@ public:
         stackEager,
     };
 
-
   private:
-
     friend class RBytecode;
     friend class CodeStream;
 
@@ -41,10 +35,8 @@ public:
         unsigned* pos;
         SEXP* ast;
 
-
-
       public:
-        AstMap & operator = (AstMap && from) {
+        AstMap& operator=(AstMap&& from) {
             delete pos;
             delete ast;
             size = from.size;
@@ -56,11 +48,8 @@ public:
             return *this;
         }
 
-        AstMap(int size, unsigned *pos, SEXP * ast):
-            size(size),
-            pos(pos),
-            ast(ast) {
-        }
+        AstMap(int size, unsigned* pos, SEXP* ast)
+            : size(size), pos(pos), ast(ast) {}
 
         AstMap(std::map<unsigned, SEXP>& astMap) {
             size = astMap.size();
@@ -93,15 +82,11 @@ public:
 
             return ast[f];
         }
-
     };
 
-    Code(size_t size, BC_t* bc, SEXP ast, size_t astSize, unsigned * astPos, SEXP * astAst):
-        size(size),
-        bc(bc),
-        ast(ast),
-        astMap(astSize, astPos, astAst) {
-    }
+    Code(size_t size, BC_t* bc, SEXP ast, size_t astSize, unsigned* astPos,
+         SEXP* astAst)
+        : size(size), bc(bc), ast(ast), astMap(astSize, astPos, astAst) {}
 
   public:
     size_t size;
@@ -110,14 +95,9 @@ public:
     AstMap astMap;
 
     /** Promises used in the code object. */
-    std::vector<Code *> children;
+    std::vector<Code*> children;
 
-    Code():
-        size(0),
-        bc(nullptr),
-        ast(nullptr),
-        astMap(0, nullptr, nullptr) {
-    }
+    Code() : size(0), bc(nullptr), ast(nullptr), astMap(0, nullptr, nullptr) {}
 
     Code(size_t size, BC_t* bc, SEXP ast, std::map<unsigned, SEXP>& astMap)
         : size(size), bc(bc), ast(ast), astMap(astMap){};
@@ -135,12 +115,12 @@ public:
         return children.size() - 1;
     }
 
-    void addCode(fun_idx_t pos, Code * c) {
+    void addCode(fun_idx_t pos, Code* c) {
         assert(pos < children.size() and children[pos] == nullptr);
         children[pos] = c;
     }
 
-    Code & operator = (Code && from) {
+    Code& operator=(Code&& from) {
         delete bc;
         size = from.size;
         bc = from.bc;
@@ -150,7 +130,6 @@ public:
         from.bc = nullptr;
         return *this;
     }
-
 };
 }
 }

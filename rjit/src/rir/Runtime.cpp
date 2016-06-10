@@ -1,7 +1,7 @@
 #include "Runtime.h"
-#include "RIntlns.h"
 #include "../Precious.h"
 #include "../Protect.h"
+#include "RIntlns.h"
 
 #include <iostream>
 
@@ -22,8 +22,7 @@ SEXP mkBCProm(Code* fun, SEXP env) {
     return s;
 }
 
-SEXP mkBCCls(Code* fun, SEXP formals, num_args_t nargs, Code::CC cc,
-             SEXP env) {
+SEXP mkBCCls(Code* fun, SEXP formals, num_args_t nargs, Code::CC cc, SEXP env) {
     SEXP s = Rf_allocVector(BCCodeType, sizeof(BCClosure));
     *getBCCls(s) = BCClosure(fun, formals, nargs, cc, env);
 

@@ -1,8 +1,8 @@
 #ifndef RIR_COMPILER_H
 #define RIR_COMPILER_H
 
-#include "../RDefs.h"
 #include "../Precious.h"
+#include "../RDefs.h"
 
 namespace rjit {
 namespace rir {
@@ -26,7 +26,7 @@ class Compiler {
         Precious::remove(exp);
     }
 
-    Code * finalize();
+    Code* finalize();
 
     static Code* compile(SEXP ast) {
         Compiler c(ast);

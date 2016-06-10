@@ -3,8 +3,8 @@
 
 #include "RVector.h"
 
-#include <cstddef>
 #include <cassert>
+#include <cstddef>
 
 #include "BC_inc.h"
 #include "RDefs.h"

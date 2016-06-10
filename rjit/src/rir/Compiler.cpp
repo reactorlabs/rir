@@ -3,14 +3,14 @@
 #include "BC.h"
 #include "CodeStream.h"
 
-#include "../Sexp.h"
 #include "../RIntlns.h"
 #include "../RList.h"
+#include "../Sexp.h"
 #include "../Symbols.h"
 
-#include "Pool.h"
 #include "Interpreter.h"
 #include "Optimizer.h"
+#include "Pool.h"
 
 namespace rjit {
 namespace rir {
@@ -21,7 +21,7 @@ fun_idx_t compilePromise(Code* f, SEXP exp);
 void compileExpression(Code* f, CodeStream& cs, SEXP exp);
 
 // function application
-void compileCall(Code * parent, CodeStream & cs, SEXP ast, SEXP fun, SEXP args) {
+void compileCall(Code* parent, CodeStream& cs, SEXP ast, SEXP fun, SEXP args) {
     // application has the form:
     // LHS ( ARGS )
 
@@ -29,8 +29,8 @@ void compileCall(Code * parent, CodeStream & cs, SEXP ast, SEXP fun, SEXP args) 
     Match(fun) {
         Case(SYMSXP) { cs << BC::getfun(fun); }
         Else({
-             compileExpression(parent, cs, fun);
-             cs << BC::check_function();
+            compileExpression(parent, cs, fun);
+            cs << BC::check_function();
         });
     }
 
@@ -64,7 +64,7 @@ void compileConst(CodeStream& cs, SEXP constant) {
     cs << BC::push(constant);
 }
 
-void compileExpression(Code * parent, CodeStream& cs, SEXP exp) {
+void compileExpression(Code* parent, CodeStream& cs, SEXP exp) {
     // Dispatch on the current type of AST node
     Match(exp) {
         // Function application
@@ -92,7 +92,7 @@ void compileFormals(CodeStream& cs, SEXP formals) {
     }
 }
 
-fun_idx_t compilePromise(Code * parent, SEXP exp) {
+fun_idx_t compilePromise(Code* parent, SEXP exp) {
     CodeStream cs(parent, exp);
     compileExpression(parent, cs, exp);
     cs << BC::ret();
@@ -100,13 +100,13 @@ fun_idx_t compilePromise(Code * parent, SEXP exp) {
 }
 }
 
-Code * Compiler::finalize() {
+Code* Compiler::finalize() {
     CodeStream cs(exp);
     if (formals)
         compileFormals(cs, formals);
     compileExpression(cs.current, cs, exp);
     cs << BC::ret();
-    Code * result = cs.toCode();
+    Code* result = cs.toCode();
     Optimizer::optimize(result);
     return result;
 }

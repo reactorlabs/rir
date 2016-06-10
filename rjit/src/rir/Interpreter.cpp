@@ -1,17 +1,17 @@
 #include "Interpreter.h"
-#include "RIntlns.h"
-#include "Compiler.h"
-#include "CodeStream.h"
-#include "Runtime.h"
-#include "Primitives.h"
 #include "../RList.h"
 #include "../Symbols.h"
+#include "CodeStream.h"
+#include "Compiler.h"
+#include "Primitives.h"
+#include "RIntlns.h"
+#include "Runtime.h"
 
 #include "RBytecode.h"
 
-#include <iostream>
-#include <deque>
 #include <array>
+#include <deque>
+#include <iostream>
 
 extern "C" {
 Rboolean convertToLogicalNoNA(SEXP what, SEXP consts, int call);
@@ -144,7 +144,7 @@ static INLINE SEXP callPrimitive(SEXP (*primfun)(SEXP, SEXP, SEXP, SEXP),
 
 static SEXP rirEval(Code* fun, SEXP env, num_args_t numArgs);
 
-static INLINE void evalCallArgs(Code * fun, int args[], num_args_t nargs,
+static INLINE void evalCallArgs(Code* fun, int args[], num_args_t nargs,
                                 SEXP env) {
 
     for (size_t i = 0; i < nargs; ++i) {
@@ -160,8 +160,8 @@ static INLINE void evalCallArgs(Code * fun, int args[], num_args_t nargs,
 
 static INLINE SEXP callSpecial(SEXP call, SEXP op, SEXP env) {
     // call, op, args, rho
-    SEXP (*primfun)(SEXP, SEXP, SEXP, SEXP) = 
-                        R_FunTab[Rinternals::primoffset(op)].cfun;
+    SEXP (*primfun)
+    (SEXP, SEXP, SEXP, SEXP) = R_FunTab[Rinternals::primoffset(op)].cfun;
 
     return primfun(call, op, CDR(call), env);
 }
@@ -172,8 +172,8 @@ static INLINE SEXP callBuiltin(Code* caller, SEXP call, SEXP op, int args[],
     evalCallArgs(caller, args, nargs, env);
 
     // call, op, args, rho
-    SEXP (*primfun)(SEXP, SEXP, SEXP, SEXP) = 
-                        R_FunTab[Rinternals::primoffset(op)].cfun;
+    SEXP (*primfun)
+    (SEXP, SEXP, SEXP, SEXP) = R_FunTab[Rinternals::primoffset(op)].cfun;
 
     return callPrimitive(primfun, call, op, env, nargs);
 }
@@ -266,12 +266,13 @@ static INLINE SEXP forcePromise(BCProm* prom, SEXP wrapper) {
 
 // TODO get rid of the lambdas...
 
-
 static SEXP bcEval(RBytecode fun, SEXP env, num_args_t numArgs, SEXP call) {
 
-    static_assert(sizeof(BC_t) == 1, "Jumps have to be updated as they assume BC_t array is bytes");
+    static_assert(
+        sizeof(BC_t) == 1,
+        "Jumps have to be updated as they assume BC_t array is bytes");
 
-    BC_t * pc = fun.bytecode();
+    BC_t* pc = fun.bytecode();
     size_t bp = stack.size();
 
     while (true) {
@@ -292,18 +293,10 @@ static SEXP bcEval(RBytecode fun, SEXP env, num_args_t numArgs, SEXP call) {
             break;
         }
 
-
-
-
         default:
             assert(false and "Invalid opcode");
         }
-
-
     }
-
-
-
 
     return nullptr;
 }
@@ -435,7 +428,8 @@ static SEXP rirEval(Code* cur, SEXP env, num_args_t numArgs) {
 
         case BC_t::check_function: {
             SEXP f = stack.top();
-            assert(TYPEOF(f) == CLOSXP or TYPEOF(f) == BUILTINSXP or TYPEOF(f) == SPECIALSXP);
+            assert(TYPEOF(f) == CLOSXP or TYPEOF(f) == BUILTINSXP or
+                   TYPEOF(f) == SPECIALSXP);
         }
 
         case BC_t::getfun: {

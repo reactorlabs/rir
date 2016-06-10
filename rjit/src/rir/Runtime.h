@@ -1,10 +1,10 @@
 #ifndef RIR_RUNTIME_H
 #define RIR_RUNTIME_H
 
-#include "Code.h"
-#include "BC.h"
 #include "../RDefs.h"
 #include "../RIntlns_inc.h"
+#include "BC.h"
+#include "Code.h"
 
 namespace rjit {
 namespace rir {
@@ -23,8 +23,7 @@ struct BCProm {
     SEXP ast() { return fun->ast; }
     SEXP val(SEXP wrapper) { return _val; }
     void val(SEXP wrapper, SEXP aVal);
-    BCProm(Code * fun, SEXP env)
-        : t(type), fun(fun), env(env) {}
+    BCProm(Code* fun, SEXP env) : t(type), fun(fun), env(env) {}
 
   private:
     SEXP _val = nullptr;
@@ -33,7 +32,6 @@ struct BCProm {
 struct BCClosure {
   public:
     static constexpr short type = 0xc105;
-
 
     short t;
     Code::CC cc;
@@ -48,8 +46,7 @@ struct BCClosure {
 #pragma pack(pop)
 
 SEXP mkBCProm(Code* fun, SEXP env);
-SEXP mkBCCls(Code* fun, SEXP formals, num_args_t nargs, Code::CC cc,
-             SEXP env);
+SEXP mkBCCls(Code* fun, SEXP formals, num_args_t nargs, Code::CC cc, SEXP env);
 
 inline BCProm* getBCProm(SEXP s) { return (BCProm*)Rinternals::raw(s); }
 
@@ -64,9 +61,6 @@ inline bool isBCCls(SEXP s) {
     return Rinternals::typeof(s) == BCCodeType &&
            getBCCls(s)->t == BCClosure::type;
 }
-
-
-
 
 } // rir
 } // rjit

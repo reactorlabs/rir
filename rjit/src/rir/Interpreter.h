@@ -8,13 +8,11 @@
 namespace rjit {
 namespace rir {
 
-
-
 class Interpreter {
     Code* fun;
 
   public:
-    Interpreter(Code * fun) : fun(fun) {}
+    Interpreter(Code* fun) : fun(fun) {}
 
     SEXP run(SEXP env);
 

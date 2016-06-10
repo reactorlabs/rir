@@ -1,8 +1,8 @@
 #ifndef RJIT_RIR_BC_INC
 #define RJIT_RIR_BC_INC
 
-#include <cstdint>
 #include <cstddef>
+#include <cstdint>
 
 #include "RDefs.h"
 
@@ -146,7 +146,8 @@ enum class BC_t : uint8_t {
     // overwritten. Currently asserts(). TODO: osr
     check_special,
 
-    // Checks that the top of the stack is a function (closure, builtin or special)
+    // Checks that the top of the stack is a function (closure, builtin or
+    // special)
     check_function,
 
     num_of

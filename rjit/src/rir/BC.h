@@ -1,8 +1,8 @@
 #ifndef RJIT_RIR_BC
 #define RJIT_RIR_BC
 
-#include <cstdint>
 #include <cstddef>
+#include <cstdint>
 #include <map>
 
 #include "Pool.h"
@@ -163,10 +163,7 @@ const BC BC::eqi() { return BC(BC_t::eqi); }
 const BC BC::numargi() { return BC(BC_t::numargi); }
 const BC BC::to_bool() { return BC(BC_t::to_bool); }
 
-
-BC BC::check_function() {
-    return BC(BC_t::check_function);
-}
+BC BC::check_function() { return BC(BC_t::check_function); }
 
 const BC BC::jmp(jmp_t j) {
     immediate_t i;

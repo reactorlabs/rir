@@ -3,9 +3,9 @@
 #include "Pool.h"
 #include <iostream>
 
+#include "../RList.h"
 #include "CodeStream.h"
 #include "RIntlns.h"
-#include "../RList.h"
 
 namespace rjit {
 namespace rir {
