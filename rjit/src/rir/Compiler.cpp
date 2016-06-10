@@ -94,7 +94,7 @@ void compileFormals(CodeStream& cs, SEXP formals) {
 
 fun_idx_t compilePromise(Code* parent, SEXP exp) {
     CodeStream cs(parent, exp);
-    compileExpression(parent, cs, exp);
+    compileExpression(cs.getCurrentCode(), cs, exp);
     cs << BC::ret();
     return cs.finalize();
 }

@@ -37,6 +37,8 @@ class CodeStream {
     std::vector<unsigned> label2pos;
 
   public:
+    Code* getCurrentCode() { return current; }
+
     Label mkLabel() {
         assert(nextLabel < MAX_JMP);
         label2pos.resize(nextLabel + 1);
