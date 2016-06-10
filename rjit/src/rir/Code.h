@@ -1,9 +1,16 @@
 #ifndef RIR_CODE
 #define RIR_CODE
 
+#include <map>
+#include <cassert>
+
+
+#include "RIntlns.h"
+#include "BC_inc.h"
+
+
 namespace rjit {
 namespace rir {
-
 
 
 
@@ -12,6 +19,13 @@ namespace rir {
 //
 class Code {
 public:
+    /** Calling convention.
+     */
+    enum class CC : char {
+        envLazy,
+        stackLazy,
+        stackEager,
+    };
 
 
   private:
@@ -29,6 +43,18 @@ public:
 
 
       public:
+        AstMap & operator = (AstMap && from) {
+            delete pos;
+            delete ast;
+            size = from.size;
+            pos = from.pos;
+            ast = from.ast;
+            from.size = 0;
+            from.pos = nullptr;
+            from.ast = nullptr;
+            return *this;
+        }
+
         AstMap(int size, unsigned *pos, SEXP * ast):
             size(size),
             pos(pos),
@@ -82,6 +108,9 @@ public:
     SEXP ast;
     AstMap astMap;
 
+    /** Promises used in the code object. */
+    std::vector<Code *> children;
+
     Code(size_t size, BC_t* bc, SEXP ast, std::map<unsigned, SEXP>& astMap)
         : size(size), bc(bc), ast(ast), astMap(astMap){};
     ~Code() { delete bc; }
@@ -92,7 +121,27 @@ public:
 
     SEXP getAst(BC_t* pc) { return astMap.at((uintptr_t)pc - (uintptr_t)bc); }
 
+    fun_idx_t next() {
+        children.push_back(nullptr);
+        assert(children.size() < MAX_FUN_IDX);
+        return children.size() - 1;
+    }
 
+    void addCode(fun_idx_t pos, Code * c) {
+        assert(pos < children.size() and children[pos] == nullptr);
+        children[pos] = c;
+    }
+
+    Code & operator = (Code && from) {
+        delete bc;
+        size = from.size;
+        bc = from.bc;
+        ast = from.ast;
+        astMap = std::move(from.astMap);
+        from.size = 0;
+        from.bc = nullptr;
+        return *this;
+    }
 
 };
 }

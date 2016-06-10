@@ -1,6 +1,5 @@
 #include "Interpreter.h"
 #include "RIntlns.h"
-#include "Function.h"
 #include "Compiler.h"
 #include "CodeStream.h"
 #include "Runtime.h"
@@ -43,14 +42,14 @@ SEXP jit(SEXP fun) {
     Compiler c(BODY(fun), FORMALS(fun));
 
     SEXP bc = mkBCCls(c.finalize(), FORMALS(fun), RList(FORMALS(fun)).length(),
-                      Function::CC::envLazy, CLOENV(fun));
+                      Code::CC::envLazy, CLOENV(fun));
     return bc;
 }
 
 SEXP jit(SEXP ast, SEXP formals, SEXP env) {
     Compiler c(ast, formals);
     SEXP bc = mkBCCls(c.finalize(), formals, RList(formals).length(),
-                      Function::CC::envLazy, env);
+                      Code::CC::envLazy, env);
     return bc;
 }
 
@@ -143,10 +142,9 @@ static INLINE SEXP callPrimitive(SEXP (*primfun)(SEXP, SEXP, SEXP, SEXP),
 // ==== Interpreter call wrappers
 //
 
-static SEXP rirEval(Function* fun, fun_idx_t c, SEXP env, num_args_t numArgs,
-                    SEXP call);
+static SEXP rirEval(Code* fun, SEXP env, num_args_t numArgs);
 
-static INLINE void evalCallArgs(Function* fun, int args[], num_args_t nargs,
+static INLINE void evalCallArgs(Code * fun, int args[], num_args_t nargs,
                                 SEXP env) {
 
     for (size_t i = 0; i < nargs; ++i) {
@@ -154,7 +152,7 @@ static INLINE void evalCallArgs(Function* fun, int args[], num_args_t nargs,
         if (idx == MISSING_ARG_IDX) {
             stack.push(R_MissingArg);
         } else {
-            SEXP arg = rirEval(fun, idx, env, 0, fun->code[idx]->ast);
+            SEXP arg = rirEval(fun->children[idx], env, 0);
             stack.push(arg);
         }
     }
@@ -168,7 +166,7 @@ static INLINE SEXP callSpecial(SEXP call, SEXP op, SEXP env) {
     return primfun(call, op, CDR(call), env);
 }
 
-static INLINE SEXP callBuiltin(Function* caller, SEXP call, SEXP op, int args[],
+static INLINE SEXP callBuiltin(Code* caller, SEXP call, SEXP op, int args[],
                                num_args_t nargs, SEXP env) {
 
     evalCallArgs(caller, args, nargs, env);
@@ -180,34 +178,34 @@ static INLINE SEXP callBuiltin(Function* caller, SEXP call, SEXP op, int args[],
     return callPrimitive(primfun, call, op, env, nargs);
 }
 
-static INLINE SEXP callClosure(Function* caller, BCClosure* cls, int args[],
+static INLINE SEXP callClosure(Code* caller, BCClosure* cls, int args[],
                                num_args_t nargs, SEXP env, SEXP call) {
 
     assert(cls->nargs == VARIADIC_ARGS || cls->nargs == nargs);
 
     switch (cls->cc) {
-    case Function::CC::stackEager: {
+    case Code::CC::stackEager: {
         assert(!cls->env);
         evalCallArgs(caller, args, nargs, env);
-        return rirEval(cls->fun, 0, env, nargs, call);
+        return rirEval(cls->fun, env, nargs);
     }
 
-    case Function::CC::stackLazy: {
+    case Code::CC::stackLazy: {
         for (size_t i = 0; i < nargs; ++i) {
             fun_idx_t idx = args[i];
             if (idx == MISSING_ARG_IDX) {
                 stack.push(R_MissingArg);
             } else {
-                SEXP prom = mkBCProm(caller, idx, env);
+                SEXP prom = mkBCProm(caller->children[idx], env);
                 stack.push(prom);
             }
         }
-        SEXP res = rirEval(cls->fun, 0, env, nargs, call);
+        SEXP res = rirEval(cls->fun, env, nargs);
         stack.pop(nargs);
         return res;
     }
 
-    case Function::CC::envLazy: {
+    case Code::CC::envLazy: {
         SEXP argslist = R_NilValue;
 
         for (size_t i = 0; i < nargs; ++i) {
@@ -215,7 +213,7 @@ static INLINE SEXP callClosure(Function* caller, BCClosure* cls, int args[],
             if (idx == MISSING_ARG_IDX) {
                 argslist = CONS_NR(R_MissingArg, argslist);
             } else {
-                SEXP prom = mkBCProm(caller, idx, env);
+                SEXP prom = mkBCProm(caller->children[idx], env);
                 argslist = CONS_NR(prom, argslist);
             }
         }
@@ -223,7 +221,7 @@ static INLINE SEXP callClosure(Function* caller, BCClosure* cls, int args[],
         SEXP newEnv = Rf_NewEnvironment(cls->formals, argslist, cls->env);
         stack.push(newEnv);
 
-        SEXP res = rirEval(cls->fun, 0, newEnv, nargs, call);
+        SEXP res = rirEval(cls->fun, newEnv, nargs);
         stack.pop();
 
         return res;
@@ -233,7 +231,7 @@ static INLINE SEXP callClosure(Function* caller, BCClosure* cls, int args[],
     return nullptr;
 }
 
-static INLINE SEXP doCall(Function* caller, SEXP call, SEXP callee, int args[],
+static INLINE SEXP doCall(Code* caller, SEXP call, SEXP callee, int args[],
                           num_args_t nargs, SEXP env) {
     size_t bp = stack.size();
     size_t bpi = stacki.size();
@@ -261,21 +259,63 @@ static INLINE SEXP doCall(Function* caller, SEXP call, SEXP callee, int args[],
 
 static INLINE SEXP forcePromise(BCProm* prom, SEXP wrapper) {
     assert(!prom->val(wrapper));
-    SEXP res = rirEval(prom->fun, prom->idx, prom->env, 0, prom->ast());
+    SEXP res = rirEval(prom->fun, prom->env, 0);
     prom->val(wrapper, res);
     return res;
+}
+
+// TODO get rid of the lambdas...
+
+
+static SEXP bcEval(RBytecode fun, SEXP env, num_args_t numArgs, SEXP call) {
+
+    static_assert(sizeof(BC_t) == 1, "Jumps have to be updated as they assume BC_t array is bytes");
+
+    BC_t * pc = fun.code();
+    size_t bp = stack.size();
+
+    while (true) {
+        switch (BC::readBC(&pc)) {
+        case BC_t::jmp:
+            pc += BC::readImmediate<jmp_t>(&pc);
+            break;
+        case BC_t::jmp_true: {
+            jmp_t j = BC::readImmediate<jmp_t>(&pc);
+            if (stack.pop() == R_TrueValue)
+                pc += j;
+            break;
+        }
+        case BC_t::jmp_false: {
+            jmp_t j = BC::readImmediate<jmp_t>(&pc);
+            if (stack.pop() == R_FalseValue)
+                pc += j;
+            break;
+        }
+
+
+
+
+        default:
+            assert(false and "Invalid opcode");
+        }
+
+
+    }
+
+
+
+
+    return nullptr;
 }
 
 // =============================================================================
 // ==== Interpreter main loop
 //
 
-static SEXP rirEval(Function* fun, fun_idx_t c, SEXP env, num_args_t numArgs,
-                    SEXP call) {
-    assert(fun->code.size() > c);
+static SEXP rirEval(Code* cur, SEXP env, num_args_t numArgs) {
 
-    // Current Code Object (from the function) being evaluated
-    Code* cur = fun->code[c];
+    SEXP call = cur->ast;
+
     // Current pc
     register BC_t* pc = cur->bc;
 
@@ -477,8 +517,8 @@ static SEXP rirEval(Function* fun, fun_idx_t c, SEXP env, num_args_t numArgs,
 
         case BC_t::mkprom: {
             fun_idx_t idx = BC::readImmediate<fun_idx_t>(&pc);
-            SEXP prom = mkBCProm(fun, idx, env);
-            assert(fun->code.size() > idx);
+            SEXP prom = mkBCProm(cur->children[idx], env);
+            assert(cur->children.size() > idx);
             stack.push((SEXP)prom);
             break;
         }
@@ -581,7 +621,7 @@ static SEXP rirEval(Function* fun, fun_idx_t c, SEXP env, num_args_t numArgs,
                     }
 
                     // Replace call args on the stack by the reordered match
-                    SEXP res = doCall(fun, cur->getAst(pc), cls, matched.data(),
+                    SEXP res = doCall(cur, cur->getAst(pc), cls, matched.data(),
                                       matched.size(), env);
                     stack.push(res);
                     break;
@@ -598,14 +638,14 @@ static SEXP rirEval(Function* fun, fun_idx_t c, SEXP env, num_args_t numArgs,
                             std::vector<int> allArgs(expected, MISSING_ARG_IDX);
                             memcpy(allArgs.data(), args, nargs * sizeof(SEXP));
                             SEXP res =
-                                doCall(fun, cur->getAst(pc), cls,
+                                doCall(cur, cur->getAst(pc), cls,
                                        allArgs.data(), allArgs.size(), env);
                             stack.push(res);
                             break;
                         }
                     }
                 }
-                SEXP res = doCall(fun, cur->getAst(pc), cls, args, nargs, env);
+                SEXP res = doCall(cur, cur->getAst(pc), cls, args, nargs, env);
                 stack.push(res);
                 break;
             }
@@ -775,7 +815,7 @@ done:
 }
 } // namespace
 
-SEXP Interpreter::run(SEXP env) { return rirEval(fun, 0, env, 0, R_NilValue); }
+SEXP Interpreter::run(SEXP env) { return rirEval(fun, env, 0); }
 
 void Interpreter::gcCallback(void (*forward_node)(SEXP)) {
     for (size_t i = 0; i < stack.size(); ++i) {

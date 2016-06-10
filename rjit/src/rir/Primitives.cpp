@@ -120,8 +120,7 @@ bool compileSpecial(CodeStream& cs, int special_id) {
 } // namespace
 
 SEXP Primitives::doCompilePrimitive(SEXP fun) {
-    Function* f = new Function;
-    CodeStream cs(f, fun);
+    CodeStream cs(fun);
 
     int idx = Rinternals::primoffset(fun);
     bool success = false;
@@ -139,10 +138,9 @@ SEXP Primitives::doCompilePrimitive(SEXP fun) {
 
     if (success) {
         cs << BC::ret();
-        cs.finalize();
-        cls = mkBCCls(f, FORMALS(fun), VARIADIC_ARGS,
-                      TYPEOF(fun) == BUILTINSXP ? Function::CC::stackEager
-                                                : Function::CC::stackLazy,
+        cls = mkBCCls(cs.toCode(), FORMALS(fun), VARIADIC_ARGS,
+                      TYPEOF(fun) == BUILTINSXP ? Code::CC::stackEager
+                                                : Code::CC::stackLazy,
                       nullptr);
         PrimitivesCache[idx] = cls;
     }

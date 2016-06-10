@@ -5,7 +5,6 @@
 #include "RIntlns.h"
 
 #include "Code.h"
-#include "Function.h"
 
 
 namespace rjit {
@@ -81,20 +80,20 @@ public:
         return * (reinterpret_cast<int const*>(code()) - 1);
     }
 
-    BC_t const * code() const {
+    BC_t * code() const {
         if (isFunctionBytecode()) {
             // version + header + code size offset
-            return reinterpret_cast<BC_t const *>(INTEGER(code_()) + sizeof(Header) / sizeof(int) + 2);
+            return reinterpret_cast<BC_t *>(INTEGER(code_()) + sizeof(Header) / sizeof(int) + 2);
         } else {
             return RBytecode(consts_()).codeByOffset(INTEGER(code_())[1]);
         }
     }
 
-    BC_t const * codeByOffset(int offset) const {
+    BC_t * codeByOffset(int offset) const {
         assert (isFunctionBytecode());
-        return reinterpret_cast<BC_t const *>(INTEGER(code_())[offset]);
+        return reinterpret_cast<BC_t *>(INTEGER(code_())[offset]);
     }
-
+#ifdef HAHA
     /** Serializes a function into RBytecode.
 
         in consts:
@@ -218,7 +217,7 @@ public:
         }
         return result;
     }
-
+#endif
 
 private:
 

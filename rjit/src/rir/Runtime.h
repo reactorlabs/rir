@@ -1,7 +1,7 @@
 #ifndef RIR_RUNTIME_H
 #define RIR_RUNTIME_H
 
-#include "Function.h"
+#include "Code.h"
 #include "BC.h"
 #include "../RDefs.h"
 #include "../RIntlns_inc.h"
@@ -17,15 +17,14 @@ struct BCProm {
   public:
     static constexpr short type = 0x9703;
     short t;
-    fun_idx_t idx;
 
-    Function* fun;
+    Code* fun;
     SEXP env;
-    SEXP ast() { return fun->code[idx]->ast; }
+    SEXP ast() { return fun->ast; }
     SEXP val(SEXP wrapper) { return _val; }
     void val(SEXP wrapper, SEXP aVal);
-    BCProm(Function* fun, fun_idx_t idx, SEXP env)
-        : t(type), idx(idx), fun(fun), env(env) {}
+    BCProm(Code * fun, SEXP env)
+        : t(type), fun(fun), env(env) {}
 
   private:
     SEXP _val = nullptr;
@@ -37,19 +36,19 @@ struct BCClosure {
 
 
     short t;
-    Function::CC cc;
+    Code::CC cc;
     num_args_t nargs;
 
-    Function* fun;
+    Code* fun;
     SEXP formals;
     SEXP env;
-    BCClosure(Function* fun, SEXP formals, num_args_t nargs, Function::CC cc, SEXP env)
+    BCClosure(Code* fun, SEXP formals, num_args_t nargs, Code::CC cc, SEXP env)
         : t(type), cc(cc), nargs(nargs), fun(fun), formals(formals), env(env) {}
 };
 #pragma pack(pop)
 
-SEXP mkBCProm(Function* fun, fun_idx_t idx, SEXP env);
-SEXP mkBCCls(Function* fun, SEXP formals, num_args_t nargs, Function::CC cc,
+SEXP mkBCProm(Code* fun, SEXP env);
+SEXP mkBCCls(Code* fun, SEXP formals, num_args_t nargs, Code::CC cc,
              SEXP env);
 
 inline BCProm* getBCProm(SEXP s) { return (BCProm*)Rinternals::raw(s); }

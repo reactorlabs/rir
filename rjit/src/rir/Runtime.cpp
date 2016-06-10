@@ -16,13 +16,13 @@ void BCProm::val(SEXP wrapper, SEXP aVal) {
     _val = aVal;
 }
 
-SEXP mkBCProm(Function* fun, fun_idx_t idx, SEXP env) {
+SEXP mkBCProm(Code* fun, SEXP env) {
     SEXP s = Rf_allocVector(BCCodeType, sizeof(BCProm));
-    *getBCProm(s) = BCProm(fun, idx, env);
+    *getBCProm(s) = BCProm(fun, env);
     return s;
 }
 
-SEXP mkBCCls(Function* fun, SEXP formals, num_args_t nargs, Function::CC cc,
+SEXP mkBCCls(Code* fun, SEXP formals, num_args_t nargs, Code::CC cc,
              SEXP env) {
     SEXP s = Rf_allocVector(BCCodeType, sizeof(BCClosure));
     *getBCCls(s) = BCClosure(fun, formals, nargs, cc, env);

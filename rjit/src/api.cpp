@@ -26,8 +26,11 @@ using namespace rjit;
 
 REXPORT SEXP jitrbc(SEXP exp) {
     rir::Compiler c(exp);
-    rir::Function* f = c.finalize();
-    return rir::RBytecode::serialize(f, rir::CallingConvention::envLazy);
+    rir::Code* f = c.finalize();
+    //rir::RBytecode x = rir::RBytecode::serialize(f, rir::CallingConvention::envLazy);
+    //rir::Function * ff = x.deserialize();
+    return nullptr;
+    //return x;
 }
 
 REXPORT SEXP jitf(SEXP exp) {
@@ -38,7 +41,7 @@ REXPORT SEXP jitf(SEXP exp) {
 
 REXPORT SEXP jitRir(SEXP exp) {
     rir::Compiler c(exp);
-    rir::Function* f = c.finalize();
+    rir::Code* f = c.finalize();
 
     SEXP env = Rf_NewEnvironment(R_NilValue, R_NilValue, R_GlobalEnv);
     rir::Interpreter i(f);

@@ -1,6 +1,5 @@
 #include "Compiler.h"
 
-#include "Function.h"
 #include "BC.h"
 #include "CodeStream.h"
 
@@ -18,11 +17,11 @@ namespace rir {
 
 namespace {
 
-fun_idx_t compilePromise(Function* f, SEXP exp);
-void compileExpression(Function* f, CodeStream& cs, SEXP exp);
+fun_idx_t compilePromise(Code* f, SEXP exp);
+void compileExpression(Code* f, CodeStream& cs, SEXP exp);
 
 // function application
-void compileCall(Function* f, CodeStream& cs, SEXP ast, SEXP fun, SEXP args) {
+void compileCall(Code * parent, CodeStream & cs, SEXP ast, SEXP fun, SEXP args) {
     // application has the form:
     // LHS ( ARGS )
 
@@ -30,7 +29,7 @@ void compileCall(Function* f, CodeStream& cs, SEXP ast, SEXP fun, SEXP args) {
     Match(fun) {
         Case(SYMSXP) { cs << BC::getfun(fun); }
         Else({
-             compileExpression(f, cs, fun);
+             compileExpression(parent, cs, fun);
              cs << BC::check_function();
         });
     }
@@ -43,7 +42,7 @@ void compileCall(Function* f, CodeStream& cs, SEXP ast, SEXP fun, SEXP args) {
     for (auto arg = RList(args).begin(); arg != RList::end(); ++arg) {
         // (1) Arguments are wrapped as Promises:
         //     create a new Code object for the promise
-        size_t prom = compilePromise(f, *arg);
+        size_t prom = compilePromise(parent, *arg);
         callArgs.push_back(prom);
 
         // (2) remember if the argument had a name associated
@@ -65,11 +64,11 @@ void compileConst(CodeStream& cs, SEXP constant) {
     cs << BC::push(constant);
 }
 
-void compileExpression(Function* f, CodeStream& cs, SEXP exp) {
+void compileExpression(Code * parent, CodeStream& cs, SEXP exp) {
     // Dispatch on the current type of AST node
     Match(exp) {
         // Function application
-        Case(LANGSXP, fun, args) { compileCall(f, cs, exp, fun, args); }
+        Case(LANGSXP, fun, args) { compileCall(parent, cs, exp, fun, args); }
         // Variable lookup
         Case(SYMSXP) { compileGetvar(cs, exp); }
         // Constant
@@ -93,30 +92,23 @@ void compileFormals(CodeStream& cs, SEXP formals) {
     }
 }
 
-fun_idx_t compileFunction(Function* f, SEXP exp, SEXP formals) {
-    CodeStream cs(f, exp);
+fun_idx_t compilePromise(Code * parent, SEXP exp) {
+    CodeStream cs(parent, exp);
+    compileExpression(parent, cs, exp);
+    cs << BC::ret();
+    return cs.finalize();
+}
+}
+
+Code * Compiler::finalize() {
+    CodeStream cs(exp);
     if (formals)
         compileFormals(cs, formals);
-    compileExpression(f, cs, exp);
+    compileExpression(nullptr, cs, exp);
     cs << BC::ret();
-    return cs.finalize();
-}
-
-fun_idx_t compilePromise(Function* f, SEXP exp) {
-    CodeStream cs(f, exp);
-    compileExpression(f, cs, exp);
-    cs << BC::ret();
-    return cs.finalize();
-}
-}
-
-Function* Compiler::finalize() {
-    Function* f = new Function;
-
-    compileFunction(f, exp, formals);
-    Optimizer::optimize(f);
-
-    return f;
+    Code * result = cs.toCode();
+    Optimizer::optimize(result);
+    return result;
 }
 }
 }

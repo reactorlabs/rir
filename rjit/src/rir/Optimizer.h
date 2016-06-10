@@ -2,7 +2,6 @@
 #define RIR_OPTIMIZER_H
 
 #include "BC.h"
-#include "Function.h"
 #include "../Symbols.h"
 #include "CodeStream.h"
 #include <cassert>
@@ -15,10 +14,10 @@ namespace {
 // ============================================================================
 // ==== Thats just a toy example of how to compile away a call to some specials
 //
-void optimize_(Function* fun, fun_idx_t idx);
-void optimize(CodeStream& cs, Function* fun, Code* cur);
+void optimize_(Code * c);
+void optimize(CodeStream& cs, Code* cur);
 
-BC_t* doInlineIf(CodeStream& cs, Function* fun, Code* cur, BC_t* pc,
+BC_t* doInlineIf(CodeStream& cs, Code* cur, BC_t* pc,
                  BC_t* end) {
 
     cs << BC::check_special(symbol::If);
@@ -33,25 +32,25 @@ BC_t* doInlineIf(CodeStream& cs, Function* fun, Code* cur, BC_t* pc,
     Label trueBranch = cs.mkLabel();
     Label nextBranch = cs.mkLabel();
 
-    optimize(cs, fun, fun->code[args[0]]);
+    optimize(cs, cur->children[args[0]]);
     cs << BC::to_bool() << BC::jmp_true(trueBranch);
 
     if (nargs < 3) {
         cs << BC::push(R_NilValue);
     } else {
-        optimize(cs, fun, fun->code[args[2]]);
+        optimize(cs, cur->children[args[2]]);
     }
     cs << BC::jmp(nextBranch);
 
     cs << trueBranch;
-    optimize(cs, fun, fun->code[args[1]]);
+    optimize(cs, cur->children[args[1]]);
 
     cs << nextBranch;
 
     return pc;
 }
 
-BC_t* doInlineBlock(CodeStream& cs, Function* fun, Code* cur, BC_t* pc,
+BC_t* doInlineBlock(CodeStream& cs, Code* cur, BC_t* pc,
                     BC_t* end) {
 
     cs << BC::check_special(symbol::Block);
@@ -64,13 +63,13 @@ BC_t* doInlineBlock(CodeStream& cs, Function* fun, Code* cur, BC_t* pc,
     int nargs = Rf_length(args_);
 
     for (int i = 0; i < nargs; ++i) {
-        optimize(cs, fun, fun->code[args[i]]);
+        optimize(cs, cur->children[args[i]]);
     }
 
     return pc;
 }
 
-void optimize(CodeStream& cs, Function* fun, Code* cur) {
+void optimize(CodeStream& cs, Code* cur) {
     BC_t* pc = cur->bc;
     BC_t* end = (BC_t*)(uintptr_t)pc + cur->size;
 
@@ -80,11 +79,11 @@ void optimize(CodeStream& cs, Function* fun, Code* cur) {
         switch (bc.bc) {
         case BC_t::getfun:
             if (bc.immediateConst() == symbol::If) {
-                pc = doInlineIf(cs, fun, cur, pc, end);
+                pc = doInlineIf(cs, cur, pc, end);
                 continue;
             }
             if (bc.immediateConst() == symbol::Block) {
-                pc = doInlineBlock(cs, fun, cur, pc, end);
+                pc = doInlineBlock(cs, cur, pc, end);
                 continue;
             }
             break;
@@ -95,7 +94,7 @@ void optimize(CodeStream& cs, Function* fun, Code* cur) {
         case BC_t::call: {
             SEXP args = bc.immediateCallArgs();
             for (int i = 0; i < Rf_length(args); ++i) {
-                optimize_(fun, INTEGER(args)[i]);
+                optimize_(cur->children[INTEGER(args)[i]]);
             }
             break;
         }
@@ -107,21 +106,20 @@ void optimize(CodeStream& cs, Function* fun, Code* cur) {
     }
 }
 
-void optimize_(Function* fun, fun_idx_t idx) {
-    Code* c = fun->code[idx];
-
+void optimize_(Code* c) {
     CodeStream opt(c->ast);
-    optimize(opt, fun, c);
+    optimize(opt, c);
     opt << BC::ret();
 
     Code* optCode = opt.toCode();
-    fun->code[idx] = optCode;
+    *c = std::move(*optCode);
+    delete optCode; // is empty now
 }
 }
 
 class Optimizer {
   public:
-    static void optimize(Function* fun) { optimize_(fun, 0); }
+    static void optimize(Code * fun) { optimize_(fun); }
 };
 
 } // rir

@@ -6,13 +6,15 @@
 #include <cstring>
 
 #include "Pool.h"
-#include "Function.h"
 #include "BC.h"
+
+#include "Code.h"
 
 namespace rjit {
 namespace rir {
 
 typedef jmp_t Label;
+
 
 class CodeStream {
     std::vector<char>* code;
@@ -20,7 +22,7 @@ class CodeStream {
     unsigned pos = 0;
     unsigned size = 1024;
 
-    Function* fun;
+    Code * parent;
     SEXP ast;
     fun_idx_t insertPoint;
 
@@ -42,12 +44,12 @@ class CodeStream {
         insert((jmp_t)0);
     }
 
-    CodeStream(Function* fun, SEXP ast)
-        : fun(fun), ast(ast), insertPoint(fun->next()) {
+    CodeStream(Code * parent, SEXP ast)
+        : parent(parent), ast(ast), insertPoint(parent->next()) {
         code = new std::vector<char>(1024);
     }
 
-    CodeStream(SEXP ast) : fun(nullptr), ast(ast), insertPoint(-1) {
+    CodeStream(SEXP ast) : parent(nullptr), ast(ast), insertPoint(-1) {
         code = new std::vector<char>(1024);
     }
 
@@ -62,8 +64,8 @@ class CodeStream {
     }
 
     fun_idx_t finalize() {
-        assert(fun);
-        fun->addCode(insertPoint, toCode());
+        assert(parent);
+        parent->addCode(insertPoint, toCode());
         return insertPoint;
     }
 
