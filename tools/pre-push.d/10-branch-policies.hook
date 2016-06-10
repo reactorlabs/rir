@@ -13,7 +13,7 @@ if [[ $current_branch =~ $PRIVATE ]]; then
 fi
 
 
-protected_branch='master'
+protected_branch='(master|rir)'
 
 policy='Force push or delete on $current_branch is not allowed! Use git revert to undo changes.'
 

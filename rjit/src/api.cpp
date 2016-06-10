@@ -28,13 +28,13 @@ REXPORT SEXP jitrbc(SEXP exp) {
     rir::Compiler c(exp);
     rir::Code* f = c.finalize();
     rir::RBytecode x = rir::RBytecode::serialize(f, rir::Code::CC::envLazy);
-    rir::Code * ff = x.deserialize();
+    rir::Code* ff = x.deserialize();
     return x;
 }
 
 REXPORT SEXP jitf(SEXP exp) {
     rir::Compiler c(exp);
-    //rir::Function * f = c.finalize();
+    // rir::Function * f = c.finalize();
     return nullptr;
 }
 
