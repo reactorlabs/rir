@@ -197,8 +197,7 @@ void optimize_(Code* fun) {
 class Optimizer {
   public:
     static void optimize(Code* fun) {
-        for (int i = 0; i < 2; ++i) {
-            std::cout << " ====================== \n";
+        for (int i = 0; i < 5; ++i) {
             optimize_(fun);
         }
     }

@@ -94,7 +94,6 @@ Code* CodeEditor::toCode() {
     }
     Code* res = cs.toCode();
     cs.getCurrentCode()->children = children;
-    std::cout << "children " << children.size() << "\n";
     return res;
 }
 
