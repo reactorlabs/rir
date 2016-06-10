@@ -104,7 +104,7 @@ Code * Compiler::finalize() {
     CodeStream cs(exp);
     if (formals)
         compileFormals(cs, formals);
-    compileExpression(nullptr, cs, exp);
+    compileExpression(cs.current, cs, exp);
     cs << BC::ret();
     Code * result = cs.toCode();
     Optimizer::optimize(result);

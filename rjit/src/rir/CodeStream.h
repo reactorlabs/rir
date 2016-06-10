@@ -17,10 +17,15 @@ typedef jmp_t Label;
 
 
 class CodeStream {
+
+    friend class Compiler;
+
     std::vector<char>* code;
 
     unsigned pos = 0;
     unsigned size = 1024;
+
+    Code * current;
 
     Code * parent;
     SEXP ast;
@@ -45,11 +50,11 @@ class CodeStream {
     }
 
     CodeStream(Code * parent, SEXP ast)
-        : parent(parent), ast(ast), insertPoint(parent->next()) {
+        : current(new Code()), parent(parent), ast(ast), insertPoint(parent->next()) {
         code = new std::vector<char>(1024);
     }
 
-    CodeStream(SEXP ast) : parent(nullptr), ast(ast), insertPoint(-1) {
+    CodeStream(SEXP ast) : current(new Code()), parent(nullptr), ast(ast), insertPoint(-1) {
         code = new std::vector<char>(1024);
     }
 
@@ -83,11 +88,16 @@ class CodeStream {
     void addAst(SEXP ast) { astMap[pos] = ast; }
 
     Code* toCode() {
+        assert (current->size == 0 and current->bc == nullptr);
         size_t size = pos;
-        Code* res = new Code(size, toBc(), ast, astMap);
+
+        current->size = size;
+        current->bc = toBc();
+        current->astMap = Code::AstMap(astMap);
+        current->ast = ast;
         ast = nullptr;
         astMap.clear();
-        return res;
+        return current;
     }
 
   private:

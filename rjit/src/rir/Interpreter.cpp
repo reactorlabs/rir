@@ -271,7 +271,7 @@ static SEXP bcEval(RBytecode fun, SEXP env, num_args_t numArgs, SEXP call) {
 
     static_assert(sizeof(BC_t) == 1, "Jumps have to be updated as they assume BC_t array is bytes");
 
-    BC_t * pc = fun.code();
+    BC_t * pc = fun.bytecode();
     size_t bp = stack.size();
 
     while (true) {

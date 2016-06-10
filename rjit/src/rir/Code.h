@@ -31,6 +31,7 @@ public:
   private:
 
     friend class RBytecode;
+    friend class CodeStream;
 
     class AstMap {
 
@@ -110,6 +111,13 @@ public:
 
     /** Promises used in the code object. */
     std::vector<Code *> children;
+
+    Code():
+        size(0),
+        bc(nullptr),
+        ast(nullptr),
+        astMap(0, nullptr, nullptr) {
+    }
 
     Code(size_t size, BC_t* bc, SEXP ast, std::map<unsigned, SEXP>& astMap)
         : size(size), bc(bc), ast(ast), astMap(astMap){};

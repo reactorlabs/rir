@@ -18,37 +18,19 @@ extern "C" SEXP createPromise(SEXP code, SEXP rho);
 
 
 
-enum class CallingConvention : int {
-    envLazy,
-    stackLazy,
-    stackEager,
-};
-
-
 /** Wrapper around a BCODESXP containing rir bytecode.
-
-
-  R's bytecode SEXPs have two portions we can use - the constant pool and the code.
-
-  The code is used to serialize the header (with special version so that rir and R bytecodes can be distinguished), followed by the rir bytecodes, which then are followed by position indices of the ast map.
-
-  The constant pool has first the ast of the function, followed by any child RBytecode objects (promises, and promises of the promises recursively), so that these have the same indices in the constant pool as they had in the Function object, then followed by the asts from ast map.
  */
 class RBytecode {
 public:
 
-    /** R bytecode version when the BCODESXP contains a promisse bytecode, i.e. its constant pool links to the function bytecode and its single bytecode after the instruction is the offset to the parent bytecode.
-      */
-    static constexpr int MAGIC_VERSION_PROMISE = 0xfe;
-
     /** Function bytecode version. Contains serialized bytecodes for the function and all its promises (recursively), as well as the ast maps.
      */
-    static constexpr int MAGIC_VERSION_FUNCTION = 0xff;
+    static constexpr int MAGIC_VERSION = 0xff;
 
     RBytecode(SEXP from):
         data_(from) {
         assert(TYPEOF(from) == BCODESXP and "Creating RBytecode from something that is not bytecode");
-        assert(version() >= MAGIC_VERSION_PROMISE and "Invalid version - perhaps not rir bytecode");
+        assert(version() >= MAGIC_VERSION and "Invalid version - perhaps not rir bytecode");
     }
 
     RBytecode(RBytecode const &) = default;
@@ -61,7 +43,7 @@ public:
         return data_;
     }
 
-    CallingConvention callingConvention() const {
+    Code::CC callingConvention() const {
         return header_().cc;
     }
 
@@ -72,152 +54,97 @@ public:
         return INTEGER(code_())[0];
     }
 
-    bool isFunctionBytecode() const {
-        return version() == MAGIC_VERSION_FUNCTION;
-    }
-
-    int size() const {
-        return * (reinterpret_cast<int const*>(code()) - 1);
-    }
-
-    BC_t * code() const {
-        if (isFunctionBytecode()) {
-            // version + header + code size offset
-            return reinterpret_cast<BC_t *>(INTEGER(code_()) + sizeof(Header) / sizeof(int) + 2);
-        } else {
-            return RBytecode(consts_()).codeByOffset(INTEGER(code_())[1]);
-        }
-    }
-
-    BC_t * codeByOffset(int offset) const {
-        assert (isFunctionBytecode());
-        return reinterpret_cast<BC_t *>(INTEGER(code_())[offset]);
-    }
-#ifdef HAHA
-    /** Serializes a function into RBytecode.
-
-        in consts:
-            ast for the code
-            promise bytecodes
-            promise asts
-            astMap for code (asts)
-            astMaps for promises (asts)
-
-        in code:
-            magic version function
-            calling convention
-            offset for ast positions
-            size of funcion code (in bytes, not rounded to ints)
-            function code (align to sizeof int)
-            size of promise x
-            code for promise x (in bytes, not rounded to ints)
-            astMap size for function code
-            astMap for function code (positions)
-            astMap size for promise x
-            astMap for promise x (positions)
+    /** Returns the ast of the code object.
      */
-    static RBytecode serialize(Function * f, CallingConvention cc) {
-        // ast + promise bytecodes & their asts, no promise slot for function
-        size_t constsSize = f->code.size() * 2 - 1;
-        // version + header
-        size_t codeSize = 1 + sizeof(Header) / sizeof(int);
-        // size of the debug data
-        size_t astSize = 0;
-        // calculate code and ast sizes for all code segments
-        for (size_t i = 0, e = f->code.size(); i != e; ++i) {
-            // astMap
-            constsSize += f->code[i]->astMap.size;
-            // code size + actual code
-            codeSize += 1 + toIntSize(f->code[i]->size);
-            // ast size + ast positions
-            astSize += 1 + f->code[i]->astMap.size;
-        }
-        // store the offset to the ast part of the code buffer
-        int astOffset = codeSize;
-        // total code buffer length is the code buffer + ast buffer
-        codeSize += astSize;
+    SEXP ast() const {
+        return VECTOR_ELT(consts_(), header_().nchildren);
+    }
+
+    /** Returns pointer to the rir bytecode contained in the object.
+     */
+    BC_t * bytecode() const {
+        return reinterpret_cast<BC_t *>(INTEGER(code_()) + sizeof(Header) / sizeof(int));
+    }
+
+    size_t bytecodeSize() const {
+        return header_().codeSize;
+    }
+
+    size_t astMapSize() const {
+        return INTEGER(code_())[sizeof(Header) / sizeof(int) + toIntSize(header_().codeSize)];
+    }
+
+    unsigned * astMapPos() const {
+        return reinterpret_cast<unsigned *>(INTEGER(code_())[sizeof(Header) / sizeof(int) + toIntSize(header_().codeSize) + 1]);
+    }
+
+    static RBytecode serialize(Code * from, Code::CC cc) {
+        size_t nchildren = from->children.size();
+        // bytecode objects for children + ast for code + astMap SEXPs
+        size_t constsSize = nchildren + 1 + from->astMap.size;
+        // header + code + astMap size + astMap positions
+        size_t codeSize = sizeof(Header) / sizeof(int) + toIntSize(from->size) + 1 + from->astMap.size;
+
 
         // create the code and consts objects
         SEXP code = allocVector(INTSXP, codeSize);
         PROTECT(code);
         SEXP consts = allocVector(VECSXP, constsSize);
         PROTECT(consts);
+
+        // store the header
+        new (INTEGER(code)) Header(cc, nchildren, from->size);
+        // store the code
+        int idx = sizeof(Header) / sizeof(int);
+        memcpy(INTEGER(code) + idx, from->bc, from->size);
+        idx += toIntSize(from->size);
+        // store the astmap size
+        INTEGER(code)[sizeof(Header) / sizeof(int) + toIntSize(from->size)] = from->astMap.size;
+        ++idx;
+        // store the astmap positions
+        memcpy(INTEGER(code) + idx, from->astMap.pos, from->astMap.size * sizeof(int));
+        idx += from->astMap.size;
+
+        assert(idx == codeSize and "Some weirdness in serializing code");
+
+        // serialize the promises
+        for (idx = 0; idx < nchildren; ++idx)
+            SET_VECTOR_ELT(consts, idx, serialize(from->children[idx], Code::CC::envLazy));
+        // serialize the code ast
+        SET_VECTOR_ELT(consts, idx++, from->ast);
+        // serialize the astMap SEXPs
+        for (size_t i = 0; i < from->astMap.size; ++i)
+            SET_VECTOR_ELT(consts, idx++, from->astMap.ast[i]);
+
+        assert(idx == constsSize and "Some weirdness in serializing consts");
+
         RBytecode result(code, consts);
         UNPROTECT(2);
-        PROTECT(result);
-
-        int * rawCode = INTEGER(code);
-
-        // add function's ast to constant pool
-        SET_VECTOR_ELT(consts, 0, f->code[0]->ast);
-
-        // serialize the version, header and main function code
-        *(rawCode++) = MAGIC_VERSION_FUNCTION;
-        new (reinterpret_cast<Header*>(rawCode)) Header(cc, f->code.size(), astOffset);
-        rawCode += sizeof(Header) / sizeof(int);
-        *(rawCode++) = f->code[0]->size;
-        memcpy(rawCode, f->code[0]->bc, f->code[0]->size);
-        rawCode += toIntSize(f->code[0]->size);
-
-        // serialize the code, bytecodes and asts of the promises
-        for (size_t i = 1, e = f->code.size(); i != e; ++i) {
-            Code * c = f->code[i];
-            *(rawCode++) = c->size;
-            SET_VECTOR_ELT(consts, i, serializePromise(rawCode - INTEGER(code), result));
-            SET_VECTOR_ELT(consts, i + f->code.size() - 1, c->ast);
-            memcpy(rawCode, c->bc, c->size);
-            rawCode += toIntSize(c->size);
-        }
-
-        // offset to constants after asts for all codes and bytecodes for promises
-        size_t constsOffset = f->code.size() * 2;
-        // serialize the astMaps for the function and promises
-        for (Code * c : f->code) {
-            *(rawCode++) = c->astMap.size;
-            memcpy(rawCode, c->astMap.pos, c->astMap.size * sizeof(int));
-            rawCode += c->astMap.size;
-            for (size_t i = 0, e = c->astMap.size; i != e; ++i)
-                SET_VECTOR_ELT(consts, constsOffset++, c->astMap.ast[i]);
-        }
-
-        assert(constsOffset == (constsSize + 1) and "Weirness in serialized constants");
-        assert(rawCode - INTEGER(code) == static_cast<int>(codeSize) and "Weirdness in serialized code");
-
-        UNPROTECT(1);
         return result;
     }
 
-    /** Deserializes the code object into a Function.
+    Code * deserialize() {
+        size_t csize = bytecodeSize();
+        size_t asize = astMapSize();
+        size_t nchildren = header_().nchildren;
 
-      It is only possible to deserialize the master
+        BC_t * bc = new BC_t[csize];
+        unsigned * astPos = new unsigned[asize];
+        SEXP * astAst = new SEXP[asize];
 
-     */
-    Function * deserialize() {
-        assert(isFunctionBytecode() and "Only function bytecodes can be deserialized");
-        Function * result = new Function();
-        size_t ncode = header_().ncode;
-        result->code.resize(ncode);
+        memcpy(bc, bytecode(), csize);
+        memcpy(astPos, astMapPos(), asize * sizeof(int));
 
-        // deserialize the function code object and its ast map
-        size_t codeOffset = 1 + sizeof(Header) / sizeof(int);
-        size_t astPosOffset = header_().astOffset;
-        size_t astAstIndex = ncode * 2 - 1; // all promises and asts
-        result->code[0] = deserializeCode(codeOffset, astPosOffset, 0, astAstIndex);
+        for (size_t i = 0; i < asize; ++i)
+            astAst[i] = VECTOR_ELT(consts_(), i + nchildren + 1);
 
-        int * code = INTEGER(code_());
+        Code * result = new Code(csize, bc, ast(), asize, astPos, astAst);
+        result->children.resize(nchildren);
+        for (size_t i = 0; i < nchildren; ++i)
+            result->addCode(i, RBytecode(VECTOR_ELT(consts_(), i)).deserialize());
 
-        // deserialize the promises
-        size_t i = 1;
-        while (i < ncode) {
-            codeOffset += toIntSize(code[codeOffset]) + 1;
-            astAstIndex += code[astPosOffset];
-            astPosOffset += code[astPosOffset];
-            result->code[i] = deserializeCode(codeOffset, astPosOffset, i, astAstIndex);
-            ++i;
-        }
         return result;
     }
-#endif
 
 private:
 
@@ -229,73 +156,29 @@ private:
     }
 
     struct Header {
+        /** Bytecode magic version. */
+        int version;
+
         /** Expected calling convention. */
-        CallingConvention cc;
+        Code::CC cc;
 
-        /** Number code objects stored in the code buffer. */
-        int ncode;
+        /** Number children code objects (first code entries). */
+        int nchildren;
 
-        /** Offset for ast positions (i.e. after all codes were serialized */
-        int astOffset;
+        /** Size of the code in bytes. */
+        int codeSize;
 
-        Header(CallingConvention cc, int ncode, int astOffset):
+        Header(Code::CC cc, int nchildren, int codeSize):
+            version(MAGIC_VERSION),
             cc(cc),
-            ncode(ncode),
-            astOffset(astOffset) {
+            nchildren(nchildren),
+            codeSize(codeSize) {
         }
 
     };
 
-    static_assert(sizeof(Header) == 3 * sizeof(int), "Header should not have any padding");
+    static_assert(sizeof(Header) == 4 * sizeof(int), "Header should not have any padding");
     static_assert(sizeof(Header) % sizeof(BC_t) == 0, "To make sure alignment won't cause us trouble");
-
-
-    /** Serializes a code object into RBytecode.
-
-      in consts:
-          consts points to parent bytecode
-
-      in code:
-          magic version promise
-          offset of code object in parent code buffer
-     */
-    static RBytecode serializePromise(int offset, RBytecode parent) {
-        // serialize the bytecode part and the header
-        SEXP code = allocVector(INTSXP, 2);
-        PROTECT(code);
-
-        INTEGER(code)[0] = MAGIC_VERSION_PROMISE;
-        INTEGER(code)[1] = offset;
-
-        // create the bytecode object as the code containing the offset and constant pool is link to the parent bytecode
-        SEXP result = RBytecode(code, parent);
-        UNPROTECT(1);
-        return result;
-    }
-
-    Code * deserializeCode(size_t codeOffset, size_t astPosOffset, size_t astIndex, size_t astAstIndex) {
-        SEXP consts = consts_();
-
-        int * code = INTEGER(code_()) + codeOffset;
-        size_t codeSize = *(code++);
-
-        BC_t * bc = new BC_t[codeSize];
-        memcpy(bc, code, codeSize);
-
-        int * codeAst = INTEGER(code_()) + astPosOffset;
-        size_t astSize = *(codeAst++);
-
-        unsigned * pos = new unsigned[astSize];
-        memcpy(pos, codeAst, astSize * sizeof(unsigned));
-
-        SEXP * ast = new SEXP[astSize];
-        for (size_t i = 0; i < astSize; ++i)
-            ast[i] = VECTOR_ELT(consts, astAstIndex++);
-
-        return new Code(codeSize, bc, VECTOR_ELT(consts, astIndex), astSize, pos, ast);
-    }
-
-
 
 
     RBytecode(SEXP code, SEXP asts) {
@@ -306,10 +189,7 @@ private:
 
 
     Header const & header_() const {
-        if (isFunctionBytecode())
-            return * reinterpret_cast<Header const *>(INTEGER(code_()) + 1);
-        else
-            return RBytecode(consts_()).header_();
+        return * reinterpret_cast<Header const *>(INTEGER(code_()));
     }
 
 
