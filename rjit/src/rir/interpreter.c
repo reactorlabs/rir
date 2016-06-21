@@ -487,9 +487,20 @@ SEXP rirEval_c(Code* c, SEXP env, unsigned numArgs) {
                 pc = pc + offset;
             break;
         }
-        case jmp_:
-        case lti_:
-        case eqi_:
+        case jmp_: {
+            pc = pc + readJumpOffset(&pc);
+            break;
+        }
+        case lti_: {
+            int rhs = iPop();
+            int lhs = iPop();
+            push(lhs < rhs ? R_TrueValue : R_FalseValue);
+        }
+        case eqi_: {
+            int rhs = iPop();
+            int lhs = iPop();
+            push(lhs == rhs ? R_TrueValue : R_FalseValue);
+        }
         case pushi_:
         case dupi_:
         case dup_:
