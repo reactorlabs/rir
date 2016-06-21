@@ -32,128 +32,23 @@ namespace rir {
 // ==== BC types
 //
 enum class BC_t : uint8_t {
-    // This is only here to trap accidentally calling zero initialized memory
-    invalid,
 
-    // Push a constant to the stack
-    // I: constant (via Pool)
-    // S: +1
-    push,
-
-    // Function lookup
-    // Pushes a closure (or primitive) to the stack
-    // I: symbol (via Pool)
-    // S: +1
-    getfun,
-
-    // Variable lookup
-    // I: symbol (via Pool)
-    // S: +1
-    getvar,
-
-    // Call function
-    // Immediate arguments are the arguments to the call (given as a list of
-    //  code object indices) and a list of name tags of the arguments.
-    // I: {arguments, names}
-    // S: -N
-    call,
-
-    // Create a promise
-    // I: promise code object index
-    // S: +1
-    mkprom,
-
-    // Create a closure
-    // I: closure code object index
-    // S: +1
-    mkclosure,
-
-    // Return
-    // return value is tos
-    ret,
-
-    // Force the promise on tos
-    // Leaves promise on tos
-    force,
-
-    // Pop one value from stack
-    pop,
-
-    // Load a specific function argument to the stack
-    // argument# is immediate
-    // Only valid for CallingConventions CC::*Stack
-    load_arg,
-
-    // Expects a promise tos, replaces it by its ast
-    get_ast,
-
-    // name and value from stack
-    // value left on stack
-    setvar,
+#define DEF_INSTR(name, ...) name,
+#include "insns.h"
 
     // push the number of arguments given to a CC::*Stack function
-    numargi,
-
-    // converts tos to a bool scalar
-    to_bool,
-
-    // pc += offset iff tos == true
-    jmp_true,
-
-    // pc += offset iff tos == false
-    jmp_false,
-
-    // unconditional jump
-    jmp,
-
-    // less than on unboxed integers
-    lti,
-
-    // equality on unboxed integers
-    eqi,
+    // TODO DELETE
+    NUMARGI_DEPRECATED,
 
     // force all promise arguments to this function passed on the stack
     // (currently unused)
-    force_all,
-
-    // push unboxed integer
-    pushi,
-
-    // duplicate unboxed integer
-    dupi,
-
-    // Load a specific function argument to the stack
-    // unboxed integer argument# expected
-    // Only valid for CallingConventions CC::*Stack
-    load_argi,
-
-    // Increment tos unboxed integer
-    inci,
-
-    // duplicate tos
-    dup,
-
-    // +
-    add,
-
-    // -
-    sub,
-
-    // <
-    lt,
-
-    // Immediate symbol of a special as argument. Checks whether special is
-    // overwritten. Currently asserts(). TODO: osr
-    check_primitive,
-
-    // Checks that the top of the stack is a function (closure, builtin or
-    // special)
-    check_function,
+    DEPRECATED_FORCE_ALL,
 
     // A label/jump target (used internally by CodeEditor only!)
     label,
 
     num_of
+
 };
 
 // ============================================================
@@ -210,7 +105,7 @@ class BC {
         int i;
     };
 
-    BC() : bc(BC_t::invalid), immediate({0}) {}
+    BC() : bc(BC_t::invalid_), immediate({0}) {}
     BC operator=(BC other) {
         bc = other.bc;
         immediate = other.immediate;

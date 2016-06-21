@@ -294,7 +294,7 @@ static SEXP rirEval(Code* cur, SEXP env, num_args_t numArgs) {
     // Main BC_t dispatch
     while (true) {
         switch (BC::readBC(&pc)) {
-        case BC_t::to_bool: {
+        case BC_t::asbool_: {
             SEXP t = stack.top();
             int cond = NA_LOGICAL;
 
@@ -341,45 +341,45 @@ static SEXP rirEval(Code* cur, SEXP env, num_args_t numArgs) {
             break;
         }
 
-        case BC_t::jmp:
+        case BC_t::br_:
             pc = (BC_t*)((uintptr_t)pc + BC::readImmediate<jmp_t>(&pc));
             break;
 
-        case BC_t::jmp_true: {
+        case BC_t::brtrue_: {
             jmp_t j = BC::readImmediate<jmp_t>(&pc);
             if (stack.pop() == R_TrueValue)
                 pc = (BC_t*)((uintptr_t)pc + j);
             break;
         }
 
-        case BC_t::jmp_false: {
+        case BC_t::brfalse_: {
             jmp_t j = BC::readImmediate<jmp_t>(&pc);
             if (stack.pop() == R_FalseValue)
                 pc = (BC_t*)((uintptr_t)pc + j);
             break;
         }
 
-        case BC_t::push: {
+        case BC_t::push_: {
             SEXP c = loadConst();
             stack.push(c);
             break;
         }
 
-        case BC_t::lti: {
+        case BC_t::lti_: {
             int b = stacki.pop();
             int a = stacki.pop();
             stack.push(a < b ? R_TrueValue : R_FalseValue);
             break;
         }
 
-        case BC_t::eqi: {
+        case BC_t::eqi_: {
             int b = stacki.pop();
             int a = stacki.pop();
             stack.push(a == b ? R_TrueValue : R_FalseValue);
             break;
         }
 
-        case BC_t::check_primitive: {
+        case BC_t::isspecial_: {
             SEXP sym = loadConst();
             SEXP val = findVar(sym, env);
             // TODO better check
@@ -387,7 +387,7 @@ static SEXP rirEval(Code* cur, SEXP env, num_args_t numArgs) {
             break;
         }
 
-        case BC_t::check_function: {
+        case BC_t::isfun_: {
             SEXP val = stack.pop();
 
             switch (Rinternals::typeof(val)) {
@@ -414,7 +414,7 @@ static SEXP rirEval(Code* cur, SEXP env, num_args_t numArgs) {
             break;
         }
 
-        case BC_t::getfun: {
+        case BC_t::ldfun_: {
             SEXP sym = loadConst();
             SEXP val = findVar(sym, env);
             R_Visible = TRUE;
@@ -462,7 +462,7 @@ static SEXP rirEval(Code* cur, SEXP env, num_args_t numArgs) {
             break;
         }
 
-        case BC_t::getvar: {
+        case BC_t::ldvar_: {
             SEXP sym = loadConst();
             SEXP val = findVar(sym, env);
             R_Visible = TRUE;
@@ -491,7 +491,7 @@ static SEXP rirEval(Code* cur, SEXP env, num_args_t numArgs) {
             break;
         }
 
-        case BC_t::mkprom: {
+        case BC_t::promise_: {
             fun_idx_t idx = BC::readImmediate<fun_idx_t>(&pc);
             SEXP prom = mkBCProm(cur->children[idx], env);
             assert(cur->children.size() > idx);
@@ -499,7 +499,7 @@ static SEXP rirEval(Code* cur, SEXP env, num_args_t numArgs) {
             break;
         }
 
-        case BC_t::call: {
+        case BC_t::call_: {
             call_args_t callArgs = BC::readImmediate<call_args_t>(&pc);
 
             // Duplicated from immediateCallArgs / immediateCallNargs for
@@ -632,19 +632,19 @@ static SEXP rirEval(Code* cur, SEXP env, num_args_t numArgs) {
             break;
         }
 
-        case BC_t::load_arg: {
+        case BC_t::pusharg_: {
             num_args_t a = BC::readImmediate<num_args_t>(&pc);
             assert(a < numArgs);
             stack.push(getArg(a));
             break;
         }
 
-        case BC_t::numargi: {
+        case BC_t::NUMARGI_DEPRECATED: {
             stacki.push(numArgs);
             break;
         }
 
-        case BC_t::get_ast: {
+        case BC_t::asast_: {
             SEXP t = stack.pop();
             assert(isBCProm(t));
             BCProm* p = getBCProm(t);
@@ -652,7 +652,7 @@ static SEXP rirEval(Code* cur, SEXP env, num_args_t numArgs) {
             break;
         }
 
-        case BC_t::setvar: {
+        case BC_t::stvar_: {
             SEXP val = stack.pop();
             SEXP sym = stack.pop();
             // TODO: complex assign
@@ -662,7 +662,7 @@ static SEXP rirEval(Code* cur, SEXP env, num_args_t numArgs) {
             break;
         }
 
-        case BC_t::force_all: {
+        case BC_t::DEPRECATED_FORCE_ALL: {
             for (size_t a = 0; a < numArgs; ++a) {
                 SEXP arg = getArg(a);
                 if (isBCProm(arg)) {
@@ -676,7 +676,7 @@ static SEXP rirEval(Code* cur, SEXP env, num_args_t numArgs) {
             break;
         }
 
-        case BC_t::force: {
+        case BC_t::force_: {
             SEXP tos = stack.pop();
             assert(isBCProm(tos));
             BCProm* prom = getBCProm(tos);
@@ -685,39 +685,39 @@ static SEXP rirEval(Code* cur, SEXP env, num_args_t numArgs) {
             break;
         }
 
-        case BC_t::pop:
+        case BC_t::pop_:
             stack.pop();
             break;
 
-        case BC_t::ret: {
+        case BC_t::ret_: {
             goto done;
         }
 
-        case BC_t::pushi: {
+        case BC_t::pushi_: {
             stacki.push(BC::readImmediate<int>(&pc));
             break;
         }
 
-        case BC_t::dup:
+        case BC_t::dup_:
             stack.push(stack.top());
             break;
 
-        case BC_t::dupi:
+        case BC_t::dupi_:
             stacki.push(stacki.top());
             break;
 
-        case BC_t::load_argi: {
+        case BC_t::push_argi_: {
             int pos = stacki.pop();
             stack.push(getArg(pos));
             break;
         }
 
-        case BC_t::inci: {
+        case BC_t::inci_: {
             stacki.top()++;
             break;
         }
 
-        case BC_t::mkclosure: {
+        case BC_t::close_: {
             SEXP body = stack.pop();
             SEXP arglist = stack.pop();
 
@@ -726,7 +726,7 @@ static SEXP rirEval(Code* cur, SEXP env, num_args_t numArgs) {
             break;
         }
 
-        case BC_t::add: {
+        case BC_t::add_: {
             SEXP rhs = stack.pop();
             SEXP lhs = stack.pop();
             if (Rinternals::typeof(lhs) == REALSXP &&
@@ -746,7 +746,7 @@ static SEXP rirEval(Code* cur, SEXP env, num_args_t numArgs) {
             break;
         }
 
-        case BC_t::sub: {
+        case BC_t::sub_: {
             SEXP rhs = stack.pop();
             SEXP lhs = stack.pop();
             if (Rinternals::typeof(lhs) == REALSXP &&
@@ -766,7 +766,7 @@ static SEXP rirEval(Code* cur, SEXP env, num_args_t numArgs) {
             break;
         }
 
-        case BC_t::lt: {
+        case BC_t::lt_: {
             SEXP rhs = stack.pop();
             SEXP lhs = stack.pop();
             if (Rinternals::typeof(lhs) == REALSXP &&
@@ -785,7 +785,7 @@ static SEXP rirEval(Code* cur, SEXP env, num_args_t numArgs) {
         }
 
         case BC_t::num_of:
-        case BC_t::invalid:
+        case BC_t::invalid_:
         case BC_t::label:
             assert(false);
         }

@@ -93,7 +93,7 @@ class CodeEditor {
                 BytecodeList* insert = pos->prev;
 
                 // Fix prom offsets
-                if (insert->bc.bc == BC_t::call) {
+                if (insert->bc.bc == BC_t::call_) {
                     size_t nargs = insert->bc.immediateCallNargs();
                     fun_idx_t* args = insert->bc.immediateCallArgs();
                     for (size_t i = 0; i < nargs; ++i) {

@@ -2,6 +2,8 @@
 #error "DEF_INSTR must be defined before including insns.h"
 #endif
 
+//        name       imm   pop   push popi pushi
+
 DEF_INSTR(invalid_,   0,    0,    0,   0,   0)
 /** 
  * invalid_:: Opcode 0 acts as a sentinnel for unintialiazed Code.
@@ -111,6 +113,15 @@ DEF_INSTR(isfun_,     0,    1,    1,   0,   0)
 /**
  * isfun_:: pop object stack, convert to RIR code or assert error, push code to object stack
  */
+
+// TODO these may be redundant but needed for the unification
+
+// Increments top of integer stack
+DEF_INSTR(inci_,      0,    0,    0,   1,   1)
+
+// TODO pushes argument value (index of the argument is taken from integer stack)
+DEF_INSTR(push_argi_, 0,    0,    1,   1,   0)
+
 
 #undef DEF_INSTR
 

@@ -102,12 +102,12 @@ void CodeEditor::normalizeReturn() {
         return;
 
     Cursor lastI(this, last.prev);
-    if ((*lastI).bc == BC_t::ret)
+    if ((*lastI).bc == BC_t::ret_)
         lastI.remove();
 
     for (Cursor pos = getCursor(); !pos.atEnd(); ++pos) {
         // TODO replace ret with jumps to the end
-        assert((*pos).bc != BC_t::ret);
+        assert((*pos).bc != BC_t::ret_);
     }
 }
 }

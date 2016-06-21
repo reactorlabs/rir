@@ -14,57 +14,57 @@ namespace rir {
 void BC::write(CodeStream& cs) const {
     cs.insert(bc);
     switch (bc) {
-    case BC_t::push:
-    case BC_t::getfun:
-    case BC_t::getvar:
-    case BC_t::check_primitive:
+    case BC_t::push_:
+    case BC_t::ldfun_:
+    case BC_t::ldvar_:
+    case BC_t::isspecial_:
         cs.insert(immediate.pool);
         return;
 
-    case BC_t::call:
+    case BC_t::call_:
         cs.insert(immediate.call_args);
         break;
 
-    case BC_t::load_arg:
+    case BC_t::pusharg_:
         cs.insert(immediate.numArgs);
         return;
 
-    case BC_t::mkprom:
+    case BC_t::promise_:
         cs.insert(immediate.fun);
         return;
 
-    case BC_t::jmp:
-    case BC_t::jmp_true:
-    case BC_t::jmp_false:
+    case BC_t::br_:
+    case BC_t::brtrue_:
+    case BC_t::brfalse_:
         cs.patchpoint(immediate.offset);
         return;
 
-    case BC_t::pushi:
+    case BC_t::pushi_:
         cs.insert(immediate.i);
         return;
 
-    case BC_t::mkclosure:
-    case BC_t::ret:
-    case BC_t::force:
-    case BC_t::force_all:
-    case BC_t::pop:
-    case BC_t::get_ast:
-    case BC_t::setvar:
-    case BC_t::to_bool:
-    case BC_t::numargi:
-    case BC_t::lti:
-    case BC_t::eqi:
-    case BC_t::dupi:
-    case BC_t::dup:
-    case BC_t::inci:
-    case BC_t::load_argi:
-    case BC_t::add:
-    case BC_t::sub:
-    case BC_t::lt:
-    case BC_t::check_function:
+    case BC_t::close_:
+    case BC_t::ret_:
+    case BC_t::force_:
+    case BC_t::DEPRECATED_FORCE_ALL:
+    case BC_t::pop_:
+    case BC_t::asast_:
+    case BC_t::stvar_:
+    case BC_t::asbool_:
+    case BC_t::NUMARGI_DEPRECATED:
+    case BC_t::lti_:
+    case BC_t::eqi_:
+    case BC_t::dupi_:
+    case BC_t::dup_:
+    case BC_t::inci_:
+    case BC_t::push_argi_:
+    case BC_t::add_:
+    case BC_t::sub_:
+    case BC_t::lt_:
+    case BC_t::isfun_:
         return;
 
-    case BC_t::invalid:
+    case BC_t::invalid_:
     case BC_t::num_of:
     case BC_t::label:
         assert(false);
@@ -105,11 +105,11 @@ void BC::print() {
         std::cout << "   ";
 
     switch (bc) {
-    case BC_t::invalid:
+    case BC_t::invalid_:
     case BC_t::num_of:
         assert(false);
         break;
-    case BC_t::call: {
+    case BC_t::call_: {
         std::cout << "call ";
         fun_idx_t* args = immediateCallArgs();
         num_args_t nargs = immediateCallNargs();
@@ -124,93 +124,93 @@ void BC::print() {
         std::cout << "\n";
         break;
     }
-    case BC_t::push:
+    case BC_t::push_:
         std::cout << "push ";
         Rf_PrintValue(immediateConst());
         break;
-    case BC_t::check_primitive:
+    case BC_t::isspecial_:
         std::cout << "check_primitive " << CHAR(PRINTNAME((immediateConst())))
                   << "\n";
         break;
-    case BC_t::getfun:
+    case BC_t::ldfun_:
         std::cout << "getfun " << CHAR(PRINTNAME((immediateConst()))) << "\n";
         break;
-    case BC_t::getvar:
+    case BC_t::ldvar_:
         std::cout << "getvar " << CHAR(PRINTNAME((immediateConst()))) << "\n";
         break;
-    case BC_t::force_all:
+    case BC_t::DEPRECATED_FORCE_ALL:
         std::cout << "force_all\n";
         break;
-    case BC_t::force:
+    case BC_t::force_:
         std::cout << "force\n";
         break;
-    case BC_t::pop:
+    case BC_t::pop_:
         std::cout << "pop\n";
         break;
-    case BC_t::setvar:
+    case BC_t::stvar_:
         std::cout << "setvar\n";
         break;
-    case BC_t::lti:
+    case BC_t::lti_:
         std::cout << "lti\n";
         break;
-    case BC_t::eqi:
+    case BC_t::eqi_:
         std::cout << "eqi\n";
         break;
-    case BC_t::ret:
+    case BC_t::ret_:
         std::cout << "ret\n";
         break;
-    case BC_t::dup:
+    case BC_t::dup_:
         std::cout << "dup\n";
         break;
-    case BC_t::dupi:
+    case BC_t::dupi_:
         std::cout << "dupi\n";
         break;
-    case BC_t::inci:
+    case BC_t::inci_:
         std::cout << "inci\n";
         break;
-    case BC_t::load_argi:
+    case BC_t::push_argi_:
         std::cout << "load_argi\n";
         break;
-    case BC_t::pushi:
+    case BC_t::pushi_:
         std::cout << "pushi " << immediate.i << "\n";
         break;
-    case BC_t::get_ast:
+    case BC_t::asast_:
         std::cout << "get_ast\n";
         break;
-    case BC_t::to_bool:
+    case BC_t::asbool_:
         std::cout << "to_bool\n";
         break;
-    case BC_t::numargi:
+    case BC_t::NUMARGI_DEPRECATED:
         std::cout << "numargi\n";
         break;
-    case BC_t::load_arg:
+    case BC_t::pusharg_:
         std::cout << "load_arg " << immediate.numArgs << "\n";
         break;
-    case BC_t::mkprom:
+    case BC_t::promise_:
         std::cout << "mkprom " << immediate.fun << "\n";
         break;
-    case BC_t::mkclosure:
+    case BC_t::close_:
         std::cout << "mkclosure " << immediate.fun << "\n";
         break;
-    case BC_t::jmp_true:
+    case BC_t::brtrue_:
         std::cout << "jmp_true " << immediate.offset << "\n";
         break;
-    case BC_t::jmp_false:
+    case BC_t::brfalse_:
         std::cout << "jmp_false " << immediate.offset << "\n";
         break;
-    case BC_t::jmp:
+    case BC_t::br_:
         std::cout << "jmp " << immediate.offset << "\n";
         break;
-    case BC_t::add:
+    case BC_t::add_:
         std::cout << "add\n";
         break;
-    case BC_t::sub:
+    case BC_t::sub_:
         std::cout << "sub\n";
         break;
-    case BC_t::lt:
+    case BC_t::lt_:
         std::cout << "lt\n";
         break;
-    case BC_t::check_function:
+    case BC_t::isfun_:
         std::cout << "check_function" << std::endl;
         break;
     case BC_t::label:
@@ -250,13 +250,13 @@ const BC BC::call(std::vector<fun_idx_t> args, std::vector<SEXP> names) {
                              Pool::instance().insert(n)};
         immediate_t i;
         i.call_args = args_;
-        return BC(BC_t::call, i);
+        return BC(BC_t::call_, i);
     }
 
     call_args_t args_ = {Pool::instance().insert(a), 0};
     immediate_t i;
     i.call_args = args_;
-    return BC(BC_t::call, i);
+    return BC(BC_t::call_, i);
 }
 }
 }

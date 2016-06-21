@@ -598,6 +598,15 @@ SEXP rirEval_c(Code* c, SEXP env, unsigned numArgs) {
             }
             break;
         }
+        case inci_: {
+            iPush(iPop() + 1);
+            break;
+        }
+        case push_argi_: {
+            int pos = iPop();
+            push(at(bp - numArgs + pos));
+            break;
+        }
         default:
             assert(false && "wrong or unimplemented opcode");
         }
