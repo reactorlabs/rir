@@ -142,15 +142,29 @@ typedef struct {
     SEXP pool;
     size_t length;
     size_t capacity;
-
-
 } Pool;
 
+Pool createPool(size_t capacity) {
+    Pool result;
+    result.length = 0;
+    result.capacity = capacity;
+    result.SEXP = Rf_allocVector(VECSXP, capacity);
+    // add to precious list
 
-SEXP cp_; // VECSXP
+}
+
+Pool cp_ = createPool(4096);
+Pool src_ = createPool(4096);
+
+// grow the size of the pool
+void grow(Pool * p) {
+    // grow capacity 2 times
+
+}
+
 
 INLINE SEXP constant(size_t index) {
-    return VECTOR_ELT(cp_, index);
+    return VECTOR_ELT(cp_.pool, index);
 }
 
 INLINE size_t addConstant(SEXP value) {
@@ -167,7 +181,7 @@ INLINE size_t addConstant(SEXP value) {
 SEXP src_; // VECSXP
 
 INLINE SEXP source(size_t index) {
-    return VECTOR_ELT(src_, index);
+    return VECTOR_ELT(src_.pool, index);
 }
 
 INLINE size_t addSource(SEXP value) {
