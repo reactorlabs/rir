@@ -60,11 +60,11 @@ enum class BC_t : uint8_t {
 // index into the constant pool
 typedef uint32_t pool_idx_t;
 // index into a functions array of code objects
-typedef uint16_t fun_idx_t;
+typedef uint32_t fun_idx_t;
 // number of arguments
-typedef uint16_t num_args_t;
+typedef uint32_t num_args_t;
 // jmp offset
-typedef int16_t jmp_t;
+typedef int32_t jmp_t;
 typedef jmp_t Label;
 // immediate arguments to call
 typedef struct {
