@@ -2,7 +2,11 @@
 #error "DEF_INSTR must be defined before including insns.h"
 #endif
 
+
 DEF_INSTR(invalid_,   0,    0,    0,   0,   0) // invalid operation
+/** 
+ * Opcode 0 acts as a sentinnel for unintialiazed Code.
+ */
 DEF_INSTR(push_,      1,    0,    1,   0,   0) // push a constant to the stack
 DEF_INSTR(ldfun_,     1,    0,    1,   0,   0) // load function from env
 DEF_INSTR(ldvar_,     1,    0,    1,   0,   0) // load variable from env
@@ -32,6 +36,5 @@ DEF_INSTR(isfun_,     0,    1,    1,   0,   0) // check tos is a function
 DEF_INSTR(end_,       0,    0,   0,    0,   0)
 
 #undef DEF_INSTR
-
 
 //DEF_INSTR(numargi_,   0,    0,    0,   0,   1) //  DELETED
