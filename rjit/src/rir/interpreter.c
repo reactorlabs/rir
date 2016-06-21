@@ -1,3 +1,5 @@
+#include <assert.h>
+
 #include "interpreter.h"
 
 // TODO force inlinine for clang & gcc
@@ -18,8 +20,10 @@ extern SEXP forcePromise(SEXP);
  */
 OpcodeT * advancePc(OpcodeT * pc) {
     switch (*pc++) {
+/*
 #define DEF_INSTR(name, imm, ...) case name : pc += sizeof(ArgT) * imm; break;
 #include "insns.h"
+*/
     default:
         assert(false && "Unknown instruction");
     }
@@ -475,19 +479,19 @@ SEXP rirEval_c(Code* c, SEXP env, unsigned numArgs) {
             push(cond ? R_TrueValue : R_FalseValue);
             break;
         }
-        case condtrue_: {
+        case brtrue_: {
             int offset = readJumpOffset(&pc);
             if (pop() == R_TrueValue)
                 pc = pc + offset;
             break;
         }
-        case condfals_: {
+        case brfalse_: {
             int offset = readJumpOffset(&pc);
             if (pop() == R_FalseValue)
                 pc = pc + offset;
             break;
         }
-        case jmp_: {
+        case br_: {
             pc = pc + readJumpOffset(&pc);
             break;
         }
