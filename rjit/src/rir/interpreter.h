@@ -3,6 +3,7 @@
 
 #include <R.h>
 #include <Rinternals.h>
+#include "../Precious.h"
 
 #undef length
 

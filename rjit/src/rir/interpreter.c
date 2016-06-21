@@ -148,9 +148,9 @@ Pool createPool(size_t capacity) {
     Pool result;
     result.length = 0;
     result.capacity = capacity;
-    result.SEXP = Rf_allocVector(VECSXP, capacity);
+    result.pool = Rf_allocVector(VECSXP, capacity);
     // add to precious list
-
+    Precious::add(result.pool);
 }
 
 Pool cp_ = createPool(4096);
@@ -158,10 +158,27 @@ Pool src_ = createPool(4096);
 
 // grow the size of the pool
 void grow(Pool * p) {
+    size_t tmp = p->capacity;
     // grow capacity 2 times
+    p->capacity = tmp * 2;
 
+    // allocate new pool
+    SEXP temp = Rf_allocVector(VECSXP, p->capacity);
+    Precious::add(temp);
+
+    // transfer values over
+    for (size_t i = 0; i <= tmp; ++i){
+        SET_VECTOR_ELT(temp, i, VECTOR_ELT(p->pool, i));
+    }
+
+    // remove the old pool
+    Precious::remove(p->pool);
+    p->pool = temp;
+
+    // add the new pool, and remove the temp pool
+    Precious::add(p->pool);
+    Precious::remove(temp);
 }
-
 
 INLINE SEXP constant(size_t index) {
     return VECTOR_ELT(cp_.pool, index);
@@ -169,24 +186,44 @@ INLINE SEXP constant(size_t index) {
 
 INLINE size_t addConstant(SEXP value) {
 
+    // check the capacity of the constant pool
+    if(cp_.capacity <= cp_.length){
+        grow(*cp_);
+    } 
 
-    // TODO
-    return 0;
+    // allocate value into the constant pool
+    SET_VECTOR_ELT(cp_.pool, cp_.length, value);
+    cp_.length = cp_.length + 1;
+    
+    // return the position length? 
+    return cp_.length;
 }
+
+
 
 /** AST (source) pool
 
  */
 
-SEXP src_; // VECSXP
+// SEXP src_; // VECSXP
 
 INLINE SEXP source(size_t index) {
     return VECTOR_ELT(src_.pool, index);
 }
 
 INLINE size_t addSource(SEXP value) {
-    // TODO
-    return 0;
+    // check the capacity of the constant pool
+    if(src_.capacity <= src_.length){
+        grow(*src_);
+    } 
+
+    // allocate value into the constant pool
+    SET_VECTOR_ELT(src_.pool, src_.length, value);
+    src_.length = src_.length + 1;
+    
+    // return the position length? 
+    return src_.length;
+}
 }
 
 // bytecode accesses
@@ -289,11 +326,11 @@ unsigned sizeInInts(unsigned sizeInBytes) {
 
 
 SEXP getCodeAST(Code * c) {
-    return getAST(c->ast);
+    return getAST(c->src);
 }
 
 SEXP getAST(unsigned index) {
-    return NULL;
+    return source(index);
 }
 
 
