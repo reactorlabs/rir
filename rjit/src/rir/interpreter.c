@@ -182,7 +182,7 @@ void grow(Pool * p) {
 
     // allocate new pool
     SEXP temp = Rf_allocVector(VECSXP, p->capacity);
-    //Precious::add(temp);
+    //poolAdd(temp);
 
     // transfer values over
     for (size_t i = 0; i <= tmp; ++i){
@@ -190,13 +190,15 @@ void grow(Pool * p) {
     }
 
     // remove the old pool
-    //Precious::remove(p->pool);
+    //poolRemove(p->pool);
     p->pool = temp;
 
     // add the new pool, and remove the temp pool
-    //Precious::add(p->pool);
-    //Precious::remove(temp);
+    //poolAdd(p->pool);
+    //poolRemove(temp);
 }
+
+/** Constant pool */
 
 INLINE SEXP constant(size_t index) {
     return VECTOR_ELT(cp_.pool, index);
@@ -217,11 +219,7 @@ INLINE size_t addConstant(SEXP value) {
     return cp_.length;
 }
 
-
-
-/** AST (source) pool
-
- */
+/** AST (source) pool */
 
 INLINE SEXP source(size_t index) {
     return VECTOR_ELT(src_.pool, index);
@@ -240,6 +238,40 @@ INLINE size_t addSource(SEXP value) {
     // return the position length? 
     return src_.length;
 }
+
+/** */
+
+typedef struct {
+    size_t length;
+    size_t size;
+    SEXP data[size];
+} Prot;
+
+Prot createPool(size_t size, SEXP[] data) {
+    Prot result;
+    result.length = 0;
+    result.size = size;
+    result.data = data;
+}
+
+Prot pp_;
+
+INLINE void poolGcCallBack(void (*forward_node)(SEXP)){
+
+}
+
+
+INLINE void poolAdd(SEXP value){
+
+}
+
+
+INLINE void poolRemove(SEXP value){
+
+}
+
+
+
 
 // bytecode accesses
 

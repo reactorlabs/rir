@@ -29,7 +29,7 @@ DEF_INSTR(promise_,   1,    0,    1,   0,   0) // create promise
 DEF_INSTR(close_,     1,    2,    1,   0,   0) // create closure
 /**
  * close_:: pop body and argument list, create closure, and push on object stack
- */CP
+ */
 DEF_INSTR(ret_,       0,    1,    0,   0,   0)
 /**
  * ret_:: terminates execution and pops result off object stack

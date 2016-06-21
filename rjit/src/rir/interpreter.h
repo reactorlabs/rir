@@ -152,7 +152,12 @@ SEXP source(size_t index);
 /** TODO Returns the code object with given offset */
 Code * codeAt(Function * f, unsigned offset);
 
-
+/** C implementation of the Precious class to protect 
+    the elements of the ast and constant pool from being
+    gc'ed */
+void poolGcCallBack(void (*forward_node)(SEXP));
+// void poolAdd(SEXP value);
+// void poolRemove(SEXP value);
 
 SEXP rirEval_c(Code* cur, SEXP env, unsigned numArgs);
 
