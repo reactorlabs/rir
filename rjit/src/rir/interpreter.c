@@ -1,3 +1,204 @@
+#include "interpreter.h"
+
+// TODO force inlinine for clang & gcc
+#define INLINE __attribute__((always_inline)) inline
+
+// helpers
+
+/** How many bytes do we need to align on 4 byte boundary?
+ */
+unsigned pad4(unsigned sizeInBytes) {
+    unsigned x = sizeInBytes % 4;
+    return (x != 0) ? (sizeInBytes + 4 - x) : sizeInBytes;
+}
+
+
+// Code object --------------------------------------------------------------------------------------------------------
+
+OpcodeT* code(Code* c) {
+    return (OpcodeT*)c->data;
+}
+
+unsigned* src(Code* c) {
+    return (unsigned*)(c->data + pad4(c->codeSize));
+}
+
+Function* function(Code* c) {
+    return (Function*)(c - c->header);
+}
+
+Code* next(Code* c) {
+    return (Code*)(c->data + pad4(c->codeSize) + c->srcLength);
+}
+
+// Function -----------------------------------------------------------------------------------------------------------
+
+bool isValidFunction(SEXP s) {
+    if (TYPEOF(s) != INTSXP)
+        return false;
+    // TODO check magicVersion
+}
+
+Function* origin(Function* f) {
+    // TODO
+}
+
+Code* begin(Function* f) {
+    return f->data;
+}
+
+Code* end(Function* f) {
+    return (Code*)((uint8_t*)f->data + f->size);
+}
+
+// Runtime support ----------------------------------------------------------------------------------------------------
+
+/** SEXP stack
+ */
+typedef struct {
+    SEXP* stack;
+    size_t length;
+    size_t capacity;
+} Stack;
+
+Stack stack_;
+
+INLINE bool stackEmpty() {
+    return stack_.length == 0;
+}
+
+INLINE SEXP pop() {
+    return stack_.stack[--stack_.length];
+}
+
+INLINE SEXP top() {
+    return stack_.stack[stack_.length];
+}
+
+INLINE void push(SEXP val) {
+    if (stack_.length == stack_.capacity) {
+        size_t newCap = stack_.capacity * 2;
+        SEXP* newStack = malloc(newCap * sizeof(SEXP*));
+        memcpy(newStack, stack_.stack, stack_.capacity * sizeof(SEXP*));
+        free(stack_.stack);
+        stack_.stack = newStack;
+        stack_.capacity = newCap;
+    }
+    stack_.stack[stack_.length++] = val;
+}
+
+/** Unboxed integer stack
+
+  (separated because of the gc, should be merged in stack later on)
+ */
+typedef struct {
+    int* stack;
+    size_t length;
+    size_t capacity;
+
+} iStack;
+
+iStack istack_;
+
+INLINE bool iStackEmpty() {
+    return istack_.length == 0;
+}
+
+INLINE SEXP iPop() {
+    return istack_.stack[--istack_.length];
+}
+
+INLINE SEXP iTop() {
+    return istack_.stack[istack_.length];
+}
+INLINE void iPush(int val) {
+    if (istack_.length == istack_.capacity) {
+        size_t newCap = istack_.capacity * 2;
+        SEXP* newStack = malloc(newCap * sizeof(int*));
+        memcpy(newStack, istack_.stack, istack_.capacity * sizeof(int*));
+        free(istack_.stack);
+        istack_.stack = newStack;
+        istack_.capacity = newCap;
+    }
+    istack_.stack[istack_.length++] = val;
+}
+
+/** Constant pool
+
+ */
+
+SEXP cp_; // VECSXP
+
+INLINE SEXP constant(size_t index) {
+    return VECTOR_ELT(cp_, index);
+}
+
+INLINE size_t addConstant(SEXP value) {
+    // TODO
+    return 0;
+}
+
+/** AST (source) pool
+
+ */
+
+SEXP src_; // VECSXP
+
+INLINE SEXP source(size_t index) {
+    return VECTOR_ELT(src_, index);
+}
+
+INLINE size_t addSource(SEXP value) {
+    // TODO
+    return 0;
+}
+
+// bytecode accesses
+
+
+INLINE Opcode readOpcode(uint8_t** pc) {
+    Opcode result = (Opcode)(**pc);
+    *pc += sizeof(OpcodeT);
+    return result;
+}
+
+INLINE unsigned readImmediate(uint8_t** pc) {
+    unsigned result = (Immediate)(**pc);
+    *pc += sizeof(Immediate);
+    return result;
+}
+
+
+INLINE int readJumpOffset(uint8_t** pc) {
+    int result = (JumpOffset)(**pc);
+    *pc += sizeof(JumpOffset);
+    return result;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+SEXP rirEval_c(Code* cure, SEXP env, unsigned numArgs) {
+
+}
+
+
+
+
+
 #ifdef HAHA
 
 #include <assert.h>
