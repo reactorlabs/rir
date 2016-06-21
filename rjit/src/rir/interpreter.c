@@ -253,48 +253,6 @@ INLINE size_t addSource(SEXP value) {
     return src_.length;
 }
 
-/** */
-
-typedef struct {
-    size_t length;
-    size_t size;
-    SEXP data[size];
-} Prot;
-
-Prot createPool(size_t size, SEXP[] data) {
-    Prot result;
-    result.length = 0;
-    result.size = size;
-    result.data = data;
-}
-
-Prot pp_;
-
-INLINE void poolGcCallBack(void (*forward_node)(SEXP)){
-
-    for (size_t i = 0; i < pp_.length; ++i){
-        forward_node(data[i]);
-    }
-}
-
-INLINE void poolAdd(SEXP value){
-    pp_.data[length] = value;
-    length = length + 1;
-}
-
-INLINE void poolRemove(SEXP value){
-    
-    size_t i = 0;
-
-    while(i < length){
-        if (pp_.data[]){
-            
-        }
-        i++;
-    }
-}
-
-
 // bytecode accesses
 
 

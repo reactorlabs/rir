@@ -18,7 +18,6 @@
 
 #include "rir/Compiler.h"
 #include "rir/Interpreter.h"
-#include "rir/interpreter.h"
 #include "rir/RBytecode.h"
 
 #include "StackScan.h"
