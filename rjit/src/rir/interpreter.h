@@ -31,15 +31,15 @@ typedef enum {
 #define DEF_INSTR(name, ...) name,
 #include "insns.h"
     numInsns_
-}
+} Opcode;
 
 /**
  * Aliases for readability.
  */
-typedef SEXP FunctionSEXP
-typedef SEXP ClosureSEXP
-typedef SEXP PromiseSEXP
-typedef SEXP IntSEXP
+typedef SEXP FunctionSEXP;
+typedef SEXP ClosureSEXP;
+typedef SEXP PromiseSEXP;
+typedef SEXP IntSEXP;
 
 
 // type of relative jump offset (all jumps are relative)
@@ -152,7 +152,8 @@ Code* end(Function* f);
 /** Returns an AST located at index in the AST_Pool */
 SEXP source(size_t index);
 
-
+/** TODO Returns the code object with given offset */
+Code * codeAt(Function * f, unsigned offset);
 
 
 

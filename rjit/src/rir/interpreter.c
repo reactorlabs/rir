@@ -61,6 +61,10 @@ Code* end(Function* f) {
     return (Code*)((uint8_t*)f->data + f->size);
 }
 
+Code * codeAt(Function * f, unsigned offset) {
+    return (Code*)((uint8_t*)f + offset);
+}
+
 // Runtime support ----------------------------------------------------------------------------------------------------
 
 /** SEXP stack
@@ -75,6 +79,10 @@ Stack stack_;
 
 INLINE bool stackEmpty() {
     return stack_.length == 0;
+}
+
+INLINE SEXP at(unsigned index) {
+    return stack_.stack[index];
 }
 
 INLINE SEXP pop() {
@@ -119,15 +127,15 @@ INLINE bool iStackEmpty() {
     return istack_.length == 0;
 }
 
-INLINE SEXP iPop() {
+INLINE int iPop() {
     return istack_.stack[--istack_.length];
 }
 
-INLINE SEXP iTop() {
+INLINE int iTop() {
     return istack_.stack[istack_.length];
 }
 
-INLINE void iPush(SEXP val) {
+INLINE void iPush(int val) {
     istack_.stack[istack_.length++] = val;
 }
 
@@ -136,7 +144,7 @@ void iCheckStackSize(unsigned minFree) {
     while (istack_.length + minFree < newCap)
         newCap *= 2;
     if (newCap != istack_.capacity) {
-        SEXP * newStack = malloc(newCap * sizeof(int));
+        int * newStack = malloc(newCap * sizeof(int));
         memcpy(newStack, istack_.stack, istack_.length * sizeof(int));
         free(istack_.stack);
         istack_.stack = newStack;
@@ -229,8 +237,11 @@ INLINE int readJumpOffset(OpcodeT** pc) {
 
 
 
-
-
+// TODO check if there is a function for this in R
+INLINE SEXP promiseValue(SEXP promise) {
+    // TODO if already evaluated, return the value
+    return forcePromise(promise);
+}
 
 
 
@@ -269,7 +280,7 @@ SEXP rirEval_c(Code* c, SEXP env, unsigned numArgs) {
 
             // if promise, evaluate & return
             if (TYPEOF(val) == PROMSXP)
-                val = forcePromise(val);
+                val = promiseValue(val);
 
             // WTF? is this just defensive programming or what?
             if (NAMED(val) == 0 && val != R_NilValue)
@@ -300,14 +311,64 @@ SEXP rirEval_c(Code* c, SEXP env, unsigned numArgs) {
             break;
         }
         case ldvar_: {
+            SEXP sym = readConst(&pc);
+            SEXP val = findVar(sym, env);
+            R_Visible = TRUE;
+
+            // TODO better errors
+            if (val == R_UnboundValue)
+                assert(false && "Unbound var");
+            else if (val == R_MissingArg)
+                assert(false && "Missing argument");
+
+            // if promise, evaluate & return
+            if (TYPEOF(val) == PROMSXP)
+                val = promiseValue(val);
+
+            // WTF? is this just defensive programming or what?
+            if (NAMED(val) == 0 && val != R_NilValue)
+                SET_NAMED(val, 1);
+
+            push(val);
+            break;
         }
-        case call_:
-        case promise_:
-        case close_:
-        case ret_:
-        case force_:
-        case pop_:
-        case pusharg_:
+        case call_: {
+            // one huge large big **** T O D O ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! !
+            break;
+        }
+        case promise_: {
+            unsigned codeOffset = readImmediate(&pc);
+            Code * promiseCode = codeAt(function(c), codeOffset);
+            // TODO make the promise with current environment and the code object
+            // and push it to the stack
+            break;
+        }
+        case close_: {
+            SEXP body = pop();
+            SEXP arglist = pop();
+            // TODO create cloisure (R's ) from the arglist and body and env and push it
+            break;
+        }
+        case ret_: {
+            return pop();
+        }
+        case force_: {
+            SEXP p = pop();
+            assert(TYPEOF(p) == PROMSXP);
+            // TODO what if it is forced?
+            push(forcePromise(p));
+            break;
+        }
+        case pop_: {
+            pop();
+            break;
+        }
+        case pusharg_: {
+            unsigned n = readImmediate(&pc);
+            assert(n < numArgs);
+            push(at(bp - numArgs + n));
+            break;
+        }
         case asast_:
         case stvar_:
         case asbool_:
