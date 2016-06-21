@@ -134,9 +134,18 @@ void iCheck(unsigned minFree) {
     }
 }
 
-/** Constant pool
+/** Constant and ast pools
 
  */
+
+typedef struct {
+    SEXP pool;
+    size_t length;
+    size_t capacity;
+
+
+} Pool;
+
 
 SEXP cp_; // VECSXP
 
@@ -145,6 +154,8 @@ INLINE SEXP constant(size_t index) {
 }
 
 INLINE size_t addConstant(SEXP value) {
+
+
     // TODO
     return 0;
 }
