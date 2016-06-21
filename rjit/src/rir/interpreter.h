@@ -65,7 +65,15 @@ typedef struct Function Function; // Forward declaration
 typedef struct Code {
     unsigned header; /// offset to Function object
 
+    // TODO comment these
+    unsigned src; /// AST of the function (or promise) represented by the code
+
+    unsigned stackLength; /// Number of slots in stack required
+
+    unsigned iStackLength; /// Number of slots in the integer stack required
+
     unsigned codeSize;  /// bytes of code (not padded)
+
     unsigned srcLength; /// number of instructions
 
     uint8_t data[]; /// the instructions
@@ -82,6 +90,8 @@ Function* function(Code* c);
 
 /** Returns the next Code in the current function. */
 Code* next(Code* c);
+
+// TODO removed src reference, now each code has its own
 
 /** A Function holds the RIR code for some GNU R function.
  *  Each function start with a header and a sequence of
@@ -113,8 +123,6 @@ typedef struct Function {
 
     SEXP origin; /// Same Function with fewer optimizations, NULL if this is the
                  /// original
-
-    unsigned src; /// index of the AST of the whole function
 
     unsigned codeLen; /// number of Code objects in the Function
 
