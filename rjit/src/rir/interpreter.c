@@ -1,5 +1,15 @@
 #include "interpreter.h"
 
+// GNU-R stuff we need
+
+extern SEXP R_TrueValue;
+extern SEXP R_FalseValue;
+extern SEXP Rf_NewEnvironment(SEXP, SEXP, SEXP);
+extern Rboolean R_Visible;
+extern SEXP forcePromise(SEXP);
+
+
+
 // TODO force inlinine for clang & gcc
 #define INLINE __attribute__((always_inline)) inline
 
@@ -79,7 +89,7 @@ INLINE void push(SEXP val) {
     stack_.stack[stack_.length++] = val;
 }
 
-void check(unsigned minFree) {
+void checkStackSize(unsigned minFree) {
     unsigned newCap = stack_.capacity;
     while (stack_.length + minFree < newCap)
         newCap *= 2;
@@ -121,7 +131,7 @@ INLINE void iPush(SEXP val) {
     istack_.stack[istack_.length++] = val;
 }
 
-void iCheck(unsigned minFree) {
+void iCheckStackSize(unsigned minFree) {
     unsigned newCap = istack_.capacity;
     while (istack_.length + minFree < newCap)
         newCap *= 2;
@@ -148,13 +158,13 @@ Pool createPool(size_t capacity) {
     Pool result;
     result.length = 0;
     result.capacity = capacity;
-    result.SEXP = Rf_allocVector(VECSXP, capacity);
+    result.pool = Rf_allocVector(VECSXP, capacity);
     // add to precious list
 
 }
 
-Pool cp_ = createPool(4096);
-Pool src_ = createPool(4096);
+Pool cp_;
+Pool src_;
 
 // grow the size of the pool
 void grow(Pool * p) {
@@ -178,8 +188,6 @@ INLINE size_t addConstant(SEXP value) {
 
  */
 
-SEXP src_; // VECSXP
-
 INLINE SEXP source(size_t index) {
     return VECTOR_ELT(src_.pool, index);
 }
@@ -192,20 +200,23 @@ INLINE size_t addSource(SEXP value) {
 // bytecode accesses
 
 
-INLINE Opcode readOpcode(uint8_t** pc) {
+INLINE Opcode readOpcode(OpcodeT** pc) {
     Opcode result = (Opcode)(**pc);
     *pc += sizeof(OpcodeT);
     return result;
 }
 
-INLINE unsigned readImmediate(uint8_t** pc) {
+INLINE unsigned readImmediate(OpcodeT** pc) {
     unsigned result = (Immediate)(**pc);
     *pc += sizeof(Immediate);
     return result;
 }
 
+INLINE SEXP readConst(OpcodeT ** pc) {
+    return constant(readImmediate(pc));
+}
 
-INLINE int readJumpOffset(uint8_t** pc) {
+INLINE int readJumpOffset(OpcodeT** pc) {
     int result = (JumpOffset)(**pc);
     *pc += sizeof(JumpOffset);
     return result;
@@ -227,7 +238,99 @@ INLINE int readJumpOffset(uint8_t** pc) {
 
 
 
-SEXP rirEval_c(Code* cure, SEXP env, unsigned numArgs) {
+SEXP rirEval_c(Code* c, SEXP env, unsigned numArgs) {
+    SEXP call = constant(c->src);
+    // make sure there is enough room on the stack
+    checkStackSize(c->stackLength);
+    iCheckStackSize(c->iStackLength);
+
+    // get pc and bp regs, we do not need istack bp
+    OpcodeT * pc = code(c);
+    size_t bp = stack_.length;
+
+    // main loop
+    while (true) {
+        switch (readOpcode(&pc)) {
+        case push_: {
+            SEXP x = readConst(&pc);
+            push(x);
+            break;
+        }
+        case ldfun_: {
+            SEXP sym = readConst(&pc);
+            SEXP val = findVar(sym, env);
+            R_Visible = TRUE;
+
+            // TODO something should happen here
+            if (val == R_UnboundValue)
+                assert(false && "Unbound var");
+            else if (val == R_MissingArg)
+                assert(false && "Missing argument");
+
+            // if promise, evaluate & return
+            if (TYPEOF(val) == PROMSXP)
+                val = forcePromise(val);
+
+            // WTF? is this just defensive programming or what?
+            if (NAMED(val) == 0 && val != R_NilValue)
+                SET_NAMED(val, 1);
+
+            switch (TYPEOF(val)) {
+            case CLOSXP:
+                // TODO we do not need lazy compiling anymore
+                /*
+                val = (SEXP)jit(val);
+                */
+                break;
+            case SPECIALSXP:
+            case BUILTINSXP: {
+                // TODO fix this
+                /**
+                SEXP prim = Primitives::compilePrimitive(val);
+                if (prim)
+                    val = prim;
+                **/
+                break;
+            }
+            default:
+                // TODO!
+                assert(false);
+            }
+            push(val);
+            break;
+        }
+        case ldvar_: {
+        }
+        case call_:
+        case promise_:
+        case close_:
+        case ret_:
+        case force_:
+        case pop_:
+        case pusharg_:
+        case asast_:
+        case stvar_:
+        case asbool_:
+        case condtrue_:
+        case condfals_:
+        case jmp_:
+        case lti_:
+        case eqi_:
+        case pushi_:
+        case dupi_:
+        case dup_:
+        case add_:
+        case sub_:
+        case lt_:
+        case isspecial_:
+        case isfun_:
+        default:
+            assert(false && "wrong or unimplemented opcode");
+        }
+    }
+
+
+
 
 }
 
