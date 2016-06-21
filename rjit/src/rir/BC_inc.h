@@ -51,6 +51,8 @@ enum class BC_t : uint8_t {
 
 };
 
+// TODO the immediate argument types should follow the C immediate types
+
 // ============================================================
 // ==== immediate argument types
 //
