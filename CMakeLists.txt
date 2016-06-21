@@ -71,7 +71,7 @@ add_custom_target(codegen_passes
 )
 
 # build the shared library for the JIT
-file(GLOB_RECURSE SRC "rjit/src/*.cpp" "rjit/src/*.h" "local/*" "rjit/R/*.R" "rjit/tests/*.R")
+file(GLOB_RECURSE SRC "rjit/src/*.cpp" "rjit/src/*.c" "rjit/src/*.h" "local/*" "rjit/R/*.R" "rjit/tests/*.R")
 add_library(${PROJECT_NAME} SHARED ${SRC})
 
 add_custom_target(codegen_was_run_before
