@@ -76,15 +76,20 @@ INLINE SEXP top() {
 }
 
 INLINE void push(SEXP val) {
-    if (stack_.length == stack_.capacity) {
-        size_t newCap = stack_.capacity * 2;
-        SEXP* newStack = malloc(newCap * sizeof(SEXP*));
-        memcpy(newStack, stack_.stack, stack_.capacity * sizeof(SEXP*));
+    stack_.stack[stack_.length++] = val;
+}
+
+void check(unsigned minFree) {
+    unsigned newCap = stack_.capacity;
+    while (stack_.length + minFree < newCap)
+        newCap *= 2;
+    if (newCap != stack_.capacity) {
+        SEXP * newStack = malloc(newCap * sizeof(SEXP));
+        memcpy(newStack, stack_.stack, stack_.length * sizeof(SEXP));
         free(stack_.stack);
         stack_.stack = newStack;
         stack_.capacity = newCap;
     }
-    stack_.stack[stack_.length++] = val;
 }
 
 /** Unboxed integer stack
@@ -111,16 +116,22 @@ INLINE SEXP iPop() {
 INLINE SEXP iTop() {
     return istack_.stack[istack_.length];
 }
-INLINE void iPush(int val) {
-    if (istack_.length == istack_.capacity) {
-        size_t newCap = istack_.capacity * 2;
-        SEXP* newStack = malloc(newCap * sizeof(int*));
-        memcpy(newStack, istack_.stack, istack_.capacity * sizeof(int*));
+
+INLINE void iPush(SEXP val) {
+    istack_.stack[istack_.length++] = val;
+}
+
+void iCheck(unsigned minFree) {
+    unsigned newCap = istack_.capacity;
+    while (istack_.length + minFree < newCap)
+        newCap *= 2;
+    if (newCap != istack_.capacity) {
+        SEXP * newStack = malloc(newCap * sizeof(int));
+        memcpy(newStack, istack_.stack, istack_.length * sizeof(int));
         free(istack_.stack);
         istack_.stack = newStack;
         istack_.capacity = newCap;
     }
-    istack_.stack[istack_.length++] = val;
 }
 
 /** Constant pool

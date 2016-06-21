@@ -4,6 +4,8 @@
 #include <R.h>
 #include <Rinternals.h>
 
+#undef length
+
 #include <stdint.h>
 
 #ifdef __cplusplus
