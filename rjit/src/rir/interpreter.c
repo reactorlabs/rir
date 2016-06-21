@@ -522,13 +522,98 @@ SEXP rirEval_c(Code* c, SEXP env, unsigned numArgs) {
             iPush(readSignedImmediate(&pc));
             break;
         }
-        case dupi_:
-        case dup_:
-        case add_:
-        case sub_:
-        case lt_:
-        case isspecial_:
-        case isfun_:
+        case dupi_: {
+            iPush(iTop());
+            break;
+        }
+        case dup_: {
+            push(top());
+            break;
+        }
+        // TODO add sub lt should change!
+        case add_: {
+            SEXP rhs = pop();
+            SEXP lhs = pop();
+            if (TYPEOF(lhs) == REALSXP && TYPEOF(rhs) == REALSXP && Rf_length(lhs) == 1 && Rf_length(rhs) == 1) {
+                SEXP res = Rf_allocVector(REALSXP, 1);
+                SET_NAMED(res, 1);
+                REAL(res)[0] = REAL(lhs)[0] + REAL(rhs)[0];
+                push(res);
+            } else {
+                SEXP op = getPrimitive("+");
+                SEXP primfun = getPrimfun("+");
+                // TODO we should change how primitives are called now that we can integrate
+                //SEXP res = callPrimitive(primfun, getCurrentCall(c, pc), op, { lhs, rhs });
+                // TODO push
+            }
+            break;
+        }
+        case sub_: {
+            SEXP rhs = pop();
+            SEXP lhs = pop();
+            if (TYPEOF(lhs) == REALSXP && TYPEOF(rhs) == REALSXP && Rf_length(lhs) == 1 && Rf_length(rhs) == 1) {
+                SEXP res = Rf_allocVector(REALSXP, 1);
+                SET_NAMED(res, 1);
+                REAL(res)[0] = REAL(lhs)[0] - REAL(rhs)[0];
+                push(res);
+            } else {
+                SEXP op = getPrimitive("-");
+                SEXP primfun = getPrimfun("-");
+                // TODO we should change how primitives are called now that we can integrate
+                //SEXP res = callPrimitive(primfun, getCurrentCall(c, pc), op, { lhs, rhs });
+                // TODO push
+            }
+            break;
+        }
+        case lt_: {
+            SEXP rhs = pop();
+            SEXP lhs = pop();
+            if (TYPEOF(lhs) == REALSXP && TYPEOF(rhs) == REALSXP && Rf_length(lhs) == 1 && Rf_length(rhs) == 1) {
+                SEXP res = Rf_allocVector(REALSXP, 1);
+                SET_NAMED(res, 1);
+                push(REAL(lhs)[0] < REAL(rhs)[0] ? R_TrueValue : R_FalseValue);
+            } else {
+                SEXP op = getPrimitive("<");
+                SEXP primfun = getPrimfun("<");
+                // TODO we should change how primitives are called now that we can integrate
+                //SEXP res = callPrimitive(primfun, getCurrentCall(c, pc), op, { lhs, rhs });
+                // TODO push
+            }
+            break;
+        }
+        case isspecial_: {
+            // TODO I do not think this is a proper way - we must check all the way down, not just findVar (vars do not shadow closures)
+            SEXP sym = readConst(&pc);
+            SEXP val = findVar(sym, env);
+            // TODO better check
+            assert(TYPEOF(val) == SPECIALSXP || TYPEOF(val) == BUILTINSXP);
+            break;
+        }
+        case isfun_: {
+            SEXP val = top();
+
+            switch (TYPEOF(val)) {
+            case CLOSXP:
+                /** No need to compile, we can handle functions */
+                //val = (SEXP)jit(val);
+                break;
+            case SPECIALSXP:
+            case BUILTINSXP: {
+                // TODO do we need to compile primitives? not really I think
+                /*
+                SEXP prim = Primitives::compilePrimitive(val);
+                if (prim)
+                    val = prim;
+                break; */
+            }
+
+            default:
+                // TODO: error not a function!
+                // TODO: check our functions and how they are created
+                assert(false);
+            }
+            break;
+        }
         default:
             assert(false && "wrong or unimplemented opcode");
         }
