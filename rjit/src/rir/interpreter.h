@@ -53,7 +53,7 @@ typedef SEXP IntSEXP;
 // type of relative jump offset (all jumps are relative)
 typedef int32_t JumpOffset;
 
-struct Function; // Forward declaration
+typedef struct Function Function; // Forward declaration
 
 // all sizes in bytes,
 // length in element sizes
@@ -131,7 +131,7 @@ Code* next(Code* c);
  *  A Function has a number of Code objects, codeLen, stored
  *  inline in data.
  */
-typedef struct {
+typedef struct Function {
     unsigned magic; /// used to detect Functions 0xCAFEBABE
 
     unsigned size; /// Size, in bytes, of the function and its data

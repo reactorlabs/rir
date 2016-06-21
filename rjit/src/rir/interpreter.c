@@ -61,7 +61,7 @@ Code* next(Code* c) {
 bool isValidFunction(SEXP s) {
     if (TYPEOF(s) != INTSXP)
         return false;
-    // TODO check magicVersion
+    return INTEGER(s)[0] == 0xCAFEBABE;
 }
 
 Function* origin(Function* f) {
@@ -182,25 +182,33 @@ Pool createPool(size_t capacity) {
     result.length = 0;
     result.capacity = capacity;
     result.pool = Rf_allocVector(VECSXP, capacity);
+    return result;
 }
 
 Pool cp_;
 Pool src_;
 
 // grow the size of the pool
-void grow(Pool * p) {
-    size_t tmp = p->capacity;
+void growPool(Pool * p) {
     // grow capacity 2 times
-    p->capacity = tmp * 2;
+    p->capacity *= 2;
 
     // allocate new pool
     SEXP temp = Rf_allocVector(VECSXP, p->capacity);
 
     // transfer values over
-    for (size_t i = 0; i <= tmp; ++i){
+    for (size_t i = 0; i < p->length; ++i){
         SET_VECTOR_ELT(temp, i, VECTOR_ELT(p->pool, i));
     }
+    // set the new pool
     p->pool = temp;
+}
+
+INLINE size_t addToPool(Pool * p, SEXP value) {
+    if (p->length >= p->capacity)
+        growPool(p);
+    SET_VECTOR_ELT(p->pool, p->length, value);
+    return p->length++;
 }
 
 /** Constant pool */
@@ -210,18 +218,7 @@ INLINE SEXP constant(size_t index) {
 }
 
 INLINE size_t addConstant(SEXP value) {
-
-    // check the capacity of the constant pool
-    if(cp_.capacity <= cp_.length){
-        grow(&cp_);
-    } 
-
-    // allocate value into the constant pool
-    SET_VECTOR_ELT(cp_.pool, cp_.length, value);
-    cp_.length = cp_.length + 1;
-    
-    // return the position length? 
-    return cp_.length;
+    return addToPool(&cp_, value);
 }
 
 /** AST (source) pool */
@@ -231,17 +228,7 @@ INLINE SEXP source(size_t index) {
 }
 
 INLINE size_t addSource(SEXP value) {
-    // check the capacity of the constant pool
-    if(src_.capacity <= src_.length){
-        grow(&src_);
-    } 
-
-    // allocate value into the constant pool
-    SET_VECTOR_ELT(src_.pool, src_.length, value);
-    src_.length = src_.length + 1;
-    
-    // return the position length? 
-    return src_.length;
+    return addToPool(&src_, value);
 }
 
 // bytecode accesses
