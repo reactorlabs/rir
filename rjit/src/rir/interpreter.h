@@ -4,9 +4,6 @@
 #include <R.h>
 #include <Rinternals.h>
 
-// Do I need this?
-// #include <Defn.h>
-
 #undef length
 
 #include <stdint.h>

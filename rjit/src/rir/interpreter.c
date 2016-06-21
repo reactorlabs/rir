@@ -272,6 +272,7 @@ INLINE SEXP promiseValue(SEXP promise) {
     if (PRVALUE(promise) && PRVALUE(promise) != R_UnboundValue)
     {
         promise = PRVALUE(promise);
+        SET_NAME(promise, 2);
         return promise; 
     }
     
@@ -395,6 +396,8 @@ SEXP rirEval_c(Code* c, SEXP env, unsigned numArgs) {
             Code * promiseCode = codeAt(function(c), codeOffset);
             // TODO make the promise with current environment and the code object
             // and push it to the stack
+
+            // This should be similar to mkPromise/createPromise
             break;
         }
         case close_: {
@@ -409,8 +412,14 @@ SEXP rirEval_c(Code* c, SEXP env, unsigned numArgs) {
         case force_: {
             SEXP p = pop();
             assert(TYPEOF(p) == PROMSXP);
-            // TODO what if it is forced?
-            push(forcePromise(p));
+            // If the promise is already evaluated then push the value inside the promise
+            // onto the stack, otherwise push the value from forcing the promise 
+            if (PRVALUE(p) && PRVALUE(p) != R_UnboundValue){
+                push(PRVALUE(p));
+                SET_NAMED(p, 2);
+            } else {
+                push(forcePromise(p));
+            }
             break;
         }
         case pop_: {
@@ -427,6 +436,9 @@ SEXP rirEval_c(Code* c, SEXP env, unsigned numArgs) {
             SEXP p = pop();
             assert(TYPEOF(p) == PROMSXP);
             // TODO get the ast depending on what type of promise it is and push it on the stack
+            // What are the different types of promises?
+            // evaluated promise
+            
             break;
         }
         case stvar_: {
