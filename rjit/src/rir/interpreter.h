@@ -16,7 +16,6 @@ extern "C" {
 #define false 0
 #endif
 
-
 // we cannot use specific sizes for enums in C
 typedef uint8_t OpcodeT;
 
@@ -41,7 +40,6 @@ typedef SEXP ClosureSEXP;
 typedef SEXP PromiseSEXP;
 typedef SEXP IntSEXP;
 
-
 // type of relative jump offset (all jumps are relative)
 typedef int32_t JumpOffset;
 
@@ -49,7 +47,6 @@ typedef struct Function Function; // Forward declaration
 
 // all sizes in bytes,
 // length in element sizes
-
 
 /**
  * Code holds a sequence of instructions; for each instruction
@@ -80,7 +77,7 @@ typedef struct Code {
 
     unsigned iStackLength; /// Number of slots in the integer stack required
 
-    unsigned codeSize;  /// bytes of code (not padded)
+    unsigned codeSize; /// bytes of code (not padded)
 
     unsigned srcLength; /// number of instructions
 
@@ -157,8 +154,7 @@ Code * codeAt(Function * f, unsigned offset);
 
 
 
-SEXP rirEval_c(Code* cure, SEXP env, unsigned numArgs);
-
+SEXP rirEval_c(Code* cur, SEXP env, unsigned numArgs);
 
 #ifdef __cplusplus
 }
