@@ -13,6 +13,7 @@ extern SEXP R_FalseValue;
 extern SEXP Rf_NewEnvironment(SEXP, SEXP, SEXP);
 extern Rboolean R_Visible;
 extern SEXP forcePromise(SEXP);
+// extern SEXP PRVALUE();
 
 // helpers
 
@@ -181,8 +182,6 @@ Pool createPool(size_t capacity) {
     result.length = 0;
     result.capacity = capacity;
     result.pool = Rf_allocVector(VECSXP, capacity);
-    // add to precious list
-    //Precious::add(result.pool);
 }
 
 Pool cp_;
@@ -196,20 +195,12 @@ void grow(Pool * p) {
 
     // allocate new pool
     SEXP temp = Rf_allocVector(VECSXP, p->capacity);
-    //poolAdd(temp);
 
     // transfer values over
     for (size_t i = 0; i <= tmp; ++i){
         SET_VECTOR_ELT(temp, i, VECTOR_ELT(p->pool, i));
     }
-
-    // remove the old pool
-    //poolRemove(p->pool);
     p->pool = temp;
-
-    // add the new pool, and remove the temp pool
-    //poolAdd(p->pool);
-    //poolRemove(temp);
 }
 
 /** Constant pool */
@@ -285,15 +276,17 @@ INLINE int readJumpOffset(OpcodeT** pc) {
 }
 
 
-
-
-
-
-
-
 // TODO check if there is a function for this in R
 INLINE SEXP promiseValue(SEXP promise) {
-    // TODO if already evaluated, return the value
+
+    // if already evaluated, return the value
+    if (PRVALUE(value) != R_UnboundValue)
+    {
+        value = PRVALUE(value);
+        SET_NAMED(value, 2);
+        return value; 
+    }
+    
     return forcePromise(promise);
 }
 
