@@ -197,8 +197,10 @@ void growPool(Pool * p) {
     SEXP temp = Rf_allocVector(VECSXP, p->capacity);
 
     // transfer values over
-    for (size_t i = 0; i < p->length; ++i){
+    size_t i = 0;
+    while (i < p->length){
         SET_VECTOR_ELT(temp, i, VECTOR_ELT(p->pool, i));
+        i++;
     }
     // set the new pool
     p->pool = temp;
@@ -267,11 +269,10 @@ INLINE int readJumpOffset(OpcodeT** pc) {
 INLINE SEXP promiseValue(SEXP promise) {
 
     // if already evaluated, return the value
-    if (PRVALUE(value) != R_UnboundValue)
+    if (PRVALUE(promise) && PRVALUE(promise) != R_UnboundValue)
     {
-        value = PRVALUE(value);
-        SET_NAMED(value, 2);
-        return value; 
+        promise = PRVALUE(promise);
+        return promise; 
     }
     
     return forcePromise(promise);
@@ -291,14 +292,15 @@ INLINE SEXP getCurrentCall(Code * c, OpcodeT * pc) {
 }
 
 
-
 void gc_callback(void (*forward_node)(SEXP)) {
-    for (size_t i = 0; i < stack_.length; ++i)
+    size_t i = 0;
+    while (i < stack_.length){
         forward_node(stack_.stack[i]);
+        i++;
+    }
     forward_node(cp_.pool);
     forward_node(src_.pool);
 }
-
 
 
 SEXP rirEval_c(Code* c, SEXP env, unsigned numArgs) {

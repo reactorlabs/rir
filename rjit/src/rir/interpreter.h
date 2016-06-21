@@ -5,7 +5,7 @@
 #include <Rinternals.h>
 
 // Do I need this?
-#include <Defn.h>
+// #include <Defn.h>
 
 #undef length
 
