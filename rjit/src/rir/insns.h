@@ -2,7 +2,6 @@
 #error "DEF_INSTR must be defined before including insns.h"
 #endif
 
-
 DEF_INSTR(invalid_,   0,    0,    0,   0,   0)
 /** 
  * invalid_:: Opcode 0 acts as a sentinnel for unintialiazed Code.
@@ -79,7 +78,7 @@ DEF_INSTR(eqi_,       0,    0,    1,   2,   0)
 /*
  * lti_:: pop two integers from primitive stack, compare with with ==. push Logical on object stack
  */
-DEF_INSTR(pushi_,     1,    0,    0,   0,   1) // push int
+DEF_INSTR(pushi_,     1,    0,    0,   0,   1)
 /**
  * psuhi_:: push immediate integer to primitie stack
  */
@@ -87,28 +86,28 @@ DEF_INSTR(dupi_,      0,    0,    0,   1,   2)
 /**
  * dupi_:: pop value from primitive stack, push it twice
  */
-DEF_INSTR(dup_,       0,    1,    2,   0,   0) // dup tos
+DEF_INSTR(dup_,       0,    1,    2,   0,   0)
 /**
  * dup_:: pop value from object stack, push it twice
  */
-DEF_INSTR(add_,       0,    2,    1,   0,   0) // +
+DEF_INSTR(add_,       0,    2,    1,   0,   0)
 /**
  * add_:: pop two values from object stack, add them, push result on object stack
  */
-DEF_INSTR(sub_,       0,    2,    1,   0,   0) // -
+DEF_INSTR(sub_,       0,    2,    1,   0,   0)
 /**
  * add_:: pop two values from object stack, add them, push result on object stack
  */
-DEF_INSTR(lt_,        0,    2,    1,   0,   0) // <
+DEF_INSTR(lt_,        0,    2,    1,   0,   0)
 /**
  * add_:: pop two values from object stack, add them, push result on object stack
  */
-DEF_INSTR(isspecial_, 1,    0,    0,   0,   0) //
+DEF_INSTR(isspecial_, 1,    0,    0,   0,   0)
 /**
  * isspecial_:: take imediate CP index of symbol, check if bound to a SPECIALSXP 
 *                or a BUILTINSXP.
  */
-DEF_INSTR(isfun_,     0,    1,    1,   0,   0) // check tos is a function
+DEF_INSTR(isfun_,     0,    1,    1,   0,   0)
 /**
  * isfun_:: pop object stack, convert to RIR code or assert error, push code to object stack
  */
