@@ -23,6 +23,12 @@
 
 #include "StackScan.h"
 
+
+extern "C" {
+    void gc_callback(void (*)(SEXP));
+}
+
+
 using namespace rjit;
 
 REXPORT SEXP jitrbc(SEXP exp) {
@@ -215,6 +221,7 @@ REXPORT SEXP setFlag(SEXP name, SEXP value) {
 
 namespace {
 
+
 void rjit_gcCallback(void (*forward_node)(SEXP)) {
     StackScan::stackScanner(forward_node);
     Compiler::gcCallback(forward_node);
@@ -222,6 +229,7 @@ void rjit_gcCallback(void (*forward_node)(SEXP)) {
     // poolGcCallBack(forward_node);
     // Precious::gcCallback(forward_node);
     rir::Interpreter::gcCallback(forward_node);
+    gc_callback(forward_node);
 }
 
 int rjitStartup() {
