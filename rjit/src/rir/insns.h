@@ -22,11 +22,11 @@ DEF_INSTR(call_,      2,    1,    1,   0,   0)
 /**
  * call_:: ...
  */
-DEF_INSTR(promise_,   1,    0,    1,   0,   0) // create promise
+DEF_INSTR(promise_,   1,    0,    1,   0,   0)
 /**
  * promise_:: take immediate CP index of Code, create promise & push on object stack
  */
-DEF_INSTR(close_,     1,    2,    1,   0,   0) // create closure
+DEF_INSTR(close_,     1,    2,    1,   0,   0)
 /**
  * close_:: pop body and argument list, create closure, and push on object stack
  */
@@ -66,7 +66,7 @@ DEF_INSTR(brfalse_,   1,    1,    0,   0,   0)
 /**
  * brfalse_:: pop object stack, if FALSE branch to immediate offset\
  */
-DEF_INSTR(br_,       1,    0,    0,   0,   0)
+DEF_INSTR(br_,        1,    0,    0,   0,   0)
 /**
  * br_:: branch to immediate offset
  */
@@ -110,10 +110,6 @@ DEF_INSTR(isspecial_, 1,    0,    0,   0,   0)
 DEF_INSTR(isfun_,     0,    1,    1,   0,   0)
 /**
  * isfun_:: pop object stack, convert to RIR code or assert error, push code to object stack
- */
-DEF_INSTR(end_,       0,    0,   0,    0,   0)
-/**
- * end_:: sentinnel
  */
 
 #undef DEF_INSTR
