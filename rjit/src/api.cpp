@@ -226,7 +226,7 @@ void rjit_gcCallback(void (*forward_node)(SEXP)) {
     StackScan::stackScanner(forward_node);
     Compiler::gcCallback(forward_node);
     // set the gc call back for the constant pool and the ast pool
-    // poolGcCallBack(forward_node);
+    gc_callback(forward_node);
     // Precious::gcCallback(forward_node);
     rir::Interpreter::gcCallback(forward_node);
     gc_callback(forward_node);

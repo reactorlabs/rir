@@ -162,16 +162,12 @@ Code * codeAt(Function * f, unsigned offset);
 /** C implementation of the Precious class to protect 
     the elements of the ast and constant pool from being
     gc'ed */
-void poolGcCallBack(void (*forward_node)(SEXP));
+// void poolGcCallBack(void (*forward_node)(SEXP));
 // void poolAdd(SEXP value);
 // void poolRemove(SEXP value);
 
 /** TODO Makes sure the gc undersands our stacks and pools. */
 void gc_callback(void (*forward_node)(SEXP));
-
-
-
->>>>>>> de7f33f95588ad1e0e4d3f86edbcfcc007caf908
 
 SEXP rirEval_c(Code* cur, SEXP env, unsigned numArgs);
 
