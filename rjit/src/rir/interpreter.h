@@ -19,6 +19,10 @@ extern "C" {
 // we cannot use specific sizes for enums in C
 typedef uint8_t OpcodeT;
 
+/** Any argument to BC must be the size of this type. */
+// TODO add static asserts somewhere in C++
+typedef uint32_t ArgT;
+
 // type  for constant & ast pool indices
 typedef uint32_t Immediate;
 
