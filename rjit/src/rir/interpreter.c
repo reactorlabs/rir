@@ -60,7 +60,7 @@ Code* next(Code* c) {
 bool isValidFunction(SEXP s) {
     if (TYPEOF(s) != INTSXP)
         return false;
-    // TODO check magicVersion
+    return INTEGER(s)[0] == 0xCAFEBABE;
 }
 
 Function* origin(Function* f) {
@@ -181,6 +181,7 @@ Pool createPool(size_t capacity) {
     result.length = 0;
     result.capacity = capacity;
     result.pool = Rf_allocVector(VECSXP, capacity);
+    return result;
 }
 
 Pool cp_;
