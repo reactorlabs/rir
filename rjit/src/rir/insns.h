@@ -3,12 +3,19 @@
 #endif
 
 
-DEF_INSTR(invalid_,   0,    0,    0,   0,   0) // invalid operation
+DEF_INSTR(invalid_,   0,    0,    0,   0,   0)
 /** 
- * Opcode 0 acts as a sentinnel for unintialiazed Code.
+ * invalid_:: Opcode 0 acts as a sentinnel for unintialiazed Code.
  */
-DEF_INSTR(push_,      1,    0,    1,   0,   0) // push a constant to the stack
-DEF_INSTR(ldfun_,     1,    0,    1,   0,   0) // load function from env
+DEF_INSTR(push_,      1,    0,    1,   0,   0)
+/**
+ * push_:: takes immediate index of an argument, and pushes on the object stack.
+ */
+DEF_INSTR(ldfun_,     1,    0,    1,   0,   0)
+/**
+ * ldfun_:: takes immediate CP index of symbol, finds binding in the environment
+ *          and pushes the result. 
+ */
 DEF_INSTR(ldvar_,     1,    0,    1,   0,   0) // load variable from env
 DEF_INSTR(call_,      2,    1,    1,   0,   0) // call fun,
 DEF_INSTR(promise_,   1,    0,    1,   0,   0) // create promise
