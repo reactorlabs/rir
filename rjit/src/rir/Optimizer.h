@@ -26,10 +26,10 @@ void inlProm(CodeEditor::Cursor cur, Code* fun, fun_idx_t idx) {
 }
 
 void doInlineBlock(CodeEditor::Cursor& cur, Code* fun) {
-    assert((*cur).bc == BC_t::getfun);
+    assert((*cur).bc == BC_t::ldfun_);
     cur.remove();
     BC bc = *cur;
-    assert(bc.bc == BC_t::call);
+    assert(bc.bc == BC_t::call_);
     cur.remove();
 
     cur << BC::check_primitive(symbol::Block);
@@ -45,10 +45,10 @@ void doInlineBlock(CodeEditor::Cursor& cur, Code* fun) {
 }
 
 void doInlineIf(CodeEditor::Cursor& cur, Code* fun) {
-    assert((*cur).bc == BC_t::getfun);
+    assert((*cur).bc == BC_t::ldfun_);
     cur.remove();
     BC bc = *cur;
-    assert(bc.bc == BC_t::call);
+    assert(bc.bc == BC_t::call_);
     cur.remove();
 
     cur << BC::check_primitive(symbol::If);
@@ -76,10 +76,10 @@ void doInlineIf(CodeEditor::Cursor& cur, Code* fun) {
 }
 
 void doInlinePar(CodeEditor::Cursor& cur, Code* fun) {
-    assert((*cur).bc == BC_t::getfun);
+    assert((*cur).bc == BC_t::ldfun_);
     cur.remove();
     BC bc = *cur;
-    assert(bc.bc == BC_t::call);
+    assert(bc.bc == BC_t::call_);
     cur.remove();
 
     cur << BC::check_primitive(symbol::Parenthesis);
@@ -93,10 +93,10 @@ void doInlinePar(CodeEditor::Cursor& cur, Code* fun) {
 }
 
 void doInlineAdd(CodeEditor::Cursor& cur, Code* fun) {
-    assert((*cur).bc == BC_t::getfun);
+    assert((*cur).bc == BC_t::ldfun_);
     cur.remove();
     BC bc = *cur;
-    assert(bc.bc == BC_t::call);
+    assert(bc.bc == BC_t::call_);
     cur.remove();
 
     cur << BC::check_primitive(symbol::Add);
@@ -111,10 +111,10 @@ void doInlineAdd(CodeEditor::Cursor& cur, Code* fun) {
 }
 
 void doInlineSub(CodeEditor::Cursor& cur, Code* fun) {
-    assert((*cur).bc == BC_t::getfun);
+    assert((*cur).bc == BC_t::ldfun_);
     cur.remove();
     BC bc = *cur;
-    assert(bc.bc == BC_t::call);
+    assert(bc.bc == BC_t::call_);
     cur.remove();
 
     cur << BC::check_primitive(symbol::Sub);
@@ -129,10 +129,10 @@ void doInlineSub(CodeEditor::Cursor& cur, Code* fun) {
 }
 
 void doInlineLt(CodeEditor::Cursor& cur, Code* fun) {
-    assert((*cur).bc == BC_t::getfun);
+    assert((*cur).bc == BC_t::ldfun_);
     cur.remove();
     BC bc = *cur;
-    assert(bc.bc == BC_t::call);
+    assert(bc.bc == BC_t::call_);
     cur.remove();
 
     cur << BC::check_primitive(symbol::Lt);
@@ -151,7 +151,7 @@ void optimize(CodeEditor& e, Code* fun) {
         BC bc = *cur;
 
         switch (bc.bc) {
-        case BC_t::getfun:
+        case BC_t::ldfun_:
             if (bc.immediateConst() == symbol::If) {
                 doInlineIf(cur, fun);
                 continue;

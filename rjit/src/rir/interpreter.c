@@ -15,6 +15,8 @@ extern Rboolean R_Visible;
 extern SEXP forcePromise(SEXP);
 // extern SEXP PRVALUE();
 
+extern SEXP mkPROMISE(SEXP expr, SEXP rho);
+
 // helpers
 
 /** Moves the pc to next instruction, based on the current instruction length
@@ -402,8 +404,15 @@ SEXP rirEval_c(Code* c, SEXP env, unsigned numArgs) {
         }
         case close_: {
             SEXP body = pop();
-            SEXP arglist = pop();
-            // TODO create cloisure (R's ) from the arglist and body and env and push it
+            SEXP formals = pop();
+            PROTECT(body);
+            PROTECT(formals);
+            SEXP result = allocSExp(CLOSXP);
+            SET_FORMALS(result, formals);
+            SET_BODY(result, body);
+            SET_CLOENV(result, env);
+            UNPROTECT(2);
+            push(result);
             break;
         }
         case ret_: {
@@ -604,6 +613,15 @@ SEXP rirEval_c(Code* c, SEXP env, unsigned numArgs) {
                 // TODO: check our functions and how they are created
                 assert(false);
             }
+            break;
+        }
+        case inci_: {
+            iPush(iPop() + 1);
+            break;
+        }
+        case push_argi_: {
+            int pos = iPop();
+            push(at(bp - numArgs + pos));
             break;
         }
         default:

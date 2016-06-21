@@ -137,6 +137,7 @@ typedef struct Function {
 
     unsigned codeLength; /// number of Code objects in the Function
 
+    // TODO this is misleading because Code objects are not continuous now
     Code data[]; // Code objects stored inline
 
 } Function;
@@ -166,6 +167,13 @@ SEXP rirEval_c(Code* cur, SEXP env, unsigned numArgs);
 
 #ifdef __cplusplus
 }
+
+
+
+
+
+
+
 #endif
 
 #endif // RIR_INTERPRETER_C_H

@@ -130,6 +130,10 @@ class Code {
         from.bc = nullptr;
         return *this;
     }
+
+    /** Serializes the code object into a Function SEXP.
+     */
+    SEXP toFunction();
 };
 }
 }
