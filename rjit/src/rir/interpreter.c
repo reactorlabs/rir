@@ -37,7 +37,6 @@ unsigned pad4(unsigned sizeInBytes) {
     return (x != 0) ? (sizeInBytes + 4 - x) : sizeInBytes;
 }
 
-
 // Code object --------------------------------------------------------------------------------------------------------
 
 OpcodeT* code(Code* c) {
@@ -48,8 +47,8 @@ unsigned* src(Code* c) {
     return (unsigned*)(c->data + pad4(c->codeSize));
 }
 
-Function* function(Code* c) {
-    return (Function*)(c - c->header);
+struct Function* function(Code* c) {
+    return (struct Function*)(c - c->header);
 }
 
 Code* next(Code* c) {
@@ -271,6 +270,12 @@ INLINE unsigned readImmediate(OpcodeT** pc) {
     return result;
 }
 
+INLINE int readSignedImmediate(OpcodeT** pc) {
+    int result = (SignedImmediate)(**pc);
+    *pc += sizeof(SignedImmediate);
+    return result;
+}
+
 INLINE SEXP readConst(OpcodeT ** pc) {
     return constant(readImmediate(pc));
 }
@@ -309,6 +314,12 @@ INLINE SEXP getCurrentCall(Code * c, OpcodeT * pc) {
 
 
 
+void gc_callback(void (*forward_node)(SEXP)) {
+    for (size_t i = 0; i < stack_.length; ++i)
+        forward_node(stack_.stack[i]);
+    forward_node(cp_.pool);
+    forward_node(src_.pool);
+}
 
 
 
@@ -499,13 +510,18 @@ SEXP rirEval_c(Code* c, SEXP env, unsigned numArgs) {
             int rhs = iPop();
             int lhs = iPop();
             push(lhs < rhs ? R_TrueValue : R_FalseValue);
+            break;
         }
         case eqi_: {
             int rhs = iPop();
             int lhs = iPop();
             push(lhs == rhs ? R_TrueValue : R_FalseValue);
+            break;
         }
-        case pushi_:
+        case pushi_: {
+            iPush(readSignedImmediate(&pc));
+            break;
+        }
         case dupi_:
         case dup_:
         case add_:

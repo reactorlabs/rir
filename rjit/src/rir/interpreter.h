@@ -1,5 +1,5 @@
-#ifndef RIR_INTERPRETER_H
-#define RIR_INTERPRETER_H
+#ifndef RIR_INTERPRETER_C_H
+#define RIR_INTERPRETER_C_H
 
 #include <R.h>
 #include <Rinternals.h>
@@ -26,6 +26,9 @@ typedef uint32_t ArgT;
 // type  for constant & ast pool indices
 typedef uint32_t Immediate;
 
+// type  signed immediate values (unboxed ints)
+typedef uint32_t SignedImmediate;
+
 // type of relative jump offset (all jumps are relative)
 typedef int32_t JumpOffset;
 
@@ -47,7 +50,7 @@ typedef SEXP IntSEXP;
 // type of relative jump offset (all jumps are relative)
 typedef int32_t JumpOffset;
 
-typedef struct Function Function; // Forward declaration
+struct Function; // Forward declaration
 
 // all sizes in bytes,
 // length in element sizes
@@ -95,7 +98,7 @@ OpcodeT* code(Code* c);
 unsigned* src(Code* c);
 
 /** Returns a pointer to the Function to which c belongs. */
-Function* function(Code* c);
+struct Function* function(Code* c);
 
 /** Returns the next Code in the current function. */
 Code* next(Code* c);
@@ -125,7 +128,7 @@ Code* next(Code* c);
  *  A Function has a number of Code objects, codeLen, stored
  *  inline in data.
  */
-typedef struct Function {
+typedef struct {
     unsigned magic; /// used to detect Functions 0xCAFEBABE
 
     unsigned size; /// Size, in bytes, of the function and its data
@@ -157,6 +160,11 @@ SEXP source(size_t index);
 Code * codeAt(Function * f, unsigned offset);
 
 
+/** TODO Makes sure the gc undersands our stacks and pools. */
+void gc_callback(void (*forward_node)(SEXP));
+
+
+
 
 SEXP rirEval_c(Code* cur, SEXP env, unsigned numArgs);
 
@@ -164,4 +172,4 @@ SEXP rirEval_c(Code* cur, SEXP env, unsigned numArgs);
 }
 #endif
 
-#endif // RIR_INTERPRETER_H
+#endif // RIR_INTERPRETER_C_H
