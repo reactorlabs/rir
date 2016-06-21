@@ -31,7 +31,15 @@ typedef enum {
 #define DEF_INSTR(name, ...) name,
 #include "insns.h"
     numInsns_
-} Opcode;
+}
+
+/**
+ * Aliases for readability.
+ */
+typedef SEXP FunctionSEXP
+typedef SEXP ClosureSEXP
+typedef SEXP PromiseSEXP
+typedef SEXP IntSEXP
 
 // type of relative jump offset (all jumps are relative)
 typedef int32_t JumpOffset;
@@ -119,16 +127,15 @@ typedef struct Function {
 
     unsigned size; /// Size, in bytes, of the function and its data
 
-    SEXP origin; /// Same Function with fewer optimizations, NULL if this is the
-                 /// original
+    FunctionSEXP origin; /// Same Function with fewer optimizations, NULL if original
 
-    unsigned codeLen; /// number of Code objects in the Function
+    unsigned codeLength; /// number of Code objects in the Function
 
     Code data[]; // Code objects stored inline
 
 } Function;
 
-bool isValidFunction(SEXP s);
+bool isValidFunction(FunctionSEXP s);
 
 Function* origin(Function* f);
 
