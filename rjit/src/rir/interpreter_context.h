@@ -9,6 +9,8 @@
 #ifndef interpreter_context_h
 #define interpreter_context_h
 
+#include <R.h>
+#include <Rinternals.h>
 #include <stdio.h>
 
 // TODO force inlinine for clang & gcc

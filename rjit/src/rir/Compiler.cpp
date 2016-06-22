@@ -108,6 +108,8 @@ Code* Compiler::finalize() {
     cs << BC::ret();
     Code* result = cs.toCode();
     Optimizer::optimize(result);
+    // call the c function here that linearise the code produced from the 
+    // codestream in order to be used for the interpreter
     return result;
 }
 }

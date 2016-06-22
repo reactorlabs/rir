@@ -31,8 +31,12 @@ SEXP Code::toFunction() {
     fHdr->codeLength = children.size() + 1;
 
     // now serialize the codes, one by one, first itself, then all the children
-    // keep in mind to update the instructions which deal push promise indices to update them so that they push offsets from the beginning
+    // keep in mind to update the instructions which deal push promise indices to update 
+    // them so that they push offsets from the beginning
 
+    // TODO: finish this mofo
+    // fill in the code objects from interpreter.h
+    
     UNPROTECT(1);
     return nullptr;
 }
