@@ -3,6 +3,8 @@
 #include "interp.h"
 #include "interp_context.h"
 
+#define NOT_IMPLEMENTED assert(false)
+
 
 // TODO we are using the RInternals, but soud not when the code moves to GNU-R
 // #include "RIntlns.h"
@@ -176,10 +178,6 @@ bool isValidFunction(SEXP s) {
     return INTEGER(s)[0] == FUNCTION_MAGIC;
 }
 
-Function* origin(Function* f) {
-    // TODO
-}
-
 Code* begin(Function* f) {
     return f->data;
 }
@@ -236,8 +234,7 @@ INLINE SEXP promiseValue(SEXP promise) {
     // if already evaluated, return the value
     if (PRVALUE(promise) && PRVALUE(promise) != R_UnboundValue) {
         promise = PRVALUE(promise);
-        // TODO implicit declaration of SET_NAME
-        SET_NAME(promise, 2);
+        SET_NAMED(promise, 2);
         return promise; 
     }
     return forcePromise(promise);
@@ -304,7 +301,6 @@ CCODE getBuiltin(SEXP f) {
     int i = ((sexprec_rjit*)f)->u.i;
     return R_FunTab[i].cfun;
 }
-
 
 /** Performs the call.
 
@@ -465,7 +461,7 @@ SEXP rirEval_c(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
             if (names) {
                 assert(false && "Can't do named args yet");
             } else {
-                ostack_pust(ctx, doCall(c, getCurrentCall(c, pc), cls, args, nargs, env, ctx));
+                ostack_push(ctx, doCall(c, getCurrentCall(c, pc), cls, args, nargs, env, ctx));
             }
             break;
         }
@@ -614,8 +610,9 @@ SEXP rirEval_c(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
                 REAL(res)[0] = REAL(lhs)[0] + REAL(rhs)[0];
                 ostack_push(ctx, res);
             } else {
-                SEXP op = getPrimitive("+");
-                SEXP primfun = getPrimfun("+");
+                NOT_IMPLEMENTED;
+                //SEXP op = getPrimitive("+");
+                //SEXP primfun = getPrimfun("+");
                 // TODO we should change how primitives are called now that we can integrate
                 //SEXP res = callPrimitive(primfun, getCurrentCall(c, pc), op, { lhs, rhs });
                 // TODO push
@@ -631,8 +628,9 @@ SEXP rirEval_c(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
                 REAL(res)[0] = REAL(lhs)[0] - REAL(rhs)[0];
                 ostack_push(ctx, res);
             } else {
-                SEXP op = getPrimitive("-");
-                SEXP primfun = getPrimfun("-");
+                NOT_IMPLEMENTED;
+                //SEXP op = getPrimitive("-");
+                //SEXP primfun = getPrimfun("-");
                 // TODO we should change how primitives are called now that we can integrate
                 //SEXP res = callPrimitive(primfun, getCurrentCall(c, pc), op, { lhs, rhs });
                 // TODO push
@@ -647,8 +645,9 @@ SEXP rirEval_c(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
                 SET_NAMED(res, 1);
                 ostack_push(ctx, REAL(lhs)[0] < REAL(rhs)[0] ? R_TrueValue : R_FalseValue);
             } else {
-                SEXP op = getPrimitive("<");
-                SEXP primfun = getPrimfun("<");
+                NOT_IMPLEMENTED;
+                //SEXP op = getPrimitive("<");
+                //SEXP primfun = getPrimfun("<");
                 // TODO we should change how primitives are called now that we can integrate
                 //SEXP res = callPrimitive(primfun, getCurrentCall(c, pc), op, { lhs, rhs });
                 // TODO push
