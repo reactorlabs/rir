@@ -8,7 +8,7 @@
 #include "../Sexp.h"
 #include "../Symbols.h"
 
-#include "Interpreter.h"
+#include "OldInterpreter.h"
 #include "Optimizer.h"
 #include "Pool.h"
 

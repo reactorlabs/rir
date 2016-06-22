@@ -8,7 +8,7 @@
 
 #include <stdint.h>
 
-#include "interpreter_context.h"
+#include "interp_context.h"
 
 
 #ifdef __cplusplus

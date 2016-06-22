@@ -5,7 +5,7 @@
 //  Created by Jan Vitek Jr on 6/21/16.
 //
 //
-#include "interpreter_context.h"
+#include "interp_context.h"
 
 void ostack_ensureSize(Context* c, unsigned minFree) {
     unsigned cap = c->ostack.capacity;

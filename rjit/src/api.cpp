@@ -17,7 +17,7 @@
 #include "Flags.h"
 
 #include "rir/Compiler.h"
-#include "rir/Interpreter.h"
+#include "rir/OldInterpreter.h"
 #include "rir/RBytecode.h"
 
 #include "StackScan.h"

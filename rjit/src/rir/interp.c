@@ -1,7 +1,7 @@
 #include <assert.h>
 
 #include "interp.h"
-#include "interpreter_context.h"
+#include "interp_context.h"
 
 // GNU-R stuff we need
 

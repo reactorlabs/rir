@@ -2,7 +2,7 @@
 
 #include "Code.h"
 
-#include "interpreter.h"
+#include "interp.h"
 
 namespace rjit {
 namespace rir {
