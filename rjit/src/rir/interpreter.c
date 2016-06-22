@@ -1,6 +1,7 @@
 #include <assert.h>
 
 #include "interpreter.h"
+#include "interpreter_context.h"
 
 // TODO force inlinine for clang & gcc
 #define INLINE __attribute__((always_inline)) inline
@@ -306,7 +307,7 @@ void gc_callback(void (*forward_node)(SEXP)) {
 }
 
 
-SEXP rirEval_c(Code* c, SEXP env, unsigned numArgs) {
+SEXP rirEval_c(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
     SEXP call = constant(c->src);
     // make sure there is enough room on the stack
     checkStackSize(c->stackLength);

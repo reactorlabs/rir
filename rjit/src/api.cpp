@@ -49,6 +49,7 @@ REXPORT SEXP jitRir(SEXP exp) {
     rir::Code* f = c.finalize();
 
     SEXP env = Rf_NewEnvironment(R_NilValue, R_NilValue, R_GlobalEnv);
+    
     rir::Interpreter i(f);
     return i.run(env);
 }
