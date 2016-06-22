@@ -520,7 +520,7 @@ SEXP rirEval_c(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
                 ast = cp_pool_at(ctx, ((Code*)ast)->src);
             // otherwise return whatever we had, make sure we do not see bytecode
             assert(TYPEOF(ast) != BCODESXP);
-            ostack_push(ast);
+            ostack_push(ctx, ast);
             break;
         }
         case stvar_: {
