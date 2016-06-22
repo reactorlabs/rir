@@ -4,9 +4,6 @@
 #include <R.h>
 #include <Rinternals.h>
 
-// Do I need this?
-// #include <Defn.h>
-
 #undef length
 
 #include <stdint.h>
@@ -34,6 +31,9 @@ typedef uint32_t SignedImmediate;
 
 // type of relative jump offset (all jumps are relative)
 typedef int32_t JumpOffset;
+
+typedef unsigned FunctionIndex;
+typedef unsigned ArgumentsCount;
 
 // enums in C are not namespaces so I am using OP_ to disambiguate
 typedef enum {
@@ -162,6 +162,13 @@ SEXP source(size_t index);
 
 /** TODO Returns the code object with given offset */
 Code * codeAt(Function * f, unsigned offset);
+
+/** C implementation of the Precious class to protect 
+    the elements of the ast and constant pool from being
+    gc'ed */
+// void poolGcCallBack(void (*forward_node)(SEXP));
+// void poolAdd(SEXP value);
+// void poolRemove(SEXP value);
 
 /** TODO Makes sure the gc undersands our stacks and pools. */
 void gc_callback(void (*forward_node)(SEXP));
