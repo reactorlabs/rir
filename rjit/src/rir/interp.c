@@ -18,7 +18,105 @@ extern SEXP forcePromise(SEXP);
 
 extern SEXP mkPROMISE(SEXP expr, SEXP rho);
 
+typedef SEXP (*CCODE)(SEXP, SEXP, SEXP, SEXP);
 
+/* Information for Deparsing Expressions */
+typedef enum {
+    PP_INVALID = 0,
+    PP_ASSIGN = 1,
+    PP_ASSIGN2 = 2,
+    PP_BINARY = 3,
+    PP_BINARY2 = 4,
+    PP_BREAK = 5,
+    PP_CURLY = 6,
+    PP_FOR = 7,
+    PP_FUNCALL = 8,
+    PP_FUNCTION = 9,
+    PP_IF = 10,
+    PP_NEXT = 11,
+    PP_PAREN = 12,
+    PP_RETURN = 13,
+    PP_SUBASS = 14,
+    PP_SUBSET = 15,
+    PP_WHILE = 16,
+    PP_UNARY = 17,
+    PP_DOLLAR = 18,
+    PP_FOREIGN = 19,
+    PP_REPEAT = 20
+} PPkind;
+
+typedef enum {
+    PREC_FN = 0,
+    PREC_LEFT = 1,
+    PREC_EQ = 2,
+    PREC_RIGHT = 3,
+    PREC_TILDE = 4,
+    PREC_OR = 5,
+    PREC_AND = 6,
+    PREC_NOT = 7,
+    PREC_COMPARE = 8,
+    PREC_SUM = 9,
+    PREC_PROD = 10,
+    PREC_PERCENT = 11,
+    PREC_COLON = 12,
+    PREC_SIGN = 13,
+    PREC_POWER = 14,
+    PREC_DOLLAR = 15,
+    PREC_NS = 16,
+    PREC_SUBSET = 17
+} PPprec;
+
+typedef struct {
+    PPkind kind;             /* deparse kind */
+    PPprec precedence;       /* operator precedence */
+    unsigned int rightassoc; /* right associative? */
+} PPinfo;
+
+
+/* The type definitions for the table of built-in functions. */
+/* This table can be found in ../main/names.c */
+typedef struct {
+    char* name;  /* print name */
+    CCODE cfun;  /* c-code address */
+    int code;    /* offset within c-code */
+    int eval;    /* evaluate args? */
+    int arity;   /* function arity */
+    PPinfo gram; /* pretty-print info */
+} FUNTAB;
+
+extern FUNTAB R_FunTab[];
+
+typedef struct sxpinfo_struct_rjit {
+    unsigned int type : 5; /* ==> (FUNSXP == 99) %% 2^5 == 3 == CLOSXP
+                        * -> warning: `type' is narrower than values
+                        *              of its type
+                        * when SEXPTYPE was an enum */
+    unsigned int obj : 1;
+    unsigned int named : 2;
+    unsigned int gp : 16;
+    unsigned int mark : 1;
+    unsigned int debug : 1;
+    unsigned int trace : 1; /* functions and memory tracing */
+    unsigned int spare : 1; /* currently unused */
+    unsigned int gcgen : 1; /* old generation number */
+    unsigned int gccls : 3; /* node class */
+} sxpifo_struct_rjit;                          /*		    Tot: 32 */
+
+typedef struct cons_rjit {
+    SEXP car;
+    SEXP cdr;
+    SEXP tag;
+} cons_rjit;
+
+typedef struct sexprec_rjit {
+    struct sxpinfo_struct_rjit sxpinfo;
+    SEXP attrib;
+    SEXP gengc_next_node, gengc_prev_node;
+    union {
+        struct cons_rjit cons;
+        int i;
+    } u;
+} sexprec_rjit;
 
 
 
@@ -157,8 +255,6 @@ INLINE SEXP getCurrentCall(Code * c, OpcodeT * pc) {
     return source(sidx == 0 ? c->src : sidx);
 }
 
-// FORMALS BODY CLOENV
-
 INLINE void matchArguments(SEXP cls) {
     // Specials and builtins do not care about names
     if (TYPEOF(cls) == SPECIALSXP || TYPEOF(cls) == BUILTINSXP)
@@ -199,27 +295,42 @@ SEXP createArgsList(Code * c, FunctionIndex * args, size_t nargs, SEXP env) {
     return result;
 }
 
+/** Returns us the CCODE object from R_FunTab based on name.
+
+  TODO This exists in gnu-r (names.c), when integrated inside, we want to make use of it.
+ */
+CCODE getBuiltin(SEXP f) {
+    int i = ((sexprec_rjit*)f)->u.i;
+    return R_FunTab[i].cfun;
+}
+
 
 /** Performs the call.
 
   TODO this is currently super simple.
 
  */
-SEXP call(Code * caller, SEXP call, SEXP callee, unsigned * args, size_t nargs, SEXP env, Context * ctx) {
+SEXP doCall(Code * caller, SEXP call, SEXP callee, unsigned * args, size_t nargs, SEXP env, Context * ctx) {
     size_t oldbp = ctx->ostack.length;
     size_t oldbpi = ctx->istack.length;
     SEXP result = R_NilValue;
     switch (TYPEOF(callee)) {
     case SPECIALSXP: {
-        // get the ccode, and callit
+        // get the ccode
+        CCODE f = getBuiltin(callee);
+        // call it with the AST only
+        result = f(call, callee, CDR(call), env);
         break;
     }
     case BUILTINSXP: {
+        // get the ccode
+        CCODE f = getBuiltin(callee);
         // create the argslist
         SEXP argslist = createArgsList(caller, args, nargs, env);
-        // get the ccode
-
         // callit
+        PROTECT(argslist);
+        result = f(call, callee, argslist, env);
+        UNPROTECT(1);
         break;
     }
     case CLOSXP: {
@@ -227,6 +338,7 @@ SEXP call(Code * caller, SEXP call, SEXP callee, unsigned * args, size_t nargs, 
         assert (Rf_length(formals) == nargs && "Cannot handle different nargs yet");
         SEXP body = BODY(callee);
         SEXP argslist = createArgsList(caller, args, nargs, env);
+        PROTECT(argslist);
         // if body is INTSXP, it is rir serialized code, execute it directly
         if (TYPEOF(body) == INTSXP) {
             SEXP newEnv = Rf_NewEnvironment(formals, argslist, CLOENV(callee));
@@ -237,6 +349,7 @@ SEXP call(Code * caller, SEXP call, SEXP callee, unsigned * args, size_t nargs, 
         // otherwise use R's own call mechanism
             result = applyClosure(call, callee, argslist, env, R_NilValue);
         }
+        UNPROTECT(1); // argslist
         break;
     }
     default:
@@ -256,7 +369,6 @@ void gc_callback(void (*forward_node)(SEXP)) {
 
 
 SEXP rirEval_c(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
-    SEXP call = cp_pool_at(ctx, c->src);
     // make sure there is enough room on the stack
     ostack_ensureSize(ctx, c->stackLength);
     istack_ensureSize(ctx, c->iStackLength);
@@ -351,12 +463,9 @@ SEXP rirEval_c(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
             SEXP cls = ostack_pop(ctx);
             // match the arguments and do the call
             if (names) {
-                //
+                assert(false && "Can't do named args yet");
             } else {
-
-
-                ostack_push(ctx, doCall());
-
+                ostack_pust(ctx, doCall(c, getCurrentCall(c, pc), cls, args, nargs, env, ctx));
             }
             break;
         }
