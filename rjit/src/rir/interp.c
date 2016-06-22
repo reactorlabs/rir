@@ -365,6 +365,325 @@ void gc_callback(void (*forward_node)(SEXP)) {
 }
 
 
+// TODO remove numArgs and bp -- this is only needed for the on stack argument handling
+#define INSTRUCTION(name) INLINE void ins_ ## name (Code * c, SEXP env, OpcodeT **pc, Context * ctx, unsigned numArgs, unsigned bp)
+
+INSTRUCTION(push_) {
+    SEXP x = readConst(ctx, pc);
+    ostack_push(ctx, x);
+}
+
+INSTRUCTION(ldfun_) {
+    SEXP sym = readConst(ctx, pc);
+    SEXP val = findVar(sym, env);
+    R_Visible = TRUE;
+
+    // TODO something should happen here
+    if (val == R_UnboundValue)
+        assert(false && "Unbound var");
+    else if (val == R_MissingArg)
+        assert(false && "Missing argument");
+
+    // if promise, evaluate & return
+    if (TYPEOF(val) == PROMSXP)
+        val = promiseValue(val);
+
+    // WTF? is this just defensive programming or what?
+    if (NAMED(val) == 0 && val != R_NilValue)
+        SET_NAMED(val, 1);
+
+    switch (TYPEOF(val)) {
+    case CLOSXP:
+        // TODO we do not need lazy compiling anymore
+        /*
+        val = (SEXP)jit(val);
+        */
+        break;
+    case SPECIALSXP:
+    case BUILTINSXP: {
+        // TODO fix this
+        /**
+        SEXP prim = Primitives::compilePrimitive(val);
+        if (prim)
+            val = prim;
+        **/
+        break;
+    }
+    default:
+        // TODO!
+        assert(false);
+    }
+    ostack_push(ctx, val);
+}
+
+INSTRUCTION(ldvar_) {
+    SEXP sym = readConst(ctx, pc);
+    SEXP val = findVar(sym, env);
+    R_Visible = TRUE;
+
+    // TODO better errors
+    if (val == R_UnboundValue)
+        assert(false && "Unbound var");
+    else if (val == R_MissingArg)
+        assert(false && "Missing argument");
+
+    // if promise, evaluate & return
+    if (TYPEOF(val) == PROMSXP)
+        val = promiseValue(val);
+
+    // WTF? is this just defensive programming or what?
+    if (NAMED(val) == 0 && val != R_NilValue)
+        SET_NAMED(val, 1);
+
+    ostack_push(ctx, val);
+}
+
+INSTRUCTION(call_) {
+    // get the indices of argument promises
+    SEXP args_ = readConst(ctx, pc);
+    assert(TYPEOF(args_) == INTSXP && "TODO change to INTSXP, not RAWSXP it used to be");
+    unsigned nargs = Rf_length(args_);
+    unsigned * args = (unsigned*)INTEGER(args_);
+    // get the names of the arguments (or R_NilValue) if none
+    SEXP names = readConst(ctx, pc);
+    // get the closure itself
+    SEXP cls = ostack_pop(ctx);
+    // match the arguments and do the call
+    if (names) {
+        assert(false && "Can't do named args yet");
+    } else {
+        ostack_push(ctx, doCall(c, getCurrentCall(c, *pc), cls, args, nargs, env, ctx));
+    }
+}
+
+INSTRUCTION(promise_) {
+    // get the Code * pointer we need
+    unsigned codeOffset = readImmediate(pc);
+    Code * promiseCode = codeAt(function(c), codeOffset);
+    // create the promise and push it on stack
+    ostack_push(ctx, createPromise(promiseCode, env));
+}
+
+INSTRUCTION(close_) {
+    SEXP body = ostack_pop(ctx);
+    SEXP formals = ostack_pop(ctx);
+    PROTECT(body);
+    PROTECT(formals);
+    SEXP result = allocSExp(CLOSXP);
+    SET_FORMALS(result, formals);
+    SET_BODY(result, body);
+    SET_CLOENV(result, env);
+    UNPROTECT(2);
+    ostack_push(ctx, result);
+}
+
+INSTRUCTION(force_) {
+    SEXP p = ostack_pop(ctx);
+    assert(TYPEOF(p) == PROMSXP);
+    // If the promise is already evaluated then push the value inside the promise
+    // onto the stack, otherwise push the value from forcing the promise
+    ostack_push(ctx, promiseValue(p));
+}
+
+INSTRUCTION(pop_) {
+    ostack_pop(ctx);
+}
+
+INSTRUCTION(pusharg_) {
+    unsigned n = readImmediate(pc);
+    assert(n < numArgs);
+    ostack_push(ctx, ostack_at(ctx, bp - numArgs + n));
+}
+
+INSTRUCTION(asast_) {
+    SEXP p = ostack_pop(ctx);
+    assert(TYPEOF(p) == PROMSXP);
+    SEXP ast = PRCODE(p);
+    // if the code is NILSXP then it is rir Code object, get its ast
+    if (TYPEOF(ast) == NILSXP)
+        ast = cp_pool_at(ctx, ((Code*)ast)->src);
+    // otherwise return whatever we had, make sure we do not see bytecode
+    assert(TYPEOF(ast) != BCODESXP);
+    ostack_push(ctx, ast);
+}
+
+INSTRUCTION(stvar_) {
+    SEXP sym = ostack_pop(ctx);
+    assert(TYPEOF(sym) == SYMSXP);
+    SEXP val = ostack_pop(ctx);
+    defineVar(sym, val, env);
+    ostack_push(ctx, val);
+}
+
+INSTRUCTION(asbool_) {
+    SEXP t = ostack_pop(ctx);
+    int cond = NA_LOGICAL;
+    if (Rf_length(t) > 1)
+        warningcall(getCurrentCall(c, *pc),
+                    ("the condition has length > 1 and only the first "
+                     "element will be used"));
+
+    if (Rf_length(t) > 0) {
+        switch(TYPEOF(t)) {
+        case LGLSXP:
+            cond = LOGICAL(t)[0];
+            break;
+        case INTSXP:
+            cond = INTEGER(t)[0]; // relies on NA_INTEGER == NA_LOGICAL
+        default:
+            cond = asLogical(t);
+        }
+    }
+
+    if (cond == NA_LOGICAL) {
+        const char* msg =
+            Rf_length(t)
+                ? (isLogical(t)
+                       ? ("missing value where TRUE/FALSE needed")
+                       : ("argument is not interpretable as logical"))
+                : ("argument is of length zero");
+        errorcall(getCurrentCall(c, *pc), msg);
+    }
+
+    ostack_push(ctx, cond ? R_TrueValue : R_FalseValue);
+}
+
+INSTRUCTION(brtrue_) {
+    int offset = readJumpOffset(pc);
+    if (ostack_pop(ctx) == R_TrueValue)
+        pc = pc + offset;
+}
+
+INSTRUCTION(brfalse_) {
+    int offset = readJumpOffset(pc);
+    if (ostack_pop(ctx) == R_FalseValue)
+        pc = pc + offset;
+}
+
+INSTRUCTION(br_) {
+    pc = pc + readJumpOffset(pc);
+}
+
+INSTRUCTION(lti_) {
+    int rhs = istack_pop(ctx);
+    int lhs = istack_pop(ctx);
+    ostack_push(ctx, lhs < rhs ? R_TrueValue : R_FalseValue);
+}
+
+INSTRUCTION(eqi_) {
+    int rhs = istack_pop(ctx);
+    int lhs = istack_pop(ctx);
+    ostack_push(ctx, lhs == rhs ? R_TrueValue : R_FalseValue);
+}
+
+INSTRUCTION(pushi_) {
+    istack_push(ctx, readSignedImmediate(pc));
+}
+
+INSTRUCTION(dupi_) {
+    istack_push(ctx, istack_top(ctx));
+}
+
+INSTRUCTION(dup_) {
+    ostack_push(ctx, ostack_top(ctx));
+}
+
+INSTRUCTION(add_) {
+    SEXP rhs = ostack_pop(ctx);
+    SEXP lhs = ostack_pop(ctx);
+    if (TYPEOF(lhs) == REALSXP && TYPEOF(rhs) == REALSXP && Rf_length(lhs) == 1 && Rf_length(rhs) == 1) {
+        SEXP res = Rf_allocVector(REALSXP, 1);
+        SET_NAMED(res, 1);
+        REAL(res)[0] = REAL(lhs)[0] + REAL(rhs)[0];
+        ostack_push(ctx, res);
+    } else {
+        NOT_IMPLEMENTED;
+        //SEXP op = getPrimitive("+");
+        //SEXP primfun = getPrimfun("+");
+        // TODO we should change how primitives are called now that we can integrate
+        //SEXP res = callPrimitive(primfun, getCurrentCall(c, pc), op, { lhs, rhs });
+        // TODO push
+    }
+}
+
+INSTRUCTION(sub_) {
+    SEXP rhs = ostack_pop(ctx);
+    SEXP lhs = ostack_pop(ctx);
+    if (TYPEOF(lhs) == REALSXP && TYPEOF(rhs) == REALSXP && Rf_length(lhs) == 1 && Rf_length(rhs) == 1) {
+        SEXP res = Rf_allocVector(REALSXP, 1);
+        SET_NAMED(res, 1);
+        REAL(res)[0] = REAL(lhs)[0] - REAL(rhs)[0];
+        ostack_push(ctx, res);
+    } else {
+        NOT_IMPLEMENTED;
+        //SEXP op = getPrimitive("-");
+        //SEXP primfun = getPrimfun("-");
+        // TODO we should change how primitives are called now that we can integrate
+        //SEXP res = callPrimitive(primfun, getCurrentCall(c, pc), op, { lhs, rhs });
+        // TODO push
+    }
+
+}
+
+INSTRUCTION(lt_) {
+    SEXP rhs = ostack_pop(ctx);
+    SEXP lhs = ostack_pop(ctx);
+    if (TYPEOF(lhs) == REALSXP && TYPEOF(rhs) == REALSXP && Rf_length(lhs) == 1 && Rf_length(rhs) == 1) {
+        SEXP res = Rf_allocVector(REALSXP, 1);
+        SET_NAMED(res, 1);
+        ostack_push(ctx, REAL(lhs)[0] < REAL(rhs)[0] ? R_TrueValue : R_FalseValue);
+    } else {
+        NOT_IMPLEMENTED;
+        //SEXP op = getPrimitive("<");
+        //SEXP primfun = getPrimfun("<");
+        // TODO we should change how primitives are called now that we can integrate
+        //SEXP res = callPrimitive(primfun, getCurrentCall(c, pc), op, { lhs, rhs });
+        // TODO push
+    }
+}
+
+INSTRUCTION(isspecial_) {
+    // TODO I do not think this is a proper way - we must check all the way down, not just findVar (vars do not shadow closures)
+    SEXP sym = readConst(ctx, pc);
+    SEXP val = findVar(sym, env);
+    // TODO better check
+    assert(TYPEOF(val) == SPECIALSXP || TYPEOF(val) == BUILTINSXP);
+}
+
+INSTRUCTION(isfun_) {
+    SEXP val = ostack_top(ctx);
+
+    switch (TYPEOF(val)) {
+    case CLOSXP:
+        /** No need to compile, we can handle functions */
+        //val = (SEXP)jit(val);
+        break;
+    case SPECIALSXP:
+    case BUILTINSXP: {
+        // TODO do we need to compile primitives? not really I think
+        /*
+        SEXP prim = Primitives::compilePrimitive(val);
+        if (prim)
+            val = prim;
+        break; */
+    }
+
+    default:
+        // TODO: error not a function!
+        // TODO: check our functions and how they are created
+        assert(false);
+    }
+}
+
+INSTRUCTION(inci_) {
+    istack_push(ctx, istack_pop(ctx) + 1);
+}
+
+INSTRUCTION(push_argi_) {
+    int pos = istack_pop(ctx);
+    ostack_push(ctx, cp_pool_at(ctx, bp - numArgs + pos));
+}
+
 SEXP rirEval_c(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
     // make sure there is enough room on the stack
     ostack_ensureSize(ctx, c->stackLength);
@@ -377,324 +696,37 @@ SEXP rirEval_c(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
     // main loop
     while (true) {
         switch (readOpcode(&pc)) {
-        case push_: {
-            SEXP x = readConst(ctx, &pc);
-            ostack_push(ctx, x);
-            break;
-        }
-        case ldfun_: {
-            SEXP sym = readConst(ctx, &pc);
-            SEXP val = findVar(sym, env);
-            R_Visible = TRUE;
-
-            // TODO something should happen here
-            if (val == R_UnboundValue)
-                assert(false && "Unbound var");
-            else if (val == R_MissingArg)
-                assert(false && "Missing argument");
-
-            // if promise, evaluate & return
-            if (TYPEOF(val) == PROMSXP)
-                val = promiseValue(val);
-
-            // WTF? is this just defensive programming or what?
-            if (NAMED(val) == 0 && val != R_NilValue)
-                SET_NAMED(val, 1);
-
-            switch (TYPEOF(val)) {
-            case CLOSXP:
-                // TODO we do not need lazy compiling anymore
-                /*
-                val = (SEXP)jit(val);
-                */
-                break;
-            case SPECIALSXP:
-            case BUILTINSXP: {
-                // TODO fix this
-                /**
-                SEXP prim = Primitives::compilePrimitive(val);
-                if (prim)
-                    val = prim;
-                **/
-                break;
-            }
-            default:
-                // TODO!
-                assert(false);
-            }
-            ostack_push(ctx, val);
-            break;
-        }
-        case ldvar_: {
-            SEXP sym = readConst(ctx, &pc);
-            SEXP val = findVar(sym, env);
-            R_Visible = TRUE;
-
-            // TODO better errors
-            if (val == R_UnboundValue)
-                assert(false && "Unbound var");
-            else if (val == R_MissingArg)
-                assert(false && "Missing argument");
-
-            // if promise, evaluate & return
-            if (TYPEOF(val) == PROMSXP)
-                val = promiseValue(val);
-
-            // WTF? is this just defensive programming or what?
-            if (NAMED(val) == 0 && val != R_NilValue)
-                SET_NAMED(val, 1);
-
-            ostack_push(ctx, val);
-            break;
-        }
-        case call_: {
-            // get the indices of argument promises
-            SEXP args_ = readConst(ctx, &pc);
-            assert(TYPEOF(args_) == INTSXP && "TODO change to INTSXP, not RAWSXP it used to be");
-            unsigned nargs = Rf_length(args_);
-            unsigned * args = (unsigned*)INTEGER(args_);
-            // get the names of the arguments (or R_NilValue) if none
-            SEXP names = readConst(ctx, &pc);
-            // get the closure itself
-            SEXP cls = ostack_pop(ctx);
-            // match the arguments and do the call
-            if (names) {
-                assert(false && "Can't do named args yet");
-            } else {
-                ostack_push(ctx, doCall(c, getCurrentCall(c, pc), cls, args, nargs, env, ctx));
-            }
-            break;
-        }
-        case promise_: {
-            // get the Code * pointer we need
-            unsigned codeOffset = readImmediate(&pc);
-            Code * promiseCode = codeAt(function(c), codeOffset);
-            // create the promise and push it on stack
-            ostack_push(ctx, createPromise(promiseCode, env));
-            break;
-        }
-        case close_: {
-            SEXP body = ostack_pop(ctx);
-            SEXP formals = ostack_pop(ctx);
-            PROTECT(body);
-            PROTECT(formals);
-            SEXP result = allocSExp(CLOSXP);
-            SET_FORMALS(result, formals);
-            SET_BODY(result, body);
-            SET_CLOENV(result, env);
-            UNPROTECT(2);
-            ostack_push(ctx, result);
-            break;
-        }
+#define INS(name) case name : ins_ ## name (c, env, &pc, ctx, numArgs, bp); break
+        INS(push_);
+        INS(ldfun_);
+        INS(ldvar_);
+        INS(call_);
+        INS(promise_);
+        INS(close_);
+        INS(force_);
+        INS(pop_);
+        INS(pusharg_);
+        INS(asast_);
+        INS(stvar_);
+        INS(asbool_);
+        INS(brtrue_);
+        INS(brfalse_);
+        INS(br_);
+        INS(lti_);
+        INS(eqi_);
+        INS(pushi_);
+        INS(dupi_);
+        INS(dup_);
+        INS(add_);
+        INS(sub_);
+        INS(lt_);
+        INS(isspecial_);
+        INS(isfun_);
+        INS(inci_);
+        INS(push_argi_);
         case ret_: {
+            // not in its own function so that we can avoid nonlocal returns
             return ostack_pop(ctx);
-        }
-        case force_: {
-            SEXP p = ostack_pop(ctx);
-            assert(TYPEOF(p) == PROMSXP);
-            // If the promise is already evaluated then push the value inside the promise
-            // onto the stack, otherwise push the value from forcing the promise 
-            ostack_push(ctx, promiseValue(p));
-            break;
-        }
-        case pop_: {
-            ostack_pop(ctx);
-            break;
-        }
-        case pusharg_: {
-            unsigned n = readImmediate(&pc);
-            assert(n < numArgs);
-            ostack_push(ctx, ostack_at(ctx, bp - numArgs + n));
-            break;
-        }
-        case asast_: {
-            SEXP p = ostack_pop(ctx);
-            assert(TYPEOF(p) == PROMSXP);
-            SEXP ast = PRCODE(p);
-            // if the code is NILSXP then it is rir Code object, get its ast
-            if (TYPEOF(ast) == NILSXP)
-                ast = cp_pool_at(ctx, ((Code*)ast)->src);
-            // otherwise return whatever we had, make sure we do not see bytecode
-            assert(TYPEOF(ast) != BCODESXP);
-            ostack_push(ctx, ast);
-            break;
-        }
-        case stvar_: {
-            SEXP sym = ostack_pop(ctx);
-            assert(TYPEOF(sym) == SYMSXP);
-            SEXP val = ostack_pop(ctx);
-            defineVar(sym, val, env);
-            ostack_push(ctx, val);
-            break;
-        }
-        case asbool_: {
-            SEXP t = ostack_pop(ctx);
-            int cond = NA_LOGICAL;
-            if (Rf_length(t) > 1)
-                warningcall(getCurrentCall(c, pc),
-                            ("the condition has length > 1 and only the first "
-                             "element will be used"));
-
-            if (Rf_length(t) > 0) {
-                switch(TYPEOF(t)) {
-                case LGLSXP:
-                    cond = LOGICAL(t)[0];
-                    break;
-                case INTSXP:
-                    cond = INTEGER(t)[0]; // relies on NA_INTEGER == NA_LOGICAL
-                default:
-                    cond = asLogical(t);
-                }
-            }
-
-            if (cond == NA_LOGICAL) {
-                const char* msg =
-                    Rf_length(t)
-                        ? (isLogical(t)
-                               ? ("missing value where TRUE/FALSE needed")
-                               : ("argument is not interpretable as logical"))
-                        : ("argument is of length zero");
-                errorcall(getCurrentCall(c, pc), msg);
-            }
-
-            ostack_push(ctx, cond ? R_TrueValue : R_FalseValue);
-            break;
-        }
-        case brtrue_: {
-            int offset = readJumpOffset(&pc);
-            if (ostack_pop(ctx) == R_TrueValue)
-                pc = pc + offset;
-            break;
-        }
-        case brfalse_: {
-            int offset = readJumpOffset(&pc);
-            if (ostack_pop(ctx) == R_FalseValue)
-                pc = pc + offset;
-            break;
-        }
-        case br_: {
-            pc = pc + readJumpOffset(&pc);
-            break;
-        }
-        case lti_: {
-            int rhs = istack_pop(ctx);
-            int lhs = istack_pop(ctx);
-            ostack_push(ctx, lhs < rhs ? R_TrueValue : R_FalseValue);
-            break;
-        }
-        case eqi_: {
-            int rhs = istack_pop(ctx);
-            int lhs = istack_pop(ctx);
-            ostack_push(ctx, lhs == rhs ? R_TrueValue : R_FalseValue);
-            break;
-        }
-        case pushi_: {
-            istack_push(ctx, readSignedImmediate(&pc));
-            break;
-        }
-        case dupi_: {
-            istack_push(ctx, istack_top(ctx));
-            break;
-        }
-        case dup_: {
-            ostack_push(ctx, ostack_top(ctx));
-            break;
-        }
-        // TODO add sub lt should change!
-        case add_: {
-            SEXP rhs = ostack_pop(ctx);
-            SEXP lhs = ostack_pop(ctx);
-            if (TYPEOF(lhs) == REALSXP && TYPEOF(rhs) == REALSXP && Rf_length(lhs) == 1 && Rf_length(rhs) == 1) {
-                SEXP res = Rf_allocVector(REALSXP, 1);
-                SET_NAMED(res, 1);
-                REAL(res)[0] = REAL(lhs)[0] + REAL(rhs)[0];
-                ostack_push(ctx, res);
-            } else {
-                NOT_IMPLEMENTED;
-                //SEXP op = getPrimitive("+");
-                //SEXP primfun = getPrimfun("+");
-                // TODO we should change how primitives are called now that we can integrate
-                //SEXP res = callPrimitive(primfun, getCurrentCall(c, pc), op, { lhs, rhs });
-                // TODO push
-            }
-            break;
-        }
-        case sub_: {
-            SEXP rhs = ostack_pop(ctx);
-            SEXP lhs = ostack_pop(ctx);
-            if (TYPEOF(lhs) == REALSXP && TYPEOF(rhs) == REALSXP && Rf_length(lhs) == 1 && Rf_length(rhs) == 1) {
-                SEXP res = Rf_allocVector(REALSXP, 1);
-                SET_NAMED(res, 1);
-                REAL(res)[0] = REAL(lhs)[0] - REAL(rhs)[0];
-                ostack_push(ctx, res);
-            } else {
-                NOT_IMPLEMENTED;
-                //SEXP op = getPrimitive("-");
-                //SEXP primfun = getPrimfun("-");
-                // TODO we should change how primitives are called now that we can integrate
-                //SEXP res = callPrimitive(primfun, getCurrentCall(c, pc), op, { lhs, rhs });
-                // TODO push
-            }
-            break;
-        }
-        case lt_: {
-            SEXP rhs = ostack_pop(ctx);
-            SEXP lhs = ostack_pop(ctx);
-            if (TYPEOF(lhs) == REALSXP && TYPEOF(rhs) == REALSXP && Rf_length(lhs) == 1 && Rf_length(rhs) == 1) {
-                SEXP res = Rf_allocVector(REALSXP, 1);
-                SET_NAMED(res, 1);
-                ostack_push(ctx, REAL(lhs)[0] < REAL(rhs)[0] ? R_TrueValue : R_FalseValue);
-            } else {
-                NOT_IMPLEMENTED;
-                //SEXP op = getPrimitive("<");
-                //SEXP primfun = getPrimfun("<");
-                // TODO we should change how primitives are called now that we can integrate
-                //SEXP res = callPrimitive(primfun, getCurrentCall(c, pc), op, { lhs, rhs });
-                // TODO push
-            }
-            break;
-        }
-        case isspecial_: {
-            // TODO I do not think this is a proper way - we must check all the way down, not just findVar (vars do not shadow closures)
-            SEXP sym = readConst(ctx, &pc);
-            SEXP val = findVar(sym, env);
-            // TODO better check
-            assert(TYPEOF(val) == SPECIALSXP || TYPEOF(val) == BUILTINSXP);
-            break;
-        }
-        case isfun_: {
-            SEXP val = ostack_top(ctx);
-
-            switch (TYPEOF(val)) {
-            case CLOSXP:
-                /** No need to compile, we can handle functions */
-                //val = (SEXP)jit(val);
-                break;
-            case SPECIALSXP:
-            case BUILTINSXP: {
-                // TODO do we need to compile primitives? not really I think
-                /*
-                SEXP prim = Primitives::compilePrimitive(val);
-                if (prim)
-                    val = prim;
-                break; */
-            }
-
-            default:
-                // TODO: error not a function!
-                // TODO: check our functions and how they are created
-                assert(false);
-            }
-            break;
-        }
-        case inci_: {
-            istack_push(ctx, istack_pop(ctx) + 1);
-            break;
-        }
-        case push_argi_: {
-            int pos = istack_pop(ctx);
-            ostack_push(ctx, cp_pool_at(ctx, bp - numArgs + pos));
-            break;
         }
         default:
             assert(false && "wrong or unimplemented opcode");
