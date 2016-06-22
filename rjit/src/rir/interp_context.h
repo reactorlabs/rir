@@ -88,6 +88,10 @@ INLINE SEXP ostack_pop(Context* c) {
     return c->ostack.data[--c->ostack.length];
 }
 
+INLINE SEXP ostack_top(Context* c) {
+    return c->ostack.data[c->ostack.length];
+}
+
 INLINE void ostack_push(Context* c, SEXP val) {
     c->ostack.data[c->ostack.length++] = val;
 }
@@ -100,6 +104,10 @@ INLINE bool istack_empty(Context* c) {
 
 INLINE int istack_pop(Context* c) {
     return c->istack.data[--c->istack.length];
+}
+
+INLINE int istack_top(Context* c) {
+    return c->istack.data[c->istack.length];
 }
 
 INLINE void istack_push(Context* c, int val) {
