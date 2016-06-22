@@ -62,6 +62,17 @@ typedef struct {
     PStack istack;
 } Context;
 
+INLINE int istack_top(Context* c) {
+    return c->istack.data[c->istack.length];
+}
+
+INLINE SEXP ostack_top(Context* c) {
+    return c->ostack.data[c->ostack.length];
+}
+
+INLINE size_t istack_length(Context* c) {
+    return c->ostack.length;
+}
 
 INLINE bool ostack_empty(Context* c) {
     return c->ostack.length == 0;
@@ -79,7 +90,7 @@ INLINE SEXP ostack_top(Context* c) {
     return c->ostack.data[c->ostack.length];
 }
 
-INLINE void push(Context* c, SEXP val) {
+INLINE void ostack_push(Context* c, SEXP val) {
     c->ostack.data[c->ostack.length++] = val;
 }
 
