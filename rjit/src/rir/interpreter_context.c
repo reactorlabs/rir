@@ -34,10 +34,10 @@ void istack_ensureSize(Context* c, unsigned minFree) {
 #define POOL_CAPACITY 4096
 #define STACK_CAPACITY 4096
 
-Context* context_create() {
+Context* context_create(size_t poolCapacity) {
     Context* c = malloc(sizeof(Context));
-    pool_init(&c->cp,POOL_CAPACITY);
-    pool_init(&c->sp,POOL_CAPACITY);
+    pool_init(&c->cp, poolCapacity);
+    pool_init(&c->src, poolCapacity);
     c->ostack.data = malloc(STACK_CAPACITY * sizeof(SEXP));
     c->ostack.length = 0;
     c->ostack.capacity = STACK_CAPACITY;
@@ -50,7 +50,7 @@ Context* context_create() {
 void pool_init(Pool* p, size_t capacity) {
     p->length = 0;
     p->capacity = capacity;
-    p->data = Rf_allocVector(VECSXP, capacity);
+    p->data = Rf_allocVector(VECSXP, capacity);
 }
 
 
@@ -58,8 +58,12 @@ void pool_grow(Pool* p) {
     p->capacity *= 2;
     SEXP temp = Rf_allocVector(VECSXP, p->capacity);
 
-    for (size_t i = 0; i < p->length; ++i)
+    size_t i = 0;
+    while ( i < p->length){
         SET_VECTOR_ELT(temp, i, VECTOR_ELT(p->data, i));
+        i++;
+    }
 
-    p->data = temp;
+    p->data = temp;
 }
+

@@ -1,9 +1,6 @@
 #ifndef RIR_INTERPRETER_C_H
 #define RIR_INTERPRETER_C_H
 
-#include <R.h>
-#include <Rinternals.h>
-
 #undef length
 
 #include <stdint.h>
