@@ -8,12 +8,11 @@
 
 #include <stdint.h>
 
+#include "interpreter_context.h"
+
+
 #ifdef __cplusplus
 extern "C" {
-#else
-#define bool int
-#define true 1
-#define false 0
 #endif
 
 // we cannot use specific sizes for enums in C
@@ -173,17 +172,10 @@ Code * codeAt(Function * f, unsigned offset);
 /** TODO Makes sure the gc undersands our stacks and pools. */
 void gc_callback(void (*forward_node)(SEXP));
 
-SEXP rirEval_c(Code* cur, SEXP env, unsigned numArgs);
+SEXP rirEval_c(Code* c, Context* ctx, SEXP env, unsigned numArgs);
 
 #ifdef __cplusplus
 }
-
-
-
-
-
-
-
 #endif
 
 #endif // RIR_INTERPRETER_C_H

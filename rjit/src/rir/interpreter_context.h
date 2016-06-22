@@ -11,6 +11,18 @@
 
 #include <stdio.h>
 
+// TODO force inlinine for clang & gcc
+#define INLINE __attribute__((always_inline)) inline
+
+
+#ifdef __cplusplus
+extern "C" {
+#else
+#define bool int
+#define true 1
+#define false 0
+#endif
+
 
 //
 // Primitive stack.
@@ -111,13 +123,17 @@ INLINE size_t src_pool_add(Context* c, SEXP v) {
     pool_add(&(c->src), v);
 }
 
-INLINE SEXP cp_pool_at(Context* c, size_t index) {
+INLINE SEXP cp_pool_at(Context* c, size_t index) {
     return VECTOR_ELT(c->cp.data, index);
 }
 
-INLINE size_t src_pool_at(Context* c, SEXP value) {
+INLINE SEXP src_pool_at(Context* c, size_t value) {
     return VECTOR_ELT(c->src.data, value);
 }
 
+#ifdef __cplusplus
+}
+#endif
 
-#endif /* interpreter_context_h */
+
+#endif // interpreter_context_h

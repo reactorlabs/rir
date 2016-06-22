@@ -3,10 +3,6 @@
 #include "interpreter.h"
 #include "interpreter_context.h"
 
-// TODO force inlinine for clang & gcc
-#define INLINE __attribute__((always_inline)) inline
-
-
 // GNU-R stuff we need
 
 extern SEXP R_TrueValue;
@@ -81,6 +77,8 @@ Code* end(Function* f) {
 Code * codeAt(Function * f, unsigned offset) {
     return (Code*)((uint8_t*)f + offset);
 }
+
+#ifdef HAHA
 
 // Runtime support ----------------------------------------------------------------------------------------------------
 
@@ -233,6 +231,8 @@ INLINE size_t addSource(SEXP value) {
     return addToPool(&src_, value);
 }
 
+#endif
+
 // bytecode accesses
 
 
@@ -338,14 +338,17 @@ INLINE SEXP doCall() {
 
 
 void gc_callback(void (*forward_node)(SEXP)) {
-    for (size_t i = 0; i < stack_.length; ++i)
+/*    for (size_t i = 0; i < stack_.length; ++i)
         forward_node(stack_.stack[i]);
     forward_node(cp_.pool);
-    forward_node(src_.pool);
+    forward_node(src_.pool); */
+    // TODO HUGE TODO
 }
 
 
 SEXP rirEval_c(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
+#ifdef HAHA
+
     SEXP call = constant(c->src);
     // make sure there is enough room on the stack
     checkStackSize(c->stackLength);
@@ -686,6 +689,8 @@ SEXP rirEval_c(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
         }
     }
 
+
+#endif
 
 
 
