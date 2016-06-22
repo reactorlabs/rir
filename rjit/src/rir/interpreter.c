@@ -14,7 +14,6 @@ extern SEXP R_FalseValue;
 extern SEXP Rf_NewEnvironment(SEXP, SEXP, SEXP);
 extern Rboolean R_Visible;
 extern SEXP forcePromise(SEXP);
-// extern SEXP PRVALUE();
 
 extern SEXP mkPROMISE(SEXP expr, SEXP rho);
 
@@ -200,17 +199,15 @@ void growPool(Pool * p) {
     SEXP temp = Rf_allocVector(VECSXP, p->capacity);
 
     // transfer values over
-    size_t i = 0;
-    while (i < p->length){
+    for (size_t i = 0; i < p->length; ++i){
         SET_VECTOR_ELT(temp, i, VECTOR_ELT(p->pool, i));
-        i++;
     }
     // set the new pool
     p->pool = temp;
 }
 
 INLINE size_t addToPool(Pool * p, SEXP value) {
-    if (p->length >= p->capacity)
+    if (p->length == p->capacity)
         growPool(p);
     SET_VECTOR_ELT(p->pool, p->length, value);
     return p->length++;
@@ -268,9 +265,14 @@ INLINE int readJumpOffset(OpcodeT** pc) {
 }
 
 
+
+
+
+
+
+
 // TODO check if there is a function for this in R
 INLINE SEXP promiseValue(SEXP promise) {
-
     // if already evaluated, return the value
     if (PRVALUE(promise) && PRVALUE(promise) != R_UnboundValue)
     {
@@ -278,7 +280,6 @@ INLINE SEXP promiseValue(SEXP promise) {
         SET_NAME(promise, 2);
         return promise; 
     }
-    
     return forcePromise(promise);
 }
 
@@ -295,13 +296,50 @@ INLINE SEXP getCurrentCall(Code * c, OpcodeT * pc) {
     return source(sidx == 0 ? c->src : sidx);
 }
 
+// FORMALS BODY CLOENV
+
+INLINE void matchArguments(SEXP cls) {
+    // Specials and builtins do not care about names
+    if (TYPEOF(cls) == SPECIALSXP || TYPEOF(cls) == BUILTINSXP)
+        return;
+    // therefore it must be closure
+    assert(TYPEOF(cls) == CLOSXP);
+    // get the formals
+    SEXP formals = FORMALS(cls);
+    // prepare matching structures
+    unsigned * matched = alloca(Rf_length(formals) * sizeof(unsigned));
+    bool * used = alloca(Rf_length(formals) + sizeof(unsigned));
+    //
+    for (size_t i = 0, e = Rf_length(formals); i != e; ++i) {
+        matched[i] = 0;
+        used[i] = false;
+    }
+
+
+
+
+}
+
+
+INLINE SEXP doCall() {
+
+
+}
+
+
+
+
+
+
+
+
+
+
+
 
 void gc_callback(void (*forward_node)(SEXP)) {
-    size_t i = 0;
-    while (i < stack_.length){
+    for (size_t i = 0; i < stack_.length; ++i)
         forward_node(stack_.stack[i]);
-        i++;
-    }
     forward_node(cp_.pool);
     forward_node(src_.pool);
 }
@@ -392,6 +430,24 @@ SEXP rirEval_c(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
         }
         case call_: {
             // one huge large big **** T O D O ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! !
+            // get the indices of argument promises
+            SEXP args_ = readConst(&pc);
+            assert(TYPEOF(args_) == INTSXP && "TODO change to INTSXP, not RAWSXP it used to be");
+            unsigned nargs = Rf_length(args_);
+            unsigned * args = (unsigned*)INTEGER(args_);
+            // get the names of the arguments (or R_NilValue) if none
+            SEXP names = readConst(&pc);
+            // get the closure itself
+            SEXP cls = pop();
+            // match the arguments and do the call
+            if (names) {
+                //
+            } else {
+
+
+                push(doCall());
+
+            }
             break;
         }
         case promise_: {

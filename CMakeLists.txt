@@ -82,10 +82,10 @@ add_custom_target(codegen_was_run_before
 add_dependencies(${PROJECT_NAME} codegen_was_run_before)
 add_dependencies(${PROJECT_NAME} codegen)
 
-add_dependencies(${PROJECT_NAME} check_gnur)
-add_custom_target(check_gnur)
-add_custom_command(TARGET check_gnur
-    COMMAND ${CMAKE_SOURCE_DIR}/tools/check_gnur)
+#add_dependencies(${PROJECT_NAME} check_gnur)
+#add_custom_target(check_gnur)
+#add_custom_command(TARGET check_gnur
+#    COMMAND ${CMAKE_SOURCE_DIR}/tools/check_gnur)
 
 add_custom_target(tests
     DEPENDS ${PROJECT_NAME})
