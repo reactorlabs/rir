@@ -135,10 +135,8 @@ typedef struct sexprec_rjit {
  */
 OpcodeT * advancePc(OpcodeT * pc) {
     switch (*pc++) {
-/*
 #define DEF_INSTR(name, imm, ...) case name : pc += sizeof(ArgT) * imm; break;
 #include "insns.h"
-*/
     default:
         assert(false && "Unknown instruction");
     }
@@ -175,7 +173,7 @@ Code* next(Code* c) {
 bool isValidFunction(SEXP s) {
     if (TYPEOF(s) != INTSXP)
         return false;
-    return INTEGER(s)[0] == 0xCAFEBABE;
+    return INTEGER(s)[0] == FUNCTION_MAGIC;
 }
 
 Function* origin(Function* f) {
@@ -226,8 +224,11 @@ INLINE int readJumpOffset(OpcodeT** pc) {
 
 
 
+/** Creates a promise from given code object and environment.
+
+ */
 INLINE SEXP createPromise(Code * code, SEXP env) {
-    assert(false);
+    return mkPROMISE((SEXP) code, env);
 }
 
 // TODO check if there is a function for this in R
@@ -451,7 +452,6 @@ SEXP rirEval_c(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
             break;
         }
         case call_: {
-            // one huge large big **** T O D O ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! !
             // get the indices of argument promises
             SEXP args_ = readConst(ctx, &pc);
             assert(TYPEOF(args_) == INTSXP && "TODO change to INTSXP, not RAWSXP it used to be");
@@ -470,12 +470,11 @@ SEXP rirEval_c(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
             break;
         }
         case promise_: {
+            // get the Code * pointer we need
             unsigned codeOffset = readImmediate(&pc);
             Code * promiseCode = codeAt(function(c), codeOffset);
-            // TODO make the promise with current environment and the code object
-            // and push it to the stack
-
-            // This should be similar to mkPromise/createPromise
+            // create the promise and push it on stack
+            ostack_push(ctx, createPromise(promiseCode, env));
             break;
         }
         case close_: {
@@ -515,10 +514,13 @@ SEXP rirEval_c(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
         case asast_: {
             SEXP p = ostack_pop(ctx);
             assert(TYPEOF(p) == PROMSXP);
-            // TODO get the ast depending on what type of promise it is and push it on the stack
-            // What are the different types of promises?
-            // evaluated promise
-            
+            SEXP ast = PRCODE(p);
+            // if the code is NILSXP then it is rir Code object, get its ast
+            if (TYPEOF(ast) == NILSXP)
+                ast = cp_pool_at(ctx, ((Code*)ast)->src);
+            // otherwise return whatever we had, make sure we do not see bytecode
+            assert(TYPEOF(ast) != BCODESXP);
+            ostack_push(ast);
             break;
         }
         case stvar_: {

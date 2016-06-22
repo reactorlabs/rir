@@ -54,8 +54,19 @@ typedef int32_t JumpOffset;
 
 typedef struct Function Function; // Forward declaration
 
+
 // all sizes in bytes,
 // length in element sizes
+
+/** Function magic constant is designed to help to distinguish between Function objects and normal INTSXPs. Normally this is not necessary, but a very creative user might try to assign arbitrary INTSXP to a closure which we would like to spot. Of course, such a creative user might actually put the magic in his vector too...
+  */
+unsigned const FUNCTION_MAGIC = 0xCAFEBABE;
+
+/** Code magic constant is intended to trick the GC into believing that it is dealing with already marked SEXP.
+
+  It also makes the SEXP look like NILSXP (0x00) so that we can determine whether a standard promise execution, or rir promise should be executed.
+ */
+unsigned const CODE_MAGIC = 0x00ff;
 
 /**
  * Code holds a sequence of instructions; for each instruction
@@ -77,6 +88,8 @@ typedef struct Function Function; // Forward declaration
  * alignment of indices.
  */
 typedef struct Code {
+    unsigned magic; ///< Magic number that attempts to be PROMSXP already marked by the GC
+
     unsigned header; /// offset to Function object
 
     // TODO comment these
