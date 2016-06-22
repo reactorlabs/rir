@@ -116,6 +116,7 @@ INLINE SEXP promiseValue(SEXP promise) {
     if (PRVALUE(promise) && PRVALUE(promise) != R_UnboundValue)
     {
         promise = PRVALUE(promise);
+        // TODO implicit declaration of SET_NAME
         SET_NAME(promise, 2);
         return promise; 
     }
@@ -177,21 +178,21 @@ void gc_callback(void (*forward_node)(SEXP)) {
 
 
 SEXP rirEval_c(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
-    SEXP call = constant(c->src);
+    SEXP call = cp_pool_at(ctx, c->src);
     // make sure there is enough room on the stack
     ostack_ensureSize(ctx, c->stackLength);
     istack_ensureSize(ctx, c->iStackLength);
 
     // get pc and bp regs, we do not need istack bp
     OpcodeT * pc = code(c);
-    size_t bp = ostack_length(ctx);
+    size_t bp = ctx->ostack.length;
 
     // main loop
     while (true) {
         switch (readOpcode(&pc)) {
         case push_: {
             SEXP x = readConst(ctx, &pc);
-            ostack_push(c, x);
+            ostack_push(ctx, x);
             break;
         }
         case ldfun_: {
@@ -276,14 +277,14 @@ SEXP rirEval_c(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
             } else {
 
 
-                ostack_push(c, doCall());
+                ostack_push(ctx, doCall());
 
             }
             break;
         }
         case promise_: {
             unsigned codeOffset = readImmediate(&pc);
-            Code * promiseCode = codeAt(function(ctx), codeOffset);
+            Code * promiseCode = codeAt(function(c), codeOffset);
             // TODO make the promise with current environment and the code object
             // and push it to the stack
 
