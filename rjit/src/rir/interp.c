@@ -3,7 +3,11 @@
 #include "interp.h"
 #include "interp_context.h"
 
-// GNU-R stuff we need
+
+// TODO we are using the RInternals, but soud not when the code moves to GNU-R
+// #include "RIntlns.h"
+
+#undef eval
 
 extern SEXP R_TrueValue;
 extern SEXP R_FalseValue;
@@ -11,18 +15,21 @@ extern SEXP Rf_NewEnvironment(SEXP, SEXP, SEXP);
 extern Rboolean R_Visible;
 extern SEXP forcePromise(SEXP);
 
+
 extern SEXP mkPROMISE(SEXP expr, SEXP rho);
 
 
-/** Typedef for primitive functions from FunTab.
 
- The four arguments are:
- * the call (language object),
- * callee (Symbol?),
- * args
- * env
- */
-typedef SEXP (*PrimitiveFunction)(SEXP, SEXP, SEXP, SEXP);
+
+
+
+
+
+
+
+
+
+
 
 // helpers
 
@@ -121,6 +128,10 @@ INLINE int readJumpOffset(OpcodeT** pc) {
 
 
 
+INLINE SEXP createPromise(Code * code, SEXP env) {
+    assert(false);
+}
+
 // TODO check if there is a function for this in R
 INLINE SEXP promiseValue(SEXP promise) {
     // if already evaluated, return the value
@@ -170,15 +181,70 @@ INLINE void matchArguments(SEXP cls) {
 
 }
 
+// TODO This changes from old where it was some other number
+#define MISSING_ARG_OFFSET 0
 
-/** Call the given function and return the result.
+
+/** Given argument code offsets, creates the argslist from their promises.
  */
-INLINE SEXP doCall() {
-
-
+// TODO unnamed only at this point
+// TODO This is a copy from old code, but doesn't it reverse arguments order?
+SEXP createArgsList(Code * c, FunctionIndex * args, size_t nargs, SEXP env) {
+    SEXP result = R_NilValue;
+    for (size_t i = 0; i < nargs; ++i) {
+        unsigned offset = args[i];
+        SEXP arg = (offset == MISSING_ARG_OFFSET) ? R_MissingArg : createPromise(codeAt(function(c), offset), env);
+        result = CONS_NR(arg, result);
+    }
+    return result;
 }
 
 
+/** Performs the call.
+
+  TODO this is currently super simple.
+
+ */
+SEXP call(Code * caller, SEXP call, SEXP callee, unsigned * args, size_t nargs, SEXP env, Context * ctx) {
+    size_t oldbp = ctx->ostack.length;
+    size_t oldbpi = ctx->istack.length;
+    SEXP result = R_NilValue;
+    switch (TYPEOF(callee)) {
+    case SPECIALSXP: {
+        // get the ccode, and callit
+        break;
+    }
+    case BUILTINSXP: {
+        // create the argslist
+        SEXP argslist = createArgsList(caller, args, nargs, env);
+        // get the ccode
+
+        // callit
+        break;
+    }
+    case CLOSXP: {
+        SEXP formals = FORMALS(callee);
+        assert (Rf_length(formals) == nargs && "Cannot handle different nargs yet");
+        SEXP body = BODY(callee);
+        SEXP argslist = createArgsList(caller, args, nargs, env);
+        // if body is INTSXP, it is rir serialized code, execute it directly
+        if (TYPEOF(body) == INTSXP) {
+            SEXP newEnv = Rf_NewEnvironment(formals, argslist, CLOENV(callee));
+            PROTECT(newEnv);
+            result = rirEval_c(begin((Function*)INTEGER(callee)), ctx, newEnv, nargs);
+            UNPROTECT(1);
+        } else {
+        // otherwise use R's own call mechanism
+            result = applyClosure(call, callee, argslist, env, R_NilValue);
+        }
+        break;
+    }
+    default:
+        assert(false && "Don't know how to run other stuff");
+    }
+    assert (oldbp == ctx->ostack.length && oldbpi == ctx->istack.length && "Corrupted stacks");
+    return result;
+}
 
 void gc_callback(void (*forward_node)(SEXP)) {
 /*    for (size_t i = 0; i < stack_.length; ++i)

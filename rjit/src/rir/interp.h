@@ -105,6 +105,15 @@ struct Function* function(Code* c);
 /** Returns the next Code in the current function. */
 Code* next(Code* c);
 
+typedef enum {
+    // arguments evaluated, pushed on stack
+    CC_StackEager,
+    // promises pushed on stack
+    CC_StackLazy,
+    // promises pushed in new environment
+    CC_EnvLazy
+} CallingConvention;
+
 // TODO removed src reference, now each code has its own
 
 /** A Function holds the RIR code for some GNU R function.
@@ -132,6 +141,8 @@ Code* next(Code* c);
  */
 typedef struct Function {
     unsigned magic; /// used to detect Functions 0xCAFEBABE
+
+    CallingConvention cc; ///< Calling convention for the function.
 
     unsigned size; /// Size, in bytes, of the function and its data
 

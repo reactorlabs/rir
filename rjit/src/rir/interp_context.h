@@ -88,6 +88,10 @@ INLINE SEXP ostack_pop(Context* c) {
     return c->ostack.data[--c->ostack.length];
 }
 
+INLINE void ostack_popn(Context* c, unsigned size) {
+    c->ostack.length -= size;
+}
+
 INLINE void ostack_push(Context* c, SEXP val) {
     c->ostack.data[c->ostack.length++] = val;
 }
