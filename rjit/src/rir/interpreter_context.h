@@ -14,7 +14,7 @@
 #include <stdio.h>
 
 // TODO force inlinine for clang & gcc
-#define INLINE __attribute__((always_inline)) inline
+#define INLINE __attribute__((always_inline)) inline static
 
 
 #ifdef __cplusplus
@@ -65,7 +65,7 @@ typedef struct {
 } Context;
 
 
-INLINE bool ostack_empty(Context* c) {
+ INLINE bool ostack_empty(Context* c) {
     return c->ostack.length == 0;
 }
 
