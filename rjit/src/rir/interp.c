@@ -220,7 +220,18 @@ INLINE int readJumpOffset(OpcodeT** pc) {
     return result;
 }
 
-
+// TODO perhaps this should have better name
+INLINE SEXP getCurrentCall(Code * c, OpcodeT * pc) {
+    // we need to determine index of the current instruction
+    OpcodeT * x = code(c);
+    // find the pc of the current instructions, it is ok to be slow
+    unsigned insIdx = 0;
+    while ((x = advancePc(x)) != pc)
+        ++insIdx;
+    unsigned sidx = src(c)[insIdx];
+    // return the ast for the instruction, or if not defined, the ast of the function
+    return source(sidx == 0 ? c->src : sidx);
+}
 
 /** Creates a promise from given code object and environment.
 
@@ -235,125 +246,9 @@ INLINE SEXP promiseValue(SEXP promise) {
     if (PRVALUE(promise) && PRVALUE(promise) != R_UnboundValue) {
         promise = PRVALUE(promise);
         SET_NAMED(promise, 2);
-        return promise; 
+        return promise;
     }
     return forcePromise(promise);
-}
-
-// TODO perhaps this should have better name
-INLINE SEXP getCurrentCall(Code * c, OpcodeT * pc) {
-    // we need to determine index of the current instruction
-    OpcodeT * x = code(c);
-    // find the pc of the current instructions, it is ok to be slow
-    unsigned insIdx = 0;
-    while ((x = advancePc(x)) != pc)
-        ++insIdx;
-    unsigned sidx = src(c)[insIdx];
-    // return the ast for the instruction, or if not defined, the ast of the function
-    return source(sidx == 0 ? c->src : sidx);
-}
-
-INLINE void matchArguments(SEXP cls) {
-    // Specials and builtins do not care about names
-    if (TYPEOF(cls) == SPECIALSXP || TYPEOF(cls) == BUILTINSXP)
-        return;
-    // therefore it must be closure
-    assert(TYPEOF(cls) == CLOSXP);
-    // get the formals
-    SEXP formals = FORMALS(cls);
-    // prepare matching structures
-    unsigned * matched = alloca(Rf_length(formals) * sizeof(unsigned));
-    bool * used = alloca(Rf_length(formals) + sizeof(unsigned));
-    //
-    for (size_t i = 0, e = Rf_length(formals); i != e; ++i) {
-        matched[i] = 0;
-        used[i] = false;
-    }
-    // TODO deal with the matching
-
-
-
-}
-
-// TODO This changes from old where it was some other number
-#define MISSING_ARG_OFFSET 0
-
-
-/** Given argument code offsets, creates the argslist from their promises.
- */
-// TODO unnamed only at this point
-// TODO This is a copy from old code, but doesn't it reverse arguments order?
-SEXP createArgsList(Code * c, FunctionIndex * args, size_t nargs, SEXP env) {
-    SEXP result = R_NilValue;
-    for (size_t i = 0; i < nargs; ++i) {
-        unsigned offset = args[i];
-        SEXP arg = (offset == MISSING_ARG_OFFSET) ? R_MissingArg : createPromise(codeAt(function(c), offset), env);
-        result = CONS_NR(arg, result);
-    }
-    return result;
-}
-
-/** Returns us the CCODE object from R_FunTab based on name.
-
-  TODO This exists in gnu-r (names.c), when integrated inside, we want to make use of it.
- */
-CCODE getBuiltin(SEXP f) {
-    int i = ((sexprec_rjit*)f)->u.i;
-    return R_FunTab[i].cfun;
-}
-
-/** Performs the call.
-
-  TODO this is currently super simple.
-
- */
-SEXP doCall(Code * caller, SEXP call, SEXP callee, unsigned * args, size_t nargs, SEXP env, Context * ctx) {
-    size_t oldbp = ctx->ostack.length;
-    size_t oldbpi = ctx->istack.length;
-    SEXP result = R_NilValue;
-    switch (TYPEOF(callee)) {
-    case SPECIALSXP: {
-        // get the ccode
-        CCODE f = getBuiltin(callee);
-        // call it with the AST only
-        result = f(call, callee, CDR(call), env);
-        break;
-    }
-    case BUILTINSXP: {
-        // get the ccode
-        CCODE f = getBuiltin(callee);
-        // create the argslist
-        SEXP argslist = createArgsList(caller, args, nargs, env);
-        // callit
-        PROTECT(argslist);
-        result = f(call, callee, argslist, env);
-        UNPROTECT(1);
-        break;
-    }
-    case CLOSXP: {
-        SEXP formals = FORMALS(callee);
-        assert (Rf_length(formals) == nargs && "Cannot handle different nargs yet");
-        SEXP body = BODY(callee);
-        SEXP argslist = createArgsList(caller, args, nargs, env);
-        PROTECT(argslist);
-        // if body is INTSXP, it is rir serialized code, execute it directly
-        if (TYPEOF(body) == INTSXP) {
-            SEXP newEnv = Rf_NewEnvironment(formals, argslist, CLOENV(callee));
-            PROTECT(newEnv);
-            result = rirEval_c(begin((Function*)INTEGER(callee)), ctx, newEnv, nargs);
-            UNPROTECT(1);
-        } else {
-        // otherwise use R's own call mechanism
-            result = applyClosure(call, callee, argslist, env, R_NilValue);
-        }
-        UNPROTECT(1); // argslist
-        break;
-    }
-    default:
-        assert(false && "Don't know how to run other stuff");
-    }
-    assert (oldbp == ctx->ostack.length && oldbpi == ctx->istack.length && "Corrupted stacks");
-    return result;
 }
 
 void gc_callback(void (*forward_node)(SEXP)) {
@@ -436,6 +331,108 @@ INSTRUCTION(ldvar_) {
         SET_NAMED(val, 1);
 
     ostack_push(ctx, val);
+}
+
+
+INLINE void matchArguments(SEXP cls) {
+    // Specials and builtins do not care about names
+    if (TYPEOF(cls) == SPECIALSXP || TYPEOF(cls) == BUILTINSXP)
+        return;
+    // therefore it must be closure
+    assert(TYPEOF(cls) == CLOSXP);
+    // get the formals
+    SEXP formals = FORMALS(cls);
+    // prepare matching structures
+    unsigned * matched = alloca(Rf_length(formals) * sizeof(unsigned));
+    bool * used = alloca(Rf_length(formals) + sizeof(unsigned));
+    //
+    for (size_t i = 0, e = Rf_length(formals); i != e; ++i) {
+        matched[i] = 0;
+        used[i] = false;
+    }
+    // TODO deal with the matching
+
+    // TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO
+
+}
+
+
+
+/** Given argument code offsets, creates the argslist from their promises.
+ */
+// TODO unnamed only at this point
+// TODO This is a copy from old code, but doesn't it reverse arguments order?
+SEXP createArgsList(Code * c, FunctionIndex * args, size_t nargs, SEXP env) {
+    SEXP result = R_NilValue;
+    for (size_t i = 0; i < nargs; ++i) {
+        unsigned offset = args[i];
+        SEXP arg = (offset == MISSING_ARG_OFFSET) ? R_MissingArg : createPromise(codeAt(function(c), offset), env);
+        result = CONS_NR(arg, result);
+    }
+    return result;
+}
+
+/** Returns us the CCODE object from R_FunTab based on name.
+
+  TODO This exists in gnu-r (names.c), when integrated inside, we want to make use of it.
+ */
+CCODE getBuiltin(SEXP f) {
+    int i = ((sexprec_rjit*)f)->u.i;
+    return R_FunTab[i].cfun;
+}
+
+/** Performs the call.
+
+  TODO this is currently super simple.
+
+ */
+SEXP doCall(Code * caller, SEXP call, SEXP callee, unsigned * args, size_t nargs, SEXP env, Context * ctx) {
+    size_t oldbp = ctx->ostack.length;
+    size_t oldbpi = ctx->istack.length;
+    SEXP result = R_NilValue;
+    switch (TYPEOF(callee)) {
+    case SPECIALSXP: {
+        // get the ccode
+        CCODE f = getBuiltin(callee);
+        // call it with the AST only
+        result = f(call, callee, CDR(call), env);
+        break;
+    }
+    case BUILTINSXP: {
+        // get the ccode
+        CCODE f = getBuiltin(callee);
+        // create the argslist
+        SEXP argslist = createArgsList(caller, args, nargs, env);
+        // callit
+        PROTECT(argslist);
+        result = f(call, callee, argslist, env);
+        UNPROTECT(1);
+        break;
+    }
+    case CLOSXP: {
+        SEXP formals = FORMALS(callee);
+        assert (Rf_length(formals) == nargs && "Cannot handle different nargs yet");
+        SEXP body = BODY(callee);
+        SEXP argslist = createArgsList(caller, args, nargs, env);
+        PROTECT(argslist);
+        // if body is INTSXP, it is rir serialized code, execute it directly
+        if (TYPEOF(body) == INTSXP) {
+            SEXP newEnv = Rf_NewEnvironment(formals, argslist, CLOENV(callee));
+            PROTECT(newEnv);
+            result = rirEval_c(begin((Function*)INTEGER(callee)), ctx, newEnv, nargs);
+            UNPROTECT(1);
+        } else {
+        // otherwise use R's own call mechanism
+            result = applyClosure(call, callee, argslist, env, R_NilValue);
+        }
+        UNPROTECT(1); // argslist
+        break;
+    }
+    default:
+        assert(false && "Don't know how to run other stuff");
+    }
+    assert (oldbp == ctx->ostack.length && oldbpi == ctx->istack.length && "Corrupted stacks");
+    return result;
 }
 
 INSTRUCTION(call_) {

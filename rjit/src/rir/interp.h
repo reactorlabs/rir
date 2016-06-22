@@ -68,6 +68,14 @@ unsigned const FUNCTION_MAGIC = 0xCAFEBABE;
  */
 unsigned const CODE_MAGIC = 0x00ff;
 
+/** Missing argument offset.
+
+  The offset is 0 (this would be impossible).
+*/
+// TODO This changes from old where it was some other number
+unsigned const MISSING_ARG_OFFSET = 0;
+
+
 /**
  * Code holds a sequence of instructions; for each instruction
  * it records the index of the source AST. Code is part of a
