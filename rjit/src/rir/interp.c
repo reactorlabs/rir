@@ -98,8 +98,8 @@ INLINE int readSignedImmediate(OpcodeT** pc) {
     return result;
 }
 
-INLINE SEXP readConst(OpcodeT ** pc) {
-    return constant(readImmediate(pc));
+INLINE SEXP readConst(Context * ctx, OpcodeT ** pc) {
+    return cp_pool_at(ctx, readImmediate(pc));
 }
 
 INLINE int readJumpOffset(OpcodeT** pc) {
@@ -184,18 +184,18 @@ SEXP rirEval_c(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
 
     // get pc and bp regs, we do not need istack bp
     OpcodeT * pc = code(c);
-    size_t bp = ostack_length(ctxt);
+    size_t bp = ostack_length(ctx);
 
     // main loop
     while (true) {
         switch (readOpcode(&pc)) {
         case push_: {
-            SEXP x = readConst(&pc);
+            SEXP x = readConst(ctx, &pc);
             ostack_push(c, x);
             break;
         }
         case ldfun_: {
-            SEXP sym = readConst(&pc);
+            SEXP sym = readConst(ctx, &pc);
             SEXP val = findVar(sym, env);
             R_Visible = TRUE;
 
@@ -234,11 +234,11 @@ SEXP rirEval_c(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
                 // TODO!
                 assert(false);
             }
-            ostack_push(c, val);
+            ostack_push(ctx, val);
             break;
         }
         case ldvar_: {
-            SEXP sym = readConst(&pc);
+            SEXP sym = readConst(ctx, &pc);
             SEXP val = findVar(sym, env);
             R_Visible = TRUE;
 
@@ -256,20 +256,20 @@ SEXP rirEval_c(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
             if (NAMED(val) == 0 && val != R_NilValue)
                 SET_NAMED(val, 1);
 
-            ostack_push(c, val);
+            ostack_push(ctx, val);
             break;
         }
         case call_: {
             // one huge large big **** T O D O ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! ! !
             // get the indices of argument promises
-            SEXP args_ = readConst(&pc);
+            SEXP args_ = readConst(ctx, &pc);
             assert(TYPEOF(args_) == INTSXP && "TODO change to INTSXP, not RAWSXP it used to be");
             unsigned nargs = Rf_length(args_);
             unsigned * args = (unsigned*)INTEGER(args_);
             // get the names of the arguments (or R_NilValue) if none
-            SEXP names = readConst(&pc);
+            SEXP names = readConst(ctx, &pc);
             // get the closure itself
-            SEXP cls = ostack_pop(c);
+            SEXP cls = ostack_pop(ctx);
             // match the arguments and do the call
             if (names) {
                 //
@@ -283,7 +283,7 @@ SEXP rirEval_c(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
         }
         case promise_: {
             unsigned codeOffset = readImmediate(&pc);
-            Code * promiseCode = codeAt(function(c), codeOffset);
+            Code * promiseCode = codeAt(function(ctx), codeOffset);
             // TODO make the promise with current environment and the code object
             // and push it to the stack
 
@@ -291,8 +291,8 @@ SEXP rirEval_c(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
             break;
         }
         case close_: {
-            SEXP body = ostack_pop(c);
-            SEXP formals = ostack_pop(c);
+            SEXP body = ostack_pop(ctx);
+            SEXP formals = ostack_pop(ctx);
             PROTECT(body);
             PROTECT(formals);
             SEXP result = allocSExp(CLOSXP);
@@ -300,37 +300,37 @@ SEXP rirEval_c(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
             SET_BODY(result, body);
             SET_CLOENV(result, env);
             UNPROTECT(2);
-            ostack_push(c, result);
+            ostack_push(ctx, result);
             break;
         }
         case ret_: {
-            return ostack_pop(c);
+            return ostack_pop(ctx);
         }
         case force_: {
-            SEXP p = ostack_pop(c);
+            SEXP p = ostack_pop(ctx);
             assert(TYPEOF(p) == PROMSXP);
             // If the promise is already evaluated then push the value inside the promise
             // onto the stack, otherwise push the value from forcing the promise 
             if (PRVALUE(p) && PRVALUE(p) != R_UnboundValue){
-                ostack_push(c, PRVALUE(p));
+                ostack_push(ctx, PRVALUE(p));
                 SET_NAMED(p, 2);
             } else {
-                ostack_push(c, forcePromise(p));
+                ostack_push(ctx, forcePromise(p));
             }
             break;
         }
         case pop_: {
-            ostack_pop(c);
+            ostack_pop(ctx);
             break;
         }
         case pusharg_: {
             unsigned n = readImmediate(&pc);
             assert(n < numArgs);
-            ostack_push(c, cp_pool_at(c, bp - numArgs + n));
+            ostack_push(ctx, ostack_at(ctx, bp - numArgs + n));
             break;
         }
         case asast_: {
-            SEXP p = ostack_pop(c);
+            SEXP p = ostack_pop(ctx);
             assert(TYPEOF(p) == PROMSXP);
             // TODO get the ast depending on what type of promise it is and push it on the stack
             // What are the different types of promises?
@@ -339,15 +339,15 @@ SEXP rirEval_c(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
             break;
         }
         case stvar_: {
-            SEXP sym = ostack_pop(c);
+            SEXP sym = ostack_pop(ctx);
             assert(TYPEOF(sym) == SYMSXP);
-            SEXP val = ostack_pop(c);
+            SEXP val = ostack_pop(ctx);
             defineVar(sym, val, env);
-            ostack_push(c, val);
+            ostack_push(ctx, val);
             break;
         }
         case asbool_: {
-            SEXP t = ostack_pop(c);
+            SEXP t = ostack_pop(ctx);
             int cond = NA_LOGICAL;
             if (Rf_length(t) > 1)
                 warningcall(getCurrentCall(c, pc),
@@ -376,18 +376,18 @@ SEXP rirEval_c(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
                 errorcall(getCurrentCall(c, pc), msg);
             }
 
-            ostack_push(c, cond ? R_TrueValue : R_FalseValue);
+            ostack_push(ctx, cond ? R_TrueValue : R_FalseValue);
             break;
         }
         case brtrue_: {
             int offset = readJumpOffset(&pc);
-            if (ostack_pop(c) == R_TrueValue)
+            if (ostack_pop(ctx) == R_TrueValue)
                 pc = pc + offset;
             break;
         }
         case brfalse_: {
             int offset = readJumpOffset(&pc);
-            if (ostack_pop(c) == R_FalseValue)
+            if (ostack_pop(ctx) == R_FalseValue)
                 pc = pc + offset;
             break;
         }
@@ -396,38 +396,38 @@ SEXP rirEval_c(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
             break;
         }
         case lti_: {
-            int rhs = istack_pop(c);
-            int lhs = istack_pop(c);
-            ostack_push(c, lhs < rhs ? R_TrueValue : R_FalseValue);
+            int rhs = istack_pop(ctx);
+            int lhs = istack_pop(ctx);
+            ostack_push(ctx, lhs < rhs ? R_TrueValue : R_FalseValue);
             break;
         }
         case eqi_: {
-            int rhs = istack_pop(c);
-            int lhs = istack_pop(c);
-            ostack_push(c, lhs == rhs ? R_TrueValue : R_FalseValue);
+            int rhs = istack_pop(ctx);
+            int lhs = istack_pop(ctx);
+            ostack_push(ctx, lhs == rhs ? R_TrueValue : R_FalseValue);
             break;
         }
         case pushi_: {
-            istack_push(c, readSignedImmediate(&pc));
+            istack_push(ctx, readSignedImmediate(&pc));
             break;
         }
         case dupi_: {
-            istack_push(c, istack_top(c));
+            istack_push(ctx, istack_top(ctx));
             break;
         }
         case dup_: {
-            ostack_push(c, ostack_top(c));
+            ostack_push(ctx, ostack_top(ctx));
             break;
         }
         // TODO add sub lt should change!
         case add_: {
-            SEXP rhs = ostack_pop(c);
-            SEXP lhs = ostack_pop(c);
+            SEXP rhs = ostack_pop(ctx);
+            SEXP lhs = ostack_pop(ctx);
             if (TYPEOF(lhs) == REALSXP && TYPEOF(rhs) == REALSXP && Rf_length(lhs) == 1 && Rf_length(rhs) == 1) {
                 SEXP res = Rf_allocVector(REALSXP, 1);
                 SET_NAMED(res, 1);
                 REAL(res)[0] = REAL(lhs)[0] + REAL(rhs)[0];
-                ostack_push(c, res);
+                ostack_push(ctx, res);
             } else {
                 SEXP op = getPrimitive("+");
                 SEXP primfun = getPrimfun("+");
@@ -438,13 +438,13 @@ SEXP rirEval_c(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
             break;
         }
         case sub_: {
-            SEXP rhs = ostack_pop(c);
-            SEXP lhs = ostack_pop(c);
+            SEXP rhs = ostack_pop(ctx);
+            SEXP lhs = ostack_pop(ctx);
             if (TYPEOF(lhs) == REALSXP && TYPEOF(rhs) == REALSXP && Rf_length(lhs) == 1 && Rf_length(rhs) == 1) {
                 SEXP res = Rf_allocVector(REALSXP, 1);
                 SET_NAMED(res, 1);
                 REAL(res)[0] = REAL(lhs)[0] - REAL(rhs)[0];
-                ostack_push(c, res);
+                ostack_push(ctx, res);
             } else {
                 SEXP op = getPrimitive("-");
                 SEXP primfun = getPrimfun("-");
@@ -455,12 +455,12 @@ SEXP rirEval_c(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
             break;
         }
         case lt_: {
-            SEXP rhs = ostack_pop(c);
-            SEXP lhs = ostack_pop(c);
+            SEXP rhs = ostack_pop(ctx);
+            SEXP lhs = ostack_pop(ctx);
             if (TYPEOF(lhs) == REALSXP && TYPEOF(rhs) == REALSXP && Rf_length(lhs) == 1 && Rf_length(rhs) == 1) {
                 SEXP res = Rf_allocVector(REALSXP, 1);
                 SET_NAMED(res, 1);
-                ostack_push(c, REAL(lhs)[0] < REAL(rhs)[0] ? R_TrueValue : R_FalseValue);
+                ostack_push(ctx, REAL(lhs)[0] < REAL(rhs)[0] ? R_TrueValue : R_FalseValue);
             } else {
                 SEXP op = getPrimitive("<");
                 SEXP primfun = getPrimfun("<");
@@ -472,14 +472,14 @@ SEXP rirEval_c(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
         }
         case isspecial_: {
             // TODO I do not think this is a proper way - we must check all the way down, not just findVar (vars do not shadow closures)
-            SEXP sym = readConst(&pc);
+            SEXP sym = readConst(ctx, &pc);
             SEXP val = findVar(sym, env);
             // TODO better check
             assert(TYPEOF(val) == SPECIALSXP || TYPEOF(val) == BUILTINSXP);
             break;
         }
         case isfun_: {
-            SEXP val = ostack_top(c);
+            SEXP val = ostack_top(ctx);
 
             switch (TYPEOF(val)) {
             case CLOSXP:
@@ -504,12 +504,12 @@ SEXP rirEval_c(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
             break;
         }
         case inci_: {
-            istack_push(c, istack_pop(c) + 1);
+            istack_push(ctx, istack_pop(ctx) + 1);
             break;
         }
         case push_argi_: {
-            int pos = istack_pop(c);
-            ostack_push(c, cp_pool_at(c, bp - numArgs + pos));
+            int pos = istack_pop(ctx);
+            ostack_push(ctx, cp_pool_at(ctx, bp - numArgs + pos));
             break;
         }
         default:

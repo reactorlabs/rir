@@ -121,11 +121,11 @@ INLINE size_t pool_add(Pool* p, SEXP v) {
 }
 
 INLINE size_t cp_pool_add(Context* c, SEXP v) {
-    pool_add(&(c->cp), v);
+    return pool_add(&(c->cp), v);
 }
 
 INLINE size_t src_pool_add(Context* c, SEXP v) {
-    pool_add(&(c->src), v);
+    return pool_add(&(c->src), v);
 }
 
 INLINE SEXP cp_pool_at(Context* c, size_t index) {
