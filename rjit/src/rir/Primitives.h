@@ -15,8 +15,8 @@ class Primitives {
     }
 
   private:
-    std::array<bool, 1024> PrimitivesCacheOccupied;
-    std::array<SEXP, 1024> PrimitivesCache;
+    bool PrimitivesCacheOccupied[1024];
+    SEXP PrimitivesCache[1024];
 
     static Primitives& instance() {
         static Primitives singleton;

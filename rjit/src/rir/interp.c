@@ -13,6 +13,17 @@ extern SEXP forcePromise(SEXP);
 
 extern SEXP mkPROMISE(SEXP expr, SEXP rho);
 
+
+/** Typedef for primitive functions from FunTab.
+
+ The four arguments are:
+ * the call (language object),
+ * callee (Symbol?),
+ * args
+ * env
+ */
+typedef SEXP (*PrimitiveFunction)(SEXP, SEXP, SEXP, SEXP);
+
 // helpers
 
 /** Moves the pc to next instruction, based on the current instruction length
@@ -113,8 +124,7 @@ INLINE int readJumpOffset(OpcodeT** pc) {
 // TODO check if there is a function for this in R
 INLINE SEXP promiseValue(SEXP promise) {
     // if already evaluated, return the value
-    if (PRVALUE(promise) && PRVALUE(promise) != R_UnboundValue)
-    {
+    if (PRVALUE(promise) && PRVALUE(promise) != R_UnboundValue) {
         promise = PRVALUE(promise);
         // TODO implicit declaration of SET_NAME
         SET_NAME(promise, 2);
@@ -154,13 +164,15 @@ INLINE void matchArguments(SEXP cls) {
         matched[i] = 0;
         used[i] = false;
     }
-
+    // TODO deal with the matching
 
 
 
 }
 
 
+/** Call the given function and return the result.
+ */
 INLINE SEXP doCall() {
 
 
@@ -312,12 +324,7 @@ SEXP rirEval_c(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
             assert(TYPEOF(p) == PROMSXP);
             // If the promise is already evaluated then push the value inside the promise
             // onto the stack, otherwise push the value from forcing the promise 
-            if (PRVALUE(p) && PRVALUE(p) != R_UnboundValue){
-                ostack_push(ctx, PRVALUE(p));
-                SET_NAMED(p, 2);
-            } else {
-                ostack_push(ctx, forcePromise(p));
-            }
+            ostack_push(ctx, promiseValue(p));
             break;
         }
         case pop_: {
