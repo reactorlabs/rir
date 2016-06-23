@@ -407,7 +407,7 @@ SEXP doCall(Code * caller, SEXP call, SEXP callee, unsigned * args, size_t nargs
 INLINE SEXP matchArgumentsAndCall(Code * caller, SEXP call, SEXP callee, unsigned * args, SEXP names, size_t nargs, SEXP env, Context * ctx) {
     // Specials and builtins do not care about names
     if (TYPEOF(callee) == SPECIALSXP || TYPEOF(callee) == BUILTINSXP)
-        return;
+        return doCall(caller, call, callee, args, nargs, env, ctx);
     // therefore it must be closure
     assert(TYPEOF(callee) == CLOSXP);
     // get the formals
