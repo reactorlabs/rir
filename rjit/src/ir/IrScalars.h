@@ -74,6 +74,7 @@ class CreateAndSetScalar : public ir::Pattern {
 
     static CreateAndSetScalar* insertBefore(llvm::Instruction* ins,
                                             ir::Value scalar, SEXPTYPE type) {
+        using namespace llvm;
         // get the allocator function
         llvm::Function* a =
             ins->getModule()->getFunction(AllocVector::intrinsicName());
@@ -421,6 +422,7 @@ class IIsNA : public ir::Pattern {
     }
 
     static IIsNA* insertBefore(llvm::Instruction* ins, ir::Value value) {
+        using namespace llvm;
         auto i = new ICmpInst(ins, ICmpInst::ICMP_EQ, value,
                               Builder::integer(INT_MIN));
         return new IIsNA(i);

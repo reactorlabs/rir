@@ -12,7 +12,7 @@ namespace rjit {
 namespace ir {
 
 template <typename aPass>
-class PassDriver : public FunctionPass {
+class PassDriver : public llvm::FunctionPass {
   public:
     static char ID;
 
@@ -21,13 +21,13 @@ class PassDriver : public FunctionPass {
         RegisterMe() : X(aPass::getPassName(), "", false, false) {
             std::cout << aPass::getPassName() << "Registered\n";
         }
-        RegisterPass<T> X;
+        llvm::RegisterPass<T> X;
     };
     static RegisterMe<PassDriver<aPass>> Registered;
 
     PassDriver() : FunctionPass(ID) {}
 
-    void getAnalysisUsage(AnalysisUsage& AU) const override {}
+    void getAnalysisUsage(llvm::AnalysisUsage& AU) const override {}
 };
 
 template <typename aPass>
@@ -41,7 +41,7 @@ class LinearDriver : public PassDriver<Pass> {
   public:
     Pass pass;
 
-    bool runOnFunction(Function& f) override {
+    bool runOnFunction(llvm::Function& f) override {
         if (f.isDeclaration() || f.empty())
             return false;
 
@@ -50,9 +50,10 @@ class LinearDriver : public PassDriver<Pass> {
     }
 
   protected:
-    virtual bool runOnFunction_(Function& f) { return dispatch_(f); }
+    virtual bool runOnFunction_(llvm::Function& f) { return dispatch_(f); }
 
-    virtual bool dispatch_(Function& f) {
+    virtual bool dispatch_(llvm::Function& f) {
+        using namespace llvm;
         for (auto& b : f) {
             BasicBlock::iterator i = b.begin();
             while (i != b.end()) {
@@ -95,6 +96,7 @@ class ForwardDriver : public PassDriver<PASS> {
      * successors.
      */
     void runOnBlock(llvm::BasicBlock* block, typename PASS::State&& incomming) {
+        using namespace llvm;
         if (not pass_.setState(block, std::move(incomming)))
             return;
         // iterate over all instructions in the block

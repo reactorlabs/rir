@@ -3,6 +3,9 @@
 #include <iostream>
 #include <unordered_map>
 
+using namespace llvm;
+
+
 namespace rjit {
 
 uint64_t JITMemoryManager::getSymbolAddress(const std::string& name) {
@@ -37,6 +40,7 @@ uint8_t* JITMemoryManager::allocateDataSection(uintptr_t size,
 uint8_t* JITMemoryManager::allocateSection(MemoryGroup& MemGroup,
                                            uintptr_t Size, unsigned Alignment) {
 
+    using namespace llvm;
     if (!Alignment)
         Alignment = 16;
 

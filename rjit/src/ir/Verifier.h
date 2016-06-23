@@ -55,6 +55,7 @@ class Verifier {
       instruction and always returns true.
      */
     bool checkPattern(llvm::BasicBlock::iterator& i) {
+        using namespace llvm;
         Pattern* p = Pattern::get(i);
         // if the instruction is not part of any pattern, all is fine
         if (p == nullptr) {

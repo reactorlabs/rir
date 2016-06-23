@@ -2,7 +2,6 @@
  * in low level.
  */
 
-#include <llvm/IR/Module.h>
 
 #include "Compiler.h"
 
@@ -21,6 +20,8 @@
 #include "rir/RBytecode.h"
 
 #include "StackScan.h"
+
+#include <llvm/IR/Module.h>
 
 
 extern "C" {
@@ -233,6 +234,7 @@ void rjit_gcCallback(void (*forward_node)(SEXP)) {
 }
 
 int rjitStartup() {
+    using namespace llvm;
     // initialize LLVM backend
     LLVMInitializeNativeTarget();
     LLVMInitializeNativeAsmPrinter();

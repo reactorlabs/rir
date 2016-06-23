@@ -67,7 +67,7 @@ typedef SEXP IntSEXP;
 // type of relative jump offset (all jumps are relative)
 typedef int32_t JumpOffset;
 
-typedef struct Function Function; // Forward declaration
+struct Function; // Forward declaration
 
 
 // all sizes in bytes,
@@ -75,20 +75,20 @@ typedef struct Function Function; // Forward declaration
 
 /** Function magic constant is designed to help to distinguish between Function objects and normal INTSXPs. Normally this is not necessary, but a very creative user might try to assign arbitrary INTSXP to a closure which we would like to spot. Of course, such a creative user might actually put the magic in his vector too...
   */
-unsigned const FUNCTION_MAGIC = 0xCAFEBABE;
+#define FUNCTION_MAGIC (unsigned)0xCAFEBABE
 
 /** Code magic constant is intended to trick the GC into believing that it is dealing with already marked SEXP.
 
   It also makes the SEXP look like NILSXP (0x00) so that we can determine whether a standard promise execution, or rir promise should be executed.
  */
-unsigned const CODE_MAGIC = 0x00ff;
+#define CODE_MAGIC (unsigned)0x00ff
 
 /** Missing argument offset.
 
   The offset is 0 (this would be impossible).
 */
 // TODO This changes from old where it was some other number
-unsigned const MISSING_ARG_OFFSET = 0;
+#define MISSING_ARG_OFFSET  (unsigned)0
 
 
 /**
@@ -174,7 +174,7 @@ INLINE Code* next(Code* c) {
  *  A Function has a number of Code objects, codeLen, stored
  *  inline in data.
  */
-typedef struct Function {
+struct Function {
     unsigned magic; /// used to detect Functions 0xCAFEBABE
 
     unsigned size; /// Size, in bytes, of the function and its data
@@ -186,7 +186,9 @@ typedef struct Function {
     // TODO this is misleading because Code objects are not continuous now
     Code data[]; // Code objects stored inline
 
-} Function;
+};
+
+typedef struct Function Function;
 
 INLINE bool isValidFunction(SEXP s) {
     if (TYPEOF(s) != INTSXP)

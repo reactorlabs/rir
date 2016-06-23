@@ -662,14 +662,19 @@ INSTRUCTION(isfun_) {
         //val = (SEXP)jit(val);
         break;
     case SPECIALSXP:
-    case BUILTINSXP: {
+    case BUILTINSXP:
+        // builtins and specials are fine
+        // TODO for now - we might be fancier here later
+        break;
+/*
+
+    {
         // TODO do we need to compile primitives? not really I think
-        /*
         SEXP prim = Primitives::compilePrimitive(val);
         if (prim)
             val = prim;
-        break; */
-    }
+        break;
+    } */
 
     default:
         // TODO: error not a function!

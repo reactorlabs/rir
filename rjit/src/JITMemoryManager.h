@@ -23,8 +23,6 @@
 
 #include "Runtime.h"
 
-using namespace llvm;
-
 namespace rjit {
 
 class JITMemoryManager : public llvm::SectionMemoryManager {
