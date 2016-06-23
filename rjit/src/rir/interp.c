@@ -295,15 +295,9 @@ INSTRUCTION(ldfun_) {
         */
         break;
     case SPECIALSXP:
-    case BUILTINSXP: {
-        // TODO fix this
-        /**
-        SEXP prim = Primitives::compilePrimitive(val);
-        if (prim)
-            val = prim;
-        **/
+    case BUILTINSXP:
+        // special and builtin functions are ok
         break;
-    }
     default:
         // TODO!
         assert(false);
@@ -332,31 +326,6 @@ INSTRUCTION(ldvar_) {
 
     ostack_push(ctx, val);
 }
-
-
-INLINE void matchArguments(SEXP cls) {
-    // Specials and builtins do not care about names
-    if (TYPEOF(cls) == SPECIALSXP || TYPEOF(cls) == BUILTINSXP)
-        return;
-    // therefore it must be closure
-    assert(TYPEOF(cls) == CLOSXP);
-    // get the formals
-    SEXP formals = FORMALS(cls);
-    // prepare matching structures
-    unsigned * matched = alloca(Rf_length(formals) * sizeof(unsigned));
-    bool * used = alloca(Rf_length(formals) + sizeof(unsigned));
-    //
-    for (size_t i = 0, e = Rf_length(formals); i != e; ++i) {
-        matched[i] = 0;
-        used[i] = false;
-    }
-    // TODO deal with the matching
-
-    // TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO
-
-}
-
-
 
 /** Given argument code offsets, creates the argslist from their promises.
  */
@@ -435,6 +404,93 @@ SEXP doCall(Code * caller, SEXP call, SEXP callee, unsigned * args, size_t nargs
     return result;
 }
 
+INLINE SEXP matchArgumentsAndCall(Code * caller, SEXP call, SEXP callee, unsigned * args, SEXP names, size_t nargs, SEXP env, Context * ctx) {
+    // Specials and builtins do not care about names
+    if (TYPEOF(callee) == SPECIALSXP || TYPEOF(callee) == BUILTINSXP)
+        return;
+    // therefore it must be closure
+    assert(TYPEOF(callee) == CLOSXP);
+    // get the formals
+    SEXP formals = FORMALS(callee);
+    // prepare matching structures
+    unsigned * matched = alloca(Rf_length(formals) * sizeof(unsigned));
+    bool * used = alloca(Rf_length(formals) + sizeof(unsigned));
+    // clear the arrays
+    for (size_t i = 0, e = Rf_length(formals); i != e; ++i) {
+        matched[i] = 0;
+        used[i] = false;
+    }
+
+    // TODO do ellipsis
+
+    size_t finger = 0;
+    size_t positional = 0;
+    SEXP formalsIter = formals;
+
+    for (size_t i = 0, e = Rf_length(formals); i != e; ++i, ++finger) {
+        bool found = false;
+        SEXP formal = CAR(formalsIter);
+        formalsIter = CDR(formalsIter);
+
+        // check if any of the supplied args has a matching tag
+        for (size_t current = 0, ii = 0, ee = Rf_length(names); ii != ee; ++ii) {
+            SEXP supplied = VECTOR_ELT(names, ii);
+            if (used[current] || supplied == R_NilValue)
+                continue;
+            if (TAG(formal) != supplied) // fine, it is a symbol
+                continue;
+            // TODO error - same name given twice
+            if (found)
+                assert(false);
+            // match
+            matched[finger] = args[current];
+            used[current] = 1;
+            ++current;
+        }
+
+        // check if any of the supplied args has a partially matching tag
+        if (! found) {
+            for (size_t current = 0, ii = 0, ee = Rf_length(names); ii != ee; ++ii) {
+                SEXP supplied = VECTOR_ELT(names, ii);
+                if (used[current] || supplied == R_NilValue)
+                    continue;
+                // check partially matching name
+                char const * given = CHAR(PRINTNAME(supplied));
+                char const * f = CHAR(PRINTNAME(TAG(formal)));
+                if (abs(strncmp(f, given, strlen(given))) != 0)
+                    continue;
+                // TODO error - partially matches two or more args
+                if (found)
+                    assert(false);
+                // match
+                matched[finger] = args[current];
+                used[current] = 1;
+                ++current;
+            }
+        }
+
+        // no match, do positionally
+        if (! found) {
+            while (positional < nargs) {
+                if (VECTOR_ELT(names, positional++) == R_NilValue) {
+                    found = true;
+                    matched[finger] = args[positional - 1]; // because ++ in loop
+                    used[positional - 1] = 1;
+                    break;
+                }
+            }
+        }
+
+        // cannot match? (no more positional left
+
+        if (! found)
+            matched[finger] = MISSING_ARG_OFFSET;
+    }
+
+    // arguments have been matched, do the call
+    return doCall(caller, call, callee, matched, Rf_length(formals), env, ctx);
+}
+
 INSTRUCTION(call_) {
     // get the indices of argument promises
     SEXP args_ = readConst(ctx, pc);
@@ -446,11 +502,10 @@ INSTRUCTION(call_) {
     // get the closure itself
     SEXP cls = ostack_pop(ctx);
     // match the arguments and do the call
-    if (names) {
-        assert(false && "Can't do named args yet");
-    } else {
+    if (names)
+        ostack_push(ctx, matchArgumentsAndCall(c,getCurrentCall(c, *pc), cls, args, names, nargs, env, ctx));
+    else
         ostack_push(ctx, doCall(c, getCurrentCall(c, *pc), cls, args, nargs, env, ctx));
-    }
 }
 
 INSTRUCTION(promise_) {
