@@ -25,6 +25,14 @@ extern "C" {
 #define false 0
 #endif
 
+#define POOL_CAPACITY 4096
+#define STACK_CAPACITY 4096
+
+/** Compiler API. Given a language object, compiles it and returns the INTSXP containing the Function and its Code objects.
+
+  The idea is to call this if we want on demand compilation of closures.
+ */
+typedef SEXP (*CompilerCallback)(SEXP);
 
 //
 // Primitive stack.
@@ -62,6 +70,7 @@ typedef struct {
     Pool src;
     OStack ostack;
     PStack istack;
+    CompilerCallback compiler;
 } Context;
 
 INLINE int istack_top(Context* c) {
@@ -112,7 +121,7 @@ INLINE void istack_push(Context* c, int val) {
 
 void istack_ensureSize(Context* c, unsigned minFree);
 
-Context* context_create(size_t poolCapacity);
+Context* context_create(CompilerCallback compiler);
 
 void pool_init(Pool* p, size_t capacity);
 

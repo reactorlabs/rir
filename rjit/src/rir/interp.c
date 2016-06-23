@@ -145,50 +145,6 @@ OpcodeT * advancePc(OpcodeT * pc) {
     return pc;
 }
 
-/** How many bytes do we need to align on 4 byte boundary?
- */
-unsigned pad4(unsigned sizeInBytes) {
-    unsigned x = sizeInBytes % 4;
-    return (x != 0) ? (sizeInBytes + 4 - x) : sizeInBytes;
-}
-
-// Code object --------------------------------------------------------------------------------------------------------
-
-OpcodeT* code(Code* c) {
-    return (OpcodeT*)c->data;
-}
-
-unsigned* src(Code* c) {
-    return (unsigned*)(c->data + pad4(c->codeSize));
-}
-
-struct Function* function(Code* c) {
-    return (struct Function*)(c - c->header);
-}
-
-Code* next(Code* c) {
-    return (Code*)(c->data + pad4(c->codeSize) + c->srcLength);
-}
-
-// Function -----------------------------------------------------------------------------------------------------------
-
-bool isValidFunction(SEXP s) {
-    if (TYPEOF(s) != INTSXP)
-        return false;
-    return INTEGER(s)[0] == FUNCTION_MAGIC;
-}
-
-Code* begin(Function* f) {
-    return f->data;
-}
-
-Code* end(Function* f) {
-    return (Code*)((uint8_t*)f->data + f->size);
-}
-
-Code * codeAt(Function * f, unsigned offset) {
-    return (Code*)((uint8_t*)f + offset);
-}
 // bytecode accesses
 
 
@@ -221,7 +177,7 @@ INLINE int readJumpOffset(OpcodeT** pc) {
 }
 
 // TODO perhaps this should have better name
-INLINE SEXP getCurrentCall(Code * c, OpcodeT * pc) {
+INLINE SEXP getCurrentCall(Code * c, OpcodeT * pc, Context * ctx) {
     // we need to determine index of the current instruction
     OpcodeT * x = code(c);
     // find the pc of the current instructions, it is ok to be slow
@@ -230,7 +186,7 @@ INLINE SEXP getCurrentCall(Code * c, OpcodeT * pc) {
         ++insIdx;
     unsigned sidx = src(c)[insIdx];
     // return the ast for the instruction, or if not defined, the ast of the function
-    return source(sidx == 0 ? c->src : sidx);
+    return src_pool_at(ctx, sidx == 0 ? c->src : sidx);
 }
 
 /** Creates a promise from given code object and environment.
@@ -250,15 +206,6 @@ INLINE SEXP promiseValue(SEXP promise) {
     }
     return forcePromise(promise);
 }
-
-void gc_callback(void (*forward_node)(SEXP)) {
-/*    for (size_t i = 0; i < stack_.length; ++i)
-        forward_node(stack_.stack[i]);
-    forward_node(cp_.pool);
-    forward_node(src_.pool); */
-    // TODO HUGE TODO
-}
-
 
 // TODO remove numArgs and bp -- this is only needed for the on stack argument handling
 #define INSTRUCTION(name) INLINE void ins_ ## name (Code * c, SEXP env, OpcodeT **pc, Context * ctx, unsigned numArgs, unsigned bp)
@@ -289,10 +236,14 @@ INSTRUCTION(ldfun_) {
 
     switch (TYPEOF(val)) {
     case CLOSXP:
-        // TODO we do not need lazy compiling anymore
-        /*
-        val = (SEXP)jit(val);
-        */
+        /** If compile on demand is active, check that the function to be called is compiled already, and compile if not.
+         */
+        if (COMPILE_ON_DEMAND) {
+            SEXP body = BODY(val);
+            assert(TYPEOF(body) != BCODESXP && "We do not plan to handle GNU-R bytecode");
+            if (TYPEOF(body) != INTSXP)
+                SET_BODY(val, ctx->compiler(body));
+        }
         break;
     case SPECIALSXP:
     case BUILTINSXP:
@@ -503,9 +454,9 @@ INSTRUCTION(call_) {
     SEXP cls = ostack_pop(ctx);
     // match the arguments and do the call
     if (names)
-        ostack_push(ctx, matchArgumentsAndCall(c,getCurrentCall(c, *pc), cls, args, names, nargs, env, ctx));
+        ostack_push(ctx, matchArgumentsAndCall(c,getCurrentCall(c, *pc, ctx), cls, args, names, nargs, env, ctx));
     else
-        ostack_push(ctx, doCall(c, getCurrentCall(c, *pc), cls, args, nargs, env, ctx));
+        ostack_push(ctx, doCall(c, getCurrentCall(c, *pc, ctx), cls, args, nargs, env, ctx));
 }
 
 INSTRUCTION(promise_) {
@@ -571,7 +522,7 @@ INSTRUCTION(asbool_) {
     SEXP t = ostack_pop(ctx);
     int cond = NA_LOGICAL;
     if (Rf_length(t) > 1)
-        warningcall(getCurrentCall(c, *pc),
+        warningcall(getCurrentCall(c, *pc, ctx),
                     ("the condition has length > 1 and only the first "
                      "element will be used"));
 
@@ -594,7 +545,7 @@ INSTRUCTION(asbool_) {
                        ? ("missing value where TRUE/FALSE needed")
                        : ("argument is not interpretable as logical"))
                 : ("argument is of length zero");
-        errorcall(getCurrentCall(c, *pc), msg);
+        errorcall(getCurrentCall(c, *pc, ctx), msg);
     }
 
     ostack_push(ctx, cond ? R_TrueValue : R_FalseValue);
@@ -786,3 +737,19 @@ SEXP rirEval_c(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
     }
 
 }
+
+// TODO for now we keep the context in a global value for easy gc
+Context * globalContext_;
+
+void interp_initialize(CompilerCallback compiler) {
+    globalContext_ = context_create(compiler);
+}
+
+void gc_callback(void (*forward_node)(SEXP)) {
+    for (size_t i = 0; i < globalContext_->ostack.length; ++i)
+        forward_node(globalContext_->ostack.data[i]);
+    forward_node(globalContext_->cp.data);
+    forward_node(globalContext_->src.data);
+}
+
+

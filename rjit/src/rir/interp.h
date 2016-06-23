@@ -10,10 +10,25 @@
 
 #include "interp_context.h"
 
+/** If 1, when a function that has not yet been compiled by rir is to be called in the interpreter, it will be compiled first.
+
+  Set to 0 if rir should handle the execution to GNU-R.
+ */
+#define COMPILE_ON_DEMAND 1
+
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+/** How many bytes do we need to align on 4 byte boundary?
+ */
+INLINE unsigned pad4(unsigned sizeInBytes) {
+    unsigned x = sizeInBytes % 4;
+    return (x != 0) ? (sizeInBytes + 4 - x) : sizeInBytes;
+}
+
+
 
 // we cannot use specific sizes for enums in C
 typedef uint8_t OpcodeT;
@@ -115,25 +130,24 @@ typedef struct Code {
 } Code;
 
 /** Returns a pointer to the instructions in c.  */
-OpcodeT* code(Code* c);
+INLINE OpcodeT* code(Code* c) {
+    return (OpcodeT*)c->data;
+}
 
 /** Returns a pointer to the source AST indices in c.  */
-unsigned* src(Code* c);
+INLINE unsigned* src(Code* c) {
+    return (unsigned*)(c->data + pad4(c->codeSize));
+}
 
 /** Returns a pointer to the Function to which c belongs. */
-struct Function* function(Code* c);
+INLINE struct Function* function(Code* c) {
+    return (struct Function*)(c - c->header);
+}
 
 /** Returns the next Code in the current function. */
-Code* next(Code* c);
-
-typedef enum {
-    // arguments evaluated, pushed on stack
-    CC_StackEager,
-    // promises pushed on stack
-    CC_StackLazy,
-    // promises pushed in new environment
-    CC_EnvLazy
-} CallingConvention;
+INLINE Code* next(Code* c) {
+    return (Code*)(c->data + pad4(c->codeSize) + c->srcLength);
+}
 
 // TODO removed src reference, now each code has its own
 
@@ -163,8 +177,6 @@ typedef enum {
 typedef struct Function {
     unsigned magic; /// used to detect Functions 0xCAFEBABE
 
-    CallingConvention cc; ///< Calling convention for the function.
-
     unsigned size; /// Size, in bytes, of the function and its data
 
     FunctionSEXP origin; /// Same Function with fewer optimizations, NULL if original
@@ -176,23 +188,28 @@ typedef struct Function {
 
 } Function;
 
-bool isValidFunction(FunctionSEXP s);
-
-Function* origin(Function* f);
+INLINE bool isValidFunction(SEXP s) {
+    if (TYPEOF(s) != INTSXP)
+        return false;
+    return (unsigned)INTEGER(s)[0] == FUNCTION_MAGIC;
+}
 
 /** Returns the first code object associated with the function.
  */
-Code* begin(Function* f);
+INLINE Code* begin(Function* f) {
+    return f->data;
+}
 
 /** Returns the end of the function as code object, for interation purposes.
  */
-Code* end(Function* f);
+INLINE Code* end(Function* f) {
+    return (Code*)((uint8_t*)f->data + f->size);
+}
 
-/** Returns an AST located at index in the AST_Pool */
-SEXP source(size_t index);
-
-/** TODO Returns the code object with given offset */
-Code * codeAt(Function * f, unsigned offset);
+/** Returns the code object with given offset */
+INLINE Code * codeAt(Function * f, unsigned offset) {
+    return (Code*)((uint8_t*)f + offset);
+}
 
 /** C implementation of the Precious class to protect 
     the elements of the ast and constant pool from being
@@ -201,10 +218,17 @@ Code * codeAt(Function * f, unsigned offset);
 // void poolAdd(SEXP value);
 // void poolRemove(SEXP value);
 
+
+SEXP rirEval_c(Code* c, Context* ctx, SEXP env, unsigned numArgs);
+
+
+/** Initializes the interpreter.
+ */
+void interp_initialize(CompilerCallback compiler);
+
 /** TODO Makes sure the gc undersands our stacks and pools. */
 void gc_callback(void (*forward_node)(SEXP));
 
-SEXP rirEval_c(Code* c, Context* ctx, SEXP env, unsigned numArgs);
 
 #ifdef __cplusplus
 }

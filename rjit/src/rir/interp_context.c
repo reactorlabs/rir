@@ -31,19 +31,17 @@ void istack_ensureSize(Context* c, unsigned minFree) {
     }
 }
 
-#define POOL_CAPACITY 4096
-#define STACK_CAPACITY 4096
-
-Context* context_create(size_t poolCapacity) {
+Context* context_create(CompilerCallback compiler) {
     Context* c = malloc(sizeof(Context));
-    pool_init(&c->cp, poolCapacity);
-    pool_init(&c->src, poolCapacity);
+    pool_init(&c->cp, POOL_CAPACITY);
+    pool_init(&c->src, POOL_CAPACITY);
     c->ostack.data = malloc(STACK_CAPACITY * sizeof(SEXP));
     c->ostack.length = 0;
     c->ostack.capacity = STACK_CAPACITY;
     c->istack.data = malloc(STACK_CAPACITY * sizeof(int));
     c->istack.length = 0;
     c->istack.capacity = STACK_CAPACITY;
+    c->compiler = compiler;
     return c;
 }
 
