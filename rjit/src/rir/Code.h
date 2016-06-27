@@ -33,17 +33,25 @@ class Code {
         size_t size;
         unsigned* pos;
         SEXP* ast;
+        // Indice is only set when a new AstMap is created
+        // this probably should create, i.e. in CodeStream.h
+        // the indice will be updated when a new ast is added in
+        unsigned* ind;
+
 
       public:
         AstMap& operator=(AstMap&& from) {
             delete pos;
             delete ast;
+            delete ind;
             size = from.size;
             pos = from.pos;
             ast = from.ast;
+            ind = from.ind;
             from.size = 0;
             from.pos = nullptr;
             from.ast = nullptr;
+            from.ind = nullptr;
             return *this;
         }
 
@@ -54,10 +62,17 @@ class Code {
             size = astMap.size();
             pos = new unsigned[size];
             ast = new SEXP[size];
+            ind = new unsigned[size];
             unsigned i = 0;
             for (auto e : astMap) {
                 pos[i] = e.first;
                 ast[i] = e.second;
+
+                if (e.second){
+                    ind[i] = i+1
+                } else {
+                    ind[i] = 0;
+                }
                 i++;
             }
         }
@@ -65,6 +80,7 @@ class Code {
         ~AstMap() {
             delete pos;
             delete ast;
+            delete ind;
         }
 
         SEXP at(unsigned p) {
@@ -134,6 +150,10 @@ class Code {
     /** Serializes the code object into a Function SEXP.
      */
     SEXP toFunction();
+
+    unsigned calcSize(unsigned size);
+
+    ::Code * createCode();
 };
 }
 }

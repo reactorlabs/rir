@@ -66,7 +66,7 @@ DEF_INSTR(brtrue_,    1,    1,    0,   0,   0)
  */
 DEF_INSTR(brfalse_,   1,    1,    0,   0,   0)
 /**
- * brfalse_:: pop object stack, if FALSE branch to immediate offset\
+ * brfalse_:: pop object stack, if FALSE branch to immediate offset
  */
 DEF_INSTR(br_,        1,    0,    0,   0,   0)
 /**

@@ -159,10 +159,13 @@ INLINE void matchArguments(SEXP cls) {
     // prepare matching structures
     unsigned * matched = alloca(Rf_length(formals) * sizeof(unsigned));
     bool * used = alloca(Rf_length(formals) + sizeof(unsigned));
-    //
-    for (size_t i = 0, e = Rf_length(formals); i != e; ++i) {
+    
+    size_t i = 0;
+    size_t e = Rf_length(formals);
+    while (i < e) {
         matched[i] = 0;
         used[i] = false;
+        i++;
     }
     // TODO deal with the matching
 

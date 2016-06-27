@@ -100,16 +100,17 @@ fun_idx_t compilePromise(Code* parent, SEXP exp) {
 }
 }
 
-Code* Compiler::finalize() {
+SEXP Compiler::finalize() {
     CodeStream cs(exp);
     if (formals)
         compileFormals(cs, formals);
     compileExpression(cs.current, cs, exp);
     cs << BC::ret();
-    Code* result = cs.toCode();
+    Code* code = cs.toCode();
     Optimizer::optimize(result);
     // call the c function here that linearise the code produced from the 
     // codestream in order to be used for the interpreter
+    SEXP result = code.toFunction();
     return result;
 }
 }

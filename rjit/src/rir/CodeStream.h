@@ -96,9 +96,6 @@ class CodeStream {
 
     void addAst(SEXP ast) { astMap[pos] = ast; }
 
-
-
-
     Code* toCode() {
         assert(current->size == 0 and current->bc == nullptr);
         size_t size = pos;
