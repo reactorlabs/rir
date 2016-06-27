@@ -1,3 +1,12 @@
+rir.print <- function(what) {
+    if (typeof(what) == "closure")
+        what <- .Internal(bodyCode(what))
+    invisible(.Call("rir_print", what))
+}
+
+
+
+
 jit.rbc <- function(what) {
     .Call("jitrbc", what)
 }

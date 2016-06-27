@@ -147,7 +147,7 @@ void CodeVerifier::vefifyFunctionLayout(SEXP sexp, ::Context * ctx) {
     objs.pop_back();
 
     // check that the call instruction has proper arguments and number of instructions is valid
-    for (Code * c : objs) {
+    for (::Code * c : objs) {
         BC_t * cptr = reinterpret_cast<BC_t*>(code(c));
         BC_t * start = cptr;
         unsigned ninsns = 0;
@@ -185,7 +185,7 @@ void CodeVerifier::vefifyFunctionLayout(SEXP sexp, ::Context * ctx) {
         }
 
         // check that the astmap indices are within bounds
-        for (Code * c : objs) {
+        for (::Code * c : objs) {
             unsigned * srcIndices = src(c);
             for (size_t i = 0; i != c->srcLength; ++i)
                 assert (srcIndices[i] < ctx->src.length and "Source index for instruction out of bounds");

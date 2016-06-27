@@ -53,6 +53,7 @@ SEXP jit(SEXP ast, SEXP formals, SEXP env) {
     return bc;
 }
 
+#undef INLINE
 #define INLINE __attribute__((always_inline)) inline
 
 // ============================================================================

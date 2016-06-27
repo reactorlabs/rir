@@ -223,15 +223,6 @@ INLINE Code * codeAt(Function * f, unsigned offset) {
 
 SEXP rirEval_c(Code* c, Context* ctx, SEXP env, unsigned numArgs);
 
-
-/** Initializes the interpreter.
- */
-void interp_initialize(CompilerCallback compiler);
-
-/** TODO Makes sure the gc undersands our stacks and pools. */
-void gc_callback(void (*forward_node)(SEXP));
-
-
 #ifdef __cplusplus
 }
 #endif

@@ -149,6 +149,22 @@ INLINE SEXP src_pool_at(Context* c, size_t value) {
     return VECTOR_ELT(c->src.data, value);
 }
 
+/** Initializes the interpreter.
+ */
+void interp_initialize(CompilerCallback compiler);
+
+/** TODO Makes sure the gc undersands our stacks and pools. */
+void gc_callback(void (*forward_node)(SEXP));
+
+/** Returns the global context for the interpreter - important to get access to the shared constant and source pools.
+
+  TODO Even in multithreaded mode we probably want to have cp and src pools shared - it is not that we add stuff to them often.
+ */
+Context * globalContext();
+
+
+
+
 #ifdef __cplusplus
 }
 #endif
