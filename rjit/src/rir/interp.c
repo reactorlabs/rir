@@ -16,10 +16,19 @@ extern SEXP R_FalseValue;
 extern SEXP Rf_NewEnvironment(SEXP, SEXP, SEXP);
 extern Rboolean R_Visible;
 
+extern SEXP hook_forcePromise(SEXP);
+extern SEXP hook_mkPROMISE(SEXP, SEXP);
 
 
-extern SEXP forcePromise(SEXP);
-extern SEXP mkPROMISE(SEXP expr, SEXP rho);
+
+
+SEXP forcePromise(SEXP what) {
+    return hook_forcePromise(what);
+}
+
+SEXP mkPROMISE(SEXP expr, SEXP rho) {
+    return hook_mkPROMISE(expr, rho);
+}
 
 typedef SEXP (*CCODE)(SEXP, SEXP, SEXP, SEXP);
 

@@ -35,19 +35,6 @@
 using namespace rjit;
 using namespace rir;
 
-extern "C" {
-// this is static in gnu-r (eval)
-    SEXP forcePromise(SEXP p) {
-        return R_NilValue;
-    }
-    SEXP mkPROMISE(SEXP expr, SEXP rho) {
-        return R_NilValue;
-    }
-
-}
-
-
-
 namespace {
 
 /** Initializes the rir contexts, registers the gc and so on...
