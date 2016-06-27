@@ -31,19 +31,20 @@ void istack_ensureSize(Context* c, unsigned minFree) {
     }
 }
 
-#define POOL_CAPACITY 4096
-#define STACK_CAPACITY 4096
-
-Context* context_create(size_t poolCapacity) {
+Context* context_create(CompilerCallback compiler) {
     Context* c = malloc(sizeof(Context));
-    pool_init(&c->cp, poolCapacity);
-    pool_init(&c->src, poolCapacity);
+    pool_init(&c->cp, POOL_CAPACITY);
+    pool_init(&c->src, POOL_CAPACITY);
     c->ostack.data = malloc(STACK_CAPACITY * sizeof(SEXP));
     c->ostack.length = 0;
     c->ostack.capacity = STACK_CAPACITY;
     c->istack.data = malloc(STACK_CAPACITY * sizeof(int));
     c->istack.length = 0;
     c->istack.capacity = STACK_CAPACITY;
+    c->compiler = compiler;
+    // first item in source and constant pools is R_NilValue so that we can use the index 0 for other purposes
+    src_pool_add(c, R_NilValue);
+    cp_pool_add(c, R_NilValue);
     return c;
 }
 
@@ -66,4 +67,23 @@ void pool_grow(Pool* p) {
 
     p->data = temp;
 }
+
+// TODO for now we keep the context in a global value for easy gc
+Context * globalContext_;
+
+void interp_initialize(CompilerCallback compiler) {
+    globalContext_ = context_create(compiler);
+}
+
+void gc_callback(void (*forward_node)(SEXP)) {
+    for (size_t i = 0; i < globalContext_->ostack.length; ++i)
+        forward_node(globalContext_->ostack.data[i]);
+    forward_node(globalContext_->cp.data);
+    forward_node(globalContext_->src.data);
+}
+
+Context * globalContext() {
+    return globalContext_;
+}
+
 

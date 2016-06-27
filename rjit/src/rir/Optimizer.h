@@ -37,7 +37,7 @@ void doInlineBlock(CodeEditor::Cursor& cur, Code* fun) {
     fun_idx_t* args = bc.immediateCallArgs();
     num_args_t nargs = bc.immediateCallNargs();
 
-    for (int i = 0; i < nargs; ++i) {
+    for (size_t i = 0; i < nargs; ++i) {
         inlProm(cur, fun, args[i]);
         if (i != nargs - 1)
             cur << BC::pop();

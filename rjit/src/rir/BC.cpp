@@ -113,7 +113,7 @@ void BC::print() {
         std::cout << "call ";
         fun_idx_t* args = immediateCallArgs();
         num_args_t nargs = immediateCallNargs();
-        for (int i = 0; i < nargs; ++i) {
+        for (size_t i = 0; i < nargs; ++i) {
             std::cout << args[i] << " ";
         }
         if (immediateCallNames())

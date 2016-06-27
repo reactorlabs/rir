@@ -514,9 +514,9 @@ class CbrZero : public Pattern {
     static CbrZero* insertBefore(llvm::Instruction* ins, ir::Value cond,
                                  llvm::BasicBlock* trueCase,
                                  llvm::BasicBlock* falseCase) {
-        ICmpInst* test = new ICmpInst(ins, ICmpInst::ICMP_NE, cond,
+        llvm::ICmpInst* test = new llvm::ICmpInst(ins, llvm::ICmpInst::ICMP_NE, cond,
                                       Builder::integer(0), "condition");
-        auto branch = BranchInst::Create(trueCase, falseCase, test, ins);
+        auto branch = llvm::BranchInst::Create(trueCase, falseCase, test, ins);
         return new CbrZero(test, branch);
     }
 
@@ -558,7 +558,7 @@ class Cbr : public Pattern {
     static Cbr* insertBefore(llvm::Instruction* ins, ir::Value test,
                              llvm::BasicBlock* trueCase,
                              llvm::BasicBlock* falseCase) {
-        auto branch = BranchInst::Create(trueCase, falseCase, test, ins);
+        auto branch = llvm::BranchInst::Create(trueCase, falseCase, test, ins);
         return new Cbr(branch);
     }
 
@@ -582,11 +582,12 @@ class MarkNotMutable : public Pattern {
     }
 
     static MarkNotMutable* insertBefore(llvm::Instruction* ins, ir::Value val) {
-        LLVMContext& c = ins->getContext();
-        ConstantInt* int32_0 =
-            ConstantInt::get(c, APInt(32, StringRef("0"), 10));
-        ConstantInt* c1 = ConstantInt::get(c, APInt(32, StringRef("-193"), 10));
-        ConstantInt* c2 = ConstantInt::get(c, APInt(32, StringRef("128"), 10));
+        using namespace llvm;
+        llvm::LLVMContext& c = ins->getContext();
+        llvm::ConstantInt* int32_0 =
+            llvm::ConstantInt::get(c, llvm::APInt(32, llvm::StringRef("0"), 10));
+        llvm::ConstantInt* c1 = llvm::ConstantInt::get(c, llvm::APInt(32, llvm::StringRef("-193"), 10));
+        llvm::ConstantInt* c2 = llvm::ConstantInt::get(c, llvm::APInt(32, llvm::StringRef("128"), 10));
         auto sexpinfo = GetElementPtrInst::Create(
             t::SEXPREC, val, std::vector<llvm::Value*>({int32_0, int32_0}), "",
             ins);
@@ -643,6 +644,7 @@ class Car : public Pattern {
     }
 
     static Car* insertBefore(llvm::Instruction* ins, ir::Value sexp) {
+        using namespace llvm;
         LLVMContext& c = ins->getContext();
         ConstantInt* int_0 = ConstantInt::get(c, APInt(32, StringRef("0"), 10));
         ConstantInt* int_4 = ConstantInt::get(c, APInt(32, StringRef("4"), 10));
@@ -685,6 +687,7 @@ class Cdr : public Pattern {
     }
 
     static Cdr* insertBefore(llvm::Instruction* ins, ir::Value sexp) {
+        using namespace llvm;
         LLVMContext& c = ins->getContext();
         ConstantInt* int_0 = ConstantInt::get(c, APInt(32, StringRef("0"), 10));
         ConstantInt* int_1 = ConstantInt::get(c, APInt(32, StringRef("1"), 10));
@@ -728,6 +731,7 @@ class Tag : public Pattern {
     }
 
     static Tag* insertBefore(llvm::Instruction* ins, ir::Value sexp) {
+        using namespace llvm;
         LLVMContext& c = ins->getContext();
         ConstantInt* int_2 = ConstantInt::get(c, APInt(32, StringRef("2"), 10));
         ConstantInt* int_0 = ConstantInt::get(c, APInt(32, StringRef("0"), 10));
@@ -772,6 +776,7 @@ class InvocationCount : public Pattern {
 
     static InvocationCount* insertBefore(llvm::Instruction* ins,
                                          llvm::Value* consts) {
+        using namespace llvm;
         LLVMContext& c = ins->getContext();
         ConstantInt* int64_0 =
             ConstantInt::get(c, APInt(64, StringRef("0"), 10));
@@ -899,6 +904,7 @@ class GetVectorElement : public Pattern {
     static GetVectorElement* insertBefore(llvm::Instruction* ins,
                                           ir::Value vector, ir::Value index,
                                           llvm::Type* elementType) {
+        using namespace llvm;
         LLVMContext& c = ins->getContext();
         ConstantInt* int64_1 =
             ConstantInt::get(c, APInt(64, StringRef("1"), 10));
@@ -974,6 +980,7 @@ class SetVectorElement : public Pattern {
                                           ir::Value vector, ir::Value index,
                                           ir::Value value,
                                           llvm::Type* elementType) {
+        using namespace llvm;
         LLVMContext& c = ins->getContext();
         ConstantInt* int64_1 = ConstantInt::get(c, APInt(64, 1));
         auto realVector = new BitCastInst(
@@ -1105,7 +1112,7 @@ class CallToAddress : public Pattern {
                       std::vector<llvm::Value*>(args.begin(), args.end()));
     }
 
-    CallToAddress(Instruction* ins) : Pattern(ins, Kind::CallToAddress) {
+    CallToAddress(llvm::Instruction* ins) : Pattern(ins, Kind::CallToAddress) {
         assert(llvm::isa<llvm::CallInst>(ins) and
                "CallToAddress must be llvm calls");
     }
@@ -1163,6 +1170,7 @@ class ICStub : public ir::Pattern {
     static ICStub* insertBefore(llvm::Instruction* ins, llvm::Function* f,
                                 llvm::ArrayRef<llvm::Value*> arguments,
                                 size_t size) {
+        using namespace llvm;
         auto i = CallInst::Create(f, arguments, "", ins);
         llvm::AttributeSet PAL;
         {

@@ -2,69 +2,203 @@
  * in low level.
  */
 
-#include <llvm/IR/Module.h>
 
-#include "Compiler.h"
+//#include "Compiler.h"
+
+#include <cassert>
 
 #include "api.h"
 
-#include "RIntlns.h"
+//#include "RIntlns.h"
 
-#include "ir/Ir.h"
-#include "ir/Builder.h"
-#include "ir/primitive_calls.h"
-#include "TypeInfo.h"
-#include "Flags.h"
+//#include "ir/Ir.h"
+//#include "ir/Builder.h"
+//#include "ir/primitive_calls.h"
+//#include "TypeInfo.h"
+//#include "Flags.h"
 
 #include "rir/Compiler.h"
-#include "rir/OldInterpreter.h"
-#include "rir/RBytecode.h"
+//#include "rir/OldInterpreter.h"
+//#include "rir/RBytecode.h"
 
-#include "StackScan.h"
+//#include "StackScan.h"
 
+//#include <llvm/IR/Module.h>
+
+#include "rir/interp_context.h"
+#include "rir/interp.h"
+#include "rir/BC_inc.h"
+
+// r print statement
+#include "R_ext/Print.h"
+
+using namespace rjit;
+using namespace rir;
 
 extern "C" {
-    void gc_callback(void (*)(SEXP));
+// this is static in gnu-r (eval)
+    SEXP forcePromise(SEXP p) {
+        return R_NilValue;
+    }
+    SEXP mkPROMISE(SEXP expr, SEXP rho) {
+        return R_NilValue;
+    }
+
 }
 
 
-using namespace rjit;
+
+namespace {
+
+/** Initializes the rir contexts, registers the gc and so on...
+ */
+bool startup() {
+    // initialize the interpreter
+    // TODO give a compiler proper
+    interp_initialize(nullptr);
+    // register gc callback
+    registerGcCallback(&gc_callback);
+
+    return true;
+}
+
+} // anonymous namespace
+
+bool startup_ok = startup();
+
+/** Compiles given closure.
+
+ */
+REXPORT SEXP rir_compileClosure(SEXP closure) {
+    assert(startup_ok and "Not initialized");
+
+    return R_NilValue;
+}
+
+/** Compiles the given ast.
+ */
+REXPORT SEXP rir_compile(SEXP ast) {
+    assert(startup_ok and "Not initialized");
+
+    return R_NilValue;
+}
+
+
+/** Helper function that prints the code object.
+ */
+void print(::Code * c) {
+    Rprintf("Code object (offset %x (hex))\n", c->header);
+    Rprintf("  Magic:     %x (hex)\n", c->magic);
+    Rprintf("  Source:    %u (index to src pool)\n", c->src);
+    Rprintf("  Stack (o): %u\n", c->stackLength);
+    Rprintf("  Stack (i): %u\n", c->iStackLength);
+    Rprintf("  Num insns: %u\n", c->srcLength);
+    Rprintf("  Code size: %u [b]\n", c->codeSize);
+    if (c->magic != CODE_MAGIC)
+        Rf_error("Wrong magic number -- corrupted IR bytecode");
+
+    // now prettyprint the code
+    BC_t * bc = reinterpret_cast<BC_t *>(code(c));
+    unsigned * sources = src(c);
+    for (unsigned ic = 0, pc = 0, e = c->srcLength; ic != e; ++ic) {
+        if (sources[ic] != 0)
+            // TODO print also the reference
+            Rprintf("        # src %u\n", sources[ic]);
+        Rprintf("%x(8)%s", pc, BC::name(bc[pc]));
+        BC_t opcode = bc[pc++];
+        switch (opcode) {
+        case BC_t::br_:
+        case BC_t::brtrue_:
+        case BC_t::brfalse_: {
+            // for branches, get the address and display the actual pc it will jump to
+            int targetPc = * reinterpret_cast<int*>(bc + pc);
+            pc += sizeof(int) / sizeof (OpcodeT);
+            targetPc = pc + targetPc;
+            Rprintf(" %x (hex)", targetPc);
+            break;
+        }
+        case BC_t::call_: {
+            unsigned * args = reinterpret_cast<unsigned*>(bc + pc);
+            pc += sizeof(unsigned) * 2 / sizeof(OpcodeT);
+
+        }
+        default:
+            // default case only prints the unsigned immediate arguments
+            for (size_t i = 0, e = BC::immCount(opcode); i != e; ++i) {
+                Rprintf(" %u",  * reinterpret_cast<unsigned*>(bc + pc));
+                pc += sizeof(unsigned) / sizeof (OpcodeT);
+            }
+        }
+        Rprintf("\n");
+    }
+
+
+
+}
+
+
+/** Prints the information in given Function SEXP
+ */
+REXPORT SEXP rir_print(SEXP function) {
+    if (TYPEOF(function) != INTSXP)
+        Rf_error("Invalid type (expected INTSXP), got %u", TYPEOF(function));
+    assert((unsigned)Rf_length(function) > sizeof(::Function) and "Corrupted int vector send");
+    ::Function * f = reinterpret_cast<Function *>(INTEGER(function));
+    Rprintf("Function object (int vector size: %u)\n", Rf_length(function));
+    Rprintf("  Magic:        %x (hex)\n", f->magic);
+    Rprintf("  Size:         %u\n", f->size);
+    Rprintf("  Origin:       %s\n", f->origin ? "optimized" : "unoptimized");
+    Rprintf("  Code objects: %u\n", f->codeLength);
+    if (f->magic != FUNCTION_MAGIC)
+        Rf_error("Wrong magic number -- not rir bytecode");
+    // print respective code objects
+    for (::Code * c = begin(f), * e = end(f); c != e; c = next(c))
+        print(c);
+    return R_NilValue;
+}
+
+
+
 
 REXPORT SEXP jitrbc(SEXP exp) {
-    rir::Compiler c(exp);
+/*    rir::Compiler c(exp);
     rir::Code* f = c.finalize();
     rir::RBytecode x = rir::RBytecode::serialize(f, rir::Code::CC::envLazy);
     rir::Code* ff = x.deserialize();
-    return x;
+    return x; */
+    return R_NilValue;
 }
 
 REXPORT SEXP jitf(SEXP exp) {
-    rir::Compiler c(exp);
+//    rir::Compiler c(exp);
     // rir::Function * f = c.finalize();
-    return nullptr;
+    return R_NilValue;
 }
 
 REXPORT SEXP jitRir(SEXP exp) {
-    rir::Compiler c(exp);
+/*    rir::Compiler c(exp);
     rir::Code* f = c.finalize();
 
     SEXP env = Rf_NewEnvironment(R_NilValue, R_NilValue, R_GlobalEnv);
-    
+
     rir::Interpreter i(f);
-    return i.run(env);
+    return i.run(env); */
+    return R_NilValue;
 }
 
 /** Compiles given ast and returns the NATIVESXP for it.
  */
 REXPORT SEXP jitAst(SEXP ast, SEXP formals, SEXP rho) {
-    Compiler c("module");
+/*    Compiler c("module");
     SEXP result = c.compile("rfunction", ast, formals);
     c.finalize();
-    return result;
+    return result; */
+    return R_NilValue;
+
 }
 
 REXPORT SEXP jitPrintTypefeedback(SEXP f) {
-    if (TYPEOF(f) == CLOSXP)
+/*    if (TYPEOF(f) == CLOSXP)
         f = BODY(f);
     if (TYPEOF(f) != NATIVESXP) {
         warning("No nativesxp passed");
@@ -83,16 +217,18 @@ REXPORT SEXP jitPrintTypefeedback(SEXP f) {
         TypeInfo info(INTEGER(typefeedback)[i]);
         SEXP sym = VECTOR_ELT(typefeedbackName, i);
         std::cout << CHAR(PRINTNAME(sym)) << ": " << info << "\n";
-    }
+    } */
 
     return R_NilValue;
 }
 
 REXPORT SEXP jitSwapForNative(SEXP original, SEXP native) {
-    SETCAR(original, native);
+/*    SETCAR(original, native);
     SETCDR(original, native);
     SET_TAG(original, native);
-    return original;
+    return original; */
+    return R_NilValue;
+
 }
 
 /** More complex compilation method that compiles multiple functions into a
@@ -103,7 +239,7 @@ REXPORT SEXP jitSwapForNative(SEXP original, SEXP native) {
   used as function names.
  */
 REXPORT SEXP jitFunctions(SEXP moduleName, SEXP functions) {
-    char const* mName = CHAR(STRING_ELT(moduleName, 0));
+/*    char const* mName = CHAR(STRING_ELT(moduleName, 0));
     Compiler c(mName);
     while (functions != R_NilValue) {
         SEXP f = CAR(functions);
@@ -121,33 +257,39 @@ REXPORT SEXP jitFunctions(SEXP moduleName, SEXP functions) {
         functions = CDR(functions);
     }
     c.finalize();
-    return moduleName;
+    return moduleName; */
+    return R_NilValue;
+
 }
 
 /** Returns the constant pool associated with the given NATIVESXP.
  */
 REXPORT SEXP jitConstants(SEXP expression) {
-    assert(TYPEOF(expression) == NATIVESXP and
+/*    assert(TYPEOF(expression) == NATIVESXP and
            "JIT constants can only be extracted from a NATIVESXP argument");
-    return CDR(expression);
+    return CDR(expression); */
+    return R_NilValue;
+
 }
 
 /** Displays the LLVM IR for given NATIVESXP.
  */
 REXPORT SEXP jitLLVM(SEXP expression) {
-    assert(TYPEOF(expression) == NATIVESXP and
+/*    assert(TYPEOF(expression) == NATIVESXP and
            "LLVM code can only be extracted from a NATIVESXP argument");
     llvm::Function* f = reinterpret_cast<llvm::Function*>(TAG(expression));
-    f->dump();
+    f->dump(); */
     return R_NilValue;
 }
 
 REXPORT SEXP printWithoutSP(SEXP expr, SEXP formals) {
-    Compiler c("module");
+/*    Compiler c("module");
     SEXP result = c.compile("rfunction", expr, formals);
     llvm::Function* rfunction = reinterpret_cast<llvm::Function*>(TAG(result));
     rfunction->dump();
-    return result;
+    return result; */
+    return R_NilValue;
+
 }
 
 // Should rjit code recompile uncompiled functions before calling them
@@ -158,17 +300,17 @@ int R_ENABLE_JIT = getenv("R_ENABLE_JIT") ? atoi(getenv("R_ENABLE_JIT")) : 0;
 int RJIT_DEBUG = getenv("RJIT_DEBUG") ? atoi(getenv("RJIT_DEBUG")) : 0;
 
 REXPORT SEXP jitDisable(SEXP expression) {
-    RJIT_COMPILE = false;
+//    RJIT_COMPILE = false;
     return R_NilValue;
 }
 
 REXPORT SEXP jitEnable(SEXP expression) {
-    RJIT_COMPILE = true;
+/*    RJIT_COMPILE = true; */
     return R_NilValue;
 }
 
 REXPORT SEXP setFlag(SEXP name, SEXP value) {
-    if (TYPEOF(value) != LGLSXP || XLENGTH(value) < 1) {
+/*    if (TYPEOF(value) != LGLSXP || XLENGTH(value) < 1) {
         std::cout << "value not a bool\n";
         return R_NilValue;
     }
@@ -216,33 +358,23 @@ REXPORT SEXP setFlag(SEXP name, SEXP value) {
     std::cout << "Unknown flag : " << flag << "\n";
     std::cout << " Valid flags are: recordTypes, recompileHot, "
               << "staticNamedMatch, unsafeNA, printIR, printOptIR\n";
+              */
     return R_NilValue;
 }
 
 namespace {
 
-
 void rjit_gcCallback(void (*forward_node)(SEXP)) {
-    StackScan::stackScanner(forward_node);
+/*    StackScan::stackScanner(forward_node);
     Compiler::gcCallback(forward_node);
     // set the gc call back for the constant pool and the ast pool
     gc_callback(forward_node);
     // Precious::gcCallback(forward_node);
     rir::Interpreter::gcCallback(forward_node);
-    gc_callback(forward_node);
+    gc_callback(forward_node); */
 }
 
-int rjitStartup() {
-    // initialize LLVM backend
-    LLVMInitializeNativeTarget();
-    LLVMInitializeNativeAsmPrinter();
-    LLVMInitializeNativeAsmParser();
-    linkStatepointExampleGC();
-
-    registerGcCallback(&rjit_gcCallback);
-
-    return 1;
-}
 }
 
-int rjit_startup = rjitStartup();
+
+

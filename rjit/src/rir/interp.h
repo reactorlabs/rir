@@ -10,10 +10,25 @@
 
 #include "interp_context.h"
 
+/** If 1, when a function that has not yet been compiled by rir is to be called in the interpreter, it will be compiled first.
+
+  Set to 0 if rir should handle the execution to GNU-R.
+ */
+#define COMPILE_ON_DEMAND 1
+
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+/** How many bytes do we need to align on 4 byte boundary?
+ */
+INLINE unsigned pad4(unsigned sizeInBytes) {
+    unsigned x = sizeInBytes % 4;
+    return (x != 0) ? (sizeInBytes + 4 - x) : sizeInBytes;
+}
+
+
 
 // we cannot use specific sizes for enums in C
 typedef uint8_t OpcodeT;
@@ -52,10 +67,29 @@ typedef SEXP IntSEXP;
 // type of relative jump offset (all jumps are relative)
 typedef int32_t JumpOffset;
 
-typedef struct Function Function; // Forward declaration
+struct Function; // Forward declaration
+
 
 // all sizes in bytes,
 // length in element sizes
+
+/** Function magic constant is designed to help to distinguish between Function objects and normal INTSXPs. Normally this is not necessary, but a very creative user might try to assign arbitrary INTSXP to a closure which we would like to spot. Of course, such a creative user might actually put the magic in his vector too...
+  */
+#define FUNCTION_MAGIC (unsigned)0xCAFEBABE
+
+/** Code magic constant is intended to trick the GC into believing that it is dealing with already marked SEXP.
+
+  It also makes the SEXP look like NILSXP (0x00) so that we can determine whether a standard promise execution, or rir promise should be executed.
+ */
+#define CODE_MAGIC (unsigned)0x00ff
+
+/** Missing argument offset.
+
+  The offset is 0 (this would be impossible).
+*/
+// TODO This changes from old where it was some other number
+#define MISSING_ARG_OFFSET  (unsigned)0
+
 
 /**
  * Code holds a sequence of instructions; for each instruction
@@ -77,6 +111,8 @@ typedef struct Function Function; // Forward declaration
  * alignment of indices.
  */
 typedef struct Code {
+    unsigned magic; ///< Magic number that attempts to be PROMSXP already marked by the GC
+
     unsigned header; /// offset to Function object
 
     // TODO comment these
@@ -94,16 +130,24 @@ typedef struct Code {
 } Code;
 
 /** Returns a pointer to the instructions in c.  */
-OpcodeT* code(Code* c);
+INLINE OpcodeT* code(Code* c) {
+    return (OpcodeT*)c->data;
+}
 
 /** Returns a pointer to the source AST indices in c.  */
-unsigned* src(Code* c);
+INLINE unsigned* src(Code* c) {
+    return (unsigned*)(c->data + pad4(c->codeSize));
+}
 
 /** Returns a pointer to the Function to which c belongs. */
-struct Function* function(Code* c);
+INLINE struct Function* function(Code* c) {
+    return (struct Function*)(c - c->header);
+}
 
 /** Returns the next Code in the current function. */
-Code* next(Code* c);
+INLINE Code* next(Code* c) {
+    return (Code*)(c->data + pad4(c->codeSize) + c->srcLength);
+}
 
 // TODO removed src reference, now each code has its own
 
@@ -130,7 +174,7 @@ Code* next(Code* c);
  *  A Function has a number of Code objects, codeLen, stored
  *  inline in data.
  */
-typedef struct Function {
+struct Function {
     unsigned magic; /// used to detect Functions 0xCAFEBABE
 
     unsigned size; /// Size, in bytes, of the function and its data
@@ -142,25 +186,32 @@ typedef struct Function {
     // TODO this is misleading because Code objects are not continuous now
     Code data[]; // Code objects stored inline
 
-} Function;
+};
 
-bool isValidFunction(FunctionSEXP s);
+typedef struct Function Function;
 
-Function* origin(Function* f);
+INLINE bool isValidFunction(SEXP s) {
+    if (TYPEOF(s) != INTSXP)
+        return false;
+    return (unsigned)INTEGER(s)[0] == FUNCTION_MAGIC;
+}
 
 /** Returns the first code object associated with the function.
  */
-Code* begin(Function* f);
+INLINE Code* begin(Function* f) {
+    return f->data;
+}
 
 /** Returns the end of the function as code object, for interation purposes.
  */
-Code* end(Function* f);
+INLINE Code* end(Function* f) {
+    return (Code*)((uint8_t*)f->data + f->size);
+}
 
-/** Returns an AST located at index in the AST_Pool */
-SEXP source(size_t index);
-
-/** TODO Returns the code object with given offset */
-Code * codeAt(Function * f, unsigned offset);
+/** Returns the code object with given offset */
+INLINE Code * codeAt(Function * f, unsigned offset) {
+    return (Code*)((uint8_t*)f + offset);
+}
 
 /** C implementation of the Precious class to protect 
     the elements of the ast and constant pool from being
@@ -169,8 +220,6 @@ Code * codeAt(Function * f, unsigned offset);
 // void poolAdd(SEXP value);
 // void poolRemove(SEXP value);
 
-/** TODO Makes sure the gc undersands our stacks and pools. */
-void gc_callback(void (*forward_node)(SEXP));
 
 SEXP rirEval_c(Code* c, Context* ctx, SEXP env, unsigned numArgs);
 

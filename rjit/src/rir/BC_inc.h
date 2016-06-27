@@ -3,10 +3,13 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <cassert>
 
 #include "RDefs.h"
 
 #include <vector>
+
+#include "interp.h"
 
 namespace rjit {
 namespace rir {
@@ -31,7 +34,7 @@ namespace rir {
 // ============================================================
 // ==== BC types
 //
-enum class BC_t : uint8_t {
+enum class BC_t : OpcodeT {
 
 #define DEF_INSTR(name, ...) name,
 #include "insns.h"
@@ -116,6 +119,75 @@ class BC {
 
     BC_t bc;
     immediate_t immediate;
+
+
+    static unsigned size(BC_t bc) {
+        switch (bc) {
+#define DEF_INSTR(name, imm, opop, opush, ipop, ipush) case BC_t::name : return imm * sizeof(ArgT) + 1;
+#include "insns.h"
+        default:
+            return 0;
+        }
+    }
+
+    static unsigned immCount(BC_t bc) {
+        switch (bc) {
+#define DEF_INSTR(name, imm, opop, opush, ipop, ipush) case BC_t::name : return imm;
+#include "insns.h"
+        default:
+            assert(false);
+            return 0;
+        }
+    }
+
+    static char const * name(BC_t bc) {
+        switch (bc) {
+#define DEF_INSTR(name, imm, opop, opush, ipop, ipush) case BC_t::name : return #name;
+#include "insns.h"
+        default:
+            return "???";
+        }
+    }
+
+    static unsigned pushCount(BC_t bc) {
+        switch (bc) {
+#define DEF_INSTR(name, imm, opop, opush, ipop, ipush) case BC_t::name : return opush;
+#include "insns.h"
+        default:
+            assert(false);
+            return 0;
+        }
+    }
+
+    static unsigned iPushCount(BC_t bc) {
+        switch (bc) {
+#define DEF_INSTR(name, imm, opop, opush, ipop, ipush) case BC_t::name : return ipush;
+#include "insns.h"
+        default:
+            assert(false);
+            return 0;
+        }
+    }
+
+    static unsigned popCount(BC_t bc) {
+        switch (bc) {
+#define DEF_INSTR(name, imm, opop, opush, ipop, ipush) case BC_t::name : return opop;
+#include "insns.h"
+        default:
+            assert(false);
+            return 0;
+        }
+    }
+
+    static unsigned iPopCount(BC_t bc) {
+        switch (bc) {
+#define DEF_INSTR(name, imm, opop, opush, ipop, ipush) case BC_t::name : return ipop;
+#include "insns.h"
+        default:
+            assert(false);
+            return 0;
+        }
+    }
 
     inline size_t size() const;
 

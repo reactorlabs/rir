@@ -25,6 +25,14 @@ extern "C" {
 #define false 0
 #endif
 
+#define POOL_CAPACITY 4096
+#define STACK_CAPACITY 4096
+
+/** Compiler API. Given a language object, compiles it and returns the INTSXP containing the Function and its Code objects.
+
+  The idea is to call this if we want on demand compilation of closures.
+ */
+typedef SEXP (*CompilerCallback)(SEXP);
 
 //
 // Primitive stack.
@@ -62,6 +70,7 @@ typedef struct {
     Pool src;
     OStack ostack;
     PStack istack;
+    CompilerCallback compiler;
 } Context;
 
 INLINE int istack_top(Context* c) {
@@ -88,6 +97,10 @@ INLINE SEXP ostack_pop(Context* c) {
     return c->ostack.data[--c->ostack.length];
 }
 
+INLINE void ostack_popn(Context* c, unsigned size) {
+    c->ostack.length -= size;
+}
+
 INLINE void ostack_push(Context* c, SEXP val) {
     c->ostack.data[c->ostack.length++] = val;
 }
@@ -108,7 +121,7 @@ INLINE void istack_push(Context* c, int val) {
 
 void istack_ensureSize(Context* c, unsigned minFree);
 
-Context* context_create(size_t poolCapacity);
+Context* context_create(CompilerCallback compiler);
 
 void pool_init(Pool* p, size_t capacity);
 
@@ -135,6 +148,22 @@ INLINE SEXP cp_pool_at(Context* c, size_t index) {
 INLINE SEXP src_pool_at(Context* c, size_t value) {
     return VECTOR_ELT(c->src.data, value);
 }
+
+/** Initializes the interpreter.
+ */
+void interp_initialize(CompilerCallback compiler);
+
+/** TODO Makes sure the gc undersands our stacks and pools. */
+void gc_callback(void (*forward_node)(SEXP));
+
+/** Returns the global context for the interpreter - important to get access to the shared constant and source pools.
+
+  TODO Even in multithreaded mode we probably want to have cp and src pools shared - it is not that we add stuff to them often.
+ */
+Context * globalContext();
+
+
+
 
 #ifdef __cplusplus
 }

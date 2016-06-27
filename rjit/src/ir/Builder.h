@@ -113,7 +113,7 @@ class Builder {
                       TypeFeedback* tf = nullptr);
     void openFunctionOrPromise(SEXP ast);
 
-    void openIC(std::string const& name, FunctionType* ty) {
+    void openIC(std::string const& name, llvm::FunctionType* ty) {
         assert(contextStack_.empty());
         c_ = new ICContext(name, m_, ty);
     }

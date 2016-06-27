@@ -46,7 +46,8 @@ class VariablePass : public Pass {
 
 class VariableAnalysis : public LinearDriver<VariablePass> {
   public:
-    bool runOnFunction_(Function& f) override {
+    bool runOnFunction_(llvm::Function& f) override {
+        using namespace llvm;
         pass.m = static_cast<JITModule*>(f.getParent());
         SEXP formals = pass.m->formals(&f);
         while (formals != R_NilValue) {
