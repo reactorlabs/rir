@@ -69,7 +69,7 @@ class Code {
                 ast[i] = e.second;
 
                 if (e.second){
-                    ind[i] = i+1
+                    ind[i] = i+1;
                 } else {
                     ind[i] = 0;
                 }
@@ -153,7 +153,9 @@ class Code {
 
     unsigned calcSize(unsigned size);
 
-    ::Code * createCode();
+    size_t createCode();
+
+    size_t codeSize(size_t count);
 };
 }
 }

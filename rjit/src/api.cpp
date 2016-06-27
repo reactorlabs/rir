@@ -118,9 +118,25 @@ void print(::Code * c) {
             break;
         }
         case BC_t::call_: {
-            unsigned * args = reinterpret_cast<unsigned*>(bc + pc);
+            unsigned * argIdxs = reinterpret_cast<unsigned*>(bc + pc);
             pc += sizeof(unsigned) * 2 / sizeof(OpcodeT);
-
+            SEXP args = cp_pool_at(globalContext(), argIdxs[0]);
+            SEXP names = cp_pool_at(globalContext(), argIdxs[1]);
+            Rprintf(" [");
+            for (size_t i = 0, e = Rf_length(args); i != e; ++i)
+                Rprintf(" %x", INTEGER(args)[i]);
+            Rprintf("]");
+            if (names) {
+                Rprintf(" [");
+                for (size_t i = 0, e = Rf_length(names); i != e; ++i) {
+                    SEXP n = VECTOR_ELT(names, i);
+                    if (n == R_NilValue)
+                        Rprintf(" -");
+                    else
+                        Rprintf(" %s", CHAR(PRINTNAME(n)));
+                }
+                Rprintf("]");
+            }
         }
         default:
             // default case only prints the unsigned immediate arguments
