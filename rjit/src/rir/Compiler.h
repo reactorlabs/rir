@@ -7,7 +7,6 @@
 namespace rjit {
 namespace rir {
 
-class Code;
 class Compiler {
     SEXP exp;
     SEXP formals;

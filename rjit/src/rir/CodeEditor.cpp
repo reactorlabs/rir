@@ -9,12 +9,12 @@
 namespace rjit {
 namespace rir {
 
-CodeEditor::CodeEditor(Code* code) : original(code), children(code->children) {
+CodeEditor::CodeEditor(CodeHandle& code) : original(code) {
     std::unordered_map<BC_t*, Label> bcLabels;
 
     {
-        BC_t* pc = code->bc;
-        BC_t* end = (BC_t*)((uintptr_t)pc + code->size);
+        BC_t* pc = (BC_t*)code.data();
+        BC_t* end = (BC_t*)((uintptr_t)pc + code.code->codeSize);
         while (pc != end) {
             BC bc = BC::advance(&pc);
             if (bc.isJmp()) {
@@ -28,8 +28,8 @@ CodeEditor::CodeEditor(Code* code) : original(code), children(code->children) {
     {
         BytecodeList* pos = &front;
 
-        BC_t* pc = code->bc;
-        BC_t* end = (BC_t*)((uintptr_t)pc + code->size);
+        BC_t* pc = (BC_t*)code.data();
+        BC_t* end = (BC_t*)((uintptr_t)pc + code.code->codeSize);
 
         while (pc != end) {
             pos->next = new BytecodeList();
@@ -47,9 +47,10 @@ CodeEditor::CodeEditor(Code* code) : original(code), children(code->children) {
                 pos->prev = prev;
             }
 
-            SEXP ast = code->getAst(pc);
-            if (ast)
-                astMap[pos] = ast;
+            //TODO: this needs to be redone
+            // SEXP ast = code->getAst(pc);
+            // if (ast)
+            //     astMap[pos] = ast;
 
             BC bc = BC::advance(&pc);
             if (bc.isJmp()) {
@@ -81,20 +82,6 @@ void CodeEditor::print() {
     for (Cursor cur = getCursor(); !cur.atEnd(); ++cur) {
         (*cur).print();
     }
-}
-
-Code* CodeEditor::toCode() {
-    assert(!empty());
-    CodeStream cs(original->ast);
-    cs.setNumLabels(nextLabel);
-    for (Cursor cur = getCursor(); !cur.atEnd(); ++cur) {
-        if (cur.hasAst())
-            cs.addAst(cur.ast());
-        cs << *cur;
-    }
-    Code* res = cs.toCode();
-    cs.getCurrentCode()->children = children;
-    return res;
 }
 
 void CodeEditor::normalizeReturn() {

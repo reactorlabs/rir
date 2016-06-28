@@ -8,7 +8,7 @@
 #include "BC.h"
 #include "Pool.h"
 
-#include "Code.h"
+#include "FunctionHandle.h"
 
 namespace rjit {
 namespace rir {
@@ -22,9 +22,8 @@ class CodeStream {
     unsigned pos = 0;
     unsigned size = 1024;
 
-    Code* current;
+    FunctionHandle& function;
 
-    Code * parent;
     SEXP ast;
     fun_idx_t insertPoint;
 
@@ -32,9 +31,9 @@ class CodeStream {
     std::map<unsigned, Label> patchpoints;
     std::vector<unsigned> label2pos;
 
-  public:
-    Code* getCurrentCode() { return current; }
+    std::vector<SEXP> sources;
 
+  public:
     Label mkLabel() {
         assert(nextLabel < MAX_JMP);
         label2pos.resize(nextLabel + 1);
@@ -51,14 +50,8 @@ class CodeStream {
         insert((jmp_t)0);
     }
 
-    CodeStream(Code* parent, SEXP ast)
-        : current(new Code()), parent(parent), ast(ast),
-          insertPoint(parent->next()) {
-        code = new std::vector<char>(1024);
-    }
-
-    CodeStream(SEXP ast)
-        : current(new Code()), parent(nullptr), ast(ast), insertPoint(-1) {
+    CodeStream(FunctionHandle& function, SEXP ast)
+        : function(function), ast(ast), insertPoint(function.nextIdx()) {
         code = new std::vector<char>(1024);
     }
 
@@ -68,19 +61,13 @@ class CodeStream {
         }
         b.write(*this);
         // make space in the sources buffer
-        current->sources.push_back(nullptr);
+        sources.push_back(nullptr);
         return *this;
     }
 
     CodeStream& operator<<(Label label) {
         label2pos[label] = pos;
         return *this;
-    }
-
-    fun_idx_t finalize() {
-        assert(parent);
-        parent->addCode(insertPoint, toCode());
-        return insertPoint;
     }
 
     template <typename T>
@@ -95,31 +82,18 @@ class CodeStream {
     }
 
     void addAst(SEXP ast) {
-        assert (current->sources.back() == nullptr);
-        current->sources.back() = ast;
+        assert (sources.back() == nullptr);
+        sources.back() = ast;
     }
 
-    Code* toCode() {
-        assert(current->size == 0 and current->bc == nullptr);
-        size_t size = pos;
-
-        current->size = size;
-        current->bc = toBc();
-        current->ast = ast;
-        ast = nullptr;
-        return current;
-    }
-
-  private:
-    BC_t* toBc() {
-        BC_t* res = (BC_t*)new char[pos];
-        memcpy((void*)res, (void*)&(*code)[0], pos);
+    fun_idx_t finalize() {
+        CodeHandle res = function.writeCode(insertPoint, ast, &(*code)[0], pos, sources);
 
         for (auto p : patchpoints) {
             unsigned pos = p.first;
             unsigned target = label2pos[p.second];
             jmp_t j = target - pos - sizeof(jmp_t);
-            *(jmp_t*)((uintptr_t)res + pos) = j;
+            *(jmp_t*)((uintptr_t)res.data() + pos) = j;
         }
 
         label2pos.clear();
@@ -128,15 +102,8 @@ class CodeStream {
 
         code->clear();
         pos = 0;
-        return res;
-    }
 
-    CodeStream& operator<<(CodeStream& cs) {
-        size += cs.pos;
-        code->resize(size);
-        memcpy((void*)&((*code)[pos]), (void*)&((*cs.code)[0]), cs.pos);
-        pos += cs.pos;
-        return *this;
+        return insertPoint;
     }
 };
 }

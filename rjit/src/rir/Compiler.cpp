@@ -17,11 +17,11 @@ namespace rir {
 
 namespace {
 
-fun_idx_t compilePromise(Code* f, SEXP exp);
-void compileExpression(Code* f, CodeStream& cs, SEXP exp);
+fun_idx_t compilePromise(FunctionHandle& f, SEXP exp);
+void compileExpression(FunctionHandle& f, CodeStream& cs, SEXP exp);
 
 // function application
-void compileCall(Code* parent, CodeStream& cs, SEXP ast, SEXP fun, SEXP args) {
+void compileCall(FunctionHandle& parent, CodeStream& cs, SEXP ast, SEXP fun, SEXP args) {
     // application has the form:
     // LHS ( ARGS )
 
@@ -64,11 +64,11 @@ void compileConst(CodeStream& cs, SEXP constant) {
     cs << BC::push(constant);
 }
 
-void compileExpression(Code* parent, CodeStream& cs, SEXP exp) {
+void compileExpression(FunctionHandle& function, CodeStream& cs, SEXP exp) {
     // Dispatch on the current type of AST node
     Match(exp) {
         // Function application
-        Case(LANGSXP, fun, args) { compileCall(parent, cs, exp, fun, args); }
+        Case(LANGSXP, fun, args) { compileCall(function, cs, exp, fun, args); }
         // Variable lookup
         Case(SYMSXP) { compileGetvar(cs, exp); }
         // Constant
@@ -92,27 +92,23 @@ void compileFormals(CodeStream& cs, SEXP formals) {
     }
 }
 
-fun_idx_t compilePromise(Code* parent, SEXP exp) {
-    CodeStream cs(parent, exp);
-    compileExpression(cs.getCurrentCode(), cs, exp);
+fun_idx_t compilePromise(FunctionHandle& function, SEXP exp) {
+    CodeStream cs(function, exp);
+    compileExpression(function, cs, exp);
     cs << BC::ret();
     return cs.finalize();
 }
 }
 
 SEXP Compiler::finalize() {
-    CodeStream cs(exp);
+    FunctionHandle function;
+    CodeStream cs(function, exp);
     if (formals)
         compileFormals(cs, formals);
-    compileExpression(cs.current, cs, exp);
+    compileExpression(function, cs, exp);
     cs << BC::ret();
-    Code* code = cs.toCode();
-    // TODO reenable optimizations !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    //Optimizer::optimize(code);
-    // call the c function here that linearise the code produced from the 
-    // codestream in order to be used for the interpreter
-    SEXP result = code->linearize(globalContext());
-    return result;
+    cs.finalize();
+    return function.store;
 }
 }
 }

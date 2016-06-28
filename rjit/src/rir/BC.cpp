@@ -88,13 +88,13 @@ SEXP BC::immediateCallNames() {
                : nullptr;
 }
 
-void Code::print() {
-    BC_t* pc = bc;
+void CodeHandle::print() {
+    BC_t* pc = (BC_t*)data();
 
     std::cout << "-------------------\n";
 
-    while ((uintptr_t)pc < (uintptr_t)bc + size) {
-        std::cout << std::setw(3) << ((uintptr_t)pc - (uintptr_t)bc) << " ";
+    while ((uintptr_t)pc < (uintptr_t)endData()) {
+        std::cout << std::setw(3) << ((uintptr_t)pc - (uintptr_t)data()) << " ";
         BC bc = BC::advance(&pc);
         bc.print();
     }
@@ -113,7 +113,7 @@ void BC::print() {
         std::cout << "call ";
         fun_idx_t* args = immediateCallArgs();
         num_args_t nargs = immediateCallNargs();
-        for (int i = 0; i < nargs; ++i) {
+        for (unsigned i = 0; i < nargs; ++i) {
             std::cout << args[i] << " ";
         }
         if (immediateCallNames())
