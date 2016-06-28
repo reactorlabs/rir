@@ -10,10 +10,8 @@
 
 #include "interp_context.h"
 
-/** If 1, when a function that has not yet been compiled by rir is to be called in the interpreter, it will be compiled first.
-
-  Set to 0 if rir should handle the execution to GNU-R.
- */
+// If 1, when a function that has not yet been compiled by rir is to be called in the interpreter, it will be compiled first.
+// Set to 0 if rir should handle the execution to GNU-R.
 #define COMPILE_ON_DEMAND 1
 
 
@@ -73,20 +71,15 @@ struct Function; // Forward declaration
 // all sizes in bytes,
 // length in element sizes
 
-/** Function magic constant is designed to help to distinguish between Function objects and normal INTSXPs. Normally this is not necessary, but a very creative user might try to assign arbitrary INTSXP to a closure which we would like to spot. Of course, such a creative user might actually put the magic in his vector too...
-  */
+// Function magic constant is designed to help to distinguish between Function objects and normal INTSXPs. Normally this is not necessary, but a very creative user might try to assign arbitrary INTSXP to a closure which we would like to spot. Of course, such a creative user might actually put the magic in his vector too...
 #define FUNCTION_MAGIC (unsigned)0xCAFEBABE
 
-/** Code magic constant is intended to trick the GC into believing that it is dealing with already marked SEXP.
-
-  It also makes the SEXP look like NILSXP (0x00) so that we can determine whether a standard promise execution, or rir promise should be executed.
- */
+// Code magic constant is intended to trick the GC into believing that it is dealing with already marked SEXP.
+//  It also makes the SEXP look like NILSXP (0x00) so that we can determine whether a standard promise execution, or rir promise should be executed.
 #define CODE_MAGIC (unsigned)0x00ff
 
-/** Missing argument offset.
-
-  The offset is 0 (this would be impossible).
-*/
+// Missing argument offset.
+// The offset is 0 (this would be impossible).
 // TODO This changes from old where it was some other number
 #define MISSING_ARG_OFFSET  (unsigned)0
 

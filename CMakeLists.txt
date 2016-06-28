@@ -15,7 +15,8 @@ message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
 include_directories(${LLVM_INCLUDE_DIRS})
 add_definitions(${LLVM_DEFINITIONS})
 # Werror should only be enabled in release builds
-add_definitions(--std=c++11 -Wall)
+set(CMAKE_C_FLAGS "--std=c99 -Wall")
+set(CMAKE_CXX_FLAGS "--std=c++11 -Wall")
 # -E is preprocessor in gcc
 
 # set R

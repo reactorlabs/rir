@@ -1,4 +1,5 @@
 #include <assert.h>
+#include <alloca.h>
 
 #include "interp.h"
 #include "interp_context.h"
