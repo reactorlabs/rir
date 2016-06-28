@@ -60,7 +60,7 @@ public:
 
 class FunctionHandle {
 public:
-    constexpr static unsigned initialSize = 1024 * 1024;
+    constexpr static unsigned initialSize = 1024;
 
     SEXP store;
     void* payload;
@@ -94,8 +94,15 @@ public:
         unsigned totalSize = CodeHandle::totalSize(codeSize, sources.size());
 
         if (function->size + totalSize > capacity) {
-            // TODO: grow store
-            assert(false);
+            unsigned newCapacity = capacity * 2;
+            SEXP newStore = Rf_allocVector(INTSXP, newCapacity);
+            void* newPayload = INTEGER(newStore);
+
+            memcpy(newPayload, payload, capacity);
+
+            store = newStore;
+            payload = newPayload;
+            capacity = newCapacity;
         }
 
         unsigned offset = function->size;
