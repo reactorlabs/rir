@@ -10,10 +10,10 @@
 
 #include "interp_context.h"
 
-// If 1, when a function that has not yet been compiled by rir is to be called in the interpreter, it will be compiled first.
+// If 1, when a function that has not yet been compiled by rir is to be called
+// in the interpreter, it will be compiled first.
 // Set to 0 if rir should handle the execution to GNU-R.
 #define COMPILE_ON_DEMAND 1
-
 
 #ifdef __cplusplus
 extern "C" {
@@ -25,8 +25,6 @@ INLINE unsigned pad4(unsigned sizeInBytes) {
     unsigned x = sizeInBytes % 4;
     return (x != 0) ? (sizeInBytes + 4 - x) : sizeInBytes;
 }
-
-
 
 // we cannot use specific sizes for enums in C
 typedef uint8_t OpcodeT;
@@ -67,22 +65,26 @@ typedef int32_t JumpOffset;
 
 struct Function; // Forward declaration
 
-
 // all sizes in bytes,
 // length in element sizes
 
-// Function magic constant is designed to help to distinguish between Function objects and normal INTSXPs. Normally this is not necessary, but a very creative user might try to assign arbitrary INTSXP to a closure which we would like to spot. Of course, such a creative user might actually put the magic in his vector too...
+// Function magic constant is designed to help to distinguish between Function
+// objects and normal INTSXPs. Normally this is not necessary, but a very
+// creative user might try to assign arbitrary INTSXP to a closure which we
+// would like to spot. Of course, such a creative user might actually put the
+// magic in his vector too...
 #define FUNCTION_MAGIC (unsigned)0xCAFEBABE
 
-// Code magic constant is intended to trick the GC into believing that it is dealing with already marked SEXP.
-//  It also makes the SEXP look like NILSXP (0x00) so that we can determine whether a standard promise execution, or rir promise should be executed.
+// Code magic constant is intended to trick the GC into believing that it is
+// dealing with already marked SEXP.
+//  It also makes the SEXP look like NILSXP (0x00) so that we can determine
+//  whether a standard promise execution, or rir promise should be executed.
 #define CODE_MAGIC (unsigned)0x00ff
 
 // Missing argument offset.
 // The offset is 0 (this would be impossible).
 // TODO This changes from old where it was some other number
-#define MISSING_ARG_OFFSET  (unsigned)0
-
+#define MISSING_ARG_OFFSET (unsigned)0
 
 /**
  * Code holds a sequence of instructions; for each instruction
@@ -106,7 +108,8 @@ struct Function; // Forward declaration
 #pragma pack(push)
 #pragma pack(1)
 typedef struct Code {
-    unsigned magic; ///< Magic number that attempts to be PROMSXP already marked by the GC
+    unsigned magic; ///< Magic number that attempts to be PROMSXP already marked
+                    ///by the GC
 
     unsigned header; /// offset to Function object
 
@@ -125,11 +128,8 @@ typedef struct Code {
 } Code;
 #pragma pack(pop)
 
-
 /** Returns a pointer to the instructions in c.  */
-INLINE OpcodeT* code(Code* c) {
-    return (OpcodeT*)c->data;
-}
+INLINE OpcodeT* code(Code* c) { return (OpcodeT*)c->data; }
 
 /** Returns a pointer to the source AST indices in c.  */
 INLINE unsigned* src(Code* c) {
@@ -143,7 +143,8 @@ INLINE struct Function* function(Code* c) {
 
 /** Returns the next Code in the current function. */
 INLINE Code* next(Code* c) {
-    return (Code*)(c->data + pad4(c->codeSize) + c->srcLength * sizeof(unsigned));
+    return (Code*)(c->data + pad4(c->codeSize) +
+                   c->srcLength * sizeof(unsigned));
 }
 
 // TODO removed src reference, now each code has its own
@@ -178,12 +179,12 @@ struct Function {
 
     unsigned size; /// Size, in bytes, of the function and its data
 
-    FunctionSEXP origin; /// Same Function with fewer optimizations, NULL if original
+    FunctionSEXP
+        origin; /// Same Function with fewer optimizations, NULL if original
 
     unsigned codeLength; /// number of Code objects in the Function
 
     uint8_t data[]; // Code objects stored inline
-
 };
 #pragma pack(pop)
 
@@ -197,28 +198,23 @@ INLINE bool isValidFunction(SEXP s) {
 
 /** Returns the first code object associated with the function.
  */
-INLINE Code* begin(Function* f) {
-    return (Code*)f->data;
-}
+INLINE Code* begin(Function* f) { return (Code*)f->data; }
 
 /** Returns the end of the function as code object, for interation purposes.
  */
-INLINE Code* end(Function* f) {
-    return (Code*)((uint8_t*)f + f->size);
-}
+INLINE Code* end(Function* f) { return (Code*)((uint8_t*)f + f->size); }
 
 /** Returns the code object with given offset */
-INLINE Code * codeAt(Function * f, unsigned offset) {
+INLINE Code* codeAt(Function* f, unsigned offset) {
     return (Code*)((uint8_t*)f + offset);
 }
 
-/** C implementation of the Precious class to protect 
+/** C implementation of the Precious class to protect
     the elements of the ast and constant pool from being
     gc'ed */
 // void poolGcCallBack(void (*forward_node)(SEXP));
 // void poolAdd(SEXP value);
 // void poolRemove(SEXP value);
-
 
 SEXP rirEval_c(Code* c, Context* ctx, SEXP env, unsigned numArgs);
 

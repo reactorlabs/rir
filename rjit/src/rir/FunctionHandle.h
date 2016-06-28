@@ -9,11 +9,12 @@ namespace rjit {
 namespace rir {
 
 class CodeHandle {
-public:
+  public:
     Code* code;
 
-    CodeHandle(SEXP ast, unsigned codeSize, unsigned sourceSize, unsigned offset, void* insert) {
-        code = new(insert) Code;
+    CodeHandle(SEXP ast, unsigned codeSize, unsigned sourceSize,
+               unsigned offset, void* insert) {
+        code = new (insert) Code;
 
         code->magic = CODE_MAGIC;
         code->header = offset;
@@ -26,13 +27,9 @@ public:
         assert(atEnd() || code->magic == CODE_MAGIC);
     }
 
-    void* endData() {
-        return (void*)((uintptr_t)data() + code->codeSize);
-    }
+    void* endData() { return (void*)((uintptr_t)data() + code->codeSize); }
 
-    void* data() {
-        return code->data;
-    }
+    void* data() { return code->data; }
 
     void* sources() {
         return (void*)((uintptr_t)(code + 1) + pad4(code->codeSize));
@@ -43,23 +40,23 @@ public:
     }
 
     void* end() {
-        return (void*)((uintptr_t)code + totalSize(code->codeSize, code->srcLength));
+        return (void*)((uintptr_t)code +
+                       totalSize(code->codeSize, code->srcLength));
     }
 
     void print();
 
     bool atEnd() {
-        uintptr_t functionEnd = (uintptr_t)function(code) + function(code)->size;
+        uintptr_t functionEnd =
+            (uintptr_t)function(code) + function(code)->size;
         return functionEnd == (uintptr_t)code;
     }
 
-    CodeHandle next() {
-        return CodeHandle(::next(code));
-    }
+    CodeHandle next() { return CodeHandle(::next(code)); }
 };
 
 class FunctionHandle {
-public:
+  public:
     constexpr static unsigned initialSize = 1024;
 
     SEXP store;
@@ -72,25 +69,26 @@ public:
         store = Rf_allocVector(INTSXP, capacity);
         payload = INTEGER(store);
 
-        function = new(payload) Function;
+        function = new (payload) Function;
         function->magic = FUNCTION_MAGIC;
         function->size = sizeof(Function);
         function->origin = nullptr;
         function->codeLength = 0;
     }
 
-    FunctionHandle(SEXP store) : store(store), payload(INTEGER(store)), capacity(Rf_length(store)), function((Function*)payload) {
+    FunctionHandle(SEXP store)
+        : store(store), payload(INTEGER(store)), capacity(Rf_length(store)),
+          function((Function*)payload) {
         assert(function->magic == FUNCTION_MAGIC);
         assert(function->size <= (unsigned)Rf_length(store));
     }
 
     FunctionHandle(const FunctionHandle&) = delete;
 
-    fun_idx_t nextIdx() {
-        return function->codeLength++;
-    }
+    fun_idx_t nextIdx() { return function->codeLength++; }
 
-    CodeHandle writeCode(fun_idx_t idx, SEXP ast, void* bc, unsigned codeSize, std::vector<SEXP>& sources) {
+    CodeHandle writeCode(fun_idx_t idx, SEXP ast, void* bc, unsigned codeSize,
+                         std::vector<SEXP>& sources) {
         unsigned totalSize = CodeHandle::totalSize(codeSize, sources.size());
 
         if (function->size + totalSize > capacity) {
@@ -115,18 +113,17 @@ public:
 
         memcpy(code.data(), bc, codeSize);
 
-        unsigned * srcs = reinterpret_cast<unsigned*>(code.sources());
+        unsigned* srcs = reinterpret_cast<unsigned*>(code.sources());
         for (size_t i = 0, e = sources.size(); i != e; ++i)
-            *(srcs++) = sources[i] == nullptr ? 0 : src_pool_add(globalContext(), sources[i]);
+            *(srcs++) = sources[i] == nullptr
+                            ? 0
+                            : src_pool_add(globalContext(), sources[i]);
 
         return code;
     }
 
-    CodeHandle begin() {
-        return CodeHandle(::begin(function));
-    }
+    CodeHandle begin() { return CodeHandle(::begin(function)); }
 };
-
 }
 }
 

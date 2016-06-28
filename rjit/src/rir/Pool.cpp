@@ -25,5 +25,3 @@ pool_idx_t Pool::getNum(double n) {
 }
 }
 }
-
-

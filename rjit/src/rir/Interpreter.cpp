@@ -809,5 +809,4 @@ void Interpreter::gcCallback(void (*forward_node)(SEXP)) {
 } // rir
 } // rjit
 
-
 #endif

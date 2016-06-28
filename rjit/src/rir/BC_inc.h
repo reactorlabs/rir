@@ -120,10 +120,11 @@ class BC {
     BC_t bc;
     immediate_t immediate;
 
-
     static unsigned size(BC_t bc) {
         switch (bc) {
-#define DEF_INSTR(name, imm, opop, opush, ipop, ipush) case BC_t::name : return imm * sizeof(ArgT) + 1;
+#define DEF_INSTR(name, imm, opop, opush, ipop, ipush)                         \
+    case BC_t::name:                                                           \
+        return imm * sizeof(ArgT) + 1;
 #include "insns.h"
         default:
             return 0;
@@ -132,7 +133,9 @@ class BC {
 
     static unsigned immCount(BC_t bc) {
         switch (bc) {
-#define DEF_INSTR(name, imm, opop, opush, ipop, ipush) case BC_t::name : return imm;
+#define DEF_INSTR(name, imm, opop, opush, ipop, ipush)                         \
+    case BC_t::name:                                                           \
+        return imm;
 #include "insns.h"
         default:
             assert(false);
@@ -140,9 +143,11 @@ class BC {
         }
     }
 
-    static char const * name(BC_t bc) {
+    static char const* name(BC_t bc) {
         switch (bc) {
-#define DEF_INSTR(name, imm, opop, opush, ipop, ipush) case BC_t::name : return #name;
+#define DEF_INSTR(name, imm, opop, opush, ipop, ipush)                         \
+    case BC_t::name:                                                           \
+        return #name;
 #include "insns.h"
         default:
             return "???";
@@ -151,7 +156,9 @@ class BC {
 
     static unsigned pushCount(BC_t bc) {
         switch (bc) {
-#define DEF_INSTR(name, imm, opop, opush, ipop, ipush) case BC_t::name : return opush;
+#define DEF_INSTR(name, imm, opop, opush, ipop, ipush)                         \
+    case BC_t::name:                                                           \
+        return opush;
 #include "insns.h"
         default:
             assert(false);
@@ -161,7 +168,9 @@ class BC {
 
     static unsigned iPushCount(BC_t bc) {
         switch (bc) {
-#define DEF_INSTR(name, imm, opop, opush, ipop, ipush) case BC_t::name : return ipush;
+#define DEF_INSTR(name, imm, opop, opush, ipop, ipush)                         \
+    case BC_t::name:                                                           \
+        return ipush;
 #include "insns.h"
         default:
             assert(false);
@@ -171,7 +180,9 @@ class BC {
 
     static unsigned popCount(BC_t bc) {
         switch (bc) {
-#define DEF_INSTR(name, imm, opop, opush, ipop, ipush) case BC_t::name : return opop;
+#define DEF_INSTR(name, imm, opop, opush, ipop, ipush)                         \
+    case BC_t::name:                                                           \
+        return opop;
 #include "insns.h"
         default:
             assert(false);
@@ -181,7 +192,9 @@ class BC {
 
     static unsigned iPopCount(BC_t bc) {
         switch (bc) {
-#define DEF_INSTR(name, imm, opop, opush, ipop, ipush) case BC_t::name : return ipop;
+#define DEF_INSTR(name, imm, opop, opush, ipop, ipush)                         \
+    case BC_t::name:                                                           \
+        return ipop;
 #include "insns.h"
         default:
             assert(false);

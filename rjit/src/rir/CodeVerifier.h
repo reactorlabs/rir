@@ -9,22 +9,18 @@ namespace rir {
 /** Various verifications of the ::Code and ::Function objects.
  */
 class CodeVerifier {
-public:
-
-    /** Verifies the stack layout of the Code object and updates its ostack and istack requirements.
+  public:
+    /** Verifies the stack layout of the Code object and updates its ostack and
+     * istack requirements.
      */
-    static void verifyStack(::Code * code);
+    static void verifyStack(::Code* code);
 
     /** Verifies that the given function object is valid.
      */
-    static void vefifyFunctionLayout(SEXP sexp, ::Context * ctx);
+    static void vefifyFunctionLayout(SEXP sexp, ::Context* ctx);
 };
 
 } // namespace rir
 } // namespace rjit
-
-
-
-
 
 #endif // STACK_VERIFIER_H

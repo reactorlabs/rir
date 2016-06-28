@@ -21,7 +21,8 @@ fun_idx_t compilePromise(FunctionHandle& f, SEXP exp);
 void compileExpression(FunctionHandle& f, CodeStream& cs, SEXP exp);
 
 // function application
-void compileCall(FunctionHandle& parent, CodeStream& cs, SEXP ast, SEXP fun, SEXP args) {
+void compileCall(FunctionHandle& parent, CodeStream& cs, SEXP ast, SEXP fun,
+                 SEXP args) {
     // application has the form:
     // LHS ( ARGS )
 

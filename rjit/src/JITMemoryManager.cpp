@@ -5,7 +5,6 @@
 
 using namespace llvm;
 
-
 namespace rjit {
 
 uint64_t JITMemoryManager::getSymbolAddress(const std::string& name) {

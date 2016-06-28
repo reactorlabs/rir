@@ -1,6 +1,5 @@
 #ifdef HAHA
 
-
 #ifndef RIR_OLD_INTERPRETER_H
 #define RIR_OLD_INTERPRETER_H
 
@@ -26,4 +25,3 @@ class Interpreter {
 #endif
 
 #endif
-

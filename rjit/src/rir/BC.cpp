@@ -77,15 +77,14 @@ fun_idx_t* BC::immediateCallArgs() {
     return (fun_idx_t*)INTEGER(Pool::get(immediate.call_args.args));
 }
 num_args_t BC::immediateCallNargs() {
-    size_t nargs = Rf_length(Pool::get(immediate.call_args.args)) /
-                   sizeof(fun_idx_t);
+    size_t nargs =
+        Rf_length(Pool::get(immediate.call_args.args)) / sizeof(fun_idx_t);
     assert(nargs < MAX_NUM_ARGS);
     return (num_args_t)nargs;
 }
 SEXP BC::immediateCallNames() {
-    return immediate.call_args.names
-               ? Pool::get(immediate.call_args.names)
-               : nullptr;
+    return immediate.call_args.names ? Pool::get(immediate.call_args.names)
+                                     : nullptr;
 }
 
 void CodeHandle::print() {
@@ -246,8 +245,7 @@ const BC BC::call(std::vector<fun_idx_t> args, std::vector<SEXP> names) {
         for (size_t i = 0; i < args.size(); ++i) {
             SET_VECTOR_ELT(n, i, names[i]);
         }
-        call_args_t args_ = {Pool::insert(a),
-                             Pool::insert(n)};
+        call_args_t args_ = {Pool::insert(a), Pool::insert(n)};
         immediate_t i;
         i.call_args = args_;
         return BC(BC_t::call_, i);

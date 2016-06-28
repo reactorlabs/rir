@@ -514,8 +514,9 @@ class CbrZero : public Pattern {
     static CbrZero* insertBefore(llvm::Instruction* ins, ir::Value cond,
                                  llvm::BasicBlock* trueCase,
                                  llvm::BasicBlock* falseCase) {
-        llvm::ICmpInst* test = new llvm::ICmpInst(ins, llvm::ICmpInst::ICMP_NE, cond,
-                                      Builder::integer(0), "condition");
+        llvm::ICmpInst* test =
+            new llvm::ICmpInst(ins, llvm::ICmpInst::ICMP_NE, cond,
+                               Builder::integer(0), "condition");
         auto branch = llvm::BranchInst::Create(trueCase, falseCase, test, ins);
         return new CbrZero(test, branch);
     }
@@ -584,10 +585,12 @@ class MarkNotMutable : public Pattern {
     static MarkNotMutable* insertBefore(llvm::Instruction* ins, ir::Value val) {
         using namespace llvm;
         llvm::LLVMContext& c = ins->getContext();
-        llvm::ConstantInt* int32_0 =
-            llvm::ConstantInt::get(c, llvm::APInt(32, llvm::StringRef("0"), 10));
-        llvm::ConstantInt* c1 = llvm::ConstantInt::get(c, llvm::APInt(32, llvm::StringRef("-193"), 10));
-        llvm::ConstantInt* c2 = llvm::ConstantInt::get(c, llvm::APInt(32, llvm::StringRef("128"), 10));
+        llvm::ConstantInt* int32_0 = llvm::ConstantInt::get(
+            c, llvm::APInt(32, llvm::StringRef("0"), 10));
+        llvm::ConstantInt* c1 = llvm::ConstantInt::get(
+            c, llvm::APInt(32, llvm::StringRef("-193"), 10));
+        llvm::ConstantInt* c2 = llvm::ConstantInt::get(
+            c, llvm::APInt(32, llvm::StringRef("128"), 10));
         auto sexpinfo = GetElementPtrInst::Create(
             t::SEXPREC, val, std::vector<llvm::Value*>({int32_0, int32_0}), "",
             ins);

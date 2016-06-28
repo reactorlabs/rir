@@ -47,7 +47,7 @@ CodeEditor::CodeEditor(CodeHandle& code) : original(code) {
                 pos->prev = prev;
             }
 
-            //TODO: this needs to be redone
+            // TODO: this needs to be redone
             // SEXP ast = code->getAst(pc);
             // if (ast)
             //     astMap[pos] = ast;

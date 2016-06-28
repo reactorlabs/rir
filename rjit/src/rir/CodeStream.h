@@ -82,12 +82,13 @@ class CodeStream {
     }
 
     void addAst(SEXP ast) {
-        assert (sources.back() == nullptr);
+        assert(sources.back() == nullptr);
         sources.back() = ast;
     }
 
     fun_idx_t finalize() {
-        CodeHandle res = function.writeCode(insertPoint, ast, &(*code)[0], pos, sources);
+        CodeHandle res =
+            function.writeCode(insertPoint, ast, &(*code)[0], pos, sources);
 
         for (auto p : patchpoints) {
             unsigned pos = p.first;
