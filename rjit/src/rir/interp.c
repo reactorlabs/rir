@@ -375,10 +375,13 @@ INLINE SEXP matchArgumentsAndCall(Code * caller, SEXP call, SEXP callee, unsigne
     // get the formals
     SEXP formals = FORMALS(callee);
     // prepare matching structures
+    // the matched array have the exact size to hold the actual arguments to the formal arguments of the function (callee)
     unsigned * matched = alloca(Rf_length(formals) * sizeof(unsigned));
+    // bool have bytesize of one. 
     bool * used = alloca(Rf_length(formals) + sizeof(unsigned));
     size_t i = 0;
     size_t e = Rf_length(formals);
+    // initialise the matched array
     while (i < e) {
         matched[i] = 0;
         used[i] = false;
@@ -386,6 +389,7 @@ INLINE SEXP matchArgumentsAndCall(Code * caller, SEXP call, SEXP callee, unsigne
     }
 
     // TODO do ellipsis
+    // A vector is required to hold the elements that would go into the ellipsis
 
     size_t finger = 0;
     size_t positional = 0;
@@ -396,7 +400,7 @@ INLINE SEXP matchArgumentsAndCall(Code * caller, SEXP call, SEXP callee, unsigne
         SEXP formal = CAR(formalsIter);
         formalsIter = CDR(formalsIter);
 
-        // check if any of the supplied args has a matching tag
+        // check if any of the supplied args has a matching tag (name)
         for (size_t current = 0, ii = 0, ee = Rf_length(names); ii != ee; ++ii) {
             SEXP supplied = VECTOR_ELT(names, ii);
             if (used[current] || supplied == R_NilValue)
@@ -404,15 +408,18 @@ INLINE SEXP matchArgumentsAndCall(Code * caller, SEXP call, SEXP callee, unsigne
             if (TAG(formal) != supplied) // fine, it is a symbol
                 continue;
             // TODO error - same name given twice
+            // how is this triggered? found is always false
+            // the found variable is not set when this matching is stored in the matched array.
             if (found)
                 assert(false);
             // match
             matched[finger] = args[current];
             used[current] = 1;
+            found = true;
             ++current;
         }
 
-        // check if any of the supplied args has a partially matching tag
+        // check if any of the supplied args has a partially matching tag (name)
         if (! found) {
             for (size_t current = 0, ii = 0, ee = Rf_length(names); ii != ee; ++ii) {
                 SEXP supplied = VECTOR_ELT(names, ii);
@@ -429,6 +436,7 @@ INLINE SEXP matchArgumentsAndCall(Code * caller, SEXP call, SEXP callee, unsigne
                 // match
                 matched[finger] = args[current];
                 used[current] = 1;
+                found = true;
                 ++current;
             }
         }
@@ -450,6 +458,8 @@ INLINE SEXP matchArgumentsAndCall(Code * caller, SEXP call, SEXP callee, unsigne
         if (! found)
             matched[finger] = MISSING_ARG_OFFSET;
     }
+
+    // the first case - when the callee i.e. the formal arguments contain an ellipsis, then in formals there is the symbol '...'
 
     // arguments have been matched, do the call
     return doCall(caller, call, callee, matched, Rf_length(formals), env, ctx);
