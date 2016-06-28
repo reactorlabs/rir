@@ -292,12 +292,21 @@ INSTRUCTION(ldvar_) {
 /** Given argument code offsets, creates the argslist from their promises.
  */
 // TODO unnamed only at this point
-// TODO This is a copy from old code, but doesn't it reverse arguments order?
 SEXP createArgsList(Code * c, FunctionIndex * args, size_t nargs, SEXP env) {
     SEXP result = R_NilValue;
-    for (size_t i = 0; i < nargs; ++i) {
+    for (size_t i = nargs - 1; i < nargs; --i) {
         unsigned offset = args[i];
         SEXP arg = (offset == MISSING_ARG_OFFSET) ? R_MissingArg : createPromise(codeAt(function(c), offset), env);
+        result = CONS_NR(arg, result);
+    }
+    return result;
+}
+
+SEXP createEagerArgsList(Code * c, FunctionIndex * args, size_t nargs, SEXP env, Context * ctx) {
+    SEXP result = R_NilValue;
+    for (size_t i = nargs - 1; i < nargs; --i) {
+        unsigned offset = args[i];
+        SEXP arg = (offset == MISSING_ARG_OFFSET) ? R_MissingArg : rirEval_c(codeAt(function(c), offset), ctx, env, 0);
         result = CONS_NR(arg, result);
     }
     return result;
@@ -333,7 +342,7 @@ SEXP doCall(Code * caller, SEXP call, SEXP callee, unsigned * args, size_t nargs
         // get the ccode
         CCODE f = getBuiltin(callee);
         // create the argslist
-        SEXP argslist = createArgsList(caller, args, nargs, env);
+        SEXP argslist = createEagerArgsList(caller, args, nargs, env, ctx);
         // callit
         PROTECT(argslist);
         result = f(call, callee, argslist, env);
@@ -469,7 +478,7 @@ INSTRUCTION(call_) {
     // get the indices of argument promises
     SEXP args_ = readConst(ctx, pc);
     assert(TYPEOF(args_) == INTSXP && "TODO change to INTSXP, not RAWSXP it used to be");
-    unsigned nargs = Rf_length(args_);
+    unsigned nargs = Rf_length(args_) / sizeof(unsigned);
     unsigned * args = (unsigned*)INTEGER(args_);
     // get the names of the arguments (or R_NilValue) if none
     SEXP names = readConst(ctx, pc);

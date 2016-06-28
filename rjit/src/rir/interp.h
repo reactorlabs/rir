@@ -184,6 +184,9 @@ struct Function {
 
     unsigned codeLength; /// number of Code objects in the Function
 
+    // We can get to this by searching, but this isfaster and so worth the extra four bytes
+    unsigned foffset; ///< Offset to the code of the function (last code)
+
     uint8_t data[]; // Code objects stored inline
 };
 #pragma pack(pop)
@@ -194,6 +197,10 @@ INLINE bool isValidFunction(SEXP s) {
     if (TYPEOF(s) != INTSXP)
         return false;
     return (unsigned)INTEGER(s)[0] == FUNCTION_MAGIC;
+}
+
+INLINE Code * functionCode(Function * f) {
+    return (Code*)((uintptr_t)f + f->foffset);
 }
 
 /** Returns the first code object associated with the function.
