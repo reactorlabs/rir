@@ -109,7 +109,7 @@ struct Function; // Forward declaration
 #pragma pack(1)
 typedef struct Code {
     unsigned magic; ///< Magic number that attempts to be PROMSXP already marked
-                    ///by the GC
+    /// by the GC
 
     unsigned header; /// offset to Function object
 
