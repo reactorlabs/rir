@@ -75,7 +75,7 @@ if [ ! -x "$CLANG_FORMAT" ] ; then
         printf "Error: clang-format executable version 3.7 not found neither in ${LLVM_CMAKE} or system.\n"
         printf "Error: consider either building clang (--with-clang flag) or\n".
         printf "Error: installing clang-format version 3.7 and make it available on your system path\n"
-        exit 1
+        exit 0
     else
         CLANG_FORMAT=`which clang-format`
     fi
@@ -128,11 +128,7 @@ cat "$patch"
 exec < /dev/tty
 read -p "Do you wish to apply this patch? [Yn]" yn
 case $yn in
-  [Nn]* ) printf "\nYou can apply these changes with:\n git apply $patch\n"
-          printf "(may need to be called from the root directory of your repository)\n"
-          printf "Aborting commit. Apply changes and commit again or skip checking with"
-          printf " --no-verify (not recommended).\n\n"
-          exit 1;;
+  [Nn]* ) exit 0;;
       * ) echo "applying patch..."
           git apply $patch
           printf "\nYou can now commit.\n"
