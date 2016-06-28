@@ -20,7 +20,7 @@ class State {
     static_assert(sizeof(unsigned) == 4, "Invalid unsigned size");
 
     static_assert(sizeof(::Code) == 7 * 4, "Invalid ::Code size");
-    static_assert(sizeof(::Function) == 5 * 4, "Invalid ::Function size");
+    static_assert(sizeof(::Function) == 6 * 4, "Invalid ::Function size");
 
     unsigned pc;
     int ostack;

@@ -90,8 +90,6 @@ SEXP BC::immediateCallNames() {
 void CodeHandle::print() {
     BC_t* pc = (BC_t*)data();
 
-    std::cout << "-------------------\n";
-
     while ((uintptr_t)pc < (uintptr_t)endData()) {
         std::cout << std::setw(3) << ((uintptr_t)pc - (uintptr_t)data()) << " ";
         BC bc = BC::advance(&pc);

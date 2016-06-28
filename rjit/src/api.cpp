@@ -72,6 +72,13 @@ REXPORT SEXP rir_compile(SEXP ast) {
     return code;
 }
 
+
+REXPORT SEXP rir_exec(SEXP bytecode, SEXP env) {
+    assert(isValidFunction(bytecode));
+    ::Function * f = reinterpret_cast<::Function *>(INTEGER(bytecode));
+    return rirEval_c(functionCode(f), globalContext(), env, 0);
+}
+
 /** Helper function that prints the code object.
  */
 void print(CodeHandle code) {
@@ -102,10 +109,11 @@ REXPORT SEXP rir_print(SEXP store) {
 
     Function* f = fun.function;
     Rprintf("Function object (int vector size: %u)\n", Rf_length(store));
-    Rprintf("  Magic:        %x (hex)\n", f->magic);
-    Rprintf("  Size:         %u\n", f->size);
-    Rprintf("  Origin:       %s\n", f->origin ? "optimized" : "unoptimized");
-    Rprintf("  Code objects: %u\n", f->codeLength);
+    Rprintf("  Magic:           %x (hex)\n", f->magic);
+    Rprintf("  Size:            %u\n", f->size);
+    Rprintf("  Origin:          %s\n", f->origin ? "optimized" : "unoptimized");
+    Rprintf("  Code objects:    %u\n", f->codeLength);
+    Rprintf("  Fun code offset: %x (hex)\n", f->foffset);
 
     if (f->magic != FUNCTION_MAGIC)
         Rf_error("Wrong magic number -- not rir bytecode");

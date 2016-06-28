@@ -8,6 +8,9 @@ rir.compile <- function(what) {
     .Call("rir_compile", what)
 }
 
+rir.exec <- function(what, env = globalenv()) {
+    .Call("rir_exec", what, env)
+}
 
 
 

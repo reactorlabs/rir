@@ -90,6 +90,9 @@ class CodeStream {
         CodeHandle res =
             function.writeCode(insertPoint, ast, &(*code)[0], pos, sources);
 
+        // set the last code offset
+        function.function->foffset = res.code->header;
+
         for (auto p : patchpoints) {
             unsigned pos = p.first;
             unsigned target = label2pos[p.second];
@@ -104,7 +107,8 @@ class CodeStream {
         code->clear();
         pos = 0;
 
-        return insertPoint;
+        return res.code->header;
+        // return insertPoint;
     }
 };
 }
