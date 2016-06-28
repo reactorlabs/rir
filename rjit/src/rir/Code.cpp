@@ -2,10 +2,95 @@
 #include "Code.h"
 #include "interp.h"
 #include "CodeVerifier.h"
-#include "interpreter_context.h"
+#include "interp_context.h"
+#include "Pool.h"
+
+extern void print(::Code * c);
 
 namespace rjit {
 namespace rir {
+
+
+::Code * Code::linearizeTo(uint8_t *& stream, ::Function * start, Context * ctx) {
+
+    print();
+
+    // increase the number of code objects
+    ++start->codeLength;
+    // get the header and fill it in
+    ::Code * c = reinterpret_cast<::Code *>(stream);
+    Rprintf("Code object created at %u\n", c);
+    c->magic = CODE_MAGIC;
+    c->header = (uintptr_t)c - (uintptr_t)start;
+    c->src = src_pool_add(ctx, ast);
+    c->codeSize = size;
+    c->srcLength = sources.size();
+    // copy the code
+    stream += sizeof(::Code);
+    memcpy(c->data, bc, size);
+    // copy the source objects
+    stream += pad4(size);
+    unsigned * srcs = reinterpret_cast<unsigned*>(stream);
+    for (size_t i = 0, e = sources.size(); i != e; ++i)
+        *(srcs++) = sources[i] == nullptr ? 0 : src_pool_add(ctx, sources[i]);
+    // get pointer to the very end
+    stream = reinterpret_cast<uint8_t*>(srcs);
+    // fill in missing information about stack sizes
+    CodeVerifier::verifyStack(c);
+
+    // linearize childdren and remember their addresses for relocation
+    std::vector<unsigned> reloc;
+    for (Code * child : children)
+        reloc.push_back(child->linearizeTo(stream, start, ctx)->header);
+
+    // relocate promise numbers in the old code vector to their offsets
+    // TODO this needs more thinking - we shouldn't really change stuff in constant pool vectors as these may be shared by others, so for now, I am adding a new one...
+    BC_t * pc  = reinterpret_cast<BC_t * >(c->data);
+    BC_t * end = pc + c->codeSize;
+    while (pc < end) {
+        switch (*pc) {
+        case BC_t::call_: {
+            SEXP indices = Pool::get(* reinterpret_cast<unsigned*>(pc + 1));
+            SEXP offsets = Rf_allocVector(INTSXP, Rf_length(indices));
+            for (size_t i = 0, e = Rf_length(indices) / sizeof(int); i != e; ++i)
+                INTEGER(offsets)[i] = reloc[INTEGER(indices)[i]];
+            * reinterpret_cast<unsigned*>(pc + 1) = Pool::insert(offsets);
+            break;
+        }
+        default:
+            break;
+        }
+        pc += BC::size(*pc);
+    }
+    ::print(c);
+    return c;
+}
+
+SEXP Code::linearize(Context * ctx) {
+    // get the size
+    size_t lsize = sizeof(::Function) + linearizedSize();
+    SEXP result = Rf_allocVector(INTSXP, lsize);
+    PROTECT(result);
+    // fill in the header
+    ::Function * f = reinterpret_cast<::Function *>(INTEGER(result));
+    Rprintf("Function object created at %u\n", f);
+    f->magic = FUNCTION_MAGIC;
+    f->size = lsize;
+    f->origin = nullptr;
+    f->codeLength = 0; // will be updated as we serialize the code objects
+    // linearize the code object and its childrens
+    uint8_t * stream = reinterpret_cast<uint8_t*>(f + 1);
+    linearizeTo(stream, f, ctx);
+
+    // verify the function layout
+    CodeVerifier::vefifyFunctionLayout(result, ctx);
+
+    UNPROTECT(1);
+    return result;
+}
+
+
+#ifdef HAHA
 
 
 #define DEF_INSTR(name, imm, ...) case name : pc += sizeof(ArgT) * imm; break;
@@ -139,6 +224,9 @@ unsigned Code::calcSize(unsigned totalSize){
 
     return size;
 }
+
+
+#endif
 
 } // namespace rir
 } // namespace rjit

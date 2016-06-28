@@ -110,6 +110,8 @@ struct Function; // Forward declaration
  * other in the Code's data section with padding to ensure
  * alignment of indices.
  */
+#pragma pack(push)
+#pragma pack(1)
 typedef struct Code {
     unsigned magic; ///< Magic number that attempts to be PROMSXP already marked by the GC
 
@@ -128,6 +130,8 @@ typedef struct Code {
 
     uint8_t data[]; /// the instructions
 } Code;
+#pragma pack(pop)
+
 
 /** Returns a pointer to the instructions in c.  */
 INLINE OpcodeT* code(Code* c) {
@@ -141,12 +145,12 @@ INLINE unsigned* src(Code* c) {
 
 /** Returns a pointer to the Function to which c belongs. */
 INLINE struct Function* function(Code* c) {
-    return (struct Function*)(c - c->header);
+    return (struct Function*)((uint8_t*)c - c->header);
 }
 
 /** Returns the next Code in the current function. */
 INLINE Code* next(Code* c) {
-    return (Code*)(c->data + pad4(c->codeSize) + c->srcLength);
+    return (Code*)(c->data + pad4(c->codeSize) + c->srcLength * sizeof(unsigned));
 }
 
 // TODO removed src reference, now each code has its own
@@ -174,6 +178,8 @@ INLINE Code* next(Code* c) {
  *  A Function has a number of Code objects, codeLen, stored
  *  inline in data.
  */
+#pragma pack(push)
+#pragma pack(1)
 struct Function {
     unsigned magic; /// used to detect Functions 0xCAFEBABE
 
@@ -183,10 +189,10 @@ struct Function {
 
     unsigned codeLength; /// number of Code objects in the Function
 
-    // TODO this is misleading because Code objects are not continuous now
-    Code data[]; // Code objects stored inline
+    uint8_t data[]; // Code objects stored inline
 
 };
+#pragma pack(pop)
 
 typedef struct Function Function;
 
@@ -199,13 +205,13 @@ INLINE bool isValidFunction(SEXP s) {
 /** Returns the first code object associated with the function.
  */
 INLINE Code* begin(Function* f) {
-    return f->data;
+    return (Code*)f->data;
 }
 
 /** Returns the end of the function as code object, for interation purposes.
  */
 INLINE Code* end(Function* f) {
-    return (Code*)((uint8_t*)f->data + f->size);
+    return (Code*)((uint8_t*)f + f->size);
 }
 
 /** Returns the code object with given offset */

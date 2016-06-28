@@ -145,27 +145,27 @@ const BC BC::force_all() { return BC(BC_t::DEPRECATED_FORCE_ALL); }
 const BC BC::pop() { return BC(BC_t::pop_); }
 const BC BC::push(SEXP constant) {
     immediate_t i;
-    i.pool = Pool::instance().insert(constant);
+    i.pool = Pool::insert(constant);
     return BC(BC_t::push_, i);
 }
 const BC BC::push(double constant) {
     immediate_t i;
-    i.pool = Pool::instance().getNum(constant);
+    i.pool = Pool::getNum(constant);
     return BC(BC_t::push_, i);
 }
 const BC BC::getfun(SEXP sym) {
     immediate_t i;
-    i.pool = Pool::instance().insert(sym);
+    i.pool = Pool::insert(sym);
     return BC(BC_t::ldfun_, i);
 }
 const BC BC::getvar(SEXP sym) {
     immediate_t i;
-    i.pool = Pool::instance().insert(sym);
+    i.pool = Pool::insert(sym);
     return BC(BC_t::ldvar_, i);
 }
 const BC BC::check_primitive(SEXP sym) {
     immediate_t i;
-    i.pool = Pool::instance().insert(sym);
+    i.pool = Pool::insert(sym);
     return BC(BC_t::isspecial_, i);
 }
 const BC BC::mkprom(fun_idx_t prom) { return BC(BC_t::promise_, {prom}); }

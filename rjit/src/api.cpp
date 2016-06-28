@@ -66,8 +66,9 @@ REXPORT SEXP rir_compileClosure(SEXP closure) {
  */
 REXPORT SEXP rir_compile(SEXP ast) {
     assert(startup_ok and "Not initialized");
+    SEXP code = Compiler::compile(ast);
 
-    return R_NilValue;
+    return code;
 }
 
 
@@ -91,7 +92,7 @@ void print(::Code * c) {
         if (sources[ic] != 0)
             // TODO print also the reference
             Rprintf("        # src %u\n", sources[ic]);
-        Rprintf("%x(8)%s", pc, BC::name(bc[pc]));
+        Rprintf("%8x %s", pc, BC::name(bc[pc]));
         BC_t opcode = bc[pc++];
         switch (opcode) {
         case BC_t::br_:
@@ -108,9 +109,10 @@ void print(::Code * c) {
             unsigned * argIdxs = reinterpret_cast<unsigned*>(bc + pc);
             pc += sizeof(unsigned) * 2 / sizeof(OpcodeT);
             SEXP args = cp_pool_at(globalContext(), argIdxs[0]);
+            assert(TYPEOF(args) == INTSXP);
             SEXP names = cp_pool_at(globalContext(), argIdxs[1]);
             Rprintf(" [");
-            for (size_t i = 0, e = Rf_length(args); i != e; ++i)
+            for (size_t i = 0, e = Rf_length(args) / sizeof (int); i != e; ++i)
                 Rprintf(" %x", INTEGER(args)[i]);
             Rprintf("]");
             if (names) {
@@ -124,6 +126,7 @@ void print(::Code * c) {
                 }
                 Rprintf("]");
             }
+            break;
         }
         default:
             // default case only prints the unsigned immediate arguments

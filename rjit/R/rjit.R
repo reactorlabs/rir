@@ -4,6 +4,10 @@ rir.print <- function(what) {
     invisible(.Call("rir_print", what))
 }
 
+rir.compile <- function(what) {
+    .Call("rir_compile", what)
+}
+
 
 
 

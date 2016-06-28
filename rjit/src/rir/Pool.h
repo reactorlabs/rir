@@ -1,3 +1,4 @@
+
 #ifndef RJIT_RIR_POOL
 #define RJIT_RIR_POOL
 
@@ -15,25 +16,21 @@ namespace rjit {
 namespace rir {
 
 class Pool {
-    RVector storage;
-    std::unordered_map<double, pool_idx_t> numbers;
+    static std::unordered_map<double, pool_idx_t> numbers;
 
   public:
-    static Pool& instance() {
-        static Pool pool;
-        return pool;
-    }
 
-    pool_idx_t insert(SEXP e) {
+    static pool_idx_t insert(SEXP e) {
         // TODO: replace the linear search by something faster
-        size_t i = storage.insert(e);
-        assert(i < MAX_POOL_IDX);
+        size_t i = cp_pool_add(globalContext(), e);
         return i;
     }
 
-    pool_idx_t getNum(double n);
+    static pool_idx_t getNum(double n);
 
-    SEXP get(pool_idx_t i) { return storage.at(i); }
+    static SEXP get(pool_idx_t i) {
+        return cp_pool_at(globalContext(), i);
+    }
 };
 }
 }

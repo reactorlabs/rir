@@ -107,10 +107,11 @@ SEXP Compiler::finalize() {
     compileExpression(cs.current, cs, exp);
     cs << BC::ret();
     Code* code = cs.toCode();
-    Optimizer::optimize(result);
+    // TODO reenable optimizations !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    //Optimizer::optimize(code);
     // call the c function here that linearise the code produced from the 
     // codestream in order to be used for the interpreter
-    SEXP result = code.toFunction();
+    SEXP result = code->linearize(globalContext());
     return result;
 }
 }

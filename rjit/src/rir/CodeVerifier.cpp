@@ -16,6 +16,13 @@ namespace {
  */
 class State {
 public:
+
+    static_assert(sizeof(SEXP) == 8, "Invalid ptr size");
+    static_assert(sizeof(unsigned) == 4, "Invalid unsigned size");
+
+    static_assert(sizeof(::Code) == 7 * 4, "Invalid ::Code size");
+    static_assert(sizeof(::Function) == 5 * 4, "Invalid ::Function size");
+
     unsigned pc;
     int ostack;
     int istack;
@@ -49,8 +56,8 @@ public:
     }
 
     void check() const {
-        assert(ostack > 0 and "Too many pops");
-        assert(istack > 0 and "Too many i pops");
+        assert(ostack >= 0 and "Too many pops");
+        assert(istack >= 0 and "Too many i pops");
     }
 
     void advance(BC_t * code, unsigned & pc) {
@@ -113,14 +120,18 @@ void CodeVerifier::verifyStack(::Code * c) {
 void CodeVerifier::vefifyFunctionLayout(SEXP sexp, ::Context * ctx) {
     assert(TYPEOF(sexp) == INTSXP and "Invalid SEXPTYPE");
     ::Function * f = reinterpret_cast<::Function*>(INTEGER(sexp));
+    Rprintf("Checking function object at %u\n", f);
     // get the code objects
     std::vector<::Code*> objs;
-    for (::Code * c = begin(f), * e = end(f); c != e; c = next(c))
+    for (::Code * c = begin(f), * e = end(f); c != e; c = next(c)) {
+        Rprintf("Checking code object at %u\n", c);
+        Rprintf("End: %u\n", e);
         objs.push_back(c);
+    }
 
     // check the function header
     assert(f->magic == FUNCTION_MAGIC and "Invalid function magic number");
-    assert(f->size / sizeof(int) == static_cast<unsigned>(Rf_length(sexp)) and "Reported size must be the same as the size of the vector");
+    assert(f->size == static_cast<unsigned>(Rf_length(sexp)) and "Reported size must be the same as the size of the vector");
     if (f->origin != nullptr) {
         assert(TYPEOF(f->origin) == INTSXP and "Invalid origin type");
         assert(static_cast<unsigned>(INTEGER(f->origin)[0]) == FUNCTION_MAGIC and "Origin does not seem to be function bytecode");
@@ -140,7 +151,7 @@ void CodeVerifier::vefifyFunctionLayout(SEXP sexp, ::Context * ctx) {
         verifyStack(c);
         assert(oldo == c->stackLength and "Invalid stack layout reported");
         assert(oldi == c->iStackLength and "Invalid integer stack layout reported");
-        assert((uintptr_t)(c) + pad4(c->codeSize) + c->srcLength * sizeof(unsigned) == (uintptr_t)objs[i+1] and "Invalid code length reported");
+        assert((uintptr_t)(c + 1) + pad4(c->codeSize) + c->srcLength * sizeof(unsigned) == (uintptr_t)objs[i+1] and "Invalid code length reported");
     }
 
     // remove the sentinel

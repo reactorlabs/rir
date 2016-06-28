@@ -24,11 +24,9 @@ class CodeStream {
 
     Code* current;
 
-    Code* parent;
+    Code * parent;
     SEXP ast;
     fun_idx_t insertPoint;
-
-    std::map<unsigned, SEXP> astMap;
 
     unsigned nextLabel = 0;
     std::map<unsigned, Label> patchpoints;
@@ -69,6 +67,8 @@ class CodeStream {
             return *this << b.immediate.offset;
         }
         b.write(*this);
+        // make space in the sources buffer
+        current->sources.push_back(nullptr);
         return *this;
     }
 
@@ -94,7 +94,10 @@ class CodeStream {
         pos += s;
     }
 
-    void addAst(SEXP ast) { astMap[pos] = ast; }
+    void addAst(SEXP ast) {
+        assert (current->sources.back() == nullptr);
+        current->sources.back() = ast;
+    }
 
     Code* toCode() {
         assert(current->size == 0 and current->bc == nullptr);
@@ -102,10 +105,8 @@ class CodeStream {
 
         current->size = size;
         current->bc = toBc();
-        current->astMap = Code::AstMap(astMap);
         current->ast = ast;
         ast = nullptr;
-        astMap.clear();
         return current;
     }
 

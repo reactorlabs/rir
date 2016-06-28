@@ -1,3 +1,5 @@
+#ifdef HAHA
+
 #include "OldInterpreter.h"
 #include "../RList.h"
 #include "../Symbols.h"
@@ -6,8 +8,6 @@
 #include "Primitives.h"
 #include "RIntlns.h"
 #include "Runtime.h"
-
-#include "RBytecode.h"
 
 #include <array>
 #include <deque>
@@ -808,3 +808,6 @@ void Interpreter::gcCallback(void (*forward_node)(SEXP)) {
 
 } // rir
 } // rjit
+
+
+#endif

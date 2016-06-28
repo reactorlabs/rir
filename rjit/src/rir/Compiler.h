@@ -26,9 +26,9 @@ class Compiler {
         Precious::remove(exp);
     }
 
-    Code* finalize();
+    SEXP finalize();
 
-    static Code* compile(SEXP ast) {
+    static SEXP compile(SEXP ast) {
         Compiler c(ast);
         return c.finalize();
     }

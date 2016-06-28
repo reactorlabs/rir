@@ -72,19 +72,19 @@ void BC::write(CodeStream& cs) const {
     }
 }
 
-SEXP BC::immediateConst() { return Pool::instance().get(immediate.pool); }
+SEXP BC::immediateConst() { return Pool::get(immediate.pool); }
 fun_idx_t* BC::immediateCallArgs() {
-    return (fun_idx_t*)RAW(Pool::instance().get(immediate.call_args.args));
+    return (fun_idx_t*)INTEGER(Pool::get(immediate.call_args.args));
 }
 num_args_t BC::immediateCallNargs() {
-    size_t nargs = Rf_length(Pool::instance().get(immediate.call_args.args)) /
+    size_t nargs = Rf_length(Pool::get(immediate.call_args.args)) /
                    sizeof(fun_idx_t);
     assert(nargs < MAX_NUM_ARGS);
     return (num_args_t)nargs;
 }
 SEXP BC::immediateCallNames() {
     return immediate.call_args.names
-               ? Pool::instance().get(immediate.call_args.names)
+               ? Pool::get(immediate.call_args.names)
                : nullptr;
 }
 
@@ -113,7 +113,7 @@ void BC::print() {
         std::cout << "call ";
         fun_idx_t* args = immediateCallArgs();
         num_args_t nargs = immediateCallNargs();
-        for (size_t i = 0; i < nargs; ++i) {
+        for (int i = 0; i < nargs; ++i) {
             std::cout << args[i] << " ";
         }
         if (immediateCallNames())
@@ -223,10 +223,10 @@ const BC BC::call(std::vector<fun_idx_t> args, std::vector<SEXP> names) {
     assert(args.size() < MAX_NUM_ARGS);
 
     Protect p;
-    SEXP a = Rf_allocVector(RAWSXP, sizeof(fun_idx_t) * args.size());
+    SEXP a = Rf_allocVector(INTSXP, sizeof(fun_idx_t) * args.size());
     p(a);
 
-    fun_idx_t* argsArray = (fun_idx_t*)RAW(a);
+    fun_idx_t* argsArray = (fun_idx_t*)INTEGER(a);
     for (size_t i = 0; i < args.size(); ++i) {
         argsArray[i] = args[i];
     }
@@ -246,14 +246,14 @@ const BC BC::call(std::vector<fun_idx_t> args, std::vector<SEXP> names) {
         for (size_t i = 0; i < args.size(); ++i) {
             SET_VECTOR_ELT(n, i, names[i]);
         }
-        call_args_t args_ = {Pool::instance().insert(a),
-                             Pool::instance().insert(n)};
+        call_args_t args_ = {Pool::insert(a),
+                             Pool::insert(n)};
         immediate_t i;
         i.call_args = args_;
         return BC(BC_t::call_, i);
     }
 
-    call_args_t args_ = {Pool::instance().insert(a), 0};
+    call_args_t args_ = {Pool::insert(a), 0};
     immediate_t i;
     i.call_args = args_;
     return BC(BC_t::call_, i);
