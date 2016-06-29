@@ -842,7 +842,6 @@ extern void printFunction(Function* f);
 SEXP rirEval_c(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
 
     // printCode(c);
-
     // make sure there is enough room on the stack
     ostack_ensureSize(ctx, c->stackLength);
     istack_ensureSize(ctx, c->iStackLength);
