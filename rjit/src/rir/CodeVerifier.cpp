@@ -116,12 +116,12 @@ void CodeVerifier::calculateAndVerifyStack(::Code* c) {
 void CodeVerifier::vefifyFunctionLayout(SEXP sexp, ::Context* ctx) {
     assert(TYPEOF(sexp) == INTSXP and "Invalid SEXPTYPE");
     ::Function* f = reinterpret_cast<::Function*>(INTEGER(sexp));
-    Rprintf("Checking function object at %u\n", f);
+    //Rprintf("Checking function object at %u\n", f);
     // get the code objects
     std::vector<::Code*> objs;
     for (::Code *c = begin(f), *e = end(f); c != e; c = next(c)) {
-        Rprintf("Checking code object at %u\n", c);
-        Rprintf("End: %u\n", e);
+        //Rprintf("Checking code object at %u\n", c);
+        //Rprintf("End: %u\n", e);
         objs.push_back(c);
     }
 

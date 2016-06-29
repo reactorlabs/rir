@@ -721,7 +721,7 @@ extern void printFunction(Function * f);
 
 SEXP rirEval_c(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
 
-    printCode(c);
+    //printCode(c);
 
     // make sure there is enough room on the stack
     ostack_ensureSize(ctx, c->stackLength);
@@ -778,14 +778,14 @@ SEXP rirEval_c(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
 SEXP rirEval_f(SEXP f, SEXP env) {
     // TODO we do not really need the arg counts now
     if (isValidPromise(f)) {
-        Rprintf("Evaluating promise:\n");
+//        Rprintf("Evaluating promise:\n");
         Code * c = (Code*)f;
         SEXP x = rirEval_c(c, globalContext(), env, 0);
-        Rprintf("Promise evaluated, length %u, value %d", Rf_length(x), REAL(x)[0]);
+//        Rprintf("Promise evaluated, length %u, value %d", Rf_length(x), REAL(x)[0]);
         return x;
     } else {
-        Rprintf("=====================================================\n");
-        Rprintf("Evaluating function\n");
+//        Rprintf("=====================================================\n");
+//        Rprintf("Evaluating function\n");
         Function * ff = (Function*)(INTEGER(f));
         return rirEval_c(functionCode(ff), globalContext(), env, 0);
     }
