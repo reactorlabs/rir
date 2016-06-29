@@ -9,28 +9,43 @@
 namespace rjit {
 namespace rir {
 
-CodeEditor::CodeEditor(CodeHandle& code) : original(code) {
+CodeEditor::CodeEditor(FunctionHandle function) : ast(function.ast()) {
+    entryPoint = new BCStore;
+    loadCode(function, function.entryPoint(), entryPoint);
+}
+
+CodeEditor::CodeEditor(FunctionHandle function, fun_idx_t idx) {
+    entryPoint = new BCStore;
+    CodeHandle code = function.codeAtIdx(idx);
+    ast = code.ast();
+    loadCode(function, code, entryPoint);
+}
+
+void CodeEditor::loadCode(FunctionHandle function, CodeHandle code,
+                          BCStore* store) {
     std::unordered_map<BC_t*, Label> bcLabels;
 
     {
         BC_t* pc = (BC_t*)code.bc();
         BC_t* end = (BC_t*)((uintptr_t)pc + code.code->codeSize);
         while (pc != end) {
-            BC bc = BC::advance(&pc);
+            BC bc = BC::decode(pc);
             if (bc.isJmp()) {
-                BC_t* target = (BC_t*)((uintptr_t)pc + bc.immediate.offset);
+                BC_t* target = BC::jmpTarget(pc);
                 if (!bcLabels.count(target))
                     bcLabels[target] = nextLabel++;
             }
+            BC::advance(&pc);
         }
     }
 
     {
-        BytecodeList* pos = &front;
+        BytecodeList* pos = &store->front;
 
         BC_t* pc = (BC_t*)code.bc();
         BC_t* end = (BC_t*)((uintptr_t)pc + code.code->codeSize);
 
+        unsigned idx = 0;
         while (pc != end) {
             pos->next = new BytecodeList();
             auto prev = pos;
@@ -47,10 +62,8 @@ CodeEditor::CodeEditor(CodeHandle& code) : original(code) {
                 pos->prev = prev;
             }
 
-            // TODO: this needs to be redone
-            // SEXP ast = code->getAst(pc);
-            // if (ast)
-            //     astMap[pos] = ast;
+            SEXP ast = code.source(idx++);
+            pos->src = ast;
 
             BC bc = BC::advance(&pc);
             if (bc.isJmp()) {
@@ -59,36 +72,71 @@ CodeEditor::CodeEditor(CodeHandle& code) : original(code) {
                 bc.immediate.offset = label;
             }
 
+            if (bc.isCall()) {
+                auto argOffset = bc.immediateCallArgs();
+
+                for (unsigned i = 0; i < bc.immediateCallNargs(); ++i) {
+                    CodeHandle code = function.codeAtOffset(argOffset[i]);
+                    argOffset[i] = code.idx();
+
+                    CodeEditor* p = new CodeEditor(function, code.idx());
+
+                    if (promises.size() <= code.idx())
+                        promises.resize(code.idx() + 1);
+
+                    promises[code.idx()] = p;
+                }
+            }
+
             pos->bc = bc;
         }
 
-        last.prev = pos;
-        pos->next = &last;
+        store->last.prev = pos;
+        pos->next = &store->last;
     }
 }
 
 CodeEditor::~CodeEditor() {
-    BytecodeList* pos = front.next;
+    for (auto store : promises) {
+        if (!store)
+            continue;
+        delete store;
+    }
 
-    while (pos != &last) {
+    BytecodeList* pos = entryPoint->front.next;
+    while (pos != &entryPoint->last) {
         BytecodeList* old = pos;
         pos = pos->next;
         delete old;
     }
 }
 
-void CodeEditor::print() {
-    std::cout << "-----------------------------\n";
+void CodeEditor::print(int offset) {
     for (Cursor cur = getCursor(); !cur.atEnd(); ++cur) {
-        (*cur).print();
+        for (int i = 0; i < offset; ++i)
+            std::cout << " ";
+        cur.print();
+    }
+    fun_idx_t i = 0;
+    for (auto p : promises) {
+        ++i;
+        if (!p)
+            continue;
+
+        for (int i = 0; i < offset; ++i)
+            std::cout << " ";
+        std::cout << "P " << i - 1 << " --\n";
+        p->print(offset + 2);
     }
 }
 
+void CodeEditor::Cursor::print() { pos->bc.print(); }
+
 void CodeEditor::normalizeReturn() {
-    if (empty())
+    if (getCursor().empty())
         return;
 
-    Cursor lastI(this, last.prev);
+    Cursor lastI(this, entryPoint->last.prev, entryPoint);
     if ((*lastI).bc == BC_t::ret_)
         lastI.remove();
 
@@ -96,6 +144,34 @@ void CodeEditor::normalizeReturn() {
         // TODO replace ret with jumps to the end
         assert((*pos).bc != BC_t::ret_);
     }
+}
+
+unsigned CodeEditor::write(FunctionHandle& function) {
+    CodeStream cs(function, ast);
+    cs.setNumLabels(nextLabel);
+
+    for (Cursor cur = getCursor(); !cur.atEnd(); ++cur) {
+        BC bc = *cur;
+        if (bc.isCall()) {
+            auto arg = bc.immediateCallArgs();
+            auto nargs = bc.immediateCallNargs();
+            for (unsigned i = 0; i < nargs; ++i) {
+                CodeEditor* e = promises[arg[i]];
+                arg[i] = e->write(function);
+            }
+        }
+        if (cur.hasAst())
+            cs.addAst(cur.ast());
+        cs << *cur;
+    }
+
+    return cs.finalize();
+}
+
+FunctionHandle CodeEditor::finalize() {
+    FunctionHandle fun = FunctionHandle::create();
+    write(fun);
+    return fun;
 }
 }
 }

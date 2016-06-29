@@ -139,11 +139,16 @@ class BC {
     SEXP immediateCallNames();
 
     inline static BC_t* jmpTarget(BC_t* pos) {
-        assert(BC::decode(pos).isJmp());
-        return (BC_t*)((uintptr_t)pos + BC::decode(pos).immediate.offset);
+        BC bc = BC::decode(pos);
+        assert(bc.isJmp());
+        return (BC_t*)((uintptr_t)pos + bc.size() + bc.immediate.offset);
     }
 
-    inline bool isJmp();
+    bool isCall() { return bc == BC_t::call_; }
+
+    bool isJmp() {
+        return bc == BC_t::br_ || bc == BC_t::brtrue_ || bc == BC_t::brfalse_;
+    }
 
     // ==== BC decoding logic
     inline static BC advance(BC_t** pc);

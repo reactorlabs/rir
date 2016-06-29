@@ -26,7 +26,6 @@ class CodeStream {
     FunctionHandle& function;
 
     SEXP ast;
-    fun_idx_t insertPoint;
 
     unsigned nextLabel = 0;
     std::map<unsigned, Label> patchpoints;
@@ -52,7 +51,7 @@ class CodeStream {
     }
 
     CodeStream(FunctionHandle& function, SEXP ast)
-        : function(function), ast(ast), insertPoint(function.nextIdx()) {
+        : function(function), ast(ast) {
         code = new std::vector<char>(1024);
     }
 
@@ -88,11 +87,7 @@ class CodeStream {
     }
 
     fun_idx_t finalize() {
-        CodeHandle res =
-            function.writeCode(insertPoint, ast, &(*code)[0], pos, sources);
-
-        // set the last code offset
-        function.function->foffset = res.code->header;
+        CodeHandle res = function.writeCode(ast, &(*code)[0], pos, sources);
 
         for (auto p : patchpoints) {
             unsigned pos = p.first;
@@ -111,7 +106,6 @@ class CodeStream {
         CodeVerifier::calculateAndVerifyStack(res.code);
 
         return res.code->header;
-        // return insertPoint;
     }
 };
 }

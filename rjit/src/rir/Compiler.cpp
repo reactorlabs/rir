@@ -104,9 +104,9 @@ fun_idx_t compilePromise(FunctionHandle& function, SEXP exp) {
 }
 
 SEXP Compiler::finalize() {
-    //Rprintf("****************************************************\n");
-    //Rprintf("Compiling function\n");
-    FunctionHandle function;
+    // Rprintf("****************************************************\n");
+    // Rprintf("Compiling function\n");
+    FunctionHandle function = FunctionHandle::create();
     CodeStream cs(function, exp);
     if (formals)
         compileFormals(cs, formals);
@@ -116,7 +116,10 @@ SEXP Compiler::finalize() {
 
     CodeVerifier::vefifyFunctionLayout(function.store, globalContext());
 
-    return function.store;
+    FunctionHandle opt = Optimizer::optimize(function);
+    CodeVerifier::vefifyFunctionLayout(opt.store, globalContext());
+
+    return opt.store;
 }
 }
 }

@@ -1,6 +1,7 @@
 #include "Pool.h"
 #include "RIntlns.h"
 #include "../Protect.h"
+#include "BC.h"
 
 namespace rjit {
 namespace rir {

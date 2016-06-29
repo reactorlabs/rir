@@ -88,10 +88,6 @@ BC BC::decode(BC_t* pc) {
 
 class CodeStream;
 
-bool BC::isJmp() {
-    return bc == BC_t::br_ || bc == BC_t::brtrue_ || bc == BC_t::brfalse_;
-}
-
 const BC BC::ret() { return BC(BC_t::ret_); }
 const BC BC::force() { return BC(BC_t::force_); }
 const BC BC::force_all() { return BC(BC_t::DEPRECATED_FORCE_ALL); }

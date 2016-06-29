@@ -18,6 +18,7 @@ class CodeEditor {
   private:
     struct BytecodeList {
         BC bc;
+        SEXP src = nullptr;
         BytecodeList* next = nullptr;
         BytecodeList* prev = nullptr;
         BytecodeList(BC bc) : bc(bc) {}
@@ -26,20 +27,32 @@ class CodeEditor {
 
     Label nextLabel = 0;
 
+    struct BCStore {
+        BytecodeList front;
+        BytecodeList last;
+    };
+    BCStore* entryPoint;
+    std::vector<CodeEditor*> promises;
+
+    SEXP ast;
+
   public:
     class Cursor {
         CodeEditor* editor;
         BytecodeList* pos;
+        BytecodeList* begin;
+        BytecodeList* end;
 
       public:
-        Cursor(CodeEditor* editor, BytecodeList* pos)
-            : editor(editor), pos(pos) {}
+        Cursor(CodeEditor* editor, BytecodeList* pos, BCStore* store)
+            : editor(editor), pos(pos), begin(&store->front),
+              end(&store->last) {}
 
         Label mkLabel() { return editor->nextLabel++; }
 
-        bool atEnd() { return pos == &editor->last; }
+        bool atEnd() { return pos == end; }
 
-        bool firstInstruction() { return editor->front.next == pos; }
+        bool firstInstruction() { return begin->next == pos; }
 
         void operator++() {
             assert(!atEnd());
@@ -69,62 +82,72 @@ class CodeEditor {
             return *this;
         }
 
-        bool hasAst() { return editor->astMap.count(pos); }
+        bool hasAst() { return pos->src; }
 
-        SEXP ast() { return editor->astMap.at(pos); }
+        SEXP ast() { return pos->src; }
 
         Cursor& operator<<(CodeEditor& other) {
-            // TODO this needs to be redone for FunctionHandle
-            // size_t labels = editor->nextLabel;
-            // size_t proms = editor->children.size();
-            // for (auto p : other.original->children) {
-            //     editor->children.push_back(p);
-            // }
+            size_t labels = editor->nextLabel;
+            size_t proms = editor->promises.size();
 
-            // Cursor cur = other.getCursor();
-            // bool first = true;
-            // while (!cur.atEnd()) {
-            //     *this << *cur;
-            //     if (first) {
-            //         // TODO ???
-            //         if (!editor->astMap.count(pos))
-            //             addAst(other.original->ast);
-            //         first = false;
-            //     }
+            std::unordered_map<fun_idx_t, fun_idx_t> duplicate;
 
-            //     BytecodeList* insert = pos->prev;
+            fun_idx_t j = 0;
+            for (auto p : other.promises) {
+                bool found = false;
+                for (fun_idx_t i = 0; i < editor->promises.size(); ++i) {
+                    if (p == editor->promises[i]) {
+                        duplicate[j] = i;
+                        editor->promises.push_back(nullptr);
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found)
+                    editor->promises.push_back(p);
+                j++;
+            }
 
-            //     // Fix prom offsets
-            //     if (insert->bc.bc == BC_t::call_) {
-            //         size_t nargs = insert->bc.immediateCallNargs();
-            //         fun_idx_t* args = insert->bc.immediateCallArgs();
-            //         for (size_t i = 0; i < nargs; ++i) {
-            //             args[i] += proms;
-            //         }
-            //     }
-            //     // Fix labels
-            //     if (insert->bc.bc == BC_t::label)
-            //         insert->bc.immediate.offset += labels;
-            //     // Adjust jmp targets
-            //     if (insert->bc.isJmp()) {
-            //         insert->bc.immediate.offset += labels;
-            //     }
+            Cursor cur = other.getCursor();
+            while (!cur.atEnd()) {
+                *this << *cur;
 
-            //     ++cur;
-            // }
-            // editor->nextLabel += other.nextLabel;
-            // editor->astMap.insert(other.astMap.begin(), other.astMap.end());
+                BytecodeList* insert = pos->prev;
+                pos->src = cur.pos->src;
+
+                // Fix prom offsets
+                if (insert->bc.bc == BC_t::call_) {
+                    fun_idx_t* args = insert->bc.immediateCallArgs();
+                    num_args_t nargs = insert->bc.immediateCallNargs();
+                    for (unsigned i = 0; i < nargs; ++i) {
+                        if (duplicate.count(args[i]))
+                            args[i] = duplicate.at(args[i]);
+                        else
+                            args[i] += proms;
+                    }
+                }
+                // Fix labels
+                if (insert->bc.bc == BC_t::label)
+                    insert->bc.immediate.offset += labels;
+                // Adjust jmp targets
+                if (insert->bc.isJmp()) {
+                    insert->bc.immediate.offset += labels;
+                }
+
+                ++cur;
+            }
+            editor->nextLabel += other.nextLabel;
             return *this;
         }
 
         void addAst(SEXP ast) {
-            assert(!editor->astMap.count(pos));
-            editor->astMap[pos] = ast;
+            assert(!pos->src);
+            pos->src = ast;
         }
 
         void remove() {
             assert(!atEnd());
-            assert(pos != &editor->front);
+            assert(pos != begin);
 
             BytecodeList* prev = pos->prev;
             BytecodeList* next = pos->next;
@@ -135,31 +158,37 @@ class CodeEditor {
             delete pos;
             pos = next;
         }
+
+        bool empty() { return begin->next == end; }
+
+        void print();
     };
     friend Cursor;
 
-    bool empty() { return front.next == &last; }
+    Cursor getCursor() {
+        return Cursor(this, entryPoint->front.next, entryPoint);
+    }
 
-    Cursor getCursor() { return Cursor(this, front.next); }
+    CodeEditor(FunctionHandle function);
+    CodeEditor(FunctionHandle function, fun_idx_t idx);
 
-    CodeEditor(CodeHandle& function);
+    void loadCode(FunctionHandle function, CodeHandle code, BCStore* store);
 
     ~CodeEditor();
 
-    // TODO
-    // void write(fun_idx_t idx, FunctionHandle& function);
+    unsigned write(FunctionHandle& function);
+
+    FunctionHandle finalize();
 
     void normalizeReturn();
 
-    void print();
+    void print(int offset = 0);
 
-  private:
-    std::unordered_map<BytecodeList*, SEXP> astMap;
-
-    BytecodeList front;
-    BytecodeList last;
-
-    CodeHandle& original;
+    CodeEditor* detachPromise(fun_idx_t idx) {
+        CodeEditor* e = promises[idx];
+        promises[idx] = nullptr;
+        return e;
+    }
 };
 }
 }

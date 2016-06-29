@@ -6,7 +6,6 @@
 
 #define NOT_IMPLEMENTED assert(false)
 
-
 // TODO we are using the RInternals, but soud not when the code moves to GNU-R
 // #include "RIntlns.h"
 
@@ -20,16 +19,9 @@ extern Rboolean R_Visible;
 extern SEXP hook_forcePromise(SEXP);
 extern SEXP hook_mkPROMISE(SEXP, SEXP);
 
+SEXP forcePromise(SEXP what) { return hook_forcePromise(what); }
 
-
-
-SEXP forcePromise(SEXP what) {
-    return hook_forcePromise(what);
-}
-
-SEXP mkPROMISE(SEXP expr, SEXP rho) {
-    return hook_mkPROMISE(expr, rho);
-}
+SEXP mkPROMISE(SEXP expr, SEXP rho) { return hook_mkPROMISE(expr, rho); }
 
 typedef SEXP (*CCODE)(SEXP, SEXP, SEXP, SEXP);
 
@@ -85,7 +77,6 @@ typedef struct {
     unsigned int rightassoc; /* right associative? */
 } PPinfo;
 
-
 /* The type definitions for the table of built-in functions. */
 /* This table can be found in ../main/names.c */
 typedef struct {
@@ -113,7 +104,7 @@ typedef struct sxpinfo_struct_rjit {
     unsigned int spare : 1; /* currently unused */
     unsigned int gcgen : 1; /* old generation number */
     unsigned int gccls : 3; /* node class */
-} sxpifo_struct_rjit;                          /*		    Tot: 32 */
+} sxpifo_struct_rjit;       /*		    Tot: 32 */
 
 typedef struct cons_rjit {
     SEXP car;
@@ -131,24 +122,16 @@ typedef struct sexprec_rjit {
     } u;
 } sexprec_rjit;
 
-
-
-
-
-
-
-
-
-
-
-
 // helpers
 
 /** Moves the pc to next instruction, based on the current instruction length
  */
-OpcodeT * advancePc(OpcodeT * pc) {
+OpcodeT* advancePc(OpcodeT* pc) {
     switch (*pc++) {
-#define DEF_INSTR(name, imm, ...) case name : pc += sizeof(ArgT) * imm; break;
+#define DEF_INSTR(name, imm, ...)                                              \
+    case name:                                                                 \
+        pc += sizeof(ArgT) * imm;                                              \
+        break;
 #include "insns.h"
     default:
         assert(false && "Unknown instruction");
@@ -157,7 +140,6 @@ OpcodeT * advancePc(OpcodeT * pc) {
 }
 
 // bytecode accesses
-
 
 INLINE Opcode readOpcode(OpcodeT** pc) {
     Opcode result = (Opcode)(**pc);
@@ -177,7 +159,7 @@ INLINE int readSignedImmediate(OpcodeT** pc) {
     return result;
 }
 
-INLINE SEXP readConst(Context * ctx, OpcodeT ** pc) {
+INLINE SEXP readConst(Context* ctx, OpcodeT** pc) {
     return cp_pool_at(ctx, readImmediate(pc));
 }
 
@@ -188,23 +170,24 @@ INLINE int readJumpOffset(OpcodeT** pc) {
 }
 
 // TODO perhaps this should have better name
-INLINE SEXP getCurrentCall(Code * c, OpcodeT * pc, Context * ctx) {
+INLINE SEXP getCurrentCall(Code* c, OpcodeT* pc, Context* ctx) {
     // we need to determine index of the current instruction
-    OpcodeT * x = code(c);
+    OpcodeT* x = code(c);
     // find the pc of the current instructions, it is ok to be slow
     unsigned insIdx = 0;
     while ((x = advancePc(x)) != pc)
         ++insIdx;
     unsigned sidx = src(c)[insIdx];
-    // return the ast for the instruction, or if not defined, the ast of the function
+    // return the ast for the instruction, or if not defined, the ast of the
+    // function
     return src_pool_at(ctx, sidx == 0 ? c->src : sidx);
 }
 
 /** Creates a promise from given code object and environment.
 
  */
-INLINE SEXP createPromise(Code * code, SEXP env) {
-    return mkPROMISE((SEXP) code, env);
+INLINE SEXP createPromise(Code* code, SEXP env) {
+    return mkPROMISE((SEXP)code, env);
 }
 
 // TODO check if there is a function for this in R
@@ -218,8 +201,11 @@ INLINE SEXP promiseValue(SEXP promise) {
     return forcePromise(promise);
 }
 
-// TODO remove numArgs and bp -- this is only needed for the on stack argument handling
-#define INSTRUCTION(name) INLINE void ins_ ## name (Code * c, SEXP env, OpcodeT **pc, Context * ctx, unsigned numArgs, unsigned bp)
+// TODO remove numArgs and bp -- this is only needed for the on stack argument
+// handling
+#define INSTRUCTION(name)                                                      \
+    INLINE void ins_##name(Code* c, SEXP env, OpcodeT** pc, Context* ctx,      \
+                           unsigned numArgs, unsigned bp)
 
 INSTRUCTION(push_) {
     SEXP x = readConst(ctx, pc);
@@ -247,11 +233,13 @@ INSTRUCTION(ldfun_) {
 
     switch (TYPEOF(val)) {
     case CLOSXP:
-        /** If compile on demand is active, check that the function to be called is compiled already, and compile if not.
+        /** If compile on demand is active, check that the function to be called
+         * is compiled already, and compile if not.
          */
         if (COMPILE_ON_DEMAND) {
             SEXP body = BODY(val);
-            assert(TYPEOF(body) != BCODESXP && "We do not plan to handle GNU-R bytecode");
+            assert(TYPEOF(body) != BCODESXP &&
+                   "We do not plan to handle GNU-R bytecode");
             if (TYPEOF(body) != INTSXP)
                 SET_BODY(val, ctx->compiler(body));
         }
@@ -292,21 +280,30 @@ INSTRUCTION(ldvar_) {
 /** Given argument code offsets, creates the argslist from their promises.
  */
 // TODO unnamed only at this point
-SEXP createArgsList(Code * c, FunctionIndex * args, size_t nargs, SEXP env) {
+SEXP createArgsList(Code* c, FunctionIndex* args, size_t nargs, SEXP env) {
     SEXP result = R_NilValue;
     for (size_t i = nargs - 1; i < nargs; --i) {
         unsigned offset = args[i];
-        SEXP arg = (offset == MISSING_ARG_OFFSET) ? R_MissingArg : createPromise(codeAt(function(c), offset), env);
+        PROTECT(result);
+        SEXP arg = (offset == MISSING_ARG_OFFSET)
+                       ? R_MissingArg
+                       : createPromise(codeAt(function(c), offset), env);
+        UNPROTECT(1);
         result = CONS_NR(arg, result);
     }
     return result;
 }
 
-SEXP createEagerArgsList(Code * c, FunctionIndex * args, size_t nargs, SEXP env, Context * ctx) {
+SEXP createEagerArgsList(Code* c, FunctionIndex* args, size_t nargs, SEXP env,
+                         Context* ctx) {
     SEXP result = R_NilValue;
     for (size_t i = nargs - 1; i < nargs; --i) {
         unsigned offset = args[i];
-        SEXP arg = (offset == MISSING_ARG_OFFSET) ? R_MissingArg : rirEval_c(codeAt(function(c), offset), ctx, env, 0);
+        PROTECT(result);
+        SEXP arg = (offset == MISSING_ARG_OFFSET)
+                       ? R_MissingArg
+                       : rirEval_c(codeAt(function(c), offset), ctx, env, 0);
+        UNPROTECT(1);
         result = CONS_NR(arg, result);
     }
     return result;
@@ -314,7 +311,8 @@ SEXP createEagerArgsList(Code * c, FunctionIndex * args, size_t nargs, SEXP env,
 
 /** Returns us the CCODE object from R_FunTab based on name.
 
-  TODO This exists in gnu-r (names.c), when integrated inside, we want to make use of it.
+  TODO This exists in gnu-r (names.c), when integrated inside, we want to make
+  use of it.
  */
 CCODE getBuiltin(SEXP f) {
     int i = ((sexprec_rjit*)f)->u.i;
@@ -326,7 +324,8 @@ CCODE getBuiltin(SEXP f) {
   TODO this is currently super simple.
 
  */
-SEXP doCall(Code * caller, SEXP call, SEXP callee, unsigned * args, size_t nargs, SEXP env, Context * ctx) {
+SEXP doCall(Code* caller, SEXP call, SEXP callee, unsigned* args, size_t nargs,
+            SEXP env, Context* ctx) {
     size_t oldbp = ctx->ostack.length;
     size_t oldbpi = ctx->istack.length;
     SEXP result = R_NilValue;
@@ -351,7 +350,8 @@ SEXP doCall(Code * caller, SEXP call, SEXP callee, unsigned * args, size_t nargs
     }
     case CLOSXP: {
         SEXP formals = FORMALS(callee);
-        assert (Rf_length(formals) == nargs && "Cannot handle different nargs yet");
+        assert(Rf_length(formals) == nargs &&
+               "Cannot handle different nargs yet");
         SEXP body = BODY(callee);
         SEXP argslist = createArgsList(caller, args, nargs, env);
         PROTECT(argslist);
@@ -359,10 +359,11 @@ SEXP doCall(Code * caller, SEXP call, SEXP callee, unsigned * args, size_t nargs
         if (TYPEOF(body) == INTSXP) {
             SEXP newEnv = Rf_NewEnvironment(formals, argslist, CLOENV(callee));
             PROTECT(newEnv);
-            result = rirEval_c(functionCode((Function*)INTEGER(body)), ctx, newEnv, nargs);
+            result = rirEval_c(functionCode((Function*)INTEGER(body)), ctx,
+                               newEnv, nargs);
             UNPROTECT(1);
         } else {
-        // otherwise use R's own call mechanism
+            // otherwise use R's own call mechanism
             result = applyClosure(call, callee, argslist, env, R_NilValue);
         }
         UNPROTECT(1); // argslist
@@ -371,11 +372,14 @@ SEXP doCall(Code * caller, SEXP call, SEXP callee, unsigned * args, size_t nargs
     default:
         assert(false && "Don't know how to run other stuff");
     }
-    assert (oldbp == ctx->ostack.length && oldbpi == ctx->istack.length && "Corrupted stacks");
+    assert(oldbp == ctx->ostack.length && oldbpi == ctx->istack.length &&
+           "Corrupted stacks");
     return result;
 }
 
-INLINE SEXP matchArgumentsAndCall(Code * caller, SEXP call, SEXP callee, unsigned * args, SEXP names, size_t nargs, SEXP env, Context * ctx) {
+INLINE SEXP matchArgumentsAndCall(Code* caller, SEXP call, SEXP callee,
+                                  unsigned* args, SEXP names, size_t nargs,
+                                  SEXP env, Context* ctx) {
     // Specials and builtins do not care about names
     if (TYPEOF(callee) == SPECIALSXP || TYPEOF(callee) == BUILTINSXP)
         return doCall(caller, call, callee, args, nargs, env, ctx);
@@ -384,8 +388,8 @@ INLINE SEXP matchArgumentsAndCall(Code * caller, SEXP call, SEXP callee, unsigne
     // get the formals
     SEXP formals = FORMALS(callee);
     // prepare matching structures
-    unsigned * matched = alloca(Rf_length(formals) * sizeof(unsigned));
-    bool * used = alloca(Rf_length(formals) + sizeof(unsigned));
+    unsigned* matched = alloca(Rf_length(formals) * sizeof(unsigned));
+    bool* used = alloca(Rf_length(formals) + sizeof(unsigned));
     size_t i = 0;
     size_t e = Rf_length(formals);
     while (i < e) {
@@ -406,7 +410,8 @@ INLINE SEXP matchArgumentsAndCall(Code * caller, SEXP call, SEXP callee, unsigne
         formalsIter = CDR(formalsIter);
 
         // check if any of the supplied args has a matching tag
-        for (size_t current = 0, ii = 0, ee = Rf_length(names); ii != ee; ++ii) {
+        for (size_t current = 0, ii = 0, ee = Rf_length(names); ii != ee;
+             ++ii) {
             SEXP supplied = VECTOR_ELT(names, ii);
             if (used[current] || supplied == R_NilValue)
                 continue;
@@ -422,14 +427,15 @@ INLINE SEXP matchArgumentsAndCall(Code * caller, SEXP call, SEXP callee, unsigne
         }
 
         // check if any of the supplied args has a partially matching tag
-        if (! found) {
-            for (size_t current = 0, ii = 0, ee = Rf_length(names); ii != ee; ++ii) {
+        if (!found) {
+            for (size_t current = 0, ii = 0, ee = Rf_length(names); ii != ee;
+                 ++ii) {
                 SEXP supplied = VECTOR_ELT(names, ii);
                 if (used[current] || supplied == R_NilValue)
                     continue;
                 // check partially matching name
-                char const * given = CHAR(PRINTNAME(supplied));
-                char const * f = CHAR(PRINTNAME(TAG(formal)));
+                char const* given = CHAR(PRINTNAME(supplied));
+                char const* f = CHAR(PRINTNAME(TAG(formal)));
                 if (abs(strncmp(f, given, strlen(given))) != 0)
                     continue;
                 // TODO error - partially matches two or more args
@@ -443,11 +449,12 @@ INLINE SEXP matchArgumentsAndCall(Code * caller, SEXP call, SEXP callee, unsigne
         }
 
         // no match, do positionally
-        if (! found) {
+        if (!found) {
             while (positional < nargs) {
                 if (VECTOR_ELT(names, positional++) == R_NilValue) {
                     found = true;
-                    matched[finger] = args[positional - 1]; // because ++ in loop
+                    matched[finger] =
+                        args[positional - 1]; // because ++ in loop
                     used[positional - 1] = 1;
                     break;
                 }
@@ -456,7 +463,7 @@ INLINE SEXP matchArgumentsAndCall(Code * caller, SEXP call, SEXP callee, unsigne
 
         // cannot match? (no more positional left
 
-        if (! found)
+        if (!found)
             matched[finger] = MISSING_ARG_OFFSET;
     }
 
@@ -467,24 +474,28 @@ INLINE SEXP matchArgumentsAndCall(Code * caller, SEXP call, SEXP callee, unsigne
 INSTRUCTION(call_) {
     // get the indices of argument promises
     SEXP args_ = readConst(ctx, pc);
-    assert(TYPEOF(args_) == INTSXP && "TODO change to INTSXP, not RAWSXP it used to be");
+    assert(TYPEOF(args_) == INTSXP &&
+           "TODO change to INTSXP, not RAWSXP it used to be");
     unsigned nargs = Rf_length(args_) / sizeof(unsigned);
-    unsigned * args = (unsigned*)INTEGER(args_);
+    unsigned* args = (unsigned*)INTEGER(args_);
     // get the names of the arguments (or R_NilValue) if none
     SEXP names = readConst(ctx, pc);
     // get the closure itself
     SEXP cls = ostack_pop(ctx);
     // match the arguments and do the call
     if (names != R_NilValue)
-        ostack_push(ctx, matchArgumentsAndCall(c,getCurrentCall(c, *pc, ctx), cls, args, names, nargs, env, ctx));
+        ostack_push(ctx,
+                    matchArgumentsAndCall(c, getCurrentCall(c, *pc, ctx), cls,
+                                          args, names, nargs, env, ctx));
     else
-        ostack_push(ctx, doCall(c, getCurrentCall(c, *pc, ctx), cls, args, nargs, env, ctx));
+        ostack_push(ctx, doCall(c, getCurrentCall(c, *pc, ctx), cls, args,
+                                nargs, env, ctx));
 }
 
 INSTRUCTION(promise_) {
     // get the Code * pointer we need
     unsigned codeOffset = readImmediate(pc);
-    Code * promiseCode = codeAt(function(c), codeOffset);
+    Code* promiseCode = codeAt(function(c), codeOffset);
     // create the promise and push it on stack
     ostack_push(ctx, createPromise(promiseCode, env));
 }
@@ -505,14 +516,13 @@ INSTRUCTION(close_) {
 INSTRUCTION(force_) {
     SEXP p = ostack_pop(ctx);
     assert(TYPEOF(p) == PROMSXP);
-    // If the promise is already evaluated then push the value inside the promise
+    // If the promise is already evaluated then push the value inside the
+    // promise
     // onto the stack, otherwise push the value from forcing the promise
     ostack_push(ctx, promiseValue(p));
 }
 
-INSTRUCTION(pop_) {
-    ostack_pop(ctx);
-}
+INSTRUCTION(pop_) { ostack_pop(ctx); }
 
 INSTRUCTION(pusharg_) {
     unsigned n = readImmediate(pc);
@@ -549,7 +559,7 @@ INSTRUCTION(asbool_) {
                      "element will be used"));
 
     if (Rf_length(t) > 0) {
-        switch(TYPEOF(t)) {
+        switch (TYPEOF(t)) {
         case LGLSXP:
             cond = LOGICAL(t)[0];
             break;
@@ -563,9 +573,8 @@ INSTRUCTION(asbool_) {
     if (cond == NA_LOGICAL) {
         const char* msg =
             Rf_length(t)
-                ? (isLogical(t)
-                       ? ("missing value where TRUE/FALSE needed")
-                       : ("argument is not interpretable as logical"))
+                ? (isLogical(t) ? ("missing value where TRUE/FALSE needed")
+                                : ("argument is not interpretable as logical"))
                 : ("argument is of length zero");
         errorcall(getCurrentCall(c, *pc, ctx), msg);
     }
@@ -576,17 +585,18 @@ INSTRUCTION(asbool_) {
 INSTRUCTION(brtrue_) {
     int offset = readJumpOffset(pc);
     if (ostack_pop(ctx) == R_TrueValue)
-        pc = pc + offset;
+        *pc = *pc + offset;
 }
 
 INSTRUCTION(brfalse_) {
     int offset = readJumpOffset(pc);
     if (ostack_pop(ctx) == R_FalseValue)
-        pc = pc + offset;
+        *pc = *pc + offset;
 }
 
 INSTRUCTION(br_) {
-    pc = pc + readJumpOffset(pc);
+    int offset = readJumpOffset(pc);
+    *pc = *pc + offset;
 }
 
 INSTRUCTION(lti_) {
@@ -601,32 +611,29 @@ INSTRUCTION(eqi_) {
     ostack_push(ctx, lhs == rhs ? R_TrueValue : R_FalseValue);
 }
 
-INSTRUCTION(pushi_) {
-    istack_push(ctx, readSignedImmediate(pc));
-}
+INSTRUCTION(pushi_) { istack_push(ctx, readSignedImmediate(pc)); }
 
-INSTRUCTION(dupi_) {
-    istack_push(ctx, istack_top(ctx));
-}
+INSTRUCTION(dupi_) { istack_push(ctx, istack_top(ctx)); }
 
-INSTRUCTION(dup_) {
-    ostack_push(ctx, ostack_top(ctx));
-}
+INSTRUCTION(dup_) { ostack_push(ctx, ostack_top(ctx)); }
 
 INSTRUCTION(add_) {
     SEXP rhs = ostack_pop(ctx);
     SEXP lhs = ostack_pop(ctx);
-    if (TYPEOF(lhs) == REALSXP && TYPEOF(rhs) == REALSXP && Rf_length(lhs) == 1 && Rf_length(rhs) == 1) {
+    if (TYPEOF(lhs) == REALSXP && TYPEOF(rhs) == REALSXP &&
+        Rf_length(lhs) == 1 && Rf_length(rhs) == 1) {
         SEXP res = Rf_allocVector(REALSXP, 1);
         SET_NAMED(res, 1);
         REAL(res)[0] = REAL(lhs)[0] + REAL(rhs)[0];
         ostack_push(ctx, res);
     } else {
         NOT_IMPLEMENTED;
-        //SEXP op = getPrimitive("+");
-        //SEXP primfun = getPrimfun("+");
-        // TODO we should change how primitives are called now that we can integrate
-        //SEXP res = callPrimitive(primfun, getCurrentCall(c, pc), op, { lhs, rhs });
+        // SEXP op = getPrimitive("+");
+        // SEXP primfun = getPrimfun("+");
+        // TODO we should change how primitives are called now that we can
+        // integrate
+        // SEXP res = callPrimitive(primfun, getCurrentCall(c, pc), op, { lhs,
+        // rhs });
         // TODO push
     }
 }
@@ -634,41 +641,48 @@ INSTRUCTION(add_) {
 INSTRUCTION(sub_) {
     SEXP rhs = ostack_pop(ctx);
     SEXP lhs = ostack_pop(ctx);
-    if (TYPEOF(lhs) == REALSXP && TYPEOF(rhs) == REALSXP && Rf_length(lhs) == 1 && Rf_length(rhs) == 1) {
+    if (TYPEOF(lhs) == REALSXP && TYPEOF(rhs) == REALSXP &&
+        Rf_length(lhs) == 1 && Rf_length(rhs) == 1) {
         SEXP res = Rf_allocVector(REALSXP, 1);
         SET_NAMED(res, 1);
         REAL(res)[0] = REAL(lhs)[0] - REAL(rhs)[0];
         ostack_push(ctx, res);
     } else {
         NOT_IMPLEMENTED;
-        //SEXP op = getPrimitive("-");
-        //SEXP primfun = getPrimfun("-");
-        // TODO we should change how primitives are called now that we can integrate
-        //SEXP res = callPrimitive(primfun, getCurrentCall(c, pc), op, { lhs, rhs });
+        // SEXP op = getPrimitive("-");
+        // SEXP primfun = getPrimfun("-");
+        // TODO we should change how primitives are called now that we can
+        // integrate
+        // SEXP res = callPrimitive(primfun, getCurrentCall(c, pc), op, { lhs,
+        // rhs });
         // TODO push
     }
-
 }
 
 INSTRUCTION(lt_) {
     SEXP rhs = ostack_pop(ctx);
     SEXP lhs = ostack_pop(ctx);
-    if (TYPEOF(lhs) == REALSXP && TYPEOF(rhs) == REALSXP && Rf_length(lhs) == 1 && Rf_length(rhs) == 1) {
+    if (TYPEOF(lhs) == REALSXP && TYPEOF(rhs) == REALSXP &&
+        Rf_length(lhs) == 1 && Rf_length(rhs) == 1) {
         SEXP res = Rf_allocVector(REALSXP, 1);
         SET_NAMED(res, 1);
-        ostack_push(ctx, REAL(lhs)[0] < REAL(rhs)[0] ? R_TrueValue : R_FalseValue);
+        ostack_push(ctx,
+                    REAL(lhs)[0] < REAL(rhs)[0] ? R_TrueValue : R_FalseValue);
     } else {
         NOT_IMPLEMENTED;
-        //SEXP op = getPrimitive("<");
-        //SEXP primfun = getPrimfun("<");
-        // TODO we should change how primitives are called now that we can integrate
-        //SEXP res = callPrimitive(primfun, getCurrentCall(c, pc), op, { lhs, rhs });
+        // SEXP op = getPrimitive("<");
+        // SEXP primfun = getPrimfun("<");
+        // TODO we should change how primitives are called now that we can
+        // integrate
+        // SEXP res = callPrimitive(primfun, getCurrentCall(c, pc), op, { lhs,
+        // rhs });
         // TODO push
     }
 }
 
 INSTRUCTION(isspecial_) {
-    // TODO I do not think this is a proper way - we must check all the way down, not just findVar (vars do not shadow closures)
+    // TODO I do not think this is a proper way - we must check all the way
+    // down, not just findVar (vars do not shadow closures)
     SEXP sym = readConst(ctx, pc);
     SEXP val = findVar(sym, env);
     // TODO better check
@@ -681,22 +695,22 @@ INSTRUCTION(isfun_) {
     switch (TYPEOF(val)) {
     case CLOSXP:
         /** No need to compile, we can handle functions */
-        //val = (SEXP)jit(val);
+        // val = (SEXP)jit(val);
         break;
     case SPECIALSXP:
     case BUILTINSXP:
         // builtins and specials are fine
         // TODO for now - we might be fancier here later
         break;
-/*
+    /*
 
-    {
-        // TODO do we need to compile primitives? not really I think
-        SEXP prim = Primitives::compilePrimitive(val);
-        if (prim)
-            val = prim;
-        break;
-    } */
+        {
+            // TODO do we need to compile primitives? not really I think
+            SEXP prim = Primitives::compilePrimitive(val);
+            if (prim)
+                val = prim;
+            break;
+        } */
 
     default:
         // TODO: error not a function!
@@ -705,63 +719,62 @@ INSTRUCTION(isfun_) {
     }
 }
 
-INSTRUCTION(inci_) {
-    istack_push(ctx, istack_pop(ctx) + 1);
-}
+INSTRUCTION(inci_) { istack_push(ctx, istack_pop(ctx) + 1); }
 
 INSTRUCTION(push_argi_) {
     int pos = istack_pop(ctx);
     ostack_push(ctx, cp_pool_at(ctx, bp - numArgs + pos));
 }
 
-extern void printCode(Code * c);
-extern void printFunction(Function * f);
-
-
+extern void printCode(Code* c);
+extern void printFunction(Function* f);
 
 SEXP rirEval_c(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
 
-    //printCode(c);
+    // printCode(c);
 
     // make sure there is enough room on the stack
     ostack_ensureSize(ctx, c->stackLength);
     istack_ensureSize(ctx, c->iStackLength);
 
     // get pc and bp regs, we do not need istack bp
-    OpcodeT * pc = code(c);
+    OpcodeT* pc = code(c);
     size_t bp = ctx->ostack.length;
 
     // main loop
     while (true) {
         switch (readOpcode(&pc)) {
-#define INS(name) case name : ins_ ## name (c, env, &pc, ctx, numArgs, bp); break
-        INS(push_);
-        INS(ldfun_);
-        INS(ldvar_);
-        INS(call_);
-        INS(promise_);
-        INS(close_);
-        INS(force_);
-        INS(pop_);
-        INS(pusharg_);
-        INS(asast_);
-        INS(stvar_);
-        INS(asbool_);
-        INS(brtrue_);
-        INS(brfalse_);
-        INS(br_);
-        INS(lti_);
-        INS(eqi_);
-        INS(pushi_);
-        INS(dupi_);
-        INS(dup_);
-        INS(add_);
-        INS(sub_);
-        INS(lt_);
-        INS(isspecial_);
-        INS(isfun_);
-        INS(inci_);
-        INS(push_argi_);
+#define INS(name)                                                              \
+    case name:                                                                 \
+        ins_##name(c, env, &pc, ctx, numArgs, bp);                             \
+        break
+            INS(push_);
+            INS(ldfun_);
+            INS(ldvar_);
+            INS(call_);
+            INS(promise_);
+            INS(close_);
+            INS(force_);
+            INS(pop_);
+            INS(pusharg_);
+            INS(asast_);
+            INS(stvar_);
+            INS(asbool_);
+            INS(brtrue_);
+            INS(brfalse_);
+            INS(br_);
+            INS(lti_);
+            INS(eqi_);
+            INS(pushi_);
+            INS(dupi_);
+            INS(dup_);
+            INS(add_);
+            INS(sub_);
+            INS(lt_);
+            INS(isspecial_);
+            INS(isfun_);
+            INS(inci_);
+            INS(push_argi_);
         case ret_: {
             // not in its own function so that we can avoid nonlocal returns
             return ostack_pop(ctx);
@@ -770,26 +783,21 @@ SEXP rirEval_c(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
             assert(false && "wrong or unimplemented opcode");
         }
     }
-
 }
-
-
 
 SEXP rirEval_f(SEXP f, SEXP env) {
     // TODO we do not really need the arg counts now
     if (isValidPromise(f)) {
-//        Rprintf("Evaluating promise:\n");
-        Code * c = (Code*)f;
+        //        Rprintf("Evaluating promise:\n");
+        Code* c = (Code*)f;
         SEXP x = rirEval_c(c, globalContext(), env, 0);
-//        Rprintf("Promise evaluated, length %u, value %d", Rf_length(x), REAL(x)[0]);
+        //        Rprintf("Promise evaluated, length %u, value %d",
+        //        Rf_length(x), REAL(x)[0]);
         return x;
     } else {
-//        Rprintf("=====================================================\n");
-//        Rprintf("Evaluating function\n");
-        Function * ff = (Function*)(INTEGER(f));
+        //        Rprintf("=====================================================\n");
+        //        Rprintf("Evaluating function\n");
+        Function* ff = (Function*)(INTEGER(f));
         return rirEval_c(functionCode(ff), globalContext(), env, 0);
     }
 }
-
-
-

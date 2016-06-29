@@ -32,9 +32,18 @@ class CodeHandle {
 
     BC_t* bc() { return (BC_t*)code->data; }
 
-    void* sources() {
-        return (void*)((uintptr_t)(code + 1) + pad4(code->codeSize));
+    unsigned* sources() {
+        return (unsigned*)((uintptr_t)(code + 1) + pad4(code->codeSize));
     }
+
+    SEXP source(unsigned instruction) {
+        unsigned sidx = sources()[instruction];
+        if (!sidx)
+            return nullptr;
+        return src_pool_at(globalContext(), sidx);
+    }
+
+    SEXP ast() { return src_pool_at(globalContext(), code->src); }
 
     static unsigned totalSize(unsigned codeSize, unsigned sourcesSize) {
         return sizeof(Code) + pad4(codeSize) + sourcesSize * sizeof(unsigned);
@@ -48,6 +57,16 @@ class CodeHandle {
     Function* function() { return ::function(code); }
 
     void print();
+
+    fun_idx_t idx() {
+        fun_idx_t i = 0;
+        Code* c = ::begin(function());
+        while (c != code) {
+            c = ::next(c);
+            ++i;
+        }
+        return i;
+    }
 };
 
 class CodeHandleIterator : public CodeHandle {
@@ -67,19 +86,24 @@ class FunctionHandle {
 
     SEXP store;
     void* payload;
-    unsigned capacity = initialSize;
+    unsigned capacity;
 
     Function* function;
 
-    FunctionHandle() {
-        store = Rf_allocVector(INTSXP, capacity);
-        payload = INTEGER(store);
+    FunctionHandle() : function(nullptr) {}
 
-        function = new (payload) Function;
+    static FunctionHandle create() {
+        SEXP store = Rf_allocVector(INTSXP, initialSize);
+        void* payload = INTEGER(store);
+
+        Function* function = new (payload) Function;
         function->magic = FUNCTION_MAGIC;
         function->size = sizeof(Function);
         function->origin = nullptr;
         function->codeLength = 0;
+        function->foffset = 0;
+
+        return FunctionHandle(store);
     }
 
     FunctionHandle(SEXP store)
@@ -89,11 +113,7 @@ class FunctionHandle {
         assert(function->size <= (unsigned)Rf_length(store));
     }
 
-    FunctionHandle(const FunctionHandle&) = delete;
-
-    fun_idx_t nextIdx() { return function->codeLength++; }
-
-    CodeHandle writeCode(fun_idx_t idx, SEXP ast, void* bc, unsigned codeSize,
+    CodeHandle writeCode(SEXP ast, void* bc, unsigned codeSize,
                          std::vector<SEXP>& sources) {
         unsigned totalSize = CodeHandle::totalSize(codeSize, sources.size());
 
@@ -125,11 +145,46 @@ class FunctionHandle {
                             ? 0
                             : src_pool_add(globalContext(), sources[i]);
 
+        function->codeLength++;
+
+        // set the last code offset
+        function->foffset = offset;
+
         return code;
+    }
+
+    CodeHandle entryPoint() {
+        assert(function->foffset);
+        return (Code*)((uintptr_t)function + function->foffset);
     }
 
     CodeHandleIterator begin() { return CodeHandleIterator(::begin(function)); }
     CodeHandleIterator end() { return CodeHandleIterator(::end(function)); }
+
+    inline Code* codeAtIdx(unsigned idx) {
+        for (auto c : *this) {
+            if (idx-- == 0)
+                return c;
+        }
+        assert(false);
+        return nullptr;
+    }
+
+    inline Code* codeAtOffset(unsigned offset) {
+        return (Code*)((uintptr_t)function + offset);
+    }
+
+    SEXP ast() { return entryPoint().ast(); }
+
+    void print() {
+        std::cout << "Fun " << this << " --------------\n";
+        entryPoint().print();
+
+        for (fun_idx_t i = 0; i < function->codeLength - 1; ++i) {
+            std::cout << " P " << i << " ------ \n";
+            CodeHandle(codeAtIdx(i)).print();
+        }
+    }
 };
 }
 }
