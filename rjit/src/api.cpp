@@ -39,35 +39,14 @@ using namespace rir;
 typedef bool (*callback_isValidFunction)(SEXP);
 typedef SEXP (*callback_rirEval_f)(SEXP, SEXP);
 
-extern "C" void initializeCallbacks(callback_isValidFunction isValidFunction, callback_rirEval_f rirEval_f);
+extern "C" void initializeCallbacks(callback_isValidFunction, callback_isValidFunction,  callback_rirEval_f);
 
 
-namespace {
-
-/** Initializes the rir contexts, registers the gc and so on...
- */
-bool startup() {
-    // initialize the interpreter
-    // TODO give a compiler proper
-    interp_initialize(nullptr);
-    // register gc callback
-    registerGcCallback(&gc_callback);
-    // initialize callbacks
-    initializeCallbacks(isValidFunction, rirEval_f);
-
-    return true;
-}
-
-} // anonymous namespace
-
-bool startup_ok = startup();
 
 /** Compiles the given ast.
  */
 REXPORT SEXP rir_compileAst(SEXP ast) {
-    assert(startup_ok and "Not initialized");
     SEXP code = Compiler::compile(ast);
-
     return code;
 }
 
@@ -144,6 +123,34 @@ REXPORT SEXP rir_print(SEXP store) {
         print(c);
     return R_NilValue;
 }
+
+namespace {
+
+/** Initializes the rir contexts, registers the gc and so on...
+ */
+bool startup() {
+    // initialize the interpreter
+    // TODO give a compiler proper
+    interp_initialize(rir_compileAst);
+    // register gc callback
+    registerGcCallback(&gc_callback);
+    // initialize callbacks
+    initializeCallbacks(isValidFunction, isValidPromise, rirEval_f);
+
+    return true;
+}
+
+} // anonymous namespace
+
+bool startup_ok = startup();
+
+
+
+
+
+
+
+
 
 REXPORT SEXP jitrbc(SEXP exp) {
     /*    rir::Compiler c(exp);

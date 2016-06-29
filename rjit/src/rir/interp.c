@@ -359,7 +359,7 @@ SEXP doCall(Code * caller, SEXP call, SEXP callee, unsigned * args, size_t nargs
         if (TYPEOF(body) == INTSXP) {
             SEXP newEnv = Rf_NewEnvironment(formals, argslist, CLOENV(callee));
             PROTECT(newEnv);
-            result = rirEval_c(begin((Function*)INTEGER(callee)), ctx, newEnv, nargs);
+            result = rirEval_c(begin((Function*)INTEGER(body)), ctx, newEnv, nargs);
             UNPROTECT(1);
         } else {
         // otherwise use R's own call mechanism
@@ -475,7 +475,7 @@ INSTRUCTION(call_) {
     // get the closure itself
     SEXP cls = ostack_pop(ctx);
     // match the arguments and do the call
-    if (names)
+    if (names != R_NilValue)
         ostack_push(ctx, matchArgumentsAndCall(c,getCurrentCall(c, *pc, ctx), cls, args, names, nargs, env, ctx));
     else
         ostack_push(ctx, doCall(c, getCurrentCall(c, *pc, ctx), cls, args, nargs, env, ctx));
@@ -765,10 +765,15 @@ SEXP rirEval_c(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
 
 }
 
+
 SEXP rirEval_f(SEXP f, SEXP env) {
     // TODO we do not really need the arg counts now
-    Function * ff = (Function*)(INTEGER(f));
-    return rirEval_c(functionCode(ff), globalContext(), env, 0);
+    if (isValidPromise(f)) {
+        return rirEval_c((Code*)f, globalContext(), env, 0);
+    } else {
+        Function * ff = (Function*)(INTEGER(f));
+        return rirEval_c(functionCode(ff), globalContext(), env, 0);
+    }
 }
 
 
