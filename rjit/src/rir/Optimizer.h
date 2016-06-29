@@ -188,14 +188,14 @@ void optimize(CodeEditor& e) {
 
 FunctionHandle optimize_(FunctionHandle fun) {
     CodeEditor edit(fun);
-    std::cout << "==================================\nbefore \n";
-    edit.print();
+    // std::cout << "==================================\nbefore \n";
+    // edit.print();
     optimize(edit);
-    std::cout << "==================================\nafter \n";
-    edit.print();
+    // std::cout << "==================================\nafter \n";
+    // edit.print();
     FunctionHandle res = edit.finalize();
-    std::cout << "==================================\nserialized \n";
-    res.print();
+    // std::cout << "==================================\nserialized \n";
+    // res.print();
     return res;
 }
 }
