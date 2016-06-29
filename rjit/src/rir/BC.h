@@ -82,44 +82,6 @@ BC BC::advance(BC_t** pc) {
 
 class CodeStream;
 
-// list of individual bytecode sizes
-static size_t immediate_size[] = {
-    (size_t)-1,          // invalid
-    sizeof(pool_idx_t),  // push
-    sizeof(pool_idx_t),  // getfun
-    sizeof(pool_idx_t),  // getvar
-    sizeof(call_args_t), // call
-    sizeof(fun_idx_t),   // mkprom
-    0,                   // mkclosure
-    0,                   // ret
-    0,                   // force
-    0,                   // pop
-    sizeof(num_args_t),  // load_arg
-    0,                   // get_ast
-    0,                   // setvar
-    0,                   // numargi
-    0,                   // to_bool
-    sizeof(jmp_t),       // jmp_true
-    sizeof(jmp_t),       // jmp_false
-    sizeof(jmp_t),       // jmp
-    0,                   // lti
-    0,                   // eqi
-    0,                   // force_all
-    sizeof(int),         // pushi
-    0,                   // dupi
-    0,                   // load_argi
-    0,                   // inci
-    0,                   // dup
-    0,                   // add
-    0,                   // sub
-    0,                   // lt
-    sizeof(pool_idx_t),  // check_primitive
-    0,                   // check_function
-    sizeof(jmp_t),       // label
-};
-static_assert(sizeof(immediate_size) / sizeof(size_t) == (unsigned)BC_t::num_of,
-              "Please add an entry for the size of the bytecode");
-
 template <typename T>
 T BC::readImmediate(BC_t** pc) {
     T res = *(T*)*pc;
@@ -137,7 +99,7 @@ bool BC::isJmp() {
     return bc == BC_t::br_ || bc == BC_t::brtrue_ || bc == BC_t::brfalse_;
 }
 
-size_t BC::size() const { return sizeof(BC_t) + immediate_size[(size_t)bc]; }
+size_t BC::size() const { return size(bc); }
 
 const BC BC::ret() { return BC(BC_t::ret_); }
 const BC BC::force() { return BC(BC_t::force_); }
