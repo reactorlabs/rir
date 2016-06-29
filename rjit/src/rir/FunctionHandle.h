@@ -25,7 +25,7 @@ class CodeHandle {
 
     CodeHandle(Code* code) : code(code) {
         // TODO see line 50
-        //assert(atEnd() || code->magic == CODE_MAGIC);
+        // assert(atEnd() || code->magic == CODE_MAGIC);
     }
 
     void* endData() { return (void*)((uintptr_t)data() + code->codeSize); }
@@ -47,9 +47,12 @@ class CodeHandle {
 
     void print();
 
-    // TODO This won't work because CodeHandle only knows Code and calculates the function from its offset, the atEnd code is end iterator sentinel, and as such is not valid, i.e. cannot get its function and segfaults. I am not entirely sure how you wanted the API to look so I can't fix it
+    // TODO This won't work because CodeHandle only knows Code and calculates
+    // the function from its offset, the atEnd code is end iterator sentinel,
+    // and as such is not valid, i.e. cannot get its function and segfaults. I
+    // am not entirely sure how you wanted the API to look so I can't fix it
     bool atEnd() {
-        Function * f = function(code);
+        Function* f = function(code);
         uintptr_t functionEnd = (uintptr_t)f + f->size;
         return functionEnd == (uintptr_t)code;
     }
