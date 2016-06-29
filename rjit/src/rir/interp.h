@@ -77,9 +77,11 @@ struct Function; // Forward declaration
 
 // Code magic constant is intended to trick the GC into believing that it is
 // dealing with already marked SEXP.
+// Note: gcgen needs to be 1, otherwise the write barrier will trigger
 //  It also makes the SEXP look like NILSXP (0x00) so that we can determine
 //  whether a standard promise execution, or rir promise should be executed.
-#define CODE_MAGIC (unsigned)0x00ff
+// TODO: why does it say NILSXP above but the type is actually 31?
+#define CODE_MAGIC (unsigned)0x110000ff
 
 // Missing argument offset.
 // The offset is 0 (this would be impossible).
@@ -128,7 +130,8 @@ typedef struct Code {
 } Code;
 #pragma pack(pop)
 
-/** Returns whether the SEXP appears to be valid promise, i.e. a pointer into the middle of the linearized code.
+/** Returns whether the SEXP appears to be valid promise, i.e. a pointer into
+ * the middle of the linearized code.
  */
 INLINE bool isValidPromise(SEXP what) {
     unsigned x = *(unsigned*)what;
@@ -194,7 +197,8 @@ struct Function {
 
     unsigned codeLength; /// number of Code objects in the Function
 
-    // We can get to this by searching, but this isfaster and so worth the extra four bytes
+    // We can get to this by searching, but this isfaster and so worth the extra
+    // four bytes
     unsigned foffset; ///< Offset to the code of the function (last code)
 
     uint8_t data[]; // Code objects stored inline
@@ -208,7 +212,7 @@ INLINE bool isValidFunction(SEXP s) {
         return false;
     if ((unsigned)Rf_length(s) < sizeof(Function))
         return false;
-    Function * f = (Function*)INTEGER(s);
+    Function* f = (Function*)INTEGER(s);
     if (f->magic != FUNCTION_MAGIC)
         return false;
     if (f->size >= (unsigned)Rf_length(s))
@@ -219,7 +223,7 @@ INLINE bool isValidFunction(SEXP s) {
     return true;
 }
 
-INLINE Code * functionCode(Function * f) {
+INLINE Code* functionCode(Function* f) {
     return (Code*)((uintptr_t)f + f->foffset);
 }
 
