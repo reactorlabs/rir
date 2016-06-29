@@ -12,6 +12,8 @@
 #include "Optimizer.h"
 #include "Pool.h"
 
+#include "CodeVerifier.h"
+
 namespace rjit {
 namespace rir {
 

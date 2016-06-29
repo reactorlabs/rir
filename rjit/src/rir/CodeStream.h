@@ -9,6 +9,7 @@
 #include "Pool.h"
 
 #include "FunctionHandle.h"
+#include "CodeVerifier.h"
 
 namespace rjit {
 namespace rir {
@@ -101,6 +102,8 @@ class CodeStream {
 
         code->clear();
         pos = 0;
+
+        CodeVerifier::calculateAndVerifyStack(res.code);
 
         return res.code->header;
     }

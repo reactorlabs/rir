@@ -155,7 +155,7 @@ void CodeVerifier::vefifyFunctionLayout(SEXP sexp, ::Context* ctx) {
         assert(c->src != 0 and "Code must have AST");
         unsigned oldo = c->stackLength;
         unsigned oldi = c->iStackLength;
-        verifyStack(c);
+        calculateAndVerifyStack(c);
         assert(oldo == c->stackLength and "Invalid stack layout reported");
         assert(oldi == c->iStackLength and
                "Invalid integer stack layout reported");

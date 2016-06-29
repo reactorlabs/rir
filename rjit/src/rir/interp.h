@@ -129,6 +129,17 @@ typedef struct Code {
 } Code;
 #pragma pack(pop)
 
+/** Returns whether the SEXP appears to be valid promise, i.e. a pointer into
+ * the middle of the linearized code.
+ */
+INLINE bool isValidPromise(SEXP what) {
+    unsigned x = *(unsigned*)what;
+    if (x == CODE_MAGIC)
+        return true;
+    else
+        return false;
+}
+
 /** Returns a pointer to the instructions in c.  */
 INLINE OpcodeT* code(Code* c) { return (OpcodeT*)c->data; }
 
@@ -185,7 +196,8 @@ struct Function {
 
     unsigned codeLength; /// number of Code objects in the Function
 
-    // We can get to this by searching, but this isfaster and so worth the extra four bytes
+    // We can get to this by searching, but this isfaster and so worth the extra
+    // four bytes
     unsigned foffset; ///< Offset to the code of the function (last code)
 
     uint8_t data[]; // Code objects stored inline
@@ -197,10 +209,20 @@ typedef struct Function Function;
 INLINE bool isValidFunction(SEXP s) {
     if (TYPEOF(s) != INTSXP)
         return false;
-    return (unsigned)INTEGER(s)[0] == FUNCTION_MAGIC;
+    if ((unsigned)Rf_length(s) < sizeof(Function))
+        return false;
+    Function* f = (Function*)INTEGER(s);
+    if (f->magic != FUNCTION_MAGIC)
+        return false;
+    if (f->size >= (unsigned)Rf_length(s))
+        return false;
+    if (f->foffset >= f->size - sizeof(Code))
+        return false;
+    // TODO it is still only an assumption
+    return true;
 }
 
-INLINE Code * functionCode(Function * f) {
+INLINE Code* functionCode(Function* f) {
     return (Code*)((uintptr_t)f + f->foffset);
 }
 
@@ -225,6 +247,8 @@ INLINE Code* codeAt(Function* f, unsigned offset) {
 // void poolRemove(SEXP value);
 
 SEXP rirEval_c(Code* c, Context* ctx, SEXP env, unsigned numArgs);
+
+SEXP rirEval_f(SEXP f, SEXP env);
 
 #ifdef __cplusplus
 }
