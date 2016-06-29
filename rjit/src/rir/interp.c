@@ -279,21 +279,69 @@ INSTRUCTION(ldvar_) {
 
 /** Given argument code offsets, creates the argslist from their promises.
  */
+// Given the actual arguments, wrap them in promises. 
+// If there exists ellipsis, then flatten the out its elements.
+// Also deal with missing arguments.
 // TODO unnamed only at this point
-SEXP createArgsList(Code * c, FunctionIndex * args, size_t nargs, SEXP env) {
+SEXP createArgsList(Code * c, FunctionIndex * args, size_t nargs, SEXP names, SEXP env) {
     SEXP result = R_NilValue;
-    for (size_t i = nargs - 1; i < nargs; --i) {
-        unsigned offset = args[i];
-        SEXP arg = (offset == MISSING_ARG_OFFSET) ? R_MissingArg : createPromise(codeAt(function(c), offset), env);
-        result = CONS_NR(arg, result);
+    SEXP arg = R_NilValue;
+    SEXP ellipFlag = Rf_install("...");
+    result = CONS_NR(R_NilValue, R_NilValue);
+    PROTECT(result);
+    PROTECT(arg);
+
+    for (size_t i = 0; i < nargs; ++i) {
+        SEXP name = CAR(names);
+        if (name == ellipFlag) {
+            SEXP ellipsis = findVar(name, env);
+            PROTECT(ellipsis);
+
+            if (TYPEOF(ellipsis) == DOTSXP) {
+                while (ellipsis != R_NilValue) {
+                    arg = createPromise(CAR(ellipsis), env);
+                    result = CONS_NR(arg, result);
+                    ellipsis = CDR(ellipsis);
+                }
+            } else if (args[i] == MISSING_ARG_OFFSET) {
+                error(_("'...' used in an incorrect context"));
+                UNPROTECT(3); 
+            }
+
+        } else if (args[i] == MISSING_ARG_OFFSET) {
+            arg = R_MissingArg;
+            result = CONS_NR(arg, result);
+        } else {
+            unsigned offset = args[i];
+            arg = createPromise(codeAt(function(c), offset), env);
+            result = CONS_NR(arg, result);
+        }
+        names = CDR(names);
     }
+    // have to reverse result - it is backwards right now.
+    reverseOrder(result)
+    UNPROTECT(3);
+    return result;
+}
+
+SEXP reverseOrder (SEXP list){
+    SEXP result = CONS_NR(R_NilValue, R_NilValue);
+    PROTECT(result);
+
+    while (list != R_NilValue){
+        SEXP val = CAR(list);
+        result = CONS_NR(val, list);
+        list = CDR(list);
+    }
+
+    UNPROTECT(1);
     return result;
 }
 
 SEXP createEagerArgsList(Code* c, FunctionIndex* args, size_t nargs, SEXP env,
                          Context* ctx) {
     SEXP result = R_NilValue;
-    for (size_t i = nargs - 1; i < nargs; --i) {
+    for (size_t i = nargs - 1; i > 0; --i) {
         unsigned offset = args[i];
         PROTECT(result);
         SEXP arg = (offset == MISSING_ARG_OFFSET)
@@ -320,7 +368,7 @@ CCODE getBuiltin(SEXP f) {
   TODO this is currently super simple.
 
  */
-SEXP doCall(Code * caller, SEXP call, SEXP callee, unsigned * args, size_t nargs, SEXP env, Context * ctx) {
+SEXP doCall(Code * caller, SEXP call, SEXP callee, unsigned * args, size_t nargs, SEXP names, SEXP env, Context * ctx) {
     size_t oldbp = ctx->ostack.length;
     size_t oldbpi = ctx->istack.length;
     SEXP result = R_NilValue;
@@ -348,8 +396,9 @@ SEXP doCall(Code * caller, SEXP call, SEXP callee, unsigned * args, size_t nargs
         assert(Rf_length(formals) == nargs &&
                "Cannot handle different nargs yet");
         SEXP body = BODY(callee);
-        SEXP argslist = createArgsList(caller, args, nargs, env);
+        SEXP argslist = createArgsList(caller, args, nargs, names, env);
         PROTECT(argslist);
+        argslist = matchArgs(formals, argslist, call);
         // if body is INTSXP, it is rir serialized code, execute it directly
         if (TYPEOF(body) == INTSXP) {
             SEXP newEnv = Rf_NewEnvironment(formals, argslist, CLOENV(callee));
@@ -485,10 +534,10 @@ INSTRUCTION(call_) {
     // get the closure itself
     SEXP cls = ostack_pop(ctx);
     // match the arguments and do the call
-    if (names)
-        ostack_push(ctx, matchArgumentsAndCall(c,getCurrentCall(c, *pc, ctx), cls, args, names, nargs, env, ctx));
-    else
-        ostack_push(ctx, doCall(c, getCurrentCall(c, *pc, ctx), cls, args, nargs, env, ctx));
+    // if (names)
+    //     ostack_push(ctx, matchArgumentsAndCall(c,getCurrentCall(c, *pc, ctx), cls, args, names, nargs, env, ctx));
+    // else
+    ostack_push(ctx, doCall(c, getCurrentCall(c, *pc, ctx), cls, args, names, nargs, env, ctx));
 }
 
 INSTRUCTION(promise_) {
