@@ -599,7 +599,7 @@ INSTRUCTION(call_) {
     // if (names)
     ostack_push(ctx, matchArgumentsAndCall(c,getCurrentCall(c, *pc, ctx), cls, args, names, nargs, env, ctx));
     // else
-    // ostack_push(ctx, doCall(c, getCurrentCall(c, *pc, ctx), cls, args, nargs, env, ctx));
+        // ostack_push(ctx, doCall(c, getCurrentCall(c, *pc, ctx), cls, args, nargs, env, ctx));
 }
 
 INSTRUCTION(promise_) {
@@ -911,3 +911,4 @@ SEXP rirEval_f(SEXP f, SEXP env) {
         return rirEval_c(functionCode(ff), globalContext(), env, 0);
     }
 }
+

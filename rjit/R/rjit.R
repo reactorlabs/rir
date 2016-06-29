@@ -5,20 +5,12 @@ rir.print <- function(what) {
 }
 
 rir.compile <- function(what) {
-    if (typeof(what) == "closure") {
-        .Call("rir_compileClosure", what)
-    } else if (any(c("language", "symbol", "logical", "integer", "double", "complex", "character") == typeof(what))) {
-        .Call("rir_compileAst", what)
-    } else {
-       stop("Only bytecode expressions and asts can be jitted.")
-    }
+    .Call("rir_compile", what)
 }
 
 rir.exec <- function(what, env = globalenv()) {
     .Call("rir_exec", what, env)
 }
-
-
 
 
 
