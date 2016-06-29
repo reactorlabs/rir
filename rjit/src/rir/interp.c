@@ -765,4 +765,11 @@ SEXP rirEval_c(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
 
 }
 
+SEXP rirEval_f(SEXP f, SEXP env) {
+    // TODO we do not really need the arg counts now
+    Function * ff = (Function*)(INTEGER(f));
+    return rirEval_c(functionCode(ff), globalContext(), env, 0);
+}
+
+
 

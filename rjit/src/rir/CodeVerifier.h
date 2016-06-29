@@ -13,7 +13,7 @@ class CodeVerifier {
     /** Verifies the stack layout of the Code object and updates its ostack and
      * istack requirements.
      */
-    static void verifyStack(::Code* code);
+    static void calculateAndVerifyStack(::Code* code);
 
     /** Verifies that the given function object is valid.
      */

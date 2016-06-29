@@ -36,6 +36,12 @@
 using namespace rjit;
 using namespace rir;
 
+typedef bool (*callback_isValidFunction)(SEXP);
+typedef SEXP (*callback_rirEval_f)(SEXP, SEXP);
+
+extern "C" void initializeCallbacks(callback_isValidFunction isValidFunction, callback_rirEval_f rirEval_f);
+
+
 namespace {
 
 /** Initializes the rir contexts, registers the gc and so on...
@@ -46,6 +52,8 @@ bool startup() {
     interp_initialize(nullptr);
     // register gc callback
     registerGcCallback(&gc_callback);
+    // initialize callbacks
+    initializeCallbacks(isValidFunction, rirEval_f);
 
     return true;
 }
@@ -54,22 +62,35 @@ bool startup() {
 
 bool startup_ok = startup();
 
-/** Compiles given closure.
-
- */
-REXPORT SEXP rir_compileClosure(SEXP closure) {
-    assert(startup_ok and "Not initialized");
-
-    return R_NilValue;
-}
-
 /** Compiles the given ast.
  */
-REXPORT SEXP rir_compile(SEXP ast) {
+REXPORT SEXP rir_compileAst(SEXP ast) {
     assert(startup_ok and "Not initialized");
     SEXP code = Compiler::compile(ast);
 
     return code;
+}
+
+REXPORT SEXP rir_compileClosure(SEXP f) {
+    assert(TYPEOF(f) == CLOSXP and "Can only do closures");
+    SEXP body = BODY(f);
+    assert(TYPEOF(body) != INTSXP and TYPEOF(body) != BCODESXP and "Can only do asts");
+    SEXP result = allocSExp(CLOSXP);
+    PROTECT(result);
+    SET_FORMALS(result, FORMALS(f));
+    SET_CLOENV(result, CLOENV(f));
+    SET_BODY(result, Compiler::compile(body));
+    UNPROTECT(1);
+    return result;
+}
+
+REXPORT SEXP rir_compileClosureInPlace(SEXP f) {
+    assert(TYPEOF(f) == CLOSXP and "Can only do closures");
+    SEXP body = BODY(f);
+    assert(TYPEOF(body) != INTSXP and TYPEOF(body) != BCODESXP and "Can only do asts");
+    SEXP code = Compiler::compile(body);
+    SET_BODY(f, code);
+    return f;
 }
 
 
@@ -119,7 +140,7 @@ REXPORT SEXP rir_print(SEXP store) {
         Rf_error("Wrong magic number -- not rir bytecode");
 
     // print respective code objects
-    for (auto c = fun.begin(); !c.atEnd(); c = c.next())
+    for (::Code * c = ::begin(fun.function), * e = ::end(fun.function); c != e; c = ::next(c))
         print(c);
     return R_NilValue;
 }
