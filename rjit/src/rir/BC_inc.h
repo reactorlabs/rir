@@ -120,6 +120,75 @@ class BC {
     BC_t bc;
     immediate_t immediate;
 
+    inline size_t size() { return size(bc); }
+    inline size_t popCount() { return popCount(bc); }
+    inline size_t pushCount() { return pushCount(bc); }
+    inline size_t iPopCount() { return iPopCount(bc); }
+    inline size_t iPushCount() { return iPushCount(bc); }
+
+    // Used to serialize bc to CodeStream
+    void write(CodeStream& cs) const;
+
+    // Print it to stdout
+    void print();
+
+    // Accessors to load immediate constant from the pool
+    SEXP immediateConst();
+    fun_idx_t* immediateCallArgs();
+    num_args_t immediateCallNargs();
+    SEXP immediateCallNames();
+
+    inline static BC_t* jmpTarget(BC_t* pos) {
+        assert(BC::decode(pos).isJmp());
+        return (BC_t*)((uintptr_t)pos + BC::decode(pos).immediate.offset);
+    }
+
+    inline bool isJmp();
+
+    // ==== BC decoding logic
+    inline static BC advance(BC_t** pc);
+    inline static BC decode(BC_t* pc);
+
+    // ==== Factory methods
+    // to create new BC objects, which can be streamed to a CodeStream
+    const static BC call(std::vector<fun_idx_t> args, std::vector<SEXP> names);
+    inline const static BC push(SEXP constant);
+    inline const static BC push(double constant);
+    inline const static BC getfun(SEXP sym);
+    inline const static BC getvar(SEXP sym);
+    inline const static BC mkprom(fun_idx_t prom);
+    inline const static BC push_arg(fun_idx_t prom);
+    inline const static BC ret();
+    inline const static BC pop();
+    inline const static BC force();
+    inline const static BC load_arg(num_args_t);
+    inline const static BC get_ast();
+    inline const static BC setvar();
+    inline const static BC numargi();
+    inline const static BC to_bool();
+    inline const static BC jmp_true(jmp_t);
+    inline const static BC jmp_false(jmp_t);
+    inline const static BC jmp(jmp_t);
+    inline const static BC label(jmp_t);
+    inline const static BC lti();
+    inline const static BC eqi();
+    inline const static BC force_all();
+    inline const static BC pushi(int);
+    inline const static BC load_argi();
+    inline const static BC dupi();
+    inline const static BC dup();
+    inline const static BC inci();
+    inline const static BC mkclosure();
+    inline const static BC add();
+    inline const static BC sub();
+    inline const static BC lt();
+    static inline BC check_function();
+    inline const static BC check_primitive(SEXP sym);
+
+  private:
+    BC(BC_t bc) : bc(bc), immediate({0}) {}
+    BC(BC_t bc, immediate_t immediate) : bc(bc), immediate(immediate) {}
+
     static unsigned size(BC_t bc) {
         switch (bc) {
 #define DEF_INSTR(name, imm, opop, opush, ipop, ipush)                         \
@@ -201,77 +270,6 @@ class BC {
             return 0;
         }
     }
-
-    inline size_t size() const;
-
-    // Used to serialize bc to CodeStream
-    void write(CodeStream& cs) const;
-
-    // Print it to stdout
-    void print();
-
-    // Accessors to load immediate constant from the pool
-    SEXP immediateConst();
-    fun_idx_t* immediateCallArgs();
-    num_args_t immediateCallNargs();
-    SEXP immediateCallNames();
-
-    inline bool isJmp();
-
-    // ==== BC decoding logic
-    // There are two interfaces:
-    //
-    // 1. Slow but convenient:
-    //    Decode one BC from stream and advance pc accordingly
-    inline static BC advance(BC_t** pc);
-
-    // 2. Fast but dangerous:
-    //    Read bytecodes and immediates directly from the stream, without
-    //    creating BC object wrapper. Dispatching on BC_t needs handle
-    //    different sizes of immediate argument.
-    template <typename T>
-    inline static T readImmediate(BC_t** pc);
-    inline static BC_t readBC(BC_t** pc);
-
-    // ==== Factory methods
-    // to create new BC objects, which can be streamed to a CodeStream
-    const static BC call(std::vector<fun_idx_t> args, std::vector<SEXP> names);
-    inline const static BC push(SEXP constant);
-    inline const static BC push(double constant);
-    inline const static BC getfun(SEXP sym);
-    inline const static BC getvar(SEXP sym);
-    inline const static BC mkprom(fun_idx_t prom);
-    inline const static BC push_arg(fun_idx_t prom);
-    inline const static BC ret();
-    inline const static BC pop();
-    inline const static BC force();
-    inline const static BC load_arg(num_args_t);
-    inline const static BC get_ast();
-    inline const static BC setvar();
-    inline const static BC numargi();
-    inline const static BC to_bool();
-    inline const static BC jmp_true(jmp_t);
-    inline const static BC jmp_false(jmp_t);
-    inline const static BC jmp(jmp_t);
-    inline const static BC label(jmp_t);
-    inline const static BC lti();
-    inline const static BC eqi();
-    inline const static BC force_all();
-    inline const static BC pushi(int);
-    inline const static BC load_argi();
-    inline const static BC dupi();
-    inline const static BC dup();
-    inline const static BC inci();
-    inline const static BC mkclosure();
-    inline const static BC add();
-    inline const static BC sub();
-    inline const static BC lt();
-    static inline BC check_function();
-    inline const static BC check_primitive(SEXP sym);
-
-  private:
-    BC(BC_t bc) : bc(bc), immediate({0}) {}
-    BC(BC_t bc, immediate_t immediate) : bc(bc), immediate(immediate) {}
 };
 
 } // rir

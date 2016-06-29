@@ -2,6 +2,7 @@
 #define RIR_FUNCTION_HANDLE_H
 
 #include "interp.h"
+#include "BC_inc.h"
 
 #include <iostream>
 
@@ -23,14 +24,13 @@ class CodeHandle {
         code->srcLength = sourceSize;
     }
 
-    CodeHandle(Code* code) : code(code) {
-        // TODO see line 50
-        //assert(atEnd() || code->magic == CODE_MAGIC);
-    }
+    CodeHandle(Code* code) : code(code) { assert(code->magic == CODE_MAGIC); }
 
-    void* endData() { return (void*)((uintptr_t)data() + code->codeSize); }
+    CodeHandle() : code(nullptr) {}
 
-    void* data() { return code->data; }
+    BC_t* endBc() { return (BC_t*)((uintptr_t)bc() + code->codeSize); }
+
+    BC_t* bc() { return (BC_t*)code->data; }
 
     void* sources() {
         return (void*)((uintptr_t)(code + 1) + pad4(code->codeSize));
@@ -45,16 +45,20 @@ class CodeHandle {
                        totalSize(code->codeSize, code->srcLength));
     }
 
+    Function* function() { return ::function(code); }
+
     void print();
+};
 
-    // TODO This won't work because CodeHandle only knows Code and calculates the function from its offset, the atEnd code is end iterator sentinel, and as such is not valid, i.e. cannot get its function and segfaults. I am not entirely sure how you wanted the API to look so I can't fix it
-    bool atEnd() {
-        Function * f = function(code);
-        uintptr_t functionEnd = (uintptr_t)f + f->size;
-        return functionEnd == (uintptr_t)code;
-    }
+class CodeHandleIterator : public CodeHandle {
+  public:
+    CodeHandleIterator(Code* code) { this->code = code; }
 
-    CodeHandle next() { return CodeHandle(::next(code)); }
+    void operator++() { code = ::next(code); }
+
+    bool operator!=(CodeHandleIterator other) { return code != other.code; }
+
+    Code* operator*() { return code; }
 };
 
 class FunctionHandle {
@@ -113,7 +117,7 @@ class FunctionHandle {
 
         assert(::function(code.code) == function);
 
-        memcpy(code.data(), bc, codeSize);
+        memcpy(code.bc(), bc, codeSize);
 
         unsigned* srcs = reinterpret_cast<unsigned*>(code.sources());
         for (size_t i = 0, e = sources.size(); i != e; ++i)
@@ -124,7 +128,8 @@ class FunctionHandle {
         return code;
     }
 
-    CodeHandle begin() { return CodeHandle(::begin(function)); }
+    CodeHandleIterator begin() { return CodeHandleIterator(::begin(function)); }
+    CodeHandleIterator end() { return CodeHandleIterator(::end(function)); }
 };
 }
 }

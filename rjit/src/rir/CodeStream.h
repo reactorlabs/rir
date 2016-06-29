@@ -98,7 +98,7 @@ class CodeStream {
             unsigned pos = p.first;
             unsigned target = label2pos[p.second];
             jmp_t j = target - pos - sizeof(jmp_t);
-            *(jmp_t*)((uintptr_t)res.data() + pos) = j;
+            *(jmp_t*)((uintptr_t)res.bc() + pos) = j;
         }
 
         label2pos.clear();

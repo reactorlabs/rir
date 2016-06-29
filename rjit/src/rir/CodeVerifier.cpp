@@ -3,8 +3,9 @@
 
 #include <cassert>
 
+#include "FunctionHandle.h"
 #include "CodeVerifier.h"
-#include "BC_inc.h"
+#include "BC.h"
 
 namespace rjit {
 namespace rir {
@@ -22,14 +23,14 @@ class State {
     static_assert(sizeof(::Code) == 7 * 4, "Invalid ::Code size");
     static_assert(sizeof(::Function) == 6 * 4, "Invalid ::Function size");
 
-    unsigned pc;
+    BC_t* pc;
     int ostack;
     int istack;
 
-    State(unsigned pc = 0, int ostack = 0, int istack = 0)
+    State(BC_t* pc = nullptr, int ostack = 0, int istack = 0)
         : pc(pc), ostack(ostack), istack(istack) {}
 
-    State(State const& from, unsigned pc)
+    State(State const& from, BC_t* pc)
         : pc(pc), ostack(from.ostack), istack(from.istack) {}
 
     bool operator!=(State const& other) const {
@@ -56,14 +57,17 @@ class State {
         assert(istack >= 0 and "Too many i pops");
     }
 
-    void advance(BC_t* code, unsigned& pc) {
-        ostack -= BC::popCount(code[pc]);
-        istack -= BC::iPopCount(code[pc]);
+    void advance() {
+        BC bc = BC::advance(&pc);
+
+        ostack -= bc.popCount();
+        istack -= bc.iPopCount();
         check();
-        ostack += BC::pushCount(code[pc]);
-        istack += BC::iPushCount(code[pc]);
-        pc += rjit::rir::BC::size(code[pc]);
+        ostack += bc.pushCount();
+        istack += bc.iPushCount();
     }
+
+    BC cur() { return BC::decode(pc); }
 
     void checkClear() const {
         assert(ostack == 0 and istack == 0 and
@@ -73,12 +77,14 @@ class State {
 
 } // unnamed namespace
 
-void CodeVerifier::calculateAndVerifyStack(::Code* c) {
+void CodeVerifier::calculateAndVerifyStack(CodeHandle code) {
     State max; // max state
-    std::map<unsigned, State> state;
+    std::map<BC_t*, State> state;
     std::stack<State> q;
-    q.push(State());
-    BC_t* cptr = reinterpret_cast<BC_t*>(code(c));
+
+    BC_t* cptr = code.bc();
+    q.push(State(cptr));
+
     while (not q.empty()) {
         State i = q.top();
         q.pop();
@@ -90,47 +96,48 @@ void CodeVerifier::calculateAndVerifyStack(::Code* c) {
         }
         while (true) {
             state[i.pc] = i;
-            unsigned oldpc = i.pc;
-            i.advance(cptr, i.pc);
+            BC_t* pc = i.pc;
+            BC cur = BC::decode(pc);
+            i.advance();
             max.updateMax(i);
-            if (cptr[oldpc] == BC_t::ret_) {
+            if (cur.bc == BC_t::ret_) {
+                assert(!cur.isJmp());
                 i.checkClear();
                 break;
-            } else if (cptr[oldpc] == BC_t::br_) {
-                unsigned target = *reinterpret_cast<ArgT*>(oldpc + 1);
-                q.push(State(i, target));
+            } else if (cur.bc == BC_t::br_) {
+                q.push(State(i, BC::jmpTarget(pc)));
                 break;
-            } else if (cptr[oldpc] == BC_t::brtrue_ or
-                       cptr[oldpc] == BC_t::brfalse_) {
-                unsigned target = *reinterpret_cast<ArgT*>(oldpc + 1);
-                q.push(State(i, target));
+            } else if (cur.bc == BC_t::brtrue_ or cur.bc == BC_t::brfalse_) {
+                q.push(State(i, BC::jmpTarget(pc)));
                 // no break because we want to continue verification in current
                 // sequence as well
             }
         }
     }
-    c->stackLength = max.ostack;
-    c->iStackLength = max.istack;
+    code.code->stackLength = max.ostack;
+    code.code->iStackLength = max.istack;
 }
 
 void CodeVerifier::vefifyFunctionLayout(SEXP sexp, ::Context* ctx) {
     assert(TYPEOF(sexp) == INTSXP and "Invalid SEXPTYPE");
-    ::Function* f = reinterpret_cast<::Function*>(INTEGER(sexp));
-    //Rprintf("Checking function object at %u\n", f);
+    FunctionHandle fun(sexp);
+
+    // Rprintf("Checking function object at %u\n", f);
     // get the code objects
-    std::vector<::Code*> objs;
-    for (::Code *c = begin(f), *e = end(f); c != e; c = next(c)) {
-        //Rprintf("Checking code object at %u\n", c);
-        //Rprintf("End: %u\n", e);
+    std::vector<Code*> objs;
+    for (auto c : fun) {
+        // Rprintf("Checking code object at %u\n", c);
+        // Rprintf("End: %u\n", e);
         objs.push_back(c);
     }
 
-    // check the function header
-    assert(f->magic == FUNCTION_MAGIC and "Invalid function magic number");
-    // TODO This has changed - Rf_length is now >= than size, the current real length is quite vasteful and we might want to conserve space better
-    assert(f->size < static_cast<unsigned>(Rf_length(sexp)) and
+    // TODO This has changed - Rf_length is now >= than size, the current real
+    // length is quite vasteful and we might want to conserve space better
+    assert(fun.function->size <= static_cast<unsigned>(Rf_length(sexp)) and
            "Reported size must be smaller than the size of the vector");
-    if (f->origin != nullptr) {
+
+    Function* f = fun.function;
+    if (f->origin) {
         assert(TYPEOF(f->origin) == INTSXP and "Invalid origin type");
         assert(static_cast<unsigned>(INTEGER(f->origin)[0]) ==
                    FUNCTION_MAGIC and
@@ -152,6 +159,7 @@ void CodeVerifier::vefifyFunctionLayout(SEXP sexp, ::Context* ctx) {
         assert(oldo == c->stackLength and "Invalid stack layout reported");
         assert(oldi == c->iStackLength and
                "Invalid integer stack layout reported");
+
         assert((uintptr_t)(c + 1) + pad4(c->codeSize) +
                        c->srcLength * sizeof(unsigned) ==
                    (uintptr_t)objs[i + 1] and
@@ -163,7 +171,7 @@ void CodeVerifier::vefifyFunctionLayout(SEXP sexp, ::Context* ctx) {
 
     // check that the call instruction has proper arguments and number of
     // instructions is valid
-    for (::Code* c : objs) {
+    for (auto c : objs) {
         BC_t* cptr = reinterpret_cast<BC_t*>(code(c));
         BC_t* start = cptr;
         unsigned ninsns = 0;
@@ -208,7 +216,7 @@ void CodeVerifier::vefifyFunctionLayout(SEXP sexp, ::Context* ctx) {
         }
 
         // check that the astmap indices are within bounds
-        for (::Code* c : objs) {
+        for (auto c : objs) {
             unsigned* srcIndices = src(c);
             for (size_t i = 0; i != c->srcLength; ++i)
                 assert(srcIndices[i] < ctx->src.length and

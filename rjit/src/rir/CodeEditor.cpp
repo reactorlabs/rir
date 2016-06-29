@@ -13,7 +13,7 @@ CodeEditor::CodeEditor(CodeHandle& code) : original(code) {
     std::unordered_map<BC_t*, Label> bcLabels;
 
     {
-        BC_t* pc = (BC_t*)code.data();
+        BC_t* pc = (BC_t*)code.bc();
         BC_t* end = (BC_t*)((uintptr_t)pc + code.code->codeSize);
         while (pc != end) {
             BC bc = BC::advance(&pc);
@@ -28,7 +28,7 @@ CodeEditor::CodeEditor(CodeHandle& code) : original(code) {
     {
         BytecodeList* pos = &front;
 
-        BC_t* pc = (BC_t*)code.data();
+        BC_t* pc = (BC_t*)code.bc();
         BC_t* end = (BC_t*)((uintptr_t)pc + code.code->codeSize);
 
         while (pc != end) {

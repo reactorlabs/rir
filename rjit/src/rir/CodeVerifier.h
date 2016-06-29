@@ -2,6 +2,7 @@
 #define CODE_VERIFIER_H
 
 #include "interp.h"
+#include "FunctionHandle.h"
 
 namespace rjit {
 namespace rir {
@@ -13,7 +14,7 @@ class CodeVerifier {
     /** Verifies the stack layout of the Code object and updates its ostack and
      * istack requirements.
      */
-    static void calculateAndVerifyStack(::Code* code);
+    static void calculateAndVerifyStack(CodeHandle code);
 
     /** Verifies that the given function object is valid.
      */

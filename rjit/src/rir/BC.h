@@ -80,26 +80,17 @@ BC BC::advance(BC_t** pc) {
     return cur;
 }
 
+BC BC::decode(BC_t* pc) {
+    BC_t bc = *pc;
+    BC cur(bc, decodeImmediate(bc, pc + 1));
+    return cur;
+}
+
 class CodeStream;
-
-template <typename T>
-T BC::readImmediate(BC_t** pc) {
-    T res = *(T*)*pc;
-    *pc = (BC_t*)((uintptr_t)*pc + sizeof(T));
-    return res;
-}
-
-BC_t BC::readBC(BC_t** pc) {
-    BC_t bc = **pc;
-    *pc += 1;
-    return bc;
-}
 
 bool BC::isJmp() {
     return bc == BC_t::br_ || bc == BC_t::brtrue_ || bc == BC_t::brfalse_;
 }
-
-size_t BC::size() const { return size(bc); }
 
 const BC BC::ret() { return BC(BC_t::ret_); }
 const BC BC::force() { return BC(BC_t::force_); }

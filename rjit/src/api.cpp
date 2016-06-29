@@ -26,7 +26,7 @@
 
 #include "rir/interp_context.h"
 #include "rir/interp.h"
-#include "rir/BC_inc.h"
+#include "rir/BC.h"
 
 // r print statement
 #include "R_ext/Print.h"
@@ -39,9 +39,9 @@ using namespace rir;
 typedef bool (*callback_isValidFunction)(SEXP);
 typedef SEXP (*callback_rirEval_f)(SEXP, SEXP);
 
-extern "C" void initializeCallbacks(callback_isValidFunction, callback_isValidFunction,  callback_rirEval_f);
-
-
+extern "C" void initializeCallbacks(callback_isValidFunction,
+                                    callback_isValidFunction,
+                                    callback_rirEval_f);
 
 /** Compiles the given ast.
  */
@@ -53,7 +53,8 @@ REXPORT SEXP rir_compileAst(SEXP ast) {
 REXPORT SEXP rir_compileClosure(SEXP f) {
     assert(TYPEOF(f) == CLOSXP and "Can only do closures");
     SEXP body = BODY(f);
-    assert(TYPEOF(body) != INTSXP and TYPEOF(body) != BCODESXP and "Can only do asts");
+    assert(TYPEOF(body) != INTSXP and TYPEOF(body) != BCODESXP and
+           "Can only do asts");
     SEXP result = allocSExp(CLOSXP);
     PROTECT(result);
     SET_FORMALS(result, FORMALS(f));
@@ -66,22 +67,22 @@ REXPORT SEXP rir_compileClosure(SEXP f) {
 REXPORT SEXP rir_compileClosureInPlace(SEXP f) {
     assert(TYPEOF(f) == CLOSXP and "Can only do closures");
     SEXP body = BODY(f);
-    assert(TYPEOF(body) != INTSXP and TYPEOF(body) != BCODESXP and "Can only do asts");
+    assert(TYPEOF(body) != INTSXP and TYPEOF(body) != BCODESXP and
+           "Can only do asts");
     SEXP code = Compiler::compile(body);
     SET_BODY(f, code);
     return f;
 }
 
-
 REXPORT SEXP rir_exec(SEXP bytecode, SEXP env) {
     assert(isValidFunction(bytecode));
-    ::Function * f = reinterpret_cast<::Function *>(INTEGER(bytecode));
+    ::Function* f = reinterpret_cast<::Function*>(INTEGER(bytecode));
     return rirEval_c(functionCode(f), globalContext(), env, 0);
 }
 
 /** Helper function that prints the code object.
  */
-extern "C" void printCode(::Code * c) {
+extern "C" void printCode(::Code* c) {
     Rprintf("Code object (offset %x (hex))\n", c->header);
     Rprintf("  Magic:     %x (hex)\n", c->magic);
     Rprintf("  Source:    %u (index to src pool)\n", c->src);
@@ -95,7 +96,7 @@ extern "C" void printCode(::Code * c) {
     CodeHandle(c).print();
 }
 
-extern "C" void printFunction(::Function * f) {
+extern "C" void printFunction(::Function* f) {
     Rprintf("Function object:\n");
     Rprintf("  Magic:           %x (hex)\n", f->magic);
     Rprintf("  Size:            %u\n", f->size);
@@ -107,7 +108,7 @@ extern "C" void printFunction(::Function * f) {
         Rf_error("Wrong magic number -- not rir bytecode");
 
     // print respective code objects
-    for (::Code * c = ::begin(f), * e = ::end(f); c != e; c = ::next(c))
+    for (::Code *c = ::begin(f), *e = ::end(f); c != e; c = ::next(c))
         printCode(c);
 }
 
@@ -147,14 +148,6 @@ bool startup() {
 } // anonymous namespace
 
 bool startup_ok = startup();
-
-
-
-
-
-
-
-
 
 REXPORT SEXP jitrbc(SEXP exp) {
     /*    rir::Compiler c(exp);

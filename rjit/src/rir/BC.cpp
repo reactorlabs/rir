@@ -7,6 +7,7 @@
 #include "../RList.h"
 #include "CodeStream.h"
 #include "RIntlns.h"
+#include "FunctionHandle.h"
 
 namespace rjit {
 namespace rir {
@@ -88,10 +89,10 @@ SEXP BC::immediateCallNames() {
 }
 
 void CodeHandle::print() {
-    BC_t* pc = (BC_t*)data();
+    BC_t* pc = (BC_t*)bc();
 
-    while ((uintptr_t)pc < (uintptr_t)endData()) {
-        std::cout << std::setw(3) << ((uintptr_t)pc - (uintptr_t)data()) << " ";
+    while ((uintptr_t)pc < (uintptr_t)endBc()) {
+        std::cout << std::setw(3) << ((uintptr_t)pc - (uintptr_t)bc()) << " ";
         BC bc = BC::advance(&pc);
         bc.print();
     }
