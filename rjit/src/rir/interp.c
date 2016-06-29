@@ -286,13 +286,15 @@ SEXP createArgsList(Code * c, FunctionIndex * args, FunctionIndex * ellipsis, bo
     SEXP ellipRes = R_NilValue;
 
     if (ellipFlag){
+        // TODO: this can't work. j is unsigned, thus always >= 0
         for (size_t j = ellipCounter - 1; j >= 0; --j){
             unsigned offset = ellipsis[j];
             SEXP arg = (offset == MISSING_ARG_OFFSET) ? R_MissingArg : createPromise(codeAt(function(c), offset), env);
             ellipRes = CONS_NR(arg, ellipRes);
         }
     }
-    for (size_t i = nargs - 1; i >= 0; --i) { 
+
+    for (size_t i = nargs - 1; i < nargs; --i) {
         PROTECT(result);
         if (i == ellipLoc && ellipFlag) {
             result = CONS_NR(ellipRes, result);
