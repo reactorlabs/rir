@@ -36,40 +36,40 @@
 using namespace rjit;
 using namespace rir;
 
-namespace {
+typedef bool (*callback_isValidFunction)(SEXP);
+typedef SEXP (*callback_rirEval_f)(SEXP, SEXP);
 
-/** Initializes the rir contexts, registers the gc and so on...
- */
-bool startup() {
-    // initialize the interpreter
-    // TODO give a compiler proper
-    interp_initialize(nullptr);
-    // register gc callback
-    registerGcCallback(&gc_callback);
+extern "C" void initializeCallbacks(callback_isValidFunction, callback_isValidFunction,  callback_rirEval_f);
 
-    return true;
-}
 
-} // anonymous namespace
-
-bool startup_ok = startup();
-
-/** Compiles given closure.
-
- */
-REXPORT SEXP rir_compileClosure(SEXP closure) {
-    assert(startup_ok and "Not initialized");
-
-    return R_NilValue;
-}
 
 /** Compiles the given ast.
  */
-REXPORT SEXP rir_compile(SEXP ast) {
-    assert(startup_ok and "Not initialized");
+REXPORT SEXP rir_compileAst(SEXP ast) {
     SEXP code = Compiler::compile(ast);
-
     return code;
+}
+
+REXPORT SEXP rir_compileClosure(SEXP f) {
+    assert(TYPEOF(f) == CLOSXP and "Can only do closures");
+    SEXP body = BODY(f);
+    assert(TYPEOF(body) != INTSXP and TYPEOF(body) != BCODESXP and "Can only do asts");
+    SEXP result = allocSExp(CLOSXP);
+    PROTECT(result);
+    SET_FORMALS(result, FORMALS(f));
+    SET_CLOENV(result, CLOENV(f));
+    SET_BODY(result, Compiler::compile(body));
+    UNPROTECT(1);
+    return result;
+}
+
+REXPORT SEXP rir_compileClosureInPlace(SEXP f) {
+    assert(TYPEOF(f) == CLOSXP and "Can only do closures");
+    SEXP body = BODY(f);
+    assert(TYPEOF(body) != INTSXP and TYPEOF(body) != BCODESXP and "Can only do asts");
+    SEXP code = Compiler::compile(body);
+    SET_BODY(f, code);
+    return f;
 }
 
 
@@ -81,8 +81,7 @@ REXPORT SEXP rir_exec(SEXP bytecode, SEXP env) {
 
 /** Helper function that prints the code object.
  */
-void print(CodeHandle code) {
-    Code* c = code.code;
+extern "C" void printCode(::Code * c) {
     Rprintf("Code object (offset %x (hex))\n", c->header);
     Rprintf("  Magic:     %x (hex)\n", c->magic);
     Rprintf("  Source:    %u (index to src pool)\n", c->src);
@@ -93,7 +92,23 @@ void print(CodeHandle code) {
     if (c->magic != CODE_MAGIC)
         Rf_error("Wrong magic number -- corrupted IR bytecode");
 
-    code.print();
+    CodeHandle(c).print();
+}
+
+extern "C" void printFunction(::Function * f) {
+    Rprintf("Function object:\n");
+    Rprintf("  Magic:           %x (hex)\n", f->magic);
+    Rprintf("  Size:            %u\n", f->size);
+    Rprintf("  Origin:          %s\n", f->origin ? "optimized" : "unoptimized");
+    Rprintf("  Code objects:    %u\n", f->codeLength);
+    Rprintf("  Fun code offset: %x (hex)\n", f->foffset);
+
+    if (f->magic != FUNCTION_MAGIC)
+        Rf_error("Wrong magic number -- not rir bytecode");
+
+    // print respective code objects
+    for (::Code * c = ::begin(f), * e = ::end(f); c != e; c = ::next(c))
+        printCode(c);
 }
 
 /** Prints the information in given Function SEXP
@@ -106,23 +121,40 @@ REXPORT SEXP rir_print(SEXP store) {
            "Corrupted int vector send");
 
     FunctionHandle fun(store);
+    Rprintf("Container length %u.\n", Rf_length(store));
 
     Function* f = fun.function;
-    Rprintf("Function object (int vector size: %u)\n", Rf_length(store));
-    Rprintf("  Magic:           %x (hex)\n", f->magic);
-    Rprintf("  Size:            %u\n", f->size);
-    Rprintf("  Origin:          %s\n", f->origin ? "optimized" : "unoptimized");
-    Rprintf("  Code objects:    %u\n", f->codeLength);
-    Rprintf("  Fun code offset: %x (hex)\n", f->foffset);
-
-    if (f->magic != FUNCTION_MAGIC)
-        Rf_error("Wrong magic number -- not rir bytecode");
-
-    // print respective code objects
-    for (auto c = fun.begin(); !c.atEnd(); c = c.next())
-        print(c);
+    printFunction(f);
     return R_NilValue;
 }
+
+namespace {
+
+/** Initializes the rir contexts, registers the gc and so on...
+ */
+bool startup() {
+    // initialize the interpreter
+    // TODO give a compiler proper
+    interp_initialize(rir_compileAst);
+    // register gc callback
+    registerGcCallback(&gc_callback);
+    // initialize callbacks
+    initializeCallbacks(isValidFunction, isValidPromise, rirEval_f);
+
+    return true;
+}
+
+} // anonymous namespace
+
+bool startup_ok = startup();
+
+
+
+
+
+
+
+
 
 REXPORT SEXP jitrbc(SEXP exp) {
     /*    rir::Compiler c(exp);

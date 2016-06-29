@@ -12,6 +12,8 @@
 #include "Optimizer.h"
 #include "Pool.h"
 
+#include "CodeVerifier.h"
+
 namespace rjit {
 namespace rir {
 
@@ -102,6 +104,8 @@ fun_idx_t compilePromise(FunctionHandle& function, SEXP exp) {
 }
 
 SEXP Compiler::finalize() {
+    //Rprintf("****************************************************\n");
+    //Rprintf("Compiling function\n");
     FunctionHandle function;
     CodeStream cs(function, exp);
     if (formals)
@@ -109,6 +113,9 @@ SEXP Compiler::finalize() {
     compileExpression(function, cs, exp);
     cs << BC::ret();
     cs.finalize();
+
+    CodeVerifier::vefifyFunctionLayout(function.store, globalContext());
+
     return function.store;
 }
 }

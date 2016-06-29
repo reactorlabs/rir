@@ -377,7 +377,7 @@ SEXP doCall(Code * caller, SEXP call, SEXP callee, unsigned * args, unsigned * e
         if (TYPEOF(body) == INTSXP) {
             SEXP newEnv = Rf_NewEnvironment(formals, argslist, CLOENV(callee));
             PROTECT(newEnv);
-            result = rirEval_c(begin((Function*)INTEGER(callee)), ctx, newEnv, nargs);
+            result = rirEval_c(functionCode((Function*)INTEGER(body)), ctx, newEnv, nargs);
             UNPROTECT(1);
         } else {
         // otherwise use R's own call mechanism
@@ -594,7 +594,7 @@ INSTRUCTION(call_) {
     // if (names)
     ostack_push(ctx, matchArgumentsAndCall(c,getCurrentCall(c, *pc, ctx), cls, args, names, nargs, env, ctx));
     // else
-        // ostack_push(ctx, doCall(c, getCurrentCall(c, *pc, ctx), cls, args, nargs, env, ctx));
+    // ostack_push(ctx, doCall(c, getCurrentCall(c, *pc, ctx), cls, args, nargs, env, ctx));
 }
 
 INSTRUCTION(promise_) {
@@ -830,7 +830,15 @@ INSTRUCTION(push_argi_) {
     ostack_push(ctx, cp_pool_at(ctx, bp - numArgs + pos));
 }
 
+extern void printCode(Code * c);
+extern void printFunction(Function * f);
+
+
+
 SEXP rirEval_c(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
+
+    //printCode(c);
+
     // make sure there is enough room on the stack
     ostack_ensureSize(ctx, c->stackLength);
     istack_ensureSize(ctx, c->iStackLength);
@@ -880,5 +888,24 @@ SEXP rirEval_c(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
     }
 
 }
+
+
+
+SEXP rirEval_f(SEXP f, SEXP env) {
+    // TODO we do not really need the arg counts now
+    if (isValidPromise(f)) {
+//        Rprintf("Evaluating promise:\n");
+        Code * c = (Code*)f;
+        SEXP x = rirEval_c(c, globalContext(), env, 0);
+//        Rprintf("Promise evaluated, length %u, value %d", Rf_length(x), REAL(x)[0]);
+        return x;
+    } else {
+//        Rprintf("=====================================================\n");
+//        Rprintf("Evaluating function\n");
+        Function * ff = (Function*)(INTEGER(f));
+        return rirEval_c(functionCode(ff), globalContext(), env, 0);
+    }
+}
+
 
 

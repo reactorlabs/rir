@@ -73,7 +73,7 @@ class State {
 
 } // unnamed namespace
 
-void CodeVerifier::verifyStack(::Code* c) {
+void CodeVerifier::calculateAndVerifyStack(::Code* c) {
     State max; // max state
     std::map<unsigned, State> state;
     std::stack<State> q;
@@ -116,19 +116,20 @@ void CodeVerifier::verifyStack(::Code* c) {
 void CodeVerifier::vefifyFunctionLayout(SEXP sexp, ::Context* ctx) {
     assert(TYPEOF(sexp) == INTSXP and "Invalid SEXPTYPE");
     ::Function* f = reinterpret_cast<::Function*>(INTEGER(sexp));
-    Rprintf("Checking function object at %u\n", f);
+    //Rprintf("Checking function object at %u\n", f);
     // get the code objects
     std::vector<::Code*> objs;
     for (::Code *c = begin(f), *e = end(f); c != e; c = next(c)) {
-        Rprintf("Checking code object at %u\n", c);
-        Rprintf("End: %u\n", e);
+        //Rprintf("Checking code object at %u\n", c);
+        //Rprintf("End: %u\n", e);
         objs.push_back(c);
     }
 
     // check the function header
     assert(f->magic == FUNCTION_MAGIC and "Invalid function magic number");
-    assert(f->size == static_cast<unsigned>(Rf_length(sexp)) and
-           "Reported size must be the same as the size of the vector");
+    // TODO This has changed - Rf_length is now >= than size, the current real length is quite vasteful and we might want to conserve space better
+    assert(f->size < static_cast<unsigned>(Rf_length(sexp)) and
+           "Reported size must be smaller than the size of the vector");
     if (f->origin != nullptr) {
         assert(TYPEOF(f->origin) == INTSXP and "Invalid origin type");
         assert(static_cast<unsigned>(INTEGER(f->origin)[0]) ==
@@ -147,7 +148,7 @@ void CodeVerifier::vefifyFunctionLayout(SEXP sexp, ::Context* ctx) {
         assert(c->src != 0 and "Code must have AST");
         unsigned oldo = c->stackLength;
         unsigned oldi = c->iStackLength;
-        verifyStack(c);
+        calculateAndVerifyStack(c);
         assert(oldo == c->stackLength and "Invalid stack layout reported");
         assert(oldi == c->iStackLength and
                "Invalid integer stack layout reported");
