@@ -81,8 +81,7 @@ REXPORT SEXP rir_exec(SEXP bytecode, SEXP env) {
 
 /** Helper function that prints the code object.
  */
-void print(CodeHandle code) {
-    Code* c = code.code;
+extern "C" void printCode(::Code * c) {
     Rprintf("Code object (offset %x (hex))\n", c->header);
     Rprintf("  Magic:     %x (hex)\n", c->magic);
     Rprintf("  Source:    %u (index to src pool)\n", c->src);
@@ -93,7 +92,23 @@ void print(CodeHandle code) {
     if (c->magic != CODE_MAGIC)
         Rf_error("Wrong magic number -- corrupted IR bytecode");
 
-    code.print();
+    CodeHandle(c).print();
+}
+
+extern "C" void printFunction(::Function * f) {
+    Rprintf("Function object:\n");
+    Rprintf("  Magic:           %x (hex)\n", f->magic);
+    Rprintf("  Size:            %u\n", f->size);
+    Rprintf("  Origin:          %s\n", f->origin ? "optimized" : "unoptimized");
+    Rprintf("  Code objects:    %u\n", f->codeLength);
+    Rprintf("  Fun code offset: %x (hex)\n", f->foffset);
+
+    if (f->magic != FUNCTION_MAGIC)
+        Rf_error("Wrong magic number -- not rir bytecode");
+
+    // print respective code objects
+    for (::Code * c = ::begin(f), * e = ::end(f); c != e; c = ::next(c))
+        printCode(c);
 }
 
 /** Prints the information in given Function SEXP
@@ -106,21 +121,10 @@ REXPORT SEXP rir_print(SEXP store) {
            "Corrupted int vector send");
 
     FunctionHandle fun(store);
+    Rprintf("Container length %u.\n", Rf_length(store));
 
     Function* f = fun.function;
-    Rprintf("Function object (int vector size: %u)\n", Rf_length(store));
-    Rprintf("  Magic:           %x (hex)\n", f->magic);
-    Rprintf("  Size:            %u\n", f->size);
-    Rprintf("  Origin:          %s\n", f->origin ? "optimized" : "unoptimized");
-    Rprintf("  Code objects:    %u\n", f->codeLength);
-    Rprintf("  Fun code offset: %x (hex)\n", f->foffset);
-
-    if (f->magic != FUNCTION_MAGIC)
-        Rf_error("Wrong magic number -- not rir bytecode");
-
-    // print respective code objects
-    for (::Code * c = ::begin(fun.function), * e = ::end(fun.function); c != e; c = ::next(c))
-        print(c);
+    printFunction(f);
     return R_NilValue;
 }
 
