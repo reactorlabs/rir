@@ -280,23 +280,39 @@ INSTRUCTION(ldvar_) {
 /** Given argument code offsets, creates the argslist from their promises.
  */
 // TODO unnamed only at this point
-SEXP createArgsList(Code* c, FunctionIndex* args, size_t nargs, SEXP env) {
+SEXP createArgsList(Code * c, FunctionIndex * args, FunctionIndex * ellipsis, bool ellipFlag, size_t ellipLoc, size_t ellipCounter,
+                                                                                         size_t nargs, SEXP env) {
     SEXP result = R_NilValue;
-    for (size_t i = nargs - 1; i < nargs; --i) {
-        unsigned offset = args[i];
-        PROTECT(result);
-        SEXP arg = (offset == MISSING_ARG_OFFSET)
-                       ? R_MissingArg
-                       : createPromise(codeAt(function(c), offset), env);
-        UNPROTECT(1);
-        result = CONS_NR(arg, result);
+    SEXP ellipRes = R_NilValue;
+
+    if (ellipFlag){
+        for (size_t j = ellipCounter - 1; j >= 0; --j){
+            unsigned offset = ellipsis[j];
+            SEXP arg = (offset == MISSING_ARG_OFFSET) ? R_MissingArg : createPromise(codeAt(function(c), offset), env);
+            ellipRes = CONS_NR(arg, ellipRes);
+        }
     }
+    for (size_t i = nargs - 1; i >= 0; --i) { 
+        PROTECT(result);
+        if (i == ellipLoc && ellipFlag) {
+            result = CONS_NR(ellipRes, result);
+        } else {
+            unsigned offset = args[i];
+            SEXP arg = (offset == MISSING_ARG_OFFSET) ? R_MissingArg : createPromise(codeAt(function(c), offset), env);
+            result = CONS_NR(arg, result);
+        }
+        UNPROTECT(1);
+    }
+
+
     return result;
 }
 
 SEXP createEagerArgsList(Code* c, FunctionIndex* args, size_t nargs, SEXP env,
                          Context* ctx) {
     SEXP result = R_NilValue;
+    // TODO: this assert fires:
+    // assert(!findVar(ellipSym, env));
     for (size_t i = nargs - 1; i < nargs; --i) {
         unsigned offset = args[i];
         PROTECT(result);
@@ -324,8 +340,8 @@ CCODE getBuiltin(SEXP f) {
   TODO this is currently super simple.
 
  */
-SEXP doCall(Code* caller, SEXP call, SEXP callee, unsigned* args, size_t nargs,
-            SEXP env, Context* ctx) {
+SEXP doCall(Code * caller, SEXP call, SEXP callee, unsigned * args, unsigned * ellipsis, bool ellipFlag, size_t ellipLoc, size_t ellipCounter,
+                                                     size_t nargs, SEXP env, Context * ctx) {
     size_t oldbp = ctx->ostack.length;
     size_t oldbpi = ctx->istack.length;
     SEXP result = R_NilValue;
@@ -353,7 +369,7 @@ SEXP doCall(Code* caller, SEXP call, SEXP callee, unsigned* args, size_t nargs,
         assert(Rf_length(formals) == nargs &&
                "Cannot handle different nargs yet");
         SEXP body = BODY(callee);
-        SEXP argslist = createArgsList(caller, args, nargs, env);
+        SEXP argslist = createArgsList(caller, args, ellipsis, ellipFlag, ellipLoc, ellipCounter, nargs, env);
         PROTECT(argslist);
         // if body is INTSXP, it is rir serialized code, execute it directly
         if (TYPEOF(body) == INTSXP) {
@@ -381,17 +397,28 @@ INLINE SEXP matchArgumentsAndCall(Code* caller, SEXP call, SEXP callee,
                                   unsigned* args, SEXP names, size_t nargs,
                                   SEXP env, Context* ctx) {
     // Specials and builtins do not care about names
-    if (TYPEOF(callee) == SPECIALSXP || TYPEOF(callee) == BUILTINSXP)
-        return doCall(caller, call, callee, args, nargs, env, ctx);
+    if (TYPEOF(callee) == SPECIALSXP || TYPEOF(callee) == BUILTINSXP || names == R_NilValue || TYPEOF(names) == NILSXP){
+        // there might still be ellipsis in the callee definition
+        // should I handle the cases here, i.e. run though the formal definition of the callee first. - No
+        // if the callee have ellipsis then the arguments will be matched by position for each position in front of the
+        // ellipsis.
+        unsigned * empty = alloca(0); // TODO check if this is valid - I simply want a null here.
+        return doCall(caller, call, callee, args, empty, false, 0, 0, nargs, env, ctx);
+    }
     // therefore it must be closure
     assert(TYPEOF(callee) == CLOSXP);
+
     // get the formals
     SEXP formals = FORMALS(callee);
     // prepare matching structures
-    unsigned* matched = alloca(Rf_length(formals) * sizeof(unsigned));
-    bool* used = alloca(Rf_length(formals) + sizeof(unsigned));
+    // the matched array have the exact size to hold the actual arguments to the formal arguments of the function (callee)
+    unsigned * matched = alloca(Rf_length(formals) * sizeof(unsigned));
+    unsigned * ellipsis = alloca(nargs * sizeof(unsigned));
+    // bool have bytesize of one.
+    bool * used = alloca(Rf_length(formals) + sizeof(unsigned));
     size_t i = 0;
     size_t e = Rf_length(formals);
+    // initialise the matched array
     while (i < e) {
         matched[i] = 0;
         used[i] = false;
@@ -399,9 +426,38 @@ INLINE SEXP matchArgumentsAndCall(Code* caller, SEXP call, SEXP callee,
     }
 
     // TODO do ellipsis
+    // A vector is required to hold the elements that would go into the ellipsis
+    SEXP ellipSym = Rf_install("...");
+    bool ellipFlag = false;
+    size_t ellipLoc = 0;
+
+    // find out if ellipsis is inside names
+    // unpackage it, and add it's elements to args and names, update nargs
+    for (size_t n = 0, length = Rf_length(names); n != length ; ++n){
+        SEXP name = VECTOR_ELT(names, n);
+        if (CAR(name) == ellipSym){
+            // retrieve the ellipsis from the env, and unpack it's content
+            SEXP callerEllip = findVar(name, env);
+            size_t ellipSize = Rf_length(callerEllip);
+            nargs += ellipSize;
+
+            unsigned * temp = alloca((nargs * sizeof(unsigned)) + (ellipSize * sizeof(unsigned)));
+            memcpy(temp, args, nargs * sizeof(unsigned));
+            temp++;
+            for (size_t m = 0; m != ellipSize; ++m){
+                // TODO figure out how it is being added into the temp
+                // which means I have to figure out how promises are added
+                // into the ellipsis to begin with.
+                temp = (unsigned) INTEGER(callerEllip)[m];
+                temp++;
+            }
+            break;
+        }
+    }
 
     size_t finger = 0;
     size_t positional = 0;
+    size_t ellipCounter = 0;
     SEXP formalsIter = formals;
 
     for (size_t i = 0, e = Rf_length(formals); i != e; ++i, ++finger) {
@@ -409,12 +465,20 @@ INLINE SEXP matchArgumentsAndCall(Code* caller, SEXP call, SEXP callee,
         SEXP formal = CAR(formalsIter);
         formalsIter = CDR(formalsIter);
 
-        // check if any of the supplied args has a matching tag
-        for (size_t current = 0, ii = 0, ee = Rf_length(names); ii != ee;
-             ++ii) {
+        // determining if there exists ellipsis inside the formal arguments
+        // this position in the matched needs to be saved for the ellipsis
+        if(ellipSym == formal) {
+            ellipFlag = true;
+            ellipLoc = finger;
+            continue;
+        }
+
+        // check if any of the supplied args has a matching tag (name)
+        for (size_t current = 0, ii = 0, ee = Rf_length(names); ii != ee; ++ii) {
             SEXP supplied = VECTOR_ELT(names, ii);
             if (used[current] || supplied == R_NilValue)
                 continue;
+            // supplied will never be an ellipsis, ellipsis will be unpackaged.
             if (TAG(formal) != supplied) // fine, it is a symbol
                 continue;
             // TODO error - same name given twice
@@ -423,13 +487,13 @@ INLINE SEXP matchArgumentsAndCall(Code* caller, SEXP call, SEXP callee,
             // match
             matched[finger] = args[current];
             used[current] = 1;
+            found = true;
             ++current;
         }
 
-        // check if any of the supplied args has a partially matching tag
-        if (!found) {
-            for (size_t current = 0, ii = 0, ee = Rf_length(names); ii != ee;
-                 ++ii) {
+        // check if any of the supplied args has a partially matching tag (name)
+        if (! found) {
+            for (size_t current = 0, ii = 0, ee = Rf_length(names); ii != ee; ++ii) {
                 SEXP supplied = VECTOR_ELT(names, ii);
                 if (used[current] || supplied == R_NilValue)
                     continue;
@@ -444,6 +508,7 @@ INLINE SEXP matchArgumentsAndCall(Code* caller, SEXP call, SEXP callee,
                 // match
                 matched[finger] = args[current];
                 used[current] = 1;
+                found = true;
                 ++current;
             }
         }
@@ -451,12 +516,31 @@ INLINE SEXP matchArgumentsAndCall(Code* caller, SEXP call, SEXP callee,
         // no match, do positionally
         if (!found) {
             while (positional < nargs) {
+                // The actual argument have no name
+                // therefore it is free to be matched
                 if (VECTOR_ELT(names, positional++) == R_NilValue) {
-                    found = true;
-                    matched[finger] =
-                        args[positional - 1]; // because ++ in loop
-                    used[positional - 1] = 1;
-                    break;
+                    if (ellipFlag){
+                        // add it into the ellipsis, and update the ellipCounter
+                        ellipsis[ellipCounter] = args[positional - 1];
+                        used[positional - 1] = 1;
+                        ellipCounter++;
+                        found = true;
+                    } else {
+                        matched[finger] = args[positional - 1]; // because ++ in loop
+                        used[positional - 1] = 1;
+                        found = true;
+                    }
+                } else {
+                    SEXP tempName = VECTOR_ELT(names, positional++);
+                    // if there are no formal argument matching to the
+                    // name of this actual argument, and there is an ellipsis
+                    // then this argument will go into the ellipsis
+                    if (nameMatch(tempName, formalsIter) && ellipsis) {
+                        ellipsis[ellipCounter] = args[positional - 1];
+                        used[positional - 1] = 1;
+                        ellipCounter++;
+                        found = true;
+                    }
                 }
             }
         }
@@ -467,8 +551,35 @@ INLINE SEXP matchArgumentsAndCall(Code* caller, SEXP call, SEXP callee,
             matched[finger] = MISSING_ARG_OFFSET;
     }
 
+    // if there exists an ellipsis in the formal arguments
+    // and there is left over actual arguments, then put the left over
+    // arguments into the 
+    if (i < (nargs - 1) && ellipFlag){
+        for (size_t p = i; p != nargs; ++p){
+            ellipsis[ellipCounter] = args[p];
+            ellipCounter++;
+        }
+
+    }
+
+    // the first case - when the callee i.e. the formal arguments contain an ellipsis, then in formals there is the symbol '...'
+
     // arguments have been matched, do the call
-    return doCall(caller, call, callee, matched, Rf_length(formals), env, ctx);
+    return doCall(caller, call, callee, matched, ellipsis, ellipFlag, ellipLoc, ellipCounter, Rf_length(formals), env, ctx);
+}
+
+bool nameMatch(SEXP name, SEXP formals){
+    bool found = false;
+    SEXP f = formals;
+    while(f != R_NilValue){
+        if (TAG(CAR(f)) == name) {
+            found = true;
+            return found;
+        }
+        f = CDR(f);
+    }
+
+    return found;
 }
 
 INSTRUCTION(call_) {
@@ -483,13 +594,10 @@ INSTRUCTION(call_) {
     // get the closure itself
     SEXP cls = ostack_pop(ctx);
     // match the arguments and do the call
-    if (names != R_NilValue)
-        ostack_push(ctx,
-                    matchArgumentsAndCall(c, getCurrentCall(c, *pc, ctx), cls,
-                                          args, names, nargs, env, ctx));
-    else
-        ostack_push(ctx, doCall(c, getCurrentCall(c, *pc, ctx), cls, args,
-                                nargs, env, ctx));
+    // if (names)
+    ostack_push(ctx, matchArgumentsAndCall(c,getCurrentCall(c, *pc, ctx), cls, args, names, nargs, env, ctx));
+    // else
+    // ostack_push(ctx, doCall(c, getCurrentCall(c, *pc, ctx), cls, args, nargs, env, ctx));
 }
 
 INSTRUCTION(promise_) {
