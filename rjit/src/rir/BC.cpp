@@ -88,132 +88,95 @@ SEXP BC::immediateCallNames() {
                                      : nullptr;
 }
 
+// TODO Why is this in BC.cpp? Shouldn't it be in FunctionHandle.cpp (which is not great name in its own either:)
 void CodeHandle::print() {
     BC_t* pc = (BC_t*)bc();
 
+    unsigned * s = src(code);
     while ((uintptr_t)pc < (uintptr_t)endBc()) {
-        std::cout << std::setw(3) << ((uintptr_t)pc - (uintptr_t)bc()) << " ";
+        if (*s != 0) {
+            Rprintf("          # (idx %u) : ", *s);
+            Rf_PrintValue(src_pool_at(globalContext(), *s));
+        }
+        Rprintf(" %5x ", ((uintptr_t)pc - (uintptr_t)bc()));
         BC bc = BC::advance(&pc);
         bc.print();
+        ++s;
     }
 }
 
 void BC::print() {
     if (bc != BC_t::label)
-        std::cout << "   ";
-
+        Rprintf("   ");
+    Rprintf("%s ", name(bc));
     switch (bc) {
     case BC_t::invalid_:
     case BC_t::num_of:
         assert(false);
         break;
     case BC_t::call_: {
-        std::cout << "call ";
         fun_idx_t* args = immediateCallArgs();
         num_args_t nargs = immediateCallNargs();
+        Rprintf("[");
         for (unsigned i = 0; i < nargs; ++i) {
-            std::cout << args[i] << " ";
+            Rprintf(" %x", args[i]);
         }
-        if (immediateCallNames())
+        Rprintf("] ");
+        if (immediateCallNames()) {
+            Rprintf("[");
             for (auto n : RVector(immediateCallNames())) {
-                std::cout << (n == R_NilValue ? "_" : CHAR(PRINTNAME(n)))
-                          << " ";
+                Rprintf(" %s", (n == R_NilValue ? "_" : CHAR(PRINTNAME(n))));
             }
-        std::cout << "\n";
+            Rprintf("]");
+        }
         break;
     }
     case BC_t::push_:
-        std::cout << "push ";
+        Rprintf(" %u # ", immediate.pool);
         Rf_PrintValue(immediateConst());
-        break;
+        return;
     case BC_t::isspecial_:
-        std::cout << "check_primitive " << CHAR(PRINTNAME((immediateConst())))
-                  << "\n";
-        break;
     case BC_t::ldfun_:
-        std::cout << "getfun " << CHAR(PRINTNAME((immediateConst()))) << "\n";
-        break;
     case BC_t::ldvar_:
-        std::cout << "getvar " << CHAR(PRINTNAME((immediateConst()))) << "\n";
-        break;
-    case BC_t::DEPRECATED_FORCE_ALL:
-        std::cout << "force_all\n";
-        break;
-    case BC_t::force_:
-        std::cout << "force\n";
-        break;
-    case BC_t::pop_:
-        std::cout << "pop\n";
-        break;
-    case BC_t::stvar_:
-        std::cout << "setvar\n";
-        break;
-    case BC_t::lti_:
-        std::cout << "lti\n";
-        break;
-    case BC_t::eqi_:
-        std::cout << "eqi\n";
-        break;
-    case BC_t::ret_:
-        std::cout << "ret\n";
-        break;
-    case BC_t::dup_:
-        std::cout << "dup\n";
-        break;
-    case BC_t::dupi_:
-        std::cout << "dupi\n";
-        break;
-    case BC_t::inci_:
-        std::cout << "inci\n";
-        break;
-    case BC_t::push_argi_:
-        std::cout << "load_argi\n";
+        Rprintf(" %u # %s", immediate.pool, CHAR(PRINTNAME((immediateConst()))));
         break;
     case BC_t::pushi_:
-        std::cout << "pushi " << immediate.i << "\n";
+        Rprintf(" %i", immediate.i);
         break;
+    case BC_t::DEPRECATED_FORCE_ALL:
+    case BC_t::force_:
+    case BC_t::pop_:
+    case BC_t::stvar_:
+    case BC_t::lti_:
+    case BC_t::eqi_:
+    case BC_t::ret_:
+    case BC_t::dup_:
+    case BC_t::dupi_:
+    case BC_t::inci_:
+    case BC_t::push_argi_:
     case BC_t::asast_:
-        std::cout << "get_ast\n";
-        break;
     case BC_t::asbool_:
-        std::cout << "to_bool\n";
-        break;
     case BC_t::NUMARGI_DEPRECATED:
-        std::cout << "numargi\n";
+    case BC_t::add_:
+    case BC_t::sub_:
+    case BC_t::lt_:
+    case BC_t::isfun_:
         break;
     case BC_t::pusharg_:
-        std::cout << "load_arg " << immediate.numArgs << "\n";
+        Rprintf(" %u", immediate.numArgs);
         break;
     case BC_t::promise_:
-        std::cout << "mkprom " << immediate.fun << "\n";
-        break;
     case BC_t::close_:
-        std::cout << "mkclosure " << immediate.fun << "\n";
+        Rprintf(" %s", immediate.fun);
         break;
     case BC_t::brtrue_:
-        std::cout << "jmp_true " << immediate.offset << "\n";
-        break;
     case BC_t::brfalse_:
-        std::cout << "jmp_false " << immediate.offset << "\n";
-        break;
     case BC_t::br_:
-        std::cout << "jmp " << immediate.offset << "\n";
-        break;
-    case BC_t::add_:
-        std::cout << "add\n";
-        break;
-    case BC_t::sub_:
-        std::cout << "sub\n";
-        break;
-    case BC_t::lt_:
-        std::cout << "lt\n";
-        break;
-    case BC_t::isfun_:
-        std::cout << "check_function" << std::endl;
-        break;
     case BC_t::label:
-        std::cout << immediate.offset << ":\n";
+        Rprintf(" %x", immediate.offset);
+        break;
     }
+    Rprintf("\n");
 }
 
 const BC BC::call(std::vector<fun_idx_t> args, std::vector<SEXP> names) {

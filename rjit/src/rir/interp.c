@@ -728,6 +728,7 @@ INSTRUCTION(dupi_) { istack_push(ctx, istack_top(ctx)); }
 INSTRUCTION(dup_) { ostack_push(ctx, ostack_top(ctx)); }
 
 INSTRUCTION(add_) {
+    assert(false);
     SEXP rhs = ostack_pop(ctx);
     SEXP lhs = ostack_pop(ctx);
     if (TYPEOF(lhs) == REALSXP && TYPEOF(rhs) == REALSXP &&
@@ -749,6 +750,7 @@ INSTRUCTION(add_) {
 }
 
 INSTRUCTION(sub_) {
+    assert(false);
     SEXP rhs = ostack_pop(ctx);
     SEXP lhs = ostack_pop(ctx);
     if (TYPEOF(lhs) == REALSXP && TYPEOF(rhs) == REALSXP &&
