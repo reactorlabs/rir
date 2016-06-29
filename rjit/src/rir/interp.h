@@ -78,9 +78,8 @@ struct Function; // Forward declaration
 // Code magic constant is intended to trick the GC into believing that it is
 // dealing with already marked SEXP.
 // Note: gcgen needs to be 1, otherwise the write barrier will trigger
-//  It also makes the SEXP look like NILSXP (0x00) so that we can determine
+//  It also makes the SEXP look like no other SEXP (31) so that we can determine
 //  whether a standard promise execution, or rir promise should be executed.
-// TODO: why does it say NILSXP above but the type is actually 31?
 #define CODE_MAGIC (unsigned)0x110000ff
 
 // Missing argument offset.
