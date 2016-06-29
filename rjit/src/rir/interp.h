@@ -130,8 +130,7 @@ typedef struct Code {
 } Code;
 #pragma pack(pop)
 
-/** Returns whether the SEXP appears to be valid promise, i.e. a pointer into
- * the middle of the linearized code.
+/** Returns whether the SEXP appears to be valid promise, i.e. a pointer into the middle of the linearized code.
  */
 INLINE bool isValidPromise(SEXP what) {
     unsigned x = *(unsigned*)what;
@@ -197,8 +196,7 @@ struct Function {
 
     unsigned codeLength; /// number of Code objects in the Function
 
-    // We can get to this by searching, but this isfaster and so worth the extra
-    // four bytes
+    // We can get to this by searching, but this isfaster and so worth the extra four bytes
     unsigned foffset; ///< Offset to the code of the function (last code)
 
     uint8_t data[]; // Code objects stored inline
@@ -212,7 +210,7 @@ INLINE bool isValidFunction(SEXP s) {
         return false;
     if ((unsigned)Rf_length(s) < sizeof(Function))
         return false;
-    Function* f = (Function*)INTEGER(s);
+    Function * f = (Function*)INTEGER(s);
     if (f->magic != FUNCTION_MAGIC)
         return false;
     if (f->size >= (unsigned)Rf_length(s))
@@ -223,7 +221,7 @@ INLINE bool isValidFunction(SEXP s) {
     return true;
 }
 
-INLINE Code* functionCode(Function* f) {
+INLINE Code * functionCode(Function * f) {
     return (Code*)((uintptr_t)f + f->foffset);
 }
 

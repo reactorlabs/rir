@@ -66,7 +66,6 @@ class CodeHandle {
             ++i;
         }
         return i;
-    }
 };
 
 class CodeHandleIterator : public CodeHandle {
