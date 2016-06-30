@@ -19,6 +19,7 @@ extern Rboolean R_Visible;
 extern SEXP hook_forcePromise(SEXP);
 extern SEXP hook_mkPROMISE(SEXP, SEXP);
 extern SEXP hook_matchArgs(SEXP, SEXP, SEXP);
+extern void hook_COPY_TAG(SEXP, SEXP);
 
 SEXP forcePromise(SEXP what) { return hook_forcePromise(what); }
 
@@ -324,6 +325,8 @@ SEXP createArgsList(Code * c, FunctionIndex * args, size_t nargs, SEXP names, SE
     SEXP pos = result;
     int protected = 0;
 
+    // printf("length of the name: %i\n", Rf_length(names));
+    printf("********** number of arguments: %i\n", nargs); 
     // loop through the arguments and create a promise, unless it is a missing argument
     for (size_t i = 0; i < nargs; ++i) {
         SEXP name = CAR(names);
@@ -334,8 +337,10 @@ SEXP createArgsList(Code * c, FunctionIndex * args, size_t nargs, SEXP names, SE
             SEXP ellipsis = findVar(name, env);
             if (TYPEOF(ellipsis) == DOTSXP) {
                 while (ellipsis != R_NilValue) {
-                    SEXP arg = hook_mkPROMISE(CAR(ellipsis), env);
-                    protected += __listAppend(&result, &pos, arg);
+                    SEXP promise = hook_mkPROMISE(CAR(ellipsis), env);
+                    // set the tag of the promise for the argument
+                    hook_COPY_TAG(promise, ellipsis);
+                    protected += __listAppend(&result, &pos, promise);
                     ellipsis = CDR(ellipsis);
                 }
             } else if (args[i] == MISSING_ARG_OFFSET) {
@@ -346,13 +351,45 @@ SEXP createArgsList(Code * c, FunctionIndex * args, size_t nargs, SEXP names, SE
             protected += __listAppend(&result, &pos, R_MissingArg);
         } else {
             unsigned offset = args[i];
-            SEXP arg = createPromise(codeAt(function(c), offset), env);
-            protected += __listAppend(&result, &pos, arg);
+            Code* arg = codeAt(function(c), offset);
+            SEXP promise = createPromise(arg, env);
+            // set the tag of the promise for the argument
+            if (name == R_NameSymbol || name == R_NilValue) {
+                hook_COPY_TAG(promise, R_NilValue);
+            } else {
+                hook_COPY_TAG(promise, names);
+            }
+            protected += __listAppend(&result, &pos, promise);
         }
         names = CDR(names);
     }
 
-    UNPROTECT(protected);
+    // Question: not sure why protected is unprotected here
+    // as it is an int, and I don't think it's been protected in the first place
+    // should this be result? - result is protected in _listAppend when setting
+    // the head of the list.
+
+    // UNPROTECT(protected);
+    UNPROTECT(result);
+    return result;
+}
+
+SEXP createNoNameArgsList(Code * c, FunctionIndex * args, size_t nargs, SEXP env) {
+    SEXP result = R_NilValue;
+    SEXP pos = result;
+    int protected = 0;
+
+    for (size_t i = 0; i < nargs; ++i) {
+        unsigned offset = args[i];
+        if (args[i] == MISSING_ARG_OFFSET) {
+            protected += __listAppend(&result, &pos, R_MissingArg);
+        } else {
+            SEXP arg = createPromise(codeAt(function(c), offset), env);
+            protected += __listAppend(&result, &pos, arg);
+        }
+    }
+
+    UNPROTECT(result);
     return result;
 }
 
@@ -372,7 +409,7 @@ SEXP createEagerArgsList(Code* c, FunctionIndex* args, size_t nargs, SEXP env,
         }
     }
 
-    UNPROTECT(protected);
+    UNPROTECT(result);
     return result;
 }
 
@@ -391,7 +428,7 @@ CCODE getBuiltin(SEXP f) {
   TODO this is currently super simple.
 
  */
-SEXP doCall(Code * caller, SEXP call, SEXP callee, unsigned * args, SEXP names, size_t nargs, SEXP env, Context * ctx) {
+SEXP doCall(Code * caller, SEXP call, SEXP callee, unsigned * args, size_t nargs, SEXP names, SEXP env, Context * ctx) {
 
     size_t oldbp = ctx->ostack.length;
     size_t oldbpi = ctx->istack.length;
@@ -416,9 +453,14 @@ SEXP doCall(Code * caller, SEXP call, SEXP callee, unsigned * args, SEXP names, 
         break;
     }
     case CLOSXP: {
+        SEXP actuals;
         SEXP formals = FORMALS(callee);
         SEXP body = BODY(callee);
-        SEXP actuals = createArgsList(caller, args, nargs, names, env);
+        if (names) {
+        actuals = createArgsList(caller, args, nargs, names, env);
+        } else {
+        actuals = createNoNameArgsList(caller, args, nargs, env);
+        }
         SEXP argslist = hook_matchArgs(formals, actuals, call);
         PROTECT(argslist);
         // if body is INTSXP, it is rir serialized code, execute it directly
@@ -453,10 +495,15 @@ INSTRUCTION(call_) {
     unsigned* args = (unsigned*)INTEGER(args_);
     // get the names of the arguments (or R_NilValue) if none
     SEXP names = readConst(ctx, pc);
+    unsigned namesLength = Rf_length(names);
+    printf("********** number of names in the arguments: %i\n", namesLength);
+    printf("********** number of arguments in call_: %i\n", nargs);
+
     // get the closure itself
     SEXP cls = ostack_pop(ctx);
     // do the call
     SEXP call = getCurrentCall(c, *pc, ctx);
+
     ostack_push(ctx, doCall(c, call, cls, args, nargs, names, env, ctx));
 }
 
