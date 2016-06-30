@@ -11,6 +11,9 @@ RList::RList(SEXP list) : list(list) {
 SEXP RListIter::tag() { return TAG(pos); }
 bool RListIter::hasTag() { return tag() != R_NilValue; }
 
+SEXP RListIter::car() { return CAR(pos); }
+bool RListIter::hasCar() { return car() != R_NilValue; }
+
 SEXP RListIter::operator*() { return CAR(pos); }
 
 void RListIter::operator++() { pos = CDR(pos); }

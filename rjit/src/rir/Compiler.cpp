@@ -49,8 +49,13 @@ void compileCall(FunctionHandle& parent, CodeStream& cs, SEXP ast, SEXP fun,
         callArgs.push_back(prom);
 
         // (2) remember if the argument had a name associated
-        // using R_NameSymbol as a temp place holder
-        names.push_back(arg.hasTag() ? arg.tag() : R_NameSymbol);
+        // using R_NameSymbol as a temp place holder for now
+        // if the argument is an ellipsis, the tag is null for some reason
+        if (arg.hasCar() && arg.car() == R_DotsSymbol){
+            names.push_back(R_DotsSymbol);
+        } else {
+            names.push_back(arg.hasTag() ? arg.tag() : R_NameSymbol);
+        }
     }
     assert(callArgs.size() < MAX_NUM_ARGS);
 
@@ -87,16 +92,17 @@ void compileExpression(FunctionHandle& function, CodeStream& cs, SEXP exp) {
 
 void compileFormals(CodeStream& cs, SEXP formals) {
     size_t narg = 0;
+    std::vector<SEXP> names;
+
     for (auto arg = RList(formals).begin(); arg != RList::end(); ++arg) {
         // TODO support default args
         assert(*arg == R_MissingArg);
 
-        SEXP name = arg.tag();
-        assert(name && name != R_NilValue);
-
-        // TODO
-        assert(name != symbol::Ellipsis);
-
+        if (arg.hasCar() && arg.car() == R_DotsSymbol){
+            names.push_back(R_DotsSymbol);
+        } else {
+            names.push_back(arg.tag());
+        }
         narg++;
     }
 }

@@ -16,6 +16,9 @@ class RListIter {
     SEXP tag();
     bool hasTag();
 
+    SEXP car();
+    bool hasCar();
+
     SEXP operator*();
 
     void operator++();
