@@ -215,7 +215,7 @@ INSTRUCTION(push_) {
 
 INSTRUCTION(ldfun_) {
     SEXP sym = readConst(ctx, pc);
-    SEXP val = findVar(sym, env);
+    SEXP val = findFun(sym, env);
     R_Visible = TRUE;
 
     // TODO something should happen here
@@ -223,14 +223,6 @@ INSTRUCTION(ldfun_) {
         assert(false && "Unbound var");
     else if (val == R_MissingArg)
         assert(false && "Missing argument");
-
-    // if promise, evaluate & return
-    if (TYPEOF(val) == PROMSXP)
-        val = promiseValue(val);
-
-    // WTF? is this just defensive programming or what?
-    if (NAMED(val) == 0 && val != R_NilValue)
-        SET_NAMED(val, 1);
 
     switch (TYPEOF(val)) {
     case CLOSXP:
@@ -250,7 +242,6 @@ INSTRUCTION(ldfun_) {
         // special and builtin functions are ok
         break;
     default:
-        // TODO!
         assert(false);
     }
     ostack_push(ctx, val);
