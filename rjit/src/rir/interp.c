@@ -730,8 +730,8 @@ SEXP rirEval_c(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
             // not in its own function so that we can avoid nonlocal returns
             return ostack_pop(ctx);
         }
-        default:
-            assert(false && "wrong or unimplemented opcode");
+        //default:
+        //    assert(false && "wrong or unimplemented opcode");
         }
     }
 }

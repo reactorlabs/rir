@@ -48,11 +48,9 @@ BC::immediate_t decodeImmediate(BC_t bc, BC_t* pc) {
     case BC_t::ret_:
     case BC_t::pop_:
     case BC_t::force_:
-    case BC_t::DEPRECATED_FORCE_ALL:
     case BC_t::asast_:
     case BC_t::stvar_:
     case BC_t::asbool_:
-    case BC_t::NUMARGI_DEPRECATED:
     case BC_t::lti_:
     case BC_t::eqi_:
     case BC_t::dupi_:
@@ -90,7 +88,6 @@ class CodeStream;
 
 const BC BC::ret() { return BC(BC_t::ret_); }
 const BC BC::force() { return BC(BC_t::force_); }
-const BC BC::force_all() { return BC(BC_t::DEPRECATED_FORCE_ALL); }
 const BC BC::pop() { return BC(BC_t::pop_); }
 const BC BC::push(SEXP constant) {
     immediate_t i;
@@ -123,7 +120,6 @@ const BC BC::get_ast() { return BC(BC_t::asast_); }
 const BC BC::setvar() { return BC(BC_t::stvar_); }
 const BC BC::lti() { return BC(BC_t::lti_); }
 const BC BC::eqi() { return BC(BC_t::eqi_); }
-const BC BC::numargi() { return BC(BC_t::NUMARGI_DEPRECATED); }
 const BC BC::to_bool() { return BC(BC_t::asbool_); }
 
 BC BC::check_function() { return BC(BC_t::isfun_); }

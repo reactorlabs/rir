@@ -39,14 +39,6 @@ enum class BC_t : OpcodeT {
 #define DEF_INSTR(name, ...) name,
 #include "insns.h"
 
-    // push the number of arguments given to a CC::*Stack function
-    // TODO DELETE
-    NUMARGI_DEPRECATED,
-
-    // force all promise arguments to this function passed on the stack
-    // (currently unused)
-    DEPRECATED_FORCE_ALL,
-
     // A label/jump target (used internally by CodeEditor only!)
     label,
 
