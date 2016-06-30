@@ -278,80 +278,80 @@ INSTRUCTION(ldvar_) {
     ostack_push(ctx, val);
 }
 
-SEXP reverseOrder(SEXP list){
-    SEXP result = CONS_NR(R_NilValue, R_NilValue);
-    PROTECT(result);
-
-    while (list != R_NilValue){
-        SEXP val = CAR(list);
-        result = CONS_NR(val, list);
-        list = CDR(list);
-    }
-
-    UNPROTECT(1);
-    return result;
-}
-
 /** Given argument code offsets, creates the argslist from their promises.
  */
 // TODO unnamed only at this point
+int __listAppend(SEXP* front, SEXP* last, SEXP value) {
+    int protected = 0;
+
+    assert(TYPEOF(*front) == LISTSXP || TYPEOF(*front) == NILSXP);
+    assert(TYPEOF(*last) == LISTSXP || TYPEOF(*last) == NILSXP);
+
+    SEXP app = CONS_NR(value, R_NilValue);
+
+    if (*front == R_NilValue) {
+        *front = app;
+        PROTECT(*front);
+        protected++;
+    }
+
+    if (*last != R_NilValue)
+        SETCDR(*last, app);
+    *last = app;
+
+    return protected;
+}
+
 SEXP createArgsList(Code * c, FunctionIndex * args, size_t nargs, SEXP names, SEXP env) {
     SEXP result = R_NilValue;
-    SEXP arg = R_NilValue;
-    result = CONS_NR(R_NilValue, R_NilValue);
-    PROTECT(result);
-    PROTECT(arg);
+    SEXP pos = result;
+    int protected = 0;
 
     for (size_t i = 0; i < nargs; ++i) {
         SEXP name = CAR(names);
         if (name == R_DotsSymbol) {
             SEXP ellipsis = findVar(name, env);
-            PROTECT(ellipsis);
-
             if (TYPEOF(ellipsis) == DOTSXP) {
                 while (ellipsis != R_NilValue) {
-                    arg = hook_mkPROMISE(CAR(ellipsis), env);
-                    result = CONS_NR(arg, result);
+                    SEXP arg = hook_mkPROMISE(CAR(ellipsis), env);
+                    protected += __listAppend(&result, &pos, arg);
                     ellipsis = CDR(ellipsis);
                 }
             } else if (args[i] == MISSING_ARG_OFFSET) {
-                // UNPROTECT(3);
                 assert(false);
             }
 
         } else if (args[i] == MISSING_ARG_OFFSET) {
-            arg = R_MissingArg;
-            result = CONS_NR(arg, result);
+            protected += __listAppend(&result, &pos, R_MissingArg);
         } else {
             unsigned offset = args[i];
-            arg = createPromise(codeAt(function(c), offset), env);
-            result = CONS_NR(arg, result);
+            SEXP arg = createPromise(codeAt(function(c), offset), env);
+            protected += __listAppend(&result, &pos, arg);
         }
         names = CDR(names);
     }
-    // have to reverse result - it is backwards right now.
-    reverseOrder(result);
-    UNPROTECT(3);
+
+    UNPROTECT(protected);
     return result;
 }
 
 SEXP createEagerArgsList(Code* c, FunctionIndex* args, size_t nargs, SEXP env,
                          Context* ctx) {
     SEXP result = R_NilValue;
-    // TODO: this assert fires:
-    // assert(!findVar(ellipSym, env));
+    SEXP pos = result;
+    int protected = 0;
 
-    // i < nargs <--- will always be true if i is initially nargs - 1
-    // should this be i > 0?
-    for (size_t i = nargs - 1; i < 0; --i) {
+    for (size_t i = 0; i < nargs; ++i) {
         unsigned offset = args[i];
-        PROTECT(result);
-        SEXP arg = (offset == MISSING_ARG_OFFSET)
-                       ? R_MissingArg
-                       : rirEval_c(codeAt(function(c), offset), ctx, env, 0);
-        UNPROTECT(1);
-        result = CONS_NR(arg, result);
+        if (args[i] == MISSING_ARG_OFFSET) {
+            protected += __listAppend(&result, &pos, R_MissingArg);
+        } else {
+            SEXP arg = rirEval_c(codeAt(function(c), offset), ctx, env, 0);
+            protected += __listAppend(&result, &pos, arg);
+        }
     }
+
+    UNPROTECT(protected);
     return result;
 }
 
@@ -399,7 +399,8 @@ SEXP doCall(Code * caller, SEXP call, SEXP callee, unsigned * args, size_t nargs
         assert(Rf_length(formals) == nargs &&
                "Cannot handle different nargs yet");
         SEXP body = BODY(callee);
-        SEXP argslist = hook_matchArgs(formals, createArgsList(caller, args, nargs, names, env), call);
+        SEXP actuals = createArgsList(caller, args, nargs, names, env);
+        SEXP argslist = hook_matchArgs(formals, actuals, call);
         PROTECT(argslist);
         // if body is INTSXP, it is rir serialized code, execute it directly
         if (TYPEOF(body) == INTSXP) {
@@ -436,7 +437,8 @@ INSTRUCTION(call_) {
     // get the closure itself
     SEXP cls = ostack_pop(ctx);
     // do the call
-    ostack_push(ctx, doCall(c, getCurrentCall(c, *pc, ctx), cls, args, names, nargs, env, ctx));
+    SEXP call = getCurrentCall(c, *pc, ctx);
+    ostack_push(ctx, doCall(c, call, cls, args, nargs, names, env, ctx));
 }
 
 INSTRUCTION(promise_) {
