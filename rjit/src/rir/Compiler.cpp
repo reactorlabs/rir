@@ -49,6 +49,7 @@ void compileCall(FunctionHandle& parent, CodeStream& cs, SEXP ast, SEXP fun,
         callArgs.push_back(prom);
 
         // (2) remember if the argument had a name associated
+        // using R_NameSymbol as a temp place holder
         names.push_back(arg.hasTag() ? arg.tag() : R_NameSymbol);
     }
     assert(callArgs.size() < MAX_NUM_ARGS);
