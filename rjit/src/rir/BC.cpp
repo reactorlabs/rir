@@ -72,7 +72,9 @@ void BC::write(CodeStream& cs) const {
 
 SEXP BC::immediateConst() { return Pool::get(immediate.pool); }
 fun_idx_t* BC::immediateCallArgs() {
-    return (fun_idx_t*)INTEGER(Pool::get(immediate.call_args.args));
+    SEXP c = Pool::get(immediate.call_args.args);
+    assert(TYPEOF(c) == INTSXP);
+    return (fun_idx_t*)INTEGER(c);
 }
 num_args_t BC::immediateCallNargs() {
     size_t nargs =

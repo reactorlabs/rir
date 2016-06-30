@@ -143,19 +143,19 @@ OpcodeT* advancePc(OpcodeT* pc) {
 // bytecode accesses
 
 INLINE Opcode readOpcode(OpcodeT** pc) {
-    Opcode result = (Opcode)(**pc);
+    Opcode result = *(OpcodeT*)(*pc);
     *pc += sizeof(OpcodeT);
     return result;
 }
 
 INLINE unsigned readImmediate(OpcodeT** pc) {
-    unsigned result = (Immediate)(**pc);
+    unsigned result = *(Immediate*)*pc;
     *pc += sizeof(Immediate);
     return result;
 }
 
 INLINE int readSignedImmediate(OpcodeT** pc) {
-    int result = (SignedImmediate)(**pc);
+    int result = *(SignedImmediate*)*pc;
     *pc += sizeof(SignedImmediate);
     return result;
 }
@@ -239,8 +239,8 @@ INSTRUCTION(ldfun_) {
          */
         if (COMPILE_ON_DEMAND) {
             SEXP body = BODY(val);
-            assert(TYPEOF(body) != BCODESXP &&
-                   "We do not plan to handle GNU-R bytecode");
+            if (TYPEOF(body) == BCODESXP)
+                body = VECTOR_ELT(CDR(body), 0);
             if (TYPEOF(body) != INTSXP)
                 SET_BODY(val, ctx->compiler(body, CLOENV(val)));
         }
@@ -396,8 +396,6 @@ SEXP doCall(Code * caller, SEXP call, SEXP callee, unsigned * args, size_t nargs
     }
     case CLOSXP: {
         SEXP formals = FORMALS(callee);
-        assert(Rf_length(formals) == nargs &&
-               "Cannot handle different nargs yet");
         SEXP body = BODY(callee);
         SEXP actuals = createArgsList(caller, args, nargs, names, env);
         SEXP argslist = hook_matchArgs(formals, actuals, call);
@@ -730,8 +728,8 @@ SEXP rirEval_c(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
             // not in its own function so that we can avoid nonlocal returns
             return ostack_pop(ctx);
         }
-        //default:
-        //    assert(false && "wrong or unimplemented opcode");
+        default:
+            assert(false && "wrong or unimplemented opcode");
         }
     }
 }

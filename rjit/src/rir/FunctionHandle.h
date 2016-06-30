@@ -55,9 +55,11 @@ class FunctionHandle {
 
             memcpy(newPayload, payload, capacity);
 
+            assert(function == payload);
             store = newStore;
             payload = newPayload;
             capacity = newCapacity;
+            function = (Function*)payload;
         }
 
         unsigned offset = function->size;
