@@ -19,7 +19,6 @@ extern Rboolean R_Visible;
 extern SEXP hook_forcePromise(SEXP);
 extern SEXP hook_mkPROMISE(SEXP, SEXP);
 extern SEXP hook_matchArgs(SEXP, SEXP, SEXP);
-extern void hook_COPY_TAG(SEXP, SEXP);
 
 SEXP forcePromise(SEXP what) { return hook_forcePromise(what); }
 
@@ -326,7 +325,7 @@ SEXP createArgsList(Code * c, FunctionIndex * args, size_t nargs, SEXP names, SE
     int protected = 0;
 
     // printf("length of the name: %i\n", Rf_length(names));
-    printf("********** number of arguments: %i\n", nargs); 
+    printf("********** number of arguments: %u\n", nargs);
     // loop through the arguments and create a promise, unless it is a missing argument
     for (size_t i = 0; i < nargs; ++i) {
         SEXP name = CAR(names);
@@ -339,7 +338,7 @@ SEXP createArgsList(Code * c, FunctionIndex * args, size_t nargs, SEXP names, SE
                 while (ellipsis != R_NilValue) {
                     SEXP promise = hook_mkPROMISE(CAR(ellipsis), env);
                     // set the tag of the promise for the argument
-                    hook_COPY_TAG(promise, ellipsis);
+                    SET_TAG(promise, R_DotsSymbol);
                     protected += __listAppend(&result, &pos, promise);
                     ellipsis = CDR(ellipsis);
                 }
@@ -354,11 +353,13 @@ SEXP createArgsList(Code * c, FunctionIndex * args, size_t nargs, SEXP names, SE
             Code* arg = codeAt(function(c), offset);
             SEXP promise = createPromise(arg, env);
             // set the tag of the promise for the argument
-            if (name == R_NameSymbol || name == R_NilValue) {
-                hook_COPY_TAG(promise, R_NilValue);
+            if (name != R_NilValue && name != R_NameSymbol)
+                SET_TAG(promise, name);
+/*            if (name == R_NameSymbol || name == R_NilValue) {
+                // no need to do anything hook_COPY_TAG(promise, R_NilValue);
             } else {
-                hook_COPY_TAG(promise, names);
-            }
+                hook_COPY_TAG(promise, names); // WHY NAMES?
+            } */
             protected += __listAppend(&result, &pos, promise);
         }
         names = CDR(names);
@@ -370,7 +371,9 @@ SEXP createArgsList(Code * c, FunctionIndex * args, size_t nargs, SEXP names, SE
     // the head of the list.
 
     // UNPROTECT(protected);
-    UNPROTECT(result);
+    // ?? Can't unprotect SEXP
+    UNPROTECT(1);
+    //UNPROTECT(result);
     return result;
 }
 
@@ -389,7 +392,9 @@ SEXP createNoNameArgsList(Code * c, FunctionIndex * args, size_t nargs, SEXP env
         }
     }
 
-    UNPROTECT(result);
+    // ?? Can't unprotect SEXP, also I do not see you are protecting anything in here
+    //UNPROTECT(result);
+    UNPROTECT(1);
     return result;
 }
 
@@ -409,7 +414,9 @@ SEXP createEagerArgsList(Code* c, FunctionIndex* args, size_t nargs, SEXP env,
         }
     }
 
-    UNPROTECT(result);
+    // ?? Can't unprotect SEXP, also I do not see you are protecting anything in here
+    //UNPROTECT(result);
+    UNPROTECT(1);
     return result;
 }
 
