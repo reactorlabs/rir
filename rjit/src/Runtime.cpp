@@ -42,20 +42,7 @@ extern "C" void* compileIC(uint64_t numargs, SEXP call, SEXP fun, SEXP rho,
         name = CHAR(PRINTNAME(CAR(call)));
     }
 
-    // We use the RJIT_COMPILE env to request rjit to compile functions before
-    // calling them
-    // The existing R_ENABLE_JIT is reused within our version of gnur to be able
-    // to use rjit as a replacement for the bytecode compiler. This only works
-    // if rjit is loaded as a real module in gnur. In accordance we use it here
-    // as well. Values 1,2 are existing gnur compiler options, level 3 only
-    // recompiles already compiled bytecode expressions (used for testing
-    // purposes), level 4 compiles ast expressions, level 5 compiles ast &
-    // bytecode expressions.
-    bool compile =
-        (RJIT_COMPILE > 0 &&
-         (TYPEOF(body) == LANGSXP || TYPEOF(body) == BCODESXP)) ||
-        (TYPEOF(body) == LANGSXP && R_ENABLE_JIT > 3) ||
-        (TYPEOF(body) == BCODESXP && (R_ENABLE_JIT == 3 || R_ENABLE_JIT > 4));
+    bool compile = R_ENABLE_JIT && TYPEOF(body) != NATIVESXP;
 
     if (compile) {
         Compiler c("module");
@@ -82,7 +69,7 @@ extern "C" void* compileIC(uint64_t numargs, SEXP call, SEXP fun, SEXP rho,
     return res;
 }
 
-REXPORT SEXP jitPrintTypefeedback(SEXP f);
+REXPORT SEXP rjit_PrintTypefeedback(SEXP f);
 extern "C" void* recompileFunction(SEXP closure,
                                    SEXP (*caller)(SEXP, SEXP, SEXP),
                                    SEXP consts, SEXP rho) {
@@ -91,7 +78,7 @@ extern "C" void* recompileFunction(SEXP closure,
     if (RJIT_DEBUG) {
         std::cout << "Recompiling closure " << (void*)closure
                   << "  Typefeedback gathered :\n";
-        jitPrintTypefeedback(closure);
+        rjit_PrintTypefeedback(closure);
     }
 
     SEXP body = BODY(closure);

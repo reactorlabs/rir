@@ -32,7 +32,7 @@ extern "C" {
 
   The idea is to call this if we want on demand compilation of closures.
  */
-typedef SEXP (*CompilerCallback)(SEXP);
+typedef SEXP (*CompilerCallback)(SEXP, SEXP);
 
 //
 // Primitive stack.
@@ -139,7 +139,7 @@ INLINE SEXP src_pool_at(Context* c, size_t value) {
 void interp_initialize(CompilerCallback compiler);
 
 /** TODO Makes sure the gc undersands our stacks and pools. */
-void gc_callback(void (*forward_node)(SEXP));
+void rir_interp_gc_callback(void (*forward_node)(SEXP));
 
 /** Returns the global context for the interpreter - important to get access to
   the shared constant and source pools.

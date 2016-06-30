@@ -75,7 +75,7 @@ void interp_initialize(CompilerCallback compiler) {
     globalContext_ = context_create(compiler);
 }
 
-void gc_callback(void (*forward_node)(SEXP)) {
+void rir_interp_gc_callback(void (*forward_node)(SEXP)) {
     for (size_t i = 0; i < globalContext_->ostack.length; ++i)
         forward_node(globalContext_->ostack.data[i]);
     forward_node(globalContext_->cp.data);

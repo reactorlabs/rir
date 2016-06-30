@@ -242,7 +242,7 @@ INSTRUCTION(ldfun_) {
             assert(TYPEOF(body) != BCODESXP &&
                    "We do not plan to handle GNU-R bytecode");
             if (TYPEOF(body) != INTSXP)
-                SET_BODY(val, ctx->compiler(body));
+                SET_BODY(val, ctx->compiler(body, CLOENV(val)));
         }
         break;
     case SPECIALSXP:
