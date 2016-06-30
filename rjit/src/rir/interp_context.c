@@ -7,6 +7,16 @@
 //
 #include "interp_context.h"
 
+void fstack_grow(Context* c) {
+    unsigned cap = c->fstack.capacity * 2;
+    Frame* data = malloc(cap * sizeof(Frame));
+    memcpy(data, c->fstack.data, c->fstack.length * sizeof(Frame));
+    free(c->fstack.data);
+    c->fstack.data = data;
+    c->fstack.capacity = cap;
+}
+
+
 void ostack_ensureSize(Context* c, unsigned minFree) {
     unsigned cap = c->ostack.capacity;
     while(c->ostack.length + minFree < cap) cap *= 2;
@@ -41,6 +51,9 @@ Context* context_create(CompilerCallback compiler) {
     c->istack.data = malloc(STACK_CAPACITY * sizeof(int));
     c->istack.length = 0;
     c->istack.capacity = STACK_CAPACITY;
+    c->fstack.data = malloc(STACK_CAPACITY * sizeof(Frame));
+    c->fstack.length = 0;
+    c->fstack.capacity = STACK_CAPACITY;
     c->compiler = compiler;
     // first item in source and constant pools is R_NilValue so that we can use the index 0 for other purposes
     src_pool_add(c, R_NilValue);
@@ -71,8 +84,19 @@ void pool_grow(Pool* p) {
 // TODO for now we keep the context in a global value for easy gc
 Context * globalContext_;
 
+extern void R_SetErrorHook(void (*hook)(SEXP, char *));
+extern void rirBacktrace(Context* ctx);
+
+void rirErrorHook(SEXP call, char * msg) {
+    Rprintf("RIR backtrace:\n");
+    rirBacktrace(globalContext_);
+    Rprintf("\n");
+    Rf_errorcall(call, msg);
+}
+
 void interp_initialize(CompilerCallback compiler) {
     globalContext_ = context_create(compiler);
+    R_SetErrorHook(&rirErrorHook);
 }
 
 void rir_interp_gc_callback(void (*forward_node)(SEXP)) {

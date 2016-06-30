@@ -13,6 +13,8 @@
 #include <Rinternals.h>
 #include <stdio.h>
 
+#include <stdint.h>
+
 // TODO force inlinine for clang & gcc
 #define INLINE __attribute__((always_inline)) inline static
 
@@ -63,6 +65,27 @@ typedef struct {
 } Pool;
 
 //
+// Frame
+//
+struct Code;
+typedef uint8_t OpcodeT;
+typedef struct {
+    struct Code* code;
+    SEXP env;
+    OpcodeT* pc;
+} Frame;
+
+//
+// Frame stack.
+//
+typedef struct {
+    Frame* data;
+    size_t length;
+    size_t capacity;
+
+} FStack;
+
+//
 // Context
 //
 typedef struct {
@@ -70,16 +93,24 @@ typedef struct {
     Pool src;
     OStack ostack;
     PStack istack;
+    FStack fstack;
     CompilerCallback compiler;
 } Context;
+
 
 INLINE int istack_top(Context* c) { return c->istack.data[c->istack.length]; }
 
 INLINE SEXP ostack_top(Context* c) { return c->ostack.data[c->ostack.length]; }
 
+INLINE int fstack_top(Context* c) {
+    return c->fstack.length - 1;
+}
+
 INLINE size_t istack_length(Context* c) { return c->ostack.length; }
 
 INLINE bool ostack_empty(Context* c) { return c->ostack.length == 0; }
+
+INLINE bool fstack_empty(Context* c) { return c->fstack.length == 0; }
 
 INLINE SEXP ostack_at(Context* c, unsigned index) {
     return c->ostack.data[index];
@@ -106,6 +137,28 @@ INLINE void istack_push(Context* c, int val) {
 }
 
 void istack_ensureSize(Context* c, unsigned minFree);
+
+INLINE Frame* fstack_at(Context* c, unsigned index) {
+    return &c->fstack.data[index];
+}
+
+INLINE void fstack_pop(Context* c) {
+    --c->fstack.length;
+}
+
+void fstack_grow(Context* c);
+
+INLINE Frame* fstack_push(Context* c, struct Code* code, SEXP env) {
+    if (c->fstack.length == c->fstack.capacity)
+        fstack_grow(c);
+
+    Frame* frame = &c->fstack.data[c->fstack.length];
+    frame->code = code;
+    frame->env = env;
+    c->fstack.length++;
+    return frame;
+}
+
 
 Context* context_create(CompilerCallback compiler);
 

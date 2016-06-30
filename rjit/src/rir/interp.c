@@ -695,6 +695,28 @@ INSTRUCTION(push_argi_) {
 extern void printCode(Code* c);
 extern void printFunction(Function* f);
 
+extern SEXP Rf_deparse1(SEXP call, Rboolean abbrev, int opts);
+extern void R_SetErrorHook(void (*hook)(SEXP, char *));
+
+extern void rirBacktrace(Context* ctx) {
+    if (fstack_empty(ctx))
+        return;
+
+    for (int i = fstack_top(ctx); i >= 0; i--) {
+        Frame* frame = fstack_at(ctx, i);
+        Code* code = frame->code;
+        SEXP call = src_pool_at(ctx, code->src);
+
+        Rprintf("%d : %s\n", i, CHAR(STRING_ELT(Rf_deparse1(call, 0, 0), 0)));
+        Rprintf(" env: ");
+        SEXP names = R_lsInternal3(frame->env, TRUE, FALSE);
+        PROTECT(names);
+        for (int i = 0; i < Rf_length(names); ++i)
+            Rprintf("%s ", CHAR(STRING_ELT(R_lsInternal3(frame->env, TRUE, FALSE), i)));
+        Rprintf("\n");
+    }
+}
+
 SEXP rirEval_c(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
 
     // printCode(c);
@@ -702,17 +724,19 @@ SEXP rirEval_c(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
     // make sure there is enough room on the stack
     ostack_ensureSize(ctx, c->stackLength);
     istack_ensureSize(ctx, c->iStackLength);
+    Frame* frame = fstack_push(ctx, c, env);
 
     // get pc and bp regs, we do not need istack bp
-    OpcodeT* pc = code(c);
+    frame->pc = code(c);
+    OpcodeT** pc = &frame->pc;
     size_t bp = ctx->ostack.length;
 
     // main loop
     while (true) {
-        switch (readOpcode(&pc)) {
+        switch (readOpcode(pc)) {
 #define INS(name)                                                              \
     case name:                                                                 \
-        ins_##name(c, env, &pc, ctx, numArgs, bp);                             \
+        ins_##name(c, env, pc, ctx, numArgs, bp);                              \
         break
             INS(push_);
             INS(ldfun_);
@@ -744,12 +768,15 @@ SEXP rirEval_c(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
             INS(push_argi_);
         case ret_: {
             // not in its own function so that we can avoid nonlocal returns
-            return ostack_pop(ctx);
+            goto __eval_done;
         }
         default:
             assert(false && "wrong or unimplemented opcode");
         }
     }
+__eval_done:
+    fstack_pop(ctx);
+    return ostack_pop(ctx);
 }
 
 SEXP rirEval_f(SEXP f, SEXP env) {

@@ -54,7 +54,7 @@ REXPORT SEXP rir_compileClosure(SEXP f) {
 
     if (TYPEOF(body) == BCODESXP) {
         // body = VECTOR_ELT(CDR(body), 0);
-        // warning("Skipping jit of Bytecode");
+        warning("Skipping jit of Bytecode");
         return f;
     }
 
