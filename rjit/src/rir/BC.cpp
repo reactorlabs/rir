@@ -161,7 +161,7 @@ void BC::print() {
     Rprintf("\n");
 }
 
-const BC BC::call(std::vector<fun_idx_t> args, std::vector<SEXP> names) {
+BC BC::call(std::vector<fun_idx_t> args, std::vector<SEXP> names) {
     assert(args.size() == names.size());
     assert(args.size() < MAX_NUM_ARGS);
 
