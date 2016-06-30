@@ -302,8 +302,12 @@ SEXP createArgsList(Code * c, FunctionIndex * args, size_t nargs, SEXP names, SE
     PROTECT(result);
     PROTECT(arg);
 
+    // loop through the arguments and create a promise, unless it is a missing argument
     for (size_t i = 0; i < nargs; ++i) {
         SEXP name = CAR(names);
+
+        // if the argument is an ellipsis, then retrieve it from the environment and 
+        // flatten the ellipsis
         if (name == R_DotsSymbol) {
             SEXP ellipsis = findVar(name, env);
             PROTECT(ellipsis);
@@ -370,7 +374,7 @@ CCODE getBuiltin(SEXP f) {
   TODO this is currently super simple.
 
  */
-SEXP doCall(Code * caller, SEXP call, SEXP callee, unsigned * args, size_t nargs, SEXP names, SEXP env, Context * ctx) {
+SEXP doCall(Code * caller, SEXP call, SEXP callee, unsigned * args, SEXP names, size_t nargs, SEXP env, Context * ctx) {
 
     size_t oldbp = ctx->ostack.length;
     size_t oldbpi = ctx->istack.length;
