@@ -30,10 +30,10 @@ void compileCall(FunctionHandle& parent, CodeStream& cs, SEXP ast, SEXP fun,
 
     // LHS can either be an identifier or an expression
     Match(fun) {
-        Case(SYMSXP) { cs << BC::getfun(fun); }
+        Case(SYMSXP) { cs << BC::ldfun(fun); }
         Else({
             compileExpression(parent, cs, fun);
-            cs << BC::check_function();
+            cs << BC::isfun();
         });
     }
 
@@ -63,7 +63,7 @@ void compileGetvar(CodeStream& cs, SEXP name) {
     if (DDVAL(name))
         cs << BC::ldddvar(name);
     else
-        cs << BC::getvar(name);
+        cs << BC::ldvar(name);
 }
 
 // Constant

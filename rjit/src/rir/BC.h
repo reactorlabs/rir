@@ -100,7 +100,7 @@ const BC BC::push(double constant) {
     i.pool = Pool::getNum(constant);
     return BC(BC_t::push_, i);
 }
-const BC BC::getfun(SEXP sym) {
+const BC BC::ldfun(SEXP sym) {
     immediate_t i;
     i.pool = Pool::insert(sym);
     return BC(BC_t::ldfun_, i);
@@ -110,42 +110,42 @@ const BC BC::ldddvar(SEXP sym) {
     i.pool = Pool::insert(sym);
     return BC(BC_t::ldddvar_, i);
 }
-const BC BC::getvar(SEXP sym) {
+const BC BC::ldvar(SEXP sym) {
     immediate_t i;
     i.pool = Pool::insert(sym);
     return BC(BC_t::ldvar_, i);
 }
-const BC BC::check_primitive(SEXP sym) {
+const BC BC::isspecial(SEXP sym) {
     immediate_t i;
     i.pool = Pool::insert(sym);
     return BC(BC_t::isspecial_, i);
 }
-const BC BC::mkprom(fun_idx_t prom) { return BC(BC_t::promise_, {prom}); }
-const BC BC::load_arg(num_args_t arg) { return BC(BC_t::pusharg_, {arg}); }
-const BC BC::get_ast() { return BC(BC_t::asast_); }
-const BC BC::setvar() { return BC(BC_t::stvar_); }
+const BC BC::promise(fun_idx_t prom) { return BC(BC_t::promise_, {prom}); }
+const BC BC::pusharg(num_args_t arg) { return BC(BC_t::pusharg_, {arg}); }
+const BC BC::asast() { return BC(BC_t::asast_); }
+const BC BC::stvar() { return BC(BC_t::stvar_); }
 const BC BC::lti() { return BC(BC_t::lti_); }
 const BC BC::eqi() { return BC(BC_t::eqi_); }
-const BC BC::to_bool() { return BC(BC_t::asbool_); }
+const BC BC::asbool() { return BC(BC_t::asbool_); }
 
-BC BC::check_function() { return BC(BC_t::isfun_); }
+const BC BC::isfun() { return BC(BC_t::isfun_); }
 
 const BC BC::label(jmp_t j) {
     immediate_t i;
     i.offset = j;
     return BC(BC_t::label, i);
 }
-const BC BC::jmp(jmp_t j) {
+const BC BC::br(jmp_t j) {
     immediate_t i;
     i.offset = j;
     return BC(BC_t::br_, i);
 }
-const BC BC::jmp_true(jmp_t j) {
+const BC BC::brtrue(jmp_t j) {
     immediate_t i;
     i.offset = j;
     return BC(BC_t::brtrue_, i);
 }
-const BC BC::jmp_false(jmp_t j) {
+const BC BC::brfalse(jmp_t j) {
     immediate_t i;
     i.offset = j;
     return BC(BC_t::brfalse_, i);
@@ -153,13 +153,13 @@ const BC BC::jmp_false(jmp_t j) {
 const BC BC::dupi() { return BC(BC_t::dupi_); }
 const BC BC::dup() { return BC(BC_t::dup_); }
 const BC BC::inci() { return BC(BC_t::inci_); }
-const BC BC::load_argi() { return BC(BC_t::push_argi_); }
+const BC BC::push_argi() { return BC(BC_t::push_argi_); }
 const BC BC::pushi(int i) {
     immediate_t im;
     im.i = i;
     return BC(BC_t::pushi_, im);
 }
-const BC BC::mkclosure() { return BC(BC_t::close_); }
+const BC BC::close() { return BC(BC_t::close_); }
 const BC BC::add() { return BC(BC_t::add_); }
 const BC BC::sub() { return BC(BC_t::sub_); }
 const BC BC::lt() { return BC(BC_t::lt_); }
