@@ -16,6 +16,7 @@ void BC::write(CodeStream& cs) const {
     switch (bc) {
     case BC_t::push_:
     case BC_t::ldfun_:
+    case BC_t::ldddvar_:
     case BC_t::ldvar_:
     case BC_t::isspecial_:
         cs.insert(immediate.pool);
@@ -120,6 +121,7 @@ void BC::print() {
     case BC_t::isspecial_:
     case BC_t::ldfun_:
     case BC_t::ldvar_:
+    case BC_t::ldddvar_:
         Rprintf(" %u # %s", immediate.pool, CHAR(PRINTNAME((immediateConst()))));
         break;
     case BC_t::pushi_:

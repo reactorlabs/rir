@@ -3,11 +3,11 @@
 
 rir.enableJit <- function() {
     .Call("rir_jitEnable");
-    compiler:::enableJIT(1);
+    invisible(compiler:::enableJIT(1));
 }
 rir.disableJit <- function() {
     .Call("rir_jitDisable");
-    compiler:::enableJIT(0);
+    invisible(compiler:::enableJIT(0));
 }
 
 rir.print <- function(what) {
@@ -35,11 +35,11 @@ rir.exec <- function(what, env = globalenv()) {
 
 rjit.enableJit <- function() {
     .Call("rjit_jitEnable");
-    compiler:::enableJIT(1);
+    invisible(compiler:::enableJIT(1));
 }
 rjit.disableJit <- function() {
     .Call("rjit_jitDisable");
-    compiler:::enableJIT(0);
+    invisible(compiler:::enableJIT(0));
 }
 
 rjit.print <- function(what) {

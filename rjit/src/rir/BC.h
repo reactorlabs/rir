@@ -23,6 +23,7 @@ BC::immediate_t decodeImmediate(BC_t bc, BC_t* pc) {
     case BC_t::push_:
     case BC_t::ldfun_:
     case BC_t::ldvar_:
+    case BC_t::ldddvar_:
     case BC_t::isspecial_:
         immediate.pool = *(pool_idx_t*)pc;
         break;
@@ -103,6 +104,11 @@ const BC BC::getfun(SEXP sym) {
     immediate_t i;
     i.pool = Pool::insert(sym);
     return BC(BC_t::ldfun_, i);
+}
+const BC BC::ldddvar(SEXP sym) {
+    immediate_t i;
+    i.pool = Pool::insert(sym);
+    return BC(BC_t::ldddvar_, i);
 }
 const BC BC::getvar(SEXP sym) {
     immediate_t i;

@@ -153,6 +153,7 @@ class BC {
     inline const static BC push(double constant);
     inline const static BC getfun(SEXP sym);
     inline const static BC getvar(SEXP sym);
+    inline const static BC ldddvar(SEXP sym);
     inline const static BC mkprom(fun_idx_t prom);
     inline const static BC push_arg(fun_idx_t prom);
     inline const static BC ret();

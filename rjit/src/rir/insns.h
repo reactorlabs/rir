@@ -14,6 +14,11 @@ DEF_INSTR(push_, 1, 0, 1, 0, 0)
  */
 DEF_INSTR(ldfun_, 1, 0, 1, 0, 0)
 /**
+ * ldfun_:: take immediate CP index of dd symbol (eg. ..1), find binding in env
+ * and push value
+ */
+DEF_INSTR(ldddvar_, 1, 0, 1, 0, 0)
+/**
  * ldfun_:: take immediate CP index of symbol, find binding in env and push
  * value
  */

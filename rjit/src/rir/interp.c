@@ -216,6 +216,7 @@ INSTRUCTION(push_) {
 INSTRUCTION(ldfun_) {
     SEXP sym = readConst(ctx, pc);
     SEXP val = findFun(sym, env);
+
     R_Visible = TRUE;
 
     // TODO something should happen here
@@ -247,9 +248,34 @@ INSTRUCTION(ldfun_) {
     ostack_push(ctx, val);
 }
 
+INSTRUCTION(ldddvar_) {
+    SEXP sym = readConst(ctx, pc);
+    SEXP val = ddfindVar(sym, env);
+
+    R_Visible = TRUE;
+
+    // TODO better errors
+    if (val == R_UnboundValue)
+        assert(false && "Unbound var");
+    else if (val == R_MissingArg)
+        assert(false && "Missing argument");
+
+    // if promise, evaluate & return
+    if (TYPEOF(val) == PROMSXP)
+        val = promiseValue(val);
+
+    // WTF? is this just defensive programming or what?
+    if (NAMED(val) == 0 && val != R_NilValue)
+        SET_NAMED(val, 1);
+
+    ostack_push(ctx, val);
+}
+
+
 INSTRUCTION(ldvar_) {
     SEXP sym = readConst(ctx, pc);
     SEXP val = findVar(sym, env);
+
     R_Visible = TRUE;
 
     // TODO better errors
@@ -691,6 +717,7 @@ SEXP rirEval_c(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
             INS(push_);
             INS(ldfun_);
             INS(ldvar_);
+            INS(ldddvar_);
             INS(call_);
             INS(promise_);
             INS(close_);

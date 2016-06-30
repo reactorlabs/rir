@@ -59,7 +59,12 @@ void compileCall(FunctionHandle& parent, CodeStream& cs, SEXP ast, SEXP fun,
 }
 
 // Lookup
-void compileGetvar(CodeStream& cs, SEXP name) { cs << BC::getvar(name); }
+void compileGetvar(CodeStream& cs, SEXP name) {
+    if (DDVAL(name))
+        cs << BC::ldddvar(name);
+    else
+        cs << BC::getvar(name);
+}
 
 // Constant
 void compileConst(CodeStream& cs, SEXP constant) {
