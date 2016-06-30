@@ -7,7 +7,6 @@
 #include "../RList.h"
 #include "CodeStream.h"
 #include "RIntlns.h"
-#include "FunctionHandle.h"
 
 namespace rjit {
 namespace rir {
@@ -17,6 +16,7 @@ void BC::write(CodeStream& cs) const {
     switch (bc) {
     case BC_t::push_:
     case BC_t::ldfun_:
+    case BC_t::ldddvar_:
     case BC_t::ldvar_:
     case BC_t::isspecial_:
         cs.insert(immediate.pool);
@@ -47,12 +47,10 @@ void BC::write(CodeStream& cs) const {
     case BC_t::close_:
     case BC_t::ret_:
     case BC_t::force_:
-    case BC_t::DEPRECATED_FORCE_ALL:
     case BC_t::pop_:
     case BC_t::asast_:
     case BC_t::stvar_:
     case BC_t::asbool_:
-    case BC_t::NUMARGI_DEPRECATED:
     case BC_t::lti_:
     case BC_t::eqi_:
     case BC_t::dupi_:
@@ -75,7 +73,9 @@ void BC::write(CodeStream& cs) const {
 
 SEXP BC::immediateConst() { return Pool::get(immediate.pool); }
 fun_idx_t* BC::immediateCallArgs() {
-    return (fun_idx_t*)INTEGER(Pool::get(immediate.call_args.args));
+    SEXP c = Pool::get(immediate.call_args.args);
+    assert(TYPEOF(c) == INTSXP);
+    return (fun_idx_t*)INTEGER(c);
 }
 num_args_t BC::immediateCallNargs() {
     size_t nargs =
@@ -86,23 +86,6 @@ num_args_t BC::immediateCallNargs() {
 SEXP BC::immediateCallNames() {
     return immediate.call_args.names ? Pool::get(immediate.call_args.names)
                                      : nullptr;
-}
-
-// TODO Why is this in BC.cpp? Shouldn't it be in FunctionHandle.cpp (which is not great name in its own either:)
-void CodeHandle::print() {
-    BC_t* pc = (BC_t*)bc();
-
-    unsigned * s = src(code);
-    while ((uintptr_t)pc < (uintptr_t)endBc()) {
-        if (*s != 0) {
-            Rprintf("          # (idx %u) : ", *s);
-            Rf_PrintValue(src_pool_at(globalContext(), *s));
-        }
-        Rprintf(" %5x ", ((uintptr_t)pc - (uintptr_t)bc()));
-        BC bc = BC::advance(&pc);
-        bc.print();
-        ++s;
-    }
 }
 
 void BC::print() {
@@ -138,12 +121,12 @@ void BC::print() {
     case BC_t::isspecial_:
     case BC_t::ldfun_:
     case BC_t::ldvar_:
+    case BC_t::ldddvar_:
         Rprintf(" %u # %s", immediate.pool, CHAR(PRINTNAME((immediateConst()))));
         break;
     case BC_t::pushi_:
         Rprintf(" %i", immediate.i);
         break;
-    case BC_t::DEPRECATED_FORCE_ALL:
     case BC_t::force_:
     case BC_t::pop_:
     case BC_t::stvar_:
@@ -156,7 +139,6 @@ void BC::print() {
     case BC_t::push_argi_:
     case BC_t::asast_:
     case BC_t::asbool_:
-    case BC_t::NUMARGI_DEPRECATED:
     case BC_t::add_:
     case BC_t::sub_:
     case BC_t::lt_:
@@ -179,7 +161,7 @@ void BC::print() {
     Rprintf("\n");
 }
 
-const BC BC::call(std::vector<fun_idx_t> args, std::vector<SEXP> names) {
+BC BC::call(std::vector<fun_idx_t> args, std::vector<SEXP> names) {
     assert(args.size() == names.size());
     assert(args.size() < MAX_NUM_ARGS);
 

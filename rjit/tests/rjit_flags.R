@@ -29,21 +29,21 @@ recompile <- function() {
     h <<- jit.compile(h)
 }
 
-jit.setFlag("recordTypes", FALSE);
-jit.setFlag("recompileHot", FALSE);
-jit.setFlag("useTypefeedback", FALSE);
-jit.setFlag("unsafeOpt", FALSE);
-jit.setFlag("staticNamedMatch", FALSE);
+rjit.internal.setFlag("recordTypes", FALSE);
+rjit.internal.setFlag("recompileHot", FALSE);
+rjit.internal.setFlag("useTypefeedback", FALSE);
+rjit.internal.setFlag("unsafeOpt", FALSE);
+rjit.internal.setFlag("staticNamedMatch", FALSE);
 
 recompile(); f();
-jit.setFlag("recordTypes", TRUE)
+rjit.internal.setFlag("recordTypes", TRUE)
 recompile(); f();
-jit.printTypefeedback(g)
-jit.setFlag("recompileHot", TRUE)
+rjit.internal.printTypefeedback(g)
+rjit.internal.setFlag("recompileHot", TRUE)
 recompile(); f();
-jit.setFlag("useTypefeedback", TRUE)
+rjit.internal.setFlag("useTypefeedback", TRUE)
 recompile(); f();
-jit.setFlag("unsafeOpt", TRUE)
+rjit.internal.setFlag("unsafeOpt", TRUE)
 recompile(); f();
-jit.setFlag("staticNamedMatch", TRUE)
+rjit.internal.setFlag("staticNamedMatch", TRUE)
 recompile(); f();

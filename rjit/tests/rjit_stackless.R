@@ -172,21 +172,23 @@ stopifnot(fx(4) == 3)
 stopifnot(fx(5) == 4)
 stopifnot(fx(6) == 4)
 
-# compiling more functions
-f1 <- function(a, b) { a + b }
-f2 <- function(c, d) { f1(c, d) }
-jit.compileFunctions("testModule", as.pairlist(list(f1 = f1, f2 = f2)))
-stopifnot(typeof(.Internal(bodyCode(f1))) == "native")
-stopifnot(typeof(.Internal(bodyCode(f2))) == "native")
-stopifnot(f2(1,2) == 3)
+# TODO what shall we do with this api?
 
-# compiling environments
-env = new.env()
-env$f1 <- function(a, b) { a + b }
-env$f2 <- function(c, d) { f1(c, d) }
-jit.compileEnvironment(env)
-stopifnot(typeof(.Internal(bodyCode(env$f1))) == "native")
-stopifnot(typeof(.Internal(bodyCode(env$f2))) == "native")
+# # compiling more functions
+# f1 <- function(a, b) { a + b }
+# f2 <- function(c, d) { f1(c, d) }
+# jit.compileFunctions("testModule", as.pairlist(list(f1 = f1, f2 = f2)))
+# stopifnot(typeof(.Internal(bodyCode(f1))) == "native")
+# stopifnot(typeof(.Internal(bodyCode(f2))) == "native")
+# stopifnot(f2(1,2) == 3)
+# 
+# # compiling environments
+# env = new.env()
+# env$f1 <- function(a, b) { a + b }
+# env$f2 <- function(c, d) { f1(c, d) }
+# jit.compileEnvironment(env)
+# stopifnot(typeof(.Internal(bodyCode(env$f1))) == "native")
+# stopifnot(typeof(.Internal(bodyCode(env$f2))) == "native")
 
 #empty fun
 jit.compile(function(a) {})

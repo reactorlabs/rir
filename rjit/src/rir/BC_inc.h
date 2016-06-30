@@ -39,14 +39,6 @@ enum class BC_t : OpcodeT {
 #define DEF_INSTR(name, ...) name,
 #include "insns.h"
 
-    // push the number of arguments given to a CC::*Stack function
-    // TODO DELETE
-    NUMARGI_DEPRECATED,
-
-    // force all promise arguments to this function passed on the stack
-    // (currently unused)
-    DEPRECATED_FORCE_ALL,
-
     // A label/jump target (used internally by CodeEditor only!)
     label,
 
@@ -156,39 +148,37 @@ class BC {
 
     // ==== Factory methods
     // to create new BC objects, which can be streamed to a CodeStream
-    const static BC call(std::vector<fun_idx_t> args, std::vector<SEXP> names);
-    inline const static BC push(SEXP constant);
-    inline const static BC push(double constant);
-    inline const static BC getfun(SEXP sym);
-    inline const static BC getvar(SEXP sym);
-    inline const static BC mkprom(fun_idx_t prom);
-    inline const static BC push_arg(fun_idx_t prom);
-    inline const static BC ret();
-    inline const static BC pop();
-    inline const static BC force();
-    inline const static BC load_arg(num_args_t);
-    inline const static BC get_ast();
-    inline const static BC setvar();
-    inline const static BC numargi();
-    inline const static BC to_bool();
-    inline const static BC jmp_true(jmp_t);
-    inline const static BC jmp_false(jmp_t);
-    inline const static BC jmp(jmp_t);
-    inline const static BC label(jmp_t);
-    inline const static BC lti();
-    inline const static BC eqi();
-    inline const static BC force_all();
-    inline const static BC pushi(int);
-    inline const static BC load_argi();
-    inline const static BC dupi();
-    inline const static BC dup();
-    inline const static BC inci();
-    inline const static BC mkclosure();
-    inline const static BC add();
-    inline const static BC sub();
-    inline const static BC lt();
-    static inline BC check_function();
-    inline const static BC check_primitive(SEXP sym);
+    static BC call(std::vector<fun_idx_t> args, std::vector<SEXP> names);
+    inline static BC push(SEXP constant);
+    inline static BC push(double constant);
+    inline static BC ldfun(SEXP sym);
+    inline static BC ldvar(SEXP sym);
+    inline static BC ldddvar(SEXP sym);
+    inline static BC promise(fun_idx_t prom);
+    inline static BC pusharg(fun_idx_t prom);
+    inline static BC ret();
+    inline static BC pop();
+    inline static BC force();
+    inline static BC asast();
+    inline static BC stvar();
+    inline static BC asbool();
+    inline static BC brtrue(jmp_t);
+    inline static BC brfalse(jmp_t);
+    inline static BC br(jmp_t);
+    inline static BC label(jmp_t);
+    inline static BC lti();
+    inline static BC eqi();
+    inline static BC pushi(int);
+    inline static BC push_argi();
+    inline static BC dupi();
+    inline static BC dup();
+    inline static BC inci();
+    inline static BC close();
+    inline static BC add();
+    inline static BC sub();
+    inline static BC lt();
+    inline static BC isspecial(SEXP);
+    inline static BC isfun();
 
   private:
     BC(BC_t bc) : bc(bc), immediate({0}) {}

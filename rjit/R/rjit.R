@@ -1,3 +1,15 @@
+# ==============================
+# === rir api:
+
+rir.enableJit <- function() {
+    .Call("rir_jitEnable");
+    invisible(compiler:::enableJIT(1));
+}
+rir.disableJit <- function() {
+    .Call("rir_jitDisable");
+    invisible(compiler:::enableJIT(0));
+}
+
 rir.print <- function(what) {
     if (typeof(what) == "closure")
         what <- .Internal(bodyCode(what))
@@ -8,7 +20,7 @@ rir.compile <- function(what) {
     if (typeof(what) == "closure") {
         .Call("rir_compileClosure", what)
     } else if (any(c("language", "symbol", "logical", "integer", "double", "complex", "character") == typeof(what))) {
-        .Call("rir_compileAst", what)
+        .Call("rir_compileAst", what, environment())
     } else {
        stop("Only bytecode expressions and asts can be jitted.")
     }
@@ -18,21 +30,33 @@ rir.exec <- function(what, env = globalenv()) {
     .Call("rir_exec", what, env)
 }
 
+# ==============================
+# === rjit api:
 
-
-
-
-jit.rbc <- function(what) {
-    .Call("jitrbc", what)
+rjit.enableJit <- function() {
+    .Call("rjit_jitEnable");
+    invisible(compiler:::enableJIT(1));
+}
+rjit.disableJit <- function() {
+    .Call("rjit_jitDisable");
+    invisible(compiler:::enableJIT(0));
 }
 
+rjit.print <- function(what) {
+    if (typeof(what) == "closure")
+        what = .Internal(bodyCode(what));
+    invisible(.Call("rjit_print", what))
+}
 
-jit.rir <- function(what) .Call("jitRir", what)
-
+# DEPRECATED
 jit.compile <- function(what, env = environment(what)) {
+    rjit.compile(what, env);
+}
+
+rjit.compile <- function(what, env = environment(what)) {
     if (typeof(what) == "closure") {
         bc = .Internal(bodyCode(what))
-        native = .Call("jitAst", bc, formals(what), env)
+        native = .Call("rjit_jit", bc, formals(what), env)
         f = .Internal(bcClose(formals(what), native, env))
         attrs = attributes(what)
         if (!is.null(attrs))
@@ -41,70 +65,28 @@ jit.compile <- function(what, env = environment(what)) {
             f = asS4(f)
         f
     } else if (any(c("language", "symbol", "logical", "integer", "double", "complex", "character") == typeof(what))) {
-        .Call("jitAst", what, NULL, env)
+        .Call("rjit_jit", what, NULL, env)
     } else {
        stop("Only bytecode expressions and asts can be jitted.")
     }
 }
 
-jit.compileInPlace <- function(what, env = environment(what)) {
+rjit.compileInPlace <- function(what, env = environment(what)) {
     #nat = .Internal(bodyCode(jit.compile(what, env)))
-    nat = jit.compile(what, env)
-    invisible(.Call("jitSwapForNative", what, nat))
+    nat = rjit.compile(what, env)
+    invisible(.Call("rjit_SwapForNative", what, nat))
 }
 
-jit.printTypefeedback <- function(what) {
-    invisible(.Call("jitPrintTypefeedback", what))
+# rjit internal api
+
+rjit.internal.printTypefeedback <- function(what) {
+    invisible(.Call("rjit_PrintTypefeedback", what))
 }
 
-jit.constants <- function(what) {
+rjit.internal.getConstants <- function(what) {
     if (typeof(what) == "closure")
         what = .Internal(bodyCode(what));
-    .Call("jitConstants", what)
+    .Call("rjit_GetConstants", what)
 }
 
-jit.llvm <- function(what) {
-    if (typeof(what) == "closure")
-        what = .Internal(bodyCode(what));
-    invisible(.Call("jitLLVM", what))
-}
-
-# Creates a module with given name and compiles the functions listed in the second argument to it.
-jit.compileFunctions <- function(moduleName, functions) {
-    .Call("jitFunctions", moduleName, functions)
-}
-
-jit.compileEnvironment <- function(environment, moduleName ="rjit module") {
-    fns = list()
-    for (name in names(environment)) {
-        x = environment[[name]]
-        if (typeof(x) == "closure")
-            fns[[name]] = x
-    }
-    if (length(fns) > 0)
-        jit.compileFunctions(moduleName, as.pairlist(fns))
-    invisible(NULL)
-}
-
-jit.printWithoutSP <- function(what) {
-    if(typeof(what) == "closure") {
-        bc = .Internal(bodyCode(what))
-        native = .Call("printWithoutSP", bc, formals(what))
-        f = .Internal(bcClose(formals(what), native, env))
-        attrs = attributes(what)
-        if (!is.null(attrs))
-            attributes(f) = attrs
-        if (isS4(what))
-            f = asS4(f)
-        f
-    }else if (any(c("language", "symbol", "logical", "integer", "double", "complex", "character") == typeof(what))) {
-        .Call("printWithoutSP", what)
-    } else {
-       stop("Only bytecode expressions and asts can be jitted.")
-    }
-}
-
-jit.enable <- function() .Call("jitEnable");
-jit.disable <- function() .Call("jitDisable");
-
-jit.setFlag <- function(flag, value) .Call("setFlag", flag, value)
+rjit.internal.setFlag <- function(flag, value) .Call("rjit_setFlag", flag, value)

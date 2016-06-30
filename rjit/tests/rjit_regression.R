@@ -20,9 +20,9 @@ stopifnot(f() == c(a="asdf"))
 
 test <- function(id, code, o, e, w) {
     code <- jit.compile(substitute(code))
-    jit.enable()
-
+    rjit.enableJit()
     stopifnot(o == eval(code, envir=new.env()))
+    rjit.disableJit()
 }
 
 expected <- structure(c(-0.0296690260968828, 0.200337918547016, -0.38901358729166, 
@@ -51,11 +51,11 @@ argv <- list(structure(c(-0.0296690260968828, 0.200337918547016, -0.389013587291
 do.call('cbind', argv);
 },  o = expected);
 
-jit.enable()
+rjit.enableJit()
 
 require(graphics)
 
-jit.compile(function() {
+f <- jit.compile(function() {
     xx <- 2:7
     nu <- seq(-10, 9, length.out = 2001)
     op <- par(lab = c(16, 5, 7))
@@ -67,4 +67,5 @@ jit.compile(function() {
     x0 <- 2^(-20:10)
     plot(x0, x0^-8, log = "xy", ylab = "", type = "n",
         main = "Bessel Functions  J_nu(x)  near 0\n log - log  scale")
-})()
+})
+f()

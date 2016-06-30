@@ -53,7 +53,7 @@ void doInlineIf(CodeEditor& e, CodeEditor::Cursor& cur) {
     assert(bc.bc == BC_t::call_);
     cur.remove();
 
-    cur << BC::check_primitive(symbol::If);
+    cur << BC::isspecial(symbol::If);
 
     fun_idx_t* args = bc.immediateCallArgs();
     num_args_t nargs = bc.immediateCallNargs();
@@ -62,14 +62,14 @@ void doInlineIf(CodeEditor& e, CodeEditor::Cursor& cur) {
     Label nextBranch = cur.mkLabel();
 
     inlProm(e, cur, args[0]);
-    cur << BC::to_bool() << BC::jmp_true(trueBranch);
+    cur << BC::asbool() << BC::brtrue(trueBranch);
 
     if (nargs < 3) {
         cur << BC::push(R_NilValue);
     } else {
         inlProm(e, cur, args[2]);
     }
-    cur << BC::jmp(nextBranch);
+    cur << BC::br(nextBranch);
 
     cur << BC::label(trueBranch);
     inlProm(e, cur, args[1]);

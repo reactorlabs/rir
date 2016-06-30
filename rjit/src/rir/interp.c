@@ -143,19 +143,19 @@ OpcodeT* advancePc(OpcodeT* pc) {
 // bytecode accesses
 
 INLINE Opcode readOpcode(OpcodeT** pc) {
-    Opcode result = (Opcode)(**pc);
+    Opcode result = *(OpcodeT*)(*pc);
     *pc += sizeof(OpcodeT);
     return result;
 }
 
 INLINE unsigned readImmediate(OpcodeT** pc) {
-    unsigned result = (Immediate)(**pc);
+    unsigned result = *(Immediate*)*pc;
     *pc += sizeof(Immediate);
     return result;
 }
 
 INLINE int readSignedImmediate(OpcodeT** pc) {
-    int result = (SignedImmediate)(**pc);
+    int result = *(SignedImmediate*)*pc;
     *pc += sizeof(SignedImmediate);
     return result;
 }
@@ -215,7 +215,8 @@ INSTRUCTION(push_) {
 
 INSTRUCTION(ldfun_) {
     SEXP sym = readConst(ctx, pc);
-    SEXP val = findVar(sym, env);
+    SEXP val = findFun(sym, env);
+
     R_Visible = TRUE;
 
     // TODO something should happen here
@@ -224,14 +225,6 @@ INSTRUCTION(ldfun_) {
     else if (val == R_MissingArg)
         assert(false && "Missing argument");
 
-    // if promise, evaluate & return
-    if (TYPEOF(val) == PROMSXP)
-        val = promiseValue(val);
-
-    // WTF? is this just defensive programming or what?
-    if (NAMED(val) == 0 && val != R_NilValue)
-        SET_NAMED(val, 1);
-
     switch (TYPEOF(val)) {
     case CLOSXP:
         /** If compile on demand is active, check that the function to be called
@@ -239,10 +232,10 @@ INSTRUCTION(ldfun_) {
          */
         if (COMPILE_ON_DEMAND) {
             SEXP body = BODY(val);
-            assert(TYPEOF(body) != BCODESXP &&
-                   "We do not plan to handle GNU-R bytecode");
+            if (TYPEOF(body) == BCODESXP)
+                body = VECTOR_ELT(CDR(body), 0);
             if (TYPEOF(body) != INTSXP)
-                SET_BODY(val, ctx->compiler(body));
+                SET_BODY(val, ctx->compiler(body, CLOENV(val)));
         }
         break;
     case SPECIALSXP:
@@ -250,15 +243,15 @@ INSTRUCTION(ldfun_) {
         // special and builtin functions are ok
         break;
     default:
-        // TODO!
         assert(false);
     }
     ostack_push(ctx, val);
 }
 
-INSTRUCTION(ldvar_) {
+INSTRUCTION(ldddvar_) {
     SEXP sym = readConst(ctx, pc);
-    SEXP val = findVar(sym, env);
+    SEXP val = ddfindVar(sym, env);
+
     R_Visible = TRUE;
 
     // TODO better errors
@@ -278,29 +271,58 @@ INSTRUCTION(ldvar_) {
     ostack_push(ctx, val);
 }
 
-SEXP reverseOrder(SEXP list){
-    SEXP result = CONS_NR(R_NilValue, R_NilValue);
-    PROTECT(result);
 
-    while (list != R_NilValue){
-        SEXP val = CAR(list);
-        result = CONS_NR(val, list);
-        list = CDR(list);
-    }
+INSTRUCTION(ldvar_) {
+    SEXP sym = readConst(ctx, pc);
+    SEXP val = findVar(sym, env);
 
-    UNPROTECT(1);
-    return result;
+    R_Visible = TRUE;
+
+    // TODO better errors
+    if (val == R_UnboundValue)
+        assert(false && "Unbound var");
+    else if (val == R_MissingArg)
+        assert(false && "Missing argument");
+
+    // if promise, evaluate & return
+    if (TYPEOF(val) == PROMSXP)
+        val = promiseValue(val);
+
+    // WTF? is this just defensive programming or what?
+    if (NAMED(val) == 0 && val != R_NilValue)
+        SET_NAMED(val, 1);
+
+    ostack_push(ctx, val);
 }
 
 /** Given argument code offsets, creates the argslist from their promises.
  */
 // TODO unnamed only at this point
+int __listAppend(SEXP* front, SEXP* last, SEXP value) {
+    int protected = 0;
+
+    assert(TYPEOF(*front) == LISTSXP || TYPEOF(*front) == NILSXP);
+    assert(TYPEOF(*last) == LISTSXP || TYPEOF(*last) == NILSXP);
+
+    SEXP app = CONS_NR(value, R_NilValue);
+
+    if (*front == R_NilValue) {
+        *front = app;
+        PROTECT(*front);
+        protected++;
+    }
+
+    if (*last != R_NilValue)
+        SETCDR(*last, app);
+    *last = app;
+
+    return protected;
+}
+
 SEXP createArgsList(Code * c, FunctionIndex * args, size_t nargs, SEXP names, SEXP env) {
     SEXP result = R_NilValue;
-    SEXP arg = R_NilValue;
-    result = CONS_NR(R_NilValue, R_NilValue);
-    PROTECT(result);
-    PROTECT(arg);
+    SEXP pos = result;
+    int protected = 0;
 
     // loop through the arguments and create a promise, unless it is a missing argument
     for (size_t i = 0; i < nargs; ++i) {
@@ -310,52 +332,47 @@ SEXP createArgsList(Code * c, FunctionIndex * args, size_t nargs, SEXP names, SE
         // flatten the ellipsis
         if (name == R_DotsSymbol) {
             SEXP ellipsis = findVar(name, env);
-            PROTECT(ellipsis);
-
             if (TYPEOF(ellipsis) == DOTSXP) {
                 while (ellipsis != R_NilValue) {
-                    arg = hook_mkPROMISE(CAR(ellipsis), env);
-                    result = CONS_NR(arg, result);
+                    SEXP arg = hook_mkPROMISE(CAR(ellipsis), env);
+                    protected += __listAppend(&result, &pos, arg);
                     ellipsis = CDR(ellipsis);
                 }
             } else if (args[i] == MISSING_ARG_OFFSET) {
-                // UNPROTECT(3);
                 assert(false);
             }
 
         } else if (args[i] == MISSING_ARG_OFFSET) {
-            arg = R_MissingArg;
-            result = CONS_NR(arg, result);
+            protected += __listAppend(&result, &pos, R_MissingArg);
         } else {
             unsigned offset = args[i];
-            arg = createPromise(codeAt(function(c), offset), env);
-            result = CONS_NR(arg, result);
+            SEXP arg = createPromise(codeAt(function(c), offset), env);
+            protected += __listAppend(&result, &pos, arg);
         }
         names = CDR(names);
     }
-    // have to reverse result - it is backwards right now.
-    reverseOrder(result);
-    UNPROTECT(3);
+
+    UNPROTECT(protected);
     return result;
 }
 
 SEXP createEagerArgsList(Code* c, FunctionIndex* args, size_t nargs, SEXP env,
                          Context* ctx) {
     SEXP result = R_NilValue;
-    // TODO: this assert fires:
-    // assert(!findVar(ellipSym, env));
+    SEXP pos = result;
+    int protected = 0;
 
-    // i < nargs <--- will always be true if i is initially nargs - 1
-    // should this be i > 0?
-    for (size_t i = nargs - 1; i < 0; --i) {
+    for (size_t i = 0; i < nargs; ++i) {
         unsigned offset = args[i];
-        PROTECT(result);
-        SEXP arg = (offset == MISSING_ARG_OFFSET)
-                       ? R_MissingArg
-                       : rirEval_c(codeAt(function(c), offset), ctx, env, 0);
-        UNPROTECT(1);
-        result = CONS_NR(arg, result);
+        if (args[i] == MISSING_ARG_OFFSET) {
+            protected += __listAppend(&result, &pos, R_MissingArg);
+        } else {
+            SEXP arg = rirEval_c(codeAt(function(c), offset), ctx, env, 0);
+            protected += __listAppend(&result, &pos, arg);
+        }
     }
+
+    UNPROTECT(protected);
     return result;
 }
 
@@ -400,10 +417,9 @@ SEXP doCall(Code * caller, SEXP call, SEXP callee, unsigned * args, SEXP names, 
     }
     case CLOSXP: {
         SEXP formals = FORMALS(callee);
-        assert(Rf_length(formals) == nargs &&
-               "Cannot handle different nargs yet");
         SEXP body = BODY(callee);
-        SEXP argslist = hook_matchArgs(formals, createArgsList(caller, args, nargs, names, env), call);
+        SEXP actuals = createArgsList(caller, args, nargs, names, env);
+        SEXP argslist = hook_matchArgs(formals, actuals, call);
         PROTECT(argslist);
         // if body is INTSXP, it is rir serialized code, execute it directly
         if (TYPEOF(body) == INTSXP) {
@@ -440,7 +456,8 @@ INSTRUCTION(call_) {
     // get the closure itself
     SEXP cls = ostack_pop(ctx);
     // do the call
-    ostack_push(ctx, doCall(c, getCurrentCall(c, *pc, ctx), cls, args, names, nargs, env, ctx));
+    SEXP call = getCurrentCall(c, *pc, ctx);
+    ostack_push(ctx, doCall(c, call, cls, args, nargs, names, env, ctx));
 }
 
 INSTRUCTION(promise_) {
@@ -682,6 +699,28 @@ INSTRUCTION(push_argi_) {
 extern void printCode(Code* c);
 extern void printFunction(Function* f);
 
+extern SEXP Rf_deparse1(SEXP call, Rboolean abbrev, int opts);
+extern void R_SetErrorHook(void (*hook)(SEXP, char *));
+
+extern void rirBacktrace(Context* ctx) {
+    if (fstack_empty(ctx))
+        return;
+
+    for (int i = fstack_top(ctx); i >= 0; i--) {
+        Frame* frame = fstack_at(ctx, i);
+        Code* code = frame->code;
+        SEXP call = src_pool_at(ctx, code->src);
+
+        Rprintf("%d : %s\n", i, CHAR(STRING_ELT(Rf_deparse1(call, 0, 0), 0)));
+        Rprintf(" env: ");
+        SEXP names = R_lsInternal3(frame->env, TRUE, FALSE);
+        PROTECT(names);
+        for (int i = 0; i < Rf_length(names); ++i)
+            Rprintf("%s ", CHAR(STRING_ELT(R_lsInternal3(frame->env, TRUE, FALSE), i)));
+        Rprintf("\n");
+    }
+}
+
 SEXP rirEval_c(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
 
     // printCode(c);
@@ -689,21 +728,24 @@ SEXP rirEval_c(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
     // make sure there is enough room on the stack
     ostack_ensureSize(ctx, c->stackLength);
     istack_ensureSize(ctx, c->iStackLength);
+    Frame* frame = fstack_push(ctx, c, env);
 
     // get pc and bp regs, we do not need istack bp
-    OpcodeT* pc = code(c);
+    frame->pc = code(c);
+    OpcodeT** pc = &frame->pc;
     size_t bp = ctx->ostack.length;
 
     // main loop
     while (true) {
-        switch (readOpcode(&pc)) {
+        switch (readOpcode(pc)) {
 #define INS(name)                                                              \
     case name:                                                                 \
-        ins_##name(c, env, &pc, ctx, numArgs, bp);                             \
+        ins_##name(c, env, pc, ctx, numArgs, bp);                              \
         break
             INS(push_);
             INS(ldfun_);
             INS(ldvar_);
+            INS(ldddvar_);
             INS(call_);
             INS(promise_);
             INS(close_);
@@ -730,12 +772,15 @@ SEXP rirEval_c(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
             INS(push_argi_);
         case ret_: {
             // not in its own function so that we can avoid nonlocal returns
-            return ostack_pop(ctx);
+            goto __eval_done;
         }
         default:
             assert(false && "wrong or unimplemented opcode");
         }
     }
+__eval_done:
+    fstack_pop(ctx);
+    return ostack_pop(ctx);
 }
 
 SEXP rirEval_f(SEXP f, SEXP env) {
