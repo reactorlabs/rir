@@ -753,7 +753,7 @@ extern void rirBacktrace(Context* ctx) {
 
 SEXP rirEval_c(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
 
-    printCode(c);
+    // printCode(c);
 
     // make sure there is enough room on the stack
     ostack_ensureSize(ctx, c->stackLength);

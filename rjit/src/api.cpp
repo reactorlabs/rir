@@ -44,8 +44,8 @@ extern "C" void initializeCallbacks(callback_isValidFunction,
 /** Compiles the given ast.
  */
 REXPORT SEXP rir_compileAst(SEXP ast, SEXP env) {
-    SEXP code = rir::Compiler::compile(ast);
-    return code;
+    auto res = rir::Compiler::compileExpression(ast);
+    return res.bc;
 }
 
 REXPORT SEXP rir_compileClosure(SEXP f) {
@@ -53,18 +53,19 @@ REXPORT SEXP rir_compileClosure(SEXP f) {
     SEXP body = BODY(f);
 
     if (TYPEOF(body) == BCODESXP) {
-        // body = VECTOR_ELT(CDR(body), 0);
-        warning("Skipping jit of Bytecode");
-        return f;
+        body = VECTOR_ELT(CDR(body), 0);
+        //warning("Skipping jit of Bytecode");
+        //return f;
     }
 
     assert(TYPEOF(body) != INTSXP and TYPEOF(body) != BCODESXP and
            "Can only do asts");
     SEXP result = allocSExp(CLOSXP);
     PROTECT(result);
-    SET_FORMALS(result, FORMALS(f));
+    auto res = rir::Compiler::compileClosure(body, CLOENV(f), FORMALS(f));
+    SET_FORMALS(result, res.formals);
     SET_CLOENV(result, CLOENV(f));
-    SET_BODY(result, rir::Compiler::compile(body));
+    SET_BODY(result, res.bc);
     UNPROTECT(1);
     return result;
 }
@@ -92,8 +93,9 @@ REXPORT SEXP rir_compileClosureInPlace(SEXP f) {
     SEXP body = BODY(f);
     assert(TYPEOF(body) != INTSXP and TYPEOF(body) != BCODESXP and
            "Can only do asts");
-    SEXP code = rir::Compiler::compile(body);
-    SET_BODY(f, code);
+    auto res = rir::Compiler::compileClosure(body, CLOENV(f), FORMALS(f));
+    SET_BODY(f, res.bc);
+    SET_FORMALS(f, res.formals);
     return f;
 }
 

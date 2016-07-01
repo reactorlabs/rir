@@ -12,7 +12,12 @@ class Compiler {
     SEXP formals;
 
   public:
-    Compiler(SEXP exp) : exp(exp), formals(nullptr) { Precious::add(exp); }
+    struct CompilerRes {
+        SEXP bc;
+        SEXP formals;
+    };
+
+    Compiler(SEXP exp) : exp(exp), formals(R_NilValue) { Precious::add(exp); }
 
     Compiler(SEXP exp, SEXP formals) : exp(exp), formals(formals) {
         Precious::add(exp);
@@ -25,10 +30,15 @@ class Compiler {
         Precious::remove(exp);
     }
 
-    SEXP finalize();
+    CompilerRes finalize();
 
-    static SEXP compile(SEXP ast) {
+    static CompilerRes compileExpression(SEXP ast) {
         Compiler c(ast);
+        return c.finalize();
+    }
+    
+    static CompilerRes compileClosure(SEXP ast, SEXP env, SEXP formals) {
+        Compiler c(ast, formals);
         return c.finalize();
     }
 };

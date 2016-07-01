@@ -20,7 +20,7 @@ namespace rir {
 namespace {
 
 fun_idx_t compilePromise(FunctionHandle& f, SEXP exp);
-void compileExpression(FunctionHandle& f, CodeStream& cs, SEXP exp);
+void compileExpr(FunctionHandle& f, CodeStream& cs, SEXP exp);
 
 // function application
 void compileCall(FunctionHandle& parent, CodeStream& cs, SEXP ast, SEXP fun,
@@ -32,7 +32,7 @@ void compileCall(FunctionHandle& parent, CodeStream& cs, SEXP ast, SEXP fun,
     Match(fun) {
         Case(SYMSXP) { cs << BC::ldfun(fun); }
         Else({
-            compileExpression(parent, cs, fun);
+            compileExpr(parent, cs, fun);
             cs << BC::isfun();
         });
     }
@@ -51,7 +51,7 @@ void compileCall(FunctionHandle& parent, CodeStream& cs, SEXP ast, SEXP fun,
         // (2) remember if the argument had a name associated
         // using R_NameSymbol as a temp place holder for now
         // if the argument is an ellipsis, the tag is null for some reason
-        if (arg.hasCar() && arg.car() == R_DotsSymbol){
+        if (*arg == R_DotsSymbol){
             names.push_back(R_DotsSymbol);
         } else {
             names.push_back(arg.hasTag() ? arg.tag() : R_NameSymbol);
@@ -78,7 +78,7 @@ void compileConst(CodeStream& cs, SEXP constant) {
     cs << BC::push(constant);
 }
 
-void compileExpression(FunctionHandle& function, CodeStream& cs, SEXP exp) {
+void compileExpr(FunctionHandle& function, CodeStream& cs, SEXP exp) {
     // Dispatch on the current type of AST node
     Match(exp) {
         // Function application
@@ -90,48 +90,64 @@ void compileExpression(FunctionHandle& function, CodeStream& cs, SEXP exp) {
     }
 }
 
-void compileFormals(CodeStream& cs, SEXP formals) {
-    size_t narg = 0;
-    std::vector<SEXP> names;
+std::vector<fun_idx_t> compileFormals(FunctionHandle& fun, SEXP formals) {
+    std::vector<fun_idx_t> res;
 
     for (auto arg = RList(formals).begin(); arg != RList::end(); ++arg) {
-        // TODO support default args
-        assert(*arg == R_MissingArg);
-
-        if (arg.hasCar() && arg.car() == R_DotsSymbol){
-            names.push_back(R_DotsSymbol);
-        } else {
-            names.push_back(arg.tag());
-        }
-        narg++;
+        if (*arg != R_MissingArg)
+            res.push_back(compilePromise(fun, *arg));
+        else
+            res.push_back(MISSING_ARG_IDX);
     }
+
+    return res;
 }
 
 fun_idx_t compilePromise(FunctionHandle& function, SEXP exp) {
     CodeStream cs(function, exp);
-    compileExpression(function, cs, exp);
+    compileExpr(function, cs, exp);
     cs << BC::ret();
     return cs.finalize();
 }
 }
 
-SEXP Compiler::finalize() {
+Compiler::CompilerRes Compiler::finalize() {
     // Rprintf("****************************************************\n");
     // Rprintf("Compiling function\n");
     FunctionHandle function = FunctionHandle::create();
+
+    auto formProm = compileFormals(function, formals);
+
     CodeStream cs(function, exp);
-    if (formals)
-        compileFormals(cs, formals);
-    compileExpression(function, cs, exp);
+    compileExpr(function, cs, exp);
     cs << BC::ret();
     cs.finalize();
+
+    Protect p;
+    SEXP formout = R_NilValue;
+    SEXP f = formout;
+    SEXP formin = formals;
+    for (auto prom : formProm) {
+        SEXP arg = (prom == MISSING_ARG_IDX) ? 
+            R_MissingArg : (SEXP)function.codeAtOffset(prom);
+        SEXP next = CONS_NR(arg, R_NilValue);
+        SET_TAG(next, TAG(formin));
+        formin = CDR(formin);
+        if (formout == R_NilValue) {
+            formout = f = next;
+            p(formout);
+        } else {
+            SETCDR(f, next);
+            f = next;
+        }
+    }
 
     CodeVerifier::vefifyFunctionLayout(function.store, globalContext());
 
     FunctionHandle opt = Optimizer::optimize(function);
     CodeVerifier::vefifyFunctionLayout(opt.store, globalContext());
 
-    return opt.store;
+    return {opt.store, formout};
 }
 }
 }
