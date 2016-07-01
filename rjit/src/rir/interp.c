@@ -306,8 +306,7 @@ int __listAppend(SEXP* front, SEXP* last, SEXP value, SEXP name) {
 
     SEXP app = CONS_NR(value, R_NilValue);
     
-    if (name != R_NilValue && name != R_NameSymbol)
-        SET_TAG(app, name);
+    SET_TAG(app, name);
 
     if (*front == R_NilValue) {
         *front = app;
@@ -345,7 +344,6 @@ SEXP createArgsList(Code * c, FunctionIndex * args, size_t nargs, SEXP names, SE
             } else if (args[i] == MISSING_ARG_OFFSET) {
                 assert(false);
             }
-
         } else if (args[i] == MISSING_ARG_OFFSET) {
             protected += __listAppend(&result, &pos, R_MissingArg, R_NilValue);
         } else {
@@ -379,19 +377,36 @@ SEXP createNoNameArgsList(Code * c, FunctionIndex * args, size_t nargs, SEXP env
     return result;
 }
 
-SEXP createEagerArgsList(Code* c, FunctionIndex* args, size_t nargs, SEXP env,
-                         Context* ctx) {
+SEXP createEagerArgsList(Code* c, FunctionIndex* args, size_t nargs, SEXP names,
+                         SEXP env, Context* ctx) {
     SEXP result = R_NilValue;
     SEXP pos = result;
     int protected = 0;
 
     for (size_t i = 0; i < nargs; ++i) {
         unsigned offset = args[i];
-        if (args[i] == MISSING_ARG_OFFSET) {
-            protected += __listAppend(&result, &pos, R_MissingArg, R_NilValue);
+        SEXP name = names != R_NilValue ? VECTOR_ELT(names, i) : R_NilValue;
+
+        // if the argument is an ellipsis, then retrieve it from the environment and 
+        // flatten the ellipsis
+        if (name == R_DotsSymbol) {
+            SEXP ellipsis = findVar(name, env);
+            if (TYPEOF(ellipsis) == DOTSXP) {
+                while (ellipsis != R_NilValue) {
+                    SEXP arg = rirEval_c((Code*)CAR(ellipsis), ctx, env, 0);
+                    name = TAG(ellipsis);
+                    protected += __listAppend(&result, &pos, arg, name);
+                    ellipsis = CDR(ellipsis);
+                }
+            } else if (args[i] == MISSING_ARG_OFFSET) {
+                assert(false);
+            }
+        } else if (args[i] == MISSING_ARG_OFFSET) {
+            // TODO error
+            assert(false);
         } else {
             SEXP arg = rirEval_c(codeAt(function(c), offset), ctx, env, 0);
-            protected += __listAppend(&result, &pos, arg, R_NilValue);
+            protected += __listAppend(&result, &pos, arg, name);
         }
     }
 
@@ -409,6 +424,7 @@ CCODE getBuiltin(SEXP f) {
     return R_FunTab[i].cfun;
 }
 
+SEXP closureArgumentAdaptor(SEXP call, SEXP op, SEXP arglist, SEXP rho, SEXP suppliedvars);
 /** Performs the call.
 
   TODO this is currently super simple.
@@ -431,7 +447,7 @@ SEXP doCall(Code * caller, SEXP call, SEXP callee, unsigned * args, size_t nargs
         // get the ccode
         CCODE f = getBuiltin(callee);
         // create the argslist
-        SEXP argslist = createEagerArgsList(caller, args, nargs, env, ctx);
+        SEXP argslist = createEagerArgsList(caller, args, nargs, names, env, ctx);
         // callit
         PROTECT(argslist);
         result = f(call, callee, argslist, env);
@@ -440,26 +456,25 @@ SEXP doCall(Code * caller, SEXP call, SEXP callee, unsigned * args, size_t nargs
     }
     case CLOSXP: {
         SEXP actuals;
-        SEXP formals = FORMALS(callee);
         SEXP body = BODY(callee);
-        // because I've switched the order, the list is not being flatten
-        if (names) {
+        // TODO: What does this comment mean:
+        // "because I've switched the order, the list is not being flatten"
+        if (names != R_NilValue) {
             actuals = createArgsList(caller, args, nargs, names, env);
         } else {
             actuals = createNoNameArgsList(caller, args, nargs, env);
         }
-        SEXP argslist = hook_matchArgs(formals, actuals, call);
-        PROTECT(argslist);
+        PROTECT(actuals);
         // if body is INTSXP, it is rir serialized code, execute it directly
         if (TYPEOF(body) == INTSXP) {
-            SEXP newEnv = Rf_NewEnvironment(formals, argslist, CLOENV(callee));
+            SEXP newEnv = closureArgumentAdaptor(call, callee, actuals, env, R_NilValue);
             PROTECT(newEnv);
             result = rirEval_c(functionCode((Function*)INTEGER(body)), ctx,
                                newEnv, nargs);
             UNPROTECT(1);
         } else {
             // otherwise use R's own call mechanism
-            result = applyClosure(call, callee, argslist, env, R_NilValue);
+            result = applyClosure(call, callee, actuals, env, R_NilValue);
         }
         UNPROTECT(1); // argslist
         break;

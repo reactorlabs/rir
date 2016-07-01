@@ -195,7 +195,7 @@ BC BC::call(std::vector<fun_idx_t> args, std::vector<SEXP> names) {
         return BC(BC_t::call_, i);
     }
 
-    call_args_t args_ = {Pool::insert(a), 0};
+    call_args_t args_ = {Pool::insert(a), Pool::insert(R_NilValue)};
     immediate_t i;
     i.call_args = args_;
     return BC(BC_t::call_, i);

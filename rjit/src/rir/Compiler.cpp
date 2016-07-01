@@ -49,12 +49,10 @@ void compileCall(FunctionHandle& parent, CodeStream& cs, SEXP ast, SEXP fun,
         callArgs.push_back(prom);
 
         // (2) remember if the argument had a name associated
-        // using R_NameSymbol as a temp place holder for now
-        // if the argument is an ellipsis, the tag is null for some reason
         if (*arg == R_DotsSymbol){
             names.push_back(R_DotsSymbol);
         } else {
-            names.push_back(arg.hasTag() ? arg.tag() : R_NameSymbol);
+            names.push_back(arg.hasTag() ? arg.tag() : R_NilValue);
         }
     }
     assert(callArgs.size() < MAX_NUM_ARGS);

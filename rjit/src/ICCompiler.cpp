@@ -235,6 +235,7 @@ bool ICCompiler::compileIc(SEXP inCall, SEXP inFun) {
                 // ir::EnableRefcnt(actuals);
             }
 
+            // TODO I think this is broken, why does this not use closure arguments adater anymore? should break with missing
             Value* newrho =
                 ir::NewEnv::create(b, ir::Car::create(b, fun())->result(),
                                    actuals, ir::Tag::create(b, fun())->result())
