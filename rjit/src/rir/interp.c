@@ -336,10 +336,6 @@ SEXP createArgsList(Code * c, FunctionIndex * args, size_t nargs, SEXP names, SE
         if (name == R_DotsSymbol) {
             SEXP ellipsis = findVar(name, env);
             if (TYPEOF(ellipsis) == DOTSXP) {
-                SEXP promise = hook_mkPROMISE(CAR(ellipsis), env);
-                protected += __listAppend(&result, &pos, promise, R_DotsSymbol);
-                ellipsis = CDR(ellipsis);
-
                 while (ellipsis != R_NilValue) {
                     name = TAG(ellipsis);
                     SEXP promise = hook_mkPROMISE(CAR(ellipsis), env);
