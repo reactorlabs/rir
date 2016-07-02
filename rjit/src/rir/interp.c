@@ -457,8 +457,6 @@ SEXP doCall(Code * caller, SEXP call, SEXP callee, unsigned * args, size_t nargs
     case CLOSXP: {
         SEXP actuals;
         SEXP body = BODY(callee);
-        // TODO: What does this comment mean:
-        // "because I've switched the order, the list is not being flatten"
         if (names != R_NilValue) {
             actuals = createArgsList(caller, args, nargs, names, env);
         } else {
