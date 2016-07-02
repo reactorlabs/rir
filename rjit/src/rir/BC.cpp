@@ -105,9 +105,10 @@ void BC::print() {
             Rprintf(" %x", args[i]);
         }
         Rprintf("] ");
-        if (immediateCallNames()) {
+        SEXP names = immediateCallNames();
+        if (names != R_NilValue) {
             Rprintf("[");
-            for (auto n : RVector(immediateCallNames())) {
+            for (auto n : RVector(names)) {
                 Rprintf(" %s", (n == R_NilValue ? "_" : CHAR(PRINTNAME(n))));
             }
             Rprintf("]");
