@@ -1,2 +1,6 @@
-dyn.load('librjit.so')
+if (Sys.info()['sysname'] == 'Darwin') {
+    dyn.load('librjit.dylib')
+} else {
+    dyn.load('librjit.so')
+}
 source('rjit/R/rjit.R')
