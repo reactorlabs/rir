@@ -1,0 +1,71 @@
+******************* The functions being demonstrated are *******************
+
+j <- function() {
+    res <- 0
+    for (k in 1:1000000) {
+        res <- res + i(a=1, b=2, c=3)
+    }
+    res
+}
+
+i <- function(a, b, c) {
+    id(a + b + c)
+}
+
+id <- function(x) x
+
+******************* To demonstrate GNUR *******************
+
+run R
+
+source("demo/demo_rir.R")
+
+(to print the GNUR bytecode of the id, i, and j functions)
+disassemble(cmpfun(id))
+disassemble(cmpfun(i))
+disassemble(cmpfun(j))
+
+system.time(j()) - gives the performance of the j function
+i(1,2,3)              - performance the i function
+
+******************* To demonstrate RJIT *******************
+
+run R
+
+source("demo/demo_rir.R")
+
+(to compile the id, i, and j functions)
+
+id <- rjit.compile(id)
+i <- rjit.compile(i)
+j <- rjit.compile(j)
+
+(to print the llvm bytecode compiled for the id, i, and j functions )
+
+rjit.print(id)
+rjit.print(i)
+rjit.print(j)
+
+system.time(j()) - gives the performance of the j function in rjit
+i(1,2,3)              - performance the i function
+
+******************* To demonstrate RIR (in a new terminal) *******************
+
+run R
+
+source("demo/demo_rir.R")
+
+(to compile the id, i, and j functions)
+
+id <- rir.compile(id)
+i <- rir.compile(i)
+j <- rir.compile(j)
+
+(to print the llvm bytecode compiled for the id, i, and j functions )
+
+rir.print(id)
+rir.print(i)
+rir.print(j)
+
+system.time(j()) - gives the performance of the j function in rir
+i(1,2,3)              - performance the i function 
