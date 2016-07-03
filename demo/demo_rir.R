@@ -78,3 +78,53 @@ printRir <- function (a) {
     recompileRir(a)
     rir.print(Rir)
 }
+
+
+# The demo instructions:
+
+# load R
+
+# Source the demo:
+
+# > source("demo/demo_rir.R")
+# Loading required package: compiler
+
+# Display function 'i' - it is already defined in the demo:
+# > i
+# function(a, b, c) {
+#     a + b + c
+# }
+
+# Display the GNUR bytecode for the function 'i' with the printCompiler function:
+# > printCompiler(i)
+# list(.Code, list(8L, GETVAR.OP, 1L, GETVAR.OP, 2L, ADD.OP, 3L,
+#     GETVAR.OP, 4L, ADD.OP, 5L, RETURN.OP), list({
+#     a + b + c
+# }, a, b, a + b, c, a + b + c))
+
+# Display the Rjit bytecode for the function 'i' with the printRjit function:
+# > printRjit(i)
+# define %struct.SEXPREC addrspace(1)* @rfunction(%struct.SEXPREC addrspace(1)* %consts, %struct.SEXPREC addrspace(1)* %rho, %struct.SEXPREC addrspace(1)* %closure) #0 gc "rjit" {
+# start:
+#   %0 = getelementptr %struct.SEXPREC, %struct.SEXPREC addrspace(1)* %consts, i64 0, i32 4, i32 1
+
+# .....
+
+# Display the Rir bytecode for the function 'i' with the printRir function:
+# > printRir(i)
+# Container length 1024.
+# Function object:
+#   Magic:           cafebabe (hex)
+#   Size:            324
+#   Origin:          unoptimized
+#   Code objects:    6
+#   Fun code offset: 10c (hex)
+# Code object (offset 18 (hex))
+#   Magic:     110000ff (hex)
+#   Source:    104 (index to src pool)
+#   Stack (o): 1
+#   Stack (i): 0
+#   Num insns: 2
+#   Code size: 6 [b]
+#      0    ldvar_  67 # a
+#      5    ret_ 
