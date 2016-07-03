@@ -39,6 +39,8 @@ require(compiler)
 
 # print out the GNUR bytecode for the function 'a'
 printCompiler <- function(a) {
+    rjit.disableJit();
+    rir.disableJit();
     disassemble(cmpfun(a))
 }
 
