@@ -215,7 +215,7 @@ INLINE bool isValidFunction(SEXP s) {
     Function* f = (Function*)INTEGER(s);
     if (f->magic != FUNCTION_MAGIC)
         return false;
-    if (f->size >= (unsigned)Rf_length(s))
+    if (f->size > (unsigned)Rf_length(s))
         return false;
     if (f->foffset >= f->size - sizeof(Code))
         return false;
