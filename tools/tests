@@ -53,7 +53,7 @@ function run_test {
   echo "source('${ROOT_DIR}/rjit/R/rjit.R')" >> $TEST
   grep -v 'require("rjit")' ${test} | grep -v 'require(rjit)'  >> $TEST
   
-  $R -f $TEST &> /dev/null
+  $R --no-init-file -f $TEST &> /dev/null
   res=$?
 
   ps -p $PARENT &> /dev/null
