@@ -438,6 +438,7 @@ SEXP evalCbFunction(EvalCbArg* arg_) {
     return rirEval_c(arg->code, arg->ctx, arg->env, arg->nargs);
 }
 void initClosureContext(void*, SEXP, SEXP, SEXP, SEXP, SEXP);
+void endClosureContext(void*, SEXP);
 
 /** Performs the call.
 
@@ -487,6 +488,7 @@ SEXP doCall(Code * caller, SEXP call, SEXP callee, unsigned * args, size_t nargs
             initClosureContext(&cntxt, call, newEnv, env, actuals, callee);
             EvalCbArg arg = {functionCode((Function*)INTEGER(body)), ctx, newEnv, nargs};
             result = hook_rirCallTrampoline(&cntxt, evalCbFunction, &arg);
+            endClosureContext(&cntxt, result);
         } else {
             // otherwise use R's own call mechanism
             result = applyClosure(call, callee, actuals, env, R_NilValue);
