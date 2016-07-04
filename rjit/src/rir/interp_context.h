@@ -9,25 +9,22 @@
 #ifndef interpreter_context_h
 #define interpreter_context_h
 
+#include "interp_data.h"
+
 #include <R.h>
 #include <Rinternals.h>
 #include <stdio.h>
 
 #include <stdint.h>
-
-// TODO force inlinine for clang & gcc
-#define INLINE __attribute__((always_inline)) inline static
+#include <assert.h>
 
 #ifdef __cplusplus
 extern "C" {
-#else
-#define bool int
-#define true 1
-#define false 0
 #endif
 
 #define POOL_CAPACITY 4096
 #define STACK_CAPACITY 4096
+
 
 /** Compiler API. Given a language object, compiles it and returns the INTSXP
   containing the Function and its Code objects.
@@ -152,6 +149,7 @@ INLINE Frame* fstack_push(Context* c, struct Code* code, SEXP env) {
     if (c->fstack.length == c->fstack.capacity)
         fstack_grow(c);
 
+    assert(*(unsigned*)code == CODE_MAGIC);
     Frame* frame = &c->fstack.data[c->fstack.length];
     frame->code = code;
     frame->env = env;

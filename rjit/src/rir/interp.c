@@ -424,7 +424,21 @@ CCODE getBuiltin(SEXP f) {
     return R_FunTab[i].cfun;
 }
 
+// hooks for the call
 SEXP closureArgumentAdaptor(SEXP call, SEXP op, SEXP arglist, SEXP rho, SEXP suppliedvars);
+typedef struct {
+    Code* code;
+    Context* ctx;
+    SEXP env;
+    size_t nargs;
+} EvalCbArg;
+SEXP hook_rirCallTrampoline(void* cntxt, SEXP (*evalCb)(EvalCbArg*), EvalCbArg* arg);
+SEXP evalCbFunction(EvalCbArg* arg_) {
+    EvalCbArg* arg = (EvalCbArg*)arg_;
+    return rirEval_c(arg->code, arg->ctx, arg->env, arg->nargs);
+}
+void initClosureContext(void*, SEXP, SEXP, SEXP, SEXP, SEXP);
+
 /** Performs the call.
 
   TODO this is currently super simple.
@@ -466,10 +480,13 @@ SEXP doCall(Code * caller, SEXP call, SEXP callee, unsigned * args, size_t nargs
         // if body is INTSXP, it is rir serialized code, execute it directly
         if (TYPEOF(body) == INTSXP) {
             SEXP newEnv = closureArgumentAdaptor(call, callee, actuals, env, R_NilValue);
-            PROTECT(newEnv);
-            result = rirEval_c(functionCode((Function*)INTEGER(body)), ctx,
-                               newEnv, nargs);
-            UNPROTECT(1);
+            // TODO since we do not have access to the context definition we
+            // just create a buffer big enough and let gnur do the rest.
+            // Once we integrate we should really setup the context ourselves!
+            char cntxt[400];
+            initClosureContext(&cntxt, call, newEnv, env, actuals, callee);
+            EvalCbArg arg = {functionCode((Function*)INTEGER(body)), ctx, newEnv, nargs};
+            result = hook_rirCallTrampoline(&cntxt, evalCbFunction, &arg);
         } else {
             // otherwise use R's own call mechanism
             result = applyClosure(call, callee, actuals, env, R_NilValue);
