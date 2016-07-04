@@ -5,6 +5,7 @@
 #include "BC_inc.h"
 
 #include "CodeHandle.h"
+#include "../Precious.h"
 
 #include <iostream>
 
@@ -25,6 +26,8 @@ class FunctionHandle {
 
     static FunctionHandle create() {
         SEXP store = Rf_allocVector(INTSXP, initialSize);
+        Precious::add(store);
+
         void* payload = INTEGER(store);
 
         Function* function = new (payload) Function;
@@ -51,10 +54,12 @@ class FunctionHandle {
         if (function->size + totalSize > capacity) {
             unsigned newCapacity = capacity * 2;
             SEXP newStore = Rf_allocVector(INTSXP, newCapacity);
+            Precious::add(newStore);
             void* newPayload = INTEGER(newStore);
 
             memcpy(newPayload, payload, capacity);
 
+            Precious::remove(store);
             assert(function == payload);
             store = newStore;
             payload = newPayload;
