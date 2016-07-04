@@ -845,13 +845,25 @@ __eval_done:
     return ostack_pop(ctx);
 }
 
+SEXP rirExpr(SEXP f) {
+    if (isValidPromise(f)) {
+        Code* c = (Code*)f;
+        return src_pool_at(globalContext(), c->src);
+    }
+    if (isValidFunction(f)) {
+        Function* ff = (Function*)(INTEGER(f));
+        return src_pool_at(globalContext(), functionCode(ff)->src);
+    }
+    return f;
+}
+
 SEXP rirEval_f(SEXP f, SEXP env) {
     // TODO we do not really need the arg counts now
     if (isValidPromise(f)) {
         //        Rprintf("Evaluating promise:\n");
         Code* c = (Code*)f;
         SEXP x = rirEval_c(c, globalContext(), env, 0);
-        //        Rprintf("Promise evaluated, length %u, value %d",
+      //        Rprintf("Promise evaluated, length %u, value %d",
         //        Rf_length(x), REAL(x)[0]);
         return x;
     } else {

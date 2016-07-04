@@ -31,10 +31,12 @@ using namespace rjit;
 
 typedef bool (*callback_isValidFunction)(SEXP);
 typedef SEXP (*callback_rirEval_f)(SEXP, SEXP);
+typedef SEXP (*callback_rirExpr)(SEXP);
 
 extern "C" void initializeCallbacks(callback_isValidFunction,
                                     callback_isValidFunction,
-                                    callback_rirEval_f);
+                                    callback_rirEval_f,
+                                    callback_rirExpr);
 
 // =======================================================================
 // == RIR API
@@ -66,6 +68,7 @@ REXPORT SEXP rir_compileClosure(SEXP f) {
     SET_FORMALS(result, res.formals);
     SET_CLOENV(result, CLOENV(f));
     SET_BODY(result, res.bc);
+    Rf_copyMostAttrib(f, result);
     UNPROTECT(1);
     return result;
 }
@@ -208,6 +211,7 @@ REXPORT SEXP rjit_compileClosure(SEXP f) {
     SET_FORMALS(result, FORMALS(f));
     SET_CLOENV(result, CLOENV(f));
     SET_BODY(result, rjit_jit(BODY(f), FORMALS(f), CLOENV(f)));
+    Rf_copyMostAttrib(f, result);
     UNPROTECT(1);
     return result;
 }
@@ -328,7 +332,7 @@ bool startup() {
 
     registerGcCallback(&rjit_globalGcCallback);
 
-    initializeCallbacks(isValidFunction, isValidPromise, rirEval_f);
+    initializeCallbacks(isValidFunction, isValidPromise, rirEval_f, rirExpr);
 
     return true;
 }
