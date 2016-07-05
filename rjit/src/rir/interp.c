@@ -165,7 +165,7 @@ INLINE SEXP readConst(Context* ctx, OpcodeT** pc) {
 }
 
 INLINE int readJumpOffset(OpcodeT** pc) {
-    int result = (JumpOffset)(**pc);
+    int result = *(JumpOffset*)(*pc);
     *pc += sizeof(JumpOffset);
     return result;
 }
