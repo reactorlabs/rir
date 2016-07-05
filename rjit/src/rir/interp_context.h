@@ -95,9 +95,9 @@ typedef struct {
 } Context;
 
 
-INLINE int istack_top(Context* c) { return c->istack.data[c->istack.length]; }
+INLINE int istack_top(Context* c) { return c->istack.data[c->istack.length-1]; }
 
-INLINE SEXP ostack_top(Context* c) { return c->ostack.data[c->ostack.length]; }
+INLINE SEXP ostack_top(Context* c) { return c->ostack.data[c->ostack.length-1]; }
 
 INLINE int fstack_top(Context* c) {
     return c->fstack.length - 1;

@@ -813,6 +813,7 @@ SEXP rirEval_c(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
 
     // main loop
     while (true) {
+        // printf("%p : %p, %p\n", c, *pc, *pc - c->data);
         switch (readOpcode(pc)) {
 #define INS(name)                                                              \
     case name:                                                                 \
