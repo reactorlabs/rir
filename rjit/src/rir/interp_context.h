@@ -139,8 +139,9 @@ INLINE Frame* fstack_at(Context* c, unsigned index) {
     return &c->fstack.data[index];
 }
 
-INLINE void fstack_pop(Context* c) {
-    --c->fstack.length;
+INLINE void fstack_pop(Context* c, Frame* frame) {
+    while(&c->fstack.data[--c->fstack.length] != frame)
+        assert(!fstack_empty(c));
 }
 
 void fstack_grow(Context* c);

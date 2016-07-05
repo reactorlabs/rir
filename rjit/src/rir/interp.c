@@ -855,7 +855,7 @@ SEXP rirEval_c(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
         }
     }
 __eval_done:
-    fstack_pop(ctx);
+    fstack_pop(ctx, frame);
     return ostack_pop(ctx);
 }
 
