@@ -212,6 +212,8 @@ void CodeVerifier::vefifyFunctionLayout(SEXP sexp, ::Context* ctx) {
                     assert(Rf_length(namesVec) == Rf_length(argsVec) and
                            "Names and args have different length");
                 }
+                // check the call has an ast attached
+                assert(src(c)[ninsns-1]);
             }
         }
 

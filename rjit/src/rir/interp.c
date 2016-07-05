@@ -170,8 +170,7 @@ INLINE int readJumpOffset(OpcodeT** pc) {
     return result;
 }
 
-// TODO perhaps this should have better name
-INLINE SEXP getCurrentCall(Code* c, OpcodeT* pc, Context* ctx) {
+INLINE SEXP getSrcAt(Code* c, OpcodeT* pc, Context* ctx) {
     // we need to determine index of the current instruction
     OpcodeT* x = code(c);
     // find the pc of the current instructions, it is ok to be slow
@@ -183,6 +182,21 @@ INLINE SEXP getCurrentCall(Code* c, OpcodeT* pc, Context* ctx) {
     // function
     return src_pool_at(ctx, sidx == 0 ? c->src : sidx);
 }
+
+INLINE SEXP getSrcForCall(Code* c, OpcodeT* pc, Context* ctx) {
+    // we need to determine index of the current instruction
+    OpcodeT* x = code(c);
+    // find the pc of the current instructions, it is ok to be slow
+    unsigned insIdx = 0;
+    while ((x = advancePc(x)) != pc)
+        ++insIdx;
+    unsigned sidx = src(c)[insIdx];
+    // return the ast for the instruction, or if not defined, the ast of the
+    // function
+    assert(sidx);
+    return src_pool_at(ctx, sidx);
+}
+
 
 /** Creates a promise from given code object and environment.
 
@@ -517,7 +531,7 @@ INSTRUCTION(call_) {
     // get the closure itself
     SEXP cls = ostack_pop(ctx);
     // do the call
-    SEXP call = getCurrentCall(c, *pc, ctx);
+    SEXP call = getSrcForCall(c, *pc, ctx);
 
     ostack_push(ctx, doCall(c, call, cls, args, nargs, names, env, ctx));
 }
@@ -584,7 +598,7 @@ INSTRUCTION(asbool_) {
     SEXP t = ostack_pop(ctx);
     int cond = NA_LOGICAL;
     if (Rf_length(t) > 1)
-        warningcall(getCurrentCall(c, *pc, ctx),
+        warningcall(getSrcAt(c, *pc, ctx),
                     ("the condition has length > 1 and only the first "
                      "element will be used"));
 
@@ -606,7 +620,7 @@ INSTRUCTION(asbool_) {
                 ? (isLogical(t) ? ("missing value where TRUE/FALSE needed")
                                 : ("argument is not interpretable as logical"))
                 : ("argument is of length zero");
-        errorcall(getCurrentCall(c, *pc, ctx), msg);
+        errorcall(getSrcAt(c, *pc, ctx), msg);
     }
 
     ostack_push(ctx, cond ? R_TrueValue : R_FalseValue);

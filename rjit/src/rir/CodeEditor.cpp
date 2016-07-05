@@ -160,9 +160,9 @@ unsigned CodeEditor::write(FunctionHandle& function) {
                 arg[i] = e->write(function);
             }
         }
+        cs << *cur;
         if (cur.hasAst())
             cs.addAst(cur.ast());
-        cs << *cur;
     }
 
     return cs.finalize();

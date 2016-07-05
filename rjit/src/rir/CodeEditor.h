@@ -108,12 +108,18 @@ class CodeEditor {
                 j++;
             }
 
+            bool first = false;
             Cursor cur = other.getCursor();
             while (!cur.atEnd()) {
                 *this << *cur;
 
                 BytecodeList* insert = pos->prev;
-                pos->src = cur.pos->src;
+                insert->src = cur.pos->src;
+                if (first) {
+                    if (!insert->src)
+                        insert->src = cur.editor->ast;
+                    first = false;
+                }
 
                 // Fix prom offsets
                 if (insert->bc.bc == BC_t::call_) {
