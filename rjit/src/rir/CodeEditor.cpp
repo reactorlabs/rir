@@ -82,7 +82,7 @@ void CodeEditor::loadCode(FunctionHandle function, CodeHandle code,
                     CodeEditor* p = new CodeEditor(function, code.idx());
 
                     if (promises.size() <= code.idx())
-                        promises.resize(code.idx() + 1);
+                        promises.resize(code.idx() + 1, nullptr);
 
                     promises[code.idx()] = p;
                 }
@@ -97,10 +97,10 @@ void CodeEditor::loadCode(FunctionHandle function, CodeHandle code,
 }
 
 CodeEditor::~CodeEditor() {
-    for (auto store : promises) {
-        if (!store)
+    for (auto p : promises) {
+        if (!p)
             continue;
-        delete store;
+        delete p;
     }
 
     BytecodeList* pos = entryPoint->front.next;
@@ -109,6 +109,8 @@ CodeEditor::~CodeEditor() {
         pos = pos->next;
         delete old;
     }
+
+    delete entryPoint;
 }
 
 void CodeEditor::print(int offset) {

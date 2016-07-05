@@ -100,7 +100,8 @@ class CodeStream {
         patchpoints.clear();
         nextLabel = 0;
 
-        code->clear();
+        delete code;
+        code = nullptr;
         pos = 0;
 
         CodeVerifier::calculateAndVerifyStack(res.code);

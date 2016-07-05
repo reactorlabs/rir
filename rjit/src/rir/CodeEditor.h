@@ -93,7 +93,7 @@ class CodeEditor {
             std::unordered_map<fun_idx_t, fun_idx_t> duplicate;
 
             fun_idx_t j = 0;
-            for (auto p : other.promises) {
+            for (auto& p : other.promises) {
                 bool found = false;
                 for (fun_idx_t i = 0; i < editor->promises.size(); ++i) {
                     if (p == editor->promises[i]) {
@@ -103,8 +103,11 @@ class CodeEditor {
                         break;
                     }
                 }
-                if (!found)
+                if (!found) {
+                    // We own the promise now
                     editor->promises.push_back(p);
+                    p = nullptr;
+                }
                 j++;
             }
 
@@ -143,6 +146,9 @@ class CodeEditor {
                 ++cur;
             }
             editor->nextLabel += other.nextLabel;
+
+            // TODO: that stinks, I know
+            delete &other;
             return *this;
         }
 

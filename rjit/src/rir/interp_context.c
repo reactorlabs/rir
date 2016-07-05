@@ -19,8 +19,11 @@ void fstack_grow(Context* c) {
 
 void ostack_ensureSize(Context* c, unsigned minFree) {
     unsigned cap = c->ostack.capacity;
-    while(c->ostack.length + minFree < cap) cap *= 2;
+    assert(cap > 0);
+    minFree = minFree < 64 ? 64 : minFree;
+    while(c->ostack.length + minFree > cap) cap *= 2;
     if (cap != c->ostack.capacity) {
+        assert(cap > 0);
         SEXP * data = malloc(cap * sizeof(SEXP));
         memcpy(data, c->ostack.data, c->ostack.length * sizeof(SEXP));
         free(c->ostack.data);
