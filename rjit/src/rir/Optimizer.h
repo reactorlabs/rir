@@ -27,24 +27,24 @@ void inlProm(CodeEditor& e, CodeEditor::Cursor cur, fun_idx_t idx) {
     cur << ce;
 }
 
-// void doInlineBlock(CodeEditor::Cursor& cur, Code* fun) {
-//     assert((*cur).bc == BC_t::ldfun_);
-//     cur.remove();
-//     BC bc = *cur;
-//     assert(bc.bc == BC_t::call_);
-//     cur.remove();
-//
-//     cur << BC::check_primitive(symbol::Block);
-//
-//     fun_idx_t* args = bc.immediateCallArgs();
-//     num_args_t nargs = bc.immediateCallNargs();
-//
-//     for (size_t i = 0; i < nargs; ++i) {
-//         inlProm(cur, fun, args[i]);
-//         if (i != nargs - 1)
-//             cur << BC::pop();
-//     }
-// }
+void doInlineBlock(CodeEditor& e, CodeEditor::Cursor& cur) {
+    assert((*cur).bc == BC_t::ldfun_);
+    cur.remove();
+    BC bc = *cur;
+    assert(bc.bc == BC_t::call_);
+    cur.remove();
+
+    cur << BC::isspecial(symbol::Block);
+
+    fun_idx_t* args = bc.immediateCallArgs();
+    num_args_t nargs = bc.immediateCallNargs();
+
+    for (size_t i = 0; i < nargs; ++i) {
+        inlProm(e, cur, args[i]);
+        if (i != nargs - 1)
+            cur << BC::pop();
+    }
+}
 
 void doInlineIf(CodeEditor& e, CodeEditor::Cursor& cur) {
     assert((*cur).bc == BC_t::ldfun_);
@@ -77,23 +77,23 @@ void doInlineIf(CodeEditor& e, CodeEditor::Cursor& cur) {
     cur << BC::label(nextBranch);
 }
 
-// void doInlinePar(CodeEditor::Cursor& cur, Code* fun) {
-//     assert((*cur).bc == BC_t::ldfun_);
-//     cur.remove();
-//     BC bc = *cur;
-//     assert(bc.bc == BC_t::call_);
-//     cur.remove();
-//
-//     cur << BC::check_primitive(symbol::Parenthesis);
-//
-//     fun_idx_t* args = bc.immediateCallArgs();
-//     num_args_t nargs = bc.immediateCallNargs();
-//
-//     assert(nargs == 1);
-//
-//     inlProm(cur, fun, args[0]);
-// }
-//
+void doInlinePar(CodeEditor& e, CodeEditor::Cursor& cur) {
+    assert((*cur).bc == BC_t::ldfun_);
+    cur.remove();
+    BC bc = *cur;
+    assert(bc.bc == BC_t::call_);
+    cur.remove();
+
+    cur << BC::isspecial(symbol::Parenthesis);
+
+    fun_idx_t* args = bc.immediateCallArgs();
+    num_args_t nargs = bc.immediateCallNargs();
+
+    assert(nargs == 1);
+
+    inlProm(e, cur, args[0]);
+}
+
 // void doInlineAdd(CodeEditor::Cursor& cur, Code* fun) {
 //     assert((*cur).bc == BC_t::ldfun_);
 //     cur.remove();
@@ -157,10 +157,10 @@ void optimize(CodeEditor& e) {
                 doInlineIf(e, cur);
                 continue;
             }
-            //             if (bc.immediateConst() == symbol::Block) {
-            //                 doInlineBlock(cur, fun);
-            //                 continue;
-            //             }
+            if (bc.immediateConst() == symbol::Block) {
+                doInlineBlock(e, cur);
+                continue;
+            }
             //             if (bc.immediateConst() == symbol::Lt) {
             //                 doInlineLt(cur, fun);
             //                 continue;
@@ -173,11 +173,10 @@ void optimize(CodeEditor& e) {
             //                 doInlineSub(cur, fun);
             //                 continue;
             //             }
-            //             if (bc.immediateConst() == symbol::Parenthesis) {
-            //                 doInlinePar(cur, fun);
-            //                 continue;
-            //             }
-            //
+            if (bc.immediateConst() == symbol::Parenthesis) {
+                doInlinePar(e, cur);
+                continue;
+            }
             break;
 
         default:
@@ -188,14 +187,12 @@ void optimize(CodeEditor& e) {
 
 FunctionHandle optimize_(FunctionHandle fun) {
     CodeEditor edit(fun);
-    // std::cout << "==================================\nbefore \n";
-    // edit.print();
+    //std::cout << "==================================\nbefore \n";
+    //fun.print();
     optimize(edit);
-    // std::cout << "==================================\nafter \n";
-    // edit.print();
     FunctionHandle res = edit.finalize();
-    // std::cout << "==================================\nserialized \n";
-    // res.print();
+    //std::cout << "==================================\nafter \n";
+    //res.print();
     return res;
 }
 }
@@ -203,7 +200,9 @@ FunctionHandle optimize_(FunctionHandle fun) {
 class Optimizer {
   public:
     static FunctionHandle optimize(FunctionHandle fun) {
-        return optimize_(fun);
+        for (int i = 0; i < 5; ++i)
+            fun = optimize_(fun);
+        return fun;
     }
 };
 

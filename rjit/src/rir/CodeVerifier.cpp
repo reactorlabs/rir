@@ -97,6 +97,7 @@ void CodeVerifier::calculateAndVerifyStack(CodeHandle code) {
         while (true) {
             state[i.pc] = i;
             BC_t* pc = i.pc;
+            assert(pc >= code.bc() && pc < code.endBc());
             BC cur = BC::decode(pc);
             i.advance();
             max.updateMax(i);
