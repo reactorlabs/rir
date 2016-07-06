@@ -39,10 +39,17 @@ void doInlineBlock(CodeEditor& e, CodeEditor::Cursor& cur) {
     fun_idx_t* args = bc.immediateCallArgs();
     num_args_t nargs = bc.immediateCallNargs();
 
+    if (nargs == 0) {
+        cur << BC::push(R_NilValue);
+        return;
+    }
+
     for (size_t i = 0; i < nargs; ++i) {
-        inlProm(e, cur, args[i]);
+        CodeEditor& ce = *e.detachPromise(args[i]);
+        ce.normalizeReturn();
         if (i != nargs - 1)
-            cur << BC::pop();
+            ce.getCursorAtEnd() << BC::pop();
+        cur << ce;
     }
 }
 
@@ -187,12 +194,12 @@ void optimize(CodeEditor& e) {
 
 FunctionHandle optimize_(FunctionHandle fun) {
     CodeEditor edit(fun);
-    //std::cout << "==================================\nbefore \n";
-    //fun.print();
+    // std::cout << "==================================\nbefore \n";
+    // edit.print();
     optimize(edit);
+    // std::cout << "==================================\nafter \n";
+    // edit.print();
     FunctionHandle res = edit.finalize();
-    //std::cout << "==================================\nafter \n";
-    //res.print();
     return res;
 }
 }
