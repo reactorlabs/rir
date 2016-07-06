@@ -207,8 +207,8 @@ FunctionHandle optimize_(FunctionHandle fun) {
 class Optimizer {
   public:
     static FunctionHandle optimize(FunctionHandle fun) {
-        for (int i = 0; i < 5; ++i)
-            fun = optimize_(fun);
+        // for (int i = 0; i < 5; ++i)
+        //     fun = optimize_(fun);
         return fun;
     }
 };

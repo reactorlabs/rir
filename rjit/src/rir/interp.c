@@ -231,8 +231,6 @@ INSTRUCTION(ldfun_) {
     SEXP sym = readConst(ctx, pc);
     SEXP val = findFun(sym, env);
 
-    R_Visible = TRUE;
-
     // TODO something should happen here
     if (val == R_UnboundValue)
         assert(false && "Unbound var");
@@ -266,8 +264,6 @@ INSTRUCTION(ldddvar_) {
     SEXP sym = readConst(ctx, pc);
     SEXP val = ddfindVar(sym, env);
 
-    R_Visible = TRUE;
-
     // TODO better errors
     if (val == R_UnboundValue)
         assert(false && "Unbound var");
@@ -289,8 +285,6 @@ INSTRUCTION(ldddvar_) {
 INSTRUCTION(ldvar_) {
     SEXP sym = readConst(ctx, pc);
     SEXP val = findVar(sym, env);
-
-    R_Visible = TRUE;
 
     // TODO better errors
     if (val == R_UnboundValue)
@@ -437,6 +431,10 @@ CCODE getBuiltin(SEXP f) {
     int i = ((sexprec_rjit*)f)->u.i;
     return R_FunTab[i].cfun;
 }
+int getFlag(SEXP f) {
+    int i = ((sexprec_rjit*)f)->u.i;
+    return (((R_FunTab[i].eval)/100)%10);
+}
 
 // hooks for the call
 SEXP closureArgumentAdaptor(SEXP call, SEXP op, SEXP arglist, SEXP rho, SEXP suppliedvars);
@@ -468,18 +466,24 @@ SEXP doCall(Code * caller, SEXP call, SEXP callee, unsigned * args, size_t nargs
     case SPECIALSXP: {
         // get the ccode
         CCODE f = getBuiltin(callee);
+        int flag = getFlag(callee);
+        R_Visible = flag != 1;
         // call it with the AST only
         result = f(call, callee, CDR(call), env);
+        if (flag < 2) R_Visible = flag != 1;
         break;
     }
     case BUILTINSXP: {
         // get the ccode
         CCODE f = getBuiltin(callee);
+        int flag = getFlag(callee);
         // create the argslist
         SEXP argslist = createEagerArgsList(caller, args, nargs, names, env, ctx);
         // callit
         PROTECT(argslist);
+        R_Visible = flag != 1;
         result = f(call, callee, argslist, env);
+        if (flag < 2) R_Visible = flag != 1;
         UNPROTECT(1);
         break;
     }
@@ -732,7 +736,7 @@ INSTRUCTION(isspecial_) {
     SEXP sym = readConst(ctx, pc);
     SEXP val = findVar(sym, env);
     // TODO better check
-    assert(TYPEOF(val) == SPECIALSXP || TYPEOF(val) == BUILTINSXP);
+    assert(TYPEOF(val) == SPECIALSXP);
 }
 
 INSTRUCTION(isfun_) {
