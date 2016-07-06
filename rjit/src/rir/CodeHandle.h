@@ -9,6 +9,8 @@
 namespace rjit {
 namespace rir {
 
+class FunctionHandle;
+
 class CodeHandle {
   public:
     Code* code;
@@ -54,19 +56,11 @@ class CodeHandle {
                        totalSize(code->codeSize, code->srcLength));
     }
 
-    Function* function() { return ::function(code); }
+    FunctionHandle function();
 
     void print();
 
-    fun_idx_t idx() {
-        fun_idx_t i = 0;
-        Code* c = ::begin(function());
-        while (c != code) {
-            c = ::next(c);
-            ++i;
-        }
-        return i;
-    }
+    fun_idx_t idx();
 };
 
 class CodeHandleIterator : public CodeHandle {

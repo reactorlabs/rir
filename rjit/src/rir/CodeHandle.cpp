@@ -8,6 +8,8 @@
 #include "CodeStream.h"
 #include "RIntlns.h"
 #include "CodeHandle.h"
+#include "FunctionHandle.h"
+#include "CodeEditor.h"
 
 namespace rjit {
 namespace rir {
@@ -26,6 +28,21 @@ void CodeHandle::print() {
         bc.print();
         ++s;
     }
+}
+
+FunctionHandle CodeHandle::function() {
+    return (SEXP)((uintptr_t)::function(code) - FUNCTION_OFFSET);
+}
+
+fun_idx_t CodeHandle::idx() {
+        fun_idx_t i = 0;
+        for (auto c : function()) {
+            if (c == code)
+                return i;
+            ++i;
+        }
+        assert(false);
+        return -1;
 }
 
 }

@@ -89,6 +89,7 @@ void CodeVerifier::calculateAndVerifyStack(CodeHandle code) {
         State i = q.top();
         q.pop();
         if (state.find(i.pc) != state.end()) {
+            assert(i.pc >= code.bc() && i.pc < code.endBc());
             State current = state[i.pc];
             if (current != i)
                 assert(false and "Stack imbalance detected");

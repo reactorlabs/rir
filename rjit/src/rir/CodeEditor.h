@@ -4,6 +4,7 @@
 #include "BC_inc.h"
 
 #include "FunctionHandle.h"
+#include "CodeHandle.h"
 
 #include <set>
 #include <unordered_map>
@@ -181,8 +182,13 @@ class CodeEditor {
         return Cursor(this, entryPoint->front.next, entryPoint);
     }
 
+    Cursor getCursorAtEnd() {
+        return Cursor(this, &entryPoint->last, entryPoint);
+    }
+
     CodeEditor(FunctionHandle function);
     CodeEditor(FunctionHandle function, fun_idx_t idx);
+    CodeEditor(CodeHandle code);
 
     void loadCode(FunctionHandle function, CodeHandle code, BCStore* store);
 
@@ -194,7 +200,7 @@ class CodeEditor {
 
     void normalizeReturn();
 
-    void print(int offset = 0);
+    void print();
 
     CodeEditor* detachPromise(fun_idx_t idx) {
         CodeEditor* e = promises[idx];

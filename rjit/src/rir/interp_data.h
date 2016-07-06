@@ -26,6 +26,10 @@ extern "C" {
 // magic in his vector too...
 #define FUNCTION_MAGIC (unsigned)0xCAFEBABE
 
+// Offset between function SEXP and Function* struct
+// This is basically sizeof(SEXPREC_ALIGN)
+#define FUNCTION_OFFSET 40
+
 // Code magic constant is intended to trick the GC into believing that it is
 // dealing with already marked SEXP.
 // Note: gcgen needs to be 1, otherwise the write barrier will trigger

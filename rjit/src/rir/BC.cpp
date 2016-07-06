@@ -89,9 +89,11 @@ SEXP BC::immediateCallNames() {
 }
 
 void BC::print() {
-    if (bc != BC_t::label)
+    if (bc != BC_t::label) {
         Rprintf("   ");
-    Rprintf("%s ", name(bc));
+        Rprintf("%s ", name(bc));
+    }
+
     switch (bc) {
     case BC_t::invalid_:
     case BC_t::num_of:
@@ -155,8 +157,10 @@ void BC::print() {
     case BC_t::brtrue_:
     case BC_t::brfalse_:
     case BC_t::br_:
-    case BC_t::label:
         Rprintf(" %x", immediate.offset);
+        break;
+    case BC_t::label:
+        Rprintf("%x:", immediate.offset);
         break;
     }
     Rprintf("\n");

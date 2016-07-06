@@ -14,6 +14,8 @@ CodeEditor::CodeEditor(FunctionHandle function) : ast(function.ast()) {
     loadCode(function, function.entryPoint(), entryPoint);
 }
 
+CodeEditor::CodeEditor(CodeHandle code) : CodeEditor(code.function(), code.idx()) { }
+
 CodeEditor::CodeEditor(FunctionHandle function, fun_idx_t idx) {
     entryPoint = new BCStore;
     CodeHandle code = function.codeAtIdx(idx);
@@ -113,10 +115,12 @@ CodeEditor::~CodeEditor() {
     delete entryPoint;
 }
 
-void CodeEditor::print(int offset) {
+void CodeEditor::print() {
     for (Cursor cur = getCursor(); !cur.atEnd(); ++cur) {
-        for (int i = 0; i < offset; ++i)
-            std::cout << " ";
+        if (cur.hasAst()) {
+            std::cout << "     # ";
+            Rf_PrintValue(cur.ast());
+        }
         cur.print();
     }
     fun_idx_t i = 0;
@@ -125,10 +129,9 @@ void CodeEditor::print(int offset) {
         if (!p)
             continue;
 
-        for (int i = 0; i < offset; ++i)
-            std::cout << " ";
-        std::cout << "P " << i - 1 << " --\n";
-        p->print(offset + 2);
+        std::cout << "------------------------\n";
+        std::cout << "@" << (void*)(long)(i-1) << "\n";
+        p->print();
     }
 }
 

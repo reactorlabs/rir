@@ -106,7 +106,7 @@ void rir_interp_gc_callback(void (*forward_node)(SEXP)) {
     for (size_t i = 0; i < globalContext_->fstack.length; ++i) {
         forward_node(globalContext_->fstack.data[i].env);
         Function* f = function(globalContext_->fstack.data[i].code);
-        SEXP store = (SEXP)((uintptr_t)f - 40);
+        SEXP store = (SEXP)((uintptr_t)f - FUNCTION_OFFSET);
         assert((Function*)INTEGER(store) == f);
         forward_node(store);
     }
