@@ -736,7 +736,7 @@ INSTRUCTION(isspecial_) {
     SEXP sym = readConst(ctx, pc);
     SEXP val = findVar(sym, env);
     // TODO better check
-    assert(TYPEOF(val) == SPECIALSXP);
+    assert(TYPEOF(val) == SPECIALSXP || TYPEOF(val) == BUILTINSXP);
 }
 
 INSTRUCTION(isfun_) {
