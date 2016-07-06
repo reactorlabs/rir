@@ -407,7 +407,7 @@ SEXP createEagerArgsList(Code* c, FunctionIndex* args, size_t nargs, SEXP names,
             SEXP ellipsis = findVar(name, env);
             if (TYPEOF(ellipsis) == DOTSXP) {
                 while (ellipsis != R_NilValue) {
-                    SEXP arg = rirEval_c((Code*)CAR(ellipsis), ctx, env, 0);
+                    SEXP arg = Rf_eval(CAR(ellipsis), env);
                     name = TAG(ellipsis);
                     protected += __listAppend(&result, &pos, arg, name);
                     ellipsis = CDR(ellipsis);
