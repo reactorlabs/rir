@@ -156,19 +156,19 @@ void doInlinePar(CodeEditor& e, CodeEditor::Cursor& cur) {
 //     cur << BC::lt();
 // }
 
-void optimize(CodeEditor& e) {
+void optimize_(CodeEditor& e) {
     for (auto cur = e.getCursor(); !cur.atEnd(); ++cur) {
         BC bc = *cur;
         switch (bc.bc) {
         case BC_t::ldfun_:
-            if (bc.immediateConst() == symbol::If) {
-                doInlineIf(e, cur);
-                continue;
-            }
-            if (bc.immediateConst() == symbol::Block) {
-                doInlineBlock(e, cur);
-                continue;
-            }
+            //if (bc.immediateConst() == symbol::If) {
+            //    doInlineIf(e, cur);
+            //    continue;
+            //}
+            // if (bc.immediateConst() == symbol::Block) {
+            //     doInlineBlock(e, cur);
+            //     continue;
+            // }
             //             if (bc.immediateConst() == symbol::Lt) {
             //                 doInlineLt(cur, fun);
             //                 continue;
@@ -181,10 +181,10 @@ void optimize(CodeEditor& e) {
             //                 doInlineSub(cur, fun);
             //                 continue;
             //             }
-            if (bc.immediateConst() == symbol::Parenthesis) {
-                doInlinePar(e, cur);
-                continue;
-            }
+            // if (bc.immediateConst() == symbol::Parenthesis) {
+            //     doInlinePar(e, cur);
+            //     continue;
+            // }
             break;
 
         default:
@@ -193,24 +193,16 @@ void optimize(CodeEditor& e) {
     }
 }
 
-FunctionHandle optimize_(FunctionHandle fun) {
-    CodeEditor edit(fun);
-    // std::cout << "==================================\nbefore \n";
-    // edit.print();
-    optimize(edit);
-    // std::cout << "==================================\nafter \n";
-    // edit.print();
-    FunctionHandle res = edit.finalize();
-    return res;
-}
 }
 
 class Optimizer {
   public:
     static FunctionHandle optimize(FunctionHandle fun) {
-        // for (int i = 0; i < 5; ++i)
-        //     fun = optimize_(fun);
-        return fun;
+        CodeEditor edit(fun);
+        for (int i = 0; i < 5 && edit.changed; ++i) {
+            optimize_(edit);
+        }
+        return edit.finalize();
     }
 };
 

@@ -68,6 +68,8 @@ class CodeEditor {
         BC operator*() { return pos->bc; }
 
         Cursor& operator<<(BC bc) {
+            editor->changed = true;
+
             auto insert = new BytecodeList(bc);
 
             BytecodeList* prev = pos->prev;
@@ -88,6 +90,8 @@ class CodeEditor {
         SEXP ast() { return pos->src; }
 
         Cursor& operator<<(CodeEditor& other) {
+            editor->changed = true;
+
             size_t labels = editor->nextLabel;
             size_t proms = editor->promises.size();
 
@@ -154,11 +158,15 @@ class CodeEditor {
         }
 
         void addAst(SEXP ast) {
+            editor->changed = true;
+
             assert(!pos->src);
             pos->src = ast;
         }
 
         void remove() {
+            editor->changed = true;
+
             assert(!atEnd());
             assert(pos != begin);
 
@@ -207,6 +215,8 @@ class CodeEditor {
         promises[idx] = nullptr;
         return e;
     }
+
+    bool changed = false;
 };
 }
 }
