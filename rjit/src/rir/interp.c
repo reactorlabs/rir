@@ -224,6 +224,7 @@ INLINE SEXP promiseValue(SEXP promise) {
 
 INSTRUCTION(push_) {
     SEXP x = readConst(ctx, pc);
+    R_Visible = TRUE;
     ostack_push(ctx, x);
 }
 
@@ -279,6 +280,7 @@ INSTRUCTION(ldddvar_) {
     if (NAMED(val) == 0 && val != R_NilValue)
         SET_NAMED(val, 1);
 
+    R_Visible = TRUE;
     ostack_push(ctx, val);
 }
 
@@ -291,7 +293,7 @@ INSTRUCTION(ldvar_) {
     if (val == R_UnboundValue) {
         Rf_error("object not found");
     } else if (val == R_MissingArg) {
-        error("argument is missing, with no default");
+        Rf_error("argument \"%s\" is missing, with no default", CHAR(PRINTNAME(sym)));
     }
 
     // if promise, evaluate & return
@@ -302,6 +304,7 @@ INSTRUCTION(ldvar_) {
     if (NAMED(val) == 0 && val != R_NilValue)
         SET_NAMED(val, 1);
 
+    R_Visible = TRUE;
     ostack_push(ctx, val);
 }
 
@@ -403,7 +406,7 @@ SEXP createEagerArgsList(Code* c, FunctionIndex* args, size_t nargs, SEXP names,
             SEXP ellipsis = findVar(name, env);
             if (TYPEOF(ellipsis) == DOTSXP) {
                 while (ellipsis != R_NilValue) {
-                    SEXP arg = Rf_eval(CAR(ellipsis), env);
+                    SEXP arg = forcePromise(CAR(ellipsis));
                     name = TAG(ellipsis);
                     protected += __listAppend(&result, &pos, arg, name);
                     ellipsis = CDR(ellipsis);
@@ -469,6 +472,7 @@ SEXP doCall(Code * caller, SEXP call, SEXP callee, unsigned * args, size_t nargs
         // get the ccode
         CCODE f = getBuiltin(callee);
         int flag = getFlag(callee);
+        //R_Visible = flag != 1;
         R_Visible = flag != 1;
         // call it with the AST only
         result = f(call, callee, CDR(call), env);
@@ -483,7 +487,7 @@ SEXP doCall(Code * caller, SEXP call, SEXP callee, unsigned * args, size_t nargs
         SEXP argslist = createEagerArgsList(caller, args, nargs, names, env, ctx);
         // callit
         PROTECT(argslist);
-        R_Visible = flag != 1;
+        if (flag < 2) R_Visible = flag != 1;
         result = f(call, callee, argslist, env);
         if (flag < 2) R_Visible = flag != 1;
         UNPROTECT(1);
@@ -815,6 +819,14 @@ SEXP rirEval_c(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
 
     // printCode(c);
 
+    static int evalcount = 0;
+    if (++evalcount > 1000) { /* was 100 before 2.8.0 */
+        R_CheckUserInterrupt();
+        evalcount = 0 ;
+    }
+
+    R_CheckStack();
+
     // make sure there is enough room on the stack
     ostack_ensureSize(ctx, c->stackLength);
     istack_ensureSize(ctx, c->iStackLength);
@@ -824,6 +836,8 @@ SEXP rirEval_c(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
     frame->pc = code(c);
     OpcodeT** pc = &frame->pc;
     size_t bp = ctx->ostack.length;
+
+    R_Visible = TRUE;
 
     // main loop
     while (true) {

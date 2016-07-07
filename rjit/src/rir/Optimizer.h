@@ -47,9 +47,9 @@ void doInlineBlock(CodeEditor& e, CodeEditor::Cursor& cur) {
     for (size_t i = 0; i < nargs; ++i) {
         CodeEditor& ce = *e.detachPromise(args[i]);
         ce.normalizeReturn();
-        if (i != nargs - 1)
-            ce.getCursorAtEnd() << BC::pop();
         cur << ce;
+        if (i != nargs - 1)
+            cur << BC::pop();
     }
 }
 
@@ -102,85 +102,20 @@ void doInlinePar(CodeEditor& e, CodeEditor::Cursor& cur) {
     inlProm(e, cur, args[0]);
 }
 
-// void doInlineAdd(CodeEditor::Cursor& cur, Code* fun) {
-//     assert((*cur).bc == BC_t::ldfun_);
-//     cur.remove();
-//     BC bc = *cur;
-//     assert(bc.bc == BC_t::call_);
-//     cur.remove();
-//
-//     cur << BC::check_primitive(symbol::Add);
-//
-//     fun_idx_t* args = bc.immediateCallArgs();
-//     num_args_t nargs = bc.immediateCallNargs();
-//
-//     assert(nargs == 2);
-//     inlProm(cur, fun, args[0]);
-//     inlProm(cur, fun, args[1]);
-//     cur << BC::add();
-// }
-//
-// void doInlineSub(CodeEditor::Cursor& cur, Code* fun) {
-//     assert((*cur).bc == BC_t::ldfun_);
-//     cur.remove();
-//     BC bc = *cur;
-//     assert(bc.bc == BC_t::call_);
-//     cur.remove();
-//
-//     cur << BC::check_primitive(symbol::Sub);
-//
-//     fun_idx_t* args = bc.immediateCallArgs();
-//     num_args_t nargs = bc.immediateCallNargs();
-//
-//     assert(nargs == 2);
-//     inlProm(cur, fun, args[0]);
-//     inlProm(cur, fun, args[1]);
-//     cur << BC::sub();
-// }
-//
-// void doInlineLt(CodeEditor::Cursor& cur, Code* fun) {
-//     assert((*cur).bc == BC_t::ldfun_);
-//     cur.remove();
-//     BC bc = *cur;
-//     assert(bc.bc == BC_t::call_);
-//     cur.remove();
-//
-//     cur << BC::check_primitive(symbol::Lt);
-//
-//     fun_idx_t* args = bc.immediateCallArgs();
-//     num_args_t nargs = bc.immediateCallNargs();
-//
-//     assert(nargs == 2);
-//     inlProm(cur, fun, args[0]);
-//     inlProm(cur, fun, args[1]);
-//     cur << BC::lt();
-// }
-
 void optimize_(CodeEditor& e) {
     for (auto cur = e.getCursor(); !cur.atEnd(); ++cur) {
         BC bc = *cur;
         switch (bc.bc) {
         case BC_t::ldfun_:
-            //if (bc.immediateConst() == symbol::If) {
-            //    doInlineIf(e, cur);
-            //    continue;
-            //}
-            // if (bc.immediateConst() == symbol::Block) {
-            //     doInlineBlock(e, cur);
-            //     continue;
-            // }
-            //             if (bc.immediateConst() == symbol::Lt) {
-            //                 doInlineLt(cur, fun);
-            //                 continue;
-            //             }
-            //             if (bc.immediateConst() == symbol::Add) {
-            //                 doInlineAdd(cur, fun);
-            //                 continue;
-            //             }
-            //             if (bc.immediateConst() == symbol::Sub) {
-            //                 doInlineSub(cur, fun);
-            //                 continue;
-            //             }
+            if (bc.immediateConst() == symbol::If) {
+                doInlineIf(e, cur);
+                continue;
+            }
+            if (bc.immediateConst() == symbol::Block) {
+                doInlineBlock(e, cur);
+                continue;
+            }
+            // TODO: in the current form breaks (...)
             // if (bc.immediateConst() == symbol::Parenthesis) {
             //     doInlinePar(e, cur);
             //     continue;
@@ -199,8 +134,10 @@ class Optimizer {
   public:
     static FunctionHandle optimize(FunctionHandle fun) {
         CodeEditor edit(fun);
-        for (int i = 0; i < 5 && edit.changed; ++i) {
+        for (int i = 0; i < 5; ++i) {
             optimize_(edit);
+            if (!edit.changed)
+                break;
         }
         return edit.finalize();
     }
