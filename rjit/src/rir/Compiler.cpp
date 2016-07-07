@@ -64,10 +64,13 @@ void compileCall(FunctionHandle& parent, CodeStream& cs, SEXP ast, SEXP fun,
 
 // Lookup
 void compileGetvar(CodeStream& cs, SEXP name) {
-    if (DDVAL(name))
+    if (DDVAL(name)) {
         cs << BC::ldddvar(name);
-    else
+    } else if (name == R_MissingArg) {
+        cs << BC::push(R_MissingArg);
+    } else {
         cs << BC::ldvar(name);
+    }
 }
 
 // Constant
