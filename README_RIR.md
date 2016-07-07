@@ -7,7 +7,7 @@ Currently I have the following very brittle method of running the gnur tests:
         # Add a system wide Rprofile which loads rir
         cat - >> library/base/R/Rprofile <<EOF
         dyn.load('~/path/to/rjit/librjit.so')
-        source('~/path/to/rjit/rjit/R/rjit.R')
+        sys.source('~/path/to/rjit/rjit/R/rjit.R')
         rir.enableJit()
         EOF
 
