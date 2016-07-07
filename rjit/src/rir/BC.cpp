@@ -61,6 +61,7 @@ void BC::write(CodeStream& cs) const {
     case BC_t::sub_:
     case BC_t::lt_:
     case BC_t::isfun_:
+    case BC_t::invisible_:
         return;
 
     case BC_t::invalid_:
@@ -146,6 +147,7 @@ void BC::print() {
     case BC_t::sub_:
     case BC_t::lt_:
     case BC_t::isfun_:
+    case BC_t::invisible_:
         break;
     case BC_t::pusharg_:
         Rprintf(" %u", immediate.numArgs);

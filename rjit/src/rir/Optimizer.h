@@ -73,6 +73,7 @@ void doInlineIf(CodeEditor& e, CodeEditor::Cursor& cur) {
 
     if (nargs < 3) {
         cur << BC::push(R_NilValue);
+        cur << BC::invisible();
     } else {
         inlProm(e, cur, args[2]);
     }

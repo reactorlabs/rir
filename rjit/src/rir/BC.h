@@ -62,6 +62,7 @@ BC::immediate_t decodeImmediate(BC_t bc, BC_t* pc) {
     case BC_t::sub_:
     case BC_t::lt_:
     case BC_t::isfun_:
+    case BC_t::invisible_:
         break;
     case BC_t::invalid_:
     case BC_t::num_of:
@@ -106,11 +107,14 @@ BC BC::ldfun(SEXP sym) {
     return BC(BC_t::ldfun_, i);
 }
 BC BC::ldddvar(SEXP sym) {
+    assert(DDVAL(sym));
     immediate_t i;
     i.pool = Pool::insert(sym);
     return BC(BC_t::ldddvar_, i);
 }
 BC BC::ldvar(SEXP sym) {
+    assert(TYPEOF(sym) == SYMSXP);
+    assert(strlen(CHAR(PRINTNAME(sym))));
     immediate_t i;
     i.pool = Pool::insert(sym);
     return BC(BC_t::ldvar_, i);
@@ -163,6 +167,7 @@ BC BC::close() { return BC(BC_t::close_); }
 BC BC::add() { return BC(BC_t::add_); }
 BC BC::sub() { return BC(BC_t::sub_); }
 BC BC::lt() { return BC(BC_t::lt_); }
+BC BC::invisible() { return BC(BC_t::invisible_); }
 
 } // rir
 } // rjit

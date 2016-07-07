@@ -179,6 +179,7 @@ class BC {
     inline static BC lt();
     inline static BC isspecial(SEXP);
     inline static BC isfun();
+    inline static BC invisible();
 
   private:
     BC(BC_t bc) : bc(bc), immediate({0}) {}

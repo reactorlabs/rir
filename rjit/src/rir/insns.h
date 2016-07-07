@@ -81,6 +81,10 @@ DEF_INSTR(br_, 1, 0, 0, 0, 0)
 /**
  * br_:: branch to immediate offset
  */
+DEF_INSTR(invisible_, 0, 0, 0, 0, 0)
+/**
+ * invisible_:: set invisible flag
+ */
 DEF_INSTR(lti_, 0, 0, 1, 2, 0)
 /**
  * lti_:: pop two integers from primitive stack, compare with with <, push

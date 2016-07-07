@@ -265,10 +265,11 @@ INSTRUCTION(ldddvar_) {
     SEXP val = ddfindVar(sym, env);
 
     // TODO better errors
-    if (val == R_UnboundValue)
-        assert(false && "Unbound var");
-    else if (val == R_MissingArg)
-        assert(false && "Missing argument");
+    if (val == R_UnboundValue) {
+        Rf_error("object not found");
+    } else if (val == R_MissingArg) {
+        error("argument is missing, with no default");
+    }
 
     // if promise, evaluate & return
     if (TYPEOF(val) == PROMSXP)
@@ -287,10 +288,11 @@ INSTRUCTION(ldvar_) {
     SEXP val = findVar(sym, env);
 
     // TODO better errors
-    if (val == R_UnboundValue)
-        assert(false && "Unbound var");
-    else if (val == R_MissingArg)
-        assert(false && "Missing argument");
+    if (val == R_UnboundValue) {
+        Rf_error("object not found");
+    } else if (val == R_MissingArg) {
+        error("argument is missing, with no default");
+    }
 
     // if promise, evaluate & return
     if (TYPEOF(val) == PROMSXP)
@@ -776,6 +778,10 @@ INSTRUCTION(push_argi_) {
     ostack_push(ctx, cp_pool_at(ctx, bp - numArgs + pos));
 }
 
+INSTRUCTION(invisible_) {
+    R_Visible = 0;
+}
+
 extern void printCode(Code* c);
 extern void printFunction(Function* f);
 
@@ -786,18 +792,22 @@ extern void rirBacktrace(Context* ctx) {
     if (fstack_empty(ctx))
         return;
 
-    for (int i = fstack_top(ctx); i >= 0; i--) {
-        Frame* frame = fstack_at(ctx, i);
-        Code* code = frame->code;
-        SEXP call = src_pool_at(ctx, code->src);
+    FStack* f = ctx->fstack;
+    while(f) {
+        for (int i = f->length - 1; i >= 0; i--) {
+            Frame* frame = &f->data[i];
+            Code* code = frame->code;
+            SEXP call = src_pool_at(ctx, code->src);
 
-        Rprintf("%d : %s\n", i, CHAR(STRING_ELT(Rf_deparse1(call, 0, 0), 0)));
-        Rprintf(" env: ");
-        SEXP names = R_lsInternal3(frame->env, TRUE, FALSE);
-        PROTECT(names);
-        for (int i = 0; i < Rf_length(names); ++i)
-            Rprintf("%s ", CHAR(STRING_ELT(R_lsInternal3(frame->env, TRUE, FALSE), i)));
-        Rprintf("\n");
+            Rprintf("%d : %s\n", i, CHAR(STRING_ELT(Rf_deparse1(call, 0, 0), 0)));
+            Rprintf(" env: ");
+            SEXP names = R_lsInternal3(frame->env, TRUE, FALSE);
+            PROTECT(names);
+            for (int i = 0; i < Rf_length(names); ++i)
+                Rprintf("%s ", CHAR(STRING_ELT(R_lsInternal3(frame->env, TRUE, FALSE), i)));
+            Rprintf("\n");
+        }
+        f = f->prev;
     }
 }
 
@@ -851,6 +861,7 @@ SEXP rirEval_c(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
             INS(isfun_);
             INS(inci_);
             INS(push_argi_);
+            INS(invisible_);
         case ret_: {
             // not in its own function so that we can avoid nonlocal returns
             goto __eval_done;
