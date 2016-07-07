@@ -7,16 +7,6 @@
 //
 #include "interp_context.h"
 
-void fstack_grow(Context* c) {
-    unsigned cap = c->fstack.capacity * 2;
-    Frame* data = malloc(cap * sizeof(Frame));
-    memcpy(data, c->fstack.data, c->fstack.length * sizeof(Frame));
-    free(c->fstack.data);
-    c->fstack.data = data;
-    c->fstack.capacity = cap;
-}
-
-
 void ostack_ensureSize(Context* c, unsigned minFree) {
     unsigned cap = c->ostack.capacity;
     assert(cap > 0);
@@ -54,9 +44,9 @@ Context* context_create(CompilerCallback compiler) {
     c->istack.data = malloc(STACK_CAPACITY * sizeof(int));
     c->istack.length = 0;
     c->istack.capacity = STACK_CAPACITY;
-    c->fstack.data = malloc(STACK_CAPACITY * sizeof(Frame));
-    c->fstack.length = 0;
-    c->fstack.capacity = STACK_CAPACITY;
+    c->fstack = malloc(sizeof(FStack));
+    c->fstack->length = 0;
+    c->fstack->prev = NULL;
     c->compiler = compiler;
     // first item in source and constant pools is R_NilValue so that we can use the index 0 for other purposes
     src_pool_add(c, R_NilValue);
@@ -99,16 +89,23 @@ void rirErrorHook(SEXP call, char * msg) {
 
 void interp_initialize(CompilerCallback compiler) {
     globalContext_ = context_create(compiler);
-    R_SetErrorHook(&rirErrorHook);
+    // TODO: make this configurable
+    // R_SetErrorHook(&rirErrorHook);
 }
 
 void rir_interp_gc_callback(void (*forward_node)(SEXP)) {
-    for (size_t i = 0; i < globalContext_->fstack.length; ++i) {
-        forward_node(globalContext_->fstack.data[i].env);
-        Function* f = function(globalContext_->fstack.data[i].code);
-        SEXP store = (SEXP)((uintptr_t)f - FUNCTION_OFFSET);
-        assert((Function*)INTEGER(store) == f);
-        forward_node(store);
+    FStack* f = globalContext_->fstack;
+
+    while (f) {
+        for (size_t i = 0; i < f->length; ++i) {
+            forward_node(f->data[i].env);
+            Function* fun = function(f->data[i].code);
+            // TODO thats a bit nasty
+            SEXP store = (SEXP)((uintptr_t)fun - FUNCTION_OFFSET);
+            assert((Function*)INTEGER(store) == fun);
+            forward_node(store);
+        }
+        f = f->prev;
     }
     for (size_t i = 0; i < globalContext_->ostack.length; ++i)
         forward_node(globalContext_->ostack.data[i]);

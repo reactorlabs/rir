@@ -75,12 +75,13 @@ typedef struct {
 //
 // Frame stack.
 //
-typedef struct {
-    Frame* data;
+#define FSTACK_CAPACITY 256
+typedef struct FStackImpl FStack;
+struct FStackImpl {
+    Frame data[FSTACK_CAPACITY];
     size_t length;
-    size_t capacity;
-
-} FStack;
+    FStack* prev;
+};
 
 //
 // Context
@@ -90,7 +91,7 @@ typedef struct {
     Pool src;
     OStack ostack;
     PStack istack;
-    FStack fstack;
+    FStack* fstack;
     CompilerCallback compiler;
 } Context;
 
@@ -99,15 +100,11 @@ INLINE int istack_top(Context* c) { return c->istack.data[c->istack.length-1]; }
 
 INLINE SEXP ostack_top(Context* c) { return c->ostack.data[c->ostack.length-1]; }
 
-INLINE int fstack_top(Context* c) {
-    return c->fstack.length - 1;
-}
-
 INLINE size_t istack_length(Context* c) { return c->ostack.length; }
 
 INLINE bool ostack_empty(Context* c) { return c->ostack.length == 0; }
 
-INLINE bool fstack_empty(Context* c) { return c->fstack.length == 0; }
+INLINE bool fstack_empty(Context* c) { return c->fstack->length == 0; }
 
 INLINE SEXP ostack_at(Context* c, unsigned index) {
     return c->ostack.data[index];
@@ -135,26 +132,44 @@ INLINE void istack_push(Context* c, int val) {
 
 void istack_ensureSize(Context* c, unsigned minFree);
 
-INLINE Frame* fstack_at(Context* c, unsigned index) {
-    return &c->fstack.data[index];
-}
-
 INLINE void fstack_pop(Context* c, Frame* frame) {
-    while(&c->fstack.data[--c->fstack.length] != frame)
-        assert(!fstack_empty(c));
-}
+    while (true) {
+        size_t idx = frame - &c->fstack->data[0];
 
-void fstack_grow(Context* c);
+        // Index is within range, we pop all frames before
+        if (idx >= 0 && idx < c->fstack->length) {
+            c->fstack->length = idx;
+            if (c->fstack->length == 0 && c->fstack->prev) {
+                FStack* empty = c->fstack;
+                c->fstack = c->fstack->prev;
+                free(empty);
+            }
+            return;
+        }
+
+        assert(c->fstack->prev);
+
+        // Index not within range, remove one chunk of the stack and try on the
+        // next one
+        FStack* empty = c->fstack;
+        c->fstack = c->fstack->prev;
+        free(empty);
+    }
+}
 
 INLINE Frame* fstack_push(Context* c, struct Code* code, SEXP env) {
-    if (c->fstack.length == c->fstack.capacity)
-        fstack_grow(c);
+    if (c->fstack->length == FSTACK_CAPACITY) {
+        FStack* nf = (FStack*)malloc(sizeof(FStack));
+        nf->length = 0;
+        nf->prev = c->fstack;
+        c->fstack = nf;
+    }
 
     assert(*(unsigned*)code == CODE_MAGIC);
-    Frame* frame = &c->fstack.data[c->fstack.length];
+    Frame* frame = &c->fstack->data[c->fstack->length];
     frame->code = code;
     frame->env = env;
-    c->fstack.length++;
+    c->fstack->length++;
     return frame;
 }
 
