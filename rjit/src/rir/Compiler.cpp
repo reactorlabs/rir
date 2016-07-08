@@ -86,6 +86,14 @@ void compileExpr(FunctionHandle& function, CodeStream& cs, SEXP exp) {
         Case(LANGSXP, fun, args) { compileCall(function, cs, exp, fun, args); }
         // Variable lookup
         Case(SYMSXP) { compileGetvar(cs, exp); }
+        // This happens in complex assignments, see eval.c::applydefine
+        // (hint: rhsprom)
+        Case(PROMSXP, value, expr, env) {
+            assert(env == R_NilValue);
+            assert(value != R_UnboundValue);
+            compileConst(cs, value);
+            cs.addAst(expr);
+        }
         // Constant
         Else(compileConst(cs, exp));
     }
@@ -124,13 +132,17 @@ Compiler::CompilerRes Compiler::finalize() {
     cs << BC::ret();
     cs.finalize();
 
+    CodeVerifier::vefifyFunctionLayout(function.store, globalContext());
+    FunctionHandle opt = Optimizer::optimize(function);
+    CodeVerifier::vefifyFunctionLayout(opt.store, globalContext());
+
     Protect p;
     SEXP formout = R_NilValue;
     SEXP f = formout;
     SEXP formin = formals;
     for (auto prom : formProm) {
         SEXP arg = (prom == MISSING_ARG_IDX) ? 
-            R_MissingArg : (SEXP)function.codeAtOffset(prom);
+            R_MissingArg : (SEXP)opt.codeAtOffset(prom);
         SEXP next = CONS_NR(arg, R_NilValue);
         SET_TAG(next, TAG(formin));
         formin = CDR(formin);
@@ -142,11 +154,6 @@ Compiler::CompilerRes Compiler::finalize() {
             f = next;
         }
     }
-
-    CodeVerifier::vefifyFunctionLayout(function.store, globalContext());
-
-    FunctionHandle opt = Optimizer::optimize(function);
-    CodeVerifier::vefifyFunctionLayout(opt.store, globalContext());
 
     return {opt.store, formout};
 }
