@@ -111,12 +111,14 @@ INLINE SEXP ostack_at(Context* c, unsigned index) {
 }
 
 INLINE SEXP ostack_pop(Context* c) {
+    assert(!ostack_empty(c));
     return c->ostack.data[--c->ostack.length];
 }
 
 INLINE void ostack_popn(Context* c, unsigned size) { c->ostack.length -= size; }
 
 INLINE void ostack_push(Context* c, SEXP val) {
+    assert(c->ostack.length != c->ostack.capacity);
     c->ostack.data[c->ostack.length++] = val;
 }
 

@@ -210,6 +210,7 @@ INLINE SEXP promiseValue(SEXP promise) {
     // if already evaluated, return the value
     if (PRVALUE(promise) && PRVALUE(promise) != R_UnboundValue) {
         promise = PRVALUE(promise);
+        assert(TYPEOF(promise) != PROMSXP);
         SET_NAMED(promise, 2);
         return promise;
     }
@@ -228,6 +229,13 @@ INSTRUCTION(push_) {
     ostack_push(ctx, x);
 }
 
+static void jit(SEXP cls, Context* ctx) {
+    SEXP body = BODY(cls);
+    if (TYPEOF(body) == BCODESXP)
+        body = VECTOR_ELT(CDR(body), 0);
+    SET_BODY(cls, ctx->compiler(body, CLOENV(cls)));
+}
+
 INSTRUCTION(ldfun_) {
     SEXP sym = readConst(ctx, pc);
     SEXP val = findFun(sym, env);
@@ -244,11 +252,7 @@ INSTRUCTION(ldfun_) {
          * is compiled already, and compile if not.
          */
         if (COMPILE_ON_DEMAND) {
-            SEXP body = BODY(val);
-            if (TYPEOF(body) == BCODESXP)
-                body = VECTOR_ELT(CDR(body), 0);
-            if (TYPEOF(body) != INTSXP)
-                SET_BODY(val, ctx->compiler(body, CLOENV(val)));
+            jit(val, ctx);
         }
         break;
     case SPECIALSXP:
@@ -256,7 +260,7 @@ INSTRUCTION(ldfun_) {
         // special and builtin functions are ok
         break;
     default:
-        assert(false);
+	error("attempt to apply non-function");
     }
     ostack_push(ctx, val);
 }
@@ -406,7 +410,8 @@ SEXP createEagerArgsList(Code* c, FunctionIndex* args, size_t nargs, SEXP names,
             SEXP ellipsis = findVar(name, env);
             if (TYPEOF(ellipsis) == DOTSXP) {
                 while (ellipsis != R_NilValue) {
-                    SEXP arg = forcePromise(CAR(ellipsis));
+                    SEXP arg = rirEval(CAR(ellipsis), env);
+                    assert(TYPEOF(arg) != PROMSXP);
                     name = TAG(ellipsis);
                     protected += __listAppend(&result, &pos, arg, name);
                     ellipsis = CDR(ellipsis);
@@ -419,6 +424,7 @@ SEXP createEagerArgsList(Code* c, FunctionIndex* args, size_t nargs, SEXP names,
             assert(false);
         } else {
             SEXP arg = rirEval_c(codeAt(function(c), offset), ctx, env, 0);
+            assert(TYPEOF(arg) != PROMSXP);
             protected += __listAppend(&result, &pos, arg, name);
         }
     }
@@ -502,22 +508,21 @@ SEXP doCall(Code * caller, SEXP call, SEXP callee, unsigned * args, size_t nargs
             actuals = createNoNameArgsList(caller, args, nargs, env);
         }
         PROTECT(actuals);
-        // if body is INTSXP, it is rir serialized code, execute it directly
-        if (TYPEOF(body) == INTSXP) {
-            SEXP newEnv = closureArgumentAdaptor(call, callee, actuals, env, R_NilValue);
-            // TODO since we do not have access to the context definition we
-            // just create a buffer big enough and let gnur do the rest.
-            // Once we integrate we should really setup the context ourselves!
-            char cntxt[400];
-            initClosureContext(&cntxt, call, newEnv, env, actuals, callee);
-            EvalCbArg arg = {functionCode((Function*)INTEGER(body)), ctx, newEnv, nargs};
-            result = hook_rirCallTrampoline(&cntxt, evalCbFunction, &arg);
-            endClosureContext(&cntxt, result);
-        } else {
-            // otherwise use R's own call mechanism
-            result = applyClosure(call, callee, actuals, env, R_NilValue);
-        }
-        UNPROTECT(1); // argslist
+
+        assert(isValidFunction(body));
+        SEXP newEnv = closureArgumentAdaptor(call, callee, actuals, env, R_NilValue);
+        PROTECT(newEnv);
+
+        // TODO since we do not have access to the context definition we
+        // just create a buffer big enough and let gnur do the rest.
+        // Once we integrate we should really setup the context ourselves!
+        char cntxt[400];
+        initClosureContext(&cntxt, call, newEnv, env, actuals, callee);
+        EvalCbArg arg = {functionCode((Function*)INTEGER(body)), ctx, newEnv, nargs};
+        result = hook_rirCallTrampoline(&cntxt, evalCbFunction, &arg);
+        endClosureContext(&cntxt, result);
+
+        UNPROTECT(2); // argslist
         break;
     }
     default:
@@ -543,7 +548,9 @@ INSTRUCTION(call_) {
     // do the call
     SEXP call = getSrcForCall(c, *pc, ctx);
 
+    PROTECT(cls);
     ostack_push(ctx, doCall(c, call, cls, args, nargs, names, env, ctx));
+    UNPROTECT(1);
 }
 
 INSTRUCTION(promise_) {
@@ -750,28 +757,16 @@ INSTRUCTION(isfun_) {
 
     switch (TYPEOF(val)) {
     case CLOSXP:
-        /** No need to compile, we can handle functions */
-        // val = (SEXP)jit(val);
+        if (TYPEOF(BODY(val)) != INTSXP)
+            jit(val, ctx);
         break;
     case SPECIALSXP:
     case BUILTINSXP:
         // builtins and specials are fine
         // TODO for now - we might be fancier here later
         break;
-    /*
-
-        {
-            // TODO do we need to compile primitives? not really I think
-            SEXP prim = Primitives::compilePrimitive(val);
-            if (prim)
-                val = prim;
-            break;
-        } */
-
     default:
-        // TODO: error not a function!
-        // TODO: check our functions and how they are created
-        assert(false);
+	error("attempt to apply non-function");
     }
 }
 
@@ -819,11 +814,11 @@ SEXP rirEval_c(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
 
     // printCode(c);
 
-    static int evalcount = 0;
-    if (++evalcount > 1000) { /* was 100 before 2.8.0 */
-        R_CheckUserInterrupt();
-        evalcount = 0 ;
-    }
+    if (!env)
+	error("'rho' cannot be C NULL: detected in C-level eval");
+    if (!isEnvironment(env))
+	error("'rho' must be an environment not %s: detected in C-level eval",
+	      type2char(TYPEOF(env)));
 
     R_CheckStack();
 
@@ -916,4 +911,111 @@ SEXP rirEval_f(SEXP f, SEXP env) {
         Function* ff = (Function*)(INTEGER(f));
         return rirEval_c(functionCode(ff), globalContext(), env, 0);
     }
+}
+
+SEXP rirEval(SEXP e, SEXP env) {
+    static int evalcount = 0;
+    if (++evalcount > 1000) { /* was 100 before 2.8.0 */
+        R_CheckUserInterrupt();
+        evalcount = 0 ;
+    }
+
+    /* handle self-evluating objects with minimal overhead */
+    switch (TYPEOF(e)) {
+    case INTSXP: {
+        assert(!isValidFunction(e));
+        if (isValidFunction(e)) {
+            Function* ff = (Function*)(INTEGER(e));
+            return rirEval_c(functionCode(ff), globalContext(), env, 0);
+        }
+        // Fall through
+    }
+    case NILSXP:
+    case LISTSXP:
+    case LGLSXP:
+    case REALSXP:
+    case STRSXP:
+    case CPLXSXP:
+    case RAWSXP:
+    case S4SXP:
+    case SPECIALSXP:
+    case BUILTINSXP:
+    case ENVSXP:
+    case CLOSXP:
+    case VECSXP:
+    case EXTPTRSXP:
+    case WEAKREFSXP:
+    case EXPRSXP:
+	/* Make sure constants in expressions are NAMED before being
+	   used as values.  Setting NAMED to 2 makes sure weird calls
+	   to replacement functions won't modify constants in
+	   expressions.  */
+	if (NAMED(e) <= 1) SET_NAMED(e, 2);
+	return e;
+
+    case 31: {
+        Code* c = (Code*)e;
+        assert(isValidPromise(e));
+        return rirEval_c(c, globalContext(), env, 0);
+    }
+
+    case NATIVESXP:
+        assert(false);
+        break;
+
+    case BCODESXP:
+        jit(e, globalContext());
+        return rirEval(BODY(e), CLOENV(e));
+
+    case SYMSXP: {
+        if (e == R_DotsSymbol)
+            error("'...' used in an incorrect context");
+
+        SEXP val;
+        
+        if (DDVAL(e))
+            val = ddfindVar(e, env);
+        else
+            val = findVar(e, env);
+
+        // TODO better errors
+        if (val == R_UnboundValue) {
+            Rf_error("object not found");
+        } else if (val == R_MissingArg) {
+            Rf_error("argument \"%s\" is missing, with no default", CHAR(PRINTNAME(e)));
+        }
+
+        // if promise, evaluate & return
+        if (TYPEOF(val) == PROMSXP)
+            val = promiseValue(val);
+
+        // WTF? is this just defensive programming or what?
+        if (NAMED(val) == 0 && val != R_NilValue)
+            SET_NAMED(val, 1);
+
+        R_Visible = TRUE;
+        return val;
+        break;
+    }
+
+    case PROMSXP:
+        return promiseValue(e);
+
+    case LANGSXP: {
+        SEXP code = globalContext()->compiler(e, env);
+        PROTECT(code);
+        Function* ff = (Function*)(INTEGER(code));
+        SEXP res = rirEval_c(functionCode(ff), globalContext(), env, 0);
+        UNPROTECT(1);
+        return res;
+    }
+
+    case DOTSXP:
+	error("'...' used in an incorrect context");
+    default:
+        assert(false && "UNIMPLEMENTED_TYPE");
+    }
+
+    assert(false);
+    return R_NilValue;
 }

@@ -32,6 +32,7 @@ using namespace rjit;
 typedef bool (*callback_isValidFunction)(SEXP);
 typedef SEXP (*callback_rirEval_f)(SEXP, SEXP);
 typedef SEXP (*callback_rirExpr)(SEXP);
+typedef SEXP (*callback_eval)(SEXP, SEXP);
 
 extern "C" void initializeCallbacks(callback_isValidFunction,
                                     callback_isValidFunction,
@@ -77,16 +78,20 @@ extern "C" void resetCompileExpressionOverride();
 extern "C" void resetCmpFunOverride();
 extern "C" void setCompileExpressionOverride(int, SEXP (*fun)(SEXP, SEXP));
 extern "C" void setCmpFunOverride(int, SEXP (*fun)(SEXP));
+extern "C" void setEvalHook(callback_eval);
+extern "C" void resetEvalHook();
 
 REXPORT SEXP rir_jitDisable(SEXP expression) {
     resetCompileExpressionOverride();
     resetCmpFunOverride();
+    resetEvalHook();
     return R_NilValue;
 }
 
 REXPORT SEXP rir_jitEnable(SEXP expression) {
     setCompileExpressionOverride(INTSXP, &rir_compileAst);
     setCmpFunOverride(INTSXP, &rir_compileClosure);
+    setEvalHook(&rirEval);
     return R_NilValue;
 }
 
