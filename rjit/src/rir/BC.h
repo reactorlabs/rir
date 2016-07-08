@@ -93,6 +93,8 @@ BC BC::force() { return BC(BC_t::force_); }
 BC BC::pop() { return BC(BC_t::pop_); }
 BC BC::push(SEXP constant) {
     assert(TYPEOF(constant) != PROMSXP);
+    assert(!isValidFunction(constant));
+    assert(!isValidPromise(constant));
     immediate_t i;
     i.pool = Pool::insert(constant);
     return BC(BC_t::push_, i);

@@ -155,7 +155,10 @@ Compiler::CompilerRes Compiler::finalize() {
         }
     }
 
-    return {opt.store, formout};
+    // TODO compiling the formals is broken, since the optimizer drops the
+    // formals code from the function object since they are not referenced!
+    // 
+    return {opt.store, formals /* formout */ };
 }
 }
 }

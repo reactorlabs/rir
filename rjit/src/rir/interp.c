@@ -230,6 +230,8 @@ INSTRUCTION(push_) {
 }
 
 static void jit(SEXP cls, Context* ctx) {
+    if (TYPEOF(BODY(cls)) == INTSXP)
+        return;
     SEXP body = BODY(cls);
     if (TYPEOF(body) == BCODESXP)
         body = VECTOR_ELT(CDR(body), 0);
@@ -757,8 +759,7 @@ INSTRUCTION(isfun_) {
 
     switch (TYPEOF(val)) {
     case CLOSXP:
-        if (TYPEOF(BODY(val)) != INTSXP)
-            jit(val, ctx);
+        jit(val, ctx);
         break;
     case SPECIALSXP:
     case BUILTINSXP:
@@ -923,6 +924,8 @@ SEXP rirEval(SEXP e, SEXP env) {
     /* handle self-evluating objects with minimal overhead */
     switch (TYPEOF(e)) {
     case INTSXP: {
+        // TODO: not sure, but I think now with rirEval we should not have
+        // naked functions anymore
         assert(!isValidFunction(e));
         if (isValidFunction(e)) {
             Function* ff = (Function*)(INTEGER(e));
