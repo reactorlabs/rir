@@ -187,7 +187,7 @@ void CodeVerifier::vefifyFunctionLayout(SEXP sexp, ::Context* ctx) {
                    "Invalid size");
             if (*cptr == BC_t::call_) {
                 unsigned* argsIndex = reinterpret_cast<ArgT*>(cptr + 1);
-                assert(*argsIndex < ctx->cp.length and "Invalid arglist index");
+                assert(*argsIndex < cp_pool_length(ctx) and "Invalid arglist index");
                 SEXP argsVec = cp_pool_at(ctx, *argsIndex);
                 assert(TYPEOF(argsVec) == INTSXP and
                        "Invalid type of arguents vector");
@@ -205,7 +205,7 @@ void CodeVerifier::vefifyFunctionLayout(SEXP sexp, ::Context* ctx) {
                 }
                 // check the names vector
                 if (argsIndex[1] != 0) {
-                    assert(argsIndex[1] < ctx->cp.length and
+                    assert(argsIndex[1] < cp_pool_length(ctx) and
                            "Invalid type of argument names index");
                     SEXP namesVec = cp_pool_at(ctx, argsIndex[1]);
                     assert(TYPEOF(namesVec) == VECSXP and
@@ -222,7 +222,7 @@ void CodeVerifier::vefifyFunctionLayout(SEXP sexp, ::Context* ctx) {
         for (auto c : objs) {
             unsigned* srcIndices = src(c);
             for (size_t i = 0; i != c->srcLength; ++i)
-                assert(srcIndices[i] < ctx->src.length and
+                assert(srcIndices[i] < src_pool_length(ctx) and
                        "Source index for instruction out of bounds");
         }
     }

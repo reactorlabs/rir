@@ -1,18 +1,9 @@
-//
-//  interpreter_context.h
-//
-//
-//  Created by Jan Vitek Jr on 6/21/16.
-//
-//
 
 #ifndef interpreter_context_h
 #define interpreter_context_h
 
 #include "interp_data.h"
 
-#include <R.h>
-#include <Rinternals.h>
 #include <stdio.h>
 
 #include <stdint.h>
@@ -25,56 +16,44 @@ extern "C" {
 #define POOL_CAPACITY 4096
 #define STACK_CAPACITY 4096
 
-
-/** Compiler API. Given a language object, compiles it and returns the INTSXP
-  containing the Function and its Code objects.
+/** Compiler API. Given a language object, compiles it and returns the INTSXP containing the Function and its Code objects.
 
   The idea is to call this if we want on demand compilation of closures.
  */
 typedef SEXP (*CompilerCallback)(SEXP, SEXP);
 
-//
-// Primitive stack.
-//
+
+/** Resizeable R list.
+
+ Allocates large list and then tricks R into believing that the list is actually smaller.
+
+ This works because R uses non-moving GC and is used for constant and source pools as well as the interpreter object stack.
+ */
+typedef struct {
+    SEXP list;
+    size_t capacity;
+} ResizeableList;
+
+/** Unboxed integer stack / primitive stack.
+
+  TODO Get consistent, this is istack or PStack???
+ */
 typedef struct {
     int* data;
     size_t length;
     size_t capacity;
+} IStack;
 
-} PStack;
-
-//
-// Ostack:: SEXP stack, or object stack
-//
-typedef struct {
-    SEXP* data;
-    size_t length;
-    size_t capacity;
-} OStack;
-
-//
-// Pool
-//
-typedef struct {
-    SEXP data;
-    size_t length;
-    size_t capacity;
-} Pool;
-
-//
-// Frame
-//
-struct Code;
-typedef uint8_t OpcodeT;
+/** Interpreter frame information.
+ */
 typedef struct {
     struct Code* code;
     SEXP env;
     OpcodeT* pc;
 } Frame;
 
-//
-// Frame stack.
-//
+/** Frame stack.
+ */
 #define FSTACK_CAPACITY 256
 typedef struct FStackImpl FStack;
 struct FStackImpl {
@@ -83,54 +62,123 @@ struct FStackImpl {
     FStack* prev;
 };
 
-//
-// Context
-//
+#define CONTEXT_INDEX_CP 0
+#define CONTEXT_INDEX_SRC 1
+#define CONTEXT_INDEX_OSTACK 2
+
+/** Interpreter's context.
+
+ Interpreter's context is a list (so that it will be marked by R's gc) that contains the SEXP pools and stack as well as other stacks that do not need to be gc'd.
+
+ */
+
 typedef struct {
-    Pool cp;
-    Pool src;
-    OStack ostack;
-    PStack istack;
-    FStack* fstack;
+    SEXP list;
+    ResizeableList cp;
+    ResizeableList src;
+    ResizeableList ostack;
+    IStack istack;
+    FStack * fstack;
     CompilerCallback compiler;
 } Context;
 
+// TODO we might actually need to do more for the lengths (i.e. true length vs length)
 
-INLINE int istack_top(Context* c) { return c->istack.data[c->istack.length-1]; }
+INLINE size_t rl_length(ResizeableList * l) {
+    return Rf_length(l->list);
+}
 
-INLINE SEXP ostack_top(Context* c) { return c->ostack.data[c->ostack.length-1]; }
+INLINE void rl_setLength(ResizeableList * l, size_t length) {
+    ((VECSEXP)l)->vecsxp.length = length;
+}
 
-INLINE size_t istack_length(Context* c) { return c->ostack.length; }
+INLINE void rl_grow(ResizeableList * l, SEXP parent, size_t index) {
+    SEXP n = Rf_allocList(l->capacity * 2);
+    memcpy(DATAPTR(n), DATAPTR(l->list), l->capacity * sizeof(SEXP));
+    SET_VECTOR_ELT(parent, index, n);
+    l->list = n;
+    rl_setLength(l, l->capacity);
+    l->capacity *= 2;
+}
 
-INLINE bool ostack_empty(Context* c) { return c->ostack.length == 0; }
+INLINE void rl_append(ResizeableList * l, SEXP val, SEXP parent, size_t index) {
+    size_t i = rl_length(l);
+    if (i == l->capacity)
+        rl_grow(l, parent, index);
+    rl_setLength(l, ++i);
+    SET_VECTOR_ELT(l->list, i, val);
+}
 
-INLINE bool fstack_empty(Context* c) { return c->fstack->length == 0; }
+INLINE int istack_top(Context* c) {
+    return c->istack.data[c->istack.length-1];
+}
+
+INLINE SEXP ostack_top(Context* c) {
+    return VECTOR_ELT(c->ostack.list, rl_length(&c->ostack) - 1);
+}
+
+INLINE size_t istack_length(Context* c) {
+    return rl_length(&c->ostack);
+}
+
+INLINE bool ostack_empty(Context* c) {
+    return rl_length(&c->ostack) == 0;
+}
+
+INLINE bool fstack_empty(Context* c) {
+    return c->fstack->length == 0;
+}
+
+INLINE size_t ostack_length(Context * c) {
+    return rl_length(&c->ostack);
+}
 
 INLINE SEXP ostack_at(Context* c, unsigned index) {
-    return c->ostack.data[index];
+    return VECTOR_ELT(c->ostack.list, index);
 }
 
 INLINE SEXP ostack_pop(Context* c) {
-    return c->ostack.data[--c->ostack.length];
+    // VECTOR_ELT does not check bounds
+    rl_setLength(& c->ostack, rl_length(&c->ostack) - 1);
+    return ostack_at(c, rl_length(&c->ostack));
 }
 
-INLINE void ostack_popn(Context* c, unsigned size) { c->ostack.length -= size; }
+INLINE void ostack_popn(Context* c, unsigned size) {
+    rl_setLength(& c->ostack, rl_length(&c->ostack) - size);
+}
 
 INLINE void ostack_push(Context* c, SEXP val) {
-    c->ostack.data[c->ostack.length++] = val;
+    rl_append(&c->ostack, val, c->list, CONTEXT_INDEX_OSTACK);
 }
 
-void ostack_ensureSize(Context* c, unsigned minFree);
+INLINE void ostack_ensureSize(Context* c, unsigned minFree) {
+    while (rl_length(&c->ostack) + minFree > c->ostack.capacity)
+        rl_grow(& c->ostack, c->list, CONTEXT_INDEX_OSTACK);
+}
 
-INLINE bool istack_empty(Context* c) { return c->istack.length == 0; }
+INLINE bool istack_empty(Context* c) {
+    return c->istack.length == 0;
+}
 
-INLINE int istack_pop(Context* c) { return c->istack.data[--c->istack.length]; }
+INLINE int istack_pop(Context* c) {
+    return c->istack.data[--c->istack.length];
+}
 
 INLINE void istack_push(Context* c, int val) {
     c->istack.data[c->istack.length++] = val;
 }
 
-void istack_ensureSize(Context* c, unsigned minFree);
+INLINE void istack_ensureSize(Context* c, unsigned minFree) {
+    unsigned cap = c->istack.capacity;
+    while (c->istack.length + minFree < cap) cap *= 2;
+    if (cap != c->istack.capacity) {
+        int * data = (int*)malloc(cap * sizeof(int));
+        memcpy(data, c->istack.data, c->istack.length * sizeof(int));
+        free(c->istack.data);
+        c->istack.data = data;
+        c->istack.capacity = cap;
+    }
+}
 
 INLINE void fstack_pop(Context* c, Frame* frame) {
     while (true) {
@@ -174,33 +222,33 @@ INLINE Frame* fstack_push(Context* c, struct Code* code, SEXP env) {
 }
 
 
-Context* context_create(CompilerCallback compiler);
+Context* context_create();
 
-void pool_init(Pool* p, size_t capacity);
+INLINE size_t cp_pool_length(Context * c) {
+    return rl_length(& c->cp);
+}
 
-void pool_grow(Pool* p);
-
-INLINE size_t pool_add(Pool* p, SEXP v) {
-    if (p->length >= p->capacity)
-        pool_grow(p);
-    SET_VECTOR_ELT(p->data, p->length, v);
-    return p->length++;
+INLINE size_t src_pool_length(Context * c) {
+    return rl_length(& c->src);
 }
 
 INLINE size_t cp_pool_add(Context* c, SEXP v) {
-    return pool_add(&(c->cp), v);
+    size_t result = rl_length(& c->cp);
+    rl_append(& c->cp, v, c->list, CONTEXT_INDEX_CP);
 }
 
+
 INLINE size_t src_pool_add(Context* c, SEXP v) {
-    return pool_add(&(c->src), v);
+    size_t result = rl_length( &c->src);
+    rl_append(& c->src, v, c->list, CONTEXT_INDEX_SRC);
 }
 
 INLINE SEXP cp_pool_at(Context* c, size_t index) {
-    return VECTOR_ELT(c->cp.data, index);
+    return VECTOR_ELT(c->cp.list, index);
 }
 
 INLINE SEXP src_pool_at(Context* c, size_t value) {
-    return VECTOR_ELT(c->src.data, value);
+    return VECTOR_ELT(c->src.list, value);
 }
 
 /** Initializes the interpreter.

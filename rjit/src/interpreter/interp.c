@@ -530,7 +530,7 @@ SEXP evalCbFunction(EvalCbArg* arg_) {
  */
 SEXP doCall(Code * caller, SEXP call, SEXP callee, unsigned * args, size_t nargs, SEXP names, SEXP env, Context * ctx) {
 
-    size_t oldbp = ctx->ostack.length;
+    size_t oldbp = ostack_length(ctx);
     size_t oldbpi = ctx->istack.length;
     SEXP result = R_NilValue;
     switch (TYPEOF(callee)) {
@@ -591,7 +591,7 @@ SEXP doCall(Code * caller, SEXP call, SEXP callee, unsigned * args, size_t nargs
     default:
         assert(false && "Don't know how to run other stuff");
     }
-    assert(oldbp == ctx->ostack.length && oldbpi == ctx->istack.length &&
+    assert(oldbp == ostack_length(ctx) && oldbpi == ctx->istack.length &&
            "Corrupted stacks");
     return result;
 }
@@ -895,7 +895,7 @@ SEXP rirEval_c(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
     // get pc and bp regs, we do not need istack bp
     frame->pc = code(c);
     OpcodeT** pc = &frame->pc;
-    size_t bp = ctx->ostack.length;
+    size_t bp = ostack_length(ctx);
 
     // main loop
     while (true) {

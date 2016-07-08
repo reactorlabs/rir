@@ -2,6 +2,7 @@
 #define RIR_INTERPRETER_C_H
 
 #include <R.h>
+#define USE_RINTERNALS
 #include <Rinternals.h>
 
 #undef length
