@@ -4,6 +4,83 @@
 #include "interp.h"
 #include "interp_context.h"
 
+
+// Those are functions from R we need
+
+
+// envir.c: 1320
+// only needed by ddfindVar
+int ddVal(SEXP symbol) {
+    const char *buf;
+    char *endp;
+    int rval;
+
+    buf = CHAR(PRINTNAME(symbol));
+    if( !strncmp(buf,"..",2) && strlen(buf) > 2 ) {
+    buf += 2;
+    rval = (int) strtol(buf, &endp, 10);
+    if( *endp != '\0')
+        return 0;
+    else
+        return rval;
+    }
+    return 0;
+}
+
+// envir.c 1357, our version ignores i18n
+SEXP Rf_ddfindVar(SEXP symbol, SEXP rho) {
+    int i;
+    SEXP vl;
+
+    /* first look for ... symbol  */
+    vl = findVar(R_DotsSymbol, rho);
+    i = ddVal(symbol);
+    if (vl != R_UnboundValue) {
+        if (Rf_length(vl) >= i) {
+            vl = nthcdr(vl, i - 1);
+            return(CAR(vl));
+        } else {
+            error("the ... list does not contain %d elements", i);
+        }
+    } else {
+        error("..%d used in an incorrect context, no ... to look in", i);
+    }
+    return R_NilValue;
+}
+
+// memory.c 2333
+/** Creates a promise.
+
+  This is not the fastest way as we always PROTECT expr and rho, but GNU-R's GC does not seem to publish its free nodes API.
+ */
+extern SEXP mkPROMISE(SEXP expr, SEXP rho) {
+    PROTECT(expr);
+    PROTECT(rho);
+    SEXP s = Rf_allocSExp(PROMSXP);
+    UNPROTECT(2);
+
+    /* precaution to ensure code does not get modified via
+       substitute() and the like */
+    if (NAMED(expr) < 2) SET_NAMED(expr, 2);
+
+    SET_PRCODE(s, expr);
+    SET_PRENV(s, rho);
+    SET_PRVALUE(s, R_UnboundValue);
+    SET_PRSEEN(s, 0);
+
+    return s;
+}
+
+
+// eval.c 463
+// The problem here is that the R_PendingPromises does not seem to be exported, so if we want to evaluate a promise, we must call the eval itself, fortunately this does evaluate the promise, but will likely not be superfast.
+SEXP forcePromise(SEXP e) {
+    if (PRVALUE(e) == R_UnboundValue)
+        return eval(e, PRENV(e));
+    else
+        return PRVALUE(e);
+}
+
 #define NOT_IMPLEMENTED assert(false)
 
 // TODO we are using the RInternals, but soud not when the code moves to GNU-R
@@ -15,14 +92,6 @@ extern SEXP R_TrueValue;
 extern SEXP R_FalseValue;
 extern SEXP Rf_NewEnvironment(SEXP, SEXP, SEXP);
 extern Rboolean R_Visible;
-
-extern SEXP hook_forcePromise(SEXP);
-extern SEXP hook_mkPROMISE(SEXP, SEXP);
-extern SEXP hook_matchArgs(SEXP, SEXP, SEXP);
-
-SEXP forcePromise(SEXP what) { return hook_forcePromise(what); }
-
-SEXP mkPROMISE(SEXP expr, SEXP rho) { return hook_mkPROMISE(expr, rho); }
 
 typedef SEXP (*CCODE)(SEXP, SEXP, SEXP, SEXP);
 
@@ -262,7 +331,7 @@ INSTRUCTION(ldfun_) {
 
 INSTRUCTION(ldddvar_) {
     SEXP sym = readConst(ctx, pc);
-    SEXP val = ddfindVar(sym, env);
+    SEXP val = Rf_ddfindVar(sym, env);
 
     // TODO better errors
     if (val == R_UnboundValue) {
@@ -347,7 +416,7 @@ SEXP createArgsList(Code * c, FunctionIndex * args, size_t nargs, SEXP names, SE
             if (TYPEOF(ellipsis) == DOTSXP) {
                 while (ellipsis != R_NilValue) {
                     name = TAG(ellipsis);
-                    SEXP promise = hook_mkPROMISE(CAR(ellipsis), env);
+                    SEXP promise = mkPROMISE(CAR(ellipsis), env);
                     protected += __listAppend(&result, &pos, promise, name);
                     ellipsis = CDR(ellipsis);
                 }
@@ -451,8 +520,8 @@ SEXP evalCbFunction(EvalCbArg* arg_) {
     EvalCbArg* arg = (EvalCbArg*)arg_;
     return rirEval_c(arg->code, arg->ctx, arg->env, arg->nargs);
 }
-void initClosureContext(void*, SEXP, SEXP, SEXP, SEXP, SEXP);
-void endClosureContext(void*, SEXP);
+//void initClosureContext(void*, SEXP, SEXP, SEXP, SEXP, SEXP);
+//void endClosureContext(void*, SEXP);
 
 /** Performs the call.
 
@@ -499,8 +568,9 @@ SEXP doCall(Code * caller, SEXP call, SEXP callee, unsigned * args, size_t nargs
         }
         PROTECT(actuals);
         // if body is INTSXP, it is rir serialized code, execute it directly
-        if (TYPEOF(body) == INTSXP) {
+/*        if (TYPEOF(body) == INTSXP) {
             SEXP newEnv = closureArgumentAdaptor(call, callee, actuals, env, R_NilValue);
+
             // TODO since we do not have access to the context definition we
             // just create a buffer big enough and let gnur do the rest.
             // Once we integrate we should really setup the context ourselves!
@@ -509,7 +579,9 @@ SEXP doCall(Code * caller, SEXP call, SEXP callee, unsigned * args, size_t nargs
             EvalCbArg arg = {functionCode((Function*)INTEGER(body)), ctx, newEnv, nargs};
             result = hook_rirCallTrampoline(&cntxt, evalCbFunction, &arg);
             endClosureContext(&cntxt, result);
-        } else {
+        } else
+ */
+        {
             // otherwise use R's own call mechanism
             result = applyClosure(call, callee, actuals, env, R_NilValue);
         }

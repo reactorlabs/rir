@@ -5,7 +5,7 @@
 #include <cassert>
 
 // r print statement
-#include "R_ext/Print.h"
+#include <R_ext/Print.h>
 
 #include "api.h"
 
@@ -22,10 +22,12 @@ typedef bool (*callback_isValidFunction)(SEXP);
 typedef SEXP (*callback_rirEval_f)(SEXP, SEXP);
 typedef SEXP (*callback_rirExpr)(SEXP);
 
-extern "C" void initializeCallbacks(callback_isValidFunction,
+/*extern "C" void initializeCallbacks(callback_isValidFunction,
                                     callback_isValidFunction,
                                     callback_rirEval_f,
                                     callback_rirExpr);
+
+*/
 
 // =======================================================================
 // == RIR API
@@ -62,20 +64,20 @@ REXPORT SEXP rir_compileClosure(SEXP f) {
     return result;
 }
 
-extern "C" void resetCompileExpressionOverride();
-extern "C" void resetCmpFunOverride();
-extern "C" void setCompileExpressionOverride(int, SEXP (*fun)(SEXP, SEXP));
-extern "C" void setCmpFunOverride(int, SEXP (*fun)(SEXP));
+//extern "C" void resetCompileExpressionOverride();
+//extern "C" void resetCmpFunOverride();
+//extern "C" void setCompileExpressionOverride(int, SEXP (*fun)(SEXP, SEXP));
+//extern "C" void setCmpFunOverride(int, SEXP (*fun)(SEXP));
 
 REXPORT SEXP rir_jitDisable(SEXP expression) {
-    resetCompileExpressionOverride();
-    resetCmpFunOverride();
+//    resetCompileExpressionOverride();
+//    resetCmpFunOverride();
     return R_NilValue;
 }
 
 REXPORT SEXP rir_jitEnable(SEXP expression) {
-    setCompileExpressionOverride(INTSXP, &rir_compileAst);
-    setCmpFunOverride(INTSXP, &rir_compileClosure);
+//    setCompileExpressionOverride(INTSXP, &rir_compileAst);
+//    setCmpFunOverride(INTSXP, &rir_compileClosure);
     return R_NilValue;
 }
 
@@ -160,12 +162,12 @@ void rjit_globalGcCallback(void (*forward_node)(SEXP)) {
  */
 bool startup() {
     
-    // TODO give a compiler proper
     interp_initialize(rir_compileAst);
 
-    registerGcCallback(&rjit_globalGcCallback);
+    // TODO deal with GC
+    //registerGcCallback(&rjit_globalGcCallback);
 
-    initializeCallbacks(isValidFunction, isValidPromise, rirEval_f, rirExpr);
+    //initializeCallbacks(isValidFunction, isValidPromise, rirEval_f, rirExpr);
 
     return true;
 }
