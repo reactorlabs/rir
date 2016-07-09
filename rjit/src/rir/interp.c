@@ -927,10 +927,6 @@ SEXP rirEval(SEXP e, SEXP env) {
         // TODO: not sure, but I think now with rirEval we should not have
         // naked functions anymore
         assert(!isValidFunction(e));
-        if (isValidFunction(e)) {
-            Function* ff = (Function*)(INTEGER(e));
-            return rirEval_c(functionCode(ff), globalContext(), env, 0);
-        }
         // Fall through
     }
     case NILSXP:
@@ -966,9 +962,11 @@ SEXP rirEval(SEXP e, SEXP env) {
         assert(false);
         break;
 
-    case BCODESXP:
+    case BCODESXP: {
         jit(e, globalContext());
-        return rirEval(BODY(e), CLOENV(e));
+        Function* ff = (Function*)(INTEGER(BODY(e)));
+        return rirEval_c(functionCode(ff), globalContext(), env, 0);
+    }
 
     case SYMSXP: {
         if (e == R_DotsSymbol)
