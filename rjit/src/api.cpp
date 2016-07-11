@@ -33,6 +33,19 @@ typedef SEXP (*callback_rirExpr)(SEXP);
 // == RIR API
 //
 
+/** Returns the constant pool object for inspection from R.
+ */
+REXPORT SEXP rir_cp() {
+    return globalContext()->cp.list;
+}
+
+/** Returns the ast (source) pool object for inspection from R.
+ */
+REXPORT SEXP rir_src() {
+    return globalContext()->src.list;
+}
+
+
 
 /** Compiles the given ast.
  */
@@ -58,10 +71,22 @@ REXPORT SEXP rir_compileClosure(SEXP f) {
     auto res = Compiler::compileClosure(body, CLOENV(f), FORMALS(f));
     SET_FORMALS(result, res.formals);
     SET_CLOENV(result, CLOENV(f));
-    SET_BODY(result, res.bc);
+    //SET_BODY(result, res.bc);
+    SET_BODY(result, createBytecodeWrapper(result, res.bc, globalContext()));
     Rf_copyMostAttrib(f, result);
     UNPROTECT(1);
     return result;
+
+
+
+
+
+}
+
+
+REXPORT SEXP rir_executeWrapper(SEXP closure) {
+    printf("ALL SEEMS TO WORK\n");
+    return R_NilValue;
 }
 
 //extern "C" void resetCompileExpressionOverride();

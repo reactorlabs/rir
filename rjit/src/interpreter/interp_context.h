@@ -65,6 +65,10 @@ struct FStackImpl {
 #define CONTEXT_INDEX_CP 0
 #define CONTEXT_INDEX_SRC 1
 #define CONTEXT_INDEX_OSTACK 2
+#define CONTEXT_INDEX_WRAPPER_BYTECODE 3
+#define CONTEXT_INDEX_WRAPPER_AST 4
+#define CONTEXT_INDEX_WRAPPER_CALL 5
+#define CONTEXT_INDEX_WRAPPER_SYMBOL 6
 
 /** Interpreter's context.
 
@@ -235,12 +239,14 @@ INLINE size_t src_pool_length(Context * c) {
 INLINE size_t cp_pool_add(Context* c, SEXP v) {
     size_t result = rl_length(& c->cp);
     rl_append(& c->cp, v, c->list, CONTEXT_INDEX_CP);
+    return result;
 }
 
 
 INLINE size_t src_pool_add(Context* c, SEXP v) {
     size_t result = rl_length( &c->src);
     rl_append(& c->src, v, c->list, CONTEXT_INDEX_SRC);
+    return result;
 }
 
 INLINE SEXP cp_pool_at(Context* c, size_t index) {
@@ -262,6 +268,12 @@ void interp_initialize(CompilerCallback compiler);
   shared - it is not that we add stuff to them often.
  */
 Context* globalContext();
+
+/** Creates a bytecode wrapper around a compiled code.
+ */
+SEXP createBytecodeWrapper(SEXP closure, SEXP rirBytecode, Context * c);
+
+
 
 #ifdef __cplusplus
 }

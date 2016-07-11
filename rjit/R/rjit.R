@@ -1,6 +1,14 @@
 # ==============================
 # === rir api:
 
+rir.cp <- function()  {
+    .Call("rir_cp")
+}
+
+rir.src <- function()  {
+    .Call("rir_src")
+}
+
 rir.enableJit <- function() {
     .Call("rir_jitEnable");
     invisible(compiler:::enableJIT(1));
