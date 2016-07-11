@@ -105,7 +105,12 @@ void BC::print() {
         num_args_t nargs = immediateCallNargs();
         Rprintf("[");
         for (unsigned i = 0; i < nargs; ++i) {
-            Rprintf(" %x", args[i]);
+            if (args[i] == MISSING_ARG_IDX)
+                Rprintf(" _");
+            else if (args[i] == DOTS_ARG_IDX)
+                Rprintf(" ...");
+            else
+                Rprintf(" %x", args[i]);
         }
         Rprintf("] ");
         SEXP names = immediateCallNames();
