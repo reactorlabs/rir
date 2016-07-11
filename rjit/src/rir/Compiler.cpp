@@ -43,17 +43,24 @@ void compileCall(FunctionHandle& parent, CodeStream& cs, SEXP ast, SEXP fun,
     std::vector<SEXP> names;
 
     for (auto arg = RList(args).begin(); arg != RList::end(); ++arg) {
+        if (*arg == R_DotsSymbol) {
+            callArgs.push_back(DOTS_ARG_IDX);
+            names.push_back(R_NilValue);
+            continue;
+        }
+        if (*arg == R_MissingArg) {
+            callArgs.push_back(MISSING_ARG_IDX);
+            names.push_back(R_NilValue);
+            continue;
+        }
+
         // (1) Arguments are wrapped as Promises:
         //     create a new Code object for the promise
         size_t prom = compilePromise(parent, *arg);
         callArgs.push_back(prom);
 
         // (2) remember if the argument had a name associated
-        if (*arg == R_DotsSymbol){
-            names.push_back(R_DotsSymbol);
-        } else {
-            names.push_back(arg.hasTag() ? arg.tag() : R_NilValue);
-        }
+        names.push_back(arg.tag());
     }
     assert(callArgs.size() < MAX_NUM_ARGS);
 
@@ -111,10 +118,10 @@ std::vector<fun_idx_t> compileFormals(FunctionHandle& fun, SEXP formals) {
     std::vector<fun_idx_t> res;
 
     for (auto arg = RList(formals).begin(); arg != RList::end(); ++arg) {
-        if (*arg != R_MissingArg)
-            res.push_back(compilePromise(fun, *arg));
+        if (*arg == R_MissingArg)
+            res.push_back(MISSING_ARG_IDX);
         else
-            res.push_back(MISSING_ARG_OFFSET);
+            res.push_back(compilePromise(fun, *arg));
     }
 
     return res;
@@ -149,7 +156,7 @@ Compiler::CompilerRes Compiler::finalize() {
     SEXP f = formout;
     SEXP formin = formals;
     for (auto prom : formProm) {
-        SEXP arg = (prom == MISSING_ARG_OFFSET) ? 
+        SEXP arg = (prom == MISSING_ARG_IDX) ? 
             R_MissingArg : (SEXP)opt.codeAtOffset(prom);
         SEXP next = CONS_NR(arg, R_NilValue);
         SET_TAG(next, TAG(formin));

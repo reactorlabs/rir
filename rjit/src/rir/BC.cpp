@@ -170,7 +170,7 @@ void BC::print() {
 
 BC BC::call(std::vector<fun_idx_t> args, std::vector<SEXP> names) {
     assert(args.size() == names.size());
-    assert(args.size() < MAX_NUM_ARGS);
+    assert(args.size() <= MAX_ARG_IDX);
 
     Protect p;
     SEXP a = Rf_allocVector(INTSXP, sizeof(fun_idx_t) * args.size());

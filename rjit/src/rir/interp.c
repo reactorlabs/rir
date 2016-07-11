@@ -351,12 +351,12 @@ SEXP createArgsList(Code * c, FunctionIndex * args, size_t nargs, SEXP names, SE
 
     // loop through the arguments and create a promise, unless it is a missing argument
     for (size_t i = 0; i < nargs; ++i) {
-        SEXP name = VECTOR_ELT(names, i);
+        SEXP name = names != R_NilValue ? VECTOR_ELT(names, i) : R_NilValue;
 
         // if the argument is an ellipsis, then retrieve it from the environment and 
         // flatten the ellipsis
-        if (name == R_DotsSymbol) {
-            SEXP ellipsis = findVar(name, env);
+        if (args[i] == DOTS_ARG_IDX) {
+            SEXP ellipsis = findVar(R_DotsSymbol, env);
             if (TYPEOF(ellipsis) == DOTSXP) {
                 while (ellipsis != R_NilValue) {
                     name = TAG(ellipsis);
@@ -364,35 +364,14 @@ SEXP createArgsList(Code * c, FunctionIndex * args, size_t nargs, SEXP names, SE
                     protected += __listAppend(&result, &pos, promise, name);
                     ellipsis = CDR(ellipsis);
                 }
-            } else if (args[i] == MISSING_ARG_OFFSET) {
-                assert(false);
             }
-        } else if (args[i] == MISSING_ARG_OFFSET) {
+        } else if (args[i] == MISSING_ARG_IDX) {
             protected += __listAppend(&result, &pos, R_MissingArg, R_NilValue);
         } else {
             unsigned offset = args[i];
             Code* arg = codeAt(function(c), offset);
             SEXP promise = createPromise(arg, env);
             protected += __listAppend(&result, &pos, promise, name);
-        }
-    }
-
-    UNPROTECT(protected);
-    return result;
-}
-
-SEXP createNoNameArgsList(Code * c, FunctionIndex * args, size_t nargs, SEXP env) {
-    SEXP result = R_NilValue;
-    SEXP pos = result;
-    int protected = 0;
-
-    for (size_t i = 0; i < nargs; ++i) {
-        unsigned offset = args[i];
-        if (args[i] == MISSING_ARG_OFFSET) {
-            protected += __listAppend(&result, &pos, R_MissingArg, R_NilValue);
-        } else {
-            SEXP arg = createPromise(codeAt(function(c), offset), env);
-            protected += __listAppend(&result, &pos, arg, R_NilValue);
         }
     }
 
@@ -412,8 +391,8 @@ SEXP createEagerArgsList(Code* c, FunctionIndex* args, size_t nargs, SEXP names,
 
         // if the argument is an ellipsis, then retrieve it from the environment and 
         // flatten the ellipsis
-        if (name == R_DotsSymbol) {
-            SEXP ellipsis = findVar(name, env);
+        if (args[i] == DOTS_ARG_IDX) {
+            SEXP ellipsis = findVar(R_DotsSymbol, env);
             if (TYPEOF(ellipsis) == DOTSXP) {
                 while (ellipsis != R_NilValue) {
                     SEXP arg = rirEval(CAR(ellipsis), env);
@@ -422,10 +401,8 @@ SEXP createEagerArgsList(Code* c, FunctionIndex* args, size_t nargs, SEXP names,
                     protected += __listAppend(&result, &pos, arg, name);
                     ellipsis = CDR(ellipsis);
                 }
-            } else if (args[i] == MISSING_ARG_OFFSET) {
-                assert(false);
             }
-        } else if (args[i] == MISSING_ARG_OFFSET) {
+        } else if (args[i] == MISSING_ARG_IDX) {
             // TODO error
             assert(false);
         } else {
@@ -508,11 +485,7 @@ SEXP doCall(Code * caller, SEXP call, SEXP callee, unsigned * args, size_t nargs
     case CLOSXP: {
         SEXP actuals;
         SEXP body = BODY(callee);
-        if (names != R_NilValue) {
-            actuals = createArgsList(caller, args, nargs, names, env);
-        } else {
-            actuals = createNoNameArgsList(caller, args, nargs, env);
-        }
+        actuals = createArgsList(caller, args, nargs, names, env);
         PROTECT(actuals);
 
         assert(isValidFunction(body));

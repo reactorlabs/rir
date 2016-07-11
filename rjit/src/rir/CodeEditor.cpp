@@ -78,6 +78,9 @@ void CodeEditor::loadCode(FunctionHandle function, CodeHandle code,
                 auto argOffset = bc.immediateCallArgs();
 
                 for (unsigned i = 0; i < bc.immediateCallNargs(); ++i) {
+                    if (argOffset[i] > MAX_ARG_IDX)
+                        continue;
+
                     CodeHandle code = function.codeAtOffset(argOffset[i]);
                     argOffset[i] = code.idx();
 
@@ -161,6 +164,8 @@ unsigned CodeEditor::write(FunctionHandle& function) {
             auto arg = bc.immediateCallArgs();
             auto nargs = bc.immediateCallNargs();
             for (unsigned i = 0; i < nargs; ++i) {
+                if (arg[i] > MAX_ARG_IDX)
+                    continue;
                 CodeEditor* e = promises[arg[i]];
                 arg[i] = e->write(function);
             }

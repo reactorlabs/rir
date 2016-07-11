@@ -134,6 +134,9 @@ class CodeEditor {
                     fun_idx_t* args = insert->bc.immediateCallArgs();
                     num_args_t nargs = insert->bc.immediateCallNargs();
                     for (unsigned i = 0; i < nargs; ++i) {
+                        if (args[i] > MAX_ARG_IDX)
+                            continue;
+
                         if (duplicate.count(args[i]))
                             args[i] = duplicate.at(args[i]);
                         else

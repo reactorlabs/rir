@@ -13,3 +13,17 @@ stopifnot(f() == "double")
 
 f <- rir.compile(function(b = 123) cat(b))
 stopifnot(f() == "123")
+rir.compile(function() {
+  stopifnot(f() == "123")
+})()
+
+
+f <- rir.compile(function(a = 1, b = 2) c(a, b))
+stopifnot(f() == c(1,2))
+stopifnot(f(2) == c(2,2))
+stopifnot(f(,1) == c(1,1))
+rir.compile(function() {
+    stopifnot(f() == c(1,2))
+    stopifnot(f(2) == c(2,2))
+    stopifnot(f(,1) == c(1,1))
+})()

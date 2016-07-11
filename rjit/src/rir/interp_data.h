@@ -37,7 +37,6 @@ extern "C" {
 //  whether a standard promise execution, or rir promise should be executed.
 #define CODE_MAGIC (unsigned)0x110000ff
 
-
 /** How many bytes do we need to align on 4 byte boundary?
  */
 INLINE unsigned pad4(unsigned sizeInBytes) {
@@ -87,10 +86,15 @@ struct Function; // Forward declaration
 // all sizes in bytes,
 // length in element sizes
 
-// Missing argument offset.
-// The offset is 0 (this would be impossible).
-// TODO This changes from old where it was some other number
-#define MISSING_ARG_OFFSET (unsigned)0
+// ============
+// Please do not change those without also changing how they are handled in the
+// CodeEditor
+// Indicates an argument is missing
+#define MISSING_ARG_IDX ((unsigned)-1)
+// Indicates an argument does not correspond to a valid CodeObject
+#define DOTS_ARG_IDX ((unsigned)-2)
+// Maximum valid entry for a CodeObject offset/idx entry 
+#define MAX_ARG_IDX ((unsigned)-3)
 
 /**
  * Code holds a sequence of instructions; for each instruction
