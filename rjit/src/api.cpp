@@ -153,21 +153,15 @@ REXPORT SEXP rir_print(SEXP store) {
 // == Callbacks
 //
 
-void rjit_globalGcCallback(void (*forward_node)(SEXP)) {
-    Precious::gcCallback(forward_node);
-    rir_interp_gc_callback(forward_node);
-}
-
 /** Initializes the rir contexts, registers the gc and so on...
+
+  VECSXP length == # of pointers?
+         tl = 0
+
  */
 bool startup() {
-    
+
     interp_initialize(rir_compileAst);
-
-    // TODO deal with GC
-    //registerGcCallback(&rjit_globalGcCallback);
-
-    //initializeCallbacks(isValidFunction, isValidPromise, rirEval_f, rirExpr);
 
     return true;
 }

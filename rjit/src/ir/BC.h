@@ -6,7 +6,7 @@
 #include <map>
 
 #include "utils/Pool.h"
-#include "R/RDefs.h"
+#include "R/r.h"
 
 #include "BC_inc.h"
 

@@ -3,7 +3,7 @@
 #include "BC.h"
 #include "CodeStream.h"
 
-#include "R/RIntlns.h"
+#include "R/r.h"
 #include "R/RList.h"
 #include "R/Sexp.h"
 #include "R/Symbols.h"

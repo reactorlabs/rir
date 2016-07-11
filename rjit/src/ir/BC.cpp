@@ -6,7 +6,7 @@
 
 #include "R/RList.h"
 #include "CodeStream.h"
-#include "R/RIntlns.h"
+#include "R/r.h"
 
 namespace rir {
 

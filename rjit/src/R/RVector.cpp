@@ -1,4 +1,4 @@
-#include "RIntlns.h"
+#include "r.h"
 #include "RVector.h"
 #include "Protect.h"
 #include <cassert>
@@ -8,7 +8,7 @@ namespace rir {
 RVector::RVector(SEXP vector)
     : size_(XLENGTH(vector)), capacity_(XLENGTH(vector)), vector(vector) {
     assert(TYPEOF(vector) == VECSXP);
-    Precious::add(vector);
+    R_PreserveObject(vector);
 }
 
 SEXP RVectorIter::operator*() { return vector->at(pos); }
@@ -16,7 +16,7 @@ SEXP RVectorIter::operator*() { return vector->at(pos); }
 RVector::RVector(size_t init_size) : size_(0), capacity_(slack) {
     vector = Rf_allocVector(VECSXP, init_size);
     SETLENGTH(vector, 0);
-    Precious::add(vector);
+    R_PreserveObject(vector);
 }
 
 void RVector::append(SEXP e) {
@@ -27,8 +27,8 @@ void RVector::append(SEXP e) {
         for (size_t i = 0; i < size_; ++i) {
             SET_VECTOR_ELT(new_vector, i, at(i));
         }
-        Precious::remove(vector);
-        Precious::add(new_vector);
+        R_ReleaseObject(vector);
+        R_PreserveObject(new_vector);
         vector = new_vector;
     }
     size_++;

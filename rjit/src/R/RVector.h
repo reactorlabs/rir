@@ -1,8 +1,7 @@
 #ifndef R_VECTOR_H
 #define R_VECTOR_H
 
-#include "RDefs.h"
-#include "Precious.h"
+#include "r.h"
 
 namespace rir {
 
@@ -26,7 +25,9 @@ class RVector {
     RVector(SEXP vector);
     RVector(size_t init_size = slack);
 
-    ~RVector() { Precious::remove(vector); }
+    ~RVector() {
+        R_ReleaseObject(vector);
+    }
 
     void append(SEXP e);
 

@@ -1,5 +1,5 @@
 #include "RList.h"
-#include "RIntlns.h"
+#include "r.h"
 #include <cassert>
 
 namespace rir {

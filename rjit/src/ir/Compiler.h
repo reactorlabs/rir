@@ -1,8 +1,9 @@
 #ifndef RIR_COMPILER_H
 #define RIR_COMPILER_H
 
-#include "R/Precious.h"
-#include "R/RDefs.h"
+#define USE_RINTERNALS
+#include <Rinternals.h>
+#include "R/r.h"
 
 namespace rir {
 
@@ -16,17 +17,19 @@ class Compiler {
         SEXP formals;
     };
 
-    Compiler(SEXP exp) : exp(exp), formals(R_NilValue) { Precious::add(exp); }
+    Compiler(SEXP exp) : exp(exp), formals(R_NilValue) {
+        R_PreserveObject(exp);
+    }
 
     Compiler(SEXP exp, SEXP formals) : exp(exp), formals(formals) {
-        Precious::add(exp);
-        Precious::add(formals);
+        R_PreserveObject(exp);
+        R_PreserveObject(formals);
     }
 
     ~Compiler() {
         if (formals)
-            Precious::remove(formals);
-        Precious::remove(exp);
+            R_ReleaseObject(formals);
+        R_ReleaseObject(exp);
     }
 
     CompilerRes finalize();

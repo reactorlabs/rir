@@ -1,11 +1,7 @@
 #ifndef RIR_INTERPRETER_DATA_C_H
 #define RIR_INTERPRETER_DATA_C_H
 
-#include <R.h>
-#define USE_RINTERNALS
-#include <Rinternals.h>
-
-#undef length
+#include "R/r.h"
 
 #include <stdint.h>
 

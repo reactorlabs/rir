@@ -5,7 +5,7 @@
 #include <cstdint>
 #include <cassert>
 
-#include "R/RDefs.h"
+#include "R/r.h"
 
 #include <vector>
 

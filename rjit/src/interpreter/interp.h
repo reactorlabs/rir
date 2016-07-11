@@ -1,9 +1,7 @@
 #ifndef RIR_INTERPRETER_C_H
 #define RIR_INTERPRETER_C_H
 
-#include <R.h>
-#define USE_RINTERNALS
-#include <Rinternals.h>
+#include <R/r.h>
 
 #undef length
 
@@ -30,3 +28,5 @@ SEXP rirExpr(SEXP f);
 #endif
 
 #endif // RIR_INTERPRETER_C_H
+
+

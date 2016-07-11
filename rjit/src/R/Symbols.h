@@ -1,7 +1,7 @@
 #ifndef SYMBOLS_H_
 #define SYMBOLS_H_
 
-#include "RDefs.h"
+#include "r.h"
 
 namespace rir {
 

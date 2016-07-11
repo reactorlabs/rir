@@ -8,7 +8,7 @@
 #include <cstddef>
 
 #include "ir/BC_inc.h"
-#include "R/RDefs.h"
+#include "R/r.h"
 
 #include <unordered_map>
 

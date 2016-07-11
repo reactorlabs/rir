@@ -5,7 +5,7 @@
 #include <iostream>
 #include <cassert>
 
-#include "RDefs.h"
+#include "r.h"
 
 namespace rir {
 

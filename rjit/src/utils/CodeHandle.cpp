@@ -6,7 +6,7 @@
 
 #include "R/RList.h"
 #include "ir/CodeStream.h"
-#include "R/RIntlns.h"
+#include "R/r.h"
 #include "CodeHandle.h"
 #include "FunctionHandle.h"
 #include "ir/CodeEditor.h"

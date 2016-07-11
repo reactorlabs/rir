@@ -89,11 +89,12 @@ INLINE size_t rl_length(ResizeableList * l) {
 }
 
 INLINE void rl_setLength(ResizeableList * l, size_t length) {
-    ((VECSEXP)l)->vecsxp.length = length;
+    ((VECSEXP)l->list)->vecsxp.length = length;
+    ((VECSEXP)l->list)->vecsxp.truelength = length;
 }
 
 INLINE void rl_grow(ResizeableList * l, SEXP parent, size_t index) {
-    SEXP n = Rf_allocList(l->capacity * 2);
+    SEXP n = Rf_allocVector(VECSXP, l->capacity * 2);
     memcpy(DATAPTR(n), DATAPTR(l->list), l->capacity * sizeof(SEXP));
     SET_VECTOR_ELT(parent, index, n);
     l->list = n;
@@ -105,7 +106,7 @@ INLINE void rl_append(ResizeableList * l, SEXP val, SEXP parent, size_t index) {
     size_t i = rl_length(l);
     if (i == l->capacity)
         rl_grow(l, parent, index);
-    rl_setLength(l, ++i);
+    rl_setLength(l, i + 1);
     SET_VECTOR_ELT(l->list, i, val);
 }
 
@@ -221,7 +222,6 @@ INLINE Frame* fstack_push(Context* c, struct Code* code, SEXP env) {
     return frame;
 }
 
-
 Context* context_create();
 
 INLINE size_t cp_pool_length(Context * c) {
@@ -254,9 +254,6 @@ INLINE SEXP src_pool_at(Context* c, size_t value) {
 /** Initializes the interpreter.
  */
 void interp_initialize(CompilerCallback compiler);
-
-/** TODO Makes sure the gc undersands our stacks and pools. */
-void rir_interp_gc_callback(void (*forward_node)(SEXP));
 
 /** Returns the global context for the interpreter - important to get access to
   the shared constant and source pools.
