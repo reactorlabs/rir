@@ -26,6 +26,10 @@ rir.compile <- function(what) {
     }
 }
 
+rir.compileInPlace <- function(what) {
+    invisible(.Call("rir_compileClosureInPlace", what))
+}
+
 rir.exec <- function(what, env = globalenv()) {
     .Call("rir_exec", what, env)
 }

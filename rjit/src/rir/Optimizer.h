@@ -85,22 +85,22 @@ void doInlineIf(CodeEditor& e, CodeEditor::Cursor& cur) {
     cur << BC::label(nextBranch);
 }
 
-void doInlinePar(CodeEditor& e, CodeEditor::Cursor& cur) {
-    assert((*cur).bc == BC_t::ldfun_);
-    cur.remove();
-    BC bc = *cur;
-    assert(bc.bc == BC_t::call_);
-    cur.remove();
-
-    cur << BC::isspecial(symbol::Parenthesis);
-
-    fun_idx_t* args = bc.immediateCallArgs();
-    num_args_t nargs = bc.immediateCallNargs();
-
-    assert(nargs == 1);
-
-    inlProm(e, cur, args[0]);
-}
+// void doInlinePar(CodeEditor& e, CodeEditor::Cursor& cur) {
+//     assert((*cur).bc == BC_t::ldfun_);
+//     cur.remove();
+//     BC bc = *cur;
+//     assert(bc.bc == BC_t::call_);
+//     cur.remove();
+// 
+//     cur << BC::isspecial(symbol::Parenthesis);
+// 
+//     fun_idx_t* args = bc.immediateCallArgs();
+//     num_args_t nargs = bc.immediateCallNargs();
+// 
+//     assert(nargs == 1);
+// 
+//     inlProm(e, cur, args[0]);
+// }
 
 void optimize_(CodeEditor& e) {
     for (auto cur = e.getCursor(); !cur.atEnd(); ++cur) {

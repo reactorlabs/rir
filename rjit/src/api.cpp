@@ -99,6 +99,9 @@ REXPORT SEXP rir_jitEnable(SEXP expression) {
 REXPORT SEXP rir_compileClosureInPlace(SEXP f) {
     assert(TYPEOF(f) == CLOSXP and "Can only do closures");
     SEXP body = BODY(f);
+    if (TYPEOF(body) == BCODESXP)
+        body = VECTOR_ELT(CDR(body), 0);
+
     assert(TYPEOF(body) != INTSXP and TYPEOF(body) != BCODESXP and
            "Can only do asts");
     auto res = rir::Compiler::compileClosure(body, CLOENV(f), FORMALS(f));

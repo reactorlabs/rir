@@ -22,7 +22,10 @@ extern SEXP hook_matchArgs(SEXP, SEXP, SEXP);
 
 SEXP forcePromise(SEXP what) { return hook_forcePromise(what); }
 
-SEXP mkPROMISE(SEXP expr, SEXP rho) { return hook_mkPROMISE(expr, rho); }
+SEXP mkPROMISE(SEXP expr, SEXP rho) {
+    assert(rho != R_NilValue);
+    return hook_mkPROMISE(expr, rho);
+}
 
 typedef SEXP (*CCODE)(SEXP, SEXP, SEXP, SEXP);
 
@@ -230,6 +233,7 @@ INSTRUCTION(push_) {
 }
 
 static void jit(SEXP cls, Context* ctx) {
+    assert(TYPEOF(cls) == CLOSXP);
     if (TYPEOF(BODY(cls)) == INTSXP)
         return;
     SEXP body = BODY(cls);
@@ -924,9 +928,10 @@ SEXP rirEval(SEXP e, SEXP env) {
     /* handle self-evluating objects with minimal overhead */
     switch (TYPEOF(e)) {
     case INTSXP: {
-        // TODO: not sure, but I think now with rirEval we should not have
-        // naked functions anymore
-        assert(!isValidFunction(e));
+        if (isValidFunction(e)) {
+            Function* ff = (Function*)(INTEGER(e));
+            return rirEval_c(functionCode(ff), globalContext(), env, 0);
+        }
         // Fall through
     }
     case NILSXP:
@@ -963,9 +968,13 @@ SEXP rirEval(SEXP e, SEXP env) {
         break;
 
     case BCODESXP: {
-        jit(e, globalContext());
-        Function* ff = (Function*)(INTEGER(BODY(e)));
-        return rirEval_c(functionCode(ff), globalContext(), env, 0);
+        SEXP expr = VECTOR_ELT(CDR(e), 0);
+        SEXP code = globalContext()->compiler(expr, env);
+        PROTECT(code);
+        Function* ff = (Function*)(INTEGER(code));
+        SEXP res = rirEval_c(functionCode(ff), globalContext(), env, 0);
+        UNPROTECT(1);
+        return res;
     }
 
     case SYMSXP: {

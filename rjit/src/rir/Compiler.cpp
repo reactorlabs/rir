@@ -92,8 +92,16 @@ void compileExpr(FunctionHandle& function, CodeStream& cs, SEXP exp) {
             assert(env == R_NilValue);
             assert(value != R_UnboundValue);
             compileConst(cs, value);
-            cs.addAst(expr);
         }
+        Case(BCODESXP) {
+            assert(false);
+        }
+        // TODO : some code (eg. serialize.c:2154) puts closures into asts...
+        //        not sure how we want to handle it...
+        // Case(CLOSXP) {
+        //     assert(false);
+        // }
+
         // Constant
         Else(compileConst(cs, exp));
     }
