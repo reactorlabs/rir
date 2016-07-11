@@ -9,7 +9,7 @@
 
 #include <vector>
 
-#include "interp.h"
+#include "interp_data.h"
 
 namespace rjit {
 namespace rir {
@@ -71,11 +71,7 @@ typedef struct {
 
 #pragma pack(pop)
 
-static constexpr num_args_t VARIADIC_ARGS =
-    (1L << (8 * sizeof(num_args_t))) - 1;
-static constexpr size_t MAX_NUM_ARGS = VARIADIC_ARGS - 1;
-static constexpr size_t MISSING_ARG_IDX = (1L << (8 * sizeof(fun_idx_t))) - 1;
-static constexpr size_t MAX_FUN_IDX = MISSING_ARG_IDX - 1;
+static constexpr size_t MAX_NUM_ARGS = 1L << (8 * sizeof(pool_idx_t));
 static constexpr size_t MAX_POOL_IDX = 1L << (8 * sizeof(pool_idx_t));
 static constexpr size_t MAX_JMP = (1L << ((8 * sizeof(jmp_t)) - 1)) - 1;
 static constexpr size_t MIN_JMP = -(1L << ((8 * sizeof(jmp_t)) - 1));

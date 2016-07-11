@@ -12,6 +12,8 @@
 
 #include <unordered_map>
 
+#include "interp.h"
+
 namespace rjit {
 namespace rir {
 

@@ -114,7 +114,7 @@ std::vector<fun_idx_t> compileFormals(FunctionHandle& fun, SEXP formals) {
         if (*arg != R_MissingArg)
             res.push_back(compilePromise(fun, *arg));
         else
-            res.push_back(MISSING_ARG_IDX);
+            res.push_back(MISSING_ARG_OFFSET);
     }
 
     return res;
@@ -149,7 +149,7 @@ Compiler::CompilerRes Compiler::finalize() {
     SEXP f = formout;
     SEXP formin = formals;
     for (auto prom : formProm) {
-        SEXP arg = (prom == MISSING_ARG_IDX) ? 
+        SEXP arg = (prom == MISSING_ARG_OFFSET) ? 
             R_MissingArg : (SEXP)opt.codeAtOffset(prom);
         SEXP next = CONS_NR(arg, R_NilValue);
         SET_TAG(next, TAG(formin));
