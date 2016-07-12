@@ -975,3 +975,11 @@ SEXP rirEval_f(SEXP f, SEXP env) {
         return rirEval_c(functionCode(ff), globalContext(), env, 0);
     }
 }
+
+
+
+
+
+
+
+

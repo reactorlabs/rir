@@ -54,6 +54,18 @@ REXPORT SEXP rir_compileAst(SEXP ast, SEXP env) {
     return res.bc;
 }
 
+
+REXPORT SEXP rir_createWrapperAst(SEXP closure, SEXP rirBytecode) {
+    static SEXP envSymbol = Rf_install("environment");
+    static SEXP callSymbol = Rf_install(".Call");
+    static SEXP execName = Rf_mkString("rir_executeWrapper");
+    SEXP envCall = lang1(envSymbol);
+    PROTECT(envCall);
+    SEXP result =  Rf_lang5(callSymbol, execName, rirBytecode, closure, envCall);
+    UNPROTECT(1);
+    return result;
+}
+
 REXPORT SEXP rir_compileClosure(SEXP f) {
     assert(TYPEOF(f) == CLOSXP and "Can only do closures");
     SEXP body = BODY(f);
@@ -72,21 +84,19 @@ REXPORT SEXP rir_compileClosure(SEXP f) {
     SET_FORMALS(result, res.formals);
     SET_CLOENV(result, CLOENV(f));
     //SET_BODY(result, res.bc);
-    SET_BODY(result, createBytecodeWrapper(result, res.bc, globalContext()));
+    SET_BODY(result, rir_createWrapperAst(result, res.bc));
     Rf_copyMostAttrib(f, result);
     UNPROTECT(1);
     return result;
-
-
-
-
-
 }
 
 
-REXPORT SEXP rir_executeWrapper(SEXP closure) {
-    printf("ALL SEEMS TO WORK\n");
-    return R_NilValue;
+
+
+
+REXPORT SEXP rir_executeWrapper(SEXP bytecode, SEXP closure, SEXP env) {
+    ::Function * f = reinterpret_cast<::Function *>(INTEGER(bytecode));
+    return rirEval_c(functionCode(f), globalContext(), env, 0);
 }
 
 //extern "C" void resetCompileExpressionOverride();

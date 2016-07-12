@@ -65,10 +65,6 @@ struct FStackImpl {
 #define CONTEXT_INDEX_CP 0
 #define CONTEXT_INDEX_SRC 1
 #define CONTEXT_INDEX_OSTACK 2
-#define CONTEXT_INDEX_WRAPPER_BYTECODE 3
-#define CONTEXT_INDEX_WRAPPER_AST 4
-#define CONTEXT_INDEX_WRAPPER_CALL 5
-#define CONTEXT_INDEX_WRAPPER_SYMBOL 6
 
 /** Interpreter's context.
 
@@ -268,12 +264,6 @@ void interp_initialize(CompilerCallback compiler);
   shared - it is not that we add stuff to them often.
  */
 Context* globalContext();
-
-/** Creates a bytecode wrapper around a compiled code.
- */
-SEXP createBytecodeWrapper(SEXP closure, SEXP rirBytecode, Context * c);
-
-
 
 #ifdef __cplusplus
 }
