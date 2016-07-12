@@ -279,6 +279,7 @@ INSTRUCTION(ldfun_) {
 INSTRUCTION(ldddvar_) {
     SEXP sym = readConst(ctx, pc);
     SEXP val = ddfindVar(sym, env);
+    R_Visible = TRUE;
 
     // TODO better errors
     if (val == R_UnboundValue) {
@@ -295,7 +296,6 @@ INSTRUCTION(ldddvar_) {
     if (NAMED(val) == 0 && val != R_NilValue)
         SET_NAMED(val, 1);
 
-    R_Visible = TRUE;
     ostack_push(ctx, val);
 }
 
@@ -303,6 +303,7 @@ INSTRUCTION(ldddvar_) {
 INSTRUCTION(ldvar_) {
     SEXP sym = readConst(ctx, pc);
     SEXP val = findVar(sym, env);
+    R_Visible = TRUE;
 
     // TODO better errors
     if (val == R_UnboundValue) {
@@ -319,7 +320,6 @@ INSTRUCTION(ldvar_) {
     if (NAMED(val) == 0 && val != R_NilValue)
         SET_NAMED(val, 1);
 
-    R_Visible = TRUE;
     ostack_push(ctx, val);
 }
 
@@ -466,7 +466,6 @@ SEXP doCall(Code * caller, SEXP call, SEXP callee, unsigned * args, size_t nargs
         // get the ccode
         CCODE f = getBuiltin(callee);
         int flag = getFlag(callee);
-        //R_Visible = flag != 1;
         R_Visible = flag != 1;
         // call it with the AST only
         result = f(call, callee, CDR(call), env);
@@ -983,7 +982,6 @@ SEXP rirEval(SEXP e, SEXP env) {
         if (NAMED(val) == 0 && val != R_NilValue)
             SET_NAMED(val, 1);
 
-        R_Visible = TRUE;
         return val;
         break;
     }
