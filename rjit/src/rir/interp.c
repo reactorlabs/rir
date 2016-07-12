@@ -385,7 +385,7 @@ SEXP createArgsList(Code * c, FunctionIndex * args, size_t nargs, SEXP names, SE
 }
 
 SEXP createEagerArgsList(Code* c, FunctionIndex* args, size_t nargs, SEXP names,
-                         SEXP env, Context* ctx) {
+                         SEXP env, SEXP call, Context* ctx) {
     SEXP result = R_NilValue;
     SEXP pos = result;
     int protected = 0;
@@ -408,8 +408,7 @@ SEXP createEagerArgsList(Code* c, FunctionIndex* args, size_t nargs, SEXP names,
                 }
             }
         } else if (args[i] == MISSING_ARG_IDX) {
-            // TODO error
-            assert(false);
+            Rf_errorcall(call, "argument is missing, with no default");
         } else {
             SEXP arg = rirEval_c(codeAt(function(c), offset), ctx, env, 0);
             assert(TYPEOF(arg) != PROMSXP);
@@ -477,7 +476,7 @@ SEXP doCall(Code * caller, SEXP call, SEXP callee, unsigned * args, size_t nargs
         CCODE f = getBuiltin(callee);
         int flag = getFlag(callee);
         // create the argslist
-        SEXP argslist = createEagerArgsList(caller, args, nargs, names, env, ctx);
+        SEXP argslist = createEagerArgsList(caller, args, nargs, names, env, call, ctx);
         // callit
         PROTECT(argslist);
         if (flag < 2) R_Visible = flag != 1;
