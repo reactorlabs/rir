@@ -206,10 +206,12 @@ INLINE SEXP getSrcForCall(Code* c, OpcodeT* pc, Context* ctx) {
  */
 INLINE SEXP createPromise(Code* code, SEXP env) {
     SEXP p = mkPROMISE((SEXP)code, env);
+    PROTECT(p);
     // TODO: This is a bit of a hack to make sure the promise keeps its function
     // reachable from the GC pov.
     SEXP a = CONS_NR(functionStore(function(code)), R_NilValue);
     SET_ATTRIB(p, a);
+    UNPROTECT(1);
     return p;
 }
 

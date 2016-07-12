@@ -103,6 +103,7 @@ void compileExpr(FunctionHandle& function, CodeStream& cs, SEXP exp) {
             //         the prom is already evaluated and only used to attach
             //         the expression to the already evaled value
             SEXP val = forcePromise(exp);
+            Protect p(val);
             compileConst(cs, val);
             cs.addAst(expr);
         }
