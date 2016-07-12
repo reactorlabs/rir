@@ -100,9 +100,7 @@ void rir_interp_gc_callback(void (*forward_node)(SEXP)) {
         for (size_t i = 0; i < f->length; ++i) {
             forward_node(f->data[i].env);
             Function* fun = function(f->data[i].code);
-            // TODO thats a bit nasty
-            SEXP store = (SEXP)((uintptr_t)fun - FUNCTION_OFFSET);
-            assert((Function*)INTEGER(store) == fun);
+            SEXP store = functionStore(fun);
             forward_node(store);
         }
         f = f->prev;

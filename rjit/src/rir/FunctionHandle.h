@@ -6,6 +6,7 @@
 
 #include "CodeHandle.h"
 #include "../Precious.h"
+#include "CodeVerifier.h"
 
 #include <iostream>
 
@@ -14,7 +15,7 @@ namespace rir {
 
 class FunctionHandle {
   public:
-    constexpr static unsigned initialSize = 1024;
+    constexpr static unsigned initialSize = 2*sizeof(Function);
 
     SEXP store;
     void* payload;
@@ -25,12 +26,15 @@ class FunctionHandle {
     FunctionHandle() : function(nullptr) {}
 
     static FunctionHandle create() {
-        SEXP store = Rf_allocVector(INTSXP, initialSize);
+        assert(initialSize > sizeof(Function));
+        assert(initialSize % sizeof(int) == 0);
+        SEXP store = Rf_allocVector(INTSXP, initialSize / sizeof(int));
         Precious::add(store);
 
         void* payload = INTEGER(store);
 
         Function* function = new (payload) Function;
+        assert(function == payload);
         function->magic = FUNCTION_MAGIC;
         function->size = sizeof(Function);
         function->origin = nullptr;
@@ -41,23 +45,36 @@ class FunctionHandle {
     }
 
     FunctionHandle(SEXP store)
-        : store(store), payload(INTEGER(store)), capacity(Rf_length(store)),
+        : store(store), payload(INTEGER(store)),
+          capacity(Rf_length(store) * sizeof(int)),
           function((Function*)payload) {
         assert(function->magic == FUNCTION_MAGIC);
-        assert(function->size <= (unsigned)Rf_length(store));
+        assert(function->size <= capacity);
+    }
+
+    ~FunctionHandle() {
+        Precious::remove(store);
     }
 
     CodeHandle writeCode(SEXP ast, void* bc, unsigned codeSize,
                          std::vector<SEXP>& sources) {
+        assert(function->size <= capacity);
+
         unsigned totalSize = CodeHandle::totalSize(codeSize, sources.size());
 
         if (function->size + totalSize > capacity) {
-            unsigned newCapacity = capacity * 2;
-            SEXP newStore = Rf_allocVector(INTSXP, newCapacity);
+            unsigned newCapacity = capacity;
+            while (function->size + totalSize > newCapacity)
+                newCapacity *= 1.5;
+            newCapacity = pad4(newCapacity);
+
+            assert(newCapacity % sizeof(int) == 0);
+            SEXP newStore = Rf_allocVector(INTSXP, newCapacity / sizeof(int));
             Precious::add(newStore);
             void* newPayload = INTEGER(newStore);
 
             memcpy(newPayload, payload, capacity);
+            memset(payload, 0xee, capacity);
 
             Precious::remove(store);
             assert(function == payload);

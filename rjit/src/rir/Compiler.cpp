@@ -147,28 +147,27 @@ Compiler::CompilerRes Compiler::finalize() {
     cs << BC::ret();
     cs.finalize();
 
-    CodeVerifier::vefifyFunctionLayout(function.store, globalContext());
     FunctionHandle opt = Optimizer::optimize(function);
     CodeVerifier::vefifyFunctionLayout(opt.store, globalContext());
 
-    Protect p;
-    SEXP formout = R_NilValue;
-    SEXP f = formout;
-    SEXP formin = formals;
-    for (auto prom : formProm) {
-        SEXP arg = (prom == MISSING_ARG_IDX) ? 
-            R_MissingArg : (SEXP)opt.codeAtOffset(prom);
-        SEXP next = CONS_NR(arg, R_NilValue);
-        SET_TAG(next, TAG(formin));
-        formin = CDR(formin);
-        if (formout == R_NilValue) {
-            formout = f = next;
-            p(formout);
-        } else {
-            SETCDR(f, next);
-            f = next;
-        }
-    }
+    // Protect p;
+    // SEXP formout = R_NilValue;
+    // SEXP f = formout;
+    // SEXP formin = formals;
+    // for (auto prom : formProm) {
+    //     SEXP arg = (prom == MISSING_ARG_IDX) ? 
+    //         R_MissingArg : (SEXP)opt.codeAtOffset(prom);
+    //     SEXP next = CONS_NR(arg, R_NilValue);
+    //     SET_TAG(next, TAG(formin));
+    //     formin = CDR(formin);
+    //     if (formout == R_NilValue) {
+    //         formout = f = next;
+    //         p(formout);
+    //     } else {
+    //         SETCDR(f, next);
+    //         f = next;
+    //     }
+    // }
 
     // TODO compiling the formals is broken, since the optimizer drops the
     // formals code from the function object since they are not referenced!

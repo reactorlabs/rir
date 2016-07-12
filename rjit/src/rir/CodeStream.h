@@ -105,7 +105,6 @@ class CodeStream {
         pos = 0;
 
         CodeVerifier::calculateAndVerifyStack(res.code);
-
         return res.code->header;
     }
 };

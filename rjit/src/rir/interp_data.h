@@ -168,6 +168,11 @@ INLINE struct Function* function(Code* c) {
     return (struct Function*)((uint8_t*)c - c->header);
 }
 
+// TODO thats a bit nasty
+INLINE SEXP functionStore(struct Function* f) {
+    return (SEXP)((uintptr_t)f - FUNCTION_OFFSET);
+}
+
 // TODO removed src reference, now each code has its own
 
 /** A Function holds the RIR code for some GNU R function.
@@ -218,12 +223,12 @@ typedef struct Function Function;
 INLINE bool isValidFunction(SEXP s) {
     if (TYPEOF(s) != INTSXP)
         return false;
-    if ((unsigned)Rf_length(s) < sizeof(Function))
+    if ((unsigned)Rf_length(s)*sizeof(int) < sizeof(Function))
         return false;
     Function* f = (Function*)INTEGER(s);
     if (f->magic != FUNCTION_MAGIC)
         return false;
-    if (f->size > (unsigned)Rf_length(s))
+    if (f->size > (unsigned)Rf_length(s)*sizeof(int))
         return false;
     if (f->foffset >= f->size - sizeof(Code))
         return false;

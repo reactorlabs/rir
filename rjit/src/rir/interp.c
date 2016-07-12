@@ -205,7 +205,12 @@ INLINE SEXP getSrcForCall(Code* c, OpcodeT* pc, Context* ctx) {
 
  */
 INLINE SEXP createPromise(Code* code, SEXP env) {
-    return mkPROMISE((SEXP)code, env);
+    SEXP p = mkPROMISE((SEXP)code, env);
+    // TODO: This is a bit of a hack to make sure the promise keeps its function
+    // reachable from the GC pov.
+    SEXP a = CONS_NR(functionStore(function(code)), R_NilValue);
+    SET_ATTRIB(p, a);
+    return p;
 }
 
 // TODO check if there is a function for this in R

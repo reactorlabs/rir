@@ -133,10 +133,10 @@ void CodeVerifier::vefifyFunctionLayout(SEXP sexp, ::Context* ctx) {
         objs.push_back(c);
     }
 
-    // TODO This has changed - Rf_length is now >= than size, the current real
-    // length is quite vasteful and we might want to conserve space better
-    assert(fun.function->size <= static_cast<unsigned>(Rf_length(sexp)) and
+    assert(fun.function->size <= sizeof(int) *static_cast<unsigned>(Rf_length(sexp)) and
            "Reported size must be smaller than the size of the vector");
+    assert(fun.function->size < 1.5 * sizeof(int) * static_cast<unsigned>(Rf_length(sexp)) and
+           "Unexpectedly large Vector");
 
     Function* f = fun.function;
     if (f->origin) {
