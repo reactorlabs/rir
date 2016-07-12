@@ -93,12 +93,18 @@ void compileExpr(FunctionHandle& function, CodeStream& cs, SEXP exp) {
         Case(LANGSXP, fun, args) { compileCall(function, cs, exp, fun, args); }
         // Variable lookup
         Case(SYMSXP) { compileGetvar(cs, exp); }
-        // This happens in complex assignments, see eval.c::applydefine
-        // (hint: rhsprom)
-        Case(PROMSXP, value, expr, env) {
-            assert(env == R_NilValue);
-            assert(value != R_UnboundValue);
-            compileConst(cs, value);
+        Case(PROMSXP, value, expr) {
+            // TODO: honestly I do not know what should be the semantics of
+            //       this shit.... For now force it here and see what
+            //       breaks...
+            //       * One of the callers that does this is eg. print.c:1013
+            //       * Another (a bit more sane) producer of this kind of ast
+            //         is eval.c::applydefine (see rhsprom). At least there
+            //         the prom is already evaluated and only used to attach
+            //         the expression to the already evaled value
+            SEXP val = forcePromise(exp);
+            compileConst(cs, val);
+            cs.addAst(expr);
         }
         Case(BCODESXP) {
             assert(false);
