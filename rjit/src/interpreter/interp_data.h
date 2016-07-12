@@ -224,6 +224,13 @@ INLINE bool isValidFunction(SEXP s) {
     return true;
 }
 
+/** Returns the INTSXP for the Function object. */
+INLINE SEXP functionSEXP(Function * f) {
+    SEXP result = (SEXP)((uint8_t*)f - sizeof(VECTOR_SEXPREC));
+    assert(TYPEOF(result) == INTSXP && "Either wrong memory altogether or bad counting");
+    return result;
+}
+
 INLINE Code* functionCode(Function* f) {
     return (Code*)((uintptr_t)f + f->foffset);
 }

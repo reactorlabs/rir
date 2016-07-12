@@ -11,6 +11,7 @@ void initializeResizeableList(ResizeableList * l, size_t capacity, SEXP parent, 
 Context* context_create(CompilerCallback compiler) {
     Context* c = malloc(sizeof(Context));
     c->list = Rf_allocVector(VECSXP, 3);
+    c->compiler = compiler;
     R_PreserveObject(c->list);
     initializeResizeableList(&c->cp, POOL_CAPACITY, c->list, CONTEXT_INDEX_CP);
     initializeResizeableList(&c->src, POOL_CAPACITY, c->list, CONTEXT_INDEX_SRC);

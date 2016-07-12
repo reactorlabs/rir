@@ -45,24 +45,40 @@ REXPORT SEXP rir_src() {
     return globalContext()->src.list;
 }
 
-
-
-/** Compiles the given ast.
- */
-REXPORT SEXP rir_compileAst(SEXP ast, SEXP env) {
-    auto res = Compiler::compileExpression(ast);
-    return res.bc;
-}
-
-
-REXPORT SEXP rir_createWrapperAst(SEXP closure, SEXP rirBytecode) {
+REXPORT SEXP rir_createWrapperAst(SEXP rirBytecode) {
     static SEXP envSymbol = Rf_install("environment");
     static SEXP callSymbol = Rf_install(".Call");
     static SEXP execName = Rf_mkString("rir_executeWrapper");
     SEXP envCall = lang1(envSymbol);
     PROTECT(envCall);
-    SEXP result =  Rf_lang5(callSymbol, execName, rirBytecode, closure, envCall);
+    SEXP result =  Rf_lang4(callSymbol, execName, rirBytecode, envCall);
     UNPROTECT(1);
+    return result;
+}
+
+/** Compiles the given ast.
+ */
+REXPORT SEXP rir_compileAst(SEXP ast, SEXP env) {
+    auto res = Compiler::compileExpression(ast);
+
+    return rir_createWrapperAst(res.bc);
+    // return res.bc;
+}
+
+
+
+REXPORT SEXP rir_createWrapperPromise(Code * code) {
+    printf("Creating promise");
+    static SEXP envSymbol = Rf_install("environment");
+    static SEXP callSymbol = Rf_install(".Call");
+    static SEXP execName = Rf_mkString("rir_executePromiseWrapper");
+    SEXP envCall = lang1(envSymbol);
+    PROTECT(envCall);
+    SEXP offset = Rf_allocVector(INTSXP, 1);
+    PROTECT(offset);
+    INTEGER(offset)[0] = code->header;
+    SEXP result =  Rf_lang5(callSymbol, execName, functionSEXP(function(code)), offset, envCall);
+    UNPROTECT(2);
     return result;
 }
 
@@ -84,7 +100,7 @@ REXPORT SEXP rir_compileClosure(SEXP f) {
     SET_FORMALS(result, res.formals);
     SET_CLOENV(result, CLOENV(f));
     //SET_BODY(result, res.bc);
-    SET_BODY(result, rir_createWrapperAst(result, res.bc));
+    SET_BODY(result, rir_createWrapperAst(res.bc));
     Rf_copyMostAttrib(f, result);
     UNPROTECT(1);
     return result;
@@ -94,9 +110,19 @@ REXPORT SEXP rir_compileClosure(SEXP f) {
 
 
 
-REXPORT SEXP rir_executeWrapper(SEXP bytecode, SEXP closure, SEXP env) {
+REXPORT SEXP rir_executeWrapper(SEXP bytecode, SEXP env) {
     ::Function * f = reinterpret_cast<::Function *>(INTEGER(bytecode));
+    printf("Evaluating function\n");
     return rirEval_c(functionCode(f), globalContext(), env, 0);
+}
+
+REXPORT SEXP rir_executePromiseWrapper(SEXP function, SEXP offset, SEXP env) {
+    assert(TYPEOF(function) == INTSXP && "Invalid rir function");
+    assert(TYPEOF(offset) == INTSXP && Rf_length(offset) == 1 && "Invalid offset");
+    unsigned ofs = (unsigned)INTEGER(offset)[0];
+    printf("Evaluating promise at offset %u\n", ofs);
+    ::Code * c = codeAt((Function*)INTEGER(function), ofs);
+    return rirEval_c(c, globalContext(), env, 0);
 }
 
 //extern "C" void resetCompileExpressionOverride();

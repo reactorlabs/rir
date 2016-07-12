@@ -266,12 +266,14 @@ INLINE SEXP getSrcForCall(Code* c, OpcodeT* pc, Context* ctx) {
     return src_pool_at(ctx, sidx);
 }
 
+extern SEXP rir_createWrapperPromise(Code * code);
 
 /** Creates a promise from given code object and environment.
 
  */
 INLINE SEXP createPromise(Code* code, SEXP env) {
-    return mkPROMISE((SEXP)code, env);
+    return mkPROMISE(rir_createWrapperPromise(code), env);
+    //return mkPROMISE((SEXP)code, env);
 }
 
 // TODO check if there is a function for this in R
@@ -315,8 +317,13 @@ INSTRUCTION(ldfun_) {
             SEXP body = BODY(val);
             if (TYPEOF(body) == BCODESXP)
                 body = VECTOR_ELT(CDR(body), 0);
-            if (TYPEOF(body) != INTSXP)
-                SET_BODY(val, ctx->compiler(body, CLOENV(val)));
+            if (TYPEOF(body) != INTSXP) {
+                SEXP env = CLOENV(val);
+                SEXP b = ctx->compiler(body, env);
+                SET_BODY(val, b);
+                //SET_BODY(val, ctx->compiler(body, CLOENV(val)));
+
+            }
         }
         break;
     case SPECIALSXP:
