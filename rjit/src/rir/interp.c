@@ -410,7 +410,7 @@ SEXP createEagerArgsList(Code* c, FunctionIndex* args, size_t nargs, SEXP names,
                 }
             }
         } else if (args[i] == MISSING_ARG_IDX) {
-            Rf_errorcall(call, "argument is missing, with no default");
+            Rf_errorcall(call, "argument %d is empty", i+1);
         } else {
             SEXP arg = rirEval_c(codeAt(function(c), offset), ctx, env, 0);
             assert(TYPEOF(arg) != PROMSXP);
