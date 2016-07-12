@@ -21,7 +21,7 @@ set(R_COMMAND ${R_HOME}/bin/R)
 
 
 include_directories(${R_INCLUDE_DIR})
-include_directories(${CMAKE_SOURCE_DIR}/rjit/src)
+include_directories(${CMAKE_SOURCE_DIR}/rir/src)
 
 add_definitions(-std=c++11 -fno-omit-frame-pointer)
 
@@ -54,7 +54,7 @@ set(MAKEVARS_SRC "SOURCES = $(wildcard *.cpp ir/*.cpp passes/codegen/*.cpp)\nOBJ
 #file(WRITE ${CMAKE_SOURCE_DIR}/.clang_complete "-I${CMAKE_SOURCE_DIR}/rjit/src\n${LLVM_CXX_FLAGS}--std=c++11\n-Wall\n")
 
 # build the shared library for the JIT
-file(GLOB_RECURSE SRC "rjit/src/*.cpp" "rjit/src/*.c" "rjit/src/*.h" "local/*" "rjit/R/*.R" "rjit/tests/*.R")
+file(GLOB_RECURSE SRC "rir/src/*.cpp" "rir/src/*.c" "rir/src/*.h" "local/*" "rir/R/*.R" "rir/tests/*.R")
 add_library(${PROJECT_NAME} SHARED ${SRC})
 
 #add_custom_target(codegen_was_run_before

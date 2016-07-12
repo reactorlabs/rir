@@ -8,6 +8,7 @@
 // stuff from api the interpreter uses
 
 extern Code * c_isValidPromise(SEXP promise);
+extern Function * c_isValidFunction(SEXP closure);
 
 extern SEXP rir_createWrapperPromise(Code * code);
 
@@ -284,6 +285,7 @@ INLINE SEXP promiseValue(SEXP promise, Context * ctx) {
         // eval.c 463 forcePromise
         // The problem here is that the R_PendingPromises does not seem to be exported, so if we want to evaluate a promise, we must call the eval itself, fortunately this does evaluate the promise, but will likely not be superfast.
         // TODO not using the Prstack will bite us - debugging info, etc?
+        // TODO how about setting the context? tricky doing that ourselves too...
         Code * c = c_isValidPromise(promise);
         if (c != NULL) {
             if (PRSEEN(promise)) {
@@ -584,13 +586,20 @@ SEXP doCall(Code * caller, SEXP call, SEXP callee, unsigned * args, size_t nargs
     }
     case CLOSXP: {
         SEXP actuals;
-        SEXP body = BODY(callee);
         if (names != R_NilValue) {
             actuals = createArgsList(caller, args, nargs, names, env);
         } else {
             actuals = createNoNameArgsList(caller, args, nargs, env);
         }
         PROTECT(actuals);
+        Function * f = c_isValidFunction(callee);
+        if (f != NULL) {
+            // TODO we do not have to go to gnu-r here, but setting up the context w/o gnu-r will be tricky
+            result = applyClosure(call, callee, actuals, env, R_NilValue);
+        } else {
+            // otherwise use R's own call mechanism
+            result = applyClosure(call, callee, actuals, env, R_NilValue);
+        }
         // if body is INTSXP, it is rir serialized code, execute it directly
 /*        if (TYPEOF(body) == INTSXP) {
             SEXP newEnv = closureArgumentAdaptor(call, callee, actuals, env, R_NilValue);
@@ -605,10 +614,6 @@ SEXP doCall(Code * caller, SEXP call, SEXP callee, unsigned * args, size_t nargs
             endClosureContext(&cntxt, result);
         } else
  */
-        {
-            // otherwise use R's own call mechanism
-            result = applyClosure(call, callee, actuals, env, R_NilValue);
-        }
         UNPROTECT(1); // argslist
         break;
     }

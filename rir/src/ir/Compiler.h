@@ -1,8 +1,6 @@
 #ifndef RIR_COMPILER_H
 #define RIR_COMPILER_H
 
-#define USE_RINTERNALS
-#include <Rinternals.h>
 #include "R/r.h"
 
 namespace rir {
