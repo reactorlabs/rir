@@ -29,8 +29,10 @@ include_directories(${R_INCLUDE_DIR})
 include_directories(${CMAKE_SOURCE_DIR}/rjit/src)
 message(STATUS "Found R ${R_ROOT_DIR}")
 
-set(CMAKE_CXX_FLAGS_RELEASE "-O2 -g -fno-omit-frame-pointer")
+set(CMAKE_CXX_FLAGS_RELEASE "-O1 -g -fno-omit-frame-pointer")
 set(CMAKE_CXX_FLAGS_DEBUG "-g -fno-omit-frame-pointer")
+set(CMAKE_C_FLAGS_RELEASE "-O1 -g")
+set(CMAKE_C_FLAGS_DEBUG "-g")
 
 file(WRITE ${CMAKE_SOURCE_DIR}/.local.config  "BUILD_DIR=${CMAKE_BINARY_DIR}\nROOT_DIR=${CMAKE_SOURCE_DIR}\nR_HOME=${R_HOME}\nLLVM_CMAKE=${LLVM_DIR}\nTESTR_DIR=${TESTR_DIR}")
 
