@@ -9,4 +9,8 @@
 #undef FALSE
 #undef length
 
+extern SEXP R_TrueValue;
+extern SEXP R_FalseValue;
+
+
 #endif

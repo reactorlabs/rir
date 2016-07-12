@@ -1,9 +1,11 @@
 #ifndef RIR_INTERPRETER_DATA_C_H
 #define RIR_INTERPRETER_DATA_C_H
 
+#include <stdint.h>
+#include <assert.h>
+
 #include "R/r.h"
 
-#include <stdint.h>
 
 #ifdef __cplusplus
 extern "C" {

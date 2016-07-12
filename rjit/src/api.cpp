@@ -18,20 +18,13 @@
 
 using namespace rir;
 
-typedef bool (*callback_isValidFunction)(SEXP);
-typedef SEXP (*callback_rirEval_f)(SEXP, SEXP);
-typedef SEXP (*callback_rirExpr)(SEXP);
+namespace {
+    SEXP envSymbol;
+    SEXP callSymbol;
+    SEXP execName;
+    SEXP promExecName;
+}
 
-/*extern "C" void initializeCallbacks(callback_isValidFunction,
-                                    callback_isValidFunction,
-                                    callback_rirEval_f,
-                                    callback_rirExpr);
-
-*/
-
-// =======================================================================
-// == RIR API
-//
 
 /** Returns the constant pool object for inspection from R.
  */
@@ -45,11 +38,72 @@ REXPORT SEXP rir_src() {
     return globalContext()->src.list;
 }
 
+/** Checks if given closure should be executed using RIR.
+
+  If the given closure is RIR function, returns its Function object, otherwise returns nullptr.
+ */
+REXPORT ::Function * c_isValidFunction(SEXP closure) {
+    if (TYPEOF(closure) != CLOSXP)
+        return nullptr;
+    SEXP body = BODY(closure);
+    if (TYPEOF(body) != LANGSXP)
+        return nullptr;
+    // now we know it is uncompiled function, check that it contains what we expect
+    SEXP x = CAR(body);
+    if (x != callSymbol)
+        return nullptr;
+    body = CDR(body);
+    if (body == R_NilValue)
+        return nullptr;
+    x = CAR(body);
+    if (x != execName)
+        return nullptr;
+    body = CDR(body);
+    if (body == R_NilValue)
+        return nullptr;
+    x = CAR(body);
+    if (TYPEOF(x) != INTSXP)
+        return nullptr;
+    // that's enough checking, return the function
+    return reinterpret_cast<::Function*>(INTEGER(x));
+}
+
+REXPORT ::Code * c_isValidPromise(SEXP promise) {
+    SEXP body = PRCODE(promise);
+    if (TYPEOF(body) != LANGSXP)
+        return nullptr;
+    // now we know it is uncompiled function, check that it contains what we expect
+    SEXP x = CAR(body);
+    if (x != callSymbol)
+        return nullptr;
+    body = CDR(body);
+    if (body == R_NilValue)
+        return nullptr;
+    x = CAR(body);
+    if (x != promExecName)
+        return nullptr;
+    body = CDR(body);
+    if (body == R_NilValue)
+        return nullptr;
+    SEXP code  = CAR(body);
+    if (TYPEOF(code) != INTSXP)
+        return nullptr;
+    body = CDR(body);
+    if (body == R_NilValue)
+        return nullptr;
+    x = CAR(body);
+    if (TYPEOF(x) != INTSXP or Rf_length(x) != 1)
+        return nullptr;
+    unsigned offset = static_cast<unsigned>(INTEGER(x)[0]);
+    return codeAt(reinterpret_cast<::Function*>(INTEGER(code)), offset);
+}
+
+REXPORT SEXP rir_isValidFunction(SEXP what) {
+    return c_isValidFunction(what) == nullptr ? R_FalseValue : R_TrueValue;
+}
+
 REXPORT SEXP rir_createWrapperAst(SEXP rirBytecode) {
-    static SEXP envSymbol = Rf_install("environment");
-    static SEXP callSymbol = Rf_install(".Call");
-    static SEXP execName = Rf_mkString("rir_executeWrapper");
-    SEXP envCall = lang1(envSymbol);
+    SEXP envCall = Rf_lang1(envSymbol);
     PROTECT(envCall);
     SEXP result =  Rf_lang4(callSymbol, execName, rirBytecode, envCall);
     UNPROTECT(1);
@@ -69,15 +123,12 @@ REXPORT SEXP rir_compileAst(SEXP ast, SEXP env) {
 
 REXPORT SEXP rir_createWrapperPromise(Code * code) {
     printf("Creating promise");
-    static SEXP envSymbol = Rf_install("environment");
-    static SEXP callSymbol = Rf_install(".Call");
-    static SEXP execName = Rf_mkString("rir_executePromiseWrapper");
     SEXP envCall = lang1(envSymbol);
     PROTECT(envCall);
     SEXP offset = Rf_allocVector(INTSXP, 1);
     PROTECT(offset);
     INTEGER(offset)[0] = code->header;
-    SEXP result =  Rf_lang5(callSymbol, execName, functionSEXP(function(code)), offset, envCall);
+    SEXP result =  Rf_lang5(callSymbol, promExecName, functionSEXP(function(code)), offset, envCall);
     UNPROTECT(2);
     return result;
 }
@@ -221,6 +272,12 @@ REXPORT SEXP rir_print(SEXP store) {
 
  */
 bool startup() {
+    envSymbol = Rf_install("environment");
+    callSymbol = Rf_install(".Call");
+    execName = Rf_mkString("rir_executeWrapper");
+    R_PreserveObject(execName);
+    promExecName = Rf_mkString("rir_executePromiseWrapper");
+    R_PreserveObject(promExecName);
 
     interp_initialize(rir_compileAst);
 

@@ -5,6 +5,14 @@
 #include "interp_context.h"
 
 
+// stuff from api the interpreter uses
+
+extern Code * c_isValidPromise(SEXP promise);
+
+extern SEXP rir_createWrapperPromise(Code * code);
+
+
+
 // Those are functions from R we need
 
 
@@ -71,15 +79,6 @@ extern SEXP mkPROMISE(SEXP expr, SEXP rho) {
     return s;
 }
 
-
-// eval.c 463
-// The problem here is that the R_PendingPromises does not seem to be exported, so if we want to evaluate a promise, we must call the eval itself, fortunately this does evaluate the promise, but will likely not be superfast.
-SEXP forcePromise(SEXP e) {
-    if (PRVALUE(e) == R_UnboundValue)
-        return eval(e, PRENV(e));
-    else
-        return PRVALUE(e);
-}
 
 #define NOT_IMPLEMENTED assert(false)
 
@@ -266,7 +265,6 @@ INLINE SEXP getSrcForCall(Code* c, OpcodeT* pc, Context* ctx) {
     return src_pool_at(ctx, sidx);
 }
 
-extern SEXP rir_createWrapperPromise(Code * code);
 
 /** Creates a promise from given code object and environment.
 
@@ -276,15 +274,34 @@ INLINE SEXP createPromise(Code* code, SEXP env) {
     //return mkPROMISE((SEXP)code, env);
 }
 
-// TODO check if there is a function for this in R
-INLINE SEXP promiseValue(SEXP promise) {
+INLINE SEXP promiseValue(SEXP promise, Context * ctx) {
     // if already evaluated, return the value
     if (PRVALUE(promise) && PRVALUE(promise) != R_UnboundValue) {
         promise = PRVALUE(promise);
         SET_NAMED(promise, 2);
         return promise;
+    } else {
+        // eval.c 463 forcePromise
+        // The problem here is that the R_PendingPromises does not seem to be exported, so if we want to evaluate a promise, we must call the eval itself, fortunately this does evaluate the promise, but will likely not be superfast.
+        // TODO not using the Prstack will bite us - debugging info, etc?
+        Code * c = c_isValidPromise(promise);
+        if (c != NULL) {
+            if (PRSEEN(promise)) {
+                if (PRSEEN(promise) == 1)
+                    error("promise already under evaluation: recursive default argument reference or earlier problems?");
+                else warning("restarting interrupted promise evaluation");
+            }
+            SET_PRSEEN(promise, 1);
+            SEXP val = rirEval_c(c, ctx, PRENV(promise), 0);
+            SET_PRSEEN(promise, 0);
+            SET_PRVALUE(promise, val);
+            SET_NAMED(val, 2);
+            SET_PRENV(promise, R_NilValue);
+            return val;
+        } else {
+            return Rf_eval(promise, PRENV(promise));
+        }
     }
-    return forcePromise(promise);
 }
 
 // TODO remove numArgs and bp -- this is only needed for the on stack argument
@@ -349,7 +366,7 @@ INSTRUCTION(ldddvar_) {
 
     // if promise, evaluate & return
     if (TYPEOF(val) == PROMSXP)
-        val = promiseValue(val);
+        val = promiseValue(val, ctx);
 
     // WTF? is this just defensive programming or what?
     if (NAMED(val) == 0 && val != R_NilValue)
@@ -372,7 +389,7 @@ INSTRUCTION(ldvar_) {
 
     // if promise, evaluate & return
     if (TYPEOF(val) == PROMSXP)
-        val = promiseValue(val);
+        val = promiseValue(val, ctx);
 
     // WTF? is this just defensive programming or what?
     if (NAMED(val) == 0 && val != R_NilValue)
@@ -648,7 +665,7 @@ INSTRUCTION(force_) {
     // If the promise is already evaluated then push the value inside the
     // promise
     // onto the stack, otherwise push the value from forcing the promise
-    ostack_push(ctx, promiseValue(p));
+    ostack_push(ctx, promiseValue(p, ctx));
 }
 
 INSTRUCTION(pop_) { ostack_pop(ctx); }

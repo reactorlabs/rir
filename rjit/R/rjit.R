@@ -9,6 +9,10 @@ rir.src <- function()  {
     .Call("rir_src")
 }
 
+rir.isValidFunction <- function(what) {
+    .Call("rir_isValidFunction", what);
+}
+
 rir.enableJit <- function() {
     .Call("rir_jitEnable");
     invisible(compiler:::enableJIT(1));
