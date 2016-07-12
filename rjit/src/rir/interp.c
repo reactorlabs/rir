@@ -903,6 +903,8 @@ SEXP rirEval(SEXP e, SEXP env) {
         evalcount = 0 ;
     }
 
+    R_Visible = TRUE;
+
     /* handle self-evluating objects with minimal overhead */
     switch (TYPEOF(e)) {
     case INTSXP: {
