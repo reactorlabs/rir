@@ -39,6 +39,9 @@ extern "C" void initializeCallbacks(callback_isValidFunction,
                                     callback_rirEval_f,
                                     callback_rirExpr);
 
+static int rirJitEnabled = false;
+static bool rjitJitEnabled = false;
+
 // =======================================================================
 // == RIR API
 //
@@ -52,17 +55,18 @@ REXPORT SEXP rir_compileAst(SEXP ast, SEXP env) {
 }
 
 REXPORT SEXP rir_compileClosure(SEXP f) {
-    assert(TYPEOF(f) == CLOSXP and "Can only do closures");
+    if(TYPEOF(f) != CLOSXP)
+        Rf_error("Expected a closure");
+
     SEXP body = BODY(f);
 
     if (TYPEOF(body) == BCODESXP) {
         body = VECTOR_ELT(CDR(body), 0);
-        //warning("Skipping jit of Bytecode");
-        //return f;
     }
 
-    assert(TYPEOF(body) != INTSXP and TYPEOF(body) != BCODESXP and
-           "Can only do asts");
+    if (TYPEOF(body) == INTSXP)
+        Rf_error("closure already compiled");
+
     SEXP result = allocSExp(CLOSXP);
     PROTECT(result);
     auto res = rir::Compiler::compileClosure(body, CLOENV(f), FORMALS(f));
@@ -82,6 +86,10 @@ extern "C" void setEvalHook(callback_eval);
 extern "C" void resetEvalHook();
 
 REXPORT SEXP rir_jitDisable(SEXP expression) {
+    if (rirJitEnabled == 2)
+        Rf_error("enabled sticky, cannot disable");
+
+    rirJitEnabled = false;
     resetCompileExpressionOverride();
     resetCmpFunOverride();
     resetEvalHook();
@@ -89,6 +97,14 @@ REXPORT SEXP rir_jitDisable(SEXP expression) {
 }
 
 REXPORT SEXP rir_jitEnable(SEXP expression) {
+    if (rjitJitEnabled)
+        Rf_error("cannot use rir and rjit at the same time");
+
+    rirJitEnabled = true;
+
+    if (TYPEOF(expression) == INTSXP && INTEGER(expression)[0] == 1)
+        rirJitEnabled = 2;
+
     setCompileExpressionOverride(INTSXP, &rir_compileAst);
     setCmpFunOverride(INTSXP, &rir_compileClosure);
     setEvalHook(&rirEval);
@@ -97,13 +113,17 @@ REXPORT SEXP rir_jitEnable(SEXP expression) {
 
 
 REXPORT SEXP rir_compileClosureInPlace(SEXP f) {
-    assert(TYPEOF(f) == CLOSXP and "Can only do closures");
-    SEXP body = BODY(f);
-    if (TYPEOF(body) == BCODESXP)
-        body = VECTOR_ELT(CDR(body), 0);
+    if(TYPEOF(f) != CLOSXP)
+        Rf_error("Expected a closure");
 
-    assert(TYPEOF(body) != INTSXP and TYPEOF(body) != BCODESXP and
-           "Can only do asts");
+    SEXP body = BODY(f);
+    if (TYPEOF(body) == BCODESXP) {
+        body = VECTOR_ELT(CDR(body), 0);
+    }
+
+    if (TYPEOF(body) == INTSXP)
+        Rf_error("closure already compiled");
+
     auto res = rir::Compiler::compileClosure(body, CLOENV(f), FORMALS(f));
     SET_BODY(f, res.bc);
     SET_FORMALS(f, res.formals);
@@ -111,7 +131,12 @@ REXPORT SEXP rir_compileClosureInPlace(SEXP f) {
 }
 
 REXPORT SEXP rir_exec(SEXP bytecode, SEXP env) {
-    assert(isValidFunction(bytecode));
+    if (rjitJitEnabled)
+        Rf_error("cannot use rir and rjit at the same time");
+
+    if (!isValidFunction(bytecode)) {
+        Rf_error("Not a valid rir function");
+    }
     ::Function* f = reinterpret_cast<::Function*>(INTEGER(bytecode));
     return rirEval_c(functionCode(f), globalContext(), env, 0);
 }
@@ -173,8 +198,8 @@ REXPORT SEXP rir_print(SEXP store) {
 /** Displays the LLVM IR for given NATIVESXP.
  */
 REXPORT SEXP rjit_print(SEXP expression) {
-    assert(TYPEOF(expression) == NATIVESXP and
-           "LLVM code can only be extracted from a NATIVESXP argument");
+    if (TYPEOF(expression) != NATIVESXP)
+        Rf_error("Invalid type (expected NATIVESXP), got %u", TYPEOF(expression));
     llvm::Function* f = reinterpret_cast<llvm::Function*>(TAG(expression));
     f->dump();
     return R_NilValue;
@@ -199,8 +224,8 @@ REXPORT SEXP rjit_SwapForNative(SEXP original, SEXP native) {
 /** Returns the constant pool associated with the given NATIVESXP.
  */
 REXPORT SEXP rjit_GetConstants(SEXP expression) {
-    assert(TYPEOF(expression) == NATIVESXP and
-           "JIT constants can only be extracted from a NATIVESXP argument");
+    if (TYPEOF(expression) != NATIVESXP)
+        Rf_error("Invalid type (expected NATIVESXP), got %u", TYPEOF(expression));
     return CDR(expression);
 }
 
@@ -213,7 +238,9 @@ REXPORT SEXP rjit_compileAst(SEXP ast, SEXP env) {
 }
 
 REXPORT SEXP rjit_compileClosure(SEXP f) {
-    assert(TYPEOF(f) == CLOSXP and "Can only do closures");
+    if(TYPEOF(f) != CLOSXP)
+        Rf_error("Expected a closure");
+
     SEXP result = allocSExp(CLOSXP);
     PROTECT(result);
     SET_FORMALS(result, FORMALS(f));
@@ -226,12 +253,17 @@ REXPORT SEXP rjit_compileClosure(SEXP f) {
 
 
 REXPORT SEXP rjit_jitDisable(SEXP expression) {
+    rjitJitEnabled = false;
     resetCompileExpressionOverride();
     resetCmpFunOverride();
     return R_NilValue;
 }
 
 REXPORT SEXP rjit_jitEnable(SEXP expression) {
+    if (rirJitEnabled)
+        Rf_error("cannot use rir and rjit at the same time");
+
+    rjitJitEnabled = true;
     setCompileExpressionOverride(NATIVESXP, &rjit_compileAst);
     setCmpFunOverride(NATIVESXP, &rjit_compileClosure);
     return R_NilValue;

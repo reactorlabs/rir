@@ -1,8 +1,8 @@
 # ==============================
 # === rir api:
 
-rir.enableJit <- function() {
-    .Call("rir_jitEnable");
+rir.enableJit <- function(sticky = 0) {
+    .Call("rir_jitEnable", sticky);
     invisible(compiler:::enableJIT(1));
 }
 rir.disableJit <- function() {
