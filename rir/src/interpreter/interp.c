@@ -197,8 +197,11 @@ INLINE SEXP getSrcForCall(Code* c, OpcodeT* pc, Context* ctx) {
 
  */
 INLINE SEXP createPromise(Code* code, SEXP env) {
+#if RIR_AS_PACKAGE == 1
     return mkPROMISE(rir_createWrapperPromise(code), env);
-    //return mkPROMISE((SEXP)code, env);
+#else
+    return mkPROMISE((SEXP)code, env);
+#endif
 }
 
 INLINE SEXP promiseValue(SEXP promise, Context * ctx) {
@@ -208,27 +211,7 @@ INLINE SEXP promiseValue(SEXP promise, Context * ctx) {
         SET_NAMED(promise, 2);
         return promise;
     } else {
-        // eval.c 463 forcePromise
-        // The problem here is that the R_PendingPromises does not seem to be exported, so if we want to evaluate a promise, we must call the eval itself, fortunately this does evaluate the promise, but will likely not be superfast.
-        // TODO not using the Prstack will bite us - debugging info, etc?
-        // TODO there is some stuff from eval() missing, such as yielding and recursion check, but not a big deal here...
-        Code * c = isValidPromiseSEXP(promise);
-        if (c != NULL) {
-            if (PRSEEN(promise)) {
-                if (PRSEEN(promise) == 1)
-                    error("promise already under evaluation: recursive default argument reference or earlier problems?");
-                else warning("restarting interrupted promise evaluation");
-            }
-            SET_PRSEEN(promise, 1);
-            SEXP val = evalRirCode(c, ctx, PRENV(promise), 0);
-            SET_PRSEEN(promise, 0);
-            SET_PRVALUE(promise, val);
-            SET_NAMED(val, 2);
-            SET_PRENV(promise, R_NilValue);
-            return val;
-        } else {
-            return Rf_eval(promise, PRENV(promise));
-        }
+        return forcePromise(promise);
     }
 }
 
@@ -472,8 +455,6 @@ SEXP evalCbFunction(EvalCbArg* arg_) {
     EvalCbArg* arg = (EvalCbArg*)arg_;
     return evalRirCode(arg->code, arg->ctx, arg->env, arg->nargs);
 }
-//void initClosureContext(void*, SEXP, SEXP, SEXP, SEXP, SEXP);
-//void endClosureContext(void*, SEXP);
 
 /** Performs the call.
 
@@ -518,16 +499,10 @@ SEXP doCall(Code * caller, SEXP call, SEXP callee, unsigned * args, size_t nargs
             actuals = createNoNameArgsList(caller, args, nargs, env);
         }
         PROTECT(actuals);
-        Function * f = isValidFunctionSEXP(callee);
-        if (f != NULL) {
-            // TODO we do not have to go to gnu-r here, but setting up the context w/o gnu-r will be tricky
-            result = applyClosure(call, callee, actuals, env, R_NilValue);
-        } else {
-            // otherwise use R's own call mechanism
-            result = applyClosure(call, callee, actuals, env, R_NilValue);
-        }
+#if RIR_AS_PACKAGE == 0
         // if body is INTSXP, it is rir serialized code, execute it directly
-/*        if (TYPEOF(body) == INTSXP) {
+        SEXP body = BODY(callee);
+        if (TYPEOF(body) == INTSXP) {
             SEXP newEnv = closureArgumentAdaptor(call, callee, actuals, env, R_NilValue);
 
             // TODO since we do not have access to the context definition we
@@ -538,8 +513,18 @@ SEXP doCall(Code * caller, SEXP call, SEXP callee, unsigned * args, size_t nargs
             EvalCbArg arg = {functionCode((Function*)INTEGER(body)), ctx, newEnv, nargs};
             result = hook_rirCallTrampoline(&cntxt, evalCbFunction, &arg);
             endClosureContext(&cntxt, result);
-        } else
- */
+            UNPROTECT(1);
+            break;
+        }
+#endif
+        Function * f = isValidClosureSEXP(callee);
+        if (f != NULL) {
+            // TODO we do not have to go to gnu-r here, but setting up the context w/o gnu-r will be tricky
+            result = applyClosure(call, callee, actuals, env, R_NilValue);
+        } else {
+            // otherwise use R's own call mechanism
+            result = applyClosure(call, callee, actuals, env, R_NilValue);
+        }
         UNPROTECT(1); // argslist
         break;
     }

@@ -21,22 +21,21 @@ using namespace rir;
 /** Returns TRUE if given SEXP is a valid rir compiled function. FALSE otherwise.
  */
 REXPORT SEXP rir_isValidFunction(SEXP what) {
-    return isValidFunctionSEXP(what) == nullptr ? R_FalseValue : R_TrueValue;
+    return isValidClosureSEXP(what) == nullptr ? R_FalseValue : R_TrueValue;
 }
 
 /** Prints the information in given Function SEXP
  */
-REXPORT SEXP rir_disassemble(SEXP store) {
-    if (TYPEOF(store) != INTSXP)
-        Rf_error("Invalid type (expected INTSXP), got %u", TYPEOF(store));
+REXPORT SEXP rir_disassemble(SEXP what) {
 
-    assert((unsigned)Rf_length(store) > sizeof(::Function) and
-           "Corrupted int vector send");
+    ::Function * f = TYPEOF(what) == CLOSXP ? isValidClosureSEXP(what) : isValidFunctionSEXP(what);
 
-    rir::FunctionHandle fun(store);
-    Rprintf("Container length %u.\n", Rf_length(store));
+    if (f == nullptr)
+        Rf_error("Not a rir compiled code");
 
-    Function* f = fun.function;
+    rir::FunctionHandle fun(functionSEXP(f));
+    Rprintf("Container length %u.\n", Rf_length(what));
+
     printFunction(f);
     return R_NilValue;
 }
@@ -68,7 +67,7 @@ REXPORT SEXP rir_compile(SEXP what) {
 REXPORT SEXP rir_eval(SEXP what, SEXP env) {
     ::Function * f = isValidFunctionObject(what);
     if (f == nullptr)
-        f = isValidCodeWrapperSEXP(what);
+        f = isValidClosureSEXP(what);
     if (f == nullptr)
         Rf_error("Not rir compiled code");
     return evalRirCode(functionCode(f), globalContext(), env, 0);
@@ -89,7 +88,7 @@ REXPORT SEXP rir_src() {
 }
 
 REXPORT SEXP rir_body(SEXP cls) {
-    ::Function * f = isValidFunctionSEXP(cls);
+    ::Function * f = isValidClosureSEXP(cls);
     if (f == nullptr)
         Rf_error("Not a valid rir compiled function");
     return functionSEXP(f);

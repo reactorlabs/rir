@@ -72,9 +72,34 @@ SEXP mkPROMISE(SEXP expr, SEXP rho) {
     return s;
 }
 
+SEXP forcePromise(SEXP promise) {
+    // eval.c 463 forcePromise
+    // The problem here is that the R_PendingPromises does not seem to be exported, so if we want to evaluate a promise, we must call the eval itself, fortunately this does evaluate the promise, but will likely not be superfast.
+    // TODO not using the Prstack will bite us - debugging info, etc?
+    // TODO there is some stuff from eval() missing, such as yielding and recursion check, but not a big deal here...
+    Code * c = isValidPromiseSEXP(promise);
+    if (c != NULL) {
+        if (PRSEEN(promise)) {
+            if (PRSEEN(promise) == 1)
+                error("promise already under evaluation: recursive default argument reference or earlier problems?");
+            else warning("restarting interrupted promise evaluation");
+        }
+        SET_PRSEEN(promise, 1);
+        SEXP val = evalRirCode(c, globalContext(), PRENV(promise), 0);
+        SET_PRSEEN(promise, 0);
+        SET_PRVALUE(promise, val);
+        SET_NAMED(val, 2);
+        SET_PRENV(promise, R_NilValue);
+        return val;
+    } else {
+        return Rf_eval(promise, PRENV(promise));
+    }
+}
+
 #endif
 
-Function * isValidCodeWrapperSEXP(SEXP wrapper) {
+Function * isValidFunctionSEXP(SEXP wrapper) {
+#if RIR_AS_PACKAGE == 1
     if (TYPEOF(wrapper) != LANGSXP)
         return nullptr;
     // now we know it is uncompiled function, check that it contains what we expect
@@ -95,20 +120,24 @@ Function * isValidCodeWrapperSEXP(SEXP wrapper) {
         return nullptr;
     // that's enough checking, return the function
     return (Function*)INTEGER(x);
+#else
+    return isValidFunctionObject(wrapper);
+#endif
 }
 
 /** Checks if given closure should be executed using RIR.
 
   If the given closure is RIR function, returns its Function object, otherwise returns nullptr.
  */
-Function * isValidFunctionSEXP(SEXP closure) {
+Function * isValidClosureSEXP(SEXP closure) {
     if (TYPEOF(closure) != CLOSXP)
         return nullptr;
-    return isValidCodeWrapperSEXP(BODY(closure));
+    return isValidFunctionSEXP(BODY(closure));
 }
 
 Code * isValidPromiseSEXP(SEXP promise) {
     SEXP body = PRCODE(promise);
+#if RIR_AS_PACKAGE == 1
     if (TYPEOF(body) != LANGSXP)
         return nullptr;
     // now we know it is uncompiled function, check that it contains what we expect
@@ -135,6 +164,9 @@ Code * isValidPromiseSEXP(SEXP promise) {
         return nullptr;
     unsigned offset = (unsigned)INTEGER(x)[0];
     return codeAt((Function*)INTEGER(code), offset);
+#else
+    return isValidCodeObject(body);
+#endif
 }
 
 // for now, we will have to rewrite this when it goes to GNU-R proper

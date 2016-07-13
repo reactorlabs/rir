@@ -7,8 +7,6 @@ rir.isValidFunction <- function(what) {
 
 # prints the disassembled rir function
 rir.disassemble <- function(what) {
-    if (typeof(what) == "closure")
-        what <- rir.body(what);
     invisible(.Call("rir_disassemble", what))
 }
 
