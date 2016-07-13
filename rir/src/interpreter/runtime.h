@@ -14,9 +14,25 @@ C_OR_CPP SEXP rir_createWrapperPromise(Code * code);
 
 // functions from gnu-r
 
+#if RIR_AS_PACKAGE == 1
+
 C_OR_CPP int ddVal(SEXP symbol);
 C_OR_CPP SEXP Rf_ddfindVar(SEXP symbol, SEXP rho);
 C_OR_CPP SEXP mkPROMISE(SEXP expr, SEXP rho);
+
+#else
+
+C_OR_CPP int ddVal(SEXP symbol);
+C_OR_CPP SEXP Rf_ddfindVar(SEXP symbol, SEXP rho);
+
+// TODO we should change gnu-R and make mkPROMISE exposed, this is a hack so that I do not change too many things at once
+C_OR_CPP SEXP hook_mkPROMISE(SEXP, SEXP);
+#define mkPROMISE hook_mkPROMISE
+
+C_OR_CPP void initializeCallbacks(callback_isValidFunction, callback_isValidFunction, callback_rirEval_f)
+
+
+#endif
 
 
 // rir runtime functions -------------------------------------------------------

@@ -192,7 +192,7 @@ SEXP rir_createWrapperPromise(Code * code) {
     UNPROTECT(2);
     return result;
 #else
-    return reinterpret_cast<SEXP>(code);
+    return (SEXP)code;
 #endif
 }
 

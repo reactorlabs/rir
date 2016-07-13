@@ -11,7 +11,7 @@
  */
 
 #ifndef RIR_AS_PACKAGE
-#define RIR_AS_PACKAGE 1
+#define RIR_AS_PACKAGE 0
 #endif
 
 
