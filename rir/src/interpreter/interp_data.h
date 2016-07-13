@@ -210,20 +210,20 @@ struct Function {
 
 typedef struct Function Function;
 
-INLINE bool isValidFunction(SEXP s) {
+INLINE Function * isValidFunctionObject(SEXP s) {
     if (TYPEOF(s) != INTSXP)
-        return false;
+        return NULL;
     if ((unsigned)Rf_length(s) < sizeof(Function))
-        return false;
+        return NULL;
     Function* f = (Function*)INTEGER(s);
     if (f->magic != FUNCTION_MAGIC)
-        return false;
+        return NULL;
     if (f->size > (unsigned)Rf_length(s))
-        return false;
+        return NULL;
     if (f->foffset >= f->size - sizeof(Code))
-        return false;
+        return NULL;
     // TODO it is still only an assumption
-    return true;
+    return f;
 }
 
 /** Returns the INTSXP for the Function object. */

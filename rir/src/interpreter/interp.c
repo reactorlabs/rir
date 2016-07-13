@@ -7,8 +7,8 @@
 
 // stuff from api the interpreter uses
 
-extern Code * c_isValidPromise(SEXP promise);
-extern Function * c_isValidFunction(SEXP closure);
+extern Code * isValidPromiseSEXP(SEXP promise);
+extern Function * isValidFunctionSEXP(SEXP closure);
 
 extern SEXP rir_createWrapperPromise(Code * code);
 
@@ -285,8 +285,8 @@ INLINE SEXP promiseValue(SEXP promise, Context * ctx) {
         // eval.c 463 forcePromise
         // The problem here is that the R_PendingPromises does not seem to be exported, so if we want to evaluate a promise, we must call the eval itself, fortunately this does evaluate the promise, but will likely not be superfast.
         // TODO not using the Prstack will bite us - debugging info, etc?
-        // TODO how about setting the context? tricky doing that ourselves too...
-        Code * c = c_isValidPromise(promise);
+        // TODO there is some stuff from eval() missing, such as yielding and recursion check, but not a big deal here...
+        Code * c = isValidPromiseSEXP(promise);
         if (c != NULL) {
             if (PRSEEN(promise)) {
                 if (PRSEEN(promise) == 1)
@@ -294,7 +294,7 @@ INLINE SEXP promiseValue(SEXP promise, Context * ctx) {
                 else warning("restarting interrupted promise evaluation");
             }
             SET_PRSEEN(promise, 1);
-            SEXP val = rirEval_c(c, ctx, PRENV(promise), 0);
+            SEXP val = evalRirCode(c, ctx, PRENV(promise), 0);
             SET_PRSEEN(promise, 0);
             SET_PRVALUE(promise, val);
             SET_NAMED(val, 2);
@@ -338,7 +338,7 @@ INSTRUCTION(ldfun_) {
                 body = VECTOR_ELT(CDR(body), 0);
             if (TYPEOF(body) != INTSXP) {
                 SEXP env = CLOENV(val);
-                SEXP b = ctx->compiler(body, env);
+                SEXP b = ctx->compiler(body);
                 SET_BODY(val, b);
                 //SET_BODY(val, ctx->compiler(body, CLOENV(val)));
 
@@ -510,7 +510,7 @@ SEXP createEagerArgsList(Code* c, FunctionIndex* args, size_t nargs, SEXP names,
             // TODO error
             assert(false);
         } else {
-            SEXP arg = rirEval_c(codeAt(function(c), offset), ctx, env, 0);
+            SEXP arg = evalRirCode(codeAt(function(c), offset), ctx, env, 0);
             protected += __listAppend(&result, &pos, arg, name);
         }
     }
@@ -544,7 +544,7 @@ typedef struct {
 SEXP hook_rirCallTrampoline(void* cntxt, SEXP (*evalCb)(EvalCbArg*), EvalCbArg* arg);
 SEXP evalCbFunction(EvalCbArg* arg_) {
     EvalCbArg* arg = (EvalCbArg*)arg_;
-    return rirEval_c(arg->code, arg->ctx, arg->env, arg->nargs);
+    return evalRirCode(arg->code, arg->ctx, arg->env, arg->nargs);
 }
 //void initClosureContext(void*, SEXP, SEXP, SEXP, SEXP, SEXP);
 //void endClosureContext(void*, SEXP);
@@ -592,7 +592,7 @@ SEXP doCall(Code * caller, SEXP call, SEXP callee, unsigned * args, size_t nargs
             actuals = createNoNameArgsList(caller, args, nargs, env);
         }
         PROTECT(actuals);
-        Function * f = c_isValidFunction(callee);
+        Function * f = isValidFunctionSEXP(callee);
         if (f != NULL) {
             // TODO we do not have to go to gnu-r here, but setting up the context w/o gnu-r will be tricky
             result = applyClosure(call, callee, actuals, env, R_NilValue);
@@ -912,7 +912,7 @@ extern void rirBacktrace(Context* ctx) {
     }
 }
 
-SEXP rirEval_c(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
+SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
 
     // printCode(c);
 
@@ -974,35 +974,6 @@ SEXP rirEval_c(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
 __eval_done:
     fstack_pop(ctx, frame);
     return ostack_pop(ctx);
-}
-
-SEXP rirExpr(SEXP f) {
-    if (isValidPromise(f)) {
-        Code* c = (Code*)f;
-        return src_pool_at(globalContext(), c->src);
-    }
-    if (isValidFunction(f)) {
-        Function* ff = (Function*)(INTEGER(f));
-        return src_pool_at(globalContext(), functionCode(ff)->src);
-    }
-    return f;
-}
-
-SEXP rirEval_f(SEXP f, SEXP env) {
-    // TODO we do not really need the arg counts now
-    if (isValidPromise(f)) {
-        //        Rprintf("Evaluating promise:\n");
-        Code* c = (Code*)f;
-        SEXP x = rirEval_c(c, globalContext(), env, 0);
-      //        Rprintf("Promise evaluated, length %u, value %d",
-        //        Rf_length(x), REAL(x)[0]);
-        return x;
-    } else {
-        //        Rprintf("=====================================================\n");
-        //        Rprintf("Evaluating function\n");
-        Function* ff = (Function*)(INTEGER(f));
-        return rirEval_c(functionCode(ff), globalContext(), env, 0);
-    }
 }
 
 

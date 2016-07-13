@@ -20,7 +20,7 @@ extern "C" {
 
   The idea is to call this if we want on demand compilation of closures.
  */
-typedef SEXP (*CompilerCallback)(SEXP, SEXP);
+typedef SEXP (*CompilerCallback)(SEXP);
 
 
 /** Resizeable R list.

@@ -25,50 +25,43 @@ namespace {
     SEXP promExecName;
 }
 
+// helper functions - not really exported to R, but helpful for both C and C++ code
 
-/** Returns the constant pool object for inspection from R.
- */
-REXPORT SEXP rir_cp() {
-    return globalContext()->cp.list;
-}
 
-/** Returns the ast (source) pool object for inspection from R.
- */
-REXPORT SEXP rir_src() {
-    return globalContext()->src.list;
-}
-
-/** Checks if given closure should be executed using RIR.
-
-  If the given closure is RIR function, returns its Function object, otherwise returns nullptr.
- */
-REXPORT ::Function * c_isValidFunction(SEXP closure) {
-    if (TYPEOF(closure) != CLOSXP)
-        return nullptr;
-    SEXP body = BODY(closure);
-    if (TYPEOF(body) != LANGSXP)
+extern "C" ::Function * isValidCodeWrapperSEXP(SEXP wrapper) {
+    if (TYPEOF(wrapper) != LANGSXP)
         return nullptr;
     // now we know it is uncompiled function, check that it contains what we expect
-    SEXP x = CAR(body);
+    SEXP x = CAR(wrapper);
     if (x != callSymbol)
         return nullptr;
-    body = CDR(body);
-    if (body == R_NilValue)
+    wrapper = CDR(wrapper);
+    if (wrapper == R_NilValue)
         return nullptr;
-    x = CAR(body);
+    x = CAR(wrapper);
     if (x != execName)
         return nullptr;
-    body = CDR(body);
-    if (body == R_NilValue)
+    wrapper = CDR(wrapper);
+    if (wrapper == R_NilValue)
         return nullptr;
-    x = CAR(body);
+    x = CAR(wrapper);
     if (TYPEOF(x) != INTSXP)
         return nullptr;
     // that's enough checking, return the function
     return reinterpret_cast<::Function*>(INTEGER(x));
 }
 
-REXPORT ::Code * c_isValidPromise(SEXP promise) {
+/** Checks if given closure should be executed using RIR.
+
+  If the given closure is RIR function, returns its Function object, otherwise returns nullptr.
+ */
+extern "C" ::Function * isValidFunctionSEXP(SEXP closure) {
+    if (TYPEOF(closure) != CLOSXP)
+        return nullptr;
+    return isValidCodeWrapperSEXP(BODY(closure));
+}
+
+extern "C" ::Code * isValidPromiseSEXP(SEXP promise) {
     SEXP body = PRCODE(promise);
     if (TYPEOF(body) != LANGSXP)
         return nullptr;
@@ -98,121 +91,6 @@ REXPORT ::Code * c_isValidPromise(SEXP promise) {
     return codeAt(reinterpret_cast<::Function*>(INTEGER(code)), offset);
 }
 
-REXPORT SEXP rir_isValidFunction(SEXP what) {
-    return c_isValidFunction(what) == nullptr ? R_FalseValue : R_TrueValue;
-}
-
-REXPORT SEXP rir_createWrapperAst(SEXP rirBytecode) {
-    SEXP envCall = Rf_lang1(envSymbol);
-    PROTECT(envCall);
-    SEXP result =  Rf_lang4(callSymbol, execName, rirBytecode, envCall);
-    UNPROTECT(1);
-    return result;
-}
-
-/** Compiles the given ast.
- */
-REXPORT SEXP rir_compileAst(SEXP ast, SEXP env) {
-    auto res = Compiler::compileExpression(ast);
-
-    return rir_createWrapperAst(res.bc);
-    // return res.bc;
-}
-
-
-
-REXPORT SEXP rir_createWrapperPromise(Code * code) {
-    printf("Creating promise");
-    SEXP envCall = lang1(envSymbol);
-    PROTECT(envCall);
-    SEXP offset = Rf_allocVector(INTSXP, 1);
-    PROTECT(offset);
-    INTEGER(offset)[0] = code->header;
-    SEXP result =  Rf_lang5(callSymbol, promExecName, functionSEXP(function(code)), offset, envCall);
-    UNPROTECT(2);
-    return result;
-}
-
-REXPORT SEXP rir_compileClosure(SEXP f) {
-    assert(TYPEOF(f) == CLOSXP and "Can only do closures");
-    SEXP body = BODY(f);
-
-    if (TYPEOF(body) == BCODESXP) {
-        body = VECTOR_ELT(CDR(body), 0);
-        //warning("Skipping jit of Bytecode");
-        //return f;
-    }
-
-    assert(TYPEOF(body) != INTSXP and TYPEOF(body) != BCODESXP and
-           "Can only do asts");
-    SEXP result = allocSExp(CLOSXP);
-    PROTECT(result);
-    auto res = Compiler::compileClosure(body, CLOENV(f), FORMALS(f));
-    SET_FORMALS(result, res.formals);
-    SET_CLOENV(result, CLOENV(f));
-    //SET_BODY(result, res.bc);
-    SET_BODY(result, rir_createWrapperAst(res.bc));
-    Rf_copyMostAttrib(f, result);
-    UNPROTECT(1);
-    return result;
-}
-
-
-
-
-
-REXPORT SEXP rir_executeWrapper(SEXP bytecode, SEXP env) {
-    ::Function * f = reinterpret_cast<::Function *>(INTEGER(bytecode));
-    printf("Evaluating function\n");
-    return rirEval_c(functionCode(f), globalContext(), env, 0);
-}
-
-REXPORT SEXP rir_executePromiseWrapper(SEXP function, SEXP offset, SEXP env) {
-    assert(TYPEOF(function) == INTSXP && "Invalid rir function");
-    assert(TYPEOF(offset) == INTSXP && Rf_length(offset) == 1 && "Invalid offset");
-    unsigned ofs = (unsigned)INTEGER(offset)[0];
-    printf("Evaluating promise at offset %u\n", ofs);
-    ::Code * c = codeAt((Function*)INTEGER(function), ofs);
-    return rirEval_c(c, globalContext(), env, 0);
-}
-
-//extern "C" void resetCompileExpressionOverride();
-//extern "C" void resetCmpFunOverride();
-//extern "C" void setCompileExpressionOverride(int, SEXP (*fun)(SEXP, SEXP));
-//extern "C" void setCmpFunOverride(int, SEXP (*fun)(SEXP));
-
-REXPORT SEXP rir_jitDisable(SEXP expression) {
-//    resetCompileExpressionOverride();
-//    resetCmpFunOverride();
-    return R_NilValue;
-}
-
-REXPORT SEXP rir_jitEnable(SEXP expression) {
-//    setCompileExpressionOverride(INTSXP, &rir_compileAst);
-//    setCmpFunOverride(INTSXP, &rir_compileClosure);
-    return R_NilValue;
-}
-
-
-REXPORT SEXP rir_compileClosureInPlace(SEXP f) {
-    assert(TYPEOF(f) == CLOSXP and "Can only do closures");
-    SEXP body = BODY(f);
-    assert(TYPEOF(body) != INTSXP and TYPEOF(body) != BCODESXP and
-           "Can only do asts");
-    auto res = Compiler::compileClosure(body, CLOENV(f), FORMALS(f));
-    SET_BODY(f, res.bc);
-    SET_FORMALS(f, res.formals);
-    return f;
-}
-
-REXPORT SEXP rir_exec(SEXP bytecode, SEXP env) {
-    assert(isValidFunction(bytecode));
-    ::Function* f = reinterpret_cast<::Function*>(INTEGER(bytecode));
-    return rirEval_c(functionCode(f), globalContext(), env, 0);
-}
-
-/** Helper function that prints the code object.
- */
 extern "C" void printCode(::Code* c) {
     Rprintf("Code object (offset %x (hex))\n", c->header);
     Rprintf("  Magic:     %x (hex)\n", c->magic);
@@ -243,9 +121,36 @@ extern "C" void printFunction(::Function* f) {
         printCode(c);
 }
 
+extern "C" SEXP rir_createWrapperAst(SEXP rirBytecode) {
+    SEXP envCall = Rf_lang1(envSymbol);
+    PROTECT(envCall);
+    SEXP result =  Rf_lang4(callSymbol, execName, rirBytecode, envCall);
+    UNPROTECT(1);
+    return result;
+}
+
+extern "C" SEXP rir_createWrapperPromise(Code * code) {
+    SEXP envCall = lang1(envSymbol);
+    PROTECT(envCall);
+    SEXP offset = Rf_allocVector(INTSXP, 1);
+    PROTECT(offset);
+    INTEGER(offset)[0] = code->header;
+    SEXP result =  Rf_lang5(callSymbol, promExecName, functionSEXP(function(code)), offset, envCall);
+    UNPROTECT(2);
+    return result;
+}
+
+// actual rir api --------------------------------------------------------------
+
+/** Returns TRUE if given SEXP is a valid rir compiled function. FALSE otherwise.
+ */
+REXPORT SEXP rir_isValidFunction(SEXP what) {
+    return isValidFunctionSEXP(what) == nullptr ? R_FalseValue : R_TrueValue;
+}
+
 /** Prints the information in given Function SEXP
  */
-REXPORT SEXP rir_print(SEXP store) {
+REXPORT SEXP rir_disassemble(SEXP store) {
     if (TYPEOF(store) != INTSXP)
         Rf_error("Invalid type (expected INTSXP), got %u", TYPEOF(store));
 
@@ -260,10 +165,74 @@ REXPORT SEXP rir_print(SEXP store) {
     return R_NilValue;
 }
 
+REXPORT SEXP rir_compile(SEXP what) {
+    // TODO make this nicer
+    if (TYPEOF(what) == CLOSXP) {
+        if (TYPEOF(BODY(what)) != BCODESXP) {
+            SEXP result = allocSExp(CLOSXP);
+            PROTECT(result);
+            auto res = Compiler::compileClosure(BODY(what), CLOENV(what), FORMALS(what));
+            SET_FORMALS(result, res.formals);
+            SET_CLOENV(result, CLOENV(what));
+            SET_BODY(result, rir_createWrapperAst(res.bc));
+            Rf_copyMostAttrib(what, result);
+            UNPROTECT(1);
+            return result;
+        }
+    } else if (TYPEOF(what) != BCODESXP) {
+        auto res = Compiler::compileExpression(what);
+        return rir_createWrapperAst(res.bc);
+    }
+    // can ony be bytecode now
+    Rf_error("Cannot compile R bytecode - use ASTs instead");
+}
 
-// =======================================================================
-// == Callbacks
-//
+/** Evaluates the given expression.
+ */
+REXPORT SEXP rir_eval(SEXP what, SEXP env) {
+    ::Function * f = isValidFunctionObject(what);
+    if (f == nullptr)
+        f = isValidCodeWrapperSEXP(what);
+    if (f == nullptr)
+        Rf_error("Not rir compiled code");
+    return evalRirCode(functionCode(f), globalContext(), env, 0);
+}
+
+// debugging & internal purposes API only --------------------------------------
+
+/** Returns the constant pool object for inspection from R.
+ */
+REXPORT SEXP rir_cp() {
+    return globalContext()->cp.list;
+}
+
+/** Returns the ast (source) pool object for inspection from R.
+ */
+REXPORT SEXP rir_src() {
+    return globalContext()->src.list;
+}
+
+REXPORT SEXP rir_body(SEXP cls) {
+    ::Function * f = isValidFunctionSEXP(cls);
+    if (f == nullptr)
+        Rf_error("Not a valid rir compiled function");
+    return functionSEXP(f);
+}
+
+REXPORT SEXP rir_executeWrapper(SEXP bytecode, SEXP env) {
+    ::Function * f = reinterpret_cast<::Function *>(INTEGER(bytecode));
+    return evalRirCode(functionCode(f), globalContext(), env, 0);
+}
+
+REXPORT SEXP rir_executePromiseWrapper(SEXP function, SEXP offset, SEXP env) {
+    assert(TYPEOF(function) == INTSXP && "Invalid rir function");
+    assert(TYPEOF(offset) == INTSXP && Rf_length(offset) == 1 && "Invalid offset");
+    unsigned ofs = (unsigned)INTEGER(offset)[0];
+    ::Code * c = codeAt((Function*)INTEGER(function), ofs);
+    return evalRirCode(c, globalContext(), env, 0);
+}
+
+// startup ---------------------------------------------------------------------
 
 /** Initializes the rir contexts, registers the gc and so on...
 
@@ -279,7 +248,7 @@ bool startup() {
     promExecName = Rf_mkString("rir_executePromiseWrapper");
     R_PreserveObject(promExecName);
 
-    interp_initialize(rir_compileAst);
+    interp_initialize(rir_compile);
 
     return true;
 }

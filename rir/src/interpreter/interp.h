@@ -17,11 +17,7 @@
 extern "C" {
 #endif
 
-SEXP rirEval_c(Code* c, Context* ctx, SEXP env, unsigned numArgs);
-
-SEXP rirEval_f(SEXP f, SEXP env);
-
-SEXP rirExpr(SEXP f);
+SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs);
 
 #ifdef __cplusplus
 }
