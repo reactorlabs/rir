@@ -19,6 +19,12 @@ extern "C" {
 
 SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs);
 
+SEXP rirExpr(SEXP f);
+
+SEXP rirEval_f(SEXP f, SEXP env);
+
+
+
 #ifdef __cplusplus
 }
 #endif

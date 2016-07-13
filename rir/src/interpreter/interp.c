@@ -856,10 +856,12 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
     while (true) {
         // printf("%p : %p, %p\n", c, *pc, *pc - c->data);
         switch (readOpcode(pc)) {
+
 #define INS(name)                                                              \
     case name:                                                                 \
         ins_##name(c, env, pc, ctx, numArgs, bp);                              \
         break
+
             INS(push_);
             INS(ldfun_);
             INS(ldvar_);
@@ -903,6 +905,34 @@ __eval_done:
 }
 
 
+SEXP rirExpr(SEXP f) {
+    if (isValidCodeObject(f)) {
+        Code* c = (Code*)f;
+        return src_pool_at(globalContext(), c->src);
+    }
+    if (isValidFunctionObject(f)) {
+        Function* ff = (Function*)(INTEGER(f));
+        return src_pool_at(globalContext(), functionCode(ff)->src);
+    }
+    return f;
+}
+
+SEXP rirEval_f(SEXP f, SEXP env) {
+    // TODO we do not really need the arg counts now
+    if (isValidCodeObject(f)) {
+        //        Rprintf("Evaluating promise:\n");
+        Code* c = (Code*)f;
+        SEXP x = evalRirCode(c, globalContext(), env, 0);
+      //        Rprintf("Promise evaluated, length %u, value %d",
+        //        Rf_length(x), REAL(x)[0]);
+        return x;
+    } else {
+        //        Rprintf("=====================================================\n");
+        //        Rprintf("Evaluating function\n");
+        Function* ff = (Function*)(INTEGER(f));
+        return evalRirCode(functionCode(ff), globalContext(), env, 0);
+    }
+}
 
 
 

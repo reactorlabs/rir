@@ -29,8 +29,11 @@ C_OR_CPP SEXP Rf_ddfindVar(SEXP symbol, SEXP rho);
 C_OR_CPP SEXP hook_mkPROMISE(SEXP, SEXP);
 #define mkPROMISE hook_mkPROMISE
 
-C_OR_CPP void initializeCallbacks(callback_isValidFunction, callback_isValidFunction, callback_rirEval_f)
+typedef int (*callback_isValidFunction)(SEXP);
+typedef SEXP (*callback_rirEval_f)(SEXP, SEXP);
+typedef SEXP (*callback_rirExpr)(SEXP);
 
+C_OR_CPP void initializeCallbacks(callback_isValidFunction, callback_isValidFunction, callback_rirEval_f, callback_rirExpr);
 
 #endif
 

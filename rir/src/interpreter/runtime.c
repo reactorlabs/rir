@@ -1,4 +1,5 @@
 #include "runtime.h"
+#include "interp.h"
 
 SEXP envSymbol;
 SEXP callSymbol;
@@ -196,6 +197,16 @@ SEXP rir_createWrapperPromise(Code * code) {
 #endif
 }
 
+// TODO change gnu-r to expect ptr and not bool aand we can get rid of the wrapper
+int isValidFunctionObject_int_wrapper(SEXP closure) {
+    return isValidFunctionObject(closure) != nullptr;
+}
+
+int isValidCodeObject_int_wrapper(SEXP code) {
+    return isValidCodeObject(code) != nullptr;
+
+}
+
 
 
 
@@ -208,6 +219,14 @@ void initializeRuntime(CompilerCallback compiler) {
     R_PreserveObject(promExecName);
     // initialize the global context
     globalContext_ = context_create(compiler);
+#if RIR_AS_PACKAGE == 0
+    initializeCallbacks(
+        isValidFunctionObject_int_wrapper,
+        isValidCodeObject_int_wrapper,
+        rirEval_f,
+        rirExpr
+    );
+#endif
 }
 
 Context * globalContext() {

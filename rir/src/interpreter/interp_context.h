@@ -222,7 +222,7 @@ INLINE Frame* fstack_push(Context* c, struct Code* code, SEXP env) {
     return frame;
 }
 
-Context* context_create();
+Context* context_create(CompilerCallback);
 
 INLINE size_t cp_pool_length(Context * c) {
     return rl_length(& c->cp);

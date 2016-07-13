@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include <assert.h>
+#include "../config.h"
 
 #include "R/r.h"
 
@@ -136,12 +137,12 @@ typedef struct Code {
 /** Returns whether the SEXP appears to be valid promise, i.e. a pointer into
  * the middle of the linearized code.
  */
-INLINE bool isValidPromise(SEXP what) {
+INLINE Code * isValidCodeObject(SEXP what) {
     unsigned x = *(unsigned*)what;
     if (x == CODE_MAGIC)
-        return true;
+        return (Code*)what;
     else
-        return false;
+        return nullptr;
 }
 
 /** Returns a pointer to the instructions in c.  */
