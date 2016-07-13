@@ -12,6 +12,9 @@
 
 #include <unordered_map>
 
+#include "interpreter/runtime.h"
+
+
 namespace rir {
 
 class Pool {

@@ -3,82 +3,8 @@
 
 #include "interp.h"
 #include "interp_context.h"
+#include "runtime.h"
 
-
-// stuff from api the interpreter uses
-
-extern Code * isValidPromiseSEXP(SEXP promise);
-extern Function * isValidFunctionSEXP(SEXP closure);
-
-extern SEXP rir_createWrapperPromise(Code * code);
-
-
-
-// Those are functions from R we need
-
-
-// envir.c: 1320
-// only needed by ddfindVar
-int ddVal(SEXP symbol) {
-    const char *buf;
-    char *endp;
-    int rval;
-
-    buf = CHAR(PRINTNAME(symbol));
-    if( !strncmp(buf,"..",2) && strlen(buf) > 2 ) {
-    buf += 2;
-    rval = (int) strtol(buf, &endp, 10);
-    if( *endp != '\0')
-        return 0;
-    else
-        return rval;
-    }
-    return 0;
-}
-
-// envir.c 1357, our version ignores i18n
-SEXP Rf_ddfindVar(SEXP symbol, SEXP rho) {
-    int i;
-    SEXP vl;
-
-    /* first look for ... symbol  */
-    vl = findVar(R_DotsSymbol, rho);
-    i = ddVal(symbol);
-    if (vl != R_UnboundValue) {
-        if (Rf_length(vl) >= i) {
-            vl = nthcdr(vl, i - 1);
-            return(CAR(vl));
-        } else {
-            error("the ... list does not contain %d elements", i);
-        }
-    } else {
-        error("..%d used in an incorrect context, no ... to look in", i);
-    }
-    return R_NilValue;
-}
-
-// memory.c 2333
-/** Creates a promise.
-
-  This is not the fastest way as we always PROTECT expr and rho, but GNU-R's GC does not seem to publish its free nodes API.
- */
-extern SEXP mkPROMISE(SEXP expr, SEXP rho) {
-    PROTECT(expr);
-    PROTECT(rho);
-    SEXP s = Rf_allocSExp(PROMSXP);
-    UNPROTECT(2);
-
-    /* precaution to ensure code does not get modified via
-       substitute() and the like */
-    if (NAMED(expr) < 2) SET_NAMED(expr, 2);
-
-    SET_PRCODE(s, expr);
-    SET_PRENV(s, rho);
-    SET_PRVALUE(s, R_UnboundValue);
-    SET_PRSEEN(s, 0);
-
-    return s;
-}
 
 
 #define NOT_IMPLEMENTED assert(false)

@@ -29,8 +29,7 @@ Context* context_create(CompilerCallback compiler) {
 }
 
 
-// TODO for now we keep the context in a global value for easy gc
-Context * globalContext_;
+extern Context * globalContext_;
 
 extern void R_SetErrorHook(void (*hook)(SEXP, char *));
 extern void rirBacktrace(Context* ctx);
@@ -42,14 +41,5 @@ void rirErrorHook(SEXP call, char * msg) {
     Rf_errorcall(call, msg);
 }
 
-void interp_initialize(CompilerCallback compiler) {
-    globalContext_ = context_create(compiler);
-    // TODO: make this configurable
-    // R_SetErrorHook(&rirErrorHook);
-}
-
-Context * globalContext() {
-    return globalContext_;
-}
 
 

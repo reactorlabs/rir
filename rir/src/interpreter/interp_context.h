@@ -9,19 +9,19 @@
 #include <stdint.h>
 #include <assert.h>
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-#define POOL_CAPACITY 4096
-#define STACK_CAPACITY 4096
-
 /** Compiler API. Given a language object, compiles it and returns the INTSXP containing the Function and its Code objects.
 
   The idea is to call this if we want on demand compilation of closures.
  */
 typedef SEXP (*CompilerCallback)(SEXP);
 
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+#define POOL_CAPACITY 4096
+#define STACK_CAPACITY 4096
 
 /** Resizeable R list.
 
@@ -253,17 +253,7 @@ INLINE SEXP src_pool_at(Context* c, size_t value) {
     return VECTOR_ELT(c->src.list, value);
 }
 
-/** Initializes the interpreter.
- */
-void interp_initialize(CompilerCallback compiler);
 
-/** Returns the global context for the interpreter - important to get access to
-  the shared constant and source pools.
-
-  TODO Even in multithreaded mode we probably want to have cp and src pools
-  shared - it is not that we add stuff to them often.
- */
-Context* globalContext();
 
 #ifdef __cplusplus
 }
