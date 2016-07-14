@@ -18,7 +18,7 @@ set(CMAKE_C_FLAGS_RELEASE "-O1 -std=c99")
 set(CMAKE_C_FLAGS_DEBUG "-std=c99")
 set(CMAKE_C_FLAGS "-std=c99")
 
-#include any local configuretion, overriding the default values above
+#include any local configuration, overriding the default values above
 include(${CMAKE_SOURCE_DIR}/local/cmake.cmake OPTIONAL)
 
 include_directories(${R_INCLUDE_DIR})
