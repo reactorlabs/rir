@@ -29,3 +29,4 @@ external/
 .Rhistory
 /tests
 *.dylib
+.R_HOME
