@@ -21,7 +21,12 @@ set(CMAKE_C_FLAGS "-std=c99")
 if(NOT DEFINED NO_LOCAL_CONFIG)
     #include any local configuration, overriding the default values above
     include(${CMAKE_SOURCE_DIR}/local/cmake.cmake OPTIONAL)
+    set(NO_LOCAL_CONFIG 0)
 endif(NOT DEFINED NO_LOCAL_CONFIG)
+if(${NO_LOCAL_CONFIG})
+    message(STATUS "Local configuration files ignored")
+endif(${NO_LOCAL_CONFIG})
+
 
 
 include_directories(${R_INCLUDE_DIR})
