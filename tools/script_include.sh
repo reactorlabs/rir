@@ -1,3 +1,12 @@
+SCRIPTPATH=`cd $(dirname "$0") && pwd`
+if [ ! -d $SCRIPTPATH ]; then
+    echo "Could not determine absolute dir of $0"
+    echo "Maybe accessed with symlink"
+fi
+
+export ROOT_DIR="${SCRIPTPATH}/.."
+export R_HOME="${ROOT_DIR}/external/custom-r"
+
 USING_OSX=0
 if [[ "$OSTYPE" == "darwin"* ]]; then
     USING_OSX=1

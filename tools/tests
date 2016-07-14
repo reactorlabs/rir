@@ -10,17 +10,14 @@ export SCRIPTPATH
 # Run install script to deploy new hooks
 $SCRIPTPATH/install_hooks.sh
 
-. "${SCRIPTPATH}/../.local.config"
 . "${SCRIPTPATH}/script_include.sh"
 
 if [ -d "$1" ]; then
-    BUILD_DIR=$1
+    export BUILD_DIR=$1
     echo "Using non-default build dir $BUILD_DIR"
+else
+    export BUILD_DIR=$ROOT_DIR
 fi
-
-export BUILD_DIR
-export R_HOME
-export ROOT_DIR
 
 STATUS=$(mktemp /tmp/r-test-status.XXXXXX)
 touch $STATUS
