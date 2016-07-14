@@ -1,6 +1,6 @@
 #!/bin/sh
 
-R_HOME=`cmake --build . --target which-r | tail -n2 | head -n1`
+R_HOME=`cat .R_HOME`
 CHK=$1
 LIBRARY_DIR=`pwd`
 

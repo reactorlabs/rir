@@ -1,14 +1,17 @@
-#!/bin/sh
+#!/bin/bash
 
 ROOT_DIR=$1
 R_HOME=$2
+BUILD_DIR=`pwd`
 
 echo $R_HOME > .R_HOME
 
-if [ ! -f .gdbinit ]; then
-    ln -s $ROOT_DIR/.gdbinit
-fi
-if [ ! -f tests ]; then
-    echo "#!/bin/sh\n$ROOT_DIR/tools/tests" > ./tests
-    chmod +x ./tests
+if [ $ROOT_DIR != $BUILD_DIR ]; then
+    if [ ! -f .gdbinit ]; then
+        ln -s $ROOT_DIR/.gdbinit
+    fi
+    if [ ! -f tests ]; then
+        echo "#!/bin/sh\n$ROOT_DIR/tools/tests" > ./tests
+        chmod +x ./tests
+    fi
 fi
