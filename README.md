@@ -2,19 +2,17 @@
 
 # Installation
 
-git clone https://github.com/reactorlabs/rir
-cd rir
-cmake .
-# Fetch and build dependencies, this will build gnur from source. Note that on Mac OSX, you will need to install a fortran compiler (eg. brew install gcc). 
-make setup
+        git clone https://github.com/reactorlabs/rir
+        cd rir
+        cmake .
+        # Fetch and build dependencies, this will build gnur from source. Note that on Mac OSX, you will need to install a fortran compiler (eg. brew install gcc). 
+        make setup
 
 ## Running tests
 
 To run the basic test, just execute:
 
-```
-tools/tests
-```
+        tools/tests
 
 # GNUR tests
 
