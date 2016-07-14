@@ -25,7 +25,7 @@ function build {
 
         mkdir -p $DIR
         cd $DIR
-        cmake $ROOT_DIR
+        cmake $ROOT_DIR -DNO_LOCAL_CONFIG=1
         cmake --build . -- -j `ncores`
     )
 }

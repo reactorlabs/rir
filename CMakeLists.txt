@@ -18,8 +18,11 @@ set(CMAKE_C_FLAGS_RELEASE "-O1 -std=c99")
 set(CMAKE_C_FLAGS_DEBUG "-std=c99")
 set(CMAKE_C_FLAGS "-std=c99")
 
-#include any local configuration, overriding the default values above
-include(${CMAKE_SOURCE_DIR}/local/cmake.cmake OPTIONAL)
+if(NOT DEFINED NO_LOCAL_CONFIG)
+    #include any local configuration, overriding the default values above
+    include(${CMAKE_SOURCE_DIR}/local/cmake.cmake OPTIONAL)
+endif(NOT DEFINED NO_LOCAL_CONFIG)
+
 
 include_directories(${R_INCLUDE_DIR})
 include_directories(${CMAKE_SOURCE_DIR}/rir/src)
