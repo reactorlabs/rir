@@ -1,9 +1,6 @@
 benchmarks/*.png
 benchmarks/*.rds
 xml/*
-rjit/src/passes/codegen/*
-rjit/src/ir/pattern_kinds.inc
-rjit/src/sandbox.cpp
 local/*
 *.Rprofile
 build/*
@@ -13,12 +10,9 @@ CMakeCache.txt
 CMakeFiles/
 Makefile
 cmake_install.cmake
-librjit.so
+librir.so
 perf.data
 perf.data.old
-rjit_0.1.tar.gz
-rjit.Rcheck
-rjit/src/Makevars
 packages/
 .local.config
 .ninja_deps
