@@ -10,9 +10,6 @@ set(R_INCLUDE_DIR ${R_HOME}/include)
 
 set(R_COMMAND ${R_HOME}/bin/R)
 
-include_directories(${R_INCLUDE_DIR})
-include_directories(${CMAKE_SOURCE_DIR}/rir/src)
-
 add_definitions(-g -fno-omit-frame-pointer)
 set(CMAKE_CXX_FLAGS_RELEASE "-O1 -std=c++11")
 set(CMAKE_CXX_FLAGS_DEBUG "-std=c++11")
@@ -21,6 +18,11 @@ set(CMAKE_C_FLAGS_RELEASE "-O1 -std=c99")
 set(CMAKE_C_FLAGS_DEBUG "-std=c99")
 set(CMAKE_C_FLAGS "-std=c99")
 
+#include any local configuretion, overriding the default values above
+include(${CMAKE_SOURCE_DIR}/local/cmake.cmake OPTIONAL)
+
+include_directories(${R_INCLUDE_DIR})
+include_directories(${CMAKE_SOURCE_DIR}/rir/src)
 
 add_custom_target(dependencies
     COMMAND ${CMAKE_SOURCE_DIR}/tools/sync.sh
@@ -56,18 +58,18 @@ file(GLOB_RECURSE SRC "rir/src/*.cpp" "rir/src/*.c" "rir/src/*.h" "local/*" "rir
 add_library(${PROJECT_NAME} SHARED ${SRC})
 
 set(PACKAGE_NAME "rir_0.1.tar.gz")
-add_custom_target(package
+add_custom_target(rpkg
     COMMAND ${R_COMMAND} CMD build rir WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
 )
 
-add_custom_target(package_check
-    DEPENDS package
+add_custom_target(rpkg_check
+    DEPENDS rpkg
     COMMAND ${R_COMMAND} CMD check ${PACKAGE_NAME} --no-manual --no-vignettes
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
 )
 
-add_custom_target(package_install
-    DEPENDS package
+add_custom_target(rpkg_install
+    DEPENDS rpkg
     COMMAND ${CMAKE_COMMAND} -E make_directory ${R_LIBRARY_TREE} WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
     COMMAND ${R_COMMAND} CMD INSTALL -l ${R_LIBRARY_TREE} ${PACKAGE_NAME} WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
 )
