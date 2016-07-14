@@ -35,9 +35,9 @@ function run_test {
   R="${R_HOME}/bin/R"
   
   if test "$(uname)" = "Darwin"; then
-      LIB="dyn.load('${BUILD_DIR}/librjit.dylib')"
+      LIB="dyn.load('${BUILD_DIR}/librir.dylib')"
   else
-      LIB="dyn.load('${BUILD_DIR}/librjit.so')"
+      LIB="dyn.load('${BUILD_DIR}/librir.so')"
   fi
   
   name=`basename $test`
@@ -50,8 +50,8 @@ function run_test {
   
   TEST=$(mktemp /tmp/r-test.XXXXXX)
   echo ${LIB} > $TEST
-  echo "source('${ROOT_DIR}/rjit/R/rjit.R')" >> $TEST
-  grep -v 'require("rjit")' ${test} | grep -v 'require(rjit)'  >> $TEST
+  echo "sys.source('${ROOT_DIR}/rir/R/rir.R')" >> $TEST
+  grep -v 'require("rir")' ${test} | grep -v 'require(rir)'  >> $TEST
   
   $R --no-init-file -f $TEST &> /dev/null
   res=$?
@@ -73,7 +73,7 @@ function run_test {
 }
 export -f run_test
 
-TESTS_PATH="${ROOT_DIR}/rjit/tests"
+TESTS_PATH="${ROOT_DIR}/rir/tests"
 
 NUM_TESTS=`find ${TESTS_PATH} -name '*.R' | wc -l`
 export NUM_TESTS

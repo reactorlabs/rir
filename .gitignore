@@ -14,7 +14,6 @@ librir.so
 perf.data
 perf.data.old
 packages/
-.local.config
 .ninja_deps
 .ninja_log
 build.ninja
@@ -26,7 +25,7 @@ doxygen_sqlite3.db
 Rplots.pdf
 .test_results
 benchmarks/
-
+external/
 .Rhistory
 
 *.dylib
