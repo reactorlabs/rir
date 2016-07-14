@@ -20,7 +20,7 @@ if [ "$#" -eq 1 ]; then
         exit 1
     fi
 else
-    R_HOME=`cmake --build . --target which-r | tail -n2 | head -n1`
+    R_HOME=`cat ${BUILD_DIR}/.R_HOME`
     export R_HOME
 fi
 

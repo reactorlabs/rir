@@ -34,8 +34,8 @@ include_directories(${CMAKE_SOURCE_DIR}/rir/src)
 
 message(STATUS "Using R from ${R_HOME}")
 
-add_custom_target(which-r
-    COMMAND echo ${R_HOME}
+add_custom_target(setup-build-dir
+    COMMAND ${CMAKE_SOURCE_DIR}/tools/setup-build-dir ${CMAKE_SOURCE_DIR} ${R_HOME}
 )
 
 add_custom_target(dependencies
@@ -65,6 +65,7 @@ set(MAKEVARS_SRC "SOURCES = $(wildcard *.cpp ir/*.cpp passes/codegen/*.cpp)\nOBJ
 # build the shared library for the JIT
 file(GLOB_RECURSE SRC "rir/src/*.cpp" "rir/src/*.c" "rir/src/*.h" "local/*" "rir/R/*.R" "rir/tests/*.R")
 add_library(${PROJECT_NAME} SHARED ${SRC})
+add_dependencies(${PROJECT_NAME} setup-build-dir)
 
 set(PACKAGE_NAME "rir_0.1.tar.gz")
 add_custom_target(rpkg

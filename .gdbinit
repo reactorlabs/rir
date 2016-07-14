@@ -1,5 +1,3 @@
-directory rjit/src
-
 define berr
     b errors.c:707
 end
