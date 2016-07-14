@@ -24,8 +24,8 @@ Currently I have the following very brittle method of running the gnur tests:
 
     # Add a system wide Rprofile which loads rir
     cat - >> library/base/R/Rprofile <<EOF
-    dyn.load('../../librir.so')
-    sys.source('../../rir/R/rir.R')
+    dyn.load(paste0(Sys.getenv("R_HOME"), '/../../librir.so'))
+    sys.source(paste0(Sys.getenv("R_HOME"), '/../../rir/R/rir.R'))
     rir.enableJit(1L)
     EOF
 
