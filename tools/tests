@@ -1,16 +1,5 @@
 #!/bin/bash -e
 
-if [ "$#" -ne 2 ]; then
-    echo "Please use 'cmake --build . --target tests'"
-    exit 1
-fi
-export BUILD_DIR=$1
-export R_HOME=$2
-if [ ! -f $BUILD_DIR/librir.* ]; then
-    echo "invalid build dir"
-    exit 1
-fi
-
 SCRIPTPATH=`cd $(dirname "$0") && pwd`
 if [ ! -d $SCRIPTPATH ]; then
     echo "Could not determine absolute dir of $0"
@@ -18,10 +7,26 @@ if [ ! -d $SCRIPTPATH ]; then
 fi
 export SCRIPTPATH
 
+export BUILD_DIR=`pwd`
+if [ ! -f $BUILD_DIR/librir.* ]; then
+    echo "could not find librjit. are you in the correct directory?"
+    exit 1
+fi
+
+if [ "$#" -eq 1 ]; then
+    export R_HOME=$2
+    if [ ! -f $R_HOME/bin/R ]; then
+        echo "invalid R_HOME given"
+        exit 1
+    fi
+else
+    R_HOME=`cmake --build . --target which-r | tail -n2 | head -n1`
+    export R_HOME
+fi
+
 . "${SCRIPTPATH}/script_include.sh"
 
 export ROOT_DIR="${SCRIPTPATH}/.."
-#export R_HOME="${ROOT_DIR}/external/custom-r"
 
 STATUS=$(mktemp /tmp/r-test-status.XXXXXX)
 touch $STATUS

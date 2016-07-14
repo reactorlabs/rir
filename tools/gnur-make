@@ -1,0 +1,13 @@
+#!/bin/sh
+
+R_HOME=`cmake --build . --target which-r | tail -n2 | head -n1`
+CHK=$1
+LIBRARY_DIR=`pwd`
+
+export RIR_ENABLE_JIT=1
+export RIR_LIBRARY="`ls $LIBRARY_DIR/librir.*`"
+
+cd $R_HOME
+git clean -fx -e Makefile tests/
+
+make $CHK

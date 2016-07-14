@@ -34,25 +34,22 @@ include_directories(${CMAKE_SOURCE_DIR}/rir/src)
 
 message(STATUS "Using R from ${R_HOME}")
 
-
+add_custom_target(which-r
+    COMMAND echo ${R_HOME}
+)
 
 add_custom_target(dependencies
     COMMAND ${CMAKE_SOURCE_DIR}/tools/sync.sh
 )
 
-add_custom_target(gnur
+add_custom_target(default-gnur
     DEPENDS dependencies
     COMMAND cd ${CMAKE_SOURCE_DIR}/external/custom-r && make -j 8
 )
 
-add_custom_target(tests
-    DEPENDS ${PROJECT_NAME}
-    COMMAND ${CMAKE_SOURCE_DIR}/tools/tests ${CMAKE_BINARY_DIR} ${R_HOME}
-)
-
 add_custom_target(setup
     DEPENDS dependencies
-    DEPENDS gnur
+    DEPENDS default-gnur
 )
 
 if (APPLE) 
