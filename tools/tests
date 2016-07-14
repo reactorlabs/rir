@@ -1,10 +1,11 @@
 #!/bin/bash -e
 
-if [ "$#" -ne 1 ]; then
+if [ "$#" -ne 2 ]; then
     echo "Please use 'cmake --build . --target tests'"
     exit 1
 fi
 export BUILD_DIR=$1
+export R_HOME=$2
 if [ ! -f $BUILD_DIR/librir.* ]; then
     echo "invalid build dir"
     exit 1
@@ -20,7 +21,7 @@ export SCRIPTPATH
 . "${SCRIPTPATH}/script_include.sh"
 
 export ROOT_DIR="${SCRIPTPATH}/.."
-export R_HOME="${ROOT_DIR}/external/custom-r"
+#export R_HOME="${ROOT_DIR}/external/custom-r"
 
 STATUS=$(mktemp /tmp/r-test-status.XXXXXX)
 touch $STATUS

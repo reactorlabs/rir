@@ -24,6 +24,10 @@ include(${CMAKE_SOURCE_DIR}/local/cmake.cmake OPTIONAL)
 include_directories(${R_INCLUDE_DIR})
 include_directories(${CMAKE_SOURCE_DIR}/rir/src)
 
+message(STATUS "Using R from ${R_HOME}")
+
+
+
 add_custom_target(dependencies
     COMMAND ${CMAKE_SOURCE_DIR}/tools/sync.sh
 )
@@ -35,7 +39,7 @@ add_custom_target(gnur
 
 add_custom_target(tests
     DEPENDS ${PROJECT_NAME}
-    COMMAND ${CMAKE_SOURCE_DIR}/tools/tests ${CMAKE_BINARY_DIR}
+    COMMAND ${CMAKE_SOURCE_DIR}/tools/tests ${CMAKE_BINARY_DIR} ${R_HOME}
 )
 
 add_custom_target(setup
