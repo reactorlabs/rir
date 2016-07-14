@@ -1,0 +1,16 @@
+#!/bin/bash
+
+ROOT=$1
+
+. "${ROOT}/tools/script_include.sh"
+
+build ${ROOT}/tests/build_push_hook ${ROOT}
+
+cd ${ROOT}/tests/build_push_hook
+
+cmake --build . --target tests
+
+if test "$?" -ne 0; then
+  echo "make tests failed. Please fix first."
+  exit 1
+fi

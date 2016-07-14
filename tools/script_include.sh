@@ -1,12 +1,3 @@
-SCRIPTPATH=`cd $(dirname "$0") && pwd`
-if [ ! -d $SCRIPTPATH ]; then
-    echo "Could not determine absolute dir of $0"
-    echo "Maybe accessed with symlink"
-fi
-
-export ROOT_DIR="${SCRIPTPATH}/.."
-export R_HOME="${ROOT_DIR}/external/custom-r"
-
 USING_OSX=0
 if [[ "$OSTYPE" == "darwin"* ]]; then
     USING_OSX=1
@@ -21,54 +12,20 @@ function ncores {
     echo $CORES
 }
 
-# function to build freshr
-# requires freshr directory, version and optimization level
-function build_freshr {
-    if [ "$1" ]; then
-        FRESH_R_DIR=$1
-    fi
+function build {
+    (
+        DIR=$1
+        ROOT_DIR=$2
 
-    if [ "$2" ]; then
-        FRESH_R_VERSION=$2
-    fi
+        # Cmake being stupid cannot build out of tree, when there is already an in-tree build :(
+        if [ -f $ROOT_DIR/CMakeCache.txt ]; then
+            mv $ROOT_DIR/CMakeCache.txt $ROOT_DIR/CMakeCache.txt.disabled
+            trap "mv $ROOT_DIR/CMakeCache.txt.disabled $ROOT_DIR/CMakeCache.txt" EXIT
+        fi
 
-    if [ "$3" ]; then
-        OPT=$3
-    fi
-
-    FRESH_R_LOG="${FRESH_R_DIR}/freshr-configure-make-log.txt"
-
-    # create the freshr directory
-    if [ ! -d ${FRESH_R_DIR} ]; then
-        mkdir ${FRESH_R_DIR}
-    fi
-
-    cd ${FRESH_R_DIR}
-
-    FRESH_R_VERS_F=R-${FRESH_R_VERS}-branch
-    FRESH_R_SRC=${FRESH_R_DIR}/${FRESH_R_VERS_F}/
-
-    # checkout R-3-2 from svn
-    if [ ! -d ${FRESH_R_SRC} ]; then
-        echo "-> checking out ${FRESH_R_VERS_F} to ${FRESH_R_SRC}"
-        svn co https://svn.r-project.org/R/branches/${FRESH_R_VERS_F}/ ${FRESH_R_SRC}
-    fi
-    cd ${FRESH_R_SRC}
-
-    # download the set of recommended packages for R-3-2
-    echo "-> checking out the recommended packages"
-    ./tools/rsync-recommended 
-
-    # configure the make file
-    echo "-> building the config file"
-    if [ $USING_OSX ]; then
-        # Mac OSX
-        F77="gfortran -arch x86_64" FC="gfortran -arch x86_64" CXXFLAGS="$OPT -arch x86_64" CFLAGS="$OPT -arch x86_64" ./configure
-    else
-        ./configure
-    fi
-
-    # make the R-3-2
-    echo "-> building a fresh copy of ${FRESH_R_VERS_F} to ${FRESH_R_DIR}"
-    make 
+        mkdir -p $DIR
+        cd $DIR
+        cmake $ROOT_DIR
+        cmake --build . -- -j `ncores`
+    )
 }

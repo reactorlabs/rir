@@ -33,7 +33,7 @@ add_custom_target(gnur
 
 add_custom_target(tests
     DEPENDS ${PROJECT_NAME}
-    COMMAND ${CMAKE_SOURCE_DIR}/tools/tests
+    COMMAND ${CMAKE_SOURCE_DIR}/tools/tests ${CMAKE_BINARY_DIR}
 )
 
 add_custom_target(setup

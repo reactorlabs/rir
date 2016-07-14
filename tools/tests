@@ -1,5 +1,15 @@
 #!/bin/bash -e
 
+if [ "$#" -ne 1 ]; then
+    echo "Please use 'cmake --build . --target tests'"
+    exit 1
+fi
+export BUILD_DIR=$1
+if [ ! -f $BUILD_DIR/librir.* ]; then
+    echo "invalid build dir"
+    exit 1
+fi
+
 SCRIPTPATH=`cd $(dirname "$0") && pwd`
 if [ ! -d $SCRIPTPATH ]; then
     echo "Could not determine absolute dir of $0"
@@ -7,17 +17,10 @@ if [ ! -d $SCRIPTPATH ]; then
 fi
 export SCRIPTPATH
 
-# Run install script to deploy new hooks
-$SCRIPTPATH/install_hooks.sh
-
 . "${SCRIPTPATH}/script_include.sh"
 
-if [ -d "$1" ]; then
-    export BUILD_DIR=$1
-    echo "Using non-default build dir $BUILD_DIR"
-else
-    export BUILD_DIR=$ROOT_DIR
-fi
+export ROOT_DIR="${SCRIPTPATH}/.."
+export R_HOME="${ROOT_DIR}/external/custom-r"
 
 STATUS=$(mktemp /tmp/r-test-status.XXXXXX)
 touch $STATUS
