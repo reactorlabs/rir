@@ -1,18 +1,22 @@
 #!/bin/bash
 
-which git-clang-format &> /dev/null
+ROOT=$1
+CF="$ROOT/tools/git-clang-format"
+
+which clang-format &> /dev/null
 
 if [[ $? -ne 0 ]]; then
-  echo "git-clang-format not found!"
-  echo "Consider installing it from https://llvm.org/svn/llvm-project/cfe/trunk/tools/clang-format/git-clang-format"
+  echo "clang-format not found!"
+  echo "Please, please, consider installing it."
+  sleep 2
   exit
 fi
 
-if [[ `git-clang-format --diff | wc -l` -gt 1 ]]; then
+if [[ `$CF --diff | wc -l` -gt 1 ]]; then
 
   echo "Your changes do not match clang format"
 
-  git-clang-format --diff
+  $CF --diff
 
   exec < /dev/tty
   read -p "Do you wish to apply this patch? [Yn]" yn
@@ -20,7 +24,7 @@ if [[ `git-clang-format --diff | wc -l` -gt 1 ]]; then
     [Nn]* ) printf ":(\n"
             exit 0;;
         * ) echo "applying patch..."
-            git-clang-format
+            $CF
             printf "\nYou can now commit again.\n"
             exit 2;;
         esac

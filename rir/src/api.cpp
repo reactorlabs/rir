@@ -70,8 +70,8 @@ REXPORT SEXP rir_compile(SEXP what) {
         UNPROTECT(1);
         return result;
     } else {
-	if (TYPEOF(what) == BCODESXP) {
-	    what = VECTOR_ELT(CDR(what), 0);
+        if (TYPEOF(what) == BCODESXP) {
+            what = VECTOR_ELT(CDR(what), 0);
         }
         auto res = Compiler::compileExpression(what);
         return rir_createWrapperAst(res.bc);
