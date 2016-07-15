@@ -52,10 +52,10 @@ REXPORT SEXP rir_compile(SEXP what) {
 
     // TODO make this nicer
     if (TYPEOF(what) == CLOSXP) {
-    	SEXP body = BODY(what);
-    	if (TYPEOF(body) == BCODESXP) {
+        SEXP body = BODY(what);
+        if (TYPEOF(body) == BCODESXP) {
             body = VECTOR_ELT(CDR(body), 0);
-    	}
+        }
 
         if (TYPEOF(body) == INTSXP)
             Rf_error("closure already compiled");
