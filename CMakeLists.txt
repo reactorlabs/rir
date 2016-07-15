@@ -52,6 +52,11 @@ add_custom_target(setup
     DEPENDS default-gnur
 )
 
+add_custom_target(tests
+  DEPENDS ${PROJECT_NAME}
+  COMMAND ${CMAKE_SOURCE_DIR}/tools/tests
+)
+
 if (APPLE) 
     find_library(libr 
                 NAMES libR.dylib
