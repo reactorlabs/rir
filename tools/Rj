@@ -1,0 +1,10 @@
+#!/bin/sh
+
+R_HOME=`cat .R_HOME`
+CHK=$1
+LIBRARY_DIR=`pwd`
+
+export RIR_ENABLE_JIT=1
+export RIR_LIBRARY="`ls $LIBRARY_DIR/librir.*`"
+
+$R_HOME/bin/R $@
