@@ -10,7 +10,7 @@ set(R_INCLUDE_DIR ${R_HOME}/include)
 
 set(R_COMMAND ${R_HOME}/bin/R)
 
-add_definitions(-g -fno-omit-frame-pointer)
+add_definitions(-g3)
 set(CMAKE_CXX_FLAGS_RELEASE "-O2 -std=c++11")
 set(CMAKE_CXX_FLAGS_DEBUG "-std=c++11")
 set(CMAKE_CXX_FLAGS "-std=c++11")

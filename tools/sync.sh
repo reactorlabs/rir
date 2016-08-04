@@ -40,9 +40,9 @@ function checkout_r {
         cd $R_DIR
         if [ $USING_OSX -eq 1 ]; then
           # Mac OSX
-            F77="gfortran -arch x86_64" FC="gfortran -arch x86_64" CXXFLAGS="-g" CFLAGS="-g" ./configure --with-blas --with-lapack --with-ICU=no --with-system-xz=no --with-system-zlib=no --with-x=no --without-recommended-packages -O2
+            F77="gfortran -arch x86_64" FC="gfortran -arch x86_64" CXXFLAGS="-g3 -O2" CFLAGS="-g3 -O2" ./configure --with-blas --with-lapack --with-ICU=no --with-system-xz=no --with-system-zlib=no --with-x=no --without-recommended-packages
         else
-            CXXFLAGS="-g" CFLAGS="-g" ./configure --with-blas --with-lapack --with-ICU=no --with-system-xz=no --with-system-zlib=no --with-x=no --without-recommended-packages -O2
+            CXXFLAGS="-g3 -O2" CFLAGS="-g3 -O2" ./configure --with-blas --with-lapack --with-ICU=no --with-system-xz=no --with-system-zlib=no --with-x=no --without-recommended-packages
         fi
     fi
     
