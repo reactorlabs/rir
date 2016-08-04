@@ -97,26 +97,25 @@ bool compileSpecialCall(Context ctx, CodeStream& cs, SEXP ast, SEXP fun,
                         SEXP args_) {
     RList args(args_);
 
-    // TODO: this is not ready for primetime...
-    if (false && fun == symbol::Assign) {
-        if (args.length() != 2)
-            return false;
-
+    if (fun == symbol::Assign && !ctx.isComplexAssignment()) {
         auto lhs = args[0];
         Match(lhs) {
             Case(SYMSXP) {
-                cs << BC::isspecial(fun);
-                compileExpr(ctx, cs, args[1]);
-                cs << BC::push(lhs) << BC::stvar();
+                if (args.length() == 2) {
+                    cs << BC::isspecial(fun);
+                    compileExpr(ctx, cs, args[1]);
+                    cs << BC::push(lhs) << BC::stvar();
+                    return true;
+                }
             }
             Else({
                 // lhs of assignment is not a symbol
-                //   -> this is a complex assignment, we have to remember
-                //      since this changes semantics of lhs expression
-                compileExpr(ctx.asComplexAssignment(), cs, args_);
+                //   -> this is a complex assignment, we have to switch context
+                //      since it changes semantics of lhs expression
+                compileExpr(ctx.asComplexAssignment(), cs, ast);
+                return true;
             })
         }
-        return true;
     }
 
     if (fun == symbol::Internal) {

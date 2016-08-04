@@ -743,9 +743,9 @@ INSTRUCTION(asast_) {
 INSTRUCTION(stvar_) {
     SEXP sym = ostack_pop(ctx);
     assert(TYPEOF(sym) == SYMSXP);
-    SEXP val = ostack_pop(ctx);
+    SEXP val = ostack_top(ctx);
+    INCREMENT_NAMED(val);
     defineVar(sym, val, env);
-    ostack_push(ctx, val);
 }
 
 INSTRUCTION(asbool_) {
