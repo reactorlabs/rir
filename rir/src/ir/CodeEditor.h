@@ -129,7 +129,7 @@ class CodeEditor {
                 }
 
                 // Fix prom offsets
-                if (insert->bc.bc == BC_t::call_) {
+                if (insert->bc.isCall()) {
                     fun_idx_t* args = insert->bc.immediateCallArgs();
                     num_args_t nargs = insert->bc.immediateCallNargs();
                     for (unsigned i = 0; i < nargs; ++i) {

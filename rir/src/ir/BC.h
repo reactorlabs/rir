@@ -28,6 +28,9 @@ BC::immediate_t decodeImmediate(BC_t bc, BC_t* pc) {
     case BC_t::isspecial_:
         immediate.pool = *(pool_idx_t*)pc;
         break;
+    case BC_t::dispatch_:
+        immediate.dispatch_args = *(dispatch_args_t*)pc;
+        break;
     case BC_t::call_:
         immediate.call_args = *(call_args_t*)pc;
         break;
@@ -39,6 +42,7 @@ BC::immediate_t decodeImmediate(BC_t bc, BC_t* pc) {
         break;
     case BC_t::br_:
     case BC_t::brtrue_:
+    case BC_t::brobj_:
     case BC_t::brfalse_:
     case BC_t::label:
         immediate.offset = *(jmp_t*)pc;
@@ -46,6 +50,7 @@ BC::immediate_t decodeImmediate(BC_t bc, BC_t* pc) {
     case BC_t::pushi_:
         immediate.i = *(int*)pc;
         break;
+    case BC_t::extract1_:
     case BC_t::close_:
     case BC_t::ret_:
     case BC_t::pop_:
@@ -148,6 +153,11 @@ BC BC::br(jmp_t j) {
     i.offset = j;
     return BC(BC_t::br_, i);
 }
+BC BC::brobj(jmp_t j) {
+    immediate_t i;
+    i.offset = j;
+    return BC(BC_t::brobj_, i);
+}
 BC BC::brtrue(jmp_t j) {
     immediate_t i;
     i.offset = j;
@@ -172,6 +182,7 @@ BC BC::add() { return BC(BC_t::add_); }
 BC BC::sub() { return BC(BC_t::sub_); }
 BC BC::lt() { return BC(BC_t::lt_); }
 BC BC::invisible() { return BC(BC_t::invisible_); }
+BC BC::extract1() { return BC(BC_t::extract1_); }
 
 } // rir
 

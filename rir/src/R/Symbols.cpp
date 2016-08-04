@@ -43,6 +43,7 @@ DECLARE(BitOr, "|");
 DECLARE(Not, "!");
 DECLARE(Ellipsis, "...");
 DECLARE(Colon, ":");
+DECLARE(Internal, ".Internal");
 
 #undef DECLARE
 } // namespace symbol

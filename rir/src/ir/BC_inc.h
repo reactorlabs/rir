@@ -67,6 +67,11 @@ typedef struct {
     pool_idx_t args;
     pool_idx_t names;
 } call_args_t;
+typedef struct {
+    pool_idx_t args;
+    pool_idx_t names;
+    pool_idx_t selector;
+} dispatch_args_t;
 
 #pragma pack(pop)
 
@@ -90,6 +95,7 @@ class BC {
     // space required.
     union immediate_t {
         call_args_t call_args;
+        dispatch_args_t dispatch_args;
         pool_idx_t pool;
         fun_idx_t fun;
         num_args_t numArgs;
@@ -131,10 +137,11 @@ class BC {
         return (BC_t*)((uintptr_t)pos + bc.size() + bc.immediate.offset);
     }
 
-    bool isCall() { return bc == BC_t::call_; }
+    bool isCall() { return bc == BC_t::call_ || bc == BC_t::dispatch_; }
 
     bool isJmp() {
-        return bc == BC_t::br_ || bc == BC_t::brtrue_ || bc == BC_t::brfalse_;
+        return bc == BC_t::br_ || bc == BC_t::brtrue_ || bc == BC_t::brfalse_ ||
+               bc == BC_t::brobj_;
     }
 
     // ==== BC decoding logic
@@ -144,6 +151,8 @@ class BC {
     // ==== Factory methods
     // to create new BC objects, which can be streamed to a CodeStream
     static BC call(std::vector<fun_idx_t> args, std::vector<SEXP> names);
+    static BC dispatch(SEXP selector, std::vector<fun_idx_t> args,
+                       std::vector<SEXP> names);
     inline static BC push(SEXP constant);
     inline static BC push(double constant);
     inline static BC ldfun(SEXP sym);
@@ -160,6 +169,7 @@ class BC {
     inline static BC brtrue(jmp_t);
     inline static BC brfalse(jmp_t);
     inline static BC br(jmp_t);
+    inline static BC brobj(jmp_t);
     inline static BC label(jmp_t);
     inline static BC lti();
     inline static BC eqi();
@@ -175,6 +185,7 @@ class BC {
     inline static BC isspecial(SEXP);
     inline static BC isfun();
     inline static BC invisible();
+    inline static BC extract1();
 
   private:
     BC(BC_t bc) : bc(bc), immediate({0}) {}

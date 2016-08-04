@@ -82,6 +82,9 @@ typedef struct {
     CompilerCallback compiler;
 } Context;
 
+// Some symbols
+static SEXP R_Subset2Sym;
+
 // TODO we might actually need to do more for the lengths (i.e. true length vs length)
 
 INLINE size_t rl_length(ResizeableList * l) {

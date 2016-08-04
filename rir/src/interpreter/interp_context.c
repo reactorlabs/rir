@@ -25,6 +25,7 @@ Context* context_create(CompilerCallback compiler) {
     // first item in source and constant pools is R_NilValue so that we can use the index 0 for other purposes
     src_pool_add(c, R_NilValue);
     cp_pool_add(c, R_NilValue);
+    R_Subset2Sym = Rf_install("[[");
     return c;
 }
 

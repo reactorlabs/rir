@@ -11,14 +11,9 @@
 namespace rir {
 
 namespace {
-//
-// //
+
 // ============================================================================
-// // ==== Thats just a toy example of how to compile away a call to some
-// specials
-// //
-// void optimize_(Code* fun);
-// void optimize(CodeEditor& e, Code* fun);
+// ==== Thats just a toy example of how to compile away a call to some specials
 
 void inlProm(CodeEditor& e, CodeEditor::Cursor cur, fun_idx_t idx) {
     CodeEditor& ce = *e.detachPromise(idx);

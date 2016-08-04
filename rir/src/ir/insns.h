@@ -132,6 +132,18 @@ DEF_INSTR(isfun_, 0, 1, 1, 0, 0)
  * isfun_:: pop object stack, convert to RIR code or assert error, push code to
  * object stack
  */
+DEF_INSTR(extract1_, 0, 2, 1, 0, 0)
+/**
+ * extract1_:: do a[[b]], where a and b are on the stack
+ */
+DEF_INSTR(brobj_, 1, 0, 0, 0, 0)
+/**
+ * brobj_:: branch if tos is object
+ */
+DEF_INSTR(dispatch_, 3, 1, 1, 0, 0)
+/**
+ * call_:: ...
+ */
 
 // TODO these may be redundant but needed for the unification
 

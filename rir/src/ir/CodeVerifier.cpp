@@ -102,16 +102,18 @@ void CodeVerifier::calculateAndVerifyStack(CodeHandle code) {
             i.advance();
             max.updateMax(i);
             if (cur.bc == BC_t::ret_) {
-                assert(!cur.isJmp());
                 i.checkClear();
                 break;
             } else if (cur.bc == BC_t::br_) {
                 q.push(State(i, BC::jmpTarget(pc)));
                 break;
-            } else if (cur.bc == BC_t::brtrue_ or cur.bc == BC_t::brfalse_) {
+            } else if (cur.bc == BC_t::brtrue_ or cur.bc == BC_t::brfalse_ or
+                       cur.bc == BC_t::brobj_) {
                 q.push(State(i, BC::jmpTarget(pc)));
                 // no break because we want to continue verification in current
                 // sequence as well
+            } else {
+                assert(!cur.isJmp());
             }
         }
     }

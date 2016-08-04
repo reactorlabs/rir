@@ -165,6 +165,7 @@ unsigned CodeEditor::write(FunctionHandle& function) {
             for (unsigned i = 0; i < nargs; ++i) {
                 if (arg[i] > MAX_ARG_IDX)
                     continue;
+                assert(arg[i] < promises.size() && promises[arg[i]]);
                 CodeEditor* e = promises[arg[i]];
                 arg[i] = e->write(function);
             }
