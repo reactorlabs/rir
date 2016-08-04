@@ -104,7 +104,9 @@ bool compileSpecialCall(Context ctx, CodeStream& cs, SEXP ast, SEXP fun,
                 if (args.length() == 2) {
                     cs << BC::isspecial(fun);
                     compileExpr(ctx, cs, args[1]);
-                    cs << BC::push(lhs) << BC::stvar();
+                    cs << BC::push(lhs)
+                       << BC::stvar()
+                       << BC::invisible();
                     return true;
                 }
             }
