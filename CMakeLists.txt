@@ -102,3 +102,8 @@ add_custom_target(scripts SOURCES ${SCRIPTS})
 # dummy target so that IDEs show the tools folder in solution explorers
 file(GLOB TOOLS "tools/*.*")
 add_custom_target(tools SOURCES ${TOOLS})
+
+# this line makes osx happy, don't ask me why
+if(libr)
+    target_link_libraries(${PROJECT_NAME} ${libr})
+endif(libr)
