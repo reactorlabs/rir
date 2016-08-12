@@ -44,6 +44,8 @@ DECLARE(Not, "!");
 DECLARE(Ellipsis, "...");
 DECLARE(Colon, ":");
 DECLARE(Internal, ".Internal");
+DECLARE(tmp, "*tmp*");
+DECLARE(value, "value");
 
 #undef DECLARE
 } // namespace symbol

@@ -180,14 +180,36 @@ void CodeVerifier::vefifyFunctionLayout(SEXP sexp, ::Context* ctx) {
         unsigned ninsns = 0;
         while (true) {
             ++ninsns;
-            if (ninsns == c->srcLength) {
-                assert((uintptr_t)cptr - (uintptr_t)(start) == 0 and
-                       "Invalid code size");
-                break;
+            assert(cptr < start + c->codeSize);
+            BC cur = BC::decode(cptr);
+            assert(ninsns <= c->srcLength);
+            if (*cptr == BC_t::call_stack_) {
+                unsigned* argsIndex = reinterpret_cast<ArgT*>(cptr + 1);
+                unsigned nargs = argsIndex[0];
+                // check the names vector
+                assert(argsIndex[1] < cp_pool_length(ctx) and
+                       "Invalid type of argument names index");
+                SEXP namesVec = cp_pool_at(ctx, argsIndex[1]);
+                if (namesVec != R_NilValue) {
+                    assert(TYPEOF(namesVec) == VECSXP and
+                           "Invalid type of argument names vector");
+                    assert(Rf_length(namesVec) == nargs and
+                           "Names and args have different length");
+                }
+                // check the call has an ast attached
+                assert(src(c)[ninsns - 1]);
             }
-            assert((uintptr_t)cptr - (uintptr_t)(start) <= c->codeSize and
-                   "Invalid size");
-            if (*cptr == BC_t::call_) {
+            if (*cptr == BC_t::promise_) {
+                unsigned* promidx = reinterpret_cast<ArgT*>(cptr + 1);
+                bool ok = false;
+                for (Code* c : objs)
+                    if (c->header == *promidx) {
+                        ok = true;
+                        break;
+                    }
+                assert(ok and "Invalid promise offset detected");
+            }
+            if (*cptr == BC_t::call_ || *cptr == BC_t::dispatch_) {
                 unsigned* argsIndex = reinterpret_cast<ArgT*>(cptr + 1);
                 assert(*argsIndex < cp_pool_length(ctx) and "Invalid arglist index");
                 SEXP argsVec = cp_pool_at(ctx, *argsIndex);
@@ -195,8 +217,10 @@ void CodeVerifier::vefifyFunctionLayout(SEXP sexp, ::Context* ctx) {
                        "Invalid type of arguents vector");
                 // check that the promise offsets are valid offsets within the
                 // function
-                for (size_t i = 0, e = Rf_length(argsVec); i != e; ++i) {
+                for (size_t i = 0, e = cur.immediateCallNargs(); i != e; ++i) {
                     unsigned offset = INTEGER(argsVec)[i];
+                    if (offset == MISSING_ARG_IDX || offset == DOTS_ARG_IDX)
+                        continue;
                     bool ok = false;
                     for (Code* c : objs)
                         if (c->header == offset) {
@@ -206,17 +230,23 @@ void CodeVerifier::vefifyFunctionLayout(SEXP sexp, ::Context* ctx) {
                     assert(ok and "Invalid promise offset detected");
                 }
                 // check the names vector
-                if (argsIndex[1] != 0) {
-                    assert(argsIndex[1] < cp_pool_length(ctx) and
-                           "Invalid type of argument names index");
-                    SEXP namesVec = cp_pool_at(ctx, argsIndex[1]);
+                assert(argsIndex[1] < cp_pool_length(ctx) and
+                       "Invalid type of argument names index");
+                SEXP namesVec = cp_pool_at(ctx, argsIndex[1]);
+                if (namesVec != R_NilValue) {
                     assert(TYPEOF(namesVec) == VECSXP and
                            "Invalid type of argument names vector");
-                    assert(Rf_length(namesVec) == Rf_length(argsVec) and
+                    assert(Rf_length(namesVec) == cur.immediateCallNargs() and
                            "Names and args have different length");
                 }
                 // check the call has an ast attached
                 assert(src(c)[ninsns-1]);
+            }
+            cptr += cur.size();
+            if (ninsns == c->srcLength) {
+                assert(cptr == start + c->codeSize);
+                assert(cur.isJmp() || cur.bc == BC_t::ret_);
+                break;
             }
         }
 

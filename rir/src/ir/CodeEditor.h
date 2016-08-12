@@ -129,7 +129,8 @@ class CodeEditor {
                 }
 
                 // Fix prom offsets
-                if (insert->bc.isCall()) {
+                if (insert->bc.bc == BC_t::call_ ||
+                    insert->bc.bc == BC_t::dispatch_) {
                     fun_idx_t* args = insert->bc.immediateCallArgs();
                     num_args_t nargs = insert->bc.immediateCallNargs();
                     for (unsigned i = 0; i < nargs; ++i) {
@@ -141,6 +142,14 @@ class CodeEditor {
                         else
                             args[i] += proms;
                     }
+                } else if (insert->bc.bc == BC_t::promise_) {
+                    if (duplicate.count(insert->bc.immediate.fun))
+                        insert->bc.immediate.fun =
+                            duplicate.at(insert->bc.immediate.fun);
+                    else
+                        insert->bc.immediate.fun += proms;
+                } else {
+                    assert(!insert->bc.hasPromargs());
                 }
                 // Fix labels
                 if (insert->bc.bc == BC_t::label)

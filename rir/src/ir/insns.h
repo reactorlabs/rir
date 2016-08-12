@@ -51,11 +51,6 @@ DEF_INSTR(pop_, 0, 1, 0, 0, 0)
 /**
  * pop_:: pop from object stack
  */
-DEF_INSTR(pusharg_, 1, 0, 1, 0, 0) // push argument to stack
-                                   /**
-                                    * pusharg_:: take immediate index of an argument, read argument value and push
-                                    * it on object stack
-                                    */
 DEF_INSTR(asast_, 0, 1, 1, 0, 0)
 /**
  * asast_:: pop a promise off the object stack, push its AST on object stack
@@ -142,7 +137,25 @@ DEF_INSTR(brobj_, 1, 0, 0, 0, 0)
  */
 DEF_INSTR(dispatch_, 3, 1, 1, 0, 0)
 /**
- * call_:: ...
+ * dispatch_:: similar to call, but receiver is tos and 3rd immediate
+ *             is selector
+ */
+DEF_INSTR(swap_, 0, 0, 0, 0, 0)
+/**
+ * swap_:: swap two elements tos
+ */
+DEF_INSTR(pick_, 1, 0, 0, 0, 0)
+/**
+ * pick_:: remove n-th element on stack and push it tos
+ */
+DEF_INSTR(put_, 1, 0, 0, 0, 0)
+/**
+ * put_:: put tos at the n-th pos in the stack
+ */
+DEF_INSTR(call_stack_, 2, -1, 1, 0, 0)
+/**
+ * call_stack_:: like call, but arguments are taken from the stack
+ *               immediate are number of args and names
  */
 
 // TODO these may be redundant but needed for the unification

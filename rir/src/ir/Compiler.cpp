@@ -98,26 +98,141 @@ bool compileSpecialCall(Context ctx, CodeStream& cs, SEXP ast, SEXP fun,
     RList args(args_);
 
     if (fun == symbol::Assign && !ctx.isComplexAssignment()) {
+        assert(args.length() == 2);
+        cs << BC::isspecial(fun);
+
         auto lhs = args[0];
+        auto rhs = args[1];
+
         Match(lhs) {
             Case(SYMSXP) {
-                if (args.length() == 2) {
-                    cs << BC::isspecial(fun);
-                    compileExpr(ctx, cs, args[1]);
-                    cs << BC::push(lhs)
-                       << BC::stvar()
-                       << BC::invisible();
-                    return true;
+                compileExpr(ctx, cs, rhs);
+                cs << BC::push(lhs) << BC::stvar() << BC::invisible();
+                return true;
+            }
+            Else(break)
+        }
+
+        compileExpr(ctx, cs, rhs);
+
+        // Find all parts of the lhs
+        SEXP target = nullptr;
+        SEXP l = lhs;
+        std::vector<SEXP> lhsParts;
+        while (!target) {
+            Match(l) {
+                Case(LANGSXP, fun, args) {
+                    assert(TYPEOF(fun) == SYMSXP);
+                    lhsParts.push_back(l);
+                    l = CAR(args);
+                }
+                Case(SYMSXP) {
+                    lhsParts.push_back(l);
+                    target = l;
+                }
+                Else(assert(false);)
+            }
+        }
+
+        // Evaluate the getter list and push it to the stack in reverse order
+        for (unsigned i = lhsParts.size() - 1; i > 0; --i) {
+            auto g = lhsParts[i];
+
+            Match(g) {
+                Case(SYMSXP) { cs << BC::ldvar(g); }
+                Case(LANGSXP) {
+                    SEXP fun = CAR(g);
+                    RList args(CDR(g));
+                    std::vector<SEXP> names;
+
+                    auto arg = args.begin();
+                    // Skip first arg (is already on the stack)
+                    ++arg;
+                    names.push_back(R_NilValue);
+
+                    // Load function and push it before the first arg
+                    cs << BC::ldfun(fun) << BC::swap();
+
+                    for (; arg != RList::end(); ++arg) {
+                        if (*arg == R_DotsSymbol || *arg == R_MissingArg) {
+                            names.push_back(R_NilValue);
+                            cs << BC::push(*arg);
+                            continue;
+                        }
+
+                        names.push_back(arg.tag());
+                        if (TYPEOF(*arg) == LANGSXP) {
+                            auto p = compilePromise(ctx, *arg);
+                            cs << BC::promise(p);
+                        } else {
+                            compileExpr(ctx, cs, *arg);
+                        }
+                    }
+
+                    cs << BC::call_stack(names.size(), names);
+                    // TODO: replace target with *tmp*
+                    cs.addAst(g);
+                }
+                Else(assert(false);)
+            }
+            if (i > 1)
+                cs << BC::dup();
+        }
+
+        // Get down the initial rhs value
+        cs << BC::pick(lhsParts.size() - 1);
+
+        // Run the setters
+        for (auto g = lhsParts.begin(); (g + 1) != lhsParts.end(); ++g) {
+            SEXP fun = CAR(*g);
+            RList args(CDR(*g));
+            std::string name(CHAR(PRINTNAME(fun)));
+            name.append("<-");
+
+            std::vector<SEXP> names;
+
+            auto arg = RList(args).begin();
+
+            unsigned nargs = 0;
+            // Skip first arg (is already on the stack)
+            ++arg;
+            names.push_back(R_NilValue);
+
+            // Load function and push it before the first arg and the value
+            // from the last setter.
+            cs << BC::ldfun(Rf_install(name.c_str())) << BC::put(2);
+
+            for (; arg != RList::end(); ++arg) {
+                nargs++;
+                if (*arg == R_DotsSymbol || *arg == R_MissingArg) {
+                    names.push_back(R_NilValue);
+                    cs << BC::push(*arg);
+                    continue;
+                }
+
+                names.push_back(arg.tag());
+                if (TYPEOF(*arg) == LANGSXP) {
+                    auto p = compilePromise(ctx, *arg);
+                    cs << BC::promise(p);
+                } else {
+                    compileExpr(ctx, cs, *arg);
                 }
             }
-            Else({
-                // lhs of assignment is not a symbol
-                //   -> this is a complex assignment, we have to switch context
-                //      since it changes semantics of lhs expression
-                compileExpr(ctx.asComplexAssignment(), cs, ast);
-                return true;
-            })
+
+            names.push_back(symbol::value);
+            // the rhs (aka "value") needs to come last, if we pushed some args
+            // we need to swap the order
+            if (nargs > 0)
+                cs << BC::pick(nargs);
+
+            cs << BC::call_stack(names.size(), names);
+            // TODO: push rewritten ast here
+            cs.addAst(R_NilValue);
         }
+
+        cs << BC::push(target) << BC::stvar() << BC::invisible();
+
+        return true;
     }
 
     if (fun == symbol::Internal) {
@@ -291,8 +406,8 @@ Compiler::CompilerRes Compiler::finalize() {
     cs.finalize();
 
     FunctionHandle opt = Optimizer::optimize(function);
-    CodeVerifier::vefifyFunctionLayout(opt.store, globalContext());
     // opt.print();
+    CodeVerifier::vefifyFunctionLayout(opt.store, globalContext());
 
     // Protect p;
     // SEXP formout = R_NilValue;

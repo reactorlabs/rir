@@ -31,11 +31,11 @@ BC::immediate_t decodeImmediate(BC_t bc, BC_t* pc) {
     case BC_t::dispatch_:
         immediate.dispatch_args = *(dispatch_args_t*)pc;
         break;
+    case BC_t::call_stack_:
+        immediate.call_stack_args = *(call_stack_args_t*)pc;
+        break;
     case BC_t::call_:
         immediate.call_args = *(call_args_t*)pc;
-        break;
-    case BC_t::pusharg_:
-        immediate.numArgs = *(num_args_t*)pc;
         break;
     case BC_t::promise_:
         immediate.fun = *(fun_idx_t*)pc;
@@ -48,7 +48,9 @@ BC::immediate_t decodeImmediate(BC_t bc, BC_t* pc) {
         immediate.offset = *(jmp_t*)pc;
         break;
     case BC_t::pushi_:
-        immediate.i = *(int*)pc;
+    case BC_t::pick_:
+    case BC_t::put_:
+        immediate.i = *(uint32_t*)pc;
         break;
     case BC_t::extract1_:
     case BC_t::close_:
@@ -62,6 +64,7 @@ BC::immediate_t decodeImmediate(BC_t bc, BC_t* pc) {
     case BC_t::eqi_:
     case BC_t::dupi_:
     case BC_t::dup_:
+    case BC_t::swap_:
     case BC_t::inci_:
     case BC_t::push_argi_:
     case BC_t::add_:
@@ -133,8 +136,11 @@ BC BC::isspecial(SEXP sym) {
     i.pool = Pool::insert(sym);
     return BC(BC_t::isspecial_, i);
 }
-BC BC::promise(fun_idx_t prom) { return BC(BC_t::promise_, {prom}); }
-BC BC::pusharg(num_args_t arg) { return BC(BC_t::pusharg_, {arg}); }
+BC BC::promise(fun_idx_t prom) {
+    immediate_t i;
+    i.fun = prom;
+    return BC(BC_t::promise_, i);
+}
 BC BC::asast() { return BC(BC_t::asast_); }
 BC BC::stvar() { return BC(BC_t::stvar_); }
 BC BC::lti() { return BC(BC_t::lti_); }
@@ -172,7 +178,7 @@ BC BC::dupi() { return BC(BC_t::dupi_); }
 BC BC::dup() { return BC(BC_t::dup_); }
 BC BC::inci() { return BC(BC_t::inci_); }
 BC BC::push_argi() { return BC(BC_t::push_argi_); }
-BC BC::pushi(int i) {
+BC BC::pushi(uint32_t i) {
     immediate_t im;
     im.i = i;
     return BC(BC_t::pushi_, im);
@@ -183,6 +189,17 @@ BC BC::sub() { return BC(BC_t::sub_); }
 BC BC::lt() { return BC(BC_t::lt_); }
 BC BC::invisible() { return BC(BC_t::invisible_); }
 BC BC::extract1() { return BC(BC_t::extract1_); }
+BC BC::swap() { return BC(BC_t::swap_); }
+BC BC::pick(uint32_t i) {
+    immediate_t im;
+    im.i = i;
+    return BC(BC_t::pick_, im);
+}
+BC BC::put(uint32_t i) {
+    immediate_t im;
+    im.i = i;
+    return BC(BC_t::put_, im);
+}
 
 } // rir
 

@@ -73,15 +73,11 @@ void CodeEditor::loadCode(FunctionHandle function, CodeHandle code,
                 bc.immediate.offset = label;
             }
 
-            if (bc.isCall()) {
-                auto argOffset = bc.immediateCallArgs();
+            if (bc.hasPromargs()) {
+                if (bc.bc == BC_t::promise_) {
+                    CodeHandle code = function.codeAtOffset(bc.immediate.fun);
 
-                for (unsigned i = 0; i < bc.immediateCallNargs(); ++i) {
-                    if (argOffset[i] > MAX_ARG_IDX)
-                        continue;
-
-                    CodeHandle code = function.codeAtOffset(argOffset[i]);
-                    argOffset[i] = code.idx();
+                    bc.immediate.fun = code.idx();
 
                     CodeEditor* p = new CodeEditor(function, code.idx());
 
@@ -89,6 +85,22 @@ void CodeEditor::loadCode(FunctionHandle function, CodeHandle code,
                         promises.resize(code.idx() + 1, nullptr);
 
                     promises[code.idx()] = p;
+                } else {
+                    auto argOffset = bc.immediateCallArgs();
+                    for (unsigned i = 0; i < bc.immediateCallNargs(); ++i) {
+                        if (argOffset[i] > MAX_ARG_IDX)
+                            continue;
+
+                        CodeHandle code = function.codeAtOffset(argOffset[i]);
+                        argOffset[i] = code.idx();
+
+                        CodeEditor* p = new CodeEditor(function, code.idx());
+
+                        if (promises.size() <= code.idx())
+                            promises.resize(code.idx() + 1, nullptr);
+
+                        promises[code.idx()] = p;
+                    }
                 }
             }
 
@@ -159,18 +171,23 @@ unsigned CodeEditor::write(FunctionHandle& function) {
 
     for (Cursor cur = getCursor(); !cur.atEnd(); ++cur) {
         BC bc = *cur;
-        if (bc.isCall()) {
-            auto arg = bc.immediateCallArgs();
-            auto nargs = bc.immediateCallNargs();
-            for (unsigned i = 0; i < nargs; ++i) {
-                if (arg[i] > MAX_ARG_IDX)
-                    continue;
-                assert(arg[i] < promises.size() && promises[arg[i]]);
-                CodeEditor* e = promises[arg[i]];
-                arg[i] = e->write(function);
+        if (bc.hasPromargs()) {
+            if (bc.bc == BC_t::promise_) {
+                CodeEditor* e = promises[bc.immediate.fun];
+                bc.immediate.fun = e->write(function);
+            } else {
+                auto arg = bc.immediateCallArgs();
+                auto nargs = bc.immediateCallNargs();
+                for (unsigned i = 0; i < nargs; ++i) {
+                    if (arg[i] > MAX_ARG_IDX)
+                        continue;
+                    assert(arg[i] < promises.size() && promises[arg[i]]);
+                    CodeEditor* e = promises[arg[i]];
+                    arg[i] = e->write(function);
+                }
             }
         }
-        cs << *cur;
+        cs << bc;
         if (cur.hasAst())
             cs.addAst(cur.ast());
     }

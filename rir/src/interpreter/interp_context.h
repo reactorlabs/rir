@@ -121,6 +121,11 @@ INLINE SEXP ostack_top(Context* c) {
     return VECTOR_ELT(c->ostack.list, rl_length(&c->ostack) - 1);
 }
 
+INLINE SEXP* ostack_at(Context* c, uint32_t i) {
+    assert(i < rl_length(&c->ostack));
+    return &VECTOR_ELT(c->ostack.list, rl_length(&c->ostack) - 1 - i);
+}
+
 INLINE size_t istack_length(Context* c) {
     return rl_length(&c->ostack);
 }
@@ -137,14 +142,11 @@ INLINE size_t ostack_length(Context * c) {
     return rl_length(&c->ostack);
 }
 
-INLINE SEXP ostack_at(Context* c, unsigned index) {
-    return VECTOR_ELT(c->ostack.list, index);
-}
-
 INLINE SEXP ostack_pop(Context* c) {
     // VECTOR_ELT does not check bounds
-    rl_setLength(& c->ostack, rl_length(&c->ostack) - 1);
-    return ostack_at(c, rl_length(&c->ostack));
+    int i = rl_length(&c->ostack) - 1;
+    rl_setLength(&c->ostack, i);
+    return VECTOR_ELT(c->ostack.list, i);
 }
 
 INLINE void ostack_popn(Context* c, unsigned size) {

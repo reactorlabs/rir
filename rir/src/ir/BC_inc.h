@@ -72,6 +72,10 @@ typedef struct {
     pool_idx_t names;
     pool_idx_t selector;
 } dispatch_args_t;
+typedef struct {
+    uint32_t nargs;
+    pool_idx_t names;
+} call_stack_args_t;
 
 #pragma pack(pop)
 
@@ -96,11 +100,12 @@ class BC {
     union immediate_t {
         call_args_t call_args;
         dispatch_args_t dispatch_args;
+        call_stack_args_t call_stack_args;
         pool_idx_t pool;
         fun_idx_t fun;
         num_args_t numArgs;
         jmp_t offset;
-        int i;
+        uint32_t i;
     };
 
     BC() : bc(BC_t::invalid_), immediate({0}) {}
@@ -114,7 +119,11 @@ class BC {
     immediate_t immediate;
 
     inline size_t size() { return size(bc); }
-    inline size_t popCount() { return popCount(bc); }
+    inline size_t popCount() {
+        if (bc == BC_t::call_stack_)
+            return immediate.call_stack_args.nargs + 1;
+        return popCount(bc);
+    }
     inline size_t pushCount() { return pushCount(bc); }
     inline size_t iPopCount() { return iPopCount(bc); }
     inline size_t iPushCount() { return iPushCount(bc); }
@@ -137,7 +146,10 @@ class BC {
         return (BC_t*)((uintptr_t)pos + bc.size() + bc.immediate.offset);
     }
 
-    bool isCall() { return bc == BC_t::call_ || bc == BC_t::dispatch_; }
+    bool hasPromargs() {
+        return bc == BC_t::call_ || bc == BC_t::dispatch_ ||
+               bc == BC_t::promise_;
+    }
 
     bool isJmp() {
         return bc == BC_t::br_ || bc == BC_t::brtrue_ || bc == BC_t::brfalse_ ||
@@ -159,7 +171,6 @@ class BC {
     inline static BC ldvar(SEXP sym);
     inline static BC ldddvar(SEXP sym);
     inline static BC promise(fun_idx_t prom);
-    inline static BC pusharg(fun_idx_t prom);
     inline static BC ret();
     inline static BC pop();
     inline static BC force();
@@ -173,7 +184,7 @@ class BC {
     inline static BC label(jmp_t);
     inline static BC lti();
     inline static BC eqi();
-    inline static BC pushi(int);
+    inline static BC pushi(uint32_t);
     inline static BC push_argi();
     inline static BC dupi();
     inline static BC dup();
@@ -186,6 +197,10 @@ class BC {
     inline static BC isfun();
     inline static BC invisible();
     inline static BC extract1();
+    inline static BC swap();
+    inline static BC put(uint32_t);
+    inline static BC pick(uint32_t);
+    static BC call_stack(uint32_t, std::vector<SEXP> names);
 
   private:
     BC(BC_t bc) : bc(bc), immediate({0}) {}
@@ -253,6 +268,7 @@ class BC {
         switch (bc) {
 #define DEF_INSTR(name, imm, opop, opush, ipop, ipush)                         \
     case BC_t::name:                                                           \
+        assert(opop != -1);                                                    \
         return opop;
 #include "insns.h"
         default:
