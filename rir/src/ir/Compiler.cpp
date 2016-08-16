@@ -130,6 +130,11 @@ bool compileSpecialCall(Context ctx, CodeStream& cs, SEXP ast, SEXP fun,
                     lhsParts.push_back(l);
                     target = l;
                 }
+                Case(STRSXP) {
+                    assert(Rf_length(l) == 1);
+                    target = Rf_install(CHAR(STRING_ELT(l, 0)));
+                    lhsParts.push_back(target);
+                }
                 Else(assert(false);)
             }
         }
@@ -188,6 +193,7 @@ bool compileSpecialCall(Context ctx, CodeStream& cs, SEXP ast, SEXP fun,
             RList args(CDR(*g));
             std::string name(CHAR(PRINTNAME(fun)));
             name.append("<-");
+            SEXP setterName = Rf_install(name.c_str());
 
             std::vector<SEXP> names;
 
@@ -200,7 +206,7 @@ bool compileSpecialCall(Context ctx, CodeStream& cs, SEXP ast, SEXP fun,
 
             // Load function and push it before the first arg and the value
             // from the last setter.
-            cs << BC::ldfun(Rf_install(name.c_str())) << BC::put(2);
+            cs << BC::ldfun(setterName) << BC::put(2);
 
             for (; arg != RList::end(); ++arg) {
                 nargs++;
@@ -226,8 +232,19 @@ bool compileSpecialCall(Context ctx, CodeStream& cs, SEXP ast, SEXP fun,
                 cs << BC::pick(nargs);
 
             cs << BC::call_stack(names.size(), names);
-            // TODO: push rewritten ast here
-            cs.addAst(R_NilValue);
+
+            Protect protect;
+            SEXP rewrite = Rf_shallow_duplicate(*g);
+            protect(rewrite);
+            SETCAR(rewrite, setterName);
+
+            SEXP lastArg = rewrite;
+            while (CDR(lastArg) != R_NilValue)
+                lastArg = CDR(lastArg);
+            SEXP value = CONS_NR(symbol::templateValue, R_NilValue);
+            SET_TAG(value, symbol::value);
+            SETCDR(lastArg, value);
+            cs.addAst(rewrite);
         }
 
         cs << BC::push(target) << BC::stvar() << BC::invisible();

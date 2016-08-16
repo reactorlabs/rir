@@ -6,6 +6,7 @@
 #include "utils/FunctionHandle.h"
 #include "CodeVerifier.h"
 #include "BC.h"
+#include "R/Symbols.h"
 
 namespace rir {
 
@@ -183,6 +184,15 @@ void CodeVerifier::vefifyFunctionLayout(SEXP sexp, ::Context* ctx) {
             assert(cptr < start + c->codeSize);
             BC cur = BC::decode(cptr);
             assert(ninsns <= c->srcLength);
+            if (*cptr == BC_t::ldvar_) {
+                unsigned* argsIndex = reinterpret_cast<ArgT*>(cptr + 1);
+                assert(*argsIndex < cp_pool_length(ctx) and
+                       "Invalid arglist index");
+                SEXP sym = cp_pool_at(ctx, *argsIndex);
+                assert(TYPEOF(sym) == SYMSXP);
+                assert(strlen(CHAR(PRINTNAME(sym))));
+                assert(sym != symbol::templateValue);
+            }
             if (*cptr == BC_t::call_stack_) {
                 unsigned* argsIndex = reinterpret_cast<ArgT*>(cptr + 1);
                 unsigned nargs = argsIndex[0];

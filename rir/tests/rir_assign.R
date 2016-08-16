@@ -58,3 +58,11 @@ f8 <- rir.compile(function() {
 })
 
 stopifnot(f8() == 8);
+
+f9 <- rir.compile(function() {
+  x <- c(1,2,3)
+  x[2] <- 123
+  x[2]
+})
+
+stopifnot(f9() == 123)

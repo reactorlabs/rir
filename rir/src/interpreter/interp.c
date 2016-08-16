@@ -474,6 +474,17 @@ typedef struct {
     size_t nargs;
 } EvalCbArg;
 SEXP hook_rirCallTrampoline(void* cntxt, SEXP (*evalCb)(EvalCbArg*), EvalCbArg* arg);
+SEXP rirCallTrampoline(void* cntxt, SEXP (*evalCb)(EvalCbArg*),
+                       EvalCbArg* arg) {
+    size_t oldbp = ostack_length(arg->ctx);
+    size_t oldbpi = arg->ctx->istack.length;
+    SEXP res = hook_rirCallTrampoline(cntxt, evalCb, arg);
+    // In the case of non-local returns we need to make sure to restore the
+    // stack to the correct state.
+    rl_setLength(&arg->ctx->ostack, oldbp);
+    arg->ctx->istack.length = oldbpi;
+    return res;
+}
 SEXP evalCbFunction(EvalCbArg* arg_) {
     EvalCbArg* arg = (EvalCbArg*)arg_;
     return evalRirCode(arg->code, arg->ctx, arg->env, arg->nargs);
@@ -535,7 +546,7 @@ SEXP doCall(Code * caller, SEXP call, SEXP callee, unsigned * args, size_t nargs
             char cntxt[400];
             initClosureContext(&cntxt, call, newEnv, env, actuals, callee);
             EvalCbArg arg = {functionCode((Function*)INTEGER(body)), ctx, newEnv, nargs};
-            result = hook_rirCallTrampoline(&cntxt, evalCbFunction, &arg);
+            result = rirCallTrampoline(&cntxt, evalCbFunction, &arg);
             endClosureContext(&cntxt, result);
             UNPROTECT(2);
             break;
@@ -569,6 +580,27 @@ SEXP doCallStack(Code* caller, SEXP call, size_t nargs, SEXP names, SEXP env,
     SEXP result = R_NilValue;
 
     SEXP callee = *ostack_at(ctx, nargs);
+
+    // This is a hack to support complex assignment
+    // The rewritten ast needs to include the evaluated value
+    // TODO: this should be done lazily, eg. we could store the ast template in
+    // the context and rewrite it on access
+    SEXP lastarg = CDR(call);
+    while (CDR(lastarg) != R_NilValue)
+        lastarg = CDR(lastarg);
+    if (CAR(lastarg) == templateValueSym) {
+        call = Rf_shallow_duplicate(call);
+        SEXP lastarg = CDR(call);
+        SEXP prev = call;
+        while (CDR(lastarg) != R_NilValue) {
+            prev = lastarg;
+            lastarg = CDR(lastarg);
+        }
+
+        SEXP v = CONS_NR(ostack_top(ctx), R_NilValue);
+        SET_TAG(v, R_valueSym);
+        SETCDR(prev, v);
+    }
 
     switch (TYPEOF(callee)) {
     case SPECIALSXP: {
@@ -630,7 +662,7 @@ SEXP doCallStack(Code* caller, SEXP call, size_t nargs, SEXP names, SEXP env,
             initClosureContext(&cntxt, call, newEnv, env, argslist, callee);
             EvalCbArg arg = {functionCode((Function*)INTEGER(body)), ctx,
                              newEnv, nargs};
-            result = hook_rirCallTrampoline(&cntxt, evalCbFunction, &arg);
+            result = rirCallTrampoline(&cntxt, evalCbFunction, &arg);
             endClosureContext(&cntxt, result);
             UNPROTECT(2);
             break;
@@ -764,7 +796,7 @@ SEXP doDispatch(Code* caller, SEXP call, SEXP selector, SEXP obj,
                 initClosureContext(&cntxt, call, newEnv, env, actuals, callee);
                 EvalCbArg arg = {functionCode((Function*)INTEGER(body)), ctx,
                                  newEnv, nargs};
-                res = hook_rirCallTrampoline(&cntxt, evalCbFunction, &arg);
+                res = rirCallTrampoline(&cntxt, evalCbFunction, &arg);
                 endClosureContext(&cntxt, res);
                 UNPROTECT(2);
                 break;

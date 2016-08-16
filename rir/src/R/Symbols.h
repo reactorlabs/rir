@@ -49,6 +49,7 @@ DECLARE(Colon, ":");
 DECLARE(Internal, ".Internal");
 DECLARE(tmp, "*tmp*");
 DECLARE(value, "value");
+DECLARE(templateValue, "*.value.template.*");
 
 #undef DECLARE
 } // namespace symbol

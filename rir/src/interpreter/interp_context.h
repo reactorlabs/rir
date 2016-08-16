@@ -83,7 +83,9 @@ typedef struct {
 } Context;
 
 // Some symbols
-static SEXP R_Subset2Sym;
+extern SEXP R_Subset2Sym;
+extern SEXP templateValueSym;
+extern SEXP R_valueSym;
 
 // TODO we might actually need to do more for the lengths (i.e. true length vs length)
 
