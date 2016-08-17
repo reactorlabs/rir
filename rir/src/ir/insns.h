@@ -157,6 +157,10 @@ DEF_INSTR(call_stack_, 2, -1, 1, 0, 0)
  * call_stack_:: like call, but arguments are taken from the stack
  *               immediate are number of args and names
  */
+DEF_INSTR(uniq_, 0, 0, 0, 0, 0)
+/**
+ * uniq_:: duplicates tos if it is shared (ie. named > 1)
+ */
 
 // TODO these may be redundant but needed for the unification
 

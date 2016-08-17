@@ -114,6 +114,7 @@ bool compileSpecialCall(Context ctx, CodeStream& cs, SEXP ast, SEXP fun,
         }
 
         compileExpr(ctx, cs, rhs);
+        cs << BC::dup();
 
         // Find all parts of the lhs
         SEXP target = nullptr;
@@ -166,7 +167,7 @@ bool compileSpecialCall(Context ctx, CodeStream& cs, SEXP ast, SEXP fun,
                         }
 
                         names.push_back(arg.tag());
-                        if (TYPEOF(*arg) == LANGSXP) {
+                        if (TYPEOF(*arg) == LANGSXP || TYPEOF(*arg) == SYMSXP) {
                             auto p = compilePromise(ctx, *arg);
                             cs << BC::promise(p);
                         } else {
@@ -182,6 +183,13 @@ bool compileSpecialCall(Context ctx, CodeStream& cs, SEXP ast, SEXP fun,
             }
             if (i > 1)
                 cs << BC::dup();
+
+            // The setter internals are allowed to modify the lhs, thus
+            // we need to make sure its not shared!
+            cs << BC::uniq();
+
+            if (i > 1)
+                cs << BC::swap();
         }
 
         // Get down the initial rhs value
@@ -217,7 +225,7 @@ bool compileSpecialCall(Context ctx, CodeStream& cs, SEXP ast, SEXP fun,
                 }
 
                 names.push_back(arg.tag());
-                if (TYPEOF(*arg) == LANGSXP) {
+                if (TYPEOF(*arg) == LANGSXP || TYPEOF(*arg) == SYMSXP) {
                     auto p = compilePromise(ctx, *arg);
                     cs << BC::promise(p);
                 } else {
@@ -247,7 +255,10 @@ bool compileSpecialCall(Context ctx, CodeStream& cs, SEXP ast, SEXP fun,
             cs.addAst(rewrite);
         }
 
-        cs << BC::push(target) << BC::stvar() << BC::invisible();
+        cs << BC::push(target)
+           << BC::stvar()
+           << BC::pop()
+           << BC::invisible();
 
         return true;
     }

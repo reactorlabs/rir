@@ -65,6 +65,7 @@ BC::immediate_t decodeImmediate(BC_t bc, BC_t* pc) {
     case BC_t::dupi_:
     case BC_t::dup_:
     case BC_t::swap_:
+    case BC_t::uniq_:
     case BC_t::inci_:
     case BC_t::push_argi_:
     case BC_t::add_:
@@ -190,6 +191,7 @@ BC BC::lt() { return BC(BC_t::lt_); }
 BC BC::invisible() { return BC(BC_t::invisible_); }
 BC BC::extract1() { return BC(BC_t::extract1_); }
 BC BC::swap() { return BC(BC_t::swap_); }
+BC BC::uniq() { return BC(BC_t::uniq_); }
 BC BC::pick(uint32_t i) {
     immediate_t im;
     im.i = i;

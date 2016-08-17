@@ -581,6 +581,8 @@ SEXP doCallStack(Code* caller, SEXP call, size_t nargs, SEXP names, SEXP env,
 
     SEXP callee = *ostack_at(ctx, nargs);
 
+    int protected = 0;
+
     // This is a hack to support complex assignment
     // The rewritten ast needs to include the evaluated value
     // TODO: this should be done lazily, eg. we could store the ast template in
@@ -590,6 +592,8 @@ SEXP doCallStack(Code* caller, SEXP call, size_t nargs, SEXP names, SEXP env,
         lastarg = CDR(lastarg);
     if (CAR(lastarg) == templateValueSym) {
         call = Rf_shallow_duplicate(call);
+        PROTECT(call);
+        protected++;
         SEXP lastarg = CDR(call);
         SEXP prev = call;
         while (CDR(lastarg) != R_NilValue) {
@@ -597,6 +601,7 @@ SEXP doCallStack(Code* caller, SEXP call, size_t nargs, SEXP names, SEXP env,
             lastarg = CDR(lastarg);
         }
 
+        INCREMENT_NAMED(ostack_top(ctx));
         SEXP v = CONS_NR(ostack_top(ctx), R_NilValue);
         SET_TAG(v, R_valueSym);
         SETCDR(prev, v);
@@ -623,6 +628,7 @@ SEXP doCallStack(Code* caller, SEXP call, size_t nargs, SEXP names, SEXP env,
         SEXP argslist =
             createArgsListStack(caller, nargs, names, env, call, ctx, true);
         PROTECT(argslist);
+        protected++;
         for (size_t i = 0; i < nargs; ++i)
             ostack_pop(ctx);
         ostack_pop(ctx); // callee
@@ -636,13 +642,13 @@ SEXP doCallStack(Code* caller, SEXP call, size_t nargs, SEXP names, SEXP env,
         result = f(call, callee, argslist, env);
         if (flag < 2)
             R_Visible = flag != 1;
-        UNPROTECT(1);
         break;
     }
     case CLOSXP: {
         SEXP argslist =
             createArgsListStack(caller, nargs, names, env, call, ctx, false);
         PROTECT(argslist);
+        protected++;
         for (size_t i = 0; i < nargs; ++i)
             ostack_pop(ctx);
         ostack_pop(ctx); // callee
@@ -654,6 +660,7 @@ SEXP doCallStack(Code* caller, SEXP call, size_t nargs, SEXP names, SEXP env,
             SEXP newEnv =
                 closureArgumentAdaptor(call, callee, argslist, env, R_NilValue);
             PROTECT(newEnv);
+            protected++;
 
             // TODO since we do not have access to the context definition we
             // just create a buffer big enough and let gnur do the rest.
@@ -664,7 +671,6 @@ SEXP doCallStack(Code* caller, SEXP call, size_t nargs, SEXP names, SEXP env,
                              newEnv, nargs};
             result = rirCallTrampoline(&cntxt, evalCbFunction, &arg);
             endClosureContext(&cntxt, result);
-            UNPROTECT(2);
             break;
         }
 #endif
@@ -677,12 +683,12 @@ SEXP doCallStack(Code* caller, SEXP call, size_t nargs, SEXP names, SEXP env,
             // otherwise use R's own call mechanism
             result = applyClosure(call, callee, argslist, env, R_NilValue);
         }
-        UNPROTECT(1);
         break;
     }
     default:
         assert(false && "Don't know how to run other stuff");
     }
+    UNPROTECT(protected);
     assert(oldbp == ostack_length(ctx) && oldbpi == ctx->istack.length &&
            "Corrupted stacks");
     return result;
@@ -939,11 +945,12 @@ INSTRUCTION(pick_) {
 }
 
 INSTRUCTION(stvar_) {
-    SEXP sym = ostack_pop(ctx);
+    SEXP sym = *ostack_at(ctx, 0);
     assert(TYPEOF(sym) == SYMSXP);
-    SEXP val = ostack_top(ctx);
+    SEXP val = *ostack_at(ctx, 1);
     INCREMENT_NAMED(val);
     defineVar(sym, val, env);
+    ostack_pop(ctx);
 }
 
 INSTRUCTION(asbool_) {
@@ -1180,6 +1187,15 @@ INSTRUCTION(invisible_) {
     R_Visible = 0;
 }
 
+INSTRUCTION(uniq_) {
+    SEXP v = ostack_top(ctx);
+    if (MAYBE_SHARED(v)) {
+        v = shallow_duplicate(v);
+        *ostack_at(ctx, 0) = v;
+        SET_NAMED(v, 1);
+    }
+}
+
 extern void printCode(Code* c);
 extern void printFunction(Function* f);
 
@@ -1279,6 +1295,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
             INS(invisible_);
             INS(extract1_);
             INS(dispatch_);
+            INS(uniq_);
         case ret_: {
             // not in its own function so that we can avoid nonlocal returns
             goto __eval_done;

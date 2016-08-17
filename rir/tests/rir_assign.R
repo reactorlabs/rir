@@ -66,3 +66,10 @@ f9 <- rir.compile(function() {
 })
 
 stopifnot(f9() == 123)
+
+f10 <- rir.compile(function() {
+  x <- 123
+  x[1] <- 55
+})
+
+stopifnot(f10() == 55)

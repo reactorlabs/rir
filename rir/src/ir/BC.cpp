@@ -63,6 +63,7 @@ void BC::write(CodeStream& cs) const {
     case BC_t::dupi_:
     case BC_t::dup_:
     case BC_t::swap_:
+    case BC_t::uniq_:
     case BC_t::inci_:
     case BC_t::push_argi_:
     case BC_t::add_:
@@ -237,6 +238,7 @@ void BC::print() {
     case BC_t::eqi_:
     case BC_t::ret_:
     case BC_t::swap_:
+    case BC_t::uniq_:
     case BC_t::dup_:
     case BC_t::dupi_:
     case BC_t::inci_:
