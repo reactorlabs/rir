@@ -253,6 +253,8 @@ bool compileSpecialCall(Context ctx, CodeStream& cs, SEXP ast, SEXP fun,
             SET_TAG(value, symbol::value);
             SETCDR(lastArg, value);
             cs.addAst(rewrite);
+
+            cs << BC::uniq();
         }
 
         cs << BC::push(target)

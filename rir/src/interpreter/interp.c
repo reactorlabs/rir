@@ -325,7 +325,7 @@ INSTRUCTION(ldvar_) {
  */
 // TODO unnamed only at this point
 int __listAppend(SEXP* front, SEXP* last, SEXP value, SEXP name) {
-    int protected = 0;
+    int p = 0;
 
     assert(TYPEOF(*front) == LISTSXP || TYPEOF(*front) == NILSXP);
     assert(TYPEOF(*last) == LISTSXP || TYPEOF(*last) == NILSXP);
@@ -337,21 +337,21 @@ int __listAppend(SEXP* front, SEXP* last, SEXP value, SEXP name) {
     if (*front == R_NilValue) {
         *front = app;
         PROTECT(*front);
-        protected++;
+        p++;
     }
 
     if (*last != R_NilValue)
         SETCDR(*last, app);
     *last = app;
 
-    return protected;
+    return p;
 }
 
 SEXP createArgsListStack(Code* c, size_t nargs, SEXP names, SEXP env, SEXP call,
                          Context* ctx, bool eager) {
     SEXP result = R_NilValue;
     SEXP pos = result;
-    int protected = 0;
+    int p = 0;
 
     SEXP* argbase = ostack_at(ctx, nargs - 1);
 
@@ -370,10 +370,10 @@ SEXP createArgsListStack(Code* c, size_t nargs, SEXP names, SEXP env, SEXP call,
                     if (eager) {
                         SEXP arg = rirEval(CAR(ellipsis), env);
                         assert(TYPEOF(arg) != PROMSXP);
-                        protected += __listAppend(&result, &pos, arg, name);
+                        p += __listAppend(&result, &pos, arg, name);
                     } else {
                         SEXP promise = mkPROMISE(CAR(ellipsis), env);
-                        protected += __listAppend(&result, &pos, promise, name);
+                        p += __listAppend(&result, &pos, promise, name);
                     }
                     ellipsis = CDR(ellipsis);
                 }
@@ -381,16 +381,16 @@ SEXP createArgsListStack(Code* c, size_t nargs, SEXP names, SEXP env, SEXP call,
         } else if (arg == R_MissingArg) {
             if (eager)
                 Rf_errorcall(call, "argument %d is empty", i + 1);
-            protected += __listAppend(&result, &pos, R_MissingArg, R_NilValue);
+            p += __listAppend(&result, &pos, R_MissingArg, R_NilValue);
         } else {
             if (eager && TYPEOF(arg) == PROMSXP) {
                 arg = rirEval(arg, env);
             }
-            protected += __listAppend(&result, &pos, arg, name);
+            p += __listAppend(&result, &pos, arg, name);
         }
     }
 
-    UNPROTECT(protected);
+    UNPROTECT(p);
     return result;
 }
 
@@ -398,7 +398,7 @@ SEXP createArgsList(Code* c, FunctionIndex* args, SEXP call, size_t nargs,
                     SEXP names, SEXP env, Context* ctx, bool eager) {
     SEXP result = R_NilValue;
     SEXP pos = result;
-    int protected = 0;
+    int p = 0;
 
     // loop through the arguments and create a promise, unless it is a missing
     // argument
@@ -416,12 +416,10 @@ SEXP createArgsList(Code* c, FunctionIndex* args, SEXP call, size_t nargs,
                     if (eager) {
                         SEXP arg = rirEval(CAR(ellipsis), env);
                         assert(TYPEOF(arg) != PROMSXP);
-                      protected
-                        += __listAppend(&result, &pos, arg, name);
+                        p += __listAppend(&result, &pos, arg, name);
                     } else {
                         SEXP promise = mkPROMISE(CAR(ellipsis), env);
-                      protected
-                        += __listAppend(&result, &pos, promise, name);
+                        p += __listAppend(&result, &pos, promise, name);
                     }
                     ellipsis = CDR(ellipsis);
                 }
@@ -429,25 +427,22 @@ SEXP createArgsList(Code* c, FunctionIndex* args, SEXP call, size_t nargs,
         } else if (args[i] == MISSING_ARG_IDX) {
             if (eager)
                 Rf_errorcall(call, "argument %d is empty", i + 1);
-          protected
-            += __listAppend(&result, &pos, R_MissingArg, R_NilValue);
+            p += __listAppend(&result, &pos, R_MissingArg, R_NilValue);
         } else {
             if (eager) {
                 SEXP arg =
                     evalRirCode(codeAt(function(c), offset), ctx, env, 0);
                 assert(TYPEOF(arg) != PROMSXP);
-              protected
-                += __listAppend(&result, &pos, arg, name);
+                p += __listAppend(&result, &pos, arg, name);
             } else {
                 Code* arg = codeAt(function(c), offset);
                 SEXP promise = createPromise(arg, env);
-              protected
-                += __listAppend(&result, &pos, promise, name);
+                p += __listAppend(&result, &pos, promise, name);
             }
         }
     }
 
-    UNPROTECT(protected);
+    UNPROTECT(p);
     return result;
 }
 
@@ -489,6 +484,9 @@ SEXP evalCbFunction(EvalCbArg* arg_) {
     EvalCbArg* arg = (EvalCbArg*)arg_;
     return evalRirCode(arg->code, arg->ctx, arg->env, arg->nargs);
 }
+
+void closureDebug(SEXP call, SEXP op, SEXP rho, SEXP newrho, void* cntxt);
+void endClosureDebug(SEXP op, SEXP call, SEXP rho);
 
 /** Performs the call.
 
@@ -545,8 +543,10 @@ SEXP doCall(Code * caller, SEXP call, SEXP callee, unsigned * args, size_t nargs
             // Once we integrate we should really setup the context ourselves!
             char cntxt[400];
             initClosureContext(&cntxt, call, newEnv, env, actuals, callee);
+            closureDebug(call, callee, env, newEnv, &cntxt);
             EvalCbArg arg = {functionCode((Function*)INTEGER(body)), ctx, newEnv, nargs};
             result = rirCallTrampoline(&cntxt, evalCbFunction, &arg);
+            endClosureDebug(callee, call, env);
             endClosureContext(&cntxt, result);
             UNPROTECT(2);
             break;
@@ -581,7 +581,7 @@ SEXP doCallStack(Code* caller, SEXP call, size_t nargs, SEXP names, SEXP env,
 
     SEXP callee = *ostack_at(ctx, nargs);
 
-    int protected = 0;
+    int p = 0;
 
     // This is a hack to support complex assignment
     // The rewritten ast needs to include the evaluated value
@@ -593,7 +593,7 @@ SEXP doCallStack(Code* caller, SEXP call, size_t nargs, SEXP names, SEXP env,
     if (CAR(lastarg) == templateValueSym) {
         call = Rf_shallow_duplicate(call);
         PROTECT(call);
-        protected++;
+        p++;
         SEXP lastarg = CDR(call);
         SEXP prev = call;
         while (CDR(lastarg) != R_NilValue) {
@@ -601,8 +601,19 @@ SEXP doCallStack(Code* caller, SEXP call, size_t nargs, SEXP names, SEXP env,
             lastarg = CDR(lastarg);
         }
 
-        INCREMENT_NAMED(ostack_top(ctx));
-        SEXP v = CONS_NR(ostack_top(ctx), R_NilValue);
+        SEXP val = ostack_top(ctx);
+
+        // If the value is an ast, we need to wrap it in a quote, since
+        // otherwise its not a value anymore, but will be evaluated.
+        if (TYPEOF(val) == LANGSXP || TYPEOF(val) == SYMSXP) {
+            val = CONS_NR(Rf_install("quote"), CONS_NR(val, R_NilValue));
+            SET_TYPEOF(val, LANGSXP);
+            PROTECT(val);
+            p++;
+        }
+
+        INCREMENT_NAMED(val);
+        SEXP v = CONS_NR(val, R_NilValue);
         SET_TAG(v, R_valueSym);
         SETCDR(prev, v);
     }
@@ -628,7 +639,7 @@ SEXP doCallStack(Code* caller, SEXP call, size_t nargs, SEXP names, SEXP env,
         SEXP argslist =
             createArgsListStack(caller, nargs, names, env, call, ctx, true);
         PROTECT(argslist);
-        protected++;
+        p++;
         for (size_t i = 0; i < nargs; ++i)
             ostack_pop(ctx);
         ostack_pop(ctx); // callee
@@ -648,7 +659,7 @@ SEXP doCallStack(Code* caller, SEXP call, size_t nargs, SEXP names, SEXP env,
         SEXP argslist =
             createArgsListStack(caller, nargs, names, env, call, ctx, false);
         PROTECT(argslist);
-        protected++;
+        p++;
         for (size_t i = 0; i < nargs; ++i)
             ostack_pop(ctx);
         ostack_pop(ctx); // callee
@@ -660,7 +671,7 @@ SEXP doCallStack(Code* caller, SEXP call, size_t nargs, SEXP names, SEXP env,
             SEXP newEnv =
                 closureArgumentAdaptor(call, callee, argslist, env, R_NilValue);
             PROTECT(newEnv);
-            protected++;
+            p++;
 
             // TODO since we do not have access to the context definition we
             // just create a buffer big enough and let gnur do the rest.
@@ -688,7 +699,7 @@ SEXP doCallStack(Code* caller, SEXP call, size_t nargs, SEXP names, SEXP env,
     default:
         assert(false && "Don't know how to run other stuff");
     }
-    UNPROTECT(protected);
+    UNPROTECT(p);
     assert(oldbp == ostack_length(ctx) && oldbpi == ctx->istack.length &&
            "Corrupted stacks");
     return result;
@@ -1249,7 +1260,6 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
     size_t bp = ostack_length(ctx);
 
     R_Visible = TRUE;
-
     // main loop
     while (true) {
         // printf("%p : %p, %p\n", c, *pc, *pc - c->data);
