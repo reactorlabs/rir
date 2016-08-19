@@ -46,6 +46,7 @@ void BC::write(CodeStream& cs) const {
 
     case BC_t::pushi_:
     case BC_t::pick_:
+    case BC_t::is_:
     case BC_t::put_:
         cs.insert(immediate.i);
         return;
@@ -230,6 +231,9 @@ void BC::print() {
     case BC_t::pick_:
     case BC_t::put_:
         Rprintf(" %i", immediate.i);
+        break;
+    case BC_t::is_:
+        Rprintf(" %s", type2char(immediate.i));
         break;
     case BC_t::force_:
     case BC_t::pop_:

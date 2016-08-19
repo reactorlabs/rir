@@ -955,6 +955,32 @@ INSTRUCTION(pick_) {
     *pos = val;
 }
 
+INSTRUCTION(is_) {
+    SEXP test = ostack_pop(ctx);
+    uint32_t i = readImmediate(pc);
+    bool res;
+    switch (i) {
+    case NILSXP:
+    case LGLSXP:
+    case REALSXP:
+        res = TYPEOF(test) == i;
+        break;
+
+    case VECSXP:
+        res = TYPEOF(test) == VECSXP || TYPEOF(test) == LISTSXP;
+        break;
+
+    case LISTSXP:
+        res = TYPEOF(test) == LISTSXP || TYPEOF(test) == NILSXP;
+        break;
+
+    default:
+        assert(false);
+        break;
+    }
+    ostack_push(ctx, res ? R_TrueValue : R_FalseValue);
+}
+
 INSTRUCTION(stvar_) {
     SEXP sym = *ostack_at(ctx, 0);
     assert(TYPEOF(sym) == SYMSXP);
@@ -1298,6 +1324,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
             INS(swap_);
             INS(put_);
             INS(pick_);
+            INS(is_);
             INS(isspecial_);
             INS(isfun_);
             INS(inci_);

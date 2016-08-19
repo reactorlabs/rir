@@ -49,6 +49,7 @@ BC::immediate_t decodeImmediate(BC_t bc, BC_t* pc) {
         break;
     case BC_t::pushi_:
     case BC_t::pick_:
+    case BC_t::is_:
     case BC_t::put_:
         immediate.i = *(uint32_t*)pc;
         break;
@@ -196,6 +197,11 @@ BC BC::pick(uint32_t i) {
     immediate_t im;
     im.i = i;
     return BC(BC_t::pick_, im);
+}
+BC BC::is(uint32_t i) {
+    immediate_t im;
+    im.i = i;
+    return BC(BC_t::is_, im);
 }
 BC BC::put(uint32_t i) {
     immediate_t im;

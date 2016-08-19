@@ -127,6 +127,10 @@ DEF_INSTR(isfun_, 0, 1, 1, 0, 0)
  * isfun_:: pop object stack, convert to RIR code or assert error, push code to
  * object stack
  */
+DEF_INSTR(is_, 1, 1, 1, 0, 0)
+/**
+ * is_:: immediate type tag, push T/F
+ */
 DEF_INSTR(extract1_, 0, 2, 1, 0, 0)
 /**
  * extract1_:: do a[[b]], where a and b are on the stack

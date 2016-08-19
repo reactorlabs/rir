@@ -201,6 +201,7 @@ class BC {
     inline static BC swap();
     inline static BC put(uint32_t);
     inline static BC pick(uint32_t);
+    inline static BC is(uint32_t);
     static BC call_stack(uint32_t, std::vector<SEXP> names);
 
   private:

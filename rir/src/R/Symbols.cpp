@@ -47,6 +47,9 @@ DECLARE(Internal, ".Internal");
 DECLARE(tmp, "*tmp*");
 DECLARE(value, "value");
 DECLARE(templateValue, "*.value.template.*");
+DECLARE(isnull, "is.null");
+DECLARE(islist, "is.list");
+DECLARE(ispairlist, "is.pairlist");
 
 #undef DECLARE
 } // namespace symbol

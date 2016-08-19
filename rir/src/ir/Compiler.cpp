@@ -244,6 +244,27 @@ bool compileSpecialCall(Context ctx, CodeStream& cs, SEXP ast, SEXP fun,
         return false;
     }
 
+    if (fun == symbol::isnull && args.length() == 1) {
+        cs << BC::isspecial(fun);
+        compileExpr(ctx, cs, args[0]);
+        cs << BC::is(NILSXP);
+        return true;
+    }
+
+    if (fun == symbol::islist && args.length() == 1) {
+        cs << BC::isspecial(fun);
+        compileExpr(ctx, cs, args[0]);
+        cs << BC::is(VECSXP);
+        return true;
+    }
+
+    if (fun == symbol::ispairlist && args.length() == 1) {
+        cs << BC::isspecial(fun);
+        compileExpr(ctx, cs, args[0]);
+        cs << BC::is(LISTSXP);
+        return true;
+    }
+
     if (fun == symbol::DoubleBracket) {
         if (args.length() == 2) {
             auto lhs = args[0];
