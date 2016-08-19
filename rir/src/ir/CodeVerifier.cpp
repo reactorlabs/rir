@@ -191,7 +191,6 @@ void CodeVerifier::vefifyFunctionLayout(SEXP sexp, ::Context* ctx) {
                 SEXP sym = cp_pool_at(ctx, *argsIndex);
                 assert(TYPEOF(sym) == SYMSXP);
                 assert(strlen(CHAR(PRINTNAME(sym))));
-                assert(sym != symbol::templateValue);
             }
             if (*cptr == BC_t::call_stack_) {
                 unsigned* argsIndex = reinterpret_cast<ArgT*>(cptr + 1);

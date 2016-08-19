@@ -73,3 +73,28 @@ f10 <- rir.compile(function() {
 })
 
 stopifnot(f10() == 55)
+
+f11 <- rir.compile(function() {
+  a <- c(1,2)
+  f <- rir.compile(function() {
+    a[[1]] <- 3
+    a[[1]]
+  })
+  rir.disassemble(f)
+  stopifnot(f() == 3)
+  a[[1]]
+})
+
+stopifnot(f11() == 1)
+
+f12 <- rir.compile(function() {
+  a <- c(1,2)
+  f <- rir.compile(function() {
+    a[1] <- 3
+    a[1]
+  })
+  stopifnot(f() == 3)
+  a[1]
+})
+
+stopifnot(f12() == 1)

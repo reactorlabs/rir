@@ -153,8 +153,11 @@ bool compileSpecialCall(Context ctx, CodeStream& cs, SEXP ast, SEXP fun,
                     }
 
                     cs << BC::call_stack(names.size(), names);
-                    // TODO: replace target with *tmp*
-                    cs.addAst(g);
+                    SEXP rewrite = Rf_shallow_duplicate(g);
+                    ctx.preserve(rewrite);
+                    SETCAR(CDR(rewrite), symbol::getterPlaceholder);
+
+                    cs.addAst(rewrite);
                 }
                 Else(assert(false);)
             }
@@ -222,12 +225,13 @@ bool compileSpecialCall(Context ctx, CodeStream& cs, SEXP ast, SEXP fun,
             ctx.preserve(rewrite);
             SETCAR(rewrite, setterName);
 
-            SEXP lastArg = rewrite;
-            while (CDR(lastArg) != R_NilValue)
-                lastArg = CDR(lastArg);
-            SEXP value = CONS_NR(symbol::templateValue, R_NilValue);
+            SEXP a = CDR(rewrite);
+            SETCAR(a, symbol::setterPlaceholder);
+            while (CDR(a) != R_NilValue)
+                a = CDR(a);
+            SEXP value = CONS_NR(symbol::setterPlaceholder, R_NilValue);
             SET_TAG(value, symbol::value);
-            SETCDR(lastArg, value);
+            SETCDR(a, value);
             cs.addAst(rewrite);
 
             cs << BC::uniq();

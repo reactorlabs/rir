@@ -8,8 +8,10 @@ void initializeResizeableList(ResizeableList * l, size_t capacity, SEXP parent, 
 }
 
 SEXP R_Subset2Sym;
-SEXP templateValueSym;
 SEXP R_valueSym;
+SEXP setterPlaceholderSym;
+SEXP getterPlaceholderSym;
+SEXP quoteSym;
 
 Context* context_create(CompilerCallback compiler) {
     Context* c = malloc(sizeof(Context));
@@ -29,8 +31,10 @@ Context* context_create(CompilerCallback compiler) {
     src_pool_add(c, R_NilValue);
     cp_pool_add(c, R_NilValue);
     R_Subset2Sym = Rf_install("[[");
-    templateValueSym = Rf_install("*.value.template.*");
     R_valueSym = Rf_install("value");
+    setterPlaceholderSym = Rf_install("*.placeholder.setter.*");
+    getterPlaceholderSym = Rf_install("*.placeholder.getter.*");
+    quoteSym = Rf_install("quote");
     return c;
 }
 

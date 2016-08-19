@@ -583,39 +583,51 @@ SEXP doCallStack(Code* caller, SEXP call, size_t nargs, SEXP names, SEXP env,
 
     int p = 0;
 
-    // This is a hack to support complex assignment
-    // The rewritten ast needs to include the evaluated value
-    // TODO: this should be done lazily, eg. we could store the ast template in
-    // the context and rewrite it on access
-    SEXP lastarg = CDR(call);
-    while (CDR(lastarg) != R_NilValue)
-        lastarg = CDR(lastarg);
-    if (CAR(lastarg) == templateValueSym) {
+    // This is a hack to support complex assignment's rewritten asts for
+    // getters and setters.
+    // The rewritten ast has target (and value for setters) marked as
+    // placeholders, which we need to fill in here.
+    // TODO: in the case of closures we should not do it eagerly
+    if ((TYPEOF(callee) == SPECIALSXP || TYPEOF(callee) == CLOSXP) &&
+        (CADR(call) == getterPlaceholderSym ||
+         CADR(call) == setterPlaceholderSym)) {
+        int setter = CADR(call) == setterPlaceholderSym;
         call = Rf_shallow_duplicate(call);
         PROTECT(call);
         p++;
-        SEXP lastarg = CDR(call);
-        SEXP prev = call;
-        while (CDR(lastarg) != R_NilValue) {
-            prev = lastarg;
-            lastarg = CDR(lastarg);
-        }
 
-        SEXP val = ostack_top(ctx);
+        SEXP a = CDR(call);
 
-        // If the value is an ast, we need to wrap it in a quote, since
+        SEXP target = *ostack_at(ctx, nargs - 1);
+        // If the target is an ast, we need to wrap it in a quote, since
         // otherwise its not a value anymore, but will be evaluated.
-        if (TYPEOF(val) == LANGSXP || TYPEOF(val) == SYMSXP) {
-            val = CONS_NR(Rf_install("quote"), CONS_NR(val, R_NilValue));
-            SET_TYPEOF(val, LANGSXP);
-            PROTECT(val);
-            p++;
+        if (TYPEOF(target) == LANGSXP || TYPEOF(target) == SYMSXP) {
+            target = LCONS(quoteSym, CONS_NR(target, R_NilValue));
         }
 
-        INCREMENT_NAMED(val);
-        SEXP v = CONS_NR(val, R_NilValue);
-        SET_TAG(v, R_valueSym);
-        SETCDR(prev, v);
+        SETCAR(a, target);
+
+        if (setter) {
+            SEXP prev = call;
+            while (CDR(a) != R_NilValue) {
+                prev = a;
+                a = CDR(a);
+            }
+
+            assert(CAR(a) == setterPlaceholderSym);
+            SEXP val = ostack_top(ctx);
+
+            // If the value is an ast, we need to wrap it in a quote, since
+            // otherwise its not a value anymore, but will be evaluated.
+            if (TYPEOF(val) == LANGSXP || TYPEOF(val) == SYMSXP) {
+                val = LCONS(quoteSym, CONS_NR(val, R_NilValue));
+            }
+
+            INCREMENT_NAMED(val);
+            SEXP v = CONS_NR(val, R_NilValue);
+            SET_TAG(v, R_valueSym);
+            SETCDR(prev, v);
+        }
     }
 
     switch (TYPEOF(callee)) {
@@ -702,6 +714,7 @@ SEXP doCallStack(Code* caller, SEXP call, size_t nargs, SEXP names, SEXP env,
     UNPROTECT(p);
     assert(oldbp == ostack_length(ctx) && oldbpi == ctx->istack.length &&
            "Corrupted stacks");
+
     return result;
 }
 
@@ -1228,8 +1241,8 @@ INSTRUCTION(uniq_) {
     if (MAYBE_SHARED(v)) {
         v = shallow_duplicate(v);
         *ostack_at(ctx, 0) = v;
-        SET_NAMED(v, 1);
     }
+    SET_NAMED(ostack_top(ctx), NAMED(ostack_top(ctx)) + 1);
 }
 
 extern void printCode(Code* c);
