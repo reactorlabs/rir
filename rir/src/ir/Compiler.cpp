@@ -82,7 +82,9 @@ bool compileSpecialCall(Context ctx, CodeStream& cs, SEXP ast, SEXP fun,
         Match(lhs) {
             Case(SYMSXP) {
                 compileExpr(ctx, cs, rhs);
-                cs << BC::push(lhs) << BC::stvar() << BC::invisible();
+                cs << BC::dup()
+                   << BC::stvar(lhs)
+                   << BC::invisible();
                 return true;
             }
             Else(break)
@@ -231,9 +233,7 @@ bool compileSpecialCall(Context ctx, CodeStream& cs, SEXP ast, SEXP fun,
             cs << BC::uniq();
         }
 
-        cs << BC::push(target)
-           << BC::stvar()
-           << BC::pop()
+        cs << BC::stvar(target)
            << BC::invisible();
 
         return true;

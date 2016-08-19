@@ -26,6 +26,7 @@ BC::immediate_t decodeImmediate(BC_t bc, BC_t* pc) {
     case BC_t::ldvar_:
     case BC_t::ldddvar_:
     case BC_t::isspecial_:
+    case BC_t::stvar_:
         immediate.pool = *(pool_idx_t*)pc;
         break;
     case BC_t::dispatch_:
@@ -59,7 +60,6 @@ BC::immediate_t decodeImmediate(BC_t bc, BC_t* pc) {
     case BC_t::pop_:
     case BC_t::force_:
     case BC_t::asast_:
-    case BC_t::stvar_:
     case BC_t::asbool_:
     case BC_t::lti_:
     case BC_t::eqi_:
@@ -144,7 +144,13 @@ BC BC::promise(fun_idx_t prom) {
     return BC(BC_t::promise_, i);
 }
 BC BC::asast() { return BC(BC_t::asast_); }
-BC BC::stvar() { return BC(BC_t::stvar_); }
+BC BC::stvar(SEXP sym) {
+    assert(TYPEOF(sym) == SYMSXP);
+    assert(strlen(CHAR(PRINTNAME(sym))));
+    immediate_t i;
+    i.pool = Pool::insert(sym);
+    return BC(BC_t::stvar_, i);
+}
 BC BC::lti() { return BC(BC_t::lti_); }
 BC BC::eqi() { return BC(BC_t::eqi_); }
 BC BC::asbool() { return BC(BC_t::asbool_); }

@@ -982,12 +982,11 @@ INSTRUCTION(is_) {
 }
 
 INSTRUCTION(stvar_) {
-    SEXP sym = *ostack_at(ctx, 0);
+    SEXP sym = readConst(ctx, pc);
     assert(TYPEOF(sym) == SYMSXP);
-    SEXP val = *ostack_at(ctx, 1);
+    SEXP val = ostack_pop(ctx);
     INCREMENT_NAMED(val);
     defineVar(sym, val, env);
-    ostack_pop(ctx);
 }
 
 INSTRUCTION(asbool_) {

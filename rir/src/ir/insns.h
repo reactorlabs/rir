@@ -55,10 +55,9 @@ DEF_INSTR(asast_, 0, 1, 1, 0, 0)
 /**
  * asast_:: pop a promise off the object stack, push its AST on object stack
  */
-DEF_INSTR(stvar_, 0, 2, 1, 0, 0)
+DEF_INSTR(stvar_, 1, 1, 0, 0, 0)
 /**
- * stvar_:: pop a symbol and a value off object stack, define a variable and
- * push value on object stack
+ * stvar_:: assign tos to the immediate symbol
  */
 DEF_INSTR(asbool_, 0, 1, 1, 0, 0)
 /**

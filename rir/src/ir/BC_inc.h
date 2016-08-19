@@ -175,7 +175,7 @@ class BC {
     inline static BC pop();
     inline static BC force();
     inline static BC asast();
-    inline static BC stvar();
+    inline static BC stvar(SEXP sym);
     inline static BC asbool();
     inline static BC brtrue(jmp_t);
     inline static BC brfalse(jmp_t);
