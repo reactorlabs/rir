@@ -68,13 +68,14 @@ class FunctionHandle {
 
             assert(newCapacity % sizeof(int) == 0);
             SEXP newStore = Rf_allocVector(INTSXP, newCapacity / sizeof(int));
-            R_PreserveObject(newStore);
             void* newPayload = INTEGER(newStore);
+
+            R_PreserveObject(newStore);
+            R_ReleaseObject(store);
 
             memcpy(newPayload, payload, capacity);
             memset(payload, 0xee, capacity);
 
-            R_ReleaseObject(store);
             assert(function == payload);
             store = newStore;
             payload = newPayload;

@@ -18,37 +18,12 @@ namespace rir {
 namespace {
 
 class Context {
-    enum class ExpT {
-        // Normal expression
-        expression,
-        // inside a complex assignment
-        complexAssignment,
-    };
-
-    bool noOpt_ = false;
-    ExpT expT_;
-    FunctionHandle& fun_;
-
-    Context(ExpT expT, FunctionHandle& fun) : expT_(expT), fun_(fun) {}
-
   public:
-    Context(FunctionHandle& fun) : expT_(ExpT::expression), fun_(fun) {}
+    FunctionHandle& fun;
+    Preserve& preserve;
 
-    FunctionHandle& fun() { return fun_; }
-
-    Context asComplexAssignment() {
-        Context c(ExpT::complexAssignment, fun());
-        return c;
-    }
-
-    Context asNoopt() {
-        Context c(expT_, fun());
-        c.noOpt_ = true;
-        return c;
-    }
-
-    bool isNoopt() { return noOpt_; }
-    bool isComplexAssignment() { return expT_ == ExpT::complexAssignment; }
+    Context(FunctionHandle& fun, Preserve& preserve)
+        : fun(fun), preserve(preserve) {}
 };
 
 fun_idx_t compilePromise(Context ctx, SEXP exp);
@@ -97,7 +72,7 @@ bool compileSpecialCall(Context ctx, CodeStream& cs, SEXP ast, SEXP fun,
                         SEXP args_) {
     RList args(args_);
 
-    if (fun == symbol::Assign && !ctx.isComplexAssignment()) {
+    if (fun == symbol::Assign) {
         assert(args.length() == 2);
         cs << BC::isspecial(fun);
 
@@ -241,9 +216,8 @@ bool compileSpecialCall(Context ctx, CodeStream& cs, SEXP ast, SEXP fun,
 
             cs << BC::call_stack(names.size(), names);
 
-            Protect protect;
             SEXP rewrite = Rf_shallow_duplicate(*g);
-            protect(rewrite);
+            ctx.preserve(rewrite);
             SETCAR(rewrite, setterName);
 
             SEXP lastArg = rewrite;
@@ -270,7 +244,7 @@ bool compileSpecialCall(Context ctx, CodeStream& cs, SEXP ast, SEXP fun,
         return false;
     }
 
-    if (fun == symbol::DoubleBracket && !ctx.isComplexAssignment()) {
+    if (fun == symbol::DoubleBracket) {
         if (args.length() == 2) {
             auto lhs = args[0];
             auto idx = args[1];
@@ -306,7 +280,7 @@ void compileCall(Context ctx, CodeStream& cs, SEXP ast, SEXP fun, SEXP args) {
     // LHS can either be an identifier or an expression
     Match(fun) {
         Case(SYMSXP) {
-            if (!ctx.isNoopt() && compileSpecialCall(ctx, cs, ast, fun, args))
+            if (compileSpecialCall(ctx, cs, ast, fun, args))
                 return;
 
             cs << BC::ldfun(fun);
@@ -415,7 +389,7 @@ std::vector<fun_idx_t> compileFormals(Context ctx, SEXP formals) {
 }
 
 fun_idx_t compilePromise(Context ctx, SEXP exp) {
-    CodeStream cs(ctx.fun(), exp);
+    CodeStream cs(ctx.fun, exp);
     compileExpr(ctx, cs, exp);
     cs << BC::ret();
     return cs.finalize();
@@ -426,7 +400,7 @@ Compiler::CompilerRes Compiler::finalize() {
     // Rprintf("****************************************************\n");
     // Rprintf("Compiling function\n");
     FunctionHandle function = FunctionHandle::create();
-    Context ctx(function);
+    Context ctx(function, preserve);
 
     auto formProm = compileFormals(ctx, formals);
 

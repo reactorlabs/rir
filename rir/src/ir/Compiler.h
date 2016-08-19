@@ -2,12 +2,14 @@
 #define RIR_COMPILER_H
 
 #include "R/r.h"
+#include "R/Preserve.h"
 
 namespace rir {
 
 class Compiler {
     SEXP exp;
     SEXP formals;
+    Preserve preserve;
 
   public:
     struct CompilerRes {
@@ -15,19 +17,11 @@ class Compiler {
         SEXP formals;
     };
 
-    Compiler(SEXP exp) : exp(exp), formals(R_NilValue) {
-        R_PreserveObject(exp);
-    }
+    Compiler(SEXP exp) : exp(exp), formals(R_NilValue) { preserve(exp); }
 
     Compiler(SEXP exp, SEXP formals) : exp(exp), formals(formals) {
-        R_PreserveObject(exp);
-        R_PreserveObject(formals);
-    }
-
-    ~Compiler() {
-        if (formals)
-            R_ReleaseObject(formals);
-        R_ReleaseObject(exp);
+        preserve(exp);
+        preserve(formals);
     }
 
     CompilerRes finalize();
