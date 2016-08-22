@@ -142,7 +142,8 @@ class CodeEditor {
                         else
                             args[i] += proms;
                     }
-                } else if (insert->bc.bc == BC_t::promise_) {
+                } else if (insert->bc.bc == BC_t::promise_ ||
+                           insert->bc.bc == BC_t::push_code_) {
                     if (duplicate.count(insert->bc.immediate.fun))
                         insert->bc.immediate.fun =
                             duplicate.at(insert->bc.immediate.fun);

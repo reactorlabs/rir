@@ -223,6 +223,16 @@ INLINE SEXP promiseValue(SEXP promise, Context * ctx) {
     }
 }
 
+INLINE SEXP escape(SEXP val) {
+    // FIXME : as long as our code objects can leak to various places
+    // outside our control, we need to make sure to convert them back
+    if (isValidCodeObject(val))
+        val = rirExpr(val);
+
+    assert(!TYPEOF(val) != 31);
+    return val;
+}
+
 // TODO remove numArgs and bp -- this is only needed for the on stack argument
 // handling
 #define INSTRUCTION(name)                                                      \
@@ -386,6 +396,8 @@ SEXP createArgsListStack(Code* c, size_t nargs, SEXP names, SEXP env, SEXP call,
             if (eager && TYPEOF(arg) == PROMSXP) {
                 arg = rirEval(arg, env);
             }
+            arg = escape(arg);
+
             p += __listAppend(&result, &pos, arg, name);
         }
     }
@@ -432,6 +444,7 @@ SEXP createArgsList(Code* c, FunctionIndex* args, SEXP call, size_t nargs,
             if (eager) {
                 SEXP arg =
                     evalRirCode(codeAt(function(c), offset), ctx, env, 0);
+                arg = escape(arg);
                 assert(TYPEOF(arg) != PROMSXP);
                 p += __listAppend(&result, &pos, arg, name);
             } else {
@@ -599,6 +612,9 @@ SEXP doCallStack(Code* caller, SEXP call, size_t nargs, SEXP names, SEXP env,
         SEXP a = CDR(call);
 
         SEXP target = *ostack_at(ctx, nargs - 1);
+
+        target = escape(target);
+
         // If the target is an ast, we need to wrap it in a quote, since
         // otherwise its not a value anymore, but will be evaluated.
         if (TYPEOF(target) == LANGSXP || TYPEOF(target) == SYMSXP) {
@@ -616,6 +632,8 @@ SEXP doCallStack(Code* caller, SEXP call, size_t nargs, SEXP names, SEXP env,
 
             assert(CAR(a) == setterPlaceholderSym);
             SEXP val = ostack_top(ctx);
+
+            val = escape(val);
 
             // If the value is an ast, we need to wrap it in a quote, since
             // otherwise its not a value anymore, but will be evaluated.
@@ -902,6 +920,14 @@ INSTRUCTION(promise_) {
     ostack_push(ctx, createPromise(promiseCode, env));
 }
 
+INSTRUCTION(push_code_) {
+    // get the Code * pointer we need
+    unsigned codeOffset = readImmediate(pc);
+    Code* promiseCode = codeAt(function(c), codeOffset);
+    // create the promise and push it on stack
+    ostack_push(ctx, (SEXP)promiseCode);
+}
+
 INSTRUCTION(close_) {
     SEXP body = ostack_pop(ctx);
     SEXP formals = ostack_pop(ctx);
@@ -997,7 +1023,7 @@ INSTRUCTION(is_) {
 INSTRUCTION(stvar_) {
     SEXP sym = readConst(ctx, pc);
     assert(TYPEOF(sym) == SYMSXP);
-    SEXP val = ostack_pop(ctx);
+    SEXP val = escape(ostack_pop(ctx));
     INCREMENT_NAMED(val);
     defineVar(sym, val, env);
 }
@@ -1315,6 +1341,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
             INS(call_);
             INS(call_stack_);
             INS(promise_);
+            INS(push_code_);
             INS(close_);
             INS(force_);
             INS(pop_);
@@ -1364,6 +1391,7 @@ SEXP rirExpr(SEXP f) {
         Code* c = (Code*)f;
         return src_pool_at(globalContext(), c->src);
     }
+    assert(TYPEOF(f) != 31);
     if (isValidFunctionObject(f)) {
         Function* ff = (Function*)(INTEGER(f));
         return src_pool_at(globalContext(), functionCode(ff)->src);
@@ -1379,12 +1407,12 @@ SEXP rirEval_f(SEXP f, SEXP env) {
         SEXP x = evalRirCode(c, globalContext(), env, 0);
       //        Rprintf("Promise evaluated, length %u, value %d",
         //        Rf_length(x), REAL(x)[0]);
-        return x;
+        return escape(x);
     } else {
         //        Rprintf("=====================================================\n");
         //        Rprintf("Evaluating function\n");
         Function* ff = (Function*)(INTEGER(f));
-        return evalRirCode(functionCode(ff), globalContext(), env, 0);
+        return escape(evalRirCode(functionCode(ff), globalContext(), env, 0));
     }
 }
 
@@ -1402,7 +1430,8 @@ SEXP rirEval(SEXP e, SEXP env) {
     case INTSXP: {
         if (isValidFunctionSEXP(e)) {
             Function* ff = (Function*)(INTEGER(e));
-            return evalRirCode(functionCode(ff), globalContext(), env, 0);
+            return escape(
+                evalRirCode(functionCode(ff), globalContext(), env, 0));
         }
         // Fall through
     }
@@ -1432,7 +1461,7 @@ SEXP rirEval(SEXP e, SEXP env) {
     case 31: {
         Code* c = (Code*)e;
         assert(isValidCodeObject(e));
-        return evalRirCode(c, globalContext(), env, 0);
+        return escape(evalRirCode(c, globalContext(), env, 0));
     }
 
     case NATIVESXP:
@@ -1446,7 +1475,7 @@ SEXP rirEval(SEXP e, SEXP env) {
         Function* ff = (Function*)(INTEGER(code));
         SEXP res = evalRirCode(functionCode(ff), globalContext(), env, 0);
         UNPROTECT(1);
-        return res;
+        return escape(res);
     }
 
     case SYMSXP: {
@@ -1488,7 +1517,7 @@ SEXP rirEval(SEXP e, SEXP env) {
         Function* ff = (Function*)(INTEGER(code));
         SEXP res = evalRirCode(functionCode(ff), globalContext(), env, 0);
         UNPROTECT(1);
-        return res;
+        return escape(res);
     }
 
     case DOTSXP:

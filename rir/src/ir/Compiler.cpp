@@ -72,12 +72,41 @@ bool compileSpecialCall(Context ctx, CodeStream& cs, SEXP ast, SEXP fun,
                         SEXP args_) {
     RList args(args_);
 
+    if (fun == symbol::quote && args.length() == 1) {
+        auto i = compilePromise(ctx, args[0]);
+
+        cs << BC::isspecial(fun) << BC::push_code(i);
+        return true;
+    }
+
     if (fun == symbol::Assign) {
         assert(args.length() == 2);
-        cs << BC::isspecial(fun);
 
         auto lhs = args[0];
         auto rhs = args[1];
+
+        // Verify lhs is valid
+        SEXP l = lhs;
+        while (l) {
+            Match(l) {
+                Case(LANGSXP, fun, args) {
+                    if (TYPEOF(fun) == SYMSXP) {
+                        l = CAR(args);
+                    } else {
+                        // Cant rewrite this statically...
+                        return false;
+                    }
+                }
+                Case(SYMSXP) { l = nullptr; }
+                Case(STRSXP) { l = nullptr; }
+                Else({
+                    // Probably broken assignment
+                    return false;
+                })
+            }
+        }
+
+        cs << BC::isspecial(fun);
 
         Match(lhs) {
             Case(SYMSXP) {
@@ -95,7 +124,7 @@ bool compileSpecialCall(Context ctx, CodeStream& cs, SEXP ast, SEXP fun,
 
         // Find all parts of the lhs
         SEXP target = nullptr;
-        SEXP l = lhs;
+        l = lhs;
         std::vector<SEXP> lhsParts;
         while (!target) {
             Match(l) {
@@ -113,7 +142,10 @@ bool compileSpecialCall(Context ctx, CodeStream& cs, SEXP ast, SEXP fun,
                     target = Rf_install(CHAR(STRING_ELT(l, 0)));
                     lhsParts.push_back(target);
                 }
-                Else(assert(false);)
+                Else({
+                    errorcall(ast,
+                              "invalid (do_set) left-hand side to assignment");
+                })
             }
         }
 

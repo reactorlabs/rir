@@ -35,6 +35,7 @@ void BC::write(CodeStream& cs) const {
         break;
 
     case BC_t::promise_:
+    case BC_t::push_code_:
         cs.insert(immediate.fun);
         return;
 
@@ -258,6 +259,7 @@ void BC::print() {
     case BC_t::close_:
         break;
     case BC_t::promise_:
+    case BC_t::push_code_:
         Rprintf(" %x", immediate.fun);
         break;
     case BC_t::brtrue_:

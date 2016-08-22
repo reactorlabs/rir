@@ -74,7 +74,7 @@ void CodeEditor::loadCode(FunctionHandle function, CodeHandle code,
             }
 
             if (bc.hasPromargs()) {
-                if (bc.bc == BC_t::promise_) {
+                if (bc.bc == BC_t::promise_ || bc.bc == BC_t::push_code_) {
                     CodeHandle code = function.codeAtOffset(bc.immediate.fun);
 
                     bc.immediate.fun = code.idx();
@@ -172,7 +172,7 @@ unsigned CodeEditor::write(FunctionHandle& function) {
     for (Cursor cur = getCursor(); !cur.atEnd(); ++cur) {
         BC bc = *cur;
         if (bc.hasPromargs()) {
-            if (bc.bc == BC_t::promise_) {
+            if (bc.bc == BC_t::promise_ || bc.bc == BC_t::push_code_) {
                 CodeEditor* e = promises[bc.immediate.fun];
                 bc.immediate.fun = e->write(function);
             } else {

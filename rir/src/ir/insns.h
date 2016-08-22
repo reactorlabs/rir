@@ -12,6 +12,11 @@ DEF_INSTR(push_, 1, 0, 1, 0, 0)
 /**
  * push_:: take immediate CP index, and push CP value on object stack.
  */
+DEF_INSTR(push_code_, 1, 0, 1, 0, 0)
+/**
+ * push_code_:: take immediate code object index, and push code object onto obj
+ * stack
+ */
 DEF_INSTR(ldfun_, 1, 0, 1, 0, 0)
 /**
  * ldfun_:: take immediate CP index of dd symbol (eg. ..1), find binding in env

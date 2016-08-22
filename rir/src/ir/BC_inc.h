@@ -148,7 +148,7 @@ class BC {
 
     bool hasPromargs() {
         return bc == BC_t::call_ || bc == BC_t::dispatch_ ||
-               bc == BC_t::promise_;
+               bc == BC_t::promise_ || bc == BC_t::push_code_;
     }
 
     bool isJmp() {
@@ -167,6 +167,7 @@ class BC {
                        std::vector<SEXP> names);
     inline static BC push(SEXP constant);
     inline static BC push(double constant);
+    inline static BC push_code(fun_idx_t i);
     inline static BC ldfun(SEXP sym);
     inline static BC ldvar(SEXP sym);
     inline static BC ldddvar(SEXP sym);
