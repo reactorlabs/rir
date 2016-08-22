@@ -500,6 +500,18 @@ INLINE SEXP rirCallTrampoline(void* cntxt, EvalCbArg* arg) {
 void closureDebug(SEXP call, SEXP op, SEXP rho, SEXP newrho, void* cntxt);
 void endClosureDebug(SEXP op, SEXP call, SEXP rho);
 
+void warnSpecial(SEXP callee, SEXP call) {
+    return;
+
+    if (((sexprec_rjit*)callee)->u.i == 26) {
+        printf("warning: calling special: .Internal(%s\n",
+                CHAR(PRINTNAME(CAR(CADR(call)))));
+    } else {
+        printf("warning: calling special: %s\n",
+                R_FunTab[((sexprec_rjit*)callee)->u.i].name);
+    }
+}
+
 /** Performs the call.
 
   TODO this is currently super simple.
@@ -517,7 +529,7 @@ INLINE SEXP doCall(Code* caller, SEXP call, SEXP callee, unsigned* args,
         CCODE f = getBuiltin(callee);
         int flag = getFlag(callee);
         R_Visible = flag != 1;
-        // printf("%s\n", R_FunTab[((sexprec_rjit*)callee)->u.i].name);
+        warnSpecial(callee, call);
         // call it with the AST only
         result = f(call, callee, CDR(call), env);
         if (flag < 2) R_Visible = flag != 1;
@@ -658,7 +670,7 @@ INLINE SEXP doCallStack(Code* caller, SEXP call, size_t nargs, SEXP names,
         CCODE f = getBuiltin(callee);
         int flag = getFlag(callee);
         R_Visible = flag != 1;
-        // printf("%s\n", R_FunTab[((sexprec_rjit*)callee)->u.i].name);
+        warnSpecial(callee, call);
         // call it with the AST only
         result = f(call, callee, CDR(call), env);
         if (flag < 2)

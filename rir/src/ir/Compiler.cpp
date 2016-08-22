@@ -72,6 +72,53 @@ bool compileSpecialCall(Context ctx, CodeStream& cs, SEXP ast, SEXP fun,
                         SEXP args_) {
     RList args(args_);
 
+    if (fun == symbol::And && args.length() == 2) {
+        cs << BC::isspecial(fun);
+
+        Label trueBranch = cs.mkLabel();
+        Label nextBranch = cs.mkLabel();
+
+        compileExpr(ctx, cs, args[0]);
+        cs << BC::asbool()
+           << BC::brtrue(trueBranch)
+
+           << BC::push(R_FalseValue)
+           << BC::br(nextBranch);
+
+        cs << trueBranch;
+
+        compileExpr(ctx, cs, args[1]);
+        cs << BC::asbool();
+
+        cs << nextBranch;
+
+        return true;
+    }
+
+    if (fun == symbol::Or && args.length() == 2) {
+        cs << BC::isspecial(fun);
+
+        Label falseBranch = cs.mkLabel();
+        Label nextBranch = cs.mkLabel();
+
+        compileExpr(ctx, cs, args[0]);
+        cs << BC::asbool()
+           << BC::brfalse(falseBranch)
+
+           << BC::push(R_TrueValue)
+           << BC::br(nextBranch);
+
+        cs << falseBranch;
+
+        compileExpr(ctx, cs, args[1]);
+        cs << BC::asbool();
+
+        cs << nextBranch;
+
+        return true;
+    }
+
+
     if (fun == symbol::quote && args.length() == 1) {
         auto i = compilePromise(ctx, args[0]);
 
