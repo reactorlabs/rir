@@ -1109,7 +1109,29 @@ INSTRUCTION(eqi_) {
 
 #if RIR_AS_PACKAGE == 0
 SEXP do_subset2_dflt(SEXP, SEXP, SEXP, SEXP);
+SEXP do_subset_dflt(SEXP, SEXP, SEXP, SEXP);
 #endif
+
+INSTRUCTION(subset1_) {
+    SEXP idx = ostack_pop(ctx);
+    SEXP val = ostack_pop(ctx);
+
+    SEXP res;
+#if RIR_AS_PACKAGE == 0
+    SEXP args;
+    PROTECT(val);
+    args = CONS_NR(idx, R_NilValue);
+    UNPROTECT(1);
+    args = CONS_NR(val, args);
+    PROTECT(args);
+    res = do_subset_dflt(getSrcForCall(c, *pc, ctx), R_SubsetSym, args, env);
+    UNPROTECT(1);
+#else
+    res = Rf_eval(getSrcForCall(c, *pc, ctx), env);
+#endif
+
+    ostack_push(ctx, res);
+}
 
 INSTRUCTION(extract1_) {
     SEXP idx = ostack_pop(ctx);
@@ -1383,6 +1405,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
             INS(push_argi_);
             INS(invisible_);
             INS(extract1_);
+            INS(subset1_);
             INS(dispatch_);
             INS(uniq_);
         case ret_: {

@@ -139,6 +139,10 @@ DEF_INSTR(extract1_, 0, 2, 1, 0, 0)
 /**
  * extract1_:: do a[[b]], where a and b are on the stack
  */
+DEF_INSTR(subset1_, 0, 2, 1, 0, 0)
+/**
+ * extract1_:: do a[b], where a and b are on the stack
+ */
 DEF_INSTR(brobj_, 1, 0, 0, 0, 0)
 /**
  * brobj_:: branch if tos is object

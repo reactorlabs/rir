@@ -56,6 +56,7 @@ BC::immediate_t decodeImmediate(BC_t bc, BC_t* pc) {
         immediate.i = *(uint32_t*)pc;
         break;
     case BC_t::extract1_:
+    case BC_t::subset1_:
     case BC_t::close_:
     case BC_t::ret_:
     case BC_t::pop_:
@@ -203,6 +204,7 @@ BC BC::sub() { return BC(BC_t::sub_); }
 BC BC::lt() { return BC(BC_t::lt_); }
 BC BC::invisible() { return BC(BC_t::invisible_); }
 BC BC::extract1() { return BC(BC_t::extract1_); }
+BC BC::subset1() { return BC(BC_t::subset1_); }
 BC BC::swap() { return BC(BC_t::swap_); }
 BC BC::uniq() { return BC(BC_t::uniq_); }
 BC BC::pick(uint32_t i) {

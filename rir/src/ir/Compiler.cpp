@@ -348,7 +348,7 @@ bool compileSpecialCall(Context ctx, CodeStream& cs, SEXP ast, SEXP fun,
         return true;
     }
 
-    if (fun == symbol::DoubleBracket) {
+    if (fun == symbol::DoubleBracket || fun == symbol::Bracket) {
         if (args.length() == 2) {
             auto lhs = args[0];
             auto idx = args[1];
@@ -361,12 +361,16 @@ bool compileSpecialCall(Context ctx, CodeStream& cs, SEXP ast, SEXP fun,
             cs << BC::brobj(objBranch);
 
             compileExpr(ctx, cs, args[1]);
-            cs << BC::extract1();
+            if (fun == symbol::DoubleBracket)
+                cs << BC::extract1();
+            else
+                cs << BC::subset1();
+
             cs.addAst(ast);
             cs << BC::br(nextBranch);
 
             cs << objBranch;
-            compileDispatch(ctx, cs, symbol::DoubleBracket, ast, fun, args_);
+            compileDispatch(ctx, cs, fun, ast, fun, args_);
 
             cs << nextBranch;
             return true;

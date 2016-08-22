@@ -84,6 +84,7 @@ typedef struct {
 
 // Some symbols
 extern SEXP R_Subset2Sym;
+extern SEXP R_SubsetSym;
 extern SEXP R_valueSym;
 extern SEXP setterPlaceholderSym;
 extern SEXP getterPlaceholderSym;

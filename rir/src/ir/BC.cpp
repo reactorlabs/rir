@@ -53,6 +53,7 @@ void BC::write(CodeStream& cs) const {
         cs.insert(immediate.i);
         return;
 
+    case BC_t::subset1_:
     case BC_t::extract1_:
     case BC_t::ret_:
     case BC_t::force_:
@@ -255,6 +256,7 @@ void BC::print() {
     case BC_t::lt_:
     case BC_t::isfun_:
     case BC_t::invisible_:
+    case BC_t::subset1_:
     case BC_t::extract1_:
     case BC_t::close_:
         break;
