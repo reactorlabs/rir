@@ -482,20 +482,19 @@ typedef struct {
     size_t nargs;
 } EvalCbArg;
 SEXP hook_rirCallTrampoline(void* cntxt, SEXP (*evalCb)(EvalCbArg*), EvalCbArg* arg);
-SEXP rirCallTrampoline(void* cntxt, SEXP (*evalCb)(EvalCbArg*),
-                       EvalCbArg* arg) {
+SEXP evalCbFunction(EvalCbArg* arg_) {
+    EvalCbArg* arg = (EvalCbArg*)arg_;
+    return evalRirCode(arg->code, arg->ctx, arg->env, arg->nargs);
+}
+INLINE SEXP rirCallTrampoline(void* cntxt, EvalCbArg* arg) {
     size_t oldbp = ostack_length(arg->ctx);
     size_t oldbpi = arg->ctx->istack.length;
-    SEXP res = hook_rirCallTrampoline(cntxt, evalCb, arg);
+    SEXP res = hook_rirCallTrampoline(cntxt, &evalCbFunction, arg);
     // In the case of non-local returns we need to make sure to restore the
     // stack to the correct state.
     rl_setLength(&arg->ctx->ostack, oldbp);
     arg->ctx->istack.length = oldbpi;
     return res;
-}
-SEXP evalCbFunction(EvalCbArg* arg_) {
-    EvalCbArg* arg = (EvalCbArg*)arg_;
-    return evalRirCode(arg->code, arg->ctx, arg->env, arg->nargs);
 }
 
 void closureDebug(SEXP call, SEXP op, SEXP rho, SEXP newrho, void* cntxt);
@@ -506,7 +505,8 @@ void endClosureDebug(SEXP op, SEXP call, SEXP rho);
   TODO this is currently super simple.
 
  */
-SEXP doCall(Code * caller, SEXP call, SEXP callee, unsigned * args, size_t nargs, SEXP names, SEXP env, Context * ctx) {
+INLINE SEXP doCall(Code* caller, SEXP call, SEXP callee, unsigned* args,
+                   size_t nargs, SEXP names, SEXP env, Context* ctx) {
 
     size_t oldbp = ostack_length(ctx);
     size_t oldbpi = ctx->istack.length;
@@ -558,7 +558,7 @@ SEXP doCall(Code * caller, SEXP call, SEXP callee, unsigned * args, size_t nargs
             initClosureContext(&cntxt, call, newEnv, env, actuals, callee);
             closureDebug(call, callee, env, newEnv, &cntxt);
             EvalCbArg arg = {functionCode((Function*)INTEGER(body)), ctx, newEnv, nargs};
-            result = rirCallTrampoline(&cntxt, evalCbFunction, &arg);
+            result = rirCallTrampoline(&cntxt, &arg);
             endClosureDebug(callee, call, env);
             endClosureContext(&cntxt, result);
             UNPROTECT(2);
@@ -585,8 +585,8 @@ SEXP doCall(Code * caller, SEXP call, SEXP callee, unsigned * args, size_t nargs
 }
 
 // TODO: unify with the above doCall
-SEXP doCallStack(Code* caller, SEXP call, size_t nargs, SEXP names, SEXP env,
-                 Context* ctx) {
+INLINE SEXP doCallStack(Code* caller, SEXP call, size_t nargs, SEXP names,
+                        SEXP env, Context* ctx) {
 
     size_t oldbp = ostack_length(ctx) - nargs - 1;
     size_t oldbpi = ctx->istack.length;
@@ -710,7 +710,7 @@ SEXP doCallStack(Code* caller, SEXP call, size_t nargs, SEXP names, SEXP env,
             initClosureContext(&cntxt, call, newEnv, env, argslist, callee);
             EvalCbArg arg = {functionCode((Function*)INTEGER(body)), ctx,
                              newEnv, nargs};
-            result = rirCallTrampoline(&cntxt, evalCbFunction, &arg);
+            result = rirCallTrampoline(&cntxt, &arg);
             endClosureContext(&cntxt, result);
             break;
         }
@@ -844,7 +844,7 @@ SEXP doDispatch(Code* caller, SEXP call, SEXP selector, SEXP obj,
                 initClosureContext(&cntxt, call, newEnv, env, actuals, callee);
                 EvalCbArg arg = {functionCode((Function*)INTEGER(body)), ctx,
                                  newEnv, nargs};
-                res = rirCallTrampoline(&cntxt, evalCbFunction, &arg);
+                res = rirCallTrampoline(&cntxt, &arg);
                 endClosureContext(&cntxt, res);
                 UNPROTECT(2);
                 break;
@@ -1300,6 +1300,8 @@ extern void rirBacktrace(Context* ctx) {
     }
 }
 
+#undef R_CheckStack
+
 SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
 
     // printCode(c);
@@ -1310,8 +1312,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
 	error("'rho' must be an environment not %s: detected in C-level eval",
 	      type2char(TYPEOF(env)));
 
-    // TODO
-    // R_CheckStack();
+    R_CheckStack();
 
     // make sure there is enough room on the stack
     ostack_ensureSize(ctx, c->stackLength);
