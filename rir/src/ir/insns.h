@@ -173,6 +173,18 @@ DEF_INSTR(uniq_, 0, 0, 0, 0, 0)
 /**
  * uniq_:: duplicates tos if it is shared (ie. named > 1)
  */
+DEF_INSTR(lgl_or_, 0, 2, 1, 0, 0)
+/**
+ * lgl_or_:: computes the logical (ternary) or of the two tos vals
+ */
+DEF_INSTR(lgl_and_, 0, 2, 1, 0, 0)
+/**
+ * lgl_and_:: computes the logical (ternary) and of the two tos vals
+ */
+DEF_INSTR(aslogical_, 0, 1, 1, 0, 0)
+/**
+ * aslogical_:: converts tos to a (ternary) logical
+ */
 
 // TODO these may be redundant but needed for the unification
 

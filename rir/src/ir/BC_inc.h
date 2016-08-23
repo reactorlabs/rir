@@ -195,6 +195,9 @@ class BC {
     inline static BC sub();
     inline static BC lt();
     inline static BC uniq();
+    inline static BC asLogical();
+    inline static BC lglOr();
+    inline static BC lglAnd();
     inline static BC isspecial(SEXP);
     inline static BC isfun();
     inline static BC invisible();

@@ -1040,8 +1040,42 @@ INSTRUCTION(stvar_) {
     defineVar(sym, val, env);
 }
 
+INSTRUCTION(aslogical_) {
+    SEXP t = ostack_top(ctx);
+    int r = asLogical(t);
+    SEXP res = ScalarLogical(r);
+    ostack_pop(ctx);
+    ostack_push(ctx, res);
+}
+
+INSTRUCTION(lgl_or_) {
+    int x2 = LOGICAL(ostack_pop(ctx))[0];
+    int x1 = LOGICAL(ostack_pop(ctx))[0];
+    assert(x1 == 1 || x1 == 0 || x1 == NA_LOGICAL);
+    assert(x2 == 1 || x2 == 0 || x2 == NA_LOGICAL);
+    if (x1 == 1 || x2 == 1)
+        ostack_push(ctx, R_TrueValue);
+    else if (x1 == 0 && x2 == 0)
+        ostack_push(ctx, R_FalseValue);
+    else
+        ostack_push(ctx, R_LogicalNAValue);
+}
+
+INSTRUCTION(lgl_and_) {
+    int x2 = LOGICAL(ostack_pop(ctx))[0];
+    int x1 = LOGICAL(ostack_pop(ctx))[0];
+    assert(x1 == 1 || x1 == 0 || x1 == NA_LOGICAL);
+    assert(x2 == 1 || x2 == 0 || x2 == NA_LOGICAL);
+    if (x1 == 1 && x2 == 1)
+        ostack_push(ctx, R_TrueValue);
+    else if (x1 == 0 || x2 == 0)
+        ostack_push(ctx, R_FalseValue);
+    else
+        ostack_push(ctx, R_LogicalNAValue);
+}
+
 INSTRUCTION(asbool_) {
-    SEXP t = ostack_pop(ctx);
+    SEXP t = ostack_top(ctx);
     int cond = NA_LOGICAL;
     if (Rf_length(t) > 1)
         warningcall(getSrcAt(c, *pc, ctx),
@@ -1069,6 +1103,7 @@ INSTRUCTION(asbool_) {
         errorcall(getSrcAt(c, *pc, ctx), msg);
     }
 
+    ostack_pop(ctx);
     ostack_push(ctx, cond ? R_TrueValue : R_FalseValue);
 }
 
@@ -1408,6 +1443,9 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
             INS(subset1_);
             INS(dispatch_);
             INS(uniq_);
+            INS(aslogical_);
+            INS(lgl_and_);
+            INS(lgl_or_);
         case ret_: {
             // not in its own function so that we can avoid nonlocal returns
             goto __eval_done;

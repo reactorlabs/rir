@@ -75,20 +75,20 @@ bool compileSpecialCall(Context ctx, CodeStream& cs, SEXP ast, SEXP fun,
     if (fun == symbol::And && args.length() == 2) {
         cs << BC::isspecial(fun);
 
-        Label trueBranch = cs.mkLabel();
         Label nextBranch = cs.mkLabel();
 
         compileExpr(ctx, cs, args[0]);
-        cs << BC::asbool()
-           << BC::brtrue(trueBranch)
 
-           << BC::push(R_FalseValue)
-           << BC::br(nextBranch);
-
-        cs << trueBranch;
+        cs << BC::asLogical();
+        cs.addAst(args[0]);
+        cs << BC::dup()
+           << BC::brfalse(nextBranch);
 
         compileExpr(ctx, cs, args[1]);
-        cs << BC::asbool();
+
+        cs << BC::asLogical();
+        cs.addAst(args[1]);
+        cs << BC::lglAnd();
 
         cs << nextBranch;
 
@@ -98,20 +98,21 @@ bool compileSpecialCall(Context ctx, CodeStream& cs, SEXP ast, SEXP fun,
     if (fun == symbol::Or && args.length() == 2) {
         cs << BC::isspecial(fun);
 
-        Label falseBranch = cs.mkLabel();
+        Label trueBranch = cs.mkLabel();
         Label nextBranch = cs.mkLabel();
 
         compileExpr(ctx, cs, args[0]);
-        cs << BC::asbool()
-           << BC::brfalse(falseBranch)
 
-           << BC::push(R_TrueValue)
-           << BC::br(nextBranch);
-
-        cs << falseBranch;
+        cs << BC::asLogical();
+        cs.addAst(args[0]);
+        cs << BC::dup()
+           << BC::brtrue(nextBranch);
 
         compileExpr(ctx, cs, args[1]);
-        cs << BC::asbool();
+
+        cs << BC::asLogical();
+        cs.addAst(args[1]);
+        cs << BC::lglOr();
 
         cs << nextBranch;
 
@@ -352,6 +353,10 @@ bool compileSpecialCall(Context ctx, CodeStream& cs, SEXP ast, SEXP fun,
         if (args.length() == 2) {
             auto lhs = args[0];
             auto idx = args[1];
+
+            // TODO
+            if (idx == R_DotsSymbol || idx == R_MissingArg)
+                return false;
 
             Label objBranch = cs.mkLabel();
             Label nextBranch = cs.mkLabel();
