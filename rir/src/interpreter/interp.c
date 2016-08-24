@@ -636,8 +636,7 @@ INLINE SEXP rirCallClosure(SEXP call, SEXP env, SEXP callee, SEXP actuals,
     SEXP newEnv =
         closureArgumentAdaptor(call, callee, actuals, env, R_NilValue);
 
-    // protect env
-    ostack_push(ctx, newEnv);
+    PROTECT(newEnv);
 
     // Create a new R context
     RCNTXT* cntxt;
@@ -655,7 +654,7 @@ INLINE SEXP rirCallClosure(SEXP call, SEXP env, SEXP callee, SEXP actuals,
 
     endRirContext(ctx, result);
 
-    ostack_pop(ctx); // enf
+    UNPROTECT(1); // newEnv
     return result;
 }
 #endif
@@ -981,7 +980,6 @@ SEXP doDispatch(Code* caller, SEXP call, SEXP selector, SEXP obj,
             if (TYPEOF(body) == INTSXP) {
                 assert(isValidFunctionSEXP(body));
                 res = rirCallClosure(call, env, callee, actuals, nargs, pc, ctx);
-                UNPROTECT(1);
                 break;
             }
 #endif
@@ -1538,7 +1536,9 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
     R_CheckStack();
 
     // make sure there is enough room on the stack
-    ostack_ensureSize(ctx, c->stackLength);
+    // there is some slack of 5 to make sure the call instruction can store
+    // some intermediate values on the stack
+    ostack_ensureSize(ctx, c->stackLength + 5);
     istack_ensureSize(ctx, c->iStackLength);
     Frame* frame = fstack_push(ctx, c, env);
 
