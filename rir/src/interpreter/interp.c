@@ -292,6 +292,76 @@ INLINE SEXP escape(SEXP val) {
     return val;
 }
 
+extern RCNTXT* R_GlobalContext;
+extern void Rf_begincontext(void*, int, SEXP, SEXP, SEXP, SEXP, SEXP);
+extern void Rf_endcontext(RCNTXT*);
+typedef struct {
+    size_t oldbp;
+    size_t oldbpi;
+    OpcodeT* pc;
+} RirContext;
+
+// We store the RCNTXT and our own metadata in an SEXP, which we put on the
+// stack. This has to be matched by a stackheight-matching endcontext.
+#define createRirLoopContext(cntxt, continuation, env, pc, ctx)                \
+    do {                                                                       \
+        SEXP cntxt_store =                                                     \
+            Rf_allocVector(RAWSXP, sizeof(RCNTXT) + sizeof(RirContext));       \
+        ostack_push(ctx, cntxt_store);                                         \
+                                                                               \
+        cntxt = (RCNTXT*)RAW(cntxt_store);                                     \
+        continuation = (RirContext*)(cntxt + 1);                               \
+                                                                               \
+        Rf_begincontext(cntxt, CTXT_LOOP, R_NilValue, env, R_BaseEnv,          \
+                        R_NilValue, R_NilValue);                               \
+                                                                               \
+        continuation->oldbp = ostack_length(ctx);                              \
+        continuation->oldbpi = ctx->istack.length;                             \
+        continuation->pc = *pc;                                                \
+    } while (false)
+
+#define createRirClosureContext(cntxt, continuation, call, env, parent, args,  \
+                                op, pc, ctx)                                   \
+    do {                                                                       \
+        SEXP cntxt_store =                                                     \
+            Rf_allocVector(RAWSXP, sizeof(RCNTXT) + sizeof(RirContext));       \
+        ostack_push(ctx, cntxt_store);                                         \
+                                                                               \
+        cntxt = (RCNTXT*)RAW(cntxt_store);                                     \
+        continuation = (RirContext*)(cntxt + 1);                               \
+                                                                               \
+        if (R_GlobalContext->callflag == CTXT_GENERIC)                         \
+            Rf_begincontext(cntxt, CTXT_RETURN, call, env,                     \
+                            R_GlobalContext->sysparent, args, op);             \
+        else                                                                   \
+            Rf_begincontext(cntxt, CTXT_RETURN, call, env, parent, args, op);  \
+                                                                               \
+        continuation->oldbp = ostack_length(ctx);                              \
+        continuation->oldbpi = ctx->istack.length;                             \
+        continuation->pc = *pc;                                                \
+    } while (false)
+
+INLINE void endRirContext(Context* ctx, SEXP value) {
+    SEXP cntxt_store = ostack_top(ctx);
+    assert(TYPEOF(cntxt_store) == RAWSXP);
+    RCNTXT* cntxt = (RCNTXT*)RAW(cntxt_store);
+    if (value) {
+// TODO we need to set the returnvalue in the context, but we cannot
+// access it since we do not know if we have INTSTACK or not (which
+// changes RCNTXT layout. therefore we rely on the endClosure here,
+// which will not work in the package version.... Not sure what is a
+// good solution here.
+#if RIR_AS_PACKAGE == 0
+        endClosureContext(cntxt, value);
+#else
+        assert(false);
+#endif
+    } else {
+        Rf_endcontext(cntxt);
+    }
+    ostack_pop(ctx); // Context
+}
+
 // TODO remove numArgs and bp -- this is only needed for the on stack argument
 // handling
 #define INSTRUCTION(name)                                                      \
@@ -532,33 +602,63 @@ int getFlag(SEXP f) {
     return (((R_FunTab[i].eval)/100)%10);
 }
 
-// hooks for the call
+#if RIR_AS_PACKAGE == 0
+void closureDebug(SEXP call, SEXP op, SEXP rho, SEXP newrho, RCNTXT* cntxt);
+void endClosureDebug(SEXP op, SEXP call, SEXP rho);
 SEXP closureArgumentAdaptor(SEXP call, SEXP op, SEXP arglist, SEXP rho, SEXP suppliedvars);
-typedef struct {
-    Code* code;
-    Context* ctx;
-    SEXP env;
-    size_t nargs;
-} EvalCbArg;
-SEXP hook_rirCallTrampoline(void* cntxt, SEXP (*evalCb)(EvalCbArg*), EvalCbArg* arg);
-SEXP evalCbFunction(EvalCbArg* arg_) {
-    EvalCbArg* arg = (EvalCbArg*)arg_;
-    return evalRirCode(arg->code, arg->ctx, arg->env, arg->nargs);
-}
-INLINE SEXP rirCallTrampoline(void* cntxt, EvalCbArg* arg) {
-    size_t oldbp = ostack_length(arg->ctx);
-    size_t oldbpi = arg->ctx->istack.length;
-    SEXP res = hook_rirCallTrampoline(cntxt, &evalCbFunction, arg);
-    // In the case of non-local returns we need to make sure to restore the
-    // stack to the correct state.
-    assert(ostack_length(arg->ctx) >= oldbp);
-    rl_setLength(&arg->ctx->ostack, oldbp);
-    arg->ctx->istack.length = oldbpi;
-    return res;
+extern SEXP R_ReturnedValue;
+
+SEXP rirCallTrampoline(RCNTXT* cntxt, RirContext* continuation, Code* code,
+                       SEXP env, unsigned nargs, Context* ctx) {
+    if ((SETJMP(cntxt->cjmpbuf))) {
+        // In the case of non-local returns we need to make sure to restore the
+        // stack to the correct state.
+        // We do not need to reset the pc, since it is local to the closure
+        // (unlike in the loop context case)
+        assert(ostack_length(ctx) >= continuation->oldbp);
+        rl_setLength(&ctx->ostack, continuation->oldbp);
+        ctx->istack.length = continuation->oldbpi;
+
+        if (R_ReturnedValue == R_RestartToken) {
+            cntxt->callflag = CTXT_RETURN; /* turn restart off */
+            R_ReturnedValue = R_NilValue;  /* remove restart token */
+            return evalRirCode(code, ctx, env, nargs);
+        } else {
+            return R_ReturnedValue;
+        }
+    }
+    return evalRirCode(code, ctx, env, nargs);
 }
 
-void closureDebug(SEXP call, SEXP op, SEXP rho, SEXP newrho, void* cntxt);
-void endClosureDebug(SEXP op, SEXP call, SEXP rho);
+INLINE SEXP rirCallClosure(SEXP call, SEXP env, SEXP callee, SEXP actuals,
+                           unsigned nargs, OpcodeT** pc, Context* ctx) {
+    // match formal arguments and create the env of this new activation record
+    SEXP newEnv =
+        closureArgumentAdaptor(call, callee, actuals, env, R_NilValue);
+
+    // protect env
+    ostack_push(ctx, newEnv);
+
+    // Create a new R context
+    RCNTXT* cntxt;
+    RirContext* continuation;
+    createRirClosureContext(cntxt, continuation, call, newEnv, env, actuals,
+                            callee, pc, ctx);
+
+    // Exec the closure
+    closureDebug(call, callee, env, newEnv, cntxt);
+    SEXP body = BODY(callee);
+    Code* code = functionCode((Function*)INTEGER(body));
+    SEXP result =
+        rirCallTrampoline(cntxt, continuation, code, newEnv, nargs, ctx);
+    endClosureDebug(callee, call, env);
+
+    endRirContext(ctx, result);
+
+    ostack_pop(ctx); // enf
+    return result;
+}
+#endif
 
 void warnSpecial(SEXP callee, SEXP call) {
     return;
@@ -578,7 +678,8 @@ void warnSpecial(SEXP callee, SEXP call) {
 
  */
 INLINE SEXP doCall(Code* caller, SEXP call, SEXP callee, unsigned* args,
-                   size_t nargs, SEXP names, SEXP env, Context* ctx) {
+                   size_t nargs, SEXP names, SEXP env, OpcodeT** pc,
+                   Context* ctx) {
 
     size_t oldbp = ostack_length(ctx);
     size_t oldbpi = ctx->istack.length;
@@ -620,20 +721,8 @@ INLINE SEXP doCall(Code* caller, SEXP call, SEXP callee, unsigned* args,
         SEXP body = BODY(callee);
         if (TYPEOF(body) == INTSXP) {
             assert(isValidFunctionSEXP(body));
-            SEXP newEnv = closureArgumentAdaptor(call, callee, actuals, env, R_NilValue);
-            PROTECT(newEnv);
-
-            // TODO since we do not have access to the context definition we
-            // just create a buffer big enough and let gnur do the rest.
-            // Once we integrate we should really setup the context ourselves!
-            char cntxt[400];
-            initClosureContext(&cntxt, call, newEnv, env, actuals, callee);
-            closureDebug(call, callee, env, newEnv, &cntxt);
-            EvalCbArg arg = {functionCode((Function*)INTEGER(body)), ctx, newEnv, nargs};
-            result = rirCallTrampoline(&cntxt, &arg);
-            endClosureDebug(callee, call, env);
-            endClosureContext(&cntxt, result);
-            UNPROTECT(2);
+            result = rirCallClosure(call, env, callee, actuals, nargs, pc, ctx);
+            UNPROTECT(1);
             break;
         }
 #endif
@@ -658,11 +747,11 @@ INLINE SEXP doCall(Code* caller, SEXP call, SEXP callee, unsigned* args,
 
 // TODO: unify with the above doCall
 INLINE SEXP doCallStack(Code* caller, SEXP call, size_t nargs, SEXP names,
-                        SEXP env, Context* ctx) {
+                        SEXP env, OpcodeT** pc, Context* ctx) {
 
     size_t oldbp = ostack_length(ctx) - nargs - 1;
     size_t oldbpi = ctx->istack.length;
-    SEXP result = R_NilValue;
+    SEXP res = R_NilValue;
 
     SEXP callee = *ostack_at(ctx, nargs);
 
@@ -732,7 +821,7 @@ INLINE SEXP doCallStack(Code* caller, SEXP call, size_t nargs, SEXP names,
         R_Visible = flag != 1;
         warnSpecial(callee, call);
         // call it with the AST only
-        result = f(call, callee, CDR(call), env);
+        res = f(call, callee, CDR(call), env);
         if (flag < 2)
             R_Visible = flag != 1;
         break;
@@ -752,7 +841,7 @@ INLINE SEXP doCallStack(Code* caller, SEXP call, size_t nargs, SEXP names,
         // callit
         if (flag < 2)
             R_Visible = flag != 1;
-        result = f(call, callee, argslist, env);
+        res = f(call, callee, argslist, env);
         if (flag < 2)
             R_Visible = flag != 1;
         break;
@@ -770,20 +859,7 @@ INLINE SEXP doCallStack(Code* caller, SEXP call, size_t nargs, SEXP names,
         SEXP body = BODY(callee);
         if (TYPEOF(body) == INTSXP) {
             assert(isValidFunctionSEXP(body));
-            SEXP newEnv =
-                closureArgumentAdaptor(call, callee, argslist, env, R_NilValue);
-            PROTECT(newEnv);
-            p++;
-
-            // TODO since we do not have access to the context definition we
-            // just create a buffer big enough and let gnur do the rest.
-            // Once we integrate we should really setup the context ourselves!
-            char cntxt[400];
-            initClosureContext(&cntxt, call, newEnv, env, argslist, callee);
-            EvalCbArg arg = {functionCode((Function*)INTEGER(body)), ctx,
-                             newEnv, nargs};
-            result = rirCallTrampoline(&cntxt, &arg);
-            endClosureContext(&cntxt, result);
+            res = rirCallClosure(call, env, callee, argslist, nargs, pc, ctx);
             break;
         }
 #endif
@@ -791,10 +867,10 @@ INLINE SEXP doCallStack(Code* caller, SEXP call, size_t nargs, SEXP names,
         if (f != NULL) {
             // TODO we do not have to go to gnu-r here, but setting up the
             // context w/o gnu-r will be tricky
-            result = applyClosure(call, callee, argslist, env, R_NilValue);
+            res = applyClosure(call, callee, argslist, env, R_NilValue);
         } else {
             // otherwise use R's own call mechanism
-            result = applyClosure(call, callee, argslist, env, R_NilValue);
+            res = applyClosure(call, callee, argslist, env, R_NilValue);
         }
         break;
     }
@@ -805,7 +881,7 @@ INLINE SEXP doCallStack(Code* caller, SEXP call, size_t nargs, SEXP names,
     assert(oldbp == ostack_length(ctx) && oldbpi == ctx->istack.length &&
            "Corrupted stacks");
 
-    return result;
+    return res;
 }
 
 // Imports from GNUR for method dispatch
@@ -817,7 +893,7 @@ int Rf_usemethod(const char* generic, SEXP obj, SEXP call, SEXP args, SEXP rho,
 
 SEXP doDispatch(Code* caller, SEXP call, SEXP selector, SEXP obj,
                 unsigned* args, size_t nargs, SEXP names, SEXP env,
-                Context* ctx) {
+                OpcodeT** pc, Context* ctx) {
 
     size_t oldbp = ostack_length(ctx);
     size_t oldbpi = ctx->istack.length;
@@ -904,21 +980,8 @@ SEXP doDispatch(Code* caller, SEXP call, SEXP selector, SEXP obj,
             SEXP body = BODY(callee);
             if (TYPEOF(body) == INTSXP) {
                 assert(isValidFunctionSEXP(body));
-                SEXP newEnv = closureArgumentAdaptor(call, callee, actuals, env,
-                                                     R_NilValue);
-                PROTECT(newEnv);
-
-                // TODO since we do not have access to the context definition we
-                // just create a buffer big enough and let gnur do the rest.
-                // Once we integrate we should really setup the context
-                // ourselves!
-                char cntxt[400];
-                initClosureContext(&cntxt, call, newEnv, env, actuals, callee);
-                EvalCbArg arg = {functionCode((Function*)INTEGER(body)), ctx,
-                                 newEnv, nargs};
-                res = rirCallTrampoline(&cntxt, &arg);
-                endClosureContext(&cntxt, res);
-                UNPROTECT(2);
+                res = rirCallClosure(call, env, callee, actuals, nargs, pc, ctx);
+                UNPROTECT(1);
                 break;
             }
 #endif
@@ -944,7 +1007,7 @@ INSTRUCTION(call_stack_) {
     // get the call
     SEXP call = getSrcForCall(c, *pc, ctx);
 
-    ostack_push(ctx, doCallStack(c, call, nargs, names, env, ctx));
+    ostack_push(ctx, doCallStack(c, call, nargs, names, env, pc, ctx));
 }
 
 INSTRUCTION(call_) {
@@ -962,7 +1025,7 @@ INSTRUCTION(call_) {
     SEXP call = getSrcForCall(c, *pc, ctx);
 
     PROTECT(cls);
-    ostack_push(ctx, doCall(c, call, cls, args, nargs, names, env, ctx));
+    ostack_push(ctx, doCall(c, call, cls, args, nargs, names, env, pc, ctx));
     UNPROTECT(1);
 }
 
@@ -980,8 +1043,8 @@ INSTRUCTION(dispatch_) {
     SEXP obj = ostack_pop(ctx);
     SEXP call = getSrcForCall(c, *pc, ctx);
 
-    ostack_push(
-        ctx, doDispatch(c, call, selector, obj, args, nargs, names, env, ctx));
+    ostack_push(ctx, doDispatch(c, call, selector, obj, args, nargs, names, env,
+                                pc, ctx));
 }
 
 INSTRUCTION(promise_) {
@@ -1173,13 +1236,7 @@ INSTRUCTION(brobj_) {
         *pc = *pc + offset;
 }
 
-extern void Rf_endcontext(RCNTXT*);
-INSTRUCTION(endcontext_) {
-    SEXP cntxt_store = ostack_top(ctx);
-    RCNTXT* cntxt = (RCNTXT*)RAW(cntxt_store);
-    Rf_endcontext(cntxt);
-    ostack_pop(ctx); // Context
-}
+INSTRUCTION(endcontext_) { endRirContext(ctx, NULL); }
 
 INSTRUCTION(brtrue_) {
     int offset = readJumpOffset(pc);
@@ -1441,13 +1498,6 @@ extern void rirBacktrace(Context* ctx) {
 
 #undef R_CheckStack
 
-extern void Rf_begincontext(void*, int, SEXP, SEXP, SEXP, SEXP, SEXP);
-typedef struct {
-    size_t oldbp;
-    size_t oldbpi;
-    OpcodeT* pc;
-} RirContext;
-
 SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
 
     // printCode(c);
@@ -1529,24 +1579,10 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
 
             // RirContext stores the data we need to continue from here, in
             // case of incomming LONGJUMPS from continue or break
-            volatile RirContext* continuation;
-
             RCNTXT* cntxt;
-            {
-                SEXP cntxt_store =
-                    Rf_allocVector(RAWSXP, sizeof(RCNTXT) + sizeof(RirContext));
+            volatile RirContext* continuation;
+            createRirLoopContext(cntxt, continuation, env, pc, ctx);
 
-                // PROTECT
-                ostack_push(ctx, cntxt_store);
-                cntxt = (RCNTXT*)RAW(cntxt_store);
-                continuation = (RirContext*)(cntxt + 1);
-                Rf_begincontext(cntxt, CTXT_LOOP, R_NilValue, env, R_BaseEnv,
-                                R_NilValue, R_NilValue);
-            }
-
-            continuation->oldbp = ostack_length(ctx);
-            continuation->oldbpi = ctx->istack.length;
-            continuation->pc = *pc;
             readJumpOffset(pc);
 
             int s;
