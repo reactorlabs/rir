@@ -636,7 +636,7 @@ INLINE SEXP rirCallClosure(SEXP call, SEXP env, SEXP callee, SEXP actuals,
     SEXP newEnv =
         closureArgumentAdaptor(call, callee, actuals, env, R_NilValue);
 
-    PROTECT(newEnv);
+    ostack_push(ctx, newEnv);
 
     // Create a new R context
     RCNTXT* cntxt;
@@ -648,13 +648,20 @@ INLINE SEXP rirCallClosure(SEXP call, SEXP env, SEXP callee, SEXP actuals,
     closureDebug(call, callee, env, newEnv, cntxt);
     SEXP body = BODY(callee);
     Code* code = functionCode((Function*)INTEGER(body));
+
+    unsigned stackguard_size_before = ostack_length(ctx);
+    SEXP stackguard_before = ostack_top(ctx);
     SEXP result =
         rirCallTrampoline(cntxt, continuation, code, newEnv, nargs, ctx);
+    unsigned stackguard_size_after = ostack_length(ctx);
+    SEXP stackguard_after = ostack_top(ctx);
+    assert(stackguard_before == stackguard_after &&
+           stackguard_size_before == stackguard_size_after);
     endClosureDebug(callee, call, env);
 
     endRirContext(ctx, result);
 
-    UNPROTECT(1); // newEnv
+    ostack_pop(ctx); // newEnv
     return result;
 }
 #endif
@@ -680,8 +687,6 @@ INLINE SEXP doCall(Code* caller, SEXP call, SEXP callee, unsigned* args,
                    size_t nargs, SEXP names, SEXP env, OpcodeT** pc,
                    Context* ctx) {
 
-    size_t oldbp = ostack_length(ctx);
-    size_t oldbpi = ctx->istack.length;
     SEXP result = R_NilValue;
     switch (TYPEOF(callee)) {
     case SPECIALSXP: {
@@ -739,8 +744,6 @@ INLINE SEXP doCall(Code* caller, SEXP call, SEXP callee, unsigned* args,
     default:
         assert(false && "Don't know how to run other stuff");
     }
-    assert(oldbp == ostack_length(ctx) && oldbpi == ctx->istack.length &&
-           "Corrupted stacks");
     return result;
 }
 
@@ -748,8 +751,6 @@ INLINE SEXP doCall(Code* caller, SEXP call, SEXP callee, unsigned* args,
 INLINE SEXP doCallStack(Code* caller, SEXP call, size_t nargs, SEXP names,
                         SEXP env, OpcodeT** pc, Context* ctx) {
 
-    size_t oldbp = ostack_length(ctx) - nargs - 1;
-    size_t oldbpi = ctx->istack.length;
     SEXP res = R_NilValue;
 
     SEXP callee = *ostack_at(ctx, nargs);
@@ -877,9 +878,6 @@ INLINE SEXP doCallStack(Code* caller, SEXP call, size_t nargs, SEXP names,
         assert(false && "Don't know how to run other stuff");
     }
     UNPROTECT(p);
-    assert(oldbp == ostack_length(ctx) && oldbpi == ctx->istack.length &&
-           "Corrupted stacks");
-
     return res;
 }
 
@@ -893,9 +891,6 @@ int Rf_usemethod(const char* generic, SEXP obj, SEXP call, SEXP args, SEXP rho,
 SEXP doDispatch(Code* caller, SEXP call, SEXP selector, SEXP obj,
                 unsigned* args, size_t nargs, SEXP names, SEXP env,
                 OpcodeT** pc, Context* ctx) {
-
-    size_t oldbp = ostack_length(ctx);
-    size_t oldbpi = ctx->istack.length;
 
 #if RIR_AS_PACKAGE == 1
     // TODO
@@ -993,8 +988,6 @@ SEXP doDispatch(Code* caller, SEXP call, SEXP selector, SEXP obj,
 
     UNPROTECT(1);
     assert(res);
-    assert(oldbp == ostack_length(ctx) && oldbpi == ctx->istack.length &&
-           "Corrupted stacks");
     return res;
 }
 

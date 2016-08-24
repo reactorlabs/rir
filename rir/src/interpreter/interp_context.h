@@ -102,11 +102,12 @@ INLINE void rl_setLength(ResizeableList * l, size_t length) {
 }
 
 INLINE void rl_grow(ResizeableList * l, SEXP parent, size_t index) {
+    int oldsize = rl_length(l);
     SEXP n = Rf_allocVector(VECSXP, l->capacity * 2);
     memcpy(DATAPTR(n), DATAPTR(l->list), l->capacity * sizeof(SEXP));
     SET_VECTOR_ELT(parent, index, n);
     l->list = n;
-    rl_setLength(l, l->capacity);
+    rl_setLength(l, oldsize);
     l->capacity *= 2;
 }
 
