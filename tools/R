@@ -7,4 +7,4 @@ LIBRARY_DIR=`pwd`
 export RIR_LOAD=1
 export RIR_LIBRARY="`ls $LIBRARY_DIR/librir.*`"
 
-$R_HOME/bin/R $@
+$R_HOME/bin/R "$@"
