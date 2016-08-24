@@ -15,6 +15,13 @@ SEXP RListIter::operator*() { return CAR(pos); }
 
 void RListIter::operator++() { pos = CDR(pos); }
 
+RListIter RListIter::operator+(unsigned n) {
+    RListIter i(pos);
+    while (n--)
+        ++i;
+    return i;
+}
+
 SEXP RList::operator[](size_t idx) {
     SEXP pos = list;
     while (idx-- > 0) {

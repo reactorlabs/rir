@@ -41,6 +41,7 @@ void BC::write(CodeStream& cs) const {
 
     case BC_t::br_:
     case BC_t::brtrue_:
+    case BC_t::beginloop_:
     case BC_t::brobj_:
     case BC_t::brfalse_:
         cs.patchpoint(immediate.offset);
@@ -77,6 +78,7 @@ void BC::write(CodeStream& cs) const {
     case BC_t::lt_:
     case BC_t::isfun_:
     case BC_t::invisible_:
+    case BC_t::endcontext_:
         return;
 
     case BC_t::invalid_:
@@ -248,9 +250,6 @@ void BC::print() {
     case BC_t::ret_:
     case BC_t::swap_:
     case BC_t::uniq_:
-    case BC_t::aslogical_:
-    case BC_t::lgl_and_:
-    case BC_t::lgl_or_:
     case BC_t::dup_:
     case BC_t::dupi_:
     case BC_t::inci_:
@@ -265,19 +264,24 @@ void BC::print() {
     case BC_t::subset1_:
     case BC_t::extract1_:
     case BC_t::close_:
+    case BC_t::endcontext_:
+    case BC_t::aslogical_:
+    case BC_t::lgl_or_:
+    case BC_t::lgl_and_:
         break;
     case BC_t::promise_:
     case BC_t::push_code_:
         Rprintf(" %x", immediate.fun);
         break;
+    case BC_t::beginloop_:
     case BC_t::brtrue_:
     case BC_t::brobj_:
     case BC_t::brfalse_:
     case BC_t::br_:
-        Rprintf(" %x", immediate.offset);
+        Rprintf(" %d", immediate.offset);
         break;
     case BC_t::label:
-        Rprintf("%x:", immediate.offset);
+        Rprintf("%d:", immediate.offset);
         break;
     }
     Rprintf("\n");

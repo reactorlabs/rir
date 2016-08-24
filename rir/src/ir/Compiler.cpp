@@ -13,25 +13,63 @@
 
 #include "CodeVerifier.h"
 
+#include <stack>
+
 namespace rir {
 
 namespace {
 
 class Context {
   public:
+    class LoopContext {
+      public:
+        Label next_;
+        Label break_;
+        LoopContext(Label next_, Label break_) : next_(next_), break_(break_) {}
+    };
+
+    class CodeContext {
+      public:
+        CodeStream cs;
+        std::stack<LoopContext> loops;
+        CodeContext(SEXP ast, FunctionHandle& fun) : cs(fun, ast) {}
+    };
+
+    std::stack<CodeContext> code;
+
+    CodeStream& cs() { return code.top().cs; }
+
     FunctionHandle& fun;
     Preserve& preserve;
 
     Context(FunctionHandle& fun, Preserve& preserve)
         : fun(fun), preserve(preserve) {}
+
+    bool inLoop() { return !code.top().loops.empty(); }
+
+    LoopContext& loop() { return code.top().loops.top(); }
+
+    void pushLoop(Label& next_, Label break_) {
+        code.top().loops.emplace(next_, break_);
+    }
+
+    void popLoop() { code.top().loops.pop(); }
+
+    void push(SEXP ast) { code.emplace(ast, fun); }
+
+    fun_idx_t pop() {
+        auto idx = cs().finalize();
+        code.pop();
+        return idx;
+    }
 };
 
-fun_idx_t compilePromise(Context ctx, SEXP exp);
-void compileExpr(Context ctx, CodeStream& cs, SEXP exp);
-void compileCall(Context ctx, CodeStream& cs, SEXP ast, SEXP fun, SEXP args);
+fun_idx_t compilePromise(Context& ctx, SEXP exp);
+void compileExpr(Context& ctx, SEXP exp);
+void compileCall(Context& ctx, SEXP ast, SEXP fun, SEXP args);
 
-void compileDispatch(Context ctx, CodeStream& cs, SEXP selector, SEXP ast,
-                     SEXP fun, SEXP args) {
+void compileDispatch(Context& ctx, SEXP selector, SEXP ast, SEXP fun,
+                     SEXP args) {
     // Process arguments:
     // Arguments can be optionally named
     std::vector<fun_idx_t> callArgs;
@@ -60,31 +98,31 @@ void compileDispatch(Context ctx, CodeStream& cs, SEXP selector, SEXP ast,
     }
     assert(callArgs.size() < MAX_NUM_ARGS);
 
-    cs << BC::dispatch(selector, callArgs, names);
+    ctx.cs() << BC::dispatch(selector, callArgs, names);
 
-    cs.addAst(ast);
+    ctx.cs().addAst(ast);
 }
 
 // Inline some specials
 // TODO: once we have sufficiently powerful analysis this should (maybe?) go
 //       away and move to an optimization phase.
-bool compileSpecialCall(Context ctx, CodeStream& cs, SEXP ast, SEXP fun,
-                        SEXP args_) {
+bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
     RList args(args_);
+    CodeStream& cs = ctx.cs();
 
     if (fun == symbol::And && args.length() == 2) {
         cs << BC::isspecial(fun);
 
         Label nextBranch = cs.mkLabel();
 
-        compileExpr(ctx, cs, args[0]);
+        compileExpr(ctx, args[0]);
 
         cs << BC::asLogical();
         cs.addAst(args[0]);
         cs << BC::dup()
            << BC::brfalse(nextBranch);
 
-        compileExpr(ctx, cs, args[1]);
+        compileExpr(ctx, args[1]);
 
         cs << BC::asLogical();
         cs.addAst(args[1]);
@@ -98,17 +136,16 @@ bool compileSpecialCall(Context ctx, CodeStream& cs, SEXP ast, SEXP fun,
     if (fun == symbol::Or && args.length() == 2) {
         cs << BC::isspecial(fun);
 
-        Label trueBranch = cs.mkLabel();
         Label nextBranch = cs.mkLabel();
 
-        compileExpr(ctx, cs, args[0]);
+        compileExpr(ctx, args[0]);
 
         cs << BC::asLogical();
         cs.addAst(args[0]);
         cs << BC::dup()
            << BC::brtrue(nextBranch);
 
-        compileExpr(ctx, cs, args[1]);
+        compileExpr(ctx, args[1]);
 
         cs << BC::asLogical();
         cs.addAst(args[1]);
@@ -158,7 +195,7 @@ bool compileSpecialCall(Context ctx, CodeStream& cs, SEXP ast, SEXP fun,
 
         Match(lhs) {
             Case(SYMSXP) {
-                compileExpr(ctx, cs, rhs);
+                compileExpr(ctx, rhs);
                 cs << BC::dup()
                    << BC::stvar(lhs)
                    << BC::invisible();
@@ -167,7 +204,7 @@ bool compileSpecialCall(Context ctx, CodeStream& cs, SEXP ast, SEXP fun,
             Else(break)
         }
 
-        compileExpr(ctx, cs, rhs);
+        compileExpr(ctx, rhs);
         cs << BC::dup();
 
         // Find all parts of the lhs
@@ -228,7 +265,7 @@ bool compileSpecialCall(Context ctx, CodeStream& cs, SEXP ast, SEXP fun,
                             auto p = compilePromise(ctx, *arg);
                             cs << BC::promise(p);
                         } else {
-                            compileExpr(ctx, cs, *arg);
+                            compileExpr(ctx, *arg);
                         }
                     }
 
@@ -289,7 +326,7 @@ bool compileSpecialCall(Context ctx, CodeStream& cs, SEXP ast, SEXP fun,
                     auto p = compilePromise(ctx, *arg);
                     cs << BC::promise(p);
                 } else {
-                    compileExpr(ctx, cs, *arg);
+                    compileExpr(ctx, *arg);
                 }
             }
 
@@ -330,21 +367,21 @@ bool compileSpecialCall(Context ctx, CodeStream& cs, SEXP ast, SEXP fun,
 
     if (fun == symbol::isnull && args.length() == 1) {
         cs << BC::isspecial(fun);
-        compileExpr(ctx, cs, args[0]);
+        compileExpr(ctx, args[0]);
         cs << BC::is(NILSXP);
         return true;
     }
 
     if (fun == symbol::islist && args.length() == 1) {
         cs << BC::isspecial(fun);
-        compileExpr(ctx, cs, args[0]);
+        compileExpr(ctx, args[0]);
         cs << BC::is(VECSXP);
         return true;
     }
 
     if (fun == symbol::ispairlist && args.length() == 1) {
         cs << BC::isspecial(fun);
-        compileExpr(ctx, cs, args[0]);
+        compileExpr(ctx, args[0]);
         cs << BC::is(LISTSXP);
         return true;
     }
@@ -355,17 +392,18 @@ bool compileSpecialCall(Context ctx, CodeStream& cs, SEXP ast, SEXP fun,
             auto idx = args[1];
 
             // TODO
-            if (idx == R_DotsSymbol || idx == R_MissingArg)
+            if (idx == R_DotsSymbol || idx == R_MissingArg ||
+                TAG(idx) != R_NilValue)
                 return false;
 
             Label objBranch = cs.mkLabel();
             Label nextBranch = cs.mkLabel();
 
             cs << BC::isspecial(fun);
-            compileExpr(ctx, cs, args[0]);
+            compileExpr(ctx, lhs);
             cs << BC::brobj(objBranch);
 
-            compileExpr(ctx, cs, args[1]);
+            compileExpr(ctx, idx);
             if (fun == symbol::DoubleBracket)
                 cs << BC::extract1();
             else
@@ -375,31 +413,80 @@ bool compileSpecialCall(Context ctx, CodeStream& cs, SEXP ast, SEXP fun,
             cs << BC::br(nextBranch);
 
             cs << objBranch;
-            compileDispatch(ctx, cs, fun, ast, fun, args_);
+            compileDispatch(ctx, fun, ast, fun, args_);
 
             cs << nextBranch;
             return true;
         }
     }
 
+    if (fun == symbol::While) {
+        assert(args.length() == 2);
+
+        auto cond = args[0];
+        auto body = args[1];
+
+        cs << BC::isspecial(fun);
+
+        Label loopBranch = cs.mkLabel();
+        Label nextBranch = cs.mkLabel();
+
+        ctx.pushLoop(loopBranch, nextBranch);
+
+        cs << BC::beginloop(nextBranch);
+        cs << loopBranch;
+
+        compileExpr(ctx, cond);
+        cs << BC::asbool() << BC::brfalse(nextBranch);
+
+        compileExpr(ctx, body);
+        cs << BC::pop() << BC::br(loopBranch);
+
+        cs << nextBranch << BC::endcontext() << BC::push(R_NilValue)
+           << BC::invisible();
+
+        ctx.popLoop();
+
+        return true;
+    }
+
+    if (fun == symbol::Next && ctx.inLoop()) {
+        assert(args.length() == 0);
+
+        cs << BC::isspecial(fun) << BC::br(ctx.loop().next_);
+
+        return true;
+    }
+
+    if (fun == symbol::Break && ctx.inLoop()) {
+        assert(args.length() == 0);
+        assert(ctx.inLoop());
+
+        cs << BC::isspecial(fun) << BC::br(ctx.loop().break_);
+
+        return true;
+    }
+
     return false;
 }
 
 // function application
-void compileCall(Context ctx, CodeStream& cs, SEXP ast, SEXP fun, SEXP args) {
+void compileCall(Context& ctx, SEXP ast, SEXP fun, SEXP args) {
+    CodeStream& cs = ctx.cs();
+
     // application has the form:
     // LHS ( ARGS )
 
     // LHS can either be an identifier or an expression
     Match(fun) {
         Case(SYMSXP) {
-            if (compileSpecialCall(ctx, cs, ast, fun, args))
+            if (compileSpecialCall(ctx, ast, fun, args))
                 return;
 
             cs << BC::ldfun(fun);
         }
         Else({
-            compileExpr(ctx, cs, fun);
+            compileExpr(ctx, fun);
             cs << BC::isfun();
         });
     }
@@ -453,13 +540,13 @@ void compileConst(CodeStream& cs, SEXP constant) {
     cs << BC::push(constant);
 }
 
-void compileExpr(Context ctx, CodeStream& cs, SEXP exp) {
+void compileExpr(Context& ctx, SEXP exp) {
     // Dispatch on the current type of AST node
     Match(exp) {
         // Function application
-        Case(LANGSXP, fun, args) { compileCall(ctx, cs, exp, fun, args); }
+        Case(LANGSXP, fun, args) { compileCall(ctx, exp, fun, args); }
         // Variable lookup
-        Case(SYMSXP) { compileGetvar(cs, exp); }
+        Case(SYMSXP) { compileGetvar(ctx.cs(), exp); }
         Case(PROMSXP, value, expr) {
             // TODO: honestly I do not know what should be the semantics of
             //       this shit.... For now force it here and see what
@@ -471,8 +558,8 @@ void compileExpr(Context ctx, CodeStream& cs, SEXP exp) {
             //         the expression to the already evaled value
             SEXP val = forcePromise(exp);
             Protect p(val);
-            compileConst(cs, val);
-            cs.addAst(expr);
+            compileConst(ctx.cs(), val);
+            ctx.cs().addAst(expr);
         }
         Case(BCODESXP) {
             assert(false);
@@ -484,11 +571,11 @@ void compileExpr(Context ctx, CodeStream& cs, SEXP exp) {
         // }
 
         // Constant
-        Else(compileConst(cs, exp));
+        Else(compileConst(ctx.cs(), exp));
     }
 }
 
-std::vector<fun_idx_t> compileFormals(Context ctx, SEXP formals) {
+std::vector<fun_idx_t> compileFormals(Context& ctx, SEXP formals) {
     std::vector<fun_idx_t> res;
 
     for (auto arg = RList(formals).begin(); arg != RList::end(); ++arg) {
@@ -501,11 +588,11 @@ std::vector<fun_idx_t> compileFormals(Context ctx, SEXP formals) {
     return res;
 }
 
-fun_idx_t compilePromise(Context ctx, SEXP exp) {
-    CodeStream cs(ctx.fun, exp);
-    compileExpr(ctx, cs, exp);
-    cs << BC::ret();
-    return cs.finalize();
+fun_idx_t compilePromise(Context& ctx, SEXP exp) {
+    ctx.push(exp);
+    compileExpr(ctx, exp);
+    ctx.cs() << BC::ret();
+    return ctx.pop();
 }
 }
 
@@ -517,10 +604,11 @@ Compiler::CompilerRes Compiler::finalize() {
 
     auto formProm = compileFormals(ctx, formals);
 
-    CodeStream cs(function, exp);
-    compileExpr(ctx, cs, exp);
-    cs << BC::ret();
-    cs.finalize();
+    ctx.push(exp);
+
+    compileExpr(ctx, exp);
+    ctx.cs() << BC::ret();
+    ctx.pop();
 
     FunctionHandle opt = Optimizer::optimize(function);
     // opt.print();

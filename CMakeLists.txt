@@ -12,11 +12,11 @@ set(R_COMMAND ${R_HOME}/bin/R)
 
 add_definitions(-g3)
 set(CMAKE_CXX_FLAGS_RELEASE "-O2 -std=c++11")
-set(CMAKE_CXX_FLAGS_DEBUG "-std=c++11")
-set(CMAKE_CXX_FLAGS "-std=c++11")
-set(CMAKE_C_FLAGS_RELEASE "-O2 -std=c99")
-set(CMAKE_C_FLAGS_DEBUG "-std=c99")
-set(CMAKE_C_FLAGS "-std=c99")
+set(CMAKE_CXX_FLAGS_DEBUG "-Wall -std=c++11")
+set(CMAKE_CXX_FLAGS "-Wall -std=c++11")
+set(CMAKE_C_FLAGS_RELEASE "-O2 -std=gnu99")
+set(CMAKE_C_FLAGS_DEBUG "-std=gnu99")
+set(CMAKE_C_FLAGS "-std=gnu99")
 
 if(NOT DEFINED NO_LOCAL_CONFIG)
     #include any local configuration, overriding the default values above

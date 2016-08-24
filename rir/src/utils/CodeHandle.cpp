@@ -22,7 +22,7 @@ void CodeHandle::print() {
             Rprintf("          # (idx %u) : ", *s);
             Rf_PrintValue(src_pool_at(globalContext(), *s));
         }
-        Rprintf(" %5x ", ((uintptr_t)pc - (uintptr_t)bc()));
+        Rprintf(" %5d ", ((uintptr_t)pc - (uintptr_t)bc()));
         BC bc = BC::advance(&pc);
         bc.print();
         ++s;

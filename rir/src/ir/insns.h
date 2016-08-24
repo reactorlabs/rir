@@ -185,6 +185,14 @@ DEF_INSTR(aslogical_, 0, 1, 1, 0, 0)
 /**
  * aslogical_:: converts tos to a (ternary) logical
  */
+DEF_INSTR(beginloop_, 1, 0, 1, 0, 0)
+/**
+ * beginloop_:: begins loop context, break target immediate
+ */
+DEF_INSTR(endcontext_, 0, 1, 0, 0, 0)
+/**
+ * endcontext_:: ends a context
+ */
 
 // TODO these may be redundant but needed for the unification
 

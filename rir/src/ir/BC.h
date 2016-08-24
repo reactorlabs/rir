@@ -47,6 +47,7 @@ BC::immediate_t decodeImmediate(BC_t bc, BC_t* pc) {
     case BC_t::brobj_:
     case BC_t::brfalse_:
     case BC_t::label:
+    case BC_t::beginloop_:
         immediate.offset = *(jmp_t*)pc;
         break;
     case BC_t::pushi_:
@@ -79,6 +80,7 @@ BC::immediate_t decodeImmediate(BC_t bc, BC_t* pc) {
     case BC_t::lt_:
     case BC_t::isfun_:
     case BC_t::invisible_:
+    case BC_t::endcontext_:
         break;
     case BC_t::invalid_:
     case BC_t::num_of:
@@ -182,6 +184,11 @@ BC BC::brobj(jmp_t j) {
     i.offset = j;
     return BC(BC_t::brobj_, i);
 }
+BC BC::beginloop(jmp_t j) {
+    immediate_t i;
+    i.offset = j;
+    return BC(BC_t::beginloop_, i);
+}
 BC BC::brtrue(jmp_t j) {
     immediate_t i;
     i.offset = j;
@@ -192,6 +199,7 @@ BC BC::brfalse(jmp_t j) {
     i.offset = j;
     return BC(BC_t::brfalse_, i);
 }
+BC BC::endcontext() { return BC(BC_t::endcontext_); }
 BC BC::dupi() { return BC(BC_t::dupi_); }
 BC BC::dup() { return BC(BC_t::dup_); }
 BC BC::inci() { return BC(BC_t::inci_); }

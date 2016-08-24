@@ -86,6 +86,65 @@ typedef struct {
 
 extern FUNTAB R_FunTab[];
 
+#include <setjmp.h>
+#include <signal.h>
+#define JMP_BUF sigjmp_buf
+#define SETJMP(x) sigsetjmp(x, 0)
+#define LONGJMP(x, i) siglongjmp(x, i)
+
+/* Evaluation Context Structure */
+typedef struct RCNTXT {
+    struct RCNTXT* nextcontext; /* The next context up the chain */
+    int callflag;               /* The context "type" */
+    JMP_BUF cjmpbuf;            /* C stack and register information */
+    int cstacktop;              /* Top of the pointer protection stack */
+    int evaldepth;              /* evaluation depth at inception */
+    SEXP promargs;              /* Promises supplied to closure */
+    SEXP callfun;               /* The closure called */
+    SEXP sysparent;             /* environment the closure was called from */
+    SEXP call;                  /* The call that effected this context*/
+    SEXP cloenv;                /* The environment */
+    SEXP conexit;               /* Interpreted "on.exit" code */
+    void (*cend)(void*);        /* C "on.exit" thunk */
+    void* cenddata;             /* data for C "on.exit" thunk */
+    void* vmax;                 /* top of R_alloc stack */
+    int intsusp;                /* interrupts are suspended */
+    SEXP handlerstack;          /* condition handler stack */
+    SEXP restartstack;          /* stack of available restarts */
+    struct RPRSTACK* prstack;   /* stack of pending promises */
+    void* nodestack;
+    // Since we don't know if the R we are linked against has an INT stack, we
+    // have to be conservative from here on....
+    void* dontuse1;
+    SEXP dontuse2; /* The source line in effect */
+    int dontuse3;  /* should browser finish this context without stopping */
+    SEXP dontuse4; /* only set during on.exit calls */
+} RCNTXT, *context;
+
+/* The Various Context Types.
+
+ * In general the type is a bitwise OR of the values below.
+ * Note that CTXT_LOOP is already the or of CTXT_NEXT and CTXT_BREAK.
+ * Only functions should have the third bit turned on;
+ * this allows us to move up the context stack easily
+ * with either RETURN's or GENERIC's or RESTART's.
+ * If you add a new context type for functions make sure
+ *   CTXT_NEWTYPE & CTXT_FUNCTION > 0
+ */
+enum {
+    CTXT_TOPLEVEL = 0,
+    CTXT_NEXT = 1,
+    CTXT_BREAK = 2,
+    CTXT_LOOP = 3, /* break OR next target */
+    CTXT_FUNCTION = 4,
+    CTXT_CCODE = 8,
+    CTXT_RETURN = 12,
+    CTXT_BROWSER = 16,
+    CTXT_GENERIC = 20,
+    CTXT_RESTART = 32,
+    CTXT_BUILTIN = 64 /* used in profiling */
+};
+
 typedef struct sxpinfo_struct_rjit {
     unsigned int type : 5; /* ==> (FUNSXP == 99) %% 2^5 == 3 == CLOSXP
                         * -> warning: `type' is narrower than values
@@ -492,6 +551,7 @@ INLINE SEXP rirCallTrampoline(void* cntxt, EvalCbArg* arg) {
     SEXP res = hook_rirCallTrampoline(cntxt, &evalCbFunction, arg);
     // In the case of non-local returns we need to make sure to restore the
     // stack to the correct state.
+    assert(ostack_length(arg->ctx) >= oldbp);
     rl_setLength(&arg->ctx->ostack, oldbp);
     arg->ctx->istack.length = oldbpi;
     return res;
@@ -1113,6 +1173,14 @@ INSTRUCTION(brobj_) {
         *pc = *pc + offset;
 }
 
+extern void Rf_endcontext(RCNTXT*);
+INSTRUCTION(endcontext_) {
+    SEXP cntxt_store = ostack_top(ctx);
+    RCNTXT* cntxt = (RCNTXT*)RAW(cntxt_store);
+    Rf_endcontext(cntxt);
+    ostack_pop(ctx); // Context
+}
+
 INSTRUCTION(brtrue_) {
     int offset = readJumpOffset(pc);
     if (ostack_pop(ctx) == R_TrueValue)
@@ -1165,6 +1233,7 @@ INSTRUCTION(subset1_) {
     res = Rf_eval(getSrcForCall(c, *pc, ctx), env);
 #endif
 
+    R_Visible = 1;
     ostack_push(ctx, res);
 }
 
@@ -1220,6 +1289,7 @@ INSTRUCTION(extract1_) {
     }
     }
 
+    R_Visible = 1;
     ostack_push(ctx, res);
 }
 
@@ -1371,6 +1441,13 @@ extern void rirBacktrace(Context* ctx) {
 
 #undef R_CheckStack
 
+extern void Rf_begincontext(void*, int, SEXP, SEXP, SEXP, SEXP, SEXP);
+typedef struct {
+    size_t oldbp;
+    size_t oldbpi;
+    OpcodeT* pc;
+} RirContext;
+
 SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
 
     // printCode(c);
@@ -1396,7 +1473,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
     R_Visible = TRUE;
     // main loop
     while (true) {
-        // printf("%p : %p, %p\n", c, *pc, *pc - c->data);
+        // printf("%p : %d, s: %d\n", c, **pc, ostack_length(ctx));
         switch (readOpcode(pc)) {
 
 #define INS(name)                                                              \
@@ -1419,6 +1496,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
             INS(stvar_);
             INS(asbool_);
             INS(brobj_);
+            INS(endcontext_);
             INS(brtrue_);
             INS(brfalse_);
             INS(br_);
@@ -1446,6 +1524,48 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
             INS(aslogical_);
             INS(lgl_and_);
             INS(lgl_or_);
+
+        case beginloop_: {
+
+            // RirContext stores the data we need to continue from here, in
+            // case of incomming LONGJUMPS from continue or break
+            volatile RirContext* continuation;
+
+            RCNTXT* cntxt;
+            {
+                SEXP cntxt_store =
+                    Rf_allocVector(RAWSXP, sizeof(RCNTXT) + sizeof(RirContext));
+
+                // PROTECT
+                ostack_push(ctx, cntxt_store);
+                cntxt = (RCNTXT*)RAW(cntxt_store);
+                continuation = (RirContext*)(cntxt + 1);
+                Rf_begincontext(cntxt, CTXT_LOOP, R_NilValue, env, R_BaseEnv,
+                                R_NilValue, R_NilValue);
+            }
+
+            continuation->oldbp = ostack_length(ctx);
+            continuation->oldbpi = ctx->istack.length;
+            continuation->pc = *pc;
+            readJumpOffset(pc);
+
+            int s;
+            if ((s = SETJMP(cntxt->cjmpbuf))) {
+                assert(ostack_length(ctx) >= continuation->oldbp);
+
+                // don't use cntxt here...
+                rl_setLength(&ctx->ostack, continuation->oldbp);
+                ctx->istack.length = continuation->oldbpi;
+                *pc = continuation->pc;
+
+                int offset = readJumpOffset(pc);
+
+                if (s == CTXT_BREAK)
+                    *pc = *pc + offset;
+            }
+            break;
+        }
+
         case ret_: {
             // not in its own function so that we can avoid nonlocal returns
             goto __eval_done;

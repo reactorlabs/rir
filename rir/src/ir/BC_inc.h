@@ -153,7 +153,7 @@ class BC {
 
     bool isJmp() {
         return bc == BC_t::br_ || bc == BC_t::brtrue_ || bc == BC_t::brfalse_ ||
-               bc == BC_t::brobj_;
+               bc == BC_t::brobj_ || bc == BC_t::beginloop_;
     }
 
     // ==== BC decoding logic
@@ -178,6 +178,8 @@ class BC {
     inline static BC asast();
     inline static BC stvar(SEXP sym);
     inline static BC asbool();
+    inline static BC beginloop(jmp_t);
+    inline static BC endcontext();
     inline static BC brtrue(jmp_t);
     inline static BC brfalse(jmp_t);
     inline static BC br(jmp_t);

@@ -20,6 +20,8 @@ class RListIter {
 
     void operator++();
 
+    RListIter operator+(unsigned n);
+
     bool operator!=(RListIter& other) { return pos != other.pos; }
 };
 

@@ -108,13 +108,10 @@ void CodeVerifier::calculateAndVerifyStack(CodeHandle code) {
             } else if (cur.bc == BC_t::br_) {
                 q.push(State(i, BC::jmpTarget(pc)));
                 break;
-            } else if (cur.bc == BC_t::brtrue_ or cur.bc == BC_t::brfalse_ or
-                       cur.bc == BC_t::brobj_) {
+            } else if (cur.isJmp()) {
                 q.push(State(i, BC::jmpTarget(pc)));
                 // no break because we want to continue verification in current
                 // sequence as well
-            } else {
-                assert(!cur.isJmp());
             }
         }
     }
@@ -202,7 +199,7 @@ void CodeVerifier::vefifyFunctionLayout(SEXP sexp, ::Context* ctx) {
                 if (namesVec != R_NilValue) {
                     assert(TYPEOF(namesVec) == VECSXP and
                            "Invalid type of argument names vector");
-                    assert(Rf_length(namesVec) == nargs and
+                    assert((unsigned)Rf_length(namesVec) == nargs and
                            "Names and args have different length");
                 }
                 // check the call has an ast attached
@@ -245,7 +242,8 @@ void CodeVerifier::vefifyFunctionLayout(SEXP sexp, ::Context* ctx) {
                 if (namesVec != R_NilValue) {
                     assert(TYPEOF(namesVec) == VECSXP and
                            "Invalid type of argument names vector");
-                    assert(Rf_length(namesVec) == cur.immediateCallNargs() and
+                    assert((unsigned)Rf_length(namesVec) ==
+                               cur.immediateCallNargs() and
                            "Names and args have different length");
                 }
                 // check the call has an ast attached
