@@ -437,18 +437,52 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
         cs << loopBranch;
 
         compileExpr(ctx, cond);
-        cs << BC::asbool() << BC::brfalse(nextBranch);
+        cs << BC::asbool()
+           << BC::brfalse(nextBranch);
 
         compileExpr(ctx, body);
-        cs << BC::pop() << BC::br(loopBranch);
+        cs << BC::pop()
+           << BC::br(loopBranch);
 
-        cs << nextBranch << BC::endcontext() << BC::push(R_NilValue)
+        cs << nextBranch
+           << BC::endcontext()
+           << BC::push(R_NilValue)
            << BC::invisible();
 
         ctx.popLoop();
 
         return true;
     }
+
+    if (fun == symbol::Repeat) {
+        assert(args.length() == 1);
+
+        auto body = args[0];
+
+        cs << BC::isspecial(fun);
+
+        Label loopBranch = cs.mkLabel();
+        Label nextBranch = cs.mkLabel();
+
+        ctx.pushLoop(loopBranch, nextBranch);
+
+        cs << BC::beginloop(nextBranch);
+        cs << loopBranch;
+
+        compileExpr(ctx, body);
+        cs << BC::pop()
+           << BC::br(loopBranch);
+
+        cs << nextBranch
+           << BC::endcontext()
+           << BC::push(R_NilValue)
+           << BC::invisible();
+
+        ctx.popLoop();
+
+        return true;
+    }
+
 
     if (fun == symbol::Next && ctx.inLoop()) {
         assert(args.length() == 0);

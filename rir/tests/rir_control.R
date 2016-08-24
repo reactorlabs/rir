@@ -33,3 +33,22 @@ f <- rir.compile(function() {
     stopifnot(i == 7)
 })
 f()
+
+f <- rir.compile(function() {
+    repeat break
+})
+f()
+
+f <- rir.compile(function() {
+    i <- 1
+    repeat
+        if (i == 7) 
+            break
+        else {
+            i <- i + 1
+            print(i)
+            next
+        }
+    stopifnot(i == 7)
+})
+f()
