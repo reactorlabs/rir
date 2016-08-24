@@ -483,6 +483,62 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
         return true;
     }
 
+    // TODO: not quite yet
+    if (false && fun == symbol::For) {
+        // TODO: if the seq is not a vector, we need to throw an error!
+        assert(args.length() == 3);
+
+        auto sym = args[0];
+        auto seq = args[1];
+        auto body = args[2];
+
+        assert(TYPEOF(sym) == SYMSXP);
+
+        cs << BC::isspecial(fun);
+
+        Label loopBranch = cs.mkLabel();
+        Label nextBranch = cs.mkLabel();
+
+        ctx.pushLoop(loopBranch, nextBranch);
+
+        compileExpr(ctx, seq);
+        cs << BC::uniq()
+           << BC::push((int)0);
+
+        cs << BC::beginloop(nextBranch)
+           // TODO: that doesn't work, since it pushes the context to the stack
+           // and the inc below will fail. but we cant do stack manipulation
+           // here either, since the beginloop is target for non-local
+           // continues.
+
+           << loopBranch
+           << BC::inc()
+           << BC::testBounds()
+           << BC::brfalse(nextBranch)
+           << BC::dup2()
+           << BC::extract1();
+
+        // TODO: we would want a less generic extract here, but we don't have it
+        // right now. therefore we need to pass an AST here (which we know won't
+        // be used since the sequence has to be a vector);
+        cs.addAst(R_NilValue);
+        cs << BC::stvar(sym);
+
+        compileExpr(ctx, body);
+        cs << BC::pop()
+           << BC::br(loopBranch);
+
+        cs << nextBranch
+           << BC::endcontext()
+           << BC::pop()
+           << BC::pop()
+           << BC::push(R_NilValue)
+           << BC::invisible();
+
+        ctx.popLoop();
+
+        return true;
+    }
 
     if (fun == symbol::Next && ctx.inLoop()) {
         assert(args.length() == 0);

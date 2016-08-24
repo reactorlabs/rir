@@ -66,12 +66,14 @@ void BC::write(CodeStream& cs) const {
     case BC_t::eqi_:
     case BC_t::dupi_:
     case BC_t::dup_:
+    case BC_t::dup2_:
+    case BC_t::test_bounds_:
     case BC_t::swap_:
     case BC_t::uniq_:
     case BC_t::aslogical_:
     case BC_t::lgl_and_:
     case BC_t::lgl_or_:
-    case BC_t::inci_:
+    case BC_t::inc_:
     case BC_t::push_argi_:
     case BC_t::add_:
     case BC_t::sub_:
@@ -252,7 +254,9 @@ void BC::print() {
     case BC_t::uniq_:
     case BC_t::dup_:
     case BC_t::dupi_:
-    case BC_t::inci_:
+    case BC_t::inc_:
+    case BC_t::dup2_:
+    case BC_t::test_bounds_:
     case BC_t::push_argi_:
     case BC_t::asast_:
     case BC_t::asbool_:

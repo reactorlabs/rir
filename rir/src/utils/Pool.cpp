@@ -6,6 +6,7 @@
 namespace rir {
 
 std::unordered_map<double, unsigned> Pool::numbers;
+std::unordered_map<int, unsigned> Pool::ints;
 
 pool_idx_t Pool::getNum(double n) {
     if (numbers.count(n))
@@ -21,6 +22,23 @@ pool_idx_t Pool::getNum(double n) {
     assert(i < MAX_POOL_IDX);
 
     numbers[n] = i;
+    return i;
+}
+
+pool_idx_t Pool::getInt(int n) {
+    if (ints.count(n))
+        return ints.at(n);
+
+    SEXP s = allocVector(INTSXP, 1);
+    Protect p(s);
+
+    INTEGER(s)[0] = n;
+    SET_NAMED(s, 2);
+
+    size_t i = cp_pool_add(globalContext(), s);
+    assert(i < MAX_POOL_IDX);
+
+    ints[n] = i;
     return i;
 }
 }

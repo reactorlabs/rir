@@ -19,6 +19,7 @@ namespace rir {
 
 class Pool {
     static std::unordered_map<double, pool_idx_t> numbers;
+    static std::unordered_map<int, pool_idx_t> ints;
 
   public:
     static pool_idx_t insert(SEXP e) {
@@ -28,6 +29,7 @@ class Pool {
     }
 
     static pool_idx_t getNum(double n);
+    static pool_idx_t getInt(int n);
 
     static SEXP get(pool_idx_t i) { return cp_pool_at(globalContext(), i); }
 };

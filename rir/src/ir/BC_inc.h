@@ -167,6 +167,7 @@ class BC {
                        std::vector<SEXP> names);
     inline static BC push(SEXP constant);
     inline static BC push(double constant);
+    inline static BC push(int constant);
     inline static BC push_code(fun_idx_t i);
     inline static BC ldfun(SEXP sym);
     inline static BC ldvar(SEXP sym);
@@ -191,7 +192,9 @@ class BC {
     inline static BC push_argi();
     inline static BC dupi();
     inline static BC dup();
-    inline static BC inci();
+    inline static BC dup2();
+    inline static BC testBounds();
+    inline static BC inc();
     inline static BC close();
     inline static BC add();
     inline static BC sub();

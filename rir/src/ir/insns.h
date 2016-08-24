@@ -106,6 +106,10 @@ DEF_INSTR(dup_, 0, 1, 2, 0, 0)
 /**
  * dup_:: pop value from object stack, push it twice
  */
+DEF_INSTR(dup2_, 0, 2, 4, 0, 0)
+/**
+ * dup2_:: a b -> a b a b
+ */
 DEF_INSTR(add_, 0, 2, 1, 0, 0)
 /**
  * add_:: pop two values from object stack, add them, push result on object
@@ -187,18 +191,22 @@ DEF_INSTR(aslogical_, 0, 1, 1, 0, 0)
  */
 DEF_INSTR(beginloop_, 1, 0, 1, 0, 0)
 /**
- * beginloop_:: begins loop context, break target immediate
+ * beginloop_:: begins loop context, break and continue target immediate
  */
 DEF_INSTR(endcontext_, 0, 1, 0, 0, 0)
 /**
  * endcontext_:: ends a context
  */
+DEF_INSTR(inc_, 0, 1, 1, 0, 0)
+/**
+ * inc_ :: increment tos integer
+ */
+DEF_INSTR(test_bounds_, 0, 0, 1, 0, 0)
+/**
+ * bounds_check_ :: check stack[0] is a valid inded into vector at stack[1]
+ */
 
 // TODO these may be redundant but needed for the unification
-
-// Increments top of integer stack
-DEF_INSTR(inci_, 0, 0, 0, 1, 1)
-
 // TODO pushes argument value (index of the argument is taken from integer
 // stack)
 DEF_INSTR(push_argi_, 0, 0, 1, 1, 0)

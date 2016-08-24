@@ -301,8 +301,8 @@ typedef struct {
     OpcodeT* pc;
 } RirContext;
 
-// We store the RCNTXT and our own metadata in an SEXP, which we put on the
-// stack. This has to be matched by a stackheight-matching endcontext.
+// We store the RCNTXT and our own metadata in an SEXP, which we put on our own
+// context stack.
 #define createRirLoopContext(cntxt, continuation, env, pc, ctx)                \
     do {                                                                       \
         SEXP cntxt_store =                                                     \
@@ -1447,7 +1447,34 @@ INSTRUCTION(isfun_) {
     }
 }
 
-INSTRUCTION(inci_) { istack_push(ctx, istack_pop(ctx) + 1); }
+INSTRUCTION(inc_) {
+    SEXP n = ostack_top(ctx);
+    assert(TYPEOF(n) == INTSXP);
+    int i = INTEGER(n)[0];
+    if (MAYBE_SHARED(n)) {
+        ostack_pop(ctx);
+        SEXP nn = Rf_allocVector(INTSXP, 1);
+        INTEGER(nn)[0] = i + 1;
+        ostack_push(ctx, nn);
+    } else {
+        INTEGER(n)[0]++;
+    }
+}
+
+INSTRUCTION(test_bounds_) {
+    SEXP vec = *ostack_at(ctx, 1);
+    SEXP idx = *ostack_at(ctx, 0);
+    int len = Rf_length(vec);
+    int i = asInteger(idx);
+    ostack_push(ctx, i > 0 && i <= len ? R_TrueValue : R_FalseValue);
+}
+
+INSTRUCTION(dup2_) {
+    SEXP a = *ostack_at(ctx, 1);
+    SEXP b = *ostack_at(ctx, 0);
+    ostack_push(ctx, a);
+    ostack_push(ctx, b);
+}
 
 INSTRUCTION(push_argi_) {
     int pos = istack_pop(ctx);
@@ -1564,7 +1591,9 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
             INS(is_);
             INS(isspecial_);
             INS(isfun_);
-            INS(inci_);
+            INS(inc_);
+            INS(dup2_);
+            INS(test_bounds_);
             INS(push_argi_);
             INS(invisible_);
             INS(extract1_);
