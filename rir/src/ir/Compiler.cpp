@@ -497,38 +497,48 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
         cs << BC::isspecial(fun);
 
         Label loopBranch = cs.mkLabel();
-        Label nextBranch = cs.mkLabel();
+        Label breakBranch = cs.mkLabel();
+        Label endForBranch = cs.mkLabel();
 
-        ctx.pushLoop(loopBranch, nextBranch);
+        ctx.pushLoop(loopBranch, breakBranch);
 
         compileExpr(ctx, seq);
         cs << BC::uniq()
            << BC::push((int)0);
 
-        cs << BC::beginloop(nextBranch)
-           // TODO: that doesn't work, since it pushes the context to the stack
-           // and the inc below will fail. but we cant do stack manipulation
-           // here either, since the beginloop is target for non-local
-           // continues.
+        cs << BC::beginloop(breakBranch)
 
            << loopBranch
+
+         // Move context out of the way
+           << BC::put(2)
+
            << BC::inc()
            << BC::testBounds()
-           << BC::brfalse(nextBranch)
+           << BC::brfalse(endForBranch)
            << BC::dup2()
            << BC::extract1();
-
         // TODO: we would want a less generic extract here, but we don't have it
         // right now. therefore we need to pass an AST here (which we know won't
         // be used since the sequence has to be a vector);
         cs.addAst(R_NilValue);
-        cs << BC::stvar(sym);
+
+         // Put context back
+        cs << BC::pick(3)
+           << BC::swap()
+
+        // Set the loop variable
+           << BC::stvar(sym);
 
         compileExpr(ctx, body);
         cs << BC::pop()
            << BC::br(loopBranch);
 
-        cs << nextBranch
+        // Put context back
+        cs << endForBranch
+           << BC::pick(2)
+
+           << breakBranch
            << BC::endcontext()
            << BC::pop()
            << BC::pop()
