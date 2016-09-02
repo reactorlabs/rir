@@ -299,60 +299,6 @@ extern RCNTXT* R_GlobalContext;
 extern void Rf_begincontext(void*, int, SEXP, SEXP, SEXP, SEXP, SEXP);
 extern void Rf_endcontext(RCNTXT*);
 
-// =============================================================================
-// TODO: This should be put into the normal RCNTXT!
-typedef struct {
-    size_t stackPointer;
-    OpcodeT* pc;
-} RirContext;
-
-#define createRirClosureContext(cntxt, continuation, call, env, parent, args,  \
-                                op, pc, ctx)                                   \
-    do {                                                                       \
-        SEXP cntxt_store =                                                     \
-            Rf_allocVector(RAWSXP, sizeof(RCNTXT) + sizeof(RirContext));       \
-        ostack_push(ctx, cntxt_store);                                         \
-                                                                               \
-        cntxt = (RCNTXT*)RAW(cntxt_store);                                     \
-        continuation = (RirContext*)(cntxt + 1);                               \
-                                                                               \
-        if (R_GlobalContext->callflag == CTXT_GENERIC)                         \
-            Rf_begincontext(cntxt, CTXT_RETURN, call, env,                     \
-                            R_GlobalContext->sysparent, args, op);             \
-        else                                                                   \
-            Rf_begincontext(cntxt, CTXT_RETURN, call, env, parent, args, op);  \
-                                                                               \
-        continuation->stackPointer = ostack_length(ctx);                       \
-        continuation->pc = NULL;                                               \
-    } while (false)
-
-#define restoreCont(continuation)                                              \
-    do {                                                                       \
-        SLOWASSERT(ostack_length(ctx) >= (continuation)->stackPointer);        \
-        rl_setLength(&ctx->ostack, (continuation)->stackPointer);              \
-    } while (false)
-
-INLINE void endRirContext(Context* ctx, SEXP value) {
-    SEXP cntxt_store = ostack_top(ctx);
-    assert(TYPEOF(cntxt_store) == RAWSXP);
-    RCNTXT* cntxt = (RCNTXT*)RAW(cntxt_store);
-    if (value) {
-// TODO we need to set the returnvalue in the context, but we cannot
-// access it since we do not know if we have INTSTACK or not (which
-// changes RCNTXT layout. therefore we rely on the endClosure here,
-// which will not work in the package version.... Not sure what is a
-// good solution here.
-#if RIR_AS_PACKAGE == 0
-        endClosureContext(cntxt, value);
-#else
-        assert(false);
-#endif
-    } else {
-        Rf_endcontext(cntxt);
-    }
-    ostack_pop(ctx); // Context
-}
-
 // TODO remove numArgs and bp -- this is only needed for the on stack argument
 // handling
 #define INSTRUCTION(name)                                                      \
@@ -599,10 +545,12 @@ void endClosureDebug(SEXP op, SEXP call, SEXP rho);
 SEXP closureArgumentAdaptor(SEXP call, SEXP op, SEXP arglist, SEXP rho, SEXP suppliedvars);
 extern SEXP R_ReturnedValue;
 
-SEXP rirCallTrampoline(RCNTXT* cntxt, RirContext* continuation, Code* code,
-                       SEXP env, unsigned nargs, Context* ctx) {
+SEXP rirCallTrampoline(RCNTXT* cntxt, Code* code, SEXP env, unsigned nargs,
+                       Context* ctx) {
+    unsigned oldStackPointer = ostack_length(ctx);
+
     if ((SETJMP(cntxt->cjmpbuf))) {
-        restoreCont(continuation);
+        rl_setLength(&ctx->ostack, oldStackPointer);
 
         if (R_ReturnedValue == R_RestartToken) {
             cntxt->callflag = CTXT_RETURN; /* turn restart off */
@@ -623,30 +571,40 @@ INLINE SEXP rirCallClosure(SEXP call, SEXP env, SEXP callee, SEXP actuals,
 
     ostack_push(ctx, newEnv);
 
-    // Create a new R context
-    RCNTXT* cntxt;
-    RirContext* continuation;
-    createRirClosureContext(cntxt, continuation, call, newEnv, env, actuals,
-                            callee, pc, ctx);
+    // Create a new R context and store it on the stack
+    SEXP cntxt_store = Rf_allocVector(RAWSXP, sizeof(RCNTXT));
+    ostack_push(ctx, cntxt_store);
+
+    RCNTXT* cntxt = (RCNTXT*)RAW(cntxt_store);
+    if (R_GlobalContext->callflag == CTXT_GENERIC)
+        Rf_begincontext(cntxt, CTXT_RETURN, call, newEnv,
+                        R_GlobalContext->sysparent, actuals, callee);
+    else
+        Rf_begincontext(cntxt, CTXT_RETURN, call, newEnv, env, actuals, callee);
 
     // Exec the closure
     closureDebug(call, callee, env, newEnv, cntxt);
     SEXP body = BODY(callee);
     Code* code = functionCode((Function*)INTEGER(body));
 
-    unsigned stackguard_size_before = ostack_length(ctx);
-    SEXP stackguard_before = ostack_top(ctx);
-    SEXP result =
-        rirCallTrampoline(cntxt, continuation, code, newEnv, nargs, ctx);
-    unsigned stackguard_size_after = ostack_length(ctx);
-    SEXP stackguard_after = ostack_top(ctx);
-    assert(stackguard_before == stackguard_after &&
-           stackguard_size_before == stackguard_size_after);
+    SEXP result = rirCallTrampoline(cntxt, code, newEnv, nargs, ctx);
+
     endClosureDebug(callee, call, env);
 
-    endRirContext(ctx, result);
+// TODO we need to set the returnvalue in the context, but we cannot
+// access it since we do not know if we have INTSTACK or not (which
+// changes RCNTXT layout. therefore we rely on the endClosure here,
+// which will not work in the package version.... Not sure what is a
+// good solution here.
+#if RIR_AS_PACKAGE == 0
+    endClosureContext(cntxt, result);
+#else
+    assert(false);
+#endif
 
+    ostack_pop(ctx); // cntxt
     ostack_pop(ctx); // newEnv
+
     return result;
 }
 #define USE_RIR_CONTEXT_SETUP true
@@ -684,10 +642,10 @@ INLINE SEXP doCall(Code* caller, SEXP call, SEXP callee, unsigned* args,
 
         // Store and restore stack status in case we get back here through
         // non-local return
-        RirContext c = {ostack_length(ctx), NULL};
+        unsigned oldStackPointer = ostack_length(ctx);
         // call it with the AST only
         result = f(call, callee, CDR(call), env);
-        restoreCont(&c);
+        rl_setLength(&ctx->ostack, oldStackPointer);
 
         if (flag < 2) R_Visible = flag != 1;
         break;
@@ -705,9 +663,9 @@ INLINE SEXP doCall(Code* caller, SEXP call, SEXP callee, unsigned* args,
 
         // Store and restore stack status in case we get back here through
         // non-local return
-        RirContext c = {ostack_length(ctx), NULL};
+        unsigned oldStackPointer = ostack_length(ctx);
         result = f(call, callee, argslist, env);
-        restoreCont(&c);
+        rl_setLength(&ctx->ostack, oldStackPointer);
 
         if (flag < 2) R_Visible = flag != 1;
         UNPROTECT(1);
@@ -733,9 +691,9 @@ INLINE SEXP doCall(Code* caller, SEXP call, SEXP callee, unsigned* args,
 
         // Store and restore stack status in case we get back here through
         // non-local return
-        RirContext c = {ostack_length(ctx), NULL};
+        unsigned oldStackPointer = ostack_length(ctx);
         result = applyClosure(call, callee, actuals, env, R_NilValue);
-        restoreCont(&c);
+        rl_setLength(&ctx->ostack, oldStackPointer);
 
         UNPROTECT(1); // argslist
         break;
@@ -822,10 +780,10 @@ INLINE SEXP doCallStack(Code* caller, SEXP call, size_t nargs, SEXP names,
 
         // Store and restore stack status in case we get back here through
         // non-local return
-        RirContext c = {ostack_length(ctx), NULL};
+        unsigned oldStackPointer = ostack_length(ctx);
         // call it with the AST only
         res = f(call, callee, CDR(call), env);
-        restoreCont(&c);
+        rl_setLength(&ctx->ostack, oldStackPointer);
 
         if (flag < 2)
             R_Visible = flag != 1;
@@ -849,9 +807,9 @@ INLINE SEXP doCallStack(Code* caller, SEXP call, size_t nargs, SEXP names,
 
         // Store and restore stack status in case we get back here through
         // non-local return
-        RirContext c = {ostack_length(ctx), NULL};
+        unsigned oldStackPointer = ostack_length(ctx);
         res = f(call, callee, argslist, env);
-        restoreCont(&c);
+        rl_setLength(&ctx->ostack, oldStackPointer);
 
         if (flag < 2)
             R_Visible = flag != 1;
@@ -879,9 +837,9 @@ INLINE SEXP doCallStack(Code* caller, SEXP call, size_t nargs, SEXP names,
 
         // Store and restore stack status in case we get back here through
         // non-local return
-        RirContext c = {ostack_length(ctx), NULL};
+        unsigned oldStackPointer = ostack_length(ctx);
         res = applyClosure(call, callee, argslist, env, R_NilValue);
-        restoreCont(&c);
+        rl_setLength(&ctx->ostack, oldStackPointer);
         break;
     }
     default:
@@ -919,7 +877,7 @@ SEXP doDispatch(Code* caller, SEXP call, SEXP selector, SEXP obj,
 
     // Store and restore stack status in case we get back here through
     // non-local return
-    RirContext c = {ostack_length(ctx), NULL};
+    unsigned oldStackPointer = ostack_length(ctx);
 
     do {
         // ===============================================
@@ -927,7 +885,7 @@ SEXP doDispatch(Code* caller, SEXP call, SEXP selector, SEXP obj,
         if (IS_S4_OBJECT(obj) && R_has_methods(selector)) {
             res = R_possible_dispatch(call, selector, actuals, env, TRUE);
             if (res) {
-                restoreCont(&c);
+                rl_setLength(&ctx->ostack, oldStackPointer);
                 break;
             }
         }
@@ -944,7 +902,7 @@ SEXP doDispatch(Code* caller, SEXP call, SEXP selector, SEXP obj,
         UNPROTECT(1);
         endClosureContext(&cntxt, success ? res : R_NilValue);
         if (success) {
-            restoreCont(&c);
+            rl_setLength(&ctx->ostack, oldStackPointer);
             break;
         }
 
@@ -967,7 +925,7 @@ SEXP doDispatch(Code* caller, SEXP call, SEXP selector, SEXP obj,
 
             // call it with the AST only
             res = f(call, callee, CDR(call), env);
-            restoreCont(&c);
+            rl_setLength(&ctx->ostack, oldStackPointer);
 
             if (flag < 2)
                 R_Visible = flag != 1;
@@ -985,9 +943,9 @@ SEXP doDispatch(Code* caller, SEXP call, SEXP selector, SEXP obj,
 
             // Store and restore stack status in case we get back here through
             // non-local return
-            RirContext c = {ostack_length(ctx), NULL};
+            unsigned oldStackPointer = ostack_length(ctx);
             res = f(call, callee, actuals, env);
-            restoreCont(&c);
+            rl_setLength(&ctx->ostack, oldStackPointer);
 
             if (flag < 2)
                 R_Visible = flag != 1;
@@ -1006,9 +964,9 @@ SEXP doDispatch(Code* caller, SEXP call, SEXP selector, SEXP obj,
 #endif
             // Store and restore stack status in case we get back here through
             // non-local return
-            RirContext c = {ostack_length(ctx), NULL};
+            unsigned oldStackPointer = ostack_length(ctx);
             res = applyClosure(call, callee, actuals, env, R_NilValue);
-            restoreCont(&c);
+            rl_setLength(&ctx->ostack, oldStackPointer);
             break;
         }
         default:
