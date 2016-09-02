@@ -483,7 +483,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
         return true;
     }
 
-    if (false && fun == symbol::For) {
+    if (fun == symbol::For) {
         // TODO: if the seq is not a vector, we need to throw an error!
         assert(args.length() == 3);
 

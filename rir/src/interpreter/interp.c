@@ -306,24 +306,6 @@ typedef struct {
     OpcodeT* pc;
 } RirContext;
 
-// We store the RCNTXT and our own metadata in an SEXP, which we put on our own
-// context stack.
-#define createRirLoopContext(cntxt, continuation, env, pc, ctx)                \
-    do {                                                                       \
-        SEXP cntxt_store =                                                     \
-            Rf_allocVector(RAWSXP, sizeof(RCNTXT) + sizeof(RirContext));       \
-        ostack_push(ctx, cntxt_store);                                         \
-                                                                               \
-        cntxt = (RCNTXT*)RAW(cntxt_store);                                     \
-        continuation = (RirContext*)(cntxt + 1);                               \
-                                                                               \
-        Rf_begincontext(cntxt, CTXT_LOOP, R_NilValue, env, R_BaseEnv,          \
-                        R_NilValue, R_NilValue);                               \
-                                                                               \
-        continuation->stackPointer = ostack_length(ctx);                       \
-        continuation->pc = pc;                                                 \
-    } while (false)
-
 #define createRirClosureContext(cntxt, continuation, call, env, parent, args,  \
                                 op, pc, ctx)                                   \
     do {                                                                       \
@@ -1276,7 +1258,13 @@ INSTRUCTION(brobj_) {
     PC_BOUNDSCHECK(*pc);
 }
 
-INSTRUCTION(endcontext_) { endRirContext(ctx, NULL); }
+INSTRUCTION(endcontext_) {
+    SEXP cntxt_store = ostack_top(ctx);
+    assert(TYPEOF(cntxt_store) == RAWSXP);
+    RCNTXT* cntxt = (RCNTXT*)RAW(cntxt_store);
+    Rf_endcontext(cntxt);
+    ostack_pop(ctx); // Context
+}
 
 INSTRUCTION(brtrue_) {
     int offset = readJumpOffset(pc);
@@ -1595,27 +1583,37 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
             INS(lgl_or_);
 
         case beginloop_: {
+            // Allocate a RCNTXT on the stack
+            SEXP cntxt_store =
+                Rf_allocVector(RAWSXP, sizeof(RCNTXT) + sizeof(pc));
+            ostack_push(ctx, cntxt_store);
 
-            // RirContext stores the data we need to continue from here, in
-            // case of incomming LONGJUMPS from continue or break
-            RCNTXT* cntxt;
-            volatile RirContext* continuation;
-            createRirLoopContext(cntxt, continuation, env, pc, ctx);
+            RCNTXT* cntxt = (RCNTXT*)RAW(cntxt_store);
+
+            // (ab)use the same buffe to store the current pc
+            OpcodeT** oldPc = (OpcodeT**)(cntxt + 1);
+            *oldPc = pc;
+
+            Rf_begincontext(cntxt, CTXT_LOOP, R_NilValue, env, R_BaseEnv,
+                            R_NilValue, R_NilValue);
+            // (ab)use the unused cenddata field to store sp
+            cntxt->cenddata = (void*)ostack_length(ctx);
 
             readJumpOffset(&pc);
 
             int s;
             if ((s = SETJMP(cntxt->cjmpbuf))) {
-                // don't use cntxt here...
+                // incomming non-local break/continue:
+                // restore our stack state
+                rl_setLength(&ctx->ostack, (size_t)R_GlobalContext->cenddata);
 
-                restoreCont(continuation);
-                // next to what we normally do, we also need to restore the pc,
-                // since it is local to the function and not volatile, thus not
-                // restored by longjmp
-                pc = continuation->pc;
-
+                // get the RCNTXT from the stack
                 SEXP cntxt_store = ostack_top(ctx);
                 assert(TYPEOF(cntxt_store) == RAWSXP && "stack botched");
+                RCNTXT* cntxt = (RCNTXT*)RAW(cntxt_store);
+                assert(cntxt == R_GlobalContext && "stack botched");
+                OpcodeT** oldPc = (OpcodeT**)(cntxt + 1);
+                pc = *oldPc;
 
                 int offset = readJumpOffset(&pc);
 
