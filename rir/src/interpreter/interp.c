@@ -194,8 +194,8 @@ OpcodeT* advancePc(OpcodeT* pc) {
     return pc;
 }
 
-#define PC_BOUNDSCHECK                                                         \
-    SLOWASSERT(*pc >= code(c) && *pc < code(c) + c->codeSize);
+#define PC_BOUNDSCHECK(pc)                                                     \
+    SLOWASSERT((pc) >= code(c) && (pc) < code(c) + c->codeSize);
 
 // bytecode accesses
 
@@ -298,9 +298,11 @@ INLINE SEXP escape(SEXP val) {
 extern RCNTXT* R_GlobalContext;
 extern void Rf_begincontext(void*, int, SEXP, SEXP, SEXP, SEXP, SEXP);
 extern void Rf_endcontext(RCNTXT*);
+
+// =============================================================================
+// TODO: This should be put into the normal RCNTXT!
 typedef struct {
     size_t stackPointer;
-    Frame* frame;
     OpcodeT* pc;
 } RirContext;
 
@@ -318,9 +320,8 @@ typedef struct {
         Rf_begincontext(cntxt, CTXT_LOOP, R_NilValue, env, R_BaseEnv,          \
                         R_NilValue, R_NilValue);                               \
                                                                                \
-        continuation->frame = fstack_top(ctx);                                 \
         continuation->stackPointer = ostack_length(ctx);                       \
-        continuation->pc = *pc;                                                \
+        continuation->pc = pc;                                                 \
     } while (false)
 
 #define createRirClosureContext(cntxt, continuation, call, env, parent, args,  \
@@ -339,16 +340,14 @@ typedef struct {
         else                                                                   \
             Rf_begincontext(cntxt, CTXT_RETURN, call, env, parent, args, op);  \
                                                                                \
-        continuation->frame = fstack_top(ctx);                                 \
         continuation->stackPointer = ostack_length(ctx);                       \
         continuation->pc = NULL;                                               \
     } while (false)
 
 #define restoreCont(continuation)                                              \
     do {                                                                       \
-        SLOWASSERT(ostack_length(ctx) >= (continuation)->frame->bp);           \
+        SLOWASSERT(ostack_length(ctx) >= (continuation)->stackPointer);        \
         rl_setLength(&ctx->ostack, (continuation)->stackPointer);              \
-        fstack_set(ctx, (continuation)->frame);                                \
     } while (false)
 
 INLINE void endRirContext(Context* ctx, SEXP value) {
@@ -703,7 +702,7 @@ INLINE SEXP doCall(Code* caller, SEXP call, SEXP callee, unsigned* args,
 
         // Store and restore stack status in case we get back here through
         // non-local return
-        RirContext c = {ostack_length(ctx), fstack_top(ctx), NULL};
+        RirContext c = {ostack_length(ctx), NULL};
         // call it with the AST only
         result = f(call, callee, CDR(call), env);
         restoreCont(&c);
@@ -724,7 +723,7 @@ INLINE SEXP doCall(Code* caller, SEXP call, SEXP callee, unsigned* args,
 
         // Store and restore stack status in case we get back here through
         // non-local return
-        RirContext c = {ostack_length(ctx), fstack_top(ctx), NULL};
+        RirContext c = {ostack_length(ctx), NULL};
         result = f(call, callee, argslist, env);
         restoreCont(&c);
 
@@ -752,7 +751,7 @@ INLINE SEXP doCall(Code* caller, SEXP call, SEXP callee, unsigned* args,
 
         // Store and restore stack status in case we get back here through
         // non-local return
-        RirContext c = {ostack_length(ctx), fstack_top(ctx), NULL};
+        RirContext c = {ostack_length(ctx), NULL};
         result = applyClosure(call, callee, actuals, env, R_NilValue);
         restoreCont(&c);
 
@@ -841,7 +840,7 @@ INLINE SEXP doCallStack(Code* caller, SEXP call, size_t nargs, SEXP names,
 
         // Store and restore stack status in case we get back here through
         // non-local return
-        RirContext c = {ostack_length(ctx), fstack_top(ctx), NULL};
+        RirContext c = {ostack_length(ctx), NULL};
         // call it with the AST only
         res = f(call, callee, CDR(call), env);
         restoreCont(&c);
@@ -868,7 +867,7 @@ INLINE SEXP doCallStack(Code* caller, SEXP call, size_t nargs, SEXP names,
 
         // Store and restore stack status in case we get back here through
         // non-local return
-        RirContext c = {ostack_length(ctx), fstack_top(ctx), NULL};
+        RirContext c = {ostack_length(ctx), NULL};
         res = f(call, callee, argslist, env);
         restoreCont(&c);
 
@@ -898,7 +897,7 @@ INLINE SEXP doCallStack(Code* caller, SEXP call, size_t nargs, SEXP names,
 
         // Store and restore stack status in case we get back here through
         // non-local return
-        RirContext c = {ostack_length(ctx), fstack_top(ctx), NULL};
+        RirContext c = {ostack_length(ctx), NULL};
         res = applyClosure(call, callee, argslist, env, R_NilValue);
         restoreCont(&c);
         break;
@@ -938,7 +937,7 @@ SEXP doDispatch(Code* caller, SEXP call, SEXP selector, SEXP obj,
 
     // Store and restore stack status in case we get back here through
     // non-local return
-    RirContext c = {ostack_length(ctx), fstack_top(ctx), NULL};
+    RirContext c = {ostack_length(ctx), NULL};
 
     do {
         // ===============================================
@@ -1004,7 +1003,7 @@ SEXP doDispatch(Code* caller, SEXP call, SEXP selector, SEXP obj,
 
             // Store and restore stack status in case we get back here through
             // non-local return
-            RirContext c = {ostack_length(ctx), fstack_top(ctx), NULL};
+            RirContext c = {ostack_length(ctx), NULL};
             res = f(call, callee, actuals, env);
             restoreCont(&c);
 
@@ -1025,7 +1024,7 @@ SEXP doDispatch(Code* caller, SEXP call, SEXP selector, SEXP obj,
 #endif
             // Store and restore stack status in case we get back here through
             // non-local return
-            RirContext c = {ostack_length(ctx), fstack_top(ctx), NULL};
+            RirContext c = {ostack_length(ctx), NULL};
             res = applyClosure(call, callee, actuals, env, R_NilValue);
             restoreCont(&c);
             break;
@@ -1274,7 +1273,7 @@ INSTRUCTION(brobj_) {
     int offset = readJumpOffset(pc);
     if (isObject(ostack_top(ctx)))
         *pc = *pc + offset;
-    PC_BOUNDSCHECK;
+    PC_BOUNDSCHECK(*pc);
 }
 
 INSTRUCTION(endcontext_) { endRirContext(ctx, NULL); }
@@ -1283,20 +1282,20 @@ INSTRUCTION(brtrue_) {
     int offset = readJumpOffset(pc);
     if (ostack_pop(ctx) == R_TrueValue)
         *pc = *pc + offset;
-    PC_BOUNDSCHECK;
+    PC_BOUNDSCHECK(*pc);
 }
 
 INSTRUCTION(brfalse_) {
     int offset = readJumpOffset(pc);
     if (ostack_pop(ctx) == R_FalseValue)
         *pc = *pc + offset;
-    PC_BOUNDSCHECK;
+    PC_BOUNDSCHECK(*pc);
 }
 
 INSTRUCTION(br_) {
     int offset = readJumpOffset(pc);
     *pc = *pc + offset;
-    PC_BOUNDSCHECK;
+    PC_BOUNDSCHECK(*pc);
 }
 
 #if RIR_AS_PACKAGE == 0
@@ -1521,30 +1520,6 @@ extern void printCode(Code* c);
 extern void printFunction(Function* f);
 
 extern SEXP Rf_deparse1(SEXP call, Rboolean abbrev, int opts);
-extern void R_SetErrorHook(void (*hook)(SEXP, char *));
-
-extern void rirBacktrace(Context* ctx) {
-    if (fstack_empty(ctx))
-        return;
-
-    FStack* f = ctx->fstack;
-    while(f) {
-        for (int i = f->length - 1; i >= 0; i--) {
-            Frame* frame = &f->data[i];
-            Code* code = frame->code;
-            SEXP call = src_pool_at(ctx, code->src);
-
-            Rprintf("%d : %s\n", i, CHAR(STRING_ELT(Rf_deparse1(call, 0, 0), 0)));
-            Rprintf(" env: ");
-            SEXP names = R_lsInternal3(frame->env, TRUE, FALSE);
-            PROTECT(names);
-            for (int i = 0; i < Rf_length(names); ++i)
-                Rprintf("%s ", CHAR(STRING_ELT(R_lsInternal3(frame->env, TRUE, FALSE), i)));
-            Rprintf("\n");
-        }
-        f = f->prev;
-    }
-}
 
 #undef R_CheckStack
 
@@ -1564,21 +1539,18 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
     // there is some slack of 5 to make sure the call instruction can store
     // some intermediate values on the stack
     ostack_ensureSize(ctx, c->stackLength + 5);
-    Frame* frame = fstack_push(ctx, c, env);
 
-    // get pc and bp regs
-    frame->pc = code(c);
-    OpcodeT** pc = &frame->pc;
+    OpcodeT* pc = code(c);
 
     R_Visible = TRUE;
     // main loop
     while (true) {
         // printf("%p : %d, s: %d\n", c, **pc, ostack_length(ctx));
-        switch (readOpcode(pc)) {
+        switch (readOpcode(&pc)) {
 
 #define INS(name)                                                              \
     case name:                                                                 \
-        ins_##name(c, env, pc, ctx, numArgs);                                  \
+        ins_##name(c, env, &pc, ctx, numArgs);                                 \
         break
 
             INS(push_);
@@ -1630,7 +1602,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
             volatile RirContext* continuation;
             createRirLoopContext(cntxt, continuation, env, pc, ctx);
 
-            readJumpOffset(pc);
+            readJumpOffset(&pc);
 
             int s;
             if ((s = SETJMP(cntxt->cjmpbuf))) {
@@ -1640,16 +1612,16 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
                 // next to what we normally do, we also need to restore the pc,
                 // since it is local to the function and not volatile, thus not
                 // restored by longjmp
-                *pc = continuation->pc;
+                pc = continuation->pc;
 
                 SEXP cntxt_store = ostack_top(ctx);
                 assert(TYPEOF(cntxt_store) == RAWSXP && "stack botched");
 
-                int offset = readJumpOffset(pc);
+                int offset = readJumpOffset(&pc);
 
                 if (s == CTXT_BREAK)
-                    *pc = *pc + offset;
-                PC_BOUNDSCHECK;
+                    pc = pc + offset;
+                PC_BOUNDSCHECK(pc);
             }
             break;
         }
@@ -1663,9 +1635,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
         }
     }
 __eval_done : {
-    SEXP res = ostack_pop(ctx);
-    fstack_pop(ctx, frame);
-    return res;
+    return ostack_pop(ctx);
 }
 }
 

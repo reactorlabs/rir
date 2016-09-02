@@ -512,8 +512,11 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
            // Move context out of the way
            << BC::put(2)
 
-           << BC::inc() << BC::testBounds() << BC::brfalse(endForBranch)
-           << BC::dup2() << BC::extract1();
+           << BC::inc()
+           << BC::testBounds()
+           << BC::brfalse(endForBranch)
+           << BC::dup2()
+           << BC::extract1();
 
         // TODO: we would want a less generic extract here, but we don't have it
         // right now. therefore we need to pass an AST here (which we know won't

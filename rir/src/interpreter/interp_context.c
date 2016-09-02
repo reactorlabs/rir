@@ -22,9 +22,6 @@ Context* context_create(CompilerCallback compiler) {
     initializeResizeableList(&c->cp, POOL_CAPACITY, c->list, CONTEXT_INDEX_CP);
     initializeResizeableList(&c->src, POOL_CAPACITY, c->list, CONTEXT_INDEX_SRC);
     initializeResizeableList(&c->ostack, STACK_CAPACITY, c->list, CONTEXT_INDEX_OSTACK);
-    c->fstack = malloc(sizeof(FStack));
-    c->fstack->length = 0;
-    c->fstack->prev = NULL;
     // first item in source and constant pools is R_NilValue so that we can use the index 0 for other purposes
     src_pool_add(c, R_NilValue);
     cp_pool_add(c, R_NilValue);
@@ -39,16 +36,3 @@ Context* context_create(CompilerCallback compiler) {
 
 
 extern Context * globalContext_;
-
-extern void R_SetErrorHook(void (*hook)(SEXP, char *));
-extern void rirBacktrace(Context* ctx);
-
-void rirErrorHook(SEXP call, char * msg) {
-    Rprintf("RIR backtrace:\n");
-    rirBacktrace(globalContext_);
-    Rprintf("\n");
-    Rf_errorcall(call, msg);
-}
-
-
-
