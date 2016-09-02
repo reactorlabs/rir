@@ -23,6 +23,13 @@ extern "C" {
 #define POOL_CAPACITY 4096
 #define STACK_CAPACITY 4096
 
+#ifdef ENABLE_SLOWASSERT
+#define SLOWASSERT(what) assert(what)
+#else
+#define SLOWASSERT(what)                                                       \
+    {}
+#endif
+
 /** Resizeable R list.
 
  Allocates large list and then tricks R into believing that the list is actually smaller.
@@ -34,22 +41,13 @@ typedef struct {
     size_t capacity;
 } ResizeableList;
 
-/** Unboxed integer stack / primitive stack.
-
-  TODO Get consistent, this is istack or PStack???
- */
-typedef struct {
-    int* data;
-    size_t length;
-    size_t capacity;
-} IStack;
-
 /** Interpreter frame information.
  */
 typedef struct {
     struct Code* code;
     SEXP env;
     OpcodeT* pc;
+    size_t bp;
 } Frame;
 
 /** Frame stack.
@@ -77,7 +75,6 @@ typedef struct {
     ResizeableList cp;
     ResizeableList src;
     ResizeableList ostack;
-    IStack istack;
     FStack * fstack;
     CompilerCallback compiler;
 } Context;
@@ -91,6 +88,45 @@ extern SEXP getterPlaceholderSym;
 extern SEXP quoteSym;
 
 // TODO we might actually need to do more for the lengths (i.e. true length vs length)
+
+INLINE Frame* fstack_top(Context* c) {
+    return &c->fstack->data[c->fstack->length - 1];
+}
+
+INLINE size_t ostack_length(Context* c);
+
+INLINE void fstack_pop(Context* c, Frame* frame) {
+    SLOWASSERT(fstack_top(c) == frame);
+
+    c->fstack->length--;
+
+    if (c->fstack->length == 0 && c->fstack->prev) {
+        FStack* empty = c->fstack;
+        c->fstack = c->fstack->prev;
+        free(empty);
+    }
+}
+
+INLINE void fstack_set(Context* c, Frame* frame) {
+    while (true) {
+        size_t idx = frame - &c->fstack->data[0];
+
+        // Index is within range, we pop all frames before
+        if (idx >= 0 && idx < c->fstack->length) {
+            c->fstack->length = idx + 1;
+            SLOWASSERT(c->fstack->data[idx].bp <= ostack_length(c));
+            return;
+        }
+
+        assert(c->fstack->prev);
+
+        // Index not within range, remove one chunk of the stack and try on the
+        // next one
+        FStack* empty = c->fstack;
+        c->fstack = c->fstack->prev;
+        free(empty);
+    }
+}
 
 INLINE size_t rl_length(ResizeableList * l) {
     return Rf_length(l->list);
@@ -119,10 +155,6 @@ INLINE void rl_append(ResizeableList * l, SEXP val, SEXP parent, size_t index) {
     SET_VECTOR_ELT(l->list, i, val);
 }
 
-INLINE int istack_top(Context* c) {
-    return c->istack.data[c->istack.length-1];
-}
-
 INLINE SEXP ostack_top(Context* c) {
     return VECTOR_ELT(c->ostack.list, rl_length(&c->ostack) - 1);
 }
@@ -130,10 +162,6 @@ INLINE SEXP ostack_top(Context* c) {
 INLINE SEXP* ostack_at(Context* c, uint32_t i) {
     assert(i < rl_length(&c->ostack));
     return &VECTOR_ELT(c->ostack.list, rl_length(&c->ostack) - 1 - i);
-}
-
-INLINE size_t istack_length(Context* c) {
-    return rl_length(&c->ostack);
 }
 
 INLINE bool ostack_empty(Context* c) {
@@ -151,12 +179,9 @@ INLINE size_t ostack_length(Context * c) {
 INLINE SEXP ostack_pop(Context* c) {
     // VECTOR_ELT does not check bounds
     int i = rl_length(&c->ostack) - 1;
+    SLOWASSERT(fstack_top(c)->bp <= (unsigned)i);
     rl_setLength(&c->ostack, i);
     return VECTOR_ELT(c->ostack.list, i);
-}
-
-INLINE void ostack_popn(Context* c, unsigned size) {
-    rl_setLength(& c->ostack, rl_length(&c->ostack) - size);
 }
 
 INLINE void ostack_push(Context* c, SEXP val) {
@@ -166,55 +191,6 @@ INLINE void ostack_push(Context* c, SEXP val) {
 INLINE void ostack_ensureSize(Context* c, unsigned minFree) {
     while (rl_length(&c->ostack) + minFree > c->ostack.capacity)
         rl_grow(& c->ostack, c->list, CONTEXT_INDEX_OSTACK);
-}
-
-INLINE bool istack_empty(Context* c) {
-    return c->istack.length == 0;
-}
-
-INLINE int istack_pop(Context* c) {
-    return c->istack.data[--c->istack.length];
-}
-
-INLINE void istack_push(Context* c, int val) {
-    c->istack.data[c->istack.length++] = val;
-}
-
-INLINE void istack_ensureSize(Context* c, unsigned minFree) {
-    unsigned cap = c->istack.capacity;
-    while (c->istack.length + minFree < cap) cap *= 2;
-    if (cap != c->istack.capacity) {
-        int * data = (int*)malloc(cap * sizeof(int));
-        memcpy(data, c->istack.data, c->istack.length * sizeof(int));
-        free(c->istack.data);
-        c->istack.data = data;
-        c->istack.capacity = cap;
-    }
-}
-
-INLINE void fstack_pop(Context* c, Frame* frame) {
-    while (true) {
-        size_t idx = frame - &c->fstack->data[0];
-
-        // Index is within range, we pop all frames before
-        if (idx >= 0 && idx < c->fstack->length) {
-            c->fstack->length = idx;
-            if (c->fstack->length == 0 && c->fstack->prev) {
-                FStack* empty = c->fstack;
-                c->fstack = c->fstack->prev;
-                free(empty);
-            }
-            return;
-        }
-
-        assert(c->fstack->prev);
-
-        // Index not within range, remove one chunk of the stack and try on the
-        // next one
-        FStack* empty = c->fstack;
-        c->fstack = c->fstack->prev;
-        free(empty);
-    }
 }
 
 INLINE Frame* fstack_push(Context* c, struct Code* code, SEXP env) {
@@ -229,6 +205,7 @@ INLINE Frame* fstack_push(Context* c, struct Code* code, SEXP env) {
     Frame* frame = &c->fstack->data[c->fstack->length];
     frame->code = code;
     frame->env = env;
+    frame->bp = ostack_length(c);
     c->fstack->length++;
     return frame;
 }

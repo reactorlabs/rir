@@ -88,9 +88,9 @@ extern FUNTAB R_FunTab[];
 
 #include <setjmp.h>
 #include <signal.h>
-#define JMP_BUF sigjmp_buf
-#define SETJMP(x) sigsetjmp(x, 0)
-#define LONGJMP(x, i) siglongjmp(x, i)
+#define JMP_BUF jmp_buf
+#define SETJMP(x) setjmp(x)
+#define LONGJMP(x, i) longjmp(x, i)
 
 /* Evaluation Context Structure */
 typedef struct RCNTXT {
@@ -194,6 +194,9 @@ OpcodeT* advancePc(OpcodeT* pc) {
     return pc;
 }
 
+#define PC_BOUNDSCHECK                                                         \
+    SLOWASSERT(*pc >= code(c) && *pc < code(c) + c->codeSize);
+
 // bytecode accesses
 
 INLINE Opcode readOpcode(OpcodeT** pc) {
@@ -296,8 +299,8 @@ extern RCNTXT* R_GlobalContext;
 extern void Rf_begincontext(void*, int, SEXP, SEXP, SEXP, SEXP, SEXP);
 extern void Rf_endcontext(RCNTXT*);
 typedef struct {
-    size_t oldbp;
-    size_t oldbpi;
+    size_t stackPointer;
+    Frame* frame;
     OpcodeT* pc;
 } RirContext;
 
@@ -315,8 +318,8 @@ typedef struct {
         Rf_begincontext(cntxt, CTXT_LOOP, R_NilValue, env, R_BaseEnv,          \
                         R_NilValue, R_NilValue);                               \
                                                                                \
-        continuation->oldbp = ostack_length(ctx);                              \
-        continuation->oldbpi = ctx->istack.length;                             \
+        continuation->frame = fstack_top(ctx);                                 \
+        continuation->stackPointer = ostack_length(ctx);                       \
         continuation->pc = *pc;                                                \
     } while (false)
 
@@ -336,9 +339,16 @@ typedef struct {
         else                                                                   \
             Rf_begincontext(cntxt, CTXT_RETURN, call, env, parent, args, op);  \
                                                                                \
-        continuation->oldbp = ostack_length(ctx);                              \
-        continuation->oldbpi = ctx->istack.length;                             \
-        continuation->pc = *pc;                                                \
+        continuation->frame = fstack_top(ctx);                                 \
+        continuation->stackPointer = ostack_length(ctx);                       \
+        continuation->pc = NULL;                                               \
+    } while (false)
+
+#define restoreCont(continuation)                                              \
+    do {                                                                       \
+        SLOWASSERT(ostack_length(ctx) >= (continuation)->frame->bp);           \
+        rl_setLength(&ctx->ostack, (continuation)->stackPointer);              \
+        fstack_set(ctx, (continuation)->frame);                                \
     } while (false)
 
 INLINE void endRirContext(Context* ctx, SEXP value) {
@@ -366,7 +376,7 @@ INLINE void endRirContext(Context* ctx, SEXP value) {
 // handling
 #define INSTRUCTION(name)                                                      \
     INLINE void ins_##name(Code* c, SEXP env, OpcodeT** pc, Context* ctx,      \
-                           unsigned numArgs, unsigned bp)
+                           unsigned numArgs)
 
 INSTRUCTION(push_) {
     SEXP x = readConst(ctx, pc);
@@ -611,13 +621,7 @@ extern SEXP R_ReturnedValue;
 SEXP rirCallTrampoline(RCNTXT* cntxt, RirContext* continuation, Code* code,
                        SEXP env, unsigned nargs, Context* ctx) {
     if ((SETJMP(cntxt->cjmpbuf))) {
-        // In the case of non-local returns we need to make sure to restore the
-        // stack to the correct state.
-        // We do not need to reset the pc, since it is local to the closure
-        // (unlike in the loop context case)
-        assert(ostack_length(ctx) >= continuation->oldbp);
-        rl_setLength(&ctx->ostack, continuation->oldbp);
-        ctx->istack.length = continuation->oldbpi;
+        restoreCont(continuation);
 
         if (R_ReturnedValue == R_RestartToken) {
             cntxt->callflag = CTXT_RETURN; /* turn restart off */
@@ -664,6 +668,7 @@ INLINE SEXP rirCallClosure(SEXP call, SEXP env, SEXP callee, SEXP actuals,
     ostack_pop(ctx); // newEnv
     return result;
 }
+#define USE_RIR_CONTEXT_SETUP true
 #endif
 
 void warnSpecial(SEXP callee, SEXP call) {
@@ -695,8 +700,14 @@ INLINE SEXP doCall(Code* caller, SEXP call, SEXP callee, unsigned* args,
         int flag = getFlag(callee);
         R_Visible = flag != 1;
         warnSpecial(callee, call);
+
+        // Store and restore stack status in case we get back here through
+        // non-local return
+        RirContext c = {ostack_length(ctx), fstack_top(ctx), NULL};
         // call it with the AST only
         result = f(call, callee, CDR(call), env);
+        restoreCont(&c);
+
         if (flag < 2) R_Visible = flag != 1;
         break;
     }
@@ -710,7 +721,13 @@ INLINE SEXP doCall(Code* caller, SEXP call, SEXP callee, unsigned* args,
         // callit
         PROTECT(argslist);
         if (flag < 2) R_Visible = flag != 1;
+
+        // Store and restore stack status in case we get back here through
+        // non-local return
+        RirContext c = {ostack_length(ctx), fstack_top(ctx), NULL};
         result = f(call, callee, argslist, env);
+        restoreCont(&c);
+
         if (flag < 2) R_Visible = flag != 1;
         UNPROTECT(1);
         break;
@@ -723,7 +740,8 @@ INLINE SEXP doCall(Code* caller, SEXP call, SEXP callee, unsigned* args,
 #if RIR_AS_PACKAGE == 0
         // if body is INTSXP, it is rir serialized code, execute it directly
         SEXP body = BODY(callee);
-        if (TYPEOF(body) == INTSXP) {
+        assert(TYPEOF(body) == INTSXP || !COMPILE_ON_DEMAND);
+        if (USE_RIR_CONTEXT_SETUP && TYPEOF(body) == INTSXP) {
             assert(isValidFunctionSEXP(body));
             result = rirCallClosure(call, env, callee, actuals, nargs, pc, ctx);
             UNPROTECT(1);
@@ -731,13 +749,13 @@ INLINE SEXP doCall(Code* caller, SEXP call, SEXP callee, unsigned* args,
         }
 #endif
         Function * f = isValidClosureSEXP(callee);
-        if (f != NULL) {
-            // TODO we do not have to go to gnu-r here, but setting up the context w/o gnu-r will be tricky
-            result = applyClosure(call, callee, actuals, env, R_NilValue);
-        } else {
-            // otherwise use R's own call mechanism
-            result = applyClosure(call, callee, actuals, env, R_NilValue);
-        }
+
+        // Store and restore stack status in case we get back here through
+        // non-local return
+        RirContext c = {ostack_length(ctx), fstack_top(ctx), NULL};
+        result = applyClosure(call, callee, actuals, env, R_NilValue);
+        restoreCont(&c);
+
         UNPROTECT(1); // argslist
         break;
     }
@@ -820,8 +838,14 @@ INLINE SEXP doCallStack(Code* caller, SEXP call, size_t nargs, SEXP names,
         int flag = getFlag(callee);
         R_Visible = flag != 1;
         warnSpecial(callee, call);
+
+        // Store and restore stack status in case we get back here through
+        // non-local return
+        RirContext c = {ostack_length(ctx), fstack_top(ctx), NULL};
         // call it with the AST only
         res = f(call, callee, CDR(call), env);
+        restoreCont(&c);
+
         if (flag < 2)
             R_Visible = flag != 1;
         break;
@@ -841,7 +865,13 @@ INLINE SEXP doCallStack(Code* caller, SEXP call, size_t nargs, SEXP names,
         // callit
         if (flag < 2)
             R_Visible = flag != 1;
+
+        // Store and restore stack status in case we get back here through
+        // non-local return
+        RirContext c = {ostack_length(ctx), fstack_top(ctx), NULL};
         res = f(call, callee, argslist, env);
+        restoreCont(&c);
+
         if (flag < 2)
             R_Visible = flag != 1;
         break;
@@ -857,21 +887,20 @@ INLINE SEXP doCallStack(Code* caller, SEXP call, size_t nargs, SEXP names,
 #if RIR_AS_PACKAGE == 0
         // if body is INTSXP, it is rir serialized code, execute it directly
         SEXP body = BODY(callee);
-        if (TYPEOF(body) == INTSXP) {
+        assert(TYPEOF(body) == INTSXP || !COMPILE_ON_DEMAND);
+        if (USE_RIR_CONTEXT_SETUP && TYPEOF(body) == INTSXP) {
             assert(isValidFunctionSEXP(body));
             res = rirCallClosure(call, env, callee, argslist, nargs, pc, ctx);
             break;
         }
 #endif
         Function* f = isValidClosureSEXP(callee);
-        if (f != NULL) {
-            // TODO we do not have to go to gnu-r here, but setting up the
-            // context w/o gnu-r will be tricky
-            res = applyClosure(call, callee, argslist, env, R_NilValue);
-        } else {
-            // otherwise use R's own call mechanism
-            res = applyClosure(call, callee, argslist, env, R_NilValue);
-        }
+
+        // Store and restore stack status in case we get back here through
+        // non-local return
+        RirContext c = {ostack_length(ctx), fstack_top(ctx), NULL};
+        res = applyClosure(call, callee, argslist, env, R_NilValue);
+        restoreCont(&c);
         break;
     }
     default:
@@ -907,12 +936,17 @@ SEXP doDispatch(Code* caller, SEXP call, SEXP selector, SEXP obj,
     // args list
     SET_PRVALUE(CAR(actuals), obj);
 
+    // Store and restore stack status in case we get back here through
+    // non-local return
+    RirContext c = {ostack_length(ctx), fstack_top(ctx), NULL};
+
     do {
         // ===============================================
         // First try S4
         if (IS_S4_OBJECT(obj) && R_has_methods(selector)) {
             res = R_possible_dispatch(call, selector, actuals, env, TRUE);
             if (res) {
+                restoreCont(&c);
                 break;
             }
         }
@@ -929,6 +963,7 @@ SEXP doDispatch(Code* caller, SEXP call, SEXP selector, SEXP obj,
         UNPROTECT(1);
         endClosureContext(&cntxt, success ? res : R_NilValue);
         if (success) {
+            restoreCont(&c);
             break;
         }
 
@@ -948,8 +983,11 @@ SEXP doDispatch(Code* caller, SEXP call, SEXP selector, SEXP obj,
             CCODE f = getBuiltin(callee);
             int flag = getFlag(callee);
             R_Visible = flag != 1;
+
             // call it with the AST only
             res = f(call, callee, CDR(call), env);
+            restoreCont(&c);
+
             if (flag < 2)
                 R_Visible = flag != 1;
             break;
@@ -963,7 +1001,13 @@ SEXP doDispatch(Code* caller, SEXP call, SEXP selector, SEXP obj,
                 SETCAR(a, rirEval(CAR(a), env));
             if (flag < 2)
                 R_Visible = flag != 1;
+
+            // Store and restore stack status in case we get back here through
+            // non-local return
+            RirContext c = {ostack_length(ctx), fstack_top(ctx), NULL};
             res = f(call, callee, actuals, env);
+            restoreCont(&c);
+
             if (flag < 2)
                 R_Visible = flag != 1;
             break;
@@ -972,13 +1016,18 @@ SEXP doDispatch(Code* caller, SEXP call, SEXP selector, SEXP obj,
 #if RIR_AS_PACKAGE == 0
             // if body is INTSXP, it is rir serialized code, execute it directly
             SEXP body = BODY(callee);
-            if (TYPEOF(body) == INTSXP) {
+            assert(TYPEOF(body) == INTSXP || !COMPILE_ON_DEMAND);
+            if (USE_RIR_CONTEXT_SETUP && TYPEOF(body) == INTSXP) {
                 assert(isValidFunctionSEXP(body));
                 res = rirCallClosure(call, env, callee, actuals, nargs, pc, ctx);
                 break;
             }
 #endif
+            // Store and restore stack status in case we get back here through
+            // non-local return
+            RirContext c = {ostack_length(ctx), fstack_top(ctx), NULL};
             res = applyClosure(call, callee, actuals, env, R_NilValue);
+            restoreCont(&c);
             break;
         }
         default:
@@ -1225,6 +1274,7 @@ INSTRUCTION(brobj_) {
     int offset = readJumpOffset(pc);
     if (isObject(ostack_top(ctx)))
         *pc = *pc + offset;
+    PC_BOUNDSCHECK;
 }
 
 INSTRUCTION(endcontext_) { endRirContext(ctx, NULL); }
@@ -1233,29 +1283,20 @@ INSTRUCTION(brtrue_) {
     int offset = readJumpOffset(pc);
     if (ostack_pop(ctx) == R_TrueValue)
         *pc = *pc + offset;
+    PC_BOUNDSCHECK;
 }
 
 INSTRUCTION(brfalse_) {
     int offset = readJumpOffset(pc);
     if (ostack_pop(ctx) == R_FalseValue)
         *pc = *pc + offset;
+    PC_BOUNDSCHECK;
 }
 
 INSTRUCTION(br_) {
     int offset = readJumpOffset(pc);
     *pc = *pc + offset;
-}
-
-INSTRUCTION(lti_) {
-    int rhs = istack_pop(ctx);
-    int lhs = istack_pop(ctx);
-    ostack_push(ctx, lhs < rhs ? R_TrueValue : R_FalseValue);
-}
-
-INSTRUCTION(eqi_) {
-    int rhs = istack_pop(ctx);
-    int lhs = istack_pop(ctx);
-    ostack_push(ctx, lhs == rhs ? R_TrueValue : R_FalseValue);
+    PC_BOUNDSCHECK;
 }
 
 #if RIR_AS_PACKAGE == 0
@@ -1340,10 +1381,6 @@ INSTRUCTION(extract1_) {
     R_Visible = 1;
     ostack_push(ctx, res);
 }
-
-INSTRUCTION(pushi_) { istack_push(ctx, readSignedImmediate(pc)); }
-
-INSTRUCTION(dupi_) { istack_push(ctx, istack_top(ctx)); }
 
 INSTRUCTION(dup_) { ostack_push(ctx, ostack_top(ctx)); }
 
@@ -1467,11 +1504,6 @@ INSTRUCTION(dup2_) {
     ostack_push(ctx, b);
 }
 
-INSTRUCTION(push_argi_) {
-    int pos = istack_pop(ctx);
-    ostack_push(ctx, cp_pool_at(ctx, bp - numArgs + pos));
-}
-
 INSTRUCTION(invisible_) {
     R_Visible = 0;
 }
@@ -1532,13 +1564,11 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
     // there is some slack of 5 to make sure the call instruction can store
     // some intermediate values on the stack
     ostack_ensureSize(ctx, c->stackLength + 5);
-    istack_ensureSize(ctx, c->iStackLength);
     Frame* frame = fstack_push(ctx, c, env);
 
-    // get pc and bp regs, we do not need istack bp
+    // get pc and bp regs
     frame->pc = code(c);
     OpcodeT** pc = &frame->pc;
-    size_t bp = ostack_length(ctx);
 
     R_Visible = TRUE;
     // main loop
@@ -1548,7 +1578,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
 
 #define INS(name)                                                              \
     case name:                                                                 \
-        ins_##name(c, env, pc, ctx, numArgs, bp);                              \
+        ins_##name(c, env, pc, ctx, numArgs);                                  \
         break
 
             INS(push_);
@@ -1570,10 +1600,6 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
             INS(brtrue_);
             INS(brfalse_);
             INS(br_);
-            INS(lti_);
-            INS(eqi_);
-            INS(pushi_);
-            INS(dupi_);
             INS(dup_);
             INS(add_);
             INS(sub_);
@@ -1587,7 +1613,6 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
             INS(inc_);
             INS(dup2_);
             INS(test_bounds_);
-            INS(push_argi_);
             INS(invisible_);
             INS(extract1_);
             INS(subset1_);
@@ -1609,17 +1634,22 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
 
             int s;
             if ((s = SETJMP(cntxt->cjmpbuf))) {
-                assert(ostack_length(ctx) >= continuation->oldbp);
-
                 // don't use cntxt here...
-                rl_setLength(&ctx->ostack, continuation->oldbp);
-                ctx->istack.length = continuation->oldbpi;
+
+                restoreCont(continuation);
+                // next to what we normally do, we also need to restore the pc,
+                // since it is local to the function and not volatile, thus not
+                // restored by longjmp
                 *pc = continuation->pc;
+
+                SEXP cntxt_store = ostack_top(ctx);
+                assert(TYPEOF(cntxt_store) == RAWSXP && "stack botched");
 
                 int offset = readJumpOffset(pc);
 
                 if (s == CTXT_BREAK)
                     *pc = *pc + offset;
+                PC_BOUNDSCHECK;
             }
             break;
         }
@@ -1632,9 +1662,11 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
             assert(false && "wrong or unimplemented opcode");
         }
     }
-__eval_done:
+__eval_done : {
+    SEXP res = ostack_pop(ctx);
     fstack_pop(ctx, frame);
-    return ostack_pop(ctx);
+    return res;
+}
 }
 
 

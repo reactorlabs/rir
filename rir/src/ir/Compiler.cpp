@@ -483,7 +483,6 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
         return true;
     }
 
-    // TODO: not quite yet
     if (false && fun == symbol::For) {
         // TODO: if the seq is not a vector, we need to throw an error!
         assert(args.length() == 3);
@@ -510,20 +509,18 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
 
            << loopBranch
 
-         // Move context out of the way
+           // Move context out of the way
            << BC::put(2)
 
-           << BC::inc()
-           << BC::testBounds()
-           << BC::brfalse(endForBranch)
-           << BC::dup2()
-           << BC::extract1();
+           << BC::inc() << BC::testBounds() << BC::brfalse(endForBranch)
+           << BC::dup2() << BC::extract1();
+
         // TODO: we would want a less generic extract here, but we don't have it
         // right now. therefore we need to pass an AST here (which we know won't
         // be used since the sequence has to be a vector);
         cs.addAst(R_NilValue);
 
-         // Put context back
+        // Put context back
         cs << BC::pick(3)
            << BC::swap()
 

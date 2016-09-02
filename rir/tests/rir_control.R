@@ -83,3 +83,50 @@ f <- rir.compile(function() {
     stopifnot(i == 7)
 })
 f()
+
+f <- rir.compile(function() {
+    for (i in 1:10) {{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{next}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}
+})
+f()
+f <- rir.compile(function() {
+    for (i in 1:2) {{{{{
+    for (i in 1:2) {{{{{
+    for (i in 1:2) {{{{{
+    for (i in 1:2) {{{{{
+    for (i in 1:2) {{{{{
+    for (i in 1:2) {{{{{
+    for (i in 1:2) {{{{
+    for (i in 1:2) {
+    for (i in 1:2) {
+        for (i in 1:2) next}
+    }}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}
+})
+f()
+
+g <- rir.compile(function(r) r())
+
+f <- rir.compile(function() {
+    for (i in 1:3)
+        g(next)
+})
+f()
+
+f <- rir.compile(function() g(return)) 
+f()
+
+ff <- rir.compile(function() {
+    f()
+})
+ff()
+
+f <- rir.compile(function() g(return)) 
+g <- rir.compile(function(r) h(r)) 
+h <- rir.compile(function(r) r())
+ff <- rir.compile(function() {
+    for (i in 1:10) {
+        print(i)
+        f()
+    }
+    f()
+})
+ff()

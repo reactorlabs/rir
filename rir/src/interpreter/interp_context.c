@@ -22,9 +22,6 @@ Context* context_create(CompilerCallback compiler) {
     initializeResizeableList(&c->cp, POOL_CAPACITY, c->list, CONTEXT_INDEX_CP);
     initializeResizeableList(&c->src, POOL_CAPACITY, c->list, CONTEXT_INDEX_SRC);
     initializeResizeableList(&c->ostack, STACK_CAPACITY, c->list, CONTEXT_INDEX_OSTACK);
-    c->istack.data = malloc(STACK_CAPACITY * sizeof(int));
-    c->istack.length = 0;
-    c->istack.capacity = STACK_CAPACITY;
     c->fstack = malloc(sizeof(FStack));
     c->fstack->length = 0;
     c->fstack->prev = NULL;
