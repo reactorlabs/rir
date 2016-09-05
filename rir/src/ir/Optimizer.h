@@ -110,6 +110,7 @@ void optimize_(CodeEditor& e) {
                 continue;
             }
             // TODO: in the current form breaks (...)
+            // TODO: in the current form breaks (...)
             // if (bc.immediateConst() == symbol::Parenthesis) {
             //     doInlinePar(e, cur);
             //     continue;

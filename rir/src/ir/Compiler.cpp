@@ -164,7 +164,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
         return true;
     }
 
-    if (fun == symbol::Assign) {
+    if (fun == symbol::Assign || fun == symbol::Assign2) {
         assert(args.length() == 2);
 
         auto lhs = args[0];
@@ -357,6 +357,57 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
         cs << BC::stvar(target)
            << BC::invisible();
 
+        return true;
+    }
+
+    if (fun == symbol::Block) {
+        cs << BC::isspecial(fun);
+
+        if (args.length() == 0) {
+            cs << BC::push(R_NilValue);
+            return true;
+        }
+
+        for (auto e = args.begin(); e != args.end(); ++e) {
+            compileExpr(ctx, *e);
+            if (e + 1 != args.end())
+                cs << BC::pop();
+        }
+
+        return true;
+    }
+
+    if (fun == symbol::If) {
+        if (args.length() < 2 || args.length() > 3)
+            return false;
+
+        cs << BC::isspecial(fun);
+        Label trueBranch = cs.mkLabel();
+        Label nextBranch = cs.mkLabel();
+
+        compileExpr(ctx, args[0]);
+        cs << BC::asbool() << BC::brtrue(trueBranch);
+
+        if (args.length() < 3) {
+            cs << BC::push(R_NilValue) << BC::invisible();
+        } else {
+            compileExpr(ctx, args[2]);
+        }
+        cs << BC::br(nextBranch);
+
+        cs << trueBranch;
+        compileExpr(ctx, args[1]);
+
+        cs << nextBranch;
+        return true;
+    }
+
+    if (fun == symbol::Parenthesis) {
+        if (args.length() != 1 || args[0] == R_DotsSymbol)
+            return false;
+
+        cs << BC::isspecial(fun);
+        compileExpr(ctx, args[0]);
         return true;
     }
 
