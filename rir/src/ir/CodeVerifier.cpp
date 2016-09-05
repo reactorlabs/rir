@@ -203,7 +203,8 @@ void CodeVerifier::vefifyFunctionLayout(SEXP sexp, ::Context* ctx) {
                            "Names and args have different length");
                 }
                 // check the call has an ast attached
-                assert(src(c)[ninsns - 1]);
+                SEXP call = cp_pool_at(ctx, argsIndex[2]);
+                assert(TYPEOF(call) == LANGSXP);
             }
             if (*cptr == BC_t::promise_) {
                 unsigned* promidx = reinterpret_cast<ArgT*>(cptr + 1);
@@ -246,8 +247,16 @@ void CodeVerifier::vefifyFunctionLayout(SEXP sexp, ::Context* ctx) {
                                cur.immediateCallNargs() and
                            "Names and args have different length");
                 }
-                // check the call has an ast attached
-                assert(src(c)[ninsns-1]);
+                if (*cptr == BC_t::dispatch_) {
+                    SEXP selector = cp_pool_at(ctx, argsIndex[2]);
+                    assert(TYPEOF(selector) == SYMSXP);
+                    SEXP call = cp_pool_at(ctx, argsIndex[3]);
+                    assert(TYPEOF(call) == LANGSXP);
+                }
+                if (*cptr == BC_t::call_) {
+                    SEXP call = cp_pool_at(ctx, argsIndex[2]);
+                    assert(TYPEOF(call) == LANGSXP);
+                }
             }
             cptr += cur.size();
             if (ninsns == c->srcLength) {

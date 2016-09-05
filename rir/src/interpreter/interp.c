@@ -984,7 +984,7 @@ INSTRUCTION(call_stack_) {
     // get the names of the arguments (or R_NilValue) if none
     SEXP names = readConst(ctx, pc);
     // get the call
-    SEXP call = getSrcForCall(c, *pc, ctx);
+    SEXP call = readConst(ctx, pc);
 
     ostack_push(ctx, doCallStack(c, call, nargs, names, env, pc, ctx));
 }
@@ -992,8 +992,8 @@ INSTRUCTION(call_stack_) {
 INSTRUCTION(call_) {
     // get the indices of argument promises
     SEXP args_ = readConst(ctx, pc);
-    assert(TYPEOF(args_) == INTSXP &&
-           "TODO change to INTSXP, not RAWSXP it used to be");
+    SLOWASSERT(TYPEOF(args_) == INTSXP &&
+               "TODO change to INTSXP, not RAWSXP it used to be");
     unsigned nargs = Rf_length(args_) / sizeof(unsigned);
     unsigned* args = (unsigned*)INTEGER(args_);
     // get the names of the arguments (or R_NilValue) if none
@@ -1001,7 +1001,7 @@ INSTRUCTION(call_) {
     // get the closure itself
     SEXP cls = ostack_pop(ctx);
     // get the call
-    SEXP call = getSrcForCall(c, *pc, ctx);
+    SEXP call = readConst(ctx, pc);
 
     PROTECT(cls);
     ostack_push(ctx, doCall(c, call, cls, args, nargs, names, env, pc, ctx));
@@ -1020,7 +1020,7 @@ INSTRUCTION(dispatch_) {
 
     SEXP selector = readConst(ctx, pc);
     SEXP obj = ostack_pop(ctx);
-    SEXP call = getSrcForCall(c, *pc, ctx);
+    SEXP call = readConst(ctx, pc);
 
     ostack_push(ctx, doDispatch(c, call, selector, obj, args, nargs, names, env,
                                 pc, ctx));

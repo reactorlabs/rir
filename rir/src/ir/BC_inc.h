@@ -66,15 +66,18 @@ typedef jmp_t Label;
 typedef struct {
     pool_idx_t args;
     pool_idx_t names;
+    pool_idx_t call;
 } call_args_t;
 typedef struct {
     pool_idx_t args;
     pool_idx_t names;
     pool_idx_t selector;
+    pool_idx_t call;
 } dispatch_args_t;
 typedef struct {
     uint32_t nargs;
     pool_idx_t names;
+    pool_idx_t call;
 } call_stack_args_t;
 
 #pragma pack(pop)
@@ -162,9 +165,11 @@ class BC {
 
     // ==== Factory methods
     // to create new BC objects, which can be streamed to a CodeStream
-    static BC call(std::vector<fun_idx_t> args, std::vector<SEXP> names);
+    static BC call(std::vector<fun_idx_t> args, std::vector<SEXP> names,
+                   SEXP call);
     static BC dispatch(SEXP selector, std::vector<fun_idx_t> args,
-                       std::vector<SEXP> names);
+                       std::vector<SEXP> names, SEXP call);
+    static BC call_stack(uint32_t, std::vector<SEXP> names, SEXP call);
     inline static BC push(SEXP constant);
     inline static BC push(double constant);
     inline static BC push(int constant);
@@ -212,7 +217,6 @@ class BC {
     inline static BC put(uint32_t);
     inline static BC pick(uint32_t);
     inline static BC is(uint32_t);
-    static BC call_stack(uint32_t, std::vector<SEXP> names);
 
   private:
     BC(BC_t bc) : bc(bc), immediate({0}) {}

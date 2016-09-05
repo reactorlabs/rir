@@ -31,7 +31,7 @@ DEF_INSTR(ldvar_, 1, 0, 1, 0, 0)
 /**
  * ldvar_:: take immediate CP index of symbol, finding binding in env and push.
  */
-DEF_INSTR(call_, 2, 1, 1, 0, 0)
+DEF_INSTR(call_, 3, 1, 1, 0, 0)
 /**
  * call_:: ...
  */
@@ -151,7 +151,7 @@ DEF_INSTR(brobj_, 1, 0, 0, 0, 0)
 /**
  * brobj_:: branch if tos is object
  */
-DEF_INSTR(dispatch_, 3, 1, 1, 0, 0)
+DEF_INSTR(dispatch_, 4, 1, 1, 0, 0)
 /**
  * dispatch_:: similar to call, but receiver is tos and 3rd immediate
  *             is selector
@@ -168,7 +168,7 @@ DEF_INSTR(put_, 1, 0, 0, 0, 0)
 /**
  * put_:: put tos at the n-th pos in the stack
  */
-DEF_INSTR(call_stack_, 2, -1, 1, 0, 0)
+DEF_INSTR(call_stack_, 3, -1, 1, 0, 0)
 /**
  * call_stack_:: like call, but arguments are taken from the stack
  *               immediate are number of args and names

@@ -292,7 +292,7 @@ void BC::print() {
 }
 
 BC BC::dispatch(SEXP selector, std::vector<fun_idx_t> args,
-                std::vector<SEXP> names) {
+                std::vector<SEXP> names, SEXP call) {
     assert(args.size() == names.size());
     assert(args.size() <= MAX_ARG_IDX);
     assert(TYPEOF(selector) == SYMSXP);
@@ -322,20 +322,20 @@ BC BC::dispatch(SEXP selector, std::vector<fun_idx_t> args,
             SET_VECTOR_ELT(n, i, names[i]);
         }
         dispatch_args_t args_ = {Pool::insert(a), Pool::insert(n),
-                                 Pool::insert(selector)};
+                                 Pool::insert(selector), Pool::insert(call)};
         immediate_t i;
         i.dispatch_args = args_;
         return BC(BC_t::dispatch_, i);
     }
 
     dispatch_args_t args_ = {Pool::insert(a), Pool::insert(R_NilValue),
-                             Pool::insert(selector)};
+                             Pool::insert(selector), Pool::insert(call)};
     immediate_t i;
     i.dispatch_args = args_;
     return BC(BC_t::dispatch_, i);
 }
 
-BC BC::call(std::vector<fun_idx_t> args, std::vector<SEXP> names) {
+BC BC::call(std::vector<fun_idx_t> args, std::vector<SEXP> names, SEXP call) {
     assert(args.size() == names.size());
     assert(args.size() <= MAX_ARG_IDX);
 
@@ -363,19 +363,21 @@ BC BC::call(std::vector<fun_idx_t> args, std::vector<SEXP> names) {
         for (size_t i = 0; i < args.size(); ++i) {
             SET_VECTOR_ELT(n, i, names[i]);
         }
-        call_args_t args_ = {Pool::insert(a), Pool::insert(n)};
+        call_args_t args_ = {Pool::insert(a), Pool::insert(n),
+                             Pool::insert(call)};
         immediate_t i;
         i.call_args = args_;
         return BC(BC_t::call_, i);
     }
 
-    call_args_t args_ = {Pool::insert(a), Pool::insert(R_NilValue)};
+    call_args_t args_ = {Pool::insert(a), Pool::insert(R_NilValue),
+                         Pool::insert(call)};
     immediate_t i;
     i.call_args = args_;
     return BC(BC_t::call_, i);
 }
 
-BC BC::call_stack(unsigned nargs, std::vector<SEXP> names) {
+BC BC::call_stack(unsigned nargs, std::vector<SEXP> names, SEXP call) {
     assert(nargs == names.size());
 
     bool hasNames = false;
@@ -395,13 +397,14 @@ BC BC::call_stack(unsigned nargs, std::vector<SEXP> names) {
         for (size_t i = 0; i < nargs; ++i) {
             SET_VECTOR_ELT(n, i, names[i]);
         }
-        call_stack_args_t args_ = {nargs, Pool::insert(n)};
+        call_stack_args_t args_ = {nargs, Pool::insert(n), Pool::insert(call)};
         immediate_t i;
         i.call_stack_args = args_;
         return BC(BC_t::call_stack_, i);
     }
 
-    call_stack_args_t args_ = {nargs, Pool::insert(R_NilValue)};
+    call_stack_args_t args_ = {nargs, Pool::insert(R_NilValue),
+                               Pool::insert(call)};
     immediate_t i;
     i.call_stack_args = args_;
     return BC(BC_t::call_stack_, i);

@@ -98,9 +98,7 @@ void compileDispatch(Context& ctx, SEXP selector, SEXP ast, SEXP fun,
     }
     assert(callArgs.size() < MAX_NUM_ARGS);
 
-    ctx.cs() << BC::dispatch(selector, callArgs, names);
-
-    ctx.cs().addAst(ast);
+    ctx.cs() << BC::dispatch(selector, callArgs, names, ast);
 }
 
 // Inline some specials
@@ -269,12 +267,10 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
                         }
                     }
 
-                    cs << BC::call_stack(names.size(), names);
                     SEXP rewrite = Rf_shallow_duplicate(g);
                     ctx.preserve(rewrite);
                     SETCAR(CDR(rewrite), symbol::getterPlaceholder);
-
-                    cs.addAst(rewrite);
+                    cs << BC::call_stack(names.size(), names, rewrite);
                 }
                 Else(assert(false);)
             }
@@ -336,8 +332,6 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
             if (nargs > 0)
                 cs << BC::pick(nargs);
 
-            cs << BC::call_stack(names.size(), names);
-
             SEXP rewrite = Rf_shallow_duplicate(*g);
             ctx.preserve(rewrite);
             SETCAR(rewrite, setterName);
@@ -349,7 +343,8 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
             SEXP value = CONS_NR(symbol::setterPlaceholder, R_NilValue);
             SET_TAG(value, symbol::value);
             SETCDR(a, value);
-            cs.addAst(rewrite);
+
+            cs << BC::call_stack(names.size(), names, rewrite);
 
             cs << BC::uniq();
         }
@@ -669,9 +664,7 @@ void compileCall(Context& ctx, SEXP ast, SEXP fun, SEXP args) {
     }
     assert(callArgs.size() < MAX_NUM_ARGS);
 
-    cs << BC::call(callArgs, names);
-
-    cs.addAst(ast);
+    cs << BC::call(callArgs, names, ast);
 }
 
 // Lookup

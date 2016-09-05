@@ -56,8 +56,22 @@ class Compiler {
             std::cout << ">>>>>>>\n";
         }
 #endif
+        static SEXP cache;
+        if (!cache)
+            cache = Rf_install("*.cachedBC.*");
+
+        if (ATTRIB(ast) && ATTRIB(ast) != R_NilValue) {
+            SEXP cached = Rf_getAttrib(ast, cache);
+            if (cached != R_NilValue)
+                return {cached, R_NilValue};
+        }
+
         Compiler c(ast);
-        return c.finalize();
+        auto res = c.finalize();
+
+        Rf_setAttrib(ast, cache, res.bc);
+
+        return res;
     }
     
     static CompilerRes compileClosure(SEXP ast, SEXP env, SEXP formals) {
