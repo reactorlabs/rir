@@ -789,4 +789,8 @@ Compiler::CompilerRes Compiler::finalize() {
     // 
     return {opt.store, formals /* formout */ };
 }
+
+#ifdef ENABLE_SLOWASSERT 
+std::unordered_map<SEXP, unsigned> Compiler::counter;
+#endif
 }
