@@ -71,6 +71,8 @@ typedef struct {
 // Some symbols
 extern SEXP R_Subset2Sym;
 extern SEXP R_SubsetSym;
+extern SEXP R_SubassignSym;
+extern SEXP R_Subassign2Sym;
 extern SEXP R_valueSym;
 extern SEXP setterPlaceholderSym;
 extern SEXP getterPlaceholderSym;
@@ -122,6 +124,11 @@ INLINE bool ostack_empty(Context* c) {
 
 INLINE size_t ostack_length(Context * c) {
     return rl_length(&c->ostack);
+}
+
+INLINE void ostack_popn(Context* c, size_t p) {
+    int i = rl_length(&c->ostack) - p;
+    rl_setLength(&c->ostack, i);
 }
 
 INLINE SEXP ostack_pop(Context* c) {

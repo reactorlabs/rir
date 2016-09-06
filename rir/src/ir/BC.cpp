@@ -19,6 +19,9 @@ void BC::write(CodeStream& cs) const {
     case BC_t::ldvar_:
     case BC_t::isspecial_:
     case BC_t::stvar_:
+    case BC_t::missing_:
+    case BC_t::subassign_:
+    case BC_t::subassign2_:
         cs.insert(immediate.pool);
         return;
 
@@ -78,6 +81,7 @@ void BC::write(CodeStream& cs) const {
     case BC_t::add_:
     case BC_t::sub_:
     case BC_t::lt_:
+    case BC_t::return_:
     case BC_t::isfun_:
     case BC_t::invisible_:
     case BC_t::endcontext_:
@@ -235,6 +239,9 @@ void BC::print() {
     case BC_t::ldvar_:
     case BC_t::ldddvar_:
     case BC_t::stvar_:
+    case BC_t::missing_:
+    case BC_t::subassign_:
+    case BC_t::subassign2_:
         Rprintf(" %u # %s", immediate.pool, CHAR(PRINTNAME((immediateConst()))));
         break;
     case BC_t::pushi_:
@@ -263,6 +270,7 @@ void BC::print() {
     case BC_t::add_:
     case BC_t::sub_:
     case BC_t::lt_:
+    case BC_t::return_:
     case BC_t::isfun_:
     case BC_t::invisible_:
     case BC_t::subset1_:

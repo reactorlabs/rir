@@ -205,6 +205,22 @@ DEF_INSTR(test_bounds_, 0, 0, 1, 0, 0)
 /**
  * bounds_check_ :: check stack[0] is a valid inded into vector at stack[1]
  */
+DEF_INSTR(return_, 0, 0, 0, 0, 0)
+/**
+ * return_ :: return instruction
+ */
+DEF_INSTR(subassign_, 1, 3, 0, 0, 0)
+/**
+ * subassign_ :: [<-(a,b,c)
+ */
+DEF_INSTR(subassign2_, 1, 3, 0, 0, 0)
+/**
+ * subassign2_ :: [[<-(a,b,c)
+ */
+DEF_INSTR(missing_, 1, 0, 1, 0, 0)
+/**
+ * missing_ :: check if symb is missing
+ */
 
 // TODO these may be redundant but needed for the unification
 // TODO pushes argument value (index of the argument is taken from integer

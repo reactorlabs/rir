@@ -30,6 +30,7 @@ class Context {
 
     class CodeContext {
       public:
+        bool optAssign = true;
         CodeStream cs;
         std::stack<LoopContext> loops;
         CodeContext(SEXP ast, FunctionHandle& fun) : cs(fun, ast) {}
@@ -56,6 +57,10 @@ class Context {
     void popLoop() { code.top().loops.pop(); }
 
     void push(SEXP ast) { code.emplace(ast, fun); }
+
+    void optAssign(bool opt) { code.top().optAssign = opt; }
+
+    bool optAssign() { return code.top().optAssign; }
 
     fun_idx_t pop() {
         auto idx = cs().finalize();
@@ -162,13 +167,13 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
         return true;
     }
 
-    if (fun == symbol::Assign || fun == symbol::Assign2) {
+    if ((fun == symbol::Assign || fun == symbol::Assign2) && ctx.optAssign()) {
         assert(args.length() == 2);
 
         auto lhs = args[0];
         auto rhs = args[1];
 
-        // Verify lhs is valid
+        // 1) Verify lhs is valid
         SEXP l = lhs;
         while (l) {
             Match(l) {
@@ -191,6 +196,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
 
         cs << BC::isspecial(fun);
 
+        // 2) Specialcalse normal assignment (ie. "i <- expr")
         Match(lhs) {
             Case(SYMSXP) {
                 compileExpr(ctx, rhs);
@@ -201,9 +207,6 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
             }
             Else(break)
         }
-
-        compileExpr(ctx, rhs);
-        cs << BC::dup();
 
         // Find all parts of the lhs
         SEXP target = nullptr;
@@ -231,6 +234,57 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
                 })
             }
         }
+
+        // 3) Special case [ and [[
+        if (lhsParts.size() == 2) {
+            RList g(lhsParts[0]);
+            if (g.length() == 3) {
+                SEXP fun = *g.begin();
+                auto idx = g.begin() + 2;
+                if (*idx != R_DotsSymbol && *idx != R_MissingArg &&
+                    !idx.hasTag()) {
+                    if (fun == symbol::DoubleBracket ||
+                        fun == symbol::Bracket) {
+
+                        Label objBranch = cs.mkLabel();
+                        Label nextBranch = cs.mkLabel();
+
+                        cs << BC::ldvar(target);
+
+                        cs << BC::brobj(objBranch);
+
+                        compileExpr(ctx, *idx);
+                        compileExpr(ctx, rhs);
+                        cs << BC::dup();
+                        cs << BC::put(3);
+
+                        if (fun == symbol::DoubleBracket)
+                            cs << BC::subassign2(target);
+                        else
+                            cs << BC::subassign(target);
+                        cs << BC::invisible();
+                        cs << BC::br(nextBranch);
+
+                        cs << objBranch;
+
+                        // TODO: this is not really correct, but how should we
+                        // do it???
+                        cs << BC::pop();
+                        ctx.optAssign(false);
+                        compileExpr(ctx, ast);
+                        ctx.optAssign(true);
+
+                        cs << nextBranch;
+                        return true;
+                    }
+                }
+            }
+
+            //            if (getter == symbol::Bracket)
+        }
+
+        compileExpr(ctx, rhs);
+        cs << BC::dup();
 
         // Evaluate the getter list and push it to the stack in reverse order
         for (unsigned i = lhsParts.size() - 1; i > 0; --i) {
@@ -406,6 +460,18 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
         return true;
     }
 
+    if (fun == symbol::Return && args.length() < 2) {
+        cs << BC::isspecial(fun);
+
+        if (args.length() == 0)
+            cs << BC::push(R_NilValue);
+        else
+            compileExpr(ctx, args[0]);
+
+        cs << BC::return_();
+        return true;
+    }
+
     if (fun == symbol::Internal) {
         // TODO: Needs more thought
         return false;
@@ -434,12 +500,11 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
 
     if (fun == symbol::DoubleBracket || fun == symbol::Bracket) {
         if (args.length() == 2) {
-            auto lhs = args[0];
-            auto idx = args[1];
+            auto lhs = *args.begin();
+            auto idx = args.begin() + 1;
 
             // TODO
-            if (idx == R_DotsSymbol || idx == R_MissingArg ||
-                TAG(idx) != R_NilValue)
+            if (*idx == R_DotsSymbol || *idx == R_MissingArg || idx.hasTag())
                 return false;
 
             Label objBranch = cs.mkLabel();
@@ -449,13 +514,12 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
             compileExpr(ctx, lhs);
             cs << BC::brobj(objBranch);
 
-            compileExpr(ctx, idx);
+            compileExpr(ctx, *idx);
             if (fun == symbol::DoubleBracket)
                 cs << BC::extract1();
             else
                 cs << BC::subset1();
 
-            cs.addAst(ast);
             cs << BC::br(nextBranch);
 
             cs << objBranch;
@@ -464,6 +528,12 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
             cs << nextBranch;
             return true;
         }
+    }
+
+    if (fun == symbol::Missing && args.length() == 1 &&
+        TYPEOF(args[0]) == SYMSXP) {
+        cs << BC::isspecial(fun) << BC::missing(args[0]);
+        return true;
     }
 
     if (fun == symbol::While) {
@@ -563,11 +633,6 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
            << BC::brfalse(endForBranch)
            << BC::dup2()
            << BC::extract1();
-
-        // TODO: we would want a less generic extract here, but we don't have it
-        // right now. therefore we need to pass an AST here (which we know won't
-        // be used since the sequence has to be a vector);
-        cs.addAst(R_NilValue);
 
         // Put context back
         cs << BC::pick(3)

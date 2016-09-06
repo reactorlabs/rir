@@ -27,6 +27,9 @@ BC::immediate_t decodeImmediate(BC_t bc, BC_t* pc) {
     case BC_t::ldddvar_:
     case BC_t::isspecial_:
     case BC_t::stvar_:
+    case BC_t::missing_:
+    case BC_t::subassign_:
+    case BC_t::subassign2_:
         immediate.pool = *(pool_idx_t*)pc;
         break;
     case BC_t::dispatch_:
@@ -80,6 +83,7 @@ BC::immediate_t decodeImmediate(BC_t bc, BC_t* pc) {
     case BC_t::add_:
     case BC_t::sub_:
     case BC_t::lt_:
+    case BC_t::return_:
     case BC_t::isfun_:
     case BC_t::invisible_:
     case BC_t::endcontext_:
@@ -109,6 +113,7 @@ BC BC::decode(BC_t* pc) {
 class CodeStream;
 
 BC BC::ret() { return BC(BC_t::ret_); }
+BC BC::return_() { return BC(BC_t::return_); }
 BC BC::force() { return BC(BC_t::force_); }
 BC BC::pop() { return BC(BC_t::pop_); }
 BC BC::push(SEXP constant) {
@@ -163,12 +168,33 @@ BC BC::promise(fun_idx_t prom) {
     return BC(BC_t::promise_, i);
 }
 BC BC::asast() { return BC(BC_t::asast_); }
+BC BC::missing(SEXP sym) {
+    assert(TYPEOF(sym) == SYMSXP);
+    assert(strlen(CHAR(PRINTNAME(sym))));
+    immediate_t i;
+    i.pool = Pool::insert(sym);
+    return BC(BC_t::missing_, i);
+}
 BC BC::stvar(SEXP sym) {
     assert(TYPEOF(sym) == SYMSXP);
     assert(strlen(CHAR(PRINTNAME(sym))));
     immediate_t i;
     i.pool = Pool::insert(sym);
     return BC(BC_t::stvar_, i);
+}
+BC BC::subassign(SEXP sym) {
+    assert(TYPEOF(sym) == SYMSXP);
+    assert(strlen(CHAR(PRINTNAME(sym))));
+    immediate_t i;
+    i.pool = Pool::insert(sym);
+    return BC(BC_t::subassign_, i);
+}
+BC BC::subassign2(SEXP sym) {
+    assert(TYPEOF(sym) == SYMSXP);
+    assert(strlen(CHAR(PRINTNAME(sym))));
+    immediate_t i;
+    i.pool = Pool::insert(sym);
+    return BC(BC_t::subassign2_, i);
 }
 BC BC::lti() { return BC(BC_t::lti_); }
 BC BC::eqi() { return BC(BC_t::eqi_); }

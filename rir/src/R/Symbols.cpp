@@ -55,6 +55,7 @@ DECLARE(getterPlaceholder, "*.placeholder.getter.*");
 DECLARE(quote, "quote");
 DECLARE(And, "&&");
 DECLARE(Or, "||");
+DECLARE(Missing, "missing");
 
 #undef DECLARE
 } // namespace symbol
