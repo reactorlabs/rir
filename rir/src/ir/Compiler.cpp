@@ -397,7 +397,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
         return true;
     }
 
-    if (fun == symbol::Parenthesis) {
+    if (false && fun == symbol::Parenthesis) {
         if (args.length() != 1 || args[0] == R_DotsSymbol)
             return false;
 
@@ -783,7 +783,4 @@ Compiler::CompilerRes Compiler::finalize() {
     return {opt.store, formals /* formout */ };
 }
 
-#ifdef ENABLE_SLOWASSERT 
-std::unordered_map<SEXP, unsigned> Compiler::counter;
-#endif
 }

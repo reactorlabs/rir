@@ -20,11 +20,16 @@ namespace rir {
 class Pool {
     static std::unordered_map<double, pool_idx_t> numbers;
     static std::unordered_map<int, pool_idx_t> ints;
+    static std::unordered_map<SEXP, size_t> contents;
 
   public:
     static pool_idx_t insert(SEXP e) {
-        // TODO: replace the linear search by something faster
+        if (contents.count(e))
+            return contents.at(e);
+
+        SET_NAMED(e, 2);
         size_t i = cp_pool_add(globalContext(), e);
+        contents[e] = i;
         return i;
     }
 

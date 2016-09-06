@@ -3,6 +3,8 @@
 
 #include "R/r.h"
 #include "R/Preserve.h"
+#include "utils/FunctionHandle.h"
+
 #include <unordered_map>
 #include <iostream>
 #include <functional>
@@ -35,19 +37,16 @@ class Compiler {
 
     CompilerRes finalize();
 
-#ifdef ENABLE_SLOWASSERT 
-    static std::unordered_map<SEXP, unsigned> counter;
-#endif
-
     static CompilerRes compileExpression(SEXP ast) {
-#ifdef ENABLE_SLOWASSERT 
-        unsigned count = 0;
-        if (counter.count(ast))
-            count = counter.at(ast);
-        count++;
-        counter[ast] = count;;
-
-        if (count % 100 == 0) {
+#if 0
+        size_t count = 1;
+        static std::unordered_map<SEXP, size_t> counts;
+        if (counts.count(ast)) {
+            counts.at(ast) = count = 1 + counts.at(ast);
+        } else {
+            counts[ast] = 1;
+        }
+        if (count % 200 == 0) {
             std::cout << "<<<<<<< Warning: expression compiled "
                       << count << "x:\n";
             Rf_PrintValue(ast);
@@ -58,42 +57,6 @@ class Compiler {
             std::cout << ">>>>>>>\n";
         }
 #endif
-
-        static SEXP untrace, trace = NULL;
-        if (!trace) {
-            trace = Rf_install("trace");
-            untrace = Rf_install("untrace");
-        }
-
-        // TODO wtf is up with trace?
-        if (TYPEOF(ast) == LANGSXP && CAR(ast) != untrace &&
-            CAR(ast) != trace) {
-            static SEXP cache;
-            if (!cache)
-                cache = Rf_install("*.cachedBC.*");
-
-            if (ATTRIB(ast) && ATTRIB(ast) != R_NilValue) {
-                SEXP cached = Rf_getAttrib(ast, cache);
-                if (cached != R_NilValue) {
-
-#ifdef ENABLE_SLOWASSERT
-                    Compiler c(ast);
-                    auto res = c.finalize();
-
-                    assert(Rf_length(res.bc) == Rf_length(cached));
-#endif
-
-                    return {cached, R_NilValue};
-                }
-            }
-
-            Compiler c(ast);
-            auto res = c.finalize();
-
-            Rf_setAttrib(ast, cache, res.bc);
-
-            return res;
-        }
 
         Compiler c(ast);
         return c.finalize();

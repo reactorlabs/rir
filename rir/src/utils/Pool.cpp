@@ -7,6 +7,7 @@ namespace rir {
 
 std::unordered_map<double, unsigned> Pool::numbers;
 std::unordered_map<int, unsigned> Pool::ints;
+std::unordered_map<SEXP, size_t> Pool::contents;
 
 pool_idx_t Pool::getNum(double n) {
     if (numbers.count(n))
