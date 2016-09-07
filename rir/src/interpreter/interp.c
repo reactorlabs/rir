@@ -781,8 +781,7 @@ INLINE SEXP doCallStack(Code* caller, SEXP call, size_t nargs, SEXP names,
     switch (TYPEOF(callee)) {
     case SPECIALSXP: {
         assert(call != R_NilValue);
-        for (size_t i = 0; i < nargs; ++i)
-            ostack_pop(ctx);
+        ostack_popn(ctx, nargs);
         ostack_pop(ctx); // callee
         // get the ccode
         CCODE f = getBuiltin(callee);
@@ -805,8 +804,7 @@ INLINE SEXP doCallStack(Code* caller, SEXP call, size_t nargs, SEXP names,
         SEXP argslist =
             createArgsListStack(caller, nargs, names, env, call, ctx, true);
         PROTECT(argslist);
-        for (size_t i = 0; i < nargs; ++i)
-            ostack_pop(ctx);
+        ostack_popn(ctx, nargs);
         ostack_pop(ctx); // callee
         // get the ccode
         CCODE f = getBuiltin(callee);
@@ -831,8 +829,7 @@ INLINE SEXP doCallStack(Code* caller, SEXP call, size_t nargs, SEXP names,
         SEXP argslist =
             createArgsListStack(caller, nargs, names, env, call, ctx, false);
         PROTECT(argslist);
-        for (size_t i = 0; i < nargs; ++i)
-            ostack_pop(ctx);
+        ostack_popn(ctx, nargs);
         ostack_pop(ctx); // callee
 #if RIR_AS_PACKAGE == 0
         // if body is INTSXP, it is rir serialized code, execute it directly
@@ -869,30 +866,34 @@ Rboolean R_has_methods(SEXP selector);
 int Rf_usemethod(const char* generic, SEXP obj, SEXP call, SEXP args, SEXP rho,
                  SEXP callrho, SEXP defrho, SEXP* ans);
 
-SEXP doDispatch(Code* caller, SEXP call, SEXP selector, SEXP obj,
-                unsigned* args, size_t nargs, SEXP names, SEXP env,
-                OpcodeT** pc, Context* ctx) {
+SEXP doDispatchStack(Code* caller, SEXP call, SEXP selector, size_t nargs,
+                     SEXP names, SEXP env, OpcodeT** pc, Context* ctx) {
 
 #if RIR_AS_PACKAGE == 1
     // TODO
     assert(false);
 #endif
 
+    SEXP obj = *ostack_at(ctx, nargs - 1);
     assert(isObject(obj));
+
+    call = fixupAST(call, ctx, nargs);
+    PROTECT(call);
+
     SEXP actuals =
-        createArgsList(caller, args, call, nargs, names, env, ctx, false);
-    protect(actuals);
-    SEXP res = NULL;
+        createArgsListStack(caller, nargs, names, env, call, ctx, true);
 
-    // Patch the already evaluated object into the first entry of the promise
-    // args list
-    SET_PRVALUE(CAR(actuals), obj);
+    ostack_popn(ctx, nargs);
 
-    // call = PROTECT(fixupAST(call, ctx, nargs));
+    ostack_push(ctx, actuals);
+    ostack_push(ctx, call);
+    UNPROTECT(1);
+
+    SEXP res;
 
     // Store and restore stack status in case we get back here through
     // non-local return
-    unsigned oldStackPointer = ostack_length(ctx);
+    unsigned oldStackPointer = ostack_length(ctx) - 2;
 
     do {
         // ===============================================
@@ -909,12 +910,12 @@ SEXP doDispatch(Code* caller, SEXP call, SEXP selector, SEXP obj,
         // Then try S3
         const char* generic = CHAR(PRINTNAME(selector));
         char cntxt[400];
-        SEXP rho1;
-        PROTECT(rho1 = Rf_NewEnvironment(R_NilValue, R_NilValue, env));
+        SEXP rho1 = Rf_NewEnvironment(R_NilValue, R_NilValue, env);
+        ostack_push(ctx, rho1);
         initClosureContext(&cntxt, call, rho1, env, actuals, selector);
         bool success = Rf_usemethod(generic, obj, call, actuals, rho1, env,
                                     R_BaseEnv, &res);
-        UNPROTECT(1);
+        ostack_pop(ctx);
         endClosureContext(&cntxt, success ? res : R_NilValue);
         if (success) {
             rl_setLength(&ctx->ostack, oldStackPointer);
@@ -941,7 +942,6 @@ SEXP doDispatch(Code* caller, SEXP call, SEXP selector, SEXP obj,
 
             // call it with the AST only
             res = f(call, callee, CDR(call), env);
-            rl_setLength(&ctx->ostack, oldStackPointer);
 
             if (flag < 2)
                 R_Visible = flag != 1;
@@ -961,7 +961,132 @@ SEXP doDispatch(Code* caller, SEXP call, SEXP selector, SEXP obj,
             // non-local return
             unsigned oldStackPointer = ostack_length(ctx);
             res = f(call, callee, actuals, env);
+
+            if (flag < 2)
+                R_Visible = flag != 1;
+            break;
+        }
+        case CLOSXP: {
+#if RIR_AS_PACKAGE == 0
+            // if body is INTSXP, it is rir serialized code, execute it directly
+            SEXP body = BODY(callee);
+            assert(TYPEOF(body) == INTSXP || !COMPILE_ON_DEMAND);
+            if (USE_RIR_CONTEXT_SETUP && TYPEOF(body) == INTSXP) {
+                assert(isValidFunctionSEXP(body));
+                res =
+                    rirCallClosure(call, env, callee, actuals, nargs, pc, ctx);
+                break;
+            }
+#endif
+            // Store and restore stack status in case we get back here through
+            // non-local return
+            unsigned oldStackPointer = ostack_length(ctx);
+            res = applyClosure(call, callee, actuals, env, R_NilValue);
+            break;
+        }
+        default:
+            assert(false && "Don't know how to run other stuff");
+        }
+    } while (false);
+
+    // This line resets the sp after possible non-local return
+    rl_setLength(&ctx->ostack, oldStackPointer);
+    assert(res);
+    return res;
+}
+
+SEXP doDispatch(Code* caller, SEXP call, SEXP selector, unsigned* args,
+                size_t nargs, SEXP names, SEXP env, OpcodeT** pc,
+                Context* ctx) {
+
+#if RIR_AS_PACKAGE == 1
+    // TODO
+    assert(false);
+#endif
+
+    SEXP obj = ostack_top(ctx);
+    assert(isObject(obj));
+
+    SEXP actuals =
+        createArgsList(caller, args, call, nargs, names, env, ctx, false);
+    ostack_push(ctx, actuals);
+    SEXP res = NULL;
+
+    // Patch the already evaluated object into the first entry of the promise
+    // args list
+    SET_PRVALUE(CAR(actuals), obj);
+
+    // Store and restore stack status in case we get back here through
+    // non-local return (-2 since we also want to remove obj and actuals from
+    // the stack when we return)
+    unsigned oldStackPointer = ostack_length(ctx) - 2;
+
+    do {
+        // ===============================================
+        // First try S4
+        if (IS_S4_OBJECT(obj) && R_has_methods(selector)) {
+            res = R_possible_dispatch(call, selector, actuals, env, TRUE);
+            if (res) {
+                rl_setLength(&ctx->ostack, oldStackPointer);
+                break;
+            }
+        }
+
+        // ===============================================
+        // Then try S3
+        const char* generic = CHAR(PRINTNAME(selector));
+        char cntxt[400];
+        SEXP rho1 = Rf_NewEnvironment(R_NilValue, R_NilValue, env);
+        ostack_push(ctx, rho1);
+        initClosureContext(&cntxt, call, rho1, env, actuals, selector);
+        bool success = Rf_usemethod(generic, obj, call, actuals, rho1, env,
+                                    R_BaseEnv, &res);
+        ostack_pop(ctx);
+        endClosureContext(&cntxt, success ? res : R_NilValue);
+        if (success) {
             rl_setLength(&ctx->ostack, oldStackPointer);
+            break;
+        }
+
+        // ===============================================
+        // Now normal dispatch (mostly a copy from doCall)
+        SEXP callee = findFun(selector, env);
+
+        // TODO something should happen here
+        if (callee == R_UnboundValue)
+            assert(false && "Unbound var");
+        else if (callee == R_MissingArg)
+            assert(false && "Missing argument");
+
+        switch (TYPEOF(callee)) {
+        case SPECIALSXP: {
+            // get the ccode
+            CCODE f = getBuiltin(callee);
+            int flag = getFlag(callee);
+            R_Visible = flag != 1;
+            warnSpecial(callee, call);
+
+            // call it with the AST only
+            res = f(call, callee, CDR(call), env);
+
+            if (flag < 2)
+                R_Visible = flag != 1;
+            break;
+        }
+        case BUILTINSXP: {
+            // get the ccode
+            CCODE f = getBuiltin(callee);
+            int flag = getFlag(callee);
+            // force all promises in the args list
+            for (SEXP a = actuals; a != R_NilValue; a = CDR(a))
+                SETCAR(a, rirEval(CAR(a), env));
+            if (flag < 2)
+                R_Visible = flag != 1;
+
+            // Store and restore stack status in case we get back here through
+            // non-local return
+            unsigned oldStackPointer = ostack_length(ctx);
+            res = f(call, callee, actuals, env);
 
             if (flag < 2)
                 R_Visible = flag != 1;
@@ -982,7 +1107,6 @@ SEXP doDispatch(Code* caller, SEXP call, SEXP selector, SEXP obj,
             // non-local return
             unsigned oldStackPointer = ostack_length(ctx);
             res = applyClosure(call, callee, actuals, env, R_NilValue);
-            rl_setLength(&ctx->ostack, oldStackPointer);
             break;
         }
         default:
@@ -990,7 +1114,8 @@ SEXP doDispatch(Code* caller, SEXP call, SEXP selector, SEXP obj,
         }
     } while (false);
 
-    UNPROTECT(1);
+    // This line resets the sp after possible non-local return
+    rl_setLength(&ctx->ostack, oldStackPointer);
     assert(res);
     return res;
 }
@@ -1024,6 +1149,18 @@ INSTRUCTION(call_) {
     UNPROTECT(1);
 }
 
+INSTRUCTION(dispatch_stack_) {
+    unsigned nargs = readImmediate(pc);
+    // get the names of the arguments (or R_NilValue) if none
+    SEXP names = readConst(ctx, pc);
+    SEXP selector = readConst(ctx, pc);
+    // get the call
+    SEXP call = readConst(ctx, pc);
+
+    ostack_push(ctx,
+                doDispatchStack(c, call, selector, nargs, names, env, pc, ctx));
+}
+
 INSTRUCTION(dispatch_) {
     // get the indices of argument promises
     SEXP args_ = readConst(ctx, pc);
@@ -1035,11 +1172,10 @@ INSTRUCTION(dispatch_) {
     SEXP names = readConst(ctx, pc);
 
     SEXP selector = readConst(ctx, pc);
-    SEXP obj = ostack_pop(ctx);
     SEXP call = readConst(ctx, pc);
 
-    ostack_push(ctx, doDispatch(c, call, selector, obj, args, nargs, names, env,
-                                pc, ctx));
+    ostack_push(
+        ctx, doDispatch(c, call, selector, args, nargs, names, env, pc, ctx));
 }
 
 INSTRUCTION(promise_) {
@@ -1314,9 +1450,9 @@ SEXP do_subassign_dflt(SEXP call, SEXP op, SEXP args, SEXP rho);
 #endif
 
 INSTRUCTION(subassign2_) {
-    SEXP val = *ostack_at(ctx, 0);
+    SEXP val = *ostack_at(ctx, 2);
     SEXP idx = *ostack_at(ctx, 1);
-    SEXP orig = *ostack_at(ctx, 2);
+    SEXP orig = *ostack_at(ctx, 0);
 
     SEXP target = readConst(ctx, pc);
     SEXP res;
@@ -1379,9 +1515,9 @@ INSTRUCTION(subassign2_) {
 }
 
 INSTRUCTION(subassign_) {
-    SEXP val = *ostack_at(ctx, 0);
+    SEXP val = *ostack_at(ctx, 2);
     SEXP idx = *ostack_at(ctx, 1);
-    SEXP orig = *ostack_at(ctx, 2);
+    SEXP orig = *ostack_at(ctx, 0);
 
     SEXP target = readConst(ctx, pc);
     SEXP res;
@@ -1562,6 +1698,7 @@ extern SEXP Rf_deparse1(SEXP call, Rboolean abbrev, int opts);
 SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
 
     // printCode(c);
+    SLOWASSERT(c->magic == CODE_MAGIC);
 
     if (!env)
 	error("'rho' cannot be C NULL: detected in C-level eval");
@@ -1595,6 +1732,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
             INS(ldddvar_);
             INS(call_);
             INS(call_stack_);
+            INS(dispatch_stack_);
             INS(promise_);
             INS(push_code_);
             INS(close_);

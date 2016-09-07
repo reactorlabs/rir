@@ -189,7 +189,7 @@ void CodeVerifier::vefifyFunctionLayout(SEXP sexp, ::Context* ctx) {
                 assert(TYPEOF(sym) == SYMSXP);
                 assert(strlen(CHAR(PRINTNAME(sym))));
             }
-            if (*cptr == BC_t::call_stack_) {
+            if (*cptr == BC_t::call_stack_ || *cptr == BC_t::dispatch_stack_) {
                 unsigned* argsIndex = reinterpret_cast<ArgT*>(cptr + 1);
                 unsigned nargs = argsIndex[0];
                 // check the names vector
@@ -202,8 +202,15 @@ void CodeVerifier::vefifyFunctionLayout(SEXP sexp, ::Context* ctx) {
                     assert((unsigned)Rf_length(namesVec) == nargs and
                            "Names and args have different length");
                 }
+                SEXP call;
                 // check the call has an ast attached
-                SEXP call = cp_pool_at(ctx, argsIndex[2]);
+                if (*cptr == BC_t::call_stack_) {
+                    call = cp_pool_at(ctx, argsIndex[2]);
+                } else {
+                    SEXP selector = cp_pool_at(ctx, argsIndex[2]);
+                    assert(TYPEOF(selector) == SYMSXP);
+                    call = cp_pool_at(ctx, argsIndex[3]);
+                }
                 assert(TYPEOF(call) == LANGSXP);
             }
             if (*cptr == BC_t::promise_) {

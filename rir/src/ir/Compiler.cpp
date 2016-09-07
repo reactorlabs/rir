@@ -249,32 +249,60 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
                         Label objBranch = cs.mkLabel();
                         Label nextBranch = cs.mkLabel();
 
-                        cs << BC::ldvar(target);
+                        // First rhs (assign is right-associative) 
+                        compileExpr(ctx, rhs);
+                        // Keep a copy of rhs since its the result of this
+                        // expression
+                        cs << BC::dup();
 
+                        // Now load target and index
+                        cs << BC::ldvar(target);
+                        compileExpr(ctx, *idx);
+
+                        // check for object case
+                        cs << BC::swap();
                         cs << BC::brobj(objBranch);
 
-                        compileExpr(ctx, *idx);
-                        compileExpr(ctx, rhs);
-                        cs << BC::dup();
-                        cs << BC::put(3);
-
+                        // do the thing
                         if (fun == symbol::DoubleBracket)
                             cs << BC::subassign2(target);
                         else
                             cs << BC::subassign(target);
-                        cs << BC::invisible();
                         cs << BC::br(nextBranch);
 
+                        // In the case the target is an object:
                         cs << objBranch;
 
-                        // TODO: this is not really correct, but how should we
-                        // do it???
-                        cs << BC::pop();
-                        ctx.optAssign(false);
-                        compileExpr(ctx, ast);
-                        ctx.optAssign(true);
+                        // We need a patched ast again :(
+                        SEXP setter = fun == symbol::DoubleBracket
+                                          ? symbol::AssignDoubleBracket
+                                          : symbol::AssignBracket;
+                        SEXP rewrite = Rf_shallow_duplicate(lhs);
+                        ctx.preserve(rewrite);
+                        SETCAR(rewrite, setter);
 
-                        cs << nextBranch;
+                        SEXP a = CDR(rewrite);
+                        SETCAR(a, symbol::setterPlaceholder);
+                        while (CDR(a) != R_NilValue)
+                            a = CDR(a);
+                        SEXP value =
+                            CONS_NR(symbol::setterPlaceholder, R_NilValue);
+                        SET_TAG(value, symbol::value);
+                        SETCDR(a, value);
+
+                        // Reorder stack into correct ordering
+                        cs << BC::swap()
+                           << BC::pick(2)
+
+                        // Do dispatch using args from the stack
+                           << BC::dispatch_stack(
+                            setter, 3, {R_NilValue, R_NilValue, symbol::value},
+                            rewrite)
+                        // store the result as "target"
+                           << BC::stvar(target);
+
+                        cs << nextBranch
+                           << BC::invisible();
                         return true;
                     }
                 }

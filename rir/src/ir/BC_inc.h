@@ -79,6 +79,12 @@ typedef struct {
     pool_idx_t names;
     pool_idx_t call;
 } call_stack_args_t;
+typedef struct {
+    uint32_t nargs;
+    pool_idx_t names;
+    pool_idx_t selector;
+    pool_idx_t call;
+} dispatch_stack_args_t;
 
 #pragma pack(pop)
 
@@ -103,6 +109,7 @@ class BC {
     union immediate_t {
         call_args_t call_args;
         dispatch_args_t dispatch_args;
+        dispatch_stack_args_t dispatch_stack_args;
         call_stack_args_t call_stack_args;
         pool_idx_t pool;
         fun_idx_t fun;
@@ -125,6 +132,8 @@ class BC {
     inline size_t popCount() {
         if (bc == BC_t::call_stack_)
             return immediate.call_stack_args.nargs + 1;
+        if (bc == BC_t::dispatch_stack_)
+            return immediate.call_stack_args.nargs;
         return popCount(bc);
     }
     inline size_t pushCount() { return pushCount(bc); }
@@ -170,6 +179,8 @@ class BC {
     static BC dispatch(SEXP selector, std::vector<fun_idx_t> args,
                        std::vector<SEXP> names, SEXP call);
     static BC call_stack(uint32_t, std::vector<SEXP> names, SEXP call);
+    static BC dispatch_stack(SEXP selector, uint32_t, std::vector<SEXP> names,
+                             SEXP call);
     inline static BC push(SEXP constant);
     inline static BC push(double constant);
     inline static BC push(int constant);

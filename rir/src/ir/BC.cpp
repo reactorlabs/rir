@@ -33,6 +33,10 @@ void BC::write(CodeStream& cs) const {
         cs.insert(immediate.dispatch_args);
         break;
 
+    case BC_t::dispatch_stack_:
+        cs.insert(immediate.dispatch_stack_args);
+        break;
+
     case BC_t::call_stack_:
         cs.insert(immediate.call_stack_args);
         break;
@@ -118,6 +122,8 @@ num_args_t BC::immediateCallNargs() {
     switch (bc) {
     case BC_t::call_stack_:
         return immediate.call_stack_args.nargs;
+    case BC_t::dispatch_stack_:
+        return immediate.dispatch_stack_args.nargs;
     case BC_t::call_: {
         size_t nargs =
             Rf_length(Pool::get(immediate.call_args.args)) / sizeof(fun_idx_t);
@@ -150,6 +156,9 @@ SEXP BC::immediateCallNames() {
         break;
     case BC_t::dispatch_:
         names = immediate.dispatch_args.names;
+        break;
+    case BC_t::dispatch_stack_:
+        names = immediate.dispatch_stack_args.names;
         break;
     default:
         assert(false);
@@ -230,6 +239,21 @@ void BC::print() {
         }
         break;
     }
+    case BC_t::dispatch_stack_: {
+        SEXP selector = Pool::get(immediate.dispatch_stack_args.selector);
+        Rprintf(" `%s` ", CHAR(PRINTNAME(selector)));
+        num_args_t nargs = immediateCallNargs();
+        Rprintf(" %d ", nargs);
+        SEXP names = immediateCallNames();
+        if (names != R_NilValue) {
+            Rprintf("[");
+            for (auto n : RVector(names)) {
+                Rprintf(" %s", (n == R_NilValue ? "_" : CHAR(PRINTNAME(n))));
+            }
+            Rprintf("]");
+        }
+        break;
+    }
     case BC_t::push_:
         Rprintf(" %u # ", immediate.pool);
         Rf_PrintValue(immediateConst());
@@ -297,6 +321,42 @@ void BC::print() {
         break;
     }
     Rprintf("\n");
+}
+
+BC BC::dispatch_stack(SEXP selector, uint32_t nargs, std::vector<SEXP> names,
+                      SEXP call) {
+    assert(nargs == names.size());
+    assert(nargs <= MAX_ARG_IDX);
+    assert(TYPEOF(selector) == SYMSXP);
+
+    Protect p;
+    bool hasNames = false;
+    for (auto n : names) {
+        if (n != R_NilValue) {
+            hasNames = true;
+            break;
+        }
+    }
+
+    SEXP n;
+    if (hasNames) {
+        n = Rf_allocVector(VECSXP, names.size());
+        p(n);
+        for (size_t i = 0; i < names.size(); ++i) {
+            SET_VECTOR_ELT(n, i, names[i]);
+        }
+        dispatch_stack_args_t args_ = {
+            nargs, Pool::insert(n), Pool::insert(selector), Pool::insert(call)};
+        immediate_t i;
+        i.dispatch_stack_args = args_;
+        return BC(BC_t::dispatch_stack_, i);
+    }
+
+    dispatch_stack_args_t args_ = {nargs, Pool::insert(R_NilValue),
+                                   Pool::insert(selector), Pool::insert(call)};
+    immediate_t i;
+    i.dispatch_stack_args = args_;
+    return BC(BC_t::dispatch_stack_, i);
 }
 
 BC BC::dispatch(SEXP selector, std::vector<fun_idx_t> args,
