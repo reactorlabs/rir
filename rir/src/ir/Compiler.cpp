@@ -531,7 +531,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
     }
 
     if (fun == symbol::Missing && args.length() == 1 &&
-        TYPEOF(args[0]) == SYMSXP) {
+        TYPEOF(args[0]) == SYMSXP && !DDVAL(args[0])) {
         cs << BC::isspecial(fun) << BC::missing(args[0]);
         return true;
     }
