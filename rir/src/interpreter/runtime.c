@@ -175,14 +175,21 @@ extern void c_printCode(Code * c);
 
 void printCode(Code* c) {
     Rprintf("Code object (offset %x (hex))\n", c->header);
-    Rprintf("  Magic:     %x (hex)\n", c->magic);
     Rprintf("  Source:    %u (index to src pool)\n", c->src);
+    Rprintf("  Magic:     %x (hex)\n", c->magic);
     Rprintf("  Stack (o): %u\n", c->stackLength);
     Rprintf("  Stack (i): %u\n", c->iStackLength);
-    Rprintf("  Num insns: %u\n", c->srcLength);
     Rprintf("  Code size: %u [b]\n", c->codeSize);
     if (c->magic != CODE_MAGIC)
         Rf_error("Wrong magic number -- corrupted IR bytecode");
+
+    Rprintf("\n  Skiplist:  %u \n", c->skiplistLength);
+    unsigned* sl = skiplist(c);
+    for (unsigned i = 0; i < c->skiplistLength; ++i) {
+        Rprintf("    pc: %u -> src_idx: %u\n", *sl, *(sl + 1));
+        sl += 2;
+    }
+    Rprintf("\n");
     c_printCode(c);
 }
 

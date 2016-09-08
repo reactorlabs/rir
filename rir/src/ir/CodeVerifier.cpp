@@ -20,7 +20,7 @@ class State {
     static_assert(sizeof(SEXP) == 8, "Invalid ptr size");
     static_assert(sizeof(unsigned) == 4, "Invalid unsigned size");
 
-    static_assert(sizeof(::Code) == 7 * 4, "Invalid ::Code size");
+    static_assert(sizeof(::Code) == 8 * 4, "Invalid ::Code size");
     static_assert(sizeof(::Function) == 6 * 4, "Invalid ::Function size");
 
     BC_t* pc;
@@ -162,7 +162,8 @@ void CodeVerifier::vefifyFunctionLayout(SEXP sexp, ::Context* ctx) {
                "Invalid integer stack layout reported");
 
         assert((uintptr_t)(c + 1) + pad4(c->codeSize) +
-                       c->srcLength * sizeof(unsigned) ==
+                       c->srcLength * sizeof(unsigned) +
+                       c->skiplistLength * 2 * sizeof(unsigned) ==
                    (uintptr_t)objs[i + 1] and
                "Invalid code length reported");
     }
@@ -175,12 +176,9 @@ void CodeVerifier::vefifyFunctionLayout(SEXP sexp, ::Context* ctx) {
     for (auto c : objs) {
         BC_t* cptr = reinterpret_cast<BC_t*>(code(c));
         BC_t* start = cptr;
-        unsigned ninsns = 0;
         while (true) {
-            ++ninsns;
             assert(cptr < start + c->codeSize);
             BC cur = BC::decode(cptr);
-            assert(ninsns <= c->srcLength);
             if (*cptr == BC_t::ldvar_) {
                 unsigned* argsIndex = reinterpret_cast<ArgT*>(cptr + 1);
                 assert(*argsIndex < cp_pool_length(ctx) and
@@ -266,7 +264,7 @@ void CodeVerifier::vefifyFunctionLayout(SEXP sexp, ::Context* ctx) {
                 }
             }
             cptr += cur.size();
-            if (ninsns == c->srcLength) {
+            if (cptr == start + c->codeSize) {
                 assert(cptr == start + c->codeSize);
                 assert(cur.isJmp() || cur.bc == BC_t::ret_);
                 break;
@@ -275,7 +273,7 @@ void CodeVerifier::vefifyFunctionLayout(SEXP sexp, ::Context* ctx) {
 
         // check that the astmap indices are within bounds
         for (auto c : objs) {
-            unsigned* srcIndices = src(c);
+            unsigned* srcIndices = raw_src(c);
             for (size_t i = 0; i != c->srcLength; ++i)
                 assert(srcIndices[i] < src_pool_length(ctx) and
                        "Source index for instruction out of bounds");

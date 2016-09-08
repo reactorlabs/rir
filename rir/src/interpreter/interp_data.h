@@ -16,6 +16,13 @@ extern "C" {
 #define false 0
 #endif
 
+#ifdef ENABLE_SLOWASSERT
+#define SLOWASSERT(what) assert(what)
+#else
+#define SLOWASSERT(what)                                                       \
+    {}
+#endif
+
 // TODO force inlinine for clang & gcc
 #define INLINE __attribute__((always_inline)) inline static
 
@@ -132,6 +139,8 @@ typedef struct Code {
 
     unsigned codeSize; /// bytes of code (not padded)
 
+    unsigned skiplistLength; /// number of skiplist entries
+
     unsigned srcLength; /// number of instructions
 
     uint8_t data[]; /// the instructions
@@ -153,14 +162,69 @@ INLINE Code * isValidCodeObject(SEXP what) {
 INLINE OpcodeT* code(Code* c) { return (OpcodeT*)c->data; }
 
 /** Returns a pointer to the source AST indices in c.  */
-INLINE unsigned* src(Code* c) {
+INLINE unsigned* skiplist(Code* c) {
     return (unsigned*)(c->data + pad4(c->codeSize));
+}
+
+/** Returns a pointer to the source AST indices in c.  */
+INLINE unsigned* raw_src(Code* c) {
+    return (unsigned*)(c->data + pad4(c->codeSize) +
+                       c->skiplistLength * 2 * sizeof(unsigned));
+}
+
+/** Moves the pc to next instruction, based on the current instruction length
+ */
+INLINE OpcodeT* advancePc(OpcodeT* pc) {
+    switch (*pc++) {
+#define DEF_INSTR(name, imm, ...)                                              \
+    case name:                                                                 \
+        pc += sizeof(ArgT) * imm;                                              \
+        break;
+#include "ir/insns.h"
+    default:
+        assert(false && "Unknown instruction");
+    }
+    return pc;
+}
+
+INLINE unsigned getSrcIdxAt(Code* c, OpcodeT* pc, bool allowMissing) {
+
+    unsigned* sl = skiplist(c);
+    unsigned sl_i = 0;
+    OpcodeT* start = c->data;
+
+    SLOWASSERT(allowMissing || *sl <= pc - start);
+
+    if (sl[0] > pc - start)
+        return 0;
+
+    while (sl[sl_i] <= pc - start && sl_i < 2 * c->skiplistLength)
+        sl_i += 2;
+
+    // we need to determine index of the current instruction
+    OpcodeT* x = code(c) + sl[sl_i - 2];
+    // find the pc of the current instructions
+    unsigned insIdx = sl[sl_i - 1];
+
+    while (x != pc) {
+        x = advancePc(x);
+        ++insIdx;
+        if (insIdx == c->srcLength) {
+            SLOWASSERT(allowMissing);
+            return 0;
+        }
+    }
+    unsigned sidx = raw_src(c)[insIdx];
+    SLOWASSERT(allowMissing || sidx);
+
+    return sidx;
 }
 
 /** Returns the next Code in the current function. */
 INLINE Code* next(Code* c) {
     return (Code*)(c->data + pad4(c->codeSize) +
-                   c->srcLength * sizeof(unsigned));
+                   c->srcLength * sizeof(unsigned) +
+                   c->skiplistLength * 2 * sizeof(unsigned));
 }
 
 /** Returns a pointer to the Function to which c belongs. */

@@ -23,13 +23,6 @@ extern "C" {
 #define POOL_CAPACITY 4096
 #define STACK_CAPACITY 4096
 
-#ifdef ENABLE_SLOWASSERT
-#define SLOWASSERT(what) assert(what)
-#else
-#define SLOWASSERT(what)                                                       \
-    {}
-#endif
-
 /** Resizeable R list.
 
  Allocates large list and then tricks R into believing that the list is actually smaller.

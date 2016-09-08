@@ -16,16 +16,15 @@ namespace rir {
 void CodeHandle::print() {
     BC_t* pc = (BC_t*)bc();
 
-    unsigned * s = src(code);
     while ((uintptr_t)pc < (uintptr_t)endBc()) {
-        if (*s != 0) {
-            Rprintf("          # (idx %u) : ", *s);
-            Rf_PrintValue(src_pool_at(globalContext(), *s));
+        unsigned s = getSrcIdxAt(code, (OpcodeT*)pc, true);
+        if (s != 0) {
+            Rprintf("          # (idx %u) : ", s);
+            Rf_PrintValue(src_pool_at(globalContext(), s));
         }
         Rprintf(" %5d ", ((uintptr_t)pc - (uintptr_t)bc()));
         BC bc = BC::advance(&pc);
         bc.print();
-        ++s;
     }
 }
 

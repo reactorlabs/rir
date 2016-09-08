@@ -46,7 +46,6 @@ void CodeEditor::loadCode(FunctionHandle function, CodeHandle code,
         BC_t* pc = (BC_t*)code.bc();
         BC_t* end = (BC_t*)((uintptr_t)pc + code.code->codeSize);
 
-        unsigned idx = 0;
         while (pc != end) {
             pos->next = new BytecodeList();
             auto prev = pos;
@@ -63,7 +62,7 @@ void CodeEditor::loadCode(FunctionHandle function, CodeHandle code,
                 pos->prev = prev;
             }
 
-            SEXP ast = code.source(idx++);
+            SEXP ast = code.source(pc);
             pos->src = ast;
 
             BC bc = BC::advance(&pc);

@@ -179,19 +179,16 @@ typedef struct sexprec_rjit {
 
 // helpers
 
-/** Moves the pc to next instruction, based on the current instruction length
- */
-OpcodeT* advancePc(OpcodeT* pc) {
-    switch (*pc++) {
-#define DEF_INSTR(name, imm, ...)                                              \
-    case name:                                                                 \
-        pc += sizeof(ArgT) * imm;                                              \
-        break;
-#include "ir/insns.h"
-    default:
-        assert(false && "Unknown instruction");
-    }
-    return pc;
+INLINE SEXP getSrcAt(Code* c, OpcodeT* pc, Context* ctx) {
+    unsigned sidx = getSrcIdxAt(c, pc, true);
+    if (sidx == 0)
+        return src_pool_at(ctx, c->src);
+    return src_pool_at(ctx, sidx);
+}
+
+INLINE SEXP getSrcForCall(Code* c, OpcodeT* pc, Context* ctx) {
+    unsigned sidx = getSrcIdxAt(c, pc, false);
+    return src_pool_at(ctx, sidx);
 }
 
 #define PC_BOUNDSCHECK(pc)                                                     \
@@ -225,33 +222,6 @@ INLINE int readJumpOffset(OpcodeT** pc) {
     int result = *(JumpOffset*)(*pc);
     *pc += sizeof(JumpOffset);
     return result;
-}
-
-INLINE SEXP getSrcAt(Code* c, OpcodeT* pc, Context* ctx) {
-    // we need to determine index of the current instruction
-    OpcodeT* x = code(c);
-    // find the pc of the current instructions, it is ok to be slow
-    unsigned insIdx = 0;
-    while ((x = advancePc(x)) != pc)
-        ++insIdx;
-    unsigned sidx = src(c)[insIdx];
-    // return the ast for the instruction, or if not defined, the ast of the
-    // function
-    return src_pool_at(ctx, sidx == 0 ? c->src : sidx);
-}
-
-INLINE SEXP getSrcForCall(Code* c, OpcodeT* pc, Context* ctx) {
-    // we need to determine index of the current instruction
-    OpcodeT* x = code(c);
-    // find the pc of the current instructions, it is ok to be slow
-    unsigned insIdx = 0;
-    while ((x = advancePc(x)) != pc)
-        ++insIdx;
-    unsigned sidx = src(c)[insIdx];
-    // return the ast for the instruction, or if not defined, the ast of the
-    // function
-    assert(sidx);
-    return src_pool_at(ctx, sidx);
 }
 
 
@@ -636,9 +606,8 @@ void warnSpecial(SEXP callee, SEXP call) {
   TODO this is currently super simple.
 
  */
-INLINE SEXP doCall(Code* caller, SEXP call, SEXP callee, unsigned* args,
-                   size_t nargs, SEXP names, SEXP env, OpcodeT** pc,
-                   Context* ctx) {
+SEXP doCall(Code* caller, SEXP call, SEXP callee, unsigned* args, size_t nargs,
+            SEXP names, SEXP env, OpcodeT** pc, Context* ctx) {
 
     SEXP result = R_NilValue;
     switch (TYPEOF(callee)) {
@@ -767,8 +736,8 @@ INLINE SEXP fixupAST(SEXP call, Context* ctx, size_t nargs) {
 }
 
 // TODO: unify with the above doCall
-INLINE SEXP doCallStack(Code* caller, SEXP call, size_t nargs, SEXP names,
-                        SEXP env, OpcodeT** pc, Context* ctx) {
+SEXP doCallStack(Code* caller, SEXP call, size_t nargs, SEXP names, SEXP env,
+                 OpcodeT** pc, Context* ctx) {
 
     SEXP res = R_NilValue;
 
@@ -1308,7 +1277,7 @@ INSTRUCTION(missing_) {
     SLOWASSERT(!DDVAL(sym));
     SEXP bind = findVarLocInFrame(env, sym, NULL);
     if (bind == R_NilValue)
-        errorcall(getSrcAt(c, *pc, ctx),
+        errorcall(getSrcAt(c, *pc - 1, ctx),
                   "'missing' can only be used for arguments");
 
     if (MISSING(bind) || CAR(bind) == R_MissingArg) {
@@ -1378,7 +1347,7 @@ INSTRUCTION(asbool_) {
     SEXP t = ostack_top(ctx);
     int cond = NA_LOGICAL;
     if (XLENGTH(t) > 1)
-        warningcall(getSrcAt(c, *pc, ctx),
+        warningcall(getSrcAt(c, *pc - 1, ctx),
                     ("the condition has length > 1 and only the first "
                      "element will be used"));
 
@@ -1400,7 +1369,7 @@ INSTRUCTION(asbool_) {
                 ? (isLogical(t) ? ("missing value where TRUE/FALSE needed")
                                 : ("argument is not interpretable as logical"))
                 : ("argument is of length zero");
-        errorcall(getSrcAt(c, *pc, ctx), msg);
+        errorcall(getSrcAt(c, *pc - 1, ctx), msg);
     }
 
     ostack_pop(ctx);
@@ -1507,7 +1476,7 @@ INSTRUCTION(subassign2_) {
     UNPROTECT(1);
 #else
     ostack_popn(ctx, 3);
-    res = Rf_eval(getSrcForCall(c, *pc, ctx), env);
+    res = Rf_eval(getSrcForCall(c, *pc - 2, ctx), env);
 #endif
     SLOWASSERT(TYPEOF(target) == SYMSXP);
     INCREMENT_NAMED(res);
@@ -1534,7 +1503,7 @@ INSTRUCTION(subassign_) {
     UNPROTECT(1);
 #else
     ostack_popn(ctx, 3);
-    res = Rf_eval(getSrcForCall(c, *pc, ctx), env);
+    res = Rf_eval(getSrcForCall(c, *pc - 2, ctx), env);
 #endif
     SLOWASSERT(TYPEOF(target) == SYMSXP);
     INCREMENT_NAMED(res);
@@ -1556,7 +1525,7 @@ INSTRUCTION(subset1_) {
     res = do_subset_dflt(R_NilValue, R_SubsetSym, args, env);
     UNPROTECT(1);
 #else
-    res = Rf_eval(getSrcForCall(c, *pc, ctx), env);
+    res = Rf_eval(getSrcForCall(c, *pc - 1, ctx), env);
 #endif
 
     R_Visible = 1;
@@ -1609,7 +1578,7 @@ INSTRUCTION(extract1_) {
         res = do_subset2_dflt(R_NilValue, R_Subset2Sym, args, env);
         UNPROTECT(1);
 #else
-        res = Rf_eval(getSrcForCall(c, *pc, ctx), env);
+        res = Rf_eval(getSrcForCall(c, *pc - 1, ctx), env);
 #endif
     }
     }
@@ -1658,6 +1627,98 @@ INSTRUCTION(inc_) {
     } else {
         INTEGER(n)[0]++;
     }
+}
+
+#define BINOP_FALLBACK(op)                                                     \
+    do {                                                                       \
+        static SEXP prim = NULL;                                               \
+        static CCODE blt;                                                      \
+        int flag;                                                              \
+        if (!prim) {                                                           \
+            prim = findFun(Rf_install(op), R_GlobalEnv);                       \
+            blt = getBuiltin(prim);                                            \
+            flag = getFlag(prim);                                              \
+        }                                                                      \
+                                                                               \
+        SEXP call = getSrcForCall(c, *pc - 1, ctx);                            \
+        SEXP argslist = CONS_NR(lhs, CONS_NR(rhs, R_NilValue));                \
+        ostack_push(ctx, argslist);                                            \
+        if (flag < 2)                                                          \
+            R_Visible = flag != 1;                                             \
+        res = blt(call, prim, argslist, env);                                  \
+        if (flag < 2)                                                          \
+            R_Visible = flag != 1;                                             \
+        ostack_pop(ctx);                                                       \
+    } while (false)
+
+INSTRUCTION(add_) {
+    SEXP lhs = *ostack_at(ctx, 1);
+    SEXP rhs = *ostack_at(ctx, 0);
+    SEXP res;
+
+    if (TYPEOF(lhs) == REALSXP && TYPEOF(rhs) == REALSXP && XLENGTH(lhs) == 1 &&
+        XLENGTH(rhs) == 1 && ATTRIB(lhs) == R_NilValue &&
+        ATTRIB(rhs) == R_NilValue && *REAL(lhs) != NA_REAL &&
+        *REAL(rhs) != NA_REAL) {
+        res = Rf_allocVector(REALSXP, 1);
+        REAL(res)[0] = REAL(lhs)[0] + REAL(rhs)[0];
+    } else if (TYPEOF(lhs) == INTSXP && TYPEOF(rhs) == INTSXP &&
+               XLENGTH(lhs) == 1 && XLENGTH(rhs) == 1 &&
+               ATTRIB(lhs) == R_NilValue && ATTRIB(rhs) == R_NilValue &&
+               *INTEGER(lhs) != NA_INTEGER && *INTEGER(rhs) != NA_INTEGER) {
+        res = Rf_allocVector(INTSXP, 1);
+        INTEGER(res)[0] = INTEGER(lhs)[0] + INTEGER(rhs)[0];
+    } else {
+        BINOP_FALLBACK("+");
+    }
+    ostack_popn(ctx, 2);
+    ostack_push(ctx, res);
+}
+
+INSTRUCTION(sub_) {
+    SEXP lhs = *ostack_at(ctx, 1);
+    SEXP rhs = *ostack_at(ctx, 0);
+    SEXP res;
+
+    if (TYPEOF(lhs) == REALSXP && TYPEOF(rhs) == REALSXP && XLENGTH(lhs) == 1 &&
+        XLENGTH(rhs) == 1 && ATTRIB(lhs) == R_NilValue &&
+        ATTRIB(rhs) == R_NilValue && *REAL(lhs) != NA_REAL &&
+        *REAL(rhs) != NA_REAL) {
+        res = Rf_allocVector(REALSXP, 1);
+        REAL(res)[0] = REAL(lhs)[0] - REAL(rhs)[0];
+    } else if (TYPEOF(lhs) == INTSXP && TYPEOF(rhs) == INTSXP &&
+               XLENGTH(lhs) == 1 && XLENGTH(rhs) == 1 &&
+               ATTRIB(lhs) == R_NilValue && ATTRIB(rhs) == R_NilValue &&
+               *INTEGER(lhs) != NA_INTEGER && *INTEGER(rhs) != NA_INTEGER) {
+        res = Rf_allocVector(INTSXP, 1);
+        INTEGER(res)[0] = INTEGER(lhs)[0] - INTEGER(rhs)[0];
+    } else {
+        BINOP_FALLBACK("-");
+    }
+    ostack_popn(ctx, 2);
+    ostack_push(ctx, res);
+}
+
+INSTRUCTION(lt_) {
+    SEXP lhs = *ostack_at(ctx, 1);
+    SEXP rhs = *ostack_at(ctx, 0);
+    SEXP res;
+
+    if (TYPEOF(lhs) == REALSXP && TYPEOF(rhs) == REALSXP && XLENGTH(lhs) == 1 &&
+        XLENGTH(rhs) == 1 && ATTRIB(lhs) == R_NilValue &&
+        ATTRIB(rhs) == R_NilValue && *REAL(lhs) != NA_REAL &&
+        *REAL(rhs) != NA_REAL) {
+        res = REAL(lhs)[0] < REAL(rhs)[0] ? R_TrueValue : R_FalseValue;
+    } else if (TYPEOF(lhs) == INTSXP && TYPEOF(rhs) == INTSXP &&
+               XLENGTH(lhs) == 1 && XLENGTH(rhs) == 1 &&
+               ATTRIB(lhs) == R_NilValue && ATTRIB(rhs) == R_NilValue &&
+               *INTEGER(lhs) != NA_INTEGER && *INTEGER(rhs) != NA_INTEGER) {
+        res = INTEGER(lhs)[0] < INTEGER(rhs)[0] ? R_TrueValue : R_FalseValue;
+    } else {
+        BINOP_FALLBACK("<");
+    }
+    ostack_popn(ctx, 2);
+    ostack_push(ctx, res);
 }
 
 INSTRUCTION(test_bounds_) {
@@ -1730,6 +1791,9 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
             INS(ldfun_);
             INS(ldvar_);
             INS(ldddvar_);
+            INS(add_);
+            INS(sub_);
+            INS(lt_);
             INS(call_);
             INS(call_stack_);
             INS(dispatch_stack_);

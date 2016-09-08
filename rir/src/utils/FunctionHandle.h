@@ -93,12 +93,61 @@ class FunctionHandle {
 
         memcpy(code.bc(), bc, codeSize);
 
-        unsigned* srcs = reinterpret_cast<unsigned*>(code.sources());
-        for (size_t i = 0, e = sources.size(); i != e; ++i)
-            *(srcs++) = sources[i] == nullptr
-                            ? 0
-                            : src_pool_add(globalContext(), sources[i]);
+        // write the sources
+        unsigned skiplistLength = CodeHandle::skiplistLength(sources.size());
+        unsigned skiplistEntries = 1 + sources.size() / skiplistLength;
 
+        unsigned* skiplist = reinterpret_cast<unsigned*>(code.sources());
+        unsigned* srcs = skiplist + 2 * skiplistLength;
+
+        BC_t* start = code.bc();
+        BC_t* pc = start;
+        unsigned instruction_number = 0;
+        unsigned sources_idx = 0;
+        unsigned compressed = 0;
+
+        while (pc < start + codeSize) {
+            if (instruction_number % skiplistEntries == 0) {
+                // no need to write empty source before next skiplist target
+                while (pc < start + codeSize &&
+                       sources[instruction_number] == nullptr) {
+                    BC::advance(&pc);
+                    ++instruction_number;
+                    ++compressed;
+                }
+
+                if (pc == start + codeSize)
+                    break;
+
+                skiplistLength--;
+                *(skiplist++) = pc - start;
+                *(skiplist++) = sources_idx;
+            }
+
+            *(srcs++) = sources[instruction_number] == nullptr
+                            ? 0
+                            : src_pool_add(globalContext(),
+                                           sources[instruction_number]);
+
+            instruction_number++;
+            sources_idx++;
+            if (pc < start + codeSize)
+                BC::advance(&pc);
+        }
+        while (skiplistLength) {
+            *(skiplist++) = pc - start;
+            *(skiplist++) = -1;
+            skiplistLength--;
+        }
+
+        assert(instruction_number == sources.size());
+        assert(skiplistLength == 0);
+        assert(compressed + sources_idx == instruction_number);
+
+        code.code->srcLength -= compressed;
+        function->size -= compressed * sizeof(unsigned);
+
+        assert(code.code->srcLength == sources_idx);
         function->codeLength++;
 
         // set the last code offset

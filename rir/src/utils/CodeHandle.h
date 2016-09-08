@@ -1,6 +1,7 @@
 #ifndef RIR_CODE_HANDLE_H
 #define RIR_CODE_HANDLE_H
 
+#include "interpreter/interp_data.h"
 #include "interpreter/interp.h"
 #include "interpreter/runtime.h"
 #include "ir/BC_inc.h"
@@ -24,6 +25,7 @@ class CodeHandle {
         code->src = src_pool_add(globalContext(), ast);
         code->codeSize = codeSize;
         code->srcLength = sourceSize;
+        code->skiplistLength = skiplistLength(sourceSize);
     }
 
     CodeHandle(Code* code) : code(code) { assert(code->magic == CODE_MAGIC); }
@@ -38,8 +40,8 @@ class CodeHandle {
         return (unsigned*)((uintptr_t)(code + 1) + pad4(code->codeSize));
     }
 
-    SEXP source(unsigned instruction) {
-        unsigned sidx = sources()[instruction];
+    SEXP source(BC_t* pc) {
+        unsigned sidx = getSrcIdxAt(code, (OpcodeT*)pc, true);
         if (!sidx)
             return nullptr;
         return src_pool_at(globalContext(), sidx);
@@ -47,8 +49,14 @@ class CodeHandle {
 
     SEXP ast() { return src_pool_at(globalContext(), code->src); }
 
+    static size_t skiplistLength(unsigned sourcesSize) {
+        size_t s = 0.1 * sourcesSize;
+        return s ? s : 1;
+    }
+
     static unsigned totalSize(unsigned codeSize, unsigned sourcesSize) {
-        return sizeof(Code) + pad4(codeSize) + sourcesSize * sizeof(unsigned);
+        return sizeof(Code) + pad4(codeSize) + sourcesSize * sizeof(unsigned) +
+               skiplistLength(sourcesSize) * 2 * sizeof(unsigned);
     }
 
     void* end() {
