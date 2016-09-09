@@ -114,16 +114,11 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
     CodeStream& cs = ctx.cs();
 
     if (args.length() == 2 &&
-        (fun == symbol::Add || fun == symbol::Sub || fun == symbol::Lt)) {
+        (fun ==
+         symbol::Add)) { // || fun == symbol::Sub || fun == symbol::Lt)) {
         cs << BC::isspecial(fun);
 
-        Label objBranch = cs.mkLabel();
-        Label nextBranch = cs.mkLabel();
-
         compileExpr(ctx, args[0]);
-
-        cs << BC::brobj(objBranch);
-
         compileExpr(ctx, args[1]);
 
         if (fun == symbol::Add)
@@ -134,12 +129,6 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
             cs << BC::lt();
         cs.addAst(ast);
 
-        cs << BC::br(nextBranch);
-
-        cs << objBranch;
-        compileDispatch(ctx, fun, ast, fun, args_);
-
-        cs << nextBranch;
         return true;
     }
 

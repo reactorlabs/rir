@@ -1639,7 +1639,6 @@ INSTRUCTION(inc_) {
             blt = getBuiltin(prim);                                            \
             flag = getFlag(prim);                                              \
         }                                                                      \
-                                                                               \
         SEXP call = getSrcForCall(c, *pc - 1, ctx);                            \
         SEXP argslist = CONS_NR(lhs, CONS_NR(rhs, R_NilValue));                \
         ostack_push(ctx, argslist);                                            \
@@ -1651,26 +1650,47 @@ INSTRUCTION(inc_) {
         ostack_pop(ctx);                                                       \
     } while (false)
 
+#define IS_SCALAR_VALUE(e, type)                                               \
+    (TYPEOF(e) == type && SHORT_VEC_LENGTH(e) == 1 && ATTRIB(e) == R_NilValue)
+
+#define DO_BINOP(op)                                                           \
+    do {                                                                       \
+        if (IS_SCALAR_VALUE(lhs, REALSXP)) {                                   \
+            if (IS_SCALAR_VALUE(rhs, REALSXP)) {                               \
+                res = Rf_allocVector(REALSXP, 1);                              \
+                *REAL(res) = (*REAL(lhs) == NA_REAL || *REAL(rhs) == NA_REAL)  \
+                                 ? NA_REAL                                     \
+                                 : *REAL(lhs) op * REAL(rhs);                  \
+                break;                                                         \
+            } else if (IS_SCALAR_VALUE(rhs, INTSXP)) {                         \
+                res = Rf_allocVector(REALSXP, 1);                              \
+                *REAL(res) =                                                   \
+                    (*REAL(lhs) == NA_REAL || *INTEGER(rhs) == NA_INTEGER)     \
+                        ? NA_REAL                                              \
+                        : *REAL(lhs) op * INTEGER(rhs);                        \
+                break;                                                         \
+            }                                                                  \
+        } else if (IS_SCALAR_VALUE(lhs, INTSXP)) {                             \
+            if (IS_SCALAR_VALUE(rhs, INTSXP)) {                                \
+                res = Rf_allocVector(INTSXP, 1);                               \
+                *INTEGER(res) = (*INTEGER(lhs) == NA_INTEGER ||                \
+                                 *INTEGER(rhs) == NA_INTEGER)                  \
+                                    ? NA_INTEGER                               \
+                                    : *INTEGER(lhs) op * INTEGER(rhs);         \
+                break;                                                         \
+            }                                                                  \
+        }                                                                      \
+                                                                               \
+        BINOP_FALLBACK(#op);                                                   \
+    } while (false)
+
 INSTRUCTION(add_) {
     SEXP lhs = *ostack_at(ctx, 1);
     SEXP rhs = *ostack_at(ctx, 0);
     SEXP res;
 
-    if (TYPEOF(lhs) == REALSXP && TYPEOF(rhs) == REALSXP && XLENGTH(lhs) == 1 &&
-        XLENGTH(rhs) == 1 && ATTRIB(lhs) == R_NilValue &&
-        ATTRIB(rhs) == R_NilValue && *REAL(lhs) != NA_REAL &&
-        *REAL(rhs) != NA_REAL) {
-        res = Rf_allocVector(REALSXP, 1);
-        REAL(res)[0] = REAL(lhs)[0] + REAL(rhs)[0];
-    } else if (TYPEOF(lhs) == INTSXP && TYPEOF(rhs) == INTSXP &&
-               XLENGTH(lhs) == 1 && XLENGTH(rhs) == 1 &&
-               ATTRIB(lhs) == R_NilValue && ATTRIB(rhs) == R_NilValue &&
-               *INTEGER(lhs) != NA_INTEGER && *INTEGER(rhs) != NA_INTEGER) {
-        res = Rf_allocVector(INTSXP, 1);
-        INTEGER(res)[0] = INTEGER(lhs)[0] + INTEGER(rhs)[0];
-    } else {
-        BINOP_FALLBACK("+");
-    }
+    DO_BINOP(+);
+
     ostack_popn(ctx, 2);
     ostack_push(ctx, res);
 }
@@ -1680,21 +1700,8 @@ INSTRUCTION(sub_) {
     SEXP rhs = *ostack_at(ctx, 0);
     SEXP res;
 
-    if (TYPEOF(lhs) == REALSXP && TYPEOF(rhs) == REALSXP && XLENGTH(lhs) == 1 &&
-        XLENGTH(rhs) == 1 && ATTRIB(lhs) == R_NilValue &&
-        ATTRIB(rhs) == R_NilValue && *REAL(lhs) != NA_REAL &&
-        *REAL(rhs) != NA_REAL) {
-        res = Rf_allocVector(REALSXP, 1);
-        REAL(res)[0] = REAL(lhs)[0] - REAL(rhs)[0];
-    } else if (TYPEOF(lhs) == INTSXP && TYPEOF(rhs) == INTSXP &&
-               XLENGTH(lhs) == 1 && XLENGTH(rhs) == 1 &&
-               ATTRIB(lhs) == R_NilValue && ATTRIB(rhs) == R_NilValue &&
-               *INTEGER(lhs) != NA_INTEGER && *INTEGER(rhs) != NA_INTEGER) {
-        res = Rf_allocVector(INTSXP, 1);
-        INTEGER(res)[0] = INTEGER(lhs)[0] - INTEGER(rhs)[0];
-    } else {
-        BINOP_FALLBACK("-");
-    }
+    DO_BINOP(-);
+
     ostack_popn(ctx, 2);
     ostack_push(ctx, res);
 }
@@ -1703,6 +1710,31 @@ INSTRUCTION(lt_) {
     SEXP lhs = *ostack_at(ctx, 1);
     SEXP rhs = *ostack_at(ctx, 0);
     SEXP res;
+
+    do {
+        if (IS_SCALAR_VALUE(lhs, REALSXP)) {
+            if (IS_SCALAR_VALUE(rhs, REALSXP)) {
+                if (*REAL(lhs) == NA_REAL || *REAL(rhs) == NA_REAL) {
+                    res = R_LogicalNAValue;
+                } else {
+                    res = *REAL(lhs) < *REAL(rhs) ? R_TrueValue : R_FalseValue;
+                }
+                break;
+            }
+        } else if (IS_SCALAR_VALUE(lhs, INTSXP)) {
+            if (IS_SCALAR_VALUE(rhs, INTSXP)) {
+                if (*INTEGER(lhs) == NA_INTEGER ||
+                    *INTEGER(rhs) == NA_INTEGER) {
+                    res = R_LogicalNAValue;
+                } else {
+                    res = *INTEGER(lhs) < *INTEGER(rhs) ? R_TrueValue
+                                                        : R_FalseValue;
+                }
+                break;
+            }
+        }
+        BINOP_FALLBACK("<");
+    } while (false);
 
     if (TYPEOF(lhs) == REALSXP && TYPEOF(rhs) == REALSXP && XLENGTH(lhs) == 1 &&
         XLENGTH(rhs) == 1 && ATTRIB(lhs) == R_NilValue &&
