@@ -1671,13 +1671,20 @@ INSTRUCTION(inc_) {
                 break;                                                         \
             }                                                                  \
         } else if (IS_SCALAR_VALUE(lhs, INTSXP)) {                             \
-            if (IS_SCALAR_VALUE(rhs, INTSXP)) {                                \
+            if (false && IS_SCALAR_VALUE(rhs, INTSXP)) {                       \
                 res = Rf_allocVector(INTSXP, 1);                               \
                 *INTEGER(res) = (*INTEGER(lhs) == NA_INTEGER ||                \
                                  *INTEGER(rhs) == NA_INTEGER)                  \
                                     ? NA_INTEGER                               \
                                     : *INTEGER(lhs) op * INTEGER(rhs);         \
+                /* TODO: check overflow */                                     \
                 break;                                                         \
+            } else if (IS_SCALAR_VALUE(rhs, REALSXP)) {                        \
+                res = Rf_allocVector(REALSXP, 1);                              \
+                *REAL(res) =                                                   \
+                    (*INTEGER(lhs) == NA_INTEGER || *REAL(rhs) == NA_REAL)     \
+                        ? NA_REAL                                              \
+                        : *INTEGER(lhs) op * REAL(rhs);                        \
             }                                                                  \
         }                                                                      \
                                                                                \
