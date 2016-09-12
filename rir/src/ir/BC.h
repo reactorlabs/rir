@@ -84,6 +84,7 @@ BC::immediate_t decodeImmediate(BC_t bc, BC_t* pc) {
     case BC_t::inc_:
     case BC_t::push_argi_:
     case BC_t::add_:
+    case BC_t::seq_:
     case BC_t::sub_:
     case BC_t::lt_:
     case BC_t::return_:
@@ -201,6 +202,7 @@ BC BC::subassign2(SEXP sym) {
 }
 BC BC::lti() { return BC(BC_t::lti_); }
 BC BC::eqi() { return BC(BC_t::eqi_); }
+BC BC::seq() { return BC(BC_t::seq_); }
 BC BC::asbool() { return BC(BC_t::asbool_); }
 
 BC BC::isfun() { return BC(BC_t::isfun_); }

@@ -59,6 +59,7 @@ DECLARE(quote, "quote");
 DECLARE(And, "&&");
 DECLARE(Or, "||");
 DECLARE(Missing, "missing");
+DECLARE(seq, "seq");
 
 #undef DECLARE
 } // namespace symbol

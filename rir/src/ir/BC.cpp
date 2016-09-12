@@ -85,6 +85,7 @@ void BC::write(CodeStream& cs) const {
     case BC_t::add_:
     case BC_t::sub_:
     case BC_t::lt_:
+    case BC_t::seq_:
     case BC_t::return_:
     case BC_t::isfun_:
     case BC_t::invisible_:
@@ -278,6 +279,7 @@ void BC::print() {
         break;
     case BC_t::force_:
     case BC_t::pop_:
+    case BC_t::seq_:
     case BC_t::lti_:
     case BC_t::eqi_:
     case BC_t::ret_:

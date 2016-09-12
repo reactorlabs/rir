@@ -1644,7 +1644,9 @@ INSTRUCTION(inc_) {
         ostack_push(ctx, argslist);                                            \
         if (flag < 2)                                                          \
             R_Visible = flag != 1;                                             \
+        unsigned oldStackPointer = ostack_length(ctx);                         \
         res = blt(call, prim, argslist, env);                                  \
+        rl_setLength(&ctx->ostack, oldStackPointer);                           \
         if (flag < 2)                                                          \
             R_Visible = flag != 1;                                             \
         ostack_pop(ctx);                                                       \
@@ -1743,20 +1745,59 @@ INSTRUCTION(lt_) {
         BINOP_FALLBACK("<");
     } while (false);
 
-    if (TYPEOF(lhs) == REALSXP && TYPEOF(rhs) == REALSXP && XLENGTH(lhs) == 1 &&
-        XLENGTH(rhs) == 1 && ATTRIB(lhs) == R_NilValue &&
-        ATTRIB(rhs) == R_NilValue && *REAL(lhs) != NA_REAL &&
-        *REAL(rhs) != NA_REAL) {
-        res = REAL(lhs)[0] < REAL(rhs)[0] ? R_TrueValue : R_FalseValue;
-    } else if (TYPEOF(lhs) == INTSXP && TYPEOF(rhs) == INTSXP &&
-               XLENGTH(lhs) == 1 && XLENGTH(rhs) == 1 &&
-               ATTRIB(lhs) == R_NilValue && ATTRIB(rhs) == R_NilValue &&
-               *INTEGER(lhs) != NA_INTEGER && *INTEGER(rhs) != NA_INTEGER) {
-        res = INTEGER(lhs)[0] < INTEGER(rhs)[0] ? R_TrueValue : R_FalseValue;
-    } else {
-        BINOP_FALLBACK("<");
-    }
     ostack_popn(ctx, 2);
+    ostack_push(ctx, res);
+}
+
+INSTRUCTION(seq_) {
+    static SEXP prim = NULL;
+    if (!prim) {
+        // TODO: we could call seq.default here, but it messes up the error
+        // call :(
+        prim = findFun(Rf_install("seq"), R_GlobalEnv);
+    }
+
+    // TODO: add a real guard here...
+    assert(prim == findFun(Rf_install("seq"), env));
+
+    SEXP from = *ostack_at(ctx, 2);
+    SEXP to = *ostack_at(ctx, 1);
+    SEXP by = *ostack_at(ctx, 0);
+    SEXP res = NULL;
+
+    if (IS_SCALAR_VALUE(from, INTSXP) && IS_SCALAR_VALUE(to, INTSXP) &&
+        IS_SCALAR_VALUE(by, INTSXP)) {
+        int f = *INTEGER(from);
+        int t = *INTEGER(to);
+        int b = *INTEGER(by);
+        if (f != NA_INTEGER && t != NA_INTEGER && b != NA_INTEGER) {
+            if ((f < t && b > 0) || (t < f && b < 0)) {
+                int size = 1 + (t - f) / b;
+                res = Rf_allocVector(INTSXP, size);
+                int v = f;
+                for (int i = 0; i < size; ++i) {
+                    INTEGER(res)[i] = v;
+                    v += b;
+                }
+            } else if (f == t) {
+                res = Rf_allocVector(INTSXP, 1);
+                *INTEGER(res) = f;
+            }
+        }
+    }
+
+    if (!res) {
+        SLOWASSERT(!isObject(from));
+        SEXP call = getSrcForCall(c, *pc - 1, ctx);
+        SEXP argslist = CONS_NR(from, CONS_NR(to, CONS_NR(by, R_NilValue)));
+        ostack_push(ctx, argslist);
+        unsigned oldStackPointer = ostack_length(ctx);
+        res = applyClosure(call, prim, argslist, env, R_NilValue);
+        rl_setLength(&ctx->ostack, oldStackPointer);
+        ostack_pop(ctx);
+    }
+
+    ostack_popn(ctx, 3);
     ostack_push(ctx, res);
 }
 
@@ -1826,6 +1867,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
         ins_##name(c, env, &pc, ctx, numArgs);                                 \
         break
 
+            INS(seq_);
             INS(push_);
             INS(ldfun_);
             INS(ldvar_);

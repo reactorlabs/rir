@@ -130,3 +130,15 @@ ff <- rir.compile(function() {
     f()
 })
 ff()
+
+stopifnot(rir.compile(function() seq(5,10,2))() == c(5, 7, 9))
+stopifnot(rir.compile(function() seq(5L,10L,2L))() == c(5L, 7L, 9L))
+stopifnot(rir.compile(function() seq(10L,4L,-2L))() == c(10L, 8L, 6L, 4L))
+
+f <- rir.compile(function() {
+    s <- 0
+    for (i in seq(5,10,2))
+        s <- s + i
+    s
+})
+stopifnot(f() == 21)

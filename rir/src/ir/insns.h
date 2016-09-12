@@ -225,6 +225,10 @@ DEF_INSTR(missing_, 1, 0, 1, 0, 0)
 /**
  * missing_ :: check if symb is missing
  */
+DEF_INSTR(seq_, 0, 3, 1, 0, 0)
+/**
+ * seq_ :: seq(scalar, scalar, scalar)
+ */
 
 // TODO these may be redundant but needed for the unification
 // TODO pushes argument value (index of the argument is taken from integer

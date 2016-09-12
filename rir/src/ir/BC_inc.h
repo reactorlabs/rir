@@ -218,6 +218,7 @@ class BC {
     inline static BC add();
     inline static BC sub();
     inline static BC lt();
+    inline static BC seq();
     inline static BC uniq();
     inline static BC asLogical();
     inline static BC lglOr();

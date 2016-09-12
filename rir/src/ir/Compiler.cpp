@@ -113,9 +113,40 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
     RList args(args_);
     CodeStream& cs = ctx.cs();
 
+    if (fun == symbol::seq && args.length() >= 2 && args.length() <= 3) {
+        // TODO: don't work since seq is lazyloaded
+        // cs << BC::isspecial(fun);
+
+        for (auto a = args.begin(); a != args.end(); ++a)
+            if (a.hasTag())
+                return false;
+
+        Label objBranch = cs.mkLabel();
+        Label nextBranch = cs.mkLabel();
+
+        compileExpr(ctx, args[0]);
+
+        cs << BC::brobj(objBranch);
+
+        compileExpr(ctx, args[1]);
+        if (args.length() == 3) {
+            compileExpr(ctx, args[2]);
+        } else {
+            cs << BC::push((int)1);
+        }
+        cs << BC::seq();
+        cs.addAst(ast);
+        cs << BC::br(nextBranch);
+
+        cs << objBranch;
+        compileDispatch(ctx, fun, ast, fun, args_);
+
+        cs << nextBranch;
+        return true;
+    }
+
     if (args.length() == 2 &&
-        (fun ==
-         symbol::Add)) { // || fun == symbol::Sub || fun == symbol::Lt)) {
+        (fun == symbol::Add || fun == symbol::Sub || fun == symbol::Lt)) {
         cs << BC::isspecial(fun);
 
         compileExpr(ctx, args[0]);
