@@ -59,7 +59,7 @@ class CP_Value {
         return true;
     }
 
-    void print() {
+    void print() const {
         if (value_ == top_)
             Rprintf("T");
         else if (value_ == bottom_)
@@ -101,6 +101,9 @@ class ConstantPropagation : public ForwardAnalysis<AbstractState<CP_Value>>,
 
     void stvar_(CodeEditor::Cursor ins) override {
         current()[ins.bc().immediateConst()] = current().pop();
+    }
+
+    void label(CodeEditor::Cursor ins) override {
     }
 
     /** All other instructions, don't care for now.

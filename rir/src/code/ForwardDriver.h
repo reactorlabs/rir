@@ -39,6 +39,7 @@ private:
             case BC_t::br_:
                 receiver_.jump(ins.editorX().label(cur.immediate.offset));
                 break;
+            case BC_t::ret_:
             case BC_t::return_:
                 receiver_.terminator(ins);
                 break;
@@ -137,7 +138,7 @@ private:
                 cfDispatcher_.dispatch(currentIns_);
                 // terminate current sequence if requested
                 if (stopCurrentSequence_)
-                    continue;
+                    break;
                 // move to next instruction
                 currentIns_.advance();
             }

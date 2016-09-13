@@ -123,7 +123,7 @@ public:
 
     /** Prettyprints the stack.
      */
-    void print() {
+    void print() const {
         Rprintf("Stack depth: %i\n", stack_.size());
         for (size_t i = 0; i < stack_.size(); ++i) {
             Rprintf("  %i : ", i);
@@ -258,11 +258,11 @@ public:
         return * parent_;
     }
 
-    void print() {
+    void print() const {
         Rprintf("Environment: ");
         for (auto i : env_) {
-            Rprintf("    %s : ", CHAR(PRINTNAME(i->first)));
-            i->second.print();
+            Rprintf("    %s : ", CHAR(PRINTNAME(i.first)));
+            i.second.print();
             Rprintf("\n");
         }
         if (parent_ != nullptr) {
@@ -342,6 +342,11 @@ public:
 
     AVALUE & operator[](SEXP name) {
         return env_[name];
+    }
+
+    void print() const {
+        stack_.print();
+        env_.print();
     }
 
 protected:

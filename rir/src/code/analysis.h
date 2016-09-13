@@ -53,7 +53,7 @@ public:
     }
 
     ASTATE const & finalState() {
-        return * finalState_;
+        return * reinterpret_cast<ASTATE *>(finalState_);
     }
 
     ASTATE const & operator [] (Cursor const & ins) {
