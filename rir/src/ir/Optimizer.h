@@ -147,8 +147,7 @@ void optimize_(CodeEditor& e) {
             if (cur.atEnd())
                 break;
             BC next = cur.peek();
-            if (next.bc == BC_t::ldvar_ || next.bc == BC_t::pop_ ||
-                    next.bc == BC_t::visible_)
+            if (next.bc == BC_t::ldvar_ || next.bc == BC_t::visible_)
                 cur.remove();
         }
 
