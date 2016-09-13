@@ -226,6 +226,7 @@ class BC {
     inline static BC isspecial(SEXP);
     inline static BC isfun();
     inline static BC invisible();
+    inline static BC visible();
     inline static BC extract1();
     inline static BC subset1();
     inline static BC swap();

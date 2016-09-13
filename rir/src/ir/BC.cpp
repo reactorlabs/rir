@@ -89,6 +89,7 @@ void BC::write(CodeStream& cs) const {
     case BC_t::return_:
     case BC_t::isfun_:
     case BC_t::invisible_:
+    case BC_t::visible_:
     case BC_t::endcontext_:
         return;
 
@@ -299,6 +300,7 @@ void BC::print() {
     case BC_t::return_:
     case BC_t::isfun_:
     case BC_t::invisible_:
+    case BC_t::visible_:
     case BC_t::subset1_:
     case BC_t::extract1_:
     case BC_t::close_:

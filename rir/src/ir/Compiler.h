@@ -58,11 +58,12 @@ class Compiler {
         }
 #endif
 
+        // Rf_PrintValue(ast);
         Compiler c(ast);
         return c.finalize();
     }
     
-    static CompilerRes compileClosure(SEXP ast, SEXP env, SEXP formals) {
+    static CompilerRes compileClosure(SEXP ast, SEXP formals) {
         Compiler c(ast, formals);
         return c.finalize();
     }

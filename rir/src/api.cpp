@@ -62,7 +62,7 @@ REXPORT SEXP rir_compile(SEXP what) {
 
         SEXP result = allocSExp(CLOSXP);
         PROTECT(result);
-        auto res = Compiler::compileClosure(body, CLOENV(what), FORMALS(what));
+        auto res = Compiler::compileClosure(body, FORMALS(what));
         SET_FORMALS(result, res.formals);
         SET_CLOENV(result, CLOENV(what));
         SET_BODY(result, rir_createWrapperAst(res.bc));

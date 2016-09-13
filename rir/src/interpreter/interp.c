@@ -1164,15 +1164,15 @@ INSTRUCTION(push_code_) {
 }
 
 INSTRUCTION(close_) {
-    SEXP body = ostack_pop(ctx);
-    SEXP formals = ostack_pop(ctx);
-    PROTECT(body);
-    PROTECT(formals);
+    SEXP srcref = *ostack_at(ctx, 0);
+    SEXP body = *ostack_at(ctx, 1);
+    SEXP formals = *ostack_at(ctx, 2);
     SEXP result = allocSExp(CLOSXP);
     SET_FORMALS(result, formals);
     SET_BODY(result, body);
     SET_CLOENV(result, env);
-    UNPROTECT(2);
+    Rf_setAttrib(result, Rf_install("srcref"), srcref);
+    ostack_popn(ctx, 3);
     ostack_push(ctx, result);
 }
 
@@ -1816,6 +1816,10 @@ INSTRUCTION(dup2_) {
     ostack_push(ctx, b);
 }
 
+INSTRUCTION(visible_) {
+    R_Visible = 1;
+}
+
 INSTRUCTION(invisible_) {
     R_Visible = 0;
 }
@@ -1906,6 +1910,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
             INS(dup2_);
             INS(test_bounds_);
             INS(invisible_);
+            INS(visible_);
             INS(extract1_);
             INS(subset1_);
             INS(dispatch_);

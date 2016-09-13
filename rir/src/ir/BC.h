@@ -90,6 +90,7 @@ BC::immediate_t decodeImmediate(BC_t bc, BC_t* pc) {
     case BC_t::return_:
     case BC_t::isfun_:
     case BC_t::invisible_:
+    case BC_t::visible_:
     case BC_t::endcontext_:
         break;
     case BC_t::invalid_:
@@ -122,7 +123,7 @@ BC BC::force() { return BC(BC_t::force_); }
 BC BC::pop() { return BC(BC_t::pop_); }
 BC BC::push(SEXP constant) {
     assert(TYPEOF(constant) != PROMSXP);
-    assert(!isValidFunctionSEXP(constant));
+//    assert(!isValidFunctionSEXP(constant));
     assert(!isValidCodeObject(constant));
     immediate_t i;
     i.pool = Pool::insert(constant);
@@ -254,6 +255,7 @@ BC BC::add() { return BC(BC_t::add_); }
 BC BC::sub() { return BC(BC_t::sub_); }
 BC BC::lt() { return BC(BC_t::lt_); }
 BC BC::invisible() { return BC(BC_t::invisible_); }
+BC BC::visible() { return BC(BC_t::visible_); }
 BC BC::extract1() { return BC(BC_t::extract1_); }
 BC BC::subset1() { return BC(BC_t::subset1_); }
 BC BC::swap() { return BC(BC_t::swap_); }

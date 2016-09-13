@@ -66,6 +66,13 @@ class CodeEditor {
 
         BC operator*() { return pos->bc; }
 
+        BC peek(int i = 1) {
+            BytecodeList* p = pos;
+            while (i-- > 0)
+                p = p->next;
+            return p->bc;
+        }
+
         Cursor& operator<<(BC bc) {
             editor->changed = true;
 

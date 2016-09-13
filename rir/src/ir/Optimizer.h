@@ -117,6 +117,73 @@ void optimize_(CodeEditor& e) {
             // }
             break;
 
+    // =========================================================================
+    // TODO: from here on are some really stupid bytecode cleanup hacks.
+    //       Lets rewrite them with the optimization framework
+
+        // remove push; pop;
+        case BC_t::push_:
+            if (cur.atEnd())
+                break;
+            if (cur.peek().bc == BC_t::pop_) {
+                cur.remove();
+                cur.remove();
+            }
+            break;
+
+        // remove dup; stvar; pop;
+        case BC_t::dup_: {
+            if (cur.peek(1).bc == BC_t::stvar_ &&
+                    cur.peek(2).bc == BC_t::pop_) {
+                cur.remove();
+                ++cur;
+                cur.remove();
+            }
+            break;
+        }
+
+        // remove invisible; (ldvar || pop || visible)
+        case BC_t::invisible_: {
+            if (cur.atEnd())
+                break;
+            BC next = cur.peek();
+            if (next.bc == BC_t::ldvar_ || next.bc == BC_t::pop_ ||
+                    next.bc == BC_t::visible_)
+                cur.remove();
+        }
+
+        // remove isspecial n; isspecial n
+        case BC_t::isspecial_: {
+            if (cur.atEnd())
+                break;
+            BC next = cur.peek();
+            if (next.bc == BC_t::isspecial_ &&
+                    bc.immediate.pool == next.immediate.pool)
+                cur.remove();
+            break;
+        }
+
+        // ldvar a; ldvar a => ldvar a; dup
+        // ldvar a; visible => ldvar a
+        case BC_t::ldvar_: {
+            if (cur.atEnd())
+                break;
+            BC next = cur.peek();
+            if (next.bc == BC_t::ldvar_ &&
+                    bc.immediate.pool == next.immediate.pool) {
+                ++cur;
+                assert((*cur).bc == BC_t::ldvar_);
+                cur.remove();
+                cur << BC::dup();
+                break;
+            }
+            if (next.bc == BC_t::visible_) {
+                ++cur;
+                cur.remove();
+            }
+            break;
+        }
+
         default:
             break;
         }

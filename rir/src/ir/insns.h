@@ -40,7 +40,7 @@ DEF_INSTR(promise_, 1, 0, 1, 0, 0)
  * promise_:: take immediate CP index of Code, create promise & push on object
  * stack
  */
-DEF_INSTR(close_, 1, 2, 1, 0, 0)
+DEF_INSTR(close_, 0, 3, 1, 0, 0)
 /**
  * close_:: pop body and argument list, create closure, and push on object stack
  */
@@ -83,6 +83,10 @@ DEF_INSTR(br_, 1, 0, 0, 0, 0)
 DEF_INSTR(invisible_, 0, 0, 0, 0, 0)
 /**
  * invisible_:: set invisible flag
+ */
+DEF_INSTR(visible_, 0, 0, 0, 0, 0)
+/**
+ * visible_:: reset invisible flag
  */
 DEF_INSTR(lti_, 0, 0, 1, 2, 0)
 /**

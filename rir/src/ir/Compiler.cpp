@@ -30,7 +30,6 @@ class Context {
 
     class CodeContext {
       public:
-        bool optAssign = true;
         CodeStream cs;
         std::stack<LoopContext> loops;
         CodeContext(SEXP ast, FunctionHandle& fun) : cs(fun, ast) {}
@@ -57,10 +56,6 @@ class Context {
     void popLoop() { code.top().loops.pop(); }
 
     void push(SEXP ast) { code.emplace(ast, fun); }
-
-    void optAssign(bool opt) { code.top().optAssign = opt; }
-
-    bool optAssign() { return code.top().optAssign; }
 
     fun_idx_t pop() {
         auto idx = cs().finalize();
@@ -112,6 +107,15 @@ void compileDispatch(Context& ctx, SEXP selector, SEXP ast, SEXP fun,
 bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
     RList args(args_);
     CodeStream& cs = ctx.cs();
+
+    if (fun == symbol::Function && args.length() == 3) {
+        auto cls = Compiler::compileClosure(args[1], args[0]);
+        cs << BC::push(cls.formals)
+           << BC::push(cls.bc)
+           << BC::push(args[2])
+           << BC::close();
+        return true;
+    }
 
     if (fun == symbol::seq && args.length() >= 2 && args.length() <= 3) {
         // TODO: don't work since seq is lazyloaded
@@ -217,7 +221,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
         return true;
     }
 
-    if ((fun == symbol::Assign || fun == symbol::Assign2) && ctx.optAssign()) {
+    if (fun == symbol::Assign || fun == symbol::Assign2) {
         assert(args.length() == 2);
 
         auto lhs = args[0];
@@ -516,7 +520,8 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
         cs << BC::asbool() << BC::brtrue(trueBranch);
 
         if (args.length() < 3) {
-            cs << BC::push(R_NilValue) << BC::invisible();
+            cs << BC::push(R_NilValue)
+               << BC::invisible();
         } else {
             compileExpr(ctx, args[2]);
         }
@@ -529,12 +534,13 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
         return true;
     }
 
-    if (false && fun == symbol::Parenthesis) {
+    if (fun == symbol::Parenthesis) {
         if (args.length() != 1 || args[0] == R_DotsSymbol)
             return false;
 
         cs << BC::isspecial(fun);
         compileExpr(ctx, args[0]);
+        cs << BC::visible();
         return true;
     }
 
@@ -640,8 +646,9 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
 
         cs << nextBranch
            << BC::endcontext()
-           << BC::push(R_NilValue)
-           << BC::invisible();
+           << BC::push(R_NilValue);
+
+        cs << BC::invisible();
 
         ctx.popLoop();
 
