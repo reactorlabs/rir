@@ -54,6 +54,9 @@ private:
 // TODO for simplicity, should we make this an analysis?
 class ForwardDriver : public Driver {
 public:
+
+protected:
+
     void clear() {
         delete currentState_;
         delete initialState_;
@@ -77,7 +80,6 @@ public:
         doRun(code, dispatcher);
     }
 
-protected:
 
     ForwardDriver():
         cfReceiver_(*this),
@@ -183,9 +185,9 @@ inline void ForwardDriver::ControlFlowReceiver::terminator(Cursor at) {
     } else {
         driver_.finalState_->mergeWith(driver_.currentState_);
         delete driver_.currentState_;
-        driver_.currentState_ = nullptr;
     }
     driver_.stopCurrentSequence_ = true;
+    driver_.currentState_ = nullptr;
 }
 
 inline void ForwardDriver::ControlFlowReceiver::label(Cursor at) {

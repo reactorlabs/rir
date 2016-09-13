@@ -1,7 +1,7 @@
 #pragma once
 
-#include "LinearDriver.h"
-#include "InstructionVisitor.h"
+#include "code/LinearDriver.h"
+#include "code/InstructionVisitor.h"
 
 namespace rir {
 
@@ -32,7 +32,7 @@ public:
 
     /** Some silly printer stuff.
      */
-    void any(Cursor & ins) {
+    void any(Cursor ins) override {
         if (ins.hasAst()) {
             printOffset();
             Rprintf("          # ");
@@ -45,7 +45,7 @@ public:
         pc_ += bc.size();
     }
 
-    void label(Cursor & ins) {
+    void label(Cursor ins) override {
         printOffset();
         Rprintf("Label %i:\n", ins.bc().immediate.offset);
     }

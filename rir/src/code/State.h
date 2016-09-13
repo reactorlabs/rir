@@ -51,10 +51,10 @@ class AbstractStack : public State {
                   "Abstract values must be copy constructible");
     static_assert(has_mergeWith<AVALUE>::value,
                   "Abstract values must have mergeWith method");
-    static_assert(std::is_const<decltype(AVALUE::top)>::value,
+/*    static_assert(std::is_const<decltype(AVALUE::top)>::value,
                   "Must have const top");
     static_assert(std::is_const<decltype(AVALUE::top)>::value,
-                  "Must have const bottom");
+                  "Must have const bottom"); */
 
 public:
   typedef AVALUE Value;
@@ -142,10 +142,13 @@ class AbstractEnvironment : public State {
                   "Abstract values must be copy constructible");
     static_assert(has_mergeWith<AVALUE>::value,
                   "Abstract values must have mergeWith method");
-    static_assert(std::is_const<decltype(AVALUE::top)>::value,
+
+    // TODO change this to static methods
+    /*static_assert(std::is_const<decltype(AVALUE::top)>::value,
                   "Must have const top");
     static_assert(std::is_const<decltype(AVALUE::top)>::value,
                   "Must have const bottom");
+    */
 
 public:
   typedef AVALUE Value;
@@ -221,7 +224,7 @@ public:
             if (parent_ != nullptr)
                 return parent_->find(name);
             else
-                return AVALUE::top;
+                return AVALUE::top();
         else
             return i->second;
     }
@@ -229,7 +232,7 @@ public:
     AVALUE const & operator[](SEXP name) const {
         auto i = env_.find(name);
         if (i == env_.end())
-            return AVALUE::bottom;
+            return AVALUE::bottom();
         else
             return i->second;
     }
@@ -238,7 +241,7 @@ public:
         auto i = env_.find(name);
         if (i == env_.end()) {
             // so that we do not demand default constructor on values
-            env_.insert(std::pair<SEXP, AVALUE>(name, AVALUE::bottom));
+            env_.insert(std::pair<SEXP, AVALUE>(name, AVALUE::bottom()));
             i = env_.find(name);
             return i->second;
         } else {

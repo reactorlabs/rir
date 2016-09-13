@@ -15,14 +15,14 @@ public:
       */
     class Receiver {
     public:
-        virtual void any(Cursor & ins) {
+        virtual void any(Cursor ins) {
         }
 
-        virtual void label(Cursor & ins) {
+        virtual void label(Cursor ins) {
             any(ins);
         }
 
-#define DEF_INSTR(NAME, ...) virtual void NAME(Cursor & ins) { any(ins); }
+#define DEF_INSTR(NAME, ...) virtual void NAME(Cursor ins) { any(ins); }
 #include "ir/insns.h"
 
         virtual ~Receiver() {

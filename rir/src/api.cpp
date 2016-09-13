@@ -13,7 +13,9 @@
 
 #include "utils/FunctionHandle.h"
 
-#include "code/Printer.h"
+#include "optimizer/Printer.h"
+#include "code/analysis.h"
+#include "optimizer/cp.h"
 
 using namespace rir;
 
@@ -37,9 +39,9 @@ REXPORT SEXP rir_da(SEXP what) {
     Printer p;
     p.run(ce);
 
-/*    ConstantPropagation cp;
+    ConstantPropagation cp;
     cp.analyze(ce);
-    cp.print(); */
+    cp.print();
 
 
     return R_NilValue;
