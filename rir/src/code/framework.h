@@ -51,23 +51,8 @@ private:
     bool success_;
 };
 
-
-
-/** TODO Frankly, I think the driver is a useless abstraction and only makes the implementation more complex.
- */
 class Driver {
-
-private:
-    virtual void doRun(Code & code, Dispatcher & dispatcher) = 0;
-
-
-
 };
-
-
-
-
-
 
 }
 

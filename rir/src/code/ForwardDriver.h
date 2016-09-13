@@ -81,7 +81,7 @@ protected:
 
     ForwardDriver():
         cfReceiver_(*this),
-        cfDispatcher_(cfReceiver) {
+        cfDispatcher_(cfReceiver_) {
     }
 
     State * initialState_;
@@ -103,17 +103,21 @@ private:
 
         void label(Cursor at);
 
+        ControlFlowReceiver(ForwardDriver & driver):
+            driver_(driver) {
+        }
+
     private:
         ForwardDriver & driver_;
     };
 
-    void doRun(Code & code, Dispatcher & dispatcher) override {
+    void doRun(Code & code, Dispatcher & dispatcher) {
         while (not q_.empty()) {
-            currentIns = q_.front();
-            q.pop_front();
+            currentIns_ = q_.front();
+            q_.pop_front();
             stopCurrentSequence_ = false;
             while (true) {
-                BC cur = currentIns.bc();
+                BC cur = currentIns_.bc();
                 // if current instruction is label, get set incomming state to stored
                 if (cur.bc == BC_t::label) {
                     State * & stored = mergePoints_[cur.immediate.offset];
@@ -126,13 +130,14 @@ private:
                     }
                 }
                 // user dispatch method
-                dispatcher.dispatch(currentIns);
+                dispatcher.dispatch(currentIns_);
                 // now dispatch on the control flow
-                dispatcher_.dispatch(currentIns);
+                cfDispatcher_.dispatch(currentIns_);
                 // terminate current sequence if requested
                 if (stopCurrentSequence_)
                     continue;
-                ++currentIns;
+                // move to next instruction
+                currentIns_.advance();
             }
         }
     }
@@ -155,7 +160,7 @@ private:
 
 };
 
-inline ForwardDriver::ControlFlowReceiver::jump(Cursor target) {
+inline void ForwardDriver::ControlFlowReceiver::jump(Cursor target) {
     if (driver_.shouldJump(target.bc().immediate.offset)) {
         driver_.q_.push_front(target);
         delete driver_.currentState_;
@@ -164,26 +169,26 @@ inline ForwardDriver::ControlFlowReceiver::jump(Cursor target) {
     }
 }
 
-inline ForwardDriver::ControlFlowReceiver::conditionalJump(Cursor target) {
+inline void ForwardDriver::ControlFlowReceiver::conditionalJump(Cursor target) {
     if (driver_.shouldJump(target.bc().immediate.offset)) {
         driver_.q_.push_front(target);
     }
-    driver_.q_.push_front(driver_.currentIns_ + 1);
+    driver_.q_.push_front(driver_.currentIns_.next());
     driver_.stopCurrentSequence_ = true;
 }
 
-inline ForwardDriver::ControlFlowReceiver::terminator(Cursor at) {
+inline void ForwardDriver::ControlFlowReceiver::terminator(Cursor at) {
     if (driver_.finalState_ == nullptr) {
         driver_.finalState_ = driver_.currentState_;
     } else {
         driver_.finalState_->mergeWith(driver_.currentState_);
         delete driver_.currentState_;
-        currentState_ = nullptr;
+        driver_.currentState_ = nullptr;
     }
     driver_.stopCurrentSequence_ = true;
 }
 
-inlind ForwardDriver::ControlFlowReceiver::label(Cursor at) {
+inline void ForwardDriver::ControlFlowReceiver::label(Cursor at) {
     // do nothing and be happy
 }
 
