@@ -121,15 +121,27 @@ private:
             stopCurrentSequence_ = false;
             while (true) {
                 BC cur = currentIns_.bc();
-                // if current instruction is label, get set incomming state to stored
+                // if current instruction is label, deal with state merging
                 if (cur.bc == BC_t::label) {
+                    // if state not stored, store copy of incomming
                     State * & stored = mergePoints_[cur.immediate.offset];
                     if (stored == nullptr) {
                         assert(currentState_ != nullptr);
                         stored = currentState_->clone();
                     } else {
-                        delete currentState_; // just to be sure
-                        currentState_ = stored->clone();
+                        // if incomming not present, copy stored
+                        if (currentState_ == nullptr) {
+                            currentState_ = stored->clone();
+                        // otherwise merge incomming with stored
+                        } else if (stored->mergeWith(currentState_)) {
+                            delete currentState_;
+                            currentState_ = stored->clone();
+                        // and terminate current branch if there is no need to continue
+                        } else {
+                            delete currentState_;
+                            currentState_ = nullptr;
+                            break;
+                        }
                     }
                 }
                 // user dispatch method

@@ -16,6 +16,7 @@
 #include "optimizer/Printer.h"
 #include "code/analysis.h"
 #include "optimizer/cp.h"
+#include "optimizer/Signature.h"
 
 using namespace rir;
 
@@ -33,10 +34,15 @@ REXPORT SEXP rir_da(SEXP what) {
     Printer p;
     p.run(ce);
 
-    ConstantPropagation cp;
+
+/*    ConstantPropagation cp;
     cp.analyze(ce);
     cp.print();
-    cp.finalState().print();
+    cp.finalState().print(); */
+
+    SignatureAnalysis sa;
+    sa.analyze(ce);
+    sa.print();
 
 
     return R_NilValue;

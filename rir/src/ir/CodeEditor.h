@@ -268,7 +268,7 @@ class CodeEditor {
     CodeEditor(CodeHandle code);
 
 
-    std::vector<SEXP> arguments() {
+    std::vector<SEXP> arguments() const {
         if (closure_ == nullptr) {
             return std::vector<SEXP>();
         } else {
