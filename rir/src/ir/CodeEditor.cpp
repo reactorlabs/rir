@@ -8,16 +8,20 @@
 
 namespace rir {
 
-CodeEditor::CodeEditor(FunctionHandle function) : ast(function.ast()) {
-    loadCode(function, function.entryPoint());
+CodeEditor::CodeEditor(SEXP closure) {
+    ::Function * f = isValidClosureSEXP(closure);
+    assert(f != nullptr);
+    closure_ = closure;
+    FunctionHandle fh(functionSEXP(f));
+    CodeHandle ch = fh.entryPoint();
+    ast = ch.ast();
+    loadCode(fh, ch);
 }
 
-CodeEditor::CodeEditor(CodeHandle code) : CodeEditor(code.function(), code.idx()) { }
-
-CodeEditor::CodeEditor(FunctionHandle function, fun_idx_t idx) {
-    CodeHandle code = function.codeAtIdx(idx);
+CodeEditor::CodeEditor(CodeHandle code) {
     ast = code.ast();
-    loadCode(function, code);
+    loadCode(code.function(), code);
+
 }
 
 void CodeEditor::loadCode(FunctionHandle function, CodeHandle code) {
@@ -78,7 +82,7 @@ void CodeEditor::loadCode(FunctionHandle function, CodeHandle code) {
 
                     bc.immediate.fun = code.idx();
 
-                    CodeEditor* p = new CodeEditor(function, code.idx());
+                    CodeEditor* p = new CodeEditor(code);
 
                     if (promises.size() <= code.idx())
                         promises.resize(code.idx() + 1, nullptr);
@@ -93,7 +97,7 @@ void CodeEditor::loadCode(FunctionHandle function, CodeHandle code) {
                         CodeHandle code = function.codeAtOffset(argOffset[i]);
                         argOffset[i] = code.idx();
 
-                        CodeEditor* p = new CodeEditor(function, code.idx());
+                        CodeEditor* p = new CodeEditor(code);
 
                         if (promises.size() <= code.idx())
                             promises.resize(code.idx() + 1, nullptr);

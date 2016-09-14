@@ -16,6 +16,7 @@ namespace rir {
 
 class CodeEditor {
   private:
+
     struct BytecodeList {
         BC bc;
         SEXP src = nullptr;
@@ -35,6 +36,12 @@ class CodeEditor {
     SEXP ast;
 
     std::vector<BytecodeList*> labels_;
+
+    /** Closure that stores given code.
+
+      nullptr if the code corresponds to a promise.
+     */
+    SEXP closure_ = nullptr;
 
   public:
 
@@ -255,9 +262,25 @@ class CodeEditor {
         return Cursor(this, & last);
     }
 
-    CodeEditor(FunctionHandle function);
-    CodeEditor(FunctionHandle function, fun_idx_t idx);
+    CodeEditor(SEXP closure);
+
+    // TODO this should be private
     CodeEditor(CodeHandle code);
+
+
+    std::vector<SEXP> arguments() {
+        if (closure_ == nullptr) {
+            return std::vector<SEXP>();
+        } else {
+            std::vector<SEXP> result;
+            SEXP formals = FORMALS(closure_);
+            while (formals != R_NilValue) {
+                result.push_back(TAG(formals));
+                formals = CDR(formals);
+            }
+            return result;
+        }
+    }
 
     void loadCode(FunctionHandle function, CodeHandle code);
 

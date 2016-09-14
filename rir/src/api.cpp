@@ -29,13 +29,7 @@ extern "C" void resetEvalHook();
 static int rirJitEnabled = 0;
 
 REXPORT SEXP rir_da(SEXP what) {
-    ::Function * f = TYPEOF(what) == CLOSXP ? isValidClosureSEXP(what) : isValidFunctionSEXP(what);
-
-    if (f == nullptr)
-        Rf_error("Not a rir compiled code");
-
-    rir::FunctionHandle fun(functionSEXP(f));
-    CodeEditor ce(fun);
+    CodeEditor ce(what);
     Printer p;
     p.run(ce);
 

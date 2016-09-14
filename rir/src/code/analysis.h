@@ -108,11 +108,11 @@ class ForwardAnalysisIns : public ForwardAnalysisFinal<ASTATE> {
     using ForwardAnalysis<ASTATE>::currentIns_;
     using ForwardAnalysis<ASTATE>::currentState_;
     using ForwardAnalysis<ASTATE>::initialState_;
-    using ForwardAnalysis<ASTATE>::code_;
     using ForwardAnalysis<ASTATE>::dispatcher;
     using ForwardAnalysis<ASTATE>::mergePoints_;
 protected:
     using ForwardAnalysis<ASTATE>::current;
+    using ForwardAnalysis<ASTATE>::code_;
 public:
 
     ASTATE const & operator [] (CodeEditor::Cursor const & ins) {

@@ -90,6 +90,9 @@ class ConstantPropagation : public ForwardAnalysisIns<AbstractState<CP_Value>>,
      */
     AbstractState<CP_Value> * initialState() override {
         auto * result = new AbstractState<CP_Value>();
+        for (SEXP x : code_->arguments()) {
+            (*result)[x] = CP_Value::top();
+        }
         return result;
     }
 
