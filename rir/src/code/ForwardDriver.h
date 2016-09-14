@@ -12,13 +12,13 @@ class ControlFlowDispatcher : public Dispatcher {
 public:
     class Receiver {
     public:
-        virtual void jump(Cursor target) = 0;
+        virtual void jump(CodeEditor::Cursor target) = 0;
 
-        virtual void conditionalJump(Cursor target) = 0;
+        virtual void conditionalJump(CodeEditor::Cursor target) = 0;
 
-        virtual void terminator(Cursor at) = 0;
+        virtual void terminator(CodeEditor::Cursor at) = 0;
 
-        virtual void label(Cursor at) = 0;
+        virtual void label(CodeEditor::Cursor at) = 0;
 
         virtual ~Receiver() {
         }
@@ -29,7 +29,7 @@ public:
    }
 
 private:
-    void doDispatch(Cursor & ins) override {
+    void doDispatch(CodeEditor::Cursor & ins) override {
         BC cur = ins.bc();
         switch (cur.bc) {
             case BC_t::brtrue_:
@@ -70,7 +70,7 @@ protected:
         mergePoints_.clear();
     }
 
-    void run(Code & code, State * initialState, Dispatcher & dispatcher) {
+    void run(CodeEditor & code, State * initialState, Dispatcher & dispatcher) {
         clear();
         mergePoints_.resize(code.numLabels());
         // set current state to initial and push the first instruction in the queue
@@ -90,7 +90,7 @@ protected:
     State * initialState_ = nullptr;
     State * currentState_ = nullptr;
     State * finalState_ = nullptr;
-    Cursor currentIns_;
+    CodeEditor::Cursor currentIns_;
 
     std::vector<State *> mergePoints_;
 
@@ -98,13 +98,13 @@ private:
 
     class ControlFlowReceiver : public ControlFlowDispatcher::Receiver {
     public:
-        void jump(Cursor target);
+        void jump(CodeEditor::Cursor target);
 
-        void conditionalJump(Cursor target);
+        void conditionalJump(CodeEditor::Cursor target);
 
-        void terminator(Cursor at);
+        void terminator(CodeEditor::Cursor at);
 
-        void label(Cursor at);
+        void label(CodeEditor::Cursor at);
 
         ControlFlowReceiver(ForwardDriver & driver):
             driver_(driver) {
@@ -114,7 +114,7 @@ private:
         ForwardDriver & driver_;
     };
 
-    void doRun(Code & code, Dispatcher & dispatcher) {
+    void doRun(CodeEditor & code, Dispatcher & dispatcher) {
         while (not q_.empty()) {
             currentIns_ = q_.front();
             q_.pop_front();
@@ -155,7 +155,7 @@ private:
         }
     }
 
-    std::deque<Cursor> q_;
+    std::deque<CodeEditor::Cursor> q_;
     bool stopCurrentSequence_;
 
     ControlFlowReceiver cfReceiver_;
@@ -163,7 +163,7 @@ private:
 
 };
 
-inline void ForwardDriver::ControlFlowReceiver::jump(Cursor target) {
+inline void ForwardDriver::ControlFlowReceiver::jump(CodeEditor::Cursor target) {
     if (driver_.shouldJump(target.bc().immediate.offset)) {
         driver_.q_.push_front(target);
         delete driver_.currentState_;
@@ -172,7 +172,7 @@ inline void ForwardDriver::ControlFlowReceiver::jump(Cursor target) {
     }
 }
 
-inline void ForwardDriver::ControlFlowReceiver::conditionalJump(Cursor target) {
+inline void ForwardDriver::ControlFlowReceiver::conditionalJump(CodeEditor::Cursor target) {
     if (driver_.shouldJump(target.bc().immediate.offset)) {
         driver_.q_.push_front(target);
     }
@@ -180,7 +180,7 @@ inline void ForwardDriver::ControlFlowReceiver::conditionalJump(Cursor target) {
     driver_.stopCurrentSequence_ = true;
 }
 
-inline void ForwardDriver::ControlFlowReceiver::terminator(Cursor at) {
+inline void ForwardDriver::ControlFlowReceiver::terminator(CodeEditor::Cursor at) {
     if (driver_.finalState_ == nullptr) {
         driver_.finalState_ = driver_.currentState_;
     } else {
@@ -191,7 +191,7 @@ inline void ForwardDriver::ControlFlowReceiver::terminator(Cursor at) {
     driver_.currentState_ = nullptr;
 }
 
-inline void ForwardDriver::ControlFlowReceiver::label(Cursor at) {
+inline void ForwardDriver::ControlFlowReceiver::label(CodeEditor::Cursor at) {
     // do nothing and be happy
 }
 

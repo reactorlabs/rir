@@ -32,7 +32,7 @@ public:
 
     /** Some silly printer stuff.
      */
-    void any(Cursor ins) override {
+    void any(CodeEditor::Cursor ins) override {
         if (ins.hasAst()) {
             printOffset();
             Rprintf("          # ");
@@ -45,7 +45,7 @@ public:
         pc_ += bc.size();
     }
 
-    void label(Cursor ins) override {
+    void label(CodeEditor::Cursor ins) override {
         printOffset();
         Rprintf("Label %i:\n", ins.bc().immediate.offset);
     }

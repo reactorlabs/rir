@@ -115,7 +115,7 @@ protected:
     using ForwardAnalysis<ASTATE>::current;
 public:
 
-    ASTATE const & operator [] (Cursor const & ins) {
+    ASTATE const & operator [] (CodeEditor::Cursor const & ins) {
         assert(& ins.editor() == code_ and "you can only use cursors from the same editor");
         if (ins != currentIns_)
             seek(ins);
