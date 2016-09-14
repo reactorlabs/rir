@@ -61,6 +61,8 @@ DECLARE(Or, "||");
 DECLARE(Missing, "missing");
 DECLARE(seq, "seq");
 DECLARE(lapply, "lapply");
+DECLARE(aslist, "as.list");
+DECLARE(isvector, "is.vector");
 
 #undef DECLARE
 } // namespace symbol

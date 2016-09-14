@@ -492,13 +492,29 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
         return true;
     }
 
-    if (fun == symbol::lapply && args.length() == 2) {
+    if (false && fun == symbol::lapply && args.length() == 2) {
+        auto a = args.begin();
+        if (a.hasTag() || (a + 1).hasTag())
+            return false;
         // TODO guard
+
+        Label notVecBranch = cs.mkLabel();
+        Label vectBranch = cs.mkLabel();
+        compileExpr(ctx, args[0]);
+        cs << BC::brobj(notVecBranch) << BC::dup() << BC::is(VECSXP)
+           << BC::brfalse(notVecBranch) << BC::br(vectBranch);
+
+        // Convert to vector
+        cs << notVecBranch << BC::ldfun(symbol::aslist) << BC::swap()
+           << BC::call_stack(
+                  1, {R_NilValue},
+                  LCONS(symbol::aslist,
+                        LCONS(symbol::getterPlaceholder, R_NilValue)));
+
+        cs << vectBranch;
 
         Label loopBranch = cs.mkLabel();
         Label nextBranch = cs.mkLabel();
-
-        compileExpr(ctx, args[0]);
 
         // get length and names of the vector
         cs << BC::dup() << BC::dup() << BC::names() << BC::swap()
@@ -508,7 +524,15 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
            // Put the counter in place
            << BC::push((int)0);
 
-        compileExpr(ctx, args[1]);
+        if (TYPEOF(args[1]) == SYMSXP) {
+            cs << BC::ldfun(args[1]);
+        } else if (TYPEOF(args[1]) == STRSXP) {
+            assert(Rf_length(args[1]) == 1);
+            cs << BC::ldfun(Rf_install(CHAR(STRING_ELT(args[1], 0))));
+        } else {
+            compileExpr(ctx, args[1]);
+            cs << BC::isfun();
+        }
         cs << BC::put(4);
 
         // loop invariant stack layout: [fun, x, ans, len+1, i]
