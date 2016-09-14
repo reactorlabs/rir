@@ -20,7 +20,6 @@ void BC::write(CodeStream& cs) const {
     case BC_t::isspecial_:
     case BC_t::stvar_:
     case BC_t::missing_:
-    case BC_t::subassign_:
     case BC_t::subassign2_:
         cs.insert(immediate.pool);
         return;
@@ -56,14 +55,19 @@ void BC::write(CodeStream& cs) const {
 
     case BC_t::pushi_:
     case BC_t::pick_:
+    case BC_t::pull_:
     case BC_t::is_:
     case BC_t::put_:
+    case BC_t::alloc_:
         cs.insert(immediate.i);
         return;
 
     case BC_t::subset1_:
     case BC_t::extract1_:
     case BC_t::ret_:
+    case BC_t::length_:
+    case BC_t::names_:
+    case BC_t::set_names_:
     case BC_t::force_:
     case BC_t::pop_:
     case BC_t::close_:
@@ -91,6 +95,7 @@ void BC::write(CodeStream& cs) const {
     case BC_t::invisible_:
     case BC_t::visible_:
     case BC_t::endcontext_:
+    case BC_t::subassign_:
         return;
 
     case BC_t::invalid_:
@@ -266,16 +271,16 @@ void BC::print() {
     case BC_t::ldddvar_:
     case BC_t::stvar_:
     case BC_t::missing_:
-    case BC_t::subassign_:
-    case BC_t::subassign2_:
         Rprintf(" %u # %s", immediate.pool, CHAR(PRINTNAME((immediateConst()))));
         break;
     case BC_t::pushi_:
     case BC_t::pick_:
+    case BC_t::pull_:
     case BC_t::put_:
         Rprintf(" %i", immediate.i);
         break;
     case BC_t::is_:
+    case BC_t::alloc_:
         Rprintf(" %s", type2char(immediate.i));
         break;
     case BC_t::force_:
@@ -304,10 +309,15 @@ void BC::print() {
     case BC_t::subset1_:
     case BC_t::extract1_:
     case BC_t::close_:
+    case BC_t::length_:
+    case BC_t::names_:
+    case BC_t::set_names_:
     case BC_t::endcontext_:
     case BC_t::aslogical_:
     case BC_t::lgl_or_:
     case BC_t::lgl_and_:
+    case BC_t::subassign_:
+    case BC_t::subassign2_:
         break;
     case BC_t::promise_:
     case BC_t::push_code_:

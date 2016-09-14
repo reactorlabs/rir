@@ -60,6 +60,7 @@ DECLARE(And, "&&");
 DECLARE(Or, "||");
 DECLARE(Missing, "missing");
 DECLARE(seq, "seq");
+DECLARE(lapply, "lapply");
 
 #undef DECLARE
 } // namespace symbol

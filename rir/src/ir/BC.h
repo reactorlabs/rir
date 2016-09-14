@@ -28,7 +28,6 @@ BC::immediate_t decodeImmediate(BC_t bc, BC_t* pc) {
     case BC_t::isspecial_:
     case BC_t::stvar_:
     case BC_t::missing_:
-    case BC_t::subassign_:
     case BC_t::subassign2_:
         immediate.pool = *(pool_idx_t*)pc;
         break;
@@ -58,8 +57,10 @@ BC::immediate_t decodeImmediate(BC_t bc, BC_t* pc) {
         break;
     case BC_t::pushi_:
     case BC_t::pick_:
+    case BC_t::pull_:
     case BC_t::is_:
     case BC_t::put_:
+    case BC_t::alloc_:
         immediate.i = *(uint32_t*)pc;
         break;
     case BC_t::test_bounds_:
@@ -92,6 +93,10 @@ BC::immediate_t decodeImmediate(BC_t bc, BC_t* pc) {
     case BC_t::invisible_:
     case BC_t::visible_:
     case BC_t::endcontext_:
+    case BC_t::subassign_:
+    case BC_t::length_:
+    case BC_t::names_:
+    case BC_t::set_names_:
         break;
     case BC_t::invalid_:
     case BC_t::num_of:
@@ -187,16 +192,10 @@ BC BC::stvar(SEXP sym) {
     i.pool = Pool::insert(sym);
     return BC(BC_t::stvar_, i);
 }
-BC BC::subassign(SEXP sym) {
-    assert(TYPEOF(sym) == SYMSXP);
-    assert(strlen(CHAR(PRINTNAME(sym))));
-    immediate_t i;
-    i.pool = Pool::insert(sym);
-    return BC(BC_t::subassign_, i);
-}
+BC BC::subassign() { return BC(BC_t::subassign_); }
 BC BC::subassign2(SEXP sym) {
-    assert(TYPEOF(sym) == SYMSXP);
-    assert(strlen(CHAR(PRINTNAME(sym))));
+    assert(sym == R_NilValue ||
+           (TYPEOF(sym) == SYMSXP && strlen(CHAR(PRINTNAME(sym)))));
     immediate_t i;
     i.pool = Pool::insert(sym);
     return BC(BC_t::subassign2_, i);
@@ -205,6 +204,15 @@ BC BC::lti() { return BC(BC_t::lti_); }
 BC BC::eqi() { return BC(BC_t::eqi_); }
 BC BC::seq() { return BC(BC_t::seq_); }
 BC BC::asbool() { return BC(BC_t::asbool_); }
+
+BC BC::length() { return BC(BC_t::length_); }
+BC BC::names() { return BC(BC_t::names_); }
+BC BC::setNames() { return BC(BC_t::set_names_); }
+BC BC::alloc(int type) {
+    immediate_t i;
+    i.i = type;
+    return BC(BC_t::alloc_, i);
+}
 
 BC BC::isfun() { return BC(BC_t::isfun_); }
 
@@ -263,6 +271,11 @@ BC BC::uniq() { return BC(BC_t::uniq_); }
 BC BC::asLogical() { return BC(BC_t::aslogical_); }
 BC BC::lglAnd() { return BC(BC_t::lgl_and_); }
 BC BC::lglOr() { return BC(BC_t::lgl_or_); }
+BC BC::pull(uint32_t i) {
+    immediate_t im;
+    im.i = i;
+    return BC(BC_t::pull_, im);
+}
 BC BC::pick(uint32_t i) {
     immediate_t im;
     im.i = i;

@@ -217,11 +217,11 @@ DEF_INSTR(return_, 0, 0, 0, 0, 0)
 /**
  * return_ :: return instruction
  */
-DEF_INSTR(subassign_, 1, 3, 0, 0, 0)
+DEF_INSTR(subassign_, 0, 3, 1, 0, 0)
 /**
  * subassign_ :: [<-(a,b,c)
  */
-DEF_INSTR(subassign2_, 1, 3, 0, 0, 0)
+DEF_INSTR(subassign2_, 1, 3, 1, 0, 0)
 /**
  * subassign2_ :: [[<-(a,b,c)
  */
@@ -233,6 +233,17 @@ DEF_INSTR(seq_, 0, 3, 1, 0, 0)
 /**
  * seq_ :: seq(scalar, scalar, scalar)
  */
+DEF_INSTR(names_, 0, 1, 1, 0, 0)
+// read out names of a vector
+DEF_INSTR(length_, 0, 1, 1, 0, 0)
+// get length of a vector
+DEF_INSTR(set_names_, 0, 2, 1, 0, 0)
+// set names of a vector, takes vector and names, puts vector back
+DEF_INSTR(alloc_, 1, 1, 1, 0, 0)
+// allocate vector. type immediate, length as integer on stack
+DEF_INSTR(pull_, 1, 0, 1, 0, 0)
+// copy a value from the stack. examples: pull(0) == dup(), pull(1) takes 2nd
+// element on stack and pushes it
 
 // TODO these may be redundant but needed for the unification
 // TODO pushes argument value (index of the argument is taken from integer

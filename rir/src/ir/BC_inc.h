@@ -195,8 +195,12 @@ class BC {
     inline static BC asast();
     inline static BC stvar(SEXP sym);
     inline static BC missing(SEXP sym);
-    inline static BC subassign(SEXP sym);
+    inline static BC subassign();
     inline static BC subassign2(SEXP sym);
+    inline static BC length();
+    inline static BC names();
+    inline static BC setNames();
+    inline static BC alloc(int type);
     inline static BC asbool();
     inline static BC beginloop(jmp_t);
     inline static BC endcontext();
@@ -232,6 +236,7 @@ class BC {
     inline static BC swap();
     inline static BC put(uint32_t);
     inline static BC pick(uint32_t);
+    inline static BC pull(uint32_t);
     inline static BC is(uint32_t);
     inline static BC return_();
 

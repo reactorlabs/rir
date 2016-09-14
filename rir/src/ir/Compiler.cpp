@@ -321,7 +321,8 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
                         if (fun == symbol::DoubleBracket)
                             cs << BC::subassign2(target);
                         else
-                            cs << BC::subassign(target);
+                            cs << BC::subassign();
+                        cs << BC::stvar(target);
                         cs << BC::br(nextBranch);
 
                         // In the case the target is an object:
@@ -487,6 +488,50 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
 
         cs << BC::stvar(target)
            << BC::invisible();
+
+        return true;
+    }
+
+    if (fun == symbol::lapply && args.length() == 2) {
+        // TODO guard
+
+        Label loopBranch = cs.mkLabel();
+        Label nextBranch = cs.mkLabel();
+
+        compileExpr(ctx, args[0]);
+
+        // get length and names of the vector
+        cs << BC::dup() << BC::dup() << BC::names() << BC::swap()
+           << BC::length() << BC::dup() << BC::uniq() << BC::inc() << BC::swap()
+           // allocate the ans vector with same size and names
+           << BC::alloc(VECSXP) << BC::pick(2) << BC::setNames() << BC::swap()
+           // Put the counter in place
+           << BC::push((int)0);
+
+        compileExpr(ctx, args[1]);
+        cs << BC::put(4);
+
+        // loop invariant stack layout: [fun, x, ans, len+1, i]
+
+        // check end condition
+        cs << loopBranch << BC::inc() << BC::dup2() << BC::swap() << BC::lt()
+           << BC::brfalse(nextBranch);
+
+        SEXP rewritten =
+            LCONS(args[1], LCONS(symbol::getterPlaceholder, R_NilValue));
+
+        cs << BC::pull(4)
+           // X[[i]]
+           << BC::pull(4) << BC::pull(2) << BC::extract1()
+           << BC::call_stack(1, {R_NilValue}, rewritten);
+
+        // store result
+        cs << BC::pull(1) << BC::pick(4) << BC::subassign2(R_NilValue)
+           << BC::put(2) << BC::br(loopBranch);
+
+        // Put ans to the top and remove rest
+        cs << nextBranch << BC::pop() << BC::pop() << BC::swap() << BC::pop()
+           << BC::swap() << BC::pop() << BC::invisible();
 
         return true;
     }
