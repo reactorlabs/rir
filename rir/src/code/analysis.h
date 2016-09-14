@@ -6,9 +6,16 @@
 namespace rir {
 
 /** Base class for all analyses.
+
+  In the future, this is where the API for analysis scheduling, retrieval and invalidation will live.
  */
 class Analysis {
 public:
+
+    /** Analyzes the given code.
+
+      Internally sets the state and then calls the doAnalyze() virtual method that should implement the actual analysis.
+     */
     void analyze(CodeEditor & code) {
         if (code_ != nullptr)
             invalidate();
@@ -30,11 +37,16 @@ public:
         return code_ != nullptr;
     }
 
-    virtual void print() {
-
-    }
+    /** Override this for pretty printing.
+     */
+    virtual void print() = 0;
 
 protected:
+
+    /** Override this method to provide the actual analysis.
+
+      This should mostly mean invoking the appropriate driver and collecting the state.
+     */
 
     virtual void doAnalyze() = 0;
 
@@ -43,6 +55,11 @@ protected:
 
 };
 
+
+/** Forward driver analysis updates the basic analysis API with forward driver.
+
+  ForwardAnalysis does not deal with visibility of any results, that is the domain of its descelndants.
+ */
 template<typename ASTATE>
 class ForwardAnalysis : public Analysis, public ForwardDriver {
 public:
@@ -50,17 +67,6 @@ public:
     void invalidate() override {
         Analysis::invalidate();
         clear();
-    }
-
-    ASTATE const & finalState() {
-        return * reinterpret_cast<ASTATE *>(finalState_);
-    }
-
-    ASTATE const & operator [] (Cursor const & ins) {
-        assert(& ins.editor() == code_ and "you can only use cursors from the same editor");
-        if (ins != currentIns_)
-            seek(ins);
-        return current();
     }
 
     void print() override {
@@ -80,10 +86,43 @@ protected:
         return new ASTATE();
     }
 
-    void doAnalyze() {
+    void doAnalyze() override {
         run(* code_, initialState(), dispatcher());
     }
 
+
+};
+
+
+template<typename ASTATE>
+class ForwardAnalysisFinal : public ForwardAnalysis<ASTATE> {
+    using ForwardAnalysis<ASTATE>::finalState_;
+public:
+    ASTATE const & finalState() {
+        return * reinterpret_cast<ASTATE *>(finalState_);
+    }
+};
+
+template<typename ASTATE>
+class ForwardAnalysisIns : public ForwardAnalysisFinal<ASTATE> {
+    using ForwardAnalysis<ASTATE>::currentIns_;
+    using ForwardAnalysis<ASTATE>::currentState_;
+    using ForwardAnalysis<ASTATE>::initialState_;
+    using ForwardAnalysis<ASTATE>::code_;
+    using ForwardAnalysis<ASTATE>::dispatcher;
+    using ForwardAnalysis<ASTATE>::mergePoints_;
+protected:
+    using ForwardAnalysis<ASTATE>::current;
+public:
+
+    ASTATE const & operator [] (Cursor const & ins) {
+        assert(& ins.editor() == code_ and "you can only use cursors from the same editor");
+        if (ins != currentIns_)
+            seek(ins);
+        return current();
+    }
+
+protected:
     void initializeCache() {
         currentState_ = initialState_->clone();
         currentIns_ = code_->getCursor();
@@ -117,6 +156,10 @@ protected:
         assert(false and "not reachable");
     }
 
+
+
 };
+
+
 
 }

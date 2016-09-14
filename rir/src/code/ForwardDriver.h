@@ -87,9 +87,9 @@ protected:
         cfDispatcher_(cfReceiver_) {
     }
 
-    State * initialState_;
-    State * currentState_;
-    State * finalState_;
+    State * initialState_ = nullptr;
+    State * currentState_ = nullptr;
+    State * finalState_ = nullptr;
     Cursor currentIns_;
 
     std::vector<State *> mergePoints_;

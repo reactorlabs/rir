@@ -76,16 +76,22 @@ class CP_Value {
 
 };
 
-class ConstantPropagation : public ForwardAnalysis<AbstractState<CP_Value>>,
+class ConstantPropagation : public ForwardAnalysisIns<AbstractState<CP_Value>>,
                             public InstructionVisitor::Receiver {
   public:
     typedef CP_Value Value;
     ConstantPropagation() :
-        ForwardAnalysis(),
         dispatcher_(*this) {
     }
 
   protected:
+
+    /** Set incomming arguments to top.
+     */
+    AbstractState<CP_Value> * initialState() override {
+        auto * result = new AbstractState<CP_Value>();
+        return result;
+    }
 
     virtual Dispatcher & dispatcher() {
         return dispatcher_;
