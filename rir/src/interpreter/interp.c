@@ -1434,7 +1434,10 @@ INSTRUCTION(subassign2_) {
 
 #if RIR_AS_PACKAGE == 0
     // Fast case
-    if (!MAYBE_SHARED(orig)) {
+    // TODO: this is broken, since in:
+    // a[[b]] <- a
+    // a is not shared, but it will leak as the return value....
+    if (false && !MAYBE_SHARED(orig)) {
         SEXPTYPE vectorT = TYPEOF(orig);
         SEXPTYPE valT = TYPEOF(val);
         SEXPTYPE idxT = TYPEOF(idx);
