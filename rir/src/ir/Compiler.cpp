@@ -502,23 +502,32 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
 
         Label notVecBranch = cs.mkLabel();
         Label vectBranch = cs.mkLabel();
+
         compileExpr(ctx, args[0]);
-        cs << BC::brobj(notVecBranch) << BC::dup() << BC::is(VECSXP)
-           << BC::brfalse(notVecBranch) << BC::br(vectBranch);
+
+        cs << BC::brobj(notVecBranch)
+           << BC::dup()
+           << BC::is(VECSXP)
+           << BC::brfalse(notVecBranch)
+           << BC::br(vectBranch);
+
+        static SEXP convertfun = nullptr;
+        if (!convertfun)
+            convertfun = LCONS(symbol::aslist,
+                    LCONS(symbol::getterPlaceholder, R_NilValue));
 
         // Convert to vector
-        cs << notVecBranch << BC::ldfun(symbol::aslist) << BC::swap()
-           << BC::call_stack(
-                  1, {R_NilValue},
-                  LCONS(symbol::aslist,
-                        LCONS(symbol::getterPlaceholder, R_NilValue)));
+        cs << notVecBranch
+           << BC::ldfun(symbol::aslist)
+           << BC::swap()
+           << BC::call_stack(1, {R_NilValue}, convertfun);
 
         cs << vectBranch;
 
         Label loopBranch = cs.mkLabel();
         Label nextBranch = cs.mkLabel();
 
-        // get length and names of the vector
+        // get length and names of the vector X
         cs << BC::dup()
            << BC::dup()
            << BC::names()
@@ -536,6 +545,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
            // Put the counter in place
            << BC::push((int)0);
 
+        // lookup of the function to apply
         if (TYPEOF(args[1]) == SYMSXP) {
             cs << BC::ldfun(args[1]);
         } else if (TYPEOF(args[1]) == STRSXP) {
@@ -547,27 +557,44 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
         }
         cs << BC::put(4);
 
-        // loop invariant stack layout: [fun, x, ans, len+1, i]
+        // loop invariant stack layout: [fun, X, ans, len(vector)+1, i]
 
         // check end condition
-        cs << loopBranch << BC::inc() << BC::dup2() << BC::swap() << BC::lt()
+        cs << loopBranch
+           << BC::inc()
+           << BC::dup2()
+           << BC::swap()
+           << BC::lt()
            << BC::brfalse(nextBranch);
 
-        SEXP rewritten =
-            LCONS(args[1], LCONS(symbol::getterPlaceholder, R_NilValue));
-
+        // X[[i]]
         cs << BC::pull(4)
-           // X[[i]]
-           << BC::pull(4) << BC::pull(2) << BC::extract1()
-           << BC::call_stack(1, {R_NilValue}, rewritten);
+           << BC::pull(4)
+           << BC::pull(2)
+           << BC::extract1();
+
+        // f(X[[i]])
+        SEXP rewritten = LCONS(args[1],
+                LCONS(symbol::getterPlaceholder, R_NilValue));
+
+        cs << BC::call_stack(1, {R_NilValue}, rewritten);
 
         // store result
-        cs << BC::pull(1) << BC::pick(4) << BC::subassign2(R_NilValue)
-           << BC::put(2) << BC::br(loopBranch);
+        cs << BC::pull(1)
+           << BC::pick(4)
+           << BC::subassign2(R_NilValue)
+           << BC::put(2)
+           << BC::br(loopBranch);
 
         // Put ans to the top and remove rest
-        cs << nextBranch << BC::pop() << BC::pop() << BC::swap() << BC::pop()
-           << BC::swap() << BC::pop() << BC::invisible();
+        cs << nextBranch
+           << BC::pop()
+           << BC::pop()
+           << BC::swap()
+           << BC::pop()
+           << BC::swap()
+           << BC::pop()
+           << BC::invisible();
 
         return true;
     }
