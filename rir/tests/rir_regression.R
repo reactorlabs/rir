@@ -24,3 +24,10 @@ f <- rir.compile(function() {
 })
 f()
 
+f <- rir.compile(function() {
+a <- list( 1 ); b <- (a[[1]] <- a); stopifnot(identical(b, list( 1 )))
+a <- list(x=1); b <- ( a$x  <-  a); stopifnot(identical(b, list(x=1)))
+})
+
+rir.disassemble(f)
+f()

@@ -307,7 +307,8 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
                         compileExpr(ctx, rhs);
                         // Keep a copy of rhs since its the result of this
                         // expression
-                        cs << BC::dup();
+                        cs << BC::dup()
+                           << BC::uniq();
 
                         // Now load target and index
                         cs << BC::ldvar(target);
@@ -367,7 +368,8 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
         }
 
         compileExpr(ctx, rhs);
-        cs << BC::dup();
+        cs << BC::dup()
+           << BC::uniq();
 
         // Evaluate the getter list and push it to the stack in reverse order
         for (unsigned i = lhsParts.size() - 1; i > 0; --i) {
@@ -517,10 +519,20 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
         Label nextBranch = cs.mkLabel();
 
         // get length and names of the vector
-        cs << BC::dup() << BC::dup() << BC::names() << BC::swap()
-           << BC::length() << BC::dup() << BC::uniq() << BC::inc() << BC::swap()
+        cs << BC::dup()
+           << BC::dup()
+           << BC::names()
+           << BC::swap()
+           << BC::length()
+           << BC::dup()
+           << BC::uniq()
+           << BC::inc()
+           << BC::swap()
            // allocate the ans vector with same size and names
-           << BC::alloc(VECSXP) << BC::pick(2) << BC::setNames() << BC::swap()
+           << BC::alloc(VECSXP)
+           << BC::pick(2)
+           << BC::setNames()
+           << BC::swap()
            // Put the counter in place
            << BC::push((int)0);
 

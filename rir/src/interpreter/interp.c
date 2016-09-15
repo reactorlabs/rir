@@ -1434,10 +1434,7 @@ INSTRUCTION(subassign2_) {
 
 #if RIR_AS_PACKAGE == 0
     // Fast case
-    // TODO: this is broken, since in:
-    // a[[b]] <- a
-    // a is not shared, but it will leak as the return value....
-    if (false && !MAYBE_SHARED(orig)) {
+    if (!MAYBE_SHARED(orig)) {
         SEXPTYPE vectorT = TYPEOF(orig);
         SEXPTYPE valT = TYPEOF(val);
         SEXPTYPE idxT = TYPEOF(idx);
@@ -1912,11 +1909,13 @@ INSTRUCTION(invisible_) {
 
 INSTRUCTION(uniq_) {
     SEXP v = ostack_top(ctx);
-    if (MAYBE_SHARED(v)) {
-        v = shallow_duplicate(v);
+    if (NAMED(v) < 2) {
+        INCREMENT_NAMED(v);
+    } else {
+        v = shallow_duplicate(escape(v));
+        SET_NAMED(v, 0);
         *ostack_at(ctx, 0) = v;
     }
-    SET_NAMED(ostack_top(ctx), 2);
 }
 
 extern void printCode(Code* c);
