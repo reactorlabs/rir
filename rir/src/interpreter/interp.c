@@ -1910,11 +1910,11 @@ INSTRUCTION(invisible_) {
 INSTRUCTION(uniq_) {
     SEXP v = ostack_top(ctx);
     if (NAMED(v) < 2) {
-        INCREMENT_NAMED(v);
+        SET_NAMED(v, 2);
     } else {
         v = shallow_duplicate(escape(v));
-        SET_NAMED(v, 0);
         *ostack_at(ctx, 0) = v;
+        SET_NAMED(v, 1);
     }
 }
 

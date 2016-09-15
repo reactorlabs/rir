@@ -593,8 +593,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
            << BC::swap()
            << BC::pop()
            << BC::swap()
-           << BC::pop()
-           << BC::invisible();
+           << BC::pop();
 
         return true;
     }
