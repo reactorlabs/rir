@@ -29,6 +29,17 @@ extern "C" void setEvalHook(callback_eval);
 extern "C" void resetEvalHook();
 static int rirJitEnabled = 0;
 
+
+/** Testing - returns the result of signature analysis on given code.
+ */
+REXPORT SEXP rir_analysis_signature(SEXP what) {
+    CodeEditor ce(what);
+    SignatureAnalysis sa;
+    sa.analyze(ce);
+    return sa.finalState().exportToR();
+}
+
+
 REXPORT SEXP rir_da(SEXP what) {
     CodeEditor ce(what);
     Printer p;

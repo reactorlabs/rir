@@ -86,6 +86,32 @@ public:
         return i->second.forced;
     }
 
+    SEXP exportToR() const {
+        SEXP result = PROTECT(allocVector(STRSXP, argumentEvaluation_.size()));
+        SEXP names = PROTECT(allocVector(STRSXP, argumentEvaluation_.size()));
+        size_t i = 0;
+        for (auto x : argumentEvaluation_) {
+            SET_STRING_ELT(names, i, PRINTNAME(x.first));
+            switch (x.second.forced) {
+                case Bool3::no:
+                    SET_STRING_ELT(result, i, mkChar("no"));
+                    break;
+                case Bool3::maybe:
+                    SET_STRING_ELT(result, i, mkChar("maybe"));
+                    break;
+                case Bool3::yes:
+                    SET_STRING_ELT(result, i, mkChar("yes"));
+                    break;
+            }
+            ++i;
+        }
+        SEXP x = PROTECT(allocVector(VECSXP, 2));
+        SET_VECTOR_ELT(x, 0, result);
+        SET_VECTOR_ELT(x, 1, names);
+        UNPROTECT(3);
+        return x;
+    }
+
     Signature * clone() const {
         return new Signature(*this);
     }
