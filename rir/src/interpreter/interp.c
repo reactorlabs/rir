@@ -414,7 +414,9 @@ SEXP createArgsListStack(Code* c, size_t nargs, SEXP names, SEXP env, SEXP call,
                 while (ellipsis != R_NilValue) {
                     name = TAG(ellipsis);
                     if (eager) {
-                        SEXP arg = rirEval(CAR(ellipsis), env);
+                        SEXP arg = CAR(ellipsis);
+                        if (arg != R_MissingArg)
+                            arg = rirEval(CAR(ellipsis), env);
                         assert(TYPEOF(arg) != PROMSXP);
                         p += __listAppend(&result, &pos, arg, name);
                     } else {
@@ -462,7 +464,9 @@ SEXP createArgsList(Code* c, FunctionIndex* args, SEXP call, size_t nargs,
                 while (ellipsis != R_NilValue) {
                     name = TAG(ellipsis);
                     if (eager) {
-                        SEXP arg = rirEval(CAR(ellipsis), env);
+                        SEXP arg = CAR(ellipsis);
+                        if (arg != R_MissingArg)
+                            arg = rirEval(CAR(ellipsis), env);
                         assert(TYPEOF(arg) != PROMSXP);
                         p += __listAppend(&result, &pos, arg, name);
                     } else {
