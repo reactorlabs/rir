@@ -414,7 +414,9 @@ SEXP createArgsListStack(Code* c, size_t nargs, SEXP names, SEXP env, SEXP call,
                 while (ellipsis != R_NilValue) {
                     name = TAG(ellipsis);
                     if (eager) {
-                        SEXP arg = rirEval(CAR(ellipsis), env);
+                        SEXP arg = CAR(ellipsis);
+                        if (arg != R_MissingArg)
+                            arg = rirEval(CAR(ellipsis), env);
                         assert(TYPEOF(arg) != PROMSXP);
                         p += __listAppend(&result, &pos, arg, name);
                     } else {
@@ -425,8 +427,8 @@ SEXP createArgsListStack(Code* c, size_t nargs, SEXP names, SEXP env, SEXP call,
                 }
             }
         } else if (arg == R_MissingArg) {
-            if (eager)
-                Rf_errorcall(call, "argument %d is empty", i + 1);
+            // TODO i think this is ok, since R_MissingArg can also occur as a
+            // value...
             p += __listAppend(&result, &pos, R_MissingArg, R_NilValue);
         } else {
             if (eager && TYPEOF(arg) == PROMSXP) {
@@ -462,7 +464,9 @@ SEXP createArgsList(Code* c, FunctionIndex* args, SEXP call, size_t nargs,
                 while (ellipsis != R_NilValue) {
                     name = TAG(ellipsis);
                     if (eager) {
-                        SEXP arg = rirEval(CAR(ellipsis), env);
+                        SEXP arg = CAR(ellipsis);
+                        if (arg != R_MissingArg)
+                            arg = rirEval(CAR(ellipsis), env);
                         assert(TYPEOF(arg) != PROMSXP);
                         p += __listAppend(&result, &pos, arg, name);
                     } else {
