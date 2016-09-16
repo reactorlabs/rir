@@ -8,22 +8,23 @@
 
 namespace rir {
 
-CodeEditor::CodeEditor(FunctionHandle function) : ast(function.ast()) {
-    entryPoint = new BCStore;
-    loadCode(function, function.entryPoint(), entryPoint);
+CodeEditor::CodeEditor(SEXP closure) {
+    ::Function * f = isValidClosureSEXP(closure);
+    assert(f != nullptr);
+    closure_ = closure;
+    FunctionHandle fh(functionSEXP(f));
+    CodeHandle ch = fh.entryPoint();
+    ast = ch.ast();
+    loadCode(fh, ch);
 }
 
-CodeEditor::CodeEditor(CodeHandle code) : CodeEditor(code.function(), code.idx()) { }
-
-CodeEditor::CodeEditor(FunctionHandle function, fun_idx_t idx) {
-    entryPoint = new BCStore;
-    CodeHandle code = function.codeAtIdx(idx);
+CodeEditor::CodeEditor(CodeHandle code) {
     ast = code.ast();
-    loadCode(function, code, entryPoint);
+    loadCode(code.function(), code);
+
 }
 
-void CodeEditor::loadCode(FunctionHandle function, CodeHandle code,
-                          BCStore* store) {
+void CodeEditor::loadCode(FunctionHandle function, CodeHandle code) {
     std::unordered_map<BC_t*, Label> bcLabels;
 
     {
@@ -40,8 +41,10 @@ void CodeEditor::loadCode(FunctionHandle function, CodeHandle code,
         }
     }
 
+    labels_.resize(labels_.size() + bcLabels.size());
+
     {
-        BytecodeList* pos = &store->front;
+        BytecodeList* pos = & front;
 
         BC_t* pc = (BC_t*)code.bc();
         BC_t* end = (BC_t*)((uintptr_t)pc + code.code->codeSize);
@@ -55,6 +58,7 @@ void CodeEditor::loadCode(FunctionHandle function, CodeHandle code,
             if (bcLabels.count(pc)) {
                 Label label = bcLabels[pc];
                 pos->bc = BC::label(label);
+                labels_[label] = pos;
 
                 pos->next = new BytecodeList();
                 auto prev = pos;
@@ -78,7 +82,7 @@ void CodeEditor::loadCode(FunctionHandle function, CodeHandle code,
 
                     bc.immediate.fun = code.idx();
 
-                    CodeEditor* p = new CodeEditor(function, code.idx());
+                    CodeEditor* p = new CodeEditor(code);
 
                     if (promises.size() <= code.idx())
                         promises.resize(code.idx() + 1, nullptr);
@@ -93,7 +97,7 @@ void CodeEditor::loadCode(FunctionHandle function, CodeHandle code,
                         CodeHandle code = function.codeAtOffset(argOffset[i]);
                         argOffset[i] = code.idx();
 
-                        CodeEditor* p = new CodeEditor(function, code.idx());
+                        CodeEditor* p = new CodeEditor(code);
 
                         if (promises.size() <= code.idx())
                             promises.resize(code.idx() + 1, nullptr);
@@ -106,8 +110,8 @@ void CodeEditor::loadCode(FunctionHandle function, CodeHandle code,
             pos->bc = bc;
         }
 
-        store->last.prev = pos;
-        pos->next = &store->last;
+        last.prev = pos;
+        pos->next = & last;
     }
 }
 
@@ -118,14 +122,12 @@ CodeEditor::~CodeEditor() {
         delete p;
     }
 
-    BytecodeList* pos = entryPoint->front.next;
-    while (pos != &entryPoint->last) {
+    BytecodeList* pos = front.next;
+    while (pos != & last) {
         BytecodeList* old = pos;
         pos = pos->next;
         delete old;
     }
-
-    delete entryPoint;
 }
 
 void CodeEditor::print() {
@@ -154,7 +156,7 @@ void CodeEditor::normalizeReturn() {
     if (getCursor().empty())
         return;
 
-    Cursor lastI(this, entryPoint->last.prev, entryPoint);
+    Cursor lastI(this, last.prev);
     if ((*lastI).bc == BC_t::ret_)
         lastI.remove();
 

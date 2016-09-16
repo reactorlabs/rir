@@ -43,3 +43,17 @@ rir.src <- function()  {
 rir.body <- function(f) {
     .Call("rir_body", f);
 }
+
+rir.da <- function(f) {
+    .Call("rir_da", f)
+}
+
+
+
+
+rir.analysis.signature <- function(f) {
+    x <- .Call("rir_analysis_signature", f)
+    result = x[[1]]
+    names(result) <- x[[2]]
+    result
+}

@@ -194,7 +194,7 @@ void optimize_(CodeEditor& e) {
 class Optimizer {
   public:
     static FunctionHandle optimize(FunctionHandle fun) {
-        CodeEditor edit(fun);
+        CodeEditor edit(fun.entryPoint());
         for (int i = 0; i < 5; ++i) {
             optimize_(edit);
             if (!edit.changed)

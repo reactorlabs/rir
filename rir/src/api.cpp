@@ -13,6 +13,11 @@
 
 #include "utils/FunctionHandle.h"
 
+#include "optimizer/Printer.h"
+#include "code/analysis.h"
+#include "optimizer/cp.h"
+#include "optimizer/Signature.h"
+
 using namespace rir;
 
 extern "C" void resetCompileExpressionOverride();
@@ -23,6 +28,38 @@ typedef SEXP (*callback_eval)(SEXP, SEXP);
 extern "C" void setEvalHook(callback_eval);
 extern "C" void resetEvalHook();
 static int rirJitEnabled = 0;
+
+
+/** Testing - returns the result of signature analysis on given code.
+ */
+REXPORT SEXP rir_analysis_signature(SEXP what) {
+    CodeEditor ce(what);
+    SignatureAnalysis sa;
+    sa.analyze(ce);
+    return sa.finalState().exportToR();
+}
+
+
+REXPORT SEXP rir_da(SEXP what) {
+    CodeEditor ce(what);
+    Printer p;
+    p.run(ce);
+
+
+/*    ConstantPropagation cp;
+    cp.analyze(ce);
+    cp.print();
+    cp.finalState().print(); */
+
+    SignatureAnalysis sa;
+    sa.analyze(ce);
+    sa.print();
+
+
+    return R_NilValue;
+}
+
+
 
 // actual rir api --------------------------------------------------------------
 
