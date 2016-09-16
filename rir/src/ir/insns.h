@@ -24,8 +24,7 @@ DEF_INSTR(ldfun_, 1, 0, 1, 0, 0)
  */
 DEF_INSTR(ldddvar_, 1, 0, 1, 0, 0)
 /**
- * ldfun_:: take immediate CP index of symbol, find binding in env and push
- * value
+ * ldddvar_:: loads the ellipsis values (such as ..1, ..2) and pushes them on stack.
  */
 DEF_INSTR(ldvar_, 1, 0, 1, 0, 0)
 /**
@@ -33,7 +32,7 @@ DEF_INSTR(ldvar_, 1, 0, 1, 0, 0)
  */
 DEF_INSTR(call_, 3, 1, 1, 0, 0)
 /**
- * call_:: ...
+ * call_:: ... Takes a list of code objects, which represent the arguments, decides on eager/lazy evaluation and does the right thing with the code objs.
  */
 DEF_INSTR(promise_, 1, 0, 1, 0, 0)
 /**
@@ -51,6 +50,8 @@ DEF_INSTR(ret_, 0, 1, 0, 0, 0)
 DEF_INSTR(force_, 0, 1, 1, 0, 0)
 /**
  * force_:: pop from objet stack, evaluate, push promise's value
+
+ TODO: check whether this is used or not?
  */
 DEF_INSTR(pop_, 0, 1, 0, 0, 0)
 /**
@@ -59,6 +60,8 @@ DEF_INSTR(pop_, 0, 1, 0, 0, 0)
 DEF_INSTR(asast_, 0, 1, 1, 0, 0)
 /**
  * asast_:: pop a promise off the object stack, push its AST on object stack
+
+ TODO: we do not use now, might not work... why?
  */
 DEF_INSTR(stvar_, 1, 1, 0, 0, 0)
 /**
@@ -66,7 +69,7 @@ DEF_INSTR(stvar_, 1, 1, 0, 0, 0)
  */
 DEF_INSTR(asbool_, 0, 1, 1, 0, 0)
 /**
- * asbool_:: pop object stack, convert to Logical and push on object stack
+ * asbool_:: pop object stack, convert to Logical vector of size 1 and push on object stack. Throws an error if the result would be NA.
  */
 DEF_INSTR(brtrue_, 1, 1, 0, 0, 0)
 /**
@@ -82,29 +85,11 @@ DEF_INSTR(br_, 1, 0, 0, 0, 0)
  */
 DEF_INSTR(invisible_, 0, 0, 0, 0, 0)
 /**
- * invisible_:: set invisible flag
+ * invisible_:: set invisible flag, so that value will not be printed. This is a global flag, many operations implicitly clear it.
  */
 DEF_INSTR(visible_, 0, 0, 0, 0, 0)
 /**
  * visible_:: reset invisible flag
- */
-DEF_INSTR(lti_, 0, 0, 1, 2, 0)
-/**
- * lti_:: pop two integers from primitive stack, compare with with <, push
- * Logical on object stack
- */
-DEF_INSTR(eqi_, 0, 0, 1, 2, 0)
-/*
- * lti_:: pop two integers from primitive stack, compare with with ==. push
- * Logical on object stack
- */
-DEF_INSTR(pushi_, 1, 0, 0, 0, 1)
-/**
- * psuhi_:: push immediate integer to primitie stack
- */
-DEF_INSTR(dupi_, 0, 0, 0, 1, 2)
-/**
- * dupi_:: pop value from primitive stack, push it twice
  */
 DEF_INSTR(dup_, 0, 1, 2, 0, 0)
 /**
@@ -118,11 +103,15 @@ DEF_INSTR(add_, 0, 2, 1, 0, 0)
 /**
  * add_:: pop two values from object stack, add them, push result on object
  * stack
+
+ Works on any SEXP.
  */
 DEF_INSTR(sub_, 0, 2, 1, 0, 0)
 /**
  * add_:: pop two values from object stack, add them, push result on object
  * stack
+
+ Works on any SEXP.
  */
 DEF_INSTR(lt_, 0, 2, 1, 0, 0)
 /**
@@ -133,6 +122,10 @@ DEF_INSTR(isspecial_, 1, 0, 0, 0, 0)
 /**
  * isspecial_:: take imediate CP index of symbol, check if bound to a SPECIALSXP
 *                or a BUILTINSXP.
+
+This should go away and be replaced with a guard, now it checks certain function is special, and if not asserts.
+
+Actually it also checks for special, or builtin.
  */
 DEF_INSTR(isfun_, 0, 1, 1, 0, 0)
 /**
@@ -141,7 +134,7 @@ DEF_INSTR(isfun_, 0, 1, 1, 0, 0)
  */
 DEF_INSTR(is_, 1, 1, 1, 0, 0)
 /**
- * is_:: immediate type tag, push T/F
+ * is_:: immediate type tag (SEXPTYPE), push T/F
  */
 DEF_INSTR(extract1_, 0, 2, 1, 0, 0)
 /**
@@ -199,11 +192,13 @@ DEF_INSTR(aslogical_, 0, 1, 1, 0, 0)
  */
 DEF_INSTR(beginloop_, 1, 0, 1, 0, 0)
 /**
- * beginloop_:: begins loop context, break and continue target immediate
+ * beginloop_:: begins loop context, break and continue target immediate (this is the target for break and next long jumps)
  */
 DEF_INSTR(endcontext_, 0, 1, 0, 0, 0)
 /**
- * endcontext_:: ends a context
+ * endcontext_:: ends a context. Takes a context as input and removes it from the stack (the context to be removed does not have to be top one)
+
+TODO black magic here
  */
 DEF_INSTR(inc_, 0, 1, 1, 0, 0)
 /**
@@ -215,7 +210,7 @@ DEF_INSTR(test_bounds_, 0, 0, 1, 0, 0)
  */
 DEF_INSTR(return_, 0, 0, 0, 0, 0)
 /**
- * return_ :: return instruction
+ * return_ :: return instruction. Non-local return instruction as opposed to ret_.
  */
 DEF_INSTR(subassign_, 0, 3, 1, 0, 0)
 /**
@@ -228,6 +223,8 @@ DEF_INSTR(subassign2_, 1, 3, 1, 0, 0)
 DEF_INSTR(missing_, 1, 0, 1, 0, 0)
 /**
  * missing_ :: check if symb is missing
+
+ TODO we want to rename to isMissing
  */
 DEF_INSTR(seq_, 0, 3, 1, 0, 0)
 /**
