@@ -500,16 +500,15 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
             return false;
         // TODO guard
 
-        Label notVecBranch = cs.mkLabel();
-        Label vectBranch = cs.mkLabel();
+        Label objBranch = cs.mkLabel();
+        Label beginBranch = cs.mkLabel();
 
         compileExpr(ctx, args[0]);
 
-        cs << BC::brobj(notVecBranch)
+        cs << BC::brobj(objBranch)
            << BC::dup()
            << BC::is(VECSXP)
-           << BC::brfalse(notVecBranch)
-           << BC::br(vectBranch);
+           << BC::brtrue(beginBranch);
 
         static SEXP convertfun = nullptr;
         if (!convertfun)
@@ -517,12 +516,15 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
                     LCONS(symbol::getterPlaceholder, R_NilValue));
 
         // Convert to vector
-        cs << notVecBranch
-           << BC::ldfun(symbol::aslist)
+        cs << BC::ldfun(symbol::aslist)
            << BC::swap()
-           << BC::call_stack(1, {R_NilValue}, convertfun);
+           << BC::call_stack(1, {R_NilValue}, convertfun)
+           << BC::br(beginBranch);
 
-        cs << vectBranch;
+        cs << objBranch
+           << BC::dispatch_stack(symbol::aslist, 1, {R_NilValue}, convertfun);
+
+        cs << beginBranch;
 
         Label loopBranch = cs.mkLabel();
         Label nextBranch = cs.mkLabel();

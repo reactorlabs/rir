@@ -425,8 +425,8 @@ SEXP createArgsListStack(Code* c, size_t nargs, SEXP names, SEXP env, SEXP call,
                 }
             }
         } else if (arg == R_MissingArg) {
-            if (eager)
-                Rf_errorcall(call, "argument %d is empty", i + 1);
+            // TODO i think this is ok, since R_MissingArg can also occur as a
+            // value...
             p += __listAppend(&result, &pos, R_MissingArg, R_NilValue);
         } else {
             if (eager && TYPEOF(arg) == PROMSXP) {
