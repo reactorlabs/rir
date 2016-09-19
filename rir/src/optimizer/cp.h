@@ -69,8 +69,8 @@ class CP_Value {
     }
 
   protected:
-    constexpr static SEXP const bottom_ = nullptr;
-    constexpr static SEXP const top_ = (SEXP)(1);
+    static SEXP const bottom_;
+    static SEXP const top_;
 
     SEXP value_;
 
