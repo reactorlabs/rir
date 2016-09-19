@@ -55,7 +55,6 @@ BC::immediate_t decodeImmediate(BC_t bc, BC_t* pc) {
     case BC_t::beginloop_:
         immediate.offset = *(jmp_t*)pc;
         break;
-    case BC_t::pushi_:
     case BC_t::pick_:
     case BC_t::pull_:
     case BC_t::is_:
@@ -72,9 +71,6 @@ BC::immediate_t decodeImmediate(BC_t bc, BC_t* pc) {
     case BC_t::force_:
     case BC_t::asast_:
     case BC_t::asbool_:
-    case BC_t::lti_:
-    case BC_t::eqi_:
-    case BC_t::dupi_:
     case BC_t::dup_:
     case BC_t::dup2_:
     case BC_t::swap_:
@@ -200,8 +196,6 @@ BC BC::subassign2(SEXP sym) {
     i.pool = Pool::insert(sym);
     return BC(BC_t::subassign2_, i);
 }
-BC BC::lti() { return BC(BC_t::lti_); }
-BC BC::eqi() { return BC(BC_t::eqi_); }
 BC BC::seq() { return BC(BC_t::seq_); }
 BC BC::asbool() { return BC(BC_t::asbool_); }
 
@@ -247,15 +241,9 @@ BC BC::brfalse(jmp_t j) {
     return BC(BC_t::brfalse_, i);
 }
 BC BC::endcontext() { return BC(BC_t::endcontext_); }
-BC BC::dupi() { return BC(BC_t::dupi_); }
 BC BC::dup() { return BC(BC_t::dup_); }
 BC BC::inc() { return BC(BC_t::inc_); }
 BC BC::push_argi() { return BC(BC_t::push_argi_); }
-BC BC::pushi(uint32_t i) {
-    immediate_t im;
-    im.i = i;
-    return BC(BC_t::pushi_, im);
-}
 BC BC::close() { return BC(BC_t::close_); }
 BC BC::dup2() { return BC(BC_t::dup2_); }
 BC BC::testBounds() { return BC(BC_t::test_bounds_); }

@@ -53,7 +53,6 @@ void BC::write(CodeStream& cs) const {
         cs.patchpoint(immediate.offset);
         return;
 
-    case BC_t::pushi_:
     case BC_t::pick_:
     case BC_t::pull_:
     case BC_t::is_:
@@ -73,9 +72,6 @@ void BC::write(CodeStream& cs) const {
     case BC_t::close_:
     case BC_t::asast_:
     case BC_t::asbool_:
-    case BC_t::lti_:
-    case BC_t::eqi_:
-    case BC_t::dupi_:
     case BC_t::dup_:
     case BC_t::dup2_:
     case BC_t::test_bounds_:
@@ -273,7 +269,6 @@ void BC::print() {
     case BC_t::missing_:
         Rprintf(" %u # %s", immediate.pool, CHAR(PRINTNAME((immediateConst()))));
         break;
-    case BC_t::pushi_:
     case BC_t::pick_:
     case BC_t::pull_:
     case BC_t::put_:
@@ -286,13 +281,10 @@ void BC::print() {
     case BC_t::force_:
     case BC_t::pop_:
     case BC_t::seq_:
-    case BC_t::lti_:
-    case BC_t::eqi_:
     case BC_t::ret_:
     case BC_t::swap_:
     case BC_t::uniq_:
     case BC_t::dup_:
-    case BC_t::dupi_:
     case BC_t::inc_:
     case BC_t::dup2_:
     case BC_t::test_bounds_:
