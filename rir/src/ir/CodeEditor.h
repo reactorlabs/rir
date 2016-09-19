@@ -57,7 +57,7 @@ class CodeEditor {
             pos(nullptr) {
         }
 
-        CodeEditor & editorX() {
+        CodeEditor & editorX() const {
             return *editor;
         }
 

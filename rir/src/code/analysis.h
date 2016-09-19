@@ -116,7 +116,7 @@ protected:
 public:
 
     ASTATE const & operator [] (CodeEditor::Cursor const & ins) {
-        assert(& ins.editor() == code_ and "you can only use cursors from the same editor");
+        assert(& ins.editorX() == code_ and "you can only use cursors from the same editor");
         if (ins != currentIns_)
             seek(ins);
         return current();
