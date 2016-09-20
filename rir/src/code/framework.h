@@ -48,46 +48,4 @@ private:
     bool success_;
 };
 
-class ControlFlowDispatcher : public Dispatcher {
-public:
-    class Receiver {
-    public:
-        virtual void jump(CodeEditor::Cursor target) = 0;
-
-        virtual void conditionalJump(CodeEditor::Cursor target) = 0;
-
-        virtual void terminator(CodeEditor::Cursor at) = 0;
-
-        virtual void label(CodeEditor::Cursor at) = 0;
-
-        virtual ~Receiver() {
-        }
-    };
-
-    ControlFlowDispatcher(Receiver & receiver):
-        receiver_(receiver) {
-   }
-
-private:
-    void doDispatch(CodeEditor::Cursor & ins) override {
-        BC cur = ins.bc();
-
-        if (cur.bc == BC_t::br_) {
-            receiver_.jump(ins.editorX().label(cur.immediate.offset));
-        } else if (cur.isJmp()) {
-            receiver_.conditionalJump(
-                ins.editorX().label(cur.immediate.offset));
-        } else if (cur.bc == BC_t::ret_ || cur.bc == BC_t::return_) {
-            receiver_.terminator(ins);
-        } else {
-            fail();
-        }
-    }
-
-    Receiver & receiver_;
-};
-
 }
-
-
-

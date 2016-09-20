@@ -82,10 +82,7 @@ public:
     }
 
 protected:
-    ForwardAnalysis():
-        cfReceiver_(*this),
-        cfDispatcher_(cfReceiver_) {
-    }
+  ForwardAnalysis() {}
 
     ASTATE & current() {
         return * reinterpret_cast<ASTATE *>(currentState_);
@@ -134,8 +131,32 @@ protected:
                 }
                 // user dispatch method
                 d.dispatch(currentIns_);
-                // now dispatch on the control flow
-                cfDispatcher_.dispatch(currentIns_);
+
+                if (currentIns_.bc().bc == BC_t::br_) {
+                    Label l = currentIns_.bc().immediate.offset;
+                    if (shouldJump(l)) {
+                        q_.push_front(code_->label(l));
+                    }
+                    delete currentState_;
+                    currentState_ = nullptr;
+                    stopCurrentSequence_ = true;
+                } else if (currentIns_.bc().isJmp()) {
+                    Label l = currentIns_.bc().immediate.offset;
+                    if (shouldJump(l)) {
+                        q_.push_front(code_->label(l));
+                    }
+                } else if (currentIns_.bc().bc == BC_t::ret_ ||
+                           currentIns_.bc().bc == BC_t::return_) {
+                    if (finalState_ == nullptr) {
+                        finalState_ = currentState_;
+                    } else {
+                        finalState_->mergeWith(currentState_);
+                        delete currentState_;
+                    }
+                    stopCurrentSequence_ = true;
+                    currentState_ = nullptr;
+                }
+
                 // terminate current sequence if requested
                 if (stopCurrentSequence_)
                     break;
@@ -153,25 +174,6 @@ protected:
 
 
 private:
-
-    class ControlFlowReceiver : public ControlFlowDispatcher::Receiver {
-    public:
-        void jump(CodeEditor::Cursor target);
-
-        void conditionalJump(CodeEditor::Cursor target);
-
-        void terminator(CodeEditor::Cursor at);
-
-        void label(CodeEditor::Cursor at);
-
-        ControlFlowReceiver(ForwardAnalysis & driver):
-            a_(driver) {
-        }
-
-    private:
-        ForwardAnalysis & a_;
-    };
-
     bool shouldJump(size_t label) {
         State * & stored = mergePoints_[label];
         if (stored == nullptr) {
@@ -184,50 +186,7 @@ private:
 
     std::deque<CodeEditor::Cursor> q_;
     bool stopCurrentSequence_;
-
-    ControlFlowReceiver cfReceiver_;
-    ControlFlowDispatcher cfDispatcher_;
-
 };
-
-template<typename ASTATE>
-void ForwardAnalysis<ASTATE>::ControlFlowReceiver::jump(CodeEditor::Cursor target) {
-    Label l = target.bc().immediate.offset;
-    if (a_.shouldJump(l)) {
-        a_.q_.push_front(target);
-    }
-    delete a_.currentState_;
-    a_.currentState_ = nullptr;
-    a_.stopCurrentSequence_ = true;
-}
-
-template<typename ASTATE>
-void ForwardAnalysis<ASTATE>::ControlFlowReceiver::conditionalJump(CodeEditor::Cursor target) {
-    Label l = target.bc().immediate.offset;
-    if (a_.shouldJump(l)) {
-        a_.q_.push_front(target);
-    }
-}
-
-template<typename ASTATE>
-void ForwardAnalysis<ASTATE>::ControlFlowReceiver::terminator(CodeEditor::Cursor at) {
-    if (a_.finalState_ == nullptr) {
-        a_.finalState_ = a_.currentState_;
-    } else {
-        a_.finalState_->mergeWith(a_.currentState_);
-        delete a_.currentState_;
-    }
-    a_.stopCurrentSequence_ = true;
-    a_.currentState_ = nullptr;
-}
-
-template<typename ASTATE>
-void ForwardAnalysis<ASTATE>::ControlFlowReceiver::label(CodeEditor::Cursor at) {
-    // do nothing and be happy
-}
-
-
-
 
 
 template<typename ASTATE>
