@@ -51,6 +51,10 @@ class CodeEditor {
         BytecodeList* pos;
 
       public:
+        unsigned long hash() const {
+            return std::hash<unsigned long>()((unsigned long)editor) ^
+                   std::hash<unsigned long>()((unsigned long)pos);
+        }
 
         Cursor():
             editor(nullptr),
@@ -325,6 +329,16 @@ class CodeEditor {
     bool changed = false;
 
 
+};
+}
+
+namespace std {
+
+template <>
+struct hash<rir::CodeEditor::Cursor> {
+    size_t operator()(rir::CodeEditor::Cursor const& x) const noexcept {
+        return x.hash();
+    }
 };
 }
 

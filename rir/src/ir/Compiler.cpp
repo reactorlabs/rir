@@ -10,6 +10,7 @@
 
 #include "Optimizer.h"
 #include "utils/Pool.h"
+#include "code/dataflow.h"
 
 #include "CodeVerifier.h"
 
@@ -1013,7 +1014,11 @@ Compiler::CompilerRes Compiler::finalize() {
     ctx.cs() << BC::ret();
     ctx.pop();
 
-    FunctionHandle opt = Optimizer::optimize(function);
+    CodeEditor code(function.entryPoint());
+    DataflowAnalysis a;
+    a.analyze(code);
+
+    FunctionHandle opt = Optimizer::optimize(code.finalize());
     // opt.print();
     CodeVerifier::vefifyFunctionLayout(opt.store, globalContext());
 
