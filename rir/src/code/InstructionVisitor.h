@@ -15,14 +15,14 @@ public:
       */
     class Receiver {
     public:
-        virtual void any(CodeEditor::Cursor ins) {
+        virtual void any(CodeEditor::Cursor& ins) {
         }
 
-        virtual void label(CodeEditor::Cursor ins) {
+        virtual void label(CodeEditor::Cursor& ins) {
             any(ins);
         }
 
-#define DEF_INSTR(NAME, ...) virtual void NAME(CodeEditor::Cursor ins) { any(ins); }
+#define DEF_INSTR(NAME, ...) virtual void NAME(CodeEditor::Cursor& ins) { any(ins); }
 #include "ir/insns.h"
 
         virtual ~Receiver() {
@@ -33,7 +33,7 @@ public:
 
       NOTE: alternatively the dispatcher base class must be templated with the receiver, which would then become argument to doDispatch().
      */
-    InstructionVisitor(Receiver & receiver):
+    InstructionVisitor(Receiver& receiver):
         receiver_(receiver) {
     }
 
@@ -44,7 +44,7 @@ private:
 
       If the instruction's opcode is not handler by the receiver, an assertion fails as the contract of instruction visitor is that it understand *all* instructions.
      */
-    void doDispatch(CodeEditor::Cursor & ins) override {
+    void doDispatch(CodeEditor::Cursor& ins) override {
         BC cur = ins.bc();
         switch (cur.bc) {
 #define DEF_INSTR(NAME, ...) case BC_t::NAME: receiver_.NAME(ins); break;

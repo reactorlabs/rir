@@ -100,24 +100,24 @@ class ConstantPropagation : public ForwardAnalysisIns<AbstractState<CP_Value>>,
         return dispatcher_;
     }
 
-    void push_(CodeEditor::Cursor ins) override {
+    void push_(CodeEditor::Cursor& ins) override {
         current().push(ins.bc().immediateConst());
     }
 
-    void ldvar_(CodeEditor::Cursor ins) override {
+    void ldvar_(CodeEditor::Cursor& ins) override {
         current().push(current().env().find(ins.bc().immediateConst()));
     }
 
-    void stvar_(CodeEditor::Cursor ins) override {
+    void stvar_(CodeEditor::Cursor& ins) override {
         current()[ins.bc().immediateConst()] = current().pop();
     }
 
-    void label(CodeEditor::Cursor ins) override {
+    void label(CodeEditor::Cursor& ins) override {
     }
 
     /** All other instructions, don't care for now.
      */
-    void any(CodeEditor::Cursor ins) override {
+    void any(CodeEditor::Cursor& ins) override {
         // pop as many as we need, push as many tops as we need
         current().pop(ins.bc().popCount());
         for (size_t i = 0, e = ins.bc().pushCount(); i != e; ++i)

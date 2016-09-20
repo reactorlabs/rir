@@ -54,11 +54,11 @@ class DataflowAnalysis : public ForwardAnalysisIns<AbstractStack<StackV>>,
     //     current().push(StackV(ins));
     // }
 
-    void label(CodeEditor::Cursor ins) override {}
+    void label(CodeEditor::Cursor& ins) override {}
 
     /** All other instructions, don't care for now.
      */
-    void any(CodeEditor::Cursor ins) override {
+    void any(CodeEditor::Cursor& ins) override {
         // pop as many as we need, push as many tops as we need
         current().pop(ins.bc().popCount());
         for (size_t i = 0, e = ins.bc().pushCount(); i != e; ++i)

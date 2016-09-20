@@ -218,40 +218,40 @@ public:
 
 protected:
 
-    void ldfun_(CodeEditor::Cursor ins) override {
+    void ldfun_(CodeEditor::Cursor& ins) override {
         current().forceArgument(ins.bc().immediateConst());
     }
 
-    void ldddvar_(CodeEditor::Cursor ins) override {
+    void ldddvar_(CodeEditor::Cursor& ins) override {
 
     }
 
-    void ldvar_(CodeEditor::Cursor ins) override {
+    void ldvar_(CodeEditor::Cursor& ins) override {
         current().forceArgument(ins.bc().immediateConst());
     }
 
-    void call_(CodeEditor::Cursor ins) override {
+    void call_(CodeEditor::Cursor& ins) override {
         current().setAsNotLeaf();
     }
 
-    void dispatch_(CodeEditor::Cursor ins) override {
+    void dispatch_(CodeEditor::Cursor& ins) override {
 
     }
 
-    void dispatch_stack_(CodeEditor::Cursor ins) override {
+    void dispatch_stack_(CodeEditor::Cursor& ins) override {
 
     }
 
-    void call_stack_(CodeEditor::Cursor ins) override {
+    void call_stack_(CodeEditor::Cursor& ins) override {
 
     }
 
-    void stvar_(CodeEditor::Cursor ins) override {
+    void stvar_(CodeEditor::Cursor& ins) override {
         current().storeArgument(ins.bc().immediateConst());
     }
 
 
-    Dispatcher & dispatcher() override {
+    Dispatcher& dispatcher() override {
         return dispatcher_;
     }
 
