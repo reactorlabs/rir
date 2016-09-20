@@ -264,6 +264,12 @@ public:
     }
 
 protected:
+
+    void doAnalyze() override {
+        ForwardAnalysis<ASTATE>::doAnalyze();
+        initializeCache();
+    }
+
     void initializeCache() {
         currentState_ = initialState_->clone();
         currentIns_ = code_->getCursor();
