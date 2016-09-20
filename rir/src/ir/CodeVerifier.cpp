@@ -12,7 +12,7 @@ namespace rir {
 
 namespace {
 
-/** State for verifying the stack layout and calculating max ostack and istack
+/** State for verifying the stack layout and calculating max ostack 
  * size.
  */
 class State {
@@ -25,52 +25,48 @@ class State {
 
     BC_t* pc;
     int ostack;
-    int istack;
 
-    State(BC_t* pc = nullptr, int ostack = 0, int istack = 0)
-        : pc(pc), ostack(ostack), istack(istack) {}
+    State(BC_t* pc = nullptr, int ostack = 0)
+        : pc(pc), ostack(ostack) {}
 
     State(State const& from, BC_t* pc)
-        : pc(pc), ostack(from.ostack), istack(from.istack) {}
+        : pc(pc), ostack(from.ostack) {}
 
     bool operator!=(State const& other) const {
         assert(pc == other.pc and
                "It is meaningless to compare different states");
-        return pc != other.pc or ostack != other.ostack or
-               istack != other.istack;
+        return pc != other.pc or ostack != other.ostack;
     }
 
     State& operator=(State const& from) = default;
 
-    /** Updates own ostack and istack if the other stack has greater
+    /** Updates own ostack if the other stack has greater
      * requirements.
      */
     void updateMax(State const& other) {
         if (other.ostack > ostack)
             ostack = other.ostack;
-        if (other.istack > istack)
-            istack = other.istack;
     }
 
     void check() const {
         assert(ostack >= 0 and "Too many pops");
-        assert(istack >= 0 and "Too many i pops");
     }
 
     void advance() {
         BC bc = BC::advance(&pc);
 
-        ostack -= bc.popCount();
-        istack -= bc.iPopCount();
+        if (bc.bc == BC_t::return_)
+            ostack = 0;
+        else
+            ostack -= bc.popCount();
         check();
         ostack += bc.pushCount();
-        istack += bc.iPushCount();
     }
 
     BC cur() { return BC::decode(pc); }
 
     void checkClear() const {
-        assert(ostack == 0 and istack == 0 and
+        assert(ostack == 0 and
                "Stack imbalance when exitting the function");
     }
 };
@@ -116,7 +112,6 @@ void CodeVerifier::calculateAndVerifyStack(CodeHandle code) {
         }
     }
     code.code->stackLength = max.ostack;
-    code.code->iStackLength = max.istack;
 }
 
 void CodeVerifier::vefifyFunctionLayout(SEXP sexp, ::Context* ctx) {
@@ -155,11 +150,8 @@ void CodeVerifier::vefifyFunctionLayout(SEXP sexp, ::Context* ctx) {
         assert(function(c) == f and "Invalid code offset");
         assert(c->src != 0 and "Code must have AST");
         unsigned oldo = c->stackLength;
-        unsigned oldi = c->iStackLength;
         calculateAndVerifyStack(c);
         assert(oldo == c->stackLength and "Invalid stack layout reported");
-        assert(oldi == c->iStackLength and
-               "Invalid integer stack layout reported");
 
         assert((uintptr_t)(c + 1) + pad4(c->codeSize) +
                        c->srcLength * sizeof(unsigned) +
