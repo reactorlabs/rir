@@ -19,7 +19,7 @@ public:
     void run(CodeEditor & code) {
         pc_ = 0;
 
-        for (CodeEditor::Cursor i = code.getCursor(), e = code.getCursorAtEnd(); i != e; i.advance())
+        for (CodeEditor::Cursor i = code.getCursor(); !i.atEnd(); i.advance())
             dispatcher_.dispatch(i);
 
         for (size_t i = 0, e = code.numPromises(); i != e; ++i) {

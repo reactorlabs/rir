@@ -89,9 +89,9 @@ class CodeEditor {
 
         Label mkLabel() { return editor->nextLabel++; }
 
-        bool atEnd() { return *this == editor->getCursorAtEnd(); }
+        bool atEnd() { return pos == &editor->last; }
 
-        bool firstInstruction() { return *this == editor->getCursor(); }
+        bool firstInstruction() { return pos == editor->front.next; }
 
         void operator++() {
             assert(!atEnd());
@@ -268,15 +268,10 @@ class CodeEditor {
         return Cursor(this, front.next);
     }
 
-    Cursor getCursorAtEnd() {
-        return Cursor(this, & last);
-    }
-
     CodeEditor(SEXP closure);
 
     // TODO this should be private
     CodeEditor(CodeHandle code);
-
 
     std::vector<SEXP> arguments() const {
         if (closure_ == nullptr) {
