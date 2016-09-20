@@ -1,7 +1,7 @@
 #pragma once
 
-#include "ForwardDriver.h"
 #include "State.h"
+#include "framework.h"
 
 namespace rir {
 
@@ -61,12 +61,20 @@ protected:
   ForwardAnalysis does not deal with visibility of any results, that is the domain of its descelndants.
  */
 template<typename ASTATE>
-class ForwardAnalysis : public Analysis, public ForwardDriver {
+class ForwardAnalysis : public Analysis {
 public:
 
     void invalidate() override {
         Analysis::invalidate();
-        clear();
+        delete currentState_;
+        delete initialState_;
+        delete finalState_;
+        initialState_ = nullptr;
+        currentState_ = nullptr;
+        finalState_ = nullptr;
+        for (State * s : mergePoints_)
+            delete s;
+        mergePoints_.clear();
     }
 
     void print() override {
@@ -74,7 +82,10 @@ public:
     }
 
 protected:
-    ForwardAnalysis() = default;
+    ForwardAnalysis():
+        cfReceiver_(*this),
+        cfDispatcher_(cfReceiver_) {
+    }
 
     ASTATE & current() {
         return * reinterpret_cast<ASTATE *>(currentState_);
@@ -87,11 +98,141 @@ protected:
     }
 
     void doAnalyze() override {
-        run(* code_, initialState(), dispatcher());
+        mergePoints_.resize(code_->numLabels());
+        initialState_ = initialState();
+        currentState_ = initialState_->clone();
+        q_.push_front(code_->getCursor());
+        Dispatcher & d = dispatcher();
+        while (not q_.empty()) {
+            currentIns_ = q_.front();
+            q_.pop_front();
+            stopCurrentSequence_ = false;
+            while (true) {
+                BC cur = currentIns_.bc();
+                // if current instruction is label, deal with state merging
+                if (cur.bc == BC_t::label) {
+                    // if state not stored, store copy of incomming
+                    State * & stored = mergePoints_[cur.immediate.offset];
+                    if (stored == nullptr) {
+                        assert(currentState_ != nullptr);
+                        stored = currentState_->clone();
+                    } else {
+                        // if incomming not present, copy stored
+                        if (currentState_ == nullptr) {
+                            currentState_ = stored->clone();
+                        // otherwise merge incomming with stored
+                        } else if (stored->mergeWith(currentState_)) {
+                            delete currentState_;
+                            currentState_ = stored->clone();
+                        // and terminate current branch if there is no need to continue
+                        } else {
+                            delete currentState_;
+                            currentState_ = nullptr;
+                            break;
+                        }
+                    }
+                }
+                // user dispatch method
+                d.dispatch(currentIns_);
+                // now dispatch on the control flow
+                cfDispatcher_.dispatch(currentIns_);
+                // terminate current sequence if requested
+                if (stopCurrentSequence_)
+                    break;
+                // move to next instruction
+                currentIns_.advance();
+            }
+        }
+    }
+
+    State * initialState_ = nullptr;
+    State * currentState_ = nullptr;
+    State * finalState_ = nullptr;
+    CodeEditor::Cursor currentIns_;
+    std::vector<State *> mergePoints_;
+
+
+private:
+
+    class ControlFlowReceiver : public ControlFlowDispatcher::Receiver {
+    public:
+        void jump(CodeEditor::Cursor target);
+
+        void conditionalJump(CodeEditor::Cursor target);
+
+        void terminator(CodeEditor::Cursor at);
+
+        void label(CodeEditor::Cursor at);
+
+        ControlFlowReceiver(ForwardAnalysis & driver):
+            a_(driver) {
+        }
+
+    private:
+        ForwardAnalysis & a_;
+    };
+
+    bool shouldJump(size_t label) {
+        State * & stored = mergePoints_[label];
+        if (stored == nullptr) {
+            stored = currentState_->clone();
+            return true;
+        } else {
+            return stored->mergeWith(currentState_);
+        }
     }
 
 
+
+
+    std::deque<CodeEditor::Cursor> q_;
+    bool stopCurrentSequence_;
+
+    ControlFlowReceiver cfReceiver_;
+    ControlFlowDispatcher cfDispatcher_;
+
+
+
 };
+
+template<typename ASTATE>
+void ForwardAnalysis<ASTATE>::ControlFlowReceiver::jump(CodeEditor::Cursor target) {
+    if (a_.shouldJump(target.bc().immediate.offset)) {
+        a_.q_.push_front(target);
+        delete a_.currentState_;
+        a_.currentState_ = nullptr;
+        a_.stopCurrentSequence_ = true;
+    }
+}
+
+template<typename ASTATE>
+void ForwardAnalysis<ASTATE>::ControlFlowReceiver::conditionalJump(CodeEditor::Cursor target) {
+    if (a_.shouldJump(target.bc().immediate.offset)) {
+        a_.q_.push_front(target);
+    }
+    a_.q_.push_front(a_.currentIns_.next());
+    a_.stopCurrentSequence_ = true;
+}
+
+template<typename ASTATE>
+void ForwardAnalysis<ASTATE>::ControlFlowReceiver::terminator(CodeEditor::Cursor at) {
+    if (a_.finalState_ == nullptr) {
+        a_.finalState_ = a_.currentState_;
+    } else {
+        a_.finalState_->mergeWith(a_.currentState_);
+        delete a_.currentState_;
+    }
+    a_.stopCurrentSequence_ = true;
+    a_.currentState_ = nullptr;
+}
+
+template<typename ASTATE>
+void ForwardAnalysis<ASTATE>::ControlFlowReceiver::label(CodeEditor::Cursor at) {
+    // do nothing and be happy
+}
+
+
+
 
 
 template<typename ASTATE>

@@ -96,7 +96,7 @@ class ConstantPropagation : public ForwardAnalysisIns<AbstractState<CP_Value>>,
         return result;
     }
 
-    virtual Dispatcher & dispatcher() {
+    virtual Dispatcher & dispatcher() override {
         return dispatcher_;
     }
 

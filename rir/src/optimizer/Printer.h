@@ -1,6 +1,5 @@
 #pragma once
 
-#include "code/LinearDriver.h"
 #include "code/InstructionVisitor.h"
 
 namespace rir {
@@ -11,7 +10,7 @@ namespace rir {
 
 */
 
-class Printer : public InstructionVisitor::Receiver, public LinearDriver {
+class Printer : public InstructionVisitor::Receiver {
 public:
     Printer():
         dispatcher_(*this) {
@@ -19,7 +18,10 @@ public:
 
     void run(CodeEditor & code) {
         pc_ = 0;
-        LinearDriver::run(code, dispatcher_);
+
+        for (CodeEditor::Cursor i = code.getCursor(), e = code.getCursorAtEnd(); i != e; i.advance())
+            dispatcher_.dispatch(i);
+
         for (size_t i = 0, e = code.numPromises(); i != e; ++i) {
             Rprintf("\n");
             printOffset();

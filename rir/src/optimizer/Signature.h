@@ -112,7 +112,7 @@ public:
         return x;
     }
 
-    Signature * clone() const {
+    Signature * clone() const override {
         return new Signature(*this);
     }
 

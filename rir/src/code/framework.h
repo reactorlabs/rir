@@ -48,7 +48,47 @@ private:
     bool success_;
 };
 
-class Driver {
+class ControlFlowDispatcher : public Dispatcher {
+public:
+    class Receiver {
+    public:
+        virtual void jump(CodeEditor::Cursor target) = 0;
+
+        virtual void conditionalJump(CodeEditor::Cursor target) = 0;
+
+        virtual void terminator(CodeEditor::Cursor at) = 0;
+
+        virtual void label(CodeEditor::Cursor at) = 0;
+
+        virtual ~Receiver() {
+        }
+    };
+
+    ControlFlowDispatcher(Receiver & receiver):
+        receiver_(receiver) {
+   }
+
+private:
+    void doDispatch(CodeEditor::Cursor & ins) override {
+        BC cur = ins.bc();
+        switch (cur.bc) {
+            case BC_t::brtrue_:
+            case BC_t::brfalse_:
+                receiver_.conditionalJump(ins.editorX().label(cur.immediate.offset));
+                break;
+            case BC_t::br_:
+                receiver_.jump(ins.editorX().label(cur.immediate.offset));
+                break;
+            case BC_t::ret_:
+            case BC_t::return_:
+                receiver_.terminator(ins);
+                break;
+            default:
+                fail();
+        }
+    }
+
+    Receiver & receiver_;
 };
 
 }

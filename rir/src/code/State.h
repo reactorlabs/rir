@@ -1,5 +1,13 @@
 #pragma once
 
+#include <cstdlib>
+#include <deque>
+#include <map>
+
+
+#include "ir/CodeEditor.h"
+#include "R/r.h"
+
 namespace rir {
 
 /** Abstract state prototype.
