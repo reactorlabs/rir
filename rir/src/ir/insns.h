@@ -208,7 +208,7 @@ DEF_INSTR(test_bounds_, 0, 0, 1, 0, 0)
 /**
  * bounds_check_ :: check stack[0] is a valid inded into vector at stack[1]
  */
-DEF_INSTR(return_, 0, 0, 0, 0, 0)
+DEF_INSTR(return_, 0, 1, 0, 0, 0)
 /**
  * return_ :: return instruction. Non-local return instruction as opposed to ret_.
  */

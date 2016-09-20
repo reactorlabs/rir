@@ -71,20 +71,16 @@ public:
 private:
     void doDispatch(CodeEditor::Cursor & ins) override {
         BC cur = ins.bc();
-        switch (cur.bc) {
-            case BC_t::brtrue_:
-            case BC_t::brfalse_:
-                receiver_.conditionalJump(ins.editorX().label(cur.immediate.offset));
-                break;
-            case BC_t::br_:
-                receiver_.jump(ins.editorX().label(cur.immediate.offset));
-                break;
-            case BC_t::ret_:
-            case BC_t::return_:
-                receiver_.terminator(ins);
-                break;
-            default:
-                fail();
+
+        if (cur.bc == BC_t::br_) {
+            receiver_.jump(ins.editorX().label(cur.immediate.offset));
+        } else if (cur.isJmp()) {
+            receiver_.conditionalJump(
+                ins.editorX().label(cur.immediate.offset));
+        } else if (cur.bc == BC_t::ret_ || cur.bc == BC_t::return_) {
+            receiver_.terminator(ins);
+        } else {
+            fail();
         }
     }
 

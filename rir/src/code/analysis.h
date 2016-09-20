@@ -182,36 +182,31 @@ private:
         }
     }
 
-
-
-
     std::deque<CodeEditor::Cursor> q_;
     bool stopCurrentSequence_;
 
     ControlFlowReceiver cfReceiver_;
     ControlFlowDispatcher cfDispatcher_;
 
-
-
 };
 
 template<typename ASTATE>
 void ForwardAnalysis<ASTATE>::ControlFlowReceiver::jump(CodeEditor::Cursor target) {
-    if (a_.shouldJump(target.bc().immediate.offset)) {
+    Label l = target.bc().immediate.offset;
+    if (a_.shouldJump(l)) {
         a_.q_.push_front(target);
-        delete a_.currentState_;
-        a_.currentState_ = nullptr;
-        a_.stopCurrentSequence_ = true;
     }
+    delete a_.currentState_;
+    a_.currentState_ = nullptr;
+    a_.stopCurrentSequence_ = true;
 }
 
 template<typename ASTATE>
 void ForwardAnalysis<ASTATE>::ControlFlowReceiver::conditionalJump(CodeEditor::Cursor target) {
-    if (a_.shouldJump(target.bc().immediate.offset)) {
+    Label l = target.bc().immediate.offset;
+    if (a_.shouldJump(l)) {
         a_.q_.push_front(target);
     }
-    a_.q_.push_front(a_.currentIns_.next());
-    a_.stopCurrentSequence_ = true;
 }
 
 template<typename ASTATE>

@@ -102,7 +102,7 @@ void CodeVerifier::calculateAndVerifyStack(CodeHandle code) {
             BC cur = BC::decode(pc);
             i.advance();
             max.updateMax(i);
-            if (cur.bc == BC_t::ret_) {
+            if (cur.bc == BC_t::ret_ || cur.bc == BC_t::return_) {
                 i.checkClear();
                 break;
             } else if (cur.bc == BC_t::br_) {
