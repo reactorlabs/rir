@@ -103,7 +103,6 @@ protected:
         while (not q_.empty()) {
             currentIns_ = q_.front();
             q_.pop_front();
-            stopCurrentSequence_ = false;
             while (true) {
                 BC cur = currentIns_.bc();
                 // if current instruction is label, deal with state merging
@@ -139,7 +138,7 @@ protected:
                     }
                     delete currentState_;
                     currentState_ = nullptr;
-                    stopCurrentSequence_ = true;
+                    break;
                 } else if (currentIns_.bc().isJmp()) {
                     Label l = currentIns_.bc().immediate.offset;
                     if (shouldJump(l)) {
@@ -153,13 +152,10 @@ protected:
                         finalState_->mergeWith(currentState_);
                         delete currentState_;
                     }
-                    stopCurrentSequence_ = true;
                     currentState_ = nullptr;
+                    break;
                 }
 
-                // terminate current sequence if requested
-                if (stopCurrentSequence_)
-                    break;
                 // move to next instruction
                 currentIns_.advance();
             }
@@ -185,7 +181,6 @@ private:
     }
 
     std::deque<CodeEditor::Cursor> q_;
-    bool stopCurrentSequence_;
 };
 
 
@@ -234,14 +229,17 @@ protected:
         currentIns_.advance();
         // if the cached instruction is label, dispose of the state and create a copy of the fixpoint
         if (currentIns_.bc().bc == BC_t::label) {
-            delete currentState_;
-            currentState_ = mergePoints_[currentIns_.bc().immediate.offset]->clone();
+            auto fixpoint = mergePoints_[currentIns_.bc().immediate.offset];
+            // if we reach dead code there is no merge state available 
+            if (fixpoint) {
+                delete currentState_;
+                currentState_ = fixpoint->clone();
+            }
         }
     }
 
     void seek(CodeEditor::Cursor ins) {
-        CodeEditor::Cursor end = ins.editorX().getCursorAtEnd();
-        while (currentIns_ != end) {
+        while (!currentIns_.atEnd()) {
             if (currentIns_ == ins)
                 return;
             // advance the state using dispatcher
@@ -249,7 +247,7 @@ protected:
         }
         // if we haven't found it, let's start over
         initializeCache();
-        while (currentIns_!= end) {
+        while (!currentIns_.atEnd()) {
             if (currentIns_ == ins)
                 return;
             advance();
