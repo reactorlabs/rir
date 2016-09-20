@@ -95,6 +95,8 @@ public:
         return result;
     }
 
+    AVALUE top() const { return stack_.front(); }
+
     AVALUE pop() {
         AVALUE result = stack_.front();
         stack_.pop_front();

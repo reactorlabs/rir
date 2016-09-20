@@ -152,20 +152,6 @@ void CodeEditor::print() {
 
 void CodeEditor::Cursor::print() { pos->bc.print(); }
 
-void CodeEditor::normalizeReturn() {
-    if (getCursor().empty())
-        return;
-
-    Cursor lastI(this, last.prev);
-    if ((*lastI).bc == BC_t::ret_)
-        lastI.remove();
-
-    for (Cursor pos = getCursor(); !pos.atEnd(); ++pos) {
-        // TODO replace ret with jumps to the end
-        assert((*pos).bc != BC_t::ret_);
-    }
-}
-
 unsigned CodeEditor::write(FunctionHandle& function) {
     CodeStream cs(function, ast);
     cs.setNumLabels(nextLabel);

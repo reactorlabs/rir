@@ -49,11 +49,17 @@ class CodeEditor {
 
         CodeEditor* editor;
         BytecodeList* pos;
+        std::vector<BytecodeList*> deleted;
 
       public:
         unsigned long hash() const {
             return std::hash<unsigned long>()((unsigned long)editor) ^
                    std::hash<unsigned long>()((unsigned long)pos);
+        }
+
+        ~Cursor() {
+            for (auto d : deleted)
+                delete d;
         }
 
         Cursor():
@@ -236,7 +242,7 @@ class CodeEditor {
             pos->src = ast;
         }
 
-        void remove() {
+        void erase() {
             editor->changed = true;
 
             assert(!atEnd());
@@ -248,8 +254,8 @@ class CodeEditor {
             prev->next = next;
             next->prev = prev;
 
-            delete pos;
-            pos = next;
+            pos->bc.bc = BC_t::invalid_;
+            deleted.push_back(pos);
         }
 
         bool empty() { return editor->front.next == & editor->last; }
@@ -293,8 +299,6 @@ class CodeEditor {
     unsigned write(FunctionHandle& function);
 
     FunctionHandle finalize();
-
-    void normalizeReturn();
 
     void print();
 

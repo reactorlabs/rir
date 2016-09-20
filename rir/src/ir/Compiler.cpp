@@ -8,7 +8,7 @@
 #include "R/Sexp.h"
 #include "R/Symbols.h"
 
-#include "Optimizer.h"
+#include "optimizer/cleanup.h"
 #include "utils/Pool.h"
 #include "code/dataflow.h"
 
@@ -1015,10 +1015,13 @@ Compiler::CompilerRes Compiler::finalize() {
     ctx.pop();
 
     CodeEditor code(function.entryPoint());
-    DataflowAnalysis a;
-    a.analyze(code);
 
-    FunctionHandle opt = Optimizer::optimize(code.finalize());
+    BCCleanup cleanup;
+    cleanup.run(code);
+
+    auto opt = code.finalize();
+
+    // FunctionHandle opt = Optimizer::optimize(code.finalize());
     // opt.print();
     CodeVerifier::vefifyFunctionLayout(opt.store, globalContext());
 
