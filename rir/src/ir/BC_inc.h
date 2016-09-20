@@ -130,6 +130,8 @@ class BC {
 
     inline size_t size() { return size(bc); }
     inline size_t popCount() {
+        // return also is a leave
+        assert(bc != BC_t::return_);
         if (bc == BC_t::call_stack_)
             return immediate.call_stack_args.nargs + 1;
         if (bc == BC_t::dispatch_stack_)

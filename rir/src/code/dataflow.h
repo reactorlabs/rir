@@ -65,6 +65,11 @@ class DataflowAnalysis : public ForwardAnalysisIns<AbstractStack<StackV>>,
             current().push(StackV(ins));
     }
 
+    void return_(CodeEditor::Cursor& ins) override {
+        // Return is also a leave instruction
+        current().pop(current().depth());
+    }
+
     InstructionVisitor dispatcher_;
 };
 }
