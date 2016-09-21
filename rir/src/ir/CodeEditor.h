@@ -85,6 +85,27 @@ class CodeEditor {
         BC operator*() const { return pos->bc; }
 
         void operator++() { pos = pos->next; }
+        void operator--() { pos = pos->prev; }
+
+        Iterator operator+(int num) {
+            if (num < 0)
+                return *this - (-num);
+
+            Iterator n = *this;
+            for (int i = 0; i < num; ++i)
+                ++n;
+            return n;
+        }
+
+        Iterator operator-(int num) {
+            if (num < 0)
+                return *this + (-num);
+
+            Iterator n = *this;
+            for (int i = 0; i < num; ++i)
+                --n;
+            return n;
+        }
 
         bool operator==(const Iterator& other) const {
             return pos == other.pos;
@@ -307,13 +328,15 @@ class CodeEditor {
             delete &other;
         }
 
-        void erase() {
+        void remove() {
             editor.changed = true;
 
             assert(!atEnd());
             assert(pos != &editor.front);
 
             pos->deleted = true;
+
+            advance();
         }
 
         bool empty() { return editor.front.next == &editor.last; }

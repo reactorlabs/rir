@@ -4,6 +4,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cassert>
+#include <cstring>
 
 #include "R/r.h"
 
@@ -124,6 +125,8 @@ class BC {
         immediate = other.immediate;
         return other;
     }
+
+    bool operator==(const BC& other) const;
 
     bool is(BC_t aBc) { return bc == aBc; }
 
