@@ -20,7 +20,7 @@ public:
 
     /** Dispatches on the given cursor, and returns true if the dispatch was successful, false if not.
      */
-    bool dispatch(CodeEditor::Cursor & ins) {
+    bool dispatch(CodeEditor::Iterator ins) {
         success_ = true;
         doDispatch(ins);
         return success_;
@@ -43,7 +43,7 @@ private:
 
       Must be implemented in children.
      */
-    virtual void doDispatch(CodeEditor::Cursor & ins) = 0;
+  virtual void doDispatch(CodeEditor::Iterator ins) = 0;
 
     bool success_;
 };

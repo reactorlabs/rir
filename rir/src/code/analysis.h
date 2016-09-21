@@ -98,15 +98,16 @@ protected:
         mergePoints_.resize(code_->numLabels());
         initialState_ = initialState();
         currentState_ = initialState_->clone();
-        q_.push_front(code_->getCursor());
+        q_.push_front(code_->begin());
         Dispatcher & d = dispatcher();
         while (not q_.empty()) {
             currentIns_ = q_.front();
             q_.pop_front();
             while (true) {
-                BC cur = currentIns_.bc();
+                BC cur = *currentIns_;
+
                 // if current instruction is label, deal with state merging
-                if (cur.bc == BC_t::label) {
+                if (cur.is(BC_t::label)) {
                     // if state not stored, store copy of incomming
                     State * & stored = mergePoints_[cur.immediate.offset];
                     if (stored == nullptr) {
@@ -131,21 +132,20 @@ protected:
                 // user dispatch method
                 d.dispatch(currentIns_);
 
-                if (currentIns_.bc().bc == BC_t::br_) {
-                    Label l = currentIns_.bc().immediate.offset;
+                if (cur.is(BC_t::br_)) {
+                    Label l = cur.immediate.offset;
                     if (shouldJump(l)) {
                         q_.push_front(code_->label(l));
                     }
                     delete currentState_;
                     currentState_ = nullptr;
                     break;
-                } else if (currentIns_.bc().isJmp()) {
-                    Label l = currentIns_.bc().immediate.offset;
+                } else if (cur.isJmp()) {
+                    Label l = cur.immediate.offset;
                     if (shouldJump(l)) {
                         q_.push_front(code_->label(l));
                     }
-                } else if (currentIns_.bc().bc == BC_t::ret_ ||
-                           currentIns_.bc().bc == BC_t::return_) {
+                } else if (cur.is(BC_t::ret_) || cur.is(BC_t::return_)) {
                     if (finalState_ == nullptr) {
                         finalState_ = currentState_;
                     } else {
@@ -157,7 +157,7 @@ protected:
                 }
 
                 // move to next instruction
-                currentIns_.advance();
+                ++currentIns_;
             }
         }
     }
@@ -165,7 +165,7 @@ protected:
     State * initialState_ = nullptr;
     State * currentState_ = nullptr;
     State * finalState_ = nullptr;
-    CodeEditor::Cursor currentIns_;
+    CodeEditor::Iterator currentIns_;
     std::vector<State *> mergePoints_;
 
 
@@ -180,7 +180,7 @@ private:
         }
     }
 
-    std::deque<CodeEditor::Cursor> q_;
+    std::deque<CodeEditor::Iterator> q_;
 };
 
 
@@ -204,9 +204,7 @@ protected:
     using ForwardAnalysis<ASTATE>::current;
     using ForwardAnalysis<ASTATE>::code_;
 public:
-
-    ASTATE const & operator [] (CodeEditor::Cursor const & ins) {
-        assert(& ins.editorX() == code_ and "you can only use cursors from the same editor");
+  ASTATE const& operator[](CodeEditor::Iterator ins) {
         if (ins != currentIns_)
             seek(ins);
         return current();
@@ -221,15 +219,15 @@ protected:
 
     void initializeCache() {
         currentState_ = initialState_->clone();
-        currentIns_ = code_->getCursor();
+        currentIns_ = code_->begin();
     }
 
     void advance() {
         dispatcher().dispatch(currentIns_);
-        currentIns_.advance();
+        ++currentIns_;
         // if the cached instruction is label, dispose of the state and create a copy of the fixpoint
-        if (currentIns_.bc().bc == BC_t::label) {
-            auto fixpoint = mergePoints_[currentIns_.bc().immediate.offset];
+        if ((*currentIns_).is(BC_t::label)) {
+            auto fixpoint = mergePoints_[(*currentIns_).immediate.offset];
             // if we reach dead code there is no merge state available 
             if (fixpoint) {
                 delete currentState_;
@@ -238,8 +236,8 @@ protected:
         }
     }
 
-    void seek(CodeEditor::Cursor ins) {
-        while (!currentIns_.atEnd()) {
+    void seek(CodeEditor::Iterator ins) {
+        while (currentIns_ != code_->end()) {
             if (currentIns_ == ins)
                 return;
             // advance the state using dispatcher
@@ -247,7 +245,7 @@ protected:
         }
         // if we haven't found it, let's start over
         initializeCache();
-        while (!currentIns_.atEnd()) {
+        while (currentIns_ != code_->end()) {
             if (currentIns_ == ins)
                 return;
             advance();

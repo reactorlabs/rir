@@ -9,6 +9,7 @@
 #include <set>
 #include <unordered_map>
 #include <cassert>
+#include <stack>
 
 #include <iostream>
 
@@ -16,14 +17,39 @@ namespace rir {
 
 class CodeEditor {
   private:
+    /*
+     * The BytecodeList is the central datastructure of the code editor. Its a
+     * doubly linked list of BC objects. Additionally every instruction can
+     * have a patch-branch and be marked as deleted. In pictures:
+     *
+     *   BC -> BC -> BC -> BC(deleted) -> BC -> BC
+     *          \                          \
+     *            > BC -> BC                 > BC
+     *
+     * The code Editor has:
+     *  1) an Iterator which will always see the *UNMODIFIED* bytecode stream
+     *  2) a Cursor which sees the modified bytecode stream and allows its
+     *     clients to do modifications.
+     *
+     * The internals of the BytecodeList are supposed to be completely
+     * insulated from CodeEditor users. In particular the Cursor creates the
+     * illusion of operating on regular stream.
+     *
+     * To make the changes available to further analysis, you have to commit()
+     * them.
+     */
 
     struct BytecodeList {
-        BC bc;
-        SEXP src = nullptr;
-        BytecodeList* next = nullptr;
-        BytecodeList* prev = nullptr;
-        BytecodeList(BC bc) : bc(bc) {}
         BytecodeList() {}
+        BytecodeList(BC bc, BytecodeList* prev, BytecodeList* next)
+            : bc(bc), prev(prev), next(next) {}
+
+        BC bc;
+        BytecodeList* prev = nullptr;
+        BytecodeList* next = nullptr;
+        BytecodeList* patch = nullptr;
+        SEXP src = nullptr;
+        bool deleted = false;
     };
 
     Label nextLabel = 0;
@@ -38,40 +64,53 @@ class CodeEditor {
     std::vector<BytecodeList*> labels_;
 
     /** Closure that stores given code.
-
       nullptr if the code corresponds to a promise.
      */
     SEXP closure_ = nullptr;
 
   public:
+    class Cursor;
 
-    class Cursor {
-
-        CodeEditor* editor;
-        BytecodeList* pos;
-        std::vector<BytecodeList*> deleted;
+    // This is a simple iterator class. It is oblivious to any uncommited
+    // changes made to the instruction stream.
+    class Iterator {
+      protected:
+        const BytecodeList* pos;
 
       public:
+        Iterator() : pos(nullptr) {}
+        Iterator(const BytecodeList* pos) : pos(pos) {}
+        Iterator(const Iterator& other) : pos(other.pos) {}
+
+        BC operator*() const { return pos->bc; }
+
+        void operator++() { pos = pos->next; }
+
+        bool operator==(const Iterator& other) const {
+            return pos == other.pos;
+        }
+
+        bool operator!=(const Iterator& other) const {
+            return pos != other.pos;
+        }
+
         unsigned long hash() const {
-            return std::hash<unsigned long>()((unsigned long)editor) ^
-                   std::hash<unsigned long>()((unsigned long)pos);
+            return std::hash<unsigned long>()((unsigned long)pos);
         }
 
-        ~Cursor() {
-            for (auto d : deleted)
-                delete d;
-        }
+        SEXP src() const { return pos->src; }
 
-        Cursor():
-            editor(nullptr),
-            pos(nullptr) {
-        }
+        Cursor asCursor(CodeEditor& editor);
+    };
 
-        CodeEditor & editorX() const {
-            return *editor;
-        }
+    // The cursor can insert changes into the codestream
+    class Cursor {
+        CodeEditor& editor;
+        BytecodeList* pos;
+        bool inPatch = false;
 
-        Cursor(CodeEditor* editor, BytecodeList* pos)
+      public:
+        Cursor(CodeEditor& editor, BytecodeList* pos)
             : editor(editor), pos(pos) {}
 
         Cursor(Cursor const & from):
@@ -80,117 +119,153 @@ class CodeEditor {
         }
 
         bool operator == (Cursor const & other) const {
-            return editor == other.editor and pos == other.pos;
+            return &editor == &other.editor and pos == other.pos;
         }
 
         bool operator != (Cursor const & other) const {
-            return  pos != other.pos or editor != other.editor;
+            return pos != other.pos or &editor != &other.editor;
         }
 
-        Label mkLabel() { return editor->nextLabel++; }
+        bool atEnd() const { return pos == &editor.last; }
+        bool firstInstruction() const { return pos == editor.front.next; }
 
-        bool atEnd() { return pos == &editor->last; }
-
-        bool firstInstruction() { return pos == editor->front.next; }
-
-        void operator++() {
+        Cursor& advance() {
             assert(!atEnd());
-            pos = pos->next;
-        }
-
-        Cursor & advance() {
-            assert(!atEnd());
-            pos = pos->next;
+            do {
+                if (pos->patch) {
+                    pos = pos->patch;
+                    inPatch = true;
+                } else {
+                    if (pos->next) {
+                        pos = pos->next;
+                    } else {
+                        // At the end of the patch we rewind and go to the next
+                        // instruction
+                        while (!pos->patch)
+                            pos = pos->prev;
+                        pos = pos->next;
+                        inPatch = false;
+                    }
+                }
+            } while (pos->deleted && !atEnd());
             return *this;
         }
 
-        Cursor next() {
+        Cursor next() const {
             assert(!atEnd());
             return Cursor(*this).advance();
         }
 
-        void operator--() {
-            assert(!firstInstruction());
-            pos = pos->prev;
+        Cursor& rwd() {
+            do {
+                assert(!firstInstruction());
+                auto oldPos = pos;
+                pos = pos->prev;
+                if (pos->patch) {
+                    // Now we need to figure out if we came backwards from the
+                    // patch, or from the other instruction stream
+                    if (oldPos == pos->patch) {
+                        inPatch = false;
+                    } else {
+                        pos = pos->patch;
+                        while (pos->next)
+                            pos = pos->next;
+                        inPatch = true;
+                    }
+                }
+            } while (pos->deleted && !firstInstruction());
+            return *this;
         }
 
-        /** Deprecated */
-        BC operator*() { return pos->bc; }
-
-        BC peek(int i = 1) {
-            BytecodeList* p = pos;
-            while (i-- > 0)
-                p = p->next;
-            return p->bc;
+        Cursor prev() const {
+            assert(!atEnd());
+            return Cursor(*this).rwd();
         }
 
-        /** Getter for the BC object the cursor points to.
-
-          (this is because the iterator interface is deprecated)
-         */
         BC bc() const {
             return pos->bc;
         }
 
+        SEXP src() const { return pos->src; }
+        void src(SEXP src) { pos->src = src; }
+
+        // TODO this breaks when inserting before the first instruction....
         Cursor& operator<<(BC bc) {
-            editor->changed = true;
+            editor.changed = true;
 
-            auto insert = new BytecodeList(bc);
-
-            BytecodeList* prev = pos->prev;
+            bool nextInPatch = inPatch;
             BytecodeList* next = pos;
 
-            prev->next = insert;
-            next->prev = insert;
+            Cursor p = prev();
+            bool prevInPatch = p.inPatch;
+            BytecodeList* prev = p.pos;
 
-            insert->prev = prev;
-            insert->next = next;
+            if (prevInPatch && nextInPatch) {
+                // Insert in the middle of a patch
+                auto insert = new BytecodeList(bc, prev, next);
+                prev->next = insert;
+                next->prev = insert;
+            }
+            if (prevInPatch && !nextInPatch) {
+                // insert at the end of a patch
+                auto insert = new BytecodeList(bc, prev, nullptr);
+                next->prev = insert;
+            }
+            if (!prevInPatch && nextInPatch) {
+                // insert at the beginning of a patch
+                auto insert = new BytecodeList(bc, prev, next);
+                prev->patch = insert;
+                next->prev = insert;
+            }
+            if (!prevInPatch && !nextInPatch) {
+                // create a new patch
+                auto insert = new BytecodeList(bc, prev, nullptr);
+                prev->patch = insert;
+            }
 
             pos = next;
             return *this;
         }
 
-        bool hasAst() { return pos->src; }
+        void insert(CodeEditor& other) {
+            editor.changed = true;
 
-        SEXP ast() { return pos->src; }
-
-        Cursor& operator<<(CodeEditor& other) {
-            editor->changed = true;
-
-            size_t labels = editor->nextLabel;
-            size_t proms = editor->promises.size();
+            size_t labels = editor.nextLabel;
+            size_t proms = editor.promises.size();
 
             std::unordered_map<fun_idx_t, fun_idx_t> duplicate;
 
             fun_idx_t j = 0;
             for (auto& p : other.promises) {
                 bool found = false;
-                for (fun_idx_t i = 0; i < editor->promises.size(); ++i) {
-                    if (p == editor->promises[i]) {
+                for (fun_idx_t i = 0; i < editor.promises.size(); ++i) {
+                    if (p == editor.promises[i]) {
                         duplicate[j] = i;
-                        editor->promises.push_back(nullptr);
+                        editor.promises.push_back(nullptr);
                         found = true;
                         break;
                     }
                 }
                 if (!found) {
                     // We own the promise now
-                    editor->promises.push_back(p);
+                    editor.promises.push_back(p);
                     p = nullptr;
                 }
                 j++;
             }
 
-            bool first = false;
+            bool first = true;
             Cursor cur = other.getCursor();
             while (!cur.atEnd()) {
-                *this << *cur;
+                *this << cur.bc();
 
-                BytecodeList* insert = pos->prev;
-                insert->src = cur.pos->src;
+                BytecodeList* insert = prev().pos;
+
+                insert->src = cur.src();
+
                 if (first) {
                     if (!insert->src)
-                        insert->src = cur.editor->ast;
+                        insert->src = other.ast;
                     first = false;
                 }
 
@@ -225,52 +300,41 @@ class CodeEditor {
                 if (insert->bc.isJmp()) {
                     insert->bc.immediate.offset += labels;
                 }
-
-                ++cur;
             }
-            editor->nextLabel += other.nextLabel;
+            editor.nextLabel += other.nextLabel;
 
             // TODO: that stinks, I know
             delete &other;
-            return *this;
-        }
-
-        void addAst(SEXP ast) {
-            editor->changed = true;
-
-            assert(!pos->src);
-            pos->src = ast;
         }
 
         void erase() {
-            editor->changed = true;
+            editor.changed = true;
 
             assert(!atEnd());
-            assert(pos != & editor->front);
+            assert(pos != &editor.front);
 
-            BytecodeList* prev = pos->prev;
-            BytecodeList* next = pos->next;
-
-            prev->next = next;
-            next->prev = prev;
-
-            pos->bc.bc = BC_t::invalid_;
-            deleted.push_back(pos);
+            pos->deleted = true;
         }
 
-        bool empty() { return editor->front.next == & editor->last; }
+        bool empty() { return editor.front.next == &editor.last; }
 
         void print();
+
+        unsigned long hash() const {
+            return std::hash<unsigned long>()((unsigned long)&editor) ^
+                   std::hash<unsigned long>()((unsigned long)pos);
+        }
     };
     friend class Cursor;
 
-    Cursor getCursor() {
-        return Cursor(this, front.next);
-    }
+    Cursor getCursor() { return Cursor(*this, front.next); }
+
+    Iterator begin() const { return Iterator(front.next); }
+
+    Iterator end() const { return Iterator(&last); }
 
     CodeEditor(SEXP closure);
 
-    // TODO this should be private
     CodeEditor(CodeHandle code);
 
     std::vector<SEXP> arguments() const {
@@ -305,9 +369,9 @@ class CodeEditor {
 
     /** Returns cursor that points to given label.
      */
-    Cursor label(size_t index) {
+    Iterator label(size_t index) {
         assert (index < labels_.size());
-        return Cursor(this, labels_[index]);
+        return Iterator(labels_[index]);
     }
 
     /** Returns number of labels in the code.
@@ -325,10 +389,46 @@ class CodeEditor {
         return * promises[index];
     }
 
+    void commit() {
+        // Step 1: splice patches
+        BytecodeList* pos = front.next;
+        while (pos != &last) {
+            if (pos->patch) {
+                BytecodeList* next = pos->next;
+                BytecodeList* patchEnd = pos->patch;
+                while (patchEnd->next)
+                    patchEnd = patchEnd->next;
+                pos->next = pos->patch;
+                pos->patch = nullptr;
+                patchEnd->next = next;
+                next->prev = patchEnd;
+                pos = patchEnd->next;
+            } else {
+                pos = pos->next;
+            }
+        }
+
+        // Step 2: remove deleted
+        pos = front.next;
+        while (pos != &last) {
+            if (pos->deleted) {
+                pos->prev->next = pos->next;
+                pos->next->prev = pos->prev;
+                BytecodeList* old = pos;
+                pos = pos->next;
+                delete old;
+            } else {
+                pos = pos->next;
+            }
+        }
+    }
+
     bool changed = false;
-
-
 };
+
+inline CodeEditor::Cursor CodeEditor::Iterator::asCursor(CodeEditor& editor) {
+    return CodeEditor::Cursor(editor, const_cast<BytecodeList*>(pos));
+}
 }
 
 namespace std {
@@ -336,6 +436,12 @@ namespace std {
 template <>
 struct hash<rir::CodeEditor::Cursor> {
     size_t operator()(rir::CodeEditor::Cursor const& x) const noexcept {
+        return x.hash();
+    }
+};
+template <>
+struct hash<rir::CodeEditor::Iterator> {
+    size_t operator()(rir::CodeEditor::Iterator const& x) const noexcept {
         return x.hash();
     }
 };

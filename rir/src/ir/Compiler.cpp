@@ -1016,8 +1016,11 @@ Compiler::CompilerRes Compiler::finalize() {
 
     CodeEditor code(function.entryPoint());
 
-    BCCleanup cleanup;
-    cleanup.run(code);
+    BCCleanup cleanup(code);
+    for (int i = 0; i < 3; ++i) {
+        cleanup.run();
+        code.commit();
+    }
 
     auto opt = code.finalize();
 

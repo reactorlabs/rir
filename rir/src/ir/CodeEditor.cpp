@@ -124,6 +124,12 @@ CodeEditor::~CodeEditor() {
 
     BytecodeList* pos = front.next;
     while (pos != & last) {
+        BytecodeList* patch = pos->patch;
+        while (patch) {
+            BytecodeList* old = patch;
+            patch = patch->next;
+            delete old;
+        }
         BytecodeList* old = pos;
         pos = pos->next;
         delete old;
@@ -131,10 +137,10 @@ CodeEditor::~CodeEditor() {
 }
 
 void CodeEditor::print() {
-    for (Cursor cur = getCursor(); !cur.atEnd(); ++cur) {
-        if (cur.hasAst()) {
+    for (Cursor cur = getCursor(); !cur.atEnd(); cur.advance()) {
+        if (cur.src()) {
             std::cout << "     # ";
-            Rf_PrintValue(cur.ast());
+            Rf_PrintValue(cur.src());
         }
         cur.print();
     }
@@ -156,8 +162,8 @@ unsigned CodeEditor::write(FunctionHandle& function) {
     CodeStream cs(function, ast);
     cs.setNumLabels(nextLabel);
 
-    for (Cursor cur = getCursor(); !cur.atEnd(); ++cur) {
-        BC bc = *cur;
+    for (Cursor cur = getCursor(); !cur.atEnd(); cur.advance()) {
+        BC bc = cur.bc();
         if (bc.hasPromargs()) {
             if (bc.bc == BC_t::promise_ || bc.bc == BC_t::push_code_) {
                 CodeEditor* e = promises[bc.immediate.fun];
@@ -175,8 +181,8 @@ unsigned CodeEditor::write(FunctionHandle& function) {
             }
         }
         cs << bc;
-        if (cur.hasAst())
-            cs.addAst(cur.ast());
+        if (cur.src())
+            cs.addAst(cur.src());
     }
 
     return cs.finalize();

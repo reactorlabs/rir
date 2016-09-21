@@ -3,7 +3,7 @@
 
 #include "ir/CodeEditor.h"
 #include "code/analysis.h"
-#include "code/InstructionVisitor.h"
+#include "code/dispatchers.h"
 #include "interpreter/interp_context.h"
 
 #include <unordered_set>
@@ -13,7 +13,7 @@ namespace rir {
 class StackV {
   public:
     StackV(){};
-    StackV(CodeEditor::Cursor c) { defs.insert(c); };
+    StackV(CodeEditor::Iterator c) { defs.insert(c); };
 
     bool operator==(StackV const& other) const {
         return defs == other.defs && uses == other.uses;
@@ -33,14 +33,14 @@ class StackV {
         return defs.size() != ds || uses.size() != us;
     }
 
-    void used(CodeEditor::Cursor c) { uses.insert(c); }
+    void used(CodeEditor::Iterator c) { uses.insert(c); }
 
-    std::unordered_set<CodeEditor::Cursor> defs;
-    std::unordered_set<CodeEditor::Cursor> uses;
+    std::unordered_set<CodeEditor::Iterator> defs;
+    std::unordered_set<CodeEditor::Iterator> uses;
 };
 
 class DataflowAnalysis : public ForwardAnalysisIns<AbstractStack<StackV>>,
-                         public InstructionVisitor::Receiver {
+                         public InstructionDispatcher::Receiver {
   public:
     DataflowAnalysis() : dispatcher_(*this) {}
 
@@ -54,23 +54,24 @@ class DataflowAnalysis : public ForwardAnalysisIns<AbstractStack<StackV>>,
     //     current().push(StackV(ins));
     // }
 
-    void label(CodeEditor::Cursor& ins) override {}
+    void label(CodeEditor::Iterator ins) override {}
 
     /** All other instructions, don't care for now.
      */
-    void any(CodeEditor::Cursor& ins) override {
+    void any(CodeEditor::Iterator ins) override {
+        BC bc = *ins;
         // pop as many as we need, push as many tops as we need
-        current().pop(ins.bc().popCount());
-        for (size_t i = 0, e = ins.bc().pushCount(); i != e; ++i)
+        current().pop(bc.popCount());
+        for (size_t i = 0, e = bc.pushCount(); i != e; ++i)
             current().push(StackV(ins));
     }
 
-    void return_(CodeEditor::Cursor& ins) override {
+    void return_(CodeEditor::Iterator ins) override {
         // Return is also a leave instruction
         current().pop(current().depth());
     }
 
-    InstructionVisitor dispatcher_;
+    InstructionDispatcher dispatcher_;
 };
 }
 #endif

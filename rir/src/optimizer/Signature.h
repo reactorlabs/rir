@@ -203,51 +203,39 @@ private:
 
 };
 
-
-
-
-class SignatureAnalysis : public ForwardAnalysisFinal<Signature>, InstructionVisitor::Receiver {
+class SignatureAnalysis : public ForwardAnalysisFinal<Signature>,
+                          InstructionDispatcher::Receiver {
 public:
     void print() override {
         finalState().print();
     }
 
-    SignatureAnalysis():
-        dispatcher_(InstructionVisitor(*this)) {
-    }
+    SignatureAnalysis() : dispatcher_(InstructionDispatcher(*this)) {}
 
 protected:
-
-    void ldfun_(CodeEditor::Cursor& ins) override {
-        current().forceArgument(ins.bc().immediateConst());
+  void ldfun_(CodeEditor::Iterator ins) override {
+      BC bc = *ins;
+      current().forceArgument(bc.immediateConst());
     }
 
-    void ldddvar_(CodeEditor::Cursor& ins) override {
+    void ldddvar_(CodeEditor::Iterator ins) override {}
 
+    void ldvar_(CodeEditor::Iterator ins) override {
+        BC bc = *ins;
+        current().forceArgument(bc.immediateConst());
     }
 
-    void ldvar_(CodeEditor::Cursor& ins) override {
-        current().forceArgument(ins.bc().immediateConst());
-    }
+    void call_(CodeEditor::Iterator ins) override { current().setAsNotLeaf(); }
 
-    void call_(CodeEditor::Cursor& ins) override {
-        current().setAsNotLeaf();
-    }
+    void dispatch_(CodeEditor::Iterator ins) override {}
 
-    void dispatch_(CodeEditor::Cursor& ins) override {
+    void dispatch_stack_(CodeEditor::Iterator ins) override {}
 
-    }
+    void call_stack_(CodeEditor::Iterator ins) override {}
 
-    void dispatch_stack_(CodeEditor::Cursor& ins) override {
-
-    }
-
-    void call_stack_(CodeEditor::Cursor& ins) override {
-
-    }
-
-    void stvar_(CodeEditor::Cursor& ins) override {
-        current().storeArgument(ins.bc().immediateConst());
+    void stvar_(CodeEditor::Iterator ins) override {
+        BC bc = *ins;
+        current().storeArgument(bc.immediateConst());
     }
 
 
@@ -262,10 +250,7 @@ protected:
     }
 
 private:
-    InstructionVisitor dispatcher_;
-
-
-
+  InstructionDispatcher dispatcher_;
 };
 
 }

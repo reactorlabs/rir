@@ -1,6 +1,6 @@
 #pragma once
 
-#include "code/InstructionVisitor.h"
+#include "code/dispatchers.h"
 
 namespace rir {
 
@@ -10,7 +10,7 @@ namespace rir {
 
 */
 
-class Printer : public InstructionVisitor::Receiver {
+class Printer : public InstructionDispatcher::Receiver {
 public:
     Printer():
         dispatcher_(*this) {
@@ -19,7 +19,7 @@ public:
     void run(CodeEditor & code) {
         pc_ = 0;
 
-        for (CodeEditor::Cursor i = code.getCursor(); !i.atEnd(); i.advance())
+        for (auto i = code.begin(); i != code.end(); ++i)
             dispatcher_.dispatch(i);
 
         for (size_t i = 0, e = code.numPromises(); i != e; ++i) {
@@ -34,11 +34,11 @@ public:
 
     /** Some silly printer stuff.
      */
-    void any(CodeEditor::Cursor& ins) override {
-        if (ins.hasAst()) {
+    void any(CodeEditor::Iterator ins) override {
+        if (ins.src()) {
             printOffset();
             Rprintf("          # ");
-            Rf_PrintValue(ins.ast());
+            Rf_PrintValue(ins.src());
         }
         printOffset();
         Rprintf(" %5x ", pc_);
@@ -47,9 +47,10 @@ public:
         pc_ += bc.size();
     }
 
-    void label(CodeEditor::Cursor& ins) override {
+    void label(CodeEditor::Iterator ins) override {
+        BC bc = *ins;
         printOffset();
-        Rprintf("Label %i:\n", ins.bc().immediate.offset);
+        Rprintf("Label %i:\n", bc.immediate.offset);
     }
 
 private:
@@ -60,7 +61,7 @@ private:
             Rprintf(" ");
     }
 
-    InstructionVisitor dispatcher_;
+    InstructionDispatcher dispatcher_;
     size_t pc_ = 0;
     size_t offset_ = 0;
 };

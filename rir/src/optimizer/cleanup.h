@@ -5,28 +5,30 @@
 
 namespace rir {
 
-class BCCleanup : public InstructionVisitor::Receiver {
+class BCCleanup : public InstructionDispatcher::Receiver {
   public:
     DataflowAnalysis analysis;
-    InstructionVisitor dispatcher;
+    InstructionDispatcher dispatcher;
+    CodeEditor& code_;
 
-    BCCleanup() : dispatcher(*this) {}
+    BCCleanup(CodeEditor& code) : dispatcher(*this), code_(code) {}
 
-    void pop_(CodeEditor::Cursor& ins) override {
+    void pop_(CodeEditor::Iterator ins) override {
         auto v = analysis[ins].top();
         if (v.uses.empty() && v.defs.size() == 1) {
-            for (auto def : v.defs) {
-                if (def.bc().bc == BC_t::push_) {
-                    def.erase();
-                    ins.erase();
+            for (auto defI : v.defs) {
+                BC def = *defI;
+                if (def.is(BC_t::push_)) {
+                    defI.asCursor(code_).erase();
+                    ins.asCursor(code_).erase();
                 }
             }
         }
     }
 
-    void run(CodeEditor& code) {
-        analysis.analyze(code);
-        for (auto i = code.getCursor(); !i.atEnd(); i.advance()) {
+    void run() {
+        analysis.analyze(code_);
+        for (auto i = code_.begin(); i != code_.end(); ++i) {
             dispatcher.dispatch(i);
         }
     }

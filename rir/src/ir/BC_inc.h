@@ -125,6 +125,8 @@ class BC {
         return other;
     }
 
+    bool is(BC_t aBc) { return bc == aBc; }
+
     BC_t bc;
     immediate_t immediate;
 
