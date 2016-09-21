@@ -47,12 +47,12 @@ class DataflowAnalysis : public ForwardAnalysisIns<AbstractStack<StackV>>,
   protected:
     virtual Dispatcher& dispatcher() override { return dispatcher_; }
 
-    // void dup_(CodeEditor::Cursor ins) override {
-    //     auto v = current().pop();
-    //     v.used(ins);
-    //     current().push(v);
-    //     current().push(StackV(ins));
-    // }
+    void dup_(CodeEditor::Iterator ins) override {
+        auto v = current().pop();
+        v.used(ins);
+        current().push(StackV(ins));
+        current().push(v);
+    }
 
     void label(CodeEditor::Iterator ins) override {}
 

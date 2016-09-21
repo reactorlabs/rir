@@ -23,7 +23,7 @@ class BCCleanup : public InstructionDispatcher::Receiver {
 
         // push - pop elimination
         if (v.uses.empty()) {
-            if (def.is(BC_t::push_)) {
+            if (def.is(BC_t::push_) || def.is(BC_t::dup_)) {
                 defI.asCursor(code_).remove();
                 ins.asCursor(code_).remove();
                 return;
@@ -55,6 +55,12 @@ class BCCleanup : public InstructionDispatcher::Receiver {
         analysis.analyze(code_);
         for (auto i = code_.begin(); i != code_.end(); ++i) {
             dispatcher.dispatch(i);
+        }
+    }
+
+    void invisible_(CodeEditor::Iterator ins) override {
+        if ((*(ins + 1)).is(BC_t::pop_)) {
+            ins.asCursor(code_).remove();
         }
     }
 };
