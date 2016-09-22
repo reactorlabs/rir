@@ -54,6 +54,43 @@ class DataflowAnalysis : public ForwardAnalysisIns<AbstractStack<StackV>>,
         current().push(v);
     }
 
+    void brobj_(CodeEditor::Iterator ins) override {
+        current().top().used(ins);
+    }
+
+    void test_bounds_(CodeEditor::Iterator ins) override {
+        current()[0].used(ins);
+        current()[1].used(ins);
+        current().push(ins);
+    }
+
+    void uniq_(CodeEditor::Iterator ins) override { current().top().used(ins); }
+
+    // TODO: should we maybe deal with those in the AbstractStack somehow???
+    void pull_(CodeEditor::Iterator ins) override {
+        int n = (*ins).immediate.i;
+        current()[n].used(ins);
+        current().push(ins);
+    }
+
+    // TODO: should we maybe deal with those in the AbstractStack somehow???
+    void put_(CodeEditor::Iterator ins) override {
+        int n = (*ins).immediate.i;
+        auto v = current().top();
+        for (int i = 0; i < n - 1; i++)
+            current()[i] = current()[i + i];
+        current()[n] = v;
+    }
+
+    // TODO: should we maybe deal with those in the AbstractStack somehow???
+    void pick_(CodeEditor::Iterator ins) override {
+        int n = (*ins).immediate.i;
+        auto v = current()[n];
+        for (int i = 0; i < n - 1; i++)
+            current()[i + 1] = current()[i];
+        current()[0] = v;
+    }
+
     void label(CodeEditor::Iterator ins) override {}
 
     /** All other instructions, don't care for now.

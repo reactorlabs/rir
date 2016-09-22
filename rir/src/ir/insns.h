@@ -144,7 +144,7 @@ DEF_INSTR(subset1_, 0, 2, 1, 0, 0)
 /**
  * extract1_:: do a[b], where a and b are on the stack
  */
-DEF_INSTR(brobj_, 1, 0, 0, 0, 0)
+DEF_INSTR(brobj_, 1, 1, 1, 0, 0)
 /**
  * brobj_:: branch if tos is object
  */
@@ -157,7 +157,7 @@ DEF_INSTR(dispatch_, 4, 1, 1, 0, 0)
  * dispatch_:: similar to call, but receiver is tos and 3rd immediate
  *             is selector
  */
-DEF_INSTR(swap_, 0, 0, 0, 0, 0)
+DEF_INSTR(swap_, 0, 2, 2, 0, 0)
 /**
  * swap_:: swap two elements tos
  */
@@ -174,7 +174,7 @@ DEF_INSTR(call_stack_, 3, -1, 1, 0, 0)
  * call_stack_:: like call, but arguments are taken from the stack
  *               immediate are number of args and names
  */
-DEF_INSTR(uniq_, 0, 0, 0, 0, 0)
+DEF_INSTR(uniq_, 0, 1, 1, 0, 0)
 /**
  * uniq_:: duplicates tos if it is shared (ie. named > 1)
  */
@@ -204,7 +204,7 @@ DEF_INSTR(inc_, 0, 1, 1, 0, 0)
 /**
  * inc_ :: increment tos integer
  */
-DEF_INSTR(test_bounds_, 0, 0, 1, 0, 0)
+DEF_INSTR(test_bounds_, 0, 2, 3, 0, 0)
 /**
  * bounds_check_ :: check stack[0] is a valid inded into vector at stack[1]
  */
