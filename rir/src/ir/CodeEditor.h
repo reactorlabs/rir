@@ -5,6 +5,7 @@
 
 #include "utils/FunctionHandle.h"
 #include "utils/CodeHandle.h"
+#include "interpreter/interp_context.h"
 
 #include <set>
 #include <unordered_map>
@@ -39,18 +40,25 @@ class CodeEditor {
      * them.
      */
 
+#pragma pack(push)
+#pragma pack(1)
     struct BytecodeList {
         BytecodeList() {}
         BytecodeList(BC bc, BytecodeList* prev, BytecodeList* next)
             : bc(bc), prev(prev), next(next) {}
 
         BC bc;
+        bool deleted = false;
+        unsigned srcIdx = 0;
         BytecodeList* prev = nullptr;
         BytecodeList* next = nullptr;
         BytecodeList* patch = nullptr;
-        SEXP src = nullptr;
-        bool deleted = false;
+
+        SEXP src() const {
+            return srcIdx != 0 ? src_pool_at(globalContext(), srcIdx) : 0;
+        }
     };
+#pragma pack(pop)
 
     Label nextLabel = 0;
 
@@ -119,7 +127,9 @@ class CodeEditor {
             return std::hash<unsigned long>()((unsigned long)pos);
         }
 
-        SEXP src() const { return pos->src; }
+        SEXP src() const { return pos->src(); }
+
+        bool deleted() const { return pos->deleted; }
 
         Cursor asCursor(CodeEditor& editor);
     };
@@ -207,8 +217,8 @@ class CodeEditor {
             return pos->bc;
         }
 
-        SEXP src() const { return pos->src; }
-        void src(SEXP src) { pos->src = src; }
+        SEXP src() const { return pos->src(); }
+        unsigned srcIdx() const { return pos->srcIdx; }
 
         // TODO this breaks when inserting before the first instruction....
         Cursor& operator<<(BC bc) {
@@ -282,11 +292,12 @@ class CodeEditor {
 
                 BytecodeList* insert = prev().pos;
 
-                insert->src = cur.src();
+                insert->srcIdx = cur.pos->srcIdx;
 
                 if (first) {
-                    if (!insert->src)
-                        insert->src = other.ast;
+                    if (!insert->srcIdx)
+                        insert->srcIdx =
+                            src_pool_add(globalContext(), other.ast);
                     first = false;
                 }
 

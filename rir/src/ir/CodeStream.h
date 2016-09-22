@@ -6,7 +6,6 @@
 #include <vector>
 
 #include "BC.h"
-#include "utils/Pool.h"
 
 #include "utils/FunctionHandle.h"
 #include "CodeVerifier.h"
@@ -30,7 +29,7 @@ class CodeStream {
     std::map<unsigned, Label> patchpoints;
     std::vector<unsigned> label2pos;
 
-    std::vector<SEXP> sources;
+    std::vector<unsigned> sources;
 
   public:
     Label mkLabel() {
@@ -60,7 +59,7 @@ class CodeStream {
         }
         b.write(*this);
         // make space in the sources buffer
-        sources.push_back(nullptr);
+        sources.push_back(0);
         return *this;
     }
 
@@ -80,9 +79,14 @@ class CodeStream {
         pos += s;
     }
 
-    void addAst(SEXP ast) {
-        assert(sources.back() == nullptr);
-        sources.back() = ast;
+    void addSrc(SEXP src) {
+        assert(sources.back() == 0);
+        sources.back() = src_pool_add(globalContext(), src);
+    }
+
+    void addSrcIdx(unsigned idx) {
+        assert(sources.back() == 0);
+        sources.back() = idx;
     }
 
     fun_idx_t finalize() {

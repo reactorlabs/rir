@@ -66,8 +66,7 @@ void CodeEditor::loadCode(FunctionHandle function, CodeHandle code) {
                 pos->prev = prev;
             }
 
-            SEXP ast = code.source(pc);
-            pos->src = ast;
+            pos->srcIdx = code.sourceIdx(pc);
 
             BC bc = BC::advance(&pc);
             if (bc.isJmp()) {
@@ -181,8 +180,8 @@ unsigned CodeEditor::write(FunctionHandle& function) {
             }
         }
         cs << bc;
-        if (cur.src())
-            cs.addAst(cur.src());
+        if (cur.srcIdx())
+            cs.addSrcIdx(cur.srcIdx());
     }
 
     return cs.finalize();

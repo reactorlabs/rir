@@ -18,12 +18,11 @@ SEXP quoteSym;
 
 Context* context_create(CompilerCallback compiler) {
     Context* c = malloc(sizeof(Context));
-    c->list = Rf_allocVector(VECSXP, 3);
+    c->list = Rf_allocVector(VECSXP, 2);
     c->compiler = compiler;
     R_PreserveObject(c->list);
     initializeResizeableList(&c->cp, POOL_CAPACITY, c->list, CONTEXT_INDEX_CP);
     initializeResizeableList(&c->src, POOL_CAPACITY, c->list, CONTEXT_INDEX_SRC);
-    initializeResizeableList(&c->ostack, STACK_CAPACITY, c->list, CONTEXT_INDEX_OSTACK);
     // first item in source and constant pools is R_NilValue so that we can use the index 0 for other purposes
     src_pool_add(c, R_NilValue);
     cp_pool_add(c, R_NilValue);

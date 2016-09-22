@@ -140,7 +140,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
             cs << BC::push((int)1);
         }
         cs << BC::seq();
-        cs.addAst(ast);
+        cs.addSrc(ast);
         cs << BC::br(nextBranch);
 
         cs << objBranch;
@@ -163,7 +163,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
             cs << BC::sub();
         else if (fun == symbol::Lt)
             cs << BC::lt();
-        cs.addAst(ast);
+        cs.addSrc(ast);
 
         return true;
     }
@@ -176,14 +176,14 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
         compileExpr(ctx, args[0]);
 
         cs << BC::asLogical();
-        cs.addAst(args[0]);
+        cs.addSrc(args[0]);
         cs << BC::dup()
            << BC::brfalse(nextBranch);
 
         compileExpr(ctx, args[1]);
 
         cs << BC::asLogical();
-        cs.addAst(args[1]);
+        cs.addSrc(args[1]);
         cs << BC::lglAnd();
 
         cs << nextBranch;
@@ -199,14 +199,14 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
         compileExpr(ctx, args[0]);
 
         cs << BC::asLogical();
-        cs.addAst(args[0]);
+        cs.addSrc(args[0]);
         cs << BC::dup()
            << BC::brtrue(nextBranch);
 
         compileExpr(ctx, args[1]);
 
         cs << BC::asLogical();
-        cs.addAst(args[1]);
+        cs.addSrc(args[1]);
         cs << BC::lglOr();
 
         cs << nextBranch;
@@ -963,7 +963,7 @@ void compileExpr(Context& ctx, SEXP exp) {
             SEXP val = forcePromise(exp);
             Protect p(val);
             compileConst(ctx.cs(), val);
-            ctx.cs().addAst(expr);
+            ctx.cs().addSrc(expr);
         }
         Case(BCODESXP) {
             assert(false);

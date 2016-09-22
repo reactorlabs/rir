@@ -55,7 +55,7 @@ class FunctionHandle {
     }
 
     CodeHandle writeCode(SEXP ast, void* bc, unsigned codeSize,
-                         std::vector<SEXP>& sources) {
+                         std::vector<unsigned>& sources) {
         assert(function->size <= capacity);
 
         unsigned totalSize = CodeHandle::totalSize(codeSize, sources.size());
@@ -110,7 +110,7 @@ class FunctionHandle {
             if (instruction_number % skiplistEntries == 0) {
                 // no need to write empty source before next skiplist target
                 while (pc < start + codeSize &&
-                       sources[instruction_number] == nullptr) {
+                       sources[instruction_number] == 0) {
                     BC::advance(&pc);
                     ++instruction_number;
                     ++compressed;
@@ -124,10 +124,7 @@ class FunctionHandle {
                 *(skiplist++) = sources_idx;
             }
 
-            *(srcs++) = sources[instruction_number] == nullptr
-                            ? 0
-                            : src_pool_add(globalContext(),
-                                           sources[instruction_number]);
+            *(srcs++) = sources[instruction_number];
 
             instruction_number++;
             sources_idx++;

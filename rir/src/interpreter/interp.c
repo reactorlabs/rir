@@ -521,11 +521,7 @@ extern SEXP R_ReturnedValue;
 
 SEXP rirCallTrampoline(RCNTXT* cntxt, Code* code, SEXP env, unsigned nargs,
                        Context* ctx) {
-    unsigned oldStackPointer = ostack_length(ctx);
-
     if ((SETJMP(cntxt->cjmpbuf))) {
-        rl_setLength(&ctx->ostack, oldStackPointer);
-
         if (R_ReturnedValue == R_RestartToken) {
             cntxt->callflag = CTXT_RETURN; /* turn restart off */
             R_ReturnedValue = R_NilValue;  /* remove restart token */
@@ -624,11 +620,8 @@ SEXP doCall(Code* caller, SEXP call, SEXP callee, unsigned* args, size_t nargs,
 
         // Store and restore stack status in case we get back here through
         // non-local return
-        unsigned oldStackPointer = ostack_length(ctx);
         // call it with the AST only
         result = f(call, callee, CDR(call), env);
-        rl_setLength(&ctx->ostack, oldStackPointer);
-
         if (flag < 2) R_Visible = flag != 1;
         break;
     }
@@ -645,10 +638,7 @@ SEXP doCall(Code* caller, SEXP call, SEXP callee, unsigned* args, size_t nargs,
 
         // Store and restore stack status in case we get back here through
         // non-local return
-        unsigned oldStackPointer = ostack_length(ctx);
         result = f(call, callee, argslist, env);
-        rl_setLength(&ctx->ostack, oldStackPointer);
-
         if (flag < 2) R_Visible = flag != 1;
         UNPROTECT(1);
         break;
@@ -673,10 +663,7 @@ SEXP doCall(Code* caller, SEXP call, SEXP callee, unsigned* args, size_t nargs,
 
         // Store and restore stack status in case we get back here through
         // non-local return
-        unsigned oldStackPointer = ostack_length(ctx);
         result = applyClosure(call, callee, actuals, env, R_NilValue);
-        rl_setLength(&ctx->ostack, oldStackPointer);
-
         UNPROTECT(1); // argslist
         break;
     }
@@ -764,11 +751,8 @@ SEXP doCallStack(Code* caller, SEXP call, size_t nargs, SEXP names, SEXP env,
 
         // Store and restore stack status in case we get back here through
         // non-local return
-        unsigned oldStackPointer = ostack_length(ctx);
         // call it with the AST only
         res = f(call, callee, CDR(call), env);
-        rl_setLength(&ctx->ostack, oldStackPointer);
-
         if (flag < 2)
             R_Visible = flag != 1;
         break;
@@ -789,10 +773,7 @@ SEXP doCallStack(Code* caller, SEXP call, size_t nargs, SEXP names, SEXP env,
 
         // Store and restore stack status in case we get back here through
         // non-local return
-        unsigned oldStackPointer = ostack_length(ctx);
         res = f(call, callee, argslist, env);
-        rl_setLength(&ctx->ostack, oldStackPointer);
-
         if (flag < 2)
             R_Visible = flag != 1;
         UNPROTECT(1);
@@ -819,9 +800,7 @@ SEXP doCallStack(Code* caller, SEXP call, size_t nargs, SEXP names, SEXP env,
 
         // Store and restore stack status in case we get back here through
         // non-local return
-        unsigned oldStackPointer = ostack_length(ctx);
         res = applyClosure(call, callee, argslist, env, R_NilValue);
-        rl_setLength(&ctx->ostack, oldStackPointer);
         UNPROTECT(1);
         break;
     }
@@ -864,17 +843,12 @@ SEXP doDispatchStack(Code* caller, SEXP call, SEXP selector, size_t nargs,
 
     SEXP res;
 
-    // Store and restore stack status in case we get back here through
-    // non-local return
-    unsigned oldStackPointer = ostack_length(ctx) - 2;
-
     do {
         // ===============================================
         // First try S4
         if (IS_S4_OBJECT(obj) && R_has_methods(selector)) {
             res = R_possible_dispatch(call, selector, actuals, env, TRUE);
             if (res) {
-                rl_setLength(&ctx->ostack, oldStackPointer);
                 break;
             }
         }
@@ -891,7 +865,6 @@ SEXP doDispatchStack(Code* caller, SEXP call, SEXP selector, size_t nargs,
         ostack_pop(ctx);
         endClosureContext(&cntxt, success ? res : R_NilValue);
         if (success) {
-            rl_setLength(&ctx->ostack, oldStackPointer);
             break;
         }
 
@@ -932,7 +905,6 @@ SEXP doDispatchStack(Code* caller, SEXP call, SEXP selector, size_t nargs,
 
             // Store and restore stack status in case we get back here through
             // non-local return
-            unsigned oldStackPointer = ostack_length(ctx);
             res = f(call, callee, actuals, env);
 
             if (flag < 2)
@@ -953,7 +925,6 @@ SEXP doDispatchStack(Code* caller, SEXP call, SEXP selector, size_t nargs,
 #endif
             // Store and restore stack status in case we get back here through
             // non-local return
-            unsigned oldStackPointer = ostack_length(ctx);
             res = applyClosure(call, callee, actuals, env, R_NilValue);
             break;
         }
@@ -962,8 +933,8 @@ SEXP doDispatchStack(Code* caller, SEXP call, SEXP selector, size_t nargs,
         }
     } while (false);
 
+    ostack_popn(ctx, 2);
     // This line resets the sp after possible non-local return
-    rl_setLength(&ctx->ostack, oldStackPointer);
     assert(res);
     return res;
 }
@@ -989,18 +960,12 @@ SEXP doDispatch(Code* caller, SEXP call, SEXP selector, unsigned* args,
     // args list
     SET_PRVALUE(CAR(actuals), obj);
 
-    // Store and restore stack status in case we get back here through
-    // non-local return (-2 since we also want to remove obj and actuals from
-    // the stack when we return)
-    unsigned oldStackPointer = ostack_length(ctx) - 2;
-
     do {
         // ===============================================
         // First try S4
         if (IS_S4_OBJECT(obj) && R_has_methods(selector)) {
             res = R_possible_dispatch(call, selector, actuals, env, TRUE);
             if (res) {
-                rl_setLength(&ctx->ostack, oldStackPointer);
                 break;
             }
         }
@@ -1017,7 +982,6 @@ SEXP doDispatch(Code* caller, SEXP call, SEXP selector, unsigned* args,
         ostack_pop(ctx);
         endClosureContext(&cntxt, success ? res : R_NilValue);
         if (success) {
-            rl_setLength(&ctx->ostack, oldStackPointer);
             break;
         }
 
@@ -1058,7 +1022,6 @@ SEXP doDispatch(Code* caller, SEXP call, SEXP selector, unsigned* args,
 
             // Store and restore stack status in case we get back here through
             // non-local return
-            unsigned oldStackPointer = ostack_length(ctx);
             res = f(call, callee, actuals, env);
 
             if (flag < 2)
@@ -1078,7 +1041,6 @@ SEXP doDispatch(Code* caller, SEXP call, SEXP selector, unsigned* args,
 #endif
             // Store and restore stack status in case we get back here through
             // non-local return
-            unsigned oldStackPointer = ostack_length(ctx);
             res = applyClosure(call, callee, actuals, env, R_NilValue);
             break;
         }
@@ -1087,8 +1049,8 @@ SEXP doDispatch(Code* caller, SEXP call, SEXP selector, unsigned* args,
         }
     } while (false);
 
+    ostack_popn(ctx, 2);
     // This line resets the sp after possible non-local return
-    rl_setLength(&ctx->ostack, oldStackPointer);
     assert(res);
     return res;
 }
@@ -1706,9 +1668,7 @@ INSTRUCTION(inc_) {
         ostack_push(ctx, argslist);                                            \
         if (flag < 2)                                                          \
             R_Visible = flag != 1;                                             \
-        unsigned oldStackPointer = ostack_length(ctx);                         \
         res = blt(call, prim, argslist, env);                                  \
-        rl_setLength(&ctx->ostack, oldStackPointer);                           \
         if (flag < 2)                                                          \
             R_Visible = flag != 1;                                             \
         ostack_pop(ctx);                                                       \
@@ -1878,9 +1838,7 @@ INSTRUCTION(seq_) {
         SEXP call = getSrcForCall(c, *pc - 1, ctx);
         SEXP argslist = CONS_NR(from, CONS_NR(to, CONS_NR(by, R_NilValue)));
         ostack_push(ctx, argslist);
-        unsigned oldStackPointer = ostack_length(ctx);
         res = applyClosure(call, prim, argslist, env, R_NilValue);
-        rl_setLength(&ctx->ostack, oldStackPointer);
         ostack_pop(ctx);
     }
 
@@ -2038,7 +1996,6 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
             if ((s = SETJMP(cntxt->cjmpbuf))) {
                 // incomming non-local break/continue:
                 // restore our stack state
-                rl_setLength(&ctx->ostack, (size_t)R_GlobalContext->cenddata);
 
                 // get the RCNTXT from the stack
                 SEXP cntxt_store = ostack_top(ctx);

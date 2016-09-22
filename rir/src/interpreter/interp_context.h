@@ -45,7 +45,6 @@ typedef struct {
 
 #define CONTEXT_INDEX_CP 0
 #define CONTEXT_INDEX_SRC 1
-#define CONTEXT_INDEX_OSTACK 2
 
 /** Interpreter's context.
 
@@ -57,7 +56,6 @@ typedef struct {
     SEXP list;
     ResizeableList cp;
     ResizeableList src;
-    ResizeableList ostack;
     CompilerCallback compiler;
 } Context;
 
@@ -102,42 +100,41 @@ INLINE void rl_append(ResizeableList * l, SEXP val, SEXP parent, size_t index) {
     SET_VECTOR_ELT(l->list, i, val);
 }
 
-INLINE SEXP ostack_top(Context* c) {
-    return VECTOR_ELT(c->ostack.list, rl_length(&c->ostack) - 1);
-}
+extern SEXP* R_BCNodeStackTop;
+extern SEXP* R_BCNodeStackEnd;
+extern SEXP* R_BCNodeStackBase;
+
+INLINE SEXP ostack_top(Context* c) { return *(R_BCNodeStackTop - 1); }
 
 INLINE SEXP* ostack_at(Context* c, uint32_t i) {
-    assert(i < rl_length(&c->ostack));
-    return &VECTOR_ELT(c->ostack.list, rl_length(&c->ostack) - 1 - i);
+    return (R_BCNodeStackTop - 1 - i);
 }
 
 INLINE bool ostack_empty(Context* c) {
-    return rl_length(&c->ostack) == 0;
+    return R_BCNodeStackTop == R_BCNodeStackBase;
 }
 
 INLINE size_t ostack_length(Context * c) {
-    return rl_length(&c->ostack);
+    return R_BCNodeStackTop - R_BCNodeStackBase;
 }
 
-INLINE void ostack_popn(Context* c, size_t p) {
-    int i = rl_length(&c->ostack) - p;
-    rl_setLength(&c->ostack, i);
-}
+INLINE void ostack_popn(Context* c, size_t p) { R_BCNodeStackTop -= p; }
 
 INLINE SEXP ostack_pop(Context* c) {
-    // VECTOR_ELT does not check bounds
-    int i = rl_length(&c->ostack) - 1;
-    rl_setLength(&c->ostack, i);
-    return VECTOR_ELT(c->ostack.list, i);
+    --R_BCNodeStackTop;
+    return *R_BCNodeStackTop;
 }
 
 INLINE void ostack_push(Context* c, SEXP val) {
-    rl_append(&c->ostack, val, c->list, CONTEXT_INDEX_OSTACK);
+    *R_BCNodeStackTop = val;
+    ++R_BCNodeStackTop;
 }
 
 INLINE void ostack_ensureSize(Context* c, unsigned minFree) {
-    while (rl_length(&c->ostack) + minFree > c->ostack.capacity)
-        rl_grow(& c->ostack, c->list, CONTEXT_INDEX_OSTACK);
+    if ((R_BCNodeStackTop + minFree) >= R_BCNodeStackEnd) {
+        // TODO....
+        assert(false);
+    }
 }
 
 Context* context_create(CompilerCallback);

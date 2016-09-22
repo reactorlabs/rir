@@ -40,8 +40,12 @@ class CodeHandle {
         return (unsigned*)((uintptr_t)(code + 1) + pad4(code->codeSize));
     }
 
+    unsigned sourceIdx(BC_t* pc) {
+        return getSrcIdxAt(code, (OpcodeT*)pc, true);
+    }
+
     SEXP source(BC_t* pc) {
-        unsigned sidx = getSrcIdxAt(code, (OpcodeT*)pc, true);
+        unsigned sidx = sourceIdx(pc);
         if (!sidx)
             return nullptr;
         return src_pool_at(globalContext(), sidx);

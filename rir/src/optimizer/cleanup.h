@@ -51,16 +51,24 @@ class BCCleanup : public InstructionDispatcher::Receiver {
         }
     }
 
-    void run() {
-        analysis.analyze(code_);
-        for (auto i = code_.begin(); i != code_.end(); ++i) {
-            dispatcher.dispatch(i);
+    void invisible_(CodeEditor::Iterator ins) override {
+        if ((*(ins + 1)).is(BC_t::pop_) || (*(ins + 1)).is(BC_t::visible_) ||
+            (*(ins + 1)).is(BC_t::ldvar_)) {
+            ins.asCursor(code_).remove();
         }
     }
 
-    void invisible_(CodeEditor::Iterator ins) override {
-        if ((*(ins + 1)).is(BC_t::pop_)) {
+    void isspecial_(CodeEditor::Iterator ins) override {
+        auto prev = ins - 1;
+        if ((*prev).is(BC_t::isspecial_) && *ins == *prev) {
             ins.asCursor(code_).remove();
+        }
+    }
+
+    void run() {
+        analysis.analyze(code_);
+        for (auto i = code_.begin() + 1; i + 1 != code_.end(); ++i) {
+            dispatcher.dispatch(i);
         }
     }
 };

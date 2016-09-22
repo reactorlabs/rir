@@ -333,6 +333,8 @@ class BC {
             return 0;
         }
     }
+
+    friend class CodeEditor;
 };
 
 } // rir
