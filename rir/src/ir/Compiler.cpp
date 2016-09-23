@@ -495,7 +495,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
         return true;
     }
 
-    if (fun == symbol::lapply && args.length() == 2) {
+    if (false && fun == symbol::lapply && args.length() == 2) {
         auto a = args.begin();
         if (a.hasTag() || (a + 1).hasTag())
             return false;
@@ -506,7 +506,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
 
         compileExpr(ctx, args[0]);
 
-        static SEXP svectorSexp = NULL;
+        static SEXP isvectorSexp = NULL;
         if (!isvectorSexp)
             isvectorSexp =
                 LCONS(symbol::isvector,
@@ -585,11 +585,29 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
            << BC::lt()
            << BC::brfalse(nextBranch);
 
+        Label extractObjBranch = cs.mkLabel();
+        Label extractNextBranch = cs.mkLabel();
+
+        static SEXP extractCall = nullptr;
+        if (!extractCall) {
+            // TODO
+            extractCall = LCONS(symbol::DoubleBracket,
+                                R_NilValue);
+        }
         // X[[i]]
+        cs << BC::isspecial(symbol::DoubleBracket);
         cs << BC::pull(4)
            << BC::pull(4)
            << BC::pull(2)
-           << BC::extract1();
+           << BC::brobj(extractObjBranch)
+           << BC::extract1()
+           << BC::br(extractNextBranch);
+
+        cs << extractObjBranch
+           << BC::dispatch_stack(symbol::DoubleBracket, 2,
+                   {R_NilValue, R_NilValue}, extractCall);
+
+        cs << extractNextBranch;
 
         // f(X[[i]])
         SEXP rewritten = LCONS(args[1],

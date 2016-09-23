@@ -1361,7 +1361,7 @@ INSTRUCTION(asbool_) {
 
 INSTRUCTION(brobj_) {
     int offset = readJumpOffset(pc);
-    if (isObject(ostack_top(ctx)))
+    if (OBJECT(ostack_top(ctx)))
         *pc = *pc + offset;
     PC_BOUNDSCHECK(*pc);
 }
