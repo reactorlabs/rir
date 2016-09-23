@@ -244,11 +244,4 @@ DEF_INSTR(pull_, 1, 0, 1, 0, 0)
 DEF_INSTR(int3_, 0, 0, 0, 0, 0)
 // low-level breakpoint
 
-// TODO these may be redundant but needed for the unification
-// TODO pushes argument value (index of the argument is taken from integer
-// stack)
-DEF_INSTR(push_argi_, 0, 0, 1, 1, 0)
-
 #undef DEF_INSTR
-
-// DEF_INSTR(numargi_,   0,    0,    0,   0,   1) //  DELETED

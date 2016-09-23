@@ -7,6 +7,7 @@
 #include "R/RList.h"
 #include "CodeStream.h"
 #include "R/r.h"
+#include "R/Funtab.h"
 
 namespace rir {
 
@@ -97,7 +98,6 @@ bool BC::operator==(const BC& other) const {
     case BC_t::lgl_and_:
     case BC_t::lgl_or_:
     case BC_t::inc_:
-    case BC_t::push_argi_:
     case BC_t::add_:
     case BC_t::sub_:
     case BC_t::lt_:
@@ -192,7 +192,6 @@ void BC::write(CodeStream& cs) const {
     case BC_t::lgl_and_:
     case BC_t::lgl_or_:
     case BC_t::inc_:
-    case BC_t::push_argi_:
     case BC_t::add_:
     case BC_t::sub_:
     case BC_t::lt_:
@@ -400,7 +399,6 @@ void BC::print() {
     case BC_t::inc_:
     case BC_t::dup2_:
     case BC_t::test_bounds_:
-    case BC_t::push_argi_:
     case BC_t::asast_:
     case BC_t::asbool_:
     case BC_t::add_:
@@ -443,18 +441,19 @@ void BC::print() {
 
 BC BC::dispatch_stack(SEXP selector, uint32_t nargs, std::vector<SEXP> names,
                       SEXP call) {
-    assert(nargs == names.size());
+    assert(nargs == names.size() || names.empty());
     assert(nargs <= MAX_ARG_IDX);
     assert(TYPEOF(selector) == SYMSXP);
 
     Protect p;
     bool hasNames = false;
-    for (auto n : names) {
-        if (n != R_NilValue) {
-            hasNames = true;
-            break;
+    if (!names.empty())
+        for (auto n : names) {
+            if (n != R_NilValue) {
+                hasNames = true;
+                break;
+            }
         }
-    }
 
     SEXP n;
     if (hasNames) {
@@ -479,7 +478,7 @@ BC BC::dispatch_stack(SEXP selector, uint32_t nargs, std::vector<SEXP> names,
 
 BC BC::dispatch(SEXP selector, std::vector<fun_idx_t> args,
                 std::vector<SEXP> names, SEXP call) {
-    assert(args.size() == names.size());
+    assert(args.size() == names.size() || names.empty());
     assert(args.size() <= MAX_ARG_IDX);
     assert(TYPEOF(selector) == SYMSXP);
 
@@ -493,12 +492,13 @@ BC BC::dispatch(SEXP selector, std::vector<fun_idx_t> args,
     }
 
     bool hasNames = false;
-    for (auto n : names) {
-        if (n != R_NilValue) {
-            hasNames = true;
-            break;
+    if (!names.empty())
+        for (auto n : names) {
+            if (n != R_NilValue) {
+                hasNames = true;
+                break;
+            }
         }
-    }
 
     SEXP n;
     if (hasNames) {
@@ -522,7 +522,7 @@ BC BC::dispatch(SEXP selector, std::vector<fun_idx_t> args,
 }
 
 BC BC::call(std::vector<fun_idx_t> args, std::vector<SEXP> names, SEXP call) {
-    assert(args.size() == names.size());
+    assert(args.size() == names.size() || names.empty());
     assert(args.size() <= MAX_ARG_IDX);
 
     Protect p;
@@ -535,12 +535,13 @@ BC BC::call(std::vector<fun_idx_t> args, std::vector<SEXP> names, SEXP call) {
     }
 
     bool hasNames = false;
-    for (auto n : names) {
-        if (n != R_NilValue) {
-            hasNames = true;
-            break;
+    if (!names.empty())
+        for (auto n : names) {
+            if (n != R_NilValue) {
+                hasNames = true;
+                break;
+            }
         }
-    }
 
     SEXP n;
     if (hasNames) {
@@ -564,15 +565,16 @@ BC BC::call(std::vector<fun_idx_t> args, std::vector<SEXP> names, SEXP call) {
 }
 
 BC BC::call_stack(unsigned nargs, std::vector<SEXP> names, SEXP call) {
-    assert(nargs == names.size());
+    assert(nargs == names.size() || names.empty());
 
     bool hasNames = false;
-    for (auto n : names) {
-        if (n != R_NilValue) {
-            hasNames = true;
-            break;
+    if (!names.empty())
+        for (auto n : names) {
+            if (n != R_NilValue) {
+                hasNames = true;
+                break;
+            }
         }
-    }
 
     SEXP n;
     if (hasNames) {

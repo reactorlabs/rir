@@ -140,7 +140,7 @@ class BC {
         if (bc == BC_t::call_stack_)
             return immediate.call_stack_args.nargs + 1;
         if (bc == BC_t::dispatch_stack_)
-            return immediate.call_stack_args.nargs;
+            return immediate.dispatch_stack_args.nargs;
         return popCount(bc);
     }
     inline size_t pushCount() { return pushCount(bc); }
