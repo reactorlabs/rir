@@ -271,11 +271,9 @@ INSTRUCTION(ldvar_) {
 /** Given argument code offsets, creates the argslist from their promises.
  */
 // TODO unnamed only at this point
-INLINE int __listAppend(SEXP* front, SEXP* last, SEXP value, SEXP name) {
-    int p = 0;
-
-    assert(TYPEOF(*front) == LISTSXP || TYPEOF(*front) == NILSXP);
-    assert(TYPEOF(*last) == LISTSXP || TYPEOF(*last) == NILSXP);
+INLINE void __listAppend(SEXP* front, SEXP* last, SEXP value, SEXP name) {
+    SLOWASSERT(TYPEOF(*front) == LISTSXP || TYPEOF(*front) == NILSXP);
+    SLOWASSERT(TYPEOF(*last) == LISTSXP || TYPEOF(*last) == NILSXP);
 
     SEXP app = CONS_NR(value, R_NilValue);
     
@@ -284,21 +282,17 @@ INLINE int __listAppend(SEXP* front, SEXP* last, SEXP value, SEXP name) {
     if (*front == R_NilValue) {
         *front = app;
         PROTECT(*front);
-        p++;
     }
 
     if (*last != R_NilValue)
         SETCDR(*last, app);
     *last = app;
-
-    return p;
 }
 
 SEXP createArgsListStack(Code* c, size_t nargs, SEXP names, SEXP env, SEXP call,
                          Context* ctx, bool eager) {
     SEXP result = R_NilValue;
     SEXP pos = result;
-    int p = 0;
 
     SEXP* argbase = ostack_at(ctx, nargs - 1);
 
@@ -319,10 +313,10 @@ SEXP createArgsListStack(Code* c, size_t nargs, SEXP names, SEXP env, SEXP call,
                         if (arg != R_MissingArg)
                             arg = rirEval(CAR(ellipsis), env);
                         assert(TYPEOF(arg) != PROMSXP);
-                        p += __listAppend(&result, &pos, arg, name);
+                        __listAppend(&result, &pos, arg, name);
                     } else {
                         SEXP promise = mkPROMISE(CAR(ellipsis), env);
-                        p += __listAppend(&result, &pos, promise, name);
+                        __listAppend(&result, &pos, promise, name);
                     }
                     ellipsis = CDR(ellipsis);
                 }
@@ -330,20 +324,25 @@ SEXP createArgsListStack(Code* c, size_t nargs, SEXP names, SEXP env, SEXP call,
         } else if (arg == R_MissingArg) {
             // TODO i think this is ok, since R_MissingArg can also occur as a
             // value...
-            SEXP promise = mkPROMISE(R_MissingArg, env);
-            SET_PRVALUE(promise, R_MissingArg);
-            p += __listAppend(&result, &pos, promise, R_NilValue);
+            if (eager) {
+                __listAppend(&result, &pos, R_MissingArg, R_NilValue);
+            } else {
+                SEXP promise = mkPROMISE(R_MissingArg, env);
+                SET_PRVALUE(promise, R_MissingArg);
+                __listAppend(&result, &pos, promise, R_NilValue);
+            }
         } else {
             if (eager && TYPEOF(arg) == PROMSXP) {
                 arg = rirEval(arg, env);
             }
             arg = escape(arg);
 
-            p += __listAppend(&result, &pos, arg, name);
+            __listAppend(&result, &pos, arg, name);
         }
     }
 
-    UNPROTECT(p);
+    if (result != R_NilValue)
+        UNPROTECT(1);
     return result;
 }
 
@@ -351,7 +350,6 @@ SEXP createArgsList(Code* c, FunctionIndex* args, SEXP call, size_t nargs,
                     SEXP names, SEXP env, Context* ctx, bool eager) {
     SEXP result = R_NilValue;
     SEXP pos = result;
-    int p = 0;
 
     // loop through the arguments and create a promise, unless it is a missing
     // argument
@@ -371,10 +369,10 @@ SEXP createArgsList(Code* c, FunctionIndex* args, SEXP call, size_t nargs,
                         if (arg != R_MissingArg)
                             arg = rirEval(CAR(ellipsis), env);
                         assert(TYPEOF(arg) != PROMSXP);
-                        p += __listAppend(&result, &pos, arg, name);
+                        __listAppend(&result, &pos, arg, name);
                     } else {
                         SEXP promise = mkPROMISE(CAR(ellipsis), env);
-                        p += __listAppend(&result, &pos, promise, name);
+                        __listAppend(&result, &pos, promise, name);
                     }
                     ellipsis = CDR(ellipsis);
                 }
@@ -382,23 +380,24 @@ SEXP createArgsList(Code* c, FunctionIndex* args, SEXP call, size_t nargs,
         } else if (args[i] == MISSING_ARG_IDX) {
             if (eager)
                 Rf_errorcall(call, "argument %d is empty", i + 1);
-            p += __listAppend(&result, &pos, R_MissingArg, R_NilValue);
+            __listAppend(&result, &pos, R_MissingArg, R_NilValue);
         } else {
             if (eager) {
                 SEXP arg =
                     evalRirCode(codeAt(function(c), offset), ctx, env, 0);
                 arg = escape(arg);
                 assert(TYPEOF(arg) != PROMSXP);
-                p += __listAppend(&result, &pos, arg, name);
+                __listAppend(&result, &pos, arg, name);
             } else {
                 Code* arg = codeAt(function(c), offset);
                 SEXP promise = createPromise(arg, env);
-                p += __listAppend(&result, &pos, promise, name);
+                __listAppend(&result, &pos, promise, name);
             }
         }
     }
 
-    UNPROTECT(p);
+    if (result != R_NilValue)
+        UNPROTECT(1);
     return result;
 }
 
