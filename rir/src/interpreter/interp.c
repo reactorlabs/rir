@@ -370,7 +370,7 @@ INSTRUCTION(ldvar_) {
 /** Given argument code offsets, creates the argslist from their promises.
  */
 // TODO unnamed only at this point
-int __listAppend(SEXP* front, SEXP* last, SEXP value, SEXP name) {
+INLINE int __listAppend(SEXP* front, SEXP* last, SEXP value, SEXP name) {
     int p = 0;
 
     assert(TYPEOF(*front) == LISTSXP || TYPEOF(*front) == NILSXP);
@@ -429,7 +429,9 @@ SEXP createArgsListStack(Code* c, size_t nargs, SEXP names, SEXP env, SEXP call,
         } else if (arg == R_MissingArg) {
             // TODO i think this is ok, since R_MissingArg can also occur as a
             // value...
-            p += __listAppend(&result, &pos, R_MissingArg, R_NilValue);
+            SEXP promise = mkPROMISE(R_MissingArg, env);
+            SET_PRVALUE(promise, R_MissingArg);
+            p += __listAppend(&result, &pos, promise, R_NilValue);
         } else {
             if (eager && TYPEOF(arg) == PROMSXP) {
                 arg = rirEval(arg, env);
@@ -687,6 +689,13 @@ INLINE SEXP fixupAST(SEXP call, Context* ctx, size_t nargs) {
         SEXP a = CDR(call);
 
         SEXP target = *ostack_at(ctx, nargs - 1);
+
+        if (target == R_MissingArg) {
+            assert(!setter);
+            SETCDR(call, R_NilValue);
+            UNPROTECT(1);
+            return call;
+        }
 
         target = escape(target);
 
@@ -1170,6 +1179,8 @@ INSTRUCTION(asast_) {
     assert(TYPEOF(ast) != BCODESXP);
     ostack_push(ctx, ast);
 }
+
+INSTRUCTION(int3_) { asm("int3"); }
 
 INSTRUCTION(swap_) {
     SEXP a = ostack_pop(ctx);
@@ -1887,9 +1898,23 @@ extern SEXP Rf_deparse1(SEXP call, Rboolean abbrev, int opts);
 
 #undef R_CheckStack
 
-SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
+static int debugging = 0;
+void debug(Code* c, OpcodeT* pc, const char* name, unsigned depth,
+           Context* ctx) {
+    return;
+    if (debugging == 0) {
+        debugging = 1;
+        printf("%p : %d, %s, s: %d\n", c, *pc, name, depth);
+        for (int i = 0; i < depth; ++i) {
+            printf("%3d: ", i);
+            Rf_PrintValue(*ostack_at(ctx, i));
+        }
+        printf("\n");
+        debugging = 0;
+    }
+}
 
-    // printCode(c);
+SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
     SLOWASSERT(c->magic == CODE_MAGIC);
 
     if (!env)
@@ -1904,6 +1929,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
     // there is some slack of 5 to make sure the call instruction can store
     // some intermediate values on the stack
     ostack_ensureSize(ctx, c->stackLength + 5);
+    unsigned bp = ostack_length(ctx);
 
     OpcodeT* pc = code(c);
 
@@ -1912,12 +1938,10 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
     while (true) {
         switch (readOpcode(&pc)) {
 
-// printf("%p : %d, %s, s: %d\n", c, *pc, #name, ostack_length(ctx)); \
-        //
-
 #define INS(name)                                                              \
     case name:                                                                 \
         ins_##name(c, env, &pc, ctx, numArgs);                                 \
+        debug(c, pc, #name, ostack_length(ctx) - bp, ctx);                     \
         break
 
             INS(seq_);
@@ -1950,6 +1974,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
             INS(br_);
             INS(dup_);
             INS(swap_);
+            INS(int3_);
             INS(put_);
             INS(pick_);
             INS(pull_);

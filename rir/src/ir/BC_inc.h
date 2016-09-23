@@ -246,6 +246,7 @@ class BC {
     inline static BC pull(uint32_t);
     inline static BC is(uint32_t);
     inline static BC return_();
+    inline static BC int3();
 
   private:
     BC(BC_t bc) : bc(bc), immediate({0}) {}

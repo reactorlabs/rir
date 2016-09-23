@@ -74,6 +74,7 @@ BC::immediate_t decodeImmediate(BC_t bc, BC_t* pc) {
     case BC_t::dup_:
     case BC_t::dup2_:
     case BC_t::swap_:
+    case BC_t::int3_:
     case BC_t::uniq_:
     case BC_t::aslogical_:
     case BC_t::lgl_and_:
@@ -255,6 +256,7 @@ BC BC::visible() { return BC(BC_t::visible_); }
 BC BC::extract1() { return BC(BC_t::extract1_); }
 BC BC::subset1() { return BC(BC_t::subset1_); }
 BC BC::swap() { return BC(BC_t::swap_); }
+BC BC::int3() { return BC(BC_t::int3_); }
 BC BC::uniq() { return BC(BC_t::uniq_); }
 BC BC::asLogical() { return BC(BC_t::aslogical_); }
 BC BC::lglAnd() { return BC(BC_t::lgl_and_); }

@@ -91,6 +91,7 @@ bool BC::operator==(const BC& other) const {
     case BC_t::dup2_:
     case BC_t::test_bounds_:
     case BC_t::swap_:
+    case BC_t::int3_:
     case BC_t::uniq_:
     case BC_t::aslogical_:
     case BC_t::lgl_and_:
@@ -185,6 +186,7 @@ void BC::write(CodeStream& cs) const {
     case BC_t::dup2_:
     case BC_t::test_bounds_:
     case BC_t::swap_:
+    case BC_t::int3_:
     case BC_t::uniq_:
     case BC_t::aslogical_:
     case BC_t::lgl_and_:
@@ -392,6 +394,7 @@ void BC::print() {
     case BC_t::seq_:
     case BC_t::ret_:
     case BC_t::swap_:
+    case BC_t::int3_:
     case BC_t::uniq_:
     case BC_t::dup_:
     case BC_t::inc_:

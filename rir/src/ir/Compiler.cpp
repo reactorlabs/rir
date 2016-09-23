@@ -495,7 +495,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
         return true;
     }
 
-    if (false && fun == symbol::lapply && args.length() == 2) {
+    if (fun == symbol::lapply && args.length() == 2) {
         auto a = args.begin();
         if (a.hasTag() || (a + 1).hasTag())
             return false;
@@ -506,9 +506,24 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
 
         compileExpr(ctx, args[0]);
 
+        static SEXP svectorSexp = NULL;
+        if (!isvectorSexp)
+            isvectorSexp =
+                LCONS(symbol::isvector,
+                      CONS_NR(symbol::getterPlaceholder, R_NilValue));
+        static SEXP anyStr = NULL;
+        if (!anyStr) {
+            anyStr = allocVector(STRSXP, 1);
+            PROTECT(anyStr);
+            SET_STRING_ELT(anyStr, 0, mkChar("any"));
+            UNPROTECT(1);
+        }
+
         cs << BC::brobj(objBranch)
-           << BC::dup()
-           << BC::is(VECSXP)
+           << BC::ldfun(symbol::isvector)
+           << BC::pull(1)
+           << BC::push(anyStr)
+           << BC::call_stack(2, {R_NilValue, R_NilValue}, isvectorSexp)
            << BC::brtrue(beginBranch);
 
         static SEXP convertfun = nullptr;
@@ -596,7 +611,8 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
            << BC::swap()
            << BC::pop()
            << BC::swap()
-           << BC::pop();
+           << BC::pop()
+           << BC::visible();
 
         return true;
     }
@@ -1017,15 +1033,13 @@ Compiler::CompilerRes Compiler::finalize() {
     CodeEditor code(function.entryPoint());
 
     BCCleanup cleanup(code);
-    for (int i = 0; i < 3; ++i) {
+    for (int i = 0; i < 2; ++i) {
         cleanup.run();
         code.commit();
     }
 
     auto opt = code.finalize();
 
-    // FunctionHandle opt = Optimizer::optimize(code.finalize());
-    // opt.print();
     CodeVerifier::vefifyFunctionLayout(opt.store, globalContext());
 
     // Protect p;

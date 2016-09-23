@@ -241,6 +241,8 @@ DEF_INSTR(alloc_, 1, 1, 1, 0, 0)
 DEF_INSTR(pull_, 1, 0, 1, 0, 0)
 // copy a value from the stack. examples: pull(0) == dup(), pull(1) takes 2nd
 // element on stack and pushes it
+DEF_INSTR(int3_, 0, 0, 0, 0, 0)
+// low-level breakpoint
 
 // TODO these may be redundant but needed for the unification
 // TODO pushes argument value (index of the argument is taken from integer
