@@ -81,6 +81,7 @@ BC::immediate_t decodeImmediate(BC_t bc, BC_t* pc) {
     case BC_t::lgl_or_:
     case BC_t::inc_:
     case BC_t::add_:
+    case BC_t::mul_:
     case BC_t::seq_:
     case BC_t::sub_:
     case BC_t::lt_:
@@ -247,6 +248,7 @@ BC BC::close() { return BC(BC_t::close_); }
 BC BC::dup2() { return BC(BC_t::dup2_); }
 BC BC::testBounds() { return BC(BC_t::test_bounds_); }
 BC BC::add() { return BC(BC_t::add_); }
+BC BC::mul() { return BC(BC_t::mul_); }
 BC BC::sub() { return BC(BC_t::sub_); }
 BC BC::lt() { return BC(BC_t::lt_); }
 BC BC::invisible() { return BC(BC_t::invisible_); }

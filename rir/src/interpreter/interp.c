@@ -291,6 +291,8 @@ INLINE void __listAppend(SEXP* front, SEXP* last, SEXP value, SEXP name) {
 
 SEXP createArgsListStack(Code* c, size_t nargs, SEXP names, SEXP env, SEXP call,
                          Context* ctx, bool eager) {
+    // for (int i = 0; i < nargs; ++i)
+    //     printf("%x\n", call);
     SEXP result = R_NilValue;
     SEXP pos = result;
 
@@ -348,6 +350,8 @@ SEXP createArgsListStack(Code* c, size_t nargs, SEXP names, SEXP env, SEXP call,
 
 SEXP createArgsList(Code* c, FunctionIndex* args, SEXP call, size_t nargs,
                     SEXP names, SEXP env, Context* ctx, bool eager) {
+    // for (int i = 0; i < nargs; ++i)
+    //     printf("%x\n", call);
     SEXP result = R_NilValue;
     SEXP pos = result;
 
@@ -1550,6 +1554,65 @@ INSTRUCTION(inc_) {
     }
 }
 
+#define R_INT_MAX INT_MAX
+#define R_INT_MIN -INT_MAX
+// .. relying on fact that NA_INTEGER is outside of these
+
+static R_INLINE int R_integer_plus(int x, int y, Rboolean* pnaflag) {
+    if (x == NA_INTEGER || y == NA_INTEGER)
+        return NA_INTEGER;
+
+    if (((y > 0) && (x > (R_INT_MAX - y))) ||
+        ((y < 0) && (x < (R_INT_MIN - y)))) {
+        if (pnaflag != NULL)
+            *pnaflag = TRUE;
+        return NA_INTEGER;
+    }
+    return x + y;
+}
+
+static R_INLINE int R_integer_minus(int x, int y, Rboolean* pnaflag) {
+    if (x == NA_INTEGER || y == NA_INTEGER)
+        return NA_INTEGER;
+
+    if (((y < 0) && (x > (R_INT_MAX + y))) ||
+        ((y > 0) && (x < (R_INT_MIN + y)))) {
+        if (pnaflag != NULL)
+            *pnaflag = TRUE;
+        return NA_INTEGER;
+    }
+    return x - y;
+}
+
+#define GOODIPROD(x, y, z) ((double)(x) * (double)(y) == (z))
+static R_INLINE int R_integer_times(int x, int y, Rboolean* pnaflag) {
+    if (x == NA_INTEGER || y == NA_INTEGER)
+        return NA_INTEGER;
+    else {
+        int z = x * y;
+        if (GOODIPROD(x, y, z) && z != NA_INTEGER)
+            return z;
+        else {
+            if (pnaflag != NULL)
+                *pnaflag = TRUE;
+            return NA_INTEGER;
+        }
+    }
+}
+
+enum op { PLUSOP, MINUSOP, TIMESOP };
+#define INTEGER_OVERFLOW_WARNING "NAs produced by integer overflow"
+
+#define CHECK_INTEGER_OVERFLOW(ans, naflag)                                    \
+    do {                                                                       \
+        if (naflag) {                                                          \
+            PROTECT(ans);                                                      \
+            SEXP call = getSrcForCall(c, *pc - 1, ctx);                        \
+            Rf_warningcall(call, INTEGER_OVERFLOW_WARNING);                    \
+            UNPROTECT(1);                                                      \
+        }                                                                      \
+    } while (0)
+
 #define BINOP_FALLBACK(op)                                                     \
     do {                                                                       \
         static SEXP prim = NULL;                                               \
@@ -1574,7 +1637,7 @@ INSTRUCTION(inc_) {
 #define IS_SCALAR_VALUE(e, type)                                               \
     (TYPEOF(e) == type && SHORT_VEC_LENGTH(e) == 1 && ATTRIB(e) == R_NilValue)
 
-#define DO_BINOP(op)                                                           \
+#define DO_BINOP(op, op2)                                                      \
     do {                                                                       \
         if (IS_SCALAR_VALUE(lhs, REALSXP)) {                                   \
             if (IS_SCALAR_VALUE(rhs, REALSXP)) {                               \
@@ -1592,13 +1655,24 @@ INSTRUCTION(inc_) {
                 break;                                                         \
             }                                                                  \
         } else if (IS_SCALAR_VALUE(lhs, INTSXP)) {                             \
-            if (false && IS_SCALAR_VALUE(rhs, INTSXP)) {                       \
+            if (IS_SCALAR_VALUE(rhs, INTSXP)) {                                \
+                Rboolean naflag = FALSE;                                       \
                 res = Rf_allocVector(INTSXP, 1);                               \
-                *INTEGER(res) = (*INTEGER(lhs) == NA_INTEGER ||                \
-                                 *INTEGER(rhs) == NA_INTEGER)                  \
-                                    ? NA_INTEGER                               \
-                                    : *INTEGER(lhs) op * INTEGER(rhs);         \
-                /* TODO: check overflow */                                     \
+                switch (op2) {                                                 \
+                case PLUSOP:                                                   \
+                    *INTEGER(res) =                                            \
+                        R_integer_plus(*INTEGER(lhs), *INTEGER(rhs), &naflag); \
+                    break;                                                     \
+                case MINUSOP:                                                  \
+                    *INTEGER(res) = R_integer_minus(*INTEGER(lhs),             \
+                                                    *INTEGER(rhs), &naflag);   \
+                    break;                                                     \
+                case TIMESOP:                                                  \
+                    *INTEGER(res) = R_integer_times(*INTEGER(lhs),             \
+                                                    *INTEGER(rhs), &naflag);   \
+                    break;                                                     \
+                }                                                              \
+                CHECK_INTEGER_OVERFLOW(res, naflag);                           \
                 break;                                                         \
             } else if (IS_SCALAR_VALUE(rhs, REALSXP)) {                        \
                 res = Rf_allocVector(REALSXP, 1);                              \
@@ -1606,18 +1680,29 @@ INSTRUCTION(inc_) {
                     (*INTEGER(lhs) == NA_INTEGER || *REAL(rhs) == NA_REAL)     \
                         ? NA_REAL                                              \
                         : *INTEGER(lhs) op * REAL(rhs);                        \
+                break;                                                         \
             }                                                                  \
         }                                                                      \
-                                                                               \
         BINOP_FALLBACK(#op);                                                   \
     } while (false)
+
+INSTRUCTION(mul_) {
+    SEXP lhs = *ostack_at(ctx, 1);
+    SEXP rhs = *ostack_at(ctx, 0);
+    SEXP res;
+
+    DO_BINOP(*, TIMESOP);
+
+    ostack_popn(ctx, 2);
+    ostack_push(ctx, res);
+}
 
 INSTRUCTION(add_) {
     SEXP lhs = *ostack_at(ctx, 1);
     SEXP rhs = *ostack_at(ctx, 0);
     SEXP res;
 
-    DO_BINOP(+);
+    DO_BINOP(+, PLUSOP);
 
     ostack_popn(ctx, 2);
     ostack_push(ctx, res);
@@ -1628,7 +1713,7 @@ INSTRUCTION(sub_) {
     SEXP rhs = *ostack_at(ctx, 0);
     SEXP res;
 
-    DO_BINOP(-);
+    DO_BINOP(-, MINUSOP);
 
     ostack_popn(ctx, 2);
     ostack_push(ctx, res);
@@ -1836,6 +1921,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
             INS(ldvar_);
             INS(ldddvar_);
             INS(add_);
+            INS(mul_);
             INS(sub_);
             INS(lt_);
             INS(call_);

@@ -135,14 +135,22 @@ static SEXP compileExpression_(SEXP exp, SEXP env) {
 }
 
 REXPORT SEXP rir_jitEnable(SEXP expression) {
+    if (TYPEOF(expression) != STRSXP || Rf_length(expression) < 1)
+        Rf_error("string expected");
+
+    const char* type CHAR(STRING_ELT(expression, 0));
+
     rirJitEnabled = 1;
 
-    if (TYPEOF(expression) == INTSXP && INTEGER(expression)[0] == 1)
+    if (strcmp(type, "sticky") == 0 || strcmp(type, "force") == 0)
         rirJitEnabled = 2;
 
     setCompileExpressionOverride(INTSXP, &compileExpression_);
     setCmpFunOverride(INTSXP, &compileClosure_);
-    setEvalHook(&rirEval);
+
+    if (strcmp(type, "force") == 0)
+        setEvalHook(&rirEval);
+
     return R_NilValue;
 }
 

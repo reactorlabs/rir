@@ -99,6 +99,11 @@ DEF_INSTR(dup2_, 0, 2, 4, 0, 0)
 /**
  * dup2_:: a b -> a b a b
  */
+DEF_INSTR(mul_, 0, 2, 1, 0, 0)
+/**
+ * add_:: pop two values from object stack, add them, push result on object
+ * stack
+ */
 DEF_INSTR(add_, 0, 2, 1, 0, 0)
 /**
  * add_:: pop two values from object stack, add them, push result on object

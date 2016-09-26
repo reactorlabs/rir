@@ -151,8 +151,8 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
         return true;
     }
 
-    if (args.length() == 2 &&
-        (fun == symbol::Add || fun == symbol::Sub || fun == symbol::Lt)) {
+    if (args.length() == 2 && (fun == symbol::Add || fun == symbol::Sub ||
+                               fun == symbol::Lt || fun == symbol::Mul)) {
         cs << BC::isspecial(fun);
 
         compileExpr(ctx, args[0]);
@@ -164,6 +164,8 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
             cs << BC::sub();
         else if (fun == symbol::Lt)
             cs << BC::lt();
+        else if (fun == symbol::Mul)
+            cs << BC::mul();
         cs.addSrc(ast);
 
         return true;

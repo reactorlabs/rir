@@ -227,6 +227,7 @@ class BC {
     inline static BC inc();
     inline static BC close();
     inline static BC add();
+    inline static BC mul();
     inline static BC sub();
     inline static BC lt();
     inline static BC seq();

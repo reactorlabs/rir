@@ -1,8 +1,8 @@
 # the following functions are intended for the API
 
-rir.enableJit <- function(sticky = 0) {
-    .Call("rir_jitEnable", sticky);
-    invisible(compiler:::enableJIT(1));
+rir.enableJit <- function(level=3, type="") {
+    .Call("rir_jitEnable", type);
+    invisible(compiler:::enableJIT(level));
 }
 rir.disableJit <- function() {
     .Call("rir_jitDisable");
