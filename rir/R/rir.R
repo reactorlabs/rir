@@ -1,7 +1,9 @@
 # the following functions are intended for the API
 
-rir.enableJit <- function(level=3, type="") {
+rir.enableJit <- function(level=2, type="") {
     .Call("rir_jitEnable", type);
+    if (level > 2)
+        warning("level 3 is broken with rir");
     invisible(compiler:::enableJIT(level));
 }
 rir.disableJit <- function() {
