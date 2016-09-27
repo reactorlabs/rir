@@ -488,8 +488,6 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
             SETCDR(a, value);
 
             cs << BC::call_stack(names.size(), names, rewrite);
-
-            cs << BC::uniq();
         }
 
         cs << BC::stvar(target)

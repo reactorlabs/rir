@@ -1335,6 +1335,8 @@ INSTRUCTION(subassign2_) {
                     if (target != R_NilValue && **pc == stvar_ &&
                         *(int*)(*pc - sizeof(int)) == *(int*)(*pc + 1)) {
                         *pc = *pc + sizeof(int) + 1;
+                        if (NAMED(orig) == 0)
+                            SET_NAMED(orig, 1);
                     } else {
                         ostack_push(ctx, orig);
                     }
