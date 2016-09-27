@@ -64,7 +64,7 @@ for (f in list.files(pattern="benchrun*")) {
   d <- rbind(d, process(f))
 }
 
-#X11()
+X11()
 ggplot(d, aes(x=cmd,y=value,color=cmd)) +
   scale_x_discrete(labels=1:length(experiments)) +
   #scale_y_continuous(limits=c(0.7,2.5)) +
@@ -73,5 +73,5 @@ ggplot(d, aes(x=cmd,y=value,color=cmd)) +
   geom_point(size=0.25, color="black") +
   facet_wrap(~bench)
 
-#Sys.sleep(100000000)
-ggsave("benchout.pdf")
+Sys.sleep(100000000)
+#ggsave("benchout.pdf")

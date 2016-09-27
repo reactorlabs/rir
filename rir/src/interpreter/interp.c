@@ -303,36 +303,13 @@ SEXP createArgsListStack(Code* c, size_t nargs, SEXP names, SEXP env, SEXP call,
 
         SEXP arg = argbase[i];
 
-        // if the argument is an ellipsis, then retrieve it from the environment and 
-        // flatten the ellipsis
-        if (arg == R_DotsSymbol) {
-            SEXP ellipsis = findVar(R_DotsSymbol, env);
-            if (TYPEOF(ellipsis) == DOTSXP) {
-                while (ellipsis != R_NilValue) {
-                    name = TAG(ellipsis);
-                    if (eager) {
-                        SEXP arg = CAR(ellipsis);
-                        if (arg != R_MissingArg)
-                            arg = rirEval(CAR(ellipsis), env);
-                        assert(TYPEOF(arg) != PROMSXP);
-                        __listAppend(&result, &pos, arg, name);
-                    } else {
-                        SEXP promise = mkPROMISE(CAR(ellipsis), env);
-                        __listAppend(&result, &pos, promise, name);
-                    }
-                    ellipsis = CDR(ellipsis);
-                }
-            }
-        } else if (arg == R_MissingArg) {
-            // TODO i think this is ok, since R_MissingArg can also occur as a
-            // value...
-            if (eager) {
-                __listAppend(&result, &pos, R_MissingArg, R_NilValue);
-            } else {
-                SEXP promise = mkPROMISE(R_MissingArg, env);
-                SET_PRVALUE(promise, R_MissingArg);
-                __listAppend(&result, &pos, promise, R_NilValue);
-            }
+        if (!eager && (arg == R_MissingArg || arg == R_DotsSymbol)) {
+            // We have to wrap them in a promise, otherwise they are threated
+            // as extression to be evaluated, when in fact they are meant to be
+            // asts as values
+            SEXP promise = mkPROMISE(arg, env);
+            SET_PRVALUE(promise, arg);
+            __listAppend(&result, &pos, promise, R_NilValue);
         } else {
             if (eager && TYPEOF(arg) == PROMSXP) {
                 arg = rirEval(arg, env);

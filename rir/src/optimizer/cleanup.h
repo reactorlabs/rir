@@ -58,6 +58,14 @@ class BCCleanup : public InstructionDispatcher::Receiver {
         }
     }
 
+    void uniq_(CodeEditor::Iterator ins) override {
+        if ((*(ins + 1)).is(BC_t::stvar_) || (*(ins + 1)).is(BC_t::pop_) ||
+            (*(ins + 1)).is(BC_t::subassign_) ||
+            (*(ins + 1)).is(BC_t::subassign2_)) {
+            ins.asCursor(code_).remove();
+        }
+    }
+
     void isspecial_(CodeEditor::Iterator ins) override {
         auto prev = ins - 1;
         if ((*prev).is(BC_t::isspecial_) && *ins == *prev) {
