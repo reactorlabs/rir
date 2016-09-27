@@ -1,7 +1,7 @@
 SCRIPTPATH=`cd $(dirname "$0") && pwd`
 PLAIN_R=~/src/freshr/R-3-2-branch/bin/R
 BASE=`cd $SCRIPTPATH/.. && pwd`
-TIMEOUT=120
+TIMEOUT=60
 
 for i in `ls ${BASE}/benchmarks/shootout/*/*.r`; do
     T=`basename $i`;

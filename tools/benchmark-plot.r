@@ -15,24 +15,24 @@ process <- function(name) {
     # label
     processed[outpos] <- raw[inpos]; outpos <- outpos+1; inpos <- inpos+1;
     for (i in 1:length(experiments)) {
+      if (inpos > length(raw)) {
+        warning("premature end of input")
+        bench <- bench - 1
+        break;
+      }
       if (length(grep(";;", raw[inpos]))) {
-        processed[outpos] <- ""; outpos <- outpos+1
+        processed[outpos] <- ""; outpos <- outpos+1; inpos <- inpos+1
       } else {
         if (!length(grep(":", raw[inpos]))) {
-          stop("malformed input")
+          stop(paste0("malformed input, expected a time but read ", raw[inpos]))
         } else {
           processed[outpos] <- raw[inpos]; outpos <- outpos+1; inpos <- inpos+1
           if (length(grep(";;", raw[inpos]))) {
             inpos <- inpos+1
           } else {
-            stop("malformed input")
+            stop(paste0("malformed input, expected terminator but read ", raw[inpos]))
           }
         }
-      }
-      if (inpos > length(raw)) {
-        warning("premature end of input")
-        bench <- bench - 1
-        break;
       }
     }
   }
@@ -45,11 +45,11 @@ process <- function(name) {
         else as.integer(p[[1]])*60+as.numeric(p[[2]]))(
           strsplit(p,":")[[1]]))), ncol=bench)
   for (i in 1:ncol(dat))
-    dat[,i] <- dat[,i] / dat[1,i]
+    dat[,i] <- dat[1,i] / dat[,i]
 
-  dat <- matrix(as.numeric(
-          lapply(dat, function(p) if (is.na(p) || p > 2) NA else p)),
-                ncol=bench)
+#  dat <- matrix(as.numeric(
+#          lapply(dat, function(p) if (is.na(p) || p > 2) NA else p)),
+#                ncol=bench)
 
   datf <- melt(dat)
   datf$cmd <- experiments
@@ -59,15 +59,19 @@ process <- function(name) {
 }
 
 d <- data.frame()
-for (f in list.files(pattern="benchrun*"))
+for (f in list.files(pattern="benchrun*")) {
+  print(f)
   d <- rbind(d, process(f))
+}
 
+#X11()
 ggplot(d, aes(x=cmd,y=value,color=cmd)) +
   scale_x_discrete(labels=1:length(experiments)) +
-  scale_y_continuous(limits=c(0.5,1.8)) +
+  #scale_y_continuous(limits=c(0.7,2.5)) +
   #stat_summary(fun.y = "mean", geom="point") +
   stat_summary(fun.data = "mean_cl_boot") +
-  geom_point(size=0.2) +
+  geom_point(size=0.25, color="black") +
   facet_wrap(~bench)
 
-ggsave("benchout.png")
+#Sys.sleep(100000000)
+ggsave("benchout.pdf")
