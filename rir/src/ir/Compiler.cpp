@@ -559,129 +559,6 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
         return true;
     }
 
-    if (fun == symbol::Internal) {
-        SEXP inAst = args[0];
-        SEXP args_ = CDR(inAst);
-        RList args(args_);
-        SEXP fun = CAR(inAst);
-
-        if (TYPEOF(fun) == SYMSXP) {
-            for (auto a = args.begin(); a != args.end(); ++a)
-                if (a.hasTag() || *a == R_DotsSymbol || *a == R_MissingArg)
-                    return false;
-
-            SEXP internal = fun->u.symsxp.internal;
-            int i = ((sexprec_rjit*)internal)->u.i;
-
-            // If the .Internal call goes to a builtin, then we call eagerly
-            if (R_FunTab[i].eval % 10 == 1) {
-                cs << BC::isspecial(symbol::Internal)
-                   << BC::push(internal);
-                for (auto a : args)
-                    compileExpr(ctx, a);
-                cs << BC::call_stack(args.length(), {}, ast);
-
-                return true;
-            }
-
-
-            if (false && fun == symbol::lapply && args.length() == 2) {
-                Label loopBranch = cs.mkLabel();
-                Label nextBranch = cs.mkLabel();
-
-                compileExpr(ctx, args[0]);
-
-                // get length and names of the vector X
-                cs << BC::dup()
-                   << BC::dup()
-                   << BC::names()
-                   << BC::swap()
-                   << BC::length()
-                   << BC::dup()
-                   << BC::uniq()
-                   << BC::inc()
-                   << BC::swap()
-                   // allocate the ans vector with same size and names
-                   << BC::alloc(VECSXP)
-                   << BC::pick(2)
-                   << BC::setNames()
-                   << BC::swap()
-                   // Put the counter in place
-                   << BC::push((int)0);
-
-                // lookup of the function to apply
-                if (TYPEOF(args[1]) == SYMSXP) {
-                    cs << BC::ldfun(args[1]);
-                } else if (TYPEOF(args[1]) == STRSXP) {
-                    assert(Rf_length(args[1]) == 1);
-                    cs << BC::ldfun(Rf_install(CHAR(STRING_ELT(args[1], 0))));
-                } else {
-                    compileExpr(ctx, args[1]);
-                    cs << BC::isfun();
-                }
-                cs << BC::put(4);
-
-                // loop invariant stack layout: [fun, X, ans, len(vector)+1, i]
-
-                // check end condition
-                cs << loopBranch
-                   << BC::inc()
-                   << BC::dup2()
-                   << BC::swap()
-                   << BC::lt()
-                   << BC::brfalse(nextBranch);
-
-                // X[[i]]
-                Label objBranch = cs.mkLabel();
-                Label contBranch = cs.mkLabel();
-
-                cs << BC::isspecial(symbol::DoubleBracket);
-                cs << BC::pull(4)
-                   << BC::pull(4)
-                   << BC::pull(2)
-                   << BC::brobj(objBranch);
-
-                cs << BC::extract1()
-                   << BC::br(contBranch);
-
-                static SEXP extractCall = nullptr;
-                if (!extractCall)
-                    extractCall = LCONS(symbol::DoubleBracket,
-                                LCONS(symbol::getterPlaceholder, R_NilValue));
-
-                cs << objBranch
-                   << BC::dispatch_stack(symbol::DoubleBracket, 2, {}, extractCall);
-                  
-                cs << contBranch;
-
-                // f(X[[i]])
-                SEXP rewritten = LCONS(args[1],
-                        LCONS(symbol::getterPlaceholder, R_NilValue));
-
-                cs << BC::call_stack(1, {}, rewritten);
-
-                // store result
-                cs << BC::pull(1)
-                   << BC::pick(4)
-                   << BC::subassign2(R_NilValue)
-                   << BC::put(2)
-                   << BC::br(loopBranch);
-
-                // Put ans to the top and remove rest
-                cs << nextBranch
-                   << BC::pop()
-                   << BC::pop()
-                   << BC::swap()
-                   << BC::pop()
-                   << BC::swap()
-                   << BC::pop()
-                   << BC::visible();
-
-                return true;
-            }
-        }
-    }
-
     if (fun == symbol::isnull && args.length() == 1) {
         cs << BC::isspecial(fun);
         compileExpr(ctx, args[0]);
@@ -880,6 +757,150 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
         assert(ctx.inLoop());
 
         cs << BC::isspecial(fun) << BC::br(ctx.loop().break_);
+
+        return true;
+    }
+
+    if (fun == symbol::Internal) {
+        SEXP inAst = args[0];
+        SEXP args_ = CDR(inAst);
+        RList args(args_);
+        SEXP fun = CAR(inAst);
+
+        if (TYPEOF(fun) == SYMSXP) {
+            for (auto a = args.begin(); a != args.end(); ++a)
+                if (a.hasTag() || *a == R_DotsSymbol || *a == R_MissingArg)
+                    return false;
+
+            SEXP internal = fun->u.symsxp.internal;
+            int i = ((sexprec_rjit*)internal)->u.i;
+
+            // If the .Internal call goes to a builtin, then we call eagerly
+            if (R_FunTab[i].eval % 10 == 1) {
+                cs << BC::isspecial(symbol::Internal)
+                   << BC::push(internal);
+                for (auto a : args)
+                    compileExpr(ctx, a);
+                cs << BC::call_stack(args.length(), {}, ast);
+
+                return true;
+            }
+
+
+            if (false && fun == symbol::lapply && args.length() == 2) {
+                Label loopBranch = cs.mkLabel();
+                Label nextBranch = cs.mkLabel();
+
+                compileExpr(ctx, args[0]);
+
+                // get length and names of the vector X
+                cs << BC::dup()
+                   << BC::dup()
+                   << BC::names()
+                   << BC::swap()
+                   << BC::length()
+                   << BC::dup()
+                   << BC::uniq()
+                   << BC::inc()
+                   << BC::swap()
+                   // allocate the ans vector with same size and names
+                   << BC::alloc(VECSXP)
+                   << BC::pick(2)
+                   << BC::setNames()
+                   << BC::swap()
+                   // Put the counter in place
+                   << BC::push((int)0);
+
+                // lookup of the function to apply
+                if (TYPEOF(args[1]) == SYMSXP) {
+                    cs << BC::ldfun(args[1]);
+                } else if (TYPEOF(args[1]) == STRSXP) {
+                    assert(Rf_length(args[1]) == 1);
+                    cs << BC::ldfun(Rf_install(CHAR(STRING_ELT(args[1], 0))));
+                } else {
+                    compileExpr(ctx, args[1]);
+                    cs << BC::isfun();
+                }
+                cs << BC::put(4);
+
+                // loop invariant stack layout: [fun, X, ans, len(vector)+1, i]
+
+                // check end condition
+                cs << loopBranch
+                   << BC::inc()
+                   << BC::dup2()
+                   << BC::swap()
+                   << BC::lt()
+                   << BC::brfalse(nextBranch);
+
+                // X[[i]]
+                Label objBranch = cs.mkLabel();
+                Label contBranch = cs.mkLabel();
+
+                cs << BC::isspecial(symbol::DoubleBracket);
+                cs << BC::pull(4)
+                   << BC::pull(4)
+                   << BC::pull(2)
+                   << BC::brobj(objBranch);
+
+                cs << BC::extract1()
+                   << BC::br(contBranch);
+
+                static SEXP extractCall = nullptr;
+                if (!extractCall)
+                    extractCall = LCONS(symbol::DoubleBracket,
+                                LCONS(symbol::getterPlaceholder, R_NilValue));
+
+                cs << objBranch
+                   << BC::dispatch_stack(symbol::DoubleBracket, 2, {}, extractCall);
+                  
+                cs << contBranch;
+
+                // f(X[[i]])
+                SEXP rewritten = LCONS(args[1],
+                        LCONS(symbol::getterPlaceholder, R_NilValue));
+
+                cs << BC::call_stack(1, {}, rewritten);
+
+                // store result
+                cs << BC::pull(1)
+                   << BC::pick(4)
+                   << BC::subassign2(R_NilValue)
+                   << BC::put(2)
+                   << BC::br(loopBranch);
+
+                // Put ans to the top and remove rest
+                cs << nextBranch
+                   << BC::pop()
+                   << BC::pop()
+                   << BC::swap()
+                   << BC::pop()
+                   << BC::swap()
+                   << BC::pop()
+                   << BC::visible();
+
+                return true;
+            }
+        }
+    }
+
+
+    SEXP builtin = fun->u.symsxp.value;
+    if (TYPEOF(builtin) == BUILTINSXP) {
+        for (auto a = args.begin(); a != args.end(); ++a)
+            if (a.hasTag() || *a == R_DotsSymbol || *a == R_MissingArg)
+                return false;
+
+        // Those are somehow overloaded in std libs
+        if (fun == symbol::standardGeneric)
+            return false;
+
+        cs << BC::isspecial(fun)
+           << BC::push(builtin);
+
+        for (auto a : args)
+            compileExpr(ctx, a);
+        cs << BC::call_stack(args.length(), {}, ast);
 
         return true;
     }

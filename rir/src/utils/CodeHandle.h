@@ -54,7 +54,7 @@ class CodeHandle {
     SEXP ast() { return src_pool_at(globalContext(), code->src); }
 
     static size_t skiplistLength(unsigned sourcesSize) {
-        size_t s = 0.1 * sourcesSize;
+        size_t s = 0.03 * sourcesSize;
         return s ? s : 1;
     }
 

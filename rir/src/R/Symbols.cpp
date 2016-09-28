@@ -71,6 +71,8 @@ DECLARE(slot, "slot");
 DECLARE(as, "as");
 DECLARE(packageSlot, "packageSlot");
 DECLARE(attributes, "attributes");
+DECLARE(c, "c");
+DECLARE(standardGeneric, "standardGeneric");
 
 #undef DECLARE
 } // namespace symbol

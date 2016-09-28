@@ -89,6 +89,7 @@ class CodeEditor {
         Iterator() : pos(nullptr) {}
         Iterator(const BytecodeList* pos) : pos(pos) {}
         Iterator(const Iterator& other) : pos(other.pos) {}
+        Iterator(int fake) : pos(reinterpret_cast<const BytecodeList*>(fake)) {}
 
         BC operator*() const { return pos->bc; }
 

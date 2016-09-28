@@ -1498,7 +1498,7 @@ INSTRUCTION(isspecial_) {
     // TODO I do not think this is a proper way - we must check all the way
     // down, not just findVar (vars do not shadow closures)
     SEXP sym = readConst(ctx, pc);
-    SEXP val = findVar(sym, env);
+    SEXP val = findFun(sym, env);
     // TODO better check
     assert(TYPEOF(val) == SPECIALSXP || TYPEOF(val) == BUILTINSXP);
 }

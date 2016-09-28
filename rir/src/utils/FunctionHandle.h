@@ -95,7 +95,7 @@ class FunctionHandle {
 
         // write the sources
         unsigned skiplistLength = CodeHandle::skiplistLength(sources.size());
-        unsigned skiplistEntries = 1 + sources.size() / skiplistLength * 10;
+        unsigned skiplistEntries = 1 + sources.size() / skiplistLength;
 
         unsigned* skiplist = reinterpret_cast<unsigned*>(code.sources());
         unsigned* srcs = skiplist + 2 * skiplistLength;

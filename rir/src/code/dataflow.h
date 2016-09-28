@@ -13,7 +13,7 @@ namespace rir {
 class StackV {
   public:
     StackV(){};
-    StackV(CodeEditor::Iterator c) { defs.insert(c); };
+    StackV(CodeEditor::Iterator c) { defs = c; };
 
     bool operator==(StackV const& other) const {
         return defs == other.defs && uses == other.uses;
@@ -24,19 +24,34 @@ class StackV {
     }
 
     bool mergeWith(StackV const& other) {
-        auto ds = defs.size();
-        auto us = uses.size();
+        auto ds = defs;
+        auto us = uses;
 
-        defs.insert(other.defs.begin(), other.defs.end());
-        uses.insert(other.uses.begin(), other.uses.end());
+        if (defs == bottom)
+            defs = other.defs;
+        else if (other.defs != bottom)
+            defs = top;
 
-        return defs.size() != ds || uses.size() != us;
+        if (uses == bottom)
+            uses = other.uses;
+        else if (other.uses != bottom)
+            uses = top;
+
+        return defs != ds || uses != us;
     }
 
-    void used(CodeEditor::Iterator c) { uses.insert(c); }
+    void used(CodeEditor::Iterator c) {
+        if (uses == bottom)
+            uses = c;
+        else
+            uses = top;
+    }
 
-    std::unordered_set<CodeEditor::Iterator> defs;
-    std::unordered_set<CodeEditor::Iterator> uses;
+    static CodeEditor::Iterator bottom;
+    static CodeEditor::Iterator top;
+
+    CodeEditor::Iterator defs = bottom;
+    CodeEditor::Iterator uses = bottom;
 };
 
 class DataflowAnalysis : public ForwardAnalysisIns<AbstractStack<StackV>>,

@@ -15,14 +15,14 @@ class BCCleanup : public InstructionDispatcher::Receiver {
 
     void pop_(CodeEditor::Iterator ins) override {
         auto v = analysis[ins].top();
-        if (v.defs.size() != 1)
+        if (v.defs == StackV::top)
             return;
 
-        auto defI = *v.defs.begin();
+        auto defI = v.defs;
         BC def = *defI;
 
         // push - pop elimination
-        if (v.uses.empty()) {
+        if (v.uses == StackV::bottom) {
             if (def.is(BC_t::push_) || def.is(BC_t::dup_)) {
                 defI.asCursor(code_).remove();
                 ins.asCursor(code_).remove();
