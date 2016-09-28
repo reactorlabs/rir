@@ -61,6 +61,16 @@ DECLARE(lapply, "lapply");
 DECLARE(aslist, "as.list");
 DECLARE(isvector, "is.vector");
 DECLARE(substr, "substr");
+DECLARE(Class, "class");
+DECLARE(OldClass, "oldClass");
+DECLARE(at, "@");
+DECLARE(names, "names");
+DECLARE(attr, "attr");
+DECLARE(body, "body");
+DECLARE(slot, "slot");
+DECLARE(as, "as");
+DECLARE(packageSlot, "packageSlot");
+DECLARE(attributes, "attributes");
 
 #undef DECLARE
 } // namespace symbol

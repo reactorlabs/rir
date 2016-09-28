@@ -565,14 +565,16 @@ INLINE SEXP fixupAST(SEXP call, Context* ctx, size_t nargs) {
         }
 
         target = escape(target);
-
-        // If the target is an ast, we need to wrap it in a quote, since
-        // otherwise its not a value anymore, but will be evaluated.
-        if (TYPEOF(target) == LANGSXP || TYPEOF(target) == SYMSXP) {
-            target = LCONS(quoteSym, CONS_NR(target, R_NilValue));
+        SEXP p = target;
+        // It might be tempting to put the values as consts into the ast, but
+        // then they are converted to consts (named = 2) which is bad.
+        // therefore we wrap them in fake promises.
+        if (TYPEOF(p) != PROMSXP) {
+            p = mkPROMISE(getterPlaceholderSym, R_NilValue);
+            SET_PRVALUE(p, target);
         }
 
-        SETCAR(a, target);
+        SETCAR(a, p);
 
         if (setter) {
             SEXP prev = call;
@@ -586,14 +588,13 @@ INLINE SEXP fixupAST(SEXP call, Context* ctx, size_t nargs) {
 
             val = escape(val);
 
-            // If the value is an ast, we need to wrap it in a quote, since
-            // otherwise its not a value anymore, but will be evaluated.
-            if (TYPEOF(val) == LANGSXP || TYPEOF(val) == SYMSXP) {
-                val = LCONS(quoteSym, CONS_NR(val, R_NilValue));
+            SEXP p = val;
+            if (TYPEOF(p) != PROMSXP) {
+                p = mkPROMISE(setterPlaceholderSym, R_NilValue);
+                SET_PRVALUE(p, val);
             }
 
-            INCREMENT_NAMED(val);
-            SEXP v = CONS_NR(val, R_NilValue);
+            SEXP v = CONS_NR(p, R_NilValue);
             SET_TAG(v, R_valueSym);
             SETCDR(prev, v);
         }
@@ -1413,7 +1414,7 @@ INSTRUCTION(extract1_) {
     SEXP val = *ostack_at(ctx, 1);
 
     SEXP res;
-    if (ATTRIB(val) != R_NilValue || ATTRIB(idx) != R_NilValue)
+    if (getAttrib(val, R_NamesSymbol) != R_NilValue || ATTRIB(idx) != R_NilValue)
         goto fallback;
 
     int i = -1;

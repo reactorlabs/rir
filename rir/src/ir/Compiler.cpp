@@ -417,15 +417,9 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
                 }
                 Else(assert(false);)
             }
-            if (i > 1)
+            if (i > 1) {
                 cs << BC::dup();
-
-            // The setter internals are allowed to modify the lhs, thus
-            // we need to make sure its not shared!
-            cs << BC::uniq();
-
-            if (i > 1)
-                cs << BC::swap();
+            }
         }
 
         // Get down the initial rhs value
@@ -448,18 +442,22 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
             ++arg;
             names.push_back(R_NilValue);
 
+            // Some setters do not check for the named flag!
+            // TODO: there are probably more!
+            if (fun == symbol::at || fun == symbol::Class ||
+                fun == symbol::OldClass || fun == symbol::slot) {
+                cs << BC::pick(1)
+                   << BC::uniq()
+                   << BC::put(1);
+            }
+
             // Load function and push it before the first arg and the value
             // from the last setter.
-            cs << BC::ldfun(setterName) << BC::put(2);
+            cs << BC::ldfun(setterName)
+               << BC::put(2);
 
             for (; arg != RList::end(); ++arg) {
                 nargs++;
-                if (*arg == R_DotsSymbol || *arg == R_MissingArg) {
-                    names.push_back(R_NilValue);
-                    cs << BC::push(*arg);
-                    continue;
-                }
-
                 names.push_back(arg.tag());
                 if (TYPEOF(*arg) == LANGSXP || TYPEOF(*arg) == SYMSXP) {
                     auto p = compilePromise(ctx, *arg);

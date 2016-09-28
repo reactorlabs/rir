@@ -2,7 +2,7 @@ require(ggplot2)
 require(reshape2)
 require(Hmisc)
 
-experiments <- c("1 R_JIT_ENABLE=3 tools/R", "2 R_JIT_ENABLE=0 tools/R", "3 R_JIT_ENABLE=3 $PLAIN_R", "4 R_JIT_ENABLE=2 $PLAIN_R", "5 R_JIT_ENABLE=0 $PLAIN_R", "6 tools/R enableJit(level=1, type='sticky')", "7 tools/R enableJit(level=2, type='sticky')", "8 tools/R enableJit(type='force')")
+experiments <- c("1 R_ENABLE_JIT=0 tools/R", "2 R_ENABLE_JIT=3 tools/R", "3 R_ENABLE_JIT=0 $PLAIN_R", "4 R_ENABLE_JIT=2 $PLAIN_R", "5 R_ENABLE_JIT=3 $PLAIN_R", "6 tools/R enableJit(level=1, type='sticky')", "7 tools/R enableJit(level=2, type='sticky')", "8 tools/R enableJit(type='force')")
 
 process <- function(name) {
   raw <- readLines(name)
@@ -45,7 +45,7 @@ process <- function(name) {
         else as.integer(p[[1]])*60+as.numeric(p[[2]]))(
           strsplit(p,":")[[1]]))), ncol=bench)
   for (i in 1:ncol(dat))
-    dat[,i] <- dat[1,i] / dat[,i]
+    dat[,i] <- dat[5,i] / dat[,i]
 
 #  dat <- matrix(as.numeric(
 #          lapply(dat, function(p) if (is.na(p) || p > 2) NA else p)),
@@ -64,14 +64,16 @@ for (f in list.files(pattern="benchrun*")) {
   d <- rbind(d, process(f))
 }
 
-X11()
+#X11()
 ggplot(d, aes(x=cmd,y=value,color=cmd)) +
   scale_x_discrete(labels=1:length(experiments)) +
   #scale_y_continuous(limits=c(0.7,2.5)) +
   #stat_summary(fun.y = "mean", geom="point") +
+  geom_hline(yintercept=c(0.8,1.2), color="red", size=0.2) +
+  geom_hline(yintercept=c(1), color="red", size=0.5) +
   stat_summary(fun.data = "mean_cl_boot") +
   geom_point(size=0.25, color="black") +
   facet_wrap(~bench)
 
-Sys.sleep(100000000)
-#ggsave("benchout.pdf")
+#Sys.sleep(100000000)
+ggsave("benchout.png", scale=2)
