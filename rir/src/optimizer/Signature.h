@@ -220,6 +220,11 @@ protected:
 
     void ldddvar_(CodeEditor::Iterator ins) override {}
 
+    void ldarg_(CodeEditor::Iterator ins) override {
+        BC bc = *ins;
+        current().forceArgument(bc.immediateConst());
+    }
+
     void ldvar_(CodeEditor::Iterator ins) override {
         BC bc = *ins;
         current().forceArgument(bc.immediateConst());

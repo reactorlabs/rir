@@ -30,6 +30,10 @@ DEF_INSTR(ldvar_, 1, 0, 1, 0, 0)
 /**
  * ldvar_:: take immediate CP index of symbol, finding binding in env and push.
  */
+DEF_INSTR(ldarg_, 1, 0, 1, 0, 0)
+/**
+ * ldarg_:: like ldvar but guaranteed to be an argument
+ */
 DEF_INSTR(call_, 3, 1, 1, 0, 0)
 /**
  * call_:: ... Takes a list of code objects, which represent the arguments, decides on eager/lazy evaluation and does the right thing with the code objs.

@@ -23,6 +23,7 @@ BC::immediate_t decodeImmediate(BC_t bc, BC_t* pc) {
     switch (bc) {
     case BC_t::push_:
     case BC_t::ldfun_:
+    case BC_t::ldarg_:
     case BC_t::ldvar_:
     case BC_t::ldddvar_:
     case BC_t::isspecial_:
@@ -158,6 +159,13 @@ BC BC::ldvar(SEXP sym) {
     immediate_t i;
     i.pool = Pool::insert(sym);
     return BC(BC_t::ldvar_, i);
+}
+BC BC::ldarg(SEXP sym) {
+    assert(TYPEOF(sym) == SYMSXP);
+    assert(strlen(CHAR(PRINTNAME(sym))));
+    immediate_t i;
+    i.pool = Pool::insert(sym);
+    return BC(BC_t::ldarg_, i);
 }
 BC BC::isspecial(SEXP sym) {
     immediate_t i;

@@ -19,6 +19,7 @@ bool BC::operator==(const BC& other) const {
     case BC_t::push_:
     case BC_t::ldfun_:
     case BC_t::ldddvar_:
+    case BC_t::ldarg_:
     case BC_t::ldvar_:
     case BC_t::isspecial_:
     case BC_t::stvar_:
@@ -125,6 +126,7 @@ void BC::write(CodeStream& cs) const {
     cs.insert(bc);
     switch (bc) {
     case BC_t::push_:
+    case BC_t::ldarg_:
     case BC_t::ldfun_:
     case BC_t::ldddvar_:
     case BC_t::ldvar_:
@@ -374,6 +376,7 @@ void BC::print() {
         Rf_PrintValue(immediateConst());
         return;
     case BC_t::isspecial_:
+    case BC_t::ldarg_:
     case BC_t::ldfun_:
     case BC_t::ldvar_:
     case BC_t::ldddvar_:

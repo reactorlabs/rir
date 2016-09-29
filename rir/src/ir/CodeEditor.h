@@ -71,11 +71,6 @@ class CodeEditor {
 
     std::vector<BytecodeList*> labels_;
 
-    /** Closure that stores given code.
-      nullptr if the code corresponds to a promise.
-     */
-    SEXP closure_ = nullptr;
-
   public:
     class Cursor;
 
@@ -370,14 +365,14 @@ class CodeEditor {
 
     CodeEditor(SEXP closure);
 
-    CodeEditor(CodeHandle code);
+    CodeEditor(CodeHandle code, SEXP formals);
 
     std::vector<SEXP> arguments() const {
-        if (closure_ == nullptr) {
+        if (formals_ == nullptr) {
             return std::vector<SEXP>();
         } else {
             std::vector<SEXP> result;
-            SEXP formals = FORMALS(closure_);
+            SEXP formals = formals_;
             while (formals != R_NilValue) {
                 result.push_back(TAG(formals));
                 formals = CDR(formals);
@@ -437,7 +432,7 @@ class CodeEditor {
                 pos->patch = nullptr;
                 patchEnd->next = next;
                 next->prev = patchEnd;
-                pos = patchEnd->next;
+                pos = patchEnd;
             } else {
                 pos = pos->next;
             }
@@ -459,6 +454,7 @@ class CodeEditor {
     }
 
     bool changed = false;
+    SEXP formals_;
 };
 
 inline CodeEditor::Cursor CodeEditor::Iterator::asCursor(CodeEditor& editor) {

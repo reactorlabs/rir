@@ -95,7 +95,9 @@ public:
         return result;
     }
 
-    AVALUE top() const { return stack_.front(); }
+    AVALUE& top() { return stack_.front(); }
+
+    AVALUE const& top() const { return stack_.front(); }
 
     AVALUE pop() {
         AVALUE result = stack_.front();
@@ -283,6 +285,11 @@ public:
         }
     }
 
+    void mergeAll(AVALUE v) {
+        for (auto& e : env_)
+            e.second.mergeWith(v);
+    }
+
 protected:
 
     AbstractEnvironment * parent_ = nullptr;
@@ -330,6 +337,10 @@ public:
         return stack_.pop();
     }
 
+    AVALUE& top() { return stack_.top(); }
+
+    AVALUE const& top() const { return stack_.top(); }
+
     void pop(size_t num) {
         stack_.pop(num);
     }
@@ -358,6 +369,8 @@ public:
         stack_.print();
         env_.print();
     }
+
+    void mergeAllEnv(AVALUE v) { env_.mergeAll(v); }
 
 protected:
   AbstractStack<AVALUE> stack_;

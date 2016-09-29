@@ -2,7 +2,7 @@ require(ggplot2)
 require(reshape2)
 require(Hmisc)
 
-experiments <- c("1 R_ENABLE_JIT=0 tools/R", "2 R_ENABLE_JIT=3 tools/R", "3 R_ENABLE_JIT=0 $PLAIN_R", "4 R_ENABLE_JIT=2 $PLAIN_R", "5 R_ENABLE_JIT=3 $PLAIN_R", "6 tools/R enableJit(level=1, type='sticky')", "7 tools/R enableJit(level=2, type='sticky')", "8 tools/R enableJit(type='force')")
+experiments <- c("1 R_COMPILER_OPTIMIZE=3 R_ENABLE_JIT=3 tools/R", "2 R_ENABLE_JIT=0 $PLAIN_R", "3 R_ENABLE_JIT=2 $PLAIN_R", "4 R_COMPILER_OPTIMIZE=3 R_ENABLE_JIT=3 $PLAIN_R", "5 tools/R enableJit(level=1, type='sticky')", "6 tools/R enableJit(level=2, type='sticky')", "7 tools/R enableJit(type='force')")
 
 process <- function(name) {
   raw <- readLines(name)
@@ -45,7 +45,7 @@ process <- function(name) {
         else as.integer(p[[1]])*60+as.numeric(p[[2]]))(
           strsplit(p,":")[[1]]))), ncol=bench)
   for (i in 1:ncol(dat))
-    dat[,i] <- dat[5,i] / dat[,i]
+    dat[,i] <- dat[4,i] / dat[,i]
 
 #  dat <- matrix(as.numeric(
 #          lapply(dat, function(p) if (is.na(p) || p > 2) NA else p)),

@@ -10,6 +10,7 @@
 #include "R/Funtab.h"
 
 #include "optimizer/cleanup.h"
+#include "optimizer/load_elimination.h"
 #include "utils/Pool.h"
 #include "code/dataflow.h"
 
@@ -1046,11 +1047,14 @@ Compiler::CompilerRes Compiler::finalize() {
     ctx.cs() << BC::ret();
     ctx.pop();
 
-    CodeEditor code(function.entryPoint());
+    CodeEditor code(function.entryPoint(), formals);
 
     BCCleanup cleanup(code);
-    for (int i = 0; i < 2; ++i) {
+    LoadElimination elim(code);
+    for (int i = 0; i < 3; ++i) {
         cleanup.run();
+        code.commit();
+        elim.run();
         code.commit();
     }
 

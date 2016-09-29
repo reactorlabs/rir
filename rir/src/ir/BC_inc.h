@@ -114,7 +114,7 @@ class BC {
         call_stack_args_t call_stack_args;
         pool_idx_t pool;
         fun_idx_t fun;
-        num_args_t numArgs;
+        num_args_t arg_idx;
         jmp_t offset;
         uint32_t i;
     };
@@ -194,6 +194,7 @@ class BC {
     inline static BC push_code(fun_idx_t i);
     inline static BC ldfun(SEXP sym);
     inline static BC ldvar(SEXP sym);
+    inline static BC ldarg(SEXP sym);
     inline static BC ldddvar(SEXP sym);
     inline static BC promise(fun_idx_t prom);
     inline static BC ret();

@@ -11,17 +11,17 @@ namespace rir {
 CodeEditor::CodeEditor(SEXP closure) {
     ::Function * f = isValidClosureSEXP(closure);
     assert(f != nullptr);
-    closure_ = closure;
+    formals_ = FORMALS(closure);
     FunctionHandle fh(functionSEXP(f));
     CodeHandle ch = fh.entryPoint();
     ast = ch.ast();
     loadCode(fh, ch);
 }
 
-CodeEditor::CodeEditor(CodeHandle code) {
+CodeEditor::CodeEditor(CodeHandle code, SEXP formals) {
+    formals_ = formals;
     ast = code.ast();
     loadCode(code.function(), code);
-
 }
 
 void CodeEditor::loadCode(FunctionHandle function, CodeHandle code) {
@@ -81,7 +81,7 @@ void CodeEditor::loadCode(FunctionHandle function, CodeHandle code) {
 
                     bc.immediate.fun = code.idx();
 
-                    CodeEditor* p = new CodeEditor(code);
+                    CodeEditor* p = new CodeEditor(code, nullptr);
 
                     if (promises.size() <= code.idx())
                         promises.resize(code.idx() + 1, nullptr);
@@ -96,7 +96,7 @@ void CodeEditor::loadCode(FunctionHandle function, CodeHandle code) {
                         CodeHandle code = function.codeAtOffset(argOffset[i]);
                         argOffset[i] = code.idx();
 
-                        CodeEditor* p = new CodeEditor(code);
+                        CodeEditor* p = new CodeEditor(code, nullptr);
 
                         if (promises.size() <= code.idx())
                             promises.resize(code.idx() + 1, nullptr);
