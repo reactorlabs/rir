@@ -333,6 +333,20 @@ class ScopeResolution : public ForwardAnalysisIns<AbstractState<PointsTo>>,
         doCall();
     }
 
+    void extract2_(CodeEditor::Iterator ins) override {
+        current().pop();
+        current().pop();
+        current().pop();
+        current().push(PointsTo::Type::AnyValue);
+    }
+
+    void subset2_(CodeEditor::Iterator ins) override {
+        current().pop();
+        current().pop();
+        current().pop();
+        current().push(PointsTo::Type::AnyValue);
+    }
+
     void extract1_(CodeEditor::Iterator ins) override {
         current().pop();
         current().pop();
