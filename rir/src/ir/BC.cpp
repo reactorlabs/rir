@@ -78,6 +78,8 @@ bool BC::operator==(const BC& other) const {
     case BC_t::alloc_:
         return immediate.i == other.immediate.i;
 
+    case BC_t::subset2_:
+    case BC_t::extract2_:
     case BC_t::subset1_:
     case BC_t::extract1_:
     case BC_t::ret_:
@@ -174,6 +176,8 @@ void BC::write(CodeStream& cs) const {
         cs.insert(immediate.i);
         return;
 
+    case BC_t::subset2_:
+    case BC_t::extract2_:
     case BC_t::subset1_:
     case BC_t::extract1_:
     case BC_t::ret_:
@@ -414,6 +418,8 @@ void BC::print() {
     case BC_t::isfun_:
     case BC_t::invisible_:
     case BC_t::visible_:
+    case BC_t::subset2_:
+    case BC_t::extract2_:
     case BC_t::subset1_:
     case BC_t::extract1_:
     case BC_t::close_:

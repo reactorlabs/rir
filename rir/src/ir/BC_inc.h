@@ -242,6 +242,8 @@ class BC {
     inline static BC visible();
     inline static BC extract1();
     inline static BC subset1();
+    inline static BC extract2();
+    inline static BC subset2();
     inline static BC swap();
     inline static BC put(uint32_t);
     inline static BC pick(uint32_t);

@@ -1408,20 +1408,62 @@ INSTRUCTION(subassign_) {
     ostack_push(ctx, res);
 }
 
-INSTRUCTION(subset1_) {
-    SEXP idx = ostack_pop(ctx);
-    SEXP val = ostack_pop(ctx);
+INSTRUCTION(subset2_) {
+    SEXP idx2 = *ostack_at(ctx, 0);
+    SEXP idx1 = *ostack_at(ctx, 1);
+    SEXP val = *ostack_at(ctx, 2);
 
     SEXP res;
 #if RIR_AS_PACKAGE == 0
     SEXP args;
-    PROTECT(val);
-    args = CONS_NR(idx, R_NilValue);
-    UNPROTECT(1);
+    args = CONS_NR(idx2, R_NilValue);
+    args = CONS_NR(idx1, args);
     args = CONS_NR(val, args);
-    PROTECT(args);
+    ostack_push(ctx, args);
     res = do_subset_dflt(R_NilValue, R_SubsetSym, args, env);
-    UNPROTECT(1);
+    ostack_popn(ctx, 4);
+#else
+    res = Rf_eval(getSrcForCall(c, *pc - 1, ctx), env);
+#endif
+
+    R_Visible = 1;
+    ostack_push(ctx, res);
+}
+
+INSTRUCTION(extract2_) {
+    SEXP idx2 = *ostack_at(ctx, 0);
+    SEXP idx1 = *ostack_at(ctx, 1);
+    SEXP val = *ostack_at(ctx, 2);
+
+    SEXP res;
+#if RIR_AS_PACKAGE == 0
+    SEXP args;
+    args = CONS_NR(idx2, R_NilValue);
+    args = CONS_NR(idx1, args);
+    args = CONS_NR(val, args);
+    ostack_push(ctx, args);
+    res = do_subset_dflt(R_NilValue, R_Subset2Sym, args, env);
+    ostack_popn(ctx, 4);
+#else
+    res = Rf_eval(getSrcForCall(c, *pc - 1, ctx), env);
+#endif
+
+    R_Visible = 1;
+    ostack_push(ctx, res);
+}
+
+INSTRUCTION(subset1_) {
+    SEXP idx = *ostack_at(ctx, 0);
+    SEXP val = *ostack_at(ctx, 1);
+
+    SEXP res;
+#if RIR_AS_PACKAGE == 0
+    SEXP args;
+    args = CONS_NR(idx, R_NilValue);
+    args = CONS_NR(val, args);
+    ostack_push(ctx, args);
+    res = do_subset_dflt(R_NilValue, R_SubsetSym, args, env);
+    ostack_popn(ctx, 3);
 #else
     res = Rf_eval(getSrcForCall(c, *pc - 1, ctx), env);
 #endif
@@ -1962,6 +2004,8 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
             INS(visible_);
             INS(extract1_);
             INS(subset1_);
+            INS(extract2_);
+            INS(subset2_);
             INS(dispatch_);
             INS(uniq_);
             INS(aslogical_);

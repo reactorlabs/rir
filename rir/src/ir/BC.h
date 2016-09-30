@@ -66,6 +66,8 @@ BC::immediate_t decodeImmediate(BC_t bc, BC_t* pc) {
     case BC_t::test_bounds_:
     case BC_t::extract1_:
     case BC_t::subset1_:
+    case BC_t::extract2_:
+    case BC_t::subset2_:
     case BC_t::close_:
     case BC_t::ret_:
     case BC_t::pop_:
@@ -263,6 +265,8 @@ BC BC::invisible() { return BC(BC_t::invisible_); }
 BC BC::visible() { return BC(BC_t::visible_); }
 BC BC::extract1() { return BC(BC_t::extract1_); }
 BC BC::subset1() { return BC(BC_t::subset1_); }
+BC BC::extract2() { return BC(BC_t::extract2_); }
+BC BC::subset2() { return BC(BC_t::subset2_); }
 BC BC::swap() { return BC(BC_t::swap_); }
 BC BC::int3() { return BC(BC_t::int3_); }
 BC BC::uniq() { return BC(BC_t::uniq_); }

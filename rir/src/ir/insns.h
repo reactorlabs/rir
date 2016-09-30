@@ -147,11 +147,19 @@ DEF_INSTR(is_, 1, 1, 1, 0, 0)
  */
 DEF_INSTR(extract1_, 0, 2, 1, 0, 0)
 /**
- * extract1_:: do a[[b]], where a and b are on the stack
+ * extract1_:: do a[[b]], where a and b are on the stack and a is no obj
  */
 DEF_INSTR(subset1_, 0, 2, 1, 0, 0)
 /**
- * extract1_:: do a[b], where a and b are on the stack
+ * subset1_:: do a[b], where a and b are on the stack and a is no obj
+ */
+DEF_INSTR(extract2_, 0, 3, 1, 0, 0)
+/**
+ * extract2_:: do a[[b,c]], where a, b and c are on the stack and a is no obj
+ */
+DEF_INSTR(subset2_, 0, 3, 1, 0, 0)
+/**
+ * subset2_:: do a[b,c], where a, b and c are on the stack and a is no obj
  */
 DEF_INSTR(brobj_, 1, 1, 1, 0, 0)
 /**

@@ -1,4 +1,5 @@
 #include "interp_context.h"
+#include "runtime.h"
 
 void initializeResizeableList(ResizeableList * l, size_t capacity, SEXP parent, size_t index) {
     l->capacity = capacity;

@@ -582,12 +582,12 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
     }
 
     if (fun == symbol::DoubleBracket || fun == symbol::Bracket) {
-        if (args.length() == 2) {
+        if (args.length() == 2 || args.length() == 3) {
             auto lhs = *args.begin();
             auto idx = args.begin() + 1;
 
-            // TODO
-            if (*idx == R_DotsSymbol || *idx == R_MissingArg || idx.hasTag())
+            if (*idx == R_DotsSymbol || idx.hasTag() ||
+                *(idx + 1) == R_DotsSymbol || (idx + 1).hasTag())
                 return false;
 
             Label objBranch = cs.mkLabel();
@@ -598,10 +598,18 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
             cs << BC::brobj(objBranch);
 
             compileExpr(ctx, *idx);
-            if (fun == symbol::DoubleBracket)
-                cs << BC::extract1();
-            else
-                cs << BC::subset1();
+            if (args.length() == 2) {
+                if (fun == symbol::DoubleBracket)
+                    cs << BC::extract1();
+                else
+                    cs << BC::subset1();
+            } else {
+                compileExpr(ctx, *(idx + 1));
+                if (fun == symbol::DoubleBracket)
+                    cs << BC::extract2();
+                else
+                    cs << BC::subset2();
+            }
 
             cs << BC::br(nextBranch);
 
