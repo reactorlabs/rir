@@ -268,7 +268,9 @@ class ScopeResolution : public ForwardAnalysisIns<AbstractState<PointsTo>>,
 
     void label(CodeEditor::Iterator ins) override {}
 
-    void doCall() { current().mergeAllEnv(PointsTo::Type::Any); }
+    void doCall() {
+        current().mergeAllEnv(PointsTo::Type::Any);
+    }
 
     void any(CodeEditor::Iterator ins) override {
         BC bc = *ins;

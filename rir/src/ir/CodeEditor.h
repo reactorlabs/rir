@@ -142,7 +142,8 @@ class CodeEditor {
 
         Cursor(Cursor const & from):
             editor(from.editor),
-            pos(from.pos) {
+            pos(from.pos),
+            inPatch(from.inPatch) {
         }
 
         bool operator == (Cursor const & other) const {
@@ -236,13 +237,14 @@ class CodeEditor {
             if (prevInPatch && !nextInPatch) {
                 // insert at the end of a patch
                 auto insert = new BytecodeList(bc, prev, nullptr);
-                next->prev = insert;
+                prev->next = insert;
             }
             if (!prevInPatch && nextInPatch) {
                 // insert at the beginning of a patch
-                auto insert = new BytecodeList(bc, prev, next);
+                auto oldPatch = prev->patch;
+                auto insert = new BytecodeList(bc, prev, oldPatch);
                 prev->patch = insert;
-                next->prev = insert;
+                oldPatch->prev = insert;
             }
             if (!prevInPatch && !nextInPatch) {
                 // create a new patch
@@ -419,7 +421,24 @@ class CodeEditor {
         return * promises[index];
     }
 
+    void verify() {
+        BytecodeList* pos = front.next;
+        while (pos != &last) {
+            if (pos->patch) {
+                BytecodeList* patch = pos->patch;
+                while (patch) {
+                    assert(patch != &last);
+                    assert(patch->patch == nullptr);
+                    patch = patch->next;
+                }
+            }
+            pos = pos->next;
+        }
+    }
+
     void commit() {
+        verify();
+
         // Step 1: splice patches
         BytecodeList* pos = front.next;
         while (pos != &last) {
