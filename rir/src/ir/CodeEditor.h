@@ -61,7 +61,7 @@ class CodeEditor {
 
         ~BytecodeList() {
             if (callSite)
-                delete callSite;
+                delete[] callSite;
         }
     };
 #pragma pack(pop)

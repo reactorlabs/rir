@@ -63,13 +63,6 @@ typedef uint32_t num_args_t;
 // jmp offset
 typedef int32_t jmp_t;
 typedef jmp_t Label;
-// immediate arguments to call
-typedef struct {
-    pool_idx_t args;
-    pool_idx_t names;
-    pool_idx_t selector;
-    pool_idx_t call;
-} dispatch_args_t;
 typedef struct {
     uint32_t nargs;
     pool_idx_t names;
@@ -104,7 +97,6 @@ class BC {
     // space required.
     union immediate_t {
         uint32_t call_id;
-        dispatch_args_t dispatch_args;
         dispatch_stack_args_t dispatch_stack_args;
         call_stack_args_t call_stack_args;
         pool_idx_t pool;
@@ -159,11 +151,17 @@ class BC {
     fun_idx_t call_arg_idx_(uint32_t* callSites, num_args_t idx);
     bool call_hasNames_(uint32_t* callSites);
     SEXP call_name_(uint32_t* callSites, num_args_t idx);
-    pool_idx_t* legacy_args_array();
 
     static unsigned CallSiteSize(BC_t bc, unsigned nargs, bool hasNames) {
-        assert(bc == BC_t::call_);
-        return 3 + nargs + (hasNames ? nargs : 0);
+        switch (bc) {
+        case BC_t::call_:
+            return 3 + nargs + (hasNames ? nargs : 0);
+        case BC_t::dispatch_:
+            return 4 + nargs + (hasNames ? nargs : 0);
+        default:
+            assert(false);
+        }
+        return 0;
     }
 
     inline static BC_t* jmpTarget(BC_t* pos) {
@@ -188,9 +186,6 @@ class BC {
 
     // ==== Factory methods
     // to create new BC objects, which can be streamed to a CodeStream
-    static BC call(uint32_t id);
-    static BC dispatch(SEXP selector, std::vector<fun_idx_t> args,
-                       std::vector<SEXP> names, SEXP call);
     static BC call_stack(uint32_t, std::vector<SEXP> names, SEXP call);
     static BC dispatch_stack(SEXP selector, uint32_t, std::vector<SEXP> names,
                              SEXP call);
@@ -346,6 +341,17 @@ class BC {
     }
 
     friend class CodeEditor;
+};
+
+class CallSite {
+  public:
+    BC_t bc;
+    uint32_t* cs;
+
+    CallSite(BC_t bc, uint32_t* cs) : bc(bc), cs(cs) {}
+    CallSite(BC bc, uint32_t* cs) : bc(bc.bc), cs(cs) {}
+
+    SEXP selector();
 };
 
 } // rir

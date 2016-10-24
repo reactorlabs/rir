@@ -210,7 +210,7 @@ void CodeVerifier::vefifyFunctionLayout(SEXP sexp, ::Context* ctx) {
                     }
                 assert(ok and "Invalid promise offset detected");
             }
-            if (*cptr == BC_t::call_) {
+            if (*cptr == BC_t::call_ || *cptr == BC_t::dispatch_) {
                 unsigned callIdx = *reinterpret_cast<ArgT*>(cptr + 1);
                 uint32_t* cs = &c->callSites[callIdx];
                 uint32_t nargs = *CallSite_nargs(cs);
@@ -237,48 +237,9 @@ void CodeVerifier::vefifyFunctionLayout(SEXP sexp, ::Context* ctx) {
                         }
                     }
                 }
-            }
-            if (*cptr == BC_t::dispatch_) {
-                unsigned* argsIndex = reinterpret_cast<ArgT*>(cptr + 1);
-                assert(*argsIndex < cp_pool_length(ctx) and "Invalid arglist index");
-                SEXP argsVec = cp_pool_at(ctx, *argsIndex);
-                assert(TYPEOF(argsVec) == INTSXP and
-                       "Invalid type of arguents vector");
-                // check that the promise offsets are valid offsets within the
-                // function
-                uint32_t* cs = cur.callSite(c->callSites);
-                for (size_t i = 0, e = cur.call_nargs_(cs); i != e; ++i) {
-                    unsigned offset = INTEGER(argsVec)[i];
-                    if (offset == MISSING_ARG_IDX || offset == DOTS_ARG_IDX)
-                        continue;
-                    bool ok = false;
-                    for (Code* c : objs)
-                        if (c->header == offset) {
-                            ok = true;
-                            break;
-                        }
-                    assert(ok and "Invalid promise offset detected");
-                }
-                // check the names vector
-                assert(argsIndex[1] < cp_pool_length(ctx) and
-                       "Invalid type of argument names index");
-                SEXP namesVec = cp_pool_at(ctx, argsIndex[1]);
-                if (namesVec != R_NilValue) {
-                    assert(TYPEOF(namesVec) == VECSXP and
-                           "Invalid type of argument names vector");
-                    assert((unsigned)Rf_length(namesVec) ==
-                               cur.call_nargs_(cs) and
-                           "Names and args have different length");
-                }
                 if (*cptr == BC_t::dispatch_) {
-                    SEXP selector = cp_pool_at(ctx, argsIndex[2]);
+                    SEXP selector = cp_pool_at(ctx, *CallSite_selector(cs));
                     assert(TYPEOF(selector) == SYMSXP);
-                    SEXP call = cp_pool_at(ctx, argsIndex[3]);
-                    assert(TYPEOF(call) == LANGSXP);
-                }
-                if (*cptr == BC_t::call_) {
-                    SEXP call = cp_pool_at(ctx, argsIndex[2]);
-                    assert(TYPEOF(call) == LANGSXP);
                 }
             }
             cptr += cur.size();

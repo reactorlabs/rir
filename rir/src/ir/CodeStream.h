@@ -56,9 +56,10 @@ class CodeStream {
         code = new std::vector<char>(1024);
     }
 
-    CodeStream& insertCall(BC_t b, std::vector<fun_idx_t> args,
-                           std::vector<SEXP> names, SEXP call) {
-        insert(b);
+    CodeStream& insertCall(BC_t bc, std::vector<fun_idx_t> args,
+                           std::vector<SEXP> names, SEXP call,
+                           SEXP selector = nullptr) {
+        insert(bc);
         insert(nextCallSiteIdx_);
         sources.push_back(0);
 
@@ -72,7 +73,7 @@ class CodeStream {
                 }
             }
 
-        unsigned needed = 3 + nargs + (hasNames ? nargs : 0);
+        unsigned needed = BC::CallSiteSize(bc, nargs, hasNames);
         if (callSites_.size() <= nextCallSiteIdx_ + needed)
             callSites_.resize(needed + callSites_.size() * 1.5);
 
@@ -91,10 +92,16 @@ class CodeStream {
             ++i;
         }
 
+        if (bc == BC_t::dispatch_) {
+            assert(selector);
+            assert(TYPEOF(selector) == SYMSXP);
+            *CallSite_selector(cs) = Pool::insert(selector);
+        }
+
         return *this;
     }
 
-    CodeStream& insertCall(BC_t b, uint32_t* callSite) {
+    CodeStream& insertWithCallSite(BC_t b, uint32_t* callSite) {
         insert(b);
         insert(nextCallSiteIdx_);
         sources.push_back(0);

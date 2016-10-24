@@ -87,7 +87,7 @@ void CodeEditor::loadCode(FunctionHandle function, CodeHandle code) {
                         promises.resize(code.idx() + 1, nullptr);
 
                     promises[code.idx()] = p;
-                } else if (bc.bc == BC_t::call_) {
+                } else {
                     auto oldCs = bc.callSite(code.code->callSites);
 
                     auto nargs = bc.call_nargs_(oldCs);
@@ -95,12 +95,10 @@ void CodeEditor::loadCode(FunctionHandle function, CodeHandle code) {
 
                     unsigned needed = BC::CallSiteSize(bc.bc, nargs, hasNames);
                     pos->callSite = new uint32_t[needed];
+                    memcpy(pos->callSite, oldCs, needed * sizeof(uint32_t));
 
                     uint32_t* cs = pos->callSite;
 
-                    *CallSite_nargs(cs) = nargs;
-                    *CallSite_call(cs) = *CallSite_call(oldCs);
-                    *CallSite_hasNames(cs) = hasNames;
                     for (unsigned i = 0; i < nargs; ++i) {
                         auto arg = CallSite_args(oldCs)[i];
                         if (arg <= MAX_ARG_IDX) {
@@ -112,27 +110,6 @@ void CodeEditor::loadCode(FunctionHandle function, CodeHandle code) {
                             promises[code.idx()] = p;
                         }
                         CallSite_args(cs)[i] = arg;
-                        if (hasNames)
-                            CallSite_names(cs)[i] = CallSite_names(oldCs)[i];
-                    }
-                } else {
-                    auto oldCs = bc.callSite(code.code->callSites);
-                    auto nargs = bc.call_nargs_(oldCs);
-
-                    for (unsigned i = 0; i < nargs; ++i) {
-                        auto arg = bc.call_arg_idx_(oldCs, i);
-                        if (arg > MAX_ARG_IDX)
-                            continue;
-
-                        CodeHandle code = function.codeAtOffset(arg);
-                        bc.legacy_args_array()[i] = code.idx();
-
-                        CodeEditor* p = new CodeEditor(code, nullptr);
-
-                        if (promises.size() <= code.idx())
-                            promises.resize(code.idx() + 1, nullptr);
-
-                        promises[code.idx()] = p;
                     }
                 }
             }
@@ -207,17 +184,13 @@ unsigned CodeEditor::write(FunctionHandle& function) {
                         CodeEditor* e = promises[arg];
                         arg = e->write(function);
                     }
-                    if (bc.bc == BC_t::call_) {
-                        CallSite_args(cur.callSite())[i] = arg;
-                    } else {
-                        bc.legacy_args_array()[i] = arg;
-                    }
+                    CallSite_args(cur.callSite())[i] = arg;
                 }
             }
         }
 
-        if (bc.bc == BC_t::call_)
-            cs.insertCall(BC_t::call_, cur.callSite());
+        if (bc.bc == BC_t::call_ || bc.bc == BC_t::dispatch_)
+            cs.insertWithCallSite(bc.bc, cur.callSite());
         else
             cs << bc;
         if (cur.srcIdx())

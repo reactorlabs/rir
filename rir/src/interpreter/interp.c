@@ -907,8 +907,7 @@ SEXP doDispatchStack(Code* caller, SEXP call, SEXP selector, size_t nargs,
     return res;
 }
 
-SEXP doDispatch(Code* caller, SEXP call, SEXP selector, unsigned* args,
-                size_t nargs, SEXP names, SEXP env, OpcodeT** pc,
+SEXP doDispatch(Code* caller, uint32_t id, SEXP env, OpcodeT** pc,
                 Context* ctx) {
 
 #if RIR_AS_PACKAGE == 1
@@ -919,8 +918,12 @@ SEXP doDispatch(Code* caller, SEXP call, SEXP selector, unsigned* args,
     SEXP obj = ostack_top(ctx);
     assert(isObject(obj));
 
-    SEXP actuals =
-        createArgsList(caller, args, call, nargs, names, env, ctx, false);
+    uint32_t* cs = &caller->callSites[id];
+    SEXP call = cp_pool_at(ctx, *CallSite_call(cs));
+    uint32_t nargs = *CallSite_nargs(cs);
+    SEXP selector = cp_pool_at(ctx, *CallSite_selector(cs));
+
+    SEXP actuals = createArgsListNew(caller, call, nargs, cs, env, ctx, false);
     ostack_push(ctx, actuals);
     SEXP res = NULL;
 
@@ -1034,7 +1037,6 @@ INSTRUCTION(call_stack_) {
 }
 
 INSTRUCTION(call_) {
-    // get the indices of argument promises
     unsigned id = readImmediate(pc);
     // get the closure itself
     SEXP cls = ostack_pop(ctx);
@@ -1056,20 +1058,8 @@ INSTRUCTION(dispatch_stack_) {
 }
 
 INSTRUCTION(dispatch_) {
-    // get the indices of argument promises
-    SEXP args_ = readConst(ctx, pc);
-    assert(TYPEOF(args_) == INTSXP &&
-           "TODO change to INTSXP, not RAWSXP it used to be");
-    unsigned nargs = LENGTH(args_) / sizeof(unsigned);
-    unsigned* args = (unsigned*)INTEGER(args_);
-    // get the names of the arguments (or R_NilValue) if none
-    SEXP names = readConst(ctx, pc);
-
-    SEXP selector = readConst(ctx, pc);
-    SEXP call = readConst(ctx, pc);
-
-    ostack_push(
-        ctx, doDispatch(c, call, selector, args, nargs, names, env, pc, ctx));
+    unsigned id = readImmediate(pc);
+    ostack_push(ctx, doDispatch(c, id, env, pc, ctx));
 }
 
 INSTRUCTION(promise_) {

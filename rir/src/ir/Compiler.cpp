@@ -101,7 +101,7 @@ void compileDispatch(Context& ctx, SEXP selector, SEXP ast, SEXP fun,
     }
     assert(callArgs.size() < MAX_NUM_ARGS);
 
-    ctx.cs() << BC::dispatch(selector, callArgs, names, ast);
+    ctx.cs().insertCall(BC_t::dispatch_, callArgs, names, ast, selector);
 }
 
 // Inline some specials
