@@ -148,17 +148,34 @@ typedef struct Code {
 } Code;
 #pragma pack(pop)
 
+typedef enum {
+    CALL_SITE_UNNAMED,
+    CALL_SITE_NAMED,
+    CALL_SITE_STACK_UNNAMED,
+    CALL_SITE_STACK_NAMED
+} CallSiteType;
+
 // Accessors to the call site
 INLINE uint32_t* CallSite_call(uint32_t* callSite) { return callSite; }
-INLINE uint32_t* CallSite_hasNames(uint32_t* callSite) { return callSite + 1; }
+INLINE CallSiteType* CallSite_type(uint32_t* callSite) {
+    return (CallSiteType*)callSite + 1;
+}
+INLINE bool CallSite_hasNames(uint32_t* callSite) {
+    return (*CallSite_type(callSite) == CALL_SITE_NAMED) ||
+           (*CallSite_type(callSite) == CALL_SITE_STACK_NAMED);
+}
+INLINE bool CallSite_hasArgs(uint32_t* callSite) {
+    return (*CallSite_type(callSite) == CALL_SITE_NAMED) ||
+           (*CallSite_type(callSite) == CALL_SITE_UNNAMED);
+}
 INLINE uint32_t* CallSite_args(uint32_t* callSite) { return callSite + 2; }
 INLINE uint32_t* CallSite_names(uint32_t* callSite, uint32_t nargs) {
-    assert(*CallSite_hasNames(callSite));
-    return callSite + 2 + nargs;
+    assert(CallSite_hasNames(callSite));
+    return callSite + 2 + (CallSite_hasArgs(callSite) ? nargs : 0);
 }
 INLINE uint32_t* CallSite_selector(uint32_t* callSite, uint32_t nargs) {
-    bool hasNames = *CallSite_hasNames(callSite);
-    return callSite + 2 + nargs * (hasNames ? 2 : 1);
+    return callSite + 2 + (CallSite_hasArgs(callSite) ? nargs : 0) +
+           (CallSite_hasNames(callSite) ? nargs : 0);
 }
 
 /** Returns whether the SEXP appears to be valid promise, i.e. a pointer into

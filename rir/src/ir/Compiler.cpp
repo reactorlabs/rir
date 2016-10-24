@@ -414,7 +414,8 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
                     SEXP rewrite = Rf_shallow_duplicate(g);
                     ctx.preserve(rewrite);
                     SETCAR(CDR(rewrite), symbol::getterPlaceholder);
-                    cs << BC::call_stack(names.size(), names, rewrite);
+                    cs.insertStackCall(BC_t::call_stack_, names.size(), names,
+                                       rewrite);
                 }
                 Else(assert(false);)
             }
@@ -486,7 +487,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
             SET_TAG(value, symbol::value);
             SETCDR(a, value);
 
-            cs << BC::call_stack(names.size(), names, rewrite);
+            cs.insertStackCall(BC_t::call_stack_, names.size(), names, rewrite);
         }
 
         cs << BC::stvar(target)
@@ -790,7 +791,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
                    << BC::push(internal);
                 for (auto a : args)
                     compileExpr(ctx, a);
-                cs << BC::call_stack(args.length(), {}, ast);
+                cs.insertStackCall(BC_t::call_stack_, args.length(), {}, ast);
 
                 return true;
             }
@@ -869,7 +870,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
                 SEXP rewritten = LCONS(args[1],
                         LCONS(symbol::getterPlaceholder, R_NilValue));
 
-                cs << BC::call_stack(1, {}, rewritten);
+                cs.insertStackCall(BC_t::call_stack_, 1, {}, rewritten);
 
                 // store result
                 cs << BC::pull(1)
@@ -909,7 +910,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
 
         for (auto a : args)
             compileExpr(ctx, a);
-        cs << BC::call_stack(args.length(), {}, ast);
+        cs.insertStackCall(BC_t::call_stack_, args.length(), {}, ast);
 
         return true;
     }

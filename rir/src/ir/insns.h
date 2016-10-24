@@ -186,7 +186,7 @@ DEF_INSTR(put_, 1, 0, 0, 0, 0)
 /**
  * put_:: put tos at the n-th pos in the stack
  */
-DEF_INSTR(call_stack_, 3, -1, 1, 0, 0)
+DEF_INSTR(call_stack_, 2, -1, 1, 0, 0)
 /**
  * call_stack_:: like call, but arguments are taken from the stack
  *               immediate are number of args and names

@@ -346,16 +346,52 @@ SEXP createArgsListStack(Code* c, size_t nargs, SEXP names, SEXP env, SEXP call,
     return result;
 }
 
+SEXP createArgsListStackNew(Code* c, size_t nargs, uint32_t* cs, SEXP env,
+                            Context* ctx, bool eager) {
+    SEXP result = R_NilValue;
+    SEXP pos = result;
+
+    SEXP* argbase = ostack_at(ctx, nargs - 1);
+
+    bool hasNames = CallSite_hasNames(cs);
+
+    for (size_t i = 0; i < nargs; ++i) {
+
+        SEXP name = hasNames ? cp_pool_at(ctx, CallSite_names(cs, nargs)[i])
+                             : R_NilValue;
+
+        SEXP arg = argbase[i];
+
+        if (!eager && (arg == R_MissingArg || arg == R_DotsSymbol)) {
+            // We have to wrap them in a promise, otherwise they are threated
+            // as extression to be evaluated, when in fact they are meant to be
+            // asts as values
+            SEXP promise = mkPROMISE(arg, env);
+            SET_PRVALUE(promise, arg);
+            __listAppend(&result, &pos, promise, R_NilValue);
+        } else {
+            if (eager && TYPEOF(arg) == PROMSXP) {
+                arg = rirEval(arg, env);
+            }
+            arg = escape(arg);
+
+            __listAppend(&result, &pos, arg, name);
+        }
+    }
+
+    if (result != R_NilValue)
+        UNPROTECT(1);
+    return result;
+}
+
 SEXP createArgsListNew(Code* c, SEXP call, size_t nargs, uint32_t* cs, SEXP env,
                        Context* ctx, bool eager) {
-    // for (int i = 0; i < nargs; ++i)
-    //     printf("%x\n", call);
     SEXP result = R_NilValue;
     SEXP pos = result;
 
     // loop through the arguments and create a promise, unless it is a missing
     // argument
-    bool hasNames = *CallSite_hasNames(cs);
+    bool hasNames = CallSite_hasNames(cs);
 
     for (size_t i = 0; i < nargs; ++i) {
         unsigned argi = CallSite_args(cs)[i];
@@ -395,63 +431,6 @@ SEXP createArgsListNew(Code* c, SEXP call, size_t nargs, uint32_t* cs, SEXP env,
                 __listAppend(&result, &pos, arg, name);
             } else {
                 Code* arg = codeAt(function(c), argi);
-                SEXP promise = createPromise(arg, env);
-                __listAppend(&result, &pos, promise, name);
-            }
-        }
-    }
-
-    if (result != R_NilValue)
-        UNPROTECT(1);
-    return result;
-}
-
-SEXP createArgsList(Code* c, FunctionIndex* args, SEXP call, size_t nargs,
-                    SEXP names, SEXP env, Context* ctx, bool eager) {
-    // for (int i = 0; i < nargs; ++i)
-    //     printf("%x\n", call);
-    SEXP result = R_NilValue;
-    SEXP pos = result;
-
-    // loop through the arguments and create a promise, unless it is a missing
-    // argument
-    for (size_t i = 0; i < nargs; ++i) {
-        unsigned offset = args[i];
-        SEXP name = names != R_NilValue ? VECTOR_ELT(names, i) : R_NilValue;
-
-        // if the argument is an ellipsis, then retrieve it from the environment and 
-        // flatten the ellipsis
-        if (args[i] == DOTS_ARG_IDX) {
-            SEXP ellipsis = findVar(R_DotsSymbol, env);
-            if (TYPEOF(ellipsis) == DOTSXP) {
-                while (ellipsis != R_NilValue) {
-                    name = TAG(ellipsis);
-                    if (eager) {
-                        SEXP arg = CAR(ellipsis);
-                        if (arg != R_MissingArg)
-                            arg = rirEval(CAR(ellipsis), env);
-                        assert(TYPEOF(arg) != PROMSXP);
-                        __listAppend(&result, &pos, arg, name);
-                    } else {
-                        SEXP promise = mkPROMISE(CAR(ellipsis), env);
-                        __listAppend(&result, &pos, promise, name);
-                    }
-                    ellipsis = CDR(ellipsis);
-                }
-            }
-        } else if (args[i] == MISSING_ARG_IDX) {
-            if (eager)
-                Rf_errorcall(call, "argument %d is empty", i + 1);
-            __listAppend(&result, &pos, R_MissingArg, R_NilValue);
-        } else {
-            if (eager) {
-                SEXP arg =
-                    evalRirCode(codeAt(function(c), offset), ctx, env, 0);
-                arg = escape(arg);
-                assert(TYPEOF(arg) != PROMSXP);
-                __listAppend(&result, &pos, arg, name);
-            } else {
-                Code* arg = codeAt(function(c), offset);
                 SEXP promise = createPromise(arg, env);
                 __listAppend(&result, &pos, promise, name);
             }
@@ -694,8 +673,11 @@ INLINE SEXP fixupAST(SEXP call, Context* ctx, size_t nargs) {
 }
 
 // TODO: unify with the above doCall
-SEXP doCallStack(Code* caller, SEXP call, size_t nargs, SEXP names, SEXP env,
+SEXP doCallStack(Code* caller, size_t nargs, unsigned id, SEXP env,
                  OpcodeT** pc, Context* ctx) {
+
+    uint32_t* cs = &caller->callSites[id];
+    SEXP call = cp_pool_at(ctx, *CallSite_call(cs));
 
     SEXP res = R_NilValue;
 
@@ -726,7 +708,7 @@ SEXP doCallStack(Code* caller, SEXP call, size_t nargs, SEXP names, SEXP env,
     }
     case BUILTINSXP: {
         SEXP argslist =
-            createArgsListStack(caller, nargs, names, env, call, ctx, true);
+            createArgsListStackNew(caller, nargs, cs, env, ctx, true);
         PROTECT(argslist);
         ostack_popn(ctx, nargs);
         ostack_pop(ctx); // callee
@@ -748,7 +730,7 @@ SEXP doCallStack(Code* caller, SEXP call, size_t nargs, SEXP names, SEXP env,
     }
     case CLOSXP: {
         SEXP argslist =
-            createArgsListStack(caller, nargs, names, env, call, ctx, false);
+            createArgsListStackNew(caller, nargs, cs, env, ctx, false);
         PROTECT(argslist);
         ostack_popn(ctx, nargs);
         ostack_pop(ctx); // callee
@@ -1025,13 +1007,9 @@ SEXP doDispatch(Code* caller, uint32_t nargs, uint32_t id, SEXP env,
 }
 
 INSTRUCTION(call_stack_) {
+    unsigned id = readImmediate(pc);
     unsigned nargs = readImmediate(pc);
-    // get the names of the arguments (or R_NilValue) if none
-    SEXP names = readConst(ctx, pc);
-    // get the call
-    SEXP call = readConst(ctx, pc);
-
-    ostack_push(ctx, doCallStack(c, call, nargs, names, env, pc, ctx));
+    ostack_push(ctx, doCallStack(c, nargs, id, env, pc, ctx));
 }
 
 INSTRUCTION(call_) {

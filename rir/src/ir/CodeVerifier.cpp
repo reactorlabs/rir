@@ -176,7 +176,7 @@ void CodeVerifier::vefifyFunctionLayout(SEXP sexp, ::Context* ctx) {
                 assert(TYPEOF(sym) == SYMSXP);
                 assert(strlen(CHAR(PRINTNAME(sym))));
             }
-            if (*cptr == BC_t::call_stack_ || *cptr == BC_t::dispatch_stack_) {
+            if (*cptr == BC_t::dispatch_stack_) {
                 unsigned* argsIndex = reinterpret_cast<ArgT*>(cptr + 1);
                 unsigned nargs = argsIndex[0];
                 // check the names vector
@@ -199,6 +199,27 @@ void CodeVerifier::vefifyFunctionLayout(SEXP sexp, ::Context* ctx) {
                     call = cp_pool_at(ctx, argsIndex[3]);
                 }
                 assert(TYPEOF(call) == LANGSXP);
+            }
+            if (*cptr == BC_t::call_stack_) {
+                unsigned callIdx = *reinterpret_cast<ArgT*>(cptr + 1);
+                uint32_t* cs = &c->callSites[callIdx];
+                uint32_t nargs = *reinterpret_cast<ArgT*>(cptr + 5);
+
+                if (CallSite_hasNames(cs)) {
+                    for (size_t i = 0, e = nargs; i != e; ++i) {
+                        uint32_t offset = CallSite_names(cs, nargs)[i];
+                        if (offset) {
+                            SEXP name = cp_pool_at(ctx, offset);
+                            assert(TYPEOF(name) == SYMSXP ||
+                                   name == R_NilValue);
+                        }
+                    }
+                }
+                if (*cptr == BC_t::dispatch_stack_) {
+                    SEXP selector =
+                        cp_pool_at(ctx, *CallSite_selector(cs, nargs));
+                    assert(TYPEOF(selector) == SYMSXP);
+                }
             }
             if (*cptr == BC_t::promise_) {
                 unsigned* promidx = reinterpret_cast<ArgT*>(cptr + 1);
@@ -227,7 +248,7 @@ void CodeVerifier::vefifyFunctionLayout(SEXP sexp, ::Context* ctx) {
                         }
                     assert(ok and "Invalid promise offset detected");
                 }
-                if (*CallSite_hasNames(cs)) {
+                if (CallSite_hasNames(cs)) {
                     for (size_t i = 0, e = nargs; i != e; ++i) {
                         uint32_t offset = CallSite_names(cs, nargs)[i];
                         if (offset) {

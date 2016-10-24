@@ -29,6 +29,7 @@ bool BC::operator==(const BC& other) const {
 
     case BC_t::dispatch_:
     case BC_t::call_:
+    case BC_t::call_stack_:
         return immediate.call_args.call_id == other.immediate.call_args.call_id;
 
     case BC_t::dispatch_stack_:
@@ -40,14 +41,6 @@ bool BC::operator==(const BC& other) const {
                    other.immediate.dispatch_stack_args.selector &&
                immediate.dispatch_stack_args.call ==
                    other.immediate.dispatch_stack_args.call;
-
-    case BC_t::call_stack_:
-        return immediate.call_stack_args.nargs ==
-                   other.immediate.call_stack_args.nargs &&
-               immediate.call_stack_args.names ==
-                   other.immediate.call_stack_args.names &&
-               immediate.call_stack_args.call ==
-                   other.immediate.call_stack_args.call;
 
     case BC_t::promise_:
     case BC_t::push_code_:
@@ -130,15 +123,12 @@ void BC::write(CodeStream& cs) const {
 
     case BC_t::call_:
     case BC_t::dispatch_:
+    case BC_t::call_stack_:
         assert(false);
         break;
 
     case BC_t::dispatch_stack_:
         cs.insert(immediate.dispatch_stack_args);
-        break;
-
-    case BC_t::call_stack_:
-        cs.insert(immediate.call_stack_args);
         break;
 
     case BC_t::promise_:
@@ -263,9 +253,11 @@ void BC::print(CallSite cs) {
         break;
     }
     case BC_t::call_stack_: {
-        num_args_t nargs = immediate.call_stack_args.nargs;
+        num_args_t nargs = immediate.call_args.nargs;
         Rprintf(" %d ", nargs);
-        // printNames(cs_);
+        if (cs.isValid()) {
+            printNames(cs);
+        }
         break;
     }
     case BC_t::dispatch_stack_: {
@@ -387,40 +379,6 @@ BC BC::dispatch_stack(SEXP selector, uint32_t nargs, std::vector<SEXP> names,
     immediate_t i;
     i.dispatch_stack_args = args_;
     return BC(BC_t::dispatch_stack_, i);
-}
-
-BC BC::call_stack(unsigned nargs, std::vector<SEXP> names, SEXP call) {
-    assert(nargs == names.size() || names.empty());
-
-    bool hasNames = false;
-    if (!names.empty())
-        for (auto n : names) {
-            if (n != R_NilValue) {
-                hasNames = true;
-                break;
-            }
-        }
-
-    SEXP n;
-    if (hasNames) {
-        Protect p;
-
-        n = Rf_allocVector(VECSXP, names.size());
-        p(n);
-        for (size_t i = 0; i < nargs; ++i) {
-            SET_VECTOR_ELT(n, i, names[i]);
-        }
-        call_stack_args_t args_ = {nargs, Pool::insert(n), Pool::insert(call)};
-        immediate_t i;
-        i.call_stack_args = args_;
-        return BC(BC_t::call_stack_, i);
-    }
-
-    call_stack_args_t args_ = {nargs, Pool::insert(R_NilValue),
-                               Pool::insert(call)};
-    immediate_t i;
-    i.call_stack_args = args_;
-    return BC(BC_t::call_stack_, i);
 }
 
 CallSite::CallSite(BC bc, uint32_t* cs)

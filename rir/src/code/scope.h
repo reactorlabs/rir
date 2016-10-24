@@ -222,8 +222,8 @@ class ScopeResolution : public ForwardAnalysisIns<AbstractState<PointsTo>>,
     }
 
     void call_stack_(CodeEditor::Iterator ins) override {
-        auto fun = current().stack()[(*ins).immediate.call_stack_args.nargs];
-        current().pop((*ins).immediate.call_stack_args.nargs + 1);
+        auto fun = current().stack()[(*ins).immediate.call_args.nargs];
+        current().pop((*ins).immediate.call_args.nargs + 1);
         current().push(PointsTo::Type::AnyValue);
 
         if (fun.t == PointsTo::Type::Constant) {

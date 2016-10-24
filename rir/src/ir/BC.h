@@ -32,14 +32,12 @@ BC::immediate_t decodeImmediate(BC_t bc, BC_t* pc) {
     case BC_t::subassign2_:
         immediate.pool = *(pool_idx_t*)pc;
         break;
-    case BC_t::call_stack_:
-        immediate.call_stack_args = *(call_stack_args_t*)pc;
-        break;
     case BC_t::dispatch_stack_:
         immediate.dispatch_stack_args = *(dispatch_stack_args_t*)pc;
         break;
     case BC_t::call_:
     case BC_t::dispatch_:
+    case BC_t::call_stack_:
         immediate.call_args = *(CallArgs*)pc;
         break;
     case BC_t::promise_:

@@ -56,6 +56,45 @@ class CodeStream {
         code = new std::vector<char>(1024);
     }
 
+    CodeStream& insertStackCall(BC_t bc, uint32_t nargs,
+                                std::vector<SEXP> names, SEXP call,
+                                SEXP selector = nullptr) {
+        insert(bc);
+        CallArgs a;
+        a.call_id = nextCallSiteIdx_;
+        a.nargs = nargs;
+        insert(a);
+        sources.push_back(0);
+
+        bool hasNames = false;
+        if (!names.empty())
+            for (auto n : names) {
+                if (n != R_NilValue) {
+                    hasNames = true;
+                    break;
+                }
+            }
+
+        unsigned needed = BC::CallSiteSize(bc, nargs, hasNames);
+        if (callSites_.size() <= nextCallSiteIdx_ + needed)
+            callSites_.resize(needed + callSites_.size() * 1.5);
+
+        uint32_t* cs = &callSites_[nextCallSiteIdx_];
+        nextCallSiteIdx_ += needed;
+
+        *CallSite_call(cs) = Pool::insert(call);
+        *CallSite_type(cs) =
+            hasNames ? CALL_SITE_STACK_NAMED : CALL_SITE_STACK_UNNAMED;
+
+        if (bc == BC_t::dispatch_stack_) {
+            assert(selector);
+            assert(TYPEOF(selector) == SYMSXP);
+            *CallSite_selector(cs, nargs) = Pool::insert(selector);
+        }
+
+        return *this;
+    }
+
     CodeStream& insertCall(BC_t bc, std::vector<fun_idx_t> args,
                            std::vector<SEXP> names, SEXP call,
                            SEXP selector = nullptr) {
@@ -85,7 +124,7 @@ class CodeStream {
         nextCallSiteIdx_ += needed;
 
         *CallSite_call(cs) = Pool::insert(call);
-        *CallSite_hasNames(cs) = hasNames;
+        *CallSite_type(cs) = hasNames ? CALL_SITE_NAMED : CALL_SITE_UNNAMED;
 
         int i = 0;
         for (auto arg : args) {
