@@ -352,15 +352,16 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
                         SETCDR(a, value);
 
                         // Reorder stack into correct ordering
-                        cs << BC::swap()
-                           << BC::pick(2)
+                        cs << BC::swap() << BC::pick(2);
 
                         // Do dispatch using args from the stack
-                           << BC::dispatch_stack(
-                            setter, 3, {R_NilValue, R_NilValue, symbol::value},
-                            rewrite)
+                        cs.insertStackCall(
+                            BC_t::dispatch_stack_, 3,
+                            {R_NilValue, R_NilValue, symbol::value}, rewrite,
+                            setter);
+
                         // store the result as "target"
-                           << BC::stvar(target);
+                        cs << BC::stvar(target);
 
                         cs << nextBranch
                            << BC::invisible();
@@ -861,9 +862,10 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
                     extractCall = LCONS(symbol::DoubleBracket,
                                 LCONS(symbol::getterPlaceholder, R_NilValue));
 
-                cs << objBranch
-                   << BC::dispatch_stack(symbol::DoubleBracket, 2, {}, extractCall);
-                  
+                cs << objBranch;
+                cs.insertStackCall(BC_t::dispatch_stack_, 2, {}, extractCall,
+                                   symbol::DoubleBracket);
+
                 cs << contBranch;
 
                 // f(X[[i]])

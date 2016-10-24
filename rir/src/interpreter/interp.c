@@ -310,44 +310,8 @@ INLINE void __listAppend(SEXP* front, SEXP* last, SEXP value, SEXP name) {
     *last = app;
 }
 
-SEXP createArgsListStack(Code* c, size_t nargs, SEXP names, SEXP env, SEXP call,
+SEXP createArgsListStack(Code* c, size_t nargs, uint32_t* cs, SEXP env,
                          Context* ctx, bool eager) {
-    // for (int i = 0; i < nargs; ++i)
-    //     printf("%x\n", call);
-    SEXP result = R_NilValue;
-    SEXP pos = result;
-
-    SEXP* argbase = ostack_at(ctx, nargs - 1);
-
-    for (size_t i = 0; i < nargs; ++i) {
-        SEXP name = names != R_NilValue ? VECTOR_ELT(names, i) : R_NilValue;
-
-        SEXP arg = argbase[i];
-
-        if (!eager && (arg == R_MissingArg || arg == R_DotsSymbol)) {
-            // We have to wrap them in a promise, otherwise they are threated
-            // as extression to be evaluated, when in fact they are meant to be
-            // asts as values
-            SEXP promise = mkPROMISE(arg, env);
-            SET_PRVALUE(promise, arg);
-            __listAppend(&result, &pos, promise, R_NilValue);
-        } else {
-            if (eager && TYPEOF(arg) == PROMSXP) {
-                arg = rirEval(arg, env);
-            }
-            arg = escape(arg);
-
-            __listAppend(&result, &pos, arg, name);
-        }
-    }
-
-    if (result != R_NilValue)
-        UNPROTECT(1);
-    return result;
-}
-
-SEXP createArgsListStackNew(Code* c, size_t nargs, uint32_t* cs, SEXP env,
-                            Context* ctx, bool eager) {
     SEXP result = R_NilValue;
     SEXP pos = result;
 
@@ -384,8 +348,8 @@ SEXP createArgsListStackNew(Code* c, size_t nargs, uint32_t* cs, SEXP env,
     return result;
 }
 
-SEXP createArgsListNew(Code* c, SEXP call, size_t nargs, uint32_t* cs, SEXP env,
-                       Context* ctx, bool eager) {
+SEXP createArgsList(Code* c, SEXP call, size_t nargs, uint32_t* cs, SEXP env,
+                    Context* ctx, bool eager) {
     SEXP result = R_NilValue;
     SEXP pos = result;
 
@@ -487,7 +451,7 @@ INLINE SEXP rirCallClosure(SEXP call, SEXP env, SEXP callee, SEXP actuals,
     Function* fun = (Function*)INTEGER(body);
     fun->invocationCount++;
     if (fun->invocationCount > 1000) {
-        printf("Hot %p\n", fun);
+        // printf("Hot %p\n", fun);
         fun->invocationCount = 0;
     }
     Code* code = functionCode(fun);
@@ -568,8 +532,7 @@ SEXP doCall(Code* caller, SEXP callee, unsigned nargs, unsigned id, SEXP env,
         CCODE f = getBuiltin(callee);
         int flag = getFlag(callee);
         // create the argslist
-        SEXP argslist =
-            createArgsListNew(caller, call, nargs, cs, env, ctx, true);
+        SEXP argslist = createArgsList(caller, call, nargs, cs, env, ctx, true);
         // callit
         PROTECT(argslist);
         if (flag < 2) R_Visible = flag != 1;
@@ -583,7 +546,7 @@ SEXP doCall(Code* caller, SEXP callee, unsigned nargs, unsigned id, SEXP env,
     }
     case CLOSXP: {
         SEXP argslist =
-            createArgsListNew(caller, call, nargs, cs, env, ctx, false);
+            createArgsList(caller, call, nargs, cs, env, ctx, false);
         PROTECT(argslist);
 #if RIR_AS_PACKAGE == 0
         // if body is INTSXP, it is rir serialized code, execute it directly
@@ -707,8 +670,7 @@ SEXP doCallStack(Code* caller, size_t nargs, unsigned id, SEXP env,
         break;
     }
     case BUILTINSXP: {
-        SEXP argslist =
-            createArgsListStackNew(caller, nargs, cs, env, ctx, true);
+        SEXP argslist = createArgsListStack(caller, nargs, cs, env, ctx, true);
         PROTECT(argslist);
         ostack_popn(ctx, nargs);
         ostack_pop(ctx); // callee
@@ -729,8 +691,7 @@ SEXP doCallStack(Code* caller, size_t nargs, unsigned id, SEXP env,
         break;
     }
     case CLOSXP: {
-        SEXP argslist =
-            createArgsListStackNew(caller, nargs, cs, env, ctx, false);
+        SEXP argslist = createArgsListStack(caller, nargs, cs, env, ctx, false);
         PROTECT(argslist);
         ostack_popn(ctx, nargs);
         ostack_pop(ctx); // callee
@@ -767,13 +728,16 @@ Rboolean R_has_methods(SEXP selector);
 int Rf_usemethod(const char* generic, SEXP obj, SEXP call, SEXP args, SEXP rho,
                  SEXP callrho, SEXP defrho, SEXP* ans);
 
-SEXP doDispatchStack(Code* caller, SEXP call, SEXP selector, size_t nargs,
-                     SEXP names, SEXP env, OpcodeT** pc, Context* ctx) {
+SEXP doDispatchStack(Code* caller, size_t nargs, uint32_t id, SEXP env,
+                     OpcodeT** pc, Context* ctx) {
 
 #if RIR_AS_PACKAGE == 1
     // TODO
     assert(false);
 #endif
+    uint32_t* cs = &caller->callSites[id];
+    SEXP call = cp_pool_at(ctx, *CallSite_call(cs));
+    SEXP selector = cp_pool_at(ctx, *CallSite_selector(cs, nargs));
 
     SEXP obj = *ostack_at(ctx, nargs - 1);
     assert(isObject(obj));
@@ -781,8 +745,7 @@ SEXP doDispatchStack(Code* caller, SEXP call, SEXP selector, size_t nargs,
     call = fixupAST(call, ctx, nargs);
     PROTECT(call);
 
-    SEXP actuals =
-        createArgsListStack(caller, nargs, names, env, call, ctx, true);
+    SEXP actuals = createArgsListStack(caller, nargs, cs, env, ctx, true);
 
     ostack_popn(ctx, nargs);
 
@@ -903,7 +866,7 @@ SEXP doDispatch(Code* caller, uint32_t nargs, uint32_t id, SEXP env,
     SEXP call = cp_pool_at(ctx, *CallSite_call(cs));
     SEXP selector = cp_pool_at(ctx, *CallSite_selector(cs, nargs));
 
-    SEXP actuals = createArgsListNew(caller, call, nargs, cs, env, ctx, false);
+    SEXP actuals = createArgsList(caller, call, nargs, cs, env, ctx, false);
     ostack_push(ctx, actuals);
     SEXP res = NULL;
 
@@ -1023,15 +986,9 @@ INSTRUCTION(call_) {
 }
 
 INSTRUCTION(dispatch_stack_) {
+    unsigned id = readImmediate(pc);
     unsigned nargs = readImmediate(pc);
-    // get the names of the arguments (or R_NilValue) if none
-    SEXP names = readConst(ctx, pc);
-    SEXP selector = readConst(ctx, pc);
-    // get the call
-    SEXP call = readConst(ctx, pc);
-
-    ostack_push(ctx,
-                doDispatchStack(c, call, selector, nargs, names, env, pc, ctx));
+    ostack_push(ctx, doDispatchStack(c, nargs, id, env, pc, ctx));
 }
 
 INSTRUCTION(dispatch_) {

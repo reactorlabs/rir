@@ -30,17 +30,8 @@ bool BC::operator==(const BC& other) const {
     case BC_t::dispatch_:
     case BC_t::call_:
     case BC_t::call_stack_:
-        return immediate.call_args.call_id == other.immediate.call_args.call_id;
-
     case BC_t::dispatch_stack_:
-        return immediate.dispatch_stack_args.nargs ==
-                   other.immediate.dispatch_stack_args.nargs &&
-               immediate.dispatch_stack_args.names ==
-                   other.immediate.dispatch_stack_args.names &&
-               immediate.dispatch_stack_args.selector ==
-                   other.immediate.dispatch_stack_args.selector &&
-               immediate.dispatch_stack_args.call ==
-                   other.immediate.dispatch_stack_args.call;
+        return immediate.call_args.call_id == other.immediate.call_args.call_id;
 
     case BC_t::promise_:
     case BC_t::push_code_:
@@ -121,14 +112,12 @@ void BC::write(CodeStream& cs) const {
         cs.insert(immediate.pool);
         return;
 
+    // They have to be inserted by CodeStream::insertCall
     case BC_t::call_:
     case BC_t::dispatch_:
     case BC_t::call_stack_:
-        assert(false);
-        break;
-
     case BC_t::dispatch_stack_:
-        cs.insert(immediate.dispatch_stack_args);
+        assert(false);
         break;
 
     case BC_t::promise_:
@@ -261,11 +250,11 @@ void BC::print(CallSite cs) {
         break;
     }
     case BC_t::dispatch_stack_: {
-        SEXP selector = Pool::get(immediate.dispatch_stack_args.selector);
-        Rprintf(" `%s` ", CHAR(PRINTNAME(selector)));
-        num_args_t nargs = immediate.dispatch_stack_args.nargs;
-        Rprintf(" %d ", nargs);
-        // printNames(cs_);
+        if (cs.isValid()) {
+            Rprintf(" `%s` ", CHAR(PRINTNAME(cs.selector())));
+            Rprintf(" %d ", cs.nargs());
+            printNames(cs);
+        }
         break;
     }
     case BC_t::push_:
@@ -342,43 +331,6 @@ void BC::print(CallSite cs) {
         break;
     }
     Rprintf("\n");
-}
-
-BC BC::dispatch_stack(SEXP selector, uint32_t nargs, std::vector<SEXP> names,
-                      SEXP call) {
-    assert(nargs == names.size() || names.empty());
-    assert(nargs <= MAX_ARG_IDX);
-    assert(TYPEOF(selector) == SYMSXP);
-
-    Protect p;
-    bool hasNames = false;
-    if (!names.empty())
-        for (auto n : names) {
-            if (n != R_NilValue) {
-                hasNames = true;
-                break;
-            }
-        }
-
-    SEXP n;
-    if (hasNames) {
-        n = Rf_allocVector(VECSXP, names.size());
-        p(n);
-        for (size_t i = 0; i < names.size(); ++i) {
-            SET_VECTOR_ELT(n, i, names[i]);
-        }
-        dispatch_stack_args_t args_ = {
-            nargs, Pool::insert(n), Pool::insert(selector), Pool::insert(call)};
-        immediate_t i;
-        i.dispatch_stack_args = args_;
-        return BC(BC_t::dispatch_stack_, i);
-    }
-
-    dispatch_stack_args_t args_ = {nargs, Pool::insert(R_NilValue),
-                                   Pool::insert(selector), Pool::insert(call)};
-    immediate_t i;
-    i.dispatch_stack_args = args_;
-    return BC(BC_t::dispatch_stack_, i);
 }
 
 CallSite::CallSite(BC bc, uint32_t* cs)

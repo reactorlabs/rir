@@ -67,13 +67,6 @@ typedef struct {
     uint32_t call_id;
     uint32_t nargs;
 } CallArgs;
-typedef struct {
-    uint32_t nargs;
-    pool_idx_t names;
-    pool_idx_t selector;
-    pool_idx_t call;
-} dispatch_stack_args_t;
-
 #pragma pack(pop)
 
 static constexpr size_t MAX_NUM_ARGS = 1L << (8 * sizeof(pool_idx_t));
@@ -116,7 +109,6 @@ class BC {
     // space required.
     union immediate_t {
         CallArgs call_args;
-        dispatch_stack_args_t dispatch_stack_args;
         pool_idx_t pool;
         fun_idx_t fun;
         num_args_t arg_idx;
@@ -145,7 +137,7 @@ class BC {
         if (bc == BC_t::call_stack_)
             return immediate.call_args.nargs + 1;
         if (bc == BC_t::dispatch_stack_)
-            return immediate.dispatch_stack_args.nargs;
+            return immediate.call_args.nargs;
         return popCount(bc);
     }
     inline size_t pushCount() { return pushCount(bc); }
@@ -191,7 +183,7 @@ class BC {
 
     bool isCallsite() {
         return bc == BC_t::call_ || bc == BC_t::dispatch_ ||
-               bc == BC_t::call_stack_;
+               bc == BC_t::call_stack_ || bc == BC_t::dispatch_stack_;
     }
 
     bool hasPromargs() {
@@ -210,8 +202,6 @@ class BC {
 
     // ==== Factory methods
     // to create new BC objects, which can be streamed to a CodeStream
-    static BC dispatch_stack(SEXP selector, uint32_t, std::vector<SEXP> names,
-                             SEXP call);
     inline static BC push(SEXP constant);
     inline static BC push(double constant);
     inline static BC push(int constant);

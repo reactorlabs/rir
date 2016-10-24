@@ -176,31 +176,7 @@ void CodeVerifier::vefifyFunctionLayout(SEXP sexp, ::Context* ctx) {
                 assert(TYPEOF(sym) == SYMSXP);
                 assert(strlen(CHAR(PRINTNAME(sym))));
             }
-            if (*cptr == BC_t::dispatch_stack_) {
-                unsigned* argsIndex = reinterpret_cast<ArgT*>(cptr + 1);
-                unsigned nargs = argsIndex[0];
-                // check the names vector
-                assert(argsIndex[1] < cp_pool_length(ctx) and
-                       "Invalid type of argument names index");
-                SEXP namesVec = cp_pool_at(ctx, argsIndex[1]);
-                if (namesVec != R_NilValue) {
-                    assert(TYPEOF(namesVec) == VECSXP and
-                           "Invalid type of argument names vector");
-                    assert((unsigned)Rf_length(namesVec) == nargs and
-                           "Names and args have different length");
-                }
-                SEXP call;
-                // check the call has an ast attached
-                if (*cptr == BC_t::call_stack_) {
-                    call = cp_pool_at(ctx, argsIndex[2]);
-                } else {
-                    SEXP selector = cp_pool_at(ctx, argsIndex[2]);
-                    assert(TYPEOF(selector) == SYMSXP);
-                    call = cp_pool_at(ctx, argsIndex[3]);
-                }
-                assert(TYPEOF(call) == LANGSXP);
-            }
-            if (*cptr == BC_t::call_stack_) {
+            if (*cptr == BC_t::dispatch_stack_ || *cptr == BC_t::call_stack_) {
                 unsigned callIdx = *reinterpret_cast<ArgT*>(cptr + 1);
                 uint32_t* cs = &c->callSites[callIdx];
                 uint32_t nargs = *reinterpret_cast<ArgT*>(cptr + 5);

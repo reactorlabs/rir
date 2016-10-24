@@ -165,7 +165,7 @@ DEF_INSTR(brobj_, 1, 1, 1, 0, 0)
 /**
  * brobj_:: branch if tos is object
  */
-DEF_INSTR(dispatch_stack_, 4, -1, 1, 0, 0)
+DEF_INSTR(dispatch_stack_, 2, -1, 1, 0, 0)
 /**
  * dispatch_stack_:: similar to dispatch, but all args on stack
  */

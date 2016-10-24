@@ -248,7 +248,7 @@ class ScopeResolution : public ForwardAnalysisIns<AbstractState<PointsTo>>,
 
     void dispatch_stack_(CodeEditor::Iterator ins) override {
         // function
-        current().pop((*ins).immediate.dispatch_stack_args.nargs);
+        current().pop((*ins).immediate.call_args.nargs);
         current().push(PointsTo::Type::AnyValue);
         doCall();
     }

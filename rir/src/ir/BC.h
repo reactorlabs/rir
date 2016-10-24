@@ -33,8 +33,6 @@ BC::immediate_t decodeImmediate(BC_t bc, BC_t* pc) {
         immediate.pool = *(pool_idx_t*)pc;
         break;
     case BC_t::dispatch_stack_:
-        immediate.dispatch_stack_args = *(dispatch_stack_args_t*)pc;
-        break;
     case BC_t::call_:
     case BC_t::dispatch_:
     case BC_t::call_stack_:
