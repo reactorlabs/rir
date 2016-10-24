@@ -965,7 +965,7 @@ void compileCall(Context& ctx, SEXP ast, SEXP fun, SEXP args) {
     }
     assert(callArgs.size() < MAX_NUM_ARGS);
 
-    cs << BC::call(callArgs, names, ast);
+    cs.insertCall(BC_t::call_, callArgs, names, ast);
 }
 
 // Lookup

@@ -31,6 +31,9 @@ class CodeStream {
 
     std::vector<unsigned> sources;
 
+    std::vector<uint32_t> callSites_;
+    unsigned nextCallSiteIdx_ = 0;
+
   public:
     Label mkLabel() {
         assert(nextLabel < MAX_JMP);
@@ -53,7 +56,65 @@ class CodeStream {
         code = new std::vector<char>(1024);
     }
 
+    CodeStream& insertCall(BC_t b, std::vector<fun_idx_t> args,
+                           std::vector<SEXP> names, SEXP call) {
+        insert(b);
+        insert(nextCallSiteIdx_);
+        sources.push_back(0);
+
+        auto nargs = args.size();
+        bool hasNames = false;
+        if (!names.empty())
+            for (auto n : names) {
+                if (n != R_NilValue) {
+                    hasNames = true;
+                    break;
+                }
+            }
+
+        unsigned needed = 3 + nargs + (hasNames ? nargs : 0);
+        if (callSites_.size() <= nextCallSiteIdx_ + needed)
+            callSites_.resize(needed + callSites_.size() * 1.5);
+
+        uint32_t* cs = &callSites_[nextCallSiteIdx_];
+        nextCallSiteIdx_ += needed;
+
+        *CallSite_nargs(cs) = nargs;
+        *CallSite_call(cs) = Pool::insert(call);
+        *CallSite_hasNames(cs) = hasNames;
+
+        int i = 0;
+        for (auto arg : args) {
+            CallSite_args(cs)[i] = arg;
+            if (hasNames)
+                CallSite_names(cs)[i] = Pool::insert(names[i]);
+            ++i;
+        }
+
+        return *this;
+    }
+
+    CodeStream& insertCall(BC_t b, uint32_t* callSite) {
+        insert(b);
+        insert(nextCallSiteIdx_);
+        sources.push_back(0);
+
+        auto nargs = *CallSite_nargs(callSite);
+        bool hasNames = *CallSite_hasNames(callSite);
+
+        unsigned needed = BC::CallSiteSize(b, nargs, hasNames);
+        if (callSites_.size() <= nextCallSiteIdx_ + needed)
+            callSites_.resize(needed + callSites_.size() * 1.5);
+
+        uint32_t* cs = &callSites_[nextCallSiteIdx_];
+        nextCallSiteIdx_ += needed;
+        memcpy(cs, callSite, needed * sizeof(uint32_t));
+
+        return *this;
+    }
+
     CodeStream& operator<<(const BC& b) {
+        assert(b.bc != BC_t::call_);
         if (b.bc == BC_t::label) {
             return *this << b.immediate.offset;
         }
@@ -98,6 +159,10 @@ class CodeStream {
             jmp_t j = target - pos - sizeof(jmp_t);
             *(jmp_t*)((uintptr_t)res.bc() + pos) = j;
         }
+
+        res.code->callSites = new uint32_t[callSites_.size()];
+        memcpy(res.code->callSites, callSites_.data(),
+               callSites_.size() * sizeof(uint32_t));
 
         label2pos.clear();
         patchpoints.clear();

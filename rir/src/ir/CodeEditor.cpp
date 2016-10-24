@@ -87,14 +87,45 @@ void CodeEditor::loadCode(FunctionHandle function, CodeHandle code) {
                         promises.resize(code.idx() + 1, nullptr);
 
                     promises[code.idx()] = p;
+                } else if (bc.bc == BC_t::call_) {
+                    auto oldCs = bc.callSite(code.code->callSites);
+
+                    auto nargs = bc.call_nargs_(oldCs);
+                    bool hasNames = bc.call_hasNames_(oldCs);
+
+                    unsigned needed = BC::CallSiteSize(bc.bc, nargs, hasNames);
+                    pos->callSite = new uint32_t[needed];
+
+                    uint32_t* cs = pos->callSite;
+
+                    *CallSite_nargs(cs) = nargs;
+                    *CallSite_call(cs) = *CallSite_call(oldCs);
+                    *CallSite_hasNames(cs) = hasNames;
+                    for (unsigned i = 0; i < nargs; ++i) {
+                        auto arg = CallSite_args(oldCs)[i];
+                        if (arg <= MAX_ARG_IDX) {
+                            CodeHandle code = function.codeAtOffset(arg);
+                            arg = code.idx();
+                            CodeEditor* p = new CodeEditor(code, nullptr);
+                            if (promises.size() <= code.idx())
+                                promises.resize(code.idx() + 1, nullptr);
+                            promises[code.idx()] = p;
+                        }
+                        CallSite_args(cs)[i] = arg;
+                        if (hasNames)
+                            CallSite_names(cs)[i] = CallSite_names(oldCs)[i];
+                    }
                 } else {
-                    auto argOffset = bc.immediateCallArgs();
-                    for (unsigned i = 0; i < bc.immediateCallNargs(); ++i) {
-                        if (argOffset[i] > MAX_ARG_IDX)
+                    auto oldCs = bc.callSite(code.code->callSites);
+                    auto nargs = bc.call_nargs_(oldCs);
+
+                    for (unsigned i = 0; i < nargs; ++i) {
+                        auto arg = bc.call_arg_idx_(oldCs, i);
+                        if (arg > MAX_ARG_IDX)
                             continue;
 
-                        CodeHandle code = function.codeAtOffset(argOffset[i]);
-                        argOffset[i] = code.idx();
+                        CodeHandle code = function.codeAtOffset(arg);
+                        bc.legacy_args_array()[i] = code.idx();
 
                         CodeEditor* p = new CodeEditor(code, nullptr);
 
@@ -155,7 +186,7 @@ void CodeEditor::print() {
     }
 }
 
-void CodeEditor::Cursor::print() { pos->bc.print(); }
+void CodeEditor::Cursor::print() { pos->bc.print_(pos->callSite); }
 
 unsigned CodeEditor::write(FunctionHandle& function) {
     CodeStream cs(function, ast);
@@ -168,18 +199,27 @@ unsigned CodeEditor::write(FunctionHandle& function) {
                 CodeEditor* e = promises[bc.immediate.fun];
                 bc.immediate.fun = e->write(function);
             } else {
-                auto arg = bc.immediateCallArgs();
-                auto nargs = bc.immediateCallNargs();
+                auto nargs = bc.call_nargs_(cur.callSite());
                 for (unsigned i = 0; i < nargs; ++i) {
-                    if (arg[i] > MAX_ARG_IDX)
-                        continue;
-                    assert(arg[i] < promises.size() && promises[arg[i]]);
-                    CodeEditor* e = promises[arg[i]];
-                    arg[i] = e->write(function);
+                    auto arg = bc.call_arg_idx_(cur.callSite(), i);
+                    if (arg <= MAX_ARG_IDX) {
+                        assert(arg < promises.size() && promises[arg]);
+                        CodeEditor* e = promises[arg];
+                        arg = e->write(function);
+                    }
+                    if (bc.bc == BC_t::call_) {
+                        CallSite_args(cur.callSite())[i] = arg;
+                    } else {
+                        bc.legacy_args_array()[i] = arg;
+                    }
                 }
             }
         }
-        cs << bc;
+
+        if (bc.bc == BC_t::call_)
+            cs.insertCall(BC_t::call_, cur.callSite());
+        else
+            cs << bc;
         if (cur.srcIdx())
             cs.addSrcIdx(cur.srcIdx());
     }

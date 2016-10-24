@@ -43,7 +43,8 @@ public:
         printOffset();
         Rprintf(" %5x ", pc_);
         BC bc = *ins;
-        bc.print();
+        // TODO(o)
+        //        bc.print();
         pc_ += bc.size();
     }
 

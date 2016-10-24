@@ -178,7 +178,6 @@ void printCode(Code* c) {
     Rprintf("  Source:    %u (index to src pool)\n", c->src);
     Rprintf("  Magic:     %x (hex)\n", c->magic);
     Rprintf("  Stack (o): %u\n", c->stackLength);
-    Rprintf("  Stack (i): %u\n", c->iStackLength);
     Rprintf("  Code size: %u [b]\n", c->codeSize);
     if (c->magic != CODE_MAGIC)
         Rf_error("Wrong magic number -- corrupted IR bytecode");

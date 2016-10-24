@@ -346,6 +346,66 @@ SEXP createArgsListStack(Code* c, size_t nargs, SEXP names, SEXP env, SEXP call,
     return result;
 }
 
+SEXP createArgsListNew(Code* c, SEXP call, size_t nargs, uint32_t* cs, SEXP env,
+                       Context* ctx, bool eager) {
+    // for (int i = 0; i < nargs; ++i)
+    //     printf("%x\n", call);
+    SEXP result = R_NilValue;
+    SEXP pos = result;
+
+    // loop through the arguments and create a promise, unless it is a missing
+    // argument
+    bool hasNames = *CallSite_hasNames(cs);
+
+    for (size_t i = 0; i < nargs; ++i) {
+        unsigned argi = CallSite_args(cs)[i];
+        SEXP name =
+            hasNames ? cp_pool_at(ctx, CallSite_names(cs)[i]) : R_NilValue;
+
+        // if the argument is an ellipsis, then retrieve it from the environment
+        // and
+        // flatten the ellipsis
+        if (argi == DOTS_ARG_IDX) {
+            SEXP ellipsis = findVar(R_DotsSymbol, env);
+            if (TYPEOF(ellipsis) == DOTSXP) {
+                while (ellipsis != R_NilValue) {
+                    name = TAG(ellipsis);
+                    if (eager) {
+                        SEXP arg = CAR(ellipsis);
+                        if (arg != R_MissingArg)
+                            arg = rirEval(CAR(ellipsis), env);
+                        assert(TYPEOF(arg) != PROMSXP);
+                        __listAppend(&result, &pos, arg, name);
+                    } else {
+                        SEXP promise = mkPROMISE(CAR(ellipsis), env);
+                        __listAppend(&result, &pos, promise, name);
+                    }
+                    ellipsis = CDR(ellipsis);
+                }
+            }
+        } else if (argi == MISSING_ARG_IDX) {
+            if (eager)
+                Rf_errorcall(call, "argument %d is empty", i + 1);
+            __listAppend(&result, &pos, R_MissingArg, R_NilValue);
+        } else {
+            if (eager) {
+                SEXP arg = evalRirCode(codeAt(function(c), argi), ctx, env, 0);
+                arg = escape(arg);
+                assert(TYPEOF(arg) != PROMSXP);
+                __listAppend(&result, &pos, arg, name);
+            } else {
+                Code* arg = codeAt(function(c), argi);
+                SEXP promise = createPromise(arg, env);
+                __listAppend(&result, &pos, promise, name);
+            }
+        }
+    }
+
+    if (result != R_NilValue)
+        UNPROTECT(1);
+    return result;
+}
+
 SEXP createArgsList(Code* c, FunctionIndex* args, SEXP call, size_t nargs,
                     SEXP names, SEXP env, Context* ctx, bool eager) {
     // for (int i = 0; i < nargs; ++i)
@@ -445,7 +505,13 @@ INLINE SEXP rirCallClosure(SEXP call, SEXP env, SEXP callee, SEXP actuals,
     // Exec the closure
     closureDebug(call, callee, env, newEnv, cntxt);
     SEXP body = BODY(callee);
-    Code* code = functionCode((Function*)INTEGER(body));
+    Function* fun = (Function*)INTEGER(body);
+    fun->invocationCount++;
+    if (fun->invocationCount > 1000) {
+        printf("Hot %p\n", fun);
+        fun->invocationCount = 0;
+    }
+    Code* code = functionCode(fun);
 
     SEXP result = rirCallTrampoline(cntxt, code, newEnv, nargs, ctx);
 
@@ -496,8 +562,12 @@ void warnSpecial(SEXP callee, SEXP call) {
   TODO this is currently super simple.
 
  */
-SEXP doCall(Code* caller, SEXP call, SEXP callee, unsigned* args, size_t nargs,
-            SEXP names, SEXP env, OpcodeT** pc, Context* ctx) {
+SEXP doCall(Code* caller, SEXP callee, unsigned id, SEXP env, OpcodeT** pc,
+            Context* ctx) {
+
+    uint32_t* cs = &caller->callSites[id];
+    SEXP call = cp_pool_at(ctx, *CallSite_call(cs));
+    uint32_t nargs = *CallSite_nargs(cs);
 
     SEXP result = R_NilValue;
     switch (TYPEOF(callee)) {
@@ -521,7 +591,7 @@ SEXP doCall(Code* caller, SEXP call, SEXP callee, unsigned* args, size_t nargs,
         int flag = getFlag(callee);
         // create the argslist
         SEXP argslist =
-            createArgsList(caller, args, call, nargs, names, env, ctx, true);
+            createArgsListNew(caller, call, nargs, cs, env, ctx, true);
         // callit
         PROTECT(argslist);
         if (flag < 2) R_Visible = flag != 1;
@@ -534,17 +604,17 @@ SEXP doCall(Code* caller, SEXP call, SEXP callee, unsigned* args, size_t nargs,
         break;
     }
     case CLOSXP: {
-        SEXP actuals;
-        actuals =
-            createArgsList(caller, args, call, nargs, names, env, ctx, false);
-        PROTECT(actuals);
+        SEXP argslist =
+            createArgsListNew(caller, call, nargs, cs, env, ctx, false);
+        PROTECT(argslist);
 #if RIR_AS_PACKAGE == 0
         // if body is INTSXP, it is rir serialized code, execute it directly
         SEXP body = BODY(callee);
         assert(TYPEOF(body) == INTSXP || !COMPILE_ON_DEMAND);
         if (USE_RIR_CONTEXT_SETUP && TYPEOF(body) == INTSXP) {
             assert(isValidFunctionSEXP(body));
-            result = rirCallClosure(call, env, callee, actuals, nargs, pc, ctx);
+            result =
+                rirCallClosure(call, env, callee, argslist, nargs, pc, ctx);
             UNPROTECT(1);
             break;
         }
@@ -553,7 +623,7 @@ SEXP doCall(Code* caller, SEXP call, SEXP callee, unsigned* args, size_t nargs,
 
         // Store and restore stack status in case we get back here through
         // non-local return
-        result = applyClosure(call, callee, actuals, env, R_NilValue);
+        result = applyClosure(call, callee, argslist, env, R_NilValue);
         UNPROTECT(1); // argslist
         break;
     }
@@ -965,20 +1035,11 @@ INSTRUCTION(call_stack_) {
 
 INSTRUCTION(call_) {
     // get the indices of argument promises
-    SEXP args_ = readConst(ctx, pc);
-    SLOWASSERT(TYPEOF(args_) == INTSXP &&
-               "TODO change to INTSXP, not RAWSXP it used to be");
-    unsigned nargs = LENGTH(args_) / sizeof(unsigned);
-    unsigned* args = (unsigned*)INTEGER(args_);
-    // get the names of the arguments (or R_NilValue) if none
-    SEXP names = readConst(ctx, pc);
+    unsigned id = readImmediate(pc);
     // get the closure itself
     SEXP cls = ostack_pop(ctx);
-    // get the call
-    SEXP call = readConst(ctx, pc);
-
     PROTECT(cls);
-    ostack_push(ctx, doCall(c, call, cls, args, nargs, names, env, pc, ctx));
+    ostack_push(ctx, doCall(c, cls, id, env, pc, ctx));
     UNPROTECT(1);
 }
 

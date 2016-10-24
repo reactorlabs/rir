@@ -24,7 +24,7 @@ void CodeHandle::print() {
         }
         Rprintf(" %5d ", ((uintptr_t)pc - (uintptr_t)bc()));
         BC bc = BC::advance(&pc);
-        bc.print();
+        bc.print_(&code->callSites[bc.immediate.call_id]);
     }
 }
 

@@ -20,9 +20,6 @@ class State {
     static_assert(sizeof(SEXP) == 8, "Invalid ptr size");
     static_assert(sizeof(unsigned) == 4, "Invalid unsigned size");
 
-    static_assert(sizeof(::Code) == 8 * 4, "Invalid ::Code size");
-    static_assert(sizeof(::Function) == 6 * 4, "Invalid ::Function size");
-
     BC_t* pc;
     int ostack;
 
@@ -213,7 +210,35 @@ void CodeVerifier::vefifyFunctionLayout(SEXP sexp, ::Context* ctx) {
                     }
                 assert(ok and "Invalid promise offset detected");
             }
-            if (*cptr == BC_t::call_ || *cptr == BC_t::dispatch_) {
+            if (*cptr == BC_t::call_) {
+                unsigned callIdx = *reinterpret_cast<ArgT*>(cptr + 1);
+                uint32_t* cs = &c->callSites[callIdx];
+                uint32_t nargs = *CallSite_nargs(cs);
+
+                for (size_t i = 0, e = nargs; i != e; ++i) {
+                    uint32_t offset = CallSite_args(cs)[i];
+                    if (offset == MISSING_ARG_IDX || offset == DOTS_ARG_IDX)
+                        continue;
+                    bool ok = false;
+                    for (Code* c : objs)
+                        if (c->header == offset) {
+                            ok = true;
+                            break;
+                        }
+                    assert(ok and "Invalid promise offset detected");
+                }
+                if (*CallSite_hasNames(cs)) {
+                    for (size_t i = 0, e = nargs; i != e; ++i) {
+                        uint32_t offset = CallSite_names(cs)[i];
+                        if (offset) {
+                            SEXP name = cp_pool_at(ctx, offset);
+                            assert(TYPEOF(name) == SYMSXP ||
+                                   name == R_NilValue);
+                        }
+                    }
+                }
+            }
+            if (*cptr == BC_t::dispatch_) {
                 unsigned* argsIndex = reinterpret_cast<ArgT*>(cptr + 1);
                 assert(*argsIndex < cp_pool_length(ctx) and "Invalid arglist index");
                 SEXP argsVec = cp_pool_at(ctx, *argsIndex);
@@ -221,7 +246,8 @@ void CodeVerifier::vefifyFunctionLayout(SEXP sexp, ::Context* ctx) {
                        "Invalid type of arguents vector");
                 // check that the promise offsets are valid offsets within the
                 // function
-                for (size_t i = 0, e = cur.immediateCallNargs(); i != e; ++i) {
+                uint32_t* cs = cur.callSite(c->callSites);
+                for (size_t i = 0, e = cur.call_nargs_(cs); i != e; ++i) {
                     unsigned offset = INTEGER(argsVec)[i];
                     if (offset == MISSING_ARG_IDX || offset == DOTS_ARG_IDX)
                         continue;
@@ -241,7 +267,7 @@ void CodeVerifier::vefifyFunctionLayout(SEXP sexp, ::Context* ctx) {
                     assert(TYPEOF(namesVec) == VECSXP and
                            "Invalid type of argument names vector");
                     assert((unsigned)Rf_length(namesVec) ==
-                               cur.immediateCallNargs() and
+                               cur.call_nargs_(cs) and
                            "Names and args have different length");
                 }
                 if (*cptr == BC_t::dispatch_) {

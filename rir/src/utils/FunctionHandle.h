@@ -38,6 +38,7 @@ class FunctionHandle {
         function->origin = nullptr;
         function->codeLength = 0;
         function->foffset = 0;
+        function->invocationCount = 0;
 
         return FunctionHandle(store);
     }

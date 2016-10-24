@@ -28,9 +28,7 @@ bool BC::operator==(const BC& other) const {
         return immediate.pool == other.immediate.pool;
 
     case BC_t::call_:
-        return immediate.call_args.args == other.immediate.call_args.args &&
-               immediate.call_args.names == other.immediate.call_args.names &&
-               immediate.call_args.call == other.immediate.call_args.call;
+        return immediate.call_id == other.immediate.call_id;
 
     case BC_t::dispatch_:
         return immediate.dispatch_args.args ==
@@ -140,7 +138,7 @@ void BC::write(CodeStream& cs) const {
         return;
 
     case BC_t::call_:
-        cs.insert(immediate.call_args);
+        cs.insert(immediate.call_id);
         break;
 
     case BC_t::dispatch_:
@@ -222,34 +220,14 @@ void BC::write(CodeStream& cs) const {
 
 SEXP BC::immediateConst() { return Pool::get(immediate.pool); }
 
-fun_idx_t* BC::immediateCallArgs() {
-    switch (bc) {
-    case BC_t::call_: {
-        SEXP c = Pool::get(immediate.call_args.args);
-        assert(TYPEOF(c) == INTSXP);
-        return (fun_idx_t*)INTEGER(c);
-    }
-    case BC_t::dispatch_: {
-        SEXP c = Pool::get(immediate.dispatch_args.args);
-        assert(TYPEOF(c) == INTSXP);
-        return (fun_idx_t*)INTEGER(c);
-    }
-    default:
-        assert(false);
-    }
-    return nullptr;
-}
-num_args_t BC::immediateCallNargs() {
+num_args_t BC::call_nargs_(uint32_t* cs) {
     switch (bc) {
     case BC_t::call_stack_:
         return immediate.call_stack_args.nargs;
     case BC_t::dispatch_stack_:
         return immediate.dispatch_stack_args.nargs;
     case BC_t::call_: {
-        size_t nargs =
-            Rf_length(Pool::get(immediate.call_args.args)) / sizeof(fun_idx_t);
-        assert(nargs < MAX_NUM_ARGS);
-        return (num_args_t)nargs;
+        return *CallSite_nargs(cs);
     }
     case BC_t::dispatch_: {
         size_t nargs = Rf_length(Pool::get(immediate.dispatch_args.args)) /
@@ -266,14 +244,50 @@ num_args_t BC::immediateCallNargs() {
     assert(false);
     return 0;
 }
-SEXP BC::immediateCallNames() {
+
+SEXP BC::call_call_(uint32_t* cs) {
+    assert(bc == BC_t::call_);
+    return Pool::get(*CallSite_call(cs));
+}
+
+uint32_t* BC::callSite(uint32_t* callSites) {
+    // TODO!!
+    // assert(bc == BC_t::call_);
+    if (bc != BC_t::call_)
+        return 0;
+    return &callSites[immediate.call_id];
+}
+
+fun_idx_t BC::call_arg_idx_(uint32_t* cs, num_args_t idx) {
+    switch (bc) {
+    case BC_t::call_: {
+        return CallSite_args(cs)[idx];
+    }
+    case BC_t::dispatch_: {
+        SEXP c = Pool::get(immediate.dispatch_args.args);
+        assert(TYPEOF(c) == INTSXP);
+        return ((fun_idx_t*)INTEGER(c))[idx];
+    }
+    default:
+        assert(false);
+    }
+    return 0;
+}
+
+pool_idx_t* BC::legacy_args_array() {
+    SEXP c = Pool::get(immediate.dispatch_args.args);
+    assert(TYPEOF(c) == INTSXP);
+    return ((fun_idx_t*)INTEGER(c));
+}
+
+bool BC::call_hasNames_(uint32_t* cs) {
     pool_idx_t names = 0;
     switch (bc) {
+    case BC_t::call_: {
+        return *CallSite_hasNames(cs);
+    }
     case BC_t::call_stack_:
         names = immediate.call_stack_args.names;
-        break;
-    case BC_t::call_:
-        names = immediate.call_args.names;
         break;
     case BC_t::dispatch_:
         names = immediate.dispatch_args.names;
@@ -284,10 +298,67 @@ SEXP BC::immediateCallNames() {
     default:
         assert(false);
     }
-    return names ? Pool::get(names) : nullptr;
+    return names;
 }
 
-void BC::print() {
+// pool_idx_t BC::call_name_idx(uint32_t* callSites, num_args_t idx) {
+//     assert(bc == BC_t::call_);
+//     uint32_t* cs = &callSites[immediate.call_id];
+//     return CallSite_names(cs)[idx];
+// }
+
+SEXP BC::call_name_(uint32_t* cs, num_args_t idx) {
+    pool_idx_t names = 0;
+    switch (bc) {
+    case BC_t::call_stack_:
+        names = immediate.call_stack_args.names;
+        break;
+    case BC_t::call_: {
+        auto n = CallSite_names(cs)[idx];
+        return Pool::get(n);
+    }
+    case BC_t::dispatch_:
+        names = immediate.dispatch_args.names;
+        break;
+    case BC_t::dispatch_stack_:
+        names = immediate.dispatch_stack_args.names;
+        break;
+    default:
+        assert(false);
+    }
+    return names ? VECTOR_ELT(Pool::get(names), idx) : nullptr;
+}
+
+void BC::printArgs(uint32_t* cs) {
+    num_args_t nargs = call_nargs_(cs);
+    Rprintf("[");
+    for (unsigned i = 0; i < nargs; ++i) {
+        auto arg = call_arg_idx_(cs, i);
+        if (arg == MISSING_ARG_IDX)
+            Rprintf(" _");
+        else if (arg == DOTS_ARG_IDX)
+            Rprintf(" ...");
+        else
+            Rprintf(" %x", arg);
+    }
+    Rprintf("] ");
+}
+
+void BC::printNames(uint32_t* cs) {
+    if (call_hasNames_(cs)) {
+        num_args_t nargs = call_nargs_(cs);
+        Rprintf("[");
+        for (unsigned i = 0; i < nargs; ++i) {
+            SEXP n = call_name_(cs, i);
+            Rprintf(
+                " %s",
+                (n == nullptr || n == R_NilValue ? "_" : CHAR(PRINTNAME(n))));
+        }
+        Rprintf("]");
+    }
+}
+
+void BC::print_(uint32_t* cs) {
     if (bc != BC_t::label) {
         Rprintf("   ");
         Rprintf("%s ", name(bc));
@@ -301,78 +372,30 @@ void BC::print() {
     case BC_t::dispatch_: {
         SEXP selector = Pool::get(immediate.dispatch_args.selector);
         Rprintf(" `%s` ", CHAR(PRINTNAME(selector)));
-
-        fun_idx_t* args = immediateCallArgs();
-        num_args_t nargs = immediateCallNargs();
-        Rprintf("[");
-        for (unsigned i = 0; i < nargs; ++i) {
-            if (args[i] == MISSING_ARG_IDX)
-                Rprintf(" _");
-            else if (args[i] == DOTS_ARG_IDX)
-                Rprintf(" ...");
-            else
-                Rprintf(" %x", args[i]);
-        }
-        Rprintf("] ");
-        SEXP names = immediateCallNames();
-        if (names != R_NilValue) {
-            Rprintf("[");
-            for (auto n : RVector(names)) {
-                Rprintf(" %s", (n == R_NilValue ? "_" : CHAR(PRINTNAME(n))));
-            }
-            Rprintf("]");
-        }
+        printArgs(cs);
+        printNames(cs);
         break;
     }
     case BC_t::call_: {
-        fun_idx_t* args = immediateCallArgs();
-        num_args_t nargs = immediateCallNargs();
-        Rprintf("[");
-        for (unsigned i = 0; i < nargs; ++i) {
-            if (args[i] == MISSING_ARG_IDX)
-                Rprintf(" _");
-            else if (args[i] == DOTS_ARG_IDX)
-                Rprintf(" ...");
-            else
-                Rprintf(" %x", args[i]);
-        }
-        Rprintf("] ");
-        SEXP names = immediateCallNames();
-        if (names != R_NilValue) {
-            Rprintf("[");
-            for (auto n : RVector(names)) {
-                Rprintf(" %s", (n == R_NilValue ? "_" : CHAR(PRINTNAME(n))));
-            }
-            Rprintf("]");
-        }
+        printArgs(cs);
+        printNames(cs);
+        SEXP call = call_call_(cs);
+        Rprintf("  # ");
+        Rf_PrintValue(call);
         break;
     }
     case BC_t::call_stack_: {
-        num_args_t nargs = immediateCallNargs();
+        num_args_t nargs = call_nargs_(cs);
         Rprintf(" %d ", nargs);
-        SEXP names = immediateCallNames();
-        if (names != R_NilValue) {
-            Rprintf("[");
-            for (auto n : RVector(names)) {
-                Rprintf(" %s", (n == R_NilValue ? "_" : CHAR(PRINTNAME(n))));
-            }
-            Rprintf("]");
-        }
+        printNames(cs);
         break;
     }
     case BC_t::dispatch_stack_: {
         SEXP selector = Pool::get(immediate.dispatch_stack_args.selector);
         Rprintf(" `%s` ", CHAR(PRINTNAME(selector)));
-        num_args_t nargs = immediateCallNargs();
+        num_args_t nargs = call_nargs_(cs);
         Rprintf(" %d ", nargs);
-        SEXP names = immediateCallNames();
-        if (names != R_NilValue) {
-            Rprintf("[");
-            for (auto n : RVector(names)) {
-                Rprintf(" %s", (n == R_NilValue ? "_" : CHAR(PRINTNAME(n))));
-            }
-            Rprintf("]");
-        }
+        printNames(cs);
         break;
     }
     case BC_t::push_:
@@ -533,46 +556,9 @@ BC BC::dispatch(SEXP selector, std::vector<fun_idx_t> args,
     return BC(BC_t::dispatch_, i);
 }
 
-BC BC::call(std::vector<fun_idx_t> args, std::vector<SEXP> names, SEXP call) {
-    assert(args.size() == names.size() || names.empty());
-    assert(args.size() <= MAX_ARG_IDX);
-
-    Protect p;
-    SEXP a = Rf_allocVector(INTSXP, sizeof(fun_idx_t) * args.size());
-    p(a);
-
-    fun_idx_t* argsArray = (fun_idx_t*)INTEGER(a);
-    for (size_t i = 0; i < args.size(); ++i) {
-        argsArray[i] = args[i];
-    }
-
-    bool hasNames = false;
-    if (!names.empty())
-        for (auto n : names) {
-            if (n != R_NilValue) {
-                hasNames = true;
-                break;
-            }
-        }
-
-    SEXP n;
-    if (hasNames) {
-        n = Rf_allocVector(VECSXP, names.size());
-        p(n);
-        for (size_t i = 0; i < args.size(); ++i) {
-            SET_VECTOR_ELT(n, i, names[i]);
-        }
-        call_args_t args_ = {Pool::insert(a), Pool::insert(n),
-                             Pool::insert(call)};
-        immediate_t i;
-        i.call_args = args_;
-        return BC(BC_t::call_, i);
-    }
-
-    call_args_t args_ = {Pool::insert(a), Pool::insert(R_NilValue),
-                         Pool::insert(call)};
+BC BC::call(uint32_t id) {
     immediate_t i;
-    i.call_args = args_;
+    i.call_id = id;
     return BC(BC_t::call_, i);
 }
 

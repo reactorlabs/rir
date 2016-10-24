@@ -67,11 +67,6 @@ typedef jmp_t Label;
 typedef struct {
     pool_idx_t args;
     pool_idx_t names;
-    pool_idx_t call;
-} call_args_t;
-typedef struct {
-    pool_idx_t args;
-    pool_idx_t names;
     pool_idx_t selector;
     pool_idx_t call;
 } dispatch_args_t;
@@ -108,7 +103,7 @@ class BC {
     // On the bytecode stream each immediate argument uses only the actual
     // space required.
     union immediate_t {
-        call_args_t call_args;
+        uint32_t call_id;
         dispatch_args_t dispatch_args;
         dispatch_stack_args_t dispatch_stack_args;
         call_stack_args_t call_stack_args;
@@ -151,13 +146,25 @@ class BC {
     void write(CodeStream& cs) const;
 
     // Print it to stdout
-    void print();
+    void print_(uint32_t* callSites);
+    void printArgs(uint32_t* callSites);
+    void printNames(uint32_t* callSites);
 
     // Accessors to load immediate constant from the pool
     SEXP immediateConst();
-    fun_idx_t* immediateCallArgs();
-    num_args_t immediateCallNargs();
-    SEXP immediateCallNames();
+
+    uint32_t* callSite(uint32_t* callSites);
+    num_args_t call_nargs_(uint32_t* callSites);
+    SEXP call_call_(uint32_t* callSites);
+    fun_idx_t call_arg_idx_(uint32_t* callSites, num_args_t idx);
+    bool call_hasNames_(uint32_t* callSites);
+    SEXP call_name_(uint32_t* callSites, num_args_t idx);
+    pool_idx_t* legacy_args_array();
+
+    static unsigned CallSiteSize(BC_t bc, unsigned nargs, bool hasNames) {
+        assert(bc == BC_t::call_);
+        return 3 + nargs + (hasNames ? nargs : 0);
+    }
 
     inline static BC_t* jmpTarget(BC_t* pos) {
         BC bc = BC::decode(pos);
@@ -181,8 +188,7 @@ class BC {
 
     // ==== Factory methods
     // to create new BC objects, which can be streamed to a CodeStream
-    static BC call(std::vector<fun_idx_t> args, std::vector<SEXP> names,
-                   SEXP call);
+    static BC call(uint32_t id);
     static BC dispatch(SEXP selector, std::vector<fun_idx_t> args,
                        std::vector<SEXP> names, SEXP call);
     static BC call_stack(uint32_t, std::vector<SEXP> names, SEXP call);

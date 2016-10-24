@@ -42,7 +42,7 @@ BC::immediate_t decodeImmediate(BC_t bc, BC_t* pc) {
         immediate.dispatch_stack_args = *(dispatch_stack_args_t*)pc;
         break;
     case BC_t::call_:
-        immediate.call_args = *(call_args_t*)pc;
+        immediate.call_id = *(uint32_t*)pc;
         break;
     case BC_t::promise_:
     case BC_t::push_code_:

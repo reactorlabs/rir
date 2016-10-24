@@ -124,6 +124,7 @@ struct Function; // Forward declaration
  */
 #pragma pack(push)
 #pragma pack(1)
+
 typedef struct Code {
     unsigned magic; ///< Magic number that attempts to be PROMSXP already marked
     /// by the GC
@@ -135,17 +136,27 @@ typedef struct Code {
 
     unsigned stackLength; /// Number of slots in stack required
 
-    unsigned iStackLength; /// Number of slots in the integer stack required
-
     unsigned codeSize; /// bytes of code (not padded)
 
     unsigned skiplistLength; /// number of skiplist entries
 
     unsigned srcLength; /// number of instructions
 
+    uint32_t* callSites;
+
     uint8_t data[]; /// the instructions
 } Code;
 #pragma pack(pop)
+
+// Accessors to the call site
+INLINE uint32_t* CallSite_nargs(uint32_t* callSite) { return callSite; }
+INLINE uint32_t* CallSite_call(uint32_t* callSite) { return callSite + 1; }
+INLINE uint32_t* CallSite_hasNames(uint32_t* callSite) { return callSite + 2; }
+INLINE uint32_t* CallSite_args(uint32_t* callSite) { return callSite + 3; }
+INLINE uint32_t* CallSite_names(uint32_t* callSite) {
+    assert(*CallSite_hasNames(callSite));
+    return callSite + 3 + *CallSite_nargs(callSite);
+}
 
 /** Returns whether the SEXP appears to be valid promise, i.e. a pointer into
  * the middle of the linearized code.
@@ -268,6 +279,8 @@ struct Function {
     unsigned magic; /// used to detect Functions 0xCAFEBABE
 
     unsigned size; /// Size, in bytes, of the function and its data
+
+    unsigned invocationCount;
 
     FunctionSEXP
         origin; /// Same Function with fewer optimizations, NULL if original
