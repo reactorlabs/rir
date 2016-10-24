@@ -34,7 +34,7 @@ DEF_INSTR(ldarg_, 1, 0, 1, 0, 0)
 /**
  * ldarg_:: like ldvar but guaranteed to be an argument
  */
-DEF_INSTR(call_, 1, 1, 1, 0, 0)
+DEF_INSTR(call_, 2, 1, 1, 0, 0)
 /**
  * call_:: ... Takes a list of code objects, which represent the arguments, decides on eager/lazy evaluation and does the right thing with the code objs.
  */
@@ -169,7 +169,7 @@ DEF_INSTR(dispatch_stack_, 4, -1, 1, 0, 0)
 /**
  * dispatch_stack_:: similar to dispatch, but all args on stack
  */
-DEF_INSTR(dispatch_, 1, 1, 1, 0, 0)
+DEF_INSTR(dispatch_, 2, 1, 1, 0, 0)
 /**
  * dispatch_:: similar to call, but receiver is tos and 3rd immediate
  *             is selector

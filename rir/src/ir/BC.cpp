@@ -29,7 +29,7 @@ bool BC::operator==(const BC& other) const {
 
     case BC_t::dispatch_:
     case BC_t::call_:
-        return immediate.call_id == other.immediate.call_id;
+        return immediate.call_args.call_id == other.immediate.call_args.call_id;
 
     case BC_t::dispatch_stack_:
         return immediate.dispatch_stack_args.nargs ==
@@ -130,7 +130,7 @@ void BC::write(CodeStream& cs) const {
 
     case BC_t::call_:
     case BC_t::dispatch_:
-        cs.insert(immediate.call_id);
+        assert(false);
         break;
 
     case BC_t::dispatch_stack_:
@@ -423,15 +423,16 @@ BC BC::call_stack(unsigned nargs, std::vector<SEXP> names, SEXP call) {
     return BC(BC_t::call_stack_, i);
 }
 
-CallSite::CallSite(BC bc, uint32_t* cs) : bc(bc.bc), cs(cs) {
+CallSite::CallSite(BC bc, uint32_t* cs)
+    : bc(bc.bc), cs(cs), n(bc.immediate.call_args.nargs) {
     assert(bc.isCallsite());
 }
 
-SEXP CallSite::selector() {
-    return Pool::get(*CallSite_selector(cs));
-}
+SEXP CallSite::selector() { return Pool::get(*CallSite_selector(cs, n)); }
 
 SEXP CallSite::call() { return Pool::get(*CallSite_call(cs)); }
 
-SEXP CallSite::name(pool_idx_t i) { return Pool::get(CallSite_names(cs)[i]); }
+SEXP CallSite::name(pool_idx_t i) {
+    return Pool::get(CallSite_names(cs, n)[i]);
+}
 }

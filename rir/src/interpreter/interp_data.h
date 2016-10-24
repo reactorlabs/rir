@@ -149,17 +149,16 @@ typedef struct Code {
 #pragma pack(pop)
 
 // Accessors to the call site
-INLINE uint32_t* CallSite_nargs(uint32_t* callSite) { return callSite; }
+INLINE uint32_t* CallSite_call(uint32_t* callSite) { return callSite; }
 INLINE uint32_t* CallSite_hasNames(uint32_t* callSite) { return callSite + 1; }
-INLINE uint32_t* CallSite_call(uint32_t* callSite) { return callSite + 2; }
-INLINE uint32_t* CallSite_args(uint32_t* callSite) { return callSite + 3; }
-INLINE uint32_t* CallSite_names(uint32_t* callSite) {
+INLINE uint32_t* CallSite_args(uint32_t* callSite) { return callSite + 2; }
+INLINE uint32_t* CallSite_names(uint32_t* callSite, uint32_t nargs) {
     assert(*CallSite_hasNames(callSite));
-    return callSite + 3 + *CallSite_nargs(callSite);
+    return callSite + 2 + nargs;
 }
-INLINE uint32_t* CallSite_selector(uint32_t* callSite) {
+INLINE uint32_t* CallSite_selector(uint32_t* callSite, uint32_t nargs) {
     bool hasNames = *CallSite_hasNames(callSite);
-    return callSite + 3 + *CallSite_nargs(callSite) * (hasNames ? 2 : 1);
+    return callSite + 2 + nargs * (hasNames ? 2 : 1);
 }
 
 /** Returns whether the SEXP appears to be valid promise, i.e. a pointer into

@@ -64,6 +64,10 @@ typedef uint32_t num_args_t;
 typedef int32_t jmp_t;
 typedef jmp_t Label;
 typedef struct {
+    uint32_t call_id;
+    uint32_t nargs;
+} CallArgs;
+typedef struct {
     uint32_t nargs;
     pool_idx_t names;
     pool_idx_t call;
@@ -95,12 +99,13 @@ class CallSite {
   public:
     BC_t bc = BC_t::invalid_;
     uint32_t* cs = nullptr;
+    uint32_t n = 0;
 
     CallSite(){};
     CallSite(BC bc, uint32_t* cs);
 
     bool isValid() { return cs != nullptr; }
-    num_args_t nargs() { return *CallSite_nargs(cs); }
+    num_args_t nargs() { return n; }
     SEXP call();
     fun_idx_t arg(num_args_t idx) { return CallSite_args(cs)[idx]; }
     bool hasNames() { return *CallSite_hasNames(cs); }
@@ -115,7 +120,7 @@ class BC {
     // On the bytecode stream each immediate argument uses only the actual
     // space required.
     union immediate_t {
-        uint32_t call_id;
+        CallArgs call_args;
         dispatch_stack_args_t dispatch_stack_args;
         call_stack_args_t call_stack_args;
         pool_idx_t pool;
@@ -165,15 +170,15 @@ class BC {
     SEXP immediateConst();
 
     CallSite callSite(uint32_t* callSites) {
-        return CallSite(bc, &callSites[immediate.call_id]);
+        return CallSite(bc, &callSites[immediate.call_args.call_id]);
     }
 
     static unsigned CallSiteSize(BC_t bc, unsigned nargs, bool hasNames) {
         switch (bc) {
         case BC_t::call_:
-            return 3 + nargs + (hasNames ? nargs : 0);
+            return 2 + nargs + (hasNames ? nargs : 0);
         case BC_t::dispatch_:
-            return 4 + nargs + (hasNames ? nargs : 0);
+            return 3 + nargs + (hasNames ? nargs : 0);
         default:
             assert(false);
         }

@@ -32,7 +32,7 @@ class CodeStream {
     std::vector<unsigned> sources;
 
     std::vector<uint32_t> callSites_;
-    unsigned nextCallSiteIdx_ = 0;
+    uint32_t nextCallSiteIdx_ = 0;
 
   public:
     Label mkLabel() {
@@ -59,11 +59,15 @@ class CodeStream {
     CodeStream& insertCall(BC_t bc, std::vector<fun_idx_t> args,
                            std::vector<SEXP> names, SEXP call,
                            SEXP selector = nullptr) {
+        uint32_t nargs = args.size();
+
         insert(bc);
-        insert(nextCallSiteIdx_);
+        CallArgs a;
+        a.call_id = nextCallSiteIdx_;
+        a.nargs = nargs;
+        insert(a);
         sources.push_back(0);
 
-        auto nargs = args.size();
         bool hasNames = false;
         if (!names.empty())
             for (auto n : names) {
@@ -80,7 +84,6 @@ class CodeStream {
         uint32_t* cs = &callSites_[nextCallSiteIdx_];
         nextCallSiteIdx_ += needed;
 
-        *CallSite_nargs(cs) = nargs;
         *CallSite_call(cs) = Pool::insert(call);
         *CallSite_hasNames(cs) = hasNames;
 
@@ -88,14 +91,14 @@ class CodeStream {
         for (auto arg : args) {
             CallSite_args(cs)[i] = arg;
             if (hasNames)
-                CallSite_names(cs)[i] = Pool::insert(names[i]);
+                CallSite_names(cs, nargs)[i] = Pool::insert(names[i]);
             ++i;
         }
 
         if (bc == BC_t::dispatch_) {
             assert(selector);
             assert(TYPEOF(selector) == SYMSXP);
-            *CallSite_selector(cs) = Pool::insert(selector);
+            *CallSite_selector(cs, nargs) = Pool::insert(selector);
         }
 
         return *this;
@@ -104,6 +107,7 @@ class CodeStream {
     CodeStream& insertWithCallSite(BC_t b, CallSite callSite) {
         insert(b);
         insert(nextCallSiteIdx_);
+        insert(callSite.nargs());
         sources.push_back(0);
 
         auto nargs = callSite.nargs();

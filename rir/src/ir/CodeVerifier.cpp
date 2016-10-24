@@ -213,7 +213,7 @@ void CodeVerifier::vefifyFunctionLayout(SEXP sexp, ::Context* ctx) {
             if (*cptr == BC_t::call_ || *cptr == BC_t::dispatch_) {
                 unsigned callIdx = *reinterpret_cast<ArgT*>(cptr + 1);
                 uint32_t* cs = &c->callSites[callIdx];
-                uint32_t nargs = *CallSite_nargs(cs);
+                uint32_t nargs = *reinterpret_cast<ArgT*>(cptr + 5);
 
                 for (size_t i = 0, e = nargs; i != e; ++i) {
                     uint32_t offset = CallSite_args(cs)[i];
@@ -229,7 +229,7 @@ void CodeVerifier::vefifyFunctionLayout(SEXP sexp, ::Context* ctx) {
                 }
                 if (*CallSite_hasNames(cs)) {
                     for (size_t i = 0, e = nargs; i != e; ++i) {
-                        uint32_t offset = CallSite_names(cs)[i];
+                        uint32_t offset = CallSite_names(cs, nargs)[i];
                         if (offset) {
                             SEXP name = cp_pool_at(ctx, offset);
                             assert(TYPEOF(name) == SYMSXP ||
@@ -238,7 +238,8 @@ void CodeVerifier::vefifyFunctionLayout(SEXP sexp, ::Context* ctx) {
                     }
                 }
                 if (*cptr == BC_t::dispatch_) {
-                    SEXP selector = cp_pool_at(ctx, *CallSite_selector(cs));
+                    SEXP selector =
+                        cp_pool_at(ctx, *CallSite_selector(cs, nargs));
                     assert(TYPEOF(selector) == SYMSXP);
                 }
             }

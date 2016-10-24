@@ -40,7 +40,7 @@ BC::immediate_t decodeImmediate(BC_t bc, BC_t* pc) {
         break;
     case BC_t::call_:
     case BC_t::dispatch_:
-        immediate.call_id = *(uint32_t*)pc;
+        immediate.call_args = *(CallArgs*)pc;
         break;
     case BC_t::promise_:
     case BC_t::push_code_:

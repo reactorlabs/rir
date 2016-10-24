@@ -359,8 +359,8 @@ SEXP createArgsListNew(Code* c, SEXP call, size_t nargs, uint32_t* cs, SEXP env,
 
     for (size_t i = 0; i < nargs; ++i) {
         unsigned argi = CallSite_args(cs)[i];
-        SEXP name =
-            hasNames ? cp_pool_at(ctx, CallSite_names(cs)[i]) : R_NilValue;
+        SEXP name = hasNames ? cp_pool_at(ctx, CallSite_names(cs, nargs)[i])
+                             : R_NilValue;
 
         // if the argument is an ellipsis, then retrieve it from the environment
         // and
@@ -562,12 +562,11 @@ void warnSpecial(SEXP callee, SEXP call) {
   TODO this is currently super simple.
 
  */
-SEXP doCall(Code* caller, SEXP callee, unsigned id, SEXP env, OpcodeT** pc,
-            Context* ctx) {
+SEXP doCall(Code* caller, SEXP callee, unsigned nargs, unsigned id, SEXP env,
+            OpcodeT** pc, Context* ctx) {
 
     uint32_t* cs = &caller->callSites[id];
     SEXP call = cp_pool_at(ctx, *CallSite_call(cs));
-    uint32_t nargs = *CallSite_nargs(cs);
 
     SEXP result = R_NilValue;
     switch (TYPEOF(callee)) {
@@ -907,8 +906,8 @@ SEXP doDispatchStack(Code* caller, SEXP call, SEXP selector, size_t nargs,
     return res;
 }
 
-SEXP doDispatch(Code* caller, uint32_t id, SEXP env, OpcodeT** pc,
-                Context* ctx) {
+SEXP doDispatch(Code* caller, uint32_t nargs, uint32_t id, SEXP env,
+                OpcodeT** pc, Context* ctx) {
 
 #if RIR_AS_PACKAGE == 1
     // TODO
@@ -920,8 +919,7 @@ SEXP doDispatch(Code* caller, uint32_t id, SEXP env, OpcodeT** pc,
 
     uint32_t* cs = &caller->callSites[id];
     SEXP call = cp_pool_at(ctx, *CallSite_call(cs));
-    uint32_t nargs = *CallSite_nargs(cs);
-    SEXP selector = cp_pool_at(ctx, *CallSite_selector(cs));
+    SEXP selector = cp_pool_at(ctx, *CallSite_selector(cs, nargs));
 
     SEXP actuals = createArgsListNew(caller, call, nargs, cs, env, ctx, false);
     ostack_push(ctx, actuals);
@@ -1038,10 +1036,11 @@ INSTRUCTION(call_stack_) {
 
 INSTRUCTION(call_) {
     unsigned id = readImmediate(pc);
+    unsigned nargs = readImmediate(pc);
     // get the closure itself
     SEXP cls = ostack_pop(ctx);
     PROTECT(cls);
-    ostack_push(ctx, doCall(c, cls, id, env, pc, ctx));
+    ostack_push(ctx, doCall(c, cls, nargs, id, env, pc, ctx));
     UNPROTECT(1);
 }
 
@@ -1059,7 +1058,8 @@ INSTRUCTION(dispatch_stack_) {
 
 INSTRUCTION(dispatch_) {
     unsigned id = readImmediate(pc);
-    ostack_push(ctx, doDispatch(c, id, env, pc, ctx));
+    unsigned nargs = readImmediate(pc);
+    ostack_push(ctx, doDispatch(c, nargs, id, env, pc, ctx));
 }
 
 INSTRUCTION(promise_) {
