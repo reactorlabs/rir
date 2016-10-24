@@ -223,7 +223,7 @@ class CodeEditor {
         SEXP src() const { return pos->src(); }
         unsigned srcIdx() const { return pos->srcIdx; }
 
-        uint32_t* callSite() { return pos->callSite; }
+        CallSite callSite() { return CallSite(pos->bc, pos->callSite); }
 
         // TODO this breaks when inserting before the first instruction....
         Cursor& operator<<(BC bc) {

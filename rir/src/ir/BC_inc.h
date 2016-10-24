@@ -88,7 +88,26 @@ static constexpr size_t MIN_JMP = -(1L << ((8 * sizeof(jmp_t)) - 1));
 // * Static factory functions to create an instance of a bytecode
 //   which can be pushed onto a CodeStream
 // * read and advance to read the next bytecode from an array
-//
+
+class BC;
+
+class CallSite {
+  public:
+    BC_t bc = BC_t::invalid_;
+    uint32_t* cs = nullptr;
+
+    CallSite(){};
+    CallSite(BC bc, uint32_t* cs);
+
+    bool isValid() { return cs != nullptr; }
+    num_args_t nargs() { return *CallSite_nargs(cs); }
+    SEXP call();
+    fun_idx_t arg(num_args_t idx) { return CallSite_args(cs)[idx]; }
+    bool hasNames() { return *CallSite_hasNames(cs); }
+    SEXP selector();
+    SEXP name(num_args_t idx);
+};
+
 class CodeStream;
 class BC {
   public:
@@ -138,19 +157,16 @@ class BC {
     void write(CodeStream& cs) const;
 
     // Print it to stdout
-    void print_(uint32_t* callSites);
-    void printArgs(uint32_t* callSites);
-    void printNames(uint32_t* callSites);
+    void print(CallSite cs = CallSite());
+    void printArgs(CallSite cs);
+    void printNames(CallSite cs);
 
     // Accessors to load immediate constant from the pool
     SEXP immediateConst();
 
-    uint32_t* callSite(uint32_t* callSites);
-    num_args_t call_nargs_(uint32_t* callSites);
-    SEXP call_call_(uint32_t* callSites);
-    fun_idx_t call_arg_idx_(uint32_t* callSites, num_args_t idx);
-    bool call_hasNames_(uint32_t* callSites);
-    SEXP call_name_(uint32_t* callSites, num_args_t idx);
+    CallSite callSite(uint32_t* callSites) {
+        return CallSite(bc, &callSites[immediate.call_id]);
+    }
 
     static unsigned CallSiteSize(BC_t bc, unsigned nargs, bool hasNames) {
         switch (bc) {
@@ -169,6 +185,8 @@ class BC {
         assert(bc.isJmp());
         return (BC_t*)((uintptr_t)pos + bc.size() + bc.immediate.offset);
     }
+
+    bool isCallsite() { return bc == BC_t::call_ || bc == BC_t::dispatch_; }
 
     bool hasPromargs() {
         return bc == BC_t::call_ || bc == BC_t::dispatch_ ||
@@ -341,17 +359,6 @@ class BC {
     }
 
     friend class CodeEditor;
-};
-
-class CallSite {
-  public:
-    BC_t bc;
-    uint32_t* cs;
-
-    CallSite(BC_t bc, uint32_t* cs) : bc(bc), cs(cs) {}
-    CallSite(BC bc, uint32_t* cs) : bc(bc.bc), cs(cs) {}
-
-    SEXP selector();
 };
 
 } // rir

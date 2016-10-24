@@ -208,91 +208,10 @@ void BC::write(CodeStream& cs) const {
 
 SEXP BC::immediateConst() { return Pool::get(immediate.pool); }
 
-num_args_t BC::call_nargs_(uint32_t* cs) {
-    switch (bc) {
-    case BC_t::call_stack_:
-        return immediate.call_stack_args.nargs;
-    case BC_t::dispatch_stack_:
-        return immediate.dispatch_stack_args.nargs;
-    case BC_t::call_:
-    case BC_t::dispatch_: {
-        return *CallSite_nargs(cs);
-    }
-    case BC_t::promise_: {
-        return 1;
-    }
-    default:
-        assert(false);
-    }
-    assert(false);
-    return 0;
-}
-
-SEXP BC::call_call_(uint32_t* cs) {
-    assert(bc == BC_t::call_ || bc == BC_t::dispatch_);
-    return Pool::get(*CallSite_call(cs));
-}
-
-uint32_t* BC::callSite(uint32_t* callSites) {
-    assert(bc == BC_t::call_ || bc == BC_t::dispatch_);
-    return &callSites[immediate.call_id];
-}
-
-fun_idx_t BC::call_arg_idx_(uint32_t* cs, num_args_t idx) {
-    assert(bc == BC_t::call_ || bc == BC_t::dispatch_);
-    return CallSite_args(cs)[idx];
-}
-
-bool BC::call_hasNames_(uint32_t* cs) {
-    pool_idx_t names = 0;
-    switch (bc) {
-    case BC_t::dispatch_:
-    case BC_t::call_: {
-        return *CallSite_hasNames(cs);
-    }
-    case BC_t::call_stack_:
-        names = immediate.call_stack_args.names;
-        break;
-    case BC_t::dispatch_stack_:
-        names = immediate.dispatch_stack_args.names;
-        break;
-    default:
-        assert(false);
-    }
-    return names;
-}
-
-// pool_idx_t BC::call_name_idx(uint32_t* callSites, num_args_t idx) {
-//     assert(bc == BC_t::call_);
-//     uint32_t* cs = &callSites[immediate.call_id];
-//     return CallSite_names(cs)[idx];
-// }
-
-SEXP BC::call_name_(uint32_t* cs, num_args_t idx) {
-    pool_idx_t names = 0;
-    switch (bc) {
-    case BC_t::call_stack_:
-        names = immediate.call_stack_args.names;
-        break;
-    case BC_t::dispatch_:
-    case BC_t::call_: {
-        auto n = CallSite_names(cs)[idx];
-        return Pool::get(n);
-    }
-    case BC_t::dispatch_stack_:
-        names = immediate.dispatch_stack_args.names;
-        break;
-    default:
-        assert(false);
-    }
-    return names ? VECTOR_ELT(Pool::get(names), idx) : nullptr;
-}
-
-void BC::printArgs(uint32_t* cs) {
-    num_args_t nargs = call_nargs_(cs);
+void BC::printArgs(CallSite cs) {
     Rprintf("[");
-    for (unsigned i = 0; i < nargs; ++i) {
-        auto arg = call_arg_idx_(cs, i);
+    for (unsigned i = 0; i < cs.nargs(); ++i) {
+        auto arg = cs.arg(i);
         if (arg == MISSING_ARG_IDX)
             Rprintf(" _");
         else if (arg == DOTS_ARG_IDX)
@@ -303,12 +222,11 @@ void BC::printArgs(uint32_t* cs) {
     Rprintf("] ");
 }
 
-void BC::printNames(uint32_t* cs) {
-    if (call_hasNames_(cs)) {
-        num_args_t nargs = call_nargs_(cs);
+void BC::printNames(CallSite cs) {
+    if (cs.hasNames()) {
         Rprintf("[");
-        for (unsigned i = 0; i < nargs; ++i) {
-            SEXP n = call_name_(cs, i);
+        for (unsigned i = 0; i < cs.nargs(); ++i) {
+            SEXP n = cs.name(i);
             Rprintf(
                 " %s",
                 (n == nullptr || n == R_NilValue ? "_" : CHAR(PRINTNAME(n))));
@@ -317,7 +235,7 @@ void BC::printNames(uint32_t* cs) {
     }
 }
 
-void BC::print_(uint32_t* cs_) {
+void BC::print(CallSite cs) {
     if (bc != BC_t::label) {
         Rprintf("   ");
         Rprintf("%s ", name(bc));
@@ -329,31 +247,33 @@ void BC::print_(uint32_t* cs_) {
         assert(false);
         break;
     case BC_t::dispatch_: {
-        CallSite cs(bc, cs_);
-        SEXP selector = cs.selector();
-        Rprintf(" `%s` ", CHAR(PRINTNAME(selector)));
+        if (cs.isValid()) {
+            SEXP selector = cs.selector();
+            Rprintf(" `%s` ", CHAR(PRINTNAME(selector)));
+        }
         // Fall through
     }
     case BC_t::call_: {
-        printArgs(cs_);
-        printNames(cs_);
-        SEXP call = call_call_(cs_);
-        Rprintf("\n        # ");
-        Rf_PrintValue(call);
+        if (cs.isValid()) {
+            printArgs(cs);
+            printNames(cs);
+            Rprintf("\n        # ");
+            Rf_PrintValue(cs.call());
+        }
         break;
     }
     case BC_t::call_stack_: {
-        num_args_t nargs = call_nargs_(cs_);
+        num_args_t nargs = immediate.call_stack_args.nargs;
         Rprintf(" %d ", nargs);
-        printNames(cs_);
+        // printNames(cs_);
         break;
     }
     case BC_t::dispatch_stack_: {
         SEXP selector = Pool::get(immediate.dispatch_stack_args.selector);
         Rprintf(" `%s` ", CHAR(PRINTNAME(selector)));
-        num_args_t nargs = call_nargs_(cs_);
+        num_args_t nargs = immediate.dispatch_stack_args.nargs;
         Rprintf(" %d ", nargs);
-        printNames(cs_);
+        // printNames(cs_);
         break;
     }
     case BC_t::push_:
@@ -503,8 +423,15 @@ BC BC::call_stack(unsigned nargs, std::vector<SEXP> names, SEXP call) {
     return BC(BC_t::call_stack_, i);
 }
 
+CallSite::CallSite(BC bc, uint32_t* cs) : bc(bc.bc), cs(cs) {
+    assert(bc.isCallsite());
+}
+
 SEXP CallSite::selector() {
-    assert(bc == BC_t::dispatch_ || bc == BC_t::dispatch_stack_);
     return Pool::get(*CallSite_selector(cs));
 }
+
+SEXP CallSite::call() { return Pool::get(*CallSite_call(cs)); }
+
+SEXP CallSite::name(pool_idx_t i) { return Pool::get(CallSite_names(cs)[i]); }
 }

@@ -101,13 +101,13 @@ class CodeStream {
         return *this;
     }
 
-    CodeStream& insertWithCallSite(BC_t b, uint32_t* callSite) {
+    CodeStream& insertWithCallSite(BC_t b, CallSite callSite) {
         insert(b);
         insert(nextCallSiteIdx_);
         sources.push_back(0);
 
-        auto nargs = *CallSite_nargs(callSite);
-        bool hasNames = *CallSite_hasNames(callSite);
+        auto nargs = callSite.nargs();
+        bool hasNames = callSite.hasNames();
 
         unsigned needed = BC::CallSiteSize(b, nargs, hasNames);
         if (callSites_.size() <= nextCallSiteIdx_ + needed)
@@ -115,7 +115,7 @@ class CodeStream {
 
         uint32_t* cs = &callSites_[nextCallSiteIdx_];
         nextCallSiteIdx_ += needed;
-        memcpy(cs, callSite, needed * sizeof(uint32_t));
+        memcpy(cs, callSite.cs, needed * sizeof(uint32_t));
 
         return *this;
     }

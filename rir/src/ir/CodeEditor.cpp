@@ -89,18 +89,17 @@ void CodeEditor::loadCode(FunctionHandle function, CodeHandle code) {
                     promises[code.idx()] = p;
                 } else {
                     auto oldCs = bc.callSite(code.code->callSites);
-
-                    auto nargs = bc.call_nargs_(oldCs);
-                    bool hasNames = bc.call_hasNames_(oldCs);
+                    auto nargs = oldCs.nargs();
+                    bool hasNames = oldCs.hasNames();
 
                     unsigned needed = BC::CallSiteSize(bc.bc, nargs, hasNames);
                     pos->callSite = new uint32_t[needed];
-                    memcpy(pos->callSite, oldCs, needed * sizeof(uint32_t));
+                    memcpy(pos->callSite, oldCs.cs, needed * sizeof(uint32_t));
 
                     uint32_t* cs = pos->callSite;
 
                     for (unsigned i = 0; i < nargs; ++i) {
-                        auto arg = CallSite_args(oldCs)[i];
+                        auto arg = oldCs.arg(i);
                         if (arg <= MAX_ARG_IDX) {
                             CodeHandle code = function.codeAtOffset(arg);
                             arg = code.idx();
@@ -163,7 +162,12 @@ void CodeEditor::print() {
     }
 }
 
-void CodeEditor::Cursor::print() { pos->bc.print_(pos->callSite); }
+void CodeEditor::Cursor::print() {
+    if (pos->callSite)
+        pos->bc.print(callSite());
+    else
+        pos->bc.print();
+}
 
 unsigned CodeEditor::write(FunctionHandle& function) {
     CodeStream cs(function, ast);
@@ -176,15 +180,15 @@ unsigned CodeEditor::write(FunctionHandle& function) {
                 CodeEditor* e = promises[bc.immediate.fun];
                 bc.immediate.fun = e->write(function);
             } else {
-                auto nargs = bc.call_nargs_(cur.callSite());
+                auto nargs = cur.callSite().nargs();
                 for (unsigned i = 0; i < nargs; ++i) {
-                    auto arg = bc.call_arg_idx_(cur.callSite(), i);
+                    auto arg = cur.callSite().arg(i);
                     if (arg <= MAX_ARG_IDX) {
                         assert(arg < promises.size() && promises[arg]);
                         CodeEditor* e = promises[arg];
                         arg = e->write(function);
                     }
-                    CallSite_args(cur.callSite())[i] = arg;
+                    CallSite_args(cur.callSite().cs)[i] = arg;
                 }
             }
         }
