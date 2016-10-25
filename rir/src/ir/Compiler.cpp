@@ -1060,17 +1060,16 @@ Compiler::CompilerRes Compiler::finalize() {
 
     CodeEditor code(function.entryPoint(), formals);
 
-    // BCCleanup cleanup(code);
-    // LoadElimination elim(code);
-    // for (int i = 0; i < 3; ++i) {
-    //     cleanup.run();
-    //     code.commit();
-    //     elim.run();
-    //     code.commit();
-    // }
+    BCCleanup cleanup(code);
+    LoadElimination elim(code);
+    for (int i = 0; i < 3; ++i) {
+        cleanup.run();
+        code.commit();
+        elim.run();
+        code.commit();
+    }
 
-    // auto opt = code.finalize();
-    auto opt = function;
+    auto opt = code.finalize();
 
     CodeVerifier::vefifyFunctionLayout(opt.store, globalContext());
 

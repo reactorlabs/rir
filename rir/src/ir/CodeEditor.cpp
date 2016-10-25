@@ -75,6 +75,15 @@ void CodeEditor::loadCode(FunctionHandle function, CodeHandle code) {
                 bc.immediate.offset = label;
             }
 
+            // If this is a call, we copy the callsite information locally
+            if (bc.isCallsite()) {
+                auto oldCs = bc.callSite(code.code->callSites);
+                auto nargs = oldCs.nargs();
+                bool hasNames = oldCs.hasNames();
+                unsigned needed = BC::CallSiteSize(bc.bc, nargs, hasNames);
+                pos->callSite = new uint32_t[needed];
+                memcpy(pos->callSite, oldCs.cs, needed * sizeof(uint32_t));
+            }
             if (bc.hasPromargs()) {
                 if (bc.bc == BC_t::promise_ || bc.bc == BC_t::push_code_) {
                     CodeHandle code = function.codeAtOffset(bc.immediate.fun);
@@ -90,14 +99,12 @@ void CodeEditor::loadCode(FunctionHandle function, CodeHandle code) {
                 } else {
                     auto oldCs = bc.callSite(code.code->callSites);
                     auto nargs = oldCs.nargs();
-                    bool hasNames = oldCs.hasNames();
-
-                    unsigned needed = BC::CallSiteSize(bc.bc, nargs, hasNames);
-                    pos->callSite = new uint32_t[needed];
-                    memcpy(pos->callSite, oldCs.cs, needed * sizeof(uint32_t));
 
                     uint32_t* cs = pos->callSite;
 
+                    // Load all code objects of the callsite and update
+                    // the indices (in the CodeEditor they are not offsets
+                    // into the code object, but index into promises vector).
                     for (unsigned i = 0; i < nargs; ++i) {
                         auto arg = oldCs.arg(i);
                         if (arg <= MAX_ARG_IDX) {
@@ -107,8 +114,8 @@ void CodeEditor::loadCode(FunctionHandle function, CodeHandle code) {
                             if (promises.size() <= code.idx())
                                 promises.resize(code.idx() + 1, nullptr);
                             promises[code.idx()] = p;
+                            CallSite_args(cs)[i] = arg;
                         }
-                        CallSite_args(cs)[i] = arg;
                     }
                 }
             }
@@ -193,7 +200,7 @@ unsigned CodeEditor::write(FunctionHandle& function) {
             }
         }
 
-        if (bc.bc == BC_t::call_ || bc.bc == BC_t::dispatch_)
+        if (bc.isCallsite())
             cs.insertWithCallSite(bc.bc, cur.callSite());
         else
             cs << bc;
