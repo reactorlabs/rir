@@ -81,26 +81,7 @@ static constexpr size_t MIN_JMP = -(1L << ((8 * sizeof(jmp_t)) - 1));
 //   which can be pushed onto a CodeStream
 // * read and advance to read the next bytecode from an array
 
-class BC;
-
-class CallSite {
-  public:
-    BC_t bc = BC_t::invalid_;
-    uint32_t* cs = nullptr;
-    uint32_t n = 0;
-
-    CallSite(){};
-    CallSite(BC bc, uint32_t* cs);
-
-    bool isValid() { return cs != nullptr; }
-    num_args_t nargs() { return n; }
-    SEXP call();
-    fun_idx_t arg(num_args_t idx) { return CallSite_args(cs)[idx]; }
-    bool hasNames() { return CallSite_hasNames(cs); }
-    SEXP selector();
-    SEXP name(num_args_t idx);
-};
-
+class CallSite;
 class CodeStream;
 class BC {
   public:
@@ -148,16 +129,16 @@ class BC {
     void write(CodeStream& cs) const;
 
     // Print it to stdout
-    void print(CallSite cs = CallSite());
+    void print();
+    void print(CallSite cs);
     void printArgs(CallSite cs);
     void printNames(CallSite cs);
 
     // Accessors to load immediate constant from the pool
     SEXP immediateConst();
 
-    CallSite callSite(uint32_t* callSites) {
-        return CallSite(*this, &callSites[immediate.call_args.call_id]);
-    }
+    // Return the callsite of this BC, needs the cassSites buffer as input
+    CallSite callSite(uint32_t* callSites);
 
     static unsigned CallSiteSize(BC_t bc, unsigned nargs, bool hasNames) {
         switch (bc) {
@@ -354,6 +335,23 @@ class BC {
     }
 
     friend class CodeEditor;
+};
+
+class CallSite {
+  public:
+    BC bc;
+    uint32_t* cs = nullptr;
+
+    CallSite(){};
+    CallSite(BC bc, uint32_t* cs);
+
+    bool isValid() { return cs != nullptr; }
+    num_args_t nargs() { return bc.immediate.call_args.nargs; }
+    SEXP call();
+    fun_idx_t arg(num_args_t idx) { return CallSite_args(cs)[idx]; }
+    bool hasNames() { return CallSite_hasNames(cs); }
+    SEXP selector();
+    SEXP name(num_args_t idx);
 };
 
 } // rir
