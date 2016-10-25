@@ -56,10 +56,12 @@ class FunctionHandle {
     }
 
     CodeHandle writeCode(SEXP ast, void* bc, unsigned codeSize,
+                         char* callSiteBuffer, unsigned callSiteLength,
                          std::vector<unsigned>& sources) {
         assert(function->size <= capacity);
 
-        unsigned totalSize = CodeHandle::totalSize(codeSize, sources.size());
+        unsigned totalSize =
+            CodeHandle::totalSize(codeSize, sources.size(), callSiteLength);
 
         if (function->size + totalSize > capacity) {
             unsigned newCapacity = capacity;
@@ -88,7 +90,8 @@ class FunctionHandle {
         void* insert = (void*)((uintptr_t)payload + function->size);
         function->size += totalSize;
 
-        CodeHandle code(ast, codeSize, sources.size(), offset, insert);
+        CodeHandle code(ast, codeSize, sources.size(), callSiteLength, offset,
+                        insert);
 
         assert(::function(code.code) == function);
 
@@ -143,6 +146,7 @@ class FunctionHandle {
         assert(compressed + sources_idx == instruction_number);
 
         code.code->srcLength -= compressed;
+
         function->size -= compressed * sizeof(unsigned);
 
         assert(code.code->srcLength == sources_idx);
@@ -150,6 +154,8 @@ class FunctionHandle {
 
         // set the last code offset
         function->foffset = offset;
+
+        memcpy(callSites(code.code), callSiteBuffer, callSiteLength);
 
         return code;
     }

@@ -142,12 +142,32 @@ typedef struct Code {
 
     unsigned srcLength; /// number of instructions
 
-    char* callSites;
+    unsigned callSiteLength; /// length of the call site information
 
     uint8_t data[]; /// the instructions
+
+    /*
+     * The Layout of data[] is actually:
+     *
+     *   Content       Format            Bytesize
+     *   ---------------------------------------------------------------------
+     *   code stream   BC                pad4(codeSize)
+     *
+     *   skiplist      (instr offset,    2 * skiplistLength * sizeof(unsigned)
+     *                  src index)
+     *
+     *   srcList       cp_idx (ast)      srcLength * sizeof(unsigned)
+     *
+     *   callSites     CallSiteStruct    callSiteLength
+     *
+     *
+     *
+     * CallSiteStructs are laid out next to each other. Since they are variable
+     * length, the call instruction refers to them by offset.
+     *
+     */
 } Code;
 
-// TODO: this should be allocated inline!
 typedef struct {
     uint32_t call;
     uint32_t selector;
@@ -155,13 +175,18 @@ typedef struct {
     uint32_t hasSelector : 1;
     uint32_t hasImmediateArgs : 1;
     uint32_t args[];
+
+    /*
+     * Layout of args is:
+     *
+     * nargs * promise offset    if hasImmediateArgs
+     * nargs * cp_idx of names   if hasNames
+     *
+     */
+
 } CallSiteStruct;
 
 #pragma pack(pop)
-
-INLINE CallSiteStruct* CallSite_get(Code* code, uint32_t idx) {
-    return (CallSiteStruct*)&code->callSites[idx];
-}
 
 INLINE uint32_t* CallSite_names(CallSiteStruct* cs, uint32_t nargs) {
     assert(cs->hasNames);
@@ -187,10 +212,17 @@ INLINE unsigned* skiplist(Code* c) {
     return (unsigned*)(c->data + pad4(c->codeSize));
 }
 
-/** Returns a pointer to the source AST indices in c.  */
 INLINE unsigned* raw_src(Code* c) {
-    return (unsigned*)(c->data + pad4(c->codeSize) +
+    return (unsigned*)((char*)skiplist(c) +
                        c->skiplistLength * 2 * sizeof(unsigned));
+}
+
+INLINE char* callSites(Code* c) {
+    return (char*)raw_src(c) + c->srcLength * sizeof(unsigned);
+}
+
+INLINE CallSiteStruct* CallSite_get(Code* code, uint32_t idx) {
+    return (CallSiteStruct*)&callSites(code)[idx];
 }
 
 /** Moves the pc to next instruction, based on the current instruction length
@@ -243,9 +275,9 @@ INLINE unsigned getSrcIdxAt(Code* c, OpcodeT* pc, bool allowMissing) {
 
 /** Returns the next Code in the current function. */
 INLINE Code* next(Code* c) {
-    return (Code*)(c->data + pad4(c->codeSize) +
-                   c->srcLength * sizeof(unsigned) +
-                   c->skiplistLength * 2 * sizeof(unsigned));
+    return (
+        Code*)(c->data + pad4(c->codeSize) + c->srcLength * sizeof(unsigned) +
+               c->skiplistLength * 2 * sizeof(unsigned) + c->callSiteLength);
 }
 
 /** Returns a pointer to the Function to which c belongs. */

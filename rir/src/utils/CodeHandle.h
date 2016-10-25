@@ -17,7 +17,7 @@ class CodeHandle {
     Code* code;
 
     CodeHandle(SEXP ast, unsigned codeSize, unsigned sourceSize,
-               unsigned offset, void* insert) {
+               unsigned callSiteLength, unsigned offset, void* insert) {
         code = new (insert) Code;
 
         code->magic = CODE_MAGIC;
@@ -26,6 +26,7 @@ class CodeHandle {
         code->codeSize = codeSize;
         code->srcLength = sourceSize;
         code->skiplistLength = skiplistLength(sourceSize);
+        code->callSiteLength = callSiteLength;
     }
 
     CodeHandle(Code* code) : code(code) { assert(code->magic == CODE_MAGIC); }
@@ -58,14 +59,17 @@ class CodeHandle {
         return s ? s : 1;
     }
 
-    static unsigned totalSize(unsigned codeSize, unsigned sourcesSize) {
+    static unsigned totalSize(unsigned codeSize, unsigned sourcesSize,
+                              unsigned callSiteLength) {
         return sizeof(Code) + pad4(codeSize) + sourcesSize * sizeof(unsigned) +
-               skiplistLength(sourcesSize) * 2 * sizeof(unsigned);
+               skiplistLength(sourcesSize) * 2 * sizeof(unsigned) +
+               callSiteLength;
     }
 
     void* end() {
-        return (void*)((uintptr_t)code +
-                       totalSize(code->codeSize, code->srcLength));
+        return (void*)((uintptr_t)code + totalSize(code->codeSize,
+                                                   code->srcLength,
+                                                   code->callSiteLength));
     }
 
     FunctionHandle function();

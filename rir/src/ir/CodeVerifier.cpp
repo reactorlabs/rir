@@ -119,8 +119,8 @@ void CodeVerifier::vefifyFunctionLayout(SEXP sexp, ::Context* ctx) {
     // get the code objects
     std::vector<Code*> objs;
     for (auto c : fun) {
-        // Rprintf("Checking code object at %u\n", c);
-        // Rprintf("End: %u\n", e);
+        // Rprintf("Checking code object at %p\n", c);
+        // Rprintf("End: %p\n", ::end(fun.function));
         objs.push_back(c);
     }
 
@@ -152,7 +152,8 @@ void CodeVerifier::vefifyFunctionLayout(SEXP sexp, ::Context* ctx) {
 
         assert((uintptr_t)(c + 1) + pad4(c->codeSize) +
                        c->srcLength * sizeof(unsigned) +
-                       c->skiplistLength * 2 * sizeof(unsigned) ==
+                       c->skiplistLength * 2 * sizeof(unsigned) +
+                       c->callSiteLength ==
                    (uintptr_t)objs[i + 1] and
                "Invalid code length reported");
     }

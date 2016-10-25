@@ -31,7 +31,7 @@ class CodeStream {
 
     std::vector<unsigned> sources;
 
-    std::vector<uint8_t> callSites_;
+    std::vector<char> callSites_;
     uint32_t nextCallSiteIdx_ = 0;
 
   public:
@@ -214,7 +214,9 @@ class CodeStream {
     }
 
     fun_idx_t finalize() {
-        CodeHandle res = function.writeCode(ast, &(*code)[0], pos, sources);
+        CodeHandle res =
+            function.writeCode(ast, &(*code)[0], pos, callSites_.data(),
+                               callSites_.size(), sources);
 
         for (auto p : patchpoints) {
             unsigned pos = p.first;
@@ -222,10 +224,6 @@ class CodeStream {
             jmp_t j = target - pos - sizeof(jmp_t);
             *(jmp_t*)((uintptr_t)res.bc() + pos) = j;
         }
-
-        // TODO move into R data structure
-        res.code->callSites = new char[callSites_.size()];
-        memcpy(res.code->callSites, callSites_.data(), callSites_.size());
 
         label2pos.clear();
         patchpoints.clear();
