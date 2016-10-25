@@ -138,18 +138,18 @@ class BC {
     SEXP immediateConst();
 
     // Return the callsite of this BC, needs the cassSites buffer as input
-    CallSite callSite(uint32_t* callSites);
+    CallSite callSite(Code* code);
 
     static unsigned CallSiteSize(BC_t bc, unsigned nargs, bool hasNames) {
         switch (bc) {
         case BC_t::call_:
-            return 2 + nargs + (hasNames ? nargs : 0);
         case BC_t::dispatch_:
-            return 3 + nargs + (hasNames ? nargs : 0);
+            return sizeof(CallSiteStruct) +
+                   sizeof(uint32_t) * (nargs + (hasNames ? nargs : 0));
         case BC_t::call_stack_:
-            return 2 + (hasNames ? nargs : 0);
         case BC_t::dispatch_stack_:
-            return 3 + (hasNames ? nargs : 0);
+            return sizeof(CallSiteStruct) +
+                   sizeof(uint32_t) * (hasNames ? nargs : 0);
         default:
             assert(false);
         }
@@ -340,16 +340,16 @@ class BC {
 class CallSite {
   public:
     BC bc;
-    uint32_t* cs = nullptr;
+    CallSiteStruct* cs = nullptr;
 
     CallSite(){};
-    CallSite(BC bc, uint32_t* cs);
+    CallSite(BC bc, CallSiteStruct* cs);
 
     bool isValid() { return cs != nullptr; }
     num_args_t nargs() { return bc.immediate.call_args.nargs; }
     SEXP call();
-    fun_idx_t arg(num_args_t idx) { return CallSite_args(cs)[idx]; }
-    bool hasNames() { return CallSite_hasNames(cs); }
+    fun_idx_t arg(num_args_t idx) { return cs->args[idx]; }
+    bool hasNames() { return cs->hasNames; }
     SEXP selector();
     SEXP name(num_args_t idx);
 };

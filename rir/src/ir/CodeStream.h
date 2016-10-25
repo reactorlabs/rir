@@ -31,7 +31,7 @@ class CodeStream {
 
     std::vector<unsigned> sources;
 
-    std::vector<uint32_t> callSites_;
+    std::vector<uint8_t> callSites_;
     uint32_t nextCallSiteIdx_ = 0;
 
   public:
@@ -56,6 +56,13 @@ class CodeStream {
         code = new std::vector<char>(1024);
     }
 
+    void ensureCallSiteSize(uint32_t needed) {
+        if (callSites_.size() <= nextCallSiteIdx_ + needed) {
+            unsigned newSize = pad4(needed + callSites_.size() * 1.5);
+            callSites_.resize(newSize);
+        }
+    }
+
     CodeStream& insertStackCall(BC_t bc, uint32_t nargs,
                                 std::vector<SEXP> names, SEXP call,
                                 SEXP selector = nullptr) {
@@ -76,20 +83,26 @@ class CodeStream {
             }
 
         unsigned needed = BC::CallSiteSize(bc, nargs, hasNames);
-        if (callSites_.size() <= nextCallSiteIdx_ + needed)
-            callSites_.resize(needed + callSites_.size() * 1.5);
+        ensureCallSiteSize(needed);
 
-        uint32_t* cs = &callSites_[nextCallSiteIdx_];
+        CallSiteStruct* cs = (CallSiteStruct*)&callSites_[nextCallSiteIdx_];
         nextCallSiteIdx_ += needed;
 
-        *CallSite_call(cs) = Pool::insert(call);
-        *CallSite_type(cs) =
-            hasNames ? CALL_SITE_STACK_NAMED : CALL_SITE_STACK_UNNAMED;
+        cs->call = Pool::insert(call);
+        cs->hasNames = hasNames;
+        cs->hasSelector = (bc == BC_t::dispatch_stack_);
+        cs->hasImmediateArgs = false;
+
+        if (hasNames) {
+            for (unsigned i = 0; i < nargs; ++i) {
+                CallSite_names(cs, nargs)[i] = Pool::insert(names[i]);
+            }
+        }
 
         if (bc == BC_t::dispatch_stack_) {
             assert(selector);
             assert(TYPEOF(selector) == SYMSXP);
-            *CallSite_selector(cs, nargs) = Pool::insert(selector);
+            cs->selector = Pool::insert(selector);
         }
 
         return *this;
@@ -117,18 +130,19 @@ class CodeStream {
             }
 
         unsigned needed = BC::CallSiteSize(bc, nargs, hasNames);
-        if (callSites_.size() <= nextCallSiteIdx_ + needed)
-            callSites_.resize(needed + callSites_.size() * 1.5);
+        ensureCallSiteSize(needed);
 
-        uint32_t* cs = &callSites_[nextCallSiteIdx_];
+        CallSiteStruct* cs = (CallSiteStruct*)&callSites_[nextCallSiteIdx_];
         nextCallSiteIdx_ += needed;
 
-        *CallSite_call(cs) = Pool::insert(call);
-        *CallSite_type(cs) = hasNames ? CALL_SITE_NAMED : CALL_SITE_UNNAMED;
+        cs->call = Pool::insert(call);
+        cs->hasNames = hasNames;
+        cs->hasSelector = (bc == BC_t::dispatch_);
+        cs->hasImmediateArgs = true;
 
         int i = 0;
         for (auto arg : args) {
-            CallSite_args(cs)[i] = arg;
+            cs->args[i] = arg;
             if (hasNames)
                 CallSite_names(cs, nargs)[i] = Pool::insert(names[i]);
             ++i;
@@ -137,14 +151,14 @@ class CodeStream {
         if (bc == BC_t::dispatch_) {
             assert(selector);
             assert(TYPEOF(selector) == SYMSXP);
-            *CallSite_selector(cs, nargs) = Pool::insert(selector);
+            cs->selector = Pool::insert(selector);
         }
 
         return *this;
     }
 
-    CodeStream& insertWithCallSite(BC_t b, CallSite callSite) {
-        insert(b);
+    CodeStream& insertWithCallSite(BC_t bc, CallSite callSite) {
+        insert(bc);
         insert(nextCallSiteIdx_);
         insert(callSite.nargs());
         sources.push_back(0);
@@ -152,13 +166,12 @@ class CodeStream {
         auto nargs = callSite.nargs();
         bool hasNames = callSite.hasNames();
 
-        unsigned needed = BC::CallSiteSize(b, nargs, hasNames);
-        if (callSites_.size() <= nextCallSiteIdx_ + needed)
-            callSites_.resize(needed + callSites_.size() * 1.5);
+        unsigned needed = BC::CallSiteSize(bc, nargs, hasNames);
+        ensureCallSiteSize(needed);
 
-        uint32_t* cs = &callSites_[nextCallSiteIdx_];
+        void* cs = &callSites_[nextCallSiteIdx_];
         nextCallSiteIdx_ += needed;
-        memcpy(cs, callSite.cs, needed * sizeof(uint32_t));
+        memcpy(cs, callSite.cs, needed);
 
         return *this;
     }
@@ -210,13 +223,15 @@ class CodeStream {
             *(jmp_t*)((uintptr_t)res.bc() + pos) = j;
         }
 
-        res.code->callSites = new uint32_t[callSites_.size()];
-        memcpy(res.code->callSites, callSites_.data(),
-               callSites_.size() * sizeof(uint32_t));
+        // TODO move into R data structure
+        res.code->callSites = new char[callSites_.size()];
+        memcpy(res.code->callSites, callSites_.data(), callSites_.size());
 
         label2pos.clear();
         patchpoints.clear();
         nextLabel = 0;
+        callSites_.clear();
+        nextCallSiteIdx_ = 0;
 
         delete code;
         code = nullptr;

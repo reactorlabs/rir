@@ -310,14 +310,14 @@ INLINE void __listAppend(SEXP* front, SEXP* last, SEXP value, SEXP name) {
     *last = app;
 }
 
-SEXP createArgsListStack(Code* c, size_t nargs, uint32_t* cs, SEXP env,
+SEXP createArgsListStack(Code* c, size_t nargs, CallSiteStruct* cs, SEXP env,
                          Context* ctx, bool eager) {
     SEXP result = R_NilValue;
     SEXP pos = result;
 
     SEXP* argbase = ostack_at(ctx, nargs - 1);
 
-    bool hasNames = CallSite_hasNames(cs);
+    bool hasNames = cs->hasNames;
 
     for (size_t i = 0; i < nargs; ++i) {
 
@@ -348,17 +348,17 @@ SEXP createArgsListStack(Code* c, size_t nargs, uint32_t* cs, SEXP env,
     return result;
 }
 
-SEXP createArgsList(Code* c, SEXP call, size_t nargs, uint32_t* cs, SEXP env,
-                    Context* ctx, bool eager) {
+SEXP createArgsList(Code* c, SEXP call, size_t nargs, CallSiteStruct* cs,
+                    SEXP env, Context* ctx, bool eager) {
     SEXP result = R_NilValue;
     SEXP pos = result;
 
     // loop through the arguments and create a promise, unless it is a missing
     // argument
-    bool hasNames = CallSite_hasNames(cs);
+    bool hasNames = cs->hasNames;
 
     for (size_t i = 0; i < nargs; ++i) {
-        unsigned argi = CallSite_args(cs)[i];
+        unsigned argi = cs->args[i];
         SEXP name = hasNames ? cp_pool_at(ctx, CallSite_names(cs, nargs)[i])
                              : R_NilValue;
 
@@ -508,8 +508,8 @@ void warnSpecial(SEXP callee, SEXP call) {
 SEXP doCall(Code* caller, SEXP callee, unsigned nargs, unsigned id, SEXP env,
             OpcodeT** pc, Context* ctx) {
 
-    uint32_t* cs = &caller->callSites[id];
-    SEXP call = cp_pool_at(ctx, *CallSite_call(cs));
+    CallSiteStruct* cs = CallSite_get(caller, id);
+    SEXP call = cp_pool_at(ctx, cs->call);
 
     SEXP result = R_NilValue;
     switch (TYPEOF(callee)) {
@@ -639,8 +639,8 @@ INLINE SEXP fixupAST(SEXP call, Context* ctx, size_t nargs) {
 SEXP doCallStack(Code* caller, size_t nargs, unsigned id, SEXP env,
                  OpcodeT** pc, Context* ctx) {
 
-    uint32_t* cs = &caller->callSites[id];
-    SEXP call = cp_pool_at(ctx, *CallSite_call(cs));
+    CallSiteStruct* cs = CallSite_get(caller, id);
+    SEXP call = cp_pool_at(ctx, cs->call);
 
     SEXP res = R_NilValue;
 
@@ -735,9 +735,9 @@ SEXP doDispatchStack(Code* caller, size_t nargs, uint32_t id, SEXP env,
     // TODO
     assert(false);
 #endif
-    uint32_t* cs = &caller->callSites[id];
-    SEXP call = cp_pool_at(ctx, *CallSite_call(cs));
-    SEXP selector = cp_pool_at(ctx, *CallSite_selector(cs, nargs));
+    CallSiteStruct* cs = CallSite_get(caller, id);
+    SEXP call = cp_pool_at(ctx, cs->call);
+    SEXP selector = cp_pool_at(ctx, cs->selector);
 
     SEXP obj = *ostack_at(ctx, nargs - 1);
     assert(isObject(obj));
@@ -862,9 +862,9 @@ SEXP doDispatch(Code* caller, uint32_t nargs, uint32_t id, SEXP env,
     SEXP obj = ostack_top(ctx);
     assert(isObject(obj));
 
-    uint32_t* cs = &caller->callSites[id];
-    SEXP call = cp_pool_at(ctx, *CallSite_call(cs));
-    SEXP selector = cp_pool_at(ctx, *CallSite_selector(cs, nargs));
+    CallSiteStruct* cs = CallSite_get(caller, id);
+    SEXP call = cp_pool_at(ctx, cs->call);
+    SEXP selector = cp_pool_at(ctx, cs->selector);
 
     SEXP actuals = createArgsList(caller, call, nargs, cs, env, ctx, false);
     ostack_push(ctx, actuals);

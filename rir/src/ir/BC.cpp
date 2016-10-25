@@ -214,8 +214,8 @@ void BC::printNames(CallSite cs) {
     }
 }
 
-CallSite BC::callSite(uint32_t* callSites) {
-    return CallSite(*this, &callSites[immediate.call_args.call_id]);
+CallSite BC::callSite(Code* code) {
+    return CallSite(*this, CallSite_get(code, immediate.call_args.call_id));
 }
 
 void BC::print() { print(CallSite()); }
@@ -339,13 +339,13 @@ void BC::print(CallSite cs) {
     Rprintf("\n");
 }
 
-CallSite::CallSite(BC bc, uint32_t* cs) : bc(bc), cs(cs) {
+CallSite::CallSite(BC bc, CallSiteStruct* cs) : bc(bc), cs(cs) {
     assert(bc.isCallsite());
 }
 
-SEXP CallSite::selector() { return Pool::get(*CallSite_selector(cs, nargs())); }
+SEXP CallSite::selector() { return Pool::get(cs->selector); }
 
-SEXP CallSite::call() { return Pool::get(*CallSite_call(cs)); }
+SEXP CallSite::call() { return Pool::get(cs->call); }
 
 SEXP CallSite::name(pool_idx_t i) {
     return Pool::get(CallSite_names(cs, nargs())[i]);

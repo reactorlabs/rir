@@ -160,6 +160,16 @@ void CodeVerifier::vefifyFunctionLayout(SEXP sexp, ::Context* ctx) {
     // remove the sentinel
     objs.pop_back();
 
+    auto verifyCallSite = [&ctx](CallSiteStruct* cs) {
+        SEXP call = cp_pool_at(ctx, cs->call);
+        assert(TYPEOF(call) == LANGSXP || TYPEOF(call) == SYMSXP ||
+               TYPEOF(call) == NILSXP);
+        if (cs->hasSelector) {
+            SEXP selector = cp_pool_at(ctx, cs->selector);
+            assert(TYPEOF(selector) == SYMSXP);
+        }
+    };
+
     // check that the call instruction has proper arguments and number of
     // instructions is valid
     for (auto c : objs) {
@@ -178,10 +188,11 @@ void CodeVerifier::vefifyFunctionLayout(SEXP sexp, ::Context* ctx) {
             }
             if (*cptr == BC_t::dispatch_stack_ || *cptr == BC_t::call_stack_) {
                 unsigned callIdx = *reinterpret_cast<ArgT*>(cptr + 1);
-                uint32_t* cs = &c->callSites[callIdx];
+                CallSiteStruct* cs = CallSite_get(c, callIdx);
                 uint32_t nargs = *reinterpret_cast<ArgT*>(cptr + 5);
+                verifyCallSite(cs);
 
-                if (CallSite_hasNames(cs)) {
+                if (cs->hasNames) {
                     for (size_t i = 0, e = nargs; i != e; ++i) {
                         uint32_t offset = CallSite_names(cs, nargs)[i];
                         if (offset) {
@@ -192,8 +203,7 @@ void CodeVerifier::vefifyFunctionLayout(SEXP sexp, ::Context* ctx) {
                     }
                 }
                 if (*cptr == BC_t::dispatch_stack_) {
-                    SEXP selector =
-                        cp_pool_at(ctx, *CallSite_selector(cs, nargs));
+                    SEXP selector = cp_pool_at(ctx, cs->selector);
                     assert(TYPEOF(selector) == SYMSXP);
                 }
             }
@@ -209,11 +219,13 @@ void CodeVerifier::vefifyFunctionLayout(SEXP sexp, ::Context* ctx) {
             }
             if (*cptr == BC_t::call_ || *cptr == BC_t::dispatch_) {
                 unsigned callIdx = *reinterpret_cast<ArgT*>(cptr + 1);
-                uint32_t* cs = &c->callSites[callIdx];
+                CallSiteStruct* cs = CallSite_get(c, callIdx);
                 uint32_t nargs = *reinterpret_cast<ArgT*>(cptr + 5);
+                verifyCallSite(cs);
+                assert(cs->hasImmediateArgs);
 
                 for (size_t i = 0, e = nargs; i != e; ++i) {
-                    uint32_t offset = CallSite_args(cs)[i];
+                    uint32_t offset = cs->args[i];
                     if (offset == MISSING_ARG_IDX || offset == DOTS_ARG_IDX)
                         continue;
                     bool ok = false;
@@ -224,7 +236,7 @@ void CodeVerifier::vefifyFunctionLayout(SEXP sexp, ::Context* ctx) {
                         }
                     assert(ok and "Invalid promise offset detected");
                 }
-                if (CallSite_hasNames(cs)) {
+                if (cs->hasNames) {
                     for (size_t i = 0, e = nargs; i != e; ++i) {
                         uint32_t offset = CallSite_names(cs, nargs)[i];
                         if (offset) {
@@ -235,8 +247,7 @@ void CodeVerifier::vefifyFunctionLayout(SEXP sexp, ::Context* ctx) {
                     }
                 }
                 if (*cptr == BC_t::dispatch_) {
-                    SEXP selector =
-                        cp_pool_at(ctx, *CallSite_selector(cs, nargs));
+                    SEXP selector = cp_pool_at(ctx, cs->selector);
                     assert(TYPEOF(selector) == SYMSXP);
                 }
             }

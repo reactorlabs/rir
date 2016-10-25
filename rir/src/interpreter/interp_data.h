@@ -142,40 +142,30 @@ typedef struct Code {
 
     unsigned srcLength; /// number of instructions
 
-    uint32_t* callSites;
+    char* callSites;
 
     uint8_t data[]; /// the instructions
 } Code;
+
+// TODO: this should be allocated inline!
+typedef struct {
+    uint32_t call;
+    uint32_t selector;
+    uint32_t hasNames : 1;
+    uint32_t hasSelector : 1;
+    uint32_t hasImmediateArgs : 1;
+    uint32_t args[];
+} CallSiteStruct;
+
 #pragma pack(pop)
 
-typedef enum {
-    CALL_SITE_UNNAMED,
-    CALL_SITE_NAMED,
-    CALL_SITE_STACK_UNNAMED,
-    CALL_SITE_STACK_NAMED
-} CallSiteType;
+INLINE CallSiteStruct* CallSite_get(Code* code, uint32_t idx) {
+    return (CallSiteStruct*)&code->callSites[idx];
+}
 
-// Accessors to the call site
-INLINE uint32_t* CallSite_call(uint32_t* callSite) { return callSite; }
-INLINE CallSiteType* CallSite_type(uint32_t* callSite) {
-    return (CallSiteType*)callSite + 1;
-}
-INLINE bool CallSite_hasNames(uint32_t* callSite) {
-    return (*CallSite_type(callSite) == CALL_SITE_NAMED) ||
-           (*CallSite_type(callSite) == CALL_SITE_STACK_NAMED);
-}
-INLINE bool CallSite_hasArgs(uint32_t* callSite) {
-    return (*CallSite_type(callSite) == CALL_SITE_NAMED) ||
-           (*CallSite_type(callSite) == CALL_SITE_UNNAMED);
-}
-INLINE uint32_t* CallSite_args(uint32_t* callSite) { return callSite + 2; }
-INLINE uint32_t* CallSite_names(uint32_t* callSite, uint32_t nargs) {
-    assert(CallSite_hasNames(callSite));
-    return callSite + 2 + (CallSite_hasArgs(callSite) ? nargs : 0);
-}
-INLINE uint32_t* CallSite_selector(uint32_t* callSite, uint32_t nargs) {
-    return callSite + 2 + (CallSite_hasArgs(callSite) ? nargs : 0) +
-           (CallSite_hasNames(callSite) ? nargs : 0);
+INLINE uint32_t* CallSite_names(CallSiteStruct* cs, uint32_t nargs) {
+    assert(cs->hasNames);
+    return &cs->args[(cs->hasImmediateArgs ? nargs : 0)];
 }
 
 /** Returns whether the SEXP appears to be valid promise, i.e. a pointer into

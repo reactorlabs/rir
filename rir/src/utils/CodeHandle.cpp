@@ -25,7 +25,7 @@ void CodeHandle::print() {
         Rprintf(" %5d ", ((uintptr_t)pc - (uintptr_t)bc()));
         BC bc = BC::advance(&pc);
         if (bc.isCallsite()) {
-            bc.print(bc.callSite(code->callSites));
+            bc.print(bc.callSite(code));
         } else {
             bc.print();
         }

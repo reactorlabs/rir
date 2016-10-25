@@ -50,7 +50,7 @@ class CodeEditor {
         BC bc;
         bool deleted = false;
         unsigned srcIdx = 0;
-        uint32_t* callSite = nullptr;
+        CallSiteStruct* callSite = nullptr;
         BytecodeList* prev = nullptr;
         BytecodeList* next = nullptr;
         BytecodeList* patch = nullptr;

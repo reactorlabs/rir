@@ -77,11 +77,11 @@ void CodeEditor::loadCode(FunctionHandle function, CodeHandle code) {
 
             // If this is a call, we copy the callsite information locally
             if (bc.isCallsite()) {
-                auto oldCs = bc.callSite(code.code->callSites);
+                auto oldCs = bc.callSite(code.code);
                 auto nargs = oldCs.nargs();
                 bool hasNames = oldCs.hasNames();
                 unsigned needed = BC::CallSiteSize(bc.bc, nargs, hasNames);
-                pos->callSite = new uint32_t[needed];
+                pos->callSite = (CallSiteStruct*)new uint32_t[needed];
                 memcpy(pos->callSite, oldCs.cs, needed * sizeof(uint32_t));
             }
             if (bc.hasPromargs()) {
@@ -97,10 +97,10 @@ void CodeEditor::loadCode(FunctionHandle function, CodeHandle code) {
 
                     promises[code.idx()] = p;
                 } else {
-                    auto oldCs = bc.callSite(code.code->callSites);
+                    auto oldCs = bc.callSite(code.code);
                     auto nargs = oldCs.nargs();
 
-                    uint32_t* cs = pos->callSite;
+                    CallSiteStruct* cs = pos->callSite;
 
                     // Load all code objects of the callsite and update
                     // the indices (in the CodeEditor they are not offsets
@@ -114,7 +114,7 @@ void CodeEditor::loadCode(FunctionHandle function, CodeHandle code) {
                             if (promises.size() <= code.idx())
                                 promises.resize(code.idx() + 1, nullptr);
                             promises[code.idx()] = p;
-                            CallSite_args(cs)[i] = arg;
+                            cs->args[i] = arg;
                         }
                     }
                 }
@@ -195,7 +195,7 @@ unsigned CodeEditor::write(FunctionHandle& function) {
                         CodeEditor* e = promises[arg];
                         arg = e->write(function);
                     }
-                    CallSite_args(cur.callSite().cs)[i] = arg;
+                    cur.callSite().cs->args[i] = arg;
                 }
             }
         }
