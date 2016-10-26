@@ -347,7 +347,5 @@ SEXP CallSite::selector() { return Pool::get(cs->selector); }
 
 SEXP CallSite::call() { return Pool::get(cs->call); }
 
-SEXP CallSite::name(pool_idx_t i) {
-    return Pool::get(CallSite_names(cs, nargs())[i]);
-}
+SEXP CallSite::name(pool_idx_t i) { return Pool::get(CallSite_names(cs)[i]); }
 }

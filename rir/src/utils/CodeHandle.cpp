@@ -25,7 +25,25 @@ void CodeHandle::print() {
         Rprintf(" %5d ", ((uintptr_t)pc - (uintptr_t)bc()));
         BC bc = BC::advance(&pc);
         if (bc.isCallsite()) {
-            bc.print(bc.callSite(code));
+            CallSite cs = bc.callSite(code);
+            bc.print(cs);
+
+            if (cs.hasProfile()) {
+                CallSiteProfile* prof = cs.profile();
+                Rprintf("           Prof : [");
+                if (prof->takenOverflow)
+                    Rprintf("*, <");
+                else
+                    Rprintf("%u, <", prof->taken);
+                if (prof->targetsOverflow)
+                    Rprintf("*>, ");
+                else
+                    Rprintf("%u> ", prof->numTargets);
+                for (int i = 0; i < prof->numTargets; ++i)
+                    Rprintf("%p(%s) ", prof->targets[i],
+                            type2char(TYPEOF(prof->targets[i])));
+                Rprintf("]\n");
+            }
         } else {
             bc.print();
         }

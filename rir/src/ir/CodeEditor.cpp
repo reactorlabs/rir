@@ -78,9 +78,7 @@ void CodeEditor::loadCode(FunctionHandle function, CodeHandle code) {
             // If this is a call, we copy the callsite information locally
             if (bc.isCallsite()) {
                 auto oldCs = bc.callSite(code.code);
-                auto nargs = oldCs.nargs();
-                bool hasNames = oldCs.hasNames();
-                unsigned needed = BC::CallSiteSize(bc.bc, nargs, hasNames);
+                unsigned needed = CallSite_sizeOf(oldCs.cs);
                 pos->callSite = (CallSiteStruct*)new uint32_t[needed];
                 memcpy(pos->callSite, oldCs.cs, needed * sizeof(uint32_t));
             }
@@ -114,7 +112,7 @@ void CodeEditor::loadCode(FunctionHandle function, CodeHandle code) {
                             if (promises.size() <= code.idx())
                                 promises.resize(code.idx() + 1, nullptr);
                             promises[code.idx()] = p;
-                            cs->args[i] = arg;
+                            CallSite_args(cs)[i] = arg;
                         }
                     }
                 }
@@ -195,7 +193,7 @@ unsigned CodeEditor::write(FunctionHandle& function) {
                         CodeEditor* e = promises[arg];
                         arg = e->write(function);
                     }
-                    cur.callSite().cs->args[i] = arg;
+                    CallSite_args(cur.callSite().cs)[i] = arg;
                 }
             }
         }

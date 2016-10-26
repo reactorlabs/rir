@@ -321,8 +321,8 @@ SEXP createArgsListStack(Code* c, size_t nargs, CallSiteStruct* cs, SEXP env,
 
     for (size_t i = 0; i < nargs; ++i) {
 
-        SEXP name = hasNames ? cp_pool_at(ctx, CallSite_names(cs, nargs)[i])
-                             : R_NilValue;
+        SEXP name =
+            hasNames ? cp_pool_at(ctx, CallSite_names(cs)[i]) : R_NilValue;
 
         SEXP arg = argbase[i];
 
@@ -358,9 +358,9 @@ SEXP createArgsList(Code* c, SEXP call, size_t nargs, CallSiteStruct* cs,
     bool hasNames = cs->hasNames;
 
     for (size_t i = 0; i < nargs; ++i) {
-        unsigned argi = cs->args[i];
-        SEXP name = hasNames ? cp_pool_at(ctx, CallSite_names(cs, nargs)[i])
-                             : R_NilValue;
+        unsigned argi = CallSite_args(cs)[i];
+        SEXP name =
+            hasNames ? cp_pool_at(ctx, CallSite_names(cs)[i]) : R_NilValue;
 
         // if the argument is an ellipsis, then retrieve it from the environment
         // and
@@ -449,11 +449,11 @@ INLINE SEXP rirCallClosure(SEXP call, SEXP env, SEXP callee, SEXP actuals,
     closureDebug(call, callee, env, newEnv, cntxt);
     SEXP body = BODY(callee);
     Function* fun = (Function*)INTEGER(body);
-    fun->invocationCount++;
-    if (fun->invocationCount > 1000) {
-        // printf("Hot %p\n", fun);
-        fun->invocationCount = 0;
+    if (fun->invocationCount == 2000) {
+        // To dump Hot functions:
+        // printFunction(fun);
     }
+    fun->invocationCount++;
     Code* code = functionCode(fun);
 
     SEXP result = rirCallTrampoline(cntxt, code, newEnv, nargs, ctx);
@@ -505,10 +505,37 @@ void warnSpecial(SEXP callee, SEXP call) {
   TODO this is currently super simple.
 
  */
+
+void profileCall(CallSiteStruct* cs, SEXP callee) {
+    if (!cs->hasProfile)
+        return;
+
+    CallSiteProfile* p = CallSite_profile(cs);
+    if (!p->takenOverflow) {
+        if (p->taken + 1 == CallSiteProfile_maxTaken)
+            p->takenOverflow = true;
+        else
+            p->taken++;
+    }
+    if (!p->targetsOverflow) {
+        if (p->numTargets + 1 == CallSiteProfile_maxTargets) {
+            p->targetsOverflow = true;
+        } else {
+            int i = 0;
+            for (; i < p->numTargets; ++i)
+                if (p->targets[i] == callee)
+                    break;
+            if (i == p->numTargets)
+                p->targets[p->numTargets++] = callee;
+        }
+    }
+}
+
 SEXP doCall(Code* caller, SEXP callee, unsigned nargs, unsigned id, SEXP env,
             OpcodeT** pc, Context* ctx) {
 
     CallSiteStruct* cs = CallSite_get(caller, id);
+    profileCall(cs, callee);
     SEXP call = cp_pool_at(ctx, cs->call);
 
     SEXP result = R_NilValue;
@@ -646,6 +673,7 @@ SEXP doCallStack(Code* caller, size_t nargs, unsigned id, SEXP env,
 
     // TODO: in the case of closures we should not do it eagerly
     SEXP callee = *ostack_at(ctx, nargs);
+    profileCall(cs, callee);
     if (TYPEOF(callee) == SPECIALSXP || TYPEOF(callee) == CLOSXP)
         call = fixupAST(call, ctx, nargs);
     PROTECT(call);
@@ -736,6 +764,7 @@ SEXP doDispatchStack(Code* caller, size_t nargs, uint32_t id, SEXP env,
     assert(false);
 #endif
     CallSiteStruct* cs = CallSite_get(caller, id);
+    profileCall(cs, Rf_install("*dispatch*"));
     SEXP call = cp_pool_at(ctx, cs->call);
     SEXP selector = cp_pool_at(ctx, cs->selector);
 
@@ -863,6 +892,7 @@ SEXP doDispatch(Code* caller, uint32_t nargs, uint32_t id, SEXP env,
     assert(isObject(obj));
 
     CallSiteStruct* cs = CallSite_get(caller, id);
+    profileCall(cs, Rf_install("*dispatch*"));
     SEXP call = cp_pool_at(ctx, cs->call);
     SEXP selector = cp_pool_at(ctx, cs->selector);
 

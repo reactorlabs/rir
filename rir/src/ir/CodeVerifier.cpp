@@ -161,7 +161,7 @@ void CodeVerifier::vefifyFunctionLayout(SEXP sexp, ::Context* ctx) {
     // remove the sentinel
     objs.pop_back();
 
-    auto verifyCallSite = [&ctx](CallSiteStruct* cs) {
+    auto verifyCallSite = [&ctx](CallSiteStruct* cs, uint32_t nargs) {
         SEXP call = cp_pool_at(ctx, cs->call);
         assert(TYPEOF(call) == LANGSXP || TYPEOF(call) == SYMSXP ||
                TYPEOF(call) == NILSXP);
@@ -169,6 +169,7 @@ void CodeVerifier::vefifyFunctionLayout(SEXP sexp, ::Context* ctx) {
             SEXP selector = cp_pool_at(ctx, cs->selector);
             assert(TYPEOF(selector) == SYMSXP);
         }
+        assert(cs->nargs == nargs);
     };
 
     // check that the call instruction has proper arguments and number of
@@ -191,11 +192,11 @@ void CodeVerifier::vefifyFunctionLayout(SEXP sexp, ::Context* ctx) {
                 unsigned callIdx = *reinterpret_cast<ArgT*>(cptr + 1);
                 CallSiteStruct* cs = CallSite_get(c, callIdx);
                 uint32_t nargs = *reinterpret_cast<ArgT*>(cptr + 5);
-                verifyCallSite(cs);
+                verifyCallSite(cs, nargs);
 
                 if (cs->hasNames) {
                     for (size_t i = 0, e = nargs; i != e; ++i) {
-                        uint32_t offset = CallSite_names(cs, nargs)[i];
+                        uint32_t offset = CallSite_names(cs)[i];
                         if (offset) {
                             SEXP name = cp_pool_at(ctx, offset);
                             assert(TYPEOF(name) == SYMSXP ||
@@ -222,11 +223,11 @@ void CodeVerifier::vefifyFunctionLayout(SEXP sexp, ::Context* ctx) {
                 unsigned callIdx = *reinterpret_cast<ArgT*>(cptr + 1);
                 CallSiteStruct* cs = CallSite_get(c, callIdx);
                 uint32_t nargs = *reinterpret_cast<ArgT*>(cptr + 5);
-                verifyCallSite(cs);
+                verifyCallSite(cs, nargs);
                 assert(cs->hasImmediateArgs);
 
                 for (size_t i = 0, e = nargs; i != e; ++i) {
-                    uint32_t offset = cs->args[i];
+                    uint32_t offset = CallSite_args(cs)[i];
                     if (offset == MISSING_ARG_IDX || offset == DOTS_ARG_IDX)
                         continue;
                     bool ok = false;
@@ -239,7 +240,7 @@ void CodeVerifier::vefifyFunctionLayout(SEXP sexp, ::Context* ctx) {
                 }
                 if (cs->hasNames) {
                     for (size_t i = 0, e = nargs; i != e; ++i) {
-                        uint32_t offset = CallSite_names(cs, nargs)[i];
+                        uint32_t offset = CallSite_names(cs)[i];
                         if (offset) {
                             SEXP name = cp_pool_at(ctx, offset);
                             assert(TYPEOF(name) == SYMSXP ||

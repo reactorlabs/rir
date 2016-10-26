@@ -63,6 +63,13 @@ class CodeStream {
         }
     }
 
+    CallSiteStruct* getNextCallSite(uint32_t needed) {
+        CallSiteStruct* cs = (CallSiteStruct*)&callSites_[nextCallSiteIdx_];
+        memset(cs, 0, needed);
+        nextCallSiteIdx_ += needed;
+        return cs;
+    }
+
     CodeStream& insertStackCall(BC_t bc, uint32_t nargs,
                                 std::vector<SEXP> names, SEXP call,
                                 SEXP selector = nullptr) {
@@ -82,20 +89,21 @@ class CodeStream {
                 }
             }
 
-        unsigned needed = BC::CallSiteSize(bc, nargs, hasNames);
+        unsigned needed = CallSite_size(false, hasNames, false, nargs);
         ensureCallSiteSize(needed);
 
-        CallSiteStruct* cs = (CallSiteStruct*)&callSites_[nextCallSiteIdx_];
-        nextCallSiteIdx_ += needed;
+        CallSiteStruct* cs = getNextCallSite(needed);
 
+        cs->nargs = nargs;
         cs->call = Pool::insert(call);
+        cs->hasProfile = false;
         cs->hasNames = hasNames;
         cs->hasSelector = (bc == BC_t::dispatch_stack_);
         cs->hasImmediateArgs = false;
 
         if (hasNames) {
             for (unsigned i = 0; i < nargs; ++i) {
-                CallSite_names(cs, nargs)[i] = Pool::insert(names[i]);
+                CallSite_names(cs)[i] = Pool::insert(names[i]);
             }
         }
 
@@ -129,22 +137,23 @@ class CodeStream {
                 }
             }
 
-        unsigned needed = BC::CallSiteSize(bc, nargs, hasNames);
+        unsigned needed = CallSite_size(true, hasNames, true, nargs);
         ensureCallSiteSize(needed);
 
-        CallSiteStruct* cs = (CallSiteStruct*)&callSites_[nextCallSiteIdx_];
-        nextCallSiteIdx_ += needed;
+        CallSiteStruct* cs = getNextCallSite(needed);
 
+        cs->nargs = nargs;
         cs->call = Pool::insert(call);
+        cs->hasProfile = true;
         cs->hasNames = hasNames;
         cs->hasSelector = (bc == BC_t::dispatch_);
         cs->hasImmediateArgs = true;
 
         int i = 0;
         for (auto arg : args) {
-            cs->args[i] = arg;
+            CallSite_args(cs)[i] = arg;
             if (hasNames)
-                CallSite_names(cs, nargs)[i] = Pool::insert(names[i]);
+                CallSite_names(cs)[i] = Pool::insert(names[i]);
             ++i;
         }
 
@@ -163,10 +172,7 @@ class CodeStream {
         insert(callSite.nargs());
         sources.push_back(0);
 
-        auto nargs = callSite.nargs();
-        bool hasNames = callSite.hasNames();
-
-        unsigned needed = BC::CallSiteSize(bc, nargs, hasNames);
+        unsigned needed = CallSite_sizeOf(callSite.cs);
         ensureCallSiteSize(needed);
 
         void* cs = &callSites_[nextCallSiteIdx_];

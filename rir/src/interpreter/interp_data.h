@@ -168,19 +168,33 @@ typedef struct Code {
      */
 } Code;
 
+const static unsigned CallSiteProfile_maxTaken = 1 << 27;
+const static unsigned CallSiteProfile_maxTargets = 1 << 3;
+typedef struct {
+    uint32_t taken : 27;
+    uint32_t takenOverflow : 1;
+    uint32_t numTargets : 3;
+    uint32_t targetsOverflow : 1;
+    SEXP targets[7];
+} CallSiteProfile;
+
 typedef struct {
     uint32_t call;
     uint32_t selector;
+    uint32_t nargs; // This is duplicated, not sure how to avoid
     uint32_t hasNames : 1;
     uint32_t hasSelector : 1;
     uint32_t hasImmediateArgs : 1;
-    uint32_t args[];
+    uint32_t hasProfile : 1;
+
+    uint32_t payload[];
 
     /*
      * Layout of args is:
      *
      * nargs * promise offset    if hasImmediateArgs
      * nargs * cp_idx of names   if hasNames
+     * CallSiteProfile           if hasProfile
      *
      */
 
@@ -188,9 +202,34 @@ typedef struct {
 
 #pragma pack(pop)
 
-INLINE uint32_t* CallSite_names(CallSiteStruct* cs, uint32_t nargs) {
+INLINE uint32_t* CallSite_names(CallSiteStruct* cs) {
     assert(cs->hasNames);
-    return &cs->args[(cs->hasImmediateArgs ? nargs : 0)];
+    return &cs->payload[(cs->hasImmediateArgs ? cs->nargs : 0)];
+}
+
+INLINE uint32_t* CallSite_args(CallSiteStruct* cs) {
+    assert(cs->hasImmediateArgs);
+    return cs->payload;
+}
+
+INLINE CallSiteProfile* CallSite_profile(CallSiteStruct* cs) {
+    assert(cs->hasProfile);
+    return (CallSiteProfile*)&cs
+        ->payload[(cs->hasImmediateArgs ? cs->nargs : 0) +
+                  (cs->hasNames ? cs->nargs : 0)];
+}
+
+INLINE unsigned CallSite_size(bool hasImmediateArgs, bool hasNames,
+                              bool hasProfile, uint32_t nargs) {
+    return sizeof(CallSiteStruct) +
+           sizeof(uint32_t) *
+               ((hasImmediateArgs ? nargs : 0) + (hasNames ? nargs : 0)) +
+           +(hasProfile ? sizeof(CallSiteProfile) : 0);
+}
+
+INLINE unsigned CallSite_sizeOf(CallSiteStruct* cs) {
+    return CallSite_size(cs->hasImmediateArgs, cs->hasNames, cs->hasProfile,
+                         cs->nargs);
 }
 
 /** Returns whether the SEXP appears to be valid promise, i.e. a pointer into

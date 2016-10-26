@@ -140,22 +140,6 @@ class BC {
     // Return the callsite of this BC, needs the cassSites buffer as input
     CallSite callSite(Code* code);
 
-    static unsigned CallSiteSize(BC_t bc, unsigned nargs, bool hasNames) {
-        switch (bc) {
-        case BC_t::call_:
-        case BC_t::dispatch_:
-            return sizeof(CallSiteStruct) +
-                   sizeof(uint32_t) * (nargs + (hasNames ? nargs : 0));
-        case BC_t::call_stack_:
-        case BC_t::dispatch_stack_:
-            return sizeof(CallSiteStruct) +
-                   sizeof(uint32_t) * (hasNames ? nargs : 0);
-        default:
-            assert(false);
-        }
-        return 0;
-    }
-
     inline static BC_t* jmpTarget(BC_t* pos) {
         BC bc = BC::decode(pos);
         assert(bc.isJmp());
@@ -346,12 +330,15 @@ class CallSite {
     CallSite(BC bc, CallSiteStruct* cs);
 
     bool isValid() { return cs != nullptr; }
-    num_args_t nargs() { return bc.immediate.call_args.nargs; }
+    num_args_t nargs() { return cs->nargs; }
     SEXP call();
-    fun_idx_t arg(num_args_t idx) { return cs->args[idx]; }
+    fun_idx_t arg(num_args_t idx) { return CallSite_args(cs)[idx]; }
     bool hasNames() { return cs->hasNames; }
+    bool hasProfile() { return cs->hasProfile; }
     SEXP selector();
     SEXP name(num_args_t idx);
+
+    CallSiteProfile* profile() { return CallSite_profile(cs); }
 };
 
 } // rir

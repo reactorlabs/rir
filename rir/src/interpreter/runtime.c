@@ -185,7 +185,8 @@ void printCode(Code* c) {
     Rprintf("\n  Skiplist:  %u \n", c->skiplistLength);
     unsigned* sl = skiplist(c);
     for (unsigned i = 0; i < c->skiplistLength; ++i) {
-        Rprintf("    pc: %u -> src_idx: %u\n", *sl, *(sl + 1));
+        if (*(sl + 1) != -1)
+            Rprintf("    pc: %u -> src_idx: %u\n", *sl, *(sl + 1));
         sl += 2;
     }
     Rprintf("\n");
@@ -199,6 +200,7 @@ void printFunction(Function* f) {
     Rprintf("  Origin:          %s\n", f->origin ? "optimized" : "unoptimized");
     Rprintf("  Code objects:    %u\n", f->codeLength);
     Rprintf("  Fun code offset: %x (hex)\n", f->foffset);
+    Rprintf("  Invoked:         %u\n", f->invocationCount);
 
     if (f->magic != FUNCTION_MAGIC)
         Rf_error("Wrong magic number -- not rir bytecode");
