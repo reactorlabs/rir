@@ -79,8 +79,8 @@ void CodeEditor::loadCode(FunctionHandle function, CodeHandle code) {
             if (bc.isCallsite()) {
                 auto oldCs = bc.callSite(code.code);
                 unsigned needed = CallSite_sizeOf(oldCs.cs);
-                pos->callSite = (CallSiteStruct*)new uint32_t[needed];
-                memcpy(pos->callSite, oldCs.cs, needed * sizeof(uint32_t));
+                pos->callSite = (CallSiteStruct*)new char[needed];
+                memcpy(pos->callSite, oldCs.cs, needed);
             }
             if (bc.hasPromargs()) {
                 if (bc.bc == BC_t::promise_ || bc.bc == BC_t::push_code_) {

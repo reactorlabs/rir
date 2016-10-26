@@ -264,86 +264,91 @@ class CodeEditor {
             return *this;
         }
 
-        // void insert(CodeEditor& other) {
-        //    editor.changed = true;
+        void insert(CodeEditor& other) {
+            editor.changed = true;
 
-        //    size_t labels = editor.nextLabel;
-        //    size_t proms = editor.promises.size();
+            size_t labels = editor.nextLabel;
+            size_t proms = editor.promises.size();
 
-        //    std::unordered_map<fun_idx_t, fun_idx_t> duplicate;
+            std::unordered_map<fun_idx_t, fun_idx_t> duplicate;
 
-        //    fun_idx_t j = 0;
-        //    for (auto& p : other.promises) {
-        //        bool found = false;
-        //        for (fun_idx_t i = 0; i < editor.promises.size(); ++i) {
-        //            if (p == editor.promises[i]) {
-        //                duplicate[j] = i;
-        //                editor.promises.push_back(nullptr);
-        //                found = true;
-        //                break;
-        //            }
-        //        }
-        //        if (!found) {
-        //            // We own the promise now
-        //            editor.promises.push_back(p);
-        //            p = nullptr;
-        //        }
-        //        j++;
-        //    }
+            fun_idx_t j = 0;
+            for (auto& p : other.promises) {
+                bool found = false;
+                for (fun_idx_t i = 0; i < editor.promises.size(); ++i) {
+                    if (p == editor.promises[i]) {
+                        duplicate[j] = i;
+                        editor.promises.push_back(nullptr);
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found) {
+                    // We own the promise now
+                    editor.promises.push_back(p);
+                    p = nullptr;
+                }
+                j++;
+            }
 
-        //    bool first = true;
-        //    Cursor cur = other.getCursor();
-        //    while (!cur.atEnd()) {
-        //        *this << cur.bc();
+            bool first = true;
+            Cursor cur = other.getCursor();
+            while (!cur.atEnd()) {
+                *this << cur.bc();
 
-        //        BytecodeList* insert = prev().pos;
+                BytecodeList* insert = prev().pos;
 
-        //        insert->srcIdx = cur.pos->srcIdx;
+                insert->srcIdx = cur.pos->srcIdx;
 
-        //        if (first) {
-        //            if (!insert->srcIdx)
-        //                insert->srcIdx =
-        //                    src_pool_add(globalContext(), other.ast);
-        //            first = false;
-        //        }
+                if (first) {
+                    if (!insert->srcIdx)
+                        insert->srcIdx =
+                            src_pool_add(globalContext(), other.ast);
+                    first = false;
+                }
 
-        //        // Fix prom offsets
-        //        if (insert->bc.bc == BC_t::call_ ||
-        //            insert->bc.bc == BC_t::dispatch_) {
-        //            fun_idx_t* args = insert->bc.immediateCallArgs();
-        //            num_args_t nargs = insert->bc.immediateCallNargs();
-        //            for (unsigned i = 0; i < nargs; ++i) {
-        //                if (args[i] > MAX_ARG_IDX)
-        //                    continue;
+                if (cur.bc().isCallsite()) {
+                    auto oldCs = cur.callSite();
+                    unsigned needed = CallSite_sizeOf(oldCs.cs);
+                    insert->callSite = (CallSiteStruct*)new char[needed];
+                    memcpy(insert->callSite, oldCs.cs, needed);
+                }
+                // Fix prom offsets
+                if (insert->bc.bc == BC_t::call_ ||
+                    insert->bc.bc == BC_t::dispatch_) {
+                    CallSite cs = cur.callSite();
+                    for (unsigned i = 0; i < cs.nargs(); ++i) {
+                        if (cs.args()[i] > MAX_ARG_IDX)
+                            continue;
 
-        //                if (duplicate.count(args[i]))
-        //                    args[i] = duplicate.at(args[i]);
-        //                else
-        //                    args[i] += proms;
-        //            }
-        //        } else if (insert->bc.bc == BC_t::promise_ ||
-        //                   insert->bc.bc == BC_t::push_code_) {
-        //            if (duplicate.count(insert->bc.immediate.fun))
-        //                insert->bc.immediate.fun =
-        //                    duplicate.at(insert->bc.immediate.fun);
-        //            else
-        //                insert->bc.immediate.fun += proms;
-        //        } else {
-        //            assert(!insert->bc.hasPromargs());
-        //        }
-        //        // Fix labels
-        //        if (insert->bc.bc == BC_t::label)
-        //            insert->bc.immediate.offset += labels;
-        //        // Adjust jmp targets
-        //        if (insert->bc.isJmp()) {
-        //            insert->bc.immediate.offset += labels;
-        //        }
-        //    }
-        //    editor.nextLabel += other.nextLabel;
+                        if (duplicate.count(cs.args()[i]))
+                            cs.args()[i] = duplicate.at(cs.args()[i]);
+                        else
+                            cs.args()[i] += proms;
+                    }
+                } else if (insert->bc.bc == BC_t::promise_ ||
+                           insert->bc.bc == BC_t::push_code_) {
+                    if (duplicate.count(insert->bc.immediate.fun))
+                        insert->bc.immediate.fun =
+                            duplicate.at(insert->bc.immediate.fun);
+                    else
+                        insert->bc.immediate.fun += proms;
+                } else {
+                    assert(!insert->bc.hasPromargs());
+                }
+                // Fix labels
+                if (insert->bc.bc == BC_t::label)
+                    insert->bc.immediate.offset += labels;
+                // Adjust jmp targets
+                if (insert->bc.isJmp()) {
+                    insert->bc.immediate.offset += labels;
+                }
+            }
+            editor.nextLabel += other.nextLabel;
 
-        //    // TODO: that stinks, I know
-        //    delete &other;
-        //}
+            // TODO: that stinks, I know
+            delete &other;
+        }
 
         void remove() {
             editor.changed = true;

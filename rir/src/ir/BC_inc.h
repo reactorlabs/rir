@@ -332,6 +332,7 @@ class CallSite {
     bool isValid() { return cs != nullptr; }
     num_args_t nargs() { return cs->nargs; }
     SEXP call();
+    fun_idx_t* args() { return CallSite_args(cs); }
     fun_idx_t arg(num_args_t idx) { return CallSite_args(cs)[idx]; }
     bool hasNames() { return cs->hasNames; }
     bool hasProfile() { return cs->hasProfile; }
