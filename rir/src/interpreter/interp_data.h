@@ -180,8 +180,12 @@ typedef struct {
 
 typedef struct {
     uint32_t call;
+    // This is not always needed, but maybe it does not pay off to put it
+    // in the payload just to save 4 bytes...
     uint32_t selector;
-    uint32_t nargs; // This is duplicated, not sure how to avoid
+    // This is duplicated in the BC instruction, not sure how to avoid
+    // without making accessing the payload a pain...
+    uint32_t nargs;
     uint32_t hasNames : 1;
     uint32_t hasSelector : 1;
     uint32_t hasImmediateArgs : 1;
