@@ -117,7 +117,7 @@ class BC {
         assert(bc != BC_t::return_);
         if (bc == BC_t::call_stack_)
             return immediate.call_args.nargs + 1;
-        if (bc == BC_t::dispatch_stack_)
+        if (bc == BC_t::static_call_stack_ || bc == BC_t::dispatch_stack_)
             return immediate.call_args.nargs;
         return popCount(bc);
     }
@@ -148,7 +148,8 @@ class BC {
 
     bool isCallsite() {
         return bc == BC_t::call_ || bc == BC_t::dispatch_ ||
-               bc == BC_t::call_stack_ || bc == BC_t::dispatch_stack_;
+               bc == BC_t::call_stack_ || bc == BC_t::dispatch_stack_ ||
+               bc == BC_t::static_call_stack_;
     }
 
     bool hasPromargs() {
@@ -338,6 +339,7 @@ class CallSite {
     bool hasProfile() { return cs->hasProfile; }
     SEXP selector();
     SEXP name(num_args_t idx);
+    SEXP target();
 
     CallSiteProfile* profile() { return CallSite_profile(cs); }
 };

@@ -166,8 +166,15 @@ void CodeVerifier::vefifyFunctionLayout(SEXP sexp, ::Context* ctx) {
         assert(TYPEOF(call) == LANGSXP || TYPEOF(call) == SYMSXP ||
                TYPEOF(call) == NILSXP);
         if (cs->hasSelector) {
-            SEXP selector = cp_pool_at(ctx, cs->selector);
+            assert(!cs->hasTarget);
+            SEXP selector = cp_pool_at(ctx, *CallSite_selector(cs));
             assert(TYPEOF(selector) == SYMSXP);
+        } else if (cs->hasTarget) {
+            assert(!cs->hasSelector);
+            SEXP selector = cp_pool_at(ctx, *CallSite_target(cs));
+            assert(TYPEOF(selector) == SYMSXP);
+        } else {
+            assert(cs->trg == 0);
         }
         assert(cs->nargs == nargs);
     };
@@ -205,7 +212,7 @@ void CodeVerifier::vefifyFunctionLayout(SEXP sexp, ::Context* ctx) {
                     }
                 }
                 if (*cptr == BC_t::dispatch_stack_) {
-                    SEXP selector = cp_pool_at(ctx, cs->selector);
+                    SEXP selector = cp_pool_at(ctx, *CallSite_selector(cs));
                     assert(TYPEOF(selector) == SYMSXP);
                 }
             }
@@ -249,7 +256,7 @@ void CodeVerifier::vefifyFunctionLayout(SEXP sexp, ::Context* ctx) {
                     }
                 }
                 if (*cptr == BC_t::dispatch_) {
-                    SEXP selector = cp_pool_at(ctx, cs->selector);
+                    SEXP selector = cp_pool_at(ctx, *CallSite_selector(cs));
                     assert(TYPEOF(selector) == SYMSXP);
                 }
             }

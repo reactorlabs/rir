@@ -788,11 +788,11 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
 
             // If the .Internal call goes to a builtin, then we call eagerly
             if (R_FunTab[i].eval % 10 == 1) {
-                cs << BC::isspecial(symbol::Internal)
-                   << BC::push(internal);
+                cs << BC::isspecial(symbol::Internal);
                 for (auto a : args)
                     compileExpr(ctx, a);
-                cs.insertStackCall(BC_t::call_stack_, args.length(), {}, ast);
+                cs.insertStackCall(BC_t::static_call_stack_, args.length(), {},
+                                   ast, internal);
 
                 return true;
             }
@@ -907,12 +907,12 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
         if (fun == symbol::standardGeneric)
             return false;
 
-        cs << BC::isspecial(fun)
-           << BC::push(builtin);
+        cs << BC::isspecial(fun);
 
         for (auto a : args)
             compileExpr(ctx, a);
-        cs.insertStackCall(BC_t::call_stack_, args.length(), {}, ast);
+        cs.insertStackCall(BC_t::static_call_stack_, args.length(), {}, ast,
+                           builtin);
 
         return true;
     }

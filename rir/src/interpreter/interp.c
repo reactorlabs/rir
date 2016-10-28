@@ -663,7 +663,7 @@ INLINE SEXP fixupAST(SEXP call, Context* ctx, size_t nargs) {
 }
 
 // TODO: unify with the above doCall
-SEXP doCallStack(Code* caller, size_t nargs, unsigned id, SEXP env,
+SEXP doCallStack(Code* caller, SEXP callee, size_t nargs, unsigned id, SEXP env,
                  OpcodeT** pc, Context* ctx) {
 
     CallSiteStruct* cs = CallSite_get(caller, id);
@@ -672,7 +672,6 @@ SEXP doCallStack(Code* caller, size_t nargs, unsigned id, SEXP env,
     SEXP res = R_NilValue;
 
     // TODO: in the case of closures we should not do it eagerly
-    SEXP callee = *ostack_at(ctx, nargs);
     profileCall(cs, callee);
     if (TYPEOF(callee) == SPECIALSXP || TYPEOF(callee) == CLOSXP)
         call = fixupAST(call, ctx, nargs);
@@ -682,7 +681,6 @@ SEXP doCallStack(Code* caller, size_t nargs, unsigned id, SEXP env,
     case SPECIALSXP: {
         assert(call != R_NilValue);
         ostack_popn(ctx, nargs);
-        ostack_pop(ctx); // callee
         // get the ccode
         CCODE f = getBuiltin(callee);
         int flag = getFlag(callee);
@@ -701,7 +699,6 @@ SEXP doCallStack(Code* caller, size_t nargs, unsigned id, SEXP env,
         SEXP argslist = createArgsListStack(caller, nargs, cs, env, ctx, true);
         PROTECT(argslist);
         ostack_popn(ctx, nargs);
-        ostack_pop(ctx); // callee
         // get the ccode
         CCODE f = getBuiltin(callee);
         int flag = getFlag(callee);
@@ -722,7 +719,6 @@ SEXP doCallStack(Code* caller, size_t nargs, unsigned id, SEXP env,
         SEXP argslist = createArgsListStack(caller, nargs, cs, env, ctx, false);
         PROTECT(argslist);
         ostack_popn(ctx, nargs);
-        ostack_pop(ctx); // callee
 #if RIR_AS_PACKAGE == 0
         // if body is INTSXP, it is rir serialized code, execute it directly
         SEXP body = BODY(callee);
@@ -766,7 +762,7 @@ SEXP doDispatchStack(Code* caller, size_t nargs, uint32_t id, SEXP env,
     CallSiteStruct* cs = CallSite_get(caller, id);
     profileCall(cs, Rf_install("*dispatch*"));
     SEXP call = cp_pool_at(ctx, cs->call);
-    SEXP selector = cp_pool_at(ctx, cs->selector);
+    SEXP selector = cp_pool_at(ctx, *CallSite_selector(cs));
 
     SEXP obj = *ostack_at(ctx, nargs - 1);
     assert(isObject(obj));
@@ -894,7 +890,7 @@ SEXP doDispatch(Code* caller, uint32_t nargs, uint32_t id, SEXP env,
     CallSiteStruct* cs = CallSite_get(caller, id);
     profileCall(cs, Rf_install("*dispatch*"));
     SEXP call = cp_pool_at(ctx, cs->call);
-    SEXP selector = cp_pool_at(ctx, cs->selector);
+    SEXP selector = cp_pool_at(ctx, *CallSite_selector(cs));
 
     SEXP actuals = createArgsList(caller, call, nargs, cs, env, ctx, false);
     ostack_push(ctx, actuals);
@@ -1002,7 +998,17 @@ SEXP doDispatch(Code* caller, uint32_t nargs, uint32_t id, SEXP env,
 INSTRUCTION(call_stack_) {
     unsigned id = readImmediate(pc);
     unsigned nargs = readImmediate(pc);
-    ostack_push(ctx, doCallStack(c, nargs, id, env, pc, ctx));
+    SEXP callee = *ostack_at(ctx, nargs);
+    SEXP res = doCallStack(c, callee, nargs, id, env, pc, ctx);
+    ostack_pop(ctx); // callee
+    ostack_push(ctx, res);
+}
+
+INSTRUCTION(static_call_stack_) {
+    unsigned id = readImmediate(pc);
+    unsigned nargs = readImmediate(pc);
+    SEXP callee = cp_pool_at(ctx, *CallSite_target(CallSite_get(c, id)));
+    ostack_push(ctx, doCallStack(c, callee, nargs, id, env, pc, ctx));
 }
 
 INSTRUCTION(call_) {
@@ -1986,6 +1992,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
             INS(lt_);
             INS(call_);
             INS(call_stack_);
+            INS(static_call_stack_);
             INS(dispatch_stack_);
             INS(promise_);
             INS(push_code_);

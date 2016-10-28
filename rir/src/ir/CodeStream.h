@@ -72,7 +72,7 @@ class CodeStream {
 
     CodeStream& insertStackCall(BC_t bc, uint32_t nargs,
                                 std::vector<SEXP> names, SEXP call,
-                                SEXP selector = nullptr) {
+                                SEXP targOrSelector = nullptr) {
         insert(bc);
         CallArgs a;
         a.call_id = nextCallSiteIdx_;
@@ -99,6 +99,7 @@ class CodeStream {
         cs->hasProfile = false;
         cs->hasNames = hasNames;
         cs->hasSelector = (bc == BC_t::dispatch_stack_);
+        cs->hasTarget = (bc == BC_t::static_call_stack_);
         cs->hasImmediateArgs = false;
 
         if (hasNames) {
@@ -108,9 +109,12 @@ class CodeStream {
         }
 
         if (bc == BC_t::dispatch_stack_) {
-            assert(selector);
-            assert(TYPEOF(selector) == SYMSXP);
-            cs->selector = Pool::insert(selector);
+            assert(TYPEOF(targOrSelector) == SYMSXP);
+            *CallSite_selector(cs) = Pool::insert(targOrSelector);
+        } else if (bc == BC_t::static_call_stack_) {
+            assert(TYPEOF(targOrSelector) == CLOSXP ||
+                   TYPEOF(targOrSelector) == BUILTINSXP);
+            *CallSite_target(cs) = Pool::insert(targOrSelector);
         }
 
         return *this;
@@ -160,7 +164,7 @@ class CodeStream {
         if (bc == BC_t::dispatch_) {
             assert(selector);
             assert(TYPEOF(selector) == SYMSXP);
-            cs->selector = Pool::insert(selector);
+            *CallSite_selector(cs) = Pool::insert(selector);
         }
 
         return *this;

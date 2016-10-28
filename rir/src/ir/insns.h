@@ -191,6 +191,10 @@ DEF_INSTR(call_stack_, 2, -1, 1, 0, 0)
  * call_stack_:: like call, but arguments are taken from the stack
  *               immediate are number of args and names
  */
+DEF_INSTR(static_call_stack_, 2, -1, 1, 0, 0)
+/**
+ * static_call_stack_:: like call_stack, but call target is immediate
+ */
 DEF_INSTR(uniq_, 0, 1, 1, 0, 0)
 /**
  * uniq_:: duplicates tos if it is shared (ie. named > 1)

@@ -30,6 +30,7 @@ bool BC::operator==(const BC& other) const {
     case BC_t::dispatch_:
     case BC_t::call_:
     case BC_t::call_stack_:
+    case BC_t::static_call_stack_:
     case BC_t::dispatch_stack_:
         return immediate.call_args.call_id == other.immediate.call_args.call_id;
 
@@ -116,6 +117,7 @@ void BC::write(CodeStream& cs) const {
     case BC_t::call_:
     case BC_t::dispatch_:
     case BC_t::call_stack_:
+    case BC_t::static_call_stack_:
     case BC_t::dispatch_stack_:
         assert(false);
         break;
@@ -255,6 +257,14 @@ void BC::print(CallSite cs) {
         }
         break;
     }
+    case BC_t::static_call_stack_: {
+        num_args_t nargs = immediate.call_args.nargs;
+        Rprintf(" %d ", nargs);
+        if (cs.isValid()) {
+            Rprintf(" %p ", cs.target());
+        }
+        break;
+    }
     case BC_t::dispatch_stack_: {
         if (cs.isValid()) {
             Rprintf(" `%s` ", CHAR(PRINTNAME(cs.selector())));
@@ -343,7 +353,9 @@ CallSite::CallSite(BC bc, CallSiteStruct* cs) : bc(bc), cs(cs) {
     assert(bc.isCallsite());
 }
 
-SEXP CallSite::selector() { return Pool::get(cs->selector); }
+SEXP CallSite::selector() { return Pool::get(*CallSite_selector(cs)); }
+
+SEXP CallSite::target() { return Pool::get(*CallSite_target(cs)); }
 
 SEXP CallSite::call() { return Pool::get(cs->call); }
 
