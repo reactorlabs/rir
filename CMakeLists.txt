@@ -68,7 +68,7 @@ endif(APPLE)
 set(MAKEVARS_SRC "SOURCES = $(wildcard *.cpp ir/*.cpp passes/codegen/*.cpp)\nOBJECTS = $(SOURCES:.cpp=.o)")
 
 # build the shared library for the JIT
-file(GLOB_RECURSE SRC "rir/src/*.cpp" "rir/src/*.c" "rir/src/*.h" "local/*" "rir/R/*.R" "rir/tests/*.R")
+file(GLOB_RECURSE SRC "rir/src/*.cpp" "rir/src/*.c" "rir/*/*.cpp" "rir/src/*.h" "local/*" "rir/R/*.R" "rir/tests/*.R")
 add_library(${PROJECT_NAME} SHARED ${SRC})
 add_dependencies(${PROJECT_NAME} setup-build-dir)
 
