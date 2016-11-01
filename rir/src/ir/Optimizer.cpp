@@ -10,6 +10,7 @@ void Optimizer::optimize(CodeEditor& code, int steam) {
     LoadElimination elim(code);
     for (int i = 0; i < 3; ++i) {
         cleanup.run();
+        code.commit();
         elim.run();
         code.commit();
     }
