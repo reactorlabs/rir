@@ -30,3 +30,4 @@ external/
 /tests
 *.dylib
 .R_HOME
+.ycm_extra_conf.py
