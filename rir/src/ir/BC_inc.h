@@ -97,7 +97,7 @@ class BC {
         uint32_t i;
     };
 
-    BC() : bc(BC_t::invalid_), immediate({0}) {}
+    BC() : bc(BC_t::invalid_), immediate({{0}}) {}
     BC operator=(BC other) {
         bc = other.bc;
         immediate = other.immediate;
@@ -233,7 +233,7 @@ class BC {
     inline static BC int3();
 
   private:
-    BC(BC_t bc) : bc(bc), immediate({0}) {}
+    BC(BC_t bc) : bc(bc), immediate({{0}}) {}
     BC(BC_t bc, immediate_t immediate) : bc(bc), immediate(immediate) {}
 
     static unsigned size(BC_t bc) {
@@ -336,6 +336,7 @@ class CallSite {
     fun_idx_t* args() { return CallSite_args(cs); }
     fun_idx_t arg(num_args_t idx) { return CallSite_args(cs)[idx]; }
     bool hasNames() { return cs->hasNames; }
+    bool hasTarget() { return cs->hasTarget; }
     bool hasProfile() { return cs->hasProfile; }
     SEXP selector();
     SEXP name(num_args_t idx);

@@ -14,7 +14,7 @@
   The idea is to call this if we want on demand compilation of closures.
  */
 typedef SEXP (*CompilerCallback)(SEXP);
-
+typedef SEXP (*OptimizerCallback)(SEXP);
 
 #ifdef __cplusplus
 extern "C" {
@@ -57,6 +57,7 @@ typedef struct {
     ResizeableList cp;
     ResizeableList src;
     CompilerCallback compiler;
+    OptimizerCallback optimizer;
 } Context;
 
 // Some symbols
@@ -137,7 +138,7 @@ INLINE void ostack_ensureSize(Context* c, unsigned minFree) {
     }
 }
 
-Context* context_create(CompilerCallback);
+Context* context_create(CompilerCallback, OptimizerCallback);
 
 INLINE size_t cp_pool_length(Context * c) {
     return rl_length(& c->cp);

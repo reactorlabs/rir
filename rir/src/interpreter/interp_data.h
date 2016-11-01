@@ -85,9 +85,6 @@ typedef SEXP ClosureSEXP;
 typedef SEXP PromiseSEXP;
 typedef SEXP IntSEXP;
 
-// type of relative jump offset (all jumps are relative)
-typedef int32_t JumpOffset;
-
 struct Function; // Forward declaration
 
 // all sizes in bytes,

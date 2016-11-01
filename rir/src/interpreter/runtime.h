@@ -68,7 +68,8 @@ C_OR_CPP SEXP rir_createWrapperAst(SEXP rirBytecode);
 
 C_OR_CPP SEXP rir_createWrapperPromise(Code * code);
 
-C_OR_CPP void initializeRuntime(CompilerCallback compiler);
+C_OR_CPP void initializeRuntime(CompilerCallback compiler,
+                                OptimizerCallback optimizer);
 
 /** Returns the global context for the interpreter - important to get access to
   the shared constant and source pools.

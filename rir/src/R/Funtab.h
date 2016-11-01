@@ -1,6 +1,10 @@
 #ifndef RIR_FUNTAB_H
 #define RIR_FUNTAB_H
 
+#include <R.h>
+#define USE_RINTERNALS
+#include <Rinternals.h>
+
 typedef struct sxpinfo_struct_rjit {
     unsigned int type : 5; /* ==> (FUNSXP == 99) %% 2^5 == 3 == CLOSXP
                         * -> warning: `type' is narrower than values

@@ -17,9 +17,11 @@ SEXP setterPlaceholderSym;
 SEXP getterPlaceholderSym;
 SEXP quoteSym;
 
-Context* context_create(CompilerCallback compiler) {
+Context* context_create(CompilerCallback compiler,
+                        OptimizerCallback optimizer) {
     Context* c = malloc(sizeof(Context));
     c->list = Rf_allocVector(VECSXP, 2);
+    c->optimizer = optimizer;
     c->compiler = compiler;
     R_PreserveObject(c->list);
     initializeResizeableList(&c->cp, POOL_CAPACITY, c->list, CONTEXT_INDEX_CP);

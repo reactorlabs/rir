@@ -18,6 +18,8 @@
 #include "optimizer/cp.h"
 #include "optimizer/Signature.h"
 
+#include "ir/Optimizer.h"
+
 using namespace rir;
 
 extern "C" void resetCompileExpressionOverride();
@@ -208,8 +210,9 @@ REXPORT SEXP rir_executePromiseWrapper(SEXP function, SEXP offset, SEXP env) {
          tl = 0
 
  */
+
 bool startup() {
-    initializeRuntime(rir_compile);
+    initializeRuntime(rir_compile, Optimizer::reoptimizeFunction);
     return true;
 }
 

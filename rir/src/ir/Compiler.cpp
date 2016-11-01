@@ -9,10 +9,9 @@
 #include "R/Symbols.h"
 #include "R/Funtab.h"
 
-#include "optimizer/cleanup.h"
-#include "optimizer/load_elimination.h"
 #include "utils/Pool.h"
 #include "code/dataflow.h"
+#include "ir/Optimizer.h"
 
 #include "CodeVerifier.h"
 
@@ -1059,18 +1058,9 @@ Compiler::CompilerRes Compiler::finalize() {
     ctx.pop();
 
     CodeEditor code(function.entryPoint(), formals);
+    Optimizer::optimize(code);
 
-    BCCleanup cleanup(code);
-    LoadElimination elim(code);
-    for (int i = 0; i < 3; ++i) {
-        cleanup.run();
-        code.commit();
-        elim.run();
-        code.commit();
-    }
-
-    auto opt = code.finalize();
-
+    FunctionHandle opt = code.finalize();
     CodeVerifier::vefifyFunctionLayout(opt.store, globalContext());
 
     // Protect p;

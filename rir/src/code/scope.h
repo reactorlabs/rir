@@ -2,6 +2,7 @@
 #define RIR_OPTIMIZER_SCOPE_H
 
 #include "ir/CodeEditor.h"
+#include "R/Funtab.h"
 #include "code/analysis.h"
 #include "code/dispatchers.h"
 #include "interpreter/interp_context.h"

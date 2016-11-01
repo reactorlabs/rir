@@ -135,7 +135,7 @@ protected:
                 if (cur.is(BC_t::br_)) {
                     Label l = cur.immediate.offset;
                     if (shouldJump(l)) {
-                        q_.push_front(code_->label(l));
+                        q_.push_front(code_->target(cur));
                     }
                     delete currentState_;
                     currentState_ = nullptr;
@@ -143,7 +143,7 @@ protected:
                 } else if (cur.isJmp()) {
                     Label l = cur.immediate.offset;
                     if (shouldJump(l)) {
-                        q_.push_front(code_->label(l));
+                        q_.push_front(code_->target(cur));
                     }
                 } else if (cur.is(BC_t::ret_) || cur.is(BC_t::return_)) {
                     if (finalState_ == nullptr) {

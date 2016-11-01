@@ -19,7 +19,7 @@ namespace rir {
 namespace {
 
 BC::immediate_t decodeImmediate(BC_t bc, BC_t* pc) {
-    BC::immediate_t immediate = {0};
+    BC::immediate_t immediate = {{0}};
     switch (bc) {
     case BC_t::push_:
     case BC_t::ldfun_:

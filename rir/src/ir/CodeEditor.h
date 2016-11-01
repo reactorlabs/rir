@@ -85,6 +85,7 @@ class CodeEditor {
     class Iterator {
       protected:
         const BytecodeList* pos;
+        friend class CodeEditor;
 
       public:
         Iterator() : pos(nullptr) {}
@@ -130,6 +131,8 @@ class CodeEditor {
         }
 
         SEXP src() const { return pos->src(); }
+
+        CallSite callSite() const { return CallSite(pos->bc, pos->callSite); }
 
         bool deleted() const { return pos->deleted; }
 
@@ -212,7 +215,7 @@ class CodeEditor {
         }
 
         Cursor prev() const {
-            assert(!atEnd());
+            assert(!firstInstruction());
             return Cursor(*this).rwd();
         }
 
@@ -226,6 +229,8 @@ class CodeEditor {
         CallSite callSite() { return CallSite(pos->bc, pos->callSite); }
 
         // TODO this breaks when inserting before the first instruction....
+        Cursor& operator<<(Label l) { return *this << BC::label(l); }
+
         Cursor& operator<<(BC bc) {
             editor.changed = true;
 
@@ -235,29 +240,34 @@ class CodeEditor {
             Cursor p = prev();
             bool prevInPatch = p.inPatch;
             BytecodeList* prev = p.pos;
+            BytecodeList* insert = nullptr;
 
             if (prevInPatch && nextInPatch) {
                 // Insert in the middle of a patch
-                auto insert = new BytecodeList(bc, prev, next);
+                insert = new BytecodeList(bc, prev, next);
                 prev->next = insert;
                 next->prev = insert;
             }
             if (prevInPatch && !nextInPatch) {
                 // insert at the end of a patch
-                auto insert = new BytecodeList(bc, prev, nullptr);
+                insert = new BytecodeList(bc, prev, nullptr);
                 prev->next = insert;
             }
             if (!prevInPatch && nextInPatch) {
                 // insert at the beginning of a patch
                 auto oldPatch = prev->patch;
-                auto insert = new BytecodeList(bc, prev, oldPatch);
+                insert = new BytecodeList(bc, prev, oldPatch);
                 prev->patch = insert;
                 oldPatch->prev = insert;
             }
             if (!prevInPatch && !nextInPatch) {
                 // create a new patch
-                auto insert = new BytecodeList(bc, prev, nullptr);
+                insert = new BytecodeList(bc, prev, nullptr);
                 prev->patch = insert;
+            }
+
+            if (bc.bc == BC_t::label) {
+                editor.labels_[bc.immediate.offset] = insert;
             }
 
             pos = next;
@@ -292,9 +302,8 @@ class CodeEditor {
             }
 
             bool first = true;
-            Cursor cur = other.getCursor();
-            while (!cur.atEnd()) {
-                *this << cur.bc();
+            for (auto cur = other.begin(); cur != other.end(); ++cur) {
+                *this << *cur;
 
                 BytecodeList* insert = prev().pos;
 
@@ -307,7 +316,7 @@ class CodeEditor {
                     first = false;
                 }
 
-                if (cur.bc().isCallsite()) {
+                if ((*cur).isCallsite()) {
                     auto oldCs = cur.callSite();
                     unsigned needed = CallSite_sizeOf(oldCs.cs);
                     insert->callSite = (CallSiteStruct*)new char[needed];
@@ -345,9 +354,6 @@ class CodeEditor {
                 }
             }
             editor.nextLabel += other.nextLabel;
-
-            // TODO: that stinks, I know
-            delete &other;
         }
 
         void remove() {
@@ -406,6 +412,20 @@ class CodeEditor {
 
     void print();
 
+    void stripReturns() {
+        Label endL = mkLabel();
+        end().asCursor(*this) << BC::label(endL);
+        for (auto i = begin(); i != end(); ++i) {
+            if ((*i).bc == BC_t::ret_) {
+                CodeEditor::Cursor e = i.asCursor(*this);
+                e.remove();
+                if ((i + 1) != end())
+                    e << BC::br(endL);
+            }
+        }
+        commit();
+    }
+
     CodeEditor* detachPromise(fun_idx_t idx) {
         CodeEditor* e = promises[idx];
         promises[idx] = nullptr;
@@ -414,7 +434,9 @@ class CodeEditor {
 
     /** Returns cursor that points to given label.
      */
-    Iterator label(size_t index) {
+    Iterator target(BC bc) {
+        assert(bc.isJmp());
+        size_t index = bc.immediate.offset;
         assert (index < labels_.size());
         return Iterator(labels_[index]);
     }
@@ -423,6 +445,11 @@ class CodeEditor {
      */
     size_t numLabels() const {
         return labels_.size();
+    }
+
+    Label mkLabel() {
+        labels_.push_back(0);
+        return nextLabel++;
     }
 
     size_t numPromises() const {
@@ -470,6 +497,8 @@ class CodeEditor {
             }
         }
 
+        std::set<BytecodeList*> usedLabels;
+
         // Step 2: remove deleted
         pos = front.next;
         while (pos != &last) {
@@ -480,7 +509,21 @@ class CodeEditor {
                 pos = pos->next;
                 delete old;
             } else {
+                if (pos->bc.isJmp()) {
+                    usedLabels.insert(
+                        const_cast<BytecodeList*>(target(pos->bc).pos));
+                }
                 pos = pos->next;
+            }
+        }
+
+        for (auto l = labels_.begin(); l != labels_.end(); ++l) {
+            auto oldL = *l;
+            if (oldL && usedLabels.find(oldL) == usedLabels.end()) {
+                oldL->prev->next = oldL->next;
+                oldL->next->prev = oldL->prev;
+                *l = nullptr;
+                delete oldL;
             }
         }
     }

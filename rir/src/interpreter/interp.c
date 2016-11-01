@@ -162,7 +162,7 @@ INLINE SEXP escape(SEXP val) {
     if (isValidCodeObject(val))
         val = rirExpr(val);
 
-    assert(!TYPEOF(val) != 31);
+    assert(TYPEOF(val) != 31);
     return val;
 }
 
@@ -451,7 +451,8 @@ INLINE SEXP rirCallClosure(SEXP call, SEXP env, SEXP callee, SEXP actuals,
     Function* fun = (Function*)INTEGER(body);
     if (fun->invocationCount == 2000) {
         // To dump Hot functions:
-        // printFunction(fun);
+        body = globalContext()->optimizer(callee);
+        SET_BODY(callee, body);
     }
     fun->invocationCount++;
     Code* code = functionCode(fun);

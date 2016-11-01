@@ -174,7 +174,7 @@ Code * isValidPromiseSEXP(SEXP promise) {
 extern void c_printCode(Code * c);
 
 void printCode(Code* c) {
-    Rprintf("Code object (offset %x (hex))\n", c->header);
+    Rprintf("Code object (%p offset %x (hex))\n", c, c->header);
     Rprintf("  Source:    %u (index to src pool)\n", c->src);
     Rprintf("  Magic:     %x (hex)\n", c->magic);
     Rprintf("  Stack (o): %u\n", c->stackLength);
@@ -247,10 +247,7 @@ int isValidCodeObject_int_wrapper(SEXP code) {
 
 }
 
-
-
-
-void initializeRuntime(CompilerCallback compiler) {
+void initializeRuntime(CompilerCallback compiler, OptimizerCallback optimizer) {
     envSymbol = Rf_install("environment");
     callSymbol = Rf_install(".Call");
     execName = Rf_mkString("rir_executeWrapper");
@@ -258,7 +255,7 @@ void initializeRuntime(CompilerCallback compiler) {
     promExecName = Rf_mkString("rir_executePromiseWrapper");
     R_PreserveObject(promExecName);
     // initialize the global context
-    globalContext_ = context_create(compiler);
+    globalContext_ = context_create(compiler, optimizer);
 #if RIR_AS_PACKAGE == 0
     initializeCallbacks(
         isValidFunctionObject_int_wrapper,
