@@ -237,6 +237,8 @@ void BC::print(CallSite cs) {
         if (cs.isValid()) {
             SEXP selector = cs.selector();
             Rprintf(" `%s` ", CHAR(PRINTNAME(selector)));
+            Rprintf("\n        # ");
+            Rf_PrintValue(cs.call());
         }
         // Fall through
     }
@@ -254,6 +256,8 @@ void BC::print(CallSite cs) {
         Rprintf(" %d ", nargs);
         if (cs.isValid()) {
             printNames(cs);
+            Rprintf("\n        # ");
+            Rf_PrintValue(cs.call());
         }
         break;
     }
@@ -262,6 +266,8 @@ void BC::print(CallSite cs) {
         Rprintf(" %d ", nargs);
         if (cs.isValid()) {
             Rprintf(" %p ", cs.target());
+            Rprintf("\n        # ");
+            Rf_PrintValue(cs.call());
         }
         break;
     }
@@ -270,6 +276,8 @@ void BC::print(CallSite cs) {
             Rprintf(" `%s` ", CHAR(PRINTNAME(cs.selector())));
             Rprintf(" %d ", cs.nargs());
             printNames(cs);
+            Rprintf("\n        # ");
+            Rf_PrintValue(cs.call());
         }
         break;
     }
