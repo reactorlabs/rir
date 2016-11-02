@@ -21,9 +21,12 @@ extern Rboolean R_Visible;
 
 #include <setjmp.h>
 #include <signal.h>
-#define JMP_BUF jmp_buf
-#define SETJMP(x) setjmp(x)
-#define LONGJMP(x, i) longjmp(x, i)
+#define SIGJMP_BUF sigjmp_buf
+#define SIGSETJMP(x, s) sigsetjmp(x, s)
+#define SIGLONGJMP(x, i) siglongjmp(x, i)
+#define JMP_BUF sigjmp_buf
+#define SETJMP(x) sigsetjmp(x, 0)
+#define LONGJMP(x, i) siglongjmp(x, i)
 
 /* Evaluation Context Structure */
 typedef struct RCNTXT {
@@ -439,6 +442,8 @@ INLINE SEXP rirCallClosure(SEXP call, SEXP env, SEXP callee, SEXP actuals,
     ostack_push(ctx, cntxt_store);
 
     RCNTXT* cntxt = (RCNTXT*)RAW(cntxt_store);
+
+    assert(((char*)&cntxt->cenddata - (char*)cntxt) == 280);
     if (R_GlobalContext->callflag == CTXT_GENERIC)
         Rf_begincontext(cntxt, CTXT_RETURN, call, newEnv,
                         R_GlobalContext->sysparent, actuals, callee);
@@ -764,6 +769,7 @@ SEXP doDispatchStack(Code* caller, size_t nargs, uint32_t id, SEXP env,
     profileCall(cs, Rf_install("*dispatch*"));
     SEXP call = cp_pool_at(ctx, cs->call);
     SEXP selector = cp_pool_at(ctx, *CallSite_selector(cs));
+    SEXP op = SYMVALUE(selector);
 
     SEXP obj = *ostack_at(ctx, nargs - 1);
     assert(isObject(obj));
@@ -784,8 +790,8 @@ SEXP doDispatchStack(Code* caller, size_t nargs, uint32_t id, SEXP env,
     do {
         // ===============================================
         // First try S4
-        if (IS_S4_OBJECT(obj) && R_has_methods(selector)) {
-            res = R_possible_dispatch(call, selector, actuals, env, TRUE);
+        if (IS_S4_OBJECT(obj) && R_has_methods(op)) {
+            res = R_possible_dispatch(call, op, actuals, env, TRUE);
             if (res) {
                 break;
             }
@@ -797,7 +803,7 @@ SEXP doDispatchStack(Code* caller, size_t nargs, uint32_t id, SEXP env,
         char cntxt[400];
         SEXP rho1 = Rf_NewEnvironment(R_NilValue, R_NilValue, env);
         ostack_push(ctx, rho1);
-        initClosureContext(&cntxt, call, rho1, env, actuals, selector);
+        initClosureContext(&cntxt, call, rho1, env, actuals, op);
         bool success = Rf_usemethod(generic, obj, call, actuals, rho1, env,
                                     R_BaseEnv, &res);
         ostack_pop(ctx);
@@ -892,6 +898,7 @@ SEXP doDispatch(Code* caller, uint32_t nargs, uint32_t id, SEXP env,
     profileCall(cs, Rf_install("*dispatch*"));
     SEXP call = cp_pool_at(ctx, cs->call);
     SEXP selector = cp_pool_at(ctx, *CallSite_selector(cs));
+    SEXP op = SYMVALUE(selector);
 
     SEXP actuals = createArgsList(caller, call, nargs, cs, env, ctx, false);
     ostack_push(ctx, actuals);
@@ -904,8 +911,8 @@ SEXP doDispatch(Code* caller, uint32_t nargs, uint32_t id, SEXP env,
     do {
         // ===============================================
         // First try S4
-        if (IS_S4_OBJECT(obj) && R_has_methods(selector)) {
-            res = R_possible_dispatch(call, selector, actuals, env, TRUE);
+        if (IS_S4_OBJECT(obj) && R_has_methods(op)) {
+            res = R_possible_dispatch(call, op, actuals, env, TRUE);
             if (res) {
                 break;
             }
@@ -917,7 +924,7 @@ SEXP doDispatch(Code* caller, uint32_t nargs, uint32_t id, SEXP env,
         char cntxt[400];
         SEXP rho1 = Rf_NewEnvironment(R_NilValue, R_NilValue, env);
         ostack_push(ctx, rho1);
-        initClosureContext(&cntxt, call, rho1, env, actuals, selector);
+        initClosureContext(&cntxt, call, rho1, env, actuals, op);
         bool success = Rf_usemethod(generic, obj, call, actuals, rho1, env,
                                     R_BaseEnv, &res);
         ostack_pop(ctx);
