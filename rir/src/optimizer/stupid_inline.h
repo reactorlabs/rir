@@ -5,6 +5,8 @@
 #include "code/analysis.h"
 #include "code/dispatchers.h"
 #include "interpreter/interp_context.h"
+#include "ir/Compiler.h"
+#include "R/RList.h"
 
 #include <unordered_set>
 
@@ -53,16 +55,32 @@ class StupidInliner {
 
     void doInline(CodeEditor::Cursor& pos, SEXP t, CodeEditor* arg = nullptr) {
         CodeEditor edit(t);
-        edit.stripReturns();
+        edit.normalizeForInline();
+
+        bool loadedDefaultArg = false;
 
         for (auto i = edit.begin(); i != edit.end(); ++i) {
             if ((*i).bc == BC_t::ldarg_) {
-                arg->stripReturns();
+                if (!arg) {
+                    RList formals(FORMALS(t));
+                    SEXP arg1 = formals[0];
+                    Compiler comp(arg1);
+                    auto res = comp.finalize();
+                    arg = new CodeEditor(res.bc);
+                }
+
+                arg->normalizeForInline();
+                for (auto i : *arg) {
+                    SLOWASSERT(i.bc != BC_t::ldarg_);
+                }
                 CodeEditor::Cursor e = i.asCursor(edit);
                 e.remove();
                 e.insert(*arg);
             }
         }
+
+        if (loadedDefaultArg)
+            delete arg;
         edit.commit();
         pos.insert(edit);
     }

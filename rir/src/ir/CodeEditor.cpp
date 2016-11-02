@@ -8,11 +8,16 @@
 
 namespace rir {
 
-CodeEditor::CodeEditor(SEXP closure) {
-    ::Function * f = isValidClosureSEXP(closure);
-    assert(f != nullptr);
-    formals_ = FORMALS(closure);
-    FunctionHandle fh(functionSEXP(f));
+CodeEditor::CodeEditor(SEXP in) {
+    SEXP bc = in;
+    assert(TYPEOF(in) == INTSXP || TYPEOF(in) == CLOSXP);
+    if (TYPEOF(in) == CLOSXP) {
+        ::Function* f = isValidClosureSEXP(in);
+        assert(f != nullptr);
+        formals_ = FORMALS(in);
+        bc = BODY(in);
+    }
+    FunctionHandle fh(bc);
     CodeHandle ch = fh.entryPoint();
     ast = ch.ast();
     loadCode(fh, ch);

@@ -412,11 +412,12 @@ class CodeEditor {
 
     void print();
 
-    void stripReturns() {
+    void normalizeForInline() {
         Label endL = mkLabel();
         end().asCursor(*this) << BC::label(endL);
         for (auto i = begin(); i != end(); ++i) {
-            if ((*i).bc == BC_t::ret_) {
+            auto bc = *i;
+            if (bc.bc == BC_t::ret_) {
                 CodeEditor::Cursor e = i.asCursor(*this);
                 e.remove();
                 if ((i + 1) != end())
