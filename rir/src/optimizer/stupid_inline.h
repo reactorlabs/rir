@@ -70,9 +70,11 @@ class StupidInliner {
                 }
 
                 arg->normalizeForInline();
+#ifdef ENABLE_SLOWASSERT
                 for (auto i : *arg) {
-                    SLOWASSERT(i.bc != BC_t::ldarg_);
+                    assert(i.bc != BC_t::ldarg_);
                 }
+#endif
                 CodeEditor::Cursor e = i.asCursor(edit);
                 e.remove();
                 e.insert(*arg);
