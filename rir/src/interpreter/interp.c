@@ -443,7 +443,6 @@ INLINE SEXP rirCallClosure(SEXP call, SEXP env, SEXP callee, SEXP actuals,
 
     RCNTXT* cntxt = (RCNTXT*)RAW(cntxt_store);
 
-    assert(((char*)&cntxt->cenddata - (char*)cntxt) == 280);
     if (R_GlobalContext->callflag == CTXT_GENERIC)
         Rf_begincontext(cntxt, CTXT_RETURN, call, newEnv,
                         R_GlobalContext->sysparent, actuals, callee);
