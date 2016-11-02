@@ -16,6 +16,7 @@ function build {
     (
         DIR=$1
         ROOT_DIR=$2
+        TYPE=$3
 
         # Cmake being stupid cannot build out of tree, when there is already an in-tree build :(
         if [ -f $ROOT_DIR/CMakeCache.txt ]; then
@@ -25,7 +26,7 @@ function build {
 
         mkdir -p $DIR
         cd $DIR
-        cmake $ROOT_DIR -DNO_LOCAL_CONFIG=1
+        cmake $ROOT_DIR -DCMAKE_BUILD_TYPE=$TYPE -DNO_LOCAL_CONFIG=1
         cmake --build . -- -j `ncores`
     )
 }
