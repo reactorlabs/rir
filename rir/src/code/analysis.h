@@ -3,6 +3,7 @@
 #include "State.h"
 #include "framework.h"
 
+#include "R/Funtab.h"
 namespace rir {
 
 /** Base class for all analyses.
@@ -145,7 +146,7 @@ protected:
                     if (shouldJump(l)) {
                         q_.push_front(code_->target(cur));
                     }
-                } else if (cur.is(BC_t::ret_) || cur.is(BC_t::return_)) {
+                } else if (cur.isReturn()) {
                     if (finalState_ == nullptr) {
                         finalState_ = currentState_;
                     } else {
@@ -252,11 +253,23 @@ protected:
         }
         assert(false and "not reachable");
     }
-
-
-
 };
 
+static inline bool isSafeBuiltin(int i) {
+    // We have reason to believe that those would not run arbitrary
+    // code and not mess with the env
 
+    // builtins for `is.*` where primval(op) not within [100,200[
+    // (those do not dispatch)
+    if ((i >= 362 && i < 376) || (i >= 379 && i <= 384))
+        return true;
 
+    switch (i) {
+    case 88:  // c
+    case 91:  // class
+    case 107: // vector
+        return true;
+    }
+    return false;
+}
 }

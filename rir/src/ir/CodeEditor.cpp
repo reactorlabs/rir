@@ -2,6 +2,7 @@
 
 #include "BC.h"
 #include "CodeStream.h"
+#include "code/scope.h"
 
 #include <iomanip>
 #include <iostream>
@@ -153,12 +154,44 @@ CodeEditor::~CodeEditor() {
 }
 
 void CodeEditor::print() {
-    for (Cursor cur = getCursor(); !cur.atEnd(); cur.advance()) {
+
+    ScopeResolution<Type::Conservative> analysis;
+    ScopeResolution<Type::NoReflection> specAnalysis;
+    analysis.analyze(*this);
+    specAnalysis.analyze(*this);
+
+    for (auto cur = begin(); cur != end(); ++cur) {
         if (cur.src()) {
             std::cout << "     # ";
             Rf_PrintValue(cur.src());
         }
-        cur.print();
+        BC bc = *cur;
+        // Print some analysis info
+        if (bc.bc != BC_t::label && bc.bc != BC_t::return_ &&
+            bc.bc != BC_t::ret_ && bc.popCount() > 0) {
+            bool assumedIsBetter = false;
+            for (int i = bc.popCount() - 1; i >= 0; --i) {
+                if (analysis[cur].stack()[i] != specAnalysis[cur].stack()[i]) {
+                    assumedIsBetter = true;
+                    break;
+                }
+            }
+
+            std::cout << "   ~~ TOS : ";
+            for (int i = bc.popCount() - 1; i >= 0; --i) {
+                analysis[cur].stack()[i].print();
+                std::cout << ", ";
+            }
+            if (assumedIsBetter) {
+                std::cout << "  /  Assumed: ";
+                for (int i = bc.popCount() - 1; i >= 0; --i) {
+                    specAnalysis[cur].stack()[i].print();
+                    std::cout << ", ";
+                }
+            }
+            std::cout << "\n";
+        }
+        bc.print();
     }
     fun_idx_t i = 0;
     for (auto p : promises) {
@@ -220,3 +253,7 @@ FunctionHandle CodeEditor::finalize() {
     return fun;
 }
 }
+
+#include "interpreter/runtime.h"
+
+C_OR_CPP void printFunctionFancy(SEXP f) { rir::CodeEditor(f).print(); }

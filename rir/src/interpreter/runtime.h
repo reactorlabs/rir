@@ -63,6 +63,7 @@ C_OR_CPP Code * isValidPromiseSEXP(SEXP promise);
 C_OR_CPP void printCode(Code* c);
 
 C_OR_CPP void printFunction(Function* f);
+C_OR_CPP void printFunctionFancy(SEXP f);
 
 C_OR_CPP SEXP rir_createWrapperAst(SEXP rirBytecode);
 

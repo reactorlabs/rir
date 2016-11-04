@@ -73,6 +73,24 @@ class BCCleanup : public InstructionDispatcher::Receiver {
         }
     }
 
+    void ret_(CodeEditor::Iterator ins) override {
+        auto prev = ins - 1;
+        if ((*prev).isReturn()) {
+            ins.asCursor(code_).remove();
+        }
+    }
+
+    // TODO there is some brokennes when there is dead code
+    // void br_(CodeEditor::Iterator ins) override {
+    //     auto target = code_.target(*ins);
+    //     auto cont = target+1;
+    //     if ((*cont).isReturn()) {
+    //         auto cur = ins.asCursor(code_);
+    //         cur.remove();
+    //         cur << *cont;
+    //     }
+    // }
+
     void run() {
         analysis.analyze(code_);
         for (auto i = code_.begin() + 1; i + 1 != code_.end(); ++i) {

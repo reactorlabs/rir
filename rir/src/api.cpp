@@ -80,10 +80,7 @@ REXPORT SEXP rir_disassemble(SEXP what) {
     if (f == nullptr)
         Rf_error("Not a rir compiled code");
 
-    rir::FunctionHandle fun(functionSEXP(f));
-    Rprintf("Container length %u.\n", Rf_length(what));
-
-    printFunction(f);
+    CodeEditor(what).print();
     return R_NilValue;
 }
 

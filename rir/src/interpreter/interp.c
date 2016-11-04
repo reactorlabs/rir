@@ -457,6 +457,11 @@ INLINE SEXP rirCallClosure(SEXP call, SEXP env, SEXP callee, SEXP actuals,
         // To dump Hot functions:
         body = globalContext()->optimizer(callee);
         SET_BODY(callee, body);
+        // printf("================ OPTIMIZING
+        // ===============================\n");
+        // Rf_PrintValue(escape(callee));
+        // printf("-----------------------------\n");
+        // printFunctionFancy(callee);
     }
     fun->invocationCount++;
     Code* code = functionCode(fun);

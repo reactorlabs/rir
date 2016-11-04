@@ -183,15 +183,6 @@ class FunctionHandle {
 
     SEXP ast() { return entryPoint().ast(); }
 
-    void print() {
-        std::cout << "Fun " << this << " --------------\n";
-        entryPoint().print();
-
-        for (fun_idx_t i = 0; i < function->codeLength - 1; ++i) {
-            std::cout << " P " << i << " ------ \n";
-            CodeHandle(codeAtIdx(i)).print();
-        }
-    }
 };
 }
 

@@ -19,15 +19,13 @@ class StupidInliner {
     StupidInliner(CodeEditor& code) : code_(code) {}
 
     bool isSafeTarget(SEXP target) {
-        if (TYPEOF(target) != BUILTINSXP)
+        if (TYPEOF(target) != BUILTINSXP || TYPEOF(target) != SPECIALSXP)
             return false;
-        int i = ((sexprec_rjit*)target)->u.i;
-        switch (i) {
-        case 107:
+        if (isSafeBuiltin(target->u.primsxp.offset))
             return true;
-        }
         printf("Warn: cannot inline due to unsafe builtin %s (%u)\n",
-               R_FunTab[i].name, i);
+               R_FunTab[target->u.primsxp.offset].name,
+               target->u.primsxp.offset);
         return false;
     }
 

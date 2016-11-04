@@ -128,8 +128,6 @@ class BC {
         return popCount(bc);
     }
     inline size_t pushCount() { return pushCount(bc); }
-    inline size_t iPopCount() { return iPopCount(bc); }
-    inline size_t iPushCount() { return iPushCount(bc); }
 
     // Used to serialize bc to CodeStream
     void write(CodeStream& cs) const;
@@ -167,6 +165,10 @@ class BC {
         return bc == BC_t::br_ || bc == BC_t::brtrue_ || bc == BC_t::brfalse_ ||
                bc == BC_t::brobj_ || bc == BC_t::beginloop_;
     }
+
+    bool isPure() { return isPure(bc); }
+
+    bool isReturn() { return bc == BC_t::ret_ || bc == BC_t::return_; }
 
     bool isGuard() { return bc == BC_t::guard_fun_; }
 
@@ -247,7 +249,7 @@ class BC {
 
     static unsigned size(BC_t bc) {
         switch (bc) {
-#define DEF_INSTR(name, imm, opop, opush, ipop, ipush)                         \
+#define DEF_INSTR(name, imm, opop, opush, pure)                                \
     case BC_t::name:                                                           \
         return imm * sizeof(ArgT) + 1;
 #include "insns.h"
@@ -258,7 +260,7 @@ class BC {
 
     static unsigned immCount(BC_t bc) {
         switch (bc) {
-#define DEF_INSTR(name, imm, opop, opush, ipop, ipush)                         \
+#define DEF_INSTR(name, imm, opop, opush, pure)                                \
     case BC_t::name:                                                           \
         return imm;
 #include "insns.h"
@@ -270,7 +272,7 @@ class BC {
 
     static char const* name(BC_t bc) {
         switch (bc) {
-#define DEF_INSTR(name, imm, opop, opush, ipop, ipush)                         \
+#define DEF_INSTR(name, imm, opop, opush, pure)                                \
     case BC_t::name:                                                           \
         return #name;
 #include "insns.h"
@@ -281,7 +283,7 @@ class BC {
 
     static unsigned pushCount(BC_t bc) {
         switch (bc) {
-#define DEF_INSTR(name, imm, opop, opush, ipop, ipush)                         \
+#define DEF_INSTR(name, imm, opop, opush, pure)                                \
     case BC_t::name:                                                           \
         return opush;
 #include "insns.h"
@@ -291,21 +293,9 @@ class BC {
         }
     }
 
-    static unsigned iPushCount(BC_t bc) {
-        switch (bc) {
-#define DEF_INSTR(name, imm, opop, opush, ipop, ipush)                         \
-    case BC_t::name:                                                           \
-        return ipush;
-#include "insns.h"
-        default:
-            assert(false);
-            return 0;
-        }
-    }
-
     static unsigned popCount(BC_t bc) {
         switch (bc) {
-#define DEF_INSTR(name, imm, opop, opush, ipop, ipush)                         \
+#define DEF_INSTR(name, imm, opop, opush, pure)                                \
     case BC_t::name:                                                           \
         assert(opop != -1);                                                    \
         return opop;
@@ -316,11 +306,11 @@ class BC {
         }
     }
 
-    static unsigned iPopCount(BC_t bc) {
+    static unsigned isPure(BC_t bc) {
         switch (bc) {
-#define DEF_INSTR(name, imm, opop, opush, ipop, ipush)                         \
+#define DEF_INSTR(name, imm, opop, opush, pure)                                \
     case BC_t::name:                                                           \
-        return ipop;
+        return pure;
 #include "insns.h"
         default:
             assert(false);
