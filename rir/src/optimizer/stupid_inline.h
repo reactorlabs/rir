@@ -136,10 +136,11 @@ class StupidInliner {
                 printf("cannot inline, did not find ldfun\n");
                 continue;
             }
+            SEXP name = cur.bc().immediateConst();
             cur.remove();
             cur.remove();
 
-            // TODO need a guard here!
+            cur << BC::checkName(name, t);
 
             if (cs.nargs() == 1) {
                 auto arg = code_.detachPromise(cs.args()[0]);

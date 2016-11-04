@@ -1586,13 +1586,14 @@ INSTRUCTION(extract1_) {
 
 INSTRUCTION(dup_) { ostack_push(ctx, ostack_top(ctx)); }
 
-INSTRUCTION(isspecial_) {
+INSTRUCTION(guard_fun_) {
     // TODO I do not think this is a proper way - we must check all the way
     // down, not just findVar (vars do not shadow closures)
     SEXP sym = readConst(ctx, pc);
+    SEXP expected = readConst(ctx, pc);
+    uint32_t id = readImmediate(pc);
     SEXP val = findFun(sym, env);
-    // TODO better check
-    assert(TYPEOF(val) == SPECIALSXP || TYPEOF(val) == BUILTINSXP);
+    assert(val == expected);
 }
 
 INSTRUCTION(isfun_) {
@@ -2025,7 +2026,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
             INS(pick_);
             INS(pull_);
             INS(is_);
-            INS(isspecial_);
+            INS(guard_fun_);
             INS(isfun_);
             INS(inc_);
             INS(dup2_);

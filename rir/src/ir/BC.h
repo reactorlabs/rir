@@ -26,7 +26,6 @@ BC::immediate_t decodeImmediate(BC_t bc, BC_t* pc) {
     case BC_t::ldarg_:
     case BC_t::ldvar_:
     case BC_t::ldddvar_:
-    case BC_t::isspecial_:
     case BC_t::stvar_:
     case BC_t::missing_:
     case BC_t::subassign2_:
@@ -38,6 +37,9 @@ BC::immediate_t decodeImmediate(BC_t bc, BC_t* pc) {
     case BC_t::call_stack_:
     case BC_t::static_call_stack_:
         immediate.call_args = *(CallArgs*)pc;
+        break;
+    case BC_t::guard_fun_:
+        immediate.guard_fun_args = *(GuardFunArgs*)pc;
         break;
     case BC_t::promise_:
     case BC_t::push_code_:
@@ -164,10 +166,18 @@ BC BC::ldarg(SEXP sym) {
     i.pool = Pool::insert(sym);
     return BC(BC_t::ldarg_, i);
 }
-BC BC::isspecial(SEXP sym) {
+BC BC::checkName(SEXP sym, SEXP expected) {
     immediate_t i;
-    i.pool = Pool::insert(sym);
-    return BC(BC_t::isspecial_, i);
+    i.guard_fun_args = {Pool::insert(sym), Pool::insert(expected), 123};
+    return BC(BC_t::guard_fun_, i);
+}
+BC BC::checkNamePrimitive(SEXP sym) {
+    immediate_t i;
+    assert(TYPEOF(sym) == SYMSXP);
+    SEXP prim = CDR(sym);
+    assert(TYPEOF(prim) == SPECIALSXP || TYPEOF(prim) == BUILTINSXP);
+    i.guard_fun_args = {Pool::insert(sym), Pool::insert(prim), 123};
+    return BC(BC_t::guard_fun_, i);
 }
 BC BC::push_code(fun_idx_t prom) {
     immediate_t i;

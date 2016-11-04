@@ -67,6 +67,11 @@ typedef struct {
     uint32_t call_id;
     uint32_t nargs;
 } CallArgs;
+typedef struct {
+    uint32_t name;
+    uint32_t expected;
+    uint32_t id;
+} GuardFunArgs;
 #pragma pack(pop)
 
 static constexpr size_t MAX_NUM_ARGS = 1L << (8 * sizeof(pool_idx_t));
@@ -90,6 +95,7 @@ class BC {
     // space required.
     union immediate_t {
         CallArgs call_args;
+        GuardFunArgs guard_fun_args;
         pool_idx_t pool;
         fun_idx_t fun;
         num_args_t arg_idx;
@@ -162,6 +168,8 @@ class BC {
                bc == BC_t::brobj_ || bc == BC_t::beginloop_;
     }
 
+    bool isGuard() { return bc == BC_t::guard_fun_; }
+
     // ==== BC decoding logic
     inline static BC advance(BC_t** pc);
     inline static BC decode(BC_t* pc);
@@ -216,7 +224,8 @@ class BC {
     inline static BC asLogical();
     inline static BC lglOr();
     inline static BC lglAnd();
-    inline static BC isspecial(SEXP);
+    inline static BC checkName(SEXP, SEXP);
+    inline static BC checkNamePrimitive(SEXP);
     inline static BC isfun();
     inline static BC invisible();
     inline static BC visible();

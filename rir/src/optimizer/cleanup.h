@@ -66,9 +66,9 @@ class BCCleanup : public InstructionDispatcher::Receiver {
         }
     }
 
-    void isspecial_(CodeEditor::Iterator ins) override {
+    void guard_fun_(CodeEditor::Iterator ins) override {
         auto prev = ins - 1;
-        if ((*prev).is(BC_t::isspecial_) && *ins == *prev) {
+        if ((*prev).is(BC_t::guard_fun_) && *ins == *prev) {
             ins.asCursor(code_).remove();
         }
     }

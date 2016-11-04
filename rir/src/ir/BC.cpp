@@ -21,7 +21,6 @@ bool BC::operator==(const BC& other) const {
     case BC_t::ldddvar_:
     case BC_t::ldarg_:
     case BC_t::ldvar_:
-    case BC_t::isspecial_:
     case BC_t::stvar_:
     case BC_t::missing_:
     case BC_t::subassign2_:
@@ -34,6 +33,8 @@ bool BC::operator==(const BC& other) const {
     case BC_t::dispatch_stack_:
         return immediate.call_args.call_id == other.immediate.call_args.call_id;
 
+    case BC_t::guard_fun_:
+        return immediate.guard_fun_args.id == other.immediate.guard_fun_args.id;
     case BC_t::promise_:
     case BC_t::push_code_:
         return immediate.fun == other.immediate.fun;
@@ -106,11 +107,14 @@ void BC::write(CodeStream& cs) const {
     case BC_t::ldfun_:
     case BC_t::ldddvar_:
     case BC_t::ldvar_:
-    case BC_t::isspecial_:
     case BC_t::stvar_:
     case BC_t::missing_:
     case BC_t::subassign2_:
         cs.insert(immediate.pool);
+        return;
+
+    case BC_t::guard_fun_:
+        cs.insert(immediate.guard_fun_args);
         return;
 
     // They have to be inserted by CodeStream::insertCall
@@ -285,7 +289,6 @@ void BC::print(CallSite cs) {
         Rprintf(" %u # ", immediate.pool);
         Rf_PrintValue(immediateConst());
         return;
-    case BC_t::isspecial_:
     case BC_t::ldarg_:
     case BC_t::ldfun_:
     case BC_t::ldvar_:
@@ -294,6 +297,12 @@ void BC::print(CallSite cs) {
     case BC_t::missing_:
         Rprintf(" %u # %s", immediate.pool, CHAR(PRINTNAME((immediateConst()))));
         break;
+    case BC_t::guard_fun_: {
+        SEXP name = Pool::get(immediate.guard_fun_args.name);
+        Rprintf(" %s == ", CHAR(PRINTNAME(name)));
+        Rf_PrintValue(Pool::get(immediate.guard_fun_args.expected));
+        break;
+    }
     case BC_t::pick_:
     case BC_t::pull_:
     case BC_t::put_:

@@ -13,14 +13,6 @@ class LoadElimination : public InstructionDispatcher::Receiver {
 
     LoadElimination(CodeEditor& code) : dispatcher(*this), code_(code) {}
 
-    void isspecial_(CodeEditor::Iterator ins) override {
-        SEXP sym = Pool::get((*ins).immediate.pool);
-        if (analysis[ins][sym].t == PointsTo::Type::DefaultValue &&
-            analysis[ins][sym].c == sym) {
-            ins.asCursor(code_).remove();
-        }
-    }
-
     void ldvar_(CodeEditor::Iterator ins) override {
         SEXP sym = Pool::get((*ins).immediate.pool);
         auto v = analysis[ins][sym];

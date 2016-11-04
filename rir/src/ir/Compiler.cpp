@@ -120,8 +120,11 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
     }
 
     if (fun == symbol::seq && args.length() >= 2 && args.length() <= 3) {
-        // TODO: don't work since seq is lazyloaded
-        // cs << BC::isspecial(fun);
+        static SEXP seqFun = nullptr;
+        if (!seqFun)
+            seqFun = findFun(fun, R_GlobalEnv);
+
+        cs << BC::checkName(fun, seqFun);
 
         for (auto a = args.begin(); a != args.end(); ++a)
             if (a.hasTag())
@@ -153,7 +156,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
 
     if (args.length() == 2 && (fun == symbol::Add || fun == symbol::Sub ||
                                fun == symbol::Lt || fun == symbol::Mul)) {
-        cs << BC::isspecial(fun);
+        cs << BC::checkNamePrimitive(fun);
 
         compileExpr(ctx, args[0]);
         compileExpr(ctx, args[1]);
@@ -172,7 +175,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
     }
 
     if (fun == symbol::And && args.length() == 2) {
-        cs << BC::isspecial(fun);
+        cs << BC::checkNamePrimitive(fun);
 
         Label nextBranch = cs.mkLabel();
 
@@ -195,7 +198,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
     }
 
     if (fun == symbol::Or && args.length() == 2) {
-        cs << BC::isspecial(fun);
+        cs << BC::checkNamePrimitive(fun);
 
         Label nextBranch = cs.mkLabel();
 
@@ -221,7 +224,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
     if (fun == symbol::quote && args.length() == 1) {
         auto i = compilePromise(ctx, args[0]);
 
-        cs << BC::isspecial(fun) << BC::push_code(i);
+        cs << BC::checkNamePrimitive(fun) << BC::push_code(i);
         return true;
     }
 
@@ -252,7 +255,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
             }
         }
 
-        cs << BC::isspecial(fun);
+        cs << BC::checkNamePrimitive(fun);
 
         // 2) Specialcalse normal assignment (ie. "i <- expr")
         Match(lhs) {
@@ -497,7 +500,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
     }
 
     if (fun == symbol::Block) {
-        cs << BC::isspecial(fun);
+        cs << BC::checkNamePrimitive(fun);
 
         if (args.length() == 0) {
             cs << BC::push(R_NilValue);
@@ -517,7 +520,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
         if (args.length() < 2 || args.length() > 3)
             return false;
 
-        cs << BC::isspecial(fun);
+        cs << BC::checkNamePrimitive(fun);
         Label trueBranch = cs.mkLabel();
         Label nextBranch = cs.mkLabel();
 
@@ -543,14 +546,14 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
         if (args.length() != 1 || args[0] == R_DotsSymbol)
             return false;
 
-        cs << BC::isspecial(fun);
+        cs << BC::checkNamePrimitive(fun);
         compileExpr(ctx, args[0]);
         cs << BC::visible();
         return true;
     }
 
     if (fun == symbol::Return && args.length() < 2) {
-        cs << BC::isspecial(fun);
+        cs << BC::checkNamePrimitive(fun);
 
         if (args.length() == 0)
             cs << BC::push(R_NilValue);
@@ -562,21 +565,21 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
     }
 
     if (fun == symbol::isnull && args.length() == 1) {
-        cs << BC::isspecial(fun);
+        cs << BC::checkNamePrimitive(fun);
         compileExpr(ctx, args[0]);
         cs << BC::is(NILSXP);
         return true;
     }
 
     if (fun == symbol::islist && args.length() == 1) {
-        cs << BC::isspecial(fun);
+        cs << BC::checkNamePrimitive(fun);
         compileExpr(ctx, args[0]);
         cs << BC::is(VECSXP);
         return true;
     }
 
     if (fun == symbol::ispairlist && args.length() == 1) {
-        cs << BC::isspecial(fun);
+        cs << BC::checkNamePrimitive(fun);
         compileExpr(ctx, args[0]);
         cs << BC::is(LISTSXP);
         return true;
@@ -594,7 +597,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
             Label objBranch = cs.mkLabel();
             Label nextBranch = cs.mkLabel();
 
-            cs << BC::isspecial(fun);
+            cs << BC::checkNamePrimitive(fun);
             compileExpr(ctx, lhs);
             cs << BC::brobj(objBranch);
 
@@ -624,7 +627,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
 
     if (fun == symbol::Missing && args.length() == 1 &&
         TYPEOF(args[0]) == SYMSXP && !DDVAL(args[0])) {
-        cs << BC::isspecial(fun) << BC::missing(args[0]);
+        cs << BC::checkNamePrimitive(fun) << BC::missing(args[0]);
         return true;
     }
 
@@ -634,7 +637,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
         auto cond = args[0];
         auto body = args[1];
 
-        cs << BC::isspecial(fun);
+        cs << BC::checkNamePrimitive(fun);
 
         Label loopBranch = cs.mkLabel();
         Label nextBranch = cs.mkLabel();
@@ -668,7 +671,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
 
         auto body = args[0];
 
-        cs << BC::isspecial(fun);
+        cs << BC::checkNamePrimitive(fun);
 
         Label loopBranch = cs.mkLabel();
         Label nextBranch = cs.mkLabel();
@@ -702,7 +705,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
 
         assert(TYPEOF(sym) == SYMSXP);
 
-        cs << BC::isspecial(fun);
+        cs << BC::checkNamePrimitive(fun);
 
         Label loopBranch = cs.mkLabel();
         Label breakBranch = cs.mkLabel();
@@ -757,7 +760,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
     if (fun == symbol::Next && ctx.inLoop()) {
         assert(args.length() == 0);
 
-        cs << BC::isspecial(fun) << BC::br(ctx.loop().next_);
+        cs << BC::checkNamePrimitive(fun) << BC::br(ctx.loop().next_);
 
         return true;
     }
@@ -766,7 +769,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
         assert(args.length() == 0);
         assert(ctx.inLoop());
 
-        cs << BC::isspecial(fun) << BC::br(ctx.loop().break_);
+        cs << BC::checkNamePrimitive(fun) << BC::br(ctx.loop().break_);
 
         return true;
     }
@@ -787,7 +790,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
 
             // If the .Internal call goes to a builtin, then we call eagerly
             if (R_FunTab[i].eval % 10 == 1) {
-                cs << BC::isspecial(symbol::Internal);
+                cs << BC::checkNamePrimitive(symbol::Internal);
                 for (auto a : args)
                     compileExpr(ctx, a);
                 cs.insertStackCall(BC_t::static_call_stack_, args.length(), {},
@@ -847,7 +850,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
                 Label objBranch = cs.mkLabel();
                 Label contBranch = cs.mkLabel();
 
-                cs << BC::isspecial(symbol::DoubleBracket);
+                cs << BC::checkNamePrimitive(symbol::DoubleBracket);
                 cs << BC::pull(4)
                    << BC::pull(4)
                    << BC::pull(2)
@@ -906,7 +909,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
         if (fun == symbol::standardGeneric)
             return false;
 
-        cs << BC::isspecial(fun);
+        cs << BC::checkNamePrimitive(fun);
 
         for (auto a : args)
             compileExpr(ctx, a);

@@ -127,14 +127,9 @@ DEF_INSTR(lt_, 0, 2, 1, 0, 0)
  * add_:: pop two values from object stack, add them, push result on object
  * stack
  */
-DEF_INSTR(isspecial_, 1, 0, 0, 0, 0)
+DEF_INSTR(guard_fun_, 3, 0, 0, 0, 0)
 /**
- * isspecial_:: take imediate CP index of symbol, check if bound to a SPECIALSXP
-*                or a BUILTINSXP.
-
-This should go away and be replaced with a guard, now it checks certain function is special, and if not asserts.
-
-Actually it also checks for special, or builtin.
+ * guard_fun_:: takes symbol, target, id, checks findFun(symbol) == target
  */
 DEF_INSTR(isfun_, 0, 1, 1, 0, 0)
 /**

@@ -254,9 +254,10 @@ class ScopeResolution : public ForwardAnalysisIns<AbstractState<PointsTo>>,
         doCall();
     }
 
-    void isspecial_(CodeEditor::Iterator ins) override {
-        SEXP sym = Pool::get((*ins).immediate.pool);
-        current()[sym] = PointsTo(PointsTo::Type::DefaultValue, sym);
+    void guard_fun_(CodeEditor::Iterator ins) override {
+        // TODO
+        // SEXP sym = Pool::get((*ins).immediate.pool);
+        // current()[sym] = PointsTo(PointsTo::Type::Value, sym);
     }
 
     void pick_(CodeEditor::Iterator ins) override {
