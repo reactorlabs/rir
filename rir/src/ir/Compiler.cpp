@@ -448,9 +448,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
             names.push_back(R_NilValue);
 
             // Some setters do not check for the named flag!
-            // TODO: there are probably more!
-            if (fun == symbol::at || fun == symbol::Class ||
-                fun == symbol::OldClass || fun == symbol::slot) {
+            if (fun != symbol::Bracket && fun != symbol::DoubleBracket) {
                 cs << BC::pick(1)
                    << BC::uniq()
                    << BC::put(1);
