@@ -57,14 +57,6 @@ add_custom_target(tests
   COMMAND ${CMAKE_SOURCE_DIR}/tools/tests
 )
 
-if (APPLE) 
-    find_library(libr 
-                NAMES libR.dylib
-                PATHS ${R_ROOT_DIR}/lib
-                )
-    message(STATUS "libR is found at ${libr}")
-endif(APPLE)
-
 set(MAKEVARS_SRC "SOURCES = $(wildcard *.cpp ir/*.cpp passes/codegen/*.cpp)\nOBJECTS = $(SOURCES:.cpp=.o)")
 
 # build the shared library for the JIT
@@ -103,7 +95,7 @@ add_custom_target(scripts SOURCES ${SCRIPTS})
 file(GLOB TOOLS "tools/*.*")
 add_custom_target(tools SOURCES ${TOOLS})
 
-# this line makes osx happy, don't ask me why
-if(libr)
-    target_link_libraries(${PROJECT_NAME} ${libr})
-endif(libr)
+if(APPLE)
+    set_target_properties(${PROJECT_NAME} PROPERTIES LINK_FLAGS "-Lexternal/custom-r/lib")
+    target_link_libraries(${PROJECT_NAME} R)
+endif(APPLE)
