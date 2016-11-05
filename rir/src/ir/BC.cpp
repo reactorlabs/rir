@@ -244,7 +244,7 @@ void BC::print(CallSite cs) {
             Rprintf("\n        # ");
             Rf_PrintValue(cs.call());
         }
-        // Fall through
+        break;
     }
     case BC_t::call_: {
         if (cs.isValid()) {

@@ -431,6 +431,29 @@ SEXP rirCallTrampoline(RCNTXT* cntxt, Code* code, SEXP env, unsigned nargs,
 
 INLINE SEXP rirCallClosure(SEXP call, SEXP env, SEXP callee, SEXP actuals,
                            unsigned nargs, OpcodeT** pc, Context* ctx) {
+
+    SEXP body = BODY(callee);
+    Function* fun = (Function*)INTEGER(body);
+
+    if (fun->invocationCount == 2000) {
+        // TODO: there might be promises with references to the old code!
+        // Therefore we keep it around.
+        // TODO: first I tried to use R_PreserveObject, but it did not work for
+        // large vectors, not sure why, need to investigate
+        cp_pool_add(ctx, body);
+
+        body = globalContext()->optimizer(callee);
+        SET_BODY(callee, body);
+        fun = (Function*)INTEGER(body);
+
+        // printf("================ OPTIMIZING
+        // ===============================\n");
+        // Rf_PrintValue(escape(callee));
+        // printf("-----------------------------\n");
+        // printFunctionFancy(callee);
+    }
+    fun->invocationCount++;
+
     // match formal arguments and create the env of this new activation record
     SEXP newEnv =
         closureArgumentAdaptor(call, callee, actuals, env, R_NilValue);
@@ -451,19 +474,6 @@ INLINE SEXP rirCallClosure(SEXP call, SEXP env, SEXP callee, SEXP actuals,
 
     // Exec the closure
     closureDebug(call, callee, env, newEnv, cntxt);
-    SEXP body = BODY(callee);
-    Function* fun = (Function*)INTEGER(body);
-    if (fun->invocationCount == 2000) {
-        // To dump Hot functions:
-        body = globalContext()->optimizer(callee);
-        SET_BODY(callee, body);
-        // printf("================ OPTIMIZING
-        // ===============================\n");
-        // Rf_PrintValue(escape(callee));
-        // printf("-----------------------------\n");
-        // printFunctionFancy(callee);
-    }
-    fun->invocationCount++;
     Code* code = functionCode(fun);
 
     SEXP result = rirCallTrampoline(cntxt, code, newEnv, nargs, ctx);

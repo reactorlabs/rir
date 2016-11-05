@@ -210,6 +210,12 @@ public:
             seek(ins);
         return current();
     }
+    ASTATE const& operator[](CodeEditor::Cursor cur) {
+        auto ins = cur.asItr();
+        if (ins != currentIns_)
+            seek(ins);
+        return current();
+    }
 
 protected:
 

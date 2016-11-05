@@ -160,12 +160,12 @@ void CodeEditor::print() {
     analysis.analyze(*this);
     specAnalysis.analyze(*this);
 
-    for (auto cur = begin(); cur != end(); ++cur) {
+    for (auto cur = getCursor(); !cur.atEnd(); cur.advance()) {
         if (cur.src()) {
             std::cout << "     # ";
             Rf_PrintValue(cur.src());
         }
-        BC bc = *cur;
+        BC bc = cur.bc();
         // Print some analysis info
         if (bc.bc != BC_t::label && bc.bc != BC_t::return_ &&
             bc.bc != BC_t::ret_ && bc.popCount() > 0) {
@@ -191,7 +191,7 @@ void CodeEditor::print() {
             }
             std::cout << "\n";
         }
-        bc.print();
+        cur.print();
     }
     fun_idx_t i = 0;
     for (auto p : promises) {

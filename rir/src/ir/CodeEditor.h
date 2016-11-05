@@ -163,6 +163,8 @@ class CodeEditor {
             return pos != other.pos or &editor != &other.editor;
         }
 
+        Iterator asItr() { return Iterator(pos); }
+
         bool atEnd() const { return pos == &editor.last; }
         bool firstInstruction() const { return pos == editor.front.next; }
 

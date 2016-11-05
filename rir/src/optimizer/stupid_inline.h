@@ -23,9 +23,9 @@ class StupidInliner {
             return false;
         if (isSafeBuiltin(target->u.primsxp.offset))
             return true;
-        printf("Warn: cannot inline due to unsafe builtin %s (%u)\n",
-               R_FunTab[target->u.primsxp.offset].name,
-               target->u.primsxp.offset);
+        // printf("Warn: cannot inline due to unsafe builtin %s (%u)\n",
+        //        R_FunTab[target->u.primsxp.offset].name,
+        //        target->u.primsxp.offset);
         return false;
     }
 
