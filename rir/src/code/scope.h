@@ -358,6 +358,9 @@ class ScopeResolution : public ForwardAnalysisIns<AbstractState<PointsTo>>,
     }
 
     void guard_fun_(CodeEditor::Iterator ins) override {
+        // TODO to look up the function it might eval a promise, how should we
+        // deal with this???
+        doCall();
         BC bc = *ins;
         SEXP sym = Pool::get(bc.immediate.guard_fun_args.name);
         // TODO this is not quite right, since its most likely coming from a
@@ -386,8 +389,45 @@ class ScopeResolution : public ForwardAnalysisIns<AbstractState<PointsTo>>,
         current().pop(bc.popCount());
         if (!bc.isPure())
             doCall();
-        for (size_t i = 0, e = bc.pushCount(); i != e; ++i)
-            current().push(PointsTo::Type::Any);
+
+        switch (bc.bc) {
+        // We know those BC do not return promises
+        case BC_t::inc_:
+        case BC_t::is_:
+        case BC_t::isfun_:
+        case BC_t::extract1_:
+        case BC_t::subset1_:
+        case BC_t::extract2_:
+        case BC_t::subset2_:
+        case BC_t::close_:
+        case BC_t::lgl_or_:
+        case BC_t::lgl_and_:
+        case BC_t::test_bounds_:
+        case BC_t::seq_:
+        case BC_t::names_:
+        case BC_t::length_:
+        case BC_t::alloc_:
+            for (size_t i = 0, e = bc.pushCount(); i != e; ++i)
+                current().push(PointsTo::Type::Value);
+            break;
+
+        default:
+            for (size_t i = 0, e = bc.pushCount(); i != e; ++i)
+                current().push(PointsTo::Type::Any);
+            break;
+        }
+    }
+
+    void dup_(CodeEditor::Iterator ins) override {
+        auto v = current().top();
+        current().push(v);
+    }
+
+    void dup2_(CodeEditor::Iterator ins) override {
+        auto a = current().stack()[0];
+        auto b = current().stack()[1];
+        current().push(a);
+        current().push(b);
     }
 
     void ldddvar_(CodeEditor::Iterator ins) override {
