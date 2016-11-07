@@ -34,7 +34,11 @@ bool BC::operator==(const BC& other) const {
         return immediate.call_args.call_id == other.immediate.call_args.call_id;
 
     case BC_t::guard_fun_:
-        return immediate.guard_fun_args.id == other.immediate.guard_fun_args.id;
+        return immediate.guard_fun_args.name ==
+                   other.immediate.guard_fun_args.name &&
+               immediate.guard_fun_args.expected ==
+                   other.immediate.guard_fun_args.expected;
+
     case BC_t::promise_:
     case BC_t::push_code_:
         return immediate.fun == other.immediate.fun;

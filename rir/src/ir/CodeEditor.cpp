@@ -169,7 +169,8 @@ void CodeEditor::print() {
         // Print some analysis info
         if (bc.bc != BC_t::label && bc.bc != BC_t::return_ &&
             bc.bc != BC_t::ret_) {
-            if (bc.bc == BC_t::ldvar_) {
+            if (bc.bc == BC_t::ldvar_ || bc.bc == BC_t::ldarg_ ||
+                bc.bc == BC_t::ldfun_) {
                 SEXP sym = bc.immediateConst();
                 auto v = analysis[cur][sym];
                 auto sv = specAnalysis[cur][sym];
@@ -185,28 +186,29 @@ void CodeEditor::print() {
                 else
                     std::cout << "??\n";
             } else if (bc.popCount() > 0) {
-            bool assumedIsBetter = false;
-            for (int i = bc.popCount() - 1; i >= 0; --i) {
-                if (analysis[cur].stack()[i] != specAnalysis[cur].stack()[i]) {
-                    assumedIsBetter = true;
-                    break;
-                }
-            }
-
-            std::cout << "   ~~ TOS : ";
-            for (int i = bc.popCount() - 1; i >= 0; --i) {
-                analysis[cur].stack()[i].print();
-                std::cout << ", ";
-            }
-            if (assumedIsBetter) {
-                std::cout << "  /  Assumed: ";
+                bool assumedIsBetter = false;
                 for (int i = bc.popCount() - 1; i >= 0; --i) {
-                    specAnalysis[cur].stack()[i].print();
+                    if (analysis[cur].stack()[i] !=
+                        specAnalysis[cur].stack()[i]) {
+                        assumedIsBetter = true;
+                        break;
+                    }
+                }
+
+                std::cout << "   ~~ TOS : ";
+                for (int i = bc.popCount() - 1; i >= 0; --i) {
+                    analysis[cur].stack()[i].print();
                     std::cout << ", ";
                 }
+                if (assumedIsBetter) {
+                    std::cout << "  /  Assumed: ";
+                    for (int i = bc.popCount() - 1; i >= 0; --i) {
+                        specAnalysis[cur].stack()[i].print();
+                        std::cout << ", ";
+                    }
+                }
+                std::cout << "\n";
             }
-            std::cout << "\n";
-        }
         }
         cur.print();
     }
