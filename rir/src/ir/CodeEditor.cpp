@@ -176,6 +176,10 @@ void CodeEditor::print() {
                 std::cout << "   ~~ ";
                 if (v.isValue())
                     std::cout << "local\n";
+                else if (v.t == FValue::Type::Argument)
+                    std::cout << "argument\n";
+                else if (sv.t == FValue::Type::Argument)
+                    std::cout << "maybe argument\n";
                 else if (sv.isValue())
                     std::cout << "maybe local\n";
                 else

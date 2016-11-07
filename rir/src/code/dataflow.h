@@ -434,8 +434,6 @@ class DataflowAnalysis : public ForwardAnalysisIns<AbstractState<FValue>>,
     }
 
     void guard_fun_(CodeEditor::Iterator ins) override {
-        // TODO to look up the function it might eval a promise, how should we
-        // deal with this???
         doCall();
         BC bc = *ins;
         SEXP sym = Pool::get(bc.immediate.guard_fun_args.name);

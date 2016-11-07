@@ -1602,11 +1602,9 @@ INSTRUCTION(extract1_) {
 INSTRUCTION(dup_) { ostack_push(ctx, ostack_top(ctx)); }
 
 INSTRUCTION(guard_fun_) {
-    // TODO I do not think this is a proper way - we must check all the way
-    // down, not just findVar (vars do not shadow closures)
     SEXP sym = readConst(ctx, pc);
     SEXP expected = readConst(ctx, pc);
-    uint32_t id = readImmediate(pc);
+    readImmediate(pc);
     SEXP val = findFun(sym, env);
     assert(val == expected);
 }
