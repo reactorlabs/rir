@@ -55,7 +55,18 @@ class FValue {
         return val;
     }
 
-    bool singleDef() {
+    FValue duplicate(CodeEditor::Iterator pos) {
+        if (isValue()) {
+            FValue d;
+            d.t = t;
+            d.value.u = UseDef();
+            d.value.u.def = pos;
+            return d;
+        }
+        return *this;
+    }
+
+    bool singleDef() const {
         if (t == Type::Constant || t == Type::Value) {
             assert(value.u.def != UseDef::unused());
             return value.u.def != UseDef::multiuse();
@@ -75,7 +86,7 @@ class FValue {
             value.u.use = UseDef::multiuse();
     }
 
-    bool used() {
+    bool used() const {
         assert(t == Type::Constant || t == Type::Value);
         return value.u.use != UseDef::unused();
     }
@@ -213,7 +224,7 @@ class FValue {
     void print() const {
         switch (t) {
         case Type::Constant:
-            std::cout << "const ";
+            std::cout << "const " << singleDef() << " " << used();
             break;
         case Type::Argument:
             std::cout << "arg " << value.argument;
@@ -434,9 +445,15 @@ class DataflowAnalysis : public ForwardAnalysisIns<AbstractState<FValue>>,
     }
 
     void guard_fun_(CodeEditor::Iterator ins) override {
-        doCall();
         BC bc = *ins;
         SEXP sym = Pool::get(bc.immediate.guard_fun_args.name);
+        // TODO: is this not sound! There could be a higher up promise with the
+        // functions name, which invalidates the local env, although very
+        // unlikely. Thus we should instead fix guard_fun to work without
+        // forcing promises.
+        if (!current()[sym].isValue() &&
+            current()[sym].t != FValue::Type::Argument)
+            doCall();
         // TODO this is not quite right, since its most likely coming from a
         // parent environment
         current()[sym] = FValue::Constant(ins);
@@ -500,8 +517,9 @@ class DataflowAnalysis : public ForwardAnalysisIns<AbstractState<FValue>>,
     }
 
     void dup_(CodeEditor::Iterator ins) override {
-        auto& v = current().top();
+        auto v = current().pop();
         v.used(ins);
+        current().push(v.duplicate(ins));
         current().push(v);
     }
 
@@ -510,8 +528,8 @@ class DataflowAnalysis : public ForwardAnalysisIns<AbstractState<FValue>>,
         auto& b = current().stack()[1];
         a.used(ins);
         b.used(ins);
-        current().push(a);
-        current().push(b);
+        current().push(a.duplicate(ins));
+        current().push(b.duplicate(ins));
     }
 
     void return_(CodeEditor::Iterator ins) override {

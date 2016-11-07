@@ -529,6 +529,8 @@ class CodeEditor {
                 delete oldL;
             }
         }
+
+        changed = false;
     }
 
     bool changed = false;

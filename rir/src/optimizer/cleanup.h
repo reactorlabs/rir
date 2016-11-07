@@ -67,6 +67,9 @@ class BCCleanup : public InstructionDispatcher::Receiver {
             SEXP constant = v.constant();
             if (TYPEOF(constant) == CLOSXP && TYPEOF(BODY(constant)) != INTSXP)
                 return;
+            // TODO: this breaks tools/Rj while loading a package, but why???
+            if (TYPEOF(constant) == STRSXP)
+                return;
             auto cur = ins.asCursor(code_);
             cur.remove();
             cur << BC::push(constant);

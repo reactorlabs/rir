@@ -435,7 +435,7 @@ INLINE SEXP rirCallClosure(SEXP call, SEXP env, SEXP callee, SEXP actuals,
     SEXP body = BODY(callee);
     Function* fun = (Function*)INTEGER(body);
 
-    if (fun->invocationCount == 2000) {
+    if (fun->invocationCount == 1000) {
         // TODO: there might be promises with references to the old code!
         // Therefore we keep it around.
         // TODO: first I tried to use R_PreserveObject, but it did not work for

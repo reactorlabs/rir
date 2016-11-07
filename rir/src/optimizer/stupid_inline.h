@@ -19,7 +19,7 @@ class StupidInliner {
     StupidInliner(CodeEditor& code) : code_(code) {}
 
     bool isSafeTarget(SEXP target) {
-        if (TYPEOF(target) != BUILTINSXP || TYPEOF(target) != SPECIALSXP)
+        if (TYPEOF(target) != BUILTINSXP && TYPEOF(target) != SPECIALSXP)
             return false;
         if (isSafeBuiltin(target->u.primsxp.offset))
             return true;
@@ -125,16 +125,16 @@ class StupidInliner {
             if (begin(f) != c)
                 continue;
 
-            if (!canInline(c))
-                continue;
-
             CodeEditor::Cursor cur = i.asCursor(code_).prev();
+            SEXP name = cur.bc().immediateConst();
+            if (!canInline(c)) {
+                continue;
+            }
 
             if (cur.bc().bc != BC_t::ldfun_) {
                 printf("cannot inline, did not find ldfun\n");
                 continue;
             }
-            SEXP name = cur.bc().immediateConst();
             cur.remove();
             cur.remove();
 
