@@ -168,7 +168,19 @@ void CodeEditor::print() {
         BC bc = cur.bc();
         // Print some analysis info
         if (bc.bc != BC_t::label && bc.bc != BC_t::return_ &&
-            bc.bc != BC_t::ret_ && bc.popCount() > 0) {
+            bc.bc != BC_t::ret_) {
+            if (bc.bc == BC_t::ldvar_) {
+                SEXP sym = bc.immediateConst();
+                auto v = analysis[cur][sym];
+                auto sv = specAnalysis[cur][sym];
+                std::cout << "   ~~ ";
+                if (v.isValue())
+                    std::cout << "local\n";
+                else if (sv.isValue())
+                    std::cout << "maybe local\n";
+                else
+                    std::cout << "??\n";
+            } else if (bc.popCount() > 0) {
             bool assumedIsBetter = false;
             for (int i = bc.popCount() - 1; i >= 0; --i) {
                 if (analysis[cur].stack()[i] != specAnalysis[cur].stack()[i]) {
@@ -190,6 +202,7 @@ void CodeEditor::print() {
                 }
             }
             std::cout << "\n";
+        }
         }
         cur.print();
     }
