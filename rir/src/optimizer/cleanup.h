@@ -32,13 +32,13 @@ class BCCleanup : public InstructionDispatcher::Receiver {
 
         // double load elimination : ldvar a; pop; ldvar a;
         if ((ins + 1) != code_.end()) {
-        auto next = ins + 1;
-        if ((*next).is(BC_t::ldvar_) && def == *next) {
-            CodeEditor::Cursor cur = ins.asCursor(code_);
-            cur.remove();
-            cur.remove();
-            return;
-        }
+            auto next = ins + 1;
+            if ((*next).is(BC_t::ldvar_) && def == *next) {
+                CodeEditor::Cursor cur = ins.asCursor(code_);
+                cur.remove();
+                cur.remove();
+                return;
+            }
         }
     }
 
@@ -74,32 +74,33 @@ class BCCleanup : public InstructionDispatcher::Receiver {
 
         // double load elimination : ldvar a; ldvar a;
         if (ins != code_.begin()) {
-        auto prev = ins - 1;
-        if ((*prev).is(BC_t::ldvar_) && *ins == *prev) {
-            CodeEditor::Cursor cur = ins.asCursor(code_);
-            cur.remove();
-            cur << BC::dup();
-            return;
-        }
+            auto prev = ins - 1;
+            if ((*prev).is(BC_t::ldvar_) && *ins == *prev) {
+                CodeEditor::Cursor cur = ins.asCursor(code_);
+                cur.remove();
+                cur << BC::dup();
+                return;
+            }
         }
     }
 
     void invisible_(CodeEditor::Iterator ins) override {
         if ((ins + 1) != code_.end()) {
-        if ((*(ins + 1)).is(BC_t::pop_) || (*(ins + 1)).is(BC_t::visible_) ||
-            (*(ins + 1)).is(BC_t::ldvar_)) {
-            ins.asCursor(code_).remove();
-        }
+            if ((*(ins + 1)).is(BC_t::pop_) ||
+                (*(ins + 1)).is(BC_t::visible_) ||
+                (*(ins + 1)).is(BC_t::ldvar_)) {
+                ins.asCursor(code_).remove();
+            }
         }
     }
 
     void uniq_(CodeEditor::Iterator ins) override {
         if ((ins + 1) != code_.end()) {
-        if ((*(ins + 1)).is(BC_t::stvar_) || (*(ins + 1)).is(BC_t::pop_) ||
-            (*(ins + 1)).is(BC_t::subassign_) ||
-            (*(ins + 1)).is(BC_t::subassign2_)) {
-            ins.asCursor(code_).remove();
-        }
+            if ((*(ins + 1)).is(BC_t::stvar_) || (*(ins + 1)).is(BC_t::pop_) ||
+                (*(ins + 1)).is(BC_t::subassign_) ||
+                (*(ins + 1)).is(BC_t::subassign2_)) {
+                ins.asCursor(code_).remove();
+            }
         }
     }
 
