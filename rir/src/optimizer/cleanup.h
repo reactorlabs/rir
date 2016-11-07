@@ -7,7 +7,7 @@ namespace rir {
 
 class BCCleanup : public InstructionDispatcher::Receiver {
   public:
-    DataflowAnalysis analysis;
+    DataflowAnalysis<Type::Conservative> analysis;
     InstructionDispatcher dispatcher;
     CodeEditor& code_;
 
@@ -15,14 +15,14 @@ class BCCleanup : public InstructionDispatcher::Receiver {
 
     void pop_(CodeEditor::Iterator ins) override {
         auto v = analysis[ins].top();
-        if (v.defs == StackV::top)
+        if (!v.singleDef())
             return;
 
-        auto defI = v.defs;
+        auto defI = v.value.u.def;
         BC def = *defI;
 
         // push - pop elimination
-        if (v.uses == StackV::bottom) {
+        if (!v.used()) {
             if (def.is(BC_t::push_) || def.is(BC_t::dup_)) {
                 defI.asCursor(code_).remove();
                 ins.asCursor(code_).remove();
@@ -40,7 +40,36 @@ class BCCleanup : public InstructionDispatcher::Receiver {
         }
     }
 
+    void ldfun_(CodeEditor::Iterator ins) override {
+        SEXP sym = Pool::get((*ins).immediate.pool);
+        auto v = analysis[ins][sym];
+        if (v.t == FValue::Type::Constant) {
+            SEXP constant = v.constant();
+            if (TYPEOF(constant) == CLOSXP && TYPEOF(BODY(constant)) != INTSXP)
+                return;
+            auto cur = ins.asCursor(code_);
+            cur.remove();
+            cur << BC::push(constant);
+        }
+    }
+
     void ldvar_(CodeEditor::Iterator ins) override {
+        SEXP sym = Pool::get((*ins).immediate.pool);
+        auto v = analysis[ins][sym];
+        if (v.t == FValue::Type::Argument) {
+            auto cur = ins.asCursor(code_);
+            cur.remove();
+            cur << BC::ldarg(sym);
+        }
+        if (v.t == FValue::Type::Constant) {
+            SEXP constant = v.constant();
+            if (TYPEOF(constant) == CLOSXP && TYPEOF(BODY(constant)) != INTSXP)
+                return;
+            auto cur = ins.asCursor(code_);
+            cur.remove();
+            cur << BC::push(constant);
+        }
+
         // double load elimination : ldvar a; ldvar a;
         auto prev = ins - 1;
         if ((*prev).is(BC_t::ldvar_) && *ins == *prev) {
@@ -70,6 +99,17 @@ class BCCleanup : public InstructionDispatcher::Receiver {
         auto prev = ins - 1;
         if ((*prev).is(BC_t::guard_fun_) && *ins == *prev) {
             ins.asCursor(code_).remove();
+        }
+
+        SEXP sym = Pool::get((*ins).immediate.guard_fun_args.name);
+        auto v = analysis[ins][sym];
+        if (v.t == FValue::Type::Constant) {
+            SEXP constant = v.constant();
+            SEXP expected = Pool::get((*ins).immediate.guard_fun_args.expected);
+            if (constant == expected) {
+                auto cur = ins.asCursor(code_);
+                cur.remove();
+            }
         }
     }
 

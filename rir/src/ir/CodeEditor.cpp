@@ -2,7 +2,7 @@
 
 #include "BC.h"
 #include "CodeStream.h"
-#include "code/scope.h"
+#include "code/dataflow.h"
 
 #include <iomanip>
 #include <iostream>
@@ -155,8 +155,8 @@ CodeEditor::~CodeEditor() {
 
 void CodeEditor::print() {
 
-    ScopeResolution<Type::Conservative> analysis;
-    ScopeResolution<Type::NoReflection> specAnalysis;
+    DataflowAnalysis<Type::Conservative> analysis;
+    DataflowAnalysis<Type::NoReflection> specAnalysis;
     analysis.analyze(*this);
     specAnalysis.analyze(*this);
 

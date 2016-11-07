@@ -1,17 +1,13 @@
 #include "ir/Optimizer.h"
 #include "optimizer/cleanup.h"
-#include "optimizer/load_elimination.h"
 #include "optimizer/stupid_inline.h"
 
 namespace rir {
 
 void Optimizer::optimize(CodeEditor& code, int steam) {
     BCCleanup cleanup(code);
-    LoadElimination elim(code);
     for (int i = 0; i < 3; ++i) {
         cleanup.run();
-        code.commit();
-        elim.run();
         code.commit();
     }
 }
