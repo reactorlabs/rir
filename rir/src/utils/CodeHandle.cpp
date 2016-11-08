@@ -27,23 +27,6 @@ void CodeHandle::print() {
         if (bc.isCallsite()) {
             CallSite cs = bc.callSite(code);
             bc.print(cs);
-
-            if (cs.hasProfile()) {
-                CallSiteProfile* prof = cs.profile();
-                Rprintf("           Prof : [");
-                if (prof->takenOverflow)
-                    Rprintf("*, <");
-                else
-                    Rprintf("%u, <", prof->taken);
-                if (prof->targetsOverflow)
-                    Rprintf("*>, ");
-                else
-                    Rprintf("%u> ", prof->numTargets);
-                for (int i = 0; i < prof->numTargets; ++i)
-                    Rprintf("%p(%s) ", prof->targets[i],
-                            type2char(TYPEOF(prof->targets[i])));
-                Rprintf("]\n");
-            }
         } else {
             bc.print();
         }

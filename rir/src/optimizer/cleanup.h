@@ -67,9 +67,6 @@ class BCCleanup : public InstructionDispatcher::Receiver {
             SEXP constant = v.constant();
             if (TYPEOF(constant) == CLOSXP && TYPEOF(BODY(constant)) != INTSXP)
                 return;
-            // TODO: this breaks tools/Rj while loading a package, but why???
-            if (TYPEOF(constant) == STRSXP)
-                return;
             auto cur = ins.asCursor(code_);
             cur.remove();
             cur << BC::push(constant);
@@ -83,6 +80,66 @@ class BCCleanup : public InstructionDispatcher::Receiver {
                 cur.remove();
                 cur << BC::dup();
                 return;
+            }
+        }
+    }
+
+    void add_(CodeEditor::Iterator ins) override {
+        auto b = analysis[ins].stack()[0];
+        auto a = analysis[ins].stack()[1];
+        if (a.t == FValue::Type::Constant && b.t == FValue::Type::Constant) {
+            SEXP ca = a.constant();
+            SEXP cb = b.constant();
+            if (!isObject(ca) && !isObject(cb)) {
+                Protect p;
+                SEXP plus = Rf_install("+");
+                SEXP c = LCONS(plus->u.symsxp.value,
+                               LCONS(ca, LCONS(cb, R_NilValue)));
+                p(c);
+                SEXP res = Rf_eval(c, R_BaseEnv);
+                auto cur = ins.asCursor(code_);
+                cur.remove();
+                cur << BC::pop() << BC::pop() << BC::push(res);
+            }
+        }
+    }
+
+    void sub_(CodeEditor::Iterator ins) override {
+        auto b = analysis[ins].stack()[0];
+        auto a = analysis[ins].stack()[1];
+        if (a.t == FValue::Type::Constant && b.t == FValue::Type::Constant) {
+            SEXP ca = a.constant();
+            SEXP cb = b.constant();
+            if (!isObject(ca) && !isObject(cb)) {
+                Protect p;
+                SEXP plus = Rf_install("-");
+                SEXP c = LCONS(plus->u.symsxp.value,
+                               LCONS(ca, LCONS(cb, R_NilValue)));
+                p(c);
+                SEXP res = Rf_eval(c, R_BaseEnv);
+                auto cur = ins.asCursor(code_);
+                cur.remove();
+                cur << BC::pop() << BC::pop() << BC::push(res);
+            }
+        }
+    }
+
+    void mul_(CodeEditor::Iterator ins) override {
+        auto b = analysis[ins].stack()[0];
+        auto a = analysis[ins].stack()[1];
+        if (a.t == FValue::Type::Constant && b.t == FValue::Type::Constant) {
+            SEXP ca = a.constant();
+            SEXP cb = b.constant();
+            if (!isObject(ca) && !isObject(cb)) {
+                Protect p;
+                SEXP plus = Rf_install("*");
+                SEXP c = LCONS(plus->u.symsxp.value,
+                               LCONS(ca, LCONS(cb, R_NilValue)));
+                p(c);
+                SEXP res = Rf_eval(c, R_BaseEnv);
+                auto cur = ins.asCursor(code_);
+                cur.remove();
+                cur << BC::pop() << BC::pop() << BC::push(res);
             }
         }
     }

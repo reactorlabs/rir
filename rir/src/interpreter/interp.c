@@ -446,11 +446,13 @@ INLINE SEXP rirCallClosure(SEXP call, SEXP env, SEXP callee, SEXP actuals,
         SET_BODY(callee, body);
         fun = (Function*)INTEGER(body);
 
-        // printf("================ OPTIMIZING
-        // ===============================\n");
-        // Rf_PrintValue(escape(callee));
-        // printf("-----------------------------\n");
-        // printFunctionFancy(callee);
+        //        if (fun->size < 1000) {
+        //            printf("================ OPTIMIZING
+        //            ===========================\n");
+        //            Rf_PrintValue(escape(callee));
+        //            printf("-----------------------------\n");
+        //            printFunctionFancy(callee);
+        //        }
     }
     fun->invocationCount++;
 

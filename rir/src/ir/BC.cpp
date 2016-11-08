@@ -224,6 +224,25 @@ void BC::printNames(CallSite cs) {
     }
 }
 
+void BC::printProfile(CallSite cs) {
+    if (cs.hasProfile()) {
+        CallSiteProfile* prof = cs.profile();
+        Rprintf("           Prof : [");
+        if (prof->takenOverflow)
+            Rprintf("*, <");
+        else
+            Rprintf("%u, <", prof->taken);
+        if (prof->targetsOverflow)
+            Rprintf("*>, ");
+        else
+            Rprintf("%u> ", prof->numTargets);
+        for (int i = 0; i < prof->numTargets; ++i)
+            Rprintf("%p(%s) ", prof->targets[i],
+                    type2char(TYPEOF(prof->targets[i])));
+        Rprintf("]\n");
+    }
+}
+
 CallSite BC::callSite(Code* code) {
     return CallSite(*this, CallSite_get(code, immediate.call_args.call_id));
 }
@@ -247,6 +266,7 @@ void BC::print(CallSite cs) {
             Rprintf(" `%s` ", CHAR(PRINTNAME(selector)));
             Rprintf("\n        # ");
             Rf_PrintValue(cs.call());
+            printProfile(cs);
         }
         break;
     }
@@ -256,6 +276,7 @@ void BC::print(CallSite cs) {
             printNames(cs);
             Rprintf("\n        -> ");
             Rf_PrintValue(cs.call());
+            printProfile(cs);
         }
         break;
     }
@@ -266,6 +287,7 @@ void BC::print(CallSite cs) {
             printNames(cs);
             Rprintf("\n        -> ");
             Rf_PrintValue(cs.call());
+            printProfile(cs);
         }
         break;
     }
@@ -276,6 +298,7 @@ void BC::print(CallSite cs) {
             Rprintf(" %p ", cs.target());
             Rprintf("\n        -> ");
             Rf_PrintValue(cs.call());
+            printProfile(cs);
         }
         break;
     }
@@ -286,6 +309,7 @@ void BC::print(CallSite cs) {
             printNames(cs);
             Rprintf("\n        -> ");
             Rf_PrintValue(cs.call());
+            printProfile(cs);
         }
         break;
     }

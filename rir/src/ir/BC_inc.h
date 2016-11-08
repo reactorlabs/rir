@@ -137,6 +137,7 @@ class BC {
     void print(CallSite cs);
     void printArgs(CallSite cs);
     void printNames(CallSite cs);
+    void printProfile(CallSite cs);
 
     // Accessors to load immediate constant from the pool
     SEXP immediateConst();

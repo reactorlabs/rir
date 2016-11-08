@@ -10,7 +10,7 @@
 namespace rir {
 
 /*
- *                                  Any
+ *                                Any
  *
  *                Value
  *
@@ -134,7 +134,7 @@ class FValue {
     };
     AValue value;
 
-    bool isValue() { return t == Type::Value || t == Type::Constant; }
+    bool isValue() const { return t == Type::Value || t == Type::Constant; }
 
     SEXP constant() {
         assert(t == Type::Constant);
@@ -146,11 +146,6 @@ class FValue {
             return Pool::get(bc.immediate.guard_fun_args.expected);
         assert(false);
         return R_NilValue;
-    }
-
-    bool pure() const {
-        // Type::Value is already evaluated!
-        return t != Type::Any && t != Type::Argument;
     }
 
     bool operator==(FValue const& other) const {
@@ -191,16 +186,15 @@ class FValue {
             return false;
         case Type::Constant:
             if (other.t != Type::Constant) {
-                t = other.pure() ? Type::Value : Type::Any;
+                t = other.isValue() ? Type::Value : Type::Any;
                 changed = true;
-            }
-            if (value.u.def != other.value.u.def) {
+            } else if (value.u.def != other.value.u.def) {
                 t = Type::Value;
                 changed = true;
             }
             break;
         case Type::Value:
-            if (!other.pure()) {
+            if (!other.isValue()) {
                 t = Type::Any;
                 changed = true;
             }
@@ -324,39 +318,39 @@ class DataflowAnalysis : public ForwardAnalysisIns<AbstractState<FValue>>,
     void ldvar_(CodeEditor::Iterator ins) override {
         SEXP sym = Pool::get((*ins).immediate.pool);
         auto v = current()[sym];
-        if (!v.pure())
+        if (!v.isValue())
             doCall();
         if (v == FValue::bottom())
             current().push(FValue::Value(ins));
         else
-            current().push(v.pure() ? v : FValue::Value(ins));
+            current().push(v.isValue() ? v : FValue::Value(ins));
     }
 
     void ldddvar_(CodeEditor::Iterator ins) override {
         SEXP sym = Pool::get((*ins).immediate.pool);
         auto v = current()[sym];
-        if (!v.pure())
+        if (!v.isValue())
             doCall();
         if (v == FValue::bottom())
             current().push(FValue::Value(ins));
         else
-            current().push(v.pure() ? v : FValue::Value(ins));
+            current().push(v.isValue() ? v : FValue::Value(ins));
     }
 
     void ldarg_(CodeEditor::Iterator ins) override {
         SEXP sym = Pool::get((*ins).immediate.pool);
         auto v = current()[sym];
-        if (!v.pure())
+        if (!v.isValue())
             doCall();
         if (v == FValue::bottom())
             current().push(FValue::Value(ins));
         else
-            current().push(v.pure() ? v : FValue::Value(ins));
+            current().push(v.isValue() ? v : FValue::Value(ins));
     }
 
     void force_(CodeEditor::Iterator ins) override {
         auto v = current().pop();
-        if (v.pure()) {
+        if (v.isValue()) {
             current().push(v);
         } else {
             doCall();
@@ -367,6 +361,9 @@ class DataflowAnalysis : public ForwardAnalysisIns<AbstractState<FValue>>,
     void stvar_(CodeEditor::Iterator ins) override {
         SEXP sym = Pool::get((*ins).immediate.pool);
         auto v = current().pop();
+        // <- is eager, this has to be a value
+        if (!v.isValue())
+            v = FValue::Value(FValue::UseDef::multiuse());
         current()[sym] = v;
     }
 
@@ -451,8 +448,8 @@ class DataflowAnalysis : public ForwardAnalysisIns<AbstractState<FValue>>,
         // functions name, which invalidates the local env, although very
         // unlikely. Thus we should instead fix guard_fun to work without
         // forcing promises.
-        if (!current()[sym].isValue() &&
-            current()[sym].t != FValue::Type::Argument)
+        if (current()[sym].t == FValue::Type::Argument ||
+            current()[sym].t == FValue::Type::Any)
             doCall();
         // TODO this is not quite right, since its most likely coming from a
         // parent environment
