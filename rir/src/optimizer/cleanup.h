@@ -112,6 +112,7 @@ class BCCleanup : public InstructionDispatcher::Receiver {
             auto prev = ins - 1;
             if ((*prev).is(BC_t::guard_fun_) && *ins == *prev) {
                 ins.asCursor(code_).remove();
+                return;
             }
         }
 
@@ -123,16 +124,21 @@ class BCCleanup : public InstructionDispatcher::Receiver {
             if (constant == expected) {
                 auto cur = ins.asCursor(code_);
                 cur.remove();
+                return;
             }
         }
-    }
 
-    void ret_(CodeEditor::Iterator ins) override {
-        if (ins != code_.begin()) {
-            auto prev = ins - 1;
-            if ((*prev).isReturn()) {
-                prev.asCursor(code_).remove();
+        CodeEditor::Iterator bubbleUp = ins;
+        while (bubbleUp != code_.begin()) {
+            bubbleUp = bubbleUp - 1;
+            if ((*bubbleUp).is(BC_t::label) || !(*bubbleUp).isPure()) {
+                bubbleUp = bubbleUp + 1;
+                break;
             }
+        }
+        if (bubbleUp != ins) {
+            bubbleUp.asCursor(code_) << *ins;
+            ins.asCursor(code_).remove();
         }
     }
 
