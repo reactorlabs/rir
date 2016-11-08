@@ -327,8 +327,8 @@ void BC::print(CallSite cs) {
         break;
     case BC_t::guard_fun_: {
         SEXP name = Pool::get(immediate.guard_fun_args.name);
-        Rprintf(" %s == ", CHAR(PRINTNAME(name)));
-        Rf_PrintValue(Pool::get(immediate.guard_fun_args.expected));
+        Rprintf(" %s == %p", CHAR(PRINTNAME(name)),
+                Pool::get(immediate.guard_fun_args.expected));
         break;
     }
     case BC_t::pick_:

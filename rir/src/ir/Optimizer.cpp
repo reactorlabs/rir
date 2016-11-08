@@ -6,7 +6,7 @@ namespace rir {
 
 void Optimizer::optimize(CodeEditor& code, int steam) {
     BCCleanup cleanup(code);
-    for (int i = 0; i < 5; ++i) {
+    for (int i = 0; i < 8; ++i) {
         cleanup.run();
         if (!code.changed)
             break;

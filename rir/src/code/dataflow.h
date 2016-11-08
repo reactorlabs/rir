@@ -10,7 +10,9 @@
 namespace rir {
 
 /*
- *                                Any
+ *                               Maybe  (might be deleted from env)
+ *
+ *                                Any   (might be a promise)
  *
  *                Value
  *
@@ -19,13 +21,13 @@ namespace rir {
 
 class FValue {
   public:
-    enum class Type { Bottom, Constant, Argument, Value, Any };
+    enum class Type { Bottom, Constant, Argument, Value, Any, Maybe };
 
     Type t = Type::Bottom;
 
     FValue() : FValue(Type::Bottom) {}
     FValue(Type t) : t(t) {
-        assert(t == Type::Any || t == Type::Bottom);
+        assert(t == Type::Any || t == Type::Bottom || t == Type::Maybe);
         value.argument = -1;
     }
     FValue(const FValue& p) : t(p.t), value(p.value) {}
@@ -44,6 +46,8 @@ class FValue {
         p.value.u.def = def;
         return p;
     }
+
+    static FValue Maybe() { return FValue(Type::Maybe); }
 
     static FValue Any() { return FValue(Type::Any); }
 
@@ -136,6 +140,8 @@ class FValue {
 
     bool isValue() const { return t == Type::Value || t == Type::Constant; }
 
+    bool isPresent() const { return t != Type::Bottom && t != Type::Maybe; }
+
     SEXP constant() {
         assert(t == Type::Constant);
         assert(value.u.def != UseDef::unused());
@@ -178,15 +184,17 @@ class FValue {
             value = other.value;
             return t != Type::Bottom;
         case Type::Argument:
-            if (other.t != Type::Argument ||
+            if (other.t != Type::Argument &&
                 value.argument != other.value.argument) {
-                t = Type::Any;
+                t = other.t == Type::Maybe ? Type::Maybe : Type::Any;
                 return true;
             }
             return false;
         case Type::Constant:
             if (other.t != Type::Constant) {
-                t = other.isValue() ? Type::Value : Type::Any;
+                t = other.isValue()
+                        ? Type::Value
+                        : (other.t == Type::Maybe ? Type::Maybe : Type::Any);
                 changed = true;
             } else if (value.u.def != other.value.u.def) {
                 t = Type::Value;
@@ -195,18 +203,24 @@ class FValue {
             break;
         case Type::Value:
             if (!other.isValue()) {
-                t = Type::Any;
+                t = other.t == Type::Maybe ? Type::Maybe : Type::Any;
                 changed = true;
             }
             break;
         case Type::Any:
+            if (other.t == Type::Maybe) {
+                t = Type::Maybe;
+                changed = true;
+            }
+            break;
+        case Type::Maybe:
             break;
         }
         return value.u.mergeWith(other.value.u) || changed;
     }
 
     static FValue const& top() {
-        static FValue value(Type::Any);
+        static FValue value(Type::Maybe);
         return value;
     }
 
@@ -229,6 +243,9 @@ class FValue {
         case Type::Value:
             std::cout << "Value";
             break;
+        case Type::Maybe:
+            std::cout << "Maybe";
+            break;
         case Type::Any:
             std::cout << "Any";
             break;
@@ -236,7 +253,7 @@ class FValue {
     }
 };
 
-enum class Type { Conservative, NoReflection };
+enum class Type { Conservative, NoReflection, NoReflectionDelete };
 
 template <Type type>
 class DataflowAnalysis : public ForwardAnalysisIns<AbstractState<FValue>>,
@@ -302,6 +319,7 @@ class DataflowAnalysis : public ForwardAnalysisIns<AbstractState<FValue>>,
             break;
         case FValue::Type::Argument:
         case FValue::Type::Any:
+        case FValue::Type::Maybe:
             doCall();
             current().push(FValue::Value(ins));
             break;
@@ -468,8 +486,10 @@ class DataflowAnalysis : public ForwardAnalysisIns<AbstractState<FValue>>,
     void label(CodeEditor::Iterator ins) override {}
 
     void doCall() {
-        if (type == Type::Conservative)
+        if (type == Type::NoReflectionDelete)
             current().mergeAllEnv(FValue::Type::Any);
+        else if (type == Type::Conservative)
+            current().mergeAllEnv(FValue::Type::Maybe);
     }
 
     void uniq_(CodeEditor::Iterator ins) override { current().top().used(ins); }

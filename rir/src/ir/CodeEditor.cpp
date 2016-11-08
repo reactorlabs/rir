@@ -175,13 +175,13 @@ void CodeEditor::print() {
                 auto v = analysis[cur][sym];
                 auto sv = specAnalysis[cur][sym];
                 std::cout << "   ~~ ";
-                if (v.isValue())
+                if (v.isPresent())
                     std::cout << "local\n";
                 else if (v.t == FValue::Type::Argument)
                     std::cout << "argument\n";
                 else if (sv.t == FValue::Type::Argument)
                     std::cout << "maybe argument\n";
-                else if (sv.isValue())
+                else if (sv.isPresent())
                     std::cout << "maybe local\n";
                 else
                     std::cout << "??\n";
