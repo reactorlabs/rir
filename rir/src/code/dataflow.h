@@ -12,7 +12,7 @@ namespace rir {
 /*
  *                               Maybe  (might be deleted from env)
  *
- *                                Any   (might be a promise)
+ *                              Any (prom)
  *
  *                Value
  *
@@ -26,73 +26,70 @@ class FValue {
     Type t = Type::Bottom;
 
     FValue() : FValue(Type::Bottom) {}
-    FValue(Type t) : t(t) {
-        assert(t == Type::Any || t == Type::Bottom || t == Type::Maybe);
-        value.argument = -1;
-    }
-    FValue(const FValue& p) : t(p.t), value(p.value) {}
+    FValue(Type t) : t(t) { assert(t == Type::Bottom || t == Type::Maybe); }
+    FValue(const FValue& p) : t(p.t), argument(p.argument), u(p.u) {}
 
     static FValue Argument(int i) {
         FValue p;
         p.t = Type::Argument;
-        p.value.argument = i;
+        p.argument = i;
         return p;
     }
 
     static FValue Constant(CodeEditor::Iterator def) {
         FValue p;
         p.t = Type::Constant;
-        p.value.u = UseDef();
-        p.value.u.def = def;
+        p.u.def = def;
         return p;
     }
 
     static FValue Maybe() { return FValue(Type::Maybe); }
 
-    static FValue Any() { return FValue(Type::Any); }
+    static FValue Any(CodeEditor::Iterator ins) {
+        FValue val;
+        val.t = Type::Any;
+        val.u.def = ins;
+        return val;
+    }
 
     static FValue Value(CodeEditor::Iterator ins) {
         FValue val;
         val.t = Type::Value;
-        val.value.u = UseDef();
-        val.value.u.def = ins;
+        val.u.def = ins;
         return val;
     }
 
     FValue duplicate(CodeEditor::Iterator pos) {
-        if (isValue()) {
-            FValue d;
-            d.t = t;
-            d.value.u = UseDef();
-            d.value.u.def = pos;
-            return d;
-        }
-        return *this;
+        FValue d;
+        d.t = t;
+        d.u = UseDef();
+        d.u.def = pos;
+        return d;
     }
 
     bool singleDef() const {
-        if (t == Type::Constant || t == Type::Value) {
-            assert(value.u.def != UseDef::unused());
-            return value.u.def != UseDef::multiuse();
+        if (hasUseDef()) {
+            assert(u.def != UseDef::unused());
+            return u.def != UseDef::multiuse();
         }
         return false;
     }
 
     CodeEditor::Iterator def() {
         assert(singleDef());
-        return value.u.def;
+        return u.def;
     }
 
     void used(CodeEditor::Iterator ins) {
-        if (value.u.use == UseDef::unused())
-            value.u.use = ins;
-        else if (value.u.use != ins)
-            value.u.use = UseDef::multiuse();
+        if (u.use == UseDef::unused())
+            u.use = ins;
+        else if (u.use != ins)
+            u.use = UseDef::multiuse();
     }
 
     bool used() const {
-        assert(t == Type::Constant || t == Type::Value);
-        return value.u.use != UseDef::unused();
+        assert(t == Type::Constant || t == Type::Value || t == Type::Any);
+        return u.use != UseDef::unused();
     }
 
     struct UseDef {
@@ -129,29 +126,18 @@ class FValue {
         }
     };
 
-    union AValue {
-        int argument;
-        UseDef u;
-
-        AValue() {}
-        AValue(const AValue& v) { *this = v; }
-    };
-    AValue value;
+    int argument = -1;
+    UseDef u;
 
     bool isValue() const { return t == Type::Value || t == Type::Constant; }
 
-    bool isPresent() const { return t != Type::Bottom && t != Type::Maybe; }
+    bool hasUseDef() const {
+        return t == Type::Value || t == Type::Constant || t == Type::Any;
+    }
 
-    SEXP constant() {
-        assert(t == Type::Constant);
-        assert(value.u.def != UseDef::unused());
-        BC bc = *value.u.def;
-        if (bc.bc == BC_t::push_)
-            return bc.immediateConst();
-        if (bc.bc == BC_t::guard_fun_)
-            return Pool::get(bc.immediate.guard_fun_args.expected);
-        assert(false);
-        return R_NilValue;
+    bool isPresent() const {
+        return t == Type::Value || t == Type::Constant || t == Type::Argument ||
+               t == Type::Any;
     }
 
     bool operator==(FValue const& other) const {
@@ -161,9 +147,10 @@ class FValue {
         switch (t) {
         case Type::Constant:
         case Type::Value:
-            return value.u == other.value.u;
+        case Type::Any:
+            return u == other.u;
         case Type::Argument:
-            return value.argument == other.value.argument;
+            return argument == other.argument;
         default:
             break;
         }
@@ -178,45 +165,70 @@ class FValue {
 
         bool changed = false;
 
+        assert(!other.hasUseDef() || other.u.def != UseDef::unused());
+        // Make sure we do not end up with an invalid use-def information
+        // when we merge a state which has none
+        if (hasUseDef() && !other.hasUseDef()) {
+            u.def = UseDef::multiuse();
+            u.use = UseDef::multiuse();
+            changed = true;
+        }
+
         switch (t) {
         case Type::Bottom:
             t = other.t;
-            value = other.value;
+            u = other.u;
+            argument = other.argument;
             return t != Type::Bottom;
-        case Type::Argument:
-            if (other.t != Type::Argument &&
-                value.argument != other.value.argument) {
-                t = other.t == Type::Maybe ? Type::Maybe : Type::Any;
-                return true;
-            }
+        case Type::Maybe:
             return false;
+        case Type::Argument:
+            if (other.t != Type::Argument || argument != other.argument) {
+                if (other.isPresent())
+                    t = Type::Any;
+                else
+                    t = Type::Maybe;
+                changed = true;
+            }
+            break;
         case Type::Constant:
             if (other.t != Type::Constant) {
-                t = other.isValue()
-                        ? Type::Value
-                        : (other.t == Type::Maybe ? Type::Maybe : Type::Any);
+                if (other.isValue())
+                    t = Type::Value;
+                else if (other.isPresent())
+                    t = Type::Any;
+                else
+                    t = Type::Maybe;
                 changed = true;
-            } else if (value.u.def != other.value.u.def) {
+            } else if (u.def != other.u.def) {
+                // Two defining sites, we cannot track the constant anymore
                 t = Type::Value;
                 changed = true;
             }
             break;
         case Type::Value:
             if (!other.isValue()) {
-                t = other.t == Type::Maybe ? Type::Maybe : Type::Any;
+                if (other.isPresent())
+                    t = Type::Any;
+                else
+                    t = Type::Maybe;
                 changed = true;
             }
             break;
         case Type::Any:
-            if (other.t == Type::Maybe) {
+            if (!other.isPresent()) {
                 t = Type::Maybe;
                 changed = true;
             }
             break;
-        case Type::Maybe:
-            break;
         }
-        return value.u.mergeWith(other.value.u) || changed;
+
+        changed = u.mergeWith(other.u) || changed;
+
+        assert(t != Type::Constant || singleDef());
+        assert(t != Type::Any || u.def != UseDef::unused());
+
+        return changed;
     }
 
     static FValue const& top() {
@@ -232,10 +244,10 @@ class FValue {
     void print() const {
         switch (t) {
         case Type::Constant:
-            std::cout << "const " << singleDef() << " " << used();
+            std::cout << "const(" << singleDef() << used() << ")";
             break;
         case Type::Argument:
-            std::cout << "arg " << value.argument;
+            std::cout << "arg " << argument;
             break;
         case Type::Bottom:
             std::cout << "??";
@@ -261,6 +273,22 @@ class DataflowAnalysis : public ForwardAnalysisIns<AbstractState<FValue>>,
 
   public:
     DataflowAnalysis() : dispatcher_(*this) {}
+
+    SEXP constant(FValue v) {
+        assert(v.t == FValue::Type::Constant);
+        assert(v.singleDef());
+        BC bc = *v.u.def;
+        if (bc.bc == BC_t::push_ || bc.bc == BC_t::guard_fun_)
+            return bc.immediateConst();
+        if (bc.bc == BC_t::ldvar_ || bc.bc == BC_t::ldddvar_ ||
+            bc.bc == BC_t::ldfun_)
+            return constant((*this)[v.u.def][(*v.u.def).immediateConst()]);
+        if (bc.bc == BC_t::dup_ || bc.bc == BC_t::dup2_)
+            return constant((*this)[v.u.def].top());
+
+        assert(false);
+        return R_NilValue;
+    }
 
   protected:
     virtual Dispatcher& dispatcher() override { return dispatcher_; }
@@ -308,10 +336,10 @@ class DataflowAnalysis : public ForwardAnalysisIns<AbstractState<FValue>>,
             // If ldfun loads a known function there are no sideeffects,
             // otherwise we cannot be sure, since in the next scope there might
             // be an unevaluated promise with the same name.
-            if (TYPEOF(v.constant()) == CLOSXP ||
-                TYPEOF(v.constant()) == BUILTINSXP ||
-                TYPEOF(v.constant()) == SPECIALSXP) {
-                current().push(v);
+            if (TYPEOF(constant(v)) == CLOSXP ||
+                TYPEOF(constant(v)) == BUILTINSXP ||
+                TYPEOF(constant(v)) == SPECIALSXP) {
+                current().push(v.duplicate(ins));
             } else {
                 doCall();
                 current().push(FValue::Value(ins));
@@ -324,7 +352,7 @@ class DataflowAnalysis : public ForwardAnalysisIns<AbstractState<FValue>>,
             current().push(FValue::Value(ins));
             break;
         case FValue::Type::Value:
-            current().push(v);
+            current().push(v.duplicate(ins));
             break;
         case FValue::Type::Bottom:
             doCall();
@@ -341,7 +369,7 @@ class DataflowAnalysis : public ForwardAnalysisIns<AbstractState<FValue>>,
         if (v == FValue::bottom())
             current().push(FValue::Value(ins));
         else
-            current().push(v.isValue() ? v : FValue::Value(ins));
+            current().push(v.isValue() ? v.duplicate(ins) : FValue::Value(ins));
     }
 
     void ldddvar_(CodeEditor::Iterator ins) override {
@@ -352,7 +380,7 @@ class DataflowAnalysis : public ForwardAnalysisIns<AbstractState<FValue>>,
         if (v == FValue::bottom())
             current().push(FValue::Value(ins));
         else
-            current().push(v.isValue() ? v : FValue::Value(ins));
+            current().push(v.isValue() ? v.duplicate(ins) : FValue::Value(ins));
     }
 
     void ldarg_(CodeEditor::Iterator ins) override {
@@ -363,7 +391,7 @@ class DataflowAnalysis : public ForwardAnalysisIns<AbstractState<FValue>>,
         if (v == FValue::bottom())
             current().push(FValue::Value(ins));
         else
-            current().push(v.isValue() ? v : FValue::Value(ins));
+            current().push(v.isValue() ? v.duplicate(ins) : FValue::Value(ins));
     }
 
     void force_(CodeEditor::Iterator ins) override {
@@ -390,7 +418,7 @@ class DataflowAnalysis : public ForwardAnalysisIns<AbstractState<FValue>>,
         // TODO we could be fancy and if its known whether fun is eager or lazy
         // analyze the promises accordingly
         doCall();
-        current().push(FValue::Any());
+        current().push(FValue::Any(ins));
     }
 
     void call_stack_(CodeEditor::Iterator ins) override {
@@ -406,15 +434,15 @@ class DataflowAnalysis : public ForwardAnalysisIns<AbstractState<FValue>>,
 
         bool safeTarget = false;
         if (fun.t == FValue::Type::Constant) {
-            if (TYPEOF(fun.constant()) == BUILTINSXP ||
-                TYPEOF(fun.constant()) == SPECIALSXP) {
-                int prim = fun.constant()->u.primsxp.offset;
+            if (TYPEOF(constant(fun)) == BUILTINSXP ||
+                TYPEOF(constant(fun)) == SPECIALSXP) {
+                int prim = constant(fun)->u.primsxp.offset;
                 safeTarget = isSafeBuiltin(prim);
             }
         }
         if (!safeTarget) {
             doCall();
-            current().push(FValue::Any());
+            current().push(FValue::Any(ins));
         } else {
             current().push(FValue::Value(ins));
         }
@@ -439,7 +467,7 @@ class DataflowAnalysis : public ForwardAnalysisIns<AbstractState<FValue>>,
         }
         if (!safeTarget) {
             doCall();
-            current().push(FValue::Any());
+            current().push(FValue::Any(ins));
         } else {
             current().push(FValue::Value(ins));
         }
@@ -449,14 +477,14 @@ class DataflowAnalysis : public ForwardAnalysisIns<AbstractState<FValue>>,
         // function
         current().pop();
         doCall();
-        current().push(FValue::Any());
+        current().push(FValue::Any(ins));
     }
 
     void dispatch_stack_(CodeEditor::Iterator ins) override {
         // function
         current().pop((*ins).immediate.call_args.nargs);
         doCall();
-        current().push(FValue::Any());
+        current().push(FValue::Any(ins));
     }
 
     void guard_fun_(CodeEditor::Iterator ins) override {
@@ -528,7 +556,7 @@ class DataflowAnalysis : public ForwardAnalysisIns<AbstractState<FValue>>,
 
         default:
             for (size_t i = 0, e = bc.pushCount(); i != e; ++i)
-                current().push(FValue::Any());
+                current().push(FValue::Any(ins));
             break;
         }
     }

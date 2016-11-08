@@ -18,7 +18,7 @@ class BCCleanup : public InstructionDispatcher::Receiver {
         if (!v.singleDef())
             return;
 
-        auto defI = v.value.u.def;
+        auto defI = v.u.def;
         BC def = *defI;
 
         // push - pop elimination
@@ -46,12 +46,16 @@ class BCCleanup : public InstructionDispatcher::Receiver {
         SEXP sym = Pool::get((*ins).immediate.pool);
         auto v = analysis[ins][sym];
         if (v.t == FValue::Type::Constant) {
-            SEXP constant = v.constant();
+            SEXP constant = analysis.constant(v);
             if (TYPEOF(constant) == CLOSXP && TYPEOF(BODY(constant)) != INTSXP)
+                return;
+            // TODO: whats going on here?
+            if (TYPEOF(constant) == STRSXP)
                 return;
             auto cur = ins.asCursor(code_);
             cur.remove();
             cur << BC::push(constant);
+            return;
         }
     }
 
@@ -62,14 +66,20 @@ class BCCleanup : public InstructionDispatcher::Receiver {
             auto cur = ins.asCursor(code_);
             cur.remove();
             cur << BC::ldarg(sym);
+            return;
         }
+        // TODO why is this broken?
         if (v.t == FValue::Type::Constant) {
-            SEXP constant = v.constant();
+            SEXP constant = analysis.constant(v);
             if (TYPEOF(constant) == CLOSXP && TYPEOF(BODY(constant)) != INTSXP)
+                return;
+            // TODO: whats going on here?
+            if (TYPEOF(constant) == STRSXP)
                 return;
             auto cur = ins.asCursor(code_);
             cur.remove();
             cur << BC::push(constant);
+            return;
         }
 
         // double load elimination : ldvar a; ldvar a;
@@ -88,8 +98,8 @@ class BCCleanup : public InstructionDispatcher::Receiver {
         auto b = analysis[ins].stack()[0];
         auto a = analysis[ins].stack()[1];
         if (a.t == FValue::Type::Constant && b.t == FValue::Type::Constant) {
-            SEXP ca = a.constant();
-            SEXP cb = b.constant();
+            SEXP ca = analysis.constant(a);
+            SEXP cb = analysis.constant(b);
             if (!isObject(ca) && !isObject(cb)) {
                 Protect p;
                 SEXP plus = Rf_install("+");
@@ -108,8 +118,8 @@ class BCCleanup : public InstructionDispatcher::Receiver {
         auto b = analysis[ins].stack()[0];
         auto a = analysis[ins].stack()[1];
         if (a.t == FValue::Type::Constant && b.t == FValue::Type::Constant) {
-            SEXP ca = a.constant();
-            SEXP cb = b.constant();
+            SEXP ca = analysis.constant(a);
+            SEXP cb = analysis.constant(b);
             if (!isObject(ca) && !isObject(cb)) {
                 Protect p;
                 SEXP plus = Rf_install("-");
@@ -128,8 +138,8 @@ class BCCleanup : public InstructionDispatcher::Receiver {
         auto b = analysis[ins].stack()[0];
         auto a = analysis[ins].stack()[1];
         if (a.t == FValue::Type::Constant && b.t == FValue::Type::Constant) {
-            SEXP ca = a.constant();
-            SEXP cb = b.constant();
+            SEXP ca = analysis.constant(a);
+            SEXP cb = analysis.constant(b);
             if (!isObject(ca) && !isObject(cb)) {
                 Protect p;
                 SEXP plus = Rf_install("*");
@@ -176,9 +186,9 @@ class BCCleanup : public InstructionDispatcher::Receiver {
         SEXP sym = Pool::get((*ins).immediate.guard_fun_args.name);
         auto v = analysis[ins][sym];
         if (v.t == FValue::Type::Constant) {
-            SEXP constant = v.constant();
+            SEXP c = analysis.constant(v);
             SEXP expected = Pool::get((*ins).immediate.guard_fun_args.expected);
-            if (constant == expected) {
+            if (c == expected) {
                 auto cur = ins.asCursor(code_);
                 cur.remove();
                 return;
@@ -186,11 +196,16 @@ class BCCleanup : public InstructionDispatcher::Receiver {
         }
 
         CodeEditor::Iterator bubbleUp = ins;
-        while (bubbleUp != code_.begin()) {
+        while (bubbleUp != code_.begin() && (bubbleUp - 1) != code_.begin()) {
             bubbleUp = bubbleUp - 1;
-            if ((*bubbleUp).is(BC_t::label) || !(*bubbleUp).isPure()) {
-                bubbleUp = bubbleUp + 1;
-                break;
+            if ((*bubbleUp).is(BC_t::label) || !(*bubbleUp).isPure() ||
+                *bubbleUp == *ins) {
+                // stvar is ok, as long as it does not affect the guard
+                if (!(*bubbleUp).is(BC_t::stvar_) &&
+                    (*bubbleUp).immediateConst() != sym) {
+                    bubbleUp = bubbleUp + 1;
+                    break;
+                }
             }
         }
         if (bubbleUp != ins) {
