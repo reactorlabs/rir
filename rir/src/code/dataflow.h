@@ -278,8 +278,10 @@ class DataflowAnalysis : public ForwardAnalysisIns<AbstractState<FValue>>,
         assert(v.t == FValue::Type::Constant);
         assert(v.singleDef());
         BC bc = *v.u.def;
-        if (bc.bc == BC_t::push_ || bc.bc == BC_t::guard_fun_)
+        if (bc.bc == BC_t::push_)
             return bc.immediateConst();
+        if (bc.bc == BC_t::guard_fun_)
+            return Pool::get(bc.immediate.guard_fun_args.expected);
         if (bc.bc == BC_t::ldvar_ || bc.bc == BC_t::ldddvar_ ||
             bc.bc == BC_t::ldfun_)
             return constant((*this)[v.u.def][(*v.u.def).immediateConst()]);

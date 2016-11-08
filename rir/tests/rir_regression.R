@@ -32,3 +32,9 @@ a <- list(x=1); b <- ( a$x  <-  a); stopifnot(identical(b, list(x=1)))
 rir.disassemble(f)
 f()
 
+f <- rir.compile(function() {
+    x <- seq(0, 4, length.out = 501)
+})
+f()
+
+
