@@ -38,3 +38,7 @@ f <- rir.compile(function() {
 f()
 
 
+f <- rir.compile(function() {
+    sessionInfo()
+})
+f()

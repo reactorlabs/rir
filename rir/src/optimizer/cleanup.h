@@ -65,7 +65,6 @@ class BCCleanup : public InstructionDispatcher::Receiver {
             cur << BC::ldarg(sym);
             return;
         }
-        // TODO why is this broken?
         if (v.t == FValue::Type::Constant) {
             SEXP constant = analysis.constant(v);
             if (TYPEOF(constant) == CLOSXP && TYPEOF(BODY(constant)) != INTSXP)

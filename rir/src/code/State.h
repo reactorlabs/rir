@@ -3,7 +3,7 @@
 #include <cstdlib>
 #include <deque>
 #include <map>
-
+#include <algorithm>
 
 #include "ir/CodeEditor.h"
 #include "R/r.h"
@@ -184,8 +184,17 @@ public:
     }
 
     /** Merges the other environment into this one.
-
-      TODO Note that merge also merges parent environments - this might require more thinking.
+     *
+     * Note: For Environments, Missing Values cannot be assumed to be Bottom!
+     *       Eg. if we merge two control flows where one has a variable
+     *       defined and the other not, we have to deal with this. We have to
+     *       assume that in one branch there exists a local binding and in the
+     *       other one not. The specific analysis needs to know what should
+     *       happen. Therefore we merge those values with AVALUE::Absent(). If
+     *       the analysis really does not care, it can define bottom == absent.
+     *
+     * TODO Note that merge also merges parent environments
+     *      - this might require more thinking.
      */
     bool mergeWith(AbstractEnvironment const & other) {
         bool result = false;
@@ -203,9 +212,14 @@ public:
                 // otherwise try merging it with our variable
                 result = own->second.mergeWith(i->second) or result;
             }
-            // and we do not care about variables that we have and other does
-            // not (that means they will be bottom in his, and therefore our
-            // values will not change
+        }
+        for (auto i = env_.begin(), e = env_.end(); i != e; ++i) {
+            auto them = other.env_.find(i->first);
+            if (them == other.env_.end()) {
+                // The other env has is missing this value, we must treat this
+                // as absent
+                result = i->second.mergeWith(AVALUE::Absent()) or result;
+            }
         }
 
         // merge parents
