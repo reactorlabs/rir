@@ -169,14 +169,6 @@ class BCCleanup : public InstructionDispatcher::Receiver {
     }
 
     void guard_fun_(CodeEditor::Iterator ins) override {
-        if (ins != code_.begin()) {
-            auto prev = ins - 1;
-            if ((*prev).is(BC_t::guard_fun_) && *ins == *prev) {
-                ins.asCursor(code_).remove();
-                return;
-            }
-        }
-
         SEXP sym = Pool::get((*ins).immediate.guard_fun_args.name);
         auto v = analysis[ins][sym];
         if (v.t == FValue::Type::Constant) {
@@ -189,22 +181,20 @@ class BCCleanup : public InstructionDispatcher::Receiver {
             }
         }
 
-        CodeEditor::Iterator bubbleUp = ins;
-        while (bubbleUp != code_.begin() && (bubbleUp - 1) != code_.begin()) {
-            bubbleUp = bubbleUp - 1;
-            if ((*bubbleUp).is(BC_t::label) || !(*bubbleUp).isPure() ||
-                *bubbleUp == *ins) {
-                // stvar is ok, as long as it does not affect the guard
-                if (!(*bubbleUp).is(BC_t::stvar_) &&
-                    (*bubbleUp).immediateConst() != sym) {
-                    bubbleUp = bubbleUp + 1;
+        if (ins != code_.begin()) {
+            CodeEditor::Iterator bubbleUp = ins - 1;
+            while (bubbleUp != code_.begin()) {
+                bubbleUp = bubbleUp - 1;
+                auto cur = *bubbleUp;
+                // We cannot move the guard across those instructions
+                if (cur.is(BC_t::label) || !cur.isPure() || cur.isReturn())
+                    break;
+                if (cur == *ins) {
+                    // This guard is redundant, remove it
+                    ins.asCursor(code_).remove();
                     break;
                 }
             }
-        }
-        if (bubbleUp != ins) {
-            bubbleUp.asCursor(code_) << *ins;
-            ins.asCursor(code_).remove();
         }
     }
 
