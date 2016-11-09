@@ -21,6 +21,8 @@ class CP_Value {
         return value;
     }
 
+    static CP_Value const& Absent() { return top(); }
+
     CP_Value(SEXP from) : value_(from) {}
 
     CP_Value(CP_Value const& other) = default;

@@ -10,54 +10,44 @@
 namespace rir {
 
 /*
- *                               Maybe  (might be deleted from env)
+ *                       Maybe  (might be deleted from env)
  *
- *                              Any (prom)
+ *          Absent             Any (prom)
  *
- *                Value
+ *                      Value         Argument
  *
- *               Constant                    Argument
+ *                    Constant
  */
 
 class FValue {
   public:
-    enum class Type { Bottom, Constant, Argument, Value, Any, Maybe };
+    enum class Type { Bottom, Absent, Constant, Argument, Value, Any, Maybe };
 
+  private:
+    FValue(Type t, int argument) : t(t), argument(argument) {}
+
+    FValue(Type t, CodeEditor::Iterator def = UseDef::unused())
+        : t(t), u(def) {}
+
+  public:
     Type t = Type::Bottom;
 
-    FValue() : FValue(Type::Bottom) {}
-    FValue(Type t) : t(t) { assert(t == Type::Bottom || t == Type::Maybe); }
+    FValue() {}
     FValue(const FValue& p) : t(p.t), argument(p.argument), u(p.u) {}
 
-    static FValue Argument(int i) {
-        FValue p;
-        p.t = Type::Argument;
-        p.argument = i;
-        return p;
-    }
-
+    static FValue Argument(int i) { return FValue(Type::Argument, i); }
     static FValue Constant(CodeEditor::Iterator def) {
-        FValue p;
-        p.t = Type::Constant;
-        p.u.def = def;
-        return p;
+        return FValue(Type::Constant, def);
     }
-
     static FValue Maybe() { return FValue(Type::Maybe); }
-
-    static FValue Any(CodeEditor::Iterator ins) {
-        FValue val;
-        val.t = Type::Any;
-        val.u.def = ins;
-        return val;
+    static FValue Any(CodeEditor::Iterator ins = UseDef::multiuse()) {
+        return FValue(Type::Any, ins);
     }
-
     static FValue Value(CodeEditor::Iterator ins) {
-        FValue val;
-        val.t = Type::Value;
-        val.u.def = ins;
-        return val;
+        return FValue(Type::Value, ins);
     }
+    static FValue Absent() { return FValue(Type::Absent); }
+    static FValue Bottom() { return FValue(Type::Bottom); }
 
     FValue duplicate(CodeEditor::Iterator pos) {
         FValue d;
@@ -95,6 +85,9 @@ class FValue {
     struct UseDef {
         CodeEditor::Iterator def = unused();
         CodeEditor::Iterator use = unused();
+
+        UseDef() {}
+        UseDef(CodeEditor::Iterator def) : def(def) {}
 
         static CodeEditor::Iterator multiuse() {
             static CodeEditor::Iterator val(-2);
@@ -160,8 +153,10 @@ class FValue {
     bool operator!=(FValue const& other) const { return !(*this == other); }
 
     bool mergeWith(FValue const& other) {
-        if (other.t == Type::Bottom)
-            return false;
+        if ((other.t == Type::Absent) != (t == Type::Absent)) {
+            t = Type::Maybe;
+            return true;
+        }
 
         bool changed = false;
 
@@ -179,7 +174,10 @@ class FValue {
             t = other.t;
             u = other.u;
             argument = other.argument;
-            return t != Type::Bottom;
+            return true;
+        case Type::Absent:
+            assert(other.t == Type::Absent);
+            return false;
         case Type::Maybe:
             return false;
         case Type::Argument:
@@ -231,13 +229,8 @@ class FValue {
         return changed;
     }
 
-    static FValue const& top() {
-        static FValue value(Type::Maybe);
-        return value;
-    }
-
     static FValue const& bottom() {
-        static FValue value(Type::Bottom);
+        static FValue value;
         return value;
     }
 
@@ -251,6 +244,9 @@ class FValue {
             break;
         case Type::Bottom:
             std::cout << "??";
+            break;
+        case Type::Absent:
+            std::cout << "absent";
             break;
         case Type::Value:
             std::cout << "Value";
@@ -356,6 +352,7 @@ class DataflowAnalysis : public ForwardAnalysisIns<AbstractState<FValue>>,
         case FValue::Type::Value:
             current().push(v.duplicate(ins));
             break;
+        case FValue::Type::Absent:
         case FValue::Type::Bottom:
             doCall();
             current().push(FValue::Value(ins));
@@ -517,9 +514,9 @@ class DataflowAnalysis : public ForwardAnalysisIns<AbstractState<FValue>>,
 
     void doCall() {
         if (type == Type::NoReflectionDelete)
-            current().mergeAllEnv(FValue::Type::Any);
+            current().mergeAllEnv(FValue::Any());
         else if (type == Type::Conservative)
-            current().mergeAllEnv(FValue::Type::Maybe);
+            current().mergeAllEnv(FValue::Maybe());
     }
 
     void uniq_(CodeEditor::Iterator ins) override { current().top().used(ins); }

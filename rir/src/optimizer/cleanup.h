@@ -49,9 +49,6 @@ class BCCleanup : public InstructionDispatcher::Receiver {
             SEXP constant = analysis.constant(v);
             if (TYPEOF(constant) == CLOSXP && TYPEOF(BODY(constant)) != INTSXP)
                 return;
-            // TODO: whats going on here?
-            if (TYPEOF(constant) == STRSXP)
-                return;
             auto cur = ins.asCursor(code_);
             cur.remove();
             cur << BC::push(constant);
@@ -72,9 +69,6 @@ class BCCleanup : public InstructionDispatcher::Receiver {
         if (v.t == FValue::Type::Constant) {
             SEXP constant = analysis.constant(v);
             if (TYPEOF(constant) == CLOSXP && TYPEOF(BODY(constant)) != INTSXP)
-                return;
-            // TODO: whats going on here?
-            if (TYPEOF(constant) == STRSXP)
                 return;
             auto cur = ins.asCursor(code_);
             cur.remove();

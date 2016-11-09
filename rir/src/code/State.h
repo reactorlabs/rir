@@ -194,7 +194,9 @@ public:
             auto own = env_.find(i->first);
             if (own == env_.end()) {
                 // if there is a variable in other that is not in us, just copy it and mark as changed
-                env_.insert(*i);
+                AVALUE missing = i->second;
+                missing.mergeWith(AVALUE::Absent());
+                env_.emplace(i->first, missing);
                 //env_[i->first] = i->second;
                 result = true;
             } else {
