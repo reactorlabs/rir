@@ -193,17 +193,19 @@ public:
         for (auto i = other.env_.begin(), e = other.env_.end(); i != e; ++i) {
             auto own = env_.find(i->first);
             if (own == env_.end()) {
-                // if there is a variable in other that is not in us, just copy it and mark as changed
+                // if there is a variable in other that does not exist here, we
+                // merge it with the Absent value.
                 AVALUE missing = i->second;
                 missing.mergeWith(AVALUE::Absent());
                 env_.emplace(i->first, missing);
-                //env_[i->first] = i->second;
                 result = true;
             } else {
                 // otherwise try merging it with our variable
                 result = own->second.mergeWith(i->second) or result;
             }
-            // and we do not care about variables that we have and other does not (that means they will be bottom in his, and therefore our values will not change
+            // and we do not care about variables that we have and other does
+            // not (that means they will be bottom in his, and therefore our
+            // values will not change
         }
 
         // merge parents
