@@ -156,7 +156,7 @@ CodeEditor::~CodeEditor() {
 void CodeEditor::print() {
 
     DataflowAnalysis<Type::Conservative> analysis;
-    DataflowAnalysis<Type::NoReflection> specAnalysis;
+    DataflowAnalysis<Type::Optimistic> specAnalysis;
     analysis.analyze(*this);
     specAnalysis.analyze(*this);
 
@@ -175,14 +175,14 @@ void CodeEditor::print() {
                 auto v = analysis[cur][sym];
                 auto sv = specAnalysis[cur][sym];
                 std::cout << "   ~~ ";
-                if (v.isPresent())
-                    std::cout << "local\n";
-                else if (v.t == FValue::Type::Argument)
+                if (v.t == FValue::Type::Argument)
                     std::cout << "argument\n";
+                else if (v.isPresent())
+                    std::cout << "local\n";
                 else if (sv.t == FValue::Type::Argument)
-                    std::cout << "maybe argument\n";
+                    std::cout << "probably argument\n";
                 else if (sv.isPresent())
-                    std::cout << "maybe local\n";
+                    std::cout << "probably local\n";
                 else
                     std::cout << "??\n";
             } else if (bc.popCount() > 0) {

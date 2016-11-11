@@ -1,6 +1,7 @@
 #include "ir/Optimizer.h"
 #include "optimizer/cleanup.h"
 #include "optimizer/stupid_inline.h"
+#include "optimizer/localize.h"
 
 namespace rir {
 
@@ -10,6 +11,7 @@ void Optimizer::optimize(CodeEditor& code, int steam) {
         // puts("******");
         // code.print();
         cleanup.run();
+        code.commit();
         if (!code.changed)
             break;
         code.commit();

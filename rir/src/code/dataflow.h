@@ -24,7 +24,7 @@ class FValue {
     enum class Type { Bottom, Absent, Constant, Argument, Value, Any, Maybe };
 
   private:
-    FValue(Type t, int argument) : t(t), argument(argument) {}
+    FValue(Type t, SEXP argument) : t(t), argument(argument) {}
 
     FValue(Type t, CodeEditor::Iterator def = UseDef::unused())
         : t(t), u(def) {}
@@ -35,7 +35,9 @@ class FValue {
     FValue() {}
     FValue(const FValue& p) : t(p.t), argument(p.argument), u(p.u) {}
 
-    static FValue Argument(int i) { return FValue(Type::Argument, i); }
+    static FValue Argument(SEXP a = nullptr) {
+        return FValue(Type::Argument, a);
+    }
     static FValue Constant(CodeEditor::Iterator def) {
         return FValue(Type::Constant, def);
     }
@@ -43,11 +45,19 @@ class FValue {
     static FValue Any(CodeEditor::Iterator ins = UseDef::multiuse()) {
         return FValue(Type::Any, ins);
     }
-    static FValue Value(CodeEditor::Iterator ins) {
+    static FValue Value(CodeEditor::Iterator ins = UseDef::multiuse()) {
         return FValue(Type::Value, ins);
     }
     static FValue Absent() { return FValue(Type::Absent); }
     static FValue Bottom() { return FValue(Type::Bottom); }
+    static const FValue& bottom() {
+        static FValue val = FValue(Type::Bottom);
+        return val;
+    }
+    static const FValue& top() {
+        static FValue val = FValue(Type::Maybe);
+        return val;
+    }
 
     FValue duplicate(CodeEditor::Iterator pos) {
         FValue d;
@@ -119,7 +129,7 @@ class FValue {
         }
     };
 
-    int argument = -1;
+    SEXP argument = nullptr;
     UseDef u;
 
     bool isValue() const { return t == Type::Value || t == Type::Constant; }
@@ -153,20 +163,62 @@ class FValue {
     bool operator!=(FValue const& other) const { return !(*this == other); }
 
     bool mergeWith(FValue const& other) {
-        if ((other.t == Type::Absent) != (t == Type::Absent)) {
-            t = Type::Maybe;
-            return true;
-        }
+#ifdef ENABLE_SLOWASSERT
+        FValue old = *this;
+        bool res = doMergeWith(other);
 
+        if (old.t != t) {
+            switch (old.t) {
+            case Type::Absent:
+                assert(t == Type::Maybe);
+                break;
+            case Type::Constant:
+                assert(t == Type::Value || t == Type::Any || t == Type::Maybe);
+                break;
+            case Type::Value:
+                assert(t == Type::Any || t == Type::Maybe);
+                break;
+            case Type::Any:
+                assert(t == Type::Maybe);
+                break;
+            case Type::Maybe:
+                assert(false);
+                break;
+            case Type::Argument:
+                assert(t == Type::Any || t == Type::Maybe);
+                break;
+            case Type::Bottom:
+                break;
+            }
+        }
+        if (res) {
+            assert(old.t != t || old.u.def != u.def || old.u.use != u.use);
+        }
+        return res;
+    }
+
+    bool doMergeWith(FValue const& other) {
+#endif
         bool changed = false;
+
+        if ((other.t == Type::Absent) != (t == Type::Absent)) {
+            changed = t != Type::Maybe;
+            t = Type::Maybe;
+            return changed;
+        }
 
         assert(!other.hasUseDef() || other.u.def != UseDef::unused());
         // Make sure we do not end up with an invalid use-def information
         // when we merge a state which has none
         if (hasUseDef() && !other.hasUseDef()) {
-            u.def = UseDef::multiuse();
-            u.use = UseDef::multiuse();
-            changed = true;
+            if (u.def != UseDef::multiuse()) {
+                u.def = UseDef::multiuse();
+                changed = true;
+            }
+            if (u.use != UseDef::multiuse()) {
+                u.use = UseDef::multiuse();
+                changed = true;
+            }
         }
 
         switch (t) {
@@ -181,6 +233,17 @@ class FValue {
         case Type::Maybe:
             return false;
         case Type::Argument:
+            // Both are argument, but arg names are not the same ->
+            // check if one of them is bottom
+            if (other.t == Type::Argument && argument != other.argument) {
+                if (!argument) {
+                    argument = other.argument;
+                    changed = true;
+                    break;
+                }
+                if (!other.argument)
+                    break;
+            }
             if (other.t != Type::Argument || argument != other.argument) {
                 if (other.isPresent())
                     t = Type::Any;
@@ -229,11 +292,6 @@ class FValue {
         return changed;
     }
 
-    static FValue const& bottom() {
-        static FValue value;
-        return value;
-    }
-
     void print() const {
         switch (t) {
         case Type::Constant:
@@ -261,7 +319,13 @@ class FValue {
     }
 };
 
-enum class Type { Conservative, NoReflection, NoReflectionDelete };
+enum class Type {
+    Conservative,
+    NoDelete,
+    NoDeleteNoPromiseStore,
+    NoArgsOverride,
+    Optimistic
+};
 
 template <Type type>
 class DataflowAnalysis : public ForwardAnalysisIns<AbstractState<FValue>>,
@@ -279,7 +343,7 @@ class DataflowAnalysis : public ForwardAnalysisIns<AbstractState<FValue>>,
         if (bc.bc == BC_t::guard_fun_)
             return Pool::get(bc.immediate.guard_fun_args.expected);
         if (bc.bc == BC_t::ldvar_ || bc.bc == BC_t::ldddvar_ ||
-            bc.bc == BC_t::ldfun_)
+            bc.bc == BC_t::ldfun_ || bc.bc == BC_t::ldlval_)
             return constant((*this)[v.u.def][(*v.u.def).immediateConst()]);
         if (bc.bc == BC_t::dup_ || bc.bc == BC_t::dup2_)
             return constant((*this)[v.u.def].top());
@@ -293,9 +357,8 @@ class DataflowAnalysis : public ForwardAnalysisIns<AbstractState<FValue>>,
 
     AbstractState<FValue>* initialState() override {
         auto* result = new AbstractState<FValue>();
-        int i = 0;
         for (SEXP x : code_->arguments()) {
-            (*result)[x] = FValue::Argument(i++);
+            (*result)[x] = FValue::Argument(x);
         }
         return result;
     }
@@ -358,6 +421,15 @@ class DataflowAnalysis : public ForwardAnalysisIns<AbstractState<FValue>>,
             current().push(FValue::Value(ins));
             break;
         }
+    }
+
+    void ldlval_(CodeEditor::Iterator ins) override {
+        SEXP sym = Pool::get((*ins).immediate.pool);
+        auto v = current()[sym];
+        if (v == FValue::bottom())
+            current().push(FValue::Value(ins));
+        else
+            current().push(v.isValue() ? v.duplicate(ins) : FValue::Value(ins));
     }
 
     void ldvar_(CodeEditor::Iterator ins) override {
@@ -486,6 +558,18 @@ class DataflowAnalysis : public ForwardAnalysisIns<AbstractState<FValue>>,
         current().push(FValue::Any(ins));
     }
 
+    void guard_arg_(CodeEditor::Iterator ins) override {
+        BC bc = *ins;
+        SEXP sym = Pool::get(bc.immediate.guard_fun_args.name);
+        current()[sym] = FValue::Argument(sym);
+    }
+
+    void guard_local_(CodeEditor::Iterator ins) override {
+        BC bc = *ins;
+        SEXP sym = Pool::get(bc.immediate.guard_fun_args.name);
+        current()[sym] = FValue::Value();
+    }
+
     void guard_fun_(CodeEditor::Iterator ins) override {
         BC bc = *ins;
         SEXP sym = Pool::get(bc.immediate.guard_fun_args.name);
@@ -498,7 +582,7 @@ class DataflowAnalysis : public ForwardAnalysisIns<AbstractState<FValue>>,
             doCall();
         // TODO this is not quite right, since its most likely coming from a
         // parent environment
-        current()[sym] = FValue::Constant(ins);
+        // current()[sym] = FValue::Constant(ins);
     }
 
     void pick_(CodeEditor::Iterator ins) override {
@@ -513,10 +597,14 @@ class DataflowAnalysis : public ForwardAnalysisIns<AbstractState<FValue>>,
     void label(CodeEditor::Iterator ins) override {}
 
     void doCall() {
-        if (type == Type::NoReflectionDelete)
+        if (type == Type::NoDelete)
             current().mergeAllEnv(FValue::Any());
+        else if (type == Type::NoDeleteNoPromiseStore)
+            current().mergeAllEnv(FValue::Value());
         else if (type == Type::Conservative)
             current().mergeAllEnv(FValue::Maybe());
+        else if (type == Type::NoArgsOverride)
+            current().mergeAllEnv(FValue::Argument());
     }
 
     void uniq_(CodeEditor::Iterator ins) override { current().top().used(ins); }

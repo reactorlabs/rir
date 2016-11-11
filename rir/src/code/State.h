@@ -262,7 +262,7 @@ public:
     AVALUE const & operator[](SEXP name) const {
         auto i = env_.find(name);
         if (i == env_.end())
-            return AVALUE::bottom();
+            return AVALUE::top();
         else
             return i->second;
     }
@@ -271,7 +271,7 @@ public:
         auto i = env_.find(name);
         if (i == env_.end()) {
             // so that we do not demand default constructor on values
-            env_.insert(std::pair<SEXP, AVALUE>(name, AVALUE::bottom()));
+            env_.insert(std::pair<SEXP, AVALUE>(name, AVALUE::top()));
             i = env_.find(name);
             return i->second;
         } else {

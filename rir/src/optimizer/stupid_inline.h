@@ -138,7 +138,7 @@ class StupidInliner {
             cur.remove();
             cur.remove();
 
-            cur << BC::checkName(name, t);
+            cur << BC::guardName(name, t);
 
             if (cs.nargs() == 1) {
                 auto arg = code_.detachPromise(cs.args()[0]);

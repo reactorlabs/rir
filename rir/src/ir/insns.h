@@ -30,6 +30,10 @@ DEF_INSTR(ldvar_, 1, 0, 1, 0)
 /**
  * ldvar_:: take immediate CP index of symbol, finding binding in env and push.
  */
+DEF_INSTR(ldlval_, 1, 0, 1, 1)
+/**
+ * ldlval_:: take immediate CP index of symbol, load value from local frame.
+ */
 DEF_INSTR(ldarg_, 1, 0, 1, 0)
 /**
  * ldarg_:: like ldvar but guaranteed to be an argument
@@ -130,6 +134,14 @@ DEF_INSTR(lt_, 0, 2, 1, 0)
 DEF_INSTR(guard_fun_, 3, 0, 0, 1)
 /**
  * guard_fun_:: takes symbol, target, id, checks findFun(symbol) == target
+ */
+DEF_INSTR(guard_arg_, 2, 0, 0, 1)
+/**
+ * guard_arg_:: takes symbol, id, checks ldvar(symbol) is a local promise
+ */
+DEF_INSTR(guard_local_, 2, 0, 0, 1)
+/**
+ * guard_local_:: takes symbol, id, checks ldvar(symbol) is local
  */
 DEF_INSTR(isfun_, 0, 1, 1, 1)
 /**

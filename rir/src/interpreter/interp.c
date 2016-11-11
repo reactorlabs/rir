@@ -247,6 +247,38 @@ INSTRUCTION(ldddvar_) {
     ostack_push(ctx, val);
 }
 
+INSTRUCTION(guard_arg_) {
+    SEXP sym = readConst(ctx, pc);
+    SEXP val = findVarInFrame(env, sym);
+    readImmediate(pc);
+    assert(val != R_UnboundValue);
+}
+
+INSTRUCTION(guard_local_) {
+    SEXP sym = readConst(ctx, pc);
+    SEXP val = findVarInFrame(env, sym);
+    readImmediate(pc);
+    assert(val != R_UnboundValue);
+    assert(val != R_MissingArg);
+    assert(TYPEOF(val) != PROMSXP);
+}
+
+INSTRUCTION(ldlval_) {
+    SEXP sym = readConst(ctx, pc);
+    SEXP val = findVarInFrame(env, sym);
+    R_Visible = TRUE;
+
+    assert(val != R_UnboundValue);
+    assert(val != R_MissingArg);
+    assert(TYPEOF(val) != PROMSXP);
+
+    // WTF? is this just defensive programming or what?
+    if (NAMED(val) == 0 && val != R_NilValue)
+        SET_NAMED(val, 1);
+
+    ostack_push(ctx, val);
+}
+
 INSTRUCTION(ldarg_) {
     SEXP sym = readConst(ctx, pc);
     SEXP val = findVarInFrame(env, sym);
@@ -435,7 +467,7 @@ INLINE SEXP rirCallClosure(SEXP call, SEXP env, SEXP callee, SEXP actuals,
     SEXP body = BODY(callee);
     Function* fun = (Function*)INTEGER(body);
 
-    if (fun->invocationCount == 1000) {
+    if (fun->invocationCount == 1000 && fun->size < 2000) {
         // TODO: there might be promises with references to the old code!
         // Therefore we keep it around.
         // TODO: first I tried to use R_PreserveObject, but it did not work for
@@ -446,13 +478,12 @@ INLINE SEXP rirCallClosure(SEXP call, SEXP env, SEXP callee, SEXP actuals,
         SET_BODY(callee, body);
         fun = (Function*)INTEGER(body);
 
-        //        if (fun->size < 1000) {
-        //            printf("================ OPTIMIZING
-        //            ===========================\n");
-        //            Rf_PrintValue(escape(callee));
-        //            printf("-----------------------------\n");
-        //            printFunctionFancy(callee);
-        //        }
+        if (false && fun->size < 1000) {
+            printf("================ OPTIMIZING ===========================\n");
+            Rf_PrintValue(escape(callee));
+            printf("-----------------------------\n");
+            printFunctionFancy(callee);
+        }
     }
     fun->invocationCount++;
 
@@ -2007,6 +2038,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
             INS(push_);
             INS(ldfun_);
             INS(ldvar_);
+            INS(ldlval_);
             INS(ldarg_);
             INS(ldddvar_);
             INS(add_);
@@ -2042,6 +2074,8 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
             INS(pull_);
             INS(is_);
             INS(guard_fun_);
+            INS(guard_local_);
+            INS(guard_arg_);
             INS(isfun_);
             INS(inc_);
             INS(dup2_);

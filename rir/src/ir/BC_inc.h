@@ -72,6 +72,10 @@ typedef struct {
     uint32_t expected;
     uint32_t id;
 } GuardFunArgs;
+typedef struct {
+    uint32_t name;
+    uint32_t id;
+} GuardLocalArgs;
 #pragma pack(pop)
 
 static constexpr size_t MAX_NUM_ARGS = 1L << (8 * sizeof(pool_idx_t));
@@ -96,6 +100,7 @@ class BC {
     union immediate_t {
         CallArgs call_args;
         GuardFunArgs guard_fun_args;
+        GuardLocalArgs guard_local_args;
         pool_idx_t pool;
         fun_idx_t fun;
         num_args_t arg_idx;
@@ -171,7 +176,10 @@ class BC {
 
     bool isReturn() { return bc == BC_t::ret_ || bc == BC_t::return_; }
 
-    bool isGuard() { return bc == BC_t::guard_fun_; }
+    bool isGuard() {
+        return bc == BC_t::guard_fun_ || bc == BC_t::guard_local_ ||
+               bc == BC_t::guard_arg_;
+    }
 
     // ==== BC decoding logic
     inline static BC advance(BC_t** pc);
@@ -185,6 +193,7 @@ class BC {
     inline static BC push_code(fun_idx_t i);
     inline static BC ldfun(SEXP sym);
     inline static BC ldvar(SEXP sym);
+    inline static BC ldlval(SEXP sym);
     inline static BC ldarg(SEXP sym);
     inline static BC ldddvar(SEXP sym);
     inline static BC promise(fun_idx_t prom);
@@ -227,8 +236,10 @@ class BC {
     inline static BC asLogical();
     inline static BC lglOr();
     inline static BC lglAnd();
-    inline static BC checkName(SEXP, SEXP);
-    inline static BC checkNamePrimitive(SEXP);
+    inline static BC guardName(SEXP, SEXP);
+    inline static BC guardNamePrimitive(SEXP);
+    inline static BC guardLocal(SEXP);
+    inline static BC guardArg(SEXP);
     inline static BC isfun();
     inline static BC invisible();
     inline static BC visible();

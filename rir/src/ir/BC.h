@@ -25,6 +25,7 @@ BC::immediate_t decodeImmediate(BC_t bc, BC_t* pc) {
     case BC_t::ldfun_:
     case BC_t::ldarg_:
     case BC_t::ldvar_:
+    case BC_t::ldlval_:
     case BC_t::ldddvar_:
     case BC_t::stvar_:
     case BC_t::missing_:
@@ -37,6 +38,10 @@ BC::immediate_t decodeImmediate(BC_t bc, BC_t* pc) {
     case BC_t::call_stack_:
     case BC_t::static_call_stack_:
         immediate.call_args = *(CallArgs*)pc;
+        break;
+    case BC_t::guard_local_:
+    case BC_t::guard_arg_:
+        immediate.guard_local_args = *(GuardLocalArgs*)pc;
         break;
     case BC_t::guard_fun_:
         immediate.guard_fun_args = *(GuardFunArgs*)pc;
@@ -152,6 +157,13 @@ BC BC::ldddvar(SEXP sym) {
     i.pool = Pool::insert(sym);
     return BC(BC_t::ldddvar_, i);
 }
+BC BC::ldlval(SEXP sym) {
+    assert(TYPEOF(sym) == SYMSXP);
+    assert(strlen(CHAR(PRINTNAME(sym))));
+    immediate_t i;
+    i.pool = Pool::insert(sym);
+    return BC(BC_t::ldlval_, i);
+}
 BC BC::ldvar(SEXP sym) {
     assert(TYPEOF(sym) == SYMSXP);
     assert(strlen(CHAR(PRINTNAME(sym))));
@@ -166,12 +178,22 @@ BC BC::ldarg(SEXP sym) {
     i.pool = Pool::insert(sym);
     return BC(BC_t::ldarg_, i);
 }
-BC BC::checkName(SEXP sym, SEXP expected) {
+BC BC::guardArg(SEXP sym) {
+    immediate_t i;
+    i.guard_local_args = {Pool::insert(sym), 123};
+    return BC(BC_t::guard_arg_, i);
+}
+BC BC::guardLocal(SEXP sym) {
+    immediate_t i;
+    i.guard_local_args = {Pool::insert(sym), 123};
+    return BC(BC_t::guard_local_, i);
+}
+BC BC::guardName(SEXP sym, SEXP expected) {
     immediate_t i;
     i.guard_fun_args = {Pool::insert(sym), Pool::insert(expected), 123};
     return BC(BC_t::guard_fun_, i);
 }
-BC BC::checkNamePrimitive(SEXP sym) {
+BC BC::guardNamePrimitive(SEXP sym) {
     immediate_t i;
     assert(TYPEOF(sym) == SYMSXP);
     SEXP prim = CDR(sym);
