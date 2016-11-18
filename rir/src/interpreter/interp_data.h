@@ -165,29 +165,33 @@ typedef struct Code {
      */
 } Code;
 
-const static unsigned CallSiteProfile_maxTaken = 1 << 27;
-const static unsigned CallSiteProfile_maxTargets = 1 << 3;
+const static unsigned CallSiteProfile_maxTaken = 1 << 28;
+const static unsigned CallSiteProfile_maxTargets = 4;
 typedef struct {
-    uint32_t taken : 27;
+    uint32_t taken : 28;
     uint32_t takenOverflow : 1;
-    uint32_t numTargets : 3;
+    uint32_t numTargets : 2;
     uint32_t targetsOverflow : 1;
-    SEXP targets[7];
+    SEXP targets[3];
 } CallSiteProfile;
 
 typedef struct {
     uint32_t call;
-    // This is not always needed, but maybe it does not pay off to put it
-    // in the payload just to save 4 bytes...
-    uint32_t trg;
-    // This is duplicated in the BC instruction, not sure how to avoid
-    // without making accessing the payload a pain...
-    uint32_t nargs;
+
     uint32_t hasNames : 1;
     uint32_t hasSelector : 1;
     uint32_t hasTarget : 1;
     uint32_t hasImmediateArgs : 1;
     uint32_t hasProfile : 1;
+    uint32_t free : 27;
+
+    // This is duplicated in the BC instruction, not sure how to avoid
+    // without making accessing the payload a pain...
+    uint32_t nargs;
+
+    // This is not always needed, but maybe it does not pay off to put it
+    // in the payload just to save 4 bytes...
+    uint32_t trg;
 
     uint32_t payload[];
 

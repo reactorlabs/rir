@@ -56,7 +56,13 @@ class CodeStream {
         code = new std::vector<char>(1024);
     }
 
+    uint32_t alignedSize(uint32_t needed) {
+        static const uint32_t align = 32;
+        return (needed % align == 0) ? needed
+                                     : needed + align - (needed % align);
+    }
     void ensureCallSiteSize(uint32_t needed) {
+        needed = alignedSize(needed);
         if (callSites_.size() <= nextCallSiteIdx_ + needed) {
             unsigned newSize = pad4(needed + callSites_.size() * 1.5);
             callSites_.resize(newSize);
@@ -64,6 +70,7 @@ class CodeStream {
     }
 
     CallSiteStruct* getNextCallSite(uint32_t needed) {
+        needed = alignedSize(needed);
         CallSiteStruct* cs = (CallSiteStruct*)&callSites_[nextCallSiteIdx_];
         memset(cs, 0, needed);
         nextCallSiteIdx_ += needed;
