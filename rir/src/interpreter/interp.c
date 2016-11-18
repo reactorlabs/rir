@@ -467,25 +467,43 @@ INLINE SEXP rirCallClosure(SEXP call, SEXP env, SEXP callee, SEXP actuals,
     SEXP body = BODY(callee);
     Function* fun = (Function*)INTEGER(body);
 
-    if (fun->invocationCount == 1000 && fun->size < 2000) {
-        // TODO: there might be promises with references to the old code!
-        // Therefore we keep it around.
-        // TODO: first I tried to use R_PreserveObject, but it did not work for
-        // large vectors, not sure why, need to investigate
-        cp_pool_add(ctx, body);
+    static bool optimizing = false;
 
-        body = globalContext()->optimizer(callee);
-        SET_BODY(callee, body);
-        fun = (Function*)INTEGER(body);
+    if (!optimizing) {
+        if (fun->invocationCount == 200) {
+            optimizing = true;
 
-        if (false && fun->size < 1000) {
-            printf("================ OPTIMIZING ===========================\n");
-            Rf_PrintValue(escape(callee));
-            printf("-----------------------------\n");
-            printFunctionFancy(callee);
+            SEXP oldBody = body;
+            body = globalContext()->optimizer(callee);
+
+            // TODO: there might be promises with references to the old code!
+            // Therefore we keep it around.
+            // TODO: first I tried to use R_PreserveObject, but it did not work
+            // for
+            // large vectors, not sure why, need to investigate
+            cp_pool_add(ctx, oldBody);
+            cp_pool_add(ctx, body);
+
+            fun->next = body;
+
+            SET_BODY(callee, body);
+            fun = (Function*)INTEGER(body);
+            fun->origin = oldBody;
+
+            fun->invocationCount = 200;
+
+            if (false) {
+                printf("================ OPTIMIZING "
+                       "===========================\n");
+                Rf_PrintValue(escape(callee));
+                // printf("-----------------------------\n");
+                // printFunctionFancy(callee);
+            }
+            optimizing = false;
         }
+        if (fun->invocationCount < UINT_MAX)
+            fun->invocationCount++;
     }
-    fun->invocationCount++;
 
     // match formal arguments and create the env of this new activation record
     SEXP newEnv =
@@ -1109,6 +1127,13 @@ INSTRUCTION(close_) {
     SEXP body = *ostack_at(ctx, 1);
     SEXP formals = *ostack_at(ctx, 2);
     SEXP result = allocSExp(CLOSXP);
+
+    assert(isValidFunctionSEXP(body));
+    // Make sure to use the most optimized version of this function
+    while (((Function*)INTEGER(body))->next)
+        body = ((Function*)INTEGER(body))->next;
+    assert(isValidFunctionSEXP(body));
+
     SET_FORMALS(result, formals);
     SET_BODY(result, body);
     SET_CLOENV(result, env);

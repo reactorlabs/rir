@@ -379,8 +379,10 @@ struct Function {
 
     unsigned invocationCount;
 
-    FunctionSEXP
-        origin; /// Same Function with fewer optimizations, NULL if original
+    FunctionSEXP origin; /// Same Function with fewer optimizations,
+                         //   NULL if original
+
+    FunctionSEXP next;
 
     unsigned codeLength; /// number of Code objects in the Function
 

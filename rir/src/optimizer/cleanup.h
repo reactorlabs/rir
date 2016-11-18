@@ -10,6 +10,7 @@ class BCCleanup : public InstructionDispatcher::Receiver {
     DataflowAnalysis<Type::Conservative> analysis;
     InstructionDispatcher dispatcher;
     CodeEditor& code_;
+    bool leaksEnvironment;
 
     BCCleanup(CodeEditor& code) : dispatcher(*this), code_(code) {}
 
@@ -242,9 +243,8 @@ class BCCleanup : public InstructionDispatcher::Receiver {
 
     void run() {
         analysis.analyze(code_);
-        for (auto i = code_.begin(); i != code_.end(); ++i) {
+        for (auto i = code_.begin(); i != code_.end(); ++i)
             dispatcher.dispatch(i);
-        }
     }
 };
 }

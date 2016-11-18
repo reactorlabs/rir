@@ -324,6 +324,8 @@ class BC {
     case BC_t::name:                                                           \
         return pure;
 #include "insns.h"
+        case BC_t::label:
+            return false;
         default:
             assert(false);
             return 0;

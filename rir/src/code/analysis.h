@@ -271,9 +271,11 @@ static inline bool isSafeBuiltin(int i) {
         return true;
 
     switch (i) {
+    case 62:  // identical
     case 88:  // c
     case 91:  // class
     case 107: // vector
+    case 555: // inherits
         return true;
     }
     return false;

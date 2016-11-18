@@ -9,6 +9,7 @@
 
 #include <set>
 #include <unordered_map>
+#include <map>
 #include <cassert>
 #include <stack>
 
@@ -390,14 +391,14 @@ class CodeEditor {
 
     CodeEditor(CodeHandle code, SEXP formals);
 
-    std::vector<SEXP> arguments() const {
+    std::map<SEXP, SEXP> arguments() const {
         if (formals_ == nullptr) {
-            return std::vector<SEXP>();
+            return std::map<SEXP, SEXP>();
         } else {
-            std::vector<SEXP> result;
+            std::map<SEXP, SEXP> result;
             SEXP formals = formals_;
             while (formals != R_NilValue) {
-                result.push_back(TAG(formals));
+                result[TAG(formals)] = CAR(formals);
                 formals = CDR(formals);
             }
             return result;
@@ -413,6 +414,13 @@ class CodeEditor {
     FunctionHandle finalize();
 
     void print();
+
+    bool isPure() {
+        for (auto i : *this)
+            if (!i.isPure())
+                return false;
+        return true;
+    }
 
     void normalizeForInline() {
         Label endL = mkLabel();

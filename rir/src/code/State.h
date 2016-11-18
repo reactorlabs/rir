@@ -316,13 +316,18 @@ protected:
 
 };
 
+class DummyState {
+  public:
+    bool mergeWith(DummyState const* other) { return false; }
+    void print() {}
+};
 
 /** This could be done with multiple virtual inheritance, but the composition is simpler, and perhaps even cleaner, albeit more lengthy.
  */
-template <typename AVALUE>
+template <typename AVALUE, typename GLOBAL = DummyState>
 class AbstractState : public State {
-public:
-  typedef AVALUE Value;
+  public:
+    typedef AVALUE Value;
 
     AbstractState() = default;
     AbstractState(AbstractState const &) = default;
@@ -336,6 +341,9 @@ public:
         return mergeWith(*dynamic_cast<AbstractState const *>(other));
     }
 
+    GLOBAL const& global() const { return global_; }
+    GLOBAL& global() { return global_; }
+
     AbstractStack<AVALUE> const& stack() const { return stack_; }
 
     AbstractStack<AVALUE>& stack() { return stack_; }
@@ -346,6 +354,7 @@ public:
 
     bool mergeWith(AbstractState const & other) {
         bool result = false;
+        result = global_.mergeWith(&other.global_) or result;
         result = stack_.mergeWith(other.stack_) or result;
         result = env_.mergeWith(other.env_) or result;
         return result;
@@ -384,6 +393,7 @@ public:
     }
 
     void print() const {
+        global_.print();
         stack_.print();
         env_.print();
     }
@@ -393,6 +403,7 @@ public:
 protected:
   AbstractStack<AVALUE> stack_;
   AbstractEnvironment<AVALUE> env_;
+  GLOBAL global_;
 };
 
 }

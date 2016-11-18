@@ -327,9 +327,25 @@ enum class Type {
     Optimistic
 };
 
+// Executing promises can only affect the local environment if we
+// execute a default argument (since this one has the local
+// environment) or if we leak our environment through another channel
+class FGlobal {
+  public:
+    bool leaksEnvironment = false;
+    bool mergeWith(const FGlobal* other) {
+        if (!leaksEnvironment && other->leaksEnvironment) {
+            leaksEnvironment = true;
+            return true;
+        }
+        return false;
+    }
+};
+
 template <Type type>
-class DataflowAnalysis : public ForwardAnalysisIns<AbstractState<FValue>>,
-                         public InstructionDispatcher::Receiver {
+class DataflowAnalysis
+    : public ForwardAnalysisIns<AbstractState<FValue, FGlobal>>,
+      public InstructionDispatcher::Receiver {
 
   public:
     DataflowAnalysis() : dispatcher_(*this) {}
@@ -355,11 +371,16 @@ class DataflowAnalysis : public ForwardAnalysisIns<AbstractState<FValue>>,
   protected:
     virtual Dispatcher& dispatcher() override { return dispatcher_; }
 
-    AbstractState<FValue>* initialState() override {
-        auto* result = new AbstractState<FValue>();
-        for (SEXP x : code_->arguments()) {
-            (*result)[x] = FValue::Argument(x);
+    AbstractState<FValue, FGlobal>* initialState() override {
+        auto* result = new AbstractState<FValue, FGlobal>();
+        for (auto a : code_->arguments()) {
+            (*result)[a.first] = FValue::Argument(a.first);
+            if (a.second != R_MissingArg &&
+                (TYPEOF(a.second) == LANGSXP || TYPEOF(a.second) == SYMSXP)) {
+                result->global().leaksEnvironment = true;
+            }
         }
+
         return result;
     }
 
@@ -402,14 +423,16 @@ class DataflowAnalysis : public ForwardAnalysisIns<AbstractState<FValue>>,
                 TYPEOF(constant(v)) == SPECIALSXP) {
                 current().push(v.duplicate(ins));
             } else {
-                doCall();
+                if (current().global().leaksEnvironment)
+                    doCall();
                 current().push(FValue::Value(ins));
             }
             break;
         case FValue::Type::Argument:
         case FValue::Type::Any:
         case FValue::Type::Maybe:
-            doCall();
+            if (current().global().leaksEnvironment)
+                doCall();
             current().push(FValue::Value(ins));
             break;
         case FValue::Type::Value:
@@ -417,7 +440,8 @@ class DataflowAnalysis : public ForwardAnalysisIns<AbstractState<FValue>>,
             break;
         case FValue::Type::Absent:
         case FValue::Type::Bottom:
-            doCall();
+            if (current().global().leaksEnvironment)
+                doCall();
             current().push(FValue::Value(ins));
             break;
         }
@@ -435,7 +459,7 @@ class DataflowAnalysis : public ForwardAnalysisIns<AbstractState<FValue>>,
     void ldvar_(CodeEditor::Iterator ins) override {
         SEXP sym = Pool::get((*ins).immediate.pool);
         auto v = current()[sym];
-        if (!v.isValue())
+        if (!v.isValue() && current().global().leaksEnvironment)
             doCall();
         if (v == FValue::bottom())
             current().push(FValue::Value(ins));
@@ -446,7 +470,7 @@ class DataflowAnalysis : public ForwardAnalysisIns<AbstractState<FValue>>,
     void ldddvar_(CodeEditor::Iterator ins) override {
         SEXP sym = Pool::get((*ins).immediate.pool);
         auto v = current()[sym];
-        if (!v.isValue())
+        if (!v.isValue() && current().global().leaksEnvironment)
             doCall();
         if (v == FValue::bottom())
             current().push(FValue::Value(ins));
@@ -457,7 +481,7 @@ class DataflowAnalysis : public ForwardAnalysisIns<AbstractState<FValue>>,
     void ldarg_(CodeEditor::Iterator ins) override {
         SEXP sym = Pool::get((*ins).immediate.pool);
         auto v = current()[sym];
-        if (!v.isValue())
+        if (!v.isValue() && current().global().leaksEnvironment)
             doCall();
         if (v == FValue::bottom())
             current().push(FValue::Value(ins));
@@ -467,7 +491,7 @@ class DataflowAnalysis : public ForwardAnalysisIns<AbstractState<FValue>>,
 
     void force_(CodeEditor::Iterator ins) override {
         auto v = current().pop();
-        if (v.isValue()) {
+        if (v.isValue() && current().global().leaksEnvironment) {
             current().push(v);
         } else {
             doCall();
@@ -573,12 +597,13 @@ class DataflowAnalysis : public ForwardAnalysisIns<AbstractState<FValue>>,
     void guard_fun_(CodeEditor::Iterator ins) override {
         BC bc = *ins;
         SEXP sym = Pool::get(bc.immediate.guard_fun_args.name);
-        // TODO: is this not sound! There could be a higher up promise with the
+        // TODO: is this not sound! There coud be a higher up promise with the
         // functions name, which invalidates the local env, although very
         // unlikely. Thus we should instead fix guard_fun to work without
         // forcing promises.
-        if (current()[sym].t == FValue::Type::Argument ||
-            current()[sym].t == FValue::Type::Any)
+        if (current().global().leaksEnvironment &&
+            (current()[sym].t == FValue::Type::Argument ||
+             current()[sym].t == FValue::Type::Any))
             doCall();
         // TODO this is not quite right, since its most likely coming from a
         // parent environment
@@ -601,9 +626,10 @@ class DataflowAnalysis : public ForwardAnalysisIns<AbstractState<FValue>>,
             current().mergeAllEnv(FValue::Any());
         else if (type == Type::NoDeleteNoPromiseStore)
             current().mergeAllEnv(FValue::Value());
-        else if (type == Type::Conservative)
+        else if (type == Type::Conservative) {
+            current().global().leaksEnvironment = true;
             current().mergeAllEnv(FValue::Maybe());
-        else if (type == Type::NoArgsOverride)
+        } else if (type == Type::NoArgsOverride)
             current().mergeAllEnv(FValue::Argument());
     }
 

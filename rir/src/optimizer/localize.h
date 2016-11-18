@@ -9,7 +9,6 @@ class Localizer : public InstructionDispatcher::Receiver {
   public:
     DataflowAnalysis<Type::Conservative> analysis;
     DataflowAnalysis<Type::NoDeleteNoPromiseStore> optimisticAnalysis;
-    DataflowAnalysis<Type::NoArgsOverride> veryOptimisticAnalysis;
     InstructionDispatcher dispatcher;
     CodeEditor& code_;
 
@@ -27,8 +26,7 @@ class Localizer : public InstructionDispatcher::Receiver {
             cur << BC::guardLocal(sym) << BC::ldlval(sym);
             return;
         }
-        auto vov = veryOptimisticAnalysis[ins][sym];
-        if (!cv.isPresent() && vov.t == FValue::Type::Argument) {
+        if (!cv.isPresent() && ov.t == FValue::Type::Argument) {
             auto cur = ins.asCursor(code_);
             cur.remove();
             cur << BC::guardArg(sym) << BC::ldarg(sym);
@@ -39,7 +37,6 @@ class Localizer : public InstructionDispatcher::Receiver {
     void run() {
         analysis.analyze(code_);
         optimisticAnalysis.analyze(code_);
-        veryOptimisticAnalysis.analyze(code_);
         for (auto i = code_.begin(); i != code_.end(); ++i) {
             dispatcher.dispatch(i);
         }

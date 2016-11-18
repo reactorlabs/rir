@@ -7,8 +7,8 @@ namespace rir {
 
 class Optimizer {
   public:
-    static void optimize(CodeEditor&, int steam = 3);
-    static void inliner(CodeEditor&);
+    static bool optimize(CodeEditor&, int steam = 3);
+    static bool inliner(CodeEditor&);
     static SEXP reoptimizeFunction(SEXP);
 };
 }

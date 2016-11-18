@@ -4,6 +4,7 @@
 #include "ir/CodeEditor.h"
 #include "code/analysis.h"
 #include "code/dispatchers.h"
+#include "code/dataflow.h"
 #include "interpreter/interp_context.h"
 #include "ir/Compiler.h"
 #include "R/RList.h"
@@ -29,8 +30,10 @@ class StupidInliner {
         return false;
     }
 
+    // For simplicity, for now we only inline functions which do not have local
+    // variables and do not leak the environment.
     bool canInline(Code* c) {
-        if (c->codeSize > 250)
+        if (c->codeSize > 800)
             return false;
 
         BC_t* pc = (BC_t*)code(c);
@@ -44,43 +47,38 @@ class StupidInliner {
                 if (!isSafeTarget(cs.target())) {
                     return false;
                 }
-            } else if (bc.bc == BC_t::ldvar_) {
+            } else if (bc.is(BC_t::guard_arg_) || bc.is(BC_t::guard_local_)) {
+                // we want to get rid of the environment, so this checks are
+                // not possible
+                return false;
+            } else if (bc.is(BC_t::ldarg_)) {
+                // ldarg is fine, we'll inline the promise here
+                continue;
+            } else if (!bc.isPure()) {
                 return false;
             }
         }
         return true;
     }
 
-    void doInline(CodeEditor::Cursor& pos, SEXP t, CodeEditor* arg = nullptr) {
+    void doInline(CodeEditor::Cursor& pos, SEXP t,
+                  std::unordered_map<SEXP, CodeEditor*>& args) {
         CodeEditor edit(t);
         edit.normalizeForInline();
 
-        bool loadedDefaultArg = false;
-
         for (auto i = edit.begin(); i != edit.end(); ++i) {
-            if ((*i).bc == BC_t::ldarg_) {
-                if (!arg) {
-                    RList formals(FORMALS(t));
-                    SEXP arg1 = formals[0];
-                    Compiler comp(arg1);
-                    auto res = comp.finalize();
-                    arg = new CodeEditor(res.bc);
-                }
-
+            BC bc = *i;
+            if (bc.bc == BC_t::ldarg_) {
+                CodeEditor* arg = args[(*i).immediateConst()];
                 arg->normalizeForInline();
-#ifdef ENABLE_SLOWASSERT
-                for (auto i : *arg) {
-                    assert(i.bc != BC_t::ldarg_);
-                }
-#endif
                 CodeEditor::Cursor e = i.asCursor(edit);
                 e.remove();
                 e.insert(*arg);
             }
+
+            assert(bc.bc != BC_t::guard_arg_);
         }
 
-        if (loadedDefaultArg)
-            delete arg;
         edit.commit();
         pos.insert(edit);
     }
@@ -91,10 +89,10 @@ class StupidInliner {
             if (bc.bc != BC_t::call_)
                 continue;
 
-            if (bc.immediate.call_args.nargs > 1)
-                continue;
-
             CallSite cs = i.callSite();
+
+            if (cs.hasNames())
+                continue;
 
             if (!cs.hasProfile())
                 continue;
@@ -135,17 +133,39 @@ class StupidInliner {
                 printf("cannot inline, did not find ldfun\n");
                 continue;
             }
+
+            std::unordered_map<SEXP, CodeEditor*> args;
+            RList formals(FORMALS(t));
+            if (formals.length() < cs.nargs())
+                continue;
+
+            size_t idx = 0;
+            for (auto f = formals.begin(); f != formals.end(); ++f) {
+                CodeEditor* arg;
+                if (idx < cs.nargs()) {
+                    arg = &code_.promise(cs.args()[idx]);
+                } else {
+                    arg = new CodeEditor(Compiler::compileExpression(*f).bc);
+                }
+                args[f.tag()] = arg;
+                ++idx;
+            }
+
             cur.remove();
             cur.remove();
 
             cur << BC::guardName(name, t);
 
-            if (cs.nargs() == 1) {
-                auto arg = code_.detachPromise(cs.args()[0]);
-                doInline(cur, t, arg);
+            doInline(cur, t, args);
+
+            idx = 0;
+            for (auto f = formals.begin(); f != formals.end(); ++f) {
+                auto arg = args[f.tag()];
+                if (idx < cs.nargs()) {
+                    arg = code_.detachPromise(cs.args()[idx]);
+                }
                 delete arg;
-            } else {
-                doInline(cur, t);
+                ++idx;
             }
         }
     }

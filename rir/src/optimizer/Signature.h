@@ -136,8 +136,8 @@ public:
 
     Signature(CodeEditor const & code):
         leaf_(true) {
-        for (SEXP i : code.arguments())
-            argumentEvaluation_[i] = ArgumentEvaluation();
+        for (auto a : code.arguments())
+            argumentEvaluation_[a.first] = ArgumentEvaluation();
     }
 
     Signature(Signature const &) = default;
