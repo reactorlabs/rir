@@ -75,6 +75,7 @@ REXPORT SEXP rir_isValidFunction(SEXP what) {
  */
 REXPORT SEXP rir_disassemble(SEXP what) {
 
+    printf("%p\n", what);
     ::Function * f = TYPEOF(what) == CLOSXP ? isValidClosureSEXP(what) : isValidFunctionSEXP(what);
 
     if (f == nullptr)

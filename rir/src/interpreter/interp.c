@@ -189,10 +189,9 @@ static void jit(SEXP cls, Context* ctx) {
     assert(TYPEOF(cls) == CLOSXP);
     if (TYPEOF(BODY(cls)) == INTSXP)
         return;
-    SEXP body = BODY(cls);
-    if (TYPEOF(body) == BCODESXP)
-        body = VECTOR_ELT(CDR(body), 0);
-    SET_BODY(cls, ctx->compiler(body));
+    SEXP cmp = ctx->compiler(cls);
+    SET_BODY(cls, BODY(cmp));
+    SET_FORMALS(cls, FORMALS(cmp));
 }
 
 INSTRUCTION(ldfun_) {
