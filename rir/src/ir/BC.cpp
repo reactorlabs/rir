@@ -88,6 +88,10 @@ bool BC::operator==(const BC& other) const {
     case BC_t::inc_:
     case BC_t::add_:
     case BC_t::mul_:
+    case BC_t::div_:
+    case BC_t::idiv_:
+    case BC_t::mod_:
+    case BC_t::pow_:
     case BC_t::sub_:
     case BC_t::lt_:
     case BC_t::seq_:
@@ -188,6 +192,10 @@ void BC::write(CodeStream& cs) const {
     case BC_t::inc_:
     case BC_t::add_:
     case BC_t::mul_:
+    case BC_t::div_:
+    case BC_t::idiv_:
+    case BC_t::mod_:
+    case BC_t::pow_:
     case BC_t::sub_:
     case BC_t::lt_:
     case BC_t::seq_:
@@ -374,6 +382,10 @@ void BC::print(CallSite cs) {
     case BC_t::asbool_:
     case BC_t::add_:
     case BC_t::mul_:
+    case BC_t::div_:
+    case BC_t::idiv_:
+    case BC_t::mod_:
+    case BC_t::pow_:
     case BC_t::sub_:
     case BC_t::lt_:
     case BC_t::return_:

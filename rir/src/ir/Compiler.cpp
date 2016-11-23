@@ -154,8 +154,10 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
         return true;
     }
 
-    if (args.length() == 2 && (fun == symbol::Add || fun == symbol::Sub ||
-                               fun == symbol::Lt || fun == symbol::Mul)) {
+    if (args.length() == 2 &&
+        (fun == symbol::Add || fun == symbol::Sub || fun == symbol::Lt ||
+         fun == symbol::Mul || fun == symbol::Div || fun == symbol::Idiv ||
+         fun == symbol::Mod || fun == symbol::Pow)) {
         cs << BC::guardNamePrimitive(fun);
 
         compileExpr(ctx, args[0]);
@@ -169,6 +171,14 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
             cs << BC::lt();
         else if (fun == symbol::Mul)
             cs << BC::mul();
+        else if (fun == symbol::Div)
+            cs << BC::div();
+        else if (fun == symbol::Mod)
+            cs << BC::mod();
+        else if (fun == symbol::Idiv)
+            cs << BC::idiv();
+        else if (fun == symbol::Pow)
+            cs << BC::pow();
         cs.addSrc(ast);
 
         return true;

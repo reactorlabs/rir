@@ -30,6 +30,8 @@ DECLARE(Sub, "-");
 DECLARE(Mul, "*");
 DECLARE(Div, "/");
 DECLARE(Pow, "^");
+DECLARE(Idiv, "%/%");
+DECLARE(Mod, "%%");
 DECLARE(Sqrt, "sqrt");
 DECLARE(Exp, "exp");
 DECLARE(Eq, "==");

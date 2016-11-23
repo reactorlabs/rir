@@ -1747,7 +1747,7 @@ static R_INLINE int R_integer_times(int x, int y, Rboolean* pnaflag) {
     }
 }
 
-enum op { PLUSOP, MINUSOP, TIMESOP };
+enum op { PLUSOP, MINUSOP, TIMESOP, DIVOP, POWOP, MODOP, IDIVOP };
 #define INTEGER_OVERFLOW_WARNING "NAs produced by integer overflow"
 
 #define CHECK_INTEGER_OVERFLOW(ans, naflag)                                    \
@@ -1839,6 +1839,119 @@ INSTRUCTION(mul_) {
     SEXP res;
 
     DO_BINOP(*, TIMESOP);
+
+    ostack_popn(ctx, 2);
+    ostack_push(ctx, res);
+}
+
+INSTRUCTION(div_) {
+    SEXP lhs = *ostack_at(ctx, 1);
+    SEXP rhs = *ostack_at(ctx, 0);
+    SEXP res;
+
+    if (IS_SCALAR_VALUE(lhs, REALSXP) && IS_SCALAR_VALUE(rhs, REALSXP)) {
+        res = Rf_allocVector(REALSXP, 1);
+        *REAL(res) = (*REAL(lhs) == NA_REAL || *REAL(rhs) == NA_REAL)
+                         ? NA_REAL
+                         : *REAL(lhs) / *REAL(rhs);
+    } else if (IS_SCALAR_VALUE(lhs, INTSXP) && IS_SCALAR_VALUE(rhs, INTSXP)) {
+        res = Rf_allocVector(REALSXP, 1);
+        int l = *INTEGER(lhs);
+        int r = *INTEGER(rhs);
+        if (l == NA_INTEGER || r == NA_INTEGER)
+            *REAL(res) = NA_REAL;
+        else
+            *REAL(res) = (double)l / (double)r;
+    } else {
+        BINOP_FALLBACK("/");
+    }
+
+    ostack_popn(ctx, 2);
+    ostack_push(ctx, res);
+}
+
+static double myfloor(double x1, double x2) {
+    double q = x1 / x2, tmp;
+
+    if (x2 == 0.0)
+        return q;
+    tmp = x1 - floor(q) * x2;
+    return floor(q) + floor(tmp / x2);
+}
+
+INSTRUCTION(idiv_) {
+    SEXP lhs = *ostack_at(ctx, 1);
+    SEXP rhs = *ostack_at(ctx, 0);
+    SEXP res;
+
+    if (IS_SCALAR_VALUE(lhs, REALSXP) && IS_SCALAR_VALUE(rhs, REALSXP)) {
+        res = Rf_allocVector(REALSXP, 1);
+        *REAL(res) = myfloor(*REAL(lhs), *REAL(rhs));
+    } else if (IS_SCALAR_VALUE(lhs, INTSXP) && IS_SCALAR_VALUE(rhs, INTSXP)) {
+        res = Rf_allocVector(INTSXP, 1);
+        int l = *INTEGER(lhs);
+        int r = *INTEGER(rhs);
+        /* This had x %/% 0 == 0 prior to 2.14.1, but
+           it seems conventionally to be undefined */
+        if (l == NA_INTEGER || r == NA_INTEGER || r == 0)
+            *INTEGER(res) = NA_INTEGER;
+        else
+            *INTEGER(res) = (int)floor((double)l / (double)r);
+    } else {
+        BINOP_FALLBACK("%/%");
+    }
+
+    ostack_popn(ctx, 2);
+    ostack_push(ctx, res);
+}
+
+INSTRUCTION(pow_) {
+    SEXP lhs = *ostack_at(ctx, 1);
+    SEXP rhs = *ostack_at(ctx, 0);
+    SEXP res;
+
+    BINOP_FALLBACK("^");
+
+    ostack_popn(ctx, 2);
+    ostack_push(ctx, res);
+}
+
+typedef struct {
+    int ibeta, it, irnd, ngrd, machep, negep, iexp, minexp, maxexp;
+    double eps, epsneg, xmin, xmax;
+} AccuracyInfo;
+LibExtern AccuracyInfo R_AccuracyInfo;
+static double myfmod(double x1, double x2) {
+    if (x2 == 0.0)
+        return R_NaN;
+    double q = x1 / x2, tmp = x1 - floor(q) * x2;
+    if (R_FINITE(q) && (fabs(q) > 1 / R_AccuracyInfo.eps))
+        warning("probable complete loss of accuracy in modulus");
+    q = floor(tmp / x2);
+    return tmp - q * x2;
+}
+
+INSTRUCTION(mod_) {
+    SEXP lhs = *ostack_at(ctx, 1);
+    SEXP rhs = *ostack_at(ctx, 0);
+    SEXP res;
+
+    if (IS_SCALAR_VALUE(lhs, REALSXP) && IS_SCALAR_VALUE(rhs, REALSXP)) {
+        res = Rf_allocVector(REALSXP, 1);
+        *REAL(res) = myfmod(*REAL(lhs), *REAL(rhs));
+    } else if (IS_SCALAR_VALUE(lhs, INTSXP) && IS_SCALAR_VALUE(rhs, INTSXP)) {
+        res = Rf_allocVector(INTSXP, 1);
+        int l = *INTEGER(lhs);
+        int r = *INTEGER(rhs);
+        if (l == NA_INTEGER || r == NA_INTEGER || r == 0) {
+            *INTEGER(res) = NA_INTEGER;
+        } else {
+            *INTEGER(res) =
+                (l >= 0 && r > 0) ? l % r : (int)myfmod((double)l, (double)r);
+        }
+    } else {
+        BINOP_FALLBACK("%%");
+    }
 
     ostack_popn(ctx, 2);
     ostack_push(ctx, res);
@@ -2076,6 +2189,10 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
             INS(ldddvar_);
             INS(add_);
             INS(mul_);
+            INS(mod_);
+            INS(pow_);
+            INS(div_);
+            INS(idiv_);
             INS(sub_);
             INS(lt_);
             INS(call_);

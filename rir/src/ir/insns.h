@@ -107,11 +107,6 @@ DEF_INSTR(dup2_, 0, 2, 4, 1)
 /**
  * dup2_:: a b -> a b a b
  */
-DEF_INSTR(mul_, 0, 2, 1, 0)
-/**
- * add_:: pop two values from object stack, add them, push result on object
- * stack
- */
 DEF_INSTR(add_, 0, 2, 1, 0)
 /**
  * add_:: pop two values from object stack, add them, push result on object
@@ -119,18 +114,13 @@ DEF_INSTR(add_, 0, 2, 1, 0)
 
  Works on any SEXP.
  */
+DEF_INSTR(mul_, 0, 2, 1, 0)
+DEF_INSTR(div_, 0, 2, 1, 0)
+DEF_INSTR(pow_, 0, 2, 1, 0)
+DEF_INSTR(idiv_, 0, 2, 1, 0)
+DEF_INSTR(mod_, 0, 2, 1, 0)
 DEF_INSTR(sub_, 0, 2, 1, 0)
-/**
- * add_:: pop two values from object stack, add them, push result on object
- * stack
-
- Works on any SEXP.
- */
 DEF_INSTR(lt_, 0, 2, 1, 0)
-/**
- * add_:: pop two values from object stack, add them, push result on object
- * stack
- */
 DEF_INSTR(guard_fun_, 3, 0, 0, 1)
 /**
  * guard_fun_:: takes symbol, target, id, checks findFun(symbol) == target

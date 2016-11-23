@@ -229,6 +229,10 @@ class BC {
     inline static BC close();
     inline static BC add();
     inline static BC mul();
+    inline static BC div();
+    inline static BC pow();
+    inline static BC idiv();
+    inline static BC mod();
     inline static BC sub();
     inline static BC lt();
     inline static BC seq();
