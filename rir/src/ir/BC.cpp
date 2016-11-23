@@ -54,6 +54,7 @@ bool BC::operator==(const BC& other) const {
     case BC_t::beginloop_:
     case BC_t::brobj_:
     case BC_t::brfalse_:
+    case BC_t::label:
         return immediate.offset == other.immediate.offset;
 
     case BC_t::pick_:
@@ -105,7 +106,6 @@ bool BC::operator==(const BC& other) const {
 
     case BC_t::invalid_:
     case BC_t::num_of:
-    case BC_t::label:
         break;
     }
 

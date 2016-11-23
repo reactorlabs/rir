@@ -41,7 +41,7 @@ void CodeEditor::loadCode(FunctionHandle function, CodeHandle code) {
             if (bc.isJmp()) {
                 BC_t* target = BC::jmpTarget(pc);
                 if (!bcLabels.count(target))
-                    bcLabels[target] = nextLabel++;
+                    bcLabels[target] = mkLabel();
             }
             BC::advance(&pc);
         }
@@ -153,12 +153,14 @@ CodeEditor::~CodeEditor() {
     }
 }
 
-void CodeEditor::print() {
+void CodeEditor::print(bool verbose) {
 
     DataflowAnalysis<Type::Conservative> analysis;
     DataflowAnalysis<Type::Optimistic> specAnalysis;
-    analysis.analyze(*this);
-    specAnalysis.analyze(*this);
+    if (verbose) {
+        analysis.analyze(*this);
+        specAnalysis.analyze(*this);
+    }
 
     for (auto cur = getCursor(); !cur.atEnd(); cur.advance()) {
         if (cur.src()) {
@@ -166,48 +168,50 @@ void CodeEditor::print() {
             Rf_PrintValue(cur.src());
         }
         BC bc = cur.bc();
-        // Print some analysis info
-        if (bc.bc != BC_t::label && bc.bc != BC_t::return_ &&
-            bc.bc != BC_t::ret_) {
-            if (bc.bc == BC_t::ldvar_ || bc.bc == BC_t::ldarg_ ||
-                bc.bc == BC_t::ldfun_) {
-                SEXP sym = bc.immediateConst();
-                auto v = analysis[cur][sym];
-                auto sv = specAnalysis[cur][sym];
-                std::cout << "   ~~ ";
-                if (v.t == FValue::Type::Argument)
-                    std::cout << "argument\n";
-                else if (v.isPresent())
-                    std::cout << "local\n";
-                else if (sv.t == FValue::Type::Argument)
-                    std::cout << "probably argument\n";
-                else if (sv.isPresent())
-                    std::cout << "probably local\n";
-                else
-                    std::cout << "??\n";
-            } else if (bc.popCount() > 0) {
-                bool assumedIsBetter = false;
-                for (int i = bc.popCount() - 1; i >= 0; --i) {
-                    if (analysis[cur].stack()[i] !=
-                        specAnalysis[cur].stack()[i]) {
-                        assumedIsBetter = true;
-                        break;
-                    }
-                }
-
-                std::cout << "   ~~ TOS : ";
-                for (int i = bc.popCount() - 1; i >= 0; --i) {
-                    analysis[cur].stack()[i].print();
-                    std::cout << ", ";
-                }
-                if (assumedIsBetter) {
-                    std::cout << "  /  Assumed: ";
+        if (verbose) {
+            // Print some analysis info
+            if (bc.bc != BC_t::label && bc.bc != BC_t::return_ &&
+                bc.bc != BC_t::ret_) {
+                if (bc.bc == BC_t::ldvar_ || bc.bc == BC_t::ldarg_ ||
+                    bc.bc == BC_t::ldfun_) {
+                    SEXP sym = bc.immediateConst();
+                    auto v = analysis[cur][sym];
+                    auto sv = specAnalysis[cur][sym];
+                    std::cout << "   ~~ ";
+                    if (v.t == FValue::Type::Argument)
+                        std::cout << "argument\n";
+                    else if (v.isPresent())
+                        std::cout << "local\n";
+                    else if (sv.t == FValue::Type::Argument)
+                        std::cout << "probably argument\n";
+                    else if (sv.isPresent())
+                        std::cout << "probably local\n";
+                    else
+                        std::cout << "??\n";
+                } else if (bc.popCount() > 0) {
+                    bool assumedIsBetter = false;
                     for (int i = bc.popCount() - 1; i >= 0; --i) {
-                        specAnalysis[cur].stack()[i].print();
+                        if (analysis[cur].stack()[i] !=
+                            specAnalysis[cur].stack()[i]) {
+                            assumedIsBetter = true;
+                            break;
+                        }
+                    }
+
+                    std::cout << "   ~~ TOS : ";
+                    for (int i = bc.popCount() - 1; i >= 0; --i) {
+                        analysis[cur].stack()[i].print();
                         std::cout << ", ";
                     }
+                    if (assumedIsBetter) {
+                        std::cout << "  /  Assumed: ";
+                        for (int i = bc.popCount() - 1; i >= 0; --i) {
+                            specAnalysis[cur].stack()[i].print();
+                            std::cout << ", ";
+                        }
+                    }
+                    std::cout << "\n";
                 }
-                std::cout << "\n";
             }
         }
         cur.print();
@@ -233,7 +237,7 @@ void CodeEditor::Cursor::print() {
 
 unsigned CodeEditor::write(FunctionHandle& function) {
     CodeStream cs(function, ast);
-    cs.setNumLabels(nextLabel);
+    cs.setNumLabels(labels_.size());
 
     for (Cursor cur = getCursor(); !cur.atEnd(); cur.advance()) {
         BC bc = cur.bc();

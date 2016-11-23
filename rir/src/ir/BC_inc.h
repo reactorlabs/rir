@@ -260,7 +260,7 @@ class BC {
     inline static BC int3();
 
   private:
-    BC(BC_t bc) : bc(bc), immediate({{0}}) {}
+    explicit BC(BC_t bc) : bc(bc), immediate({{0}}) {}
     BC(BC_t bc, immediate_t immediate) : bc(bc), immediate(immediate) {}
 
     static unsigned size(BC_t bc) {

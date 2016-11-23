@@ -67,8 +67,6 @@ class CodeEditor {
     };
 #pragma pack(pop)
 
-    Label nextLabel = 0;
-
     BytecodeList front;
     BytecodeList last;
 
@@ -269,9 +267,8 @@ class CodeEditor {
                 prev->patch = insert;
             }
 
-            if (bc.bc == BC_t::label) {
-                editor.labels_[bc.immediate.offset] = insert;
-            }
+            if (bc.bc == BC_t::label)
+                editor.labels_[insert->bc.immediate.offset] = insert;
 
             pos = next;
             return *this;
@@ -280,11 +277,15 @@ class CodeEditor {
         void insert(CodeEditor& other) {
             editor.changed = true;
 
-            size_t labels = editor.nextLabel;
+            // Merge labels
+            std::unordered_map<fun_idx_t, fun_idx_t> labelRewrite;
+            for (auto l : other.labels_)
+                if (l)
+                    labelRewrite[l->bc.immediate.offset] = editor.mkLabel();
+
+            // Merge promises
             size_t proms = editor.promises.size();
-
             std::unordered_map<fun_idx_t, fun_idx_t> duplicate;
-
             fun_idx_t j = 0;
             for (auto& p : other.promises) {
                 bool found = false;
@@ -306,6 +307,12 @@ class CodeEditor {
 
             bool first = true;
             for (auto cur = other.begin(); cur != other.end(); ++cur) {
+
+                if ((*cur).is(BC_t::label)) {
+                    *this << BC::label(labelRewrite[(*cur).immediate.offset]);
+                    continue;
+                }
+
                 *this << *cur;
 
                 BytecodeList* insert = prev().pos;
@@ -355,15 +362,12 @@ class CodeEditor {
                 } else {
                     assert(!insert->bc.hasPromargs());
                 }
-                // Fix labels
-                if (insert->bc.bc == BC_t::label)
-                    insert->bc.immediate.offset += labels;
                 // Adjust jmp targets
                 if (insert->bc.isJmp()) {
-                    insert->bc.immediate.offset += labels;
+                    insert->bc.immediate.offset =
+                        labelRewrite.at(insert->bc.immediate.offset);
                 }
             }
-            editor.nextLabel += other.nextLabel;
         }
 
         void remove() {
@@ -419,7 +423,7 @@ class CodeEditor {
 
     FunctionHandle finalize();
 
-    void print();
+    void print(bool verbose = true);
 
     bool isPure() {
         for (auto i : *this)
@@ -466,7 +470,7 @@ class CodeEditor {
 
     Label mkLabel() {
         labels_.push_back(0);
-        return nextLabel++;
+        return labels_.size() - 1;
     }
 
     size_t numPromises() const {
@@ -479,6 +483,7 @@ class CodeEditor {
     }
 
     void verify() {
+        std::set<int> labels;
         BytecodeList* pos = front.next;
         while (pos != &last) {
             if (pos->patch) {
@@ -488,6 +493,14 @@ class CodeEditor {
                     assert(patch->patch == nullptr);
                     patch = patch->next;
                 }
+            }
+            if (pos->bc.isJmp())
+                target(pos->bc);
+            if (pos->bc.is(BC_t::label)) {
+                assert(labels.find(pos->bc.immediate.offset) == labels.end() &&
+                       "Label is used multiple times");
+                assert(labels_[pos->bc.immediate.offset] && "Label is unknown");
+                labels.insert(pos->bc.immediate.offset);
             }
             pos = pos->next;
         }
@@ -544,6 +557,7 @@ class CodeEditor {
             }
         }
 
+        verify();
         changed = false;
     }
 
