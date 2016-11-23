@@ -1760,7 +1760,7 @@ enum op { PLUSOP, MINUSOP, TIMESOP };
     do {                                                                       \
         static SEXP prim = NULL;                                               \
         static CCODE blt;                                                      \
-        int flag;                                                              \
+        static int flag;                                                       \
         if (!prim) {                                                           \
             prim = findFun(Rf_install(op), R_GlobalEnv);                       \
             blt = getBuiltin(prim);                                            \

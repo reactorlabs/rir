@@ -328,23 +328,30 @@ class CodeEditor {
                 // Fix prom offsets
                 if (insert->bc.bc == BC_t::call_ ||
                     insert->bc.bc == BC_t::dispatch_) {
-                    CallSite cs = cur.callSite();
-                    for (unsigned i = 0; i < cs.nargs(); ++i) {
-                        if (cs.args()[i] > MAX_ARG_IDX)
+                    auto cs = insert->callSite;
+                    for (unsigned i = 0; i < cs->nargs; ++i) {
+                        auto idx = CallSite_args(cs)[i];
+                        if (idx > MAX_ARG_IDX)
                             continue;
 
-                        if (duplicate.count(cs.args()[i]))
-                            cs.args()[i] = duplicate.at(cs.args()[i]);
+                        if (duplicate.count(idx))
+                            idx = duplicate.at(idx);
                         else
-                            cs.args()[i] += proms;
+                            idx += proms;
+                        assert(editor.promises.size() >= idx &&
+                               editor.promises[idx]);
+                        CallSite_args(cs)[i] = idx;
                     }
                 } else if (insert->bc.bc == BC_t::promise_ ||
                            insert->bc.bc == BC_t::push_code_) {
-                    if (duplicate.count(insert->bc.immediate.fun))
-                        insert->bc.immediate.fun =
-                            duplicate.at(insert->bc.immediate.fun);
+                    auto idx = insert->bc.immediate.fun;
+                    if (duplicate.count(idx))
+                        idx = duplicate.at(idx);
                     else
-                        insert->bc.immediate.fun += proms;
+                        idx += proms;
+                    assert(editor.promises.size() >= idx &&
+                           editor.promises[idx]);
+                    insert->bc.immediate.fun = idx;
                 } else {
                     assert(!insert->bc.hasPromargs());
                 }
@@ -388,7 +395,6 @@ class CodeEditor {
     Iterator end() const { return Iterator(&last); }
 
     CodeEditor(SEXP closure);
-
     CodeEditor(CodeHandle code, SEXP formals);
 
     std::map<SEXP, SEXP> arguments() const {
@@ -542,7 +548,7 @@ class CodeEditor {
     }
 
     bool changed = false;
-    SEXP formals_;
+    SEXP formals_ = nullptr;
 };
 
 inline CodeEditor::Cursor CodeEditor::Iterator::asCursor(CodeEditor& editor) {

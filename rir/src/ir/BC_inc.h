@@ -346,11 +346,12 @@ class CallSite {
     bool isValid() { return cs != nullptr; }
     num_args_t nargs() { return cs->nargs; }
     SEXP call();
-    fun_idx_t* args() { return CallSite_args(cs); }
+    const fun_idx_t* args() { return CallSite_args(cs); }
     fun_idx_t arg(num_args_t idx) { return CallSite_args(cs)[idx]; }
     bool hasNames() { return cs->hasNames; }
     bool hasTarget() { return cs->hasTarget; }
     bool hasProfile() { return cs->hasProfile; }
+    bool hasImmediateArgs() { return cs->hasImmediateArgs; }
     SEXP selector();
     SEXP name(num_args_t idx);
     SEXP target();

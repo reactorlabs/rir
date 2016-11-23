@@ -267,7 +267,7 @@ static inline bool isSafeBuiltin(int i) {
 
     // builtins for `is.*` where primval(op) not within [100,200[
     // (those do not dispatch)
-    if ((i >= 362 && i < 376) || (i >= 379 && i <= 384))
+    if ((i >= 362 && i < 376) || (i >= 379 && i <= 389))
         return true;
 
     switch (i) {
@@ -275,6 +275,7 @@ static inline bool isSafeBuiltin(int i) {
     case 88:  // c
     case 91:  // class
     case 107: // vector
+    case 397: // rep.int
     case 555: // inherits
         return true;
     }

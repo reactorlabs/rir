@@ -99,7 +99,7 @@ class StupidInliner {
 
             CallSiteProfile* p = cs.profile();
 
-            if (p->taken < 200) {
+            if (p->taken < 50) {
                 continue;
             }
 
@@ -143,7 +143,7 @@ class StupidInliner {
             for (auto f = formals.begin(); f != formals.end(); ++f) {
                 CodeEditor* arg;
                 if (idx < cs.nargs()) {
-                    arg = &code_.promise(cs.args()[idx]);
+                    arg = code_.detachPromise(cs.args()[idx]);
                 } else {
                     arg = new CodeEditor(Compiler::compileExpression(*f).bc);
                 }
@@ -158,15 +158,8 @@ class StupidInliner {
 
             doInline(cur, t, args);
 
-            idx = 0;
-            for (auto f = formals.begin(); f != formals.end(); ++f) {
-                auto arg = args[f.tag()];
-                if (idx < cs.nargs()) {
-                    arg = code_.detachPromise(cs.args()[idx]);
-                }
-                delete arg;
-                ++idx;
-            }
+            for (auto a : args)
+                delete a.second;
         }
     }
 };
