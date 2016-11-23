@@ -469,17 +469,20 @@ INLINE SEXP rirCallClosure(SEXP call, SEXP env, SEXP callee, SEXP actuals,
     static bool optimizing = false;
 
     if (!optimizing) {
-        if (fun->invocationCount == 200) {
+        Code* code = functionCode(fun);
+        if ((fun->invocationCount == 1 && code->perfCounter > 400) ||
+            (fun->invocationCount == 10 && code->perfCounter > 800) ||
+            fun->invocationCount == 200) {
             optimizing = true;
 
+            Function* oldFun = fun;
             SEXP oldBody = body;
             body = globalContext()->optimizer(callee);
 
             // TODO: there might be promises with references to the old code!
             // Therefore we keep it around.
             // TODO: first I tried to use R_PreserveObject, but it did not work
-            // for
-            // large vectors, not sure why, need to investigate
+            // for large vectors, not sure why, need to investigate
             cp_pool_add(ctx, oldBody);
             cp_pool_add(ctx, body);
 
@@ -489,18 +492,10 @@ INLINE SEXP rirCallClosure(SEXP call, SEXP env, SEXP callee, SEXP actuals,
             fun = (Function*)INTEGER(body);
             fun->origin = oldBody;
 
-            fun->invocationCount = 200;
+            fun->invocationCount = oldFun->invocationCount + 1;
 
-            if (false) {
-                printf("================ OPTIMIZING "
-                       "===========================\n");
-                Rf_PrintValue(escape(callee));
-                // printf("-----------------------------\n");
-                // printFunctionFancy(callee);
-            }
             optimizing = false;
-        }
-        if (fun->invocationCount < UINT_MAX)
+        } else if (fun->invocationCount < UINT_MAX)
             fun->invocationCount++;
     }
 
@@ -1366,20 +1361,29 @@ INSTRUCTION(endcontext_) {
 
 INSTRUCTION(brtrue_) {
     int offset = readJumpOffset(pc);
-    if (ostack_pop(ctx) == R_TrueValue)
+    if (ostack_pop(ctx) == R_TrueValue) {
         *pc = *pc + offset;
+        if (offset < 0 && c->perfCounter < UINT_MAX)
+            c->perfCounter++;
+    }
     PC_BOUNDSCHECK(*pc);
 }
 
 INSTRUCTION(brfalse_) {
     int offset = readJumpOffset(pc);
-    if (ostack_pop(ctx) == R_FalseValue)
+    if (ostack_pop(ctx) == R_FalseValue) {
         *pc = *pc + offset;
+        if (offset < 0 && c->perfCounter < UINT_MAX)
+            c->perfCounter++;
+    }
     PC_BOUNDSCHECK(*pc);
 }
 
 INSTRUCTION(br_) {
     int offset = readJumpOffset(pc);
+    if (offset < 0 && c->perfCounter < UINT_MAX) {
+        c->perfCounter++;
+    }
     *pc = *pc + offset;
     PC_BOUNDSCHECK(*pc);
 }
@@ -2029,7 +2033,12 @@ void debug(Code* c, OpcodeT* pc, const char* name, unsigned depth,
 }
 
 SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
-    SLOWASSERT(c->magic == CODE_MAGIC);
+    assert(c->magic == CODE_MAGIC);
+
+    // if (c->perfCounter > 200000 && c->perfCounter != UINT_MAX) {
+    //     c->perfCounter = UINT_MAX;
+    //     printCode(c);
+    // }
 
     if (!env)
 	error("'rho' cannot be C NULL: detected in C-level eval");

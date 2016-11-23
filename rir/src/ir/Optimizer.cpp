@@ -8,7 +8,7 @@ namespace rir {
 bool Optimizer::optimize(CodeEditor& code, int steam) {
     bool changed = false;
     BCCleanup cleanup(code);
-    for (int i = 0; i < 8; ++i) {
+    for (int i = 0; i < steam; ++i) {
         // puts("******");
         // code.print();
         cleanup.run();
@@ -37,7 +37,7 @@ bool Optimizer::inliner(CodeEditor& code) {
 SEXP Optimizer::reoptimizeFunction(SEXP s) {
     CodeEditor code(s);
 
-    for (int i = 0; i < 4; ++i) {
+    for (int i = 0; i < 8; ++i) {
         if (!Optimizer::inliner(code))
             break;
         if (!Optimizer::optimize(code, 2))

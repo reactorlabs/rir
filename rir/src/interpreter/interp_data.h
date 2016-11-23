@@ -141,6 +141,8 @@ typedef struct Code {
 
     unsigned callSiteLength; /// length of the call site information
 
+    unsigned perfCounter;
+
     uint8_t data[]; /// the instructions
 
     /*

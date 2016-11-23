@@ -27,6 +27,7 @@ class CodeHandle {
         code->srcLength = sourceSize;
         code->skiplistLength = skiplistLength(sourceSize);
         code->callSiteLength = callSiteLength;
+        code->perfCounter = 0;
     }
 
     CodeHandle(Code* code) : code(code) { assert(code->magic == CODE_MAGIC); }
