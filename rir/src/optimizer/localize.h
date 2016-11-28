@@ -11,9 +11,11 @@ class Localizer : public InstructionDispatcher::Receiver {
     InstructionDispatcher dispatcher;
     CodeEditor& code_;
     CodeEditor::Iterator lastCall;
+    bool initSteam;
     bool steam;
 
-    Localizer(CodeEditor& code) : dispatcher(*this), code_(code) {}
+    Localizer(CodeEditor& code, bool envIsStable)
+        : dispatcher(*this), code_(code), initSteam(envIsStable) {}
 
     void call_(CodeEditor::Iterator ins) override { lastCall = ins; }
 
@@ -60,6 +62,7 @@ class Localizer : public InstructionDispatcher::Receiver {
     }
 
     void run() {
+        steam = initSteam;
         analysis.analyze(code_);
         lastCall = code_.end();
         for (auto i = code_.begin(); i != code_.end(); ++i) {

@@ -20,8 +20,8 @@ bool Optimizer::optimize(CodeEditor& code, int steam) {
     return changed;
 }
 
-bool Optimizer::inliner(CodeEditor& code) {
-    Localizer local(code);
+bool Optimizer::inliner(CodeEditor& code, bool stable) {
+    Localizer local(code, stable);
     local.run();
     bool changed = code.changed;
     if (code.changed)
@@ -40,10 +40,12 @@ SEXP Optimizer::reoptimizeFunction(SEXP s) {
 
     CodeEditor code(s);
 
+    // TODO: need to figure out why envs still leak after they look stable in
+    // the beginning...
+    safe = false;
     for (int i = 0; i < 8; ++i) {
-        if (safe)
-            if (!Optimizer::inliner(code))
-                break;
+        if (!Optimizer::inliner(code, safe))
+            break;
         if (!Optimizer::optimize(code, 2))
             break;
     }
