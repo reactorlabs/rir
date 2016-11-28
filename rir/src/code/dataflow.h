@@ -2,6 +2,7 @@
 #define RIR_ANALYSIS_DATAFLOW_H
 
 #include "ir/CodeEditor.h"
+#include "R/r.h"
 #include "R/Funtab.h"
 #include "code/analysis.h"
 #include "code/dispatchers.h"
@@ -359,7 +360,8 @@ class DataflowAnalysis
         if (bc.bc == BC_t::guard_fun_)
             return Pool::get(bc.immediate.guard_fun_args.expected);
         if (bc.bc == BC_t::ldvar_ || bc.bc == BC_t::ldddvar_ ||
-            bc.bc == BC_t::ldfun_ || bc.bc == BC_t::ldlval_)
+            bc.bc == BC_t::ldfun_ || bc.bc == BC_t::ldlval_ ||
+            bc.bc == BC_t::ldarg_)
             return constant((*this)[v.u.def][(*v.u.def).immediateConst()]);
         if (bc.bc == BC_t::dup_ || bc.bc == BC_t::dup2_)
             return constant((*this)[v.u.def].top());
@@ -424,7 +426,7 @@ class DataflowAnalysis
                 current().push(v.duplicate(ins));
             } else {
                 if (current().global().leaksEnvironment)
-                    doCall();
+                    doCall(ins);
                 current().push(FValue::Value(ins));
             }
             break;
@@ -432,7 +434,7 @@ class DataflowAnalysis
         case FValue::Type::Any:
         case FValue::Type::Maybe:
             if (current().global().leaksEnvironment)
-                doCall();
+                doCall(ins);
             current().push(FValue::Value(ins));
             break;
         case FValue::Type::Value:
@@ -441,62 +443,59 @@ class DataflowAnalysis
         case FValue::Type::Absent:
         case FValue::Type::Bottom:
             if (current().global().leaksEnvironment)
-                doCall();
+                doCall(ins);
             current().push(FValue::Value(ins));
             break;
         }
     }
 
+    FValue forceProm(FValue val, CodeEditor::Iterator ins) {
+        if (!val.isValue() && current().global().leaksEnvironment)
+            doCall(ins);
+
+        if (val.isValue())
+            return val.duplicate(ins);
+
+        return FValue::Value(ins);
+    }
+
     void ldlval_(CodeEditor::Iterator ins) override {
         SEXP sym = Pool::get((*ins).immediate.pool);
         auto v = current()[sym];
-        if (v == FValue::bottom())
-            current().push(FValue::Value(ins));
+        if (v.isValue())
+            v = v.duplicate(ins);
         else
-            current().push(v.isValue() ? v.duplicate(ins) : FValue::Value(ins));
+            v = FValue::Value(ins);
+        current()[sym] = v;
+        current().push(v);
     }
 
     void ldvar_(CodeEditor::Iterator ins) override {
         SEXP sym = Pool::get((*ins).immediate.pool);
-        auto v = current()[sym];
-        if (!v.isValue() && current().global().leaksEnvironment)
-            doCall();
-        if (v == FValue::bottom())
-            current().push(FValue::Value(ins));
-        else
-            current().push(v.isValue() ? v.duplicate(ins) : FValue::Value(ins));
+        auto v = forceProm(current()[sym], ins);
+        if (current()[sym].isPresent())
+            current()[sym] = v;
+        current().push(v);
     }
 
     void ldddvar_(CodeEditor::Iterator ins) override {
         SEXP sym = Pool::get((*ins).immediate.pool);
-        auto v = current()[sym];
-        if (!v.isValue() && current().global().leaksEnvironment)
-            doCall();
-        if (v == FValue::bottom())
-            current().push(FValue::Value(ins));
-        else
-            current().push(v.isValue() ? v.duplicate(ins) : FValue::Value(ins));
+        auto v = forceProm(current()[sym], ins);
+        if (current()[sym].isPresent())
+            current()[sym] = v;
+        current().push(v);
     }
 
     void ldarg_(CodeEditor::Iterator ins) override {
         SEXP sym = Pool::get((*ins).immediate.pool);
-        auto v = current()[sym];
-        if (!v.isValue() && current().global().leaksEnvironment)
-            doCall();
-        if (v == FValue::bottom())
-            current().push(FValue::Value(ins));
-        else
-            current().push(v.isValue() ? v.duplicate(ins) : FValue::Value(ins));
+        auto v = forceProm(current()[sym], ins);
+        if (current()[sym].isPresent())
+            current()[sym] = v;
+        current().push(v);
     }
 
     void force_(CodeEditor::Iterator ins) override {
-        auto v = current().pop();
-        if (v.isValue() && current().global().leaksEnvironment) {
-            current().push(v);
-        } else {
-            doCall();
-            current().push(FValue::Value(ins));
-        }
+        current().push(forceProm(current().pop(), ins));
     }
 
     void stvar_(CodeEditor::Iterator ins) override {
@@ -512,7 +511,7 @@ class DataflowAnalysis
         current().pop();
         // TODO we could be fancy and if its known whether fun is eager or lazy
         // analyze the promises accordingly
-        doCall();
+        doCall(ins);
         current().push(FValue::Any(ins));
     }
 
@@ -523,7 +522,7 @@ class DataflowAnalysis
                 noProms = false;
         }
         if (!noProms)
-            doCall();
+            doCall(ins);
 
         auto fun = current().pop();
 
@@ -536,7 +535,7 @@ class DataflowAnalysis
             }
         }
         if (!safeTarget) {
-            doCall();
+            doCall(ins);
             current().push(FValue::Any(ins));
         } else {
             current().push(FValue::Value(ins));
@@ -553,7 +552,7 @@ class DataflowAnalysis
                 noProms = false;
         }
         if (!noProms)
-            doCall();
+            doCall(ins);
 
         bool safeTarget = false;
         if (TYPEOF(fun) == BUILTINSXP || TYPEOF(fun) == SPECIALSXP) {
@@ -561,7 +560,7 @@ class DataflowAnalysis
             safeTarget = isSafeBuiltin(prim);
         }
         if (!safeTarget) {
-            doCall();
+            doCall(ins);
             current().push(FValue::Any(ins));
         } else {
             current().push(FValue::Value(ins));
@@ -571,27 +570,15 @@ class DataflowAnalysis
     void dispatch_(CodeEditor::Iterator ins) override {
         // function
         current().pop();
-        doCall();
+        doCall(ins);
         current().push(FValue::Any(ins));
     }
 
     void dispatch_stack_(CodeEditor::Iterator ins) override {
         // function
         current().pop((*ins).immediate.call_args.nargs);
-        doCall();
+        doCall(ins);
         current().push(FValue::Any(ins));
-    }
-
-    void guard_arg_(CodeEditor::Iterator ins) override {
-        BC bc = *ins;
-        SEXP sym = Pool::get(bc.immediate.guard_fun_args.name);
-        current()[sym] = FValue::Argument(sym);
-    }
-
-    void guard_local_(CodeEditor::Iterator ins) override {
-        BC bc = *ins;
-        SEXP sym = Pool::get(bc.immediate.guard_fun_args.name);
-        current()[sym] = FValue::Value();
     }
 
     void guard_fun_(CodeEditor::Iterator ins) override {
@@ -604,7 +591,7 @@ class DataflowAnalysis
         if (current().global().leaksEnvironment &&
             (current()[sym].t == FValue::Type::Argument ||
              current()[sym].t == FValue::Type::Any))
-            doCall();
+            doCall(ins);
         // TODO this is not quite right, since its most likely coming from a
         // parent environment
         // current()[sym] = FValue::Constant(ins);
@@ -621,7 +608,14 @@ class DataflowAnalysis
 
     void label(CodeEditor::Iterator ins) override {}
 
-    void doCall() {
+    void doCall(CodeEditor::Iterator ins) {
+        if ((ins + 1) != code_->end() && (*(ins + 1)).is(BC_t::guard_env_)) {
+            for (auto& e : current().env())
+                if (e.second.t != FValue::Type::Argument)
+                    e.second.mergeWith(FValue::Value());
+            return;
+        }
+
         if (type == Type::NoDelete)
             current().mergeAllEnv(FValue::Any());
         else if (type == Type::NoDeleteNoPromiseStore)
@@ -644,7 +638,7 @@ class DataflowAnalysis
         // pop as many as we need, push as many tops as we need
         current().pop(bc.popCount());
         if (!bc.isPure())
-            doCall();
+            doCall(ins);
 
         switch (bc.bc) {
         // We know those BC do not return promises

@@ -246,30 +246,16 @@ INSTRUCTION(ldddvar_) {
     ostack_push(ctx, val);
 }
 
-INSTRUCTION(guard_arg_) {
-    SEXP sym = readConst(ctx, pc);
-    SEXP val = findVarInFrame(env, sym);
-    readImmediate(pc);
-    assert(val != R_UnboundValue);
-}
-
-INSTRUCTION(guard_local_) {
-    SEXP sym = readConst(ctx, pc);
-    SEXP val = findVarInFrame(env, sym);
-    readImmediate(pc);
-    assert(val != R_UnboundValue);
-    assert(val != R_MissingArg);
-    assert(TYPEOF(val) != PROMSXP);
-}
-
 INSTRUCTION(ldlval_) {
     SEXP sym = readConst(ctx, pc);
     SEXP val = findVarInFrame(env, sym);
     R_Visible = TRUE;
 
+    if (TYPEOF(val) == PROMSXP)
+        val = PRVALUE(val);
+
     assert(val != R_UnboundValue);
     assert(val != R_MissingArg);
-    assert(TYPEOF(val) != PROMSXP);
 
     // WTF? is this just defensive programming or what?
     if (NAMED(val) == 0 && val != R_NilValue)
@@ -477,13 +463,13 @@ INLINE SEXP rirCallClosure(SEXP call, SEXP env, SEXP callee, SEXP actuals,
 
             Function* oldFun = fun;
             SEXP oldBody = body;
+            cp_pool_add(ctx, oldBody);
             body = globalContext()->optimizer(callee);
 
             // TODO: there might be promises with references to the old code!
             // Therefore we keep it around.
             // TODO: first I tried to use R_PreserveObject, but it did not work
             // for large vectors, not sure why, need to investigate
-            cp_pool_add(ctx, oldBody);
             cp_pool_add(ctx, body);
 
             fun->next = body;
@@ -493,6 +479,8 @@ INLINE SEXP rirCallClosure(SEXP call, SEXP env, SEXP callee, SEXP actuals,
             fun->origin = oldBody;
 
             fun->invocationCount = oldFun->invocationCount + 1;
+            fun->envLeaked = oldFun->envLeaked;
+            fun->envChanged = oldFun->envChanged;
 
             optimizing = false;
         } else if (fun->invocationCount < UINT_MAX)
@@ -535,6 +523,11 @@ INLINE SEXP rirCallClosure(SEXP call, SEXP env, SEXP callee, SEXP actuals,
 #else
     assert(false);
 #endif
+
+    if (FRAME_LEAKED(env))
+        fun->envLeaked = true;
+    if (FRAME_CHANGED(env))
+        fun->envChanged = true;
 
     ostack_pop(ctx); // cntxt
     ostack_pop(ctx); // newEnv
@@ -1271,10 +1264,13 @@ INSTRUCTION(missing_) {
 
 INSTRUCTION(stvar_) {
     SEXP sym = readConst(ctx, pc);
+    int wasChanged = FRAME_CHANGED(env);
     SLOWASSERT(TYPEOF(sym) == SYMSXP);
     SEXP val = escape(ostack_pop(ctx));
     INCREMENT_NAMED(val);
     defineVar(sym, val, env);
+    if (!wasChanged)
+        CLEAR_FRAME_CHANGED(env);
 }
 
 INSTRUCTION(aslogical_) {
@@ -1359,12 +1355,20 @@ INSTRUCTION(endcontext_) {
     ostack_pop(ctx); // Context
 }
 
+INLINE void incPerfCount(Code* c) {
+    if (c->perfCounter < UINT_MAX) {
+        c->perfCounter++;
+        if (c->perfCounter == 200000)
+            printCode(c);
+    }
+}
+
 INSTRUCTION(brtrue_) {
     int offset = readJumpOffset(pc);
     if (ostack_pop(ctx) == R_TrueValue) {
         *pc = *pc + offset;
-        if (offset < 0 && c->perfCounter < UINT_MAX)
-            c->perfCounter++;
+        if (offset < 0)
+            incPerfCount(c);
     }
     PC_BOUNDSCHECK(*pc);
 }
@@ -1373,17 +1377,16 @@ INSTRUCTION(brfalse_) {
     int offset = readJumpOffset(pc);
     if (ostack_pop(ctx) == R_FalseValue) {
         *pc = *pc + offset;
-        if (offset < 0 && c->perfCounter < UINT_MAX)
-            c->perfCounter++;
+        if (offset < 0)
+            incPerfCount(c);
     }
     PC_BOUNDSCHECK(*pc);
 }
 
 INSTRUCTION(br_) {
     int offset = readJumpOffset(pc);
-    if (offset < 0 && c->perfCounter < UINT_MAX) {
-        c->perfCounter++;
-    }
+    if (offset < 0)
+        incPerfCount(c);
     *pc = *pc + offset;
     PC_BOUNDSCHECK(*pc);
 }
@@ -1661,6 +1664,12 @@ INSTRUCTION(extract1_) {
 }
 
 INSTRUCTION(dup_) { ostack_push(ctx, ostack_top(ctx)); }
+
+INSTRUCTION(guard_env_) {
+    readImmediate(pc);
+    assert(!FRAME_CHANGED(env) && "Guarded env modified");
+    assert(!FRAME_LEAKED(env) && "Guarded env leaked");
+}
 
 INSTRUCTION(guard_fun_) {
     SEXP sym = readConst(ctx, pc);
@@ -2148,11 +2157,6 @@ void debug(Code* c, OpcodeT* pc, const char* name, unsigned depth,
 SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
     assert(c->magic == CODE_MAGIC);
 
-    // if (c->perfCounter > 200000 && c->perfCounter != UINT_MAX) {
-    //     c->perfCounter = UINT_MAX;
-    //     printCode(c);
-    // }
-
     if (!env)
 	error("'rho' cannot be C NULL: detected in C-level eval");
     if (!isEnvironment(env))
@@ -2224,8 +2228,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
             INS(pull_);
             INS(is_);
             INS(guard_fun_);
-            INS(guard_local_);
-            INS(guard_arg_);
+            INS(guard_env_);
             INS(isfun_);
             INS(inc_);
             INS(dup2_);

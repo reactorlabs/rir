@@ -39,9 +39,8 @@ BC::immediate_t decodeImmediate(BC_t bc, BC_t* pc) {
     case BC_t::static_call_stack_:
         immediate.call_args = *(CallArgs*)pc;
         break;
-    case BC_t::guard_local_:
-    case BC_t::guard_arg_:
-        immediate.guard_local_args = *(GuardLocalArgs*)pc;
+    case BC_t::guard_env_:
+        immediate.guard_id = *(uint32_t*)pc;
         break;
     case BC_t::guard_fun_:
         immediate.guard_fun_args = *(GuardFunArgs*)pc;
@@ -182,15 +181,10 @@ BC BC::ldarg(SEXP sym) {
     i.pool = Pool::insert(sym);
     return BC(BC_t::ldarg_, i);
 }
-BC BC::guardArg(SEXP sym) {
+BC BC::guardEnv() {
     immediate_t i;
-    i.guard_local_args = {Pool::insert(sym), 123};
-    return BC(BC_t::guard_arg_, i);
-}
-BC BC::guardLocal(SEXP sym) {
-    immediate_t i;
-    i.guard_local_args = {Pool::insert(sym), 123};
-    return BC(BC_t::guard_local_, i);
+    i.guard_id = 213;
+    return BC(BC_t::guard_env_, i);
 }
 BC BC::guardName(SEXP sym, SEXP expected) {
     immediate_t i;

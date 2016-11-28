@@ -21,12 +21,12 @@ bool Optimizer::optimize(CodeEditor& code, int steam) {
 }
 
 bool Optimizer::inliner(CodeEditor& code) {
-    StupidInliner inl(code);
     Localizer local(code);
     local.run();
     bool changed = code.changed;
     if (code.changed)
         code.commit();
+    StupidInliner inl(code);
     inl.run();
     changed = changed || code.changed;
     if (code.changed)
@@ -35,11 +35,15 @@ bool Optimizer::inliner(CodeEditor& code) {
 }
 
 SEXP Optimizer::reoptimizeFunction(SEXP s) {
+    Function* fun = (Function*)INTEGER(BODY(s));
+    bool safe = !fun->envLeaked && !fun->envChanged;
+
     CodeEditor code(s);
 
     for (int i = 0; i < 8; ++i) {
-        if (!Optimizer::inliner(code))
-            break;
+        if (safe)
+            if (!Optimizer::inliner(code))
+                break;
         if (!Optimizer::optimize(code, 2))
             break;
     }

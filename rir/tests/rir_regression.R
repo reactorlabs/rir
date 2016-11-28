@@ -66,3 +66,4 @@ function (x)
 })
 for (i in 1:5000) f(c(1,2,3))
 
+(rir.compile(function(a) {a;a}))(1)

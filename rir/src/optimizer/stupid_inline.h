@@ -47,7 +47,7 @@ class StupidInliner {
                 if (!isSafeTarget(cs.target())) {
                     return false;
                 }
-            } else if (bc.is(BC_t::guard_arg_) || bc.is(BC_t::guard_local_)) {
+            } else if (bc.is(BC_t::guard_env_)) {
                 // we want to get rid of the environment, so this checks are
                 // not possible
                 return false;
@@ -75,8 +75,6 @@ class StupidInliner {
                 e.remove();
                 e.insert(*arg);
             }
-
-            assert(bc.bc != BC_t::guard_arg_);
         }
 
         edit.commit();
@@ -153,6 +151,8 @@ class StupidInliner {
 
             cur.remove();
             cur.remove();
+            if (cur.bc().is(BC_t::guard_env_))
+                cur.remove();
 
             cur << BC::guardName(name, t);
 

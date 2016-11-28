@@ -58,30 +58,6 @@ class BCCleanup : public InstructionDispatcher::Receiver {
     }
 
     void ldvar_(CodeEditor::Iterator ins) override {
-        SEXP sym = Pool::get((*ins).immediate.pool);
-        auto v = analysis[ins][sym];
-        if (v.t == FValue::Type::Argument) {
-            auto cur = ins.asCursor(code_);
-            cur.remove();
-            cur << BC::ldarg(sym);
-            return;
-        }
-        if (v.t == FValue::Type::Constant) {
-            SEXP constant = analysis.constant(v);
-            if (TYPEOF(constant) == CLOSXP && TYPEOF(BODY(constant)) != INTSXP)
-                return;
-            auto cur = ins.asCursor(code_);
-            cur.remove();
-            cur << BC::push(constant);
-            return;
-        }
-        if (v.isValue()) {
-            auto cur = ins.asCursor(code_);
-            cur.remove();
-            cur << BC::ldlval(sym);
-            return;
-        }
-
         // double load elimination : ldvar a; ldvar a;
         if (ins != code_.begin()) {
             auto prev = ins - 1;
@@ -185,32 +161,6 @@ class BCCleanup : public InstructionDispatcher::Receiver {
                 cur.remove();
                 return;
             }
-        }
-
-        if (ins != code_.begin()) {
-            CodeEditor::Iterator bubbleUp = ins - 1;
-            while (bubbleUp != code_.begin()) {
-                bubbleUp = bubbleUp - 1;
-                auto cur = *bubbleUp;
-                // We cannot move the guard across those instructions
-                if (cur.is(BC_t::label) || !cur.isPure() || cur.isReturn())
-                    break;
-                if (cur == *ins) {
-                    // This guard is redundant, remove it
-                    ins.asCursor(code_).remove();
-                    break;
-                }
-            }
-        }
-    }
-
-    void guard_local_(CodeEditor::Iterator ins) override {
-        SEXP sym = Pool::get((*ins).immediate.guard_fun_args.name);
-        auto v = analysis[ins][sym];
-        if (v.isValue()) {
-            auto cur = ins.asCursor(code_);
-            cur.remove();
-            return;
         }
 
         if (ins != code_.begin()) {

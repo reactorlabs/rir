@@ -308,6 +308,10 @@ public:
             e.second.mergeWith(v);
     }
 
+    typename std::map<SEXP, AVALUE>::iterator begin() { return env_.begin(); }
+
+    typename std::map<SEXP, AVALUE>::iterator end() { return env_.end(); }
+
 protected:
 
     AbstractEnvironment * parent_ = nullptr;

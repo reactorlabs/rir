@@ -72,10 +72,6 @@ typedef struct {
     uint32_t expected;
     uint32_t id;
 } GuardFunArgs;
-typedef struct {
-    uint32_t name;
-    uint32_t id;
-} GuardLocalArgs;
 #pragma pack(pop)
 
 static constexpr size_t MAX_NUM_ARGS = 1L << (8 * sizeof(pool_idx_t));
@@ -100,7 +96,7 @@ class BC {
     union immediate_t {
         CallArgs call_args;
         GuardFunArgs guard_fun_args;
-        GuardLocalArgs guard_local_args;
+        uint32_t guard_id;
         pool_idx_t pool;
         fun_idx_t fun;
         num_args_t arg_idx;
@@ -176,10 +172,7 @@ class BC {
 
     bool isReturn() { return bc == BC_t::ret_ || bc == BC_t::return_; }
 
-    bool isGuard() {
-        return bc == BC_t::guard_fun_ || bc == BC_t::guard_local_ ||
-               bc == BC_t::guard_arg_;
-    }
+    bool isGuard() { return bc == BC_t::guard_fun_ || bc == BC_t::guard_env_; }
 
     // ==== BC decoding logic
     inline static BC advance(BC_t** pc);
@@ -242,8 +235,7 @@ class BC {
     inline static BC lglAnd();
     inline static BC guardName(SEXP, SEXP);
     inline static BC guardNamePrimitive(SEXP);
-    inline static BC guardLocal(SEXP);
-    inline static BC guardArg(SEXP);
+    inline static BC guardEnv();
     inline static BC isfun();
     inline static BC invisible();
     inline static BC visible();

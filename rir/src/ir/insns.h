@@ -36,7 +36,7 @@ DEF_INSTR(ldlval_, 1, 0, 1, 1)
  */
 DEF_INSTR(ldarg_, 1, 0, 1, 0)
 /**
- * ldarg_:: like ldvar but guaranteed to be an argument
+ * ldarg_:: load argument
  */
 DEF_INSTR(call_, 2, 1, 1, 0)
 /**
@@ -125,14 +125,8 @@ DEF_INSTR(guard_fun_, 3, 0, 0, 1)
 /**
  * guard_fun_:: takes symbol, target, id, checks findFun(symbol) == target
  */
-DEF_INSTR(guard_arg_, 2, 0, 0, 1)
-/**
- * guard_arg_:: takes symbol, id, checks ldvar(symbol) is a local promise
- */
-DEF_INSTR(guard_local_, 2, 0, 0, 1)
-/**
- * guard_local_:: takes symbol, id, checks ldvar(symbol) is local
- */
+DEF_INSTR(guard_env_, 1, 0, 0, 1)
+
 DEF_INSTR(isfun_, 0, 1, 1, 1)
 /**
  * isfun_:: pop object stack, convert to RIR code or assert error, push code to

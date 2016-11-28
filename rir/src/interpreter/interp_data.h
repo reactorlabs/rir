@@ -381,6 +381,10 @@ struct Function {
 
     unsigned invocationCount;
 
+    unsigned envLeaked : 1;
+    unsigned envChanged : 1;
+    unsigned spare : 30;
+
     FunctionSEXP origin; /// Same Function with fewer optimizations,
                          //   NULL if original
 

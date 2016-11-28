@@ -34,10 +34,8 @@ bool BC::operator==(const BC& other) const {
     case BC_t::dispatch_stack_:
         return immediate.call_args.call_id == other.immediate.call_args.call_id;
 
-    case BC_t::guard_local_:
-    case BC_t::guard_arg_:
-        return immediate.guard_local_args.name ==
-               other.immediate.guard_local_args.name;
+    case BC_t::guard_env_:
+        return immediate.guard_id == other.immediate.guard_id;
 
     case BC_t::guard_fun_:
         return immediate.guard_fun_args.name ==
@@ -128,9 +126,8 @@ void BC::write(CodeStream& cs) const {
         cs.insert(immediate.pool);
         return;
 
-    case BC_t::guard_local_:
-    case BC_t::guard_arg_:
-        cs.insert(immediate.guard_local_args);
+    case BC_t::guard_env_:
+        cs.insert(immediate.guard_id);
         return;
 
     case BC_t::guard_fun_:
@@ -346,12 +343,6 @@ void BC::print(CallSite cs) {
     case BC_t::missing_:
         Rprintf(" %u # %s", immediate.pool, CHAR(PRINTNAME((immediateConst()))));
         break;
-    case BC_t::guard_arg_:
-    case BC_t::guard_local_: {
-        SEXP name = Pool::get(immediate.guard_local_args.name);
-        Rprintf(" %s local?!", CHAR(PRINTNAME(name)));
-        break;
-    }
     case BC_t::guard_fun_: {
         SEXP name = Pool::get(immediate.guard_fun_args.name);
         Rprintf(" %s == %p", CHAR(PRINTNAME(name)),
@@ -367,6 +358,7 @@ void BC::print(CallSite cs) {
     case BC_t::alloc_:
         Rprintf(" %s", type2char(immediate.i));
         break;
+    case BC_t::guard_env_:
     case BC_t::force_:
     case BC_t::pop_:
     case BC_t::seq_:

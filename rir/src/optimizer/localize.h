@@ -8,35 +8,60 @@ namespace rir {
 class Localizer : public InstructionDispatcher::Receiver {
   public:
     DataflowAnalysis<Type::Conservative> analysis;
-    DataflowAnalysis<Type::NoDeleteNoPromiseStore> optimisticAnalysis;
     InstructionDispatcher dispatcher;
     CodeEditor& code_;
+    CodeEditor::Iterator lastCall;
+    bool steam;
 
     Localizer(CodeEditor& code) : dispatcher(*this), code_(code) {}
 
-    void ldfun_(CodeEditor::Iterator ins) override {}
+    void call_(CodeEditor::Iterator ins) override { lastCall = ins; }
+
+    void dispatch_(CodeEditor::Iterator ins) override { lastCall = ins; }
+
+    void call_stack_(CodeEditor::Iterator ins) override { lastCall = ins; }
+
+    void dispatch_stack_(CodeEditor::Iterator ins) override { lastCall = ins; }
+
+    void static_call_stack_(CodeEditor::Iterator ins) override {
+        lastCall = ins;
+    }
 
     void ldvar_(CodeEditor::Iterator ins) override {
-        SEXP sym = Pool::get((*ins).immediate.pool);
-        auto cv = analysis[ins][sym];
-        auto ov = optimisticAnalysis[ins][sym];
-        if (!cv.isPresent() && ov.isValue()) {
+        SEXP sym = (*ins).immediateConst();
+        auto v = analysis[ins][sym];
+
+        if (v.t == FValue::Type::Argument) {
             auto cur = ins.asCursor(code_);
             cur.remove();
-            cur << BC::guardLocal(sym) << BC::ldlval(sym);
+            cur << BC::ldarg(sym);
             return;
         }
-        if (!cv.isPresent() && ov.t == FValue::Type::Argument) {
+        if (v.t == FValue::Type::Constant) {
+            SEXP constant = analysis.constant(v);
+            if (TYPEOF(constant) == CLOSXP && TYPEOF(BODY(constant)) != INTSXP)
+                return;
             auto cur = ins.asCursor(code_);
             cur.remove();
-            cur << BC::guardArg(sym) << BC::ldarg(sym);
+            cur << BC::push(constant);
             return;
+        }
+        if (v.isValue()) {
+            auto cur = ins.asCursor(code_);
+            cur.remove();
+            cur << BC::ldlval(sym);
+            return;
+        }
+
+        if (steam && lastCall != code_.end()) {
+            (lastCall + 1).asCursor(code_) << BC::guardEnv();
+            steam = false;
         }
     }
 
     void run() {
         analysis.analyze(code_);
-        optimisticAnalysis.analyze(code_);
+        lastCall = code_.end();
         for (auto i = code_.begin(); i != code_.end(); ++i) {
             dispatcher.dispatch(i);
         }

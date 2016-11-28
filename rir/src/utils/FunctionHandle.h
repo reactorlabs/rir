@@ -34,6 +34,8 @@ class FunctionHandle {
         Function* function = new (payload) Function;
         assert(function == payload);
         function->magic = FUNCTION_MAGIC;
+        function->envLeaked = false;
+        function->envChanged = false;
         function->size = sizeof(Function);
         function->origin = nullptr;
         function->next = nullptr;
