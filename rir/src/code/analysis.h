@@ -247,6 +247,8 @@ protected:
         while (currentIns_ != code_->end()) {
             if (currentIns_ == ins)
                 return;
+            if ((*currentIns_).isReturn())
+                break;
             // advance the state using dispatcher
             advance();
         }

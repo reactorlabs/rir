@@ -56,15 +56,21 @@ class Localizer : public InstructionDispatcher::Receiver {
         }
 
         if (steam && lastCall != code_.end()) {
-            (lastCall + 1).asCursor(code_) << BC::guardEnv();
-            steam = false;
+            auto cs = lastCall.callSite();
+            if (cs.hasProfile() && !cs.profile()->taken)
+                return;
+            auto vb = analysis[lastCall][sym];
+            if (vb.isValue()) {
+                (lastCall + 1).asCursor(code_) << BC::guardEnv();
+                steam = false;
+            }
         }
     }
 
     void run() {
         steam = initSteam;
-        analysis.analyze(code_);
         lastCall = code_.end();
+        analysis.analyze(code_);
         for (auto i = code_.begin(); i != code_.end(); ++i) {
             dispatcher.dispatch(i);
         }

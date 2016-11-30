@@ -38,15 +38,16 @@ SEXP Optimizer::reoptimizeFunction(SEXP s) {
     Function* fun = (Function*)INTEGER(BODY(s));
     bool safe = !fun->envLeaked && !fun->envChanged;
 
+    // TODO: this currently triggers too often, we need to have OSR to enable
+    // it
+    safe = false;
+
     CodeEditor code(s);
 
-    // TODO: need to figure out why envs still leak after they look stable in
-    // the beginning...
-    safe = false;
-    for (int i = 0; i < 8; ++i) {
-        if (!Optimizer::inliner(code, safe))
-            break;
-        if (!Optimizer::optimize(code, 2))
+    for (int i = 0; i < 16; ++i) {
+        bool changedInl = Optimizer::inliner(code, safe);
+        bool changedOpt = Optimizer::optimize(code, 2);
+        if (!changedInl && !changedOpt)
             break;
     }
 

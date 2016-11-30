@@ -456,9 +456,9 @@ INLINE SEXP rirCallClosure(SEXP call, SEXP env, SEXP callee, SEXP actuals,
 
     if (!optimizing) {
         Code* code = functionCode(fun);
-        if ((fun->invocationCount == 1 && code->perfCounter > 400) ||
-            (fun->invocationCount == 10 && code->perfCounter > 800) ||
-            fun->invocationCount == 200) {
+        if ((fun->invocationCount == 1 && code->perfCounter > 100) ||
+            (fun->invocationCount == 10 && code->perfCounter > 20) ||
+            fun->invocationCount == 100) {
             optimizing = true;
 
             Function* oldFun = fun;
@@ -524,9 +524,9 @@ INLINE SEXP rirCallClosure(SEXP call, SEXP env, SEXP callee, SEXP actuals,
     assert(false);
 #endif
 
-    if (FRAME_LEAKED(env))
+    if (!fun->envLeaked && FRAME_LEAKED(newEnv))
         fun->envLeaked = true;
-    if (FRAME_CHANGED(env))
+    if (!fun->envChanged && FRAME_CHANGED(newEnv))
         fun->envChanged = true;
 
     ostack_pop(ctx); // cntxt
@@ -1358,8 +1358,8 @@ INSTRUCTION(endcontext_) {
 INLINE void incPerfCount(Code* c) {
     if (c->perfCounter < UINT_MAX) {
         c->perfCounter++;
-        if (c->perfCounter == 200000)
-            printCode(c);
+        // if (c->perfCounter == 200000)
+        //     printCode(c);
     }
 }
 
