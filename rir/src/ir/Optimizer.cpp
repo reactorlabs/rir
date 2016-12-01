@@ -38,10 +38,6 @@ SEXP Optimizer::reoptimizeFunction(SEXP s) {
     Function* fun = (Function*)INTEGER(BODY(s));
     bool safe = !fun->envLeaked && !fun->envChanged;
 
-    // TODO: this currently triggers too often, we need to have OSR to enable
-    // it
-    safe = false;
-
     CodeEditor code(s);
 
     for (int i = 0; i < 16; ++i) {

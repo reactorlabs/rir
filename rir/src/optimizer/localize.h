@@ -2,6 +2,7 @@
 #define RIR_LOCALIZE_H
 
 #include "code/dataflow.h"
+#include "interpreter/deoptimizer.h"
 
 namespace rir {
 
@@ -60,9 +61,15 @@ class Localizer : public InstructionDispatcher::Receiver {
             if (cs.hasProfile() && !cs.profile()->taken)
                 return;
             auto vb = analysis[lastCall][sym];
-            if (vb.isValue()) {
-                (lastCall + 1).asCursor(code_) << BC::guardEnv();
-                steam = false;
+            if (vb.isValue() || vb.t == FValue::Type::Argument) {
+                if (lastCall.hasOrigin()) {
+                    BC_t* deoptTarget = lastCall.origin();
+                    BC::advance(&deoptTarget);
+                    uint32_t deoptId =
+                        Deoptimizer_register((OpcodeT*)deoptTarget);
+                    (lastCall + 1).asCursor(code_) << BC::guardEnv(deoptId);
+                    steam = false;
+                }
             }
         }
     }

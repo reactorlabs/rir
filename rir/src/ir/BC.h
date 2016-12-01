@@ -181,14 +181,15 @@ BC BC::ldarg(SEXP sym) {
     i.pool = Pool::insert(sym);
     return BC(BC_t::ldarg_, i);
 }
-BC BC::guardEnv() {
+BC BC::guardEnv(uint32_t id) {
     immediate_t i;
-    i.guard_id = 213;
+    i.guard_id = id;
     return BC(BC_t::guard_env_, i);
 }
 BC BC::guardName(SEXP sym, SEXP expected) {
     immediate_t i;
-    i.guard_fun_args = {Pool::insert(sym), Pool::insert(expected), 123};
+    i.guard_fun_args = {Pool::insert(sym), Pool::insert(expected),
+                        NO_DEOPT_INFO};
     return BC(BC_t::guard_fun_, i);
 }
 BC BC::guardNamePrimitive(SEXP sym) {
@@ -196,7 +197,7 @@ BC BC::guardNamePrimitive(SEXP sym) {
     assert(TYPEOF(sym) == SYMSXP);
     SEXP prim = CDR(sym);
     assert(TYPEOF(prim) == SPECIALSXP || TYPEOF(prim) == BUILTINSXP);
-    i.guard_fun_args = {Pool::insert(sym), Pool::insert(prim), 123};
+    i.guard_fun_args = {Pool::insert(sym), Pool::insert(prim), NO_DEOPT_INFO};
     return BC(BC_t::guard_fun_, i);
 }
 BC BC::push_code(fun_idx_t prom) {

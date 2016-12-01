@@ -5,7 +5,7 @@
 #include "interp_context.h"
 #include "runtime.h"
 #include "R/Funtab.h"
-
+#include "interpreter/deoptimizer.h"
 
 #define NOT_IMPLEMENTED assert(false)
 
@@ -177,7 +177,7 @@ extern void Rf_endcontext(RCNTXT*);
 // handling
 #define INSTRUCTION(name)                                                      \
     INLINE void ins_##name(Code* c, SEXP env, OpcodeT** pc, Context* ctx,      \
-                           unsigned numArgs)
+                           unsigned numArgs, Code** cStore)
 
 INSTRUCTION(push_) {
     SEXP x = readConst(ctx, pc);
@@ -454,7 +454,7 @@ INLINE SEXP rirCallClosure(SEXP call, SEXP env, SEXP callee, SEXP actuals,
 
     static bool optimizing = false;
 
-    if (!optimizing) {
+    if (!optimizing && !fun->next) {
         Code* code = functionCode(fun);
         if ((fun->invocationCount == 1 && code->perfCounter > 100) ||
             (fun->invocationCount == 10 && code->perfCounter > 20) ||
@@ -528,6 +528,9 @@ INLINE SEXP rirCallClosure(SEXP call, SEXP env, SEXP callee, SEXP actuals,
         fun->envLeaked = true;
     if (!fun->envChanged && FRAME_CHANGED(newEnv))
         fun->envChanged = true;
+
+    if (fun->deopt)
+        SET_BODY(callee, fun->origin);
 
     ostack_pop(ctx); // cntxt
     ostack_pop(ctx); // newEnv
@@ -1666,9 +1669,17 @@ INSTRUCTION(extract1_) {
 INSTRUCTION(dup_) { ostack_push(ctx, ostack_top(ctx)); }
 
 INSTRUCTION(guard_env_) {
-    readImmediate(pc);
-    assert(!FRAME_CHANGED(env) && "Guarded env modified");
-    assert(!FRAME_LEAKED(env) && "Guarded env leaked");
+    uint32_t deoptId = readImmediate(pc);
+    if (FRAME_CHANGED(env) || FRAME_LEAKED(env)) {
+        Function* fun = function(c);
+        assert(functionCode(fun) == c && "Cannot deopt from promise");
+        fun->deopt = true;
+        SEXP deopt = fun->origin;
+        Function* deoptFun = (Function*)INTEGER(deopt);
+        Code* deoptCode = functionCode(deoptFun);
+        *cStore = deoptCode;
+        *pc = Deoptimizer_pc(deoptId);
+    }
 }
 
 INSTRUCTION(guard_fun_) {
@@ -2180,7 +2191,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
 
 #define INS(name)                                                              \
     case name:                                                                 \
-        ins_##name(c, env, &pc, ctx, numArgs);                                 \
+        ins_##name(c, env, &pc, ctx, numArgs, &c);                             \
         debug(c, pc, #name, ostack_length(ctx) - bp, ctx);                     \
         break
 

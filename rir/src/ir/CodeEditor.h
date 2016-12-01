@@ -45,11 +45,13 @@ class CodeEditor {
 #pragma pack(1)
     struct BytecodeList {
         BytecodeList() {}
+        explicit BytecodeList(BC_t* pos) : origin(pos) {}
         BytecodeList(BC bc, BytecodeList* prev, BytecodeList* next)
             : bc(bc), prev(prev), next(next) {}
 
-        BC bc;
         bool deleted = false;
+        BC_t* origin = nullptr;
+        BC bc;
         unsigned srcIdx = 0;
         CallSiteStruct* callSite = nullptr;
         BytecodeList* prev = nullptr;
@@ -132,6 +134,13 @@ class CodeEditor {
         SEXP src() const { return pos->src(); }
 
         CallSite callSite() const { return CallSite(pos->bc, pos->callSite); }
+
+        bool hasOrigin() { return pos->origin; }
+
+        BC_t* origin() {
+            assert(pos->origin);
+            return pos->origin;
+        }
 
         bool deleted() const { return pos->deleted; }
 

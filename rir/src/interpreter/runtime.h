@@ -80,5 +80,4 @@ C_OR_CPP void initializeRuntime(CompilerCallback compiler,
  */
 C_OR_CPP Context* globalContext();
 
-
 #endif

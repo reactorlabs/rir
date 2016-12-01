@@ -9,6 +9,8 @@
 #include "R/r.h"
 #include "R/Funtab.h"
 
+#include "interpreter/deoptimizer.h"
+
 namespace rir {
 
 bool BC::operator==(const BC& other) const {
@@ -359,6 +361,9 @@ void BC::print(CallSite cs) {
         Rprintf(" %s", type2char(immediate.i));
         break;
     case BC_t::guard_env_:
+        Deoptimizer_print(immediate.guard_id);
+        Rprintf("\n");
+        break;
     case BC_t::force_:
     case BC_t::pop_:
     case BC_t::seq_:

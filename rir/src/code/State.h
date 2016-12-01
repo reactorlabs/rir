@@ -144,6 +144,14 @@ public:
         }
     }
 
+    typename std::deque<AVALUE>::const_iterator const begin() const {
+        return stack_.begin();
+    }
+
+    typename std::deque<AVALUE>::const_iterator const end() const {
+        return stack_.end();
+    }
+
 protected:
     std::deque<AVALUE> stack_;
 };

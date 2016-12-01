@@ -235,7 +235,7 @@ class BC {
     inline static BC lglAnd();
     inline static BC guardName(SEXP, SEXP);
     inline static BC guardNamePrimitive(SEXP);
-    inline static BC guardEnv();
+    inline static BC guardEnv(uint32_t id);
     inline static BC isfun();
     inline static BC invisible();
     inline static BC visible();

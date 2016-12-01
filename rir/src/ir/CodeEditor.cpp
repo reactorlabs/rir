@@ -56,7 +56,7 @@ void CodeEditor::loadCode(FunctionHandle function, CodeHandle code) {
         BC_t* end = (BC_t*)((uintptr_t)pc + code.code->codeSize);
 
         while (pc != end) {
-            pos->next = new BytecodeList();
+            pos->next = new BytecodeList(pc);
             auto prev = pos;
             pos = pos->next;
             pos->prev = prev;

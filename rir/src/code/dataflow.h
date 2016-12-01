@@ -386,6 +386,12 @@ class DataflowAnalysis
         return result;
     }
 
+    void guard_env_(CodeEditor::Iterator ins) override {
+        // Make sure that the stack remains unchanged across guards
+        for (auto v : current().stack())
+            v.used(ins);
+    }
+
     void swap_(CodeEditor::Iterator ins) override {
         auto a = current().pop();
         auto b = current().pop();

@@ -36,6 +36,7 @@ class FunctionHandle {
         function->magic = FUNCTION_MAGIC;
         function->envLeaked = false;
         function->envChanged = false;
+        function->deopt = false;
         function->size = sizeof(Function);
         function->origin = nullptr;
         function->next = nullptr;

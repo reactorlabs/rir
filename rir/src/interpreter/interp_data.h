@@ -383,7 +383,8 @@ struct Function {
 
     unsigned envLeaked : 1;
     unsigned envChanged : 1;
-    unsigned spare : 30;
+    unsigned deopt : 1;
+    unsigned spare : 29;
 
     FunctionSEXP origin; /// Same Function with fewer optimizations,
                          //   NULL if original
@@ -441,6 +442,8 @@ INLINE Code* end(Function* f) { return (Code*)((uint8_t*)f + f->size); }
 INLINE Code* codeAt(Function* f, unsigned offset) {
     return (Code*)((uint8_t*)f + offset);
 }
+
+const static uint32_t NO_DEOPT_INFO = (uint32_t)-1;
 
 #ifdef __cplusplus
 }
