@@ -456,12 +456,17 @@ class DataflowAnalysis
     }
 
     FValue forceProm(FValue val, CodeEditor::Iterator ins) {
+        // If the local environment might have been leaked and we don't know if
+        // that the promise was forced already, we have to assume the worst
+        // (ie. its as bad as calling random code).
         if (!val.isValue() && current().global().leaksEnvironment)
             doCall(ins);
 
+        // If the promise is forced already we might know more
         if (val.isValue())
             return val.duplicate(ins);
 
+        // The result of forcing a promise is some value
         return FValue::Value(ins);
     }
 
@@ -614,7 +619,12 @@ class DataflowAnalysis
 
     void label(CodeEditor::Iterator ins) override {}
 
+    // Deal with the impact on the local environment when calling random code
     void doCall(CodeEditor::Iterator ins) {
+        // If the call is proceeded by a guard, we can assume that:
+        // 1. No binding gets deleted
+        // 2. Arguments are not overwritten
+        // 3. The environment is not leaked
         if ((ins + 1) != code_->end() && (*(ins + 1)).is(BC_t::guard_env_)) {
             for (auto& e : current().env())
                 if (e.second.t != FValue::Type::Argument)
@@ -622,6 +632,8 @@ class DataflowAnalysis
             return;
         }
 
+        // Depending on the type of analysis, we apply different strategies.
+        // Only Type::Conservative is sound!
         if (type == Type::NoDelete)
             current().mergeAllEnv(FValue::Any());
         else if (type == Type::NoDeleteNoPromiseStore)
