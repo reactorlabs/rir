@@ -34,6 +34,8 @@ class Localizer : public InstructionDispatcher::Receiver {
         SEXP sym = (*ins).immediateConst();
         auto v = analysis[ins][sym];
 
+        // Try to convert generic ldvar instruction to a more specialized
+        // version
         if (v.t == FValue::Type::Argument) {
             auto cur = ins.asCursor(code_);
             cur.remove();
@@ -56,18 +58,30 @@ class Localizer : public InstructionDispatcher::Receiver {
             return;
         }
 
+        // Lets see if there was a call before this ldvar and if before that
+        // call we knew that the variable is a local variable or argument.
+        // If that's the case, we insert a guard_env instruction after the call
+        // to optimistically assume this is still the case after the call.
+        // TODO: right now we do not immediately use the new won knowledge,
+        // since for that we'd have to rerun the analysis, which we cannot,
+        // since the code is not commited yet. Therefore the effect of the
+        // guard_env on this ldvar-site will only become apparent on the next
+        // run of this optimization pass (we assume it's run multiple times).
+
         if (steam && lastCall != code_.end()) {
-            auto cs = lastCall.callSite();
-            if (cs.hasProfile() && !cs.profile()->taken)
-                return;
             auto vb = analysis[lastCall][sym];
             if (vb.isValue() || vb.t == FValue::Type::Argument) {
                 if (lastCall.hasOrigin()) {
+                    // Get a new deopt id for this guard, pointing to the pc
+                    // right after the call.
                     BC_t* deoptTarget = lastCall.origin();
                     BC::advance(&deoptTarget);
                     uint32_t deoptId =
                         Deoptimizer_register((OpcodeT*)deoptTarget);
+                    // Insert the guard
                     (lastCall + 1).asCursor(code_) << BC::guardEnv(deoptId);
+                    // Prevent multiple guards being inserted before the
+                    // analysis was rerun.
                     steam = false;
                 }
             }
