@@ -553,10 +553,10 @@ void warnSpecial(SEXP callee, SEXP call) {
 
     return;
     if (((sexprec_rjit*)callee)->u.i == 26) {
-        printf("warning: calling special: .Internal(%s\n",
+        Rprintf("warning: calling special: .Internal(%s\n",
                 CHAR(PRINTNAME(CAR(CADR(call)))));
     } else {
-        printf("warning: calling special: %s\n",
+        Rprintf("warning: calling special: %s\n",
                 R_FunTab[((sexprec_rjit*)callee)->u.i].name);
     }
 }

@@ -296,25 +296,25 @@ class FValue {
     void print() const {
         switch (t) {
         case Type::Constant:
-            std::cout << "const(" << singleDef() << used() << ")";
+            Rprintf("const(%d%d)", singleDef(), used());
             break;
         case Type::Argument:
-            std::cout << "arg " << argument;
+            Rprintf("arg %d", argument);
             break;
         case Type::Bottom:
-            std::cout << "??";
+            Rprintf("??");
             break;
         case Type::Absent:
-            std::cout << "absent";
+            Rprintf("absent");
             break;
         case Type::Value:
-            std::cout << "Value";
+            Rprintf("Value");
             break;
         case Type::Maybe:
-            std::cout << "Maybe";
+            Rprintf("Maybe");
             break;
         case Type::Any:
-            std::cout << "Any";
+            Rprintf("Any");
             break;
         }
     }

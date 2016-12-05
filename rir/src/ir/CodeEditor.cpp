@@ -164,7 +164,7 @@ void CodeEditor::print(bool verbose) {
 
     for (auto cur = getCursor(); !cur.atEnd(); cur.advance()) {
         if (cur.src()) {
-            std::cout << "     # ";
+            Rprintf("     # ");
             Rf_PrintValue(cur.src());
         }
         BC bc = cur.bc();
@@ -177,17 +177,17 @@ void CodeEditor::print(bool verbose) {
                     SEXP sym = bc.immediateConst();
                     auto v = analysis[cur][sym];
                     auto sv = specAnalysis[cur][sym];
-                    std::cout << "   ~~ ";
+                    Rprintf("   ~~ ");
                     if (v.t == FValue::Type::Argument)
-                        std::cout << "argument\n";
+                        Rprintf("argument\n");
                     else if (v.isPresent())
-                        std::cout << "local\n";
+                        Rprintf("local\n");
                     else if (sv.t == FValue::Type::Argument)
-                        std::cout << "probably argument\n";
+                        Rprintf("probably argument\n");
                     else if (sv.isPresent())
-                        std::cout << "probably local\n";
+                        Rprintf("probably local\n");
                     else
-                        std::cout << "??\n";
+                        Rprintf("??\n");
                 } else if (bc.popCount() > 0) {
                     bool assumedIsBetter = false;
                     for (int i = bc.popCount() - 1; i >= 0; --i) {
@@ -198,19 +198,19 @@ void CodeEditor::print(bool verbose) {
                         }
                     }
 
-                    std::cout << "   ~~ TOS : ";
+                    Rprintf("   ~~ TOS : ");
                     for (int i = bc.popCount() - 1; i >= 0; --i) {
                         analysis[cur].stack()[i].print();
-                        std::cout << ", ";
+                        Rprintf(", ");
                     }
                     if (assumedIsBetter) {
-                        std::cout << "  /  Assumed: ";
+                        Rprintf("  /  Assumed: ");
                         for (int i = bc.popCount() - 1; i >= 0; --i) {
                             specAnalysis[cur].stack()[i].print();
-                            std::cout << ", ";
+                            Rprintf(", ");
                         }
                     }
-                    std::cout << "\n";
+                    Rprintf("\n");
                 }
             }
         }
@@ -222,8 +222,8 @@ void CodeEditor::print(bool verbose) {
         if (!p)
             continue;
 
-        std::cout << "------------------------\n";
-        std::cout << "@" << (void*)(long)(i-1) << "\n";
+        Rprintf("------------------------\n");
+        Rprintf("@%d\n", (void*)(long)(i - 1));
         p->print();
     }
 }

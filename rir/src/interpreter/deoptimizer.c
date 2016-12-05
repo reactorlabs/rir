@@ -56,7 +56,7 @@ static DeoptInfo* DeoptInfo_get(uint32_t idx) {
 void Deoptimizer_print(uint32_t idx) {
     assert(idx != NO_DEOPT_INFO);
     DeoptInfo* i = DeoptInfo_get(idx);
-    printf("[d#%d: %p]", idx, i->oldPc);
+    Rprintf("[d#%d: %p]", idx, i->oldPc);
 }
 
 OpcodeT* Deoptimizer_pc(uint32_t idx) {

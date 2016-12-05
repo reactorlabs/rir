@@ -128,7 +128,7 @@ class StupidInliner {
             }
 
             if (cur.bc().bc != BC_t::ldfun_) {
-                printf("cannot inline, did not find ldfun\n");
+                Rprintf("cannot inline, did not find ldfun\n");
                 continue;
             }
 
