@@ -43,6 +43,7 @@ class FunctionHandle {
         function->codeLength = 0;
         function->foffset = 0;
         function->invocationCount = 0;
+        function->markOpt = false;
 
         return FunctionHandle(store);
     }

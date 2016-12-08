@@ -115,6 +115,15 @@ REXPORT SEXP rir_compile(SEXP what) {
     }
 }
 
+REXPORT SEXP rir_markOptimize(SEXP what) {
+    assert(TYPEOF(what) == CLOSXP);
+    SEXP b = BODY(what);
+    isValidFunctionSEXP(b);
+    Function* fun = (Function*)INTEGER(b);
+    fun->markOpt = true;
+    return R_NilValue;
+}
+
 REXPORT SEXP rir_jitDisable(SEXP expression) {
     if (rirJitEnabled == 2)
         Rf_error("enabled sticky, cannot disable");

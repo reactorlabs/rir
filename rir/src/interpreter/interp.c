@@ -456,7 +456,8 @@ INLINE SEXP rirCallClosure(SEXP call, SEXP env, SEXP callee, SEXP actuals,
 
     if (!optimizing && !fun->next) {
         Code* code = functionCode(fun);
-        if ((fun->invocationCount == 1 && code->perfCounter > 100) ||
+        if (fun->markOpt ||
+            (fun->invocationCount == 1 && code->perfCounter > 100) ||
             (fun->invocationCount == 10 && code->perfCounter > 20) ||
             fun->invocationCount == 100) {
             optimizing = true;

@@ -384,7 +384,8 @@ struct Function {
     unsigned envLeaked : 1;
     unsigned envChanged : 1;
     unsigned deopt : 1;
-    unsigned spare : 29;
+    unsigned markOpt : 1;
+    unsigned spare : 28;
 
     FunctionSEXP origin; /// Same Function with fewer optimizations,
                          //   NULL if original

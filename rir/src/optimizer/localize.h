@@ -18,6 +18,8 @@ class Localizer : public InstructionDispatcher::Receiver {
     Localizer(CodeEditor& code, bool envIsStable)
         : dispatcher(*this), code_(code), initSteam(envIsStable) {}
 
+    void asbool_(CodeEditor::Iterator ins) override { lastCall = ins; }
+
     void call_(CodeEditor::Iterator ins) override { lastCall = ins; }
 
     void dispatch_(CodeEditor::Iterator ins) override { lastCall = ins; }

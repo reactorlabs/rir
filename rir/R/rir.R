@@ -12,6 +12,10 @@ rir.disableJit <- function() {
 }
 
 
+rir.markOptimize <- function(what) {
+    .Call("rir_markOptimize", what);
+}
+
 # Returns TRUE if the argument is a rir-compiled closure.
 rir.isValidFunction <- function(what) {
     .Call("rir_isValidFunction", what);
