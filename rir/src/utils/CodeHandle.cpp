@@ -14,7 +14,7 @@
 namespace rir {
 
 void CodeHandle::print() {
-    BC_t* pc = (BC_t*)bc();
+    Opcode* pc = (Opcode*)bc();
 
     while ((uintptr_t)pc < (uintptr_t)endBc()) {
         unsigned s = getSrcIdxAt(code, (OpcodeT*)pc, true);
@@ -37,15 +37,15 @@ FunctionHandle CodeHandle::function() {
     return (SEXP)((uintptr_t)::function(code) - FUNCTION_OFFSET);
 }
 
-fun_idx_t CodeHandle::idx() {
-        fun_idx_t i = 0;
-        for (auto c : function()) {
-            if (c == code)
-                return i;
-            ++i;
-        }
-        assert(false);
-        return -1;
+FunIdxT CodeHandle::idx() {
+    FunIdxT i = 0;
+    for (auto c : function()) {
+        if (c == code)
+            return i;
+        ++i;
+    }
+    assert(false);
+    return -1;
 }
 
 }

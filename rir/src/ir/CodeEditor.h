@@ -45,12 +45,12 @@ class CodeEditor {
 #pragma pack(1)
     struct BytecodeList {
         BytecodeList() {}
-        explicit BytecodeList(BC_t* pos) : origin(pos) {}
+        explicit BytecodeList(Opcode* pos) : origin(pos) {}
         BytecodeList(BC bc, BytecodeList* prev, BytecodeList* next)
             : bc(bc), prev(prev), next(next) {}
 
         bool deleted = false;
-        BC_t* origin = nullptr;
+        Opcode* origin = nullptr;
         BC bc;
         unsigned srcIdx = 0;
         CallSiteStruct* callSite = nullptr;
@@ -137,7 +137,7 @@ class CodeEditor {
 
         bool hasOrigin() { return pos->origin; }
 
-        BC_t* origin() {
+        Opcode* origin() {
             assert(pos->origin);
             return pos->origin;
         }
@@ -239,7 +239,7 @@ class CodeEditor {
         CallSite callSite() { return CallSite(pos->bc, pos->callSite); }
 
         // TODO this breaks when inserting before the first instruction....
-        Cursor& operator<<(Label l) { return *this << BC::label(l); }
+        Cursor& operator<<(LabelT l) { return *this << BC::label(l); }
 
         Cursor& operator<<(BC bc) {
             editor.changed = true;
@@ -276,7 +276,7 @@ class CodeEditor {
                 prev->patch = insert;
             }
 
-            if (bc.bc == BC_t::label)
+            if (bc.bc == Opcode::label)
                 editor.labels_[insert->bc.immediate.offset] = insert;
 
             pos = next;
@@ -287,18 +287,18 @@ class CodeEditor {
             editor.changed = true;
 
             // Merge labels
-            std::unordered_map<fun_idx_t, fun_idx_t> labelRewrite;
+            std::unordered_map<FunIdxT, FunIdxT> labelRewrite;
             for (auto l : other.labels_)
                 if (l)
                     labelRewrite[l->bc.immediate.offset] = editor.mkLabel();
 
             // Merge promises
             size_t proms = editor.promises.size();
-            std::unordered_map<fun_idx_t, fun_idx_t> duplicate;
-            fun_idx_t j = 0;
+            std::unordered_map<FunIdxT, FunIdxT> duplicate;
+            FunIdxT j = 0;
             for (auto& p : other.promises) {
                 bool found = false;
-                for (fun_idx_t i = 0; i < editor.promises.size(); ++i) {
+                for (FunIdxT i = 0; i < editor.promises.size(); ++i) {
                     if (p == editor.promises[i]) {
                         duplicate[j] = i;
                         editor.promises.push_back(nullptr);
@@ -317,7 +317,7 @@ class CodeEditor {
             bool first = true;
             for (auto cur = other.begin(); cur != other.end(); ++cur) {
 
-                if ((*cur).is(BC_t::label)) {
+                if ((*cur).is(Opcode::label)) {
                     *this << BC::label(labelRewrite[(*cur).immediate.offset]);
                     continue;
                 }
@@ -342,8 +342,8 @@ class CodeEditor {
                     memcpy(insert->callSite, oldCs.cs, needed);
                 }
                 // Fix prom offsets
-                if (insert->bc.bc == BC_t::call_ ||
-                    insert->bc.bc == BC_t::dispatch_) {
+                if (insert->bc.bc == Opcode::call_ ||
+                    insert->bc.bc == Opcode::dispatch_) {
                     auto cs = insert->callSite;
                     for (unsigned i = 0; i < cs->nargs; ++i) {
                         auto idx = CallSite_args(cs)[i];
@@ -358,8 +358,8 @@ class CodeEditor {
                                editor.promises[idx]);
                         CallSite_args(cs)[i] = idx;
                     }
-                } else if (insert->bc.bc == BC_t::promise_ ||
-                           insert->bc.bc == BC_t::push_code_) {
+                } else if (insert->bc.bc == Opcode::promise_ ||
+                           insert->bc.bc == Opcode::push_code_) {
                     auto idx = insert->bc.immediate.fun;
                     if (duplicate.count(idx))
                         idx = duplicate.at(idx);
@@ -442,11 +442,11 @@ class CodeEditor {
     }
 
     void normalizeForInline() {
-        Label endL = mkLabel();
+        LabelT endL = mkLabel();
         end().asCursor(*this) << BC::label(endL);
         for (auto i = begin(); i != end(); ++i) {
             auto bc = *i;
-            if (bc.bc == BC_t::ret_) {
+            if (bc.bc == Opcode::ret_) {
                 CodeEditor::Cursor e = i.asCursor(*this);
                 e.remove();
                 if ((i + 1) != end())
@@ -456,7 +456,7 @@ class CodeEditor {
         commit();
     }
 
-    CodeEditor* detachPromise(fun_idx_t idx) {
+    CodeEditor* detachPromise(FunIdxT idx) {
         CodeEditor* e = promises[idx];
         promises[idx] = nullptr;
         return e;
@@ -477,7 +477,7 @@ class CodeEditor {
         return labels_.size();
     }
 
-    Label mkLabel() {
+    LabelT mkLabel() {
         labels_.push_back(0);
         return labels_.size() - 1;
     }
@@ -505,7 +505,7 @@ class CodeEditor {
             }
             if (pos->bc.isJmp())
                 target(pos->bc);
-            if (pos->bc.is(BC_t::label)) {
+            if (pos->bc.is(Opcode::label)) {
                 assert(labels.find(pos->bc.immediate.offset) == labels.end() &&
                        "Label is used multiple times");
                 assert(labels_[pos->bc.immediate.offset] && "Label is unknown");

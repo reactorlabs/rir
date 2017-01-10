@@ -25,9 +25,10 @@ class Context {
   public:
     class LoopContext {
       public:
-        Label next_;
-        Label break_;
-        LoopContext(Label next_, Label break_) : next_(next_), break_(break_) {}
+        LabelT next_;
+        LabelT break_;
+        LoopContext(LabelT next_, LabelT break_)
+            : next_(next_), break_(break_) {}
     };
 
     class CodeContext {
@@ -51,7 +52,7 @@ class Context {
 
     LoopContext& loop() { return code.top().loops.top(); }
 
-    void pushLoop(Label& next_, Label break_) {
+    void pushLoop(LabelT& next_, LabelT break_) {
         code.top().loops.emplace(next_, break_);
     }
 
@@ -59,14 +60,14 @@ class Context {
 
     void push(SEXP ast) { code.emplace(ast, fun); }
 
-    fun_idx_t pop() {
+    FunIdxT pop() {
         auto idx = cs().finalize();
         code.pop();
         return idx;
     }
 };
 
-fun_idx_t compilePromise(Context& ctx, SEXP exp);
+FunIdxT compilePromise(Context& ctx, SEXP exp);
 void compileExpr(Context& ctx, SEXP exp);
 void compileCall(Context& ctx, SEXP ast, SEXP fun, SEXP args);
 
@@ -74,7 +75,7 @@ void compileDispatch(Context& ctx, SEXP selector, SEXP ast, SEXP fun,
                      SEXP args) {
     // Process arguments:
     // Arguments can be optionally named
-    std::vector<fun_idx_t> callArgs;
+    std::vector<FunIdxT> callArgs;
     std::vector<SEXP> names;
 
     // This is the sane as in doCall
@@ -100,7 +101,7 @@ void compileDispatch(Context& ctx, SEXP selector, SEXP ast, SEXP fun,
     }
     assert(callArgs.size() < MAX_NUM_ARGS);
 
-    ctx.cs().insertCall(BC_t::dispatch_, callArgs, names, ast, selector);
+    ctx.cs().insertCall(Opcode::dispatch_, callArgs, names, ast, selector);
 }
 
 // Inline some specials
@@ -130,8 +131,8 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
             if (a.hasTag())
                 return false;
 
-        Label objBranch = cs.mkLabel();
-        Label nextBranch = cs.mkLabel();
+        LabelT objBranch = cs.mkLabel();
+        LabelT nextBranch = cs.mkLabel();
 
         compileExpr(ctx, args[0]);
 
@@ -187,7 +188,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
     if (fun == symbol::And && args.length() == 2) {
         cs << BC::guardNamePrimitive(fun);
 
-        Label nextBranch = cs.mkLabel();
+        LabelT nextBranch = cs.mkLabel();
 
         compileExpr(ctx, args[0]);
 
@@ -210,7 +211,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
     if (fun == symbol::Or && args.length() == 2) {
         cs << BC::guardNamePrimitive(fun);
 
-        Label nextBranch = cs.mkLabel();
+        LabelT nextBranch = cs.mkLabel();
 
         compileExpr(ctx, args[0]);
 
@@ -317,8 +318,8 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
                     if (fun == symbol::DoubleBracket ||
                         fun == symbol::Bracket) {
 
-                        Label objBranch = cs.mkLabel();
-                        Label nextBranch = cs.mkLabel();
+                        LabelT objBranch = cs.mkLabel();
+                        LabelT nextBranch = cs.mkLabel();
 
                         // First rhs (assign is right-associative) 
                         compileExpr(ctx, rhs);
@@ -368,7 +369,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
 
                         // Do dispatch using args from the stack
                         cs.insertStackCall(
-                            BC_t::dispatch_stack_, 3,
+                            Opcode::dispatch_stack_, 3,
                             {R_NilValue, R_NilValue, symbol::value}, rewrite,
                             setter);
 
@@ -427,7 +428,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
                     SEXP rewrite = Rf_shallow_duplicate(g);
                     ctx.preserve(rewrite);
                     SETCAR(CDR(rewrite), symbol::getterPlaceholder);
-                    cs.insertStackCall(BC_t::call_stack_, names.size(), names,
+                    cs.insertStackCall(Opcode::call_stack_, names.size(), names,
                                        rewrite);
                 }
                 Else(assert(false);)
@@ -498,7 +499,8 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
             SET_TAG(value, symbol::value);
             SETCDR(a, value);
 
-            cs.insertStackCall(BC_t::call_stack_, names.size(), names, rewrite);
+            cs.insertStackCall(Opcode::call_stack_, names.size(), names,
+                               rewrite);
         }
 
         cs << BC::stvar(target)
@@ -529,8 +531,8 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
             return false;
 
         cs << BC::guardNamePrimitive(fun);
-        Label trueBranch = cs.mkLabel();
-        Label nextBranch = cs.mkLabel();
+        LabelT trueBranch = cs.mkLabel();
+        LabelT nextBranch = cs.mkLabel();
 
         compileExpr(ctx, args[0]);
         cs << BC::asbool() << BC::brtrue(trueBranch);
@@ -602,8 +604,8 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
                 *(idx + 1) == R_DotsSymbol || (idx + 1).hasTag())
                 return false;
 
-            Label objBranch = cs.mkLabel();
-            Label nextBranch = cs.mkLabel();
+            LabelT objBranch = cs.mkLabel();
+            LabelT nextBranch = cs.mkLabel();
 
             cs << BC::guardNamePrimitive(fun);
             compileExpr(ctx, lhs);
@@ -647,8 +649,8 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
 
         cs << BC::guardNamePrimitive(fun);
 
-        Label loopBranch = cs.mkLabel();
-        Label nextBranch = cs.mkLabel();
+        LabelT loopBranch = cs.mkLabel();
+        LabelT nextBranch = cs.mkLabel();
 
         ctx.pushLoop(loopBranch, nextBranch);
 
@@ -681,8 +683,8 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
 
         cs << BC::guardNamePrimitive(fun);
 
-        Label loopBranch = cs.mkLabel();
-        Label nextBranch = cs.mkLabel();
+        LabelT loopBranch = cs.mkLabel();
+        LabelT nextBranch = cs.mkLabel();
 
         ctx.pushLoop(loopBranch, nextBranch);
 
@@ -715,9 +717,9 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
 
         cs << BC::guardNamePrimitive(fun);
 
-        Label loopBranch = cs.mkLabel();
-        Label breakBranch = cs.mkLabel();
-        Label endForBranch = cs.mkLabel();
+        LabelT loopBranch = cs.mkLabel();
+        LabelT breakBranch = cs.mkLabel();
+        LabelT endForBranch = cs.mkLabel();
 
         ctx.pushLoop(loopBranch, breakBranch);
 
@@ -801,16 +803,16 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
                 cs << BC::guardNamePrimitive(symbol::Internal);
                 for (auto a : args)
                     compileExpr(ctx, a);
-                cs.insertStackCall(BC_t::static_call_stack_, args.length(), {},
-                                   ast, internal);
+                cs.insertStackCall(Opcode::static_call_stack_, args.length(),
+                                   {}, ast, internal);
 
                 return true;
             }
 
 
             if (false && fun == symbol::lapply && args.length() == 2) {
-                Label loopBranch = cs.mkLabel();
-                Label nextBranch = cs.mkLabel();
+                LabelT loopBranch = cs.mkLabel();
+                LabelT nextBranch = cs.mkLabel();
 
                 compileExpr(ctx, args[0]);
 
@@ -855,8 +857,8 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
                    << BC::brfalse(nextBranch);
 
                 // X[[i]]
-                Label objBranch = cs.mkLabel();
-                Label contBranch = cs.mkLabel();
+                LabelT objBranch = cs.mkLabel();
+                LabelT contBranch = cs.mkLabel();
 
                 cs << BC::guardNamePrimitive(symbol::DoubleBracket);
                 cs << BC::pull(4)
@@ -873,7 +875,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
                                 LCONS(symbol::getterPlaceholder, R_NilValue));
 
                 cs << objBranch;
-                cs.insertStackCall(BC_t::dispatch_stack_, 2, {}, extractCall,
+                cs.insertStackCall(Opcode::dispatch_stack_, 2, {}, extractCall,
                                    symbol::DoubleBracket);
 
                 cs << contBranch;
@@ -882,7 +884,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
                 SEXP rewritten = LCONS(args[1],
                         LCONS(symbol::getterPlaceholder, R_NilValue));
 
-                cs.insertStackCall(BC_t::call_stack_, 1, {}, rewritten);
+                cs.insertStackCall(Opcode::call_stack_, 1, {}, rewritten);
 
                 // store result
                 cs << BC::pull(1)
@@ -921,7 +923,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
 
         for (auto a : args)
             compileExpr(ctx, a);
-        cs.insertStackCall(BC_t::static_call_stack_, args.length(), {}, ast,
+        cs.insertStackCall(Opcode::static_call_stack_, args.length(), {}, ast,
                            builtin);
 
         return true;
@@ -953,7 +955,7 @@ void compileCall(Context& ctx, SEXP ast, SEXP fun, SEXP args) {
 
     // Process arguments:
     // Arguments can be optionally named
-    std::vector<fun_idx_t> callArgs;
+    std::vector<FunIdxT> callArgs;
     std::vector<SEXP> names;
 
     for (auto arg = RList(args).begin(); arg != RList::end(); ++arg) {
@@ -978,7 +980,7 @@ void compileCall(Context& ctx, SEXP ast, SEXP fun, SEXP args) {
     }
     assert(callArgs.size() < MAX_NUM_ARGS);
 
-    cs.insertCall(BC_t::call_, callArgs, names, ast);
+    cs.insertCall(Opcode::call_, callArgs, names, ast);
 }
 
 // Lookup
@@ -1033,8 +1035,8 @@ void compileExpr(Context& ctx, SEXP exp) {
     }
 }
 
-std::vector<fun_idx_t> compileFormals(Context& ctx, SEXP formals) {
-    std::vector<fun_idx_t> res;
+std::vector<FunIdxT> compileFormals(Context& ctx, SEXP formals) {
+    std::vector<FunIdxT> res;
 
     for (auto arg = RList(formals).begin(); arg != RList::end(); ++arg) {
         if (*arg == R_MissingArg)
@@ -1046,7 +1048,7 @@ std::vector<fun_idx_t> compileFormals(Context& ctx, SEXP formals) {
     return res;
 }
 
-fun_idx_t compilePromise(Context& ctx, SEXP exp) {
+FunIdxT compilePromise(Context& ctx, SEXP exp) {
     ctx.push(exp);
     compileExpr(ctx, exp);
     ctx.cs() << BC::ret();

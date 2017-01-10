@@ -36,8 +36,8 @@ class StupidInliner {
         if (c->codeSize > 800)
             return false;
 
-        BC_t* pc = (BC_t*)code(c);
-        BC_t* end = pc + c->codeSize;
+        Opcode* pc = (Opcode*)code(c);
+        Opcode* end = pc + c->codeSize;
         while (pc != end) {
             BC bc = BC::advance(&pc);
             if (bc.isCallsite()) {
@@ -47,11 +47,11 @@ class StupidInliner {
                 if (!isSafeTarget(cs.target())) {
                     return false;
                 }
-            } else if (bc.is(BC_t::guard_env_)) {
+            } else if (bc.is(Opcode::guard_env_)) {
                 // we want to get rid of the environment, so this checks are
                 // not possible
                 return false;
-            } else if (bc.is(BC_t::ldarg_)) {
+            } else if (bc.is(Opcode::ldarg_)) {
                 // ldarg is fine, we'll inline the promise here
                 continue;
             } else if (!bc.isPure()) {
@@ -68,7 +68,7 @@ class StupidInliner {
 
         for (auto i = edit.begin(); i != edit.end(); ++i) {
             BC bc = *i;
-            if (bc.bc == BC_t::ldarg_) {
+            if (bc.bc == Opcode::ldarg_) {
                 CodeEditor* arg = args[(*i).immediateConst()];
                 arg->normalizeForInline();
                 CodeEditor::Cursor e = i.asCursor(edit);
@@ -84,7 +84,7 @@ class StupidInliner {
     void run() {
         for (auto i = code_.begin(); i != code_.end(); ++i) {
             BC bc = *i;
-            if (bc.bc != BC_t::call_)
+            if (bc.bc != Opcode::call_)
                 continue;
 
             CallSite cs = i.callSite();
@@ -127,7 +127,7 @@ class StupidInliner {
                 continue;
             }
 
-            if (cur.bc().bc != BC_t::ldfun_) {
+            if (cur.bc().bc != Opcode::ldfun_) {
                 Rprintf("cannot inline, did not find ldfun\n");
                 continue;
             }
@@ -151,7 +151,7 @@ class StupidInliner {
 
             cur.remove();
             cur.remove();
-            if (cur.bc().is(BC_t::guard_env_))
+            if (cur.bc().is(Opcode::guard_env_))
                 cur.remove();
 
             cur << BC::guardName(name, t);

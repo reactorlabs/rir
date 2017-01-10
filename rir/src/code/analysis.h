@@ -108,7 +108,7 @@ protected:
                 BC cur = *currentIns_;
 
                 // if current instruction is label, deal with state merging
-                if (cur.is(BC_t::label)) {
+                if (cur.is(Opcode::label)) {
                     // if state not stored, store copy of incomming
                     State * & stored = mergePoints_[cur.immediate.offset];
                     if (stored == nullptr) {
@@ -133,8 +133,8 @@ protected:
                 // user dispatch method
                 d.dispatch(currentIns_);
 
-                if (cur.is(BC_t::br_)) {
-                    Label l = cur.immediate.offset;
+                if (cur.is(Opcode::br_)) {
+                    LabelT l = cur.immediate.offset;
                     if (shouldJump(l)) {
                         q_.push_front(code_->target(cur));
                     }
@@ -142,7 +142,7 @@ protected:
                     currentState_ = nullptr;
                     break;
                 } else if (cur.isJmp()) {
-                    Label l = cur.immediate.offset;
+                    LabelT l = cur.immediate.offset;
                     if (shouldJump(l)) {
                         q_.push_front(code_->target(cur));
                     }
@@ -233,7 +233,7 @@ protected:
         dispatcher().dispatch(currentIns_);
         ++currentIns_;
         // if the cached instruction is label, dispose of the state and create a copy of the fixpoint
-        if ((*currentIns_).is(BC_t::label)) {
+        if ((*currentIns_).is(Opcode::label)) {
             auto fixpoint = mergePoints_[(*currentIns_).immediate.offset];
             // if we reach dead code there is no merge state available 
             if (fixpoint) {

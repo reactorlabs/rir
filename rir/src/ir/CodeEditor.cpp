@@ -31,15 +31,15 @@ CodeEditor::CodeEditor(CodeHandle code, SEXP formals) {
 }
 
 void CodeEditor::loadCode(FunctionHandle function, CodeHandle code) {
-    std::unordered_map<BC_t*, Label> bcLabels;
+    std::unordered_map<Opcode*, LabelT> bcLabels;
 
     {
-        BC_t* pc = (BC_t*)code.bc();
-        BC_t* end = (BC_t*)((uintptr_t)pc + code.code->codeSize);
+        Opcode* pc = (Opcode*)code.bc();
+        Opcode* end = (Opcode*)((uintptr_t)pc + code.code->codeSize);
         while (pc != end) {
             BC bc = BC::decode(pc);
             if (bc.isJmp()) {
-                BC_t* target = BC::jmpTarget(pc);
+                Opcode* target = BC::jmpTarget(pc);
                 if (!bcLabels.count(target))
                     bcLabels[target] = mkLabel();
             }
@@ -52,8 +52,8 @@ void CodeEditor::loadCode(FunctionHandle function, CodeHandle code) {
     {
         BytecodeList* pos = & front;
 
-        BC_t* pc = (BC_t*)code.bc();
-        BC_t* end = (BC_t*)((uintptr_t)pc + code.code->codeSize);
+        Opcode* pc = (Opcode*)code.bc();
+        Opcode* end = (Opcode*)((uintptr_t)pc + code.code->codeSize);
 
         while (pc != end) {
             pos->next = new BytecodeList(pc);
@@ -62,7 +62,7 @@ void CodeEditor::loadCode(FunctionHandle function, CodeHandle code) {
             pos->prev = prev;
 
             if (bcLabels.count(pc)) {
-                Label label = bcLabels[pc];
+                LabelT label = bcLabels[pc];
                 pos->bc = BC::label(label);
                 labels_[label] = pos;
 
@@ -76,8 +76,8 @@ void CodeEditor::loadCode(FunctionHandle function, CodeHandle code) {
 
             BC bc = BC::advance(&pc);
             if (bc.isJmp()) {
-                BC_t* target = (BC_t*)((uintptr_t)pc + bc.immediate.offset);
-                Label label = bcLabels[target];
+                Opcode* target = (Opcode*)((uintptr_t)pc + bc.immediate.offset);
+                LabelT label = bcLabels[target];
                 bc.immediate.offset = label;
             }
 
@@ -89,7 +89,7 @@ void CodeEditor::loadCode(FunctionHandle function, CodeHandle code) {
                 memcpy(pos->callSite, oldCs.cs, needed);
             }
             if (bc.hasPromargs()) {
-                if (bc.bc == BC_t::promise_ || bc.bc == BC_t::push_code_) {
+                if (bc.bc == Opcode::promise_ || bc.bc == Opcode::push_code_) {
                     CodeHandle code = function.codeAtOffset(bc.immediate.fun);
 
                     bc.immediate.fun = code.idx();
@@ -170,10 +170,10 @@ void CodeEditor::print(bool verbose) {
         BC bc = cur.bc();
         if (verbose) {
             // Print some analysis info
-            if (bc.bc != BC_t::label && bc.bc != BC_t::return_ &&
-                bc.bc != BC_t::ret_) {
-                if (bc.bc == BC_t::ldvar_ || bc.bc == BC_t::ldarg_ ||
-                    bc.bc == BC_t::ldfun_) {
+            if (bc.bc != Opcode::label && bc.bc != Opcode::return_ &&
+                bc.bc != Opcode::ret_) {
+                if (bc.bc == Opcode::ldvar_ || bc.bc == Opcode::ldarg_ ||
+                    bc.bc == Opcode::ldfun_) {
                     SEXP sym = bc.immediateConst();
                     auto v = analysis[cur][sym];
                     auto sv = specAnalysis[cur][sym];
@@ -216,7 +216,7 @@ void CodeEditor::print(bool verbose) {
         }
         cur.print();
     }
-    fun_idx_t i = 0;
+    FunIdxT i = 0;
     for (auto p : promises) {
         ++i;
         if (!p)
@@ -242,7 +242,7 @@ unsigned CodeEditor::write(FunctionHandle& function) {
     for (Cursor cur = getCursor(); !cur.atEnd(); cur.advance()) {
         BC bc = cur.bc();
         if (bc.hasPromargs()) {
-            if (bc.bc == BC_t::promise_ || bc.bc == BC_t::push_code_) {
+            if (bc.bc == Opcode::promise_ || bc.bc == Opcode::push_code_) {
                 CodeEditor* e = promises[bc.immediate.fun];
                 bc.immediate.fun = e->write(function);
             } else {

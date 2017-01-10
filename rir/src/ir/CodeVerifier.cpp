@@ -20,14 +20,12 @@ class State {
     static_assert(sizeof(SEXP) == 8, "Invalid ptr size");
     static_assert(sizeof(unsigned) == 4, "Invalid unsigned size");
 
-    BC_t* pc;
+    Opcode* pc;
     int ostack;
 
-    State(BC_t* pc = nullptr, int ostack = 0)
-        : pc(pc), ostack(ostack) {}
+    State(Opcode* pc = nullptr, int ostack = 0) : pc(pc), ostack(ostack) {}
 
-    State(State const& from, BC_t* pc)
-        : pc(pc), ostack(from.ostack) {}
+    State(State const& from, Opcode* pc) : pc(pc), ostack(from.ostack) {}
 
     bool operator!=(State const& other) const {
         assert(pc == other.pc and
@@ -52,7 +50,7 @@ class State {
     void advance() {
         BC bc = BC::advance(&pc);
 
-        if (bc.bc == BC_t::return_)
+        if (bc.bc == Opcode::return_)
             ostack = 0;
         else
             ostack -= bc.popCount();
@@ -72,10 +70,10 @@ class State {
 
 void CodeVerifier::calculateAndVerifyStack(CodeHandle code) {
     State max; // max state
-    std::map<BC_t*, State> state;
+    std::map<Opcode*, State> state;
     std::stack<State> q;
 
-    BC_t* cptr = code.bc();
+    Opcode* cptr = code.bc();
     q.push(State(cptr));
 
     while (not q.empty()) {
@@ -90,15 +88,15 @@ void CodeVerifier::calculateAndVerifyStack(CodeHandle code) {
         }
         while (true) {
             state[i.pc] = i;
-            BC_t* pc = i.pc;
+            Opcode* pc = i.pc;
             assert(pc >= code.bc() && pc < code.endBc());
             BC cur = BC::decode(pc);
             i.advance();
             max.updateMax(i);
-            if (cur.bc == BC_t::ret_ || cur.bc == BC_t::return_) {
+            if (cur.bc == Opcode::ret_ || cur.bc == Opcode::return_) {
                 i.checkClear();
                 break;
-            } else if (cur.bc == BC_t::br_) {
+            } else if (cur.bc == Opcode::br_) {
                 q.push(State(i, BC::jmpTarget(pc)));
                 break;
             } else if (cur.isJmp()) {
@@ -182,12 +180,12 @@ void CodeVerifier::vefifyFunctionLayout(SEXP sexp, ::Context* ctx) {
     // check that the call instruction has proper arguments and number of
     // instructions is valid
     for (auto c : objs) {
-        BC_t* cptr = reinterpret_cast<BC_t*>(code(c));
-        BC_t* start = cptr;
+        Opcode* cptr = reinterpret_cast<Opcode*>(code(c));
+        Opcode* start = cptr;
         while (true) {
             assert(cptr < start + c->codeSize);
             BC cur = BC::decode(cptr);
-            if (*cptr == BC_t::ldvar_) {
+            if (*cptr == Opcode::ldvar_) {
                 unsigned* argsIndex = reinterpret_cast<ArgT*>(cptr + 1);
                 assert(*argsIndex < cp_pool_length(ctx) and
                        "Invalid arglist index");
@@ -195,7 +193,8 @@ void CodeVerifier::vefifyFunctionLayout(SEXP sexp, ::Context* ctx) {
                 assert(TYPEOF(sym) == SYMSXP);
                 assert(strlen(CHAR(PRINTNAME(sym))));
             }
-            if (*cptr == BC_t::dispatch_stack_ || *cptr == BC_t::call_stack_) {
+            if (*cptr == Opcode::dispatch_stack_ ||
+                *cptr == Opcode::call_stack_) {
                 unsigned callIdx = *reinterpret_cast<ArgT*>(cptr + 1);
                 CallSiteStruct* cs = CallSite_get(c, callIdx);
                 uint32_t nargs = *reinterpret_cast<ArgT*>(cptr + 5);
@@ -211,12 +210,12 @@ void CodeVerifier::vefifyFunctionLayout(SEXP sexp, ::Context* ctx) {
                         }
                     }
                 }
-                if (*cptr == BC_t::dispatch_stack_) {
+                if (*cptr == Opcode::dispatch_stack_) {
                     SEXP selector = cp_pool_at(ctx, *CallSite_selector(cs));
                     assert(TYPEOF(selector) == SYMSXP);
                 }
             }
-            if (*cptr == BC_t::promise_) {
+            if (*cptr == Opcode::promise_) {
                 unsigned* promidx = reinterpret_cast<ArgT*>(cptr + 1);
                 bool ok = false;
                 for (Code* c : objs)
@@ -226,7 +225,7 @@ void CodeVerifier::vefifyFunctionLayout(SEXP sexp, ::Context* ctx) {
                     }
                 assert(ok and "Invalid promise offset detected");
             }
-            if (*cptr == BC_t::call_ || *cptr == BC_t::dispatch_) {
+            if (*cptr == Opcode::call_ || *cptr == Opcode::dispatch_) {
                 unsigned callIdx = *reinterpret_cast<ArgT*>(cptr + 1);
                 CallSiteStruct* cs = CallSite_get(c, callIdx);
                 uint32_t nargs = *reinterpret_cast<ArgT*>(cptr + 5);
@@ -255,7 +254,7 @@ void CodeVerifier::vefifyFunctionLayout(SEXP sexp, ::Context* ctx) {
                         }
                     }
                 }
-                if (*cptr == BC_t::dispatch_) {
+                if (*cptr == Opcode::dispatch_) {
                     SEXP selector = cp_pool_at(ctx, *CallSite_selector(cs));
                     assert(TYPEOF(selector) == SYMSXP);
                 }
@@ -263,7 +262,7 @@ void CodeVerifier::vefifyFunctionLayout(SEXP sexp, ::Context* ctx) {
             cptr += cur.size();
             if (cptr == start + c->codeSize) {
                 assert(cptr == start + c->codeSize);
-                assert(cur.isJmp() || cur.bc == BC_t::ret_);
+                assert(cur.isJmp() || cur.bc == Opcode::ret_);
                 break;
             }
         }

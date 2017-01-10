@@ -45,11 +45,11 @@ class InstructionDispatcher : public Dispatcher {
         BC cur = *ins;
         switch (cur.bc) {
 #define DEF_INSTR(NAME, ...)                                                   \
-    case BC_t::NAME:                                                           \
+    case Opcode::NAME:                                                         \
         receiver_.NAME(ins);                                                   \
         break;
 #include "ir/insns.h"
-        case BC_t::label:
+        case Opcode::label:
             receiver_.label(ins);
             break;
         default:

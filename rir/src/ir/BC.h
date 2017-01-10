@@ -18,93 +18,93 @@ namespace rir {
 
 namespace {
 
-BC::immediate_t decodeImmediate(BC_t bc, BC_t* pc) {
-    BC::immediate_t immediate = {{0}};
+BC::ImmediateT decodeImmediate(Opcode bc, Opcode* pc) {
+    BC::ImmediateT immediate = {{0}};
     switch (bc) {
-    case BC_t::push_:
-    case BC_t::ldfun_:
-    case BC_t::ldarg_:
-    case BC_t::ldvar_:
-    case BC_t::ldlval_:
-    case BC_t::ldddvar_:
-    case BC_t::stvar_:
-    case BC_t::missing_:
-    case BC_t::subassign2_:
-        immediate.pool = *(pool_idx_t*)pc;
+    case Opcode::push_:
+    case Opcode::ldfun_:
+    case Opcode::ldarg_:
+    case Opcode::ldvar_:
+    case Opcode::ldlval_:
+    case Opcode::ldddvar_:
+    case Opcode::stvar_:
+    case Opcode::missing_:
+    case Opcode::subassign2_:
+        immediate.pool = *(PoolIdxT*)pc;
         break;
-    case BC_t::dispatch_stack_:
-    case BC_t::call_:
-    case BC_t::dispatch_:
-    case BC_t::call_stack_:
-    case BC_t::static_call_stack_:
+    case Opcode::dispatch_stack_:
+    case Opcode::call_:
+    case Opcode::dispatch_:
+    case Opcode::call_stack_:
+    case Opcode::static_call_stack_:
         immediate.call_args = *(CallArgs*)pc;
         break;
-    case BC_t::guard_env_:
+    case Opcode::guard_env_:
         immediate.guard_id = *(uint32_t*)pc;
         break;
-    case BC_t::guard_fun_:
+    case Opcode::guard_fun_:
         immediate.guard_fun_args = *(GuardFunArgs*)pc;
         break;
-    case BC_t::promise_:
-    case BC_t::push_code_:
-        immediate.fun = *(fun_idx_t*)pc;
+    case Opcode::promise_:
+    case Opcode::push_code_:
+        immediate.fun = *(FunIdxT*)pc;
         break;
-    case BC_t::br_:
-    case BC_t::brtrue_:
-    case BC_t::brobj_:
-    case BC_t::brfalse_:
-    case BC_t::label:
-    case BC_t::beginloop_:
-        immediate.offset = *(jmp_t*)pc;
+    case Opcode::br_:
+    case Opcode::brtrue_:
+    case Opcode::brobj_:
+    case Opcode::brfalse_:
+    case Opcode::label:
+    case Opcode::beginloop_:
+        immediate.offset = *(JmpT*)pc;
         break;
-    case BC_t::pick_:
-    case BC_t::pull_:
-    case BC_t::is_:
-    case BC_t::put_:
-    case BC_t::alloc_:
+    case Opcode::pick_:
+    case Opcode::pull_:
+    case Opcode::is_:
+    case Opcode::put_:
+    case Opcode::alloc_:
         immediate.i = *(uint32_t*)pc;
         break;
-    case BC_t::test_bounds_:
-    case BC_t::extract1_:
-    case BC_t::subset1_:
-    case BC_t::extract2_:
-    case BC_t::subset2_:
-    case BC_t::close_:
-    case BC_t::ret_:
-    case BC_t::pop_:
-    case BC_t::force_:
-    case BC_t::asast_:
-    case BC_t::asbool_:
-    case BC_t::dup_:
-    case BC_t::dup2_:
-    case BC_t::swap_:
-    case BC_t::int3_:
-    case BC_t::uniq_:
-    case BC_t::aslogical_:
-    case BC_t::lgl_and_:
-    case BC_t::lgl_or_:
-    case BC_t::inc_:
-    case BC_t::add_:
-    case BC_t::mul_:
-    case BC_t::div_:
-    case BC_t::idiv_:
-    case BC_t::mod_:
-    case BC_t::pow_:
-    case BC_t::seq_:
-    case BC_t::sub_:
-    case BC_t::lt_:
-    case BC_t::return_:
-    case BC_t::isfun_:
-    case BC_t::invisible_:
-    case BC_t::visible_:
-    case BC_t::endcontext_:
-    case BC_t::subassign_:
-    case BC_t::length_:
-    case BC_t::names_:
-    case BC_t::set_names_:
+    case Opcode::test_bounds_:
+    case Opcode::extract1_:
+    case Opcode::subset1_:
+    case Opcode::extract2_:
+    case Opcode::subset2_:
+    case Opcode::close_:
+    case Opcode::ret_:
+    case Opcode::pop_:
+    case Opcode::force_:
+    case Opcode::asast_:
+    case Opcode::asbool_:
+    case Opcode::dup_:
+    case Opcode::dup2_:
+    case Opcode::swap_:
+    case Opcode::int3_:
+    case Opcode::uniq_:
+    case Opcode::aslogical_:
+    case Opcode::lgl_and_:
+    case Opcode::lgl_or_:
+    case Opcode::inc_:
+    case Opcode::add_:
+    case Opcode::mul_:
+    case Opcode::div_:
+    case Opcode::idiv_:
+    case Opcode::mod_:
+    case Opcode::pow_:
+    case Opcode::seq_:
+    case Opcode::sub_:
+    case Opcode::lt_:
+    case Opcode::return_:
+    case Opcode::isfun_:
+    case Opcode::invisible_:
+    case Opcode::visible_:
+    case Opcode::endcontext_:
+    case Opcode::subassign_:
+    case Opcode::length_:
+    case Opcode::names_:
+    case Opcode::set_names_:
         break;
-    case BC_t::invalid_:
-    case BC_t::num_of:
+    case Opcode::invalid_:
+    case Opcode::num_of:
         assert(false);
         break;
     }
@@ -112,216 +112,216 @@ BC::immediate_t decodeImmediate(BC_t bc, BC_t* pc) {
 }
 }
 
-BC BC::advance(BC_t** pc) {
-    BC_t bc = **pc;
+BC BC::advance(Opcode** pc) {
+    Opcode bc = **pc;
     BC cur(bc, decodeImmediate(bc, (*pc) + 1));
-    *pc = (BC_t*)((uintptr_t)(*pc) + cur.size());
+    *pc = (Opcode*)((uintptr_t)(*pc) + cur.size());
     return cur;
 }
 
-BC BC::decode(BC_t* pc) {
-    BC_t bc = *pc;
+BC BC::decode(Opcode* pc) {
+    Opcode bc = *pc;
     BC cur(bc, decodeImmediate(bc, pc + 1));
     return cur;
 }
 
 class CodeStream;
 
-BC BC::ret() { return BC(BC_t::ret_); }
-BC BC::return_() { return BC(BC_t::return_); }
-BC BC::force() { return BC(BC_t::force_); }
-BC BC::pop() { return BC(BC_t::pop_); }
+BC BC::ret() { return BC(Opcode::ret_); }
+BC BC::return_() { return BC(Opcode::return_); }
+BC BC::force() { return BC(Opcode::force_); }
+BC BC::pop() { return BC(Opcode::pop_); }
 BC BC::push(SEXP constant) {
     assert(TYPEOF(constant) != PROMSXP);
 //    assert(!isValidFunctionSEXP(constant));
     assert(!isValidCodeObject(constant));
-    immediate_t i;
+    ImmediateT i;
     i.pool = Pool::insert(constant);
-    return BC(BC_t::push_, i);
+    return BC(Opcode::push_, i);
 }
 BC BC::push(double constant) {
-    immediate_t i;
+    ImmediateT i;
     i.pool = Pool::getNum(constant);
-    return BC(BC_t::push_, i);
+    return BC(Opcode::push_, i);
 }
 BC BC::push(int constant) {
-    immediate_t i;
+    ImmediateT i;
     i.pool = Pool::getInt(constant);
-    return BC(BC_t::push_, i);
+    return BC(Opcode::push_, i);
 }
 BC BC::ldfun(SEXP sym) {
-    immediate_t i;
+    ImmediateT i;
     i.pool = Pool::insert(sym);
-    return BC(BC_t::ldfun_, i);
+    return BC(Opcode::ldfun_, i);
 }
 BC BC::ldddvar(SEXP sym) {
     assert(DDVAL(sym));
-    immediate_t i;
+    ImmediateT i;
     i.pool = Pool::insert(sym);
-    return BC(BC_t::ldddvar_, i);
+    return BC(Opcode::ldddvar_, i);
 }
 BC BC::ldlval(SEXP sym) {
     assert(TYPEOF(sym) == SYMSXP);
     assert(strlen(CHAR(PRINTNAME(sym))));
-    immediate_t i;
+    ImmediateT i;
     i.pool = Pool::insert(sym);
-    return BC(BC_t::ldlval_, i);
+    return BC(Opcode::ldlval_, i);
 }
 BC BC::ldvar(SEXP sym) {
     assert(TYPEOF(sym) == SYMSXP);
     assert(strlen(CHAR(PRINTNAME(sym))));
-    immediate_t i;
+    ImmediateT i;
     i.pool = Pool::insert(sym);
-    return BC(BC_t::ldvar_, i);
+    return BC(Opcode::ldvar_, i);
 }
 BC BC::ldarg(SEXP sym) {
     assert(TYPEOF(sym) == SYMSXP);
     assert(strlen(CHAR(PRINTNAME(sym))));
-    immediate_t i;
+    ImmediateT i;
     i.pool = Pool::insert(sym);
-    return BC(BC_t::ldarg_, i);
+    return BC(Opcode::ldarg_, i);
 }
 BC BC::guardEnv(uint32_t id) {
-    immediate_t i;
+    ImmediateT i;
     i.guard_id = id;
-    return BC(BC_t::guard_env_, i);
+    return BC(Opcode::guard_env_, i);
 }
 BC BC::guardName(SEXP sym, SEXP expected) {
-    immediate_t i;
+    ImmediateT i;
     i.guard_fun_args = {Pool::insert(sym), Pool::insert(expected),
                         NO_DEOPT_INFO};
-    return BC(BC_t::guard_fun_, i);
+    return BC(Opcode::guard_fun_, i);
 }
 BC BC::guardNamePrimitive(SEXP sym) {
-    immediate_t i;
+    ImmediateT i;
     assert(TYPEOF(sym) == SYMSXP);
     SEXP prim = CDR(sym);
     assert(TYPEOF(prim) == SPECIALSXP || TYPEOF(prim) == BUILTINSXP);
     i.guard_fun_args = {Pool::insert(sym), Pool::insert(prim), NO_DEOPT_INFO};
-    return BC(BC_t::guard_fun_, i);
+    return BC(Opcode::guard_fun_, i);
 }
-BC BC::push_code(fun_idx_t prom) {
-    immediate_t i;
+BC BC::push_code(FunIdxT prom) {
+    ImmediateT i;
     i.fun = prom;
-    return BC(BC_t::push_code_, i);
+    return BC(Opcode::push_code_, i);
 }
-BC BC::promise(fun_idx_t prom) {
-    immediate_t i;
+BC BC::promise(FunIdxT prom) {
+    ImmediateT i;
     i.fun = prom;
-    return BC(BC_t::promise_, i);
+    return BC(Opcode::promise_, i);
 }
-BC BC::asast() { return BC(BC_t::asast_); }
+BC BC::asast() { return BC(Opcode::asast_); }
 BC BC::missing(SEXP sym) {
     assert(TYPEOF(sym) == SYMSXP);
     assert(strlen(CHAR(PRINTNAME(sym))));
-    immediate_t i;
+    ImmediateT i;
     i.pool = Pool::insert(sym);
-    return BC(BC_t::missing_, i);
+    return BC(Opcode::missing_, i);
 }
 BC BC::stvar(SEXP sym) {
     assert(TYPEOF(sym) == SYMSXP);
     assert(strlen(CHAR(PRINTNAME(sym))));
-    immediate_t i;
+    ImmediateT i;
     i.pool = Pool::insert(sym);
-    return BC(BC_t::stvar_, i);
+    return BC(Opcode::stvar_, i);
 }
-BC BC::subassign() { return BC(BC_t::subassign_); }
+BC BC::subassign() { return BC(Opcode::subassign_); }
 BC BC::subassign2(SEXP sym) {
     assert(sym == R_NilValue ||
            (TYPEOF(sym) == SYMSXP && strlen(CHAR(PRINTNAME(sym)))));
-    immediate_t i;
+    ImmediateT i;
     i.pool = Pool::insert(sym);
-    return BC(BC_t::subassign2_, i);
+    return BC(Opcode::subassign2_, i);
 }
-BC BC::seq() { return BC(BC_t::seq_); }
-BC BC::asbool() { return BC(BC_t::asbool_); }
+BC BC::seq() { return BC(Opcode::seq_); }
+BC BC::asbool() { return BC(Opcode::asbool_); }
 
-BC BC::length() { return BC(BC_t::length_); }
-BC BC::names() { return BC(BC_t::names_); }
-BC BC::setNames() { return BC(BC_t::set_names_); }
+BC BC::length() { return BC(Opcode::length_); }
+BC BC::names() { return BC(Opcode::names_); }
+BC BC::setNames() { return BC(Opcode::set_names_); }
 BC BC::alloc(int type) {
-    immediate_t i;
+    ImmediateT i;
     i.i = type;
-    return BC(BC_t::alloc_, i);
+    return BC(Opcode::alloc_, i);
 }
 
-BC BC::isfun() { return BC(BC_t::isfun_); }
+BC BC::isfun() { return BC(Opcode::isfun_); }
 
-BC BC::label(jmp_t j) {
-    immediate_t i;
+BC BC::label(JmpT j) {
+    ImmediateT i;
     i.offset = j;
-    return BC(BC_t::label, i);
+    return BC(Opcode::label, i);
 }
-BC BC::br(jmp_t j) {
-    immediate_t i;
+BC BC::br(JmpT j) {
+    ImmediateT i;
     i.offset = j;
-    return BC(BC_t::br_, i);
+    return BC(Opcode::br_, i);
 }
-BC BC::brobj(jmp_t j) {
-    immediate_t i;
+BC BC::brobj(JmpT j) {
+    ImmediateT i;
     i.offset = j;
-    return BC(BC_t::brobj_, i);
+    return BC(Opcode::brobj_, i);
 }
-BC BC::beginloop(jmp_t j) {
-    immediate_t i;
+BC BC::beginloop(JmpT j) {
+    ImmediateT i;
     i.offset = j;
-    return BC(BC_t::beginloop_, i);
+    return BC(Opcode::beginloop_, i);
 }
-BC BC::brtrue(jmp_t j) {
-    immediate_t i;
+BC BC::brtrue(JmpT j) {
+    ImmediateT i;
     i.offset = j;
-    return BC(BC_t::brtrue_, i);
+    return BC(Opcode::brtrue_, i);
 }
-BC BC::brfalse(jmp_t j) {
-    immediate_t i;
+BC BC::brfalse(JmpT j) {
+    ImmediateT i;
     i.offset = j;
-    return BC(BC_t::brfalse_, i);
+    return BC(Opcode::brfalse_, i);
 }
-BC BC::endcontext() { return BC(BC_t::endcontext_); }
-BC BC::dup() { return BC(BC_t::dup_); }
-BC BC::inc() { return BC(BC_t::inc_); }
-BC BC::close() { return BC(BC_t::close_); }
-BC BC::dup2() { return BC(BC_t::dup2_); }
-BC BC::testBounds() { return BC(BC_t::test_bounds_); }
-BC BC::add() { return BC(BC_t::add_); }
-BC BC::mul() { return BC(BC_t::mul_); }
-BC BC::div() { return BC(BC_t::div_); }
-BC BC::idiv() { return BC(BC_t::idiv_); }
-BC BC::mod() { return BC(BC_t::mod_); }
-BC BC::pow() { return BC(BC_t::pow_); }
-BC BC::sub() { return BC(BC_t::sub_); }
-BC BC::lt() { return BC(BC_t::lt_); }
-BC BC::invisible() { return BC(BC_t::invisible_); }
-BC BC::visible() { return BC(BC_t::visible_); }
-BC BC::extract1() { return BC(BC_t::extract1_); }
-BC BC::subset1() { return BC(BC_t::subset1_); }
-BC BC::extract2() { return BC(BC_t::extract2_); }
-BC BC::subset2() { return BC(BC_t::subset2_); }
-BC BC::swap() { return BC(BC_t::swap_); }
-BC BC::int3() { return BC(BC_t::int3_); }
-BC BC::uniq() { return BC(BC_t::uniq_); }
-BC BC::asLogical() { return BC(BC_t::aslogical_); }
-BC BC::lglAnd() { return BC(BC_t::lgl_and_); }
-BC BC::lglOr() { return BC(BC_t::lgl_or_); }
+BC BC::endcontext() { return BC(Opcode::endcontext_); }
+BC BC::dup() { return BC(Opcode::dup_); }
+BC BC::inc() { return BC(Opcode::inc_); }
+BC BC::close() { return BC(Opcode::close_); }
+BC BC::dup2() { return BC(Opcode::dup2_); }
+BC BC::testBounds() { return BC(Opcode::test_bounds_); }
+BC BC::add() { return BC(Opcode::add_); }
+BC BC::mul() { return BC(Opcode::mul_); }
+BC BC::div() { return BC(Opcode::div_); }
+BC BC::idiv() { return BC(Opcode::idiv_); }
+BC BC::mod() { return BC(Opcode::mod_); }
+BC BC::pow() { return BC(Opcode::pow_); }
+BC BC::sub() { return BC(Opcode::sub_); }
+BC BC::lt() { return BC(Opcode::lt_); }
+BC BC::invisible() { return BC(Opcode::invisible_); }
+BC BC::visible() { return BC(Opcode::visible_); }
+BC BC::extract1() { return BC(Opcode::extract1_); }
+BC BC::subset1() { return BC(Opcode::subset1_); }
+BC BC::extract2() { return BC(Opcode::extract2_); }
+BC BC::subset2() { return BC(Opcode::subset2_); }
+BC BC::swap() { return BC(Opcode::swap_); }
+BC BC::int3() { return BC(Opcode::int3_); }
+BC BC::uniq() { return BC(Opcode::uniq_); }
+BC BC::asLogical() { return BC(Opcode::aslogical_); }
+BC BC::lglAnd() { return BC(Opcode::lgl_and_); }
+BC BC::lglOr() { return BC(Opcode::lgl_or_); }
 BC BC::pull(uint32_t i) {
-    immediate_t im;
+    ImmediateT im;
     im.i = i;
-    return BC(BC_t::pull_, im);
+    return BC(Opcode::pull_, im);
 }
 BC BC::pick(uint32_t i) {
-    immediate_t im;
+    ImmediateT im;
     im.i = i;
-    return BC(BC_t::pick_, im);
+    return BC(Opcode::pick_, im);
 }
 BC BC::is(uint32_t i) {
-    immediate_t im;
+    ImmediateT im;
     im.i = i;
-    return BC(BC_t::is_, im);
+    return BC(Opcode::is_, im);
 }
 BC BC::put(uint32_t i) {
-    immediate_t im;
+    ImmediateT im;
     im.i = i;
-    return BC(BC_t::put_, im);
+    return BC(Opcode::put_, im);
 }
 
 } // rir

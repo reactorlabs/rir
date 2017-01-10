@@ -9,7 +9,7 @@ std::unordered_map<double, unsigned> Pool::numbers;
 std::unordered_map<int, unsigned> Pool::ints;
 std::unordered_map<SEXP, size_t> Pool::contents;
 
-pool_idx_t Pool::getNum(double n) {
+PoolIdxT Pool::getNum(double n) {
     if (numbers.count(n))
         return numbers.at(n);
 
@@ -26,7 +26,7 @@ pool_idx_t Pool::getNum(double n) {
     return i;
 }
 
-pool_idx_t Pool::getInt(int n) {
+PoolIdxT Pool::getInt(int n) {
     if (ints.count(n))
         return ints.at(n);
 

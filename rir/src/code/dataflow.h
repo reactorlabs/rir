@@ -355,15 +355,15 @@ class DataflowAnalysis
         assert(v.t == FValue::Type::Constant);
         assert(v.singleDef());
         BC bc = *v.u.def;
-        if (bc.bc == BC_t::push_)
+        if (bc.bc == Opcode::push_)
             return bc.immediateConst();
-        if (bc.bc == BC_t::guard_fun_)
+        if (bc.bc == Opcode::guard_fun_)
             return Pool::get(bc.immediate.guard_fun_args.expected);
-        if (bc.bc == BC_t::ldvar_ || bc.bc == BC_t::ldddvar_ ||
-            bc.bc == BC_t::ldfun_ || bc.bc == BC_t::ldlval_ ||
-            bc.bc == BC_t::ldarg_)
+        if (bc.bc == Opcode::ldvar_ || bc.bc == Opcode::ldddvar_ ||
+            bc.bc == Opcode::ldfun_ || bc.bc == Opcode::ldlval_ ||
+            bc.bc == Opcode::ldarg_)
             return constant((*this)[v.u.def][(*v.u.def).immediateConst()]);
-        if (bc.bc == BC_t::dup_ || bc.bc == BC_t::dup2_)
+        if (bc.bc == Opcode::dup_ || bc.bc == Opcode::dup2_)
             return constant((*this)[v.u.def].top());
 
         assert(false);
@@ -625,7 +625,7 @@ class DataflowAnalysis
         // 1. No binding gets deleted
         // 2. Arguments are not overwritten
         // 3. The environment is not leaked
-        if ((ins + 1) != code_->end() && (*(ins + 1)).is(BC_t::guard_env_)) {
+        if ((ins + 1) != code_->end() && (*(ins + 1)).is(Opcode::guard_env_)) {
             for (auto& e : current().env())
                 if (e.second.t != FValue::Type::Argument)
                     e.second.mergeWith(FValue::Value());
@@ -660,21 +660,21 @@ class DataflowAnalysis
 
         switch (bc.bc) {
         // We know those BC do not return promises
-        case BC_t::inc_:
-        case BC_t::is_:
-        case BC_t::isfun_:
-        case BC_t::extract1_:
-        case BC_t::subset1_:
-        case BC_t::extract2_:
-        case BC_t::subset2_:
-        case BC_t::close_:
-        case BC_t::lgl_or_:
-        case BC_t::lgl_and_:
-        case BC_t::test_bounds_:
-        case BC_t::seq_:
-        case BC_t::names_:
-        case BC_t::length_:
-        case BC_t::alloc_:
+        case Opcode::inc_:
+        case Opcode::is_:
+        case Opcode::isfun_:
+        case Opcode::extract1_:
+        case Opcode::subset1_:
+        case Opcode::extract2_:
+        case Opcode::subset2_:
+        case Opcode::close_:
+        case Opcode::lgl_or_:
+        case Opcode::lgl_and_:
+        case Opcode::test_bounds_:
+        case Opcode::seq_:
+        case Opcode::names_:
+        case Opcode::length_:
+        case Opcode::alloc_:
             for (size_t i = 0, e = bc.pushCount(); i != e; ++i)
                 current().push(FValue::Value(ins));
             break;

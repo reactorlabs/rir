@@ -34,19 +34,19 @@ class CodeHandle {
 
     CodeHandle() : code(nullptr) {}
 
-    BC_t* endBc() { return (BC_t*)((uintptr_t)bc() + code->codeSize); }
+    Opcode* endBc() { return (Opcode*)((uintptr_t)bc() + code->codeSize); }
 
-    BC_t* bc() { return (BC_t*)code->data; }
+    Opcode* bc() { return (Opcode*)code->data; }
 
     unsigned* sources() {
         return (unsigned*)((uintptr_t)(code + 1) + pad4(code->codeSize));
     }
 
-    unsigned sourceIdx(BC_t* pc) {
+    unsigned sourceIdx(Opcode* pc) {
         return getSrcIdxAt(code, (OpcodeT*)pc, true);
     }
 
-    SEXP source(BC_t* pc) {
+    SEXP source(Opcode* pc) {
         unsigned sidx = sourceIdx(pc);
         if (!sidx)
             return nullptr;
@@ -77,7 +77,7 @@ class CodeHandle {
 
     void print();
 
-    fun_idx_t idx();
+    FunIdxT idx();
 };
 
 class CodeHandleIterator : public CodeHandle {

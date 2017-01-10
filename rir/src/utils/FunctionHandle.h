@@ -109,8 +109,8 @@ class FunctionHandle {
         unsigned* skiplist = reinterpret_cast<unsigned*>(code.sources());
         unsigned* srcs = skiplist + 2 * skiplistLength;
 
-        BC_t* start = code.bc();
-        BC_t* pc = start;
+        Opcode* start = code.bc();
+        Opcode* pc = start;
         unsigned instruction_number = 0;
         unsigned sources_idx = 0;
         unsigned compressed = 0;

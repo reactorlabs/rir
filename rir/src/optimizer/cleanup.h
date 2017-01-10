@@ -24,7 +24,7 @@ class BCCleanup : public InstructionDispatcher::Receiver {
 
         // push - pop elimination
         if (!v.used()) {
-            if (def.is(BC_t::push_) || def.is(BC_t::dup_)) {
+            if (def.is(Opcode::push_) || def.is(Opcode::dup_)) {
                 defI.asCursor(code_).remove();
                 ins.asCursor(code_).remove();
                 return;
@@ -34,7 +34,7 @@ class BCCleanup : public InstructionDispatcher::Receiver {
         // double load elimination : ldvar a; pop; ldvar a;
         if ((ins + 1) != code_.end()) {
             auto next = ins + 1;
-            if ((*next).is(BC_t::ldvar_) && def == *next) {
+            if ((*next).is(Opcode::ldvar_) && def == *next) {
                 CodeEditor::Cursor cur = ins.asCursor(code_);
                 cur.remove();
                 cur.remove();
@@ -61,7 +61,7 @@ class BCCleanup : public InstructionDispatcher::Receiver {
         // double load elimination : ldvar a; ldvar a;
         if (ins != code_.begin()) {
             auto prev = ins - 1;
-            if ((*prev).is(BC_t::ldvar_) && *ins == *prev) {
+            if ((*prev).is(Opcode::ldvar_) && *ins == *prev) {
                 CodeEditor::Cursor cur = ins.asCursor(code_);
                 cur.remove();
                 cur << BC::dup();
@@ -132,9 +132,9 @@ class BCCleanup : public InstructionDispatcher::Receiver {
 
     void invisible_(CodeEditor::Iterator ins) override {
         if ((ins + 1) != code_.end()) {
-            if ((*(ins + 1)).is(BC_t::pop_) ||
-                (*(ins + 1)).is(BC_t::visible_) ||
-                (*(ins + 1)).is(BC_t::ldvar_)) {
+            if ((*(ins + 1)).is(Opcode::pop_) ||
+                (*(ins + 1)).is(Opcode::visible_) ||
+                (*(ins + 1)).is(Opcode::ldvar_)) {
                 ins.asCursor(code_).remove();
             }
         }
@@ -142,9 +142,10 @@ class BCCleanup : public InstructionDispatcher::Receiver {
 
     void uniq_(CodeEditor::Iterator ins) override {
         if ((ins + 1) != code_.end()) {
-            if ((*(ins + 1)).is(BC_t::stvar_) || (*(ins + 1)).is(BC_t::pop_) ||
-                (*(ins + 1)).is(BC_t::subassign_) ||
-                (*(ins + 1)).is(BC_t::subassign2_)) {
+            if ((*(ins + 1)).is(Opcode::stvar_) ||
+                (*(ins + 1)).is(Opcode::pop_) ||
+                (*(ins + 1)).is(Opcode::subassign_) ||
+                (*(ins + 1)).is(Opcode::subassign2_)) {
                 ins.asCursor(code_).remove();
             }
         }
@@ -169,7 +170,7 @@ class BCCleanup : public InstructionDispatcher::Receiver {
                 bubbleUp = bubbleUp - 1;
                 auto cur = *bubbleUp;
                 // We cannot move the guard across those instructions
-                if (cur.is(BC_t::label) || !cur.isPure() || cur.isReturn())
+                if (cur.is(Opcode::label) || !cur.isPure() || cur.isReturn())
                     break;
                 if (cur == *ins) {
                     // This guard is redundant, remove it

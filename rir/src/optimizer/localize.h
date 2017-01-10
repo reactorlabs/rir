@@ -76,7 +76,7 @@ class Localizer : public InstructionDispatcher::Receiver {
                 if (lastCall.hasOrigin()) {
                     // Get a new deopt id for this guard, pointing to the pc
                     // right after the call.
-                    BC_t* deoptTarget = lastCall.origin();
+                    Opcode* deoptTarget = lastCall.origin();
                     BC::advance(&deoptTarget);
                     uint32_t deoptId =
                         Deoptimizer_register((OpcodeT*)deoptTarget);

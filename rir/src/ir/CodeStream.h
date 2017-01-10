@@ -26,7 +26,7 @@ class CodeStream {
     SEXP ast;
 
     unsigned nextLabel = 0;
-    std::map<unsigned, Label> patchpoints;
+    std::map<unsigned, LabelT> patchpoints;
     std::vector<unsigned> label2pos;
 
     std::vector<unsigned> sources;
@@ -35,7 +35,7 @@ class CodeStream {
     uint32_t nextCallSiteIdx_ = 0;
 
   public:
-    Label mkLabel() {
+    LabelT mkLabel() {
         assert(nextLabel < MAX_JMP);
         label2pos.resize(nextLabel + 1);
         return nextLabel++;
@@ -46,9 +46,9 @@ class CodeStream {
         nextLabel = n;
     }
 
-    void patchpoint(Label l) {
+    void patchpoint(LabelT l) {
         patchpoints[pos] = l;
-        insert((jmp_t)0);
+        insert((JmpT)0);
     }
 
     CodeStream(FunctionHandle& function, SEXP ast)
@@ -77,7 +77,7 @@ class CodeStream {
         return cs;
     }
 
-    CodeStream& insertStackCall(BC_t bc, uint32_t nargs,
+    CodeStream& insertStackCall(Opcode bc, uint32_t nargs,
                                 std::vector<SEXP> names, SEXP call,
                                 SEXP targOrSelector = nullptr) {
         insert(bc);
@@ -105,8 +105,8 @@ class CodeStream {
         cs->call = Pool::insert(call);
         cs->hasProfile = false;
         cs->hasNames = hasNames;
-        cs->hasSelector = (bc == BC_t::dispatch_stack_);
-        cs->hasTarget = (bc == BC_t::static_call_stack_);
+        cs->hasSelector = (bc == Opcode::dispatch_stack_);
+        cs->hasTarget = (bc == Opcode::static_call_stack_);
         cs->hasImmediateArgs = false;
 
         if (hasNames) {
@@ -115,10 +115,10 @@ class CodeStream {
             }
         }
 
-        if (bc == BC_t::dispatch_stack_) {
+        if (bc == Opcode::dispatch_stack_) {
             assert(TYPEOF(targOrSelector) == SYMSXP);
             *CallSite_selector(cs) = Pool::insert(targOrSelector);
-        } else if (bc == BC_t::static_call_stack_) {
+        } else if (bc == Opcode::static_call_stack_) {
             assert(TYPEOF(targOrSelector) == CLOSXP ||
                    TYPEOF(targOrSelector) == BUILTINSXP);
             *CallSite_target(cs) = Pool::insert(targOrSelector);
@@ -127,7 +127,7 @@ class CodeStream {
         return *this;
     }
 
-    CodeStream& insertCall(BC_t bc, std::vector<fun_idx_t> args,
+    CodeStream& insertCall(Opcode bc, std::vector<FunIdxT> args,
                            std::vector<SEXP> names, SEXP call,
                            SEXP selector = nullptr) {
         uint32_t nargs = args.size();
@@ -157,7 +157,7 @@ class CodeStream {
         cs->call = Pool::insert(call);
         cs->hasProfile = true;
         cs->hasNames = hasNames;
-        cs->hasSelector = (bc == BC_t::dispatch_);
+        cs->hasSelector = (bc == Opcode::dispatch_);
         cs->hasImmediateArgs = true;
 
         int i = 0;
@@ -168,7 +168,7 @@ class CodeStream {
             ++i;
         }
 
-        if (bc == BC_t::dispatch_) {
+        if (bc == Opcode::dispatch_) {
             assert(selector);
             assert(TYPEOF(selector) == SYMSXP);
             *CallSite_selector(cs) = Pool::insert(selector);
@@ -177,7 +177,7 @@ class CodeStream {
         return *this;
     }
 
-    CodeStream& insertWithCallSite(BC_t bc, CallSite callSite) {
+    CodeStream& insertWithCallSite(Opcode bc, CallSite callSite) {
         insert(bc);
         insert(nextCallSiteIdx_);
         insert(callSite.nargs());
@@ -194,8 +194,8 @@ class CodeStream {
     }
 
     CodeStream& operator<<(const BC& b) {
-        assert(b.bc != BC_t::call_);
-        if (b.bc == BC_t::label) {
+        assert(b.bc != Opcode::call_);
+        if (b.bc == Opcode::label) {
             return *this << b.immediate.offset;
         }
         b.write(*this);
@@ -204,7 +204,7 @@ class CodeStream {
         return *this;
     }
 
-    CodeStream& operator<<(Label label) {
+    CodeStream& operator<<(LabelT label) {
         label2pos[label] = pos;
         return *this;
     }
@@ -230,7 +230,7 @@ class CodeStream {
         sources.back() = idx;
     }
 
-    fun_idx_t finalize() {
+    FunIdxT finalize() {
         CodeHandle res =
             function.writeCode(ast, &(*code)[0], pos, callSites_.data(),
                                callSites_.size(), sources);
@@ -238,8 +238,8 @@ class CodeStream {
         for (auto p : patchpoints) {
             unsigned pos = p.first;
             unsigned target = label2pos[p.second];
-            jmp_t j = target - pos - sizeof(jmp_t);
-            *(jmp_t*)((uintptr_t)res.bc() + pos) = j;
+            JmpT j = target - pos - sizeof(JmpT);
+            *(JmpT*)((uintptr_t)res.bc() + pos) = j;
         }
 
         label2pos.clear();
