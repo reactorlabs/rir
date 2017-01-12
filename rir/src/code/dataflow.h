@@ -13,7 +13,7 @@ namespace rir {
 /*
  *                       Maybe  (might be deleted from env)
  *
- *          Absent             Any (prom)
+ *          Absent             Any (prom, R_MissingArg)
  *
  *                      Value         Argument
  *
@@ -466,8 +466,9 @@ class DataflowAnalysis
         if (val.isValue())
             return val.duplicate(ins);
 
-        // The result of forcing a promise is some value
-        return FValue::Value(ins);
+        // The result of forcing a promise is NOT necessarily a value. It might
+        // be R_MissingArg
+        return FValue::Any(ins);
     }
 
     void ldlval_(CodeEditor::Iterator ins) override {
