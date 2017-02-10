@@ -11,6 +11,13 @@ compiler:
   - clang
   - gcc
 
+matrix:
+  exclude:
+    - os: osx
+      compiler: gcc
+    - os: linux
+      compiler: clang
+
 addons:
   apt:
     packages:
@@ -41,4 +48,4 @@ before_script:
 
 script:
   - ./tools/tests
-  - ./tools/gnur-make check
+  - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then ./tools/gnur-make check; fi
