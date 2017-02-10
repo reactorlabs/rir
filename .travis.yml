@@ -13,14 +13,8 @@ compiler:
 
 addons:
   apt:
-    sources:
-      - ubuntu-toolchain-r-test
-      - llvm-toolchain-precise-3.7
-      - kalakris-cmake
     packages:
       - ninja-build
-      - doxygen
-      - python3
       - xdg-utils
       - gfortran
       - subversion
@@ -30,33 +24,21 @@ addons:
       - sed
       - binutils
       - curl
+      - cmake
       - ruby
       - openjdk-7-jdk
-      - doxygen
       - rsync
       - xorg-dev
-      - clang-3.7
-
-matrix:
-  exclude:
-    - os: osx
-      compiler: gcc
-    - os: linux
-      compiler: clang
 
 before_install:
   - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then . ./tools/ci/before_install-osx.sh; fi
   - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then . ./tools/ci/before_install-linux.sh; fi
-  - git clone https://github.com/RomanTsegelskyi/llvm llvm >> git_clone.log
-  - export LLVM_BUILD_DIR=${TRAVIS_BUILD_DIR}/llvm
-  - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then export LLVM_BUILD_DIR=${TRAVIS_BUILD_DIR}/llvm/llvm-install-osx; fi
-  - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then export LLVM_BUILD_DIR=${TRAVIS_BUILD_DIR}/llvm/llvm-install-linux; fi
 
 before_script:
-  - ./tools/setup.sh -n -l -f -O2
+  - cmake -DCMAKE_BUILD_TYPE=debug -GNinja
+  - ninja setup
+  - ninja
 
 script:
-  - ./tools/integration_tests.sh
-
-after_script:
-  - bash -x ./tools/ci/slack_notify.sh
+  - ./tools/tests
+  - ./tools/gnur-make check
