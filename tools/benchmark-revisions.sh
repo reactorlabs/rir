@@ -2,7 +2,7 @@
 
 BRANCH=`git branch | grep "*" | tail -c +3`
 
-if [$BRANCH != "master"]; then
+if [[ "$BRANCH" != "master" ]]; then
     echo "expected to be on master branch"
     exit 1
 fi
@@ -22,7 +22,7 @@ for revf in $REV; do
     rev=`echo $revf | cut -d'|' -f1`
     dat=`echo $revf | cut -d'|' -f2`
     for run in $(seq 1 $RUNS); do
-        log="$OUT/$rev-run.csv"
+        log="$OUT/$rev-$run.csv"
         if [ ! -f "$log" ]; then
             echo "**************  testing $run $rev"
             git checkout $rev
