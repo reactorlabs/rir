@@ -27,8 +27,8 @@ extern "C" {
 #define INLINE __attribute__((always_inline)) inline static
 
 // Function magic constant is designed to help to distinguish between Function
-// objects and normal INTSXPs. Normally this is not necessary, but a very
-// creative user might try to assign arbitrary INTSXP to a closure which we
+// objects and normal EXTERNALSXPs. Normally this is not necessary, but a very
+// creative user might try to assign arbitrary EXTERNAL to a closure which we
 // would like to spot. Of course, such a creative user might actually put the
 // magic in his vector too...
 #define FUNCTION_MAGIC (unsigned)0xCAFEBABE
@@ -39,10 +39,11 @@ extern "C" {
 
 // Code magic constant is intended to trick the GC into believing that it is
 // dealing with already marked SEXP.
-// Note: gcgen needs to be 1, otherwise the write barrier will trigger
-//  It also makes the SEXP look like no other SEXP (31) so that we can determine
-//  whether a standard promise execution, or rir promise should be executed.
-#define CODE_MAGIC (unsigned)0x110000ff
+// Note: gcgen needs to be 1, otherwise the write barrier will trigger and
+//       named count is 2 to make it stable
+//  It also has an unique bitpattern for gp (0xee) so that we can keep it apart
+//  from functions
+#define CODE_MAGIC (unsigned)0x1100ee9a
 
 /** How many bytes do we need to align on 4 byte boundary?
  */
@@ -405,14 +406,10 @@ struct Function {
 typedef struct Function Function;
 
 INLINE Function * isValidFunctionObject(SEXP s) {
-    if (TYPEOF(s) != INTSXP)
-        return NULL;
-    if ((unsigned)Rf_length(s)*sizeof(int) < sizeof(Function))
+    if (TYPEOF(s) != EXTERNALSXP)
         return NULL;
     Function* f = (Function*)INTEGER(s);
     if (f->magic != FUNCTION_MAGIC)
-        return NULL;
-    if (f->size > (unsigned)Rf_length(s)*sizeof(int))
         return NULL;
     if (f->foffset >= f->size - sizeof(Code))
         return NULL;
@@ -420,10 +417,11 @@ INLINE Function * isValidFunctionObject(SEXP s) {
     return f;
 }
 
-/** Returns the INTSXP for the Function object. */
+/** Returns the EXTERNALSXP for the Function object. */
 INLINE SEXP functionSEXP(Function * f) {
     SEXP result = (SEXP)((uint8_t*)f - sizeof(VECTOR_SEXPREC));
-    assert(TYPEOF(result) == INTSXP && "Either wrong memory altogether or bad counting");
+    assert(TYPEOF(result) == EXTERNALSXP &&
+           "Either wrong memory altogether or bad counting");
     return result;
 }
 

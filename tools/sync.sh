@@ -32,8 +32,8 @@ function checkout_r {
     R_DIR="${SRC_DIR}/external/${NAME}"
 
     cd $R_DIR
+    git fetch
     git checkout $BRANCH
-    git pull
    
     if [ ! -f $R_DIR/Makefile ]; then
         echo "-> configure gnur"
@@ -67,5 +67,5 @@ fi
 #     git clean -xf
 # fi
  
-checkout_r custom-r rllvm
+checkout_r custom-r rir_patched
 #checkout_r vanilla-r R-3-2-branch

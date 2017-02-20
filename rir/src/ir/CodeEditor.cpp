@@ -11,7 +11,7 @@ namespace rir {
 
 CodeEditor::CodeEditor(SEXP in) {
     SEXP bc = in;
-    assert(TYPEOF(in) == INTSXP || TYPEOF(in) == CLOSXP);
+    assert(TYPEOF(in) == EXTERNALSXP || TYPEOF(in) == CLOSXP);
     if (TYPEOF(in) == CLOSXP) {
         ::Function* f = isValidClosureSEXP(in);
         assert(f != nullptr);

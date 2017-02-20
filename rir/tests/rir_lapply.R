@@ -6,9 +6,9 @@ rref <- bibentry(
     address = "Vienna, Austria",
     year = 2014,
     url = "http://www.R-project.org/")
-rir.enableJit()
+compiler:::enableJIT(2)
 (function() print(rref, style = "Bibtex"))()
-rir.disableJit()
+compiler:::enableJIT(0)
 
 
 a = bquote(a == a)

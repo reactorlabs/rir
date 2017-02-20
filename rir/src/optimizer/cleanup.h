@@ -48,7 +48,8 @@ class BCCleanup : public InstructionDispatcher::Receiver {
         auto v = analysis[ins][sym];
         if (v.t == FValue::Type::Constant) {
             SEXP constant = analysis.constant(v);
-            if (TYPEOF(constant) == CLOSXP && TYPEOF(BODY(constant)) != INTSXP)
+            if (TYPEOF(constant) == CLOSXP &&
+                TYPEOF(BODY(constant)) != EXTERNALSXP)
                 return;
             auto cur = ins.asCursor(code_);
             cur.remove();

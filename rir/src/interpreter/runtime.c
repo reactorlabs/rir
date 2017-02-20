@@ -116,7 +116,7 @@ Function * isValidFunctionSEXP(SEXP wrapper) {
     if (wrapper == R_NilValue)
         return nullptr;
     x = CAR(wrapper);
-    if (TYPEOF(x) != INTSXP)
+    if (TYPEOF(x) != EXTERNALSXP)
         return nullptr;
     // that's enough checking, return the function
     return (Function*)INTEGER(x);
@@ -154,13 +154,13 @@ Code * isValidPromiseSEXP(SEXP promise) {
     if (body == R_NilValue)
         return nullptr;
     SEXP code  = CAR(body);
-    if (TYPEOF(code) != INTSXP)
+    if (TYPEOF(code) != EXTERNALSXP)
         return nullptr;
     body = CDR(body);
     if (body == R_NilValue)
         return nullptr;
     x = CAR(body);
-    if (TYPEOF(x) != INTSXP || Rf_length(x) != 1)
+    if (TYPEOF(x) != EXTERNALSXP || Rf_length(x) != 1)
         return nullptr;
     unsigned offset = (unsigned)INTEGER(x)[0];
     return codeAt((Function*)INTEGER(code), offset);
@@ -256,14 +256,7 @@ void initializeRuntime(CompilerCallback compiler, OptimizerCallback optimizer) {
     R_PreserveObject(promExecName);
     // initialize the global context
     globalContext_ = context_create(compiler, optimizer);
-#if RIR_AS_PACKAGE == 0
-    initializeCallbacks(
-        isValidFunctionObject_int_wrapper,
-        isValidCodeObject_int_wrapper,
-        rirEval_f,
-        rirExpr
-    );
-#endif
+    registerExternalCode(rirEval_f, compiler, rirExpr);
 }
 
 Context * globalContext() {

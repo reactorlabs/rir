@@ -9,11 +9,12 @@
 #include <stdint.h>
 #include <assert.h>
 
-/** Compiler API. Given a language object, compiles it and returns the INTSXP containing the Function and its Code objects.
+/** Compiler API. Given a language object, compiles it and returns the
+  EXTERNALSXP containing the Function and its Code objects.
 
   The idea is to call this if we want on demand compilation of closures.
  */
-typedef SEXP (*CompilerCallback)(SEXP);
+typedef SEXP (*CompilerCallback)(SEXP, SEXP);
 typedef SEXP (*OptimizerCallback)(SEXP);
 
 #ifdef __cplusplus
@@ -101,14 +102,19 @@ INLINE void rl_append(ResizeableList * l, SEXP val, SEXP parent, size_t index) {
     SET_VECTOR_ELT(l->list, i, val);
 }
 
-extern SEXP* R_BCNodeStackTop;
-extern SEXP* R_BCNodeStackEnd;
-extern SEXP* R_BCNodeStackBase;
+INLINE SEXP ostack_top(Context* c) { return (R_BCNodeStackTop - 1)->u.sxpval; }
 
-INLINE SEXP ostack_top(Context* c) { return *(R_BCNodeStackTop - 1); }
+INLINE SEXP ostack_at(Context* c, uint32_t i) {
+    return (R_BCNodeStackTop - 1 - i)->u.sxpval;
+}
 
-INLINE SEXP* ostack_at(Context* c, uint32_t i) {
-    return (R_BCNodeStackTop - 1 - i);
+INLINE void ostack_set(Context* c, uint32_t i, SEXP v) {
+    (R_BCNodeStackTop - 1 - i)->u.sxpval = v;
+    (R_BCNodeStackTop - 1 - i)->tag = 0;
+}
+
+INLINE R_bcstack_t* ostack_cell_at(Context* c, uint32_t i) {
+    return R_BCNodeStackTop - 1 - i;
 }
 
 INLINE bool ostack_empty(Context* c) {
@@ -123,11 +129,14 @@ INLINE void ostack_popn(Context* c, size_t p) { R_BCNodeStackTop -= p; }
 
 INLINE SEXP ostack_pop(Context* c) {
     --R_BCNodeStackTop;
-    return *R_BCNodeStackTop;
+    return R_BCNodeStackTop->u.sxpval;
 }
 
 INLINE void ostack_push(Context* c, SEXP val) {
-    *R_BCNodeStackTop = val;
+    Function* f = (Function*)INTEGER(val);
+    assert(TYPEOF(val) != EXTERNALSXP || f->magic == FUNCTION_MAGIC);
+    R_BCNodeStackTop->u.sxpval = val;
+    R_BCNodeStackTop->tag = 0;
     ++R_BCNodeStackTop;
 }
 

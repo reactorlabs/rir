@@ -231,13 +231,14 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
         return true;
     }
 
-
-    if (fun == symbol::quote && args.length() == 1) {
-        auto i = compilePromise(ctx, args[0]);
-
-        cs << BC::guardNamePrimitive(fun) << BC::push_code(i);
-        return true;
-    }
+    // TODO: This is broken, since the code objects escape to places they do
+    // not belong to
+    // if (fun == symbol::quote && args.length() == 1) {
+    //     auto i = compilePromise(ctx, args[0]);
+    //
+    //     cs << BC::guardNamePrimitive(fun) << BC::push_code(i);
+    //     return true;
+    // }
 
     if (fun == symbol::Assign || fun == symbol::Assign2) {
         assert(args.length() == 2);
@@ -804,7 +805,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
                 for (auto a : args)
                     compileExpr(ctx, a);
                 cs.insertStackCall(Opcode::static_call_stack_, args.length(),
-                                   {}, ast, internal);
+                                   {}, inAst, internal);
 
                 return true;
             }

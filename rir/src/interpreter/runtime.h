@@ -13,41 +13,6 @@ C_OR_CPP Function * isValidFunctionSEXP(SEXP wrapper);
 C_OR_CPP SEXP rir_createWrapperPromise(Code * code);
 
 
-// functions from gnu-r
-
-#if RIR_AS_PACKAGE == 1
-
-C_OR_CPP int ddVal(SEXP symbol);
-C_OR_CPP SEXP Rf_ddfindVar(SEXP symbol, SEXP rho);
-C_OR_CPP SEXP mkPROMISE(SEXP expr, SEXP rho);
-C_OR_CPP SEXP forcePromise(SEXP promise);
-
-#else
-
-C_OR_CPP int ddVal(SEXP symbol);
-C_OR_CPP SEXP Rf_ddfindVar(SEXP symbol, SEXP rho);
-
-// TODO we should change gnu-R and make mkPROMISE exposed, this is a hack so that I do not change too many things at once
-C_OR_CPP SEXP hook_mkPROMISE(SEXP, SEXP);
-#define mkPROMISE hook_mkPROMISE
-
-// TODO the same as mkPROMISE
-C_OR_CPP SEXP hook_forcePromise(SEXP promise);
-#define forcePromise hook_forcePromise
-
-typedef int (*callback_isValidFunction)(SEXP);
-typedef SEXP (*callback_rirEval_f)(SEXP, SEXP);
-typedef SEXP (*callback_rirExpr)(SEXP);
-
-C_OR_CPP void initializeCallbacks(callback_isValidFunction, callback_isValidFunction, callback_rirEval_f, callback_rirExpr);
-
-C_OR_CPP void initClosureContext(void*, SEXP, SEXP, SEXP, SEXP, SEXP);
-C_OR_CPP void endClosureContext(void*, SEXP);
-
-
-#endif
-
-
 // rir runtime functions -------------------------------------------------------
 
 C_OR_CPP Function * isValidClosureSEXP(SEXP wrapper);

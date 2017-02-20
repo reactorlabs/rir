@@ -17,8 +17,8 @@ class FunctionHandle {
 
     SEXP store;
     void* payload;
-    unsigned capacity;
 
+    size_t capacity;
     Function* function;
 
     FunctionHandle() : function(nullptr) {}
@@ -26,10 +26,11 @@ class FunctionHandle {
     static FunctionHandle create() {
         assert(initialSize > sizeof(Function));
         assert(initialSize % sizeof(int) == 0);
-        SEXP store = Rf_allocVector(INTSXP, initialSize / sizeof(int));
-        R_PreserveObject(store);
-
+        SEXP store = Rf_allocVector(EXTERNALSXP, initialSize);
         void* payload = INTEGER(store);
+
+        TYPEOF(store) = EXTERNALSXP;
+        R_PreserveObject(store);
 
         Function* function = new (payload) Function;
         assert(function == payload);
@@ -49,8 +50,7 @@ class FunctionHandle {
     }
 
     FunctionHandle(SEXP store)
-        : store(store), payload(INTEGER(store)),
-          capacity(Rf_length(store) * sizeof(int)),
+        : store(store), payload(INTEGER(store)), capacity(XLENGTH(store)),
           function((Function*)payload) {
         assert(function->magic == FUNCTION_MAGIC);
         assert(function->size <= capacity);
@@ -75,25 +75,30 @@ class FunctionHandle {
             newCapacity = pad4(newCapacity);
 
             assert(newCapacity % sizeof(int) == 0);
-            SEXP newStore = Rf_allocVector(INTSXP, newCapacity / sizeof(int));
+            assert(function->size + totalSize <= newCapacity);
+
+            SEXP newStore = Rf_allocVector(EXTERNALSXP, newCapacity);
             void* newPayload = INTEGER(newStore);
 
-            R_PreserveObject(newStore);
-            R_ReleaseObject(store);
+            TYPEOF(newStore) = EXTERNALSXP;
 
             memcpy(newPayload, payload, capacity);
             memset(payload, 0xee, capacity);
 
+            R_PreserveObject(newStore);
+            R_ReleaseObject(store);
+
             assert(function == payload);
             store = newStore;
             payload = newPayload;
-            capacity = newCapacity;
             function = (Function*)payload;
+            capacity = newCapacity;
         }
 
         unsigned offset = function->size;
         void* insert = (void*)((uintptr_t)payload + function->size);
         function->size += totalSize;
+        assert(function->size <= capacity);
 
         CodeHandle code(ast, codeSize, sources.size(), callSiteLength, offset,
                         insert);

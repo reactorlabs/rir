@@ -110,7 +110,7 @@ void CodeVerifier::calculateAndVerifyStack(CodeHandle code) {
 }
 
 void CodeVerifier::vefifyFunctionLayout(SEXP sexp, ::Context* ctx) {
-    assert(TYPEOF(sexp) == INTSXP and "Invalid SEXPTYPE");
+    assert(TYPEOF(sexp) == EXTERNALSXP and "Invalid SEXPTYPE");
     FunctionHandle fun(sexp);
 
     // Rprintf("Checking function object at %u\n", f);
@@ -122,14 +122,12 @@ void CodeVerifier::vefifyFunctionLayout(SEXP sexp, ::Context* ctx) {
         objs.push_back(c);
     }
 
-    assert(fun.function->size <= sizeof(int) *static_cast<unsigned>(Rf_length(sexp)) and
+    assert(fun.function->size <= XLENGTH(fun.store) and
            "Reported size must be smaller than the size of the vector");
-    assert(fun.function->size < 1.5 * sizeof(int) * static_cast<unsigned>(Rf_length(sexp)) and
-           "Unexpectedly large Vector");
 
     Function* f = fun.function;
     if (f->origin) {
-        assert(TYPEOF(f->origin) == INTSXP and "Invalid origin type");
+        assert(TYPEOF(f->origin) == EXTERNALSXP and "Invalid origin type");
         assert(static_cast<unsigned>(INTEGER(f->origin)[0]) ==
                    FUNCTION_MAGIC and
                "Origin does not seem to be function bytecode");
