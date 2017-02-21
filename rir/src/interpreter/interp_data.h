@@ -255,8 +255,7 @@ INLINE unsigned CallSite_sizeOf(CallSiteStruct* cs) {
  * the middle of the linearized code.
  */
 INLINE Code * isValidCodeObject(SEXP what) {
-    unsigned x = *(unsigned*)what;
-    if (x == CODE_MAGIC)
+    if (TYPEOF(what) == EXTERNALSXP && *(unsigned*)what == CODE_MAGIC)
         return (Code*)what;
     else
         return nullptr;
@@ -411,9 +410,6 @@ INLINE Function * isValidFunctionObject(SEXP s) {
     Function* f = (Function*)INTEGER(s);
     if (f->magic != FUNCTION_MAGIC)
         return NULL;
-    if (f->foffset >= f->size - sizeof(Code))
-        return NULL;
-    // TODO it is still only an assumption
     return f;
 }
 
