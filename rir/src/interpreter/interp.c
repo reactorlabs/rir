@@ -520,16 +520,7 @@ INLINE SEXP rirCallClosure(SEXP call, SEXP env, SEXP callee, SEXP actuals,
 
     endClosureDebug(callee, call, env);
 
-// TODO we need to set the returnvalue in the context, but we cannot
-// access it since we do not know if we have INTSTACK or not (which
-// changes RCNTXT layout. therefore we rely on the endClosure here,
-// which will not work in the package version.... Not sure what is a
-// good solution here.
-#if RIR_AS_PACKAGE == 0
     endClosureContext(cntxt, result);
-#else
-    assert(false);
-#endif
 
     if (!fun->envLeaked && FRAME_LEAKED(newEnv))
         fun->envLeaked = true;
