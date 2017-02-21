@@ -4,14 +4,18 @@ ARG=$1
 
 SCRIPTPATH=`cd $(dirname "$0") && pwd`
 BASE=`cd $SCRIPTPATH/.. && pwd`
-PLAIN_R=~/Documents/freshr/R-3-2-branch/bin/R
-TIMEOUT=30
+PLAIN_R=$BASE/external/vanilla-r/bin/R
+MOD_R=$BASE/external/custom-r/bin/R
+TIMEOUT=80
 OUT="benchmark-out/current"
 RUNS=3
  
+# checkout gnur without our modifications
 if [ ! -f $PLAIN_R ]; then
-    echo "expected plain R at $PLAIN_R"
-    exit 1
+    pushd .
+    $BASE/tools/sync.sh --vanilla
+    cd $BASE/external/vanilla-r && make -j 8
+    popd
 fi
 
 if [ "$#" == "1" ]; then
@@ -34,20 +38,17 @@ else
           echo $T
           T=`basename $i`;
           D="`dirname $i`/../..";
-          echo -n "1 R_COMPILER_OPTIMIZE=3 R_ENABLE_JIT=3 tools/R, $T, " >> $log;
-          R_COMPILER_OPTIMIZE=3 R_ENABLE_JIT=2 timeout $TIMEOUT /usr/bin/time -f'%E' -- ${SCRIPTPATH}/R -e "{setwd('$D'); source('$i'); execute()}" \
+          echo -n "1 R_ENABLE_JIT=2 custom-r, $T, " >> $log;
+          R_ENABLE_JIT=2 timeout $TIMEOUT ${MOD_R}  -e \
+              "{options(warn=-1); setwd('$D'); source('$i'); execute(); write(system.time(execute())[[3]], stderr())}" \
               > /dev/null 2>>$log || echo "" >>$log
-          echo -n "2 R_ENABLE_JIT=0 PLAIN_R, $T, " >> $log;
-          R_ENABLE_JIT=0 timeout $TIMEOUT /usr/bin/time -f'%E' -- $PLAIN_R -e "{setwd('$D'); source('$i'); execute()}" \
+          echo -n "2 R_ENABLE_JIT=2 vanilla-r, $T, " >> $log;
+          R_ENABLE_JIT=2 timeout $TIMEOUT $PLAIN_R  -e \
+              "{options(warn=-1); setwd('$D'); source('$i'); execute(); write(system.time(execute())[[3]], stderr())}" \
               > /dev/null 2>>$log || echo "" >>$log
-          echo -n "3 R_COMPILER_OPTIMIZE=3 R_ENABLE_JIT=3 PLAIN_R, $T, " >> $log;
-          R_COMPILER_OPTIMIZE=3 R_ENABLE_JIT=2 timeout $TIMEOUT /usr/bin/time -f'%E' -- $PLAIN_R -e "{setwd('$D'); source('$i'); execute()}" \
-              > /dev/null 2>>$log || echo "" >>$log
-          echo -n "4 tools/R enableJit(level=2 type='sticky'), $T, " >> $log;
-          timeout $TIMEOUT /usr/bin/time -f'%E' -- ${SCRIPTPATH}/R -e "{rir.enableJit(level=2, type='sticky');setwd('$D'); source('$i'); execute()}" \
-              > /dev/null 2>>$log || echo "" >>$log
-          echo -n "5 tools/R enableJit(type='force'), $T, " >> $log;
-          timeout $TIMEOUT /usr/bin/time -f'%E' -- ${SCRIPTPATH}/R -e "{rir.enableJit(level=2, type='force');setwd('$D'); source('$i'); execute()}" \
+          echo -n "3 R_ENABLE_JIT=2 rir, $T, " >> $log;
+          R_ENABLE_JIT=2 timeout $TIMEOUT ${SCRIPTPATH}/R -e \
+              "{options(warn=-1); setwd('$D'); source('$i'); execute(); write(system.time(execute())[[3]], stderr())}" \
               > /dev/null 2>>$log || echo "" >>$log
       done 
   done

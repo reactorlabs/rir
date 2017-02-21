@@ -2,6 +2,7 @@
 
 set -e
 
+VANILLA=$1
 CURRENT_DIR=`pwd`
 SCRIPTPATH=`cd $(dirname "$0") && pwd`
 if [ ! -d $SCRIPTPATH ]; then
@@ -31,6 +32,11 @@ function checkout_r {
     BRANCH=$2
     R_DIR="${SRC_DIR}/external/${NAME}"
 
+    if [ ! -d $R_DIR ]; then
+        cd ${SRC_DIR}/external
+        git clone https://github.com/reactorlabs/gnur.git ${NAME}
+    fi
+
     cd $R_DIR
     git fetch
     git checkout $BRANCH
@@ -56,16 +62,7 @@ function checkout_r {
     fi
 }
 
-if [ ! -d ${SRC_DIR}/external/custom-r ]; then
-    cd ${SRC_DIR}/external
-    git clone https://github.com/reactorlabs/gnur.git custom-r
-fi
-# TODO: cleanup our gnur repo and add a vanilla branch
-# if [ ! -d ${SRC_DIR}/external/vanilla-r ]; then
-#     cp -r ${SRC_DIR}/external/custom-r ${SRC_DIR}/external/vanilla-r
-#     cd ${SRC_DIR}/external/vanilla-r
-#     git clean -xf
-# fi
- 
 checkout_r custom-r rir_patched
-#checkout_r vanilla-r R-3-2-branch
+if [[ $VANILLA == "--vanilla" ]]; then
+    checkout_r vanilla-r base
+fi

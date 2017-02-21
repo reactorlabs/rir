@@ -7,10 +7,15 @@ if [[ "$BRANCH" != "master" ]]; then
     exit 1
 fi
 
+if [[ $(git diff --shortstat 2> /dev/null | tail -n1) != "" ]]; then
+    echo "repo is dirty"
+    exit 1
+fi
+
 SCRIPTPATH=`cd $(dirname "$0") && pwd`
 BASE=`cd $SCRIPTPATH/.. && pwd`
-TIMEOUT=20
-LOOKBACK=30
+TIMEOUT=80
+LOOKBACK=10
 RUNS=3
 REV=`git log -n $LOOKBACK --pretty=format:"%H|%cI"`
 BENCH=`ls ${BASE}/benchmarks/shootout/*/*.r`
@@ -28,14 +33,15 @@ for revf in $REV; do
             git checkout $rev
             ninja clean
             cmake $BASE
+            ninja setup
             ninja
             for i in $BENCH; do
                 T=`basename $i`;
                 D="`dirname $i`/../..";
                 echo $T
                 echo -n "$dat $rev, $T, " >> $log
-                timeout $TIMEOUT /usr/bin/time -f'%E' -- ${SCRIPTPATH}/R -e \
-                    "{rir.enableJit(level=2, type='sticky');setwd('$D'); source('$i'); execute()}" \
+                R_ENABLE_JIT=2 timeout $TIMEOUT ${SCRIPTPATH}/R -e \
+                    "{setwd('$D'); source('$i'); execute(); write(system.time(execute())[[3]], stderr())}" \
                       > /dev/null 2>>$log || echo "" >>$log
             done
         fi
