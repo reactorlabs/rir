@@ -1075,7 +1075,9 @@ Compiler::CompilerRes Compiler::finalize() {
     Optimizer::optimize(code);
 
     FunctionHandle opt = code.finalize();
+#ifdef ENABLE_SLOWASSERT
     CodeVerifier::vefifyFunctionLayout(opt.store, globalContext());
+#endif
 
     // Protect p;
     // SEXP formout = R_NilValue;

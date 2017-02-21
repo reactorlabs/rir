@@ -133,8 +133,10 @@ INLINE SEXP ostack_pop(Context* c) {
 }
 
 INLINE void ostack_push(Context* c, SEXP val) {
+#ifdef SLOWASSERT
     Function* f = (Function*)INTEGER(val);
     assert(TYPEOF(val) != EXTERNALSXP || f->magic == FUNCTION_MAGIC);
+#endif
     R_BCNodeStackTop->u.sxpval = val;
     R_BCNodeStackTop->tag = 0;
     ++R_BCNodeStackTop;

@@ -30,8 +30,8 @@ INLINE SEXP getSrcForCall(Code* c, OpcodeT* pc, Context* ctx) {
     return src_pool_at(ctx, sidx);
 }
 
-#define PC_BOUNDSCHECK(pc)                                                     \
-    SLOWASSERT((pc) >= code(c) && (pc) < code(c) + c->codeSize);
+#define PC_BOUNDSCHECK(pc, c)                                                  \
+    SLOWASSERT((pc) >= code(c) && (pc) < code(c) + (c)->codeSize);
 
 // bytecode accesses
 
@@ -115,8 +115,8 @@ INLINE SEXP promiseValue(SEXP promise, Context * ctx) {
 // TODO remove numArgs and bp -- this is only needed for the on stack argument
 // handling
 #define INSTRUCTION(name)                                                      \
-    INLINE void ins_##name(Code* c, SEXP env, OpcodeT** pc, Context* ctx,      \
-                           unsigned numArgs, Code** cStore)
+    INLINE void ins_##name(Code** c, SEXP env, OpcodeT** pc, Context* ctx,     \
+                           unsigned numArgs)
 
 INSTRUCTION(push_) {
     SEXP x = readConst(ctx, pc);
@@ -451,7 +451,16 @@ INLINE SEXP rirCallClosure(SEXP call, SEXP env, SEXP callee, SEXP actuals,
 
     static bool optimizing = false;
 
-    if (!optimizing && !fun->next) {
+    if (!optimizing &&
+        !fun->next
+         /* currently there is a bug if we reoptimize a function twice:
+          *  Deopt ids from the first optimization and second optimizations
+          *  will be mixed and the deoptimizer always only goes back one
+          *  optimization level!
+          *  To avoid this bug we currently only optimize once
+          */
+        &&
+        !fun->origin) {
         Code* code = functionCode(fun);
         if (fun->markOpt ||
             (fun->invocationCount == 1 && code->perfCounter > 100) ||
@@ -1050,7 +1059,7 @@ INSTRUCTION(call_stack_) {
     unsigned id = readImmediate(pc);
     unsigned nargs = readImmediate(pc);
     SEXP callee = ostack_at(ctx, nargs);
-    SEXP res = doCallStack(c, callee, nargs, id, env, pc, ctx);
+    SEXP res = doCallStack(*c, callee, nargs, id, env, pc, ctx);
     ostack_pop(ctx); // callee
     ostack_push(ctx, res);
 }
@@ -1058,8 +1067,8 @@ INSTRUCTION(call_stack_) {
 INSTRUCTION(static_call_stack_) {
     unsigned id = readImmediate(pc);
     unsigned nargs = readImmediate(pc);
-    SEXP callee = cp_pool_at(ctx, *CallSite_target(CallSite_get(c, id)));
-    ostack_push(ctx, doCallStack(c, callee, nargs, id, env, pc, ctx));
+    SEXP callee = cp_pool_at(ctx, *CallSite_target(CallSite_get(*c, id)));
+    ostack_push(ctx, doCallStack(*c, callee, nargs, id, env, pc, ctx));
 }
 
 INSTRUCTION(call_) {
@@ -1068,26 +1077,26 @@ INSTRUCTION(call_) {
     // get the closure itself
     SEXP cls = ostack_pop(ctx);
     PROTECT(cls);
-    ostack_push(ctx, doCall(c, cls, nargs, id, env, pc, ctx));
+    ostack_push(ctx, doCall(*c, cls, nargs, id, env, pc, ctx));
     UNPROTECT(1);
 }
 
 INSTRUCTION(dispatch_stack_) {
     unsigned id = readImmediate(pc);
     unsigned nargs = readImmediate(pc);
-    ostack_push(ctx, doDispatchStack(c, nargs, id, env, pc, ctx));
+    ostack_push(ctx, doDispatchStack(*c, nargs, id, env, pc, ctx));
 }
 
 INSTRUCTION(dispatch_) {
     unsigned id = readImmediate(pc);
     unsigned nargs = readImmediate(pc);
-    ostack_push(ctx, doDispatch(c, nargs, id, env, pc, ctx));
+    ostack_push(ctx, doDispatch(*c, nargs, id, env, pc, ctx));
 }
 
 INSTRUCTION(promise_) {
     // get the Code * pointer we need
     unsigned codeOffset = readImmediate(pc);
-    Code* promiseCode = codeAt(function(c), codeOffset);
+    Code* promiseCode = codeAt(function(*c), codeOffset);
     // create the promise and push it on stack
     ostack_push(ctx, createPromise(promiseCode, env));
 }
@@ -1095,7 +1104,7 @@ INSTRUCTION(promise_) {
 INSTRUCTION(push_code_) {
     // get the Code * pointer we need
     unsigned codeOffset = readImmediate(pc);
-    Code* promiseCode = codeAt(function(c), codeOffset);
+    Code* promiseCode = codeAt(function(*c), codeOffset);
     // create the promise and push it on stack
     ostack_push(ctx, (SEXP)promiseCode);
 }
@@ -1226,7 +1235,7 @@ INSTRUCTION(missing_) {
     SLOWASSERT(!DDVAL(sym));
     SEXP bind = (SEXP)R_findVarLocInFrame(env, sym);
     if (bind == NULL)
-        errorcall(getSrcAt(c, *pc - 1, ctx),
+        errorcall(getSrcAt(*c, *pc - 1, ctx),
                   "'missing' can only be used for arguments");
 
     if (MISSING(bind) || CAR(bind) == R_MissingArg) {
@@ -1299,7 +1308,7 @@ INSTRUCTION(asbool_) {
     SEXP t = ostack_top(ctx);
     int cond = NA_LOGICAL;
     if (XLENGTH(t) > 1)
-        warningcall(getSrcAt(c, *pc - 1, ctx),
+        warningcall(getSrcAt(*c, *pc - 1, ctx),
                     ("the condition has length > 1 and only the first "
                      "element will be used"));
 
@@ -1321,7 +1330,7 @@ INSTRUCTION(asbool_) {
                 ? (isLogical(t) ? ("missing value where TRUE/FALSE needed")
                                 : ("argument is not interpretable as logical"))
                 : ("argument is of length zero");
-        errorcall(getSrcAt(c, *pc - 1, ctx), msg);
+        errorcall(getSrcAt(*c, *pc - 1, ctx), msg);
     }
 
     ostack_pop(ctx);
@@ -1332,7 +1341,7 @@ INSTRUCTION(brobj_) {
     int offset = readJumpOffset(pc);
     if (OBJECT(ostack_top(ctx)))
         *pc = *pc + offset;
-    PC_BOUNDSCHECK(*pc);
+    PC_BOUNDSCHECK(*pc, *c);
 }
 
 INSTRUCTION(endcontext_) {
@@ -1356,9 +1365,9 @@ INSTRUCTION(brtrue_) {
     if (ostack_pop(ctx) == R_TrueValue) {
         *pc = *pc + offset;
         if (offset < 0)
-            incPerfCount(c);
+            incPerfCount(*c);
     }
-    PC_BOUNDSCHECK(*pc);
+    PC_BOUNDSCHECK(*pc, *c);
 }
 
 INSTRUCTION(brfalse_) {
@@ -1366,17 +1375,17 @@ INSTRUCTION(brfalse_) {
     if (ostack_pop(ctx) == R_FalseValue) {
         *pc = *pc + offset;
         if (offset < 0)
-            incPerfCount(c);
+            incPerfCount(*c);
     }
-    PC_BOUNDSCHECK(*pc);
+    PC_BOUNDSCHECK(*pc, *c);
 }
 
 INSTRUCTION(br_) {
     int offset = readJumpOffset(pc);
     if (offset < 0)
-        incPerfCount(c);
+        incPerfCount(*c);
     *pc = *pc + offset;
-    PC_BOUNDSCHECK(*pc);
+    PC_BOUNDSCHECK(*pc, *c);
 }
 
 INSTRUCTION(subassign2_) {
@@ -1648,14 +1657,15 @@ INSTRUCTION(dup_) { ostack_push(ctx, ostack_top(ctx)); }
 INSTRUCTION(guard_env_) {
     uint32_t deoptId = readImmediate(pc);
     if (FRAME_CHANGED(env) || FRAME_LEAKED(env)) {
-        Function* fun = function(c);
-        assert(functionCode(fun) == c && "Cannot deopt from promise");
+        Function* fun = function(*c);
+        assert(functionCode(fun) == *c && "Cannot deopt from promise");
         fun->deopt = true;
         SEXP deopt = fun->origin;
         Function* deoptFun = (Function*)INTEGER(deopt);
         Code* deoptCode = functionCode(deoptFun);
-        *cStore = deoptCode;
+        *c = deoptCode;
         *pc = Deoptimizer_pc(deoptId);
+        PC_BOUNDSCHECK(*pc, *c);
     }
 }
 
@@ -1751,7 +1761,7 @@ enum op { PLUSOP, MINUSOP, TIMESOP, DIVOP, POWOP, MODOP, IDIVOP };
     do {                                                                       \
         if (naflag) {                                                          \
             PROTECT(ans);                                                      \
-            SEXP call = getSrcForCall(c, *pc - 1, ctx);                        \
+            SEXP call = getSrcForCall(*c, *pc - 1, ctx);                       \
             Rf_warningcall(call, INTEGER_OVERFLOW_WARNING);                    \
             UNPROTECT(1);                                                      \
         }                                                                      \
@@ -1767,7 +1777,7 @@ enum op { PLUSOP, MINUSOP, TIMESOP, DIVOP, POWOP, MODOP, IDIVOP };
             blt = getBuiltin(prim);                                            \
             flag = getFlag(prim);                                              \
         }                                                                      \
-        SEXP call = getSrcForCall(c, *pc - 1, ctx);                            \
+        SEXP call = getSrcForCall(*c, *pc - 1, ctx);                           \
         SEXP argslist = CONS_NR(lhs, CONS_NR(rhs, R_NilValue));                \
         ostack_push(ctx, argslist);                                            \
         if (flag < 2)                                                          \
@@ -2074,7 +2084,7 @@ INSTRUCTION(seq_) {
 
     if (!res) {
         SLOWASSERT(!isObject(from));
-        SEXP call = getSrcForCall(c, *pc - 1, ctx);
+        SEXP call = getSrcForCall(*c, *pc - 1, ctx);
         SEXP argslist = CONS_NR(from, CONS_NR(to, CONS_NR(by, R_NilValue)));
         ostack_push(ctx, argslist);
         res = applyClosure(call, prim, argslist, env, R_NilValue);
@@ -2168,7 +2178,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
 
 #define INS(name)                                                              \
     case name:                                                                 \
-        ins_##name(c, env, &pc, ctx, numArgs, &c);                             \
+        ins_##name(&c, env, &pc, ctx, numArgs);                                \
         debug(c, pc, #name, ostack_length(ctx) - bp, ctx);                     \
         break
 
@@ -2273,7 +2283,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
 
                 if (s == CTXT_BREAK)
                     pc = pc + offset;
-                PC_BOUNDSCHECK(pc);
+                PC_BOUNDSCHECK(pc, c);
             }
             break;
         }
@@ -2308,15 +2318,10 @@ SEXP rirEval_f(SEXP f, SEXP env) {
     assert(TYPEOF(f) == EXTERNALSXP);
     // TODO we do not really need the arg counts now
     if (isValidCodeObject(f)) {
-        //        Rprintf("Evaluating promise:\n");
         Code* c = (Code*)f;
         SEXP x = evalRirCode(c, globalContext(), env, 0);
-      //        Rprintf("Promise evaluated, length %u, value %d",
-        //        Rf_length(x), REAL(x)[0]);
         return x;
     } else {
-        //        Rprintf("=====================================================\n");
-        //        Rprintf("Evaluating function\n");
         Function* ff = (Function*)(INTEGER(f));
         return evalRirCode(functionCode(ff), globalContext(), env, 0);
     }

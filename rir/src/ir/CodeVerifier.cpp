@@ -7,6 +7,7 @@
 #include "CodeVerifier.h"
 #include "BC.h"
 #include "R/Symbols.h"
+#include "interpreter/deoptimizer.h"
 
 namespace rir {
 
@@ -113,12 +114,9 @@ void CodeVerifier::vefifyFunctionLayout(SEXP sexp, ::Context* ctx) {
     assert(TYPEOF(sexp) == EXTERNALSXP and "Invalid SEXPTYPE");
     FunctionHandle fun(sexp);
 
-    // Rprintf("Checking function object at %u\n", f);
     // get the code objects
     std::vector<Code*> objs;
     for (auto c : fun) {
-        // Rprintf("Checking code object at %p\n", c);
-        // Rprintf("End: %p\n", ::end(fun.function));
         objs.push_back(c);
     }
 
@@ -180,9 +178,24 @@ void CodeVerifier::vefifyFunctionLayout(SEXP sexp, ::Context* ctx) {
     for (auto c : objs) {
         Opcode* cptr = reinterpret_cast<Opcode*>(code(c));
         Opcode* start = cptr;
+        Opcode* end = start + c->codeSize;
         while (true) {
-            assert(cptr < start + c->codeSize);
+            assert(cptr < end);
             BC cur = BC::decode(cptr);
+            if (*cptr == Opcode::br_ || *cptr == Opcode::brobj_ ||
+                *cptr == Opcode::brtrue_ || *cptr == Opcode::brfalse_) {
+                int off = *reinterpret_cast<int*>(cptr + 1);
+                assert(cptr + off >= start && cptr + off < end);
+            }
+            if (*cptr == Opcode::guard_env_) {
+                unsigned deoptId = *reinterpret_cast<ArgT*>(cptr + 1);
+                Opcode* deoptPc = (Opcode*)Deoptimizer_pc(deoptId);
+                assert(f->origin);
+                FunctionHandle deoptFun = f->origin;
+                CodeHandle deoptCode = deoptFun.entryPoint();
+                assert(deoptPc >= deoptCode.bc() &&
+                       deoptPc < deoptCode.endBc());
+            }
             if (*cptr == Opcode::ldvar_) {
                 unsigned* argsIndex = reinterpret_cast<ArgT*>(cptr + 1);
                 assert(*argsIndex < cp_pool_length(ctx) and

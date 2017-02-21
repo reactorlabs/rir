@@ -48,7 +48,11 @@ SEXP Optimizer::reoptimizeFunction(SEXP s) {
     }
 
     FunctionHandle opt = code.finalize();
+    opt.function->origin = BODY(s);
+#ifdef ENABLE_SLOWASSERT
     CodeVerifier::vefifyFunctionLayout(opt.store, globalContext());
-    return opt.store;
+#endif
+    SEXP res = opt.store;
+    return res;
 }
 }
