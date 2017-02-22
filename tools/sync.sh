@@ -46,7 +46,7 @@ function checkout_r {
 
     CUR_BRANCH=`git branch | grep "*" | tail -c +3`
     if [[ "$CUR_BRANCH" != "$BRANCH" ]]; then
-        if [ ! -f $R_DIR/Makefile ]; then
+        if [ -f $R_DIR/Makefile ]; then
             make distclean
         fi
     fi
@@ -54,14 +54,16 @@ function checkout_r {
     git fetch
     git checkout $BRANCH
    
+    tools/rsync-recommended
+
     if [ ! -f $R_DIR/Makefile ]; then
         echo "-> configure gnur"
         cd $R_DIR
         if [ $USING_OSX -eq 1 ]; then
           # Mac OSX
-            F77="gfortran -arch x86_64" FC="gfortran -arch x86_64" CXXFLAGS="-g3 -O2" CFLAGS="-g3 -O2" ./configure --with-blas --with-lapack --with-ICU=no --with-x=no --without-recommended-packages
+            F77="gfortran -arch x86_64" FC="gfortran -arch x86_64" CXXFLAGS="-g3 -O2" CFLAGS="-g3 -O2" ./configure --with-ICU=no --with-x=no
         else
-            CXXFLAGS="-g3 -O2" CFLAGS="-g3 -O2" ./configure --with-blas --with-lapack --with-ICU=no --with-x=no --without-recommended-packages
+            CXXFLAGS="-g3 -O2" CFLAGS="-g3 -O2" ./configure --with-ICU=no --with-x=no
         fi
     fi
     
