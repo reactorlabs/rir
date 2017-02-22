@@ -38,6 +38,19 @@ function checkout_r {
     fi
 
     cd $R_DIR
+
+    if [[ $(git diff --shortstat 2> /dev/null | tail -n1) != "" ]]; then
+        echo "repo is dirty"
+        exit 1
+    fi
+
+    CUR_BRANCH=`git branch | grep "*" | tail -c +3`
+    if [[ "$CUR_BRANCH" != "$BRANCH" ]]; then
+        if [ ! -f $R_DIR/Makefile ]; then
+            make distclean
+        fi
+    fi
+
     git fetch
     git checkout $BRANCH
    
@@ -46,9 +59,9 @@ function checkout_r {
         cd $R_DIR
         if [ $USING_OSX -eq 1 ]; then
           # Mac OSX
-            F77="gfortran -arch x86_64" FC="gfortran -arch x86_64" CXXFLAGS="-g3 -O2" CFLAGS="-g3 -O2" ./configure --with-blas --with-lapack --with-ICU=no --with-system-xz=no --with-system-zlib=no --with-x=no --without-recommended-packages
+            F77="gfortran -arch x86_64" FC="gfortran -arch x86_64" CXXFLAGS="-g3 -O2" CFLAGS="-g3 -O2" ./configure --with-blas --with-lapack --with-ICU=no --with-x=no --without-recommended-packages
         else
-            CXXFLAGS="-g3 -O2" CFLAGS="-g3 -O2" ./configure --with-blas --with-lapack --with-ICU=no --with-system-xz=no --with-system-zlib=no --with-x=no --without-recommended-packages
+            CXXFLAGS="-g3 -O2" CFLAGS="-g3 -O2" ./configure --with-blas --with-lapack --with-ICU=no --with-x=no --without-recommended-packages
         fi
     fi
     
@@ -62,7 +75,7 @@ function checkout_r {
     fi
 }
 
-checkout_r custom-r rir_patched
+checkout_r custom-r rir-patch-3-3-branch
 if [[ $VANILLA == "--vanilla" ]]; then
-    checkout_r vanilla-r base
+    checkout_r vanilla-r R-3-3-branch
 fi

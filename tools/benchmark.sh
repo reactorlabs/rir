@@ -11,9 +11,9 @@ OUT="benchmark-out/current"
 RUNS=3
  
 # checkout gnur without our modifications
+$BASE/tools/sync.sh --vanilla
 if [ ! -f $PLAIN_R ]; then
     pushd .
-    $BASE/tools/sync.sh --vanilla
     cd $BASE/external/vanilla-r && make -j 8
     popd
 fi

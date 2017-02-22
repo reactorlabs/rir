@@ -1224,7 +1224,7 @@ INSTRUCTION(missing_) {
     SEXP sym = readConst(ctx, pc);
     SLOWASSERT(TYPEOF(sym) == SYMSXP);
     SLOWASSERT(!DDVAL(sym));
-    SEXP bind = (SEXP)R_findVarLocInFrame(env, sym);
+    SEXP bind = R_findVarLocInFrame(env, sym).cell;
     if (bind == NULL)
         errorcall(getSrcAt(*c, *pc - 1, ctx),
                   "'missing' can only be used for arguments");
@@ -1409,7 +1409,8 @@ INSTRUCTION(subassign2_) {
             // vector
             SEXP target = cp_pool_at(ctx, targetI);
             bool localBinding =
-                (target == R_NilValue) || (R_findVarLocInFrame(env, target));
+                (target == R_NilValue) ||
+                !R_VARLOC_IS_NULL(R_findVarLocInFrame(env, target));
 
             if (localBinding) {
                 int idx_ = -1;
