@@ -11,8 +11,17 @@ compiler:
   - clang
   - gcc
 
+env:
+  - TESTS=debug
+  - TESTS=devel
+  - TESTS=recommended
+
 matrix:
   exclude:
+    - os: osx
+      env: TESTS=devel
+    - os: osx
+      env: TESTS=recommended
     - os: osx
       compiler: gcc
     - os: linux
@@ -42,10 +51,11 @@ before_install:
   - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then . ./tools/ci/before_install-linux.sh; fi
 
 before_script:
-  - cmake -DCMAKE_BUILD_TYPE=debug -GNinja
+  - if [[ "$TESTS" == "debug" ]]; then cmake -DCMAKE_BUILD_TYPE=debug -GNinja; else cmake -DCMAKE_BUILD_TYPE=release -GNinja; fi
   - ninja setup
   - ninja
 
 script:
   - ./tools/tests
-  - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then ./tools/gnur-make check; fi
+  - if [[ "$TESTS" == "devel" ]]; then ./tools/gnur-make check-devel; fi
+  - if [[ "$TESTS" == "recommended" ]]; then ./tools/gnur-make check-recommended; fi
