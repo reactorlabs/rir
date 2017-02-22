@@ -15,7 +15,7 @@ fi
 SCRIPTPATH=`cd $(dirname "$0") && pwd`
 BASE=`cd $SCRIPTPATH/.. && pwd`
 TIMEOUT=80
-LOOKBACK=10
+LOOKBACK=5
 RUNS=3
 REV=`git log -n $LOOKBACK --pretty=format:"%H|%cI"`
 BENCH=`ls ${BASE}/benchmarks/shootout/*/*.r`
