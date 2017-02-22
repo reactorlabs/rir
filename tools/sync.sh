@@ -44,13 +44,6 @@ function checkout_r {
         exit 1
     fi
 
-    CUR_BRANCH=`git branch | grep "*" | tail -c +3`
-    if [[ "$CUR_BRANCH" != "$BRANCH" ]]; then
-        if [ -f $R_DIR/Makefile ]; then
-            make distclean
-        fi
-    fi
-
     git fetch
     git checkout origin/$BRANCH
    
