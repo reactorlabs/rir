@@ -54,7 +54,7 @@ function checkout_r {
         cd $R_DIR
         if [ $USING_OSX -eq 1 ]; then
           # Mac OSX
-            F77="gfortran -arch x86_64" FC="gfortran -arch x86_64" CXXFLAGS="-g3 -O2" CFLAGS="-g3 -O2" ./configure --with-system-zlib=no --with-system-xz=no --with-ICU=no --with-x=no
+            F77="gfortran -arch x86_64" FC="gfortran -arch x86_64" CXXFLAGS="-g3 -O2" CFLAGS="-g3 -O2" ./configure --with-ICU=no --with-x=no
         else
             CXXFLAGS="-g3 -O2" CFLAGS="-g3 -O2" ./configure --with-ICU=no --with-x=no
         fi
