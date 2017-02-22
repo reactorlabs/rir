@@ -338,6 +338,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
                             cs << BC::subassign2(target);
                         else
                             cs << BC::subassign();
+
                         cs << BC::stvar(target);
                         cs << BC::br(nextBranch);
 

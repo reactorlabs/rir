@@ -52,7 +52,7 @@ function checkout_r {
     fi
 
     git fetch
-    git checkout $BRANCH
+    git checkout origin/$BRANCH
    
     tools/rsync-recommended
 

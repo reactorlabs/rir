@@ -66,7 +66,8 @@ REXPORT SEXP rir_compile(SEXP what, SEXP env = NULL) {
 }
 
 REXPORT SEXP rir_markOptimize(SEXP what) {
-    assert(TYPEOF(what) == CLOSXP);
+    if (TYPEOF(what) != CLOSXP)
+        return R_NilValue;
     SEXP b = BODY(what);
     isValidFunctionSEXP(b);
     Function* fun = (Function*)INTEGER(b);
@@ -91,6 +92,8 @@ REXPORT SEXP rir_body(SEXP cls) {
 }
 
 REXPORT SEXP rir_analysis_signature(SEXP what) {
+    if (TYPEOF(what) != CLOSXP)
+        return R_NilValue;
     CodeEditor ce(what);
     SignatureAnalysis sa;
     sa.analyze(ce);
