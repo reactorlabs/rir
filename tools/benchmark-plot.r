@@ -17,4 +17,4 @@ ggplot(d, aes(x=experiment, y=value, color=experiment, group=variable)) +
   geom_point(size=0.25, color="black") +
   facet_wrap(~benchmark, scales="free")
 
-ggsave(paste0(args[[1]],".png"))
+ggsave(paste0(args[[1]],".png"), scale=2.5)

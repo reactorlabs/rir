@@ -41,7 +41,7 @@ for revf in $REV; do
                 echo $T
                 echo -n "$dat $rev, $T, " >> $log
                 R_ENABLE_JIT=2 timeout $TIMEOUT ${SCRIPTPATH}/R -e \
-                    "{setwd('$D'); source('$i'); execute(); write(system.time(execute())[[3]], stderr())}" \
+                    "{options(warn=-1); setwd('$D'); source('$i'); execute(); write(system.time(execute())[[3]], stderr())}" \
                       > /dev/null 2>>$log || echo "" >>$log
             done
         fi
