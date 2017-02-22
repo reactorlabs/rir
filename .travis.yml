@@ -13,13 +13,10 @@ compiler:
 
 env:
   - TESTS=debug
-  - TESTS=devel
   - TESTS=recommended
 
 matrix:
   exclude:
-    - os: osx
-      env: TESTS=devel
     - os: osx
       env: TESTS=recommended
     - os: osx
@@ -57,5 +54,5 @@ before_script:
 
 script:
   - ./tools/tests
-  - if [[ "$TESTS" == "devel" ]]; then ./tools/gnur-make check-devel; fi
+  - if [[ "$TESTS" == "debug" ]]; then ./tools/gnur-make check-devel; fi
   - if [[ "$TESTS" == "recommended" ]]; then ./tools/gnur-make check-recommended; fi
