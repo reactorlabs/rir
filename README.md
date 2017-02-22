@@ -23,4 +23,4 @@ To run tests from gnur with rir enabled as a jit:
 ## Build Status
 
 * [performance](http://ginger.ele.fit.cvut.cz/~oli/r-we-fast/)
-* [tests](https://travis-ci.org/reactorlabs/rir) ![travis](https://api.travis-ci.org/reactorlabs/rir.svg?branch=master)
+* ![travis](https://api.travis-ci.org/reactorlabs/rir.svg?branch=master) ([travis](https://travis-ci.org/reactorlabs/rir))
