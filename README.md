@@ -18,5 +18,9 @@ To run the basic test, just execute:
 
 To run tests from gnur with rir enabled as a jit:
 
-    tools/gnur-make check
+    tools/gnur-make check-devel
 
+## Build Status
+
+* [performance](http://ginger.ele.fit.cvut.cz/~oli/r-we-fast/)
+* [tests](https://travis-ci.org/reactorlabs/rir) ![travis](https://api.travis-ci.org/reactorlabs/rir.svg?branch=master)

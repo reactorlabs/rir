@@ -11,4 +11,4 @@ ggplot(d, aes(x=version, y=value, color=benchmark, group=variable)) +
  stat_summary(fun.data = "mean_cl_boot", geom = "smooth") +
  facet_wrap(~benchmark)
 
-ggsave(paste0(args[[1]],".png"), scale=2.5)
+ggsave(paste0(args[[1]],".png"), scale=1.5)
