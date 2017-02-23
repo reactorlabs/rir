@@ -1,4 +1,3 @@
-sudo: required
 dist: trusty
 
 language: cpp
@@ -12,17 +11,22 @@ compiler:
   - gcc
 
 env:
-  - TESTS=debug
-  - TESTS=recommended
+  - CHECK=check BUILD=release
+  - CHECK=check-devel BUILD=debug
+  - CHECK=check-recommended BUILD=release
 
 matrix:
   exclude:
     - os: osx
-      env: TESTS=recommended
-    - os: osx
       compiler: gcc
     - os: linux
       compiler: clang
+    - os: linux
+      env: CHECK=check BUILD=release
+    - os: osx
+      env: CHECK=check-devel BUILD=debug
+    - os: osx
+      env: CHECK=check-recommended BUILD=debug
 
 addons:
   apt:
@@ -45,14 +49,13 @@ before_install:
   - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then . ./tools/ci/before_install-linux.sh; fi
 
 before_script:
-  - if [[ "$TESTS" == "debug" ]]; then cmake -DCMAKE_BUILD_TYPE=debug; else cmake -DCMAKE_BUILD_TYPE=release; fi
+  - cmake -DCMAKE_BUILD_TYPE=$BUILD .
   - make setup
   - make -j4
 
 script:
   - ./tools/tests
-  - if [[ "$TESTS" == "debug" ]]; then ./tools/gnur-make check-devel; fi
-  - if [[ "$TESTS" == "recommended" ]]; then ./tools/gnur-make check-recommended; fi
+  - TEST_MC_CORES=3 ./tools/gnur-make $CHECK
 
 cache:
   - ccache
