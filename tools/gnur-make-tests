@@ -13,5 +13,7 @@ export EXTRA_LOAD_R="$PKG/R/rir.R"
 export R_ENABLE_JIT=2
 
 cd $R_HOME
+git clean -fx -e Makefile tests/
 
+cd tests
 make $CHK

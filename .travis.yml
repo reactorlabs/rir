@@ -11,8 +11,9 @@ compiler:
   - gcc
 
 env:
-  - CHECK=check BUILD=release
-  - CHECK=check-devel BUILD=debug
+  - CORES=3 CHECK=check BUILD=release
+  - CORES=3 CHECK=check BUILD=debug
+  - CHECK=test-all-devel BUILD=release
   - CHECK=check-recommended BUILD=release
 
 matrix:
@@ -22,9 +23,11 @@ matrix:
     - os: linux
       compiler: clang
     - os: linux
-      env: CHECK=check BUILD=release
+      env: CORES=3 CHECK=check BUILD=release
     - os: osx
-      env: CHECK=check-devel BUILD=debug
+      env: CORES=3 CHECK=check BUILD=debug
+    - os: osx
+      env: CHECK=test-all-devel BUILD=release
     - os: osx
       env: CHECK=check-recommended BUILD=release
 
@@ -55,7 +58,8 @@ before_script:
 
 script:
   - ./tools/tests
-  - TEST_MC_CORES=3 ./tools/gnur-make $CHECK
+  - echo "running make $CHECK on a $BUILD build with CORES=$CORES"
+  - TEST_MC_CORES=$CORES ./tools/gnur-make-tests $CHECK
 
 cache:
   - ccache
