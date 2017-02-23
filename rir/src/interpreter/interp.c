@@ -2110,11 +2110,16 @@ INSTRUCTION(invisible_) {
     R_Visible = 0;
 }
 
-INSTRUCTION(uniq_) {
+INSTRUCTION(set_shared_) {
     SEXP v = ostack_top(ctx);
     if (NAMED(v) < 2) {
         SET_NAMED(v, 2);
-    } else {
+    }
+}
+
+INSTRUCTION(uniq_) {
+    SEXP v = ostack_top(ctx);
+    if (NAMED(v) == 2) {
         v = shallow_duplicate(v);
         ostack_set(ctx, 0, v);
         SET_NAMED(v, 1);
@@ -2231,6 +2236,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
             INS(subset2_);
             INS(dispatch_);
             INS(uniq_);
+            INS(set_shared_);
             INS(aslogical_);
             INS(lgl_and_);
             INS(lgl_or_);

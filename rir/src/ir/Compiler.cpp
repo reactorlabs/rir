@@ -323,7 +323,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
                         // Keep a copy of rhs since its the result of this
                         // expression
                         cs << BC::dup()
-                           << BC::uniq();
+                           << BC::setShared();
 
                         // Now load target and index
                         cs << BC::ldvar(target);
@@ -386,7 +386,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
 
         compileExpr(ctx, rhs);
         cs << BC::dup()
-           << BC::uniq();
+           << BC::setShared();
 
         // Evaluate the getter list and push it to the stack in reverse order
         for (unsigned i = lhsParts.size() - 1; i > 0; --i) {
@@ -456,12 +456,9 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
             ++arg;
             names.push_back(R_NilValue);
 
-            // Some setters do not check for the named flag!
-            if (fun != symbol::Bracket && fun != symbol::DoubleBracket) {
-                cs << BC::pick(1)
-                   << BC::uniq()
-                   << BC::put(1);
-            }
+            cs << BC::pick(1)
+               << BC::uniq()
+               << BC::put(1);
 
             // Load function and push it before the first arg and the value
             // from the last setter.
@@ -722,7 +719,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
         ctx.pushLoop(loopBranch, breakBranch);
 
         compileExpr(ctx, seq);
-        cs << BC::uniq()
+        cs << BC::setShared()
            << BC::push((int)0);
 
         cs << BC::beginloop(breakBranch)

@@ -647,6 +647,9 @@ class DataflowAnalysis
     }
 
     void uniq_(CodeEditor::Iterator ins) override { current().top().used(ins); }
+    void set_shared_(CodeEditor::Iterator ins) override {
+        current().top().used(ins);
+    }
 
     void brobj_(CodeEditor::Iterator ins) override {
         current().top().used(ins);
