@@ -270,6 +270,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
             Case(SYMSXP) {
                 compileExpr(ctx, rhs);
                 cs << BC::dup()
+                   << BC::setShared()
                    << BC::stvar(lhs)
                    << BC::invisible();
                 return true;

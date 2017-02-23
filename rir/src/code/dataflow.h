@@ -93,6 +93,19 @@ class FValue {
         return u.use != UseDef::unused();
     }
 
+    bool singleUse() const {
+        if (hasUseDef()) {
+            assert(u.use != UseDef::unused());
+            return u.use != UseDef::multiuse();
+        }
+        return false;
+    }
+
+    CodeEditor::Iterator use() {
+        assert(singleUse());
+        return u.use;
+    }
+
     struct UseDef {
         CodeEditor::Iterator def = unused();
         CodeEditor::Iterator use = unused();
