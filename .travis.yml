@@ -27,7 +27,6 @@ matrix:
 addons:
   apt:
     packages:
-      - ninja-build
       - xdg-utils
       - gfortran
       - subversion
@@ -38,8 +37,6 @@ addons:
       - binutils
       - curl
       - cmake
-      - ruby
-      - openjdk-7-jdk
       - rsync
       - xorg-dev
 
@@ -48,11 +45,14 @@ before_install:
   - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then . ./tools/ci/before_install-linux.sh; fi
 
 before_script:
-  - if [[ "$TESTS" == "debug" ]]; then cmake -DCMAKE_BUILD_TYPE=debug -GNinja; else cmake -DCMAKE_BUILD_TYPE=release -GNinja; fi
-  - ninja setup
-  - ninja
+  - if [[ "$TESTS" == "debug" ]]; then cmake -DCMAKE_BUILD_TYPE=debug; else cmake -DCMAKE_BUILD_TYPE=release; fi
+  - make setup
+  - make -j4
 
 script:
   - ./tools/tests
   - if [[ "$TESTS" == "debug" ]]; then ./tools/gnur-make check-devel; fi
   - if [[ "$TESTS" == "recommended" ]]; then ./tools/gnur-make check-recommended; fi
+
+cache:
+  - ccache
