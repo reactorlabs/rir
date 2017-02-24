@@ -93,6 +93,19 @@ class FValue {
         return u.use != UseDef::unused();
     }
 
+    bool singleUse() const {
+        if (hasUseDef()) {
+            assert(u.use != UseDef::unused());
+            return u.use != UseDef::multiuse();
+        }
+        return false;
+    }
+
+    CodeEditor::Iterator use() {
+        assert(singleUse());
+        return u.use;
+    }
+
     struct UseDef {
         CodeEditor::Iterator def = unused();
         CodeEditor::Iterator use = unused();
@@ -646,7 +659,12 @@ class DataflowAnalysis
             current().mergeAllEnv(FValue::Argument());
     }
 
-    void uniq_(CodeEditor::Iterator ins) override { current().top().used(ins); }
+    void make_unique_(CodeEditor::Iterator ins) override {
+        current().top().used(ins);
+    }
+    void set_shared_(CodeEditor::Iterator ins) override {
+        current().top().used(ins);
+    }
 
     void brobj_(CodeEditor::Iterator ins) override {
         current().top().used(ins);

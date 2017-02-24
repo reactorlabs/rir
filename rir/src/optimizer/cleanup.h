@@ -22,11 +22,32 @@ class BCCleanup : public InstructionDispatcher::Receiver {
         auto defI = v.u.def;
         BC def = *defI;
 
+        bool isDup = def.is(Opcode::dup_);
         // push - pop elimination
-        if (!v.used()) {
-            if (def.is(Opcode::push_) || def.is(Opcode::dup_)) {
+        if (def.is(Opcode::push_) || isDup) {
+            bool used = v.used();
+            if (used && v.singleUse()) {
+                CodeEditor::Iterator use = v.use();
+                if ((*use).is(Opcode::set_shared_) ||
+                    (*use).is(Opcode::make_unique_)) {
+                    use.asCursor(code_).remove();
+                    used = false;
+                }
+            }
+
+            if (!used) {
                 defI.asCursor(code_).remove();
                 ins.asCursor(code_).remove();
+                /* if we remove a dup instruction then the potentially
+                 * following set_shared_ becomes obsolete as well */
+                if (isDup) {
+                    if ((ins + 1) != code_.end()) {
+                        auto next = ins + 1;
+                        if ((*next).is(Opcode::set_shared_)) {
+                            next.asCursor(code_).remove();
+                        }
+                    }
+                }
                 return;
             }
         }
@@ -136,17 +157,6 @@ class BCCleanup : public InstructionDispatcher::Receiver {
             if ((*(ins + 1)).is(Opcode::pop_) ||
                 (*(ins + 1)).is(Opcode::visible_) ||
                 (*(ins + 1)).is(Opcode::ldvar_)) {
-                ins.asCursor(code_).remove();
-            }
-        }
-    }
-
-    void uniq_(CodeEditor::Iterator ins) override {
-        if ((ins + 1) != code_.end()) {
-            if ((*(ins + 1)).is(Opcode::stvar_) ||
-                (*(ins + 1)).is(Opcode::pop_) ||
-                (*(ins + 1)).is(Opcode::subassign_) ||
-                (*(ins + 1)).is(Opcode::subassign2_)) {
                 ins.asCursor(code_).remove();
             }
         }

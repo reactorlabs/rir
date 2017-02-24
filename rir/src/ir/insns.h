@@ -186,7 +186,11 @@ DEF_INSTR(static_call_stack_, 2, -1, 1, 0)
 /**
  * static_call_stack_:: like call_stack, but call target is immediate
  */
-DEF_INSTR(uniq_, 0, 1, 1, 1)
+DEF_INSTR(set_shared_, 0, 1, 1, 1)
+/**
+ * set_shared_:: marks tos to be shared (ie. named = 2)
+ */
+DEF_INSTR(make_unique_, 0, 1, 1, 1)
 /**
  * uniq_:: duplicates tos if it is shared (ie. named > 1)
  */

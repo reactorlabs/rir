@@ -79,7 +79,8 @@ BC::ImmediateT decodeImmediate(Opcode bc, Opcode* pc) {
     case Opcode::dup2_:
     case Opcode::swap_:
     case Opcode::int3_:
-    case Opcode::uniq_:
+    case Opcode::make_unique_:
+    case Opcode::set_shared_:
     case Opcode::aslogical_:
     case Opcode::lgl_and_:
     case Opcode::lgl_or_:
@@ -299,7 +300,8 @@ BC BC::extract2() { return BC(Opcode::extract2_); }
 BC BC::subset2() { return BC(Opcode::subset2_); }
 BC BC::swap() { return BC(Opcode::swap_); }
 BC BC::int3() { return BC(Opcode::int3_); }
-BC BC::uniq() { return BC(Opcode::uniq_); }
+BC BC::makeUnique() { return BC(Opcode::make_unique_); }
+BC BC::setShared() { return BC(Opcode::set_shared_); }
 BC BC::asLogical() { return BC(Opcode::aslogical_); }
 BC BC::lglAnd() { return BC(Opcode::lgl_and_); }
 BC BC::lglOr() { return BC(Opcode::lgl_or_); }
