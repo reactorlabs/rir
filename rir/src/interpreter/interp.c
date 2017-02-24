@@ -2117,7 +2117,7 @@ INSTRUCTION(set_shared_) {
     }
 }
 
-INSTRUCTION(uniq_) {
+INSTRUCTION(make_unique_) {
     SEXP v = ostack_top(ctx);
     if (NAMED(v) == 2) {
         v = shallow_duplicate(v);
@@ -2235,7 +2235,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
             INS(extract2_);
             INS(subset2_);
             INS(dispatch_);
-            INS(uniq_);
+            INS(make_unique_);
             INS(set_shared_);
             INS(aslogical_);
             INS(lgl_and_);

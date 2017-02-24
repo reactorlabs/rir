@@ -458,7 +458,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
             names.push_back(R_NilValue);
 
             cs << BC::pick(1)
-               << BC::uniq()
+               << BC::makeUnique()
                << BC::put(1);
 
             // Load function and push it before the first arg and the value
@@ -819,7 +819,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
                    << BC::swap()
                    << BC::length()
                    << BC::dup()
-                   << BC::uniq()
+                   << BC::makeUnique()
                    << BC::inc()
                    << BC::swap()
                    // allocate the ans vector with same size and names

@@ -29,7 +29,7 @@ class BCCleanup : public InstructionDispatcher::Receiver {
             if (used && v.singleUse()) {
                 CodeEditor::Iterator use = v.use();
                 if ((*use).is(Opcode::set_shared_) ||
-                    (*use).is(Opcode::uniq_)) {
+                    (*use).is(Opcode::make_unique_)) {
                     use.asCursor(code_).remove();
                     used = false;
                 }

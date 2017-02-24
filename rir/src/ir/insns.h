@@ -190,7 +190,7 @@ DEF_INSTR(set_shared_, 0, 1, 1, 1)
 /**
  * set_shared_:: marks tos to be shared (ie. named = 2)
  */
-DEF_INSTR(uniq_, 0, 1, 1, 1)
+DEF_INSTR(make_unique_, 0, 1, 1, 1)
 /**
  * uniq_:: duplicates tos if it is shared (ie. named > 1)
  */

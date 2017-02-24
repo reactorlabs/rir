@@ -82,7 +82,7 @@ bool BC::operator==(const BC& other) const {
     case Opcode::test_bounds_:
     case Opcode::swap_:
     case Opcode::int3_:
-    case Opcode::uniq_:
+    case Opcode::make_unique_:
     case Opcode::set_shared_:
     case Opcode::aslogical_:
     case Opcode::lgl_and_:
@@ -185,7 +185,7 @@ void BC::write(CodeStream& cs) const {
     case Opcode::test_bounds_:
     case Opcode::swap_:
     case Opcode::int3_:
-    case Opcode::uniq_:
+    case Opcode::make_unique_:
     case Opcode::set_shared_:
     case Opcode::aslogical_:
     case Opcode::lgl_and_:
@@ -372,7 +372,7 @@ void BC::print(CallSite cs) {
     case Opcode::ret_:
     case Opcode::swap_:
     case Opcode::int3_:
-    case Opcode::uniq_:
+    case Opcode::make_unique_:
     case Opcode::set_shared_:
     case Opcode::dup_:
     case Opcode::inc_:
