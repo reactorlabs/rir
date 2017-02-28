@@ -16,6 +16,7 @@ SCRIPTPATH=`cd $(dirname "$0") && pwd`
 BASE=`cd $SCRIPTPATH/.. && pwd`
 TIMEOUT=80
 LOOKBACK=5
+LOOKBACK_PLOT=50
 RUNS=3
 REV=`git log -n $LOOKBACK --pretty=format:"%H|%cI"`
 BENCH=`ls ${BASE}/benchmarks/shootout/*/*.r`
@@ -50,11 +51,14 @@ done
 
 git checkout master
 
+REV=`git log -n $LOOKBACK_PLOT --pretty=format:"%H|%cI"`
 FINAL=$OUT/benchmark-combined.csv
 echo "version, benchmark, time" > $FINAL
 for revf in $REV; do
     rev=`echo $revf | cut -d'|' -f1`
-    cat $OUT/$rev-*.csv >> $FINAL
+    if [[ "`ls $OUT/$rev-*.csv 2>/dev/null`" != "" ]]; then
+        cat $OUT/$rev-*.csv >> $FINAL
+    fi
 done
 
 R -f ${BASE}/tools/benchmark-revisions-plot.r --args $FINAL
