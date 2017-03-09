@@ -12,12 +12,15 @@ namespace rir {
 
 /*
  *                       Maybe  (might be deleted from env)
- *
- *          Absent             Any (prom, R_MissingArg)
- *
+ *                    /        \
+ *              Absent          Any (prom, R_MissingArg)
+ *                          /         \
  *                      Value         Argument
- *
+ *                        |
  *                    Constant
+ *
+ *                  \     |     /
+ *                      Bottom
  */
 
 class FValue {
