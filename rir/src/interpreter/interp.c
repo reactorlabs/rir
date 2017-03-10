@@ -86,9 +86,6 @@ void endClosureContext(RCNTXT* cntxt, SEXP result) {
 
  */
 INLINE SEXP createPromise(Code* code, SEXP env) {
-#if RIR_AS_PACKAGE == 1
-    return mkPROMISE(rir_createWrapperPromise(code), env);
-#else
     SEXP p = mkPROMISE((SEXP)code, env);
     PROTECT(p);
     // TODO: This is a bit of a hack to make sure the promise keeps its function
@@ -97,7 +94,6 @@ INLINE SEXP createPromise(Code* code, SEXP env) {
     SET_ATTRIB(p, a);
     UNPROTECT(1);
     return p;
-#endif
 }
 
 INLINE SEXP promiseValue(SEXP promise, Context * ctx) {
@@ -427,8 +423,6 @@ static SEXP closureArgumentAdaptor(SEXP call, SEXP op, SEXP arglist, SEXP rho,
     return newrho;
 }
 
-#if RIR_AS_PACKAGE == 0
-
 SEXP rirCallTrampoline(RCNTXT* cntxt, Code* code, SEXP env, unsigned nargs,
                        Context* ctx) {
     if ((SETJMP(cntxt->cjmpbuf))) {
@@ -536,7 +530,6 @@ INLINE SEXP rirCallClosure(SEXP call, SEXP env, SEXP callee, SEXP actuals,
     return result;
 }
 #define USE_RIR_CONTEXT_SETUP true
-#endif
 
 void warnSpecial(SEXP callee, SEXP call) {
     return;
@@ -634,7 +627,7 @@ SEXP doCall(Code* caller, SEXP callee, unsigned nargs, unsigned id, SEXP env,
         SEXP argslist =
             createArgsList(caller, call, nargs, cs, env, ctx, false);
         PROTECT(argslist);
-#if RIR_AS_PACKAGE == 0
+
         // if body is INTSXP, it is rir serialized code, execute it directly
         SEXP body = BODY(callee);
         assert(TYPEOF(body) == EXTERNALSXP || !COMPILE_ON_DEMAND);
@@ -645,7 +638,7 @@ SEXP doCall(Code* caller, SEXP callee, unsigned nargs, unsigned id, SEXP env,
             UNPROTECT(1);
             break;
         }
-#endif
+
         Function * f = isValidClosureSEXP(callee);
 
         // Store and restore stack status in case we get back here through
@@ -775,7 +768,7 @@ SEXP doCallStack(Code* caller, SEXP callee, size_t nargs, unsigned id, SEXP env,
         SEXP argslist = createArgsListStack(caller, nargs, cs, env, ctx, false);
         PROTECT(argslist);
         ostack_popn(ctx, nargs);
-#if RIR_AS_PACKAGE == 0
+
         // if body is INTSXP, it is rir serialized code, execute it directly
         SEXP body = BODY(callee);
         assert(TYPEOF(body) == EXTERNALSXP || !COMPILE_ON_DEMAND);
@@ -785,7 +778,7 @@ SEXP doCallStack(Code* caller, SEXP callee, size_t nargs, unsigned id, SEXP env,
             UNPROTECT(1);
             break;
         }
-#endif
+
         Function* f = isValidClosureSEXP(callee);
 
         // Store and restore stack status in case we get back here through
@@ -804,10 +797,6 @@ SEXP doCallStack(Code* caller, SEXP callee, size_t nargs, unsigned id, SEXP env,
 SEXP doDispatchStack(Code* caller, size_t nargs, uint32_t id, SEXP env,
                      OpcodeT** pc, Context* ctx) {
 
-#if RIR_AS_PACKAGE == 1
-    // TODO
-    assert(false);
-#endif
     CallSiteStruct* cs = CallSite_get(caller, id);
     profileCall(cs, Rf_install("*dispatch*"));
     SEXP call = cp_pool_at(ctx, cs->call);
@@ -899,7 +888,6 @@ SEXP doDispatchStack(Code* caller, size_t nargs, uint32_t id, SEXP env,
             break;
         }
         case CLOSXP: {
-#if RIR_AS_PACKAGE == 0
             // if body is INTSXP, it is rir serialized code, execute it directly
             SEXP body = BODY(callee);
             assert(TYPEOF(body) == EXTERNALSXP || !COMPILE_ON_DEMAND);
@@ -909,7 +897,6 @@ SEXP doDispatchStack(Code* caller, size_t nargs, uint32_t id, SEXP env,
                     rirCallClosure(call, env, callee, actuals, nargs, pc, ctx);
                 break;
             }
-#endif
             // Store and restore stack status in case we get back here through
             // non-local return
             res = applyClosure(call, callee, actuals, env, R_NilValue);
@@ -928,11 +915,6 @@ SEXP doDispatchStack(Code* caller, size_t nargs, uint32_t id, SEXP env,
 
 SEXP doDispatch(Code* caller, uint32_t nargs, uint32_t id, SEXP env,
                 OpcodeT** pc, Context* ctx) {
-
-#if RIR_AS_PACKAGE == 1
-    // TODO
-    assert(false);
-#endif
 
     SEXP obj = ostack_top(ctx);
     assert(isObject(obj));
@@ -1020,7 +1002,6 @@ SEXP doDispatch(Code* caller, uint32_t nargs, uint32_t id, SEXP env,
             break;
         }
         case CLOSXP: {
-#if RIR_AS_PACKAGE == 0
             // if body is INTSXP, it is rir serialized code, execute it directly
             SEXP body = BODY(callee);
             assert(TYPEOF(body) == EXTERNALSXP || !COMPILE_ON_DEMAND);
@@ -1029,7 +1010,7 @@ SEXP doDispatch(Code* caller, uint32_t nargs, uint32_t id, SEXP env,
                 res = rirCallClosure(call, env, callee, actuals, nargs, pc, ctx);
                 break;
             }
-#endif
+
             // Store and restore stack status in case we get back here through
             // non-local return
             res = applyClosure(call, callee, actuals, env, R_NilValue);
@@ -1387,7 +1368,6 @@ INSTRUCTION(subassign2_) {
     unsigned targetI = readImmediate(pc);
     SEXP res;
 
-#if RIR_AS_PACKAGE == 0
     // Fast case
     if (!MAYBE_SHARED(orig)) {
         SEXPTYPE vectorT = TYPEOF(orig);
@@ -1466,10 +1446,7 @@ INSTRUCTION(subassign2_) {
     res = do_subassign2_dflt(R_NilValue, R_Subassign2Sym, args, env);
     ostack_popn(ctx, 3);
     UNPROTECT(1);
-#else
-    ostack_popn(ctx, 3);
-    res = Rf_eval(getSrcForCall(c, *pc - 2, ctx), env);
-#endif
+
     ostack_push(ctx, res);
 }
 
@@ -1480,7 +1457,6 @@ INSTRUCTION(subassign_) {
 
     SEXP res;
 
-#if RIR_AS_PACKAGE == 0
     INCREMENT_NAMED(orig);
     SEXP args;
     args = CONS_NR(val, R_NilValue);
@@ -1490,10 +1466,7 @@ INSTRUCTION(subassign_) {
     res = do_subassign_dflt(R_NilValue, R_SubassignSym, args, env);
     ostack_popn(ctx, 3);
     UNPROTECT(1);
-#else
-    ostack_popn(ctx, 3);
-    res = Rf_eval(getSrcForCall(c, *pc - 2, ctx), env);
-#endif
+
     ostack_push(ctx, res);
 }
 
@@ -1503,7 +1476,6 @@ INSTRUCTION(subset2_) {
     SEXP val = ostack_at(ctx, 2);
 
     SEXP res;
-#if RIR_AS_PACKAGE == 0
     SEXP args;
     args = CONS_NR(idx2, R_NilValue);
     args = CONS_NR(idx1, args);
@@ -1511,9 +1483,6 @@ INSTRUCTION(subset2_) {
     ostack_push(ctx, args);
     res = do_subset_dflt(R_NilValue, R_SubsetSym, args, env);
     ostack_popn(ctx, 4);
-#else
-    res = Rf_eval(getSrcForCall(c, *pc - 1, ctx), env);
-#endif
 
     R_Visible = 1;
     ostack_push(ctx, res);
@@ -1525,17 +1494,14 @@ INSTRUCTION(extract2_) {
     SEXP val = ostack_at(ctx, 2);
 
     SEXP res;
-#if RIR_AS_PACKAGE == 0
     SEXP args;
+
     args = CONS_NR(idx2, R_NilValue);
     args = CONS_NR(idx1, args);
     args = CONS_NR(val, args);
     ostack_push(ctx, args);
     res = do_subset_dflt(R_NilValue, R_Subset2Sym, args, env);
     ostack_popn(ctx, 4);
-#else
-    res = Rf_eval(getSrcForCall(c, *pc - 1, ctx), env);
-#endif
 
     R_Visible = 1;
     ostack_push(ctx, res);
@@ -1546,16 +1512,13 @@ INSTRUCTION(subset1_) {
     SEXP val = ostack_at(ctx, 1);
 
     SEXP res;
-#if RIR_AS_PACKAGE == 0
     SEXP args;
+
     args = CONS_NR(idx, R_NilValue);
     args = CONS_NR(val, args);
     ostack_push(ctx, args);
     res = do_subset_dflt(R_NilValue, R_SubsetSym, args, env);
     ostack_popn(ctx, 3);
-#else
-    res = Rf_eval(getSrcForCall(c, *pc - 1, ctx), env);
-#endif
 
     R_Visible = 1;
     ostack_push(ctx, res);
@@ -1627,17 +1590,12 @@ INSTRUCTION(extract1_) {
 
 // ---------
     fallback : {
-#if RIR_AS_PACKAGE == 0
         SEXP args;
         args = CONS_NR(idx, R_NilValue);
         args = CONS_NR(val, args);
         ostack_push(ctx, args);
         res = do_subset2_dflt(R_NilValue, R_Subset2Sym, args, env);
         ostack_popn(ctx, 3);
-#else
-        res = Rf_eval(getSrcForCall(c, *pc - 1, ctx), env);
-        ostack_popn(ctx, 2);
-#endif
     }
 
     R_Visible = 1;
