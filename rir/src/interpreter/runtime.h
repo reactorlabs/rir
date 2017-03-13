@@ -10,8 +10,6 @@
 C_OR_CPP Code * isValidPromiseSEXP(SEXP promise);
 C_OR_CPP Function * isValidClosureSEXP(SEXP closure);
 C_OR_CPP Function * isValidFunctionSEXP(SEXP wrapper);
-C_OR_CPP SEXP rir_createWrapperPromise(Code * code);
-
 
 // rir runtime functions -------------------------------------------------------
 
@@ -29,10 +27,6 @@ C_OR_CPP void printCode(Code* c);
 
 C_OR_CPP void printFunction(Function* f);
 C_OR_CPP void printFunctionFancy(SEXP f);
-
-C_OR_CPP SEXP rir_createWrapperAst(SEXP rirBytecode);
-
-C_OR_CPP SEXP rir_createWrapperPromise(Code * code);
 
 C_OR_CPP void initializeRuntime(CompilerCallback compiler,
                                 OptimizerCallback optimizer);
