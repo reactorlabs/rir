@@ -529,7 +529,6 @@ INLINE SEXP rirCallClosure(SEXP call, SEXP env, SEXP callee, SEXP actuals,
 
     return result;
 }
-#define USE_RIR_CONTEXT_SETUP true
 
 void warnSpecial(SEXP callee, SEXP call) {
     return;
@@ -631,7 +630,7 @@ SEXP doCall(Code* caller, SEXP callee, unsigned nargs, unsigned id, SEXP env,
         // if body is INTSXP, it is rir serialized code, execute it directly
         SEXP body = BODY(callee);
         assert(TYPEOF(body) == EXTERNALSXP || !COMPILE_ON_DEMAND);
-        if (USE_RIR_CONTEXT_SETUP && TYPEOF(body) == EXTERNALSXP) {
+        if (TYPEOF(body) == EXTERNALSXP) {
             assert(isValidFunctionSEXP(body));
             result =
                 rirCallClosure(call, env, callee, argslist, nargs, pc, ctx);
@@ -772,7 +771,7 @@ SEXP doCallStack(Code* caller, SEXP callee, size_t nargs, unsigned id, SEXP env,
         // if body is INTSXP, it is rir serialized code, execute it directly
         SEXP body = BODY(callee);
         assert(TYPEOF(body) == EXTERNALSXP || !COMPILE_ON_DEMAND);
-        if (USE_RIR_CONTEXT_SETUP && TYPEOF(body) == EXTERNALSXP) {
+        if (TYPEOF(body) == EXTERNALSXP) {
             assert(isValidFunctionSEXP(body));
             res = rirCallClosure(call, env, callee, argslist, nargs, pc, ctx);
             UNPROTECT(1);
@@ -891,7 +890,7 @@ SEXP doDispatchStack(Code* caller, size_t nargs, uint32_t id, SEXP env,
             // if body is INTSXP, it is rir serialized code, execute it directly
             SEXP body = BODY(callee);
             assert(TYPEOF(body) == EXTERNALSXP || !COMPILE_ON_DEMAND);
-            if (USE_RIR_CONTEXT_SETUP && TYPEOF(body) == EXTERNALSXP) {
+            if (TYPEOF(body) == EXTERNALSXP) {
                 assert(isValidFunctionSEXP(body));
                 res =
                     rirCallClosure(call, env, callee, actuals, nargs, pc, ctx);
@@ -1005,7 +1004,7 @@ SEXP doDispatch(Code* caller, uint32_t nargs, uint32_t id, SEXP env,
             // if body is INTSXP, it is rir serialized code, execute it directly
             SEXP body = BODY(callee);
             assert(TYPEOF(body) == EXTERNALSXP || !COMPILE_ON_DEMAND);
-            if (USE_RIR_CONTEXT_SETUP && TYPEOF(body) == EXTERNALSXP) {
+            if (TYPEOF(body) == EXTERNALSXP) {
                 assert(isValidFunctionSEXP(body));
                 res = rirCallClosure(call, env, callee, actuals, nargs, pc, ctx);
                 break;
