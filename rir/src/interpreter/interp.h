@@ -8,11 +8,6 @@
 #include "interp_context.h"
 #include "interp_data.h"
 
-// If 1, when a function that has not yet been compiled by rir is to be called
-// in the interpreter, it will be compiled first.
-// Set to 0 if rir should handle the execution to GNU-R.
-#define COMPILE_ON_DEMAND 1
-
 #ifdef __cplusplus
 extern "C" {
 #endif
