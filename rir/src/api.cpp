@@ -52,7 +52,7 @@ REXPORT SEXP rir_compile(SEXP what, SEXP env = NULL) {
         auto res = Compiler::compileClosure(body, FORMALS(what));
         SET_FORMALS(result, res.formals);
         SET_CLOENV(result, CLOENV(what));
-        SET_BODY(result, rir_createWrapperAst(res.bc));
+        SET_BODY(result, res.bc);
         Rf_copyMostAttrib(what, result);
         UNPROTECT(1);
         return result;
@@ -61,7 +61,7 @@ REXPORT SEXP rir_compile(SEXP what, SEXP env = NULL) {
             what = VECTOR_ELT(CDR(what), 0);
         }
         auto res = Compiler::compileExpression(what);
-        return rir_createWrapperAst(res.bc);
+        return res.bc;
     }
 }
 

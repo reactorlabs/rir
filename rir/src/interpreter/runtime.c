@@ -66,22 +66,13 @@ void printFunction(Function* f) {
         printCode(c);
 }
 
-SEXP rir_createWrapperAst(SEXP rirBytecode) {
-    return rirBytecode;
-}
-
-SEXP rir_createWrapperPromise(Code * code) {
-    return (SEXP)code;
-}
-
-// TODO change gnu-r to expect ptr and not bool aand we can get rid of the wrapper
+// TODO change gnu-r to expect ptr and not bool and we can get rid of the wrapper
 int isValidFunctionObject_int_wrapper(SEXP closure) {
     return isValidFunctionObject(closure) != nullptr;
 }
 
 int isValidCodeObject_int_wrapper(SEXP code) {
     return isValidCodeObject(code) != nullptr;
-
 }
 
 void initializeRuntime(CompilerCallback compiler, OptimizerCallback optimizer) {
