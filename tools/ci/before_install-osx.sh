@@ -11,4 +11,3 @@ echo Installing gcc/fortran
 brew install gcc
 
 brew install xz
-brew install pcre
