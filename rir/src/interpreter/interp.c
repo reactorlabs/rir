@@ -82,17 +82,8 @@ void endClosureContext(RCNTXT* cntxt, SEXP result) {
     endcontext(cntxt);
 }
 
-/** Creates a promise from given code object and environment.
-
- */
 INLINE SEXP createPromise(Code* code, SEXP env) {
     SEXP p = mkPROMISE((SEXP)code, env);
-    PROTECT(p);
-    // TODO: This is a bit of a hack to make sure the promise keeps its function
-    // reachable from the GC pov.
-    SEXP a = CONS_NR(functionStore(function(code)), R_NilValue);
-    SET_ATTRIB(p, a);
-    UNPROTECT(1);
     return p;
 }
 
@@ -141,12 +132,7 @@ INSTRUCTION(ldfun_) {
 
     switch (TYPEOF(val)) {
     case CLOSXP:
-        /** If compile on demand is active, check that the function to be called
-         * is compiled already, and compile if not.
-         */
-        if (COMPILE_ON_DEMAND) {
-            jit(val, ctx);
-        }
+        jit(val, ctx);
         break;
     case SPECIALSXP:
     case BUILTINSXP:
@@ -437,7 +423,7 @@ SEXP rirCallTrampoline(RCNTXT* cntxt, Code* code, SEXP env, unsigned nargs,
     return evalRirCode(code, ctx, env, nargs);
 }
 
-INLINE SEXP rirCallClosure(SEXP call, SEXP env, SEXP callee, SEXP actuals,
+static SEXP rirCallClosure(SEXP call, SEXP env, SEXP callee, SEXP actuals,
                            unsigned nargs, OpcodeT** pc, Context* ctx) {
 
     SEXP body = BODY(callee);
@@ -494,27 +480,22 @@ INLINE SEXP rirCallClosure(SEXP call, SEXP env, SEXP callee, SEXP actuals,
 
     ostack_push(ctx, newEnv);
 
-    // Create a new R context and store it on the stack
-    SEXP cntxt_store = Rf_allocVector(RAWSXP, sizeof(RCNTXT));
-    ostack_push(ctx, cntxt_store);
-
-    RCNTXT* cntxt = (RCNTXT*)RAW(cntxt_store);
-
+    RCNTXT cntxt;
     if (R_GlobalContext->callflag == CTXT_GENERIC)
-        Rf_begincontext(cntxt, CTXT_RETURN, call, newEnv,
+        Rf_begincontext(&cntxt, CTXT_RETURN, call, newEnv,
                         R_GlobalContext->sysparent, actuals, callee);
     else
-        Rf_begincontext(cntxt, CTXT_RETURN, call, newEnv, env, actuals, callee);
+        Rf_begincontext(&cntxt, CTXT_RETURN, call, newEnv, env, actuals, callee);
 
     // Exec the closure
-    closureDebug(call, callee, env, newEnv, cntxt);
+    closureDebug(call, callee, env, newEnv, &cntxt);
     Code* code = functionCode(fun);
 
-    SEXP result = rirCallTrampoline(cntxt, code, newEnv, nargs, ctx);
+    SEXP result = rirCallTrampoline(&cntxt, code, newEnv, nargs, ctx);
 
     endClosureDebug(callee, call, env);
 
-    endClosureContext(cntxt, result);
+    endClosureContext(&cntxt, result);
 
     if (!fun->envLeaked && FRAME_LEAKED(newEnv))
         fun->envLeaked = true;
@@ -524,9 +505,7 @@ INLINE SEXP rirCallClosure(SEXP call, SEXP env, SEXP callee, SEXP actuals,
     if (fun->deopt)
         SET_BODY(callee, fun->origin);
 
-    ostack_pop(ctx); // cntxt
     ostack_pop(ctx); // newEnv
-
     return result;
 }
 
@@ -629,7 +608,6 @@ SEXP doCall(Code* caller, SEXP callee, unsigned nargs, unsigned id, SEXP env,
 
         // if body is INTSXP, it is rir serialized code, execute it directly
         SEXP body = BODY(callee);
-        assert(TYPEOF(body) == EXTERNALSXP || !COMPILE_ON_DEMAND);
         if (TYPEOF(body) == EXTERNALSXP) {
             assert(isValidFunctionSEXP(body));
             result =
@@ -770,7 +748,6 @@ SEXP doCallStack(Code* caller, SEXP callee, size_t nargs, unsigned id, SEXP env,
 
         // if body is INTSXP, it is rir serialized code, execute it directly
         SEXP body = BODY(callee);
-        assert(TYPEOF(body) == EXTERNALSXP || !COMPILE_ON_DEMAND);
         if (TYPEOF(body) == EXTERNALSXP) {
             assert(isValidFunctionSEXP(body));
             res = rirCallClosure(call, env, callee, argslist, nargs, pc, ctx);
@@ -889,7 +866,6 @@ SEXP doDispatchStack(Code* caller, size_t nargs, uint32_t id, SEXP env,
         case CLOSXP: {
             // if body is INTSXP, it is rir serialized code, execute it directly
             SEXP body = BODY(callee);
-            assert(TYPEOF(body) == EXTERNALSXP || !COMPILE_ON_DEMAND);
             if (TYPEOF(body) == EXTERNALSXP) {
                 assert(isValidFunctionSEXP(body));
                 res =
@@ -1003,7 +979,6 @@ SEXP doDispatch(Code* caller, uint32_t nargs, uint32_t id, SEXP env,
         case CLOSXP: {
             // if body is INTSXP, it is rir serialized code, execute it directly
             SEXP body = BODY(callee);
-            assert(TYPEOF(body) == EXTERNALSXP || !COMPILE_ON_DEMAND);
             if (TYPEOF(body) == EXTERNALSXP) {
                 assert(isValidFunctionSEXP(body));
                 res = rirCallClosure(call, env, callee, actuals, nargs, pc, ctx);
@@ -2088,8 +2063,6 @@ extern void printFunction(Function* f);
 
 extern SEXP Rf_deparse1(SEXP call, Rboolean abbrev, int opts);
 
-#undef R_CheckStack
-
 static int debugging = 0;
 void debug(Code* c, OpcodeT* pc, const char* name, unsigned depth,
            Context* ctx) {
@@ -2114,8 +2087,6 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
     if (!isEnvironment(env))
 	error("'rho' must be an environment not %s: detected in C-level eval",
 	      type2char(TYPEOF(env)));
-
-    R_CheckStack();
 
     // make sure there is enough room on the stack
     // there is some slack of 5 to make sure the call instruction can store
