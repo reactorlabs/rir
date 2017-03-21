@@ -102,4 +102,4 @@ popd
 
 popd
 
-R -f ${BASE}/tools/benchmark-speedup-plot.r --args $log
+R -f ${BASE}/tools/bench-speedup-plot.r --args $log
