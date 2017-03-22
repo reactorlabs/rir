@@ -1944,6 +1944,176 @@ INSTRUCTION(lt_) {
     ostack_push(ctx, res);
 }
 
+INSTRUCTION(gt_) {
+    SEXP lhs = ostack_at(ctx, 1);
+    SEXP rhs = ostack_at(ctx, 0);
+    SEXP res;
+
+    do {
+        if (IS_SCALAR_VALUE(lhs, REALSXP)) {
+            if (IS_SCALAR_VALUE(rhs, REALSXP)) {
+                if (*REAL(lhs) == NA_REAL || *REAL(rhs) == NA_REAL) {
+                    res = R_LogicalNAValue;
+                } else {
+                    res = *REAL(lhs) > *REAL(rhs) ? R_TrueValue : R_FalseValue;
+                }
+                break;
+            }
+        } else if (IS_SCALAR_VALUE(lhs, INTSXP)) {
+            if (IS_SCALAR_VALUE(rhs, INTSXP)) {
+                if (*INTEGER(lhs) == NA_INTEGER ||
+                    *INTEGER(rhs) == NA_INTEGER) {
+                    res = R_LogicalNAValue;
+                } else {
+                    res = *INTEGER(lhs) > *INTEGER(rhs) ? R_TrueValue
+                                                        : R_FalseValue;
+                }
+                break;
+            }
+        }
+        BINOP_FALLBACK(">");
+    } while (false);
+
+    ostack_popn(ctx, 2);
+    ostack_push(ctx, res);
+}
+
+INSTRUCTION(le_) {
+    SEXP lhs = ostack_at(ctx, 1);
+    SEXP rhs = ostack_at(ctx, 0);
+    SEXP res;
+
+    do {
+        if (IS_SCALAR_VALUE(lhs, REALSXP)) {
+            if (IS_SCALAR_VALUE(rhs, REALSXP)) {
+                if (*REAL(lhs) == NA_REAL || *REAL(rhs) == NA_REAL) {
+                    res = R_LogicalNAValue;
+                } else {
+                    res = *REAL(lhs) <= *REAL(rhs) ? R_TrueValue : R_FalseValue;
+                }
+                break;
+            }
+        } else if (IS_SCALAR_VALUE(lhs, INTSXP)) {
+            if (IS_SCALAR_VALUE(rhs, INTSXP)) {
+                if (*INTEGER(lhs) == NA_INTEGER ||
+                    *INTEGER(rhs) == NA_INTEGER) {
+                    res = R_LogicalNAValue;
+                } else {
+                    res = *INTEGER(lhs) <= *INTEGER(rhs) ? R_TrueValue
+                                                        : R_FalseValue;
+                }
+                break;
+            }
+        }
+        BINOP_FALLBACK("<=");
+    } while (false);
+
+    ostack_popn(ctx, 2);
+    ostack_push(ctx, res);
+}
+
+INSTRUCTION(ge_) {
+    SEXP lhs = ostack_at(ctx, 1);
+    SEXP rhs = ostack_at(ctx, 0);
+    SEXP res;
+
+    do {
+        if (IS_SCALAR_VALUE(lhs, REALSXP)) {
+            if (IS_SCALAR_VALUE(rhs, REALSXP)) {
+                if (*REAL(lhs) == NA_REAL || *REAL(rhs) == NA_REAL) {
+                    res = R_LogicalNAValue;
+                } else {
+                    res = *REAL(lhs) >= *REAL(rhs) ? R_TrueValue : R_FalseValue;
+                }
+                break;
+            }
+        } else if (IS_SCALAR_VALUE(lhs, INTSXP)) {
+            if (IS_SCALAR_VALUE(rhs, INTSXP)) {
+                if (*INTEGER(lhs) == NA_INTEGER ||
+                    *INTEGER(rhs) == NA_INTEGER) {
+                    res = R_LogicalNAValue;
+                } else {
+                    res = *INTEGER(lhs) >= *INTEGER(rhs) ? R_TrueValue
+                                                        : R_FalseValue;
+                }
+                break;
+            }
+        }
+        BINOP_FALLBACK(">=");
+    } while (false);
+
+    ostack_popn(ctx, 2);
+    ostack_push(ctx, res);
+}
+
+INSTRUCTION(eq_) {
+    SEXP lhs = ostack_at(ctx, 1);
+    SEXP rhs = ostack_at(ctx, 0);
+    SEXP res;
+
+    do {
+        if (IS_SCALAR_VALUE(lhs, REALSXP)) {
+            if (IS_SCALAR_VALUE(rhs, REALSXP)) {
+                if (*REAL(lhs) == NA_REAL || *REAL(rhs) == NA_REAL) {
+                    res = R_LogicalNAValue;
+                } else {
+                    res = *REAL(lhs) == *REAL(rhs) ? R_TrueValue : R_FalseValue;
+                }
+                break;
+            }
+        } else if (IS_SCALAR_VALUE(lhs, INTSXP)) {
+            if (IS_SCALAR_VALUE(rhs, INTSXP)) {
+                if (*INTEGER(lhs) == NA_INTEGER ||
+                    *INTEGER(rhs) == NA_INTEGER) {
+                    res = R_LogicalNAValue;
+                } else {
+                    res = *INTEGER(lhs) == *INTEGER(rhs) ? R_TrueValue
+                                                        : R_FalseValue;
+                }
+                break;
+            }
+        }
+        BINOP_FALLBACK("==");
+    } while (false);
+
+    ostack_popn(ctx, 2);
+    ostack_push(ctx, res);
+}
+
+INSTRUCTION(ne_) {
+    SEXP lhs = ostack_at(ctx, 1);
+    SEXP rhs = ostack_at(ctx, 0);
+    SEXP res;
+
+    do {
+        if (IS_SCALAR_VALUE(lhs, REALSXP)) {
+            if (IS_SCALAR_VALUE(rhs, REALSXP)) {
+                if (*REAL(lhs) == NA_REAL || *REAL(rhs) == NA_REAL) {
+                    res = R_LogicalNAValue;
+                } else {
+                    res = *REAL(lhs) != *REAL(rhs) ? R_TrueValue : R_FalseValue;
+                }
+                break;
+            }
+        } else if (IS_SCALAR_VALUE(lhs, INTSXP)) {
+            if (IS_SCALAR_VALUE(rhs, INTSXP)) {
+                if (*INTEGER(lhs) == NA_INTEGER ||
+                    *INTEGER(rhs) == NA_INTEGER) {
+                    res = R_LogicalNAValue;
+                } else {
+                    res = *INTEGER(lhs) != *INTEGER(rhs) ? R_TrueValue
+                                                        : R_FalseValue;
+                }
+                break;
+            }
+        }
+        BINOP_FALLBACK("!=");
+    } while (false);
+
+    ostack_popn(ctx, 2);
+    ostack_push(ctx, res);
+}
+
 INSTRUCTION(names_) {
     ostack_push(ctx, getAttrib(ostack_pop(ctx), R_NamesSymbol));
 }
@@ -2122,6 +2292,11 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
             INS(idiv_);
             INS(sub_);
             INS(lt_);
+            INS(gt_);
+            INS(le_);
+            INS(ge_);
+            INS(eq_);
+            INS(ne_);
             INS(call_);
             INS(call_stack_);
             INS(static_call_stack_);

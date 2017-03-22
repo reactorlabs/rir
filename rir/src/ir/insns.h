@@ -121,6 +121,12 @@ DEF_INSTR(idiv_, 0, 2, 1, 0)
 DEF_INSTR(mod_, 0, 2, 1, 0)
 DEF_INSTR(sub_, 0, 2, 1, 0)
 DEF_INSTR(lt_, 0, 2, 1, 0)
+DEF_INSTR(gt_, 0, 2, 1, 0)
+DEF_INSTR(le_, 0, 2, 1, 0)
+DEF_INSTR(ge_, 0, 2, 1, 0)
+DEF_INSTR(eq_, 0, 2, 1, 0)
+DEF_INSTR(ne_, 0, 2, 1, 0)
+
 DEF_INSTR(guard_fun_, 3, 0, 0, 1)
 /**
  * guard_fun_:: takes symbol, target, id, checks findFun(symbol) == target
