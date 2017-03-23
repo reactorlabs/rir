@@ -28,12 +28,18 @@ else
     exit 1
 fi
 
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    USING_OSX=1
+fi
+
 RIR_REVISION=`git rev-parse HEAD`
 if [ "$#" == "1" ]; then
     RIR_REVISION=$1
 fi
-PLAIN_R=$BASE/external/vanilla-r/bin/R
-MOD_R=$BASE/external/custom-r/bin/R
+PLAIN_DIR=$BASE/external/vanilla-r
+PLAIN_R=$PLAIN_DIR/bin/R
+MOD_DIR=$BASE/external/custom-r
+MOD_R=$MOD_DIR/bin/R
 BENCH=`ls ${BASE}/benchmarks/shootout/*/*.r`
 REV=`git log $RIR_REVISION -n 1 --pretty=format:"%h"`
 TIMEOUT=80
@@ -43,18 +49,38 @@ OUT="$WD/benchmark-out/`git log $RIR_REVISION -n 1 --pretty=format:'%cd_%h' --da
 mkdir -p $OUT
 
 
-# checkout and build rir (ensure vanilla-r and custom-r)
+# checkout and build vanilla-r and custom-r, ensure packages not bytecompiled
+$BASE/tools/sync.sh --vanilla
+
+pushd $PLAIN_DIR
+make clean
+if [ $USING_OSX -eq 1 ]; then
+  # Mac OSX
+    F77="gfortran -arch x86_64" FC="gfortran -arch x86_64" CXXFLAGS="-g3 -O2" CFLAGS="-g3 -O2" ./configure --enable-R-shlib --without-internal-tzcode --with-ICU=no --disable-byte-compiled-packages
+else
+    CXXFLAGS="-g3 -O2" CFLAGS="-g3 -O2" ./configure --with-ICU=no --disable-byte-compiled-packages
+fi
+make -j 8
+popd
+
+pushd $MOD_DIR
+make clean
+if [ $USING_OSX -eq 1 ]; then
+  # Mac OSX
+    F77="gfortran -arch x86_64" FC="gfortran -arch x86_64" CXXFLAGS="-g3 -O2" CFLAGS="-g3 -O2" ./configure --enable-R-shlib --without-internal-tzcode --with-ICU=no --disable-byte-compiled-packages
+else
+    CXXFLAGS="-g3 -O2" CFLAGS="-g3 -O2" ./configure --with-ICU=no --disable-byte-compiled-packages
+fi
+make -j 8
+popd
+
+
+# checkout rir revision and build rir
 git checkout $RIR_REVISION
 
-ninja clean
+ninja clean || true
 cmake -GNinja $BASE
-ninja setup
-ninja
-
-$BASE/tools/sync.sh --vanilla
-pushd .
-cd $BASE/external/vanilla-r && make -j 8
-popd
+ninja  # assume all dependencies satisfied (custom-r ready -- sync.sh and make)
 
 
 # run benchmarks
@@ -62,7 +88,7 @@ TIME=`date '+%Y-%m-%d-%H-%M-%S'`
 log="$OUT/benchmark-$REV-$TIME.csv"
 echo "experiment, benchmark, time" > $log
 for run in $(seq 1 $RUNS); do
-    echo "**************  testing run $run"
+    echo "************** testing run [$run]"
     for i in $BENCH; do
         T=`basename $i`;
         D="`dirname $i`/../..";
@@ -90,15 +116,14 @@ done
 # return to where we were
 git checkout $BRANCH
 
+pushd $MOD_DIR
+make clean
+popd
+
 ninja clean
 cmake -GNinja $BASE
 ninja setup
 ninja
-
-$BASE/tools/sync.sh --vanilla
-pushd .
-cd $BASE/external/vanilla-r && make -j 8
-popd
 
 popd
 
