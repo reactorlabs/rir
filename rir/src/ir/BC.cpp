@@ -96,6 +96,11 @@ bool BC::operator==(const BC& other) const {
     case Opcode::pow_:
     case Opcode::sub_:
     case Opcode::lt_:
+    case Opcode::gt_:
+    case Opcode::le_:
+    case Opcode::ge_:
+    case Opcode::eq_:
+    case Opcode::ne_:
     case Opcode::seq_:
     case Opcode::return_:
     case Opcode::isfun_:
@@ -199,6 +204,11 @@ void BC::write(CodeStream& cs) const {
     case Opcode::pow_:
     case Opcode::sub_:
     case Opcode::lt_:
+    case Opcode::gt_:
+    case Opcode::le_:
+    case Opcode::ge_:
+    case Opcode::eq_:
+    case Opcode::ne_:
     case Opcode::seq_:
     case Opcode::return_:
     case Opcode::isfun_:
@@ -388,6 +398,11 @@ void BC::print(CallSite cs) {
     case Opcode::pow_:
     case Opcode::sub_:
     case Opcode::lt_:
+    case Opcode::gt_:
+    case Opcode::le_:
+    case Opcode::ge_:
+    case Opcode::eq_:
+    case Opcode::ne_:
     case Opcode::return_:
     case Opcode::isfun_:
     case Opcode::invisible_:
