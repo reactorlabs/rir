@@ -52,6 +52,8 @@ mkdir -p $OUT
 # checkout and build vanilla-r and custom-r, ensure packages not bytecompiled
 $BASE/tools/sync.sh --vanilla
 
+export R_NO_BASE_COMPILE=1
+
 pushd $PLAIN_DIR
 make clean
 if [ $USING_OSX -eq 1 ]; then
