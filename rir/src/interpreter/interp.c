@@ -1910,35 +1910,42 @@ INSTRUCTION(sub_) {
     ostack_push(ctx, res);
 }
 
+
+// TODO: what about (REAL op INT) and (INT op REAL) -- fallback as is
+#define DO_RELOP(op)                                                           \
+    do {                                                                       \
+        if (IS_SCALAR_VALUE(lhs, REALSXP)) {                                   \
+            if (IS_SCALAR_VALUE(rhs, REALSXP)) {                               \
+                if (*REAL(lhs) == NA_REAL || *REAL(rhs) == NA_REAL) {          \
+                    res = R_LogicalNAValue;                                    \
+                } else {                                                       \
+                    res = *REAL(lhs) op *REAL(rhs) ? R_TrueValue               \
+                                                   : R_FalseValue;             \
+                }                                                              \
+                break;                                                         \
+            }                                                                  \
+        } else if (IS_SCALAR_VALUE(lhs, INTSXP)) {                             \
+            if (IS_SCALAR_VALUE(rhs, INTSXP)) {                                \
+                if (*INTEGER(lhs) == NA_INTEGER ||                             \
+                    *INTEGER(rhs) == NA_INTEGER) {                             \
+                    res = R_LogicalNAValue;                                    \
+                } else {                                                       \
+                    res = *INTEGER(lhs) op *INTEGER(rhs) ? R_TrueValue         \
+                                                         : R_FalseValue;       \
+                }                                                              \
+                break;                                                         \
+            }                                                                  \
+        }                                                                      \
+        BINOP_FALLBACK(#op);                                                   \
+    } while (false)
+
+
 INSTRUCTION(lt_) {
     SEXP lhs = ostack_at(ctx, 1);
     SEXP rhs = ostack_at(ctx, 0);
     SEXP res;
 
-    do {
-        if (IS_SCALAR_VALUE(lhs, REALSXP)) {
-            if (IS_SCALAR_VALUE(rhs, REALSXP)) {
-                if (*REAL(lhs) == NA_REAL || *REAL(rhs) == NA_REAL) {
-                    res = R_LogicalNAValue;
-                } else {
-                    res = *REAL(lhs) < *REAL(rhs) ? R_TrueValue : R_FalseValue;
-                }
-                break;
-            }
-        } else if (IS_SCALAR_VALUE(lhs, INTSXP)) {
-            if (IS_SCALAR_VALUE(rhs, INTSXP)) {
-                if (*INTEGER(lhs) == NA_INTEGER ||
-                    *INTEGER(rhs) == NA_INTEGER) {
-                    res = R_LogicalNAValue;
-                } else {
-                    res = *INTEGER(lhs) < *INTEGER(rhs) ? R_TrueValue
-                                                        : R_FalseValue;
-                }
-                break;
-            }
-        }
-        BINOP_FALLBACK("<");
-    } while (false);
+    DO_RELOP(<);
 
     ostack_popn(ctx, 2);
     ostack_push(ctx, res);
@@ -1949,30 +1956,7 @@ INSTRUCTION(gt_) {
     SEXP rhs = ostack_at(ctx, 0);
     SEXP res;
 
-    do {
-        if (IS_SCALAR_VALUE(lhs, REALSXP)) {
-            if (IS_SCALAR_VALUE(rhs, REALSXP)) {
-                if (*REAL(lhs) == NA_REAL || *REAL(rhs) == NA_REAL) {
-                    res = R_LogicalNAValue;
-                } else {
-                    res = *REAL(lhs) > *REAL(rhs) ? R_TrueValue : R_FalseValue;
-                }
-                break;
-            }
-        } else if (IS_SCALAR_VALUE(lhs, INTSXP)) {
-            if (IS_SCALAR_VALUE(rhs, INTSXP)) {
-                if (*INTEGER(lhs) == NA_INTEGER ||
-                    *INTEGER(rhs) == NA_INTEGER) {
-                    res = R_LogicalNAValue;
-                } else {
-                    res = *INTEGER(lhs) > *INTEGER(rhs) ? R_TrueValue
-                                                        : R_FalseValue;
-                }
-                break;
-            }
-        }
-        BINOP_FALLBACK(">");
-    } while (false);
+    DO_RELOP(>);
 
     ostack_popn(ctx, 2);
     ostack_push(ctx, res);
@@ -1983,30 +1967,7 @@ INSTRUCTION(le_) {
     SEXP rhs = ostack_at(ctx, 0);
     SEXP res;
 
-    do {
-        if (IS_SCALAR_VALUE(lhs, REALSXP)) {
-            if (IS_SCALAR_VALUE(rhs, REALSXP)) {
-                if (*REAL(lhs) == NA_REAL || *REAL(rhs) == NA_REAL) {
-                    res = R_LogicalNAValue;
-                } else {
-                    res = *REAL(lhs) <= *REAL(rhs) ? R_TrueValue : R_FalseValue;
-                }
-                break;
-            }
-        } else if (IS_SCALAR_VALUE(lhs, INTSXP)) {
-            if (IS_SCALAR_VALUE(rhs, INTSXP)) {
-                if (*INTEGER(lhs) == NA_INTEGER ||
-                    *INTEGER(rhs) == NA_INTEGER) {
-                    res = R_LogicalNAValue;
-                } else {
-                    res = *INTEGER(lhs) <= *INTEGER(rhs) ? R_TrueValue
-                                                        : R_FalseValue;
-                }
-                break;
-            }
-        }
-        BINOP_FALLBACK("<=");
-    } while (false);
+    DO_RELOP(<=);
 
     ostack_popn(ctx, 2);
     ostack_push(ctx, res);
@@ -2017,30 +1978,7 @@ INSTRUCTION(ge_) {
     SEXP rhs = ostack_at(ctx, 0);
     SEXP res;
 
-    do {
-        if (IS_SCALAR_VALUE(lhs, REALSXP)) {
-            if (IS_SCALAR_VALUE(rhs, REALSXP)) {
-                if (*REAL(lhs) == NA_REAL || *REAL(rhs) == NA_REAL) {
-                    res = R_LogicalNAValue;
-                } else {
-                    res = *REAL(lhs) >= *REAL(rhs) ? R_TrueValue : R_FalseValue;
-                }
-                break;
-            }
-        } else if (IS_SCALAR_VALUE(lhs, INTSXP)) {
-            if (IS_SCALAR_VALUE(rhs, INTSXP)) {
-                if (*INTEGER(lhs) == NA_INTEGER ||
-                    *INTEGER(rhs) == NA_INTEGER) {
-                    res = R_LogicalNAValue;
-                } else {
-                    res = *INTEGER(lhs) >= *INTEGER(rhs) ? R_TrueValue
-                                                        : R_FalseValue;
-                }
-                break;
-            }
-        }
-        BINOP_FALLBACK(">=");
-    } while (false);
+    DO_RELOP(>=);
 
     ostack_popn(ctx, 2);
     ostack_push(ctx, res);
@@ -2051,30 +1989,7 @@ INSTRUCTION(eq_) {
     SEXP rhs = ostack_at(ctx, 0);
     SEXP res;
 
-    do {
-        if (IS_SCALAR_VALUE(lhs, REALSXP)) {
-            if (IS_SCALAR_VALUE(rhs, REALSXP)) {
-                if (*REAL(lhs) == NA_REAL || *REAL(rhs) == NA_REAL) {
-                    res = R_LogicalNAValue;
-                } else {
-                    res = *REAL(lhs) == *REAL(rhs) ? R_TrueValue : R_FalseValue;
-                }
-                break;
-            }
-        } else if (IS_SCALAR_VALUE(lhs, INTSXP)) {
-            if (IS_SCALAR_VALUE(rhs, INTSXP)) {
-                if (*INTEGER(lhs) == NA_INTEGER ||
-                    *INTEGER(rhs) == NA_INTEGER) {
-                    res = R_LogicalNAValue;
-                } else {
-                    res = *INTEGER(lhs) == *INTEGER(rhs) ? R_TrueValue
-                                                        : R_FalseValue;
-                }
-                break;
-            }
-        }
-        BINOP_FALLBACK("==");
-    } while (false);
+    DO_RELOP(==);
 
     ostack_popn(ctx, 2);
     ostack_push(ctx, res);
@@ -2085,30 +2000,7 @@ INSTRUCTION(ne_) {
     SEXP rhs = ostack_at(ctx, 0);
     SEXP res;
 
-    do {
-        if (IS_SCALAR_VALUE(lhs, REALSXP)) {
-            if (IS_SCALAR_VALUE(rhs, REALSXP)) {
-                if (*REAL(lhs) == NA_REAL || *REAL(rhs) == NA_REAL) {
-                    res = R_LogicalNAValue;
-                } else {
-                    res = *REAL(lhs) != *REAL(rhs) ? R_TrueValue : R_FalseValue;
-                }
-                break;
-            }
-        } else if (IS_SCALAR_VALUE(lhs, INTSXP)) {
-            if (IS_SCALAR_VALUE(rhs, INTSXP)) {
-                if (*INTEGER(lhs) == NA_INTEGER ||
-                    *INTEGER(rhs) == NA_INTEGER) {
-                    res = R_LogicalNAValue;
-                } else {
-                    res = *INTEGER(lhs) != *INTEGER(rhs) ? R_TrueValue
-                                                        : R_FalseValue;
-                }
-                break;
-            }
-        }
-        BINOP_FALLBACK("!=");
-    } while (false);
+    DO_RELOP(!=);
 
     ostack_popn(ctx, 2);
     ostack_push(ctx, res);
