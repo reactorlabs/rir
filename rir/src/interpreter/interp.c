@@ -1910,6 +1910,91 @@ INSTRUCTION(sub_) {
     ostack_push(ctx, res);
 }
 
+static R_INLINE int R_integer_uplus(int x, Rboolean* pnaflag) {
+    if (x == NA_INTEGER)
+        return NA_INTEGER;
+
+    return x;
+}
+
+static R_INLINE int R_integer_uminus(int x, Rboolean* pnaflag) {
+    if (x == NA_INTEGER)
+        return NA_INTEGER;
+
+    if (x == R_INT_MIN) {
+        if (pnaflag != NULL)
+            *pnaflag = TRUE;
+        return NA_INTEGER;
+    }
+    return -x;
+}
+
+#define UNOP_FALLBACK(op)                                                      \
+    do {                                                                       \
+        static SEXP prim = NULL;                                               \
+        static CCODE blt;                                                      \
+        static int flag;                                                       \
+        if (!prim) {                                                           \
+            prim = findFun(Rf_install(op), R_GlobalEnv);                       \
+            blt = getBuiltin(prim);                                            \
+            flag = getFlag(prim);                                              \
+        }                                                                      \
+        SEXP call = getSrcForCall(*c, *pc - 1, ctx);                           \
+        SEXP argslist = CONS_NR(rhs, R_NilValue);                              \
+        ostack_push(ctx, argslist);                                            \
+        if (flag < 2)                                                          \
+            R_Visible = flag != 1;                                             \
+        res = blt(call, prim, argslist, env);                                  \
+        if (flag < 2)                                                          \
+            R_Visible = flag != 1;                                             \
+        ostack_pop(ctx);                                                       \
+    } while (false)
+
+#define DO_UNOP(op, op2)                                                       \
+    do {                                                                       \
+        if (IS_SCALAR_VALUE(rhs, REALSXP)) {                                   \
+            res = Rf_allocVector(REALSXP, 1);                                  \
+            *REAL(res) = (*REAL(rhs) == NA_REAL)                               \
+                             ? NA_REAL                                         \
+                             : op *REAL(rhs);                                  \
+            break;                                                             \
+        } else if (IS_SCALAR_VALUE(rhs, INTSXP)) {                             \
+            Rboolean naflag = FALSE;                                           \
+            res = Rf_allocVector(INTSXP, 1);                                   \
+            switch (op2) {                                                     \
+            case PLUSOP:                                                       \
+                *INTEGER(res) = R_integer_uplus(*INTEGER(rhs), &naflag);       \
+                break;                                                         \
+            case MINUSOP:                                                      \
+                *INTEGER(res) = R_integer_uminus(*INTEGER(rhs), &naflag);      \
+                break;                                                         \
+            }                                                                  \
+            CHECK_INTEGER_OVERFLOW(res, naflag);                               \
+            break;                                                             \
+        }                                                                      \
+        UNOP_FALLBACK(#op);                                                    \
+    } while (false)
+
+INSTRUCTION(uplus_) {
+    SEXP rhs = ostack_at(ctx, 0);
+    SEXP res;
+
+    DO_UNOP(+, PLUSOP);
+
+    ostack_popn(ctx, 1);
+    ostack_push(ctx, res);
+}
+
+INSTRUCTION(uminus_) {
+    SEXP rhs = ostack_at(ctx, 0);
+    SEXP res;
+
+    DO_UNOP(-, MINUSOP);
+
+    ostack_popn(ctx, 1);
+    ostack_push(ctx, res);
+}
+
 
 // TODO: what about (REAL op INT) and (INT op REAL) -- fallback as is
 #define DO_RELOP(op)                                                           \
@@ -2183,6 +2268,8 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
             INS(div_);
             INS(idiv_);
             INS(sub_);
+            INS(uplus_);
+            INS(uminus_);
             INS(lt_);
             INS(gt_);
             INS(le_);

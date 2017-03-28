@@ -198,6 +198,21 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
         return true;
     }
 
+    if (args.length() == 1 &&
+        (fun == symbol::Add || fun == symbol::Sub)) {
+        cs << BC::guardNamePrimitive(fun);
+
+        compileExpr(ctx, args[0]);
+
+        if (fun == symbol::Add)
+            cs << BC::uplus();
+        else if (fun == symbol::Sub)
+            cs << BC::uminus();
+        cs.addSrc(ast);
+
+        return true;
+    }
+
     if (fun == symbol::And && args.length() == 2) {
         cs << BC::guardNamePrimitive(fun);
 

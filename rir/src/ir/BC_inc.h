@@ -226,6 +226,8 @@ class BC {
     inline static BC idiv();
     inline static BC mod();
     inline static BC sub();
+    inline static BC uplus();
+    inline static BC uminus();
     inline static BC lt();
     inline static BC gt();
     inline static BC le();
