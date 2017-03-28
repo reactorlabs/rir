@@ -2091,6 +2091,31 @@ INSTRUCTION(ne_) {
     ostack_push(ctx, res);
 }
 
+INSTRUCTION(not_) {
+    SEXP rhs = ostack_at(ctx, 0);
+    SEXP res;
+
+    if (IS_SCALAR_VALUE(rhs, REALSXP)) {
+        if (*REAL(rhs) == NA_REAL) {
+            res = R_LogicalNAValue;
+        } else {
+            res = *REAL(rhs) == 0.0 ? R_TrueValue : R_FalseValue;
+        }
+    } else if (IS_SCALAR_VALUE(rhs, INTSXP)) {
+        if (*INTEGER(rhs) == NA_INTEGER) {
+            res = R_LogicalNAValue;
+        } else {
+            res = *INTEGER(rhs) == 0 ? R_TrueValue : R_FalseValue;
+        }
+    } else {
+        UNOP_FALLBACK("!");
+    }
+
+    ostack_popn(ctx, 1);
+    ostack_push(ctx, res);
+}
+
+
 INSTRUCTION(names_) {
     ostack_push(ctx, getAttrib(ostack_pop(ctx), R_NamesSymbol));
 }
@@ -2270,6 +2295,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
             INS(sub_);
             INS(uplus_);
             INS(uminus_);
+            INS(not_);
             INS(lt_);
             INS(gt_);
             INS(le_);

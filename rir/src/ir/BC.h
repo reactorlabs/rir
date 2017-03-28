@@ -95,6 +95,7 @@ BC::ImmediateT decodeImmediate(Opcode bc, Opcode* pc) {
     case Opcode::sub_:
     case Opcode::uplus_:
     case Opcode::uminus_:
+    case Opcode::not_:
     case Opcode::lt_:
     case Opcode::gt_:
     case Opcode::le_:
@@ -300,6 +301,7 @@ BC BC::pow() { return BC(Opcode::pow_); }
 BC BC::sub() { return BC(Opcode::sub_); }
 BC BC::uplus() { return BC(Opcode::uplus_); }
 BC BC::uminus() { return BC(Opcode::uminus_); }
+BC BC::Not() { return BC(Opcode::not_); }
 BC BC::lt() { return BC(Opcode::lt_); }
 BC BC::gt() { return BC(Opcode::gt_); }
 BC BC::le() { return BC(Opcode::le_); }

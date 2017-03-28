@@ -123,6 +123,7 @@ DEF_INSTR(sub_, 0, 2, 1, 0)
 
 DEF_INSTR(uplus_, 0, 1, 1, 0)
 DEF_INSTR(uminus_, 0, 1, 1, 0)
+DEF_INSTR(not_, 0, 1, 1, 0)
 
 DEF_INSTR(lt_, 0, 2, 1, 0)
 DEF_INSTR(gt_, 0, 2, 1, 0)
