@@ -35,6 +35,14 @@ f <- rir.compile(function() {
     stopifnot(is.na(a17))
     a18 <- NA || NA
     stopifnot(is.na(a18))
+    a19 <- !TRUE
+    stopifnot(a19 == FALSE)
+    a20 <- !FALSE
+    stopifnot(a20 == TRUE)
+    a21 <- !NA
+    stopifnot(is.na(a21))
+    a22 <- !((1:5 %% 2) == 0)
+    stopifnot(a22 == c(TRUE, FALSE, TRUE, FALSE, TRUE))
 })
 
 f()
