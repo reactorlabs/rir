@@ -41,10 +41,10 @@ PLAIN_R=$PLAIN_DIR/bin/R
 MOD_DIR=$BASE/external/custom-r
 MOD_R=$MOD_DIR/bin/R
 BENCH=`ls ${BASE}/benchmarks/shootout/*/*.r`
-REV=`git log $RIR_REVISION -n 1 --pretty=format:"%h"`
 TIMEOUT=80
 RUNS=3
-OUT="$WD/benchmark-out/`git log $RIR_REVISION -n 1 --pretty=format:'%cd_%h' --date=format:'%Y-%m-%d_%H-%M-%S'`"
+OUT="$WD/benchmark-out"
+log="$OUT/benchmark_`git log $RIR_REVISION -n 1 --pretty=format:'%cd_%h' --date=format:'%Y-%m-%d_%H-%M-%S'`.csv"
 
 mkdir -p $OUT
 
@@ -86,8 +86,6 @@ ninja  # assume all dependencies satisfied (custom-r ready -- sync.sh and make)
 
 
 # run benchmarks
-TIME=`date '+%Y-%m-%d-%H-%M-%S'`
-log="$OUT/benchmark-$REV-$TIME.csv"
 echo "experiment, benchmark, time" > $log
 for run in $(seq 1 $RUNS); do
     echo "************** testing run [$run]"
