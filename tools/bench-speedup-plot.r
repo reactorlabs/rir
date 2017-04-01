@@ -16,8 +16,6 @@ d <- reshape(d,
              timevar = "experiment",
              idvar = "benchmark",
              direction = "wide")
-#rownames(d) <- 1:benchmarks
-#colnames(d) <- c("benchmark", substring(colnames(d), 6)[-1])
 
 for (col in (experiments:1)+1)
   d[[col]] <- d[[2]] / d[[col]]

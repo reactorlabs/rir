@@ -28,10 +28,6 @@ else
     exit 1
 fi
 
-if [[ "$OSTYPE" == "darwin"* ]]; then
-    USING_OSX=1
-fi
-
 RIR_REVISION=`git rev-parse HEAD`
 if [ "$#" == "1" ]; then
     RIR_REVISION=$1
@@ -49,40 +45,20 @@ log="$OUT/benchmark_`git log $RIR_REVISION -n 1 --pretty=format:'%cd_%h' --date=
 mkdir -p $OUT
 
 
-# checkout and build vanilla-r and custom-r, ensure packages not bytecompiled
+# checkout rir revision and build rir (ensure vanilla-r and custom-r)
+git checkout $RIR_REVISION
+
 $BASE/tools/sync.sh --vanilla
 
-export R_NO_BASE_COMPILE=1
-
-pushd $PLAIN_DIR
-make clean
-if [ $USING_OSX -eq 1 ]; then
-  # Mac OSX
-    F77="gfortran -arch x86_64" FC="gfortran -arch x86_64" CXXFLAGS="-g3 -O2" CFLAGS="-g3 -O2" ./configure --enable-R-shlib --without-internal-tzcode --with-ICU=no --disable-byte-compiled-packages
-else
-    CXXFLAGS="-g3 -O2" CFLAGS="-g3 -O2" ./configure --with-ICU=no --disable-byte-compiled-packages
+if [ ! -f $PLAIN_R ]; then
+    pushd .
+    cd $BASE/external/vanilla-r && make -j 8
+    popd
 fi
-make -j 8
-popd
-
-pushd $MOD_DIR
-make clean
-if [ $USING_OSX -eq 1 ]; then
-  # Mac OSX
-    F77="gfortran -arch x86_64" FC="gfortran -arch x86_64" CXXFLAGS="-g3 -O2" CFLAGS="-g3 -O2" ./configure --enable-R-shlib --without-internal-tzcode --with-ICU=no --disable-byte-compiled-packages
-else
-    CXXFLAGS="-g3 -O2" CFLAGS="-g3 -O2" ./configure --with-ICU=no --disable-byte-compiled-packages
-fi
-make -j 8
-popd
-
-
-# checkout rir revision and build rir
-git checkout $RIR_REVISION
 
 cmake --build . --target clean || true
 cmake -GNinja $BASE || cmake $BASE
-# here all dependencies satisfied (custom-r ready because of sync.sh and make)
+cmake --build . --target setup
 cmake --build .
 
 
@@ -117,9 +93,7 @@ done
 # restore original git and rir states
 git checkout $BRANCH
 
-pushd $MOD_DIR
-make clean
-popd
+$BASE/tools/sync.sh
 
 cmake --build . --target clean
 cmake -GNinja $BASE || cmake $BASE
@@ -129,3 +103,4 @@ cmake --build .
 popd
 
 R -f ${BASE}/tools/bench-speedup-plot.r --args $log
+R -f ${BASE}/tools/bench-speedup-rir-history.r --args $OUT
