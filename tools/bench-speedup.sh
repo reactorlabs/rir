@@ -80,9 +80,10 @@ popd
 # checkout rir revision and build rir
 git checkout $RIR_REVISION
 
-ninja clean || true
-cmake -GNinja $BASE
-ninja  # assume all dependencies satisfied (custom-r ready -- sync.sh and make)
+cmake --build . --target clean || true
+cmake -GNinja $BASE || cmake $BASE
+# here all dependencies satisfied (custom-r ready because of sync.sh and make)
+cmake --build .
 
 
 # run benchmarks
@@ -113,17 +114,17 @@ for run in $(seq 1 $RUNS); do
 done
 
 
-# return to where we were
+# restore original git and rir states
 git checkout $BRANCH
 
 pushd $MOD_DIR
 make clean
 popd
 
-ninja clean
-cmake -GNinja $BASE
-ninja setup
-ninja
+cmake --build . --target clean
+cmake -GNinja $BASE || cmake $BASE
+cmake --build . --target setup
+cmake --build .
 
 popd
 

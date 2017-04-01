@@ -31,9 +31,9 @@ else
   echo "experiment, benchmark, time" > $log
 
   for run in $(seq 1 $RUNS); do
-      ninja clean
+      cmake --build . --target clean
       cmake $BASE
-      ninja
+      cmake --build .
   
       for i in `ls ${BASE}/benchmarks/shootout/*/*.r`; do
           echo $T
