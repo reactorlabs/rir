@@ -1921,11 +1921,6 @@ static R_INLINE int R_integer_uminus(int x, Rboolean* pnaflag) {
     if (x == NA_INTEGER)
         return NA_INTEGER;
 
-    if (x == R_INT_MIN) {
-        if (pnaflag != NULL)
-            *pnaflag = TRUE;
-        return NA_INTEGER;
-    }
     return -x;
 }
 
@@ -1995,17 +1990,34 @@ INSTRUCTION(uminus_) {
     ostack_push(ctx, res);
 }
 
-
-// TODO: what about (REAL op INT) and (INT op REAL) -- fallback as is
 #define DO_RELOP(op)                                                           \
     do {                                                                       \
-        if (IS_SCALAR_VALUE(lhs, REALSXP)) {                                   \
+        if (IS_SCALAR_VALUE(lhs, LGLSXP)) {                                    \
+            if (IS_SCALAR_VALUE(rhs, LGLSXP)) {                                \
+                if (*LOGICAL(lhs) == NA_LOGICAL ||                             \
+                    *LOGICAL(rhs) == NA_LOGICAL) {                             \
+                    res = R_LogicalNAValue;                                    \
+                } else {                                                       \
+                    res = *LOGICAL(lhs) op *LOGICAL(rhs) ? R_TrueValue         \
+                                                         : R_FalseValue;       \
+                }                                                              \
+                break;                                                         \
+            }                                                                  \
+        } else if (IS_SCALAR_VALUE(lhs, REALSXP)) {                            \
             if (IS_SCALAR_VALUE(rhs, REALSXP)) {                               \
                 if (*REAL(lhs) == NA_REAL || *REAL(rhs) == NA_REAL) {          \
                     res = R_LogicalNAValue;                                    \
                 } else {                                                       \
                     res = *REAL(lhs) op *REAL(rhs) ? R_TrueValue               \
                                                    : R_FalseValue;             \
+                }                                                              \
+                break;                                                         \
+            } else if (IS_SCALAR_VALUE(rhs, INTSXP)) {                         \
+                if (*REAL(lhs) == NA_REAL || *INTEGER(rhs) == NA_INTEGER) {    \
+                    res = R_LogicalNAValue;                                    \
+                } else {                                                       \
+                    res = *REAL(lhs) op *INTEGER(rhs) ? R_TrueValue            \
+                                                      : R_FalseValue;          \
                 }                                                              \
                 break;                                                         \
             }                                                                  \
@@ -2019,11 +2031,18 @@ INSTRUCTION(uminus_) {
                                                          : R_FalseValue;       \
                 }                                                              \
                 break;                                                         \
+            } else if (IS_SCALAR_VALUE(rhs, REALSXP)) {                        \
+                if (*INTEGER(lhs) == NA_INTEGER || *REAL(rhs) == NA_REAL) {    \
+                    res = R_LogicalNAValue;                                    \
+                } else {                                                       \
+                    res = *INTEGER(lhs) op *REAL(rhs) ? R_TrueValue            \
+                                                      : R_FalseValue;          \
+                }                                                              \
+                break;                                                         \
             }                                                                  \
         }                                                                      \
         BINOP_FALLBACK(#op);                                                   \
     } while (false)
-
 
 INSTRUCTION(lt_) {
     SEXP lhs = ostack_at(ctx, 1);
@@ -2095,7 +2114,13 @@ INSTRUCTION(not_) {
     SEXP rhs = ostack_at(ctx, 0);
     SEXP res;
 
-    if (IS_SCALAR_VALUE(rhs, REALSXP)) {
+    if (IS_SCALAR_VALUE(rhs, LGLSXP)) {
+        if (*LOGICAL(rhs) == NA_LOGICAL) {
+            res = R_LogicalNAValue;
+        } else {
+            res = *LOGICAL(rhs) == 0 ? R_TrueValue : R_FalseValue;
+        }
+    } else if (IS_SCALAR_VALUE(rhs, REALSXP)) {
         if (*REAL(rhs) == NA_REAL) {
             res = R_LogicalNAValue;
         } else {
