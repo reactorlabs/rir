@@ -27,7 +27,7 @@ spectralnorm_alt <- function(args) {
 }
 
 
-execute <- function(n = 250L) {
+execute <- function(n = 2000L) {
     spectralnorm_alt(n)
 }
 
