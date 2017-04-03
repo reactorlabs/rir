@@ -32,10 +32,10 @@ for revf in $REV; do
         if [ ! -f "$log" ]; then
             echo "**************  testing $run $rev"
             git checkout $rev
-            ninja clean
+            cmake --build . --target clean
             cmake $BASE
-            ninja setup
-            ninja
+            cmake --build . --target setup
+            cmake --build .
             for i in $BENCH; do
                 T=`basename $i`;
                 D="`dirname $i`/../..";

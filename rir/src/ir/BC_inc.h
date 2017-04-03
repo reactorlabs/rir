@@ -214,11 +214,6 @@ class BC {
     inline static BC br(JmpT);
     inline static BC brobj(JmpT);
     inline static BC label(JmpT);
-    inline static BC lti();
-    inline static BC eqi();
-    inline static BC pushi(uint32_t);
-    inline static BC push_argi();
-    inline static BC dupi();
     inline static BC dup();
     inline static BC dup2();
     inline static BC testBounds();
@@ -231,7 +226,15 @@ class BC {
     inline static BC idiv();
     inline static BC mod();
     inline static BC sub();
+    inline static BC uplus();
+    inline static BC uminus();
+    inline static BC Not();
     inline static BC lt();
+    inline static BC gt();
+    inline static BC le();
+    inline static BC ge();
+    inline static BC eq();
+    inline static BC ne();
     inline static BC seq();
     inline static BC makeUnique();
     inline static BC setShared();
