@@ -486,9 +486,9 @@ class CodeEditor {
         return promises.size();
     }
 
-    CodeEditor & promise(size_t index) {
+    CodeEditor * promise(size_t index) {
         assert(index < promises.size());
-        return * promises[index];
+        return promises[index];
     }
 
     void verify() {

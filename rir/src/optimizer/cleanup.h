@@ -14,6 +14,12 @@ class BCCleanup : public InstructionDispatcher::Receiver {
 
     BCCleanup(CodeEditor& code) : dispatcher(*this), code_(code) {}
 
+    void nop_(CodeEditor::Iterator ins) override {
+        CodeEditor::Cursor cur = ins.asCursor(code_);
+        cur.remove();
+        return;
+    }
+
     void pop_(CodeEditor::Iterator ins) override {
         auto v = analysis[ins].top();
         if (!v.singleDef())

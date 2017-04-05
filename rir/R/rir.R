@@ -16,10 +16,15 @@ rir.disassemble <- function(what) {
 
 # compiles given closure, or expression and returns the compiled version.
 rir.compile <- function(what) {
-    .Call("rir_compile", what)
+    # TODO: gnu-r compile function takes optional environment argument for expressions
+    # this just uses globalenv for now
+    if (typeof(what) == "closure")
+        .Call("rir_compile", what, environment(what))
+    else
+        .Call("rir_compile", what, globalenv())
 }
 
-rir.eval <- function(what, env = globalEnv()) {
+rir.eval <- function(what, env = globalenv()) {
     .Call("rir_eval", what, env);
 }
 

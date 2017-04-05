@@ -2419,6 +2419,11 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
             break;
         }
 
+        case nop_: {
+            // should not appear after optimizations...
+            break;
+        }
+
         case ret_: {
             // not in its own function so that we can avoid nonlocal returns
             goto __eval_done;

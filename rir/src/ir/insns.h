@@ -10,6 +10,11 @@
 DEF_INSTR(invalid_, 0, 0, 0, 0)
 
 /**
+  * nop_:: do nothing.
+  */
+DEF_INSTR(nop_, 0, 0, 0, 1)
+
+/**
  * push_:: take immediate CP index, and push CP value on object stack.
  */
 DEF_INSTR(push_, 1, 0, 1, 1)

@@ -184,6 +184,7 @@ class BC {
 
     // ==== Factory methods
     // to create new BC objects, which can be streamed to a CodeStream
+    inline static BC nop();
     inline static BC push(SEXP constant);
     inline static BC push(double constant);
     inline static BC push(int constant);
@@ -337,6 +338,7 @@ class BC {
     }
 
     friend class CodeEditor;
+    friend class CodeStream;
 };
 
 class CallSite {
@@ -344,7 +346,7 @@ class CallSite {
     BC bc;
     CallSiteStruct* cs = nullptr;
 
-    CallSite(){};
+    CallSite() {}
     CallSite(BC bc, CallSiteStruct* cs);
 
     bool isValid() { return cs != nullptr; }

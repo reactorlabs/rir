@@ -27,6 +27,7 @@ class Context {
       public:
         LabelT next_;
         LabelT break_;
+        bool context_needed_ = false;
         LoopContext(LabelT next_, LabelT break_)
             : next_(next_), break_(break_) {}
     };
@@ -35,33 +36,91 @@ class Context {
       public:
         CodeStream cs;
         std::stack<LoopContext> loops;
-        CodeContext(SEXP ast, FunctionHandle& fun) : cs(fun, ast) {}
+        CodeContext* parent;
+        CodeContext(SEXP ast, FunctionHandle& fun, CodeContext* p) : cs(fun, ast), parent(p) {}
+        virtual ~CodeContext() {}
+        bool inLoop() {
+            return !loops.empty() ||
+                    (parent && parent->inLoop());
+        }
+        LabelT loopNext() {
+            assert(!loops.empty());
+            return loops.top().next_;
+        }
+        LabelT loopBreak() {
+            assert(!loops.empty());
+            return loops.top().break_;
+        }
+        void setContextNeeded() {
+            if (loops.empty() && parent)
+                parent->setContextNeeded();
+            else
+                loops.top().context_needed_ = true;
+        }
+        virtual bool loopIsLocal() {
+            if (loops.empty()) return false;
+            return true;
+        }
     };
 
-    std::stack<CodeContext> code;
+    class PromiseContext : public CodeContext {
+      public:
+        PromiseContext(SEXP ast, FunctionHandle& fun, CodeContext* p) : CodeContext(ast, fun, p) {}
+        bool loopIsLocal() override {
+            if (loops.empty()) {
+                parent->setContextNeeded();
+                return false;
+            }
+            return true;
+        }
+    };
 
-    CodeStream& cs() { return code.top().cs; }
+    std::stack<CodeContext*> code;
+
+    CodeStream& cs() { return code.top()->cs; }
 
     FunctionHandle& fun;
     Preserve& preserve;
 
-    Context(FunctionHandle& fun, Preserve& preserve)
+    Context(FunctionHandle& fun, Preserve& preserve, SEXP env)
         : fun(fun), preserve(preserve) {}
 
-    bool inLoop() { return !code.top().loops.empty(); }
+    ~Context() { assert(code.empty()); }
 
-    LoopContext& loop() { return code.top().loops.top(); }
+    bool inLoop() { return code.top()->inLoop(); }
 
-    void pushLoop(LabelT& next_, LabelT break_) {
-        code.top().loops.emplace(next_, break_);
+    LoopContext& loop() { return code.top()->loops.top(); }
+
+    bool loopNeedsContext() {
+        assert(inLoop());
+        return code.top()->loops.top().context_needed_;
     }
 
-    void popLoop() { code.top().loops.pop(); }
+    bool loopIsLocal() {
+        return code.top()->loopIsLocal();
+    }
 
-    void push(SEXP ast) { code.emplace(ast, fun); }
+    LabelT loopNext() {
+        return code.top()->loopNext();
+    }
+
+    LabelT loopBreak() {
+        return code.top()->loopBreak();
+    }
+
+    void pushLoop(LabelT next_, LabelT break_) {
+        code.top()->loops.emplace(next_, break_);
+    }
+
+    void popLoop() { code.top()->loops.pop(); }
+
+    void push(SEXP ast) { code.push(new CodeContext(ast, fun, code.empty() ? nullptr : code.top())); }
+
+    void pushPromiseContext(SEXP ast) { code.push(new PromiseContext(ast, fun, code.empty() ? nullptr : code.top())); }
 
     FunIdxT pop() {
         auto idx = cs().finalize();
+        delete code.top();
         code.pop();
         return idx;
     }
@@ -350,7 +409,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
                         LabelT objBranch = cs.mkLabel();
                         LabelT nextBranch = cs.mkLabel();
 
-                        // First rhs (assign is right-associative) 
+                        // First rhs (assign is right-associative)
                         compileExpr(ctx, rhs);
                         // Keep a copy of rhs since its the result of this
                         // expression
@@ -681,8 +740,10 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
 
         ctx.pushLoop(loopBranch, nextBranch);
 
-        cs << BC::beginloop(nextBranch);
-        cs << loopBranch;
+        unsigned beginLoopPos = cs.currentPos();
+
+        cs << BC::beginloop(nextBranch)
+           << loopBranch;
 
         compileExpr(ctx, cond);
         cs << BC::asbool()
@@ -690,13 +751,17 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
 
         compileExpr(ctx, body);
         cs << BC::pop()
-           << BC::br(loopBranch);
+           << BC::br(loopBranch)
+           << nextBranch;
 
-        cs << nextBranch
-           << BC::endcontext()
-           << BC::push(R_NilValue);
+        if (ctx.loopNeedsContext()) {
+            cs << BC::endcontext();
+        } else {
+            cs.remove(beginLoopPos);
+        }
 
-        cs << BC::invisible();
+        cs << BC::push(R_NilValue)
+           << BC::invisible();
 
         ctx.popLoop();
 
@@ -715,16 +780,23 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
 
         ctx.pushLoop(loopBranch, nextBranch);
 
-        cs << BC::beginloop(nextBranch);
-        cs << loopBranch;
+        unsigned beginLoopPos = cs.currentPos();
+
+        cs << BC::beginloop(nextBranch)
+           << loopBranch;
 
         compileExpr(ctx, body);
         cs << BC::pop()
-           << BC::br(loopBranch);
+           << BC::br(loopBranch)
+           << nextBranch;
 
-        cs << nextBranch
-           << BC::endcontext()
-           << BC::push(R_NilValue)
+        if (ctx.loopNeedsContext()) {
+            cs << BC::endcontext();
+        } else {
+            cs.remove(beginLoopPos);
+        }
+
+        cs << BC::push(R_NilValue)
            << BC::invisible();
 
         ctx.popLoop();
@@ -754,37 +826,50 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
         cs << BC::setShared()
            << BC::push((int)0);
 
+        std::vector<unsigned> pcs;
+
+        pcs.push_back(cs.currentPos());
         cs << BC::beginloop(breakBranch)
+           << loopBranch;
 
-           << loopBranch
+        // Move context out of the way
+        pcs.push_back(cs.currentPos());
+        cs << BC::put(2);
 
-           // Move context out of the way
-           << BC::put(2)
-
-           << BC::inc()
+        cs << BC::inc()
            << BC::testBounds()
            << BC::brfalse(endForBranch)
            << BC::dup2()
            << BC::extract1();
 
         // Put context back
-        cs << BC::pick(3)
-           << BC::swap()
+        pcs.push_back(cs.currentPos());
+        cs << BC::pick(3);
+        pcs.push_back(cs.currentPos());
+        cs << BC::swap();
 
         // Set the loop variable
-           << BC::stvar(sym);
+        cs << BC::stvar(sym);
 
         compileExpr(ctx, body);
         cs << BC::pop()
            << BC::br(loopBranch);
 
+        cs << endForBranch;
         // Put context back
-        cs << endForBranch
-           << BC::pick(2)
+        pcs.push_back(cs.currentPos());
+        cs << BC::pick(2);
 
-           << breakBranch
-           << BC::endcontext()
-           << BC::pop()
+        cs << breakBranch;
+
+        if (ctx.loopNeedsContext()) {
+            cs << BC::endcontext();
+        } else {
+            for (auto pc : pcs)
+                cs.remove(pc);
+        }
+
+        cs << BC::pop()
            << BC::pop()
            << BC::push(R_NilValue)
            << BC::invisible();
@@ -794,21 +879,36 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
         return true;
     }
 
-    if (fun == symbol::Next && ctx.inLoop()) {
+    if (fun == symbol::Next) {
         assert(args.length() == 0);
 
-        cs << BC::guardNamePrimitive(fun) << BC::br(ctx.loop().next_);
+        if (!ctx.inLoop()) {
+            // notify wrong next
+            return false;
+        }
 
-        return true;
+        if (ctx.loopIsLocal()) {
+            cs << BC::guardNamePrimitive(fun)
+               << BC::br(ctx.loopNext())
+               << BC::push(R_NilValue);
+            return true;
+        }
     }
 
-    if (fun == symbol::Break && ctx.inLoop()) {
+    if (fun == symbol::Break) {
         assert(args.length() == 0);
-        assert(ctx.inLoop());
 
-        cs << BC::guardNamePrimitive(fun) << BC::br(ctx.loop().break_);
+        if (!ctx.inLoop()) {
+            // notify wrong break
+            return false;
+        }
 
-        return true;
+        if (ctx.loopIsLocal()) {
+            cs << BC::guardNamePrimitive(fun)
+               << BC::br(ctx.loopBreak())
+               << BC::push(R_NilValue);
+            return true;
+        }
     }
 
     if (fun == symbol::Internal) {
@@ -1076,18 +1176,19 @@ std::vector<FunIdxT> compileFormals(Context& ctx, SEXP formals) {
 }
 
 FunIdxT compilePromise(Context& ctx, SEXP exp) {
-    ctx.push(exp);
+    ctx.pushPromiseContext(exp);
     compileExpr(ctx, exp);
     ctx.cs() << BC::ret();
     return ctx.pop();
 }
-}
+
+}  // anonymous namespace
 
 Compiler::CompilerRes Compiler::finalize() {
     // Rprintf("****************************************************\n");
     // Rprintf("Compiling function\n");
     FunctionHandle function = FunctionHandle::create();
-    Context ctx(function, preserve);
+    Context ctx(function, preserve, env);
 
     auto formProm = compileFormals(ctx, formals);
 
@@ -1100,6 +1201,10 @@ Compiler::CompilerRes Compiler::finalize() {
     CodeEditor code(function.entryPoint(), formals);
     Optimizer::optimize(code);
 
+    for (size_t i = 0; i < code.numPromises(); ++i)
+        if (code.promise(i))
+            Optimizer::optimize(*code.promise(i));
+
     FunctionHandle opt = code.finalize();
 #ifdef ENABLE_SLOWASSERT
     CodeVerifier::vefifyFunctionLayout(opt.store, globalContext());
@@ -1110,7 +1215,7 @@ Compiler::CompilerRes Compiler::finalize() {
     // SEXP f = formout;
     // SEXP formin = formals;
     // for (auto prom : formProm) {
-    //     SEXP arg = (prom == MISSING_ARG_IDX) ? 
+    //     SEXP arg = (prom == MISSING_ARG_IDX) ?
     //         R_MissingArg : (SEXP)opt.codeAtOffset(prom);
     //     SEXP next = CONS_NR(arg, R_NilValue);
     //     SET_TAG(next, TAG(formin));
@@ -1126,7 +1231,7 @@ Compiler::CompilerRes Compiler::finalize() {
 
     // TODO compiling the formals is broken, since the optimizer drops the
     // formals code from the function object since they are not referenced!
-    // 
+    //
     return {opt.store, formals /* formout */ };
 }
 

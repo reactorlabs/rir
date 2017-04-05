@@ -4,6 +4,12 @@ library(Hmisc)
 args <- commandArgs(trailingOnly = TRUE)
 
 files <- sort(list.files(path = args[[1]], pattern = "^benchmark.*\\.csv$"))
+
+if (length(files) < 2) {
+    cat("Not plotting history, less than 2 records found...\n")
+    q()
+}
+
 hashes <- sapply(strsplit(sapply(strsplit(files, "_", fixed = TRUE), tail, n = 1), ".", fixed = TRUE), head, n = 1)
 files <- file.path(args[[1]], files)
 

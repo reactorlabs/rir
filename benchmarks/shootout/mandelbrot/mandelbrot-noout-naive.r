@@ -30,6 +30,6 @@ mandelbrot_noout_naive <- function(args) {
     }
 }
 
-execute <- function(n = 400L) {
+execute <- function(n = 700L) {
     mandelbrot_noout_naive(n)
 }

@@ -27,7 +27,7 @@ public:
             printOffset();
             Rprintf("promise %i:\n", i);
             offset_ += 4;
-            run(code.promise(i));
+            run(*code.promise(i));
             offset_ -= 4;
         }
     }

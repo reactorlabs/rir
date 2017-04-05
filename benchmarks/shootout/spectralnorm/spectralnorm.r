@@ -48,6 +48,6 @@ spectralnorm <- function(args) {
     u
 }
 
-    execute <- function(n = 250L) {
+    execute <- function(n = 1000L) {
         spectralnorm(n)
     }

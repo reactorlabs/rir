@@ -82,7 +82,7 @@ paste. <- function (..., digits=16, sep=" ", collapse=NULL) {
     }
 }
 
-execute <- function(n = "shootout/fasta/fasta3000.txt") {
+execute <- function(n = "shootout/fasta/fasta10000.txt") {
     knucleotide(n)
 }
 
