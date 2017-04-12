@@ -19,7 +19,7 @@ rir.compile <- function(what) {
     .Call("rir_compile", what)
 }
 
-rir.eval <- function(what, env = globalEnv()) {
+rir.eval <- function(what, env = globalenv()) {
     .Call("rir_eval", what, env);
 }
 
