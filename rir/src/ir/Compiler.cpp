@@ -220,7 +220,8 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
          fun == symbol::Mod || fun == symbol::Pow ||
          fun == symbol::Lt || fun == symbol::Gt ||
          fun == symbol::Le || fun == symbol::Ge ||
-         fun == symbol::Eq || fun == symbol::Ne)) {
+         fun == symbol::Eq || fun == symbol::Ne ||
+         fun == symbol::Colon)) {
         cs << BC::guardNamePrimitive(fun);
 
         compileExpr(ctx, args[0]);
@@ -252,6 +253,8 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
             cs << BC::idiv();
         else if (fun == symbol::Pow)
             cs << BC::pow();
+        else if (fun == symbol::Colon)
+            cs << BC::colon();
         cs.addSrc(ast);
 
         return true;

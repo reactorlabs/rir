@@ -2216,6 +2216,70 @@ INSTRUCTION(seq_) {
     ostack_push(ctx, res);
 }
 
+static SEXP seq_int(int n1, int n2) {
+    int n = n1 <= n2 ? n2 - n1 + 1 : n1 - n2 + 1;
+    SEXP ans = Rf_allocVector(INTSXP, n);
+    int *data = INTEGER(ans);
+    if (n1 <= n2) {
+        for (int i = 0; i < n; i++)
+            data[i] = n1 + i;
+    } else {
+        for (int i = 0; i < n; i++)
+            data[i] = n1 - i;
+    }
+    return ans;
+}
+
+INSTRUCTION(colon_) {
+
+    SEXP lhs = ostack_at(ctx, 1);
+    SEXP rhs = ostack_at(ctx, 0);
+    SEXP res = NULL;
+
+    if (IS_SCALAR_VALUE(lhs, INTSXP)) {
+        int from = *INTEGER(lhs);
+        if (IS_SCALAR_VALUE(rhs, INTSXP)) {
+            int to = *INTEGER(rhs);
+            if (from != NA_INTEGER && to != NA_INTEGER) {
+                res = seq_int(from, to);
+            }
+        } else if (IS_SCALAR_VALUE(rhs, REALSXP)) {
+            double to = *REAL(rhs);
+            if (from != NA_INTEGER && to != NA_REAL &&
+                    R_FINITE(to) &&	INT_MIN <= to &&
+                    INT_MAX >= to && to == (int)to) {
+                res = seq_int(from, (int)to);
+            }
+        }
+    } else if (IS_SCALAR_VALUE(lhs, REALSXP)) {
+        double from = *REAL(lhs);
+        if (IS_SCALAR_VALUE(rhs, INTSXP)) {
+            int to = *INTEGER(rhs);
+            if (from != NA_REAL && to != NA_INTEGER &&
+                    R_FINITE(from) &&	INT_MIN <= from &&
+                    INT_MAX >= from && from == (int)from) {
+                res = seq_int((int)from, to);
+            }
+        } else if (IS_SCALAR_VALUE(rhs, REALSXP)) {
+            double to = *REAL(rhs);
+            if (from != NA_REAL && to != NA_REAL &&
+                    R_FINITE(from) && R_FINITE(to) &&
+                    INT_MIN <= from && INT_MAX >= from &&
+                    INT_MIN <= to && INT_MAX >= to &&
+                    from == (int)from && to == (int)to) {
+                res = seq_int((int)from, (int)to);
+            }
+        }
+    }
+
+    if (res == NULL) {
+        BINOP_FALLBACK(":");
+    }
+
+    ostack_popn(ctx, 2);
+    ostack_push(ctx, res);
+}
+
 INSTRUCTION(test_bounds_) {
     SEXP vec = ostack_at(ctx, 1);
     SEXP idx = ostack_at(ctx, 0);
@@ -2305,6 +2369,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
         break
 
             INS(seq_);
+            INS(colon_);
             INS(push_);
             INS(ldfun_);
             INS(ldvar_);
