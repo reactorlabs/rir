@@ -20,6 +20,7 @@ namespace rir {
 class Compiler {
     SEXP exp;
     SEXP formals;
+    SEXP env;
     Preserve preserve;
 
   public:
@@ -28,16 +29,22 @@ class Compiler {
         SEXP formals;
     };
 
-    Compiler(SEXP exp) : exp(exp), formals(R_NilValue) { preserve(exp); }
+    Compiler(SEXP exp, SEXP env) : exp(exp), formals(R_NilValue), env(env) {
+        preserve(exp);
+        if (env != R_NilValue)
+            preserve(env);
+    }
 
-    Compiler(SEXP exp, SEXP formals) : exp(exp), formals(formals) {
+    Compiler(SEXP exp, SEXP formals, SEXP env) : exp(exp), formals(formals), env(env) {
         preserve(exp);
         preserve(formals);
+        if (env != R_NilValue)
+            preserve(env);
     }
 
     CompilerRes finalize();
 
-    static CompilerRes compileExpression(SEXP ast) {
+    static CompilerRes compileExpression(SEXP ast, SEXP env = R_NilValue) {
 #if 0
         size_t count = 1;
         static std::unordered_map<SEXP, size_t> counts;
@@ -59,15 +66,16 @@ class Compiler {
 #endif
 
         // Rf_PrintValue(ast);
-        Compiler c(ast);
+        Compiler c(ast, env);
         return c.finalize();
     }
-    
-    static CompilerRes compileClosure(SEXP ast, SEXP formals) {
-        Compiler c(ast, formals);
+
+    static CompilerRes compileClosure(SEXP ast, SEXP formals, SEXP env = R_NilValue) {
+        Compiler c(ast, formals, env);
         return c.finalize();
     }
 };
+
 }
 
 #endif

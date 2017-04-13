@@ -34,7 +34,7 @@ REXPORT SEXP rir_disassemble(SEXP what) {
     return R_NilValue;
 }
 
-REXPORT SEXP rir_compile(SEXP what, SEXP env = NULL) {
+REXPORT SEXP rir_compile(SEXP what, SEXP env) {
 
     // TODO make this nicer
     if (TYPEOF(what) == CLOSXP) {
@@ -49,7 +49,7 @@ REXPORT SEXP rir_compile(SEXP what, SEXP env = NULL) {
 
         SEXP result = allocSExp(CLOSXP);
         PROTECT(result);
-        auto res = Compiler::compileClosure(body, FORMALS(what));
+        auto res = Compiler::compileClosure(body, FORMALS(what), env);
         SET_FORMALS(result, res.formals);
         SET_CLOENV(result, CLOENV(what));
         SET_BODY(result, res.bc);
@@ -60,7 +60,7 @@ REXPORT SEXP rir_compile(SEXP what, SEXP env = NULL) {
         if (TYPEOF(what) == BCODESXP) {
             what = VECTOR_ELT(CDR(what), 0);
         }
-        auto res = Compiler::compileExpression(what);
+        auto res = Compiler::compileExpression(what, env);
         return res.bc;
     }
 }

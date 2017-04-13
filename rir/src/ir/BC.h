@@ -64,6 +64,7 @@ BC::ImmediateT decodeImmediate(Opcode bc, Opcode* pc) {
     case Opcode::alloc_:
         immediate.i = *(uint32_t*)pc;
         break;
+    case Opcode::nop_:
     case Opcode::test_bounds_:
     case Opcode::extract1_:
     case Opcode::subset1_:
@@ -136,6 +137,7 @@ BC BC::decode(Opcode* pc) {
 
 class CodeStream;
 
+BC BC::nop() { return BC(Opcode::nop_); }
 BC BC::ret() { return BC(Opcode::ret_); }
 BC BC::return_() { return BC(Opcode::return_); }
 BC BC::force() { return BC(Opcode::force_); }

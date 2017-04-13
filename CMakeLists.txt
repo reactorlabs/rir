@@ -18,6 +18,8 @@ set(CMAKE_C_FLAGS_RELEASE "-O2 -std=gnu99")
 set(CMAKE_C_FLAGS_DEBUG "-std=gnu99 -DENABLE_SLOWASSERT")
 set(CMAKE_C_FLAGS "-std=gnu99")
 
+add_definitions(-DGNUR_COMPATIBILITY)
+
 if(NOT DEFINED NO_LOCAL_CONFIG)
     #include any local configuration, overriding the default values above
     include(${CMAKE_SOURCE_DIR}/local/cmake.cmake OPTIONAL)

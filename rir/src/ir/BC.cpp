@@ -64,6 +64,7 @@ bool BC::operator==(const BC& other) const {
     case Opcode::alloc_:
         return immediate.i == other.immediate.i;
 
+    case Opcode::nop_:
     case Opcode::subset2_:
     case Opcode::extract2_:
     case Opcode::subset1_:
@@ -175,6 +176,7 @@ void BC::write(CodeStream& cs) const {
         cs.insert(immediate.i);
         return;
 
+    case Opcode::nop_:
     case Opcode::subset2_:
     case Opcode::extract2_:
     case Opcode::subset1_:
@@ -382,6 +384,7 @@ void BC::print(CallSite cs) {
         Deoptimizer_print(immediate.guard_id);
         Rprintf("\n");
         break;
+    case Opcode::nop_:
     case Opcode::force_:
     case Opcode::pop_:
     case Opcode::seq_:

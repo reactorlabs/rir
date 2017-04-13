@@ -230,6 +230,35 @@ class CodeStream {
         sources.back() = idx;
     }
 
+    unsigned currentPos() const {
+        return pos;
+    }
+
+    unsigned currentSourcesSize() const {
+        return sources.size();
+    }
+
+    void remove(unsigned pc) {
+
+#define INS(pc_) (*reinterpret_cast<Opcode*>(&(*code)[(pc_)]))
+
+        unsigned size = BC(INS(pc)).size();
+
+        for (unsigned i = 0; i < size; ++i) {
+            INS(pc + i) = Opcode::nop_;
+            // patchpoints are fixed by just removing the binding to label
+            patchpoints.erase(pc + i);
+        }
+
+        unsigned tmp = 0, sourceIdx = 0;
+        while (tmp != pc) {
+            tmp += BC(INS(tmp)).size();
+            sourceIdx++;
+        }
+        // need to insert source slots for the nops occupying the immediate places
+        sources.insert(sources.begin() + sourceIdx + 1, size - 1, 0);
+    }
+
     FunIdxT finalize() {
         CodeHandle res =
             function.writeCode(ast, &(*code)[0], pos, callSites_.data(),
