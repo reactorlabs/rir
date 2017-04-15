@@ -200,6 +200,7 @@ class BC {
     inline static BC force();
     inline static BC asast();
     inline static BC stvar(SEXP sym);
+    inline static BC stvar2(SEXP sym);
     inline static BC missing(SEXP sym);
     inline static BC subassign();
     inline static BC subassign2(SEXP sym);

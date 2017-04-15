@@ -25,6 +25,7 @@ bool BC::operator==(const BC& other) const {
     case Opcode::ldvar_:
     case Opcode::ldlval_:
     case Opcode::stvar_:
+    case Opcode::stvar2_:
     case Opcode::missing_:
     case Opcode::subassign2_:
         return immediate.pool == other.immediate.pool;
@@ -133,6 +134,7 @@ void BC::write(CodeStream& cs) const {
     case Opcode::ldvar_:
     case Opcode::ldlval_:
     case Opcode::stvar_:
+    case Opcode::stvar2_:
     case Opcode::missing_:
     case Opcode::subassign2_:
         cs.insert(immediate.pool);
@@ -362,6 +364,7 @@ void BC::print(CallSite cs) {
     case Opcode::ldlval_:
     case Opcode::ldddvar_:
     case Opcode::stvar_:
+    case Opcode::stvar2_:
     case Opcode::missing_:
         Rprintf(" %u # %s", immediate.pool, CHAR(PRINTNAME((immediateConst()))));
         break;

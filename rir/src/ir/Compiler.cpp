@@ -326,7 +326,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
         return true;
     }
 
-    if (fun == symbol::Assign || fun == symbol::Assign2) {
+    if (fun == symbol::Assign || fun == symbol::Assign2 || fun == symbol::SuperAssign) {
         assert(args.length() == 2);
 
         auto lhs = args[0];
@@ -361,7 +361,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
                 compileExpr(ctx, rhs);
                 cs << BC::dup()
                    << BC::setShared()
-                   << BC::stvar(lhs)
+                   << (fun == symbol::SuperAssign ? BC::stvar2(lhs) : BC::stvar(lhs))
                    << BC::invisible();
                 return true;
             }

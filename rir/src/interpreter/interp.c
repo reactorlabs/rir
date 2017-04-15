@@ -1216,6 +1216,17 @@ INSTRUCTION(stvar_) {
         CLEAR_FRAME_CHANGED(env);
 }
 
+INSTRUCTION(stvar2_) {
+    SEXP sym = readConst(ctx, pc);
+    int wasChanged = FRAME_CHANGED(env);
+    SLOWASSERT(TYPEOF(sym) == SYMSXP);
+    SEXP val = ostack_pop(ctx);
+    INCREMENT_NAMED(val);
+    setVar(sym, val, ENCLOS(env));
+    if (!wasChanged)
+        CLEAR_FRAME_CHANGED(env);
+}
+
 INSTRUCTION(aslogical_) {
     SEXP t = ostack_top(ctx);
     int r = asLogical(t);
@@ -2339,6 +2350,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
             INS(return_);
             INS(asast_);
             INS(stvar_);
+            INS(stvar2_);
             INS(missing_);
             INS(subassign_);
             INS(subassign2_);

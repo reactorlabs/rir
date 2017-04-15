@@ -28,6 +28,7 @@ BC::ImmediateT decodeImmediate(Opcode bc, Opcode* pc) {
     case Opcode::ldlval_:
     case Opcode::ldddvar_:
     case Opcode::stvar_:
+    case Opcode::stvar2_:
     case Opcode::missing_:
     case Opcode::subassign2_:
         immediate.pool = *(PoolIdxT*)pc;
@@ -235,6 +236,13 @@ BC BC::stvar(SEXP sym) {
     ImmediateT i;
     i.pool = Pool::insert(sym);
     return BC(Opcode::stvar_, i);
+}
+BC BC::stvar2(SEXP sym) {
+    assert(TYPEOF(sym) == SYMSXP);
+    assert(strlen(CHAR(PRINTNAME(sym))));
+    ImmediateT i;
+    i.pool = Pool::insert(sym);
+    return BC(Opcode::stvar2_, i);
 }
 BC BC::subassign() { return BC(Opcode::subassign_); }
 BC BC::subassign2(SEXP sym) {

@@ -97,6 +97,11 @@ DEF_INSTR(asast_, 0, 1, 1, 1)
 DEF_INSTR(stvar_, 1, 1, 0, 1)
 
 /**
+ * stvar2_:: assign tos to the immediate symbol
+ */
+DEF_INSTR(stvar2_, 1, 1, 0, 1)
+
+/**
  * asbool_:: pop object stack, convert to Logical vector of size 1 and push on object stack. Throws an error if the result would be NA.
  */
 DEF_INSTR(asbool_, 0, 1, 1, 0)
