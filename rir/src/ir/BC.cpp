@@ -23,6 +23,7 @@ bool BC::operator==(const BC& other) const {
     case Opcode::ldddvar_:
     case Opcode::ldarg_:
     case Opcode::ldvar_:
+    case Opcode::ldvar2_:
     case Opcode::ldlval_:
     case Opcode::stvar_:
     case Opcode::stvar2_:
@@ -132,6 +133,7 @@ void BC::write(CodeStream& cs) const {
     case Opcode::ldfun_:
     case Opcode::ldddvar_:
     case Opcode::ldvar_:
+    case Opcode::ldvar2_:
     case Opcode::ldlval_:
     case Opcode::stvar_:
     case Opcode::stvar2_:
@@ -361,6 +363,7 @@ void BC::print(CallSite cs) {
     case Opcode::ldarg_:
     case Opcode::ldfun_:
     case Opcode::ldvar_:
+    case Opcode::ldvar2_:
     case Opcode::ldlval_:
     case Opcode::ldddvar_:
     case Opcode::stvar_:

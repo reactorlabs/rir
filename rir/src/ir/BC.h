@@ -25,6 +25,7 @@ BC::ImmediateT decodeImmediate(Opcode bc, Opcode* pc) {
     case Opcode::ldfun_:
     case Opcode::ldarg_:
     case Opcode::ldvar_:
+    case Opcode::ldvar2_:
     case Opcode::ldlval_:
     case Opcode::ldddvar_:
     case Opcode::stvar_:
@@ -185,6 +186,13 @@ BC BC::ldvar(SEXP sym) {
     ImmediateT i;
     i.pool = Pool::insert(sym);
     return BC(Opcode::ldvar_, i);
+}
+BC BC::ldvar2(SEXP sym) {
+    assert(TYPEOF(sym) == SYMSXP);
+    assert(strlen(CHAR(PRINTNAME(sym))));
+    ImmediateT i;
+    i.pool = Pool::insert(sym);
+    return BC(Opcode::ldvar2_, i);
 }
 BC BC::ldarg(SEXP sym) {
     assert(TYPEOF(sym) == SYMSXP);

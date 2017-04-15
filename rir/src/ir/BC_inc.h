@@ -191,6 +191,7 @@ class BC {
     inline static BC push_code(FunIdxT i);
     inline static BC ldfun(SEXP sym);
     inline static BC ldvar(SEXP sym);
+    inline static BC ldvar2(SEXP sym);
     inline static BC ldlval(SEXP sym);
     inline static BC ldarg(SEXP sym);
     inline static BC ldddvar(SEXP sym);

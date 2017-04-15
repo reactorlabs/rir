@@ -329,6 +329,8 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
     if (fun == symbol::Assign || fun == symbol::Assign2 || fun == symbol::SuperAssign) {
         assert(args.length() == 2);
 
+        bool superAssign = fun == symbol::SuperAssign;
+
         auto lhs = args[0];
         auto rhs = args[1];
 
@@ -361,7 +363,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
                 compileExpr(ctx, rhs);
                 cs << BC::dup()
                    << BC::setShared()
-                   << (fun == symbol::SuperAssign ? BC::stvar2(lhs) : BC::stvar(lhs))
+                   << (superAssign ? BC::stvar2(lhs) : BC::stvar(lhs))
                    << BC::invisible();
                 return true;
             }
@@ -417,7 +419,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
                            << BC::setShared();
 
                         // Now load target and index
-                        cs << BC::ldvar(target);
+                        cs << (superAssign ? BC::ldvar2(target) : BC::ldvar(target));
                         compileExpr(ctx, *idx);
 
                         // check for object case
@@ -430,7 +432,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
                         else
                             cs << BC::subassign();
 
-                        cs << BC::stvar(target);
+                        cs << (superAssign ? BC::stvar2(target) : BC::stvar(target));
                         cs << BC::br(nextBranch);
 
                         // In the case the target is an object:
@@ -463,7 +465,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
                             setter);
 
                         // store the result as "target"
-                        cs << BC::stvar(target);
+                        cs << (superAssign ? BC::stvar2(target) : BC::stvar(target));
 
                         cs << nextBranch
                            << BC::invisible();

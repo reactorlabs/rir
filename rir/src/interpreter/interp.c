@@ -230,6 +230,28 @@ INSTRUCTION(ldvar_) {
     ostack_push(ctx, val);
 }
 
+INSTRUCTION(ldvar2_) {
+    SEXP sym = readConst(ctx, pc);
+    SEXP val = findVar(sym, ENCLOS(env));
+    R_Visible = TRUE;
+
+    if (val == R_UnboundValue) {
+        Rf_error("object not found");
+    } else if (val == R_MissingArg) {
+        Rf_error("argument \"%s\" is missing, with no default", CHAR(PRINTNAME(sym)));
+    }
+
+    // if promise, evaluate & return
+    if (TYPEOF(val) == PROMSXP)
+        val = promiseValue(val, ctx);
+
+    // WTF? is this just defensive programming or what?
+    if (NAMED(val) == 0 && val != R_NilValue)
+        SET_NAMED(val, 1);
+
+    ostack_push(ctx, val);
+}
+
 void closureDebug(SEXP call, SEXP op, SEXP rho, SEXP newrho,
                   RCNTXT* cntxt){// TODO!!!
 };
@@ -2319,6 +2341,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
             INS(push_);
             INS(ldfun_);
             INS(ldvar_);
+            INS(ldvar2_);
             INS(ldlval_);
             INS(ldarg_);
             INS(ldddvar_);
