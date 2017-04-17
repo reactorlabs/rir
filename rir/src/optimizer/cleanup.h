@@ -198,6 +198,19 @@ class BCCleanup : public InstructionDispatcher::Receiver {
         }
     }
 
+    void pick_(CodeEditor::Iterator ins) override {
+        // double pick elimination : pick 1; pick 1;
+        if (ins != code_.begin() && ins.asCursor(code_).bc().immediate.i == 1) {
+            auto prev = ins - 1;
+            if ((*prev).is(Opcode::pick_) && *ins == *prev) {
+                CodeEditor::Cursor cur = prev.asCursor(code_);
+                cur.remove();
+                cur.remove();
+                return;
+            }
+        }
+    }
+
     // TODO there is some brokennes when there is dead code
     // void br_(CodeEditor::Iterator ins) override {
     //     auto target = code_.target(*ins);
