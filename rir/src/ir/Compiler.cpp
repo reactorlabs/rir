@@ -172,6 +172,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
 
     if (fun == symbol::Function && args.length() == 3) {
         auto cls = Compiler::compileClosure(args[1], args[0]);
+        ctx.preserve(cls.bc);  // needed since push_ can trigger garbage collector!
         cs << BC::push(cls.formals)
            << BC::push(cls.bc)
            << BC::push(args[2])
