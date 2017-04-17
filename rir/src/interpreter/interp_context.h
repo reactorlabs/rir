@@ -96,8 +96,11 @@ INLINE void rl_grow(ResizeableList * l, SEXP parent, size_t index) {
 
 INLINE void rl_append(ResizeableList * l, SEXP val, SEXP parent, size_t index) {
     size_t i = rl_length(l);
-    if (i == l->capacity)
+    if (i == l->capacity) {
+        PROTECT(val);
         rl_grow(l, parent, index);
+        UNPROTECT(1);
+    }
     rl_setLength(l, i + 1);
     SET_VECTOR_ELT(l->list, i, val);
 }
