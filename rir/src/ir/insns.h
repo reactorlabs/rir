@@ -325,6 +325,11 @@ DEF_INSTR(missing_, 1, 0, 1, 1)
 DEF_INSTR(seq_, 0, 3, 1, 1)
 
 /**
+ * colon_:: takes two bounds a and b and pushes a:b
+ */
+DEF_INSTR(colon_, 0, 2, 1, 0)
+
+/**
  * names_ :: read out names of a vector
  */
 DEF_INSTR(names_, 0, 1, 1, 1)
