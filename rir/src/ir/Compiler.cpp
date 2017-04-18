@@ -355,6 +355,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
             }
         }
 
+        unsigned guardPos = cs.currentPos();
         cs << BC::guardNamePrimitive(fun);
 
         // 2) Specialcalse normal assignment (ie. "i <- expr")
@@ -475,6 +476,11 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
             }
 
             //            if (getter == symbol::Bracket)
+        }
+
+        if (superAssign) {
+            cs.remove(guardPos);
+            return false;
         }
 
         compileExpr(ctx, rhs);
