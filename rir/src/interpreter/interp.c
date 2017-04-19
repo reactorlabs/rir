@@ -352,6 +352,9 @@ SEXP createArgsList(Code* c, SEXP call, size_t nargs, CallSiteStruct* cs,
 
 static SEXP closureArgumentAdaptor(SEXP call, SEXP op, SEXP arglist, SEXP rho,
                                    SEXP suppliedvars) {
+    if (FORMALS(op) == R_NilValue && arglist == R_NilValue)
+        return Rf_NewEnvironment(R_NilValue, R_NilValue, CLOENV(op));
+
     /*  Set up a context with the call in it so error has access to it */
     RCNTXT cntxt;
     initClosureContext(&cntxt, call, CLOENV(op), rho, arglist, op);
@@ -536,10 +539,14 @@ void warnSpecial(SEXP callee, SEXP call) {
 
  */
 
-void profileCall(CallSiteStruct* cs, SEXP callee) {
+void doProfileCall(CallSiteStruct*, SEXP);
+INLINE void profileCall(CallSiteStruct* cs, SEXP callee) {
     if (!cs->hasProfile)
         return;
+    doProfileCall(cs, callee);
+}
 
+void doProfileCall(CallSiteStruct* cs, SEXP callee) {
     CallSiteProfile* p = CallSite_profile(cs);
     if (!p->takenOverflow) {
         if (p->taken + 1 == CallSiteProfile_maxTaken)
@@ -1272,7 +1279,7 @@ INSTRUCTION(asbool_) {
 
     if (cond == NA_LOGICAL) {
         const char* msg =
-            Rf_length(t)
+            XLENGTH(t)
                 ? (isLogical(t) ? ("missing value where TRUE/FALSE needed")
                                 : ("argument is not interpretable as logical"))
                 : ("argument is of length zero");
@@ -1535,11 +1542,12 @@ INSTRUCTION(extract1_) {
 
 #define SIMPLECASE(vectype, vecaccess)                                         \
     case vectype: {                                                            \
-        if (SHORT_VEC_LENGTH(val) == 1 && !MAYBE_SHARED(val))                  \
+        if (SHORT_VEC_LENGTH(val) == 1 && !MAYBE_SHARED(val)) {                \
             res = val;                                                         \
-        else                                                                   \
+        } else {                                                               \
             res = allocVector(vectype, 1);                                     \
-        vecaccess(res)[0] = vecaccess(val)[i];                                 \
+            vecaccess(res)[0] = vecaccess(val)[i];                             \
+        }                                                                      \
         break;                                                                 \
     }
 
@@ -2283,7 +2291,14 @@ INSTRUCTION(colon_) {
 INSTRUCTION(test_bounds_) {
     SEXP vec = ostack_at(ctx, 1);
     SEXP idx = ostack_at(ctx, 0);
-    int len = Rf_length(vec);
+    int len;
+    // TODO: we should extract the length just once at the begining of
+    // the loop and generally have somthing more clever here...
+    if (isVector(vec))
+      len = LENGTH(vec);
+    else if (isList(vec) || isNull(vec))
+      len = Rf_length(vec);
+    else errorcall(R_NilValue, "invalid for() loop sequence");
     int i = asInteger(idx);
     ostack_push(ctx, i > 0 && i <= len ? R_TrueValue : R_FalseValue);
 }
