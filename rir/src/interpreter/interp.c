@@ -1115,23 +1115,41 @@ INSTRUCTION(swap_) {
 INSTRUCTION(put_) {
     uint32_t i = readImmediate(pc);
     R_bcstack_t* pos = ostack_cell_at(ctx, 0);
+#ifdef TYPED_STACK
     SEXP val = pos->u.sxpval;
     while (i--) {
         pos->u.sxpval = (pos - 1)->u.sxpval;
         pos--;
     }
     pos->u.sxpval = val;
+#else
+    SEXP val = *pos;
+    while (i--) {
+        *pos = *(pos - 1);
+        pos--;
+    }
+    *pos = val;
+#endif
 }
 
 INSTRUCTION(pick_) {
     uint32_t i = readImmediate(pc);
     R_bcstack_t* pos = ostack_cell_at(ctx, i);
+#ifdef TYPED_STACK
     SEXP val = pos->u.sxpval;
     while (i--) {
         pos->u.sxpval = (pos + 1)->u.sxpval;
         pos++;
     }
     pos->u.sxpval = val;
+#else
+    SEXP val = *pos;
+    while (i--) {
+        *pos = *(pos + 1);
+        pos++;
+    }
+    *pos = val;
+#endif
 }
 
 INSTRUCTION(pull_) {
