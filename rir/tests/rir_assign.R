@@ -98,3 +98,15 @@ f12 <- rir.compile(function() {
 })
 
 stopifnot(f12() == 1)
+
+x <- c(NA, 1, 2)
+f13 <- rir.compile(function() {
+    x <- c(1, 2, NA)
+    # is.na(x) should use the local x!
+    # see https://cran.r-project.org/doc/manuals/r-release/R-lang.html#Subset-assignment
+    x[is.na(x)] <<- 0
+})
+f13()
+
+stopifnot(x[[3]] == 0)
+stopifnot(any(is.na(x)))
