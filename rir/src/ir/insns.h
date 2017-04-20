@@ -42,6 +42,11 @@ DEF_INSTR(ldddvar_, 1, 0, 1, 0)
 DEF_INSTR(ldvar_, 1, 0, 1, 0)
 
 /**
+ * ldvar2_:: take immediate CP index of symbol, finding binding in env and push.
+ */
+DEF_INSTR(ldvar2_, 1, 0, 1, 0)
+
+/**
  * ldlval_:: take immediate CP index of symbol, load value from local frame.
  */
 DEF_INSTR(ldlval_, 1, 0, 1, 1)
@@ -95,6 +100,11 @@ DEF_INSTR(asast_, 0, 1, 1, 1)
  * stvar_:: assign tos to the immediate symbol
  */
 DEF_INSTR(stvar_, 1, 1, 0, 1)
+
+/**
+ * stvar2_:: assign tos to the immediate symbol
+ */
+DEF_INSTR(stvar2_, 1, 1, 0, 1)
 
 /**
  * asbool_:: pop object stack, convert to Logical vector of size 1 and push on object stack. Throws an error if the result would be NA.

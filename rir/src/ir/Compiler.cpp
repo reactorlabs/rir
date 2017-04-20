@@ -329,8 +329,10 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
         return true;
     }
 
-    if (fun == symbol::Assign || fun == symbol::Assign2) {
+    if (fun == symbol::Assign || fun == symbol::Assign2 || fun == symbol::SuperAssign) {
         assert(args.length() == 2);
+
+        bool superAssign = fun == symbol::SuperAssign;
 
         auto lhs = args[0];
         auto rhs = args[1];
@@ -356,15 +358,14 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
             }
         }
 
-        cs << BC::guardNamePrimitive(fun);
-
         // 2) Specialcalse normal assignment (ie. "i <- expr")
         Match(lhs) {
             Case(SYMSXP) {
+                cs << BC::guardNamePrimitive(fun);
                 compileExpr(ctx, rhs);
                 cs << BC::dup()
                    << BC::setShared()
-                   << BC::stvar(lhs)
+                   << (superAssign ? BC::stvar2(lhs) : BC::stvar(lhs))
                    << BC::invisible();
                 return true;
             }
@@ -402,15 +403,17 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
         if (lhsParts.size() == 2) {
             RList g(lhsParts[0]);
             if (g.length() == 3) {
-                SEXP fun = *g.begin();
+                SEXP fun2 = *g.begin();
                 auto idx = g.begin() + 2;
                 if (*idx != R_DotsSymbol && *idx != R_MissingArg &&
                     !idx.hasTag()) {
-                    if (fun == symbol::DoubleBracket ||
-                        fun == symbol::Bracket) {
+                    if (fun2 == symbol::DoubleBracket ||
+                        fun2 == symbol::Bracket) {
 
                         LabelT objBranch = cs.mkLabel();
                         LabelT nextBranch = cs.mkLabel();
+
+                        cs << BC::guardNamePrimitive(fun);
 
                         // First rhs (assign is right-associative)
                         compileExpr(ctx, rhs);
@@ -420,7 +423,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
                            << BC::setShared();
 
                         // Now load target and index
-                        cs << BC::ldvar(target);
+                        cs << (superAssign ? BC::ldvar2(target) : BC::ldvar(target));
                         compileExpr(ctx, *idx);
 
                         // check for object case
@@ -428,21 +431,21 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
                         cs << BC::brobj(objBranch);
 
                         // do the thing
-                        if (fun == symbol::DoubleBracket)
+                        if (fun2 == symbol::DoubleBracket)
                             cs << BC::subassign2(target);
                         else
                             cs << BC::subassign();
 
-                        cs << BC::stvar(target);
+                        cs << (superAssign ? BC::stvar2(target) : BC::stvar(target));
                         cs << BC::br(nextBranch);
 
                         // In the case the target is an object:
                         cs << objBranch;
 
                         // We need a patched ast again :(
-                        SEXP setter = fun == symbol::DoubleBracket
-                                          ? symbol::AssignDoubleBracket
-                                          : symbol::AssignBracket;
+                        SEXP setter = fun2 == symbol::DoubleBracket
+                                           ? symbol::AssignDoubleBracket
+                                           : symbol::AssignBracket;
                         SEXP rewrite = Rf_shallow_duplicate(lhs);
                         ctx.preserve(rewrite);
                         SETCAR(rewrite, setter);
@@ -466,7 +469,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
                             setter);
 
                         // store the result as "target"
-                        cs << BC::stvar(target);
+                        cs << (superAssign ? BC::stvar2(target) : BC::stvar(target));
 
                         cs << nextBranch
                            << BC::invisible();
@@ -477,6 +480,12 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
 
             //            if (getter == symbol::Bracket)
         }
+
+        if (superAssign) {
+            return false;
+        }
+
+        cs << BC::guardNamePrimitive(fun);
 
         compileExpr(ctx, rhs);
         cs << BC::dup()
