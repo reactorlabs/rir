@@ -355,12 +355,10 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
             }
         }
 
-        unsigned guardPos = cs.currentPos();
-        cs << BC::guardNamePrimitive(fun);
-
         // 2) Specialcalse normal assignment (ie. "i <- expr")
         Match(lhs) {
             Case(SYMSXP) {
+                cs << BC::guardNamePrimitive(fun);
                 compileExpr(ctx, rhs);
                 cs << BC::dup()
                    << BC::setShared()
@@ -402,15 +400,17 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
         if (lhsParts.size() == 2) {
             RList g(lhsParts[0]);
             if (g.length() == 3) {
-                SEXP fun = *g.begin();
+                SEXP fun2 = *g.begin();
                 auto idx = g.begin() + 2;
                 if (*idx != R_DotsSymbol && *idx != R_MissingArg &&
                     !idx.hasTag()) {
-                    if (fun == symbol::DoubleBracket ||
-                        fun == symbol::Bracket) {
+                    if (fun2 == symbol::DoubleBracket ||
+                        fun2 == symbol::Bracket) {
 
                         LabelT objBranch = cs.mkLabel();
                         LabelT nextBranch = cs.mkLabel();
+
+                        cs << BC::guardNamePrimitive(fun);
 
                         // First rhs (assign is right-associative)
                         compileExpr(ctx, rhs);
@@ -428,7 +428,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
                         cs << BC::brobj(objBranch);
 
                         // do the thing
-                        if (fun == symbol::DoubleBracket)
+                        if (fun2 == symbol::DoubleBracket)
                             cs << BC::subassign2(target);
                         else
                             cs << BC::subassign();
@@ -440,9 +440,9 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
                         cs << objBranch;
 
                         // We need a patched ast again :(
-                        SEXP setter = fun == symbol::DoubleBracket
-                                          ? symbol::AssignDoubleBracket
-                                          : symbol::AssignBracket;
+                        SEXP setter = fun2 == symbol::DoubleBracket
+                                           ? symbol::AssignDoubleBracket
+                                           : symbol::AssignBracket;
                         SEXP rewrite = Rf_shallow_duplicate(lhs);
                         ctx.preserve(rewrite);
                         SETCAR(rewrite, setter);
@@ -479,9 +479,10 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
         }
 
         if (superAssign) {
-            cs.remove(guardPos);
             return false;
         }
+
+        cs << BC::guardNamePrimitive(fun);
 
         compileExpr(ctx, rhs);
         cs << BC::dup()

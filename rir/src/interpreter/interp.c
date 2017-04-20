@@ -1240,13 +1240,10 @@ INSTRUCTION(stvar_) {
 
 INSTRUCTION(stvar2_) {
     SEXP sym = readConst(ctx, pc);
-    int wasChanged = FRAME_CHANGED(env);
     SLOWASSERT(TYPEOF(sym) == SYMSXP);
     SEXP val = ostack_pop(ctx);
     INCREMENT_NAMED(val);
     setVar(sym, val, ENCLOS(env));
-    if (!wasChanged)
-        CLEAR_FRAME_CHANGED(env);
 }
 
 INSTRUCTION(aslogical_) {
