@@ -96,21 +96,38 @@ INLINE void rl_grow(ResizeableList * l, SEXP parent, size_t index) {
 
 INLINE void rl_append(ResizeableList * l, SEXP val, SEXP parent, size_t index) {
     size_t i = rl_length(l);
-    if (i == l->capacity)
+    if (i == l->capacity) {
+        PROTECT(val);
         rl_grow(l, parent, index);
+        UNPROTECT(1);
+    }
     rl_setLength(l, i + 1);
     SET_VECTOR_ELT(l->list, i, val);
 }
 
-INLINE SEXP ostack_top(Context* c) { return (R_BCNodeStackTop - 1)->u.sxpval; }
+INLINE SEXP ostack_top(Context* c) {
+#ifdef TYPED_STACK
+    return (R_BCNodeStackTop - 1)->u.sxpval;
+#else
+    return *(R_BCNodeStackTop - 1);
+#endif
+}
 
 INLINE SEXP ostack_at(Context* c, uint32_t i) {
+#ifdef TYPED_STACK
     return (R_BCNodeStackTop - 1 - i)->u.sxpval;
+#else
+    return *(R_BCNodeStackTop - 1 - i);
+#endif
 }
 
 INLINE void ostack_set(Context* c, uint32_t i, SEXP v) {
+#ifdef TYPED_STACK
     (R_BCNodeStackTop - 1 - i)->u.sxpval = v;
     (R_BCNodeStackTop - 1 - i)->tag = 0;
+#else
+    *(R_BCNodeStackTop - 1 - i) = v;
+#endif
 }
 
 INLINE R_bcstack_t* ostack_cell_at(Context* c, uint32_t i) {
@@ -129,12 +146,20 @@ INLINE void ostack_popn(Context* c, size_t p) { R_BCNodeStackTop -= p; }
 
 INLINE SEXP ostack_pop(Context* c) {
     --R_BCNodeStackTop;
+#ifdef TYPED_STACK
     return R_BCNodeStackTop->u.sxpval;
+#else
+    return *R_BCNodeStackTop;
+#endif
 }
 
 INLINE void ostack_push(Context* c, SEXP val) {
+#ifdef TYPED_STACK
     R_BCNodeStackTop->u.sxpval = val;
     R_BCNodeStackTop->tag = 0;
+#else
+    *R_BCNodeStackTop = val;
+#endif
     ++R_BCNodeStackTop;
 }
 

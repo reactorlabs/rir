@@ -374,6 +374,9 @@ SEXP createArgsList(Code* c, SEXP call, size_t nargs, CallSiteStruct* cs,
 
 static SEXP closureArgumentAdaptor(SEXP call, SEXP op, SEXP arglist, SEXP rho,
                                    SEXP suppliedvars) {
+    if (FORMALS(op) == R_NilValue && arglist == R_NilValue)
+        return Rf_NewEnvironment(R_NilValue, R_NilValue, CLOENV(op));
+
     /*  Set up a context with the call in it so error has access to it */
     RCNTXT cntxt;
     initClosureContext(&cntxt, call, CLOENV(op), rho, arglist, op);
@@ -558,10 +561,14 @@ void warnSpecial(SEXP callee, SEXP call) {
 
  */
 
-void profileCall(CallSiteStruct* cs, SEXP callee) {
+void doProfileCall(CallSiteStruct*, SEXP);
+INLINE void profileCall(CallSiteStruct* cs, SEXP callee) {
     if (!cs->hasProfile)
         return;
+    doProfileCall(cs, callee);
+}
 
+void doProfileCall(CallSiteStruct* cs, SEXP callee) {
     CallSiteProfile* p = CallSite_profile(cs);
     if (!p->takenOverflow) {
         if (p->taken + 1 == CallSiteProfile_maxTaken)
@@ -1137,23 +1144,41 @@ INSTRUCTION(swap_) {
 INSTRUCTION(put_) {
     uint32_t i = readImmediate(pc);
     R_bcstack_t* pos = ostack_cell_at(ctx, 0);
+#ifdef TYPED_STACK
     SEXP val = pos->u.sxpval;
     while (i--) {
         pos->u.sxpval = (pos - 1)->u.sxpval;
         pos--;
     }
     pos->u.sxpval = val;
+#else
+    SEXP val = *pos;
+    while (i--) {
+        *pos = *(pos - 1);
+        pos--;
+    }
+    *pos = val;
+#endif
 }
 
 INSTRUCTION(pick_) {
     uint32_t i = readImmediate(pc);
     R_bcstack_t* pos = ostack_cell_at(ctx, i);
+#ifdef TYPED_STACK
     SEXP val = pos->u.sxpval;
     while (i--) {
         pos->u.sxpval = (pos + 1)->u.sxpval;
         pos++;
     }
     pos->u.sxpval = val;
+#else
+    SEXP val = *pos;
+    while (i--) {
+        *pos = *(pos + 1);
+        pos++;
+    }
+    *pos = val;
+#endif
 }
 
 INSTRUCTION(pull_) {
@@ -1302,7 +1327,7 @@ INSTRUCTION(asbool_) {
 
     if (cond == NA_LOGICAL) {
         const char* msg =
-            Rf_length(t)
+            XLENGTH(t)
                 ? (isLogical(t) ? ("missing value where TRUE/FALSE needed")
                                 : ("argument is not interpretable as logical"))
                 : ("argument is of length zero");
@@ -1565,11 +1590,12 @@ INSTRUCTION(extract1_) {
 
 #define SIMPLECASE(vectype, vecaccess)                                         \
     case vectype: {                                                            \
-        if (SHORT_VEC_LENGTH(val) == 1 && !MAYBE_SHARED(val))                  \
+        if (SHORT_VEC_LENGTH(val) == 1 && !MAYBE_SHARED(val)) {                \
             res = val;                                                         \
-        else                                                                   \
+        } else {                                                               \
             res = allocVector(vectype, 1);                                     \
-        vecaccess(res)[0] = vecaccess(val)[i];                                 \
+            vecaccess(res)[0] = vecaccess(val)[i];                             \
+        }                                                                      \
         break;                                                                 \
     }
 
@@ -2246,10 +2272,81 @@ INSTRUCTION(seq_) {
     ostack_push(ctx, res);
 }
 
+static SEXP seq_int(int n1, int n2) {
+    int n = n1 <= n2 ? n2 - n1 + 1 : n1 - n2 + 1;
+    SEXP ans = Rf_allocVector(INTSXP, n);
+    int *data = INTEGER(ans);
+    if (n1 <= n2) {
+        for (int i = 0; i < n; i++)
+            data[i] = n1 + i;
+    } else {
+        for (int i = 0; i < n; i++)
+            data[i] = n1 - i;
+    }
+    return ans;
+}
+
+INSTRUCTION(colon_) {
+
+    SEXP lhs = ostack_at(ctx, 1);
+    SEXP rhs = ostack_at(ctx, 0);
+    SEXP res = NULL;
+
+    if (IS_SCALAR_VALUE(lhs, INTSXP)) {
+        int from = *INTEGER(lhs);
+        if (IS_SCALAR_VALUE(rhs, INTSXP)) {
+            int to = *INTEGER(rhs);
+            if (from != NA_INTEGER && to != NA_INTEGER) {
+                res = seq_int(from, to);
+            }
+        } else if (IS_SCALAR_VALUE(rhs, REALSXP)) {
+            double to = *REAL(rhs);
+            if (from != NA_INTEGER && to != NA_REAL &&
+                    R_FINITE(to) &&	INT_MIN <= to &&
+                    INT_MAX >= to && to == (int)to) {
+                res = seq_int(from, (int)to);
+            }
+        }
+    } else if (IS_SCALAR_VALUE(lhs, REALSXP)) {
+        double from = *REAL(lhs);
+        if (IS_SCALAR_VALUE(rhs, INTSXP)) {
+            int to = *INTEGER(rhs);
+            if (from != NA_REAL && to != NA_INTEGER &&
+                    R_FINITE(from) &&	INT_MIN <= from &&
+                    INT_MAX >= from && from == (int)from) {
+                res = seq_int((int)from, to);
+            }
+        } else if (IS_SCALAR_VALUE(rhs, REALSXP)) {
+            double to = *REAL(rhs);
+            if (from != NA_REAL && to != NA_REAL &&
+                    R_FINITE(from) && R_FINITE(to) &&
+                    INT_MIN <= from && INT_MAX >= from &&
+                    INT_MIN <= to && INT_MAX >= to &&
+                    from == (int)from && to == (int)to) {
+                res = seq_int((int)from, (int)to);
+            }
+        }
+    }
+
+    if (res == NULL) {
+        BINOP_FALLBACK(":");
+    }
+
+    ostack_popn(ctx, 2);
+    ostack_push(ctx, res);
+}
+
 INSTRUCTION(test_bounds_) {
     SEXP vec = ostack_at(ctx, 1);
     SEXP idx = ostack_at(ctx, 0);
-    int len = Rf_length(vec);
+    int len;
+    // TODO: we should extract the length just once at the begining of
+    // the loop and generally have somthing more clever here...
+    if (isVector(vec))
+      len = LENGTH(vec);
+    else if (isList(vec) || isNull(vec))
+      len = Rf_length(vec);
+    else errorcall(R_NilValue, "invalid for() loop sequence");
     int i = asInteger(idx);
     ostack_push(ctx, i > 0 && i <= len ? R_TrueValue : R_FalseValue);
 }
@@ -2335,6 +2432,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
         break
 
             INS(seq_);
+            INS(colon_);
             INS(push_);
             INS(ldfun_);
             INS(ldvar_);

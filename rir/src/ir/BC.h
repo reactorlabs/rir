@@ -95,6 +95,7 @@ BC::ImmediateT decodeImmediate(Opcode bc, Opcode* pc) {
     case Opcode::mod_:
     case Opcode::pow_:
     case Opcode::seq_:
+    case Opcode::colon_:
     case Opcode::sub_:
     case Opcode::uplus_:
     case Opcode::uminus_:
@@ -261,6 +262,7 @@ BC BC::subassign2(SEXP sym) {
     return BC(Opcode::subassign2_, i);
 }
 BC BC::seq() { return BC(Opcode::seq_); }
+BC BC::colon() { return BC(Opcode::colon_); }
 BC BC::asbool() { return BC(Opcode::asbool_); }
 
 BC BC::length() { return BC(Opcode::length_); }

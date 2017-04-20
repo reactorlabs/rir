@@ -239,6 +239,7 @@ class BC {
     inline static BC eq();
     inline static BC ne();
     inline static BC seq();
+    inline static BC colon();
     inline static BC makeUnique();
     inline static BC setShared();
     inline static BC asLogical();
