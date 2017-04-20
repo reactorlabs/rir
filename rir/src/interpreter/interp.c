@@ -1192,8 +1192,75 @@ void debug(Code* c, OpcodeT* pc, const char* name, unsigned depth, Context* ctx)
     }
 }
 
+#define BINDING_CACHE_SIZE 11
+typedef struct {
+    SEXP loc;
+    Immediate idx;
+} BindingCache;
+
+INLINE SEXP cachedGetBindingCell(SEXP env, Immediate idx, Context* ctx,
+                                 BindingCache* bindingCache) {
+    if (env != R_BaseEnv && env != R_BaseNamespace) {
+        Immediate cidx = idx * (idx + 3) % BINDING_CACHE_SIZE;
+        if (bindingCache[cidx].idx == idx) {
+            return bindingCache[cidx].loc;
+        }
+        SEXP sym = cp_pool_at(ctx, idx);
+        SLOWASSERT(TYPEOF(sym) == SYMSXP);
+        R_varloc_t loc = R_findVarLocInFrame(env, sym);
+        if (!R_VARLOC_IS_NULL(loc)) {
+            bindingCache[cidx].loc = loc.cell;
+            bindingCache[cidx].idx = idx;
+            return loc.cell;
+        }
+    }
+    return NULL;
+}
+
+INLINE SEXP cachedGetVar(SEXP env, Immediate idx, Context* ctx,
+                         BindingCache* bindingCache) {
+    SEXP loc = cachedGetBindingCell(env, idx, ctx, bindingCache);
+    if (loc) {
+        SEXP res = CAR(loc);
+        if (res != R_UnboundValue)
+            return res;
+    }
+    SEXP sym = cp_pool_at(ctx, idx);
+    SLOWASSERT(TYPEOF(sym) == SYMSXP);
+    return findVar(sym, env);
+}
+
+#define ACTIVE_BINDING_MASK (1 << 15)
+#define BINDING_LOCK_MASK (1 << 14)
+#define IS_ACTIVE_BINDING(b) ((b)->sxpinfo.gp & ACTIVE_BINDING_MASK)
+#define BINDING_IS_LOCKED(b) ((b)->sxpinfo.gp & BINDING_LOCK_MASK)
+INLINE void cachedSetVar(SEXP val, SEXP env, Immediate idx, Context* ctx,
+                         BindingCache* bindingCache) {
+    SEXP loc = cachedGetBindingCell(env, idx, ctx, bindingCache);
+    if (loc && !BINDING_IS_LOCKED(loc) && !IS_ACTIVE_BINDING(loc)) {
+        if (CAR(loc) == val)
+            return;
+
+        INCREMENT_NAMED(val);
+        SETCAR(loc, val);
+        if (MISSING(loc))
+            SET_MISSING(loc, 0);
+        return;
+    }
+
+    SEXP sym = cp_pool_at(ctx, idx);
+    SLOWASSERT(TYPEOF(sym) == SYMSXP);
+    INCREMENT_NAMED(val);
+    PROTECT(val);
+    defineVar(sym, val, env);
+    UNPROTECT(1);
+}
+
 SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
     assert(c->magic == CODE_MAGIC);
+
+    BindingCache bindingCache[BINDING_CACHE_SIZE];
+    memset(&bindingCache, 0, sizeof(bindingCache));
 
     if (!env) {
         error("'rho' cannot be C NULL: detected in C-level eval");
@@ -1258,14 +1325,15 @@ loop:
     }
 
     INSTRUCTION(ldvar_) {
-        sym = readConst(ctx, readImmediate());
+        id = readImmediate();
         advanceImmediate();
-        res = findVar(sym, env);
+        res = cachedGetVar(env, id, ctx, bindingCache);
         R_Visible = TRUE;
 
         if (res == R_UnboundValue) {
             Rf_error("object not found");
         } else if (res == R_MissingArg) {
+            sym = cp_pool_at(ctx, id);
             Rf_error("argument \"%s\" is missing, with no default", CHAR(PRINTNAME(sym)));
         }
 
@@ -1331,9 +1399,13 @@ loop:
     }
 
     INSTRUCTION(ldlval_) {
-        sym = readConst(ctx, readImmediate());
+        id = readImmediate();
         advanceImmediate();
-        res = findVarInFrame(env, sym);
+        res = cachedGetBindingCell(env, id, ctx, bindingCache);
+        assert(res);
+        res = CAR(res);
+        assert(res != R_UnboundValue);
+
         R_Visible = TRUE;
 
         if (TYPEOF(res) == PROMSXP)
@@ -1351,14 +1423,19 @@ loop:
     }
 
     INSTRUCTION(ldarg_) {
-        sym = readConst(ctx, readImmediate());
+        id = readImmediate();
         advanceImmediate();
-        res = findVarInFrame(env, sym);
+        res = cachedGetBindingCell(env, id, ctx, bindingCache);
+        assert(res);
+        res = CAR(res);
+        assert(res != R_UnboundValue);
+
         R_Visible = TRUE;
 
         if (res == R_UnboundValue) {
             Rf_error("object not found");
         } else if (res == R_MissingArg) {
+            sym = cp_pool_at(ctx, id);
             Rf_error("argument \"%s\" is missing, with no default",
                      CHAR(PRINTNAME(sym)));
         }
@@ -1584,13 +1661,12 @@ loop:
     }
 
     INSTRUCTION(stvar_) {
-        sym = readConst(ctx, readImmediate());
+        id = readImmediate();
         advanceImmediate();
         int wasChanged = FRAME_CHANGED(env);
         SLOWASSERT(TYPEOF(sym) == SYMSXP);
         val = ostack_pop(ctx);
-        INCREMENT_NAMED(val);
-        defineVar(sym, val, env);
+        cachedSetVar(val, env, id, ctx, bindingCache);
         if (!wasChanged)
             CLEAR_FRAME_CHANGED(env);
         NEXT();
