@@ -23,7 +23,7 @@ extern "C" {
     {}
 #endif
 
-// TODO force inlinine for clang & gcc
+// TODO force inlining for clang & gcc
 #define INLINE __attribute__((always_inline)) inline static
 
 // Function magic constant is designed to help to distinguish between Function
