@@ -830,29 +830,27 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
 
         cs << BC::guardNamePrimitive(fun);
 
-        LabelT loopBranch = cs.mkLabel();
-        LabelT breakBranch = cs.mkLabel();
-        LabelT endForBranch = cs.mkLabel();
+        LabelT condBranch = cs.mkLabel();
+        LabelT bodyBranch = cs.mkLabel();
+        LabelT afterBranch = cs.mkLabel();
 
-        ctx.pushLoop(loopBranch, breakBranch);
+        ctx.pushLoop(condBranch, afterBranch);
 
         compileExpr(ctx, seq);
         cs << BC::setShared()
            << BC::push((int)0);
 
         std::vector<unsigned> pcs;
-
         pcs.push_back(cs.currentPos());
-        cs << BC::beginloop(breakBranch)
-           << loopBranch;
 
-        // Move context out of the way
-        pcs.push_back(cs.currentPos());
-        cs << BC::put(2);
+        cs << BC::beginloop(afterBranch);
 
-        cs << BC::inc()
-           << BC::testBounds()
-           << BC::brfalse(endForBranch)
+        // Stack is now [..., seq, idx, cntxt]
+        // Jump to step and condition
+        cs << BC::br(condBranch);
+
+        // After bounds check stack is [..., cntxt, seq, idx]
+        cs << bodyBranch
            << BC::dup2()
            << BC::extract1();
 
@@ -862,19 +860,28 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
         pcs.push_back(cs.currentPos());
         cs << BC::swap();
 
+        // Stack is now [..., seq, idx, cntxt, seq[idx]]
         // Set the loop variable
         cs << BC::stvar(sym);
 
         compileExpr(ctx, body);
-        cs << BC::pop()
-           << BC::br(loopBranch);
+        cs << BC::pop();
 
-        cs << endForBranch;
+        cs << condBranch;
+
+        // Move context out of the way
+        pcs.push_back(cs.currentPos());
+        cs << BC::put(2);
+
+        cs << BC::inc()
+           << BC::testBounds()
+           << BC::brtrue(bodyBranch);
+
         // Put context back
         pcs.push_back(cs.currentPos());
         cs << BC::pick(2);
 
-        cs << breakBranch;
+        cs << afterBranch;
 
         if (ctx.loopNeedsContext()) {
             cs << BC::endcontext();
