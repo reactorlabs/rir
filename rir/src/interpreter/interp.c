@@ -17,6 +17,7 @@ extern SEXP Rf_NewEnvironment(SEXP, SEXP, SEXP);
 extern Rboolean R_Visible;
 
 // #define UNSOUND_OPTS
+
 // helpers
 
 INLINE SEXP getSrcAt(Code* c, OpcodeT* pc, Context* ctx) {
@@ -1192,7 +1193,7 @@ void debug(Code* c, OpcodeT* pc, const char* name, unsigned depth, Context* ctx)
     }
 }
 
-#define BINDING_CACHE_SIZE 11
+#define BINDING_CACHE_SIZE 5
 typedef struct {
     SEXP loc;
     Immediate idx;
@@ -1200,24 +1201,26 @@ typedef struct {
 
 INLINE SEXP cachedGetBindingCell(SEXP env, Immediate idx, Context* ctx,
                                  BindingCache* bindingCache) {
-    if (env != R_BaseEnv && env != R_BaseNamespace) {
-        Immediate cidx = idx * (idx + 3) % BINDING_CACHE_SIZE;
-        if (bindingCache[cidx].idx == idx) {
-            return bindingCache[cidx].loc;
-        }
-        SEXP sym = cp_pool_at(ctx, idx);
-        SLOWASSERT(TYPEOF(sym) == SYMSXP);
-        R_varloc_t loc = R_findVarLocInFrame(env, sym);
-        if (!R_VARLOC_IS_NULL(loc)) {
-            bindingCache[cidx].loc = loc.cell;
-            bindingCache[cidx].idx = idx;
-            return loc.cell;
-        }
+    if (env == R_BaseEnv || env == R_BaseNamespace)
+        return NULL;
+
+    Immediate cidx = idx % BINDING_CACHE_SIZE;
+    if (bindingCache[cidx].idx == idx) {
+        return bindingCache[cidx].loc;
+    }
+
+    SEXP sym = cp_pool_at(ctx, idx);
+    SLOWASSERT(TYPEOF(sym) == SYMSXP);
+    R_varloc_t loc = R_findVarLocInFrame(env, sym);
+    if (!R_VARLOC_IS_NULL(loc)) {
+        bindingCache[cidx].loc = loc.cell;
+        bindingCache[cidx].idx = idx;
+        return loc.cell;
     }
     return NULL;
 }
 
-INLINE SEXP cachedGetVar(SEXP env, Immediate idx, Context* ctx,
+static SEXP cachedGetVar(SEXP env, Immediate idx, Context* ctx,
                          BindingCache* bindingCache) {
     SEXP loc = cachedGetBindingCell(env, idx, ctx, bindingCache);
     if (loc) {
@@ -1234,13 +1237,13 @@ INLINE SEXP cachedGetVar(SEXP env, Immediate idx, Context* ctx,
 #define BINDING_LOCK_MASK (1 << 14)
 #define IS_ACTIVE_BINDING(b) ((b)->sxpinfo.gp & ACTIVE_BINDING_MASK)
 #define BINDING_IS_LOCKED(b) ((b)->sxpinfo.gp & BINDING_LOCK_MASK)
-INLINE void cachedSetVar(SEXP val, SEXP env, Immediate idx, Context* ctx,
+static void cachedSetVar(SEXP val, SEXP env, Immediate idx, Context* ctx,
                          BindingCache* bindingCache) {
     SEXP loc = cachedGetBindingCell(env, idx, ctx, bindingCache);
     if (loc && !BINDING_IS_LOCKED(loc) && !IS_ACTIVE_BINDING(loc)) {
-        if (CAR(loc) == val)
+        SEXP cur = CAR(loc);
+        if (cur == val)
             return;
-
         INCREMENT_NAMED(val);
         SETCAR(loc, val);
         if (MISSING(loc))
@@ -1428,7 +1431,6 @@ loop:
         res = cachedGetBindingCell(env, id, ctx, bindingCache);
         assert(res);
         res = CAR(res);
-        assert(res != R_UnboundValue);
 
         R_Visible = TRUE;
 
@@ -1664,9 +1666,10 @@ loop:
         id = readImmediate();
         advanceImmediate();
         int wasChanged = FRAME_CHANGED(env);
-        SLOWASSERT(TYPEOF(sym) == SYMSXP);
-        val = ostack_pop(ctx);
+        SEXP val = ostack_pop(ctx);
+
         cachedSetVar(val, env, id, ctx, bindingCache);
+
         if (!wasChanged)
             CLEAR_FRAME_CHANGED(env);
         NEXT();
