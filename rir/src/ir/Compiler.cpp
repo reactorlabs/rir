@@ -789,20 +789,20 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
 
         cs << BC::guardNamePrimitive(fun);
 
-        LabelT loopBranch = cs.mkLabel();
-        LabelT nextBranch = cs.mkLabel();
+        LabelT bodyBranch = cs.mkLabel();
+        LabelT afterBranch = cs.mkLabel();
 
-        ctx.pushLoop(loopBranch, nextBranch);
+        ctx.pushLoop(bodyBranch, afterBranch);
 
         unsigned beginLoopPos = cs.currentPos();
 
-        cs << BC::beginloop(nextBranch)
-           << loopBranch;
+        cs << BC::beginloop(afterBranch)
+           << bodyBranch;
 
         compileExpr(ctx, body);
         cs << BC::pop()
-           << BC::br(loopBranch)
-           << nextBranch;
+           << BC::br(bodyBranch)
+           << afterBranch;
 
         if (ctx.loopNeedsContext()) {
             cs << BC::endcontext();
