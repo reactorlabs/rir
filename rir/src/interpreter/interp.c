@@ -1327,7 +1327,6 @@ loop:
         if (TYPEOF(res) == PROMSXP)
             res = promiseValue(res, ctx);
 
-        // WTF? is this just defensive programming or what?
         if (NAMED(res) == 0 && res != R_NilValue)
             SET_NAMED(res, 1);
 
@@ -1351,7 +1350,6 @@ loop:
         if (TYPEOF(res) == PROMSXP)
             res = promiseValue(res, ctx);
 
-        // WTF? is this just defensive programming or what?
         if (NAMED(res) == 0 && res != R_NilValue)
             SET_NAMED(res, 1);
 
@@ -1376,7 +1374,6 @@ loop:
         if (TYPEOF(res) == PROMSXP)
             res = promiseValue(res, ctx);
 
-        // WTF? is this just defensive programming or what?
         if (NAMED(res) == 0 && res != R_NilValue)
             SET_NAMED(res, 1);
 
@@ -1400,7 +1397,6 @@ loop:
         assert(res != R_UnboundValue);
         assert(res != R_MissingArg);
 
-        // WTF? is this just defensive programming or what?
         if (NAMED(res) == 0 && res != R_NilValue)
             SET_NAMED(res, 1);
 
@@ -1430,7 +1426,6 @@ loop:
         if (TYPEOF(res) == PROMSXP)
             res = promiseValue(res, ctx);
 
-        // WTF? is this just defensive programming or what?
         if (NAMED(res) == 0 && res != R_NilValue)
             SET_NAMED(res, 1);
 
@@ -2262,7 +2257,7 @@ loop:
 
 #define SIMPLECASE(vectype, vecaccess)                                         \
     case vectype: {                                                            \
-        if (SHORT_VEC_LENGTH(val) == 1 && !MAYBE_SHARED(val)) {                \
+        if (XLENGTH(val) == 1 && NO_REFERENCES(val)) {                         \
             res = val;                                                         \
         } else {                                                               \
             res = allocVector(vectype, 1);                                     \
