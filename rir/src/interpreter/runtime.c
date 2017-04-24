@@ -85,6 +85,9 @@ void initializeRuntime(CompilerCallback compiler, OptimizerCallback optimizer) {
     // initialize the global context
     globalContext_ = context_create(compiler, optimizer);
     registerExternalCode(rirEval_f, compiler, rirExpr);
+#ifdef THREADED_CODE
+    evalRirCode(NULL, NULL, NULL, 0);
+#endif
 }
 
 Context * globalContext() {
