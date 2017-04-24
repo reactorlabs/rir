@@ -953,53 +953,79 @@ enum op { PLUSOP, MINUSOP, TIMESOP, DIVOP, POWOP, MODOP, IDIVOP };
         ostack_pop(ctx);                                                       \
     } while (false)
 
-#define DO_BINOP(op, op2)                                                      \
+#define DO_FAST_BINOP(op, op2)                                                 \
     do {                                                                       \
         if (IS_SIMPLE_SCALAR(lhs, REALSXP)) {                                  \
             if (IS_SIMPLE_SCALAR(rhs, REALSXP)) {                              \
-                res = Rf_allocVector(REALSXP, 1);                              \
-                *REAL(res) = (*REAL(lhs) == NA_REAL || *REAL(rhs) == NA_REAL)  \
-                                 ? NA_REAL                                     \
-                                 : *REAL(lhs) op * REAL(rhs);                  \
-                break;                                                         \
+                res_type = REALSXP;                                            \
+                real_res = (*REAL(lhs) == NA_REAL || *REAL(rhs) == NA_REAL)    \
+                               ? NA_REAL                                       \
+                               : *REAL(lhs) op * REAL(rhs);                    \
             } else if (IS_SIMPLE_SCALAR(rhs, INTSXP)) {                        \
-                res = Rf_allocVector(REALSXP, 1);                              \
-                *REAL(res) =                                                   \
+                res_type = REALSXP;                                            \
+                real_res =                                                     \
                     (*REAL(lhs) == NA_REAL || *INTEGER(rhs) == NA_INTEGER)     \
                         ? NA_REAL                                              \
                         : *REAL(lhs) op * INTEGER(rhs);                        \
-                break;                                                         \
             }                                                                  \
         } else if (IS_SIMPLE_SCALAR(lhs, INTSXP)) {                            \
             if (IS_SIMPLE_SCALAR(rhs, INTSXP)) {                               \
                 Rboolean naflag = FALSE;                                       \
-                res = Rf_allocVector(INTSXP, 1);                               \
                 switch (op2) {                                                 \
                 case PLUSOP:                                                   \
-                    *INTEGER(res) =                                            \
+                    int_res =                                                  \
                         R_integer_plus(*INTEGER(lhs), *INTEGER(rhs), &naflag); \
                     break;                                                     \
                 case MINUSOP:                                                  \
-                    *INTEGER(res) = R_integer_minus(*INTEGER(lhs),             \
-                                                    *INTEGER(rhs), &naflag);   \
+                    int_res = R_integer_minus(*INTEGER(lhs), *INTEGER(rhs),    \
+                                              &naflag);                        \
                     break;                                                     \
                 case TIMESOP:                                                  \
-                    *INTEGER(res) = R_integer_times(*INTEGER(lhs),             \
-                                                    *INTEGER(rhs), &naflag);   \
+                    int_res = R_integer_times(*INTEGER(lhs), *INTEGER(rhs),    \
+                                              &naflag);                        \
                     break;                                                     \
                 }                                                              \
-                CHECK_INTEGER_OVERFLOW(res, naflag);                           \
-                break;                                                         \
+                res_type = INTSXP;                                             \
+                CHECK_INTEGER_OVERFLOW(R_NilValue, naflag);                    \
             } else if (IS_SIMPLE_SCALAR(rhs, REALSXP)) {                       \
-                res = Rf_allocVector(REALSXP, 1);                              \
-                *REAL(res) =                                                   \
+                res_type = REALSXP;                                            \
+                real_res =                                                     \
                     (*INTEGER(lhs) == NA_INTEGER || *REAL(rhs) == NA_REAL)     \
                         ? NA_REAL                                              \
                         : *INTEGER(lhs) op * REAL(rhs);                        \
-                break;                                                         \
             }                                                                  \
         }                                                                      \
-        BINOP_FALLBACK(#op);                                                   \
+    } while (false)
+
+#define STORE_BINOP(res_type, int_res, real_res)                               \
+    do {                                                                       \
+        res = ostack_at(ctx, 1);                                               \
+        if (TYPEOF(res) != res_type || !NO_REFERENCES(res)) {                  \
+            res = allocVector(res_type, 1);                                    \
+        }                                                                      \
+        switch (res_type) {                                                    \
+        case INTSXP:                                                           \
+            INTEGER(res)[0] = int_res;                                         \
+            break;                                                             \
+        case REALSXP:                                                          \
+            REAL(res)[0] = real_res;                                           \
+            break;                                                             \
+        }                                                                      \
+    } while (false)
+
+#define DO_BINOP(op, op2)                                                      \
+    do {                                                                       \
+        int int_res;                                                           \
+        double real_res;                                                       \
+        int res_type = 0;                                                      \
+        DO_FAST_BINOP(op, op2);                                                \
+        if (res_type) {                                                        \
+            STORE_BINOP(res_type, int_res, real_res);                          \
+        } else {                                                               \
+            BINOP_FALLBACK(#op);                                               \
+        }                                                                      \
+        ostack_pop(ctx);                                                       \
+        ostack_set(ctx, 0, res);                                               \
     } while (false)
 
 static double myfloor(double x1, double x2) {
@@ -1066,7 +1092,6 @@ static R_INLINE int R_integer_uminus(int x, Rboolean* pnaflag) {
         if (IS_SIMPLE_SCALAR(val, REALSXP)) {                                  \
             res = Rf_allocVector(REALSXP, 1);                                  \
             *REAL(res) = (*REAL(val) == NA_REAL) ? NA_REAL : op * REAL(val);   \
-            break;                                                             \
         } else if (IS_SIMPLE_SCALAR(val, INTSXP)) {                            \
             Rboolean naflag = FALSE;                                           \
             res = Rf_allocVector(INTSXP, 1);                                   \
@@ -1079,9 +1104,10 @@ static R_INLINE int R_integer_uminus(int x, Rboolean* pnaflag) {
                 break;                                                         \
             }                                                                  \
             CHECK_INTEGER_OVERFLOW(res, naflag);                               \
-            break;                                                             \
+        } else {                                                               \
+            UNOP_FALLBACK(#op);                                                \
         }                                                                      \
-        UNOP_FALLBACK(#op);                                                    \
+        ostack_set(ctx, 0, res);                                               \
     } while (false)
 
 #define DO_RELOP(op)                                                           \
@@ -1666,16 +1692,12 @@ loop:
         SEXP lhs = ostack_at(ctx, 1);
         SEXP rhs = ostack_at(ctx, 0);
         DO_BINOP(+, PLUSOP);
-        ostack_popn(ctx, 2);
-        ostack_push(ctx, res);
         NEXT();
     }
 
     INSTRUCTION(uplus_) {
         SEXP val = ostack_at(ctx, 0);
         DO_UNOP(+, PLUSOP);
-        ostack_popn(ctx, 1);
-        ostack_push(ctx, res);
         NEXT();
     }
 
@@ -1698,16 +1720,12 @@ loop:
         SEXP lhs = ostack_at(ctx, 1);
         SEXP rhs = ostack_at(ctx, 0);
         DO_BINOP(-, MINUSOP);
-        ostack_popn(ctx, 2);
-        ostack_push(ctx, res);
         NEXT();
     }
 
     INSTRUCTION(uminus_) {
         SEXP val = ostack_at(ctx, 0);
         DO_UNOP(-, MINUSOP);
-        ostack_popn(ctx, 1);
-        ostack_push(ctx, res);
         NEXT();
     }
 
@@ -1715,8 +1733,6 @@ loop:
         SEXP lhs = ostack_at(ctx, 1);
         SEXP rhs = ostack_at(ctx, 0);
         DO_BINOP(*, TIMESOP);
-        ostack_popn(ctx, 2);
-        ostack_push(ctx, res);
         NEXT();
     }
 
@@ -1725,19 +1741,20 @@ loop:
         SEXP rhs = ostack_at(ctx, 0);
 
         if (IS_SIMPLE_SCALAR(lhs, REALSXP) && IS_SIMPLE_SCALAR(rhs, REALSXP)) {
-            res = Rf_allocVector(REALSXP, 1);
-            *REAL(res) = (*REAL(lhs) == NA_REAL || *REAL(rhs) == NA_REAL)
-                             ? NA_REAL
-                             : *REAL(lhs) / *REAL(rhs);
+            double real_res = (*REAL(lhs) == NA_REAL || *REAL(rhs) == NA_REAL)
+                                  ? NA_REAL
+                                  : *REAL(lhs) / *REAL(rhs);
+            STORE_BINOP(REALSXP, 0, real_res);
         } else if (IS_SIMPLE_SCALAR(lhs, INTSXP) &&
                    IS_SIMPLE_SCALAR(rhs, INTSXP)) {
-            res = Rf_allocVector(REALSXP, 1);
+            double real_res;
             int l = *INTEGER(lhs);
             int r = *INTEGER(rhs);
             if (l == NA_INTEGER || r == NA_INTEGER)
-                *REAL(res) = NA_REAL;
+                real_res = NA_REAL;
             else
-                *REAL(res) = (double)l / (double)r;
+                real_res = (double)l / (double)r;
+            STORE_BINOP(REALSXP, 0, real_res);
         } else {
             BINOP_FALLBACK("/");
         }
@@ -1752,19 +1769,20 @@ loop:
         SEXP rhs = ostack_at(ctx, 0);
 
         if (IS_SIMPLE_SCALAR(lhs, REALSXP) && IS_SIMPLE_SCALAR(rhs, REALSXP)) {
-            res = Rf_allocVector(REALSXP, 1);
-            *REAL(res) = myfloor(*REAL(lhs), *REAL(rhs));
+            double real_res = myfloor(*REAL(lhs), *REAL(rhs));
+            STORE_BINOP(REALSXP, 0, real_res);
         } else if (IS_SIMPLE_SCALAR(lhs, INTSXP) &&
                    IS_SIMPLE_SCALAR(rhs, INTSXP)) {
-            res = Rf_allocVector(INTSXP, 1);
+            int int_res;
             int l = *INTEGER(lhs);
             int r = *INTEGER(rhs);
             /* This had x %/% 0 == 0 prior to 2.14.1, but
                it seems conventionally to be undefined */
             if (l == NA_INTEGER || r == NA_INTEGER || r == 0)
-                *INTEGER(res) = NA_INTEGER;
+                int_res = NA_INTEGER;
             else
-                *INTEGER(res) = (int)floor((double)l / (double)r);
+                int_res = (int)floor((double)l / (double)r);
+            STORE_BINOP(INTSXP, int_res, 0);
         } else {
             BINOP_FALLBACK("%/%");
         }
@@ -1779,19 +1797,20 @@ loop:
         SEXP rhs = ostack_at(ctx, 0);
 
         if (IS_SIMPLE_SCALAR(lhs, REALSXP) && IS_SIMPLE_SCALAR(rhs, REALSXP)) {
-            res = Rf_allocVector(REALSXP, 1);
-            *REAL(res) = myfmod(*REAL(lhs), *REAL(rhs));
+            double real_res = myfmod(*REAL(lhs), *REAL(rhs));
+            STORE_BINOP(REALSXP, 0, real_res);
         } else if (IS_SIMPLE_SCALAR(lhs, INTSXP) &&
                    IS_SIMPLE_SCALAR(rhs, INTSXP)) {
-            res = Rf_allocVector(INTSXP, 1);
+            int int_res;
             int l = *INTEGER(lhs);
             int r = *INTEGER(rhs);
             if (l == NA_INTEGER || r == NA_INTEGER || r == 0) {
-                *INTEGER(res) = NA_INTEGER;
+                int_res = NA_INTEGER;
             } else {
-                *INTEGER(res) =
-                    (l >= 0 && r > 0) ? l % r : (int)myfmod((double)l, (double)r);
+                int_res = (l >= 0 && r > 0) ? l % r
+                                            : (int)myfmod((double)l, (double)r);
             }
+            STORE_BINOP(INTSXP, int_res, 0);
         } else {
             BINOP_FALLBACK("%%");
         }
