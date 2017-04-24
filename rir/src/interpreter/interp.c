@@ -953,19 +953,16 @@ enum op { PLUSOP, MINUSOP, TIMESOP, DIVOP, POWOP, MODOP, IDIVOP };
         ostack_pop(ctx);                                                       \
     } while (false)
 
-#define IS_SCALAR_VALUE(e, type)                                               \
-    (TYPEOF(e) == type && SHORT_VEC_LENGTH(e) == 1 && ATTRIB(e) == R_NilValue)
-
 #define DO_BINOP(op, op2)                                                      \
     do {                                                                       \
-        if (IS_SCALAR_VALUE(lhs, REALSXP)) {                                   \
-            if (IS_SCALAR_VALUE(rhs, REALSXP)) {                               \
+        if (IS_SIMPLE_SCALAR(lhs, REALSXP)) {                                  \
+            if (IS_SIMPLE_SCALAR(rhs, REALSXP)) {                              \
                 res = Rf_allocVector(REALSXP, 1);                              \
                 *REAL(res) = (*REAL(lhs) == NA_REAL || *REAL(rhs) == NA_REAL)  \
                                  ? NA_REAL                                     \
                                  : *REAL(lhs) op * REAL(rhs);                  \
                 break;                                                         \
-            } else if (IS_SCALAR_VALUE(rhs, INTSXP)) {                         \
+            } else if (IS_SIMPLE_SCALAR(rhs, INTSXP)) {                        \
                 res = Rf_allocVector(REALSXP, 1);                              \
                 *REAL(res) =                                                   \
                     (*REAL(lhs) == NA_REAL || *INTEGER(rhs) == NA_INTEGER)     \
@@ -973,8 +970,8 @@ enum op { PLUSOP, MINUSOP, TIMESOP, DIVOP, POWOP, MODOP, IDIVOP };
                         : *REAL(lhs) op * INTEGER(rhs);                        \
                 break;                                                         \
             }                                                                  \
-        } else if (IS_SCALAR_VALUE(lhs, INTSXP)) {                             \
-            if (IS_SCALAR_VALUE(rhs, INTSXP)) {                                \
+        } else if (IS_SIMPLE_SCALAR(lhs, INTSXP)) {                            \
+            if (IS_SIMPLE_SCALAR(rhs, INTSXP)) {                               \
                 Rboolean naflag = FALSE;                                       \
                 res = Rf_allocVector(INTSXP, 1);                               \
                 switch (op2) {                                                 \
@@ -993,7 +990,7 @@ enum op { PLUSOP, MINUSOP, TIMESOP, DIVOP, POWOP, MODOP, IDIVOP };
                 }                                                              \
                 CHECK_INTEGER_OVERFLOW(res, naflag);                           \
                 break;                                                         \
-            } else if (IS_SCALAR_VALUE(rhs, REALSXP)) {                        \
+            } else if (IS_SIMPLE_SCALAR(rhs, REALSXP)) {                       \
                 res = Rf_allocVector(REALSXP, 1);                              \
                 *REAL(res) =                                                   \
                     (*INTEGER(lhs) == NA_INTEGER || *REAL(rhs) == NA_REAL)     \
@@ -1066,11 +1063,11 @@ static R_INLINE int R_integer_uminus(int x, Rboolean* pnaflag) {
 
 #define DO_UNOP(op, op2)                                                       \
     do {                                                                       \
-        if (IS_SCALAR_VALUE(val, REALSXP)) {                                   \
+        if (IS_SIMPLE_SCALAR(val, REALSXP)) {                                  \
             res = Rf_allocVector(REALSXP, 1);                                  \
             *REAL(res) = (*REAL(val) == NA_REAL) ? NA_REAL : op * REAL(val);   \
             break;                                                             \
-        } else if (IS_SCALAR_VALUE(val, INTSXP)) {                             \
+        } else if (IS_SIMPLE_SCALAR(val, INTSXP)) {                            \
             Rboolean naflag = FALSE;                                           \
             res = Rf_allocVector(INTSXP, 1);                                   \
             switch (op2) {                                                     \
@@ -1089,51 +1086,51 @@ static R_INLINE int R_integer_uminus(int x, Rboolean* pnaflag) {
 
 #define DO_RELOP(op)                                                           \
     do {                                                                       \
-        if (IS_SCALAR_VALUE(lhs, LGLSXP)) {                                    \
-            if (IS_SCALAR_VALUE(rhs, LGLSXP)) {                                \
+        if (IS_SIMPLE_SCALAR(lhs, LGLSXP)) {                                   \
+            if (IS_SIMPLE_SCALAR(rhs, LGLSXP)) {                               \
                 if (*LOGICAL(lhs) == NA_LOGICAL ||                             \
                     *LOGICAL(rhs) == NA_LOGICAL) {                             \
                     res = R_LogicalNAValue;                                    \
                 } else {                                                       \
-                    res = *LOGICAL(lhs) op *LOGICAL(rhs) ? R_TrueValue         \
-                                                         : R_FalseValue;       \
+                    res = *LOGICAL(lhs) op * LOGICAL(rhs) ? R_TrueValue        \
+                                                          : R_FalseValue;      \
                 }                                                              \
                 break;                                                         \
             }                                                                  \
-        } else if (IS_SCALAR_VALUE(lhs, REALSXP)) {                            \
-            if (IS_SCALAR_VALUE(rhs, REALSXP)) {                               \
+        } else if (IS_SIMPLE_SCALAR(lhs, REALSXP)) {                           \
+            if (IS_SIMPLE_SCALAR(rhs, REALSXP)) {                              \
                 if (*REAL(lhs) == NA_REAL || *REAL(rhs) == NA_REAL) {          \
                     res = R_LogicalNAValue;                                    \
                 } else {                                                       \
-                    res = *REAL(lhs) op *REAL(rhs) ? R_TrueValue               \
-                                                   : R_FalseValue;             \
+                    res = *REAL(lhs) op * REAL(rhs) ? R_TrueValue              \
+                                                    : R_FalseValue;            \
                 }                                                              \
                 break;                                                         \
-            } else if (IS_SCALAR_VALUE(rhs, INTSXP)) {                         \
+            } else if (IS_SIMPLE_SCALAR(rhs, INTSXP)) {                        \
                 if (*REAL(lhs) == NA_REAL || *INTEGER(rhs) == NA_INTEGER) {    \
                     res = R_LogicalNAValue;                                    \
                 } else {                                                       \
-                    res = *REAL(lhs) op *INTEGER(rhs) ? R_TrueValue            \
-                                                      : R_FalseValue;          \
+                    res = *REAL(lhs) op * INTEGER(rhs) ? R_TrueValue           \
+                                                       : R_FalseValue;         \
                 }                                                              \
                 break;                                                         \
             }                                                                  \
-        } else if (IS_SCALAR_VALUE(lhs, INTSXP)) {                             \
-            if (IS_SCALAR_VALUE(rhs, INTSXP)) {                                \
+        } else if (IS_SIMPLE_SCALAR(lhs, INTSXP)) {                            \
+            if (IS_SIMPLE_SCALAR(rhs, INTSXP)) {                               \
                 if (*INTEGER(lhs) == NA_INTEGER ||                             \
                     *INTEGER(rhs) == NA_INTEGER) {                             \
                     res = R_LogicalNAValue;                                    \
                 } else {                                                       \
-                    res = *INTEGER(lhs) op *INTEGER(rhs) ? R_TrueValue         \
-                                                         : R_FalseValue;       \
+                    res = *INTEGER(lhs) op * INTEGER(rhs) ? R_TrueValue        \
+                                                          : R_FalseValue;      \
                 }                                                              \
                 break;                                                         \
-            } else if (IS_SCALAR_VALUE(rhs, REALSXP)) {                        \
+            } else if (IS_SIMPLE_SCALAR(rhs, REALSXP)) {                       \
                 if (*INTEGER(lhs) == NA_INTEGER || *REAL(rhs) == NA_REAL) {    \
                     res = R_LogicalNAValue;                                    \
                 } else {                                                       \
-                    res = *INTEGER(lhs) op *REAL(rhs) ? R_TrueValue            \
-                                                      : R_FalseValue;          \
+                    res = *INTEGER(lhs) op * REAL(rhs) ? R_TrueValue           \
+                                                       : R_FalseValue;         \
                 }                                                              \
                 break;                                                         \
             }                                                                  \
@@ -1732,12 +1729,13 @@ loop:
         SEXP lhs = ostack_at(ctx, 1);
         SEXP rhs = ostack_at(ctx, 0);
 
-        if (IS_SCALAR_VALUE(lhs, REALSXP) && IS_SCALAR_VALUE(rhs, REALSXP)) {
+        if (IS_SIMPLE_SCALAR(lhs, REALSXP) && IS_SIMPLE_SCALAR(rhs, REALSXP)) {
             res = Rf_allocVector(REALSXP, 1);
             *REAL(res) = (*REAL(lhs) == NA_REAL || *REAL(rhs) == NA_REAL)
                              ? NA_REAL
                              : *REAL(lhs) / *REAL(rhs);
-        } else if (IS_SCALAR_VALUE(lhs, INTSXP) && IS_SCALAR_VALUE(rhs, INTSXP)) {
+        } else if (IS_SIMPLE_SCALAR(lhs, INTSXP) &&
+                   IS_SIMPLE_SCALAR(rhs, INTSXP)) {
             res = Rf_allocVector(REALSXP, 1);
             int l = *INTEGER(lhs);
             int r = *INTEGER(rhs);
@@ -1758,10 +1756,11 @@ loop:
         SEXP lhs = ostack_at(ctx, 1);
         SEXP rhs = ostack_at(ctx, 0);
 
-        if (IS_SCALAR_VALUE(lhs, REALSXP) && IS_SCALAR_VALUE(rhs, REALSXP)) {
+        if (IS_SIMPLE_SCALAR(lhs, REALSXP) && IS_SIMPLE_SCALAR(rhs, REALSXP)) {
             res = Rf_allocVector(REALSXP, 1);
             *REAL(res) = myfloor(*REAL(lhs), *REAL(rhs));
-        } else if (IS_SCALAR_VALUE(lhs, INTSXP) && IS_SCALAR_VALUE(rhs, INTSXP)) {
+        } else if (IS_SIMPLE_SCALAR(lhs, INTSXP) &&
+                   IS_SIMPLE_SCALAR(rhs, INTSXP)) {
             res = Rf_allocVector(INTSXP, 1);
             int l = *INTEGER(lhs);
             int r = *INTEGER(rhs);
@@ -1784,10 +1783,11 @@ loop:
         SEXP lhs = ostack_at(ctx, 1);
         SEXP rhs = ostack_at(ctx, 0);
 
-        if (IS_SCALAR_VALUE(lhs, REALSXP) && IS_SCALAR_VALUE(rhs, REALSXP)) {
+        if (IS_SIMPLE_SCALAR(lhs, REALSXP) && IS_SIMPLE_SCALAR(rhs, REALSXP)) {
             res = Rf_allocVector(REALSXP, 1);
             *REAL(res) = myfmod(*REAL(lhs), *REAL(rhs));
-        } else if (IS_SCALAR_VALUE(lhs, INTSXP) && IS_SCALAR_VALUE(rhs, INTSXP)) {
+        } else if (IS_SIMPLE_SCALAR(lhs, INTSXP) &&
+                   IS_SIMPLE_SCALAR(rhs, INTSXP)) {
             res = Rf_allocVector(INTSXP, 1);
             int l = *INTEGER(lhs);
             int r = *INTEGER(rhs);
@@ -1872,19 +1872,19 @@ loop:
     INSTRUCTION(not_) {
         SEXP val = ostack_at(ctx, 0);
 
-        if (IS_SCALAR_VALUE(val, LGLSXP)) {
+        if (IS_SIMPLE_SCALAR(val, LGLSXP)) {
             if (*LOGICAL(val) == NA_LOGICAL) {
                 res = R_LogicalNAValue;
             } else {
                 res = *LOGICAL(val) == 0 ? R_TrueValue : R_FalseValue;
             }
-        } else if (IS_SCALAR_VALUE(val, REALSXP)) {
+        } else if (IS_SIMPLE_SCALAR(val, REALSXP)) {
             if (*REAL(val) == NA_REAL) {
                 res = R_LogicalNAValue;
             } else {
                 res = *REAL(val) == 0.0 ? R_TrueValue : R_FalseValue;
             }
-        } else if (IS_SCALAR_VALUE(val, INTSXP)) {
+        } else if (IS_SIMPLE_SCALAR(val, INTSXP)) {
             if (*INTEGER(val) == NA_INTEGER) {
                 res = R_LogicalNAValue;
             } else {
@@ -2366,8 +2366,8 @@ loop:
         SEXP by = ostack_at(ctx, 0);
         res = NULL;
 
-        if (IS_SCALAR_VALUE(from, INTSXP) && IS_SCALAR_VALUE(to, INTSXP) &&
-            IS_SCALAR_VALUE(by, INTSXP)) {
+        if (IS_SIMPLE_SCALAR(from, INTSXP) && IS_SIMPLE_SCALAR(to, INTSXP) &&
+            IS_SIMPLE_SCALAR(by, INTSXP)) {
             int f = *INTEGER(from);
             int t = *INTEGER(to);
             int b = *INTEGER(by);
@@ -2407,14 +2407,14 @@ loop:
         SEXP rhs = ostack_at(ctx, 0);
         res = NULL;
 
-        if (IS_SCALAR_VALUE(lhs, INTSXP)) {
+        if (IS_SIMPLE_SCALAR(lhs, INTSXP)) {
             int from = *INTEGER(lhs);
-            if (IS_SCALAR_VALUE(rhs, INTSXP)) {
+            if (IS_SIMPLE_SCALAR(rhs, INTSXP)) {
                 int to = *INTEGER(rhs);
                 if (from != NA_INTEGER && to != NA_INTEGER) {
                     res = seq_int(from, to);
                 }
-            } else if (IS_SCALAR_VALUE(rhs, REALSXP)) {
+            } else if (IS_SIMPLE_SCALAR(rhs, REALSXP)) {
                 double to = *REAL(rhs);
                 if (from != NA_INTEGER && to != NA_REAL &&
                         R_FINITE(to) &&	INT_MIN <= to &&
@@ -2422,16 +2422,16 @@ loop:
                     res = seq_int(from, (int)to);
                 }
             }
-        } else if (IS_SCALAR_VALUE(lhs, REALSXP)) {
+        } else if (IS_SIMPLE_SCALAR(lhs, REALSXP)) {
             double from = *REAL(lhs);
-            if (IS_SCALAR_VALUE(rhs, INTSXP)) {
+            if (IS_SIMPLE_SCALAR(rhs, INTSXP)) {
                 int to = *INTEGER(rhs);
                 if (from != NA_REAL && to != NA_INTEGER &&
                         R_FINITE(from) &&	INT_MIN <= from &&
                         INT_MAX >= from && from == (int)from) {
                     res = seq_int((int)from, to);
                 }
-            } else if (IS_SCALAR_VALUE(rhs, REALSXP)) {
+            } else if (IS_SIMPLE_SCALAR(rhs, REALSXP)) {
                 double to = *REAL(rhs);
                 if (from != NA_REAL && to != NA_REAL &&
                         R_FINITE(from) && R_FINITE(to) &&
