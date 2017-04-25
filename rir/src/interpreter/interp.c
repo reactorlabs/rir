@@ -2511,7 +2511,12 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
 
         INSTRUCTION(length_) {
             SEXP val = ostack_pop(ctx);
-            R_xlen_t len = XLENGTH(val);
+            R_xlen_t len;
+            if (isVector(val)) {
+                len = XLENGTH(val);
+            } else {
+                len = Rf_length(val);
+            }
             ostack_push(ctx, Rf_allocVector(INTSXP, 1));
             INTEGER(ostack_top(ctx))[0] = len;
             NEXT();
