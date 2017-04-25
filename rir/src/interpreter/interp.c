@@ -75,10 +75,10 @@ volatile static void * opAddr[numInsns_];
 #define advanceImmediate() pc += sizeof(Immediate)
 #define advanceJump() pc += sizeof(JumpOffset)
 
-//#define readConst(ctx, idx) (cp_pool_at(ctx, idx))
-INLINE SEXP readConst(Context* ctx, unsigned idx) {
-    return cp_pool_at(ctx, idx);
-}
+#define readConst(ctx, idx) (cp_pool_at(ctx, idx))
+//INLINE SEXP readConst(Context* ctx, unsigned idx) {
+//    return cp_pool_at(ctx, idx);
+//}
 
 void initClosureContext(RCNTXT* cntxt, SEXP call, SEXP rho, SEXP sysparent,
                         SEXP arglist, SEXP op) {
