@@ -36,29 +36,14 @@ INLINE SEXP getSrcForCall(Code* c, OpcodeT* pc, Context* ctx) {
 
 #ifdef THREADED_CODE
 
-/* Declare volatile to prevent gcc 6 from making a local copy
-   in bcEval stack frames and thus increasing stack usage
-   dramatically */
-volatile static void * opAddr[numInsns_];
-
-#define INITIALIZE_MACHINE() if (c == NULL) goto init
-#define BEGIN_MACHINE  NEXT(); init: { loop: switch(opcode++)
+#define BEGIN_MACHINE NEXT();
 #define INSTRUCTION(name) \
-    case name: \
-        opAddr[name] = (__extension__ &&op_##name); \
-        goto loop; \
     op_##name:  // debug(c, pc, #name, ostack_length(ctx) - bp, ctx);
 #define NEXT() (__extension__ ({goto *opAddr[advanceOpcode()];}))
-#define LASTOP \
-    case numInsns_: \
-        return R_NilValue; \
-    default: \
-        assert(false && "wrong or unimplemented opcode"); \
-    }
+#define LASTOP {}
 
 #else
 
-#define INITIALIZE_MACHINE()  /* nothing */
 #define BEGIN_MACHINE  loop: switch(advanceOpcode())
 #define INSTRUCTION(name)  case name:  // debug(c, pc, #name, ostack_length(ctx) - bp, ctx);
 #define NEXT()  goto loop
@@ -1310,10 +1295,12 @@ INLINE void cachedSetVar(SEXP val, SEXP env, Immediate idx, Context* ctx,
 SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
 
 #ifdef THREADED_CODE
-    Opcode opcode = 0;
+    static void* opAddr[numInsns_] = {
+#define DEF_INSTR(name, ...) (__extension__ && op_##name),
+#include "ir/insns.h"
+#undef DEF_INSTR
+    };
 #endif
-
-    INITIALIZE_MACHINE();
 
     assert(c->magic == CODE_MAGIC);
 
