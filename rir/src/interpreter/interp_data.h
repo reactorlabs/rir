@@ -23,6 +23,10 @@ extern "C" {
     {}
 #endif
 
+#if defined(__GNUC__) && (! defined(NO_THREADED_CODE))
+#  define THREADED_CODE
+#endif
+
 // TODO force inlining for clang & gcc
 #define INLINE __attribute__((always_inline)) inline static
 

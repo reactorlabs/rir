@@ -73,8 +73,6 @@ extern SEXP quoteSym;
 
 // TODO we might actually need to do more for the lengths (i.e. true length vs length)
 
-INLINE size_t ostack_length(Context* c);
-
 INLINE size_t rl_length(ResizeableList * l) {
     return Rf_length(l->list);
 }
@@ -105,63 +103,61 @@ INLINE void rl_append(ResizeableList * l, SEXP val, SEXP parent, size_t index) {
     SET_VECTOR_ELT(l->list, i, val);
 }
 
-INLINE SEXP ostack_top(Context* c) {
+#define ostack_length(c) (R_BCNodeStackTop - R_BCNodeStackBase)
+
 #ifdef TYPED_STACK
-    return (R_BCNodeStackTop - 1)->u.sxpval;
+#  define ostack_top(c) ((R_BCNodeStackTop - 1)->u.sxpval)
 #else
-    return *(R_BCNodeStackTop - 1);
+#  define ostack_top(c) (*(R_BCNodeStackTop - 1))
 #endif
-}
 
-INLINE SEXP ostack_at(Context* c, uint32_t i) {
 #ifdef TYPED_STACK
-    return (R_BCNodeStackTop - 1 - i)->u.sxpval;
+#  define ostack_at(c, i) ((R_BCNodeStackTop - 1 - (i))->u.sxpval)
 #else
-    return *(R_BCNodeStackTop - 1 - i);
+#  define ostack_at(c, i) (*(R_BCNodeStackTop - 1 - (i)))
 #endif
-}
 
-INLINE void ostack_set(Context* c, uint32_t i, SEXP v) {
 #ifdef TYPED_STACK
-    (R_BCNodeStackTop - 1 - i)->u.sxpval = v;
-    (R_BCNodeStackTop - 1 - i)->tag = 0;
+#  define ostack_set(c, i, v) do { \
+        SEXP tmp = (v); \
+        int idx = (i); \
+        (R_BCNodeStackTop - 1 - idx)->u.sxpval = tmp; \
+        (R_BCNodeStackTop - 1 - idx)->tag = 0; \
+    } while (0)
 #else
-    *(R_BCNodeStackTop - 1 - i) = v;
+#  define ostack_set(c, i, v) do { \
+        SEXP tmp = (v); \
+        int idx = (i); \
+        *(R_BCNodeStackTop - 1 - idx) = tmp; \
+    } while (0)
 #endif
-}
 
-INLINE R_bcstack_t* ostack_cell_at(Context* c, uint32_t i) {
-    return R_BCNodeStackTop - 1 - i;
-}
+#define ostack_cell_at(c, i) (R_BCNodeStackTop - 1 - (i))
 
-INLINE bool ostack_empty(Context* c) {
-    return R_BCNodeStackTop == R_BCNodeStackBase;
-}
+#define ostack_empty(c) (R_BCNodeStackTop == R_BCNodeStackBase)
 
-INLINE size_t ostack_length(Context * c) {
-    return R_BCNodeStackTop - R_BCNodeStackBase;
-}
+#define ostack_popn(c, p) do { R_BCNodeStackTop -= (p); } while (0)
 
-INLINE void ostack_popn(Context* c, size_t p) { R_BCNodeStackTop -= p; }
-
-INLINE SEXP ostack_pop(Context* c) {
-    --R_BCNodeStackTop;
 #ifdef TYPED_STACK
-    return R_BCNodeStackTop->u.sxpval;
+#  define ostack_pop(c) ((--R_BCNodeStackTop)->u.sxpval)
 #else
-    return *R_BCNodeStackTop;
+#  define ostack_pop(c) (*(--R_BCNodeStackTop))
 #endif
-}
 
-INLINE void ostack_push(Context* c, SEXP val) {
 #ifdef TYPED_STACK
-    R_BCNodeStackTop->u.sxpval = val;
-    R_BCNodeStackTop->tag = 0;
+#  define ostack_push(c, v) do { \
+        SEXP tmp = (v); \
+        R_BCNodeStackTop->u.sxpval = tmp; \
+        R_BCNodeStackTop->tag = 0; \
+        ++R_BCNodeStackTop; \
+    } while (0)
 #else
-    *R_BCNodeStackTop = val;
+#  define ostack_push(c, v) do { \
+        SEXP tmp = (v); \
+        *R_BCNodeStackTop = tmp; \
+        ++R_BCNodeStackTop; \
+    } while (0)
 #endif
-    ++R_BCNodeStackTop;
-}
 
 INLINE void ostack_ensureSize(Context* c, unsigned minFree) {
     if ((R_BCNodeStackTop + minFree) >= R_BCNodeStackEnd) {
@@ -172,13 +168,8 @@ INLINE void ostack_ensureSize(Context* c, unsigned minFree) {
 
 Context* context_create(CompilerCallback, OptimizerCallback);
 
-INLINE size_t cp_pool_length(Context * c) {
-    return rl_length(& c->cp);
-}
-
-INLINE size_t src_pool_length(Context * c) {
-    return rl_length(& c->src);
-}
+#define cp_pool_length(c) (rl_length(& (c)->cp))
+#define src_pool_length(c) (rl_length(& (c)->src))
 
 INLINE size_t cp_pool_add(Context* c, SEXP v) {
     size_t result = rl_length(& c->cp);
@@ -193,15 +184,8 @@ INLINE size_t src_pool_add(Context* c, SEXP v) {
     return result;
 }
 
-INLINE SEXP cp_pool_at(Context* c, size_t index) {
-    return VECTOR_ELT(c->cp.list, index);
-}
-
-INLINE SEXP src_pool_at(Context* c, size_t value) {
-    return VECTOR_ELT(c->src.list, value);
-}
-
-
+#define cp_pool_at(c, index) (VECTOR_ELT((c)->cp.list, (index)))
+#define src_pool_at(c, value) (VECTOR_ELT((c)->src.list, (value)))
 
 #ifdef __cplusplus
 }
