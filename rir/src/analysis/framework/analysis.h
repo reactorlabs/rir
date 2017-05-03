@@ -8,63 +8,58 @@ namespace rir {
 
 /** Base class for all analyses.
 
-  In the future, this is where the API for analysis scheduling, retrieval and invalidation will live.
+  In the future, this is where the API for analysis scheduling, retrieval and
+  invalidation will live.
  */
 class Analysis {
-public:
-
+  public:
     /** Analyzes the given code.
 
-      Internally sets the state and then calls the doAnalyze() virtual method that should implement the actual analysis.
+      Internally sets the state and then calls the doAnalyze() virtual method
+      that should implement the actual analysis.
      */
-    void analyze(CodeEditor & code) {
+    void analyze(CodeEditor& code) {
         if (code_ != nullptr)
             invalidate();
-        code_ = & code;
+        code_ = &code;
         doAnalyze();
     }
 
     /** Invalidates the data computed by the analysis.
 
-      This is to be overwritten in child classes to proviode the appropriate cleanup functionality.
+      This is to be overwritten in child classes to proviode the appropriate
+      cleanup functionality.
      */
-    virtual void invalidate() {
-        code_ = nullptr;
-    }
+    virtual void invalidate() { code_ = nullptr; }
 
     /** Returns true if the analysis contains valid data.
      */
-    bool good() const {
-        return code_ != nullptr;
-    }
+    bool good() const { return code_ != nullptr; }
 
     /** Override this for pretty printing.
      */
     virtual void print() = 0;
 
-protected:
-
+  protected:
     /** Override this method to provide the actual analysis.
 
-      This should mostly mean invoking the appropriate driver and collecting the state.
+      This should mostly mean invoking the appropriate driver and collecting the
+      state.
      */
 
     virtual void doAnalyze() = 0;
 
-    CodeEditor * code_ = nullptr;
-
-
+    CodeEditor* code_ = nullptr;
 };
-
 
 /** Forward driver analysis updates the basic analysis API with forward driver.
 
-  ForwardAnalysis does not deal with visibility of any results, that is the domain of its descelndants.
+  ForwardAnalysis does not deal with visibility of any results, that is the
+  domain of its descelndants.
  */
-template<typename ASTATE>
+template <typename ASTATE>
 class ForwardAnalysis : public Analysis {
-public:
-
+  public:
     void invalidate() override {
         Analysis::invalidate();
         delete currentState_;
@@ -73,34 +68,28 @@ public:
         initialState_ = nullptr;
         currentState_ = nullptr;
         finalState_ = nullptr;
-        for (State * s : mergePoints_)
+        for (State* s : mergePoints_)
             delete s;
         mergePoints_.clear();
     }
 
-    void print() override {
+    void print() override {}
 
-    }
+  protected:
+    ForwardAnalysis() {}
 
-protected:
-  ForwardAnalysis() {}
+    ASTATE& current() { return *reinterpret_cast<ASTATE*>(currentState_); }
 
-    ASTATE & current() {
-        return * reinterpret_cast<ASTATE *>(currentState_);
-    }
+    virtual Dispatcher& dispatcher() = 0;
 
-    virtual Dispatcher & dispatcher() = 0;
-
-    virtual ASTATE * initialState() {
-        return new ASTATE();
-    }
+    virtual ASTATE* initialState() { return new ASTATE(); }
 
     void doAnalyze() override {
         mergePoints_.resize(code_->numLabels());
         initialState_ = initialState();
         currentState_ = initialState_->clone();
         q_.push_front(code_->begin());
-        Dispatcher & d = dispatcher();
+        Dispatcher& d = dispatcher();
         while (not q_.empty()) {
             currentIns_ = q_.front();
             q_.pop_front();
@@ -110,7 +99,7 @@ protected:
                 // if current instruction is label, deal with state merging
                 if (cur.is(Opcode::label)) {
                     // if state not stored, store copy of incomming
-                    State * & stored = mergePoints_[cur.immediate.offset];
+                    State*& stored = mergePoints_[cur.immediate.offset];
                     if (stored == nullptr) {
                         assert(currentState_ != nullptr);
                         stored = currentState_->clone();
@@ -118,11 +107,12 @@ protected:
                         // if incomming not present, copy stored
                         if (currentState_ == nullptr) {
                             currentState_ = stored->clone();
-                        // otherwise merge incomming with stored
+                            // otherwise merge incomming with stored
                         } else if (stored->mergeWith(currentState_)) {
                             delete currentState_;
                             currentState_ = stored->clone();
-                        // and terminate current branch if there is no need to continue
+                            // and terminate current branch if there is no need
+                            // to continue
                         } else {
                             delete currentState_;
                             currentState_ = nullptr;
@@ -163,16 +153,15 @@ protected:
         }
     }
 
-    State * initialState_ = nullptr;
-    State * currentState_ = nullptr;
-    State * finalState_ = nullptr;
+    State* initialState_ = nullptr;
+    State* currentState_ = nullptr;
+    State* finalState_ = nullptr;
     CodeEditor::Iterator currentIns_;
-    std::vector<State *> mergePoints_;
+    std::vector<State*> mergePoints_;
 
-
-private:
+  private:
     bool shouldJump(size_t label) {
-        State * & stored = mergePoints_[label];
+        State*& stored = mergePoints_[label];
         if (stored == nullptr) {
             stored = currentState_->clone();
             return true;
@@ -184,28 +173,30 @@ private:
     std::deque<CodeEditor::Iterator> q_;
 };
 
-
-template<typename ASTATE>
+template <typename ASTATE>
 class ForwardAnalysisFinal : public ForwardAnalysis<ASTATE> {
     using ForwardAnalysis<ASTATE>::finalState_;
-public:
-    ASTATE const & finalState() {
-        return * reinterpret_cast<ASTATE *>(finalState_);
+
+  public:
+    ASTATE const& finalState() {
+        return *reinterpret_cast<ASTATE*>(finalState_);
     }
 };
 
-template<typename ASTATE>
+template <typename ASTATE>
 class ForwardAnalysisIns : public ForwardAnalysisFinal<ASTATE> {
     using ForwardAnalysis<ASTATE>::currentIns_;
     using ForwardAnalysis<ASTATE>::currentState_;
     using ForwardAnalysis<ASTATE>::initialState_;
     using ForwardAnalysis<ASTATE>::dispatcher;
     using ForwardAnalysis<ASTATE>::mergePoints_;
-protected:
+
+  protected:
     using ForwardAnalysis<ASTATE>::current;
     using ForwardAnalysis<ASTATE>::code_;
-public:
-  ASTATE const& operator[](CodeEditor::Iterator ins) {
+
+  public:
+    ASTATE const& operator[](CodeEditor::Iterator ins) {
         if (ins != currentIns_)
             seek(ins);
         return current();
@@ -217,8 +208,7 @@ public:
         return current();
     }
 
-protected:
-
+  protected:
     void doAnalyze() override {
         ForwardAnalysis<ASTATE>::doAnalyze();
         initializeCache();
@@ -232,10 +222,11 @@ protected:
     void advance() {
         dispatcher().dispatch(currentIns_);
         ++currentIns_;
-        // if the cached instruction is label, dispose of the state and create a copy of the fixpoint
+        // if the cached instruction is label, dispose of the state and create a
+        // copy of the fixpoint
         if ((*currentIns_).is(Opcode::label)) {
             auto fixpoint = mergePoints_[(*currentIns_).immediate.offset];
-            // if we reach dead code there is no merge state available 
+            // if we reach dead code there is no merge state available
             if (fixpoint) {
                 delete currentState_;
                 currentState_ = fixpoint->clone();

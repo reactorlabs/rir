@@ -1,8 +1,8 @@
 #ifndef RIR_OPTIMIZER_CP_H
 #define RIR_OPTIMIZER_CP_H
 
-#include "code/analysis.h"
-#include "code/dispatchers.h"
+#include "framework/analysis.h"
+#include "framework/dispatchers.h"
 #include "interpreter/interp_context.h"
 
 namespace rir {
@@ -11,12 +11,12 @@ namespace rir {
  */
 class CP_Value {
   public:
-    static CP_Value const & top() {
+    static CP_Value const& top() {
         static CP_Value value(top_);
         return value;
     }
 
-    static CP_Value const & bottom() {
+    static CP_Value const& bottom() {
         static CP_Value value(bottom_);
         return value;
     }
@@ -75,7 +75,6 @@ class CP_Value {
     static SEXP const top_;
 
     SEXP value_;
-
 };
 
 class ConstantPropagation
@@ -83,12 +82,9 @@ class ConstantPropagation
       public InstructionDispatcher::Receiver {
   public:
     typedef CP_Value Value;
-    ConstantPropagation() :
-        dispatcher_(*this) {
-    }
+    ConstantPropagation() : dispatcher_(*this) {}
 
   protected:
-
     /** Set incomming arguments to top.
      */
     AbstractState<SEXP, CP_Value>* initialState() override {
@@ -99,9 +95,7 @@ class ConstantPropagation
         return result;
     }
 
-    virtual Dispatcher & dispatcher() override {
-        return dispatcher_;
-    }
+    virtual Dispatcher& dispatcher() override { return dispatcher_; }
 
     void push_(CodeEditor::Iterator ins) override {
         BC bc = *ins;

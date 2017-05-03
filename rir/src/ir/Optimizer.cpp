@@ -1,7 +1,7 @@
 #include "ir/Optimizer.h"
-#include "optimizer/cleanup.h"
-#include "optimizer/stupid_inline.h"
-#include "optimizer/localize.h"
+#include "analysis/cleanup.h"
+#include "analysis/localize.h"
+#include "analysis/stupid_inline.h"
 
 namespace rir {
 

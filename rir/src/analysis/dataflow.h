@@ -1,12 +1,12 @@
 #ifndef RIR_ANALYSIS_DATAFLOW_H
 #define RIR_ANALYSIS_DATAFLOW_H
 
-#include "ir/CodeEditor.h"
-#include "R/r.h"
 #include "R/Funtab.h"
-#include "code/analysis.h"
-#include "code/dispatchers.h"
+#include "R/r.h"
+#include "framework/analysis.h"
+#include "framework/dispatchers.h"
 #include "interpreter/interp_context.h"
+#include "ir/CodeEditor.h"
 
 namespace rir {
 
