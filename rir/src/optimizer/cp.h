@@ -78,8 +78,9 @@ class CP_Value {
 
 };
 
-class ConstantPropagation : public ForwardAnalysisIns<AbstractState<CP_Value>>,
-                            public InstructionDispatcher::Receiver {
+class ConstantPropagation
+    : public ForwardAnalysisIns<AbstractState<SEXP, CP_Value>>,
+      public InstructionDispatcher::Receiver {
   public:
     typedef CP_Value Value;
     ConstantPropagation() :
@@ -90,8 +91,8 @@ class ConstantPropagation : public ForwardAnalysisIns<AbstractState<CP_Value>>,
 
     /** Set incomming arguments to top.
      */
-    AbstractState<CP_Value> * initialState() override {
-        auto * result = new AbstractState<CP_Value>();
+    AbstractState<SEXP, CP_Value>* initialState() override {
+        auto* result = new AbstractState<SEXP, CP_Value>();
         for (auto x : code_->arguments()) {
             (*result)[x.first] = CP_Value::top();
         }

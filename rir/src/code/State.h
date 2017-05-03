@@ -156,7 +156,7 @@ protected:
     std::deque<AVALUE> stack_;
 };
 
-template <typename AVALUE>
+template <typename KEY, typename AVALUE>
 class AbstractEnvironment : public State {
     static_assert(std::is_copy_constructible<AVALUE>::value,
                   "Abstract values must be copy constructible");
@@ -248,15 +248,13 @@ public:
         return env_.empty();
     }
 
-    bool has(SEXP name) const {
-        return env_.find(name) != env_.end();
-    }
+    bool has(KEY name) const { return env_.find(name) != env_.end(); }
 
     /** Simulates looking for a variable.
 
       If the variable is found in current environment, it is returned. If not, then parent environments are searched and only if the variable is not found anywhere in them, top value is returned.
      */
-    AVALUE const & find(SEXP name) const {
+    AVALUE const& find(KEY name) const {
         auto i = env_.find(name);
         if (i == env_.end())
             if (parent_ != nullptr)
@@ -267,7 +265,7 @@ public:
             return i->second;
     }
 
-    AVALUE const & operator[](SEXP name) const {
+    AVALUE const& operator[](KEY name) const {
         auto i = env_.find(name);
         if (i == env_.end())
             return AVALUE::top();
@@ -275,11 +273,11 @@ public:
             return i->second;
     }
 
-    AVALUE & operator[](SEXP name) {
+    AVALUE& operator[](KEY name) {
         auto i = env_.find(name);
         if (i == env_.end()) {
             // so that we do not demand default constructor on values
-            env_.insert(std::pair<SEXP, AVALUE>(name, AVALUE::top()));
+            env_.insert(std::pair<KEY, AVALUE>(name, AVALUE::top()));
             i = env_.find(name);
             return i->second;
         } else {
@@ -316,16 +314,14 @@ public:
             e.second.mergeWith(v);
     }
 
-    typename std::map<SEXP, AVALUE>::iterator begin() { return env_.begin(); }
+    typename std::map<KEY, AVALUE>::iterator begin() { return env_.begin(); }
 
-    typename std::map<SEXP, AVALUE>::iterator end() { return env_.end(); }
+    typename std::map<KEY, AVALUE>::iterator end() { return env_.end(); }
 
-protected:
-
+  protected:
     AbstractEnvironment * parent_ = nullptr;
 
-    std::map<SEXP, AVALUE> env_;
-
+    std::map<KEY, AVALUE> env_;
 };
 
 class DummyState {
@@ -336,7 +332,7 @@ class DummyState {
 
 /** This could be done with multiple virtual inheritance, but the composition is simpler, and perhaps even cleaner, albeit more lengthy.
  */
-template <typename AVALUE, typename GLOBAL = DummyState>
+template <typename KEY, typename AVALUE, typename GLOBAL = DummyState>
 class AbstractState : public State {
   public:
     typedef AVALUE Value;
@@ -360,9 +356,9 @@ class AbstractState : public State {
 
     AbstractStack<AVALUE>& stack() { return stack_; }
 
-    AbstractEnvironment<AVALUE> const& env() const { return env_; }
+    AbstractEnvironment<KEY, AVALUE> const& env() const { return env_; }
 
-    AbstractEnvironment<AVALUE>& env() { return env_; }
+    AbstractEnvironment<KEY, AVALUE>& env() { return env_; }
 
     bool mergeWith(AbstractState const & other) {
         bool result = false;
@@ -396,13 +392,9 @@ class AbstractState : public State {
         return stack_[index];
     }
 
-    AVALUE const & operator[](SEXP name) const {
-        return env_[name];
-    }
+    AVALUE const& operator[](KEY name) const { return env_[name]; }
 
-    AVALUE & operator[](SEXP name) {
-        return env_[name];
-    }
+    AVALUE& operator[](KEY name) { return env_[name]; }
 
     void print() const {
         global_.print();
@@ -414,7 +406,7 @@ class AbstractState : public State {
 
 protected:
   AbstractStack<AVALUE> stack_;
-  AbstractEnvironment<AVALUE> env_;
+  AbstractEnvironment<KEY, AVALUE> env_;
   GLOBAL global_;
 };
 
