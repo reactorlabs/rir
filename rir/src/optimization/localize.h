@@ -1,7 +1,7 @@
 #ifndef RIR_LOCALIZE_H
 #define RIR_LOCALIZE_H
 
-#include "analyzers/dataflow.h"
+#include "analysis/dataflow.h"
 #include "interpreter/deoptimizer.h"
 
 namespace rir {

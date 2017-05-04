@@ -2,9 +2,9 @@
 #define RIR_STUPID_INLINE_H
 
 #include "R/RList.h"
-#include "analysis/analysis.h"
-#include "analysis/dispatchers.h"
-#include "analyzers/dataflow.h"
+#include "analysis/dataflow.h"
+#include "analysis_framework/analysis.h"
+#include "analysis_framework/dispatchers.h"
 #include "interpreter/interp_context.h"
 #include "ir/CodeEditor.h"
 #include "ir/Compiler.h"

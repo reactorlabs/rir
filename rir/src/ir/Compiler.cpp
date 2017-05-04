@@ -9,7 +9,7 @@
 #include "R/Symbols.h"
 #include "R/Funtab.h"
 
-#include "analyzers/dataflow.h"
+#include "analysis/dataflow.h"
 #include "ir/Optimizer.h"
 #include "utils/Pool.h"
 

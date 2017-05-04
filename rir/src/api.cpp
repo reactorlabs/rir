@@ -13,9 +13,9 @@
 
 #include "utils/FunctionHandle.h"
 
-#include "analysis/analysis.h"
-#include "analyzers/Signature.h"
-#include "optimizers/cp.h"
+#include "analysis/Signature.h"
+#include "analysis_framework/analysis.h"
+#include "optimization/cp.h"
 #include "utils/Printer.h"
 
 #include "ir/Optimizer.h"

@@ -1,7 +1,7 @@
 #pragma once
 
-#include "analysis/analysis.h"
-#include "analysis/dispatchers.h"
+#include "analysis_framework/analysis.h"
+#include "analysis_framework/dispatchers.h"
 
 namespace rir {
 
