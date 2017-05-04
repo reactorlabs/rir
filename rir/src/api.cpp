@@ -13,10 +13,10 @@
 
 #include "utils/FunctionHandle.h"
 
-#include "utils/Printer.h"
+#include "analysis/analysis.h"
 #include "analyzers/Signature.h"
 #include "optimizers/cp.h"
-#include "analysis/analysis.h"
+#include "utils/Printer.h"
 
 #include "ir/Optimizer.h"
 
