@@ -1,8 +1,8 @@
 #ifndef RIR_OPTIMIZER_CP_H
 #define RIR_OPTIMIZER_CP_H
 
-#include "framework/analysis.h"
-#include "framework/dispatchers.h"
+#include "analysis/analysis.h"
+#include "analysis/dispatchers.h"
 #include "interpreter/interp_context.h"
 
 namespace rir {

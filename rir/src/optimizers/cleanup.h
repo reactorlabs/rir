@@ -1,7 +1,7 @@
 #ifndef RIR_OPTIMIZER_CLEANUP_H
 #define RIR_OPTIMIZER_CLEANUP_H
 
-#include "dataflow.h"
+#include "analyzers/dataflow.h"
 
 namespace rir {
 

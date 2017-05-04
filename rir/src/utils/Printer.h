@@ -1,6 +1,6 @@
 #pragma once
 
-#include "framework/dispatchers.h"
+#include "analysis/dispatchers.h"
 
 namespace rir {
 

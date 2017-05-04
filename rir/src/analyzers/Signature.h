@@ -1,6 +1,6 @@
 #pragma once
 
-#include "framework/analysis.h"
+#include "analysis/analysis.h"
 
 namespace rir {
 

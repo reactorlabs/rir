@@ -3,8 +3,8 @@
 
 #include "R/Funtab.h"
 #include "R/r.h"
-#include "framework/analysis.h"
-#include "framework/dispatchers.h"
+#include "analysis/analysis.h"
+#include "analysis/dispatchers.h"
 #include "interpreter/interp_context.h"
 #include "ir/CodeEditor.h"
 
