@@ -24,6 +24,13 @@ rir.compile <- function(what) {
         .Call("rir_compile", what, globalenv())
 }
 
+# compiles code of the given file and returns the list of compiled version.
+rir.compile.program <- function(file) {
+  contents <- readChar(file, file.info(file)$size)
+  expr <- eval(parse(text = paste("function() {", contents, "}", sep = "\n")))
+  rir.compile(expr)
+}
+
 rir.eval <- function(what, env = globalenv()) {
     .Call("rir_eval", what, env);
 }

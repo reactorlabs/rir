@@ -2,7 +2,7 @@
 
 #include "BC.h"
 #include "CodeStream.h"
-#include "code/dataflow.h"
+#include "analysis/dataflow.h"
 
 #include <iomanip>
 #include <iostream>

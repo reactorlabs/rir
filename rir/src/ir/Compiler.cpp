@@ -9,9 +9,9 @@
 #include "R/Symbols.h"
 #include "R/Funtab.h"
 
-#include "utils/Pool.h"
-#include "code/dataflow.h"
+#include "analysis/dataflow.h"
 #include "ir/Optimizer.h"
+#include "utils/Pool.h"
 
 #include "CodeVerifier.h"
 
