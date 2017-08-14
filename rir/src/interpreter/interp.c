@@ -214,11 +214,11 @@ SEXP createArgsList(Code* c, SEXP call, size_t nargs, CallSiteStruct* cs,
             __listAppend(&result, &pos, R_MissingArg, R_NilValue);
         } else {
             if (eager) {
-                SEXP arg = evalRirCode(codeAt(function(c), argi), ctx, env, 0);
+                SEXP arg = evalRirCode(codeAt(code2function(c), argi), ctx, env, 0);
                 assert(TYPEOF(arg) != PROMSXP);
                 __listAppend(&result, &pos, arg, name);
             } else {
-                Code* arg = codeAt(function(c), argi);
+                Code* arg = codeAt(code2function(c), argi);
                 SEXP promise = createPromise(arg, env);
                 __listAppend(&result, &pos, promise, name);
             }
@@ -310,7 +310,7 @@ static SEXP rirCallClosure(SEXP call, SEXP env, SEXP callee, SEXP actuals,
                            unsigned nargs, Context* ctx) {
 
     SEXP body = BODY(callee);
-    Function* fun = (Function*)INTEGER(body);
+    Function* fun = sexp2function(body);
 
     static bool optimizing = false;
 
@@ -324,7 +324,7 @@ static SEXP rirCallClosure(SEXP call, SEXP env, SEXP callee, SEXP actuals,
           */
         &&
         !fun->origin) {
-        Code* code = functionCode(fun);
+        Code* code = bodyCode(fun);
         if (fun->markOpt ||
             (fun->invocationCount == 1 && code->perfCounter > 100) ||
             (fun->invocationCount == 10 && code->perfCounter > 20) ||
@@ -345,7 +345,7 @@ static SEXP rirCallClosure(SEXP call, SEXP env, SEXP callee, SEXP actuals,
             fun->next = body;
 
             SET_BODY(callee, body);
-            fun = (Function*)INTEGER(body);
+            fun = sexp2function(body);
             fun->origin = oldBody;
 
             fun->invocationCount = oldFun->invocationCount + 1;
@@ -372,7 +372,7 @@ static SEXP rirCallClosure(SEXP call, SEXP env, SEXP callee, SEXP actuals,
 
     // Exec the closure
     closureDebug(call, callee, env, newEnv, &cntxt);
-    Code* code = functionCode(fun);
+    Code* code = bodyCode(fun);
 
     SEXP result = rirCallTrampoline(&cntxt, code, newEnv, nargs, ctx);
 
@@ -1544,8 +1544,8 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
 
             assert(isValidFunctionSEXP(body));
             // Make sure to use the most optimized version of this function
-            while (((Function*)INTEGER(body))->next)
-                body = ((Function*)INTEGER(body))->next;
+            while ((sexp2function(body))->next)
+                body = ((sexp2function(body))->next);
             assert(isValidFunctionSEXP(body));
 
             SET_FORMALS(res, formals);
@@ -1579,7 +1579,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
             // get the Code * pointer we need
             Immediate id = readImmediate();
             advanceImmediate();
-            Code* promiseCode = codeAt(function(c), id);
+            Code* promiseCode = codeAt(code2function(c), id);
             // create the promise and push it on stack
             ostack_push(ctx, createPromise(promiseCode, env));
             NEXT();
@@ -1606,7 +1606,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
             // get the Code * pointer we need
             Immediate n = readImmediate();
             advanceImmediate();
-            Code* promiseCode = codeAt(function(c), n);
+            Code* promiseCode = codeAt(code2function(c), n);
             // create the promise and push it on stack
             ostack_push(ctx, (SEXP)promiseCode);
             NEXT();
@@ -2360,12 +2360,12 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
             uint32_t deoptId = readImmediate();
             advanceImmediate();
             if (FRAME_CHANGED(env) || FRAME_LEAKED(env)) {
-                Function* fun = function(c);
-                assert(functionCode(fun) == c && "Cannot deopt from promise");
+                Function* fun = code2function(c);
+                assert(bodyCode(fun) == c && "Cannot deopt from promise");
                 fun->deopt = true;
                 SEXP val = fun->origin;
-                Function* deoptFun = (Function*)INTEGER(val);
-                Code* deoptCode = functionCode(deoptFun);
+                Function* deoptFun = sexp2function(val);
+                Code* deoptCode = bodyCode(deoptFun);
                 c = deoptCode;
                 pc = Deoptimizer_pc(deoptId);
                 PC_BOUNDSCHECK(pc, c);
@@ -2641,8 +2641,8 @@ SEXP rirExpr(SEXP f) {
         return src_pool_at(globalContext(), c->src);
     }
     if (isValidFunctionObject(f)) {
-        Function* ff = (Function*)(INTEGER(f));
-        return src_pool_at(globalContext(), functionCode(ff)->src);
+        Function* ff = sexp2function(f);
+        return src_pool_at(globalContext(), bodyCode(ff)->src);
     }
     return f;
 }
@@ -2655,7 +2655,7 @@ SEXP rirEval_f(SEXP f, SEXP env) {
         SEXP x = evalRirCode(c, globalContext(), env, 0);
         return x;
     } else {
-        Function* ff = (Function*)(INTEGER(f));
-        return evalRirCode(functionCode(ff), globalContext(), env, 0);
+        Function* ff = sexp2function(f);
+        return evalRirCode(bodyCode(ff), globalContext(), env, 0);
     }
 }

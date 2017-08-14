@@ -5,9 +5,9 @@ SEXP envSymbol;
 SEXP callSymbol;
 SEXP execName;
 SEXP promExecName;
-Context * globalContext_;
+Context* globalContext_;
 
-Function * isValidFunctionSEXP(SEXP wrapper) {
+Function* isValidFunctionSEXP(SEXP wrapper) {
     return isValidFunctionObject(wrapper);
 }
 
@@ -15,13 +15,13 @@ Function * isValidFunctionSEXP(SEXP wrapper) {
 
   If the given closure is RIR function, returns its Function object, otherwise returns nullptr.
  */
-Function * isValidClosureSEXP(SEXP closure) {
+Function* isValidClosureSEXP(SEXP closure) {
     if (TYPEOF(closure) != CLOSXP)
         return nullptr;
-    return isValidFunctionSEXP(BODY(closure));
+    return isValidFunctionObject(BODY(closure));
 }
 
-Code * isValidPromiseSEXP(SEXP promise) {
+Code* isValidPromiseSEXP(SEXP promise) {
     return isValidCodeObject(PRCODE(promise));
 }
 

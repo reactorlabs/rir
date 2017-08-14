@@ -113,8 +113,8 @@ class StupidInliner {
             if (!isValidFunctionSEXP(fun))
                 continue;
 
-            Function* f = (Function*)INTEGER(fun);
-            Code* c = functionCode(f);
+            Function* f = sexp2function(fun);
+            Code* c = bodyCode(f);
 
             // TODO: This is a bit of a hack to find out if the function
             // has just one code object.

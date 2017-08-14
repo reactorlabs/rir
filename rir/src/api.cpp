@@ -70,7 +70,7 @@ REXPORT SEXP rir_markOptimize(SEXP what) {
         return R_NilValue;
     SEXP b = BODY(what);
     isValidFunctionSEXP(b);
-    Function* fun = (Function*)INTEGER(b);
+    Function* fun = sexp2function(b);
     fun->markOpt = true;
     return R_NilValue;
 }
@@ -81,14 +81,14 @@ REXPORT SEXP rir_eval(SEXP what, SEXP env) {
         f = isValidClosureSEXP(what);
     if (f == nullptr)
         Rf_error("Not rir compiled code");
-    return evalRirCode(functionCode(f), globalContext(), env, 0);
+    return evalRirCode(bodyCode(f), globalContext(), env, 0);
 }
 
 REXPORT SEXP rir_body(SEXP cls) {
     ::Function * f = isValidClosureSEXP(cls);
     if (f == nullptr)
         Rf_error("Not a valid rir compiled function");
-    return functionSEXP(f);
+    return function2store(f);
 }
 
 REXPORT SEXP rir_analysis_signature(SEXP what) {

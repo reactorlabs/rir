@@ -7,21 +7,14 @@
 
 // stuff from api the interpreter uses
 
-C_OR_CPP Code * isValidPromiseSEXP(SEXP promise);
-C_OR_CPP Function * isValidClosureSEXP(SEXP closure);
-C_OR_CPP Function * isValidFunctionSEXP(SEXP wrapper);
-
-// rir runtime functions -------------------------------------------------------
-
-C_OR_CPP Function * isValidClosureSEXP(SEXP wrapper);
+C_OR_CPP Code* isValidPromiseSEXP(SEXP promise);
+C_OR_CPP Function* isValidClosureSEXP(SEXP closure);
+C_OR_CPP Function* isValidFunctionSEXP(SEXP wrapper);
 
 /** Checks if given closure should be executed using RIR.
 
   If the given closure is RIR function, returns its Function object, otherwise returns nullptr.
  */
-C_OR_CPP Function * isValidClosureSEXP(SEXP closure);
-
-C_OR_CPP Code * isValidPromiseSEXP(SEXP promise);
 
 C_OR_CPP void printCode(Code* c);
 

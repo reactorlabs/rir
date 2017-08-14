@@ -34,7 +34,7 @@ void CodeHandle::print() {
 }
 
 FunctionHandle CodeHandle::function() {
-    return (SEXP)((uintptr_t)::function(code) - FUNCTION_OFFSET);
+    return ::function2store(::code2function(code));
 }
 
 FunIdxT CodeHandle::idx() {
