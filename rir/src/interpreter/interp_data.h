@@ -90,8 +90,6 @@ typedef SEXP ClosureSEXP;
 typedef SEXP PromiseSEXP;
 typedef SEXP IntSEXP;
 
-struct Function; // Forward declaration
-
 // all sizes in bytes,
 // length in element sizes
 
@@ -258,11 +256,13 @@ INLINE unsigned CallSite_sizeOf(CallSiteStruct* cs) {
 /** Returns whether the SEXP appears to be valid promise, i.e. a pointer into
  * the middle of the linearized code.
  */
-INLINE Code * isValidCodeObject(SEXP what) {
-    if (TYPEOF(what) == EXTERNALSXP && *(unsigned*)what == CODE_MAGIC)
-        return (Code*)what;
-    else
+INLINE Code* isValidCodeObject(SEXP s) {
+    if (TYPEOF(s) != EXTERNALSXP)
         return nullptr;
+    Code* c = (Code*)s;
+    if (c->magic != CODE_MAGIC)
+        return nullptr;
+    return c;
 }
 
 /** Returns a pointer to the instructions in c.  */
@@ -341,16 +341,6 @@ INLINE Code* next(Code* c) {
                c->skiplistLength * 2 * sizeof(unsigned) + c->callSiteLength);
 }
 
-/** Returns a pointer to the Function to which c belongs. */
-INLINE struct Function* function(Code* c) {
-    return (struct Function*)((uint8_t*)c - c->header);
-}
-
-// TODO thats a bit nasty
-INLINE SEXP functionStore(struct Function* f) {
-    return (SEXP)((uintptr_t)f - FUNCTION_OFFSET);
-}
-
 // TODO removed src reference, now each code has its own
 
 /** A Function holds the RIR code for some GNU R function.
@@ -378,7 +368,7 @@ INLINE SEXP functionStore(struct Function* f) {
  */
 #pragma pack(push)
 #pragma pack(1)
-struct Function {
+typedef struct Function {
     unsigned magic; /// used to detect Functions 0xCAFEBABE
 
     unsigned size; /// Size, in bytes, of the function and its data
@@ -398,35 +388,34 @@ struct Function {
 
     unsigned codeLength; /// number of Code objects in the Function
 
-    // We can get to this by searching, but this isfaster and so worth the extra
-    // four bytes
+    // We can get to this by searching, but this is faster and so worth the
+    // extra four bytes
     unsigned foffset; ///< Offset to the code of the function (last code)
 
     uint8_t data[]; // Code objects stored inline
-};
+} Function;
 #pragma pack(pop)
 
-typedef struct Function Function;
-
-INLINE Function * isValidFunctionObject(SEXP s) {
-    if (TYPEOF(s) != EXTERNALSXP)
-        return NULL;
-    Function* f = (Function*)INTEGER(s);
-    if (f->magic != FUNCTION_MAGIC)
-        return NULL;
-    return f;
-}
-
 /** Returns the EXTERNALSXP for the Function object. */
-INLINE SEXP functionSEXP(Function * f) {
-    SEXP result = (SEXP)((uint8_t*)f - sizeof(VECTOR_SEXPREC));
+INLINE SEXP function2store(Function* f) {
+    SEXP result = (SEXP)((uintptr_t)f - sizeof(VECTOR_SEXPREC));
     assert(TYPEOF(result) == EXTERNALSXP &&
            "Either wrong memory altogether or bad counting");
     return result;
 }
 
-INLINE Code* functionCode(Function* f) {
-    return (Code*)((uintptr_t)f + f->foffset);
+/** Returns the Function object an SEXP. */
+INLINE Function* sexp2function(SEXP s) {
+    return (Function*)INTEGER(s);
+}
+
+INLINE Function* isValidFunctionObject(SEXP s) {
+    if (TYPEOF(s) != EXTERNALSXP)
+        return nullptr;
+    Function* f = sexp2function(s);
+    if (f->magic != FUNCTION_MAGIC)
+        return nullptr;
+    return f;
 }
 
 /** Returns the first code object associated with the function.
@@ -435,11 +424,21 @@ INLINE Code* begin(Function* f) { return (Code*)f->data; }
 
 /** Returns the end of the function as code object, for interation purposes.
  */
-INLINE Code* end(Function* f) { return (Code*)((uint8_t*)f + f->size); }
+INLINE Code* end(Function* f) { return (Code*)((uintptr_t)f + f->size); }
+
+/** Returns a pointer to the Function to which code object c belongs. */
+INLINE Function* code2function(Code* c) {
+    return (Function*)((uintptr_t)c - c->header);
+}
+
+/** Returns a pointer to the code of the function (the last code object). */
+INLINE Code* bodyCode(Function* f) {
+    return (Code*)((uintptr_t)f + f->foffset);
+}
 
 /** Returns the code object with given offset */
 INLINE Code* codeAt(Function* f, unsigned offset) {
-    return (Code*)((uint8_t*)f + offset);
+    return (Code*)((uintptr_t)f + offset);
 }
 
 const static uint32_t NO_DEOPT_INFO = (uint32_t)-1;

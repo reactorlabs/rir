@@ -35,7 +35,7 @@ bool Optimizer::inliner(CodeEditor& code, bool stable) {
 }
 
 SEXP Optimizer::reoptimizeFunction(SEXP s) {
-    Function* fun = (Function*)INTEGER(BODY(s));
+    Function* fun = sexp2function(BODY(s));
     bool safe = !fun->envLeaked && !fun->envChanged;
 
     CodeEditor code(s);

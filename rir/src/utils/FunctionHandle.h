@@ -103,7 +103,7 @@ class FunctionHandle {
         CodeHandle code(ast, codeSize, sources.size(), callSiteLength, offset,
                         insert);
 
-        assert(::function(code.code) == function);
+        assert(::code2function(code.code) == function);
 
         memcpy(code.bc(), bc, codeSize);
 
@@ -172,7 +172,7 @@ class FunctionHandle {
 
     CodeHandle entryPoint() {
         assert(function->foffset);
-        return (Code*)((uintptr_t)function + function->foffset);
+        return bodyCode(function);
     }
 
     CodeHandleIterator begin() { return CodeHandleIterator(::begin(function)); }
@@ -188,7 +188,7 @@ class FunctionHandle {
     }
 
     inline Code* codeAtOffset(unsigned offset) {
-        return (Code*)((uintptr_t)function + offset);
+        return codeAt(function, offset);
     }
 
     SEXP ast() { return entryPoint().ast(); }
