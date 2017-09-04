@@ -14,6 +14,7 @@
 #include "utils/FunctionHandle.h"
 
 #include "analysis/Signature.h"
+#include "analysis/liveness.h"
 #include "analysis_framework/analysis.h"
 #include "optimization/cp.h"
 #include "utils/Printer.h"
@@ -92,12 +93,26 @@ REXPORT SEXP rir_body(SEXP cls) {
 }
 
 REXPORT SEXP rir_analysis_signature(SEXP what) {
-    if (TYPEOF(what) != CLOSXP)
-        return R_NilValue;
+    ::Function * f = TYPEOF(what) == CLOSXP ? isValidClosureSEXP(what) : isValidFunctionSEXP(what);
+    if (f == nullptr)
+        Rf_error("Not a rir compiled code");
     CodeEditor ce(what);
     SignatureAnalysis sa;
     sa.analyze(ce);
     return sa.finalState().exportToR();
+}
+
+
+REXPORT SEXP rir_analysis_liveness(SEXP what) {
+    ::Function * f = TYPEOF(what) == CLOSXP ? isValidClosureSEXP(what) : isValidFunctionSEXP(what);
+    if (f == nullptr)
+        Rf_error("Not a rir compiled code");
+    CodeEditor ce(what);
+    LivenessAnalysis la;
+    la.analyze(ce);
+    la.finalState().getState().print();
+    Rprintf("\n");
+    return R_NilValue;
 }
 
 // startup ---------------------------------------------------------------------
