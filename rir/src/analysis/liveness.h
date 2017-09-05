@@ -106,7 +106,8 @@ private:
     AVALUE state;
 };
 
-class LivenessAnalysis : public BackwardAnalysisIns<LivenessAbstractState<ASet>>, public InstructionDispatcher::Receiver {
+class LivenessAnalysis : public BackwardAnalysisIns<LivenessAbstractState<ASet>>,
+                         public InstructionDispatcher::Receiver {
 public:
     LivenessAnalysis() :
         dispatcher_(*this) {

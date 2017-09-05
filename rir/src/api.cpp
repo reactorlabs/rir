@@ -110,8 +110,13 @@ REXPORT SEXP rir_analysis_liveness(SEXP what) {
     CodeEditor ce(what);
     LivenessAnalysis la;
     la.analyze(ce);
-    la.finalState().getState().print();
-    Rprintf("\n");
+    Rprintf("Liveness analysis dump:\n");
+    for (auto i = ce.begin(); i != ce.end(); ++i) {
+        Rprintf("  -- live: ");
+        la[i].getState().print();
+        Rprintf("\n");
+        (*i).print();
+    }
     return R_NilValue;
 }
 
