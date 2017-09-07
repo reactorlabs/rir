@@ -27,13 +27,8 @@ public:
 
     bool mergeWith(ASet const & other) {
         // This is just set union
-
         auto originalSize = variables.size();
-
-        for (auto const & var : other.variables) {
-            variables.insert(var);
-        }
-
+        variables.insert(other.variables.begin(), other.variables.end());
         return originalSize != variables.size();
     }
 
@@ -52,56 +47,39 @@ public:
     }
 
     std::unordered_set<SEXP> variables;
-
 };
 
 template <typename AVALUE>
-class LivenessAbstractState : public State
-{
-public:
+class LivenessAbstractState : public State {
+  public:
     
     LivenessAbstractState() = default;
 
     LivenessAbstractState(LivenessAbstractState const &) = default;
-    
-    virtual ~LivenessAbstractState()
-    {}
-    
+
+    virtual ~LivenessAbstractState() {}
+
     /** Creates a deep copy of the state and returns it.
      */
-    virtual LivenessAbstractState * clone() const
-    {
+    virtual LivenessAbstractState* clone() const {
         return new LivenessAbstractState(*this);
     }
 
     /** Merges the information from the other state, returns true if changed.
      */
-    virtual bool mergeWith(const State *other)
-    {
+    virtual bool mergeWith(const State* other) {
         return this->state.mergeWith(dynamic_cast<const LivenessAbstractState*>(other)->getState());
     }
-    
-    const ASet& getState() const
-    {
-        return state;
-    }
-    
-    void setState(const ASet& s)
-    {
-        state = s;
-    }
-    
-    void insert(SEXP e)
-    {
-        state.variables.insert(e);
-    }
-    
-    void erase(SEXP e)
-    {
-        state.variables.erase(e);
-    }
-    
-private:
+
+    const ASet& getState() const { return state; }
+
+    void setState(const ASet& s) { state = s; }
+
+    void insert(SEXP e) { state.variables.insert(e); }
+
+    void erase(SEXP e) { state.variables.erase(e); }
+
+  private:
     
     AVALUE state;
 };

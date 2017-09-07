@@ -165,9 +165,8 @@ class ForwardAnalysis : public Analysis {
         if (stored == nullptr) {
             stored = currentState_->clone();
             return true;
-        } else {
-            return stored->mergeWith(currentState_);
         }
+        return stored->mergeWith(currentState_);
     }
 
     std::deque<CodeEditor::Iterator> q_;
@@ -415,9 +414,8 @@ private:
         if (stored == nullptr) {
             stored = currentState_->clone();
             return true;
-        } else {
-            return stored->mergeWith(currentState_);
         }
+        return stored->mergeWith(currentState_);
     }
 
     std::vector<std::vector<CodeEditor::Iterator>> jumpOrigins_;
