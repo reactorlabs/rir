@@ -310,7 +310,7 @@ class BackwardAnalysis : public Analysis {
                 }
                 // add entry point to working list
                 // this assumes that the last instruction is always ret_
-                if (ins.isReturn()) {
+                if (isExitPoint(it)) {
                     q_.push_front(it);
                     dead = true;
                 }
@@ -329,7 +329,7 @@ class BackwardAnalysis : public Analysis {
                 BC cur = *currentIns_;
 
                 // start of new path
-                if (cur.isReturn()) {
+                if (isExitPoint(currentIns_)) {
                     assert(currentState_ == nullptr);
                     currentState_ = initialState_->clone();
                 }
@@ -435,6 +435,10 @@ protected:
         }
         return false;
     }
+
+    bool isExitPoint(CodeEditor::Iterator ins) const {
+        return ins + 1 == code_->end() || (*ins).isReturn();
+    }
 };
 
 template<typename ASTATE>
@@ -486,8 +490,8 @@ protected:
 
     void advance() {
         --currentIns_;
-        // this is entry point for the analysis, so initial state is needed
-        if ((*currentIns_).isReturn()) {
+        // if entry point for the analysis, initial state is needed
+        if (this->isExitPoint(currentIns_)) {
             delete currentState_;
             currentState_ = initialState_->clone();
         // here we have stored fixpoint, so use it
