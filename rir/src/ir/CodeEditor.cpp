@@ -9,6 +9,21 @@
 
 namespace rir {
 
+std::unordered_set<CodeEditor::Iterator> CodeEditor::next(CodeEditor::Iterator ins) {
+    std::unordered_set<CodeEditor::Iterator> result;
+    if (isExitPoint(ins))
+        return result;
+    // add jump target
+    if ((*ins).isJmp()) {
+        result.insert(target(*ins));
+    }
+    // add next instruction
+    if (!(*ins).isUncondJmp()) {
+        result.insert(ins + 1);
+    }
+    return result;
+}
+
 CodeEditor::CodeEditor(SEXP in) {
     SEXP bc = in;
     assert(TYPEOF(in) == EXTERNALSXP || TYPEOF(in) == CLOSXP);

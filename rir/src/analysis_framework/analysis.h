@@ -290,33 +290,16 @@ class BackwardAnalysis : public Analysis {
 
     void doAnalyze() override {
 
-        // First, forward pass to find the jumps that target labels
+        // First, forward pass to find jump origins for labels
         // and to add exit points to the working list
-        jumpOrigins_.resize(code_->numLabels());
-        int mpCount = 0;
-        bool dead = false;
         for (auto it = code_->begin(); it != code_->end(); ++it) {
-            BC ins = *it;
-            if (ins.is(Opcode::label)) dead = false;
-            if (!dead) {
-                // remember jump targets
-                if (ins.isJmp()) {
-                    JmpT l = ins.immediate.offset;
-                    jumpOrigins_[l].push_back(it);
-                }
-                // count merge points
-                if (isBasicBlockEnd(it)) {
-                    ++mpCount;
-                }
-                // add entry point to working list
-                // this assumes that the last instruction is always ret_
-                if (isExitPoint(it)) {
-                    q_.push_front(it);
-                    dead = true;
-                }
+            if (code_->isJmp(it)) {
+                jumpOrigins_[code_->target(it)].push_back(it);
+            }
+            if (code_->isExitPoint(it)) {
+                q_.push_front(it);
             }
         }
-        mergePoints_.reserve(mpCount);
 
         initialState_ = initialState();
         Dispatcher& d = dispatcher();
@@ -326,19 +309,14 @@ class BackwardAnalysis : public Analysis {
             q_.pop_front();
 
             while (true) {
-                BC cur = *currentIns_;
-
-                // start of new path
-                if (isExitPoint(currentIns_)) {
+                if (code_->isExitPoint(currentIns_)) {
+                    // need initial state
                     assert(currentState_ == nullptr);
                     currentState_ = initialState_->clone();
-                }
-                // merging
-                else if (isBasicBlockEnd(currentIns_)) {
-
+                } else if (isMergePoint(currentIns_)) {
                     // if state not stored, store copy of incoming
-                    State * & stored = mergePoints_[currentIns_];  // first call to [] initializes to nullptr
-                    if (stored == nullptr) {
+                    State*& stored = mergePoints_[currentIns_];  // first call to [] initializes to nullptr
+                    if (!stored) {
                         assert(currentState_ != nullptr);
                         stored = currentState_->clone();
                     } else {
@@ -361,8 +339,8 @@ class BackwardAnalysis : public Analysis {
                 // user dispatch method
                 d.dispatch(currentIns_);
 
-                // endpoint is begining
-                if (currentIns_ == code_->begin()) {
+                if (code_->isEntryPoint(currentIns_)) {
+                    // backward analysis ends here
                     if (finalState_ == nullptr) {
                         finalState_ = currentState_;
                     } else {
@@ -373,21 +351,16 @@ class BackwardAnalysis : public Analysis {
                     break;
                 }
 
-                // add jumps, terminate finished branches
-                // possibly multiple paths lead to this instruction
-                if (cur.is(Opcode::label)) {
-
-                    // merge all origin points to this label and continue to prev
-                    for (auto& origin : jumpOrigins_[cur.immediate.offset]) {
+                if (code_->isLabel(currentIns_)) {
+                    // merge all origins for this label
+                    for (auto origin : jumpOrigins_[currentIns_]) {
                         if (shouldFollowJumpFrom(origin)) {
                             q_.push_front(origin);
                         }
                     }
-                    // if prev is unconditional jump elswhere or return, terminate branch
-                    BC prev = *(currentIns_ - 1);
-                    if ((prev.is(Opcode::br_) && code_->target(prev) != currentIns_) ||
-                            prev.isReturn()) {
-                        // all origins already in q_
+                    // if previous instruction doesn't lead here
+                    if (code_->isExitPoint(currentIns_ - 1) ||
+                            code_->next(currentIns_ - 1).count(currentIns_) == 0) {
                         delete currentState_;
                         currentState_ = nullptr;
                         break;
@@ -400,6 +373,10 @@ class BackwardAnalysis : public Analysis {
         }
     }
 
+    bool isMergePoint(CodeEditor::Iterator ins) const {
+        return code_->isJmp(ins);
+    }
+
     State* initialState_ = nullptr;
     State* currentState_ = nullptr;
     State* finalState_ = nullptr;
@@ -407,38 +384,18 @@ class BackwardAnalysis : public Analysis {
 
     std::unordered_map<CodeEditor::Iterator, State*> mergePoints_;
 
-
-private:
+  private:
     bool shouldFollowJumpFrom(CodeEditor::Iterator ins) {
-        State*& stored = mergePoints_[ins];  // first call to [] initializes to nullptr
-        if (stored == nullptr) {
+        State*& stored = mergePoints_[ins];
+        if (!stored) {
             stored = currentState_->clone();
             return true;
         }
         return stored->mergeWith(currentState_);
     }
 
-    std::vector<std::vector<CodeEditor::Iterator>> jumpOrigins_;
+    std::unordered_map<CodeEditor::Iterator, std::vector<CodeEditor::Iterator>> jumpOrigins_;
     std::deque<CodeEditor::Iterator> q_;
-
-protected:
-    bool isBasicBlockEnd(CodeEditor::Iterator ins) const {
-        BC cur = *ins;
-        // jumps are terminators
-        if (cur.isJmp()) return true;
-        // returns are entry points for analyses
-        if (cur.isReturn()) return false;
-        // whatever plus label means whatever is end of block
-        if (ins + 1 != code_->end()) {
-            BC next = *(ins + 1);
-            if (next.is(Opcode::label)) return true;
-        }
-        return false;
-    }
-
-    bool isExitPoint(CodeEditor::Iterator ins) const {
-        return ins + 1 == code_->end() || (*ins).isReturn();
-    }
 };
 
 template<typename ASTATE>
@@ -484,18 +441,18 @@ protected:
     void initializeCache() {
         delete currentState_;  // possibly non-null?
         currentState_ = initialState_->clone();
-        currentIns_ = code_->end() - 1;
+        currentIns_ = code_->rbegin();
         dispatcher().dispatch(currentIns_);
     }
 
     void advance() {
         --currentIns_;
         // if entry point for the analysis, initial state is needed
-        if (this->isExitPoint(currentIns_)) {
+        if (code_->isExitPoint(currentIns_)) {
             delete currentState_;
             currentState_ = initialState_->clone();
         // here we have stored fixpoint, so use it
-        } else if (this->isBasicBlockEnd(currentIns_)) {
+        } else if (this->isMergePoint(currentIns_)) {
             auto fixpoint = mergePoints_[currentIns_];
             if (fixpoint) {
                 delete currentState_;
@@ -506,23 +463,19 @@ protected:
     }
 
     void seek(CodeEditor::Iterator ins) {
-        while (currentIns_ != code_->begin()) {
+        while (currentIns_ != code_->rend()) {
             if (currentIns_ == ins)
                 return;
             // advance the state using dispatcher
             advance();
         }
-        if (currentIns_ == ins)
-            return;
         // if we haven't found it, let's start over
         initializeCache();
-        while (currentIns_ != code_->begin()) {
+        while (currentIns_ != code_->rend()) {
             if (currentIns_ == ins)
                 return;
             advance();
         }
-        if (currentIns_ == ins)
-            return;
         assert(false and "not reachable");
     }
 };

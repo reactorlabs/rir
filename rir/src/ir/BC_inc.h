@@ -153,28 +153,37 @@ class BC {
         return (Opcode*)((uintptr_t)pos + bc.size() + bc.immediate.offset);
     }
 
-    bool isCallsite() {
+    bool isCallsite() const {
         return bc == Opcode::call_ || bc == Opcode::dispatch_ ||
                bc == Opcode::call_stack_ || bc == Opcode::dispatch_stack_ ||
                bc == Opcode::static_call_stack_;
     }
 
-    bool hasPromargs() {
+    bool hasPromargs() const {
         return bc == Opcode::call_ || bc == Opcode::dispatch_ ||
                bc == Opcode::promise_ || bc == Opcode::push_code_;
     }
 
-    bool isJmp() {
-        return bc == Opcode::br_ || bc == Opcode::brtrue_ ||
-               bc == Opcode::brfalse_ || bc == Opcode::brobj_ ||
-               bc == Opcode::beginloop_;
+    bool isCondJmp() const {
+        return bc == Opcode::brtrue_ || bc == Opcode::brfalse_ ||
+               bc == Opcode::brobj_ || bc == Opcode::beginloop_;
+    }
+
+    bool isUncondJmp() const {
+        return bc == Opcode::br_;
+    }
+
+    bool isJmp() const {
+        return isCondJmp() || isUncondJmp();
     }
 
     bool isPure() { return isPure(bc); }
 
-    bool isReturn() { return bc == Opcode::ret_ || bc == Opcode::return_; }
+    bool isReturn() const { return bc == Opcode::ret_ || bc == Opcode::return_; }
 
-    bool isGuard() {
+    bool isLabel() const { return bc == Opcode::label; }
+
+    bool isGuard() const {
         return bc == Opcode::guard_fun_ || bc == Opcode::guard_env_;
     }
 
