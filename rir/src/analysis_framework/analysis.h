@@ -13,6 +13,8 @@ namespace rir {
  */
 class Analysis {
   public:
+    virtual ~Analysis() {}
+
     /** Analyzes the given code.
 
       Internally sets the state and then calls the doAnalyze() virtual method
@@ -60,6 +62,8 @@ class Analysis {
 template <typename ASTATE>
 class ForwardAnalysis : public Analysis {
   public:
+    ~ForwardAnalysis() { invalidate(); }
+
     void invalidate() override {
         Analysis::invalidate();
         delete currentState_;
@@ -177,6 +181,8 @@ class ForwardAnalysisFinal : public ForwardAnalysis<ASTATE> {
     using ForwardAnalysis<ASTATE>::finalState_;
 
   public:
+    ~ForwardAnalysisFinal() = default;
+
     ASTATE const& finalState() {
         return *reinterpret_cast<ASTATE*>(finalState_);
     }
@@ -195,6 +201,8 @@ class ForwardAnalysisIns : public ForwardAnalysisFinal<ASTATE> {
     using ForwardAnalysis<ASTATE>::code_;
 
   public:
+    ~ForwardAnalysisIns() = default;
+
     ASTATE const& operator[](CodeEditor::Iterator ins) {
         if (ins != currentIns_)
             seek(ins);
@@ -214,6 +222,7 @@ class ForwardAnalysisIns : public ForwardAnalysisFinal<ASTATE> {
     }
 
     void initializeCache() {
+        delete currentState_;
         currentState_ = initialState_->clone();
         currentIns_ = code_->begin();
     }
@@ -259,6 +268,8 @@ class ForwardAnalysisIns : public ForwardAnalysisFinal<ASTATE> {
 template <typename ASTATE>
 class BackwardAnalysis : public Analysis {
   public:
+    ~BackwardAnalysis() { invalidate(); }
+
     void invalidate() override {
         Analysis::invalidate();
         delete currentState_;
@@ -402,6 +413,8 @@ template<typename ASTATE>
 class BackwardAnalysisFinal : public BackwardAnalysis<ASTATE> {
     using BackwardAnalysis<ASTATE>::finalState_;
 public:
+    ~BackwardAnalysisFinal() = default;
+
     ASTATE const& finalState() {
         return *reinterpret_cast<ASTATE*>(finalState_);
     }
@@ -420,6 +433,8 @@ protected:
     using BackwardAnalysis<ASTATE>::code_;
 
 public:
+    ~BackwardAnalysisIns() = default;
+
     ASTATE const& operator[](CodeEditor::Iterator ins) {
         if (ins != currentIns_)
             seek(ins);
