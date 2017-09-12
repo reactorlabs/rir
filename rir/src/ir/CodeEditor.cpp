@@ -14,11 +14,11 @@ std::unordered_set<CodeEditor::Iterator> CodeEditor::next(CodeEditor::Iterator i
     if (isExitPoint(ins))
         return result;
     // add jump target
-    if ((*ins).isJmp()) {
-        result.insert(target(*ins));
+    if (isJmp(ins)) {
+        result.insert(target(ins));
     }
     // add next instruction
-    if (!(*ins).isUncondJmp()) {
+    if (!isUncondJmp(ins)) {
         result.insert(ins + 1);
     }
     return result;
