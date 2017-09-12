@@ -72,8 +72,8 @@ class ForwardAnalysis : public Analysis {
         initialState_ = nullptr;
         currentState_ = nullptr;
         finalState_ = nullptr;
-        for (State* s : mergePoints_)
-            delete s;
+        for (auto& s : mergePoints_)
+            delete s.second;
         mergePoints_.clear();
     }
 
@@ -89,7 +89,6 @@ class ForwardAnalysis : public Analysis {
     virtual ASTATE* initialState() { return new ASTATE(); }
 
     void doAnalyze() override {
-        mergePoints_.resize(code_->numLabels());
         initialState_ = initialState();
         currentState_ = initialState_->clone();
         q_.push_front(code_->begin());
@@ -98,12 +97,10 @@ class ForwardAnalysis : public Analysis {
             currentIns_ = q_.front();
             q_.pop_front();
             while (true) {
-                BC cur = *currentIns_;
-
                 // if current instruction is label, deal with state merging
-                if (cur.is(Opcode::label)) {
+                if (code_->isLabel(currentIns_)) {
                     // if state not stored, store copy of incoming
-                    State*& stored = mergePoints_[cur.immediate.offset];
+                    State*& stored = mergePoints_[currentIns_];
                     if (stored == nullptr) {
                         assert(currentState_ != nullptr);
                         stored = currentState_->clone();
@@ -127,20 +124,17 @@ class ForwardAnalysis : public Analysis {
                 // user dispatch method
                 d.dispatch(currentIns_);
 
-                if (cur.is(Opcode::br_)) {
-                    LabelT l = cur.immediate.offset;
+                if (code_->isJmp(currentIns_)) {
+                    auto l = code_->target(currentIns_);
                     if (shouldJump(l)) {
-                        q_.push_front(code_->target(cur));
+                        q_.push_front(l);
                     }
-                    delete currentState_;
-                    currentState_ = nullptr;
-                    break;
-                } else if (cur.isJmp()) {
-                    LabelT l = cur.immediate.offset;
-                    if (shouldJump(l)) {
-                        q_.push_front(code_->target(cur));
+                    if (code_->isUncondJmp(currentIns_)) {
+                        delete currentState_;
+                        currentState_ = nullptr;
+                        break;
                     }
-                } else if (cur.isReturn()) {
+                } else if (code_->isExitPoint(currentIns_)) {
                     if (finalState_ == nullptr) {
                         finalState_ = currentState_;
                     } else {
@@ -161,10 +155,10 @@ class ForwardAnalysis : public Analysis {
     State* currentState_ = nullptr;
     State* finalState_ = nullptr;
     CodeEditor::Iterator currentIns_;
-    std::vector<State*> mergePoints_;
+    std::unordered_map<CodeEditor::Iterator, State*> mergePoints_;
 
   private:
-    bool shouldJump(size_t label) {
+    bool shouldJump(CodeEditor::Iterator label) {
         State*& stored = mergePoints_[label];
         if (stored == nullptr) {
             stored = currentState_->clone();
@@ -232,8 +226,8 @@ class ForwardAnalysisIns : public ForwardAnalysisFinal<ASTATE> {
         ++currentIns_;
         // if the cached instruction is label, dispose of the state and create a
         // copy of the fixpoint
-        if ((*currentIns_).is(Opcode::label)) {
-            auto fixpoint = mergePoints_[(*currentIns_).immediate.offset];
+        if (code_->isLabel(currentIns_)) {
+            auto fixpoint = mergePoints_[currentIns_];
             // if we reach dead code there is no merge state available
             if (fixpoint) {
                 delete currentState_;
@@ -246,7 +240,7 @@ class ForwardAnalysisIns : public ForwardAnalysisFinal<ASTATE> {
         while (currentIns_ != code_->end()) {
             if (currentIns_ == ins)
                 return;
-            if ((*currentIns_).isReturn())
+            if (code_->isExitPoint(currentIns_))
                 break;
             // advance the state using dispatcher
             advance();

@@ -422,6 +422,10 @@ class CodeEditor {
 
     bool isJmp(Iterator ins) const { return (*ins).isJmp(); }
 
+    bool isCondJmp(Iterator ins) const { return (*ins).isCondJmp(); }
+
+    bool isUncondJmp(Iterator ins) const { return (*ins).isUncondJmp(); }
+
     bool isLabel(Iterator ins) const { return (*ins).isLabel(); }
 
     CodeEditor(SEXP closure);
