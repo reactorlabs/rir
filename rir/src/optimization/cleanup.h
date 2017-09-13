@@ -47,8 +47,8 @@ class BCCleanup : public InstructionDispatcher::Receiver {
                 /* if we remove a dup instruction then the potentially
                  * following set_shared_ becomes obsolete as well */
                 if (isDup) {
-                    if ((ins + 1) != code_.end()) {
-                        auto next = ins + 1;
+                    if ((defI + 1) != code_.end()) {
+                        auto next = defI + 1;
                         if ((*next).is(Opcode::set_shared_)) {
                             next.asCursor(code_).remove();
                         }
