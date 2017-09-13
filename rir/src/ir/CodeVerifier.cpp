@@ -126,8 +126,7 @@ void CodeVerifier::vefifyFunctionLayout(SEXP sexp, ::Context* ctx) {
     Function* f = fun.function;
     if (f->origin) {
         assert(TYPEOF(f->origin) == EXTERNALSXP and "Invalid origin type");
-        assert(static_cast<unsigned>(INTEGER(f->origin)[0]) ==
-                   FUNCTION_MAGIC and
+        assert(sexp2function(f->origin)->magic == FUNCTION_MAGIC and
                "Origin does not seem to be function bytecode");
     }
     assert(f->codeLength == objs.size() and "Invalid number of code objects");
@@ -138,7 +137,7 @@ void CodeVerifier::vefifyFunctionLayout(SEXP sexp, ::Context* ctx) {
     for (size_t i = 0, e = objs.size() - 1; i != e; ++i) {
         Code* c = objs[i];
         assert(c->magic == CODE_MAGIC and "Invalid code magic number");
-        assert(function(c) == f and "Invalid code offset");
+        assert(code2function(c) == f and "Invalid code offset");
         assert(c->src != 0 and "Code must have AST");
         unsigned oldo = c->stackLength;
         calculateAndVerifyStack(c);

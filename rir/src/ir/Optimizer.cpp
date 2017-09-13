@@ -1,7 +1,7 @@
 #include "ir/Optimizer.h"
-#include "optimizer/cleanup.h"
-#include "optimizer/stupid_inline.h"
-#include "optimizer/localize.h"
+#include "optimization/cleanup.h"
+#include "optimization/localize.h"
+#include "optimization/stupid_inline.h"
 
 namespace rir {
 
@@ -35,7 +35,7 @@ bool Optimizer::inliner(CodeEditor& code, bool stable) {
 }
 
 SEXP Optimizer::reoptimizeFunction(SEXP s) {
-    Function* fun = (Function*)INTEGER(BODY(s));
+    Function* fun = sexp2function(BODY(s));
     bool safe = !fun->envLeaked && !fun->envChanged;
 
     CodeEditor code(s);

@@ -1,13 +1,13 @@
 #ifndef RIR_STUPID_INLINE_H
 #define RIR_STUPID_INLINE_H
 
-#include "ir/CodeEditor.h"
-#include "code/analysis.h"
-#include "code/dispatchers.h"
-#include "code/dataflow.h"
-#include "interpreter/interp_context.h"
-#include "ir/Compiler.h"
 #include "R/RList.h"
+#include "analysis/dataflow.h"
+#include "analysis_framework/analysis.h"
+#include "analysis_framework/dispatchers.h"
+#include "interpreter/interp_context.h"
+#include "ir/CodeEditor.h"
+#include "ir/Compiler.h"
 
 #include <unordered_set>
 
@@ -113,8 +113,8 @@ class StupidInliner {
             if (!isValidFunctionSEXP(fun))
                 continue;
 
-            Function* f = (Function*)INTEGER(fun);
-            Code* c = functionCode(f);
+            Function* f = sexp2function(fun);
+            Code* c = bodyCode(f);
 
             // TODO: This is a bit of a hack to find out if the function
             // has just one code object.

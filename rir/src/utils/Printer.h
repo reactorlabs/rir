@@ -1,22 +1,21 @@
 #pragma once
 
-#include "code/dispatchers.h"
+#include "analysis_framework/dispatchers.h"
 
 namespace rir {
 
 /** A simple demonstration of the dispatching, a printer.
 
-  As long as we need only single dispatcher, single driver and single receiver, they can all be parents of the class as they are in this simple example.
+  As long as we need only single dispatcher, single driver and single receiver,
+  they can all be parents of the class as they are in this simple example.
 
 */
 
 class Printer : public InstructionDispatcher::Receiver {
-public:
-    Printer():
-        dispatcher_(*this) {
-    }
+  public:
+    Printer() : dispatcher_(*this) {}
 
-    void run(CodeEditor & code) {
+    void run(CodeEditor& code) {
         pc_ = 0;
 
         for (auto i = code.begin(); i != code.end(); ++i)
@@ -54,8 +53,7 @@ public:
         Rprintf("Label %i:\n", bc.immediate.offset);
     }
 
-private:
-
+  private:
     // TODO slow & ugly
     void printOffset() {
         for (size_t i = 0; i != offset_; ++i)
@@ -66,5 +64,4 @@ private:
     size_t pc_ = 0;
     size_t offset_ = 0;
 };
-
 }

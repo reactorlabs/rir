@@ -1,12 +1,12 @@
 #ifndef RIR_ANALYSIS_DATAFLOW_H
 #define RIR_ANALYSIS_DATAFLOW_H
 
-#include "ir/CodeEditor.h"
-#include "R/r.h"
 #include "R/Funtab.h"
-#include "code/analysis.h"
-#include "code/dispatchers.h"
+#include "R/r.h"
+#include "analysis_framework/analysis.h"
+#include "analysis_framework/dispatchers.h"
 #include "interpreter/interp_context.h"
+#include "ir/CodeEditor.h"
 
 namespace rir {
 
@@ -361,7 +361,7 @@ class FGlobal {
 
 template <Type type>
 class DataflowAnalysis
-    : public ForwardAnalysisIns<AbstractState<FValue, FGlobal>>,
+    : public ForwardAnalysisIns<AbstractState<SEXP, FValue, FGlobal>>,
       public InstructionDispatcher::Receiver {
 
   public:
@@ -389,8 +389,8 @@ class DataflowAnalysis
   protected:
     virtual Dispatcher& dispatcher() override { return dispatcher_; }
 
-    AbstractState<FValue, FGlobal>* initialState() override {
-        auto* result = new AbstractState<FValue, FGlobal>();
+    AbstractState<SEXP, FValue, FGlobal>* initialState() override {
+        auto* result = new AbstractState<SEXP, FValue, FGlobal>();
         for (auto a : code_->arguments()) {
             (*result)[a.first] = FValue::Argument(a.first);
             if (a.second != R_MissingArg &&
