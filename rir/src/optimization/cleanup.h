@@ -182,7 +182,7 @@ class BCCleanup : public InstructionDispatcher::Receiver {
         }
 
         if (ins != code_.begin()) {
-            CodeEditor::Iterator bubbleUp = ins - 1;
+            CodeEditor::Iterator bubbleUp = ins;
             while (bubbleUp != code_.begin()) {
                 bubbleUp = bubbleUp - 1;
                 auto cur = *bubbleUp;
