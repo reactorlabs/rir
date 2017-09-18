@@ -41,6 +41,8 @@ class FunctionHandle {
         function->size = sizeof(Function);
         function->origin = nullptr;
         function->next = nullptr;
+        function->closure = nullptr;
+        // TODO(mhyee): signature
         function->codeLength = 0;
         function->foffset = 0;
         function->invocationCount = 0;
