@@ -2385,7 +2385,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
             advanceImmediate();
             advanceImmediate();
     #ifndef UNSOUND_OPTS
-            assert(res = findFun(sym, env));
+            assert(res == findFun(sym, env) && "guard_fun_ fail");
     #endif
             NEXT();
         }
