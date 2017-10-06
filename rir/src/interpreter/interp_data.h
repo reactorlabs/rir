@@ -37,6 +37,8 @@ extern "C" {
 // magic in his vector too...
 #define FUNCTION_MAGIC (unsigned)0xCAFEBABE
 
+#define DISPATCH_TABLE_MAGIC (unsigned)0xBEEF1234
+
 // Offset between function SEXP and Function* struct
 // This is basically sizeof(SEXPREC_ALIGN)
 #define FUNCTION_OFFSET 40
@@ -381,10 +383,16 @@ typedef struct Function {
     unsigned markOpt : 1;
     unsigned spare : 28;
 
+    // TODO(mhyee): remove origin and next
     FunctionSEXP origin; /// Same Function with fewer optimizations,
                          //   NULL if original
 
     FunctionSEXP next;
+
+    ClosureSEXP closure; /// pointer to Closure
+                         //    which has a pointer to DispatchTable
+
+    // TODO(mhyee): member for signature
 
     unsigned codeLength; /// number of Code objects in the Function
 
@@ -439,6 +447,45 @@ INLINE Code* bodyCode(Function* f) {
 /** Returns the code object with given offset */
 INLINE Code* codeAt(Function* f, unsigned offset) {
     return (Code*)((uintptr_t)f + offset);
+}
+
+typedef SEXP DispatchTableEntry;
+
+/*
+ * A dispatch table (vtable) for functions.
+ *
+ * We set TRUELENGTH to the size of the entry table, i.e. capacity, so the GC
+ * knows where the start of the entry table is.
+ */
+#pragma pack(push)
+#pragma pack(1)
+typedef struct DispatchTable {
+    unsigned magic; /// used to detect DispatchTables 0xBEEF1234
+
+    size_t length; /// number of entries
+
+    DispatchTableEntry entry[];
+} DispatchTable;
+#pragma pack(pop)
+
+INLINE SEXP dispatchTable2store(DispatchTable* t) {
+    SEXP result = (SEXP)((uintptr_t)t - sizeof(VECTOR_SEXPREC));
+    assert(TYPEOF(result) == EXTERNALSXP &&
+           "Either wrong memory altogether or bad counting");
+    return result;
+}
+
+INLINE DispatchTable* sexp2dispatchTable(SEXP s) {
+    return (DispatchTable*)INTEGER(s);
+}
+
+INLINE DispatchTable* isValidDispatchTableObject(SEXP s) {
+    if (TYPEOF(s) != EXTERNALSXP)
+        return nullptr;
+    DispatchTable* t = sexp2dispatchTable(s);
+    if (t->magic != DISPATCH_TABLE_MAGIC)
+        return nullptr;
+    return t;
 }
 
 const static uint32_t NO_DEOPT_INFO = (uint32_t)-1;

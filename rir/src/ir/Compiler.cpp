@@ -172,8 +172,8 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
 
     if (fun == symbol::Function && args.length() == 3) {
         auto cls = Compiler::compileClosure(args[1], args[0]);
-        cs << BC::push(cls.formals)
-           << BC::push(cls.bc)
+        cs << BC::push(FORMALS(cls))
+           << BC::push(BODY(cls))
            << BC::push(args[2])
            << BC::close();
         return true;
@@ -1219,7 +1219,7 @@ Compiler::CompilerRes Compiler::finalize() {
 
     FunctionHandle opt = code.finalize();
 #ifdef ENABLE_SLOWASSERT
-    CodeVerifier::vefifyFunctionLayout(opt.store, globalContext());
+    CodeVerifier::verifyFunctionLayout(opt.store, globalContext());
 #endif
 
     // Protect p;

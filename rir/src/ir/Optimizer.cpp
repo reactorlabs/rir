@@ -35,7 +35,7 @@ bool Optimizer::inliner(CodeEditor& code, bool stable) {
 }
 
 SEXP Optimizer::reoptimizeFunction(SEXP s) {
-    Function* fun = sexp2function(BODY(s));
+    Function* fun = sexp2function(s);
     bool safe = !fun->envLeaked && !fun->envChanged;
 
     CodeEditor code(s);
@@ -48,9 +48,9 @@ SEXP Optimizer::reoptimizeFunction(SEXP s) {
     }
 
     FunctionHandle opt = code.finalize();
-    opt.function->origin = BODY(s);
+    opt.function->origin = s;
 #ifdef ENABLE_SLOWASSERT
-    CodeVerifier::vefifyFunctionLayout(opt.store, globalContext());
+    CodeVerifier::verifyFunctionLayout(opt.store, globalContext());
 #endif
     SEXP res = opt.store;
     return res;

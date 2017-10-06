@@ -10,6 +10,7 @@
 C_OR_CPP Code* isValidPromiseSEXP(SEXP promise);
 C_OR_CPP Function* isValidClosureSEXP(SEXP closure);
 C_OR_CPP Function* isValidFunctionSEXP(SEXP wrapper);
+C_OR_CPP DispatchTable* isValidDispatchTableSEXP(SEXP wrapper);
 
 /** Checks if given closure should be executed using RIR.
 
