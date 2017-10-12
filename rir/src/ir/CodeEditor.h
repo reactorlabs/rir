@@ -73,6 +73,7 @@ class CodeEditor {
     BytecodeList last;
 
     std::vector<CodeEditor*> promises;
+    std::vector<unsigned> formalsPromises;  // indices of formal argument promises
 
     SEXP ast;
 
@@ -428,7 +429,7 @@ class CodeEditor {
 
     ~CodeEditor();
 
-    unsigned write(FunctionHandle& function);
+    unsigned write(FunctionHandle& function, bool isFormal = false);
 
     FunctionHandle finalize();
 

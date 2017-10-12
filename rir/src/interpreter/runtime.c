@@ -45,6 +45,7 @@ void printCode(Code* c) {
     Rprintf("  Magic:     %x (hex)\n", c->magic);
     Rprintf("  Stack (o): %u\n", c->stackLength);
     Rprintf("  Code size: %u [b]\n", c->codeSize);
+    Rprintf("  Is formal: %s\n", c->isFormalPromise ? "true" : "false");
     if (c->magic != CODE_MAGIC)
         Rf_error("Wrong magic number -- corrupted IR bytecode");
 

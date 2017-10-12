@@ -118,15 +118,15 @@ class Context {
 
     void pushPromiseContext(SEXP ast) { code.push(new PromiseContext(ast, fun, code.empty() ? nullptr : code.top())); }
 
-    FunIdxT pop() {
-        auto idx = cs().finalize();
+    FunIdxT pop(bool isFormal = false) {
+        auto idx = cs().finalize(isFormal);
         delete code.top();
         code.pop();
         return idx;
     }
 };
 
-FunIdxT compilePromise(Context& ctx, SEXP exp);
+FunIdxT compilePromise(Context& ctx, SEXP exp, bool isFormal = false);
 void compileExpr(Context& ctx, SEXP exp);
 void compileCall(Context& ctx, SEXP ast, SEXP fun, SEXP args);
 
@@ -1177,21 +1177,23 @@ void compileExpr(Context& ctx, SEXP exp) {
 std::vector<FunIdxT> compileFormals(Context& ctx, SEXP formals) {
     std::vector<FunIdxT> res;
 
-    for (auto arg = RList(formals).begin(); arg != RList::end(); ++arg) {
-        if (*arg == R_MissingArg)
-            res.push_back(MISSING_ARG_IDX);
-        else
-            res.push_back(compilePromise(ctx, *arg));
+    if (formals) {
+        for (auto arg = RList(formals).begin(); arg != RList::end(); ++arg) {
+            if (*arg == R_MissingArg)
+                res.push_back(MISSING_ARG_IDX);
+            else
+                res.push_back(compilePromise(ctx, *arg, true));
+        }
     }
 
     return res;
 }
 
-FunIdxT compilePromise(Context& ctx, SEXP exp) {
+FunIdxT compilePromise(Context& ctx, SEXP exp, bool isFormal) {
     ctx.pushPromiseContext(exp);
     compileExpr(ctx, exp);
     ctx.cs() << BC::ret();
-    return ctx.pop();
+    return ctx.pop(isFormal);
 }
 
 }  // anonymous namespace
@@ -1211,40 +1213,38 @@ Compiler::CompilerRes Compiler::finalize() {
     ctx.pop();
 
     CodeEditor code(function.entryPoint(), formals);
-    Optimizer::optimize(code);
 
     for (size_t i = 0; i < code.numPromises(); ++i)
         if (code.promise(i))
             Optimizer::optimize(*code.promise(i));
+
+    Optimizer::optimize(code);
 
     FunctionHandle opt = code.finalize();
 #ifdef ENABLE_SLOWASSERT
     CodeVerifier::verifyFunctionLayout(opt.store, globalContext());
 #endif
 
-    // Protect p;
-    // SEXP formout = R_NilValue;
-    // SEXP f = formout;
-    // SEXP formin = formals;
-    // for (auto prom : formProm) {
-    //     SEXP arg = (prom == MISSING_ARG_IDX) ?
-    //         R_MissingArg : (SEXP)opt.codeAtOffset(prom);
-    //     SEXP next = CONS_NR(arg, R_NilValue);
-    //     SET_TAG(next, TAG(formin));
-    //     formin = CDR(formin);
-    //     if (formout == R_NilValue) {
-    //         formout = f = next;
-    //         p(formout);
-    //     } else {
-    //         SETCDR(f, next);
-    //         f = next;
-    //     }
-    // }
+    Protect p;
+    SEXP formout = R_NilValue;
+    SEXP f = formout;
+    SEXP formin = formals;
+    for (auto prom : formProm) {
+        SEXP arg = (prom == MISSING_ARG_IDX) ?
+            R_MissingArg : (SEXP)opt.codeAtOffset(prom);
+        SEXP next = CONS_NR(arg, R_NilValue);
+        SET_TAG(next, TAG(formin));
+        formin = CDR(formin);
+        if (formout == R_NilValue) {
+            formout = f = next;
+            p(formout);
+        } else {
+            SETCDR(f, next);
+            f = next;
+        }
+    }
 
-    // TODO compiling the formals is broken, since the optimizer drops the
-    // formals code from the function object since they are not referenced!
-    //
-    return {opt.store, formals /* formout */ };
+    return { opt.store, formout };
 }
 
-}
+}  // namespace rir

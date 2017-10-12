@@ -1,5 +1,7 @@
 #include "CodeEditor.h"
 
+#include "R/RList.h"
+
 #include "BC.h"
 #include "CodeStream.h"
 #include "analysis/dataflow.h"
@@ -33,6 +35,21 @@ CodeEditor::CodeEditor(CodeHandle code, SEXP formals) {
 
 void CodeEditor::loadCode(FunctionHandle function, CodeHandle code) {
     std::unordered_map<Opcode*, LabelT> bcLabels;
+
+    // Add promises that are default values of formal arguments
+    if (formals_) {
+        for (auto c : function) {
+            if (c->isFormalPromise) {
+                CodeHandle ch(c);
+                CodeEditor* p = new CodeEditor(ch, nullptr);
+                auto idx = ch.idx();
+                if (promises.size() <= idx)
+                    promises.resize(idx + 1, nullptr);
+                promises[idx] = p;
+                formalsPromises.push_back(idx);
+            }
+        }
+    }
 
     {
         Opcode* pc = (Opcode*)code.bc();
@@ -135,8 +152,6 @@ void CodeEditor::loadCode(FunctionHandle function, CodeHandle code) {
 
 CodeEditor::~CodeEditor() {
     for (auto p : promises) {
-        if (!p)
-            continue;
         delete p;
     }
 
@@ -236,9 +251,13 @@ void CodeEditor::Cursor::print() {
         pos->bc.print();
 }
 
-unsigned CodeEditor::write(FunctionHandle& function) {
+unsigned CodeEditor::write(FunctionHandle& function, bool isFormal) {
     CodeStream cs(function, ast);
     cs.setNumLabels(labels_.size());
+
+    // Write the promises of compiled default values of args
+    for (auto form : formalsPromises)
+        promises[form]->write(function, true);
 
     for (Cursor cur = getCursor(); !cur.atEnd(); cur.advance()) {
         BC bc = cur.bc();
@@ -268,7 +287,7 @@ unsigned CodeEditor::write(FunctionHandle& function) {
             cs.addSrcIdx(cur.srcIdx());
     }
 
-    return cs.finalize();
+    return cs.finalize(isFormal);
 }
 
 FunctionHandle CodeEditor::finalize() {

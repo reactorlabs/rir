@@ -17,7 +17,7 @@ class CodeHandle {
     Code* code;
 
     CodeHandle(SEXP ast, unsigned codeSize, unsigned sourceSize,
-               unsigned callSiteLength, unsigned offset, void* insert) {
+               unsigned callSiteLength, unsigned offset, void* insert, bool isFormal) {
         code = new (insert) Code;
 
         code->magic = CODE_MAGIC;
@@ -28,6 +28,7 @@ class CodeHandle {
         code->skiplistLength = skiplistLength(sourceSize);
         code->callSiteLength = callSiteLength;
         code->perfCounter = 0;
+        code->isFormalPromise = isFormal;
     }
 
     CodeHandle(Code* code) : code(code) { assert(code->magic == CODE_MAGIC); }

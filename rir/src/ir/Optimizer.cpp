@@ -38,7 +38,9 @@ SEXP Optimizer::reoptimizeFunction(SEXP s) {
     Function* fun = sexp2function(s);
     bool safe = !fun->envLeaked && !fun->envChanged;
 
-    CodeEditor code(s);
+    FunctionHandle fh(s);
+    CodeHandle ch = fh.entryPoint();
+    CodeEditor code(ch, FORMALS(fun->closure));
 
     for (int i = 0; i < 16; ++i) {
         bool changedInl = Optimizer::inliner(code, safe);

@@ -347,6 +347,7 @@ static SEXP rirCallClosure(SEXP call, SEXP env, SEXP callee, SEXP actuals,
             Function* oldFun = fun;
             SEXP oldFunStore = funStore;
             cp_pool_add(ctx, oldFunStore);
+
             funStore = globalContext()->optimizer(funStore);
 
             oldFun->next = funStore;
@@ -535,7 +536,7 @@ SEXP doCall(Code* caller, SEXP callee, unsigned nargs, unsigned id, SEXP env,
             createArgsList(caller, call, nargs, cs, env, ctx, false);
         PROTECT(argslist);
 
-        // if body is INTSXP, it is rir serialized code, execute it directly
+        // if body is EXTERNALSXP, it is rir serialized code, execute it directly
         SEXP body = BODY(callee);
         if (TYPEOF(body) == EXTERNALSXP) {
             assert(isValidDispatchTableSEXP(body));

@@ -77,6 +77,9 @@ class Compiler {
         Compiler c(ast, formals, env);
         auto res = c.finalize();
 
+        // Set formals (do it right away to prevent gc?)
+        SET_FORMALS(closure, res.formals);
+
         // Set the compiled function's closure pointer.
         Function* func = sexp2function(res.bc);
         func->closure = closure;
@@ -93,10 +96,9 @@ class Compiler {
         vtable->length = 1;
         vtable->entry[0] = res.bc;
 
-        // Set the closure fields.
+        // Set the closure body
         // NOTE: The closure environment is set by the caller.
         SET_BODY(closure, vtableStore);
-        SET_FORMALS(closure, formals);
 
         UNPROTECT(2);
         return closure;

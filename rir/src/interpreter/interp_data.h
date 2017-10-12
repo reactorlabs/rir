@@ -148,6 +148,9 @@ typedef struct Code {
 
     unsigned perfCounter;
 
+    unsigned isFormalPromise : 1;  /// is this a default formal argument promise
+    unsigned free : 31;
+
     uint8_t data[]; /// the instructions
 
     /*
