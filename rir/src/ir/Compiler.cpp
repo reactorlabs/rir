@@ -1201,6 +1201,9 @@ FunIdxT compilePromise(Context& ctx, SEXP exp, bool isFormal) {
 Compiler::CompilerRes Compiler::finalize() {
     // Rprintf("****************************************************\n");
     // Rprintf("Compiling function\n");
+
+    Protect p;
+
     FunctionHandle function = FunctionHandle::create();
     Context ctx(function, preserve, env);
 
@@ -1221,11 +1224,11 @@ Compiler::CompilerRes Compiler::finalize() {
     Optimizer::optimize(code);
 
     FunctionHandle opt = code.finalize();
+    p(opt.store);
 #ifdef ENABLE_SLOWASSERT
     CodeVerifier::verifyFunctionLayout(opt.store, globalContext());
 #endif
 
-    Protect p;
     SEXP formout = R_NilValue;
     SEXP f = formout;
     SEXP formin = formals;

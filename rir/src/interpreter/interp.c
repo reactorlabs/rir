@@ -109,6 +109,9 @@ static void jit(SEXP cls, Context* ctx) {
     SEXP cmp = ctx->compiler(cls, NULL);
     SET_BODY(cls, BODY(cmp));
     SET_FORMALS(cls, FORMALS(cmp));
+    DispatchTable* dt = sexp2dispatchTable(BODY(cls));
+    Function* fun = sexp2function(dt->entry[0]);
+    fun->closure = cls;
 }
 
 void closureDebug(SEXP call, SEXP op, SEXP rho, SEXP newrho, RCNTXT* cntxt) {
@@ -348,7 +351,7 @@ static SEXP rirCallClosure(SEXP call, SEXP env, SEXP callee, SEXP actuals,
             SEXP oldFunStore = funStore;
             cp_pool_add(ctx, oldFunStore);
 
-            funStore = globalContext()->optimizer(funStore);
+            PROTECT(funStore = globalContext()->optimizer(funStore));
 
             oldFun->next = funStore;
             fun = sexp2function(funStore);
@@ -394,6 +397,9 @@ static SEXP rirCallClosure(SEXP call, SEXP env, SEXP callee, SEXP actuals,
             fun->invocationCount = oldFun->invocationCount + 1;
             fun->envLeaked = oldFun->envLeaked;
             fun->envChanged = oldFun->envChanged;
+            fun->closure = callee;
+
+            UNPROTECT(1);
 
             optimizing = false;
         } else if (fun->invocationCount < UINT_MAX)

@@ -24,20 +24,20 @@ CodeEditor::CodeEditor(SEXP in) {
     FunctionHandle fh(bc);
     CodeHandle ch = fh.entryPoint();
     ast = ch.ast();
-    loadCode(fh, ch);
+    loadCode(fh, ch, true);
 }
 
 CodeEditor::CodeEditor(CodeHandle code, SEXP formals) {
     formals_ = formals;
     ast = code.ast();
-    loadCode(code.function(), code);
+    loadCode(code.function(), code, formals_ != nullptr);
 }
 
-void CodeEditor::loadCode(FunctionHandle function, CodeHandle code) {
+void CodeEditor::loadCode(FunctionHandle function, CodeHandle code, bool loadFormals) {
     std::unordered_map<Opcode*, LabelT> bcLabels;
 
     // Add promises that are default values of formal arguments
-    if (formals_) {
+    if (loadFormals) {
         for (auto c : function) {
             if (c->isFormalPromise) {
                 CodeHandle ch(c);
@@ -151,9 +151,8 @@ void CodeEditor::loadCode(FunctionHandle function, CodeHandle code) {
 }
 
 CodeEditor::~CodeEditor() {
-    for (auto p : promises) {
+    for (auto p : promises)
         delete p;
-    }
 
     BytecodeList* pos = front.next;
     while (pos != & last) {

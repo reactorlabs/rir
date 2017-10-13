@@ -425,7 +425,7 @@ class CodeEditor {
         }
     }
 
-    void loadCode(FunctionHandle function, CodeHandle code);
+    void loadCode(FunctionHandle function, CodeHandle code, bool loadFormals);
 
     ~CodeEditor();
 

@@ -3,6 +3,7 @@
 
 #include "R/r.h"
 #include "R/Preserve.h"
+#include "R/Protect.h"
 #include "utils/FunctionHandle.h"
 
 #include <unordered_map>
@@ -71,14 +72,14 @@ class Compiler {
     }
 
     static SEXP compileClosure(SEXP ast, SEXP formals, SEXP env = R_NilValue) {
+        Protect p;
         SEXP closure = allocSExp(CLOSXP);
-        PROTECT(closure);
+        p(closure);
 
         Compiler c(ast, formals, env);
         auto res = c.finalize();
-
-        // Set formals (do it right away to prevent gc?)
-        SET_FORMALS(closure, res.formals);
+        p(res.bc);
+        p(res.formals);
 
         // Set the compiled function's closure pointer.
         Function* func = sexp2function(res.bc);
@@ -86,7 +87,8 @@ class Compiler {
 
         // Allocate a new vtable.
         size_t vtableSize = sizeof(DispatchTable) + sizeof(DispatchTableEntry);
-        SEXP vtableStore = PROTECT(Rf_allocVector(EXTERNALSXP, vtableSize));
+        SEXP vtableStore = Rf_allocVector(EXTERNALSXP, vtableSize);
+        p(vtableStore);
         DispatchTable* vtable = sexp2dispatchTable(vtableStore);
 
         // Initialize the vtable. Initially the table has one entry, which is
@@ -96,11 +98,11 @@ class Compiler {
         vtable->length = 1;
         vtable->entry[0] = res.bc;
 
-        // Set the closure body
+        // Set the closure fields.
         // NOTE: The closure environment is set by the caller.
         SET_BODY(closure, vtableStore);
+        SET_FORMALS(closure, res.formals);
 
-        UNPROTECT(2);
         return closure;
     }
 };
