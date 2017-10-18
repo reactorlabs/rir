@@ -21,7 +21,6 @@ namespace rir {
 class Compiler {
     SEXP exp;
     SEXP formals;
-    SEXP env;
     Preserve preserve;
 
   public:
@@ -30,22 +29,18 @@ class Compiler {
         SEXP formals;
     };
 
-    Compiler(SEXP exp, SEXP env) : exp(exp), formals(R_NilValue), env(env) {
+    Compiler(SEXP exp) : exp(exp), formals(R_NilValue) {
         preserve(exp);
-        if (env != R_NilValue)
-            preserve(env);
     }
 
-    Compiler(SEXP exp, SEXP formals, SEXP env) : exp(exp), formals(formals), env(env) {
+    Compiler(SEXP exp, SEXP formals) : exp(exp), formals(formals) {
         preserve(exp);
         preserve(formals);
-        if (env != R_NilValue)
-            preserve(env);
     }
 
     CompilerRes finalize();
 
-    static CompilerRes compileExpression(SEXP ast, SEXP env = R_NilValue) {
+    static CompilerRes compileExpression(SEXP ast) {
 #if 0
         size_t count = 1;
         static std::unordered_map<SEXP, size_t> counts;
@@ -67,16 +62,16 @@ class Compiler {
 #endif
 
         // Rf_PrintValue(ast);
-        Compiler c(ast, env);
+        Compiler c(ast);
         return c.finalize();
     }
 
-    static SEXP compileClosure(SEXP ast, SEXP formals, SEXP env = R_NilValue) {
+    static SEXP compileClosure(SEXP ast, SEXP formals) {
         Protect p;
         SEXP closure = allocSExp(CLOSXP);
         p(closure);
 
-        Compiler c(ast, formals, env);
+        Compiler c(ast, formals);
         auto res = c.finalize();
         p(res.bc);
         p(res.formals);

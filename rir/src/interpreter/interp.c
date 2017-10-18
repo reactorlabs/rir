@@ -106,7 +106,7 @@ static void jit(SEXP cls, Context* ctx) {
     assert(TYPEOF(cls) == CLOSXP);
     if (TYPEOF(BODY(cls)) == EXTERNALSXP)
         return;
-    SEXP cmp = ctx->compiler(cls, NULL);
+    SEXP cmp = ctx->compiler(cls);
     SET_BODY(cls, BODY(cmp));
     SET_FORMALS(cls, FORMALS(cmp));
     DispatchTable* dt = sexp2dispatchTable(BODY(cls));

@@ -82,7 +82,7 @@ class Context {
     FunctionHandle& fun;
     Preserve& preserve;
 
-    Context(FunctionHandle& fun, Preserve& preserve, SEXP env)
+    Context(FunctionHandle& fun, Preserve& preserve)
         : fun(fun), preserve(preserve) {}
 
     ~Context() { assert(code.empty()); }
@@ -1205,7 +1205,7 @@ Compiler::CompilerRes Compiler::finalize() {
     Protect p;
 
     FunctionHandle function = FunctionHandle::create();
-    Context ctx(function, preserve, env);
+    Context ctx(function, preserve);
 
     auto formProm = compileFormals(ctx, formals);
 

@@ -34,7 +34,7 @@ REXPORT SEXP rir_disassemble(SEXP what) {
     return R_NilValue;
 }
 
-REXPORT SEXP rir_compile(SEXP what, SEXP env) {
+REXPORT SEXP rir_compile(SEXP what) {
 
     // TODO make this nicer
     if (TYPEOF(what) == CLOSXP) {
@@ -47,7 +47,7 @@ REXPORT SEXP rir_compile(SEXP what, SEXP env) {
         if (TYPEOF(body) == EXTERNALSXP)
             Rf_error("closure already compiled");
 
-        SEXP result = Compiler::compileClosure(body, FORMALS(what), env);
+        SEXP result = Compiler::compileClosure(body, FORMALS(what));
         SET_CLOENV(result, CLOENV(what));
         Rf_copyMostAttrib(what, result);
         return result;
@@ -55,7 +55,7 @@ REXPORT SEXP rir_compile(SEXP what, SEXP env) {
         if (TYPEOF(what) == BCODESXP) {
             what = VECTOR_ELT(CDR(what), 0);
         }
-        auto res = Compiler::compileExpression(what, env);
+        auto res = Compiler::compileExpression(what);
         return res.bc;
     }
 }
