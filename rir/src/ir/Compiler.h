@@ -68,8 +68,7 @@ class Compiler {
 
     static SEXP compileClosure(SEXP ast, SEXP formals) {
         Protect p;
-        SEXP closure = allocSExp(CLOSXP);
-        p(closure);
+        SEXP closure = p(allocSExp(CLOSXP));
 
         Compiler c(ast, formals);
         auto res = c.finalize();
@@ -82,8 +81,7 @@ class Compiler {
 
         // Allocate a new vtable.
         size_t vtableSize = sizeof(DispatchTable) + sizeof(DispatchTableEntry);
-        SEXP vtableStore = Rf_allocVector(EXTERNALSXP, vtableSize);
-        p(vtableStore);
+        SEXP vtableStore = p(Rf_allocVector(EXTERNALSXP, vtableSize));
         DispatchTable* vtable = sexp2dispatchTable(vtableStore);
 
         // Initialize the vtable. Initially the table has one entry, which is

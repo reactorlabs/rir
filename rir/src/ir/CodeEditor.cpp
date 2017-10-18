@@ -27,10 +27,15 @@ CodeEditor::CodeEditor(SEXP in) {
     loadCode(fh, ch, true);
 }
 
+CodeEditor::CodeEditor(CodeHandle code) {
+    ast = code.ast();
+    loadCode(code.function(), code, false);
+}
+
 CodeEditor::CodeEditor(CodeHandle code, SEXP formals) {
     formals_ = formals;
     ast = code.ast();
-    loadCode(code.function(), code, formals_ != nullptr);
+    loadCode(code.function(), code, true);
 }
 
 void CodeEditor::loadCode(FunctionHandle function, CodeHandle code, bool loadFormals) {
@@ -41,7 +46,7 @@ void CodeEditor::loadCode(FunctionHandle function, CodeHandle code, bool loadFor
         for (auto c : function) {
             if (c->isFormalPromise) {
                 CodeHandle ch(c);
-                CodeEditor* p = new CodeEditor(ch, nullptr);
+                CodeEditor* p = new CodeEditor(ch);
                 auto idx = ch.idx();
                 if (promises.size() <= idx)
                     promises.resize(idx + 1, nullptr);
@@ -112,7 +117,7 @@ void CodeEditor::loadCode(FunctionHandle function, CodeHandle code, bool loadFor
 
                     bc.immediate.fun = code.idx();
 
-                    CodeEditor* p = new CodeEditor(code, nullptr);
+                    CodeEditor* p = new CodeEditor(code);
 
                     if (promises.size() <= code.idx())
                         promises.resize(code.idx() + 1, nullptr);
@@ -132,7 +137,7 @@ void CodeEditor::loadCode(FunctionHandle function, CodeHandle code, bool loadFor
                         if (arg <= MAX_ARG_IDX) {
                             CodeHandle code = function.codeAtOffset(arg);
                             arg = code.idx();
-                            CodeEditor* p = new CodeEditor(code, nullptr);
+                            CodeEditor* p = new CodeEditor(code);
                             if (promises.size() <= code.idx())
                                 promises.resize(code.idx() + 1, nullptr);
                             promises[code.idx()] = p;
@@ -256,7 +261,8 @@ unsigned CodeEditor::write(FunctionHandle& function, bool isFormal) {
 
     // Write the promises of compiled default values of args
     for (auto form : formalsPromises)
-        promises[form]->write(function, true);
+        if (promises[form])
+            promises[form]->write(function, true);
 
     for (Cursor cur = getCursor(); !cur.atEnd(); cur.advance()) {
         BC bc = cur.bc();

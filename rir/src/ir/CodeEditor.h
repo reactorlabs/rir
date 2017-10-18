@@ -408,7 +408,8 @@ class CodeEditor {
 
     Iterator end() const { return Iterator(&last); }
 
-    CodeEditor(SEXP closure);
+    explicit CodeEditor(SEXP closure);
+    explicit CodeEditor(CodeHandle code);
     CodeEditor(CodeHandle code, SEXP formals);
 
     std::map<SEXP, SEXP> arguments() const {

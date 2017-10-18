@@ -1202,8 +1202,6 @@ Compiler::CompilerRes Compiler::finalize() {
     // Rprintf("****************************************************\n");
     // Rprintf("Compiling function\n");
 
-    Protect p;
-
     FunctionHandle function = FunctionHandle::create();
     Context ctx(function, preserve);
 
@@ -1224,11 +1222,24 @@ Compiler::CompilerRes Compiler::finalize() {
     Optimizer::optimize(code);
 
     FunctionHandle opt = code.finalize();
-    p(opt.store);
+
 #ifdef ENABLE_SLOWASSERT
     CodeVerifier::verifyFunctionLayout(opt.store, globalContext());
 #endif
 
+    // Update the formals offsets because optimizing the promises might
+    // have changed the lengths of some code objects
+    Code* c = begin(opt.function);
+    for (unsigned int i = 0; i < formProm.size(); ++i) {
+         if (formProm[i] == MISSING_ARG_IDX)
+            continue;
+        while (!c->isFormalPromise)
+            c = next(c);
+        formProm[i] = c->header;
+        c = next(c);
+    }
+
+    Protect p;
     SEXP formout = R_NilValue;
     SEXP f = formout;
     SEXP formin = formals;
