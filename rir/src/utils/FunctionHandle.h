@@ -12,6 +12,8 @@
 namespace rir {
 
 class FunctionHandle {
+  private:
+    bool storeOwner_ = true;
   public:
     constexpr static unsigned initialSize = 2*sizeof(Function);
 
@@ -21,7 +23,8 @@ class FunctionHandle {
     size_t capacity;
     Function* function;
 
-    FunctionHandle() : function(nullptr) {}
+    FunctionHandle() = delete;
+    // also copy and move ctors = default ?
 
     static FunctionHandle create() {
         assert(initialSize > sizeof(Function));
@@ -48,18 +51,22 @@ class FunctionHandle {
         function->invocationCount = 0;
         function->markOpt = false;
 
-        return FunctionHandle(store);
+        FunctionHandle res(store);
+        res.storeOwner_ = true;
+
+        return res;
     }
 
-    FunctionHandle(SEXP store)
-        : store(store), payload(INTEGER(store)), capacity(XLENGTH(store)),
-          function((Function*)payload) {
+    explicit FunctionHandle(SEXP store)
+        : storeOwner_(false), store(store), payload(INTEGER(store)),
+          capacity(XLENGTH(store)), function((Function*)payload) {
         assert(function->magic == FUNCTION_MAGIC);
         assert(function->size <= capacity);
     }
 
     ~FunctionHandle() {
-        R_ReleaseObject(store);
+        if (storeOwner_)
+            R_ReleaseObject(store);
     }
 
     CodeHandle writeCode(SEXP ast, void* bc, unsigned codeSize,

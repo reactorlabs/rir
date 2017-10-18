@@ -34,7 +34,7 @@ void CodeHandle::print() {
 }
 
 FunctionHandle CodeHandle::function() {
-    return ::function2store(::code2function(code));
+    return FunctionHandle(::function2store(::code2function(code)));
 }
 
 FunIdxT CodeHandle::idx() {
