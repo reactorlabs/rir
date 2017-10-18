@@ -1231,7 +1231,7 @@ Compiler::CompilerRes Compiler::finalize() {
     // have changed the lengths of some code objects
     Code* c = begin(opt.function);
     for (unsigned int i = 0; i < formProm.size(); ++i) {
-         if (formProm[i] == MISSING_ARG_IDX)
+        if (formProm[i] == MISSING_ARG_IDX)
             continue;
         while (!c->isFormalPromise)
             c = next(c);
