@@ -21,6 +21,8 @@ class CodeHandle {
         code = new (insert) Code;
 
         code->magic = CODE_MAGIC;
+        code->_padding1 = 0xabababab;
+        code->attributes = R_NilValue;
         code->header = offset;
         code->src = src_pool_add(globalContext(), ast);
         code->codeSize = codeSize;
