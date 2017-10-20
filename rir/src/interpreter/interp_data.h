@@ -131,9 +131,6 @@ typedef struct Code {
     unsigned magic; ///< Magic number that attempts to be PROMSXP already marked
     /// by the GC
 
-    unsigned _padding1;
-    SEXP attributes;  /// Attributes field
-
     unsigned header; /// offset to Function object
 
     // TODO comment these

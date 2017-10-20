@@ -1163,6 +1163,9 @@ void compileExpr(Context& ctx, SEXP exp) {
         Case(BCODESXP) {
             assert(false);
         }
+        Case(EXTERNALSXP) {
+            assert(false);  // how to deal with this? (examples for base, through duplicate1 call
+        }
         // TODO : some code (eg. serialize.c:2154) puts closures into asts...
         //        not sure how we want to handle it...
         // Case(CLOSXP) {
