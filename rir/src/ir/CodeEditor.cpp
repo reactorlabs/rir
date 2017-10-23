@@ -20,6 +20,8 @@ CodeEditor::CodeEditor(SEXP in) {
         formals_ = FORMALS(in);
         DispatchTable* dispatchTable = sexp2dispatchTable(BODY(in));
         bc = dispatchTable->entry[0];
+    } else {
+        assert(isValidFunctionObject(in));
     }
     FunctionHandle fh(bc);
     CodeHandle ch = fh.entryPoint();
@@ -242,8 +244,18 @@ void CodeEditor::print(bool verbose) {
         if (!p)
             continue;
 
+        bool isfp = false;
+        for (auto fp : formalsPromises)
+            if (i - 1 == fp) {
+                isfp = true;
+                break;
+            }
+
         Rprintf("------------------------\n");
-        Rprintf("@%d\n", (void*)(long)(i - 1));
+        if (isfp)
+            Rprintf("# formal promise\n");
+        else
+            Rprintf("@%d\n", (void*)(long)(i - 1));
         p->print();
     }
 }
