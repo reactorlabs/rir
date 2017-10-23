@@ -157,8 +157,8 @@ SEXP createArgsListStack(Code* c, size_t nargs, CallSiteStruct* cs, SEXP env,
         SEXP arg = ostack_at(ctx, nargs - i - 1);
 
         if (!eager && (arg == R_MissingArg || arg == R_DotsSymbol)) {
-            // We have to wrap them in a promise, otherwise they are threated
-            // as extression to be evaluated, when in fact they are meant to be
+            // We have to wrap them in a promise, otherwise they are treated
+            // as expressions to be evaluated, when in fact they are meant to be
             // asts as values
             SEXP promise = mkPROMISE(arg, env);
             SET_PRVALUE(promise, arg);
