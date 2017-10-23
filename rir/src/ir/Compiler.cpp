@@ -1164,7 +1164,7 @@ void compileExpr(Context& ctx, SEXP exp) {
             assert(false);
         }
         Case(EXTERNALSXP) {
-            assert(false);  // how to deal with this? (examples for base, through duplicate1 call
+            assert(false);
         }
         // TODO : some code (eg. serialize.c:2154) puts closures into asts...
         //        not sure how we want to handle it...
@@ -1201,7 +1201,7 @@ FunIdxT compilePromise(Context& ctx, SEXP exp, bool isFormal) {
 
 }  // anonymous namespace
 
-Compiler::CompilerRes Compiler::finalize() {
+SEXP Compiler::finalize() {
     // Rprintf("****************************************************\n");
     // Rprintf("Compiling function\n");
 
@@ -1211,7 +1211,6 @@ Compiler::CompilerRes Compiler::finalize() {
     auto formProm = compileFormals(ctx, formals);
 
     ctx.push(exp);
-
     compileExpr(ctx, exp);
     ctx.cs() << BC::ret();
     ctx.pop();

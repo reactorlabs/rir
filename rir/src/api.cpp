@@ -55,8 +55,8 @@ REXPORT SEXP rir_compile(SEXP what) {
         if (TYPEOF(what) == BCODESXP) {
             what = VECTOR_ELT(CDR(what), 0);
         }
-        auto res = Compiler::compileExpression(what);
-        return res.bc;
+        SEXP result = Compiler::compileExpression(what);
+        return result;
     }
 }
 

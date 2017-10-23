@@ -108,7 +108,6 @@ static void jit(SEXP cls, Context* ctx) {
         return;
     SEXP cmp = ctx->compiler(cls);
     SET_BODY(cls, BODY(cmp));
-    SET_FORMALS(cls, FORMALS(cmp));
     DispatchTable* dt = sexp2dispatchTable(BODY(cls));
     Function* fun = sexp2function(dt->entry[0]);
     fun->closure = cls;

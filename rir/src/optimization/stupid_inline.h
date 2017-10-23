@@ -143,7 +143,7 @@ class StupidInliner {
                 if (idx < cs.nargs()) {
                     arg = code_.detachPromise(cs.args()[idx]);
                 } else {
-                    arg = new CodeEditor(Compiler::compileExpression(*f).bc);
+                    arg = new CodeEditor(Compiler::compileExpression(*f));
                 }
                 args[f.tag()] = arg;
                 ++idx;

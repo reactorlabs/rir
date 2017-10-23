@@ -24,10 +24,6 @@ class Compiler {
     Preserve preserve;
 
   public:
-    struct CompilerRes {
-        SEXP bc;
-        SEXP formals;
-    };
 
     Compiler(SEXP exp) : exp(exp), formals(R_NilValue) {
         preserve(exp);
@@ -38,9 +34,9 @@ class Compiler {
         preserve(formals);
     }
 
-    CompilerRes finalize();
+    SEXP finalize();
 
-    static CompilerRes compileExpression(SEXP ast) {
+    static SEXP compileExpression(SEXP ast) {
 #if 0
         size_t count = 1;
         static std::unordered_map<SEXP, size_t> counts;
@@ -71,12 +67,10 @@ class Compiler {
         SEXP closure = p(allocSExp(CLOSXP));
 
         Compiler c(ast, formals);
-        auto res = c.finalize();
-        p(res.bc);
-        p(res.formals);
+        SEXP res = p(c.finalize());
 
         // Set the compiled function's closure pointer.
-        Function* func = sexp2function(res.bc);
+        Function* func = sexp2function(res);
         func->closure = closure;
 
         // Allocate a new vtable.
@@ -89,12 +83,12 @@ class Compiler {
         SET_TRUELENGTH(vtableStore, 1);
         vtable->magic = DISPATCH_TABLE_MAGIC;
         vtable->length = 1;
-        vtable->entry[0] = res.bc;
+        vtable->entry[0] = res;
 
         // Set the closure fields.
         // NOTE: The closure environment is set by the caller.
         SET_BODY(closure, vtableStore);
-        SET_FORMALS(closure, res.formals);
+        SET_FORMALS(closure, formals);
 
         return closure;
     }
