@@ -268,18 +268,22 @@ static SEXP closureArgumentAdaptor(SEXP call, SEXP op, SEXP arglist, SEXP rho,
        environment layout.  We can live with it for now since it only
        happens immediately after the environment creation.  LT */
 
-    Code* c = begin(extractFunction(op));
     f = FORMALS(op);
     a = actuals;
+    // get the first Code that is a compiled formal (or end())
+    Code* c = nextFormalPromise(begin(extractFunction(op)));
     while (f != R_NilValue) {
         if (CAR(f) != R_MissingArg) {
             if (CAR(a) == R_MissingArg) {
-                while (!c->isFormalPromise)
-                    c = next(c);
+                assert(c != end(extractFunction(op)) &&
+                        "No more compiled formals available.");
                 SETCAR(a, createPromise(c, newrho));
                 SET_MISSING(a, 2);
             }
-            c = next(c);
+            // Either just used the compiled formal or it was not needed.
+            // Skip to next Code (at least the body Code is always there),
+            // then find the following compiled formal
+            c = nextFormalPromise(next(c));
         }
         assert(CAR(f) != R_DotsSymbol || TYPEOF(CAR(a)) == DOTSXP);
         f = CDR(f);

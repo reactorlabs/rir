@@ -495,6 +495,13 @@ INLINE Function* extractFunction(SEXP s) {
     return sexp2function(sexp2dispatchTable(BODY(s))->entry[0]);
 }
 
+INLINE Code* nextFormalPromise(Code* c) {
+    Code* e = end(code2function(c));
+    while (c != e && !c->isFormalPromise)
+        c = next(c);
+    return c;
+}
+
 const static uint32_t NO_DEOPT_INFO = (uint32_t)-1;
 
 #ifdef __cplusplus
