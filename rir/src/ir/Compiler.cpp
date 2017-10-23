@@ -1177,21 +1177,6 @@ void compileExpr(Context& ctx, SEXP exp) {
     }
 }
 
-std::vector<FunIdxT> compileFormals(Context& ctx, SEXP formals) {
-    std::vector<FunIdxT> res;
-
-    if (formals) {
-        for (auto arg = RList(formals).begin(); arg != RList::end(); ++arg) {
-            if (*arg == R_MissingArg)
-                res.push_back(MISSING_ARG_IDX);
-            else
-                res.push_back(compilePromise(ctx, *arg, true));
-        }
-    }
-
-    return res;
-}
-
 FunIdxT compilePromise(Context& ctx, SEXP exp, bool isFormal) {
     ctx.pushPromiseContext(exp);
     compileExpr(ctx, exp);
@@ -1208,7 +1193,11 @@ SEXP Compiler::finalize() {
     FunctionHandle function = FunctionHandle::create();
     Context ctx(function, preserve);
 
-    auto formProm = compileFormals(ctx, formals);
+    // Compile formals (if any)
+    for (auto arg = RList(formals).begin(); arg != RList::end(); ++arg) {
+        if (*arg != R_MissingArg)
+            compilePromise(ctx, *arg, true);
+    }
 
     ctx.push(exp);
     compileExpr(ctx, exp);
@@ -1229,38 +1218,7 @@ SEXP Compiler::finalize() {
     CodeVerifier::verifyFunctionLayout(opt.store, globalContext());
 #endif
 
-    // Update the formals offsets because optimizing the promises might
-    // have changed the lengths of some code objects
-    Code* c = begin(opt.function);
-    for (unsigned int i = 0; i < formProm.size(); ++i) {
-        if (formProm[i] == MISSING_ARG_IDX)
-            continue;
-        while (!c->isFormalPromise)
-            c = next(c);
-        formProm[i] = c->header;
-        c = next(c);
-    }
-
-    Protect p;
-    SEXP formout = R_NilValue;
-    SEXP f = formout;
-    SEXP formin = formals;
-    for (auto prom : formProm) {
-        SEXP arg = (prom == MISSING_ARG_IDX) ?
-            R_MissingArg : (SEXP)opt.codeAtOffset(prom);
-        SEXP next = CONS_NR(arg, R_NilValue);
-        SET_TAG(next, TAG(formin));
-        formin = CDR(formin);
-        if (formout == R_NilValue) {
-            formout = f = next;
-            p(formout);
-        } else {
-            SETCDR(f, next);
-            f = next;
-        }
-    }
-
-    return { opt.store, formout };
+    return opt.store;
 }
 
 }  // namespace rir

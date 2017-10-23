@@ -491,6 +491,10 @@ INLINE DispatchTable* isValidDispatchTableObject(SEXP s) {
     return t;
 }
 
+INLINE Function* extractFunction(SEXP s) {
+    return sexp2function(sexp2dispatchTable(BODY(s))->entry[0]);
+}
+
 const static uint32_t NO_DEOPT_INFO = (uint32_t)-1;
 
 #ifdef __cplusplus

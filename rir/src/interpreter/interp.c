@@ -268,12 +268,18 @@ static SEXP closureArgumentAdaptor(SEXP call, SEXP op, SEXP arglist, SEXP rho,
        environment layout.  We can live with it for now since it only
        happens immediately after the environment creation.  LT */
 
+    Code* c = begin(extractFunction(op));
     f = FORMALS(op);
     a = actuals;
     while (f != R_NilValue) {
-        if (CAR(a) == R_MissingArg && CAR(f) != R_MissingArg) {
-            SETCAR(a, mkPROMISE(CAR(f), newrho));
-            SET_MISSING(a, 2);
+        if (CAR(f) != R_MissingArg) {
+            if (CAR(a) == R_MissingArg) {
+                while (!c->isFormalPromise)
+                    c = next(c);
+                SETCAR(a, createPromise(c, newrho));
+                SET_MISSING(a, 2);
+            }
+            c = next(c);
         }
         assert(CAR(f) != R_DotsSymbol || TYPEOF(CAR(a)) == DOTSXP);
         f = CDR(f);
