@@ -4,7 +4,7 @@
 
 namespace rir {
 
-RList::RList(SEXP list) : list(list) {
+RList::RList(SEXP list) : list(list ? list : R_NilValue) {
     assert(TYPEOF(list) == LISTSXP || TYPEOF(list) == LANGSXP || TYPEOF(list) == NILSXP);
 }
 

@@ -355,7 +355,7 @@ class CodeEditor {
                             idx = duplicate.at(idx);
                         else
                             idx += proms;
-                        assert(editor.promises.size() >= idx &&
+                        assert(editor.promises.size() > idx &&
                                editor.promises[idx]);
                         CallSite_args(cs)[i] = idx;
                     }
@@ -366,7 +366,7 @@ class CodeEditor {
                         idx = duplicate.at(idx);
                     else
                         idx += proms;
-                    assert(editor.promises.size() >= idx &&
+                    assert(editor.promises.size() > idx &&
                            editor.promises[idx]);
                     insert->bc.immediate.fun = idx;
                 } else {
