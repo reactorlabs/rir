@@ -16,10 +16,7 @@ rir.disassemble <- function(what) {
 
 # compiles given closure, or expression and returns the compiled version.
 rir.compile <- function(what) {
-    if (typeof(what) == "closure")
-        .Call("rir_compile", what)
-    else
-        .Call("rir_compile", what)
+    .Call("rir_compile", what)
 }
 
 # compiles code of the given file and returns the list of compiled version.

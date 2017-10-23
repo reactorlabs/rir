@@ -34,7 +34,7 @@ REXPORT SEXP rir_disassemble(SEXP what) {
     return R_NilValue;
 }
 
-REXPORT SEXP rir_compile(SEXP what) {
+REXPORT SEXP rir_compile(SEXP what, SEXP env = NULL) {
 
     // TODO make this nicer
     if (TYPEOF(what) == CLOSXP) {
