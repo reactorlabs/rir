@@ -40,20 +40,20 @@ CodeEditor::CodeEditor(CodeHandle code, SEXP formals) {
     loadCode(code.function(), code, true);
 }
 
-void CodeEditor::loadCode(FunctionHandle function, CodeHandle code, bool loadFormals) {
+void CodeEditor::loadCode(FunctionHandle function, CodeHandle code, bool loadCompiledDefaultArgs) {
     std::unordered_map<Opcode*, LabelT> bcLabels;
 
     // Add promises that are default values of formal arguments
-    if (loadFormals) {
+    if (loadCompiledDefaultArgs) {
         for (auto c : function) {
-            if (c->isFormalPromise) {
+            if (c->isDefaultArgument) {
                 CodeHandle ch(c);
                 CodeEditor* p = new CodeEditor(ch);
                 auto idx = ch.idx();
                 if (promises.size() <= idx)
                     promises.resize(idx + 1, nullptr);
                 promises[idx] = p;
-                formalsPromises.push_back(idx);
+                defaultArguments.push_back(idx);
             }
         }
     }
@@ -245,7 +245,7 @@ void CodeEditor::print(bool verbose) {
             continue;
 
         bool isfp = false;
-        for (auto fp : formalsPromises)
+        for (auto fp : defaultArguments)
             if (i - 1 == fp) {
                 isfp = true;
                 break;
@@ -253,7 +253,7 @@ void CodeEditor::print(bool verbose) {
 
         Rprintf("------------------------\n");
         if (isfp)
-            Rprintf("# formal promise\n");
+            Rprintf("# default argument\n");
         else
             Rprintf("@%d\n", (void*)(long)(i - 1));
         p->print();
@@ -267,14 +267,14 @@ void CodeEditor::Cursor::print() {
         pos->bc.print();
 }
 
-unsigned CodeEditor::write(FunctionHandle& function, bool isFormal) {
+unsigned CodeEditor::write(FunctionHandle& function, bool isDefaultArgument) {
     CodeStream cs(function, ast);
     cs.setNumLabels(labels_.size());
 
     // Write the promises of compiled default values of args
-    for (auto form : formalsPromises)
-        if (promises[form])
-            promises[form]->write(function, true);
+    for (auto arg : defaultArguments)
+        if (promises[arg])
+            promises[arg]->write(function, true);
 
     for (Cursor cur = getCursor(); !cur.atEnd(); cur.advance()) {
         BC bc = cur.bc();
@@ -304,7 +304,7 @@ unsigned CodeEditor::write(FunctionHandle& function, bool isFormal) {
             cs.addSrcIdx(cur.srcIdx());
     }
 
-    return cs.finalize(isFormal);
+    return cs.finalize(isDefaultArgument);
 }
 
 FunctionHandle CodeEditor::finalize() {

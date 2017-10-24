@@ -259,10 +259,10 @@ class CodeStream {
         sources.insert(sources.begin() + sourceIdx + 1, size - 1, 0);
     }
 
-    FunIdxT finalize(bool markFormal) {
+    FunIdxT finalize(bool markDefaultArg) {
         CodeHandle res =
             function.writeCode(ast, &(*code)[0], pos, callSites_.data(),
-                               callSites_.size(), sources, markFormal);
+                               callSites_.size(), sources, markDefaultArg);
 
         for (auto p : patchpoints) {
             unsigned pos = p.first;

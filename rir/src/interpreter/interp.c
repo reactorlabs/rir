@@ -270,8 +270,9 @@ static SEXP closureArgumentAdaptor(SEXP call, SEXP op, SEXP arglist, SEXP rho,
 
     f = FORMALS(op);
     a = actuals;
-    // get the first Code that is a compiled formal (or end())
-    Code* c = nextFormalPromise(begin(extractFunction(op)));
+    // get the first Code that is a compiled default value of a formal arg
+    // (or end() if no such exist)
+    Code* c = findDefaultArgument(begin(extractFunction(op)));
     while (f != R_NilValue) {
         if (CAR(f) != R_MissingArg) {
             if (CAR(a) == R_MissingArg) {
@@ -283,7 +284,7 @@ static SEXP closureArgumentAdaptor(SEXP call, SEXP op, SEXP arglist, SEXP rho,
             // Either just used the compiled formal or it was not needed.
             // Skip to next Code (at least the body Code is always there),
             // then find the following compiled formal
-            c = nextFormalPromise(next(c));
+            c = findDefaultArgument(next(c));
         }
         assert(CAR(f) != R_DotsSymbol || TYPEOF(CAR(a)) == DOTSXP);
         f = CDR(f);

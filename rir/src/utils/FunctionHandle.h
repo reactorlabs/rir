@@ -71,7 +71,7 @@ class FunctionHandle {
 
     CodeHandle writeCode(SEXP ast, void* bc, unsigned codeSize,
                          char* callSiteBuffer, unsigned callSiteLength,
-                         std::vector<unsigned>& sources, bool markFormal) {
+                         std::vector<unsigned>& sources, bool markDefaultArg) {
         assert(function->size <= capacity);
 
         unsigned totalSize =
@@ -110,7 +110,7 @@ class FunctionHandle {
         assert(function->size <= capacity);
 
         CodeHandle code(ast, codeSize, sources.size(), callSiteLength, offset,
-                        insert, markFormal);
+                        insert, markDefaultArg);
 
         assert(::code2function(code.code) == function);
 

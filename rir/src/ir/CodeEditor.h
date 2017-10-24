@@ -73,7 +73,8 @@ class CodeEditor {
     BytecodeList last;
 
     std::vector<CodeEditor*> promises;
-    std::vector<unsigned> formalsPromises;  // indices of formal argument promises
+    std::vector<unsigned> defaultArguments;  // indices of promises that are compiled
+                                             // default arguments
 
     SEXP ast;
 
@@ -426,11 +427,11 @@ class CodeEditor {
         }
     }
 
-    void loadCode(FunctionHandle function, CodeHandle code, bool loadFormals);
+    void loadCode(FunctionHandle function, CodeHandle code, bool loadCompiledDefaultArgs);
 
     ~CodeEditor();
 
-    unsigned write(FunctionHandle& function, bool isFormal = false);
+    unsigned write(FunctionHandle& function, bool isDefaultArgument = false);
 
     FunctionHandle finalize();
 
