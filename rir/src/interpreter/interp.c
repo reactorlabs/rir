@@ -17,6 +17,7 @@ extern SEXP Rf_NewEnvironment(SEXP, SEXP, SEXP);
 extern Rboolean R_Visible;
 
 // #define UNSOUND_OPTS
+
 // helpers
 
 INLINE SEXP getSrcAt(Code* c, OpcodeT* pc, Context* ctx) {
@@ -309,21 +310,33 @@ SEXP rirCallTrampoline(RCNTXT* cntxt, Code* code, SEXP env, unsigned nargs,
 static SEXP rirCallClosure(SEXP call, SEXP env, SEXP callee, SEXP actuals,
                            unsigned nargs, Context* ctx) {
 
-    SEXP body = BODY(callee);
-    Function* fun = sexp2function(body);
+    SEXP vtableStore = BODY(callee);
+    DispatchTable* vtable = sexp2dispatchTable(vtableStore);
+    SEXP funStore = vtable->entry[0];
+    Function* fun = sexp2function(funStore);
 
     static bool optimizing = false;
 
+    // NOTE(mhyee): The introduction of a dispatch table for different function
+    // versions changes many things. This function handles a closure call, and
+    // will optimize the closure function and update the linked list of
+    // functions, so that subsequent closure calls pick the most optimized
+    // version.
+    // This is no longer true with the dispatch table, where the first function
+    // is always selected, unless specified by the call instruction.
+    // For now, to keep the changes simpler, we'll just optimize the function
+    // once and add it to the dispatch table. But the call will still select
+    // the original, unoptimized version.
+
     if (!optimizing &&
         !fun->next
-         /* currently there is a bug if we reoptimize a function twice:
-          *  Deopt ids from the first optimization and second optimizations
-          *  will be mixed and the deoptimizer always only goes back one
-          *  optimization level!
-          *  To avoid this bug we currently only optimize once
-          */
-        &&
-        !fun->origin) {
+        /* currently there is a bug if we reoptimize a function twice:
+         *  Deopt ids from the first optimization and second optimizations
+         *  will be mixed and the deoptimizer always only goes back one
+         *  optimization level!
+         *  To avoid this bug we currently only optimize once
+         */
+        && !fun->origin) {
         Code* code = bodyCode(fun);
         if (fun->markOpt ||
             (fun->invocationCount == 1 && code->perfCounter > 100) ||
@@ -332,21 +345,50 @@ static SEXP rirCallClosure(SEXP call, SEXP env, SEXP callee, SEXP actuals,
             optimizing = true;
 
             Function* oldFun = fun;
-            SEXP oldBody = body;
-            cp_pool_add(ctx, oldBody);
-            body = globalContext()->optimizer(callee);
+            SEXP oldFunStore = funStore;
+            cp_pool_add(ctx, oldFunStore);
+            funStore = globalContext()->optimizer(funStore);
 
-            // TODO: there might be promises with references to the old code!
-            // Therefore we keep it around.
-            // TODO: first I tried to use R_PreserveObject, but it did not work
-            // for large vectors, not sure why, need to investigate
-            cp_pool_add(ctx, body);
+            oldFun->next = funStore;
+            fun = sexp2function(funStore);
+            fun->origin = oldFunStore;
 
-            fun->next = body;
+            // Add the new function to the vtable.
+            if (vtable->length < TRUELENGTH(vtableStore)) {
+                vtable->entry[vtable->length++] = funStore;
+            } else {
+                // Allocate a new, larger vtable.
+                DispatchTable* oldVtable = vtable;
+                SEXP oldVtableStore = vtableStore;
 
-            SET_BODY(callee, body);
-            fun = sexp2function(body);
-            fun->origin = oldBody;
+                size_t capacity = TRUELENGTH(oldVtableStore) * 2;
+                size_t size = sizeof(DispatchTable) +
+                              (capacity * sizeof(DispatchTableEntry));
+                vtableStore = PROTECT(Rf_allocVector(EXTERNALSXP, size));
+                vtable = sexp2dispatchTable(vtableStore);
+
+                // Initialize the new vtable, copying old entries over.
+                SET_TRUELENGTH(vtableStore, capacity);
+                vtable->magic = DISPATCH_TABLE_MAGIC;
+                vtable->length = oldVtable->length + 1;
+
+                for (size_t i = 0; i < oldVtable->length; i++) {
+                    vtable->entry[i] = oldVtable->entry[i];
+                }
+
+                // Insert the new function version.
+                vtable->entry[oldVtable->length] = funStore;
+
+                // NULL out the remaining entries.
+                for (size_t i = vtable->length; i < capacity; i++) {
+                    vtable->entry[i] = NULL;
+                }
+
+                // Update the closure with the new vtable.
+                SET_BODY(callee, vtableStore);
+
+                UNPROTECT(1);
+            }
 
             fun->invocationCount = oldFun->invocationCount + 1;
             fun->envLeaked = oldFun->envLeaked;
@@ -496,7 +538,7 @@ SEXP doCall(Code* caller, SEXP callee, unsigned nargs, unsigned id, SEXP env,
         // if body is INTSXP, it is rir serialized code, execute it directly
         SEXP body = BODY(callee);
         if (TYPEOF(body) == EXTERNALSXP) {
-            assert(isValidFunctionSEXP(body));
+            assert(isValidDispatchTableSEXP(body));
             result =
                 rirCallClosure(call, env, callee, argslist, nargs, ctx);
             UNPROTECT(1);
@@ -636,7 +678,7 @@ SEXP doCallStack(Code* caller, SEXP callee, size_t nargs, unsigned id, SEXP env,
         // if body is INTSXP, it is rir serialized code, execute it directly
         SEXP body = BODY(callee);
         if (TYPEOF(body) == EXTERNALSXP) {
-            assert(isValidFunctionSEXP(body));
+            assert(isValidDispatchTableSEXP(body));
             res = rirCallClosure(call, env, callee, argslist, nargs, ctx);
             UNPROTECT(1);
             break;
@@ -754,7 +796,7 @@ SEXP doDispatchStack(Code* caller, size_t nargs, uint32_t id, SEXP env,
             // if body is INTSXP, it is rir serialized code, execute it directly
             SEXP body = BODY(callee);
             if (TYPEOF(body) == EXTERNALSXP) {
-                assert(isValidFunctionSEXP(body));
+                assert(isValidDispatchTableSEXP(body));
                 res =
                     rirCallClosure(call, env, callee, actuals, nargs, ctx);
                 break;
@@ -867,7 +909,7 @@ SEXP doDispatch(Code* caller, uint32_t nargs, uint32_t id, SEXP env,
             // if body is INTSXP, it is rir serialized code, execute it directly
             SEXP body = BODY(callee);
             if (TYPEOF(body) == EXTERNALSXP) {
-                assert(isValidFunctionSEXP(body));
+                assert(isValidDispatchTableSEXP(body));
                 res = rirCallClosure(call, env, callee, actuals, nargs, ctx);
                 break;
             }
@@ -1228,7 +1270,7 @@ void debug(Code* c, OpcodeT* pc, const char* name, unsigned depth, Context* ctx)
     }
 }
 
-#define BINDING_CACHE_SIZE 11
+#define BINDING_CACHE_SIZE 5
 typedef struct {
     SEXP loc;
     Immediate idx;
@@ -1236,24 +1278,26 @@ typedef struct {
 
 INLINE SEXP cachedGetBindingCell(SEXP env, Immediate idx, Context* ctx,
                                  BindingCache* bindingCache) {
-    if (env != R_BaseEnv && env != R_BaseNamespace) {
-        Immediate cidx = idx * (idx + 3) % BINDING_CACHE_SIZE;
-        if (bindingCache[cidx].idx == idx) {
-            return bindingCache[cidx].loc;
-        }
-        SEXP sym = cp_pool_at(ctx, idx);
-        SLOWASSERT(TYPEOF(sym) == SYMSXP);
-        R_varloc_t loc = R_findVarLocInFrame(env, sym);
-        if (!R_VARLOC_IS_NULL(loc)) {
-            bindingCache[cidx].loc = loc.cell;
-            bindingCache[cidx].idx = idx;
-            return loc.cell;
-        }
+    if (env == R_BaseEnv || env == R_BaseNamespace)
+        return NULL;
+
+    Immediate cidx = idx % BINDING_CACHE_SIZE;
+    if (bindingCache[cidx].idx == idx) {
+        return bindingCache[cidx].loc;
+    }
+
+    SEXP sym = cp_pool_at(ctx, idx);
+    SLOWASSERT(TYPEOF(sym) == SYMSXP);
+    R_varloc_t loc = R_findVarLocInFrame(env, sym);
+    if (!R_VARLOC_IS_NULL(loc)) {
+        bindingCache[cidx].loc = loc.cell;
+        bindingCache[cidx].idx = idx;
+        return loc.cell;
     }
     return NULL;
 }
 
-INLINE SEXP cachedGetVar(SEXP env, Immediate idx, Context* ctx,
+static SEXP cachedGetVar(SEXP env, Immediate idx, Context* ctx,
                          BindingCache* bindingCache) {
     SEXP loc = cachedGetBindingCell(env, idx, ctx, bindingCache);
     if (loc) {
@@ -1270,13 +1314,13 @@ INLINE SEXP cachedGetVar(SEXP env, Immediate idx, Context* ctx,
 #define BINDING_LOCK_MASK (1 << 14)
 #define IS_ACTIVE_BINDING(b) ((b)->sxpinfo.gp & ACTIVE_BINDING_MASK)
 #define BINDING_IS_LOCKED(b) ((b)->sxpinfo.gp & BINDING_LOCK_MASK)
-INLINE void cachedSetVar(SEXP val, SEXP env, Immediate idx, Context* ctx,
+static void cachedSetVar(SEXP val, SEXP env, Immediate idx, Context* ctx,
                          BindingCache* bindingCache) {
     SEXP loc = cachedGetBindingCell(env, idx, ctx, bindingCache);
     if (loc && !BINDING_IS_LOCKED(loc) && !IS_ACTIVE_BINDING(loc)) {
-        if (CAR(loc) == val)
+        SEXP cur = CAR(loc);
+        if (cur == val)
             return;
-
         INCREMENT_NAMED(val);
         SETCAR(loc, val);
         if (MISSING(loc))
@@ -1541,13 +1585,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
             SEXP body = ostack_at(ctx, 1);
             SEXP formals = ostack_at(ctx, 2);
             res = allocSExp(CLOSXP);
-
-            assert(isValidFunctionSEXP(body));
-            // Make sure to use the most optimized version of this function
-            while ((sexp2function(body))->next)
-                body = ((sexp2function(body))->next);
-            assert(isValidFunctionSEXP(body));
-
+            assert(isValidDispatchTableObject(body));
             SET_FORMALS(res, formals);
             SET_BODY(res, body);
             SET_CLOENV(res, env);
@@ -1693,7 +1731,9 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
             advanceImmediate();
             int wasChanged = FRAME_CHANGED(env);
             SEXP val = ostack_pop(ctx);
+
             cachedSetVar(val, env, id, ctx, bindingCache);
+
             if (!wasChanged)
                 CLEAR_FRAME_CHANGED(env);
             NEXT();
@@ -2380,7 +2420,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
             advanceImmediate();
             advanceImmediate();
     #ifndef UNSOUND_OPTS
-            assert(res = findFun(sym, env));
+            assert(res == findFun(sym, env) && "guard_fun_ fail");
     #endif
             NEXT();
         }
@@ -2644,6 +2684,12 @@ SEXP rirExpr(SEXP f) {
         Function* ff = sexp2function(f);
         return src_pool_at(globalContext(), bodyCode(ff)->src);
     }
+    if (isValidDispatchTableObject(f)) {
+        // Default is the source of the first function in the dispatch table
+        DispatchTable* t = sexp2dispatchTable(f);
+        Function* ff = sexp2function(t->entry[0]);
+        return src_pool_at(globalContext(), bodyCode(ff)->src);
+    }
     return f;
 }
 
@@ -2652,10 +2698,16 @@ SEXP rirEval_f(SEXP f, SEXP env) {
     // TODO we do not really need the arg counts now
     if (isValidCodeObject(f)) {
         Code* c = (Code*)f;
-        SEXP x = evalRirCode(c, globalContext(), env, 0);
-        return x;
-    } else {
+        return evalRirCode(c, globalContext(), env, 0);
+    } else if (isValidFunctionObject(f)) {
         Function* ff = sexp2function(f);
         return evalRirCode(bodyCode(ff), globalContext(), env, 0);
+    } else if (isValidDispatchTableObject(f)) {
+        // Default target is the first version in the dispatch table
+        DispatchTable* t = sexp2dispatchTable(f);
+        Function* ff = sexp2function(t->entry[0]);
+        return evalRirCode(bodyCode(ff), globalContext(), env, 0);
+    } else {
+        assert(false && "Expected a code object, function, or dispatch table");
     }
 }

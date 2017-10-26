@@ -31,7 +31,8 @@ CodeEditor::CodeEditor(SEXP in) {
         ::Function* f = isValidClosureSEXP(in);
         assert(f != nullptr);
         formals_ = FORMALS(in);
-        bc = BODY(in);
+        DispatchTable* dispatchTable = sexp2dispatchTable(BODY(in));
+        bc = dispatchTable->entry[0];
     }
     FunctionHandle fh(bc);
     CodeHandle ch = fh.entryPoint();

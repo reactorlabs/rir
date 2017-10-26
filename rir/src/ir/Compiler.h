@@ -70,9 +70,36 @@ class Compiler {
         return c.finalize();
     }
 
-    static CompilerRes compileClosure(SEXP ast, SEXP formals, SEXP env = R_NilValue) {
+    static SEXP compileClosure(SEXP ast, SEXP formals, SEXP env = R_NilValue) {
+        SEXP closure = allocSExp(CLOSXP);
+        PROTECT(closure);
+
         Compiler c(ast, formals, env);
-        return c.finalize();
+        auto res = c.finalize();
+
+        // Set the compiled function's closure pointer.
+        Function* func = sexp2function(res.bc);
+        func->closure = closure;
+
+        // Allocate a new vtable.
+        size_t vtableSize = sizeof(DispatchTable) + sizeof(DispatchTableEntry);
+        SEXP vtableStore = PROTECT(Rf_allocVector(EXTERNALSXP, vtableSize));
+        DispatchTable* vtable = sexp2dispatchTable(vtableStore);
+
+        // Initialize the vtable. Initially the table has one entry, which is
+        // the compiled function.
+        SET_TRUELENGTH(vtableStore, 1);
+        vtable->magic = DISPATCH_TABLE_MAGIC;
+        vtable->length = 1;
+        vtable->entry[0] = res.bc;
+
+        // Set the closure fields.
+        // NOTE: The closure environment is set by the caller.
+        SET_BODY(closure, vtableStore);
+        SET_FORMALS(closure, formals);
+
+        UNPROTECT(2);
+        return closure;
     }
 };
 

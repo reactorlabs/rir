@@ -7,6 +7,10 @@ SEXP execName;
 SEXP promExecName;
 Context* globalContext_;
 
+DispatchTable* isValidDispatchTableSEXP(SEXP wrapper) {
+    return isValidDispatchTableObject(wrapper);
+}
+
 Function* isValidFunctionSEXP(SEXP wrapper) {
     return isValidFunctionObject(wrapper);
 }
@@ -18,7 +22,13 @@ Function* isValidFunctionSEXP(SEXP wrapper) {
 Function* isValidClosureSEXP(SEXP closure) {
     if (TYPEOF(closure) != CLOSXP)
         return nullptr;
-    return isValidFunctionObject(BODY(closure));
+    DispatchTable* t = isValidDispatchTableObject(BODY(closure));
+    if (t == nullptr)
+        return nullptr;
+    Function* f = sexp2function(t->entry[0]);
+    if (f->magic != FUNCTION_MAGIC)
+        return nullptr;
+    return f;
 }
 
 Code* isValidPromiseSEXP(SEXP promise) {

@@ -17,7 +17,7 @@ class CodeVerifier {
 
     /** Verifies that the given function object is valid.
      */
-    static void vefifyFunctionLayout(SEXP sexp, ::Context* ctx);
+    static void verifyFunctionLayout(SEXP sexp, ::Context* ctx);
 };
 
 } // namespace rir

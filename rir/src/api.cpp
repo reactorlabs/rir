@@ -48,14 +48,9 @@ REXPORT SEXP rir_compile(SEXP what, SEXP env) {
         if (TYPEOF(body) == EXTERNALSXP)
             Rf_error("closure already compiled");
 
-        SEXP result = allocSExp(CLOSXP);
-        PROTECT(result);
-        auto res = Compiler::compileClosure(body, FORMALS(what), env);
-        SET_FORMALS(result, res.formals);
+        SEXP result = Compiler::compileClosure(body, FORMALS(what), env);
         SET_CLOENV(result, CLOENV(what));
-        SET_BODY(result, res.bc);
         Rf_copyMostAttrib(what, result);
-        UNPROTECT(1);
         return result;
     } else {
         if (TYPEOF(what) == BCODESXP) {
@@ -67,11 +62,16 @@ REXPORT SEXP rir_compile(SEXP what, SEXP env) {
 }
 
 REXPORT SEXP rir_markOptimize(SEXP what) {
+    // TODO(mhyee): This is to mark a function for optimization.
+    // However, now that we have vtables, does this still make sense? Maybe it
+    // might be better to mark a specific version for optimization.
+    // For now, we just mark the first version in the vtable.
     if (TYPEOF(what) != CLOSXP)
         return R_NilValue;
     SEXP b = BODY(what);
-    isValidFunctionSEXP(b);
-    Function* fun = sexp2function(b);
+    assert(isValidDispatchTableSEXP(b) && "Expected a DispatchTable");
+    DispatchTable* dt = sexp2dispatchTable(b);
+    Function* fun = sexp2function(dt->entry[0]);
     fun->markOpt = true;
     return R_NilValue;
 }
