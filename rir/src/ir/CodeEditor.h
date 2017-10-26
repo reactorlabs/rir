@@ -7,6 +7,7 @@
 #include "utils/CodeHandle.h"
 #include "interpreter/interp_context.h"
 
+#include <unordered_set>
 #include <set>
 #include <unordered_map>
 #include <map>
@@ -407,6 +408,26 @@ class CodeEditor {
 
     Iterator end() const { return Iterator(&last); }
 
+    Iterator rbegin() const { return Iterator(last.prev); }
+
+    Iterator rend() const { return Iterator(&front); }
+
+    bool isEntryPoint(Iterator ins) const { return ins == begin(); }
+
+    bool isExitPoint(Iterator ins) const { return ins == rbegin() || (*ins).isReturn(); }
+
+    /** Returns set of instructions that may follow after ins.
+     */
+    std::unordered_set<Iterator> next(Iterator ins);
+
+    bool isJmp(Iterator ins) const { return (*ins).isJmp(); }
+
+    bool isCondJmp(Iterator ins) const { return (*ins).isCondJmp(); }
+
+    bool isUncondJmp(Iterator ins) const { return (*ins).isUncondJmp(); }
+
+    bool isLabel(Iterator ins) const { return (*ins).isLabel(); }
+
     CodeEditor(SEXP closure);
     CodeEditor(CodeHandle code, SEXP formals);
 
@@ -469,6 +490,10 @@ class CodeEditor {
         size_t index = bc.immediate.offset;
         assert (index < labels_.size());
         return Iterator(labels_[index]);
+    }
+
+    Iterator target(Iterator ins) {
+        return target(*ins);
     }
 
     /** Returns number of labels in the code.
