@@ -3,6 +3,7 @@
 
 #include "R/r.h"
 #include "R/Preserve.h"
+#include "R/Protect.h"
 #include "utils/FunctionHandle.h"
 
 #include <unordered_map>
@@ -20,31 +21,22 @@ namespace rir {
 class Compiler {
     SEXP exp;
     SEXP formals;
-    SEXP env;
     Preserve preserve;
 
   public:
-    struct CompilerRes {
-        SEXP bc;
-        SEXP formals;
-    };
 
-    Compiler(SEXP exp, SEXP env) : exp(exp), formals(R_NilValue), env(env) {
+    Compiler(SEXP exp) : exp(exp), formals(R_NilValue) {
         preserve(exp);
-        if (env != R_NilValue)
-            preserve(env);
     }
 
-    Compiler(SEXP exp, SEXP formals, SEXP env) : exp(exp), formals(formals), env(env) {
+    Compiler(SEXP exp, SEXP formals) : exp(exp), formals(formals) {
         preserve(exp);
         preserve(formals);
-        if (env != R_NilValue)
-            preserve(env);
     }
 
-    CompilerRes finalize();
+    SEXP finalize();
 
-    static CompilerRes compileExpression(SEXP ast, SEXP env = R_NilValue) {
+    static SEXP compileExpression(SEXP ast) {
 #if 0
         size_t count = 1;
         static std::unordered_map<SEXP, size_t> counts;
@@ -66,24 +58,24 @@ class Compiler {
 #endif
 
         // Rf_PrintValue(ast);
-        Compiler c(ast, env);
+        Compiler c(ast);
         return c.finalize();
     }
 
-    static SEXP compileClosure(SEXP ast, SEXP formals, SEXP env = R_NilValue) {
-        SEXP closure = allocSExp(CLOSXP);
-        PROTECT(closure);
+    static SEXP compileClosure(SEXP ast, SEXP formals) {
+        Protect p;
+        SEXP closure = p(allocSExp(CLOSXP));
 
-        Compiler c(ast, formals, env);
-        auto res = c.finalize();
+        Compiler c(ast, formals);
+        SEXP res = p(c.finalize());
 
         // Set the compiled function's closure pointer.
-        Function* func = sexp2function(res.bc);
+        Function* func = sexp2function(res);
         func->closure = closure;
 
         // Allocate a new vtable.
         size_t vtableSize = sizeof(DispatchTable) + sizeof(DispatchTableEntry);
-        SEXP vtableStore = PROTECT(Rf_allocVector(EXTERNALSXP, vtableSize));
+        SEXP vtableStore = p(Rf_allocVector(EXTERNALSXP, vtableSize));
         DispatchTable* vtable = sexp2dispatchTable(vtableStore);
 
         // Initialize the vtable. Initially the table has one entry, which is
@@ -91,14 +83,13 @@ class Compiler {
         SET_TRUELENGTH(vtableStore, 1);
         vtable->magic = DISPATCH_TABLE_MAGIC;
         vtable->length = 1;
-        vtable->entry[0] = res.bc;
+        vtable->entry[0] = res;
 
         // Set the closure fields.
         // NOTE: The closure environment is set by the caller.
         SET_BODY(closure, vtableStore);
         SET_FORMALS(closure, formals);
 
-        UNPROTECT(2);
         return closure;
     }
 };

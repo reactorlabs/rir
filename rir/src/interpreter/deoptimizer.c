@@ -17,6 +17,8 @@ static DeoptInfo* DeoptInfo_alloc() {
         memcpy(newDeoptTable, deoptTable, deoptTableSize);
         memset((char*)newDeoptTable + deoptTableSize, 0,
                newDeoptTableSize - deoptTableSize);
+        if (deoptTableSize > 0)
+            free(deoptTable);
         deoptTable = newDeoptTable;
         deoptTableSize = newDeoptTableSize;
     }
@@ -39,8 +41,10 @@ uint32_t Deoptimizer_register(OpcodeT* oldPc) {
                sizeof(uint32_t) * deoptTableEntries);
         memset(newDeoptTableOffset + deoptTableEntries, 0,
                sizeof(uint32_t) * (newDeoptTableEntries - deoptTableEntries));
-        deoptTableEntries = newDeoptTableEntries;
+        if (deoptTableEntries > 0)
+            free(deoptTableOffset);
         deoptTableOffset = newDeoptTableOffset;
+        deoptTableEntries = newDeoptTableEntries;
     }
     uint32_t off = (char*)i - (char*)deoptTable;
     uint32_t idx = deoptTableEntriesUsed++;

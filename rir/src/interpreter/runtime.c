@@ -41,10 +41,11 @@ extern void c_printCode(Code * c);
 
 void printCode(Code* c) {
     Rprintf("Code object (%p offset %x (hex))\n", c, c->header);
-    Rprintf("  Source:    %u (index to src pool)\n", c->src);
-    Rprintf("  Magic:     %x (hex)\n", c->magic);
-    Rprintf("  Stack (o): %u\n", c->stackLength);
-    Rprintf("  Code size: %u [b]\n", c->codeSize);
+    Rprintf("  Source:      %u (index to src pool)\n", c->src);
+    Rprintf("  Magic:       %x (hex)\n", c->magic);
+    Rprintf("  Stack (o):   %u\n", c->stackLength);
+    Rprintf("  Code size:   %u [B]\n", c->codeSize);
+    Rprintf("  Default arg? %s\n", c->isDefaultArgument ? "yes" : "no");
     if (c->magic != CODE_MAGIC)
         Rf_error("Wrong magic number -- corrupted IR bytecode");
 

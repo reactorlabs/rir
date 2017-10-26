@@ -74,6 +74,8 @@ class CodeEditor {
     BytecodeList last;
 
     std::vector<CodeEditor*> promises;
+    std::vector<unsigned> defaultArguments;  // indices of promises that are compiled
+                                             // default arguments
 
     SEXP ast;
 
@@ -355,7 +357,7 @@ class CodeEditor {
                             idx = duplicate.at(idx);
                         else
                             idx += proms;
-                        assert(editor.promises.size() >= idx &&
+                        assert(editor.promises.size() > idx &&
                                editor.promises[idx]);
                         CallSite_args(cs)[i] = idx;
                     }
@@ -366,7 +368,7 @@ class CodeEditor {
                         idx = duplicate.at(idx);
                     else
                         idx += proms;
-                    assert(editor.promises.size() >= idx &&
+                    assert(editor.promises.size() > idx &&
                            editor.promises[idx]);
                     insert->bc.immediate.fun = idx;
                 } else {
@@ -428,7 +430,8 @@ class CodeEditor {
 
     bool isLabel(Iterator ins) const { return (*ins).isLabel(); }
 
-    CodeEditor(SEXP closure);
+    explicit CodeEditor(SEXP closure);
+    explicit CodeEditor(CodeHandle code);
     CodeEditor(CodeHandle code, SEXP formals);
 
     std::map<SEXP, SEXP> arguments() const {
@@ -445,11 +448,11 @@ class CodeEditor {
         }
     }
 
-    void loadCode(FunctionHandle function, CodeHandle code);
+    void loadCode(FunctionHandle function, CodeHandle code, bool loadCompiledDefaultArgs);
 
     ~CodeEditor();
 
-    unsigned write(FunctionHandle& function);
+    unsigned write(FunctionHandle& function, bool isDefaultArgument = false);
 
     FunctionHandle finalize();
 

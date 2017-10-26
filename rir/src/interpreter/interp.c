@@ -108,7 +108,9 @@ static void jit(SEXP cls, Context* ctx) {
         return;
     SEXP cmp = ctx->compiler(cls, NULL);
     SET_BODY(cls, BODY(cmp));
-    SET_FORMALS(cls, FORMALS(cmp));
+    DispatchTable* dt = sexp2dispatchTable(BODY(cls));
+    Function* fun = sexp2function(dt->entry[0]);
+    fun->closure = cls;
 }
 
 void closureDebug(SEXP call, SEXP op, SEXP rho, SEXP newrho, RCNTXT* cntxt) {
@@ -155,8 +157,8 @@ SEXP createArgsListStack(Code* c, size_t nargs, CallSiteStruct* cs, SEXP env,
         SEXP arg = ostack_at(ctx, nargs - i - 1);
 
         if (!eager && (arg == R_MissingArg || arg == R_DotsSymbol)) {
-            // We have to wrap them in a promise, otherwise they are threated
-            // as extression to be evaluated, when in fact they are meant to be
+            // We have to wrap them in a promise, otherwise they are treated
+            // as expressions to be evaluated, when in fact they are meant to be
             // asts as values
             SEXP promise = mkPROMISE(arg, env);
             SET_PRVALUE(promise, arg);
@@ -268,10 +270,21 @@ static SEXP closureArgumentAdaptor(SEXP call, SEXP op, SEXP arglist, SEXP rho,
 
     f = FORMALS(op);
     a = actuals;
+    // get the first Code that is a compiled default value of a formal arg
+    // (or end() if no such exist)
+    Code* c = findDefaultArgument(begin(extractFunction(op)));
     while (f != R_NilValue) {
-        if (CAR(a) == R_MissingArg && CAR(f) != R_MissingArg) {
-            SETCAR(a, mkPROMISE(CAR(f), newrho));
-            SET_MISSING(a, 2);
+        if (CAR(f) != R_MissingArg) {
+            if (CAR(a) == R_MissingArg) {
+                assert(c != end(extractFunction(op)) &&
+                        "No more compiled formals available.");
+                SETCAR(a, createPromise(c, newrho));
+                SET_MISSING(a, 2);
+            }
+            // Either just used the compiled formal or it was not needed.
+            // Skip to next Code (at least the body Code is always there),
+            // then find the following compiled formal
+            c = findDefaultArgument(next(c));
         }
         assert(CAR(f) != R_DotsSymbol || TYPEOF(CAR(a)) == DOTSXP);
         f = CDR(f);
@@ -347,7 +360,8 @@ static SEXP rirCallClosure(SEXP call, SEXP env, SEXP callee, SEXP actuals,
             Function* oldFun = fun;
             SEXP oldFunStore = funStore;
             cp_pool_add(ctx, oldFunStore);
-            funStore = globalContext()->optimizer(funStore);
+
+            PROTECT(funStore = globalContext()->optimizer(funStore));
 
             oldFun->next = funStore;
             fun = sexp2function(funStore);
@@ -393,6 +407,9 @@ static SEXP rirCallClosure(SEXP call, SEXP env, SEXP callee, SEXP actuals,
             fun->invocationCount = oldFun->invocationCount + 1;
             fun->envLeaked = oldFun->envLeaked;
             fun->envChanged = oldFun->envChanged;
+            fun->closure = callee;
+
+            UNPROTECT(1);
 
             optimizing = false;
         } else if (fun->invocationCount < UINT_MAX)
@@ -535,7 +552,7 @@ SEXP doCall(Code* caller, SEXP callee, unsigned nargs, unsigned id, SEXP env,
             createArgsList(caller, call, nargs, cs, env, ctx, false);
         PROTECT(argslist);
 
-        // if body is INTSXP, it is rir serialized code, execute it directly
+        // if body is EXTERNALSXP, it is rir serialized code, execute it directly
         SEXP body = BODY(callee);
         if (TYPEOF(body) == EXTERNALSXP) {
             assert(isValidDispatchTableSEXP(body));

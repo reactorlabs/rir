@@ -148,6 +148,10 @@ typedef struct Code {
 
     unsigned perfCounter;
 
+    unsigned isDefaultArgument : 1;  /// is this a compiled default value
+                                     /// of a formal argument
+    unsigned free : 31;
+
     uint8_t data[]; /// the instructions
 
     /*
@@ -486,6 +490,17 @@ INLINE DispatchTable* isValidDispatchTableObject(SEXP s) {
     if (t->magic != DISPATCH_TABLE_MAGIC)
         return nullptr;
     return t;
+}
+
+INLINE Function* extractFunction(SEXP s) {
+    return sexp2function(sexp2dispatchTable(BODY(s))->entry[0]);
+}
+
+INLINE Code* findDefaultArgument(Code* c) {
+    Code* e = end(code2function(c));
+    while (c != e && !c->isDefaultArgument)
+        c = next(c);
+    return c;
 }
 
 const static uint32_t NO_DEOPT_INFO = (uint32_t)-1;

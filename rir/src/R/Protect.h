@@ -11,11 +11,11 @@ class Protect {
   public:
     Protect(const Protect& other) = delete;
 
-    Protect(){};
+    Protect() {}
     Protect(SEXP init) {
         Rf_protect(init);
         ++protectedValues_;
-    };
+    }
 
     SEXP operator()(SEXP value) {
         Rf_protect(value);

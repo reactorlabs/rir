@@ -10,7 +10,7 @@ class Preserve {
   public:
     Preserve(const Preserve& other) = delete;
 
-    Preserve(){};
+    Preserve() {}
 
     SEXP operator()(SEXP value) {
         R_PreserveObject(value);

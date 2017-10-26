@@ -190,7 +190,7 @@ void CodeVerifier::verifyFunctionLayout(SEXP sexp, ::Context* ctx) {
                 unsigned deoptId = *reinterpret_cast<ArgT*>(cptr + 1);
                 Opcode* deoptPc = (Opcode*)Deoptimizer_pc(deoptId);
                 assert(f->origin);
-                FunctionHandle deoptFun = f->origin;
+                FunctionHandle deoptFun(f->origin);
                 CodeHandle deoptCode = deoptFun.entryPoint();
                 assert(deoptPc >= deoptCode.bc() &&
                        deoptPc < deoptCode.endBc());

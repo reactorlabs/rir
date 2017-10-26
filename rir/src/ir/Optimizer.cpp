@@ -49,6 +49,7 @@ SEXP Optimizer::reoptimizeFunction(SEXP s) {
 
     FunctionHandle opt = code.finalize();
     opt.function->origin = s;
+
 #ifdef ENABLE_SLOWASSERT
     CodeVerifier::verifyFunctionLayout(opt.store, globalContext());
 #endif

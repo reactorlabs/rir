@@ -1,5 +1,7 @@
 #include "CodeEditor.h"
 
+#include "R/RList.h"
+
 #include "BC.h"
 #include "CodeStream.h"
 #include "analysis/dataflow.h"
@@ -33,21 +35,43 @@ CodeEditor::CodeEditor(SEXP in) {
         formals_ = FORMALS(in);
         DispatchTable* dispatchTable = sexp2dispatchTable(BODY(in));
         bc = dispatchTable->entry[0];
+    } else {
+        assert(isValidFunctionObject(in));
     }
     FunctionHandle fh(bc);
     CodeHandle ch = fh.entryPoint();
     ast = ch.ast();
-    loadCode(fh, ch);
+    loadCode(fh, ch, true);
+}
+
+CodeEditor::CodeEditor(CodeHandle code) {
+    ast = code.ast();
+    loadCode(code.function(), code, false);
 }
 
 CodeEditor::CodeEditor(CodeHandle code, SEXP formals) {
     formals_ = formals;
     ast = code.ast();
-    loadCode(code.function(), code);
+    loadCode(code.function(), code, true);
 }
 
-void CodeEditor::loadCode(FunctionHandle function, CodeHandle code) {
+void CodeEditor::loadCode(FunctionHandle function, CodeHandle code, bool loadCompiledDefaultArgs) {
     std::unordered_map<Opcode*, LabelT> bcLabels;
+
+    // Add promises that are default values of formal arguments
+    if (loadCompiledDefaultArgs) {
+        for (auto c : function) {
+            if (c->isDefaultArgument) {
+                CodeHandle ch(c);
+                CodeEditor* p = new CodeEditor(ch);
+                auto idx = ch.idx();
+                if (promises.size() <= idx)
+                    promises.resize(idx + 1, nullptr);
+                promises[idx] = p;
+                defaultArguments.push_back(idx);
+            }
+        }
+    }
 
     {
         Opcode* pc = (Opcode*)code.bc();
@@ -110,7 +134,7 @@ void CodeEditor::loadCode(FunctionHandle function, CodeHandle code) {
 
                     bc.immediate.fun = code.idx();
 
-                    CodeEditor* p = new CodeEditor(code, nullptr);
+                    CodeEditor* p = new CodeEditor(code);
 
                     if (promises.size() <= code.idx())
                         promises.resize(code.idx() + 1, nullptr);
@@ -130,7 +154,7 @@ void CodeEditor::loadCode(FunctionHandle function, CodeHandle code) {
                         if (arg <= MAX_ARG_IDX) {
                             CodeHandle code = function.codeAtOffset(arg);
                             arg = code.idx();
-                            CodeEditor* p = new CodeEditor(code, nullptr);
+                            CodeEditor* p = new CodeEditor(code);
                             if (promises.size() <= code.idx())
                                 promises.resize(code.idx() + 1, nullptr);
                             promises[code.idx()] = p;
@@ -149,11 +173,8 @@ void CodeEditor::loadCode(FunctionHandle function, CodeHandle code) {
 }
 
 CodeEditor::~CodeEditor() {
-    for (auto p : promises) {
-        if (!p)
-            continue;
+    for (auto p : promises)
         delete p;
-    }
 
     BytecodeList* pos = front.next;
     while (pos != & last) {
@@ -238,8 +259,18 @@ void CodeEditor::print(bool verbose) {
         if (!p)
             continue;
 
+        bool isfp = false;
+        for (auto fp : defaultArguments)
+            if (i - 1 == fp) {
+                isfp = true;
+                break;
+            }
+
         Rprintf("------------------------\n");
-        Rprintf("@%d\n", (void*)(long)(i - 1));
+        if (isfp)
+            Rprintf("# default argument\n");
+        else
+            Rprintf("@%d\n", (void*)(long)(i - 1));
         p->print();
     }
 }
@@ -251,9 +282,14 @@ void CodeEditor::Cursor::print() {
         pos->bc.print();
 }
 
-unsigned CodeEditor::write(FunctionHandle& function) {
+unsigned CodeEditor::write(FunctionHandle& function, bool isDefaultArgument) {
     CodeStream cs(function, ast);
     cs.setNumLabels(labels_.size());
+
+    // Write the promises of compiled default values of args
+    for (auto arg : defaultArguments)
+        if (promises[arg])
+            promises[arg]->write(function, true);
 
     for (Cursor cur = getCursor(); !cur.atEnd(); cur.advance()) {
         BC bc = cur.bc();
@@ -283,7 +319,7 @@ unsigned CodeEditor::write(FunctionHandle& function) {
             cs.addSrcIdx(cur.srcIdx());
     }
 
-    return cs.finalize();
+    return cs.finalize(isDefaultArgument);
 }
 
 FunctionHandle CodeEditor::finalize() {
