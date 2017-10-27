@@ -11,9 +11,29 @@
 namespace rir {
 
 /*
+ *  This dataflow analysis computes various things about stack slots and
+ *  environment variables.
+ *
+ *  First of all there is a lattice of "availability" of a value stored in the
+ *  local variable "t".
+ *
+ *  "Absent" means, that the was a variable, but it was removed by "rm".
+ *  Implementation wise this means the environment contains "R_UnboundValue".
+ *
+ *  "Value" is any evaluated value (ie. can also be a forced promise). TODO:
+ *  below this entry we could additionally track types...
+ *
+ *  "Any" can be a Value, a function argument, a missing argument (at runtime
+ *  represented by R_MissingArg), or an unevaluated promise.
+ *
+ *  When a call happens, the callee has access to our local environment. We do
+ *  not only have to expect that it changes every entry, and adds new ones, it
+ *  could also remove existing ones. That's why we need to merge with "Maybe"
+ *  instead of "Any".
+ *
  *                       Maybe  (might be deleted from env)
  *                    /        \
- *              Absent          Any (prom, R_MissingArg)
+ *              Absent          Any (prom)
  *                          /         \
  *                      Value         Argument
  *                        |
@@ -21,6 +41,30 @@ namespace rir {
  *
  *                  \     |     /
  *                      Bottom
+ *
+ *
+ *  Additionally we keep track of the following things for each abstract value
+ *   * "maybeArg": Can this value potentially flow from a function argument?
+ *     This is important since after a ldvar_ the result is either a Value or
+ *     R_MissingArg, which means we would have to degrade to the much less
+ *     precise Any. We further assume that function calls do not convert normal
+ *     entries into R_MissingArgument, since there is afaik no R api to do so.
+ *   * "def": where (which instruction) was this value created
+ *
+ *  Globally we keep track if a function leaks the environment. This is
+ *  interesting since as long as the environment is not leaked, we can assume
+ *  that forcing a promise does not touch the local environment. The reason is
+ *  that the callee has access to the caller environment, but the caller does
+ *  not have access to the callee environment. Since promises are evaluated in
+ *  the caller environment, they can only access the local environment if it
+ *  was leaked somehow. The environment can leak if we store it somewhere,
+ *  where it can be accessed by environments which are "above" us. We can for
+ *  example assign it to a global var:
+ *    `set("myEnv", environment(), R_GlobalEnv)`
+ *  or we can just pass it to a function, that leaks it for us... Note that the
+ *  callee has access to our environment. Therefore unless we prove that id
+ *  does not leak our env, we have to assume it leaks on every call.
+ *
  */
 
 class FValue {
@@ -28,10 +72,11 @@ class FValue {
     enum class Type { Bottom, Absent, Constant, Argument, Value, Any, Maybe };
 
   private:
-    FValue(Type t, SEXP argument) : t(t), argument(argument) {}
+    FValue(Type t, SEXP argument) : t(t), argument(argument), maybeArg(true) {}
 
-    FValue(Type t, CodeEditor::Iterator def = UseDef::unused())
-        : t(t), u(def) {}
+    FValue(Type t, bool maybeArg = true,
+           CodeEditor::Iterator def = UseDef::unused())
+        : t(t), u(def), maybeArg(maybeArg) {}
 
   public:
     Type t = Type::Bottom;
@@ -43,23 +88,26 @@ class FValue {
         return FValue(Type::Argument, a);
     }
     static FValue Constant(CodeEditor::Iterator def) {
-        return FValue(Type::Constant, def);
+        return FValue(Type::Constant, false, def);
     }
-    static FValue Maybe() { return FValue(Type::Maybe); }
+    static FValue MaybeNonArg() { return FValue(Type::Maybe, false); }
+    static FValue AnyNonArg(CodeEditor::Iterator ins = UseDef::multiuse()) {
+        return FValue(Type::Any, false, ins);
+    }
     static FValue Any(CodeEditor::Iterator ins = UseDef::multiuse()) {
-        return FValue(Type::Any, ins);
+        return FValue(Type::Any, true, ins);
     }
     static FValue Value(CodeEditor::Iterator ins = UseDef::multiuse()) {
-        return FValue(Type::Value, ins);
+        return FValue(Type::Value, false, ins);
     }
-    static FValue Absent() { return FValue(Type::Absent); }
+    static FValue Absent() { return FValue(Type::Absent, false); }
     static FValue Bottom() { return FValue(Type::Bottom); }
     static const FValue& bottom() {
         static FValue val = FValue(Type::Bottom);
         return val;
     }
     static const FValue& top() {
-        static FValue val = FValue(Type::Maybe);
+        static FValue val = FValue(Type::Maybe, true, UseDef::multiuse());
         return val;
     }
 
@@ -68,6 +116,7 @@ class FValue {
         d.t = t;
         d.u = UseDef();
         d.u.def = pos;
+        d.maybeArg = maybeArg;
         return d;
     }
 
@@ -148,6 +197,7 @@ class FValue {
 
     SEXP argument = nullptr;
     UseDef u;
+    bool maybeArg = true;
 
     bool isValue() const { return t == Type::Value || t == Type::Constant; }
 
@@ -162,6 +212,8 @@ class FValue {
 
     bool operator==(FValue const& other) const {
         if (t != other.t)
+            return false;
+        if (maybeArg != other.maybeArg)
             return false;
 
         switch (t) {
@@ -209,7 +261,8 @@ class FValue {
             }
         }
         if (res) {
-            assert(old.t != t || old.u.def != u.def || old.u.use != u.use);
+            assert(old.t != t || old.u.def != u.def || old.u.use != u.use ||
+                   old.maybeArg != maybeArg);
         }
         return res;
     }
@@ -236,6 +289,11 @@ class FValue {
                 u.use = UseDef::multiuse();
                 changed = true;
             }
+        }
+
+        if (!maybeArg && other.maybeArg) {
+            maybeArg = true;
+            changed = true;
         }
 
         switch (t) {
@@ -484,7 +542,10 @@ class DataflowAnalysis
 
         // The result of forcing a promise is NOT necessarily a value. It might
         // be R_MissingArg
-        return FValue::Any(ins);
+        if (val.maybeArg)
+            return FValue::Any(ins);
+
+        return FValue::Value(ins);
     }
 
     void ldlval_(CodeEditor::Iterator ins) override {
@@ -540,7 +601,7 @@ class DataflowAnalysis
         // TODO we could be fancy and if its known whether fun is eager or lazy
         // analyze the promises accordingly
         doCall(ins);
-        current().push(FValue::Any(ins));
+        current().push(FValue::AnyNonArg(ins));
     }
 
     void call_stack_(CodeEditor::Iterator ins) override {
@@ -564,7 +625,7 @@ class DataflowAnalysis
         }
         if (!safeTarget) {
             doCall(ins);
-            current().push(FValue::Any(ins));
+            current().push(FValue::AnyNonArg(ins));
         } else {
             current().push(FValue::Value(ins));
         }
@@ -589,7 +650,7 @@ class DataflowAnalysis
         }
         if (!safeTarget) {
             doCall(ins);
-            current().push(FValue::Any(ins));
+            current().push(FValue::AnyNonArg(ins));
         } else {
             current().push(FValue::Value(ins));
         }
@@ -599,14 +660,14 @@ class DataflowAnalysis
         // function
         current().pop();
         doCall(ins);
-        current().push(FValue::Any(ins));
+        current().push(FValue::AnyNonArg(ins));
     }
 
     void dispatch_stack_(CodeEditor::Iterator ins) override {
         // function
         current().pop((*ins).immediate.call_args.nargs);
         doCall(ins);
-        current().push(FValue::Any(ins));
+        current().push(FValue::AnyNonArg(ins));
     }
 
     void guard_fun_(CodeEditor::Iterator ins) override {
@@ -652,12 +713,12 @@ class DataflowAnalysis
         // Depending on the type of analysis, we apply different strategies.
         // Only Type::Conservative is sound!
         if (type == Type::NoDelete)
-            current().mergeAllEnv(FValue::Any());
+            current().mergeAllEnv(FValue::AnyNonArg());
         else if (type == Type::NoDeleteNoPromiseStore)
             current().mergeAllEnv(FValue::Value());
         else if (type == Type::Conservative) {
             current().global().leaksEnvironment = true;
-            current().mergeAllEnv(FValue::Maybe());
+            current().mergeAllEnv(FValue::MaybeNonArg());
         } else if (type == Type::NoArgsOverride)
             current().mergeAllEnv(FValue::Argument());
     }
