@@ -171,9 +171,10 @@ class BCCleanup : public InstructionDispatcher::Receiver {
     void guard_fun_(CodeEditor::Iterator ins) override {
         SEXP sym = Pool::get((*ins).immediate.guard_fun_args.name);
         auto v = analysis[ins][sym];
+        SEXP name = Pool::get((*ins).immediate.guard_fun_args.expected);
+        SEXP expected = Pool::get((*ins).immediate.guard_fun_args.expected);
         if (v.t == FValue::Type::Constant) {
             SEXP c = analysis.constant(v);
-            SEXP expected = Pool::get((*ins).immediate.guard_fun_args.expected);
             if (c == expected) {
                 auto cur = ins.asCursor(code_);
                 cur.remove();
@@ -187,8 +188,22 @@ class BCCleanup : public InstructionDispatcher::Receiver {
                 bubbleUp = bubbleUp - 1;
                 auto cur = *bubbleUp;
                 // We cannot move the guard across those instructions
-                if (cur.is(Opcode::label) || !cur.isPure() || cur.isReturn())
-                    break;
+                if (cur.is(Opcode::label) || !cur.isPure() || cur.isReturn()) {
+                    if (!cur.is(Opcode::stvar_)) {
+                        break;
+                    }
+                    // stvar that does not interfere with the guard we can
+                    // skip. Otherwise we treat it as a barrier. Note, this is a
+                    // conservative approximation. Assigning to a variable with
+                    // the same name does not guarantee that the guard fails.
+                    // We could still:
+                    // * override it with the same function
+                    // * override it with a non-function value, which (due to
+                    //   the amazing R lookup semantics) does not override
+                    //   functions.
+                    if (Pool::get(cur.immediate.pool) == name)
+                        break;
+                }
                 if (cur == *ins) {
                     // This guard is redundant, remove it
                     ins.asCursor(code_).remove();
