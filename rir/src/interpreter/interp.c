@@ -98,7 +98,9 @@ INLINE SEXP promiseValue(SEXP promise, Context * ctx) {
         SET_NAMED(promise, 2);
         return promise;
     } else {
-        return forcePromise(promise);
+        SEXP res = forcePromise(promise);
+        assert(TYPEOF(res) != PROMSXP && "promise returned promise");
+        return res;
     }
 }
 
