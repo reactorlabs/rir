@@ -32,24 +32,24 @@ class FunctionHandle {
         SEXP store = Rf_allocVector(EXTERNALSXP, initialSize);
         void* payload = INTEGER(store);
 
-        TYPEOF(store) = EXTERNALSXP;
-        R_PreserveObject(store);
-
-        Function* function = new (payload) Function;
-        assert(function == payload);
+        Function* function = (Function*)payload;
+        function->info.gc_area_start = sizeof(rir_header);  // just after the header
+        function->info.gc_area_length = 4;  // origin, next, closure, signature
+        function->origin = nullptr;
+        function->next = nullptr;
+        function->closure = nullptr;
+        function->signature = nullptr;
         function->magic = FUNCTION_MAGIC;
         function->envLeaked = false;
         function->envChanged = false;
         function->deopt = false;
         function->size = sizeof(Function);
-        function->origin = nullptr;
-        function->next = nullptr;
-        function->closure = nullptr;
-        // TODO(mhyee): signature
         function->codeLength = 0;
         function->foffset = 0;
         function->invocationCount = 0;
         function->markOpt = false;
+
+        R_PreserveObject(store);
 
         FunctionHandle res(store);
         res.storeOwner_ = true;
@@ -92,7 +92,6 @@ class FunctionHandle {
             TYPEOF(newStore) = EXTERNALSXP;
 
             memcpy(newPayload, payload, capacity);
-            memset(payload, 0xee, capacity);
 
             R_PreserveObject(newStore);
             R_ReleaseObject(store);

@@ -80,9 +80,10 @@ class Compiler {
 
         // Initialize the vtable. Initially the table has one entry, which is
         // the compiled function.
-        SET_TRUELENGTH(vtableStore, 1);
+        vtable->info.gc_area_start = sizeof(DispatchTable);  // at the end
+        vtable->info.gc_area_length = 1;
         vtable->magic = DISPATCH_TABLE_MAGIC;
-        vtable->length = 1;
+        vtable->capacity = 1;
         vtable->entry[0] = res;
 
         // Set the closure fields.

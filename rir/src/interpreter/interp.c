@@ -368,33 +368,33 @@ static SEXP rirCallClosure(SEXP call, SEXP env, SEXP callee, SEXP actuals,
             fun->origin = oldFunStore;
 
             // Add the new function to the vtable.
-            if (vtable->length < TRUELENGTH(vtableStore)) {
-                vtable->entry[vtable->length++] = funStore;
+            if (vtable->info.gc_area_length < vtable->capacity) {
+                vtable->entry[vtable->info.gc_area_length++] = funStore;
             } else {
                 // Allocate a new, larger vtable.
                 DispatchTable* oldVtable = vtable;
-                SEXP oldVtableStore = vtableStore;
 
-                size_t capacity = TRUELENGTH(oldVtableStore) * 2;
+                size_t capacity = oldVtable->capacity * 2;
                 size_t size = sizeof(DispatchTable) +
                               (capacity * sizeof(DispatchTableEntry));
                 vtableStore = PROTECT(Rf_allocVector(EXTERNALSXP, size));
                 vtable = sexp2dispatchTable(vtableStore);
 
                 // Initialize the new vtable, copying old entries over.
-                SET_TRUELENGTH(vtableStore, capacity);
+                vtable->info.gc_area_start = sizeof(DispatchTable);  // at the end
+                vtable->info.gc_area_length = oldVtable->info.gc_area_length + 1;
                 vtable->magic = DISPATCH_TABLE_MAGIC;
-                vtable->length = oldVtable->length + 1;
+                vtable->capacity = capacity;
 
-                for (size_t i = 0; i < oldVtable->length; i++) {
+                for (size_t i = 0; i < oldVtable->info.gc_area_length; i++) {
                     vtable->entry[i] = oldVtable->entry[i];
                 }
 
                 // Insert the new function version.
-                vtable->entry[oldVtable->length] = funStore;
+                vtable->entry[oldVtable->info.gc_area_length] = funStore;
 
                 // NULL out the remaining entries.
-                for (size_t i = vtable->length; i < capacity; i++) {
+                for (size_t i = vtable->info.gc_area_length; i < capacity; i++) {
                     vtable->entry[i] = NULL;
                 }
 

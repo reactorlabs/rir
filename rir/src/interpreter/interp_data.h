@@ -37,11 +37,11 @@ extern "C" {
 // magic in his vector too...
 #define FUNCTION_MAGIC (unsigned)0xCAFEBABE
 
-#define DISPATCH_TABLE_MAGIC (unsigned)0xBEEF1234
-
 // Offset between function SEXP and Function* struct
 // This is basically sizeof(SEXPREC_ALIGN)
 #define FUNCTION_OFFSET 40
+
+#define DISPATCH_TABLE_MAGIC (unsigned)0xBEEF1234
 
 // Code magic constant is intended to trick the GC into believing that it is
 // dealing with already marked SEXP.
@@ -88,12 +88,37 @@ typedef enum {
  * Aliases for readability.
  */
 typedef SEXP FunctionSEXP;
+typedef SEXP SignatureSEXP;
 typedef SEXP ClosureSEXP;
 typedef SEXP PromiseSEXP;
-typedef SEXP IntSEXP;
+typedef SEXP DispatchTableEntry;
 
 // all sizes in bytes,
 // length in element sizes
+
+
+/** Header for all RIR objects embedded inside an EXTERNALSXP R object.
+ *  This is used to expose SEXPs in RIR objects to R's garbage collector.
+ *
+ *  RIR objects that want to expose some of their internal SEXPs to the
+ *  GC to trace need to place those SEXPs consecutively one after another.
+ *
+ *  gc_area_start is the offset in bytes to the first exposed SEXP,
+ *  relative to the start of the RIR object (i.e. INTEGER(obj)).
+ *
+ *  gc_area_length is the number of exposed SEXPs.
+ */
+typedef struct {
+    uint32_t gc_area_start;  /// First SEXP to be marked by the GC
+    uint32_t gc_area_length;  /// Number of SEXPs to expose to the GC
+
+    // TODO:  Later maybe also add type of the object here and have just
+    //        one EXTERNALSXP with a union of other types.
+    // For now just make sure that this header is in all RIR objects.
+    // The exception is Code, since it is not a valid SEXP in the
+    // first place.
+} rir_header;
+
 
 // ============
 // Please do not change those without also changing how they are handled in the
@@ -375,6 +400,18 @@ INLINE Code* next(Code* c) {
 #pragma pack(push)
 #pragma pack(1)
 typedef struct Function {
+    rir_header info;  /// for exposing SEXPs to GC
+
+    FunctionSEXP origin; /// Same Function with fewer optimizations,
+                         //   NULL if original
+
+    FunctionSEXP next;
+
+    ClosureSEXP closure; /// pointer to Closure
+                         //    which has a pointer to DispatchTable
+
+    SignatureSEXP signature;  /// pointer to this version's signature
+
     unsigned magic; /// used to detect Functions 0xCAFEBABE
 
     unsigned size; /// Size, in bytes, of the function and its data
@@ -386,17 +423,6 @@ typedef struct Function {
     unsigned deopt : 1;
     unsigned markOpt : 1;
     unsigned spare : 28;
-
-    // TODO(mhyee): remove origin and next
-    FunctionSEXP origin; /// Same Function with fewer optimizations,
-                         //   NULL if original
-
-    FunctionSEXP next;
-
-    ClosureSEXP closure; /// pointer to Closure
-                         //    which has a pointer to DispatchTable
-
-    // TODO(mhyee): member for signature
 
     unsigned codeLength; /// number of Code objects in the Function
 
@@ -453,20 +479,19 @@ INLINE Code* codeAt(Function* f, unsigned offset) {
     return (Code*)((uintptr_t)f + offset);
 }
 
-typedef SEXP DispatchTableEntry;
-
 /*
  * A dispatch table (vtable) for functions.
- *
- * We set TRUELENGTH to the size of the entry table, i.e. capacity, so the GC
- * knows where the start of the entry table is.
  */
 #pragma pack(push)
 #pragma pack(1)
 typedef struct DispatchTable {
-    unsigned magic; /// used to detect DispatchTables 0xBEEF1234
+    rir_header info;  /// for exposing SEXPs to GC
 
-    size_t length; /// number of entries
+    uint32_t magic; /// used to detect DispatchTables 0xBEEF1234
+
+    uint32_t capacity; /// size of the entry array
+                       /// note: number of currently occupied slots
+                       /// is stored in info.gc_area_length
 
     DispatchTableEntry entry[];
 } DispatchTable;
