@@ -89,14 +89,19 @@ class FunctionHandle {
             SEXP newStore = Rf_allocVector(EXTERNALSXP, newCapacity);
             void* newPayload = INTEGER(newStore);
 
-            TYPEOF(newStore) = EXTERNALSXP;
-
             memcpy(newPayload, payload, capacity);
 
-            R_PreserveObject(newStore);
+            assert(function == payload);
+
+            // clear the fields that GC traces and release the old store
+            function->origin = nullptr;
+            function->next = nullptr;
+            function->closure = nullptr;
+            function->signature = nullptr;
             R_ReleaseObject(store);
 
-            assert(function == payload);
+            R_PreserveObject(newStore);
+
             store = newStore;
             payload = newPayload;
             function = (Function*)payload;
