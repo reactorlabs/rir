@@ -32,7 +32,9 @@ class FunctionHandle {
         SEXP store = Rf_allocVector(EXTERNALSXP, initialSize);
         void* payload = INTEGER(store);
 
-        Function* function = (Function*)payload;
+        Function* function = new (payload) Function;
+        assert(function == payload);
+
         function->info.gc_area_start = sizeof(rir_header);  // just after the header
         function->info.gc_area_length = 4;  // origin, next, closure, signature
         function->origin = nullptr;
