@@ -26,7 +26,6 @@ doxygen_sqlite3.db
 Rplots.pdf
 .test_results
 benchmarks/
-external/
 .Rhistory
 /tests
 *.dylib
