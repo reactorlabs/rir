@@ -13,9 +13,10 @@
 #undef length
 #undef eval
 
+extern "C" {
 extern SEXP R_TrueValue;
 extern SEXP R_FalseValue;
 extern SEXP R_LogicalNAValue;
-
+};
 
 #endif

@@ -571,8 +571,8 @@ class DataflowAnalysis
     }
 
     void static_call_stack_(CodeEditor::Iterator ins) override {
-        CallSite cs = ins.callSite();
-        SEXP fun = cs.target();
+        auto cs = ins.callSite();
+        SEXP fun = Pool::get(*cs->target());
 
         bool noProms = true;
         for (size_t i = 0; i < (*ins).immediate.call_args.nargs; ++i) {

@@ -242,10 +242,10 @@ void BC::write(CodeStream& cs) const {
 
 SEXP BC::immediateConst() { return Pool::get(immediate.pool); }
 
-void BC::printArgs(CallSite cs) {
+void BC::printArgs(CallSiteStruct* cs) {
     Rprintf("[");
-    for (unsigned i = 0; i < cs.nargs(); ++i) {
-        auto arg = cs.arg(i);
+    for (unsigned i = 0; i < cs->nargs; ++i) {
+        auto arg = cs->args()[i];
         if (arg == MISSING_ARG_IDX)
             Rprintf(" _");
         else if (arg == DOTS_ARG_IDX)
@@ -256,11 +256,11 @@ void BC::printArgs(CallSite cs) {
     Rprintf("] ");
 }
 
-void BC::printNames(CallSite cs) {
-    if (cs.hasNames()) {
+void BC::printNames(CallSiteStruct* cs) {
+    if (cs->hasNames) {
         Rprintf("[");
-        for (unsigned i = 0; i < cs.nargs(); ++i) {
-            SEXP n = cs.name(i);
+        for (unsigned i = 0; i < cs->nargs; ++i) {
+            SEXP n = Pool::get(cs->names()[i]);
             Rprintf(
                 " %s",
                 (n == nullptr || n == R_NilValue ? "_" : CHAR(PRINTNAME(n))));
@@ -269,9 +269,9 @@ void BC::printNames(CallSite cs) {
     }
 }
 
-void BC::printProfile(CallSite cs) {
-    if (cs.hasProfile()) {
-        CallSiteProfile* prof = cs.profile();
+void BC::printProfile(CallSiteStruct* cs) {
+    if (cs->hasProfile) {
+        CallSiteProfile* prof = cs->profile();
         Rprintf("           Prof : [");
         if (prof->takenOverflow)
             Rprintf("*, <");
@@ -288,13 +288,11 @@ void BC::printProfile(CallSite cs) {
     }
 }
 
-CallSite BC::callSite(Code* code) {
-    return CallSite(*this, CallSite_get(code, immediate.call_args.call_id));
+CallSiteStruct* BC::callSite(Code* code) {
+    return code->callSite(immediate.call_args.call_id);
 }
 
-void BC::print() { print(CallSite()); }
-
-void BC::print(CallSite cs) {
+void BC::print(CallSiteStruct* cs) {
     if (bc != Opcode::label) {
         Rprintf("   ");
         Rprintf("%s ", name(bc));
@@ -306,21 +304,21 @@ void BC::print(CallSite cs) {
         assert(false);
         break;
     case Opcode::dispatch_: {
-        if (cs.isValid()) {
-            SEXP selector = cs.selector();
+        if (cs) {
+            SEXP selector = Pool::get(*cs->selector());
             Rprintf(" `%s` ", CHAR(PRINTNAME(selector)));
             Rprintf("\n        # ");
-            Rf_PrintValue(cs.call());
+            Rf_PrintValue(Pool::get(cs->call));
             printProfile(cs);
         }
         break;
     }
     case Opcode::call_: {
-        if (cs.isValid()) {
+        if (cs) {
             printArgs(cs);
             printNames(cs);
             Rprintf("\n        -> ");
-            Rf_PrintValue(cs.call());
+            Rf_PrintValue(Pool::get(cs->call));
             printProfile(cs);
         }
         break;
@@ -328,10 +326,10 @@ void BC::print(CallSite cs) {
     case Opcode::call_stack_: {
         NumArgsT nargs = immediate.call_args.nargs;
         Rprintf(" %d ", nargs);
-        if (cs.isValid()) {
+        if (cs) {
             printNames(cs);
             Rprintf("\n        -> ");
-            Rf_PrintValue(cs.call());
+            Rf_PrintValue(Pool::get(cs->call));
             printProfile(cs);
         }
         break;
@@ -339,21 +337,21 @@ void BC::print(CallSite cs) {
     case Opcode::static_call_stack_: {
         NumArgsT nargs = immediate.call_args.nargs;
         Rprintf(" %d ", nargs);
-        if (cs.isValid()) {
-            Rprintf(" %p ", cs.target());
+        if (cs) {
+            Rprintf(" %p ", cs->target());
             Rprintf("\n        -> ");
-            Rf_PrintValue(cs.call());
+            Rf_PrintValue(Pool::get(cs->call));
             printProfile(cs);
         }
         break;
     }
     case Opcode::dispatch_stack_: {
-        if (cs.isValid()) {
-            Rprintf(" `%s` ", CHAR(PRINTNAME(cs.selector())));
-            Rprintf(" %d ", cs.nargs());
+        if (cs) {
+            Rprintf(" `%s` ", CHAR(PRINTNAME(Pool::get(*cs->selector()))));
+            Rprintf(" %d ", cs->nargs);
             printNames(cs);
             Rprintf("\n        -> ");
-            Rf_PrintValue(cs.call());
+            Rf_PrintValue(Pool::get(cs->call));
             printProfile(cs);
         }
         break;
@@ -461,15 +459,4 @@ void BC::print(CallSite cs) {
     Rprintf("\n");
 }
 
-CallSite::CallSite(BC bc, CallSiteStruct* cs) : bc(bc), cs(cs) {
-    assert(bc.isCallsite());
-}
-
-SEXP CallSite::selector() { return Pool::get(*CallSite_selector(cs)); }
-
-SEXP CallSite::target() { return Pool::get(*CallSite_target(cs)); }
-
-SEXP CallSite::call() { return Pool::get(cs->call); }
-
-SEXP CallSite::name(PoolIdxT i) { return Pool::get(CallSite_names(cs)[i]); }
 }

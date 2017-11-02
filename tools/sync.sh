@@ -17,7 +17,7 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
     USING_OSX=1
 fi
 
-mkdir -p ${SRC_DIR}/external
+git submodule update --init
 
 # check the .git of the rjit directory
 test -d ${SRC_DIR}/.git
@@ -27,26 +27,17 @@ if [ $IS_GIT_CHECKOUT -eq 0 ]; then
     ${SRC_DIR}/tools/install_hooks.sh
 fi
 
-function checkout_r {
+function build_r {
     NAME=$1
-    BRANCH=$2
     R_DIR="${SRC_DIR}/external/${NAME}"
-
-    if [ ! -d $R_DIR ]; then
-        cd ${SRC_DIR}/external
-        git clone https://github.com/reactorlabs/gnur.git ${NAME}
-    fi
 
     cd $R_DIR
 
     if [[ $(git diff --shortstat 2> /dev/null | tail -n1) != "" ]]; then
-        echo "repo is dirty"
+        echo "$NAME repo is dirty"
         exit 1
     fi
 
-    git fetch
-    git checkout origin/$BRANCH
-   
     tools/rsync-recommended
 
     if [ ! -f $R_DIR/Makefile ]; then
@@ -70,7 +61,7 @@ function checkout_r {
     fi
 }
 
-checkout_r custom-r rir-patch-3-3-branch
+build_r custom-r
 if [[ $VANILLA == "--vanilla" ]]; then
-    checkout_r vanilla-r R-3-3-branch
+    build_r vanilla-r
 fi

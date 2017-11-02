@@ -36,15 +36,15 @@ class StupidInliner {
         if (c->codeSize > 800)
             return false;
 
-        Opcode* pc = (Opcode*)code(c);
+        Opcode* pc = c->code();
         Opcode* end = pc + c->codeSize;
         while (pc != end) {
             BC bc = BC::advance(&pc);
             if (bc.isCallsite()) {
-                CallSite cs = bc.callSite(c);
-                if (!cs.hasTarget())
+                CallSiteStruct* cs = bc.callSite(c);
+                if (!cs->hasTarget)
                     return false;
-                if (!isSafeTarget(cs.target())) {
+                if (!isSafeTarget(Pool::get(*cs->target()))) {
                     return false;
                 }
             } else if (bc.is(Opcode::guard_env_)) {
@@ -87,15 +87,15 @@ class StupidInliner {
             if (bc.bc != Opcode::call_)
                 continue;
 
-            CallSite cs = i.callSite();
+            auto cs = i.callSite();
 
-            if (cs.hasNames())
+            if (cs->hasNames)
                 continue;
 
-            if (!cs.hasProfile())
+            if (!cs->hasProfile)
                 continue;
 
-            CallSiteProfile* p = cs.profile();
+            CallSiteProfile* p = cs->profile();
 
             if (p->taken < 50) {
                 continue;
@@ -134,14 +134,14 @@ class StupidInliner {
 
             std::unordered_map<SEXP, CodeEditor*> args;
             RList formals(FORMALS(t));
-            if (formals.length() < cs.nargs())
+            if (formals.length() < cs->nargs)
                 continue;
 
             size_t idx = 0;
             for (auto f = formals.begin(); f != formals.end(); ++f) {
                 CodeEditor* arg;
-                if (idx < cs.nargs()) {
-                    arg = code_.detachPromise(cs.args()[idx]);
+                if (idx < cs->nargs) {
+                    arg = code_.detachPromise(cs->args()[idx]);
                 } else {
                     arg = new CodeEditor(Compiler::compileExpression(*f));
                 }
