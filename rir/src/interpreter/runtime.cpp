@@ -1,5 +1,6 @@
 #include "runtime.h"
 #include "interp.h"
+#include "utils/CodeHandle.h"
 
 SEXP envSymbol;
 SEXP callSymbol;
@@ -17,7 +18,8 @@ Function* isValidFunctionSEXP(SEXP wrapper) {
 
 /** Checks if given closure should be executed using RIR.
 
-  If the given closure is RIR function, returns its Function object, otherwise returns nullptr.
+  If the given closure is RIR function, returns its Function object, otherwise
+  returns nullptr.
  */
 Function* isValidClosureSEXP(SEXP closure) {
     if (TYPEOF(closure) != CLOSXP)
@@ -37,8 +39,6 @@ Code* isValidPromiseSEXP(SEXP promise) {
 
 // for now, we will have to rewrite this when it goes to GNU-R proper
 
-extern void c_printCode(Code * c);
-
 void printCode(Code* c) {
     Rprintf("Code object (%p offset %x (hex))\n", c, c->header);
     Rprintf("  Source:      %u (index to src pool)\n", c->src);
@@ -52,12 +52,12 @@ void printCode(Code* c) {
     Rprintf("\n  Skiplist:  %u \n", c->skiplistLength);
     unsigned* sl = skiplist(c);
     for (unsigned i = 0; i < c->skiplistLength; ++i) {
-        if (*(sl + 1) != -1)
+        if (*(sl + 1) != (unsigned)-1)
             Rprintf("    pc: %u -> src_idx: %u\n", *sl, *(sl + 1));
         sl += 2;
     }
     Rprintf("\n");
-    c_printCode(c);
+    rir::CodeHandle(c).print();
 }
 
 void printFunction(Function* f) {
@@ -75,13 +75,14 @@ void printFunction(Function* f) {
         Rf_error("Wrong magic number -- not rir bytecode");
 
     // print respective code objects
-    for (Code *c = begin(f), *e = end(f); c != e; c = next(c))
+    for (Code* c = begin(f), *e = end(f); c != e; c = next(c))
         printCode(c);
 
     Rprintf("\n");
 }
 
-// TODO change gnu-r to expect ptr and not bool and we can get rid of the wrapper
+// TODO change gnu-r to expect ptr and not bool and we can get rid of the
+// wrapper
 int isValidFunctionObject_int_wrapper(SEXP closure) {
     return isValidFunctionObject(closure) != nullptr;
 }
@@ -102,8 +103,4 @@ void initializeRuntime(CompilerCallback compiler, OptimizerCallback optimizer) {
     registerExternalCode(rirEval_f, compiler, rirExpr);
 }
 
-Context * globalContext() {
-    return globalContext_;
-}
-
-
+Context* globalContext() { return globalContext_; }
