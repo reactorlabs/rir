@@ -3,6 +3,7 @@
 #define interpreter_context_h
 
 #include "interp_data.h"
+#include "runtime/Opcode.h"
 
 #include <stdio.h>
 
@@ -38,9 +39,9 @@ typedef struct {
 /** Interpreter frame information.
  */
 typedef struct {
-    struct Code* code;
+    struct rir::Code* code;
     SEXP env;
-    OpcodeT* pc;
+    rir::Opcode* pc;
     size_t bp;
 } Frame;
 

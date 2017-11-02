@@ -20,27 +20,30 @@ extern Rboolean R_Visible;
 
 // helpers
 
-INLINE SEXP getSrcAt(Code* c, OpcodeT* pc, Context* ctx) {
-    unsigned sidx = getSrcIdxAt(c, pc, true);
+using namespace rir;
+
+INLINE SEXP getSrcAt(Code* c, Opcode* pc, Context* ctx) {
+    unsigned sidx = c->getSrcIdxAt(pc, true);
     if (sidx == 0)
         return src_pool_at(ctx, c->src);
     return src_pool_at(ctx, sidx);
 }
 
-INLINE SEXP getSrcForCall(Code* c, OpcodeT* pc, Context* ctx) {
-    unsigned sidx = getSrcIdxAt(c, pc, false);
+INLINE SEXP getSrcForCall(Code* c, Opcode* pc, Context* ctx) {
+    unsigned sidx = c->getSrcIdxAt(pc, false);
     return src_pool_at(ctx, sidx);
 }
 
 #define PC_BOUNDSCHECK(pc, c)                                                  \
-    SLOWASSERT((pc) >= code(c) && (pc) < code(c) + (c)->codeSize);
+    SLOWASSERT((pc) >= (c)->code() && (pc) < (c)->endCode());
 
 #ifdef THREADED_CODE
 
 #define BEGIN_MACHINE NEXT();
 #define INSTRUCTION(name)                                                      \
     op_##name: // debug(c, pc, #name, ostack_length(ctx) - bp, ctx);
-#define NEXT() (__extension__({ goto* opAddr[advanceOpcode()]; }))
+#define NEXT()                                                                 \
+    (__extension__({ goto* opAddr[static_cast<uint8_t>(advanceOpcode())]; }))
 #define LASTOP                                                                 \
     {}
 
@@ -160,8 +163,7 @@ SEXP createArgsListStack(Code* c, size_t nargs, CallSiteStruct* cs, SEXP env,
 
     for (size_t i = 0; i < nargs; ++i) {
 
-        SEXP name =
-            hasNames ? cp_pool_at(ctx, CallSite_names(cs)[i]) : R_NilValue;
+        SEXP name = hasNames ? cp_pool_at(ctx, cs->names()[i]) : R_NilValue;
 
         SEXP arg = ostack_at(ctx, nargs - i - 1);
 
@@ -195,9 +197,8 @@ SEXP createArgsList(Code* c, SEXP call, size_t nargs, CallSiteStruct* cs,
     bool hasNames = cs->hasNames;
 
     for (size_t i = 0; i < nargs; ++i) {
-        unsigned argi = CallSite_args(cs)[i];
-        SEXP name =
-            hasNames ? cp_pool_at(ctx, CallSite_names(cs)[i]) : R_NilValue;
+        unsigned argi = cs->args()[i];
+        SEXP name = hasNames ? cp_pool_at(ctx, cs->names()[i]) : R_NilValue;
 
         // if the argument is an ellipsis, then retrieve it from the environment
         // and
@@ -227,11 +228,11 @@ SEXP createArgsList(Code* c, SEXP call, size_t nargs, CallSiteStruct* cs,
         } else {
             if (eager) {
                 SEXP arg =
-                    evalRirCode(codeAt(code2function(c), argi), ctx, env, 0);
+                    evalRirCode(codeAt(c->function(), argi), ctx, env, 0);
                 assert(TYPEOF(arg) != PROMSXP);
                 __listAppend(&result, &pos, arg, name);
             } else {
-                Code* arg = codeAt(code2function(c), argi);
+                Code* arg = codeAt(c->function(), argi);
                 SEXP promise = createPromise(arg, env);
                 __listAppend(&result, &pos, promise, name);
             }
@@ -456,8 +457,9 @@ static SEXP rirCallClosure(SEXP call, SEXP env, SEXP callee, SEXP actuals,
     if (!fun->envChanged && FRAME_CHANGED(newEnv))
         fun->envChanged = true;
 
-    if (fun->deopt)
-        SET_BODY(callee, fun->origin);
+    // TODO this is broken since vtables!!
+    // if (fun->deopt)
+    //    SET_BODY(callee, fun->origin);
 
     ostack_pop(ctx); // newEnv
     return result;
@@ -498,7 +500,7 @@ INLINE void profileCall(CallSiteStruct* cs, SEXP callee) {
 }
 
 void doProfileCall(CallSiteStruct* cs, SEXP callee) {
-    CallSiteProfile* p = CallSite_profile(cs);
+    CallSiteProfile* p = cs->profile();
     if (!p->takenOverflow) {
         if (p->taken + 1 == CallSiteProfile_maxTaken)
             p->takenOverflow = true;
@@ -522,7 +524,7 @@ void doProfileCall(CallSiteStruct* cs, SEXP callee) {
 SEXP doCall(Code* caller, SEXP callee, unsigned nargs, unsigned id, SEXP env,
             Context* ctx) {
 
-    CallSiteStruct* cs = CallSite_get(caller, id);
+    CallSiteStruct* cs = caller->callSite(id);
     profileCall(cs, callee);
     SEXP call = cp_pool_at(ctx, cs->call);
 
@@ -651,7 +653,7 @@ INLINE SEXP fixupAST(SEXP call, Context* ctx, size_t nargs) {
 SEXP doCallStack(Code* caller, SEXP callee, size_t nargs, unsigned id, SEXP env,
                  Context* ctx) {
 
-    CallSiteStruct* cs = CallSite_get(caller, id);
+    CallSiteStruct* cs = caller->callSite(id);
     SEXP call = cp_pool_at(ctx, cs->call);
 
     SEXP res = R_NilValue;
@@ -730,10 +732,10 @@ SEXP doCallStack(Code* caller, SEXP callee, size_t nargs, unsigned id, SEXP env,
 SEXP doDispatchStack(Code* caller, size_t nargs, uint32_t id, SEXP env,
                      Context* ctx) {
 
-    CallSiteStruct* cs = CallSite_get(caller, id);
+    CallSiteStruct* cs = caller->callSite(id);
     profileCall(cs, Rf_install("*dispatch*"));
     SEXP call = cp_pool_at(ctx, cs->call);
-    SEXP selector = cp_pool_at(ctx, *CallSite_selector(cs));
+    SEXP selector = cp_pool_at(ctx, *cs->selector());
     SEXP op = SYMVALUE(selector);
 
     SEXP obj = ostack_at(ctx, nargs - 1);
@@ -850,10 +852,10 @@ SEXP doDispatch(Code* caller, uint32_t nargs, uint32_t id, SEXP env,
     SEXP obj = ostack_top(ctx);
     assert(isObject(obj));
 
-    CallSiteStruct* cs = CallSite_get(caller, id);
+    CallSiteStruct* cs = caller->callSite(id);
     profileCall(cs, Rf_install("*dispatch*"));
     SEXP call = cp_pool_at(ctx, cs->call);
-    SEXP selector = cp_pool_at(ctx, *CallSite_selector(cs));
+    SEXP selector = cp_pool_at(ctx, *cs->selector());
     SEXP op = SYMVALUE(selector);
 
     SEXP actuals = createArgsList(caller, call, nargs, cs, env, ctx, false);
@@ -1285,7 +1287,7 @@ INLINE void incPerfCount(Code* c) {
 }
 
 static int debugging = 0;
-void debug(Code* c, OpcodeT* pc, const char* name, unsigned depth,
+void debug(Code* c, Opcode* pc, const char* name, unsigned depth,
            Context* ctx) {
     return;
     if (debugging == 0) {
@@ -1369,7 +1371,7 @@ static void cachedSetVar(SEXP val, SEXP env, Immediate idx, Context* ctx,
 SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
 
 #ifdef THREADED_CODE
-    static void* opAddr[numInsns_] = {
+    static void* opAddr[static_cast<uint8_t>(Opcode::num_of)] = {
 #define DEF_INSTR(name, ...) (__extension__ && op_##name),
 #include "ir/insns.h"
 #undef DEF_INSTR
@@ -1394,7 +1396,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
     // some intermediate values on the stack
     ostack_ensureSize(ctx, c->stackLength + 5);
 
-    OpcodeT* pc = code(c);
+    Opcode* pc = c->code();
     SEXP res;
 
     R_Visible = TRUE;
@@ -1587,7 +1589,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
             advanceImmediate();
             Immediate n = readImmediate();
             advanceImmediate();
-            res = cp_pool_at(ctx, *CallSite_target(CallSite_get(c, id)));
+            res = cp_pool_at(ctx, *c->callSite(id)->target());
             res = doCallStack(c, res, n, id, env, ctx);
             ostack_push(ctx, res);
             NEXT();
@@ -1648,7 +1650,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
             // get the Code * pointer we need
             Immediate id = readImmediate();
             advanceImmediate();
-            Code* promiseCode = codeAt(code2function(c), id);
+            Code* promiseCode = codeAt(c->function(), id);
             // create the promise and push it on stack
             ostack_push(ctx, createPromise(promiseCode, env));
             NEXT();
@@ -1676,7 +1678,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
             // get the Code * pointer we need
             Immediate n = readImmediate();
             advanceImmediate();
-            Code* promiseCode = codeAt(code2function(c), n);
+            Code* promiseCode = codeAt(c->function(), n);
             // create the promise and push it on stack
             ostack_push(ctx, (SEXP)promiseCode);
             NEXT();
@@ -2321,7 +2323,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
                             // (which is highly probably) then we do not
                             // have to execute it, since we changed the value
                             // inline
-                            if (target != R_NilValue && *pc == stvar_ &&
+                            if (target != R_NilValue && *pc == Opcode::stvar_ &&
                                 *(int*)(pc - sizeof(int)) == *(int*)(pc + 1)) {
                                 pc = pc + sizeof(int) + 1;
                                 if (NAMED(orig) == 0)
@@ -2447,7 +2449,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
             uint32_t deoptId = readImmediate();
             advanceImmediate();
             if (FRAME_CHANGED(env) || FRAME_LEAKED(env)) {
-                Function* fun = code2function(c);
+                Function* fun = c->function();
                 assert(bodyCode(fun) == c && "Cannot deopt from promise");
                 fun->deopt = true;
                 SEXP val = fun->origin;
@@ -2658,7 +2660,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
             RCNTXT* cntxt = (RCNTXT*)RAW(val);
 
             // (ab)use the same buffe to store the current pc
-            OpcodeT** oldPc = (OpcodeT**)(cntxt + 1);
+            Opcode** oldPc = (Opcode**)(cntxt + 1);
             *oldPc = pc;
 
             Rf_begincontext(cntxt, CTXT_LOOP, R_NilValue, env, R_BaseEnv,
@@ -2678,7 +2680,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
                 assert(TYPEOF(val) == RAWSXP && "stack botched");
                 RCNTXT* cntxt = (RCNTXT*)RAW(val);
                 assert(cntxt == R_GlobalContext && "stack botched");
-                OpcodeT** oldPc = (OpcodeT**)(cntxt + 1);
+                Opcode** oldPc = (Opcode**)(cntxt + 1);
                 pc = *oldPc;
 
                 int offset = readJumpOffset();

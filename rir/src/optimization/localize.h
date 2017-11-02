@@ -79,8 +79,7 @@ class Localizer : public InstructionDispatcher::Receiver {
                     // right after the call.
                     Opcode* deoptTarget = lastCall.origin();
                     BC::advance(&deoptTarget);
-                    uint32_t deoptId =
-                        Deoptimizer_register((OpcodeT*)deoptTarget);
+                    uint32_t deoptId = Deoptimizer_register(deoptTarget);
                     // Insert the guard
                     (lastCall + 1).asCursor(code_) << BC::guardEnv(deoptId);
                     // Prevent multiple guards being inserted before the

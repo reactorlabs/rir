@@ -17,8 +17,6 @@ C_OR_CPP DispatchTable* isValidDispatchTableSEXP(SEXP wrapper);
   If the given closure is RIR function, returns its Function object, otherwise returns nullptr.
  */
 
-C_OR_CPP void printCode(Code* c);
-
 C_OR_CPP void printFunction(Function* f);
 C_OR_CPP void printFunctionFancy(SEXP f);
 
