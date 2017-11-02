@@ -2,9 +2,9 @@
 #define RIR_FUNCTION_HANDLE_H
 
 #include "interpreter/interp.h"
+#include "interpreter/runtime.h"
 #include "ir/BC_inc.h"
 
-#include "CodeHandle.h"
 #include "ir/CodeVerifier.h"
 
 #include <iostream>
@@ -65,19 +65,37 @@ class FunctionHandle {
         assert(function->size <= capacity);
     }
 
+    explicit FunctionHandle(Function* function)
+        : storeOwner_(false), store(::function2store(function)),
+          payload(function), capacity(XLENGTH(store)), function(function) {
+        assert(function->magic == FUNCTION_MAGIC);
+        assert(function->size <= capacity);
+    }
+
     ~FunctionHandle() {
         if (storeOwner_)
             R_ReleaseObject(store);
     }
 
-    CodeHandle writeCode(SEXP ast, void* bc, unsigned codeSize,
-                         char* callSiteBuffer, unsigned callSiteLength,
-                         std::vector<unsigned>& sources, bool markDefaultArg) {
+    unsigned indexOf(Code* code) {
+        unsigned idx = 0;
+        for (Code* c : *this) {
+            if (c == code)
+                return idx;
+            ++idx;
+        }
+        assert(false);
+        return 0;
+    }
+
+    Code* writeCode(SEXP ast, void* bc, unsigned codeSize, char* callSiteBuffer,
+                    unsigned callSiteLength, std::vector<unsigned>& sources,
+                    bool markDefaultArg) {
         assert(function->size <= capacity);
         assert(storeOwner_);
 
         unsigned totalSize =
-            CodeHandle::totalSize(codeSize, sources.size(), callSiteLength);
+            Code::size(codeSize, sources.size(), callSiteLength);
 
         if (function->size + totalSize > capacity) {
             unsigned newCapacity = capacity;
@@ -118,21 +136,21 @@ class FunctionHandle {
         function->size += totalSize;
         assert(function->size <= capacity);
 
-        CodeHandle code(ast, codeSize, sources.size(), callSiteLength, offset,
-                        insert, markDefaultArg);
+        Code* code = new (insert) Code(ast, codeSize, sources.size(),
+                                       callSiteLength, offset, markDefaultArg);
 
-        assert(::code2function(code.code) == function);
+        assert(code->function() == function);
 
-        memcpy(code.bc(), bc, codeSize);
+        memcpy(code->code(), bc, codeSize);
 
         // write the sources
-        unsigned skiplistLength = CodeHandle::skiplistLength(sources.size());
+        unsigned skiplistLength = Code::calcSkiplistLength(sources.size());
         unsigned skiplistEntries = 1 + sources.size() / skiplistLength;
 
-        unsigned* skiplist = reinterpret_cast<unsigned*>(code.sources());
+        unsigned* skiplist = code->skiplist();
         unsigned* srcs = skiplist + 2 * skiplistLength;
 
-        Opcode* start = code.bc();
+        Opcode* start = code->code();
         Opcode* pc = start;
         unsigned instruction_number = 0;
         unsigned sources_idx = 0;
@@ -173,22 +191,22 @@ class FunctionHandle {
         assert(skiplistLength == 0);
         assert(compressed + sources_idx == instruction_number);
 
-        code.code->srcLength -= compressed;
+        code->srcLength -= compressed;
 
         function->size -= compressed * sizeof(unsigned);
 
-        assert(code.code->srcLength == sources_idx);
+        assert(code->srcLength == sources_idx);
         function->codeLength++;
 
         // set the last code offset
         function->foffset = offset;
 
-        memcpy(callSites(code.code), callSiteBuffer, callSiteLength);
+        memcpy((void*)code->callSites(), callSiteBuffer, callSiteLength);
 
         return code;
     }
 
-    CodeHandle entryPoint() {
+    Code* entryPoint() {
         assert(function->foffset);
         return bodyCode(function);
     }
@@ -209,8 +227,7 @@ class FunctionHandle {
         return codeAt(function, offset);
     }
 
-    SEXP ast() { return entryPoint().ast(); }
-
+    SEXP ast() { return src_pool_at(globalContext(), entryPoint()->src); }
 };
 }
 

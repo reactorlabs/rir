@@ -12,14 +12,14 @@ extern "C" {
 #endif
 
 typedef struct {
-    OpcodeT* oldPc;
+    rir::Opcode* oldPc;
     size_t size;
     uint8_t payload[];
 } DeoptInfo;
 
-extern uint32_t Deoptimizer_register(OpcodeT* oldPc);
+extern uint32_t Deoptimizer_register(rir::Opcode* oldPc);
 extern void Deoptimizer_print(uint32_t);
-extern OpcodeT* Deoptimizer_pc(uint32_t);
+extern rir::Opcode* Deoptimizer_pc(uint32_t);
 
 #ifdef __cplusplus
 }

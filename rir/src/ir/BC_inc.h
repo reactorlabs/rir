@@ -10,7 +10,19 @@
 
 #include <vector>
 
-#include "interpreter/interp_data.h"
+typedef uint32_t ArgT;
+
+// type  for constant & ast pool indices
+typedef uint32_t Immediate;
+
+// type  signed immediate values (unboxed ints)
+typedef uint32_t SignedImmediate;
+
+// type of relative jump offset (all jumps are relative)
+typedef int32_t JumpOffset;
+
+typedef unsigned FunctionIndex;
+typedef unsigned ArgumentsCount;
 
 namespace rir {
 
@@ -34,7 +46,12 @@ namespace rir {
 // ============================================================
 // ==== BC types
 //
-enum class Opcode : OpcodeT {
+
+struct Code;
+struct CallSiteStruct;
+struct CallSiteProfile;
+
+enum class Opcode : uint8_t {
 
 #define DEF_INSTR(name, ...) name,
 #include "insns.h"
@@ -87,7 +104,6 @@ static constexpr size_t MIN_JMP = -(1L << ((8 * sizeof(JmpT)) - 1));
 //   which can be pushed onto a CodeStream
 // * read and advance to read the next bytecode from an array
 
-class CallSite;
 class CodeStream;
 class BC {
   public:
@@ -135,17 +151,16 @@ class BC {
     void write(CodeStream& cs) const;
 
     // Print it to stdout
-    void print();
-    void print(CallSite cs);
-    void printArgs(CallSite cs);
-    void printNames(CallSite cs);
-    void printProfile(CallSite cs);
+    void print(CallSiteStruct* cs = nullptr);
+    void printArgs(CallSiteStruct* cs);
+    void printNames(CallSiteStruct* cs);
+    void printProfile(CallSiteStruct* cs);
 
     // Accessors to load immediate constant from the pool
     SEXP immediateConst();
 
     // Return the callsite of this BC, needs the cassSites buffer as input
-    CallSite callSite(Code* code);
+    CallSiteStruct* callSite(Code* code);
 
     inline static Opcode* jmpTarget(Opcode* pos) {
         BC bc = BC::decode(pos);
@@ -188,8 +203,18 @@ class BC {
     }
 
     // ==== BC decoding logic
-    inline static BC advance(Opcode** pc);
-    inline static BC decode(Opcode* pc);
+    inline static BC advance(Opcode** pc) {
+        Opcode bc = **pc;
+        BC cur(bc, decodeImmediate(bc, (*pc) + 1));
+        *pc = (Opcode*)((uintptr_t)(*pc) + cur.size());
+        return cur;
+    }
+
+    inline static BC decode(Opcode* pc) {
+        Opcode bc = *pc;
+        BC cur(bc, decodeImmediate(bc, pc + 1));
+        return cur;
+    }
 
     // ==== Factory methods
     // to create new BC objects, which can be streamed to a CodeStream
@@ -349,32 +374,114 @@ class BC {
         }
     }
 
+    inline static ImmediateT decodeImmediate(Opcode bc, Opcode* pc) {
+        ImmediateT immediate = {{0}};
+        switch (bc) {
+        case Opcode::push_:
+        case Opcode::ldfun_:
+        case Opcode::ldarg_:
+        case Opcode::ldvar_:
+        case Opcode::ldvar2_:
+        case Opcode::ldlval_:
+        case Opcode::ldddvar_:
+        case Opcode::stvar_:
+        case Opcode::stvar2_:
+        case Opcode::missing_:
+        case Opcode::subassign2_:
+            immediate.pool = *(PoolIdxT*)pc;
+            break;
+        case Opcode::dispatch_stack_:
+        case Opcode::call_:
+        case Opcode::dispatch_:
+        case Opcode::call_stack_:
+        case Opcode::static_call_stack_:
+            immediate.call_args = *(CallArgs*)pc;
+            break;
+        case Opcode::guard_env_:
+            immediate.guard_id = *(uint32_t*)pc;
+            break;
+        case Opcode::guard_fun_:
+            immediate.guard_fun_args = *(GuardFunArgs*)pc;
+            break;
+        case Opcode::promise_:
+        case Opcode::push_code_:
+            immediate.fun = *(FunIdxT*)pc;
+            break;
+        case Opcode::br_:
+        case Opcode::brtrue_:
+        case Opcode::brobj_:
+        case Opcode::brfalse_:
+        case Opcode::label:
+        case Opcode::beginloop_:
+            immediate.offset = *(JmpT*)pc;
+            break;
+        case Opcode::pick_:
+        case Opcode::pull_:
+        case Opcode::is_:
+        case Opcode::put_:
+        case Opcode::alloc_:
+            immediate.i = *(uint32_t*)pc;
+            break;
+        case Opcode::nop_:
+        case Opcode::test_bounds_:
+        case Opcode::extract1_:
+        case Opcode::subset1_:
+        case Opcode::extract2_:
+        case Opcode::subset2_:
+        case Opcode::close_:
+        case Opcode::ret_:
+        case Opcode::pop_:
+        case Opcode::force_:
+        case Opcode::asast_:
+        case Opcode::asbool_:
+        case Opcode::dup_:
+        case Opcode::dup2_:
+        case Opcode::swap_:
+        case Opcode::int3_:
+        case Opcode::make_unique_:
+        case Opcode::set_shared_:
+        case Opcode::aslogical_:
+        case Opcode::lgl_and_:
+        case Opcode::lgl_or_:
+        case Opcode::inc_:
+        case Opcode::add_:
+        case Opcode::mul_:
+        case Opcode::div_:
+        case Opcode::idiv_:
+        case Opcode::mod_:
+        case Opcode::pow_:
+        case Opcode::seq_:
+        case Opcode::colon_:
+        case Opcode::sub_:
+        case Opcode::uplus_:
+        case Opcode::uminus_:
+        case Opcode::not_:
+        case Opcode::lt_:
+        case Opcode::gt_:
+        case Opcode::le_:
+        case Opcode::ge_:
+        case Opcode::eq_:
+        case Opcode::ne_:
+        case Opcode::return_:
+        case Opcode::isfun_:
+        case Opcode::invisible_:
+        case Opcode::visible_:
+        case Opcode::endcontext_:
+        case Opcode::subassign_:
+        case Opcode::length_:
+        case Opcode::names_:
+        case Opcode::set_names_:
+            break;
+        case Opcode::invalid_:
+        case Opcode::num_of:
+            assert(false);
+            break;
+        }
+        return immediate;
+    }
+
     friend class CodeEditor;
     friend class CodeStream;
-};
-
-class CallSite {
-  public:
-    BC bc;
-    CallSiteStruct* cs = nullptr;
-
-    CallSite() {}
-    CallSite(BC bc, CallSiteStruct* cs);
-
-    bool isValid() { return cs != nullptr; }
-    NumArgsT nargs() { return cs->nargs; }
-    SEXP call();
-    const FunIdxT* args() { return CallSite_args(cs); }
-    FunIdxT arg(NumArgsT idx) { return CallSite_args(cs)[idx]; }
-    bool hasNames() { return cs->hasNames; }
-    bool hasTarget() { return cs->hasTarget; }
-    bool hasProfile() { return cs->hasProfile; }
-    bool hasImmediateArgs() { return cs->hasImmediateArgs; }
-    SEXP selector();
-    SEXP name(NumArgsT idx);
-    SEXP target();
-
-    CallSiteProfile* profile() { return CallSite_profile(cs); }
 };
 
 } // rir

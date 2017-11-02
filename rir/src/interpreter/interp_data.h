@@ -4,23 +4,15 @@
 #include <stdint.h>
 #include <assert.h>
 #include "../config.h"
+#include "runtime/Code.h"
+#include "runtime/RirHeader.h"
 
 #include "R/r.h"
 
 
-#ifdef ENABLE_SLOWASSERT
-#define SLOWASSERT(what) assert(what)
-#else
-#define SLOWASSERT(what)                                                       \
-    {}
-#endif
-
 #if defined(__GNUC__) && (! defined(NO_THREADED_CODE))
 #  define THREADED_CODE
 #endif
-
-// TODO force inlining for clang & gcc
-#define INLINE __attribute__((always_inline)) inline static
 
 // Function magic constant is designed to help to distinguish between Function
 // objects and normal EXTERNALSXPs. Normally this is not necessary, but a very
@@ -29,52 +21,7 @@
 // magic in his vector too...
 #define FUNCTION_MAGIC (unsigned)0xCAFEBABE
 
-// Offset between function SEXP and Function* struct
-// This is basically sizeof(SEXPREC_ALIGN)
-#define FUNCTION_OFFSET 40
-
 #define DISPATCH_TABLE_MAGIC (unsigned)0xBEEF1234
-
-// Code magic constant is intended to trick the GC into believing that it is
-// dealing with already marked SEXP.
-// Note: gcgen needs to be 1, otherwise the write barrier will trigger and
-//       named count is 2 to make it stable
-//  It also has an unique bitpattern for gp (0xee) so that we can keep it apart
-//  from functions
-#define CODE_MAGIC (unsigned)0x1100ee9a
-
-/** How many bytes do we need to align on 4 byte boundary?
- */
-INLINE unsigned pad4(unsigned sizeInBytes) {
-    unsigned x = sizeInBytes % 4;
-    return (x != 0) ? (sizeInBytes + 4 - x) : sizeInBytes;
-}
-
-// we cannot use specific sizes for enums in C
-typedef uint8_t OpcodeT;
-
-/** Any argument to BC must be the size of this type. */
-// TODO add static asserts somewhere in C++
-typedef uint32_t ArgT;
-
-// type  for constant & ast pool indices
-typedef uint32_t Immediate;
-
-// type  signed immediate values (unboxed ints)
-typedef uint32_t SignedImmediate;
-
-// type of relative jump offset (all jumps are relative)
-typedef int32_t JumpOffset;
-
-typedef unsigned FunctionIndex;
-typedef unsigned ArgumentsCount;
-
-// enums in C are not namespaces so I am using OP_ to disambiguate
-typedef enum {
-#define DEF_INSTR(name, ...) name,
-#include "ir/insns.h"
-    numInsns_
-} Opcode;
 
 /**
  * Aliases for readability.
@@ -84,31 +31,10 @@ typedef SEXP SignatureSEXP;
 typedef SEXP PromiseSEXP;
 typedef SEXP DispatchTableEntry;
 
+typedef rir::Code Code;
+
 // all sizes in bytes,
 // length in element sizes
-
-
-/** Header for all RIR objects embedded inside an EXTERNALSXP R object.
- *  This is used to expose SEXPs in RIR objects to R's garbage collector.
- *
- *  RIR objects that want to expose some of their internal SEXPs to the
- *  GC to trace need to place those SEXPs consecutively one after another.
- *
- *  gc_area_start is the offset in bytes to the first exposed SEXP,
- *  relative to the start of the RIR object (i.e. INTEGER(obj)).
- *
- *  gc_area_length is the number of exposed SEXPs.
- */
-typedef struct {
-    uint32_t gc_area_start;  /// First SEXP to be marked by the GC
-    uint32_t gc_area_length;  /// Number of SEXPs to expose to the GC
-
-    // TODO:  Later maybe also add type of the object here and have just
-    //        one EXTERNALSXP with a union of other types.
-    // For now just make sure that this header is in all RIR objects.
-    // The exception is Code, since it is not a valid SEXP in the
-    // first place.
-} rir_header;
 
 
 // ============
@@ -120,160 +46,6 @@ typedef struct {
 #define DOTS_ARG_IDX ((unsigned)-2)
 // Maximum valid entry for a CodeObject offset/idx entry 
 #define MAX_ARG_IDX ((unsigned)-3)
-
-/**
- * Code holds a sequence of instructions; for each instruction
- * it records the index of the source AST. Code is part of a
- * Function.
- *
- * Code objects are allocated contiguously within the data
- * section of a Function. The Function header can be found,
- * at an offset from the start of each Code object
- *
- * Instructions are variable size; Code knows how many bytes
- * are required for instructions.
- *
- * The number of indices of source ASTs stored in Code equals
- * the number of instructions.
- *
- * Instructions and AST indices are allocated one after the
- * other in the Code's data section with padding to ensure
- * alignment of indices.
- */
-#pragma pack(push)
-#pragma pack(1)
-
-typedef struct Code {
-    unsigned magic; ///< Magic number that attempts to be PROMSXP already marked
-    /// by the GC
-
-    unsigned header; /// offset to Function object
-
-    // TODO comment these
-    unsigned src; /// AST of the function (or promise) represented by the code
-
-    unsigned stackLength; /// Number of slots in stack required
-
-    unsigned codeSize; /// bytes of code (not padded)
-
-    unsigned skiplistLength; /// number of skiplist entries
-
-    unsigned srcLength; /// number of instructions
-
-    unsigned callSiteLength; /// length of the call site information
-
-    unsigned perfCounter;
-
-    unsigned isDefaultArgument : 1;  /// is this a compiled default value
-                                     /// of a formal argument
-    unsigned free : 31;
-
-    uint8_t data[]; /// the instructions
-
-    /*
-     * The Layout of data[] is actually:
-     *
-     *   Content       Format            Bytesize
-     *   ---------------------------------------------------------------------
-     *   code stream   BC                pad4(codeSize)
-     *
-     *   skiplist      (instr offset,    2 * skiplistLength * sizeof(unsigned)
-     *                  src index)
-     *
-     *   srcList       cp_idx (ast)      srcLength * sizeof(unsigned)
-     *
-     *   callSites     CallSiteStruct    callSiteLength
-     *
-     *
-     *
-     * CallSiteStructs are laid out next to each other. Since they are variable
-     * length, the call instruction refers to them by offset.
-     *
-     */
-} Code;
-
-const static unsigned CallSiteProfile_maxTaken = 1 << 28;
-const static unsigned CallSiteProfile_maxTargets = 4;
-typedef struct {
-    uint32_t taken : 28;
-    uint32_t takenOverflow : 1;
-    uint32_t numTargets : 2;
-    uint32_t targetsOverflow : 1;
-    SEXP targets[3];
-} CallSiteProfile;
-
-typedef struct {
-    uint32_t call;
-
-    uint32_t hasNames : 1;
-    uint32_t hasSelector : 1;
-    uint32_t hasTarget : 1;
-    uint32_t hasImmediateArgs : 1;
-    uint32_t hasProfile : 1;
-    uint32_t free : 27;
-
-    // This is duplicated in the BC instruction, not sure how to avoid
-    // without making accessing the payload a pain...
-    uint32_t nargs;
-
-    // This is not always needed, but maybe it does not pay off to put it
-    // in the payload just to save 4 bytes...
-    uint32_t trg;
-
-    uint32_t payload[];
-
-    /*
-     * Layout of args is:
-     *
-     * nargs * promise offset    if hasImmediateArgs
-     * nargs * cp_idx of names   if hasNames
-     * CallSiteProfile           if hasProfile
-     *
-     */
-
-} CallSiteStruct;
-
-#pragma pack(pop)
-
-INLINE uint32_t* CallSite_selector(CallSiteStruct* cs) {
-    assert(cs->hasSelector);
-    return &cs->trg;
-}
-
-INLINE uint32_t* CallSite_target(CallSiteStruct* cs) {
-    assert(cs->hasTarget);
-    return &cs->trg;
-}
-
-INLINE uint32_t* CallSite_names(CallSiteStruct* cs) {
-    assert(cs->hasNames);
-    return &cs->payload[(cs->hasImmediateArgs ? cs->nargs : 0)];
-}
-
-INLINE uint32_t* CallSite_args(CallSiteStruct* cs) {
-    assert(cs->hasImmediateArgs);
-    return cs->payload;
-}
-
-INLINE CallSiteProfile* CallSite_profile(CallSiteStruct* cs) {
-    assert(cs->hasProfile);
-    return (CallSiteProfile*)&cs
-        ->payload[(cs->hasImmediateArgs ? cs->nargs : 0) +
-                  (cs->hasNames ? cs->nargs : 0)];
-}
-
-INLINE unsigned CallSite_size(bool hasImmediateArgs, bool hasNames,
-                              bool hasProfile, uint32_t nargs) {
-    return sizeof(CallSiteStruct) +
-           sizeof(uint32_t) *
-               ((hasImmediateArgs ? nargs : 0) + (hasNames ? nargs : 0)) +
-           +(hasProfile ? sizeof(CallSiteProfile) : 0);
-}
-
-INLINE unsigned CallSite_sizeOf(CallSiteStruct* cs) {
-    return CallSite_size(cs->hasImmediateArgs, cs->hasNames, cs->hasProfile,
-                         cs->nargs);
-}
 
 /** Returns whether the SEXP appears to be valid promise, i.e. a pointer into
  * the middle of the linearized code.
@@ -287,81 +59,7 @@ INLINE Code* isValidCodeObject(SEXP s) {
     return c;
 }
 
-/** Returns a pointer to the instructions in c.  */
-INLINE OpcodeT* code(Code* c) { return (OpcodeT*)c->data; }
-
-/** Returns a pointer to the source AST indices in c.  */
-INLINE unsigned* skiplist(Code* c) {
-    return (unsigned*)(c->data + pad4(c->codeSize));
-}
-
-INLINE unsigned* raw_src(Code* c) {
-    return (unsigned*)((char*)skiplist(c) +
-                       c->skiplistLength * 2 * sizeof(unsigned));
-}
-
-INLINE char* callSites(Code* c) {
-    return (char*)raw_src(c) + c->srcLength * sizeof(unsigned);
-}
-
-INLINE CallSiteStruct* CallSite_get(Code* code, uint32_t idx) {
-    return (CallSiteStruct*)&callSites(code)[idx];
-}
-
-/** Moves the pc to next instruction, based on the current instruction length
- */
-INLINE OpcodeT* advancePc(OpcodeT* pc) {
-    switch (*pc++) {
-#define DEF_INSTR(name, imm, ...)                                              \
-    case name:                                                                 \
-        pc += sizeof(ArgT) * imm;                                              \
-        break;
-#include "ir/insns.h"
-    default:
-        assert(false && "Unknown instruction");
-    }
-    return pc;
-}
-
-INLINE unsigned getSrcIdxAt(Code* c, OpcodeT* pc, bool allowMissing) {
-
-    unsigned* sl = skiplist(c);
-    unsigned sl_i = 0;
-    OpcodeT* start = c->data;
-
-    SLOWASSERT(allowMissing || *sl <= pc - start);
-
-    if (sl[0] > pc - start)
-        return 0;
-
-    while (sl[sl_i] <= pc - start && sl_i < 2 * c->skiplistLength)
-        sl_i += 2;
-
-    // we need to determine index of the current instruction
-    OpcodeT* x = code(c) + sl[sl_i - 2];
-    // find the pc of the current instructions
-    unsigned insIdx = sl[sl_i - 1];
-
-    while (x != pc) {
-        x = advancePc(x);
-        ++insIdx;
-        if (insIdx == c->srcLength) {
-            SLOWASSERT(allowMissing);
-            return 0;
-        }
-    }
-    unsigned sidx = raw_src(c)[insIdx];
-    SLOWASSERT(allowMissing || sidx);
-
-    return sidx;
-}
-
-/** Returns the next Code in the current function. */
-INLINE Code* next(Code* c) {
-    return (
-        Code*)(c->data + pad4(c->codeSize) + c->srcLength * sizeof(unsigned) +
-               c->skiplistLength * 2 * sizeof(unsigned) + c->callSiteLength);
-}
+INLINE Code* next(Code* c) { return (Code*)((uintptr_t)c + c->size()); }
 
 // TODO removed src reference, now each code has its own
 
@@ -397,8 +95,8 @@ INLINE Code* next(Code* c) {
 
 #pragma pack(push)
 #pragma pack(1)
-typedef struct Function {
-    rir_header info;  /// for exposing SEXPs to GC
+struct Function {
+    rir::rir_header info;  /// for exposing SEXPs to GC
 
     SignatureSEXP signature; /// pointer to this version's signature
 
@@ -426,7 +124,7 @@ typedef struct Function {
     unsigned foffset; ///< Offset to the code of the function (last code)
 
     uint8_t data[]; // Code objects stored inline
-} Function;
+};
 #pragma pack(pop)
 
 /** Returns the EXTERNALSXP for the Function object. */
@@ -459,11 +157,6 @@ INLINE Code* begin(Function* f) { return (Code*)f->data; }
  */
 INLINE Code* end(Function* f) { return (Code*)((uintptr_t)f + f->size); }
 
-/** Returns a pointer to the Function to which code object c belongs. */
-INLINE Function* code2function(Code* c) {
-    return (Function*)((uintptr_t)c - c->header);
-}
-
 /** Returns a pointer to the code of the function (the last code object). */
 INLINE Code* bodyCode(Function* f) {
     return (Code*)((uintptr_t)f + f->foffset);
@@ -480,7 +173,7 @@ INLINE Code* codeAt(Function* f, unsigned offset) {
 #pragma pack(push)
 #pragma pack(1)
 typedef struct DispatchTable {
-    rir_header info;  /// for exposing SEXPs to GC
+    rir::rir_header info;  /// for exposing SEXPs to GC
 
     uint32_t magic; /// used to detect DispatchTables 0xBEEF1234
 
@@ -516,13 +209,13 @@ INLINE Function* extractFunction(SEXP s) {
     return sexp2function(sexp2dispatchTable(BODY(s))->entry[0]);
 }
 
+const static uint32_t NO_DEOPT_INFO = (uint32_t)-1;
+
 INLINE Code* findDefaultArgument(Code* c) {
-    Code* e = end(code2function(c));
+    Code* e = end(c->function());
     while (c != e && !c->isDefaultArgument)
         c = next(c);
     return c;
 }
-
-const static uint32_t NO_DEOPT_INFO = (uint32_t)-1;
 
 #endif // RIR_INTERPRETER_C_H
