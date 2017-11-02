@@ -361,58 +361,76 @@ static SEXP rirCallClosure(SEXP call, SEXP env, SEXP callee, SEXP actuals,
             SEXP oldFunStore = funStore;
             cp_pool_add(ctx, oldFunStore);
 
-            PROTECT(funStore = globalContext()->optimizer(funStore));
+            funStore = globalContext()->optimizer(funStore);
 
-            oldFun->next = funStore;
-            fun = sexp2function(funStore);
-            fun->origin = oldFunStore;
+            // only if the optimizer actually changed something
+            if (funStore != oldFunStore) {
+                PROTECT(funStore);
 
-            // Add the new function to the vtable.
-            if (vtable->info.gc_area_length < vtable->capacity) {
-                vtable->entry[vtable->info.gc_area_length++] = funStore;
-            } else {
-                // Allocate a new, larger vtable.
-                DispatchTable* oldVtable = vtable;
+                oldFun->next = funStore;
+                fun = sexp2function(funStore);
 
-                size_t capacity = oldVtable->capacity * 2;
-                size_t size = sizeof(DispatchTable) +
-                              (capacity * sizeof(DispatchTableEntry));
-                vtableStore = PROTECT(Rf_allocVector(EXTERNALSXP, size));
-                vtable = sexp2dispatchTable(vtableStore);
+                // Update the vtable.
+                EXTERNALSXP_SET_ENTRY(vtableStore, 0, funStore);
 
-                // Initialize the new vtable, copying old entries over.
-                vtable->info.gc_area_start = sizeof(DispatchTable);  // at the end
-                vtable->info.gc_area_length = oldVtable->info.gc_area_length + 1;
-                vtable->magic = DISPATCH_TABLE_MAGIC;
-                vtable->capacity = capacity;
+#if 0
+// for now, the optimizer just produces a new version with the same signature
+// so there is no need to reallocate the vtable
+// TODO: take care of correctly updating the vtable and the closure
+                // Add the new function to the vtable.
+                if (vtable->info.gc_area_length < vtable->capacity) {
+                    vtable->entry[vtable->info.gc_area_length++] = funStore;
+                } else {
+                    // Allocate a new, larger vtable.
+                    DispatchTable* oldVtable = vtable;
 
-                for (size_t i = 0; i < oldVtable->info.gc_area_length; i++) {
-                    vtable->entry[i] = oldVtable->entry[i];
+                    size_t capacity = oldVtable->capacity * 2;
+                    size_t size = sizeof(DispatchTable) +
+                                  (capacity * sizeof(DispatchTableEntry));
+                    vtableStore = PROTECT(Rf_allocVector(EXTERNALSXP, size));
+                    vtable = sexp2dispatchTable(vtableStore);
+
+                    // Initialize the new vtable, copying old entries over.
+                    vtable->info.gc_area_start = sizeof(DispatchTable);  // at the end
+                    vtable->info.gc_area_length = oldVtable->info.gc_area_length + 1;
+                    vtable->magic = DISPATCH_TABLE_MAGIC;
+                    vtable->capacity = capacity;
+
+                    for (size_t i = 0; i < oldVtable->info.gc_area_length; i++) {
+                        vtable->entry[i] = oldVtable->entry[i];
+                        // oldVtable->entry[i] = NULL;
+                        // TODO: is this only referenced from this closure body? if not
+                        // we cannot null it out,
+                        // also, maybe just leave it be (we mark what we want to keep)
+                    }
+
+                    // Insert the new function version.
+                    vtable->entry[oldVtable->info.gc_area_length] = funStore;
+
+                    // NULL out the remaining entries.
+                    for (size_t i = vtable->info.gc_area_length; i < capacity; i++) {
+                        vtable->entry[i] = NULL;
+                    }
+
+                    // Update the closure with the new vtable.
+                    SET_BODY(callee, vtableStore);
+
+                    UNPROTECT(1);  // vtableStore
                 }
+#endif
 
-                // Insert the new function version.
-                vtable->entry[oldVtable->info.gc_area_length] = funStore;
+                fun->invocationCount = oldFun->invocationCount;
+                fun->envLeaked = oldFun->envLeaked;
+                fun->envChanged = oldFun->envChanged;
+                fun->closure = callee;
 
-                // NULL out the remaining entries.
-                for (size_t i = vtable->info.gc_area_length; i < capacity; i++) {
-                    vtable->entry[i] = NULL;
-                }
-
-                // Update the closure with the new vtable.
-                SET_BODY(callee, vtableStore);
-
-                UNPROTECT(1);
+                UNPROTECT(1);  // funStore
             }
 
-            fun->invocationCount = oldFun->invocationCount + 1;
-            fun->envLeaked = oldFun->envLeaked;
-            fun->envChanged = oldFun->envChanged;
-            fun->closure = callee;
-
-            UNPROTECT(1);
 
             optimizing = false;
-        } else if (fun->invocationCount < UINT_MAX)
+        }
+        if (fun->invocationCount < UINT_MAX)
             fun->invocationCount++;
     }
 
@@ -556,9 +574,10 @@ SEXP doCall(Code* caller, SEXP callee, unsigned nargs, unsigned id, SEXP env,
         SEXP body = BODY(callee);
         if (TYPEOF(body) == EXTERNALSXP) {
             assert(isValidDispatchTableSEXP(body));
+            assert(isValidFunctionSEXP(sexp2dispatchTable(body)->entry[0]));
             result =
                 rirCallClosure(call, env, callee, argslist, nargs, ctx);
-            UNPROTECT(1);
+            UNPROTECT(1); // argslist
             break;
         }
 
@@ -692,7 +711,7 @@ SEXP doCallStack(Code* caller, SEXP callee, size_t nargs, unsigned id, SEXP env,
         PROTECT(argslist);
         ostack_popn(ctx, nargs);
 
-        // if body is INTSXP, it is rir serialized code, execute it directly
+        // if body is EXTERNALSXP, it is rir serialized code, execute it directly
         SEXP body = BODY(callee);
         if (TYPEOF(body) == EXTERNALSXP) {
             assert(isValidDispatchTableSEXP(body));
@@ -810,7 +829,7 @@ SEXP doDispatchStack(Code* caller, size_t nargs, uint32_t id, SEXP env,
             break;
         }
         case CLOSXP: {
-            // if body is INTSXP, it is rir serialized code, execute it directly
+            // if body is EXTERNALSXP, it is rir serialized code, execute it directly
             SEXP body = BODY(callee);
             if (TYPEOF(body) == EXTERNALSXP) {
                 assert(isValidDispatchTableSEXP(body));
@@ -923,7 +942,7 @@ SEXP doDispatch(Code* caller, uint32_t nargs, uint32_t id, SEXP env,
             break;
         }
         case CLOSXP: {
-            // if body is INTSXP, it is rir serialized code, execute it directly
+            // if body is EXTERNALSXP, it is rir serialized code, execute it directly
             SEXP body = BODY(callee);
             if (TYPEOF(body) == EXTERNALSXP) {
                 assert(isValidDispatchTableSEXP(body));

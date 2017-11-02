@@ -75,7 +75,7 @@ class Compiler {
 
         // Allocate a new vtable.
         size_t vtableSize = sizeof(DispatchTable) + sizeof(DispatchTableEntry);
-        SEXP vtableStore = p(Rf_allocVector(EXTERNALSXP, vtableSize));
+        SEXP vtableStore = Rf_allocVector(EXTERNALSXP, vtableSize);
         DispatchTable* vtable = sexp2dispatchTable(vtableStore);
 
         // Initialize the vtable. Initially the table has one entry, which is

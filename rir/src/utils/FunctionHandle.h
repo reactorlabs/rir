@@ -75,6 +75,7 @@ class FunctionHandle {
                          char* callSiteBuffer, unsigned callSiteLength,
                          std::vector<unsigned>& sources, bool markDefaultArg) {
         assert(function->size <= capacity);
+        assert(storeOwner_);
 
         unsigned totalSize =
             CodeHandle::totalSize(codeSize, sources.size(), callSiteLength);
@@ -95,14 +96,8 @@ class FunctionHandle {
 
             assert(function == payload);
 
-            // clear the fields that GC traces and release the old store
-            function->origin = nullptr;
-            function->next = nullptr;
-            function->closure = nullptr;
-            function->signature = nullptr;
-            R_ReleaseObject(store);
-
             R_PreserveObject(newStore);
+            R_ReleaseObject(store);
 
             store = newStore;
             payload = newPayload;
