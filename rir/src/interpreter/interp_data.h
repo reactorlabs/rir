@@ -8,14 +8,6 @@
 #include "R/r.h"
 
 
-#ifdef __cplusplus
-extern "C" {
-#else
-#define bool int
-#define true 1
-#define false 0
-#endif
-
 #ifdef ENABLE_SLOWASSERT
 #define SLOWASSERT(what) assert(what)
 #else
@@ -504,9 +496,5 @@ INLINE Code* findDefaultArgument(Code* c) {
 }
 
 const static uint32_t NO_DEOPT_INFO = (uint32_t)-1;
-
-#ifdef __cplusplus
-}
-#endif
 
 #endif // RIR_INTERPRETER_C_H

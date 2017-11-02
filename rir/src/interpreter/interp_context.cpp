@@ -1,7 +1,8 @@
 #include "interp_context.h"
 #include "runtime.h"
 
-void initializeResizeableList(ResizeableList * l, size_t capacity, SEXP parent, size_t index) {
+void initializeResizeableList(ResizeableList* l, size_t capacity, SEXP parent,
+                              size_t index) {
     l->capacity = capacity;
     l->list = Rf_allocVector(VECSXP, capacity);
     SET_VECTOR_ELT(parent, index, l->list);
@@ -19,14 +20,16 @@ SEXP quoteSym;
 
 Context* context_create(CompilerCallback compiler,
                         OptimizerCallback optimizer) {
-    Context* c = malloc(sizeof(Context));
+    Context* c = new Context;
     c->list = Rf_allocVector(VECSXP, 2);
     c->optimizer = optimizer;
     c->compiler = compiler;
     R_PreserveObject(c->list);
     initializeResizeableList(&c->cp, POOL_CAPACITY, c->list, CONTEXT_INDEX_CP);
-    initializeResizeableList(&c->src, POOL_CAPACITY, c->list, CONTEXT_INDEX_SRC);
-    // first item in source and constant pools is R_NilValue so that we can use the index 0 for other purposes
+    initializeResizeableList(&c->src, POOL_CAPACITY, c->list,
+                             CONTEXT_INDEX_SRC);
+    // first item in source and constant pools is R_NilValue so that we can use
+    // the index 0 for other purposes
     src_pool_add(c, R_NilValue);
     cp_pool_add(c, R_NilValue);
     R_Subset2Sym = Rf_install("[[");
@@ -40,5 +43,4 @@ Context* context_create(CompilerCallback compiler,
     return c;
 }
 
-
-extern Context * globalContext_;
+extern Context* globalContext_;

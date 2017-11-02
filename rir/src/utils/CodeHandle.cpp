@@ -49,8 +49,3 @@ FunIdxT CodeHandle::idx() {
 }
 
 }
-
-C_OR_CPP void c_printCode(Code * c) {
-    rir::CodeHandle(c).print();
-}
-
