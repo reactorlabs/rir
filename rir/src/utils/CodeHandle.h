@@ -4,7 +4,7 @@
 #include "interpreter/interp_data.h"
 #include "interpreter/interp.h"
 #include "interpreter/runtime.h"
-#include "ir/BC_inc.h"
+#include "ir/BC.h"
 
 #include <iostream>
 
