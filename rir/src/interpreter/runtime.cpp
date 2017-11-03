@@ -26,7 +26,7 @@ Function* isValidClosureSEXP(SEXP closure) {
     DispatchTable* t = isValidDispatchTableObject(BODY(closure));
     if (t == nullptr)
         return nullptr;
-    Function* f = sexp2function(t->entry[0]);
+    Function* f = t->first();
     if (f->magic != FUNCTION_MAGIC)
         return nullptr;
     return f;
@@ -42,9 +42,9 @@ void printFunction(Function* f) {
     Rprintf("Function object (%p):\n", f);
     Rprintf("  Magic:           %x (hex)\n", f->magic);
     Rprintf("  Size:            %u\n", f->size);
-    Rprintf("  Origin:          %p %s\n", f->origin, f->origin ? "" : "(unoptimized)");
-    Rprintf("  Next:            %p\n", f->next);
-    Rprintf("  Signature:       %p\n", f->signature);
+    Rprintf("  Origin:          %p %s\n", f->origin(), f->origin() ? "" : "(unoptimized)");
+    Rprintf("  Next:            %p\n", f->next());
+    Rprintf("  Signature:       %p\n", f->signature());
     Rprintf("  Code objects:    %u\n", f->codeLength);
     Rprintf("  Fun code offset: %x (hex)\n", f->foffset);
     Rprintf("  Invoked:         %u\n", f->invocationCount);
@@ -53,7 +53,7 @@ void printFunction(Function* f) {
         Rf_error("Wrong magic number -- not rir bytecode");
 
     // print respective code objects
-    for (Code* c = begin(f), *e = end(f); c != e; c = next(c))
+    for (Code* c : *f)
         c->print();
 }
 

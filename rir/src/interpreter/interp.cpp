@@ -6,6 +6,7 @@
 #include "runtime.h"
 #include "R/Funtab.h"
 #include "interpreter/deoptimizer.h"
+#include "runtime/DispatchTable.h"
 
 #define NOT_IMPLEMENTED assert(false)
 
@@ -225,11 +226,11 @@ SEXP createArgsList(Code* c, SEXP call, size_t nargs, CallSiteStruct* cs,
         } else {
             if (eager) {
                 SEXP arg =
-                    evalRirCode(codeAt(c->function(), argi), ctx, env, 0);
+                    evalRirCode(c->function()->codeAt(argi), ctx, env, 0);
                 assert(TYPEOF(arg) != PROMSXP);
                 __listAppend(&result, &pos, arg, name);
             } else {
-                Code* arg = codeAt(c->function(), argi);
+                Code* arg = c->function()->codeAt(argi);
                 SEXP promise = createPromise(arg, env);
                 __listAppend(&result, &pos, promise, name);
             }
@@ -280,19 +281,20 @@ static SEXP closureArgumentAdaptor(SEXP call, SEXP op, SEXP arglist, SEXP rho,
     a = actuals;
     // get the first Code that is a compiled default value of a formal arg
     // (or end() if no such exist)
-    Code* c = findDefaultArgument(begin(extractFunction(op)));
+    Function* fun = DispatchTable::unpack(BODY(op))->first();
+    Code* c = findDefaultArgument(fun->first());
+    Code* e = fun->codeEnd();
     while (f != R_NilValue) {
         if (CAR(f) != R_MissingArg) {
             if (CAR(a) == R_MissingArg) {
-                assert(c != end(extractFunction(op)) &&
-                       "No more compiled formals available.");
+                assert(c != e && "No more compiled formals available.");
                 SETCAR(a, createPromise(c, newrho));
                 SET_MISSING(a, 2);
             }
             // Either just used the compiled formal or it was not needed.
             // Skip to next Code (at least the body Code is always there),
             // then find the following compiled formal
-            c = findDefaultArgument(next(c));
+            c = findDefaultArgument(c->next());
         }
         assert(CAR(f) != R_DotsSymbol || TYPEOF(CAR(a)) == DOTSXP);
         f = CDR(f);
@@ -331,10 +333,8 @@ SEXP rirCallTrampoline(RCNTXT* cntxt, Code* code, SEXP env, unsigned nargs,
 static SEXP rirCallClosure(SEXP call, SEXP env, SEXP callee, SEXP actuals,
                            unsigned nargs, Context* ctx) {
 
-    SEXP vtableStore = BODY(callee);
-    DispatchTable* vtable = sexp2dispatchTable(vtableStore);
-    SEXP funStore = vtable->entry[0];
-    Function* fun = sexp2function(funStore);
+    DispatchTable* vtable = DispatchTable::unpack(BODY(callee));
+    Function* fun = vtable->first();
 
     static bool optimizing = false;
 
@@ -350,16 +350,15 @@ static SEXP rirCallClosure(SEXP call, SEXP env, SEXP callee, SEXP actuals,
     // the original, unoptimized version.
 
     if (!optimizing &&
-        !fun->next
+        !fun->next() &&
          /* currently there is a bug if we reoptimize a function twice:
           *  Deopt ids from the first optimization and second optimizations
           *  will be mixed and the deoptimizer always only goes back one
           *  optimization level!
           *  To avoid this bug we currently only optimize once
           */
-        &&
-        !fun->origin) {
-        Code* code = bodyCode(fun);
+        !fun->origin()) {
+        Code* code = fun->body();
         if (fun->markOpt ||
             (fun->invocationCount == 1 && code->perfCounter > 100) ||
             (fun->invocationCount == 10 && code->perfCounter > 20) ||
@@ -367,56 +366,20 @@ static SEXP rirCallClosure(SEXP call, SEXP env, SEXP callee, SEXP actuals,
             optimizing = true;
 
             Function* oldFun = fun;
-            SEXP oldFunStore = funStore;
-            cp_pool_add(ctx, oldFunStore);
+            cp_pool_add(ctx, oldFun->container());
 
-            funStore = globalContext()->optimizer(funStore);
+            fun = Function::unpack(globalContext()->optimizer(fun->container()));
 
-            // only if the optimizer actually changed something
-            if (funStore != oldFunStore) {
-                PROTECT(funStore);
+            PROTECT(fun->container());
 
-                EXTERNALSXP_SET_ENTRY(oldFunStore, FUNCTION_NEXT_OFFSET,
-                                      funStore);
-                fun = sexp2function(funStore);
+            // Update the vtable.
+            vtable->put(0, fun);
 
-                // Update the vtable.
-                EXTERNALSXP_SET_ENTRY(vtableStore, 0, funStore);
+            fun->invocationCount = oldFun->invocationCount;
+            fun->envLeaked = oldFun->envLeaked;
+            fun->envChanged = oldFun->envChanged;
 
-#if 0
-// for now, the optimizer just produces a new version with the same signature
-// so there is no need to reallocate the vtable
-// TODO: take care of correctly updating the vtable and the closure
-            if (vtable->length < (size_t)TRUELENGTH(vtableStore)) {
-                vtable->entry[vtable->length++] = funStore;
-            } else {
-                // Allocate a new, larger vtable.
-                DispatchTable* oldVtable = vtable;
-                SEXP oldVtableStore = vtableStore;
-
-                size_t capacity = TRUELENGTH(oldVtableStore) * 2;
-                size_t size = sizeof(DispatchTable) +
-                              (capacity * sizeof(DispatchTableEntry));
-                vtableStore = PROTECT(Rf_allocVector(EXTERNALSXP, size));
-                vtable = sexp2dispatchTable(vtableStore);
-
-                // Initialize the new vtable, copying old entries over.
-                SET_TRUELENGTH(vtableStore, capacity);
-                vtable->magic = DISPATCH_TABLE_MAGIC;
-                vtable->length = oldVtable->length + 1;
-
-                for (size_t i = 0; i < oldVtable->length; i++) {
-                    vtable->entry[i] = oldVtable->entry[i];
-                }
-#endif
-
-                fun->invocationCount = oldFun->invocationCount;
-                fun->envLeaked = oldFun->envLeaked;
-                fun->envChanged = oldFun->envChanged;
-
-                UNPROTECT(1);  // funStore
-            }
-
+            UNPROTECT(1);  // funStore
             optimizing = false;
         }
         if (fun->invocationCount < UINT_MAX)
@@ -439,7 +402,7 @@ static SEXP rirCallClosure(SEXP call, SEXP env, SEXP callee, SEXP actuals,
 
     // Exec the closure
     closureDebug(call, callee, env, newEnv, &cntxt);
-    Code* code = bodyCode(fun);
+    Code* code = fun->body();
 
     SEXP result = rirCallTrampoline(&cntxt, code, newEnv, nargs, ctx);
 
@@ -569,8 +532,8 @@ SEXP doCall(Code* caller, SEXP callee, unsigned nargs, unsigned id, SEXP env,
         // directly
         SEXP body = BODY(callee);
         if (TYPEOF(body) == EXTERNALSXP) {
-            assert(isValidDispatchTableSEXP(body));
-            assert(isValidFunctionSEXP(sexp2dispatchTable(body)->entry[0]));
+            assert(DispatchTable::check(body));
+            assert(DispatchTable::unpack(body)->first());
             result = rirCallClosure(call, env, callee, argslist, nargs, ctx);
             UNPROTECT(1); // argslist
             break;
@@ -1647,7 +1610,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
             // get the Code * pointer we need
             Immediate id = readImmediate();
             advanceImmediate();
-            Code* promiseCode = codeAt(c->function(), id);
+            Code* promiseCode = c->function()->codeAt(id);
             // create the promise and push it on stack
             ostack_push(ctx, createPromise(promiseCode, env));
             NEXT();
@@ -1675,7 +1638,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
             // get the Code * pointer we need
             Immediate n = readImmediate();
             advanceImmediate();
-            Code* promiseCode = codeAt(c->function(), n);
+            Code* promiseCode = c->function()->codeAt(n);
             // create the promise and push it on stack
             ostack_push(ctx, (SEXP)promiseCode);
             NEXT();
@@ -2447,11 +2410,11 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
             advanceImmediate();
             if (FRAME_CHANGED(env) || FRAME_LEAKED(env)) {
                 Function* fun = c->function();
-                assert(bodyCode(fun) == c && "Cannot deopt from promise");
+                assert(fun->body() == c && "Cannot deopt from promise");
                 fun->deopt = true;
-                SEXP val = fun->origin;
-                Function* deoptFun = sexp2function(val);
-                Code* deoptCode = bodyCode(deoptFun);
+                SEXP val = fun->origin();
+                Function* deoptFun = Function::unpack(val);
+                Code* deoptCode = deoptFun->body();
                 c = deoptCode;
                 pc = Deoptimizer_pc(deoptId);
                 PC_BOUNDSCHECK(pc, c);
@@ -2724,33 +2687,32 @@ SEXP rirExpr(SEXP f) {
         Code* c = (Code*)f;
         return src_pool_at(globalContext(), c->src);
     }
-    if (isValidFunctionObject(f)) {
-        Function* ff = sexp2function(f);
-        return src_pool_at(globalContext(), bodyCode(ff)->src);
+    Function* ff;
+    if ((ff = Function::check(f))) {
+        return src_pool_at(globalContext(), ff->body()->src);
     }
-    if (isValidDispatchTableObject(f)) {
+    DispatchTable* t;
+    if ((t = DispatchTable::check(f))) {
         // Default is the source of the first function in the dispatch table
-        DispatchTable* t = sexp2dispatchTable(f);
-        Function* ff = sexp2function(t->entry[0]);
-        return src_pool_at(globalContext(), bodyCode(ff)->src);
+        Function* ff = t->first();
+        return src_pool_at(globalContext(), ff->body()->src);
     }
     return f;
 }
 
 SEXP rirEval_f(SEXP f, SEXP env) {
     assert(TYPEOF(f) == EXTERNALSXP);
+    Function* ff;
+    DispatchTable* t;
     // TODO we do not really need the arg counts now
     if (isValidCodeObject(f)) {
         Code* c = (Code*)f;
         return evalRirCode(c, globalContext(), env, 0);
-    } else if (isValidFunctionObject(f)) {
-        Function* ff = sexp2function(f);
-        return evalRirCode(bodyCode(ff), globalContext(), env, 0);
-    } else if (isValidDispatchTableObject(f)) {
+    } else if ((ff = Function::check(f))) {
+        return evalRirCode(ff->body(), globalContext(), env, 0);
+    } else if ((t = DispatchTable::check(f))) {
         // Default target is the first version in the dispatch table
-        DispatchTable* t = sexp2dispatchTable(f);
-        Function* ff = sexp2function(t->entry[0]);
-        return evalRirCode(bodyCode(ff), globalContext(), env, 0);
+        return evalRirCode(t->first()->body(), globalContext(), env, 0);
     } else {
         assert(false && "Expected a code object, function, or dispatch table");
     }

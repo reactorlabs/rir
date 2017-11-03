@@ -6,93 +6,40 @@
 #include "ir/BC_inc.h"
 
 #include "ir/CodeVerifier.h"
+#include "runtime/Function.h"
 
 #include <iostream>
 
 namespace rir {
 
-class FunctionHandle {
-  private:
-    bool storeOwner_ = true;
+class FunctionWriter {
   public:
-    constexpr static unsigned initialSize = 2*sizeof(Function);
+    constexpr static unsigned initialSize = 2 * sizeof(Function);
 
-    SEXP store;
-    void* payload;
-
-    size_t capacity;
     Function* function;
 
-    FunctionHandle() = delete;
+    size_t capacity;
+
+    FunctionWriter() = delete;
     // also copy and move ctors = default ?
 
-    static FunctionHandle create() {
+    static FunctionWriter create() {
         assert(initialSize > sizeof(Function));
         assert(initialSize % sizeof(int) == 0);
         SEXP store = Rf_allocVector(EXTERNALSXP, initialSize);
         void* payload = INTEGER(store);
 
         Function* function = new (payload) Function;
-        assert(function == payload);
-
-        function->info.gc_area_start = sizeof(rir_header);  // just after the header
-        function->info.gc_area_length = 3; // signature, origin, next
-        function->signature = nullptr;
-        function->origin = nullptr;
-        function->next = nullptr;
-        function->magic = FUNCTION_MAGIC;
-        function->envLeaked = false;
-        function->envChanged = false;
-        function->deopt = false;
-        function->size = sizeof(Function);
-        function->codeLength = 0;
-        function->foffset = 0;
-        function->invocationCount = 0;
-        function->markOpt = false;
-
-        R_PreserveObject(store);
-
-        FunctionHandle res(store);
-        res.storeOwner_ = true;
-
+        FunctionWriter res(function, initialSize);
         return res;
     }
 
-    explicit FunctionHandle(SEXP store)
-        : storeOwner_(false), store(store), payload(INTEGER(store)),
-          capacity(XLENGTH(store)), function((Function*)payload) {
-        assert(function->magic == FUNCTION_MAGIC);
-        assert(function->size <= capacity);
-    }
-
-    explicit FunctionHandle(Function* function)
-        : storeOwner_(false), store(::function2store(function)),
-          payload(function), capacity(XLENGTH(store)), function(function) {
-        assert(function->magic == FUNCTION_MAGIC);
-        assert(function->size <= capacity);
-    }
-
-    ~FunctionHandle() {
-        if (storeOwner_)
-            R_ReleaseObject(store);
-    }
-
-    unsigned indexOf(Code* code) {
-        unsigned idx = 0;
-        for (Code* c : *this) {
-            if (c == code)
-                return idx;
-            ++idx;
-        }
-        assert(false);
-        return 0;
-    }
+    ~FunctionWriter() { R_ReleaseObject(function->container()); }
 
     Code* writeCode(SEXP ast, void* bc, unsigned codeSize, char* callSiteBuffer,
                     unsigned callSiteLength, std::vector<unsigned>& sources,
                     bool markDefaultArg) {
         assert(function->size <= capacity);
-        assert(storeOwner_);
 
         unsigned totalSize =
             Code::size(codeSize, sources.size(), callSiteLength);
@@ -109,30 +56,19 @@ class FunctionHandle {
             SEXP newStore = Rf_allocVector(EXTERNALSXP, newCapacity);
             void* newPayload = INTEGER(newStore);
 
-            memcpy(newPayload, payload, capacity);
-            EXTERNALSXP_SET_ENTRY(
-                newStore, FUNCTION_SIGNATURE_OFFSET,
-                EXTERNALSXP_ENTRY(store, FUNCTION_SIGNATURE_OFFSET));
-            EXTERNALSXP_SET_ENTRY(
-                newStore, FUNCTION_ORIGIN_OFFSET,
-                EXTERNALSXP_ENTRY(store, FUNCTION_ORIGIN_OFFSET));
-            EXTERNALSXP_SET_ENTRY(
-                newStore, FUNCTION_NEXT_OFFSET,
-                EXTERNALSXP_ENTRY(store, FUNCTION_NEXT_OFFSET));
-
-            assert(function == payload);
+            // it is ok to bypass write barrier here, since newPayload is a new
+            // object
+            memcpy(newPayload, function, capacity);
 
             R_PreserveObject(newStore);
-            R_ReleaseObject(store);
+            R_ReleaseObject(function->container());
 
-            store = newStore;
-            payload = newPayload;
-            function = (Function*)payload;
+            function = reinterpret_cast<Function*>(newPayload);
             capacity = newCapacity;
         }
 
         unsigned offset = function->size;
-        void* insert = (void*)((uintptr_t)payload + function->size);
+        void* insert = (void*)((uintptr_t)function + function->size);
         function->size += totalSize;
         assert(function->size <= capacity);
 
@@ -206,28 +142,12 @@ class FunctionHandle {
         return code;
     }
 
-    Code* entryPoint() {
-        assert(function->foffset);
-        return bodyCode(function);
+  private:
+    explicit FunctionWriter(Function* function, size_t capacity)
+        : function(function), capacity(capacity) {
+        assert(function->magic == FUNCTION_MAGIC);
+        assert(function->size <= capacity);
     }
-
-    CodeHandleIterator begin() { return CodeHandleIterator(::begin(function)); }
-    CodeHandleIterator end() { return CodeHandleIterator(::end(function)); }
-
-    inline Code* codeAtIdx(unsigned idx) {
-        for (auto c : *this) {
-            if (idx-- == 0)
-                return c;
-        }
-        assert(false);
-        return nullptr;
-    }
-
-    inline Code* codeAtOffset(unsigned offset) {
-        return codeAt(function, offset);
-    }
-
-    SEXP ast() { return src_pool_at(globalContext(), entryPoint()->src); }
 };
 }
 

@@ -7,9 +7,9 @@
 #include <cstdint>
 #include <cassert>
 
-struct Function;
-
 namespace rir {
+
+struct Function;
 
 // Offset between function SEXP and Function* struct
 // This is basically sizeof(SEXPREC_ALIGN)
@@ -48,8 +48,7 @@ namespace rir {
 struct CallSiteStruct;
 
 struct Code {
-    friend class FunctionHandle;
-    friend class CodeHandle;
+    friend class FunctionWriter;
     friend class CodeVerifier;
 
     Code() = delete;
@@ -162,6 +161,8 @@ struct Code {
     }
 
     void print();
+
+    Code* next() { return (Code*)((uintptr_t) this + this->size()); }
 
   private:
     static size_t calcSkiplistLength(unsigned sourcesSize) {

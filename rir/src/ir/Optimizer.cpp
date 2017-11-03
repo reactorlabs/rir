@@ -35,8 +35,7 @@ bool Optimizer::inliner(CodeEditor& code, bool stable) {
 }
 
 SEXP Optimizer::reoptimizeFunction(SEXP s) {
-    Function* fun = isValidFunctionObject(s);
-    assert(fun);
+    Function* fun = Function::unpack(s);
     bool safe = !fun->envLeaked && !fun->envChanged;
 
     CodeEditor code(s);
@@ -52,12 +51,13 @@ SEXP Optimizer::reoptimizeFunction(SEXP s) {
         }
     }
 
-    FunctionHandle opt = code.finalize();
-    EXTERNALSXP_SET_ENTRY(opt.store, FUNCTION_ORIGIN_OFFSET, s);
+    Function* opt = code.finalize();
+    opt->origin(fun);
+    fun->next(opt);
 
 #ifdef ENABLE_SLOWASSERT
-    CodeVerifier::verifyFunctionLayout(opt.store, globalContext());
+    CodeVerifier::verifyFunctionLayout(opt->container(), globalContext());
 #endif
-    return opt.store;
+    return opt->container();
 }
 }

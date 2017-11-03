@@ -2,7 +2,6 @@
 #define CODE_VERIFIER_H
 
 #include "interpreter/interp.h"
-#include "utils/FunctionHandle.h"
 
 namespace rir {
 

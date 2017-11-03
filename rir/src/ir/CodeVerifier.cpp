@@ -3,7 +3,6 @@
 
 #include <cassert>
 
-#include "utils/FunctionHandle.h"
 #include "CodeVerifier.h"
 #include "BC.h"
 #include "R/Symbols.h"
@@ -112,27 +111,26 @@ void CodeVerifier::calculateAndVerifyStack(Code* code) {
 
 void CodeVerifier::verifyFunctionLayout(SEXP sexp, ::Context* ctx) {
     assert(TYPEOF(sexp) == EXTERNALSXP and "Invalid SEXPTYPE");
-    FunctionHandle fun(sexp);
+    Function* f = Function::unpack(sexp);
 
     // get the code objects
     std::vector<Code*> objs;
-    for (auto c : fun) {
+    for (auto c : *f) {
         objs.push_back(c);
     }
 
-    assert(fun.function->size <= XLENGTH(fun.store) and
+    assert(f->size <= XLENGTH(sexp) and
            "Reported size must be smaller than the size of the vector");
 
-    Function* f = fun.function;
-    if (f->origin) {
-        assert(TYPEOF(f->origin) == EXTERNALSXP and "Invalid origin type");
-        assert(sexp2function(f->origin)->magic == FUNCTION_MAGIC and
+    if (f->origin()) {
+        assert(TYPEOF(f->origin()) == EXTERNALSXP and "Invalid origin type");
+        assert(Function::unpack(f->origin())->magic == FUNCTION_MAGIC and
                "Origin does not seem to be function bytecode");
     }
     assert(f->codeLength == objs.size() and "Invalid number of code objects");
 
     // add the end sentinel
-    objs.push_back(end(f));
+    objs.push_back(f->codeEnd());
     // check the code headers
     for (size_t i = 0, e = objs.size() - 1; i != e; ++i) {
         Code* c = objs[i];
@@ -189,9 +187,9 @@ void CodeVerifier::verifyFunctionLayout(SEXP sexp, ::Context* ctx) {
             if (*cptr == Opcode::guard_env_) {
                 unsigned deoptId = *reinterpret_cast<ArgT*>(cptr + 1);
                 Opcode* deoptPc = (Opcode*)Deoptimizer_pc(deoptId);
-                assert(f->origin);
-                FunctionHandle deoptFun(f->origin);
-                Code* deoptCode = deoptFun.entryPoint();
+                assert(f->origin());
+                Function* deoptFun = Function::unpack(f->origin());
+                Code* deoptCode = deoptFun->body();
                 assert(deoptPc >= deoptCode->code() &&
                        deoptPc < deoptCode->endCode());
             }

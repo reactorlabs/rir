@@ -4,7 +4,7 @@
 #include "R/r.h"
 #include "R/Preserve.h"
 #include "R/Protect.h"
-#include "utils/FunctionHandle.h"
+#include "utils/FunctionWriter.h"
 
 #include <unordered_map>
 #include <iostream>
@@ -70,21 +70,15 @@ class Compiler {
         SEXP res = p(c.finalize());
 
         // Allocate a new vtable.
-        size_t vtableSize = sizeof(DispatchTable) + sizeof(DispatchTableEntry);
-        SEXP vtableStore = p(Rf_allocVector(EXTERNALSXP, vtableSize));
-        DispatchTable* vtable = sexp2dispatchTable(vtableStore);
+        DispatchTable* vtable = DispatchTable::create(1);
 
         // Initialize the vtable. Initially the table has one entry, which is
         // the compiled function.
-        vtable->info.gc_area_start = sizeof(DispatchTable);  // at the end
-        vtable->info.gc_area_length = 1;
-        vtable->magic = DISPATCH_TABLE_MAGIC;
-        vtable->capacity = 1;
-        EXTERNALSXP_SET_ENTRY(vtableStore, 0, res);
+        vtable->put(0, Function::unpack(res));
 
         // Set the closure fields.
         // NOTE: The closure environment is set by the caller.
-        SET_BODY(closure, vtableStore);
+        SET_BODY(closure, vtable->container());
         SET_FORMALS(closure, formals);
 
         return closure;

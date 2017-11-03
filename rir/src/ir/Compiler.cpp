@@ -37,7 +37,8 @@ class Context {
         CodeStream cs;
         std::stack<LoopContext> loops;
         CodeContext* parent;
-        CodeContext(SEXP ast, FunctionHandle& fun, CodeContext* p) : cs(fun, ast), parent(p) {}
+        CodeContext(SEXP ast, FunctionWriter& fun, CodeContext* p)
+            : cs(fun, ast), parent(p) {}
         virtual ~CodeContext() {}
         bool inLoop() {
             return !loops.empty() ||
@@ -65,7 +66,8 @@ class Context {
 
     class PromiseContext : public CodeContext {
       public:
-        PromiseContext(SEXP ast, FunctionHandle& fun, CodeContext* p) : CodeContext(ast, fun, p) {}
+        PromiseContext(SEXP ast, FunctionWriter& fun, CodeContext* p)
+            : CodeContext(ast, fun, p) {}
         bool loopIsLocal() override {
             if (loops.empty()) {
                 parent->setContextNeeded();
@@ -79,10 +81,10 @@ class Context {
 
     CodeStream& cs() { return code.top()->cs; }
 
-    FunctionHandle& fun;
+    FunctionWriter& fun;
     Preserve& preserve;
 
-    Context(FunctionHandle& fun, Preserve& preserve)
+    Context(FunctionWriter& fun, Preserve& preserve)
         : fun(fun), preserve(preserve) {}
 
     ~Context() { assert(code.empty()); }
@@ -1190,7 +1192,7 @@ SEXP Compiler::finalize() {
     // Rprintf("****************************************************\n");
     // Rprintf("Compiling function\n");
 
-    FunctionHandle function = FunctionHandle::create();
+    FunctionWriter function = FunctionWriter::create();
     Context ctx(function, preserve);
 
     // Compile formals (if any)
@@ -1204,7 +1206,7 @@ SEXP Compiler::finalize() {
     ctx.cs() << BC::ret();
     ctx.pop();
 
-    CodeEditor code(function.entryPoint(), formals);
+    CodeEditor code(function.function->body(), formals);
 
     for (size_t i = 0; i < code.numPromises(); ++i)
         if (code.promise(i))
@@ -1212,13 +1214,13 @@ SEXP Compiler::finalize() {
 
     Optimizer::optimize(code);
 
-    FunctionHandle opt = code.finalize();
+    Function* opt = code.finalize();
 
 #ifdef ENABLE_SLOWASSERT
-    CodeVerifier::verifyFunctionLayout(opt.store, globalContext());
+    CodeVerifier::verifyFunctionLayout(opt->container(), globalContext());
 #endif
 
-    return opt.store;
+    return opt->container();
 }
 
 }  // namespace rir

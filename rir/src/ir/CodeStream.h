@@ -8,8 +8,8 @@
 #include "runtime/Code.h"
 #include "BC.h"
 
-#include "utils/FunctionHandle.h"
 #include "CodeVerifier.h"
+#include "utils/FunctionWriter.h"
 
 namespace rir {
 
@@ -22,7 +22,7 @@ class CodeStream {
     unsigned pos = 0;
     unsigned size = 1024;
 
-    FunctionHandle& function;
+    FunctionWriter& function;
 
     SEXP ast;
 
@@ -52,7 +52,7 @@ class CodeStream {
         insert((JmpT)0);
     }
 
-    CodeStream(FunctionHandle& function, SEXP ast)
+    CodeStream(FunctionWriter& function, SEXP ast)
         : function(function), ast(ast) {
         code = new std::vector<char>(1024);
     }

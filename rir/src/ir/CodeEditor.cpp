@@ -33,36 +33,36 @@ CodeEditor::CodeEditor(SEXP in) {
         ::Function* f = isValidClosureSEXP(in);
         assert(f != nullptr);
         formals_ = FORMALS(in);
-        DispatchTable* dispatchTable = sexp2dispatchTable(BODY(in));
-        bc = dispatchTable->entry[0];
+        DispatchTable* dispatchTable = DispatchTable::unpack(BODY(in));
+        bc = dispatchTable->first()->container();
     } else {
         assert(isValidFunctionObject(in));
     }
-    FunctionHandle fh(bc);
-    Code* ch = fh.entryPoint();
+    Function* f = Function::unpack(bc);
+    Code* ch = f->body();
     ast = src_pool_at(globalContext(), ch->src);
-    loadCode(fh, ch, true);
+    loadCode(f, ch, true);
 }
 
 CodeEditor::CodeEditor(Code* code) {
     ast = src_pool_at(globalContext(), code->src);
-    loadCode(FunctionHandle(code->function()), code, false);
+    loadCode(code->function(), code, false);
 }
 
 CodeEditor::CodeEditor(Code* code, SEXP formals) {
     formals_ = formals;
     ast = src_pool_at(globalContext(), code->src);
-    loadCode(FunctionHandle(code->function()), code, true);
+    loadCode(code->function(), code, true);
 }
 
-void CodeEditor::loadCode(FunctionHandle function, Code* code,
+void CodeEditor::loadCode(Function* function, Code* code,
                           bool loadCompiledDefaultArgs) {
     std::unordered_map<Opcode*, LabelT> bcLabels;
 
     // Add promises that are default values of formal arguments
     if (loadCompiledDefaultArgs) {
         unsigned idx = 0;
-        for (auto c : function) {
+        for (auto c : *function) {
             if (c->isDefaultArgument) {
                 CodeEditor* p = new CodeEditor(c);
                 if (promises.size() <= idx)
@@ -131,9 +131,9 @@ void CodeEditor::loadCode(FunctionHandle function, Code* code,
             }
             if (bc.hasPromargs()) {
                 if (bc.bc == Opcode::promise_ || bc.bc == Opcode::push_code_) {
-                    Code* code = function.codeAtOffset(bc.immediate.fun);
+                    Code* code = function->codeAt(bc.immediate.fun);
 
-                    unsigned idx = function.indexOf(code);
+                    unsigned idx = function->indexOf(code);
                     bc.immediate.fun = idx;
 
                     CodeEditor* p = new CodeEditor(code);
@@ -155,8 +155,8 @@ void CodeEditor::loadCode(FunctionHandle function, Code* code,
                     for (unsigned i = 0; i < nargs; ++i) {
                         auto arg = oldCs->args()[i];
                         if (arg <= MAX_ARG_IDX) {
-                            Code* code = function.codeAtOffset(arg);
-                            arg = function.indexOf(code);
+                            Code* code = function->codeAt(arg);
+                            arg = function->indexOf(code);
                             CodeEditor* p = new CodeEditor(code);
                             if (promises.size() <= arg)
                                 promises.resize(arg + 1, nullptr);
@@ -285,7 +285,7 @@ void CodeEditor::Cursor::print() {
         pos->bc.print();
 }
 
-unsigned CodeEditor::write(FunctionHandle& function, bool isDefaultArgument) {
+unsigned CodeEditor::write(FunctionWriter& function, bool isDefaultArgument) {
     CodeStream cs(function, ast);
     cs.setNumLabels(labels_.size());
 
@@ -325,10 +325,10 @@ unsigned CodeEditor::write(FunctionHandle& function, bool isDefaultArgument) {
     return cs.finalize(isDefaultArgument);
 }
 
-FunctionHandle CodeEditor::finalize() {
-    FunctionHandle fun = FunctionHandle::create();
+Function* CodeEditor::finalize() {
+    FunctionWriter fun = FunctionWriter::create();
     write(fun);
-    return fun;
+    return fun.function;
 }
 }
 

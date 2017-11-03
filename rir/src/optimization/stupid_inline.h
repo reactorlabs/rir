@@ -113,12 +113,12 @@ class StupidInliner {
             if (!isValidFunctionSEXP(fun))
                 continue;
 
-            Function* f = sexp2function(fun);
-            Code* c = bodyCode(f);
+            Function* f = Function::unpack(fun);
+            Code* c = f->body();
 
             // TODO: This is a bit of a hack to find out if the function
             // has just one code object.
-            if (begin(f) != c)
+            if (f->begin() != c)
                 continue;
 
             CodeEditor::Cursor cur = i.asCursor(code_).prev();

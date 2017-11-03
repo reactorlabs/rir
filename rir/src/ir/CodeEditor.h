@@ -3,8 +3,8 @@
 
 #include "BC_inc.h"
 
-#include "utils/FunctionHandle.h"
 #include "interpreter/interp_context.h"
+#include "utils/FunctionWriter.h"
 
 #include <unordered_set>
 #include <set>
@@ -447,14 +447,13 @@ class CodeEditor {
         }
     }
 
-    void loadCode(FunctionHandle function, Code* code,
-                  bool loadCompiledDefaultArgs);
+    void loadCode(Function* function, Code* code, bool loadCompiledDefaultArgs);
 
     ~CodeEditor();
 
-    unsigned write(FunctionHandle& function, bool isDefaultArgument = false);
+    unsigned write(FunctionWriter& function, bool isDefaultArgument = false);
 
-    FunctionHandle finalize();
+    Function* finalize();
 
     void print(bool verbose = true);
 
