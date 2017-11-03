@@ -64,7 +64,6 @@ void printFunction(Function* f) {
     Rprintf("Function object (%p):\n", f);
     Rprintf("  Magic:           %x (hex)\n", f->magic);
     Rprintf("  Size:            %u\n", f->size);
-    Rprintf("  Closure:         %p\n", f->closure);
     Rprintf("  Origin:          %p %s\n", f->origin, f->origin ? "" : "(unoptimized)");
     Rprintf("  Next:            %p\n", f->next);
     Rprintf("  Signature:       %p\n", f->signature);

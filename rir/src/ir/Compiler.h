@@ -69,13 +69,9 @@ class Compiler {
         Compiler c(ast, formals);
         SEXP res = p(c.finalize());
 
-        // Set the compiled function's closure pointer.
-        Function* func = sexp2function(res);
-        func->closure = closure;
-
         // Allocate a new vtable.
         size_t vtableSize = sizeof(DispatchTable) + sizeof(DispatchTableEntry);
-        SEXP vtableStore = Rf_allocVector(EXTERNALSXP, vtableSize);
+        SEXP vtableStore = p(Rf_allocVector(EXTERNALSXP, vtableSize));
         DispatchTable* vtable = sexp2dispatchTable(vtableStore);
 
         // Initialize the vtable. Initially the table has one entry, which is
@@ -84,7 +80,7 @@ class Compiler {
         vtable->info.gc_area_length = 1;
         vtable->magic = DISPATCH_TABLE_MAGIC;
         vtable->capacity = 1;
-        vtable->entry[0] = res;
+        EXTERNALSXP_SET_ENTRY(vtableStore, 0, res);
 
         // Set the closure fields.
         // NOTE: The closure environment is set by the caller.

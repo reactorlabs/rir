@@ -36,11 +36,10 @@ class FunctionHandle {
         assert(function == payload);
 
         function->info.gc_area_start = sizeof(rir_header);  // just after the header
-        function->info.gc_area_length = 4;  // origin, next, closure, signature
+        function->info.gc_area_length = 3; // signature, origin, next
+        function->signature = nullptr;
         function->origin = nullptr;
         function->next = nullptr;
-        function->closure = nullptr;
-        function->signature = nullptr;
         function->magic = FUNCTION_MAGIC;
         function->envLeaked = false;
         function->envChanged = false;
@@ -93,6 +92,15 @@ class FunctionHandle {
             void* newPayload = INTEGER(newStore);
 
             memcpy(newPayload, payload, capacity);
+            EXTERNALSXP_SET_ENTRY(
+                newStore, FUNCTION_SIGNATURE_OFFSET,
+                EXTERNALSXP_ENTRY(store, FUNCTION_SIGNATURE_OFFSET));
+            EXTERNALSXP_SET_ENTRY(
+                newStore, FUNCTION_ORIGIN_OFFSET,
+                EXTERNALSXP_ENTRY(store, FUNCTION_ORIGIN_OFFSET));
+            EXTERNALSXP_SET_ENTRY(
+                newStore, FUNCTION_NEXT_OFFSET,
+                EXTERNALSXP_ENTRY(store, FUNCTION_NEXT_OFFSET));
 
             assert(function == payload);
 

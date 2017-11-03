@@ -89,7 +89,6 @@ typedef enum {
  */
 typedef SEXP FunctionSEXP;
 typedef SEXP SignatureSEXP;
-typedef SEXP ClosureSEXP;
 typedef SEXP PromiseSEXP;
 typedef SEXP DispatchTableEntry;
 
@@ -397,20 +396,24 @@ INLINE Code* next(Code* c) {
  *  A Function has a number of Code objects, codeLen, stored
  *  inline in data.
  */
+
+// TODO: some better mechanism... for now, keep these synced with the order
+// of the SEXPs in Function
+#define FUNCTION_SIGNATURE_OFFSET 0
+#define FUNCTION_ORIGIN_OFFSET 1
+#define FUNCTION_NEXT_OFFSET 2
+
 #pragma pack(push)
 #pragma pack(1)
 typedef struct Function {
     rir_header info;  /// for exposing SEXPs to GC
 
+    SignatureSEXP signature; /// pointer to this version's signature
+
     FunctionSEXP origin; /// Same Function with fewer optimizations,
                          //   NULL if original
 
     FunctionSEXP next;
-
-    ClosureSEXP closure; /// pointer to Closure
-                         //    which has a pointer to DispatchTable
-
-    SignatureSEXP signature;  /// pointer to this version's signature
 
     unsigned magic; /// used to detect Functions 0xCAFEBABE
 

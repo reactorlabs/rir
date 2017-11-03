@@ -108,9 +108,6 @@ static void jit(SEXP cls, Context* ctx) {
         return;
     SEXP cmp = ctx->compiler(cls, NULL);
     SET_BODY(cls, BODY(cmp));
-    DispatchTable* dt = sexp2dispatchTable(BODY(cls));
-    Function* fun = sexp2function(dt->entry[0]);
-    fun->closure = cls;
 }
 
 void closureDebug(SEXP call, SEXP op, SEXP rho, SEXP newrho, RCNTXT* cntxt) {
@@ -367,7 +364,8 @@ static SEXP rirCallClosure(SEXP call, SEXP env, SEXP callee, SEXP actuals,
             if (funStore != oldFunStore) {
                 PROTECT(funStore);
 
-                oldFun->next = funStore;
+                EXTERNALSXP_SET_ENTRY(oldFunStore, FUNCTION_NEXT_OFFSET,
+                                      funStore);
                 fun = sexp2function(funStore);
 
                 // Update the vtable.
@@ -422,11 +420,9 @@ static SEXP rirCallClosure(SEXP call, SEXP env, SEXP callee, SEXP actuals,
                 fun->invocationCount = oldFun->invocationCount;
                 fun->envLeaked = oldFun->envLeaked;
                 fun->envChanged = oldFun->envChanged;
-                fun->closure = callee;
 
                 UNPROTECT(1);  // funStore
             }
-
 
             optimizing = false;
         }
@@ -462,8 +458,10 @@ static SEXP rirCallClosure(SEXP call, SEXP env, SEXP callee, SEXP actuals,
     if (!fun->envChanged && FRAME_CHANGED(newEnv))
         fun->envChanged = true;
 
-    if (fun->deopt)
+    if (fun->deopt) {
+        // TODO: fix -- should save dispatch table instead of function store
         SET_BODY(callee, fun->origin);
+    }
 
     ostack_pop(ctx); // newEnv
     return result;
