@@ -672,6 +672,13 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
         return true;
     }
 
+    if (fun == symbol::length && args.length() == 1) {
+        cs << BC::guardNamePrimitive(fun);
+        compileExpr(ctx, args[0]);
+        cs << BC::length();
+        return true;
+    }
+
     if (fun == symbol::isnull && args.length() == 1) {
         cs << BC::guardNamePrimitive(fun);
         compileExpr(ctx, args[0]);

@@ -77,6 +77,7 @@ DECLARE(as, "as");
 DECLARE(packageSlot, "packageSlot");
 DECLARE(attributes, "attributes");
 DECLARE(c, "c");
+DECLARE(length, "length");
 DECLARE(standardGeneric, "standardGeneric");
 
 #undef DECLARE
