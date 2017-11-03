@@ -50,7 +50,7 @@ R with RIR patches is a submodule under external/custom-r. This is how you edit:
     cd external/custom-r
     # By default submodules are checked out headless. We use a
     # branch to keep track of our changes to R, that is based on
-    # one of the R version branches. If you want ot make changes
+    # one of the R version branches. If you want to make changes
     # you have to make sure to be on that branch locally, before
     # creating commits.
     git checkout rir-patch-3-3-branch
@@ -61,9 +61,36 @@ R with RIR patches is a submodule under external/custom-r. This is how you edit:
     cd ../..
     # now the updated submodule needs to be commited to rir 
     git commit external/custom-r -m "bump R module version"
-    git push my-remote my-feature-branch
+    git push my-rir-remote my-rir-feature-branch
     # Now you can create a PR with the R changes & potential RIR 
     # changes in my-feature-branch
+
+If you want to test your R changes on travis, before pushing to the main branch on the gnur repository you can also push to a feature branch on gnur first. E.g.:
+
+    git checkout -b my-rir-feature-branch
+    cd external/custom-r
+    git checkout -b my-gnur-feature-branch
+    # edit and commit. Need to push, or travis will not be able to access the submodule reference
+    git push origin my-gnur-feature-branch
+    cd ../..
+    git commit external/custom-r -m "temp module version"
+    git push my-rir-remote my-rir-feature-branch
+
+    # Review....
+    # Now, with travis green, before merging, change it back:
+
+    cd external/custom-r
+    git checkout rir-patch-3-3-branch
+    git pull origin rir-patch-3-3-branch
+    git merge --fast-forward-only my-gnur-feature-branch
+    git push origin rir-patch-3-3-branch
+    # delete old branch
+    git push origin :my-gnur-feature-branch
+    cd ../..
+    git commit external/custom-r -m "bump R module version"
+    git push my-rir-remote my-rir-feature-branch
+
+    # Merge PR
 
 Fetch updated R:
 
