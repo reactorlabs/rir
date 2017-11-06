@@ -61,10 +61,12 @@ void printCode(Code* c) {
 }
 
 void printFunction(Function* f) {
-    Rprintf("Function object:\n");
+    Rprintf("Function object (%p):\n", f);
     Rprintf("  Magic:           %x (hex)\n", f->magic);
     Rprintf("  Size:            %u\n", f->size);
-    Rprintf("  Origin:          %s\n", f->origin ? "optimized" : "unoptimized");
+    Rprintf("  Origin:          %p %s\n", f->origin, f->origin ? "" : "(unoptimized)");
+    Rprintf("  Next:            %p\n", f->next);
+    Rprintf("  Signature:       %p\n", f->signature);
     Rprintf("  Code objects:    %u\n", f->codeLength);
     Rprintf("  Fun code offset: %x (hex)\n", f->foffset);
     Rprintf("  Invoked:         %u\n", f->invocationCount);
@@ -75,6 +77,8 @@ void printFunction(Function* f) {
     // print respective code objects
     for (Code *c = begin(f), *e = end(f); c != e; c = next(c))
         printCode(c);
+
+    Rprintf("\n");
 }
 
 // TODO change gnu-r to expect ptr and not bool and we can get rid of the wrapper

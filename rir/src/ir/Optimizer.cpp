@@ -35,25 +35,29 @@ bool Optimizer::inliner(CodeEditor& code, bool stable) {
 }
 
 SEXP Optimizer::reoptimizeFunction(SEXP s) {
-    Function* fun = sexp2function(s);
+    Function* fun = isValidFunctionObject(s);
+    assert(fun);
     bool safe = !fun->envLeaked && !fun->envChanged;
 
     CodeEditor code(s);
 
     for (int i = 0; i < 16; ++i) {
         bool changedInl = Optimizer::inliner(code, safe);
-        bool changedOpt = Optimizer::optimize(code, 2);
-        if (!changedInl && !changedOpt)
-            break;
+        bool changedOpt = Optimizer::optimize(code, 8);
+        if (!changedInl && !changedOpt) {
+            if (i == 0)
+                return s;
+            else
+                break;
+        }
     }
 
     FunctionHandle opt = code.finalize();
-    opt.function->origin = s;
+    EXTERNALSXP_SET_ENTRY(opt.store, FUNCTION_ORIGIN_OFFSET, s);
 
 #ifdef ENABLE_SLOWASSERT
     CodeVerifier::verifyFunctionLayout(opt.store, globalContext());
 #endif
-    SEXP res = opt.store;
-    return res;
+    return opt.store;
 }
 }

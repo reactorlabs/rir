@@ -32,24 +32,25 @@ class FunctionHandle {
         SEXP store = Rf_allocVector(EXTERNALSXP, initialSize);
         void* payload = INTEGER(store);
 
-        TYPEOF(store) = EXTERNALSXP;
-        R_PreserveObject(store);
-
         Function* function = new (payload) Function;
         assert(function == payload);
+
+        function->info.gc_area_start = sizeof(rir_header);  // just after the header
+        function->info.gc_area_length = 3; // signature, origin, next
+        function->signature = nullptr;
+        function->origin = nullptr;
+        function->next = nullptr;
         function->magic = FUNCTION_MAGIC;
         function->envLeaked = false;
         function->envChanged = false;
         function->deopt = false;
         function->size = sizeof(Function);
-        function->origin = nullptr;
-        function->next = nullptr;
-        function->closure = nullptr;
-        // TODO(mhyee): signature
         function->codeLength = 0;
         function->foffset = 0;
         function->invocationCount = 0;
         function->markOpt = false;
+
+        R_PreserveObject(store);
 
         FunctionHandle res(store);
         res.storeOwner_ = true;
@@ -73,6 +74,7 @@ class FunctionHandle {
                          char* callSiteBuffer, unsigned callSiteLength,
                          std::vector<unsigned>& sources, bool markDefaultArg) {
         assert(function->size <= capacity);
+        assert(storeOwner_);
 
         unsigned totalSize =
             CodeHandle::totalSize(codeSize, sources.size(), callSiteLength);
@@ -89,15 +91,22 @@ class FunctionHandle {
             SEXP newStore = Rf_allocVector(EXTERNALSXP, newCapacity);
             void* newPayload = INTEGER(newStore);
 
-            TYPEOF(newStore) = EXTERNALSXP;
-
             memcpy(newPayload, payload, capacity);
-            memset(payload, 0xee, capacity);
+            EXTERNALSXP_SET_ENTRY(
+                newStore, FUNCTION_SIGNATURE_OFFSET,
+                EXTERNALSXP_ENTRY(store, FUNCTION_SIGNATURE_OFFSET));
+            EXTERNALSXP_SET_ENTRY(
+                newStore, FUNCTION_ORIGIN_OFFSET,
+                EXTERNALSXP_ENTRY(store, FUNCTION_ORIGIN_OFFSET));
+            EXTERNALSXP_SET_ENTRY(
+                newStore, FUNCTION_NEXT_OFFSET,
+                EXTERNALSXP_ENTRY(store, FUNCTION_NEXT_OFFSET));
+
+            assert(function == payload);
 
             R_PreserveObject(newStore);
             R_ReleaseObject(store);
 
-            assert(function == payload);
             store = newStore;
             payload = newPayload;
             function = (Function*)payload;
