@@ -99,7 +99,7 @@ DEF_INSTR(asast_, 0, 1, 1, 1)
 /**
  * stvar_:: assign tos to the immediate symbol
  */
-DEF_INSTR(stvar_, 1, 1, 0, 1)
+DEF_INSTR(stvar_, 1, 1, 0, 0)
 
 /**
  * stvar2_:: assign tos to the immediate symbol
