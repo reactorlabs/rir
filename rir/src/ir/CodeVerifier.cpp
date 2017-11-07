@@ -3,7 +3,6 @@
 
 #include <cassert>
 
-#include "utils/FunctionHandle.h"
 #include "CodeVerifier.h"
 #include "BC.h"
 #include "R/Symbols.h"
@@ -69,19 +68,19 @@ class State {
 
 } // unnamed namespace
 
-void CodeVerifier::calculateAndVerifyStack(CodeHandle code) {
+void CodeVerifier::calculateAndVerifyStack(Code* code) {
     State max; // max state
     std::map<Opcode*, State> state;
     std::stack<State> q;
 
-    Opcode* cptr = code.bc();
+    Opcode* cptr = code->code();
     q.push(State(cptr));
 
     while (not q.empty()) {
         State i = q.top();
         q.pop();
         if (state.find(i.pc) != state.end()) {
-            assert(i.pc >= code.bc() && i.pc < code.endBc());
+            assert(i.pc >= code->code() && i.pc < code->endCode());
             State current = state[i.pc];
             if (current != i)
                 assert(false and "Stack imbalance detected");
@@ -90,7 +89,7 @@ void CodeVerifier::calculateAndVerifyStack(CodeHandle code) {
         while (true) {
             state[i.pc] = i;
             Opcode* pc = i.pc;
-            assert(pc >= code.bc() && pc < code.endBc());
+            assert(pc >= code->code() && pc < code->endCode());
             BC cur = BC::decode(pc);
             i.advance();
             max.updateMax(i);
@@ -107,37 +106,36 @@ void CodeVerifier::calculateAndVerifyStack(CodeHandle code) {
             }
         }
     }
-    code.code->stackLength = max.ostack;
+    code->stackLength = max.ostack;
 }
 
 void CodeVerifier::verifyFunctionLayout(SEXP sexp, ::Context* ctx) {
     assert(TYPEOF(sexp) == EXTERNALSXP and "Invalid SEXPTYPE");
-    FunctionHandle fun(sexp);
+    Function* f = Function::unpack(sexp);
 
     // get the code objects
     std::vector<Code*> objs;
-    for (auto c : fun) {
+    for (auto c : *f) {
         objs.push_back(c);
     }
 
-    assert(fun.function->size <= XLENGTH(fun.store) and
+    assert(f->size <= XLENGTH(sexp) and
            "Reported size must be smaller than the size of the vector");
 
-    Function* f = fun.function;
-    if (f->origin) {
-        assert(TYPEOF(f->origin) == EXTERNALSXP and "Invalid origin type");
-        assert(sexp2function(f->origin)->magic == FUNCTION_MAGIC and
+    if (f->origin()) {
+        assert(TYPEOF(f->origin()) == EXTERNALSXP and "Invalid origin type");
+        assert(Function::unpack(f->origin())->magic == FUNCTION_MAGIC and
                "Origin does not seem to be function bytecode");
     }
     assert(f->codeLength == objs.size() and "Invalid number of code objects");
 
     // add the end sentinel
-    objs.push_back(end(f));
+    objs.push_back(f->codeEnd());
     // check the code headers
     for (size_t i = 0, e = objs.size() - 1; i != e; ++i) {
         Code* c = objs[i];
         assert(c->magic == CODE_MAGIC and "Invalid code magic number");
-        assert(code2function(c) == f and "Invalid code offset");
+        assert(c->function() == f and "Invalid code offset");
         assert(c->src != 0 and "Code must have AST");
         unsigned oldo = c->stackLength;
         calculateAndVerifyStack(c);
@@ -160,11 +158,11 @@ void CodeVerifier::verifyFunctionLayout(SEXP sexp, ::Context* ctx) {
                TYPEOF(call) == NILSXP);
         if (cs->hasSelector) {
             assert(!cs->hasTarget);
-            SEXP selector = cp_pool_at(ctx, *CallSite_selector(cs));
+            SEXP selector = cp_pool_at(ctx, *cs->selector());
             assert(TYPEOF(selector) == SYMSXP);
         } else if (cs->hasTarget) {
             assert(!cs->hasSelector);
-            SEXP selector = cp_pool_at(ctx, *CallSite_target(cs));
+            SEXP selector = cp_pool_at(ctx, *cs->target());
             assert(TYPEOF(selector) == SYMSXP);
         } else {
             assert(cs->trg == 0);
@@ -175,7 +173,7 @@ void CodeVerifier::verifyFunctionLayout(SEXP sexp, ::Context* ctx) {
     // check that the call instruction has proper arguments and number of
     // instructions is valid
     for (auto c : objs) {
-        Opcode* cptr = reinterpret_cast<Opcode*>(code(c));
+        Opcode* cptr = c->code();
         Opcode* start = cptr;
         Opcode* end = start + c->codeSize;
         while (true) {
@@ -189,11 +187,11 @@ void CodeVerifier::verifyFunctionLayout(SEXP sexp, ::Context* ctx) {
             if (*cptr == Opcode::guard_env_) {
                 unsigned deoptId = *reinterpret_cast<ArgT*>(cptr + 1);
                 Opcode* deoptPc = (Opcode*)Deoptimizer_pc(deoptId);
-                assert(f->origin);
-                FunctionHandle deoptFun(f->origin);
-                CodeHandle deoptCode = deoptFun.entryPoint();
-                assert(deoptPc >= deoptCode.bc() &&
-                       deoptPc < deoptCode.endBc());
+                assert(f->origin());
+                Function* deoptFun = Function::unpack(f->origin());
+                Code* deoptCode = deoptFun->body();
+                assert(deoptPc >= deoptCode->code() &&
+                       deoptPc < deoptCode->endCode());
             }
             if (*cptr == Opcode::ldvar_) {
                 unsigned* argsIndex = reinterpret_cast<ArgT*>(cptr + 1);
@@ -206,13 +204,13 @@ void CodeVerifier::verifyFunctionLayout(SEXP sexp, ::Context* ctx) {
             if (*cptr == Opcode::dispatch_stack_ ||
                 *cptr == Opcode::call_stack_) {
                 unsigned callIdx = *reinterpret_cast<ArgT*>(cptr + 1);
-                CallSiteStruct* cs = CallSite_get(c, callIdx);
+                CallSiteStruct* cs = c->callSite(callIdx);
                 uint32_t nargs = *reinterpret_cast<ArgT*>(cptr + 5);
                 verifyCallSite(cs, nargs);
 
                 if (cs->hasNames) {
                     for (size_t i = 0, e = nargs; i != e; ++i) {
-                        uint32_t offset = CallSite_names(cs)[i];
+                        uint32_t offset = cs->names()[i];
                         if (offset) {
                             SEXP name = cp_pool_at(ctx, offset);
                             assert(TYPEOF(name) == SYMSXP ||
@@ -221,7 +219,7 @@ void CodeVerifier::verifyFunctionLayout(SEXP sexp, ::Context* ctx) {
                     }
                 }
                 if (*cptr == Opcode::dispatch_stack_) {
-                    SEXP selector = cp_pool_at(ctx, *CallSite_selector(cs));
+                    SEXP selector = cp_pool_at(ctx, *cs->selector());
                     assert(TYPEOF(selector) == SYMSXP);
                 }
             }
@@ -237,13 +235,13 @@ void CodeVerifier::verifyFunctionLayout(SEXP sexp, ::Context* ctx) {
             }
             if (*cptr == Opcode::call_ || *cptr == Opcode::dispatch_) {
                 unsigned callIdx = *reinterpret_cast<ArgT*>(cptr + 1);
-                CallSiteStruct* cs = CallSite_get(c, callIdx);
+                CallSiteStruct* cs = c->callSite(callIdx);
                 uint32_t nargs = *reinterpret_cast<ArgT*>(cptr + 5);
                 verifyCallSite(cs, nargs);
                 assert(cs->hasImmediateArgs);
 
                 for (size_t i = 0, e = nargs; i != e; ++i) {
-                    uint32_t offset = CallSite_args(cs)[i];
+                    uint32_t offset = cs->args()[i];
                     if (offset == MISSING_ARG_IDX || offset == DOTS_ARG_IDX)
                         continue;
                     bool ok = false;
@@ -256,7 +254,7 @@ void CodeVerifier::verifyFunctionLayout(SEXP sexp, ::Context* ctx) {
                 }
                 if (cs->hasNames) {
                     for (size_t i = 0, e = nargs; i != e; ++i) {
-                        uint32_t offset = CallSite_names(cs)[i];
+                        uint32_t offset = cs->names()[i];
                         if (offset) {
                             SEXP name = cp_pool_at(ctx, offset);
                             assert(TYPEOF(name) == SYMSXP ||
@@ -265,7 +263,7 @@ void CodeVerifier::verifyFunctionLayout(SEXP sexp, ::Context* ctx) {
                     }
                 }
                 if (*cptr == Opcode::dispatch_) {
-                    SEXP selector = cp_pool_at(ctx, *CallSite_selector(cs));
+                    SEXP selector = cp_pool_at(ctx, *cs->selector());
                     assert(TYPEOF(selector) == SYMSXP);
                 }
             }
@@ -279,7 +277,7 @@ void CodeVerifier::verifyFunctionLayout(SEXP sexp, ::Context* ctx) {
 
         // check that the astmap indices are within bounds
         for (auto c : objs) {
-            unsigned* srcIndices = raw_src(c);
+            unsigned* srcIndices = c->raw_src();
             for (size_t i = 0; i != c->srcLength; ++i)
                 assert(srcIndices[i] < src_pool_length(ctx) and
                        "Source index for instruction out of bounds");

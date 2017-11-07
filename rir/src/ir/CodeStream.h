@@ -5,10 +5,11 @@
 #include <map>
 #include <vector>
 
+#include "runtime/Code.h"
 #include "BC.h"
 
-#include "utils/FunctionHandle.h"
 #include "CodeVerifier.h"
+#include "utils/FunctionWriter.h"
 
 namespace rir {
 
@@ -21,7 +22,7 @@ class CodeStream {
     unsigned pos = 0;
     unsigned size = 1024;
 
-    FunctionHandle& function;
+    FunctionWriter& function;
 
     SEXP ast;
 
@@ -51,7 +52,7 @@ class CodeStream {
         insert((JmpT)0);
     }
 
-    CodeStream(FunctionHandle& function, SEXP ast)
+    CodeStream(FunctionWriter& function, SEXP ast)
         : function(function), ast(ast) {
         code = new std::vector<char>(1024);
     }
@@ -96,7 +97,7 @@ class CodeStream {
                 }
             }
 
-        unsigned needed = CallSite_size(false, hasNames, false, nargs);
+        unsigned needed = CallSiteStruct::size(false, hasNames, false, nargs);
         ensureCallSiteSize(needed);
 
         CallSiteStruct* cs = getNextCallSite(needed);
@@ -111,17 +112,17 @@ class CodeStream {
 
         if (hasNames) {
             for (unsigned i = 0; i < nargs; ++i) {
-                CallSite_names(cs)[i] = Pool::insert(names[i]);
+                cs->names()[i] = Pool::insert(names[i]);
             }
         }
 
         if (bc == Opcode::dispatch_stack_) {
             assert(TYPEOF(targOrSelector) == SYMSXP);
-            *CallSite_selector(cs) = Pool::insert(targOrSelector);
+            *cs->selector() = Pool::insert(targOrSelector);
         } else if (bc == Opcode::static_call_stack_) {
             assert(TYPEOF(targOrSelector) == CLOSXP ||
                    TYPEOF(targOrSelector) == BUILTINSXP);
-            *CallSite_target(cs) = Pool::insert(targOrSelector);
+            *cs->target() = Pool::insert(targOrSelector);
         }
 
         return *this;
@@ -148,7 +149,7 @@ class CodeStream {
                 }
             }
 
-        unsigned needed = CallSite_size(true, hasNames, true, nargs);
+        unsigned needed = CallSiteStruct::size(true, hasNames, true, nargs);
         ensureCallSiteSize(needed);
 
         CallSiteStruct* cs = getNextCallSite(needed);
@@ -162,33 +163,33 @@ class CodeStream {
 
         int i = 0;
         for (auto arg : args) {
-            CallSite_args(cs)[i] = arg;
+            cs->args()[i] = arg;
             if (hasNames)
-                CallSite_names(cs)[i] = Pool::insert(names[i]);
+                cs->names()[i] = Pool::insert(names[i]);
             ++i;
         }
 
         if (bc == Opcode::dispatch_) {
             assert(selector);
             assert(TYPEOF(selector) == SYMSXP);
-            *CallSite_selector(cs) = Pool::insert(selector);
+            *cs->selector() = Pool::insert(selector);
         }
 
         return *this;
     }
 
-    CodeStream& insertWithCallSite(Opcode bc, CallSite callSite) {
+    CodeStream& insertWithCallSite(Opcode bc, CallSiteStruct* callSite) {
         insert(bc);
         insert(nextCallSiteIdx_);
-        insert(callSite.nargs());
+        insert(callSite->nargs);
         sources.push_back(0);
 
-        unsigned needed = CallSite_sizeOf(callSite.cs);
+        unsigned needed = callSite->size();
         ensureCallSiteSize(needed);
 
         void* cs = &callSites_[nextCallSiteIdx_];
         nextCallSiteIdx_ += needed;
-        memcpy(cs, callSite.cs, needed);
+        memcpy(cs, callSite, needed);
 
         return *this;
     }
@@ -260,7 +261,7 @@ class CodeStream {
     }
 
     FunIdxT finalize(bool markDefaultArg) {
-        CodeHandle res =
+        Code* res =
             function.writeCode(ast, &(*code)[0], pos, callSites_.data(),
                                callSites_.size(), sources, markDefaultArg);
 
@@ -268,7 +269,7 @@ class CodeStream {
             unsigned pos = p.first;
             unsigned target = label2pos[p.second];
             JmpT j = target - pos - sizeof(JmpT);
-            *(JmpT*)((uintptr_t)res.bc() + pos) = j;
+            *(JmpT*)((uintptr_t)res->code() + pos) = j;
         }
 
         label2pos.clear();
@@ -281,8 +282,8 @@ class CodeStream {
         code = nullptr;
         pos = 0;
 
-        CodeVerifier::calculateAndVerifyStack(res.code);
-        return res.code->header;
+        CodeVerifier::calculateAndVerifyStack(res);
+        return res->header;
     }
 };
 }

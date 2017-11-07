@@ -3,9 +3,8 @@
 
 #include "BC_inc.h"
 
-#include "utils/FunctionHandle.h"
-#include "utils/CodeHandle.h"
 #include "interpreter/interp_context.h"
+#include "utils/FunctionWriter.h"
 
 #include <unordered_set>
 #include <set>
@@ -136,7 +135,7 @@ class CodeEditor {
 
         SEXP src() const { return pos->src(); }
 
-        CallSite callSite() const { return CallSite(pos->bc, pos->callSite); }
+        CallSiteStruct* callSite() const { return pos->callSite; }
 
         bool hasOrigin() { return pos->origin; }
 
@@ -239,7 +238,7 @@ class CodeEditor {
         SEXP src() const { return pos->src(); }
         unsigned srcIdx() const { return pos->srcIdx; }
 
-        CallSite callSite() { return CallSite(pos->bc, pos->callSite); }
+        CallSiteStruct* callSite() { return pos->callSite; }
 
         // TODO this breaks when inserting before the first instruction....
         Cursor& operator<<(LabelT l) { return *this << BC::label(l); }
@@ -340,16 +339,16 @@ class CodeEditor {
 
                 if ((*cur).isCallsite()) {
                     auto oldCs = cur.callSite();
-                    unsigned needed = CallSite_sizeOf(oldCs.cs);
+                    unsigned needed = oldCs->size();
                     insert->callSite = (CallSiteStruct*)new char[needed];
-                    memcpy(insert->callSite, oldCs.cs, needed);
+                    memcpy(insert->callSite, oldCs, needed);
                 }
                 // Fix prom offsets
                 if (insert->bc.bc == Opcode::call_ ||
                     insert->bc.bc == Opcode::dispatch_) {
                     auto cs = insert->callSite;
                     for (unsigned i = 0; i < cs->nargs; ++i) {
-                        auto idx = CallSite_args(cs)[i];
+                        auto idx = cs->args()[i];
                         if (idx > MAX_ARG_IDX)
                             continue;
 
@@ -359,7 +358,7 @@ class CodeEditor {
                             idx += proms;
                         assert(editor.promises.size() > idx &&
                                editor.promises[idx]);
-                        CallSite_args(cs)[i] = idx;
+                        cs->args()[i] = idx;
                     }
                 } else if (insert->bc.bc == Opcode::promise_ ||
                            insert->bc.bc == Opcode::push_code_) {
@@ -431,8 +430,8 @@ class CodeEditor {
     bool isLabel(Iterator ins) const { return (*ins).isLabel(); }
 
     explicit CodeEditor(SEXP closure);
-    explicit CodeEditor(CodeHandle code);
-    CodeEditor(CodeHandle code, SEXP formals);
+    explicit CodeEditor(Code* code);
+    CodeEditor(Code* code, SEXP formals);
 
     std::map<SEXP, SEXP> arguments() const {
         if (formals_ == nullptr) {
@@ -448,13 +447,13 @@ class CodeEditor {
         }
     }
 
-    void loadCode(FunctionHandle function, CodeHandle code, bool loadCompiledDefaultArgs);
+    void loadCode(Function* function, Code* code, bool loadCompiledDefaultArgs);
 
     ~CodeEditor();
 
-    unsigned write(FunctionHandle& function, bool isDefaultArgument = false);
+    unsigned write(FunctionWriter& function, bool isDefaultArgument = false);
 
-    FunctionHandle finalize();
+    Function* finalize();
 
     void print(bool verbose = true);
 

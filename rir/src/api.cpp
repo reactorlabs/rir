@@ -11,8 +11,6 @@
 #include "interpreter/interp.h"
 #include "ir/BC.h"
 
-#include "utils/FunctionHandle.h"
-
 #include "analysis/Signature.h"
 #include "analysis/liveness.h"
 #include "analysis_framework/analysis.h"
@@ -69,9 +67,8 @@ REXPORT SEXP rir_markOptimize(SEXP what) {
     if (TYPEOF(what) != CLOSXP)
         return R_NilValue;
     SEXP b = BODY(what);
-    assert(isValidDispatchTableSEXP(b) && "Expected a DispatchTable");
-    DispatchTable* dt = sexp2dispatchTable(b);
-    Function* fun = sexp2function(dt->entry[0]);
+    DispatchTable* dt = DispatchTable::unpack(b);
+    Function* fun = dt->first();
     fun->markOpt = true;
     return R_NilValue;
 }
@@ -82,14 +79,14 @@ REXPORT SEXP rir_eval(SEXP what, SEXP env) {
         f = isValidClosureSEXP(what);
     if (f == nullptr)
         Rf_error("Not rir compiled code");
-    return evalRirCode(bodyCode(f), globalContext(), env, 0);
+    return evalRirCode(f->body(), globalContext(), env, 0);
 }
 
 REXPORT SEXP rir_body(SEXP cls) {
     ::Function * f = isValidClosureSEXP(cls);
     if (f == nullptr)
         Rf_error("Not a valid rir compiled function");
-    return function2store(f);
+    return f->container();
 }
 
 REXPORT SEXP rir_analysis_signature(SEXP what) {

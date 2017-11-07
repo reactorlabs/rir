@@ -8,6 +8,8 @@ static size_t deoptTableSizeUsed = 0;
 static size_t deoptTableEntriesUsed = 0;
 static size_t deoptTableGrow = 10;
 
+using namespace rir;
+
 static DeoptInfo* DeoptInfo_alloc() {
     size_t needed = sizeof(DeoptInfo);
     if (deoptTableSizeUsed + needed >= deoptTableSize) {
@@ -28,7 +30,7 @@ static DeoptInfo* DeoptInfo_alloc() {
     return i;
 }
 
-uint32_t Deoptimizer_register(OpcodeT* oldPc) {
+uint32_t Deoptimizer_register(Opcode* oldPc) {
     DeoptInfo* i = DeoptInfo_alloc();
     i->oldPc = oldPc;
 
@@ -63,7 +65,7 @@ void Deoptimizer_print(uint32_t idx) {
     Rprintf("[d#%d: %p]", idx, i->oldPc);
 }
 
-OpcodeT* Deoptimizer_pc(uint32_t idx) {
+Opcode* Deoptimizer_pc(uint32_t idx) {
     assert(idx != NO_DEOPT_INFO);
     DeoptInfo* i = DeoptInfo_get(idx);
     return i->oldPc;

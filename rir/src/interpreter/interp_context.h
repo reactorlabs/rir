@@ -3,6 +3,7 @@
 #define interpreter_context_h
 
 #include "interp_data.h"
+#include "runtime/Opcode.h"
 
 #include <stdio.h>
 
@@ -34,15 +35,6 @@ typedef struct {
     SEXP list;
     size_t capacity;
 } ResizeableList;
-
-/** Interpreter frame information.
- */
-typedef struct {
-    struct Code* code;
-    SEXP env;
-    OpcodeT* pc;
-    size_t bp;
-} Frame;
 
 #define CONTEXT_INDEX_CP 0
 #define CONTEXT_INDEX_SRC 1
