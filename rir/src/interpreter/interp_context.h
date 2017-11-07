@@ -36,15 +36,6 @@ typedef struct {
     size_t capacity;
 } ResizeableList;
 
-/** Interpreter frame information.
- */
-typedef struct {
-    struct rir::Code* code;
-    SEXP env;
-    rir::Opcode* pc;
-    size_t bp;
-} Frame;
-
 #define CONTEXT_INDEX_CP 0
 #define CONTEXT_INDEX_SRC 1
 

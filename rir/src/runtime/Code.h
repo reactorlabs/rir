@@ -57,7 +57,7 @@ struct Code {
          unsigned callSiteLength, unsigned offset, bool isDefaultArg);
 
     // Magic number that attempts to be PROMSXP already marked by the GC
-    unsigned magic = CODE_MAGIC;
+    unsigned magic;
 
     unsigned header; /// offset to Function object
 

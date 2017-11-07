@@ -23,8 +23,6 @@ typedef SEXP SignatureSEXP;
 // magic in his vector too...
 #define FUNCTION_MAGIC (unsigned)0xCAFEBABE
 
-#define DISPATCH_TABLE_MAGIC (unsigned)0xBEEF1234
-
 // TODO removed src reference, now each code has its own
 /** A Function holds the RIR code for some GNU R function.
  *  Each function start with a header and a sequence of
