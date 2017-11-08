@@ -1,6 +1,7 @@
 [submodule "external/custom-r"]
 	path = external/custom-r
 	url = https://github.com/reactorlabs/gnur.git
+	ignore = untracked
 [submodule "external/vanilla-r"]
 	path = external/vanilla-r
 	url = https://github.com/reactorlabs/gnur.git
