@@ -368,18 +368,23 @@ static SEXP rirCallClosure(SEXP call, SEXP env, SEXP callee, SEXP actuals,
             Function* oldFun = fun;
             cp_pool_add(ctx, oldFun->container());
 
-            fun = Function::unpack(globalContext()->optimizer(fun->container()));
+            SEXP opt = globalContext()->optimizer(fun->container());
 
-            PROTECT(fun->container());
+            if (opt != nullptr) {
+                fun = Function::unpack(opt);
 
-            // Update the vtable.
-            vtable->put(0, fun);
+                PROTECT(fun->container());
 
-            fun->invocationCount = oldFun->invocationCount;
-            fun->envLeaked = oldFun->envLeaked;
-            fun->envChanged = oldFun->envChanged;
+                // Update the vtable.
+                vtable->put(0, fun);
 
-            UNPROTECT(1);  // funStore
+                fun->invocationCount = oldFun->invocationCount;
+                fun->envLeaked = oldFun->envLeaked;
+                fun->envChanged = oldFun->envChanged;
+
+                UNPROTECT(1);  // funStore
+            }
+
             optimizing = false;
         }
         if (fun->invocationCount < UINT_MAX)
