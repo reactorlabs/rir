@@ -274,7 +274,7 @@ void CodeEditor::print(bool verbose) {
             Rprintf("# default argument\n");
         else
             Rprintf("@%d\n", (void*)(long)(i - 1));
-        p->print();
+        p->print(verbose);
     }
 }
 
