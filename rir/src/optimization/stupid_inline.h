@@ -41,7 +41,7 @@ class StupidInliner {
         while (pc != end) {
             BC bc = BC::advance(&pc);
             if (bc.isCallsite()) {
-                CallSiteStruct* cs = bc.callSite(c);
+                CallSite* cs = bc.callSite(c);
                 if (!cs->hasTarget)
                     return false;
                 if (!isSafeTarget(Pool::get(*cs->target()))) {

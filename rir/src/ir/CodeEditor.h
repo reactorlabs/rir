@@ -53,7 +53,7 @@ class CodeEditor {
         Opcode* origin = nullptr;
         BC bc;
         unsigned srcIdx = 0;
-        CallSiteStruct* callSite = nullptr;
+        CallSite* callSite = nullptr;
         BytecodeList* prev = nullptr;
         BytecodeList* next = nullptr;
         BytecodeList* patch = nullptr;
@@ -135,7 +135,7 @@ class CodeEditor {
 
         SEXP src() const { return pos->src(); }
 
-        CallSiteStruct* callSite() const { return pos->callSite; }
+        CallSite* callSite() const { return pos->callSite; }
 
         bool hasOrigin() { return pos->origin; }
 
@@ -238,7 +238,7 @@ class CodeEditor {
         SEXP src() const { return pos->src(); }
         unsigned srcIdx() const { return pos->srcIdx; }
 
-        CallSiteStruct* callSite() { return pos->callSite; }
+        CallSite* callSite() { return pos->callSite; }
 
         // TODO this breaks when inserting before the first instruction....
         Cursor& operator<<(LabelT l) { return *this << BC::label(l); }
@@ -340,7 +340,7 @@ class CodeEditor {
                 if ((*cur).isCallsite()) {
                     auto oldCs = cur.callSite();
                     unsigned needed = oldCs->size();
-                    insert->callSite = (CallSiteStruct*)new char[needed];
+                    insert->callSite = (CallSite*)new char[needed];
                     memcpy(insert->callSite, oldCs, needed);
                 }
                 // Fix prom offsets

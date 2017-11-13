@@ -46,7 +46,7 @@ void Code::print() {
         Rprintf(" %5d ", ((uintptr_t)pc - (uintptr_t)code()));
         BC bc = BC::advance(&pc);
         if (bc.isCallsite()) {
-            CallSiteStruct* cs = bc.callSite(this);
+            CallSite* cs = bc.callSite(this);
             bc.print(cs);
         } else {
             bc.print();

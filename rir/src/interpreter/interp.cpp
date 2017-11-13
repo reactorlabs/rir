@@ -152,7 +152,7 @@ INLINE void __listAppend(SEXP* front, SEXP* last, SEXP value, SEXP name) {
     *last = app;
 }
 
-SEXP createArgsListStack(Code* c, size_t nargs, CallSiteStruct* cs, SEXP env,
+SEXP createArgsListStack(Code* c, size_t nargs, CallSite* cs, SEXP env,
                          Context* ctx, bool eager) {
     SEXP result = R_NilValue;
     SEXP pos = result;
@@ -185,7 +185,7 @@ SEXP createArgsListStack(Code* c, size_t nargs, CallSiteStruct* cs, SEXP env,
     return result;
 }
 
-SEXP createArgsList(Code* c, SEXP call, size_t nargs, CallSiteStruct* cs,
+SEXP createArgsList(Code* c, SEXP call, size_t nargs, CallSite* cs,
                     SEXP env, Context* ctx, bool eager) {
     SEXP result = R_NilValue;
     SEXP pos = result;
@@ -451,14 +451,14 @@ void warnSpecial(SEXP callee, SEXP call) {
 
  */
 
-void doProfileCall(CallSiteStruct*, SEXP);
-INLINE void profileCall(CallSiteStruct* cs, SEXP callee) {
+void doProfileCall(CallSite*, SEXP);
+INLINE void profileCall(CallSite* cs, SEXP callee) {
     if (!cs->hasProfile)
         return;
     doProfileCall(cs, callee);
 }
 
-void doProfileCall(CallSiteStruct* cs, SEXP callee) {
+void doProfileCall(CallSite* cs, SEXP callee) {
     CallSiteProfile* p = cs->profile();
     if (!p->takenOverflow) {
         if (p->taken + 1 == CallSiteProfile_maxTaken)
@@ -483,7 +483,7 @@ void doProfileCall(CallSiteStruct* cs, SEXP callee) {
 SEXP doCall(Code* caller, SEXP callee, unsigned nargs, unsigned id, SEXP env,
             Context* ctx) {
 
-    CallSiteStruct* cs = caller->callSite(id);
+    CallSite* cs = caller->callSite(id);
     profileCall(cs, callee);
     SEXP call = cp_pool_at(ctx, cs->call);
 
@@ -613,7 +613,7 @@ INLINE SEXP fixupAST(SEXP call, Context* ctx, size_t nargs) {
 SEXP doCallStack(Code* caller, SEXP callee, size_t nargs, unsigned id, SEXP env,
                  Context* ctx) {
 
-    CallSiteStruct* cs = caller->callSite(id);
+    CallSite* cs = caller->callSite(id);
     SEXP call = cp_pool_at(ctx, cs->call);
 
     SEXP res = R_NilValue;
@@ -692,7 +692,7 @@ SEXP doCallStack(Code* caller, SEXP callee, size_t nargs, unsigned id, SEXP env,
 SEXP doDispatchStack(Code* caller, size_t nargs, uint32_t id, SEXP env,
                      Context* ctx) {
 
-    CallSiteStruct* cs = caller->callSite(id);
+    CallSite* cs = caller->callSite(id);
     profileCall(cs, Rf_install("*dispatch*"));
     SEXP call = cp_pool_at(ctx, cs->call);
     SEXP selector = cp_pool_at(ctx, *cs->selector());
@@ -812,7 +812,7 @@ SEXP doDispatch(Code* caller, uint32_t nargs, uint32_t id, SEXP env,
     SEXP obj = ostack_top(ctx);
     assert(isObject(obj));
 
-    CallSiteStruct* cs = caller->callSite(id);
+    CallSite* cs = caller->callSite(id);
     profileCall(cs, Rf_install("*dispatch*"));
     SEXP call = cp_pool_at(ctx, cs->call);
     SEXP selector = cp_pool_at(ctx, *cs->selector());

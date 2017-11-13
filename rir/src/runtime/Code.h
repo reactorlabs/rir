@@ -45,7 +45,7 @@ struct Function;
 #pragma pack(push)
 #pragma pack(1)
 
-struct CallSiteStruct;
+struct CallSite;
 
 struct Code {
     friend class FunctionWriter;
@@ -103,9 +103,9 @@ struct Code {
      *
      */
 
-    CallSiteStruct* callSite(uint32_t idx) {
+    CallSite* callSite(uint32_t idx) {
         assert(idx < callSiteLength);
-        return (CallSiteStruct*)(callSites() + idx);
+        return (CallSite*)(callSites() + idx);
     }
 
     /** Returns a pointer to the instructions in c.  */
@@ -192,7 +192,7 @@ struct CallSiteProfile {
     SEXP targets[3];
 };
 
-struct CallSiteStruct {
+struct CallSite {
     uint32_t call;
 
     uint32_t hasNames : 1;
@@ -249,7 +249,7 @@ struct CallSiteStruct {
 
     static unsigned size(bool hasImmediateArgs, bool hasNames, bool hasProfile,
                          uint32_t nargs) {
-        return sizeof(CallSiteStruct) +
+        return sizeof(CallSite) +
                sizeof(uint32_t) *
                    ((hasImmediateArgs ? nargs : 0) + (hasNames ? nargs : 0)) +
                +(hasProfile ? sizeof(CallSiteProfile) : 0);

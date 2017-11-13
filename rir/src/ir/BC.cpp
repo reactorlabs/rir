@@ -242,7 +242,7 @@ void BC::write(CodeStream& cs) const {
 
 SEXP BC::immediateConst() { return Pool::get(immediate.pool); }
 
-void BC::printArgs(CallSiteStruct* cs) {
+void BC::printArgs(CallSite* cs) {
     Rprintf("[");
     for (unsigned i = 0; i < cs->nargs; ++i) {
         auto arg = cs->args()[i];
@@ -256,7 +256,7 @@ void BC::printArgs(CallSiteStruct* cs) {
     Rprintf("] ");
 }
 
-void BC::printNames(CallSiteStruct* cs) {
+void BC::printNames(CallSite* cs) {
     if (cs->hasNames) {
         Rprintf("[");
         for (unsigned i = 0; i < cs->nargs; ++i) {
@@ -269,7 +269,7 @@ void BC::printNames(CallSiteStruct* cs) {
     }
 }
 
-void BC::printProfile(CallSiteStruct* cs) {
+void BC::printProfile(CallSite* cs) {
     if (cs->hasProfile) {
         CallSiteProfile* prof = cs->profile();
         Rprintf("           Prof : [");
@@ -288,11 +288,11 @@ void BC::printProfile(CallSiteStruct* cs) {
     }
 }
 
-CallSiteStruct* BC::callSite(Code* code) {
+CallSite* BC::callSite(Code* code) {
     return code->callSite(immediate.call_args.call_id);
 }
 
-void BC::print(CallSiteStruct* cs) {
+void BC::print(CallSite* cs) {
     if (bc != Opcode::label) {
         Rprintf("   ");
         Rprintf("%s ", name(bc));
