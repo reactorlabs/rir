@@ -1195,10 +1195,13 @@ SEXP Compiler::finalize() {
     FunctionWriter function = FunctionWriter::create();
     Context ctx(function, preserve);
 
-    // Compile formals (if any)
+    FunctionSignature* signature = new FunctionSignature();
+
+    // Compile formals (if any) and create signature
     for (auto arg = RList(formals).begin(); arg != RList::end(); ++arg) {
         if (*arg != R_MissingArg)
             compilePromise(ctx, *arg, true);
+        signature->pushDefaultArgument();
     }
 
     ctx.push(exp);
@@ -1215,6 +1218,7 @@ SEXP Compiler::finalize() {
     Optimizer::optimize(code);
 
     Function* opt = code.finalize();
+    opt->signature = signature;
 
 #ifdef ENABLE_SLOWASSERT
     CodeVerifier::verifyFunctionLayout(opt->container(), globalContext());
