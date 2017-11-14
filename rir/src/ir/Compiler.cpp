@@ -1073,6 +1073,78 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
     return false;
 }
 
+SEXP findRIRClosure(SEXP sym, SEXP rho) {
+    SEXP fun;
+    while (rho != R_EmptyEnv) {
+        fun = findVarInFrame3(rho, sym, TRUE);
+        if (fun != R_UnboundValue) {
+            if (TYPEOF(fun) == PROMSXP || TYPEOF(fun) == BUILTINSXP ||
+                    TYPEOF(fun) == SPECIALSXP || fun == R_MissingArg)
+                return nullptr;
+            if (isValidClosureSEXP(fun))
+                return fun;
+        }
+        rho = ENCLOS(rho);
+    }
+    return nullptr;
+}
+
+// try to look up a closure
+bool compileWithGuess(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
+    RList args(args_);
+    CodeStream& cs = ctx.cs();
+
+    SEXP cls = findRIRClosure(fun, R_GlobalEnv);  // or current env of the closure?
+    if (!cls)
+        return false;
+
+    for (auto farg = RList(FORMALS(cls)).begin(); farg != RList::end(); ++farg)
+        if (*farg == R_DotsSymbol)
+            return false;
+
+    for (auto a = args.begin(); a != args.end(); ++a) {
+        if (a.hasTag())
+            return false;
+        switch (TYPEOF(*a)) {
+        case NILSXP:
+        case LISTSXP:
+        case LGLSXP:
+        case INTSXP:
+        case REALSXP:
+        case STRSXP:
+        case CPLXSXP:
+        case RAWSXP:
+        case S4SXP:
+        case SPECIALSXP:
+        case BUILTINSXP:
+        case ENVSXP:
+        case CLOSXP:
+        case VECSXP:
+        case EXTPTRSXP:
+        case WEAKREFSXP:
+        case EXPRSXP:
+            break;
+        default:
+            return false;
+        }
+    }
+
+    // do argument matching / shuffling?
+    // cannot reuse matchArgs from gnur (but could rewrite it)
+
+    // create signature here too?
+
+    cs << BC::guardName(fun, cls);
+
+    for (auto a : args)
+        compileExpr(ctx, a);
+
+    cs.insertStackCall(Opcode::static_call_stack_, args.length(), {}, ast,
+                       cls);
+
+    return true;
+}
+
 // function application
 void compileCall(Context& ctx, SEXP ast, SEXP fun, SEXP args) {
     CodeStream& cs = ctx.cs();
@@ -1084,6 +1156,9 @@ void compileCall(Context& ctx, SEXP ast, SEXP fun, SEXP args) {
     Match(fun) {
         Case(SYMSXP) {
             if (compileSpecialCall(ctx, ast, fun, args))
+                return;
+
+            if (compileWithGuess(ctx, ast, fun, args))
                 return;
 
             cs << BC::ldfun(fun);
