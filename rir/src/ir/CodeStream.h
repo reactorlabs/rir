@@ -70,9 +70,9 @@ class CodeStream {
         }
     }
 
-    CallSiteStruct* getNextCallSite(uint32_t needed) {
+    CallSite* getNextCallSite(uint32_t needed) {
         needed = alignedSize(needed);
-        CallSiteStruct* cs = (CallSiteStruct*)&callSites_[nextCallSiteIdx_];
+        CallSite* cs = (CallSite*)&callSites_[nextCallSiteIdx_];
         memset(cs, 0, needed);
         nextCallSiteIdx_ += needed;
         return cs;
@@ -97,10 +97,10 @@ class CodeStream {
                 }
             }
 
-        unsigned needed = CallSiteStruct::size(false, hasNames, false, nargs);
+        unsigned needed = CallSite::size(false, hasNames, false, nargs);
         ensureCallSiteSize(needed);
 
-        CallSiteStruct* cs = getNextCallSite(needed);
+        CallSite* cs = getNextCallSite(needed);
 
         cs->nargs = nargs;
         cs->call = Pool::insert(call);
@@ -149,10 +149,10 @@ class CodeStream {
                 }
             }
 
-        unsigned needed = CallSiteStruct::size(true, hasNames, true, nargs);
+        unsigned needed = CallSite::size(true, hasNames, true, nargs);
         ensureCallSiteSize(needed);
 
-        CallSiteStruct* cs = getNextCallSite(needed);
+        CallSite* cs = getNextCallSite(needed);
 
         cs->nargs = nargs;
         cs->call = Pool::insert(call);
@@ -178,7 +178,7 @@ class CodeStream {
         return *this;
     }
 
-    CodeStream& insertWithCallSite(Opcode bc, CallSiteStruct* callSite) {
+    CodeStream& insertWithCallSite(Opcode bc, CallSite* callSite) {
         insert(bc);
         insert(nextCallSiteIdx_);
         insert(callSite->nargs);

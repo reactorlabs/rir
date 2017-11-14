@@ -45,9 +45,8 @@ SEXP Optimizer::reoptimizeFunction(SEXP s) {
         bool changedOpt = Optimizer::optimize(code, 8);
         if (!changedInl && !changedOpt) {
             if (i == 0)
-                return s;
-            else
-                break;
+                return nullptr;
+            break;
         }
     }
 
@@ -60,4 +59,5 @@ SEXP Optimizer::reoptimizeFunction(SEXP s) {
 #endif
     return opt->container();
 }
-}
+
+}  // namespace rir
