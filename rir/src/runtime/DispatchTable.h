@@ -49,6 +49,10 @@ struct DispatchTable {
         return Function::unpack(entry[0]);
     }
 
+    Function* getMatching(FunctionSignature* sig) {
+        return first();
+    }
+
     rir::rir_header info;  /// for exposing SEXPs to GC
 
     uint32_t magic; /// used to detect DispatchTables 0xBEEF1234

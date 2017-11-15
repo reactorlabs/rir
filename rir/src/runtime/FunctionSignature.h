@@ -19,6 +19,9 @@ struct FunctionSignature {
             if (isEvaluated)
                 length = XLENGTH(s);
         }
+        ArgumentType(bool evaled, unsigned int type) :
+            isEvaluated(evaled),
+            type(static_cast<unsigned char>(type)) {}
 
         bool matches(ArgumentType const& other) const {
             return isEvaluated == other.isEvaluated && type == other.type &&
@@ -32,6 +35,13 @@ struct FunctionSignature {
     };
 
     void pushDefaultArgument() { arguments.emplace_back(); }
+
+    void pushArgument(ArgumentType arg) { arguments.emplace_back(arg); }
+
+    static FunctionSignature const * defaultSignature() {
+        static FunctionSignature signature;
+        return &signature;
+    }
 
     bool matches(FunctionSignature const& other) const {
         if (argsOnStack != other.argsOnStack)
@@ -51,6 +61,8 @@ struct FunctionSignature {
             arg.print();
         Rprintf("\n");
     }
+
+    FunctionSignature() = default;
 
     bool argsOnStack = false;
     std::vector<ArgumentType> arguments;

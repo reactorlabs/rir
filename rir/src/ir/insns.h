@@ -261,6 +261,12 @@ DEF_INSTR(call_stack_, 2, -1, 1, 0)
 DEF_INSTR(static_call_stack_, 2, -1, 1, 0)
 
 /**
+ * call_ordered_:: arguments are taken from the stack
+ *                 immediate is number of args
+ */
+DEF_INSTR(call_ordered_, 2, -1, 1, 0)
+
+/**
  * set_shared_:: marks tos to be shared (ie. named = 2)
  */
 DEF_INSTR(set_shared_, 0, 1, 1, 1)

@@ -10,6 +10,7 @@
 namespace rir {
 
 struct Function;
+struct FunctionSignature;
 
 // Offset between function SEXP and Function* struct
 // This is basically sizeof(SEXPREC_ALIGN)
@@ -209,6 +210,8 @@ struct CallSite {
     // This is not always needed, but maybe it does not pay off to put it
     // in the payload just to save 4 bytes...
     uint32_t trg;
+
+    FunctionSignature* signature;
 
     uint32_t payload[];
 

@@ -1098,8 +1098,12 @@ bool compileWithGuess(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
     if (!cls)
         return false;
 
-    for (auto farg = RList(FORMALS(cls)).begin(); farg != RList::end(); ++farg)
-        if (*farg == R_DotsSymbol)
+    RList formals(FORMALS(cls));
+    if (formals.length() != args.length() || args.length() == 0)
+        return false;
+
+    for (auto farg : formals)
+        if (farg == R_DotsSymbol)
             return false;
 
     for (auto a = args.begin(); a != args.end(); ++a) {
@@ -1113,34 +1117,39 @@ bool compileWithGuess(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
         case REALSXP:
         case STRSXP:
         case CPLXSXP:
-        case RAWSXP:
-        case S4SXP:
-        case SPECIALSXP:
-        case BUILTINSXP:
-        case ENVSXP:
-        case CLOSXP:
+//        case RAWSXP:
+//        case S4SXP:
+//        case SPECIALSXP:
+//        case BUILTINSXP:
+//        case ENVSXP:
+//        case CLOSXP:
         case VECSXP:
-        case EXTPTRSXP:
-        case WEAKREFSXP:
-        case EXPRSXP:
+//        case EXTPTRSXP:
+//        case WEAKREFSXP:
+//        case EXPRSXP:
             break;
         default:
             return false;
         }
     }
 
+    // maybe use promise_ and compile everything either as push or
+    // as promise?
+
     // do argument matching / shuffling?
     // cannot reuse matchArgs from gnur (but could rewrite it)
 
-    // create signature here too?
-
     cs << BC::guardName(fun, cls);
 
-    for (auto a : args)
-        compileExpr(ctx, a);
+    FunctionSignature* signature = new FunctionSignature();
+    signature->argsOnStack = true;
 
-    cs.insertStackCall(Opcode::static_call_stack_, args.length(), {}, ast,
-                       cls);
+    for (auto a : args) {
+        compileExpr(ctx, a);
+        signature->pushArgument({true, TYPEOF(a)});
+    }
+
+    cs.insertStackCall(Opcode::call_ordered_, args.length(), {}, ast, cls, signature);
 
     return true;
 }
