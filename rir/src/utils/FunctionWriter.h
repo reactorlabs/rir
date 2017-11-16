@@ -147,6 +147,7 @@ class FunctionWriter {
         : function(function), capacity(capacity) {
         assert(function->magic == FUNCTION_MAGIC);
         assert(function->size <= capacity);
+        R_PreserveObject(function->container());
     }
 };
 }
