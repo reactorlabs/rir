@@ -10,8 +10,8 @@ rir.isValidFunction <- function(what) {
 }
 
 # prints the disassembled rir function
-rir.disassemble <- function(what) {
-    invisible(.Call("rir_disassemble", what))
+rir.disassemble <- function(what, verbose = TRUE) {
+    invisible(.Call("rir_disassemble", what, verbose))
 }
 
 # compiles given closure, or expression and returns the compiled version.

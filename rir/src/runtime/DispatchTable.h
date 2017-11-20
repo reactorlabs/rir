@@ -18,7 +18,7 @@ typedef SEXP DispatchTableEntry;
  */
 #pragma pack(push)
 #pragma pack(1)
-typedef struct DispatchTable {
+struct DispatchTable {
     SEXP container() {
         SEXP result = (SEXP)((uintptr_t) this - sizeof(VECTOR_SEXPREC));
         assert(TYPEOF(result) == EXTERNALSXP &&
@@ -71,7 +71,7 @@ typedef struct DispatchTable {
     }
 
     DispatchTableEntry entry[];
-} DispatchTable;
+};
 #pragma pack(pop)
 }
 

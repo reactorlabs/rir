@@ -152,7 +152,7 @@ void CodeVerifier::verifyFunctionLayout(SEXP sexp, ::Context* ctx) {
     // remove the sentinel
     objs.pop_back();
 
-    auto verifyCallSite = [&ctx](CallSiteStruct* cs, uint32_t nargs) {
+    auto verifyCallSite = [&ctx](CallSite* cs, uint32_t nargs) {
         SEXP call = cp_pool_at(ctx, cs->call);
         assert(TYPEOF(call) == LANGSXP || TYPEOF(call) == SYMSXP ||
                TYPEOF(call) == NILSXP);
@@ -204,7 +204,7 @@ void CodeVerifier::verifyFunctionLayout(SEXP sexp, ::Context* ctx) {
             if (*cptr == Opcode::dispatch_stack_ ||
                 *cptr == Opcode::call_stack_) {
                 unsigned callIdx = *reinterpret_cast<ArgT*>(cptr + 1);
-                CallSiteStruct* cs = c->callSite(callIdx);
+                CallSite* cs = c->callSite(callIdx);
                 uint32_t nargs = *reinterpret_cast<ArgT*>(cptr + 5);
                 verifyCallSite(cs, nargs);
 
@@ -235,7 +235,7 @@ void CodeVerifier::verifyFunctionLayout(SEXP sexp, ::Context* ctx) {
             }
             if (*cptr == Opcode::call_ || *cptr == Opcode::dispatch_) {
                 unsigned callIdx = *reinterpret_cast<ArgT*>(cptr + 1);
-                CallSiteStruct* cs = c->callSite(callIdx);
+                CallSite* cs = c->callSite(callIdx);
                 uint32_t nargs = *reinterpret_cast<ArgT*>(cptr + 5);
                 verifyCallSite(cs, nargs);
                 assert(cs->hasImmediateArgs);

@@ -48,7 +48,7 @@ namespace rir {
 //
 
 struct Code;
-struct CallSiteStruct;
+struct CallSite;
 struct CallSiteProfile;
 
 enum class Opcode : uint8_t {
@@ -151,16 +151,16 @@ class BC {
     void write(CodeStream& cs) const;
 
     // Print it to stdout
-    void print(CallSiteStruct* cs = nullptr);
-    void printArgs(CallSiteStruct* cs);
-    void printNames(CallSiteStruct* cs);
-    void printProfile(CallSiteStruct* cs);
+    void print(CallSite* cs = nullptr);
+    void printArgs(CallSite* cs);
+    void printNames(CallSite* cs);
+    void printProfile(CallSite* cs);
 
     // Accessors to load immediate constant from the pool
     SEXP immediateConst();
 
     // Return the callsite of this BC, needs the cassSites buffer as input
-    CallSiteStruct* callSite(Code* code);
+    CallSite* callSite(Code* code);
 
     inline static Opcode* jmpTarget(Opcode* pos) {
         BC bc = BC::decode(pos);

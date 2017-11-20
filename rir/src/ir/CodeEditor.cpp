@@ -126,7 +126,7 @@ void CodeEditor::loadCode(Function* function, Code* code,
             if (bc.isCallsite()) {
                 auto oldCs = bc.callSite(code);
                 unsigned needed = oldCs->size();
-                pos->callSite = (CallSiteStruct*)new char[needed];
+                pos->callSite = (CallSite*)new char[needed];
                 memcpy(pos->callSite, oldCs, needed);
             }
             if (bc.hasPromargs()) {
@@ -146,7 +146,7 @@ void CodeEditor::loadCode(Function* function, Code* code,
                     auto oldCs = bc.callSite(code);
                     auto nargs = oldCs->nargs;
 
-                    CallSiteStruct* cs = pos->callSite;
+                    CallSite* cs = pos->callSite;
                     assert(cs->nargs == oldCs->nargs);
 
                     // Load all code objects of the callsite and update
@@ -274,7 +274,7 @@ void CodeEditor::print(bool verbose) {
             Rprintf("# default argument\n");
         else
             Rprintf("@%d\n", (void*)(long)(i - 1));
-        p->print();
+        p->print(verbose);
     }
 }
 
