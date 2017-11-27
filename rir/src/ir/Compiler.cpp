@@ -1117,16 +1117,16 @@ bool compileWithGuess(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
         case REALSXP:
         case STRSXP:
         case CPLXSXP:
-//        case RAWSXP:
-//        case S4SXP:
-//        case SPECIALSXP:
-//        case BUILTINSXP:
-//        case ENVSXP:
-//        case CLOSXP:
+        case RAWSXP:
+        case S4SXP:
+        case SPECIALSXP:
+        case BUILTINSXP:
+        case ENVSXP:
+        case CLOSXP:
         case VECSXP:
-//        case EXTPTRSXP:
-//        case WEAKREFSXP:
-//        case EXPRSXP:
+        case EXTPTRSXP:
+        case WEAKREFSXP:
+        case EXPRSXP:
             break;
         default:
             return false;
