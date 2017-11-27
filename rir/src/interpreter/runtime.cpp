@@ -27,7 +27,7 @@ Function* isValidClosureSEXP(SEXP closure) {
     if (t == nullptr)
         return nullptr;
     Function* f = t->first();
-    if (f->magic != FUNCTION_MAGIC)
+    if (f->info.magic != FUNCTION_MAGIC)
         return nullptr;
     return f;
 }
@@ -40,7 +40,7 @@ Code* isValidPromiseSEXP(SEXP promise) {
 
 void printFunction(Function* f) {
     Rprintf("Function object (%p):\n", f);
-    Rprintf("  Magic:           %x (hex)\n", f->magic);
+    Rprintf("  Magic:           %x (hex)\n", f->info.magic);
     Rprintf("  Size:            %u\n", f->size);
     Rprintf("  Origin:          %p %s\n", f->origin(), f->origin() ? "" : "(unoptimized)");
     Rprintf("  Next:            %p\n", f->next());
@@ -51,7 +51,7 @@ void printFunction(Function* f) {
     if (f->signature)
         f->signature->print();
 
-    if (f->magic != FUNCTION_MAGIC)
+    if (f->info.magic != FUNCTION_MAGIC)
         Rf_error("Wrong magic number -- not rir bytecode");
 
     // print respective code objects

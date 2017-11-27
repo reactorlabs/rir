@@ -20,6 +20,7 @@ namespace rir {
 struct rir_header {
     uint32_t gc_area_start;  /// First SEXP to be marked by the GC
     uint32_t gc_area_length;  /// Number of SEXPs to expose to the GC
+    uint32_t magic;  /// Magic number to tell different RIR objects apart
 
     // TODO:  Later maybe also add type of the object here and have just
     //        one EXTERNALSXP with a union of other types.

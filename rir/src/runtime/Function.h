@@ -48,9 +48,9 @@ typedef SEXP FunctionSEXP;
 #pragma pack(1)
 struct Function {
     Function() {
-        magic = FUNCTION_MAGIC;
         info.gc_area_start = sizeof(rir_header);  // just after the header
         info.gc_area_length = 2;                  // origin, next
+        info.magic = FUNCTION_MAGIC;
         envLeaked = false;
         envChanged = false;
         deopt = false;
@@ -73,12 +73,12 @@ struct Function {
 
     static Function* check(SEXP s) {
         Function* f = (Function*)INTEGER(s);
-        return f->magic == FUNCTION_MAGIC ? f : nullptr;
+        return f->info.magic == FUNCTION_MAGIC ? f : nullptr;
     }
 
     static Function* unpack(SEXP s) {
         Function* f = (Function*)INTEGER(s);
-        assert(f->magic == FUNCTION_MAGIC &&
+        assert(f->info.magic == FUNCTION_MAGIC &&
                "This container does not conatin a Function");
         return f;
     }
@@ -124,8 +124,6 @@ public:
     }
     FunctionSEXP origin() { return origin_; }
     FunctionSEXP next() { return next_; }
-
-    unsigned magic; /// used to detect Functions 0xCAFEBABE
 
     unsigned size; /// Size, in bytes, of the function and its data
 

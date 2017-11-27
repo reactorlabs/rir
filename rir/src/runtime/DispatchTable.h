@@ -28,14 +28,14 @@ struct DispatchTable {
 
     static DispatchTable* unpack(SEXP s) {
         DispatchTable* d = (DispatchTable*)INTEGER(s);
-        assert(d->magic == DISPATCH_TABLE_MAGIC &&
+        assert(d->info.magic == DISPATCH_TABLE_MAGIC &&
                "This container does not contain a dispatch table.");
         return d;
     }
 
     static DispatchTable* check(SEXP s) {
         DispatchTable* d = (DispatchTable*)INTEGER(s);
-        return d->magic == DISPATCH_TABLE_MAGIC ? d : nullptr;
+        return d->info.magic == DISPATCH_TABLE_MAGIC ? d : nullptr;
     }
 
     Function* at(size_t i) { return Function::unpack(entry[i]); }
@@ -53,9 +53,7 @@ struct DispatchTable {
         return first();
     }
 
-    rir::rir_header info;  /// for exposing SEXPs to GC
-
-    uint32_t magic; /// used to detect DispatchTables 0xBEEF1234
+    rir::rir_header info;
 
     static DispatchTable* create(size_t capacity) {
         size_t size =
@@ -67,9 +65,9 @@ struct DispatchTable {
   private:
     DispatchTable() = delete;
     DispatchTable(size_t cap) {
-        magic = DISPATCH_TABLE_MAGIC;
         info.gc_area_start = sizeof(DispatchTable);
         info.gc_area_length = cap;
+        info.magic = DISPATCH_TABLE_MAGIC;
         for (size_t c = 0; c < cap; ++c)
             entry[c] = nullptr;
     }
