@@ -216,6 +216,12 @@ class BC {
         return cur;
     }
 
+    inline static Opcode* next(Opcode* pc) {
+        Opcode bc = *pc;
+        BC cur(bc, decodeImmediate(bc, pc + 1));
+        return (Opcode*)((uintptr_t)pc + cur.size());
+    }
+
     // ==== Factory methods
     // to create new BC objects, which can be streamed to a CodeStream
     inline static BC nop();
