@@ -16,6 +16,8 @@ struct FunctionSignature {
             if (type == PROMSXP) {
                 isEvaluated = PRVALUE(s) != R_UnboundValue;
             }
+            // Only get the length if the promise is forced,
+            // otherwise stays set to -1 (unknown)
             if (isEvaluated)
                 length = XLENGTH(s);
         }

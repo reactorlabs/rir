@@ -1560,7 +1560,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
             NEXT();
         }
 
-        INSTRUCTION(call_ordered_) {
+        INSTRUCTION(call_eager_) {
             Immediate id = readImmediate();
             advanceImmediate();
             Immediate n = readImmediate();

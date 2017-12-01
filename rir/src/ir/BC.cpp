@@ -35,7 +35,7 @@ bool BC::operator==(const BC& other) const {
     case Opcode::call_:
     case Opcode::call_stack_:
     case Opcode::static_call_stack_:
-    case Opcode::call_ordered_:
+    case Opcode::call_eager_:
     case Opcode::dispatch_stack_:
         return immediate.call_args.call_id == other.immediate.call_args.call_id;
 
@@ -157,7 +157,7 @@ void BC::write(CodeStream& cs) const {
     case Opcode::dispatch_:
     case Opcode::call_stack_:
     case Opcode::static_call_stack_:
-    case Opcode::call_ordered_:
+    case Opcode::call_eager_:
     case Opcode::dispatch_stack_:
         assert(false);
         break;
@@ -337,7 +337,7 @@ void BC::print(CallSite* cs) {
         break;
     }
     case Opcode::static_call_stack_:
-    case Opcode::call_ordered_: {
+    case Opcode::call_eager_: {
         NumArgsT nargs = immediate.call_args.nargs;
         Rprintf(" %d ", nargs);
         if (cs) {

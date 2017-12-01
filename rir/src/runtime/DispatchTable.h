@@ -50,6 +50,7 @@ struct DispatchTable {
     }
 
     Function* getMatching(FunctionSignature* sig) {
+        // TODO: Actually do some matching when we have multiple signatures.
         return first();
     }
 

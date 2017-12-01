@@ -595,7 +595,7 @@ class DataflowAnalysis
         }
     }
 
-    void call_ordered_(CodeEditor::Iterator ins) override {
+    void call_eager_(CodeEditor::Iterator ins) override {
         doCall(ins);
         current().push(FValue::Any(ins));
     }

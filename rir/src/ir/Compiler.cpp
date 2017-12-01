@@ -1099,7 +1099,7 @@ bool compileWithGuess(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
         return false;
 
     RList formals(FORMALS(cls));
-    if (formals.length() != args.length() || args.length() == 0)
+    if (formals.length() != args.length())
         return false;
 
     for (auto farg : formals)
@@ -1149,7 +1149,7 @@ bool compileWithGuess(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
         signature->pushArgument({true, TYPEOF(a)});
     }
 
-    cs.insertStackCall(Opcode::call_ordered_, args.length(), {}, ast, cls, signature);
+    cs.insertStackCall(Opcode::call_eager_, args.length(), {}, ast, cls, signature);
 
     return true;
 }
