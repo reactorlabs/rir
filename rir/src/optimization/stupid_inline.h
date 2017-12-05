@@ -110,10 +110,11 @@ class StupidInliner {
 
             SEXP fun = BODY(t);
 
-            if (!isValidFunctionSEXP(fun))
+            if (!isValidDispatchTableSEXP(fun))
                 continue;
 
-            Function* f = Function::unpack(fun);
+            auto d = DispatchTable::unpack(fun);
+            auto f = d->first();
             Code* c = f->body();
 
             // TODO: This is a bit of a hack to find out if the function
