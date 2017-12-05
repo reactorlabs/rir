@@ -30,6 +30,9 @@ matrix:
       env: CHECK=test-all-devel BUILD=release
     - os: osx
       env: CHECK=check-recommended BUILD=release
+  include:
+    - os: osx
+      osx_image: xcode7.3
 
 addons:
   apt:
