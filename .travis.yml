@@ -2,33 +2,20 @@ dist: trusty
 
 language: cpp
 
-os:
-  - osx
-  - linux
-
-compiler:
-  - clang
-  - gcc
-
-env:
-  - CORES=3 CHECK=check BUILD=release
-  - CORES=3 CHECK=check BUILD=debug
-  - CHECK=test-all-devel BUILD=release
-  - CHECK=check-recommended BUILD=release
-
 matrix:
-  exclude:
+  include:
     - os: osx
-      compiler: gcc
-    - os: linux
+      osx_image: xcode7.3
       compiler: clang
-    - os: linux
       env: CORES=3 CHECK=check BUILD=release
-    - os: osx
+    - os: linux
+      compiler: gcc
       env: CORES=3 CHECK=check BUILD=debug
-    - os: osx
+    - os: linux
+      compiler: gcc
       env: CHECK=test-all-devel BUILD=release
-    - os: osx
+    - os: linux
+      compiler: gcc
       env: CHECK=check-recommended BUILD=release
 
 addons:
