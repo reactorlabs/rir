@@ -1,7 +1,5 @@
 dist: trusty
 
-osx_image: xcode7.3
-
 language: cpp
 
 os:
@@ -19,6 +17,9 @@ env:
   - CHECK=check-recommended BUILD=release
 
 matrix:
+  include:
+    - os: osx
+      osx_image: xcode7.3
   exclude:
     - os: osx
       compiler: gcc
