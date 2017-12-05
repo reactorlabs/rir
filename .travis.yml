@@ -10,11 +10,13 @@ matrix:
       env: CORES=3 CHECK=check BUILD=release
     - os: linux
       compiler: gcc
-      env:
-        - CORES=3 CHECK=check BUILD=debug
-        - CHECK=test-all-devel BUILD=release
-        - CHECK=check-recommended BUILD=release
-
+      env: CORES=3 CHECK=check BUILD=debug
+    - os: linux
+      compiler: gcc
+      env: CHECK=test-all-devel BUILD=release
+    - os: linux
+      compiler: gcc
+      env: CHECK=check-recommended BUILD=release
 
 addons:
   apt:
