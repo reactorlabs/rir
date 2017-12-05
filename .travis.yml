@@ -20,6 +20,8 @@ matrix:
   include:
     - os: osx
       osx_image: xcode7.3
+
+matrix:
   exclude:
     - os: osx
       compiler: gcc
