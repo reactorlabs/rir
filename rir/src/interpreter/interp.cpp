@@ -1570,7 +1570,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
             SEXP call = cp_pool_at(ctx, cs->call);
             SEXP callee = cp_pool_at(ctx, *cs->target());
 
-            assert(isValidClosureSEXP(callee));
+            jit(callee, ctx);
 
             profileCall(cs, callee);
 

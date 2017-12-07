@@ -128,7 +128,7 @@ class CodeStream {
                    TYPEOF(targOrSelector) == BUILTINSXP);
             *cs->target() = Pool::insert(targOrSelector);
         } else if (bc == Opcode::call_eager_) {
-            assert(isValidClosureSEXP(targOrSelector));
+            assert(TYPEOF(targOrSelector) == CLOSXP);
             *cs->target() = Pool::insert(targOrSelector);
         }
 

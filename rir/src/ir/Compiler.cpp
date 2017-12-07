@@ -1073,7 +1073,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
     return false;
 }
 
-SEXP findRIRClosure(SEXP sym, SEXP rho) {
+SEXP findClosure(SEXP sym, SEXP rho) {
     SEXP fun;
     while (rho != R_EmptyEnv) {
         fun = findVarInFrame3(rho, sym, TRUE);
@@ -1081,7 +1081,7 @@ SEXP findRIRClosure(SEXP sym, SEXP rho) {
             if (TYPEOF(fun) == PROMSXP || TYPEOF(fun) == BUILTINSXP ||
                     TYPEOF(fun) == SPECIALSXP || fun == R_MissingArg)
                 return nullptr;
-            if (isValidClosureSEXP(fun))
+            if (TYPEOF(fun) == CLOSXP)
                 return fun;
         }
         rho = ENCLOS(rho);
@@ -1094,7 +1094,7 @@ bool compileWithGuess(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
     RList args(args_);
     CodeStream& cs = ctx.cs();
 
-    SEXP cls = findRIRClosure(fun, R_GlobalEnv);  // or current env of the closure?
+    SEXP cls = findClosure(fun, R_GlobalEnv);  // or current env of the closure?
     if (!cls)
         return false;
 
