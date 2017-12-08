@@ -387,9 +387,10 @@ static SEXP rirCallClosure(SEXP call, SEXP env, SEXP callee, SEXP actuals,
 
             optimizing = false;
         }
-        if (fun->invocationCount < UINT_MAX)
-            fun->invocationCount++;
     }
+
+    if (fun->invocationCount < UINT_MAX)
+        fun->invocationCount++;
 
     // match formal arguments and create the env of this new activation record
     SEXP newEnv =
