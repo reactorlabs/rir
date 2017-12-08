@@ -1603,6 +1603,10 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
 
             DispatchTable* vtable = DispatchTable::unpack(BODY(callee));
             Function* fun = vtable->first();
+
+            if (fun->invocationCount < UINT_MAX)
+                fun->invocationCount++;
+
             Code* code = fun->body();
 
             SEXP res = rirCallTrampoline(&cntxt, code, newEnv, n, ctx);
