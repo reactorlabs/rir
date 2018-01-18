@@ -261,15 +261,6 @@ DEF_INSTR(call_stack_, 2, -1, 1, 0)
 DEF_INSTR(static_call_stack_, 2, -1, 1, 0)
 
 /**
- * call_eager_:: gets nargs as its immediate; the args are expected to be
- *               on the stack, in the correct order and evaluated;
- *               no argument list is created, instead the environment
- *               of the callee is populated directly by the values
- *               found on the stack
- */
-DEF_INSTR(call_eager_, 2, -1, 1, 0)
-
-/**
  * set_shared_:: marks tos to be shared (ie. named = 2)
  */
 DEF_INSTR(set_shared_, 0, 1, 1, 1)

@@ -32,8 +32,6 @@ class Localizer : public InstructionDispatcher::Receiver {
         lastCall = ins;
     }
 
-    void call_eager_(CodeEditor::Iterator ins) override { lastCall = ins; }
-
     void ldvar_(CodeEditor::Iterator ins) override {
         SEXP sym = (*ins).immediateConst();
         auto v = analysis[ins][sym];

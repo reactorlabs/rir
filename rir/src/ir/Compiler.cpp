@@ -1149,7 +1149,7 @@ bool compileWithGuess(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
         signature->pushArgument({true, TYPEOF(a)});
     }
 
-    cs.insertStackCall(Opcode::call_eager_, args.length(), {}, ast, cls, signature);
+    cs.insertStackCall(Opcode::static_call_stack_, args.length(), {}, ast, cls, signature);
 
     return true;
 }

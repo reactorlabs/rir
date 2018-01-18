@@ -141,8 +141,7 @@ class BC {
         assert(bc != Opcode::return_);
         if (bc == Opcode::call_stack_)
             return immediate.call_args.nargs + 1;
-        if (bc == Opcode::static_call_stack_ || bc == Opcode::dispatch_stack_ ||
-                bc == Opcode::call_eager_)
+        if (bc == Opcode::static_call_stack_ || bc == Opcode::dispatch_stack_)
             return immediate.call_args.nargs;
         return popCount(bc);
     }
@@ -172,7 +171,7 @@ class BC {
     bool isCallsite() const {
         return bc == Opcode::call_ || bc == Opcode::dispatch_ ||
                bc == Opcode::call_stack_ || bc == Opcode::dispatch_stack_ ||
-               bc == Opcode::static_call_stack_ || bc == Opcode::call_eager_;
+               bc == Opcode::static_call_stack_;
     }
 
     bool hasPromargs() const {
@@ -396,7 +395,6 @@ class BC {
         case Opcode::dispatch_:
         case Opcode::call_stack_:
         case Opcode::static_call_stack_:
-        case Opcode::call_eager_:
             immediate.call_args = *(CallArgs*)pc;
             break;
         case Opcode::guard_env_:
