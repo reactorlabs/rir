@@ -23,11 +23,12 @@ using namespace rir;
 
 REXPORT SEXP rir_disassemble(SEXP what, SEXP verbose) {
 
-    Rprintf("%p\n", what);
     Function* f = TYPEOF(what) == CLOSXP ? isValidClosureSEXP(what) : isValidFunctionSEXP(what);
 
     if (f == nullptr)
         Rf_error("Not a rir compiled code");
+
+    Rprintf("%p  [invoked %ux]\n", what, f->invocationCount);
 
     CodeEditor(what).print(LOGICAL(verbose)[0]);
     return R_NilValue;
