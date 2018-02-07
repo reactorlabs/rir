@@ -1257,7 +1257,7 @@ void debug(Code* c, Opcode* pc, const char* name, unsigned depth,
     return;
     if (debugging == 0) {
         debugging = 1;
-        printf("%p : %d, %s, s: %d\n", c, *pc, name, depth);
+        printf("%p : %d, %s, s: %d\n", c, (int)*pc, name, depth);
         for (unsigned i = 0; i < depth; ++i) {
             printf("%3d: ", i);
             Rf_PrintValue(ostack_at(ctx, i));
@@ -2571,21 +2571,19 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
             NEXT();
         }
 
-        INSTRUCTION(test_bounds_) {
-            SEXP val = ostack_at(ctx, 1);
-            SEXP idx = ostack_at(ctx, 0);
+        INSTRUCTION(for_seq_size_) {
+            SEXP seq = ostack_at(ctx, 0);
             // TODO: we should extract the length just once at the begining of
             // the loop and generally have somthing more clever here...
-            R_xlen_t len;
-            if (isVector(val)) {
-                len = LENGTH(val);
-            } else if (isList(val) || isNull(val)) {
-                len = Rf_length(val);
+            SEXP value = allocVector(INTSXP, 1);
+            if (isVector(seq)) {
+                INTEGER(value)[0] = LENGTH(seq);
+            } else if (isList(seq) || isNull(seq)) {
+                INTEGER(value)[0] = Rf_length(seq);
             } else {
                 errorcall(R_NilValue, "invalid for() loop sequence");
             }
-            int x1 = asInteger(idx);
-            ostack_push(ctx, x1 > 0 && x1 <= len ? R_TrueValue : R_FalseValue);
+            ostack_push(ctx, value);
             NEXT();
         }
 

@@ -303,9 +303,9 @@ DEF_INSTR(endcontext_, 0, 1, 0, 0)
 DEF_INSTR(inc_, 0, 1, 1, 1)
 
 /**
- * test_bounds_ :: check stack[0] is a valid inded into vector at stack[1]
+ * for_seq_size_ :: get size of the for loop sequence
  */
-DEF_INSTR(test_bounds_, 0, 2, 3, 1)
+DEF_INSTR(for_seq_size_, 0, 0, 1, 0)
 
 /**
  * return_ :: return instruction. Non-local return instruction as opposed to ret_.

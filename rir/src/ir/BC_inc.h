@@ -253,7 +253,7 @@ class BC {
     inline static BC label(JmpT);
     inline static BC dup();
     inline static BC dup2();
-    inline static BC testBounds();
+    inline static BC forSeqSize();
     inline static BC inc();
     inline static BC close();
     inline static BC add();
@@ -423,7 +423,7 @@ class BC {
             immediate.i = *(uint32_t*)pc;
             break;
         case Opcode::nop_:
-        case Opcode::test_bounds_:
+        case Opcode::for_seq_size_:
         case Opcode::extract1_:
         case Opcode::subset1_:
         case Opcode::extract2_:
