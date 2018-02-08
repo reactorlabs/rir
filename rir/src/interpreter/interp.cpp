@@ -2706,27 +2706,18 @@ SEXP rirExpr(SEXP f) {
 SEXP rirEval_f(SEXP what, SEXP env) {
     assert(TYPEOF(what) == EXTERNALSXP);
     Code* c;
-    Function* f;
     DispatchTable* t;
     // TODO we do not really need the arg counts now
-    if ((c = isValidCodeObject(what))) {
-        // nothing
-    } else if ((f = Function::check(what))) {
-        // note: could try to optimize, but no way to update the
-        // containing dispatch table
-        // also this branch is probably not taken at all,
-        // since this function is an API used only by gnur
-        // eval, which should always pass in a CLOSXP
-        f->registerInvocation();
-        c = f->body();
+    if (isValidCodeObject(what)) {
+        c = (Code*)what;
     } else if ((t = DispatchTable::check(what))) {
         size_t offset = 0; // Default target is the first version
-        f = t->at(offset);
         tryOptimizeClosure(t, offset, globalContext());
+        Function* f = t->at(offset);
         f->registerInvocation();
         c = f->body();
     } else {
-        assert(false && "Expected a code object, function, or dispatch table");
+        assert(false && "Expected a code object or a dispatch table");
     }
     return evalRirCode(c, globalContext(), env, 0);
 }
