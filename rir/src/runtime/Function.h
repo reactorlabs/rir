@@ -131,6 +131,11 @@ public:
 
     unsigned invocationCount;
 
+    void registerInvocation() {
+        if (invocationCount < UINT_MAX)
+            invocationCount++;
+    }
+
     unsigned envLeaked : 1;
     unsigned envChanged : 1;
     unsigned deopt : 1;

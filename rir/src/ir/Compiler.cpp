@@ -837,8 +837,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
         ctx.pushLoop(loopBranch, breakBranch);
 
         compileExpr(ctx, seq);
-        cs << BC::setShared()
-           << BC::push((int)0);
+        cs << BC::setShared() << BC::forSeqSize() << BC::push((int)0);
 
         std::vector<unsigned> pcs;
 
@@ -848,17 +847,14 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
 
         // Move context out of the way
         pcs.push_back(cs.currentPos());
-        cs << BC::put(2);
+        cs << BC::put(3);
 
-        cs << BC::inc()
-           << BC::testBounds()
-           << BC::brfalse(endForBranch)
-           << BC::dup2()
-           << BC::extract1();
+        cs << BC::inc() << BC::dup2() << BC::lt() << BC::brtrue(endForBranch)
+           << BC::pull(2) << BC::pull(1) << BC::extract1();
 
         // Put context back
         pcs.push_back(cs.currentPos());
-        cs << BC::pick(3);
+        cs << BC::pick(4);
         pcs.push_back(cs.currentPos());
         cs << BC::swap();
 
@@ -872,7 +868,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
         cs << endForBranch;
         // Put context back
         pcs.push_back(cs.currentPos());
-        cs << BC::pick(2);
+        cs << BC::pick(3);
 
         cs << breakBranch;
 
@@ -883,9 +879,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
                 cs.remove(pc);
         }
 
-        cs << BC::pop()
-           << BC::pop()
-           << BC::push(R_NilValue)
+        cs << BC::pop() << BC::pop() << BC::pop() << BC::push(R_NilValue)
            << BC::invisible();
 
         ctx.popLoop();

@@ -189,7 +189,7 @@ BC BC::dup() { return BC(Opcode::dup_); }
 BC BC::inc() { return BC(Opcode::inc_); }
 BC BC::close() { return BC(Opcode::close_); }
 BC BC::dup2() { return BC(Opcode::dup2_); }
-BC BC::testBounds() { return BC(Opcode::test_bounds_); }
+BC BC::forSeqSize() { return BC(Opcode::for_seq_size_); }
 BC BC::add() { return BC(Opcode::add_); }
 BC BC::mul() { return BC(Opcode::mul_); }
 BC BC::div() { return BC(Opcode::div_); }
