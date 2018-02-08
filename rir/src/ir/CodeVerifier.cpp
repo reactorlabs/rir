@@ -124,7 +124,7 @@ void CodeVerifier::verifyFunctionLayout(SEXP sexp, ::Context* ctx) {
 
     if (f->origin()) {
         assert(TYPEOF(f->origin()) == EXTERNALSXP and "Invalid origin type");
-        assert(Function::unpack(f->origin())->magic == FUNCTION_MAGIC and
+        assert(Function::unpack(f->origin())->info.magic == FUNCTION_MAGIC and
                "Origin does not seem to be function bytecode");
     }
     assert(f->codeLength == objs.size() and "Invalid number of code objects");

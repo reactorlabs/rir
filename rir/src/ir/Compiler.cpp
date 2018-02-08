@@ -1067,6 +1067,87 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
     return false;
 }
 
+SEXP findClosure(SEXP sym, SEXP rho) {
+    SEXP fun;
+    while (rho != R_EmptyEnv) {
+        fun = findVarInFrame3(rho, sym, TRUE);
+        if (fun != R_UnboundValue) {
+            if (TYPEOF(fun) == PROMSXP || TYPEOF(fun) == BUILTINSXP ||
+                    TYPEOF(fun) == SPECIALSXP || fun == R_MissingArg)
+                return nullptr;
+            if (TYPEOF(fun) == CLOSXP)
+                return fun;
+        }
+        rho = ENCLOS(rho);
+    }
+    return nullptr;
+}
+
+// try to look up a closure
+bool compileWithGuess(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
+    RList args(args_);
+    CodeStream& cs = ctx.cs();
+
+    SEXP cls = findClosure(fun, R_GlobalEnv);  // or current env of the closure?
+    if (!cls)
+        return false;
+
+    RList formals(FORMALS(cls));
+    if (formals.length() != args.length())
+        return false;
+
+    for (auto farg : formals)
+        if (farg == R_DotsSymbol)
+            return false;
+
+    for (auto a = args.begin(); a != args.end(); ++a) {
+        if (a.hasTag())
+            return false;
+        switch (TYPEOF(*a)) {
+        case NILSXP:
+        case LISTSXP:
+        case LGLSXP:
+        case INTSXP:
+        case REALSXP:
+        case STRSXP:
+        case CPLXSXP:
+        case RAWSXP:
+        case S4SXP:
+        case SPECIALSXP:
+        case BUILTINSXP:
+        case ENVSXP:
+        case CLOSXP:
+        case VECSXP:
+        case EXTPTRSXP:
+        case WEAKREFSXP:
+        case EXPRSXP:
+            break;
+        default:
+            return false;
+        }
+    }
+
+    // maybe use promise_ and compile everything either as push or
+    // as promise?
+
+    // do argument matching / shuffling?
+    // cannot reuse matchArgs from gnur (but could rewrite it)
+
+    cs << BC::guardName(fun, cls);
+
+    FunctionSignature* signature = new FunctionSignature();
+    signature->argsOnStack = true;
+
+    for (auto a : args) {
+        compileExpr(ctx, a);
+        signature->pushArgument({true, TYPEOF(a)});
+    }
+
+    cs.insertStackCall(Opcode::static_call_stack_, args.length(), {}, ast, cls, signature);
+
+    return true;
+}
+
 // function application
 void compileCall(Context& ctx, SEXP ast, SEXP fun, SEXP args) {
     CodeStream& cs = ctx.cs();
@@ -1078,6 +1159,9 @@ void compileCall(Context& ctx, SEXP ast, SEXP fun, SEXP args) {
     Match(fun) {
         Case(SYMSXP) {
             if (compileSpecialCall(ctx, ast, fun, args))
+                return;
+
+            if (compileWithGuess(ctx, ast, fun, args))
                 return;
 
             cs << BC::ldfun(fun);
@@ -1189,10 +1273,13 @@ SEXP Compiler::finalize() {
     FunctionWriter function = FunctionWriter::create();
     Context ctx(function, preserve);
 
-    // Compile formals (if any)
+    FunctionSignature* signature = new FunctionSignature();
+
+    // Compile formals (if any) and create signature
     for (auto arg = RList(formals).begin(); arg != RList::end(); ++arg) {
         if (*arg != R_MissingArg)
             compilePromise(ctx, *arg, true);
+        signature->pushDefaultArgument();
     }
 
     ctx.push(exp);
@@ -1209,6 +1296,7 @@ SEXP Compiler::finalize() {
     Optimizer::optimize(code);
 
     Function* opt = code.finalize();
+    opt->signature = signature;
 
 #ifdef ENABLE_SLOWASSERT
     CodeVerifier::verifyFunctionLayout(opt->container(), globalContext());

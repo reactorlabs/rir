@@ -80,7 +80,8 @@ class CodeStream {
 
     CodeStream& insertStackCall(Opcode bc, uint32_t nargs,
                                 std::vector<SEXP> names, SEXP call,
-                                SEXP targOrSelector = nullptr) {
+                                SEXP targOrSelector = nullptr,
+                                FunctionSignature* signature = nullptr) {
         insert(bc);
         CallArgs a;
         a.call_id = nextCallSiteIdx_;
@@ -110,6 +111,8 @@ class CodeStream {
         cs->hasTarget = (bc == Opcode::static_call_stack_);
         cs->hasImmediateArgs = false;
 
+        cs->signature = signature;
+
         if (hasNames) {
             for (unsigned i = 0; i < nargs; ++i) {
                 cs->names()[i] = Pool::insert(names[i]);
@@ -130,7 +133,8 @@ class CodeStream {
 
     CodeStream& insertCall(Opcode bc, std::vector<FunIdxT> args,
                            std::vector<SEXP> names, SEXP call,
-                           SEXP selector = nullptr) {
+                           SEXP selector = nullptr,
+                           FunctionSignature* signature = nullptr) {
         uint32_t nargs = args.size();
 
         insert(bc);
@@ -160,6 +164,8 @@ class CodeStream {
         cs->hasNames = hasNames;
         cs->hasSelector = (bc == Opcode::dispatch_);
         cs->hasImmediateArgs = true;
+
+        cs->signature = signature;
 
         int i = 0;
         for (auto arg : args) {

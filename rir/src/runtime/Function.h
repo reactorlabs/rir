@@ -1,8 +1,9 @@
 #ifndef RIR_FUNCTION_H
 #define RIR_FUNCTION_H
 
-#include "R/r.h"
 #include "Code.h"
+#include "FunctionSignature.h"
+#include "R/r.h"
 #include "RirHeader.h"
 
 namespace rir {
@@ -11,10 +12,6 @@ namespace rir {
  * Aliases for readability.
  */
 typedef SEXP FunctionSEXP;
-typedef SEXP ClosureSEXP;
-typedef SEXP PromiseSEXP;
-typedef SEXP IntSEXP;
-typedef SEXP SignatureSEXP;
 
 // Function magic constant is designed to help to distinguish between Function
 // objects and normal EXTERNALSXPs. Normally this is not necessary, but a very
@@ -51,17 +48,16 @@ typedef SEXP SignatureSEXP;
 #pragma pack(1)
 struct Function {
     Function() {
-        magic = FUNCTION_MAGIC;
         info.gc_area_start = sizeof(rir_header);  // just after the header
-        info.gc_area_length = 3; // signature, origin, next
-        signature_ = nullptr;
+        info.gc_area_length = 2;                  // origin, next
+        info.magic = FUNCTION_MAGIC;
         envLeaked = false;
         envChanged = false;
         deopt = false;
         size = sizeof(Function);
         origin_ = nullptr;
         next_ = nullptr;
-        // TODO(mhyee): signature
+        signature = nullptr;
         codeLength = 0;
         foffset = 0;
         invocationCount = 0;
@@ -77,12 +73,12 @@ struct Function {
 
     static Function* check(SEXP s) {
         Function* f = (Function*)INTEGER(s);
-        return f->magic == FUNCTION_MAGIC ? f : nullptr;
+        return f->info.magic == FUNCTION_MAGIC ? f : nullptr;
     }
 
     static Function* unpack(SEXP s) {
         Function* f = (Function*)INTEGER(s);
-        assert(f->magic == FUNCTION_MAGIC &&
+        assert(f->info.magic == FUNCTION_MAGIC &&
                "This container does not conatin a Function");
         return f;
     }
@@ -116,27 +112,22 @@ struct Function {
     rir::rir_header info;  /// for exposing SEXPs to GC
 
 private:
-    SignatureSEXP signature_; /// pointer to this version's signature
     FunctionSEXP origin_; /// Same Function with fewer optimizations,
                          //   NULL if original
     FunctionSEXP next_;
 public:
-    void signature(SignatureSEXP s) {
-        EXTERNALSXP_SET_ENTRY(container(), 0, s);
-    }
     void origin(Function* s) {
-        EXTERNALSXP_SET_ENTRY(container(), 1, s->container());
+        EXTERNALSXP_SET_ENTRY(container(), 0, s->container());
     }
     void next(Function* s) {
-        EXTERNALSXP_SET_ENTRY(container(), 2, s->container());
+        EXTERNALSXP_SET_ENTRY(container(), 1, s->container());
     }
-    SignatureSEXP signature() { return signature_; }
     FunctionSEXP origin() { return origin_; }
     FunctionSEXP next() { return next_; }
 
-    unsigned magic; /// used to detect Functions 0xCAFEBABE
-
     unsigned size; /// Size, in bytes, of the function and its data
+
+    FunctionSignature* signature; /// pointer to this version's signature
 
     unsigned invocationCount;
 
