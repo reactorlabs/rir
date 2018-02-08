@@ -123,6 +123,50 @@ static void jit(SEXP cls, Context* ctx) {
     SET_BODY(cls, BODY(cmp));
 }
 
+void tryOptimizeClosure(DispatchTable* table, size_t offset, Context* ctx) {
+
+    // This function will optimize the function and update the linked list
+    // of functions, so that subsequent closure calls pick the most optimized
+    // version.
+
+    static bool optimizing = false;
+
+    Function* fun = table->at(offset);
+
+    if (!optimizing && !fun->next() && !fun->origin()) {
+         /* currently there is a bug if we reoptimize a function twice:
+          *  Deopt ids from the first optimization and second optimizations
+          *  will be mixed and the deoptimizer always only goes back one
+          *  optimization level!
+          *  To avoid this bug we currently only optimize once
+          */
+        Code* code = fun->body();
+        if (fun->markOpt ||
+                (fun->invocationCount == 1 && code->perfCounter > 100) ||
+                (fun->invocationCount == 10 && code->perfCounter > 20) ||
+                 fun->invocationCount == 100) {
+            optimizing = true;
+
+            Function* oldFun = fun;
+            cp_pool_add(ctx, oldFun->container());
+
+            SEXP opt = globalContext()->optimizer(fun->container());
+
+            if (opt != nullptr) {
+                fun = Function::unpack(opt);
+
+                fun->invocationCount = oldFun->invocationCount;
+                fun->envLeaked = oldFun->envLeaked;
+                fun->envChanged = oldFun->envChanged;
+
+                // Update the dispatch table
+                table->put(offset, fun);
+            }
+            optimizing = false;
+        }
+    }
+}
+
 void closureDebug(SEXP call, SEXP op, SEXP rho, SEXP newrho, RCNTXT* cntxt) {
     // TODO!!!
 }
@@ -336,60 +380,16 @@ static SEXP rirCallClosure(SEXP call, SEXP env, SEXP callee, SEXP actuals,
     DispatchTable* vtable = DispatchTable::unpack(BODY(callee));
     Function* fun = vtable->first();
 
-    static bool optimizing = false;
-
     // NOTE(mhyee): The introduction of a dispatch table for different function
     // versions changes many things. This function handles a closure call, and
     // will optimize the closure function and update the linked list of
     // functions, so that subsequent closure calls pick the most optimized
     // version.
-    // This is no longer true with the dispatch table, where the first function
-    // is always selected, unless specified by the call instruction.
-    // For now, to keep the changes simpler, we'll just optimize the function
-    // once and add it to the dispatch table. But the call will still select
-    // the original, unoptimized version.
+    // This does not introduce a new item into the dispatch table!
 
-    if (!optimizing &&
-        !fun->next() &&
-         /* currently there is a bug if we reoptimize a function twice:
-          *  Deopt ids from the first optimization and second optimizations
-          *  will be mixed and the deoptimizer always only goes back one
-          *  optimization level!
-          *  To avoid this bug we currently only optimize once
-          */
-        !fun->origin()) {
-        Code* code = fun->body();
-        if (fun->markOpt ||
-            (fun->invocationCount == 1 && code->perfCounter > 100) ||
-            (fun->invocationCount == 10 && code->perfCounter > 20) ||
-            fun->invocationCount == 100) {
-            optimizing = true;
+    tryOptimizeClosure(vtable, 0, ctx);
 
-            Function* oldFun = fun;
-            cp_pool_add(ctx, oldFun->container());
-
-            SEXP opt = globalContext()->optimizer(fun->container());
-
-            if (opt != nullptr) {
-                fun = Function::unpack(opt);
-
-                PROTECT(fun->container());
-
-                // Update the vtable.
-                vtable->put(0, fun);
-
-                fun->invocationCount = oldFun->invocationCount;
-                fun->envLeaked = oldFun->envLeaked;
-                fun->envChanged = oldFun->envChanged;
-
-                UNPROTECT(1);  // funStore
-            }
-
-            optimizing = false;
-        }
-        if (fun->invocationCount < UINT_MAX)
-            fun->invocationCount++;
-    }
+    fun->registerInvocation();
 
     // match formal arguments and create the env of this new activation record
     SEXP newEnv =
@@ -1257,7 +1257,7 @@ void debug(Code* c, Opcode* pc, const char* name, unsigned depth,
     return;
     if (debugging == 0) {
         debugging = 1;
-        printf("%p : %d, %s, s: %d\n", c, *pc, name, depth);
+        printf("%p : %d, %s, s: %d\n", c, (int)*pc, name, depth);
         for (unsigned i = 0; i < depth; ++i) {
             printf("%3d: ", i);
             Rf_PrintValue(ostack_at(ctx, i));
@@ -2571,21 +2571,19 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
             NEXT();
         }
 
-        INSTRUCTION(test_bounds_) {
-            SEXP val = ostack_at(ctx, 1);
-            SEXP idx = ostack_at(ctx, 0);
+        INSTRUCTION(for_seq_size_) {
+            SEXP seq = ostack_at(ctx, 0);
             // TODO: we should extract the length just once at the begining of
             // the loop and generally have somthing more clever here...
-            R_xlen_t len;
-            if (isVector(val)) {
-                len = LENGTH(val);
-            } else if (isList(val) || isNull(val)) {
-                len = Rf_length(val);
+            SEXP value = allocVector(INTSXP, 1);
+            if (isVector(seq)) {
+                INTEGER(value)[0] = LENGTH(seq);
+            } else if (isList(seq) || isNull(seq)) {
+                INTEGER(value)[0] = Rf_length(seq);
             } else {
                 errorcall(R_NilValue, "invalid for() loop sequence");
             }
-            int x1 = asInteger(idx);
-            ostack_push(ctx, x1 > 0 && x1 <= len ? R_TrueValue : R_FalseValue);
+            ostack_push(ctx, value);
             NEXT();
         }
 
@@ -2705,20 +2703,21 @@ SEXP rirExpr(SEXP f) {
     return f;
 }
 
-SEXP rirEval_f(SEXP f, SEXP env) {
-    assert(TYPEOF(f) == EXTERNALSXP);
-    Function* ff;
+SEXP rirEval_f(SEXP what, SEXP env) {
+    assert(TYPEOF(what) == EXTERNALSXP);
+    Code* c;
     DispatchTable* t;
     // TODO we do not really need the arg counts now
-    if (isValidCodeObject(f)) {
-        Code* c = (Code*)f;
-        return evalRirCode(c, globalContext(), env, 0);
-    } else if ((ff = Function::check(f))) {
-        return evalRirCode(ff->body(), globalContext(), env, 0);
-    } else if ((t = DispatchTable::check(f))) {
-        // Default target is the first version in the dispatch table
-        return evalRirCode(t->first()->body(), globalContext(), env, 0);
+    if (isValidCodeObject(what)) {
+        c = (Code*)what;
+    } else if ((t = DispatchTable::check(what))) {
+        size_t offset = 0; // Default target is the first version
+        tryOptimizeClosure(t, offset, globalContext());
+        Function* f = t->at(offset);
+        f->registerInvocation();
+        c = f->body();
     } else {
-        assert(false && "Expected a code object, function, or dispatch table");
+        assert(false && "Expected a code object or a dispatch table");
     }
+    return evalRirCode(c, globalContext(), env, 0);
 }

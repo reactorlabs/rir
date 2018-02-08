@@ -692,7 +692,7 @@ class DataflowAnalysis
         case Opcode::close_:
         case Opcode::lgl_or_:
         case Opcode::lgl_and_:
-        case Opcode::test_bounds_:
+        case Opcode::for_seq_size_:
         case Opcode::seq_:
         case Opcode::names_:
         case Opcode::length_:
