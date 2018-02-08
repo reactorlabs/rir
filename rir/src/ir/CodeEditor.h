@@ -394,7 +394,7 @@ class CodeEditor {
 
         bool empty() { return editor.front.next == &editor.last; }
 
-        void print();
+        void print(bool verbose);
 
         unsigned long hash() const {
             return std::hash<unsigned long>()((unsigned long)&editor) ^
