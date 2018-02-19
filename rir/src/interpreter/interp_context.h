@@ -158,6 +158,48 @@ INLINE void ostack_ensureSize(Context* c, unsigned minFree) {
     }
 }
 
+class Locals final {
+// NOTE: must not own any resources, because the destructor is not called
+//       if there is a longjmp from the evalRirCode call
+private:
+    R_bcstack_t* base;
+    unsigned localsCount;
+public:
+    Locals(unsigned count) : base(R_BCNodeStackTop), localsCount(count) {
+        R_BCNodeStackTop += count;
+    }
+
+    ~Locals() {
+        R_BCNodeStackTop -= localsCount;
+    }
+
+    SEXP load(unsigned offset) {
+        assert(offset < localsCount && "Attempt to load invalid local variable.");
+#ifdef TYPED_STACK
+        return (base + offset)->u.sxpval;
+#else
+        return base[offset];
+#endif
+    }
+
+    void store(unsigned offset, SEXP val) {
+        assert(offset < localsCount && "Attempt to store invalid local variable.");
+#ifdef TYPED_STACK
+        (base + offset)->u.sxpval = val;
+        (base + offset)->tag = 0;
+#else
+        base[offset] = val;
+#endif
+    }
+
+    // maybe this is an overkill?
+    Locals(Locals const&) = delete;
+    Locals(Locals&&) = delete;
+    Locals& operator=(Locals const&) = delete;
+    Locals& operator=(Locals&&) = delete;
+    static void* operator new(size_t) = delete;
+};
+
 Context* context_create(CompilerCallback, OptimizerCallback);
 
 #define cp_pool_length(c) (rl_length(& (c)->cp))

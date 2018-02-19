@@ -73,6 +73,16 @@ BC BC::ldvar2(SEXP sym) {
     i.pool = Pool::insert(sym);
     return BC(Opcode::ldvar2_, i);
 }
+BC BC::ldloc(uint32_t offset) {
+    ImmediateT im;
+    im.loc = offset;
+    return BC(Opcode::ldloc_, im);
+}
+BC BC::stloc(uint32_t offset) {
+    ImmediateT im;
+    im.loc = offset;
+    return BC(Opcode::stloc_, im);
+}
 BC BC::ldarg(SEXP sym) {
     assert(TYPEOF(sym) == SYMSXP);
     assert(strlen(CHAR(PRINTNAME(sym))));

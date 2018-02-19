@@ -67,6 +67,9 @@ struct Code {
 
     unsigned stackLength; /// Number of slots in stack required
 
+    // TODO: for now, only use 1 slot for everything (to store current env)
+    unsigned localsCount; /// Number of slots for local variables
+
     unsigned codeSize; /// bytes of code (not padded)
 
     unsigned skiplistLength; /// number of skiplist entries

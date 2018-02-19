@@ -1345,6 +1345,9 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
 
     assert(c->magic == CODE_MAGIC);
 
+    Locals locals(c->localsCount);
+    locals.store(0, env);
+
     BindingCache bindingCache[BINDING_CACHE_SIZE];
     memset(&bindingCache, 0, sizeof(bindingCache));
 
@@ -1521,6 +1524,22 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
                 SET_NAMED(res, 1);
 
             ostack_push(ctx, res);
+            NEXT();
+        }
+
+        INSTRUCTION(ldloc_) {
+            Immediate offset = readImmediate();
+            advanceImmediate();
+            res = locals.load(offset);
+            ostack_push(ctx, res);
+            NEXT();
+        }
+
+        INSTRUCTION(stloc_) {
+            Immediate offset = readImmediate();
+            advanceImmediate();
+            locals.store(offset, ostack_top(ctx));
+            ostack_pop(ctx);
             NEXT();
         }
 
@@ -2667,7 +2686,9 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
 
         INSTRUCTION(return_) {
             res = ostack_top(ctx);
+            // this restores stack pointer to the value from the target context
             Rf_findcontext(CTXT_BROWSER | CTXT_FUNCTION, env, res);
+            // not reached
             NEXT();
         }
 
@@ -2705,19 +2726,24 @@ SEXP rirExpr(SEXP f) {
 
 SEXP rirEval_f(SEXP what, SEXP env) {
     assert(TYPEOF(what) == EXTERNALSXP);
-    Code* c;
-    DispatchTable* t;
+    assert(TYPEOF(env) == ENVSXP);
+
     // TODO we do not really need the arg counts now
-    if (isValidCodeObject(what)) {
-        c = (Code*)what;
-    } else if ((t = DispatchTable::check(what))) {
+
+    if (isValidCodeObject(what))
+        return evalRirCode((Code*)what, globalContext(), env, 0);
+
+    if (DispatchTable::check(what)) {
+        auto table = DispatchTable::unpack(what);
         size_t offset = 0; // Default target is the first version
-        tryOptimizeClosure(t, offset, globalContext());
-        Function* f = t->at(offset);
-        f->registerInvocation();
-        c = f->body();
-    } else {
-        assert(false && "Expected a code object or a dispatch table");
+
+        tryOptimizeClosure(table, offset, globalContext());
+
+        Function* fun = table->at(offset);
+        fun->registerInvocation();
+
+        return evalRirCode(fun->body(), globalContext(), env, 0);
     }
-    return evalRirCode(c, globalContext(), env, 0);
+
+    assert(false && "Expected a code object or a dispatch table");
 }

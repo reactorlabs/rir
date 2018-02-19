@@ -9,9 +9,10 @@ Code::Code(SEXP ast, unsigned cs, unsigned sourceSize, unsigned csl,
     magic = CODE_MAGIC;
     header = offset;
     src = src_pool_add(globalContext(), ast);
+    localsCount = 1;  // put current execution environment into local #0
     codeSize = cs;
-    srcLength = sourceSize;
     skiplistLength = calcSkiplistLength(sourceSize);
+    srcLength = sourceSize;
     callSiteLength = csl;
     perfCounter = 0;
     isDefaultArgument = isDefaultArg;
