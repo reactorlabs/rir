@@ -177,7 +177,7 @@ class Locals final {
 
   public:
     Locals(unsigned count) : base(R_BCNodeStackTop), localsCount(count) {
-        R_BCNodeStackTop += count;
+        R_BCNodeStackTop += localsCount;
     }
 
     ~Locals() { R_BCNodeStackTop -= localsCount; }
@@ -203,7 +203,6 @@ class Locals final {
 #endif
     }
 
-    // maybe this is an overkill?
     Locals(Locals const&) = delete;
     Locals(Locals&&) = delete;
     Locals& operator=(Locals const&) = delete;
