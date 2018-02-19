@@ -1,9 +1,9 @@
 #ifndef RJIT_RIR_BC_INC
 #define RJIT_RIR_BC_INC
 
+#include <cassert>
 #include <cstddef>
 #include <cstdint>
-#include <cassert>
 #include <cstring>
 
 #include "R/r.h"
@@ -186,17 +186,15 @@ class BC {
                bc == Opcode::brobj_ || bc == Opcode::beginloop_;
     }
 
-    bool isUncondJmp() const {
-        return bc == Opcode::br_;
-    }
+    bool isUncondJmp() const { return bc == Opcode::br_; }
 
-    bool isJmp() const {
-        return isCondJmp() || isUncondJmp();
-    }
+    bool isJmp() const { return isCondJmp() || isUncondJmp(); }
 
     bool isPure() { return isPure(bc); }
 
-    bool isReturn() const { return bc == Opcode::ret_ || bc == Opcode::return_; }
+    bool isReturn() const {
+        return bc == Opcode::ret_ || bc == Opcode::return_;
+    }
 
     bool isLabel() const { return bc == Opcode::label; }
 

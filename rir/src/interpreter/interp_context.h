@@ -7,8 +7,8 @@
 
 #include <stdio.h>
 
-#include <stdint.h>
 #include <assert.h>
+#include <stdint.h>
 
 /** Compiler API. Given a language object, compiles it and returns the
   EXTERNALSXP containing the Function and its Code objects.
@@ -27,9 +27,11 @@ extern "C" {
 
 /** Resizeable R list.
 
- Allocates large list and then tricks R into believing that the list is actually smaller.
+ Allocates large list and then tricks R into believing that the list is actually
+ smaller.
 
- This works because R uses non-moving GC and is used for constant and source pools as well as the interpreter object stack.
+ This works because R uses non-moving GC and is used for constant and source
+ pools as well as the interpreter object stack.
  */
 typedef struct {
     SEXP list;
@@ -41,7 +43,9 @@ typedef struct {
 
 /** Interpreter's context.
 
- Interpreter's context is a list (so that it will be marked by R's gc) that contains the SEXP pools and stack as well as other stacks that do not need to be gc'd.
+ Interpreter's context is a list (so that it will be marked by R's gc) that
+ contains the SEXP pools and stack as well as other stacks that do not need to
+ be gc'd.
 
  */
 
@@ -63,18 +67,17 @@ extern SEXP setterPlaceholderSym;
 extern SEXP getterPlaceholderSym;
 extern SEXP quoteSym;
 
-// TODO we might actually need to do more for the lengths (i.e. true length vs length)
+// TODO we might actually need to do more for the lengths (i.e. true length vs
+// length)
 
-INLINE size_t rl_length(ResizeableList * l) {
-    return Rf_length(l->list);
-}
+INLINE size_t rl_length(ResizeableList* l) { return Rf_length(l->list); }
 
-INLINE void rl_setLength(ResizeableList * l, size_t length) {
+INLINE void rl_setLength(ResizeableList* l, size_t length) {
     ((VECSEXP)l->list)->vecsxp.length = length;
     ((VECSEXP)l->list)->vecsxp.truelength = length;
 }
 
-INLINE void rl_grow(ResizeableList * l, SEXP parent, size_t index) {
+INLINE void rl_grow(ResizeableList* l, SEXP parent, size_t index) {
     int oldsize = rl_length(l);
     SEXP n = Rf_allocVector(VECSXP, l->capacity * 2);
     memcpy(DATAPTR(n), DATAPTR(l->list), l->capacity * sizeof(SEXP));
@@ -84,7 +87,7 @@ INLINE void rl_grow(ResizeableList * l, SEXP parent, size_t index) {
     l->capacity *= 2;
 }
 
-INLINE void rl_append(ResizeableList * l, SEXP val, SEXP parent, size_t index) {
+INLINE void rl_append(ResizeableList* l, SEXP val, SEXP parent, size_t index) {
     size_t i = rl_length(l);
     if (i == l->capacity) {
         PROTECT(val);
@@ -98,29 +101,31 @@ INLINE void rl_append(ResizeableList * l, SEXP val, SEXP parent, size_t index) {
 #define ostack_length(c) (R_BCNodeStackTop - R_BCNodeStackBase)
 
 #ifdef TYPED_STACK
-#  define ostack_top(c) ((R_BCNodeStackTop - 1)->u.sxpval)
+#define ostack_top(c) ((R_BCNodeStackTop - 1)->u.sxpval)
 #else
-#  define ostack_top(c) (*(R_BCNodeStackTop - 1))
+#define ostack_top(c) (*(R_BCNodeStackTop - 1))
 #endif
 
 #ifdef TYPED_STACK
-#  define ostack_at(c, i) ((R_BCNodeStackTop - 1 - (i))->u.sxpval)
+#define ostack_at(c, i) ((R_BCNodeStackTop - 1 - (i))->u.sxpval)
 #else
-#  define ostack_at(c, i) (*(R_BCNodeStackTop - 1 - (i)))
+#define ostack_at(c, i) (*(R_BCNodeStackTop - 1 - (i)))
 #endif
 
 #ifdef TYPED_STACK
-#  define ostack_set(c, i, v) do { \
-        SEXP tmp = (v); \
-        int idx = (i); \
-        (R_BCNodeStackTop - 1 - idx)->u.sxpval = tmp; \
-        (R_BCNodeStackTop - 1 - idx)->tag = 0; \
+#define ostack_set(c, i, v)                                                    \
+    do {                                                                       \
+        SEXP tmp = (v);                                                        \
+        int idx = (i);                                                         \
+        (R_BCNodeStackTop - 1 - idx)->u.sxpval = tmp;                          \
+        (R_BCNodeStackTop - 1 - idx)->tag = 0;                                 \
     } while (0)
 #else
-#  define ostack_set(c, i, v) do { \
-        SEXP tmp = (v); \
-        int idx = (i); \
-        *(R_BCNodeStackTop - 1 - idx) = tmp; \
+#define ostack_set(c, i, v)                                                    \
+    do {                                                                       \
+        SEXP tmp = (v);                                                        \
+        int idx = (i);                                                         \
+        *(R_BCNodeStackTop - 1 - idx) = tmp;                                   \
     } while (0)
 #endif
 
@@ -128,26 +133,31 @@ INLINE void rl_append(ResizeableList * l, SEXP val, SEXP parent, size_t index) {
 
 #define ostack_empty(c) (R_BCNodeStackTop == R_BCNodeStackBase)
 
-#define ostack_popn(c, p) do { R_BCNodeStackTop -= (p); } while (0)
+#define ostack_popn(c, p)                                                      \
+    do {                                                                       \
+        R_BCNodeStackTop -= (p);                                               \
+    } while (0)
 
 #ifdef TYPED_STACK
-#  define ostack_pop(c) ((--R_BCNodeStackTop)->u.sxpval)
+#define ostack_pop(c) ((--R_BCNodeStackTop)->u.sxpval)
 #else
-#  define ostack_pop(c) (*(--R_BCNodeStackTop))
+#define ostack_pop(c) (*(--R_BCNodeStackTop))
 #endif
 
 #ifdef TYPED_STACK
-#  define ostack_push(c, v) do { \
-        SEXP tmp = (v); \
-        R_BCNodeStackTop->u.sxpval = tmp; \
-        R_BCNodeStackTop->tag = 0; \
-        ++R_BCNodeStackTop; \
+#define ostack_push(c, v)                                                      \
+    do {                                                                       \
+        SEXP tmp = (v);                                                        \
+        R_BCNodeStackTop->u.sxpval = tmp;                                      \
+        R_BCNodeStackTop->tag = 0;                                             \
+        ++R_BCNodeStackTop;                                                    \
     } while (0)
 #else
-#  define ostack_push(c, v) do { \
-        SEXP tmp = (v); \
-        *R_BCNodeStackTop = tmp; \
-        ++R_BCNodeStackTop; \
+#define ostack_push(c, v)                                                      \
+    do {                                                                       \
+        SEXP tmp = (v);                                                        \
+        *R_BCNodeStackTop = tmp;                                               \
+        ++R_BCNodeStackTop;                                                    \
     } while (0)
 #endif
 
@@ -159,22 +169,22 @@ INLINE void ostack_ensureSize(Context* c, unsigned minFree) {
 }
 
 class Locals final {
-// NOTE: must not own any resources, because the destructor is not called
-//       if there is a longjmp from the evalRirCode call
-private:
+    // NOTE: must not own any resources, because the destructor is not called
+    //       if there is a longjmp from the evalRirCode call
+  private:
     R_bcstack_t* base;
     unsigned localsCount;
-public:
+
+  public:
     Locals(unsigned count) : base(R_BCNodeStackTop), localsCount(count) {
         R_BCNodeStackTop += count;
     }
 
-    ~Locals() {
-        R_BCNodeStackTop -= localsCount;
-    }
+    ~Locals() { R_BCNodeStackTop -= localsCount; }
 
     SEXP load(unsigned offset) {
-        assert(offset < localsCount && "Attempt to load invalid local variable.");
+        assert(offset < localsCount &&
+               "Attempt to load invalid local variable.");
 #ifdef TYPED_STACK
         return (base + offset)->u.sxpval;
 #else
@@ -183,7 +193,8 @@ public:
     }
 
     void store(unsigned offset, SEXP val) {
-        assert(offset < localsCount && "Attempt to store invalid local variable.");
+        assert(offset < localsCount &&
+               "Attempt to store invalid local variable.");
 #ifdef TYPED_STACK
         (base + offset)->u.sxpval = val;
         (base + offset)->tag = 0;
@@ -202,19 +213,18 @@ public:
 
 Context* context_create(CompilerCallback, OptimizerCallback);
 
-#define cp_pool_length(c) (rl_length(& (c)->cp))
-#define src_pool_length(c) (rl_length(& (c)->src))
+#define cp_pool_length(c) (rl_length(&(c)->cp))
+#define src_pool_length(c) (rl_length(&(c)->src))
 
 INLINE size_t cp_pool_add(Context* c, SEXP v) {
-    size_t result = rl_length(& c->cp);
-    rl_append(& c->cp, v, c->list, CONTEXT_INDEX_CP);
+    size_t result = rl_length(&c->cp);
+    rl_append(&c->cp, v, c->list, CONTEXT_INDEX_CP);
     return result;
 }
 
-
 INLINE size_t src_pool_add(Context* c, SEXP v) {
-    size_t result = rl_length( &c->src);
-    rl_append(& c->src, v, c->list, CONTEXT_INDEX_SRC);
+    size_t result = rl_length(&c->src);
+    rl_append(&c->src, v, c->list, CONTEXT_INDEX_SRC);
     return result;
 }
 

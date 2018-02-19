@@ -47,10 +47,10 @@ typedef SEXP FunctionSEXP;
 #pragma pack(push)
 #pragma pack(1)
 struct Function {
-public:
+  public:
     Function() {
-        info.gc_area_start = sizeof(rir_header);  // just after the header
-        info.gc_area_length = 2;                  // origin, next
+        info.gc_area_start = sizeof(rir_header); // just after the header
+        info.gc_area_length = 2;                 // origin, next
         info.magic = FUNCTION_MAGIC;
         origin_ = nullptr;
         next_ = nullptr;
@@ -96,13 +96,9 @@ public:
         return c;
     }
 
-    CodeHandleIterator begin() {
-        return CodeHandleIterator(first());
-    }
+    CodeHandleIterator begin() { return CodeHandleIterator(first()); }
 
-    CodeHandleIterator end() {
-        return CodeHandleIterator(codeEnd());
-    }
+    CodeHandleIterator end() { return CodeHandleIterator(codeEnd()); }
 
     unsigned indexOf(Code* code) {
         unsigned idx = 0;
@@ -132,14 +128,14 @@ public:
             invocationCount++;
     }
 
-    rir::rir_header info;  /// for exposing SEXPs to GC
+    rir::rir_header info; /// for exposing SEXPs to GC
 
-private:
+  private:
     FunctionSEXP origin_; /// Same Function with fewer optimizations,
-                         //   NULL if original
+                          //   NULL if original
     FunctionSEXP next_;
 
-public:
+  public:
     unsigned size; /// Size, in bytes, of the function and its data
 
     FunctionSignature* signature; /// pointer to this version's signature

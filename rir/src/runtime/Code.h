@@ -1,11 +1,11 @@
 #ifndef RIR_CODE_H
 #define RIR_CODE_H
 
-#include "R/r.h"
 #include "Opcode.h"
+#include "R/r.h"
 
-#include <cstdint>
 #include <cassert>
+#include <cstdint>
 
 namespace rir {
 

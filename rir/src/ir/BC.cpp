@@ -1,13 +1,13 @@
 #include "BC.h"
 
 #include "utils/Pool.h"
-#include <iostream>
 #include <iomanip>
+#include <iostream>
 
-#include "R/RList.h"
 #include "CodeStream.h"
-#include "R/r.h"
 #include "R/Funtab.h"
+#include "R/RList.h"
+#include "R/r.h"
 
 #include "interpreter/deoptimizer.h"
 
@@ -378,7 +378,8 @@ void BC::print(CallSite* cs) {
     case Opcode::stvar_:
     case Opcode::stvar2_:
     case Opcode::missing_:
-        Rprintf(" %u # %s", immediate.pool, CHAR(PRINTNAME((immediateConst()))));
+        Rprintf(" %u # %s", immediate.pool,
+                CHAR(PRINTNAME((immediateConst()))));
         break;
     case Opcode::guard_fun_: {
         SEXP name = Pool::get(immediate.guard_fun_args.name);
@@ -471,5 +472,4 @@ void BC::print(CallSite* cs) {
     }
     Rprintf("\n");
 }
-
 }

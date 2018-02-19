@@ -134,12 +134,12 @@ void tryOptimizeClosure(DispatchTable* table, size_t offset, Context* ctx) {
     Function* fun = table->at(offset);
 
     if (!optimizing && !fun->next() && !fun->origin()) {
-         /* currently there is a bug if we reoptimize a function twice:
-          *  Deopt ids from the first optimization and second optimizations
-          *  will be mixed and the deoptimizer always only goes back one
-          *  optimization level!
-          *  To avoid this bug we currently only optimize once
-          */
+        /* currently there is a bug if we reoptimize a function twice:
+         *  Deopt ids from the first optimization and second optimizations
+         *  will be mixed and the deoptimizer always only goes back one
+         *  optimization level!
+         *  To avoid this bug we currently only optimize once
+         */
         Code* code = fun->body();
         if (fun->markOpt ||
                 (fun->invocationCount == 1 && code->perfCounter > 100) ||
@@ -229,8 +229,8 @@ SEXP createArgsListStack(Code* c, size_t nargs, CallSite* cs, SEXP env,
     return result;
 }
 
-SEXP createArgsList(Code* c, SEXP call, size_t nargs, CallSite* cs,
-                    SEXP env, Context* ctx, bool eager) {
+SEXP createArgsList(Code* c, SEXP call, size_t nargs, CallSite* cs, SEXP env,
+                    Context* ctx, bool eager) {
     SEXP result = R_NilValue;
     SEXP pos = result;
 
@@ -672,7 +672,8 @@ SEXP doCallStack(Code* caller, SEXP callee, size_t nargs, unsigned id, SEXP env,
         PROTECT(argslist);
         ostack_popn(ctx, nargs);
 
-        // if body is EXTERNALSXP, it is rir serialized code, execute it directly
+        // if body is EXTERNALSXP, it is rir serialized code, execute it
+        // directly
         SEXP body = BODY(callee);
         if (TYPEOF(body) == EXTERNALSXP) {
             assert(isValidDispatchTableSEXP(body));
@@ -788,7 +789,8 @@ SEXP doDispatchStack(Code* caller, size_t nargs, uint32_t id, SEXP env,
             break;
         }
         case CLOSXP: {
-            // if body is EXTERNALSXP, it is rir serialized code, execute it directly
+            // if body is EXTERNALSXP, it is rir serialized code, execute it
+            // directly
             SEXP body = BODY(callee);
             if (TYPEOF(body) == EXTERNALSXP) {
                 assert(isValidDispatchTableSEXP(body));
@@ -900,7 +902,8 @@ SEXP doDispatch(Code* caller, uint32_t nargs, uint32_t id, SEXP env,
             break;
         }
         case CLOSXP: {
-            // if body is EXTERNALSXP, it is rir serialized code, execute it directly
+            // if body is EXTERNALSXP, it is rir serialized code, execute it
+            // directly
             SEXP body = BODY(callee);
             if (TYPEOF(body) == EXTERNALSXP) {
                 assert(isValidDispatchTableSEXP(body));
@@ -1916,7 +1919,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
         INSTRUCTION(lt_) {
             SEXP lhs = ostack_at(ctx, 1);
             SEXP rhs = ostack_at(ctx, 0);
-            DO_RELOP(< );
+            DO_RELOP(<);
             ostack_popn(ctx, 2);
             ostack_push(ctx, res);
             NEXT();
@@ -1925,7 +1928,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
         INSTRUCTION(gt_) {
             SEXP lhs = ostack_at(ctx, 1);
             SEXP rhs = ostack_at(ctx, 0);
-            DO_RELOP(> );
+            DO_RELOP(>);
             ostack_popn(ctx, 2);
             ostack_push(ctx, res);
             NEXT();
@@ -1934,7 +1937,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
         INSTRUCTION(le_) {
             SEXP lhs = ostack_at(ctx, 1);
             SEXP rhs = ostack_at(ctx, 0);
-            DO_RELOP(<= );
+            DO_RELOP(<=);
             ostack_popn(ctx, 2);
             ostack_push(ctx, res);
             NEXT();
@@ -1943,7 +1946,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
         INSTRUCTION(ge_) {
             SEXP lhs = ostack_at(ctx, 1);
             SEXP rhs = ostack_at(ctx, 0);
-            DO_RELOP(>= );
+            DO_RELOP(>=);
             ostack_popn(ctx, 2);
             ostack_push(ctx, res);
             NEXT();
@@ -1952,7 +1955,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
         INSTRUCTION(eq_) {
             SEXP lhs = ostack_at(ctx, 1);
             SEXP rhs = ostack_at(ctx, 0);
-            DO_RELOP(== );
+            DO_RELOP(==);
             ostack_popn(ctx, 2);
             ostack_push(ctx, res);
             NEXT();
@@ -1961,7 +1964,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
         INSTRUCTION(ne_) {
             SEXP lhs = ostack_at(ctx, 1);
             SEXP rhs = ostack_at(ctx, 0);
-            DO_RELOP(!= );
+            DO_RELOP(!=);
             ostack_popn(ctx, 2);
             ostack_push(ctx, res);
             NEXT();

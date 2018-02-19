@@ -1,7 +1,7 @@
 #include "Code.h"
-#include "utils/Pool.h"
-#include "ir/CodeEditor.h"
 #include "ir/BC.h"
+#include "ir/CodeEditor.h"
+#include "utils/Pool.h"
 
 namespace rir {
 Code::Code(SEXP ast, unsigned cs, unsigned sourceSize, unsigned csl,
@@ -9,7 +9,7 @@ Code::Code(SEXP ast, unsigned cs, unsigned sourceSize, unsigned csl,
     magic = CODE_MAGIC;
     header = offset;
     src = src_pool_add(globalContext(), ast);
-    localsCount = 1;  // put current execution environment into local #0
+    localsCount = 1; // put current execution environment into local #0
     codeSize = cs;
     skiplistLength = calcSkiplistLength(sourceSize);
     srcLength = sourceSize;

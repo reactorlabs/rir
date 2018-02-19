@@ -5,8 +5,8 @@
 #include <cstdint>
 #include <map>
 
-#include "utils/Pool.h"
 #include "R/r.h"
+#include "utils/Pool.h"
 
 #include "BC_inc.h"
 
