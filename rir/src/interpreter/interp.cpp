@@ -2192,7 +2192,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
             NEXT();
         }
 
-        INSTRUCTION(subset1_) {
+        INSTRUCTION(extract1_1_) {
             SEXP idx = ostack_at(ctx, 0);
             SEXP val = ostack_at(ctx, 1);
 
@@ -2207,7 +2207,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
             NEXT();
         }
 
-        INSTRUCTION(subset2_) {
+        INSTRUCTION(extract1_2_) {
             SEXP idx2 = ostack_at(ctx, 0);
             SEXP idx = ostack_at(ctx, 1);
             SEXP val = ostack_at(ctx, 2);
@@ -2337,7 +2337,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
             NEXT();
         }
 
-        INSTRUCTION(extract1_) {
+        INSTRUCTION(extract2_1_) {
             SEXP idx = ostack_at(ctx, 0);
             SEXP val = ostack_at(ctx, 1);
             int i = -1;
@@ -2415,7 +2415,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
         }
         }
 
-        INSTRUCTION(extract2_) {
+        INSTRUCTION(extract2_2_) {
             SEXP idx2 = ostack_at(ctx, 0);
             SEXP idx = ostack_at(ctx, 1);
             SEXP val = ostack_at(ctx, 2);

@@ -218,10 +218,10 @@ BC BC::eq() { return BC(Opcode::eq_); }
 BC BC::ne() { return BC(Opcode::ne_); }
 BC BC::invisible() { return BC(Opcode::invisible_); }
 BC BC::visible() { return BC(Opcode::visible_); }
-BC BC::extract1() { return BC(Opcode::extract1_); }
-BC BC::subset1() { return BC(Opcode::subset1_); }
-BC BC::extract2() { return BC(Opcode::extract2_); }
-BC BC::subset2() { return BC(Opcode::subset2_); }
+BC BC::extract1_1() { return BC(Opcode::extract1_1_); }
+BC BC::extract1_2() { return BC(Opcode::extract1_2_); }
+BC BC::extract2_1() { return BC(Opcode::extract2_1_); }
+BC BC::extract2_2() { return BC(Opcode::extract2_2_); }
 BC BC::swap() { return BC(Opcode::swap_); }
 BC BC::int3() { return BC(Opcode::int3_); }
 BC BC::makeUnique() { return BC(Opcode::make_unique_); }

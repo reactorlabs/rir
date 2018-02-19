@@ -287,10 +287,10 @@ class BC {
     inline static BC isfun();
     inline static BC invisible();
     inline static BC visible();
-    inline static BC extract1();
-    inline static BC subset1();
-    inline static BC extract2();
-    inline static BC subset2();
+    inline static BC extract1_1();
+    inline static BC extract1_2();
+    inline static BC extract2_1();
+    inline static BC extract2_2();
     inline static BC swap();
     inline static BC put(uint32_t);
     inline static BC pick(uint32_t);
@@ -430,10 +430,10 @@ class BC {
             break;
         case Opcode::nop_:
         case Opcode::for_seq_size_:
-        case Opcode::extract1_:
-        case Opcode::subset1_:
-        case Opcode::extract2_:
-        case Opcode::subset2_:
+        case Opcode::extract1_1_:
+        case Opcode::extract2_1_:
+        case Opcode::extract1_2_:
+        case Opcode::extract2_2_:
         case Opcode::close_:
         case Opcode::ret_:
         case Opcode::pop_:
