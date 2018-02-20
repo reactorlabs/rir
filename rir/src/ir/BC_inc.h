@@ -239,7 +239,7 @@ class BC {
     inline static BC stvar(SEXP sym);
     inline static BC stvar2(SEXP sym);
     inline static BC missing(SEXP sym);
-    inline static BC subassign();
+    inline static BC subassign1();
     inline static BC subassign2(SEXP sym);
     inline static BC length();
     inline static BC names();
@@ -473,7 +473,7 @@ class BC {
         case Opcode::invisible_:
         case Opcode::visible_:
         case Opcode::endcontext_:
-        case Opcode::subassign_:
+        case Opcode::subassign1_:
         case Opcode::length_:
         case Opcode::names_:
         case Opcode::set_names_:

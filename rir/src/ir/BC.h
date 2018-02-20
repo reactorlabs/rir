@@ -141,7 +141,7 @@ BC BC::stvar2(SEXP sym) {
     i.pool = Pool::insert(sym);
     return BC(Opcode::stvar2_, i);
 }
-BC BC::subassign() { return BC(Opcode::subassign_); }
+BC BC::subassign1() { return BC(Opcode::subassign1_); }
 BC BC::subassign2(SEXP sym) {
     assert(sym == R_NilValue ||
            (TYPEOF(sym) == SYMSXP && strlen(CHAR(PRINTNAME(sym)))));
