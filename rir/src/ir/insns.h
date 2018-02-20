@@ -57,6 +57,16 @@ DEF_INSTR(ldlval_, 1, 0, 1, 1)
 DEF_INSTR(ldarg_, 1, 0, 1, 0)
 
 /**
+ * ldloc_:: push local variable on stack
+ */
+DEF_INSTR(ldloc_, 1, 0, 1, 1)
+
+/**
+ * stloc_:: store top of stack to local variable
+ */
+DEF_INSTR(stloc_, 1, 1, 0, 1)
+
+/**
  * call_:: ... Takes a list of code objects, which represent the arguments, decides on eager/lazy evaluation and does the right thing with the code objs.
  */
 DEF_INSTR(call_, 2, 1, 1, 0)

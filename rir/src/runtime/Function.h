@@ -47,21 +47,22 @@ typedef SEXP FunctionSEXP;
 #pragma pack(push)
 #pragma pack(1)
 struct Function {
+  public:
     Function() {
-        info.gc_area_start = sizeof(rir_header);  // just after the header
-        info.gc_area_length = 2;                  // origin, next
+        info.gc_area_start = sizeof(rir_header); // just after the header
+        info.gc_area_length = 2;                 // origin, next
         info.magic = FUNCTION_MAGIC;
+        origin_ = nullptr;
+        next_ = nullptr;
+        size = sizeof(Function);
+        signature = nullptr;
+        invocationCount = 0;
         envLeaked = false;
         envChanged = false;
         deopt = false;
-        size = sizeof(Function);
-        origin_ = nullptr;
-        next_ = nullptr;
-        signature = nullptr;
+        markOpt = false;
         codeLength = 0;
         foffset = 0;
-        invocationCount = 0;
-        markOpt = false;
     }
 
     SEXP container() {
@@ -96,6 +97,7 @@ struct Function {
     }
 
     CodeHandleIterator begin() { return CodeHandleIterator(first()); }
+
     CodeHandleIterator end() { return CodeHandleIterator(codeEnd()); }
 
     unsigned indexOf(Code* code) {
@@ -109,32 +111,36 @@ struct Function {
         return 0;
     }
 
-    rir::rir_header info;  /// for exposing SEXPs to GC
+    FunctionSEXP origin() { return origin_; }
 
-private:
-    FunctionSEXP origin_; /// Same Function with fewer optimizations,
-                         //   NULL if original
-    FunctionSEXP next_;
-public:
     void origin(Function* s) {
         EXTERNALSXP_SET_ENTRY(container(), 0, s->container());
     }
+
+    FunctionSEXP next() { return next_; }
+
     void next(Function* s) {
         EXTERNALSXP_SET_ENTRY(container(), 1, s->container());
     }
-    FunctionSEXP origin() { return origin_; }
-    FunctionSEXP next() { return next_; }
-
-    unsigned size; /// Size, in bytes, of the function and its data
-
-    FunctionSignature* signature; /// pointer to this version's signature
-
-    unsigned invocationCount;
 
     void registerInvocation() {
         if (invocationCount < UINT_MAX)
             invocationCount++;
     }
+
+    rir::rir_header info; /// for exposing SEXPs to GC
+
+  private:
+    FunctionSEXP origin_; /// Same Function with fewer optimizations,
+                          //   NULL if original
+    FunctionSEXP next_;
+
+  public:
+    unsigned size; /// Size, in bytes, of the function and its data
+
+    FunctionSignature* signature; /// pointer to this version's signature
+
+    unsigned invocationCount;
 
     unsigned envLeaked : 1;
     unsigned envChanged : 1;

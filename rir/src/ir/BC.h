@@ -5,8 +5,8 @@
 #include <cstdint>
 #include <map>
 
-#include "utils/Pool.h"
 #include "R/r.h"
+#include "utils/Pool.h"
 
 #include "BC_inc.h"
 
@@ -72,6 +72,16 @@ BC BC::ldvar2(SEXP sym) {
     ImmediateT i;
     i.pool = Pool::insert(sym);
     return BC(Opcode::ldvar2_, i);
+}
+BC BC::ldloc(uint32_t offset) {
+    ImmediateT im;
+    im.loc = offset;
+    return BC(Opcode::ldloc_, im);
+}
+BC BC::stloc(uint32_t offset) {
+    ImmediateT im;
+    im.loc = offset;
+    return BC(Opcode::stloc_, im);
 }
 BC BC::ldarg(SEXP sym) {
     assert(TYPEOF(sym) == SYMSXP);

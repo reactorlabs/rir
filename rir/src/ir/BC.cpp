@@ -1,13 +1,13 @@
 #include "BC.h"
 
 #include "utils/Pool.h"
-#include <iostream>
 #include <iomanip>
+#include <iostream>
 
-#include "R/RList.h"
 #include "CodeStream.h"
-#include "R/r.h"
 #include "R/Funtab.h"
+#include "R/RList.h"
+#include "R/r.h"
 
 #include "interpreter/deoptimizer.h"
 
@@ -65,6 +65,10 @@ bool BC::operator==(const BC& other) const {
     case Opcode::put_:
     case Opcode::alloc_:
         return immediate.i == other.immediate.i;
+
+    case Opcode::ldloc_:
+    case Opcode::stloc_:
+        return immediate.loc == other.immediate.loc;
 
     case Opcode::nop_:
     case Opcode::subset2_:
@@ -179,6 +183,11 @@ void BC::write(CodeStream& cs) const {
     case Opcode::put_:
     case Opcode::alloc_:
         cs.insert(immediate.i);
+        return;
+
+    case Opcode::ldloc_:
+    case Opcode::stloc_:
+        cs.insert(immediate.loc);
         return;
 
     case Opcode::nop_:
@@ -369,7 +378,8 @@ void BC::print(CallSite* cs) {
     case Opcode::stvar_:
     case Opcode::stvar2_:
     case Opcode::missing_:
-        Rprintf(" %u # %s", immediate.pool, CHAR(PRINTNAME((immediateConst()))));
+        Rprintf(" %u # %s", immediate.pool,
+                CHAR(PRINTNAME((immediateConst()))));
         break;
     case Opcode::guard_fun_: {
         SEXP name = Pool::get(immediate.guard_fun_args.name);
@@ -381,6 +391,10 @@ void BC::print(CallSite* cs) {
     case Opcode::pull_:
     case Opcode::put_:
         Rprintf(" %i", immediate.i);
+        break;
+    case Opcode::ldloc_:
+    case Opcode::stloc_:
+        Rprintf(" @%i", immediate.loc);
         break;
     case Opcode::is_:
     case Opcode::alloc_:
@@ -458,5 +472,4 @@ void BC::print(CallSite* cs) {
     }
     Rprintf("\n");
 }
-
 }

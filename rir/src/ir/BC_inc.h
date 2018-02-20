@@ -1,9 +1,9 @@
 #ifndef RJIT_RIR_BC_INC
 #define RJIT_RIR_BC_INC
 
+#include <cassert>
 #include <cstddef>
 #include <cstdint>
-#include <cassert>
 #include <cstring>
 
 #include "R/r.h"
@@ -90,6 +90,7 @@ typedef struct {
     uint32_t id;
 } GuardFunArgs;
 typedef uint32_t GuardT;
+typedef uint32_t NumLocalsT;
 #pragma pack(pop)
 
 static constexpr size_t MAX_NUM_ARGS = 1L << (8 * sizeof(PoolIdxT));
@@ -119,6 +120,7 @@ class BC {
         NumArgsT arg_idx;
         JmpT offset;
         uint32_t i;
+        NumLocalsT loc;
     };
 
     BC() : bc(Opcode::invalid_), immediate({{0}}) {}
@@ -184,17 +186,15 @@ class BC {
                bc == Opcode::brobj_ || bc == Opcode::beginloop_;
     }
 
-    bool isUncondJmp() const {
-        return bc == Opcode::br_;
-    }
+    bool isUncondJmp() const { return bc == Opcode::br_; }
 
-    bool isJmp() const {
-        return isCondJmp() || isUncondJmp();
-    }
+    bool isJmp() const { return isCondJmp() || isUncondJmp(); }
 
     bool isPure() { return isPure(bc); }
 
-    bool isReturn() const { return bc == Opcode::ret_ || bc == Opcode::return_; }
+    bool isReturn() const {
+        return bc == Opcode::ret_ || bc == Opcode::return_;
+    }
 
     bool isLabel() const { return bc == Opcode::label; }
 
@@ -229,6 +229,8 @@ class BC {
     inline static BC ldlval(SEXP sym);
     inline static BC ldarg(SEXP sym);
     inline static BC ldddvar(SEXP sym);
+    inline static BC ldloc(uint32_t offset);
+    inline static BC stloc(uint32_t offset);
     inline static BC promise(FunIdxT prom);
     inline static BC ret();
     inline static BC pop();
@@ -421,6 +423,10 @@ class BC {
         case Opcode::put_:
         case Opcode::alloc_:
             immediate.i = *(uint32_t*)pc;
+            break;
+        case Opcode::ldloc_:
+        case Opcode::stloc_:
+            immediate.loc = *(NumLocalsT*)pc;
             break;
         case Opcode::nop_:
         case Opcode::for_seq_size_:

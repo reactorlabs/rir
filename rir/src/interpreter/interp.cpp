@@ -134,12 +134,12 @@ void tryOptimizeClosure(DispatchTable* table, size_t offset, Context* ctx) {
     Function* fun = table->at(offset);
 
     if (!optimizing && !fun->next() && !fun->origin()) {
-         /* currently there is a bug if we reoptimize a function twice:
-          *  Deopt ids from the first optimization and second optimizations
-          *  will be mixed and the deoptimizer always only goes back one
-          *  optimization level!
-          *  To avoid this bug we currently only optimize once
-          */
+        /* currently there is a bug if we reoptimize a function twice:
+         *  Deopt ids from the first optimization and second optimizations
+         *  will be mixed and the deoptimizer always only goes back one
+         *  optimization level!
+         *  To avoid this bug we currently only optimize once
+         */
         Code* code = fun->body();
         if (fun->markOpt ||
                 (fun->invocationCount == 1 && code->perfCounter > 100) ||
@@ -229,8 +229,8 @@ SEXP createArgsListStack(Code* c, size_t nargs, CallSite* cs, SEXP env,
     return result;
 }
 
-SEXP createArgsList(Code* c, SEXP call, size_t nargs, CallSite* cs,
-                    SEXP env, Context* ctx, bool eager) {
+SEXP createArgsList(Code* c, SEXP call, size_t nargs, CallSite* cs, SEXP env,
+                    Context* ctx, bool eager) {
     SEXP result = R_NilValue;
     SEXP pos = result;
 
@@ -672,7 +672,8 @@ SEXP doCallStack(Code* caller, SEXP callee, size_t nargs, unsigned id, SEXP env,
         PROTECT(argslist);
         ostack_popn(ctx, nargs);
 
-        // if body is EXTERNALSXP, it is rir serialized code, execute it directly
+        // if body is EXTERNALSXP, it is rir serialized code, execute it
+        // directly
         SEXP body = BODY(callee);
         if (TYPEOF(body) == EXTERNALSXP) {
             assert(isValidDispatchTableSEXP(body));
@@ -788,7 +789,8 @@ SEXP doDispatchStack(Code* caller, size_t nargs, uint32_t id, SEXP env,
             break;
         }
         case CLOSXP: {
-            // if body is EXTERNALSXP, it is rir serialized code, execute it directly
+            // if body is EXTERNALSXP, it is rir serialized code, execute it
+            // directly
             SEXP body = BODY(callee);
             if (TYPEOF(body) == EXTERNALSXP) {
                 assert(isValidDispatchTableSEXP(body));
@@ -900,7 +902,8 @@ SEXP doDispatch(Code* caller, uint32_t nargs, uint32_t id, SEXP env,
             break;
         }
         case CLOSXP: {
-            // if body is EXTERNALSXP, it is rir serialized code, execute it directly
+            // if body is EXTERNALSXP, it is rir serialized code, execute it
+            // directly
             SEXP body = BODY(callee);
             if (TYPEOF(body) == EXTERNALSXP) {
                 assert(isValidDispatchTableSEXP(body));
@@ -1345,6 +1348,9 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
 
     assert(c->magic == CODE_MAGIC);
 
+    Locals locals(c->localsCount);
+    locals.store(0, env);
+
     BindingCache bindingCache[BINDING_CACHE_SIZE];
     memset(&bindingCache, 0, sizeof(bindingCache));
 
@@ -1521,6 +1527,22 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
                 SET_NAMED(res, 1);
 
             ostack_push(ctx, res);
+            NEXT();
+        }
+
+        INSTRUCTION(ldloc_) {
+            Immediate offset = readImmediate();
+            advanceImmediate();
+            res = locals.load(offset);
+            ostack_push(ctx, res);
+            NEXT();
+        }
+
+        INSTRUCTION(stloc_) {
+            Immediate offset = readImmediate();
+            advanceImmediate();
+            locals.store(offset, ostack_top(ctx));
+            ostack_pop(ctx);
             NEXT();
         }
 
@@ -1897,7 +1919,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
         INSTRUCTION(lt_) {
             SEXP lhs = ostack_at(ctx, 1);
             SEXP rhs = ostack_at(ctx, 0);
-            DO_RELOP(< );
+            DO_RELOP(<);
             ostack_popn(ctx, 2);
             ostack_push(ctx, res);
             NEXT();
@@ -1906,7 +1928,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
         INSTRUCTION(gt_) {
             SEXP lhs = ostack_at(ctx, 1);
             SEXP rhs = ostack_at(ctx, 0);
-            DO_RELOP(> );
+            DO_RELOP(>);
             ostack_popn(ctx, 2);
             ostack_push(ctx, res);
             NEXT();
@@ -1915,7 +1937,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
         INSTRUCTION(le_) {
             SEXP lhs = ostack_at(ctx, 1);
             SEXP rhs = ostack_at(ctx, 0);
-            DO_RELOP(<= );
+            DO_RELOP(<=);
             ostack_popn(ctx, 2);
             ostack_push(ctx, res);
             NEXT();
@@ -1924,7 +1946,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
         INSTRUCTION(ge_) {
             SEXP lhs = ostack_at(ctx, 1);
             SEXP rhs = ostack_at(ctx, 0);
-            DO_RELOP(>= );
+            DO_RELOP(>=);
             ostack_popn(ctx, 2);
             ostack_push(ctx, res);
             NEXT();
@@ -1933,7 +1955,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
         INSTRUCTION(eq_) {
             SEXP lhs = ostack_at(ctx, 1);
             SEXP rhs = ostack_at(ctx, 0);
-            DO_RELOP(== );
+            DO_RELOP(==);
             ostack_popn(ctx, 2);
             ostack_push(ctx, res);
             NEXT();
@@ -1942,7 +1964,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
         INSTRUCTION(ne_) {
             SEXP lhs = ostack_at(ctx, 1);
             SEXP rhs = ostack_at(ctx, 0);
-            DO_RELOP(!= );
+            DO_RELOP(!=);
             ostack_popn(ctx, 2);
             ostack_push(ctx, res);
             NEXT();
@@ -2667,7 +2689,9 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
 
         INSTRUCTION(return_) {
             res = ostack_top(ctx);
+            // this restores stack pointer to the value from the target context
             Rf_findcontext(CTXT_BROWSER | CTXT_FUNCTION, env, res);
+            // not reached
             NEXT();
         }
 
@@ -2705,19 +2729,24 @@ SEXP rirExpr(SEXP f) {
 
 SEXP rirEval_f(SEXP what, SEXP env) {
     assert(TYPEOF(what) == EXTERNALSXP);
-    Code* c;
-    DispatchTable* t;
+    assert(TYPEOF(env) == ENVSXP);
+
     // TODO we do not really need the arg counts now
-    if (isValidCodeObject(what)) {
-        c = (Code*)what;
-    } else if ((t = DispatchTable::check(what))) {
+
+    if (isValidCodeObject(what))
+        return evalRirCode((Code*)what, globalContext(), env, 0);
+
+    if (DispatchTable::check(what)) {
+        auto table = DispatchTable::unpack(what);
         size_t offset = 0; // Default target is the first version
-        tryOptimizeClosure(t, offset, globalContext());
-        Function* f = t->at(offset);
-        f->registerInvocation();
-        c = f->body();
-    } else {
-        assert(false && "Expected a code object or a dispatch table");
+
+        tryOptimizeClosure(table, offset, globalContext());
+
+        Function* fun = table->at(offset);
+        fun->registerInvocation();
+
+        return evalRirCode(fun->body(), globalContext(), env, 0);
     }
-    return evalRirCode(c, globalContext(), env, 0);
+
+    assert(false && "Expected a code object or a dispatch table");
 }

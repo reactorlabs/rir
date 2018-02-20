@@ -1,11 +1,11 @@
 #ifndef RIR_CODE_H
 #define RIR_CODE_H
 
-#include "R/r.h"
 #include "Opcode.h"
+#include "R/r.h"
 
-#include <cstdint>
 #include <cassert>
+#include <cstdint>
 
 namespace rir {
 
@@ -66,6 +66,9 @@ struct Code {
     unsigned src; /// AST of the function (or promise) represented by the code
 
     unsigned stackLength; /// Number of slots in stack required
+
+    // TODO: for now, only use 1 slot for everything (to store current env)
+    unsigned localsCount; /// Number of slots for local variables
 
     unsigned codeSize; /// bytes of code (not padded)
 
