@@ -685,10 +685,10 @@ class DataflowAnalysis
         case Opcode::inc_:
         case Opcode::is_:
         case Opcode::isfun_:
-        case Opcode::extract1_:
-        case Opcode::subset1_:
-        case Opcode::extract2_:
-        case Opcode::subset2_:
+        case Opcode::extract1_1_:
+        case Opcode::extract1_2_:
+        case Opcode::extract2_1_:
+        case Opcode::extract2_2_:
         case Opcode::close_:
         case Opcode::lgl_or_:
         case Opcode::lgl_and_:

@@ -71,10 +71,10 @@ bool BC::operator==(const BC& other) const {
         return immediate.loc == other.immediate.loc;
 
     case Opcode::nop_:
-    case Opcode::subset2_:
-    case Opcode::extract2_:
-    case Opcode::subset1_:
-    case Opcode::extract1_:
+    case Opcode::extract1_1_:
+    case Opcode::extract1_2_:
+    case Opcode::extract2_1_:
+    case Opcode::extract2_2_:
     case Opcode::ret_:
     case Opcode::length_:
     case Opcode::names_:
@@ -191,10 +191,10 @@ void BC::write(CodeStream& cs) const {
         return;
 
     case Opcode::nop_:
-    case Opcode::subset2_:
-    case Opcode::extract2_:
-    case Opcode::subset1_:
-    case Opcode::extract1_:
+    case Opcode::extract1_1_:
+    case Opcode::extract1_2_:
+    case Opcode::extract2_1_:
+    case Opcode::extract2_2_:
     case Opcode::ret_:
     case Opcode::length_:
     case Opcode::names_:
@@ -440,10 +440,10 @@ void BC::print(CallSite* cs) {
     case Opcode::isfun_:
     case Opcode::invisible_:
     case Opcode::visible_:
-    case Opcode::subset2_:
-    case Opcode::extract2_:
-    case Opcode::subset1_:
-    case Opcode::extract1_:
+    case Opcode::extract1_1_:
+    case Opcode::extract1_2_:
+    case Opcode::extract2_1_:
+    case Opcode::extract2_2_:
     case Opcode::close_:
     case Opcode::length_:
     case Opcode::names_:

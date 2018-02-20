@@ -209,24 +209,24 @@ DEF_INSTR(isfun_, 0, 1, 1, 1)
 DEF_INSTR(is_, 1, 1, 1, 1)
 
 /**
- * extract1_:: do a[[b]], where a and b are on the stack and a is no obj
+ * extract2_1_:: do a[[b]], where a and b are on the stack and a is no obj
  */
-DEF_INSTR(extract1_, 0, 2, 1, 1)
+DEF_INSTR(extract2_1_, 0, 2, 1, 1)
 
 /**
- * subset1_:: do a[b], where a and b are on the stack and a is no obj
+ * extract1_1_:: do a[b], where a and b are on the stack and a is no obj
  */
-DEF_INSTR(subset1_, 0, 2, 1, 1)
+DEF_INSTR(extract1_1_, 0, 2, 1, 1)
 
 /**
- * extract2_:: do a[[b,c]], where a, b and c are on the stack and a is no obj
+ * extract2_2_:: do a[[b,c]], where a, b and c are on the stack and a is no obj
  */
-DEF_INSTR(extract2_, 0, 3, 1, 1)
+DEF_INSTR(extract2_2_, 0, 3, 1, 1)
 
 /**
- * subset2_:: do a[b,c], where a, b and c are on the stack and a is no obj
+ * extract1_2_:: do a[b,c], where a, b and c are on the stack and a is no obj
  */
-DEF_INSTR(subset2_, 0, 3, 1, 1)
+DEF_INSTR(extract1_2_, 0, 3, 1, 1)
 
 /**
  * brobj_:: branch if tos is object

@@ -714,15 +714,15 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
             compileExpr(ctx, *idx);
             if (args.length() == 2) {
                 if (fun == symbol::DoubleBracket)
-                    cs << BC::extract1();
+                    cs << BC::extract2_1();
                 else
-                    cs << BC::subset1();
+                    cs << BC::extract1_1();
             } else {
                 compileExpr(ctx, *(idx + 1));
                 if (fun == symbol::DoubleBracket)
-                    cs << BC::extract2();
+                    cs << BC::extract2_2();
                 else
-                    cs << BC::subset2();
+                    cs << BC::extract1_2();
             }
 
             cs << BC::br(nextBranch);
@@ -850,7 +850,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
         cs << BC::put(3);
 
         cs << BC::inc() << BC::dup2() << BC::lt() << BC::brtrue(endForBranch)
-           << BC::pull(2) << BC::pull(1) << BC::extract1();
+           << BC::pull(2) << BC::pull(1) << BC::extract2_1();
 
         // Put context back
         pcs.push_back(cs.currentPos());
@@ -1001,8 +1001,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
                    << BC::pull(2)
                    << BC::brobj(objBranch);
 
-                cs << BC::extract1()
-                   << BC::br(contBranch);
+                cs << BC::extract2_1() << BC::br(contBranch);
 
                 static SEXP extractCall = nullptr;
                 if (!extractCall)
