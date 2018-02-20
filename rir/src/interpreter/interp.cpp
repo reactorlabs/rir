@@ -1538,6 +1538,29 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
             NEXT();
         }
 
+        INSTRUCTION(stvar_) {
+            Immediate id = readImmediate();
+            advanceImmediate();
+            int wasChanged = FRAME_CHANGED(env);
+            SEXP val = ostack_pop(ctx);
+
+            cachedSetVar(val, env, id, ctx, bindingCache);
+
+            if (!wasChanged)
+                CLEAR_FRAME_CHANGED(env);
+            NEXT();
+        }
+
+        INSTRUCTION(stvar2_) {
+            SEXP sym = readConst(ctx, readImmediate());
+            advanceImmediate();
+            SLOWASSERT(TYPEOF(sym) == SYMSXP);
+            SEXP val = ostack_pop(ctx);
+            INCREMENT_NAMED(val);
+            setVar(sym, val, ENCLOS(env));
+            NEXT();
+        }
+
         INSTRUCTION(stloc_) {
             Immediate offset = readImmediate();
             advanceImmediate();
@@ -1582,21 +1605,21 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
             NEXT();
         }
 
-        INSTRUCTION(dispatch_stack_) {
-            Immediate id = readImmediate();
-            advanceImmediate();
-            Immediate n = readImmediate();
-            advanceImmediate();
-            ostack_push(ctx, doDispatchStack(c, n, id, env, ctx));
-            NEXT();
-        }
-
         INSTRUCTION(dispatch_) {
             Immediate id = readImmediate();
             advanceImmediate();
             Immediate n = readImmediate();
             advanceImmediate();
             ostack_push(ctx, doDispatch(c, n, id, env, ctx));
+            NEXT();
+        }
+
+        INSTRUCTION(dispatch_stack_) {
+            Immediate id = readImmediate();
+            advanceImmediate();
+            Immediate n = readImmediate();
+            advanceImmediate();
+            ostack_push(ctx, doDispatchStack(c, n, id, env, ctx));
             NEXT();
         }
 
@@ -1744,29 +1767,6 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
             advanceImmediate();
             SEXP val = ostack_at(ctx, i);
             ostack_push(ctx, val);
-            NEXT();
-        }
-
-        INSTRUCTION(stvar_) {
-            Immediate id = readImmediate();
-            advanceImmediate();
-            int wasChanged = FRAME_CHANGED(env);
-            SEXP val = ostack_pop(ctx);
-
-            cachedSetVar(val, env, id, ctx, bindingCache);
-
-            if (!wasChanged)
-                CLEAR_FRAME_CHANGED(env);
-            NEXT();
-        }
-
-        INSTRUCTION(stvar2_) {
-            SEXP sym = readConst(ctx, readImmediate());
-            advanceImmediate();
-            SLOWASSERT(TYPEOF(sym) == SYMSXP);
-            SEXP val = ostack_pop(ctx);
-            INCREMENT_NAMED(val);
-            setVar(sym, val, ENCLOS(env));
             NEXT();
         }
 
@@ -2224,7 +2224,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
             NEXT();
         }
 
-        INSTRUCTION(subassign_) {
+        INSTRUCTION(subassign1_) {
             SEXP val = ostack_at(ctx, 2);
             SEXP idx = ostack_at(ctx, 1);
             SEXP orig = ostack_at(ctx, 0);
@@ -2235,101 +2235,6 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
             args = CONS_NR(orig, args);
             PROTECT(args);
             res = do_subassign_dflt(R_NilValue, R_SubassignSym, args, env);
-            ostack_popn(ctx, 3);
-            UNPROTECT(1);
-
-            ostack_push(ctx, res);
-            NEXT();
-        }
-
-        INSTRUCTION(subassign2_) {
-            SEXP val = ostack_at(ctx, 2);
-            SEXP idx = ostack_at(ctx, 1);
-            SEXP orig = ostack_at(ctx, 0);
-
-            unsigned targetI = readImmediate();
-            advanceImmediate();
-
-            // Fast case
-            if (!MAYBE_SHARED(orig)) {
-                SEXPTYPE vectorT = TYPEOF(orig);
-                SEXPTYPE valT = TYPEOF(val);
-                SEXPTYPE idxT = TYPEOF(idx);
-
-                // Fast case only if
-                // 1. index is numerical and scalar
-                // 2. vector is real and shape of value fits into real
-                //      or vector is int and shape of value is int
-                //      or vector is generic
-                // 3. value fits into one cell of the vector
-                if ((idxT == INTSXP || idxT == REALSXP) &&
-                    (XLENGTH(idx) == 1) && // 1
-                    ((vectorT == REALSXP &&
-                      (valT == REALSXP || valT == INTSXP)) || // 2
-                     (vectorT == INTSXP && (valT == INTSXP)) ||
-                     (vectorT == VECSXP)) &&
-                    (XLENGTH(val) == 1 || vectorT == VECSXP)) { // 3
-
-                    // if the target == R_NilValue that means this is a stack
-                    // allocated
-                    // vector
-                    SEXP target = cp_pool_at(ctx, targetI);
-                    bool localBinding =
-                        (target == R_NilValue) ||
-                        !R_VARLOC_IS_NULL(R_findVarLocInFrame(env, target));
-
-                    if (localBinding) {
-                        int idx_ = -1;
-
-                        if (idxT == REALSXP) {
-                            if (*REAL(idx) != NA_REAL)
-                                idx_ = (int)*REAL(idx) - 1;
-                        } else {
-                            if (*INTEGER(idx) != NA_INTEGER)
-                                idx_ = *INTEGER(idx) - 1;
-                        }
-
-                        if (idx_ >= 0 && idx_ < XLENGTH(orig)) {
-                            switch (vectorT) {
-                            case REALSXP:
-                                REAL(orig)[idx_] = valT == REALSXP
-                                                       ? *REAL(val)
-                                                       : (double)*INTEGER(val);
-                                break;
-                            case INTSXP:
-                                INTEGER(orig)[idx_] = *INTEGER(val);
-                                break;
-                            case VECSXP:
-                                SET_VECTOR_ELT(orig, idx_, val);
-                                break;
-                            }
-                            ostack_popn(ctx, 3);
-
-                            // this is a very nice and dirty hack...
-                            // if the next instruction is a matching stvar
-                            // (which is highly probably) then we do not
-                            // have to execute it, since we changed the value
-                            // inline
-                            if (target != R_NilValue && *pc == Opcode::stvar_ &&
-                                *(int*)(pc - sizeof(int)) == *(int*)(pc + 1)) {
-                                pc = pc + sizeof(int) + 1;
-                                if (NAMED(orig) == 0)
-                                    SET_NAMED(orig, 1);
-                            } else {
-                                ostack_push(ctx, orig);
-                            }
-                            NEXT();
-                        }
-                    }
-                }
-            }
-
-            INCREMENT_NAMED(orig);
-            SEXP args = CONS_NR(val, R_NilValue);
-            args = CONS_NR(idx, args);
-            args = CONS_NR(orig, args);
-            PROTECT(args);
-            res = do_subassign2_dflt(R_NilValue, R_Subassign2Sym, args, env);
             ostack_popn(ctx, 3);
             UNPROTECT(1);
 
@@ -2432,6 +2337,113 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
             NEXT();
         }
 
+        INSTRUCTION(subassign2_) {
+            SEXP val = ostack_at(ctx, 2);
+            SEXP idx = ostack_at(ctx, 1);
+            SEXP orig = ostack_at(ctx, 0);
+
+            unsigned targetI = readImmediate();
+            advanceImmediate();
+
+            // Fast case
+            if (!MAYBE_SHARED(orig)) {
+                SEXPTYPE vectorT = TYPEOF(orig);
+                SEXPTYPE valT = TYPEOF(val);
+                SEXPTYPE idxT = TYPEOF(idx);
+
+                // Fast case only if
+                // 1. index is numerical and scalar
+                // 2. vector is real and shape of value fits into real
+                //      or vector is int and shape of value is int
+                //      or vector is generic
+                // 3. value fits into one cell of the vector
+                if ((idxT == INTSXP || idxT == REALSXP) &&
+                    (XLENGTH(idx) == 1) && // 1
+                    ((vectorT == REALSXP &&
+                      (valT == REALSXP || valT == INTSXP)) || // 2
+                     (vectorT == INTSXP && (valT == INTSXP)) ||
+                     (vectorT == VECSXP)) &&
+                    (XLENGTH(val) == 1 || vectorT == VECSXP)) { // 3
+
+                    // if the target == R_NilValue that means this is a stack
+                    // allocated
+                    // vector
+                    SEXP target = cp_pool_at(ctx, targetI);
+                    bool localBinding =
+                        (target == R_NilValue) ||
+                        !R_VARLOC_IS_NULL(R_findVarLocInFrame(env, target));
+
+                    if (localBinding) {
+                        int idx_ = -1;
+
+                        if (idxT == REALSXP) {
+                            if (*REAL(idx) != NA_REAL)
+                                idx_ = (int)*REAL(idx) - 1;
+                        } else {
+                            if (*INTEGER(idx) != NA_INTEGER)
+                                idx_ = *INTEGER(idx) - 1;
+                        }
+
+                        if (idx_ >= 0 && idx_ < XLENGTH(orig)) {
+                            switch (vectorT) {
+                            case REALSXP:
+                                REAL(orig)[idx_] = valT == REALSXP
+                                                       ? *REAL(val)
+                                                       : (double)*INTEGER(val);
+                                break;
+                            case INTSXP:
+                                INTEGER(orig)[idx_] = *INTEGER(val);
+                                break;
+                            case VECSXP:
+                                SET_VECTOR_ELT(orig, idx_, val);
+                                break;
+                            }
+                            ostack_popn(ctx, 3);
+
+                            // this is a very nice and dirty hack...
+                            // if the next instruction is a matching stvar
+                            // (which is highly probably) then we do not
+                            // have to execute it, since we changed the value
+                            // inline
+                            if (target != R_NilValue && *pc == Opcode::stvar_ &&
+                                *(int*)(pc - sizeof(int)) == *(int*)(pc + 1)) {
+                                pc = pc + sizeof(int) + 1;
+                                if (NAMED(orig) == 0)
+                                    SET_NAMED(orig, 1);
+                            } else {
+                                ostack_push(ctx, orig);
+                            }
+                            NEXT();
+                        }
+                    }
+                }
+            }
+
+            INCREMENT_NAMED(orig);
+            SEXP args = CONS_NR(val, R_NilValue);
+            args = CONS_NR(idx, args);
+            args = CONS_NR(orig, args);
+            PROTECT(args);
+            res = do_subassign2_dflt(R_NilValue, R_Subassign2Sym, args, env);
+            ostack_popn(ctx, 3);
+            UNPROTECT(1);
+
+            ostack_push(ctx, res);
+            NEXT();
+        }
+
+        INSTRUCTION(guard_fun_) {
+            SEXP sym = readConst(ctx, readImmediate());
+            advanceImmediate();
+            res = readConst(ctx, readImmediate());
+            advanceImmediate();
+            advanceImmediate();
+#ifndef UNSOUND_OPTS
+            assert(res == findFun(sym, env) && "guard_fun_ fail");
+#endif
+            NEXT();
+        }
+
         INSTRUCTION(guard_env_) {
             uint32_t deoptId = readImmediate();
             advanceImmediate();
@@ -2446,18 +2458,6 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
                 pc = Deoptimizer_pc(deoptId);
                 PC_BOUNDSCHECK(pc, c);
             }
-            NEXT();
-        }
-
-        INSTRUCTION(guard_fun_) {
-            SEXP sym = readConst(ctx, readImmediate());
-            advanceImmediate();
-            res = readConst(ctx, readImmediate());
-            advanceImmediate();
-            advanceImmediate();
-#ifndef UNSOUND_OPTS
-            assert(res == findFun(sym, env) && "guard_fun_ fail");
-#endif
             NEXT();
         }
 

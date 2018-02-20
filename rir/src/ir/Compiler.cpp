@@ -436,7 +436,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
                         if (fun2 == symbol::DoubleBracket)
                             cs << BC::subassign2(target);
                         else
-                            cs << BC::subassign();
+                            cs << BC::subassign1();
 
                         cs << (superAssign ? BC::stvar2(target) : BC::stvar(target));
                         cs << BC::br(nextBranch);
