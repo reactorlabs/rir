@@ -27,7 +27,7 @@ class TheInliner {
                 Call* call = Call::Cast(*it);
                 if (!call)
                     continue;
-                MkClsFun* cls = MkClsFun::Cast(call->cls());
+                auto cls = ClosureWrapper::Cast(call->cls());
                 if (!cls)
                     continue;
                 Function* inlinee = cls->fun;
@@ -58,7 +58,7 @@ class TheInliner {
                         auto ld = LdArg::Cast(*ip);
                         if (m) {
                             if (m->parent() == Env::theContext())
-                                m->parent(cls->env());
+                                m->parent(cls->env);
                         }
                         if (ld) {
                             ld->replaceUsesWith(arguments[ld->id]);

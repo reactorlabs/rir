@@ -2,6 +2,7 @@
 #define PIR_PIR_IMPL_H
 
 #include "bb.h"
+#include "closure_wrapper.h"
 #include "env.h"
 #include "function.h"
 #include "instruction.h"

@@ -21,6 +21,7 @@ class Value {
     void printRef(std::ostream& out);
     void printRef() { printRef(std::cerr); }
     bool isInstruction();
+    Value* replaceRefs(Value*, Value*);
 };
 
 }

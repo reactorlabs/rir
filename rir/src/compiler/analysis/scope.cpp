@@ -120,12 +120,12 @@ void TheScopeAnalysis::apply(ScopeAnalysis::AbstractState& envs,
     }
 
     // Keep track of closures
-    MkClsFun* mkfun = MkClsFun::Cast(i);
+    auto mkfun = ClosureWrapper::Cast(i);
     tryLoad(envs, i, [&](ScopeAnalysis::AbstractLoadVal a) {
         handled = true;
         // let's check if we loaded a closure
         if (!mkfun && a.second.singleValue())
-            mkfun = MkClsFun::Cast(*a.second.vals.begin());
+            mkfun = ClosureWrapper::Cast(*a.second.vals.begin());
     });
     if (mkfun)
         envs[i->env()].functionPointers[i] = mkfun->fun;

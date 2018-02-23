@@ -18,7 +18,6 @@
     V(Return)                                                                  \
     V(MkArg)                                                                   \
     V(MkCls)                                                                   \
-    V(MkClsFun)                                                                \
     V(ChkMissing)                                                              \
     V(ChkClosure)                                                              \
     V(Call)                                                                    \

@@ -9,6 +9,7 @@ namespace pir {
 class Replace {
   public:
     static void usesOfValue(BB* start, Value*, Value*);
+    static void usesOfValue(Instruction* i, Value*, Value*);
 };
 }
 }

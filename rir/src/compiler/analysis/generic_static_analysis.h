@@ -61,17 +61,19 @@ class StaticAnalysis {
         bool reachedExit = false;
         bool done;
 
+        std::vector<bool> changed(cfg.size(), false);
+        changed[entry->id] = true;
+
         do {
             done = true;
-            std::vector<bool> unchanged(cfg.size(), false);
-
             Visitor::run(entry, [&](BB* bb) {
                 size_t id = bb->id;
 
-                if (unchanged[id])
+                if (!changed[id])
                     return;
 
                 size_t segment = 0;
+                assert(mergepoint[id].size() > 0);
                 AbstractState state = mergepoint[id][segment];
 
                 for (auto i : *bb) {
@@ -101,23 +103,29 @@ class StaticAnalysis {
                 if (bb->next0) {
                     if (mergepoint[bb->next0->id].empty()) {
                         mergepoint[bb->next0->id].push_back(state);
+                        done = false;
+                        changed[bb->next0->id] = true;
                     } else {
-                        if (mergepoint[bb->next0->id][0].merge(state))
+                        if (mergepoint[bb->next0->id][0].merge(state)) {
                             done = false;
-                        else
-                            unchanged[bb->next0->id] = true;
+                            changed[bb->next0->id] = true;
+                        }
                     }
                 }
                 if (bb->next1) {
                     if (mergepoint[bb->next1->id].empty()) {
                         mergepoint[bb->next1->id].push_back(state);
+                        done = false;
+                        changed[bb->next1->id] = true;
                     } else {
-                        if (mergepoint[bb->next1->id][0].merge(state))
+                        if (mergepoint[bb->next1->id][0].merge(state)) {
                             done = false;
-                        else
-                            unchanged[bb->next1->id] = true;
+                            changed[bb->next1->id] = true;
+                        }
                     }
                 }
+
+                changed[id] = false;
             });
         } while (!done);
     }

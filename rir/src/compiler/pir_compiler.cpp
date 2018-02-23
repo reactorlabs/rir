@@ -6,6 +6,7 @@
 #include "ir/BC.h"
 #include "opt/cleanup.h"
 #include "opt/delay_env.h"
+#include "opt/delay_instr.h"
 #include "opt/elide_env.h"
 #include "opt/force_dominance.h"
 #include "opt/inline.h"
@@ -634,7 +635,7 @@ Value* CodeCompiler::operator()(bool addReturn) {
             FunctionCompiler f(fun, Env::theContext(), fmls, cmp);
             Function* innerF = f();
 
-            push(b(new MkClsFun(innerF, b.env)));
+            push(new ClosureWrapper(innerF, b.env));
 
             matched = true;
             m.pc = next;
@@ -720,6 +721,9 @@ void PirCompiler::compileFunction(SEXP f) {
         Cleanup::apply(f);
         if (verb)
             print("cleanup", f);
+        DelayInstr::apply(f);
+        if (verb)
+            print("delay instr", f);
         ElideEnv::apply(f);
         if (verb)
             print("elide env", f);

@@ -35,6 +35,7 @@ class Instruction : public Value {
     virtual bool leaksEnv() { return false; }
     virtual bool needsLiveEnv() { return false; }
     virtual bool hasEnv() { return false; }
+    virtual bool accessesEnv() { return false; }
     virtual Value* env() = 0;
 
     virtual Instruction* clone() = 0;
@@ -56,6 +57,7 @@ class Instruction : public Value {
 
     const char* name() { return TagToStr(tag); }
 
+    Instruction* hasSingleUse();
     void replaceUsesWith(Value* val);
     void replaceUsesIn(Value* val, BB* target);
     bool unused();
@@ -106,6 +108,7 @@ class Instruction : public Value {
 
 enum class EnvAccess : uint8_t {
     None,
+    Capture,
     Read,
     ReadKeepAlive,
     Write,
@@ -134,6 +137,7 @@ class InstructionDescription : public Instruction {
     bool changesEnv() override { return ENV >= EnvAccess::Write; }
     bool leaksEnv() override { return ENV == EnvAccess::Leak; }
     bool hasEnv() override { return ENV > EnvAccess::None; }
+    bool accessesEnv() override { return ENV > EnvAccess::Capture; }
     bool needsLiveEnv() override {
         return ENV == EnvAccess::ReadKeepAlive ||
                ENV >= EnvAccess::WriteKeepAlive;
@@ -439,7 +443,7 @@ class FLI(Return, 1, Effect::None, EnvAccess::None) {
 };
 
 class Promise;
-class FLI(MkArg, 2, Effect::None, EnvAccess::Read) {
+class FLI(MkArg, 2, Effect::None, EnvAccess::Capture) {
   public:
     Promise* prom;
     MkArg(Promise* prom, Value* v, Value* env)
@@ -459,20 +463,12 @@ class FLI(Seq, 3, Effect::None, EnvAccess::None) {
               {{start, end, step}}) {}
 };
 
-class FLI(MkCls, 4, Effect::None, EnvAccess::Read) {
+class FLI(MkCls, 4, Effect::None, EnvAccess::Capture) {
   public:
     MkCls(Value* code, Value* arg, Value* src, Value* parent)
         : FixedLenInstruction(RType::closure,
                               {{RType::code, PirType::list(), PirType::any()}},
                               {{code, arg, src}}, parent) {}
-};
-
-class FLI(MkClsFun, 1, Effect::None, EnvAccess::Read) {
-  public:
-    Function* fun;
-    MkClsFun(Function* fun, Value* env)
-        : FixedLenInstruction(RType::closure, env), fun(fun) {}
-    void printArgs(std::ostream& out) override;
 };
 
 class FLI(Force, 1, Effect::Any, EnvAccess::None) {
@@ -669,7 +665,7 @@ class VLI(CallSafeBuiltin, Effect::None, EnvAccess::None) {
     void printArgs(std::ostream& out) override;
 };
 
-class VLI(MkEnv, Effect::None, EnvAccess::Read) {
+class VLI(MkEnv, Effect::None, EnvAccess::Capture) {
   public:
     std::vector<SEXP> varName;
 

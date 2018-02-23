@@ -36,11 +36,15 @@ BB* BBTransform::clone(size_t* id_counter, BB* src, Code* target) {
     BB* newEntry = bbs[src->id];
     Visitor::run(newEntry, [&](BB* bb) {
         for (auto i : *bb)
-            i->map_arg([&](Value* v, PirType) {
+            i->map_arg([&](Value* v, PirType) -> Value* {
                 if (v->isInstruction()) {
                     assert(relocation_table.count(v));
                     return relocation_table.at(v);
                 } else {
+                    auto c = ClosureWrapper::Cast(v);
+                    if (c && relocation_table.count(c->env))
+                        return (new ClosureWrapper(
+                            c->fun, relocation_table.at(c->env)));
                     return v;
                 }
             });

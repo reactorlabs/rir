@@ -84,14 +84,36 @@ bool Instruction::unused() {
     });
 }
 
+Instruction* Instruction::hasSingleUse() {
+    size_t seen = 0;
+    Instruction* usage;
+    Visitor::check(bb(), [&](BB* bb) {
+        for (auto i : *bb) {
+            i->each_arg([&](Value* v, PirType t) {
+                if (v == this) {
+                    usage = i;
+                    seen++;
+                }
+            });
+            if (seen > 1)
+                return false;
+        }
+        return true;
+    });
+    if (seen == 1)
+        return usage;
+    return nullptr;
+}
+
 void Instruction::replaceUsesIn(Value* replace, BB* target) {
     Visitor::run(target, [&](BB* bb) {
         for (auto i : *bb) {
             i->map_arg([&](Value* v, PirType t) {
-                if (v == this)
+                if (v == this) {
                     return replace;
-                else
-                    return v;
+                } else {
+                    return v->replaceRefs(this, replace);
+                }
             });
         }
     });
@@ -101,10 +123,11 @@ void Instruction::replaceUsesWith(Value* replace) {
     Visitor::run(bb(), [&](BB* bb) {
         for (auto i : *bb) {
             i->map_arg([&](Value* v, PirType t) {
-                if (v == this)
+                if (v == this) {
                     return replace;
-                else
-                    return v;
+                } else {
+                    return v->replaceRefs(this, replace);
+                }
             });
         }
     });
@@ -131,12 +154,6 @@ void MkArg::printArgs(std::ostream& out) {
     out << "(";
     arg<0>()->printRef(out);
     out << ", " << *prom << ", ";
-    env()->printRef(out);
-    out << ") ";
-}
-
-void MkClsFun::printArgs(std::ostream& out) {
-    out << "(" << *fun << ", ";
     env()->printRef(out);
     out << ") ";
 }
@@ -213,12 +230,12 @@ CallBuiltin::CallBuiltin(Value* e, SEXP builtin,
 
 void CallBuiltin::printArgs(std::ostream& out) {
     std::cout << "[" << getBuiltinName(builtinId) << "] ";
-    printArgs(out);
+    Instruction::printArgs(out);
 }
 
 void CallSafeBuiltin::printArgs(std::ostream& out) {
     std::cout << "[" << getBuiltinName(builtinId) << "] ";
-    printArgs(out);
+    Instruction::printArgs(out);
 }
 
 void Deopt::printArgs(std::ostream& out) {
