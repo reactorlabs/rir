@@ -91,7 +91,7 @@ void endClosureContext(RCNTXT* cntxt, SEXP result) {
 }
 
 INLINE SEXP createPromise(Code* code, SEXP env) {
-    SEXP p = mkPROMISE((SEXP)code, env);
+    SEXP p = Rf_mkPROMISE((SEXP)code, env);
     return p;
 }
 
@@ -207,7 +207,7 @@ SEXP createArgsListStack(Code* c, size_t nargs, CallSite* cs, SEXP env,
             // We have to wrap them in a promise, otherwise they are treated
             // as expressions to be evaluated, when in fact they are meant to be
             // asts as values
-            SEXP promise = mkPROMISE(arg, env);
+            SEXP promise = Rf_mkPROMISE(arg, env);
             SET_PRVALUE(promise, arg);
             __listAppend(&result, &pos, promise, R_NilValue);
         } else {
@@ -251,7 +251,7 @@ SEXP createArgsList(Code* c, SEXP call, size_t nargs, CallSite* cs, SEXP env,
                         assert(TYPEOF(arg) != PROMSXP);
                         __listAppend(&result, &pos, arg, name);
                     } else {
-                        SEXP promise = mkPROMISE(CAR(ellipsis), env);
+                        SEXP promise = Rf_mkPROMISE(CAR(ellipsis), env);
                         __listAppend(&result, &pos, promise, name);
                     }
                     ellipsis = CDR(ellipsis);
@@ -502,7 +502,7 @@ INLINE SEXP fixupAST(SEXP call, Context* ctx, size_t nargs) {
         // then they are converted to consts (named = 2) which is bad.
         // therefore we wrap them in fake promises.
         if (TYPEOF(p) != PROMSXP) {
-            p = mkPROMISE(getterPlaceholderSym, R_NilValue);
+            p = Rf_mkPROMISE(getterPlaceholderSym, R_NilValue);
             SET_PRVALUE(p, target);
         }
 
@@ -520,7 +520,7 @@ INLINE SEXP fixupAST(SEXP call, Context* ctx, size_t nargs) {
 
             SEXP p = val;
             if (TYPEOF(p) != PROMSXP) {
-                p = mkPROMISE(setterPlaceholderSym, R_NilValue);
+                p = Rf_mkPROMISE(setterPlaceholderSym, R_NilValue);
                 SET_PRVALUE(p, val);
             }
 
