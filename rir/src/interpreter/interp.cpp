@@ -79,15 +79,15 @@ void initClosureContext(RCNTXT* cntxt, SEXP call, SEXP rho, SEXP sysparent,
        is a straight substitution of the generic.  */
 
     if (R_GlobalContext->callflag == CTXT_GENERIC)
-        begincontext(cntxt, CTXT_RETURN, call, rho, R_GlobalContext->sysparent,
-                     arglist, op);
+        Rf_begincontext(cntxt, CTXT_RETURN, call, rho,
+                        R_GlobalContext->sysparent, arglist, op);
     else
-        begincontext(cntxt, CTXT_RETURN, call, rho, sysparent, arglist, op);
+        Rf_begincontext(cntxt, CTXT_RETURN, call, rho, sysparent, arglist, op);
 }
 
 void endClosureContext(RCNTXT* cntxt, SEXP result) {
     cntxt->returnValue = result;
-    endcontext(cntxt);
+    Rf_endcontext(cntxt);
 }
 
 INLINE SEXP createPromise(Code* code, SEXP env) {
@@ -392,12 +392,7 @@ static SEXP rirCallClosure(SEXP call, SEXP env, SEXP callee, SEXP actuals,
     ostack_push(ctx, newEnv);
 
     RCNTXT cntxt;
-    if (R_GlobalContext->callflag == CTXT_GENERIC)
-        Rf_begincontext(&cntxt, CTXT_RETURN, call, newEnv,
-                        R_GlobalContext->sysparent, actuals, callee);
-    else
-        Rf_begincontext(&cntxt, CTXT_RETURN, call, newEnv, env, actuals,
-                        callee);
+    initClosureContext(&cntxt, call, newEnv, env, actuals, callee);
 
     // Exec the closure
     closureDebug(call, callee, env, newEnv, &cntxt);
@@ -669,9 +664,9 @@ SEXP doDispatch(Code* caller, bool argsOnStack, uint32_t nargs, uint32_t id,
         // ===============================================
         // Then try S3
         const char* generic = CHAR(PRINTNAME(selector));
-        RCNTXT cntxt;
         SEXP rho1 = Rf_NewEnvironment(R_NilValue, R_NilValue, env);
         ostack_push(ctx, rho1);
+        RCNTXT cntxt;
         initClosureContext(&cntxt, call, rho1, env, actuals, op);
         bool success = Rf_usemethod(generic, obj, call, actuals, rho1, env,
                                     R_BaseEnv, &result);
