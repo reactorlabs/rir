@@ -55,21 +55,21 @@ class TheScopeResolution {
                     auto aload = analysis.loads[ld];
                     auto v = aload.second;
                     bool localVals = true;
-                    for (auto i : v.origin)
-                        if (i->bb()->fun != function) {
+                    for (auto i : v.vals)
+                        if (i.orig()->bb()->fun != function) {
                             localVals = false;
                             break;
                         }
                     if (localVals) {
                         if (v.singleValue()) {
-                            Value* val = *v.vals.begin();
+                            Value* val = (*v.vals.begin()).val();
                             ld->replaceUsesWith(val);
                             if (!ld->changesEnv() || !val->type.maybeLazy())
                                 next = bb->remove(ip);
                         } else if (!v.vals.empty()) {
                             auto phi = new Phi;
                             for (auto a : v.vals) {
-                                phi->push_arg(a);
+                                phi->addInput(a.orig()->bb(), a.val());
                             }
                             phi->updateType();
                             ld->replaceUsesWith(phi);

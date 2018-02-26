@@ -35,16 +35,15 @@ void InsertCast::apply(BB* bb) {
         if ((p = Phi::Cast(instr))) {
             p->updateType();
         }
-        instr->map_arg([&](Value* v, PirType t) -> Value* {
+        instr->map_arg([&](Value** v, PirType t) {
             size_t added = 0;
-            while (!(t >= v->type)) {
-                auto c = cast(v, t);
+            while (!(t >= (*v)->type)) {
+                auto c = cast(*v, t);
                 c->bb_ = bb;
-                v = c;
+                *v = c;
                 next = bb->insert((ip + added), c);
                 added++;
             }
-            return v;
         });
         ip = next;
     }

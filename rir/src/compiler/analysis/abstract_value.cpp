@@ -7,8 +7,7 @@ namespace pir {
 
 AbstractValue::AbstractValue() : type(PirType::bottom()) {}
 AbstractValue::AbstractValue(Value* v, Instruction* o) : type(v->type) {
-    vals.insert(v);
-    origin.insert(o);
+    vals.insert(ValOrig(v, o));
 }
 
 bool AbstractValue::merge(const AbstractValue& other) {
@@ -22,12 +21,6 @@ bool AbstractValue::merge(const AbstractValue& other) {
     }
 
     bool changed = false;
-    if (!std::includes(origin.begin(), origin.end(), other.origin.begin(),
-                       other.origin.end())) {
-        origin.insert(other.origin.begin(), other.origin.end());
-        changed = true;
-    }
-
     if (!std::includes(vals.begin(), vals.end(), other.vals.begin(),
                        other.vals.end())) {
         vals.insert(other.vals.begin(), other.vals.end());
@@ -44,20 +37,15 @@ void AbstractValue::print(std::ostream& out) {
     }
     out << "(";
     for (auto it = vals.begin(); it != vals.end();) {
-        (*it)->printRef(out);
+        auto vo = *it;
+        vo.first->printRef(out);
+        out << "@";
+        vo.second->printRef(out);
         it++;
         if (it != vals.end())
             out << "|";
     }
     out << ") : " << type;
-    out << ", @(";
-    for (auto it = origin.begin(); it != origin.end();) {
-        (*it)->printRef(out);
-        it++;
-        if (it != origin.end())
-            out << "|";
-    }
-    out << ")";
 }
 }
 }

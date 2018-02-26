@@ -15,6 +15,7 @@ class TheCleanup {
     Function* function;
     void operator()() {
         std::set<size_t> used_p;
+        std::set<BB*> used_bb;
 
         Visitor::run(function->entry, [&](BB* bb) {
             auto ip = bb->begin();
@@ -49,18 +50,12 @@ class TheCleanup {
                 } else if (phi) {
                     std::set<Value*> phin;
                     phi->each_arg([&](Value* v, PirType) { phin.insert(v); });
-                    if (phin.size() < phi->nargs()) {
-                        Phi* newphi = new Phi;
-                        for (auto v : phin)
-                            newphi->push_arg(v);
-                        phi->replaceUsesWith(newphi);
-                        bb->replace(ip, newphi);
-                        phi = newphi;
-                    }
-                    phi->updateType();
                     if (phin.size() == 1) {
                         phi->replaceUsesWith(*phin.begin());
                         next = bb->remove(ip);
+                    } else {
+                        phi->updateType();
+                        used_bb.insert(phi->input.begin(), phi->input.end());
                     }
                 } else if (arg) {
                     used_p.insert(arg->prom->id);
@@ -116,6 +111,7 @@ class TheCleanup {
                 bb->next1 = d->next1;
                 d->next0 = nullptr;
                 d->next1 = nullptr;
+                assert(used_bb.find(d) == used_bb.end());
                 toDel[d] = nullptr;
             }
         });
@@ -123,6 +119,7 @@ class TheCleanup {
             // Remove empty jump-through blocks
             if (bb->jmp() && bb->next0->empty() && bb->next0->jmp() &&
                 cfg.preds[bb->next0->next0->id].size() == 1) {
+                assert(used_bb.find(bb->next0) == used_bb.end());
                 toDel[bb->next0] = bb->next0->next0;
             }
         });
@@ -130,7 +127,9 @@ class TheCleanup {
             // Remvove empty branches
             if (bb->next0 && bb->next1) {
                 if (bb->next0->empty() && bb->next1->empty() &&
-                    bb->next0->next0 == bb->next1->next0) {
+                    bb->next0->next0 == bb->next1->next0 &&
+                    used_bb.find(bb->next0) == used_bb.end() &&
+                    used_bb.find(bb->next1) == used_bb.end()) {
                     toDel[bb->next0] = bb->next0->next0;
                     toDel[bb->next1] = bb->next0->next0;
                     bb->next1 = nullptr;
@@ -153,6 +152,7 @@ class TheCleanup {
             bb->next1 = d->next1;
             d->next0 = nullptr;
             d->next1 = nullptr;
+            assert(used_bb.find(d) == used_bb.end());
             toDel[d] = nullptr;
         }
         Visitor::run(function->entry, [&](BB* bb) {

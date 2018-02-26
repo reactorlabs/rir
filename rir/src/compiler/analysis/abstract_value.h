@@ -13,14 +13,18 @@ namespace pir {
 struct AbstractValue {
     bool unknown = false;
 
-    std::set<Value*> vals;
+    struct ValOrig : public std::pair<Value*, Instruction*> {
+        ValOrig(Value* v, Instruction* o)
+            : std::pair<Value*, Instruction*>(v, o) {}
+        Value* val() const { return first; }
+        Instruction* orig() const { return second; }
+    };
+
+    std::set<ValOrig> vals;
 
     PirType type = PirType::bottom();
 
-    std::set<Instruction*> origin;
-
     AbstractValue();
-    AbstractValue(PirType t, Instruction* o) : type(t) { origin.insert(o); }
     AbstractValue(Value* v, Instruction* origin);
 
     static AbstractValue tainted() {
@@ -61,7 +65,6 @@ struct AbstractEnvironment {
 
     bool leaked = false;
     bool tainted = false;
-    bool mergedWith = false;
 
     void taint() {
         tainted = true;
@@ -107,7 +110,7 @@ struct AbstractEnvironment {
         for (auto n : keys) {
             // if this is not the first incomming edge and it has more entries
             // we are in trouble.
-            if (mergedWith && !entries.count(n)) {
+            if (!entries.count(n)) {
                 entries[n].taint();
                 changed = true;
             } else if (entries[n].merge(other.get(n))) {
@@ -133,7 +136,6 @@ struct AbstractEnvironment {
             changed = true;
         }
 
-        mergedWith = true;
         return changed;
     }
 };
@@ -151,8 +153,13 @@ class AbstractEnvironmentSet : public std::unordered_map<Value*, AE> {
         for (auto e : other)
             k.insert(e.first);
         for (auto i : k)
-            if ((*this)[i].merge(other[i]))
+            if (this->count(i)) {
+                if (this->at(i).merge(other[i]))
+                    changed = true;
+            } else {
+                (*this)[i].taint();
                 changed = true;
+            }
         return changed;
     }
     void clear() {

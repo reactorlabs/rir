@@ -6,10 +6,9 @@ namespace rir {
 namespace pir {
 
 void Replace::usesOfValue(Instruction* i, Value* old, Value* rpl) {
-    i->map_arg([&](Value* v, PirType t) {
-        if (v == old)
-            return rpl;
-        return v->replaceRefs(old, rpl);
+    i->map_arg([&](Value** v) {
+        if (*v == old)
+            *v = rpl;
     });
 }
 

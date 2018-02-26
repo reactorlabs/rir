@@ -41,14 +41,14 @@ class TheScopeAnalysis : public StaticAnalysis<ScopeAnalysis::AbstractState> {
         collect([&](const ScopeAnalysis::AbstractState& env, Instruction* i) {
             tryLoad(env, i, [&](ScopeAnalysis::AbstractLoadVal a) {
                 loads[i] = a;
-                observedStores.insert(a.second.origin.begin(),
-                                      a.second.origin.end());
+                for (auto s : a.second.vals)
+                    observedStores.insert(s.orig());
             });
             if (i->leaksEnv()) {
                 for (auto e : env) {
                     for (auto a : e.second.entries) {
-                        observedStores.insert(a.second.origin.begin(),
-                                              a.second.origin.end());
+                        for (auto s : a.second.vals)
+                            observedStores.insert(s.orig());
                     }
                 }
             }
@@ -125,7 +125,7 @@ void TheScopeAnalysis::apply(ScopeAnalysis::AbstractState& envs,
         handled = true;
         // let's check if we loaded a closure
         if (!mkfun && a.second.singleValue())
-            mkfun = ClosureWrapper::Cast(*a.second.vals.begin());
+            mkfun = ClosureWrapper::Cast((*a.second.vals.begin()).val());
     });
     if (mkfun)
         envs[i->env()].functionPointers[i] = mkfun->fun;

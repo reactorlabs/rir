@@ -19,8 +19,24 @@ void DelayInstr::apply(Function* function) {
 
             if (i->accessesEnv() == false && i->mightIO() == false) {
                 Instruction* usage = i->hasSingleUse();
-                if (usage && usage->bb() != bb)
-                    next = bb->moveToBegin(ip, usage->bb());
+                if (usage && usage->bb() != bb) {
+                    auto phi = Phi::Cast(usage);
+                    if (phi) {
+                        // If the usage is a phi, we make sure to keep this
+                        // value only in the input branch, where it is
+                        // actually needed.
+                        for (size_t j = 0; j < phi->nargs(); ++j) {
+                            if (phi->arg(j) == i) {
+                                if (phi->input[j] != bb) {
+                                    next = bb->moveToEnd(ip, phi->input[j]);
+                                }
+                                break;
+                            }
+                        }
+                    } else {
+                        next = bb->moveToBegin(ip, usage->bb());
+                    }
+                }
             }
 
             ip = next;

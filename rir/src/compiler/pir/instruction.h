@@ -20,6 +20,7 @@ namespace pir {
 
 class BB;
 class Function;
+class Phi;
 
 class Instruction : public Value {
   protected:
@@ -52,8 +53,10 @@ class Instruction : public Value {
 
     Id id();
 
-    typedef std::function<void(Value*, PirType)> arg_iterator;
-    typedef std::function<Value*(Value*, PirType)> arg_map_iterator;
+    typedef std::function<void(Value*)> arg_iterator;
+    typedef std::function<void(Value*, PirType)> arg_iterator2;
+    typedef std::function<void(Value**)> arg_map_iterator;
+    typedef std::function<void(Value**, PirType)> arg_map_iterator2;
 
     const char* name() { return TagToStr(tag); }
 
@@ -65,11 +68,11 @@ class Instruction : public Value {
     virtual void printArgs(std::ostream& out) {
         out << "(";
         if (nargs() > 0) {
-            for (size_t i = 0; i < nargs() - 1; ++i) {
+            for (size_t i = 0; i < nargs(); ++i) {
                 arg(i)->printRef(out);
-                out << ", ";
+                if (i + 1 < nargs())
+                    out << ", ";
             }
-            arg(nargs() - 1)->printRef(out);
         }
         out << ")";
     }
@@ -92,6 +95,13 @@ class Instruction : public Value {
     void each_arg(arg_iterator it) {
         for (size_t i = 0; i < nargs(); ++i) {
             Value* v = arg(i);
+            it(v);
+        }
+    }
+
+    void each_arg(arg_iterator2 it) {
+        for (size_t i = 0; i < nargs(); ++i) {
+            Value* v = arg(i);
             PirType t = types()[i];
             it(v, t);
         }
@@ -99,9 +109,14 @@ class Instruction : public Value {
 
     void map_arg(arg_map_iterator it) {
         for (size_t i = 0; i < nargs(); ++i) {
-            Value* v = arg(i);
+            it(&args()[i]);
+        }
+    }
+
+    void map_arg(arg_map_iterator2 it) {
+        for (size_t i = 0; i < nargs(); ++i) {
             PirType t = types()[i];
-            arg(i, it(v, t));
+            it(&args()[i], t);
         }
     }
 };
@@ -625,8 +640,7 @@ class VLI(Call, Effect::Any, EnvAccess::Leak) {
     void eachCallArg(arg_iterator it) {
         for (size_t i = 0; i < nCallArgs(); ++i) {
             Value* v = callArgs()[i];
-            PirType t = callTypes()[i];
-            it(v, t);
+            it(v);
         }
     }
 };
@@ -647,8 +661,7 @@ class VLI(CallBuiltin, Effect::Any, EnvAccess::WriteKeepAlive) {
     void eachCallArg(arg_iterator it) {
         for (size_t i = 0; i < nCallArgs(); ++i) {
             Value* v = callArgs()[i];
-            PirType t = callTypes()[i];
-            it(v, t);
+            it(v);
         }
     }
 
@@ -694,8 +707,18 @@ class VLI(MkEnv, Effect::None, EnvAccess::Capture) {
 
 class VLI(Phi, Effect::None, EnvAccess::None) {
   public:
+    std::vector<BB*> input;
     Phi() : VarLenInstruction(PirType::any()) {}
+    void printArgs(std::ostream& out) override;
     void updateType();
+    template <bool E = false>
+    inline void push_arg(Value*) {
+        static_assert(E, "use addInput");
+    }
+    void addInput(BB* in, Value* arg) {
+        input.push_back(in);
+        VarLenInstruction::push_arg(arg);
+    }
 };
 
 class VLI(Deopt, Effect::Any, EnvAccess::Leak) {

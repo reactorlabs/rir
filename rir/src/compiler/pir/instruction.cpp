@@ -108,12 +108,9 @@ Instruction* Instruction::hasSingleUse() {
 void Instruction::replaceUsesIn(Value* replace, BB* target) {
     Visitor::run(target, [&](BB* bb) {
         for (auto i : *bb) {
-            i->map_arg([&](Value* v, PirType t) {
-                if (v == this) {
-                    return replace;
-                } else {
-                    return v->replaceRefs(this, replace);
-                }
+            i->map_arg([&](Value** v) {
+                if (*v == this)
+                    *v = replace;
             });
         }
     });
@@ -122,12 +119,9 @@ void Instruction::replaceUsesIn(Value* replace, BB* target) {
 void Instruction::replaceUsesWith(Value* replace) {
     Visitor::run(bb(), [&](BB* bb) {
         for (auto i : *bb) {
-            i->map_arg([&](Value* v, PirType t) {
-                if (v == this) {
-                    return replace;
-                } else {
-                    return v->replaceRefs(this, replace);
-                }
+            i->map_arg([&](Value** v) {
+                if (*v == this)
+                    *v = replace;
             });
         }
     });
@@ -146,8 +140,8 @@ void LdConst::printArgs(std::ostream& out) {
 }
 
 void Branch::printArgs(std::ostream& out) {
-    arg<0>()->printRef(out);
-    out << ", BB" << bb()->next0->id << ", BB" << bb()->next1->id;
+    FixedLenInstruction::printArgs(out);
+    out << " -> BB" << bb()->next0->id << " | BB" << bb()->next1->id;
 }
 
 void MkArg::printArgs(std::ostream& out) {
@@ -211,6 +205,19 @@ void MkEnv::printArgs(std::ostream& out) {
 void Phi::updateType() {
     type = arg(0)->type;
     each_arg([&](Value* v, PirType t) -> void { type = type | v->type; });
+}
+
+void Phi::printArgs(std::ostream& out) {
+    out << "(";
+    if (nargs() > 0) {
+        for (size_t i = 0; i < nargs(); ++i) {
+            arg(i)->printRef(out);
+            out << ":BB" << input[i]->id;
+            if (i + 1 < nargs())
+                out << ", ";
+        }
+    }
+    out << ")";
 }
 
 CallSafeBuiltin::CallSafeBuiltin(SEXP builtin, const std::vector<Value*>& args)

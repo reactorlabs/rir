@@ -3,9 +3,7 @@
 
 #include "pir.h"
 
-#include <cassert>
-#include <iostream>
-#include <vector>
+#include <set>
 
 namespace rir {
 namespace pir {

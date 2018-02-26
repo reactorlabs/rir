@@ -14,6 +14,7 @@
 #include "pir/pir_impl.h"
 #include "transform/insert_cast.h"
 #include "util/builder.h"
+#include "util/cfg.h"
 #include "util/visitor.h"
 
 #include <deque>
@@ -430,7 +431,7 @@ class CodeCompiler {
                 auto v = m.stack.at(i);
                 auto p = new Phi;
                 s.entry->append(p);
-                p->push_arg(v);
+                p->addInput(b.bb, v);
                 s.stack.push_back(p);
             }
 
@@ -444,13 +445,7 @@ class CodeCompiler {
             assert(p);
             Value* incom = m.stack.at(i);
             if (incom != p) {
-                bool seen = false;
-                p->each_arg([&](Value* v, PirType) {
-                    if (v == incom)
-                        seen = true;
-                });
-                if (!seen)
-                    p->push_arg(incom);
+                p->addInput(b.bb, incom);
             }
         }
         return false;
@@ -659,8 +654,8 @@ Value* CodeCompiler::operator()(bool addReturn) {
         BB* merge = b.createBB();
         Phi* phi = b(new Phi());
         for (auto r : results) {
-            std::get<0>(r)->next0 = merge;
-            phi->push_arg(std::get<1>(r));
+            r.first->next0 = merge;
+            phi->addInput(r.first, r.second);
         }
         phi->updateType();
         res = phi;
@@ -669,6 +664,8 @@ Value* CodeCompiler::operator()(bool addReturn) {
     results.clear();
     if (addReturn)
         b(new Return(res));
+
+    CFG cfg(b.code->entry);
 
     // Remove excessive Phis
     Visitor::run(b.code->entry, [&](BB* bb) {
@@ -734,8 +731,8 @@ void PirCompiler::compileFunction(SEXP f) {
 
     cmp.m->print(std::cout);
     for (auto f : cmp.m->function) {
-        apply(f, true);
-        apply(f, true);
+        apply(f, false);
+        apply(f, false);
     }
     std::cout << "============== whole module passes ======================\n";
     cmp.m->print(std::cout);

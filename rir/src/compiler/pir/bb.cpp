@@ -14,8 +14,9 @@ void BB::print(std::ostream& out) {
         i->print(out);
         out << "\n";
     }
-    if (next0 && !next1)
-        out << "  goto BB " << next0->id << "\n";
+    if (next0 && !next1) {
+        out << "  goto BB" << next0->id << "\n";
+    }
 }
 
 BB::~BB() {
