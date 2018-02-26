@@ -54,8 +54,13 @@ class TheScopeResolution {
                 } else if (ld) {
                     auto aload = analysis.loads[ld];
                     auto v = aload.second;
-                    if (v.origin.size() == 1 &&
-                        (*v.origin.begin())->bb()->fun == function) {
+                    bool localVals = true;
+                    for (auto i : v.origin)
+                        if (i->bb()->fun != function) {
+                            localVals = false;
+                            break;
+                        }
+                    if (localVals) {
                         if (v.singleValue()) {
                             Value* val = *v.vals.begin();
                             ld->replaceUsesWith(val);
