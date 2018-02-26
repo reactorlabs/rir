@@ -594,7 +594,8 @@ SEXP doCall(Code* caller, SEXP callee, bool argsOnStack, uint32_t nargs,
     if (TYPEOF(callee) == CLOSXP) {
         // if body is EXTERNALSXP, it is rir serialized code, execute it
         // directly
-        SEXP body = BODY(callee), result;
+        SEXP body = BODY(callee);
+        SEXP result;
         if (TYPEOF(body) == EXTERNALSXP) {
             assert(isValidDispatchTableSEXP(body));
             result = rirCallClosure(call, env, callee, argslist, nargs, ctx);
@@ -605,7 +606,7 @@ SEXP doCall(Code* caller, SEXP callee, bool argsOnStack, uint32_t nargs,
     }
 
     // not reached
-    return R_NilValue;
+    assert(false);
 }
 
 SEXP doDispatch(Code* caller, bool argsOnStack, uint32_t nargs, uint32_t id,
@@ -666,7 +667,7 @@ SEXP doDispatch(Code* caller, bool argsOnStack, uint32_t nargs, uint32_t id,
         }
 
         // ===============================================
-        // Now normal dispatch (mostly a copy from doCall)
+        // Now normal dispatch
         SEXP callee = Rf_findFun(selector, env);
 
         // TODO something should happen here
