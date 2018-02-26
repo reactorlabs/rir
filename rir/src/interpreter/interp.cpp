@@ -544,69 +544,78 @@ SEXP doCall(Code* caller, SEXP callee, bool argsOnStack, uint32_t nargs,
 
     profileCall(cs, callee);
 
-    if (TYPEOF(callee) == SPECIALSXP) {
-        assert(call != R_NilValue);
+    SEXP result = nullptr;
+
+    do {
+        // ===============================================
+        // SPECIALSXPs do not take argslist
+        if (TYPEOF(callee) == SPECIALSXP) {
+            assert(call != R_NilValue);
+            Protect p;
+            if (argsOnStack) {
+                call = fixupAST(call, ctx, nargs);
+                p(call);
+                ostack_popn(ctx, nargs);
+            }
+            // get the ccode
+            CCODE f = getBuiltin(callee);
+            int flag = getFlag(callee);
+            R_Visible = static_cast<Rboolean>(flag != 1);
+            warnSpecial(callee, call);
+            // call it with the AST only
+            result = f(call, callee, CDR(call), env);
+            if (flag < 2)
+                R_Visible = static_cast<Rboolean>(flag != 1);
+            break;
+        }
+
+        // ===============================================
+        // BUILTINSXP or CLOSXP
+
+        // create the argslist
+        bool eager = TYPEOF(callee) == BUILTINSXP;
+        SEXP argslist;
         Protect p;
         if (argsOnStack) {
             call = fixupAST(call, ctx, nargs);
             p(call);
+            argslist = createArgsListStack(caller, nargs, cs, env, ctx, eager);
             ostack_popn(ctx, nargs);
-        }
-        // get the ccode
-        CCODE f = getBuiltin(callee);
-        int flag = getFlag(callee);
-        R_Visible = static_cast<Rboolean>(flag != 1);
-        warnSpecial(callee, call);
-        // call it with the AST only
-        SEXP result = f(call, callee, CDR(call), env);
-        if (flag < 2)
-            R_Visible = static_cast<Rboolean>(flag != 1);
-        return result;
-    }
-
-    // create the argslist
-    bool eager = TYPEOF(callee) == BUILTINSXP;
-    SEXP argslist;
-    Protect p;
-    if (argsOnStack) {
-        call = fixupAST(call, ctx, nargs);
-        p(call);
-        argslist = createArgsListStack(caller, nargs, cs, env, ctx, eager);
-        ostack_popn(ctx, nargs);
-    } else {
-        argslist = createArgsList(caller, call, nargs, cs, env, ctx, eager);
-    }
-    p(argslist);
-
-    if (TYPEOF(callee) == BUILTINSXP) {
-        // get the ccode
-        CCODE f = getBuiltin(callee);
-        int flag = getFlag(callee);
-        if (flag < 2)
-            R_Visible = static_cast<Rboolean>(flag != 1);
-        // call it
-        SEXP result = f(call, callee, argslist, env);
-        if (flag < 2)
-            R_Visible = static_cast<Rboolean>(flag != 1);
-        return result;
-    }
-
-    if (TYPEOF(callee) == CLOSXP) {
-        // if body is EXTERNALSXP, it is rir serialized code, execute it
-        // directly
-        SEXP body = BODY(callee);
-        SEXP result;
-        if (TYPEOF(body) == EXTERNALSXP) {
-            assert(isValidDispatchTableSEXP(body));
-            result = rirCallClosure(call, env, callee, argslist, nargs, ctx);
         } else {
-            result = applyClosure(call, callee, argslist, env, R_NilValue);
+            argslist = createArgsList(caller, call, nargs, cs, env, ctx, eager);
         }
-        return result;
-    }
+        p(argslist);
 
-    // not reached
-    assert(false);
+        if (TYPEOF(callee) == BUILTINSXP) {
+            // get the ccode
+            CCODE f = getBuiltin(callee);
+            int flag = getFlag(callee);
+            if (flag < 2)
+                R_Visible = static_cast<Rboolean>(flag != 1);
+            // call it
+            result = f(call, callee, argslist, env);
+            if (flag < 2)
+                R_Visible = static_cast<Rboolean>(flag != 1);
+            break;
+        }
+
+        if (TYPEOF(callee) == CLOSXP) {
+            // if body is EXTERNALSXP, it is rir serialized code, execute it
+            // directly
+            SEXP body = BODY(callee);
+            if (TYPEOF(body) == EXTERNALSXP) {
+                assert(isValidDispatchTableSEXP(body));
+                result =
+                    rirCallClosure(call, env, callee, argslist, nargs, ctx);
+            } else {
+                result = applyClosure(call, callee, argslist, env, R_NilValue);
+            }
+            break;
+        }
+    } while (false);
+
+    assert(result);
+    return result;
 }
 
 SEXP doDispatch(Code* caller, bool argsOnStack, uint32_t nargs, uint32_t id,
