@@ -39,6 +39,11 @@ function run_test {
   test=$0
 
   R="${R_HOME}/bin/R"
+  VALGRIND=""
+
+  if [[ "$ENABLE_VALGRIND" == "1" ]]; then
+      VALGRIND="-d valgrind --debugger-args=--error-exitcode=13"
+  fi
   
   if test "$(uname)" = "Darwin"; then
       LIB="dyn.load('${BUILD_DIR}/librir.dylib')"
@@ -59,7 +64,7 @@ function run_test {
   echo "sys.source('${ROOT_DIR}/rir/R/rir.R')" >> $TEST
   grep -v 'require("rir")' ${test} | grep -v 'require(rir)'  >> $TEST
   
-  $R --no-init-file -f $TEST &> /dev/null
+  $R $VALGRIND --no-init-file -f $TEST &> /dev/null
   res=$?
 
   ps -p $PARENT &> /dev/null
@@ -69,7 +74,7 @@ function run_test {
   fi
 
   if [ $res -ne 0 ]; then
-      echo -e "\nfailed test $name:\n   $R -f $TEST"
+      echo -e "\nfailed test $name:\n   $R $VALGRIND -f $TEST"
       exit 255
   fi
   rm $TEST

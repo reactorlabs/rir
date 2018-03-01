@@ -5,15 +5,15 @@ language: cpp
 matrix:
   include:
     - os: osx
-      osx_image: xcode7.3
+      osx_image: xcode9.3
       compiler: clang
       env: CORES=3 CHECK=check BUILD=release
     - os: linux
       compiler: gcc
-      env: CORES=3 CHECK=check BUILD=debug
+      env: CORES=3 CHECK=check BUILD=debug ENABLE_VALGRIND=1
     - os: linux
       compiler: gcc
-      env: CHECK=test-all-devel BUILD=release
+      env: CHECK=test-all-devel BUILD=release ENABLE_VALGRIND=1
     - os: linux
       compiler: gcc
       env: CHECK=check-recommended BUILD=release
@@ -33,6 +33,7 @@ addons:
       - cmake
       - rsync
       - xorg-dev
+      - valgrind
 
 before_install:
   - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then . ./tools/ci/before_install-osx.sh; fi
