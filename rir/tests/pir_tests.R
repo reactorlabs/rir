@@ -1,0 +1,1 @@
+.Call("pir_tests")
