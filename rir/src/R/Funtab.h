@@ -113,6 +113,8 @@ static inline CCODE getBuiltin(SEXP f) {
     int i = ((sexprec_rjit*)f)->u.i;
     return R_FunTab[i].cfun;
 }
+static inline int getBuiltinNr(SEXP f) { return ((sexprec_rjit*)f)->u.i; }
+static inline const char* getBuiltinName(int i) { return R_FunTab[i].name; }
 static inline int getFlag(SEXP f) {
     int i = ((sexprec_rjit*)f)->u.i;
     return (((R_FunTab[i].eval) / 100) % 10);
