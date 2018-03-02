@@ -4,6 +4,13 @@
 #include "analysis/query.h"
 #include "analysis/verifier.h"
 #include "ir/BC.h"
+#include "opt/cleanup.h"
+#include "opt/delay_env.h"
+#include "opt/delay_instr.h"
+#include "opt/elide_env.h"
+#include "opt/force_dominance.h"
+#include "opt/inline.h"
+#include "opt/scope_resolution.h"
 #include "pir/pir_impl.h"
 #include "transform/insert_cast.h"
 #include "util/builder.h"
@@ -694,8 +701,55 @@ Module* PirCompiler::compileFunction(SEXP f, bool verbose) {
     TheCompiler cmp;
     cmp(f);
 
+    size_t passnr = 0;
+    auto print = [&](const std::string& pass, pir::Function* f) {
+        std::cout << "============== " << pass << " == " << passnr++
+                  << " ======================\n";
+        f->print(std::cout);
+    };
+
+    auto apply = [&](pir::Function* f, bool verb) {
+        ForceDominance::apply(f);
+        if (verb)
+            print("force", f);
+        ScopeResolution::apply(f);
+        if (verb)
+            print("scope", f);
+        Cleanup::apply(f);
+        if (verb)
+            print("cleanup", f);
+        DelayInstr::apply(f);
+        if (verb)
+            print("delay instr", f);
+        ElideEnv::apply(f);
+        if (verb)
+            print("elide env", f);
+        DelayEnv::apply(f);
+        if (verb)
+            print("delay env", f);
+    };
+
     if (verbose)
         cmp.m->print(std::cout);
+
+    for (auto f : cmp.m->function) {
+        apply(f, false);
+        apply(f, false);
+    }
+
+    if (verbose) {
+        std::cout << "============== whole module passes ======================\n";
+        cmp.m->print(std::cout);
+    }
+
+    auto fun = *cmp.m->function.begin();
+    for (size_t iter = 0; iter < 5; ++iter) {
+        Inline::apply(fun);
+        if (verbose)
+            print("inline", fun);
+
+        apply(fun, verbose);
+    }
 
     return cmp.m;
 }
