@@ -7,10 +7,10 @@ matrix:
     - os: osx
       osx_image: xcode9.3
       compiler: clang
-      env: CORES=3 CHECK=check BUILD=release
+      env: CORES=2 CHECK=check BUILD=release
     - os: linux
       compiler: gcc
-      env: CORES=3 CHECK=check BUILD=debug ENABLE_VALGRIND=1
+      env: CORES=2 CHECK=check BUILD=debug ENABLE_VALGRIND=1
     - os: linux
       compiler: gcc
       env: CHECK=test-all-devel BUILD=release ENABLE_VALGRIND=1
@@ -42,7 +42,7 @@ before_install:
 before_script:
   - cmake -DCMAKE_BUILD_TYPE=$BUILD .
   - make setup
-  - make -j4
+  - make -j2
 
 script:
   - ./tools/tests
@@ -50,4 +50,6 @@ script:
   - TEST_MC_CORES=$CORES ./tools/gnur-make-tests $CHECK
 
 cache:
-  - ccache
+  directories:
+  - external
+
