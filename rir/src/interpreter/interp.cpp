@@ -1457,9 +1457,9 @@ SEXP evalRirCode(Code* c, Context* ctx, EnvironmentProxy* ep) {
             advanceImmediate();
             Immediate n = readImmediate();
             advanceImmediate();
-            SEXP closure = ostack_at(ctx, 0); // get the closure itself
-            res = doCall(c, closure, false, n, id, ep, ctx);
-            ostack_pop(ctx);
+            SEXP callee = ostack_at(ctx, 0);
+            res = doCall(c, callee, false, n, id, ep, ctx);
+            ostack_pop(ctx); // callee
             ostack_push(ctx, res);
             NEXT();
         }
@@ -1469,8 +1469,8 @@ SEXP evalRirCode(Code* c, Context* ctx, EnvironmentProxy* ep) {
             advanceImmediate();
             Immediate n = readImmediate();
             advanceImmediate();
-            SEXP closure = ostack_at(ctx, n);
-            res = doCall(c, closure, true, n, id, ep, ctx);
+            SEXP callee = ostack_at(ctx, n);
+            res = doCall(c, callee, true, n, id, ep, ctx);
             ostack_pop(ctx); // callee
             ostack_push(ctx, res);
             NEXT();
@@ -1481,8 +1481,8 @@ SEXP evalRirCode(Code* c, Context* ctx, EnvironmentProxy* ep) {
             advanceImmediate();
             Immediate n = readImmediate();
             advanceImmediate();
-            SEXP closure = cp_pool_at(ctx, *c->callSite(id)->target());
-            res = doCall(c, closure, true, n, id, ep, ctx);
+            SEXP callee = cp_pool_at(ctx, *c->callSite(id)->target());
+            res = doCall(c, callee, true, n, id, ep, ctx);
             ostack_push(ctx, res);
             NEXT();
         }
