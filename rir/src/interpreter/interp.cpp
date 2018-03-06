@@ -1226,6 +1226,27 @@ SEXP evalRirCode(Code* c, Context* ctx, EnvironmentProxy* ep) {
 
         INSTRUCTION(nop_) NEXT();
 
+        INSTRUCTION(make_env_) {
+            SEXP parent = ostack_pop(ctx);
+            assert(TYPEOF(parent) == ENVSXP &&
+                   "Non-environment used as environment parent.");
+            res = Rf_NewEnvironment(R_NilValue, R_NilValue, parent);
+            ostack_push(ctx, res);
+            NEXT();
+        }
+
+        INSTRUCTION(get_env_) {
+            ostack_push(ctx, ep->env());
+            NEXT();
+        }
+
+        INSTRUCTION(set_env_) {
+            SEXP e = ostack_pop(ctx);
+            assert(TYPEOF(e) == ENVSXP && "Expected an environment on TOS.");
+            ep->set(e);
+            NEXT();
+        }
+
         INSTRUCTION(ldfun_) {
             SEXP sym = readConst(ctx, readImmediate());
             advanceImmediate();

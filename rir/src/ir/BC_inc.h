@@ -225,6 +225,9 @@ class BC {
     // ==== Factory methods
     // to create new BC objects, which can be streamed to a CodeStream
     inline static BC nop();
+    inline static BC makeEnv();
+    inline static BC getEnv();
+    inline static BC setEnv();
     inline static BC push(SEXP constant);
     inline static BC push(double constant);
     inline static BC push(int constant);
@@ -435,6 +438,9 @@ class BC {
             immediate.loc = *(NumLocalsT*)pc;
             break;
         case Opcode::nop_:
+        case Opcode::make_env_:
+        case Opcode::get_env_:
+        case Opcode::set_env_:
         case Opcode::for_seq_size_:
         case Opcode::extract1_1_:
         case Opcode::extract2_1_:
