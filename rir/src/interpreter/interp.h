@@ -5,6 +5,7 @@
 
 #undef length
 
+#include "call_support.h"
 #include "interp_context.h"
 #include "interp_data.h"
 
@@ -12,7 +13,7 @@
 extern "C" {
 #endif
 
-SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs);
+SEXP evalRirCode(Code* c, Context* ctx, rir::EnvironmentProxy* ep);
 
 SEXP rirExpr(SEXP f);
 
