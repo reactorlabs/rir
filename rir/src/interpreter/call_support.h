@@ -24,7 +24,6 @@ class ArgumentListProxy {
             uint32_t nargs;
             CallSite* cs;
             EnvironmentProxy* ep;
-            Context* ctx;
         } ctxt_;
     };
 
@@ -34,9 +33,9 @@ class ArgumentListProxy {
     explicit ArgumentListProxy(SEXP argslist) : argslist_{argslist} {}
     explicit ArgumentListProxy(Code* caller, SEXP call, bool argsOnStack,
                                uint32_t nargs, CallSite* cs,
-                               EnvironmentProxy* ep, Context* ctx)
+                               EnvironmentProxy* ep)
         : validArgslist_{false},
-          ctxt_{caller, call, argsOnStack, nargs, cs, ep, ctx} {}
+          ctxt_{caller, call, argsOnStack, nargs, cs, ep} {}
 
     SEXP argslist() {
         if (!validArgslist_)

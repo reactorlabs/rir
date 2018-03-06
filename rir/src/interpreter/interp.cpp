@@ -614,7 +614,7 @@ SEXP doCall(Code* caller, SEXP callee, bool argsOnStack, uint32_t nargs,
         if (argsOnStack)
             call = p(fixupAST(call, ctx, nargs));
 
-        ArgumentListProxy ap(caller, call, argsOnStack, nargs, cs, ep, ctx);
+        ArgumentListProxy ap(caller, call, argsOnStack, nargs, cs, ep);
 
         result = rirCallClosure(call, callee, &ap, ep, ctx);
 
@@ -758,15 +758,15 @@ void ArgumentListProxy::create() {
     SEXP argslist;
     if (ctxt_.onStack) {
         argslist = createArgsListStack(ctxt_.caller, ctxt_.nargs, ctxt_.cs,
-                                       ctxt_.ep, ctxt_.ctx, false);
-        ostack_popn(ctxt_.ctx, ctxt_.nargs);
+                                       ctxt_.ep, globalContext(), false);
+        ostack_popn(globalContext(), ctxt_.nargs);
         // Also patch the node stack top in the context -- arguments need
         // to be removed in case of non-local return
         RCNTXT* cntxt = findClosureReturnContext();
         cntxt->nodestack -= ctxt_.nargs;
     } else {
         argslist = createArgsList(ctxt_.caller, ctxt_.call, ctxt_.nargs,
-                                  ctxt_.cs, ctxt_.ep, ctxt_.ctx, false);
+                                  ctxt_.cs, ctxt_.ep, globalContext(), false);
     }
 
     argslist_ = argslist;
