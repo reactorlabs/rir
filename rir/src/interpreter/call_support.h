@@ -19,27 +19,21 @@ class ArgumentListProxy {
         SEXP argslist_;
         struct {
             Code* caller;
-            SEXP call;
             bool onStack;
-            uint32_t nargs;
-            CallSite* cs;
-            EnvironmentProxy* ep;
+            uint32_t id;
         } ctxt_;
     };
 
-    void create();
+    void create(EnvironmentProxy* ep);
 
   public:
     explicit ArgumentListProxy(SEXP argslist) : argslist_{argslist} {}
-    explicit ArgumentListProxy(Code* caller, SEXP call, bool argsOnStack,
-                               uint32_t nargs, CallSite* cs,
-                               EnvironmentProxy* ep)
-        : validArgslist_{false},
-          ctxt_{caller, call, argsOnStack, nargs, cs, ep} {}
+    explicit ArgumentListProxy(Code* caller, bool argsOnStack, uint32_t id)
+        : validArgslist_{false}, ctxt_{caller, argsOnStack, id} {}
 
-    SEXP argslist() {
+    SEXP argslist(EnvironmentProxy* ep) {
         if (!validArgslist_)
-            create();
+            create(ep);
         return argslist_;
     }
 

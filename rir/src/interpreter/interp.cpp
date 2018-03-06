@@ -191,18 +191,18 @@ INLINE void __listAppend(SEXP* front, SEXP* last, SEXP value, SEXP name) {
     *last = app;
 }
 
-SEXP createArgsListStack(Code* c, size_t nargs, CallSite* cs,
-                         EnvironmentProxy* ep, Context* ctx, bool eager) {
+SEXP createArgsListStack(Code* c, CallSite* cs, EnvironmentProxy* ep,
+                         bool eager, Context* ctx) {
     SEXP result = R_NilValue;
     SEXP pos = result;
 
     bool hasNames = cs->hasNames;
 
-    for (size_t i = 0; i < nargs; ++i) {
+    for (size_t i = 0; i < cs->nargs; ++i) {
 
         SEXP name = hasNames ? cp_pool_at(ctx, cs->names()[i]) : R_NilValue;
 
-        SEXP arg = ostack_at(ctx, nargs - i - 1);
+        SEXP arg = ostack_at(ctx, cs->nargs - i - 1);
 
         if (!eager && (arg == R_MissingArg || arg == R_DotsSymbol)) {
             // We have to wrap them in a promise, otherwise they are treated
@@ -224,8 +224,8 @@ SEXP createArgsListStack(Code* c, size_t nargs, CallSite* cs,
     return result;
 }
 
-SEXP createArgsList(Code* c, SEXP call, size_t nargs, CallSite* cs,
-                    EnvironmentProxy* ep, Context* ctx, bool eager) {
+SEXP createArgsList(Code* c, SEXP call, CallSite* cs, EnvironmentProxy* ep,
+                    bool eager, Context* ctx) {
     SEXP result = R_NilValue;
     SEXP pos = result;
 
@@ -233,7 +233,7 @@ SEXP createArgsList(Code* c, SEXP call, size_t nargs, CallSite* cs,
     // argument
     bool hasNames = cs->hasNames;
 
-    for (size_t i = 0; i < nargs; ++i) {
+    for (size_t i = 0; i < cs->nargs; ++i) {
         unsigned argi = cs->args()[i];
         SEXP name = hasNames ? cp_pool_at(ctx, cs->names()[i]) : R_NilValue;
 
@@ -576,12 +576,10 @@ SEXP doCall(Code* caller, SEXP callee, bool argsOnStack, uint32_t nargs,
             if (argsOnStack) {
                 call = fixupAST(call, ctx, nargs);
                 p(call);
-                argslist =
-                    createArgsListStack(caller, nargs, cs, ep, ctx, eager);
+                argslist = createArgsListStack(caller, cs, ep, eager, ctx);
                 ostack_popn(ctx, nargs);
             } else {
-                argslist =
-                    createArgsList(caller, call, nargs, cs, ep, ctx, eager);
+                argslist = createArgsList(caller, call, cs, ep, eager, ctx);
             }
             p(argslist);
 
@@ -614,7 +612,7 @@ SEXP doCall(Code* caller, SEXP callee, bool argsOnStack, uint32_t nargs,
         if (argsOnStack)
             call = p(fixupAST(call, ctx, nargs));
 
-        ArgumentListProxy ap(caller, call, argsOnStack, nargs, cs, ep);
+        ArgumentListProxy ap(caller, argsOnStack, id);
 
         result = rirCallClosure(call, callee, &ap, ep, ctx);
 
@@ -643,12 +641,12 @@ SEXP doDispatch(Code* caller, bool argsOnStack, uint32_t nargs, uint32_t id,
     if (argsOnStack) {
         call = fixupAST(call, ctx, nargs);
         Protect p(call);
-        actuals = createArgsListStack(caller, nargs, cs, ep, ctx, true);
+        actuals = createArgsListStack(caller, cs, ep, true, ctx);
         ostack_popn(ctx, nargs);
         ostack_push(ctx, actuals);
         ostack_push(ctx, call);
     } else {
-        actuals = createArgsList(caller, call, nargs, cs, ep, ctx, false);
+        actuals = createArgsList(caller, call, cs, ep, false, ctx);
         ostack_push(ctx, actuals);
         // Patch the already evaluated object into the first entry of
         // the promise args list
@@ -753,20 +751,23 @@ static RCNTXT* findClosureReturnContext() {
     assert(false && "no function return context found");
 }
 
-void ArgumentListProxy::create() {
+void ArgumentListProxy::create(EnvironmentProxy* ep) {
+
+    CallSite* cs = ctxt_.caller->callSite(ctxt_.id);
+    SEXP call = cp_pool_at(globalContext(), cs->call);
 
     SEXP argslist;
     if (ctxt_.onStack) {
-        argslist = createArgsListStack(ctxt_.caller, ctxt_.nargs, ctxt_.cs,
-                                       ctxt_.ep, globalContext(), false);
-        ostack_popn(globalContext(), ctxt_.nargs);
+        argslist =
+            createArgsListStack(ctxt_.caller, cs, ep, false, globalContext());
+        ostack_popn(globalContext(), cs->nargs);
         // Also patch the node stack top in the context -- arguments need
         // to be removed in case of non-local return
         RCNTXT* cntxt = findClosureReturnContext();
-        cntxt->nodestack -= ctxt_.nargs;
+        cntxt->nodestack -= cs->nargs;
     } else {
-        argslist = createArgsList(ctxt_.caller, ctxt_.call, ctxt_.nargs,
-                                  ctxt_.cs, ctxt_.ep, globalContext(), false);
+        argslist =
+            createArgsList(ctxt_.caller, call, cs, ep, false, globalContext());
     }
 
     argslist_ = argslist;
@@ -779,7 +780,7 @@ void EnvironmentProxy::init() {
     if (!createEnvironment_)
         return;
 
-    SEXP argslist = ctxt_.ap->argslist();
+    SEXP argslist = ctxt_.ap->argslist(parent_);
     Protect p(argslist);
     SEXP env = closureArgumentAdaptor(ctxt_.call, ctxt_.callee, argslist,
                                       parent_->env(), R_NilValue);
