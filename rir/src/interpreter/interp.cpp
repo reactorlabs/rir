@@ -382,7 +382,7 @@ static SEXP rirCallClosure(SEXP call, SEXP callee, ArgumentListProxy* ap,
     initClosureContext(&cntxt, call, R_NilValue, ep->env(), R_NilValue, callee);
 
     EnvironmentProxy newEp(fun->signature->createEnvironment, call, callee, ap,
-                           &cntxt, ep);
+                           ep);
 
     // Exec the closure
     closureDebug(call, callee, ep->env(), R_NilValue, &cntxt);
@@ -739,8 +739,18 @@ SEXP doDispatch(Code* caller, bool argsOnStack, uint32_t nargs, uint32_t id,
     } while (false);
 
     ostack_popn(ctx, 2);
+
     assert(result);
     return result;
+}
+
+static RCNTXT* findClosureReturnContext() {
+    for (RCNTXT* cptr = R_GlobalContext;
+         cptr != NULL && cptr->callflag != CTXT_TOPLEVEL;
+         cptr = cptr->nextcontext)
+        if (cptr->callflag & CTXT_FUNCTION)
+            return cptr;
+    assert(false && "no function return context found");
 }
 
 void ArgumentListProxy::create() {
@@ -750,6 +760,10 @@ void ArgumentListProxy::create() {
         argslist = createArgsListStack(ctxt_.caller, ctxt_.nargs, ctxt_.cs,
                                        ctxt_.ep, ctxt_.ctx, false);
         ostack_popn(ctxt_.ctx, ctxt_.nargs);
+        // Also patch the node stack top in the context -- arguments need
+        // to be removed in case of non-local return
+        RCNTXT* cntxt = findClosureReturnContext();
+        cntxt->nodestack -= ctxt_.nargs;
     } else {
         argslist = createArgsList(ctxt_.caller, ctxt_.call, ctxt_.nargs,
                                   ctxt_.cs, ctxt_.ep, ctxt_.ctx, false);
@@ -773,8 +787,9 @@ void EnvironmentProxy::init() {
     // This patches the missing values in the return context of this
     // closure call. From now, they are also protected during gc
     // (contexts are considered roots by the collector).
-    ctxt_.cntxt->promargs = argslist;
-    ctxt_.cntxt->cloenv = env;
+    RCNTXT* cntxt = findClosureReturnContext();
+    cntxt->promargs = argslist;
+    cntxt->cloenv = env;
 
     env_ = env;
     validREnv_ = true;
@@ -1454,8 +1469,8 @@ SEXP evalRirCode(Code* c, Context* ctx, EnvironmentProxy* ep) {
             advanceImmediate();
             Immediate n = readImmediate();
             advanceImmediate();
-            res = ostack_at(ctx, n);
-            res = doCall(c, res, true, n, id, ep, ctx);
+            SEXP closure = ostack_at(ctx, n);
+            res = doCall(c, closure, true, n, id, ep, ctx);
             ostack_pop(ctx); // callee
             ostack_push(ctx, res);
             NEXT();
@@ -1466,8 +1481,8 @@ SEXP evalRirCode(Code* c, Context* ctx, EnvironmentProxy* ep) {
             advanceImmediate();
             Immediate n = readImmediate();
             advanceImmediate();
-            res = cp_pool_at(ctx, *c->callSite(id)->target());
-            res = doCall(c, res, true, n, id, ep, ctx);
+            SEXP closure = cp_pool_at(ctx, *c->callSite(id)->target());
+            res = doCall(c, closure, true, n, id, ep, ctx);
             ostack_push(ctx, res);
             NEXT();
         }

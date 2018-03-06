@@ -68,7 +68,6 @@ class EnvironmentProxy {
             SEXP call;
             SEXP callee;
             ArgumentListProxy* ap;
-            RCNTXT* cntxt;
         } ctxt_;
     };
     EnvironmentProxy* parent_ = nullptr;
@@ -84,10 +83,9 @@ class EnvironmentProxy {
     }
 
     explicit EnvironmentProxy(bool eager, SEXP call, SEXP callee,
-                              ArgumentListProxy* ap, RCNTXT* cntxt,
-                              EnvironmentProxy* parent)
-        : validREnv_{false}, createEnvironment_{eager},
-          ctxt_{call, callee, ap, cntxt}, parent_{parent} {}
+                              ArgumentListProxy* ap, EnvironmentProxy* parent)
+        : validREnv_{false}, createEnvironment_{eager}, ctxt_{call, callee, ap},
+          parent_{parent} {}
 
     void init();
 
