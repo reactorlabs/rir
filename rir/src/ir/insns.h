@@ -27,7 +27,7 @@ DEF_INSTR(get_env_, 0, 0, 1, 1)
 /**
  * set_env_:: make tos environment the current env
  */
-DEF_INSTR(set_env_, 0, 1, 0, 1)
+DEF_INSTR(set_env_, 0, 1, 0, 0)
 
 /**
  * ldfun_:: take immediate CP index of symbol, find function bound to that name
