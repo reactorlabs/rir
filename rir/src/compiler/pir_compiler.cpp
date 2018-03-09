@@ -373,6 +373,9 @@ class CodeCompiler {
             assert(false);
 
         // Unsupported opcodes:
+        case Opcode::make_env_:
+        case Opcode::get_env_:
+        case Opcode::set_env_:
         case Opcode::ldloc_:
         case Opcode::stloc_:
         case Opcode::ldlval_:

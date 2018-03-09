@@ -10,12 +10,28 @@
 DEF_INSTR(invalid_, 0, 0, 0, 0)
 
 /**
-  * nop_:: do nothing.
-  */
+ * nop_:: do nothing.
+ */
 DEF_INSTR(nop_, 0, 0, 0, 1)
 
 /**
- * ldfun_:: take immediate CP index of symbol, find function bound to that name and push it on stack.
+ * make_env_:: create a new empty environment with the parent taken from TOS
+ */
+DEF_INSTR(make_env_, 0, 1, 1, 1)
+
+/**
+ * get_env_:: push current env to tos
+ */
+DEF_INSTR(get_env_, 0, 0, 1, 1)
+
+/**
+ * set_env_:: make tos environment the current env
+ */
+DEF_INSTR(set_env_, 0, 1, 0, 0)
+
+/**
+ * ldfun_:: take immediate CP index of symbol, find function bound to that name
+ * and push it on stack.
  */
 DEF_INSTR(ldfun_, 1, 0, 1, 0)
 

@@ -80,7 +80,8 @@ REXPORT SEXP rir_eval(SEXP what, SEXP env) {
         f = isValidClosureSEXP(what);
     if (f == nullptr)
         Rf_error("Not rir compiled code");
-    return evalRirCode(f->body(), globalContext(), env, 0);
+    EnvironmentProxy ep(env);
+    return evalRirCode(f->body(), globalContext(), &ep);
 }
 
 REXPORT SEXP rir_body(SEXP cls) {

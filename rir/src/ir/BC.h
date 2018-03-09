@@ -19,6 +19,9 @@ namespace rir {
 class CodeStream;
 
 BC BC::nop() { return BC(Opcode::nop_); }
+BC BC::makeEnv() { return BC(Opcode::make_env_); }
+BC BC::getEnv() { return BC(Opcode::get_env_); }
+BC BC::setEnv() { return BC(Opcode::set_env_); }
 BC BC::ret() { return BC(Opcode::ret_); }
 BC BC::return_() { return BC(Opcode::return_); }
 BC BC::force() { return BC(Opcode::force_); }
