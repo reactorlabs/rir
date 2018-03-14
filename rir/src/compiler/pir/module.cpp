@@ -5,14 +5,14 @@ namespace rir {
 namespace pir {
 
 void Module::print(std::ostream& out) {
-    for (auto f : function) {
-        f->print(out);
+    for (auto f : functions) {
+        f->dstIR->print(out);
         out << "\n-------------------------------\n";
     }
 }
 
 Module::~Module() {
-    for (auto f : function)
+    for (auto f : functions)
         delete f;
 }
 }

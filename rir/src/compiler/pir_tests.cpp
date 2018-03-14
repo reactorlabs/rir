@@ -1,11 +1,11 @@
-#include "pir_tests.h"
+/*#include "pir_tests.h"
 #include "R/Protect.h"
 #include "R_ext/Parse.h"
 #include "analysis/query.h"
 #include "analysis/verifier.h"
 #include "ir/Compiler.h"
 #include "pir/pir_impl.h"
-#include "pir_compiler.h"
+#include "translations/rir_2_pir.h"
 #include "util/visitor.h"
 
 namespace {
@@ -19,7 +19,7 @@ static pir::Module* compile(const std::string& inp) {
     SEXP str = p(Rf_mkString(inp.c_str()));
     SEXP bdy = p(R_ParseVector(str, -1, &status, R_NilValue));
     SEXP fun = p(Compiler::compileClosure(CDR(bdy), arg));
-    PirCompiler cmp;
+    Rir2Pir cmp;
     return cmp.compileFunction(fun);
 }
 
@@ -123,3 +123,4 @@ void PirTests::run() {
     }
 }
 }
+*/

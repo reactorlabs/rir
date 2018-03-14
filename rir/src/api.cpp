@@ -118,21 +118,25 @@ REXPORT SEXP rir_analysis_liveness(SEXP what) {
     return R_NilValue;
 }
 
-#include "compiler/pir_compiler.h"
+#include "compiler/translations/rir_2_pir.h"
 #include "compiler/pir_tests.h"
 
 REXPORT SEXP pir_compile(SEXP what) {
     if (!isValidClosureSEXP(what))
         Rf_error("not a compiled closure");
-    PirCompiler cmp;
-    delete cmp.compileFunction(what, true);
+    //Rir2Pir cmp;
+    //delete cmp.compileFunction(what, true);
     return R_NilValue;
 }
 
-REXPORT SEXP pir_tests() {
-    PirTests::run();
+#include "compiler/translations/pir_2_rir.h"
+/*REXPORT SEXP pir_2_rir(SEXP what) {
+    if (!isValidClosureSEXP(what))
+        Rf_error("not a compiled closure");
+    Rir2Pir cmp;
+    delete cmp.compileFunction(what, true);
     return R_NilValue;
-}
+}*/
 
 // startup ---------------------------------------------------------------------
 

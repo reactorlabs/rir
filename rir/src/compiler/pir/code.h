@@ -9,7 +9,7 @@ namespace pir {
 /*
  * A piece of code, starting at the BB entry.
  *
- * Currently: either a Promise of a function.
+ * Currently: either a Promise or a function.
  *
  */
 class Code {
