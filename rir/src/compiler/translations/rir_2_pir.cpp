@@ -36,12 +36,12 @@ namespace rir {
 IRTransformation* Rir2Pir::declare(Function* rirFunction) {
     IRTransformation rir2Pir;
     rir2Pir.srcIR = rirFunction;
-    auto formals = RList(FORMALS(rirFunction->body()));
+    //auto formals = RList(FORMALS(rirFunction->body()));
 
     std::vector<SEXP> fml;
-    for (auto it = formals.begin(); it != formals.end(); ++it) {
+    /*for (auto it = formals.begin(); it != formals.end(); ++it) {
         fml.push_back(it.tag());
-    }
+    }*/
     pir::Function* pirFunction = new pir::Function(fml);
     rir2Pir.dstIR = pirFunction;
     return &rir2Pir;
@@ -55,12 +55,12 @@ pir::Function* Rir2Pir::compileFunction(SEXP function2Compile){
 }
 
 pir::Function* Rir2Pir::compileFunction(Function* function2Compile){
-    auto formals = RList(FORMALS(function2Compile->body()));
+    //auto formals = RList(FORMALS(function2Compile->body()));
 
     std::vector<SEXP> fml;
-    for (auto it = formals.begin(); it != formals.end(); ++it) {
+    /*for (auto it = formals.begin(); it != formals.end(); ++it) {
         fml.push_back(it.tag());
-    }
+    }*/
     pir::Function* pirFunction = new pir::Function(fml);
     IRTransformation rir2Pir;
     rir2Pir.srcIR = function2Compile;
