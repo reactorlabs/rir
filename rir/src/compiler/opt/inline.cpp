@@ -90,8 +90,7 @@ class TheInliner {
                             if (copiedPromise[id]) {
                                 mk->prom = function->promises[newPromId[id]];
                             } else {
-                                Promise* clone = new Promise(
-                                    function, function->promises.size());
+                                Promise* clone = function->createProm();
                                 BB* promCopy =
                                     BBTransform::clone(prom->entry, clone);
                                 clone->id = function->promises.size();

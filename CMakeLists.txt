@@ -12,10 +12,10 @@ set(R_COMMAND ${R_HOME}/bin/R)
 
 add_definitions(-g3)
 set(CMAKE_CXX_FLAGS_RELEASE "-O2 -std=c++11")
-set(CMAKE_CXX_FLAGS_DEBUG "-Og -Wall -std=c++11 -DENABLE_SLOWASSERT")
+set(CMAKE_CXX_FLAGS_DEBUG "-Wall -std=c++11 -DENABLE_SLOWASSERT")
 set(CMAKE_CXX_FLAGS "-Wall -std=c++11")
 set(CMAKE_C_FLAGS_RELEASE "-O2 -std=gnu99")
-set(CMAKE_C_FLAGS_DEBUG "-Og -std=gnu99 -DENABLE_SLOWASSERT")
+set(CMAKE_C_FLAGS_DEBUG "-std=gnu99 -DENABLE_SLOWASSERT")
 set(CMAKE_C_FLAGS "-std=gnu99")
 
 
