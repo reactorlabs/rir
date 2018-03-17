@@ -6,7 +6,7 @@
 #include <iostream>
 #include <vector>
 
-#include "utils/Bitset.h"
+#include "utils/EnumSet.h"
 
 #include "R/r.h"
 
@@ -14,7 +14,7 @@ namespace rir {
 namespace pir {
 
 enum class RType : uint8_t {
-    unused,
+    _UNUSED_,
 
     nil,
     cons,
@@ -37,19 +37,21 @@ enum class RType : uint8_t {
     env,
     ast,
 
-    max
+    FIRST = nil,
+    LAST = ast
 };
 
 enum class NativeType : uint8_t {
-    unused,
+    _UNUSED_,
 
     test,
 
-    max
+    FIRST = test,
+    LAST = test
 };
 
 enum class TypeFlags : uint8_t {
-    unused,
+    _UNUSED_,
 
     lazy,
     missing,
@@ -57,7 +59,8 @@ enum class TypeFlags : uint8_t {
     is_scalar,
     rtype,
 
-    max
+    FIRST = lazy,
+    LAST = rtype
 };
 
 /*
@@ -84,9 +87,9 @@ enum class TypeFlags : uint8_t {
  *
  */
 struct PirType {
-    typedef BitSet<uint32_t, RType> RTypeSet;
-    typedef BitSet<uint8_t, NativeType> NativeTypeSet;
-    typedef BitSet<uint8_t, TypeFlags> FlagSet;
+    typedef EnumSet<RType> RTypeSet;
+    typedef EnumSet<NativeType> NativeTypeSet;
+    typedef EnumSet<TypeFlags> FlagSet;
 
     FlagSet flags_;
 
@@ -101,12 +104,8 @@ struct PirType {
     static FlagSet defaultRTypeFlags() { return FlagSet() | TypeFlags::rtype; }
 
     PirType() : PirType(RTypeSet()) {}
-    PirType(const RType& t) : flags_(defaultRTypeFlags()), t_(t) {
-        assert(t > RType::unused && t < RType::max);
-    }
-    PirType(const NativeType& t) : t_(t) {
-        assert(t > NativeType::unused && t < NativeType::max);
-    }
+    PirType(const RType& t) : flags_(defaultRTypeFlags()), t_(t) {}
+    PirType(const NativeType& t) : t_(t) {}
     PirType(const RTypeSet& t) : flags_(defaultRTypeFlags()), t_(t) {}
     PirType(const NativeTypeSet& t) : t_(t) {}
     PirType(SEXP);
@@ -194,7 +193,7 @@ struct PirType {
         if (isScalar() && o.isScalar())
             r.flags_.set(TypeFlags::is_scalar);
         else
-            r.flags_.clear(TypeFlags::is_scalar);
+            r.flags_.reset(TypeFlags::is_scalar);
         if (o.maybeObj())
             r.flags_.set(TypeFlags::obj);
 
@@ -235,8 +234,7 @@ inline std::ostream& operator<<(std::ostream& out, NativeType t) {
     case NativeType::test:
         out << "t";
         break;
-    case NativeType::unused:
-    case NativeType::max:
+    case NativeType::_UNUSED_:
         assert(false);
         break;
     }
@@ -290,8 +288,7 @@ inline std::ostream& operator<<(std::ostream& out, RType t) {
     case RType::logical:
         out << "lgl";
         break;
-    case RType::unused:
-    case RType::max:
+    case RType::_UNUSED_:
         assert(false);
         break;
     }
@@ -300,25 +297,19 @@ inline std::ostream& operator<<(std::ostream& out, RType t) {
 
 inline std::ostream& operator<<(std::ostream& out, PirType t) {
     if (!t.isRType()) {
-        if (t.t_.n.size() == 0) {
+        if (t.t_.n.empty() == 0) {
             out << "void";
             return out;
         }
 
-        std::vector<NativeType> ts;
-        for (NativeType bt = NativeType::unused; bt != NativeType::max;
-             bt = (NativeType)((size_t)bt + 1)) {
-            if (t.t_.n.includes(bt))
-                ts.push_back(bt);
-        }
-        if (ts.size() > 1)
+        if (t.t_.n.count() > 1)
             out << "(";
-        for (auto i = ts.begin(); i != ts.end(); ++i) {
-            out << *i;
-            if (i + 1 != ts.end())
+        for (auto e = t.t_.n.begin(); e != t.t_.n.end(); ++e) {
+            out << *e;
+            if (e + 1 != t.t_.n.end())
                 out << "|";
         }
-        if (ts.size() > 1)
+        if (t.t_.n.count() > 1)
             out << ")";
         return out;
     }
@@ -326,20 +317,14 @@ inline std::ostream& operator<<(std::ostream& out, PirType t) {
     if (t.baseType() >= PirType::val().baseType()) {
         out << "val";
     } else {
-        std::vector<RType> ts;
-        for (RType bt = RType::unused; bt != RType::max;
-             bt = (RType)((size_t)bt + 1)) {
-            if (t.t_.r.includes(bt))
-                ts.push_back(bt);
-        }
-        if (ts.size() != 1)
+        if (t.t_.r.count() > 1)
             out << "(";
-        for (auto i = ts.begin(); i != ts.end(); ++i) {
+        for (auto i = t.t_.r.begin(); i != t.t_.r.end(); ++i) {
             out << *i;
-            if (i + 1 != ts.end())
+            if (i + 1 != t.t_.r.end())
                 out << "|";
         }
-        if (ts.size() != 1)
+        if (t.t_.r.count() > 1)
             out << ")";
     }
 
