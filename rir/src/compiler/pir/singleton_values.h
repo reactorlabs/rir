@@ -13,8 +13,13 @@ namespace pir {
 
 template <typename T>
 class SingletonValue : public Value {
-  public:
+  protected:
     SingletonValue(PirType t, Tag tag) : Value(t, tag) {}
+
+  public:
+    SingletonValue(const SingletonValue&) = delete;
+    void operator=(const SingletonValue&) = delete;
+
     static T* instance() {
         static T i;
         return &i;
