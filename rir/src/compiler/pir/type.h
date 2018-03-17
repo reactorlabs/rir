@@ -212,7 +212,7 @@ struct PirType {
                (isRType() ? t_.r == o.t_.r : t_.n == o.t_.n);
     }
 
-    bool operator>=(const PirType& o) const {
+    bool isSuper(const PirType& o) const {
         if (isRType() != o.isRType()) {
             return false;
         }
@@ -315,7 +315,8 @@ inline std::ostream& operator<<(std::ostream& out, PirType t) {
         return out;
     }
 
-    if (t.baseType() >= PirType::val().baseType()) {
+    // If the base type is at least a value, then it's a value
+    if (t.isRType() && PirType::val() == t.baseType()) {
         out << "val";
     } else {
         if (t.t_.r.count() > 1)

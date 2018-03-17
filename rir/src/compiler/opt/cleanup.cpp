@@ -32,19 +32,19 @@ class TheCleanup {
                     next = bb->remove(ip);
                 } else if (force) {
                     Value* arg = force->arg<0>();
-                    if (PirType::valOrMissing() >= arg->type) {
+                    if (PirType::valOrMissing().isSuper(arg->type)) {
                         force->replaceUsesWith(arg);
                         next = bb->remove(ip);
                     }
                 } else if (missing) {
                     Value* arg = missing->arg<0>();
-                    if (PirType::val() >= arg->type) {
+                    if (PirType::val().isSuper(arg->type)) {
                         missing->replaceUsesWith(arg);
                         next = bb->remove(ip);
                     }
                 } else if (closure) {
                     Value* arg = closure->arg<0>();
-                    if (PirType::val() >= arg->type) {
+                    if (PirType::val().isSuper(arg->type)) {
                         closure->replaceUsesWith(arg);
                         next = bb->remove(ip);
                     }

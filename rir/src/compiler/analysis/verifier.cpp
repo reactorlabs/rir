@@ -114,7 +114,7 @@ class TheVerifier {
                 }
             }
 
-            if (!(t >= v->type)) {
+            if (!t.isSuper(v->type)) {
                 std::cerr << "Error at instruction '";
                 i->print(std::cerr);
                 std::cerr << "': Value ";

@@ -70,7 +70,7 @@ PirType::PirType(SEXP e) : flags_(defaultRTypeFlags()), t_(RTypeSet()) {
         flags_.set(TypeFlags::obj);
     }
 
-    if (PirType::vecs() >= *this) {
+    if (PirType::vecs().isSuper(*this)) {
         if (Rf_length(e) == 1)
             flags_.set(TypeFlags::is_scalar);
     }

@@ -37,7 +37,7 @@ void InsertCast::apply(BB* bb) {
         }
         instr->map_arg([&](Value** v, PirType t) {
             size_t added = 0;
-            while (!(t >= (*v)->type)) {
+            while (!t.isSuper((*v)->type)) {
                 auto c = cast(*v, t);
                 c->bb_ = bb;
                 *v = c;
