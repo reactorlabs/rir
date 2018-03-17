@@ -18,7 +18,7 @@ void Value::printRef(std::ostream& out) {
         break;
         COMPILER_VALUES(V);
 #undef V
-    case Tag::Unused:
+    case Tag::_UNUSED_:
         assert(false);
     };
 }
@@ -33,7 +33,7 @@ bool Value::isInstruction() {
         COMPILER_VALUES(V);
         return false;
 #undef V
-    case Tag::Unused:
+    case Tag::_UNUSED_:
         assert(false);
     };
     assert(false);

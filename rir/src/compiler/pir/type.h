@@ -13,6 +13,30 @@
 namespace rir {
 namespace pir {
 
+/*
+ * Values in PIR are either types from R (RType), or native types (NativeType).
+ *
+ * In both cases we use union types, represented by a bitset.
+ *
+ * There is an additional flags bitset, that adds some modifiers.
+ *
+ * As an example, an R integer, that is potentially promised, has:
+ *
+ *  - flags_ : TypeFlag::rtype | TypeFlag::lazy
+ *  - t_.r   : RType::integer
+ *
+ * A machine boolean has type:
+ *
+ *  - flags_ : ()
+ *  - t_.n   : NativeType::test
+ *
+ * An R value (not a promise), has:
+ *
+ *  - flags_ : TypeFlag::rtype
+ *  - t_.r   : RType::symbol | ... | RType::ast
+ *
+ */
+
 enum class RType : uint8_t {
     _UNUSED_,
 
@@ -63,29 +87,6 @@ enum class TypeFlags : uint8_t {
     LAST = rtype
 };
 
-/*
- * Values in PIR are either types from R (RType), or native types (NativeType).
- *
- * In both cases we use union types, represented by a bitset.
- *
- * There is an additional flags bitset, that adds some modifiers.
- *
- * As an example, an R integer, that is potentially promised, has:
- * 
- *  - flag : TypeFlag::rtype | TypeFlag::lazy
- *  - t_.r : RType::integer 
- *
- * A machine boolean has type:
- *
- *  - flag : ()
- *  - t_.n : NativeType::test
- *
- * An R value (not a promise), has:
- *
- *  - flag : TypeFlag::rtype
- *  - t_.r : RType::symbol | ... | RType::ast
- *
- */
 struct PirType {
     typedef EnumSet<RType> RTypeSet;
     typedef EnumSet<NativeType> NativeTypeSet;

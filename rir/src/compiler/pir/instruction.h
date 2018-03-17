@@ -86,7 +86,7 @@ class Instruction : public Value {
     typedef std::function<void(Value**)> arg_map_iterator;
     typedef std::function<void(Value**, PirType)> arg_map_iterator2;
 
-    const char* name() { return TagToStr(tag); }
+    const char* name() { return tagToStr(tag); }
 
     Instruction* hasSingleUse();
     void replaceUsesWith(Value* val);

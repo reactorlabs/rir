@@ -29,6 +29,7 @@ PirType::PirType(SEXP e) : flags_(defaultRTypeFlags()), t_(RTypeSet()) {
         break;
     case LANGSXP:
         t_.r.set(RType::ast);
+        t_.r.set(RType::code);
         break;
     case CHARSXP:
         t_.r.set(RType::chars);
@@ -51,13 +52,14 @@ PirType::PirType(SEXP e) : flags_(defaultRTypeFlags()), t_(RTypeSet()) {
     case RAWSXP:
         t_.r.set(RType::raw);
         break;
+    case BCODESXP:
+        t_.r.set(RType::code);
     case SPECIALSXP:
     case BUILTINSXP:
     case DOTSXP:
     case ANYSXP:
     case CPLXSXP:
     case EXPRSXP:
-    case BCODESXP:
     case EXTPTRSXP:
     case WEAKREFSXP:
     case S4SXP:
