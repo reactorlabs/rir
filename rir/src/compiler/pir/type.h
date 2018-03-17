@@ -87,6 +87,21 @@ enum class TypeFlags : uint8_t {
     LAST = rtype
 };
 
+/*
+ * A PirType can either represent a union of R types or of native types.
+ *
+ * `a :> b` is implemented by `a.isSuper(b)`. The primitive types are enumerated
+ * by RType and NativeType respectively.
+ *
+ * TypeFlags are additional features. The element `rtype` of the type flags is
+ * abused to store, if the type is an R type or native type.
+ *
+ * `a.flags_.includes(b.flags_)` is a necessary condition for `a :> b`.
+ *
+ * The "BaseType" is the (union) R or native type, stripped of all flags.
+ *
+ */
+
 struct PirType {
     typedef EnumSet<RType> RTypeSet;
     typedef EnumSet<NativeType> NativeTypeSet;
@@ -113,7 +128,7 @@ struct PirType {
 
     void operator=(const PirType& o) {
         flags_ = o.flags_;
-        if (flags_.includes(TypeFlags::rtype))
+        if (isRType())
             t_.r = o.t_.r;
         else
             t_.n = o.t_.n;
@@ -298,7 +313,7 @@ inline std::ostream& operator<<(std::ostream& out, RType t) {
 
 inline std::ostream& operator<<(std::ostream& out, PirType t) {
     if (!t.isRType()) {
-        if (t.t_.n.empty() == 0) {
+        if (t.t_.n.empty()) {
             out << "void";
             return out;
         }
