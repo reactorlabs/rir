@@ -43,14 +43,14 @@ enum class RType : uint8_t {
     nil,
     cons,
 
-    symbol,
-    chars,
+    sym,
+    chr,
 
     logical,
     integer,
-    dbls,
-    strs,
-    vecs,
+    real,
+    str,
+    vec,
 
     raw,
 
@@ -120,16 +120,16 @@ struct PirType {
     }
 
     static PirType num() {
-        return PirType(RType::logical) | RType::integer | RType::dbls;
+        return PirType(RType::logical) | RType::integer | RType::real;
     }
     static PirType val() {
-        return PirType(vecs() | list() | RType::symbol | RType::chars |
-                       RType::raw | RType::closure | RType::prom | RType::code |
-                       RType::env | RType::ast);
+        return PirType(vecs() | list() | RType::sym | RType::chr | RType::raw |
+                       RType::closure | RType::prom | RType::code | RType::env |
+                       RType::ast);
         // TODO: for now we ignore object systems..
         //    .orObj();
     }
-    static PirType vecs() { return num() | RType::strs | RType::vecs; }
+    static PirType vecs() { return num() | RType::str | RType::vec; }
 
     static PirType valOrMissing() { return val().orMissing(); }
     static PirType valOrLazy() { return val().orLazy(); }
@@ -250,16 +250,16 @@ inline std::ostream& operator<<(std::ostream& out, RType t) {
     case RType::raw:
         out << "raw";
         break;
-    case RType::vecs:
+    case RType::vec:
         out << "vec";
         break;
-    case RType::chars:
+    case RType::chr:
         out << "char";
         break;
-    case RType::dbls:
-        out << "dble";
+    case RType::real:
+        out << "real";
         break;
-    case RType::strs:
+    case RType::str:
         out << "str";
         break;
     case RType::env:
@@ -280,7 +280,7 @@ inline std::ostream& operator<<(std::ostream& out, RType t) {
     case RType::closure:
         out << "cls";
         break;
-    case RType::symbol:
+    case RType::sym:
         out << "sym";
         break;
     case RType::integer:
