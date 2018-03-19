@@ -25,7 +25,7 @@ class TheVerifier {
             return;
         }
 
-        for (auto p : f->promise) {
+        for (auto p : f->promises) {
             verify(p);
             if (!ok) {
                 std::cerr << "Verification of promise failed\n";
@@ -33,7 +33,7 @@ class TheVerifier {
                 return;
             }
         }
-        for (auto p : f->default_arg) {
+        for (auto p : f->defaultArgs) {
             verify(p);
             if (!ok) {
                 std::cerr << "Verification of argument failed\n";

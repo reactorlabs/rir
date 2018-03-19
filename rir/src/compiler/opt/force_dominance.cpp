@@ -144,10 +144,10 @@ void ForceDominance::apply(Function* function) {
                             inlinedPromise[f] = strict;
                         } else if (dom.safeToInline(mkarg)) {
                             Promise* prom = mkarg->prom;
-                            BB* split = BBTransform::split(
-                                ++function->max_bb_id, bb, ip, function);
+                            BB* split = BBTransform::split(++function->maxBBId,
+                                                           bb, ip, function);
                             BB* prom_copy = BBTransform::clone(
-                                &function->max_bb_id, prom->entry, function);
+                                &function->maxBBId, prom->entry, function);
                             bb->next0 = prom_copy;
 
                             // For now we assume every promise starts with a

@@ -15,7 +15,7 @@ void Code::print(std::ostream& out) {
 
 Code::~Code() {
     std::stack<BB*> toDel;
-    Visitor::run(entry, [&](BB* bb) { toDel.push(bb); });
+    Visitor::run(entry, [&toDel](BB* bb) { toDel.push(bb); });
     while (!toDel.empty()) {
         delete toDel.top();
         toDel.pop();

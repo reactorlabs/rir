@@ -110,8 +110,8 @@ void TheScopeAnalysis::apply(ScopeAnalysis::AbstractState& envs,
         Value* trg = call->cls();
         Function* fun = envs.findFunction(i->env(), trg);
         if (fun != UnknownFunction) {
-            if (fun->arg_name.size() == call->nCallArgs()) {
-                TheScopeAnalysis nextFun(fun, fun->arg_name, fun->entry, envs,
+            if (fun->argNames.size() == call->nCallArgs()) {
+                TheScopeAnalysis nextFun(fun, fun->argNames, fun->entry, envs,
                                          call, depth + 1);
                 nextFun();
                 envs.merge(nextFun.exitpoint);
@@ -175,7 +175,7 @@ namespace rir {
 namespace pir {
 
 ScopeAnalysis::ScopeAnalysis(Function* function) {
-    TheScopeAnalysis analysis(function, function->arg_name, function->entry);
+    TheScopeAnalysis analysis(function, function->argNames, function->entry);
     analysis();
     if (false)
         analysis.print();
