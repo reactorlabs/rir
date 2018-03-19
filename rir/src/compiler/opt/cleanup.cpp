@@ -77,16 +77,14 @@ class TheCleanup {
         while (!todo.empty()) {
             Promise* p = todo.back();
             todo.pop_back();
-            Visitor::run(p->entry, [&](BB* bb) {
-                for (auto i : *bb) {
-                    MkArg* mk = MkArg::Cast(i);
-                    if (mk) {
-                        size_t id = mk->prom->id;
-                        if (used_p.find(id) == used_p.end()) {
-                            // found a new used promise...
-                            todo.push_back(mk->prom);
-                            used_p.insert(mk->prom->id);
-                        }
+            Visitor::run(p->entry, [&](Instruction* i) {
+                MkArg* mk = MkArg::Cast(i);
+                if (mk) {
+                    size_t id = mk->prom->id;
+                    if (used_p.find(id) == used_p.end()) {
+                        // found a new used promise...
+                        todo.push_back(mk->prom);
+                        used_p.insert(mk->prom->id);
                     }
                 }
             });

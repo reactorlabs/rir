@@ -83,14 +83,12 @@ bool testDelayEnv() {
     // auto m = compile("{f <- function()1; arg1[[2]]}");
 
     auto m = compile("{f <- arg1; arg1[[2]]}");
-    bool t = Visitor::check(m->functions.front()->entry, [&](BB* bb) {
-        for (auto i : *bb) {
-            if (i->hasEnv()) {
-                CHECK(Deopt::Cast(bb->last()));
-            }
-        }
-        return true;
-    });
+    bool t = Visitor::check(m->functions.front()->entry,
+                            [&](Instruction* i, BB* bb) {
+                                if (i->hasEnv())
+                                    CHECK(Deopt::Cast(bb->last()));
+                                return true;
+                            });
     delete m;
     return t;
 }

@@ -14,8 +14,56 @@ namespace pir {
 
 class Visitor {
   public:
+    typedef std::function<bool(Instruction*)> InstrActionPredicate;
+    typedef std::function<void(Instruction*)> InstrAction;
+    typedef std::function<bool(Instruction*, BB*)> InstrBBActionPredicate;
+    typedef std::function<void(Instruction*, BB*)> InstrBBAction;
     typedef std::function<bool(BB*)> BBActionPredicate;
     typedef std::function<void(BB*)> BBAction;
+
+    template <bool STABLE = false>
+    static void run(BB* bb, InstrAction action) {
+        run<STABLE>(bb, [action](BB* bb) {
+            for (auto i : *bb)
+                action(i);
+        });
+    }
+
+    template <bool STABLE = false>
+    static bool check(BB* bb, InstrActionPredicate action) {
+        return check<STABLE>(bb, [action](BB* bb) {
+            bool holds = true;
+            for (auto i : *bb) {
+                if (!action(i)) {
+                    holds = false;
+                    break;
+                }
+            }
+            return holds;
+        });
+    }
+
+    template <bool STABLE = false>
+    static void run(BB* bb, InstrBBAction action) {
+        run<STABLE>(bb, [action](BB* bb) {
+            for (auto i : *bb)
+                action(i, bb);
+        });
+    }
+
+    template <bool STABLE = false>
+    static bool check(BB* bb, InstrBBActionPredicate action) {
+        return check<STABLE>(bb, [action](BB* bb) {
+            bool holds = true;
+            for (auto i : *bb) {
+                if (!action(i, bb)) {
+                    holds = false;
+                    break;
+                }
+            }
+            return holds;
+        });
+    }
 
     template <bool STABLE = false>
     static void run(BB* bb, BBAction action) {
