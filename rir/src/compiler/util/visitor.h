@@ -6,7 +6,7 @@
 
 #include <deque>
 #include <functional>
-#include <set>
+#include <unordered_set>
 
 namespace rir {
 namespace pir {
@@ -105,7 +105,7 @@ class Visitor {
     static void runWithChangingIds(BB* bb, BBAction action) {
         BB* cur = bb;
         std::deque<BB*> todo;
-        std::set<BB*> done;
+        std::unordered_set<BB*> done;
         done.insert(cur);
 
         while (cur) {

@@ -23,8 +23,8 @@ bool Query::pure(Code* c) {
     });
 }
 
-std::set<Value*> Query::returned(Code* c) {
-    std::set<Value*> returned;
+std::unordered_set<Value*> Query::returned(Code* c) {
+    std::unordered_set<Value*> returned;
     Visitor::run(c->entry, [&](BB* bb) {
         for (auto i : *bb) {
             auto ret = Return::Cast(i);

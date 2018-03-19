@@ -4,8 +4,8 @@
 #include "../util/visitor.h"
 #include "R/r.h"
 
-#include <set>
 #include <unordered_map>
+#include <unordered_set>
 
 namespace {
 using namespace rir::pir;
@@ -15,8 +15,8 @@ class TheCleanup {
     TheCleanup(Function* function) : function(function) {}
     Function* function;
     void operator()() {
-        std::set<size_t> used_p;
-        std::unordered_map<BB*, std::set<Phi*>> used_bb;
+        std::unordered_set<size_t> used_p;
+        std::unordered_map<BB*, std::unordered_set<Phi*>> used_bb;
 
         Visitor::run(function->entry, [&](BB* bb) {
             auto ip = bb->begin();
@@ -49,7 +49,7 @@ class TheCleanup {
                         next = bb->remove(ip);
                     }
                 } else if (phi) {
-                    std::set<Value*> phin;
+                    std::unordered_set<Value*> phin;
                     phi->eachArg([&](Value* v) { phin.insert(v); });
                     if (phin.size() == 1) {
                         phi->replaceUsesWith(*phin.begin());

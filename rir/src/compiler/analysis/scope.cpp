@@ -18,7 +18,7 @@ class TheScopeAnalysis : public StaticAnalysis<ScopeAnalysis::AbstractState> {
 
     std::unordered_map<Instruction*, ScopeAnalysis::AbstractLoadVal> loads;
     std::unordered_map<Value*, Function*> functions;
-    std::set<Instruction*> observedStores;
+    std::unordered_set<Instruction*> observedStores;
 
     TheScopeAnalysis(Function* origin, const std::vector<SEXP>& args, BB* bb)
         : Super(bb), origin(origin), args(args), depth(0) {}

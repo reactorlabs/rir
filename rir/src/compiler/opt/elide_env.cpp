@@ -10,7 +10,7 @@ namespace rir {
 namespace pir {
 
 void ElideEnv::apply(Function* function) {
-    std::set<Value*> envNeeded;
+    std::unordered_set<Value*> envNeeded;
     std::unordered_map<Value*, Value*> envDependency;
 
     Visitor::run(function->entry, [&](BB* bb) {

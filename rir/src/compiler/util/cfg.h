@@ -2,7 +2,7 @@
 #define PIR_CFG_H
 
 #include "../pir/pir.h"
-#include <set>
+#include <unordered_set>
 #include <vector>
 
 namespace rir {
@@ -20,7 +20,7 @@ class CFG {
 };
 
 class DominanceGraph {
-    typedef std::set<BB*> BBList;
+    typedef std::unordered_set<BB*> BBList;
 
   public:
     std::vector<BBList> doms;

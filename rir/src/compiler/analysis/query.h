@@ -3,7 +3,7 @@
 
 #include "../pir/pir.h"
 
-#include <set>
+#include <unordered_set>
 
 namespace rir {
 namespace pir {
@@ -16,7 +16,7 @@ class Query {
   public:
     static bool pure(Code* c);
     static bool noEnv(Code* c);
-    static std::set<Value*> returned(Code* c);
+    static std::unordered_set<Value*> returned(Code* c);
 };
 }
 }

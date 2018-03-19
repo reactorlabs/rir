@@ -6,8 +6,8 @@
 #include "abstract_value.h"
 
 #include <algorithm>
-#include <set>
 #include <unordered_map>
+#include <unordered_set>
 
 namespace rir {
 namespace pir {
@@ -25,7 +25,7 @@ class ScopeAnalysis {
     typedef AbstractEnvironmentSet<AbstractEnv, AbstractValue> AbstractState;
     typedef std::pair<Value*, AbstractValue> AbstractLoadVal;
     std::unordered_map<Instruction*, AbstractLoadVal> loads;
-    std::set<Instruction*> observedStores;
+    std::unordered_set<Instruction*> observedStores;
     AbstractState finalState;
     ScopeAnalysis(Function* fun);
 };

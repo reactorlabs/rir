@@ -4,8 +4,29 @@
 #include "../pir/pir.h"
 
 #include <algorithm>
-#include <set>
 #include <unordered_map>
+#include <unordered_set>
+
+namespace rir {
+namespace pir {
+struct ValOrig : public std::pair<Value*, Instruction*> {
+    ValOrig(Value* v, Instruction* o) : std::pair<Value*, Instruction*>(v, o) {}
+    Value* val() const { return first; }
+    Instruction* orig() const { return second; }
+};
+}
+}
+
+namespace std {
+template <>
+struct hash<rir::pir::ValOrig> {
+    std::size_t operator()(const rir::pir::ValOrig& v) const {
+        using std::hash;
+        return hash<rir::pir::Value*>()(v.first) ^
+               hash<rir::pir::Instruction*>()(v.second);
+    }
+};
+}
 
 namespace rir {
 namespace pir {
@@ -21,14 +42,7 @@ namespace pir {
 struct AbstractValue {
     bool unknown = false;
 
-    struct ValOrig : public std::pair<Value*, Instruction*> {
-        ValOrig(Value* v, Instruction* o)
-            : std::pair<Value*, Instruction*>(v, o) {}
-        Value* val() const { return first; }
-        Instruction* orig() const { return second; }
-    };
-
-    std::set<ValOrig> vals;
+    std::unordered_set<ValOrig> vals;
 
     PirType type = PirType::bottom();
 
@@ -123,7 +137,7 @@ struct AbstractEnvironment {
         if (!tainted && other.tainted)
             changed = tainted = true;
 
-        std::set<SEXP> keys;
+        std::unordered_set<SEXP> keys;
         for (auto e : entries)
             keys.insert(std::get<0>(e));
         for (auto e : other.entries)
@@ -139,7 +153,7 @@ struct AbstractEnvironment {
             }
         }
 
-        std::set<Value*> fps;
+        std::unordered_set<Value*> fps;
         for (auto e : functionPointers)
             fps.insert(std::get<0>(e));
         for (auto e : other.functionPointers)
@@ -174,7 +188,7 @@ class AbstractEnvironmentSet : public std::unordered_map<Value*, AE> {
 
     bool merge(AbstractEnvironmentSet& other) {
         bool changed = false;
-        std::set<Value*> k;
+        std::unordered_set<Value*> k;
         for (auto e : *this)
             k.insert(e.first);
         for (auto e : other)

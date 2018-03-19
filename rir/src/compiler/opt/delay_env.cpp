@@ -4,7 +4,7 @@
 #include "../util/cfg.h"
 #include "../util/visitor.h"
 
-#include <set>
+#include <unordered_set>
 
 namespace rir {
 namespace pir {
@@ -13,7 +13,7 @@ void DelayEnv::apply(Function* function) {
     std::vector<MkEnv*> envs;
 
     Visitor::run(function->entry, [&](BB* bb) {
-        std::set<MkEnv*> done;
+        std::unordered_set<MkEnv*> done;
         MkEnv* e;
 
         while (true) {

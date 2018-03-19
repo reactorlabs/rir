@@ -8,7 +8,7 @@
 namespace {
 using namespace rir::pir;
 
-class BBSet : public std::set<size_t> {
+class BBSet : public std::unordered_set<size_t> {
   public:
     bool seen = false;
 

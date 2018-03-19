@@ -82,7 +82,7 @@ class ForceDominanceAnalysis : public StaticAnalysis<ForcedAt> {
   public:
     ForceDominanceAnalysis(BB* bb) : StaticAnalysis(bb) {}
     std::unordered_map<Force*, Force*> domBy;
-    std::set<Force*> dom;
+    std::unordered_set<Force*> dom;
 
     void apply(ForcedAt& d, Instruction* i) const override {
         auto f = Force::Cast(i);

@@ -3,8 +3,6 @@
 #include "../util/cfg.h"
 #include "../util/visitor.h"
 
-#include <set>
-
 namespace rir {
 namespace pir {
 
