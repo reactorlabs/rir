@@ -4,11 +4,12 @@
 
 #include <algorithm>
 #include <stack>
+#include <unordered_map>
 
 namespace {
 using namespace rir::pir;
 
-class BBSet : public std::unordered_set<size_t> {
+class BBSet : public std::unordered_set<BB*> {
   public:
     bool seen = false;
 
@@ -29,14 +30,10 @@ class BBSet : public std::unordered_set<size_t> {
     }
 };
 
-static void computeCfg(CFG* cfg, BB* start) {
+void computeCfg(CFG* cfg, BB* start) {
     std::stack<BB*> todo;
 
-    std::vector<BBSet> pred;
-    std::vector<BB*> bbPtr;
-
-    pred.resize(start->id + 10);
-    bbPtr.resize(start->id + 10);
+    std::unordered_map<BB*, BBSet> pred;
 
     size_t maxId = 0;
 
@@ -44,23 +41,11 @@ static void computeCfg(CFG* cfg, BB* start) {
         if (maxId < cur->id)
             maxId = cur->id;
 
-        if (pred.size() <= cur->id) {
-            pred.resize(cur->id + 5);
-            bbPtr.resize(cur->id + 5);
-        }
-
-        bbPtr[cur->id] = cur;
-
         auto apply = [&](BB* bb) {
             if (!bb)
                 return;
 
-            if (pred.size() <= bb->id) {
-                pred.resize(bb->id + 5);
-                bbPtr.resize(bb->id + 5);
-            }
-
-            pred[bb->id].insert(cur->id);
+            pred[bb].insert(cur);
         };
         apply(cur->next0);
         apply(cur->next1);
@@ -69,41 +54,31 @@ static void computeCfg(CFG* cfg, BB* start) {
         }
     });
 
-    cfg->preds.resize(maxId + 1);
+    cfg->predecessors.resize(maxId + 1);
 
-    for (size_t i = 0; i < maxId + 1; ++i) {
-        for (auto p : pred[i])
-            cfg->preds[i].push_back(bbPtr[p]);
+    for (auto e : pred) {
+        auto i = e.first->id;
+        cfg->predecessors[i].insert(cfg->predecessors[i].end(),
+                                    e.second.begin(), e.second.end());
     }
 }
 
-static void computeDominanceGraph(DominanceGraph* cfg, BB* start) {
+// Static Analysis computes the set of all dominating bb's, for every bb
+// reachable from start. Runs until none of the sets grow anymore.
+void computeDominanceGraph(DominanceGraph* cfg, BB* start) {
     std::stack<BB*> todo;
     todo.push(start);
 
-    std::vector<BBSet> dom;
-    std::vector<BBSet> pred;
-    std::vector<BB*> bbPtr;
-
-    dom.resize(start->id + 10);
-    pred.resize(start->id + 10);
-    bbPtr.resize(start->id + 10);
+    std::unordered_map<BB*, BBSet> dom;
 
     size_t maxId = 0;
 
-    do {
+    while (!todo.empty()) {
         BB* cur = todo.top();
         if (maxId < cur->id)
             maxId = cur->id;
 
-        if (dom.size() <= cur->id) {
-            dom.resize(cur->id + 5);
-            pred.resize(cur->id + 5);
-            bbPtr.resize(cur->id + 5);
-        }
-
-        BBSet& front = dom[cur->id];
-        bbPtr[cur->id] = cur;
+        BBSet& front = dom[cur];
 
         todo.pop();
 
@@ -111,19 +86,11 @@ static void computeDominanceGraph(DominanceGraph* cfg, BB* start) {
             if (!bb)
                 return;
 
-            if (dom.size() <= bb->id) {
-                dom.resize(bb->id + 5);
-                pred.resize(bb->id + 5);
-                bbPtr.resize(bb->id + 5);
-            }
-
-            pred[bb->id].insert(cur->id);
-
-            BBSet& d = dom[bb->id];
-            if (!dom[bb->id].seen) {
+            BBSet& d = dom[bb];
+            if (!dom[bb].seen) {
                 d.seen = true;
                 d.insert(front.begin(), front.end());
-                d.insert(cur->id);
+                d.insert(cur);
                 todo.push(bb);
                 return;
             }
@@ -133,13 +100,13 @@ static void computeDominanceGraph(DominanceGraph* cfg, BB* start) {
         };
         apply(cur->next0);
         apply(cur->next1);
-    } while (!todo.empty());
+    }
 
-    cfg->doms.resize(maxId + 1);
+    cfg->dominating.resize(maxId + 1);
 
-    for (size_t i = 0; i < maxId + 1; ++i) {
-        for (auto p : dom[i])
-            cfg->doms[i].insert(bbPtr[p]);
+    for (auto e : dom) {
+        unsigned i = e.first->id;
+        cfg->dominating[i].insert(e.second.begin(), e.second.end());
     }
 }
 }
@@ -154,7 +121,7 @@ DominanceGraph::DominanceGraph(BB* start) {
 }
 
 bool DominanceGraph::dominates(BB* a, BB* b) const {
-    return doms[b->id].find(a) != doms[b->id].end();
+    return dominating[b->id].find(a) != dominating[b->id].end();
 }
 }
 }

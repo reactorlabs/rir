@@ -12,10 +12,10 @@ class CFG {
     typedef std::vector<BB*> BBList;
 
   public:
-    std::vector<BBList> preds;
+    std::vector<BBList> predecessors;
     BBList exits;
 
-    size_t size() { return preds.size(); }
+    size_t size() { return predecessors.size(); }
     CFG(BB*);
 };
 
@@ -23,9 +23,9 @@ class DominanceGraph {
     typedef std::unordered_set<BB*> BBList;
 
   public:
-    std::vector<BBList> doms;
+    std::vector<BBList> dominating;
 
-    size_t size() { return doms.size(); }
+    size_t size() { return dominating.size(); }
     DominanceGraph(BB*);
 
     bool dominates(BB* a, BB* b) const;

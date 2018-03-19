@@ -104,7 +104,7 @@ class TheCleanup {
 
         Visitor::run(function->entry, [&](BB* bb) {
             // Remove unnecessary splits
-            if (bb->isJmp() && cfg.preds[bb->next0->id].size() == 1) {
+            if (bb->isJmp() && cfg.predecessors[bb->next0->id].size() == 1) {
                 BB* d = bb->next0;
                 while (!d->isEmpty()) {
                     d->moveToEnd(d->begin(), bb);
@@ -124,7 +124,7 @@ class TheCleanup {
         Visitor::run(function->entry, [&](BB* bb) {
             // Remove empty jump-through blocks
             if (bb->isJmp() && bb->next0->isEmpty() && bb->next0->isJmp() &&
-                cfg.preds[bb->next0->next0->id].size() == 1) {
+                cfg.predecessors[bb->next0->next0->id].size() == 1) {
                 assert(used_bb.find(bb->next0) == used_bb.end());
                 toDel[bb->next0] = bb->next0->next0;
             }
@@ -148,7 +148,7 @@ class TheCleanup {
         //     function->entry = function->entry->next0;
         // }
         if (function->entry->isJmp() &&
-            cfg.preds[function->entry->next0->id].size() == 1) {
+            cfg.predecessors[function->entry->next0->id].size() == 1) {
             BB* bb = function->entry;
             BB* d = bb->next0;
             while (!d->isEmpty()) {
