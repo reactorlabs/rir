@@ -39,11 +39,11 @@ class TheInliner {
 
                 Call* theCall = Call::Cast(*split->begin());
                 std::vector<MkArg*> arguments;
-                for (size_t i = 0; i < theCall->nCallArgs(); ++i) {
-                    MkArg* a = MkArg::Cast(theCall->callArgs()[i]);
+                theCall->eachCallArg([&](Value* v) {
+                    MkArg* a = MkArg::Cast(v);
                     assert(a);
                     arguments.push_back(a);
-                }
+                });
 
                 // Clone the function
                 BB* copy = BBTransform::clone(&function->max_bb_id,

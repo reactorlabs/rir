@@ -87,7 +87,9 @@ class TheVerifier {
         }
 
         Phi* phi = Phi::Cast(i);
-        i->each_arg([&](Value* v, PirType t) -> void {
+        i->eachArg([&](const InstrArg& a) -> void {
+            auto v = a.val();
+            auto t = a.type();
             Instruction* iv = Instruction::Cast(v);
             if (iv) {
                 if (phi) {

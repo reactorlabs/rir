@@ -72,7 +72,7 @@ struct ForcedAt : public std::unordered_map<Value*, Force*> {
 static Value* getValue(Force* f) {
     Value* res;
     while (f) {
-        res = f->arg<0>();
+        res = f->arg<0>().val();
         f = Force::Cast(res);
     }
     return res;
@@ -137,7 +137,7 @@ void ForceDominance::apply(Function* function) {
                 auto mkarg = MkArg::Cast(getValue(f));
                 if (mkarg) {
                     if (dom.isDominating(f)) {
-                        Value* strict = mkarg->arg<0>();
+                        Value* strict = mkarg->arg<0>().val();
                         if (strict != Missing::instance()) {
                             f->replaceUsesWith(strict);
                             next = bb->remove(ip);

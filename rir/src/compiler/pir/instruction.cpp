@@ -26,13 +26,26 @@ static size_t getMaxInstructionNameLength() {
 }
 static size_t maxInstructionNameLength = getMaxInstructionNameLength();
 
-extern std::ostream& operator<<(std::ostream& out, Instruction::Id id) {
+extern std::ostream& operator<<(std::ostream& out,
+                                Instruction::InstructionUID id) {
     out << std::get<0>(id) << "." << std::get<1>(id);
     return out;
 }
 
 void printPaddedInstructionName(std::ostream& out, const std::string& name) {
     out << std::left << std::setw(maxInstructionNameLength + 1) << name << " ";
+}
+
+void Instruction::printArgs(std::ostream& out) {
+    out << "(";
+    if (nargs() > 0) {
+        for (size_t i = 0; i < nargs(); ++i) {
+            arg(i).val()->printRef(out);
+            if (i + 1 < nargs())
+                out << ", ";
+        }
+    }
+    out << ")";
 }
 
 void Instruction::print(std::ostream& out) {
@@ -65,7 +78,9 @@ void Instruction::printRef(std::ostream& out) {
         out << "%" << id();
 };
 
-Instruction::Id Instruction::id() { return Id(bb()->id, bb()->indexOf(this)); }
+Instruction::InstructionUID Instruction::id() {
+    return InstructionUID(bb()->id, bb()->indexOf(this));
+}
 
 bool Instruction::unused() {
     // TODO: better solution?
@@ -75,8 +90,7 @@ bool Instruction::unused() {
     return Visitor::check(bb(), [&](BB* bb) {
         bool unused = true;
         for (auto i : *bb) {
-            i->each_arg(
-                [&](Value* v, PirType t) { unused = unused && (v != this); });
+            i->eachArg([&](Value* v) { unused = unused && (v != this); });
             if (!unused)
                 return false;
         }
@@ -89,7 +103,7 @@ Instruction* Instruction::hasSingleUse() {
     Instruction* usage;
     Visitor::check(bb(), [&](BB* bb) {
         for (auto i : *bb) {
-            i->each_arg([&](Value* v, PirType t) {
+            i->eachArg([&](Value* v) {
                 if (v == this) {
                     usage = i;
                     seen++;
@@ -108,9 +122,9 @@ Instruction* Instruction::hasSingleUse() {
 void Instruction::replaceUsesIn(Value* replace, BB* target) {
     Visitor::run(target, [&](BB* bb) {
         for (auto i : *bb) {
-            i->map_arg([&](Value** v) {
-                if (*v == this)
-                    *v = replace;
+            i->eachArg([&](InstrArg& arg) {
+                if (arg.val() == this)
+                    arg.val() = replace;
             });
         }
     });
@@ -119,9 +133,9 @@ void Instruction::replaceUsesIn(Value* replace, BB* target) {
 void Instruction::replaceUsesWith(Value* replace) {
     Visitor::run(bb(), [&](BB* bb) {
         for (auto i : *bb) {
-            i->map_arg([&](Value** v) {
-                if (*v == this)
-                    *v = replace;
+            i->eachArg([&](InstrArg& arg) {
+                if (arg.val() == this)
+                    arg.val() = replace;
             });
         }
     });
@@ -146,7 +160,7 @@ void Branch::printArgs(std::ostream& out) {
 
 void MkArg::printArgs(std::ostream& out) {
     out << "(";
-    arg<0>()->printRef(out);
+    arg<0>().val()->printRef(out);
     out << ", " << *prom << ", ";
     env()->printRef(out);
     out << ") ";
@@ -190,12 +204,12 @@ void LdVarSuper::printArgs(std::ostream& out) {
 
 void MkEnv::printArgs(std::ostream& out) {
     out << "(parent=";
-    arg(0)->printRef(out);
+    arg(0).val()->printRef(out);
     if (nargs() > 1)
         out << ", ";
     for (unsigned i = 0; i < nargs() - 1; ++i) {
         out << CHAR(PRINTNAME(this->varName[i])) << "=";
-        this->arg(i + 1)->printRef(out);
+        this->arg(i + 1).val()->printRef(out);
         if (i != nargs() - 2)
             out << ", ";
     }
@@ -203,15 +217,15 @@ void MkEnv::printArgs(std::ostream& out) {
 }
 
 void Phi::updateType() {
-    type = arg(0)->type;
-    each_arg([&](Value* v, PirType t) -> void { type = type | v->type; });
+    type = arg(0).val()->type;
+    eachArg([&](Value* v) -> void { type = type | v->type; });
 }
 
 void Phi::printArgs(std::ostream& out) {
     out << "(";
     if (nargs() > 0) {
         for (size_t i = 0; i < nargs(); ++i) {
-            arg(i)->printRef(out);
+            arg(i).val()->printRef(out);
             out << ":BB" << input[i]->id;
             if (i + 1 < nargs())
                 out << ", ";
@@ -224,7 +238,7 @@ CallSafeBuiltin::CallSafeBuiltin(SEXP builtin, const std::vector<Value*>& args)
     : VarLenInstruction(PirType::valOrLazy()), builtin(getBuiltin(builtin)),
       builtinId(getBuiltinNr(builtin)) {
     for (unsigned i = 0; i < args.size(); ++i)
-        this->push_arg(PirType::val(), args[i]);
+        this->pushArg(args[i], PirType::val());
 }
 
 CallBuiltin::CallBuiltin(Value* e, SEXP builtin,
@@ -232,7 +246,7 @@ CallBuiltin::CallBuiltin(Value* e, SEXP builtin,
     : VarLenInstruction(PirType::valOrLazy(), e), builtin(getBuiltin(builtin)),
       builtinId(getBuiltinNr(builtin)) {
     for (unsigned i = 0; i < args.size(); ++i)
-        this->push_arg(PirType::val(), args[i]);
+        this->pushArg(args[i], PirType::val());
 }
 
 void CallBuiltin::printArgs(std::ostream& out) {
@@ -248,7 +262,7 @@ void CallSafeBuiltin::printArgs(std::ostream& out) {
 void Deopt::printArgs(std::ostream& out) {
     out << "@" << pc << ", stack=[";
     for (size_t i = 1; i < nargs(); ++i) {
-        arg(i)->printRef(out);
+        arg(i).val()->printRef(out);
         if (i + 1 < nargs())
             out << ", ";
     }

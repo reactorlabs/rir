@@ -29,7 +29,7 @@ std::set<Value*> Query::returned(Code* c) {
         for (auto i : *bb) {
             auto ret = Return::Cast(i);
             if (ret)
-                returned.insert(ret->arg<0>());
+                returned.insert(ret->arg<0>().val());
         }
     });
     return returned;

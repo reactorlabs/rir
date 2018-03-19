@@ -31,26 +31,26 @@ class TheCleanup {
                 if (!i->mightIO() && !i->changesEnv() && i->unused()) {
                     next = bb->remove(ip);
                 } else if (force) {
-                    Value* arg = force->arg<0>();
+                    Value* arg = force->arg<0>().val();
                     if (PirType::valOrMissing().isSuper(arg->type)) {
                         force->replaceUsesWith(arg);
                         next = bb->remove(ip);
                     }
                 } else if (missing) {
-                    Value* arg = missing->arg<0>();
+                    Value* arg = missing->arg<0>().val();
                     if (PirType::val().isSuper(arg->type)) {
                         missing->replaceUsesWith(arg);
                         next = bb->remove(ip);
                     }
                 } else if (closure) {
-                    Value* arg = closure->arg<0>();
+                    Value* arg = closure->arg<0>().val();
                     if (PirType::val().isSuper(arg->type)) {
                         closure->replaceUsesWith(arg);
                         next = bb->remove(ip);
                     }
                 } else if (phi) {
                     std::set<Value*> phin;
-                    phi->each_arg([&](Value* v, PirType) { phin.insert(v); });
+                    phi->eachArg([&](Value* v) { phin.insert(v); });
                     if (phin.size() == 1) {
                         phi->replaceUsesWith(*phin.begin());
                         next = bb->remove(ip);

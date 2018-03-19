@@ -26,7 +26,7 @@ void ElideEnv::apply(Function* function) {
         for (auto i : *bb) {
             if (i->mightIO() || i->type != PirType::voyd() || Return::Cast(i) ||
                 Deopt::Cast(i)) {
-                i->each_arg([&](Value* v, PirType) {
+                i->eachArg([&](Value* v) {
                     if (envDependency.count(v))
                         envNeeded.insert(envDependency.at(v));
                 });

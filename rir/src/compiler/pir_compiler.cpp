@@ -681,8 +681,8 @@ Value* CodeCompiler::operator()(bool addReturn) {
             }
             if (p->nargs() == 1) {
                 if (p == res)
-                    res = p->arg(0);
-                p->replaceUsesWith(p->arg(0));
+                    res = p->arg(0).val();
+                p->replaceUsesWith(p->arg(0).val());
                 it = bb->remove(it);
                 continue;
             }

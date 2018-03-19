@@ -43,15 +43,15 @@ void DelayEnv::apply(Function* function) {
                     break;
 
                 auto consumeStVar = [&](StVar* st) {
-                    size_t i = 0;
-                    for (; i < e->nLocals(); ++i) {
-                        if (e->varName[i] == st->varName) {
-                            e->localVars()[i] = st->val();
-                            break;
+                    bool exists = false;
+                    e->eachLocalVar([&](SEXP name, InstrArg& arg) {
+                        if (name == st->varName) {
+                            exists = true;
+                            arg.val() = st->val();
                         }
-                    }
-                    if (i == e->nLocals()) {
-                        e->push_arg(PirType::any(), st->val());
+                    });
+                    if (!exists) {
+                        e->pushArg(st->val(), PirType::any());
                         e->varName.push_back(st->varName);
                     }
                 };
