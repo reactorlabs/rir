@@ -67,8 +67,6 @@ void Instruction::print(std::ostream& out) {
 
     if (leaksEnv())
         out << " ; env leak";
-    else if (needsLiveEnv())
-        out << " ; env live";
 }
 
 void Instruction::printRef(std::ostream& out) {

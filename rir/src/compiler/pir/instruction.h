@@ -33,7 +33,7 @@
  * is some machinery to enforce passing an environment to the respective
  * superclassses.
  *
- * Every instruction has a unique instruction tag, which is used to "Cast" in
+ * Every instruction has a unique instruction tag, which is used to "Cast" an
  * Intruction* to the particular instruction type.
  *
  * Every instruction (since it is a value) has a return type and every argument
@@ -74,7 +74,6 @@ class Instruction : public Value {
     virtual bool mightIO() const = 0;
     virtual bool changesEnv() const = 0;
     virtual bool leaksEnv() const { return false; }
-    virtual bool needsLiveEnv() const { return false; }
     virtual bool hasEnv() const { return false; }
     virtual bool accessesEnv() const { return false; }
 
@@ -137,16 +136,18 @@ class Instruction : public Value {
     }
 };
 
+// EnvAccess specifies if an instruction has an environment argument
+// (ie. EnvAccess > None), and if yes, what kind of interactions with that
+// environment can happen.
 enum class EnvAccess : uint8_t {
     None,
     Capture, // only needs a reference, does not load/store
     Read,
-    ReadKeepAlive,
     Write,
-    WriteKeepAlive,
     Leak,
 };
 
+// Effect that can be produced by an instruction.
 enum class Effect : uint8_t {
     None,
     Warn,
@@ -174,10 +175,6 @@ class InstructionImplementation : public Instruction {
     bool leaksEnv() const override final { return ENV == EnvAccess::Leak; }
     bool hasEnv() const override final { return ENV > EnvAccess::None; }
     bool accessesEnv() const override final { return ENV > EnvAccess::Capture; }
-    bool needsLiveEnv() const override final {
-        return ENV == EnvAccess::ReadKeepAlive ||
-               ENV >= EnvAccess::WriteKeepAlive;
-    }
 
     Instruction* clone() const override {
         assert(Base::Cast(this));
@@ -227,7 +224,7 @@ class FixedLenInstruction
 
     Value* env() const override {
         // TODO find a better way
-        assert(ENV != EnvAccess::None);
+        assert(ENV > EnvAccess::None);
         return arg(ARGS - 1).val();
     }
 
@@ -342,7 +339,7 @@ class FLI(LdConst, 0, Effect::None, EnvAccess::None) {
     void printArgs(std::ostream& out) override;
 };
 
-class FLI(LdFun, 1, Effect::Any, EnvAccess::WriteKeepAlive) {
+class FLI(LdFun, 1, Effect::Any, EnvAccess::Write) {
   public:
     SEXP varName;
 
@@ -356,7 +353,7 @@ class FLI(LdFun, 1, Effect::Any, EnvAccess::WriteKeepAlive) {
     void printArgs(std::ostream& out) override;
 };
 
-class FLI(LdVar, 1, Effect::None, EnvAccess::ReadKeepAlive) {
+class FLI(LdVar, 1, Effect::None, EnvAccess::Read) {
   public:
     SEXP varName;
 
@@ -399,7 +396,7 @@ class FLI(ChkClosure, 1, Effect::Warn, EnvAccess::None) {
         : FixedLenInstruction(RType::closure, {{PirType::val()}}, {{in}}) {}
 };
 
-class FLI(StVarSuper, 2, Effect::None, EnvAccess::WriteKeepAlive) {
+class FLI(StVarSuper, 2, Effect::None, EnvAccess::Write) {
   public:
     StVarSuper(SEXP name, Value* val, Value* env)
         : FixedLenInstruction(PirType::voyd(), {{PirType::val()}}, {{val}},
@@ -417,7 +414,7 @@ class FLI(StVarSuper, 2, Effect::None, EnvAccess::WriteKeepAlive) {
     void printArgs(std::ostream& out) override;
 };
 
-class FLI(LdVarSuper, 1, Effect::None, EnvAccess::ReadKeepAlive) {
+class FLI(LdVarSuper, 1, Effect::None, EnvAccess::Read) {
   public:
     LdVarSuper(SEXP name, Value* env)
         : FixedLenInstruction(PirType::voyd(), env), varName(name) {}
@@ -660,7 +657,7 @@ class VLI(Call, Effect::Any, EnvAccess::Leak) {
 
 typedef SEXP (*CCODE)(SEXP, SEXP, SEXP, SEXP);
 
-class VLI(CallBuiltin, Effect::Any, EnvAccess::WriteKeepAlive) {
+class VLI(CallBuiltin, Effect::Any, EnvAccess::Write) {
   public:
     const CCODE builtin;
     int builtinId;

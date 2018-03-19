@@ -15,7 +15,7 @@ void ElideEnv::apply(Function* function) {
 
     Visitor::run(function->entry, [&](BB* bb) {
         for (auto i : *bb) {
-            if (i->leaksEnv() || i->needsLiveEnv())
+            if (i->hasEnv() && !StVar::Cast(i))
                 envNeeded.insert(i->env());
             if (!Env::isEnv(i) && i->hasEnv())
                 envDependency[i] = i->env();
