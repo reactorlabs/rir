@@ -104,9 +104,9 @@ class TheCleanup {
 
         Visitor::run(function->entry, [&](BB* bb) {
             // Remove unnecessary splits
-            if (bb->jmp() && cfg.preds[bb->next0->id].size() == 1) {
+            if (bb->isJmp() && cfg.preds[bb->next0->id].size() == 1) {
                 BB* d = bb->next0;
-                while (!d->empty()) {
+                while (!d->isEmpty()) {
                     d->moveToEnd(d->begin(), bb);
                 }
                 bb->next0 = d->next0;
@@ -123,7 +123,7 @@ class TheCleanup {
         });
         Visitor::run(function->entry, [&](BB* bb) {
             // Remove empty jump-through blocks
-            if (bb->jmp() && bb->next0->empty() && bb->next0->jmp() &&
+            if (bb->isJmp() && bb->next0->isEmpty() && bb->next0->isJmp() &&
                 cfg.preds[bb->next0->next0->id].size() == 1) {
                 assert(used_bb.find(bb->next0) == used_bb.end());
                 toDel[bb->next0] = bb->next0->next0;
@@ -132,7 +132,7 @@ class TheCleanup {
         Visitor::run(function->entry, [&](BB* bb) {
             // Remove empty branches
             if (bb->next0 && bb->next1) {
-                if (bb->next0->empty() && bb->next1->empty() &&
+                if (bb->next0->isEmpty() && bb->next1->isEmpty() &&
                     bb->next0->next0 == bb->next1->next0 &&
                     used_bb.find(bb->next0) == used_bb.end() &&
                     used_bb.find(bb->next1) == used_bb.end()) {
@@ -143,15 +143,15 @@ class TheCleanup {
                 }
             }
         });
-        // if (function->entry->jmp() && function->entry->empty()) {
+        // if (function->entry->isJmp() && function->entry->empty()) {
         //     toDel[function->entry] = function->entry->next0;
         //     function->entry = function->entry->next0;
         // }
-        if (function->entry->jmp() &&
+        if (function->entry->isJmp() &&
             cfg.preds[function->entry->next0->id].size() == 1) {
             BB* bb = function->entry;
             BB* d = bb->next0;
-            while (!d->empty()) {
+            while (!d->isEmpty()) {
                 d->moveToEnd(d->begin(), bb);
             }
             bb->next0 = d->next0;

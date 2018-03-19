@@ -3,8 +3,6 @@
 
 #include "pir.h"
 
-#include <set>
-
 namespace rir {
 namespace pir {
 
@@ -44,7 +42,7 @@ class BB {
 
     unsigned indexOf(Instruction* i) {
         unsigned p = 0;
-        for (auto j : instr) {
+        for (auto j : instrs) {
             if (i == j)
                 return p;
             p++;
@@ -54,15 +52,15 @@ class BB {
     }
 
     Instruction* last() {
-        assert(instr.size() > 0);
-        return instr.back();
+        assert(instrs.size() > 0);
+        return instrs.back();
     }
 
     BB* next0 = nullptr;
     BB* next1 = nullptr;
 
-    bool jmp() { return next0 && !next1; }
-    bool empty() { return instr.size() == 0; }
+    bool isJmp() { return next0 && !next1; }
+    bool isEmpty() { return instrs.size() == 0; }
 
     typedef std::vector<Instruction*> Instrs;
 
@@ -75,19 +73,20 @@ class BB {
     Instrs::iterator moveToEnd(Instrs::iterator it, BB* other);
     Instrs::iterator moveToBegin(Instrs::iterator it, BB* other);
 
-    void swap(Instrs::iterator);
+    void swapWithNext(Instrs::iterator);
 
     void print(std::ostream& = std::cout);
 
-    Instrs::iterator begin() { return instr.begin(); }
-    Instrs::iterator end() { return instr.end(); }
-    size_t size() { return instr.size(); }
-    Instruction* at(size_t i) { return instr[i]; }
+    Instrs::iterator begin() { return instrs.begin(); }
+    Instrs::iterator end() { return instrs.end(); }
+    size_t size() { return instrs.size(); }
+    Instruction* at(size_t i) { return instrs[i]; }
 
     void gc();
 
   private:
-    Instrs instr;
+    Instrs instrs;
+    // Keeps around deleted instructions to be able to remove them later
     Instrs deleted;
 };
 

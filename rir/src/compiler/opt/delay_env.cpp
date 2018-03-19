@@ -69,7 +69,7 @@ void DelayEnv::apply(Function* function) {
                 if (next->hasEnv() && next->env() == e)
                     break;
 
-                bb->swap(it);
+                bb->swapWithNext(it);
                 it++;
             }
 

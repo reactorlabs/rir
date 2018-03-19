@@ -26,7 +26,7 @@
  * Instructions have an InstructionDescription, which gives us basic
  * information about its effects and environment interactions.
  *
- * If an instruction needs an envrionment (ie. if its EnvAccess >= None), it
+ * If an instruction needs an environment (ie. if its EnvAccess >= None), it
  * needs to have a dedicated environment argument. This dedicated environment
  * input is (for technical reasons) the last argument of fixed length
  * instructions and the first argument for variable length instructions. There

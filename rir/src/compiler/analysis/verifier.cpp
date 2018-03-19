@@ -46,7 +46,7 @@ class TheVerifier {
     void verify(BB* bb) {
         for (auto i : *bb)
             verify(i, bb);
-        if (bb->empty()) {
+        if (bb->isEmpty()) {
             if (!bb->next0 && !bb->next1) {
                 std::cerr << "bb" << bb->id << " has no successor\n";
                 ok = false;
