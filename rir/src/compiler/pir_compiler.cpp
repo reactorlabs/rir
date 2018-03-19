@@ -483,7 +483,7 @@ class TheCompiler {
     Function* declare(rir::Function* src, const std::vector<SEXP>& a) {
         Function* fun = new Function(a);
         // TODO: catch duplicates
-        m->function.push_back(fun);
+        m->functions.push_back(fun);
         return fun;
     }
 
@@ -735,7 +735,7 @@ Module* PirCompiler::compileFunction(SEXP f, bool verbose) {
     if (verbose)
         cmp.m->print(std::cout);
 
-    for (auto f : cmp.m->function) {
+    for (auto f : cmp.m->functions) {
         apply(f, false);
         apply(f, false);
     }
@@ -745,7 +745,7 @@ Module* PirCompiler::compileFunction(SEXP f, bool verbose) {
         cmp.m->print(std::cout);
     }
 
-    auto fun = *cmp.m->function.begin();
+    auto fun = *cmp.m->functions.begin();
     for (size_t iter = 0; iter < 5; ++iter) {
         Inline::apply(fun);
         if (verbose)

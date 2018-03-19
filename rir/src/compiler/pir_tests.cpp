@@ -11,7 +11,7 @@
 namespace {
 using namespace rir;
 
-static pir::Module* compile(const std::string& inp) {
+pir::Module* compile(const std::string& inp) {
     Protect p;
     ParseStatus status;
     SEXP arg = p(CONS(R_NilValue, R_NilValue));
@@ -37,7 +37,7 @@ typedef std::pair<std::string, TestFunction> Test;
 
 bool test42(const std::string& input) {
     auto m = compile(input);
-    auto f = m->function.front();
+    auto f = m->functions.front();
 
     CHECK(Query::noEnv(f));
 
@@ -59,12 +59,12 @@ class NullBuffer : public std::ostream {
 };
 
 bool verify(Module* m) {
-    for (auto f : m->function)
+    for (auto f : m->functions)
         if (!Verify::apply(f))
             return false;
     // TODO: find fix for osx
     // NullBuffer nb;
-    for (auto f : m->function)
+    for (auto f : m->functions)
         f->print(std::cout);
 
     return true;
@@ -83,7 +83,7 @@ bool testDelayEnv() {
     // auto m = compile("{f <- function()1; arg1[[2]]}");
 
     auto m = compile("{f <- arg1; arg1[[2]]}");
-    bool t = Visitor::check(m->function.front()->entry, [&](BB* bb) {
+    bool t = Visitor::check(m->functions.front()->entry, [&](BB* bb) {
         for (auto i : *bb) {
             if (i->hasEnv()) {
                 CHECK(Deopt::Cast(bb->last()));

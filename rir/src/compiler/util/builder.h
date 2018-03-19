@@ -21,7 +21,6 @@ class Builder {
     template <class T>
     T* operator()(T* i) {
         bb->append(i);
-        i->bb_ = bb;
         return i;
     }
 
