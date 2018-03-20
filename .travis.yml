@@ -50,6 +50,5 @@ script:
   - TEST_MC_CORES=$CORES ./tools/gnur-make-tests $CHECK
 
 cache:
-  directories:
-  - external
+  - ccache
 
