@@ -33,11 +33,12 @@ class Rir2Pir : public PirTranslator {
     pir::Function* compileFunction(Function*);
     pir::Function* compileFunction(pir::IRTransformation*);
     pir::Function* compileFunction(pir::IRTransformation*, bool);
-    pir::Module* optimizeFunction(pir::Function*);
+    void optimizeFunction(pir::Function*);
     pir::Module* compileModule(SEXP f, bool);
     void operator()(SEXP in);
-    pir::IRTransformation* declare(rir::Function* rir);
-    
+
+    static pir::IRTransformation* declare(SEXP& function);
+    static pir::IRTransformation* declare(rir::Function* rir);
   private:
     std::unordered_map<Opcode*, pir::StackMachine> mergepoint;
     pir::StackMachine state;

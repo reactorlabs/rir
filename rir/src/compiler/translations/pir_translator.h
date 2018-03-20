@@ -13,13 +13,12 @@ class PirTranslator {
     virtual pir::Function* compileFunction(SEXP) = 0;
     virtual pir::Function* compileFunction(rir::Function*) = 0;
     virtual pir::Function* compileFunction(pir::IRTransformation*) = 0;
-    virtual pir::Module* optimizeFunction(pir::Function*) = 0;
-    void operator()(SEXP in);
     pir::Function* declare(const std::vector<SEXP>& a);
     PirTranslator() : module(new pir::Module) , verbose(false) {}
 
     bool getVerbose();
     void setVerbose(bool);
+    pir::Module* getModule();
   private:
       pir::Module* compileModule();
       bool verbose;

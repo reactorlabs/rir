@@ -124,8 +124,9 @@ REXPORT SEXP rir_analysis_liveness(SEXP what) {
 REXPORT SEXP pir_compile(SEXP what) {
     if (!isValidClosureSEXP(what))
         Rf_error("not a compiled closure");
-    //Rir2Pir cmp;
-    //delete cmp.compileFunction(what, true);
+    Rir2Pir cmp;
+    cmp.setVerbose(true);
+    delete cmp.compileFunction(what);
     return R_NilValue;
 }
 

@@ -33,18 +33,34 @@ typedef std::pair<BB*, Value*> ReturnSite;
 
 namespace rir {
 
+pir::IRTransformation* Rir2Pir::declare(SEXP& function) {
+    assert(isValidClosureSEXP(function));
+    IRTransformation* rir2Pir = new IRTransformation();
+    DispatchTable* tbl = DispatchTable::unpack(BODY(function));
+    rir2Pir->srcIR = tbl->first();
+    auto formals = RList(FORMALS(function));
+
+    std::vector<SEXP> fml;
+    for (auto it = formals.begin(); it != formals.end(); ++it) {
+        fml.push_back(it.tag());
+    }
+    pir::Function* pirFunction = new pir::Function(fml);
+    rir2Pir->dstIR = pirFunction;
+    return rir2Pir;
+}
+
 IRTransformation* Rir2Pir::declare(Function* rirFunction) {
-    IRTransformation rir2Pir;
-    rir2Pir.srcIR = rirFunction;
-    //auto formals = RList(FORMALS(rirFunction->body()));
+    IRTransformation* rir2Pir = new IRTransformation();
+    rir2Pir->srcIR = rirFunction;
+    // auto formals = RList(FORMALS(rirFunction->container()));
 
     std::vector<SEXP> fml;
     /*for (auto it = formals.begin(); it != formals.end(); ++it) {
         fml.push_back(it.tag());
     }*/
     pir::Function* pirFunction = new pir::Function(fml);
-    rir2Pir.dstIR = pirFunction;
-    return &rir2Pir;
+    rir2Pir->dstIR = pirFunction;
+    return rir2Pir;
 }
 
 pir::Function* Rir2Pir::compileFunction(SEXP function2Compile){
@@ -62,43 +78,14 @@ pir::Function* Rir2Pir::compileFunction(Function* function2Compile){
         fml.push_back(it.tag());
     }*/
     pir::Function* pirFunction = new pir::Function(fml);
-    IRTransformation rir2Pir;
-    rir2Pir.srcIR = function2Compile;
-    rir2Pir.dstIR = pirFunction;
-    this->compileFunction(&rir2Pir);
-}
-
-void Rir2Pir::recoverCFG(IRTransformation* rir2PirTransformation) {
-    std::unordered_map<Opcode*, std::vector<Opcode*>> incom;
-    // Mark incoming jmps
-    rir::Code* srcCode = rir2PirTransformation->srcIR->body();
-    for (auto pc = srcCode->code(); pc != srcCode->endCode();) {
-        BC bc = BC::decode(pc);
-        if (bc.isJmp()) {
-            incom[bc.jmpTarget(pc)].push_back(pc);
-        }
-        BC::advance(&pc);
-    }
-    // Mark falltrough to label
-    for (auto pc = srcCode->code(); pc != srcCode->endCode();) {
-        BC bc = BC::decode(pc);
-        if (!bc.isUncondJmp()) {
-            Opcode* next = BC::next(pc);
-            if (incom.count(next))
-                incom[next].push_back(pc);
-        }
-        BC::advance(&pc);
-    }
-    // Create mergepoints
-    for (auto m : incom) {
-        if (std::get<1>(m).size() > 1) {
-            mergepoint[std::get<0>(m)] = StackMachine();
-        }
-    }
+    IRTransformation* rir2Pir = new IRTransformation();
+    rir2Pir->srcIR = function2Compile;
+    rir2Pir->dstIR = pirFunction;
+    return this->compileFunction(rir2Pir);
 }
 
 pir::Function* Rir2Pir::compileFunction(IRTransformation* rir2PirTransformation) {
-    this->compileFunction(rir2PirTransformation, true);
+    return this->compileFunction(rir2PirTransformation, true);
 }    
 
 pir::Function* Rir2Pir::compileFunction(IRTransformation* rir2PirTransformation, bool addReturn) {
@@ -119,7 +106,7 @@ pir::Function* Rir2Pir::compileFunction(IRTransformation* rir2PirTransformation,
         if (state.getPC() == end)
             popFromWorklist(&worklist, &builder);
 
-        BC bc = BC::decode(state.getPC());
+        BC bc = state.getCurrentBC();
 
         if (mergepoint.count(state.getPC()) > 0) {
             StackMachine* other = &mergepoint.at(state.getPC());
@@ -239,10 +226,8 @@ pir::Function* Rir2Pir::compileFunction(IRTransformation* rir2PirTransformation,
 
         if (!matched) {
             int size = state.stack_size();
-            Opcode* pc = state.getPC();
-            state.run(bc, &builder, rir2PirTransformation->srcIR, &results);
+            state.runCurrentBC(&builder, rir2PirTransformation->srcIR, &results);
             assert(state.stack_size() == size - bc.popCount() + bc.pushCount());
-            BC::advance(&pc);
         }
     }
     assert(state.empty());
@@ -299,11 +284,39 @@ pir::Function* Rir2Pir::compileFunction(IRTransformation* rir2PirTransformation,
     this->optimizeFunction(pirFunction);
     if (Verify::apply(pirFunction))
         return pirFunction;
-    return nullptr;
+    return rir2PirTransformation->dstIR;
 }
 
+void Rir2Pir::recoverCFG(IRTransformation* rir2PirTransformation) {
+    std::unordered_map<Opcode*, std::vector<Opcode*>> incom;
+    // Mark incoming jmps
+    rir::Code* srcCode = rir2PirTransformation->srcIR->body();
+    for (auto pc = srcCode->code(); pc != srcCode->endCode();) {
+        BC bc = BC::decode(pc);
+        if (bc.isJmp()) {
+            incom[bc.jmpTarget(pc)].push_back(pc);
+        }
+        BC::advance(&pc);
+    }
+    // Mark falltrough to label
+    for (auto pc = srcCode->code(); pc != srcCode->endCode();) {
+        BC bc = BC::decode(pc);
+        if (!bc.isUncondJmp()) {
+            Opcode* next = BC::next(pc);
+            if (incom.count(next))
+                incom[next].push_back(pc);
+        }
+        BC::advance(&pc);
+    }
+    // Create mergepoints
+    for (auto m : incom) {
+        if (std::get<1>(m).size() > 1) {
+            mergepoint[std::get<0>(m)] = StackMachine();
+        }
+    }
+}
 
-pir::Module* Rir2Pir::optimizeFunction(pir::Function* function){
+void Rir2Pir::optimizeFunction(pir::Function* function){
     size_t passnr = 0;
     bool verbose = getVerbose();
 
@@ -345,13 +358,13 @@ pir::Module* Rir2Pir::optimizeFunction(pir::Function* function){
         this->module->print(std::cout);
     }
 
-    auto fun = this->module->functions.begin();
+    IRTransformation* moduleFunction = *this->module->functions.begin();
     for (size_t iter = 0; iter < 5; ++iter) {
-        Inline::apply(function);
+        Inline::apply(moduleFunction->dstIR);
         if (verbose)
-            print("inline", function);
+            print("inline", moduleFunction->dstIR);
 
-        apply(function, verbose);
+        apply(moduleFunction->dstIR, verbose);
     }
 }
 

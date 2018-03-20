@@ -40,10 +40,12 @@ void StackMachine::set(size_t index, Value* value) {
     stack[stack_size() - index - 1] = value;
 }
 
-void StackMachine::run(BC bc, Builder* builder, rir::Function* src, std::vector<ReturnSite>* results) {
+void StackMachine::runCurrentBC(Builder* builder, rir::Function* src,
+                                std::vector<ReturnSite>* results) {
     Value* v;
     Value* x;
     Value* y;
+    BC bc = this->getCurrentBC();
     switch (bc.bc) {
         case Opcode::push_:
             push((*builder)(new LdConst(bc.immediateConst())));
@@ -340,6 +342,7 @@ void StackMachine::run(BC bc, Builder* builder, rir::Function* src, std::vector<
             assert(false);
             break;
     }
+    this->consumeBC(src->body()->endCode());
 }
 
 bool StackMachine::doMerge(Opcode* trg, Builder* builder, StackMachine* other) {
@@ -371,8 +374,28 @@ bool StackMachine::doMerge(Opcode* trg, Builder* builder, StackMachine* other) {
 }
 
 Opcode* StackMachine::getPC() { return pc; }
-void StackMachine::setPC(Opcode* opcode) { pc = opcode;}
+
+void StackMachine::setPC(Opcode* opcode) { 
+    pc = opcode;
+    this->decodeCurrentBytecode();
+}
+
 pir::BB* StackMachine::getEntry() { return entry; }
 void StackMachine::setEntry(pir::BB* ent) {entry = ent; }
+
+void StackMachine::consumeBC(Opcode* end) {
+    this->advancePC();
+    if (pc != end) this->decodeCurrentBytecode();
+}
+
+void StackMachine::decodeCurrentBytecode() {
+    this->currentBC = BC(this->pc);
+}
+
+void StackMachine::advancePC() {
+    pc = (Opcode*)((uintptr_t)(pc) + this->currentBC.size());
+}
+
+BC StackMachine::getCurrentBC() { return this->currentBC; }
 }
 }
