@@ -172,7 +172,7 @@ class TheCleanup {
 
         // Renumber
         function->maxBBId = 0;
-        Visitor::runWithChangingIds(function->entry, [&](BB* bb) {
+        UnstableIDsVisitor::run(function->entry, [&](BB* bb) {
             bb->unsafeSetId(function->maxBBId++);
             bb->gc();
         });

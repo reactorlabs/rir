@@ -12,26 +12,83 @@
 namespace rir {
 namespace pir {
 
-class Visitor {
+namespace VisitorHelpers {
+typedef std::function<bool(BB*)> BBActionPredicate;
+typedef std::function<void(BB*)> BBAction;
+
+/*
+ * PredicateWrapper abstracts over BBAction and BBActionPredicate, to be
+ * able to use them in the same generic implementation.
+ * In the case of BBAction the return value will always be true.
+ *
+ */
+template <typename ActionKind>
+struct PredicateWrapper {};
+
+template <>
+struct PredicateWrapper<BBAction> {
+    const BBAction action;
+    bool operator()(BB* bb) const {
+        action(bb);
+        return true;
+    }
+};
+
+template <>
+struct PredicateWrapper<BBActionPredicate> {
+    const BBActionPredicate action;
+    bool operator()(BB* bb) const { return action(bb); }
+};
+
+/*
+ * Helpers to remember which BB has already been visited. There is a fast
+ * version (IDMarker) that uses a bitvector, but relies on stable BB ids. And
+ * there is a slow version (PointerMarker) using a set.
+ *
+ */
+struct IDMarker {
+    std::vector<bool> done;
+    IDMarker() : done(128, false){};
+
+    void set(BB* bb) {
+        while (bb->id >= done.size())
+            done.resize(done.size() * 2);
+        done[bb->id] = true;
+    }
+
+    bool check(BB* bb) { return bb->id < done.size() && done[bb->id]; }
+};
+
+struct PointerMarker {
+    std::unordered_set<BB*> done;
+    void set(BB* bb) { done.insert(bb); }
+    bool check(BB* bb) { return done.find(bb) != done.end(); }
+};
+};
+
+template <bool STABLE, class Marker>
+class VisitorImplementation {
   public:
     typedef std::function<bool(Instruction*)> InstrActionPredicate;
     typedef std::function<void(Instruction*)> InstrAction;
     typedef std::function<bool(Instruction*, BB*)> InstrBBActionPredicate;
     typedef std::function<void(Instruction*, BB*)> InstrBBAction;
-    typedef std::function<bool(BB*)> BBActionPredicate;
-    typedef std::function<void(BB*)> BBAction;
+    using BBActionPredicate = VisitorHelpers::BBActionPredicate;
+    using BBAction = VisitorHelpers::BBAction;
 
-    template <bool STABLE = false>
+    /*
+     * Instruction Visitors
+     *
+     */
     static void run(BB* bb, InstrAction action) {
-        run<STABLE>(bb, [action](BB* bb) {
+        run(bb, [action](BB* bb) {
             for (auto i : *bb)
                 action(i);
         });
     }
 
-    template <bool STABLE = false>
     static bool check(BB* bb, InstrActionPredicate action) {
-        return check<STABLE>(bb, [action](BB* bb) {
+        return check(bb, [action](BB* bb) {
             bool holds = true;
             for (auto i : *bb) {
                 if (!action(i)) {
@@ -43,17 +100,15 @@ class Visitor {
         });
     }
 
-    template <bool STABLE = false>
     static void run(BB* bb, InstrBBAction action) {
-        run<STABLE>(bb, [action](BB* bb) {
+        run(bb, [action](BB* bb) {
             for (auto i : *bb)
                 action(i, bb);
         });
     }
 
-    template <bool STABLE = false>
     static bool check(BB* bb, InstrBBActionPredicate action) {
-        return check<STABLE>(bb, [action](BB* bb) {
+        return check(bb, [action](BB* bb) {
             bool holds = true;
             for (auto i : *bb) {
                 if (!action(i, bb)) {
@@ -65,72 +120,44 @@ class Visitor {
         });
     }
 
-    template <bool STABLE = false>
-    static void run(BB* bb, BBAction action) {
-        BB* cur = bb;
-        std::deque<BB*> todo;
-        std::vector<bool> done(64, false);
-        markDone(done, cur);
+    /*
+     * BB Visitors
+     *
+     */
+    static void run(BB* bb, BBAction action) { genericRun(bb, action); }
 
-        while (cur) {
-            BB* next = nullptr;
-
-            if (cur->next0 && !isDone(done, cur->next0)) {
-                if (todo.empty())
-                    next = cur->next0;
-                else
-                    enqueue<STABLE>(todo, cur->next0);
-                markDone(done, cur->next0);
-            }
-
-            if (cur->next1 && !isDone(done, cur->next1)) {
-                if (!next && todo.empty()) {
-                    next = cur->next1;
-                } else {
-                    enqueue<STABLE>(todo, cur->next1);
-                }
-                markDone(done, cur->next1);
-            }
-
-            if (!next) {
-                if (!todo.empty()) {
-                    next = todo.front();
-                    todo.pop_front();
-                }
-            }
-
-            action(cur);
-
-            cur = next;
-        }
-        assert(todo.empty());
+    static bool check(BB* bb, BBActionPredicate action) {
+        return genericRun(bb, action);
     }
 
-    template <bool STABLE = false>
-    static bool check(BB* bb, BBActionPredicate action) {
+    template <typename ActionKind>
+    static bool genericRun(BB* bb, ActionKind action) {
+        typedef VisitorHelpers::PredicateWrapper<ActionKind> PredicateWrapper;
+        const PredicateWrapper predicate = {action};
+
         BB* cur = bb;
         std::deque<BB*> todo;
-        std::vector<bool> done(128, false);
-        markDone(done, cur);
+        Marker done;
+        done.set(cur);
 
         while (cur) {
             BB* next = nullptr;
 
-            if (cur->next0 && !isDone(done, cur->next0)) {
+            if (cur->next0 && !done.check(cur->next0)) {
                 if (todo.empty())
                     next = cur->next0;
                 else
-                    enqueue<STABLE>(todo, cur->next0);
-                markDone(done, cur->next0);
+                    enqueue(todo, cur->next0);
+                done.set(cur->next0);
             }
 
-            if (cur->next1 && !isDone(done, cur->next1)) {
+            if (cur->next1 && !done.check(cur->next1)) {
                 if (!next && todo.empty()) {
                     next = cur->next1;
                 } else {
-                    enqueue<STABLE>(todo, cur->next1);
+                    enqueue(todo, cur->next1);
                 }
-                markDone(done, cur->next1);
+                done.set(cur->next1);
             }
 
             if (!next) {
@@ -140,7 +167,7 @@ class Visitor {
                 }
             }
 
-            if (!action(cur))
+            if (!predicate(cur))
                 return false;
 
             cur = next;
@@ -150,72 +177,29 @@ class Visitor {
         return true;
     }
 
-    // This visitor does not rely on stable bb ids, use for renumbering
-    static void runWithChangingIds(BB* bb, BBAction action) {
-        BB* cur = bb;
-        std::deque<BB*> todo;
-        std::unordered_set<BB*> done;
-        done.insert(cur);
-
-        while (cur) {
-            BB* next = nullptr;
-
-            if (cur->next0 && done.find(cur->next0) == done.end()) {
-                if (todo.empty())
-                    next = cur->next0;
-                else
-                    enqueue<true>(todo, cur->next0);
-                done.insert(cur->next0);
-            }
-
-            if (cur->next1 && done.find(cur->next1) == done.end()) {
-                if (!next && todo.empty()) {
-                    next = cur->next1;
-                } else {
-                    enqueue<true>(todo, cur->next1);
-                }
-                done.insert(cur->next1);
-            }
-
-            if (!next) {
-                if (!todo.empty()) {
-                    next = todo.front();
-                    todo.pop_front();
-                }
-            }
-
-            action(cur);
-
-            cur = next;
-        }
-        assert(todo.empty());
-    }
-
   private:
-    static std::random_device rd;
-    static std::mt19937 gen;
-    static std::bernoulli_distribution coin;
+    static bool coinFlip() {
+        static std::random_device rd;
+        static std::mt19937 gen(rd());
+        static std::bernoulli_distribution coin(0.5);
+        return coin(gen);
+    };
 
-    static void markDone(std::vector<bool>& done, BB* bb) {
-        while (bb->id >= done.size())
-            done.resize(done.size() * 2);
-        done[bb->id] = true;
-    }
-
-    static bool isDone(std::vector<bool>& done, BB* bb) {
-        return bb->id < done.size() && done[bb->id];
-    }
-
-    template <bool STABLE>
     static void enqueue(std::deque<BB*>& todo, BB* bb) {
         // For analysis random search is faster
-        if (STABLE || coin(gen)) {
+        if (STABLE || coinFlip())
             todo.push_back(bb);
-        } else {
+        else
             todo.push_front(bb);
-        }
     }
 };
+
+class Visitor
+    : public VisitorImplementation<false, VisitorHelpers::IDMarker> {};
+class BreadthFirstVisitor
+    : public VisitorImplementation<true, VisitorHelpers::IDMarker> {};
+class UnstableIDsVisitor
+    : public VisitorImplementation<false, VisitorHelpers::PointerMarker> {};
 }
 }
 
