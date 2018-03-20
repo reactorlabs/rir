@@ -97,6 +97,6 @@ file(GLOB TOOLS "tools/*.*")
 add_custom_target(tools SOURCES ${TOOLS})
 
 if(APPLE)
-    set_target_properties(${PROJECT_NAME} PROPERTIES LINK_FLAGS "-Lexternal/custom-r/lib")
+    set_target_properties(${PROJECT_NAME} PROPERTIES LINK_FLAGS "-L${R_HOME}/lib")
     target_link_libraries(${PROJECT_NAME} R)
 endif(APPLE)
