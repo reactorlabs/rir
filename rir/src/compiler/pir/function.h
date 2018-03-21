@@ -5,8 +5,6 @@
 #include "code.h"
 #include "pir.h"
 
-#include <set>
-
 namespace rir {
 namespace pir {
 
@@ -21,24 +19,24 @@ namespace pir {
 class Function : public Code {
   public:
     Function(std::initializer_list<SEXP> a, std::initializer_list<Promise*> p)
-        : arg_name(a), default_arg(p) {}
+        : argNames(a), defaultArgs(p) {}
 
     Function(const std::vector<SEXP>& a, const std::vector<Promise*>& p)
-        : arg_name(a), default_arg(p) {}
+        : argNames(a), defaultArgs(p) {}
 
     Function(std::initializer_list<SEXP> a) : Function(a, {}) {}
     Function(const std::vector<SEXP>& a) : Function(a, {}) {}
 
-    std::vector<SEXP> arg_name;
-    std::vector<Promise*> default_arg;
+    std::vector<SEXP> argNames;
+    std::vector<Promise*> defaultArgs;
 
-    std::vector<Promise*> promise;
+    std::vector<Promise*> promises;
 
     void print(std::ostream& out);
 
     Promise* createProm();
 
-    size_t max_bb_id = 0;
+    size_t maxBBId = 0;
 
     friend std::ostream& operator<<(std::ostream& out, const Function& e) {
         out << "Func(" << (void*)&e << ")";

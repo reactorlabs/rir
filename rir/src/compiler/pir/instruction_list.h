@@ -1,6 +1,8 @@
 #ifndef COMPILER_INSTRUCTION_LIST_H
 #define COMPILER_INSTRUCTION_LIST_H
 
+// Please keep in sync with implementation of instructions in instruction.h
+
 #define COMPILER_INSTRUCTIONS(V)                                               \
     V(LdFun)                                                                   \
     V(Seq)                                                                     \

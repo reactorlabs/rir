@@ -25,7 +25,7 @@ class TheVerifier {
             return;
         }
 
-        for (auto p : f->promise) {
+        for (auto p : f->promises) {
             verify(p);
             if (!ok) {
                 std::cerr << "Verification of promise failed\n";
@@ -33,7 +33,7 @@ class TheVerifier {
                 return;
             }
         }
-        for (auto p : f->default_arg) {
+        for (auto p : f->defaultArgs) {
             verify(p);
             if (!ok) {
                 std::cerr << "Verification of argument failed\n";
@@ -46,7 +46,7 @@ class TheVerifier {
     void verify(BB* bb) {
         for (auto i : *bb)
             verify(i, bb);
-        if (bb->empty()) {
+        if (bb->isEmpty()) {
             if (!bb->next0 && !bb->next1) {
                 std::cerr << "bb" << bb->id << " has no successor\n";
                 ok = false;
@@ -87,7 +87,9 @@ class TheVerifier {
         }
 
         Phi* phi = Phi::Cast(i);
-        i->each_arg([&](Value* v, PirType t) -> void {
+        i->eachArg([&](const InstrArg& a) -> void {
+            auto v = a.val();
+            auto t = a.type();
             Instruction* iv = Instruction::Cast(v);
             if (iv) {
                 if (phi) {
@@ -114,7 +116,7 @@ class TheVerifier {
                 }
             }
 
-            if (!(t >= v->type)) {
+            if (!t.isSuper(v->type)) {
                 std::cerr << "Error at instruction '";
                 i->print(std::cerr);
                 std::cerr << "': Value ";

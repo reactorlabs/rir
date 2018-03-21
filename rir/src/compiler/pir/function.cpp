@@ -9,23 +9,23 @@ namespace pir {
 void Function::print(std::ostream& out) {
     out << "Function " << this << "\n";
     Code::print(out);
-    for (auto p : promise) {
+    for (auto p : promises) {
         if (p)
             p->print(out);
     }
 }
 
 Promise* Function::createProm() {
-    Promise* p = new Promise(this, promise.size());
-    promise.push_back(p);
+    Promise* p = new Promise(this, promises.size());
+    promises.push_back(p);
     return p;
 }
 
 Function::~Function() {
-    for (auto p : promise)
+    for (auto p : promises)
         if (p)
             delete p;
-    for (auto p : default_arg)
+    for (auto p : defaultArgs)
         delete p;
 }
 }

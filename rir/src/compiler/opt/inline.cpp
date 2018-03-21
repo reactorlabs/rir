@@ -31,22 +31,22 @@ class TheInliner {
                 if (!cls)
                     continue;
                 Function* inlinee = cls->fun;
-                if (inlinee->arg_name.size() != call->nCallArgs())
+                if (inlinee->argNames.size() != call->nCallArgs())
                     continue;
 
                 BB* split =
-                    BBTransform::split(++function->max_bb_id, bb, it, function);
+                    BBTransform::split(++function->maxBBId, bb, it, function);
 
                 Call* theCall = Call::Cast(*split->begin());
                 std::vector<MkArg*> arguments;
-                for (size_t i = 0; i < theCall->nCallArgs(); ++i) {
-                    MkArg* a = MkArg::Cast(theCall->callArgs()[i]);
+                theCall->eachCallArg([&](Value* v) {
+                    MkArg* a = MkArg::Cast(v);
                     assert(a);
                     arguments.push_back(a);
-                }
+                });
 
                 // Clone the function
-                BB* copy = BBTransform::clone(&function->max_bb_id,
+                BB* copy = BBTransform::clone(&function->maxBBId,
                                               inlinee->entry, function);
 
                 // Link all inner environments to the outer one
@@ -88,14 +88,14 @@ class TheInliner {
                         size_t id = prom->id;
                         if (prom->fun == inlinee) {
                             if (copiedPromise[id]) {
-                                mk->prom = function->promise[newPromId[id]];
+                                mk->prom = function->promises[newPromId[id]];
                             } else {
                                 Promise* clone = new Promise(
-                                    function, function->promise.size());
+                                    function, function->promises.size());
                                 BB* promCopy =
                                     BBTransform::clone(prom->entry, clone);
-                                clone->id = function->promise.size();
-                                function->promise.push_back(clone);
+                                clone->id = function->promises.size();
+                                function->promises.push_back(clone);
                                 clone->entry = promCopy;
                                 newPromId[id] = clone->id;
                                 copiedPromise[id] = true;

@@ -48,7 +48,7 @@ class TheScopeResolution {
                     // local, can be replaced by simple StVar
                     auto e = Env::parentEnv(ss->env());
                     if (e != Env::theContext()) {
-                        auto r = new StVar(ss->varName, ss->arg<0>(), e);
+                        auto r = new StVar(ss->varName, ss->arg<0>().val(), e);
                         bb->replace(ip, r);
                     }
                 } else if (s) {

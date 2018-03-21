@@ -1,13 +1,23 @@
 #ifndef CAPTURE_OUT_H
 #define CAPTURE_OUT_H
 
-#include <stdio.h>
-#include <stdlib.h>
+#include <cstdio>
+#include <cstdlib>
 #include <string>
 #include <unistd.h>
 
 namespace rir {
 
+// Can be used to capture stdout to a string. Usage:
+//
+//      std::string output;
+//      {
+//          CaptureOut capture;
+//          doSomeStuffThatWritesToStdout();
+//          output = capture();
+//      }
+//      std::cout << "Captured " << output << "\n";
+//
 class CaptureOut {
     const static unsigned MAX_LEN = 1024 * 8;
     char buffer[MAX_LEN + 1] = {0};

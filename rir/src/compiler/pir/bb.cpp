@@ -1,6 +1,7 @@
 #include "pir_impl.h"
 
 #include <iostream>
+#include <unordered_set>
 
 namespace rir {
 namespace pir {
@@ -9,47 +10,43 @@ BB::BB(Code* fun, unsigned id) : id(id), fun(fun) {}
 
 void BB::print(std::ostream& out) {
     out << "BB " << id << "\n";
-    for (auto i : instr) {
+    for (auto i : instrs) {
         out << "  ";
         i->print(out);
         out << "\n";
     }
-    if (next0 && !next1) {
+    if (isJmp()) {
         out << "  goto BB" << next0->id << "\n";
     }
 }
 
 BB::~BB() {
     gc();
-    for (auto* i : instr)
+    for (auto* i : instrs)
         delete i;
 }
 
 void BB::append(Instruction* i) {
-    instr.push_back(i);
+    instrs.push_back(i);
     i->bb_ = this;
 }
 
 BB::Instrs::iterator BB::remove(Instrs::iterator it) {
     deleted.push_back(*it);
-    return instr.erase(it);
+    return instrs.erase(it);
 }
 
 BB::Instrs::iterator BB::moveToEnd(Instrs::iterator it, BB* other) {
-    Instruction* i = *it;
-    i->bb_ = other;
-    other->instr.push_back(i);
-    return instr.erase(it);
+    other->append(*it);
+    return instrs.erase(it);
 }
 
 BB::Instrs::iterator BB::moveToBegin(Instrs::iterator it, BB* other) {
-    Instruction* i = *it;
-    i->bb_ = other;
-    other->instr.insert(other->instr.begin(), i);
-    return instr.erase(it);
+    other->insert(other->instrs.begin(), *it);
+    return instrs.erase(it);
 }
 
-void BB::swap(Instrs::iterator it) {
+void BB::swapWithNext(Instrs::iterator it) {
     Instruction* i = *it;
     *it = *(it + 1);
     *(it + 1) = i;
@@ -57,10 +54,10 @@ void BB::swap(Instrs::iterator it) {
 
 BB* BB::cloneInstrs(BB* src, unsigned id, Code* target) {
     BB* c = new BB(target, id);
-    for (auto i : src->instr) {
+    for (auto i : src->instrs) {
         Instruction* ic = i->clone();
         ic->bb_ = c;
-        c->instr.push_back(ic);
+        c->instrs.push_back(ic);
     }
     c->next0 = c->next1 = nullptr;
     return c;
@@ -73,14 +70,14 @@ void BB::replace(Instrs::iterator it, Instruction* i) {
 }
 
 BB::Instrs::iterator BB::insert(Instrs::iterator it, Instruction* i) {
-    auto itup = instr.insert(it, i);
+    auto itup = instrs.insert(it, i);
     i->bb_ = this;
     return itup;
 }
 
 void BB::gc() {
     // Catch double deletes
-    std::set<Instruction*> dup;
+    std::unordered_set<Instruction*> dup;
     dup.insert(deleted.begin(), deleted.end());
     assert(dup.size() == deleted.size());
 

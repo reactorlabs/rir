@@ -3,8 +3,6 @@
 #include "../util/cfg.h"
 #include "../util/visitor.h"
 
-#include <set>
-
 namespace rir {
 namespace pir {
 
@@ -26,7 +24,7 @@ void DelayInstr::apply(Function* function) {
                         // value only in the input branch, where it is
                         // actually needed.
                         for (size_t j = 0; j < phi->nargs(); ++j) {
-                            if (phi->arg(j) == i) {
+                            if (phi->arg(j).val() == i) {
                                 if (phi->input[j] != bb) {
                                     next = bb->moveToEnd(ip, phi->input[j]);
                                 }

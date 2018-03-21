@@ -12,7 +12,7 @@ class Env;
 
 class Module {
   public:
-    std::vector<Function*> function;
+    std::vector<Function*> functions;
     void print(std::ostream& out = std::cout);
     ~Module();
 };

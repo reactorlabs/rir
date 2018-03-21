@@ -4,8 +4,8 @@
 #include "../util/visitor.h"
 #include "R/r.h"
 
-#include <set>
 #include <unordered_map>
+#include <unordered_set>
 
 namespace {
 using namespace rir::pir;
@@ -15,8 +15,8 @@ class TheCleanup {
     TheCleanup(Function* function) : function(function) {}
     Function* function;
     void operator()() {
-        std::set<size_t> used_p;
-        std::unordered_map<BB*, std::set<Phi*>> used_bb;
+        std::unordered_set<size_t> used_p;
+        std::unordered_map<BB*, std::unordered_set<Phi*>> used_bb;
 
         Visitor::run(function->entry, [&](BB* bb) {
             auto ip = bb->begin();
@@ -31,26 +31,26 @@ class TheCleanup {
                 if (!i->mightIO() && !i->changesEnv() && i->unused()) {
                     next = bb->remove(ip);
                 } else if (force) {
-                    Value* arg = force->arg<0>();
-                    if (PirType::valOrMissing() >= arg->type) {
+                    Value* arg = force->arg<0>().val();
+                    if (PirType::valOrMissing().isSuper(arg->type)) {
                         force->replaceUsesWith(arg);
                         next = bb->remove(ip);
                     }
                 } else if (missing) {
-                    Value* arg = missing->arg<0>();
-                    if (PirType::val() >= arg->type) {
+                    Value* arg = missing->arg<0>().val();
+                    if (PirType::val().isSuper(arg->type)) {
                         missing->replaceUsesWith(arg);
                         next = bb->remove(ip);
                     }
                 } else if (closure) {
-                    Value* arg = closure->arg<0>();
-                    if (PirType::val() >= arg->type) {
+                    Value* arg = closure->arg<0>().val();
+                    if (PirType::val().isSuper(arg->type)) {
                         closure->replaceUsesWith(arg);
                         next = bb->remove(ip);
                     }
                 } else if (phi) {
-                    std::set<Value*> phin;
-                    phi->each_arg([&](Value* v, PirType) { phin.insert(v); });
+                    std::unordered_set<Value*> phin;
+                    phi->eachArg([&](Value* v) { phin.insert(v); });
                     if (phin.size() == 1) {
                         phi->replaceUsesWith(*phin.begin());
                         next = bb->remove(ip);
@@ -68,8 +68,8 @@ class TheCleanup {
 
         // Recursively serach promises for referencs to other promises
         std::deque<Promise*> todo;
-        for (size_t i = 0; i < function->promise.size(); ++i) {
-            Promise* p = function->promise[i];
+        for (size_t i = 0; i < function->promises.size(); ++i) {
+            Promise* p = function->promises[i];
             if (p && used_p.find(i) != used_p.end()) {
                 todo.push_back(p);
             }
@@ -92,10 +92,10 @@ class TheCleanup {
             });
         }
 
-        for (size_t i = 0; i < function->promise.size(); ++i) {
-            if (function->promise[i] && used_p.find(i) == used_p.end()) {
-                delete function->promise[i];
-                function->promise[i] = nullptr;
+        for (size_t i = 0; i < function->promises.size(); ++i) {
+            if (function->promises[i] && used_p.find(i) == used_p.end()) {
+                delete function->promises[i];
+                function->promises[i] = nullptr;
             }
         }
 
@@ -104,9 +104,9 @@ class TheCleanup {
 
         Visitor::run(function->entry, [&](BB* bb) {
             // Remove unnecessary splits
-            if (bb->jmp() && cfg.preds[bb->next0->id].size() == 1) {
+            if (bb->isJmp() && cfg.predecessors[bb->next0->id].size() == 1) {
                 BB* d = bb->next0;
-                while (!d->empty()) {
+                while (!d->isEmpty()) {
                     d->moveToEnd(d->begin(), bb);
                 }
                 bb->next0 = d->next0;
@@ -123,8 +123,8 @@ class TheCleanup {
         });
         Visitor::run(function->entry, [&](BB* bb) {
             // Remove empty jump-through blocks
-            if (bb->jmp() && bb->next0->empty() && bb->next0->jmp() &&
-                cfg.preds[bb->next0->next0->id].size() == 1) {
+            if (bb->isJmp() && bb->next0->isEmpty() && bb->next0->isJmp() &&
+                cfg.predecessors[bb->next0->next0->id].size() == 1) {
                 assert(used_bb.find(bb->next0) == used_bb.end());
                 toDel[bb->next0] = bb->next0->next0;
             }
@@ -132,7 +132,7 @@ class TheCleanup {
         Visitor::run(function->entry, [&](BB* bb) {
             // Remove empty branches
             if (bb->next0 && bb->next1) {
-                if (bb->next0->empty() && bb->next1->empty() &&
+                if (bb->next0->isEmpty() && bb->next1->isEmpty() &&
                     bb->next0->next0 == bb->next1->next0 &&
                     used_bb.find(bb->next0) == used_bb.end() &&
                     used_bb.find(bb->next1) == used_bb.end()) {
@@ -143,15 +143,15 @@ class TheCleanup {
                 }
             }
         });
-        // if (function->entry->jmp() && function->entry->empty()) {
+        // if (function->entry->isJmp() && function->entry->empty()) {
         //     toDel[function->entry] = function->entry->next0;
         //     function->entry = function->entry->next0;
         // }
-        if (function->entry->jmp() &&
-            cfg.preds[function->entry->next0->id].size() == 1) {
+        if (function->entry->isJmp() &&
+            cfg.predecessors[function->entry->next0->id].size() == 1) {
             BB* bb = function->entry;
             BB* d = bb->next0;
-            while (!d->empty()) {
+            while (!d->isEmpty()) {
                 d->moveToEnd(d->begin(), bb);
             }
             bb->next0 = d->next0;
@@ -173,12 +173,12 @@ class TheCleanup {
         }
 
         // Renumber
-        function->max_bb_id = 0;
+        function->maxBBId = 0;
         Visitor::runWithChangingIds(function->entry, [&](BB* bb) {
-            bb->unsafeSetId(function->max_bb_id++);
+            bb->unsafeSetId(function->maxBBId++);
             bb->gc();
         });
-        function->max_bb_id--;
+        function->maxBBId--;
     }
 };
 }

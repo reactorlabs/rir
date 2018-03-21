@@ -10,12 +10,12 @@ namespace rir {
 namespace pir {
 
 void ElideEnv::apply(Function* function) {
-    std::set<Value*> envNeeded;
+    std::unordered_set<Value*> envNeeded;
     std::unordered_map<Value*, Value*> envDependency;
 
     Visitor::run(function->entry, [&](BB* bb) {
         for (auto i : *bb) {
-            if (i->leaksEnv() || i->needsLiveEnv())
+            if (i->hasEnv() && !StVar::Cast(i))
                 envNeeded.insert(i->env());
             if (!Env::isEnv(i) && i->hasEnv())
                 envDependency[i] = i->env();
@@ -26,7 +26,7 @@ void ElideEnv::apply(Function* function) {
         for (auto i : *bb) {
             if (i->mightIO() || i->type != PirType::voyd() || Return::Cast(i) ||
                 Deopt::Cast(i)) {
-                i->each_arg([&](Value* v, PirType) {
+                i->eachArg([&](Value* v) {
                     if (envDependency.count(v))
                         envNeeded.insert(envDependency.at(v));
                 });

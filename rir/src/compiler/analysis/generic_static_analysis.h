@@ -9,7 +9,6 @@
 #include "R/r.h"
 
 #include <functional>
-#include <set>
 #include <stack>
 #include <unordered_map>
 

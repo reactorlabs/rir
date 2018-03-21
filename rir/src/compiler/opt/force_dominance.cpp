@@ -72,7 +72,7 @@ struct ForcedAt : public std::unordered_map<Value*, Force*> {
 static Value* getValue(Force* f) {
     Value* res;
     while (f) {
-        res = f->arg<0>();
+        res = f->arg<0>().val();
         f = Force::Cast(res);
     }
     return res;
@@ -82,7 +82,7 @@ class ForceDominanceAnalysis : public StaticAnalysis<ForcedAt> {
   public:
     ForceDominanceAnalysis(BB* bb) : StaticAnalysis(bb) {}
     std::unordered_map<Force*, Force*> domBy;
-    std::set<Force*> dom;
+    std::unordered_set<Force*> dom;
 
     void apply(ForcedAt& d, Instruction* i) const override {
         auto f = Force::Cast(i);
@@ -137,17 +137,17 @@ void ForceDominance::apply(Function* function) {
                 auto mkarg = MkArg::Cast(getValue(f));
                 if (mkarg) {
                     if (dom.isDominating(f)) {
-                        Value* strict = mkarg->arg<0>();
+                        Value* strict = mkarg->arg<0>().val();
                         if (strict != Missing::instance()) {
                             f->replaceUsesWith(strict);
                             next = bb->remove(ip);
                             inlinedPromise[f] = strict;
                         } else if (dom.safeToInline(mkarg)) {
                             Promise* prom = mkarg->prom;
-                            BB* split = BBTransform::split(
-                                ++function->max_bb_id, bb, ip, function);
+                            BB* split = BBTransform::split(++function->maxBBId,
+                                                           bb, ip, function);
                             BB* prom_copy = BBTransform::clone(
-                                &function->max_bb_id, prom->entry, function);
+                                &function->maxBBId, prom->entry, function);
                             bb->next0 = prom_copy;
 
                             // For now we assume every promise starts with a

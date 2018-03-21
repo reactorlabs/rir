@@ -11,11 +11,11 @@ namespace pir {
 
 /*
  * Every Value has a unique tag, to be able to safely downcast values and
- * instructions (without relying on RTTI).
+ * instructions (without relying on RTTI). Instructions are values too.
  *
  */
 enum class Tag : uint8_t {
-    Unused,
+    _UNUSED_,
 #define V(I) I,
     COMPILER_INSTRUCTIONS(V)
 #undef V
@@ -24,7 +24,7 @@ enum class Tag : uint8_t {
 #undef V
 };
 
-const char* TagToStr(Tag t);
+const char* tagToStr(Tag t);
 }
 }
 

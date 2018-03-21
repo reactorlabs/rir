@@ -6,27 +6,51 @@
 #include <iostream>
 #include <vector>
 
-#include "utils/Bitset.h"
+#include "utils/EnumSet.h"
 
 #include "R/r.h"
 
 namespace rir {
 namespace pir {
 
+/*
+ * Values in PIR are either types from R (RType), or native types (NativeType).
+ *
+ * In both cases we use union types, represented by a bitset.
+ *
+ * There is an additional flags bitset, that adds some modifiers.
+ *
+ * As an example, an R integer, that is potentially promised, has:
+ *
+ *  - flags_ : TypeFlag::rtype | TypeFlag::lazy
+ *  - t_.r   : RType::integer
+ *
+ * A machine boolean has type:
+ *
+ *  - flags_ : ()
+ *  - t_.n   : NativeType::test
+ *
+ * An R value (not a promise), has:
+ *
+ *  - flags_ : TypeFlag::rtype
+ *  - t_.r   : RType::symbol | ... | RType::ast
+ *
+ */
+
 enum class RType : uint8_t {
-    unused,
+    _UNUSED_,
 
     nil,
     cons,
 
-    symbol,
-    chars,
+    sym,
+    chr,
 
     logical,
     integer,
-    dbls,
-    strs,
-    vecs,
+    real,
+    str,
+    vec,
 
     raw,
 
@@ -37,19 +61,21 @@ enum class RType : uint8_t {
     env,
     ast,
 
-    max
+    FIRST = nil,
+    LAST = ast
 };
 
 enum class NativeType : uint8_t {
-    unused,
+    _UNUSED_,
 
     test,
 
-    max
+    FIRST = test,
+    LAST = test
 };
 
 enum class TypeFlags : uint8_t {
-    unused,
+    _UNUSED_,
 
     lazy,
     missing,
@@ -57,36 +83,29 @@ enum class TypeFlags : uint8_t {
     is_scalar,
     rtype,
 
-    max
+    FIRST = lazy,
+    LAST = rtype
 };
 
 /*
- * Values in PIR are either types from R (RType), or native types (NativeType).
+ * A PirType can either represent a union of R types or of native types.
  *
- * In both cases we use union types, represented by a bitset.
+ * `a :> b` is implemented by `a.isSuper(b)`. The primitive types are enumerated
+ * by RType and NativeType respectively.
  *
- * There is an additional flags bitset, that adds some modifiers.
+ * TypeFlags are additional features. The element `rtype` of the type flags is
+ * abused to store, if the type is an R type or native type.
  *
- * As an example, an R integer, that is potentially promised, has:
- * 
- *  - flag : TypeFlag::rtype | TypeFlag::lazy
- *  - t_.r : RType::integer 
+ * `a.flags_.includes(b.flags_)` is a necessary condition for `a :> b`.
  *
- * A machine boolean has type:
- *
- *  - flag : ()
- *  - t_.n : NativeType::test
- *
- * An R value (not a promise), has:
- *
- *  - flag : TypeFlag::rtype
- *  - t_.r : RType::symbol | ... | RType::ast
+ * The "BaseType" is the (union) R or native type, stripped of all flags.
  *
  */
+
 struct PirType {
-    typedef BitSet<uint32_t, RType> RTypeSet;
-    typedef BitSet<uint8_t, NativeType> NativeTypeSet;
-    typedef BitSet<uint8_t, TypeFlags> FlagSet;
+    typedef EnumSet<RType> RTypeSet;
+    typedef EnumSet<NativeType> NativeTypeSet;
+    typedef EnumSet<TypeFlags> FlagSet;
 
     FlagSet flags_;
 
@@ -101,35 +120,31 @@ struct PirType {
     static FlagSet defaultRTypeFlags() { return FlagSet() | TypeFlags::rtype; }
 
     PirType() : PirType(RTypeSet()) {}
-    PirType(const RType& t) : flags_(defaultRTypeFlags()), t_(t) {
-        assert(t > RType::unused && t < RType::max);
-    }
-    PirType(const NativeType& t) : t_(t) {
-        assert(t > NativeType::unused && t < NativeType::max);
-    }
+    PirType(const RType& t) : flags_(defaultRTypeFlags()), t_(t) {}
+    PirType(const NativeType& t) : t_(t) {}
     PirType(const RTypeSet& t) : flags_(defaultRTypeFlags()), t_(t) {}
     PirType(const NativeTypeSet& t) : t_(t) {}
     PirType(SEXP);
 
     void operator=(const PirType& o) {
         flags_ = o.flags_;
-        if (flags_.includes(TypeFlags::rtype))
+        if (isRType())
             t_.r = o.t_.r;
         else
             t_.n = o.t_.n;
     }
 
     static PirType num() {
-        return PirType(RType::logical) | RType::integer | RType::dbls;
+        return PirType(RType::logical) | RType::integer | RType::real;
     }
     static PirType val() {
-        return PirType(vecs() | list() | RType::symbol | RType::chars |
-                       RType::raw | RType::closure | RType::prom | RType::code |
-                       RType::env | RType::ast);
+        return PirType(vecs() | list() | RType::sym | RType::chr | RType::raw |
+                       RType::closure | RType::prom | RType::code | RType::env |
+                       RType::ast);
         // TODO: for now we ignore object systems..
         //    .orObj();
     }
-    static PirType vecs() { return num() | RType::strs | RType::vecs; }
+    static PirType vecs() { return num() | RType::str | RType::vec; }
 
     static PirType valOrMissing() { return val().orMissing(); }
     static PirType valOrLazy() { return val().orLazy(); }
@@ -194,7 +209,7 @@ struct PirType {
         if (isScalar() && o.isScalar())
             r.flags_.set(TypeFlags::is_scalar);
         else
-            r.flags_.clear(TypeFlags::is_scalar);
+            r.flags_.reset(TypeFlags::is_scalar);
         if (o.maybeObj())
             r.flags_.set(TypeFlags::obj);
 
@@ -212,7 +227,7 @@ struct PirType {
                (isRType() ? t_.r == o.t_.r : t_.n == o.t_.n);
     }
 
-    bool operator>=(const PirType& o) const {
+    bool isSuper(const PirType& o) const {
         if (isRType() != o.isRType()) {
             return false;
         }
@@ -235,8 +250,7 @@ inline std::ostream& operator<<(std::ostream& out, NativeType t) {
     case NativeType::test:
         out << "t";
         break;
-    case NativeType::unused:
-    case NativeType::max:
+    case NativeType::_UNUSED_:
         assert(false);
         break;
     }
@@ -251,16 +265,16 @@ inline std::ostream& operator<<(std::ostream& out, RType t) {
     case RType::raw:
         out << "raw";
         break;
-    case RType::vecs:
+    case RType::vec:
         out << "vec";
         break;
-    case RType::chars:
+    case RType::chr:
         out << "char";
         break;
-    case RType::dbls:
-        out << "dble";
+    case RType::real:
+        out << "real";
         break;
-    case RType::strs:
+    case RType::str:
         out << "str";
         break;
     case RType::env:
@@ -281,7 +295,7 @@ inline std::ostream& operator<<(std::ostream& out, RType t) {
     case RType::closure:
         out << "cls";
         break;
-    case RType::symbol:
+    case RType::sym:
         out << "sym";
         break;
     case RType::integer:
@@ -290,8 +304,7 @@ inline std::ostream& operator<<(std::ostream& out, RType t) {
     case RType::logical:
         out << "lgl";
         break;
-    case RType::unused:
-    case RType::max:
+    case RType::_UNUSED_:
         assert(false);
         break;
     }
@@ -300,46 +313,35 @@ inline std::ostream& operator<<(std::ostream& out, RType t) {
 
 inline std::ostream& operator<<(std::ostream& out, PirType t) {
     if (!t.isRType()) {
-        if (t.t_.n.size() == 0) {
+        if (t.t_.n.empty()) {
             out << "void";
             return out;
         }
 
-        std::vector<NativeType> ts;
-        for (NativeType bt = NativeType::unused; bt != NativeType::max;
-             bt = (NativeType)((size_t)bt + 1)) {
-            if (t.t_.n.includes(bt))
-                ts.push_back(bt);
-        }
-        if (ts.size() > 1)
+        if (t.t_.n.count() > 1)
             out << "(";
-        for (auto i = ts.begin(); i != ts.end(); ++i) {
-            out << *i;
-            if (i + 1 != ts.end())
+        for (auto e = t.t_.n.begin(); e != t.t_.n.end(); ++e) {
+            out << *e;
+            if (e + 1 != t.t_.n.end())
                 out << "|";
         }
-        if (ts.size() > 1)
+        if (t.t_.n.count() > 1)
             out << ")";
         return out;
     }
 
-    if (t.baseType() >= PirType::val().baseType()) {
+    // If the base type is at least a value, then it's a value
+    if (t.isRType() && PirType::val() == t.baseType()) {
         out << "val";
     } else {
-        std::vector<RType> ts;
-        for (RType bt = RType::unused; bt != RType::max;
-             bt = (RType)((size_t)bt + 1)) {
-            if (t.t_.r.includes(bt))
-                ts.push_back(bt);
-        }
-        if (ts.size() != 1)
+        if (t.t_.r.count() > 1)
             out << "(";
-        for (auto i = ts.begin(); i != ts.end(); ++i) {
+        for (auto i = t.t_.r.begin(); i != t.t_.r.end(); ++i) {
             out << *i;
-            if (i + 1 != ts.end())
+            if (i + 1 != t.t_.r.end())
                 out << "|";
         }
-        if (ts.size() != 1)
+        if (t.t_.r.count() > 1)
             out << ")";
     }
 

@@ -13,7 +13,7 @@ PirType::PirType(SEXP e) : flags_(defaultRTypeFlags()), t_(RTypeSet()) {
         t_.r.set(RType::nil);
         break;
     case SYMSXP:
-        t_.r.set(RType::symbol);
+        t_.r.set(RType::sym);
         break;
     case LISTSXP:
         t_.r.set(RType::cons);
@@ -29,9 +29,10 @@ PirType::PirType(SEXP e) : flags_(defaultRTypeFlags()), t_(RTypeSet()) {
         break;
     case LANGSXP:
         t_.r.set(RType::ast);
+        t_.r.set(RType::code);
         break;
     case CHARSXP:
-        t_.r.set(RType::chars);
+        t_.r.set(RType::chr);
         break;
     case LGLSXP:
         t_.r.set(RType::logical);
@@ -40,24 +41,25 @@ PirType::PirType(SEXP e) : flags_(defaultRTypeFlags()), t_(RTypeSet()) {
         t_.r.set(RType::integer);
         break;
     case REALSXP:
-        t_.r.set(RType::dbls);
+        t_.r.set(RType::real);
         break;
     case STRSXP:
-        t_.r.set(RType::strs);
+        t_.r.set(RType::str);
         break;
     case VECSXP:
-        t_.r.set(RType::vecs);
+        t_.r.set(RType::vec);
         break;
     case RAWSXP:
         t_.r.set(RType::raw);
         break;
+    case BCODESXP:
+        t_.r.set(RType::code);
     case SPECIALSXP:
     case BUILTINSXP:
     case DOTSXP:
     case ANYSXP:
     case CPLXSXP:
     case EXPRSXP:
-    case BCODESXP:
     case EXTPTRSXP:
     case WEAKREFSXP:
     case S4SXP:
@@ -68,7 +70,7 @@ PirType::PirType(SEXP e) : flags_(defaultRTypeFlags()), t_(RTypeSet()) {
         flags_.set(TypeFlags::obj);
     }
 
-    if (PirType::vecs() >= *this) {
+    if (PirType::vecs().isSuper(*this)) {
         if (Rf_length(e) == 1)
             flags_.set(TypeFlags::is_scalar);
     }

@@ -5,7 +5,7 @@
 namespace rir {
 namespace pir {
 
-const char* TagToStr(Tag tag) {
+const char* tagToStr(Tag tag) {
     switch (tag) {
 #define V(I)                                                                   \
     case Tag::I:                                                               \
@@ -14,10 +14,10 @@ const char* TagToStr(Tag tag) {
 #undef V
 #define V(I)                                                                   \
     case Tag::I:                                                               \
-        assert(false);
+        return #I;
         COMPILER_VALUES(V)
 #undef V
-    case Tag::Unused:
+    case Tag::_UNUSED_:
         assert(false);
     }
     assert(false);

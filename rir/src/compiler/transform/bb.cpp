@@ -41,10 +41,10 @@ BB* BBTransform::clone(size_t* id_counter, BB* src, Code* target) {
                 for (size_t j = 0; j < phi->input.size(); ++j)
                     phi->input[j] = bbs[phi->input[j]->id];
             }
-            i->map_arg([&](Value** v) {
-                if ((*v)->isInstruction()) {
-                    assert(relocation_table.count(*v));
-                    *v = relocation_table.at(*v);
+            i->eachArg([&](InstrArg& arg) {
+                if (arg.val()->isInstruction()) {
+                    assert(relocation_table.count(arg.val()));
+                    arg.val() = relocation_table.at(arg.val());
                 }
             });
         }
@@ -89,7 +89,7 @@ Value* BBTransform::forInline(BB* inlinee, BB* splice) {
         Return* ret = Return::Cast(bb->last());
         assert(ret);
         assert(!found);
-        found = ret->arg<0>();
+        found = ret->arg<0>().val();
         bb->next0 = splice;
         bb->remove(bb->end() - 1);
     });
