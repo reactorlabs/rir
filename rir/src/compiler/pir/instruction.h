@@ -193,6 +193,18 @@ class InstructionImplementation : public Instruction {
         return nullptr;
     }
 
+    static void Cast(Value* i, std::function<void(Base*)> m) {
+        Base* b = Cast(i);
+        if (b)
+            m(b);
+    }
+
+    static const void Cast(const Value* i, std::function<void(const Base*)> m) {
+        Base* b = Cast(i);
+        if (b)
+            m(b);
+    }
+
     size_t nargs() const override { return args_.size(); }
 
     const InstrArg& arg(size_t pos) const override final { return args_[pos]; }

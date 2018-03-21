@@ -13,24 +13,20 @@ void ElideEnv::apply(Function* function) {
     std::unordered_set<Value*> envNeeded;
     std::unordered_map<Value*, Value*> envDependency;
 
-    Visitor::run(function->entry, [&](BB* bb) {
-        for (auto i : *bb) {
-            if (i->hasEnv() && !StVar::Cast(i))
-                envNeeded.insert(i->env());
-            if (!Env::isEnv(i) && i->hasEnv())
-                envDependency[i] = i->env();
-        }
+    Visitor::run(function->entry, [&](Instruction* i) {
+        if (i->hasEnv() && !StVar::Cast(i))
+            envNeeded.insert(i->env());
+        if (!Env::isEnv(i) && i->hasEnv())
+            envDependency[i] = i->env();
     });
 
-    Visitor::run(function->entry, [&](BB* bb) {
-        for (auto i : *bb) {
-            if (i->mightIO() || i->type != PirType::voyd() || Return::Cast(i) ||
-                Deopt::Cast(i)) {
-                i->eachArg([&](Value* v) {
-                    if (envDependency.count(v))
-                        envNeeded.insert(envDependency.at(v));
-                });
-            }
+    Visitor::run(function->entry, [&](Instruction* i) {
+        if (i->mightIO() || i->type != PirType::voyd() || Return::Cast(i) ||
+            Deopt::Cast(i)) {
+            i->eachArg([&](Value* v) {
+                if (envDependency.count(v))
+                    envNeeded.insert(envDependency.at(v));
+            });
         }
     });
 

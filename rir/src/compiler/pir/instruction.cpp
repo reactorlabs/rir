@@ -85,13 +85,9 @@ bool Instruction::unused() {
     if (tag == Tag::Branch || tag == Tag::Return)
         return false;
 
-    return Visitor::check(bb(), [&](BB* bb) {
+    return Visitor::check(bb(), [&](Instruction* i) {
         bool unused = true;
-        for (auto i : *bb) {
-            i->eachArg([&](Value* v) { unused = unused && (v != this); });
-            if (!unused)
-                return false;
-        }
+        i->eachArg([&](Value* v) { unused = unused && (v != this); });
         return unused;
     });
 }
@@ -99,18 +95,14 @@ bool Instruction::unused() {
 Instruction* Instruction::hasSingleUse() {
     size_t seen = 0;
     Instruction* usage;
-    Visitor::check(bb(), [&](BB* bb) {
-        for (auto i : *bb) {
-            i->eachArg([&](Value* v) {
-                if (v == this) {
-                    usage = i;
-                    seen++;
-                }
-            });
-            if (seen > 1)
-                return false;
-        }
-        return true;
+    Visitor::check(bb(), [&](Instruction* i) {
+        i->eachArg([&](Value* v) {
+            if (v == this) {
+                usage = i;
+                seen++;
+            }
+        });
+        return seen <= 1;
     });
     if (seen == 1)
         return usage;
@@ -118,24 +110,20 @@ Instruction* Instruction::hasSingleUse() {
 }
 
 void Instruction::replaceUsesIn(Value* replace, BB* target) {
-    Visitor::run(target, [&](BB* bb) {
-        for (auto i : *bb) {
-            i->eachArg([&](InstrArg& arg) {
-                if (arg.val() == this)
-                    arg.val() = replace;
-            });
-        }
+    Visitor::run(target, [&](Instruction* i) {
+        i->eachArg([&](InstrArg& arg) {
+            if (arg.val() == this)
+                arg.val() = replace;
+        });
     });
 }
 
 void Instruction::replaceUsesWith(Value* replace) {
-    Visitor::run(bb(), [&](BB* bb) {
-        for (auto i : *bb) {
-            i->eachArg([&](InstrArg& arg) {
-                if (arg.val() == this)
-                    arg.val() = replace;
-            });
-        }
+    Visitor::run(bb(), [&](Instruction* i) {
+        i->eachArg([&](InstrArg& arg) {
+            if (arg.val() == this)
+                arg.val() = replace;
+        });
     });
 }
 

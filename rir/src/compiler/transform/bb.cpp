@@ -34,20 +34,18 @@ BB* BBTransform::clone(size_t* id_counter, BB* src, Code* target) {
 
     // Relocate arg pointers
     BB* newEntry = bbs[src->id];
-    Visitor::run(newEntry, [&](BB* bb) {
-        for (auto i : *bb) {
-            auto phi = Phi::Cast(i);
-            if (phi) {
-                for (size_t j = 0; j < phi->input.size(); ++j)
-                    phi->input[j] = bbs[phi->input[j]->id];
-            }
-            i->eachArg([&](InstrArg& arg) {
-                if (arg.val()->isInstruction()) {
-                    assert(relocation_table.count(arg.val()));
-                    arg.val() = relocation_table.at(arg.val());
-                }
-            });
+    Visitor::run(newEntry, [&](Instruction* i) {
+        auto phi = Phi::Cast(i);
+        if (phi) {
+            for (size_t j = 0; j < phi->input.size(); ++j)
+                phi->input[j] = bbs[phi->input[j]->id];
         }
+        i->eachArg([&](InstrArg& arg) {
+            if (arg.val()->isInstruction()) {
+                assert(relocation_table.count(arg.val()));
+                arg.val() = relocation_table.at(arg.val());
+            }
+        });
     });
 
     return newEntry;
@@ -63,14 +61,12 @@ BB* BBTransform::split(size_t next_id, BB* src, BB::Instrs::iterator it,
     }
     src->next0 = split;
     src->next1 = nullptr;
-    Visitor::run(split, [&](BB* bb) {
-        for (auto i : *bb) {
-            auto phi = Phi::Cast(i);
-            if (phi) {
-                for (size_t j = 0; j < phi->input.size(); ++j)
-                    if (phi->input[j] == src)
-                        phi->input[j] = split;
-            }
+    Visitor::run(split, [&](Instruction* i) {
+        auto phi = Phi::Cast(i);
+        if (phi) {
+            for (size_t j = 0; j < phi->input.size(); ++j)
+                if (phi->input[j] == src)
+                    phi->input[j] = split;
         }
     });
     return split;

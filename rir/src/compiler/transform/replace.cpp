@@ -13,11 +13,7 @@ void Replace::usesOfValue(Instruction* i, Value* old, Value* rpl) {
 }
 
 void Replace::usesOfValue(BB* start, Value* old, Value* rpl) {
-    Visitor::run(start, [&](BB* bb) {
-        for (auto i : *bb) {
-            usesOfValue(i, old, rpl);
-        }
-    });
+    Visitor::run(start, [&](Instruction* i) { usesOfValue(i, old, rpl); });
 }
 }
 }
