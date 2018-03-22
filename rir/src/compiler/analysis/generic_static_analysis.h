@@ -8,12 +8,13 @@
 #include "../util/visitor.h"
 #include "R/r.h"
 
-#include <functional>
 #include <stack>
 #include <unordered_map>
 
 namespace rir {
 namespace pir {
+
+enum class PositioningStyle { BeforeInstruction, AfterInstruction };
 
 /*
  * Generic implementation of a (forward) static analysis.
@@ -31,16 +32,26 @@ namespace pir {
  * "mergepoint" and then "apply" is used to seek to the desired instruction
  * pointer (see "collect" for an example).
  *
+ * AbstractState basically has to have a merge function.
+ * Anything else depends on the requirements of the apply function, which is
+ * provided by the subclass that specializes StaticAnalysis.
  */
 template <class AbstractState>
 class StaticAnalysis {
-  protected:
+  private:
     std::vector<std::vector<AbstractState>> mergepoint;
+    virtual void apply(AbstractState&, Instruction*) const = 0;
+    AbstractState exitpoint;
+    bool done = false;
+
+  protected:
+    const std::vector<std::vector<AbstractState>>& getMergepoints() {
+        return mergepoint;
+    }
 
   public:
-    AbstractState exitpoint;
     BB* entry;
-    CFG cfg;
+    const CFG cfg;
 
     StaticAnalysis(BB* entry) : entry(entry), cfg(entry) {
         mergepoint.resize(cfg.size());
@@ -52,23 +63,55 @@ class StaticAnalysis {
         mergepoint[entry->id].push_back(initialState);
     }
 
-    virtual void apply(AbstractState&, Instruction*) const = 0;
+    const AbstractState& result() {
+        assert(done);
 
-    typedef std::function<void(const AbstractState&, Instruction*)> collect_res;
+        return exitpoint;
+    }
 
-    template <bool before = true>
-    void collect(collect_res collect) {
+    template <PositioningStyle POS>
+    const AbstractState& at(Instruction* i) {
+        assert(done);
+
+        BB* bb = i->bb();
+        size_t segment = 0;
+        AbstractState state = mergepoint[bb->id][segment];
+        for (auto j : *bb) {
+            if (POS == PositioningStyle::BeforeInstruction && i == j)
+                return state;
+
+            if (Call::Cast(i))
+                state = mergepoint[bb->id][++segment];
+            else
+                apply(state, i);
+
+            if (POS == PositioningStyle::AfterInstruction && i == j)
+                return state;
+        }
+
+        assert(false);
+        return state;
+    }
+
+    typedef std::function<void(const AbstractState&, Instruction*)> Collect;
+
+    template <PositioningStyle POS>
+    void foreach (Collect collect) {
+        assert(done);
+
         Visitor::run(entry, [&](BB* bb) {
             size_t segment = 0;
             AbstractState state = mergepoint[bb->id][segment];
             for (auto i : *bb) {
-                if (before)
+                if (POS == PositioningStyle::BeforeInstruction)
                     collect(state, i);
+
                 if (Call::Cast(i))
                     state = mergepoint[bb->id][++segment];
                 else
                     apply(state, i);
-                if (!before)
+
+                if (POS == PositioningStyle::AfterInstruction)
                     collect(state, i);
             }
         });
@@ -76,7 +119,6 @@ class StaticAnalysis {
 
     void operator()() {
         bool reachedExit = false;
-        bool done;
 
         std::vector<bool> changed(cfg.size(), false);
         changed[entry->id] = true;

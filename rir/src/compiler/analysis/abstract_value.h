@@ -3,16 +3,24 @@
 
 #include "../pir/pir.h"
 
-#include <algorithm>
+#include <functional>
 #include <unordered_map>
 #include <unordered_set>
 
 namespace rir {
 namespace pir {
-struct ValOrig : public std::pair<Value*, Instruction*> {
-    ValOrig(Value* v, Instruction* o) : std::pair<Value*, Instruction*>(v, o) {}
-    Value* val() const { return first; }
-    Instruction* orig() const { return second; }
+struct ValOrig {
+    Value* val;
+    Instruction* origin;
+    ValOrig(Value* v, Instruction* o) : val(v), origin(o) {}
+    bool operator<(const ValOrig& other) const {
+        if (origin == other.origin)
+            return val < other.val;
+        return origin < other.origin;
+    }
+    bool operator==(const ValOrig& other) const {
+        return val == other.val && origin == other.origin;
+    }
 };
 }
 }
@@ -22,8 +30,8 @@ template <>
 struct hash<rir::pir::ValOrig> {
     std::size_t operator()(const rir::pir::ValOrig& v) const {
         using std::hash;
-        return hash<rir::pir::Value*>()(v.first) ^
-               hash<rir::pir::Instruction*>()(v.second);
+        return hash<rir::pir::Value*>()(v.val) ^
+               hash<rir::pir::Instruction*>()(v.origin);
     }
 };
 }
@@ -39,18 +47,19 @@ namespace pir {
  * the top element of our lattice.
  *
  */
-struct AbstractValue {
+struct AbstractPirValue {
+  private:
     bool unknown = false;
-
     std::unordered_set<ValOrig> vals;
 
+  public:
     PirType type = PirType::bottom();
 
-    AbstractValue();
-    AbstractValue(Value* v, Instruction* origin);
+    AbstractPirValue();
+    AbstractPirValue(Value* v, Instruction* origin);
 
-    static AbstractValue tainted() {
-        AbstractValue v;
+    static AbstractPirValue tainted() {
+        AbstractPirValue v;
         v.taint();
         return v;
     }
@@ -63,13 +72,26 @@ struct AbstractValue {
 
     bool isUnknown() const { return unknown; }
 
-    bool singleValue() {
+    bool isSingleValue() {
         if (unknown)
             return false;
         return vals.size() == 1;
     }
 
-    bool merge(const AbstractValue& other);
+    typedef std::function<void(Value*)> ValMaybe;
+    typedef std::function<void(ValOrig&)> ValOrigMaybe;
+
+    void ifSingleValue(ValMaybe known) {
+        if (!unknown && vals.size() == 1)
+            known((*vals.begin()).val);
+    }
+
+    void eachSource(ValOrigMaybe apply) {
+        for (auto v : vals)
+            apply(v);
+    }
+
+    bool merge(const AbstractPirValue& other);
 
     void print(std::ostream& out = std::cout);
 };
@@ -79,7 +101,7 @@ static Value* UninitializedParent = nullptr;
 static Function* UnknownFunction = (Function*)-1;
 
 /*
- * An AbstracEnvironment is a static approximation of an R runtime Envrionment.
+ * An AbstractREnvironment is a static approximation of an R runtime Envrionment
  *
  * A key notion is, when an environment leaks. A leaked environment describes
  * an environment, that is visible to an unknown context. This means, that it
@@ -91,9 +113,8 @@ static Function* UnknownFunction = (Function*)-1;
  *
  * For inter-procedural analysis we can additionally keep track of closures.
  */
-template <class AV>
-struct AbstractEnvironment {
-    std::unordered_map<SEXP, AV> entries;
+struct AbstractREnvironment {
+    std::unordered_map<SEXP, AbstractPirValue> entries;
     std::unordered_map<Value*, Function*> functionPointers;
 
     Value* parentEnv = UninitializedParent;
@@ -109,28 +130,28 @@ struct AbstractEnvironment {
     }
 
     void set(SEXP n, Value* v, Instruction* origin) {
-        entries[n] = AV(v, origin);
+        entries[n] = AbstractPirValue(v, origin);
     }
 
     void print(std::ostream& out = std::cout) {
         for (auto e : entries) {
             SEXP name = std::get<0>(e);
             out << "   " << CHAR(PRINTNAME(name)) << " -> ";
-            AV v = std::get<1>(e);
+            AbstractPirValue v = std::get<1>(e);
             v.print(out);
             out << "\n";
         }
         out << "\n";
     }
 
-    const AV& get(SEXP e) const {
-        static AV t = AV::tainted();
+    const AbstractPirValue& get(SEXP e) const {
+        static AbstractPirValue t = AbstractPirValue::tainted();
         if (entries.count(e))
             return entries.at(e);
         return t;
     }
 
-    bool merge(AbstractEnvironment& other) {
+    bool merge(const AbstractREnvironment& other) {
         bool changed = false;
         if (!leaked && other.leaked)
             changed = leaked = true;
@@ -143,7 +164,7 @@ struct AbstractEnvironment {
         for (auto e : other.entries)
             keys.insert(std::get<0>(e));
         for (auto n : keys) {
-            // if this is not the first incomming edge and it has more entries
+            // if this is not the first incoming edge and it has more entries
             // we are in trouble.
             if (!entries.count(n)) {
                 entries[n].taint();
@@ -160,7 +181,8 @@ struct AbstractEnvironment {
             fps.insert(std::get<0>(e));
         for (auto n : fps) {
             if (functionPointers[n] != UnknownFunction &&
-                functionPointers[n] != other.functionPointers[n]) {
+                (other.functionPointers.count(n) == 0 ||
+                 functionPointers[n] != other.functionPointers.at(n))) {
                 functionPointers[n] = UnknownFunction;
             }
         }
@@ -181,12 +203,19 @@ struct AbstractEnvironment {
  * analysis, or analyzing a function with multiple environments.
  *
  */
-template <class AE, class AV>
-class AbstractEnvironmentSet : public std::unordered_map<Value*, AE> {
-  public:
-    typedef std::pair<Value*, AV> AbstractLoadVal;
 
-    bool merge(AbstractEnvironmentSet& other) {
+struct AbstractLoad {
+    Value* env = nullptr;
+    AbstractPirValue result;
+
+    AbstractLoad(Value* env, const AbstractPirValue& val)
+        : env(env), result(val) {}
+};
+
+class AbstractREnvironmentHierarchy
+    : public std::unordered_map<Value*, AbstractREnvironment> {
+  public:
+    bool merge(const AbstractREnvironmentHierarchy& other) {
         bool changed = false;
         std::unordered_set<Value*> k;
         for (auto e : *this)
@@ -195,17 +224,16 @@ class AbstractEnvironmentSet : public std::unordered_map<Value*, AE> {
             k.insert(e.first);
         for (auto i : k)
             if (this->count(i)) {
-                if (this->at(i).merge(other[i]))
+                if (other.count(i) == 0 && !at(i).tainted) {
+                    at(i).taint();
+                } else if (at(i).merge(other.at(i))) {
                     changed = true;
+                }
             } else {
                 (*this)[i].taint();
                 changed = true;
             }
         return changed;
-    }
-    void clear() {
-        for (auto e : *this)
-            e.second.clear();
     }
 
     Function* findFunction(Value* env, Value* fun) {
@@ -217,16 +245,16 @@ class AbstractEnvironmentSet : public std::unordered_map<Value*, AE> {
         return UnknownFunction;
     }
 
-    AbstractLoadVal get(Value* env, SEXP e) const {
+    AbstractLoad get(Value* env, SEXP e) const {
         while (env != UnknownParent) {
             if (this->count(env) == 0)
-                return AbstractLoadVal(env, AV::tainted());
-            const AV& res = this->at(env).get(e);
+                return AbstractLoad(env, AbstractPirValue::tainted());
+            const AbstractPirValue& res = this->at(env).get(e);
             if (!res.isUnknown())
-                return AbstractLoadVal(env, res);
+                return AbstractLoad(env, res);
             env = (*this).at(env).parentEnv;
         }
-        return AbstractLoadVal(env, AV::tainted());
+        return AbstractLoad(env, AbstractPirValue::tainted());
     }
 };
 }

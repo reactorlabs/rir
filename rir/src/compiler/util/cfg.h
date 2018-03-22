@@ -15,7 +15,7 @@ class CFG {
     std::vector<BBList> predecessors;
     BBList exits;
 
-    size_t size() { return predecessors.size(); }
+    size_t size() const { return predecessors.size(); }
     CFG(BB*);
 };
 
@@ -25,7 +25,7 @@ class DominanceGraph {
   public:
     std::vector<BBList> dominating;
 
-    size_t size() { return dominating.size(); }
+    size_t size() const { return dominating.size(); }
     DominanceGraph(BB*);
 
     bool dominates(BB* a, BB* b) const;

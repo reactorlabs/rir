@@ -81,41 +81,50 @@ static Value* getValue(Force* f) {
 class ForceDominanceAnalysis : public StaticAnalysis<ForcedAt> {
   public:
     ForceDominanceAnalysis(BB* bb) : StaticAnalysis(bb) {}
-    std::unordered_map<Force*, Force*> domBy;
-    std::unordered_set<Force*> dom;
 
     void apply(ForcedAt& d, Instruction* i) const override {
         auto f = Force::Cast(i);
         if (f)
             d.evalAt(getValue(f), f);
     }
+};
 
-    void operator()() {
-        StaticAnalysis::operator()();
-
-        collect<false>([&](const ForcedAt& p, Instruction* i) {
-            auto f = Force::Cast(i);
-            if (f) {
-                if (p.find(getValue(f)) != p.end()) {
-                    auto o = p.at(getValue(f));
-                    if (o != ForcedAt::ambiguous()) {
-                        if (f != o)
-                            domBy[f] = o;
-                        else
-                            dom.insert(f);
+class ForceDominanceAnalysisResult {
+  public:
+    ForceDominanceAnalysisResult(BB* bb) {
+        ForceDominanceAnalysis analysis(bb);
+        analysis();
+        analysis.foreach<PositioningStyle::AfterInstruction>(
+            [&](const ForcedAt& p, Instruction* i) {
+                auto f = Force::Cast(i);
+                if (f) {
+                    if (p.find(getValue(f)) != p.end()) {
+                        auto o = p.at(getValue(f));
+                        if (o != ForcedAt::ambiguous()) {
+                            if (f != o)
+                                domBy[f] = o;
+                            else
+                                dom.insert(f);
+                        }
                     }
                 }
-            }
-        });
+            });
+        exit = std::move(analysis.result());
     }
-    bool safeToInline(MkArg* a) {
-        return exitpoint.count(a) && exitpoint.at(a) != ForcedAt::ambiguous();
+
+    bool isSafeToInline(MkArg* a) {
+        return exit.count(a) && exit.at(a) != ForcedAt::ambiguous();
     }
     bool isDominating(Force* f) { return dom.find(f) != dom.end(); }
-    void map(Force* f, std::function<void(Force* f)> action) {
+    void mapToDominator(Force* f, std::function<void(Force* f)> action) {
         if (domBy.count(f))
             action(domBy.at(f));
     }
+
+  private:
+    ForcedAt exit;
+    std::unordered_map<Force*, Force*> domBy;
+    std::unordered_set<Force*> dom;
 };
 }
 
@@ -123,11 +132,11 @@ namespace rir {
 namespace pir {
 
 void ForceDominance::apply(Function* function) {
-    ForceDominanceAnalysis dom(function->entry);
-    dom();
+    ForceDominanceAnalysisResult analysis(function->entry);
 
     std::unordered_map<Force*, Value*> inlinedPromise;
 
+    // 1. Inline dominating promises
     Visitor::run(function->entry, [&](BB* bb) {
         auto ip = bb->begin();
         while (ip != bb->end()) {
@@ -136,13 +145,13 @@ void ForceDominance::apply(Function* function) {
             if (f) {
                 auto mkarg = MkArg::Cast(getValue(f));
                 if (mkarg) {
-                    if (dom.isDominating(f)) {
+                    if (analysis.isDominating(f)) {
                         Value* strict = mkarg->arg<0>().val();
                         if (strict != Missing::instance()) {
                             f->replaceUsesWith(strict);
                             next = bb->remove(ip);
                             inlinedPromise[f] = strict;
-                        } else if (dom.safeToInline(mkarg)) {
+                        } else if (analysis.isSafeToInline(mkarg)) {
                             Promise* prom = mkarg->prom;
                             BB* split = BBTransform::split(++function->maxBBId,
                                                            bb, ip, function);
@@ -178,6 +187,7 @@ void ForceDominance::apply(Function* function) {
         }
     });
 
+    // 2. replace dominated promises
     Visitor::run(function->entry, [&](BB* bb) {
         auto ip = bb->begin();
         while (ip != bb->end()) {
@@ -186,7 +196,7 @@ void ForceDominance::apply(Function* function) {
             if (f) {
                 // If this force instruction is dominated by another force we
                 // can replace it with the dominating instruction
-                dom.map(f, [&](Force* r) {
+                analysis.mapToDominator(f, [&](Force* r) {
                     if (inlinedPromise.count(r))
                         f->replaceUsesWith(inlinedPromise.at(r));
                     else

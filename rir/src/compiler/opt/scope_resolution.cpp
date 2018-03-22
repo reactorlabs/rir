@@ -57,23 +57,21 @@ class TheScopeResolution {
                         analysis.observedStores.find(s) ==
                             analysis.observedStores.end())
                         next = bb->remove(ip);
-                } else if (ld) {
+                } else if (ld && analysis.loads.count(ld)) {
                     // If we have a non-ambiguous load, we can replace the load
                     // with the actual values.
-                    auto aload = analysis.loads[ld];
-                    auto v = aload.second;
+                    auto aload = analysis.loads.at(ld);
+                    auto aval = aload.result;
                     bool localVals = true;
-                    for (auto i : v.vals) {
+                    aval.eachSource([&](ValOrig& src) {
                         // inter-procedural scope analysis can drag in values
                         // from other functions, which we cannot use here!
-                        if (i.orig()->bb()->fun != function) {
+                        if (src.origin->bb()->fun != function) {
                             localVals = false;
-                            break;
                         }
-                    }
+                    });
                     if (localVals) {
-                        if (v.singleValue()) {
-                            Value* val = (*v.vals.begin()).val();
+                        aval.ifSingleValue([&](Value* val) {
                             if (ldf) {
                                 auto f = new Force(val);
                                 // TODO
@@ -84,11 +82,12 @@ class TheScopeResolution {
                                 ld->replaceUsesWith(val);
                                 next = bb->remove(ip);
                             }
-                        } else if (!v.vals.empty()) {
+                        });
+                        if (!aval.isSingleValue() && !aval.isUnknown()) {
                             auto phi = new Phi;
-                            for (auto a : v.vals) {
-                                phi->addInput(a.orig()->bb(), a.val());
-                            }
+                            aval.eachSource([&](ValOrig& src) {
+                                phi->addInput(src.origin->bb(), src.val);
+                            });
                             phi->updateType();
                             if (ldf) {
                                 auto f = new Force(phi);
