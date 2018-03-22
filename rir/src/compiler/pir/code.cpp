@@ -10,7 +10,7 @@ namespace pir {
 Code::Code() : entry(new BB(this, 0)) {}
 
 void Code::print(std::ostream& out) {
-    Visitor::run<true>(entry, [&out](BB* bb) { bb->print(out); });
+    BreadthFirstVisitor::run(entry, [&out](BB* bb) { bb->print(out); });
 }
 
 Code::~Code() {
