@@ -130,6 +130,11 @@ REXPORT SEXP pir_compile(SEXP what) {
     return R_NilValue;
 }
 
+REXPORT SEXP pir_tests() {
+    PirTests::run();
+    return R_NilValue;
+}
+
 #include "compiler/translations/pir_2_rir.h"
 /*REXPORT SEXP pir_2_rir(SEXP what) {
     if (!isValidClosureSEXP(what))

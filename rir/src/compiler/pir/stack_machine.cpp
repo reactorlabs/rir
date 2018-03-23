@@ -1,6 +1,7 @@
 #include "stack_machine.h"
 #include "ir/BC.h"
 #include "../translations/rir_2_pir.h"
+#include "../translations/rir_inlined_promise_2_pir.h"
 #include "R/Funtab.h"
 #include "../util/builder.h"
 #include "../pir/pir_impl.h"
@@ -126,22 +127,22 @@ void StackMachine::runCurrentBC(Builder* builder, rir::Function* src,
                 } else if (argi == MISSING_ARG_IDX) {
                     assert(false);
                 }
+                rir::Code* promiseCode = src->codeAt(argi);
                 Promise* prom = builder->function->createProm();
                 {
-                    // What should I do with this?
-                    Builder pb(builder->function, prom);
-                    Rir2Pir compiler = Rir2Pir();
-                    IRTransformation* rir2Pir = compiler.declare(src);
-                    compiler.compileFunction(rir2Pir, true);
-                    //CodeCompiler c(pb, src, code, cmp);
-                    //c(true);
+                    Builder promiseBuilder(builder->function, prom);
+                    Rir2Pir compiler(&promiseBuilder);
+                    IRTransformation* rir2Pir =
+                        compiler.declare(src, promiseCode);
+                    compiler.compileFunction(rir2Pir);
                 }
                 Value* val = Missing::instance();
                 if (Query::pure(prom)) {
-                    Rir2Pir compiler = Rir2Pir();
-                    IRTransformation* rir2Pir = compiler.declare(src);
-                    compiler.compileFunction(rir2Pir, false);
-                    //val = c(false);
+                    RirInlinedPromise2Rir compiler =
+                        RirInlinedPromise2Rir(builder);
+                    IRTransformation* rir2Pir =
+                        compiler.declare(src, promiseCode);
+                    compiler.compileFunction(rir2Pir);
                 }
                 args.push_back((*builder)(new MkArg(prom, val, builder->env)));
             }
@@ -150,21 +151,22 @@ void StackMachine::runCurrentBC(Builder* builder, rir::Function* src,
             break;
         }
         case Opcode::promise_: {
-            //unsigned promi = bc.immediate.i;
+            unsigned promi = bc.immediate.i;
+            rir::Code* promiseCode = src->codeAt(promi);
             Promise* prom = builder->function->createProm();
             {
                 // What should I do with this?
-                Builder pb(builder->function, prom);
-                Rir2Pir compiler = Rir2Pir();
-                compiler.compileFunction(src);
-                //CodeCompiler c(pb, src, code, cmp);
-                //c(true);
+                Builder promiseBuilder(builder->function, prom);
+                Rir2Pir compiler(&promiseBuilder);
+                IRTransformation* rirPromise2Pir = compiler.declare(src, promiseCode);
+                compiler.compileFunction(rirPromise2Pir);
             }
             Value* val = Missing::instance();
             if (Query::pure(prom)) {
-                Rir2Pir compiler = Rir2Pir();
-                compiler.compileFunction(src);
-                //val = c(false);
+                RirInlinedPromise2Rir compiler(builder);
+                IRTransformation* rirPromise2Pir =
+                    compiler.declare(src, promiseCode);
+                compiler.compileFunction(rirPromise2Pir);
             }
             // TODO: Remove comment and check how to deal with
             push((*builder)(new MkArg(prom, val, builder->env)));
@@ -349,12 +351,13 @@ bool StackMachine::doMerge(Opcode* trg, Builder* builder, StackMachine* other) {
     if (other->entry == nullptr) {
         other->entry = builder->createBB();
         other->pc = trg;
+        other->currentBC = this->getCurrentBC();
         for (size_t i = 0; i < stack_size(); ++i) {
             auto v = stack.at(i);
             auto p = new Phi;
             other->entry->append(p);
             p->addInput(builder->bb, v);
-            stack.push_back(p);
+            other->push(p);
         }
 
         return true;
@@ -363,7 +366,7 @@ bool StackMachine::doMerge(Opcode* trg, Builder* builder, StackMachine* other) {
     assert(stack_size() == other->stack_size());
 
     for (size_t i = 0; i < stack_size(); ++i) {
-        Phi* p = Phi::Cast(stack.at(i));
+        Phi* p = Phi::Cast(other->at(i));
         assert(p);
         Value* incom = stack.at(i);
         if (incom != p) {
