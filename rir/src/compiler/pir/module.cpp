@@ -6,7 +6,7 @@ namespace pir {
 
 void Module::print(std::ostream& out) {
     for (auto f : functions) {
-        f->dstIR->print(out);
+        f->dstFunction->print(out);
         out << "\n-------------------------------\n";
     }
 }

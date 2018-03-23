@@ -11,8 +11,13 @@ namespace pir {
 class Function;
 
 struct IRTransformation {
-  rir::Function* srcIR;
-  pir::Function* dstIR;
+  rir::Function* srcFunction;
+  rir::Code* srcCode;
+  pir::Function* dstFunction;
+  IRTransformation(rir::Function* src, pir::Function* dst)
+      : srcFunction(src), srcCode(src->body()), dstFunction(dst) {}
+  IRTransformation(rir::Function* src, rir::Code* srcCode, pir::Function* dst)
+      : srcFunction(src), srcCode(srcCode), dstFunction(dst) {}
 };
 
 

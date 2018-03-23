@@ -3,7 +3,7 @@
 namespace rir {
     pir::Module* PirTranslator::compileModule() {
         for (auto f : this->module->functions) {
-            this->compileFunction(f->srcIR);
+            this->compileFunction(f->srcFunction);
         }
         return this->module;
     }
