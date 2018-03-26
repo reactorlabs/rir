@@ -100,8 +100,8 @@ static Test tests[] = {
     Test("test_inline", []() { return test42("{f <- function() 42L; f()}"); }),
     Test("return_cls", []() { return compileAndVerify("function() 42L"); }),
     Test("index", []() { return compileAndVerify("arg1[[2]]"); }),
-    //Test("test_inline_arg",
-    //     []() { return test42("{f <- function(x) x; f(42L)}"); }),
+    Test("test_inline_arg",
+         []() { return test42("{f <- function(x) x; f(42L)}"); }),
     Test("test_assign",
         []() { return test42("{y<-42L; if (arg1) x<-y else x<-y; x}"); }),
     Test(
