@@ -132,17 +132,13 @@ void StackMachine::runCurrentBC(Builder* builder, rir::Function* src,
                 {
                     Builder promiseBuilder(builder->function, prom);
                     Rir2Pir compiler(&promiseBuilder);
-                    IRTransformation* rir2Pir =
-                        compiler.declare(src, promiseCode);
-                    compiler.compileFunction(rir2Pir);
+                    compiler.translateCode(src, promiseCode);
                 }
                 Value* val = Missing::instance();
                 if (Query::pure(prom)) {
                     RirInlinedPromise2Rir compiler =
                         RirInlinedPromise2Rir(builder);
-                    IRTransformation* rir2Pir =
-                        compiler.declare(src, promiseCode);
-                    compiler.compileFunction(rir2Pir);
+                    val = compiler.translateCode(src, promiseCode);
                 }
                 args.push_back((*builder)(new MkArg(prom, val, builder->env)));
             }
@@ -158,15 +154,12 @@ void StackMachine::runCurrentBC(Builder* builder, rir::Function* src,
                 // What should I do with this?
                 Builder promiseBuilder(builder->function, prom);
                 Rir2Pir compiler(&promiseBuilder);
-                IRTransformation* rirPromise2Pir = compiler.declare(src, promiseCode);
-                compiler.compileFunction(rirPromise2Pir);
+                compiler.translateCode(src, promiseCode);
             }
             Value* val = Missing::instance();
             if (Query::pure(prom)) {
                 RirInlinedPromise2Rir compiler(builder);
-                IRTransformation* rirPromise2Pir =
-                    compiler.declare(src, promiseCode);
-                compiler.compileFunction(rirPromise2Pir);
+                val = compiler.translateCode(src, promiseCode);
             }
             // TODO: Remove comment and check how to deal with
             push((*builder)(new MkArg(prom, val, builder->env)));

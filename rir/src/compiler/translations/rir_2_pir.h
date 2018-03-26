@@ -30,27 +30,28 @@ class Rir2Pir : public PirTranslator {
   public:
     Rir2Pir()
         : PirTranslator(), mergepoint(), state(), builder(nullptr) {}
+    Rir2Pir(pir::Module* module)
+        : PirTranslator(module), mergepoint(), state(), builder(nullptr) {}
     Rir2Pir(pir::Builder* builder)
         : PirTranslator(), mergepoint(), state(), builder(builder) {}
     pir::Function* compileFunction(SEXP);
-    pir::Function* compileFunction(Function*);
     pir::Function* compileFunction(Function*, std::vector<SEXP>);
-    pir::Function* compileFunction(pir::IRTransformation*);
+    pir::Value* translateCode(rir::Function*, rir::Code*);
     void optimizeFunction(pir::Function*);
     pir::Module* compileModule(SEXP f);
-    void operator()(SEXP in);
-
-    static pir::IRTransformation* declare(SEXP&);
+    
+    /*static pir::IRTransformation* declare(SEXP&);
     static pir::IRTransformation* declare(rir::Function*);
-    static pir::IRTransformation* declare(rir::Function*, rir::Code*);
+    static pir::IRTransformation* declare(rir::Function*, rir::Code*);*/
   private:
     std::unordered_map<Opcode*, pir::StackMachine> mergepoint;
     pir::StackMachine state;
     pir::Builder* builder;
-    void recoverCFG(pir::IRTransformation* rir2PirTransformation);
+    void recoverCFG(rir::Code*);
     bool doMerge(Opcode* trg, pir::Builder*);
     void popFromWorklist(std::deque<pir::StackMachine>*, pir::Builder*);
     void addReturn(pir::Value*);
+    pir::Function* compileInnerFunction(Function*, std::vector<SEXP>);
     pir::Builder* getBuilder();
 };
 }

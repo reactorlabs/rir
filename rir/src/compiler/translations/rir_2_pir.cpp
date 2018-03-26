@@ -33,70 +33,43 @@ typedef std::pair<BB*, Value*> ReturnSite;
 
 namespace rir {
 
-pir::IRTransformation* Rir2Pir::declare(SEXP& function) {
-    assert(isValidClosureSEXP(function));
-    DispatchTable* tbl = DispatchTable::unpack(BODY(function));
-    auto formals = RList(FORMALS(function));
-
-    std::vector<SEXP> fml;
-    for (auto it = formals.begin(); it != formals.end(); ++it) {
-        fml.push_back(it.tag());
-    }
-    pir::Function* pirFunction = new pir::Function(fml);
-    
-    return
-        new IRTransformation(tbl->first(), tbl->first()->body(), pirFunction);
-}
-
-pir::IRTransformation* Rir2Pir::declare(Function* rirFunction) {
-    return Rir2Pir::declare(rirFunction, rirFunction->body());
-}
-
-pir::IRTransformation* Rir2Pir::declare(Function* rirFunction, rir::Code* srcCode) {
-    // auto formals = RList(FORMALS(rirFunction->container()));
-
-    std::vector<SEXP> fml;
-    /*for (auto it = formals.begin(); it != formals.end(); ++it) {
-        fml.push_back(it.tag());
-    }*/
-    pir::Function* pirFunction = new pir::Function(fml);
-    return new IRTransformation(rirFunction, srcCode, pirFunction);
-}
-
 pir::Function* Rir2Pir::compileFunction(SEXP function2Compile) {
-    pir::IRTransformation* rir2PirTranslation = declare(function2Compile);
-    return this->compileFunction(rir2PirTranslation);
-}
-
-pir::Function* Rir2Pir::compileFunction(Function* function2Compile){
-    //auto formals = RList(FORMALS(function2Compile->body()));
+    assert(isValidClosureSEXP(function2Compile));
+    DispatchTable* tbl = DispatchTable::unpack(BODY(function2Compile));
+    auto formals = RList(FORMALS(function2Compile));
 
     std::vector<SEXP> fmls;
-    /*for (auto it = formals.begin(); it != formals.end(); ++it) {
-        fml.push_back(it.tag());
-    }*/
-    return this->compileFunction(function2Compile, fmls);
+    for (auto it = formals.begin(); it != formals.end(); ++it) {
+        fmls.push_back(it.tag());
+    }
+    return this->compileFunction(tbl->first(), fmls);
 }
 
 pir::Function* Rir2Pir::compileFunction(Function* function2Compile,
                                         std::vector<SEXP> fmls) {
+    pir::Function* pirFunction = this->compileInnerFunction(function2Compile, fmls);
+    this->optimizeFunction(pirFunction);
+    return pirFunction;
+}
+
+pir::Function* Rir2Pir::compileInnerFunction(Function* function2Compile,
+                                        std::vector<SEXP> fmls) {
     pir::Function* pirFunction = new pir::Function(fmls);
     IRTransformation* rir2Pir =
         new IRTransformation(function2Compile, pirFunction);
-    return this->compileFunction(rir2Pir);
+    this->builder = new Builder(pirFunction, Env::theContext());
+
+    this->module->functions.push_back(rir2Pir);
+    this->translateCode(function2Compile, rir2Pir->srcCode);
+    if (Verify::apply(pirFunction))
+        return pirFunction;
+    return nullptr;
 }
 
-pir::Function* Rir2Pir::compileFunction(IRTransformation* rir2PirTransformation) {
-    this->module->functions.push_back(rir2PirTransformation);
-    this->recoverCFG(rir2PirTransformation);
+pir::Value* Rir2Pir::translateCode(rir::Function* srcFunction, rir::Code* srcCode) {
+    this->recoverCFG(srcCode);
     
-    pir::Function* pirFunction = rir2PirTransformation->dstFunction;
-
-    rir::Code* srcCode = rir2PirTransformation->srcCode;
     std::deque<StackMachine> worklist;
-    if (builder == nullptr)
-        this->builder = new Builder(pirFunction, Env::theContext());
-
     pir::Builder* builder = this->getBuilder();
 
     state.setPC(srcCode->code());
@@ -218,8 +191,8 @@ pir::Function* Rir2Pir::compileFunction(IRTransformation* rir2PirTransformation)
             DispatchTable* dt = DispatchTable::unpack(code);
             rir::Function* function = dt->first();
 
-            Rir2Pir compiler;
-            pir::Function* innerF = compiler.compileFunction(function);
+            Rir2Pir compiler(this->getModule());
+            pir::Function* innerF = compiler.compileInnerFunction(function, fmls);
 
             state.push((*builder)(new MkFunCls(innerF, builder->env)));
 
@@ -229,7 +202,7 @@ pir::Function* Rir2Pir::compileFunction(IRTransformation* rir2PirTransformation)
 
         if (!matched) {
             int size = state.stack_size();
-            state.runCurrentBC(builder, rir2PirTransformation->srcFunction, &results);
+            state.runCurrentBC(builder, srcFunction, &results);
             assert(state.stack_size() == size - bc.popCount() + bc.pushCount());
         }
     }
@@ -254,8 +227,8 @@ pir::Function* Rir2Pir::compileFunction(IRTransformation* rir2PirTransformation)
     results.clear();
     this->addReturn(res);
 
-    CFG cfg(builder->code->entry);
-
+    //CFG cfg(builder->code->entry);
+    
     // Remove excessive Phis
     Visitor::run(builder->code->entry, [&](BB* bb) {
         auto it = bb->begin();
@@ -276,23 +249,16 @@ pir::Function* Rir2Pir::compileFunction(IRTransformation* rir2PirTransformation)
             it++;
         }
     });
-    
-    /*
-    What is this?
-    InsertCast c(builder.code->entry);
-    c();
-    */
 
-    this->optimizeFunction(pirFunction);
-    if (Verify::apply(pirFunction))
-        return pirFunction;
-    return rir2PirTransformation->dstFunction;
+    InsertCast c(builder->code->entry);
+    c();
+
+    return res;
 }
 
-void Rir2Pir::recoverCFG(IRTransformation* rir2PirTransformation) {
+void Rir2Pir::recoverCFG(rir::Code* srcCode) {
     std::unordered_map<Opcode*, std::vector<Opcode*>> incom;
     // Mark incoming jmps
-    rir::Code* srcCode = rir2PirTransformation->srcCode;
     for (auto pc = srcCode->code(); pc != srcCode->endCode();) {
         BC bc = BC::decode(pc);
         if (bc.isJmp()) {
@@ -369,13 +335,6 @@ void Rir2Pir::optimizeFunction(pir::Function* function){
         apply(moduleFunction->dstFunction, verbose);
     }
 }
-
-Module* Rir2Pir::compileModule(SEXP f) {
-    for (auto f : this->module->functions) {
-        this->compileFunction(f);
-    }
-    return this->module;
-} 
 
 void Rir2Pir::popFromWorklist(std::deque<StackMachine>* worklist, Builder* builder){
     assert(!worklist->empty());
