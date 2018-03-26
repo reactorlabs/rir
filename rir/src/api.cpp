@@ -135,15 +135,6 @@ REXPORT SEXP pir_tests() {
     return R_NilValue;
 }
 
-#include "compiler/translations/pir_2_rir.h"
-/*REXPORT SEXP pir_2_rir(SEXP what) {
-    if (!isValidClosureSEXP(what))
-        Rf_error("not a compiled closure");
-    Rir2Pir cmp;
-    delete cmp.compileFunction(what, true);
-    return R_NilValue;
-}*/
-
 // startup ---------------------------------------------------------------------
 
 bool startup() {
