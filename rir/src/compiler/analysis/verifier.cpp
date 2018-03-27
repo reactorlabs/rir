@@ -107,7 +107,7 @@ class TheVerifier {
                     ok = false;
                 }
 
-                if (iv->bb()->fun != i->bb()->fun) {
+                if (iv->bb()->owner != i->bb()->owner) {
                     std::cerr << "Error at instruction '";
                     i->print(std::cerr);
                     std::cerr << "': input '";

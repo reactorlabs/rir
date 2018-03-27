@@ -4,7 +4,7 @@
 namespace rir {
 namespace pir {
 
-BB* Builder::createBB() { return new BB(function, ++function->maxBBId); }
+BB* Builder::createBB() { return new BB(code, ++function->maxBBId); }
 
 Builder::Builder(Function* fun, Env* enclos)
     : function(fun), code(fun), env(nullptr), bb(fun->entry) {

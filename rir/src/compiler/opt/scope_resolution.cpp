@@ -66,7 +66,7 @@ class TheScopeResolution {
                     aval.eachSource([&](ValOrig& src) {
                         // inter-procedural scope analysis can drag in values
                         // from other functions, which we cannot use here!
-                        if (src.origin->bb()->fun != function) {
+                        if (src.origin->bb()->owner != function) {
                             localVals = false;
                         }
                     });

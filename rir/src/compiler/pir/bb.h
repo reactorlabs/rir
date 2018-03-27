@@ -28,7 +28,7 @@ class BB {
   public:
     // The visitor relies on stable ids, do not renumber inside a visitor!!!
     const unsigned id;
-    Code* fun;
+    Code* owner;
 
     BB(const BB&) = delete;
     void operator=(const BB&) = delete;
