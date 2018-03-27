@@ -9,14 +9,14 @@ using namespace rir::pir;
 class TheVerifier {
   public:
     Function* f;
-    DominanceGraph dom;
 
-    TheVerifier(Function* f) : f(f), dom(f->entry) {}
+    TheVerifier(Function* f) : f(f) {}
 
     bool ok = true;
 
     void operator()() {
-        Visitor::run(f->entry, [&](BB* bb) { return verify(bb); });
+        DominanceGraph dom(f->entry);
+        Visitor::run(f->entry, [&](BB* bb) { return verify(bb, dom); });
 
         if (!ok) {
             std::cerr << "Verification of function " << *f << " failed\n";
@@ -43,9 +43,9 @@ class TheVerifier {
         }
     }
 
-    void verify(BB* bb) {
+    void verify(BB* bb, const DominanceGraph& dom) {
         for (auto i : *bb)
-            verify(i, bb);
+            verify(i, bb, dom);
         if (bb->isEmpty()) {
             if (!bb->next0 && !bb->next1) {
                 std::cerr << "bb" << bb->id << " has no successor\n";
@@ -74,10 +74,11 @@ class TheVerifier {
     }
 
     void verify(Promise* p) {
-        Visitor::run(p->entry, [&](BB* bb) { verify(bb); });
+        DominanceGraph dom(p->entry);
+        Visitor::run(p->entry, [&](BB* bb) { verify(bb, dom); });
     }
 
-    void verify(Instruction* i, BB* bb) {
+    void verify(Instruction* i, BB* bb, const DominanceGraph& dom) {
         if (i->bb() != bb) {
             std::cerr << "Error: instruction '";
             i->print(std::cerr);

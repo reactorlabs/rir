@@ -70,7 +70,7 @@ struct ForcedAt : public std::unordered_map<Value*, Force*> {
 };
 
 static Value* getValue(Force* f) {
-    Value* res;
+    Value* res = nullptr;
     while (f) {
         res = f->arg<0>().val();
         f = Force::Cast(res);

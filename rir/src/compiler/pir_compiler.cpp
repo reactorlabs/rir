@@ -757,3 +757,33 @@ Module* PirCompiler::compileFunction(SEXP f, bool verbose) {
     return cmp.m;
 }
 }
+
+extern "C" {
+// For debugging
+using namespace rir::pir;
+void dumpf(rir::pir::Function* x) {
+    x->print(std::cerr);
+    std::cerr << "\n";
+    std::flush(std::cerr);
+}
+void dumpp(rir::pir::Promise* x) {
+    x->print(std::cerr);
+    std::cerr << "\n";
+    std::flush(std::cerr);
+}
+void dumpi(rir::pir::Instruction* x) {
+    x->print(std::cerr);
+    std::cerr << "\n";
+    std::flush(std::cerr);
+}
+void dumpv(rir::pir::Value* x) {
+    x->printRef(std::cerr);
+    std::cerr << "\n";
+    std::flush(std::cerr);
+}
+void dumpb(rir::pir::BB* x) {
+    x->print(std::cerr);
+    std::cerr << "\n";
+    std::flush(std::cerr);
+}
+};

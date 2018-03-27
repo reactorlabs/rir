@@ -18,7 +18,6 @@ class Code {
 
     Code();
     void print(std::ostream&);
-    void print() { print(std::cerr); }
     ~Code();
 };
 }
