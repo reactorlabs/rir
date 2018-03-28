@@ -98,7 +98,8 @@ struct AbstractPirValue {
 
 static Value* UnknownParent = (Value*)-1;
 static Value* UninitializedParent = nullptr;
-static Function* UnknownFunction = (Function*)-1;
+class MkFunCls;
+static MkFunCls* UnknownFunction = (MkFunCls*)-1;
 
 /*
  * An AbstractREnvironment is a static approximation of an R runtime Envrionment
@@ -115,7 +116,7 @@ static Function* UnknownFunction = (Function*)-1;
  */
 struct AbstractREnvironment {
     std::unordered_map<SEXP, AbstractPirValue> entries;
-    std::unordered_map<Value*, Function*> functionPointers;
+    std::unordered_map<Value*, MkFunCls*> mkClosures;
 
     Value* parentEnv = UninitializedParent;
 
@@ -175,15 +176,15 @@ struct AbstractREnvironment {
         }
 
         std::unordered_set<Value*> fps;
-        for (auto e : functionPointers)
+        for (auto e : mkClosures)
             fps.insert(std::get<0>(e));
-        for (auto e : other.functionPointers)
+        for (auto e : other.mkClosures)
             fps.insert(std::get<0>(e));
         for (auto n : fps) {
-            if (functionPointers[n] != UnknownFunction &&
-                (other.functionPointers.count(n) == 0 ||
-                 functionPointers[n] != other.functionPointers.at(n))) {
-                functionPointers[n] = UnknownFunction;
+            if (mkClosures[n] != UnknownFunction &&
+                (other.mkClosures.count(n) == 0 ||
+                 mkClosures[n] != other.mkClosures.at(n))) {
+                mkClosures[n] = UnknownFunction;
             }
         }
 
@@ -236,31 +237,16 @@ class AbstractREnvironmentHierarchy
         return changed;
     }
 
-    Function* findFunction(Value* env, Value* fun) {
+    MkFunCls* findClosure(Value* env, Value* fun) {
         while (env && env != UnknownParent) {
-            if ((*this)[env].functionPointers.count(fun))
-                return (*this)[env].functionPointers.at(fun);
+            if ((*this)[env].mkClosures.count(fun))
+                return (*this)[env].mkClosures.at(fun);
             env = (*this)[env].parentEnv;
         }
         return UnknownFunction;
     }
 
-    AbstractLoad get(Value* env, SEXP e) const {
-        while (env != UnknownParent) {
-            if (this->count(env) == 0)
-                return AbstractLoad(env, AbstractPirValue::tainted());
-            auto aenv = this->at(env);
-            const AbstractPirValue& res = aenv.get(e);
-            if (!res.isUnknown())
-                return AbstractLoad(env, res);
-            // Tainted environment, we can't bet on absent values being
-            // actually absent.
-            if (aenv.tainted)
-                return AbstractLoad(env, AbstractPirValue::tainted());
-            env = (*this).at(env).parentEnv;
-        }
-        return AbstractLoad(env, AbstractPirValue::tainted());
-    }
+    AbstractLoad get(Value* env, SEXP e) const;
 };
 }
 }

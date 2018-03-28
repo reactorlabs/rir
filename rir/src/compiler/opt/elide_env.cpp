@@ -16,7 +16,7 @@ void ElideEnv::apply(Function* function) {
     Visitor::run(function->entry, [&](Instruction* i) {
         if (i->hasEnv() && !StVar::Cast(i))
             envNeeded.insert(i->env());
-        if (!Env::isEnv(i) && i->hasEnv())
+        if (!Env::isPirEnv(i) && i->hasEnv())
             envDependency[i] = i->env();
     });
 
@@ -34,12 +34,12 @@ void ElideEnv::apply(Function* function) {
         auto ip = bb->begin();
         while (ip != bb->end()) {
             Instruction* i = *ip;
-            if (Env::isEnv(i)) {
+            if (Env::isPirEnv(i)) {
                 if (envNeeded.find(i) == envNeeded.end())
                     ip = bb->remove(ip);
                 else
                     ip++;
-            } else if (i->hasEnv() &&
+            } else if (i->hasEnv() && Env::isPirEnv(i->env()) &&
                        envNeeded.find(i->env()) == envNeeded.end()) {
                 ip = bb->remove(ip);
             } else {

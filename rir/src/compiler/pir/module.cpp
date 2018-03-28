@@ -56,9 +56,25 @@ void Module::VersionedFunction::saveVersion() {
     translations.push_back(f);
 }
 
+Env* Module::getEnv(SEXP rho) {
+    if (rho == R_NilValue)
+        return Env::nil();
+
+    if (environments.count(rho))
+        return environments.at(rho);
+
+    assert(TYPEOF(rho) == ENVSXP);
+    Env* parent = getEnv(ENCLOS(rho));
+    Env* env = new Env(rho, parent);
+    environments[rho] = env;
+    return env;
+}
+
 Module::~Module() {
     for (auto f : functions)
         f.second.deallocatePirFunctions();
+    for (auto e : environments)
+        delete e.second;
 }
 }
 }

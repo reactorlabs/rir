@@ -70,6 +70,7 @@ class Instruction : public Value {
 
     virtual size_t nargs() const = 0;
     virtual Value* env() const = 0;
+    virtual void env(Value*) = 0;
 
     virtual bool mightIO() const = 0;
     virtual bool changesEnv() const = 0;
@@ -240,6 +241,12 @@ class FixedLenInstruction
         return arg(ARGS - 1).val();
     }
 
+    void env(Value* v) override {
+        // TODO find a better way
+        assert(ENV > EnvAccess::None);
+        arg(ARGS - 1).val() = v;
+    }
+
     FixedLenInstruction(PirType resultType, Value* env)
         : Super(resultType, ArgsZip(env)) {
         assert(env);
@@ -310,6 +317,12 @@ class VarLenInstruction
         // TODO find a better way
         assert(ENV != EnvAccess::None);
         return arg(0).val();
+    }
+
+    void env(Value* v) override {
+        // TODO find a better way
+        assert(ENV != EnvAccess::None);
+        arg(0).val() = v;
     }
 
     void pushArg(Value* a) {
