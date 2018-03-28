@@ -249,9 +249,14 @@ class AbstractREnvironmentHierarchy
         while (env != UnknownParent) {
             if (this->count(env) == 0)
                 return AbstractLoad(env, AbstractPirValue::tainted());
-            const AbstractPirValue& res = this->at(env).get(e);
+            auto aenv = this->at(env);
+            const AbstractPirValue& res = aenv.get(e);
             if (!res.isUnknown())
                 return AbstractLoad(env, res);
+            // Tainted environment, we can't bet on absent values being
+            // actually absent.
+            if (aenv.tainted)
+                return AbstractLoad(env, AbstractPirValue::tainted());
             env = (*this).at(env).parentEnv;
         }
         return AbstractLoad(env, AbstractPirValue::tainted());

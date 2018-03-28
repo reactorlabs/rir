@@ -33,22 +33,31 @@ class TheScopeAnalysis : public StaticAnalysis<AbstractREnvironmentHierarchy> {
 };
 
 void TheScopeAnalysis::tryLoad(const AS& envs, Instruction* i,
-                               LoadMaybe success) const {
+                               LoadMaybe aLoad) const {
     LdVar* ld = LdVar::Cast(i);
     LdVarSuper* sld = LdVarSuper::Cast(i);
     LdFun* ldf = LdFun::Cast(i);
 
+    Value* env = nullptr;
+    SEXP name = nullptr;
     if (ld) {
-        success(envs.get(ld->env(), ld->varName));
+        name = ld->varName;
+        env = ld->env();
     } else if (sld) {
         if (envs.count(sld->env())) {
             auto superEnv = envs.at(sld->env()).parentEnv;
-            if (superEnv != UnknownParent)
-                success(envs.get(sld->env(), sld->varName));
+            if (superEnv != UnknownParent) {
+                name = sld->varName;
+                env = sld->env();
+            }
         }
     } else if (ldf) {
-        auto res = envs.get(ldf->env(), ldf->varName);
-        success(res);
+        name = ldf->varName;
+        env = ldf->env();
+    }
+    if (name) {
+        auto res = envs.get(env, name);
+        aLoad(res);
     }
 }
 
