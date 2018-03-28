@@ -3,7 +3,8 @@
 
 #include <cstdio>
 #include <cstdlib>
-#include <string>
+#include <cstring>
+#include <iostream>
 #include <unistd.h>
 
 namespace rir {
@@ -28,10 +29,12 @@ class CaptureOut {
     CaptureOut() {
         fflush(stdout);
         saved_stdout = dup(STDOUT_FILENO);
-        if (pipe(out_pipe) != 0)
+        int err = pipe(out_pipe);
+        if (err != 0) {
+            printf("Pipe err! %s\n", strerror(errno));
             return;
+        }
         dup2(out_pipe[1], STDOUT_FILENO);
-        close(out_pipe[1]);
     }
 
     std::string operator()() {
@@ -41,7 +44,10 @@ class CaptureOut {
     }
 
     ~CaptureOut() {
-        dup2(saved_stdout, STDOUT_FILENO); /* reconnect stdout for testing */
+        dup2(saved_stdout, STDOUT_FILENO); /* reconnect stdout */
+        close(saved_stdout);
+        close(out_pipe[0]);
+        close(out_pipe[1]);
     }
 };
 }
