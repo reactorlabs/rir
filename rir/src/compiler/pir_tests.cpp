@@ -105,6 +105,11 @@ static Test tests[] = {
         []() { return test42("{x <- 0; f <- function() x <<- 42L; f(); x}"); }),
     Test("return_cls", []() { return compileAndVerify("function() 42L"); }),
     Test("index", []() { return compileAndVerify("arg1[[2]]"); }),
+    Test("deopt_in_prom",
+         []() {
+             return compileAndVerify(
+                 "{function(a) {f <- function(x) x; f(a[[1]])}}");
+         }),
     Test("delay_env", &testDelayEnv),
 };
 }

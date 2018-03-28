@@ -6,7 +6,7 @@
 namespace rir {
 namespace pir {
 
-BB::BB(Code* fun, unsigned id) : id(id), fun(fun) {}
+BB::BB(Code* owner, unsigned id) : id(id), owner(owner) {}
 
 void BB::print(std::ostream& out) {
     out << "BB " << id << "\n";
