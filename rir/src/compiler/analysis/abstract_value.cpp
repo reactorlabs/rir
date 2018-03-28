@@ -2,15 +2,17 @@
 #include "query.h"
 #include "scope.h"
 
+#include <algorithm>
+
 namespace rir {
 namespace pir {
 
-AbstractValue::AbstractValue() : type(PirType::bottom()) {}
-AbstractValue::AbstractValue(Value* v, Instruction* o) : type(v->type) {
+AbstractPirValue::AbstractPirValue() : type(PirType::bottom()) {}
+AbstractPirValue::AbstractPirValue(Value* v, Instruction* o) : type(v->type) {
     vals.insert(ValOrig(v, o));
 }
 
-bool AbstractValue::merge(const AbstractValue& other) {
+bool AbstractPirValue::merge(const AbstractPirValue& other) {
     assert(other.type != PirType::bottom());
 
     if (unknown)
@@ -30,7 +32,7 @@ bool AbstractValue::merge(const AbstractValue& other) {
     return changed;
 }
 
-void AbstractValue::print(std::ostream& out) {
+void AbstractPirValue::print(std::ostream& out) {
     if (unknown) {
         out << "??";
         return;
@@ -38,9 +40,9 @@ void AbstractValue::print(std::ostream& out) {
     out << "(";
     for (auto it = vals.begin(); it != vals.end();) {
         auto vo = *it;
-        vo.first->printRef(out);
+        vo.val->printRef(out);
         out << "@";
-        vo.second->printRef(out);
+        vo.origin->printRef(out);
         it++;
         if (it != vals.end())
             out << "|";

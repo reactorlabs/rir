@@ -5,7 +5,6 @@
 #include "../pir/pir.h"
 #include "abstract_value.h"
 
-#include <algorithm>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -21,12 +20,9 @@ namespace pir {
  */
 class ScopeAnalysis {
   public:
-    typedef AbstractEnvironment<AbstractValue> AbstractEnv;
-    typedef AbstractEnvironmentSet<AbstractEnv, AbstractValue> AbstractState;
-    typedef std::pair<Value*, AbstractValue> AbstractLoadVal;
-    std::unordered_map<Instruction*, AbstractLoadVal> loads;
+    std::unordered_map<Instruction*, AbstractLoad> loads;
     std::unordered_set<Instruction*> observedStores;
-    AbstractState finalState;
+    AbstractREnvironmentHierarchy finalState;
     ScopeAnalysis(Function* fun);
 };
 }

@@ -5,9 +5,10 @@
 namespace {
 using namespace rir::pir;
 
-class TheScopeAnalysis : public StaticAnalysis<ScopeAnalysis::AbstractState> {
+class TheScopeAnalysis : public StaticAnalysis<AbstractREnvironmentHierarchy> {
   public:
-    typedef StaticAnalysis<ScopeAnalysis::AbstractState> Super;
+    typedef AbstractREnvironmentHierarchy AS;
+    typedef StaticAnalysis<AS> Super;
 
     Function* origin;
     const std::vector<SEXP>& args;
@@ -16,51 +17,23 @@ class TheScopeAnalysis : public StaticAnalysis<ScopeAnalysis::AbstractState> {
     size_t depth;
     Call* invocation = nullptr;
 
-    std::unordered_map<Instruction*, ScopeAnalysis::AbstractLoadVal> loads;
-    std::unordered_map<Value*, Function*> functions;
-    std::unordered_set<Instruction*> observedStores;
-
     TheScopeAnalysis(Function* origin, const std::vector<SEXP>& args, BB* bb)
         : Super(bb), origin(origin), args(args), depth(0) {}
     TheScopeAnalysis(Function* origin, const std::vector<SEXP>& args, BB* bb,
-                     const ScopeAnalysis::AbstractState& initialState,
-                     Call* invocation, size_t depth)
+                     const AS& initialState, Call* invocation, size_t depth)
         : Super(bb, initialState), origin(origin), args(args), depth(depth),
           invocation(invocation) {}
 
-    void apply(ScopeAnalysis::AbstractState& envs,
-               Instruction* i) const override;
+    void apply(AS& envs, Instruction* i) const override;
 
-    void tryLoad(const ScopeAnalysis::AbstractState& envs, Instruction* i,
-                 std::function<void(ScopeAnalysis::AbstractLoadVal)>) const;
-    void operator()() {
-        // Compute Fixedpoint
-        Super::operator()();
-
-        // Collect all abstract values of all loads
-        collect([&](const ScopeAnalysis::AbstractState& env, Instruction* i) {
-            tryLoad(env, i, [&](ScopeAnalysis::AbstractLoadVal a) {
-                loads[i] = a;
-                for (auto s : a.second.vals)
-                    observedStores.insert(s.orig());
-            });
-            if (i->leaksEnv()) {
-                for (auto e : env) {
-                    for (auto a : e.second.entries) {
-                        for (auto s : a.second.vals)
-                            observedStores.insert(s.orig());
-                    }
-                }
-            }
-        });
-    }
+    typedef std::function<void(AbstractLoad)> LoadMaybe;
+    void tryLoad(const AS& envs, Instruction* i, LoadMaybe) const;
 
     void print(std::ostream& out = std::cout);
 };
 
-void TheScopeAnalysis::tryLoad(
-    const ScopeAnalysis::AbstractState& envs, Instruction* i,
-    std::function<void(ScopeAnalysis::AbstractLoadVal)> success) const {
+void TheScopeAnalysis::tryLoad(const AS& envs, Instruction* i,
+                               LoadMaybe success) const {
     LdVar* ld = LdVar::Cast(i);
     LdVarSuper* sld = LdVarSuper::Cast(i);
     LdFun* ldf = LdFun::Cast(i);
@@ -79,8 +52,7 @@ void TheScopeAnalysis::tryLoad(
     }
 }
 
-void TheScopeAnalysis::apply(ScopeAnalysis::AbstractState& envs,
-                             Instruction* i) const {
+void TheScopeAnalysis::apply(AS& envs, Instruction* i) const {
     StVar* s = StVar::Cast(i);
     StVarSuper* ss = StVarSuper::Cast(i);
     MkEnv* mk = MkEnv::Cast(i);
@@ -114,7 +86,7 @@ void TheScopeAnalysis::apply(ScopeAnalysis::AbstractState& envs,
                 TheScopeAnalysis nextFun(fun, fun->argNames, fun->entry, envs,
                                          call, depth + 1);
                 nextFun();
-                envs.merge(nextFun.exitpoint);
+                envs.merge(nextFun.result());
                 handled = true;
             }
         }
@@ -122,11 +94,12 @@ void TheScopeAnalysis::apply(ScopeAnalysis::AbstractState& envs,
 
     // Keep track of closures
     auto mkfun = MkFunCls::Cast(i);
-    tryLoad(envs, i, [&](ScopeAnalysis::AbstractLoadVal a) {
+    tryLoad(envs, i, [&](AbstractLoad load) {
         handled = true;
         // let's check if we loaded a closure
-        if (!mkfun && a.second.singleValue())
-            mkfun = MkFunCls::Cast((*a.second.vals.begin()).val());
+        if (!mkfun)
+            load.result.ifSingleValue(
+                [&](Value* val) { mkfun = MkFunCls::Cast(val); });
     });
     if (mkfun)
         envs[i->env()].functionPointers[i] = mkfun->fun;
@@ -143,7 +116,7 @@ void TheScopeAnalysis::apply(ScopeAnalysis::AbstractState& envs,
 
 void TheScopeAnalysis::print(std::ostream& out) {
     size_t id = 0;
-    for (auto& m : this->mergepoint) {
+    for (auto& m : getMergepoints()) {
         if (!m.empty()) {
             out << "---- BB_" << id++ << " -----------------------------\n";
             size_t segment = 0;
@@ -161,7 +134,7 @@ void TheScopeAnalysis::print(std::ostream& out) {
         }
     }
     out << "---- exit -----------------------------\n";
-    for (auto& entry : exitpoint) {
+    for (auto& entry : result()) {
         auto ptr = entry.first;
         auto env = entry.second;
         std::cout << "Env(" << ptr << "), leaked " << env.leaked << ":\n";
@@ -179,9 +152,25 @@ ScopeAnalysis::ScopeAnalysis(Function* function) {
     analysis();
     if (false)
         analysis.print();
-    loads = std::move(analysis.loads);
-    finalState = std::move(analysis.exitpoint);
-    observedStores = std::move(analysis.observedStores);
+
+    // Collect all abstract values of all loads
+    analysis.foreach<PositioningStyle::BeforeInstruction>(
+        [&](const AbstractREnvironmentHierarchy& envs, Instruction* i) {
+            analysis.tryLoad(envs, i, [&](AbstractLoad load) {
+                loads.emplace(i, load);
+                load.result.eachSource(
+                    [&](ValOrig& src) { observedStores.insert(src.origin); });
+            });
+            if (i->leaksEnv()) {
+                for (auto e : envs) {
+                    for (auto load : e.second.entries) {
+                        load.second.eachSource([&](ValOrig& src) {
+                            observedStores.insert(src.origin);
+                        });
+                    }
+                }
+            }
+        });
 }
 }
 }

@@ -10,8 +10,8 @@ namespace pir {
 BB* BBTransform::clone(size_t* id_counter, BB* src, Code* target) {
     std::vector<BB*> bbs;
 
-    // Copy instructions
-    std::unordered_map<Value*, Value*> relocation_table;
+    // Copy instructions and remember old -> new instruction map.
+    std::unordered_map<Value*, Instruction*> relocation_table;
     Visitor::run(src, [&](BB* bb) {
         *id_counter = *id_counter + 1;
         BB* theClone = BB::cloneInstrs(bb, *id_counter, target);
@@ -23,7 +23,7 @@ BB* BBTransform::clone(size_t* id_counter, BB* src, Code* target) {
             relocation_table[bb->at(i)] = theClone->at(i);
     });
 
-    // Fixup CFG
+    // Fixup CFG: next pointers of copied BB's need to be filled in.
     Visitor::run(src, [&](BB* bb) {
         bbs[bb->id]->next0 = bbs[bb->id]->next1 = nullptr;
         if (bb->next0)
@@ -32,7 +32,7 @@ BB* BBTransform::clone(size_t* id_counter, BB* src, Code* target) {
             bbs[bb->id]->next1 = bbs[bb->next1->id];
     });
 
-    // Relocate arg pointers
+    // Relocate argument pointers using old -> new map
     BB* newEntry = bbs[src->id];
     Visitor::run(newEntry, [&](Instruction* i) {
         auto phi = Phi::Cast(i);
@@ -84,7 +84,11 @@ Value* BBTransform::forInline(BB* inlinee, BB* splice) {
 
         Return* ret = Return::Cast(bb->last());
         assert(ret);
+
+        // This transformation assumes that we have just one reachable return.
+        // Assert that we do not find a second one.
         assert(!found);
+
         found = ret->arg<0>().val();
         bb->next0 = splice;
         bb->remove(bb->end() - 1);
