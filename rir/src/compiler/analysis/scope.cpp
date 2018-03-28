@@ -10,16 +10,16 @@ class TheScopeAnalysis : public StaticAnalysis<AbstractREnvironmentHierarchy> {
     typedef AbstractREnvironmentHierarchy AS;
     typedef StaticAnalysis<AS> Super;
 
-    Function* origin;
+    Closure* origin;
     const std::vector<SEXP>& args;
 
     static constexpr size_t maxDepth = 5;
     size_t depth;
     Call* invocation = nullptr;
 
-    TheScopeAnalysis(Function* origin, const std::vector<SEXP>& args, BB* bb)
+    TheScopeAnalysis(Closure* origin, const std::vector<SEXP>& args, BB* bb)
         : Super(bb), origin(origin), args(args), depth(0) {}
-    TheScopeAnalysis(Function* origin, const std::vector<SEXP>& args, BB* bb,
+    TheScopeAnalysis(Closure* origin, const std::vector<SEXP>& args, BB* bb,
                      const AS& initialState, Call* invocation, size_t depth)
         : Super(bb, initialState), origin(origin), args(args), depth(depth),
           invocation(invocation) {}
@@ -47,7 +47,7 @@ void TheScopeAnalysis::tryLoad(const AS& envs, Instruction* i,
     } else if (sld) {
         if (envs.count(sld->env())) {
             auto superEnv = envs.at(sld->env()).parentEnv;
-            if (superEnv != UnknownParent) {
+            if (superEnv != AbstractREnvironment::UnknownParent) {
                 name = sld->varName;
                 env = sld->env();
             }
@@ -76,7 +76,7 @@ void TheScopeAnalysis::apply(AS& envs, Instruction* i) const {
     if (mk) {
         Value* parentEnv = mk->env();
         // If we know the caller, we can fill in the parent env
-        if (parentEnv == Env::theParent() && invocation) {
+        if (parentEnv == Env::notClosed() && invocation) {
             Value* cls = invocation->cls();
             if (envs[invocation->env()].mkClosures.count(cls)) {
                 auto mkCls = envs[invocation->env()].mkClosures.at(cls);
@@ -92,14 +92,14 @@ void TheScopeAnalysis::apply(AS& envs, Instruction* i) const {
         handled = true;
     } else if (ss) {
         auto superEnv = envs[ss->env()].parentEnv;
-        if (superEnv != UnknownParent) {
+        if (superEnv != AbstractREnvironment::UnknownParent) {
             envs[superEnv].set(ss->varName, ss->val(), ss);
             handled = true;
         }
     } else if (call && depth < maxDepth) {
         Value* trg = call->cls();
         MkFunCls* cls = envs.findClosure(i->env(), trg);
-        if (cls != UnknownFunction) {
+        if (cls != AbstractREnvironment::UnknownClosure) {
             if (cls->fun->argNames.size() == call->nCallArgs()) {
                 TheScopeAnalysis nextFun(cls->fun, cls->fun->argNames,
                                          cls->fun->entry, envs, call,
@@ -167,7 +167,7 @@ void TheScopeAnalysis::print(std::ostream& out) {
 namespace rir {
 namespace pir {
 
-ScopeAnalysis::ScopeAnalysis(Function* function) {
+ScopeAnalysis::ScopeAnalysis(Closure* function) {
     TheScopeAnalysis analysis(function, function->argNames, function->entry);
     analysis();
     if (false)

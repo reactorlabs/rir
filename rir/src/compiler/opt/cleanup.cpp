@@ -12,8 +12,8 @@ using namespace rir::pir;
 
 class TheCleanup {
   public:
-    TheCleanup(Function* function) : function(function) {}
-    Function* function;
+    TheCleanup(Closure* function) : function(function) {}
+    Closure* function;
     void operator()() {
         std::unordered_set<size_t> used_p;
         std::unordered_map<BB*, std::unordered_set<Phi*>> used_bb;
@@ -184,7 +184,7 @@ class TheCleanup {
 namespace rir {
 namespace pir {
 
-void Cleanup::apply(Function* function) {
+void Cleanup::apply(Closure* function) {
     TheCleanup s(function);
     s();
 }

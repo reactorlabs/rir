@@ -47,7 +47,7 @@ enum class Opcode : uint8_t;
 namespace pir {
 
 class BB;
-class Function;
+class Closure;
 class Phi;
 
 struct InstrArg : public std::pair<Value*, PirType> {
@@ -516,8 +516,8 @@ class FLI(MkCls, 4, Effect::None, EnvAccess::Capture) {
 
 class FLI(MkFunCls, 1, Effect::None, EnvAccess::Capture) {
   public:
-    Function* fun;
-    MkFunCls(Function* fun, Value* parent)
+    Closure* fun;
+    MkFunCls(Closure* fun, Value* parent)
         : FixedLenInstruction(RType::closure, parent), fun(fun) {}
 };
 

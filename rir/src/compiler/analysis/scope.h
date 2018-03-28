@@ -23,7 +23,7 @@ class ScopeAnalysis {
     std::unordered_map<Instruction*, AbstractLoad> loads;
     std::unordered_set<Instruction*> observedStores;
     AbstractREnvironmentHierarchy finalState;
-    ScopeAnalysis(Function* fun);
+    ScopeAnalysis(Closure* fun);
 };
 }
 }

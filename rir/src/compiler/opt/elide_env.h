@@ -11,10 +11,10 @@ namespace pir {
  * can be removed.
  *
  */
-class Function;
+class Closure;
 class ElideEnv {
   public:
-    static void apply(Function* function);
+    static void apply(Closure* function);
 };
 }
 }

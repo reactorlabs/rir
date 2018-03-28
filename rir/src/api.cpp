@@ -128,7 +128,7 @@ REXPORT SEXP pir_compile(SEXP what) {
     pir::Module* m = new pir::Module;
     pir::Rir2PirCompiler cmp(m);
     cmp.setVerbose(true);
-    cmp.compileFunction(what);
+    cmp.compileClosure(what);
     cmp.optimizeModule();
     delete m;
     return R_NilValue;

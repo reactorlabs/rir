@@ -11,10 +11,10 @@ namespace pir {
  * environment, to pir SSA variables.
  *
  */
-class Function;
+class Closure;
 class ScopeResolution {
   public:
-    static void apply(Function* function);
+    static void apply(Closure* function);
 };
 }
 }
