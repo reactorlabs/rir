@@ -1,8 +1,6 @@
 #include "rir_2_pir.h"
-#include "R/RList.h"
 #include "../analysis/query.h"
 #include "../analysis/verifier.h"
-#include "ir/BC.h"
 #include "../opt/cleanup.h"
 #include "../opt/delay_env.h"
 #include "../opt/delay_instr.h"
@@ -15,6 +13,9 @@
 #include "../util/builder.h"
 #include "../util/cfg.h"
 #include "../util/visitor.h"
+#include "R/RList.h"
+#include "ir/BC.h"
+#include "ir/Compiler.h"
 
 #include <deque>
 #include <vector>
@@ -53,7 +54,15 @@ namespace rir {
 namespace pir {
 
 Closure* Rir2PirCompiler::compileClosure(SEXP closure) {
-    assert(isValidClosureSEXP(closure));
+    assert(TYPEOF(closure) == CLOSXP);
+
+    if (!isValidClosureSEXP(closure)) {
+        Protect p;
+        SEXP rirClosure =
+            p(rir::Compiler::compileClosure(BODY(closure), FORMALS(closure)));
+        return compileClosure(rirClosure);
+    }
+
     DispatchTable* tbl = DispatchTable::unpack(BODY(closure));
     auto formals = RList(FORMALS(closure));
 
@@ -72,8 +81,8 @@ Closure* Rir2PirCompiler::compileFunction(rir::Function* srcFunction,
 
 Closure* Rir2PirCompiler::compileClosure(rir::Function* srcFunction,
                                          const std::vector<SEXP>& args,
-                                         Value* closureEnv) {
-    Closure* pirFunction = module->declare(srcFunction, args);
+                                         Env* closureEnv) {
+    Closure* pirFunction = module->declare(srcFunction, args, closureEnv);
 
     Builder builder(pirFunction, closureEnv);
 

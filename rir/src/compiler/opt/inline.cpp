@@ -24,22 +24,38 @@ class TheInliner {
             // Dangerous iterater usage, works since we do only update it in
             // one place.
             for (auto it = bb->begin(); it != bb->end(); it++) {
-                Call* call = Call::Cast(*it);
+                auto call = CallInstruction::Cast(*it);
                 if (!call)
                     continue;
-                auto cls = MkFunCls::Cast(call->cls());
-                if (!cls)
-                    continue;
-                Closure* inlinee = cls->fun;
-                if (inlinee->argNames.size() != call->nCallArgs())
-                    continue;
+
+                Closure* inlinee = nullptr;
+                Value* staticEnv = nullptr;
+
+                if (Call::Cast(*it)) {
+                    Call* call = Call::Cast(*it);
+                    auto cls = MkFunCls::Cast(call->cls());
+                    if (!cls)
+                        continue;
+                    inlinee = cls->fun;
+                    if (inlinee->argNames.size() != call->nCallArgs())
+                        continue;
+                    assert(cls->fun->closureEnv() == Env::notClosed());
+                    staticEnv = cls->env();
+                } else if (StaticCall::Cast(*it)) {
+                    StaticCall* call = StaticCall::Cast(*it);
+                    inlinee = call->cls();
+                    staticEnv = inlinee->closureEnv();
+                } else {
+                    assert(false);
+                }
 
                 BB* split =
                     BBTransform::split(++function->maxBBId, bb, it, function);
 
-                Call* theCall = Call::Cast(*split->begin());
+                auto theCall = *split->begin();
+                auto theCallInstruction = CallInstruction::Cast(theCall);
                 std::vector<MkArg*> arguments;
-                theCall->eachCallArg([&](Value* v) {
+                theCallInstruction->eachCallArg([&](Value* v) {
                     MkArg* a = MkArg::Cast(v);
                     assert(a);
                     arguments.push_back(a);
@@ -57,7 +73,7 @@ class TheInliner {
                         auto ld = LdArg::Cast(*ip);
                         Instruction* i = *ip;
                         if (i->hasEnv() && i->env() == Env::notClosed()) {
-                            i->env(cls->env());
+                            i->env(staticEnv);
                         }
                         if (ld) {
                             ld->replaceUsesWith(arguments[ld->id]);
@@ -83,23 +99,25 @@ class TheInliner {
                         if (!mk)
                             continue;
 
-                        Promise* prom = mk->prom;
-                        size_t id = prom->id;
-                        if (prom->fun == inlinee) {
-                            if (copiedPromise[id]) {
-                                mk->prom = function->promises[newPromId[id]];
-                            } else {
-                                Promise* clone = function->createProm();
-                                BB* promCopy =
-                                    BBTransform::clone(prom->entry, clone);
-                                clone->id = function->promises.size();
-                                function->promises.push_back(clone);
-                                clone->entry = promCopy;
-                                newPromId[id] = clone->id;
-                                copiedPromise[id] = true;
-                                mk->prom = clone;
+                        mk->ifPromise([&](Promise* prom) {
+                            size_t id = prom->id;
+                            if (prom->fun == inlinee) {
+                                if (copiedPromise[id]) {
+                                    mk->promise(
+                                        function->promises[newPromId[id]]);
+                                } else {
+                                    Promise* clone = function->createProm();
+                                    BB* promCopy =
+                                        BBTransform::clone(prom->entry, clone);
+                                    clone->id = function->promises.size();
+                                    function->promises.push_back(clone);
+                                    clone->entry = promCopy;
+                                    newPromId[id] = clone->id;
+                                    copiedPromise[id] = true;
+                                    mk->promise(clone);
+                                }
                             }
-                        }
+                        });
                     }
                 });
 

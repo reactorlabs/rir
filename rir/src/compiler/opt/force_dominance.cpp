@@ -152,33 +152,36 @@ void ForceDominance::apply(Closure* function) {
                             next = bb->remove(ip);
                             inlinedPromise[f] = strict;
                         } else if (analysis.isSafeToInline(mkarg)) {
-                            Promise* prom = mkarg->prom;
-                            BB* split = BBTransform::split(++function->maxBBId,
-                                                           bb, ip, function);
-                            BB* prom_copy = BBTransform::clone(
-                                &function->maxBBId, prom->entry, function);
-                            bb->next0 = prom_copy;
+                            mkarg->ifPromise([&](Promise* prom) {
+                                BB* split = BBTransform::split(
+                                    ++function->maxBBId, bb, ip, function);
+                                BB* prom_copy = BBTransform::clone(
+                                    &function->maxBBId, prom->entry, function);
+                                bb->next0 = prom_copy;
 
-                            // For now we assume every promise starts with a
-                            // LdFunctionEnv instruction. We replace it's usages
-                            // with the caller environment.
-                            LdFunctionEnv* e =
-                                LdFunctionEnv::Cast(*prom_copy->begin());
-                            assert(e);
-                            Replace::usesOfValue(prom_copy, e, mkarg->env());
-                            prom_copy->remove(prom_copy->begin());
+                                // For now we assume every promise starts with a
+                                // LdFunctionEnv instruction. We replace it's
+                                // usages
+                                // with the caller environment.
+                                LdFunctionEnv* e =
+                                    LdFunctionEnv::Cast(*prom_copy->begin());
+                                assert(e);
+                                Replace::usesOfValue(prom_copy, e,
+                                                     mkarg->env());
+                                prom_copy->remove(prom_copy->begin());
 
-                            // Create a return value phi of the promise
-                            Value* promRes =
-                                BBTransform::forInline(prom_copy, split);
+                                // Create a return value phi of the promise
+                                Value* promRes =
+                                    BBTransform::forInline(prom_copy, split);
 
-                            f = Force::Cast(*split->begin());
-                            assert(f);
-                            f->replaceUsesWith(promRes);
-                            next = split->remove(split->begin());
-                            bb = split;
+                                f = Force::Cast(*split->begin());
+                                assert(f);
+                                f->replaceUsesWith(promRes);
+                                next = split->remove(split->begin());
+                                bb = split;
 
-                            inlinedPromise[f] = promRes;
+                                inlinedPromise[f] = promRes;
+                            });
                         }
                     }
                 }

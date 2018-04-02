@@ -487,12 +487,23 @@ class FLI(Return, 1, Effect::None, EnvAccess::None) {
 
 class Promise;
 class FLI(MkArg, 2, Effect::None, EnvAccess::Capture) {
-  public:
     Promise* prom;
+
+  public:
     MkArg(Promise* prom, Value* v, Value* env)
         : FixedLenInstruction(RType::prom, {{PirType::valOrMissing()}}, {{v}},
                               env),
           prom(prom) {}
+    MkArg(Value* v, Value* env)
+        : FixedLenInstruction(RType::prom, {{PirType::val()}}, {{v}}, env),
+          prom(nullptr) {}
+    typedef std::function<void(Promise*)> PromMaybe;
+    void ifPromise(PromMaybe p) {
+        if (prom)
+            p(prom);
+    }
+    void promise(Promise* p) { prom = p; }
+
     void printArgs(std::ostream& out) override;
 };
 
@@ -517,8 +528,7 @@ class FLI(MkCls, 4, Effect::None, EnvAccess::Capture) {
 class FLI(MkFunCls, 1, Effect::None, EnvAccess::Capture) {
   public:
     Closure* fun;
-    MkFunCls(Closure* fun, Value* parent)
-        : FixedLenInstruction(RType::closure, parent), fun(fun) {}
+    MkFunCls(Closure* fun, Value* parent);
 };
 
 class FLI(Force, 1, Effect::Any, EnvAccess::None) {
@@ -658,13 +668,19 @@ SAFE_UNOP(Length);
   public                                                                       \
     VarLenInstruction<Tag::type, type, io, env>
 
-class VLI(Call, Effect::Any, EnvAccess::Leak) {
+// Common interface to all call instructions
+struct CallInstructionI {
+    virtual size_t nCallArgs() = 0;
+    virtual void eachCallArg(Instruction::ArgumentValueIterator it) = 0;
+};
+
+class VLI(Call, Effect::Any, EnvAccess::Leak), public CallInstructionI {
   public:
     constexpr static size_t clsIdx = 1;
     constexpr static size_t callArgOffset = 2;
 
     Value* cls() { return arg(clsIdx).val(); }
-    size_t nCallArgs() { return nargs() - callArgOffset; }
+    size_t nCallArgs() override { return nargs() - callArgOffset; }
 
     Call(Value* e, Value* fun, const std::vector<Value*>& args)
         : VarLenInstruction(PirType::valOrLazy(), e) {
@@ -673,10 +689,41 @@ class VLI(Call, Effect::Any, EnvAccess::Leak) {
             this->pushArg(args[i], RType::prom);
     }
 
-    void eachCallArg(ArgumentValueIterator it) {
+    void eachCallArg(ArgumentValueIterator it) override {
         for (size_t i = 0; i < nCallArgs(); ++i) {
             it(arg(i + callArgOffset).val());
         }
+    }
+};
+
+class VLI(StaticCall, Effect::Any, EnvAccess::Leak), public CallInstructionI {
+  public:
+    constexpr static size_t callArgOffset = 1;
+    Closure* cls_;
+
+    Closure* cls() { return cls_; }
+    size_t nCallArgs() override { return nargs() - callArgOffset; }
+
+    StaticCall(Value * e, Closure * cls, const std::vector<Value*>& args)
+        : VarLenInstruction(PirType::valOrLazy(), e), cls_(cls) {
+        for (unsigned i = 0; i < args.size(); ++i)
+            this->pushArg(args[i], RType::prom);
+    }
+
+    void eachCallArg(ArgumentValueIterator it) override {
+        for (size_t i = 0; i < nCallArgs(); ++i) {
+            it(arg(i + callArgOffset).val());
+        }
+    }
+
+    void printArgs(std::ostream&) override;
+};
+
+struct CallInstruction {
+    static CallInstructionI* Cast(Value* v) {
+        if (Call::Cast(v))
+            return Call::Cast(v);
+        return StaticCall::Cast(v);
     }
 };
 
@@ -743,6 +790,16 @@ class VLI(Phi, Effect::None, EnvAccess::None) {
   public:
     std::vector<BB*> input;
     Phi() : VarLenInstruction(PirType::any()) {}
+    Phi(const std::initializer_list<Value*>& vals,
+        const std::initializer_list<BB*>& inputs)
+        : VarLenInstruction(PirType::any()) {
+        assert(vals.size() == inputs.size());
+        for (auto i : inputs)
+            input.push_back(i);
+        for (auto a : vals)
+            VarLenInstruction::pushArg(a);
+        assert(nargs() == inputs.size());
+    }
     void printArgs(std::ostream& out) override;
     void updateType();
     template <bool E = false>
