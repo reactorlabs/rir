@@ -5,13 +5,13 @@
 #include "analysis/verifier.h"
 #include "ir/Compiler.h"
 #include "pir/pir_impl.h"
-#include "pir_compiler.h"
+#include "translations/rir_2_pir.h"
 #include "util/visitor.h"
 
 namespace {
 using namespace rir;
 
-pir::Module* compile(const std::string& inp) {
+std::pair<pir::Function*, pir::Module*> compile(const std::string& inp) {
     Protect p;
     ParseStatus status;
     SEXP arg = p(CONS(R_NilValue, R_NilValue));
@@ -19,8 +19,12 @@ pir::Module* compile(const std::string& inp) {
     SEXP str = p(Rf_mkString(inp.c_str()));
     SEXP bdy = p(R_ParseVector(str, -1, &status, R_NilValue));
     SEXP fun = p(Compiler::compileClosure(CDR(bdy), arg));
-    PirCompiler cmp;
-    return cmp.compileFunction(fun);
+    pir::Module* m = new pir::Module;
+    pir::Rir2PirCompiler cmp(m);
+    // cmp.setVerbose(true);
+    auto f = cmp.compileFunction(fun);
+    cmp.optimizeModule();
+    return std::pair<pir::Function*, pir::Module*>(f, m);
 }
 
 using namespace rir::pir;
@@ -36,8 +40,9 @@ typedef std::pair<std::string, TestFunction> Test;
     }
 
 bool test42(const std::string& input) {
-    auto m = compile(input);
-    auto f = m->functions.front();
+    auto res = compile(input);
+    auto f = res.first;
+    auto m = res.second;
 
     CHECK(Query::noEnv(f));
 
@@ -48,7 +53,6 @@ bool test42(const std::string& input) {
     CHECK(ld);
     CHECK(TYPEOF(ld->c) == INTSXP);
     CHECK(INTEGER(ld->c)[0] == 42);
-
     delete m;
     return true;
 };
@@ -59,19 +63,22 @@ class NullBuffer : public std::ostream {
 };
 
 bool verify(Module* m) {
-    for (auto f : m->functions)
-        if (!Verify::apply(f))
-            return false;
+    bool success = true;
+    m->eachPirFunction([&success](pir::Module::VersionedFunction& f) {
+        f.eachVersion([&success](pir::Function* f) {
+            if (!Verify::apply(f))
+                success = false;
+        });
+    });
     // TODO: find fix for osx
     // NullBuffer nb;
-    for (auto f : m->functions)
-        f->print(std::cout);
+    m->print(std::cout);
 
     return true;
 }
 
 bool compileAndVerify(const std::string& input) {
-    auto m = compile(input);
+    auto m = compile(input).second;
     bool t = verify(m);
     delete m;
     return t;
@@ -82,13 +89,14 @@ bool testDelayEnv() {
     //       analysis!
     // auto m = compile("{f <- function()1; arg1[[2]]}");
 
-    auto m = compile("{f <- arg1; arg1[[2]]}");
-    bool t = Visitor::check(m->functions.front()->entry,
-                            [&](Instruction* i, BB* bb) {
-                                if (i->hasEnv())
-                                    CHECK(Deopt::Cast(bb->last()));
-                                return true;
-                            });
+    auto res = compile("{f <- arg1; arg1[[2]]}");
+    auto f = res.first;
+    auto m = res.second;
+    bool t = Visitor::check(f->entry, [&](Instruction* i, BB* bb) {
+        if (i->hasEnv())
+            CHECK(Deopt::Cast(bb->last()));
+        return true;
+    });
     delete m;
     return t;
 }
@@ -96,10 +104,12 @@ bool testDelayEnv() {
 static Test tests[] = {
     Test("test_42L", []() { return test42("42L"); }),
     Test("test_inline", []() { return test42("{f <- function() 42L; f()}"); }),
+    Test("return_cls", []() { return compileAndVerify("function() 42L"); }),
+    Test("index", []() { return compileAndVerify("arg1[[2]]"); }),
     Test("test_inline_arg",
          []() { return test42("{f <- function(x) x; f(42L)}"); }),
     Test("test_assign",
-         []() { return test42("{y<-42L; if (arg1) x<-y else x<-y; x}"); }),
+        []() { return test42("{y<-42L; if (arg1) x<-y else x<-y; x}"); }),
     Test(
         "test_super_assign",
         []() { return test42("{x <- 0; f <- function() x <<- 42L; f(); x}"); }),

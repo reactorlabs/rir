@@ -17,16 +17,12 @@ namespace pir {
  *
  */
 class Function : public Code {
+  private:
+    friend class Module;
+    Function(std::initializer_list<SEXP> a) : argNames(a) {}
+    Function(const std::vector<SEXP>& a) : argNames(a) {}
+
   public:
-    Function(std::initializer_list<SEXP> a, std::initializer_list<Promise*> p)
-        : argNames(a), defaultArgs(p) {}
-
-    Function(const std::vector<SEXP>& a, const std::vector<Promise*>& p)
-        : argNames(a), defaultArgs(p) {}
-
-    Function(std::initializer_list<SEXP> a) : Function(a, {}) {}
-    Function(const std::vector<SEXP>& a) : Function(a, {}) {}
-
     std::vector<SEXP> argNames;
     std::vector<Promise*> defaultArgs;
 
@@ -42,6 +38,8 @@ class Function : public Code {
         out << "Func(" << (void*)&e << ")";
         return out;
     }
+
+    Function* clone();
 
     ~Function();
 };

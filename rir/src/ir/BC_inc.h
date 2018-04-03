@@ -124,6 +124,12 @@ class BC {
     };
 
     BC() : bc(Opcode::invalid_), immediate({{0}}) {}
+    
+    BC(Opcode* pc) {
+        bc = *pc;
+        immediate = decodeImmediate(bc, pc + 1);
+    }
+
     BC operator=(BC other) {
         bc = other.bc;
         immediate = other.immediate;
