@@ -68,9 +68,6 @@ enum class Opcode : uint8_t {
 // ============================================================
 // ==== immediate argument types
 //
-#pragma pack(push)
-#pragma pack(0)
-
 // index into the constant pool
 typedef uint32_t PoolIdxT;
 // index into a functions array of code objects
@@ -91,7 +88,6 @@ typedef struct {
 } GuardFunArgs;
 typedef uint32_t GuardT;
 typedef uint32_t NumLocalsT;
-#pragma pack(pop)
 
 static constexpr size_t MAX_NUM_ARGS = 1L << (8 * sizeof(PoolIdxT));
 static constexpr size_t MAX_POOL_IDX = 1L << (8 * sizeof(PoolIdxT));

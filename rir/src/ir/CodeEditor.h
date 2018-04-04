@@ -41,8 +41,6 @@ class CodeEditor {
      * them.
      */
 
-#pragma pack(push)
-#pragma pack(1)
     struct BytecodeList {
         BytecodeList() {}
         explicit BytecodeList(Opcode* pos) : origin(pos) {}
@@ -67,7 +65,6 @@ class CodeEditor {
                 delete[] callSite;
         }
     };
-#pragma pack(pop)
 
     BytecodeList front;
     BytecodeList last;
