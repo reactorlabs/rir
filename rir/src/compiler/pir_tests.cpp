@@ -167,7 +167,7 @@ static Test tests[] = {
     Test("test_inline_arg",
          []() { return test42("{f <- function(x) x; f(42L)}"); }),
     Test("test_assign",
-        []() { return test42("{y<-42L; if (arg1) x<-y else x<-y; x}"); }),
+         []() { return test42("{y<-42L; if (arg1) x<-y else x<-y; x}"); }),
     Test(
         "test_super_assign",
         []() { return test42("{x <- 0; f <- function() x <<- 42L; f(); x}"); }),
@@ -181,6 +181,11 @@ static Test tests[] = {
     Test("delay_env", &testDelayEnv),
     Test("context_load", []() { return canRemoveEnvironment("a"); }),
     Test("super_assign", &testSuperAssign),
+    Test("loop",
+         []() {
+             return compileAndVerify(
+                 "{function(x) {while (x < 10) if (x) x <- x + 1}}");
+         }),
 };
 }
 

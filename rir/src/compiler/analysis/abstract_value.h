@@ -4,6 +4,7 @@
 #include "../pir/pir.h"
 
 #include <functional>
+#include <set>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -50,7 +51,8 @@ namespace pir {
 struct AbstractPirValue {
   private:
     bool unknown = false;
-    std::unordered_set<ValOrig> vals;
+    // This needs to be ordered set, for std::includes check!
+    std::set<ValOrig> vals;
 
   public:
     PirType type = PirType::bottom();
