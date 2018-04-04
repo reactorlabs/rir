@@ -2,6 +2,7 @@
 #define PIR_MODULE_H
 
 #include <functional>
+#include "R/r.h"
 #include <iostream>
 #include <unordered_map>
 #include <vector>
@@ -11,11 +12,16 @@
 namespace rir {
 namespace pir {
 
+class Env;
 class Function;
 
 class Module {
+    std::unordered_map<SEXP, Env*> environments;
+
   public:
     Function* declare(rir::Function*, const std::vector<SEXP>& a);
+    Env* getEnv(SEXP);
+
     void print(std::ostream& out = std::cout);
     void printEachVersion(std::ostream& out = std::cout);
 

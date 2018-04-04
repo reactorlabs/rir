@@ -49,5 +49,24 @@ void AbstractPirValue::print(std::ostream& out) {
     }
     out << ") : " << type;
 }
+
+AbstractLoad AbstractREnvironmentHierarchy::get(Value* env, SEXP e) const {
+    while (env != UnknownParent) {
+        if (this->count(env) == 0)
+            return AbstractLoad(env, AbstractPirValue::tainted());
+        auto aenv = this->at(env);
+        const AbstractPirValue& res = aenv.get(e);
+        if (!res.isUnknown())
+            return AbstractLoad(env, res);
+        // Tainted environment, we can't bet on absent values being
+        // actually absent.
+        if (aenv.tainted)
+            return AbstractLoad(env, AbstractPirValue::tainted());
+        env = at(env).parentEnv;
+        if (env == UnknownParent && Env::parentEnv(env))
+            env = Env::parentEnv(env);
+    }
+    return AbstractLoad(env, AbstractPirValue::tainted());
+    }
 }
 }

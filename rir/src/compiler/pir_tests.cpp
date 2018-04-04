@@ -11,7 +11,7 @@
 namespace {
 using namespace rir;
 
-std::pair<pir::Function*, pir::Module*> compile(const std::string& inp) {
+std::pair<pir::Function*, pir::Module*> compile(const std::string& inp, SEXP env = R_GlobalEnv) {
     Protect p;
     ParseStatus status;
     SEXP arg = p(CONS(R_NilValue, R_NilValue));
@@ -19,6 +19,7 @@ std::pair<pir::Function*, pir::Module*> compile(const std::string& inp) {
     SEXP str = p(Rf_mkString(inp.c_str()));
     SEXP bdy = p(R_ParseVector(str, -1, &status, R_NilValue));
     SEXP fun = p(Compiler::compileClosure(CDR(bdy), arg));
+    CLOENV(fun) = env;
     pir::Module* m = new pir::Module;
     pir::Rir2PirCompiler cmp(m);
     // cmp.setVerbose(true);
@@ -84,6 +85,16 @@ bool compileAndVerify(const std::string& input) {
     return t;
 }
 
+bool canRemoveEnvironment(const std::string& input) {
+    auto r = compile(input);
+    auto m = r.second;
+    auto f = r.first;
+    bool t = verify(m);
+    t = t && Query::noEnv(f);
+    delete m;
+    return t;
+}
+
 bool testDelayEnv() {
     // TODO: counterexample: closure creates circular dependency, need more
     //       analysis!
@@ -99,6 +110,53 @@ bool testDelayEnv() {
     });
     delete m;
     return t;
+}
+
+extern "C" SEXP Rf_NewEnvironment(SEXP, SEXP, SEXP);
+bool testSuperAssign() {
+    auto hasAssign = [](pir::Function* f) {
+        return !Visitor::check(f->entry, [&](Instruction* i) {
+            if (StVar::Cast(i))
+                return false;
+            return true;
+        });
+    };
+    auto hasSuperAssign = [](pir::Function* f) {
+        return !Visitor::check(f->entry, [&](Instruction* i) {
+            if (StVarSuper::Cast(i))
+                return false;
+            return true;
+        });
+    };
+    {
+        // This super assign can be fully resolved, and dead store eliminated
+        auto r = compile("{a <- 1; (function() a <<- 1)()}");
+        auto m = r.second;
+        auto f = r.first;
+        CHECK(!hasSuperAssign(f));
+        CHECK(!hasAssign(f));
+        delete m;
+    }
+    {
+        // This super assign can be converted into a store to the global env
+        auto r = compile("{(function() a <<- 1)()}");
+        auto m = r.second;
+        auto f = r.first;
+        CHECK(!hasSuperAssign(f));
+        CHECK(hasAssign(f));
+        delete m;
+    }
+    {
+        // This super assign cannot be removed, since the super env is not
+        // assigneable.
+        auto r = compile("{f <- (function() a <<- 1)()}", R_NilValue);
+        auto m = r.second;
+        auto f = r.first;
+        CHECK(hasSuperAssign(f));
+        delete m;
+    }
+
+    return true;
 }
 
 static Test tests[] = {
@@ -121,6 +179,8 @@ static Test tests[] = {
                  "{function(a) {f <- function(x) x; f(a[[1]])}}");
          }),
     Test("delay_env", &testDelayEnv),
+    Test("context_load", []() { return canRemoveEnvironment("a"); }),
+    Test("super_assign", &testSuperAssign),
 };
 }
 

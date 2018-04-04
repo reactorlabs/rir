@@ -14,7 +14,7 @@ class Builder {
     Value* env;
     BB* bb;
     Builder(Function* fun, Promise* prom);
-    Builder(Function* fun, Env* enclos);
+    Builder(Function* fun, Value* closureEnv);
 
     Value* buildDefaultEnv(Function* fun);
 

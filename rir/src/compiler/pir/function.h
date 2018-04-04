@@ -23,6 +23,8 @@ class Function : public Code {
     Function(const std::vector<SEXP>& a) : argNames(a) {}
 
   public:
+    Env* closureEnv;
+
     std::vector<SEXP> argNames;
     std::vector<Promise*> defaultArgs;
 

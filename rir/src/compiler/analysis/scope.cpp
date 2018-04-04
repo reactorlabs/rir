@@ -37,6 +37,7 @@ void TheScopeAnalysis::tryLoad(const AS& envs, Instruction* i,
     LdVar* ld = LdVar::Cast(i);
     LdVarSuper* sld = LdVarSuper::Cast(i);
     LdFun* ldf = LdFun::Cast(i);
+    StVarSuper* sts = StVarSuper::Cast(i);
 
     Value* env = nullptr;
     SEXP name = nullptr;
@@ -54,6 +55,9 @@ void TheScopeAnalysis::tryLoad(const AS& envs, Instruction* i,
     } else if (ldf) {
         name = ldf->varName;
         env = ldf->env();
+    } else if (sts) {
+        env = Env::parentEnv(sts->env());
+        name = sts->varName;
     }
     if (name) {
         auto res = envs.get(env, name);
@@ -72,8 +76,13 @@ void TheScopeAnalysis::apply(AS& envs, Instruction* i) const {
     if (mk) {
         Value* parentEnv = mk->env();
         // If we know the caller, we can fill in the parent env
-        if (parentEnv == Env::theContext() && invocation)
-            parentEnv = invocation->env();
+        if (parentEnv == Env::theParent() && invocation) {
+            Value* cls = invocation->cls();
+            if (envs[invocation->env()].mkClosures.count(cls)) {
+                auto mkCls = envs[invocation->env()].mkClosures.at(cls);
+                parentEnv = mkCls->env();
+            }
+        }
         envs[mk].parentEnv = parentEnv;
         mk->eachLocalVar(
             [&](SEXP name, Value* val) { envs[mk].set(name, val, mk); });
@@ -89,11 +98,12 @@ void TheScopeAnalysis::apply(AS& envs, Instruction* i) const {
         }
     } else if (call && depth < maxDepth) {
         Value* trg = call->cls();
-        Function* fun = envs.findFunction(i->env(), trg);
-        if (fun != UnknownFunction) {
-            if (fun->argNames.size() == call->nCallArgs()) {
-                TheScopeAnalysis nextFun(fun, fun->argNames, fun->entry, envs,
-                                         call, depth + 1);
+        MkFunCls* cls = envs.findClosure(i->env(), trg);
+        if (cls != UnknownFunction) {
+            if (cls->fun->argNames.size() == call->nCallArgs()) {
+                TheScopeAnalysis nextFun(cls->fun, cls->fun->argNames,
+                                         cls->fun->entry, envs, call,
+                                         depth + 1);
                 nextFun();
                 envs.merge(nextFun.result());
                 handled = true;
@@ -103,15 +113,16 @@ void TheScopeAnalysis::apply(AS& envs, Instruction* i) const {
 
     // Keep track of closures
     auto mkfun = MkFunCls::Cast(i);
-    tryLoad(envs, i, [&](AbstractLoad load) {
-        handled = true;
-        // let's check if we loaded a closure
-        if (!mkfun)
-            load.result.ifSingleValue(
-                [&](Value* val) { mkfun = MkFunCls::Cast(val); });
-    });
+    tryLoad(envs, i,
+            [&](AbstractLoad load) {
+                handled = true;
+                // let's check if we loaded a closure
+                if (!mkfun)
+                    load.result.ifSingleValue(
+                        [&](Value* val) { mkfun = MkFunCls::Cast(val); });
+            });
     if (mkfun)
-        envs[i->env()].functionPointers[i] = mkfun->fun;
+        envs[i->env()].mkClosures[i] = mkfun;
 
     if (!handled) {
         if (i->leaksEnv()) {
@@ -165,11 +176,13 @@ ScopeAnalysis::ScopeAnalysis(Function* function) {
     // Collect all abstract values of all loads
     analysis.foreach<PositioningStyle::BeforeInstruction>(
         [&](const AbstractREnvironmentHierarchy& envs, Instruction* i) {
-            analysis.tryLoad(envs, i, [&](AbstractLoad load) {
-                loads.emplace(i, load);
-                load.result.eachSource(
-                    [&](ValOrig& src) { observedStores.insert(src.origin); });
-            });
+            analysis.tryLoad(envs, i,
+                             [&](AbstractLoad load) {
+                                 loads.emplace(i, load);
+                                 load.result.eachSource([&](ValOrig& src) {
+                                     observedStores.insert(src.origin);
+                                 });
+                             });
             if (i->leaksEnv()) {
                 for (auto e : envs) {
                     for (auto load : e.second.entries) {

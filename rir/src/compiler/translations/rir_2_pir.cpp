@@ -62,14 +62,15 @@ Function* Rir2PirCompiler::compileFunction(SEXP closure) {
         fmls.push_back(it.tag());
 
     rir::Function* srcFunction = tbl->first();
-    return compileFunction(srcFunction, fmls);
+    return compileFunction(srcFunction, fmls, module->getEnv(CLOENV(closure)));
 }
 
 Function* Rir2PirCompiler::compileFunction(rir::Function* srcFunction,
-                                           const std::vector<SEXP>& args) {
+                                           const std::vector<SEXP>& args,
+                                           Value* closureEnv) {
     Function* pirFunction = module->declare(srcFunction, args);
 
-    Builder builder(pirFunction, Env::theContext());
+    Builder builder(pirFunction, closureEnv);
 
     {
         Rir2Pir rir2pir(*this, builder, srcFunction, srcFunction->body());
@@ -212,7 +213,7 @@ Value* Rir2Pir::translate() {
             DispatchTable* dt = DispatchTable::unpack(code);
             rir::Function* function = dt->first();
 
-            Function* innerF = cmp.compileFunction(function, fmls);
+            Function* innerF = cmp.compileFunction(function, fmls, Env::theParent());
 
             state.push(insert(new MkFunCls(innerF, insert.env)));
 

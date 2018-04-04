@@ -54,11 +54,10 @@ class TheInliner {
                     auto ip = bb->begin();
                     while (ip != bb->end()) {
                         auto next = ip + 1;
-                        auto m = MkEnv::Cast(*ip);
                         auto ld = LdArg::Cast(*ip);
-                        if (m) {
-                            if (m->parent() == Env::theContext())
-                                m->parent(cls->env());
+                        Instruction* i = *ip;
+                        if (i->hasEnv() && i->env() == Env::theParent()) {
+                            i->env(cls->env());
                         }
                         if (ld) {
                             ld->replaceUsesWith(arguments[ld->id]);

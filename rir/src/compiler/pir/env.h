@@ -14,22 +14,27 @@ namespace pir {
 class Instruction;
 
 /*
- * Statically known environments.
- *
- * Currently only "theContext"-singleton is used, to denote an unknown parent
- * envrionment.
+ * Statically known envs.
  *
  */
 class Env : public Value {
-  public:
-    Env* parent = nullptr;
+    Env(SEXP rho, Env* parent)
+        : Value(RType::env, Tag::Env), rho(rho), parent(parent) {}
+    friend class Module;
 
-    static Env* theContext() {
-        static Env e;
-        return &e;
+  public:
+    SEXP rho;
+    Env* parent;
+
+    static Env* nil() {
+        static Env u(nullptr, nullptr);
+        return &u;
     }
 
-    Env() : Value(RType::env, Tag::Env) {}
+    static Env* theParent() {
+        static Env u(nullptr, nullptr);
+        return &u;
+    }
 
     void printRef(std::ostream& out);
 
@@ -37,7 +42,10 @@ class Env : public Value {
         return v->tag == Tag::Env ? static_cast<Env*>(v) : nullptr;
     }
 
-    static bool isEnv(Value* v);
+    static bool isPirEnv(Value* v);
+    static bool isStaticEnv(Value* v);
+    static bool isAnyEnv(Value* v);
+
     static bool isParentEnv(Value* a, Value* b);
     static Value* parentEnv(Value* e);
 };
