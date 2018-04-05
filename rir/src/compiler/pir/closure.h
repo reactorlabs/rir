@@ -9,18 +9,18 @@ namespace rir {
 namespace pir {
 
 /*
- * Function
+ * Closure
  *
  * A function does not have an environment per se, but just a number of named
  * arguments. If an environment is necessary, `MkEnv` can bind arguments
  * (referred to by `LdArg`).
  *
  */
-class Function : public Code {
+class Closure : public Code {
   private:
     friend class Module;
-    Function(std::initializer_list<SEXP> a) : argNames(a) {}
-    Function(const std::vector<SEXP>& a) : argNames(a) {}
+    Closure(std::initializer_list<SEXP> a) : argNames(a) {}
+    Closure(const std::vector<SEXP>& a) : argNames(a) {}
 
   public:
     Env* closureEnv;
@@ -36,14 +36,14 @@ class Function : public Code {
 
     size_t maxBBId = 0;
 
-    friend std::ostream& operator<<(std::ostream& out, const Function& e) {
+    friend std::ostream& operator<<(std::ostream& out, const Closure& e) {
         out << "Func(" << (void*)&e << ")";
         return out;
     }
 
-    Function* clone();
+    Closure* clone();
 
-    ~Function();
+    ~Closure();
 };
 }
 }

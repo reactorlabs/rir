@@ -9,8 +9,8 @@ namespace rir {
 namespace pir {
 
 void Env::printRef(std::ostream& out) {
-    if (this == theParent()) {
-        out << "parent?";
+    if (this == notClosed()) {
+        out << "?";
         return;
     }
     if (this == nil()) {
@@ -28,7 +28,7 @@ void Env::printRef(std::ostream& out) {
 }
 
 bool Env::isStaticEnv(Value* v) {
-    return Env::Cast(v) && v != Env::theParent() && v != Env::nil();
+    return Env::Cast(v) && v != Env::notClosed() && v != Env::nil();
 }
 
 bool Env::isPirEnv(Value* v) {

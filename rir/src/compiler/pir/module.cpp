@@ -15,7 +15,7 @@ void Module::printEachVersion(std::ostream& out) {
     for (auto f : functions) {
         out << "\n======= Function ========================\n";
         f.second.current()->print(out);
-        f.second.eachVersion([&](Function* f) {
+        f.second.eachVersion([&](Closure* f) {
             out << "\n     == Version ========================\n";
             f->print(out);
         });
@@ -23,35 +23,35 @@ void Module::printEachVersion(std::ostream& out) {
     }
 }
 
-Function* Module::declare(rir::Function* fun, const std::vector<SEXP>& args) {
-    auto* f = new pir::Function(args);
+Closure* Module::declare(rir::Function* fun, const std::vector<SEXP>& args) {
+    auto* f = new pir::Closure(args);
     functions.emplace(fun, f);
     return f;
 }
 
-void Module::VersionedFunction::deallocatePirFunctions() {
+void Module::VersionedClosure::deallocatePirFunctions() {
     for (auto f : translations) {
         delete f;
     }
-    delete pirFunction;
+    delete pirClosure;
 }
 
-void Module::eachPirFunction(PirFunctionIterator it) {
+void Module::eachPirFunction(PirClosureIterator it) {
     for (auto& f : functions)
         it(f.second.current());
 }
 
-void Module::eachPirFunction(PirFunctionVersionIterator it) {
+void Module::eachPirFunction(PirClosureVersionIterator it) {
     for (auto& f : functions)
         it(f.second);
 }
 
-void Module::VersionedFunction::eachVersion(PirFunctionIterator it) {
+void Module::VersionedClosure::eachVersion(PirClosureIterator it) {
     for (auto f : translations)
         it(f);
 }
 
-void Module::VersionedFunction::saveVersion() {
+void Module::VersionedClosure::saveVersion() {
     auto f = current()->clone();
     translations.push_back(f);
 }

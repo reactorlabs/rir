@@ -1,4 +1,4 @@
-#include "function.h"
+#include "closure.h"
 #include "../transform/bb.h"
 #include "../util/visitor.h"
 #include "pir_impl.h"
@@ -8,8 +8,8 @@
 namespace rir {
 namespace pir {
 
-void Function::print(std::ostream& out) {
-    out << "Function " << this << "\n";
+void Closure::print(std::ostream& out) {
+    out << "Closure " << this << "\n";
     Code::print(out);
     for (auto p : promises) {
         if (p)
@@ -17,13 +17,13 @@ void Function::print(std::ostream& out) {
     }
 }
 
-Promise* Function::createProm() {
+Promise* Closure::createProm() {
     Promise* p = new Promise(this, promises.size());
     promises.push_back(p);
     return p;
 }
 
-Function::~Function() {
+Closure::~Closure() {
     for (auto p : promises)
         if (p)
             delete p;
@@ -31,8 +31,8 @@ Function::~Function() {
         delete p;
 }
 
-Function* Function::clone() {
-    Function* c = new Function(argNames);
+Closure* Closure::clone() {
+    Closure* c = new Closure(argNames);
 
     // clone code
     c->entry = BBTransform::clone(entry, c);

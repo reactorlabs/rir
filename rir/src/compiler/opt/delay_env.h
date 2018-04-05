@@ -10,10 +10,10 @@ namespace pir {
  * the goal is to move it out of the others.
  *
  */
-class Function;
+class Closure;
 class DelayEnv {
   public:
-    static void apply(Function*);
+    static void apply(Closure*);
 };
 }
 }

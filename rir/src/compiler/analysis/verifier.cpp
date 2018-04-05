@@ -8,9 +8,9 @@ using namespace rir::pir;
 
 class TheVerifier {
   public:
-    Function* f;
+    Closure* f;
 
-    TheVerifier(Function* f) : f(f) {}
+    TheVerifier(Closure* f) : f(f) {}
 
     bool ok = true;
 
@@ -135,7 +135,7 @@ class TheVerifier {
 namespace rir {
 namespace pir {
 
-bool Verify::apply(Function* f) {
+bool Verify::apply(Closure* f) {
     TheVerifier v(f);
     v();
     return v.ok;

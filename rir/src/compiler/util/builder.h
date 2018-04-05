@@ -9,14 +9,14 @@ namespace pir {
 
 class Builder {
   public:
-    Function* function;
+    Closure* function;
     Code* code;
     Value* env;
     BB* bb;
-    Builder(Function* fun, Promise* prom);
-    Builder(Function* fun, Value* closureEnv);
+    Builder(Closure* fun, Promise* prom);
+    Builder(Closure* fun, Value* enclos);
 
-    Value* buildDefaultEnv(Function* fun);
+    Value* buildDefaultEnv(Closure* fun);
 
     template <class T>
     T* operator()(T* i) {

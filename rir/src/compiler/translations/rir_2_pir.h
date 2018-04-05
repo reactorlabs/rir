@@ -11,8 +11,10 @@ namespace pir {
 class Rir2PirCompiler {
   public:
     Rir2PirCompiler(Module* module) : module(module) {}
-    Function* compileFunction(SEXP);
-    Function* compileFunction(rir::Function*, const std::vector<SEXP>&, Value* closureEnv);
+    Closure* compileClosure(SEXP);
+    Closure* compileClosure(rir::Function*, const std::vector<SEXP>&,
+                            Value* closureEnv);
+    Closure* compileFunction(rir::Function*, const std::vector<SEXP>&);
     void optimizeModule();
     Module* getModule() { return module; }
 

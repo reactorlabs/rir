@@ -12,53 +12,53 @@
 namespace rir {
 namespace pir {
 
+class Closure;
 class Env;
-class Function;
 
 class Module {
     std::unordered_map<SEXP, Env*> environments;
 
   public:
-    Function* declare(rir::Function*, const std::vector<SEXP>& a);
+    Closure* declare(rir::Function*, const std::vector<SEXP>& a);
     Env* getEnv(SEXP);
 
     void print(std::ostream& out = std::cout);
     void printEachVersion(std::ostream& out = std::cout);
 
-    typedef std::function<void(pir::Function*)> PirFunctionIterator;
-    struct VersionedFunction {
+    typedef std::function<void(pir::Closure*)> PirClosureIterator;
+    struct VersionedClosure {
         SEXP closure = nullptr;
-        pir::Function* pirFunction;
+        pir::Closure* pirClosure;
 
-        VersionedFunction(SEXP closure, pir::Function* pir)
-            : closure(closure), pirFunction(pir) {}
-        VersionedFunction(pir::Function* pir) : pirFunction(pir) {}
+        VersionedClosure(SEXP closure, pir::Closure* pir)
+            : closure(closure), pirClosure(pir) {}
+        VersionedClosure(pir::Closure* pir) : pirClosure(pir) {}
 
-        pir::Function* current() { return pirFunction; }
+        pir::Closure* current() { return pirClosure; }
 
         void saveVersion();
 
-        void eachVersion(PirFunctionIterator it);
+        void eachVersion(PirClosureIterator it);
 
         void deallocatePirFunctions();
 
       private:
-        std::vector<pir::Function*> translations;
+        std::vector<pir::Closure*> translations;
     };
 
-    pir::Function* get(rir::Function* f) {
+    pir::Closure* get(rir::Function* f) {
         assert(functions.count(f));
         return functions.at(f).current();
     }
 
-    typedef std::function<void(VersionedFunction&)> PirFunctionVersionIterator;
-    void eachPirFunction(PirFunctionIterator it);
-    void eachPirFunction(PirFunctionVersionIterator it);
+    typedef std::function<void(VersionedClosure&)> PirClosureVersionIterator;
+    void eachPirFunction(PirClosureIterator it);
+    void eachPirFunction(PirClosureVersionIterator it);
 
     ~Module();
 
   private:
-    std::unordered_map<rir::Function*, VersionedFunction> functions;
+    std::unordered_map<rir::Function*, VersionedClosure> functions;
 };
 
 }

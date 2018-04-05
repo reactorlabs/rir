@@ -14,10 +14,10 @@ namespace pir {
  * Later scope resolution and force dominance passes will do the smart parts.
  *
  */
-class Function;
+class Closure;
 class Inline {
   public:
-    static void apply(Function* function);
+    static void apply(Closure* function);
 };
 }
 }
