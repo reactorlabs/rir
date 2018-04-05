@@ -70,6 +70,10 @@ bool BC::operator==(const BC& other) const {
     case Opcode::stloc_:
         return immediate.loc == other.immediate.loc;
 
+    case Opcode::copyloc_:
+        return immediate.loc_cpy.target == other.immediate.loc_cpy.target &&
+               immediate.loc_cpy.source == other.immediate.loc_cpy.source;
+
     case Opcode::nop_:
     case Opcode::make_env_:
     case Opcode::get_env_:
@@ -191,6 +195,10 @@ void BC::write(CodeStream& cs) const {
     case Opcode::ldloc_:
     case Opcode::stloc_:
         cs.insert(immediate.loc);
+        return;
+
+    case Opcode::copyloc_:
+        cs.insert(immediate.loc_cpy);
         return;
 
     case Opcode::nop_:
@@ -401,6 +409,10 @@ void BC::print(CallSite* cs) {
     case Opcode::ldloc_:
     case Opcode::stloc_:
         Rprintf(" @%i", immediate.loc);
+        break;
+    case Opcode::copyloc_:
+        Rprintf(" %i <- %i", immediate.loc_cpy.target,
+                immediate.loc_cpy.source);
         break;
     case Opcode::is_:
     case Opcode::alloc_:

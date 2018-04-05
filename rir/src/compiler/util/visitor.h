@@ -199,7 +199,7 @@ class Visitor
 class BreadthFirstVisitor
     : public VisitorImplementation<true, VisitorHelpers::IDMarker> {};
 class UnstableIDsVisitor
-    : public VisitorImplementation<false, VisitorHelpers::PointerMarker> {};
+    : public VisitorImplementation<true, VisitorHelpers::PointerMarker> {};
 }
 }
 

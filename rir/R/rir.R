@@ -19,9 +19,9 @@ rir.compile <- function(what) {
     .Call("rir_compile", what)
 }
 
-# compiles given closure, or expression and returns the compiled version.
+# optimizes given rir compiled closure
 pir.compile <- function(what) {
-    .Call("pir_compile", what)
+    invisible(.Call("pir_compile", what))
 }
 
 # compiles code of the given file and returns the list of compiled version.
