@@ -8,7 +8,7 @@
 namespace rir {
 namespace pir {
 
-class Function;
+class Closure;
 class BB;
 class Promise;
 class Value;

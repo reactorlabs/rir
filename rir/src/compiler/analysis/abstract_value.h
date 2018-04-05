@@ -98,11 +98,6 @@ struct AbstractPirValue {
     void print(std::ostream& out = std::cout);
 };
 
-static Value* UnknownParent = (Value*)-1;
-static Value* UninitializedParent = nullptr;
-class MkFunCls;
-static MkFunCls* UnknownFunction = (MkFunCls*)-1;
-
 /*
  * An AbstractREnvironment is a static approximation of an R runtime Envrionment
  *
@@ -116,7 +111,12 @@ static MkFunCls* UnknownFunction = (MkFunCls*)-1;
  *
  * For inter-procedural analysis we can additionally keep track of closures.
  */
+class MkFunCls;
 struct AbstractREnvironment {
+    static Value* UnknownParent;
+    static Value* UninitializedParent;
+    static MkFunCls* UnknownClosure;
+
     std::unordered_map<SEXP, AbstractPirValue> entries;
     std::unordered_map<Value*, MkFunCls*> mkClosures;
 
@@ -183,10 +183,10 @@ struct AbstractREnvironment {
         for (auto e : other.mkClosures)
             fps.insert(std::get<0>(e));
         for (auto n : fps) {
-            if (mkClosures[n] != UnknownFunction &&
+            if (mkClosures[n] != UnknownClosure &&
                 (other.mkClosures.count(n) == 0 ||
                  mkClosures[n] != other.mkClosures.at(n))) {
-                mkClosures[n] = UnknownFunction;
+                mkClosures[n] = UnknownClosure;
             }
         }
 
@@ -240,12 +240,12 @@ class AbstractREnvironmentHierarchy
     }
 
     MkFunCls* findClosure(Value* env, Value* fun) {
-        while (env && env != UnknownParent) {
+        while (env && env != AbstractREnvironment::UnknownParent) {
             if ((*this)[env].mkClosures.count(fun))
                 return (*this)[env].mkClosures.at(fun);
             env = (*this)[env].parentEnv;
         }
-        return UnknownFunction;
+        return AbstractREnvironment::UnknownClosure;
     }
 
     AbstractLoad get(Value* env, SEXP e) const;

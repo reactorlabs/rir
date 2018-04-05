@@ -2,7 +2,7 @@
 #define PIR_GENERIC_STATIC_ANALYSIS
 
 #include "../pir/bb.h"
-#include "../pir/function.h"
+#include "../pir/closure.h"
 #include "../pir/instruction.h"
 #include "../util/cfg.h"
 #include "../util/visitor.h"

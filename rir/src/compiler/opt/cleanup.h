@@ -4,10 +4,10 @@
 namespace rir {
 namespace pir {
 
-class Function;
+class Closure;
 class Cleanup {
   public:
-    static void apply(Function* function);
+    static void apply(Closure* function);
 };
 }
 }
