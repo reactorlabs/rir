@@ -31,7 +31,7 @@ class Env : public Value {
         return &u;
     }
 
-    static Env* theParent() {
+    static Env* notClosed() {
         static Env u(nullptr, nullptr);
         return &u;
     }

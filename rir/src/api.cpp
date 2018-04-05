@@ -129,8 +129,8 @@ REXPORT SEXP pir_compile(SEXP what) {
 
     pir::Module* m = new pir::Module;
     pir::Rir2PirCompiler cmp(m);
-    cmp.setVerbose(false);
-    cmp.compileFunction(what);
+    cmp.setVerbose(true);
+    cmp.compileClosure(what);
     cmp.optimizeModule();
 
     bool debug = true;
@@ -144,7 +144,7 @@ REXPORT SEXP pir_compile(SEXP what) {
     size_t offset = 0;
     auto oldFun = table->at(offset);
     pir::Pir2Rir p2r;
-    auto fun = p2r(m->get(oldFun));
+    //auto fun = p2r(m->get(oldFun));
 #if 0
     // patch the closure
     oldFun->next(fun);

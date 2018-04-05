@@ -51,7 +51,7 @@ void AbstractPirValue::print(std::ostream& out) {
 }
 
 AbstractLoad AbstractREnvironmentHierarchy::get(Value* env, SEXP e) const {
-    while (env != UnknownParent) {
+    while (env != AbstractREnvironment::UnknownParent) {
         if (this->count(env) == 0)
             return AbstractLoad(env, AbstractPirValue::tainted());
         auto aenv = this->at(env);
@@ -63,10 +63,14 @@ AbstractLoad AbstractREnvironmentHierarchy::get(Value* env, SEXP e) const {
         if (aenv.tainted)
             return AbstractLoad(env, AbstractPirValue::tainted());
         env = at(env).parentEnv;
-        if (env == UnknownParent && Env::parentEnv(env))
+        if (env == AbstractREnvironment::UnknownParent && Env::parentEnv(env))
             env = Env::parentEnv(env);
     }
     return AbstractLoad(env, AbstractPirValue::tainted());
-    }
+}
+
+Value* AbstractREnvironment::UnknownParent = (Value*)-1;
+Value* AbstractREnvironment::UninitializedParent = nullptr;
+MkFunCls* AbstractREnvironment::UnknownClosure = (MkFunCls*)-1;
 }
 }

@@ -2,27 +2,12 @@
 #define RIR_2_PIR_H
 
 #include "pir_translator.h"
+#include "rir_2_pir_compiler.h"
 #include "../pir/stack_machine.h"
 #include <unordered_map>
 
 namespace rir {
 namespace pir {
-
-class Rir2PirCompiler {
-  public:
-    Rir2PirCompiler(Module* module) : module(module) {}
-    Function* compileFunction(SEXP);
-    Function* compileFunction(rir::Function*, const std::vector<SEXP>&, Value* closureEnv);
-    void optimizeModule();
-    Module* getModule() { return module; }
-
-    bool isVerbose() { return verbose; }
-    void setVerbose(bool v) { verbose = v; }
-
-  private:
-    bool verbose = false;
-    Module* module;
-};
 
 class Rir2Pir : public PirTranslator {
   public:

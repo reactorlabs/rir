@@ -1,4 +1,4 @@
-#include "pir_2_rir.h"
+/*#include "pir_2_rir.h"
 #include "../../ir/CodeStream.h"
 #include "../../utils/FunctionWriter.h"
 #include "../pir/pir_impl.h"
@@ -76,3 +76,4 @@ rir::Function* Pir2Rir::operator()(Function* fun) {
 
 } // namespace pir
 } // namespace rir
+*/

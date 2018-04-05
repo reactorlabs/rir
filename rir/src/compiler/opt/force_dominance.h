@@ -12,10 +12,10 @@ namespace pir {
  * dominating force, and replaces all subsequent forces with it's result.
  *
  */
-class Function;
+class Closure;
 class ForceDominance {
   public:
-    static void apply(Function*);
+    static void apply(Closure*);
 };
 }
 }

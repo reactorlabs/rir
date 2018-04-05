@@ -6,7 +6,7 @@ namespace pir {
 
 BB* Builder::createBB() { return new BB(code, ++function->maxBBId); }
 
-Builder::Builder(Function* fun, Value* closureEnv)
+Builder::Builder(Closure* fun, Value* closureEnv)
     : function(fun), code(fun), env(nullptr), bb(fun->entry) {
     bb = function->entry = createBB();
     std::vector<Value*> args;
@@ -14,7 +14,7 @@ Builder::Builder(Function* fun, Value* closureEnv)
         args.push_back(this->operator()(new LdArg(i)));
     env = this->operator()(new MkEnv(closureEnv, fun->argNames, args.data()));
 }
-Builder::Builder(Function* fun, Promise* prom)
+Builder::Builder(Closure* fun, Promise* prom)
     : function(fun), code(prom), env(nullptr), bb(prom->entry) {
     bb = prom->entry = createBB();
     env = this->operator()(new LdFunctionEnv());

@@ -15,8 +15,8 @@ using namespace rir::pir;
 
 class TheInliner {
   public:
-    Function* function;
-    TheInliner(Function* function) : function(function) {}
+    Closure* function;
+    TheInliner(Closure* function) : function(function) {}
 
     void operator()() {
 
@@ -30,7 +30,7 @@ class TheInliner {
                 auto cls = MkFunCls::Cast(call->cls());
                 if (!cls)
                     continue;
-                Function* inlinee = cls->fun;
+                Closure* inlinee = cls->fun;
                 if (inlinee->argNames.size() != call->nCallArgs())
                     continue;
 
@@ -56,7 +56,7 @@ class TheInliner {
                         auto next = ip + 1;
                         auto ld = LdArg::Cast(*ip);
                         Instruction* i = *ip;
-                        if (i->hasEnv() && i->env() == Env::theParent()) {
+                        if (i->hasEnv() && i->env() == Env::notClosed()) {
                             i->env(cls->env());
                         }
                         if (ld) {
@@ -124,7 +124,7 @@ class TheInliner {
 namespace rir {
 namespace pir {
 
-void Inline::apply(Function* function) {
+void Inline::apply(Closure* function) {
     TheInliner s(function);
     s();
 }

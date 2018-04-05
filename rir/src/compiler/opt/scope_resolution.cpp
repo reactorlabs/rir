@@ -14,8 +14,8 @@ namespace {
 using namespace rir::pir;
 class TheScopeResolution {
   public:
-    Function* function;
-    TheScopeResolution(Function* function) : function(function) {}
+    Closure* function;
+    TheScopeResolution(Closure* function) : function(function) {}
     void operator()() {
         ScopeAnalysis analysis(function);
 
@@ -49,7 +49,7 @@ class TheScopeResolution {
                     // exists in the super env.
                     auto e = Env::parentEnv(ss->env());
                     auto aload = analysis.loads.at(ss);
-                    if (e && aload.env != UnknownParent) {
+                    if (e && aload.env != AbstractREnvironment::UnknownParent) {
                         if ((Env::isPirEnv(aload.env) &&
                              !aload.result.isUnknown()) ||
                             Env::isStaticEnv(aload.env)) {
@@ -71,7 +71,8 @@ class TheScopeResolution {
                     auto aload = analysis.loads.at(ld);
                     auto aval = aload.result;
                     bool localVals = true;
-                    if (aval.isUnknown() && aload.env != UnknownParent) {
+                    if (aval.isUnknown() &&
+                        aload.env != AbstractREnvironment::UnknownParent) {
                         // We have no clue what we load, but we know from where
                         ld->env(aload.env);
                     } else {
@@ -128,7 +129,7 @@ class TheScopeResolution {
 namespace rir {
 namespace pir {
 
-void ScopeResolution::apply(Function* function) {
+void ScopeResolution::apply(Closure* function) {
     TheScopeResolution s(function);
     s();
 }
