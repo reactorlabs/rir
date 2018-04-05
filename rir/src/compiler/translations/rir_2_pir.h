@@ -13,7 +13,7 @@ class Rir2PirCompiler {
     Rir2PirCompiler(Module* module) : module(module) {}
     Closure* compileClosure(SEXP);
     Closure* compileClosure(rir::Function*, const std::vector<SEXP>&,
-                            Value* closureEnv);
+                            Env* closureEnv);
     Closure* compileFunction(rir::Function*, const std::vector<SEXP>&);
     void optimizeModule();
     Module* getModule() { return module; }

@@ -32,7 +32,7 @@ Closure::~Closure() {
 }
 
 Closure* Closure::clone() {
-    Closure* c = new Closure(argNames);
+    Closure* c = new Closure(argNames, env);
 
     // clone code
     c->entry = BBTransform::clone(entry, c);
@@ -52,13 +52,13 @@ Closure* Closure::clone() {
     Visitor::run(c->entry, [&](Instruction* i) {
         auto a = MkArg::Cast(i);
         if (a)
-            a->prom = promMap[a->prom];
+            a->ifPromise([&](Promise* p) { a->promise(promMap[p]); });
     });
     for (auto p : c->promises)
         Visitor::run(p->entry, [&](Instruction* i) {
             auto a = MkArg::Cast(i);
             if (a)
-                a->prom = promMap[a->prom];
+                a->ifPromise([&](Promise* p) { a->promise(promMap[p]); });
         });
 
     return c;

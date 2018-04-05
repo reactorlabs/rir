@@ -60,7 +60,7 @@ class TheCleanup {
                             used_bb[bb].insert(phi);
                     }
                 } else if (arg) {
-                    used_p.insert(arg->prom->id);
+                    arg->ifPromise([&](Promise* p) { used_p.insert(p->id); });
                 }
                 ip = next;
             }
@@ -80,12 +80,14 @@ class TheCleanup {
             Visitor::run(p->entry, [&](Instruction* i) {
                 MkArg* mk = MkArg::Cast(i);
                 if (mk) {
-                    size_t id = mk->prom->id;
-                    if (used_p.find(id) == used_p.end()) {
-                        // found a new used promise...
-                        todo.push_back(mk->prom);
-                        used_p.insert(mk->prom->id);
-                    }
+                    mk->ifPromise([&](Promise* prom) {
+                        size_t id = prom->id;
+                        if (used_p.find(id) == used_p.end()) {
+                            // found a new used promise...
+                            todo.push_back(prom);
+                            used_p.insert(prom->id);
+                        }
+                    });
                 }
             });
         }

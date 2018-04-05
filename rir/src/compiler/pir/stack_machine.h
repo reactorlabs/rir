@@ -30,7 +30,7 @@ class StackMachine {
 
       typedef std::pair<BB*, Value*> ReturnSite;
       typedef std::function<void(ReturnSite)> ReturnMaybe;
-      void runCurrentBC(Rir2Pir& cmp, Builder&);
+      void runCurrentBC(Rir2Pir&, Builder&);
 
       void clear();
       bool empty();
@@ -43,6 +43,7 @@ class StackMachine {
       void advancePC();
 
     private:
+      void compileCall(Rir2Pir& cmp, Builder&, BC);
       rir::Function* srcFunction;
       rir::Code* srcCode;
       std::deque<Value*> stack;

@@ -24,6 +24,7 @@
     V(ChkMissing)                                                              \
     V(ChkClosure)                                                              \
     V(Call)                                                                    \
+    V(StaticCall)                                                              \
     V(CallBuiltin)                                                             \
     V(CallSafeBuiltin)                                                         \
     V(MkEnv)                                                                   \
