@@ -2,22 +2,24 @@
 #define PIR_TRANSLATOR_H
 
 #include "../pir/module.h"
-#include "../pir/value.h"
-#include "runtime/Function.h"
+#include <string>
 
 namespace rir {
 namespace pir {
 
+class RirCompiler;
 class PirTranslator {
   public:
-    PirTranslator(bool verbose) : verbose(verbose) {}
+    PirTranslator(std::string name)
+        : name(name) {}
 
-    pir::Closure* compileClosure(SEXP);
+    void apply(Closure* function);
+    std::string& getName() { return this->name; }
+    virtual ~PirTranslator() {}
 
-    bool isVerbose();
-    void setVerbose(bool);
-  private:
-      bool verbose;
+  protected:
+    virtual void applyTranslation(Closure* function) = 0;
+    std::string name;
 };
 }
 }
