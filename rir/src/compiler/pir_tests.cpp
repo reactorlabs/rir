@@ -186,8 +186,8 @@ bool testPir2RirBasic() {
 
     SEXP after = p(rir_eval(fun, env));
 
-    // Rf_PrintValue(orig);
-    // Rf_PrintValue(after);
+    Rf_PrintValue(orig);
+    Rf_PrintValue(after);
 
     if (TYPEOF(orig) != TYPEOF(after) || TYPEOF(orig) != INTSXP ||
         XLENGTH(orig) != XLENGTH(after) ||

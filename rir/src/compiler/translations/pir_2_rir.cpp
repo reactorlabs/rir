@@ -41,11 +41,11 @@ class Alloc {
 
 class Pir2Rir {
   public:
-    Pir2Rir(Function* fun, Alloc& a) : fun(fun), a(a) {}
+    Pir2Rir(Closure* cls, Alloc& a) : cls(cls), a(a) {}
     rir::Function* finalize();
 
   private:
-    Function* fun;
+    Closure* cls;
     Alloc& a;
 };
 
@@ -59,7 +59,7 @@ rir::Function* Pir2Rir::finalize() {
     // functions and asts don't correspond anymore
     codeStreams.push_back(new CodeStream(funWrt, R_NilValue));
 
-    BreadthFirstVisitor::run(fun->entry, [&](BB* bb) {
+    BreadthFirstVisitor::run(cls->entry, [&](BB* bb) {
         CodeStream& cs = *codeStreams.back();
         for (auto instr : *bb) {
             switch (instr->tag) {
@@ -108,9 +108,9 @@ rir::Function* Pir2RirCompiler::operator()(Module* m) {
     // TODO: what about multiple functions??
     std::vector<rir::Function*> results;
 
-    m->eachPirFunction([&](Function* fun) {
+    m->eachPirFunction([&](Closure* cls) {
         // For each Phi, insert copies
-        BreadthFirstVisitor::run(fun->entry, [&](BB* bb) {
+        BreadthFirstVisitor::run(cls->entry, [&](BB* bb) {
             std::vector<Instruction*> phiCopies;
             for (auto instr : *bb) {
                 Phi* phi = Phi::Cast(instr);
@@ -139,17 +139,17 @@ rir::Function* Pir2RirCompiler::operator()(Module* m) {
         });
 
         // std::cout << "--- phi copies inserted ---\n";
-        // fun->print(std::cout);
+        // cls->print(std::cout);
 
         Alloc a;
-        BreadthFirstVisitor::run(fun->entry, [&](Instruction* instr) {
+        BreadthFirstVisitor::run(cls->entry, [&](Instruction* instr) {
             Phi* phi = Phi::Cast(instr);
             if (phi) {
                 auto slot = a.allocateLocal(phi);
                 phi->eachArg([&](Value* arg) { a.allocateLocal(arg, slot); });
             }
         });
-        BreadthFirstVisitor::run(fun->entry, [&](Instruction* instr) {
+        BreadthFirstVisitor::run(cls->entry, [&](Instruction* instr) {
             if (instr->type != PirType::voyd() && a.alloc.count(instr) == 0)
                 a.allocateLocal(instr);
         });
@@ -162,7 +162,7 @@ rir::Function* Pir2RirCompiler::operator()(Module* m) {
         // }
         // std::cout << "total slots needed: " << a.slots() << "\n";
 
-        Pir2Rir cmp(fun, a);
+        Pir2Rir cmp(cls, a);
         results.push_back(cmp.finalize());
     });
 
