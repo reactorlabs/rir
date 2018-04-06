@@ -99,7 +99,7 @@ class Instruction : public Value {
     bool unused();
 
     virtual void printArgs(std::ostream& out);
-    virtual void print(std::ostream&);
+    void print(std::ostream&);
     void printRef(std::ostream& out);
     void print() { print(std::cerr); }
 
@@ -607,12 +607,6 @@ class FLI(IsObject, 1, Effect::None, EnvAccess::None) {
 class FLI(LdFunctionEnv, 0, Effect::None, EnvAccess::None) {
   public:
     LdFunctionEnv() : FixedLenInstruction(RType::env) {}
-};
-
-class FLI(PirCopy, 1, Effect::None, EnvAccess::None) {
-  public:
-    PirCopy(Value* v) : FixedLenInstruction(v->type, {{v->type}}, {{v}}) {}
-    void print(std::ostream& out) override;
 };
 
 #define SAFE_BINOP(Name, Type)                                                 \

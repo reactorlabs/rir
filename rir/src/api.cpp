@@ -121,7 +121,6 @@ REXPORT SEXP rir_analysis_liveness(SEXP what) {
 
 #include "compiler/translations/rir_2_pir.h"
 #include "compiler/pir_tests.h"
-#include "compiler/translations/pir_2_rir.h"
 
 REXPORT SEXP pir_compile(SEXP what) {
     if (!isValidClosureSEXP(what))
@@ -132,32 +131,6 @@ REXPORT SEXP pir_compile(SEXP what) {
     cmp.setVerbose(true);
     cmp.compileClosure(what);
     cmp.optimizeModule();
-
-    bool debug = true;
-
-    Protect p(what);
-
-    if (debug)
-        m->print();
-
-    auto table = DispatchTable::unpack(BODY(what));
-    size_t offset = 0;
-    auto oldFun = table->at(offset);
-    pir::Pir2Rir p2r;
-    //auto fun = p2r(m->get(oldFun));
-#if 0
-    // patch the closure
-    oldFun->next(fun);
-    fun->origin(oldFun);
-    fun->invocationCount = oldFun->invocationCount;
-    fun->envLeaked = oldFun->envLeaked;
-    fun->envChanged = oldFun->envChanged;
-    fun->signature = oldFun->signature;
-    table->put(offset, fun);
-    if (debug)
-        CodeEditor(what).print(false);
-#endif
-
     delete m;
     return R_NilValue;
 }

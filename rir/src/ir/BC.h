@@ -86,12 +86,6 @@ BC BC::stloc(uint32_t offset) {
     im.loc = offset;
     return BC(Opcode::stloc_, im);
 }
-BC BC::copyloc(uint32_t target, uint32_t source) {
-    ImmediateT im;
-    im.loc_cpy.target = target;
-    im.loc_cpy.source = source;
-    return BC(Opcode::copyloc_, im);
-}
 BC BC::ldarg(SEXP sym) {
     assert(TYPEOF(sym) == SYMSXP);
     assert(strlen(CHAR(PRINTNAME(sym))));

@@ -58,7 +58,6 @@
     V(Subassign2_1D)                                                           \
     V(ForSeqSize)                                                              \
     V(Deopt)                                                                   \
-    V(Force)                                                                   \
-    V(PirCopy)
+    V(Force)                                                                   
 
 #endif

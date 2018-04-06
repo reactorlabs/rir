@@ -1453,15 +1453,6 @@ SEXP evalRirCode(Code* c, Context* ctx, EnvironmentProxy* ep) {
             NEXT();
         }
 
-        INSTRUCTION(copyloc_) {
-            Immediate target = readImmediate();
-            advanceImmediate();
-            Immediate source = readImmediate();
-            advanceImmediate();
-            locals.store(target, locals.load(source));
-            NEXT();
-        }
-
         INSTRUCTION(call_) {
             Immediate id = readImmediate();
             advanceImmediate();
