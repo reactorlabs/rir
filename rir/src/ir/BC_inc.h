@@ -88,6 +88,10 @@ typedef struct {
 } GuardFunArgs;
 typedef uint32_t GuardT;
 typedef uint32_t NumLocalsT;
+typedef struct {
+    uint32_t target;
+    uint32_t source;
+} LocalsCopyT;
 
 static constexpr size_t MAX_NUM_ARGS = 1L << (8 * sizeof(PoolIdxT));
 static constexpr size_t MAX_POOL_IDX = 1L << (8 * sizeof(PoolIdxT));
@@ -117,6 +121,7 @@ class BC {
         JmpT offset;
         uint32_t i;
         NumLocalsT loc;
+        LocalsCopyT loc_cpy;
     };
 
     BC() : bc(Opcode::invalid_), immediate({{0}}) {}
@@ -242,6 +247,7 @@ class BC {
     inline static BC ldddvar(SEXP sym);
     inline static BC ldloc(uint32_t offset);
     inline static BC stloc(uint32_t offset);
+    inline static BC copyloc(uint32_t target, uint32_t source);
     inline static BC promise(FunIdxT prom);
     inline static BC ret();
     inline static BC pop();
@@ -438,6 +444,9 @@ class BC {
         case Opcode::ldloc_:
         case Opcode::stloc_:
             immediate.loc = *(NumLocalsT*)pc;
+            break;
+        case Opcode::copyloc_:
+            immediate.loc_cpy = *(LocalsCopyT*)pc;
             break;
         case Opcode::nop_:
         case Opcode::make_env_:

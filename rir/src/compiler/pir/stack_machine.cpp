@@ -328,6 +328,7 @@ void StackMachine::runCurrentBC(Rir2Pir& pir2rir, Builder& insert) {
         case Opcode::set_env_:
         case Opcode::ldloc_:
         case Opcode::stloc_:
+        case Opcode::copyloc_:
         case Opcode::ldlval_:
         case Opcode::asast_:
         case Opcode::missing_:

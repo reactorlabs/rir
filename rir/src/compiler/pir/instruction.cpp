@@ -220,6 +220,18 @@ void Phi::printArgs(std::ostream& out) {
     out << ")";
 }
 
+void PirCopy::print(std::ostream& out) {
+    std::ostringstream buf;
+    buf << type;
+    out << std::left << std::setw(7) << buf.str() << " ";
+    buf.str("");
+    printRef(buf);
+    out << std::setw(5) << buf.str() << " = ";
+    buf.str("");
+    arg(0).val()->printRef(buf);
+    out << std::setw(50) << buf.str();
+}
+
 CallSafeBuiltin::CallSafeBuiltin(SEXP builtin, const std::vector<Value*>& args)
     : VarLenInstruction(PirType::valOrLazy()), builtin(getBuiltin(builtin)),
       builtinId(getBuiltinNr(builtin)) {
