@@ -238,12 +238,6 @@ Value* Rir2Pir::translate() {
     InsertCast c(insert.code->entry);
     c();
 
-    if (isVerbose()) {
-        std::cout << " ========== Done compiling " << srcFunction << "\n";
-        insert.function->print(std::cout);
-        std::cout << " ==========\n";
-    }
-
     return res;
 }
 

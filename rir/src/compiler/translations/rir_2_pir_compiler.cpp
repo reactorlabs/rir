@@ -45,6 +45,11 @@ Closure* Rir2PirCompiler::compileClosure(rir::Function* srcFunction,
     {
         Rir2Pir rir2pir(*this, builder, srcFunction, srcFunction->body());
         rir2pir.translate();
+        if (isVerbose()) {
+            std::cout << " ========== Done compiling " << srcFunction << "\n";
+            builder.function->print(std::cout);
+            std::cout << " ==========\n";
+        }
     }
 
     assert(Verify::apply(pirFunction));
@@ -56,39 +61,12 @@ void Rir2PirCompiler::optimizeModule() {
     size_t passnr = 0;
     bool verbose = isVerbose();
 
-    auto print = [&](const std::string& pass, Closure* f) {
-        std::cout << "============== " << pass << " == " << passnr++
-                  << " ======================\n";
-        f->print(std::cout);
-    };
-
-    auto apply = [&](Closure* f, bool verb) {
-        ForceDominance::apply(f);
-        if (verb)
-            print("force", f);
-        ScopeResolution::apply(f);
-        if (verb)
-            print("scope", f);
-        Cleanup::apply(f);
-        if (verb)
-            print("cleanup", f);
-        DelayInstr::apply(f);
-        if (verb)
-            print("delay instr", f);
-        ElideEnv::apply(f);
-        if (verb)
-            print("elide env", f);
-        DelayEnv::apply(f);
-        if (verb)
-            print("delay env", f);
-    };
-
     module->eachPirFunction([&](Module::VersionedClosure& v) {
         auto f = v.current();
         if (verbose)
             v.saveVersion();
-        apply(f, verbose);
-        apply(f, verbose);
+        applyOptimizations(f, "Optimizations 1st Pass");
+        applyOptimizations(f, "Optimizations 2nd Pass");
     });
 
     for (int i = 0; i < 5; ++i) {
@@ -98,12 +76,29 @@ void Rir2PirCompiler::optimizeModule() {
                 v.saveVersion();
             Inline::apply(f);
             if (verbose)
-                print("inline", f);
-
-            apply(f, verbose);
+                printAfterPass("inline", "Inlining", f, passnr++);
+            applyOptimizations(f, "Optimizations After Inlining");
         });
     }
 }
 
+void Rir2PirCompiler::printAfterPass(const std::string& pass,
+                                     const std::string& category, Closure* f,
+                                     size_t passnr) {
+    std::cout << "============== " << category << ": " << pass << " == " << passnr
+              << " ======================\n";
+    f->print(std::cout);
 }
-}
+
+void Rir2PirCompiler::applyOptimizations(Closure* f,
+                                         const std::string& category) {
+    size_t passnr = 0;
+    for (auto translation : this->translations) {
+        translation->apply(f);
+        if (isVerbose())
+            printAfterPass(translation->getName(), category, f, passnr++);
+    }
+}    
+
+} // namespace pir
+} // namespace rir

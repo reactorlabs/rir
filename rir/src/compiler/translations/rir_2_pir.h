@@ -1,20 +1,19 @@
 #ifndef RIR_2_PIR_H
 #define RIR_2_PIR_H
 
+#include "../pir/stack_machine.h"
 #include "pir_translator.h"
 #include "rir_2_pir_compiler.h"
-#include "../pir/stack_machine.h"
 #include <unordered_map>
 
 namespace rir {
 namespace pir {
 
-class Rir2Pir : public PirTranslator {
+class Rir2Pir {
   public:
     Rir2Pir(Rir2PirCompiler& cmp, Builder& insert, rir::Function* srcFunction,
             rir::Code* srcCode)
-        : PirTranslator(cmp.isVerbose()), insert(insert), cmp(cmp),
-          srcFunction(srcFunction), srcCode(srcCode) {}
+        : insert(insert), cmp(cmp), srcFunction(srcFunction), srcCode(srcCode) {}
 
     Value* translate();
 
