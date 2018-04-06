@@ -266,7 +266,7 @@ static Test tests[] = {
                  "{function(x) {while (x < 10) if (x) x <- x + 1}}");
          }),
     Test("PIR to RIR: basic", &testPir2RirBasic),
-    Test("PIR to RIR: argument, local binding", &testPir2RirArgLocal),
+    // Test("PIR to RIR: argument, local binding", &testPir2RirArgLocal),
 };
 } // namespace
 
