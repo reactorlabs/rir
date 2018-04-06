@@ -98,6 +98,8 @@ rir::Function* Pir2Rir::finalize() {
     CodeVerifier::verifyFunctionLayout(opt->container(), globalContext());
 #endif
 
+    opt->body()->localsCount = a.slots();
+
     return opt;
 }
 

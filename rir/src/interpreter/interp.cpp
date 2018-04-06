@@ -1220,7 +1220,6 @@ SEXP evalRirCode(Code* c, Context* ctx, EnvironmentProxy* ep) {
     ep->init();
 
     Locals locals(c->localsCount);
-    locals.store(0, ep->env()); // prob remove this..
 
     BindingCache bindingCache[BINDING_CACHE_SIZE];
     memset(&bindingCache, 0, sizeof(bindingCache));
