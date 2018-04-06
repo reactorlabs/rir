@@ -8,10 +8,10 @@ namespace pir {
  * DelayInstr tries to schedule instruction right before they are needed.
  *
  */
-class Function;
+class Closure;
 class DelayInstr {
   public:
-    static void apply(Function*);
+    static void apply(Closure*);
 };
 }
 }

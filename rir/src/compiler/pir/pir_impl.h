@@ -6,8 +6,8 @@
 // contains all the headers from the /pir subdir
 
 #include "bb.h"
+#include "closure.h"
 #include "env.h"
-#include "function.h"
 #include "instruction.h"
 #include "module.h"
 #include "pir.h"

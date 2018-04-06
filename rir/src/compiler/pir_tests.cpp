@@ -12,8 +12,9 @@
 namespace {
 using namespace rir;
 
-std::pair<pir::Function*, pir::Module*> compile(const std::string& inp,
-                                                SEXP env = R_GlobalEnv) {
+
+std::pair<pir::Closure*, pir::Module*> compile(const std::string& inp,
+                                               SEXP env = R_GlobalEnv) {
     Protect p;
     ParseStatus status;
     SEXP arg = p(CONS(R_NilValue, R_NilValue));
@@ -25,14 +26,14 @@ std::pair<pir::Function*, pir::Module*> compile(const std::string& inp,
     pir::Module* m = new pir::Module;
     pir::Rir2PirCompiler cmp(m);
     // cmp.setVerbose(true);
-    auto f = cmp.compileFunction(fun);
+    auto f = cmp.compileClosure(fun);
     cmp.optimizeModule();
-    return std::pair<pir::Function*, pir::Module*>(f, m);
+    return std::pair<pir::Closure*, pir::Module*>(f, m);
 }
 
 using namespace rir::pir;
-typedef std::function<bool(void)> TestFunction;
-typedef std::pair<std::string, TestFunction> Test;
+typedef std::function<bool(void)> TestClosure;
+typedef std::pair<std::string, TestClosure> Test;
 
 #define CHECK(___test___)                                                      \
     if (!(___test___)) {                                                       \
@@ -67,8 +68,8 @@ class NullBuffer : public std::ostream {
 
 bool verify(Module* m) {
     bool success = true;
-    m->eachPirFunction([&success](pir::Module::VersionedFunction& f) {
-        f.eachVersion([&success](pir::Function* f) {
+    m->eachPirFunction([&success](pir::Module::VersionedClosure& f) {
+        f.eachVersion([&success](pir::Closure* f) {
             if (!Verify::apply(f))
                 success = false;
         });
@@ -116,14 +117,14 @@ bool testDelayEnv() {
 
 extern "C" SEXP Rf_NewEnvironment(SEXP, SEXP, SEXP);
 bool testSuperAssign() {
-    auto hasAssign = [](pir::Function* f) {
+    auto hasAssign = [](pir::Closure* f) {
         return !Visitor::check(f->entry, [&](Instruction* i) {
             if (StVar::Cast(i))
                 return false;
             return true;
         });
     };
-    auto hasSuperAssign = [](pir::Function* f) {
+    auto hasSuperAssign = [](pir::Closure* f) {
         return !Visitor::check(f->entry, [&](Instruction* i) {
             if (StVarSuper::Cast(i))
                 return false;

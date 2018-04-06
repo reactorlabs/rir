@@ -12,7 +12,7 @@ class PirTranslator {
   public:
     PirTranslator(bool verbose) : verbose(verbose) {}
 
-    pir::Function* compileFunction(SEXP);
+    pir::Closure* compileClosure(SEXP);
 
     bool isVerbose();
     void setVerbose(bool);

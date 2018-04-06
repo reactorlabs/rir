@@ -52,7 +52,7 @@ struct Matcher {
 namespace rir {
 namespace pir {
 
-Function* Rir2PirCompiler::compileFunction(SEXP closure) {
+Closure* Rir2PirCompiler::compileClosure(SEXP closure) {
     assert(isValidClosureSEXP(closure));
     DispatchTable* tbl = DispatchTable::unpack(BODY(closure));
     auto formals = RList(FORMALS(closure));
@@ -62,13 +62,18 @@ Function* Rir2PirCompiler::compileFunction(SEXP closure) {
         fmls.push_back(it.tag());
 
     rir::Function* srcFunction = tbl->first();
-    return compileFunction(srcFunction, fmls, module->getEnv(CLOENV(closure)));
+    return compileClosure(srcFunction, fmls, module->getEnv(CLOENV(closure)));
 }
 
-Function* Rir2PirCompiler::compileFunction(rir::Function* srcFunction,
-                                           const std::vector<SEXP>& args,
-                                           Value* closureEnv) {
-    Function* pirFunction = module->declare(srcFunction, args);
+Closure* Rir2PirCompiler::compileFunction(rir::Function* srcFunction,
+                                          const std::vector<SEXP>& args) {
+    return compileClosure(srcFunction, args, Env::notClosed());
+}
+
+Closure* Rir2PirCompiler::compileClosure(rir::Function* srcFunction,
+                                         const std::vector<SEXP>& args,
+                                         Value* closureEnv) {
+    Closure* pirFunction = module->declare(srcFunction, args);
 
     Builder builder(pirFunction, closureEnv);
 
@@ -213,7 +218,7 @@ Value* Rir2Pir::translate() {
             DispatchTable* dt = DispatchTable::unpack(code);
             rir::Function* function = dt->first();
 
-            Function* innerF = cmp.compileFunction(function, fmls, Env::theParent());
+            Closure* innerF = cmp.compileFunction(function, fmls);
 
             state.push(insert(new MkFunCls(innerF, insert.env)));
 
@@ -317,13 +322,13 @@ void Rir2PirCompiler::optimizeModule() {
     size_t passnr = 0;
     bool verbose = isVerbose();
 
-    auto print = [&](const std::string& pass, Function* f) {
+    auto print = [&](const std::string& pass, Closure* f) {
         std::cout << "============== " << pass << " == " << passnr++
                 << " ======================\n";
         f->print(std::cout);
     };
 
-    auto apply = [&](Function* f, bool verb) {
+    auto apply = [&](Closure* f, bool verb) {
         ForceDominance::apply(f);
         if (verb)
             print("force", f);
@@ -344,7 +349,7 @@ void Rir2PirCompiler::optimizeModule() {
             print("delay env", f);
     };
 
-    module->eachPirFunction([&](Module::VersionedFunction& v) {
+    module->eachPirFunction([&](Module::VersionedClosure& v) {
         auto f = v.current();
         if (verbose)
             v.saveVersion();
@@ -353,7 +358,7 @@ void Rir2PirCompiler::optimizeModule() {
     });
 
     for (int i = 0; i < 5; ++i) {
-        module->eachPirFunction([&](Module::VersionedFunction& v) {
+        module->eachPirFunction([&](Module::VersionedClosure& v) {
             auto f = v.current();
             if (verbose)
                 v.saveVersion();
