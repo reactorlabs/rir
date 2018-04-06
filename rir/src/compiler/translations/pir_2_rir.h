@@ -8,9 +8,9 @@
 namespace rir {
 namespace pir {
 
-class Pir2Rir {
+class Pir2RirCompiler {
   public:
-    rir::Function* operator()(Function* fun);
+    rir::Function* operator()(Module* fun);
 };
 
 } // namespace pir

@@ -127,26 +127,35 @@ REXPORT SEXP pir_compile(SEXP what) {
     if (!isValidClosureSEXP(what))
         Rf_error("not a compiled closure");
 
-    pir::Module* m = new pir::Module;
-    pir::Rir2PirCompiler cmp(m);
+    bool debug = false;
+    Protect p(what);
+
+    if (debug)
+        Rprintf("~~~ pir_compile ~~~\n");
+
+    if (debug) {
+        Rprintf("%p\n", what);
+        CodeEditor(what).print(false);
+    }
+
+    // compile to pir
+    pir::Rir2PirCompiler cmp(new pir::Module);
     cmp.setVerbose(false);
     cmp.compileFunction(what);
     cmp.optimizeModule();
 
-    bool debug = true;
-
-    Protect p(what);
-
     if (debug)
-        m->print();
+        cmp.getModule()->print();
 
+    // compile back to rir
+    pir::Pir2RirCompiler p2r;
+    auto fun = p2r(cmp.getModule());
+    p(fun->container());
+
+    // patch the closure
     auto table = DispatchTable::unpack(BODY(what));
     size_t offset = 0;
     auto oldFun = table->at(offset);
-    pir::Pir2Rir p2r;
-    auto fun = p2r(m->get(oldFun));
-#if 0
-    // patch the closure
     oldFun->next(fun);
     fun->origin(oldFun);
     fun->invocationCount = oldFun->invocationCount;
@@ -154,11 +163,13 @@ REXPORT SEXP pir_compile(SEXP what) {
     fun->envChanged = oldFun->envChanged;
     fun->signature = oldFun->signature;
     table->put(offset, fun);
-    if (debug)
-        CodeEditor(what).print(false);
-#endif
 
-    delete m;
+    if (debug) {
+        Rprintf("%p\n", what);
+        CodeEditor(what).print(false);
+    }
+
+    delete cmp.getModule();
     return R_NilValue;
 }
 

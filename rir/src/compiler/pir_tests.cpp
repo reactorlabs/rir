@@ -5,6 +5,7 @@
 #include "analysis/verifier.h"
 #include "ir/Compiler.h"
 #include "pir/pir_impl.h"
+#include "translations/pir_2_rir.h"
 #include "translations/rir_2_pir.h"
 #include "util/visitor.h"
 
@@ -159,6 +160,42 @@ bool testSuperAssign() {
     return true;
 }
 
+extern "C" SEXP rir_eval(SEXP, SEXP);
+extern "C" SEXP pir_compile(SEXP);
+bool testPir2RirBasic() {
+    // function() 42L
+    // run rir, compile rir->pir->rir, run, compare
+
+    Protect p;
+    bool res = true;
+    std::string inp = "42L";
+
+    ParseStatus status;
+    SEXP str = p(Rf_mkString(inp.c_str()));
+    SEXP bdy = p(R_ParseVector(str, -1, &status, R_NilValue));
+    SEXP fun = p(Compiler::compileClosure(CDR(bdy), R_NilValue));
+    CLOENV(fun) = R_GlobalEnv;
+
+    SEXP env = p(Rf_NewEnvironment(R_NilValue, R_NilValue, R_GlobalEnv));
+
+    SEXP orig = p(rir_eval(fun, env));
+
+    pir_compile(fun);
+
+    SEXP after = p(rir_eval(fun, env));
+
+    // Rf_PrintValue(orig);
+    // Rf_PrintValue(after);
+
+    if (TYPEOF(orig) != TYPEOF(after) ||
+        TYPEOF(orig) != INTSXP ||
+        XLENGTH(orig) != XLENGTH(after) ||
+        INTEGER(orig)[0] != INTEGER(after)[0])
+        res = false;
+
+    return res;
+}
+
 static Test tests[] = {
     Test("test_42L", []() { return test42("42L"); }),
     Test("test_inline", []() { return test42("{f <- function() 42L; f()}"); }),
@@ -186,6 +223,7 @@ static Test tests[] = {
              return compileAndVerify(
                  "{function(x) {while (x < 10) if (x) x <- x + 1}}");
          }),
+    Test("pir2rir_basic", &testPir2RirBasic),
 };
 }
 

@@ -24,6 +24,10 @@ pir.compile <- function(what) {
     invisible(.Call("pir_compile", what))
 }
 
+pir.tests <- function() {
+    invisible(.Call("pir_tests"))
+}
+
 # compiles code of the given file and returns the list of compiled version.
 rir.compile.program <- function(file) {
   contents <- readChar(file, file.info(file)$size)
