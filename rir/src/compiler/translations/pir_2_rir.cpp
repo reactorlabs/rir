@@ -1,14 +1,14 @@
 
 #include "pir_2_rir.h"
+#include "../pir/pir_impl.h"
+#include "../util/cfg.h"
+#include "../util/visitor.h"
 #include "interpreter/runtime.h"
 #include "ir/CodeEditor.h"
 #include "ir/CodeStream.h"
 #include "ir/CodeVerifier.h"
 #include "ir/Optimizer.h"
 #include "utils/FunctionWriter.h"
-#include "../pir/pir_impl.h"
-#include "../util/cfg.h"
-#include "../util/visitor.h"
 
 namespace rir {
 namespace pir {
@@ -74,7 +74,8 @@ rir::Function* Pir2Rir::finalize() {
                 break;
             }
             default:
-                assert(false && "PIR to RIR translation of this instruction not yet implemented.");
+                assert(false && "PIR to RIR translation of this instruction "
+                                "not yet implemented.");
             }
         }
     });
@@ -108,7 +109,6 @@ rir::Function* Pir2RirCompiler::operator()(Module* m) {
     std::vector<rir::Function*> results;
 
     m->eachPirFunction([&](Function* fun) {
-
         // For each Phi, insert copies
         BreadthFirstVisitor::run(fun->entry, [&](BB* bb) {
             std::vector<Instruction*> phiCopies;
@@ -146,9 +146,7 @@ rir::Function* Pir2RirCompiler::operator()(Module* m) {
             Phi* phi = Phi::Cast(instr);
             if (phi) {
                 auto slot = a.allocateLocal(phi);
-                phi->eachArg([&](Value* arg) {
-                    a.allocateLocal(arg, slot);
-                });
+                phi->eachArg([&](Value* arg) { a.allocateLocal(arg, slot); });
             }
         });
         BreadthFirstVisitor::run(fun->entry, [&](Instruction* instr) {

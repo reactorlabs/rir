@@ -12,7 +12,8 @@
 namespace {
 using namespace rir;
 
-std::pair<pir::Function*, pir::Module*> compile(const std::string& inp, SEXP env = R_GlobalEnv) {
+std::pair<pir::Function*, pir::Module*> compile(const std::string& inp,
+                                                SEXP env = R_GlobalEnv) {
     Protect p;
     ParseStatus status;
     SEXP arg = p(CONS(R_NilValue, R_NilValue));
@@ -187,8 +188,7 @@ bool testPir2RirBasic() {
     // Rf_PrintValue(orig);
     // Rf_PrintValue(after);
 
-    if (TYPEOF(orig) != TYPEOF(after) ||
-        TYPEOF(orig) != INTSXP ||
+    if (TYPEOF(orig) != TYPEOF(after) || TYPEOF(orig) != INTSXP ||
         XLENGTH(orig) != XLENGTH(after) ||
         INTEGER(orig)[0] != INTEGER(after)[0])
         res = false;
@@ -225,7 +225,7 @@ static Test tests[] = {
          }),
     Test("pir2rir_basic", &testPir2RirBasic),
 };
-}
+} // namespace
 
 namespace rir {
 
@@ -238,4 +238,4 @@ void PirTests::run() {
         }
     }
 }
-}
+} // namespace rir

@@ -241,7 +241,8 @@ class BCCleanup : public InstructionDispatcher::Receiver {
         // eliminate stloc_ X; ldloc_ X;
         if (ins != code_.begin()) {
             auto prev = ins - 1;
-            if ((*prev).is(Opcode::stloc_) && (*ins).immediate.loc == (*prev).immediate.loc) {
+            if ((*prev).is(Opcode::stloc_) &&
+                (*ins).immediate.loc == (*prev).immediate.loc) {
                 CodeEditor::Cursor cur = prev.asCursor(code_);
                 cur.remove();
                 cur.remove();
@@ -256,5 +257,5 @@ class BCCleanup : public InstructionDispatcher::Receiver {
             dispatcher.dispatch(i);
     }
 };
-}
+} // namespace rir
 #endif

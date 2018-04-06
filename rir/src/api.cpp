@@ -6,10 +6,10 @@
 
 #include "api.h"
 
-#include "ir/Compiler.h"
-#include "interpreter/interp_context.h"
 #include "interpreter/interp.h"
+#include "interpreter/interp_context.h"
 #include "ir/BC.h"
+#include "ir/Compiler.h"
 
 #include "analysis/Signature.h"
 #include "analysis/liveness.h"
@@ -23,7 +23,8 @@ using namespace rir;
 
 REXPORT SEXP rir_disassemble(SEXP what, SEXP verbose) {
 
-    Function* f = TYPEOF(what) == CLOSXP ? isValidClosureSEXP(what) : isValidFunctionSEXP(what);
+    Function* f = TYPEOF(what) == CLOSXP ? isValidClosureSEXP(what)
+                                         : isValidFunctionSEXP(what);
 
     if (f == nullptr)
         Rf_error("Not a rir compiled code");
@@ -75,7 +76,7 @@ REXPORT SEXP rir_markOptimize(SEXP what) {
 }
 
 REXPORT SEXP rir_eval(SEXP what, SEXP env) {
-    ::Function * f = isValidFunctionObject(what);
+    ::Function* f = isValidFunctionObject(what);
     if (f == nullptr)
         f = isValidClosureSEXP(what);
     if (f == nullptr)
@@ -85,14 +86,15 @@ REXPORT SEXP rir_eval(SEXP what, SEXP env) {
 }
 
 REXPORT SEXP rir_body(SEXP cls) {
-    ::Function * f = isValidClosureSEXP(cls);
+    ::Function* f = isValidClosureSEXP(cls);
     if (f == nullptr)
         Rf_error("Not a valid rir compiled function");
     return f->container();
 }
 
 REXPORT SEXP rir_analysis_signature(SEXP what) {
-    ::Function * f = TYPEOF(what) == CLOSXP ? isValidClosureSEXP(what) : isValidFunctionSEXP(what);
+    ::Function* f = TYPEOF(what) == CLOSXP ? isValidClosureSEXP(what)
+                                           : isValidFunctionSEXP(what);
     if (f == nullptr)
         Rf_error("Not a rir compiled code");
     CodeEditor ce(what);
@@ -101,9 +103,9 @@ REXPORT SEXP rir_analysis_signature(SEXP what) {
     return sa.finalState().exportToR();
 }
 
-
 REXPORT SEXP rir_analysis_liveness(SEXP what) {
-    ::Function * f = TYPEOF(what) == CLOSXP ? isValidClosureSEXP(what) : isValidFunctionSEXP(what);
+    ::Function* f = TYPEOF(what) == CLOSXP ? isValidClosureSEXP(what)
+                                           : isValidFunctionSEXP(what);
     if (f == nullptr)
         Rf_error("Not a rir compiled code");
     CodeEditor ce(what);
@@ -119,9 +121,9 @@ REXPORT SEXP rir_analysis_liveness(SEXP what) {
     return R_NilValue;
 }
 
-#include "compiler/translations/rir_2_pir.h"
 #include "compiler/pir_tests.h"
 #include "compiler/translations/pir_2_rir.h"
+#include "compiler/translations/rir_2_pir.h"
 
 REXPORT SEXP pir_compile(SEXP what) {
     if (!isValidClosureSEXP(what))
