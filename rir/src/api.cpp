@@ -129,7 +129,7 @@ REXPORT SEXP pir_compile(SEXP what) {
     if (!isValidClosureSEXP(what))
         Rf_error("not a compiled closure");
 
-    bool debug = false;
+    bool debug = true;
     Protect p(what);
 
     if (debug)

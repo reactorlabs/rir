@@ -8,6 +8,8 @@
 #include "translations/pir_2_rir.h"
 #include "translations/rir_2_pir.h"
 #include "util/visitor.h"
+#include <string>
+#include <vector>
 
 namespace {
 using namespace rir;
@@ -162,39 +164,78 @@ bool testSuperAssign() {
     return true;
 }
 
+SEXP ParseCompileToRir(std::string input) {
+    Protect p;
+    ParseStatus status;
+
+    SEXP str = p(Rf_mkString(input.c_str()));
+    SEXP expr = p(R_ParseVector(str, -1, &status, R_NilValue));
+    SEXP cls = p(Rf_eval(VECTOR_ELT(expr, 0), R_GlobalEnv));
+
+    return Compiler::compileClosure(BODY(cls), FORMALS(cls));
+}
+
+bool checkPir2Rir(SEXP expected, SEXP result) {
+    if (TYPEOF(expected) != TYPEOF(result))
+        return false;
+    if (XLENGTH(expected) != XLENGTH(result))
+        return false;
+    for (size_t i = 0; i < XLENGTH(expected); ++i) {
+        switch (TYPEOF(expected)) {
+        case INTSXP:
+            if (INTEGER(expected)[i] != INTEGER(result)[i])
+                return false;
+            break;
+        case REALSXP:
+            if (REAL(expected)[i] != REAL(result)[i])
+                return false;
+            break;
+        default:
+            assert(false);
+        }
+    }
+    return true;
+}
+
 extern "C" SEXP rir_eval(SEXP, SEXP);
 extern "C" SEXP pir_compile(SEXP);
+
 bool testPir2RirBasic() {
-    // function() 42L
-    // run rir, compile rir->pir->rir, run, compare
-
     Protect p;
-    bool res = true;
-    std::string inp = "42L";
 
-    ParseStatus status;
-    SEXP str = p(Rf_mkString(inp.c_str()));
-    SEXP bdy = p(R_ParseVector(str, -1, &status, R_NilValue));
-    SEXP fun = p(Compiler::compileClosure(CDR(bdy), R_NilValue));
-    CLOENV(fun) = R_GlobalEnv;
+    auto fun = p(ParseCompileToRir("function() 42L"));
+    SEXP emptyExecEnv =
+        p(Rf_NewEnvironment(R_NilValue, R_NilValue, R_GlobalEnv));
 
-    SEXP env = p(Rf_NewEnvironment(R_NilValue, R_NilValue, R_GlobalEnv));
-
-    SEXP orig = p(rir_eval(fun, env));
+    SEXP orig = p(rir_eval(fun, emptyExecEnv));
 
     pir_compile(fun);
 
-    SEXP after = p(rir_eval(fun, env));
+    SEXP after = p(rir_eval(fun, emptyExecEnv));
+
+    return checkPir2Rir(orig, after);
+}
+
+bool testPir2RirArgLocal() {
+    Protect p;
+
+    auto fun = p(ParseCompileToRir("function(a, b = 1) { x <- 2; a + b + x }"));
+    SEXP emptyExecEnv =
+        p(Rf_NewEnvironment(R_NilValue, R_NilValue, R_GlobalEnv));
+    SEXP argument = p(Rf_allocVector(REALSXP, 1));
+    REAL(argument)[0] = 3;
+    Rf_defineVar(Rf_install("a"), argument, emptyExecEnv);
+
+    SEXP orig = p(rir_eval(fun, emptyExecEnv));
+
+    pir_compile(fun);
+
+    SEXP after = p(rir_eval(fun, emptyExecEnv));
 
     Rf_PrintValue(orig);
     Rf_PrintValue(after);
 
-    if (TYPEOF(orig) != TYPEOF(after) || TYPEOF(orig) != INTSXP ||
-        XLENGTH(orig) != XLENGTH(after) ||
-        INTEGER(orig)[0] != INTEGER(after)[0])
-        res = false;
-
-    return res;
+    return checkPir2Rir(orig, after);
 }
 
 static Test tests[] = {
@@ -224,7 +265,8 @@ static Test tests[] = {
              return compileAndVerify(
                  "{function(x) {while (x < 10) if (x) x <- x + 1}}");
          }),
-    Test("pir2rir_basic", &testPir2RirBasic),
+    Test("PIR to RIR: basic", &testPir2RirBasic),
+    Test("PIR to RIR: argument, local binding", &testPir2RirArgLocal),
 };
 } // namespace
 
