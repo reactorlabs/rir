@@ -71,6 +71,15 @@ rir::Function* Pir2Rir::finalize() {
                 cs << BC::ldarg(LdArg::Cast(instr)->id)
                    << BC::stloc(a.alloc[instr]);
                 break;
+            case Tag::Add: {
+                auto add = Add::Cast(instr);
+                auto lhs = a.alloc[add->arg(0).val()];
+                auto rhs = a.alloc[add->arg(1).val()];
+                auto res = a.alloc[add];
+                cs << BC::ldloc(lhs) << BC::ldloc(rhs) << BC::add()
+                   << BC::stloc(res);
+                break;
+            }
             case Tag::Force: {
                 auto force = Force::Cast(instr);
                 auto slot = a.alloc[force];

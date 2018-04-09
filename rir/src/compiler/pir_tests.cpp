@@ -225,6 +225,7 @@ bool testPir2RirBasic() {
 
     auto execEnv = p(Rf_NewEnvironment(R_NilValue, R_NilValue, R_GlobalEnv));
     auto rirFun = p(parseCompileToRir(fun));
+    SET_CLOENV(rirFun, execEnv);
     Rf_defineVar(Rf_install(name.c_str()), rirFun, execEnv);
     auto rCall = createRWrapperCall(call);
 
@@ -250,6 +251,7 @@ bool testPir2RirArgBasic() {
 
     auto execEnv = p(Rf_NewEnvironment(R_NilValue, R_NilValue, R_GlobalEnv));
     auto rirFun = p(parseCompileToRir(fun));
+    SET_CLOENV(rirFun, execEnv);
     Rf_defineVar(Rf_install(name.c_str()), rirFun, execEnv);
     auto rCall = createRWrapperCall(call);
 
@@ -266,27 +268,34 @@ bool testPir2RirArgBasic() {
     return checkPir2Rir(orig, after);
 }
 
-// bool testPir2RirArgLocal() {
-//     Protect p;
+bool testPir2RirLocal() {
+    Protect p;
 
-//     auto fun = p(parseCompileToRir("function(a, b = 1) { x <- 2; a + b + x }"));
-//     SEXP emptyExecEnv =
-//         p(Rf_NewEnvironment(R_NilValue, R_NilValue, R_GlobalEnv));
-//     SEXP argument = p(Rf_allocVector(REALSXP, 1));
-//     REAL(argument)[0] = 3;
-//     Rf_defineVar(Rf_install("a"), argument, emptyExecEnv);
+    std::string name = "foo";
+    std::string fun = "function(dummy, a) { x <- 3; a + x }";
+    //     std::string fun = "function(dummy, a, b = 2) { x <- 3; a + b + x }";
+    std::string call = name + "(cat('WHOA\n'), 1)";
 
-//     SEXP orig = p(rir_eval(fun, emptyExecEnv));
+    auto execEnv = p(Rf_NewEnvironment(R_NilValue, R_NilValue, R_GlobalEnv));
+    auto rirFun = p(parseCompileToRir(fun));
+    SET_CLOENV(rirFun, execEnv);
+    Rf_defineVar(Rf_install(name.c_str()), rirFun, execEnv);
+    auto rCall = createRWrapperCall(call);
 
-//     pir_compile(fun);
+    auto orig = p(Rf_eval(rCall, execEnv));
 
-//     SEXP after = p(rir_eval(fun, emptyExecEnv));
+    Rprintf(" orig = %p\n", orig);
+    Rf_PrintValue(orig);
 
-//     Rf_PrintValue(orig);
-//     Rf_PrintValue(after);
+    pir_compile(rirFun);
 
-//     return checkPir2Rir(orig, after);
-// }
+    auto after = p(Rf_eval(rCall, execEnv));
+
+    Rprintf("after = %p\n", after);
+    Rf_PrintValue(after);
+
+    return checkPir2Rir(orig, after);
+}
 
 static Test tests[] = {
     Test("test_42L", []() { return test42("42L"); }),
@@ -317,7 +326,7 @@ static Test tests[] = {
          }),
     Test("PIR to RIR: basic", &testPir2RirBasic),
     Test("PIR to RIR: simple argument", &testPir2RirArgBasic),
-    // Test("PIR to RIR: argument, local binding", &testPir2RirArgLocal),
+    Test("PIR to RIR: local binding", &testPir2RirLocal),
 };
 } // namespace
 
