@@ -119,6 +119,9 @@ static void jit(SEXP cls, Context* ctx) {
 
 void tryOptimizeClosure(DispatchTable* table, size_t offset, Context* ctx) {
 
+    // TODO: needs to change for PIR
+    return;
+
     // This function will optimize the function and update the linked list
     // of functions, so that subsequent closure calls pick the most optimized
     // version.

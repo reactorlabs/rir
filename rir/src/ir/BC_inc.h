@@ -72,14 +72,15 @@ enum class Opcode : uint8_t {
 typedef uint32_t PoolIdxT;
 // index into a functions array of code objects
 typedef uint32_t FunIdxT;
-// number of arguments
 typedef uint32_t NumArgsT;
+// index into arguments
+typedef uint32_t ArgIdxT;
 // jmp offset
 typedef int32_t JmpT;
 typedef JmpT LabelT;
 typedef struct {
     uint32_t call_id;
-    uint32_t nargs;
+    NumArgsT nargs;
 } CallArgs;
 typedef struct {
     uint32_t name;
@@ -117,7 +118,7 @@ class BC {
         GuardT guard_id;
         PoolIdxT pool;
         FunIdxT fun;
-        NumArgsT arg_idx;
+        ArgIdxT arg_idx;
         JmpT offset;
         uint32_t i;
         NumLocalsT loc;
@@ -243,8 +244,8 @@ class BC {
     inline static BC ldvar(SEXP sym);
     inline static BC ldvar2(SEXP sym);
     inline static BC ldlval(SEXP sym);
-    inline static BC ldarg(SEXP sym);
     inline static BC ldddvar(SEXP sym);
+    inline static BC ldarg(uint32_t offset);
     inline static BC ldloc(uint32_t offset);
     inline static BC stloc(uint32_t offset);
     inline static BC copyloc(uint32_t target, uint32_t source);
@@ -398,7 +399,6 @@ class BC {
         switch (bc) {
         case Opcode::push_:
         case Opcode::ldfun_:
-        case Opcode::ldarg_:
         case Opcode::ldvar_:
         case Opcode::ldvar2_:
         case Opcode::ldlval_:
@@ -440,6 +440,9 @@ class BC {
         case Opcode::put_:
         case Opcode::alloc_:
             immediate.i = *(uint32_t*)pc;
+            break;
+        case Opcode::ldarg_:
+            immediate.arg_idx = *(ArgIdxT*)pc;
             break;
         case Opcode::ldloc_:
         case Opcode::stloc_:

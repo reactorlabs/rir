@@ -76,6 +76,11 @@ BC BC::ldvar2(SEXP sym) {
     i.pool = Pool::insert(sym);
     return BC(Opcode::ldvar2_, i);
 }
+BC BC::ldarg(uint32_t offset) {
+    ImmediateT i;
+    i.arg_idx = offset;
+    return BC(Opcode::ldarg_, i);
+}
 BC BC::ldloc(uint32_t offset) {
     ImmediateT im;
     im.loc = offset;
@@ -91,13 +96,6 @@ BC BC::copyloc(uint32_t target, uint32_t source) {
     im.loc_cpy.target = target;
     im.loc_cpy.source = source;
     return BC(Opcode::copyloc_, im);
-}
-BC BC::ldarg(SEXP sym) {
-    assert(TYPEOF(sym) == SYMSXP);
-    assert(strlen(CHAR(PRINTNAME(sym))));
-    ImmediateT i;
-    i.pool = Pool::insert(sym);
-    return BC(Opcode::ldarg_, i);
 }
 BC BC::guardEnv(uint32_t id) {
     ImmediateT i;

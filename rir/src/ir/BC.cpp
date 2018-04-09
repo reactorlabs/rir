@@ -21,7 +21,6 @@ bool BC::operator==(const BC& other) const {
     case Opcode::push_:
     case Opcode::ldfun_:
     case Opcode::ldddvar_:
-    case Opcode::ldarg_:
     case Opcode::ldvar_:
     case Opcode::ldvar2_:
     case Opcode::ldlval_:
@@ -65,6 +64,9 @@ bool BC::operator==(const BC& other) const {
     case Opcode::put_:
     case Opcode::alloc_:
         return immediate.i == other.immediate.i;
+
+    case Opcode::ldarg_:
+        return immediate.arg_idx == other.immediate.arg_idx;
 
     case Opcode::ldloc_:
     case Opcode::stloc_:
@@ -141,7 +143,6 @@ void BC::write(CodeStream& cs) const {
     cs.insert(bc);
     switch (bc) {
     case Opcode::push_:
-    case Opcode::ldarg_:
     case Opcode::ldfun_:
     case Opcode::ldddvar_:
     case Opcode::ldvar_:
@@ -190,6 +191,10 @@ void BC::write(CodeStream& cs) const {
     case Opcode::put_:
     case Opcode::alloc_:
         cs.insert(immediate.i);
+        return;
+
+    case Opcode::ldarg_:
+        cs.insert(immediate.arg_idx);
         return;
 
     case Opcode::ldloc_:
@@ -383,7 +388,6 @@ void BC::print(CallSite* cs) {
         Rprintf(" %u # ", immediate.pool);
         Rf_PrintValue(immediateConst());
         return;
-    case Opcode::ldarg_:
     case Opcode::ldfun_:
     case Opcode::ldvar_:
     case Opcode::ldvar2_:
@@ -405,6 +409,9 @@ void BC::print(CallSite* cs) {
     case Opcode::pull_:
     case Opcode::put_:
         Rprintf(" %i", immediate.i);
+        break;
+    case Opcode::ldarg_:
+        Rprintf(" %u", immediate.arg_idx);
         break;
     case Opcode::ldloc_:
     case Opcode::stloc_:

@@ -36,6 +36,8 @@ class Localizer : public InstructionDispatcher::Receiver {
         SEXP sym = (*ins).immediateConst();
         auto v = analysis[ins][sym];
 
+// Disable as part of PIR work... ldarg_ reused for pir, since this will go away
+#if 0
         // Try to convert generic ldvar instruction to a more specialized
         // version
         if (v.t == FValue::Type::Argument) {
@@ -44,6 +46,7 @@ class Localizer : public InstructionDispatcher::Receiver {
             cur << BC::ldarg(sym);
             return;
         }
+#endif
         if (v.t == FValue::Type::Constant) {
             SEXP constant = analysis.constant(v);
             if (TYPEOF(constant) == CLOSXP &&

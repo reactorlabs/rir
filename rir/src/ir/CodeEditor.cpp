@@ -212,8 +212,7 @@ void CodeEditor::print(bool verbose) {
             // Print some analysis info
             if (bc.bc != Opcode::label && bc.bc != Opcode::return_ &&
                 bc.bc != Opcode::ret_) {
-                if (bc.bc == Opcode::ldvar_ || bc.bc == Opcode::ldarg_ ||
-                    bc.bc == Opcode::ldfun_) {
+                if (bc.bc == Opcode::ldvar_ || bc.bc == Opcode::ldfun_) {
                     SEXP sym = bc.immediateConst();
                     auto v = analysis[cur][sym];
                     auto sv = specAnalysis[cur][sym];
