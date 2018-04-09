@@ -16,7 +16,6 @@ class RirCompiler {
     RirCompiler(Module* module) : module(module) {}
     virtual Closure* compileClosure(SEXP) = 0;
     
-    Module* getModule() { return module; }
     bool isVerbose() { return verbose; }
     void setVerbose(bool v) { verbose = v; }
 

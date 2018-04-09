@@ -1,7 +1,7 @@
 #ifndef PIR_ELIDE_ENV_H
 #define PIR_ELIDE_ENV_H
 
-#include "../translations/rir_compiler.h"
+#include "../translations/pir_translator.h"
 
 namespace rir {
 namespace pir {
@@ -18,8 +18,7 @@ class ElideEnv : public PirTranslator {
   public:
     ElideEnv() : PirTranslator("Elide Environment"){};
 
-  protected:
-    void applyTranslation(Closure* function);
+  void apply(Closure* function) override;
 };
 }
 }

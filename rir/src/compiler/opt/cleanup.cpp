@@ -184,7 +184,7 @@ class TheCleanup {
 namespace rir {
 namespace pir {
 
-void Cleanup::applyTranslation(Closure* function) {
+void Cleanup::apply(Closure* function) {
     TheCleanup s(function);
     s();
 }

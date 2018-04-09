@@ -1,10 +1,10 @@
 #ifndef MACHINE_STATE_H
 #define MACHINE_STATE_H
 
-#include "instruction.h"
-#include "bb.h"
+#include "../../pir/instruction.h"
+#include "../../pir/bb.h"
 #include "runtime/Function.h"
-#include "../util/builder.h"
+#include "../../util/builder.h"
 #include <queue>
 
 namespace rir {

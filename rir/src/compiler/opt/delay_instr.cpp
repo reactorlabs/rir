@@ -6,7 +6,7 @@
 namespace rir {
 namespace pir {
 
-void DelayInstr::applyTranslation(Closure* function) {
+void DelayInstr::apply(Closure* function) {
     std::vector<MkEnv*> envs;
 
     Visitor::run(function->entry, [&](BB* bb) {

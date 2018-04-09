@@ -1,7 +1,7 @@
 #ifndef PIR_CLEANUP_H
 #define PIR_CLEANUP_H
 
-#include "../translations/rir_compiler.h"
+#include "../translations/pir_translator.h"
 
 namespace rir {
 namespace pir {
@@ -12,8 +12,7 @@ class Cleanup : public PirTranslator {
     Cleanup()
         : PirTranslator("cleanup") {};
 
-  protected:
-    void applyTranslation(Closure* function);
+    void apply(Closure* function) override;
 };
 }
 }

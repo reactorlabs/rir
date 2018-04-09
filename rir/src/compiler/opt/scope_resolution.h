@@ -1,7 +1,7 @@
 #ifndef PIR_SCOPE_RESOLUTION_H
 #define PIR_SCOPE_RESOLUTION_H
 
-#include "../translations/rir_compiler.h"
+#include "../translations/pir_translator.h"
 
 namespace rir {
 namespace pir {
@@ -18,8 +18,7 @@ class ScopeResolution : public PirTranslator {
   public:
     ScopeResolution() : PirTranslator("scope resulotion") {};
 
-  protected:
-    void applyTranslation(Closure* function);
+  void apply(Closure* function) override;
 };
 }
 }

@@ -1,21 +1,30 @@
 #include "rir_2_pir_compiler.h"
-#include "../pir/pir_impl.h"
+#include "../../pir/pir_impl.h"
 #include "R/RList.h"
 #include "rir_2_pir.h"
 
-#include "../analysis/query.h"
-#include "../analysis/verifier.h"
-#include "../opt/cleanup.h"
-#include "../opt/delay_env.h"
-#include "../opt/delay_instr.h"
-#include "../opt/elide_env.h"
-#include "../opt/force_dominance.h"
-#include "../opt/inline.h"
-#include "../opt/scope_resolution.h"
+#include "../../analysis/query.h"
+#include "../../analysis/verifier.h"
+#include "../../opt/cleanup.h"
+#include "../../opt/delay_env.h"
+#include "../../opt/delay_instr.h"
+#include "../../opt/elide_env.h"
+#include "../../opt/force_dominance.h"
+#include "../../opt/inline.h"
+#include "../../opt/scope_resolution.h"
 #include "ir/BC.h"
 
 namespace rir {
 namespace pir {
+
+Rir2PirCompiler::Rir2PirCompiler(Module* module) : RirCompiler(module) {
+    translations.push_back(new ForceDominance());
+    translations.push_back(new ScopeResolution());
+    translations.push_back(new Cleanup());
+    translations.push_back(new DelayInstr());
+    translations.push_back(new ElideEnv());
+    translations.push_back(new DelayEnv());
+}
 
 Closure* Rir2PirCompiler::compileClosure(SEXP closure) {
     assert(isValidClosureSEXP(closure));

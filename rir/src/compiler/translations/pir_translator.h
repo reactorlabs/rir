@@ -13,12 +13,11 @@ class PirTranslator {
     PirTranslator(std::string name)
         : name(name) {}
 
-    void apply(Closure* function);
-    std::string& getName() { return this->name; }
+    virtual void apply(Closure* function) = 0;
+    std::string getName() { return this->name; }
     virtual ~PirTranslator() {}
 
   protected:
-    virtual void applyTranslation(Closure* function) = 0;
     std::string name;
 };
 }

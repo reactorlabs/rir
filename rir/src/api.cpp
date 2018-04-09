@@ -119,7 +119,7 @@ REXPORT SEXP rir_analysis_liveness(SEXP what) {
     return R_NilValue;
 }
 
-#include "compiler/translations/rir_2_pir.h"
+#include "compiler/translations/rir_2_pir/rir_2_pir.h"
 #include "compiler/pir_tests.h"
 
 REXPORT SEXP pir_compile(SEXP what) {

@@ -129,7 +129,7 @@ class TheScopeResolution {
 namespace rir {
 namespace pir {
 
-void ScopeResolution::applyTranslation(Closure* function) {
+void ScopeResolution::apply(Closure* function) {
     TheScopeResolution s(function);
     s();
 }

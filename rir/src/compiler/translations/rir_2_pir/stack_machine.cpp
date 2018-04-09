@@ -1,11 +1,11 @@
 #include "stack_machine.h"
 #include "ir/BC.h"
-#include "../translations/rir_2_pir.h"
-#include "../translations/rir_inlined_promise_2_pir.h"
+#include "rir_2_pir.h"
+#include "rir_inlined_promise_2_pir.h"
 #include "R/Funtab.h"
-#include "../util/builder.h"
-#include "../pir/pir_impl.h"
-#include "../analysis/query.h"
+#include "../../util/builder.h"
+#include "../../pir/pir_impl.h"
+#include "../../analysis/query.h"
 
 namespace rir {
 namespace pir {

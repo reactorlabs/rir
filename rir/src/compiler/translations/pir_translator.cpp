@@ -4,8 +4,5 @@
 namespace rir {
 namespace pir {
 
-void PirTranslator::apply(Closure* function) { 
-    this->applyTranslation(function);
-}
 }
 }    

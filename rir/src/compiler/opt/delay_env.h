@@ -1,7 +1,7 @@
 #ifndef PIR_DELAY_ENV_H
 #define PIR_DELAY_ENV_H
 
-#include "../translations/rir_compiler.h"
+#include "../translations/pir_translator.h"
 
 namespace rir {
 namespace pir {
@@ -17,9 +17,8 @@ class Closure;
 class DelayEnv : public PirTranslator {
   public:
     DelayEnv() : PirTranslator("Delay Environment"){};
-
-  protected:
-    void applyTranslation(Closure* function);
+  
+  void apply(Closure* function) override;
 };
 }
 }
