@@ -237,20 +237,6 @@ class BCCleanup : public InstructionDispatcher::Receiver {
     //     }
     // }
 
-    void ldloc_(CodeEditor::Iterator ins) override {
-        // eliminate stloc_ X; ldloc_ X;
-        if (ins != code_.begin()) {
-            auto prev = ins - 1;
-            if ((*prev).is(Opcode::stloc_) &&
-                (*ins).immediate.loc == (*prev).immediate.loc) {
-                CodeEditor::Cursor cur = prev.asCursor(code_);
-                cur.remove();
-                cur.remove();
-                return;
-            }
-        }
-    }
-
     void run() {
         analysis.analyze(code_);
         for (auto i = code_.begin(); i != code_.end(); ++i)

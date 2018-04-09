@@ -272,7 +272,7 @@ bool testPir2RirLocal() {
     Protect p;
 
     std::string name = "foo";
-    std::string fun = "function(dummy, a) { x <- 3; a + x }";
+    std::string fun = "function(dummy, a) { x <- 3; x + a * x + a }";
     //     std::string fun = "function(dummy, a, b = 2) { x <- 3; a + b + x }";
     std::string call = name + "(cat('WHOA\n'), 1)";
 

@@ -80,6 +80,15 @@ rir::Function* Pir2Rir::finalize() {
                    << BC::stloc(res);
                 break;
             }
+            case Tag::Mul: {
+                auto mul = Mul::Cast(instr);
+                auto lhs = a.alloc[mul->arg(0).val()];
+                auto rhs = a.alloc[mul->arg(1).val()];
+                auto res = a.alloc[mul];
+                cs << BC::ldloc(lhs) << BC::ldloc(rhs) << BC::mul()
+                   << BC::stloc(res);
+                break;
+            }
             case Tag::Force: {
                 auto force = Force::Cast(instr);
                 auto slot = a.alloc[force];
