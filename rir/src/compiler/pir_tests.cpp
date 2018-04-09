@@ -164,7 +164,9 @@ bool testSuperAssign() {
     return true;
 }
 
-SEXP ParseCompileToRir(std::string input) {
+// ----------------- PIR to RIR tests -----------------
+
+SEXP parseCompileToRir(std::string input) {
     Protect p;
     ParseStatus status;
 
@@ -175,7 +177,21 @@ SEXP ParseCompileToRir(std::string input) {
     return Compiler::compileClosure(BODY(cls), FORMALS(cls));
 }
 
+SEXP createRWrapperCall(std::string input) {
+    Protect p;
+    ParseStatus status;
+
+    std::string wrapper = "rir.compile( function() " + input + " )()";
+
+    SEXP str = p(Rf_mkString(wrapper.c_str()));
+    SEXP expr = p(R_ParseVector(str, -1, &status, R_NilValue));
+    SEXP call = p(VECTOR_ELT(expr, 0));
+
+    return call;
+}
+
 bool checkPir2Rir(SEXP expected, SEXP result) {
+    // ?! or maybe just expected == result
     if (TYPEOF(expected) != TYPEOF(result))
         return false;
     if (XLENGTH(expected) != XLENGTH(result))
@@ -203,40 +219,74 @@ extern "C" SEXP pir_compile(SEXP);
 bool testPir2RirBasic() {
     Protect p;
 
-    auto fun = p(ParseCompileToRir("function() 42L"));
-    SEXP emptyExecEnv =
-        p(Rf_NewEnvironment(R_NilValue, R_NilValue, R_GlobalEnv));
+    std::string name = "foo";
+    std::string fun = "function() 42L";
+    std::string call = name + "()";
 
-    SEXP orig = p(rir_eval(fun, emptyExecEnv));
+    auto execEnv = p(Rf_NewEnvironment(R_NilValue, R_NilValue, R_GlobalEnv));
+    auto rirFun = p(parseCompileToRir(fun));
+    Rf_defineVar(Rf_install(name.c_str()), rirFun, execEnv);
+    auto rCall = createRWrapperCall(call);
 
-    pir_compile(fun);
+    auto orig = p(Rf_eval(rCall, execEnv));
 
-    SEXP after = p(rir_eval(fun, emptyExecEnv));
+    pir_compile(rirFun);
+
+    auto after = p(Rf_eval(rCall, execEnv));
+
+    // Rprintf(" orig = %p\nafter = %p\n", orig, after);
+    // Rf_PrintValue(orig);
+    // Rf_PrintValue(after);
 
     return checkPir2Rir(orig, after);
 }
 
-bool testPir2RirArgLocal() {
+bool testPir2RirArgBasic() {
     Protect p;
 
-    auto fun = p(ParseCompileToRir("function(a, b = 1) { x <- 2; a + b + x }"));
-    SEXP emptyExecEnv =
-        p(Rf_NewEnvironment(R_NilValue, R_NilValue, R_GlobalEnv));
-    SEXP argument = p(Rf_allocVector(REALSXP, 1));
-    REAL(argument)[0] = 3;
-    Rf_defineVar(Rf_install("a"), argument, emptyExecEnv);
+    std::string name = "foo";
+    std::string fun = "function(x) x";
+    std::string call = name + "(16L)";
 
-    SEXP orig = p(rir_eval(fun, emptyExecEnv));
+    auto execEnv = p(Rf_NewEnvironment(R_NilValue, R_NilValue, R_GlobalEnv));
+    auto rirFun = p(parseCompileToRir(fun));
+    Rf_defineVar(Rf_install(name.c_str()), rirFun, execEnv);
+    auto rCall = createRWrapperCall(call);
 
-    pir_compile(fun);
+    auto orig = p(Rf_eval(rCall, execEnv));
 
-    SEXP after = p(rir_eval(fun, emptyExecEnv));
+    pir_compile(rirFun);
 
-    Rf_PrintValue(orig);
-    Rf_PrintValue(after);
+    auto after = p(Rf_eval(rCall, execEnv));
+
+    // Rprintf(" orig = %p\nafter = %p\n", orig, after);
+    // Rf_PrintValue(orig);
+    // Rf_PrintValue(after);
 
     return checkPir2Rir(orig, after);
 }
+
+// bool testPir2RirArgLocal() {
+//     Protect p;
+
+//     auto fun = p(parseCompileToRir("function(a, b = 1) { x <- 2; a + b + x }"));
+//     SEXP emptyExecEnv =
+//         p(Rf_NewEnvironment(R_NilValue, R_NilValue, R_GlobalEnv));
+//     SEXP argument = p(Rf_allocVector(REALSXP, 1));
+//     REAL(argument)[0] = 3;
+//     Rf_defineVar(Rf_install("a"), argument, emptyExecEnv);
+
+//     SEXP orig = p(rir_eval(fun, emptyExecEnv));
+
+//     pir_compile(fun);
+
+//     SEXP after = p(rir_eval(fun, emptyExecEnv));
+
+//     Rf_PrintValue(orig);
+//     Rf_PrintValue(after);
+
+//     return checkPir2Rir(orig, after);
+// }
 
 static Test tests[] = {
     Test("test_42L", []() { return test42("42L"); }),
@@ -266,6 +316,7 @@ static Test tests[] = {
                  "{function(x) {while (x < 10) if (x) x <- x + 1}}");
          }),
     Test("PIR to RIR: basic", &testPir2RirBasic),
+    Test("PIR to RIR: simple argument", &testPir2RirArgBasic),
     // Test("PIR to RIR: argument, local binding", &testPir2RirArgLocal),
 };
 } // namespace
