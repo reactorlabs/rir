@@ -67,6 +67,17 @@ rir::Function* Pir2Rir::finalize() {
                 cs << BC::push(LdConst::Cast(instr)->c)
                    << BC::stloc(a.alloc[instr]);
                 break;
+            case Tag::LdArg:
+                cs << BC::ldarg(LdArg::Cast(instr)->id)
+                   << BC::stloc(a.alloc[instr]);
+                break;
+            case Tag::Force: {
+                auto force = Force::Cast(instr);
+                auto slot = a.alloc[force];
+                auto argslot = a.alloc[force->arg(0).val()];
+                cs << BC::ldloc(argslot) << BC::force() << BC::stloc(slot);
+                break;
+            }
             case Tag::Return: {
                 Return* ret = Return::Cast(instr);
                 auto slot = a.alloc[ret->arg(0).val()];
@@ -99,6 +110,7 @@ rir::Function* Pir2Rir::finalize() {
 #endif
 
     opt->body()->localsCount = a.slots();
+    opt->isPirCompiled = true;
 
     return opt;
 }

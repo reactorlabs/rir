@@ -61,6 +61,7 @@ struct Function {
         envChanged = false;
         deopt = false;
         markOpt = false;
+        isPirCompiled = false;
         codeLength = 0;
         foffset = 0;
     }

@@ -154,6 +154,8 @@ REXPORT SEXP pir_compile(SEXP what) {
     auto fun = p2r(cmp.getModule());
     p(fun->container());
 
+    // TODO: put instead into a new table slot...
+
     // patch the closure
     auto table = DispatchTable::unpack(BODY(what));
     size_t offset = 0;
