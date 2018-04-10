@@ -94,8 +94,8 @@ void Rir2PirCompiler::optimizeModule() {
 void Rir2PirCompiler::printAfterPass(const std::string& pass,
                                      const std::string& category, Closure* f,
                                      size_t passnr) {
-    std::cout << "============== " << category << ": " << pass << " == " << passnr
-              << " ======================\n";
+    std::cout << "============== " << category << ": " << pass
+              << " == " << passnr << " ======================\n";
     f->print(std::cout);
 }
 
@@ -107,7 +107,7 @@ void Rir2PirCompiler::applyOptimizations(Closure* f,
         if (isVerbose())
             printAfterPass(translation->getName(), category, f, passnr++);
     }
-}    
+}
 
 } // namespace pir
 } // namespace rir

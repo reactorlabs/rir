@@ -15,7 +15,7 @@ class Rir2PirCompiler : public RirCompiler {
     void optimizeModule();
     void printAfterPass(const std::string&, const std::string&, Closure*,
                         size_t);
-    
+
     ~Rir2PirCompiler() {
         for (auto translation : translations) {
             delete translation;

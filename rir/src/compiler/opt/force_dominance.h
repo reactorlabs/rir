@@ -19,8 +19,7 @@ class ForceDominance : public PirTranslator {
   public:
     ForceDominance() : PirTranslator("force dominance") {};
 
-  void apply(Closure* function) override;
-  
+    void apply(Closure* function) override;
 };
 }
 }

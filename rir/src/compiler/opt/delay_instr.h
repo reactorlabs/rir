@@ -15,7 +15,7 @@ class DelayInstr : public PirTranslator {
   public:
     DelayInstr() : PirTranslator("Delay Instructions"){};
 
-  void apply(Closure* function) override;
+    void apply(Closure* function) override;
 };
 }
 }

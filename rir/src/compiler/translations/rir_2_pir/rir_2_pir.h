@@ -1,9 +1,9 @@
 #ifndef RIR_2_PIR_H
 #define RIR_2_PIR_H
 
-#include "stack_machine.h"
 #include "../pir_translator.h"
 #include "rir_2_pir_compiler.h"
+#include "stack_machine.h"
 #include <unordered_map>
 
 namespace rir {
@@ -13,7 +13,8 @@ class Rir2Pir {
   public:
     Rir2Pir(Rir2PirCompiler& cmp, Builder& insert, rir::Function* srcFunction,
             rir::Code* srcCode)
-        : insert(insert), cmp(cmp), srcFunction(srcFunction), srcCode(srcCode) {}
+        : insert(insert), cmp(cmp), srcFunction(srcFunction), srcCode(srcCode) {
+    }
 
     Value* translate();
 
@@ -40,6 +41,6 @@ class Rir2Pir {
 
     friend class RirInlinedPromise2Rir;
 };
-}
-}
+} // namespace pir
+} // namespace rir
 #endif

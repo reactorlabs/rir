@@ -18,7 +18,7 @@ class ElideEnv : public PirTranslator {
   public:
     ElideEnv() : PirTranslator("Elide Environment"){};
 
-  void apply(Closure* function) override;
+    void apply(Closure* function) override;
 };
 }
 }

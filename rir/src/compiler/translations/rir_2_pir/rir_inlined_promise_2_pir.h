@@ -16,6 +16,6 @@ class RirInlinedPromise2Rir : public Rir2Pir {
   private:
     void compileReturn(pir::Value*) override;
 };
-}
-}
+} // namespace pir
+} // namespace rir
 #endif

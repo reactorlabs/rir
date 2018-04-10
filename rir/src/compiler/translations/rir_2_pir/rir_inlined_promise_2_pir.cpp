@@ -4,5 +4,5 @@ namespace rir {
 namespace pir {
 
 void RirInlinedPromise2Rir::compileReturn(pir::Value* res) {}
-}
-}
+} // namespace pir
+} // namespace rir

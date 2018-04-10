@@ -40,7 +40,7 @@ struct Matcher {
         return true;
     }
 };
-}
+} // namespace
 
 namespace rir {
 namespace pir {
@@ -271,5 +271,5 @@ void Rir2Pir::recoverCFG(rir::Code* srcCode) {
 }
 
 void Rir2Pir::compileReturn(Value* res) { insert(new Return(res)); }
-}
-}
+} // namespace pir
+} // namespace rir
