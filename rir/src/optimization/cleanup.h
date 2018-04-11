@@ -226,6 +226,16 @@ class BCCleanup : public InstructionDispatcher::Receiver {
         }
     }
 
+    void br_(CodeEditor::Iterator ins) override {
+        // remove br_ x; x: ...
+        if (ins + 1 != code_.end()) {
+            if (code_.target(*ins) == ins + 1) {
+                auto cur = ins.asCursor(code_);
+                cur.remove();
+            }
+        }
+    }
+
     // TODO there is some brokennes when there is dead code
     // void br_(CodeEditor::Iterator ins) override {
     //     auto target = code_.target(*ins);

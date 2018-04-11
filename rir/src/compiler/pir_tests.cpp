@@ -14,7 +14,6 @@
 namespace {
 using namespace rir;
 
-
 std::pair<pir::Closure*, pir::Module*> compile(const std::string& inp,
                                                SEXP env = R_GlobalEnv) {
     Protect p;
@@ -183,6 +182,8 @@ SEXP createRWrapperCall(std::string input) {
 
     std::string wrapper = "rir.compile( function() " + input + " )()";
 
+    Rprintf("   > %s\n\n", wrapper.c_str());
+
     SEXP str = p(Rf_mkString(wrapper.c_str()));
     SEXP expr = p(R_ParseVector(str, -1, &status, R_NilValue));
     SEXP call = p(VECTOR_ELT(expr, 0));
@@ -191,7 +192,8 @@ SEXP createRWrapperCall(std::string input) {
 }
 
 bool checkPir2Rir(SEXP expected, SEXP result) {
-    // ?! or maybe just expected == result
+    if (expected == result)
+        return true;
     if (TYPEOF(expected) != TYPEOF(result))
         return false;
     if (XLENGTH(expected) != XLENGTH(result))
@@ -216,12 +218,12 @@ bool checkPir2Rir(SEXP expected, SEXP result) {
 extern "C" SEXP rir_eval(SEXP, SEXP);
 extern "C" SEXP pir_compile(SEXP);
 
-bool testPir2RirBasic() {
+bool testPir2Rir(std::string name, std::string fun, std::string args) {
     Protect p;
 
-    std::string name = "foo";
-    std::string fun = "function() 42L";
-    std::string call = name + "()";
+    std::string call = name + "(" + args + ")";
+
+    Rprintf("   > %s <- %s\n", name.c_str(), fun.c_str());
 
     auto execEnv = p(Rf_NewEnvironment(R_NilValue, R_NilValue, R_GlobalEnv));
     auto rirFun = p(parseCompileToRir(fun));
@@ -230,69 +232,14 @@ bool testPir2RirBasic() {
     auto rCall = createRWrapperCall(call);
 
     auto orig = p(Rf_eval(rCall, execEnv));
-
-    pir_compile(rirFun);
-
-    auto after = p(Rf_eval(rCall, execEnv));
-
-    // Rprintf(" orig = %p\nafter = %p\n", orig, after);
+    // Rprintf(" orig = %p\n", orig);
     // Rf_PrintValue(orig);
-    // Rf_PrintValue(after);
-
-    return checkPir2Rir(orig, after);
-}
-
-bool testPir2RirArgBasic() {
-    Protect p;
-
-    std::string name = "foo";
-    std::string fun = "function(x) x";
-    std::string call = name + "(16L)";
-
-    auto execEnv = p(Rf_NewEnvironment(R_NilValue, R_NilValue, R_GlobalEnv));
-    auto rirFun = p(parseCompileToRir(fun));
-    SET_CLOENV(rirFun, execEnv);
-    Rf_defineVar(Rf_install(name.c_str()), rirFun, execEnv);
-    auto rCall = createRWrapperCall(call);
-
-    auto orig = p(Rf_eval(rCall, execEnv));
 
     pir_compile(rirFun);
 
     auto after = p(Rf_eval(rCall, execEnv));
-
-    // Rprintf(" orig = %p\nafter = %p\n", orig, after);
-    // Rf_PrintValue(orig);
+    // Rprintf("after = %p\n", after);
     // Rf_PrintValue(after);
-
-    return checkPir2Rir(orig, after);
-}
-
-bool testPir2RirLocal() {
-    Protect p;
-
-    std::string name = "foo";
-    std::string fun = "function(dummy, a) { x <- 3; x + a * x + a }";
-    //     std::string fun = "function(dummy, a, b = 2) { x <- 3; a + b + x }";
-    std::string call = name + "(cat('WHOA\n'), 1)";
-
-    auto execEnv = p(Rf_NewEnvironment(R_NilValue, R_NilValue, R_GlobalEnv));
-    auto rirFun = p(parseCompileToRir(fun));
-    SET_CLOENV(rirFun, execEnv);
-    Rf_defineVar(Rf_install(name.c_str()), rirFun, execEnv);
-    auto rCall = createRWrapperCall(call);
-
-    auto orig = p(Rf_eval(rCall, execEnv));
-
-    Rprintf(" orig = %p\n", orig);
-    Rf_PrintValue(orig);
-
-    pir_compile(rirFun);
-
-    auto after = p(Rf_eval(rCall, execEnv));
-
-    Rprintf("after = %p\n", after);
-    Rf_PrintValue(after);
 
     return checkPir2Rir(orig, after);
 }
@@ -324,9 +271,27 @@ static Test tests[] = {
              return compileAndVerify(
                  "{function(x) {while (x < 10) if (x) x <- x + 1}}");
          }),
-    Test("PIR to RIR: basic", &testPir2RirBasic),
-    Test("PIR to RIR: simple argument", &testPir2RirArgBasic),
-    Test("PIR to RIR: local binding", &testPir2RirLocal),
+    Test("PIR to RIR: basic",
+         []() { return testPir2Rir("foo", "function() 42L", ""); }),
+    Test("PIR to RIR: simple argument",
+         []() { return testPir2Rir("foo", "function(x) x", "16L"); }),
+    // Test("PIR to RIR: default arg",
+    //      []() { return testPir2Rir("foo", "function(x = 3) x", ""); }),
+    Test("PIR to RIR: local binding",
+         []() {
+             return testPir2Rir("foo",
+                                "function(dummy, a) { x <- 3; x + a + x + a }",
+                                "cat('WHOA\n'), 1");
+         }),
+    Test("PIR to RIR: if",
+         []() {
+             return testPir2Rir("foo", "function(x) if (x) 1 else 2", "TRUE");
+         }),
+    Test("PIR to RIR: if",
+         []() { return testPir2Rir("foo", "function(x) if (x) 1", "F"); }),
+    // function(x) while (x > 0) x <- x - 1
+    // function(x) while (TRUE) if (x) break
+    // function(x) foo(x)
 };
 } // namespace
 

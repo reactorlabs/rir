@@ -1928,8 +1928,8 @@ SEXP evalRirCode(Code* c, Context* ctx, EnvironmentProxy* ep) {
 
         INSTRUCTION(aslogical_) {
             SEXP val = ostack_top(ctx);
-            int x1 = asLogical(val);
-            res = ScalarLogical(x1);
+            int x1 = Rf_asLogical(val);
+            res = Rf_ScalarLogical(x1);
             ostack_pop(ctx);
             ostack_push(ctx, res);
             NEXT();
@@ -1953,7 +1953,7 @@ SEXP evalRirCode(Code* c, Context* ctx, EnvironmentProxy* ep) {
                         INTEGER(val)[0]; // relies on NA_INTEGER == NA_LOGICAL
                     break;
                 default:
-                    cond = asLogical(val);
+                    cond = Rf_asLogical(val);
                 }
             }
 

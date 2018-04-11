@@ -418,7 +418,7 @@ void BC::print(CallSite* cs) {
         Rprintf(" @%i", immediate.loc);
         break;
     case Opcode::copyloc_:
-        Rprintf(" %i <- %i", immediate.loc_cpy.target,
+        Rprintf(" @%i = @%i", immediate.loc_cpy.target,
                 immediate.loc_cpy.source);
         break;
     case Opcode::is_:

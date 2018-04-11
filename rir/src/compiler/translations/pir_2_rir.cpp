@@ -59,25 +59,63 @@ rir::Function* Pir2Rir::finalize() {
     // functions and asts don't correspond anymore
     codeStreams.push_back(new CodeStream(funWrt, R_NilValue));
 
+    // create labels for all bbs
+    std::unordered_map<BB*, LabelT> bbLabels;
+    BreadthFirstVisitor::run(cls->entry, [&](BB* bb) {
+        bbLabels[bb] = codeStreams.back()->mkLabel();
+    });
+
     BreadthFirstVisitor::run(cls->entry, [&](BB* bb) {
         CodeStream& cs = *codeStreams.back();
-        for (auto instr : *bb) {
+        cs << bbLabels[bb];
+
+        // this attempts to eliminate redundant store-load pairs, ie.
+        // if there is an instruction that has only one use, and the use is the
+        // next instruction, and it is its only input, and PirCopy is not
+        // involved
+        // TODO: is it always the case that the store and load use the same
+        // local slot?
+        auto store = [&](BB::Instrs::iterator it, Alloc::LocalSlotIdx where) {
+            if (it + 1 != bb->end()) {
+                auto next = it + 1;
+                if (*next == (*it)->hasSingleUse() && (*next)->nargs() == 1)
+                    return; // no store...
+            }
+            cs << BC::stloc(where);
+        };
+        auto load = [&](BB::Instrs::iterator it, Alloc::LocalSlotIdx where) {
+            if (it != bb->begin()) {
+                auto prev = it - 1;
+                if ((*prev)->hasSingleUse() == *it && (*it)->nargs() == 1)
+                    return; // no load...
+            }
+            cs << BC::ldloc(where);
+        };
+
+        for (auto it = bb->begin(); it != bb->end(); ++it) {
+            auto instr = *it;
             switch (instr->tag) {
-            case Tag::LdConst:
-                cs << BC::push(LdConst::Cast(instr)->c)
-                   << BC::stloc(a.alloc[instr]);
+            case Tag::LdConst: {
+                auto res = a.alloc[instr];
+                cs << BC::push(LdConst::Cast(instr)->c);
+                store(it, res);
                 break;
-            case Tag::LdArg:
-                cs << BC::ldarg(LdArg::Cast(instr)->id)
-                   << BC::stloc(a.alloc[instr]);
+            }
+            case Tag::LdArg: {
+                auto res = a.alloc[instr];
+                cs << BC::ldarg(LdArg::Cast(instr)->id);
+                store(it, res);
                 break;
+            }
             case Tag::Add: {
                 auto add = Add::Cast(instr);
                 auto lhs = a.alloc[add->arg(0).val()];
                 auto rhs = a.alloc[add->arg(1).val()];
                 auto res = a.alloc[add];
-                cs << BC::ldloc(lhs) << BC::ldloc(rhs) << BC::add()
-                   << BC::stloc(res);
+                load(it, lhs);
+                load(it, rhs);
+                cs << BC::add();
+                store(it, res);
                 break;
             }
             case Tag::Mul: {
@@ -85,21 +123,69 @@ rir::Function* Pir2Rir::finalize() {
                 auto lhs = a.alloc[mul->arg(0).val()];
                 auto rhs = a.alloc[mul->arg(1).val()];
                 auto res = a.alloc[mul];
-                cs << BC::ldloc(lhs) << BC::ldloc(rhs) << BC::mul()
-                   << BC::stloc(res);
+                load(it, lhs);
+                load(it, rhs);
+                cs << BC::mul();
+                store(it, res);
                 break;
             }
             case Tag::Force: {
                 auto force = Force::Cast(instr);
-                auto slot = a.alloc[force];
+                auto res = a.alloc[force];
                 auto argslot = a.alloc[force->arg(0).val()];
-                cs << BC::ldloc(argslot) << BC::force() << BC::stloc(slot);
+                load(it, argslot);
+                cs << BC::force();
+                store(it, res);
                 break;
+            }
+            case Tag::AsLogical: {
+                auto aslogical = AsLogical::Cast(instr);
+                auto res = a.alloc[aslogical];
+                auto argslot = a.alloc[aslogical->arg(0).val()];
+                load(it, argslot);
+                cs << BC::asLogical();
+                store(it, res);
+                break;
+            }
+            case Tag::AsTest: {
+                auto test = AsTest::Cast(instr);
+                auto res = a.alloc[test];
+                auto argslot = a.alloc[test->arg(0).val()];
+                load(it, argslot);
+                cs << BC::asbool();
+                store(it, res);
+                break;
+            }
+            case Tag::Phi: {
+                auto phi = Phi::Cast(instr);
+                auto src = a.alloc[phi->arg(0).val()];
+                auto res = a.alloc[phi];
+                load(it, src);
+                store(it, res);
+                break;
+            }
+            case Tag::Branch: {
+                auto br = Branch::Cast(instr);
+                auto argslot = a.alloc[br->arg(0).val()];
+                load(it, argslot);
+                cs << BC::brtrue(bbLabels[bb->next1])
+                   << BC::br(bbLabels[bb->next0]);
+                // or brfalse next0; br next1       ??
+                return;
             }
             case Tag::Return: {
                 Return* ret = Return::Cast(instr);
-                auto slot = a.alloc[ret->arg(0).val()];
-                cs << BC::ldloc(slot) << BC::ret();
+                auto argslot = a.alloc[ret->arg(0).val()];
+                load(it, argslot);
+                cs << BC::ret();
+                return;
+            }
+            case Tag::PirCopy: {
+                PirCopy* copy = PirCopy::Cast(instr);
+                auto target = a.alloc[copy];
+                auto source = a.alloc[copy->arg(0).val()];
+                load(it, source);
+                store(it, target);
                 break;
             }
             default:
@@ -107,6 +193,7 @@ rir::Function* Pir2Rir::finalize() {
                                 "not yet implemented.");
             }
         }
+        cs << BC::br(bbLabels[bb->next0]);
     });
 
     for (auto cs : codeStreams) {
