@@ -289,6 +289,11 @@ static Test tests[] = {
          }),
     Test("PIR to RIR: if",
          []() { return testPir2Rir("foo", "function(x) if (x) 1", "F"); }),
+    Test("PIR to RIR: simple loop",
+         []() {
+             return testPir2Rir("foo", "function(x) while (TRUE) if (x) break",
+                                "T");
+         }),
     // function(x) while (x > 0) x <- x - 1
     // function(x) while (TRUE) if (x) break
     // function(x) foo(x)

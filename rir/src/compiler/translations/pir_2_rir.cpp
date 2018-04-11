@@ -62,10 +62,17 @@ rir::Function* Pir2Rir::finalize() {
     // create labels for all bbs
     std::unordered_map<BB*, LabelT> bbLabels;
     BreadthFirstVisitor::run(cls->entry, [&](BB* bb) {
-        bbLabels[bb] = codeStreams.back()->mkLabel();
+        if (!bb->isEmpty())
+            bbLabels[bb] = codeStreams.back()->mkLabel();
     });
 
+    // nop hack (rir verifier fails if first instr is target of a jump...)
+    (*codeStreams.back()) << BC::ldloc(0) << BC::stloc(0);
+
     BreadthFirstVisitor::run(cls->entry, [&](BB* bb) {
+        if (bb->isEmpty())
+            return;
+
         CodeStream& cs = *codeStreams.back();
         cs << bbLabels[bb];
 
@@ -165,12 +172,30 @@ rir::Function* Pir2Rir::finalize() {
                 break;
             }
             case Tag::Branch: {
+                // TODO: maybe more cases for brfalse vs brtrue?
+
                 auto br = Branch::Cast(instr);
                 auto argslot = a.alloc[br->arg(0).val()];
                 load(it, argslot);
-                cs << BC::brtrue(bbLabels[bb->next1])
-                   << BC::br(bbLabels[bb->next0]);
-                // or brfalse next0; br next1       ??
+
+                // jump through empty blocks
+                auto next0 = bb->next0;
+                while (next0->isEmpty())
+                    next0 = next0->next0;
+                auto next1 = bb->next1;
+                while (next1->isEmpty())
+                    next1 = next1->next0;
+
+                bool useBrFalse = true;
+                if (next0->id == bb->id + 1)
+                    useBrFalse = false;
+
+                if (useBrFalse)
+                    cs << BC::brfalse(bbLabels[next0])
+                       << BC::br(bbLabels[next1]);
+                else
+                    cs << BC::brtrue(bbLabels[next1])
+                       << BC::br(bbLabels[next0]);
                 return;
             }
             case Tag::Return: {
@@ -193,7 +218,12 @@ rir::Function* Pir2Rir::finalize() {
                                 "not yet implemented.");
             }
         }
-        cs << BC::br(bbLabels[bb->next0]);
+
+        // jump through empty blocks
+        auto next = bb->next0;
+        while (next->isEmpty())
+            next = next->next0;
+        cs << BC::br(bbLabels[next]);
     });
 
     for (auto cs : codeStreams) {
