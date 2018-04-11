@@ -1,9 +1,8 @@
 #include "pir_translator.h"
+#include "rir_compiler.h"
 
 namespace rir {
 namespace pir {
 
-bool PirTranslator::isVerbose() { return verbose; }
-void PirTranslator::setVerbose(bool isVerbose) { verbose = isVerbose; }
 }
 }    

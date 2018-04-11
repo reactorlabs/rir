@@ -1,6 +1,8 @@
 #ifndef PIR_DELAY_INSTR_H
 #define PIR_DELAY_INSTR_H
 
+#include "../translations/pir_translator.h"
+
 namespace rir {
 namespace pir {
 
@@ -9,9 +11,11 @@ namespace pir {
  *
  */
 class Closure;
-class DelayInstr {
+class DelayInstr : public PirTranslator {
   public:
-    static void apply(Closure*);
+    DelayInstr() : PirTranslator("Delay Instructions"){};
+
+    void apply(Closure* function) override;
 };
 }
 }

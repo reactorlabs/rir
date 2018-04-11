@@ -67,6 +67,7 @@ class BB {
     void append(Instruction* i);
 
     Instrs::iterator insert(Instrs::iterator it, Instruction* i);
+    
     void replace(Instrs::iterator it, Instruction* i);
 
     Instrs::iterator remove(Instrs::iterator it);

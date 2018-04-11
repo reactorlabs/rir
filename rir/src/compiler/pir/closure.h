@@ -45,7 +45,7 @@ class Closure : public Code {
 
     ~Closure();
 };
-}
-}
+} // namespace pir
+} // namespace rir
 
 #endif

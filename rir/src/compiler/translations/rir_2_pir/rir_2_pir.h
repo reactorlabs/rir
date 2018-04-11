@@ -1,37 +1,20 @@
 #ifndef RIR_2_PIR_H
 #define RIR_2_PIR_H
 
-#include "pir_translator.h"
-#include "../pir/stack_machine.h"
+#include "../pir_translator.h"
+#include "rir_2_pir_compiler.h"
+#include "stack_machine.h"
 #include <unordered_map>
 
 namespace rir {
 namespace pir {
 
-class Rir2PirCompiler {
-  public:
-    Rir2PirCompiler(Module* module) : module(module) {}
-    Closure* compileClosure(SEXP);
-    Closure* compileClosure(rir::Function*, const std::vector<SEXP>&,
-                            Value* closureEnv);
-    Closure* compileFunction(rir::Function*, const std::vector<SEXP>&);
-    void optimizeModule();
-    Module* getModule() { return module; }
-
-    bool isVerbose() { return verbose; }
-    void setVerbose(bool v) { verbose = v; }
-
-  private:
-    bool verbose = false;
-    Module* module;
-};
-
-class Rir2Pir : public PirTranslator {
+class Rir2Pir {
   public:
     Rir2Pir(Rir2PirCompiler& cmp, Builder& insert, rir::Function* srcFunction,
             rir::Code* srcCode)
-        : PirTranslator(cmp.isVerbose()), insert(insert), cmp(cmp),
-          srcFunction(srcFunction), srcCode(srcCode) {}
+        : insert(insert), cmp(cmp), srcFunction(srcFunction), srcCode(srcCode) {
+    }
 
     Value* translate();
 
@@ -58,6 +41,6 @@ class Rir2Pir : public PirTranslator {
 
     friend class RirInlinedPromise2Rir;
 };
-}
-}
+} // namespace pir
+} // namespace rir
 #endif
