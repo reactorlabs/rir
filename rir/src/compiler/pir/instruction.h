@@ -86,6 +86,8 @@ class Instruction : public Value {
         return bb_;
     }
 
+    unsigned srcIdx = 0;
+
     Instruction(Tag tag, PirType t) : Value(t, tag) {}
     virtual ~Instruction() {}
 
@@ -618,9 +620,11 @@ class FLI(PirCopy, 1, Effect::None, EnvAccess::None) {
 #define SAFE_BINOP(Name, Type)                                                 \
     class FLI(Name, 2, Effect::None, EnvAccess::None) {                        \
       public:                                                                  \
-        Name(Value* a, Value* b)                                               \
+        Name(Value* a, Value* b, unsigned src)                                 \
             : FixedLenInstruction(Type, {{PirType::val(), PirType::val()}},    \
-                                  {{a, b}}) {}                                 \
+                                  {{a, b}}) {                                  \
+            srcIdx = src;                                                      \
+        }                                                                      \
     }
 
 SAFE_BINOP(Gte, PirType::val());
@@ -775,7 +779,7 @@ class VLI(Deopt, Effect::Any, EnvAccess::Leak) {
 };
 
 #undef VLI
-}
-}
+} // namespace pir
+} // namespace rir
 
 #endif
