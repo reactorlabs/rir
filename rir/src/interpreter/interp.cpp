@@ -1,5 +1,5 @@
-#include <assert.h>
 #include <alloca.h>
+#include <assert.h>
 
 #include "R/Funtab.h"
 #include "R/Protect.h"
@@ -1559,18 +1559,13 @@ SEXP evalRirCode(Code* c, Context* ctx, EnvironmentProxy* ep) {
         }
 
         INSTRUCTION(force_) {
-            SEXP val = ostack_pop(ctx);
-            /* after PIR, does it have to be PROMSXP??
-                maybe yes, and if we pass eager parameters,
-                we wrap the values in promises too?
-                leave assert here for now (the change would be
-                to do { pop; if (type == prom) promiseValue; push result })
-            */
-            assert(TYPEOF(val) == PROMSXP);
-            // If the promise is already evaluated then push the value inside
-            // the promise
-            // onto the stack, otherwise push the value from forcing the promise
-            ostack_push(ctx, promiseValue(val, ctx));
+            if (TYPEOF(ostack_top(ctx)) == PROMSXP) {
+                SEXP val = ostack_pop(ctx);
+                // If the promise is already evaluated then push the value
+                // inside the promise onto the stack, otherwise push the value
+                // from forcing the promise
+                ostack_push(ctx, promiseValue(val, ctx));
+            }
             NEXT();
         }
 
