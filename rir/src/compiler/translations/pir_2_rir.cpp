@@ -1,4 +1,3 @@
-
 #include "pir_2_rir.h"
 #include "../pir/pir_impl.h"
 #include "../util/cfg.h"
@@ -22,6 +21,8 @@ class Alloc {
     LocalSlotIdx allocateLocal(Value* val) {
         assert(alloc.count(val) == 0);
         alloc[val] = maxLocalIdx;
+        // val->printRef(std::cout);
+        // std::cout << "\t" << maxLocalIdx << "\n";
         return maxLocalIdx++;
     }
 
@@ -29,6 +30,8 @@ class Alloc {
         assert(alloc.count(val) == 0);
         assert(i < maxLocalIdx);
         alloc[val] = i;
+        // val->printRef(std::cout);
+        // std::cout << "\t" << i << "\n";
     }
 
     LocalSlotIdx slots() const { return maxLocalIdx; }
@@ -65,9 +68,6 @@ rir::Function* Pir2Rir::finalize() {
         if (!bb->isEmpty())
             bbLabels[bb] = codeStreams.back()->mkLabel();
     });
-
-    // nop hack (rir verifier fails if first instr is target of a jump...)
-    (*codeStreams.back()) << BC::ldloc(0) << BC::stloc(0);
 
     BreadthFirstVisitor::run(cls->entry, [&](BB* bb) {
         if (bb->isEmpty())
@@ -260,8 +260,11 @@ rir::Function* Pir2RirCompiler::operator()(Module* m) {
     m->eachPirFunction([&](Closure* cls) {
         // For each Phi, insert copies
         BreadthFirstVisitor::run(cls->entry, [&](BB* bb) {
-            std::vector<Instruction*> phiCopies;
-            for (auto instr : *bb) {
+            // TODO: move all phi's to the beginning, then insert the copies not
+            // after each phi but after all phi's std::vector<Instruction*>
+            // phiCopies;
+            for (auto it = bb->begin(); it != bb->end(); ++it) {
+                auto instr = *it;
                 Phi* phi = Phi::Cast(instr);
                 if (phi) {
                     for (size_t i = 0; i < phi->nargs(); ++i) {
@@ -274,17 +277,18 @@ rir::Function* Pir2RirCompiler::operator()(Module* m) {
                         phi->arg(i).val() = *copy;
                     }
                     auto phiCopy = new PirCopy(phi);
-                    phiCopies.push_back(phiCopy);
                     phi->replaceUsesWith(phiCopy);
+                    it = bb->insert(it + 1, phiCopy);
+                    // phiCopies.push_back(phiCopy);
                 }
             }
-            // find last phi in bb, insert all copies after it
-            auto lastPhi = bb->end();
-            for (auto it = bb->begin(); it != bb->end(); ++it)
-                if (Phi::Cast(*it))
-                    lastPhi = it;
-            ++lastPhi;
-            bb->insert(lastPhi, phiCopies);
+            // // find last phi in bb, insert all copies after it
+            // auto lastPhi = bb->end();
+            // for (auto it = bb->begin(); it != bb->end(); ++it)
+            //     if (Phi::Cast(*it))
+            //         lastPhi = it;
+            // ++lastPhi;
+            // bb->insert(lastPhi, phiCopies);
         });
 
         // std::cout << "--- phi copies inserted ---\n";
@@ -302,14 +306,6 @@ rir::Function* Pir2RirCompiler::operator()(Module* m) {
             if (instr->type != PirType::voyd() && a.alloc.count(instr) == 0)
                 a.allocateLocal(instr);
         });
-
-        // std::cout << "--- locals allocation ---\n";
-        // for (auto x : a.alloc) {
-        //     std::cout << "  ";
-        //     x.first->printRef(std::cout);
-        //     std::cout << " -> " << x.second << "\n";
-        // }
-        // std::cout << "total slots needed: " << a.slots() << "\n";
 
         Pir2Rir cmp(cls, a);
         results.push_back(cmp.finalize());
