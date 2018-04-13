@@ -198,10 +198,13 @@ struct PirType {
 
     PirType operator|(const PirType& o) const {
         assert(isRType() == o.isRType());
-        if (!isRType()) {
-            return t_.n | o.t_.n;
-        }
-        PirType r = t_.r | o.t_.r;
+
+        PirType r;
+        if (isRType())
+            r = t_.r | o.t_.r;
+        else
+            r = t_.n | o.t_.n;
+
         r.flags_ = flags_ | o.flags_;
         if (!(isScalar() && o.isScalar()))
             r.flags_.reset(TypeFlags::is_scalar);
