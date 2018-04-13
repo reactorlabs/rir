@@ -108,32 +108,94 @@ rir::Function* Pir2Rir::finalize() {
                 store(it, res);
                 break;
             }
+            case Tag::LdFun: {
+                assert(false && "not yet implemented.");
+                break;
+            }
+            case Tag::LdVar: {
+                assert(false && "not yet implemented.");
+                break;
+            }
+            case Tag::ForSeqSize: {
+                assert(false && "not yet implemented.");
+                break;
+            }
             case Tag::LdArg: {
                 auto res = a.alloc[instr];
                 cs << BC::ldarg(LdArg::Cast(instr)->id);
                 store(it, res);
                 break;
             }
-            case Tag::Add: {
-                auto add = Add::Cast(instr);
-                auto lhs = a.alloc[add->arg(0).val()];
-                auto rhs = a.alloc[add->arg(1).val()];
-                auto res = a.alloc[add];
-                load(it, lhs);
-                load(it, rhs);
-                cs << BC::add();
-                store(it, res);
+            case Tag::ChkMissing: {
+                assert(false && "not yet implemented.");
                 break;
             }
-            case Tag::Mul: {
-                auto mul = Mul::Cast(instr);
-                auto lhs = a.alloc[mul->arg(0).val()];
-                auto rhs = a.alloc[mul->arg(1).val()];
-                auto res = a.alloc[mul];
-                load(it, lhs);
-                load(it, rhs);
-                cs << BC::mul();
-                store(it, res);
+            case Tag::ChkClosure: {
+                assert(false && "not yet implemented.");
+                break;
+            }
+            case Tag::StVarSuper: {
+                assert(false && "not yet implemented.");
+                break;
+            }
+            case Tag::LdVarSuper: {
+                assert(false && "not yet implemented.");
+                break;
+            }
+            case Tag::StVar: {
+                assert(false && "not yet implemented.");
+                break;
+            }
+            case Tag::Branch: {
+                auto br = Branch::Cast(instr);
+                auto argslot = a.alloc[br->arg(0).val()];
+                load(it, argslot);
+
+                // jump through empty blocks
+                auto next0 = bb->next0;
+                while (next0->isEmpty())
+                    next0 = next0->next0;
+                auto next1 = bb->next1;
+                while (next1->isEmpty())
+                    next1 = next1->next0;
+
+                bool useBrFalse = true;
+                if (next0->id == bb->id + 1)
+                    useBrFalse = false;
+
+                if (useBrFalse)
+                    cs << BC::brfalse(bbLabels[next0])
+                       << BC::br(bbLabels[next1]);
+                else
+                    cs << BC::brtrue(bbLabels[next1])
+                       << BC::br(bbLabels[next0]);
+
+                // this is the end of this BB
+                return;
+            }
+            case Tag::Return: {
+                Return* ret = Return::Cast(instr);
+                auto argslot = a.alloc[ret->arg(0).val()];
+                load(it, argslot);
+                cs << BC::ret();
+
+                // this is the end of this BB
+                return;
+            }
+            case Tag::MkArg: {
+                assert(false && "not yet implemented.");
+                break;
+            }
+            case Tag::Seq: {
+                assert(false && "not yet implemented.");
+                break;
+            }
+            case Tag::MkCls: {
+                assert(false && "not yet implemented.");
+                break;
+            }
+            case Tag::MkFunCls: {
+                assert(false && "not yet implemented.");
                 break;
             }
             case Tag::Force: {
@@ -163,47 +225,41 @@ rir::Function* Pir2Rir::finalize() {
                 store(it, res);
                 break;
             }
-            case Tag::Phi: {
-                auto phi = Phi::Cast(instr);
-                auto src = a.alloc[phi->arg(0).val()];
-                auto res = a.alloc[phi];
-                load(it, src);
-                store(it, res);
+            case Tag::Subassign1_1D: {
+                assert(false && "not yet implemented.");
                 break;
             }
-            case Tag::Branch: {
-                // TODO: maybe more cases for brfalse vs brtrue?
-
-                auto br = Branch::Cast(instr);
-                auto argslot = a.alloc[br->arg(0).val()];
-                load(it, argslot);
-
-                // jump through empty blocks
-                auto next0 = bb->next0;
-                while (next0->isEmpty())
-                    next0 = next0->next0;
-                auto next1 = bb->next1;
-                while (next1->isEmpty())
-                    next1 = next1->next0;
-
-                bool useBrFalse = true;
-                if (next0->id == bb->id + 1)
-                    useBrFalse = false;
-
-                if (useBrFalse)
-                    cs << BC::brfalse(bbLabels[next0])
-                       << BC::br(bbLabels[next1]);
-                else
-                    cs << BC::brtrue(bbLabels[next1])
-                       << BC::br(bbLabels[next0]);
-                return;
+            case Tag::Subassign2_1D: {
+                assert(false && "not yet implemented.");
+                break;
             }
-            case Tag::Return: {
-                Return* ret = Return::Cast(instr);
-                auto argslot = a.alloc[ret->arg(0).val()];
-                load(it, argslot);
-                cs << BC::ret();
-                return;
+            case Tag::Extract1_1D: {
+                assert(false && "not yet implemented.");
+                break;
+            }
+            case Tag::Extract2_1D: {
+                assert(false && "not yet implemented.");
+                break;
+            }
+            case Tag::Extract1_2D: {
+                assert(false && "not yet implemented.");
+                break;
+            }
+            case Tag::Extract2_2D: {
+                assert(false && "not yet implemented.");
+                break;
+            }
+            case Tag::Inc: {
+                assert(false && "not yet implemented.");
+                break;
+            }
+            case Tag::IsObject: {
+                assert(false && "not yet implemented.");
+                break;
+            }
+            case Tag::LdFunctionEnv: {
+                assert(false && "not yet implemented.");
+                break;
             }
             case Tag::PirCopy: {
                 PirCopy* copy = PirCopy::Cast(instr);
@@ -213,12 +269,113 @@ rir::Function* Pir2Rir::finalize() {
                 store(it, target);
                 break;
             }
-            default:
-                assert(false && "PIR to RIR translation of this instruction "
-                                "not yet implemented.");
+
+#define BINOP(Name, Factory)                                                   \
+    case Tag::Name: {                                                          \
+        auto binop = Name::Cast(instr);                                        \
+        auto lhs = a.alloc[binop->arg(0).val()];                               \
+        auto rhs = a.alloc[binop->arg(1).val()];                               \
+        auto res = a.alloc[binop];                                             \
+        load(it, lhs);                                                         \
+        load(it, rhs);                                                         \
+        cs << BC::Factory();                                                   \
+        cs.addSrcIdx(binop->srcIdx);                                           \
+        store(it, res);                                                        \
+        break;                                                                 \
+    }
+                BINOP(Add, add);
+                BINOP(Sub, sub);
+                BINOP(Mul, mul);
+                BINOP(Div, div);
+                BINOP(IDiv, idiv);
+                BINOP(Mod, mod);
+                BINOP(Pow, pow);
+                BINOP(Lt, lt);
+                BINOP(Gt, gt);
+                BINOP(Lte, ge);
+                BINOP(Gte, le);
+                BINOP(Eq, eq);
+                BINOP(Neq, ne);
+                BINOP(LOr, lglOr);
+                BINOP(LAnd, lglAnd);
+                BINOP(Colon, colon);
+#undef BINOP
+
+#define UNOP(Name, Factory)                                                    \
+    case Tag::Name: {                                                          \
+        auto binop = Name::Cast(instr);                                        \
+        auto lhs = a.alloc[binop->arg(0).val()];                               \
+        auto rhs = a.alloc[binop->arg(1).val()];                               \
+        auto res = a.alloc[binop];                                             \
+        load(it, lhs);                                                         \
+        load(it, rhs);                                                         \
+        cs << BC::Factory();                                                   \
+        cs.addSrcIdx(binop->srcIdx);                                           \
+        store(it, res);                                                        \
+        break;                                                                 \
+    }
+                UNOP(Plus, uplus);
+                UNOP(Minus, uminus);
+                UNOP(Not, Not);
+                UNOP(Length, length);
+#undef UNOP
+
+            case Tag::Is: {
+                assert(false &&
+                       "is_ takes an immediate, but in PIR it is unop");
+                assert(false && "not yet implemented.");
+                break;
+            }
+            case Tag::Call: {
+                assert(false && "not yet implemented.");
+                break;
+            }
+            case Tag::CallBuiltin: {
+                assert(false && "not yet implemented.");
+                break;
+            }
+            case Tag::CallSafeBuiltin: {
+                assert(false && "not yet implemented.");
+                break;
+            }
+            case Tag::MkEnv: {
+                auto mkenv = MkEnv::Cast(instr);
+                // create env, parent?
+                auto parent = Env::Cast(mkenv->parent());
+                assert(parent->rho);
+                cs << BC::push(parent->rho) << BC::makeEnv() << BC::setEnv();
+                // bind all args
+                mkenv->eachLocalVar([&](SEXP name, Value* val) {
+                    auto slot = a.alloc[val];
+                    cs << BC::ldloc(slot) << BC::stvar(name);
+                });
+                break;
+            }
+            case Tag::Phi: {
+                auto phi = Phi::Cast(instr);
+                auto src = a.alloc[phi->arg(0).val()];
+                auto res = a.alloc[phi];
+                load(it, src);
+                store(it, res);
+                break;
+            }
+            case Tag::Deopt: {
+                assert(false && "not yet implemented.");
+                break;
+            }
+            // values, not instructions
+            case Tag::Missing:
+            case Tag::Env:
+            case Tag::Nil:
+                break;
+            // dummy sentinel enum item
+            case Tag::_UNUSED_:
+                break;
+                // no default to get compiler warnings for missing...
             }
         }
 
+        // this BB has exactly one successor, next0
         // jump through empty blocks
         auto next = bb->next0;
         while (next->isEmpty())
