@@ -221,7 +221,6 @@ class BCCleanup : public InstructionDispatcher::Receiver {
                 CodeEditor::Cursor cur = prev.asCursor(code_);
                 cur.remove();
                 cur.remove();
-                return;
             }
         }
     }
@@ -232,6 +231,24 @@ class BCCleanup : public InstructionDispatcher::Receiver {
             if (code_.target(*ins) == ins + 1) {
                 auto cur = ins.asCursor(code_);
                 cur.remove();
+            }
+        }
+    }
+
+    void ldloc_(CodeEditor::Iterator ins) override {
+        // replace ldloc x; stloc y; by copyloc x y
+        // remove ldloc x; stloc x
+        if (ins + 1 != code_.end()) {
+            auto next = ins + 1;
+            if ((*next).is(Opcode::stloc_)) {
+                auto src = ins.asCursor(code_).bc().immediate.loc;
+                auto trg = next.asCursor(code_).bc().immediate.loc;
+                // remove them
+                auto cur = ins.asCursor(code_);
+                cur.remove();
+                cur.remove();
+                if (src != trg)
+                    cur << BC::copyloc(trg, src);
             }
         }
     }
