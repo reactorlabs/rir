@@ -102,6 +102,7 @@ class EnvironmentProxy {
     void set(SEXP env) {
         SLOWASSERT(env && TYPEOF(env) == ENVSXP && "setting to invalid env");
         env_ = env;
+        validREnv_ = true;
     }
 
     void make(SEXP parent) {
