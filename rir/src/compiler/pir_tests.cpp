@@ -232,14 +232,14 @@ bool testPir2Rir(std::string name, std::string fun, std::string args) {
     auto rCall = createRWrapperCall(call);
 
     auto orig = p(Rf_eval(rCall, execEnv));
-    // Rprintf(" orig = %p\n", orig);
-    // Rf_PrintValue(orig);
+    Rprintf(" orig = %p\n", orig);
+    Rf_PrintValue(orig);
 
     pir_compile(rirFun);
 
     auto after = p(Rf_eval(rCall, execEnv));
-    // Rprintf("after = %p\n", after);
-    // Rf_PrintValue(after);
+    Rprintf("after = %p\n", after);
+    Rf_PrintValue(after);
 
     return checkPir2Rir(orig, after);
 }
@@ -294,9 +294,22 @@ static Test tests[] = {
              return testPir2Rir("foo", "function(x) while (TRUE) if (x) break",
                                 "T");
          }),
-    // function(x) while (x > 0) x <- x - 1
-    // function(x) while (TRUE) if (x) break
+    Test("PIR to RIR: loop",
+         []() {
+             return testPir2Rir("foo",
+                                "function(x) {"
+                                "  sum <- 0;"
+                                "  while (x > 0) {"
+                                "    sum <- sum + x;"
+                                "    x <- x - 1"
+                                "  };"
+                                "  sum"
+                                "}",
+                                "10");
+         }),
+    // for, repeat, break, continue
     // function(x) foo(x)
+    // all pir instructions...
 };
 } // namespace
 
