@@ -202,16 +202,9 @@ struct PirType {
             return t_.n | o.t_.n;
         }
         PirType r = t_.r | o.t_.r;
-        if (o.maybeLazy())
-            r.flags_.set(TypeFlags::lazy);
-        if (o.maybeMissing())
-            r.flags_.set(TypeFlags::missing);
-        if (isScalar() && o.isScalar())
-            r.flags_.set(TypeFlags::is_scalar);
-        else
+        r.flags_ = flags_ | o.flags_;
+        if (!(isScalar() && o.isScalar()))
             r.flags_.reset(TypeFlags::is_scalar);
-        if (o.maybeObj())
-            r.flags_.set(TypeFlags::obj);
 
         return r;
     }
