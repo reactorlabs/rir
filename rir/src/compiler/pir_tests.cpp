@@ -307,9 +307,35 @@ static Test tests[] = {
                                 "}",
                                 "10");
          }),
-    // for, repeat, break, continue
+    Test("PIR to RIR: loop with break and next",
+         []() {
+             return testPir2Rir("foo",
+                                "f <- function(x, y) {\n"
+                                "    s <- 0L\n"
+                                "    repeat {\n"
+                                "        if (x > y)\n"
+                                "            break\n"
+                                "        if (x %% 2L == 1L) {\n"
+                                "            x <- x + 1L\n"
+                                "        } else {\n"
+                                "            x <- x + 1L\n"
+                                "            y <- y - 1L\n"
+                                "            next\n"
+                                "        }\n"
+                                "        s <- s + x\n"
+                                "    }\n"
+                                "    s\n"
+                                "}",
+                                "1L, 10L");
+         }),
+    // TODO: fails w/ "Cannot cast val to int$" for the loop index
+    // Test("PIR to RIR: simple for loop",
+    //      []() {
+    //          return testPir2Rir("foo",
+    //                             "function(x) { s = 0; for (i in 1:x) s = s + i; s }",
+    //                             "10L");
+    //      }),
     // function(x) foo(x)
-    // all pir instructions...
 };
 } // namespace
 

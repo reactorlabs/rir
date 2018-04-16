@@ -371,7 +371,7 @@ rir::Function* Pir2Rir::finalize() {
             // dummy sentinel enum item
             case Tag::_UNUSED_:
                 break;
-                // no default to get compiler warnings for missing...
+            // no default to get compiler warnings for missing...
             }
         }
 
