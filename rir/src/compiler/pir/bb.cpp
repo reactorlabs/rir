@@ -75,12 +75,6 @@ BB::Instrs::iterator BB::insert(Instrs::iterator it, Instruction* i) {
     return itup;
 }
 
-BB::Instrs::iterator BB::insert(Instrs::iterator it, Instrs is) {
-    for (auto instr : is)
-        instr->bb_ = this;
-    return instrs.insert(it, is.begin(), is.end());
-}
-
 void BB::gc() {
     // Catch double deletes
     std::unordered_set<Instruction*> dup;
