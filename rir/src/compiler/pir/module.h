@@ -19,7 +19,7 @@ class Module {
     std::unordered_map<SEXP, Env*> environments;
 
   public:
-    Closure* declare(rir::Function*, const std::vector<SEXP>& a);
+    Closure* declare(rir::Function*, const std::vector<SEXP>& a, Env* env);
     Env* getEnv(SEXP);
 
     void print(std::ostream& out = std::cout);

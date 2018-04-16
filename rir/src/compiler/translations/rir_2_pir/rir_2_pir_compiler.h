@@ -15,16 +15,9 @@ class Rir2PirCompiler : public RirCompiler {
     void optimizeModule();
     void printAfterPass(const std::string&, const std::string&, Closure*,
                         size_t);
-
-    ~Rir2PirCompiler() {
-        for (auto translation : translations) {
-            delete translation;
-        }
-    }
-
   private:
     Closure* compileClosure(rir::Function*, const std::vector<SEXP>&,
-                            Value* closureEnv);
+                            Env* closureEnv);
     void applyOptimizations(Closure*, const std::string&);
 };
 } // namespace pir

@@ -5,6 +5,7 @@
 #include "R/Funtab.h"
 #include "utils/capture_out.h"
 
+#include <algorithm>
 #include <cassert>
 #include <iomanip>
 #include <sstream>
@@ -136,6 +137,11 @@ void LdConst::printArgs(std::ostream& out) {
     }
     if (val.length() > 0)
         val.pop_back();
+    std::replace(val.begin(), val.end(), '\n', ' ');
+    if (val.length() > 40) {
+        val.resize(47);
+        val.append("...");
+    }
     out << val;
 }
 
@@ -147,7 +153,9 @@ void Branch::printArgs(std::ostream& out) {
 void MkArg::printArgs(std::ostream& out) {
     out << "(";
     arg<0>().val()->printRef(out);
-    out << ", " << *prom << ", ";
+    out << ", ";
+    if (prom)
+        out << *prom << ", ";
     env()->printRef(out);
     out << ") ";
 }
@@ -254,6 +262,35 @@ void Deopt::printArgs(std::ostream& out) {
     }
     out << "], env=";
     env()->printRef(out);
+}
+
+MkFunCls::MkFunCls(Closure* fun, Value* parent)
+    : FixedLenInstruction(RType::closure, parent), fun(fun) {
+    assert(fun->closureEnv() == Env::notClosed());
+}
+
+void StaticEagerCall::printArgs(std::ostream& out) {
+    out << "(" << *cls_ << ", ";
+    if (nargs() > 0) {
+        for (size_t i = 0; i < nargs(); ++i) {
+            arg(i).val()->printRef(out);
+            if (i + 1 < nargs())
+                out << ", ";
+        }
+    }
+    out << ")";
+}
+
+void StaticCall::printArgs(std::ostream& out) {
+    out << "(" << *cls_ << ", ";
+    if (nargs() > 0) {
+        for (size_t i = 0; i < nargs(); ++i) {
+            arg(i).val()->printRef(out);
+            if (i + 1 < nargs())
+                out << ", ";
+        }
+    }
+    out << ")";
 }
 }
 }

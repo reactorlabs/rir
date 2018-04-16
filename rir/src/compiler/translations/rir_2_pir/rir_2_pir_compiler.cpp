@@ -46,8 +46,8 @@ Closure* Rir2PirCompiler::compileFunction(rir::Function* srcFunction,
 
 Closure* Rir2PirCompiler::compileClosure(rir::Function* srcFunction,
                                          const std::vector<SEXP>& args,
-                                         Value* closureEnv) {
-    Closure* pirFunction = module->declare(srcFunction, args);
+                                         Env* closureEnv) {
+    Closure* pirFunction = module->declare(srcFunction, args, closureEnv);
 
     Builder builder(pirFunction, closureEnv);
 
@@ -102,7 +102,7 @@ void Rir2PirCompiler::printAfterPass(const std::string& pass,
 void Rir2PirCompiler::applyOptimizations(Closure* f,
                                          const std::string& category) {
     size_t passnr = 0;
-    for (auto translation : this->translations) {
+    for (auto& translation : this->translations) {
         translation->apply(f);
         if (isVerbose())
             printAfterPass(translation->getName(), category, f, passnr++);

@@ -19,11 +19,13 @@ namespace pir {
 class Closure : public Code {
   private:
     friend class Module;
-    Closure(std::initializer_list<SEXP> a) : argNames(a) {}
-    Closure(const std::vector<SEXP>& a) : argNames(a) {}
+    Closure(std::initializer_list<SEXP> a, Env* env) : env(env), argNames(a) {}
+    Closure(const std::vector<SEXP>& a, Env* env) : env(env), argNames(a) {}
+
+    Env* env;
 
   public:
-    Env* closureEnv;
+    Env* closureEnv() { return env; }
 
     std::vector<SEXP> argNames;
     std::vector<Promise*> defaultArgs;
@@ -45,7 +47,7 @@ class Closure : public Code {
 
     ~Closure();
 };
-} // namespace pir
-} // namespace rir
+}
+}
 
 #endif
