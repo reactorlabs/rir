@@ -1,11 +1,11 @@
 #include "stack_machine.h"
-#include "../analysis/query.h"
-#include "../pir/pir_impl.h"
-#include "../translations/rir_2_pir.h"
-#include "../translations/rir_inlined_promise_2_pir.h"
-#include "../util/builder.h"
+#include "../../analysis/query.h"
+#include "../../pir/pir_impl.h"
+#include "../../util/builder.h"
 #include "R/Funtab.h"
 #include "ir/BC.h"
+#include "rir_2_pir.h"
+#include "rir_inlined_promise_2_pir.h"
 
 namespace rir {
 namespace pir {
@@ -267,7 +267,6 @@ void StackMachine::runCurrentBC(Rir2Pir& pir2rir, Builder& insert) {
         BINOP(Sub, sub_);
         BINOP(Eq, eq_);
         BINOP(Neq, ne_);
-
 #undef BINOP
 #define UNOP(Name, Op)                                                         \
     case Opcode::Op:                                                           \
@@ -304,6 +303,7 @@ void StackMachine::runCurrentBC(Rir2Pir& pir2rir, Builder& insert) {
         break;
 
     // Currently unused opcodes:
+    case Opcode::ldarg_:
     case Opcode::alloc_:
     case Opcode::push_code_:
     case Opcode::set_names_:
@@ -321,17 +321,12 @@ void StackMachine::runCurrentBC(Rir2Pir& pir2rir, Builder& insert) {
     case Opcode::br_:
         assert(false);
 
-    // Opcodes that only come from PIR
+    // Unsupported opcodes:
     case Opcode::make_env_:
     case Opcode::get_env_:
     case Opcode::set_env_:
-    case Opcode::ldarg_:
     case Opcode::ldloc_:
     case Opcode::stloc_:
-    case Opcode::copyloc_:
-        assert(false && "Recompiling PIR not supported for now.");
-
-    // Unsupported opcodes:
     case Opcode::ldlval_:
     case Opcode::asast_:
     case Opcode::missing_:

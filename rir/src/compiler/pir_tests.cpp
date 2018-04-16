@@ -6,7 +6,7 @@
 #include "ir/Compiler.h"
 #include "pir/pir_impl.h"
 #include "translations/pir_2_rir.h"
-#include "translations/rir_2_pir.h"
+#include "translations/rir_2_pir/rir_2_pir.h"
 #include "util/visitor.h"
 #include <string>
 #include <vector>

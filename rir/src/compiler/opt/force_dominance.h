@@ -1,6 +1,8 @@
 #ifndef PIR_FORCE_DOMINANCE_H
 #define PIR_FORCE_DOMINANCE_H
 
+#include "../translations/pir_translator.h"
+
 namespace rir {
 namespace pir {
 
@@ -13,9 +15,11 @@ namespace pir {
  *
  */
 class Closure;
-class ForceDominance {
+class ForceDominance : public PirTranslator {
   public:
-    static void apply(Closure*);
+    ForceDominance() : PirTranslator("force dominance"){};
+
+    void apply(Closure* function) override;
 };
 }
 }

@@ -1,9 +1,9 @@
 #ifndef MACHINE_STATE_H
 #define MACHINE_STATE_H
 
-#include "../util/builder.h"
-#include "bb.h"
-#include "instruction.h"
+#include "../../pir/bb.h"
+#include "../../pir/instruction.h"
+#include "../../util/builder.h"
 #include "runtime/Function.h"
 #include <queue>
 
@@ -52,6 +52,8 @@ class StackMachine {
     Value* at(size_t);
     void set(size_t n, Value* v);
 };
+
 } // namespace pir
 } // namespace rir
+
 #endif

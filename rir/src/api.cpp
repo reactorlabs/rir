@@ -123,7 +123,7 @@ REXPORT SEXP rir_analysis_liveness(SEXP what) {
 
 #include "compiler/pir_tests.h"
 #include "compiler/translations/pir_2_rir.h"
-#include "compiler/translations/rir_2_pir.h"
+#include "compiler/translations/rir_2_pir/rir_2_pir.h"
 
 REXPORT SEXP pir_compile(SEXP what) {
     if (!isValidClosureSEXP(what))
@@ -141,17 +141,18 @@ REXPORT SEXP pir_compile(SEXP what) {
     }
 
     // compile to pir
-    pir::Rir2PirCompiler cmp(new pir::Module);
+    pir::Module* m = new pir::Module;
+    pir::Rir2PirCompiler cmp(m);
     cmp.setVerbose(false);
     cmp.compileClosure(what);
     cmp.optimizeModule();
 
     if (debug)
-        cmp.getModule()->print();
+        m->print();
 
     // compile back to rir
     pir::Pir2RirCompiler p2r;
-    auto fun = p2r(cmp.getModule());
+    auto fun = p2r(m);
     p(fun->container());
 
     // TODO: put instead into a new table slot...
@@ -173,7 +174,7 @@ REXPORT SEXP pir_compile(SEXP what) {
         CodeEditor(what).print(false);
     }
 
-    delete cmp.getModule();
+    delete m;
     return R_NilValue;
 }
 
