@@ -13,6 +13,7 @@
 #include "../../opt/inline.h"
 #include "../../opt/scope_resolution.h"
 #include "ir/BC.h"
+#include "ir/Compiler.h"
 
 namespace rir {
 namespace pir {
@@ -29,7 +30,14 @@ Rir2PirCompiler::Rir2PirCompiler(Module* module) : RirCompiler(module) {
 }
 
 Closure* Rir2PirCompiler::compileClosure(SEXP closure) {
-    assert(isValidClosureSEXP(closure));
+    assert(TYPEOF(closure) == CLOSXP);
+    if (!isValidClosureSEXP(closure)) {
+        Protect p;
+        SEXP result =
+            p(Compiler::compileClosure(BODY(closure), FORMALS(closure)));
+        SET_BODY(closure, BODY(result));
+    }
+
     DispatchTable* tbl = DispatchTable::unpack(BODY(closure));
     auto formals = RList(FORMALS(closure));
 
