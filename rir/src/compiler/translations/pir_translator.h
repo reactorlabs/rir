@@ -10,8 +10,7 @@ namespace pir {
 class RirCompiler;
 class PirTranslator {
   public:
-    PirTranslator(std::string name)
-        : name(name) {}
+    PirTranslator(std::string name) : name(name) {}
 
     virtual void apply(Closure* function) = 0;
     std::string getName() { return this->name; }

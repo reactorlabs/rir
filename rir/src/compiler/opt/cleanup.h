@@ -9,8 +9,7 @@ namespace pir {
 class Closure;
 class Cleanup : public PirTranslator {
   public:
-    Cleanup()
-        : PirTranslator("cleanup") {};
+    Cleanup() : PirTranslator("cleanup"){};
 
     void apply(Closure* function) override;
 };

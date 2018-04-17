@@ -72,14 +72,15 @@ enum class Opcode : uint8_t {
 typedef uint32_t PoolIdxT;
 // index into a functions array of code objects
 typedef uint32_t FunIdxT;
-// number of arguments
 typedef uint32_t NumArgsT;
+// index into arguments
+typedef uint32_t ArgIdxT;
 // jmp offset
 typedef int32_t JmpT;
 typedef JmpT LabelT;
 typedef struct {
     uint32_t call_id;
-    uint32_t nargs;
+    NumArgsT nargs;
 } CallArgs;
 typedef struct {
     uint32_t name;
@@ -88,6 +89,10 @@ typedef struct {
 } GuardFunArgs;
 typedef uint32_t GuardT;
 typedef uint32_t NumLocalsT;
+typedef struct {
+    uint32_t target;
+    uint32_t source;
+} LocalsCopyT;
 
 static constexpr size_t MAX_NUM_ARGS = 1L << (8 * sizeof(PoolIdxT));
 static constexpr size_t MAX_POOL_IDX = 1L << (8 * sizeof(PoolIdxT));
@@ -113,10 +118,11 @@ class BC {
         GuardT guard_id;
         PoolIdxT pool;
         FunIdxT fun;
-        NumArgsT arg_idx;
+        ArgIdxT arg_idx;
         JmpT offset;
         uint32_t i;
         NumLocalsT loc;
+        LocalsCopyT loc_cpy;
     };
 
     BC() : bc(Opcode::invalid_), immediate({{0}}) {}
@@ -238,10 +244,11 @@ class BC {
     inline static BC ldvar(SEXP sym);
     inline static BC ldvar2(SEXP sym);
     inline static BC ldlval(SEXP sym);
-    inline static BC ldarg(SEXP sym);
     inline static BC ldddvar(SEXP sym);
+    inline static BC ldarg(uint32_t offset);
     inline static BC ldloc(uint32_t offset);
     inline static BC stloc(uint32_t offset);
+    inline static BC copyloc(uint32_t target, uint32_t source);
     inline static BC promise(FunIdxT prom);
     inline static BC ret();
     inline static BC pop();
@@ -392,7 +399,6 @@ class BC {
         switch (bc) {
         case Opcode::push_:
         case Opcode::ldfun_:
-        case Opcode::ldarg_:
         case Opcode::ldvar_:
         case Opcode::ldvar2_:
         case Opcode::ldlval_:
@@ -435,9 +441,15 @@ class BC {
         case Opcode::alloc_:
             immediate.i = *(uint32_t*)pc;
             break;
+        case Opcode::ldarg_:
+            immediate.arg_idx = *(ArgIdxT*)pc;
+            break;
         case Opcode::ldloc_:
         case Opcode::stloc_:
             immediate.loc = *(NumLocalsT*)pc;
+            break;
+        case Opcode::copyloc_:
+            immediate.loc_cpy = *(LocalsCopyT*)pc;
             break;
         case Opcode::nop_:
         case Opcode::make_env_:

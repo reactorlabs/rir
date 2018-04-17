@@ -159,7 +159,7 @@ void StackMachine::runCurrentBC(Rir2Pir& rir2pir, Builder& insert) {
             auto& cmp = rir2pir.compiler();
             Closure* f = cmp.compileClosure(monomorphic);
             Value* expected = insert(new LdConst(monomorphic));
-            Value* t = insert(new Eq(top(), expected));
+            Value* t = insert(new Eq(top(), expected, -1));
             insert(new Branch(t));
             BB* curBB = insert.bb;
 
@@ -287,7 +287,7 @@ void StackMachine::runCurrentBC(Rir2Pir& rir2pir, Builder& insert) {
     case Opcode::Op:                                                           \
         x = pop();                                                             \
         y = pop();                                                             \
-        push(insert(new Name(x, y)));                                          \
+        push(insert(new Name(y, x, getSrcIdx())));                             \
         break
         BINOP(LOr, lgl_or_);
         BINOP(LAnd, lgl_and_);
@@ -305,7 +305,6 @@ void StackMachine::runCurrentBC(Rir2Pir& rir2pir, Builder& insert) {
         BINOP(Sub, sub_);
         BINOP(Eq, eq_);
         BINOP(Neq, ne_);
-
 #undef BINOP
 #define UNOP(Name, Op)                                                         \
     case Opcode::Op:                                                           \
@@ -342,7 +341,6 @@ void StackMachine::runCurrentBC(Rir2Pir& rir2pir, Builder& insert) {
         break;
 
     // Currently unused opcodes:
-    case Opcode::ldarg_:
     case Opcode::alloc_:
     case Opcode::push_code_:
     case Opcode::set_names_:
@@ -360,12 +358,17 @@ void StackMachine::runCurrentBC(Rir2Pir& rir2pir, Builder& insert) {
     case Opcode::br_:
         assert(false);
 
-    // Unsupported opcodes:
+    // Opcodes that only come from PIR
     case Opcode::make_env_:
     case Opcode::get_env_:
     case Opcode::set_env_:
+    case Opcode::ldarg_:
     case Opcode::ldloc_:
     case Opcode::stloc_:
+    case Opcode::copyloc_:
+        assert(false && "Recompiling PIR not supported for now.");
+
+    // Unsupported opcodes:
     case Opcode::ldlval_:
     case Opcode::asast_:
     case Opcode::missing_:
@@ -423,5 +426,8 @@ void StackMachine::setEntry(pir::BB* ent) { entry = ent; }
 void StackMachine::advancePC() { BC::advance(&pc); }
 
 BC StackMachine::getCurrentBC() { return BC::decode(pc); }
+
+unsigned StackMachine::getSrcIdx() { return srcCode->getSrcIdxAt(pc, true); }
+
 } // namespace pir
 } // namespace rir

@@ -37,6 +37,16 @@ class ArgumentListProxy {
         return argslist_;
     }
 
+    CallSite* getCallSite() {
+        assert(!validArgslist_);
+        return ctxt_.caller->callSite(ctxt_.id);
+    }
+
+    Code* getCaller() {
+        assert(!validArgslist_);
+        return ctxt_.caller;
+    }
+
     ~ArgumentListProxy() = default;
     ArgumentListProxy(ArgumentListProxy const&) = delete;
     ArgumentListProxy(ArgumentListProxy&&) = delete;
@@ -87,14 +97,33 @@ class EnvironmentProxy {
         return env_;
     }
 
+    bool validREnv() { return validREnv_; }
+
     void set(SEXP env) {
         SLOWASSERT(env && TYPEOF(env) == ENVSXP && "setting to invalid env");
         env_ = env;
+        validREnv_ = true;
     }
 
     void make(SEXP parent) {
         // create a new env, save it to env_ (return old?)
         assert(false && "not implemented yet");
+    }
+
+    CallSite* getCallsite() {
+        assert(!validREnv_);
+        return ctxt_.ap->getCallSite();
+    }
+
+    Code* getCaller() {
+        assert(!validREnv_);
+        return ctxt_.ap->getCaller();
+    }
+
+    SEXP getParentEnv() {
+        SLOWASSERT(parent_ && parent_->validREnv_ &&
+                   "Caller of PIR doesn't have valid env");
+        return parent_->env();
     }
 
     ~EnvironmentProxy() = default;

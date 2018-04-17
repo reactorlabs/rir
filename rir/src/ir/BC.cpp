@@ -21,7 +21,6 @@ bool BC::operator==(const BC& other) const {
     case Opcode::push_:
     case Opcode::ldfun_:
     case Opcode::ldddvar_:
-    case Opcode::ldarg_:
     case Opcode::ldvar_:
     case Opcode::ldvar2_:
     case Opcode::ldlval_:
@@ -66,9 +65,16 @@ bool BC::operator==(const BC& other) const {
     case Opcode::alloc_:
         return immediate.i == other.immediate.i;
 
+    case Opcode::ldarg_:
+        return immediate.arg_idx == other.immediate.arg_idx;
+
     case Opcode::ldloc_:
     case Opcode::stloc_:
         return immediate.loc == other.immediate.loc;
+
+    case Opcode::copyloc_:
+        return immediate.loc_cpy.target == other.immediate.loc_cpy.target &&
+               immediate.loc_cpy.source == other.immediate.loc_cpy.source;
 
     case Opcode::nop_:
     case Opcode::make_env_:
@@ -137,7 +143,6 @@ void BC::write(CodeStream& cs) const {
     cs.insert(bc);
     switch (bc) {
     case Opcode::push_:
-    case Opcode::ldarg_:
     case Opcode::ldfun_:
     case Opcode::ldddvar_:
     case Opcode::ldvar_:
@@ -188,9 +193,17 @@ void BC::write(CodeStream& cs) const {
         cs.insert(immediate.i);
         return;
 
+    case Opcode::ldarg_:
+        cs.insert(immediate.arg_idx);
+        return;
+
     case Opcode::ldloc_:
     case Opcode::stloc_:
         cs.insert(immediate.loc);
+        return;
+
+    case Opcode::copyloc_:
+        cs.insert(immediate.loc_cpy);
         return;
 
     case Opcode::nop_:
@@ -375,7 +388,6 @@ void BC::print(CallSite* cs) {
         Rprintf(" %u # ", immediate.pool);
         Rf_PrintValue(immediateConst());
         return;
-    case Opcode::ldarg_:
     case Opcode::ldfun_:
     case Opcode::ldvar_:
     case Opcode::ldvar2_:
@@ -398,9 +410,16 @@ void BC::print(CallSite* cs) {
     case Opcode::put_:
         Rprintf(" %i", immediate.i);
         break;
+    case Opcode::ldarg_:
+        Rprintf(" %u", immediate.arg_idx);
+        break;
     case Opcode::ldloc_:
     case Opcode::stloc_:
         Rprintf(" @%i", immediate.loc);
+        break;
+    case Opcode::copyloc_:
+        Rprintf(" @%i = @%i", immediate.loc_cpy.target,
+                immediate.loc_cpy.source);
         break;
     case Opcode::is_:
     case Opcode::alloc_:
