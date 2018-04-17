@@ -21,9 +21,11 @@ Rir2PirCompiler::Rir2PirCompiler(Module* module) : RirCompiler(module) {
     translations.push_back(new ForceDominance());
     translations.push_back(new ScopeResolution());
     translations.push_back(new Cleanup());
+    translations.push_back(new Cleanup());
     translations.push_back(new DelayInstr());
     translations.push_back(new ElideEnv());
     translations.push_back(new DelayEnv());
+    translations.push_back(new Cleanup());
 }
 
 Closure* Rir2PirCompiler::compileClosure(SEXP closure) {

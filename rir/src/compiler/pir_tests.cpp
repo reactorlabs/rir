@@ -194,6 +194,11 @@ static Test tests[] = {
     Test("test_42L", []() { return test42("42L"); }),
     Test("test_inline", []() { return test42("{f <- function() 42L; f()}"); }),
     Test("test_inline", []() { return test42("{f <- function() 42L; f()}"); }),
+    Test("test_inline_two",
+         []() {
+             return test42(
+                 "{f <- function(val, fun) fun(val); f(42L, function(x)x)}");
+         }),
     Test("test_inline_arg",
          []() { return test42("{f <- function(x) x; f(42L)}"); }),
     Test("test_assign",
