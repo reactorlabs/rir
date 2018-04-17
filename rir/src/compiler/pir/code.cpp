@@ -17,9 +17,10 @@ Code::~Code() {
     std::stack<BB*> toDel;
     Visitor::run(entry, [&toDel](BB* bb) { toDel.push(bb); });
     while (!toDel.empty()) {
-        assert(toDel.top()->owner == this);
-        delete toDel.top();
+        auto d = toDel.top();
         toDel.pop();
+        assert(d->owner == this);
+        delete d;
     }
 }
 }

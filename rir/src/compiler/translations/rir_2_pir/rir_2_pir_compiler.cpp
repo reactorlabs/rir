@@ -47,23 +47,25 @@ Closure* Rir2PirCompiler::compileFunction(rir::Function* srcFunction,
 Closure* Rir2PirCompiler::compileClosure(rir::Function* srcFunction,
                                          const std::vector<SEXP>& args,
                                          Env* closureEnv) {
-    Closure* pirFunction = module->declare(srcFunction, args, closureEnv);
+    return module->getOrCreate(
+        srcFunction, args, closureEnv, [&](Closure* pirFunction) {
 
-    Builder builder(pirFunction, closureEnv);
+            Builder builder(pirFunction, closureEnv);
 
-    {
-        Rir2Pir rir2pir(*this, builder, srcFunction, srcFunction->body());
-        rir2pir.translate();
-        if (isVerbose()) {
-            std::cout << " ========== Done compiling " << srcFunction << "\n";
-            builder.function->print(std::cout);
-            std::cout << " ==========\n";
-        }
-    }
+            {
+                Rir2Pir rir2pir(*this, builder, srcFunction,
+                                srcFunction->body());
+                rir2pir.translate();
+                if (isVerbose()) {
+                    std::cout << " ========== Done compiling " << srcFunction
+                              << "\n";
+                    builder.function->print(std::cout);
+                    std::cout << " ==========\n";
+                }
+            }
 
-    assert(Verify::apply(pirFunction));
-
-    return pirFunction;
+            assert(Verify::apply(pirFunction));
+        });
 }
 
 void Rir2PirCompiler::optimizeModule() {

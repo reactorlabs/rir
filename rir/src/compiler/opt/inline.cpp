@@ -83,7 +83,7 @@ class TheInliner {
                                 // value
                                 auto cast = new CastType(a, RType::prom,
                                                          PirType::any());
-                                bb->insert(ip + 1, cast);
+                                next = bb->insert(ip + 1, cast);
                                 a = cast;
                             }
                             ld->replaceUsesWith(a);
@@ -97,8 +97,8 @@ class TheInliner {
                 // Copy over promises used by the inner function
                 std::vector<bool> copiedPromise;
                 std::vector<size_t> newPromId;
-                copiedPromise.resize(arguments.size(), false);
-                newPromId.resize(arguments.size());
+                copiedPromise.resize(inlinee->promises.size(), false);
+                newPromId.resize(inlinee->promises.size());
                 Visitor::run(copy, [&](BB* bb) {
                     auto it = bb->begin();
                     while (it != bb->end()) {
@@ -109,14 +109,13 @@ class TheInliner {
 
                         size_t id = mk->prom->id;
                         if (mk->prom->fun == inlinee) {
+                            assert(id < copiedPromise.size());
                             if (copiedPromise[id]) {
                                 mk->prom = function->promises[newPromId[id]];
                             } else {
                                 Promise* clone = function->createProm();
                                 BB* promCopy =
                                     BBTransform::clone(mk->prom->entry, clone);
-                                clone->id = function->promises.size();
-                                function->promises.push_back(clone);
                                 clone->entry = promCopy;
                                 newPromId[id] = clone->id;
                                 copiedPromise[id] = true;

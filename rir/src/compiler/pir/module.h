@@ -19,7 +19,6 @@ class Module {
     std::unordered_map<SEXP, Env*> environments;
 
   public:
-    Closure* declare(rir::Function*, const std::vector<SEXP>& a, Env* env);
     Env* getEnv(SEXP);
 
     void print(std::ostream& out = std::cout);
@@ -51,6 +50,16 @@ class Module {
         return functions.at(f).current();
     }
 
+    typedef std::function<void(Closure* f)> Compile;
+    Closure* getOrCreate(rir::Function* f, const std::vector<SEXP>& a, Env* env,
+                         Compile cmp) {
+        if (functions.count(f))
+            return functions.at(f).current();
+        Closure* cls = declare(f, a, env);
+        cmp(cls);
+        return cls;
+    }
+
     typedef std::function<void(VersionedClosure&)> PirClosureVersionIterator;
     void eachPirFunction(PirClosureIterator it);
     void eachPirFunction(PirClosureVersionIterator it);
@@ -58,6 +67,7 @@ class Module {
     ~Module();
 
   private:
+    Closure* declare(rir::Function*, const std::vector<SEXP>& a, Env* env);
     std::unordered_map<rir::Function*, VersionedClosure> functions;
 };
 
