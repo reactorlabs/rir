@@ -63,5 +63,5 @@ Closure* Closure::clone() {
 
     return c;
 }
-}
-}
+} // namespace pir
+} // namespace rir

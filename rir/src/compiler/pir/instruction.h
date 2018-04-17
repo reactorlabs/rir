@@ -525,6 +525,7 @@ class FLI(MkFunCls, 1, Effect::None, EnvAccess::Capture) {
   public:
     Closure* fun;
     MkFunCls(Closure* fun, Value* parent);
+    void printArgs(std::ostream&) override;
 };
 
 class FLI(Force, 1, Effect::Any, EnvAccess::None) {
@@ -703,9 +704,10 @@ class VLI(Call, Effect::Any, EnvAccess::Leak), public CallInstructionI {
 // Call instruction for lazy, but staticatlly resolved calls. Closure is
 // specified as `cls_`, args passed as promises.
 class VLI(StaticCall, Effect::Any, EnvAccess::Leak), public CallInstructionI {
+    Closure* cls_;
+
   public:
     constexpr static size_t callArgOffset = 1;
-    Closure* cls_;
 
     Closure* cls() { return cls_; }
     size_t nCallArgs() override { return nargs() - callArgOffset; }
@@ -729,9 +731,10 @@ class VLI(StaticCall, Effect::Any, EnvAccess::Leak), public CallInstructionI {
 // specified as `cls_`, args passed as values.
 class VLI(StaticEagerCall, Effect::Any, EnvAccess::Leak),
     public CallInstructionI {
+    Closure* cls_;
+
   public:
     constexpr static size_t callArgOffset = 1;
-    Closure* cls_;
 
     Closure* cls() { return cls_; }
     size_t nCallArgs() override { return nargs() - callArgOffset; }
