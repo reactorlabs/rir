@@ -27,10 +27,11 @@ compile(const std::string& context, const std::string& expr, pir::Module* m,
         SEXP e = p(R_ParseVector(str, -1, &status, R_NilValue));
 
         // Compile expression to rir
-        SEXP rirexp = p(Compiler::compileClosure(VECTOR_ELT(e, 0), R_NilValue));
+        SEXP rirexp =
+            p(Compiler::compileFunction(VECTOR_ELT(e, 0), R_NilValue));
 
         // Evaluate expression under the fresh environment `env`
-        Rf_eval(BODY(rirexp), env);
+        Rf_eval(rirexp, env);
     };
 
     if (context != "") {

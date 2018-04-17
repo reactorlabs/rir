@@ -40,16 +40,10 @@ REXPORT SEXP rir_compile(SEXP what, SEXP env = NULL) {
     // TODO make this nicer
     if (TYPEOF(what) == CLOSXP) {
         SEXP body = BODY(what);
-        if (TYPEOF(body) == BCODESXP) {
-            R_PreserveObject(body);
-            body = VECTOR_ELT(CDR(body), 0);
-        }
-
         if (TYPEOF(body) == EXTERNALSXP)
             Rf_error("closure already compiled");
 
-        SEXP result = Compiler::compileClosure(body, FORMALS(what));
-        SET_CLOENV(result, CLOENV(what));
+        SEXP result = Compiler::compileClosure(what);
         Rf_copyMostAttrib(what, result);
         return result;
     } else {
