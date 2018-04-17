@@ -16,7 +16,7 @@ namespace pir {
 class Closure;
 class ScopeResolution : public PirTranslator {
   public:
-    ScopeResolution() : PirTranslator("scope resulotion") {};
+    ScopeResolution() : PirTranslator("scope resulotion"){};
 
     void apply(Closure* function) override;
 };

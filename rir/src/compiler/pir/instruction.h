@@ -26,7 +26,7 @@
  * Instructions have an InstructionDescription, which gives us basic
  * information about its effects and environment interactions.
  *
- * If an instruction needs an environment (ie. if its EnvAccess >= None), it
+ * If an instruction needs an environment (ie. if its EnvAccess > None), it
  * needs to have a dedicated environment argument. This dedicated environment
  * input is (for technical reasons) the last argument of fixed length
  * instructions and the first argument for variable length instructions. There
@@ -86,6 +86,8 @@ class Instruction : public Value {
         return bb_;
     }
 
+    unsigned srcIdx = 0;
+
     Instruction(Tag tag, PirType t) : Value(t, tag) {}
     virtual ~Instruction() {}
 
@@ -99,7 +101,7 @@ class Instruction : public Value {
     bool unused();
 
     virtual void printArgs(std::ostream& out);
-    void print(std::ostream&);
+    virtual void print(std::ostream&);
     void printRef(std::ostream& out);
     void print() { print(std::cerr); }
 
@@ -622,12 +624,20 @@ class FLI(LdFunctionEnv, 0, Effect::None, EnvAccess::None) {
     LdFunctionEnv() : FixedLenInstruction(RType::env) {}
 };
 
+class FLI(PirCopy, 1, Effect::None, EnvAccess::None) {
+  public:
+    PirCopy(Value* v) : FixedLenInstruction(v->type, {{v->type}}, {{v}}) {}
+    void print(std::ostream& out) override;
+};
+
 #define SAFE_BINOP(Name, Type)                                                 \
     class FLI(Name, 2, Effect::None, EnvAccess::None) {                        \
       public:                                                                  \
-        Name(Value* a, Value* b)                                               \
+        Name(Value* a, Value* b, unsigned src)                                 \
             : FixedLenInstruction(Type, {{PirType::val(), PirType::val()}},    \
-                                  {{a, b}}) {}                                 \
+                                  {{a, b}}) {                                  \
+            srcIdx = src;                                                      \
+        }                                                                      \
     }
 
 SAFE_BINOP(Gte, PirType::val());
@@ -868,7 +878,7 @@ class VLI(Deopt, Effect::Any, EnvAccess::Leak) {
 };
 
 #undef VLI
-}
-}
+} // namespace pir
+} // namespace rir
 
 #endif

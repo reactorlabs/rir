@@ -17,7 +17,7 @@ namespace pir {
 class Closure;
 class ForceDominance : public PirTranslator {
   public:
-    ForceDominance() : PirTranslator("force dominance") {};
+    ForceDominance() : PirTranslator("force dominance"){};
 
     void apply(Closure* function) override;
 };

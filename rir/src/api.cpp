@@ -6,10 +6,10 @@
 
 #include "api.h"
 
-#include "ir/Compiler.h"
-#include "interpreter/interp_context.h"
 #include "interpreter/interp.h"
+#include "interpreter/interp_context.h"
 #include "ir/BC.h"
+#include "ir/Compiler.h"
 
 #include "analysis/Signature.h"
 #include "analysis/liveness.h"
@@ -23,7 +23,8 @@ using namespace rir;
 
 REXPORT SEXP rir_disassemble(SEXP what, SEXP verbose) {
 
-    Function* f = TYPEOF(what) == CLOSXP ? isValidClosureSEXP(what) : isValidFunctionSEXP(what);
+    Function* f = TYPEOF(what) == CLOSXP ? isValidClosureSEXP(what)
+                                         : isValidFunctionSEXP(what);
 
     if (f == nullptr)
         Rf_error("Not a rir compiled code");
@@ -75,7 +76,7 @@ REXPORT SEXP rir_markOptimize(SEXP what) {
 }
 
 REXPORT SEXP rir_eval(SEXP what, SEXP env) {
-    ::Function * f = isValidFunctionObject(what);
+    ::Function* f = isValidFunctionObject(what);
     if (f == nullptr)
         f = isValidClosureSEXP(what);
     if (f == nullptr)
@@ -85,14 +86,15 @@ REXPORT SEXP rir_eval(SEXP what, SEXP env) {
 }
 
 REXPORT SEXP rir_body(SEXP cls) {
-    ::Function * f = isValidClosureSEXP(cls);
+    ::Function* f = isValidClosureSEXP(cls);
     if (f == nullptr)
         Rf_error("Not a valid rir compiled function");
     return f->container();
 }
 
 REXPORT SEXP rir_analysis_signature(SEXP what) {
-    ::Function * f = TYPEOF(what) == CLOSXP ? isValidClosureSEXP(what) : isValidFunctionSEXP(what);
+    ::Function* f = TYPEOF(what) == CLOSXP ? isValidClosureSEXP(what)
+                                           : isValidFunctionSEXP(what);
     if (f == nullptr)
         Rf_error("Not a rir compiled code");
     CodeEditor ce(what);
@@ -101,9 +103,9 @@ REXPORT SEXP rir_analysis_signature(SEXP what) {
     return sa.finalState().exportToR();
 }
 
-
 REXPORT SEXP rir_analysis_liveness(SEXP what) {
-    ::Function * f = TYPEOF(what) == CLOSXP ? isValidClosureSEXP(what) : isValidFunctionSEXP(what);
+    ::Function* f = TYPEOF(what) == CLOSXP ? isValidClosureSEXP(what)
+                                           : isValidFunctionSEXP(what);
     if (f == nullptr)
         Rf_error("Not a rir compiled code");
     CodeEditor ce(what);
@@ -120,17 +122,58 @@ REXPORT SEXP rir_analysis_liveness(SEXP what) {
 }
 
 #include "compiler/pir_tests.h"
+#include "compiler/translations/pir_2_rir.h"
 #include "compiler/translations/rir_2_pir/rir_2_pir.h"
 
 REXPORT SEXP pir_compile(SEXP what) {
     if (!isValidClosureSEXP(what))
         Rf_error("not a compiled closure");
 
+    bool debug = true;
+    Protect p(what);
+
+    if (debug)
+        Rprintf("~~~ pir_compile ~~~\n");
+
+    if (debug) {
+        Rprintf("%p\n", what);
+        CodeEditor(what).print(false);
+    }
+
+    // compile to pir
     pir::Module* m = new pir::Module;
     pir::Rir2PirCompiler cmp(m);
-    cmp.setVerbose(true);
+    cmp.setVerbose(false);
     cmp.compileClosure(what);
     cmp.optimizeModule();
+
+    if (debug)
+        m->print();
+
+    // compile back to rir
+    pir::Pir2RirCompiler p2r;
+    auto fun = p2r(m);
+    p(fun->container());
+
+    // TODO: put instead into a new table slot...
+
+    // patch the closure
+    auto table = DispatchTable::unpack(BODY(what));
+    size_t offset = 0;
+    auto oldFun = table->at(offset);
+    oldFun->next(fun);
+    fun->origin(oldFun);
+    fun->invocationCount = oldFun->invocationCount;
+    fun->envLeaked = oldFun->envLeaked;
+    fun->envChanged = oldFun->envChanged;
+    fun->signature = oldFun->signature;
+    table->put(offset, fun);
+
+    if (debug) {
+        Rprintf("%p\n", what);
+        CodeEditor(what).print(false);
+    }
+
     delete m;
     return R_NilValue;
 }

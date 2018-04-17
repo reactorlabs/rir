@@ -61,6 +61,7 @@ struct Function {
         envChanged = false;
         deopt = false;
         markOpt = false;
+        isPirCompiled = false;
         codeLength = 0;
         foffset = 0;
     }
@@ -146,7 +147,8 @@ struct Function {
     unsigned envChanged : 1;
     unsigned deopt : 1;
     unsigned markOpt : 1;
-    unsigned spare : 28;
+    unsigned isPirCompiled : 1;
+    unsigned spare : 27;
 
     unsigned codeLength; /// number of Code objects in the Function
 
