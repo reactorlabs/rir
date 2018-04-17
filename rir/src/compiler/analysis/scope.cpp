@@ -15,14 +15,15 @@ class TheScopeAnalysis : public StaticAnalysis<AbstractREnvironmentHierarchy> {
 
     static constexpr size_t maxDepth = 5;
     size_t depth;
-    Call* invocation = nullptr;
+    Value* staticClosureEnv = nullptr;
 
     TheScopeAnalysis(Closure* origin, const std::vector<SEXP>& args, BB* bb)
         : Super(bb), origin(origin), args(args), depth(0) {}
-    TheScopeAnalysis(Closure* origin, const std::vector<SEXP>& args, BB* bb,
-                     const AS& initialState, Call* invocation, size_t depth)
+    TheScopeAnalysis(Closure* origin, const std::vector<SEXP>& args,
+                     Value* staticClosureEnv, BB* bb, const AS& initialState,
+                     size_t depth)
         : Super(bb, initialState), origin(origin), args(args), depth(depth),
-          invocation(invocation) {}
+          staticClosureEnv(staticClosureEnv) {}
 
     void apply(AS& envs, Instruction* i) const override;
 
@@ -69,19 +70,15 @@ void TheScopeAnalysis::apply(AS& envs, Instruction* i) const {
     StVar* s = StVar::Cast(i);
     StVarSuper* ss = StVarSuper::Cast(i);
     MkEnv* mk = MkEnv::Cast(i);
-    Call* call = Call::Cast(i);
 
     bool handled = false;
 
     if (mk) {
         Value* parentEnv = mk->env();
         // If we know the caller, we can fill in the parent env
-        if (parentEnv == Env::notClosed() && invocation) {
-            Value* cls = invocation->cls();
-            if (envs[invocation->env()].mkClosures.count(cls)) {
-                auto mkCls = envs[invocation->env()].mkClosures.at(cls);
-                parentEnv = mkCls->env();
-            }
+        if (parentEnv == Env::notClosed() &&
+            staticClosureEnv != Env::notClosed()) {
+            parentEnv = staticClosureEnv;
         }
         envs[mk].parentEnv = parentEnv;
         mk->eachLocalVar(
@@ -96,14 +93,33 @@ void TheScopeAnalysis::apply(AS& envs, Instruction* i) const {
             envs[superEnv].set(ss->varName, ss->val(), ss);
             handled = true;
         }
-    } else if (call && depth < maxDepth) {
-        Value* trg = call->cls();
-        MkFunCls* cls = envs.findClosure(i->env(), trg);
-        if (cls != AbstractREnvironment::UnknownClosure) {
-            if (cls->fun->argNames.size() == call->nCallArgs()) {
-                TheScopeAnalysis nextFun(cls->fun, cls->fun->argNames,
-                                         cls->fun->entry, envs, call,
-                                         depth + 1);
+    } else if (CallInstruction::Cast(i) && depth < maxDepth) {
+        auto calli = CallInstruction::Cast(i);
+        if (Call::Cast(i)) {
+            auto call = Call::Cast(i);
+            Value* trg = call->cls();
+            MkFunCls* cls = envs.findClosure(i->env(), trg);
+            if (cls != AbstractREnvironment::UnknownClosure) {
+                if (cls->fun->argNames.size() == call->nCallArgs()) {
+                    TheScopeAnalysis nextFun(cls->fun, cls->fun->argNames,
+                                             cls->env(), cls->fun->entry, envs,
+                                             depth + 1);
+                    nextFun();
+                    envs.merge(nextFun.result());
+                    handled = true;
+                }
+            }
+        } else {
+            Closure* trg = nullptr;
+            if (StaticCall::Cast(i)) {
+                trg = StaticCall::Cast(i)->cls();
+            } else if (StaticEagerCall::Cast(i)) {
+                trg = StaticEagerCall::Cast(i)->cls();
+            }
+            assert(trg);
+            if (trg->argNames.size() == calli->nCallArgs()) {
+                TheScopeAnalysis nextFun(trg, trg->argNames, trg->closureEnv(),
+                                         trg->entry, envs, depth + 1);
                 nextFun();
                 envs.merge(nextFun.result());
                 handled = true;

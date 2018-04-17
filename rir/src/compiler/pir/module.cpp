@@ -23,8 +23,10 @@ void Module::printEachVersion(std::ostream& out) {
     }
 }
 
-Closure* Module::declare(rir::Function* fun, const std::vector<SEXP>& args) {
-    auto* f = new pir::Closure(args);
+Closure* Module::declare(rir::Function* fun, const std::vector<SEXP>& args,
+                         Env* env) {
+    assert(functions.count(fun) == 0);
+    auto* f = new pir::Closure(args, env);
     functions.emplace(fun, f);
     return f;
 }

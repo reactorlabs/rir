@@ -21,9 +21,11 @@ Rir2PirCompiler::Rir2PirCompiler(Module* module) : RirCompiler(module) {
     translations.push_back(new ForceDominance());
     translations.push_back(new ScopeResolution());
     translations.push_back(new Cleanup());
+    translations.push_back(new Cleanup());
     translations.push_back(new DelayInstr());
     translations.push_back(new ElideEnv());
     translations.push_back(new DelayEnv());
+    translations.push_back(new Cleanup());
 }
 
 Closure* Rir2PirCompiler::compileClosure(SEXP closure) {
@@ -46,24 +48,26 @@ Closure* Rir2PirCompiler::compileFunction(rir::Function* srcFunction,
 
 Closure* Rir2PirCompiler::compileClosure(rir::Function* srcFunction,
                                          const std::vector<SEXP>& args,
-                                         Value* closureEnv) {
-    Closure* pirFunction = module->declare(srcFunction, args);
+                                         Env* closureEnv) {
+    return module->getOrCreate(
+        srcFunction, args, closureEnv, [&](Closure* pirFunction) {
 
-    Builder builder(pirFunction, closureEnv);
+            Builder builder(pirFunction, closureEnv);
 
-    {
-        Rir2Pir rir2pir(*this, builder, srcFunction, srcFunction->body());
-        rir2pir.translate();
-        if (isVerbose()) {
-            std::cout << " ========== Done compiling " << srcFunction << "\n";
-            builder.function->print(std::cout);
-            std::cout << " ==========\n";
-        }
-    }
+            {
+                Rir2Pir rir2pir(*this, builder, srcFunction,
+                                srcFunction->body());
+                rir2pir.translate();
+                if (isVerbose()) {
+                    std::cout << " ========== Done compiling " << srcFunction
+                              << "\n";
+                    builder.function->print(std::cout);
+                    std::cout << " ==========\n";
+                }
+            }
 
-    assert(Verify::apply(pirFunction));
-
-    return pirFunction;
+            assert(Verify::apply(pirFunction));
+        });
 }
 
 void Rir2PirCompiler::optimizeModule() {
@@ -102,7 +106,7 @@ void Rir2PirCompiler::printAfterPass(const std::string& pass,
 void Rir2PirCompiler::applyOptimizations(Closure* f,
                                          const std::string& category) {
     size_t passnr = 0;
-    for (auto translation : this->translations) {
+    for (auto& translation : this->translations) {
         translation->apply(f);
         if (isVerbose())
             printAfterPass(translation->getName(), category, f, passnr++);

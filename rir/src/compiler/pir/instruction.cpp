@@ -5,6 +5,7 @@
 #include "R/Funtab.h"
 #include "utils/capture_out.h"
 
+#include <algorithm>
 #include <cassert>
 #include <iomanip>
 #include <sstream>
@@ -37,7 +38,6 @@ void printPaddedInstructionName(std::ostream& out, const std::string& name) {
 }
 
 void Instruction::printArgs(std::ostream& out) {
-    out << "(";
     if (nargs() > 0) {
         for (size_t i = 0; i < nargs(); ++i) {
             arg(i).val()->printRef(out);
@@ -45,7 +45,6 @@ void Instruction::printArgs(std::ostream& out) {
                 out << ", ";
         }
     }
-    out << ")";
 }
 
 void Instruction::print(std::ostream& out) {
@@ -136,6 +135,11 @@ void LdConst::printArgs(std::ostream& out) {
     }
     if (val.length() > 0)
         val.pop_back();
+    std::replace(val.begin(), val.end(), '\n', ' ');
+    if (val.length() > 40) {
+        val.resize(47);
+        val.append("...");
+    }
     out << val;
 }
 
@@ -145,51 +149,44 @@ void Branch::printArgs(std::ostream& out) {
 }
 
 void MkArg::printArgs(std::ostream& out) {
-    out << "(";
     arg<0>().val()->printRef(out);
     out << ", " << *prom << ", ";
     env()->printRef(out);
-    out << ") ";
 }
 
 void LdVar::printArgs(std::ostream& out) {
-    out << "(" << CHAR(PRINTNAME(varName)) << ", ";
+    out << CHAR(PRINTNAME(varName)) << ", ";
     env()->printRef(out);
-    out << ") ";
 }
 
 void LdFun::printArgs(std::ostream& out) {
-    out << "(" << CHAR(PRINTNAME(varName)) << ", ";
+    out << CHAR(PRINTNAME(varName)) << ", ";
     env()->printRef(out);
-    out << ") ";
 }
 
-void LdArg::printArgs(std::ostream& out) { out << "(" << id << ")"; }
+void LdArg::printArgs(std::ostream& out) { out << id; }
 
 void StVar::printArgs(std::ostream& out) {
-    out << "(" << CHAR(PRINTNAME(varName)) << ", ";
+    out << CHAR(PRINTNAME(varName)) << ", ";
     val()->printRef(out);
     out << ", ";
     env()->printRef(out);
-    out << ") ";
 }
 
 void StVarSuper::printArgs(std::ostream& out) {
-    out << "(" << CHAR(PRINTNAME(varName)) << ", ";
+    out << CHAR(PRINTNAME(varName)) << ", ";
     val()->printRef(out);
     out << ", ";
     env()->printRef(out);
-    out << ") ";
 }
 
 void LdVarSuper::printArgs(std::ostream& out) {
-    out << "(" << CHAR(PRINTNAME(varName)) << ", ";
+    out << CHAR(PRINTNAME(varName)) << ", ";
     env()->printRef(out);
-    out << ") ";
 }
 
 void MkEnv::printArgs(std::ostream& out) {
-    out << "(parent=";
+    out << "parent=";
     arg(0).val()->printRef(out);
     if (nargs() > 1)
         out << ", ";
@@ -199,7 +196,6 @@ void MkEnv::printArgs(std::ostream& out) {
         if (i != nargs() - 2)
             out << ", ";
     }
-    out << ") ";
 }
 
 void Phi::updateType() {
@@ -208,7 +204,6 @@ void Phi::updateType() {
 }
 
 void Phi::printArgs(std::ostream& out) {
-    out << "(";
     if (nargs() > 0) {
         for (size_t i = 0; i < nargs(); ++i) {
             arg(i).val()->printRef(out);
@@ -217,7 +212,6 @@ void Phi::printArgs(std::ostream& out) {
                 out << ", ";
         }
     }
-    out << ")";
 }
 
 CallSafeBuiltin::CallSafeBuiltin(SEXP builtin, const std::vector<Value*>& args)
@@ -236,12 +230,12 @@ CallBuiltin::CallBuiltin(Value* e, SEXP builtin,
 }
 
 void CallBuiltin::printArgs(std::ostream& out) {
-    std::cout << "[" << getBuiltinName(builtinId) << "] ";
+    std::cout << getBuiltinName(builtinId) << ", ";
     Instruction::printArgs(out);
 }
 
 void CallSafeBuiltin::printArgs(std::ostream& out) {
-    std::cout << "[" << getBuiltinName(builtinId) << "] ";
+    std::cout << getBuiltinName(builtinId) << ", ";
     Instruction::printArgs(out);
 }
 
@@ -254,6 +248,31 @@ void Deopt::printArgs(std::ostream& out) {
     }
     out << "], env=";
     env()->printRef(out);
+}
+
+MkFunCls::MkFunCls(Closure* fun, Value* parent)
+    : FixedLenInstruction(RType::closure, parent), fun(fun) {
+    assert(fun->closureEnv() == Env::notClosed());
+}
+
+void MkFunCls::printArgs(std::ostream& out) {
+    out << *fun;
+    out << ", ";
+    Instruction::printArgs(out);
+}
+
+void StaticEagerCall::printArgs(std::ostream& out) {
+    out << *cls_;
+    if (nargs() > 0)
+        out << ", ";
+    Instruction::printArgs(out);
+}
+
+void StaticCall::printArgs(std::ostream& out) {
+    out << *cls_;
+    if (nargs() > 0)
+        out << ", ";
+    Instruction::printArgs(out);
 }
 }
 }
