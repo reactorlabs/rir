@@ -121,7 +121,7 @@ class Context {
     void pushPromiseContext(SEXP ast) { code.push(new PromiseContext(ast, fun, code.empty() ? nullptr : code.top())); }
 
     FunIdxT pop(bool isDefaultArg = false) {
-        auto idx = cs().finalize(isDefaultArg);
+        auto idx = cs().finalize(isDefaultArg, 0);
         delete code.top();
         code.pop();
         return idx;

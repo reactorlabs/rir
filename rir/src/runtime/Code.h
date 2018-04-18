@@ -55,7 +55,8 @@ struct Code {
     Code() = delete;
 
     Code(SEXP ast, unsigned codeSize, unsigned sourceSize,
-         unsigned callSiteLength, unsigned offset, bool isDefaultArg);
+         unsigned callSiteLength, unsigned offset, bool isDefaultArg,
+         size_t localsCnt);
 
     // Magic number that attempts to be PROMSXP already marked by the GC
     unsigned magic;

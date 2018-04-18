@@ -266,10 +266,10 @@ class CodeStream {
         sources.insert(sources.begin() + sourceIdx + 1, size - 1, 0);
     }
 
-    FunIdxT finalize(bool markDefaultArg) {
-        Code* res =
-            function.writeCode(ast, &(*code)[0], pos, callSites_.data(),
-                               callSites_.size(), sources, markDefaultArg);
+    FunIdxT finalize(bool markDefaultArg, size_t localsCnt) {
+        Code* res = function.writeCode(ast, &(*code)[0], pos, callSites_.data(),
+                                       callSites_.size(), sources,
+                                       markDefaultArg, localsCnt);
 
         for (auto p : patchpoints) {
             unsigned pos = p.first;

@@ -151,16 +151,16 @@ REXPORT SEXP pir_compile(SEXP what) {
         m->print();
 
     // compile back to rir
+    auto table = DispatchTable::unpack(BODY(what));
+    size_t offset = 0;
+    auto oldFun = table->at(offset);
     pir::Pir2RirCompiler p2r;
-    auto fun = p2r(m);
+    auto fun = p2r(m, oldFun);
     p(fun->container());
 
     // TODO: put instead into a new table slot...
 
     // patch the closure
-    auto table = DispatchTable::unpack(BODY(what));
-    size_t offset = 0;
-    auto oldFun = table->at(offset);
     oldFun->next(fun);
     fun->origin(oldFun);
     fun->invocationCount = oldFun->invocationCount;

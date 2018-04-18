@@ -74,6 +74,7 @@ class CodeEditor {
                                              // default arguments
 
     SEXP ast;
+    size_t localsCnt = 0;
 
     std::vector<BytecodeList*> labels_;
 

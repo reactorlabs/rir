@@ -18,6 +18,23 @@ class Alloc {
   public:
     typedef size_t LocalSlotIdx;
 
+    LocalSlotIdx maxLocalIdx = 0;
+    std::unordered_map<Value*, LocalSlotIdx> alloc;
+
+    Alloc(Code* code) {
+        BreadthFirstVisitor::run(code->entry, [&](Instruction* instr) {
+            Phi* phi = Phi::Cast(instr);
+            if (phi) {
+                auto slot = allocateLocal(phi);
+                phi->eachArg([&](Value* arg) { allocateLocal(arg, slot); });
+            }
+        });
+        BreadthFirstVisitor::run(code->entry, [&](Instruction* instr) {
+            if (instr->type != PirType::voyd() && alloc.count(instr) == 0)
+                allocateLocal(instr);
+        });
+    }
+
     LocalSlotIdx allocateLocal(Value* val) {
         assert(alloc.count(val) == 0);
         alloc[val] = maxLocalIdx;
@@ -34,54 +51,83 @@ class Alloc {
         // std::cout << "\t" << i << "\n";
     }
 
-    LocalSlotIdx slots() const { return maxLocalIdx; }
+    size_t slots() { return maxLocalIdx; }
+};
 
-    std::unordered_map<Value*, LocalSlotIdx> alloc;
+class Context {
+  public:
+    std::stack<CodeStream*> css;
+    FunctionWriter& fun;
+
+    Context(FunctionWriter& fun) : fun(fun) {}
+    ~Context() { assert(css.empty()); }
+
+    CodeStream& cs() { return *css.top(); }
+
+    void pushDefaultArg(SEXP ast) {
+        defaultArg.push(true);
+        push(ast);
+    }
+    void pushPromise(SEXP ast) {
+        defaultArg.push(false);
+        push(ast);
+    }
+    void pushBody(SEXP ast) {
+        defaultArg.push(false);
+        push(ast);
+    }
+
+    FunIdxT pop(size_t localsCnt) {
+        auto da = defaultArg.top();
+        defaultArg.pop();
+        auto idx = cs().finalize(da, localsCnt);
+        delete css.top();
+        css.pop();
+        return idx;
+    }
 
   private:
-    LocalSlotIdx maxLocalIdx = 0;
+    std::stack<bool> defaultArg;
+    void push(SEXP ast) { css.push(new CodeStream(fun, ast)); }
 };
 
 class Pir2Rir {
   public:
-    Pir2Rir(Closure* cls, Alloc& a) : cls(cls), a(a) {}
-    rir::Function* finalize();
-
-  private:
     Closure* cls;
-    Alloc& a;
+
+    Pir2Rir(Closure* cls) : cls(cls) {}
+    size_t compile(Context& ctx, Code* code);
+    void removePhis(Code* code);
+    rir::Function* finalize();
 };
 
-rir::Function* Pir2Rir::finalize() {
-    FunctionWriter funWrt = FunctionWriter::create();
-    std::vector<CodeStream*> codeStreams;
+size_t Pir2Rir::compile(Context& ctx, Code* code) {
 
-    // for now, ignore formals
-
-    // TODO: ast is NIL for now, how to deal with that? after inlining
-    // functions and asts don't correspond anymore
-    codeStreams.push_back(new CodeStream(funWrt, R_NilValue));
+    removePhis(code);
+    Alloc a(code);
 
     // create labels for all bbs
     std::unordered_map<BB*, LabelT> bbLabels;
-    BreadthFirstVisitor::run(cls->entry, [&](BB* bb) {
+    BreadthFirstVisitor::run(code->entry, [&](BB* bb) {
         if (!bb->isEmpty())
-            bbLabels[bb] = codeStreams.back()->mkLabel();
+            bbLabels[bb] = ctx.cs().mkLabel();
     });
 
-    BreadthFirstVisitor::run(cls->entry, [&](BB* bb) {
+    BreadthFirstVisitor::run(code->entry, [&](BB* bb) {
         if (bb->isEmpty())
             return;
 
-        CodeStream& cs = *codeStreams.back();
+        CodeStream& cs = ctx.cs();
         cs << bbLabels[bb];
 
-        // this attempts to eliminate redundant store-load pairs, ie.
-        // if there is an instruction that has only one use, and the use is the
-        // next instruction, and it is its only input, and PirCopy is not
-        // involved
-        // TODO: is it always the case that the store and load use the same
-        // local slot?
+        /*
+            this attempts to eliminate redundant store-load pairs, ie.
+            if there is an instruction that has only one use, and the use is the
+            next instruction, and it is its only input, and PirCopy is not
+            involved
+            TODO: is it always the case that the store and load use the same
+            local slot?
+        */
         auto store = [&](BB::Instrs::iterator it, Alloc::LocalSlotIdx where) {
             if (it + 1 != bb->end()) {
                 auto next = it + 1;
@@ -383,12 +429,69 @@ rir::Function* Pir2Rir::finalize() {
         cs << BC::br(bbLabels[next]);
     });
 
-    for (auto cs : codeStreams) {
-        cs->finalize(false);
-        delete cs;
-    }
+    return a.slots();
+}
 
-    CodeEditor code(funWrt.function->body());
+void Pir2Rir::removePhis(Code* code) {
+
+    // For each Phi, insert copies
+    BreadthFirstVisitor::run(code->entry, [&](BB* bb) {
+        // TODO: move all phi's to the beginning, then insert the copies not
+        // after each phi but after all phi's
+        for (auto it = bb->begin(); it != bb->end(); ++it) {
+            auto instr = *it;
+            Phi* phi = Phi::Cast(instr);
+            if (phi) {
+                for (size_t i = 0; i < phi->nargs(); ++i) {
+                    BB* pred = phi->input[i];
+                    // pred is either jump (insert copy at end) or branch
+                    // (insert copy before the branch instr)
+                    auto it = pred->isJmp() ? pred->end() : pred->end() - 1;
+                    Instruction* iav = Instruction::Cast(phi->arg(i).val());
+                    auto copy = pred->insert(it, new PirCopy(iav));
+                    phi->arg(i).val() = *copy;
+                }
+                auto phiCopy = new PirCopy(phi);
+                phi->replaceUsesWith(phiCopy);
+                it = bb->insert(it + 1, phiCopy);
+            }
+        }
+    });
+
+    // std::cout << "--- phi copies inserted ---\n";
+    // code->print(std::cout);
+}
+
+rir::Function* Pir2Rir::finalize() {
+    // TODO: asts are NIL for now, how to deal with that? after inlining
+    // functions and asts don't correspond anymore
+
+    FunctionWriter function = FunctionWriter::create();
+    Context ctx(function);
+
+    std::unordered_map<Promise*, FunIdxT> promises;
+    std::unordered_map<Promise*, SEXP> argNames;
+    size_t i = 0;
+    for (auto arg : cls->defaultArgs) {
+        if (!arg)
+            continue;
+        ctx.pushDefaultArg(R_NilValue);
+        size_t localsCnt = compile(ctx, arg);
+        promises[arg] = ctx.pop(localsCnt);
+        argNames[arg] = cls->argNames[i++];
+    }
+    for (auto prom : cls->promises) {
+        if (!prom)
+            continue;
+        ctx.pushPromise(R_NilValue);
+        size_t localsCnt = compile(ctx, prom);
+        promises[prom] = ctx.pop(localsCnt);
+    }
+    ctx.pushBody(R_NilValue);
+    size_t localsCnt = compile(ctx, cls);
+    ctx.pop(localsCnt);
+
+    CodeEditor code(function.function->body());
 
     for (size_t i = 0; i < code.numPromises(); ++i)
         if (code.promise(i))
@@ -401,7 +504,6 @@ rir::Function* Pir2Rir::finalize() {
     CodeVerifier::verifyFunctionLayout(opt->container(), globalContext());
 #endif
 
-    opt->body()->localsCount = a.slots();
     opt->isPirCompiled = true;
 
     return opt;
@@ -409,69 +511,10 @@ rir::Function* Pir2Rir::finalize() {
 
 } // namespace
 
-rir::Function* Pir2RirCompiler::operator()(Module* m) {
-
-    // TODO: what about multiple functions??
-    std::vector<rir::Function*> results;
-
-    m->eachPirFunction([&](Closure* cls) {
-        // For each Phi, insert copies
-        BreadthFirstVisitor::run(cls->entry, [&](BB* bb) {
-            // TODO: move all phi's to the beginning, then insert the copies not
-            // after each phi but after all phi's std::vector<Instruction*>
-            // phiCopies;
-            for (auto it = bb->begin(); it != bb->end(); ++it) {
-                auto instr = *it;
-                Phi* phi = Phi::Cast(instr);
-                if (phi) {
-                    for (size_t i = 0; i < phi->nargs(); ++i) {
-                        BB* pred = phi->input[i];
-                        // pred is either jump (insert copy at end) or branch
-                        // (insert copy before the branch instr)
-                        auto it = pred->isJmp() ? pred->end() : pred->end() - 1;
-                        Instruction* iav = Instruction::Cast(phi->arg(i).val());
-                        auto copy = pred->insert(it, new PirCopy(iav));
-                        phi->arg(i).val() = *copy;
-                    }
-                    auto phiCopy = new PirCopy(phi);
-                    phi->replaceUsesWith(phiCopy);
-                    it = bb->insert(it + 1, phiCopy);
-                    // phiCopies.push_back(phiCopy);
-                }
-            }
-            // // find last phi in bb, insert all copies after it
-            // auto lastPhi = bb->end();
-            // for (auto it = bb->begin(); it != bb->end(); ++it)
-            //     if (Phi::Cast(*it))
-            //         lastPhi = it;
-            // ++lastPhi;
-            // bb->insert(lastPhi, phiCopies);
-        });
-
-        // std::cout << "--- phi copies inserted ---\n";
-        // cls->print(std::cout);
-
-        Alloc a;
-        BreadthFirstVisitor::run(cls->entry, [&](Instruction* instr) {
-            Phi* phi = Phi::Cast(instr);
-            if (phi) {
-                auto slot = a.allocateLocal(phi);
-                phi->eachArg([&](Value* arg) { a.allocateLocal(arg, slot); });
-            }
-        });
-        BreadthFirstVisitor::run(cls->entry, [&](Instruction* instr) {
-            if (instr->type != PirType::voyd() && a.alloc.count(instr) == 0)
-                a.allocateLocal(instr);
-        });
-
-        Pir2Rir cmp(cls, a);
-        results.push_back(cmp.finalize());
-    });
-
-    // for now, assert there is only one
-    assert(results.size() == 1);
-
-    return results.back();
+rir::Function* Pir2RirCompiler::operator()(Module* m, rir::Function* orig) {
+    Closure* cls = m->get(orig);
+    Pir2Rir cmp(cls);
+    return cmp.finalize();
 }
 
 } // namespace pir
