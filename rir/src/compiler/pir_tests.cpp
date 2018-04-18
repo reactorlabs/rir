@@ -229,6 +229,13 @@ bool testPir2Rir(std::string name, std::string fun, std::string args) {
     auto rirFun = p(parseCompileToRir(fun));
     SET_CLOENV(rirFun, execEnv);
     Rf_defineVar(Rf_install(name.c_str()), rirFun, execEnv);
+
+    // bind `bar <- function(a) a + 1` in the execEnv to be called by the tested
+    // function
+    auto rirFun2 = p(parseCompileToRir("function(a) a + 1"));
+    SET_CLOENV(rirFun2, execEnv);
+    Rf_defineVar(Rf_install("bar"), rirFun2, execEnv);
+
     auto rCall = createRWrapperCall(call);
 
     auto orig = p(Rf_eval(rCall, execEnv));
@@ -283,7 +290,7 @@ static Test tests[] = {
                                 "function(dummy, a) { x <- 3; x + a + x + a }",
                                 "cat('WHOA\n'), 1");
          }),
-    Test("PIR to RIR: if",
+    Test("PIR to RIR: if else",
          []() {
              return testPir2Rir("foo", "function(x) if (x) 1 else 2", "TRUE");
          }),
@@ -294,7 +301,7 @@ static Test tests[] = {
              return testPir2Rir("foo", "function(x) while (TRUE) if (x) break",
                                 "T");
          }),
-    Test("PIR to RIR: loop",
+    Test("PIR to RIR: loop - sum",
          []() {
              return testPir2Rir("foo",
                                 "function(x) {"
@@ -332,10 +339,20 @@ static Test tests[] = {
     // Test("PIR to RIR: simple for loop",
     //      []() {
     //          return testPir2Rir("foo",
-    //                             "function(x) { s = 0; for (i in 1:x) s = s + i; s }",
-    //                             "10L");
+    //                             "function(x) { s = 0; for (i in 1:x) s = s +
+    //                             i; s }", "10L");
     //      }),
-    // function(x) foo(x)
+    Test("PIR to RIR: inlined call",
+         []() {
+             return testPir2Rir("foo",
+                                "function(x) {"
+                                "  bar <- function(a) a + 1;"
+                                "  bar(x)"
+                                "}",
+                                "1");
+         }),
+    Test("PIR to RIR: call",
+         []() { return testPir2Rir("foo", "function(x) bar(x)", "1"); }),
 };
 } // namespace
 
