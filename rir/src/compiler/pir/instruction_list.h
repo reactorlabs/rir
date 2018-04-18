@@ -24,6 +24,8 @@
     V(ChkMissing)                                                              \
     V(ChkClosure)                                                              \
     V(Call)                                                                    \
+    V(StaticCall)                                                              \
+    V(StaticEagerCall)                                                         \
     V(CallBuiltin)                                                             \
     V(CallSafeBuiltin)                                                         \
     V(MkEnv)                                                                   \
@@ -59,6 +61,7 @@
     V(ForSeqSize)                                                              \
     V(Deopt)                                                                   \
     V(Force)                                                                   \
+    V(CastType)                                                                \
     V(PirCopy)
 
 #endif

@@ -24,7 +24,7 @@ class Rir2PirCompiler : public RirCompiler {
 
   private:
     Closure* compileClosure(rir::Function*, const std::vector<SEXP>&,
-                            Value* closureEnv);
+                            Env* closureEnv);
     void applyOptimizations(Closure*, const std::string&);
 };
 } // namespace pir

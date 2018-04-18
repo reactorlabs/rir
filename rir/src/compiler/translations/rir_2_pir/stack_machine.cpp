@@ -41,7 +41,7 @@ void StackMachine::set(size_t index, Value* value) {
     stack[stack_size() - index - 1] = value;
 }
 
-void StackMachine::runCurrentBC(Rir2Pir& pir2rir, Builder& insert) {
+void StackMachine::runCurrentBC(Rir2Pir& rir2pir, Builder& insert) {
     assert(pc >= srcCode->code() && pc < srcCode->endCode());
 
     Value* env = insert.env;
@@ -71,7 +71,7 @@ void StackMachine::runCurrentBC(Rir2Pir& pir2rir, Builder& insert) {
         insert(new StVarSuper(bc.immediateConst(), v, env));
         break;
     case Opcode::ret_:
-        pir2rir.addReturn(ReturnSite(bb, pop()));
+        rir2pir.addReturn(ReturnSite(bb, pop()));
         assert(empty());
         break;
     case Opcode::asbool_:
@@ -123,6 +123,14 @@ void StackMachine::runCurrentBC(Rir2Pir& pir2rir, Builder& insert) {
         unsigned n = bc.immediate.call_args.nargs;
         rir::CallSite* cs = bc.callSite(srcFunction->body());
 
+        SEXP monomorphic = nullptr;
+        if (cs->hasProfile) {
+            auto prof = cs->profile();
+            if (prof->numTargets == 1) {
+                monomorphic = prof->targets[0];
+            }
+        }
+
         std::vector<Value*> args;
         for (size_t i = 0; i < n; ++i) {
             unsigned argi = cs->args()[i];
@@ -135,19 +143,45 @@ void StackMachine::runCurrentBC(Rir2Pir& pir2rir, Builder& insert) {
             Promise* prom = insert.function->createProm();
             {
                 Builder promiseBuilder(insert.function, prom);
-                Rir2Pir compiler(pir2rir.compiler(), promiseBuilder,
+                Rir2Pir compiler(rir2pir.compiler(), promiseBuilder,
                                  srcFunction, promiseCode);
                 compiler.translate();
             }
             Value* val = Missing::instance();
             if (Query::pure(prom)) {
-                RirInlinedPromise2Rir compiler(pir2rir, promiseCode);
+                RirInlinedPromise2Rir compiler(rir2pir, promiseCode);
                 val = compiler.translate();
             }
             args.push_back(insert(new MkArg(prom, val, env)));
         }
 
-        push(insert(new Call(env, pop(), args)));
+        if (monomorphic && isValidClosureSEXP(monomorphic)) {
+            auto& cmp = rir2pir.compiler();
+            Closure* f = cmp.compileClosure(monomorphic);
+            Value* expected = insert(new LdConst(monomorphic));
+            Value* t = insert(
+                new Eq(top(), expected, 0)); // here we don't have src ast...
+            insert(new Branch(t));
+            BB* curBB = insert.bb;
+
+            BB* asExpected = insert.createBB();
+            insert.bb = asExpected;
+            curBB->next0 = asExpected;
+            Value* r1 = insert(new StaticCall(insert.env, f, args));
+
+            BB* fallback = insert.createBB();
+            insert.bb = fallback;
+            curBB->next1 = fallback;
+            Value* r2 = insert(new Call(insert.env, pop(), args));
+
+            BB* cont = insert.createBB();
+            asExpected->next0 = cont;
+            fallback->next0 = cont;
+            insert.bb = cont;
+            push(insert(new Phi({r1, r2}, {asExpected, fallback})));
+        } else {
+            push(insert(new Call(insert.env, pop(), args)));
+        }
         break;
     }
     case Opcode::promise_: {
@@ -157,13 +191,13 @@ void StackMachine::runCurrentBC(Rir2Pir& pir2rir, Builder& insert) {
         {
             // What should I do with this?
             Builder promiseBuilder(insert.function, prom);
-            Rir2Pir compiler(pir2rir.compiler(), promiseBuilder, srcFunction,
+            Rir2Pir compiler(rir2pir.compiler(), promiseBuilder, srcFunction,
                              promiseCode);
             compiler.translate();
         }
         Value* val = Missing::instance();
         if (Query::pure(prom)) {
-            RirInlinedPromise2Rir compiler(pir2rir, promiseCode);
+            RirInlinedPromise2Rir compiler(rir2pir, promiseCode);
             val = compiler.translate();
         }
         // TODO: Remove comment and check how to deal with
@@ -179,13 +213,18 @@ void StackMachine::runCurrentBC(Rir2Pir& pir2rir, Builder& insert) {
         for (size_t i = 0; i < n; ++i)
             args[n - i - 1] = pop();
 
-        // TODO: compile a list of safe builtins
-        static int vector = findBuiltin("vector");
+        if (TYPEOF(target) == BUILTINSXP) {
+            // TODO: compile a list of safe builtins
+            static int vector = findBuiltin("vector");
 
-        if (getBuiltinNr(target) == vector)
-            push(insert(new CallSafeBuiltin(target, args)));
-        else
-            push(insert(new CallBuiltin(env, target, args)));
+            if (getBuiltinNr(target) == vector)
+                push(insert(new CallSafeBuiltin(target, args)));
+            else
+                push(insert(new CallBuiltin(env, target, args)));
+        } else {
+            Closure* f = rir2pir.compiler().compileClosure(target);
+            push(insert(new StaticEagerCall(env, f, args)));
+        }
         break;
     }
     case Opcode::seq_: {

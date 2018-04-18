@@ -70,12 +70,17 @@ struct ForcedAt : public std::unordered_map<Value*, Force*> {
 };
 
 static Value* getValue(Force* f) {
-    Value* res = nullptr;
-    while (f) {
-        res = f->arg<0>().val();
-        f = Force::Cast(res);
+    Value* cur = f;
+    while (true) {
+        if (Force::Cast(cur)) {
+            cur = Force::Cast(cur)->arg<0>().val();
+        } else if (CastType::Cast(cur)) {
+            cur = CastType::Cast(cur)->arg<0>().val();
+        } else {
+            break;
+        }
     }
-    return res;
+    return cur;
 }
 
 class ForceDominanceAnalysis : public StaticAnalysis<ForcedAt> {

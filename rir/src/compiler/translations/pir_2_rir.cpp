@@ -253,6 +253,10 @@ size_t Pir2Rir::compile(Context& ctx, Code* code) {
                 store(it, res);
                 break;
             }
+            case Tag::CastType: {
+                assert(false && "not yet implemented.");
+                break;
+            }
             case Tag::AsLogical: {
                 auto aslogical = AsLogical::Cast(instr);
                 auto res = a.alloc[aslogical];
@@ -373,6 +377,14 @@ size_t Pir2Rir::compile(Context& ctx, Code* code) {
                 break;
             }
             case Tag::Call: {
+                assert(false && "not yet implemented.");
+                break;
+            }
+            case Tag::StaticCall: {
+                assert(false && "not yet implemented.");
+                break;
+            }
+            case Tag::StaticEagerCall: {
                 assert(false && "not yet implemented.");
                 break;
             }

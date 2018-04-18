@@ -14,6 +14,9 @@ namespace pir {
 class RirCompiler {
   public:
     RirCompiler(Module* module) : module(module) {}
+    RirCompiler(const RirCompiler&) = delete;
+    void operator=(const RirCompiler&) = delete;
+
     virtual Closure* compileClosure(SEXP) = 0;
 
     bool isVerbose() { return verbose; }

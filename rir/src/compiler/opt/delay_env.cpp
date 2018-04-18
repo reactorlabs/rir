@@ -76,15 +76,17 @@ void DelayEnv::apply(Closure* function) {
             if (it != bb->end() && (it + 1) != bb->end()) {
                 auto b = Branch::Cast(*(it + 1));
                 if (e && b) {
-                    auto d = Deopt::Cast(bb->next0->last());
-                    if (d) {
-                        auto newE = e->clone();
-                        it = bb->insert(it, newE);
-                        e->replaceUsesIn(newE, bb->next0);
-                        // Closure wrapper in MkEnv can be circular
-                        Replace::usesOfValue(newE, e, newE);
-                        it = bb->moveToBegin(it, bb->next0);
-                        it = bb->moveToBegin(it, bb->next1);
+                    if (!bb->next0->isEmpty()) {
+                        auto d = Deopt::Cast(bb->next0->last());
+                        if (d) {
+                            auto newE = e->clone();
+                            it = bb->insert(it, newE);
+                            e->replaceUsesIn(newE, bb->next0);
+                            // Closure wrapper in MkEnv can be circular
+                            Replace::usesOfValue(newE, e, newE);
+                            it = bb->moveToBegin(it, bb->next0);
+                            it = bb->moveToBegin(it, bb->next1);
+                        }
                     }
                 }
             }
