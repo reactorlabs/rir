@@ -24,6 +24,8 @@
     V(ChkMissing)                                                              \
     V(ChkClosure)                                                              \
     V(Call)                                                                    \
+    V(StaticCall)                                                              \
+    V(StaticEagerCall)                                                         \
     V(CallBuiltin)                                                             \
     V(CallSafeBuiltin)                                                         \
     V(MkEnv)                                                                   \
@@ -58,6 +60,7 @@
     V(Subassign2_1D)                                                           \
     V(ForSeqSize)                                                              \
     V(Deopt)                                                                   \
-    V(Force)                                                                   
+    V(Force)                                                                   \
+    V(CastType)
 
 #endif

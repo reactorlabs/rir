@@ -208,11 +208,13 @@ struct AbstractREnvironment {
  */
 
 struct AbstractLoad {
-    Value* env = nullptr;
+    Value* env;
     AbstractPirValue result;
 
     AbstractLoad(Value* env, const AbstractPirValue& val)
-        : env(env), result(val) {}
+        : env(env), result(val) {
+        assert(env);
+    }
 };
 
 class AbstractREnvironmentHierarchy

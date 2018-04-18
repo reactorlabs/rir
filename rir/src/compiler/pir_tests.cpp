@@ -1,5 +1,6 @@
 #include "pir_tests.h"
 #include "R/Protect.h"
+#include "R/RList.h"
 #include "R_ext/Parse.h"
 #include "analysis/query.h"
 #include "analysis/verifier.h"
@@ -11,22 +12,53 @@
 namespace {
 using namespace rir;
 
-std::pair<pir::Closure*, pir::Module*> compile(const std::string& inp,
-                                               SEXP env = R_GlobalEnv) {
+std::unordered_map<std::string, pir::Closure*>
+compile(const std::string& context, const std::string& expr, pir::Module* m,
+        SEXP super = R_GlobalEnv) {
     Protect p;
-    ParseStatus status;
-    SEXP arg = p(CONS(R_NilValue, R_NilValue));
-    SET_TAG(arg, Rf_install("arg1"));
-    SEXP str = p(Rf_mkString(inp.c_str()));
-    SEXP bdy = p(R_ParseVector(str, -1, &status, R_NilValue));
-    SEXP fun = p(Compiler::compileClosure(CDR(bdy), arg));
-    CLOENV(fun) = env;
-    pir::Module* m = new pir::Module;
+
+    auto eval = [&](const std::string& expr, SEXP env) {
+        ParseStatus status;
+        // Parse expression
+        SEXP str = p(Rf_mkString(("{" + expr + "}").c_str()));
+        SEXP e = p(R_ParseVector(str, -1, &status, R_NilValue));
+
+        // Compile expression to rir
+        SEXP rirexp = p(Compiler::compileClosure(VECTOR_ELT(e, 0), R_NilValue));
+
+        // Evaluate expression under the fresh environment `env`
+        Rf_eval(BODY(rirexp), env);
+    };
+
+    if (context != "") {
+        SEXP contextEnv = p(Rf_allocSExp(ENVSXP));
+        ENCLOS(contextEnv) = super;
+        eval(context, contextEnv);
+        super = contextEnv;
+    }
+
+    SEXP env = p(Rf_allocSExp(ENVSXP));
+    ENCLOS(env) = super;
+    eval(expr, env);
+
     pir::Rir2PirCompiler cmp(m);
+
+    // Compile every function the expression created
+    std::unordered_map<std::string, pir::Closure*> results;
+    auto envlist = RList(FRAME(env));
+    for (auto f = envlist.begin(); f != envlist.end(); ++f) {
+        auto fun = *f;
+        if (TYPEOF(fun) == CLOSXP) {
+            assert(isValidClosureSEXP(fun));
+            // isValidClosureSEXP(fun)->body()->print();
+            results[CHAR(PRINTNAME(f.tag()))] = cmp.compileClosure(fun);
+        }
+    }
+
+    m->print(std::cout);
     // cmp.setVerbose(true);
-    auto f = cmp.compileClosure(fun);
     cmp.optimizeModule();
-    return std::pair<pir::Closure*, pir::Module*>(f, m);
+    return results;
 }
 
 using namespace rir::pir;
@@ -35,16 +67,16 @@ typedef std::pair<std::string, TestClosure> Test;
 
 #define CHECK(___test___)                                                      \
     if (!(___test___)) {                                                       \
-        m->print(std::cerr);                                                   \
+        m.print(std::cerr);                                                    \
         std::cerr << "'" << #___test___ << "' failed\n";                       \
         assert(false);                                                         \
         return false;                                                          \
     }
 
 bool test42(const std::string& input) {
-    auto res = compile(input);
-    auto f = res.first;
-    auto m = res.second;
+    pir::Module m;
+    auto res = compile("", "theFun <- function() " + input, &m);
+    auto f = res["theFun"];
 
     CHECK(Query::noEnv(f));
 
@@ -55,7 +87,6 @@ bool test42(const std::string& input) {
     CHECK(ld);
     CHECK(TYPEOF(ld->c) == INTSXP);
     CHECK(INTEGER(ld->c)[0] == 42);
-    delete m;
     return true;
 };
 
@@ -79,20 +110,22 @@ bool verify(Module* m) {
     return true;
 }
 
-bool compileAndVerify(const std::string& input) {
-    auto m = compile(input).second;
-    bool t = verify(m);
-    delete m;
+bool compileAndVerify(const std::string& context, const std::string& input) {
+    pir::Module m;
+    compile(context, input, &m);
+    bool t = verify(&m);
     return t;
 }
 
+bool compileAndVerify(const std::string& input) {
+    return compileAndVerify("", input);
+}
+
 bool canRemoveEnvironment(const std::string& input) {
-    auto r = compile(input);
-    auto m = r.second;
-    auto f = r.first;
-    bool t = verify(m);
-    t = t && Query::noEnv(f);
-    delete m;
+    pir::Module m;
+    compile("", input, &m);
+    bool t = verify(&m);
+    m.eachPirFunction([&t](pir::Closure* f) { t = t && Query::noEnv(f); });
     return t;
 }
 
@@ -101,15 +134,13 @@ bool testDelayEnv() {
     //       analysis!
     // auto m = compile("{f <- function()1; arg1[[2]]}");
 
-    auto res = compile("{f <- arg1; arg1[[2]]}");
-    auto f = res.first;
-    auto m = res.second;
-    bool t = Visitor::check(f->entry, [&](Instruction* i, BB* bb) {
+    pir::Module m;
+    auto res = compile("", "a <- function(b) {f <- b; b[[2]]}", &m);
+    bool t = Visitor::check(res["a"]->entry, [&](Instruction* i, BB* bb) {
         if (i->hasEnv())
             CHECK(Deopt::Cast(bb->last()));
         return true;
     });
-    delete m;
     return t;
 }
 
@@ -130,31 +161,30 @@ bool testSuperAssign() {
         });
     };
     {
+        pir::Module m;
         // This super assign can be fully resolved, and dead store eliminated
-        auto r = compile("{a <- 1; (function() a <<- 1)()}");
-        auto m = r.second;
-        auto f = r.first;
+        auto res =
+            compile("", "f <- function() {a <- 1; (function() a <<- 1)()}", &m);
+        auto f = res["f"];
         CHECK(!hasSuperAssign(f));
         CHECK(!hasAssign(f));
-        delete m;
     }
     {
+        pir::Module m;
         // This super assign can be converted into a store to the global env
-        auto r = compile("{(function() a <<- 1)()}");
-        auto m = r.second;
-        auto f = r.first;
+        auto res = compile("", "f <- function() {(function() a <<- 1)()}", &m);
+        auto f = res["f"];
         CHECK(!hasSuperAssign(f));
         CHECK(hasAssign(f));
-        delete m;
     }
     {
+        pir::Module m;
         // This super assign cannot be removed, since the super env is not
-        // assigneable.
-        auto r = compile("{f <- (function() a <<- 1)()}", R_NilValue);
-        auto m = r.second;
-        auto f = r.first;
+        // unknown.
+        auto res = compile(
+            "", "f <- function() {f <- (function() {qq(); a <<- 1})()}", &m);
+        auto f = res["f"];
         CHECK(hasSuperAssign(f));
-        delete m;
     }
 
     return true;
@@ -163,8 +193,12 @@ bool testSuperAssign() {
 static Test tests[] = {
     Test("test_42L", []() { return test42("42L"); }),
     Test("test_inline", []() { return test42("{f <- function() 42L; f()}"); }),
-    Test("return_cls", []() { return compileAndVerify("function() 42L"); }),
-    Test("index", []() { return compileAndVerify("arg1[[2]]"); }),
+    Test("test_inline", []() { return test42("{f <- function() 42L; f()}"); }),
+    Test("test_inline_two",
+         []() {
+             return test42(
+                 "{f <- function(val, fun) fun(val); f(42L, function(x)x)}");
+         }),
     Test("test_inline_arg",
          []() { return test42("{f <- function(x) x; f(42L)}"); }),
     Test("test_assign",
@@ -172,20 +206,30 @@ static Test tests[] = {
     Test(
         "test_super_assign",
         []() { return test42("{x <- 0; f <- function() x <<- 42L; f(); x}"); }),
-    Test("return_cls", []() { return compileAndVerify("function() 42L"); }),
-    Test("index", []() { return compileAndVerify("arg1[[2]]"); }),
+
+    Test("return_cls",
+         []() { return compileAndVerify("f <- function() 42L"); }),
+    Test("index", []() { return compileAndVerify("f <- function(x) x[[2]]"); }),
+    Test("return_cls",
+         []() { return compileAndVerify("f <- function() {function() 42L}"); }),
     Test("deopt_in_prom",
          []() {
              return compileAndVerify(
-                 "{function(a) {f <- function(x) x; f(a[[1]])}}");
+                 "fun <- function(a) {f <- function(x) x; f(a[[1]])}");
          }),
     Test("delay_env", &testDelayEnv),
-    Test("context_load", []() { return canRemoveEnvironment("a"); }),
+    Test("context_load",
+         []() { return canRemoveEnvironment("f <- function() a"); }),
     Test("super_assign", &testSuperAssign),
     Test("loop",
          []() {
              return compileAndVerify(
-                 "{function(x) {while (x < 10) if (x) x <- x + 1}}");
+                 "f <- function(x) {while (x < 10) if (x) x <- x + 1}");
+         }),
+    Test("static_call",
+         []() {
+             return compileAndVerify("f <- function(x) x",
+                                     "g <- function() f(1); g()");
          }),
 };
 }
