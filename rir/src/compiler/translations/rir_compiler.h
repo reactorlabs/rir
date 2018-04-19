@@ -18,7 +18,7 @@ class RirCompiler {
     void operator=(const RirCompiler&) = delete;
 
     virtual Closure* compileClosure(SEXP) = 0;
-    
+
     bool isVerbose() { return verbose; }
     void setVerbose(bool v) { verbose = v; }
 

@@ -4,6 +4,7 @@
 #include "../../util/builder.h"
 #include "R/Funtab.h"
 #include "ir/BC.h"
+#include "ir/Compiler.h"
 #include "rir_2_pir.h"
 #include "rir_inlined_promise_2_pir.h"
 
@@ -221,6 +222,13 @@ void StackMachine::runCurrentBC(Rir2Pir& rir2pir, Builder& insert) {
             else
                 push(insert(new CallBuiltin(env, target, args)));
         } else {
+            assert(TYPEOF(target) == CLOSXP);
+            if (!isValidClosureSEXP(target)) {
+                target = Compiler::compileClosure(target);
+                // TODO: we need to keep track of this compiled rir function.
+                // For now let's just put it in the constant pool.
+                Pool::insert(target);
+            }
             Closure* f = rir2pir.compiler().compileClosure(target);
             push(insert(new StaticEagerCall(env, f, args)));
         }
