@@ -12,8 +12,8 @@
 
 extern "C" SEXP deparse1line(SEXP call, Rboolean abbrev);
 
-namespace rir {
-namespace pir {
+namespace {
+using namespace rir::pir;
 
 static size_t getMaxInstructionNameLength() {
     size_t max = 0;
@@ -23,9 +23,39 @@ static size_t getMaxInstructionNameLength() {
     if (cur > max)                                                             \
         max = cur;
     COMPILER_INSTRUCTIONS(V)
+#undef V
     return max;
 }
 static size_t maxInstructionNameLength = getMaxInstructionNameLength();
+
+const static Instruction::Description instructionDescriptionTable[] = {
+#define V(Instruction) Instruction::getDescription(),
+    COMPILER_INSTRUCTIONS(V)
+#undef V
+};
+
+static_assert(static_cast<unsigned>(Tag::_UNUSED_) == 0, "");
+static size_t tagIdx(Tag tag) { return static_cast<size_t>(tag) - 1; }
+}
+
+namespace rir {
+namespace pir {
+
+bool Instruction::mightIO() const {
+    return instructionDescriptionTable[tagIdx(tag)].mightIO;
+}
+bool Instruction::changesEnv() const {
+    return instructionDescriptionTable[tagIdx(tag)].changesEnv;
+}
+bool Instruction::leaksEnv() const {
+    return instructionDescriptionTable[tagIdx(tag)].leaksEnv;
+}
+bool Instruction::hasEnv() const {
+    return instructionDescriptionTable[tagIdx(tag)].hasEnv;
+}
+bool Instruction::accessesEnv() const {
+    return instructionDescriptionTable[tagIdx(tag)].accessEnv;
+}
 
 extern std::ostream& operator<<(std::ostream& out,
                                 Instruction::InstructionUID id) {

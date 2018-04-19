@@ -59,6 +59,26 @@ struct InstrArg : public std::pair<Value*, PirType> {
     PirType type() const { return second; }
 };
 
+// EnvAccess specifies if an instruction has an environment argument
+// (ie. EnvAccess > None), and if yes, what kind of interactions with that
+// environment can happen.
+enum class EnvAccess : uint8_t {
+    None,
+    Capture, // only needs a reference, does not load/store
+    Read,
+    Write,
+    Leak,
+};
+
+// Effect that can be produced by an instruction.
+enum class Effect : uint8_t {
+    None,
+    Warn,
+    Error,
+    Print,
+    Any,
+};
+
 class Instruction : public Value {
   public:
     struct InstructionUID : public std::pair<unsigned, unsigned> {
@@ -68,15 +88,17 @@ class Instruction : public Value {
         unsigned idx() const { return second; }
     };
 
+    Instruction(Tag tag, PirType t) : Value(t, tag) {}
+
+    bool mightIO() const;
+    bool changesEnv() const;
+    bool leaksEnv() const;
+    bool hasEnv() const;
+    bool accessesEnv() const;
+
     virtual size_t nargs() const = 0;
     virtual Value* env() const = 0;
     virtual void env(Value*) = 0;
-
-    virtual bool mightIO() const = 0;
-    virtual bool changesEnv() const = 0;
-    virtual bool leaksEnv() const { return false; }
-    virtual bool hasEnv() const { return false; }
-    virtual bool accessesEnv() const { return false; }
 
     virtual Instruction* clone() const = 0;
 
@@ -86,7 +108,6 @@ class Instruction : public Value {
         return bb_;
     }
 
-    Instruction(Tag tag, PirType t) : Value(t, tag) {}
     virtual ~Instruction() {}
 
     InstructionUID id();
@@ -135,26 +156,19 @@ class Instruction : public Value {
         }
         return nullptr;
     }
-};
 
-// EnvAccess specifies if an instruction has an environment argument
-// (ie. EnvAccess > None), and if yes, what kind of interactions with that
-// environment can happen.
-enum class EnvAccess : uint8_t {
-    None,
-    Capture, // only needs a reference, does not load/store
-    Read,
-    Write,
-    Leak,
-};
-
-// Effect that can be produced by an instruction.
-enum class Effect : uint8_t {
-    None,
-    Warn,
-    Error,
-    Print,
-    Any,
+    struct Description {
+        const bool mightIO;
+        const bool changesEnv;
+        const bool leaksEnv;
+        const bool hasEnv;
+        const bool accessEnv;
+        Description(Effect effect, EnvAccess env)
+            : mightIO(effect > Effect::None),
+              changesEnv(env >= EnvAccess::Write),
+              leaksEnv(env == EnvAccess::Leak), hasEnv(env > EnvAccess::None),
+              accessEnv(env > EnvAccess::Capture) {}
+    };
 };
 
 template <Tag ITAG, class Base, Effect EFFECT, EnvAccess ENV, class ArgStore>
@@ -170,12 +184,6 @@ class InstructionImplementation : public Instruction {
 
     void operator=(InstructionImplementation&) = delete;
     InstructionImplementation() = delete;
-
-    bool mightIO() const override final { return EFFECT > Effect::None; }
-    bool changesEnv() const override final { return ENV >= EnvAccess::Write; }
-    bool leaksEnv() const override final { return ENV == EnvAccess::Leak; }
-    bool hasEnv() const override final { return ENV > EnvAccess::None; }
-    bool accessesEnv() const override final { return ENV > EnvAccess::Capture; }
 
     Instruction* clone() const override {
         assert(Base::Cast(this));
@@ -211,6 +219,10 @@ class InstructionImplementation : public Instruction {
     const InstrArg& arg(size_t pos) const override final { return args_[pos]; }
 
     InstrArg& arg(size_t pos) override final { return args_[pos]; }
+
+    const static Instruction::Description getDescription() {
+        return Instruction::Description(EFFECT, ENV);
+    }
 };
 
 template <Tag ITAG, class Base, size_t ARGS, Effect EFFECT, EnvAccess ENV>
@@ -868,7 +880,7 @@ class VLI(Deopt, Effect::Any, EnvAccess::Leak) {
 };
 
 #undef VLI
-}
-}
+} // namespace pir
+} // namespace rir
 
 #endif
