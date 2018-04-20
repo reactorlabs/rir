@@ -9,6 +9,18 @@
 #include "ir/Optimizer.h"
 #include "utils/FunctionWriter.h"
 
+// #define DEBUGGING
+#define ALLOC_DEBUG 1
+#define PHI_REMOVE_DEBUG 1
+
+#ifdef DEBUGGING
+#define DEBUGCODE(flag, code)                                                  \
+    if (flag)                                                                  \
+    code
+#else
+#define DEBUGCODE(flag, code) /* nothing */
+#endif
+
 namespace rir {
 namespace pir {
 
@@ -38,8 +50,10 @@ class Alloc {
     LocalSlotIdx allocateLocal(Value* val) {
         assert(alloc.count(val) == 0);
         alloc[val] = maxLocalIdx;
-        // val->printRef(std::cout);
-        // std::cout << "\t" << maxLocalIdx << "\n";
+        DEBUGCODE(ALLOC_DEBUG, {
+            val->printRef(std::cout);
+            std::cout << "\t" << maxLocalIdx << "\n";
+        });
         return maxLocalIdx++;
     }
 
@@ -47,8 +61,10 @@ class Alloc {
         assert(alloc.count(val) == 0);
         assert(i < maxLocalIdx);
         alloc[val] = i;
-        // val->printRef(std::cout);
-        // std::cout << "\t" << i << "\n";
+        DEBUGCODE(ALLOC_DEBUG, {
+            val->printRef(std::cout);
+            std::cout << "\t" << i << "\n";
+        });
     }
 
     size_t slots() { return maxLocalIdx; }
@@ -470,8 +486,10 @@ void Pir2Rir::removePhis(Code* code) {
         }
     });
 
-    // std::cout << "--- phi copies inserted ---\n";
-    // code->print(std::cout);
+    DEBUGCODE(PHI_REMOVE_DEBUG, {
+        std::cout << "--- phi copies inserted ---\n";
+        code->print(std::cout);
+    });
 }
 
 rir::Function* Pir2Rir::finalize() {
@@ -511,12 +529,11 @@ rir::Function* Pir2Rir::finalize() {
     Optimizer::optimize(code);
 
     auto opt = code.finalize();
+    opt->isPirCompiled = true;
 
 #ifdef ENABLE_SLOWASSERT
     CodeVerifier::verifyFunctionLayout(opt->container(), globalContext());
 #endif
-
-    opt->isPirCompiled = true;
 
     return opt;
 }

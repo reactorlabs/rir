@@ -1217,7 +1217,7 @@ static void cachedSetVar(SEXP val, SEXP env, Immediate idx, Context* ctx,
     SLOWASSERT(TYPEOF(sym) == SYMSXP);
     INCREMENT_NAMED(val);
     PROTECT(val);
-    defineVar(sym, val, env);
+    Rf_defineVar(sym, val, env);
     UNPROTECT(1);
 }
 

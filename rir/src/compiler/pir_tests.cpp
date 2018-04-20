@@ -206,13 +206,9 @@ SEXP parseCompileToRir(std::string input) {
     return Compiler::compileClosure(BODY(cls), FORMALS(cls));
 }
 
-SEXP createRWrapperCall(std::string input) {
+SEXP createRWrapperCall(std::string wrapper) {
     Protect p;
     ParseStatus status;
-
-    std::string wrapper = "rir.compile( function() " + input + " )()";
-
-    Rprintf("   > %s\n\n", wrapper.c_str());
 
     SEXP str = p(Rf_mkString(wrapper.c_str()));
     SEXP expr = p(R_ParseVector(str, -1, &status, R_NilValue));
@@ -251,9 +247,11 @@ extern "C" SEXP pir_compile(SEXP);
 bool testPir2Rir(std::string name, std::string fun, std::string args) {
     Protect p;
 
-    std::string call = name + "(" + args + ")";
+    std::string wrapper =
+        "rir.compile( function() " + name + "(" + args + ") )()";
 
     Rprintf("   > %s <- %s\n", name.c_str(), fun.c_str());
+    Rprintf("   > %s\n\n", wrapper.c_str());
 
     auto execEnv = p(Rf_NewEnvironment(R_NilValue, R_NilValue, R_GlobalEnv));
     auto rirFun = p(parseCompileToRir(fun));
@@ -266,11 +264,21 @@ bool testPir2Rir(std::string name, std::string fun, std::string args) {
     SET_CLOENV(rirFun2, execEnv);
     Rf_defineVar(Rf_install("bar"), rirFun2, execEnv);
 
-    auto rCall = createRWrapperCall(call);
+    auto rCall = createRWrapperCall(wrapper);
 
     auto orig = p(Rf_eval(rCall, execEnv));
     Rprintf(" orig = %p\n", orig);
     Rf_PrintValue(orig);
+
+    // redo everything, this time compile also to PIR
+    execEnv = p(Rf_NewEnvironment(R_NilValue, R_NilValue, R_GlobalEnv));
+    rirFun = p(parseCompileToRir(fun));
+    SET_CLOENV(rirFun, execEnv);
+    Rf_defineVar(Rf_install(name.c_str()), rirFun, execEnv);
+    rirFun2 = p(parseCompileToRir("function(a) a + 1"));
+    SET_CLOENV(rirFun2, execEnv);
+    Rf_defineVar(Rf_install("bar"), rirFun2, execEnv);
+    rCall = createRWrapperCall(wrapper);
 
     pir_compile(rirFun);
 
@@ -297,7 +305,6 @@ static Test tests[] = {
     Test(
         "test_super_assign",
         []() { return test42("{x <- 0; f <- function() x <<- 42L; f(); x}"); }),
-
     Test("return_cls",
          []() { return compileAndVerify("f <- function() 42L"); }),
     Test("index", []() { return compileAndVerify("f <- function(x) x[[2]]"); }),
@@ -326,8 +333,12 @@ static Test tests[] = {
          []() { return testPir2Rir("foo", "function() 42L", ""); }),
     Test("PIR to RIR: simple argument",
          []() { return testPir2Rir("foo", "function(x) x", "16L"); }),
-    // Test("PIR to RIR: default arg",
-    //      []() { return testPir2Rir("foo", "function(x = 3) x", ""); }),
+    /*
+        fails because RIR to PIR doesn't support default args for now
+
+        Test("PIR to RIR: default arg",
+             []() { return testPir2Rir("foo", "function(x = 3) x", ""); }),
+    */
     Test("PIR to RIR: local binding",
          []() {
              return testPir2Rir("foo",
@@ -348,13 +359,13 @@ static Test tests[] = {
     Test("PIR to RIR: loop - sum",
          []() {
              return testPir2Rir("foo",
-                                "function(x) {"
-                                "  sum <- 0;"
-                                "  while (x > 0) {"
-                                "    sum <- sum + x;"
-                                "    x <- x - 1"
-                                "  };"
-                                "  sum"
+                                "function(x) {\n"
+                                "  sum <- 0\n"
+                                "  while (x > 0) {\n"
+                                "    sum <- sum + x\n"
+                                "    x <- x - 1\n"
+                                "  }\n"
+                                "  sum\n"
                                 "}",
                                 "10");
          }),
@@ -379,24 +390,36 @@ static Test tests[] = {
                                 "}",
                                 "1L, 10L");
          }),
-    // TODO: fails w/ "Cannot cast val to int$" for the loop index
-    // Test("PIR to RIR: simple for loop",
-    //      []() {
-    //          return testPir2Rir("foo",
-    //                             "function(x) { s = 0; for (i in 1:x) s = s +
-    //                             i; s }", "10L");
-    //      }),
-    // Test("PIR to RIR: inlined call",
-    //      []() {
-    //          return testPir2Rir("foo",
-    //                             "function(x) {"
-    //                             "  bar <- function(a) a + 1;"
-    //                             "  bar(x)"
-    //                             "}",
-    //                             "1");
-    //      }),
-    // Test("PIR to RIR: call",
-    //      []() { return testPir2Rir("foo", "function(x) bar(x)", "1"); }),
+    /*
+        fails w/ "Cannot cast val to int$" for the loop index
+
+        Test("PIR to RIR: simple for loop",
+             []() {
+                 return testPir2Rir("foo",
+                                    "function(x) { s = 0; for (i in 1:x) s = s +
+                                    i; s }", "10L");
+             }),
+    */
+    Test("PIR to RIR: inlined call",
+         []() {
+             return testPir2Rir("foo",
+                                "function(x) {"
+                                "  bar <- function(a) a + 1;"
+                                "  bar(x)"
+                                "}",
+                                "1");
+         }),
+    Test("PIR to RIR: call safe builtin",
+         []() {
+             return testPir2Rir("foo", "function(x) vector('integer', x)", "4");
+         }),
+    Test("PIR to RIR: call builtin",
+         []() {
+             return testPir2Rir("foo",
+                                "function(x) c(1, 2, 3, x, x + 1, x + 2)", "4");
+         }),
+    Test("PIR to RIR: call",
+         []() { return testPir2Rir("foo", "function(x) bar(x)", "2"); }),
 };
 } // namespace
 
