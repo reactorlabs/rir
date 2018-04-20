@@ -242,6 +242,7 @@ class BC {
     inline static BC push_code(FunIdxT i);
     inline static BC ldfun(SEXP sym);
     inline static BC ldvar(SEXP sym);
+    inline static BC getvar(SEXP sym);
     inline static BC ldvar2(SEXP sym);
     inline static BC ldlval(SEXP sym);
     inline static BC ldddvar(SEXP sym);
@@ -400,6 +401,7 @@ class BC {
         case Opcode::push_:
         case Opcode::ldfun_:
         case Opcode::ldvar_:
+        case Opcode::getvar_:
         case Opcode::ldvar2_:
         case Opcode::ldlval_:
         case Opcode::ldddvar_:

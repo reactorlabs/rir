@@ -363,6 +363,7 @@ void StackMachine::runCurrentBC(Rir2Pir& rir2pir, Builder& insert) {
     case Opcode::make_env_:
     case Opcode::get_env_:
     case Opcode::set_env_:
+    case Opcode::getvar_:
     case Opcode::ldarg_:
     case Opcode::ldloc_:
     case Opcode::stloc_:

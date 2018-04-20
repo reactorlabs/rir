@@ -30,25 +30,47 @@ class Alloc {
   public:
     typedef size_t LocalSlotIdx;
 
-    LocalSlotIdx maxLocalIdx = 0;
-    std::unordered_map<Value*, LocalSlotIdx> alloc;
-
     Alloc(Code* code) {
         BreadthFirstVisitor::run(code->entry, [&](Instruction* instr) {
             Phi* phi = Phi::Cast(instr);
             if (phi) {
                 auto slot = allocateLocal(phi);
-                phi->eachArg([&](Value* arg) { allocateLocal(arg, slot); });
+                phi->eachArg([&](Value* arg) {
+                    // here the arg must not yet be allocated
+                    if (shouldAllocate(arg))
+                        allocateLocal(arg, slot);
+                });
             }
         });
         BreadthFirstVisitor::run(code->entry, [&](Instruction* instr) {
-            if (instr->type != PirType::voyd() && alloc.count(instr) == 0)
+            if (shouldAllocate(instr) && alloc.count(instr) == 0) {
                 allocateLocal(instr);
+                instr->eachArg([&](Value* arg) {
+                    if (shouldAllocate(arg) && alloc.count(arg) == 0)
+                        allocateLocal(arg);
+                });
+            }
         });
+    }
+
+    size_t slots() { return maxLocalIdx; }
+
+    LocalSlotIdx operator[](Value* val) {
+        assert(alloc.count(val) && "getting unallocated val...");
+        return alloc[val];
+    }
+
+  private:
+    bool shouldAllocate(Value* val) const {
+        return val->type != PirType::voyd() &&
+               val->type != PirType::missing() &&
+               val->type != PirType::bottom() && !Env::isStaticEnv(val);
     }
 
     LocalSlotIdx allocateLocal(Value* val) {
         assert(alloc.count(val) == 0);
+        assert(val->type != PirType::voyd());
+        assert(!Env::isStaticEnv(val));
         alloc[val] = maxLocalIdx;
         DEBUGCODE(ALLOC_DEBUG, {
             val->printRef(std::cout);
@@ -58,8 +80,10 @@ class Alloc {
     }
 
     void allocateLocal(Value* val, LocalSlotIdx i) {
-        assert(alloc.count(val) == 0);
         assert(i < maxLocalIdx);
+        assert(alloc.count(val) == 0);
+        assert(val->type != PirType::voyd());
+        assert(!Env::isStaticEnv(val));
         alloc[val] = i;
         DEBUGCODE(ALLOC_DEBUG, {
             val->printRef(std::cout);
@@ -67,7 +91,8 @@ class Alloc {
         });
     }
 
-    size_t slots() { return maxLocalIdx; }
+    LocalSlotIdx maxLocalIdx = 0;
+    std::unordered_map<Value*, LocalSlotIdx> alloc;
 };
 
 class Context {
@@ -115,12 +140,16 @@ class Pir2Rir {
     size_t compile(Context& ctx, Code* code);
     void removePhis(Code* code);
     rir::Function* finalize();
+
+  private:
+    std::unordered_map<Promise*, FunIdxT> promises;
+    std::unordered_map<Promise*, SEXP> argNames;
 };
 
 size_t Pir2Rir::compile(Context& ctx, Code* code) {
 
     removePhis(code);
-    Alloc a(code);
+    Alloc alloc(code);
 
     // create labels for all bbs
     std::unordered_map<BB*, LabelT> bbLabels;
@@ -144,48 +173,62 @@ size_t Pir2Rir::compile(Context& ctx, Code* code) {
             TODO: is it always the case that the store and load use the same
             local slot?
         */
-        auto store = [&](BB::Instrs::iterator it, Alloc::LocalSlotIdx where) {
+        auto store = [&](BB::Instrs::iterator it, Value* what) {
             if (it + 1 != bb->end()) {
                 auto next = it + 1;
                 if (*next == (*it)->hasSingleUse() && (*next)->nargs() == 1)
                     return; // no store...
             }
-            cs << BC::stloc(where);
+            cs << BC::stloc(alloc[what]);
         };
-        auto load = [&](BB::Instrs::iterator it, Alloc::LocalSlotIdx where) {
+        auto load = [&](BB::Instrs::iterator it, Value* what) {
             if (it != bb->begin()) {
                 auto prev = it - 1;
                 if ((*prev)->hasSingleUse() == *it && (*it)->nargs() == 1)
                     return; // no load...
             }
-            cs << BC::ldloc(where);
+            cs << BC::ldloc(alloc[what]);
+        };
+
+        auto loadEnv = [&](BB::Instrs::iterator it, Value* val) {
+            assert(Env::isAnyEnv(val));
+            if (Env::isStaticEnv(val))
+                cs << BC::push(Env::Cast(val)->rho);
+            else
+                load(it, val);
         };
 
         for (auto it = bb->begin(); it != bb->end(); ++it) {
             auto instr = *it;
             switch (instr->tag) {
             case Tag::LdConst: {
-                auto res = a.alloc[instr];
                 cs << BC::push(LdConst::Cast(instr)->c);
-                store(it, res);
+                store(it, instr);
                 break;
             }
             case Tag::LdFun: {
-                assert(false && "not yet implemented.");
+                auto ldfun = LdFun::Cast(instr);
+                loadEnv(it, ldfun->env());
+                cs << BC::setEnv() << BC::ldfun(ldfun->varName);
+                store(it, ldfun);
                 break;
             }
             case Tag::LdVar: {
-                assert(false && "not yet implemented.");
+                auto ldvar = LdVar::Cast(instr);
+                loadEnv(it, ldvar->env());
+                cs << BC::setEnv() << BC::getvar(ldvar->varName);
+                store(it, ldvar);
                 break;
             }
             case Tag::ForSeqSize: {
-                assert(false && "not yet implemented.");
+                // make sure that the seq is at TOS? the instr doesn't push it!
+                cs << BC::forSeqSize();
+                store(it, instr);
                 break;
             }
             case Tag::LdArg: {
-                auto res = a.alloc[instr];
                 cs << BC::ldarg(LdArg::Cast(instr)->id);
-                store(it, res);
+                store(it, instr);
                 break;
             }
             case Tag::ChkMissing: {
@@ -205,13 +248,14 @@ size_t Pir2Rir::compile(Context& ctx, Code* code) {
                 break;
             }
             case Tag::StVar: {
-                assert(false && "not yet implemented.");
+                auto stvar = StVar::Cast(instr);
+                loadEnv(it, stvar->env());
+                cs << BC::setEnv() << BC::stvar(stvar->varName);
                 break;
             }
             case Tag::Branch: {
                 auto br = Branch::Cast(instr);
-                auto argslot = a.alloc[br->arg(0).val()];
-                load(it, argslot);
+                load(it, br->arg(0).val());
 
                 // jump through empty blocks
                 auto next0 = bb->next0;
@@ -237,15 +281,13 @@ size_t Pir2Rir::compile(Context& ctx, Code* code) {
             }
             case Tag::Return: {
                 Return* ret = Return::Cast(instr);
-                auto argslot = a.alloc[ret->arg(0).val()];
-                load(it, argslot);
+                load(it, ret->arg(0).val());
                 cs << BC::ret();
 
                 // this is the end of this BB
                 return;
             }
             case Tag::MkArg: {
-                assert(false && "not yet implemented.");
                 break;
             }
             case Tag::Seq: {
@@ -262,33 +304,27 @@ size_t Pir2Rir::compile(Context& ctx, Code* code) {
             }
             case Tag::Force: {
                 auto force = Force::Cast(instr);
-                auto res = a.alloc[force];
-                auto argslot = a.alloc[force->arg(0).val()];
-                load(it, argslot);
+                load(it, force->arg(0).val());
                 cs << BC::force();
-                store(it, res);
+                store(it, force);
                 break;
             }
             case Tag::CastType: {
-                assert(false && "not yet implemented.");
+                // TODO: what should it do?
                 break;
             }
             case Tag::AsLogical: {
                 auto aslogical = AsLogical::Cast(instr);
-                auto res = a.alloc[aslogical];
-                auto argslot = a.alloc[aslogical->arg(0).val()];
-                load(it, argslot);
+                load(it, aslogical->arg(0).val());
                 cs << BC::asLogical();
-                store(it, res);
+                store(it, aslogical);
                 break;
             }
             case Tag::AsTest: {
                 auto test = AsTest::Cast(instr);
-                auto res = a.alloc[test];
-                auto argslot = a.alloc[test->arg(0).val()];
-                load(it, argslot);
+                load(it, test->arg(0).val());
                 cs << BC::asbool();
-                store(it, res);
+                store(it, test);
                 break;
             }
             case Tag::Subassign1_1D: {
@@ -316,7 +352,10 @@ size_t Pir2Rir::compile(Context& ctx, Code* code) {
                 break;
             }
             case Tag::Inc: {
-                assert(false && "not yet implemented.");
+                auto inc = Inc::Cast(instr);
+                load(it, inc->arg(0).val());
+                cs << BC::inc();
+                store(it, inc);
                 break;
             }
             case Tag::IsObject: {
@@ -329,24 +368,19 @@ size_t Pir2Rir::compile(Context& ctx, Code* code) {
             }
             case Tag::PirCopy: {
                 PirCopy* copy = PirCopy::Cast(instr);
-                auto target = a.alloc[copy];
-                auto source = a.alloc[copy->arg(0).val()];
-                load(it, source);
-                store(it, target);
+                load(it, copy->arg(0).val());
+                store(it, copy);
                 break;
             }
 
 #define BINOP(Name, Factory)                                                   \
     case Tag::Name: {                                                          \
         auto binop = Name::Cast(instr);                                        \
-        auto lhs = a.alloc[binop->arg(0).val()];                               \
-        auto rhs = a.alloc[binop->arg(1).val()];                               \
-        auto res = a.alloc[binop];                                             \
-        load(it, lhs);                                                         \
-        load(it, rhs);                                                         \
+        load(it, binop->arg(0).val());                                         \
+        load(it, binop->arg(1).val());                                         \
         cs << BC::Factory();                                                   \
         cs.addSrcIdx(binop->srcIdx);                                           \
-        store(it, res);                                                        \
+        store(it, binop);                                                      \
         break;                                                                 \
     }
                 BINOP(Add, add);
@@ -369,15 +403,11 @@ size_t Pir2Rir::compile(Context& ctx, Code* code) {
 
 #define UNOP(Name, Factory)                                                    \
     case Tag::Name: {                                                          \
-        auto binop = Name::Cast(instr);                                        \
-        auto lhs = a.alloc[binop->arg(0).val()];                               \
-        auto rhs = a.alloc[binop->arg(1).val()];                               \
-        auto res = a.alloc[binop];                                             \
-        load(it, lhs);                                                         \
-        load(it, rhs);                                                         \
+        auto unop = Name::Cast(instr);                                         \
+        load(it, unop->arg(0).val());                                          \
         cs << BC::Factory();                                                   \
-        cs.addSrcIdx(binop->srcIdx);                                           \
-        store(it, res);                                                        \
+        cs.addSrcIdx(unop->srcIdx);                                            \
+        store(it, unop);                                                       \
         break;                                                                 \
     }
                 UNOP(Plus, uplus);
@@ -427,10 +457,8 @@ size_t Pir2Rir::compile(Context& ctx, Code* code) {
             }
             case Tag::Phi: {
                 auto phi = Phi::Cast(instr);
-                auto src = a.alloc[phi->arg(0).val()];
-                auto res = a.alloc[phi];
-                load(it, src);
-                store(it, res);
+                load(it, phi->arg(0).val());
+                store(it, phi);
                 break;
             }
             case Tag::Deopt: {
@@ -457,7 +485,7 @@ size_t Pir2Rir::compile(Context& ctx, Code* code) {
         cs << BC::br(bbLabels[next]);
     });
 
-    return a.slots();
+    return alloc.slots();
 }
 
 void Pir2Rir::removePhis(Code* code) {
@@ -499,8 +527,6 @@ rir::Function* Pir2Rir::finalize() {
     FunctionWriter function = FunctionWriter::create();
     Context ctx(function);
 
-    std::unordered_map<Promise*, FunIdxT> promises;
-    std::unordered_map<Promise*, SEXP> argNames;
     size_t i = 0;
     for (auto arg : cls->defaultArgs) {
         if (!arg)

@@ -1329,6 +1329,23 @@ SEXP evalRirCode(Code* c, Context* ctx, EnvironmentProxy* ep) {
             NEXT();
         }
 
+        INSTRUCTION(getvar_) {
+            Immediate id = readImmediate();
+            advanceImmediate();
+            res = cachedGetVar(ep->env(), id, ctx, bindingCache);
+            R_Visible = TRUE;
+
+            if (res == R_UnboundValue) {
+                Rf_error("object not found");
+            }
+
+            if (NAMED(res) == 0 && res != R_NilValue)
+                SET_NAMED(res, 1);
+
+            ostack_push(ctx, res);
+            NEXT();
+        }
+
         INSTRUCTION(ldvar2_) {
             SEXP sym = readConst(ctx, readImmediate());
             advanceImmediate();

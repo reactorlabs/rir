@@ -69,6 +69,13 @@ BC BC::ldvar(SEXP sym) {
     i.pool = Pool::insert(sym);
     return BC(Opcode::ldvar_, i);
 }
+BC BC::getvar(SEXP sym) {
+    assert(TYPEOF(sym) == SYMSXP);
+    assert(strlen(CHAR(PRINTNAME(sym))));
+    ImmediateT i;
+    i.pool = Pool::insert(sym);
+    return BC(Opcode::getvar_, i);
+}
 BC BC::ldvar2(SEXP sym) {
     assert(TYPEOF(sym) == SYMSXP);
     assert(strlen(CHAR(PRINTNAME(sym))));

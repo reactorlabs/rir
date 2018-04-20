@@ -41,6 +41,11 @@ DEF_INSTR(ldfun_, 1, 0, 1, 0)
 DEF_INSTR(ldvar_, 1, 0, 1, 0)
 
 /**
+ * getvar_:: like ldvar_ but don't force if promise or fail if missing
+ */
+DEF_INSTR(getvar_, 1, 0, 1, 0)
+
+/**
  * ldvar2_:: take immediate CP index of symbol, finding binding in enclosing env and push.
  */
 DEF_INSTR(ldvar2_, 1, 0, 1, 0)
