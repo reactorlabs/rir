@@ -21,19 +21,22 @@ namespace rir {
 class Compiler {
     SEXP exp;
     SEXP formals;
+    SEXP closureEnv;
+
     Preserve preserve;
 
-  public:
-
-    Compiler(SEXP exp) : exp(exp), formals(R_NilValue) {
+    Compiler(SEXP exp) : exp(exp), formals(R_NilValue), closureEnv(nullptr) {
         preserve(exp);
     }
 
-    Compiler(SEXP exp, SEXP formals) : exp(exp), formals(formals) {
+    Compiler(SEXP exp, SEXP formals, SEXP env)
+        : exp(exp), formals(formals), closureEnv(env) {
         preserve(exp);
         preserve(formals);
+        preserve(env);
     }
 
+  public:
     SEXP finalize();
 
     static SEXP compileExpression(SEXP ast) {
@@ -62,11 +65,11 @@ class Compiler {
         return c.finalize();
     }
 
-    static SEXP compileClosure(SEXP ast, SEXP formals) {
+    // To compile a function which is not yet closed
+    static SEXP compileFunction(SEXP ast, SEXP formals) {
         Protect p;
-        SEXP closure = p(allocSExp(CLOSXP));
 
-        Compiler c(ast, formals);
+        Compiler c(ast, formals, nullptr);
         SEXP res = p(c.finalize());
 
         // Allocate a new vtable.
@@ -77,9 +80,38 @@ class Compiler {
         vtable->put(0, Function::unpack(res));
 
         // Set the closure fields.
-        // NOTE: The closure environment is set by the caller.
+        return vtable->container();
+    }
+
+    static SEXP compileClosure(SEXP inClosure) {
+        Protect p;
+        assert(TYPEOF(inClosure) == CLOSXP);
+
+        SEXP body = BODY(inClosure);
+        SEXP formals = FORMALS(inClosure);
+        SEXP env = CLOENV(inClosure);
+
+        if (TYPEOF(body) == BCODESXP) {
+            R_PreserveObject(body);
+            body = VECTOR_ELT(CDR(body), 0);
+        }
+
+        SEXP closure = p(allocSExp(CLOSXP));
+
+        Compiler c(body, formals, env);
+        SEXP res = p(c.finalize());
+
+        // Allocate a new vtable.
+        DispatchTable* vtable = DispatchTable::create(1);
+
+        // Initialize the vtable. Initially the table has one entry, which is
+        // the compiled function.
+        vtable->put(0, Function::unpack(res));
+
+        // Set the closure fields.
         SET_BODY(closure, vtable->container());
         SET_FORMALS(closure, formals);
+        SET_CLOENV(closure, env);
 
         return closure;
     }

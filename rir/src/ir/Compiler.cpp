@@ -36,9 +36,10 @@ class Context {
       public:
         CodeStream cs;
         std::stack<LoopContext> loops;
+        SEXP env;
         CodeContext* parent;
-        CodeContext(SEXP ast, FunctionWriter& fun, CodeContext* p)
-            : cs(fun, ast), parent(p) {}
+        CodeContext(SEXP ast, SEXP env, FunctionWriter& fun, CodeContext* p)
+            : cs(fun, ast), env(env), parent(p) {}
         virtual ~CodeContext() {}
         bool inLoop() {
             return !loops.empty() ||
@@ -67,7 +68,7 @@ class Context {
     class PromiseContext : public CodeContext {
       public:
         PromiseContext(SEXP ast, FunctionWriter& fun, CodeContext* p)
-            : CodeContext(ast, fun, p) {}
+            : CodeContext(ast, nullptr, fun, p) {}
         bool loopIsLocal() override {
             if (loops.empty()) {
                 parent->setContextNeeded();
@@ -80,6 +81,7 @@ class Context {
     std::stack<CodeContext*> code;
 
     CodeStream& cs() { return code.top()->cs; }
+    SEXP env() { return code.top()->env; }
 
     FunctionWriter& fun;
     Preserve& preserve;
@@ -116,7 +118,10 @@ class Context {
 
     void popLoop() { code.top()->loops.pop(); }
 
-    void push(SEXP ast) { code.push(new CodeContext(ast, fun, code.empty() ? nullptr : code.top())); }
+    void push(SEXP ast, SEXP env) {
+        code.push(new CodeContext(ast, env, fun,
+                                  code.empty() ? nullptr : code.top()));
+    }
 
     void pushPromiseContext(SEXP ast) { code.push(new PromiseContext(ast, fun, code.empty() ? nullptr : code.top())); }
 
@@ -173,10 +178,8 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
     CodeStream& cs = ctx.cs();
 
     if (fun == symbol::Function && args.length() == 3) {
-        auto cls = Compiler::compileClosure(args[1], args[0]);
-        cs << BC::push(FORMALS(cls))
-           << BC::push(BODY(cls))
-           << BC::push(args[2])
+        auto fun = Compiler::compileFunction(args[1], args[0]);
+        cs << BC::push(args[0]) << BC::push(fun) << BC::push(args[2])
            << BC::close();
         return true;
     }
@@ -1084,10 +1087,13 @@ SEXP findClosure(SEXP sym, SEXP rho) {
 
 // try to look up a closure
 bool compileWithGuess(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
+    if (!ctx.env())
+        return false;
+
     RList args(args_);
     CodeStream& cs = ctx.cs();
 
-    SEXP cls = findClosure(fun, R_GlobalEnv);  // or current env of the closure?
+    SEXP cls = findClosure(fun, ctx.env());
     if (!cls)
         return false;
 
@@ -1281,7 +1287,7 @@ SEXP Compiler::finalize() {
         signature->pushDefaultArgument();
     }
 
-    ctx.push(exp);
+    ctx.push(exp, closureEnv);
     compileExpr(ctx, exp);
     ctx.cs() << BC::ret();
     ctx.pop();
