@@ -363,7 +363,11 @@ size_t Pir2Rir::compile(Context& ctx, Code* code) {
                 break;
             }
             case Tag::LdFunctionEnv: {
-                assert(false && "not yet implemented.");
+                // TODO: what should happen? For now get the current env (should
+                // be the promise environment that the evaluator was called
+                // with) and store it into local and leave it set as current
+                cs << BC::getEnv();
+                store(it, instr);
                 break;
             }
             case Tag::PirCopy: {
@@ -423,7 +427,22 @@ size_t Pir2Rir::compile(Context& ctx, Code* code) {
                 break;
             }
             case Tag::Call: {
-                assert(false && "not yet implemented.");
+                auto call = Call::Cast(instr);
+                auto cls = call->cls();
+                loadEnv(it, call->env());
+                cs << BC::setEnv()
+                   << BC::ldloc(alloc[cls]); // TODO: can use load(it, cls) for
+                                             // the closure?
+
+                std::vector<FunIdxT> callArgs;
+                call->eachCallArg([&](Value* arg) {
+                    auto mkarg = MkArg::Cast(arg);
+                    callArgs.push_back(promises[mkarg->prom]);
+                });
+
+                cs.insertCall(Opcode::call_, callArgs, {},
+                              Pool::get(call->srcIdx));
+                store(it, call);
                 break;
             }
             case Tag::StaticCall: {
@@ -435,7 +454,14 @@ size_t Pir2Rir::compile(Context& ctx, Code* code) {
                 break;
             }
             case Tag::CallBuiltin: {
-                assert(false && "not yet implemented.");
+                auto blt = CallBuiltin::Cast(instr);
+                // TODO: is it needed to set the environment?
+                loadEnv(it, blt->env());
+                cs << BC::setEnv();
+                blt->eachCallArg([&](Value* arg) { load(it, arg); });
+                cs.insertStackCall(Opcode::static_call_stack_, blt->nCallArgs(),
+                                   {}, Pool::get(blt->srcIdx), blt->blt);
+                store(it, blt);
                 break;
             }
             case Tag::CallSafeBuiltin: {
@@ -444,15 +470,14 @@ size_t Pir2Rir::compile(Context& ctx, Code* code) {
             }
             case Tag::MkEnv: {
                 auto mkenv = MkEnv::Cast(instr);
-                // create env, parent?
-                auto parent = Env::Cast(mkenv->parent());
-                assert(parent->rho);
-                cs << BC::push(parent->rho) << BC::makeEnv() << BC::setEnv();
+                loadEnv(it, mkenv->parent());
+                cs << BC::makeEnv() << BC::dup() << BC::setEnv();
                 // bind all args
                 mkenv->eachLocalVar([&](SEXP name, Value* val) {
-                    auto slot = a.alloc[val];
-                    cs << BC::ldloc(slot) << BC::stvar(name);
+                    load(it, val);
+                    cs << BC::stvar(name);
                 });
+                store(it, mkenv);
                 break;
             }
             case Tag::Phi: {

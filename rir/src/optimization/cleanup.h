@@ -253,6 +253,18 @@ class BCCleanup : public InstructionDispatcher::Receiver {
         }
     }
 
+    void get_env_(CodeEditor::Iterator ins) override {
+        // remove get_env_; set_env_
+        if (ins + 1 != code_.end()) {
+            auto next = ins + 1;
+            if ((*next).is(Opcode::set_env_)) {
+                auto cur = ins.asCursor(code_);
+                cur.remove();
+                cur.remove();
+            }
+        }
+    }
+
     // TODO there is some brokennes when there is dead code
     // void br_(CodeEditor::Iterator ins) override {
     //     auto target = code_.target(*ins);

@@ -234,11 +234,12 @@ CallSafeBuiltin::CallSafeBuiltin(SEXP builtin, const std::vector<Value*>& args)
 }
 
 CallBuiltin::CallBuiltin(Value* e, SEXP builtin,
-                         const std::vector<Value*>& args)
-    : VarLenInstruction(PirType::valOrLazy(), e), builtin(getBuiltin(builtin)),
-      builtinId(getBuiltinNr(builtin)) {
+                         const std::vector<Value*>& args, unsigned src)
+    : VarLenInstruction(PirType::valOrLazy(), e), blt(builtin),
+      builtin(getBuiltin(builtin)), builtinId(getBuiltinNr(builtin)) {
     for (unsigned i = 0; i < args.size(); ++i)
         this->pushArg(args[i], PirType::val());
+    srcIdx = src;
 }
 
 void CallBuiltin::printArgs(std::ostream& out) {
@@ -286,5 +287,6 @@ void StaticCall::printArgs(std::ostream& out) {
         out << ", ";
     Instruction::printArgs(out);
 }
-}
-}
+
+} // namespace pir
+} // namespace rir

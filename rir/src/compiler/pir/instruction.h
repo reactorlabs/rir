@@ -697,11 +697,12 @@ class VLI(Call, Effect::Any, EnvAccess::Leak), public CallInstructionI {
     Value* cls() { return arg(clsIdx).val(); }
     size_t nCallArgs() override { return nargs() - callArgOffset; }
 
-    Call(Value* e, Value* fun, const std::vector<Value*>& args)
+    Call(Value * e, Value * fun, const std::vector<Value*>& args, unsigned src)
         : VarLenInstruction(PirType::valOrLazy(), e) {
         this->pushArg(fun, RType::closure);
         for (unsigned i = 0; i < args.size(); ++i)
             this->pushArg(args[i], RType::prom);
+        srcIdx = src;
     }
 
     void eachCallArg(ArgumentValueIterator it) override {
@@ -783,10 +784,21 @@ typedef SEXP (*CCODE)(SEXP, SEXP, SEXP, SEXP);
 
 class VLI(CallBuiltin, Effect::Any, EnvAccess::Write) {
   public:
+    constexpr static size_t callArgOffset = 1;
+    SEXP blt;
     const CCODE builtin;
     int builtinId;
 
-    CallBuiltin(Value* e, SEXP builtin, const std::vector<Value*>& args);
+    size_t nCallArgs() { return nargs() - callArgOffset; }
+
+    CallBuiltin(Value* e, SEXP builtin, const std::vector<Value*>& args,
+                unsigned src);
+
+    void eachCallArg(Instruction::ArgumentValueIterator it) {
+        for (size_t i = 0; i < nCallArgs(); ++i) {
+            it(arg(i + callArgOffset).val());
+        }
+    }
 
     void printArgs(std::ostream& out) override;
 };

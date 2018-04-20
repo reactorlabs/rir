@@ -172,7 +172,7 @@ void StackMachine::runCurrentBC(Rir2Pir& rir2pir, Builder& insert) {
             BB* fallback = insert.createBB();
             insert.bb = fallback;
             curBB->next1 = fallback;
-            Value* r2 = insert(new Call(insert.env, pop(), args));
+            Value* r2 = insert(new Call(insert.env, pop(), args, cs->call));
 
             BB* cont = insert.createBB();
             asExpected->next0 = cont;
@@ -180,7 +180,7 @@ void StackMachine::runCurrentBC(Rir2Pir& rir2pir, Builder& insert) {
             insert.bb = cont;
             push(insert(new Phi({r1, r2}, {asExpected, fallback})));
         } else {
-            push(insert(new Call(insert.env, pop(), args)));
+            push(insert(new Call(insert.env, pop(), args, cs->call)));
         }
         break;
     }
@@ -220,7 +220,7 @@ void StackMachine::runCurrentBC(Rir2Pir& rir2pir, Builder& insert) {
             if (getBuiltinNr(target) == vector)
                 push(insert(new CallSafeBuiltin(target, args)));
             else
-                push(insert(new CallBuiltin(env, target, args)));
+                push(insert(new CallBuiltin(env, target, args, cs->call)));
         } else {
             Closure* f = rir2pir.compiler().compileClosure(target);
             push(insert(new StaticEagerCall(env, f, args)));
