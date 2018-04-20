@@ -1097,6 +1097,9 @@ bool compileWithGuess(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
     if (!cls)
         return false;
 
+    if (isValidClosureSEXP(cls) && isValidClosureSEXP(cls)->isPirCompiled)
+        return false;
+
     RList formals(FORMALS(cls));
     if (formals.length() != args.length())
         return false;

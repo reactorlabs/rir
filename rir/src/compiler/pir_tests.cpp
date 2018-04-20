@@ -204,7 +204,7 @@ SEXP parseCompileToRir(std::string input) {
     SEXP expr = p(R_ParseVector(str, -1, &status, R_NilValue));
     SEXP cls = p(Rf_eval(VECTOR_ELT(expr, 0), R_GlobalEnv));
 
-    return Compiler::compileClosure(BODY(cls), FORMALS(cls));
+    return Compiler::compileClosure(cls);
 }
 
 SEXP createRWrapperCall(std::string wrapper) {
