@@ -17,7 +17,7 @@ compile(const std::string& context, const std::string& expr, pir::Module* m,
         SEXP super = R_GlobalEnv) {
     Protect p;
 
-    auto eval = [&](const std::string& expr, SEXP env) {
+    auto eval = [&p](const std::string& expr, SEXP env) {
         ParseStatus status;
         // Parse expression
         SEXP str = p(Rf_mkString(("{" + expr + "}").c_str()));
@@ -56,7 +56,6 @@ compile(const std::string& context, const std::string& expr, pir::Module* m,
         }
     }
 
-    m->print(std::cout);
     // cmp.setVerbose(true);
     cmp.optimizeModule();
     return results;
@@ -91,9 +90,12 @@ bool test42(const std::string& input) {
     return true;
 };
 
-class NullBuffer : public std::ostream {
+class NullBuffer : public std::ostream, std::streambuf {
   public:
-    int overflow(int c) { return c; }
+    NullBuffer() : std::ostream(this) {}
+    int overflow(int c) {
+        return (c == std::ostream::traits_type::eof()) ? '\0' : c;
+    }
 };
 
 bool verify(Module* m) {
@@ -105,8 +107,9 @@ bool verify(Module* m) {
         });
     });
     // TODO: find fix for osx
-    // NullBuffer nb;
-    m->print(std::cout);
+    NullBuffer nb;
+    m->print(nb);
+    // m->print(std::cout);
 
     return true;
 }
@@ -137,7 +140,7 @@ bool testDelayEnv() {
 
     pir::Module m;
     auto res = compile("", "a <- function(b) {f <- b; b[[2]]}", &m);
-    bool t = Visitor::check(res["a"]->entry, [&](Instruction* i, BB* bb) {
+    bool t = Visitor::check(res["a"]->entry, [&m](Instruction* i, BB* bb) {
         if (i->hasEnv())
             CHECK(Deopt::Cast(bb->last()));
         return true;
@@ -148,14 +151,14 @@ bool testDelayEnv() {
 extern "C" SEXP Rf_NewEnvironment(SEXP, SEXP, SEXP);
 bool testSuperAssign() {
     auto hasAssign = [](pir::Closure* f) {
-        return !Visitor::check(f->entry, [&](Instruction* i) {
+        return !Visitor::check(f->entry, [](Instruction* i) {
             if (StVar::Cast(i))
                 return false;
             return true;
         });
     };
     auto hasSuperAssign = [](pir::Closure* f) {
-        return !Visitor::check(f->entry, [&](Instruction* i) {
+        return !Visitor::check(f->entry, [](Instruction* i) {
             if (StVarSuper::Cast(i))
                 return false;
             return true;
@@ -193,7 +196,6 @@ bool testSuperAssign() {
 
 static Test tests[] = {
     Test("test_42L", []() { return test42("42L"); }),
-    Test("test_inline", []() { return test42("{f <- function() 42L; f()}"); }),
     Test("test_inline", []() { return test42("{f <- function() 42L; f()}"); }),
     Test("test_inline_two",
          []() {
