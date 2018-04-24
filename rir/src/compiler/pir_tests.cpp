@@ -196,8 +196,6 @@ bool testSuperAssign() {
 
 static Test tests[] = {
     Test("test_42L", []() { return test42("42L"); }),
-    Test("test_inline", []() { return test42("{f <- function() 42L; f()}");
-    }),
     Test("test_inline", []() { return test42("{f <- function() 42L; f()}"); }),
     Test("test_inline_two",
          []() {
