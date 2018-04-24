@@ -90,9 +90,12 @@ bool test42(const std::string& input) {
     return true;
 };
 
-class NullBuffer : public std::ostream {
+class NullBuffer : public std::ostream, std::streambuf {
   public:
-    int overflow(int c) { return (c == traits_type::eof()) ? '\0' : c; }
+    NullBuffer() : std::ostream(this) {}
+    int overflow(int c) {
+        return (c == std::ostream::traits_type::eof()) ? '\0' : c;
+    }
 };
 
 bool verify(Module* m) {
@@ -106,6 +109,7 @@ bool verify(Module* m) {
     // TODO: find fix for osx
     NullBuffer nb;
     m->print(nb);
+    // m->print(std::cout);
 
     return true;
 }
@@ -192,7 +196,8 @@ bool testSuperAssign() {
 
 static Test tests[] = {
     Test("test_42L", []() { return test42("42L"); }),
-    Test("test_inline", []() { return test42("{f <- function() 42L; f()}"); }),
+    Test("test_inline", []() { return test42("{f <- function() 42L; f()}");
+    }),
     Test("test_inline", []() { return test42("{f <- function() 42L; f()}"); }),
     Test("test_inline_two",
          []() {
