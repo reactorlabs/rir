@@ -34,6 +34,12 @@ void DelayInstr::apply(Closure* function) {
                     } else {
                         next = bb->moveToBegin(ip, usage->bb());
                     }
+                } else if (usage && usage != *next) {
+                    auto swap = ip;
+                    while (swap + 1 != bb->end() && *(swap + 1) != usage) {
+                        bb->swapWithNext(swap);
+                        ++swap;
+                    }
                 }
             }
 
