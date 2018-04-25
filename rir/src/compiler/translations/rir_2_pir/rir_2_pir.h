@@ -1,8 +1,8 @@
 #ifndef RIR_2_PIR_H
 #define RIR_2_PIR_H
 
-#include "../rir_compiler.h"
 #include "../ir_translator.h"
+#include "../rir_compiler.h"
 #include "stack_machine.h"
 #include <unordered_map>
 
@@ -11,11 +11,11 @@ namespace pir {
 
 class Rir2Pir : public IRTranslator {
   public:
-    Rir2Pir(RirCompiler& cmp) : Rir2Pir(cmp, "Rir 2 Pir")  { }
-    Rir2Pir(RirCompiler& cmp, std::string name) : IRTranslator(cmp, name) { }
+    Rir2Pir(RirCompiler& cmp) : Rir2Pir(cmp, "Rir 2 Pir") {}
+    Rir2Pir(RirCompiler& cmp, std::string name) : IRTranslator(cmp, name) {}
 
     void apply(IRCode);
-    Value* translate(rir::Function* , rir::Code*);
+    Value* translate(rir::Function*, rir::Code*);
 
     typedef StackMachine::ReturnSite ReturnSite;
     void addReturn(ReturnSite r) { results.push_back(r); }

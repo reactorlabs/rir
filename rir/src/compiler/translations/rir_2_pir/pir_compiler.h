@@ -12,10 +12,11 @@ class PirCompiler : public RirCompiler {
 
     IRCode compile(IRCode);
     void optimizeModule();
-    
+
     static RirInput createRirInputFromSEXP(SEXP, std::vector<SEXP>&, Env* env);
-    static RirInput createRirInputFromFunction(rir::Function*, std::vector<SEXP>&);
-    
+    static RirInput createRirInputFromFunction(rir::Function*,
+                                               std::vector<SEXP>&);
+
   private:
     Closure* compileClosure(rir::Function*, const std::vector<SEXP>&,
                             Env* closureEnv);
@@ -23,7 +24,6 @@ class PirCompiler : public RirCompiler {
     void applyOptimizations(Closure*, const std::string&);
     void printAfterPass(const std::string&, const std::string&, Closure*,
                         size_t);
-
 };
 } // namespace pir
 } // namespace rir

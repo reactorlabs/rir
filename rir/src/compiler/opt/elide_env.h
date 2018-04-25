@@ -15,7 +15,8 @@ namespace pir {
  */
 class ElideEnv : public IRTranslator {
   public:
-    ElideEnv(RirCompiler& compiler) : IRTranslator(compiler, "Elide Environment") {};
+    ElideEnv(RirCompiler& compiler)
+        : IRTranslator(compiler, "Elide Environment"){};
 
     void apply(IRCode) override;
 };

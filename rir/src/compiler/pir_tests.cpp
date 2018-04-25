@@ -50,12 +50,13 @@ compile(const std::string& context, const std::string& expr, pir::Module* m,
         auto fun = *f;
         if (TYPEOF(fun) == CLOSXP) {
             assert(isValidClosureSEXP(fun));
-            std::vector<SEXP> fmls;    
-            pir::RirInput input = pir::PirCompiler::createRirInputFromSEXP(fun, fmls,
-                m->getEnv(CLOENV(fun)));
-            pir::IRCode entry; 
+            std::vector<SEXP> fmls;
+            pir::RirInput input = pir::PirCompiler::createRirInputFromSEXP(
+                fun, fmls, m->getEnv(CLOENV(fun)));
+            pir::IRCode entry;
             entry.rirInput = &input;
-            results[CHAR(PRINTNAME(f.tag()))] = cmp.compile(entry).getPirInputFormat();
+            results[CHAR(PRINTNAME(f.tag()))] =
+                cmp.compile(entry).getPirInputFormat();
         }
     }
 

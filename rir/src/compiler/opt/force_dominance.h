@@ -17,7 +17,8 @@ namespace pir {
 class Closure;
 class ForceDominance : public IRTranslator {
   public:
-    ForceDominance(RirCompiler& compiler) : IRTranslator(compiler, "force dominance") {};
+    ForceDominance(RirCompiler& compiler)
+        : IRTranslator(compiler, "force dominance"){};
 
     void apply(IRCode) override;
 };

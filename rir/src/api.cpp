@@ -130,9 +130,10 @@ REXPORT SEXP pir_compile(SEXP what) {
     pir::PirCompiler cmp(m);
     cmp.setVerbose(true);
     cmp.enableOptimizations();
-    std::vector<SEXP> fmls; 
-    pir::RirInput input = cmp.createRirInputFromSEXP(what, fmls, m->getEnv(CLOENV(what)));
-    pir::IRCode entry; 
+    std::vector<SEXP> fmls;
+    pir::RirInput input =
+        cmp.createRirInputFromSEXP(what, fmls, m->getEnv(CLOENV(what)));
+    pir::IRCode entry;
     entry.rirInput = &input;
     cmp.compile(entry);
     cmp.optimizeModule();

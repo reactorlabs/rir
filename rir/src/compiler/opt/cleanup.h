@@ -8,8 +8,7 @@ namespace pir {
 
 class Cleanup : public IRTranslator {
   public:
-    Cleanup(RirCompiler& compiler)
-        : IRTranslator(compiler, "cleanup") {};
+    Cleanup(RirCompiler& compiler) : IRTranslator(compiler, "cleanup"){};
 
     void apply(IRCode) override;
 };

@@ -15,7 +15,8 @@ namespace pir {
 
 class DelayEnv : public IRTranslator {
   public:
-    DelayEnv(RirCompiler& compiler) : IRTranslator(compiler, "Delay Environment"){};
+    DelayEnv(RirCompiler& compiler)
+        : IRTranslator(compiler, "Delay Environment"){};
 
     void apply(IRCode) override;
 };

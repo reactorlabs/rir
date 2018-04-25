@@ -1,10 +1,10 @@
 #include "stack_machine.h"
-#include "pir_compiler.h"
 #include "../../analysis/query.h"
 #include "../../pir/pir_impl.h"
 #include "../../util/builder.h"
 #include "R/Funtab.h"
 #include "ir/BC.h"
+#include "pir_compiler.h"
 #include "rir_2_pir.h"
 #include "rir_inlined_promise_2_pir.h"
 
@@ -153,7 +153,8 @@ void StackMachine::runCurrentBC(Rir2Pir& rir2pir, Builder& insert) {
             }
             Value* val = Missing::instance();
             if (Query::pure(prom)) {
-                RirInlinedPromise2Rir compiler(cmp, "Rir to Pir: Promise Inliner");
+                RirInlinedPromise2Rir compiler(cmp,
+                                               "Rir to Pir: Promise Inliner");
                 val = compiler.translate(srcFunction, promiseCode);
             }
             args.push_back(insert(new MkArg(prom, val, env)));
@@ -161,12 +162,13 @@ void StackMachine::runCurrentBC(Rir2Pir& rir2pir, Builder& insert) {
 
         if (monomorphic && isValidClosureSEXP(monomorphic)) {
             auto& cmp = rir2pir.compiler();
-            std::vector<SEXP> fmls;    
-            RirInput input = PirCompiler::createRirInputFromSEXP(monomorphic, fmls, 
-                cmp.getEnv(monomorphic));
+            std::vector<SEXP> fmls;
+            RirInput input = PirCompiler::createRirInputFromSEXP(
+                monomorphic, fmls, cmp.getEnv(monomorphic));
             IRCode entry = {.rirInput = &input};
             PirCompiler anotherCompiler(cmp.getModule());
-            if (cmp.optimizationsEnabled()) anotherCompiler.enableOptimizations();
+            if (cmp.optimizationsEnabled())
+                anotherCompiler.enableOptimizations();
             Closure* f = (anotherCompiler.compile(entry)).getPirInputFormat();
 
             Value* expected = insert(new LdConst(monomorphic));
@@ -236,11 +238,12 @@ void StackMachine::runCurrentBC(Rir2Pir& rir2pir, Builder& insert) {
                 push(insert(new CallBuiltin(env, target, args)));
         } else {
             std::vector<SEXP> fmls;
-            RirInput input = PirCompiler::createRirInputFromSEXP(target, fmls,
-                cmp.getEnv(target));
-            IRCode entry; 
+            RirInput input = PirCompiler::createRirInputFromSEXP(
+                target, fmls, cmp.getEnv(target));
+            IRCode entry;
             entry.rirInput = &input;
-            Closure* f = (rir2pir.compiler().compile(entry)).getPirInputFormat();
+            Closure* f =
+                (rir2pir.compiler().compile(entry)).getPirInputFormat();
             push(insert(new StaticEagerCall(env, f, args)));
         }
         break;

@@ -15,7 +15,8 @@ namespace pir {
  */
 class ScopeResolution : public IRTranslator {
   public:
-    ScopeResolution(RirCompiler& compiler) : IRTranslator(compiler, "scope resulotion") {};
+    ScopeResolution(RirCompiler& compiler)
+        : IRTranslator(compiler, "scope resulotion"){};
 
     void apply(IRCode) override;
 };

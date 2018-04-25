@@ -138,7 +138,7 @@ namespace pir {
 
 void ForceDominance::apply(IRCode input) {
     Closure* function = input.getPirInputFormat();
-    
+
     ForceDominanceAnalysisResult analysis(function->entry);
 
     std::unordered_map<Force*, Value*> inlinedPromise;

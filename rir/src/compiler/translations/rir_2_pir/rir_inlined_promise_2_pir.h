@@ -9,7 +9,9 @@ namespace pir {
 
 class RirInlinedPromise2Rir : public Rir2Pir {
   public:
-    RirInlinedPromise2Rir(RirCompiler& cmp, std::string name) : Rir2Pir(cmp, name) { }
+    RirInlinedPromise2Rir(RirCompiler& cmp, std::string name)
+        : Rir2Pir(cmp, name) {}
+
   private:
     void compileReturn(pir::Value*) override;
 };

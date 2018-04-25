@@ -14,7 +14,7 @@ void ElideEnv::apply(IRCode input) {
     std::unordered_map<Value*, Value*> envDependency;
 
     Closure* function = input.getPirInputFormat();
-    
+
     Visitor::run(function->entry, [&](Instruction* i) {
         if (i->hasEnv() && !StVar::Cast(i))
             envNeeded.insert(i->env());

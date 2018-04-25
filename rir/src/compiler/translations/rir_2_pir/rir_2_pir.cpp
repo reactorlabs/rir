@@ -1,5 +1,4 @@
 #include "rir_2_pir.h"
-#include "pir_compiler.h"
 #include "../../analysis/query.h"
 #include "../../analysis/verifier.h"
 #include "../../pir/pir_impl.h"
@@ -9,6 +8,7 @@
 #include "../../util/visitor.h"
 #include "R/RList.h"
 #include "ir/BC.h"
+#include "pir_compiler.h"
 
 #include <deque>
 #include <vector>
@@ -49,8 +49,8 @@ namespace pir {
 void Rir2Pir::apply(IRCode input) {
     rir::Function* srcFunction = input.getRirInputFormat()->function;
     translate(srcFunction, srcFunction->body());
-    //input.pirClosure 
-} 
+    // input.pirClosure
+}
 
 Value* Rir2Pir::translate(rir::Function* srcFunction, rir::Code* srcCode) {
     assert(!done);
@@ -146,8 +146,8 @@ Value* Rir2Pir::translate(rir::Function* srcFunction, rir::Code* srcCode) {
                 state.setEntry(branch);
                 insert->bb = branch;
                 Value* front = state.front();
-                (*insert)(new Deopt(insert->env, state.getPC(), state.stack_size(),
-                                 &front));
+                (*insert)(new Deopt(insert->env, state.getPC(),
+                                    state.stack_size(), &front));
                 break;
             }
             default:
@@ -183,12 +183,14 @@ Value* Rir2Pir::translate(rir::Function* srcFunction, rir::Code* srcCode) {
 
             DispatchTable* dt = DispatchTable::unpack(code);
             rir::Function* function = dt->first();
-            
-            RirInput input = PirCompiler::createRirInputFromFunction(function, fmls);
-            IRCode entry {.rirInput = &input};
+
+            RirInput input =
+                PirCompiler::createRirInputFromFunction(function, fmls);
+            IRCode entry{.rirInput = &input};
             PirCompiler anotherCompiler(cmp.getModule());
             anotherCompiler.setVerbose(true);
-            Closure* innerF = (anotherCompiler.compile(entry)).getPirInputFormat();
+            Closure* innerF =
+                (anotherCompiler.compile(entry)).getPirInputFormat();
 
             state.push((*insert)(new MkFunCls(innerF, insert->env)));
 
@@ -282,6 +284,8 @@ void Rir2Pir::recoverCFG(rir::Function* srcFunction, rir::Code* srcCode) {
     }
 }
 
-void Rir2Pir::compileReturn(Value* res) { (*cmp.getBuilder())(new Return(res)); }
+void Rir2Pir::compileReturn(Value* res) {
+    (*cmp.getBuilder())(new Return(res));
+}
 } // namespace pir
 } // namespace rir

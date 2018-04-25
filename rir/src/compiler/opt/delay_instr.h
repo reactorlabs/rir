@@ -12,7 +12,8 @@ namespace pir {
  */
 class DelayInstr : public IRTranslator {
   public:
-    DelayInstr(RirCompiler& compiler) : IRTranslator(compiler, "Delay Instructions"){};
+    DelayInstr(RirCompiler& compiler)
+        : IRTranslator(compiler, "Delay Instructions"){};
 
     void apply(IRCode) override;
 };
