@@ -27,7 +27,7 @@ Closure* Module::declare(rir::Function* fun, const std::vector<SEXP>& args,
                          Env* env) {
     assert(functions.count(fun) == 0);
     auto* f = new pir::Closure(args, env);
-    auto aa = functions.emplace(fun, f);
+    functions.emplace(fun, f);
     return f;
 }
 
