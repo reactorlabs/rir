@@ -9,10 +9,10 @@
 namespace rir {
 namespace pir {
 
-void DelayEnv::apply(Closure* function) {
+void DelayEnv::apply(IRCode input) {
     std::vector<MkEnv*> envs;
 
-    Visitor::run(function->entry, [&](BB* bb) {
+    Visitor::run(input.getPirInputFormat()->entry, [&](BB* bb) {
         std::unordered_set<MkEnv*> done;
         MkEnv* e;
 

@@ -6,7 +6,7 @@
 #include "analysis/verifier.h"
 #include "ir/Compiler.h"
 #include "pir/pir_impl.h"
-#include "translations/rir_2_pir/rir_2_pir.h"
+#include "translations/rir_2_pir/pir_compiler.h"
 #include "util/visitor.h"
 
 namespace {
@@ -41,8 +41,8 @@ compile(const std::string& context, const std::string& expr, pir::Module* m,
     ENCLOS(env) = super;
     eval(expr, env);
 
-    pir::Rir2PirCompiler cmp(m);
-
+    pir::PirCompiler cmp(m);
+    cmp.enableOptimizations();
     // Compile every function the expression created
     std::unordered_map<std::string, pir::Closure*> results;
     auto envlist = RList(FRAME(env));
@@ -50,14 +50,18 @@ compile(const std::string& context, const std::string& expr, pir::Module* m,
         auto fun = *f;
         if (TYPEOF(fun) == CLOSXP) {
             assert(isValidClosureSEXP(fun));
-            // isValidClosureSEXP(fun)->body()->print();
-            results[CHAR(PRINTNAME(f.tag()))] = cmp.compileClosure(fun);
+            std::vector<SEXP> fmls;    
+            pir::RirInput input = pir::PirCompiler::createRirInputFromSEXP(fun, fmls,
+                m->getEnv(CLOENV(fun)));
+            pir::IRCode entry; 
+            entry.rirInput = &input;
+            results[CHAR(PRINTNAME(f.tag()))] = cmp.compile(entry).getPirInputFormat();
         }
     }
 
     m->print(std::cout);
-    // cmp.setVerbose(true);
     cmp.optimizeModule();
+    // cmp.setVerbose(true);
     return results;
 }
 
@@ -192,7 +196,6 @@ bool testSuperAssign() {
 
 static Test tests[] = {
     Test("test_42L", []() { return test42("42L"); }),
-    Test("test_inline", []() { return test42("{f <- function() 42L; f()}"); }),
     Test("test_inline", []() { return test42("{f <- function() 42L; f()}"); }),
     Test("test_inline_two",
          []() {

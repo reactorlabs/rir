@@ -9,10 +9,12 @@
 namespace rir {
 namespace pir {
 
-void ElideEnv::apply(Closure* function) {
+void ElideEnv::apply(IRCode input) {
     std::unordered_set<Value*> envNeeded;
     std::unordered_map<Value*, Value*> envDependency;
 
+    Closure* function = input.getPirInputFormat();
+    
     Visitor::run(function->entry, [&](Instruction* i) {
         if (i->hasEnv() && !StVar::Cast(i))
             envNeeded.insert(i->env());
