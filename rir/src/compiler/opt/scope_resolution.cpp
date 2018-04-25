@@ -129,8 +129,8 @@ class TheScopeResolution {
 namespace rir {
 namespace pir {
 
-void ScopeResolution::apply(Closure* function) {
-    TheScopeResolution s(function);
+void ScopeResolution::apply(IRCode input) {
+    TheScopeResolution s(input.getPirInputFormat());
     s();
 }
 }

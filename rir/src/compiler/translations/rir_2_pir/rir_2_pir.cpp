@@ -1,4 +1,5 @@
 #include "rir_2_pir.h"
+#include "pir_compiler.h"
 #include "../../analysis/query.h"
 #include "../../analysis/verifier.h"
 #include "../../pir/pir_impl.h"
@@ -45,21 +46,28 @@ struct Matcher {
 namespace rir {
 namespace pir {
 
-Value* Rir2Pir::translate() {
+void Rir2Pir::apply(IRCode input) {
+    rir::Function* srcFunction = input.getRirInputFormat()->function;
+    translate(srcFunction, srcFunction->body());
+    //input.pirClosure 
+} 
+
+Value* Rir2Pir::translate(rir::Function* srcFunction, rir::Code* srcCode) {
     assert(!done);
     done = true;
 
-    recoverCFG(srcCode);
+    Builder* insert = cmp.getBuilder();
+
+    recoverCFG(srcFunction, srcCode);
 
     std::deque<StackMachine> worklist;
-
     StackMachine state(srcFunction, srcCode);
 
     auto popFromWorklist = [&]() {
         assert(!worklist.empty());
         state = worklist.back();
         worklist.pop_back();
-        insert.bb = state.getEntry();
+        insert->bb = state.getEntry();
     };
 
     while (!state.atEnd() || !worklist.empty()) {
@@ -70,9 +78,9 @@ Value* Rir2Pir::translate() {
 
         if (mergepoint.count(state.getPC()) > 0) {
             StackMachine* other = &mergepoint.at(state.getPC());
-            bool todo = state.doMerge(state.getPC(), insert, other);
+            bool todo = state.doMerge(state.getPC(), *insert, other);
             state = mergepoint.at(state.getPC());
-            insert.next(state.getEntry());
+            insert->next(state.getEntry());
             if (!todo) {
                 if (worklist.empty()) {
                     state.clear();
@@ -96,30 +104,30 @@ Value* Rir2Pir::translate() {
             case Opcode::brtrue_:
             case Opcode::brfalse_: {
                 Value* v = state.pop();
-                insert(new Branch(v));
+                (*insert)(new Branch(v));
                 break;
             }
             case Opcode::brobj_: {
-                Value* v = insert(new IsObject(state.top()));
-                insert(new Branch(v));
+                Value* v = (*insert)(new IsObject(state.top()));
+                (*insert)(new Branch(v));
                 break;
             }
             default:
                 assert(false);
             }
 
-            BB* branch = insert.createBB();
-            BB* fall = insert.createBB();
+            BB* branch = insert->createBB();
+            BB* fall = insert->createBB();
 
             switch (bc.bc) {
             case Opcode::brtrue_:
-                insert.bb->next0 = fall;
-                insert.bb->next1 = branch;
+                insert->bb->next0 = fall;
+                insert->bb->next1 = branch;
                 break;
             case Opcode::brfalse_:
             case Opcode::brobj_:
-                insert.bb->next0 = branch;
-                insert.bb->next1 = fall;
+                insert->bb->next0 = branch;
+                insert->bb->next1 = fall;
                 break;
             default:
                 assert(false);
@@ -136,9 +144,9 @@ Value* Rir2Pir::translate() {
             case Opcode::brobj_: {
                 state.setPC(trg);
                 state.setEntry(branch);
-                insert.bb = branch;
+                insert->bb = branch;
                 Value* front = state.front();
-                insert(new Deopt(insert.env, state.getPC(), state.stack_size(),
+                (*insert)(new Deopt(insert->env, state.getPC(), state.stack_size(),
                                  &front));
                 break;
             }
@@ -148,7 +156,7 @@ Value* Rir2Pir::translate() {
 
             state.setPC(fallpc);
             state.setEntry(fall);
-            insert.bb = fall;
+            insert->bb = fall;
             continue;
         }
 
@@ -175,10 +183,14 @@ Value* Rir2Pir::translate() {
 
             DispatchTable* dt = DispatchTable::unpack(code);
             rir::Function* function = dt->first();
+            
+            RirInput input = PirCompiler::createRirInputFromFunction(function, fmls);
+            IRCode entry {.rirInput = &input};
+            PirCompiler anotherCompiler(cmp.getModule());
+            anotherCompiler.setVerbose(true);
+            Closure* innerF = (anotherCompiler.compile(entry)).getPirInputFormat();
 
-            Closure* innerF = cmp.compileFunction(function, fmls);
-
-            state.push(insert(new MkFunCls(innerF, insert.env)));
+            state.push((*insert)(new MkFunCls(innerF, insert->env)));
 
             matched = true;
             state.setPC(next);
@@ -186,7 +198,7 @@ Value* Rir2Pir::translate() {
 
         if (!matched) {
             int size = state.stack_size();
-            state.runCurrentBC(*this, insert);
+            state.runCurrentBC(*this, *insert);
             assert(state.stack_size() == size - bc.popCount() + bc.pushCount());
             state.advancePC();
         }
@@ -196,11 +208,11 @@ Value* Rir2Pir::translate() {
     Value* res;
     assert(results.size() > 0);
     if (results.size() == 1) {
-        insert.bb = results.back().first;
+        insert->bb = results.back().first;
         res = results.back().second;
     } else {
-        BB* merge = insert.createBB();
-        Phi* phi = insert(new Phi());
+        BB* merge = insert->createBB();
+        Phi* phi = (*insert)(new Phi());
         for (auto r : results) {
             r.first->next0 = merge;
             phi->addInput(r.first, r.second);
@@ -215,7 +227,7 @@ Value* Rir2Pir::translate() {
     // CFG cfg(insert.code->entry);
 
     // Remove excessive Phis
-    Visitor::run(insert.code->entry, [&](BB* bb) {
+    Visitor::run(insert->code->entry, [&](BB* bb) {
         auto it = bb->begin();
         while (it != bb->end()) {
             Phi* p = Phi::Cast(*it);
@@ -235,13 +247,13 @@ Value* Rir2Pir::translate() {
         }
     });
 
-    InsertCast c(insert.code->entry);
+    InsertCast c((*insert).code->entry);
     c();
 
     return res;
 }
 
-void Rir2Pir::recoverCFG(rir::Code* srcCode) {
+void Rir2Pir::recoverCFG(rir::Function* srcFunction, rir::Code* srcCode) {
     std::unordered_map<Opcode*, std::vector<Opcode*>> incom;
     // Mark incoming jmps
     for (auto pc = srcCode->code(); pc != srcCode->endCode();) {
@@ -270,6 +282,6 @@ void Rir2Pir::recoverCFG(rir::Code* srcCode) {
     }
 }
 
-void Rir2Pir::compileReturn(Value* res) { insert(new Return(res)); }
+void Rir2Pir::compileReturn(Value* res) { (*cmp.getBuilder())(new Return(res)); }
 } // namespace pir
 } // namespace rir

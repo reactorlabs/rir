@@ -1,41 +1,32 @@
 #ifndef RIR_2_PIR_H
 #define RIR_2_PIR_H
 
-#include "../pir_translator.h"
-#include "rir_2_pir_compiler.h"
+#include "../rir_compiler.h"
+#include "../ir_translator.h"
 #include "stack_machine.h"
 #include <unordered_map>
 
 namespace rir {
 namespace pir {
 
-class Rir2Pir {
+class Rir2Pir : public IRTranslator {
   public:
-    Rir2Pir(Rir2PirCompiler& cmp, Builder& insert, rir::Function* srcFunction,
-            rir::Code* srcCode)
-        : insert(insert), cmp(cmp), srcFunction(srcFunction), srcCode(srcCode) {
-    }
+    Rir2Pir(RirCompiler& cmp) : Rir2Pir(cmp, "Rir 2 Pir")  { }
+    Rir2Pir(RirCompiler& cmp, std::string name) : IRTranslator(cmp, name) { }
 
-    Value* translate();
+    void apply(IRCode);
+    Value* translate(rir::Function* , rir::Code*);
 
     typedef StackMachine::ReturnSite ReturnSite;
     void addReturn(ReturnSite r) { results.push_back(r); }
 
-    Rir2PirCompiler& compiler() { return cmp; }
-
   private:
     bool done = false;
-
-    Builder& insert;
-    Rir2PirCompiler& cmp;
-
-    rir::Function* srcFunction;
-    rir::Code* srcCode;
 
     std::unordered_map<Opcode*, StackMachine> mergepoint;
     std::vector<ReturnSite> results;
 
-    void recoverCFG(rir::Code*);
+    void recoverCFG(rir::Function*, rir::Code*);
     bool doMerge(Opcode* trg);
     virtual void compileReturn(Value*);
 

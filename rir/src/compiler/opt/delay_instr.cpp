@@ -6,10 +6,10 @@
 namespace rir {
 namespace pir {
 
-void DelayInstr::apply(Closure* function) {
+void DelayInstr::apply(IRCode input) {
     std::vector<MkEnv*> envs;
 
-    Visitor::run(function->entry, [&](BB* bb) {
+    Visitor::run(input.getPirInputFormat()->entry, [&](BB* bb) {
         auto ip = bb->begin();
         while (ip != bb->end()) {
             auto i = *ip;

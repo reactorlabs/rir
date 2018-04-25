@@ -1,7 +1,7 @@
 #ifndef PIR_DELAY_INSTR_H
 #define PIR_DELAY_INSTR_H
 
-#include "../translations/pir_translator.h"
+#include "../translations/ir_translator.h"
 
 namespace rir {
 namespace pir {
@@ -10,12 +10,11 @@ namespace pir {
  * DelayInstr tries to schedule instruction right before they are needed.
  *
  */
-class Closure;
-class DelayInstr : public PirTranslator {
+class DelayInstr : public IRTranslator {
   public:
-    DelayInstr() : PirTranslator("Delay Instructions"){};
+    DelayInstr(RirCompiler& compiler) : IRTranslator(compiler, "Delay Instructions"){};
 
-    void apply(Closure* function) override;
+    void apply(IRCode) override;
 };
 }
 }

@@ -50,6 +50,11 @@ class Module {
         return functions.at(f).current();
     }
 
+    VersionedClosure* getVersioned(rir::Function* f) {
+        assert(functions.count(f));
+        return &functions.at(f);
+    }
+
     typedef std::function<void(Closure* f)> Compile;
     Closure* getOrCreate(rir::Function* f, const std::vector<SEXP>& a, Env* env,
                          Compile cmp) {
