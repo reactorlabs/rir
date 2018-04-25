@@ -5,6 +5,7 @@
 #include "R/Funtab.h"
 #include "ir/BC.h"
 #include "ir/Compiler.h"
+#include "pir_compiler.h"
 #include "rir_2_pir.h"
 #include "rir_inlined_promise_2_pir.h"
 
@@ -142,23 +143,35 @@ void StackMachine::runCurrentBC(Rir2Pir& rir2pir, Builder& insert) {
             }
             rir::Code* promiseCode = srcFunction->codeAt(argi);
             Promise* prom = insert.function->createProm();
+            RirCompiler& cmp = rir2pir.compiler();
             {
+                Builder* oldBuilder = cmp.getBuilder();
                 Builder promiseBuilder(insert.function, prom);
-                Rir2Pir compiler(rir2pir.compiler(), promiseBuilder,
-                                 srcFunction, promiseCode);
-                compiler.translate();
+                cmp.setBuilder(&promiseBuilder);
+                Rir2Pir compiler(cmp, "Rir to Pir: Promise");
+                compiler.translate(srcFunction, promiseCode);
+                cmp.setBuilder(oldBuilder);
             }
             Value* val = Missing::instance();
             if (Query::pure(prom)) {
-                RirInlinedPromise2Rir compiler(rir2pir, promiseCode);
-                val = compiler.translate();
+                RirInlinedPromise2Rir compiler(cmp,
+                                               "Rir to Pir: Promise Inliner");
+                val = compiler.translate(srcFunction, promiseCode);
             }
             args.push_back(insert(new MkArg(prom, val, env)));
         }
 
         if (monomorphic && isValidClosureSEXP(monomorphic)) {
             auto& cmp = rir2pir.compiler();
-            Closure* f = cmp.compileClosure(monomorphic);
+            std::vector<SEXP> fmls;
+            RirInput input = PirCompiler::createRirInputFromSEXP(
+                monomorphic, fmls, cmp.getEnv(monomorphic));
+            IRCode entry = {.rirInput = &input};
+            PirCompiler anotherCompiler(cmp.getModule());
+            if (cmp.optimizationsEnabled())
+                anotherCompiler.enableOptimizations();
+            Closure* f = (anotherCompiler.compile(entry)).getPirInputFormat();
+
             Value* expected = insert(new LdConst(monomorphic));
             Value* t = insert(new Eq(top(), expected));
             insert(new Branch(t));
@@ -188,17 +201,19 @@ void StackMachine::runCurrentBC(Rir2Pir& rir2pir, Builder& insert) {
         unsigned promi = bc.immediate.i;
         rir::Code* promiseCode = srcFunction->codeAt(promi);
         Promise* prom = insert.function->createProm();
+        RirCompiler& cmp = rir2pir.compiler();
         {
-            // What should I do with this?
+            Builder* oldBuilder = cmp.getBuilder();
             Builder promiseBuilder(insert.function, prom);
-            Rir2Pir compiler(rir2pir.compiler(), promiseBuilder, srcFunction,
-                             promiseCode);
-            compiler.translate();
+            cmp.setBuilder(&promiseBuilder);
+            Rir2Pir compiler(cmp, "Rir to Pir: Promise");
+            compiler.translate(srcFunction, promiseCode);
+            cmp.setBuilder(oldBuilder);
         }
         Value* val = Missing::instance();
         if (Query::pure(prom)) {
-            RirInlinedPromise2Rir compiler(rir2pir, promiseCode);
-            val = compiler.translate();
+            RirInlinedPromise2Rir compiler(cmp, "Rir to Pir: Promise Inliner");
+            val = compiler.translate(srcFunction, promiseCode);
         }
         // TODO: Remove comment and check how to deal with
         push(insert(new MkArg(prom, val, env)));
@@ -208,6 +223,7 @@ void StackMachine::runCurrentBC(Rir2Pir& rir2pir, Builder& insert) {
         unsigned n = bc.immediate.call_args.nargs;
         rir::CallSite* cs = bc.callSite(srcFunction->body());
         SEXP target = rir::Pool::get(*cs->target());
+        RirCompiler& cmp = rir2pir.compiler();
 
         std::vector<Value*> args(n);
         for (size_t i = 0; i < n; ++i)
@@ -229,7 +245,11 @@ void StackMachine::runCurrentBC(Rir2Pir& rir2pir, Builder& insert) {
                 // For now let's just put it in the constant pool.
                 Pool::insert(target);
             }
-            Closure* f = rir2pir.compiler().compileClosure(target);
+            std::vector<SEXP> fmls;
+            RirInput input = PirCompiler::createRirInputFromSEXP(
+                target, fmls, cmp.getEnv(target));
+            IRCode entry{.rirInput = &input};
+            Closure* f = (cmp.compile(entry)).getPirInputFormat();
             push(insert(new StaticEagerCall(env, f, args)));
         }
         break;

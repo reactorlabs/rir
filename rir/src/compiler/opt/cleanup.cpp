@@ -184,8 +184,8 @@ class TheCleanup {
 namespace rir {
 namespace pir {
 
-void Cleanup::apply(Closure* function) {
-    TheCleanup s(function);
+void Cleanup::apply(IRCode input) {
+    TheCleanup s(input.getPirInputFormat());
     s();
 }
 }

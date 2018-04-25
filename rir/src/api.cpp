@@ -114,16 +114,22 @@ REXPORT SEXP rir_analysis_liveness(SEXP what) {
 }
 
 #include "compiler/pir_tests.h"
-#include "compiler/translations/rir_2_pir/rir_2_pir.h"
+#include "compiler/translations/rir_2_pir/pir_compiler.h"
 
 REXPORT SEXP pir_compile(SEXP what) {
     if (!isValidClosureSEXP(what))
         Rf_error("not a compiled closure");
 
     pir::Module* m = new pir::Module;
-    pir::Rir2PirCompiler cmp(m);
+    pir::PirCompiler cmp(m);
     cmp.setVerbose(true);
-    cmp.compileClosure(what);
+    cmp.enableOptimizations();
+    std::vector<SEXP> fmls;
+    pir::RirInput input =
+        cmp.createRirInputFromSEXP(what, fmls, m->getEnv(CLOENV(what)));
+    pir::IRCode entry;
+    entry.rirInput = &input;
+    cmp.compile(entry);
     cmp.optimizeModule();
     delete m;
     return R_NilValue;
