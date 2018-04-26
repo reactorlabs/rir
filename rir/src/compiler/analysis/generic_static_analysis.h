@@ -51,15 +51,14 @@ class StaticAnalysis {
 
   public:
     BB* entry;
-    const CFG cfg;
 
-    StaticAnalysis(BB* entry) : entry(entry), cfg(entry) {
-        mergepoint.resize(cfg.size());
+    StaticAnalysis(Closure* cls) : entry(cls->entry) {
+        mergepoint.resize(cls->maxBBId + 1);
         mergepoint[entry->id].resize(1);
     }
-    StaticAnalysis(BB* entry, const AbstractState& initialState)
-        : entry(entry), cfg(entry) {
-        mergepoint.resize(cfg.size());
+    StaticAnalysis(Closure* cls, const AbstractState& initialState)
+        : entry(cls->entry) {
+        mergepoint.resize(cls->maxBBId + 1);
         mergepoint[entry->id].push_back(initialState);
     }
 
@@ -120,7 +119,7 @@ class StaticAnalysis {
     void operator()() {
         bool reachedExit = false;
 
-        std::vector<bool> changed(cfg.size(), false);
+        std::vector<bool> changed(mergepoint.size(), false);
         changed[entry->id] = true;
 
         do {

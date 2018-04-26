@@ -10,19 +10,18 @@ class TheScopeAnalysis : public StaticAnalysis<AbstractREnvironmentHierarchy> {
     typedef AbstractREnvironmentHierarchy AS;
     typedef StaticAnalysis<AS> Super;
 
-    Closure* origin;
     const std::vector<SEXP>& args;
 
     static constexpr size_t maxDepth = 5;
     size_t depth;
     Value* staticClosureEnv = nullptr;
 
-    TheScopeAnalysis(Closure* origin, const std::vector<SEXP>& args, BB* bb)
-        : Super(bb), origin(origin), args(args), depth(0) {}
-    TheScopeAnalysis(Closure* origin, const std::vector<SEXP>& args,
+    TheScopeAnalysis(Closure* cls, const std::vector<SEXP>& args)
+        : Super(cls), args(args), depth(0) {}
+    TheScopeAnalysis(Closure* cls, const std::vector<SEXP>& args,
                      Value* staticClosureEnv, BB* bb, const AS& initialState,
                      size_t depth)
-        : Super(bb, initialState), origin(origin), args(args), depth(depth),
+        : Super(cls, initialState), args(args), depth(depth),
           staticClosureEnv(staticClosureEnv) {}
 
     void apply(AS& envs, Instruction* i) const override;
@@ -151,10 +150,10 @@ void TheScopeAnalysis::apply(AS& envs, Instruction* i) const {
 }
 
 void TheScopeAnalysis::print(std::ostream& out) {
-    size_t id = 0;
-    for (auto& m : getMergepoints()) {
+    for (size_t id = 0; id < getMergepoints().size(); ++id) {
+        auto& m = getMergepoints()[id];
         if (!m.empty()) {
-            out << "---- BB_" << id++ << " -----------------------------\n";
+            out << "---- BB_" << id << " -----------------------------\n";
             size_t segment = 0;
             for (auto& e : m) {
                 out << "    segm -- " << segment++ << "\n";
@@ -184,7 +183,7 @@ namespace rir {
 namespace pir {
 
 ScopeAnalysis::ScopeAnalysis(Closure* function) {
-    TheScopeAnalysis analysis(function, function->argNames, function->entry);
+    TheScopeAnalysis analysis(function, function->argNames);
     analysis();
     if (false)
         analysis.print();
@@ -195,18 +194,16 @@ ScopeAnalysis::ScopeAnalysis(Closure* function) {
             analysis.tryLoad(envs, i,
                              [&](AbstractLoad load) {
                                  loads.emplace(i, load);
-                                 load.result.eachSource([&](ValOrig& src) {
-                                     observedStores.insert(src.origin);
-                                 });
+                                 if (load.result.isUnknown()) {
+                                     allStoresObserved.insert(i->env());
+                                 } else {
+                                     load.result.eachSource([&](ValOrig& src) {
+                                         observedStores.insert(src.origin);
+                                     });
+                                 }
                              });
             if (i->leaksEnv()) {
-                for (auto e : envs) {
-                    for (auto load : e.second.entries) {
-                        load.second.eachSource([&](ValOrig& src) {
-                            observedStores.insert(src.origin);
-                        });
-                    }
-                }
+                allStoresObserved.insert(i->env());
             }
         });
 }

@@ -85,7 +85,7 @@ static Value* getValue(Force* f) {
 
 class ForceDominanceAnalysis : public StaticAnalysis<ForcedAt> {
   public:
-    ForceDominanceAnalysis(BB* bb) : StaticAnalysis(bb) {}
+    ForceDominanceAnalysis(Closure* cls) : StaticAnalysis(cls) {}
 
     void apply(ForcedAt& d, Instruction* i) const override {
         auto f = Force::Cast(i);
@@ -96,8 +96,8 @@ class ForceDominanceAnalysis : public StaticAnalysis<ForcedAt> {
 
 class ForceDominanceAnalysisResult {
   public:
-    ForceDominanceAnalysisResult(BB* bb) {
-        ForceDominanceAnalysis analysis(bb);
+    ForceDominanceAnalysisResult(Closure* cls) {
+        ForceDominanceAnalysis analysis(cls);
         analysis();
         analysis.foreach<PositioningStyle::AfterInstruction>(
             [&](const ForcedAt& p, Instruction* i) {
@@ -136,13 +136,13 @@ class ForceDominanceAnalysisResult {
 namespace rir {
 namespace pir {
 
-void ForceDominance::apply(Closure* function) {
-    ForceDominanceAnalysisResult analysis(function->entry);
+void ForceDominance::apply(Closure* cls) {
+    ForceDominanceAnalysisResult analysis(cls);
 
     std::unordered_map<Force*, Value*> inlinedPromise;
 
     // 1. Inline dominating promises
-    Visitor::run(function->entry, [&](BB* bb) {
+    Visitor::run(cls->entry, [&](BB* bb) {
         auto ip = bb->begin();
         while (ip != bb->end()) {
             auto f = Force::Cast(*ip);
@@ -158,10 +158,10 @@ void ForceDominance::apply(Closure* function) {
                             inlinedPromise[f] = strict;
                         } else if (analysis.isSafeToInline(mkarg)) {
                             Promise* prom = mkarg->prom;
-                            BB* split = BBTransform::split(++function->maxBBId,
-                                                           bb, ip, function);
+                            BB* split =
+                                BBTransform::split(++cls->maxBBId, bb, ip, cls);
                             BB* prom_copy = BBTransform::clone(
-                                &function->maxBBId, prom->entry, function);
+                                &cls->maxBBId, prom->entry, cls);
                             bb->next0 = prom_copy;
 
                             // For now we assume every promise starts with a
@@ -193,7 +193,7 @@ void ForceDominance::apply(Closure* function) {
     });
 
     // 2. replace dominated promises
-    Visitor::run(function->entry, [&](BB* bb) {
+    Visitor::run(cls->entry, [&](BB* bb) {
         auto ip = bb->begin();
         while (ip != bb->end()) {
             auto f = Force::Cast(*ip);

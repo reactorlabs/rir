@@ -21,6 +21,10 @@ bool AbstractPirValue::merge(const AbstractPirValue& other) {
         *this = other;
         return true;
     }
+    if (other.unknown) {
+        unknown = true;
+        return true;
+    }
 
     bool changed = false;
     if (!std::includes(vals.begin(), vals.end(), other.vals.begin(),
@@ -56,13 +60,10 @@ AbstractLoad AbstractREnvironmentHierarchy::get(Value* env, SEXP e) const {
             return AbstractLoad(env ? env : AbstractREnvironment::UnknownParent,
                                 AbstractPirValue::tainted());
         auto aenv = this->at(env);
-        const AbstractPirValue& res = aenv.get(e);
-        if (!res.isUnknown())
+        if (!aenv.absent(e)) {
+            const AbstractPirValue& res = aenv.get(e);
             return AbstractLoad(env, res);
-        // Tainted environment, we can't bet on absent values being
-        // actually absent.
-        if (aenv.tainted)
-            return AbstractLoad(env, AbstractPirValue::tainted());
+        }
         env = at(env).parentEnv;
         if (env == AbstractREnvironment::UnknownParent && Env::parentEnv(env))
             env = Env::parentEnv(env);

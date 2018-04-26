@@ -62,9 +62,9 @@ class TheScopeResolution {
                     // Dead store to non-escaping environment can be removed
                     if (Env::isPirEnv(s->env()) &&
                         !analysis.finalState[s->env()].leaked &&
-                        analysis.observedStores.find(s) ==
-                            analysis.observedStores.end())
+                        analysis.deadStore(s)) {
                         next = bb->remove(ip);
+                    }
                 } else if (ld && analysis.loads.count(ld)) {
                     // If we have a non-ambiguous load, we can replace the load
                     // with the actual values.
