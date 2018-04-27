@@ -15,7 +15,6 @@ class CFG {
     std::vector<BBList> predecessors;
     BBList exits;
 
-    size_t size() const { return predecessors.size(); }
     CFG(BB*);
 };
 

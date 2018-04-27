@@ -90,6 +90,15 @@ bool test42(const std::string& input) {
     return true;
 };
 
+bool hasLoadVar(const std::string& input) {
+    pir::Module m;
+    auto res = compile("", input, &m);
+    auto f = res["theFun"];
+    bool noLdVar = Visitor::check(
+        f->entry, [&](Instruction* i) { return !LdVar::Cast(i); });
+    return !noLdVar;
+};
+
 class NullBuffer : public std::ostream, std::streambuf {
   public:
     NullBuffer() : std::ostream(this) {}
@@ -233,6 +242,16 @@ static Test tests[] = {
          []() {
              return compileAndVerify("f <- function(x) x",
                                      "g <- function() f(1); g()");
+         }),
+    Test("merge_missing_bl",
+         []() {
+             return !hasLoadVar("theFun <- function(a) {if (a) {q <-1} else "
+                                "{if (a) q <- 3 else q <- 2}; q}");
+         }),
+    Test("merge_missing",
+         []() {
+             return hasLoadVar("theFun <- function(a) {if (a) {q <-1} else {if "
+                               "(a) 3 else q <- 2}; q}");
          }),
 };
 }

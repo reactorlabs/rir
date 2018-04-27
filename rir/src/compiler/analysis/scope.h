@@ -19,9 +19,14 @@ namespace pir {
  *
  */
 class ScopeAnalysis {
-  public:
-    std::unordered_map<Instruction*, AbstractLoad> loads;
     std::unordered_set<Instruction*> observedStores;
+    std::unordered_set<Value*> allStoresObserved;
+
+  public:
+    bool deadStore(Instruction* i) {
+        return !allStoresObserved.count(i->env()) && !observedStores.count(i);
+    }
+    std::unordered_map<Instruction*, AbstractLoad> loads;
     AbstractREnvironmentHierarchy finalState;
     ScopeAnalysis(Closure* fun);
 };

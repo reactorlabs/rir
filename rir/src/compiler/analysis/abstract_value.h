@@ -154,6 +154,8 @@ struct AbstractREnvironment {
         return t;
     }
 
+    const bool absent(SEXP e) const { return !tainted && !entries.count(e); }
+
     bool merge(const AbstractREnvironment& other) {
         bool changed = false;
         if (!leaked && other.leaked)
@@ -161,18 +163,19 @@ struct AbstractREnvironment {
         if (!tainted && other.tainted)
             changed = tainted = true;
 
-        std::unordered_set<SEXP> keys;
-        for (auto e : entries)
-            keys.insert(std::get<0>(e));
-        for (auto e : other.entries)
-            keys.insert(std::get<0>(e));
-        for (auto n : keys) {
-            // if this is not the first incoming edge and it has more entries
-            // we are in trouble.
-            if (!entries.count(n)) {
-                entries[n].taint();
+        for (auto entry : other.entries) {
+            auto name = entry.first;
+            if (!entries.count(name)) {
+                entries[name].taint();
                 changed = true;
-            } else if (entries[n].merge(other.get(n))) {
+            } else if (entries[name].merge(other.get(name))) {
+                changed = true;
+            }
+        }
+        for (auto entry : entries) {
+            auto name = entry.first;
+            if (!other.entries.count(name) && !entries.at(name).isUnknown()) {
+                entries.at(name).taint();
                 changed = true;
             }
         }
