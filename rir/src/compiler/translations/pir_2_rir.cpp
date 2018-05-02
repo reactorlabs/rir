@@ -302,29 +302,10 @@ size_t Pir2Rir::compile(Context& ctx, Code* code) {
                 assert(false && "not yet implemented.");
                 break;
             }
-            case Tag::Force: {
-                auto force = Force::Cast(instr);
-                load(it, force->arg(0).val());
-                cs << BC::force();
-                store(it, force);
-                break;
-            }
             case Tag::CastType: {
-                // TODO: what should it do?
-                break;
-            }
-            case Tag::AsLogical: {
-                auto aslogical = AsLogical::Cast(instr);
-                load(it, aslogical->arg(0).val());
-                cs << BC::asLogical();
-                store(it, aslogical);
-                break;
-            }
-            case Tag::AsTest: {
-                auto test = AsTest::Cast(instr);
-                load(it, test->arg(0).val());
-                cs << BC::asbool();
-                store(it, test);
+                auto cast = CastType::Cast(instr);
+                load(it, cast->arg(0).val());
+                store(it, cast);
                 break;
             }
             case Tag::Subassign1_1D: {
@@ -351,13 +332,6 @@ size_t Pir2Rir::compile(Context& ctx, Code* code) {
                 assert(false && "not yet implemented.");
                 break;
             }
-            case Tag::Inc: {
-                auto inc = Inc::Cast(instr);
-                load(it, inc->arg(0).val());
-                cs << BC::inc();
-                store(it, inc);
-                break;
-            }
             case Tag::IsObject: {
                 assert(false && "not yet implemented.");
                 break;
@@ -371,11 +345,32 @@ size_t Pir2Rir::compile(Context& ctx, Code* code) {
                 break;
             }
             case Tag::PirCopy: {
-                PirCopy* copy = PirCopy::Cast(instr);
-                load(it, copy->arg(0).val());
-                store(it, copy);
+                auto cpy = PirCopy::Cast(instr);
+                load(it, cpy->arg(0).val());
+                store(it, cpy);
                 break;
             }
+
+#define SIMPLE_INSTR(Name, Factory)                                            \
+    case Tag::Name: {                                                          \
+        auto simple = Name::Cast(instr);                                       \
+        load(it, simple->arg(0).val());                                        \
+        cs << BC::Factory();                                                   \
+        cs.addSrcIdx(simple->srcIdx);                                          \
+        store(it, simple);                                                     \
+        break;                                                                 \
+    }
+                SIMPLE_INSTR(Inc, inc);
+                SIMPLE_INSTR(Force, force);
+                SIMPLE_INSTR(AsLogical, asLogical);
+                SIMPLE_INSTR(AsTest, asbool);
+                // unary operators are simple, too
+                SIMPLE_INSTR(Plus, uplus);
+                SIMPLE_INSTR(Minus, uminus);
+                SIMPLE_INSTR(Not, Not);
+                SIMPLE_INSTR(Length, length);
+
+#undef SIMPLE_INSTR
 
 #define BINOP(Name, Factory)                                                   \
     case Tag::Name: {                                                          \
@@ -404,21 +399,6 @@ size_t Pir2Rir::compile(Context& ctx, Code* code) {
                 BINOP(LAnd, lglAnd);
                 BINOP(Colon, colon);
 #undef BINOP
-
-#define UNOP(Name, Factory)                                                    \
-    case Tag::Name: {                                                          \
-        auto unop = Name::Cast(instr);                                         \
-        load(it, unop->arg(0).val());                                          \
-        cs << BC::Factory();                                                   \
-        cs.addSrcIdx(unop->srcIdx);                                            \
-        store(it, unop);                                                       \
-        break;                                                                 \
-    }
-                UNOP(Plus, uplus);
-                UNOP(Minus, uminus);
-                UNOP(Not, Not);
-                UNOP(Length, length);
-#undef UNOP
 
             case Tag::Is: {
                 assert(false &&

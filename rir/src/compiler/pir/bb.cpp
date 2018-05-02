@@ -9,7 +9,7 @@ namespace pir {
 BB::BB(Code* owner, unsigned id) : id(id), owner(owner) {}
 
 void BB::print(std::ostream& out) {
-    out << "BB " << id << "\n";
+    out << "BB" << id << "\n";
     for (auto i : instrs) {
         out << "  ";
         i->print(out);

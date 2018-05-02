@@ -218,34 +218,15 @@ SEXP createRWrapperCall(std::string wrapper) {
     return call;
 }
 
+extern "C" Rboolean R_compute_identical(SEXP, SEXP, int);
 bool checkPir2Rir(SEXP expected, SEXP result) {
-    if (expected == result)
-        return true;
-    if (TYPEOF(expected) != TYPEOF(result))
-        return false;
-    if (XLENGTH(expected) != XLENGTH(result))
-        return false;
-    for (size_t i = 0; i < XLENGTH(expected); ++i) {
-        switch (TYPEOF(expected)) {
-        case INTSXP:
-            if (INTEGER(expected)[i] != INTEGER(result)[i])
-                return false;
-            break;
-        case REALSXP:
-            if (REAL(expected)[i] != REAL(result)[i])
-                return false;
-            break;
-        default:
-            assert(false);
-        }
-    }
-    return true;
+    return R_compute_identical(expected, result, 15) == TRUE;
 }
 
 extern "C" SEXP rir_eval(SEXP, SEXP);
 extern "C" SEXP pir_compile(SEXP);
 
-bool testPir2Rir(std::string name, std::string fun, std::string args) {
+bool testPir2Rir(std::string name, std::string fun, std::string args, bool useSame = false) {
     Protect p;
 
     std::string wrapper =
@@ -271,15 +252,17 @@ bool testPir2Rir(std::string name, std::string fun, std::string args) {
     Rprintf(" orig = %p\n", orig);
     Rf_PrintValue(orig);
 
-    // redo everything, this time compile also to PIR
-    execEnv = p(Rf_NewEnvironment(R_NilValue, R_NilValue, R_GlobalEnv));
-    rirFun = p(parseCompileToRir(fun));
-    SET_CLOENV(rirFun, execEnv);
-    Rf_defineVar(Rf_install(name.c_str()), rirFun, execEnv);
-    rirFun2 = p(parseCompileToRir("function(a) a + 1"));
-    SET_CLOENV(rirFun2, execEnv);
-    Rf_defineVar(Rf_install("bar"), rirFun2, execEnv);
-    rCall = createRWrapperCall(wrapper);
+    if (!useSame) {
+        // redo everything
+        execEnv = p(Rf_NewEnvironment(R_NilValue, R_NilValue, R_GlobalEnv));
+        rirFun = p(parseCompileToRir(fun));
+        SET_CLOENV(rirFun, execEnv);
+        Rf_defineVar(Rf_install(name.c_str()), rirFun, execEnv);
+        rirFun2 = p(parseCompileToRir("function(a) a + 1"));
+        SET_CLOENV(rirFun2, execEnv);
+        Rf_defineVar(Rf_install("bar"), rirFun2, execEnv);
+        rCall = createRWrapperCall(wrapper);
+    }
 
     pir_compile(rirFun);
 
@@ -419,8 +402,12 @@ static Test tests[] = {
              return testPir2Rir("foo",
                                 "function(x) c(1, 2, 3, x, x + 1, x + 2)", "4");
          }),
+    Test("PIR to RIR: call .Internal",
+         []() { return testPir2Rir("foo", "function() .Internal(formals(bar))", ""); }),
     Test("PIR to RIR: call",
          []() { return testPir2Rir("foo", "function(x) bar(x)", "2"); }),
+    Test("PIR to RIR: call twice",
+         []() { return testPir2Rir("foo", "function(x) { bar(x); bar(x + 1) }", "2"); }),
 };
 } // namespace
 

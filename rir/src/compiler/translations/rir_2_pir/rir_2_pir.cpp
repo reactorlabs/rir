@@ -111,6 +111,7 @@ Value* Rir2Pir::translate() {
             BB* branch = insert.createBB();
             BB* fall = insert.createBB();
 
+            // TOS == TRUE goes to next1, TOS == FALSE goes to next0
             switch (bc.bc) {
             case Opcode::brtrue_:
                 insert.bb->next0 = fall;

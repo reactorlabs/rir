@@ -256,7 +256,7 @@ void CodeEditor::print(bool verbose) {
                 }
             }
         }
-        cur.print(verbose);
+        cur.print();
     }
     FunIdxT i = 0;
     for (auto p : promises) {
@@ -280,8 +280,8 @@ void CodeEditor::print(bool verbose) {
     }
 }
 
-void CodeEditor::Cursor::print(bool verbose) {
-    if (verbose && pos->callSite)
+void CodeEditor::Cursor::print() {
+    if (pos->callSite)
         pos->bc.print(callSite());
     else
         pos->bc.print();
