@@ -145,7 +145,8 @@ void LdConst::printArgs(std::ostream& out) {
 
 void Branch::printArgs(std::ostream& out) {
     FixedLenInstruction::printArgs(out);
-    out << " -> BB" << bb()->next1->id << " (if true) | BB" << bb()->next0->id << "(if false)";
+    out << " -> BB" << bb()->next1->id << " (if true) | BB" << bb()->next0->id
+        << "(if false)";
 }
 
 void MkArg::printArgs(std::ostream& out) {

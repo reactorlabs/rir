@@ -226,7 +226,8 @@ bool checkPir2Rir(SEXP expected, SEXP result) {
 extern "C" SEXP rir_eval(SEXP, SEXP);
 extern "C" SEXP pir_compile(SEXP);
 
-bool testPir2Rir(std::string name, std::string fun, std::string args, bool useSame = false) {
+bool testPir2Rir(std::string name, std::string fun, std::string args,
+                 bool useSame = false) {
     Protect p;
 
     std::string wrapper =
@@ -403,11 +404,17 @@ static Test tests[] = {
                                 "function(x) c(1, 2, 3, x, x + 1, x + 2)", "4");
          }),
     Test("PIR to RIR: call .Internal",
-         []() { return testPir2Rir("foo", "function() .Internal(formals(bar))", ""); }),
+         []() {
+             return testPir2Rir("foo", "function() .Internal(formals(bar))",
+                                "");
+         }),
     Test("PIR to RIR: call",
          []() { return testPir2Rir("foo", "function(x) bar(x)", "2"); }),
     Test("PIR to RIR: call twice",
-         []() { return testPir2Rir("foo", "function(x) { bar(x); bar(x + 1) }", "2"); }),
+         []() {
+             return testPir2Rir("foo", "function(x) { bar(x); bar(x + 1) }",
+                                "2");
+         }),
 };
 } // namespace
 
