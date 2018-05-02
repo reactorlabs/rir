@@ -165,21 +165,21 @@ void StackMachine::runCurrentBC(Rir2Pir& rir2pir, Builder& insert) {
             insert(new Branch(t));
             BB* curBB = insert.bb;
 
-            BB* asExpected = insert.createBB();
-            insert.bb = asExpected;
-            curBB->next0 = asExpected;
-            Value* r1 = insert(new StaticCall(insert.env, f, args));
-
             BB* fallback = insert.createBB();
             insert.bb = fallback;
-            curBB->next1 = fallback;
-            Value* r2 = insert(new Call(insert.env, pop(), args, cs->call));
+            curBB->next0 = fallback;
+            Value* r1 = insert(new Call(insert.env, pop(), args, cs->call));
+
+            BB* asExpected = insert.createBB();
+            insert.bb = asExpected;
+            curBB->next1 = asExpected;
+            Value* r2 = insert(new StaticCall(insert.env, f, args));
 
             BB* cont = insert.createBB();
-            asExpected->next0 = cont;
             fallback->next0 = cont;
+            asExpected->next0 = cont;
             insert.bb = cont;
-            push(insert(new Phi({r1, r2}, {asExpected, fallback})));
+            push(insert(new Phi({r1, r2}, {fallback, asExpected})));
         } else {
             push(insert(new Call(insert.env, pop(), args, cs->call)));
         }
