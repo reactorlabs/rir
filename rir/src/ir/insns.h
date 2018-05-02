@@ -86,9 +86,9 @@ DEF_INSTR(stvar2_, 1, 1, 0, 1)
 DEF_INSTR(stloc_, 1, 1, 0, 1)
 
 /**
- * copyloc_:: copy one local into another
+ * movloc_:: copy one local into another
  */
-DEF_INSTR(copyloc_, 2, 0, 0, 1)
+DEF_INSTR(movloc_, 2, 0, 0, 1)
 
 /**
  * call_:: ... Takes a list of code objects, which represent the arguments, decides on eager/lazy evaluation and does the right thing with the code objs.

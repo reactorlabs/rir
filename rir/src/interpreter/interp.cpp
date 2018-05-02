@@ -1470,7 +1470,7 @@ SEXP evalRirCode(Code* c, Context* ctx, EnvironmentProxy* ep) {
             NEXT();
         }
 
-        INSTRUCTION(copyloc_) {
+        INSTRUCTION(movloc_) {
             Immediate target = readImmediate();
             advanceImmediate();
             Immediate source = readImmediate();

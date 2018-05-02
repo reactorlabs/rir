@@ -784,21 +784,12 @@ typedef SEXP (*CCODE)(SEXP, SEXP, SEXP, SEXP);
 
 class VLI(CallBuiltin, Effect::Any, EnvAccess::Write) {
   public:
-    constexpr static size_t callArgOffset = 1;
     SEXP blt;
     const CCODE builtin;
     int builtinId;
 
-    size_t nCallArgs() { return nargs() - callArgOffset; }
-
     CallBuiltin(Value* e, SEXP builtin, const std::vector<Value*>& args,
                 unsigned src);
-
-    void eachCallArg(Instruction::ArgumentValueIterator it) {
-        for (size_t i = 0; i < nCallArgs(); ++i) {
-            it(arg(i + callArgOffset).val());
-        }
-    }
 
     void printArgs(std::ostream& out) override;
 };

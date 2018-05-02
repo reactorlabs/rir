@@ -426,6 +426,7 @@ size_t Pir2Rir::compile(Context& ctx, Code* code) {
                 std::vector<FunIdxT> callArgs;
                 call->eachCallArg([&](Value* arg) {
                     auto mkarg = MkArg::Cast(arg);
+                    // TODO: for now, ignore the eager value in MkArg
                     callArgs.push_back(promises[mkarg->prom]);
                 });
 
@@ -444,12 +445,11 @@ size_t Pir2Rir::compile(Context& ctx, Code* code) {
             }
             case Tag::CallBuiltin: {
                 auto blt = CallBuiltin::Cast(instr);
-                // TODO: is it needed to set the environment?
                 loadEnv(it, blt->env());
                 cs << BC::setEnv();
-                blt->eachCallArg([&](Value* arg) { load(it, arg); });
-                cs.insertStackCall(Opcode::static_call_stack_, blt->nCallArgs(),
-                                   {}, Pool::get(blt->srcIdx), blt->blt);
+                blt->eachArg([&](Value* arg) { load(it, arg); });
+                cs.insertStackCall(Opcode::static_call_stack_, blt->nargs(), {},
+                                   Pool::get(blt->srcIdx), blt->blt);
                 store(it, blt);
                 break;
             }

@@ -102,7 +102,7 @@ BC BC::copyloc(uint32_t target, uint32_t source) {
     ImmediateT im;
     im.loc_cpy.target = target;
     im.loc_cpy.source = source;
-    return BC(Opcode::copyloc_, im);
+    return BC(Opcode::movloc_, im);
 }
 BC BC::guardEnv(uint32_t id) {
     ImmediateT i;

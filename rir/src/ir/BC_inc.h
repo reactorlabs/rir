@@ -450,7 +450,7 @@ class BC {
         case Opcode::stloc_:
             immediate.loc = *(NumLocalsT*)pc;
             break;
-        case Opcode::copyloc_:
+        case Opcode::movloc_:
             immediate.loc_cpy = *(LocalsCopyT*)pc;
             break;
         case Opcode::nop_:

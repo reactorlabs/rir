@@ -375,7 +375,7 @@ void StackMachine::runCurrentBC(Rir2Pir& rir2pir, Builder& insert) {
     case Opcode::ldarg_:
     case Opcode::ldloc_:
     case Opcode::stloc_:
-    case Opcode::copyloc_:
+    case Opcode::movloc_:
         assert(false && "Recompiling PIR not supported for now.");
 
     // Unsupported opcodes:
