@@ -288,6 +288,15 @@ size_t Pir2Rir::compile(Context& ctx, Code* code) {
                 return;
             }
             case Tag::MkArg: {
+                auto mkarg = MkArg::Cast(instr);
+                // TODO: eager values
+                // auto eagerVal = mkarg->arg(0).val();
+                // if (Missing::Cast(eagerVal))
+                loadEnv(it, mkarg->env());
+                cs << BC::setEnv();
+                auto prom = promises[mkarg->prom];
+                cs << BC::promise(prom);
+                store(it, mkarg);
                 break;
             }
             case Tag::Seq: {
