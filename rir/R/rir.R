@@ -43,14 +43,3 @@ rir.eval <- function(what, env = globalenv()) {
 rir.body <- function(f) {
     .Call("rir_body", f);
 }
-
-rir.analysis.signature <- function(f) {
-    x <- .Call("rir_analysis_signature", f)
-    result = x[[1]]
-    names(result) <- x[[2]]
-    result
-}
-
-rir.analysis.liveness <- function(f) {
-    .Call("rir_analysis_liveness", f)
-}

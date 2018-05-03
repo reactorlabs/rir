@@ -11,10 +11,6 @@
 #include "ir/BC.h"
 #include "ir/Compiler.h"
 
-#include "analysis/Signature.h"
-#include "analysis/liveness.h"
-#include "analysis_framework/analysis.h"
-#include "optimization/cp.h"
 #include "utils/Printer.h"
 
 #include "ir/Optimizer.h"
@@ -84,35 +80,6 @@ REXPORT SEXP rir_body(SEXP cls) {
     if (f == nullptr)
         Rf_error("Not a valid rir compiled function");
     return f->container();
-}
-
-REXPORT SEXP rir_analysis_signature(SEXP what) {
-    ::Function* f = TYPEOF(what) == CLOSXP ? isValidClosureSEXP(what)
-                                           : isValidFunctionSEXP(what);
-    if (f == nullptr)
-        Rf_error("Not a rir compiled code");
-    CodeEditor ce(what);
-    SignatureAnalysis sa;
-    sa.analyze(ce);
-    return sa.finalState().exportToR();
-}
-
-REXPORT SEXP rir_analysis_liveness(SEXP what) {
-    ::Function* f = TYPEOF(what) == CLOSXP ? isValidClosureSEXP(what)
-                                           : isValidFunctionSEXP(what);
-    if (f == nullptr)
-        Rf_error("Not a rir compiled code");
-    CodeEditor ce(what);
-    LivenessAnalysis la;
-    la.analyze(ce);
-    Rprintf("Liveness analysis dump:\n");
-    for (auto i = ce.begin(); i != ce.end(); ++i) {
-        Rprintf("  -- live: ");
-        la[i].getState().print();
-        Rprintf("\n");
-        (*i).print();
-    }
-    return R_NilValue;
 }
 
 #include "compiler/pir_tests.h"
