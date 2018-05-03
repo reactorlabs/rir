@@ -3,11 +3,11 @@
 
 #include "R/Funtab.h"
 #include "R/Protect.h"
+#include "call_support.h"
 #include "interp.h"
 #include "interp_context.h"
 #include "interpreter/deoptimizer.h"
 #include "runtime.h"
-#include "runtime/DispatchTable.h"
 
 #define NOT_IMPLEMENTED assert(false)
 
@@ -152,6 +152,7 @@ void tryOptimizeClosure(DispatchTable* table, size_t offset, Context* ctx) {
                 fun->invocationCount = oldFun->invocationCount;
                 fun->envLeaked = oldFun->envLeaked;
                 fun->envChanged = oldFun->envChanged;
+                fun->signature = oldFun->signature;
 
                 // Update the dispatch table
                 table->put(offset, fun);
@@ -165,7 +166,7 @@ void closureDebug(SEXP call, SEXP op, SEXP rho, SEXP newrho, RCNTXT* cntxt) {
     // TODO!!!
 }
 
-void endClosureDebug(SEXP op, SEXP call, SEXP rho) {
+void endClosureDebug(SEXP call, SEXP op, SEXP rho) {
     // TODO!!!
 }
 
@@ -190,29 +191,29 @@ INLINE void __listAppend(SEXP* front, SEXP* last, SEXP value, SEXP name) {
     *last = app;
 }
 
-SEXP createArgsListStack(Code* c, size_t nargs, CallSite* cs, SEXP env,
-                         Context* ctx, bool eager) {
+SEXP createArgsListStack(Code* c, CallSite* cs, EnvironmentProxy* ep,
+                         bool eager, Context* ctx) {
     SEXP result = R_NilValue;
     SEXP pos = result;
 
     bool hasNames = cs->hasNames;
 
-    for (size_t i = 0; i < nargs; ++i) {
+    for (size_t i = 0; i < cs->nargs; ++i) {
 
         SEXP name = hasNames ? cp_pool_at(ctx, cs->names()[i]) : R_NilValue;
 
-        SEXP arg = ostack_at(ctx, nargs - i - 1);
+        SEXP arg = ostack_at(ctx, cs->nargs - i - 1);
 
         if (!eager && (arg == R_MissingArg || arg == R_DotsSymbol)) {
             // We have to wrap them in a promise, otherwise they are treated
             // as expressions to be evaluated, when in fact they are meant to be
             // asts as values
-            SEXP promise = Rf_mkPROMISE(arg, env);
+            SEXP promise = Rf_mkPROMISE(arg, ep->env());
             SET_PRVALUE(promise, arg);
             __listAppend(&result, &pos, promise, R_NilValue);
         } else {
             if (eager && TYPEOF(arg) == PROMSXP) {
-                arg = Rf_eval(arg, env);
+                arg = Rf_eval(arg, ep->env());
             }
             __listAppend(&result, &pos, arg, name);
         }
@@ -223,8 +224,8 @@ SEXP createArgsListStack(Code* c, size_t nargs, CallSite* cs, SEXP env,
     return result;
 }
 
-SEXP createArgsList(Code* c, SEXP call, size_t nargs, CallSite* cs, SEXP env,
-                    Context* ctx, bool eager) {
+SEXP createArgsList(Code* c, SEXP call, CallSite* cs, EnvironmentProxy* ep,
+                    bool eager, Context* ctx) {
     SEXP result = R_NilValue;
     SEXP pos = result;
 
@@ -232,7 +233,7 @@ SEXP createArgsList(Code* c, SEXP call, size_t nargs, CallSite* cs, SEXP env,
     // argument
     bool hasNames = cs->hasNames;
 
-    for (size_t i = 0; i < nargs; ++i) {
+    for (size_t i = 0; i < cs->nargs; ++i) {
         unsigned argi = cs->args()[i];
         SEXP name = hasNames ? cp_pool_at(ctx, cs->names()[i]) : R_NilValue;
 
@@ -240,18 +241,18 @@ SEXP createArgsList(Code* c, SEXP call, size_t nargs, CallSite* cs, SEXP env,
         // and
         // flatten the ellipsis
         if (argi == DOTS_ARG_IDX) {
-            SEXP ellipsis = findVar(R_DotsSymbol, env);
+            SEXP ellipsis = Rf_findVar(R_DotsSymbol, ep->env());
             if (TYPEOF(ellipsis) == DOTSXP) {
                 while (ellipsis != R_NilValue) {
                     name = TAG(ellipsis);
                     if (eager) {
                         SEXP arg = CAR(ellipsis);
                         if (arg != R_MissingArg)
-                            arg = Rf_eval(CAR(ellipsis), env);
+                            arg = Rf_eval(CAR(ellipsis), ep->env());
                         assert(TYPEOF(arg) != PROMSXP);
                         __listAppend(&result, &pos, arg, name);
                     } else {
-                        SEXP promise = Rf_mkPROMISE(CAR(ellipsis), env);
+                        SEXP promise = Rf_mkPROMISE(CAR(ellipsis), ep->env());
                         __listAppend(&result, &pos, promise, name);
                     }
                     ellipsis = CDR(ellipsis);
@@ -263,13 +264,12 @@ SEXP createArgsList(Code* c, SEXP call, size_t nargs, CallSite* cs, SEXP env,
             __listAppend(&result, &pos, R_MissingArg, R_NilValue);
         } else {
             if (eager) {
-                SEXP arg =
-                    evalRirCode(c->function()->codeAt(argi), ctx, env, 0);
+                SEXP arg = evalRirCode(c->function()->codeAt(argi), ctx, ep);
                 assert(TYPEOF(arg) != PROMSXP);
                 __listAppend(&result, &pos, arg, name);
             } else {
                 Code* arg = c->function()->codeAt(argi);
-                SEXP promise = createPromise(arg, env);
+                SEXP promise = createPromise(arg, ep->env());
                 __listAppend(&result, &pos, promise, name);
             }
         }
@@ -295,7 +295,7 @@ static SEXP closureArgumentAdaptor(SEXP call, SEXP op, SEXP arglist, SEXP rho,
         hashed.  */
     SEXP newrho, a, f;
 
-    SEXP actuals = matchArgs(FORMALS(op), arglist, call);
+    SEXP actuals = Rf_matchArgs(FORMALS(op), arglist, call);
     PROTECT(newrho = Rf_NewEnvironment(FORMALS(op), actuals, CLOENV(op)));
 
     /* Turn on reference counting for the binding cells so local
@@ -342,7 +342,7 @@ static SEXP closureArgumentAdaptor(SEXP call, SEXP op, SEXP arglist, SEXP rho,
     /*  Fix up any extras that were supplied by usemethod. */
 
     if (suppliedvars != R_NilValue)
-        addMissingVarsToNewEnv(newrho, suppliedvars);
+        Rf_addMissingVarsToNewEnv(newrho, suppliedvars);
 
     if (R_envHasNoSpecialSymbols(newrho))
         SET_NO_SPECIAL_SYMBOLS(newrho);
@@ -354,59 +354,49 @@ static SEXP closureArgumentAdaptor(SEXP call, SEXP op, SEXP arglist, SEXP rho,
     return newrho;
 }
 
-SEXP rirCallTrampoline(RCNTXT* cntxt, Code* code, SEXP env, unsigned nargs,
+SEXP rirCallTrampoline(RCNTXT* cntxt, Code* code, EnvironmentProxy* ep,
                        Context* ctx) {
     if ((SETJMP(cntxt->cjmpbuf))) {
         if (R_ReturnedValue == R_RestartToken) {
             cntxt->callflag = CTXT_RETURN; /* turn restart off */
             R_ReturnedValue = R_NilValue;  /* remove restart token */
-            return evalRirCode(code, ctx, env, nargs);
+            return evalRirCode(code, ctx, ep);
         } else {
             return R_ReturnedValue;
         }
     }
-    return evalRirCode(code, ctx, env, nargs);
+    return evalRirCode(code, ctx, ep);
 }
 
-static SEXP rirCallClosure(SEXP call, SEXP env, SEXP callee, SEXP actuals,
-                           unsigned nargs, Context* ctx) {
+static SEXP rirCallClosure(SEXP call, SEXP callee, ArgumentListProxy* ap,
+                           EnvironmentProxy* ep, Context* ctx) {
 
     DispatchTable* vtable = DispatchTable::unpack(BODY(callee));
     Function* fun = vtable->first();
-
-    // NOTE(mhyee): The introduction of a dispatch table for different function
-    // versions changes many things. This function handles a closure call, and
-    // will optimize the closure function and update the linked list of
-    // functions, so that subsequent closure calls pick the most optimized
-    // version.
-    // This does not introduce a new item into the dispatch table!
 
     tryOptimizeClosure(vtable, 0, ctx);
 
     fun->registerInvocation();
 
-    // match formal arguments and create the env of this new activation record
-    SEXP newEnv =
-        closureArgumentAdaptor(call, callee, actuals, env, R_NilValue);
-
-    ostack_push(ctx, newEnv);
-
     RCNTXT cntxt;
-    initClosureContext(&cntxt, call, newEnv, env, actuals, callee);
+    initClosureContext(&cntxt, call, R_NilValue, ep->env(), R_NilValue, callee);
+
+    EnvironmentProxy newEp(fun->signature->createEnvironment, call, callee, ap,
+                           ep);
 
     // Exec the closure
-    closureDebug(call, callee, env, newEnv, &cntxt);
+    closureDebug(call, callee, ep->env(), R_NilValue, &cntxt);
+
     Code* code = fun->body();
+    SEXP result = rirCallTrampoline(&cntxt, code, &newEp, ctx);
 
-    SEXP result = rirCallTrampoline(&cntxt, code, newEnv, nargs, ctx);
-
-    endClosureDebug(callee, call, env);
+    endClosureDebug(call, callee, ep->env());
 
     endClosureContext(&cntxt, result);
 
-    if (!fun->envLeaked && FRAME_LEAKED(newEnv))
+    if (!fun->envLeaked && FRAME_LEAKED(newEp.env()))
         fun->envLeaked = true;
-    if (!fun->envChanged && FRAME_CHANGED(newEnv))
+    if (!fun->envChanged && FRAME_CHANGED(newEp.env()))
         fun->envChanged = true;
 
     if (fun->deopt) {
@@ -414,7 +404,6 @@ static SEXP rirCallClosure(SEXP call, SEXP env, SEXP callee, SEXP actuals,
         // SET_BODY(callee, fun->origin);
     }
 
-    ostack_pop(ctx); // newEnv
     return result;
 }
 
@@ -533,11 +522,17 @@ INLINE SEXP fixupAST(SEXP call, Context* ctx, size_t nargs) {
     return call;
 }
 
-SEXP doCall(Code* caller, SEXP callee, bool argsOnStack, uint32_t nargs,
-            uint32_t id, SEXP env, Context* ctx) {
+INLINE bool callingR(SEXP callee) {
+    return TYPEOF(callee) == SPECIALSXP || TYPEOF(callee) == BUILTINSXP ||
+           (TYPEOF(callee) == CLOSXP && TYPEOF(BODY(callee)) != EXTERNALSXP);
+}
 
-    assert(TYPEOF(callee) == SPECIALSXP || TYPEOF(callee) == BUILTINSXP ||
-           TYPEOF(callee) == CLOSXP);
+INLINE bool callingRir(SEXP callee) {
+    return TYPEOF(callee) == CLOSXP && TYPEOF(BODY(callee)) == EXTERNALSXP;
+}
+
+SEXP doCall(Code* caller, SEXP callee, bool argsOnStack, uint32_t nargs,
+            uint32_t id, EnvironmentProxy* ep, Context* ctx) {
 
     CallSite* cs = caller->callSite(id);
     SEXP call = cp_pool_at(ctx, cs->call);
@@ -546,80 +541,91 @@ SEXP doCall(Code* caller, SEXP callee, bool argsOnStack, uint32_t nargs,
 
     SEXP result = nullptr;
 
-    do {
-        // ===============================================
-        // SPECIALSXPs do not take argslist
-        if (TYPEOF(callee) == SPECIALSXP) {
-            assert(call != R_NilValue);
+    if (callingR(callee)) {
+
+        do {
+            // ===============================================
+            // SPECIALSXPs do not take argslist
+            if (TYPEOF(callee) == SPECIALSXP) {
+                assert(call != R_NilValue);
+                Protect p;
+                if (argsOnStack) {
+                    call = fixupAST(call, ctx, nargs);
+                    p(call);
+                    ostack_popn(ctx, nargs);
+                }
+                // get the ccode
+                CCODE f = getBuiltin(callee);
+                int flag = getFlag(callee);
+                R_Visible = static_cast<Rboolean>(flag != 1);
+                warnSpecial(callee, call);
+                // call it with the AST only
+                result = f(call, callee, CDR(call), ep->env());
+                if (flag < 2)
+                    R_Visible = static_cast<Rboolean>(flag != 1);
+                break;
+            }
+
+            // ===============================================
+            // BUILTINSXP or CLOSXP
+
+            // create the argslist
+            bool eager = TYPEOF(callee) == BUILTINSXP;
+            SEXP argslist;
             Protect p;
             if (argsOnStack) {
                 call = fixupAST(call, ctx, nargs);
                 p(call);
+                argslist = createArgsListStack(caller, cs, ep, eager, ctx);
                 ostack_popn(ctx, nargs);
-            }
-            // get the ccode
-            CCODE f = getBuiltin(callee);
-            int flag = getFlag(callee);
-            R_Visible = static_cast<Rboolean>(flag != 1);
-            warnSpecial(callee, call);
-            // call it with the AST only
-            result = f(call, callee, CDR(call), env);
-            if (flag < 2)
-                R_Visible = static_cast<Rboolean>(flag != 1);
-            break;
-        }
-
-        // ===============================================
-        // BUILTINSXP or CLOSXP
-
-        // create the argslist
-        bool eager = TYPEOF(callee) == BUILTINSXP;
-        SEXP argslist;
-        Protect p;
-        if (argsOnStack) {
-            call = fixupAST(call, ctx, nargs);
-            p(call);
-            argslist = createArgsListStack(caller, nargs, cs, env, ctx, eager);
-            ostack_popn(ctx, nargs);
-        } else {
-            argslist = createArgsList(caller, call, nargs, cs, env, ctx, eager);
-        }
-        p(argslist);
-
-        if (TYPEOF(callee) == BUILTINSXP) {
-            // get the ccode
-            CCODE f = getBuiltin(callee);
-            int flag = getFlag(callee);
-            if (flag < 2)
-                R_Visible = static_cast<Rboolean>(flag != 1);
-            // call it
-            result = f(call, callee, argslist, env);
-            if (flag < 2)
-                R_Visible = static_cast<Rboolean>(flag != 1);
-            break;
-        }
-
-        if (TYPEOF(callee) == CLOSXP) {
-            // if body is EXTERNALSXP, it is rir serialized code, execute it
-            // directly
-            SEXP body = BODY(callee);
-            if (TYPEOF(body) == EXTERNALSXP) {
-                assert(isValidDispatchTableSEXP(body));
-                result =
-                    rirCallClosure(call, env, callee, argslist, nargs, ctx);
             } else {
-                result = applyClosure(call, callee, argslist, env, R_NilValue);
+                argslist = createArgsList(caller, call, cs, ep, eager, ctx);
             }
-            break;
-        }
-    } while (false);
+            p(argslist);
+
+            if (TYPEOF(callee) == BUILTINSXP) {
+                // get the ccode
+                CCODE f = getBuiltin(callee);
+                int flag = getFlag(callee);
+                if (flag < 2)
+                    R_Visible = static_cast<Rboolean>(flag != 1);
+                // call it
+                result = f(call, callee, argslist, ep->env());
+                if (flag < 2)
+                    R_Visible = static_cast<Rboolean>(flag != 1);
+                break;
+            }
+
+            if (TYPEOF(callee) == CLOSXP) {
+                result = Rf_applyClosure(call, callee, argslist, ep->env(),
+                                         R_NilValue);
+                break;
+            }
+        } while (false);
+
+    } else if (callingRir(callee)) {
+
+        SEXP body = BODY(callee);
+        assert(isValidDispatchTableSEXP(body));
+
+        Protect p;
+        if (argsOnStack)
+            call = p(fixupAST(call, ctx, nargs));
+
+        ArgumentListProxy ap(caller, argsOnStack, id);
+
+        result = rirCallClosure(call, callee, &ap, ep, ctx);
+
+    } else {
+        assert(false && "Don't know how to run other stuff");
+    }
 
     assert(result);
     return result;
 }
 
 SEXP doDispatch(Code* caller, bool argsOnStack, uint32_t nargs, uint32_t id,
-                SEXP env, Context* ctx) {
+                EnvironmentProxy* ep, Context* ctx) {
 
     SEXP obj = argsOnStack ? ostack_at(ctx, nargs - 1) : ostack_top(ctx);
     assert(isObject(obj));
@@ -632,21 +638,19 @@ SEXP doDispatch(Code* caller, bool argsOnStack, uint32_t nargs, uint32_t id,
     profileCall(cs, Rf_install("*dispatch*"));
 
     SEXP actuals;
-    {
-        if (argsOnStack) {
-            call = fixupAST(call, ctx, nargs);
-            Protect p(call);
-            actuals = createArgsListStack(caller, nargs, cs, env, ctx, true);
-            ostack_popn(ctx, nargs);
-            ostack_push(ctx, actuals);
-            ostack_push(ctx, call);
-        } else {
-            actuals = createArgsList(caller, call, nargs, cs, env, ctx, false);
-            ostack_push(ctx, actuals);
-            // Patch the already evaluated object into the first entry of
-            // the promise args list
-            SET_PRVALUE(CAR(actuals), obj);
-        }
+    if (argsOnStack) {
+        call = fixupAST(call, ctx, nargs);
+        Protect p(call);
+        actuals = createArgsListStack(caller, cs, ep, true, ctx);
+        ostack_popn(ctx, nargs);
+        ostack_push(ctx, actuals);
+        ostack_push(ctx, call);
+    } else {
+        actuals = createArgsList(caller, call, cs, ep, false, ctx);
+        ostack_push(ctx, actuals);
+        // Patch the already evaluated object into the first entry of
+        // the promise args list
+        SET_PRVALUE(CAR(actuals), obj);
     }
 
     SEXP result = nullptr;
@@ -654,7 +658,7 @@ SEXP doDispatch(Code* caller, bool argsOnStack, uint32_t nargs, uint32_t id,
         // ===============================================
         // First try S4
         if (IS_S4_OBJECT(obj) && R_has_methods(op)) {
-            result = R_possible_dispatch(call, op, actuals, env, TRUE);
+            result = R_possible_dispatch(call, op, actuals, ep->env(), TRUE);
             if (result) {
                 break;
             }
@@ -663,12 +667,12 @@ SEXP doDispatch(Code* caller, bool argsOnStack, uint32_t nargs, uint32_t id,
         // ===============================================
         // Then try S3
         const char* generic = CHAR(PRINTNAME(selector));
-        SEXP rho1 = Rf_NewEnvironment(R_NilValue, R_NilValue, env);
+        SEXP rho1 = Rf_NewEnvironment(R_NilValue, R_NilValue, ep->env());
         ostack_push(ctx, rho1);
         RCNTXT cntxt;
-        initClosureContext(&cntxt, call, rho1, env, actuals, op);
-        bool success = Rf_usemethod(generic, obj, call, actuals, rho1, env,
-                                    R_BaseEnv, &result);
+        initClosureContext(&cntxt, call, rho1, ep->env(), actuals, op);
+        bool success = Rf_usemethod(generic, obj, call, actuals, rho1,
+                                    ep->env(), R_BaseEnv, &result);
         ostack_pop(ctx);
         endClosureContext(&cntxt, success ? result : R_NilValue);
         if (success) {
@@ -677,7 +681,7 @@ SEXP doDispatch(Code* caller, bool argsOnStack, uint32_t nargs, uint32_t id,
 
         // ===============================================
         // Now normal dispatch
-        SEXP callee = Rf_findFun(selector, env);
+        SEXP callee = Rf_findFun(selector, ep->env());
 
         // TODO something should happen here
         if (callee == R_UnboundValue)
@@ -693,7 +697,7 @@ SEXP doDispatch(Code* caller, bool argsOnStack, uint32_t nargs, uint32_t id,
             R_Visible = static_cast<Rboolean>(flag != 1);
             warnSpecial(callee, call);
             // call it with the AST only
-            result = f(call, callee, CDR(call), env);
+            result = f(call, callee, CDR(call), ep->env());
             if (flag < 2)
                 R_Visible = static_cast<Rboolean>(flag != 1);
             break;
@@ -703,12 +707,12 @@ SEXP doDispatch(Code* caller, bool argsOnStack, uint32_t nargs, uint32_t id,
             CCODE f = getBuiltin(callee);
             // force all promises in the args list
             for (SEXP a = actuals; a != R_NilValue; a = CDR(a))
-                SETCAR(a, Rf_eval(CAR(a), env));
+                SETCAR(a, Rf_eval(CAR(a), ep->env()));
             int flag = getFlag(callee);
             if (flag < 2)
                 R_Visible = static_cast<Rboolean>(flag != 1);
             // call it
-            result = f(call, callee, actuals, env);
+            result = f(call, callee, actuals, ep->env());
             if (flag < 2)
                 R_Visible = static_cast<Rboolean>(flag != 1);
             break;
@@ -719,9 +723,11 @@ SEXP doDispatch(Code* caller, bool argsOnStack, uint32_t nargs, uint32_t id,
             SEXP body = BODY(callee);
             if (TYPEOF(body) == EXTERNALSXP) {
                 assert(isValidDispatchTableSEXP(body));
-                result = rirCallClosure(call, env, callee, actuals, nargs, ctx);
+                ArgumentListProxy ap(actuals);
+                result = rirCallClosure(call, callee, &ap, ep, ctx);
             } else {
-                result = applyClosure(call, callee, actuals, env, R_NilValue);
+                result = Rf_applyClosure(call, callee, actuals, ep->env(),
+                                         R_NilValue);
             }
             break;
         }
@@ -731,8 +737,63 @@ SEXP doDispatch(Code* caller, bool argsOnStack, uint32_t nargs, uint32_t id,
     } while (false);
 
     ostack_popn(ctx, 2);
+
     assert(result);
     return result;
+}
+
+static RCNTXT* findClosureReturnContext() {
+    for (RCNTXT* cptr = R_GlobalContext;
+         cptr != NULL && cptr->callflag != CTXT_TOPLEVEL;
+         cptr = cptr->nextcontext)
+        if (cptr->callflag & CTXT_FUNCTION)
+            return cptr;
+    assert(false && "no function return context found");
+}
+
+void ArgumentListProxy::create(EnvironmentProxy* ep) {
+
+    CallSite* cs = ctxt_.caller->callSite(ctxt_.id);
+    SEXP call = cp_pool_at(globalContext(), cs->call);
+
+    SEXP argslist;
+    if (ctxt_.onStack) {
+        argslist =
+            createArgsListStack(ctxt_.caller, cs, ep, false, globalContext());
+        ostack_popn(globalContext(), cs->nargs);
+        // Also patch the node stack top in the context -- arguments need
+        // to be removed in case of non-local return
+        RCNTXT* cntxt = findClosureReturnContext();
+        cntxt->nodestack -= cs->nargs;
+    } else {
+        argslist =
+            createArgsList(ctxt_.caller, call, cs, ep, false, globalContext());
+    }
+
+    argslist_ = argslist;
+    validArgslist_ = true;
+}
+
+void EnvironmentProxy::init() {
+    if (validREnv_)
+        return;
+    if (!createEnvironment_)
+        return;
+
+    SEXP argslist = ctxt_.ap->argslist(parent_);
+    Protect p(argslist);
+    SEXP env = closureArgumentAdaptor(ctxt_.call, ctxt_.callee, argslist,
+                                      parent_->env(), R_NilValue);
+
+    // This patches the missing values in the return context of this
+    // closure call. From now, they are also protected during gc
+    // (contexts are considered roots by the collector).
+    RCNTXT* cntxt = findClosureReturnContext();
+    cntxt->promargs = argslist;
+    cntxt->cloenv = env;
+
+    env_ = env;
+    validREnv_ = true;
 }
 
 #define R_INT_MAX INT_MAX
@@ -800,7 +861,7 @@ enum op { PLUSOP, MINUSOP, TIMESOP, DIVOP, POWOP, MODOP, IDIVOP };
         static CCODE blt;                                                      \
         static int flag;                                                       \
         if (!prim) {                                                           \
-            prim = findFun(Rf_install(op), R_GlobalEnv);                       \
+            prim = Rf_findFun(Rf_install(op), R_GlobalEnv);                    \
             blt = getBuiltin(prim);                                            \
             flag = getFlag(prim);                                              \
         }                                                                      \
@@ -809,7 +870,7 @@ enum op { PLUSOP, MINUSOP, TIMESOP, DIVOP, POWOP, MODOP, IDIVOP };
         ostack_push(ctx, argslist);                                            \
         if (flag < 2)                                                          \
             R_Visible = static_cast<Rboolean>(flag != 1);                      \
-        res = blt(call, prim, argslist, env);                                  \
+        res = blt(call, prim, argslist, ep->env());                            \
         if (flag < 2)                                                          \
             R_Visible = static_cast<Rboolean>(flag != 1);                      \
         ostack_pop(ctx);                                                       \
@@ -934,7 +995,7 @@ static R_INLINE int R_integer_uminus(int x, Rboolean* pnaflag) {
         static CCODE blt;                                                      \
         static int flag;                                                       \
         if (!prim) {                                                           \
-            prim = findFun(Rf_install(op), R_GlobalEnv);                       \
+            prim = Rf_findFun(Rf_install(op), R_GlobalEnv);                    \
             blt = getBuiltin(prim);                                            \
             flag = getFlag(prim);                                              \
         }                                                                      \
@@ -943,7 +1004,7 @@ static R_INLINE int R_integer_uminus(int x, Rboolean* pnaflag) {
         ostack_push(ctx, argslist);                                            \
         if (flag < 2)                                                          \
             R_Visible = static_cast<Rboolean>(flag != 1);                      \
-        res = blt(call, prim, argslist, env);                                  \
+        res = blt(call, prim, argslist, ep->env());                            \
         if (flag < 2)                                                          \
             R_Visible = static_cast<Rboolean>(flag != 1);                      \
         ostack_pop(ctx);                                                       \
@@ -1115,7 +1176,7 @@ static SEXP cachedGetVar(SEXP env, Immediate idx, Context* ctx,
     }
     SEXP sym = cp_pool_at(ctx, idx);
     SLOWASSERT(TYPEOF(sym) == SYMSXP);
-    return findVar(sym, env);
+    return Rf_findVar(sym, env);
 }
 
 #define ACTIVE_BINDING_MASK (1 << 15)
@@ -1144,7 +1205,7 @@ static void cachedSetVar(SEXP val, SEXP env, Immediate idx, Context* ctx,
     UNPROTECT(1);
 }
 
-SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
+SEXP evalRirCode(Code* c, Context* ctx, EnvironmentProxy* ep) {
 
 #ifdef THREADED_CODE
     static void* opAddr[static_cast<uint8_t>(Opcode::num_of)] = {
@@ -1156,19 +1217,13 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
 
     assert(c->magic == CODE_MAGIC);
 
+    ep->init();
+
     Locals locals(c->localsCount);
-    locals.store(0, env);
+    locals.store(0, ep->env()); // prob remove this..
 
     BindingCache bindingCache[BINDING_CACHE_SIZE];
     memset(&bindingCache, 0, sizeof(bindingCache));
-
-    if (!env) {
-        error("'rho' cannot be C NULL: detected in C-level eval");
-    }
-    if (!isEnvironment(env)) {
-        error("'rho' must be an environment not %s: detected in C-level eval",
-              type2char(TYPEOF(env)));
-    }
 
     // make sure there is enough room on the stack
     // there is some slack of 5 to make sure the call instruction can store
@@ -1187,10 +1242,31 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
 
         INSTRUCTION(nop_) NEXT();
 
+        INSTRUCTION(make_env_) {
+            SEXP parent = ostack_pop(ctx);
+            assert(TYPEOF(parent) == ENVSXP &&
+                   "Non-environment used as environment parent.");
+            res = Rf_NewEnvironment(R_NilValue, R_NilValue, parent);
+            ostack_push(ctx, res);
+            NEXT();
+        }
+
+        INSTRUCTION(get_env_) {
+            ostack_push(ctx, ep->env());
+            NEXT();
+        }
+
+        INSTRUCTION(set_env_) {
+            SEXP e = ostack_pop(ctx);
+            assert(TYPEOF(e) == ENVSXP && "Expected an environment on TOS.");
+            ep->set(e);
+            NEXT();
+        }
+
         INSTRUCTION(ldfun_) {
             SEXP sym = readConst(ctx, readImmediate());
             advanceImmediate();
-            res = findFun(sym, env);
+            res = Rf_findFun(sym, ep->env());
 
             // TODO something should happen here
             if (res == R_UnboundValue)
@@ -1216,7 +1292,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
         INSTRUCTION(ldvar_) {
             Immediate id = readImmediate();
             advanceImmediate();
-            res = cachedGetVar(env, id, ctx, bindingCache);
+            res = cachedGetVar(ep->env(), id, ctx, bindingCache);
             R_Visible = TRUE;
 
             if (res == R_UnboundValue) {
@@ -1241,7 +1317,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
         INSTRUCTION(ldvar2_) {
             SEXP sym = readConst(ctx, readImmediate());
             advanceImmediate();
-            res = findVar(sym, ENCLOS(env));
+            res = Rf_findVar(sym, ENCLOS(ep->env()));
             R_Visible = TRUE;
 
             if (res == R_UnboundValue) {
@@ -1265,7 +1341,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
         INSTRUCTION(ldddvar_) {
             SEXP sym = readConst(ctx, readImmediate());
             advanceImmediate();
-            res = Rf_ddfindVar(sym, env);
+            res = Rf_ddfindVar(sym, ep->env());
             R_Visible = TRUE;
 
             // TODO better errors
@@ -1289,7 +1365,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
         INSTRUCTION(ldlval_) {
             Immediate id = readImmediate();
             advanceImmediate();
-            res = cachedGetBindingCell(env, id, ctx, bindingCache);
+            res = cachedGetBindingCell(ep->env(), id, ctx, bindingCache);
             assert(res);
             res = CAR(res);
             assert(res != R_UnboundValue);
@@ -1312,7 +1388,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
         INSTRUCTION(ldarg_) {
             Immediate id = readImmediate();
             advanceImmediate();
-            res = cachedGetBindingCell(env, id, ctx, bindingCache);
+            res = cachedGetBindingCell(ep->env(), id, ctx, bindingCache);
             assert(res);
             res = CAR(res);
             assert(res != R_UnboundValue);
@@ -1349,13 +1425,13 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
         INSTRUCTION(stvar_) {
             Immediate id = readImmediate();
             advanceImmediate();
-            int wasChanged = FRAME_CHANGED(env);
+            int wasChanged = FRAME_CHANGED(ep->env());
             SEXP val = ostack_pop(ctx);
 
-            cachedSetVar(val, env, id, ctx, bindingCache);
+            cachedSetVar(val, ep->env(), id, ctx, bindingCache);
 
             if (!wasChanged)
-                CLEAR_FRAME_CHANGED(env);
+                CLEAR_FRAME_CHANGED(ep->env());
             NEXT();
         }
 
@@ -1365,7 +1441,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
             SLOWASSERT(TYPEOF(sym) == SYMSXP);
             SEXP val = ostack_pop(ctx);
             INCREMENT_NAMED(val);
-            setVar(sym, val, ENCLOS(env));
+            setVar(sym, val, ENCLOS(ep->env()));
             NEXT();
         }
 
@@ -1382,10 +1458,9 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
             advanceImmediate();
             Immediate n = readImmediate();
             advanceImmediate();
-            // get the closure itself
-            res = ostack_at(ctx, 0);
-            res = doCall(c, res, false, n, id, env, ctx);
-            ostack_pop(ctx);
+            SEXP callee = ostack_at(ctx, 0);
+            res = doCall(c, callee, false, n, id, ep, ctx);
+            ostack_pop(ctx); // callee
             ostack_push(ctx, res);
             NEXT();
         }
@@ -1395,8 +1470,8 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
             advanceImmediate();
             Immediate n = readImmediate();
             advanceImmediate();
-            res = ostack_at(ctx, n);
-            res = doCall(c, res, true, n, id, env, ctx);
+            SEXP callee = ostack_at(ctx, n);
+            res = doCall(c, callee, true, n, id, ep, ctx);
             ostack_pop(ctx); // callee
             ostack_push(ctx, res);
             NEXT();
@@ -1407,8 +1482,8 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
             advanceImmediate();
             Immediate n = readImmediate();
             advanceImmediate();
-            res = cp_pool_at(ctx, *c->callSite(id)->target());
-            res = doCall(c, res, true, n, id, env, ctx);
+            SEXP callee = cp_pool_at(ctx, *c->callSite(id)->target());
+            res = doCall(c, callee, true, n, id, ep, ctx);
             ostack_push(ctx, res);
             NEXT();
         }
@@ -1418,7 +1493,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
             advanceImmediate();
             Immediate n = readImmediate();
             advanceImmediate();
-            ostack_push(ctx, doDispatch(c, false, n, id, env, ctx));
+            ostack_push(ctx, doDispatch(c, false, n, id, ep, ctx));
             NEXT();
         }
 
@@ -1427,7 +1502,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
             advanceImmediate();
             Immediate n = readImmediate();
             advanceImmediate();
-            ostack_push(ctx, doDispatch(c, true, n, id, env, ctx));
+            ostack_push(ctx, doDispatch(c, true, n, id, ep, ctx));
             NEXT();
         }
 
@@ -1439,7 +1514,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
             assert(isValidDispatchTableObject(body));
             SET_FORMALS(res, formals);
             SET_BODY(res, body);
-            SET_CLOENV(res, env);
+            SET_CLOENV(res, ep->env());
             Rf_setAttrib(res, Rf_install("srcref"), srcref);
             ostack_popn(ctx, 3);
             ostack_push(ctx, res);
@@ -1470,7 +1545,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
             advanceImmediate();
             Code* promiseCode = c->function()->codeAt(id);
             // create the promise and push it on stack
-            ostack_push(ctx, createPromise(promiseCode, env));
+            ostack_push(ctx, createPromise(promiseCode, ep->env()));
             NEXT();
         }
 
@@ -1929,7 +2004,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
             advanceImmediate();
             SLOWASSERT(TYPEOF(sym) == SYMSXP);
             SLOWASSERT(!DDVAL(sym));
-            SEXP val = R_findVarLocInFrame(env, sym).cell;
+            SEXP val = R_findVarLocInFrame(ep->env(), sym).cell;
             if (val == NULL)
                 errorcall(getSrcAt(c, pc - 1, ctx),
                           "'missing' can only be used for arguments");
@@ -2007,7 +2082,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
             SEXP args = CONS_NR(idx, R_NilValue);
             args = CONS_NR(val, args);
             ostack_push(ctx, args);
-            res = do_subset_dflt(R_NilValue, R_SubsetSym, args, env);
+            res = do_subset_dflt(R_NilValue, R_SubsetSym, args, ep->env());
             ostack_popn(ctx, 3);
 
             R_Visible = TRUE;
@@ -2024,7 +2099,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
             args = CONS_NR(idx, args);
             args = CONS_NR(val, args);
             ostack_push(ctx, args);
-            res = do_subset_dflt(R_NilValue, R_SubsetSym, args, env);
+            res = do_subset_dflt(R_NilValue, R_SubsetSym, args, ep->env());
             ostack_popn(ctx, 4);
 
             R_Visible = TRUE;
@@ -2042,7 +2117,8 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
             args = CONS_NR(idx, args);
             args = CONS_NR(orig, args);
             PROTECT(args);
-            res = do_subassign_dflt(R_NilValue, R_SubassignSym, args, env);
+            res =
+                do_subassign_dflt(R_NilValue, R_SubassignSym, args, ep->env());
             ostack_popn(ctx, 3);
             UNPROTECT(1);
 
@@ -2119,7 +2195,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
             SEXP args = CONS_NR(idx, R_NilValue);
             args = CONS_NR(val, args);
             ostack_push(ctx, args);
-            res = do_subset2_dflt(R_NilValue, R_Subset2Sym, args, env);
+            res = do_subset2_dflt(R_NilValue, R_Subset2Sym, args, ep->env());
             ostack_popn(ctx, 3);
 
             R_Visible = TRUE;
@@ -2137,7 +2213,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
             args = CONS_NR(idx, args);
             args = CONS_NR(val, args);
             ostack_push(ctx, args);
-            res = do_subset_dflt(R_NilValue, R_Subset2Sym, args, env);
+            res = do_subset_dflt(R_NilValue, R_Subset2Sym, args, ep->env());
             ostack_popn(ctx, 4);
 
             R_Visible = TRUE;
@@ -2177,9 +2253,9 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
                     // allocated
                     // vector
                     SEXP target = cp_pool_at(ctx, targetI);
-                    bool localBinding =
-                        (target == R_NilValue) ||
-                        !R_VARLOC_IS_NULL(R_findVarLocInFrame(env, target));
+                    bool localBinding = (target == R_NilValue) ||
+                                        !R_VARLOC_IS_NULL(R_findVarLocInFrame(
+                                            ep->env(), target));
 
                     if (localBinding) {
                         int idx_ = -1;
@@ -2232,7 +2308,8 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
             args = CONS_NR(idx, args);
             args = CONS_NR(orig, args);
             PROTECT(args);
-            res = do_subassign2_dflt(R_NilValue, R_Subassign2Sym, args, env);
+            res = do_subassign2_dflt(R_NilValue, R_Subassign2Sym, args,
+                                     ep->env());
             ostack_popn(ctx, 3);
             UNPROTECT(1);
 
@@ -2247,7 +2324,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
             advanceImmediate();
             advanceImmediate();
 #ifndef UNSOUND_OPTS
-            assert(res == findFun(sym, env) && "guard_fun_ fail");
+            assert(res == Rf_findFun(sym, ep->env()) && "guard_fun_ fail");
 #endif
             NEXT();
         }
@@ -2255,7 +2332,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
         INSTRUCTION(guard_env_) {
             uint32_t deoptId = readImmediate();
             advanceImmediate();
-            if (FRAME_CHANGED(env) || FRAME_LEAKED(env)) {
+            if (FRAME_CHANGED(ep->env()) || FRAME_LEAKED(ep->env())) {
                 Function* fun = c->function();
                 assert(fun->body() == c && "Cannot deopt from promise");
                 fun->deopt = true;
@@ -2275,11 +2352,11 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
                 // TODO: we could call seq.default here, but it messes up the
                 // error
                 // call :(
-                prim = findFun(Rf_install("seq"), R_GlobalEnv);
+                prim = Rf_findFun(Rf_install("seq"), R_GlobalEnv);
             }
 
             // TODO: add a real guard here...
-            assert(prim == findFun(Rf_install("seq"), env));
+            assert(prim == Rf_findFun(Rf_install("seq"), ep->env()));
 
             SEXP from = ostack_at(ctx, 2);
             SEXP to = ostack_at(ctx, 1);
@@ -2313,7 +2390,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
                 SEXP argslist =
                     CONS_NR(from, CONS_NR(to, CONS_NR(by, R_NilValue)));
                 ostack_push(ctx, argslist);
-                res = applyClosure(call, prim, argslist, env, R_NilValue);
+                res = applyClosure(call, prim, argslist, ep->env(), R_NilValue);
                 ostack_pop(ctx);
             }
 
@@ -2456,7 +2533,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
             Opcode** oldPc = (Opcode**)(cntxt + 1);
             *oldPc = pc;
 
-            Rf_begincontext(cntxt, CTXT_LOOP, R_NilValue, env, R_BaseEnv,
+            Rf_begincontext(cntxt, CTXT_LOOP, R_NilValue, ep->env(), R_BaseEnv,
                             R_NilValue, R_NilValue);
             // (ab)use the unused cenddata field to store sp
             cntxt->cenddata = (void*)ostack_length(ctx);
@@ -2498,7 +2575,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP env, unsigned numArgs) {
         INSTRUCTION(return_) {
             res = ostack_top(ctx);
             // this restores stack pointer to the value from the target context
-            Rf_findcontext(CTXT_BROWSER | CTXT_FUNCTION, env, res);
+            Rf_findcontext(CTXT_BROWSER | CTXT_FUNCTION, ep->env(), res);
             // not reached
             NEXT();
         }
@@ -2537,12 +2614,11 @@ SEXP rirExpr(SEXP f) {
 
 SEXP rirEval_f(SEXP what, SEXP env) {
     assert(TYPEOF(what) == EXTERNALSXP);
-    assert(TYPEOF(env) == ENVSXP);
 
-    // TODO we do not really need the arg counts now
+    EnvironmentProxy ep(env);
 
     if (isValidCodeObject(what))
-        return evalRirCode((Code*)what, globalContext(), env, 0);
+        return evalRirCode((Code*)what, globalContext(), &ep);
 
     if (DispatchTable::check(what)) {
         auto table = DispatchTable::unpack(what);
@@ -2553,7 +2629,7 @@ SEXP rirEval_f(SEXP what, SEXP env) {
         Function* fun = table->at(offset);
         fun->registerInvocation();
 
-        return evalRirCode(fun->body(), globalContext(), env, 0);
+        return evalRirCode(fun->body(), globalContext(), &ep);
     }
 
     assert(false && "Expected a code object or a dispatch table");

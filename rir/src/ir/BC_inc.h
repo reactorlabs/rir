@@ -68,9 +68,6 @@ enum class Opcode : uint8_t {
 // ============================================================
 // ==== immediate argument types
 //
-#pragma pack(push)
-#pragma pack(0)
-
 // index into the constant pool
 typedef uint32_t PoolIdxT;
 // index into a functions array of code objects
@@ -91,7 +88,6 @@ typedef struct {
 } GuardFunArgs;
 typedef uint32_t GuardT;
 typedef uint32_t NumLocalsT;
-#pragma pack(pop)
 
 static constexpr size_t MAX_NUM_ARGS = 1L << (8 * sizeof(PoolIdxT));
 static constexpr size_t MAX_POOL_IDX = 1L << (8 * sizeof(PoolIdxT));
@@ -124,6 +120,12 @@ class BC {
     };
 
     BC() : bc(Opcode::invalid_), immediate({{0}}) {}
+    
+    BC(Opcode* pc) {
+        bc = *pc;
+        immediate = decodeImmediate(bc, pc + 1);
+    }
+
     BC operator=(BC other) {
         bc = other.bc;
         immediate = other.immediate;
@@ -216,9 +218,18 @@ class BC {
         return cur;
     }
 
+    inline static Opcode* next(Opcode* pc) {
+        Opcode bc = *pc;
+        BC cur(bc, decodeImmediate(bc, pc + 1));
+        return (Opcode*)((uintptr_t)pc + cur.size());
+    }
+
     // ==== Factory methods
     // to create new BC objects, which can be streamed to a CodeStream
     inline static BC nop();
+    inline static BC makeEnv();
+    inline static BC getEnv();
+    inline static BC setEnv();
     inline static BC push(SEXP constant);
     inline static BC push(double constant);
     inline static BC push(int constant);
@@ -429,6 +440,9 @@ class BC {
             immediate.loc = *(NumLocalsT*)pc;
             break;
         case Opcode::nop_:
+        case Opcode::make_env_:
+        case Opcode::get_env_:
+        case Opcode::set_env_:
         case Opcode::for_seq_size_:
         case Opcode::extract1_1_:
         case Opcode::extract2_1_:

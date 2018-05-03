@@ -137,7 +137,8 @@ class FunctionWriter {
         // set the last code offset
         function->foffset = offset;
 
-        memcpy((void*)code->callSites(), callSiteBuffer, callSiteLength);
+        if (callSiteLength)
+            memcpy((void*)code->callSites(), callSiteBuffer, callSiteLength);
 
         return code;
     }

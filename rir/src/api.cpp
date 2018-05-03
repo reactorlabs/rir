@@ -35,16 +35,10 @@ REXPORT SEXP rir_compile(SEXP what, SEXP env = NULL) {
     // TODO make this nicer
     if (TYPEOF(what) == CLOSXP) {
         SEXP body = BODY(what);
-        if (TYPEOF(body) == BCODESXP) {
-            R_PreserveObject(body);
-            body = VECTOR_ELT(CDR(body), 0);
-        }
-
         if (TYPEOF(body) == EXTERNALSXP)
             Rf_error("closure already compiled");
 
-        SEXP result = Compiler::compileClosure(body, FORMALS(what));
-        SET_CLOENV(result, CLOENV(what));
+        SEXP result = Compiler::compileClosure(what);
         Rf_copyMostAttrib(what, result);
         return result;
     } else {
@@ -76,7 +70,8 @@ REXPORT SEXP rir_eval(SEXP what, SEXP env) {
         f = isValidClosureSEXP(what);
     if (f == nullptr)
         Rf_error("Not rir compiled code");
-    return evalRirCode(f->body(), globalContext(), env, 0);
+    EnvironmentProxy ep(env);
+    return evalRirCode(f->body(), globalContext(), &ep);
 }
 
 REXPORT SEXP rir_body(SEXP cls) {
@@ -84,6 +79,27 @@ REXPORT SEXP rir_body(SEXP cls) {
     if (f == nullptr)
         Rf_error("Not a valid rir compiled function");
     return f->container();
+}
+
+#include "compiler/pir_tests.h"
+#include "compiler/translations/rir_2_pir/rir_2_pir.h"
+
+REXPORT SEXP pir_compile(SEXP what) {
+    if (!isValidClosureSEXP(what))
+        Rf_error("not a compiled closure");
+
+    pir::Module* m = new pir::Module;
+    pir::Rir2PirCompiler cmp(m);
+    cmp.setVerbose(true);
+    cmp.compileClosure(what);
+    cmp.optimizeModule();
+    delete m;
+    return R_NilValue;
+}
+
+REXPORT SEXP pir_tests() {
+    PirTests::run();
+    return R_NilValue;
 }
 
 // startup ---------------------------------------------------------------------

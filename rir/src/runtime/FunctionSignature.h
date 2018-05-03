@@ -57,6 +57,8 @@ struct FunctionSignature {
     }
 
     void print() const {
+        Rprintf("    environment?   %s\n",
+                createEnvironment ? "true" : "false");
         Rprintf("    on stack?      %s\n", argsOnStack ? "true" : "false");
         Rprintf("    args (%u):\n", arguments.size());
         for (auto arg : arguments)
@@ -66,6 +68,7 @@ struct FunctionSignature {
 
     FunctionSignature() = default;
 
+    bool createEnvironment = true;
     bool argsOnStack = false;
     std::vector<ArgumentType> arguments;
 };

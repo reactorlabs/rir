@@ -71,6 +71,9 @@ bool BC::operator==(const BC& other) const {
         return immediate.loc == other.immediate.loc;
 
     case Opcode::nop_:
+    case Opcode::make_env_:
+    case Opcode::get_env_:
+    case Opcode::set_env_:
     case Opcode::extract1_1_:
     case Opcode::extract1_2_:
     case Opcode::extract2_1_:
@@ -191,6 +194,9 @@ void BC::write(CodeStream& cs) const {
         return;
 
     case Opcode::nop_:
+    case Opcode::make_env_:
+    case Opcode::get_env_:
+    case Opcode::set_env_:
     case Opcode::extract1_1_:
     case Opcode::extract1_2_:
     case Opcode::extract2_1_:
@@ -405,6 +411,9 @@ void BC::print(CallSite* cs) {
         Rprintf("\n");
         break;
     case Opcode::nop_:
+    case Opcode::make_env_:
+    case Opcode::get_env_:
+    case Opcode::set_env_:
     case Opcode::force_:
     case Opcode::pop_:
     case Opcode::seq_:
