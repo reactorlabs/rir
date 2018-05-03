@@ -190,12 +190,21 @@ size_t Pir2Rir::compile(Context& ctx, Code* code) {
             cs << BC::ldloc(alloc[what]);
         };
 
+        Value* currentEnv = nullptr;
         auto loadEnv = [&](BB::Instrs::iterator it, Value* val) {
             assert(Env::isAnyEnv(val));
             if (Env::isStaticEnv(val))
                 cs << BC::push(Env::Cast(val)->rho);
             else
                 load(it, val);
+        };
+        auto setEnv = [&](BB::Instrs::iterator it, Value* val) {
+            assert(Env::isAnyEnv(val));
+            if (val != currentEnv) {
+                currentEnv = val;
+                loadEnv(it, val);
+                cs << BC::setEnv();
+            }
         };
 
         for (auto it = bb->begin(); it != bb->end(); ++it) {
@@ -208,15 +217,15 @@ size_t Pir2Rir::compile(Context& ctx, Code* code) {
             }
             case Tag::LdFun: {
                 auto ldfun = LdFun::Cast(instr);
-                loadEnv(it, ldfun->env());
-                cs << BC::setEnv() << BC::ldfun(ldfun->varName);
+                setEnv(it, ldfun->env());
+                cs << BC::ldfun(ldfun->varName);
                 store(it, ldfun);
                 break;
             }
             case Tag::LdVar: {
                 auto ldvar = LdVar::Cast(instr);
-                loadEnv(it, ldvar->env());
-                cs << BC::setEnv() << BC::getvar(ldvar->varName);
+                setEnv(it, ldvar->env());
+                cs << BC::getvar(ldvar->varName);
                 store(it, ldvar);
                 break;
             }
@@ -249,13 +258,13 @@ size_t Pir2Rir::compile(Context& ctx, Code* code) {
             }
             case Tag::StVar: {
                 auto stvar = StVar::Cast(instr);
-                loadEnv(it, stvar->env());
-                cs << BC::setEnv() << BC::stvar(stvar->varName);
+                setEnv(it, stvar->env());
+                cs << BC::stvar(stvar->varName);
                 break;
             }
             case Tag::Branch: {
                 auto br = Branch::Cast(instr);
-                load(it, br->arg(0).val());
+                load(it, br->arg<0>().val());
 
                 // jump through empty blocks
                 auto next0 = bb->next0;
@@ -281,22 +290,22 @@ size_t Pir2Rir::compile(Context& ctx, Code* code) {
             }
             case Tag::Return: {
                 Return* ret = Return::Cast(instr);
-                load(it, ret->arg(0).val());
+                load(it, ret->arg<0>().val());
                 cs << BC::ret();
 
                 // this is the end of this BB
                 return;
             }
             case Tag::MkArg: {
-                auto mkarg = MkArg::Cast(instr);
-                // TODO: eager values
-                // auto eagerVal = mkarg->arg(0).val();
-                // if (Missing::Cast(eagerVal))
-                loadEnv(it, mkarg->env());
-                cs << BC::setEnv();
-                auto prom = promises[mkarg->prom];
-                cs << BC::promise(prom);
-                store(it, mkarg);
+                // auto mkarg = MkArg::Cast(instr);
+                // // TODO: eager values
+                // // auto eagerVal = mkarg->arg(0).val();
+                // // if (Missing::Cast(eagerVal))
+                // setEnv(it, mkarg->env());
+                // auto prom = promises[mkarg->prom];
+                // cs << BC::promise(prom);
+                // store(it, mkarg);
+                // assert(all uses are call instructions...);
                 break;
             }
             case Tag::Seq: {
@@ -313,7 +322,7 @@ size_t Pir2Rir::compile(Context& ctx, Code* code) {
             }
             case Tag::CastType: {
                 auto cast = CastType::Cast(instr);
-                load(it, cast->arg(0).val());
+                load(it, cast->arg<0>().val());
                 store(it, cast);
                 break;
             }
@@ -355,7 +364,7 @@ size_t Pir2Rir::compile(Context& ctx, Code* code) {
             }
             case Tag::PirCopy: {
                 auto cpy = PirCopy::Cast(instr);
-                load(it, cpy->arg(0).val());
+                load(it, cpy->arg<0>().val());
                 store(it, cpy);
                 break;
             }
@@ -363,7 +372,7 @@ size_t Pir2Rir::compile(Context& ctx, Code* code) {
 #define SIMPLE_INSTR(Name, Factory)                                            \
     case Tag::Name: {                                                          \
         auto simple = Name::Cast(instr);                                       \
-        load(it, simple->arg(0).val());                                        \
+        load(it, simple->arg<0>().val());                                      \
         cs << BC::Factory();                                                   \
         cs.addSrcIdx(simple->srcIdx);                                          \
         store(it, simple);                                                     \
@@ -384,8 +393,8 @@ size_t Pir2Rir::compile(Context& ctx, Code* code) {
 #define BINOP(Name, Factory)                                                   \
     case Tag::Name: {                                                          \
         auto binop = Name::Cast(instr);                                        \
-        load(it, binop->arg(0).val());                                         \
-        load(it, binop->arg(1).val());                                         \
+        load(it, binop->arg<0>().val());                                       \
+        load(it, binop->arg<1>().val());                                       \
         cs << BC::Factory();                                                   \
         cs.addSrcIdx(binop->srcIdx);                                           \
         store(it, binop);                                                      \
@@ -418,10 +427,8 @@ size_t Pir2Rir::compile(Context& ctx, Code* code) {
             case Tag::Call: {
                 auto call = Call::Cast(instr);
                 auto cls = call->cls();
-                loadEnv(it, call->env());
-                cs << BC::setEnv()
-                   << BC::ldloc(alloc[cls]); // TODO: can use load(it, cls) for
-                                             // the closure?
+                setEnv(it, call->env());
+                cs << BC::ldloc(alloc[cls]);
 
                 std::vector<FunIdxT> callArgs;
                 call->eachCallArg([&](Value* arg) {
@@ -445,11 +452,10 @@ size_t Pir2Rir::compile(Context& ctx, Code* code) {
             }
             case Tag::CallBuiltin: {
                 auto blt = CallBuiltin::Cast(instr);
-                loadEnv(it, blt->env());
-                cs << BC::setEnv();
-                blt->eachArg([&](Value* arg) { load(it, arg); });
-                cs.insertStackCall(Opcode::static_call_stack_, blt->nargs(), {},
-                                   Pool::get(blt->srcIdx), blt->blt);
+                setEnv(it, blt->env());
+                blt->eachCallArg([&](Value* arg) { load(it, arg); });
+                cs.insertStackCall(Opcode::static_call_stack_, blt->nCallArgs(),
+                                   {}, Pool::get(blt->srcIdx), blt->blt);
                 store(it, blt);
                 break;
             }
@@ -461,7 +467,9 @@ size_t Pir2Rir::compile(Context& ctx, Code* code) {
                 auto mkenv = MkEnv::Cast(instr);
                 loadEnv(it, mkenv->parent());
                 cs << BC::makeEnv() << BC::dup() << BC::setEnv();
+                currentEnv = mkenv;
                 // bind all args
+                // TODO: maybe later have a separate instruction for this?
                 mkenv->eachLocalVar([&](SEXP name, Value* val) {
                     load(it, val);
                     cs << BC::stvar(name);
@@ -471,7 +479,11 @@ size_t Pir2Rir::compile(Context& ctx, Code* code) {
             }
             case Tag::Phi: {
                 auto phi = Phi::Cast(instr);
-                load(it, phi->arg(0).val());
+                phi->eachArg([&](Value* arg) {
+                    assert(alloc[phi] == alloc[arg] &&
+                           "Phi inputs must all be allocated in 1 slot");
+                });
+                load(it, phi);
                 store(it, phi);
                 break;
             }

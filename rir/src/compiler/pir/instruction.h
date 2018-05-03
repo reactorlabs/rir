@@ -788,8 +788,20 @@ class VLI(CallBuiltin, Effect::Any, EnvAccess::Write) {
     const CCODE builtin;
     int builtinId;
 
+    size_t nCallArgs() {
+        // do not count environment
+        return nargs() - 1;
+    }
+
     CallBuiltin(Value* e, SEXP builtin, const std::vector<Value*>& args,
                 unsigned src);
+
+    void eachCallArg(ArgumentValueIterator it) {
+        // skip environment at index 0
+        for (size_t i = 1; i < nargs(); ++i) {
+            it(arg(i).val());
+        }
+    }
 
     void printArgs(std::ostream& out) override;
 };
