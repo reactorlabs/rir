@@ -4,7 +4,6 @@
 
 #include "BC.h"
 #include "CodeStream.h"
-#include "analysis/dataflow.h"
 
 #include <iomanip>
 #include <iostream>
@@ -195,64 +194,10 @@ CodeEditor::~CodeEditor() {
 
 void CodeEditor::print(bool verbose) {
 
-    DataflowAnalysis<Type::Conservative> analysis;
-    DataflowAnalysis<Type::Optimistic> specAnalysis;
-    if (verbose) {
-        analysis.analyze(*this);
-        specAnalysis.analyze(*this);
-    }
-
     for (auto cur = getCursor(); !cur.atEnd(); cur.advance()) {
         if (cur.src() && verbose) {
             Rprintf("     # ");
             Rf_PrintValue(cur.src());
-        }
-        BC bc = cur.bc();
-        if (verbose) {
-            // Print some analysis info
-            if (bc.bc != Opcode::label && bc.bc != Opcode::return_ &&
-                bc.bc != Opcode::ret_) {
-                if (bc.bc == Opcode::ldvar_ || bc.bc == Opcode::ldarg_ ||
-                    bc.bc == Opcode::ldfun_) {
-                    SEXP sym = bc.immediateConst();
-                    auto v = analysis[cur][sym];
-                    auto sv = specAnalysis[cur][sym];
-                    Rprintf("   ~~ ");
-                    if (v.t == FValue::Type::Argument)
-                        Rprintf("argument\n");
-                    else if (v.isPresent())
-                        Rprintf("local\n");
-                    else if (sv.t == FValue::Type::Argument)
-                        Rprintf("probably argument\n");
-                    else if (sv.isPresent())
-                        Rprintf("probably local\n");
-                    else
-                        Rprintf("??\n");
-                } else if (bc.popCount() > 0) {
-                    bool assumedIsBetter = false;
-                    for (int i = bc.popCount() - 1; i >= 0; --i) {
-                        if (analysis[cur].stack()[i] !=
-                            specAnalysis[cur].stack()[i]) {
-                            assumedIsBetter = true;
-                            break;
-                        }
-                    }
-
-                    Rprintf("   ~~ TOS : ");
-                    for (int i = bc.popCount() - 1; i >= 0; --i) {
-                        analysis[cur].stack()[i].print();
-                        Rprintf(", ");
-                    }
-                    if (assumedIsBetter) {
-                        Rprintf("  /  Assumed: ");
-                        for (int i = bc.popCount() - 1; i >= 0; --i) {
-                            specAnalysis[cur].stack()[i].print();
-                            Rprintf(", ");
-                        }
-                    }
-                    Rprintf("\n");
-                }
-            }
         }
         cur.print(verbose);
     }
