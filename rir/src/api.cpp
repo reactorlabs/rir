@@ -91,7 +91,7 @@ REXPORT SEXP pir_compile(SEXP what) {
         Rf_error("not a compiled closure");
     assert(DispatchTable::unpack(BODY(what))->capacity() == 2 &&
            "fix, support for more than 2 slots needed...");
-    if (DispatchTable::unpack(BODY(what))->at(1) != nullptr)
+    if (DispatchTable::unpack(BODY(what))->slot(1) != nullptr)
         Rf_error("closure already compiled to pir");
 
     bool debug = true;

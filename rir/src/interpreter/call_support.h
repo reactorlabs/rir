@@ -15,14 +15,12 @@ class EnvironmentProxy;
 class ArgumentListProxy {
   private:
     bool validArgslist_ = true;
-    union {
-        SEXP argslist_;
-        struct {
-            Code* caller;
-            bool onStack;
-            uint32_t id;
-        } ctxt_;
-    };
+    SEXP argslist_;
+    struct {
+        Code* caller;
+        bool onStack;
+        uint32_t id;
+    } ctxt_;
 
     void create(EnvironmentProxy* ep);
 
@@ -38,12 +36,10 @@ class ArgumentListProxy {
     }
 
     CallSite* getCallSite() {
-        assert(!validArgslist_);
         return ctxt_.caller->callSite(ctxt_.id);
     }
 
     Code* getCaller() {
-        assert(!validArgslist_);
         return ctxt_.caller;
     }
 
@@ -65,14 +61,12 @@ class EnvironmentProxy {
   private:
     bool validREnv_ = true;
     bool createEnvironment_ = false;
-    union {
-        SEXP env_;
-        struct {
-            SEXP call;
-            SEXP callee;
-            ArgumentListProxy* ap;
-        } ctxt_;
-    };
+    SEXP env_;
+    struct {
+        SEXP call;
+        SEXP callee;
+        ArgumentListProxy* ap;
+    } ctxt_;
     EnvironmentProxy* parent_ = nullptr;
 
   public:
@@ -105,18 +99,11 @@ class EnvironmentProxy {
         validREnv_ = true;
     }
 
-    void make(SEXP parent) {
-        // create a new env, save it to env_ (return old?)
-        assert(false && "not implemented yet");
-    }
-
     CallSite* getCallsite() {
-        assert(!validREnv_);
         return ctxt_.ap->getCallSite();
     }
 
     Code* getCaller() {
-        assert(!validREnv_);
         return ctxt_.ap->getCaller();
     }
 

@@ -566,7 +566,7 @@ SEXP doCall(Code* caller, SEXP callee, bool argsOnStack, uint32_t nargs,
 
         auto table = DispatchTable::unpack(body);
         unsigned slot = 0; // default version is unoptimized RIR
-        if (table->slotOccupied(1) && !argsOnStack)
+        if (table->slot(1) && !argsOnStack)
             slot = 1; // switch to PIR optimized
 
         Protect p;

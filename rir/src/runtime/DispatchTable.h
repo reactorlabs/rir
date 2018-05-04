@@ -40,6 +40,11 @@ struct DispatchTable {
 
     Function* at(size_t i) { return Function::unpack(entry[i]); }
 
+    SEXP slot(size_t i) {
+        assert(i < capacity() && "invalid dispatch table slot access");
+        return entry[i];
+    }
+
     void put(size_t i, Function* f) {
         EXTERNALSXP_SET_ENTRY(container(), i, f->container());
     }
@@ -47,10 +52,6 @@ struct DispatchTable {
     Function* first() {
         assert(info.gc_area_length > 0);
         return Function::unpack(entry[0]);
-    }
-
-    bool slotOccupied(size_t i) const {
-        return i < capacity() && entry[i] != nullptr;
     }
 
     Function* getMatching(FunctionSignature* sig) {

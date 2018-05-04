@@ -285,7 +285,7 @@ void BC::printArgs(CallSite* cs) {
         else
             Rprintf(" %x", arg);
     }
-    Rprintf("] ");
+    Rprintf(" ] ");
 }
 
 void BC::printNames(CallSite* cs) {
@@ -297,14 +297,14 @@ void BC::printNames(CallSite* cs) {
                 " %s",
                 (n == nullptr || n == R_NilValue ? "_" : CHAR(PRINTNAME(n))));
         }
-        Rprintf("]");
+        Rprintf(" ]");
     }
 }
 
 void BC::printProfile(CallSite* cs) {
     if (cs->hasProfile) {
         CallSiteProfile* prof = cs->profile();
-        Rprintf("           Prof : [");
+        Rprintf("           Prof : [ ");
         if (prof->takenOverflow)
             Rprintf("*, <");
         else
