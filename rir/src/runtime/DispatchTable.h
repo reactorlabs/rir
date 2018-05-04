@@ -49,6 +49,10 @@ struct DispatchTable {
         return Function::unpack(entry[0]);
     }
 
+    bool slotOccupied(size_t i) const {
+        return i < capacity() && entry[i] != nullptr;
+    }
+
     Function* getMatching(FunctionSignature* sig) {
         // TODO: Actually do some matching when we have multiple signatures.
         return first();

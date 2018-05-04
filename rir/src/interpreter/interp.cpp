@@ -323,21 +323,19 @@ SEXP rirCallTrampoline(RCNTXT* cntxt, Code* code, EnvironmentProxy* ep,
     return evalRirCode(code, ctx, ep);
 }
 
-static SEXP rirCallClosure(SEXP call, SEXP callee, ArgumentListProxy* ap,
-                           EnvironmentProxy* ep, Context* ctx) {
+static SEXP rirCallClosure(SEXP call, SEXP callee, unsigned slot,
+                           ArgumentListProxy* ap, EnvironmentProxy* ep,
+                           Context* ctx) {
 
     DispatchTable* vtable = DispatchTable::unpack(BODY(callee));
-    Function* fun = vtable->first();
+    Function* fun = vtable->at(slot);
 
     fun->registerInvocation();
 
     RCNTXT cntxt;
     initClosureContext(&cntxt, call, R_NilValue, ep->env(), R_NilValue, callee);
 
-    // TODO: make this better: use signature? now env. creation based only on
-    // whether pir or not...
-    // bool createEnvironment = !fun->isPirCompiled;
-    bool createEnvironment = true;
+    bool createEnvironment = slot != 1;
     EnvironmentProxy newEp(createEnvironment, call, callee, ap, ep);
 
     // Exec the closure
@@ -567,10 +565,9 @@ SEXP doCall(Code* caller, SEXP callee, bool argsOnStack, uint32_t nargs,
         assert(isValidDispatchTableSEXP(body));
 
         auto table = DispatchTable::unpack(body);
-        // if (table->first()->isPirCompiled)
-        if (table->capacity() > 1)
-            assert(!argsOnStack &&
-                   "PIR functions expect args not to be passed on stack.");
+        unsigned slot = 0; // default version is unoptimized RIR
+        if (table->slotOccupied(1) && !argsOnStack)
+            slot = 1; // switch to PIR optimized
 
         Protect p;
         if (argsOnStack)
@@ -578,7 +575,7 @@ SEXP doCall(Code* caller, SEXP callee, bool argsOnStack, uint32_t nargs,
 
         ArgumentListProxy ap(caller, argsOnStack, id);
 
-        result = rirCallClosure(call, callee, &ap, ep, ctx);
+        result = rirCallClosure(call, callee, slot, &ap, ep, ctx);
 
     } else {
         assert(false && "Don't know how to run other stuff");
@@ -687,13 +684,8 @@ SEXP doDispatch(Code* caller, bool argsOnStack, uint32_t nargs, uint32_t id,
             SEXP body = BODY(callee);
             if (TYPEOF(body) == EXTERNALSXP) {
                 assert(isValidDispatchTableSEXP(body));
-                auto table = DispatchTable::unpack(body);
-                // if (table->first()->isPirCompiled)
-                if (table->capacity() > 1)
-                    assert(false &&
-                           "Dispatching to pir compiled not supported.");
                 ArgumentListProxy ap(actuals);
-                result = rirCallClosure(call, callee, &ap, ep, ctx);
+                result = rirCallClosure(call, callee, 0, &ap, ep, ctx);
             } else {
                 result = Rf_applyClosure(call, callee, actuals, ep->env(),
                                          R_NilValue);

@@ -335,107 +335,106 @@ static Test tests[] = {
              return hasLoadVar("theFun <- function(a) {if (a) {q <-1} else {if "
                                "(a) 3 else q <- 2}; q}");
          }),
-    Test("PIR to RIR: basic",
-         []() { return testPir2Rir("foo", "function() 42L", ""); }),
-    Test("PIR to RIR: simple argument",
-         []() { return testPir2Rir("foo", "function(x) x", "16L"); }),
-    /*
-        fails because RIR to PIR doesn't support default args for now
+    // Test("PIR to RIR: basic",
+    //      []() { return testPir2Rir("foo", "function() 42L", ""); }),
+    // Test("PIR to RIR: simple argument",
+    //      []() { return testPir2Rir("foo", "function(x) x", "16L"); }),
+    // /*
+    //     fails because RIR to PIR doesn't support default args for now
 
-        Test("PIR to RIR: default arg",
-             []() { return testPir2Rir("foo", "function(x = 3) x", ""); }),
-    */
-    Test("PIR to RIR: local binding",
-         []() {
-             return testPir2Rir("foo",
-                                "function(dummy, a) { x <- 3; x + a + x + a }",
-                                "cat('WHOA\n'), 1");
-         }),
-    Test("PIR to RIR: if else",
-         []() {
-             return testPir2Rir("foo", "function(x) if (x) 1 else 2", "TRUE");
-         }),
-    Test("PIR to RIR: if",
-         []() { return testPir2Rir("foo", "function(x) if (x) 1", "F"); }),
-    Test("PIR to RIR: simple loop",
-         []() {
-             return testPir2Rir("foo", "function(x) while (TRUE) if (x) break",
-                                "T");
-         }),
-    Test("PIR to RIR: loop - sum",
-         []() {
-             return testPir2Rir("foo",
-                                "function(x) {\n"
-                                "  sum <- 0\n"
-                                "  while (x > 0) {\n"
-                                "    sum <- sum + x\n"
-                                "    x <- x - 1\n"
-                                "  }\n"
-                                "  sum\n"
-                                "}",
-                                "10");
-         }),
-    Test("PIR to RIR: loop with break and next",
-         []() {
-             return testPir2Rir("foo",
-                                "f <- function(x, y) {\n"
-                                "    s <- 0L\n"
-                                "    repeat {\n"
-                                "        if (x > y)\n"
-                                "            break\n"
-                                "        if (x %% 2L == 1L) {\n"
-                                "            x <- x + 1L\n"
-                                "        } else {\n"
-                                "            x <- x + 1L\n"
-                                "            y <- y - 1L\n"
-                                "            next\n"
-                                "        }\n"
-                                "        s <- s + x\n"
-                                "    }\n"
-                                "    s\n"
-                                "}",
-                                "1L, 10L");
-         }),
-    /*
-        fails w/ "Cannot cast val to int$" for the loop index
-
-        Test("PIR to RIR: simple for loop",
-             []() {
-                 return testPir2Rir("foo",
-                                    "function(x) { s = 0; for (i in 1:x) s = s +
-                                    i; s }", "10L");
-             }),
-    */
-    Test("PIR to RIR: inlined call",
-         []() {
-             return testPir2Rir("foo",
-                                "function(x) {"
-                                "  bar <- function(a) a + 1;"
-                                "  bar(x)"
-                                "}",
-                                "1");
-         }),
-    Test("PIR to RIR: call safe builtin",
-         []() {
-             return testPir2Rir("foo", "function(x) vector('integer', x)", "4");
-         }),
-    Test("PIR to RIR: call builtin",
-         []() {
-             return testPir2Rir("foo",
-                                "function(x) c(1, 2, 3, x, x + 1, x + 2)", "4");
-         }),
-    Test("PIR to RIR: call .Internal",
-         []() {
-             return testPir2Rir("foo", "function() .Internal(formals(bar))",
-                                "");
-         }),
-    Test("PIR to RIR: call",
-         []() { return testPir2Rir("foo", "function(x) bar(x)", "2"); }),
-    Test("PIR to RIR: call twice",
-         []() {
-             return testPir2Rir("foo", "function(x) { bar(x); bar(x + 1) }",
-                                "2");
-         }),
+    //     Test("PIR to RIR: default arg",
+    //          []() { return testPir2Rir("foo", "function(x = 3) x", ""); }),
+    // */
+    // Test("PIR to RIR: local binding",
+    //      []() {
+    //          return testPir2Rir("foo",
+    //                             "function(dummy, a) { x <- 3; x + a + x + a }",
+    //                             "cat('WHOA\n'), 1");
+    //      }),
+    // Test("PIR to RIR: if else",
+    //      []() {
+    //          return testPir2Rir("foo", "function(x) if (x) 1 else 2", "TRUE");
+    //      }),
+    // Test("PIR to RIR: if",
+    //      []() { return testPir2Rir("foo", "function(x) if (x) 1", "F"); }),
+    // Test("PIR to RIR: simple loop",
+    //      []() {
+    //          return testPir2Rir("foo", "function(x) while (TRUE) if (x) break",
+    //                             "T");
+    //      }),
+    // Test("PIR to RIR: loop - sum",
+    //      []() {
+    //          return testPir2Rir("foo",
+    //                             "function(x) {\n"
+    //                             "  sum <- 0\n"
+    //                             "  while (x > 0) {\n"
+    //                             "    sum <- sum + x\n"
+    //                             "    x <- x - 1\n"
+    //                             "  }\n"
+    //                             "  sum\n"
+    //                             "}",
+    //                             "10");
+    //      }),
+    // Test("PIR to RIR: loop with break and next",
+    //      []() {
+    //          return testPir2Rir("foo",
+    //                             "f <- function(x, y) {\n"
+    //                             "    s <- 0L\n"
+    //                             "    repeat {\n"
+    //                             "        if (x > y)\n"
+    //                             "            break\n"
+    //                             "        if (x %% 2L == 1L) {\n"
+    //                             "            x <- x + 1L\n"
+    //                             "        } else {\n"
+    //                             "            x <- x + 1L\n"
+    //                             "            y <- y - 1L\n"
+    //                             "            next\n"
+    //                             "        }\n"
+    //                             "        s <- s + x\n"
+    //                             "    }\n"
+    //                             "    s\n"
+    //                             "}",
+    //                             "1L, 10L");
+    //      }),
+    // /*
+    //     fails w/ "Cannot cast val to int$" for the loop index
+    //     Test("PIR to RIR: simple for loop",
+    //          []() {
+    //              return testPir2Rir("foo",
+    //                                 "function(x) { s = 0; for (i in 1:x) s = s +
+    //                                 i; s }", "10L");
+    //          }),
+    // */
+    // Test("PIR to RIR: inlined call",
+    //      []() {
+    //          return testPir2Rir("foo",
+    //                             "function(x) {"
+    //                             "  bar <- function(a) a + 1;"
+    //                             "  bar(x)"
+    //                             "}",
+    //                             "1");
+    //      }),
+    // Test("PIR to RIR: call safe builtin",
+    //      []() {
+    //          return testPir2Rir("foo", "function(x) vector('integer', x)", "4");
+    //      }),
+    // Test("PIR to RIR: call builtin",
+    //      []() {
+    //          return testPir2Rir("foo",
+    //                             "function(x) c(1, 2, 3, x, x + 1, x + 2)", "4");
+    //      }),
+    // Test("PIR to RIR: call .Internal",
+    //      []() {
+    //          return testPir2Rir("foo", "function() .Internal(formals(bar))",
+    //                             "");
+    //      }),
+    // Test("PIR to RIR: call",
+    //      []() { return testPir2Rir("foo", "function(x) bar(x)", "2"); }),
+    // Test("PIR to RIR: call twice",
+    //      []() {
+    //          return testPir2Rir("foo", "function(x) { bar(x); bar(x + 1) }",
+    //                             "2");
+    //      }),
 };
 } // namespace
 
@@ -444,9 +443,9 @@ namespace rir {
 void PirTests::run() {
     // todo: what about bar(1), bar(x) and promises
     // how is it that when mkarg is nop and calling rir, it works??
-    if (!([]() { return testPir2Rir("foo", "function(x) bar(1)", "2"); }()))
-        exit(1);
-    return;
+    // if (!([]() { return testPir2Rir("foo", "function(x) bar(1)", "2"); }()))
+    //     exit(1);
+    // return;
     for (auto t : tests) {
         std::cout << "> " << t.first << "\n";
         if (!t.second()) {
