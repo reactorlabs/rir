@@ -435,6 +435,20 @@ static Test tests[] = {
              return testPir2Rir("foo", "function(x) { bar(x); bar(x + 1) }",
                                 "2");
          }),
+    Test("PIR to RIR: with env",
+         []() {
+             return testPir2Rir("foo",
+                                "function(x) {\n"
+                                "  sum <- 0\n"
+                                "  while (x > 0) {\n"
+                                "    sum <- sum + x\n"
+                                "    x <- x - 1\n"
+                                "    bar(sum)\n"
+                                "  }\n"
+                                "  sum\n"
+                                "}",
+                                "4");
+         }),
 };
 } // namespace
 

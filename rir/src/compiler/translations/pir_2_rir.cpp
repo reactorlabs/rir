@@ -251,6 +251,7 @@ size_t Pir2Rir::compile(Context& ctx, Code* code) {
             case Tag::StVarSuper: {
                 // TODO: not tested
                 auto stvar = StVarSuper::Cast(instr);
+                load(it, stvar->val());
                 setEnv(it, stvar->env());
                 cs << BC::stvarSuper(stvar->varName);
                 break;
@@ -265,6 +266,7 @@ size_t Pir2Rir::compile(Context& ctx, Code* code) {
             }
             case Tag::StVar: {
                 auto stvar = StVar::Cast(instr);
+                load(it, stvar->val());
                 setEnv(it, stvar->env());
                 cs << BC::stvar(stvar->varName);
                 break;
