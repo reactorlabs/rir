@@ -367,9 +367,8 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
             Case(SYMSXP) {
                 cs << BC::guardNamePrimitive(fun);
                 compileExpr(ctx, rhs);
-                cs << BC::dup()
-                   << BC::setShared()
-                   << (superAssign ? BC::stvar2(lhs) : BC::stvar(lhs))
+                cs << BC::dup() << BC::setShared()
+                   << (superAssign ? BC::stvarSuper(lhs) : BC::stvar(lhs))
                    << BC::invisible();
                 return true;
             }
@@ -427,7 +426,8 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
                            << BC::setShared();
 
                         // Now load target and index
-                        cs << (superAssign ? BC::ldvar2(target) : BC::ldvar(target));
+                        cs << (superAssign ? BC::ldvarSuper(target)
+                                           : BC::ldvar(target));
                         compileExpr(ctx, *idx);
 
                         // check for object case
@@ -440,7 +440,8 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
                         else
                             cs << BC::subassign1();
 
-                        cs << (superAssign ? BC::stvar2(target) : BC::stvar(target));
+                        cs << (superAssign ? BC::stvarSuper(target)
+                                           : BC::stvar(target));
                         cs << BC::br(nextBranch);
 
                         // In the case the target is an object:
@@ -473,7 +474,8 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
                             setter);
 
                         // store the result as "target"
-                        cs << (superAssign ? BC::stvar2(target) : BC::stvar(target));
+                        cs << (superAssign ? BC::stvarSuper(target)
+                                           : BC::stvar(target));
 
                         cs << nextBranch
                            << BC::invisible();
@@ -1094,9 +1096,6 @@ bool compileWithGuess(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
 
     SEXP cls = findClosure(fun, ctx.env());
     if (!cls)
-        return false;
-
-    if (isValidClosureSEXP(cls) && isValidClosureSEXP(cls)->isPirCompiled)
         return false;
 
     RList formals(FORMALS(cls));

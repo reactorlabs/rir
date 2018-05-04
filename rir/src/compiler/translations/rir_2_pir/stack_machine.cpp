@@ -64,10 +64,10 @@ void StackMachine::runCurrentBC(Rir2Pir& rir2pir, Builder& insert) {
         v = pop();
         insert(new StVar(bc.immediateConst(), v, env));
         break;
-    case Opcode::ldvar2_:
+    case Opcode::ldvar_super_:
         insert(new LdVarSuper(bc.immediateConst(), env));
         break;
-    case Opcode::stvar2_:
+    case Opcode::stvar_super_:
         v = pop();
         insert(new StVarSuper(bc.immediateConst(), v, env));
         break;
@@ -371,7 +371,8 @@ void StackMachine::runCurrentBC(Rir2Pir& rir2pir, Builder& insert) {
     case Opcode::make_env_:
     case Opcode::get_env_:
     case Opcode::set_env_:
-    case Opcode::getvar_:
+    case Opcode::ldvar_noforce_:
+    case Opcode::ldvar_noforce_super_:
     case Opcode::ldarg_:
     case Opcode::ldloc_:
     case Opcode::stloc_:

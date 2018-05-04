@@ -73,7 +73,7 @@ class Compiler {
         SEXP res = p(c.finalize());
 
         // Allocate a new vtable.
-        DispatchTable* vtable = DispatchTable::create(1);
+        DispatchTable* vtable = DispatchTable::create();
 
         // Initialize the vtable. Initially the table has one entry, which is
         // the compiled function.
@@ -102,7 +102,7 @@ class Compiler {
         SEXP res = p(c.finalize());
 
         // Allocate a new vtable.
-        DispatchTable* vtable = DispatchTable::create(1);
+        DispatchTable* vtable = DispatchTable::create();
 
         // Initialize the vtable. Initially the table has one entry, which is
         // the compiled function.

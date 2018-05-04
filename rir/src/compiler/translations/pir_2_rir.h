@@ -10,7 +10,7 @@ namespace pir {
 
 class Pir2RirCompiler {
   public:
-    rir::Function* operator()(Module* fun, rir::Function* orig);
+    rir::Function* operator()(Closure* orig);
 };
 
 } // namespace pir

@@ -162,24 +162,26 @@ Value* Rir2Pir::translate() {
             Opcode* pc = state.getPC();
             BC ldfmls = BC::advance(&pc);
             BC ldcode = BC::advance(&pc);
-            /* BC ldsrc = */ BC::advance(&pc);
+            BC ldsrc = BC::advance(&pc);
             BC::advance(&pc); // close
 
-            auto fmlsl = RList(ldfmls.immediateConst());
+            SEXP fmls = ldfmls.immediateConst();
             SEXP code = ldcode.immediateConst();
-            // SEXP src = ldsrc.immediateConst();
+            SEXP src = ldsrc.immediateConst();
+            auto fmlsList = RList(fmls);
 
-            std::vector<SEXP> fmls;
-            for (auto it = fmlsl.begin(); it != fmlsl.end(); ++it) {
-                fmls.push_back(it.tag());
+            std::vector<SEXP> fmlsNames;
+            for (auto it = fmlsList.begin(); it != fmlsList.end(); ++it) {
+                fmlsNames.push_back(it.tag());
             }
 
             DispatchTable* dt = DispatchTable::unpack(code);
             rir::Function* function = dt->first();
 
-            Closure* innerF = cmp.compileFunction(function, fmls);
+            Closure* innerF = cmp.compileFunction(function, fmlsNames);
 
-            state.push(insert(new MkFunCls(innerF, insert.env)));
+            state.push(
+                insert(new MkFunCls(innerF, insert.env, fmls, code, src)));
 
             matched = true;
             state.setPC(next);

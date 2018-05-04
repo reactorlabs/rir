@@ -117,54 +117,6 @@ static void jit(SEXP cls, Context* ctx) {
     SET_BODY(cls, BODY(cmp));
 }
 
-void tryOptimizeClosure(DispatchTable* table, size_t offset, Context* ctx) {
-
-    // TODO: needs to change for PIR
-    return;
-
-    // This function will optimize the function and update the linked list
-    // of functions, so that subsequent closure calls pick the most optimized
-    // version.
-
-    static bool optimizing = false;
-
-    Function* fun = table->at(offset);
-
-    if (!optimizing && !fun->next() && !fun->origin()) {
-        /* currently there is a bug if we reoptimize a function twice:
-         *  Deopt ids from the first optimization and second optimizations
-         *  will be mixed and the deoptimizer always only goes back one
-         *  optimization level!
-         *  To avoid this bug we currently only optimize once
-         */
-        Code* code = fun->body();
-        if (fun->markOpt ||
-                (fun->invocationCount == 1 && code->perfCounter > 100) ||
-                (fun->invocationCount == 10 && code->perfCounter > 20) ||
-                 fun->invocationCount == 100) {
-            optimizing = true;
-
-            Function* oldFun = fun;
-            cp_pool_add(ctx, oldFun->container());
-
-            SEXP opt = globalContext()->optimizer(fun->container());
-
-            if (opt != nullptr) {
-                fun = Function::unpack(opt);
-
-                fun->invocationCount = oldFun->invocationCount;
-                fun->envLeaked = oldFun->envLeaked;
-                fun->envChanged = oldFun->envChanged;
-                fun->signature = oldFun->signature;
-
-                // Update the dispatch table
-                table->put(offset, fun);
-            }
-            optimizing = false;
-        }
-    }
-}
-
 void closureDebug(SEXP call, SEXP op, SEXP rho, SEXP newrho, RCNTXT* cntxt) {
     // TODO!!!
 }
@@ -377,8 +329,6 @@ static SEXP rirCallClosure(SEXP call, SEXP callee, ArgumentListProxy* ap,
     DispatchTable* vtable = DispatchTable::unpack(BODY(callee));
     Function* fun = vtable->first();
 
-    tryOptimizeClosure(vtable, 0, ctx);
-
     fun->registerInvocation();
 
     RCNTXT cntxt;
@@ -386,7 +336,8 @@ static SEXP rirCallClosure(SEXP call, SEXP callee, ArgumentListProxy* ap,
 
     // TODO: make this better: use signature? now env. creation based only on
     // whether pir or not...
-    bool createEnvironment = !fun->isPirCompiled;
+    // bool createEnvironment = !fun->isPirCompiled;
+    bool createEnvironment = true;
     EnvironmentProxy newEp(createEnvironment, call, callee, ap, ep);
 
     // Exec the closure
@@ -616,7 +567,8 @@ SEXP doCall(Code* caller, SEXP callee, bool argsOnStack, uint32_t nargs,
         assert(isValidDispatchTableSEXP(body));
 
         auto table = DispatchTable::unpack(body);
-        if (table->first()->isPirCompiled)
+        // if (table->first()->isPirCompiled)
+        if (table->capacity() > 1)
             assert(!argsOnStack &&
                    "PIR functions expect args not to be passed on stack.");
 
@@ -736,7 +688,8 @@ SEXP doDispatch(Code* caller, bool argsOnStack, uint32_t nargs, uint32_t id,
             if (TYPEOF(body) == EXTERNALSXP) {
                 assert(isValidDispatchTableSEXP(body));
                 auto table = DispatchTable::unpack(body);
-                if (table->first()->isPirCompiled)
+                // if (table->first()->isPirCompiled)
+                if (table->capacity() > 1)
                     assert(false &&
                            "Dispatching to pir compiled not supported.");
                 ArgumentListProxy ap(actuals);
@@ -1329,7 +1282,7 @@ SEXP evalRirCode(Code* c, Context* ctx, EnvironmentProxy* ep) {
             NEXT();
         }
 
-        INSTRUCTION(getvar_) {
+        INSTRUCTION(ldvar_noforce_) {
             Immediate id = readImmediate();
             advanceImmediate();
             res = cachedGetVar(ep->env(), id, ctx, bindingCache);
@@ -1346,7 +1299,7 @@ SEXP evalRirCode(Code* c, Context* ctx, EnvironmentProxy* ep) {
             NEXT();
         }
 
-        INSTRUCTION(ldvar2_) {
+        INSTRUCTION(ldvar_super_) {
             SEXP sym = readConst(ctx, readImmediate());
             advanceImmediate();
             res = Rf_findVar(sym, ENCLOS(ep->env()));
@@ -1362,6 +1315,23 @@ SEXP evalRirCode(Code* c, Context* ctx, EnvironmentProxy* ep) {
             // if promise, evaluate & return
             if (TYPEOF(res) == PROMSXP)
                 res = promiseValue(res, ctx);
+
+            if (NAMED(res) == 0 && res != R_NilValue)
+                SET_NAMED(res, 1);
+
+            ostack_push(ctx, res);
+            NEXT();
+        }
+
+        INSTRUCTION(ldvar_noforce_super_) {
+            SEXP sym = readConst(ctx, readImmediate());
+            advanceImmediate();
+            res = Rf_findVar(sym, ENCLOS(ep->env()));
+            R_Visible = TRUE;
+
+            if (res == R_UnboundValue) {
+                Rf_error("object not found");
+            }
 
             if (NAMED(res) == 0 && res != R_NilValue)
                 SET_NAMED(res, 1);
@@ -1452,13 +1422,13 @@ SEXP evalRirCode(Code* c, Context* ctx, EnvironmentProxy* ep) {
             NEXT();
         }
 
-        INSTRUCTION(stvar2_) {
+        INSTRUCTION(stvar_super_) {
             SEXP sym = readConst(ctx, readImmediate());
             advanceImmediate();
             SLOWASSERT(TYPEOF(sym) == SYMSXP);
             SEXP val = ostack_pop(ctx);
             INCREMENT_NAMED(val);
-            setVar(sym, val, ENCLOS(ep->env()));
+            Rf_setVar(sym, val, ENCLOS(ep->env()));
             NEXT();
         }
 
@@ -2650,8 +2620,6 @@ SEXP rirEval_f(SEXP what, SEXP env) {
     if (DispatchTable::check(what)) {
         auto table = DispatchTable::unpack(what);
         size_t offset = 0; // Default target is the first version
-
-        tryOptimizeClosure(table, offset, globalContext());
 
         Function* fun = table->at(offset);
         fun->registerInvocation();

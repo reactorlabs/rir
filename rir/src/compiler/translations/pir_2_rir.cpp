@@ -118,11 +118,10 @@ class Context {
         push(ast);
     }
 
-    FunIdxT pop(size_t localsCnt) {
-        auto da = defaultArg.top();
-        defaultArg.pop();
-        auto idx = cs().finalize(da, localsCnt);
+    FunIdxT finalizeCode(size_t localsCnt) {
+        auto idx = cs().finalize(defaultArg.top(), localsCnt);
         delete css.top();
+        defaultArg.pop();
         css.pop();
         return idx;
     }
@@ -225,11 +224,12 @@ size_t Pir2Rir::compile(Context& ctx, Code* code) {
             case Tag::LdVar: {
                 auto ldvar = LdVar::Cast(instr);
                 setEnv(it, ldvar->env());
-                cs << BC::getvar(ldvar->varName);
+                cs << BC::ldvarNoForce(ldvar->varName);
                 store(it, ldvar);
                 break;
             }
             case Tag::ForSeqSize: {
+                // TODO: not tested
                 // make sure that the seq is at TOS? the instr doesn't push it!
                 cs << BC::forSeqSize();
                 store(it, instr);
@@ -249,11 +249,18 @@ size_t Pir2Rir::compile(Context& ctx, Code* code) {
                 break;
             }
             case Tag::StVarSuper: {
-                assert(false && "not yet implemented.");
+                // TODO: not tested
+                auto stvar = StVarSuper::Cast(instr);
+                setEnv(it, stvar->env());
+                cs << BC::stvarSuper(stvar->varName);
                 break;
             }
             case Tag::LdVarSuper: {
-                assert(false && "not yet implemented.");
+                // TODO: not tested
+                auto ldvar = LdVarSuper::Cast(instr);
+                setEnv(it, ldvar->env());
+                cs << BC::ldvarNoForceSuper(ldvar->varName);
+                store(it, ldvar);
                 break;
             }
             case Tag::StVar: {
@@ -297,27 +304,47 @@ size_t Pir2Rir::compile(Context& ctx, Code* code) {
                 return;
             }
             case Tag::MkArg: {
-                // auto mkarg = MkArg::Cast(instr);
-                // // TODO: eager values
-                // // auto eagerVal = mkarg->arg(0).val();
-                // // if (Missing::Cast(eagerVal))
-                // setEnv(it, mkarg->env());
-                // auto prom = promises[mkarg->prom];
-                // cs << BC::promise(prom);
-                // store(it, mkarg);
-                // assert(all uses are call instructions...);
+                // TODO: handle eager values
+                BreadthFirstVisitor::run(bb, [&](Instruction* i) {
+                    i->eachArg([&](Value* arg) {
+                        if (arg == i)
+                            assert(CallInstruction::Cast(i) &&
+                                   "MkArg used in a non-call instruction");
+                    });
+                });
                 break;
             }
             case Tag::Seq: {
-                assert(false && "not yet implemented.");
+                // TODO: not tested
+                auto seq = Seq::Cast(instr);
+                auto start = seq->arg<0>().val();
+                auto end = seq->arg<1>().val();
+                auto step = seq->arg<2>().val();
+                cs << BC::ldloc(alloc[start]) << BC::ldloc(alloc[end])
+                   << BC::ldloc(alloc[step]) << BC::seq();
+                store(it, seq);
                 break;
             }
             case Tag::MkCls: {
+                // check if it is used (suspect only MkFunCls is ever created)
                 assert(false && "not yet implemented.");
                 break;
             }
             case Tag::MkFunCls: {
-                assert(false && "not yet implemented.");
+                // TODO: not tested
+
+                auto mkfuncls = MkFunCls::Cast(instr);
+                Pir2Rir cmp(mkfuncls->fun);
+                auto rirFun = cmp.finalize();
+
+                auto dt = DispatchTable::unpack(mkfuncls->code);
+                assert(dt->capacity() == 2 && dt->at(1) == nullptr &&
+                       "invalid dispatch table");
+                dt->put(1, rirFun);
+
+                cs << BC::push(mkfuncls->fml) << BC::push(mkfuncls->code)
+                   << BC::push(mkfuncls->src) << BC::close();
+                store(it, mkfuncls);
                 break;
             }
             case Tag::CastType: {
@@ -432,8 +459,8 @@ size_t Pir2Rir::compile(Context& ctx, Code* code) {
 
                 std::vector<FunIdxT> callArgs;
                 call->eachCallArg([&](Value* arg) {
-                    auto mkarg = MkArg::Cast(arg);
                     // TODO: for now, ignore the eager value in MkArg
+                    auto mkarg = MkArg::Cast(arg);
                     callArgs.push_back(promises[mkarg->prom]);
                 });
 
@@ -559,7 +586,7 @@ rir::Function* Pir2Rir::finalize() {
             continue;
         ctx.pushDefaultArg(R_NilValue);
         size_t localsCnt = compile(ctx, arg);
-        promises[arg] = ctx.pop(localsCnt);
+        promises[arg] = ctx.finalizeCode(localsCnt);
         argNames[arg] = cls->argNames[i++];
     }
     for (auto prom : cls->promises) {
@@ -567,11 +594,11 @@ rir::Function* Pir2Rir::finalize() {
             continue;
         ctx.pushPromise(R_NilValue);
         size_t localsCnt = compile(ctx, prom);
-        promises[prom] = ctx.pop(localsCnt);
+        promises[prom] = ctx.finalizeCode(localsCnt);
     }
     ctx.pushBody(R_NilValue);
     size_t localsCnt = compile(ctx, cls);
-    ctx.pop(localsCnt);
+    ctx.finalizeCode(localsCnt);
 
     CodeEditor code(function.function->body());
 
@@ -581,7 +608,6 @@ rir::Function* Pir2Rir::finalize() {
     Optimizer::optimize(code);
 
     auto opt = code.finalize();
-    opt->isPirCompiled = true;
 
 #ifdef ENABLE_SLOWASSERT
     CodeVerifier::verifyFunctionLayout(opt->container(), globalContext());
@@ -592,9 +618,8 @@ rir::Function* Pir2Rir::finalize() {
 
 } // namespace
 
-rir::Function* Pir2RirCompiler::operator()(Module* m, rir::Function* orig) {
-    Closure* cls = m->get(orig);
-    Pir2Rir cmp(cls);
+rir::Function* Pir2RirCompiler::operator()(Closure* orig) {
+    Pir2Rir cmp(orig);
     return cmp.finalize();
 }
 

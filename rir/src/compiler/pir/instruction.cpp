@@ -294,8 +294,9 @@ void Deopt::printArgs(std::ostream& out) {
     env()->printRef(out);
 }
 
-MkFunCls::MkFunCls(Closure* fun, Value* parent)
-    : FixedLenInstruction(RType::closure, parent), fun(fun) {
+MkFunCls::MkFunCls(Closure* fun, Value* parent, SEXP fml, SEXP code, SEXP src)
+    : FixedLenInstruction(RType::closure, parent), fun(fun), fml(fml),
+      code(code), src(src) {
     assert(fun->closureEnv() == Env::notClosed());
 }
 

@@ -56,12 +56,15 @@ struct DispatchTable {
 
     rir::rir_header info;
 
-    static DispatchTable* create(size_t capacity) {
+    static DispatchTable* create(size_t capacity = 2) {
+        // capacity default is 2 for now (rir and pir versions)
         size_t size =
             sizeof(DispatchTable) + (capacity * sizeof(DispatchTableEntry));
         SEXP s = Rf_allocVector(EXTERNALSXP, size);
         return new (INTEGER(s)) DispatchTable(capacity);
     }
+
+    size_t capacity() const { return info.gc_area_length; }
 
   private:
     DispatchTable() = delete;

@@ -69,19 +69,26 @@ BC BC::ldvar(SEXP sym) {
     i.pool = Pool::insert(sym);
     return BC(Opcode::ldvar_, i);
 }
-BC BC::getvar(SEXP sym) {
+BC BC::ldvarNoForce(SEXP sym) {
     assert(TYPEOF(sym) == SYMSXP);
     assert(strlen(CHAR(PRINTNAME(sym))));
     ImmediateT i;
     i.pool = Pool::insert(sym);
-    return BC(Opcode::getvar_, i);
+    return BC(Opcode::ldvar_noforce_, i);
 }
-BC BC::ldvar2(SEXP sym) {
+BC BC::ldvarSuper(SEXP sym) {
     assert(TYPEOF(sym) == SYMSXP);
     assert(strlen(CHAR(PRINTNAME(sym))));
     ImmediateT i;
     i.pool = Pool::insert(sym);
-    return BC(Opcode::ldvar2_, i);
+    return BC(Opcode::ldvar_super_, i);
+}
+BC BC::ldvarNoForceSuper(SEXP sym) {
+    assert(TYPEOF(sym) == SYMSXP);
+    assert(strlen(CHAR(PRINTNAME(sym))));
+    ImmediateT i;
+    i.pool = Pool::insert(sym);
+    return BC(Opcode::ldvar_noforce_super_, i);
 }
 BC BC::ldarg(uint32_t offset) {
     ImmediateT i;
@@ -148,12 +155,12 @@ BC BC::stvar(SEXP sym) {
     i.pool = Pool::insert(sym);
     return BC(Opcode::stvar_, i);
 }
-BC BC::stvar2(SEXP sym) {
+BC BC::stvarSuper(SEXP sym) {
     assert(TYPEOF(sym) == SYMSXP);
     assert(strlen(CHAR(PRINTNAME(sym))));
     ImmediateT i;
     i.pool = Pool::insert(sym);
-    return BC(Opcode::stvar2_, i);
+    return BC(Opcode::stvar_super_, i);
 }
 BC BC::subassign1() { return BC(Opcode::subassign1_); }
 BC BC::subassign2(SEXP sym) {

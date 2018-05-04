@@ -442,6 +442,11 @@ static Test tests[] = {
 namespace rir {
 
 void PirTests::run() {
+    // todo: what about bar(1), bar(x) and promises
+    // how is it that when mkarg is nop and calling rir, it works??
+    if (!([]() { return testPir2Rir("foo", "function(x) bar(1)", "2"); }()))
+        exit(1);
+    return;
     for (auto t : tests) {
         std::cout << "> " << t.first << "\n";
         if (!t.second()) {

@@ -242,8 +242,9 @@ class BC {
     inline static BC push_code(FunIdxT i);
     inline static BC ldfun(SEXP sym);
     inline static BC ldvar(SEXP sym);
-    inline static BC getvar(SEXP sym);
-    inline static BC ldvar2(SEXP sym);
+    inline static BC ldvarNoForce(SEXP sym);
+    inline static BC ldvarSuper(SEXP sym);
+    inline static BC ldvarNoForceSuper(SEXP sym);
     inline static BC ldlval(SEXP sym);
     inline static BC ldddvar(SEXP sym);
     inline static BC ldarg(uint32_t offset);
@@ -256,7 +257,7 @@ class BC {
     inline static BC force();
     inline static BC asast();
     inline static BC stvar(SEXP sym);
-    inline static BC stvar2(SEXP sym);
+    inline static BC stvarSuper(SEXP sym);
     inline static BC missing(SEXP sym);
     inline static BC subassign1();
     inline static BC subassign2(SEXP sym);
@@ -401,12 +402,13 @@ class BC {
         case Opcode::push_:
         case Opcode::ldfun_:
         case Opcode::ldvar_:
-        case Opcode::getvar_:
-        case Opcode::ldvar2_:
+        case Opcode::ldvar_noforce_:
+        case Opcode::ldvar_super_:
+        case Opcode::ldvar_noforce_super_:
         case Opcode::ldlval_:
         case Opcode::ldddvar_:
         case Opcode::stvar_:
-        case Opcode::stvar2_:
+        case Opcode::stvar_super_:
         case Opcode::missing_:
         case Opcode::subassign2_:
             immediate.pool = *(PoolIdxT*)pc;

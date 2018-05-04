@@ -89,17 +89,13 @@ REXPORT SEXP rir_body(SEXP cls) {
 REXPORT SEXP pir_compile(SEXP what) {
     if (!isValidClosureSEXP(what))
         Rf_error("not a compiled closure");
+    assert(DispatchTable::unpack(BODY(what))->capacity() == 2 &&
+           "fix, support for more than 2 slots needed...");
+    if (DispatchTable::unpack(BODY(what))->at(1) != nullptr)
+        Rf_error("closure already compiled to pir");
 
     bool debug = true;
     Protect p(what);
-
-    if (debug)
-        Rprintf("~~~ pir_compile ~~~\n");
-
-    if (debug) {
-        Rprintf("%p\n", what);
-        CodeEditor(what).print(false);
-    }
 
     // compile to pir
     pir::Module* m = new pir::Module;
@@ -113,26 +109,26 @@ REXPORT SEXP pir_compile(SEXP what) {
 
     // compile back to rir
     auto table = DispatchTable::unpack(BODY(what));
-    size_t offset = 0;
-    auto oldFun = table->at(offset);
+    auto oldFun = table->first();
     pir::Pir2RirCompiler p2r;
-    auto fun = p2r(m, oldFun);
+    auto fun = p2r(m->get(oldFun));
     p(fun->container());
 
-    // TODO: put instead into a new table slot...
-
-    // patch the closure
-    oldFun->next(fun);
-    fun->origin(oldFun);
-    fun->invocationCount = oldFun->invocationCount;
+    // TODO: probably start from 0?
+    // fun->invocationCount = oldFun->invocationCount;
+    // TODO: are these still needed / used?
     fun->envLeaked = oldFun->envLeaked;
     fun->envChanged = oldFun->envChanged;
+    // TODO: signatures need a rework
     fun->signature = oldFun->signature;
-    table->put(offset, fun);
+
+    table->put(1, fun);
 
     if (debug) {
-        Rprintf("%p\n", what);
-        CodeEditor(what).print(false);
+        Rprintf("orig:\n");
+        printFunction(oldFun);
+        Rprintf("new:\n");
+        printFunction(fun);
     }
 
     delete m;

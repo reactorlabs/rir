@@ -538,7 +538,8 @@ class FLI(MkCls, 4, Effect::None, EnvAccess::Capture) {
 class FLI(MkFunCls, 1, Effect::None, EnvAccess::Capture) {
   public:
     Closure* fun;
-    MkFunCls(Closure* fun, Value* parent);
+    SEXP fml, code, src;
+    MkFunCls(Closure* fun, Value* parent, SEXP fml, SEXP code, SEXP src);
     void printArgs(std::ostream&) override;
 };
 
