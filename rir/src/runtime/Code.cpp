@@ -5,11 +5,11 @@
 
 namespace rir {
 Code::Code(SEXP ast, unsigned cs, unsigned sourceSize, unsigned csl,
-           unsigned offset, bool isDefaultArg) {
+           unsigned offset, bool isDefaultArg, size_t localsCnt) {
     magic = CODE_MAGIC;
     header = offset;
     src = src_pool_add(globalContext(), ast);
-    localsCount = 1; // put current execution environment into local #0
+    localsCount = localsCnt;
     codeSize = cs;
     skiplistLength = calcSkiplistLength(sourceSize);
     srcLength = sourceSize;

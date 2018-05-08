@@ -51,7 +51,6 @@ Closure* Rir2PirCompiler::compileClosure(rir::Function* srcFunction,
                                          Env* closureEnv) {
     return module->getOrCreate(
         srcFunction, args, closureEnv, [&](Closure* pirFunction) {
-
             Builder builder(pirFunction, closureEnv);
 
             {

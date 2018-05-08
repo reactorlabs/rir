@@ -6,10 +6,10 @@
 
 #include "api.h"
 
-#include "ir/Compiler.h"
-#include "interpreter/interp_context.h"
 #include "interpreter/interp.h"
+#include "interpreter/interp_context.h"
 #include "ir/BC.h"
+#include "ir/Compiler.h"
 
 #include "utils/Printer.h"
 
@@ -19,7 +19,8 @@ using namespace rir;
 
 REXPORT SEXP rir_disassemble(SEXP what, SEXP verbose) {
 
-    Function* f = TYPEOF(what) == CLOSXP ? isValidClosureSEXP(what) : isValidFunctionSEXP(what);
+    Function* f = TYPEOF(what) == CLOSXP ? isValidClosureSEXP(what)
+                                         : isValidFunctionSEXP(what);
 
     if (f == nullptr)
         Rf_error("Not a rir compiled code");
@@ -65,7 +66,7 @@ REXPORT SEXP rir_markOptimize(SEXP what) {
 }
 
 REXPORT SEXP rir_eval(SEXP what, SEXP env) {
-    ::Function * f = isValidFunctionObject(what);
+    ::Function* f = isValidFunctionObject(what);
     if (f == nullptr)
         f = isValidClosureSEXP(what);
     if (f == nullptr)
@@ -75,24 +76,61 @@ REXPORT SEXP rir_eval(SEXP what, SEXP env) {
 }
 
 REXPORT SEXP rir_body(SEXP cls) {
-    ::Function * f = isValidClosureSEXP(cls);
+    ::Function* f = isValidClosureSEXP(cls);
     if (f == nullptr)
         Rf_error("Not a valid rir compiled function");
     return f->container();
 }
 
 #include "compiler/pir_tests.h"
+#include "compiler/translations/pir_2_rir.h"
 #include "compiler/translations/rir_2_pir/rir_2_pir.h"
 
 REXPORT SEXP pir_compile(SEXP what) {
     if (!isValidClosureSEXP(what))
         Rf_error("not a compiled closure");
+    assert(DispatchTable::unpack(BODY(what))->capacity() == 2 &&
+           "fix, support for more than 2 slots needed...");
+    if (DispatchTable::unpack(BODY(what))->slot(1) != nullptr)
+        Rf_error("closure already compiled to pir");
 
+    bool debug = true;
+    Protect p(what);
+
+    // compile to pir
     pir::Module* m = new pir::Module;
     pir::Rir2PirCompiler cmp(m);
-    cmp.setVerbose(true);
+    cmp.setVerbose(false);
     cmp.compileClosure(what);
     cmp.optimizeModule();
+
+    if (debug)
+        m->print();
+
+    // compile back to rir
+    auto table = DispatchTable::unpack(BODY(what));
+    auto oldFun = table->first();
+    pir::Pir2RirCompiler p2r;
+    auto fun = p2r(m->get(oldFun));
+    p(fun->container());
+
+    // TODO: probably start from 0?
+    // fun->invocationCount = oldFun->invocationCount;
+    // TODO: are these still needed / used?
+    fun->envLeaked = oldFun->envLeaked;
+    fun->envChanged = oldFun->envChanged;
+    // TODO: signatures need a rework
+    fun->signature = oldFun->signature;
+
+    table->put(1, fun);
+
+    if (debug) {
+        Rprintf("orig:\n");
+        printFunction(oldFun);
+        Rprintf("new:\n");
+        printFunction(fun);
+    }
+
     delete m;
     return R_NilValue;
 }

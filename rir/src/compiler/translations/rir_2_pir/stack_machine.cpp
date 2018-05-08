@@ -64,10 +64,10 @@ void StackMachine::runCurrentBC(Rir2Pir& rir2pir, Builder& insert) {
         v = pop();
         insert(new StVar(bc.immediateConst(), v, env));
         break;
-    case Opcode::ldvar2_:
+    case Opcode::ldvar_super_:
         insert(new LdVarSuper(bc.immediateConst(), env));
         break;
-    case Opcode::stvar2_:
+    case Opcode::stvar_super_:
         v = pop();
         insert(new StVarSuper(bc.immediateConst(), v, env));
         break;
@@ -160,27 +160,28 @@ void StackMachine::runCurrentBC(Rir2Pir& rir2pir, Builder& insert) {
             auto& cmp = rir2pir.compiler();
             Closure* f = cmp.compileClosure(monomorphic);
             Value* expected = insert(new LdConst(monomorphic));
-            Value* t = insert(new Eq(top(), expected));
+            Value* t = insert(
+                new Eq(top(), expected, 0)); // here we don't have src ast...
             insert(new Branch(t));
             BB* curBB = insert.bb;
 
-            BB* asExpected = insert.createBB();
-            insert.bb = asExpected;
-            curBB->next0 = asExpected;
-            Value* r1 = insert(new StaticCall(insert.env, f, args));
-
             BB* fallback = insert.createBB();
             insert.bb = fallback;
-            curBB->next1 = fallback;
-            Value* r2 = insert(new Call(insert.env, pop(), args));
+            curBB->next0 = fallback;
+            Value* r1 = insert(new Call(insert.env, pop(), args, cs->call));
+
+            BB* asExpected = insert.createBB();
+            insert.bb = asExpected;
+            curBB->next1 = asExpected;
+            Value* r2 = insert(new StaticCall(insert.env, f, args));
 
             BB* cont = insert.createBB();
-            asExpected->next0 = cont;
             fallback->next0 = cont;
+            asExpected->next0 = cont;
             insert.bb = cont;
-            push(insert(new Phi({r1, r2}, {asExpected, fallback})));
+            push(insert(new Phi({r1, r2}, {fallback, asExpected})));
         } else {
-            push(insert(new Call(insert.env, pop(), args)));
+            push(insert(new Call(insert.env, pop(), args, cs->call)));
         }
         break;
     }
@@ -220,7 +221,7 @@ void StackMachine::runCurrentBC(Rir2Pir& rir2pir, Builder& insert) {
             if (getBuiltinNr(target) == vector)
                 push(insert(new CallSafeBuiltin(target, args)));
             else
-                push(insert(new CallBuiltin(env, target, args)));
+                push(insert(new CallBuiltin(env, target, args, cs->call)));
         } else {
             assert(TYPEOF(target) == CLOSXP);
             if (!isValidClosureSEXP(target)) {
@@ -295,7 +296,7 @@ void StackMachine::runCurrentBC(Rir2Pir& rir2pir, Builder& insert) {
     case Opcode::Op:                                                           \
         x = pop();                                                             \
         y = pop();                                                             \
-        push(insert(new Name(x, y)));                                          \
+        push(insert(new Name(y, x, getSrcIdx())));                             \
         break
         BINOP(LOr, lgl_or_);
         BINOP(LAnd, lgl_and_);
@@ -313,7 +314,6 @@ void StackMachine::runCurrentBC(Rir2Pir& rir2pir, Builder& insert) {
         BINOP(Sub, sub_);
         BINOP(Eq, eq_);
         BINOP(Neq, ne_);
-
 #undef BINOP
 #define UNOP(Name, Op)                                                         \
     case Opcode::Op:                                                           \
@@ -350,7 +350,6 @@ void StackMachine::runCurrentBC(Rir2Pir& rir2pir, Builder& insert) {
         break;
 
     // Currently unused opcodes:
-    case Opcode::ldarg_:
     case Opcode::alloc_:
     case Opcode::push_code_:
     case Opcode::set_names_:
@@ -368,12 +367,19 @@ void StackMachine::runCurrentBC(Rir2Pir& rir2pir, Builder& insert) {
     case Opcode::br_:
         assert(false);
 
-    // Unsupported opcodes:
+    // Opcodes that only come from PIR
     case Opcode::make_env_:
     case Opcode::get_env_:
     case Opcode::set_env_:
+    case Opcode::ldvar_noforce_:
+    case Opcode::ldvar_noforce_super_:
+    case Opcode::ldarg_:
     case Opcode::ldloc_:
     case Opcode::stloc_:
+    case Opcode::movloc_:
+        assert(false && "Recompiling PIR not supported for now.");
+
+    // Unsupported opcodes:
     case Opcode::ldlval_:
     case Opcode::asast_:
     case Opcode::missing_:
@@ -431,5 +437,8 @@ void StackMachine::setEntry(pir::BB* ent) { entry = ent; }
 void StackMachine::advancePC() { BC::advance(&pc); }
 
 BC StackMachine::getCurrentBC() { return BC::decode(pc); }
+
+unsigned StackMachine::getSrcIdx() { return srcCode->getSrcIdxAt(pc, true); }
+
 } // namespace pir
 } // namespace rir

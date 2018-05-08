@@ -61,6 +61,7 @@
     V(ForSeqSize)                                                              \
     V(Deopt)                                                                   \
     V(Force)                                                                   \
-    V(CastType)
+    V(CastType)                                                                \
+    V(PirCopy)
 
 #endif

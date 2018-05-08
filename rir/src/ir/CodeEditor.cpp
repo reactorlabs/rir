@@ -40,17 +40,20 @@ CodeEditor::CodeEditor(SEXP in) {
     Function* f = Function::unpack(bc);
     Code* ch = f->body();
     ast = src_pool_at(globalContext(), ch->src);
+    localsCnt = ch->localsCount;
     loadCode(f, ch, true);
 }
 
 CodeEditor::CodeEditor(Code* code) {
     ast = src_pool_at(globalContext(), code->src);
+    localsCnt = code->localsCount;
     loadCode(code->function(), code, false);
 }
 
 CodeEditor::CodeEditor(Code* code, SEXP formals) {
     formals_ = formals;
     ast = src_pool_at(globalContext(), code->src);
+    localsCnt = code->localsCount;
     loadCode(code->function(), code, true);
 }
 
@@ -199,7 +202,7 @@ void CodeEditor::print(bool verbose) {
             Rprintf("     # ");
             Rf_PrintValue(cur.src());
         }
-        cur.print(verbose);
+        cur.print();
     }
     FunIdxT i = 0;
     for (auto p : promises) {
@@ -223,8 +226,8 @@ void CodeEditor::print(bool verbose) {
     }
 }
 
-void CodeEditor::Cursor::print(bool verbose) {
-    if (verbose && pos->callSite)
+void CodeEditor::Cursor::print() {
+    if (pos->callSite)
         pos->bc.print(callSite());
     else
         pos->bc.print();
@@ -267,7 +270,7 @@ unsigned CodeEditor::write(FunctionWriter& function, bool isDefaultArgument) {
             cs.addSrcIdx(cur.srcIdx());
     }
 
-    return cs.finalize(isDefaultArgument);
+    return cs.finalize(isDefaultArgument, localsCnt);
 }
 
 Function* CodeEditor::finalize() {

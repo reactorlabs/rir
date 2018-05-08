@@ -41,6 +41,7 @@ class StackMachine {
     Value* pop();
     BC getCurrentBC();
     void advancePC();
+    unsigned getSrcIdx();
 
   private:
     rir::Function* srcFunction;
@@ -51,6 +52,8 @@ class StackMachine {
     Value* at(size_t);
     void set(size_t n, Value* v);
 };
+
 } // namespace pir
 } // namespace rir
+
 #endif

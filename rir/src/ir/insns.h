@@ -41,9 +41,20 @@ DEF_INSTR(ldfun_, 1, 0, 1, 0)
 DEF_INSTR(ldvar_, 1, 0, 1, 0)
 
 /**
- * ldvar2_:: take immediate CP index of symbol, finding binding in enclosing env and push.
+ * ldvar_noforce_:: like ldvar_ but don't force if promise or fail if missing
  */
-DEF_INSTR(ldvar2_, 1, 0, 1, 0)
+DEF_INSTR(ldvar_noforce_, 1, 0, 1, 1)
+
+/**
+ * ldvar_super_:: take immediate CP index of symbol, finding binding in
+ * enclosing env and push.
+ */
+DEF_INSTR(ldvar_super_, 1, 0, 1, 0)
+
+/**
+ * ldvar_noforce_super_:: like ldvar_super_ but no force
+ */
+DEF_INSTR(ldvar_noforce_super_, 1, 0, 1, 1)
 
 /**
  * ldddvar_:: loads the ellipsis values (such as ..1, ..2) and pushes them on stack.
@@ -71,14 +82,20 @@ DEF_INSTR(ldloc_, 1, 0, 1, 1)
 DEF_INSTR(stvar_, 1, 1, 0, 0)
 
 /**
- * stvar2_:: assign tos to the immediate symbol, lookup starts in the enclosing environment
+ * stvar_super_:: assign tos to the immediate symbol, lookup starts in the
+ * enclosing environment
  */
-DEF_INSTR(stvar2_, 1, 1, 0, 1)
+DEF_INSTR(stvar_super_, 1, 1, 0, 1)
 
 /**
  * stloc_:: store top of stack to local variable
  */
 DEF_INSTR(stloc_, 1, 1, 0, 1)
+
+/**
+ * movloc_:: copy one local into another
+ */
+DEF_INSTR(movloc_, 2, 0, 0, 1)
 
 /**
  * call_:: ... Takes a list of code objects, which represent the arguments, decides on eager/lazy evaluation and does the right thing with the code objs.

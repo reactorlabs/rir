@@ -3,8 +3,8 @@
 
 #include <cassert>
 
-#include "CodeVerifier.h"
 #include "BC.h"
+#include "CodeVerifier.h"
 #include "R/Symbols.h"
 #include "interpreter/deoptimizer.h"
 
@@ -12,7 +12,7 @@ namespace rir {
 
 namespace {
 
-/** State for verifying the stack layout and calculating max ostack 
+/** State for verifying the stack layout and calculating max ostack
  * size.
  */
 class State {
@@ -43,9 +43,7 @@ class State {
             ostack = other.ostack;
     }
 
-    void check() const {
-        assert(ostack >= 0 and "Too many pops");
-    }
+    void check() const { assert(ostack >= 0 and "Too many pops"); }
 
     void advance() {
         BC bc = BC::advance(&pc);
@@ -61,8 +59,7 @@ class State {
     BC cur() { return BC::decode(pc); }
 
     void checkClear() const {
-        assert(ostack == 0 and
-               "Stack imbalance when exitting the function");
+        assert(ostack == 0 and "Stack imbalance when exitting the function");
     }
 };
 
@@ -182,7 +179,8 @@ void CodeVerifier::verifyFunctionLayout(SEXP sexp, ::Context* ctx) {
             if (*cptr == Opcode::br_ || *cptr == Opcode::brobj_ ||
                 *cptr == Opcode::brtrue_ || *cptr == Opcode::brfalse_) {
                 int off = *reinterpret_cast<int*>(cptr + 1);
-                assert(cptr + off >= start && cptr + off < end);
+                assert(cptr + cur.size() + off >= start &&
+                       cptr + cur.size() + off < end);
             }
             if (*cptr == Opcode::guard_env_) {
                 unsigned deoptId = *reinterpret_cast<ArgT*>(cptr + 1);

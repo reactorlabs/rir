@@ -1,5 +1,5 @@
-#include <assert.h>
 #include <alloca.h>
+#include <assert.h>
 
 #include "R/Funtab.h"
 #include "R/Protect.h"
@@ -115,51 +115,6 @@ static void jit(SEXP cls, Context* ctx) {
         return;
     SEXP cmp = ctx->compiler(cls, NULL);
     SET_BODY(cls, BODY(cmp));
-}
-
-void tryOptimizeClosure(DispatchTable* table, size_t offset, Context* ctx) {
-
-    // This function will optimize the function and update the linked list
-    // of functions, so that subsequent closure calls pick the most optimized
-    // version.
-
-    static bool optimizing = false;
-
-    Function* fun = table->at(offset);
-
-    if (!optimizing && !fun->next() && !fun->origin()) {
-        /* currently there is a bug if we reoptimize a function twice:
-         *  Deopt ids from the first optimization and second optimizations
-         *  will be mixed and the deoptimizer always only goes back one
-         *  optimization level!
-         *  To avoid this bug we currently only optimize once
-         */
-        Code* code = fun->body();
-        if (fun->markOpt ||
-                (fun->invocationCount == 1 && code->perfCounter > 100) ||
-                (fun->invocationCount == 10 && code->perfCounter > 20) ||
-                 fun->invocationCount == 100) {
-            optimizing = true;
-
-            Function* oldFun = fun;
-            cp_pool_add(ctx, oldFun->container());
-
-            SEXP opt = globalContext()->optimizer(fun->container());
-
-            if (opt != nullptr) {
-                fun = Function::unpack(opt);
-
-                fun->invocationCount = oldFun->invocationCount;
-                fun->envLeaked = oldFun->envLeaked;
-                fun->envChanged = oldFun->envChanged;
-                fun->signature = oldFun->signature;
-
-                // Update the dispatch table
-                table->put(offset, fun);
-            }
-            optimizing = false;
-        }
-    }
 }
 
 void closureDebug(SEXP call, SEXP op, SEXP rho, SEXP newrho, RCNTXT* cntxt) {
@@ -368,21 +323,20 @@ SEXP rirCallTrampoline(RCNTXT* cntxt, Code* code, EnvironmentProxy* ep,
     return evalRirCode(code, ctx, ep);
 }
 
-static SEXP rirCallClosure(SEXP call, SEXP callee, ArgumentListProxy* ap,
-                           EnvironmentProxy* ep, Context* ctx) {
+static SEXP rirCallClosure(SEXP call, SEXP callee, unsigned slot,
+                           ArgumentListProxy* ap, EnvironmentProxy* ep,
+                           Context* ctx) {
 
     DispatchTable* vtable = DispatchTable::unpack(BODY(callee));
-    Function* fun = vtable->first();
-
-    tryOptimizeClosure(vtable, 0, ctx);
+    Function* fun = vtable->at(slot);
 
     fun->registerInvocation();
 
     RCNTXT cntxt;
     initClosureContext(&cntxt, call, R_NilValue, ep->env(), R_NilValue, callee);
 
-    EnvironmentProxy newEp(fun->signature->createEnvironment, call, callee, ap,
-                           ep);
+    bool createEnvironment = slot != 1;
+    EnvironmentProxy newEp(createEnvironment, call, callee, ap, ep);
 
     // Exec the closure
     closureDebug(call, callee, ep->env(), R_NilValue, &cntxt);
@@ -394,10 +348,12 @@ static SEXP rirCallClosure(SEXP call, SEXP callee, ArgumentListProxy* ap,
 
     endClosureContext(&cntxt, result);
 
-    if (!fun->envLeaked && FRAME_LEAKED(newEp.env()))
-        fun->envLeaked = true;
-    if (!fun->envChanged && FRAME_CHANGED(newEp.env()))
-        fun->envChanged = true;
+    if (newEp.validREnv()) {
+        if (!fun->envLeaked && FRAME_LEAKED(newEp.env()))
+            fun->envLeaked = true;
+        if (!fun->envChanged && FRAME_CHANGED(newEp.env()))
+            fun->envChanged = true;
+    }
 
     if (fun->deopt) {
         // TODO: fix -- should save dispatch table instead of function store
@@ -608,13 +564,18 @@ SEXP doCall(Code* caller, SEXP callee, bool argsOnStack, uint32_t nargs,
         SEXP body = BODY(callee);
         assert(isValidDispatchTableSEXP(body));
 
+        auto table = DispatchTable::unpack(body);
+        unsigned slot = 0; // default version is unoptimized RIR
+        if (table->slot(1) && !argsOnStack)
+            slot = 1; // switch to PIR optimized
+
         Protect p;
         if (argsOnStack)
             call = p(fixupAST(call, ctx, nargs));
 
         ArgumentListProxy ap(caller, argsOnStack, id);
 
-        result = rirCallClosure(call, callee, &ap, ep, ctx);
+        result = rirCallClosure(call, callee, slot, &ap, ep, ctx);
 
     } else {
         assert(false && "Don't know how to run other stuff");
@@ -724,7 +685,7 @@ SEXP doDispatch(Code* caller, bool argsOnStack, uint32_t nargs, uint32_t id,
             if (TYPEOF(body) == EXTERNALSXP) {
                 assert(isValidDispatchTableSEXP(body));
                 ArgumentListProxy ap(actuals);
-                result = rirCallClosure(call, callee, &ap, ep, ctx);
+                result = rirCallClosure(call, callee, 0, &ap, ep, ctx);
             } else {
                 result = Rf_applyClosure(call, callee, actuals, ep->env(),
                                          R_NilValue);
@@ -1201,7 +1162,7 @@ static void cachedSetVar(SEXP val, SEXP env, Immediate idx, Context* ctx,
     SLOWASSERT(TYPEOF(sym) == SYMSXP);
     INCREMENT_NAMED(val);
     PROTECT(val);
-    defineVar(sym, val, env);
+    Rf_defineVar(sym, val, env);
     UNPROTECT(1);
 }
 
@@ -1220,7 +1181,6 @@ SEXP evalRirCode(Code* c, Context* ctx, EnvironmentProxy* ep) {
     ep->init();
 
     Locals locals(c->localsCount);
-    locals.store(0, ep->env()); // prob remove this..
 
     BindingCache bindingCache[BINDING_CACHE_SIZE];
     memset(&bindingCache, 0, sizeof(bindingCache));
@@ -1314,7 +1274,24 @@ SEXP evalRirCode(Code* c, Context* ctx, EnvironmentProxy* ep) {
             NEXT();
         }
 
-        INSTRUCTION(ldvar2_) {
+        INSTRUCTION(ldvar_noforce_) {
+            Immediate id = readImmediate();
+            advanceImmediate();
+            res = cachedGetVar(ep->env(), id, ctx, bindingCache);
+            R_Visible = TRUE;
+
+            if (res == R_UnboundValue) {
+                Rf_error("object not found");
+            }
+
+            if (NAMED(res) == 0 && res != R_NilValue)
+                SET_NAMED(res, 1);
+
+            ostack_push(ctx, res);
+            NEXT();
+        }
+
+        INSTRUCTION(ldvar_super_) {
             SEXP sym = readConst(ctx, readImmediate());
             advanceImmediate();
             res = Rf_findVar(sym, ENCLOS(ep->env()));
@@ -1330,6 +1307,23 @@ SEXP evalRirCode(Code* c, Context* ctx, EnvironmentProxy* ep) {
             // if promise, evaluate & return
             if (TYPEOF(res) == PROMSXP)
                 res = promiseValue(res, ctx);
+
+            if (NAMED(res) == 0 && res != R_NilValue)
+                SET_NAMED(res, 1);
+
+            ostack_push(ctx, res);
+            NEXT();
+        }
+
+        INSTRUCTION(ldvar_noforce_super_) {
+            SEXP sym = readConst(ctx, readImmediate());
+            advanceImmediate();
+            res = Rf_findVar(sym, ENCLOS(ep->env()));
+            R_Visible = TRUE;
+
+            if (res == R_UnboundValue) {
+                Rf_error("object not found");
+            }
 
             if (NAMED(res) == 0 && res != R_NilValue)
                 SET_NAMED(res, 1);
@@ -1386,29 +1380,14 @@ SEXP evalRirCode(Code* c, Context* ctx, EnvironmentProxy* ep) {
         }
 
         INSTRUCTION(ldarg_) {
-            Immediate id = readImmediate();
+            Immediate idx = readImmediate();
             advanceImmediate();
-            res = cachedGetBindingCell(ep->env(), id, ctx, bindingCache);
-            assert(res);
-            res = CAR(res);
-            assert(res != R_UnboundValue);
 
-            R_Visible = TRUE;
+            unsigned argi = ep->getCallsite()->args()[idx];
+            assert(argi != DOTS_ARG_IDX && argi != MISSING_ARG_IDX);
 
-            if (res == R_UnboundValue) {
-                Rf_error("object not found");
-            } else if (res == R_MissingArg) {
-                SEXP sym = cp_pool_at(ctx, id);
-                Rf_error("argument \"%s\" is missing, with no default",
-                         CHAR(PRINTNAME(sym)));
-            }
-
-            // if promise, evaluate & return
-            if (TYPEOF(res) == PROMSXP)
-                res = promiseValue(res, ctx);
-
-            if (NAMED(res) == 0 && res != R_NilValue)
-                SET_NAMED(res, 1);
+            Code* arg = ep->getCaller()->function()->codeAt(argi);
+            res = createPromise(arg, ep->getParentEnv());
 
             ostack_push(ctx, res);
             NEXT();
@@ -1435,13 +1414,13 @@ SEXP evalRirCode(Code* c, Context* ctx, EnvironmentProxy* ep) {
             NEXT();
         }
 
-        INSTRUCTION(stvar2_) {
+        INSTRUCTION(stvar_super_) {
             SEXP sym = readConst(ctx, readImmediate());
             advanceImmediate();
             SLOWASSERT(TYPEOF(sym) == SYMSXP);
             SEXP val = ostack_pop(ctx);
             INCREMENT_NAMED(val);
-            setVar(sym, val, ENCLOS(ep->env()));
+            Rf_setVar(sym, val, ENCLOS(ep->env()));
             NEXT();
         }
 
@@ -1450,6 +1429,15 @@ SEXP evalRirCode(Code* c, Context* ctx, EnvironmentProxy* ep) {
             advanceImmediate();
             locals.store(offset, ostack_top(ctx));
             ostack_pop(ctx);
+            NEXT();
+        }
+
+        INSTRUCTION(movloc_) {
+            Immediate target = readImmediate();
+            advanceImmediate();
+            Immediate source = readImmediate();
+            advanceImmediate();
+            locals.store(target, locals.load(source));
             NEXT();
         }
 
@@ -1550,12 +1538,13 @@ SEXP evalRirCode(Code* c, Context* ctx, EnvironmentProxy* ep) {
         }
 
         INSTRUCTION(force_) {
-            SEXP val = ostack_pop(ctx);
-            assert(TYPEOF(val) == PROMSXP);
-            // If the promise is already evaluated then push the value inside
-            // the promise
-            // onto the stack, otherwise push the value from forcing the promise
-            ostack_push(ctx, promiseValue(val, ctx));
+            if (TYPEOF(ostack_top(ctx)) == PROMSXP) {
+                SEXP val = ostack_pop(ctx);
+                // If the promise is already evaluated then push the value
+                // inside the promise onto the stack, otherwise push the value
+                // from forcing the promise
+                ostack_push(ctx, promiseValue(val, ctx));
+            }
             NEXT();
         }
 
@@ -1913,8 +1902,8 @@ SEXP evalRirCode(Code* c, Context* ctx, EnvironmentProxy* ep) {
 
         INSTRUCTION(aslogical_) {
             SEXP val = ostack_top(ctx);
-            int x1 = asLogical(val);
-            res = ScalarLogical(x1);
+            int x1 = Rf_asLogical(val);
+            res = Rf_ScalarLogical(x1);
             ostack_pop(ctx);
             ostack_push(ctx, res);
             NEXT();
@@ -1938,7 +1927,7 @@ SEXP evalRirCode(Code* c, Context* ctx, EnvironmentProxy* ep) {
                         INTEGER(val)[0]; // relies on NA_INTEGER == NA_LOGICAL
                     break;
                 default:
-                    cond = asLogical(val);
+                    cond = Rf_asLogical(val);
                 }
             }
 
@@ -2623,8 +2612,6 @@ SEXP rirEval_f(SEXP what, SEXP env) {
     if (DispatchTable::check(what)) {
         auto table = DispatchTable::unpack(what);
         size_t offset = 0; // Default target is the first version
-
-        tryOptimizeClosure(table, offset, globalContext());
 
         Function* fun = table->at(offset);
         fun->registerInvocation();

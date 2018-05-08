@@ -74,6 +74,7 @@ class CodeEditor {
                                              // default arguments
 
     SEXP ast;
+    size_t localsCnt = 0;
 
     std::vector<BytecodeList*> labels_;
 
@@ -391,7 +392,7 @@ class CodeEditor {
 
         bool empty() { return editor.front.next == &editor.last; }
 
-        void print(bool verbose);
+        void print();
 
         unsigned long hash() const {
             return std::hash<unsigned long>()((unsigned long)&editor) ^

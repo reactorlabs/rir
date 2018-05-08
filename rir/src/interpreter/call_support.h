@@ -15,14 +15,12 @@ class EnvironmentProxy;
 class ArgumentListProxy {
   private:
     bool validArgslist_ = true;
-    union {
-        SEXP argslist_;
-        struct {
-            Code* caller;
-            bool onStack;
-            uint32_t id;
-        } ctxt_;
-    };
+    SEXP argslist_;
+    struct {
+        Code* caller;
+        bool onStack;
+        uint32_t id;
+    } ctxt_;
 
     void create(EnvironmentProxy* ep);
 
@@ -35,6 +33,14 @@ class ArgumentListProxy {
         if (!validArgslist_)
             create(ep);
         return argslist_;
+    }
+
+    CallSite* getCallSite() {
+        return ctxt_.caller->callSite(ctxt_.id);
+    }
+
+    Code* getCaller() {
+        return ctxt_.caller;
     }
 
     ~ArgumentListProxy() = default;
@@ -55,14 +61,12 @@ class EnvironmentProxy {
   private:
     bool validREnv_ = true;
     bool createEnvironment_ = false;
-    union {
-        SEXP env_;
-        struct {
-            SEXP call;
-            SEXP callee;
-            ArgumentListProxy* ap;
-        } ctxt_;
-    };
+    SEXP env_;
+    struct {
+        SEXP call;
+        SEXP callee;
+        ArgumentListProxy* ap;
+    } ctxt_;
     EnvironmentProxy* parent_ = nullptr;
 
   public:
@@ -87,14 +91,26 @@ class EnvironmentProxy {
         return env_;
     }
 
+    bool validREnv() { return validREnv_; }
+
     void set(SEXP env) {
         SLOWASSERT(env && TYPEOF(env) == ENVSXP && "setting to invalid env");
         env_ = env;
+        validREnv_ = true;
     }
 
-    void make(SEXP parent) {
-        // create a new env, save it to env_ (return old?)
-        assert(false && "not implemented yet");
+    CallSite* getCallsite() {
+        return ctxt_.ap->getCallSite();
+    }
+
+    Code* getCaller() {
+        return ctxt_.ap->getCaller();
+    }
+
+    SEXP getParentEnv() {
+        SLOWASSERT(parent_ && parent_->validREnv_ &&
+                   "Caller of PIR doesn't have valid env");
+        return parent_->env();
     }
 
     ~EnvironmentProxy() = default;

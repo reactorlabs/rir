@@ -26,7 +26,7 @@
  * Instructions have an InstructionDescription, which gives us basic
  * information about its effects and environment interactions.
  *
- * If an instruction needs an environment (ie. if its EnvAccess >= None), it
+ * If an instruction needs an environment (ie. if its EnvAccess > None), it
  * needs to have a dedicated environment argument. This dedicated environment
  * input is (for technical reasons) the last argument of fixed length
  * instructions and the first argument for variable length instructions. There
@@ -108,6 +108,8 @@ class Instruction : public Value {
         return bb_;
     }
 
+    unsigned srcIdx = 0;
+
     virtual ~Instruction() {}
 
     InstructionUID id();
@@ -120,7 +122,7 @@ class Instruction : public Value {
     bool unused();
 
     virtual void printArgs(std::ostream& out);
-    void print(std::ostream&);
+    virtual void print(std::ostream&);
     void printRef(std::ostream& out);
     void print() { print(std::cerr); }
 
@@ -536,7 +538,8 @@ class FLI(MkCls, 4, Effect::None, EnvAccess::Capture) {
 class FLI(MkFunCls, 1, Effect::None, EnvAccess::Capture) {
   public:
     Closure* fun;
-    MkFunCls(Closure* fun, Value* parent);
+    SEXP fml, code, src;
+    MkFunCls(Closure* fun, Value* parent, SEXP fml, SEXP code, SEXP src);
     void printArgs(std::ostream&) override;
 };
 
@@ -634,12 +637,20 @@ class FLI(LdFunctionEnv, 0, Effect::None, EnvAccess::None) {
     LdFunctionEnv() : FixedLenInstruction(RType::env) {}
 };
 
+class FLI(PirCopy, 1, Effect::None, EnvAccess::None) {
+  public:
+    PirCopy(Value* v) : FixedLenInstruction(v->type, {{v->type}}, {{v}}) {}
+    void print(std::ostream& out) override;
+};
+
 #define SAFE_BINOP(Name, Type)                                                 \
     class FLI(Name, 2, Effect::None, EnvAccess::None) {                        \
       public:                                                                  \
-        Name(Value* a, Value* b)                                               \
+        Name(Value* a, Value* b, unsigned src)                                 \
             : FixedLenInstruction(Type, {{PirType::val(), PirType::val()}},    \
-                                  {{a, b}}) {}                                 \
+                                  {{a, b}}) {                                  \
+            srcIdx = src;                                                      \
+        }                                                                      \
     }
 
 SAFE_BINOP(Gte, PirType::val());
@@ -699,11 +710,12 @@ class VLI(Call, Effect::Any, EnvAccess::Leak), public CallInstructionI {
     Value* cls() { return arg(clsIdx).val(); }
     size_t nCallArgs() override { return nargs() - callArgOffset; }
 
-    Call(Value* e, Value* fun, const std::vector<Value*>& args)
+    Call(Value * e, Value * fun, const std::vector<Value*>& args, unsigned src)
         : VarLenInstruction(PirType::valOrLazy(), e) {
         this->pushArg(fun, RType::closure);
         for (unsigned i = 0; i < args.size(); ++i)
             this->pushArg(args[i], RType::prom);
+        srcIdx = src;
     }
 
     void eachCallArg(ArgumentValueIterator it) override {
@@ -785,10 +797,24 @@ typedef SEXP (*CCODE)(SEXP, SEXP, SEXP, SEXP);
 
 class VLI(CallBuiltin, Effect::Any, EnvAccess::Write) {
   public:
+    SEXP blt;
     const CCODE builtin;
     int builtinId;
 
-    CallBuiltin(Value* e, SEXP builtin, const std::vector<Value*>& args);
+    size_t nCallArgs() {
+        // do not count environment
+        return nargs() - 1;
+    }
+
+    CallBuiltin(Value* e, SEXP builtin, const std::vector<Value*>& args,
+                unsigned src);
+
+    void eachCallArg(ArgumentValueIterator it) {
+        // skip environment at index 0
+        for (size_t i = 1; i < nargs(); ++i) {
+            it(arg(i).val());
+        }
+    }
 
     void printArgs(std::ostream& out) override;
 };

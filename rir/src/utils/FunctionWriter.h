@@ -38,7 +38,7 @@ class FunctionWriter {
 
     Code* writeCode(SEXP ast, void* bc, unsigned codeSize, char* callSiteBuffer,
                     unsigned callSiteLength, std::vector<unsigned>& sources,
-                    bool markDefaultArg) {
+                    bool markDefaultArg, size_t localsCnt) {
         assert(function->size <= capacity);
 
         unsigned totalSize =
@@ -72,8 +72,9 @@ class FunctionWriter {
         function->size += totalSize;
         assert(function->size <= capacity);
 
-        Code* code = new (insert) Code(ast, codeSize, sources.size(),
-                                       callSiteLength, offset, markDefaultArg);
+        Code* code =
+            new (insert) Code(ast, codeSize, sources.size(), callSiteLength,
+                              offset, markDefaultArg, localsCnt);
 
         assert(code->function() == function);
 

@@ -89,6 +89,46 @@ class BCCleanup : public InstructionDispatcher::Receiver {
         }
     }
 
+    void br_(CodeEditor::Iterator ins) override {
+        // remove br_ x; x: ...
+        if (ins + 1 != code_.end()) {
+            if (code_.target(*ins) == ins + 1) {
+                auto cur = ins.asCursor(code_);
+                cur.remove();
+            }
+        }
+    }
+
+    void ldloc_(CodeEditor::Iterator ins) override {
+        // replace ldloc x; stloc y; by copyloc x y
+        // remove ldloc x; stloc x
+        if (ins + 1 != code_.end()) {
+            auto next = ins + 1;
+            if ((*next).is(Opcode::stloc_)) {
+                auto src = ins.asCursor(code_).bc().immediate.loc;
+                auto trg = next.asCursor(code_).bc().immediate.loc;
+                // remove them
+                auto cur = ins.asCursor(code_);
+                cur.remove();
+                cur.remove();
+                if (src != trg)
+                    cur << BC::copyloc(trg, src);
+            }
+        }
+    }
+
+    void get_env_(CodeEditor::Iterator ins) override {
+        // remove get_env_; set_env_
+        if (ins + 1 != code_.end()) {
+            auto next = ins + 1;
+            if ((*next).is(Opcode::set_env_)) {
+                auto cur = ins.asCursor(code_);
+                cur.remove();
+                cur.remove();
+            }
+        }
+    }
+
     // TODO there is some brokennes when there is dead code
     // void br_(CodeEditor::Iterator ins) override {
     //     auto target = code_.target(*ins);
@@ -105,5 +145,5 @@ class BCCleanup : public InstructionDispatcher::Receiver {
             dispatcher.dispatch(i);
     }
 };
-}
+} // namespace rir
 #endif

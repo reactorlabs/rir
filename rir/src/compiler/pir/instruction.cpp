@@ -36,7 +36,7 @@ const static Instruction::Description instructionDescriptionTable[] = {
 
 static_assert(static_cast<unsigned>(Tag::_UNUSED_) == 0, "");
 static size_t tagIdx(Tag tag) { return static_cast<size_t>(tag) - 1; }
-}
+} // namespace
 
 namespace rir {
 namespace pir {
@@ -175,7 +175,8 @@ void LdConst::printArgs(std::ostream& out) {
 
 void Branch::printArgs(std::ostream& out) {
     FixedLenInstruction::printArgs(out);
-    out << " -> BB" << bb()->next0->id << " | BB" << bb()->next1->id;
+    out << " -> BB" << bb()->next1->id << " (if true) | BB" << bb()->next0->id
+        << " (if false)";
 }
 
 void MkArg::printArgs(std::ostream& out) {
@@ -244,6 +245,18 @@ void Phi::printArgs(std::ostream& out) {
     }
 }
 
+void PirCopy::print(std::ostream& out) {
+    std::ostringstream buf;
+    buf << type;
+    out << std::left << std::setw(7) << buf.str() << " ";
+    buf.str("");
+    printRef(buf);
+    out << std::setw(5) << buf.str() << " = ";
+    buf.str("");
+    arg(0).val()->printRef(buf);
+    out << std::setw(50) << buf.str();
+}
+
 CallSafeBuiltin::CallSafeBuiltin(SEXP builtin, const std::vector<Value*>& args)
     : VarLenInstruction(PirType::valOrLazy()), builtin(getBuiltin(builtin)),
       builtinId(getBuiltinNr(builtin)) {
@@ -252,11 +265,12 @@ CallSafeBuiltin::CallSafeBuiltin(SEXP builtin, const std::vector<Value*>& args)
 }
 
 CallBuiltin::CallBuiltin(Value* e, SEXP builtin,
-                         const std::vector<Value*>& args)
-    : VarLenInstruction(PirType::valOrLazy(), e), builtin(getBuiltin(builtin)),
-      builtinId(getBuiltinNr(builtin)) {
+                         const std::vector<Value*>& args, unsigned src)
+    : VarLenInstruction(PirType::valOrLazy(), e), blt(builtin),
+      builtin(getBuiltin(builtin)), builtinId(getBuiltinNr(builtin)) {
     for (unsigned i = 0; i < args.size(); ++i)
         this->pushArg(args[i], PirType::val());
+    srcIdx = src;
 }
 
 void CallBuiltin::printArgs(std::ostream& out) {
@@ -280,8 +294,9 @@ void Deopt::printArgs(std::ostream& out) {
     env()->printRef(out);
 }
 
-MkFunCls::MkFunCls(Closure* fun, Value* parent)
-    : FixedLenInstruction(RType::closure, parent), fun(fun) {
+MkFunCls::MkFunCls(Closure* fun, Value* parent, SEXP fml, SEXP code, SEXP src)
+    : FixedLenInstruction(RType::closure, parent), fun(fun), fml(fml),
+      code(code), src(src) {
     assert(fun->closureEnv() == Env::notClosed());
 }
 
@@ -304,5 +319,6 @@ void StaticCall::printArgs(std::ostream& out) {
         out << ", ";
     Instruction::printArgs(out);
 }
-}
-}
+
+} // namespace pir
+} // namespace rir
