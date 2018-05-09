@@ -18,16 +18,23 @@
 using namespace rir;
 
 REXPORT SEXP rir_disassemble(SEXP what, SEXP verbose) {
+    if (!what || TYPEOF(what) != CLOSXP)
+        Rf_error("Not a rir compiled code");
+    DispatchTable* t = isValidDispatchTableObject(BODY(what));
 
-    Function* f = TYPEOF(what) == CLOSXP ? isValidClosureSEXP(what)
-                                         : isValidFunctionSEXP(what);
-
-    if (f == nullptr)
+    if (!t)
         Rf_error("Not a rir compiled code");
 
-    Rprintf("%p  [invoked %ux]\n", what, f->invocationCount);
+    Rprintf("* closure %p (vtable %p, env %p)\n", what, t, CLOENV(what));
+    for (size_t entry = 0; entry < t->capacity(); ++entry) {
+        if (!t->slot(entry))
+            continue;
+        Function* f = t->at(entry);
+        Rprintf("= vtable slot <%d> (%p, invoked %u) =\n", entry, f,
+                f->invocationCount);
+        CodeEditor(f).print(LOGICAL(verbose)[0]);
+    }
 
-    CodeEditor(what).print(LOGICAL(verbose)[0]);
     return R_NilValue;
 }
 
@@ -86,7 +93,12 @@ REXPORT SEXP rir_body(SEXP cls) {
 #include "compiler/translations/pir_2_rir.h"
 #include "compiler/translations/rir_2_pir/rir_2_pir.h"
 
-REXPORT SEXP pir_compile(SEXP what, bool debug = false) {
+REXPORT SEXP pir_compile(SEXP what, SEXP verbose) {
+    bool debug = false;
+    if (verbose && TYPEOF(verbose) == LGLSXP && Rf_length(verbose) > 0 &&
+        LOGICAL(verbose)[0])
+        debug = true;
+
     if (!isValidClosureSEXP(what))
         Rf_error("not a compiled closure");
     assert(DispatchTable::unpack(BODY(what))->capacity() == 2 &&
@@ -99,7 +111,7 @@ REXPORT SEXP pir_compile(SEXP what, bool debug = false) {
     // compile to pir
     pir::Module* m = new pir::Module;
     pir::Rir2PirCompiler cmp(m);
-    cmp.setVerbose(false);
+    cmp.setVerbose(debug);
     cmp.compileClosure(what);
     cmp.optimizeModule();
 
@@ -113,8 +125,7 @@ REXPORT SEXP pir_compile(SEXP what, bool debug = false) {
     auto fun = p2r(m->get(oldFun));
     p(fun->container());
 
-    // TODO: probably start from 0?
-    // fun->invocationCount = oldFun->invocationCount;
+    fun->invocationCount = oldFun->invocationCount;
     // TODO: are these still needed / used?
     fun->envLeaked = oldFun->envLeaked;
     fun->envChanged = oldFun->envChanged;
@@ -131,7 +142,7 @@ REXPORT SEXP pir_compile(SEXP what, bool debug = false) {
     }
 
     delete m;
-    return R_NilValue;
+    return what;
 }
 
 REXPORT SEXP pir_tests() {

@@ -46,6 +46,7 @@ struct DispatchTable {
     }
 
     void put(size_t i, Function* f) {
+        assert(i < capacity());
         EXTERNALSXP_SET_ENTRY(container(), i, f->container());
     }
 

@@ -44,6 +44,13 @@ CodeEditor::CodeEditor(SEXP in) {
     loadCode(f, ch, true);
 }
 
+CodeEditor::CodeEditor(Function* f) {
+    Code* ch = f->body();
+    ast = src_pool_at(globalContext(), ch->src);
+    localsCnt = ch->localsCount;
+    loadCode(f, ch, true);
+}
+
 CodeEditor::CodeEditor(Code* code) {
     ast = src_pool_at(globalContext(), code->src);
     localsCnt = code->localsCount;

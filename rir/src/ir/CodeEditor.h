@@ -428,6 +428,7 @@ class CodeEditor {
     bool isLabel(Iterator ins) const { return (*ins).isLabel(); }
 
     explicit CodeEditor(SEXP closure);
+    explicit CodeEditor(Function* function);
     explicit CodeEditor(Code* code);
     CodeEditor(Code* code, SEXP formals);
 
