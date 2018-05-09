@@ -15,7 +15,9 @@ using namespace rir::pir;
 class TheScopeResolution {
   public:
     Closure* function;
-    TheScopeResolution(Closure* function) : function(function) {}
+    CFG cfg;
+    TheScopeResolution(Closure* function)
+        : function(function), cfg(function->entry) {}
     void operator()() {
         ScopeAnalysis analysis(function);
 
@@ -25,15 +27,15 @@ class TheScopeResolution {
                 Instruction* i = *ip;
                 auto next = ip + 1;
                 LdArg* lda = LdArg::Cast(i);
-                LdFun* ldf = LdFun::Cast(i);
+                LdFun* ldfun = LdFun::Cast(i);
                 Instruction* ld = LdVar::Cast(i);
                 StVar* s = StVar::Cast(i);
                 StVarSuper* ss = StVarSuper::Cast(i);
                 LdVarSuper* sld = LdVarSuper::Cast(i);
                 if (lda)
                     ld = lda;
-                else if (ldf)
-                    ld = ldf;
+                else if (ldfun)
+                    ld = ldfun;
 
                 if (sld) {
                     // LdVarSuper where the parent environment is known and
@@ -70,52 +72,74 @@ class TheScopeResolution {
                     // with the actual values.
                     auto aload = analysis.loads.at(ld);
                     auto aval = aload.result;
-                    bool localVals = true;
+                    // inter-procedural scope analysis can drag in values
+                    // from other functions, which we cannot use here!
+                    bool onlyLocalVals = true;
+                    aval.eachSource([&](ValOrig& src) {
+                        if (src.origin->bb()->owner != function)
+                            onlyLocalVals = false;
+                    });
                     if (aval.isUnknown() &&
                         aload.env != AbstractREnvironment::UnknownParent) {
                         // We have no clue what we load, but we know from where
                         ld->env(aload.env);
-                    } else {
-                        aval.eachSource([&](ValOrig& src) {
-                            // inter-procedural scope analysis can drag in
-                            // values
-                            // from other functions, which we cannot use here!
-                            if (src.origin->bb()->owner != function) {
-                                localVals = false;
+                    } else if (onlyLocalVals) {
+                        auto replaceLdFun = [&](Value* val) {
+                            if (val->type.isA(PirType::closure())) {
+                                next = bb->remove(ip);
+                                ld->replaceUsesWith(val);
+                                return;
+                            }
+                            auto fz = new Force(val);
+                            auto ch = new ChkClosure(fz);
+                            bb->replace(ip, fz);
+                            next = bb->insert(ip + 1, ch);
+                            next++;
+                            ld->replaceUsesWith(ch);
+                        };
+                        // This load can be resolved to a unique value
+                        aval.ifSingleValue([&](Value* val) {
+                            if (ldfun) {
+                                replaceLdFun(val);
+                            } else {
+                                ld->replaceUsesWith(val);
+                                next = bb->remove(ip);
                             }
                         });
-                        if (localVals) {
-                            aval.ifSingleValue([&](Value* val) {
-                                if (ldf) {
-                                    auto f = new Force(val);
-                                    // TODO
-                                    // !(PirType(RType::closure) >= phi->type)
-                                    ld->replaceUsesWith(f);
-                                    bb->replace(ip, f);
-                                } else {
-                                    ld->replaceUsesWith(val);
-                                    next = bb->remove(ip);
-                                }
-                            });
-                            if (!aval.isSingleValue() && !aval.isUnknown()) {
-                                auto phi = new Phi;
+                        // This load can have multiple values. We need a phi
+                        // to distinguish them. (LdFun case is not yet
+                        // handled here)
+                        if (!aval.isSingleValue() && !aval.isUnknown() &&
+                            !ldfun) {
+                            auto hasAllInputs = [&](BB* load) {
+                                bool success = true;
                                 aval.eachSource([&](ValOrig& src) {
-                                    phi->addInput(src.origin->bb(), src.val);
+                                    if (!cfg.transitivePredecessors[load->id]
+                                             .count(src.origin->bb()))
+                                        success = false;
                                 });
-                                phi->updateType();
-                                if (ldf) {
-                                    auto f = new Force(phi);
-                                    // TODO
-                                    // !(PirType(RType::closure) >= phi->type)
-                                    ld->replaceUsesWith(f);
-                                    bb->replace(ip, phi);
-                                    next = bb->insert(ip + 1, f);
-                                    next++;
-                                } else {
-                                    ld->replaceUsesWith(phi);
-                                    bb->replace(ip, phi);
-                                }
+                                return success;
+                            };
+                            BB* phiBlock = bb;
+                            // Shift phi up until we see at least two inputs
+                            // comming from different paths.
+                            for (bool up = true; up;) {
+                                auto preds = cfg.predecessors[phiBlock->id];
+                                for (auto pre : preds)
+                                    up = up & hasAllInputs(pre);
+                                if (up)
+                                    phiBlock = *preds.begin();
                             }
+                            auto phi = new Phi;
+                            aval.eachSource([&](ValOrig& src) {
+                                phi->addInput(src.origin->bb(), src.val);
+                            });
+                            phi->updateType();
+                            ld->replaceUsesWith(phi);
+                            if (phiBlock == bb)
+                                bb->replace(ip, phi);
+                            else
+                                phiBlock->insert(phiBlock->begin(), phi);
                         }
                     }
                 }

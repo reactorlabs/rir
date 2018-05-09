@@ -145,6 +145,7 @@ struct PirType {
         //    .orObj();
     }
     static PirType vecs() { return num() | RType::str | RType::vec; }
+    static PirType closure() { return RType::closure; }
 
     static PirType valOrMissing() { return val().orMissing(); }
     static PirType valOrLazy() { return val().orLazy(); }
@@ -222,6 +223,8 @@ struct PirType {
         return flags_ == o.flags_ &&
                (isRType() ? t_.r == o.t_.r : t_.n == o.t_.n);
     }
+
+    bool isA(const PirType& o) const { return o.isSuper(*this); }
 
     bool isSuper(const PirType& o) const {
         if (isRType() != o.isRType()) {

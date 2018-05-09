@@ -16,6 +16,8 @@ class Code {
   public:
     BB* entry;
 
+    size_t maxBBId = 0;
+
     Code();
     void print(std::ostream&);
     ~Code();

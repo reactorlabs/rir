@@ -54,6 +54,24 @@ void AbstractPirValue::print(std::ostream& out) {
     out << ") : " << type;
 }
 
+MkFunCls* AbstractREnvironmentHierarchy::findClosure(Value* env, Value* fun) {
+    for (;;) {
+        if (Force::Cast(fun)) {
+            fun = Force::Cast(fun)->arg<0>().val();
+        } else if (ChkClosure::Cast(fun)) {
+            fun = ChkClosure::Cast(fun)->arg<0>().val();
+        } else {
+            break;
+        }
+    }
+    while (env && env != AbstractREnvironment::UnknownParent) {
+        if ((*this)[env].mkClosures.count(fun))
+            return (*this)[env].mkClosures.at(fun);
+        env = (*this)[env].parentEnv;
+    }
+    return AbstractREnvironment::UnknownClosure;
+}
+
 AbstractLoad AbstractREnvironmentHierarchy::get(Value* env, SEXP e) const {
     while (env != AbstractREnvironment::UnknownParent) {
         if (this->count(env) == 0)

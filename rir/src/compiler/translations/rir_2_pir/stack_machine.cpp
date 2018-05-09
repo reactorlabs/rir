@@ -46,7 +46,6 @@ void StackMachine::runCurrentBC(Rir2Pir& rir2pir, Builder& insert) {
     assert(pc >= srcCode->code() && pc < srcCode->endCode());
 
     Value* env = insert.env;
-    BB* bb = insert.bb;
 
     Value* v;
     Value* x;
@@ -72,7 +71,7 @@ void StackMachine::runCurrentBC(Rir2Pir& rir2pir, Builder& insert) {
         insert(new StVarSuper(bc.immediateConst(), v, env));
         break;
     case Opcode::ret_:
-        rir2pir.addReturn(ReturnSite(bb, pop()));
+        rir2pir.addReturn(ReturnSite(insert.bb, pop()));
         assert(empty());
         break;
     case Opcode::asbool_:

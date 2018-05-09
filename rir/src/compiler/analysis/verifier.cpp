@@ -9,8 +9,9 @@ using namespace rir::pir;
 class TheVerifier {
   public:
     Closure* f;
+    CFG cfg;
 
-    TheVerifier(Closure* f) : f(f) {}
+    TheVerifier(Closure* f) : f(f), cfg(f->entry) {}
 
     bool ok = true;
 
@@ -26,7 +27,8 @@ class TheVerifier {
         }
 
         for (auto p : f->promises) {
-            verify(p);
+            if (p)
+                verify(p);
             if (!ok) {
                 std::cerr << "Verification of promise failed\n";
                 p->print(std::cerr);
@@ -34,7 +36,8 @@ class TheVerifier {
             }
         }
         for (auto p : f->defaultArgs) {
-            verify(p);
+            if (p)
+                verify(p);
             if (!ok) {
                 std::cerr << "Verification of argument failed\n";
                 p->print(std::cerr);
@@ -50,6 +53,16 @@ class TheVerifier {
             if (!bb->next0 && !bb->next1) {
                 std::cerr << "bb" << bb->id << " has no successor\n";
                 ok = false;
+            }
+            if (cfg.predecessors[bb->id].size() > 1) {
+                for (auto in : cfg.predecessors[bb->id]) {
+                    if (in->next1) {
+                        std::cerr << "BB " << in->id << " merges into "
+                                  << bb->id << " and branches into "
+                                  << in->next1->id << " at the same time.\n";
+                        ok = false;
+                    }
+                }
             }
         } else {
             Instruction* last = bb->last();
@@ -94,7 +107,15 @@ class TheVerifier {
             Instruction* iv = Instruction::Cast(v);
             if (iv) {
                 if (phi) {
-                    // TODO: what is a good condition for phi inputs?
+                    if (!cfg.transitivePredecessors[i->bb()->id].count(
+                            iv->bb())) {
+                        std::cerr << "Error at instruction '";
+                        i->print(std::cerr);
+                        std::cerr << "': input '";
+                        iv->printRef(std::cerr);
+                        std::cerr << "' does not come from a predecessor.\n";
+                        ok = false;
+                    }
                 } else if ((iv->bb() == i->bb() &&
                             bb->indexOf(iv) > bb->indexOf(i)) ||
                            (iv->bb() != i->bb() &&

@@ -24,6 +24,7 @@ class TheCleanup {
                 Instruction* i = *ip;
                 auto next = ip + 1;
                 Force* force = Force::Cast(i);
+                ChkClosure* chkcls = ChkClosure::Cast(i);
                 ChkMissing* missing = ChkMissing::Cast(i);
                 ChkClosure* closure = ChkClosure::Cast(i);
                 Phi* phi = Phi::Cast(i);
@@ -34,6 +35,12 @@ class TheCleanup {
                     Value* arg = force->arg<0>().val();
                     if (PirType::valOrMissing().isSuper(arg->type)) {
                         force->replaceUsesWith(arg);
+                        next = bb->remove(ip);
+                    }
+                } else if (chkcls) {
+                    Value* arg = chkcls->arg<0>().val();
+                    if (PirType(RType::closure).isSuper(arg->type)) {
+                        chkcls->replaceUsesWith(arg);
                         next = bb->remove(ip);
                     }
                 } else if (missing) {
@@ -50,7 +57,7 @@ class TheCleanup {
                     }
                 } else if (phi) {
                     std::unordered_set<Value*> phin;
-                    phi->eachArg([&](Value* v) { phin.insert(v); });
+                    phi->eachArg([&](BB*, Value* v) { phin.insert(v); });
                     if (phin.size() == 1) {
                         phi->replaceUsesWith(*phin.begin());
                         next = bb->remove(ip);
@@ -170,12 +177,15 @@ class TheCleanup {
             delete bb;
         }
 
-        // Renumber
+        // Renumber in dominance order. This ensures that controlflow always
+        // goes from smaller id to bigger id, except for back-edges.
         function->maxBBId = 0;
-        UnstableIDsVisitor::run(function->entry, [&](BB* bb) {
-            bb->unsafeSetId(function->maxBBId++);
-            bb->gc();
-        });
+        DominanceGraph dom(function->entry);
+        DominatorTreeVisitor<VisitorHelpers::IDMarker>(dom).run(
+            function, [&](BB* bb) {
+                bb->unsafeSetId(function->maxBBId++);
+                bb->gc();
+            });
         function->maxBBId--;
     }
 };

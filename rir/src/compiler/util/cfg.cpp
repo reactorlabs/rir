@@ -3,17 +3,79 @@
 #include "../util/visitor.h"
 
 #include <algorithm>
+#include <set>
 #include <stack>
 #include <unordered_map>
 
 namespace {
 using namespace rir::pir;
 
-class BBSet : public std::unordered_set<BB*> {
+class BBUnionSet : public std::set<BB*> {
+  public:
+    bool merge(BBUnionSet& other) {
+        if (!std::includes(begin(), end(), other.begin(), other.end())) {
+            insert(other.begin(), other.end());
+            return true;
+        }
+        return false;
+    }
+};
+
+void computeCfg(CFG* cfg, BB* start) {
+    std::set<BB*> todo;
+    todo.insert(start);
+
+    std::unordered_map<BB*, BBUnionSet> pred;
+    std::unordered_map<BB*, BBUnionSet> directPred;
+
+    size_t maxId = start->id;
+
+    while (!todo.empty()) {
+        BB* cur = *todo.begin();
+        todo.erase(todo.begin());
+
+        auto apply = [&](BB* bb) {
+            if (!bb)
+                return;
+
+            if (bb->id > maxId)
+                maxId = bb->id;
+
+            if (!directPred[bb].count(cur))
+                directPred[bb].insert(cur);
+
+            if (!pred[bb].count(cur)) {
+                pred[bb].insert(cur);
+                todo.insert(bb);
+            }
+
+            if (pred[bb].merge(pred[cur]))
+                todo.insert(bb);
+        };
+
+        apply(cur->next0);
+        apply(cur->next1);
+        if (!cur->next0 && !cur->next1)
+            cfg->exits.insert(cur);
+    }
+
+    cfg->predecessors.resize(maxId + 1);
+    cfg->transitivePredecessors.resize(maxId + 1);
+
+    for (auto e : pred) {
+        auto i = e.first->id;
+        cfg->transitivePredecessors[i].insert(e.second.begin(), e.second.end());
+    }
+    for (auto e : directPred) {
+        auto i = e.first->id;
+        cfg->predecessors[i].insert(e.second.begin(), e.second.end());
+    }
+}
+
+class BBInterSet : public std::unordered_set<BB*> {
   public:
     bool seen = false;
-
-    bool merge(BBSet& other) {
+    bool merge(BBInterSet& other) {
         if (*this == other)
             return false;
         bool changed = false;
@@ -30,46 +92,13 @@ class BBSet : public std::unordered_set<BB*> {
     }
 };
 
-void computeCfg(CFG* cfg, BB* start) {
-    std::stack<BB*> todo;
-
-    std::unordered_map<BB*, BBSet> pred;
-
-    size_t maxId = 0;
-
-    Visitor::run(start, [&](BB* cur) {
-        if (maxId < cur->id)
-            maxId = cur->id;
-
-        auto apply = [&](BB* bb) {
-            if (!bb)
-                return;
-
-            pred[bb].insert(cur);
-        };
-        apply(cur->next0);
-        apply(cur->next1);
-        if (cur->next0 == nullptr && cur->next1 == nullptr) {
-            cfg->exits.push_back(cur);
-        }
-    });
-
-    cfg->predecessors.resize(maxId + 1);
-
-    for (auto e : pred) {
-        auto i = e.first->id;
-        cfg->predecessors[i].insert(cfg->predecessors[i].end(),
-                                    e.second.begin(), e.second.end());
-    }
-}
-
 // Static Analysis computes the set of all dominating bb's, for every bb
 // reachable from start. Runs until none of the sets grow anymore.
 void computeDominanceGraph(DominanceGraph* cfg, BB* start) {
     std::stack<BB*> todo;
     todo.push(start);
 
-    std::unordered_map<BB*, BBSet> dom;
+    std::unordered_map<BB*, BBInterSet> dom;
 
     size_t maxId = 0;
 
@@ -78,7 +107,7 @@ void computeDominanceGraph(DominanceGraph* cfg, BB* start) {
         if (maxId < cur->id)
             maxId = cur->id;
 
-        BBSet& front = dom[cur];
+        auto& front = dom[cur];
 
         todo.pop();
 
@@ -86,7 +115,7 @@ void computeDominanceGraph(DominanceGraph* cfg, BB* start) {
             if (!bb)
                 return;
 
-            BBSet& d = dom[bb];
+            auto& d = dom[bb];
             if (!dom[bb].seen) {
                 d.seen = true;
                 d.insert(front.begin(), front.end());

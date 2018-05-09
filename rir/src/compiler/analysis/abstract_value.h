@@ -244,14 +244,7 @@ class AbstractREnvironmentHierarchy
         return changed;
     }
 
-    MkFunCls* findClosure(Value* env, Value* fun) {
-        while (env && env != AbstractREnvironment::UnknownParent) {
-            if ((*this)[env].mkClosures.count(fun))
-                return (*this)[env].mkClosures.at(fun);
-            env = (*this)[env].parentEnv;
-        }
-        return AbstractREnvironment::UnknownClosure;
-    }
+    MkFunCls* findClosure(Value* env, Value* fun);
 
     AbstractLoad get(Value* env, SEXP e) const;
 };

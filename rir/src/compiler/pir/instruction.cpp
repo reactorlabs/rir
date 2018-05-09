@@ -231,7 +231,7 @@ void MkEnv::printArgs(std::ostream& out) {
 
 void Phi::updateType() {
     type = arg(0).val()->type;
-    eachArg([&](Value* v) -> void { type = type | v->type; });
+    eachArg([&](BB*, Value* v) -> void { type = type | v->type; });
 }
 
 void Phi::printArgs(std::ostream& out) {
