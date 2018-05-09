@@ -86,7 +86,7 @@ REXPORT SEXP rir_body(SEXP cls) {
 #include "compiler/translations/pir_2_rir.h"
 #include "compiler/translations/rir_2_pir/rir_2_pir.h"
 
-REXPORT SEXP pir_compile(SEXP what) {
+REXPORT SEXP pir_compile(SEXP what, bool debug = false) {
     if (!isValidClosureSEXP(what))
         Rf_error("not a compiled closure");
     assert(DispatchTable::unpack(BODY(what))->capacity() == 2 &&
@@ -94,7 +94,6 @@ REXPORT SEXP pir_compile(SEXP what) {
     if (DispatchTable::unpack(BODY(what))->slot(1) != nullptr)
         Rf_error("closure already compiled to pir");
 
-    bool debug = true;
     Protect p(what);
 
     // compile to pir
