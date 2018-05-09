@@ -73,7 +73,7 @@ class SSAAllocator {
     }
 
     // Run backwards analysis to compute livenessintervals
-    void computeLiveness(bool verbose = true) {
+    void computeLiveness(bool verbose = false) {
         // temp list of live out sets for every BB
         std::unordered_map<BB*, std::set<Value*>> liveAtEnd(bbsSize);
 
