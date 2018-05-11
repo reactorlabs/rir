@@ -239,14 +239,16 @@ extern "C" SEXP rir_eval(SEXP, SEXP);
 extern "C" SEXP pir_compile(SEXP);
 
 bool testPir2Rir(std::string name, std::string fun, std::string args,
-                 bool useSame = false) {
+                 bool useSame = false, bool verbose = false) {
     Protect p;
 
     std::string wrapper =
         "rir.compile( function() " + name + "(" + args + ") )()";
 
-    Rprintf("   > %s <- %s\n", name.c_str(), fun.c_str());
-    Rprintf("   > %s\n\n", wrapper.c_str());
+    if (verbose) {
+        Rprintf("   > %s <- %s\n", name.c_str(), fun.c_str());
+        Rprintf("   > %s\n\n", wrapper.c_str());
+    }
 
     auto execEnv = p(Rf_NewEnvironment(R_NilValue, R_NilValue, R_GlobalEnv));
     auto rirFun = p(parseCompileToRir(fun));
@@ -262,8 +264,10 @@ bool testPir2Rir(std::string name, std::string fun, std::string args,
     auto rCall = createRWrapperCall(wrapper);
 
     auto orig = p(Rf_eval(rCall, execEnv));
-    Rprintf(" orig = %p\n", orig);
-    Rf_PrintValue(orig);
+    if (verbose) {
+        Rprintf(" orig = %p\n", orig);
+        Rf_PrintValue(orig);
+    }
 
     if (!useSame) {
         // redo everything
@@ -280,8 +284,10 @@ bool testPir2Rir(std::string name, std::string fun, std::string args,
     pir_compile(rirFun);
 
     auto after = p(Rf_eval(rCall, execEnv));
-    Rprintf("after = %p\n", after);
-    Rf_PrintValue(after);
+    if (verbose) {
+        Rprintf("after = %p\n", after);
+        Rf_PrintValue(after);
+    }
 
     return checkPir2Rir(orig, after);
 }
