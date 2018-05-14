@@ -251,7 +251,6 @@ class DominatorTreeVisitor {
 
             action(cur);
         }
-        assert(todo.empty());
     }
 };
 }

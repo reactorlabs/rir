@@ -91,8 +91,8 @@ class SSAAllocator {
 
             // Mark all (backwards) incoming live variables
             for (auto v : liveAtEnd[bb]) {
-                auto& liveRange = livenessInterval[v][bb->id];
                 assert(livenessInterval.count(v));
+                auto& liveRange = livenessInterval.at(v)[bb->id];
                 if (!liveRange.live || liveRange.end < bb->size()) {
                     liveRange.live = true;
                     liveRange.end = bb->size();
@@ -219,8 +219,10 @@ class SSAAllocator {
     void computeStackAllocation() {
         Visitor::run(code->entry, [&](BB* bb) {
             {
-                // Phi at the beginning of BB, all inputs at the end of
-                // immediate predecessors -> put on stack
+                // If a phi is at the beginning of a BB, and all inputs are at
+                // the end of the immediate predecessors BB, we can allocate it
+                // on the stack, since the stack is otherwise empty at the BB
+                // boundaries.
                 size_t pos = 1;
                 for (auto i : *bb) {
                     Phi* phi = Phi::Cast(i);
