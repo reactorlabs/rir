@@ -26,7 +26,6 @@ class TheCleanup {
                 Force* force = Force::Cast(i);
                 ChkClosure* chkcls = ChkClosure::Cast(i);
                 ChkMissing* missing = ChkMissing::Cast(i);
-                ChkClosure* closure = ChkClosure::Cast(i);
                 Phi* phi = Phi::Cast(i);
                 MkArg* arg = MkArg::Cast(i);
                 if (!i->mightIO() && !i->changesEnv() && i->unused()) {
@@ -39,7 +38,7 @@ class TheCleanup {
                     }
                 } else if (chkcls) {
                     Value* arg = chkcls->arg<0>().val();
-                    if (PirType(RType::closure).isSuper(arg->type)) {
+                    if (arg->type.isA(RType::closure)) {
                         chkcls->replaceUsesWith(arg);
                         next = bb->remove(ip);
                     }
@@ -47,12 +46,6 @@ class TheCleanup {
                     Value* arg = missing->arg<0>().val();
                     if (PirType::val().isSuper(arg->type)) {
                         missing->replaceUsesWith(arg);
-                        next = bb->remove(ip);
-                    }
-                } else if (closure) {
-                    Value* arg = closure->arg<0>().val();
-                    if (PirType::val().isSuper(arg->type)) {
-                        closure->replaceUsesWith(arg);
                         next = bb->remove(ip);
                     }
                 } else if (phi) {
