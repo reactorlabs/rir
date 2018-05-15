@@ -87,7 +87,6 @@ typedef struct {
     uint32_t expected;
     uint32_t id;
 } GuardFunArgs;
-typedef uint32_t GuardT;
 typedef uint32_t NumLocalsT;
 typedef struct {
     uint32_t target;
@@ -115,7 +114,6 @@ class BC {
     union ImmediateT {
         CallArgs call_args;
         GuardFunArgs guard_fun_args;
-        GuardT guard_id;
         PoolIdxT pool;
         FunIdxT fun;
         ArgIdxT arg_idx;
@@ -207,7 +205,7 @@ class BC {
     bool isLabel() const { return bc == Opcode::label; }
 
     bool isGuard() const {
-        return bc == Opcode::guard_fun_ || bc == Opcode::guard_env_;
+        return bc == Opcode::guard_fun_;
     }
 
     // ==== BC decoding logic
@@ -303,7 +301,6 @@ class BC {
     inline static BC lglAnd();
     inline static BC guardName(SEXP, SEXP);
     inline static BC guardNamePrimitive(SEXP);
-    inline static BC guardEnv(uint32_t id);
     inline static BC isfun();
     inline static BC invisible();
     inline static BC visible();
@@ -419,9 +416,6 @@ class BC {
         case Opcode::call_stack_:
         case Opcode::static_call_stack_:
             immediate.call_args = *(CallArgs*)pc;
-            break;
-        case Opcode::guard_env_:
-            immediate.guard_id = *(uint32_t*)pc;
             break;
         case Opcode::guard_fun_:
             immediate.guard_fun_args = *(GuardFunArgs*)pc;

@@ -6,7 +6,6 @@
 #include "BC.h"
 #include "CodeVerifier.h"
 #include "R/Symbols.h"
-#include "interpreter/deoptimizer.h"
 
 namespace rir {
 
@@ -181,15 +180,6 @@ void CodeVerifier::verifyFunctionLayout(SEXP sexp, ::Context* ctx) {
                 int off = *reinterpret_cast<int*>(cptr + 1);
                 assert(cptr + cur.size() + off >= start &&
                        cptr + cur.size() + off < end);
-            }
-            if (*cptr == Opcode::guard_env_) {
-                unsigned deoptId = *reinterpret_cast<ArgT*>(cptr + 1);
-                Opcode* deoptPc = (Opcode*)Deoptimizer_pc(deoptId);
-                assert(f->origin());
-                Function* deoptFun = Function::unpack(f->origin());
-                Code* deoptCode = deoptFun->body();
-                assert(deoptPc >= deoptCode->code() &&
-                       deoptPc < deoptCode->endCode());
             }
             if (*cptr == Opcode::ldvar_) {
                 unsigned* argsIndex = reinterpret_cast<ArgT*>(cptr + 1);

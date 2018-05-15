@@ -385,7 +385,6 @@ void StackMachine::runCurrentBC(Rir2Pir& rir2pir, Builder& insert) {
     case Opcode::missing_:
     case Opcode::dispatch_stack_:
     case Opcode::dispatch_:
-    case Opcode::guard_env_:
     case Opcode::call_stack_:
     case Opcode::return_:
     case Opcode::beginloop_:

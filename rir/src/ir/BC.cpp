@@ -9,8 +9,6 @@
 #include "R/RList.h"
 #include "R/r.h"
 
-#include "interpreter/deoptimizer.h"
-
 namespace rir {
 
 bool BC::operator==(const BC& other) const {
@@ -38,9 +36,6 @@ bool BC::operator==(const BC& other) const {
     case Opcode::static_call_stack_:
     case Opcode::dispatch_stack_:
         return immediate.call_args.call_id == other.immediate.call_args.call_id;
-
-    case Opcode::guard_env_:
-        return immediate.guard_id == other.immediate.guard_id;
 
     case Opcode::guard_fun_:
         return immediate.guard_fun_args.name ==
@@ -157,10 +152,6 @@ void BC::write(CodeStream& cs) const {
     case Opcode::missing_:
     case Opcode::subassign2_:
         cs.insert(immediate.pool);
-        return;
-
-    case Opcode::guard_env_:
-        cs.insert(immediate.guard_id);
         return;
 
     case Opcode::guard_fun_:
@@ -430,10 +421,6 @@ void BC::print(CallSite* cs) {
     case Opcode::is_:
     case Opcode::alloc_:
         Rprintf(" %s", type2char(immediate.i));
-        break;
-    case Opcode::guard_env_:
-        Deoptimizer_print(immediate.guard_id);
-        Rprintf("\n");
         break;
     case Opcode::nop_:
     case Opcode::make_env_:
