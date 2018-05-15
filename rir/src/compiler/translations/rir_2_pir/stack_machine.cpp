@@ -46,7 +46,6 @@ void StackMachine::runCurrentBC(Rir2Pir& rir2pir, Builder& insert) {
     assert(pc >= srcCode->code() && pc < srcCode->endCode());
 
     Value* env = insert.env;
-    BB* bb = insert.bb;
 
     Value* v;
     Value* x;
@@ -70,10 +69,6 @@ void StackMachine::runCurrentBC(Rir2Pir& rir2pir, Builder& insert) {
     case Opcode::stvar_super_:
         v = pop();
         insert(new StVarSuper(bc.immediateConst(), v, env));
-        break;
-    case Opcode::ret_:
-        rir2pir.addReturn(ReturnSite(bb, pop()));
-        assert(empty());
         break;
     case Opcode::asbool_:
     case Opcode::aslogical_:
@@ -365,6 +360,8 @@ void StackMachine::runCurrentBC(Rir2Pir& rir2pir, Builder& insert) {
     case Opcode::brtrue_:
     case Opcode::brfalse_:
     case Opcode::br_:
+    case Opcode::ret_:
+    case Opcode::return_:
         assert(false);
 
     // Opcodes that only come from PIR
@@ -387,7 +384,6 @@ void StackMachine::runCurrentBC(Rir2Pir& rir2pir, Builder& insert) {
     case Opcode::dispatch_:
     case Opcode::guard_env_:
     case Opcode::call_stack_:
-    case Opcode::return_:
     case Opcode::beginloop_:
     case Opcode::endcontext_:
     case Opcode::ldddvar_:

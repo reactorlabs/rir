@@ -90,11 +90,54 @@ class BCCleanup : public InstructionDispatcher::Receiver {
     }
 
     void br_(CodeEditor::Iterator ins) override {
-        // remove br_ x; x: ...
-        if (ins + 1 != code_.end()) {
-            if (code_.target(*ins) == ins + 1) {
+        auto next = removeDead(ins + 1);
+        if (next == code_.end())
+            return;
+        // next is a label here
+        auto target = code_.target(*ins);
+        if (target == next) {
+            ins.asCursor(code_).remove();
+            return;
+        }
+        auto cont = target + 1;
+        if (cont == code_.end())
+            return;
+        // if the continuation is return, propagate to the prev block
+        if ((*cont).isReturn()) {
+            auto cur = ins.asCursor(code_);
+            cur.remove();
+            cur << *cont;
+        }
+    }
+
+    void brtrue_(CodeEditor::Iterator ins) override {
+        // change brtrue_ x; br_ y; x: ... to brfalse_ y; x: ...
+        if (ins + 1 != code_.end() && ins + 2 != code_.end()) {
+            auto n = ins + 1;
+            auto nn = ins + 2;
+            if ((*n).is(Opcode::br_) && (*nn).isLabel() &&
+                code_.target(*ins) == nn) {
+                auto target = (*n).immediate.offset;
                 auto cur = ins.asCursor(code_);
                 cur.remove();
+                cur.remove();
+                cur << BC::brfalse(target);
+            }
+        }
+    }
+
+    void brfalse_(CodeEditor::Iterator ins) override {
+        // change brfalse_ x; br_ y; x: ... to brtrue_ y; x: ...
+        if (ins + 1 != code_.end() && ins + 2 != code_.end()) {
+            auto n = ins + 1;
+            auto nn = ins + 2;
+            if ((*n).is(Opcode::br_) && (*nn).isLabel() &&
+                code_.target(*ins) == nn) {
+                auto target = (*n).immediate.offset;
+                auto cur = ins.asCursor(code_);
+                cur.remove();
+                cur.remove();
+                cur << BC::brtrue(target);
             }
         }
     }
@@ -105,8 +148,8 @@ class BCCleanup : public InstructionDispatcher::Receiver {
         if (ins + 1 != code_.end()) {
             auto next = ins + 1;
             if ((*next).is(Opcode::stloc_)) {
-                auto src = ins.asCursor(code_).bc().immediate.loc;
-                auto trg = next.asCursor(code_).bc().immediate.loc;
+                auto src = (*ins).immediate.loc;
+                auto trg = (*next).immediate.loc;
                 // remove them
                 auto cur = ins.asCursor(code_);
                 cur.remove();
@@ -129,20 +172,25 @@ class BCCleanup : public InstructionDispatcher::Receiver {
         }
     }
 
-    // TODO there is some brokennes when there is dead code
-    // void br_(CodeEditor::Iterator ins) override {
-    //     auto target = code_.target(*ins);
-    //     auto cont = target+1;
-    //     if ((*cont).isReturn()) {
-    //         auto cur = ins.asCursor(code_);
-    //         cur.remove();
-    //         cur << *cont;
-    //     }
-    // }
+    void ret_(CodeEditor::Iterator ins) override { removeDead(ins + 1); }
+
+    void return_(CodeEditor::Iterator ins) override { removeDead(ins + 1); }
 
     void run() {
-        for (auto i = code_.begin(); i != code_.end(); ++i)
-            dispatcher.dispatch(i);
+        for (auto i = code_.begin(); i != code_.end(); ++i) {
+            if (!i.deleted())
+                dispatcher.dispatch(i);
+        }
+    }
+
+  private:
+    CodeEditor::Iterator removeDead(CodeEditor::Iterator ins) {
+        // everything after br_ ret_ and return_ until end or next label is dead
+        // code...
+        auto cur = ins.asCursor(code_);
+        while (!cur.atEnd() && !cur.bc().isLabel())
+            cur.remove();
+        return cur.asItr();
     }
 };
 } // namespace rir

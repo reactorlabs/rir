@@ -153,6 +153,26 @@ Value* Rir2Pir::translate() {
             continue;
         }
 
+        if (bc.isReturn()) {
+            switch (bc.bc) {
+            case Opcode::ret_:
+                break;
+            case Opcode::return_:
+                std::cerr << "Cannot compile Function. Unsupported bc\n";
+                bc.print();
+            default:
+                assert(false);
+            }
+            addReturn(ReturnSite(insert.bb, state.pop()));
+            assert(state.empty());
+            if (worklist.empty()) {
+                state.clear();
+                break;
+            }
+            popFromWorklist();
+            continue;
+        }
+
         const static Matcher<4> ifFunctionLiteral(
             {{{Opcode::push_, Opcode::push_, Opcode::push_, Opcode::close_}}});
 
@@ -203,6 +223,7 @@ Value* Rir2Pir::translate() {
         res = results.back().second;
     } else {
         BB* merge = insert.createBB();
+        insert.bb = merge;
         Phi* phi = insert(new Phi());
         for (auto r : results) {
             r.first->next0 = merge;
@@ -257,7 +278,7 @@ void Rir2Pir::recoverCFG(rir::Code* srcCode) {
     // Mark falltrough to label
     for (auto pc = srcCode->code(); pc != srcCode->endCode();) {
         BC bc = BC::decode(pc);
-        if (!bc.isUncondJmp()) {
+        if (!bc.isUncondJmp() && !bc.isReturn()) {
             Opcode* next = BC::next(pc);
             if (incom.count(next))
                 incom[next].push_back(pc);

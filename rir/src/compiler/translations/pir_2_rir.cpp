@@ -283,16 +283,7 @@ size_t Pir2Rir::compile(Context& ctx, Code* code) {
                 while (next1->isEmpty())
                     next1 = next1->next0;
 
-                bool useBrFalse = true;
-                if (next0->id == bb->id + 1)
-                    useBrFalse = false;
-
-                if (useBrFalse)
-                    cs << BC::brfalse(bbLabels[next0])
-                       << BC::br(bbLabels[next1]);
-                else
-                    cs << BC::brtrue(bbLabels[next1])
-                       << BC::br(bbLabels[next0]);
+                cs << BC::brfalse(bbLabels[next0]) << BC::br(bbLabels[next1]);
 
                 // this is the end of this BB
                 return;
