@@ -111,14 +111,11 @@ class TheScopeResolution {
                         // handled here)
                         if (!aval.isSingleValue() && !aval.isUnknown() &&
                             !ldfun) {
-                            auto hasAllInputs = [&](BB* load) {
-                                bool success = true;
-                                aval.eachSource([&](ValOrig& src) {
-                                    if (!cfg.transitivePredecessors[load->id]
-                                             .count(src.origin->bb()))
-                                        success = false;
+                            auto hasAllInputs = [&](BB* load) -> bool {
+                                return aval.checkEachSource([&](ValOrig& src) {
+                                    return cfg.transitivePredecessors[load->id]
+                                        .count(src.origin->bb());
                                 });
-                                return success;
                             };
                             BB* phiBlock = bb;
                             // Shift phi up until we see at least two inputs

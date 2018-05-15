@@ -28,6 +28,33 @@ namespace pir {
 
 namespace {
 
+/*
+ * SSAAllocator assigns each instruction to a local variable number, or the
+ * stack. It uses the following algorithm:
+ *
+ * 1. Split phis with moves. This translates the IR to CSSA (see toCSSA).
+ * 2. Compute liveness (see computeLiveness):
+ *    Liveness intervals are stored as:
+ *        Instruction* -> BB id -> { start : pos, end : pos, live : bool}
+ *    Two Instructions interfere iff there is a BB where they are both live
+ *    and the start-end overlap.
+ * 3. Use simple heuristics to detect Instructions that can stay on the RIR
+ *    stack (see computeStackAllocation):
+ *    1. Use stack slots for instructions which are used
+ *       (i)   exactly once,
+ *       (ii)  in stack order,
+ *       (iii) within the same BB.
+ *    2. Use stack slots for phi which are
+ *       (i)  at the beginning of a BB, and
+ *       (ii) all inputs are at the end of all immediate predecessor BBs.
+ * 4. Assign the remaining Instructions to local RIR variable numbers
+ *    (see computeAllocation):
+ *    1. Coalesc all remaining phi with their inputs. This is save since we are
+ *       already in CSSA. Directly allocate a register on the fly, such that.
+ *    2. Traverse the dominance tree and eagerly allocate the remaining ones
+ * 5. For debugging, verify the assignment with a static analysis that simulates
+ *    the variable and stack usage (see verify).
+*/
 class SSAAllocator {
   public:
     CFG cfg;
@@ -188,7 +215,8 @@ class SSAAllocator {
                 }
             };
             for (auto pre : cfg.predecessors[bb->id]) {
-                if (!liveAtEnd.count(pre)) {
+                bool firstTime = !liveAtEnd.count(pre);
+                if (firstTime) {
                     liveAtEnd[pre] = accumulated;
                     mergePhiInp(pre);
                     todo.insert(pre);
@@ -275,7 +303,10 @@ class SSAAllocator {
                     return;
 
                 // pop args from stack, discarding all unmatched values
-                // in the process
+                // in the process. For example if the stack contains
+                // [xxx, A, B, C] and we match [A, C], then we will mark
+                // A, C to be in a stack slot, discard B (it will become
+                // a local variable later) and resize the stack to [xxx]
                 stack.resize(newStackSize);
                 i->eachInstructionArg(
                     [&](Instruction* arg) { allocation[arg] = stackSlot; });
@@ -567,7 +598,7 @@ class Pir2Rir {
 
     Pir2Rir(Closure* cls) : cls(cls) {}
     size_t compile(Context& ctx, Code* code);
-    void removePhis(Code* code);
+    void toCSSA(Code* code);
     rir::Function* finalize();
 
   private:
@@ -576,7 +607,7 @@ class Pir2Rir {
 };
 
 size_t Pir2Rir::compile(Context& ctx, Code* code) {
-    removePhis(code);
+    toCSSA(code);
 
     // code->print(std::cout);
     SSAAllocator alloc(code);
@@ -979,7 +1010,7 @@ size_t Pir2Rir::compile(Context& ctx, Code* code) {
     return alloc.slots();
 }
 
-void Pir2Rir::removePhis(Code* code) {
+void Pir2Rir::toCSSA(Code* code) {
 
     // For each Phi, insert copies
     BreadthFirstVisitor::run(code->entry, [&](BB* bb) {
