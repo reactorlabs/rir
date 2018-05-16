@@ -268,7 +268,7 @@ void CodeVerifier::verifyFunctionLayout(SEXP sexp, ::Context* ctx) {
             cptr += cur.size();
             if (cptr == start + c->codeSize) {
                 assert(cptr == start + c->codeSize);
-                assert(cur.isJmp() || cur.bc == Opcode::ret_);
+                assert(cur.isJmp() || cur.isReturn());
                 break;
             }
         }
