@@ -177,6 +177,8 @@ class BCCleanup : public InstructionDispatcher::Receiver {
     void return_(CodeEditor::Iterator ins) override { removeDead(ins + 1); }
 
     void run() {
+        // Go over all instructions. Since some might get marked for deletion
+        // before they are dispatched and the change commited, skip those here
         for (auto i = code_.begin(); i != code_.end(); ++i) {
             if (!i.deleted())
                 dispatcher.dispatch(i);
