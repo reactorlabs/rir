@@ -82,6 +82,7 @@ struct AbstractPirValue {
 
     typedef std::function<void(Value*)> ValMaybe;
     typedef std::function<void(ValOrig&)> ValOrigMaybe;
+    typedef std::function<bool(ValOrig&)> ValOrigMaybePredicate;
 
     void ifSingleValue(ValMaybe known) {
         if (!unknown && vals.size() == 1)
@@ -91,6 +92,13 @@ struct AbstractPirValue {
     void eachSource(ValOrigMaybe apply) {
         for (auto v : vals)
             apply(v);
+    }
+
+    bool checkEachSource(ValOrigMaybePredicate apply) {
+        for (auto v : vals)
+            if (!apply(v))
+                return false;
+        return true;
     }
 
     bool merge(const AbstractPirValue& other);
@@ -244,14 +252,7 @@ class AbstractREnvironmentHierarchy
         return changed;
     }
 
-    MkFunCls* findClosure(Value* env, Value* fun) {
-        while (env && env != AbstractREnvironment::UnknownParent) {
-            if ((*this)[env].mkClosures.count(fun))
-                return (*this)[env].mkClosures.at(fun);
-            env = (*this)[env].parentEnv;
-        }
-        return AbstractREnvironment::UnknownClosure;
-    }
+    MkFunCls* findClosure(Value* env, Value* fun);
 
     AbstractLoad get(Value* env, SEXP e) const;
 };

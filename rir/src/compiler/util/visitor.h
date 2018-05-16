@@ -2,11 +2,14 @@
 #define COMPILER_VISITOR_H
 
 #include "../pir/bb.h"
+#include "../pir/code.h"
 #include "../pir/pir.h"
+#include "../util/cfg.h"
 
 #include <deque>
 #include <functional>
 #include <random>
+#include <stack>
 #include <unordered_set>
 
 namespace rir {
@@ -66,7 +69,10 @@ struct PointerMarker {
 };
 };
 
-template <bool STABLE, class Marker>
+enum class Order { Depth, Breadth, Random };
+enum class Direction { Forward, Backward };
+
+template <Order ORDER, class Marker>
 class VisitorImplementation {
   public:
     typedef std::function<bool(Instruction*)> InstrActionPredicate;
@@ -187,7 +193,7 @@ class VisitorImplementation {
 
     static void enqueue(std::deque<BB*>& todo, BB* bb) {
         // For analysis random search is faster
-        if (STABLE || coinFlip())
+        if (ORDER == Order::Breadth || (ORDER == Order::Random && coinFlip()))
             todo.push_back(bb);
         else
             todo.push_front(bb);
@@ -195,11 +201,58 @@ class VisitorImplementation {
 };
 
 class Visitor
-    : public VisitorImplementation<false, VisitorHelpers::IDMarker> {};
+    : public VisitorImplementation<Order::Random, VisitorHelpers::IDMarker> {};
 class BreadthFirstVisitor
-    : public VisitorImplementation<true, VisitorHelpers::IDMarker> {};
-class UnstableIDsVisitor
-    : public VisitorImplementation<true, VisitorHelpers::PointerMarker> {};
+    : public VisitorImplementation<Order::Breadth, VisitorHelpers::IDMarker> {};
+class DepthFirstVisitor
+    : public VisitorImplementation<Order::Depth, VisitorHelpers::IDMarker> {};
+
+template <class Marker = VisitorHelpers::IDMarker>
+class DominatorTreeVisitor {
+    using BBAction = VisitorHelpers::BBAction;
+
+    const DominanceGraph& dom;
+
+  public:
+    DominatorTreeVisitor(const DominanceGraph& dom) : dom(dom) {}
+
+    void run(Code* code, BBAction action) {
+        Marker done;
+
+        std::stack<BB*> todo;
+        std::stack<BB*> delayedTodo;
+
+        todo.push(code->entry);
+        done.set(code->entry);
+
+        BB* cur;
+        while (!todo.empty() || !delayedTodo.empty()) {
+            if (!todo.empty()) {
+                cur = todo.top();
+                todo.pop();
+            } else {
+                cur = delayedTodo.top();
+                delayedTodo.pop();
+            }
+
+            auto apply = [&](BB* next) {
+                if (!next || done.check(next))
+                    return;
+                if (dom.dominates(cur, next)) {
+                    todo.push(next);
+                } else {
+                    delayedTodo.push(next);
+                }
+                done.set(next);
+            };
+
+            apply(cur->next0);
+            apply(cur->next1);
+
+            action(cur);
+        }
+    }
+};
 }
 }
 
