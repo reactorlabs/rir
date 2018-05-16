@@ -36,8 +36,6 @@ class Closure : public Code {
 
     Promise* createProm();
 
-    size_t maxBBId = 0;
-
     friend std::ostream& operator<<(std::ostream& out, const Closure& e) {
         out << "Func(" << (void*)&e << ")";
         return out;

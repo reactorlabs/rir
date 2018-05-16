@@ -9,10 +9,11 @@ namespace rir {
 namespace pir {
 
 class CFG {
-    typedef std::vector<BB*> BBList;
+    typedef std::unordered_set<BB*> BBList;
 
   public:
     std::vector<BBList> predecessors;
+    std::vector<BBList> transitivePredecessors;
     BBList exits;
 
     CFG(BB*);

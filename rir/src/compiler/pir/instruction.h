@@ -130,12 +130,21 @@ class Instruction : public Value {
     virtual const InstrArg& arg(size_t pos) const = 0;
 
     typedef std::function<void(Value*)> ArgumentValueIterator;
+    typedef std::function<void(Instruction*)> ArgumentInstructionIterator;
     typedef std::function<void(const InstrArg&)> ArgumentIterator;
     typedef std::function<void(InstrArg&)> MutableArgumentIterator;
 
     void eachArg(Instruction::ArgumentValueIterator it) const {
         for (size_t i = 0; i < nargs(); ++i)
             it(arg(i).val());
+    }
+
+    void eachInstructionArg(Instruction::ArgumentInstructionIterator it) const {
+        for (size_t i = 0; i < nargs(); ++i) {
+            auto in = Instruction::Cast(arg(i).val());
+            if (in)
+                it(in);
+        }
     }
 
     void eachArg(Instruction::ArgumentIterator it) const {
@@ -889,6 +898,22 @@ class VLI(Phi, Effect::None, EnvAccess::None) {
     void addInput(BB* in, Value* arg) {
         input.push_back(in);
         VarLenInstruction::pushArg(arg);
+    }
+    typedef std::function<void(BB* bb, Value*)> PhiArgumentIterator;
+    typedef std::function<void(BB* bb, Instruction*)>
+        PhiArgumentInstructionIterator;
+
+    void eachArg(PhiArgumentIterator it) const {
+        for (size_t i = 0; i < nargs(); ++i)
+            it(input[i], arg(i).val());
+    }
+
+    void eachInstructionArg(PhiArgumentInstructionIterator it) const {
+        for (size_t i = 0; i < nargs(); ++i) {
+            auto in = Instruction::Cast(arg(i).val());
+            if (in)
+                it(input[i], in);
+        }
     }
 };
 
