@@ -44,6 +44,19 @@ class Closure : public Code {
     Closure* clone();
 
     ~Closure();
+
+    typedef std::function<void(Promise*)> PromiseIterator;
+
+    void eachDefaultArg(PromiseIterator it) const {
+        for (auto p : defaultArgs)
+            it(p);
+    }
+
+    void eachPromise(PromiseIterator it) const {
+        for (auto p : promises)
+            it(p);
+    }
+
 };
 } // namespace pir
 } // namespace rir

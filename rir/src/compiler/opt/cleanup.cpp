@@ -170,19 +170,25 @@ class TheCleanup {
             delete bb;
         }
 
-        // Renumber in dominance order. This ensures that controlflow always
-        // goes from smaller id to bigger id, except for back-edges.
-        function->maxBBId = 0;
-        DominanceGraph dom(function->entry);
-        DominatorTreeVisitor<VisitorHelpers::IDMarker>(dom).run(
-            function, [&](BB* bb) {
-                bb->unsafeSetId(function->maxBBId++);
-                bb->gc();
-            });
-        function->maxBBId--;
+        auto renumberBBs = [&](Code* code) {
+            // Renumber in dominance order. This ensures that controlflow always
+            // goes from smaller id to bigger id, except for back-edges.
+            code->maxBBId = 0;
+            DominanceGraph dom(code->entry);
+            DominatorTreeVisitor<VisitorHelpers::IDMarker>(dom).run(
+                code, [&](BB* bb) {
+                    bb->unsafeSetId(code->maxBBId++);
+                    bb->gc();
+                });
+            code->maxBBId--;
+        };
+        renumberBBs(function);
+        function->eachPromise(renumberBBs);
+        function->eachDefaultArg(renumberBBs);
     }
 };
-}
+
+} // namespace
 
 namespace rir {
 namespace pir {
@@ -191,5 +197,6 @@ void Cleanup::apply(Closure* function) {
     TheCleanup s(function);
     s();
 }
-}
-}
+
+} // namespace pir
+} // namespace rir
