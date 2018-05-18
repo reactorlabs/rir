@@ -1098,10 +1098,6 @@ bool compileWithGuess(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
     if (!cls)
         return false;
 
-    auto dt = DispatchTable::check(BODY(cls));
-    if (dt && dt->slot(1) != nullptr)
-        return false;
-
     RList formals(FORMALS(cls));
     if (formals.length() != args.length())
         return false;
