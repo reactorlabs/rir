@@ -54,7 +54,7 @@ namespace {
  *    2. Traverse the dominance tree and eagerly allocate the remaining ones
  * 5. For debugging, verify the assignment with a static analysis that simulates
  *    the variable and stack usage (see verify).
-*/
+ */
 class SSAAllocator {
   public:
     CFG cfg;
@@ -91,10 +91,10 @@ class SSAAllocator {
     };
     std::unordered_map<Value*, Liveness> livenessInterval;
 
-    SSAAllocator(Code* code)
+    SSAAllocator(Code* code, bool verbose)
         : cfg(code->entry), dom(code->entry), code(code),
           bbsSize(code->maxBBId + 1) {
-        computeLiveness();
+        computeLiveness(verbose);
         computeStackAllocation();
         computeAllocation();
     }
@@ -228,19 +228,21 @@ class SSAAllocator {
         }
 
         if (verbose) {
+            std::cout << "======= Liveness ========\n";
             for (auto ll : livenessInterval) {
                 auto& l = ll.second;
                 ll.first->printRef(std::cout);
                 std::cout << " is live : ";
                 for (size_t i = 0; i < bbsSize; ++i) {
                     if (l[i].live) {
-                        std::cout << i << " [";
+                        std::cout << "BB" << i << " [";
                         std::cout << l[i].begin << ",";
                         std::cout << l[i].end << "]  ";
                     }
                 }
                 std::cout << "\n";
             }
+            std::cout << "======= End Liveness ========\n";
         }
     }
 
@@ -401,8 +403,9 @@ class SSAAllocator {
     }
 
     void print(std::ostream& out = std::cout) {
-        out << "Allocation : ";
+        out << "======= Allocation ========\n";
         BreadthFirstVisitor::run(code->entry, [&](BB* bb) {
+            out << "BB" << bb->id << ": ";
             for (auto a : allocation) {
                 auto i = a.first;
                 if (Instruction::Cast(i) && Instruction::Cast(i)->bb() != bb)
@@ -415,8 +418,9 @@ class SSAAllocator {
                     out << a.second;
                 out << "   ";
             }
+            out << "\n";
         });
-        out << "\n";
+        out << "======= End Allocation ========\n";
     }
 
     void verify() {
@@ -594,26 +598,29 @@ class Context {
 
 class Pir2Rir {
   public:
-    Closure* cls;
-
-    Pir2Rir(Closure* cls) : cls(cls) {}
-    size_t compile(Context& ctx, Code* code);
+    Pir2Rir(Pir2RirCompiler& cmp, Closure* cls) : compiler(cmp), cls(cls) {}
+    size_t compileCode(Context& ctx, Code* code);
     void toCSSA(Code* code);
     rir::Function* finalize();
 
   private:
+    Pir2RirCompiler& compiler;
+    Closure* cls;
     std::unordered_map<Promise*, FunIdxT> promises;
     std::unordered_map<Promise*, SEXP> argNames;
 };
 
-size_t Pir2Rir::compile(Context& ctx, Code* code) {
+size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
     toCSSA(code);
 
-    // code->print(std::cout);
-    SSAAllocator alloc(code);
-    // std::cout << "======= Liveness ========\n";
-    // alloc.print();
-    // std::cout << "======= End Liveness ========\n";
+    if (compiler.verbose)
+        code->print(std::cout);
+
+    SSAAllocator alloc(code, compiler.verbose);
+
+    if (compiler.verbose)
+        alloc.print();
+
     alloc.verify();
 
     // create labels for all bbs
@@ -986,7 +993,6 @@ size_t Pir2Rir::compile(Context& ctx, Code* code) {
             // dummy sentinel enum item
             case Tag::_UNUSED_:
                 break;
-            // no default to get compiler warnings for missing...
             }
         }
 
@@ -1045,7 +1051,7 @@ rir::Function* Pir2Rir::finalize() {
         if (!arg)
             continue;
         ctx.pushDefaultArg(R_NilValue);
-        size_t localsCnt = compile(ctx, arg);
+        size_t localsCnt = compileCode(ctx, arg);
         promises[arg] = ctx.finalizeCode(localsCnt);
         argNames[arg] = cls->argNames[i++];
     }
@@ -1053,11 +1059,11 @@ rir::Function* Pir2Rir::finalize() {
         if (!prom)
             continue;
         ctx.pushPromise(R_NilValue);
-        size_t localsCnt = compile(ctx, prom);
+        size_t localsCnt = compileCode(ctx, prom);
         promises[prom] = ctx.finalizeCode(localsCnt);
     }
     ctx.pushBody(R_NilValue);
-    size_t localsCnt = compile(ctx, cls);
+    size_t localsCnt = compileCode(ctx, cls);
     ctx.finalizeCode(localsCnt);
 
     CodeEditor code(function.function->body());
@@ -1078,9 +1084,27 @@ rir::Function* Pir2Rir::finalize() {
 
 } // namespace
 
-rir::Function* Pir2RirCompiler::operator()(Closure* orig) {
-    Pir2Rir cmp(orig);
-    return cmp.finalize();
+rir::Function* Pir2RirCompiler::compile(Closure* cls, SEXP origin) {
+    auto table = DispatchTable::unpack(BODY(origin));
+    if (table->slot(1))
+        return table->at(1);
+
+    Pir2Rir pir2rir(*this, cls);
+    auto fun = pir2rir.finalize();
+    Protect p(fun->container());
+
+    auto oldFun = table->first();
+
+    fun->invocationCount = oldFun->invocationCount;
+    // TODO: are these still needed / used?
+    fun->envLeaked = oldFun->envLeaked;
+    fun->envChanged = oldFun->envChanged;
+    // TODO: signatures need a rework
+    fun->signature = oldFun->signature;
+
+    table->put(1, fun);
+
+    return fun;
 }
 
 } // namespace pir

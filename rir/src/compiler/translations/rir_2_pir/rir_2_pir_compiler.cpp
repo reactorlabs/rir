@@ -31,6 +31,9 @@ Rir2PirCompiler::Rir2PirCompiler(Module* module) : RirCompiler(module) {
 Closure* Rir2PirCompiler::compileClosure(SEXP closure) {
     assert(isValidClosureSEXP(closure));
     DispatchTable* tbl = DispatchTable::unpack(BODY(closure));
+
+    assert(tbl->slot(1) == nullptr && "Closure already compiled to PIR");
+
     auto formals = RList(FORMALS(closure));
 
     std::vector<SEXP> fmls;
