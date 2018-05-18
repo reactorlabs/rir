@@ -748,15 +748,19 @@ class VLI(Call, Effect::Any, EnvAccess::Leak), public CallInstructionI {
 // specified as `cls_`, args passed as promises.
 class VLI(StaticCall, Effect::Any, EnvAccess::Leak), public CallInstructionI {
     Closure* cls_;
+    SEXP origin_;
 
   public:
     constexpr static size_t callArgOffset = 1;
 
     Closure* cls() { return cls_; }
+    SEXP origin() { return origin_; }
     size_t nCallArgs() override { return nargs() - callArgOffset; }
 
-    StaticCall(Value * e, Closure * cls, const std::vector<Value*>& args)
-        : VarLenInstruction(PirType::valOrLazy(), e), cls_(cls) {
+    StaticCall(Value * e, Closure * cls, const std::vector<Value*>& args,
+               unsigned src, SEXP origin)
+        : VarLenInstruction(PirType::valOrLazy(), e), cls_(cls),
+          origin_(origin) {
         for (unsigned i = 0; i < args.size(); ++i)
             this->pushArg(args[i], RType::prom);
     }
@@ -775,17 +779,22 @@ class VLI(StaticCall, Effect::Any, EnvAccess::Leak), public CallInstructionI {
 class VLI(StaticEagerCall, Effect::Any, EnvAccess::Leak),
     public CallInstructionI {
     Closure* cls_;
+    SEXP origin_;
 
   public:
     constexpr static size_t callArgOffset = 1;
 
     Closure* cls() { return cls_; }
+    SEXP origin() { return origin_; }
     size_t nCallArgs() override { return nargs() - callArgOffset; }
 
-    StaticEagerCall(Value * e, Closure * cls, const std::vector<Value*>& args)
-        : VarLenInstruction(PirType::valOrLazy(), e), cls_(cls) {
+    StaticEagerCall(Value * e, Closure * cls, const std::vector<Value*>& args,
+                    unsigned src, SEXP origin)
+        : VarLenInstruction(PirType::valOrLazy(), e), cls_(cls),
+          origin_(origin) {
         for (unsigned i = 0; i < args.size(); ++i)
             this->pushArg(args[i], PirType::val());
+        srcIdx = src;
     }
 
     void eachCallArg(ArgumentValueIterator it) override {
@@ -840,10 +849,12 @@ class VLI(CallBuiltin, Effect::Any, EnvAccess::Write) {
 
 class VLI(CallSafeBuiltin, Effect::None, EnvAccess::None) {
   public:
+    SEXP blt;
     const CCODE builtin;
     int builtinId;
 
-    CallSafeBuiltin(SEXP builtin, const std::vector<Value*>& args);
+    CallSafeBuiltin(SEXP builtin, const std::vector<Value*>& args,
+                    unsigned src);
 
     void printArgs(std::ostream& out) override;
 };

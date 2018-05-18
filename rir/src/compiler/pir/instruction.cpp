@@ -262,11 +262,13 @@ void PirCopy::print(std::ostream& out) {
     out << std::setw(50) << buf.str();
 }
 
-CallSafeBuiltin::CallSafeBuiltin(SEXP builtin, const std::vector<Value*>& args)
-    : VarLenInstruction(PirType::valOrLazy()), builtin(getBuiltin(builtin)),
-      builtinId(getBuiltinNr(builtin)) {
+CallSafeBuiltin::CallSafeBuiltin(SEXP builtin, const std::vector<Value*>& args,
+                                 unsigned src)
+    : VarLenInstruction(PirType::valOrLazy()), blt(builtin),
+      builtin(getBuiltin(builtin)), builtinId(getBuiltinNr(builtin)) {
     for (unsigned i = 0; i < args.size(); ++i)
         this->pushArg(args[i], PirType::val());
+    srcIdx = src;
 }
 
 CallBuiltin::CallBuiltin(Value* e, SEXP builtin,

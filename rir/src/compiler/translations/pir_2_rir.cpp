@@ -800,8 +800,8 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 // TODO: not tested
 
                 auto mkfuncls = MkFunCls::Cast(instr);
-                Pir2Rir cmp(mkfuncls->fun);
-                auto rirFun = cmp.finalize();
+                Pir2Rir pir2rir(compiler, mkfuncls->fun);
+                auto rirFun = pir2rir.finalize();
 
                 auto dt = DispatchTable::unpack(mkfuncls->code);
                 assert(dt->capacity() == 2 && dt->at(1) == nullptr &&
@@ -920,9 +920,8 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
 
             case Tag::Call: {
                 auto call = Call::Cast(instr);
-                auto cls = call->cls();
                 setEnv(it, call->env());
-                cs << BC::ldloc(alloc[cls]);
+                load(it, call->cls());
 
                 std::vector<FunIdxT> callArgs;
                 call->eachCallArg([&](Value* arg) {
@@ -937,11 +936,36 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 break;
             }
             case Tag::StaticCall: {
-                assert(false && "not yet implemented.");
+                auto call = StaticCall::Cast(instr);
+                setEnv(it, call->env());
+
+                compiler.compile(call->cls(), call->origin());
+                // push callee - this stores it into constant pool - discuss!
+                cs << BC::push(call->origin());
+
+                std::vector<FunIdxT> callArgs;
+                call->eachCallArg([&](Value* arg) {
+                    // TODO: for now, ignore the eager value in MkArg
+                    auto mkarg = MkArg::Cast(arg);
+                    callArgs.push_back(promises[mkarg->prom]);
+                });
+
+                cs.insertCall(Opcode::call_, callArgs, {},
+                              Pool::get(call->srcIdx));
+                store(it, call);
                 break;
             }
             case Tag::StaticEagerCall: {
-                assert(false && "not yet implemented.");
+                auto call = StaticEagerCall::Cast(instr);
+
+                compiler.compile(call->cls(), call->origin());
+
+                setEnv(it, call->env());
+                call->eachCallArg([&](Value* arg) { load(it, arg); });
+                cs.insertStackCall(Opcode::static_call_stack_,
+                                   call->nCallArgs(), {},
+                                   Pool::get(call->srcIdx), call->origin());
+                store(it, call);
                 break;
             }
             case Tag::CallBuiltin: {
@@ -954,7 +978,12 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 break;
             }
             case Tag::CallSafeBuiltin: {
-                assert(false && "not yet implemented.");
+                auto blt = CallSafeBuiltin::Cast(instr);
+                // no environment
+                blt->eachArg([&](Value* arg) { load(it, arg); });
+                cs.insertStackCall(Opcode::static_call_stack_, blt->nargs(), {},
+                                   Pool::get(blt->srcIdx), blt->blt);
+                store(it, blt);
                 break;
             }
             case Tag::MkEnv: {
