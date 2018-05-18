@@ -861,6 +861,13 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 store(it, cpy);
                 break;
             }
+            case Tag::Is: {
+                auto is = Is::Cast(instr);
+                load(it, is->arg<0>().val());
+                cs << BC::is(is->tag);
+                store(it, is);
+                break;
+            }
 
 #define SIMPLE_INSTR(Name, Factory)                                            \
     case Tag::Name: {                                                          \
@@ -911,12 +918,6 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 BINOP(Colon, colon);
 #undef BINOP
 
-            case Tag::Is: {
-                assert(false &&
-                       "is_ takes an immediate, but in PIR it is unop");
-                assert(false && "not yet implemented.");
-                break;
-            }
             case Tag::Call: {
                 auto call = Call::Cast(instr);
                 auto cls = call->cls();

@@ -635,6 +635,17 @@ class FLI(Inc, 1, Effect::None, EnvAccess::None) {
                               {{PirType(RType::integer).scalar()}}, {{v}}) {}
 };
 
+class FLI(Is, 1, Effect::None, EnvAccess::None) {
+  public:
+    Is(uint32_t tag, Value* v)
+        : FixedLenInstruction(PirType(RType::logical).scalar(),
+                              {{PirType::val()}}, {{v}}),
+          tag(tag) {}
+    uint32_t tag;
+
+    void printArgs(std::ostream& out) override;
+};
+
 class FLI(IsObject, 1, Effect::None, EnvAccess::None) {
   public:
     IsObject(Value* v)
@@ -689,7 +700,6 @@ SAFE_BINOP(LOr, RType::logical);
         }                                                                      \
     }
 
-SAFE_UNOP(Is);
 SAFE_UNOP(Not);
 SAFE_UNOP(Plus);
 SAFE_UNOP(Minus);

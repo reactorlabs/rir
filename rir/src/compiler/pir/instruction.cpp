@@ -229,6 +229,11 @@ void MkEnv::printArgs(std::ostream& out) {
     }
 }
 
+void Is::printArgs(std::ostream& out) {
+    arg<0>().val()->printRef(out);
+    out << ", " << Rf_type2char(tag);
+}
+
 void Phi::updateType() {
     type = arg(0).val()->type;
     eachArg([&](BB*, Value* v) -> void { type = type | v->type; });

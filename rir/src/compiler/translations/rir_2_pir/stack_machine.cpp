@@ -319,9 +319,12 @@ void StackMachine::runCurrentBC(Rir2Pir& rir2pir, Builder& insert) {
         UNOP(Minus, uminus_);
         UNOP(Inc, inc_);
         UNOP(Not, not_);
-        UNOP(Is, is_);
         UNOP(Length, length_);
 #undef UNOP
+
+    case Opcode::is_:
+        push(insert(new Is(bc.immediate.i, pop())));
+        break;
 
     case Opcode::pick_:
         push(at(bc.immediate.i));
