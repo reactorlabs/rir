@@ -157,6 +157,15 @@ class Instruction : public Value {
             it(arg(i));
     }
 
+    void eachStackArg(Instruction::ArgumentInstructionIterator it) const {
+        for (int i = nargs() - 1; i >= 0; --i) {
+            // skip non-instructions (ie. static environments)
+            auto instr = Instruction::Cast(arg(i).val());
+            if (instr)
+                it(instr);
+        }
+    }
+
     static Instruction* Cast(Value* v) {
         switch (v->tag) {
 #define V(Name) case Tag::Name:

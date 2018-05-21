@@ -275,7 +275,6 @@ class SSAAllocator {
             }
 
             // Precolor easy stack load-stores within one BB
-            size_t pos = 0;
             std::deque<Instruction*> stack;
 
             auto tryLoadingArgsFromStack = [&](Instruction* i) {
@@ -286,7 +285,7 @@ class SSAAllocator {
                 size_t newStackSize = stack.size();
                 bool foundAll = true;
                 auto check = stack.rbegin();
-                i->eachArg([&](Value* arg) {
+                i->eachStackArg([&](Instruction* arg) {
                     while (check != stack.rend() && *check != arg) {
                         ++check;
                         --newStackSize;
@@ -310,13 +309,12 @@ class SSAAllocator {
                 // A, C to be in a stack slot, discard B (it will become
                 // a local variable later) and resize the stack to [xxx]
                 stack.resize(newStackSize);
-                i->eachInstructionArg(
+                i->eachStackArg(
                     [&](Instruction* arg) { allocation[arg] = stackSlot; });
             };
 
             for (auto i : *bb) {
                 tryLoadingArgsFromStack(i);
-                ++pos;
 
                 if (!allocation.count(i) && !(i->type == PirType::voyd()) &&
                     !Phi::Cast(i) && i->hasSingleUse()) {
@@ -460,7 +458,7 @@ class SSAAllocator {
                         stack.pop_back();
                 } else {
                     // Make sure all our args are live
-                    i->eachInstructionArg([&](Instruction* a) {
+                    i->eachStackArg([&](Instruction* a) {
                         if (!allocation.count(a)) {
                             std::cerr << "REG alloc fail: ";
                             i->printRef(std::cerr);
@@ -545,7 +543,14 @@ class SSAAllocator {
         return allocation.at(i) - 1;
     }
 
-    size_t slots() const { return allocation.size(); }
+    size_t slots() const {
+        unsigned max = 0;
+        for (auto a : allocation) {
+            if (a.second != stackSlot && max < a.second)
+                max = a.second;
+        }
+        return max;
+    }
 
     bool onStack(Value* v) const {
         Instruction* i = Instruction::Cast(v);
