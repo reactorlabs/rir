@@ -1988,6 +1988,12 @@ SEXP evalRirCode(Code* c, Context* ctx, EnvironmentProxy* ep) {
             NEXT();
         }
 
+        INSTRUCTION(isobj_) {
+            SEXP val = ostack_pop(ctx);
+            ostack_push(ctx, isObject(val) ? R_TrueValue : R_FalseValue);
+            NEXT();
+        }
+
         INSTRUCTION(missing_) {
             SEXP sym = readConst(ctx, readImmediate());
             advanceImmediate();
@@ -2018,6 +2024,13 @@ SEXP evalRirCode(Code* c, Context* ctx, EnvironmentProxy* ep) {
                                      ? R_TrueValue
                                      : R_FalseValue);
             }
+            NEXT();
+        }
+
+        INSTRUCTION(check_missing_) {
+            SEXP val = ostack_top(ctx);
+            if (val == R_MissingArg)
+                Rf_error("argument is missing, with no default");
             NEXT();
         }
 
@@ -2065,8 +2078,8 @@ SEXP evalRirCode(Code* c, Context* ctx, EnvironmentProxy* ep) {
         }
 
         INSTRUCTION(extract1_1_) {
-            SEXP idx = ostack_at(ctx, 0);
             SEXP val = ostack_at(ctx, 1);
+            SEXP idx = ostack_at(ctx, 0);
 
             SEXP args = CONS_NR(idx, R_NilValue);
             args = CONS_NR(val, args);
@@ -2080,9 +2093,9 @@ SEXP evalRirCode(Code* c, Context* ctx, EnvironmentProxy* ep) {
         }
 
         INSTRUCTION(extract1_2_) {
-            SEXP idx2 = ostack_at(ctx, 0);
-            SEXP idx = ostack_at(ctx, 1);
             SEXP val = ostack_at(ctx, 2);
+            SEXP idx = ostack_at(ctx, 1);
+            SEXP idx2 = ostack_at(ctx, 0);
 
             SEXP args = CONS_NR(idx2, R_NilValue);
             args = CONS_NR(idx, args);
@@ -2116,8 +2129,8 @@ SEXP evalRirCode(Code* c, Context* ctx, EnvironmentProxy* ep) {
         }
 
         INSTRUCTION(extract2_1_) {
-            SEXP idx = ostack_at(ctx, 0);
             SEXP val = ostack_at(ctx, 1);
+            SEXP idx = ostack_at(ctx, 0);
             int i = -1;
 
             if (getAttrib(val, R_NamesSymbol) != R_NilValue ||
@@ -2194,9 +2207,9 @@ SEXP evalRirCode(Code* c, Context* ctx, EnvironmentProxy* ep) {
         }
 
         INSTRUCTION(extract2_2_) {
-            SEXP idx2 = ostack_at(ctx, 0);
-            SEXP idx = ostack_at(ctx, 1);
             SEXP val = ostack_at(ctx, 2);
+            SEXP idx = ostack_at(ctx, 1);
+            SEXP idx2 = ostack_at(ctx, 0);
 
             SEXP args = CONS_NR(idx2, R_NilValue);
             args = CONS_NR(idx, args);

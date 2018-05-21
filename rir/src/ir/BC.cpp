@@ -130,6 +130,8 @@ bool BC::operator==(const BC& other) const {
     case Opcode::visible_:
     case Opcode::endcontext_:
     case Opcode::subassign1_:
+    case Opcode::isobj_:
+    case Opcode::check_missing_:
         return true;
 
     case Opcode::invalid_:
@@ -262,6 +264,8 @@ void BC::write(CodeStream& cs) const {
     case Opcode::visible_:
     case Opcode::endcontext_:
     case Opcode::subassign1_:
+    case Opcode::isobj_:
+    case Opcode::check_missing_:
         return;
 
     case Opcode::invalid_:
@@ -488,6 +492,8 @@ void BC::print(CallSite* cs) {
     case Opcode::lgl_and_:
     case Opcode::subassign1_:
     case Opcode::subassign2_:
+    case Opcode::isobj_:
+    case Opcode::check_missing_:
         break;
     case Opcode::promise_:
     case Opcode::push_code_:

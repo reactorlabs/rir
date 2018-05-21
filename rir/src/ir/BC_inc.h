@@ -259,6 +259,7 @@ class BC {
     inline static BC stvar(SEXP sym);
     inline static BC stvarSuper(SEXP sym);
     inline static BC missing(SEXP sym);
+    inline static BC checkMissing();
     inline static BC subassign1();
     inline static BC subassign2(SEXP sym);
     inline static BC length();
@@ -316,6 +317,7 @@ class BC {
     inline static BC pick(uint32_t);
     inline static BC pull(uint32_t);
     inline static BC is(uint32_t);
+    inline static BC isObj();
     inline static BC return_();
     inline static BC int3();
 
@@ -507,6 +509,8 @@ class BC {
         case Opcode::length_:
         case Opcode::names_:
         case Opcode::set_names_:
+        case Opcode::isobj_:
+        case Opcode::check_missing_:
             break;
         case Opcode::invalid_:
         case Opcode::num_of:

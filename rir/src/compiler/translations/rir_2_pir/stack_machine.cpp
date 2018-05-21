@@ -104,10 +104,10 @@ void StackMachine::runCurrentBC(Rir2Pir& rir2pir, Builder& insert) {
         break;
     }
     case Opcode::close_: {
-        Value* x = pop();
-        Value* y = pop();
-        Value* z = pop();
-        push(insert(new MkCls(x, y, z, env)));
+        Value* srcref = pop();
+        Value* body = pop();
+        Value* formals = pop();
+        push(insert(new MkCls(formals, body, srcref, env)));
         break;
     }
     case Opcode::nop_:
@@ -232,10 +232,10 @@ void StackMachine::runCurrentBC(Rir2Pir& rir2pir, Builder& insert) {
         break;
     }
     case Opcode::seq_: {
-        auto x = pop();
-        auto y = pop();
-        auto z = pop();
-        push(insert(new Seq(x, y, z)));
+        auto step = pop();
+        auto stop = pop();
+        auto start = pop();
+        push(insert(new Seq(start, stop, step)));
         break;
     }
     case Opcode::for_seq_size_:
@@ -243,31 +243,31 @@ void StackMachine::runCurrentBC(Rir2Pir& rir2pir, Builder& insert) {
         break;
 
     case Opcode::extract1_1_: {
-        Value* vec = pop();
         Value* idx = pop();
+        Value* vec = pop();
         push(insert(new Extract1_1D(vec, idx)));
         break;
     }
 
     case Opcode::extract2_1_: {
-        Value* vec = pop();
         Value* idx = pop();
+        Value* vec = pop();
         push(insert(new Extract2_1D(vec, idx)));
         break;
     }
 
     case Opcode::extract1_2_: {
-        Value* vec = pop();
-        Value* idx1 = pop();
         Value* idx2 = pop();
+        Value* idx1 = pop();
+        Value* vec = pop();
         push(insert(new Extract1_2D(vec, idx1, idx2)));
         break;
     }
 
     case Opcode::extract2_2_: {
-        Value* vec = pop();
-        Value* idx1 = pop();
         Value* idx2 = pop();
+        Value* idx1 = pop();
+        Value* vec = pop();
         push(insert(new Extract2_2D(vec, idx1, idx2)));
         break;
     }
@@ -276,24 +276,26 @@ void StackMachine::runCurrentBC(Rir2Pir& rir2pir, Builder& insert) {
         Value* vec = pop();
         Value* idx = pop();
         Value* val = pop();
-        push(insert(new Subassign1_1D(vec, idx, val)));
+        push(insert(new Subassign1_1D(val, idx, vec)));
         break;
     }
 
     case Opcode::subassign2_: {
+        SEXP sym = rir::Pool::get(bc.immediate.pool);
         Value* vec = pop();
         Value* idx = pop();
         Value* val = pop();
-        push(insert(new Subassign2_1D(vec, idx, val)));
+        push(insert(new Subassign2_1D(val, idx, vec, sym)));
         break;
     }
 
 #define BINOP(Name, Op)                                                        \
-    case Opcode::Op:                                                           \
-        x = pop();                                                             \
-        y = pop();                                                             \
-        push(insert(new Name(y, x, getSrcIdx())));                             \
-        break
+    case Opcode::Op: {                                                         \
+        auto rhs = pop();                                                      \
+        auto lhs = pop();                                                      \
+        push(insert(new Name(lhs, rhs, getSrcIdx())));                         \
+        break;                                                                 \
+    }
         BINOP(LOr, lgl_or_);
         BINOP(LAnd, lgl_and_);
         BINOP(Lt, lt_);
@@ -312,10 +314,11 @@ void StackMachine::runCurrentBC(Rir2Pir& rir2pir, Builder& insert) {
         BINOP(Neq, ne_);
 #undef BINOP
 #define UNOP(Name, Op)                                                         \
-    case Opcode::Op:                                                           \
+    case Opcode::Op: {                                                         \
         v = pop();                                                             \
         push(insert(new Name(v)));                                             \
-        break
+        break;                                                                 \
+    }
         UNOP(Plus, uplus_);
         UNOP(Minus, uminus_);
         UNOP(Inc, inc_);
@@ -378,6 +381,8 @@ void StackMachine::runCurrentBC(Rir2Pir& rir2pir, Builder& insert) {
     case Opcode::ldloc_:
     case Opcode::stloc_:
     case Opcode::movloc_:
+    case Opcode::isobj_:
+    case Opcode::check_missing_:
         assert(false && "Recompiling PIR not supported for now.");
 
     // Unsupported opcodes:

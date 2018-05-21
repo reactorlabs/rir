@@ -547,10 +547,10 @@ class FLI(Seq, 3, Effect::None, EnvAccess::None) {
 
 class FLI(MkCls, 4, Effect::None, EnvAccess::Capture) {
   public:
-    MkCls(Value* code, Value* arg, Value* src, Value* parent)
+    MkCls(Value* fml, Value* code, Value* src, Value* parent)
         : FixedLenInstruction(RType::closure,
-                              {{RType::code, PirType::list(), PirType::any()}},
-                              {{code, arg, src}}, parent) {}
+                              {{PirType::list(), RType::code, PirType::any()}},
+                              {{fml, code, src}}, parent) {}
 };
 
 class FLI(MkFunCls, 1, Effect::None, EnvAccess::Capture) {
@@ -587,20 +587,21 @@ class FLI(AsTest, 1, Effect::None, EnvAccess::None) {
 
 class FLI(Subassign1_1D, 3, Effect::None, EnvAccess::None) {
   public:
-    Subassign1_1D(Value* vec, Value* index, Value* value)
+    Subassign1_1D(Value* value, Value* index, Value* vec)
         : FixedLenInstruction(
               PirType::val(),
               {{PirType::val(), PirType::val(), PirType::val()}},
-              {{vec, index, value}}) {}
+              {{value, index, vec}}) {}
 };
 
 class FLI(Subassign2_1D, 3, Effect::None, EnvAccess::None) {
   public:
-    Subassign2_1D(Value* vec, Value* index, Value* value)
+    Subassign2_1D(Value* value, Value* index, Value* vec, SEXP sym)
         : FixedLenInstruction(
               PirType::val(),
               {{PirType::val(), PirType::val(), PirType::val()}},
-              {{vec, index, value}}) {}
+              {{value, index, vec}}), sym(sym) {}
+    SEXP sym;
 };
 
 class FLI(Extract1_1D, 2, Effect::None, EnvAccess::None) {
@@ -675,9 +676,9 @@ class FLI(PirCopy, 1, Effect::None, EnvAccess::None) {
 #define SAFE_BINOP(Name, Type)                                                 \
     class FLI(Name, 2, Effect::None, EnvAccess::None) {                        \
       public:                                                                  \
-        Name(Value* a, Value* b, unsigned src)                                 \
+        Name(Value* lhs, Value* rhs, unsigned src)                             \
             : FixedLenInstruction(Type, {{PirType::val(), PirType::val()}},    \
-                                  {{a, b}}) {                                  \
+                                  {{lhs, rhs}}) {                              \
             srcIdx = src;                                                      \
         }                                                                      \
     }

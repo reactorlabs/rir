@@ -719,18 +719,26 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 break;
             }
             case Tag::ChkMissing: {
-                assert(false && "not yet implemented.");
+                // TODO: not tested
+                auto check = ChkMissing::Cast(instr);
+                load(it, check->arg<0>().val());
+                cs << BC::checkMissing();
+                store(it, check);
                 break;
             }
             case Tag::ChkClosure: {
-                assert(false && "not yet implemented.");
+                // TODO: not tested
+                auto check = ChkClosure::Cast(instr);
+                load(it, check->arg<0>().val());
+                cs << BC::isfun();
+                store(it, check);
                 break;
             }
             case Tag::StVarSuper: {
                 // TODO: not tested
                 auto stvar = StVarSuper::Cast(instr);
-                load(it, stvar->val());
                 setEnv(it, stvar->env());
+                load(it, stvar->val());
                 cs << BC::stvarSuper(stvar->varName);
                 break;
             }
@@ -744,8 +752,8 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
             }
             case Tag::StVar: {
                 auto stvar = StVar::Cast(instr);
-                load(it, stvar->val());
                 setEnv(it, stvar->env());
+                load(it, stvar->val());
                 cs << BC::stvar(stvar->varName);
                 break;
             }
@@ -788,11 +796,10 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
             case Tag::Seq: {
                 // TODO: not tested
                 auto seq = Seq::Cast(instr);
-                auto start = seq->arg<0>().val();
-                auto end = seq->arg<1>().val();
-                auto step = seq->arg<2>().val();
-                cs << BC::ldloc(alloc[start]) << BC::ldloc(alloc[end])
-                   << BC::ldloc(alloc[step]) << BC::seq();
+                load(it, seq->arg<0>().val());
+                load(it, seq->arg<1>().val());
+                load(it, seq->arg<2>().val());
+                cs << BC::seq();
                 store(it, seq);
                 break;
             }
@@ -805,14 +812,15 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 // TODO: not tested
 
                 auto mkfuncls = MkFunCls::Cast(instr);
+
                 Pir2Rir pir2rir(compiler, mkfuncls->fun);
                 auto rirFun = pir2rir.finalize();
-
                 auto dt = DispatchTable::unpack(mkfuncls->code);
                 assert(dt->capacity() == 2 && dt->at(1) == nullptr &&
                        "invalid dispatch table");
                 dt->put(1, rirFun);
 
+                setEnv(it, mkfuncls->env());
                 cs << BC::push(mkfuncls->fml) << BC::push(mkfuncls->code)
                    << BC::push(mkfuncls->src) << BC::close();
                 store(it, mkfuncls);
@@ -825,39 +833,78 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 break;
             }
             case Tag::Subassign1_1D: {
-                assert(false && "not yet implemented.");
+                // TODO: not tested
+                auto res = Subassign1_1D::Cast(instr);
+                load(it, res->arg<0>().val());
+                load(it, res->arg<1>().val());
+                load(it, res->arg<2>().val());
+                cs << BC::subassign1();
+                store(it, res);
                 break;
             }
             case Tag::Subassign2_1D: {
-                assert(false && "not yet implemented.");
+                // TODO: not tested
+                auto res = Subassign2_1D::Cast(instr);
+                load(it, res->arg<0>().val());
+                load(it, res->arg<1>().val());
+                load(it, res->arg<2>().val());
+                cs << BC::subassign2(res->sym);
+                store(it, res);
                 break;
             }
             case Tag::Extract1_1D: {
-                assert(false && "not yet implemented.");
+                // TODO: not tested
+                auto res = Extract1_1D::Cast(instr);
+                load(it, res->arg<0>().val());
+                load(it, res->arg<1>().val());
+                cs << BC::extract1_1();
+                store(it, res);
                 break;
             }
             case Tag::Extract2_1D: {
-                assert(false && "not yet implemented.");
+                // TODO: not tested
+                auto res = Extract2_1D::Cast(instr);
+                load(it, res->arg<0>().val());
+                load(it, res->arg<1>().val());
+                cs << BC::extract2_1();
+                store(it, res);
                 break;
             }
             case Tag::Extract1_2D: {
-                assert(false && "not yet implemented.");
+                // TODO: not tested
+                auto res = Extract1_2D::Cast(instr);
+                load(it, res->arg<0>().val());
+                load(it, res->arg<1>().val());
+                load(it, res->arg<2>().val());
+                cs << BC::extract1_2();
+                store(it, res);
                 break;
             }
             case Tag::Extract2_2D: {
-                assert(false && "not yet implemented.");
+                // TODO: not tested
+                auto res = Extract2_2D::Cast(instr);
+                load(it, res->arg<0>().val());
+                load(it, res->arg<1>().val());
+                load(it, res->arg<2>().val());
+                cs << BC::extract2_2();
+                store(it, res);
                 break;
             }
             case Tag::IsObject: {
-                assert(false && "not yet implemented.");
+                auto is = IsObject::Cast(instr);
+                load(it, is->arg<0>().val());
+                cs << BC::isObj();
+                store(it, is);
                 break;
             }
             case Tag::LdFunctionEnv: {
                 // TODO: what should happen? For now get the current env (should
                 // be the promise environment that the evaluator was called
                 // with) and store it into local and leave it set as current
-                cs << BC::getEnv();
-                store(it, instr);
+                if (!alloc.dead(instr)) {
+                    cs << BC::getEnv();
+                    store(it, instr);
+                }
                 break;
             }
             case Tag::PirCopy: {
@@ -898,8 +945,10 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
 #define BINOP(Name, Factory)                                                   \
     case Tag::Name: {                                                          \
         auto binop = Name::Cast(instr);                                        \
-        load(it, binop->arg<0>().val());                                       \
-        load(it, binop->arg<1>().val());                                       \
+        auto lhs = binop->arg<0>().val();                                      \
+        auto rhs = binop->arg<1>().val();                                      \
+        load(it, lhs);                                                         \
+        load(it, rhs);                                                         \
         cs << BC::Factory();                                                   \
         cs.addSrcIdx(binop->srcIdx);                                           \
         store(it, binop);                                                      \
@@ -994,7 +1043,7 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
             case Tag::MkEnv: {
                 auto mkenv = MkEnv::Cast(instr);
                 loadEnv(it, mkenv->parent());
-                cs << BC::makeEnv() << BC::dup() << BC::setEnv();
+                cs << BC::makeEnv() << BC::setEnv();
                 currentEnv = mkenv;
                 // bind all args
                 // TODO: maybe later have a separate instruction for this?
@@ -1002,18 +1051,11 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                     load(it, val);
                     cs << BC::stvar(name);
                 });
+                cs << BC::getEnv();
                 store(it, mkenv);
                 break;
             }
             case Tag::Phi: {
-                auto phi = Phi::Cast(instr);
-                phi->eachArg([&](BB*, Value* arg) {
-                    assert(((alloc.onStack(phi) && alloc.onStack(arg)) ||
-                            (alloc[phi] == alloc[arg])) &&
-                           "Phi inputs must all be allocated in 1 slot");
-                });
-                load(it, phi);
-                store(it, phi);
                 break;
             }
             case Tag::Deopt: {
