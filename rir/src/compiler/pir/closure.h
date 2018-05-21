@@ -49,12 +49,14 @@ class Closure : public Code {
 
     void eachDefaultArg(PromiseIterator it) const {
         for (auto p : defaultArgs)
-            it(p);
+            if (p)
+                it(p);
     }
 
     void eachPromise(PromiseIterator it) const {
         for (auto p : promises)
-            it(p);
+            if (p)
+                it(p);
     }
 
 };
