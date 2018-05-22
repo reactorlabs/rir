@@ -5,6 +5,8 @@
 #include "code.h"
 #include "pir.h"
 
+#include <functional>
+
 namespace rir {
 namespace pir {
 
