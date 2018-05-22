@@ -587,20 +587,20 @@ class FLI(AsTest, 1, Effect::None, EnvAccess::None) {
 
 class FLI(Subassign1_1D, 3, Effect::None, EnvAccess::None) {
   public:
-    Subassign1_1D(Value* value, Value* index, Value* vec)
+    Subassign1_1D(Value* vec, Value* index, Value* val)
         : FixedLenInstruction(
               PirType::val(),
               {{PirType::val(), PirType::val(), PirType::val()}},
-              {{value, index, vec}}) {}
+              {{vec, index, val}}) {}
 };
 
 class FLI(Subassign2_1D, 3, Effect::None, EnvAccess::None) {
   public:
-    Subassign2_1D(Value* value, Value* index, Value* vec, SEXP sym)
+    Subassign2_1D(Value* vec, Value* index, Value* value, SEXP sym)
         : FixedLenInstruction(
               PirType::val(),
               {{PirType::val(), PirType::val(), PirType::val()}},
-              {{value, index, vec}}), sym(sym) {}
+              {{vec, index, value}}), sym(sym) {}
     SEXP sym;
 };
 

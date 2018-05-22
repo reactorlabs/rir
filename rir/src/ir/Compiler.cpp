@@ -425,14 +425,16 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
                         cs << BC::dup()
                            << BC::setShared();
 
-                        // Now load target and index
-                        cs << (superAssign ? BC::ldvarSuper(target)
-                                           : BC::ldvar(target));
+                        // Now load index and target
                         compileExpr(ctx, *idx);
+                        cs << BC::swap()
+                           << (superAssign ? BC::ldvarSuper(target)
+                                           : BC::ldvar(target));
 
+                        // We now have [... val idx val vec]
                         // check for object case
-                        cs << BC::swap();
-                        cs << BC::brobj(objBranch);
+                        cs << BC::brobj(objBranch)
+                           << BC::put(2);
 
                         // do the thing
                         if (fun2 == symbol::DoubleBracket)
@@ -465,7 +467,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
                         SETCDR(a, value);
 
                         // Reorder stack into correct ordering
-                        cs << BC::swap() << BC::pick(2);
+                        cs << BC::put(2);
 
                         // Do dispatch using args from the stack
                         cs.insertStackCall(
@@ -1025,8 +1027,10 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
                 cs.insertStackCall(Opcode::call_stack_, 1, {}, rewritten);
 
                 // store result
-                cs << BC::pull(1)
-                   << BC::pick(4)
+                cs << BC::pick(3)
+                   << BC::swap()
+                   << BC::pull(2)
+                   << BC::swap()
                    << BC::subassign2(R_NilValue)
                    << BC::put(2)
                    << BC::br(loopBranch);

@@ -273,19 +273,19 @@ void StackMachine::runCurrentBC(Rir2Pir& rir2pir, Builder& insert) {
     }
 
     case Opcode::subassign1_: {
-        Value* vec = pop();
-        Value* idx = pop();
         Value* val = pop();
-        push(insert(new Subassign1_1D(val, idx, vec)));
+        Value* idx = pop();
+        Value* vec = pop();
+        push(insert(new Subassign1_1D(vec, idx, val)));
         break;
     }
 
     case Opcode::subassign2_: {
         SEXP sym = rir::Pool::get(bc.immediate.pool);
-        Value* vec = pop();
-        Value* idx = pop();
         Value* val = pop();
-        push(insert(new Subassign2_1D(val, idx, vec, sym)));
+        Value* idx = pop();
+        Value* vec = pop();
+        push(insert(new Subassign2_1D(vec, idx, val, sym)));
         break;
     }
 
