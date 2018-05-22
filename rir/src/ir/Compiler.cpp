@@ -950,7 +950,8 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
                 return true;
             }
 
-
+            // This is broken. I found a bug: brobj_ tested index instead of vector
+            // still there is something else
             if (false && fun == symbol::lapply && args.length() == 2) {
                 LabelT loopBranch = cs.mkLabel();
                 LabelT nextBranch = cs.mkLabel();
@@ -965,7 +966,6 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
                    << BC::length()
                    << BC::dup()
                    << BC::makeUnique()
-                   << BC::inc()
                    << BC::swap()
                    // allocate the ans vector with same size and names
                    << BC::alloc(VECSXP)
@@ -987,14 +987,13 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
                 }
                 cs << BC::put(4);
 
-                // loop invariant stack layout: [fun, X, ans, len(vector)+1, i]
+                // loop invariant stack layout: [fun, X, ans, len(vector), i]
 
                 // check end condition
                 cs << loopBranch
                    << BC::inc()
                    << BC::dup2()
-                   << BC::swap()
-                   << BC::lt()
+                   << BC::ge()
                    << BC::brfalse(nextBranch);
 
                 // X[[i]]
@@ -1003,18 +1002,19 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
 
                 cs << BC::guardNamePrimitive(symbol::DoubleBracket);
                 cs << BC::pull(4)
-                   << BC::pull(4)
-                   << BC::pull(2)
+                   << BC::pull(1)
+                   << BC::pull(5)
+                   // [fun, X, ans, len(vector), i, fun, i, X]
                    << BC::brobj(objBranch);
 
-                cs << BC::extract2_1() << BC::br(contBranch);
+                cs << BC::swap() << BC::extract2_1() << BC::br(contBranch);
 
                 static SEXP extractCall = nullptr;
                 if (!extractCall)
                     extractCall = LCONS(symbol::DoubleBracket,
                                 LCONS(symbol::getterPlaceholder, R_NilValue));
 
-                cs << objBranch;
+                cs << objBranch << BC::swap();
                 cs.insertStackCall(Opcode::dispatch_stack_, 2, {}, extractCall,
                                    symbol::DoubleBracket);
 
