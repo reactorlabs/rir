@@ -16,7 +16,14 @@ struct Optimization {
 
     bool operator<(const Optimization& anotherOptimization) const {
         if (order == anotherOptimization.order) {
-            return anotherOptimization.translator->getName() == "cleanup";
+            if (anotherOptimization.translator->getName() == "cleanup") {
+                return true;
+            } else if (this->translator->getName() == "cleanup") {
+                return false;
+            } else {
+                return anotherOptimization.translator->getName().compare(
+                           this->translator->getName()) > 0;
+            }
         } else {
             return order < anotherOptimization.order;
         }

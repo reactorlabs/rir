@@ -16,7 +16,8 @@ namespace rir {
 void Configurations::parseINIFile() {
     INIReader reader(".pir/configuration.ini");
     if (reader.ParseError() < 0) {
-        //std::cout << "Can't load optimizations.ini file, we resort to default "
+        // std::cout << "Can't load optimizations.ini file, we resort to default
+        // "
         //             "optimizations'\n";
         return defaultOptimizations();
     }
