@@ -148,6 +148,7 @@ BC BC::missing(SEXP sym) {
     i.pool = Pool::insert(sym);
     return BC(Opcode::missing_, i);
 }
+BC BC::checkMissing() { return BC(Opcode::check_missing_); }
 BC BC::stvar(SEXP sym) {
     assert(TYPEOF(sym) == SYMSXP);
     assert(strlen(CHAR(PRINTNAME(sym))));
@@ -250,6 +251,7 @@ BC BC::setShared() { return BC(Opcode::set_shared_); }
 BC BC::asLogical() { return BC(Opcode::aslogical_); }
 BC BC::lglAnd() { return BC(Opcode::lgl_and_); }
 BC BC::lglOr() { return BC(Opcode::lgl_or_); }
+BC BC::isObj() { return BC(Opcode::isobj_); }
 BC BC::pull(uint32_t i) {
     ImmediateT im;
     im.i = i;

@@ -104,10 +104,10 @@ void StackMachine::runCurrentBC(Rir2Pir& rir2pir, Builder& insert) {
         break;
     }
     case Opcode::close_: {
-        Value* x = pop();
-        Value* y = pop();
-        Value* z = pop();
-        push(insert(new MkCls(x, y, z, env)));
+        Value* srcref = pop();
+        Value* body = pop();
+        Value* formals = pop();
+        push(insert(new MkCls(formals, body, srcref, env)));
         break;
     }
     case Opcode::nop_:
@@ -168,7 +168,8 @@ void StackMachine::runCurrentBC(Rir2Pir& rir2pir, Builder& insert) {
             BB* asExpected = insert.createBB();
             insert.bb = asExpected;
             curBB->next1 = asExpected;
-            Value* r2 = insert(new StaticCall(insert.env, f, args));
+            Value* r2 = insert(
+                new StaticCall(insert.env, f, args, cs->call, monomorphic));
 
             BB* cont = insert.createBB();
             fallback->next0 = cont;
@@ -214,7 +215,7 @@ void StackMachine::runCurrentBC(Rir2Pir& rir2pir, Builder& insert) {
             static int vector = findBuiltin("vector");
 
             if (getBuiltinNr(target) == vector)
-                push(insert(new CallSafeBuiltin(target, args)));
+                push(insert(new CallSafeBuiltin(target, args, cs->call)));
             else
                 push(insert(new CallBuiltin(env, target, args, cs->call)));
         } else {
@@ -226,15 +227,15 @@ void StackMachine::runCurrentBC(Rir2Pir& rir2pir, Builder& insert) {
                 Pool::insert(target);
             }
             Closure* f = rir2pir.compiler().compileClosure(target);
-            push(insert(new StaticEagerCall(env, f, args)));
+            push(insert(new StaticEagerCall(env, f, args, cs->call, target)));
         }
         break;
     }
     case Opcode::seq_: {
-        auto x = pop();
-        auto y = pop();
-        auto z = pop();
-        push(insert(new Seq(x, y, z)));
+        auto step = pop();
+        auto stop = pop();
+        auto start = pop();
+        push(insert(new Seq(start, stop, step)));
         break;
     }
     case Opcode::for_seq_size_:
@@ -242,57 +243,59 @@ void StackMachine::runCurrentBC(Rir2Pir& rir2pir, Builder& insert) {
         break;
 
     case Opcode::extract1_1_: {
-        Value* vec = pop();
         Value* idx = pop();
+        Value* vec = pop();
         push(insert(new Extract1_1D(vec, idx)));
         break;
     }
 
     case Opcode::extract2_1_: {
-        Value* vec = pop();
         Value* idx = pop();
+        Value* vec = pop();
         push(insert(new Extract2_1D(vec, idx)));
         break;
     }
 
     case Opcode::extract1_2_: {
-        Value* vec = pop();
-        Value* idx1 = pop();
         Value* idx2 = pop();
+        Value* idx1 = pop();
+        Value* vec = pop();
         push(insert(new Extract1_2D(vec, idx1, idx2)));
         break;
     }
 
     case Opcode::extract2_2_: {
-        Value* vec = pop();
-        Value* idx1 = pop();
         Value* idx2 = pop();
+        Value* idx1 = pop();
+        Value* vec = pop();
         push(insert(new Extract2_2D(vec, idx1, idx2)));
         break;
     }
 
     case Opcode::subassign1_: {
-        Value* vec = pop();
-        Value* idx = pop();
         Value* val = pop();
+        Value* idx = pop();
+        Value* vec = pop();
         push(insert(new Subassign1_1D(vec, idx, val)));
         break;
     }
 
     case Opcode::subassign2_: {
-        Value* vec = pop();
-        Value* idx = pop();
+        SEXP sym = rir::Pool::get(bc.immediate.pool);
         Value* val = pop();
-        push(insert(new Subassign2_1D(vec, idx, val)));
+        Value* idx = pop();
+        Value* vec = pop();
+        push(insert(new Subassign2_1D(vec, idx, val, sym)));
         break;
     }
 
 #define BINOP(Name, Op)                                                        \
-    case Opcode::Op:                                                           \
-        x = pop();                                                             \
-        y = pop();                                                             \
-        push(insert(new Name(y, x, getSrcIdx())));                             \
-        break
+    case Opcode::Op: {                                                         \
+        auto rhs = pop();                                                      \
+        auto lhs = pop();                                                      \
+        push(insert(new Name(lhs, rhs, getSrcIdx())));                         \
+        break;                                                                 \
+    }
         BINOP(LOr, lgl_or_);
         BINOP(LAnd, lgl_and_);
         BINOP(Lt, lt_);
@@ -311,17 +314,21 @@ void StackMachine::runCurrentBC(Rir2Pir& rir2pir, Builder& insert) {
         BINOP(Neq, ne_);
 #undef BINOP
 #define UNOP(Name, Op)                                                         \
-    case Opcode::Op:                                                           \
+    case Opcode::Op: {                                                         \
         v = pop();                                                             \
         push(insert(new Name(v)));                                             \
-        break
+        break;                                                                 \
+    }
         UNOP(Plus, uplus_);
         UNOP(Minus, uminus_);
         UNOP(Inc, inc_);
         UNOP(Not, not_);
-        UNOP(Is, is_);
         UNOP(Length, length_);
 #undef UNOP
+
+    case Opcode::is_:
+        push(insert(new Is(bc.immediate.i, pop())));
+        break;
 
     case Opcode::pick_:
         push(at(bc.immediate.i));
@@ -374,6 +381,8 @@ void StackMachine::runCurrentBC(Rir2Pir& rir2pir, Builder& insert) {
     case Opcode::ldloc_:
     case Opcode::stloc_:
     case Opcode::movloc_:
+    case Opcode::isobj_:
+    case Opcode::check_missing_:
         assert(false && "Recompiling PIR not supported for now.");
 
     // Unsupported opcodes:

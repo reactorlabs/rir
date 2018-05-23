@@ -4,6 +4,7 @@
 #include "R/r.h"
 #include "instruction_list.h"
 #include "pir.h"
+#include "singleton_values.h"
 #include "tag.h"
 #include "value.h"
 
@@ -130,21 +131,12 @@ class Instruction : public Value {
     virtual const InstrArg& arg(size_t pos) const = 0;
 
     typedef std::function<void(Value*)> ArgumentValueIterator;
-    typedef std::function<void(Instruction*)> ArgumentInstructionIterator;
     typedef std::function<void(const InstrArg&)> ArgumentIterator;
     typedef std::function<void(InstrArg&)> MutableArgumentIterator;
 
     void eachArg(Instruction::ArgumentValueIterator it) const {
         for (size_t i = 0; i < nargs(); ++i)
             it(arg(i).val());
-    }
-
-    void eachInstructionArg(Instruction::ArgumentInstructionIterator it) const {
-        for (size_t i = 0; i < nargs(); ++i) {
-            auto in = Instruction::Cast(arg(i).val());
-            if (in)
-                it(in);
-        }
     }
 
     void eachArg(Instruction::ArgumentIterator it) const {
@@ -155,6 +147,11 @@ class Instruction : public Value {
     void eachArg(Instruction::MutableArgumentIterator it) {
         for (size_t i = 0; i < nargs(); ++i)
             it(arg(i));
+    }
+
+    void eachArgRev(Instruction::ArgumentValueIterator it) const {
+        for (size_t i = 0; i < nargs(); ++i)
+            it(arg(nargs() - 1 - i).val());
     }
 
     static Instruction* Cast(Value* v) {
@@ -333,9 +330,9 @@ class VarLenInstruction
     typedef InstructionImplementation<ITAG, Base, EFFECT, ENV,
                                       std::vector<InstrArg>>
         Super;
-    using Super::nargs;
     using Super::arg;
     using Super::args_;
+    using Super::nargs;
 
     Value* env() const override {
         // TODO find a better way
@@ -521,7 +518,16 @@ class FLI(MkArg, 2, Effect::None, EnvAccess::Capture) {
     MkArg(Value* v, Value* env)
         : FixedLenInstruction(RType::prom, {{PirType::val()}}, {{v}}, env),
           prom(nullptr) {}
+
     typedef std::function<void(Promise*)> PromMaybe;
+    typedef std::function<void(Value*)> EagerMaybe;
+
+    Value* eagerArg() { return arg<0>().val(); }
+
+    void ifEager(EagerMaybe maybe) {
+        if (eagerArg() != Missing::instance())
+            maybe(eagerArg());
+    }
 
     void printArgs(std::ostream& out) override;
 };
@@ -538,10 +544,10 @@ class FLI(Seq, 3, Effect::None, EnvAccess::None) {
 
 class FLI(MkCls, 4, Effect::None, EnvAccess::Capture) {
   public:
-    MkCls(Value* code, Value* arg, Value* src, Value* parent)
+    MkCls(Value* fml, Value* code, Value* src, Value* parent)
         : FixedLenInstruction(RType::closure,
-                              {{RType::code, PirType::list(), PirType::any()}},
-                              {{code, arg, src}}, parent) {}
+                              {{PirType::list(), RType::code, PirType::any()}},
+                              {{fml, code, src}}, parent) {}
 };
 
 class FLI(MkFunCls, 1, Effect::None, EnvAccess::Capture) {
@@ -578,20 +584,22 @@ class FLI(AsTest, 1, Effect::None, EnvAccess::None) {
 
 class FLI(Subassign1_1D, 3, Effect::None, EnvAccess::None) {
   public:
-    Subassign1_1D(Value* vec, Value* index, Value* value)
+    Subassign1_1D(Value* vec, Value* index, Value* val)
         : FixedLenInstruction(
               PirType::val(),
               {{PirType::val(), PirType::val(), PirType::val()}},
-              {{vec, index, value}}) {}
+              {{vec, index, val}}) {}
 };
 
 class FLI(Subassign2_1D, 3, Effect::None, EnvAccess::None) {
   public:
-    Subassign2_1D(Value* vec, Value* index, Value* value)
+    Subassign2_1D(Value* vec, Value* index, Value* value, SEXP sym)
         : FixedLenInstruction(
               PirType::val(),
               {{PirType::val(), PirType::val(), PirType::val()}},
-              {{vec, index, value}}) {}
+              {{vec, index, value}}),
+          sym(sym) {}
+    SEXP sym;
 };
 
 class FLI(Extract1_1D, 2, Effect::None, EnvAccess::None) {
@@ -635,6 +643,17 @@ class FLI(Inc, 1, Effect::None, EnvAccess::None) {
                               {{PirType(RType::integer).scalar()}}, {{v}}) {}
 };
 
+class FLI(Is, 1, Effect::None, EnvAccess::None) {
+  public:
+    Is(uint32_t tag, Value* v)
+        : FixedLenInstruction(PirType(RType::logical).scalar(),
+                              {{PirType::val()}}, {{v}}),
+          tag(tag) {}
+    uint32_t tag;
+
+    void printArgs(std::ostream& out) override;
+};
+
 class FLI(IsObject, 1, Effect::None, EnvAccess::None) {
   public:
     IsObject(Value* v)
@@ -655,9 +674,9 @@ class FLI(PirCopy, 1, Effect::None, EnvAccess::None) {
 #define SAFE_BINOP(Name, Type)                                                 \
     class FLI(Name, 2, Effect::None, EnvAccess::None) {                        \
       public:                                                                  \
-        Name(Value* a, Value* b, unsigned src)                                 \
+        Name(Value* lhs, Value* rhs, unsigned src)                             \
             : FixedLenInstruction(Type, {{PirType::val(), PirType::val()}},    \
-                                  {{a, b}}) {                                  \
+                                  {{lhs, rhs}}) {                              \
             srcIdx = src;                                                      \
         }                                                                      \
     }
@@ -689,7 +708,6 @@ SAFE_BINOP(LOr, RType::logical);
         }                                                                      \
     }
 
-SAFE_UNOP(Is);
 SAFE_UNOP(Not);
 SAFE_UNOP(Plus);
 SAFE_UNOP(Minus);
@@ -707,6 +725,19 @@ SAFE_UNOP(Length);
 struct CallInstructionI {
     virtual size_t nCallArgs() = 0;
     virtual void eachCallArg(Instruction::ArgumentValueIterator it) = 0;
+    virtual bool allArgsEager() {
+        bool res = true;
+        eachCallArg([&](Value* arg) {
+            auto mkarg = MkArg::Cast(arg);
+            if (mkarg) {
+                if (mkarg->eagerArg() == Missing::instance())
+                    res = false;
+            } else {
+                assert(false && "Call expects MkArg arguments");
+            }
+        });
+        return res;
+    }
 };
 
 // Default call instruction. Closure expression (ie. expr left of `(`) is
@@ -738,15 +769,19 @@ class VLI(Call, Effect::Any, EnvAccess::Leak), public CallInstructionI {
 // specified as `cls_`, args passed as promises.
 class VLI(StaticCall, Effect::Any, EnvAccess::Leak), public CallInstructionI {
     Closure* cls_;
+    SEXP origin_;
 
   public:
     constexpr static size_t callArgOffset = 1;
 
     Closure* cls() { return cls_; }
+    SEXP origin() { return origin_; }
     size_t nCallArgs() override { return nargs() - callArgOffset; }
 
-    StaticCall(Value * e, Closure * cls, const std::vector<Value*>& args)
-        : VarLenInstruction(PirType::valOrLazy(), e), cls_(cls) {
+    StaticCall(Value * e, Closure * cls, const std::vector<Value*>& args,
+               unsigned src, SEXP origin)
+        : VarLenInstruction(PirType::valOrLazy(), e), cls_(cls),
+          origin_(origin) {
         for (unsigned i = 0; i < args.size(); ++i)
             this->pushArg(args[i], RType::prom);
     }
@@ -765,17 +800,22 @@ class VLI(StaticCall, Effect::Any, EnvAccess::Leak), public CallInstructionI {
 class VLI(StaticEagerCall, Effect::Any, EnvAccess::Leak),
     public CallInstructionI {
     Closure* cls_;
+    SEXP origin_;
 
   public:
     constexpr static size_t callArgOffset = 1;
 
     Closure* cls() { return cls_; }
+    SEXP origin() { return origin_; }
     size_t nCallArgs() override { return nargs() - callArgOffset; }
 
-    StaticEagerCall(Value * e, Closure * cls, const std::vector<Value*>& args)
-        : VarLenInstruction(PirType::valOrLazy(), e), cls_(cls) {
+    StaticEagerCall(Value * e, Closure * cls, const std::vector<Value*>& args,
+                    unsigned src, SEXP origin)
+        : VarLenInstruction(PirType::valOrLazy(), e), cls_(cls),
+          origin_(origin) {
         for (unsigned i = 0; i < args.size(); ++i)
             this->pushArg(args[i], PirType::val());
+        srcIdx = src;
     }
 
     void eachCallArg(ArgumentValueIterator it) override {
@@ -783,6 +823,8 @@ class VLI(StaticEagerCall, Effect::Any, EnvAccess::Leak),
             it(arg(i + callArgOffset).val());
         }
     }
+
+    bool allArgsEager() override { return true; }
 
     void printArgs(std::ostream&) override;
 };
@@ -830,10 +872,12 @@ class VLI(CallBuiltin, Effect::Any, EnvAccess::Write) {
 
 class VLI(CallSafeBuiltin, Effect::None, EnvAccess::None) {
   public:
+    SEXP blt;
     const CCODE builtin;
     int builtinId;
 
-    CallSafeBuiltin(SEXP builtin, const std::vector<Value*>& args);
+    CallSafeBuiltin(SEXP builtin, const std::vector<Value*>& args,
+                    unsigned src);
 
     void printArgs(std::ostream& out) override;
 };
@@ -900,20 +944,10 @@ class VLI(Phi, Effect::None, EnvAccess::None) {
         VarLenInstruction::pushArg(arg);
     }
     typedef std::function<void(BB* bb, Value*)> PhiArgumentIterator;
-    typedef std::function<void(BB* bb, Instruction*)>
-        PhiArgumentInstructionIterator;
 
     void eachArg(PhiArgumentIterator it) const {
         for (size_t i = 0; i < nargs(); ++i)
             it(input[i], arg(i).val());
-    }
-
-    void eachInstructionArg(PhiArgumentInstructionIterator it) const {
-        for (size_t i = 0; i < nargs(); ++i) {
-            auto in = Instruction::Cast(arg(i).val());
-            if (in)
-                it(input[i], in);
-        }
     }
 };
 

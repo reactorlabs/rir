@@ -54,7 +54,7 @@ namespace {
  *    2. Traverse the dominance tree and eagerly allocate the remaining ones
  * 5. For debugging, verify the assignment with a static analysis that simulates
  *    the variable and stack usage (see verify).
-*/
+ */
 class SSAAllocator {
   public:
     CFG cfg;
@@ -91,10 +91,10 @@ class SSAAllocator {
     };
     std::unordered_map<Value*, Liveness> livenessInterval;
 
-    SSAAllocator(Code* code)
+    SSAAllocator(Code* code, bool verbose)
         : cfg(code->entry), dom(code->entry), code(code),
           bbsSize(code->maxBBId + 1) {
-        computeLiveness();
+        computeLiveness(verbose);
         computeStackAllocation();
         computeAllocation();
     }
@@ -228,19 +228,21 @@ class SSAAllocator {
         }
 
         if (verbose) {
+            std::cout << "======= Liveness ========\n";
             for (auto ll : livenessInterval) {
                 auto& l = ll.second;
                 ll.first->printRef(std::cout);
                 std::cout << " is live : ";
                 for (size_t i = 0; i < bbsSize; ++i) {
                     if (l[i].live) {
-                        std::cout << i << " [";
+                        std::cout << "BB" << i << " [";
                         std::cout << l[i].begin << ",";
                         std::cout << l[i].end << "]  ";
                     }
                 }
                 std::cout << "\n";
             }
+            std::cout << "======= End Liveness ========\n";
         }
     }
 
@@ -273,7 +275,6 @@ class SSAAllocator {
             }
 
             // Precolor easy stack load-stores within one BB
-            size_t pos = 0;
             std::deque<Instruction*> stack;
 
             auto tryLoadingArgsFromStack = [&](Instruction* i) {
@@ -284,7 +285,7 @@ class SSAAllocator {
                 size_t newStackSize = stack.size();
                 bool foundAll = true;
                 auto check = stack.rbegin();
-                i->eachArg([&](Value* arg) {
+                StackArgVisitor::run(i, [&](Value* arg) {
                     while (check != stack.rend() && *check != arg) {
                         ++check;
                         --newStackSize;
@@ -308,13 +309,12 @@ class SSAAllocator {
                 // A, C to be in a stack slot, discard B (it will become
                 // a local variable later) and resize the stack to [xxx]
                 stack.resize(newStackSize);
-                i->eachInstructionArg(
-                    [&](Instruction* arg) { allocation[arg] = stackSlot; });
+                StackArgVisitor::run(
+                    i, [&](Value* arg) { allocation[arg] = stackSlot; });
             };
 
             for (auto i : *bb) {
                 tryLoadingArgsFromStack(i);
-                ++pos;
 
                 if (!allocation.count(i) && !(i->type == PirType::voyd()) &&
                     !Phi::Cast(i) && i->hasSingleUse()) {
@@ -401,8 +401,9 @@ class SSAAllocator {
     }
 
     void print(std::ostream& out = std::cout) {
-        out << "Allocation : ";
+        out << "======= Allocation ========\n";
         BreadthFirstVisitor::run(code->entry, [&](BB* bb) {
+            out << "BB" << bb->id << ": ";
             for (auto a : allocation) {
                 auto i = a.first;
                 if (Instruction::Cast(i) && Instruction::Cast(i)->bb() != bb)
@@ -415,8 +416,18 @@ class SSAAllocator {
                     out << a.second;
                 out << "   ";
             }
+            out << "\n";
         });
-        out << "\n";
+        out << "dead: ";
+        BreadthFirstVisitor::run(code->entry, [&](BB* bb) {
+            for (auto i : *bb) {
+                if (allocation.count(i) == 0) {
+                    i->printRef(out);
+                    out << "   ";
+                }
+            }
+        });
+        out << "\nslots: " << slots() << "\n======= End Allocation ========\n";
     }
 
     void verify() {
@@ -432,7 +443,10 @@ class SSAAllocator {
                 Phi* phi = Phi::Cast(i);
                 if (phi) {
                     SlotNumber slot = allocation.at(phi);
-                    phi->eachInstructionArg([&](BB*, Instruction* i) {
+                    phi->eachArg([&](BB*, Value* arg) {
+                        auto i = Instruction::Cast(arg);
+                        if (!i)
+                            return;
                         if (allocation[i] != slot) {
                             std::cerr << "REG alloc fail: ";
                             phi->printRef(std::cerr);
@@ -456,7 +470,7 @@ class SSAAllocator {
                         stack.pop_back();
                 } else {
                     // Make sure all our args are live
-                    i->eachInstructionArg([&](Instruction* a) {
+                    StackArgVisitor::run(i, [&](Value* a) {
                         if (!allocation.count(a)) {
                             std::cerr << "REG alloc fail: ";
                             i->printRef(std::cerr);
@@ -541,7 +555,14 @@ class SSAAllocator {
         return allocation.at(i) - 1;
     }
 
-    size_t slots() const { return allocation.size(); }
+    size_t slots() const {
+        unsigned max = 0;
+        for (auto a : allocation) {
+            if (a.second != stackSlot && max < a.second)
+                max = a.second;
+        }
+        return max;
+    }
 
     bool onStack(Value* v) const {
         Instruction* i = Instruction::Cast(v);
@@ -554,6 +575,74 @@ class SSAAllocator {
         assert(i);
         return allocation.count(i) == 0;
     }
+
+  private:
+    struct StackArgVisitor {
+        typedef std::function<void(Value*)> ValueAction;
+        static void run(Instruction* i, ValueAction action) {
+            auto runReverseArgs = [&](CallInstructionI* call) {
+                std::vector<Value*> args(call->nCallArgs());
+                call->eachCallArg([&](Value* a) { args.push_back(a); });
+                while (!args.empty()) {
+                    action(args.back());
+                    args.pop_back();
+                }
+            };
+            switch (i->tag) {
+            case Tag::MkArg: {
+                // just the eager value, if it's not missing
+                MkArg::Cast(i)->ifEager([&](Value* arg) { action(arg); });
+                break;
+            }
+            case Tag::Call: {
+                auto call = Call::Cast(i);
+                if (call->allArgsEager())
+                    runReverseArgs(call);
+                action(Call::Cast(i)->cls());
+                break;
+            }
+            case Tag::StaticCall: {
+                auto call = StaticCall::Cast(i);
+                if (call->allArgsEager())
+                    runReverseArgs(call);
+                break;
+            }
+            case Tag::Phi: {
+                // do nothing - stack-allocated phi's are handled elsewhere
+                break;
+            }
+            case Tag::MkEnv: {
+                // expects the parent on stack; only allocate if non-static
+                auto parent = MkEnv::Cast(i)->parent();
+                if (!Env::isStaticEnv(parent))
+                    action(parent);
+                // then fall through to the default and do all locals in reverse
+            }
+            // default is ok for these
+            case Tag::StaticEagerCall:
+            case Tag::CallBuiltin:
+            case Tag::CallSafeBuiltin:
+            default: {
+                // skip env if they have it and go over the rest in reverse
+                i->eachArgRev([&](Value* arg) {
+                    if (i->hasEnv() && i->env() == arg)
+                        return;
+                    action(arg);
+                });
+                break;
+            }
+            case Tag::MkCls:
+            case Tag::Deopt:
+                assert(false && "what to do with these??");
+            // values, not instructions
+            case Tag::Missing:
+            case Tag::Env:
+            case Tag::Nil:
+            case Tag::_UNUSED_:
+                assert(false && "not an instruction");
+            }
+        }
+    };
 };
 
 class Context {
@@ -594,26 +683,29 @@ class Context {
 
 class Pir2Rir {
   public:
-    Closure* cls;
-
-    Pir2Rir(Closure* cls) : cls(cls) {}
-    size_t compile(Context& ctx, Code* code);
+    Pir2Rir(Pir2RirCompiler& cmp, Closure* cls) : compiler(cmp), cls(cls) {}
+    size_t compileCode(Context& ctx, Code* code);
     void toCSSA(Code* code);
     rir::Function* finalize();
 
   private:
+    Pir2RirCompiler& compiler;
+    Closure* cls;
     std::unordered_map<Promise*, FunIdxT> promises;
     std::unordered_map<Promise*, SEXP> argNames;
 };
 
-size_t Pir2Rir::compile(Context& ctx, Code* code) {
+size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
     toCSSA(code);
 
-    // code->print(std::cout);
-    SSAAllocator alloc(code);
-    // std::cout << "======= Liveness ========\n";
-    // alloc.print();
-    // std::cout << "======= End Liveness ========\n";
+    if (compiler.verbose)
+        code->print(std::cout);
+
+    SSAAllocator alloc(code, compiler.verbose);
+
+    if (compiler.verbose)
+        alloc.print();
+
     alloc.verify();
 
     // create labels for all bbs
@@ -707,18 +799,26 @@ size_t Pir2Rir::compile(Context& ctx, Code* code) {
                 break;
             }
             case Tag::ChkMissing: {
-                assert(false && "not yet implemented.");
+                // TODO: not tested
+                auto check = ChkMissing::Cast(instr);
+                load(it, check->arg<0>().val());
+                cs << BC::checkMissing();
+                store(it, check);
                 break;
             }
             case Tag::ChkClosure: {
-                assert(false && "not yet implemented.");
+                // TODO: not tested
+                auto check = ChkClosure::Cast(instr);
+                load(it, check->arg<0>().val());
+                cs << BC::isfun();
+                store(it, check);
                 break;
             }
             case Tag::StVarSuper: {
                 // TODO: not tested
                 auto stvar = StVarSuper::Cast(instr);
-                load(it, stvar->val());
                 setEnv(it, stvar->env());
+                load(it, stvar->val());
                 cs << BC::stvarSuper(stvar->varName);
                 break;
             }
@@ -732,8 +832,8 @@ size_t Pir2Rir::compile(Context& ctx, Code* code) {
             }
             case Tag::StVar: {
                 auto stvar = StVar::Cast(instr);
-                load(it, stvar->val());
                 setEnv(it, stvar->env());
+                load(it, stvar->val());
                 cs << BC::stvar(stvar->varName);
                 break;
             }
@@ -763,7 +863,6 @@ size_t Pir2Rir::compile(Context& ctx, Code* code) {
                 return;
             }
             case Tag::MkArg: {
-                // TODO: handle eager values
                 BreadthFirstVisitor::run(bb, [&](Instruction* i) {
                     i->eachArg([&](Value* arg) {
                         if (arg == i)
@@ -771,16 +870,21 @@ size_t Pir2Rir::compile(Context& ctx, Code* code) {
                                    "MkArg used in a non-call instruction");
                     });
                 });
+                // TODO: handle eager values; for now, if eager, just throw it
+                // away
+                MkArg::Cast(instr)->ifEager([&](Value* arg) {
+                    if (alloc.onStack(arg))
+                        cs << BC::pop();
+                });
                 break;
             }
             case Tag::Seq: {
                 // TODO: not tested
                 auto seq = Seq::Cast(instr);
-                auto start = seq->arg<0>().val();
-                auto end = seq->arg<1>().val();
-                auto step = seq->arg<2>().val();
-                cs << BC::ldloc(alloc[start]) << BC::ldloc(alloc[end])
-                   << BC::ldloc(alloc[step]) << BC::seq();
+                load(it, seq->arg<0>().val());
+                load(it, seq->arg<1>().val());
+                load(it, seq->arg<2>().val());
+                cs << BC::seq();
                 store(it, seq);
                 break;
             }
@@ -793,14 +897,15 @@ size_t Pir2Rir::compile(Context& ctx, Code* code) {
                 // TODO: not tested
 
                 auto mkfuncls = MkFunCls::Cast(instr);
-                Pir2Rir cmp(mkfuncls->fun);
-                auto rirFun = cmp.finalize();
 
+                Pir2Rir pir2rir(compiler, mkfuncls->fun);
+                auto rirFun = pir2rir.finalize();
                 auto dt = DispatchTable::unpack(mkfuncls->code);
                 assert(dt->capacity() == 2 && dt->at(1) == nullptr &&
                        "invalid dispatch table");
                 dt->put(1, rirFun);
 
+                setEnv(it, mkfuncls->env());
                 cs << BC::push(mkfuncls->fml) << BC::push(mkfuncls->code)
                    << BC::push(mkfuncls->src) << BC::close();
                 store(it, mkfuncls);
@@ -813,45 +918,91 @@ size_t Pir2Rir::compile(Context& ctx, Code* code) {
                 break;
             }
             case Tag::Subassign1_1D: {
-                assert(false && "not yet implemented.");
+                // TODO: not tested
+                auto res = Subassign1_1D::Cast(instr);
+                load(it, res->arg<0>().val());
+                load(it, res->arg<1>().val());
+                load(it, res->arg<2>().val());
+                cs << BC::subassign1();
+                store(it, res);
                 break;
             }
             case Tag::Subassign2_1D: {
-                assert(false && "not yet implemented.");
+                // TODO: not tested
+                auto res = Subassign2_1D::Cast(instr);
+                load(it, res->arg<0>().val());
+                load(it, res->arg<1>().val());
+                load(it, res->arg<2>().val());
+                cs << BC::subassign2(res->sym);
+                store(it, res);
                 break;
             }
             case Tag::Extract1_1D: {
-                assert(false && "not yet implemented.");
+                // TODO: not tested
+                auto res = Extract1_1D::Cast(instr);
+                load(it, res->arg<0>().val());
+                load(it, res->arg<1>().val());
+                cs << BC::extract1_1();
+                store(it, res);
                 break;
             }
             case Tag::Extract2_1D: {
-                assert(false && "not yet implemented.");
+                // TODO: not tested
+                auto res = Extract2_1D::Cast(instr);
+                load(it, res->arg<0>().val());
+                load(it, res->arg<1>().val());
+                cs << BC::extract2_1();
+                store(it, res);
                 break;
             }
             case Tag::Extract1_2D: {
-                assert(false && "not yet implemented.");
+                // TODO: not tested
+                auto res = Extract1_2D::Cast(instr);
+                load(it, res->arg<0>().val());
+                load(it, res->arg<1>().val());
+                load(it, res->arg<2>().val());
+                cs << BC::extract1_2();
+                store(it, res);
                 break;
             }
             case Tag::Extract2_2D: {
-                assert(false && "not yet implemented.");
+                // TODO: not tested
+                auto res = Extract2_2D::Cast(instr);
+                load(it, res->arg<0>().val());
+                load(it, res->arg<1>().val());
+                load(it, res->arg<2>().val());
+                cs << BC::extract2_2();
+                store(it, res);
                 break;
             }
             case Tag::IsObject: {
-                assert(false && "not yet implemented.");
+                auto is = IsObject::Cast(instr);
+                load(it, is->arg<0>().val());
+                cs << BC::isObj();
+                store(it, is);
                 break;
             }
             case Tag::LdFunctionEnv: {
                 // TODO: what should happen? For now get the current env (should
                 // be the promise environment that the evaluator was called
                 // with) and store it into local and leave it set as current
-                cs << BC::getEnv();
-                store(it, instr);
+                if (!alloc.dead(instr)) {
+                    cs << BC::getEnv();
+                    store(it, instr);
+                }
                 break;
             }
             case Tag::PirCopy: {
                 auto cpy = PirCopy::Cast(instr);
                 load(it, cpy->arg<0>().val());
                 store(it, cpy);
+                break;
+            }
+            case Tag::Is: {
+                auto is = Is::Cast(instr);
+                load(it, is->arg<0>().val());
+                cs << BC::is(is->tag);
+                store(it, is);
                 break;
             }
 
@@ -879,8 +1030,10 @@ size_t Pir2Rir::compile(Context& ctx, Code* code) {
 #define BINOP(Name, Factory)                                                   \
     case Tag::Name: {                                                          \
         auto binop = Name::Cast(instr);                                        \
-        load(it, binop->arg<0>().val());                                       \
-        load(it, binop->arg<1>().val());                                       \
+        auto lhs = binop->arg<0>().val();                                      \
+        auto rhs = binop->arg<1>().val();                                      \
+        load(it, lhs);                                                         \
+        load(it, rhs);                                                         \
         cs << BC::Factory();                                                   \
         cs.addSrcIdx(binop->srcIdx);                                           \
         store(it, binop);                                                      \
@@ -904,36 +1057,64 @@ size_t Pir2Rir::compile(Context& ctx, Code* code) {
                 BINOP(Colon, colon);
 #undef BINOP
 
-            case Tag::Is: {
-                assert(false &&
-                       "is_ takes an immediate, but in PIR it is unop");
-                assert(false && "not yet implemented.");
-                break;
-            }
             case Tag::Call: {
                 auto call = Call::Cast(instr);
-                auto cls = call->cls();
                 setEnv(it, call->env());
-                cs << BC::ldloc(alloc[cls]);
+                load(it, call->cls());
 
-                std::vector<FunIdxT> callArgs;
-                call->eachCallArg([&](Value* arg) {
-                    // TODO: for now, ignore the eager value in MkArg
-                    auto mkarg = MkArg::Cast(arg);
-                    callArgs.push_back(promises[mkarg->prom]);
-                });
-
-                cs.insertCall(Opcode::call_, callArgs, {},
-                              Pool::get(call->srcIdx));
+                if (call->allArgsEager()) {
+                    call->eachCallArg([&](Value* arg) { load(it, arg); });
+                    cs.insertStackCall(Opcode::call_stack_, call->nCallArgs(),
+                                       {}, Pool::get(call->srcIdx));
+                } else {
+                    std::vector<FunIdxT> callArgs;
+                    call->eachCallArg([&](Value* arg) {
+                        // TODO: for now, ignore the eager value in MkArg
+                        auto mkarg = MkArg::Cast(arg);
+                        callArgs.push_back(promises[mkarg->prom]);
+                    });
+                    cs.insertCall(Opcode::call_, callArgs, {},
+                                  Pool::get(call->srcIdx));
+                }
                 store(it, call);
                 break;
             }
             case Tag::StaticCall: {
-                assert(false && "not yet implemented.");
+                auto call = StaticCall::Cast(instr);
+                setEnv(it, call->env());
+
+                compiler.compile(call->cls(), call->origin());
+                // push callee - this stores it into constant pool
+                cs << BC::push(call->origin());
+
+                if (call->allArgsEager()) {
+                    call->eachCallArg([&](Value* arg) { load(it, arg); });
+                    cs.insertStackCall(Opcode::call_stack_, call->nCallArgs(),
+                                       {}, Pool::get(call->srcIdx));
+                } else {
+                    std::vector<FunIdxT> callArgs;
+                    call->eachCallArg([&](Value* arg) {
+                        // TODO: for now, ignore the eager value in MkArg
+                        auto mkarg = MkArg::Cast(arg);
+                        callArgs.push_back(promises[mkarg->prom]);
+                    });
+                    cs.insertCall(Opcode::call_, callArgs, {},
+                                  Pool::get(call->srcIdx));
+                }
+                store(it, call);
                 break;
             }
             case Tag::StaticEagerCall: {
-                assert(false && "not yet implemented.");
+                auto call = StaticEagerCall::Cast(instr);
+
+                compiler.compile(call->cls(), call->origin());
+
+                setEnv(it, call->env());
+                call->eachCallArg([&](Value* arg) { load(it, arg); });
+                cs.insertStackCall(Opcode::static_call_stack_,
+                                   call->nCallArgs(), {},
+                                   Pool::get(call->srcIdx), call->origin());
+                store(it, call);
                 break;
             }
             case Tag::CallBuiltin: {
@@ -946,32 +1127,39 @@ size_t Pir2Rir::compile(Context& ctx, Code* code) {
                 break;
             }
             case Tag::CallSafeBuiltin: {
-                assert(false && "not yet implemented.");
+                auto blt = CallSafeBuiltin::Cast(instr);
+                // no environment
+                blt->eachArg([&](Value* arg) { load(it, arg); });
+                cs.insertStackCall(Opcode::static_call_stack_, blt->nargs(), {},
+                                   Pool::get(blt->srcIdx), blt->blt);
+                store(it, blt);
                 break;
             }
             case Tag::MkEnv: {
                 auto mkenv = MkEnv::Cast(instr);
                 loadEnv(it, mkenv->parent());
-                cs << BC::makeEnv() << BC::dup() << BC::setEnv();
-                currentEnv = mkenv;
+                cs << BC::makeEnv();
+                store(it, mkenv);
+
                 // bind all args
                 // TODO: maybe later have a separate instruction for this?
+                setEnv(it, mkenv);
                 mkenv->eachLocalVar([&](SEXP name, Value* val) {
                     load(it, val);
                     cs << BC::stvar(name);
                 });
-                store(it, mkenv);
                 break;
             }
             case Tag::Phi: {
+                // Phi functions are no-ops, because after allocation on CSSA
+                // form, all arguments and the funcion itself are allocated to
+                // the same place
                 auto phi = Phi::Cast(instr);
                 phi->eachArg([&](BB*, Value* arg) {
                     assert(((alloc.onStack(phi) && alloc.onStack(arg)) ||
                             (alloc[phi] == alloc[arg])) &&
                            "Phi inputs must all be allocated in 1 slot");
                 });
-                load(it, phi);
-                store(it, phi);
                 break;
             }
             case Tag::Deopt: {
@@ -986,7 +1174,6 @@ size_t Pir2Rir::compile(Context& ctx, Code* code) {
             // dummy sentinel enum item
             case Tag::_UNUSED_:
                 break;
-            // no default to get compiler warnings for missing...
             }
         }
 
@@ -1045,7 +1232,7 @@ rir::Function* Pir2Rir::finalize() {
         if (!arg)
             continue;
         ctx.pushDefaultArg(R_NilValue);
-        size_t localsCnt = compile(ctx, arg);
+        size_t localsCnt = compileCode(ctx, arg);
         promises[arg] = ctx.finalizeCode(localsCnt);
         argNames[arg] = cls->argNames[i++];
     }
@@ -1053,11 +1240,11 @@ rir::Function* Pir2Rir::finalize() {
         if (!prom)
             continue;
         ctx.pushPromise(R_NilValue);
-        size_t localsCnt = compile(ctx, prom);
+        size_t localsCnt = compileCode(ctx, prom);
         promises[prom] = ctx.finalizeCode(localsCnt);
     }
     ctx.pushBody(R_NilValue);
-    size_t localsCnt = compile(ctx, cls);
+    size_t localsCnt = compileCode(ctx, cls);
     ctx.finalizeCode(localsCnt);
 
     CodeEditor code(function.function->body());
@@ -1066,7 +1253,6 @@ rir::Function* Pir2Rir::finalize() {
         if (code.promise(i))
             Optimizer::optimize(*code.promise(i));
     Optimizer::optimize(code);
-
     auto opt = code.finalize();
 
 #ifdef ENABLE_SLOWASSERT
@@ -1078,9 +1264,27 @@ rir::Function* Pir2Rir::finalize() {
 
 } // namespace
 
-rir::Function* Pir2RirCompiler::operator()(Closure* orig) {
-    Pir2Rir cmp(orig);
-    return cmp.finalize();
+rir::Function* Pir2RirCompiler::compile(Closure* cls, SEXP origin) {
+    auto table = DispatchTable::unpack(BODY(origin));
+    if (table->slot(1))
+        return table->at(1);
+
+    Pir2Rir pir2rir(*this, cls);
+    auto fun = pir2rir.finalize();
+    Protect p(fun->container());
+
+    auto oldFun = table->first();
+
+    fun->invocationCount = oldFun->invocationCount;
+    // TODO: are these still needed / used?
+    fun->envLeaked = oldFun->envLeaked;
+    fun->envChanged = oldFun->envChanged;
+    // TODO: signatures need a rework
+    fun->signature = oldFun->signature;
+
+    table->put(1, fun);
+
+    return fun;
 }
 
 } // namespace pir

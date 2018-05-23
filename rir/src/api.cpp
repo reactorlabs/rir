@@ -112,34 +112,16 @@ REXPORT SEXP pir_compile(SEXP what, SEXP verbose) {
     pir::Module* m = new pir::Module;
     pir::Rir2PirCompiler cmp(m);
     cmp.setVerbose(debug);
-    cmp.compileClosure(what);
+    auto c = cmp.compileClosure(what);
     cmp.optimizeModule();
 
     if (debug)
         m->print();
 
     // compile back to rir
-    auto table = DispatchTable::unpack(BODY(what));
-    auto oldFun = table->first();
     pir::Pir2RirCompiler p2r;
-    auto fun = p2r(m->get(oldFun));
-    p(fun->container());
-
-    fun->invocationCount = oldFun->invocationCount;
-    // TODO: are these still needed / used?
-    fun->envLeaked = oldFun->envLeaked;
-    fun->envChanged = oldFun->envChanged;
-    // TODO: signatures need a rework
-    fun->signature = oldFun->signature;
-
-    table->put(1, fun);
-
-    if (debug) {
-        Rprintf("orig:\n");
-        printFunction(oldFun);
-        Rprintf("new:\n");
-        printFunction(fun);
-    }
+    p2r.verbose = debug;
+    p2r.compile(c, what);
 
     delete m;
     return what;

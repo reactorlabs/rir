@@ -5,6 +5,8 @@
 #include "code.h"
 #include "pir.h"
 
+#include <functional>
+
 namespace rir {
 namespace pir {
 
@@ -44,6 +46,21 @@ class Closure : public Code {
     Closure* clone();
 
     ~Closure();
+
+    typedef std::function<void(Promise*)> PromiseIterator;
+
+    void eachDefaultArg(PromiseIterator it) const {
+        for (auto p : defaultArgs)
+            if (p)
+                it(p);
+    }
+
+    void eachPromise(PromiseIterator it) const {
+        for (auto p : promises)
+            if (p)
+                it(p);
+    }
+
 };
 } // namespace pir
 } // namespace rir

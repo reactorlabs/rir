@@ -143,8 +143,6 @@ DEF_INSTR(promise_, 1, 0, 1, 1)
 
 /**
  * force_:: pop from objet stack, evaluate, push promise's value
-
- TODO: check whether this is used or not?
  */
 DEF_INSTR(force_, 0, 1, 1, 0)
 
@@ -267,16 +265,24 @@ DEF_INSTR(asast_, 0, 1, 1, 1)
 DEF_INSTR(is_, 1, 1, 1, 1)
 
 /**
- * missing_ :: check if symb is missing
+ * isobj_:: check if TOS is any kind of object, push T/F
+ */
+DEF_INSTR(isobj_, 0, 1, 1, 1)
 
- TODO we want to rename to isMissing
+/**
+ * missing_ :: check if symb is missing
  */
 DEF_INSTR(missing_, 1, 0, 1, 1)
 
 /**
+ * check_missing_ :: check if TOS is missing
+ */
+DEF_INSTR(check_missing_, 0, 0, 0, 1)
+
+/**
  * brobj_:: branch if tos is object
  */
-DEF_INSTR(brobj_, 1, 1, 1, 1)
+DEF_INSTR(brobj_, 1, 0, 0, 1)
 
 /**
  * brtrue_:: pop object stack, if TRUE branch to immediate offset

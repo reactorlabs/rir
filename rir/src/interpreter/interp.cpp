@@ -1988,6 +1988,12 @@ SEXP evalRirCode(Code* c, Context* ctx, EnvironmentProxy* ep) {
             NEXT();
         }
 
+        INSTRUCTION(isobj_) {
+            SEXP val = ostack_pop(ctx);
+            ostack_push(ctx, isObject(val) ? R_TrueValue : R_FalseValue);
+            NEXT();
+        }
+
         INSTRUCTION(missing_) {
             SEXP sym = readConst(ctx, readImmediate());
             advanceImmediate();
@@ -2018,6 +2024,13 @@ SEXP evalRirCode(Code* c, Context* ctx, EnvironmentProxy* ep) {
                                      ? R_TrueValue
                                      : R_FalseValue);
             }
+            NEXT();
+        }
+
+        INSTRUCTION(check_missing_) {
+            SEXP val = ostack_top(ctx);
+            if (val == R_MissingArg)
+                Rf_error("argument is missing, with no default");
             NEXT();
         }
 
@@ -2065,8 +2078,8 @@ SEXP evalRirCode(Code* c, Context* ctx, EnvironmentProxy* ep) {
         }
 
         INSTRUCTION(extract1_1_) {
-            SEXP idx = ostack_at(ctx, 0);
             SEXP val = ostack_at(ctx, 1);
+            SEXP idx = ostack_at(ctx, 0);
 
             SEXP args = CONS_NR(idx, R_NilValue);
             args = CONS_NR(val, args);
@@ -2080,9 +2093,9 @@ SEXP evalRirCode(Code* c, Context* ctx, EnvironmentProxy* ep) {
         }
 
         INSTRUCTION(extract1_2_) {
-            SEXP idx2 = ostack_at(ctx, 0);
-            SEXP idx = ostack_at(ctx, 1);
             SEXP val = ostack_at(ctx, 2);
+            SEXP idx = ostack_at(ctx, 1);
+            SEXP idx2 = ostack_at(ctx, 0);
 
             SEXP args = CONS_NR(idx2, R_NilValue);
             args = CONS_NR(idx, args);
@@ -2097,14 +2110,14 @@ SEXP evalRirCode(Code* c, Context* ctx, EnvironmentProxy* ep) {
         }
 
         INSTRUCTION(subassign1_) {
-            SEXP val = ostack_at(ctx, 2);
+            SEXP vec = ostack_at(ctx, 2);
             SEXP idx = ostack_at(ctx, 1);
-            SEXP orig = ostack_at(ctx, 0);
+            SEXP val = ostack_at(ctx, 0);
 
-            INCREMENT_NAMED(orig);
+            INCREMENT_NAMED(vec);
             SEXP args = CONS_NR(val, R_NilValue);
             args = CONS_NR(idx, args);
-            args = CONS_NR(orig, args);
+            args = CONS_NR(vec, args);
             PROTECT(args);
             res =
                 do_subassign_dflt(R_NilValue, R_SubassignSym, args, ep->env());
@@ -2116,8 +2129,8 @@ SEXP evalRirCode(Code* c, Context* ctx, EnvironmentProxy* ep) {
         }
 
         INSTRUCTION(extract2_1_) {
-            SEXP idx = ostack_at(ctx, 0);
             SEXP val = ostack_at(ctx, 1);
+            SEXP idx = ostack_at(ctx, 0);
             int i = -1;
 
             if (getAttrib(val, R_NamesSymbol) != R_NilValue ||
@@ -2194,9 +2207,9 @@ SEXP evalRirCode(Code* c, Context* ctx, EnvironmentProxy* ep) {
         }
 
         INSTRUCTION(extract2_2_) {
-            SEXP idx2 = ostack_at(ctx, 0);
-            SEXP idx = ostack_at(ctx, 1);
             SEXP val = ostack_at(ctx, 2);
+            SEXP idx = ostack_at(ctx, 1);
+            SEXP idx2 = ostack_at(ctx, 0);
 
             SEXP args = CONS_NR(idx2, R_NilValue);
             args = CONS_NR(idx, args);
@@ -2211,16 +2224,16 @@ SEXP evalRirCode(Code* c, Context* ctx, EnvironmentProxy* ep) {
         }
 
         INSTRUCTION(subassign2_) {
-            SEXP val = ostack_at(ctx, 2);
+            SEXP vec = ostack_at(ctx, 2);
             SEXP idx = ostack_at(ctx, 1);
-            SEXP orig = ostack_at(ctx, 0);
+            SEXP val = ostack_at(ctx, 0);
 
             unsigned targetI = readImmediate();
             advanceImmediate();
 
             // Fast case
-            if (!MAYBE_SHARED(orig)) {
-                SEXPTYPE vectorT = TYPEOF(orig);
+            if (!MAYBE_SHARED(vec)) {
+                SEXPTYPE vectorT = TYPEOF(vec);
                 SEXPTYPE valT = TYPEOF(val);
                 SEXPTYPE idxT = TYPEOF(idx);
 
@@ -2257,18 +2270,18 @@ SEXP evalRirCode(Code* c, Context* ctx, EnvironmentProxy* ep) {
                                 idx_ = *INTEGER(idx) - 1;
                         }
 
-                        if (idx_ >= 0 && idx_ < XLENGTH(orig)) {
+                        if (idx_ >= 0 && idx_ < XLENGTH(vec)) {
                             switch (vectorT) {
                             case REALSXP:
-                                REAL(orig)[idx_] = valT == REALSXP
+                                REAL(vec)[idx_] = valT == REALSXP
                                                        ? *REAL(val)
                                                        : (double)*INTEGER(val);
                                 break;
                             case INTSXP:
-                                INTEGER(orig)[idx_] = *INTEGER(val);
+                                INTEGER(vec)[idx_] = *INTEGER(val);
                                 break;
                             case VECSXP:
-                                SET_VECTOR_ELT(orig, idx_, val);
+                                SET_VECTOR_ELT(vec, idx_, val);
                                 break;
                             }
                             ostack_popn(ctx, 3);
@@ -2281,10 +2294,10 @@ SEXP evalRirCode(Code* c, Context* ctx, EnvironmentProxy* ep) {
                             if (target != R_NilValue && *pc == Opcode::stvar_ &&
                                 *(int*)(pc - sizeof(int)) == *(int*)(pc + 1)) {
                                 pc = pc + sizeof(int) + 1;
-                                if (NAMED(orig) == 0)
-                                    SET_NAMED(orig, 1);
+                                if (NAMED(vec) == 0)
+                                    SET_NAMED(vec, 1);
                             } else {
-                                ostack_push(ctx, orig);
+                                ostack_push(ctx, vec);
                             }
                             NEXT();
                         }
@@ -2292,10 +2305,10 @@ SEXP evalRirCode(Code* c, Context* ctx, EnvironmentProxy* ep) {
                 }
             }
 
-            INCREMENT_NAMED(orig);
+            INCREMENT_NAMED(vec);
             SEXP args = CONS_NR(val, R_NilValue);
             args = CONS_NR(idx, args);
-            args = CONS_NR(orig, args);
+            args = CONS_NR(vec, args);
             PROTECT(args);
             res = do_subassign2_dflt(R_NilValue, R_Subassign2Sym, args,
                                      ep->env());
