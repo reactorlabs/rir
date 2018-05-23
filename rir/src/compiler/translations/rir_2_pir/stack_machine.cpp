@@ -52,57 +52,62 @@ void StackMachine::runCurrentBC(Rir2Pir& rir2pir, Builder& insert) {
     Value* y;
     BC bc = this->getCurrentBC();
     switch (bc.bc) {
+
     case Opcode::push_:
         push(insert(new LdConst(bc.immediateConst())));
         break;
+
     case Opcode::ldvar_:
         v = insert(new LdVar(bc.immediateConst(), env));
         push(insert(new Force(v)));
         break;
+
     case Opcode::stvar_:
         v = pop();
         insert(new StVar(bc.immediateConst(), v, env));
         break;
+
     case Opcode::ldvar_super_:
         insert(new LdVarSuper(bc.immediateConst(), env));
         break;
+
     case Opcode::stvar_super_:
         v = pop();
         insert(new StVarSuper(bc.immediateConst(), v, env));
         break;
+
     case Opcode::asbool_:
     case Opcode::aslogical_:
         push(insert(new AsLogical(pop())));
         break;
+
     case Opcode::ldfun_:
         push(insert(new LdFun(bc.immediateConst(), env)));
         break;
+
     case Opcode::guard_fun_:
         std::cout << "warn: guard ignored "
                   << CHAR(PRINTNAME(
                          rir::Pool::get(bc.immediate.guard_fun_args.name)))
                   << "\n";
         break;
+
     case Opcode::swap_:
         x = pop();
         y = pop();
         push(x);
         push(y);
         break;
+
     case Opcode::dup_:
         push(top());
         break;
+
     case Opcode::dup2_:
-        x = at(0);
-        y = at(1);
-        push(y);
-        push(x);
+        push(at(1));
+        push(at(1));
         break;
-    case Opcode::pull_: {
-        size_t i = bc.immediate.i;
-        push(at(i));
-        break;
-    }
+
     case Opcode::close_: {
         Value* srcref = pop();
         Value* body = pop();
@@ -110,11 +115,14 @@ void StackMachine::runCurrentBC(Rir2Pir& rir2pir, Builder& insert) {
         push(insert(new MkCls(formals, body, srcref, env)));
         break;
     }
+
     case Opcode::nop_:
         break;
+
     case Opcode::pop_:
         pop();
         break;
+
     case Opcode::call_: {
         unsigned n = bc.immediate.call_args.nargs;
         rir::CallSite* cs = bc.callSite(srcFunction->body());
@@ -181,6 +189,7 @@ void StackMachine::runCurrentBC(Rir2Pir& rir2pir, Builder& insert) {
         }
         break;
     }
+
     case Opcode::promise_: {
         unsigned promi = bc.immediate.i;
         rir::Code* promiseCode = srcFunction->codeAt(promi);
@@ -201,6 +210,7 @@ void StackMachine::runCurrentBC(Rir2Pir& rir2pir, Builder& insert) {
         push(insert(new MkArg(prom, val, env)));
         break;
     }
+
     case Opcode::static_call_stack_: {
         unsigned n = bc.immediate.call_args.nargs;
         rir::CallSite* cs = bc.callSite(srcFunction->body());
@@ -231,6 +241,7 @@ void StackMachine::runCurrentBC(Rir2Pir& rir2pir, Builder& insert) {
         }
         break;
     }
+
     case Opcode::seq_: {
         auto step = pop();
         auto stop = pop();
@@ -238,6 +249,7 @@ void StackMachine::runCurrentBC(Rir2Pir& rir2pir, Builder& insert) {
         push(insert(new Seq(start, stop, step)));
         break;
     }
+
     case Opcode::for_seq_size_:
         push(insert(new ForSeqSize(top())));
         break;
@@ -313,6 +325,7 @@ void StackMachine::runCurrentBC(Rir2Pir& rir2pir, Builder& insert) {
         BINOP(Eq, eq_);
         BINOP(Neq, ne_);
 #undef BINOP
+
 #define UNOP(Name, Op)                                                         \
     case Opcode::Op: {                                                         \
         v = pop();                                                             \
@@ -330,16 +343,27 @@ void StackMachine::runCurrentBC(Rir2Pir& rir2pir, Builder& insert) {
         push(insert(new Is(bc.immediate.i, pop())));
         break;
 
-    case Opcode::pick_:
-        push(at(bc.immediate.i));
+    case Opcode::pull_: {
+        size_t i = bc.immediate.i;
+        push(at(i));
         break;
+    }
 
-    case Opcode::put_:
+    case Opcode::pick_: {
+        x = at(bc.immediate.i);
+        for (int i = bc.immediate.i; i > 0; --i)
+            set(i, at(i - 1));
+        set(0, x);
+        break;
+    }
+
+    case Opcode::put_: {
         x = top();
         for (size_t i = 0; i < bc.immediate.i - 1; ++i)
             set(i, at(i + 1));
         set(bc.immediate.i, x);
         break;
+    }
 
     // TODO implement!
     // (silently ignored)
@@ -422,7 +446,7 @@ bool StackMachine::doMerge(Opcode* trg, Builder& builder, StackMachine* other) {
     assert(stack_size() == other->stack_size());
 
     for (size_t i = 0; i < stack_size(); ++i) {
-        Phi* p = Phi::Cast(other->at(i));
+        Phi* p = Phi::Cast(other->stack.at(i));
         assert(p);
         Value* incom = stack.at(i);
         if (incom != p) {

@@ -259,6 +259,7 @@ Value* Rir2Pir::translate() {
         }
     });
 
+
     InsertCast c(insert.code->entry);
     c();
 
