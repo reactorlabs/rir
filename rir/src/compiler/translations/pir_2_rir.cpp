@@ -591,9 +591,7 @@ class SSAAllocator {
             switch (i->tag) {
             case Tag::MkArg: {
                 // just the eager value, if it's not missing
-                auto mkarg = MkArg::Cast(i);
-                if (mkarg->hasEagerArg())
-                    action(mkarg->eagerArg());
+                MkArg::Cast(i)->ifEager([&](Value* arg) { action(arg); });
                 break;
             }
             case Tag::Call: {
@@ -874,9 +872,10 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 });
                 // TODO: handle eager values; for now, if eager, just throw it
                 // away
-                auto mkarg = MkArg::Cast(instr);
-                if (mkarg->hasEagerArg() && alloc.onStack(mkarg->eagerArg()))
-                    cs << BC::pop();
+                MkArg::Cast(instr)->ifEager([&](Value* arg) {
+                    if (alloc.onStack(arg))
+                        cs << BC::pop();
+                });
                 break;
             }
             case Tag::Seq: {

@@ -518,10 +518,16 @@ class FLI(MkArg, 2, Effect::None, EnvAccess::Capture) {
     MkArg(Value* v, Value* env)
         : FixedLenInstruction(RType::prom, {{PirType::val()}}, {{v}}, env),
           prom(nullptr) {}
+
     typedef std::function<void(Promise*)> PromMaybe;
+    typedef std::function<void(Value*)> EagerMaybe;
 
     Value* eagerArg() { return arg<0>().val(); }
-    bool hasEagerArg() { return eagerArg() != Missing::instance(); }
+
+    void ifEager(EagerMaybe maybe) {
+        if (eagerArg() != Missing::instance())
+            maybe(eagerArg());
+    }
 
     void printArgs(std::ostream& out) override;
 };
@@ -724,7 +730,7 @@ struct CallInstructionI {
         eachCallArg([&](Value* arg) {
             auto mkarg = MkArg::Cast(arg);
             if (mkarg) {
-                if (!mkarg->hasEagerArg())
+                if (mkarg->eagerArg() == Missing::instance())
                     res = false;
             } else {
                 assert(false && "Call expects MkArg arguments");
