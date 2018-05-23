@@ -84,4 +84,4 @@ void initializeRuntime(CompilerCallback compiler, OptimizerCallback optimizer) {
 }
 
 Context* globalContext() { return globalContext_; }
-rir::Configurations* pirConfigurations(){ return configurations; }
+rir::Configurations* pirConfigurations() { return configurations; }

@@ -22,7 +22,7 @@ namespace rir {
 namespace pir {
 
 Rir2PirCompiler::Rir2PirCompiler(Module* module) : RirCompiler(module) {
-    for (auto optimization: pirConfigurations()->pirOptimizations()) {
+    for (auto optimization : pirConfigurations()->pirOptimizations()) {
         translations.push_back(optimization->translator);
     }
 }

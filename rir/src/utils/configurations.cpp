@@ -1,5 +1,5 @@
-#include <sstream>
 #include <iostream>
+#include <sstream>
 
 #include "configurations.h"
 
@@ -12,11 +12,12 @@
 #include "../compiler/opt/scope_resolution.h"
 
 namespace rir {
-    
-void Configurations::parseINIFile() {    
+
+void Configurations::parseINIFile() {
     INIReader reader(".pir/configuration.ini");
     if (reader.ParseError() < 0) {
-        std::cout << "Can't load optimizations.ini file, we resort to default optimizations'\n";
+        //std::cout << "Can't load optimizations.ini file, we resort to default "
+        //             "optimizations'\n";
         return defaultOptimizations();
     }
     read(reader, "globalValueNumber");
@@ -28,11 +29,11 @@ void Configurations::parseINIFile() {
     string cleanups = reader.Get("optimizations", "cleanup", "UNKNOWN");
     std::stringstream data(cleanups);
     std::string order;
-    while(std::getline(data, order, ','))
-    {
-        optimizations.insert(new Optimization(new pir::Cleanup(), std::stoi( order )));
+    while (std::getline(data, order, ',')) {
+        optimizations.insert(
+            new Optimization(new pir::Cleanup(), std::stoi(order)));
     }
-}    
+}
 
 void Configurations::defaultOptimizations() {
     optimizations.insert(new Optimization(new pir::ForceDominance(), 1));
@@ -48,20 +49,24 @@ void Configurations::defaultOptimizations() {
 void Configurations::read(INIReader& reader, string optimizationName) {
     short order = reader.GetInteger("optimizations", optimizationName, 0);
     if (order) {
-        if (!optimizationName.compare("globalValueNumber")){
-            //optimizations.insert(new Optimization(new pir::Cleanup(), order ));
-        } else if (!optimizationName.compare("forceDominance")){
-            optimizations.insert(new Optimization(new pir::ForceDominance(), order ));
-        } else if (!optimizationName.compare("escapeAnalysis")){
-            optimizations.insert(new Optimization(new pir::ScopeResolution(), order ));
-        } else if (!optimizationName.compare("delayInstructions")){
-            optimizations.insert(new Optimization(new pir::DelayInstr(), order ));
-        } else if (!optimizationName.compare("elideEnvironments")){
-            optimizations.insert(new Optimization(new pir::ElideEnv(), order ));
-        } else if (!optimizationName.compare("delayEnvironments")){
-            optimizations.insert(new Optimization(new pir::DelayEnv(), order ));
+        if (optimizationName == "globalValueNumber") {
+            // optimizations.insert(new Optimization(new pir::Cleanup(), order
+            // ));
+        } else if (optimizationName == "forceDominance") {
+            optimizations.insert(
+                new Optimization(new pir::ForceDominance(), order));
+        } else if (optimizationName == "escapeAnalysis") {
+            optimizations.insert(
+                new Optimization(new pir::ScopeResolution(), order));
+        } else if (optimizationName == "delayInstructions") {
+            optimizations.insert(
+                new Optimization(new pir::DelayInstr(), order));
+        } else if (optimizationName == "elideEnvironments") {
+            optimizations.insert(new Optimization(new pir::ElideEnv(), order));
+        } else if (optimizationName == "delayEnvironments") {
+            optimizations.insert(new Optimization(new pir::DelayEnv(), order));
         }
     }
 }
 
-}    
+} // namespace rir
