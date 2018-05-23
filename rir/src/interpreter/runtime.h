@@ -1,6 +1,7 @@
 #ifndef RIR_INTERPRETER_RUNTIME_H
 #define RIR_INTERPRETER_RUNTIME_H
 
+#include "utils/configurations.h"
 #include "../config.h"
 #include "interp_data.h"
 #include "interp_context.h"
@@ -30,5 +31,6 @@ C_OR_CPP void initializeRuntime(CompilerCallback compiler,
   shared - it is not that we add stuff to them often.
  */
 C_OR_CPP Context* globalContext();
+rir::Configurations* pirConfigurations();
 
 #endif

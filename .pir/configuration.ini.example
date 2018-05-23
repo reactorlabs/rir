@@ -1,0 +1,10 @@
+[optimizations]
+;Key is optimization, value is the order in which the optimization is used. 0 means the optimization is disabled
+globalValueNumber=1
+forceDominance=2
+escapeAnalysis=3
+delayInstructions=4
+elideEnvironments=5
+delayEnvironments=6
+;Describes after which optimizations a cleanup must be run. Repeat for more than one cleanup pass.
+cleanup=2,2,5
