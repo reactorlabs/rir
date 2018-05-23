@@ -4,6 +4,7 @@
 #include "R/r.h"
 #include "instruction_list.h"
 #include "pir.h"
+#include "singleton_values.h"
 #include "tag.h"
 #include "value.h"
 
@@ -130,21 +131,12 @@ class Instruction : public Value {
     virtual const InstrArg& arg(size_t pos) const = 0;
 
     typedef std::function<void(Value*)> ArgumentValueIterator;
-    typedef std::function<void(Instruction*)> ArgumentInstructionIterator;
     typedef std::function<void(const InstrArg&)> ArgumentIterator;
     typedef std::function<void(InstrArg&)> MutableArgumentIterator;
 
     void eachArg(Instruction::ArgumentValueIterator it) const {
         for (size_t i = 0; i < nargs(); ++i)
             it(arg(i).val());
-    }
-
-    void eachInstructionArg(Instruction::ArgumentInstructionIterator it) const {
-        for (size_t i = 0; i < nargs(); ++i) {
-            auto in = Instruction::Cast(arg(i).val());
-            if (in)
-                it(in);
-        }
     }
 
     void eachArg(Instruction::ArgumentIterator it) const {
@@ -157,13 +149,9 @@ class Instruction : public Value {
             it(arg(i));
     }
 
-    void eachStackArg(Instruction::ArgumentInstructionIterator it) const {
-        for (int i = nargs() - 1; i >= 0; --i) {
-            // skip non-instructions (ie. static environments)
-            auto instr = Instruction::Cast(arg(i).val());
-            if (instr)
-                it(instr);
-        }
+    void eachArgRev(Instruction::ArgumentValueIterator it) const {
+        for (size_t i = 0; i < nargs(); ++i)
+            it(arg(nargs() - 1 - i).val());
     }
 
     static Instruction* Cast(Value* v) {
@@ -342,9 +330,9 @@ class VarLenInstruction
     typedef InstructionImplementation<ITAG, Base, EFFECT, ENV,
                                       std::vector<InstrArg>>
         Super;
-    using Super::nargs;
     using Super::arg;
     using Super::args_;
+    using Super::nargs;
 
     Value* env() const override {
         // TODO find a better way
@@ -532,6 +520,9 @@ class FLI(MkArg, 2, Effect::None, EnvAccess::Capture) {
           prom(nullptr) {}
     typedef std::function<void(Promise*)> PromMaybe;
 
+    Value* eagerArg() { return arg<0>().val(); }
+    bool hasEagerArg() { return eagerArg() != Missing::instance(); }
+
     void printArgs(std::ostream& out) override;
 };
 
@@ -600,7 +591,8 @@ class FLI(Subassign2_1D, 3, Effect::None, EnvAccess::None) {
         : FixedLenInstruction(
               PirType::val(),
               {{PirType::val(), PirType::val(), PirType::val()}},
-              {{vec, index, value}}), sym(sym) {}
+              {{vec, index, value}}),
+          sym(sym) {}
     SEXP sym;
 };
 
@@ -727,6 +719,19 @@ SAFE_UNOP(Length);
 struct CallInstructionI {
     virtual size_t nCallArgs() = 0;
     virtual void eachCallArg(Instruction::ArgumentValueIterator it) = 0;
+    virtual bool allArgsEager() {
+        bool res = true;
+        eachCallArg([&](Value* arg) {
+            auto mkarg = MkArg::Cast(arg);
+            if (mkarg) {
+                if (!mkarg->hasEagerArg())
+                    res = false;
+            } else {
+                assert(false && "Call expects MkArg arguments");
+            }
+        });
+        return res;
+    }
 };
 
 // Default call instruction. Closure expression (ie. expr left of `(`) is
@@ -812,6 +817,8 @@ class VLI(StaticEagerCall, Effect::Any, EnvAccess::Leak),
             it(arg(i + callArgOffset).val());
         }
     }
+
+    bool allArgsEager() override { return true; }
 
     void printArgs(std::ostream&) override;
 };
@@ -931,20 +938,10 @@ class VLI(Phi, Effect::None, EnvAccess::None) {
         VarLenInstruction::pushArg(arg);
     }
     typedef std::function<void(BB* bb, Value*)> PhiArgumentIterator;
-    typedef std::function<void(BB* bb, Instruction*)>
-        PhiArgumentInstructionIterator;
 
     void eachArg(PhiArgumentIterator it) const {
         for (size_t i = 0; i < nargs(); ++i)
             it(input[i], arg(i).val());
-    }
-
-    void eachInstructionArg(PhiArgumentInstructionIterator it) const {
-        for (size_t i = 0; i < nargs(); ++i) {
-            auto in = Instruction::Cast(arg(i).val());
-            if (in)
-                it(input[i], in);
-        }
     }
 };
 

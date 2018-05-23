@@ -285,7 +285,7 @@ class SSAAllocator {
                 size_t newStackSize = stack.size();
                 bool foundAll = true;
                 auto check = stack.rbegin();
-                i->eachStackArg([&](Instruction* arg) {
+                StackArgVisitor::run(i, [&](Value* arg) {
                     while (check != stack.rend() && *check != arg) {
                         ++check;
                         --newStackSize;
@@ -309,8 +309,8 @@ class SSAAllocator {
                 // A, C to be in a stack slot, discard B (it will become
                 // a local variable later) and resize the stack to [xxx]
                 stack.resize(newStackSize);
-                i->eachStackArg(
-                    [&](Instruction* arg) { allocation[arg] = stackSlot; });
+                StackArgVisitor::run(
+                    i, [&](Value* arg) { allocation[arg] = stackSlot; });
             };
 
             for (auto i : *bb) {
@@ -418,7 +418,16 @@ class SSAAllocator {
             }
             out << "\n";
         });
-        out << "======= End Allocation ========\n";
+        out << "dead: ";
+        BreadthFirstVisitor::run(code->entry, [&](BB* bb) {
+            for (auto i : *bb) {
+                if (allocation.count(i) == 0) {
+                    i->printRef(out);
+                    out << "   ";
+                }
+            }
+        });
+        out << "\nslots: " << slots() << "\n======= End Allocation ========\n";
     }
 
     void verify() {
@@ -434,7 +443,10 @@ class SSAAllocator {
                 Phi* phi = Phi::Cast(i);
                 if (phi) {
                     SlotNumber slot = allocation.at(phi);
-                    phi->eachInstructionArg([&](BB*, Instruction* i) {
+                    phi->eachArg([&](BB*, Value* arg) {
+                        auto i = Instruction::Cast(arg);
+                        if (!i)
+                            return;
                         if (allocation[i] != slot) {
                             std::cerr << "REG alloc fail: ";
                             phi->printRef(std::cerr);
@@ -458,7 +470,7 @@ class SSAAllocator {
                         stack.pop_back();
                 } else {
                     // Make sure all our args are live
-                    i->eachStackArg([&](Instruction* a) {
+                    StackArgVisitor::run(i, [&](Value* a) {
                         if (!allocation.count(a)) {
                             std::cerr << "REG alloc fail: ";
                             i->printRef(std::cerr);
@@ -563,6 +575,76 @@ class SSAAllocator {
         assert(i);
         return allocation.count(i) == 0;
     }
+
+  private:
+    struct StackArgVisitor {
+        typedef std::function<void(Value*)> ValueAction;
+        static void run(Instruction* i, ValueAction action) {
+            auto runReverseArgs = [&](CallInstructionI* call) {
+                std::vector<Value*> args(call->nCallArgs());
+                call->eachCallArg([&](Value* a) { args.push_back(a); });
+                while (!args.empty()) {
+                    action(args.back());
+                    args.pop_back();
+                }
+            };
+            switch (i->tag) {
+            case Tag::MkArg: {
+                // just the eager value, if it's not missing
+                auto mkarg = MkArg::Cast(i);
+                if (mkarg->hasEagerArg())
+                    action(mkarg->eagerArg());
+                break;
+            }
+            case Tag::Call: {
+                auto call = Call::Cast(i);
+                if (call->allArgsEager())
+                    runReverseArgs(call);
+                action(Call::Cast(i)->cls());
+                break;
+            }
+            case Tag::StaticCall: {
+                auto call = StaticCall::Cast(i);
+                if (call->allArgsEager())
+                    runReverseArgs(call);
+                break;
+            }
+            case Tag::Phi: {
+                // do nothing - stack-allocated phi's are handled elsewhere
+                break;
+            }
+            case Tag::MkEnv: {
+                // expects the parent on stack; only allocate if non-static
+                auto parent = MkEnv::Cast(i)->parent();
+                if (!Env::isStaticEnv(parent))
+                    action(parent);
+                // then fall through to the default and do all locals in reverse
+            }
+            // default is ok for these
+            case Tag::StaticEagerCall:
+            case Tag::CallBuiltin:
+            case Tag::CallSafeBuiltin:
+            default: {
+                // skip env if they have it and go over the rest in reverse
+                i->eachArgRev([&](Value* arg) {
+                    if (i->hasEnv() && i->env() == arg)
+                        return;
+                    action(arg);
+                });
+                break;
+            }
+            case Tag::MkCls:
+            case Tag::Deopt:
+                assert(false && "what to do with these??");
+            // values, not instructions
+            case Tag::Missing:
+            case Tag::Env:
+            case Tag::Nil:
+            case Tag::_UNUSED_:
+                assert(false && "not an instruction");
+            }
+        }
+    };
 };
 
 class Context {
@@ -783,7 +865,6 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 return;
             }
             case Tag::MkArg: {
-                // TODO: handle eager values
                 BreadthFirstVisitor::run(bb, [&](Instruction* i) {
                     i->eachArg([&](Value* arg) {
                         if (arg == i)
@@ -791,6 +872,11 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                                    "MkArg used in a non-call instruction");
                     });
                 });
+                // TODO: handle eager values; for now, if eager, just throw it
+                // away
+                auto mkarg = MkArg::Cast(instr);
+                if (mkarg->hasEagerArg() && alloc.onStack(mkarg->eagerArg()))
+                    cs << BC::pop();
                 break;
             }
             case Tag::Seq: {
@@ -977,15 +1063,20 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 setEnv(it, call->env());
                 load(it, call->cls());
 
-                std::vector<FunIdxT> callArgs;
-                call->eachCallArg([&](Value* arg) {
-                    // TODO: for now, ignore the eager value in MkArg
-                    auto mkarg = MkArg::Cast(arg);
-                    callArgs.push_back(promises[mkarg->prom]);
-                });
-
-                cs.insertCall(Opcode::call_, callArgs, {},
-                              Pool::get(call->srcIdx));
+                if (call->allArgsEager()) {
+                    call->eachCallArg([&](Value* arg) { load(it, arg); });
+                    cs.insertStackCall(Opcode::call_stack_, call->nCallArgs(),
+                                       {}, Pool::get(call->srcIdx));
+                } else {
+                    std::vector<FunIdxT> callArgs;
+                    call->eachCallArg([&](Value* arg) {
+                        // TODO: for now, ignore the eager value in MkArg
+                        auto mkarg = MkArg::Cast(arg);
+                        callArgs.push_back(promises[mkarg->prom]);
+                    });
+                    cs.insertCall(Opcode::call_, callArgs, {},
+                                  Pool::get(call->srcIdx));
+                }
                 store(it, call);
                 break;
             }
@@ -994,18 +1085,23 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 setEnv(it, call->env());
 
                 compiler.compile(call->cls(), call->origin());
-                // push callee - this stores it into constant pool - discuss!
+                // push callee - this stores it into constant pool
                 cs << BC::push(call->origin());
 
-                std::vector<FunIdxT> callArgs;
-                call->eachCallArg([&](Value* arg) {
-                    // TODO: for now, ignore the eager value in MkArg
-                    auto mkarg = MkArg::Cast(arg);
-                    callArgs.push_back(promises[mkarg->prom]);
-                });
-
-                cs.insertCall(Opcode::call_, callArgs, {},
-                              Pool::get(call->srcIdx));
+                if (call->allArgsEager()) {
+                    call->eachCallArg([&](Value* arg) { load(it, arg); });
+                    cs.insertStackCall(Opcode::call_stack_, call->nCallArgs(),
+                                       {}, Pool::get(call->srcIdx));
+                } else {
+                    std::vector<FunIdxT> callArgs;
+                    call->eachCallArg([&](Value* arg) {
+                        // TODO: for now, ignore the eager value in MkArg
+                        auto mkarg = MkArg::Cast(arg);
+                        callArgs.push_back(promises[mkarg->prom]);
+                    });
+                    cs.insertCall(Opcode::call_, callArgs, {},
+                                  Pool::get(call->srcIdx));
+                }
                 store(it, call);
                 break;
             }
@@ -1043,19 +1139,28 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
             case Tag::MkEnv: {
                 auto mkenv = MkEnv::Cast(instr);
                 loadEnv(it, mkenv->parent());
-                cs << BC::makeEnv() << BC::setEnv();
-                currentEnv = mkenv;
+                cs << BC::makeEnv();
+                store(it, mkenv);
+
                 // bind all args
                 // TODO: maybe later have a separate instruction for this?
+                setEnv(it, mkenv);
                 mkenv->eachLocalVar([&](SEXP name, Value* val) {
                     load(it, val);
                     cs << BC::stvar(name);
                 });
-                cs << BC::getEnv();
-                store(it, mkenv);
                 break;
             }
             case Tag::Phi: {
+                // Phi functions are no-ops, because after allocation on CSSA
+                // form, all arguments and the funcion itself are allocated to
+                // the same place
+                auto phi = Phi::Cast(instr);
+                phi->eachArg([&](BB*, Value* arg) {
+                    assert(((alloc.onStack(phi) && alloc.onStack(arg)) ||
+                            (alloc[phi] == alloc[arg])) &&
+                           "Phi inputs must all be allocated in 1 slot");
+                });
                 break;
             }
             case Tag::Deopt: {
@@ -1149,7 +1254,6 @@ rir::Function* Pir2Rir::finalize() {
         if (code.promise(i))
             Optimizer::optimize(*code.promise(i));
     Optimizer::optimize(code);
-
     auto opt = code.finalize();
 
 #ifdef ENABLE_SLOWASSERT
