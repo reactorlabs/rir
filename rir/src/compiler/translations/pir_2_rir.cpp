@@ -793,10 +793,11 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 auto seq = sz->arg(0).val();
                 load(it, seq);
                 cs << BC::forSeqSize();
-                // hack to fix for_seq_size_ not popping the sequence...
-                // TODO: find another way
-                if (Instruction::Cast(seq)->hasSingleUse() == sz && alloc.onStack(seq))
-                    cs << BC::swap() << BC::pop();
+                // TODO: currently we always pop the sequence, since we cannot
+                // deal with instructions that do not pop the value after use.
+                // If it is used in a later instruction, it will be loaded
+                // from a local variable again.
+                cs << BC::swap() << BC::pop();
                 store(it, instr);
                 break;
             }
