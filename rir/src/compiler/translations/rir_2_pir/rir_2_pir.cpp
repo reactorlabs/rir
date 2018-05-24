@@ -40,16 +40,47 @@ struct Matcher {
         return true;
     }
 };
+
+void recoverCFG(rir::Code* srcCode, rir::Function* srcFunction,
+                std::unordered_map<Opcode*, StackMachine>& mergepoint) {
+    std::unordered_map<Opcode*, std::vector<Opcode*>> incom;
+    // Mark incoming jmps
+    for (auto pc = srcCode->code(); pc != srcCode->endCode();) {
+        BC bc = BC::decode(pc);
+        if (bc.isJmp()) {
+            incom[bc.jmpTarget(pc)].push_back(pc);
+        }
+        BC::advance(&pc);
+    }
+    // Mark falltrough to label
+    for (auto pc = srcCode->code(); pc != srcCode->endCode();) {
+        BC bc = BC::decode(pc);
+        if (!bc.isUncondJmp() && !bc.isReturn()) {
+            Opcode* next = BC::next(pc);
+            if (incom.count(next))
+                incom[next].push_back(pc);
+        }
+        BC::advance(&pc);
+    }
+    // Create mergepoints
+    for (auto m : incom)
+        if (std::get<1>(m).size() > 1)
+            mergepoint.emplace(m.first,
+                               StackMachine(srcFunction, srcCode, m.first));
+}
+
 } // namespace
 
 namespace rir {
 namespace pir {
 
-Value* Rir2Pir::translate() {
-    assert(!done);
-    done = true;
+Value* Rir2Pir::translate(rir::Code* srcCode, Builder& insert) const {
+    assert(!finalized);
 
-    recoverCFG(srcCode);
+    std::unordered_map<Opcode*, StackMachine> mergepoint;
+    std::vector<ReturnSite> results;
+
+    recoverCFG(srcCode, srcFunction, mergepoint);
 
     std::deque<StackMachine> worklist;
 
@@ -163,7 +194,7 @@ Value* Rir2Pir::translate() {
             default:
                 assert(false);
             }
-            addReturn(ReturnSite(insert.bb, state.pop()));
+            results.push_back(ReturnSite(insert.bb, state.pop()));
             assert(state.empty());
             if (worklist.empty()) {
                 state.clear();
@@ -198,7 +229,7 @@ Value* Rir2Pir::translate() {
             DispatchTable* dt = DispatchTable::unpack(code);
             rir::Function* function = dt->first();
 
-            Closure* innerF = cmp.compileFunction(function, fmlsNames);
+            Closure* innerF = compiler.compileFunction(function, fmlsNames);
 
             state.push(
                 insert(new MkFunCls(innerF, insert.env, fmls, code, src)));
@@ -234,9 +265,15 @@ Value* Rir2Pir::translate() {
     }
 
     results.clear();
-    compileReturn(res);
 
-    // CFG cfg(insert.code->entry);
+    return res;
+}
+
+void Rir2Pir::finalize(Value* ret, Builder& insert) {
+    assert(!finalized);
+    assert(ret);
+    assert(!insert.bb->next0 && !insert.bb->next1 &&
+           "Builder needs to be on an exit-block to insert return");
 
     // Remove excessive Phis
     Visitor::run(insert.code->entry, [&](BB* bb) {
@@ -248,8 +285,8 @@ Value* Rir2Pir::translate() {
                 continue;
             }
             if (p->nargs() == 1) {
-                if (p == res)
-                    res = p->arg(0).val();
+                if (p == ret)
+                    ret = p->arg(0).val();
                 p->replaceUsesWith(p->arg(0).val());
                 it = bb->remove(it);
                 continue;
@@ -259,42 +296,13 @@ Value* Rir2Pir::translate() {
         }
     });
 
+    insert(new Return(ret));
 
     InsertCast c(insert.code->entry);
     c();
 
-    return res;
+    finalized = true;
 }
 
-void Rir2Pir::recoverCFG(rir::Code* srcCode) {
-    std::unordered_map<Opcode*, std::vector<Opcode*>> incom;
-    // Mark incoming jmps
-    for (auto pc = srcCode->code(); pc != srcCode->endCode();) {
-        BC bc = BC::decode(pc);
-        if (bc.isJmp()) {
-            incom[bc.jmpTarget(pc)].push_back(pc);
-        }
-        BC::advance(&pc);
-    }
-    // Mark falltrough to label
-    for (auto pc = srcCode->code(); pc != srcCode->endCode();) {
-        BC bc = BC::decode(pc);
-        if (!bc.isUncondJmp() && !bc.isReturn()) {
-            Opcode* next = BC::next(pc);
-            if (incom.count(next))
-                incom[next].push_back(pc);
-        }
-        BC::advance(&pc);
-    }
-    // Create mergepoints
-    for (auto m : incom) {
-        if (std::get<1>(m).size() > 1) {
-            mergepoint.emplace(m.first,
-                               StackMachine(srcFunction, srcCode, m.first));
-        }
-    }
-}
-
-void Rir2Pir::compileReturn(Value* res) { insert(new Return(res)); }
 } // namespace pir
 } // namespace rir

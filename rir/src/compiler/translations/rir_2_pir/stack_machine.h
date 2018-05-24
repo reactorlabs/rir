@@ -30,7 +30,7 @@ class StackMachine {
 
     typedef std::pair<BB*, Value*> ReturnSite;
     typedef std::function<void(ReturnSite)> ReturnMaybe;
-    void runCurrentBC(Rir2Pir& cmp, Builder&);
+    void runCurrentBC(const Rir2Pir& cmp, Builder&);
 
     void clear();
     bool empty();

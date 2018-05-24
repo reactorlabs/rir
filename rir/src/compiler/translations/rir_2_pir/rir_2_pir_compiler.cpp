@@ -56,9 +56,8 @@ Closure* Rir2PirCompiler::compileClosure(rir::Function* srcFunction,
             Builder builder(pirFunction, closureEnv);
 
             {
-                Rir2Pir rir2pir(*this, builder, srcFunction,
-                                srcFunction->body());
-                rir2pir.translate();
+                Rir2Pir rir2pir(*this, srcFunction);
+                rir2pir.compile(srcFunction->body(), builder);
                 if (isVerbose()) {
                     std::cout << " ========== Done compiling " << srcFunction
                               << "\n";
