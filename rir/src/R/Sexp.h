@@ -62,21 +62,20 @@ class MatchStatement {
 
 #define Case2(__M__type, __M__car_name)                                        \
     case (__M__type): {                                                        \
-        SEXP(__M__car_name) = CAR(__M__match_statement__.subject);
+        SEXP __M__car_name = CAR(__M__match_statement__.subject);
 
 #define Case3(__M__type, __M__car_name, __M__cdr_name)                         \
     case (__M__type): {                                                        \
-        SEXP(__M__car_name)                                                    \
-        __attribute__((unused)) = CAR(__M__match_statement__.subject);         \
-        SEXP(__M__cdr_name) = CDR(__M__match_statement__.subject);
+        SEXP __M__car_name __attribute__((unused)) =                           \
+            CAR(__M__match_statement__.subject);                               \
+        SEXP __M__cdr_name = CDR(__M__match_statement__.subject);
 
 #define Case4(__M__type, __M__car_name, __M__cdr_name, __M__tag_name)          \
     case (__M__type): {                                                        \
-        SEXP(__M__car_name)                                                    \
-        __attribute__((unused)) = CAR(__M__match_statement__.subject);         \
-        SEXP(__M__cdr_name)                                                    \
-        __attribute__((unused)) = CDR(__M__match_statement__.subject);         \
-        SEXP(__M__tag_name) = TAG(__M__match_statement__.subject);
-
+        SEXP __M__car_name __attribute__((unused)) =                           \
+            CAR(__M__match_statement__.subject);                               \
+        SEXP __M__cdr_name __attribute__((unused)) =                           \
+            CDR(__M__match_statement__.subject);                               \
+        SEXP __M__tag_name = TAG(__M__match_statement__.subject);
 
 #endif
