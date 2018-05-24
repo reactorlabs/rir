@@ -6,7 +6,6 @@ SEXP callSymbol;
 SEXP execName;
 SEXP promExecName;
 Context* globalContext_;
-rir::Configurations* configurations;
 
 DispatchTable* isValidDispatchTableSEXP(SEXP wrapper) {
     return isValidDispatchTableObject(wrapper);
@@ -24,9 +23,9 @@ Function* isValidFunctionSEXP(SEXP wrapper) {
 Function* isValidClosureSEXP(SEXP closure) {
     if (TYPEOF(closure) != CLOSXP)
         return nullptr;
-    if (!isValidDispatchTableObject(BODY(closure)))
-        return nullptr;
     DispatchTable* t = isValidDispatchTableObject(BODY(closure));
+    if (t == nullptr)
+        return nullptr;
     Function* f = t->first();
     if (f->info.magic != FUNCTION_MAGIC)
         return nullptr;
@@ -80,8 +79,6 @@ void initializeRuntime(CompilerCallback compiler, OptimizerCallback optimizer) {
     // initialize the global context
     globalContext_ = context_create(compiler, optimizer);
     registerExternalCode(rirEval_f, compiler, rirExpr);
-    configurations = new rir::Configurations();
 }
 
 Context* globalContext() { return globalContext_; }
-rir::Configurations* pirConfigurations() { return configurations; }
