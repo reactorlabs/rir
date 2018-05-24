@@ -13,25 +13,30 @@ struct Optimization {
 
     pir::PirTranslator* translator;
     short order;
+};
 
-    bool operator<(const Optimization& anotherOptimization) const {
-        auto T = [&](const Optimization& o) {
+struct OptmizationCmp {
+    bool operator()(const Optimization* opt,
+                    const Optimization* anotherOpt) const {
+        auto T = [&](const Optimization* o) {
             return std::tuple<unsigned, unsigned, string>(
-                o.order, o.translator->getName() == "cleanup" ? 0 : 1,
-                o.translator->getName());
+                o->order, o->translator->getName() == "cleanup" ? 1 : 0,
+                o->translator->getName());
         };
-        return T(*this) < T(anotherOptimization);
+        return T(opt) < T(anotherOpt);
     }
 };
 
 class Configurations {
   public:
     Configurations() { this->parseINIFile(); }
-    std::set<Optimization*>& pirOptimizations() { return optimizations; }
+    std::multiset<Optimization*, OptmizationCmp>& pirOptimizations() {
+        return optimizations;
+    }
     ~Configurations() { optimizations.clear(); }
 
   private:
-    std::set<Optimization*> optimizations;
+    std::multiset<Optimization*, OptmizationCmp> optimizations;
     void defaultOptimizations();
     void read(INIReader&, std::string);
     void parseINIFile();

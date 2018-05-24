@@ -28,11 +28,13 @@ void Configurations::parseINIFile() {
     read(reader, "elideEnvironments");
     read(reader, "delayEnvironments");
     string cleanups = reader.Get("optimizations", "cleanup", "UNKNOWN");
-    std::stringstream data(cleanups);
-    std::string order;
-    while (std::getline(data, order, ',')) {
-        optimizations.insert(
-            new Optimization(new pir::Cleanup(), std::stoi(order)));
+    if (cleanups != "UNKNOWN") {
+        std::stringstream data(cleanups);
+        std::string order;
+        while (std::getline(data, order, ',')) {
+            optimizations.insert(
+                new Optimization(new pir::Cleanup(), std::stoi(order)));
+        }
     }
 }
 
