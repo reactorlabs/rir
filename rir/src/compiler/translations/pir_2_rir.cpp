@@ -789,7 +789,14 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
             case Tag::ForSeqSize: {
                 // TODO: not tested
                 // make sure that the seq is at TOS? the instr doesn't push it!
+                auto sz = ForSeqSize::Cast(instr);
+                auto seq = sz->arg(0).val();
+                load(it, seq);
                 cs << BC::forSeqSize();
+                // hack to fix for_seq_size_ not popping the sequence...
+                // TODO: find another way
+                if (Instruction::Cast(seq)->hasSingleUse() == sz && alloc.onStack(seq))
+                    cs << BC::swap() << BC::pop();
                 store(it, instr);
                 break;
             }
