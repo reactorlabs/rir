@@ -236,7 +236,7 @@ bool checkPir2Rir(SEXP expected, SEXP result) {
 }
 
 extern "C" SEXP rir_eval(SEXP, SEXP);
-extern "C" SEXP pir_compile(SEXP);
+extern "C" SEXP pir_compile(SEXP, SEXP);
 
 bool testPir2Rir(std::string name, std::string fun, std::string args,
                  bool useSame = false, bool verbose = false) {
@@ -281,7 +281,7 @@ bool testPir2Rir(std::string name, std::string fun, std::string args,
         rCall = createRWrapperCall(wrapper);
     }
 
-    pir_compile(rirFun);
+    pir_compile(rirFun, R_FalseValue);
 
     auto after = p(Rf_eval(rCall, execEnv));
     if (verbose) {
