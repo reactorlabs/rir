@@ -11,35 +11,28 @@ namespace pir {
 
 class Rir2Pir {
   public:
-    Rir2Pir(Rir2PirCompiler& cmp, Builder& insert, rir::Function* srcFunction,
-            rir::Code* srcCode)
-        : insert(insert), cmp(cmp), srcFunction(srcFunction), srcCode(srcCode) {
+    Rir2Pir(Rir2PirCompiler& cmp, rir::Function* srcFunction)
+        : compiler(cmp), srcFunction(srcFunction) {}
+    Rir2Pir(const Rir2Pir& r2p) : Rir2Pir(r2p.compiler, r2p.srcFunction) {}
+
+    void compile(rir::Code* srcCode, Builder& insert) {
+        finalize(translate(srcCode, insert), insert);
     }
 
-    Value* translate();
-
-    typedef StackMachine::ReturnSite ReturnSite;
-    void addReturn(ReturnSite r) { results.push_back(r); }
-
-    Rir2PirCompiler& compiler() { return cmp; }
+    ~Rir2Pir() { assert(finalized); }
 
   private:
-    bool done = false;
+    Value* translate(rir::Code* srcCode, Builder& insert) const;
+    void finalize(Value*, Builder& insert);
 
-    Builder& insert;
-    Rir2PirCompiler& cmp;
+    bool finalized = false;
 
+    Rir2PirCompiler& compiler;
     rir::Function* srcFunction;
-    rir::Code* srcCode;
 
-    std::unordered_map<Opcode*, StackMachine> mergepoint;
-    std::vector<ReturnSite> results;
-
-    void recoverCFG(rir::Code*);
     bool doMerge(Opcode* trg);
-    virtual void compileReturn(Value*);
 
-    friend class RirInlinedPromise2Rir;
+    friend class StackMachine;
 };
 } // namespace pir
 } // namespace rir

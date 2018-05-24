@@ -6,7 +6,6 @@
 #include "ir/BC.h"
 #include "ir/Compiler.h"
 #include "rir_2_pir.h"
-#include "rir_inlined_promise_2_pir.h"
 
 namespace rir {
 namespace pir {
@@ -42,7 +41,7 @@ void StackMachine::set(size_t index, Value* value) {
     stack[stack_size() - index - 1] = value;
 }
 
-void StackMachine::runCurrentBC(Rir2Pir& rir2pir, Builder& insert) {
+void StackMachine::runCurrentBC(const Rir2Pir& rir2pir, Builder& insert) {
     assert(pc >= srcCode->code() && pc < srcCode->endCode());
 
     Value* env = insert.env;
@@ -147,21 +146,17 @@ void StackMachine::runCurrentBC(Rir2Pir& rir2pir, Builder& insert) {
             Promise* prom = insert.function->createProm();
             {
                 Builder promiseBuilder(insert.function, prom);
-                Rir2Pir compiler(rir2pir.compiler(), promiseBuilder,
-                                 srcFunction, promiseCode);
-                compiler.translate();
+                Rir2Pir(rir2pir).compile(promiseCode, promiseBuilder);
             }
             Value* val = Missing::instance();
             if (Query::pure(prom)) {
-                RirInlinedPromise2Rir compiler(rir2pir, promiseCode);
-                val = compiler.translate();
+                val = rir2pir.translate(promiseCode, insert);
             }
             args.push_back(insert(new MkArg(prom, val, env)));
         }
 
         if (monomorphic && isValidClosureSEXP(monomorphic)) {
-            auto& cmp = rir2pir.compiler();
-            Closure* f = cmp.compileClosure(monomorphic);
+            Closure* f = rir2pir.compiler.compileClosure(monomorphic);
             Value* expected = insert(new LdConst(monomorphic));
             Value* t = insert(
                 new Eq(top(), expected, 0)); // here we don't have src ast...
@@ -197,14 +192,11 @@ void StackMachine::runCurrentBC(Rir2Pir& rir2pir, Builder& insert) {
         {
             // What should I do with this?
             Builder promiseBuilder(insert.function, prom);
-            Rir2Pir compiler(rir2pir.compiler(), promiseBuilder, srcFunction,
-                             promiseCode);
-            compiler.translate();
+            Rir2Pir(rir2pir).compile(promiseCode, promiseBuilder);
         }
         Value* val = Missing::instance();
         if (Query::pure(prom)) {
-            RirInlinedPromise2Rir compiler(rir2pir, promiseCode);
-            val = compiler.translate();
+            val = rir2pir.translate(promiseCode, insert);
         }
         // TODO: Remove comment and check how to deal with
         push(insert(new MkArg(prom, val, env)));
@@ -236,7 +228,7 @@ void StackMachine::runCurrentBC(Rir2Pir& rir2pir, Builder& insert) {
                 // For now let's just put it in the constant pool.
                 Pool::insert(target);
             }
-            Closure* f = rir2pir.compiler().compileClosure(target);
+            Closure* f = rir2pir.compiler.compileClosure(target);
             push(insert(new StaticEagerCall(env, f, args, cs->call, target)));
         }
         break;
