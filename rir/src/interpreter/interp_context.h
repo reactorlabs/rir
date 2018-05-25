@@ -108,8 +108,10 @@ INLINE void rl_append(ResizeableList* l, SEXP val, SEXP parent, size_t index) {
 
 #ifdef TYPED_STACK
 #define ostack_at(c, i) ((R_BCNodeStackTop - 1 - (i))->u.sxpval)
+#define ostack_at_cell(cell) ((cell)->u.sxpval)
 #else
 #define ostack_at(c, i) (*(R_BCNodeStackTop - 1 - (i)))
+#define ostack_at_cell(cell) (*(cell))
 #endif
 
 #ifdef TYPED_STACK
