@@ -7,9 +7,11 @@ namespace rir {
 
 class Optimizer {
   public:
-    static bool optimize(CodeEditor&, int steam = 10);
+    static bool cleanupRIR(CodeEditor&, int steam = 10);
+    static bool tryOptimize(SEXP what, bool verbose = false);
     static SEXP reoptimizeFunction(SEXP);
 };
-}
+
+} // namespace rir
 
 #endif

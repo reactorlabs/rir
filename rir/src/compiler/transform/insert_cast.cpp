@@ -16,7 +16,9 @@ pir::Instruction* InsertCast::cast(pir::Value* v, PirType t) {
         return new pir::AsTest(v);
     }
 
-    std::cerr << "Cannot cast " << v->type << " to " << t << "\n";
+    std::cerr << "Cannot cast ";
+    v->printRef(std::cerr);
+    std::cerr << " (type " << v->type << ") to " << t << "\n";
     assert(false);
     return nullptr;
 }

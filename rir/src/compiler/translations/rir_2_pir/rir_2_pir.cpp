@@ -276,25 +276,31 @@ void Rir2Pir::finalize(Value* ret, Builder& insert) {
            "Builder needs to be on an exit-block to insert return");
 
     // Remove excessive Phis
-    Visitor::run(insert.code->entry, [&](BB* bb) {
-        auto it = bb->begin();
-        while (it != bb->end()) {
-            Phi* p = Phi::Cast(*it);
-            if (!p) {
+    while (true) {
+        bool removePhis = false;
+        Visitor::run(insert.code->entry, [&](BB* bb) {
+            auto it = bb->begin();
+            while (it != bb->end()) {
+                Phi* p = Phi::Cast(*it);
+                if (!p) {
+                    it++;
+                    continue;
+                }
+                if (p->nargs() == 1) {
+                    removePhis = true;
+                    if (p == ret)
+                        ret = p->arg(0).val();
+                    p->replaceUsesWith(p->arg(0).val());
+                    it = bb->remove(it);
+                    continue;
+                }
+                p->updateType();
                 it++;
-                continue;
             }
-            if (p->nargs() == 1) {
-                if (p == ret)
-                    ret = p->arg(0).val();
-                p->replaceUsesWith(p->arg(0).val());
-                it = bb->remove(it);
-                continue;
-            }
-            p->updateType();
-            it++;
-        }
-    });
+        });
+        if (!removePhis)
+            break;
+    }
 
     insert(new Return(ret));
 
@@ -302,6 +308,54 @@ void Rir2Pir::finalize(Value* ret, Builder& insert) {
     c();
 
     finalized = true;
+}
+
+bool Rir2Pir::supported(rir::Function* fun) {
+    static SEXP um = nullptr;
+    for (auto c : *fun) {
+        for (auto pc = c->code(); pc < c->endCode();) {
+            BC bc = BC::advance(&pc);
+            switch (bc.bc) {
+            case Opcode::ldfun_: {
+                if (!um)
+                    um = Rf_install("UseMethod");
+                // don't want S3 objects for now
+                if (bc.immediateConst() == um)
+                    return false;
+                break;
+            }
+            // Opcodes that only come from PIR
+            case Opcode::make_env_:
+            case Opcode::get_env_:
+            case Opcode::set_env_:
+            case Opcode::ldvar_noforce_:
+            case Opcode::ldvar_noforce_super_:
+            case Opcode::ldarg_:
+            case Opcode::ldloc_:
+            case Opcode::stloc_:
+            case Opcode::movloc_:
+            case Opcode::isobj_:
+            case Opcode::check_missing_:
+            // Unsupported opcodes
+            case Opcode::return_:
+            case Opcode::ldlval_:
+            case Opcode::asast_:
+            case Opcode::missing_:
+            case Opcode::dispatch_stack_:
+            case Opcode::dispatch_:
+            case Opcode::guard_env_:
+            case Opcode::call_stack_:
+            case Opcode::beginloop_:
+            case Opcode::endcontext_:
+            case Opcode::ldddvar_:
+            case Opcode::int3_:
+                return false;
+            default:
+                break;
+            }
+        }
+    }
+    return true;
 }
 
 } // namespace pir

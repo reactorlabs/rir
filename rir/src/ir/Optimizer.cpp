@@ -1,9 +1,13 @@
 #include "ir/Optimizer.h"
 #include "ir/cleanup.h"
+#include "compiler/translations/pir_2_rir.h"
+#include "compiler/translations/rir_2_pir/rir_2_pir.h"
+
+#include <memory>
 
 namespace rir {
 
-bool Optimizer::optimize(CodeEditor& code, int steam) {
+bool Optimizer::cleanupRIR(CodeEditor& code, int steam) {
     bool changed = false;
     BCCleanup cleanup(code);
     for (int i = 0; i < steam; ++i) {
@@ -18,28 +22,32 @@ bool Optimizer::optimize(CodeEditor& code, int steam) {
     return changed;
 }
 
-SEXP Optimizer::reoptimizeFunction(SEXP s) {
-    Function* fun = Function::unpack(s);
+bool Optimizer::tryOptimize(SEXP what, bool verbose) {
 
-    CodeEditor code(s);
+    Protect p(what);
+    std::unique_ptr<pir::Module> m(new pir::Module);
+    pir::Rir2PirCompiler cmp(m.get());
+    cmp.setVerbose(verbose);
+    auto c = cmp.compileClosure(what);
 
-    for (int i = 0; i < 16; ++i) {
-        bool changedOpt = Optimizer::optimize(code, 8);
-        if (!changedOpt) {
-            if (i == 0)
-                return nullptr;
-            break;
-        }
-    }
+    if (c == nullptr)
+        return false;
 
-    Function* opt = code.finalize();
-    opt->origin(fun);
-    fun->next(opt);
+    cmp.optimizeModule();
 
-#ifdef ENABLE_SLOWASSERT
-    CodeVerifier::verifyFunctionLayout(opt->container(), globalContext());
-#endif
-    return opt->container();
+    if (verbose)
+        m->print();
+
+    pir::Pir2RirCompiler p2r;
+    p2r.verbose = verbose;
+    p2r.compile(c, what);
+
+    return true;
 }
 
-}  // namespace rir
+SEXP Optimizer::reoptimizeFunction(SEXP s) {
+    Rf_warning("rir: reoptimizing not implemented as of now");
+    return s;
+}
+
+} // namespace rir

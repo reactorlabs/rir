@@ -1301,9 +1301,9 @@ SEXP Compiler::finalize() {
 
     for (size_t i = 0; i < code.numPromises(); ++i)
         if (code.promise(i))
-            Optimizer::optimize(*code.promise(i));
+            Optimizer::cleanupRIR(*code.promise(i));
 
-    Optimizer::optimize(code);
+    Optimizer::cleanupRIR(code);
 
     Function* opt = code.finalize();
     opt->signature = signature;

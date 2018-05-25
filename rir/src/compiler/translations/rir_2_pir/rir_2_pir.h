@@ -21,6 +21,8 @@ class Rir2Pir {
 
     ~Rir2Pir() { assert(finalized); }
 
+    static bool supported(rir::Function* fun);
+
   private:
     Value* translate(rir::Code* srcCode, Builder& insert) const;
     void finalize(Value*, Builder& insert);

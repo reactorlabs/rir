@@ -1259,8 +1259,8 @@ rir::Function* Pir2Rir::finalize() {
 
     for (size_t i = 0; i < code.numPromises(); ++i)
         if (code.promise(i))
-            Optimizer::optimize(*code.promise(i));
-    Optimizer::optimize(code);
+            Optimizer::cleanupRIR(*code.promise(i));
+    Optimizer::cleanupRIR(code);
     auto opt = code.finalize();
 
 #ifdef ENABLE_SLOWASSERT
