@@ -6,6 +6,9 @@
 
 #include "api.h"
 
+#include "compiler/pir_tests.h"
+#include "compiler/translations/pir_2_rir.h"
+#include "compiler/translations/rir_2_pir/rir_2_pir.h"
 #include "interpreter/interp.h"
 #include "interpreter/interp_context.h"
 #include "ir/BC.h"
@@ -13,6 +16,7 @@
 
 #include "utils/Printer.h"
 
+#include <memory>
 
 using namespace rir;
 
@@ -46,7 +50,27 @@ REXPORT SEXP rir_compile(SEXP what, SEXP env = NULL) {
             Rf_error("closure already compiled");
 
         SEXP result = Compiler::compileClosure(what);
+        PROTECT(result);
+
         Rf_copyMostAttrib(what, result);
+
+#ifdef SLOWASSERT
+        // rir_disassemble(result, R_FalseValue);
+
+        std::unique_ptr<pir::Module> m(new pir::Module);
+        pir::Rir2PirCompiler cmp(m.get());
+        // cmp.setVerbose(true);
+        cmp.compileClosure(result,
+                           [&](pir::Closure* c) {
+                               cmp.optimizeModule();
+                               // TODO, next step: enable back-compilation
+                               // pir::Pir2RirCompiler p2r;
+                               // p2r.compile(c, closure);
+                           },
+                           [&]() {});
+#endif
+
+        UNPROTECT(1);
         return result;
     } else {
         if (TYPEOF(what) == BCODESXP) {
@@ -88,10 +112,6 @@ REXPORT SEXP rir_body(SEXP cls) {
     return f->container();
 }
 
-#include "compiler/pir_tests.h"
-#include "compiler/translations/pir_2_rir.h"
-#include "compiler/translations/rir_2_pir/rir_2_pir.h"
-
 REXPORT SEXP pir_compile(SEXP what, SEXP verbose) {
     bool debug = false;
     if (verbose && TYPEOF(verbose) == LGLSXP && Rf_length(verbose) > 0 &&
@@ -111,16 +131,19 @@ REXPORT SEXP pir_compile(SEXP what, SEXP verbose) {
     pir::Module* m = new pir::Module;
     pir::Rir2PirCompiler cmp(m);
     cmp.setVerbose(debug);
-    auto c = cmp.compileClosure(what);
-    cmp.optimizeModule();
+    cmp.compileClosure(what,
+                       [&](pir::Closure* c) {
+                           cmp.optimizeModule();
 
-    if (debug)
-        m->print();
+                           if (debug)
+                               m->print();
 
-    // compile back to rir
-    pir::Pir2RirCompiler p2r;
-    p2r.verbose = debug;
-    p2r.compile(c, what);
+                           // compile back to rir
+                           pir::Pir2RirCompiler p2r;
+                           p2r.verbose = debug;
+                           p2r.compile(c, what);
+                       },
+                       []() { std::cerr << "Compilation failed\n"; });
 
     delete m;
     return what;

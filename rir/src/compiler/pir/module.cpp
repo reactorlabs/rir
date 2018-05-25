@@ -23,6 +23,20 @@ void Module::printEachVersion(std::ostream& out) {
     }
 }
 
+void Module::getAndCreateIfMissing(rir::Function* f, const std::vector<SEXP>& a,
+                                   Env* env, MaybeVal get, MaybeCreate create) {
+    if (functions.count(f))
+        return get(functions.at(f).current());
+    Closure* cls = declare(f, a, env);
+    if (create(cls)) {
+        get(cls);
+    } else {
+        auto it = functions.find(f);
+        delete cls;
+        functions.erase(it);
+    }
+}
+
 Closure* Module::declare(rir::Function* fun, const std::vector<SEXP>& args,
                          Env* env) {
     assert(functions.count(fun) == 0);

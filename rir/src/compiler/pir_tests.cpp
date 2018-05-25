@@ -55,7 +55,11 @@ compile(const std::string& context, const std::string& expr, pir::Module* m,
         if (TYPEOF(fun) == CLOSXP) {
             assert(isValidClosureSEXP(fun));
             // isValidClosureSEXP(fun)->body()->print();
-            results[CHAR(PRINTNAME(f.tag()))] = cmp.compileClosure(fun);
+            cmp.compileClosure(fun,
+                               [&](pir::Closure* cls) {
+                                   results[CHAR(PRINTNAME(f.tag()))] = cls;
+                               },
+                               []() { assert(false); });
         }
     }
 

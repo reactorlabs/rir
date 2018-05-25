@@ -50,15 +50,11 @@ class Module {
         return functions.at(f).current();
     }
 
-    typedef std::function<void(Closure* f)> Compile;
-    Closure* getOrCreate(rir::Function* f, const std::vector<SEXP>& a, Env* env,
-                         Compile cmp) {
-        if (functions.count(f))
-            return functions.at(f).current();
-        Closure* cls = declare(f, a, env);
-        cmp(cls);
-        return cls;
-    }
+    typedef std::function<void(Closure* f)> MaybeVal;
+    typedef std::function<bool(Closure* f)> MaybeCreate;
+
+    void getAndCreateIfMissing(rir::Function* f, const std::vector<SEXP>& a,
+                               Env* env, MaybeVal get, MaybeCreate create);
 
     typedef std::function<void(VersionedClosure&)> PirClosureVersionIterator;
     void eachPirFunction(PirClosureIterator it);

@@ -15,14 +15,38 @@ class Rir2Pir {
         : compiler(cmp), srcFunction(srcFunction) {}
     Rir2Pir(const Rir2Pir& r2p) : Rir2Pir(r2p.compiler, r2p.srcFunction) {}
 
-    void compile(rir::Code* srcCode, Builder& insert) {
-        finalize(translate(srcCode, insert), insert);
+    typedef std::function<void()> Maybe;
+    typedef std::function<void(Value*)> MaybeVal;
+
+    bool tryCompile(rir::Code* srcCode, Builder& insert)
+        __attribute__((warn_unused_result)) {
+        return translate<bool>(srcCode, insert,
+                               [&](Value* v) {
+                                   finalize(v, insert);
+                                   return true;
+                               },
+                               []() { return false; });
     }
 
-    ~Rir2Pir() { assert(finalized); }
-
   private:
-    Value* translate(rir::Code* srcCode, Builder& insert) const;
+    void translate(rir::Code* srcCode, Builder& insert, MaybeVal success,
+                   Maybe fail) const;
+
+    void translate(rir::Code* srcCode, Builder& insert,
+                   MaybeVal success) const {
+        translate(srcCode, insert, success, []() {});
+    }
+
+    template <typename T>
+    T translate(rir::Code* srcCode, Builder& insert,
+                std::function<T(Value*)> success,
+                std::function<T()> fail) const {
+        T res;
+        translate(srcCode, insert, [&](Value* v) { res = success(v); },
+                  [&]() { res = fail(); });
+        return res;
+    }
+
     void finalize(Value*, Builder& insert);
 
     bool finalized = false;

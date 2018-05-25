@@ -17,7 +17,13 @@ class RirCompiler {
     RirCompiler(const RirCompiler&) = delete;
     void operator=(const RirCompiler&) = delete;
 
-    virtual Closure* compileClosure(SEXP) = 0;
+    typedef std::function<void()> Maybe;
+    typedef std::function<void(Closure*)> MaybeVal;
+
+    virtual void compileClosure(SEXP, MaybeVal, Maybe) = 0;
+    void compileClosure(SEXP cls, MaybeVal success) {
+        return compileClosure(cls, success, []() {});
+    }
 
     bool isVerbose() { return verbose; }
     void setVerbose(bool v) { verbose = v; }

@@ -41,7 +41,7 @@ void StackMachine::set(size_t index, Value* value) {
     stack[stack_size() - index - 1] = value;
 }
 
-void StackMachine::runCurrentBC(const Rir2Pir& rir2pir, Builder& insert) {
+bool StackMachine::tryRunCurrentBC(const Rir2Pir& rir2pir, Builder& insert) {
     assert(pc >= srcCode->code() && pc < srcCode->endCode());
 
     Value* env = insert.env;
@@ -85,10 +85,12 @@ void StackMachine::runCurrentBC(const Rir2Pir& rir2pir, Builder& insert) {
         break;
 
     case Opcode::guard_fun_:
-        std::cout << "warn: guard ignored "
-                  << CHAR(PRINTNAME(
-                         rir::Pool::get(bc.immediate.guard_fun_args.name)))
-                  << "\n";
+        if (rir2pir.compiler.isVerbose()) {
+            std::cout << "warn: guard ignored "
+                      << CHAR(PRINTNAME(
+                             rir::Pool::get(bc.immediate.guard_fun_args.name)))
+                      << "\n";
+        }
         break;
 
     case Opcode::swap_:
@@ -138,47 +140,56 @@ void StackMachine::runCurrentBC(const Rir2Pir& rir2pir, Builder& insert) {
         for (size_t i = 0; i < n; ++i) {
             unsigned argi = cs->args()[i];
             if (argi == DOTS_ARG_IDX) {
-                assert(false);
+                return false;
             } else if (argi == MISSING_ARG_IDX) {
-                assert(false);
+                return false;
             }
             rir::Code* promiseCode = srcFunction->codeAt(argi);
             Promise* prom = insert.function->createProm();
             {
                 Builder promiseBuilder(insert.function, prom);
-                Rir2Pir(rir2pir).compile(promiseCode, promiseBuilder);
+                if (!Rir2Pir(rir2pir).tryCompile(promiseCode, promiseBuilder))
+                    return false;
             }
             Value* val = Missing::instance();
             if (Query::pure(prom)) {
-                val = rir2pir.translate(promiseCode, insert);
+                rir2pir.translate(promiseCode, insert,
+                                  [&](Value* success) { val = success; });
             }
             args.push_back(insert(new MkArg(prom, val, env)));
         }
 
         if (monomorphic && isValidClosureSEXP(monomorphic)) {
-            Closure* f = rir2pir.compiler.compileClosure(monomorphic);
-            Value* expected = insert(new LdConst(monomorphic));
-            Value* t = insert(
-                new Eq(top(), expected, 0)); // here we don't have src ast...
-            insert(new Branch(t));
-            BB* curBB = insert.bb;
+            rir2pir.compiler.compileClosure(
+                monomorphic,
+                [&](Closure* f) {
+                    Value* expected = insert(new LdConst(monomorphic));
+                    Value* t = insert(new Eq(
+                        top(), expected, 0)); // here we don't have src ast...
+                    insert(new Branch(t));
+                    BB* curBB = insert.bb;
 
-            BB* fallback = insert.createBB();
-            insert.bb = fallback;
-            curBB->next0 = fallback;
-            Value* r1 = insert(new Call(insert.env, pop(), args, cs->call));
+                    BB* fallback = insert.createBB();
+                    insert.bb = fallback;
+                    curBB->next0 = fallback;
+                    Value* r1 =
+                        insert(new Call(insert.env, pop(), args, cs->call));
 
-            BB* asExpected = insert.createBB();
-            insert.bb = asExpected;
-            curBB->next1 = asExpected;
-            Value* r2 = insert(
-                new StaticCall(insert.env, f, args, cs->call, monomorphic));
+                    BB* asExpected = insert.createBB();
+                    insert.bb = asExpected;
+                    curBB->next1 = asExpected;
+                    Value* r2 = insert(new StaticCall(insert.env, f, args,
+                                                      cs->call, monomorphic));
 
-            BB* cont = insert.createBB();
-            fallback->next0 = cont;
-            asExpected->next0 = cont;
-            insert.bb = cont;
-            push(insert(new Phi({r1, r2}, {fallback, asExpected})));
+                    BB* cont = insert.createBB();
+                    fallback->next0 = cont;
+                    asExpected->next0 = cont;
+                    insert.bb = cont;
+                    push(insert(new Phi({r1, r2}, {fallback, asExpected})));
+                },
+                [&]() {
+                    push(insert(new Call(insert.env, pop(), args, cs->call)));
+                });
         } else {
             push(insert(new Call(insert.env, pop(), args, cs->call)));
         }
@@ -192,11 +203,13 @@ void StackMachine::runCurrentBC(const Rir2Pir& rir2pir, Builder& insert) {
         {
             // What should I do with this?
             Builder promiseBuilder(insert.function, prom);
-            Rir2Pir(rir2pir).compile(promiseCode, promiseBuilder);
+            if (!Rir2Pir(rir2pir).tryCompile(promiseCode, promiseBuilder))
+                return false;
         }
         Value* val = Missing::instance();
         if (Query::pure(prom)) {
-            val = rir2pir.translate(promiseCode, insert);
+            rir2pir.translate(promiseCode, insert,
+                              [&](Value* success) { val = success; });
         }
         // TODO: Remove comment and check how to deal with
         push(insert(new MkArg(prom, val, env)));
@@ -228,8 +241,16 @@ void StackMachine::runCurrentBC(const Rir2Pir& rir2pir, Builder& insert) {
                 // For now let's just put it in the constant pool.
                 Pool::insert(target);
             }
-            Closure* f = rir2pir.compiler.compileClosure(target);
-            push(insert(new StaticEagerCall(env, f, args, cs->call, target)));
+            bool failed = false;
+            rir2pir.compiler.compileClosure(
+                target,
+                [&](Closure* f) {
+                    push(insert(
+                        new StaticEagerCall(env, f, args, cs->call, target)));
+                },
+                [&]() { failed = true; });
+            if (failed)
+                return false;
         }
         break;
     }
@@ -413,11 +434,9 @@ void StackMachine::runCurrentBC(const Rir2Pir& rir2pir, Builder& insert) {
     case Opcode::endcontext_:
     case Opcode::ldddvar_:
     case Opcode::int3_:
-        std::cerr << "Cannot compile Function. Unsupported bc\n";
-        bc.print();
-        assert(false);
-        break;
+        return false;
     }
+    return true;
 }
 
 bool StackMachine::doMerge(Opcode* trg, Builder& builder, StackMachine* other) {
