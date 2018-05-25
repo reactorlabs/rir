@@ -41,14 +41,17 @@ Closure* Rir2PirCompiler::compileClosure(SEXP closure) {
 
     auto srcFunction = tbl->first();
 
+    for (auto c : *srcFunction)
+        if (c->isDefaultArgument)
+            return nullptr;
+
     if (!Rir2Pir::supported(srcFunction))
         return nullptr;
 
-    printFunction(srcFunction);
-
     std::vector<SEXP> fmls;
     for (auto arg = RList(FORMALS(closure)).begin(); arg != RList::end(); ++arg) {
-        if (*arg == R_MissingArg || *arg == R_DotsSymbol)
+        // don't want default args or ellipsis args for now
+        if (*arg != R_MissingArg || arg.tag() == R_DotsSymbol)
             return nullptr;
         fmls.push_back(arg.tag());
     }

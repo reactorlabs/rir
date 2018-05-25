@@ -23,12 +23,6 @@ bool Optimizer::cleanupRIR(CodeEditor& code, int steam) {
 }
 
 bool Optimizer::tryOptimize(SEXP what, bool verbose) {
-    if (!isValidClosureSEXP(what))
-        return false;
-    if (DispatchTable::unpack(BODY(what))->capacity() != 2)
-        return false;
-    if (DispatchTable::unpack(BODY(what))->slot(1) != nullptr)
-        return false;
 
     Protect p(what);
     std::unique_ptr<pir::Module> m(new pir::Module);

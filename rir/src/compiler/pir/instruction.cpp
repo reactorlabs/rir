@@ -140,20 +140,20 @@ Instruction* Instruction::hasSingleUse() {
 
 void Instruction::replaceUsesIn(Value* replace, BB* target) {
     Visitor::run(target, [&](Instruction* i) {
+        auto phi = Phi::Cast(i);
         i->eachArg([&](InstrArg& arg) {
-            if (arg.val() == this)
-                arg.val() = replace;
+            if (arg.val() == this) {
+                if (phi && phi == replace)
+                    phi->removeInput(this);
+                else
+                    arg.val() = replace;
+            }
         });
     });
 }
 
 void Instruction::replaceUsesWith(Value* replace) {
-    Visitor::run(bb(), [&](Instruction* i) {
-        i->eachArg([&](InstrArg& arg) {
-            if (arg.val() == this)
-                arg.val() = replace;
-        });
-    });
+    replaceUsesIn(replace, bb());
 }
 
 void LdConst::printArgs(std::ostream& out) {

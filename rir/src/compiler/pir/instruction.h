@@ -943,6 +943,16 @@ class VLI(Phi, Effect::None, EnvAccess::None) {
         input.push_back(in);
         VarLenInstruction::pushArg(arg);
     }
+    void removeInput(Value* what) {
+        for (size_t i = 0; i < nargs(); ++i) {
+            if (arg(i).val() == what) {
+                input.erase(input.begin() + i);
+                args_.erase(args_.begin() + i);
+                --i;
+            }
+        }
+    }
+
     typedef std::function<void(BB* bb, Value*)> PhiArgumentIterator;
 
     void eachArg(PhiArgumentIterator it) const {

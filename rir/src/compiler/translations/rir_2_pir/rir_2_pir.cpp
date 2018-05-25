@@ -276,25 +276,31 @@ void Rir2Pir::finalize(Value* ret, Builder& insert) {
            "Builder needs to be on an exit-block to insert return");
 
     // Remove excessive Phis
-    Visitor::run(insert.code->entry, [&](BB* bb) {
-        auto it = bb->begin();
-        while (it != bb->end()) {
-            Phi* p = Phi::Cast(*it);
-            if (!p) {
+    while (true) {
+        bool removePhis = false;
+        Visitor::run(insert.code->entry, [&](BB* bb) {
+            auto it = bb->begin();
+            while (it != bb->end()) {
+                Phi* p = Phi::Cast(*it);
+                if (!p) {
+                    it++;
+                    continue;
+                }
+                if (p->nargs() == 1) {
+                    removePhis = true;
+                    if (p == ret)
+                        ret = p->arg(0).val();
+                    p->replaceUsesWith(p->arg(0).val());
+                    it = bb->remove(it);
+                    continue;
+                }
+                p->updateType();
                 it++;
-                continue;
             }
-            if (p->nargs() == 1) {
-                if (p == ret)
-                    ret = p->arg(0).val();
-                p->replaceUsesWith(p->arg(0).val());
-                it = bb->remove(it);
-                continue;
-            }
-            p->updateType();
-            it++;
-        }
-    });
+        });
+        if (!removePhis)
+            break;
+    }
 
     insert(new Return(ret));
 
@@ -305,10 +311,19 @@ void Rir2Pir::finalize(Value* ret, Builder& insert) {
 }
 
 bool Rir2Pir::supported(rir::Function* fun) {
+    static SEXP um = nullptr;
     for (auto c : *fun) {
         for (auto pc = c->code(); pc < c->endCode();) {
             BC bc = BC::advance(&pc);
             switch (bc.bc) {
+            case Opcode::ldfun_: {
+                if (!um)
+                    um = Rf_install("UseMethod");
+                // don't want S3 objects for now
+                if (bc.immediateConst() == um)
+                    return false;
+                break;
+            }
             // Opcodes that only come from PIR
             case Opcode::make_env_:
             case Opcode::get_env_:

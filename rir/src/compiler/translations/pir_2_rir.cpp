@@ -697,7 +697,7 @@ class Pir2Rir {
 
 size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
     toCSSA(code);
-code->print(std::cout);
+
     if (compiler.verbose)
         code->print(std::cout);
 
