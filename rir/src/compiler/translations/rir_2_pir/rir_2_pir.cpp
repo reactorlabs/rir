@@ -304,5 +304,44 @@ void Rir2Pir::finalize(Value* ret, Builder& insert) {
     finalized = true;
 }
 
+bool Rir2Pir::supported(rir::Function* fun) {
+    for (auto c : *fun) {
+        for (auto pc = c->code(); pc < c->endCode();) {
+            BC bc = BC::advance(&pc);
+            switch (bc.bc) {
+            // Opcodes that only come from PIR
+            case Opcode::make_env_:
+            case Opcode::get_env_:
+            case Opcode::set_env_:
+            case Opcode::ldvar_noforce_:
+            case Opcode::ldvar_noforce_super_:
+            case Opcode::ldarg_:
+            case Opcode::ldloc_:
+            case Opcode::stloc_:
+            case Opcode::movloc_:
+            case Opcode::isobj_:
+            case Opcode::check_missing_:
+            // Unsupported opcodes
+            case Opcode::return_:
+            case Opcode::ldlval_:
+            case Opcode::asast_:
+            case Opcode::missing_:
+            case Opcode::dispatch_stack_:
+            case Opcode::dispatch_:
+            case Opcode::guard_env_:
+            case Opcode::call_stack_:
+            case Opcode::beginloop_:
+            case Opcode::endcontext_:
+            case Opcode::ldddvar_:
+            case Opcode::int3_:
+                return false;
+            default:
+                break;
+            }
+        }
+    }
+    return true;
+}
+
 } // namespace pir
 } // namespace rir

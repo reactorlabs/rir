@@ -29,7 +29,7 @@ struct OptmizationCmp {
 
 class Configurations {
   public:
-    Configurations() { this->parseINIFile(); }
+    Configurations() { parseINIFile(); }
     std::multiset<Optimization*, OptmizationCmp>& pirOptimizations() {
         return optimizations;
     }
@@ -43,4 +43,5 @@ class Configurations {
 };
 
 } // namespace rir
+
 #endif

@@ -1,6 +1,7 @@
 #ifndef RIR_FUNCTION_HANDLE_H
 #define RIR_FUNCTION_HANDLE_H
 
+#include "ir/BC.h"
 #include "interpreter/interp.h"
 #include "interpreter/runtime.h"
 #include "ir/BC_inc.h"

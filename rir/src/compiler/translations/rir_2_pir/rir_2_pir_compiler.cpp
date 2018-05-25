@@ -28,18 +28,31 @@ Rir2PirCompiler::Rir2PirCompiler(Module* module) : RirCompiler(module) {
 }
 
 Closure* Rir2PirCompiler::compileClosure(SEXP closure) {
-    assert(isValidClosureSEXP(closure));
+    if (!isValidClosureSEXP(closure))
+        return nullptr;
+
     DispatchTable* tbl = DispatchTable::unpack(BODY(closure));
 
-    assert(tbl->slot(1) == nullptr && "Closure already compiled to PIR");
+    if (tbl->capacity() != 2)
+        return nullptr;
 
-    auto formals = RList(FORMALS(closure));
+    if (tbl->slot(1) != nullptr)
+        return nullptr;
+
+    auto srcFunction = tbl->first();
+
+    if (!Rir2Pir::supported(srcFunction))
+        return nullptr;
+
+    printFunction(srcFunction);
 
     std::vector<SEXP> fmls;
-    for (auto it = formals.begin(); it != formals.end(); ++it)
-        fmls.push_back(it.tag());
+    for (auto arg = RList(FORMALS(closure)).begin(); arg != RList::end(); ++arg) {
+        if (*arg == R_MissingArg || *arg == R_DotsSymbol)
+            return nullptr;
+        fmls.push_back(arg.tag());
+    }
 
-    rir::Function* srcFunction = tbl->first();
     return compileClosure(srcFunction, fmls, module->getEnv(CLOENV(closure)));
 }
 

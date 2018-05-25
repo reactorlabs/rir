@@ -5,6 +5,7 @@
 #include "analysis/query.h"
 #include "analysis/verifier.h"
 #include "ir/Compiler.h"
+#include "ir/Optimizer.h"
 #include "pir/pir_impl.h"
 #include "translations/pir_2_rir.h"
 #include "translations/rir_2_pir/rir_2_pir.h"
@@ -235,9 +236,6 @@ bool checkPir2Rir(SEXP expected, SEXP result) {
     return R_compute_identical(expected, result, 15) == TRUE;
 }
 
-extern "C" SEXP rir_eval(SEXP, SEXP);
-extern "C" SEXP pir_compile(SEXP, SEXP);
-
 bool testPir2Rir(std::string name, std::string fun, std::string args,
                  bool useSame = false, bool verbose = false) {
     Protect p;
@@ -281,7 +279,10 @@ bool testPir2Rir(std::string name, std::string fun, std::string args,
         rCall = createRWrapperCall(wrapper);
     }
 
-    pir_compile(rirFun, R_FalseValue);
+    if (!Optimizer::tryOptimize(rirFun)) {
+        Rprintf("PIR to RIR test: failed to PIR optimize...");
+        return false;
+    }
 
     auto after = p(Rf_eval(rCall, execEnv));
     if (verbose) {
@@ -402,15 +403,12 @@ static Test tests[] = {
                                 "}",
                                 "1L, 10L");
          }),
-    /*
-        fails w/ "Cannot cast val to int$" for the loop index
-        Test("PIR to RIR: simple for loop",
-             []() {
-                 return testPir2Rir("foo",
-                                    "function(x) { s = 0; for (i in 1:x) s = s +
-                                    i; s }", "10L");
-             }),
-    */
+    Test("PIR to RIR: simple for loop",
+         []() {
+             return testPir2Rir(
+                 "foo", "function(x) { s = 0; for (i in 1:x) s = s + i; s }",
+                 "10L");
+         }),
     Test("PIR to RIR: inlined call",
          []() {
              return testPir2Rir("foo",
@@ -456,6 +454,7 @@ static Test tests[] = {
                                 "4");
          }),
 };
+
 } // namespace
 
 namespace rir {
@@ -469,4 +468,5 @@ void PirTests::run() {
         }
     }
 }
+
 } // namespace rir
