@@ -21,7 +21,7 @@
  *
  * Instructions are either FixedLength or VariableLength.
  *
- * Every instruction is also a Value, and can therefore be used as an argument
+ * Every instruction also has a Value, and can therefore be used as an argument
  * for other instructions.
  *
  * Instructions have an InstructionDescription, which gives us basic

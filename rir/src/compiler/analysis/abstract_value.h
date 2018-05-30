@@ -43,7 +43,7 @@ namespace pir {
 /*
  * Captures an abstract PIR value.
  *
- * Vals is the set of potential candidates. If we don't can't tell what the
+ * Vals is the set of potential candidates. If we can't tell what the
  * possible values are, then we set "unknown" (ie. we taint the value). This is
  * the top element of our lattice.
  *
@@ -210,13 +210,6 @@ struct AbstractREnvironment {
         return changed;
     }
 };
-
-/*
- * AbstractEnvironmentSet is an abstract domain that deals with multiple
- * environments at the same time. This is necessary for inter-procedural
- * analysis, or analyzing a function with multiple environments.
- *
- */
 
 struct AbstractLoad {
     Value* env;

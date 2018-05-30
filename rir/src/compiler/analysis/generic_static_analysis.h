@@ -32,20 +32,39 @@ enum class PositioningStyle { BeforeInstruction, AfterInstruction };
  * "mergepoint" and then "apply" is used to seek to the desired instruction
  * pointer (see "collect" for an example).
  *
- * AbstractState basically has to have a merge function.
+ * The lattice is indirectly defined by the merge function defined within a
+ * subclass of AbstractValue. It is up to the client to ensure
+ * that the merge function conforms a lattice.
+ * 
+ * AbstractState basically has to have a merge function. Ideally, it fits the
+ * AbstractState abstract class defined below and the client can subclass it. 
+ * For other cases, ad-hoc AbstractStates can be defined as long as they implement 
+ * the merge function.  
+ * 
  * Anything else depends on the requirements of the apply function, which is
  * provided by the subclass that specializes StaticAnalysis.
  */
-template <class AbstractState>
+
+class AbstractValue {
+    virtual bool merge(const AbstractValue& otherValue) = 0;            
+};
+
+template <class AbsValue>
+class AbstractState : public std::unordered_map<Value*, AbsValue> {
+    virtual bool merge(const AbstractState& otherState) = 0;            
+};         
+
+
+template <class State>
 class StaticAnalysis {
   private:
-    std::vector<std::vector<AbstractState>> mergepoint;
-    virtual void apply(AbstractState&, Instruction*) const = 0;
-    AbstractState exitpoint;
+    std::vector<std::vector<State>> mergepoint;
+    virtual void apply(State&, Instruction*) const = 0;
+    State exitpoint;
     bool done = false;
 
   protected:
-    const std::vector<std::vector<AbstractState>>& getMergepoints() {
+    const std::vector<std::vector<State>>& getMergepoints() {
         return mergepoint;
     }
 
@@ -56,25 +75,25 @@ class StaticAnalysis {
         mergepoint.resize(cls->maxBBId + 1);
         mergepoint[entry->id].resize(1);
     }
-    StaticAnalysis(Closure* cls, const AbstractState& initialState)
+    StaticAnalysis(Closure* cls, const State& initialState)
         : entry(cls->entry) {
         mergepoint.resize(cls->maxBBId + 1);
         mergepoint[entry->id].push_back(initialState);
     }
 
-    const AbstractState& result() {
+    const State& result() {
         assert(done);
 
         return exitpoint;
     }
 
     template <PositioningStyle POS>
-    const AbstractState& at(Instruction* i) {
+    const State& at(Instruction* i) {
         assert(done);
 
         BB* bb = i->bb();
         size_t segment = 0;
-        AbstractState state = mergepoint[bb->id][segment];
+        State state = mergepoint[bb->id][segment];
         for (auto j : *bb) {
             if (POS == PositioningStyle::BeforeInstruction && i == j)
                 return state;
@@ -92,7 +111,7 @@ class StaticAnalysis {
         return state;
     }
 
-    typedef std::function<void(const AbstractState&, Instruction*)> Collect;
+    typedef std::function<void(const State&, Instruction*)> Collect;
 
     template <PositioningStyle POS>
     void foreach (Collect collect) {
@@ -100,7 +119,7 @@ class StaticAnalysis {
 
         Visitor::run(entry, [&](BB* bb) {
             size_t segment = 0;
-            AbstractState state = mergepoint[bb->id][segment];
+            State state = mergepoint[bb->id][segment];
             for (auto i : *bb) {
                 if (POS == PositioningStyle::BeforeInstruction)
                     collect(state, i);
@@ -132,7 +151,7 @@ class StaticAnalysis {
 
                 size_t segment = 0;
                 assert(mergepoint[id].size() > 0);
-                AbstractState state = mergepoint[id][segment];
+                State state = mergepoint[id][segment];
 
                 for (auto i : *bb) {
                     apply(state, i);

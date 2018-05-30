@@ -15,6 +15,7 @@ class Rir2PirCompiler : public RirCompiler {
     void optimizeModule();
     void printAfterPass(const std::string&, const std::string&, Closure*,
                         size_t);
+
   private:
     Closure* compileClosure(rir::Function*, const std::vector<SEXP>&,
                             Env* closureEnv);

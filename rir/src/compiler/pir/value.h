@@ -11,8 +11,6 @@ namespace pir {
 
 enum class Tag : uint8_t;
 
-class BB;
-
 /*
  * A typed PIR value.
  *
