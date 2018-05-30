@@ -21,9 +21,9 @@ namespace pir {
 class Closure : public Code {
   private:
     friend class Module;
+    friend bool hasRedundantCopy(std::function <void (Closure*)>&);
     Closure(std::initializer_list<SEXP> a, Env* env) : env(env), argNames(a) {}
     Closure(const std::vector<SEXP>& a, Env* env) : env(env), argNames(a) {}
-
     Env* env;
 
   public:
@@ -60,7 +60,6 @@ class Closure : public Code {
             if (p)
                 it(p);
     }
-
 };
 } // namespace pir
 } // namespace rir
