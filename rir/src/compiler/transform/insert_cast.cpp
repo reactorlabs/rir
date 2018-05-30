@@ -16,7 +16,10 @@ pir::Instruction* InsertCast::cast(pir::Value* v, PirType t) {
         return new pir::AsTest(v);
     }
 
-    std::cerr << "Cannot cast " << v->type << " to " << t << "\n";
+    std::cerr << "Cannot cast " << v->type << " to " << t;
+    std::cerr << " for at ";
+    v->printRef(std::cerr);
+    std::cerr << "\n";
     assert(false);
     return nullptr;
 }
@@ -29,23 +32,19 @@ void InsertCast::apply(BB* bb) {
     auto ip = bb->begin();
     while (ip != bb->end()) {
         Instruction* instr = *ip;
-        auto next = ip + 1;
-
         Phi* p = nullptr;
         if ((p = Phi::Cast(instr))) {
             p->updateType();
         }
         instr->eachArg([&](InstrArg& arg) {
-            size_t added = 0;
             while (!arg.type().isSuper(arg.val()->type)) {
                 auto c = cast(arg.val(), arg.type());
                 c->bb_ = bb;
                 arg.val() = c;
-                next = bb->insert((ip + added), c);
-                added++;
+                ip = bb->insert(ip, c);
             }
         });
-        ip = next;
+        ip++;
     }
 }
 }

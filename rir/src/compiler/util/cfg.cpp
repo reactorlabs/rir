@@ -107,7 +107,8 @@ void computeDominanceGraph(DominanceGraph* cfg, BB* start) {
         if (maxId < cur->id)
             maxId = cur->id;
 
-        auto& front = dom[cur];
+        auto front = dom[cur];
+        front.insert(cur);
 
         todo.pop();
 
@@ -119,7 +120,6 @@ void computeDominanceGraph(DominanceGraph* cfg, BB* start) {
             if (!dom[bb].seen) {
                 d.seen = true;
                 d.insert(front.begin(), front.end());
-                d.insert(cur);
                 todo.push(bb);
                 return;
             }

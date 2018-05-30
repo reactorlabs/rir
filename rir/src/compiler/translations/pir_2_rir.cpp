@@ -1009,7 +1009,7 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
             case Tag::Is: {
                 auto is = Is::Cast(instr);
                 load(it, is->arg<0>().val());
-                cs << BC::is(is->tag);
+                cs << BC::is(is->sexpTag);
                 store(it, is);
                 break;
             }

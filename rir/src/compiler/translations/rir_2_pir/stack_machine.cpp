@@ -67,7 +67,7 @@ void StackMachine::runCurrentBC(const Rir2Pir& rir2pir, Builder& insert) {
         break;
 
     case Opcode::ldvar_super_:
-        insert(new LdVarSuper(bc.immediateConst(), env));
+        push(insert(new LdVarSuper(bc.immediateConst(), env)));
         break;
 
     case Opcode::stvar_super_:
@@ -124,7 +124,7 @@ void StackMachine::runCurrentBC(const Rir2Pir& rir2pir, Builder& insert) {
 
     case Opcode::call_: {
         unsigned n = bc.immediate.call_args.nargs;
-        rir::CallSite* cs = bc.callSite(srcFunction->body());
+        rir::CallSite* cs = bc.callSite(srcCode);
 
         SEXP monomorphic = nullptr;
         if (cs->hasProfile) {
@@ -205,7 +205,7 @@ void StackMachine::runCurrentBC(const Rir2Pir& rir2pir, Builder& insert) {
 
     case Opcode::static_call_stack_: {
         unsigned n = bc.immediate.call_args.nargs;
-        rir::CallSite* cs = bc.callSite(srcFunction->body());
+        rir::CallSite* cs = bc.callSite(srcCode);
         SEXP target = rir::Pool::get(*cs->target());
 
         std::vector<Value*> args(n);

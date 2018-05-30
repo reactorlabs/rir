@@ -42,11 +42,11 @@ class StackMachine {
     BC getCurrentBC();
     void advancePC();
     unsigned getSrcIdx();
+    std::deque<Value*> stack;
 
   private:
     rir::Function* srcFunction;
     rir::Code* srcCode;
-    std::deque<Value*> stack;
     Opcode* pc;
     pir::BB* entry = nullptr;
     Value* at(size_t);

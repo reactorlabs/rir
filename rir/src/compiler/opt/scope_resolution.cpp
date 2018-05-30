@@ -44,6 +44,7 @@ class TheScopeResolution {
                     if (e) {
                         auto r = new LdVar(sld->varName, e);
                         bb->replace(ip, r);
+                        sld->replaceUsesWith(r);
                     }
                 } else if (ss) {
                     // StVarSuper where the parent environment is known and
@@ -58,6 +59,7 @@ class TheScopeResolution {
                             auto r = new StVar(ss->varName, ss->arg<0>().val(),
                                                aload.env);
                             bb->replace(ip, r);
+                            ss->replaceUsesWith(r);
                         }
                     }
                 } else if (s) {

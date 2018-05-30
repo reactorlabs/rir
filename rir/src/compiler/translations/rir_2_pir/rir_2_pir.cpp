@@ -169,9 +169,7 @@ Value* Rir2Pir::translate(rir::Code* srcCode, Builder& insert) const {
                 state.setPC(trg);
                 state.setEntry(branch);
                 insert.bb = branch;
-                Value* front = state.front();
-                insert(new Deopt(insert.env, state.getPC(), state.stack_size(),
-                                 &front));
+                insert(new Deopt(insert.env, state.getPC(), state.stack));
                 break;
             }
             default:
@@ -275,26 +273,50 @@ void Rir2Pir::finalize(Value* ret, Builder& insert) {
     assert(!insert.bb->next0 && !insert.bb->next1 &&
            "Builder needs to be on an exit-block to insert return");
 
-    // Remove excessive Phis
-    Visitor::run(insert.code->entry, [&](BB* bb) {
-        auto it = bb->begin();
-        while (it != bb->end()) {
-            Phi* p = Phi::Cast(*it);
-            if (!p) {
+    bool changed = true;
+    while (changed) {
+        changed = false;
+        // Remove excessive Phis
+        Visitor::run(insert.code->entry, [&](BB* bb) {
+            auto it = bb->begin();
+            while (it != bb->end()) {
+                Phi* p = Phi::Cast(*it);
+                if (!p) {
+                    it++;
+                    continue;
+                }
+                if (p->nargs() == 1) {
+                    if (p == ret)
+                        ret = p->arg(0).val();
+                    p->replaceUsesWith(p->arg(0).val());
+                    it = bb->remove(it);
+                    changed = true;
+                    continue;
+                }
+                // Phi where all inputs are the same value (except the phi
+                // itself), then we can remove it. 
+                Value* allTheSame = p->arg(0).val();
+                p->eachArg([&](BB*, Value* v) {
+                    if (allTheSame == p)
+                        allTheSame = v;
+                    else if (v != p && v != allTheSame)
+                        allTheSame = nullptr;
+                });
+                if (allTheSame) {
+                    p->replaceUsesWith(allTheSame);
+                    it = bb->remove(it);
+                    changed = true;
+                    continue;
+                }
+                if (p->updateType()) {
+                    p->printRef(std::cout);
+                    std::cout << " changed\n";
+                    changed = true;
+                }
                 it++;
-                continue;
             }
-            if (p->nargs() == 1) {
-                if (p == ret)
-                    ret = p->arg(0).val();
-                p->replaceUsesWith(p->arg(0).val());
-                it = bb->remove(it);
-                continue;
-            }
-            p->updateType();
-            it++;
-        }
-    });
+        });
+    }
 
     insert(new Return(ret));
 
