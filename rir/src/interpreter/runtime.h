@@ -1,6 +1,7 @@
 #ifndef RIR_INTERPRETER_RUNTIME_H
 #define RIR_INTERPRETER_RUNTIME_H
 
+#include "utils/configurations.h"
 #include "../config.h"
 #include "interp_context.h"
 #include "interp_data.h"
