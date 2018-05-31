@@ -53,9 +53,7 @@ class TheScopeResolution {
                     auto e = Env::parentEnv(ss->env());
                     auto aload = analysis.loads.at(ss);
                     if (e && aload.env != AbstractREnvironment::UnknownParent) {
-                        if ((Env::isPirEnv(aload.env) &&
-                             !aload.result.isUnknown()) ||
-                            Env::isStaticEnv(aload.env)) {
+                        if (!aload.result.isUnknown()) {
                             auto r = new StVar(ss->varName, ss->arg<0>().val(),
                                                aload.env);
                             bb->replace(ip, r);

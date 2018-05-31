@@ -14,7 +14,7 @@ class TheScopeAnalysis : public StaticAnalysis<AbstractREnvironmentHierarchy> {
 
     static constexpr size_t maxDepth = 5;
     size_t depth;
-    Value* staticClosureEnv = nullptr;
+    Value* staticClosureEnv = Env::notClosed();
 
     TheScopeAnalysis(Closure* cls, const std::vector<SEXP>& args)
         : Super(cls), args(args), depth(0) {}
@@ -39,29 +39,14 @@ void TheScopeAnalysis::tryLoad(const AS& envs, Instruction* i,
     LdFun* ldf = LdFun::Cast(i);
     StVarSuper* sts = StVarSuper::Cast(i);
 
-    Value* env = nullptr;
-    SEXP name = nullptr;
     if (ld) {
-        name = ld->varName;
-        env = ld->env();
+        aLoad(envs.get(ld->env(), ld->varName));
     } else if (sld) {
-        if (envs.count(sld->env())) {
-            auto superEnv = envs.at(sld->env()).parentEnv;
-            if (superEnv != AbstractREnvironment::UnknownParent) {
-                name = sld->varName;
-                env = sld->env();
-            }
-        }
+        aLoad(envs.superGet(sld->env(), sld->varName));
     } else if (ldf) {
-        name = ldf->varName;
-        env = ldf->env();
+        aLoad(envs.get(ldf->env(), ldf->varName));
     } else if (sts) {
-        env = Env::parentEnv(sts->env());
-        name = sts->varName;
-    }
-    if (name) {
-        auto res = envs.get(env, name);
-        aLoad(res);
+        aLoad(envs.superGet(sts->env(), sts->varName));
     }
 }
 
@@ -79,7 +64,7 @@ void TheScopeAnalysis::apply(AS& envs, Instruction* i) const {
             staticClosureEnv != Env::notClosed()) {
             parentEnv = staticClosureEnv;
         }
-        envs[mk].parentEnv = parentEnv;
+        envs[mk].parentEnv(parentEnv);
         mk->eachLocalVar(
             [&](SEXP name, Value* val) { envs[mk].set(name, val, mk); });
         handled = true;
@@ -87,7 +72,7 @@ void TheScopeAnalysis::apply(AS& envs, Instruction* i) const {
         envs[s->env()].set(s->varName, s->val(), s);
         handled = true;
     } else if (ss) {
-        auto superEnv = envs[ss->env()].parentEnv;
+        auto superEnv = envs[ss->env()].parentEnv();
         if (superEnv != AbstractREnvironment::UnknownParent) {
             envs[superEnv].set(ss->varName, ss->val(), ss);
             handled = true;
