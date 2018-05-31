@@ -139,8 +139,17 @@ Value* Rir2Pir::translate(rir::Code* srcCode, Builder& insert) const {
                 assert(false);
             }
 
-            BB* branch = insert.createBB();
-            BB* fall = insert.createBB();
+            auto edgeSplit = [&](Opcode* trg, BB* branch) {
+                if (mergepoint.count(trg)) {
+                    BB* next = insert.createBB();
+                    branch->next0 = next;
+                    branch = next;
+                }
+                return branch;
+            };
+
+            BB* branch = edgeSplit(trg, insert.createBB());
+            BB* fall = edgeSplit(fallpc, insert.createBB());
 
             // TOS == TRUE goes to next1, TOS == FALSE goes to next0
             switch (bc.bc) {

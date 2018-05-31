@@ -180,7 +180,7 @@ class TheCleanup {
             // goes from smaller id to bigger id, except for back-edges.
             code->maxBBId = 0;
             DominanceGraph dom(code->entry);
-            DominatorTreeVisitor<VisitorHelpers::IDMarker>(dom).run(
+            DominatorTreeVisitor<VisitorHelpers::PointerMarker>(dom).run(
                 code, [&](BB* bb) {
                     bb->unsafeSetId(code->maxBBId++);
                     bb->gc();
