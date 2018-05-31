@@ -3,6 +3,7 @@
 
 #include "../pir/pir.h"
 #include "generic_static_analysis.h"
+#include <algorithm>
 
 namespace rir {
 namespace pir {
@@ -105,7 +106,7 @@ struct PIRAssignment {
         if (type != anotherPA.type) return false;
         if (this->isConstant()) return *argument.constant == *anotherPA.argument.constant;
         else if (this->isArgIndex()) return argument.argIndex == anotherPA.argument.argIndex;
-        else return argument.expression = anotherPA.argument.expression;
+        else return argument.expression == anotherPA.argument.expression;
     }
 };
 
@@ -123,13 +124,13 @@ class GREquivalenceClass {
         bool changed = false;
         assert(number == otherClass.number);
         for (auto var : otherClass.variables){
-            int size = variables.size();
+            size_t size = variables.size();
             variables.push_back(var);
             changed = changed || (variables.size() > size);
         }
         for (auto exp : otherClass.expressions){
             // TODO: Verify after merge that there are no more that one argument and constants
-            int size = expressions.size();
+            size_t size = expressions.size();
             expressions.push_back(exp);
             changed = changed || (expressions.size() > size);
         }
