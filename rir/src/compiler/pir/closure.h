@@ -21,7 +21,9 @@ namespace pir {
 class Closure : public Code {
   private:
     friend class Module;
-    friend bool hasRedundantCopy(std::function <void (Closure*)>&);
+    friend bool hasRedundantCopy(std::function <void (Closure*)>& addPirCodeToTest,
+                      std::function <BB* (Closure*)>& basicBlockToCheck,
+                      std::function <bool (BB*)>& predicate);
     Closure(std::initializer_list<SEXP> a, Env* env) : env(env), argNames(a) {}
     Closure(const std::vector<SEXP>& a, Env* env) : env(env), argNames(a) {}
     Env* env;
