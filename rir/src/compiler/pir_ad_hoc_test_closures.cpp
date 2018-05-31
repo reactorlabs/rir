@@ -1,6 +1,6 @@
+#include "R/Protect.h"
 #include "pir/pir_impl.h"
 #include "util/builder.h"
-#include "R/Protect.h"
 #include "util/visitor.h"
 
 namespace rir {
@@ -14,14 +14,14 @@ void sameBBSimpleRedundancy(pir::Closure* function) {
     builder(new LdConst(value));
 }
 
-void sameBBComplexRedundancy(pir::Closure* function) {
+/*void sameBBComplexRedundancy(pir::Closure* function) {
     Protect p;
     Builder builder(function, Env::notClosed());
     SEXP value = p(Rf_ScalarInteger(1));
-    SEXP value = p(Rf_ScalarInteger(2));
+    SEXP value2 = p(Rf_ScalarInteger(2));
     builder(new LdConst(value));
-    builder(new LdConst(value));
-}
+    builder(new LdConst(value2));
+}*/
 
 void controlFlowRedundancy(pir::Closure* function) {
     Protect p;
@@ -48,41 +48,36 @@ void controlFlowRedundancy(pir::Closure* function) {
     builder(new LdConst(value));
 }
 
-bool hasOneConstantLoad(BB* bb){
+bool hasOneConstantLoad(BB* bb) {
     std::vector<SEXP> values;
-    return !Visitor::check (
-        bb, [&](Instruction* i) { 
-            if (LdConst::Cast(i)) {
-                if(std::find(values.begin(), values.end(), LdConst::Cast(i)->c) != values.end())
-                    return false;
-                else
-                    values.push_back(LdConst::Cast(i)->c);
-            }
-            return true;
-        });
+    return !Visitor::check(bb, [&](Instruction* i) {
+        if (LdConst::Cast(i)) {
+            if (std::find(values.begin(), values.end(), LdConst::Cast(i)->c) !=
+                values.end())
+                return false;
+            else
+                values.push_back(LdConst::Cast(i)->c);
+        }
+        return true;
+    });
 }
 
-bool hasTwoConstantLoads(BB* bb){
+bool hasTwoConstantLoads(BB* bb) {
     std::vector<SEXP> values;
-    return !Visitor::check (
-        bb, [&](Instruction* i) { 
-            if (LdConst::Cast(i)) {
-                if(std::find(values.begin(), values.end(), LdConst::Cast(i)->c) != values.end())
-                    return false;
-                else
-                    values.push_back(LdConst::Cast(i)->c);
-            }
-            return true;
-        });
+    return !Visitor::check(bb, [&](Instruction* i) {
+        if (LdConst::Cast(i)) {
+            if (std::find(values.begin(), values.end(), LdConst::Cast(i)->c) !=
+                values.end())
+                return false;
+            else
+                values.push_back(LdConst::Cast(i)->c);
+        }
+        return true;
+    });
 }
 
-BB* firstBB(pir::Closure* closure) {
-    return closure->entry;
-}
+BB* firstBB(pir::Closure* closure) { return closure->entry; }
 
-BB* mergeBB(pir::Closure* closure) {
-    return closure->entry->next0->next0;
-}
-
+BB* mergeBB(pir::Closure* closure) { return closure->entry->next0->next0; }
 }
 }

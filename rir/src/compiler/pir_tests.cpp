@@ -18,9 +18,9 @@ namespace rir {
 namespace pir {
 /* I define this function within the same namespace as Closure so that 
    the friendshipness works for Closure's private constructors */
-bool hasRedundantCopy(std::function <void (Closure*)>& addPirCodeToTest,
-                      std::function <BB* (Closure*)>& basicBlockToCheck,
-                      std::function <bool (BB*)>& predicate) {
+bool hasRedundantCopy(std::function<void(Closure*)>& addPirCodeToTest,
+                      std::function<BB*(Closure*)>& basicBlockToCheck,
+                      std::function<bool(BB*)>& predicate) {
     pir::Module module;
     std::vector<SEXP> args;
     auto* f = new Closure(args, Env::notClosed());
@@ -39,7 +39,6 @@ bool hasOneConstantLoad(BB* bb);
 bool hasTwoConstantLoads(BB* bb);
 BB* firstBB(pir::Closure*);
 BB* mergeBB(pir::Closure* closure);
-
 }
 }
 
@@ -374,40 +373,56 @@ static Test tests[] = {
          }),
     Test("sameBBredundnacy",
          []() {
-             std::function<void(Closure* pirFunction)> test = [](Closure* pirFunction){
-                 rir::pir::sameBBSimpleRedundancy(pirFunction);};
-             std::function<BB*(Closure*)> bbSelector = [](Closure* pirFunction) -> BB* {
-                 return rir::pir::firstBB(pirFunction);};
+             std::function<void(Closure * pirFunction)> test =
+                 [](Closure* pirFunction) {
+                     rir::pir::sameBBSimpleRedundancy(pirFunction);
+                 };
+             std::function<BB*(Closure*)> bbSelector =
+                 [](Closure* pirFunction) -> BB* {
+                 return rir::pir::firstBB(pirFunction);
+             };
              std::function<bool(BB*)> redundancyPredicate = [](BB* bb) -> bool {
-                 return rir::pir::hasTwoConstantLoads(bb);};
-                 
+                 return rir::pir::hasTwoConstantLoads(bb);
+             };
+
              return !hasRedundantCopy(test, bbSelector, redundancyPredicate);
          }),
-    Test("sameBBOperationRedundancy",
+    /*Test("sameBBOperationRedundancy",
          []() {
-             std::function<void(Closure* pirFunction)> test = [](Closure* pirFunction){
-                 rir::pir::sameBBComplexRedundancy(pirFunction);};
-             std::function<BB*(Closure*)> bbSelector = [](Closure* pirFunction) -> BB* {
-                 return rir::pir::firstBB(pirFunction);};
+             std::function<void(Closure * pirFunction)> test =
+                 [](Closure* pirFunction) {
+                     rir::pir::sameBBComplexRedundancy(pirFunction);
+                 };
+             std::function<BB*(Closure*)> bbSelector =
+                 [](Closure* pirFunction) -> BB* {
+                 return rir::pir::firstBB(pirFunction);
+             };
              std::function<bool(BB*)> redundancyPredicate = [](BB* bb) -> bool {
-                 return rir::pir::hasTwoAdditions(bb);};
-                 
+                 return rir::pir::hasTwoAdditions(bb);
+             };
+
              return !hasRedundantCopy(test, bbSelector, redundancyPredicate);
-         }),     
+         }),*/
     Test("controlFlowDependentSimpleRedundancy",
          []() {
-             std::function<void(Closure* pirFunction)> test = [](Closure* pirFunction){
-                 rir::pir::controlFlowRedundancy(pirFunction);};
-             std::function<BB*(Closure*)> bbSelector = [](Closure* pirFunction) -> BB* {
-                 return rir::pir::mergeBB(pirFunction);};
+             std::function<void(Closure * pirFunction)> test =
+                 [](Closure* pirFunction) {
+                     rir::pir::controlFlowRedundancy(pirFunction);
+                 };
+             std::function<BB*(Closure*)> bbSelector =
+                 [](Closure* pirFunction) -> BB* {
+                 return rir::pir::mergeBB(pirFunction);
+             };
              std::function<bool(BB*)> redundancyPredicate = [](BB* bb) -> bool {
-                 return rir::pir::hasOneConstantLoad(bb);};
-                 
+                 return rir::pir::hasOneConstantLoad(bb);
+             };
+
              return !hasRedundantCopy(test, bbSelector, redundancyPredicate);
          }),
     /*Test("controlFlowDependentComplexRedundancy",
          []() {
-             std::function<void(Closure* pirFunction)> lambda = [](Closure* pirFunction){rir::pir::controlFlowComplexRedundnacy(pirFunction);};
+             std::function<void(Closure* pirFunction)> lambda = [](Closure*
+       pirFunction){rir::pir::controlFlowComplexRedundnacy(pirFunction);};
              return !hasRedundantCopy(lambda);
          }),*/
     Test("PIR to RIR: basic",
