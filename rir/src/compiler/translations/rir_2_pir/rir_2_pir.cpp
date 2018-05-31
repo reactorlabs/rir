@@ -309,8 +309,6 @@ void Rir2Pir::finalize(Value* ret, Builder& insert) {
                     continue;
                 }
                 if (p->updateType()) {
-                    p->printRef(std::cout);
-                    std::cout << " changed\n";
                     changed = true;
                 }
                 it++;

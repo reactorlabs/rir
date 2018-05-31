@@ -240,8 +240,11 @@ class AbstractREnvironmentHierarchy
             k.insert(e.first);
         for (auto i : k)
             if (this->count(i)) {
-                if (other.count(i) == 0 && !at(i).tainted) {
-                    at(i).taint();
+                if (other.count(i) == 0) {
+                    if (!at(i).tainted) {
+                        changed = true;
+                        at(i).taint();
+                    }
                 } else if (at(i).merge(other.at(i))) {
                     changed = true;
                 }

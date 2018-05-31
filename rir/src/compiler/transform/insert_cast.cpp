@@ -15,12 +15,14 @@ pir::Instruction* InsertCast::cast(pir::Value* v, PirType t) {
     if (v->type == RType::logical && t == NativeType::test) {
         return new pir::AsTest(v);
     }
+    if (!v->type.isA(RType::closure) && t == RType::closure) {
+        return new pir::ChkClosure(v);
+    }
 
     std::cerr << "Cannot cast " << v->type << " to " << t;
     std::cerr << " for at ";
     v->printRef(std::cerr);
     std::cerr << "\n";
-    assert(false);
     return nullptr;
 }
 
@@ -39,9 +41,13 @@ void InsertCast::apply(BB* bb) {
         instr->eachArg([&](InstrArg& arg) {
             while (!arg.type().isSuper(arg.val()->type)) {
                 auto c = cast(arg.val(), arg.type());
+                if (!c) {
+                    bb->print(std::cerr);
+                    assert(false);
+                }
                 c->bb_ = bb;
                 arg.val() = c;
-                ip = bb->insert(ip, c);
+                ip = bb->insert(ip, c) + 1;
             }
         });
         ip++;
