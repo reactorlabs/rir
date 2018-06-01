@@ -128,7 +128,6 @@ struct AbstractREnvironment {
     std::unordered_map<SEXP, AbstractPirValue> entries;
     std::unordered_map<Value*, MkFunCls*> mkClosures;
 
-    Value* parentEnv = UninitializedParent;
 
     bool leaked = false;
     bool tainted = false;
@@ -201,14 +200,33 @@ struct AbstractREnvironment {
             }
         }
 
-        if (parentEnv == UninitializedParent &&
-            other.parentEnv != UninitializedParent) {
-            parentEnv = other.parentEnv;
+        if (parentEnv_ == UninitializedParent &&
+            other.parentEnv_ != UninitializedParent) {
+            parentEnv(other.parentEnv());
+            changed = true;
+        } else if (parentEnv_ != UninitializedParent &&
+                   parentEnv_ != UnknownParent &&
+                   other.parentEnv_ != parentEnv_) {
+            parentEnv_ = UnknownParent;
             changed = true;
         }
 
         return changed;
     }
+
+    Value* parentEnv() const {
+        if (parentEnv_ == UninitializedParent)
+            return UnknownParent;
+        return parentEnv_;
+    }
+
+    void parentEnv(Value* v) {
+        assert(v);
+        parentEnv_ = v;
+    }
+
+  private:
+    Value* parentEnv_ = UninitializedParent;
 };
 
 /*
@@ -240,8 +258,11 @@ class AbstractREnvironmentHierarchy
             k.insert(e.first);
         for (auto i : k)
             if (this->count(i)) {
-                if (other.count(i) == 0 && !at(i).tainted) {
-                    at(i).taint();
+                if (other.count(i) == 0) {
+                    if (!at(i).tainted) {
+                        changed = true;
+                        at(i).taint();
+                    }
                 } else if (at(i).merge(other.at(i))) {
                     changed = true;
                 }
@@ -255,6 +276,7 @@ class AbstractREnvironmentHierarchy
     MkFunCls* findClosure(Value* env, Value* fun);
 
     AbstractLoad get(Value* env, SEXP e) const;
+    AbstractLoad superGet(Value* env, SEXP e) const;
 };
 }
 }

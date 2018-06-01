@@ -17,6 +17,8 @@ void Closure::print(std::ostream& out) {
     }
 }
 
+void Closure::print() { print(std::cout); }
+
 Promise* Closure::createProm() {
     Promise* p = new Promise(this, promises.size());
     promises.push_back(p);

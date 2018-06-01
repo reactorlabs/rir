@@ -97,12 +97,21 @@ class TheCleanup {
             }
         }
 
+        auto fixupPhiInput = [&](BB* old, BB* n) {
+            for (auto phi : used_bb[old]) {
+                for (auto& in : phi->input)
+                    if (in == old)
+                        in = n;
+            }
+        };
         CFG cfg(function->entry);
         std::unordered_map<BB*, BB*> toDel;
-
         Visitor::run(function->entry, [&](BB* bb) {
             // Remove unnecessary splits
-            if (bb->isJmp() && cfg.predecessors[bb->next0->id].size() == 1) {
+            if (bb->isJmp() && cfg.predecessors[bb->next0->id].size() == 1 &&
+                /* this condition keeps graph in split-edge: */
+                cfg.predecessors[bb->id].size() == 1 &&
+                (*cfg.predecessors[bb->id].begin())->isJmp()) {
                 BB* d = bb->next0;
                 while (!d->isEmpty()) {
                     d->moveToEnd(d->begin(), bb);
@@ -111,11 +120,7 @@ class TheCleanup {
                 bb->next1 = d->next1;
                 d->next0 = nullptr;
                 d->next1 = nullptr;
-                for (auto phi : used_bb[d]) {
-                    for (auto& in : phi->input)
-                        if (in == d)
-                            in = bb;
-                }
+                fixupPhiInput(d, bb);
                 toDel[d] = nullptr;
             }
         });
@@ -156,7 +161,7 @@ class TheCleanup {
             bb->next1 = d->next1;
             d->next0 = nullptr;
             d->next1 = nullptr;
-            assert(used_bb.find(d) == used_bb.end());
+            fixupPhiInput(d, bb);
             toDel[d] = nullptr;
         }
         Visitor::run(function->entry, [&](BB* bb) {
@@ -175,7 +180,7 @@ class TheCleanup {
             // goes from smaller id to bigger id, except for back-edges.
             code->maxBBId = 0;
             DominanceGraph dom(code->entry);
-            DominatorTreeVisitor<VisitorHelpers::IDMarker>(dom).run(
+            DominatorTreeVisitor<VisitorHelpers::PointerMarker>(dom).run(
                 code, [&](BB* bb) {
                     bb->unsafeSetId(code->maxBBId++);
                     bb->gc();

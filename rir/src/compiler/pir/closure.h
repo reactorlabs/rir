@@ -35,6 +35,7 @@ class Closure : public Code {
     std::vector<Promise*> promises;
 
     void print(std::ostream& out);
+    void print();
 
     Promise* createProm();
 

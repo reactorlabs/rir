@@ -3,6 +3,7 @@
 
 #include "../pir/bb.h"
 #include "../pir/pir.h"
+#include "../pir/tag.h"
 
 namespace rir {
 namespace pir {
@@ -20,6 +21,7 @@ class Builder {
 
     template <class T>
     T* operator()(T* i) {
+        assert(i->tag != Tag::_UNUSED_);
         bb->append(i);
         return i;
     }

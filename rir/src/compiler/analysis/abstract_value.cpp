@@ -67,12 +67,13 @@ MkFunCls* AbstractREnvironmentHierarchy::findClosure(Value* env, Value* fun) {
     while (env && env != AbstractREnvironment::UnknownParent) {
         if ((*this)[env].mkClosures.count(fun))
             return (*this)[env].mkClosures.at(fun);
-        env = (*this)[env].parentEnv;
+        env = (*this)[env].parentEnv();
     }
     return AbstractREnvironment::UnknownClosure;
 }
 
 AbstractLoad AbstractREnvironmentHierarchy::get(Value* env, SEXP e) const {
+    assert(env);
     while (env != AbstractREnvironment::UnknownParent) {
         if (this->count(env) == 0)
             return AbstractLoad(env ? env : AbstractREnvironment::UnknownParent,
@@ -82,15 +83,30 @@ AbstractLoad AbstractREnvironmentHierarchy::get(Value* env, SEXP e) const {
             const AbstractPirValue& res = aenv.get(e);
             return AbstractLoad(env, res);
         }
-        env = at(env).parentEnv;
-        if (env == AbstractREnvironment::UnknownParent && Env::parentEnv(env))
+        auto parent = at(env).parentEnv();
+        assert(parent);
+        if (parent == AbstractREnvironment::UnknownParent &&
+            Env::parentEnv(env))
             env = Env::parentEnv(env);
+        else
+            env = parent;
     }
     return AbstractLoad(env, AbstractPirValue::tainted());
 }
 
+AbstractLoad AbstractREnvironmentHierarchy::superGet(Value* env, SEXP e) const {
+    if (!count(env))
+        return AbstractLoad(AbstractREnvironment::UnknownParent,
+                            AbstractPirValue::tainted());
+    auto parent = at(env).parentEnv();
+    assert(parent);
+    if (parent == AbstractREnvironment::UnknownParent && Env::parentEnv(env))
+        parent = Env::parentEnv(env);
+    return get(parent, e);
+}
+
 Value* AbstractREnvironment::UnknownParent = (Value*)-1;
-Value* AbstractREnvironment::UninitializedParent = nullptr;
+Value* AbstractREnvironment::UninitializedParent = (Value*)-2;
 MkFunCls* AbstractREnvironment::UnknownClosure = (MkFunCls*)-1;
 }
 }

@@ -187,18 +187,25 @@ bool testSuperAssign() {
     }
     {
         pir::Module m;
-        // This super assign can be converted into a store to the global env
+        // This super assign cannot be removed, since the super env is unknown
         auto res = compile("", "f <- function() {(function() a <<- 1)()}", &m);
         auto f = res["f"];
-        CHECK(!hasSuperAssign(f));
-        CHECK(hasAssign(f));
+        CHECK(hasSuperAssign(f));
     }
     {
         pir::Module m;
-        // This super assign cannot be removed, since the super env is not
-        // unknown.
+        // This super assign can be removed, since the super env is not tainted
         auto res = compile(
-            "", "f <- function() {f <- (function() {qq(); a <<- 1})()}", &m);
+            "", "f <- function() {a <- 1; (function() {asdf(); a <<- 1})()}",
+            &m);
+        auto f = res["f"];
+        CHECK(!hasSuperAssign(f));
+    }
+    {
+        pir::Module m;
+        // This super assign cannot be removed, since the super env is tainted
+        auto res = compile(
+            "", "f <- function() {a <- 1; asdf(); (function() a <<- 1)()}", &m);
         auto f = res["f"];
         CHECK(hasSuperAssign(f));
     }

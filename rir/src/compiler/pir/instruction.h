@@ -13,6 +13,7 @@
 #include <cstdint>
 #include <functional>
 #include <iostream>
+#include <deque>
 
 /*
  * This file provides implementations for all instructions
@@ -52,7 +53,9 @@ class Closure;
 class Phi;
 
 struct InstrArg : public std::pair<Value*, PirType> {
-    InstrArg(Value* v, PirType t) : std::pair<Value*, PirType>(v, t) {}
+    InstrArg(Value* v, PirType t) : std::pair<Value*, PirType>(v, t) {
+        assert(v->tag != Tag::_UNUSED_);
+    }
     InstrArg() : std::pair<Value*, PirType>(nullptr, PirType::bottom()) {}
     Value*& val() { return first; }
     PirType& type() { return second; }
@@ -464,10 +467,10 @@ class FLI(StVarSuper, 2, Effect::None, EnvAccess::Write) {
 class FLI(LdVarSuper, 1, Effect::None, EnvAccess::Read) {
   public:
     LdVarSuper(SEXP name, Value* env)
-        : FixedLenInstruction(PirType::voyd(), env), varName(name) {}
+        : FixedLenInstruction(PirType::any(), env), varName(name) {}
 
     LdVarSuper(const char* name, Value* env)
-        : FixedLenInstruction(PirType::voyd(), env), varName(Rf_install(name)) {
+        : FixedLenInstruction(PirType::any(), env), varName(Rf_install(name)) {
     }
 
     SEXP varName;
@@ -537,8 +540,8 @@ class FLI(Seq, 3, Effect::None, EnvAccess::None) {
     Seq(Value* start, Value* end, Value* step)
         : FixedLenInstruction(
               PirType::num(),
-              {{PirType::num().scalar(), PirType::num().scalar(),
-                PirType::num().scalar()}},
+              // TODO: require scalars, but this needs some cast support
+              {{PirType::val(), PirType::val(), PirType::val()}},
               {{start, end, step}}) {}
 };
 
@@ -645,11 +648,11 @@ class FLI(Inc, 1, Effect::None, EnvAccess::None) {
 
 class FLI(Is, 1, Effect::None, EnvAccess::None) {
   public:
-    Is(uint32_t tag, Value* v)
+    Is(uint32_t sexpTag, Value* v)
         : FixedLenInstruction(PirType(RType::logical).scalar(),
                               {{PirType::val()}}, {{v}}),
-          tag(tag) {}
-    uint32_t tag;
+            sexpTag(sexpTag) {}
+    uint32_t sexpTag;
 
     void printArgs(std::ostream& out) override;
 };
@@ -934,7 +937,7 @@ class VLI(Phi, Effect::None, EnvAccess::None) {
         assert(nargs() == inputs.size());
     }
     void printArgs(std::ostream& out) override;
-    void updateType();
+    bool updateType();
     template <bool E = false>
     inline void pushArg(Value* a) {
         static_assert(E, "use addInput");
@@ -955,9 +958,9 @@ class VLI(Deopt, Effect::Any, EnvAccess::Leak) {
   public:
     Opcode* pc;
 
-    Deopt(Value* env, Opcode* pc, size_t stackSize, Value** stack)
+    Deopt(Value* env, Opcode* pc, const std::deque<Value*>& stack)
         : VarLenInstruction(PirType::voyd(), env), pc(pc) {
-        for (unsigned i = 0; i < stackSize; ++i)
+        for (unsigned i = 0; i < stack.size(); ++i)
             pushArg(stack[i], PirType::any());
     }
 

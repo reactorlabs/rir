@@ -19,6 +19,9 @@ PirType::PirType(SEXP e) : flags_(defaultRTypeFlags()), t_(RTypeSet()) {
         t_.r.set(RType::cons);
         break;
     case CLOSXP:
+    // TODO: maybe have different types for those three?
+    case SPECIALSXP:
+    case BUILTINSXP:
         t_.r.set(RType::closure);
         break;
     case ENVSXP:
@@ -54,8 +57,6 @@ PirType::PirType(SEXP e) : flags_(defaultRTypeFlags()), t_(RTypeSet()) {
         break;
     case BCODESXP:
         t_.r.set(RType::code);
-    case SPECIALSXP:
-    case BUILTINSXP:
     case DOTSXP:
     case ANYSXP:
     case CPLXSXP:

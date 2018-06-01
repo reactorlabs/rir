@@ -9,15 +9,15 @@ using namespace rir::pir;
 class TheVerifier {
   public:
     Closure* f;
-    CFG cfg;
 
-    TheVerifier(Closure* f) : f(f), cfg(f->entry) {}
+    TheVerifier(Closure* f) : f(f) {}
 
     bool ok = true;
 
     void operator()() {
         DominanceGraph dom(f->entry);
-        Visitor::run(f->entry, [&](BB* bb) { return verify(bb, dom); });
+        CFG cfg(f->entry);
+        Visitor::run(f->entry, [&](BB* bb) { return verify(bb, dom, cfg); });
 
         if (!ok) {
             std::cerr << "Verification of function " << *f << " failed\n";
@@ -46,9 +46,9 @@ class TheVerifier {
         }
     }
 
-    void verify(BB* bb, const DominanceGraph& dom) {
+    void verify(BB* bb, const DominanceGraph& dom, const CFG& cfg) {
         for (auto i : *bb)
-            verify(i, bb, dom);
+            verify(i, bb, dom, cfg);
         if (bb->isEmpty()) {
             if (!bb->next0 && !bb->next1) {
                 std::cerr << "bb" << bb->id << " has no successor\n";
@@ -110,10 +110,12 @@ class TheVerifier {
 
     void verify(Promise* p) {
         DominanceGraph dom(p->entry);
-        Visitor::run(p->entry, [&](BB* bb) { verify(bb, dom); });
+        CFG cfg(p->entry);
+        Visitor::run(p->entry, [&](BB* bb) { verify(bb, dom, cfg); });
     }
 
-    void verify(Instruction* i, BB* bb, const DominanceGraph& dom) {
+    void verify(Instruction* i, BB* bb, const DominanceGraph& dom,
+                const CFG& cfg) {
         if (i->bb() != bb) {
             std::cerr << "Error: instruction '";
             i->print(std::cerr);
@@ -136,6 +138,11 @@ class TheVerifier {
                         std::cerr << "': input '";
                         iv->printRef(std::cerr);
                         std::cerr << "' does not come from a predecessor.\n";
+                        std::cerr << "My preds are ";
+                        for (auto p : cfg.transitivePredecessors[i->bb()->id])
+                            std::cerr << p->id << " ";
+                        std::cerr << "\n";
+
                         ok = false;
                     }
                 } else if ((iv->bb() == i->bb() &&

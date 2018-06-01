@@ -372,10 +372,11 @@ void BC::print(CallSite* cs) {
     }
     case Opcode::static_call_stack_: {
         NumArgsT nargs = immediate.call_args.nargs;
-        Rprintf(" %d ", nargs);
+        Rprintf(" %d : ", nargs);
         if (cs) {
-            Rprintf(" %p ", cs->target());
-            Rprintf("\n        -> ");
+            Rprintf(" (%d) ", *cs->target());
+            Rf_PrintValue(Pool::get(*cs->target()));
+            Rprintf("        -> ", *cs->target());
             Rf_PrintValue(Pool::get(cs->call));
             printProfile(cs);
         }
