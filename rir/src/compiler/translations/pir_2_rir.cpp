@@ -1,4 +1,5 @@
 #include "pir_2_rir.h"
+#include "../../ir/cleanup.h"
 #include "../pir/pir_impl.h"
 #include "../util/cfg.h"
 #include "../util/visitor.h"
@@ -6,7 +7,6 @@
 #include "ir/CodeEditor.h"
 #include "ir/CodeStream.h"
 #include "ir/CodeVerifier.h"
-#include "ir/Optimizer.h"
 #include "utils/FunctionWriter.h"
 
 #include <algorithm>
@@ -1257,8 +1257,8 @@ rir::Function* Pir2Rir::finalize() {
 
     for (size_t i = 0; i < code.numPromises(); ++i)
         if (code.promise(i))
-            Optimizer::optimize(*code.promise(i));
-    Optimizer::optimize(code);
+            BCCleanup::apply(*code.promise(i));
+    BCCleanup::apply(code);
     auto opt = code.finalize();
 
 #ifdef ENABLE_SLOWASSERT

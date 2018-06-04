@@ -7,6 +7,12 @@ namespace rir {
 
 class BCCleanup : public InstructionDispatcher::Receiver {
   public:
+    static void apply(CodeEditor& code) {
+        BCCleanup c(code);
+        c.run();
+        code.commit();
+    }
+
     InstructionDispatcher dispatcher;
     CodeEditor& code_;
     bool leaksEnvironment;

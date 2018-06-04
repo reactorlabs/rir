@@ -13,7 +13,6 @@
 
 #include "utils/Printer.h"
 
-#include "ir/Optimizer.h"
 
 using namespace rir;
 
@@ -134,8 +133,13 @@ REXPORT SEXP pir_tests() {
 
 // startup ---------------------------------------------------------------------
 
+SEXP dummyOpt(SEXP opt) {
+    // Currently unused
+    return opt;
+}
+
 bool startup() {
-    initializeRuntime(rir_compile, Optimizer::reoptimizeFunction);
+    initializeRuntime(rir_compile, dummyOpt);
     return true;
 }
 
