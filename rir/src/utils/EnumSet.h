@@ -1,6 +1,7 @@
 #ifndef RIR_BITSET_H
 #define RIR_BITSET_H
 
+#include "common.h"
 #include <bitset>
 #include <initializer_list>
 
@@ -29,34 +30,44 @@ class EnumSet {
     EnumSet(const Element& e) { set(e); }
     EnumSet(const Store& s) : set_(s) {}
 
-    bool contains(const Element& e) const {
+    RIR_INLINE bool contains(const Element& e) const {
         assert(boundscheck(e));
         return set_ & singleton(e);
     }
 
-    void set(const Element& e) {
+    RIR_INLINE void set(const Element& e) {
         assert(boundscheck(e));
         set_.set(static_cast<size_t>(e));
     }
 
-    void reset(const Element& e) {
+    RIR_INLINE void reset(const Element& e) {
         assert(boundscheck(e));
         set_.reset(static_cast<size_t>(e));
     }
 
-    bool includes(const EnumSet& s) const { return (s.set_ & set_) == s.set_; }
+    RIR_INLINE bool includes(const EnumSet& s) const {
+        return (s.set_ & set_) == s.set_;
+    }
 
-    bool operator==(const Element& t) const { return EnumSet(t) == set_; }
+    RIR_INLINE bool operator==(const Element& t) const {
+        return EnumSet(t) == set_;
+    }
 
-    bool operator==(const EnumSet& s) const { return set_ == s.set_; }
+    RIR_INLINE bool operator==(const EnumSet& s) const {
+        return set_ == s.set_;
+    }
 
-    EnumSet operator|(const EnumSet& s) const { return EnumSet(s.set_ | set_); }
+    RIR_INLINE EnumSet operator|(const EnumSet& s) const {
+        return EnumSet(s.set_ | set_);
+    }
 
-    EnumSet operator|(const Element& t) const { return *this | EnumSet(t); }
+    RIR_INLINE EnumSet operator|(const Element& t) const {
+        return *this | EnumSet(t);
+    }
 
-    bool empty() const { return set_.none(); }
+    RIR_INLINE bool empty() const { return set_.none(); }
 
-    std::size_t count() const { return set_.count(); }
+    RIR_INLINE std::size_t count() const { return set_.count(); }
 
     struct Iterator {
       private:

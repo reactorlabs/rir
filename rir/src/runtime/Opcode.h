@@ -2,24 +2,15 @@
 #define RIR_OPCODE_H
 
 #include "R/r.h"
+#include "common.h"
 #include "ir/BC_inc.h"
 
 #include <cstdint>
 #include <cassert>
 
-// TODO force inlining for clang & gcc
-#define INLINE __attribute__((always_inline)) inline static
-
-#ifdef ENABLE_SLOWASSERT
-#define SLOWASSERT(what) assert(what)
-#else
-#define SLOWASSERT(what)                                                       \
-    {}
-#endif
-
 /** Moves the pc to next instruction, based on the current instruction length
  */
-INLINE rir::Opcode* advancePc(rir::Opcode* pc) {
+RIR_INLINE rir::Opcode* advancePc(rir::Opcode* pc) {
     switch (*pc++) {
 #define DEF_INSTR(name, imm, ...)                                              \
     case rir::Opcode::name:                                                    \

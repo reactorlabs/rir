@@ -110,8 +110,11 @@ void Rir2PirCompiler::applyOptimizations(Closure* f,
         translation->apply(f);
         if (isVerbose())
             printAfterPass(translation->getName(), category, f, passnr++);
+#if 0
         assert(Verify::apply(f));
+#endif
     }
+    assert(Verify::apply(f));
 }
 
 } // namespace pir

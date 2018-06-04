@@ -130,14 +130,14 @@ FinalDispatchContext DispatchContext::popArgs(Context* ctx) const {
     return FinalDispatchContext(*this);
 }
 
-INLINE SEXP getSrcAt(Code* c, Opcode* pc, Context* ctx) {
+RIR_INLINE SEXP getSrcAt(Code* c, Opcode* pc, Context* ctx) {
     unsigned sidx = c->getSrcIdxAt(pc, true);
     if (sidx == 0)
         return src_pool_at(ctx, c->src);
     return src_pool_at(ctx, sidx);
 }
 
-INLINE SEXP getSrcForCall(Code* c, Opcode* pc, Context* ctx) {
+RIR_INLINE SEXP getSrcForCall(Code* c, Opcode* pc, Context* ctx) {
     unsigned sidx = c->getSrcIdxAt(pc, false);
     return src_pool_at(ctx, sidx);
 }
@@ -196,12 +196,12 @@ void endClosureContext(RCNTXT* cntxt, SEXP result) {
     Rf_endcontext(cntxt);
 }
 
-INLINE SEXP createPromise(Code* code, SEXP env) {
+RIR_INLINE SEXP createPromise(Code* code, SEXP env) {
     SEXP p = Rf_mkPROMISE((SEXP)code, env);
     return p;
 }
 
-INLINE SEXP promiseValue(SEXP promise, Context* ctx) {
+RIR_INLINE SEXP promiseValue(SEXP promise, Context* ctx) {
     // if already evaluated, return the value
     if (PRVALUE(promise) && PRVALUE(promise) != R_UnboundValue) {
         promise = PRVALUE(promise);
@@ -234,7 +234,7 @@ void endClosureDebug(SEXP call, SEXP op, SEXP rho) {
 /** Given argument code offsets, creates the argslist from their promises.
  */
 // TODO unnamed only at this point
-INLINE void __listAppend(SEXP* front, SEXP* last, SEXP value, SEXP name) {
+RIR_INLINE void __listAppend(SEXP* front, SEXP* last, SEXP value, SEXP name) {
     SLOWASSERT(TYPEOF(*front) == LISTSXP || TYPEOF(*front) == NILSXP);
     SLOWASSERT(TYPEOF(*last) == LISTSXP || TYPEOF(*last) == NILSXP);
 
@@ -443,12 +443,12 @@ void warnSpecial(SEXP callee, SEXP call) {
  */
 
 void doProfileCall(CallSite*, SEXP);
-INLINE void profileCall(const DispatchContext& call, SEXP callee) {
+RIR_INLINE void profileCall(const DispatchContext& call, SEXP callee) {
     if (!call.callSite->hasProfile)
         return;
     doProfileCall(call.callSite, callee);
 }
-INLINE void profileCall(const CallContext& call) {
+RIR_INLINE void profileCall(const CallContext& call) {
     return profileCall(call, call.callee);
 }
 
@@ -1145,7 +1145,7 @@ static SEXP seq_int(int n1, int n2) {
     return ans;
 }
 
-INLINE SEXP findRootPromise(SEXP p) {
+RIR_INLINE SEXP findRootPromise(SEXP p) {
     if (TYPEOF(p) == PROMSXP) {
         while (TYPEOF(PREXPR(p)) == PROMSXP) {
             p = PREXPR(p);
@@ -1159,7 +1159,7 @@ extern void printFunction(Function* f);
 
 extern SEXP Rf_deparse1(SEXP call, Rboolean abbrev, int opts);
 
-INLINE void incPerfCount(Code* c) {
+RIR_INLINE void incPerfCount(Code* c) {
     if (c->perfCounter < UINT_MAX) {
         c->perfCounter++;
         // if (c->perfCounter == 200000)
@@ -1189,8 +1189,8 @@ typedef struct {
     Immediate idx;
 } BindingCache;
 
-INLINE SEXP cachedGetBindingCell(SEXP env, Immediate idx, Context* ctx,
-                                 BindingCache* bindingCache) {
+RIR_INLINE SEXP cachedGetBindingCell(SEXP env, Immediate idx, Context* ctx,
+                                     BindingCache* bindingCache) {
     if (env == R_BaseEnv || env == R_BaseNamespace)
         return NULL;
 

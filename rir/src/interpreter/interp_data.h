@@ -38,7 +38,7 @@ typedef rir::DispatchTable DispatchTable;
 /** Returns whether the SEXP appears to be valid promise, i.e. a pointer into
  * the middle of the linearized code.
  */
-INLINE Code* isValidCodeObject(SEXP s) {
+RIR_INLINE Code* isValidCodeObject(SEXP s) {
     if (TYPEOF(s) != EXTERNALSXP)
         return nullptr;
     Code* c = (Code*)s;
@@ -47,13 +47,13 @@ INLINE Code* isValidCodeObject(SEXP s) {
     return c;
 }
 
-INLINE Function* isValidFunctionObject(SEXP s) {
+RIR_INLINE Function* isValidFunctionObject(SEXP s) {
     if (TYPEOF(s) != EXTERNALSXP)
         return nullptr;
     return Function::check(s);
 }
 
-INLINE DispatchTable* isValidDispatchTableObject(SEXP s) {
+RIR_INLINE DispatchTable* isValidDispatchTableObject(SEXP s) {
     if (TYPEOF(s) != EXTERNALSXP)
         return nullptr;
     return DispatchTable::check(s);
@@ -61,7 +61,7 @@ INLINE DispatchTable* isValidDispatchTableObject(SEXP s) {
 
 const static uint32_t NO_DEOPT_INFO = (uint32_t)-1;
 
-INLINE Code* findDefaultArgument(Code* c) {
+RIR_INLINE Code* findDefaultArgument(Code* c) {
     Code* e = c->function()->codeEnd();
     while (c != e && !c->isDefaultArgument)
         c = c->next();
