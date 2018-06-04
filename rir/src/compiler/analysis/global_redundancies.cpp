@@ -43,6 +43,7 @@ void GlobalRedundanciesAnalysis::apply(GRPartition& partition, Instruction* inst
         */
         if (!partition.count(instruction)) {
             GREquivalenceClass klass;
+            // TODO: Add support for phis with more than 2 arguments.
             klass.phis = new ValuePhiFunction(phi->arg(0).val(), phi->arg(1).val());
             partition.insert({instruction, klass});
         }
@@ -53,23 +54,27 @@ void GlobalRedundanciesAnalysis::apply(GRPartition& partition, Instruction* inst
 
     PIRAssignment assignment;
     if (loadConst) {
-        assignment.setConstant(&loadConst->c);
+        assignment.setConstant(loadConst->c);
     } else if (loadArg) {
         assignment.setIndex(loadArg->id);
     } else {
-        ValueExpression::Expression expression;
+        ValueExpression expression;
         if (loadFun || loadVar || superLoadVar) {
-            expression.operand1 = instruction->arg(0).first;
+            /* This kind of expressions depend on the actual environment 
+             * which may changed among operations so we can not do anything
+             * with them in this optimization.
+            */
+            return;
         } else if (inc || isObject) {
             expression.operand1 = instruction->arg(0).first;
-            expression.operation = &instruction->tag;
+            expression.operation = instruction->tag;
         } else if (add || gte || lte || mul || division || idiv || mod || colon || 
                 power || sub || gt || lt || neq || eq || land || lor) {
             expression.operand1 = instruction->arg(0).first;
             expression.operand2 = instruction->arg(1).first;
-            expression.operation = &instruction->tag;            
+            expression.operation = instruction->tag;            
         }
-        assignment.setExpression(&expression);
+        assignment.setExpression(expression);
     }
     Value* eqClass = partition.detectClassContaining(assignment);
     if (eqClass) {
@@ -97,9 +102,6 @@ void GlobalRedundanciesAnalysis::apply(GRPartition& partition, Instruction* inst
                 partition.insert({instruction, klass});
             }
         }
-    
-        /*if (add || gte || lte || mul || division || idiv || mod || colon || 
-                power || sub || gt || lt || neq || eq || land || lor)*/
     }
 }
 

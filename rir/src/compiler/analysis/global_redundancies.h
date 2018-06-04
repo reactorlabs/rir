@@ -37,19 +37,19 @@ struct GBNValue {
  * For more information see page 170. 
 */
 struct ValueExpression {
-    typedef ValueExpression Expression;
-    ValueExpression() : operand1(), operand2(), operation(nullptr) {};
-    ValueExpression(Value* value) : operand1(value), operand2(), operation(nullptr) {};
-    ValueExpression(Value* value, Value* anotherValue, Tag* operation) : 
+    //typedef ValueExpression Expression;
+    ValueExpression() : operand1(), operand2(), operation(Tag::_UNUSED_) {};
+    ValueExpression(Value* value) : operand1(value), operand2(), operation(Tag::_UNUSED_) {};
+    ValueExpression(Value* value, Value* anotherValue, Tag operation) : 
         operand1(value), operand2(anotherValue), operation(operation) {};
     Value* operand1;
     Value* operand2;
-    Tag* operation;
+    Tag operation;
 
-    bool contains(Expression& expression) {
-        return (operand1 == expression.operand1) &&
-                (operand2 == expression.operand2) &&
-                (operation == expression.operation); 
+    bool operator==(const ValueExpression& anotherVE) {
+        return operand1 == anotherVE.operand1 &&
+               operand2 == anotherVE.operand2 &&
+               operation == anotherVE.operation;
     }
 };
 
@@ -68,17 +68,18 @@ struct ValuePhiFunction {
     }        
 };
 
-union GRPIRAssignment {
-    SEXP* constant;
-    size_t argIndex;
-    ValueExpression::Expression* expression;
-};
-
 struct PIRAssignment {
+    union GRPIRAssignment {
+        GRPIRAssignment() {constant = nullptr;}
+        SEXP constant;
+        size_t argIndex;
+        ValueExpression expression;
+    };
+
     GRPIRAssignment argument;
     unsigned char type;
     
-    void setConstant(SEXP* constant) {
+    void setConstant(SEXP constant) {
         argument.constant = constant;
         type = 1;        
     }
@@ -88,12 +89,12 @@ struct PIRAssignment {
         type = 2;        
     }
 
-    void setExpression(ValueExpression::Expression* expession) {
+    void setExpression(ValueExpression expession) {
         argument.expression = expession;
         type = 3;        
     }
 
-    ValueExpression::Expression* getExpression() {
+    ValueExpression& getExpression() {
         assert(type == 3);
         return argument.expression;
     }
@@ -104,7 +105,7 @@ struct PIRAssignment {
 
     bool operator==(const PIRAssignment& anotherPA) {
         if (type != anotherPA.type) return false;
-        if (this->isConstant()) return *argument.constant == *anotherPA.argument.constant;
+        if (this->isConstant()) return argument.constant == anotherPA.argument.constant;
         else if (this->isArgIndex()) return argument.argIndex == anotherPA.argument.argIndex;
         else return argument.expression == anotherPA.argument.expression;
     }

@@ -40,6 +40,16 @@ struct hash<rir::pir::ValOrig> {
 namespace rir {
 namespace pir {
 
+class AbstractValue {
+    virtual bool merge(const AbstractValue& otherValue) = 0;            
+};
+
+template <class AbsValue>
+class AbstractState : public std::unordered_map<Value*, AbsValue> {
+    virtual bool merge(const AbstractState& otherState) = 0;            
+};         
+
+
 /*
  * Captures an abstract PIR value.
  *

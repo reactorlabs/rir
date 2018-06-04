@@ -45,16 +45,6 @@ enum class PositioningStyle { BeforeInstruction, AfterInstruction };
  * provided by the subclass that specializes StaticAnalysis.
  */
 
-class AbstractValue {
-    virtual bool merge(const AbstractValue& otherValue) = 0;            
-};
-
-template <class AbsValue>
-class AbstractState : public std::unordered_map<Value*, AbsValue> {
-    virtual bool merge(const AbstractState& otherState) = 0;            
-};         
-
-
 template <class State>
 class StaticAnalysis {
   private:
