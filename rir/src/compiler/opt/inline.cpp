@@ -54,7 +54,7 @@ class TheInliner {
                 }
 
                 BB* split =
-                    BBTransform::split(++function->maxBBId, bb, it, function);
+                    BBTransform::split(function->nextBBId++, bb, it, function);
 
                 auto theCall = *split->begin();
                 auto theCallInstruction = CallInstruction::Cast(theCall);
@@ -63,8 +63,7 @@ class TheInliner {
                     [&](Value* v) { arguments.push_back(v); });
 
                 // Clone the function
-                BB* copy = BBTransform::clone(&function->maxBBId,
-                                              inlinee->entry, function);
+                BB* copy = BBTransform::clone(inlinee->entry, function);
 
                 // Link all inner environments to the outer one
                 Visitor::run(copy, [&](BB* bb) {

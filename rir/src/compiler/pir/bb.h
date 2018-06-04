@@ -51,10 +51,7 @@ class BB {
         return 0;
     }
 
-    Instruction* last() {
-        assert(instrs.size() > 0);
-        return instrs.back();
-    }
+    Instruction* last();
 
     BB* next0 = nullptr;
     BB* next1 = nullptr;

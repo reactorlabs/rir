@@ -16,8 +16,7 @@ class TheScopeResolution {
   public:
     Closure* function;
     CFG cfg;
-    TheScopeResolution(Closure* function)
-        : function(function), cfg(function->entry) {}
+    TheScopeResolution(Closure* function) : function(function), cfg(function) {}
     void operator()() {
         ScopeAnalysis analysis(function);
 
@@ -113,15 +112,16 @@ class TheScopeResolution {
                             !ldfun) {
                             auto hasAllInputs = [&](BB* load) -> bool {
                                 return aval.checkEachSource([&](ValOrig& src) {
-                                    return cfg.transitivePredecessors[load->id]
-                                        .count(src.origin->bb());
+                                    return cfg.isPredecessor(src.origin->bb(),
+                                                             load);
                                 });
                             };
                             BB* phiBlock = bb;
                             // Shift phi up until we see at least two inputs
                             // comming from different paths.
                             for (bool up = true; up;) {
-                                auto preds = cfg.predecessors[phiBlock->id];
+                                auto preds =
+                                    cfg.immediatePredecessors(phiBlock);
                                 for (auto pre : preds)
                                     up = up & hasAllInputs(pre);
                                 if (up)

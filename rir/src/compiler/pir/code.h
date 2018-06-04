@@ -16,7 +16,7 @@ class Code {
   public:
     BB* entry;
 
-    size_t maxBBId = 0;
+    size_t nextBBId = 0;
 
     Code();
     void print(std::ostream&);

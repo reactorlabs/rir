@@ -53,12 +53,12 @@ class StaticAnalysis {
     BB* entry;
 
     StaticAnalysis(Closure* cls) : entry(cls->entry) {
-        mergepoint.resize(cls->maxBBId + 1);
+        mergepoint.resize(cls->nextBBId);
         mergepoint[entry->id].resize(1);
     }
     StaticAnalysis(Closure* cls, const AbstractState& initialState)
         : entry(cls->entry) {
-        mergepoint.resize(cls->maxBBId + 1);
+        mergepoint.resize(cls->nextBBId);
         mergepoint[entry->id].push_back(initialState);
     }
 

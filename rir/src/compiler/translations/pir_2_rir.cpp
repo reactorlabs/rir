@@ -92,8 +92,7 @@ class SSAAllocator {
     std::unordered_map<Value*, Liveness> livenessInterval;
 
     SSAAllocator(Code* code, bool verbose)
-        : cfg(code->entry), dom(code->entry), code(code),
-          bbsSize(code->maxBBId + 1) {
+        : cfg(code), dom(code), code(code), bbsSize(code->nextBBId) {
         computeLiveness(verbose);
         computeStackAllocation();
         computeAllocation();
@@ -105,7 +104,7 @@ class SSAAllocator {
         std::unordered_map<BB*, std::set<Value*>> liveAtEnd(bbsSize);
 
         std::set<BB*> todo;
-        for (auto e : cfg.exits)
+        for (auto e : cfg.exits())
             todo.insert(e);
 
         while (!todo.empty()) {
@@ -208,13 +207,12 @@ class SSAAllocator {
                 for (auto in : accumulatedPhiInput) {
                     auto inBB = in.first;
                     auto inLive = in.second;
-                    if (bb == inBB ||
-                        cfg.transitivePredecessors[bb->id].count(inBB)) {
+                    if (bb == inBB || cfg.isPredecessor(inBB, bb)) {
                         merge(bb, inLive);
                     }
                 }
             };
-            for (auto pre : cfg.predecessors[bb->id]) {
+            for (auto pre : cfg.immediatePredecessors(bb)) {
                 bool firstTime = !liveAtEnd.count(pre);
                 if (firstTime) {
                     liveAtEnd[pre] = accumulated;

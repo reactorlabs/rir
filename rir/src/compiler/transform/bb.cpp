@@ -7,14 +7,13 @@
 namespace rir {
 namespace pir {
 
-BB* BBTransform::clone(size_t* id_counter, BB* src, Code* target) {
+BB* BBTransform::clone(BB* src, Code* target) {
     std::vector<BB*> bbs;
 
     // Copy instructions and remember old -> new instruction map.
     std::unordered_map<Value*, Instruction*> relocation_table;
     Visitor::run(src, [&](BB* bb) {
-        *id_counter = *id_counter + 1;
-        BB* theClone = BB::cloneInstrs(bb, *id_counter, target);
+        BB* theClone = BB::cloneInstrs(bb, target->nextBBId++, target);
         assert(bb->size() == theClone->size());
         if (bb->id >= bbs.size())
             bbs.resize(bb->id + 5);

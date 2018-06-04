@@ -9,14 +9,20 @@ namespace rir {
 namespace pir {
 
 class CFG {
-    typedef std::unordered_set<BB*> BBList;
+    typedef std::vector<BB*> BBList;
+
+    std::vector<BBList> predecessors_;
+    std::vector<BBList> transitivePredecessors;
+    BBList exits_;
 
   public:
-    std::vector<BBList> predecessors;
-    std::vector<BBList> transitivePredecessors;
-    BBList exits;
-
-    CFG(BB*);
+    CFG(Code*);
+    bool isPredecessor(BB* a, BB* b) const;
+    bool isImmediatePredecessor(BB* a, BB* b) const;
+    bool hasSinglePred(BB* a) const;
+    bool isMergeBlock(BB* a) const;
+    const BBList& immediatePredecessors(BB* a) const;
+    const BBList& exits() const { return exits_; }
 };
 
 class DominanceGraph {
@@ -26,7 +32,7 @@ class DominanceGraph {
     std::vector<BBList> dominating;
 
     size_t size() const { return dominating.size(); }
-    DominanceGraph(BB*);
+    DominanceGraph(Code*);
 
     bool dominates(BB* a, BB* b) const;
 };
