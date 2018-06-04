@@ -30,8 +30,10 @@ PirType::PirType(SEXP e) : flags_(defaultRTypeFlags()), t_(RTypeSet()) {
     case PROMSXP:
         t_.r.set(RType::prom);
         break;
-    case LANGSXP:
+    case EXPRSXP:
         t_.r.set(RType::ast);
+        // fall through
+    case LANGSXP:
         t_.r.set(RType::code);
         break;
     case CHARSXP:
@@ -57,19 +59,21 @@ PirType::PirType(SEXP e) : flags_(defaultRTypeFlags()), t_(RTypeSet()) {
         break;
     case BCODESXP:
         t_.r.set(RType::code);
+        break;
+    case CPLXSXP:
+        t_.r.set(RType::cplx);
+        break;
     case DOTSXP:
     case ANYSXP:
-    case CPLXSXP:
-    case EXPRSXP:
     case EXTPTRSXP:
     case WEAKREFSXP:
     case S4SXP:
-        assert(false);
+        t_.r = val().t_.r;
     }
 
-    if (Rf_isObject(e)) {
-        flags_.set(TypeFlags::obj);
-    }
+    // if (Rf_isObject(e)) {
+    //     flags_.set(TypeFlags::obj);
+    // }
 
     if (PirType::vecs().isSuper(*this)) {
         if (Rf_length(e) == 1)

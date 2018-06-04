@@ -51,6 +51,7 @@ enum class RType : uint8_t {
     real,
     str,
     vec,
+    cplx,
 
     raw,
 
@@ -79,7 +80,6 @@ enum class TypeFlags : uint8_t {
 
     lazy,
     missing,
-    obj,
     is_scalar,
     rtype,
 
@@ -135,14 +135,13 @@ struct PirType {
     }
 
     static PirType num() {
-        return PirType(RType::logical) | RType::integer | RType::real;
+        return PirType(RType::logical) | RType::integer | RType::real |
+               RType::cplx;
     }
     static PirType val() {
         return PirType(vecs() | list() | RType::sym | RType::chr | RType::raw |
                        RType::closure | RType::prom | RType::code | RType::env |
                        RType::ast);
-        // TODO: for now we ignore object systems..
-        //    .orObj();
     }
     static PirType vecs() { return num() | RType::str | RType::vec; }
     static PirType closure() { return RType::closure; }
@@ -152,7 +151,6 @@ struct PirType {
     static PirType list() { return PirType(RType::cons) | RType::nil; }
     static PirType any() { return val().orLazy().orMissing(); }
 
-    bool maybeObj() const { return flags_.includes(TypeFlags::obj); }
     RIR_INLINE bool maybeMissing() const {
         return flags_.includes(TypeFlags::missing);
     }
@@ -236,7 +234,7 @@ struct PirType {
         }
         if ((!maybeLazy() && o.maybeLazy()) ||
             (!maybeMissing() && o.maybeMissing()) ||
-            (!maybeObj() && o.maybeObj()) || (isScalar() && !o.isScalar())) {
+            (isScalar() && !o.isScalar())) {
             return false;
         }
         return t_.r.includes(o.t_.r);
@@ -273,6 +271,9 @@ inline std::ostream& operator<<(std::ostream& out, RType t) {
         break;
     case RType::real:
         out << "real";
+        break;
+    case RType::cplx:
+        out << "complex";
         break;
     case RType::str:
         out << "str";
@@ -347,8 +348,6 @@ inline std::ostream& operator<<(std::ostream& out, PirType t) {
 
     if (t.isScalar())
         out << "$";
-    if (t.maybeObj())
-        out << "&";
     if (t.maybeLazy())
         out << "^";
     if (t.maybeMissing())
