@@ -13,6 +13,8 @@
 
 namespace rir {
 
+using namespace std;
+
 void Configurations::parseINIFile() {
     INIReader reader(".pir/configuration.ini");
     if (reader.ParseError() < 0) {

@@ -4,6 +4,8 @@
 #include "compiler/translations/pir_translator.h"
 #include "utils/INIReader.h"
 
+#include <set>
+
 namespace rir {
 
 struct Optimization {
@@ -19,7 +21,7 @@ struct OptmizationCmp {
     bool operator()(const Optimization* opt,
                     const Optimization* anotherOpt) const {
         auto T = [&](const Optimization* o) {
-            return std::tuple<unsigned, unsigned, string>(
+            return std::tuple<unsigned, unsigned, std::string>(
                 o->order, o->translator->getName() == "cleanup" ? 1 : 0,
                 o->translator->getName());
         };
