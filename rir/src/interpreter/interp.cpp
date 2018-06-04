@@ -982,8 +982,8 @@ enum op { PLUSOP, MINUSOP, TIMESOP, DIVOP, POWOP, MODOP, IDIVOP };
 
 #define DO_BINOP(op, op2)                                                      \
     do {                                                                       \
-        int int_res;                                                           \
-        double real_res;                                                       \
+        int int_res = -1;                                                      \
+        double real_res = -2.0;                                                \
         int res_type = 0;                                                      \
         DO_FAST_BINOP(op, op2);                                                \
         if (res_type) {                                                        \

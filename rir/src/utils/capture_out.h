@@ -39,7 +39,8 @@ class CaptureOut {
 
     std::string operator()() {
         fflush(stdout);
-        read(out_pipe[0], buffer, MAX_LEN);
+        if (!read(out_pipe[0], buffer, MAX_LEN))
+            buffer[0] = 0;
         return buffer;
     }
 
