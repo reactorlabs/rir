@@ -111,11 +111,6 @@ BC BC::copyloc(uint32_t target, uint32_t source) {
     im.loc_cpy.source = source;
     return BC(Opcode::movloc_, im);
 }
-BC BC::guardEnv(uint32_t id) {
-    ImmediateT i;
-    i.guard_id = id;
-    return BC(Opcode::guard_env_, i);
-}
 BC BC::guardName(SEXP sym, SEXP expected) {
     ImmediateT i;
     i.guard_fun_args = {Pool::insert(sym), Pool::insert(expected),

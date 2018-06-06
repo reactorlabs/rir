@@ -6,7 +6,6 @@
 #include "call_support.h"
 #include "interp.h"
 #include "interp_context.h"
-#include "interpreter/deoptimizer.h"
 #include "runtime.h"
 
 #define NOT_IMPLEMENTED assert(false)
@@ -2328,23 +2327,6 @@ SEXP evalRirCode(Code* c, Context* ctx, EnvironmentProxy* ep) {
 #ifndef UNSOUND_OPTS
             assert(res == Rf_findFun(sym, ep->env()) && "guard_fun_ fail");
 #endif
-            NEXT();
-        }
-
-        INSTRUCTION(guard_env_) {
-            uint32_t deoptId = readImmediate();
-            advanceImmediate();
-            if (FRAME_CHANGED(ep->env()) || FRAME_LEAKED(ep->env())) {
-                Function* fun = c->function();
-                assert(fun->body() == c && "Cannot deopt from promise");
-                fun->deopt = true;
-                SEXP val = fun->origin();
-                Function* deoptFun = Function::unpack(val);
-                Code* deoptCode = deoptFun->body();
-                c = deoptCode;
-                pc = Deoptimizer_pc(deoptId);
-                PC_BOUNDSCHECK(pc, c);
-            }
             NEXT();
         }
 

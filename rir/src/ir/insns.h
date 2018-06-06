@@ -333,7 +333,6 @@ DEF_INSTR(subassign2_, 1, 3, 1, 1)
  * guard_fun_:: takes symbol, target, id, checks findFun(symbol) == target
  */
 DEF_INSTR(guard_fun_, 3, 0, 0, 1)
-DEF_INSTR(guard_env_, 1, 0, 0, 1)
 
 /**
  * seq_ :: seq(scalar, scalar, scalar)
