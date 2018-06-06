@@ -98,29 +98,37 @@ DEF_INSTR(stloc_, 1, 1, 0, 1)
 DEF_INSTR(movloc_, 2, 0, 0, 1)
 
 /**
- * call_:: ... Takes a list of code objects, which represent the arguments, decides on eager/lazy evaluation and does the right thing with the code objs.
+ * call_:: Takes a list of code objects, which represent the arguments,
+ *         decides on eager/lazy evaluation and does the right thing
+ *         with the code objs.
+ *         Expects the callee on TOS.
  */
 DEF_INSTR(call_, 2, 1, 1, 0)
 
 /**
- * call_stack_:: like call, but arguments are taken from the stack
- *               immediate are number of args and names
+ * call_stack_:: Like call_, but expects arguments on the stack
+ *               on top of the callee.
  */
 DEF_INSTR(call_stack_, 2, -1, 1, 0)
 
 /**
- * static_call_stack_:: like call_stack, but call target is immediate
+ * static_call_stack_:: Like call_stack_, but the callee is known statically
+ *                      and accessed through the callsite (immediate arg),
+ *                      not on the stack.
  */
 DEF_INSTR(static_call_stack_, 2, -1, 1, 0)
 
 /**
- * dispatch_:: similar to call, but receiver is tos and 3rd immediate
- *             is selector
+ * dispatch_:: Similar to call_, but also looks for the callee (the selector
+ *             is accessed through the callsite immediate).
+ *             Expects the receiver on TOS.
  */
 DEF_INSTR(dispatch_, 2, 1, 1, 0)
 
 /**
- * dispatch_stack_:: similar to dispatch, but all args on stack
+ * dispatch_stack_:: Similar to dispatch_, but expects the receiver and
+ *                   all other args on the stack.
+ *                   Note: nargs includes the receiver!
  */
 DEF_INSTR(dispatch_stack_, 2, -1, 1, 0)
 

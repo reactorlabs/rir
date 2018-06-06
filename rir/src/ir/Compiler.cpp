@@ -136,8 +136,7 @@ FunIdxT compilePromise(Context& ctx, SEXP exp, bool isFormal = false);
 void compileExpr(Context& ctx, SEXP exp);
 void compileCall(Context& ctx, SEXP ast, SEXP fun, SEXP args);
 
-void compileDispatch(Context& ctx, SEXP selector, SEXP ast, SEXP fun,
-                     SEXP args) {
+void compileDispatch(Context& ctx, SEXP selector, SEXP ast, SEXP args) {
     // Process arguments:
     // Arguments can be optionally named
     std::vector<FunIdxT> callArgs;
@@ -212,7 +211,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
         cs << BC::br(nextBranch);
 
         cs << objBranch;
-        compileDispatch(ctx, fun, ast, fun, args_);
+        compileDispatch(ctx, fun, ast, args_);
 
         cs << nextBranch;
         return true;
@@ -734,7 +733,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
             cs << BC::br(nextBranch);
 
             cs << objBranch;
-            compileDispatch(ctx, fun, ast, fun, args_);
+            compileDispatch(ctx, fun, ast, args_);
 
             cs << nextBranch;
             return true;
