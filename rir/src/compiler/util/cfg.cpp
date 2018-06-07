@@ -10,68 +10,6 @@
 namespace {
 using namespace rir::pir;
 
-class BBUnionSet : public std::set<BB*> {
-  public:
-    bool merge(BBUnionSet& other) {
-        if (!std::includes(begin(), end(), other.begin(), other.end())) {
-            insert(other.begin(), other.end());
-            return true;
-        }
-        return false;
-    }
-};
-
-void computeCfg(CFG* cfg, BB* start) {
-    std::set<BB*> todo;
-    todo.insert(start);
-
-    std::unordered_map<BB*, BBUnionSet> pred;
-    std::unordered_map<BB*, BBUnionSet> directPred;
-
-    size_t maxId = start->id;
-
-    while (!todo.empty()) {
-        BB* cur = *todo.begin();
-        todo.erase(todo.begin());
-
-        auto apply = [&](BB* bb) {
-            if (!bb)
-                return;
-
-            if (bb->id > maxId)
-                maxId = bb->id;
-
-            if (!directPred[bb].count(cur))
-                directPred[bb].insert(cur);
-
-            if (!pred[bb].count(cur)) {
-                pred[bb].insert(cur);
-                todo.insert(bb);
-            }
-
-            if (pred[bb].merge(pred[cur]))
-                todo.insert(bb);
-        };
-
-        apply(cur->next0);
-        apply(cur->next1);
-        if (!cur->next0 && !cur->next1)
-            cfg->exits.insert(cur);
-    }
-
-    cfg->predecessors.resize(maxId + 1);
-    cfg->transitivePredecessors.resize(maxId + 1);
-
-    for (auto e : pred) {
-        auto i = e.first->id;
-        cfg->transitivePredecessors[i].insert(e.second.begin(), e.second.end());
-    }
-    for (auto e : directPred) {
-        auto i = e.first->id;
-        cfg->predecessors[i].insert(e.second.begin(), e.second.end());
-    }
-}
-
 class BBInterSet : public std::unordered_set<BB*> {
   public:
     bool seen = false;
@@ -91,23 +29,79 @@ class BBInterSet : public std::unordered_set<BB*> {
         return changed;
     }
 };
+}
 
-// Static Analysis computes the set of all dominating bb's, for every bb
-// reachable from start. Runs until none of the sets grow anymore.
-void computeDominanceGraph(DominanceGraph* cfg, BB* start) {
+namespace rir {
+namespace pir {
+
+CFG::CFG(Code* start)
+    : predecessors_(start->nextBBId), transitivePredecessors(start->nextBBId) {
+    Visitor::run(start->entry, [&](BB* bb) {
+        auto apply = [&](BB* next) {
+            if (!next)
+                return;
+            if (!isImmediatePredecessor(bb, next)) {
+                predecessors_[next->id].push_back(bb);
+                transitivePredecessors[next->id].push_back(bb);
+            }
+        };
+        apply(bb->next0);
+        apply(bb->next1);
+        if (!bb->next0 && !bb->next1)
+            exits_.push_back(bb);
+    });
+
+    std::function<void(BB*, BB*)> complete = [&](BB* bb, BB* pre1) {
+        for (auto pre2 : immediatePredecessors(pre1)) {
+            if (!isPredecessor(pre2, bb)) {
+                transitivePredecessors[bb->id].push_back(pre2);
+                complete(bb, pre2);
+            }
+        }
+    };
+
+    Visitor::run(start->entry, [&](BB* bb) {
+        for (auto pre1 : immediatePredecessors(bb))
+            complete(bb, pre1);
+    });
+}
+
+bool CFG::isMergeBlock(BB* a) const { return predecessors_[a->id].size() > 1; }
+
+bool CFG::hasSinglePred(BB* a) const {
+    return predecessors_[a->id].size() == 1;
+}
+
+bool CFG::isPredecessor(BB* a, BB* b) const {
+    for (auto p : transitivePredecessors[b->id])
+        if (p == a)
+            return true;
+    return false;
+}
+
+bool CFG::isImmediatePredecessor(BB* a, BB* b) const {
+    for (auto p : predecessors_[b->id])
+        if (p == a)
+            return true;
+    return false;
+}
+
+const CFG::BBList& CFG::immediatePredecessors(BB* a) const {
+    return predecessors_[a->id];
+}
+
+DominanceGraph::DominanceGraph(Code* start) : dominating(start->nextBBId) {
+    // Static Analysis computes the set of all dominating bb's, for every bb
+    // reachable from start. Runs until none of the sets grow anymore.
+
     std::stack<BB*> todo;
-    todo.push(start);
+    todo.push(start->entry);
 
-    std::unordered_map<BB*, BBInterSet> dom;
-
-    size_t maxId = 0;
+    std::vector<BBInterSet> dom(start->nextBBId);
 
     while (!todo.empty()) {
         BB* cur = todo.top();
-        if (maxId < cur->id)
-            maxId = cur->id;
-
-        auto front = dom[cur];
+        auto front = dom[cur->id];
         front.insert(cur);
 
         todo.pop();
@@ -116,8 +110,8 @@ void computeDominanceGraph(DominanceGraph* cfg, BB* start) {
             if (!bb)
                 return;
 
-            auto& d = dom[bb];
-            if (!dom[bb].seen) {
+            auto& d = dom[bb->id];
+            if (!dom[bb->id].seen) {
                 d.seen = true;
                 d.insert(front.begin(), front.end());
                 todo.push(bb);
@@ -131,22 +125,9 @@ void computeDominanceGraph(DominanceGraph* cfg, BB* start) {
         apply(cur->next1);
     }
 
-    cfg->dominating.resize(maxId + 1);
-
-    for (auto e : dom) {
-        unsigned i = e.first->id;
-        cfg->dominating[i].insert(e.second.begin(), e.second.end());
+    for (size_t i = 0; i < start->nextBBId; ++i) {
+        dominating[i].insert(dom[i].begin(), dom[i].end());
     }
-}
-}
-
-namespace rir {
-namespace pir {
-
-CFG::CFG(BB* start) { computeCfg(this, start); }
-
-DominanceGraph::DominanceGraph(BB* start) {
-    computeDominanceGraph(this, start);
 }
 
 bool DominanceGraph::dominates(BB* a, BB* b) const {

@@ -23,6 +23,19 @@ void Module::printEachVersion(std::ostream& out) {
     }
 }
 
+void Module::createIfMissing(rir::Function* f, const std::vector<SEXP>& a,
+                             Env* env, MaybeCreate create) {
+    if (functions.count(f))
+        return;
+    Closure* cls = declare(f, a, env);
+    if (!create(cls)) {
+        // creation failed, delete declaration
+        auto it = functions.find(f);
+        delete cls;
+        functions.erase(it);
+    }
+}
+
 Closure* Module::declare(rir::Function* fun, const std::vector<SEXP>& args,
                          Env* env) {
     assert(functions.count(fun) == 0);

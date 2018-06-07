@@ -15,8 +15,8 @@ class TheVerifier {
     bool ok = true;
 
     void operator()() {
-        DominanceGraph dom(f->entry);
-        CFG cfg(f->entry);
+        DominanceGraph dom(f);
+        CFG cfg(f);
         Visitor::run(f->entry, [&](BB* bb) { return verify(bb, dom, cfg); });
 
         if (!ok) {
@@ -76,8 +76,8 @@ class TheVerifier {
                In the above example, we can't push an instruction from C to A
                and B, without worrying about D.
             */
-            if (cfg.predecessors[bb->id].size() > 1) {
-                for (auto in : cfg.predecessors[bb->id]) {
+            if (cfg.isMergeBlock(bb)) {
+                for (auto in : cfg.immediatePredecessors(bb)) {
                     if (in->next1) {
                         std::cerr << "BB " << in->id << " merges into "
                                   << bb->id << " and branches into "
@@ -109,8 +109,8 @@ class TheVerifier {
     }
 
     void verify(Promise* p) {
-        DominanceGraph dom(p->entry);
-        CFG cfg(p->entry);
+        DominanceGraph dom(p);
+        CFG cfg(p);
         Visitor::run(p->entry, [&](BB* bb) { verify(bb, dom, cfg); });
     }
 
@@ -131,18 +131,12 @@ class TheVerifier {
             Instruction* iv = Instruction::Cast(v);
             if (iv) {
                 if (phi) {
-                    if (!cfg.transitivePredecessors[i->bb()->id].count(
-                            iv->bb())) {
+                    if (!cfg.isPredecessor(iv->bb(), i->bb())) {
                         std::cerr << "Error at instruction '";
                         i->print(std::cerr);
                         std::cerr << "': input '";
                         iv->printRef(std::cerr);
                         std::cerr << "' does not come from a predecessor.\n";
-                        std::cerr << "My preds are ";
-                        for (auto p : cfg.transitivePredecessors[i->bb()->id])
-                            std::cerr << p->id << " ";
-                        std::cerr << "\n";
-
                         ok = false;
                     }
                 } else if ((iv->bb() == i->bb() &&

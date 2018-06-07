@@ -74,7 +74,8 @@ void recoverCFG(rir::Code* srcCode, rir::Function* srcFunction,
 namespace rir {
 namespace pir {
 
-Value* Rir2Pir::translate(rir::Code* srcCode, Builder& insert) const {
+void Rir2Pir::translate(rir::Code* srcCode, Builder& insert,
+                        MaybeVal<void> success, Maybe<void> fail) const {
     assert(!finalized);
 
     std::unordered_map<Opcode*, StackMachine> mergepoint;
@@ -135,6 +136,12 @@ Value* Rir2Pir::translate(rir::Code* srcCode, Builder& insert) const {
                 insert(new Branch(v));
                 break;
             }
+            case Opcode::beginloop_:
+                if (compiler.isVerbose())
+                    std::cerr
+                        << "Cannot compile Function. Unsupported return bc\n";
+                fail();
+                return;
             default:
                 assert(false);
             }
@@ -196,8 +203,11 @@ Value* Rir2Pir::translate(rir::Code* srcCode, Builder& insert) const {
             case Opcode::ret_:
                 break;
             case Opcode::return_:
-                std::cerr << "Cannot compile Function. Unsupported bc\n";
-                bc.print();
+                if (compiler.isVerbose())
+                    std::cerr
+                        << "Cannot compile Function. Unsupported return bc\n";
+                fail();
+                return;
             default:
                 assert(false);
             }
@@ -214,7 +224,7 @@ Value* Rir2Pir::translate(rir::Code* srcCode, Builder& insert) const {
         const static Matcher<4> ifFunctionLiteral(
             {{{Opcode::push_, Opcode::push_, Opcode::push_, Opcode::close_}}});
 
-        bool matched = false;
+        bool skip = false;
 
         ifFunctionLiteral(state.getPC(), srcCode->endCode(), [&](Opcode* next) {
             Opcode* pc = state.getPC();
@@ -236,26 +246,46 @@ Value* Rir2Pir::translate(rir::Code* srcCode, Builder& insert) const {
             DispatchTable* dt = DispatchTable::unpack(code);
             rir::Function* function = dt->first();
 
-            Closure* innerF = compiler.compileFunction(function, fmlsNames);
+            compiler.compileFunction(
+                function, fmlsNames,
+                [&](Closure* innerF) {
+                    state.push(insert(
+                        new MkFunCls(innerF, insert.env, fmls, code, src)));
 
-            state.push(
-                insert(new MkFunCls(innerF, insert.env, fmls, code, src)));
-
-            matched = true;
-            state.setPC(next);
+                    skip = true;
+                    state.setPC(next);
+                },
+                []() {
+                    // If the closure does not compile, we can still call the
+                    // unoptimized version (which is what happens on
+                    // `tryRunCurrentBC` below)
+                });
         });
 
-        if (!matched) {
+        if (!skip) {
             int size = state.stack_size();
-            state.runCurrentBC(*this, insert);
+            if (!state.tryRunCurrentBC(*this, insert)) {
+                if (compiler.isVerbose()) {
+                    std::cout << "Abort r2p due to unsupported bc ";
+                    state.getCurrentBC().print();
+                    std::cout << "\n";
+                }
+                fail();
+                return;
+            }
             assert(state.stack_size() == size - bc.popCount() + bc.pushCount());
             state.advancePC();
         }
     }
     assert(state.empty());
 
+    if (results.size() == 0) {
+        // Cannot compile functions with infinite loop
+        fail();
+        return;
+    }
+
     Value* res;
-    assert(results.size() > 0);
     if (results.size() == 1) {
         insert.bb = results.back().first;
         res = results.back().second;
@@ -273,7 +303,7 @@ Value* Rir2Pir::translate(rir::Code* srcCode, Builder& insert) const {
 
     results.clear();
 
-    return res;
+    success(res);
 }
 
 void Rir2Pir::finalize(Value* ret, Builder& insert) {

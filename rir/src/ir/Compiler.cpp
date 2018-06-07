@@ -9,10 +9,11 @@
 #include "R/Symbols.h"
 #include "R/Funtab.h"
 
-#include "ir/Optimizer.h"
 #include "utils/Pool.h"
 
+#include "CodeEditor.h"
 #include "CodeVerifier.h"
+#include "cleanup.h"
 
 #include <stack>
 
@@ -1300,9 +1301,9 @@ SEXP Compiler::finalize() {
 
     for (size_t i = 0; i < code.numPromises(); ++i)
         if (code.promise(i))
-            Optimizer::optimize(*code.promise(i));
+            BCCleanup::apply(*code.promise(i));
 
-    Optimizer::optimize(code);
+    BCCleanup::apply(code);
 
     Function* opt = code.finalize();
     opt->signature = signature;

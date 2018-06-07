@@ -6,7 +6,9 @@
 namespace rir {
 namespace pir {
 
-BB::BB(Code* owner, unsigned id) : id(id), owner(owner) {}
+BB::BB(Code* owner, unsigned id) : id(id), owner(owner) {
+    assert(id < owner->nextBBId);
+}
 
 void BB::print(std::ostream& out) {
     out << "BB" << id << "\n";
@@ -24,6 +26,11 @@ BB::~BB() {
     gc();
     for (auto* i : instrs)
         delete i;
+}
+
+Instruction* BB::last() {
+    assert(!instrs.empty());
+    return instrs.back();
 }
 
 void BB::append(Instruction* i) {

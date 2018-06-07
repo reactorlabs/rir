@@ -51,6 +51,7 @@ enum class RType : uint8_t {
     real,
     str,
     vec,
+    cplx,
 
     raw,
 
@@ -79,7 +80,6 @@ enum class TypeFlags : uint8_t {
 
     lazy,
     missing,
-    obj,
     is_scalar,
     rtype,
 
@@ -126,7 +126,7 @@ struct PirType {
     PirType(const NativeTypeSet& t) : t_(t) {}
     PirType(SEXP);
 
-    void operator=(const PirType& o) {
+    RIR_INLINE void operator=(const PirType& o) {
         flags_ = o.flags_;
         if (isRType())
             t_.r = o.t_.r;
@@ -135,14 +135,13 @@ struct PirType {
     }
 
     static PirType num() {
-        return PirType(RType::logical) | RType::integer | RType::real;
+        return PirType(RType::logical) | RType::integer | RType::real |
+               RType::cplx;
     }
     static PirType val() {
         return PirType(vecs() | list() | RType::sym | RType::chr | RType::raw |
                        RType::closure | RType::prom | RType::code | RType::env |
                        RType::ast);
-        // TODO: for now we ignore object systems..
-        //    .orObj();
     }
     static PirType vecs() { return num() | RType::str | RType::vec; }
     static PirType closure() { return RType::closure; }
@@ -152,41 +151,41 @@ struct PirType {
     static PirType list() { return PirType(RType::cons) | RType::nil; }
     static PirType any() { return val().orLazy().orMissing(); }
 
-    bool maybeMissing() const { return flags_.includes(TypeFlags::missing); }
-    bool maybeLazy() const { return flags_.includes(TypeFlags::lazy); }
-    bool maybeObj() const { return flags_.includes(TypeFlags::obj); }
-    bool isScalar() const { return flags_.includes(TypeFlags::is_scalar); }
-    bool isRType() const { return flags_.includes(TypeFlags::rtype); }
+    RIR_INLINE bool maybeMissing() const {
+        return flags_.includes(TypeFlags::missing);
+    }
+    RIR_INLINE bool maybeLazy() const {
+        return flags_.includes(TypeFlags::lazy);
+    }
+    RIR_INLINE bool isScalar() const {
+        return flags_.includes(TypeFlags::is_scalar);
+    }
+    RIR_INLINE bool isRType() const {
+        return flags_.includes(TypeFlags::rtype);
+    }
 
-    PirType scalar() const {
+    RIR_INLINE PirType scalar() const {
         assert(isRType());
         PirType t = *this;
         t.flags_.set(TypeFlags::is_scalar);
         return t;
     }
 
-    PirType orObj() const {
-        assert(isRType());
-        PirType t = *this;
-        t.flags_.set(TypeFlags::obj);
-        return t;
-    }
-
-    PirType orMissing() const {
+    RIR_INLINE PirType orMissing() const {
         assert(isRType());
         PirType t = *this;
         t.flags_.set(TypeFlags::missing);
         return t;
     }
 
-    PirType orLazy() const {
+    RIR_INLINE PirType orLazy() const {
         assert(isRType());
         PirType t = *this;
         t.flags_.set(TypeFlags::lazy);
         return t;
     }
 
-    PirType baseType() const {
+    RIR_INLINE PirType baseType() const {
         assert(isRType());
         return PirType(t_.r);
     }
@@ -197,7 +196,7 @@ struct PirType {
 
     static const PirType bottom() { return PirType(RTypeSet()); }
 
-    PirType operator|(const PirType& o) const {
+    RIR_INLINE PirType operator|(const PirType& o) const {
         assert(isRType() == o.isRType());
 
         PirType r;
@@ -213,13 +212,13 @@ struct PirType {
         return r;
     }
 
-    bool operator==(const NativeType& o) const {
+    RIR_INLINE bool operator==(const NativeType& o) const {
         return !isRType() && t_.n == o;
     }
 
-    bool operator!=(const PirType& o) const { return !(*this == o); }
+    RIR_INLINE bool operator!=(const PirType& o) const { return !(*this == o); }
 
-    bool operator==(const PirType& o) const {
+    RIR_INLINE bool operator==(const PirType& o) const {
         return flags_ == o.flags_ &&
                (isRType() ? t_.r == o.t_.r : t_.n == o.t_.n);
     }
@@ -235,7 +234,7 @@ struct PirType {
         }
         if ((!maybeLazy() && o.maybeLazy()) ||
             (!maybeMissing() && o.maybeMissing()) ||
-            (!maybeObj() && o.maybeObj()) || (isScalar() && !o.isScalar())) {
+            (isScalar() && !o.isScalar())) {
             return false;
         }
         return t_.r.includes(o.t_.r);
@@ -272,6 +271,9 @@ inline std::ostream& operator<<(std::ostream& out, RType t) {
         break;
     case RType::real:
         out << "real";
+        break;
+    case RType::cplx:
+        out << "complex";
         break;
     case RType::str:
         out << "str";
@@ -346,8 +348,6 @@ inline std::ostream& operator<<(std::ostream& out, PirType t) {
 
     if (t.isScalar())
         out << "$";
-    if (t.maybeObj())
-        out << "&";
     if (t.maybeLazy())
         out << "^";
     if (t.maybeMissing())

@@ -104,14 +104,14 @@ class TheCleanup {
                         in = n;
             }
         };
-        CFG cfg(function->entry);
+        CFG cfg(function);
         std::unordered_map<BB*, BB*> toDel;
         Visitor::run(function->entry, [&](BB* bb) {
             // Remove unnecessary splits
-            if (bb->isJmp() && cfg.predecessors[bb->next0->id].size() == 1 &&
+            if (bb->isJmp() && cfg.hasSinglePred(bb->next0) &&
                 /* this condition keeps graph in split-edge: */
-                cfg.predecessors[bb->id].size() == 1 &&
-                (*cfg.predecessors[bb->id].begin())->isJmp()) {
+                cfg.hasSinglePred(bb) &&
+                cfg.immediatePredecessors(bb)[0]->isJmp()) {
                 BB* d = bb->next0;
                 while (!d->isEmpty()) {
                     d->moveToEnd(d->begin(), bb);
@@ -127,7 +127,7 @@ class TheCleanup {
         Visitor::run(function->entry, [&](BB* bb) {
             // Remove empty jump-through blocks
             if (bb->isJmp() && bb->next0->isEmpty() && bb->next0->isJmp() &&
-                cfg.predecessors[bb->next0->next0->id].size() == 1) {
+                cfg.hasSinglePred(bb->next0->next0)) {
                 assert(used_bb.find(bb->next0) == used_bb.end());
                 toDel[bb->next0] = bb->next0->next0;
             }
@@ -151,7 +151,7 @@ class TheCleanup {
         //     function->entry = function->entry->next0;
         // }
         if (function->entry->isJmp() &&
-            cfg.predecessors[function->entry->next0->id].size() == 1) {
+            cfg.hasSinglePred(function->entry->next0)) {
             BB* bb = function->entry;
             BB* d = bb->next0;
             while (!d->isEmpty()) {
@@ -178,14 +178,13 @@ class TheCleanup {
         auto renumberBBs = [&](Code* code) {
             // Renumber in dominance order. This ensures that controlflow always
             // goes from smaller id to bigger id, except for back-edges.
-            code->maxBBId = 0;
-            DominanceGraph dom(code->entry);
+            DominanceGraph dom(code);
+            code->nextBBId = 0;
             DominatorTreeVisitor<VisitorHelpers::PointerMarker>(dom).run(
                 code, [&](BB* bb) {
-                    bb->unsafeSetId(code->maxBBId++);
+                    bb->unsafeSetId(code->nextBBId++);
                     bb->gc();
                 });
-            code->maxBBId--;
         };
         renumberBBs(function);
         function->eachPromise(renumberBBs);

@@ -27,11 +27,15 @@ Rir2PirCompiler::Rir2PirCompiler(Module* module) : RirCompiler(module) {
     }
 }
 
-Closure* Rir2PirCompiler::compileClosure(SEXP closure) {
+void Rir2PirCompiler::compileClosure(SEXP closure, MaybeCls success,
+                                     Maybe fail) {
     assert(isValidClosureSEXP(closure));
     DispatchTable* tbl = DispatchTable::unpack(BODY(closure));
 
-    assert(tbl->slot(1) == nullptr && "Closure already compiled to PIR");
+    if (!tbl->slot(1)) {
+        if (isVerbose())
+            std::cerr << "Closure already compiled to PIR\n";
+    }
 
     auto formals = RList(FORMALS(closure));
 
@@ -40,34 +44,54 @@ Closure* Rir2PirCompiler::compileClosure(SEXP closure) {
         fmls.push_back(it.tag());
 
     rir::Function* srcFunction = tbl->first();
-    return compileClosure(srcFunction, fmls, module->getEnv(CLOENV(closure)));
+    compileClosure(srcFunction, fmls, module->getEnv(CLOENV(closure)), success,
+                   fail);
 }
 
-Closure* Rir2PirCompiler::compileFunction(rir::Function* srcFunction,
-                                          const std::vector<SEXP>& args) {
-    return compileClosure(srcFunction, args, Env::notClosed());
+void Rir2PirCompiler::compileFunction(rir::Function* srcFunction,
+                                      const std::vector<SEXP>& args,
+                                      MaybeCls success, Maybe fail) {
+    compileClosure(srcFunction, args, Env::notClosed(), success, fail);
 }
 
-Closure* Rir2PirCompiler::compileClosure(rir::Function* srcFunction,
-                                         const std::vector<SEXP>& args,
-                                         Env* closureEnv) {
-    return module->getOrCreate(
+void Rir2PirCompiler::compileClosure(rir::Function* srcFunction,
+                                     const std::vector<SEXP>& args,
+                                     Env* closureEnv, MaybeCls success,
+                                     Maybe fail) {
+    bool failed = false;
+    module->createIfMissing(
         srcFunction, args, closureEnv, [&](Closure* pirFunction) {
             Builder builder(pirFunction, closureEnv);
-
-            {
-                Rir2Pir rir2pir(*this, srcFunction);
-                rir2pir.compile(srcFunction->body(), builder);
+            Rir2Pir rir2pir(*this, srcFunction);
+            if (rir2pir.tryCompile(srcFunction->body(), builder)) {
                 if (isVerbose()) {
-                    std::cout << " ========== Done compiling " << srcFunction
+                    std::cout << " ========= Done compiling " << srcFunction
                               << "\n";
                     builder.function->print(std::cout);
                     std::cout << " ==========\n";
                 }
+                if (!Verify::apply(pirFunction)) {
+                    failed = true;
+                    if (isVerbose()) {
+                        std::cout << " Failed verification after p2r compile "
+                                  << srcFunction << "\n";
+                    }
+                    assert(false);
+                    return false;
+                }
+                return true;
             }
-
-            assert(Verify::apply(pirFunction));
+            failed = true;
+            if (isVerbose()) {
+                std::cout << " Failed p2r compile " << srcFunction << "\n";
+            }
+            return false;
         });
+
+    if (failed)
+        fail();
+    else
+        success(module->get(srcFunction));
 }
 
 void Rir2PirCompiler::optimizeModule() {
@@ -110,8 +134,11 @@ void Rir2PirCompiler::applyOptimizations(Closure* f,
         translation->apply(f);
         if (isVerbose())
             printAfterPass(translation->getName(), category, f, passnr++);
+#if 0
         assert(Verify::apply(f));
+#endif
     }
+    assert(Verify::apply(f));
 }
 
 } // namespace pir
