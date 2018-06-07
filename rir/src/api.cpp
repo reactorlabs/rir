@@ -79,7 +79,7 @@ REXPORT SEXP rir_eval(SEXP what, SEXP env) {
     if (f == nullptr)
         Rf_error("Not rir compiled code");
     SEXP lenv;
-    return evalRirCode(f->body(), globalContext(), &lenv);
+    return evalRirCodeExtCaller(f->body(), globalContext(), &lenv);
 }
 
 REXPORT SEXP rir_body(SEXP cls) {
