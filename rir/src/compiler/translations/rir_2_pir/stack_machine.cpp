@@ -159,6 +159,9 @@ bool StackMachine::tryRunCurrentBC(const Rir2Pir& rir2pir, Builder& insert) {
             args.push_back(insert(new MkArg(prom, val, env)));
         }
 
+        auto insertGenericCall = [&]() {
+            push(insert(new Call(insert.env, pop(), args, cs->call)));
+        };
         if (monomorphic && isValidClosureSEXP(monomorphic)) {
             rir2pir.compiler.compileClosure(
                 monomorphic,
@@ -187,11 +190,9 @@ bool StackMachine::tryRunCurrentBC(const Rir2Pir& rir2pir, Builder& insert) {
                     insert.bb = cont;
                     push(insert(new Phi({r1, r2}, {fallback, asExpected})));
                 },
-                [&]() {
-                    push(insert(new Call(insert.env, pop(), args, cs->call)));
-                });
+                insertGenericCall);
         } else {
-            push(insert(new Call(insert.env, pop(), args, cs->call)));
+            insertGenericCall();
         }
         break;
     }

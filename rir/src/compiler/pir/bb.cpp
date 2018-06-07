@@ -29,9 +29,7 @@ BB::~BB() {
 }
 
 Instruction* BB::last() {
-    if (!instrs.size())
-        owner->print(std::cerr);
-    assert(instrs.size() > 0);
+    assert(!instrs.empty());
     return instrs.back();
 }
 

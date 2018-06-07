@@ -27,9 +27,9 @@ class CFG {
 
 class DominanceGraph {
     typedef std::unordered_set<BB*> BBList;
+    std::vector<BBList> dominating;
 
   public:
-    std::vector<BBList> dominating;
 
     size_t size() const { return dominating.size(); }
     DominanceGraph(Code*);

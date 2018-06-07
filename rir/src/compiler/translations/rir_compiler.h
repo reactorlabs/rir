@@ -18,10 +18,10 @@ class RirCompiler {
     void operator=(const RirCompiler&) = delete;
 
     typedef std::function<void()> Maybe;
-    typedef std::function<void(Closure*)> MaybeVal;
+    typedef std::function<void(Closure*)> MaybeCls;
 
-    virtual void compileClosure(SEXP, MaybeVal, Maybe) = 0;
-    void compileClosure(SEXP cls, MaybeVal success) {
+    virtual void compileClosure(SEXP, MaybeCls, Maybe) = 0;
+    void compileClosure(SEXP cls, MaybeCls success) {
         return compileClosure(cls, success, []() {});
     }
 

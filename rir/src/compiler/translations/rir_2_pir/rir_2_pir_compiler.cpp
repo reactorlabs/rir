@@ -27,7 +27,7 @@ Rir2PirCompiler::Rir2PirCompiler(Module* module) : RirCompiler(module) {
     }
 }
 
-void Rir2PirCompiler::compileClosure(SEXP closure, MaybeVal success,
+void Rir2PirCompiler::compileClosure(SEXP closure, MaybeCls success,
                                      Maybe fail) {
     assert(isValidClosureSEXP(closure));
     DispatchTable* tbl = DispatchTable::unpack(BODY(closure));
@@ -50,18 +50,17 @@ void Rir2PirCompiler::compileClosure(SEXP closure, MaybeVal success,
 
 void Rir2PirCompiler::compileFunction(rir::Function* srcFunction,
                                       const std::vector<SEXP>& args,
-                                      MaybeVal success, Maybe fail) {
+                                      MaybeCls success, Maybe fail) {
     compileClosure(srcFunction, args, Env::notClosed(), success, fail);
 }
 
 void Rir2PirCompiler::compileClosure(rir::Function* srcFunction,
                                      const std::vector<SEXP>& args,
-                                     Env* closureEnv, MaybeVal success,
+                                     Env* closureEnv, MaybeCls success,
                                      Maybe fail) {
-    module->getAndCreateIfMissing(
-        srcFunction, args, closureEnv,
-        [&](Closure* pirFunction) { success(pirFunction); },
-        [&](Closure* pirFunction) {
+    bool failed = false;
+    module->createIfMissing(
+        srcFunction, args, closureEnv, [&](Closure* pirFunction) {
             Builder builder(pirFunction, closureEnv);
             Rir2Pir rir2pir(*this, srcFunction);
             if (rir2pir.tryCompile(srcFunction->body(), builder)) {
@@ -71,17 +70,28 @@ void Rir2PirCompiler::compileClosure(rir::Function* srcFunction,
                     builder.function->print(std::cout);
                     std::cout << " ==========\n";
                 }
-                bool pass = Verify::apply(pirFunction);
-                assert(pass);
-                if (pass)
-                    return true;
+                if (!Verify::apply(pirFunction)) {
+                    failed = true;
+                    if (isVerbose()) {
+                        std::cout << " Failed verification after p2r compile "
+                                  << srcFunction << "\n";
+                    }
+                    assert(false);
+                    return false;
+                }
+                return true;
             }
+            failed = true;
             if (isVerbose()) {
                 std::cout << " Failed p2r compile " << srcFunction << "\n";
             }
-            fail();
             return false;
         });
+
+    if (failed)
+        fail();
+    else
+        success(module->get(srcFunction));
 }
 
 void Rir2PirCompiler::optimizeModule() {

@@ -75,8 +75,7 @@ namespace rir {
 namespace pir {
 
 void Rir2Pir::translate(rir::Code* srcCode, Builder& insert,
-                        std::function<void(Value*)> success,
-                        std::function<void()> fail) const {
+                        MaybeVal<void> success, Maybe<void> fail) const {
     assert(!finalized);
 
     std::unordered_map<Opcode*, StackMachine> mergepoint;
@@ -225,7 +224,7 @@ void Rir2Pir::translate(rir::Code* srcCode, Builder& insert,
         const static Matcher<4> ifFunctionLiteral(
             {{{Opcode::push_, Opcode::push_, Opcode::push_, Opcode::close_}}});
 
-        bool matched = false;
+        bool skip = false;
 
         ifFunctionLiteral(state.getPC(), srcCode->endCode(), [&](Opcode* next) {
             Opcode* pc = state.getPC();
@@ -253,17 +252,21 @@ void Rir2Pir::translate(rir::Code* srcCode, Builder& insert,
                     state.push(insert(
                         new MkFunCls(innerF, insert.env, fmls, code, src)));
 
-                    matched = true;
+                    skip = true;
                     state.setPC(next);
                 },
-                []() {});
+                []() {
+                    // If the closure does not compile, we can still call the
+                    // unoptimized version (which is what happens on
+                    // `tryRunCurrentBC` below)
+                });
         });
 
-        if (!matched) {
+        if (!skip) {
             int size = state.stack_size();
             if (!state.tryRunCurrentBC(*this, insert)) {
                 if (compiler.isVerbose()) {
-                    std::cout << "Abort p2r due to unsupported bc ";
+                    std::cout << "Abort r2p due to unsupported bc ";
                     state.getCurrentBC().print();
                     std::cout << "\n";
                 }

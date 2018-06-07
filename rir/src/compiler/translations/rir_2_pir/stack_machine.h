@@ -29,9 +29,7 @@ class StackMachine {
     bool doMerge(Opcode*, Builder&, StackMachine*);
 
     typedef std::pair<BB*, Value*> ReturnSite;
-    typedef std::function<void(ReturnSite)> ReturnMaybe;
 
-    typedef std::function<void()> Maybe;
     bool tryRunCurrentBC(const Rir2Pir& cmp, Builder&)
         __attribute__((warn_unused_result));
 

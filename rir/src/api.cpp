@@ -54,12 +54,13 @@ REXPORT SEXP rir_compile(SEXP what, SEXP env = NULL) {
 
         Rf_copyMostAttrib(what, result);
 
-#ifdef SLOWASSERT
+#ifdef ENABLE_SLOWASSERT
         // rir_disassemble(result, R_FalseValue);
 
         std::unique_ptr<pir::Module> m(new pir::Module);
         pir::Rir2PirCompiler cmp(m.get());
         // cmp.setVerbose(true);
+        auto ignore = []() {};
         cmp.compileClosure(result,
                            [&](pir::Closure* c) {
                                cmp.optimizeModule();
@@ -67,7 +68,7 @@ REXPORT SEXP rir_compile(SEXP what, SEXP env = NULL) {
                                // pir::Pir2RirCompiler p2r;
                                // p2r.compile(c, closure);
                            },
-                           [&]() {});
+                           ignore);
 #endif
 
         UNPROTECT(1);

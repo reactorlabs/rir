@@ -7,10 +7,14 @@ namespace rir {
 
 class BCCleanup : public InstructionDispatcher::Receiver {
   public:
+    static constexpr int STEAM = 4;
+
     static void apply(CodeEditor& code) {
         BCCleanup c(code);
-        c.run();
-        code.commit();
+        for (int i = 0; i < STEAM; ++i) {
+            c.run();
+            code.commit();
+        }
     }
 
     InstructionDispatcher dispatcher;
