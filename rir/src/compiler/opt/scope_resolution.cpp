@@ -119,7 +119,7 @@ class TheScopeResolution {
                             };
                             BB* phiBlock = bb;
                             // Shift phi up until we see at least two inputs
-                            // comming from different paths.
+                            // coming from different paths.
                             for (bool up = true; up;) {
                                 auto preds = cfg.predecessors[phiBlock->id];
                                 for (auto pre : preds)

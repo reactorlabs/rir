@@ -13,8 +13,6 @@ typedef SEXP DispatchTableEntry;
 /*
  * A dispatch table (vtable) for functions.
  *
- * We set TRUELENGTH to the size of the entry table, i.e. capacity, so the GC
- * knows where the start of the entry table is.
  */
 #pragma pack(push)
 #pragma pack(1)

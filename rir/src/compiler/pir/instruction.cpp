@@ -148,12 +148,7 @@ void Instruction::replaceUsesIn(Value* replace, BB* target) {
 }
 
 void Instruction::replaceUsesWith(Value* replace) {
-    Visitor::run(bb(), [&](Instruction* i) {
-        i->eachArg([&](InstrArg& arg) {
-            if (arg.val() == this)
-                arg.val() = replace;
-        });
-    });
+    replaceUsesIn(replace, bb());
 }
 
 void LdConst::printArgs(std::ostream& out) {

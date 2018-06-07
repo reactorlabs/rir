@@ -27,8 +27,7 @@ Promise* Closure::createProm() {
 
 Closure::~Closure() {
     for (auto p : promises)
-        if (p)
-            delete p;
+        delete p;
     for (auto p : defaultArgs)
         delete p;
 }
