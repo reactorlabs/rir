@@ -22,34 +22,49 @@ extern Rboolean R_Visible;
 
 using namespace rir;
 
-struct CallContext;
-struct FinalCallContext;
-struct FinalDispatchContext;
+struct CallContext {
+    CallContext(Code* c, unsigned callsiteId, SEXP callee,
+                R_bcstack_t* eagerArgs, SEXP callerEnv, Context* ctx)
+        : eagerArgs(eagerArgs), caller(c->function()), callerEnv(callerEnv),
+          callSite(c->callSite(callsiteId)),
+          ast(cp_pool_at(ctx, callSite->call)), callee_(callee) {
+        assert(!callee || TYPEOF(callee) == CLOSXP ||
+               TYPEOF(callee) == SPECIALSXP || TYPEOF(callee) == BUILTINSXP);
+    }
 
-struct DispatchContext {
+    CallContext(Code* c, unsigned id, SEXP callee, SEXP callerEnv, Context* ctx)
+        : CallContext(c, id, callee, nullptr, callerEnv, ctx) {}
+
+    CallContext(Code* c, unsigned id, R_bcstack_t* eagerArgs, SEXP callerEnv,
+                Context* ctx)
+        : CallContext(c, id, nullptr, eagerArgs, callerEnv, ctx) {}
+
+    CallContext(Code* c, unsigned id, SEXP callerEnv, Context* ctx)
+        : CallContext(c, id, nullptr, nullptr, callerEnv, ctx) {}
+
     R_bcstack_t* eagerArgs;
     Function* caller;
     SEXP callerEnv;
     CallSite* callSite;
     SEXP ast;
 
-    DispatchContext(Code* c, unsigned callsiteId, R_bcstack_t* eagerArgs,
-                    SEXP callerEnv, Context* ctx)
-        : eagerArgs(eagerArgs), caller(c->function()), callerEnv(callerEnv),
-          callSite(c->callSite(callsiteId)),
-          ast(cp_pool_at(ctx, callSite->call)) {}
-
-    DispatchContext(Code* c, unsigned id, SEXP callerEnv, Context* ctx)
-        : DispatchContext(c, id, nullptr, callerEnv, ctx) {}
-
-    DispatchContext(R_bcstack_t* eagerArgs, Function* caller, SEXP callerEnv,
-                    CallSite* callSite, SEXP ast)
-        : eagerArgs(eagerArgs), caller(caller), callerEnv(callerEnv),
-          callSite(callSite), ast(ast) {}
-
     unsigned nargs() const { return callSite->nargs; }
 
     bool hasEagerArgs() const { return eagerArgs != nullptr; }
+    bool hasEagerCallee() const { return TYPEOF(callee()) == BUILTINSXP; }
+
+    SEXP callee() const {
+        assert(callee_);
+        return callee_;
+    }
+
+    CallContext resolveTarget(SEXP newCallee) const {
+        assert(TYPEOF(newCallee) == CLOSXP || TYPEOF(newCallee) == SPECIALSXP ||
+               TYPEOF(newCallee) == BUILTINSXP);
+        auto c = *this;
+        c.callee_ = newCallee;
+        return c;
+    }
 
     Code* arg(unsigned i) const {
         assert(i < nargs());
@@ -62,73 +77,16 @@ struct DispatchContext {
     }
 
     SEXP getFixedupAst() const;
-    DispatchContext fixupAst() const {
-        return DispatchContext(eagerArgs, caller, callerEnv, callSite,
-                               getFixedupAst());
-    }
 
-    FinalDispatchContext popArgs(Context*) const;
-};
-
-struct CallContext : public DispatchContext {
-    SEXP callee;
-
-    CallContext(Code* code, unsigned callsiteId, R_bcstack_t* eagerArgs,
-                SEXP callee, SEXP callerEnv, Context* ctx)
-        : DispatchContext(code, callsiteId, eagerArgs, callerEnv, ctx),
-          callee(callee) {}
-    CallContext(Code* code, unsigned callsiteId, SEXP callee, SEXP callerEnv,
-                Context* ctx)
-        : DispatchContext(code, callsiteId, callerEnv, ctx), callee(callee) {}
-    CallContext(R_bcstack_t* eagerArgs, Function* caller, SEXP callerEnv,
-                CallSite* callSite, SEXP ast, SEXP callee)
-        : DispatchContext(eagerArgs, caller, callerEnv, callSite, ast),
-          callee(callee) {}
-
-    bool hasEagerCallee() const {
-        assert(TYPEOF(callee) == BUILTINSXP || TYPEOF(callee) == CLOSXP);
-        return TYPEOF(callee) == BUILTINSXP;
-    }
-
-    FinalCallContext popArgs(Context*) const;
     CallContext fixupAst() const {
-        return CallContext(eagerArgs, caller, callerEnv, callSite,
-                           getFixedupAst(), callee);
+        auto copy = *this;
+        copy.ast = getFixedupAst();
+        return copy;
     }
+
+  protected:
+    SEXP callee_;
 };
-
-struct FinalDispatchContext : public DispatchContext {
-    FinalCallContext setCallee(SEXP callee) const;
-    DispatchContext fixupAst() const = delete;
-    FinalDispatchContext popArgs(Context*) const = delete;
-    explicit FinalDispatchContext(const DispatchContext& other)
-        : DispatchContext(other) {}
-    FinalDispatchContext(const FinalDispatchContext& other) = default;
-};
-
-struct FinalCallContext : public CallContext {
-    CallContext fixupAst() const = delete;
-    FinalCallContext popArgs(Context*) const = delete;
-    explicit FinalCallContext(const CallContext& other) : CallContext(other) {}
-    FinalCallContext(const FinalCallContext& other) = default;
-};
-
-FinalCallContext FinalDispatchContext::setCallee(SEXP callee) const {
-    return FinalCallContext(
-        CallContext(eagerArgs, caller, callerEnv, callSite, ast, callee));
-}
-
-FinalCallContext CallContext::popArgs(Context* ctx) const {
-    if (hasEagerArgs())
-        ostack_popn(ctx, nargs());
-    return FinalCallContext(*this);
-}
-
-FinalDispatchContext DispatchContext::popArgs(Context* ctx) const {
-    if (hasEagerArgs())
-        ostack_popn(ctx, nargs());
-    return FinalDispatchContext(*this);
-}
 
 RIR_INLINE SEXP getSrcAt(Code* c, Opcode* pc, Context* ctx) {
     unsigned sidx = c->getSrcIdxAt(pc, true);
@@ -177,7 +135,7 @@ RIR_INLINE SEXP getSrcForCall(Code* c, Opcode* pc, Context* ctx) {
 
 #define readConst(ctx, idx) (cp_pool_at(ctx, idx))
 
-void initClosureContext(const DispatchContext& call, RCNTXT* cntxt, SEXP rho,
+void initClosureContext(const CallContext& call, RCNTXT* cntxt, SEXP rho,
                         SEXP sysparent, SEXP arglist, SEXP op) {
     /*  If we have a generic function we need to use the sysparent of
        the generic as the sysparent of the method because the method
@@ -252,7 +210,7 @@ RIR_INLINE void __listAppend(SEXP* front, SEXP* last, SEXP value, SEXP name) {
     *last = app;
 }
 
-SEXP createLegacyArgsListFromEagerValues(const DispatchContext& call,
+SEXP createLegacyArgsListFromEagerValues(const CallContext& call,
                                          bool eagerCallee, Context* ctx) {
     SEXP result = R_NilValue;
     SEXP pos = result;
@@ -287,7 +245,7 @@ SEXP createLegacyArgsListFromEagerValues(const DispatchContext& call,
     return result;
 }
 
-SEXP createLegacyArgsList(const DispatchContext& call, bool eagerCallee,
+SEXP createLegacyArgsList(const CallContext& call, bool eagerCallee,
                           Context* ctx) {
     SEXP result = R_NilValue;
     SEXP pos = result;
@@ -347,7 +305,7 @@ SEXP createLegacyArgsList(const DispatchContext& call, bool eagerCallee,
     return result;
 }
 
-SEXP createLegacyLazyArgsList(const DispatchContext& call, Context* ctx) {
+SEXP createLegacyLazyArgsList(const CallContext& call, Context* ctx) {
     if (call.hasEagerArgs()) {
         return createLegacyArgsListFromEagerValues(call, false, ctx);
     } else {
@@ -366,7 +324,7 @@ SEXP createLegacyArgsList(const CallContext& call, Context* ctx) {
 
 SEXP rirCallTrampoline(const CallContext& call, Function* fun, SEXP env,
                        SEXP arglist, R_bcstack_t* eagerArgs, Context* ctx) {
-    auto trampoline = [](RCNTXT* cntxt, const DispatchContext* call, Code* code,
+    auto trampoline = [](RCNTXT* cntxt, const CallContext* call, Code* code,
                          SEXP* env, R_bcstack_t* eagerArgs, Context* ctx) {
         int trampIn = ostack_length(ctx);
         if ((SETJMP(cntxt->cjmpbuf))) {
@@ -384,8 +342,9 @@ SEXP rirCallTrampoline(const CallContext& call, Function* fun, SEXP env,
 
     RCNTXT cntxt;
 
-    initClosureContext(call, &cntxt, env, call.callerEnv, arglist, call.callee);
-    closureDebug(call.ast, call.callee, env, R_NilValue, &cntxt);
+    initClosureContext(call, &cntxt, env, call.callerEnv, arglist,
+                       call.callee());
+    closureDebug(call.ast, call.callee(), env, R_NilValue, &cntxt);
 
     // Warning: call.popArgs() between initClosureContext and trampoline will
     // result in broken stack on non-local returns.
@@ -397,7 +356,7 @@ SEXP rirCallTrampoline(const CallContext& call, Function* fun, SEXP env,
         trampoline(&cntxt, &call, code, &cntxt.cloenv, eagerArgs, ctx);
     PROTECT(result);
 
-    endClosureDebug(call.ast, call.callee, env);
+    endClosureDebug(call.ast, call.callee(), env);
     endClosureContext(&cntxt, result);
 
     UNPROTECT(1);
@@ -409,7 +368,7 @@ SEXP rirCallTrampoline(const CallContext& call, Function* fun, Context* ctx) {
                              ctx);
 }
 
-SEXP rirCallTrampoline(const FinalCallContext& call, Function* fun, SEXP env,
+SEXP rirCallTrampoline(const CallContext& call, Function* fun, SEXP env,
                        SEXP arglist, Context* ctx) {
     return rirCallTrampoline(call, fun, env, arglist, nullptr, ctx);
 }
@@ -443,13 +402,13 @@ void warnSpecial(SEXP callee, SEXP call) {
  */
 
 void doProfileCall(CallSite*, SEXP);
-RIR_INLINE void profileCall(const DispatchContext& call, SEXP callee) {
+RIR_INLINE void profileCall(const CallContext& call, SEXP callee) {
     if (!call.callSite->hasProfile)
         return;
     doProfileCall(call.callSite, callee);
 }
 RIR_INLINE void profileCall(const CallContext& call) {
-    return profileCall(call, call.callee);
+    return profileCall(call, call.callee());
 }
 
 void doProfileCall(CallSite* cs, SEXP callee) {
@@ -474,7 +433,7 @@ void doProfileCall(CallSite* cs, SEXP callee) {
     }
 }
 
-SEXP DispatchContext::getFixedupAst() const {
+SEXP CallContext::getFixedupAst() const {
     SEXP ast = this->ast;
     assert(hasEagerArgs());
     // This is a hack to support complex assignment's rewritten asts for
@@ -534,38 +493,38 @@ SEXP DispatchContext::getFixedupAst() const {
     return ast;
 }
 
-SEXP legacySpecialCall(const FinalCallContext& call, Context* ctx) {
+SEXP legacySpecialCall(const CallContext& call, Context* ctx) {
     assert(call.ast != R_NilValue);
 
     // get the ccode
-    CCODE f = getBuiltin(call.callee);
-    int flag = getFlag(call.callee);
+    CCODE f = getBuiltin(call.callee());
+    int flag = getFlag(call.callee());
     R_Visible = static_cast<Rboolean>(flag != 1);
     // call it with the AST only
-    SEXP result = f(call.ast, call.callee, CDR(call.ast), call.callerEnv);
+    SEXP result = f(call.ast, call.callee(), CDR(call.ast), call.callerEnv);
     if (flag < 2)
         R_Visible = static_cast<Rboolean>(flag != 1);
     return result;
 }
 
-SEXP legacyCallWithArgslist(const FinalCallContext& call, SEXP argslist,
+SEXP legacyCallWithArgslist(const CallContext& call, SEXP argslist,
                             Context* ctx) {
-    if (TYPEOF(call.callee) == BUILTINSXP) {
+    if (TYPEOF(call.callee()) == BUILTINSXP) {
         // get the ccode
-        CCODE f = getBuiltin(call.callee);
-        int flag = getFlag(call.callee);
+        CCODE f = getBuiltin(call.callee());
+        int flag = getFlag(call.callee());
         if (flag < 2)
             R_Visible = static_cast<Rboolean>(flag != 1);
         // call it
-        SEXP result = f(call.ast, call.callee, argslist, call.callerEnv);
+        SEXP result = f(call.ast, call.callee(), argslist, call.callerEnv);
         if (flag < 2)
             R_Visible = static_cast<Rboolean>(flag != 1);
         return result;
     }
 
-    assert(TYPEOF(call.callee) == CLOSXP &&
-           TYPEOF(BODY(call.callee)) != EXTERNALSXP);
-    return Rf_applyClosure(call.ast, call.callee, argslist, call.callerEnv,
+    assert(TYPEOF(call.callee()) == CLOSXP &&
+           TYPEOF(BODY(call.callee())) != EXTERNALSXP);
+    return Rf_applyClosure(call.ast, call.callee(), argslist, call.callerEnv,
                            R_NilValue);
 }
 
@@ -573,15 +532,14 @@ SEXP legacyCall(const CallContext& call, Context* ctx) {
     // create the argslist
     SEXP argslist = createLegacyArgsList(call, ctx);
     PROTECT(argslist);
-    auto fcall = call.popArgs(ctx);
-    SEXP res = legacyCallWithArgslist(fcall, argslist, ctx);
+    SEXP res = legacyCallWithArgslist(call, argslist, ctx);
     UNPROTECT(1);
     return res;
 }
 
-SEXP closureArgumentAdaptor(const FinalCallContext& call, SEXP arglist,
+SEXP closureArgumentAdaptor(const CallContext& call, SEXP arglist,
                             SEXP suppliedvars) {
-    SEXP op = call.callee;
+    SEXP op = call.callee();
     if (FORMALS(op) == R_NilValue && arglist == R_NilValue)
         return Rf_NewEnvironment(R_NilValue, R_NilValue, CLOENV(op));
 
@@ -662,16 +620,18 @@ unsigned dispatch(const CallContext& call, DispatchTable* vt) {
     // Try to dispatch to slot 1
     if (call.callSite->hasNames ||
         /* TODO: length is waay slow. Will be fixed by signatures */
-        call.nargs() != (size_t)Rf_length(FORMALS(call.callee))) {
+        call.nargs() != (size_t)Rf_length(FORMALS(call.callee()))) {
         return 0;
     }
 
     return 1;
 };
 
+// Call a RIR function, when we already have created the list of actuals (this
+// is for example the case, if we tried to dispatch).
 SEXP rirCall(const CallContext& call, SEXP actuals, Context* ctx) {
-
-    SEXP body = BODY(call.callee);
+    assert(actuals);
+    SEXP body = BODY(call.callee());
     assert(isValidDispatchTableSEXP(body));
 
     auto table = DispatchTable::unpack(body);
@@ -682,23 +642,14 @@ SEXP rirCall(const CallContext& call, SEXP actuals, Context* ctx) {
     Function* fun = table->at(slot);
     fun->registerInvocation();
 
-    SEXP arglist = actuals;
-
     SEXP env = R_NilValue;
-    if (!arglist && needsEnv) {
-        arglist = createLegacyLazyArgsList(call, ctx);
-    }
-    PROTECT(arglist);
 
     SEXP result = nullptr;
     if (needsEnv) {
-        auto fcall = call.popArgs(ctx);
-        assert(arglist);
-        env = closureArgumentAdaptor(fcall, arglist, R_NilValue);
-        result = rirCallTrampoline(fcall, fun, env, arglist, ctx);
+        env = closureArgumentAdaptor(call, actuals, R_NilValue);
+        result = rirCallTrampoline(call, fun, env, actuals, ctx);
     } else {
         result = rirCallTrampoline(call, fun, ctx);
-        call.popArgs(ctx);
     }
 
     assert(result);
@@ -710,26 +661,64 @@ SEXP rirCall(const CallContext& call, SEXP actuals, Context* ctx) {
             fun->envChanged = true;
     }
 
-    UNPROTECT(1);
+    assert(!fun->deopt);
+    return result;
+}
+
+// Call a RIR function. Arguments are still untouched.
+SEXP rirCall(const CallContext& call, Context* ctx) {
+    SEXP body = BODY(call.callee());
+    assert(isValidDispatchTableSEXP(body));
+
+    auto table = DispatchTable::unpack(body);
+
+    unsigned slot = dispatch(call, table);
+    bool needsEnv = slot == 0;
+
+    Function* fun = table->at(slot);
+    fun->registerInvocation();
+
+    SEXP env = R_NilValue;
+
+    SEXP result = nullptr;
+    if (needsEnv) {
+        auto arglist = createLegacyLazyArgsList(call, ctx);
+        PROTECT(arglist);
+        env = closureArgumentAdaptor(call, arglist, R_NilValue);
+        result = rirCallTrampoline(call, fun, env, arglist, ctx);
+        UNPROTECT(1);
+    } else {
+        result = rirCallTrampoline(call, fun, ctx);
+    }
+
+    assert(result);
+
+    if (env) {
+        if (!fun->envLeaked && FRAME_LEAKED(env))
+            fun->envLeaked = true;
+        if (!fun->envChanged && FRAME_CHANGED(env))
+            fun->envChanged = true;
+    }
+
     assert(!fun->deopt);
     return result;
 }
 
 SEXP doCall(const CallContext& call, Context* ctx) {
-    assert(call.callee);
+    assert(call.callee());
 
     profileCall(call);
 
     auto apply = [&](const CallContext& call) {
-        switch (TYPEOF(call.callee)) {
+        switch (TYPEOF(call.callee())) {
         case SPECIALSXP:
-            return legacySpecialCall(call.popArgs(ctx), ctx);
+            return legacySpecialCall(call, ctx);
         case BUILTINSXP:
             return legacyCall(call, ctx);
         case CLOSXP: {
-            if (TYPEOF(BODY(call.callee)) != EXTERNALSXP)
+            if (TYPEOF(BODY(call.callee())) != EXTERNALSXP)
                 return legacyCall(call, ctx);
-            return rirCall(call, nullptr, ctx);
+            return rirCall(call, ctx);
         }
         default:
             Rf_error("Invalid Callee");
@@ -747,10 +736,10 @@ SEXP doCall(const CallContext& call, Context* ctx) {
     return apply(call);
 }
 
-SEXP dispatchApply(const FinalDispatchContext& call, SEXP obj, SEXP actuals,
+SEXP dispatchApply(const CallContext& call, SEXP obj, SEXP actuals,
                    Context* ctx);
 
-SEXP doDispatch(const DispatchContext& call, Context* ctx) {
+SEXP doDispatch(const CallContext& call, Context* ctx) {
     SEXP obj = call.hasEagerArgs() ? ostack_at(ctx, call.nargs() - 1)
                                    : ostack_top(ctx);
     assert(isObject(obj));
@@ -762,7 +751,7 @@ SEXP doDispatch(const DispatchContext& call, Context* ctx) {
         PROTECT(fcall.ast);
         SEXP actuals = createLegacyLazyArgsList(call, ctx);
         PROTECT(actuals);
-        SEXP result = dispatchApply(fcall.popArgs(ctx), obj, actuals, ctx);
+        SEXP result = dispatchApply(fcall, obj, actuals, ctx);
         UNPROTECT(2);
         return result;
     }
@@ -773,12 +762,12 @@ SEXP doDispatch(const DispatchContext& call, Context* ctx) {
     // Patch the already evaluated object into the first entry of
     // the promise args list
     SET_PRVALUE(CAR(actuals), obj);
-    SEXP result = dispatchApply(call.popArgs(ctx), obj, actuals, ctx);
+    SEXP result = dispatchApply(call, obj, actuals, ctx);
     UNPROTECT(1);
     return result;
 }
 
-SEXP dispatchApply(const FinalDispatchContext& call, SEXP obj, SEXP actuals,
+SEXP dispatchApply(const CallContext& call, SEXP obj, SEXP actuals,
                    Context* ctx) {
     CallSite* cs = call.callSite;
     SEXP ast = call.ast;
@@ -811,15 +800,17 @@ SEXP dispatchApply(const FinalDispatchContext& call, SEXP obj, SEXP actuals,
 
     // ===============================================
     // Now normal dispatch
-    auto fcall = call.setCallee(Rf_findFun(selector, call.callerEnv));
+    SEXP callee = Rf_findFun(selector, call.callerEnv);
 
     // TODO something should happen here
-    if (fcall.callee == R_UnboundValue)
+    if (callee == R_UnboundValue)
         assert(false && "Unbound var");
-    if (fcall.callee == R_MissingArg)
+    if (callee == R_MissingArg)
         assert(false && "Missing argument");
 
-    switch (TYPEOF(fcall.callee)) {
+    auto fcall = call.resolveTarget(callee);
+
+    switch (TYPEOF(fcall.callee())) {
     case SPECIALSXP:
         return legacySpecialCall(fcall, ctx);
     case BUILTINSXP:
@@ -831,7 +822,7 @@ SEXP dispatchApply(const FinalDispatchContext& call, SEXP obj, SEXP actuals,
             SETCAR(a, Rf_eval(CAR(a), call.callerEnv));
         return legacyCallWithArgslist(fcall, actuals, ctx);
     case CLOSXP:
-        if (TYPEOF(BODY(fcall.callee)) != EXTERNALSXP)
+        if (TYPEOF(BODY(fcall.callee())) != EXTERNALSXP)
             return legacyCallWithArgslist(fcall, actuals, ctx);
         return rirCall(fcall, actuals, ctx);
     }
@@ -1254,7 +1245,7 @@ SEXP evalRirCodeExtCaller(Code* c, Context* ctx, SEXP* env) {
 }
 
 SEXP evalRirCode(Code* c, Context* ctx, SEXP* env,
-                 const DispatchContext* callCtxt) {
+                 const CallContext* callCtxt) {
     assert(*env);
     assert((*env != R_NilValue) || (callCtxt != nullptr));
 
@@ -1542,11 +1533,13 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env,
             auto lll = ostack_length(ctx);
             int ttt = R_PPStackTop;
 
-            // Callee is TOS, popped after doCall
+            // Callee is TOS
+            // Arguments are immediate (in the CallSite struct), given as
+            // promise code indices.
             Immediate id = readImmediate();
             advanceImmediate();
             advanceImmediate(); // nargs, TODO: remove
-            CallContext call(c, id, ostack_at(ctx, 0), getenv(), ctx);
+            CallContext call(c, id, ostack_top(ctx), getenv(), ctx);
             res = doCall(call, ctx);
             ostack_pop(ctx); // callee
             ostack_push(ctx, res);
@@ -1561,15 +1554,14 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env,
             int ttt = R_PPStackTop;
 
             // Stack contains [callee, arg1, ..., argn]
-            // args are popped by doCall
             Immediate id = readImmediate();
             advanceImmediate();
             Immediate n = readImmediate();
             advanceImmediate();
-            CallContext call(c, id, R_BCNodeStackTop - n, ostack_at(ctx, n),
-                             getenv(), ctx);
+            CallContext call(c, id, ostack_at(ctx, n),
+                             ostack_cell_at(ctx, n - 1), getenv(), ctx);
             res = doCall(call, ctx);
-            ostack_pop(ctx); // callee
+            ostack_popn(ctx, n + 1);
             ostack_push(ctx, res);
 
             assert(ttt == R_PPStackTop);
@@ -1582,15 +1574,15 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env,
             int ttt = R_PPStackTop;
 
             // Stack contains [arg1, ..., argn], callee is immediate
-            // args are popped by doCall
             Immediate id = readImmediate();
             advanceImmediate();
             Immediate n = readImmediate();
             advanceImmediate();
             SEXP callee = cp_pool_at(ctx, *c->callSite(id)->target());
-            CallContext call(c, id, R_BCNodeStackTop - n, callee, getenv(),
-                             ctx);
+            CallContext call(c, id, callee, ostack_cell_at(ctx, n - 1),
+                             getenv(), ctx);
             res = doCall(call, ctx);
+            ostack_popn(ctx, n);
             ostack_push(ctx, res);
 
             assert(ttt == R_PPStackTop);
@@ -1603,10 +1595,12 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env,
             int ttt = R_PPStackTop;
 
             // TOS is receiver object
+            // Arguments are immediate (in the CallSite struct), given as
+            // promise code indices.
             Immediate id = readImmediate();
             advanceImmediate();
             advanceImmediate(); // nargs, TODO: remove
-            DispatchContext call(c, id, getenv(), ctx);
+            CallContext call(c, id, getenv(), ctx);
             res = doDispatch(call, ctx);
             ostack_pop(ctx); // receiver obj
             ostack_push(ctx, res);
@@ -1621,13 +1615,13 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env,
             int ttt = R_PPStackTop;
 
             // Stack contains [receiver obj (aka arg1), arg2, ..., argn]
-            // all args (including receiver obj) are popped by doDispatch
             Immediate id = readImmediate();
             advanceImmediate();
             Immediate n = readImmediate();
             advanceImmediate();
-            DispatchContext call(c, id, R_BCNodeStackTop - n, getenv(), ctx);
+            CallContext call(c, id, ostack_cell_at(ctx, n - 1), getenv(), ctx);
             res = doDispatch(call, ctx);
+            ostack_popn(ctx, n);
             ostack_push(ctx, res);
 
             assert(ttt == R_PPStackTop);
