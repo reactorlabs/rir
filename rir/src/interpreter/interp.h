@@ -12,10 +12,10 @@
 extern "C" {
 #endif
 
-struct DispatchContext;
+struct CallContext;
 SEXP evalRirCodeExtCaller(Code* c, Context* ctx, SEXP* env);
 SEXP evalRirCode(Code* c, Context* ctx, SEXP* env,
-                 const DispatchContext* callContext);
+                 const CallContext* callContext);
 
 SEXP rirExpr(SEXP f);
 
