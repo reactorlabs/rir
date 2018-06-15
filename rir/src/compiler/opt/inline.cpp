@@ -86,6 +86,7 @@ class TheInliner {
                                 a = cast;
                             }
                             ld->replaceUsesWith(a);
+                            next = bb->remove(ip);
                         }
                         ip = next;
                     }

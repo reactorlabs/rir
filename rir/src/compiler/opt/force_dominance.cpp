@@ -45,9 +45,14 @@ using namespace rir::pir;
 struct ForcedAt : public std::unordered_map<Value*, Force*> {
     static Force* ambiguous() { return (Force*)0x22; }
 
-    void evalAt(Value* val, Force* force) {
+    void forcedAt(MkArg* val, Force* force) {
         if (!count(val))
             (*this)[val] = force;
+    }
+    void usedAt(MkArg* val, Force* force) {
+        // Used before force, this means we need to keep the promise as is
+        if (!count(val))
+            (*this)[val] = ambiguous();
     }
     bool merge(ForcedAt& other) {
         bool changed = false;
@@ -89,8 +94,17 @@ class ForceDominanceAnalysis : public StaticAnalysis<ForcedAt> {
 
     void apply(ForcedAt& d, Instruction* i) const override {
         auto f = Force::Cast(i);
-        if (f)
-            d.evalAt(getValue(f), f);
+        if (f) {
+            MkArg* arg = MkArg::Cast(getValue(f));
+            if (arg)
+                d.forcedAt(arg, f);
+        } else if (!CastType::Cast(i)) {
+            i->eachArg([&](Value* v) {
+                MkArg* arg = MkArg::Cast(v);
+                if (arg)
+                    d.usedAt(arg, f);
+            });
+        }
     }
 };
 
@@ -140,6 +154,7 @@ void ForceDominance::apply(Closure* cls) {
     ForceDominanceAnalysisResult analysis(cls);
 
     std::unordered_map<Force*, Value*> inlinedPromise;
+    std::unordered_map<Instruction*, MkArg*> forcedMkArg;
 
     // 1. Inline dominating promises
     Visitor::run(cls->entry, [&](BB* bb) {
@@ -180,10 +195,15 @@ void ForceDominance::apply(Closure* cls) {
                             f = Force::Cast(*split->begin());
                             assert(f);
                             f->replaceUsesWith(promRes);
-                            next = split->remove(split->begin());
-                            bb = split;
+                            split->remove(split->begin());
+
+                            MkArg* fixedMkArg =
+                                new MkArg(mkarg->prom, promRes, mkarg->env());
+                            next = split->insert(split->begin(), fixedMkArg);
+                            forcedMkArg[mkarg] = fixedMkArg;
 
                             inlinedPromise[f] = promRes;
+                            bb = split;
                         }
                     }
                 }
@@ -197,6 +217,7 @@ void ForceDominance::apply(Closure* cls) {
         auto ip = bb->begin();
         while (ip != bb->end()) {
             auto f = Force::Cast(*ip);
+            auto cast = CastType::Cast(*ip);
             auto next = ip + 1;
             if (f) {
                 // If this force instruction is dominated by another force we
@@ -209,9 +230,20 @@ void ForceDominance::apply(Closure* cls) {
                     next = bb->remove(ip);
                 });
             }
+            if (cast) {
+                // Collect aliases of promises for step 3 bellow
+                auto in = Instruction::Cast(cast->arg<0>().val());
+                if (in && forcedMkArg.count(in)) {
+                    forcedMkArg[cast] = forcedMkArg.at(in);
+                }
+            }
             ip = next;
         }
     });
+
+    // 3. replace remaining uses of the mkarg itself
+    for (auto m : forcedMkArg)
+        m.first->replaceUsesIn(m.second, m.second->bb());
 }
 }
 }
