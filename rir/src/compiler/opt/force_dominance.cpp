@@ -154,7 +154,7 @@ void ForceDominance::apply(Closure* cls) {
     ForceDominanceAnalysisResult analysis(cls);
 
     std::unordered_map<Force*, Value*> inlinedPromise;
-    std::unordered_map<MkArg*, MkArg*> forcedMkArg;
+    std::unordered_map<Instruction*, MkArg*> forcedMkArg;
 
     // 1. Inline dominating promises
     Visitor::run(cls->entry, [&](BB* bb) {
@@ -217,6 +217,7 @@ void ForceDominance::apply(Closure* cls) {
         auto ip = bb->begin();
         while (ip != bb->end()) {
             auto f = Force::Cast(*ip);
+            auto cast = CastType::Cast(*ip);
             auto next = ip + 1;
             if (f) {
                 // If this force instruction is dominated by another force we
@@ -228,6 +229,13 @@ void ForceDominance::apply(Closure* cls) {
                         f->replaceUsesWith(r);
                     next = bb->remove(ip);
                 });
+            }
+            if (cast) {
+                // Collect aliases of promises for step 3 bellow
+                auto in = Instruction::Cast(cast->arg<0>().val());
+                if (in && forcedMkArg.count(in)) {
+                    forcedMkArg[cast] = forcedMkArg.at(in);
+                }
             }
             ip = next;
         }
