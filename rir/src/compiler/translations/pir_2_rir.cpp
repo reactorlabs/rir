@@ -549,10 +549,8 @@ class SSAAllocator {
     }
 
     size_t operator[](Value* v) const {
-        Instruction* i = Instruction::Cast(v);
-        assert(i);
-        assert(allocation.at(i) != stackSlot);
-        return allocation.at(i) - 1;
+        assert(allocation.at(v) != stackSlot);
+        return allocation.at(v) - 1;
     }
 
     size_t slots() const {
@@ -564,17 +562,9 @@ class SSAAllocator {
         return max;
     }
 
-    bool onStack(Value* v) const {
-        Instruction* i = Instruction::Cast(v);
-        assert(i);
-        return allocation.at(i) == stackSlot;
-    }
+    bool onStack(Value* v) const { return allocation.at(v) == stackSlot; }
 
-    bool dead(Value* v) const {
-        Instruction* i = Instruction::Cast(v);
-        assert(i);
-        return allocation.count(i) == 0;
-    }
+    bool dead(Value* v) const { return allocation.count(v) == 0; }
 };
 
 class Context {
@@ -674,8 +664,15 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                         cs << BC::push(Env::Cast(what)->rho);
                     } else if (what == Env::notClosed()) {
                         cs << BC::callerEnv();
-                    } else if (!alloc.onStack(what)) {
-                        cs << BC::ldloc(alloc[what]);
+                    } else {
+                        if (alloc.dead(what)) {
+                            std::cerr << "Don't know how to load the env ";
+                            what->printRef(std::cerr);
+                            std::cerr << " (" << tagToStr(what->tag) << ")\n";
+                            assert(false);
+                        }
+                        if (!alloc.onStack(what))
+                            cs << BC::ldloc(alloc[what]);
                     }
                 };
 
@@ -684,8 +681,15 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                     if (what == Missing::instance()) {
                         assert(MkArg::Cast(instr) &&
                                "only mkarg supports missing");
-                    } else if (!alloc.onStack(what)) {
-                        cs << BC::ldloc(alloc[what]);
+                    } else {
+                        if (alloc.dead(what)) {
+                            std::cerr << "Don't know how to load the env ";
+                            what->printRef(std::cerr);
+                            std::cerr << " (" << tagToStr(what->tag) << ")\n";
+                            assert(false);
+                        }
+                        if (!alloc.onStack(what))
+                            cs << BC::ldloc(alloc[what]);
                     }
                 };
 
@@ -716,8 +720,10 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                     // are removed from the stack.
                     CallInstructionI::CastCall(instr)->eachCallArg(
                         [&](Value* arg) {
-                            if (alloc.onStack(arg)) {
-                                MkArg::Cast(arg)->ifEager(
+                            auto mkarg = MkArg::Cast(arg);
+                            assert(mkarg);
+                            if (alloc.onStack(mkarg)) {
+                                mkarg->ifEager(
                                     [&](Value*) { cs << BC::pop(); });
                             }
                         });
