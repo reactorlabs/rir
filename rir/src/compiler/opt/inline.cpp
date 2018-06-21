@@ -24,7 +24,7 @@ class TheInliner {
             // Dangerous iterater usage, works since we do only update it in
             // one place.
             for (auto it = bb->begin(); it != bb->end(); it++) {
-                auto call = CallInstruction::Cast(*it);
+                auto call = CallInstructionI::CastCall(*it);
                 if (!call)
                     continue;
 
@@ -50,14 +50,14 @@ class TheInliner {
                     inlinee = call->cls();
                     staticEnv = inlinee->closureEnv();
                 } else {
-                    assert(false);
+                    continue;
                 }
 
                 BB* split =
                     BBTransform::split(function->nextBBId++, bb, it, function);
 
                 auto theCall = *split->begin();
-                auto theCallInstruction = CallInstruction::Cast(theCall);
+                auto theCallInstruction = CallInstructionI::CastCall(theCall);
                 std::vector<Value*> arguments;
                 theCallInstruction->eachCallArg(
                     [&](Value* v) { arguments.push_back(v); });

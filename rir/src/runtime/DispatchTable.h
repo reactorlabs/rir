@@ -36,12 +36,12 @@ struct DispatchTable {
         return d->info.magic == DISPATCH_TABLE_MAGIC ? d : nullptr;
     }
 
-    Function* at(size_t i) { return Function::unpack(entry[i]); }
-
-    SEXP slot(size_t i) {
-        assert(i < capacity() && "invalid dispatch table slot access");
+    bool available(size_t i) {
+        assert(i < capacity());
         return entry[i];
     }
+
+    Function* at(size_t i) { return Function::unpack(entry[i]); }
 
     void put(size_t i, Function* f) {
         assert(i < capacity());

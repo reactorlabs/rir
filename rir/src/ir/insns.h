@@ -20,6 +20,11 @@ DEF_INSTR(nop_, 0, 0, 0, 1)
 DEF_INSTR(make_env_, 0, 1, 1, 1)
 
 /**
+ * caller_env_:: push caller env to tos
+ */
+DEF_INSTR(caller_env_, 0, 0, 1, 1)
+
+/**
  * get_env_:: push current env to tos
  */
 DEF_INSTR(get_env_, 0, 0, 1, 1)
@@ -234,6 +239,8 @@ DEF_INSTR(le_, 0, 2, 1, 0)
 DEF_INSTR(ge_, 0, 2, 1, 0)
 DEF_INSTR(eq_, 0, 2, 1, 0)
 DEF_INSTR(ne_, 0, 2, 1, 0)
+
+DEF_INSTR(identical_, 0, 2, 1, 0)
 
 /**
  * not_:: unary negation operator !

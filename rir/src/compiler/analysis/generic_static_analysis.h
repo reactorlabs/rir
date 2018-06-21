@@ -79,7 +79,7 @@ class StaticAnalysis {
             if (POS == PositioningStyle::BeforeInstruction && i == j)
                 return state;
 
-            if (CallInstruction::Cast(i))
+            if (CallInstructionI::CastCall(i))
                 state = mergepoint[bb->id][++segment];
             else
                 apply(state, i);
@@ -105,7 +105,7 @@ class StaticAnalysis {
                 if (POS == PositioningStyle::BeforeInstruction)
                     collect(state, i);
 
-                if (CallInstruction::Cast(i))
+                if (CallInstructionI::CastCall(i))
                     state = mergepoint[bb->id][++segment];
                 else
                     apply(state, i);
@@ -137,7 +137,7 @@ class StaticAnalysis {
                 for (auto i : *bb) {
                     apply(state, i);
 
-                    if (CallInstruction::Cast(i)) {
+                    if (CallInstructionI::CastCall(i)) {
                         segment++;
                         if (mergepoint[id].size() <= segment) {
                             mergepoint[id].resize(segment + 1);

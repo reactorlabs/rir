@@ -9,6 +9,7 @@ namespace pir {
 class Pir2RirCompiler {
   public:
     bool verbose = false;
+    bool dryRun = false;
 
     rir::Function* compile(Closure* cls, SEXP origin);
 };

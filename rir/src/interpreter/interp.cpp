@@ -614,7 +614,7 @@ SEXP closureArgumentAdaptor(const CallContext& call, SEXP arglist,
 
 unsigned dispatch(const CallContext& call, DispatchTable* vt) {
     assert(vt->capacity() > 0);
-    if (vt->capacity() == 1 || !vt->slot(1))
+    if (vt->capacity() == 1 || !vt->available(1))
         return 0;
 
     // Try to dispatch to slot 1
@@ -1297,6 +1297,11 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env,
             NEXT();
         }
 
+        INSTRUCTION(caller_env_) {
+            ostack_push(ctx, callCtxt->callerEnv);
+            NEXT();
+        }
+
         INSTRUCTION(get_env_) {
             assert(env);
             ostack_push(ctx, getenv());
@@ -1965,6 +1970,13 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env,
             DO_RELOP(==);
             ostack_popn(ctx, 2);
             ostack_push(ctx, res);
+            NEXT();
+        }
+
+        INSTRUCTION(identical_) {
+            SEXP rhs = ostack_pop(ctx);
+            SEXP lhs = ostack_pop(ctx);
+            ostack_push(ctx, rhs == lhs ? R_TrueValue : R_FalseValue);
             NEXT();
         }
 

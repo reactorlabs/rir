@@ -166,7 +166,7 @@ void ForceDominance::apply(Closure* cls) {
                 auto mkarg = MkArg::Cast(getValue(f));
                 if (mkarg) {
                     if (analysis.isDominating(f)) {
-                        Value* strict = mkarg->arg<0>().val();
+                        Value* strict = mkarg->eagerArg();
                         if (strict != Missing::instance()) {
                             f->replaceUsesWith(strict);
                             next = bb->remove(ip);

@@ -51,6 +51,7 @@
     V(Gt)                                                                      \
     V(Neq)                                                                     \
     V(Eq)                                                                      \
+    V(Identical)                                                               \
     V(Length)                                                                  \
     V(Extract1_1D)                                                             \
     V(Extract1_2D)                                                             \

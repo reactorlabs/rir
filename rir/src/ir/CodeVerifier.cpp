@@ -47,7 +47,6 @@ class State {
 
     void advance() {
         BC bc = BC::advance(&pc);
-
         if (bc.bc == Opcode::return_)
             ostack = 0;
         else

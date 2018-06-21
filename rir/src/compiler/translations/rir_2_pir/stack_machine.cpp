@@ -167,8 +167,7 @@ bool StackMachine::tryRunCurrentBC(const Rir2Pir& rir2pir, Builder& insert) {
                 monomorphic,
                 [&](Closure* f) {
                     Value* expected = insert(new LdConst(monomorphic));
-                    Value* t = insert(new Eq(
-                        top(), expected, 0)); // here we don't have src ast...
+                    Value* t = insert(new Identical(top(), expected));
                     insert(new Branch(t));
                     BB* curBB = insert.bb;
 
@@ -340,6 +339,13 @@ bool StackMachine::tryRunCurrentBC(const Rir2Pir& rir2pir, Builder& insert) {
         BINOP(Neq, ne_);
 #undef BINOP
 
+    case Opcode::identical_: {
+        auto rhs = pop();
+        auto lhs = pop();
+        push(insert(new Identical(lhs, rhs)));
+        break;
+    }
+
 #define UNOP(Name, Op)                                                         \
     case Opcode::Op: {                                                         \
         v = pop();                                                             \
@@ -412,6 +418,7 @@ bool StackMachine::tryRunCurrentBC(const Rir2Pir& rir2pir, Builder& insert) {
     // Opcodes that only come from PIR
     case Opcode::make_env_:
     case Opcode::get_env_:
+    case Opcode::caller_env_:
     case Opcode::set_env_:
     case Opcode::ldvar_noforce_:
     case Opcode::ldvar_noforce_super_:

@@ -81,6 +81,7 @@ bool BC::operator==(const BC& other) const {
     case Opcode::nop_:
     case Opcode::make_env_:
     case Opcode::get_env_:
+    case Opcode::caller_env_:
     case Opcode::set_env_:
     case Opcode::extract1_1_:
     case Opcode::extract1_2_:
@@ -121,6 +122,7 @@ bool BC::operator==(const BC& other) const {
     case Opcode::le_:
     case Opcode::ge_:
     case Opcode::eq_:
+    case Opcode::identical_:
     case Opcode::ne_:
     case Opcode::seq_:
     case Opcode::colon_:
@@ -215,6 +217,7 @@ void BC::write(CodeStream& cs) const {
     case Opcode::nop_:
     case Opcode::make_env_:
     case Opcode::get_env_:
+    case Opcode::caller_env_:
     case Opcode::set_env_:
     case Opcode::extract1_1_:
     case Opcode::extract1_2_:
@@ -255,6 +258,7 @@ void BC::write(CodeStream& cs) const {
     case Opcode::le_:
     case Opcode::ge_:
     case Opcode::eq_:
+    case Opcode::identical_:
     case Opcode::ne_:
     case Opcode::seq_:
     case Opcode::colon_:
@@ -443,6 +447,7 @@ void BC::print(CallSite* cs) {
     case Opcode::nop_:
     case Opcode::make_env_:
     case Opcode::get_env_:
+    case Opcode::caller_env_:
     case Opcode::set_env_:
     case Opcode::force_:
     case Opcode::pop_:
@@ -474,6 +479,7 @@ void BC::print(CallSite* cs) {
     case Opcode::le_:
     case Opcode::ge_:
     case Opcode::eq_:
+    case Opcode::identical_:
     case Opcode::ne_:
     case Opcode::return_:
     case Opcode::isfun_:

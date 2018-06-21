@@ -77,8 +77,8 @@ void TheScopeAnalysis::apply(AS& envs, Instruction* i) const {
             envs[superEnv].set(ss->varName, ss->val(), ss);
             handled = true;
         }
-    } else if (CallInstruction::Cast(i) && depth < maxDepth) {
-        auto calli = CallInstruction::Cast(i);
+    } else if (CallInstructionI::CastCall(i) && depth < maxDepth) {
+        auto calli = CallInstructionI::CastCall(i);
         if (Call::Cast(i)) {
             auto call = Call::Cast(i);
             Value* trg = call->cls();
@@ -100,8 +100,7 @@ void TheScopeAnalysis::apply(AS& envs, Instruction* i) const {
             } else if (StaticEagerCall::Cast(i)) {
                 trg = StaticEagerCall::Cast(i)->cls();
             }
-            assert(trg);
-            if (trg->argNames.size() == calli->nCallArgs()) {
+            if (trg && trg->argNames.size() == calli->nCallArgs()) {
                 TheScopeAnalysis nextFun(trg, trg->argNames, trg->closureEnv(),
                                          trg->entry, envs, depth + 1);
                 nextFun();

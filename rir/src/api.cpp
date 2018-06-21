@@ -30,7 +30,7 @@ REXPORT SEXP rir_disassemble(SEXP what, SEXP verbose) {
 
     Rprintf("* closure %p (vtable %p, env %p)\n", what, t, CLOENV(what));
     for (size_t entry = 0; entry < t->capacity(); ++entry) {
-        if (!t->slot(entry))
+        if (!t->available(entry))
             continue;
         Function* f = t->at(entry);
         Rprintf("= vtable slot <%d> (%p, invoked %u) =\n", entry, f,
@@ -55,18 +55,16 @@ REXPORT SEXP rir_compile(SEXP what, SEXP env = NULL) {
         Rf_copyMostAttrib(what, result);
 
 #ifdef ENABLE_SLOWASSERT
-        // rir_disassemble(result, R_FalseValue);
-
         std::unique_ptr<pir::Module> m(new pir::Module);
         pir::Rir2PirCompiler cmp(m.get());
-        // cmp.setVerbose(true);
         auto ignore = []() {};
         cmp.compileClosure(result,
                            [&](pir::Closure* c) {
                                cmp.optimizeModule();
-                               // TODO, next step: enable back-compilation
-                               // pir::Pir2RirCompiler p2r;
-                               // p2r.compile(c, closure);
+                               pir::Pir2RirCompiler p2r;
+                               // TODO, next step: run the compiled code
+                               p2r.dryRun = true;
+                               p2r.compile(c, result);
                            },
                            ignore);
 #endif
@@ -123,7 +121,7 @@ REXPORT SEXP pir_compile(SEXP what, SEXP verbose) {
         Rf_error("not a compiled closure");
     assert(DispatchTable::unpack(BODY(what))->capacity() == 2 &&
            "fix, support for more than 2 slots needed...");
-    if (DispatchTable::unpack(BODY(what))->slot(1) != nullptr)
+    if (DispatchTable::unpack(BODY(what))->available(1))
         Rf_error("closure already compiled to pir");
 
     Protect p(what);
