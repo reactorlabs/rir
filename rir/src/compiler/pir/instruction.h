@@ -763,20 +763,6 @@ class CallInstructionI {
     virtual size_t nCallArgs() = 0;
     virtual void eachCallArg(Instruction::ArgumentValueIterator it) = 0;
     virtual void eachCallArgRev(Instruction::ArgumentValueIterator it) = 0;
-    virtual bool allArgsEager() {
-        bool res = true;
-        eachCallArg([&](Value* arg) {
-            auto mkarg = MkArg::Cast(arg);
-            if (mkarg) {
-                if (mkarg->eagerArg() == Missing::instance())
-                    res = false;
-            } else {
-                assert(false && "Call expects MkArg arguments");
-            }
-        });
-        return res;
-    }
-
     static CallInstructionI* CastCall(Value* v);
 };
 
@@ -857,6 +843,25 @@ class ACallInstructionImplementation(StaticCall, Effect::Any, EnvAccess::Leak,
     void printArgs(std::ostream&) override;
 };
 
+// Call instruction for eager calls. Closure is
+// specified as `cls_`, args passed as values.
+class ACallInstructionImplementation(EagerCall, Effect::Any, EnvAccess::Leak,
+                                     true) {
+  public:
+    constexpr static size_t clsIdx = 0;
+
+    Value* cls() { return arg(clsIdx).val(); }
+
+    EagerCall(Value * e, Value * cls, const std::vector<Value*>& args,
+              unsigned src)
+        : CallInstructionImplementation(PirType::valOrLazy(), e) {
+        this->pushArg(cls, RType::closure);
+        for (unsigned i = 0; i < args.size(); ++i)
+            this->pushArg(args[i], PirType::val());
+        srcIdx = src;
+    }
+};
+
 // Call instruction for eager, staticatlly resolved calls. Closure is
 // specified as `cls_`, args passed as values.
 class ACallInstructionImplementation(StaticEagerCall, Effect::Any,
@@ -876,8 +881,6 @@ class ACallInstructionImplementation(StaticEagerCall, Effect::Any,
             this->pushArg(args[i], PirType::val());
         srcIdx = src;
     }
-
-    bool allArgsEager() override { return true; }
 
     void printArgs(std::ostream&) override;
 };

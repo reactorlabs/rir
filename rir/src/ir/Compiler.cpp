@@ -528,7 +528,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
                         names.push_back(arg.tag());
                         if (TYPEOF(*arg) == LANGSXP || TYPEOF(*arg) == SYMSXP) {
                             auto p = compilePromise(ctx, *arg);
-                            cs << BC::promise(p);
+                            cs << BC::push(R_UnboundValue) << BC::promise(p);
                         } else {
                             compileExpr(ctx, *arg);
                         }
@@ -581,7 +581,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
                 names.push_back(arg.tag());
                 if (TYPEOF(*arg) == LANGSXP || TYPEOF(*arg) == SYMSXP) {
                     auto p = compilePromise(ctx, *arg);
-                    cs << BC::promise(p);
+                    cs << BC::push(R_UnboundValue) << BC::promise(p);
                 } else {
                     compileExpr(ctx, *arg);
                 }

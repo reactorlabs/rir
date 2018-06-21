@@ -306,6 +306,8 @@ CallInstructionI* CallInstructionI::CastCall(Value* v) {
         return Call::Cast(v);
     case Tag::StaticCall:
         return StaticCall::Cast(v);
+    case Tag::EagerCall:
+        return EagerCall::Cast(v);
     case Tag::StaticEagerCall:
         return StaticEagerCall::Cast(v);
     case Tag::CallBuiltin:

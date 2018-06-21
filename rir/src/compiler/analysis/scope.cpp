@@ -79,27 +79,31 @@ void TheScopeAnalysis::apply(AS& envs, Instruction* i) const {
         }
     } else if (CallInstructionI::CastCall(i) && depth < maxDepth) {
         auto calli = CallInstructionI::CastCall(i);
-        if (Call::Cast(i)) {
-            auto call = Call::Cast(i);
-            Value* trg = call->cls();
-            MkFunCls* cls = envs.findClosure(i->env(), trg);
-            if (cls != AbstractREnvironment::UnknownClosure) {
-                if (cls->fun->argNames.size() == call->nCallArgs()) {
-                    TheScopeAnalysis nextFun(cls->fun, cls->fun->argNames,
-                                             cls->env(), cls->fun->entry, envs,
-                                             depth + 1);
-                    nextFun();
-                    envs.merge(nextFun.result());
-                    handled = true;
+        if (Call::Cast(i) || EagerCall::Cast(i)) {
+            Value* trg = nullptr;
+            if (Call::Cast(i))
+                trg = Call::Cast(i)->cls();
+            else if (EagerCall::Cast(i))
+                trg = EagerCall::Cast(i)->cls();
+            if (trg) {
+                MkFunCls* cls = envs.findClosure(i->env(), trg);
+                if (cls != AbstractREnvironment::UnknownClosure) {
+                    if (cls->fun->argNames.size() == calli->nCallArgs()) {
+                        TheScopeAnalysis nextFun(cls->fun, cls->fun->argNames,
+                                                 cls->env(), cls->fun->entry,
+                                                 envs, depth + 1);
+                        nextFun();
+                        envs.merge(nextFun.result());
+                        handled = true;
+                    }
                 }
             }
         } else {
             Closure* trg = nullptr;
-            if (StaticCall::Cast(i)) {
+            if (StaticCall::Cast(i))
                 trg = StaticCall::Cast(i)->cls();
-            } else if (StaticEagerCall::Cast(i)) {
+            else if (StaticEagerCall::Cast(i))
                 trg = StaticEagerCall::Cast(i)->cls();
-            }
             if (trg && trg->argNames.size() == calli->nCallArgs()) {
                 TheScopeAnalysis nextFun(trg, trg->argNames, trg->closureEnv(),
                                          trg->entry, envs, depth + 1);

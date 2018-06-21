@@ -564,7 +564,7 @@ class SSAAllocator {
 
     bool onStack(Value* v) const { return allocation.at(v) == stackSlot; }
 
-    bool dead(Value* v) const { return allocation.count(v) == 0; }
+    bool hasSlot(Value* v) const { return allocation.count(v); }
 };
 
 class Context {
@@ -665,7 +665,7 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                     } else if (what == Env::notClosed()) {
                         cs << BC::callerEnv();
                     } else {
-                        if (alloc.dead(what)) {
+                        if (!alloc.hasSlot(what)) {
                             std::cerr << "Don't know how to load the env ";
                             what->printRef(std::cerr);
                             std::cerr << " (" << tagToStr(what->tag) << ")\n";
@@ -679,10 +679,13 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 auto loadArg = [&](BB::Instrs::iterator it, Instruction* instr,
                                    Value* what) {
                     if (what == Missing::instance()) {
+                        // if missing flows into instructions with more than one
+                        // arg we will need stack shuffling here
                         assert(MkArg::Cast(instr) &&
                                "only mkarg supports missing");
+                        cs << BC::push(R_UnboundValue);
                     } else {
-                        if (alloc.dead(what)) {
+                        if (!alloc.hasSlot(what)) {
                             std::cerr << "Don't know how to load the env ";
                             what->printRef(std::cerr);
                             std::cerr << " (" << tagToStr(what->tag) << ")\n";
@@ -706,30 +709,14 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                                 cs << BC::setEnv();
                                 currentEnv = env;
                         } else {
-                            if (alloc.onStack(env))
+                            if (alloc.hasSlot(env) && alloc.onStack(env))
                                 cs << BC::pop();
                         }
                     }
                 }
 
                 // Step two: load the rest
-                auto c = Call::Cast(instr);
-                auto sc = StaticCall::Cast(instr);
-                if ((c && !c->allArgsEager()) || (sc && !sc->allArgsEager())) {
-                    // For lazy calls the args are not loaded, eager call args
-                    // are removed from the stack.
-                    CallInstructionI::CastCall(instr)->eachCallArg(
-                        [&](Value* arg) {
-                            auto mkarg = MkArg::Cast(arg);
-                            assert(mkarg);
-                            if (alloc.onStack(mkarg)) {
-                                mkarg->ifEager(
-                                    [&](Value*) { cs << BC::pop(); });
-                            }
-                        });
-                    if (c)
-                        loadArg(it, instr, c->cls());
-                } else if (!Phi::Cast(instr)) {
+                if (!Phi::Cast(instr)) {
                     instr->eachArg([&](Value* what) {
                         if (instr->hasEnv() && instr->env() == what) {
                             if (explicitEnvValue(instr))
@@ -813,18 +800,7 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 return;
             }
             case Tag::MkArg: {
-                // MkArg just passes on the eager value
-                if (MkArg::Cast(instr)->eagerArg() == Missing::instance())
-                    hasResult = false;
-#ifdef SLOWASSERT
-                BreadthFirstVisitor::run(bb, [&](Instruction* i) {
-                    i->eachArg([&](Value* arg) {
-                        if (arg == i)
-                            assert(CallInstructionI::CastCall(i) &&
-                                   "MkArg used in a non-call instruction");
-                    });
-                });
-#endif
+                cs << BC::promise(getPromiseIdx(ctx, MkArg::Cast(instr)->prom));
                 break;
             }
             case Tag::Seq: {
@@ -832,13 +808,10 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 break;
             }
             case Tag::MkCls: {
-                // check if it is used (suspect only MkFunCls is ever created)
-                assert(false && "not yet implemented.");
+                cs << BC::close();
                 break;
             }
             case Tag::MkFunCls: {
-                // TODO: not tested
-
                 auto mkfuncls = MkFunCls::Cast(instr);
 
                 auto dt = DispatchTable::unpack(mkfuncls->code);
@@ -948,50 +921,27 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
 
             case Tag::Call: {
                 auto call = Call::Cast(instr);
-                if (call->allArgsEager()) {
-                    cs.insertStackCall(Opcode::call_stack_, call->nCallArgs(),
-                                       {}, Pool::get(call->srcIdx));
-                } else {
-                    std::vector<FunIdxT> callArgs;
-                    call->eachCallArg([&](Value* arg) {
-                        auto mkarg = MkArg::Cast(arg);
-                        assert(mkarg);
-                        callArgs.push_back(getPromiseIdx(ctx, mkarg->prom));
-                    });
-
-                    cs.insertCall(Opcode::call_, callArgs, {},
-                                  Pool::get(call->srcIdx));
-                }
+                cs.insertStackCall(Opcode::call_stack_lazy_, call->nCallArgs(),
+                                   {}, Pool::get(call->srcIdx));
                 break;
             }
             case Tag::StaticCall: {
                 auto call = StaticCall::Cast(instr);
-
                 compiler.compile(call->cls(), call->origin());
-                // push callee - this stores it into constant pool
-                cs << BC::push(call->origin());
-
-                if (call->allArgsEager()) {
-                    cs.insertStackCall(Opcode::call_stack_, call->nCallArgs(),
-                                       {}, Pool::get(call->srcIdx));
-                } else {
-                    std::vector<FunIdxT> callArgs;
-                    call->eachCallArg([&](Value* arg) {
-                        auto mkarg = MkArg::Cast(arg);
-                        assert(mkarg);
-                        callArgs.push_back(getPromiseIdx(ctx, mkarg->prom));
-                    });
-
-                    cs.insertCall(Opcode::call_, callArgs, {},
-                                  Pool::get(call->srcIdx));
-                }
+                cs.insertStackCall(Opcode::static_call_stack_lazy_,
+                                   call->nCallArgs(), {},
+                                   Pool::get(call->srcIdx), call->origin());
+                break;
+            }
+            case Tag::EagerCall: {
+                auto call = EagerCall::Cast(instr);
+                cs.insertStackCall(Opcode::call_stack_, call->nCallArgs(), {},
+                                   Pool::get(call->srcIdx));
                 break;
             }
             case Tag::StaticEagerCall: {
                 auto call = StaticEagerCall::Cast(instr);
-
                 compiler.compile(call->cls(), call->origin());
-
                 cs.insertStackCall(Opcode::static_call_stack_,
                                    call->nCallArgs(), {},
                                    Pool::get(call->srcIdx), call->origin());
@@ -1040,7 +990,7 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
             case Tag::Deopt: {
                 Deopt::Cast(instr)->eachArg([&](Value*) { cs << BC::pop(); });
                 // TODO
-                cs << BC::int3();
+                cs << BC::int3() << BC::push(R_NilValue) << BC::ret();
                 return;
             }
             // values, not instructions
@@ -1055,7 +1005,7 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
 
             // Store the result
             if (hasResult) {
-                if (alloc.dead(instr))
+                if (!alloc.hasSlot(instr))
                     cs << BC::pop();
                 else if (!alloc.onStack(instr))
                     cs << BC::stloc(alloc[instr]);
@@ -1126,7 +1076,7 @@ rir::Function* Pir2Rir::finalize() {
     for (auto arg : cls->defaultArgs) {
         if (!arg)
             continue;
-        promises[arg] = getPromiseIdx(ctx, arg);
+        getPromiseIdx(ctx, arg);
         argNames[arg] = cls->argNames[i++];
     }
     ctx.pushBody(R_NilValue);

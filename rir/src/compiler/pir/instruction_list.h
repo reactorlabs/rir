@@ -26,6 +26,7 @@
     V(Call)                                                                    \
     V(StaticCall)                                                              \
     V(StaticEagerCall)                                                         \
+    V(EagerCall)                                                               \
     V(CallBuiltin)                                                             \
     V(CallSafeBuiltin)                                                         \
     V(MkEnv)                                                                   \

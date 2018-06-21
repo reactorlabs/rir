@@ -111,10 +111,23 @@ DEF_INSTR(movloc_, 2, 0, 0, 1)
 DEF_INSTR(call_, 2, 1, 1, 0)
 
 /**
- * call_stack_:: Like call_, but expects arguments on the stack
+ * call_stack_lazy_:: Like call_, but expects promised arguments on the stack
+ *               on top of the callee.
+ */
+DEF_INSTR(call_stack_lazy_, 2, -1, 1, 0)
+
+/**
+ * call_stack_:: Like call_, but expects eager arguments on the stack
  *               on top of the callee.
  */
 DEF_INSTR(call_stack_, 2, -1, 1, 0)
+
+/**
+ * static_call_stack_lazy_:: Like call_stack_, but the callee is known
+ * statically and accessed through the callsite (immediate arg), not on the
+ * stack.
+ */
+DEF_INSTR(static_call_stack_lazy_, 2, -1, 1, 0)
 
 /**
  * static_call_stack_:: Like call_stack_, but the callee is known statically
@@ -152,7 +165,7 @@ DEF_INSTR(isfun_, 0, 1, 1, 1)
  * promise_:: take immediate CP index of Code, create promise & push on object
  * stack
  */
-DEF_INSTR(promise_, 1, 0, 1, 1)
+DEF_INSTR(promise_, 1, 1, 1, 1)
 
 /**
  * force_:: pop from objet stack, evaluate, push promise's value

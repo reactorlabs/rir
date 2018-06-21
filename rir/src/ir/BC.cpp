@@ -35,7 +35,9 @@ bool BC::operator==(const BC& other) const {
     case Opcode::dispatch_:
     case Opcode::call_:
     case Opcode::call_stack_:
+    case Opcode::call_stack_lazy_:
     case Opcode::static_call_stack_:
+    case Opcode::static_call_stack_lazy_:
     case Opcode::dispatch_stack_:
         return immediate.call_args.call_id == other.immediate.call_args.call_id;
 
@@ -175,7 +177,9 @@ void BC::write(CodeStream& cs) const {
     case Opcode::call_:
     case Opcode::dispatch_:
     case Opcode::call_stack_:
+    case Opcode::call_stack_lazy_:
     case Opcode::static_call_stack_:
+    case Opcode::static_call_stack_lazy_:
     case Opcode::dispatch_stack_:
         assert(false);
         break;
@@ -363,7 +367,8 @@ void BC::print(CallSite* cs) {
         }
         break;
     }
-    case Opcode::call_stack_: {
+    case Opcode::call_stack_:
+    case Opcode::call_stack_lazy_: {
         NumArgsT nargs = immediate.call_args.nargs;
         Rprintf(" %d ", nargs);
         if (cs) {
@@ -374,6 +379,7 @@ void BC::print(CallSite* cs) {
         }
         break;
     }
+    case Opcode::static_call_stack_lazy_:
     case Opcode::static_call_stack_: {
         NumArgsT nargs = immediate.call_args.nargs;
         Rprintf(" %d : ", nargs);
@@ -399,7 +405,10 @@ void BC::print(CallSite* cs) {
     }
     case Opcode::push_:
         Rprintf(" %u # ", immediate.pool);
-        Rf_PrintValue(immediateConst());
+        if (immediateConst() == R_UnboundValue)
+            Rprintf(" -\n");
+        else
+            Rf_PrintValue(immediateConst());
         return;
     case Opcode::ldfun_:
     case Opcode::ldvar_:

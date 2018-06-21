@@ -41,6 +41,16 @@ class TheInliner {
                         continue;
                     assert(cls->fun->closureEnv() == Env::notClosed());
                     staticEnv = cls->env();
+                } else if (EagerCall::Cast(*it)) {
+                    EagerCall* call = EagerCall::Cast(*it);
+                    auto cls = MkFunCls::Cast(call->cls());
+                    if (!cls)
+                        continue;
+                    inlinee = cls->fun;
+                    if (inlinee->argNames.size() != call->nCallArgs())
+                        continue;
+                    assert(cls->fun->closureEnv() == Env::notClosed());
+                    staticEnv = cls->env();
                 } else if (StaticCall::Cast(*it)) {
                     StaticCall* call = StaticCall::Cast(*it);
                     inlinee = call->cls();
