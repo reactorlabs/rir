@@ -20,6 +20,11 @@ DEF_INSTR(nop_, 0, 0, 0, 1)
 DEF_INSTR(make_env_, 0, 1, 1, 1)
 
 /**
+ * caller_env_:: push caller env to tos
+ */
+DEF_INSTR(caller_env_, 0, 0, 1, 1)
+
+/**
  * get_env_:: push current env to tos
  */
 DEF_INSTR(get_env_, 0, 0, 1, 1)
@@ -106,17 +111,29 @@ DEF_INSTR(movloc_, 2, 0, 0, 1)
 DEF_INSTR(call_, 2, 1, 1, 0)
 
 /**
- * call_stack_:: Like call_, but expects arguments on the stack
- *               on top of the callee.
+ * call_stack_promised_:: Like call_, but expects promised arguments on the
+ * stack on top of the callee.
  */
-DEF_INSTR(call_stack_, 2, -1, 1, 0)
+DEF_INSTR(call_stack_promised_, 2, -1, 1, 0)
 
 /**
- * static_call_stack_:: Like call_stack_, but the callee is known statically
- *                      and accessed through the callsite (immediate arg),
- *                      not on the stack.
+ * call_stack_eager_:: Like call_, but expects eager arguments on the stack
+ *               on top of the callee.
  */
-DEF_INSTR(static_call_stack_, 2, -1, 1, 0)
+DEF_INSTR(call_stack_eager_, 2, -1, 1, 0)
+
+/**
+ * static_call_stack_promised_:: Like static_call_stack_, but expects promised
+ *                           arguments on the stack.
+ */
+DEF_INSTR(static_call_stack_promised_, 2, -1, 1, 0)
+
+/**
+ * static_call_stack_eager_:: Like call_stack_, but the callee is known
+ * statically and accessed through the callsite (immediate arg), not on the
+ * stack.
+ */
+DEF_INSTR(static_call_stack_eager_, 2, -1, 1, 0)
 
 /**
  * dispatch_:: Similar to call_, but also looks for the callee (the selector
@@ -126,11 +143,11 @@ DEF_INSTR(static_call_stack_, 2, -1, 1, 0)
 DEF_INSTR(dispatch_, 2, 1, 1, 0)
 
 /**
- * dispatch_stack_:: Similar to dispatch_, but expects the receiver and
+ * dispatch_stack_eager_:: Similar to dispatch_, but expects the receiver and
  *                   all other args on the stack.
  *                   Note: nargs includes the receiver!
  */
-DEF_INSTR(dispatch_stack_, 2, -1, 1, 0)
+DEF_INSTR(dispatch_stack_eager_, 2, -1, 1, 0)
 
 /**
  * close_:: pop body and argument list, create closure, and push on object stack
@@ -147,7 +164,7 @@ DEF_INSTR(isfun_, 0, 1, 1, 1)
  * promise_:: take immediate CP index of Code, create promise & push on object
  * stack
  */
-DEF_INSTR(promise_, 1, 0, 1, 1)
+DEF_INSTR(promise_, 1, 1, 1, 1)
 
 /**
  * force_:: pop from objet stack, evaluate, push promise's value
@@ -234,6 +251,8 @@ DEF_INSTR(le_, 0, 2, 1, 0)
 DEF_INSTR(ge_, 0, 2, 1, 0)
 DEF_INSTR(eq_, 0, 2, 1, 0)
 DEF_INSTR(ne_, 0, 2, 1, 0)
+
+DEF_INSTR(identical_, 0, 2, 1, 0)
 
 /**
  * not_:: unary negation operator !

@@ -26,6 +26,7 @@
     V(Call)                                                                    \
     V(StaticCall)                                                              \
     V(StaticEagerCall)                                                         \
+    V(EagerCall)                                                               \
     V(CallBuiltin)                                                             \
     V(CallSafeBuiltin)                                                         \
     V(MkEnv)                                                                   \
@@ -51,6 +52,7 @@
     V(Gt)                                                                      \
     V(Neq)                                                                     \
     V(Eq)                                                                      \
+    V(Identical)                                                               \
     V(Length)                                                                  \
     V(Extract1_1D)                                                             \
     V(Extract1_2D)                                                             \

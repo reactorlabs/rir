@@ -28,34 +28,11 @@ static size_t getMaxInstructionNameLength() {
 }
 static size_t maxInstructionNameLength = getMaxInstructionNameLength();
 
-const static Instruction::Description instructionDescriptionTable[] = {
-#define V(Instruction) Instruction::getDescription(),
-    COMPILER_INSTRUCTIONS(V)
-#undef V
-};
-
 static_assert(static_cast<unsigned>(Tag::_UNUSED_) == 0, "");
-static size_t tagIdx(Tag tag) { return static_cast<size_t>(tag) - 1; }
 } // namespace
 
 namespace rir {
 namespace pir {
-
-bool Instruction::mightIO() const {
-    return instructionDescriptionTable[tagIdx(tag)].mightIO;
-}
-bool Instruction::changesEnv() const {
-    return instructionDescriptionTable[tagIdx(tag)].changesEnv;
-}
-bool Instruction::leaksEnv() const {
-    return instructionDescriptionTable[tagIdx(tag)].leaksEnv;
-}
-bool Instruction::hasEnv() const {
-    return instructionDescriptionTable[tagIdx(tag)].hasEnv;
-}
-bool Instruction::accessesEnv() const {
-    return instructionDescriptionTable[tagIdx(tag)].accessEnv;
-}
 
 extern std::ostream& operator<<(std::ostream& out,
                                 Instruction::InstructionUID id) {
@@ -175,7 +152,7 @@ void Branch::printArgs(std::ostream& out) {
 }
 
 void MkArg::printArgs(std::ostream& out) {
-    arg<0>().val()->printRef(out);
+    eagerArg()->printRef(out);
     out << ", " << *prom << ", ";
     env()->printRef(out);
 }
@@ -212,16 +189,13 @@ void LdVarSuper::printArgs(std::ostream& out) {
 }
 
 void MkEnv::printArgs(std::ostream& out) {
-    out << "parent=";
-    arg(0).val()->printRef(out);
-    if (nargs() > 1)
+    eachLocalVar([&](SEXP name, Value* v) {
+        out << CHAR(PRINTNAME(name)) << "=";
+        v->printRef(out);
         out << ", ";
-    for (unsigned i = 0; i < nargs() - 1; ++i) {
-        out << CHAR(PRINTNAME(this->varName[i])) << "=";
-        this->arg(i + 1).val()->printRef(out);
-        if (i != nargs() - 2)
-            out << ", ";
-    }
+    });
+    out << "parent=";
+    parent()->printRef(out);
 }
 
 void Is::printArgs(std::ostream& out) {
@@ -263,7 +237,7 @@ void PirCopy::print(std::ostream& out) {
 
 CallSafeBuiltin::CallSafeBuiltin(SEXP builtin, const std::vector<Value*>& args,
                                  unsigned src)
-    : VarLenInstruction(PirType::valOrLazy()), blt(builtin),
+    : CallInstructionImplementation(PirType::valOrLazy()), blt(builtin),
       builtin(getBuiltin(builtin)), builtinId(getBuiltinNr(builtin)) {
     for (unsigned i = 0; i < args.size(); ++i)
         this->pushArg(args[i], PirType::val());
@@ -272,7 +246,7 @@ CallSafeBuiltin::CallSafeBuiltin(SEXP builtin, const std::vector<Value*>& args,
 
 CallBuiltin::CallBuiltin(Value* e, SEXP builtin,
                          const std::vector<Value*>& args, unsigned src)
-    : VarLenInstruction(PirType::valOrLazy(), e), blt(builtin),
+    : CallInstructionImplementation(PirType::valOrLazy(), e), blt(builtin),
       builtin(getBuiltin(builtin)), builtinId(getBuiltinNr(builtin)) {
     for (unsigned i = 0; i < args.size(); ++i)
         this->pushArg(args[i], PirType::val());
@@ -324,6 +298,25 @@ void StaticCall::printArgs(std::ostream& out) {
     if (nargs() > 0)
         out << ", ";
     Instruction::printArgs(out);
+}
+
+CallInstruction* CallInstruction::CastCall(Value* v) {
+    switch (v->tag) {
+    case Tag::Call:
+        return Call::Cast(v);
+    case Tag::StaticCall:
+        return StaticCall::Cast(v);
+    case Tag::EagerCall:
+        return EagerCall::Cast(v);
+    case Tag::StaticEagerCall:
+        return StaticEagerCall::Cast(v);
+    case Tag::CallBuiltin:
+        return CallBuiltin::Cast(v);
+    case Tag::CallSafeBuiltin:
+        return CallSafeBuiltin::Cast(v);
+    default: {}
+    }
+    return nullptr;
 }
 
 } // namespace pir

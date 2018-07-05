@@ -167,8 +167,7 @@ bool StackMachine::tryRunCurrentBC(const Rir2Pir& rir2pir, Builder& insert) {
                 monomorphic,
                 [&](Closure* f) {
                     Value* expected = insert(new LdConst(monomorphic));
-                    Value* t = insert(new Eq(
-                        top(), expected, 0)); // here we don't have src ast...
+                    Value* t = insert(new Identical(top(), expected));
                     insert(new Branch(t));
                     BB* curBB = insert.bb;
 
@@ -200,24 +199,18 @@ bool StackMachine::tryRunCurrentBC(const Rir2Pir& rir2pir, Builder& insert) {
     case Opcode::promise_: {
         unsigned promi = bc.immediate.i;
         rir::Code* promiseCode = srcFunction->codeAt(promi);
+        Value* val = pop();
         Promise* prom = insert.function->createProm();
         {
-            // What should I do with this?
             Builder promiseBuilder(insert.function, prom);
             if (!Rir2Pir(rir2pir).tryCompile(promiseCode, promiseBuilder))
                 return false;
         }
-        Value* val = Missing::instance();
-        if (Query::pure(prom)) {
-            rir2pir.translate(promiseCode, insert,
-                              [&](Value* success) { val = success; });
-        }
-        // TODO: Remove comment and check how to deal with
         push(insert(new MkArg(prom, val, env)));
         break;
     }
 
-    case Opcode::static_call_stack_: {
+    case Opcode::static_call_stack_eager_: {
         unsigned n = bc.immediate.call_args.nargs;
         rir::CallSite* cs = bc.callSite(srcCode);
         SEXP target = rir::Pool::get(*cs->target());
@@ -340,6 +333,13 @@ bool StackMachine::tryRunCurrentBC(const Rir2Pir& rir2pir, Builder& insert) {
         BINOP(Neq, ne_);
 #undef BINOP
 
+    case Opcode::identical_: {
+        auto rhs = pop();
+        auto lhs = pop();
+        push(insert(new Identical(lhs, rhs)));
+        break;
+    }
+
 #define UNOP(Name, Op)                                                         \
     case Opcode::Op: {                                                         \
         v = pop();                                                             \
@@ -412,6 +412,7 @@ bool StackMachine::tryRunCurrentBC(const Rir2Pir& rir2pir, Builder& insert) {
     // Opcodes that only come from PIR
     case Opcode::make_env_:
     case Opcode::get_env_:
+    case Opcode::caller_env_:
     case Opcode::set_env_:
     case Opcode::ldvar_noforce_:
     case Opcode::ldvar_noforce_super_:
@@ -421,16 +422,18 @@ bool StackMachine::tryRunCurrentBC(const Rir2Pir& rir2pir, Builder& insert) {
     case Opcode::movloc_:
     case Opcode::isobj_:
     case Opcode::check_missing_:
+    case Opcode::static_call_stack_promised_:
+    case Opcode::call_stack_promised_:
         assert(false && "Recompiling PIR not supported for now.");
 
     // Unsupported opcodes:
     case Opcode::ldlval_:
     case Opcode::asast_:
     case Opcode::missing_:
-    case Opcode::dispatch_stack_:
+    case Opcode::dispatch_stack_eager_:
     case Opcode::dispatch_:
     case Opcode::guard_env_:
-    case Opcode::call_stack_:
+    case Opcode::call_stack_eager_:
     case Opcode::beginloop_:
     case Opcode::endcontext_:
     case Opcode::ldddvar_:

@@ -24,15 +24,14 @@ class TheInliner {
             // Dangerous iterater usage, works since we do only update it in
             // one place.
             for (auto it = bb->begin(); it != bb->end(); it++) {
-                auto call = CallInstruction::Cast(*it);
+                auto call = CallInstruction::CastCall(*it);
                 if (!call)
                     continue;
 
                 Closure* inlinee = nullptr;
                 Value* staticEnv = nullptr;
 
-                if (Call::Cast(*it)) {
-                    Call* call = Call::Cast(*it);
+                if (auto call = Call::Cast(*it)) {
                     auto cls = MkFunCls::Cast(call->cls());
                     if (!cls)
                         continue;
@@ -41,23 +40,30 @@ class TheInliner {
                         continue;
                     assert(cls->fun->closureEnv() == Env::notClosed());
                     staticEnv = cls->env();
-                } else if (StaticCall::Cast(*it)) {
-                    StaticCall* call = StaticCall::Cast(*it);
+                } else if (auto call = EagerCall::Cast(*it)) {
+                    auto cls = MkFunCls::Cast(call->cls());
+                    if (!cls)
+                        continue;
+                    inlinee = cls->fun;
+                    if (inlinee->argNames.size() != call->nCallArgs())
+                        continue;
+                    assert(cls->fun->closureEnv() == Env::notClosed());
+                    staticEnv = cls->env();
+                } else if (auto call = StaticCall::Cast(*it)) {
                     inlinee = call->cls();
                     staticEnv = inlinee->closureEnv();
-                } else if (StaticEagerCall::Cast(*it)) {
-                    StaticEagerCall* call = StaticEagerCall::Cast(*it);
+                } else if (auto call = StaticEagerCall::Cast(*it)) {
                     inlinee = call->cls();
                     staticEnv = inlinee->closureEnv();
                 } else {
-                    assert(false);
+                    continue;
                 }
 
                 BB* split =
                     BBTransform::split(function->nextBBId++, bb, it, function);
 
                 auto theCall = *split->begin();
-                auto theCallInstruction = CallInstruction::Cast(theCall);
+                auto theCallInstruction = CallInstruction::CastCall(theCall);
                 std::vector<Value*> arguments;
                 theCallInstruction->eachCallArg(
                     [&](Value* v) { arguments.push_back(v); });
@@ -86,6 +92,7 @@ class TheInliner {
                                 a = cast;
                             }
                             ld->replaceUsesWith(a);
+                            next = bb->remove(ip);
                         }
                         ip = next;
                     }

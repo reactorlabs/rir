@@ -471,7 +471,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
 
                         // Do dispatch using args from the stack
                         cs.insertStackCall(
-                            Opcode::dispatch_stack_, 3,
+                            Opcode::dispatch_stack_eager_, 3,
                             {R_NilValue, R_NilValue, symbol::value}, rewrite,
                             setter);
 
@@ -528,7 +528,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
                         names.push_back(arg.tag());
                         if (TYPEOF(*arg) == LANGSXP || TYPEOF(*arg) == SYMSXP) {
                             auto p = compilePromise(ctx, *arg);
-                            cs << BC::promise(p);
+                            cs << BC::push(R_UnboundValue) << BC::promise(p);
                         } else {
                             compileExpr(ctx, *arg);
                         }
@@ -537,8 +537,8 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
                     SEXP rewrite = Rf_shallow_duplicate(g);
                     ctx.preserve(rewrite);
                     SETCAR(CDR(rewrite), symbol::getterPlaceholder);
-                    cs.insertStackCall(Opcode::call_stack_, names.size(), names,
-                                       rewrite);
+                    cs.insertStackCall(Opcode::call_stack_eager_, names.size(),
+                                       names, rewrite);
                 }
                 Else(assert(false);)
             }
@@ -581,7 +581,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
                 names.push_back(arg.tag());
                 if (TYPEOF(*arg) == LANGSXP || TYPEOF(*arg) == SYMSXP) {
                     auto p = compilePromise(ctx, *arg);
-                    cs << BC::promise(p);
+                    cs << BC::push(R_UnboundValue) << BC::promise(p);
                 } else {
                     compileExpr(ctx, *arg);
                 }
@@ -605,7 +605,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
             SET_TAG(value, symbol::value);
             SETCDR(a, value);
 
-            cs.insertStackCall(Opcode::call_stack_, names.size(), names,
+            cs.insertStackCall(Opcode::call_stack_eager_, names.size(), names,
                                rewrite);
         }
 
@@ -944,8 +944,8 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
                 cs << BC::guardNamePrimitive(symbol::Internal);
                 for (auto a : args)
                     compileExpr(ctx, a);
-                cs.insertStackCall(Opcode::static_call_stack_, args.length(),
-                                   {}, inAst, internal);
+                cs.insertStackCall(Opcode::static_call_stack_eager_,
+                                   args.length(), {}, inAst, internal);
 
                 return true;
             }
@@ -1015,8 +1015,8 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
                                 LCONS(symbol::getterPlaceholder, R_NilValue));
 
                 cs << objBranch << BC::swap();
-                cs.insertStackCall(Opcode::dispatch_stack_, 2, {}, extractCall,
-                                   symbol::DoubleBracket);
+                cs.insertStackCall(Opcode::dispatch_stack_eager_, 2, {},
+                                   extractCall, symbol::DoubleBracket);
 
                 cs << contBranch;
 
@@ -1024,7 +1024,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
                 SEXP rewritten = LCONS(args[1],
                         LCONS(symbol::getterPlaceholder, R_NilValue));
 
-                cs.insertStackCall(Opcode::call_stack_, 1, {}, rewritten);
+                cs.insertStackCall(Opcode::call_stack_eager_, 1, {}, rewritten);
 
                 // store result
                 cs << BC::pick(3)
@@ -1065,8 +1065,8 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
 
         for (auto a : args)
             compileExpr(ctx, a);
-        cs.insertStackCall(Opcode::static_call_stack_, args.length(), {}, ast,
-                           builtin);
+        cs.insertStackCall(Opcode::static_call_stack_eager_, args.length(), {},
+                           ast, builtin);
 
         return true;
     }
@@ -1153,7 +1153,8 @@ bool compileWithGuess(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
         signature->pushArgument({true, TYPEOF(a)});
     }
 
-    cs.insertStackCall(Opcode::static_call_stack_, args.length(), {}, ast, cls, signature);
+    cs.insertStackCall(Opcode::static_call_stack_eager_, args.length(), {}, ast,
+                       cls, signature);
 
     return true;
 }

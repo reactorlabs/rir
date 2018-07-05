@@ -34,9 +34,11 @@ bool BC::operator==(const BC& other) const {
 
     case Opcode::dispatch_:
     case Opcode::call_:
-    case Opcode::call_stack_:
-    case Opcode::static_call_stack_:
-    case Opcode::dispatch_stack_:
+    case Opcode::call_stack_eager_:
+    case Opcode::call_stack_promised_:
+    case Opcode::static_call_stack_eager_:
+    case Opcode::static_call_stack_promised_:
+    case Opcode::dispatch_stack_eager_:
         return immediate.call_args.call_id == other.immediate.call_args.call_id;
 
     case Opcode::guard_env_:
@@ -81,6 +83,7 @@ bool BC::operator==(const BC& other) const {
     case Opcode::nop_:
     case Opcode::make_env_:
     case Opcode::get_env_:
+    case Opcode::caller_env_:
     case Opcode::set_env_:
     case Opcode::extract1_1_:
     case Opcode::extract1_2_:
@@ -121,6 +124,7 @@ bool BC::operator==(const BC& other) const {
     case Opcode::le_:
     case Opcode::ge_:
     case Opcode::eq_:
+    case Opcode::identical_:
     case Opcode::ne_:
     case Opcode::seq_:
     case Opcode::colon_:
@@ -172,9 +176,11 @@ void BC::write(CodeStream& cs) const {
     // They have to be inserted by CodeStream::insertCall
     case Opcode::call_:
     case Opcode::dispatch_:
-    case Opcode::call_stack_:
-    case Opcode::static_call_stack_:
-    case Opcode::dispatch_stack_:
+    case Opcode::call_stack_eager_:
+    case Opcode::call_stack_promised_:
+    case Opcode::static_call_stack_eager_:
+    case Opcode::static_call_stack_promised_:
+    case Opcode::dispatch_stack_eager_:
         assert(false);
         break;
 
@@ -215,6 +221,7 @@ void BC::write(CodeStream& cs) const {
     case Opcode::nop_:
     case Opcode::make_env_:
     case Opcode::get_env_:
+    case Opcode::caller_env_:
     case Opcode::set_env_:
     case Opcode::extract1_1_:
     case Opcode::extract1_2_:
@@ -255,6 +262,7 @@ void BC::write(CodeStream& cs) const {
     case Opcode::le_:
     case Opcode::ge_:
     case Opcode::eq_:
+    case Opcode::identical_:
     case Opcode::ne_:
     case Opcode::seq_:
     case Opcode::colon_:
@@ -359,7 +367,8 @@ void BC::print(CallSite* cs) {
         }
         break;
     }
-    case Opcode::call_stack_: {
+    case Opcode::call_stack_eager_:
+    case Opcode::call_stack_promised_: {
         NumArgsT nargs = immediate.call_args.nargs;
         Rprintf(" %d ", nargs);
         if (cs) {
@@ -370,7 +379,8 @@ void BC::print(CallSite* cs) {
         }
         break;
     }
-    case Opcode::static_call_stack_: {
+    case Opcode::static_call_stack_promised_:
+    case Opcode::static_call_stack_eager_: {
         NumArgsT nargs = immediate.call_args.nargs;
         Rprintf(" %d : ", nargs);
         if (cs) {
@@ -382,7 +392,7 @@ void BC::print(CallSite* cs) {
         }
         break;
     }
-    case Opcode::dispatch_stack_: {
+    case Opcode::dispatch_stack_eager_: {
         if (cs) {
             Rprintf(" `%s` ", CHAR(PRINTNAME(Pool::get(*cs->selector()))));
             Rprintf(" %d ", cs->nargs);
@@ -395,7 +405,10 @@ void BC::print(CallSite* cs) {
     }
     case Opcode::push_:
         Rprintf(" %u # ", immediate.pool);
-        Rf_PrintValue(immediateConst());
+        if (immediateConst() == R_UnboundValue)
+            Rprintf(" -\n");
+        else
+            Rf_PrintValue(immediateConst());
         return;
     case Opcode::ldfun_:
     case Opcode::ldvar_:
@@ -443,6 +456,7 @@ void BC::print(CallSite* cs) {
     case Opcode::nop_:
     case Opcode::make_env_:
     case Opcode::get_env_:
+    case Opcode::caller_env_:
     case Opcode::set_env_:
     case Opcode::force_:
     case Opcode::pop_:
@@ -474,6 +488,7 @@ void BC::print(CallSite* cs) {
     case Opcode::le_:
     case Opcode::ge_:
     case Opcode::eq_:
+    case Opcode::identical_:
     case Opcode::ne_:
     case Opcode::return_:
     case Opcode::isfun_:

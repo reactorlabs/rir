@@ -149,9 +149,12 @@ class BC {
     inline size_t popCount() {
         // return also is a leave
         assert(bc != Opcode::return_);
-        if (bc == Opcode::call_stack_)
+        if (bc == Opcode::call_stack_eager_ ||
+            bc == Opcode::call_stack_promised_)
             return immediate.call_args.nargs + 1;
-        if (bc == Opcode::static_call_stack_ || bc == Opcode::dispatch_stack_)
+        if (bc == Opcode::static_call_stack_eager_ ||
+            bc == Opcode::static_call_stack_promised_ ||
+            bc == Opcode::dispatch_stack_eager_)
             return immediate.call_args.nargs;
         return popCount(bc);
     }
@@ -180,8 +183,11 @@ class BC {
 
     bool isCallsite() const {
         return bc == Opcode::call_ || bc == Opcode::dispatch_ ||
-               bc == Opcode::call_stack_ || bc == Opcode::dispatch_stack_ ||
-               bc == Opcode::static_call_stack_;
+               bc == Opcode::call_stack_eager_ ||
+               bc == Opcode::dispatch_stack_eager_ ||
+               bc == Opcode::static_call_stack_eager_ ||
+               bc == Opcode::call_stack_promised_ ||
+               bc == Opcode::static_call_stack_promised_;
     }
 
     bool hasPromargs() const {
@@ -234,6 +240,7 @@ class BC {
     // to create new BC objects, which can be streamed to a CodeStream
     inline static BC nop();
     inline static BC makeEnv();
+    inline static BC callerEnv();
     inline static BC getEnv();
     inline static BC setEnv();
     inline static BC push(SEXP constant);
@@ -294,6 +301,7 @@ class BC {
     inline static BC le();
     inline static BC ge();
     inline static BC eq();
+    inline static BC identical();
     inline static BC ne();
     inline static BC seq();
     inline static BC colon();
@@ -415,11 +423,13 @@ class BC {
         case Opcode::subassign2_:
             immediate.pool = *(PoolIdxT*)pc;
             break;
-        case Opcode::dispatch_stack_:
+        case Opcode::dispatch_stack_eager_:
         case Opcode::call_:
         case Opcode::dispatch_:
-        case Opcode::call_stack_:
-        case Opcode::static_call_stack_:
+        case Opcode::call_stack_eager_:
+        case Opcode::call_stack_promised_:
+        case Opcode::static_call_stack_eager_:
+        case Opcode::static_call_stack_promised_:
             immediate.call_args = *(CallArgs*)pc;
             break;
         case Opcode::guard_env_:
@@ -460,6 +470,7 @@ class BC {
         case Opcode::nop_:
         case Opcode::make_env_:
         case Opcode::get_env_:
+        case Opcode::caller_env_:
         case Opcode::set_env_:
         case Opcode::for_seq_size_:
         case Opcode::extract1_1_:
@@ -499,6 +510,7 @@ class BC {
         case Opcode::le_:
         case Opcode::ge_:
         case Opcode::eq_:
+        case Opcode::identical_:
         case Opcode::ne_:
         case Opcode::return_:
         case Opcode::isfun_:

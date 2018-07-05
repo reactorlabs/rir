@@ -32,7 +32,7 @@ void Rir2PirCompiler::compileClosure(SEXP closure, MaybeCls success,
     assert(isValidClosureSEXP(closure));
     DispatchTable* tbl = DispatchTable::unpack(BODY(closure));
 
-    if (!tbl->slot(1)) {
+    if (tbl->available(1)) {
         if (isVerbose())
             std::cerr << "Closure already compiled to PIR\n";
     }
