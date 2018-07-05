@@ -42,8 +42,11 @@ using namespace rir::pir;
  * branch) or not. Thus we cannot inline it.
  */
 
-struct ForcedAt : public std::unordered_map<Value*, Force*> {
-    static Force* ambiguous() { return (Force*)0x22; }
+struct ForcedBy : public std::unordered_map<Value*, Force*> {
+    static Force* ambiguous() {
+        static Force f(nullptr);
+        return &f;
+    }
 
     void forcedAt(MkArg* val, Force* force) {
         if (!count(val))
@@ -54,7 +57,7 @@ struct ForcedAt : public std::unordered_map<Value*, Force*> {
         if (!count(val))
             (*this)[val] = ambiguous();
     }
-    bool merge(ForcedAt& other) {
+    bool merge(ForcedBy& other) {
         bool changed = false;
         for (auto& e : *this) {
             auto v = e.first;
@@ -88,11 +91,11 @@ static Value* getValue(Force* f) {
     return cur;
 }
 
-class ForceDominanceAnalysis : public StaticAnalysis<ForcedAt> {
+class ForceDominanceAnalysis : public StaticAnalysis<ForcedBy> {
   public:
     ForceDominanceAnalysis(Closure* cls) : StaticAnalysis(cls) {}
 
-    void apply(ForcedAt& d, Instruction* i) const override {
+    void apply(ForcedBy& d, Instruction* i) const override {
         auto f = Force::Cast(i);
         if (f) {
             MkArg* arg = MkArg::Cast(getValue(f));
@@ -114,12 +117,12 @@ class ForceDominanceAnalysisResult {
         ForceDominanceAnalysis analysis(cls);
         analysis();
         analysis.foreach<PositioningStyle::AfterInstruction>(
-            [&](const ForcedAt& p, Instruction* i) {
+            [&](const ForcedBy& p, Instruction* i) {
                 auto f = Force::Cast(i);
                 if (f) {
                     if (p.find(getValue(f)) != p.end()) {
                         auto o = p.at(getValue(f));
-                        if (o != ForcedAt::ambiguous()) {
+                        if (o != ForcedBy::ambiguous()) {
                             if (f != o)
                                 domBy[f] = o;
                             else
@@ -132,7 +135,7 @@ class ForceDominanceAnalysisResult {
     }
 
     bool isSafeToInline(MkArg* a) {
-        return exit.count(a) && exit.at(a) != ForcedAt::ambiguous();
+        return exit.count(a) && exit.at(a) != ForcedBy::ambiguous();
     }
     bool isDominating(Force* f) { return dom.find(f) != dom.end(); }
     void mapToDominator(Force* f, std::function<void(Force* f)> action) {
@@ -141,7 +144,7 @@ class ForceDominanceAnalysisResult {
     }
 
   private:
-    ForcedAt exit;
+    ForcedBy exit;
     std::unordered_map<Force*, Force*> domBy;
     std::unordered_set<Force*> dom;
 };

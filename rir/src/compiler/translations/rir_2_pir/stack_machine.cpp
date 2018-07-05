@@ -210,7 +210,7 @@ bool StackMachine::tryRunCurrentBC(const Rir2Pir& rir2pir, Builder& insert) {
         break;
     }
 
-    case Opcode::static_call_stack_: {
+    case Opcode::static_call_stack_eager_: {
         unsigned n = bc.immediate.call_args.nargs;
         rir::CallSite* cs = bc.callSite(srcCode);
         SEXP target = rir::Pool::get(*cs->target());
@@ -422,18 +422,18 @@ bool StackMachine::tryRunCurrentBC(const Rir2Pir& rir2pir, Builder& insert) {
     case Opcode::movloc_:
     case Opcode::isobj_:
     case Opcode::check_missing_:
-    case Opcode::static_call_stack_lazy_:
-    case Opcode::call_stack_lazy_:
+    case Opcode::static_call_stack_promised_:
+    case Opcode::call_stack_promised_:
         assert(false && "Recompiling PIR not supported for now.");
 
     // Unsupported opcodes:
     case Opcode::ldlval_:
     case Opcode::asast_:
     case Opcode::missing_:
-    case Opcode::dispatch_stack_:
+    case Opcode::dispatch_stack_eager_:
     case Opcode::dispatch_:
     case Opcode::guard_env_:
-    case Opcode::call_stack_:
+    case Opcode::call_stack_eager_:
     case Opcode::beginloop_:
     case Opcode::endcontext_:
     case Opcode::ldddvar_:

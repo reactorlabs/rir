@@ -383,13 +383,13 @@ class VarLenInstruction
     void pushArg(Value* a) { pushArg(a, a->type); }
 
     VarLenInstruction(PirType return_type) : Super(return_type) {
-        static_assert(ENV == EnvAccess::None,
+        static_assert(!Description.HasEnv,
                       "This instruction needs an environment");
     }
 
     VarLenInstruction(PirType return_type, Value* env) : Super(return_type) {
         assert(env);
-        static_assert(ENV > EnvAccess::None,
+        static_assert(Description.HasEnv,
                       "This instruction has no environment access");
         args_.push_back(InstrArg(env, RType::env));
     }
@@ -758,19 +758,19 @@ SAFE_UNOP(Length);
     VarLenInstruction<Tag::type, type, io, env>
 
 // Common interface to all call instructions
-class CallInstructionI {
+class CallInstruction {
   public:
     virtual size_t nCallArgs() = 0;
     virtual void eachCallArg(Instruction::ArgumentValueIterator it) = 0;
     virtual void eachCallArgRev(Instruction::ArgumentValueIterator it) = 0;
-    static CallInstructionI* CastCall(Value* v);
+    static CallInstruction* CastCall(Value* v);
 };
 
 template <Tag ITAG, class Base, Effect EFFECT, EnvAccess ENV,
           bool HAS_TARGET_ARG>
 class CallInstructionImplementation
     : public VarLenInstruction<ITAG, Base, EFFECT, ENV>,
-      public CallInstructionI {
+      public CallInstruction {
   public:
     typedef VarLenInstruction<ITAG, Base, EFFECT, ENV> Super;
     CallInstructionImplementation(PirType returnType, Value* env)
@@ -814,9 +814,9 @@ class ACallInstructionImplementation(Call, Effect::Any, EnvAccess::Leak, true) {
 
     Call(Value * e, Value * fun, const std::vector<Value*>& args, unsigned src)
         : CallInstructionImplementation(PirType::valOrLazy(), e) {
-        this->pushArg(fun, RType::closure);
+        pushArg(fun, RType::closure);
         for (unsigned i = 0; i < args.size(); ++i)
-            this->pushArg(args[i], RType::prom);
+            pushArg(args[i], RType::prom);
         srcIdx = src;
     }
 };
@@ -837,14 +837,14 @@ class ACallInstructionImplementation(StaticCall, Effect::Any, EnvAccess::Leak,
         : CallInstructionImplementation(PirType::valOrLazy(), e), cls_(cls),
           origin_(origin) {
         for (unsigned i = 0; i < args.size(); ++i)
-            this->pushArg(args[i], RType::prom);
+            pushArg(args[i], RType::prom);
     }
 
     void printArgs(std::ostream&) override;
 };
 
 // Call instruction for eager calls. Closure is
-// specified as `cls_`, args passed as values.
+// passed as first arg.
 class ACallInstructionImplementation(EagerCall, Effect::Any, EnvAccess::Leak,
                                      true) {
   public:
@@ -855,9 +855,9 @@ class ACallInstructionImplementation(EagerCall, Effect::Any, EnvAccess::Leak,
     EagerCall(Value * e, Value * cls, const std::vector<Value*>& args,
               unsigned src)
         : CallInstructionImplementation(PirType::valOrLazy(), e) {
-        this->pushArg(cls, RType::closure);
+        pushArg(cls, RType::closure);
         for (unsigned i = 0; i < args.size(); ++i)
-            this->pushArg(args[i], PirType::val());
+            pushArg(args[i], PirType::val());
         srcIdx = src;
     }
 };
@@ -878,7 +878,7 @@ class ACallInstructionImplementation(StaticEagerCall, Effect::Any,
         : CallInstructionImplementation(PirType::valOrLazy(), e), cls_(cls),
           origin_(origin) {
         for (unsigned i = 0; i < args.size(); ++i)
-            this->pushArg(args[i], PirType::val());
+            pushArg(args[i], PirType::val());
         srcIdx = src;
     }
 
@@ -938,7 +938,7 @@ class VLI(MkEnv, Effect::None, EnvAccess::Capture) {
     MkEnv(Value* parent, const std::vector<SEXP>& names, Value** args)
         : VarLenInstruction(RType::env, parent), varName(names) {
         for (unsigned i = 0; i < varName.size(); ++i)
-            this->pushArg(args[i], PirType::any());
+            pushArg(args[i], PirType::any());
     }
 
     Value* parent() { return env(); }

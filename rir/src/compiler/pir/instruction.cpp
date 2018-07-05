@@ -300,7 +300,7 @@ void StaticCall::printArgs(std::ostream& out) {
     Instruction::printArgs(out);
 }
 
-CallInstructionI* CallInstructionI::CastCall(Value* v) {
+CallInstruction* CallInstruction::CastCall(Value* v) {
     switch (v->tag) {
     case Tag::Call:
         return Call::Cast(v);

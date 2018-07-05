@@ -77,8 +77,8 @@ void TheScopeAnalysis::apply(AS& envs, Instruction* i) const {
             envs[superEnv].set(ss->varName, ss->val(), ss);
             handled = true;
         }
-    } else if (CallInstructionI::CastCall(i) && depth < maxDepth) {
-        auto calli = CallInstructionI::CastCall(i);
+    } else if (CallInstruction::CastCall(i) && depth < maxDepth) {
+        auto calli = CallInstruction::CastCall(i);
         if (Call::Cast(i) || EagerCall::Cast(i)) {
             Value* trg = nullptr;
             if (Call::Cast(i))

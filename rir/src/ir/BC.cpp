@@ -34,11 +34,11 @@ bool BC::operator==(const BC& other) const {
 
     case Opcode::dispatch_:
     case Opcode::call_:
-    case Opcode::call_stack_:
-    case Opcode::call_stack_lazy_:
-    case Opcode::static_call_stack_:
-    case Opcode::static_call_stack_lazy_:
-    case Opcode::dispatch_stack_:
+    case Opcode::call_stack_eager_:
+    case Opcode::call_stack_promised_:
+    case Opcode::static_call_stack_eager_:
+    case Opcode::static_call_stack_promised_:
+    case Opcode::dispatch_stack_eager_:
         return immediate.call_args.call_id == other.immediate.call_args.call_id;
 
     case Opcode::guard_env_:
@@ -176,11 +176,11 @@ void BC::write(CodeStream& cs) const {
     // They have to be inserted by CodeStream::insertCall
     case Opcode::call_:
     case Opcode::dispatch_:
-    case Opcode::call_stack_:
-    case Opcode::call_stack_lazy_:
-    case Opcode::static_call_stack_:
-    case Opcode::static_call_stack_lazy_:
-    case Opcode::dispatch_stack_:
+    case Opcode::call_stack_eager_:
+    case Opcode::call_stack_promised_:
+    case Opcode::static_call_stack_eager_:
+    case Opcode::static_call_stack_promised_:
+    case Opcode::dispatch_stack_eager_:
         assert(false);
         break;
 
@@ -367,8 +367,8 @@ void BC::print(CallSite* cs) {
         }
         break;
     }
-    case Opcode::call_stack_:
-    case Opcode::call_stack_lazy_: {
+    case Opcode::call_stack_eager_:
+    case Opcode::call_stack_promised_: {
         NumArgsT nargs = immediate.call_args.nargs;
         Rprintf(" %d ", nargs);
         if (cs) {
@@ -379,8 +379,8 @@ void BC::print(CallSite* cs) {
         }
         break;
     }
-    case Opcode::static_call_stack_lazy_:
-    case Opcode::static_call_stack_: {
+    case Opcode::static_call_stack_promised_:
+    case Opcode::static_call_stack_eager_: {
         NumArgsT nargs = immediate.call_args.nargs;
         Rprintf(" %d : ", nargs);
         if (cs) {
@@ -392,7 +392,7 @@ void BC::print(CallSite* cs) {
         }
         break;
     }
-    case Opcode::dispatch_stack_: {
+    case Opcode::dispatch_stack_eager_: {
         if (cs) {
             Rprintf(" `%s` ", CHAR(PRINTNAME(Pool::get(*cs->selector()))));
             Rprintf(" %d ", cs->nargs);

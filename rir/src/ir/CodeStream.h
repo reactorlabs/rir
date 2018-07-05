@@ -107,9 +107,9 @@ class CodeStream {
         cs->call = Pool::insert(call);
         cs->hasProfile = false;
         cs->hasNames = hasNames;
-        cs->hasSelector = (bc == Opcode::dispatch_stack_);
-        cs->hasTarget = (bc == Opcode::static_call_stack_ ||
-                         bc == Opcode::static_call_stack_lazy_);
+        cs->hasSelector = (bc == Opcode::dispatch_stack_eager_);
+        cs->hasTarget = (bc == Opcode::static_call_stack_eager_ ||
+                         bc == Opcode::static_call_stack_promised_);
         cs->hasImmediateArgs = false;
 
         cs->signature = signature;
@@ -120,11 +120,11 @@ class CodeStream {
             }
         }
 
-        if (bc == Opcode::dispatch_stack_) {
+        if (bc == Opcode::dispatch_stack_eager_) {
             assert(TYPEOF(targOrSelector) == SYMSXP);
             *cs->selector() = Pool::insert(targOrSelector);
-        } else if (bc == Opcode::static_call_stack_ ||
-                   bc == Opcode::static_call_stack_lazy_) {
+        } else if (bc == Opcode::static_call_stack_eager_ ||
+                   bc == Opcode::static_call_stack_promised_) {
             assert(TYPEOF(targOrSelector) == CLOSXP ||
                    TYPEOF(targOrSelector) == BUILTINSXP);
             *cs->target() = Pool::insert(targOrSelector);

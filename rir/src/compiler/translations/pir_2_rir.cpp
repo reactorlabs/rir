@@ -686,7 +686,7 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                         cs << BC::push(R_UnboundValue);
                     } else {
                         if (!alloc.hasSlot(what)) {
-                            std::cerr << "Don't know how to load the env ";
+                            std::cerr << "Don't know how to load the arg ";
                             what->printRef(std::cerr);
                             std::cerr << " (" << tagToStr(what->tag) << ")\n";
                             assert(false);
@@ -699,15 +699,15 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 // Step one: load and set env
                 if (!Phi::Cast(instr)) {
                     if (instr->hasEnv() && !explicitEnvValue(instr)) {
-                            // If the env is passed on the stack, it needs
-                            // to be TOS here. To relax this condition some
-                            // stack shuffling would be needed.
-                            assert(instr->envSlot() == instr->nargs() - 1);
-                            auto env = instr->env();
-                            if (currentEnv != env) {
-                                loadEnv(it, env);
-                                cs << BC::setEnv();
-                                currentEnv = env;
+                        // If the env is passed on the stack, it needs
+                        // to be TOS here. To relax this condition some
+                        // stack shuffling would be needed.
+                        assert(instr->envSlot() == instr->nargs() - 1);
+                        auto env = instr->env();
+                        if (currentEnv != env) {
+                            loadEnv(it, env);
+                            cs << BC::setEnv();
+                            currentEnv = env;
                         } else {
                             if (alloc.hasSlot(env) && alloc.onStack(env))
                                 cs << BC::pop();
@@ -921,42 +921,45 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
 
             case Tag::Call: {
                 auto call = Call::Cast(instr);
-                cs.insertStackCall(Opcode::call_stack_lazy_, call->nCallArgs(),
-                                   {}, Pool::get(call->srcIdx));
+                cs.insertStackCall(Opcode::call_stack_promised_,
+                                   call->nCallArgs(), {},
+                                   Pool::get(call->srcIdx));
                 break;
             }
             case Tag::StaticCall: {
                 auto call = StaticCall::Cast(instr);
                 compiler.compile(call->cls(), call->origin());
-                cs.insertStackCall(Opcode::static_call_stack_lazy_,
+                cs.insertStackCall(Opcode::static_call_stack_promised_,
                                    call->nCallArgs(), {},
                                    Pool::get(call->srcIdx), call->origin());
                 break;
             }
             case Tag::EagerCall: {
                 auto call = EagerCall::Cast(instr);
-                cs.insertStackCall(Opcode::call_stack_, call->nCallArgs(), {},
-                                   Pool::get(call->srcIdx));
+                cs.insertStackCall(Opcode::call_stack_eager_, call->nCallArgs(),
+                                   {}, Pool::get(call->srcIdx));
                 break;
             }
             case Tag::StaticEagerCall: {
                 auto call = StaticEagerCall::Cast(instr);
                 compiler.compile(call->cls(), call->origin());
-                cs.insertStackCall(Opcode::static_call_stack_,
+                cs.insertStackCall(Opcode::static_call_stack_eager_,
                                    call->nCallArgs(), {},
                                    Pool::get(call->srcIdx), call->origin());
                 break;
             }
             case Tag::CallBuiltin: {
                 auto blt = CallBuiltin::Cast(instr);
-                cs.insertStackCall(Opcode::static_call_stack_, blt->nCallArgs(),
-                                   {}, Pool::get(blt->srcIdx), blt->blt);
+                cs.insertStackCall(Opcode::static_call_stack_eager_,
+                                   blt->nCallArgs(), {}, Pool::get(blt->srcIdx),
+                                   blt->blt);
                 break;
             }
             case Tag::CallSafeBuiltin: {
                 auto blt = CallSafeBuiltin::Cast(instr);
-                cs.insertStackCall(Opcode::static_call_stack_, blt->nargs(), {},
-                                   Pool::get(blt->srcIdx), blt->blt);
+                cs.insertStackCall(Opcode::static_call_stack_eager_,
+                                   blt->nargs(), {}, Pool::get(blt->srcIdx),
+                                   blt->blt);
                 break;
             }
             case Tag::MkEnv: {

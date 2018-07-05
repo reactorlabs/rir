@@ -1558,7 +1558,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env,
             NEXT();
         }
 
-        INSTRUCTION(call_stack_) {
+        INSTRUCTION(call_stack_eager_) {
             auto lll = ostack_length(ctx);
             int ttt = R_PPStackTop;
 
@@ -1578,7 +1578,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env,
             NEXT();
         }
 
-        INSTRUCTION(static_call_stack_) {
+        INSTRUCTION(static_call_stack_eager_) {
             auto lll = ostack_length(ctx);
             int ttt = R_PPStackTop;
 
@@ -1599,7 +1599,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env,
             NEXT();
         }
 
-        INSTRUCTION(call_stack_lazy_) {
+        INSTRUCTION(call_stack_promised_) {
             auto lll = ostack_length(ctx);
             int ttt = R_PPStackTop;
 
@@ -1619,7 +1619,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env,
             NEXT();
         }
 
-        INSTRUCTION(static_call_stack_lazy_) {
+        INSTRUCTION(static_call_stack_promised_) {
             auto lll = ostack_length(ctx);
             int ttt = R_PPStackTop;
 
@@ -1660,7 +1660,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env,
             NEXT();
         }
 
-        INSTRUCTION(dispatch_stack_) {
+        INSTRUCTION(dispatch_stack_eager_) {
             auto lll = ostack_length(ctx);
             int ttt = R_PPStackTop;
 

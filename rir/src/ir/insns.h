@@ -111,30 +111,29 @@ DEF_INSTR(movloc_, 2, 0, 0, 1)
 DEF_INSTR(call_, 2, 1, 1, 0)
 
 /**
- * call_stack_lazy_:: Like call_, but expects promised arguments on the stack
- *               on top of the callee.
+ * call_stack_promised_:: Like call_, but expects promised arguments on the
+ * stack on top of the callee.
  */
-DEF_INSTR(call_stack_lazy_, 2, -1, 1, 0)
+DEF_INSTR(call_stack_promised_, 2, -1, 1, 0)
 
 /**
- * call_stack_:: Like call_, but expects eager arguments on the stack
+ * call_stack_eager_:: Like call_, but expects eager arguments on the stack
  *               on top of the callee.
  */
-DEF_INSTR(call_stack_, 2, -1, 1, 0)
+DEF_INSTR(call_stack_eager_, 2, -1, 1, 0)
 
 /**
- * static_call_stack_lazy_:: Like call_stack_, but the callee is known
+ * static_call_stack_promised_:: Like static_call_stack_, but expects promised
+ *                           arguments on the stack.
+ */
+DEF_INSTR(static_call_stack_promised_, 2, -1, 1, 0)
+
+/**
+ * static_call_stack_eager_:: Like call_stack_, but the callee is known
  * statically and accessed through the callsite (immediate arg), not on the
  * stack.
  */
-DEF_INSTR(static_call_stack_lazy_, 2, -1, 1, 0)
-
-/**
- * static_call_stack_:: Like call_stack_, but the callee is known statically
- *                      and accessed through the callsite (immediate arg),
- *                      not on the stack.
- */
-DEF_INSTR(static_call_stack_, 2, -1, 1, 0)
+DEF_INSTR(static_call_stack_eager_, 2, -1, 1, 0)
 
 /**
  * dispatch_:: Similar to call_, but also looks for the callee (the selector
@@ -144,11 +143,11 @@ DEF_INSTR(static_call_stack_, 2, -1, 1, 0)
 DEF_INSTR(dispatch_, 2, 1, 1, 0)
 
 /**
- * dispatch_stack_:: Similar to dispatch_, but expects the receiver and
+ * dispatch_stack_eager_:: Similar to dispatch_, but expects the receiver and
  *                   all other args on the stack.
  *                   Note: nargs includes the receiver!
  */
-DEF_INSTR(dispatch_stack_, 2, -1, 1, 0)
+DEF_INSTR(dispatch_stack_eager_, 2, -1, 1, 0)
 
 /**
  * close_:: pop body and argument list, create closure, and push on object stack
