@@ -152,12 +152,7 @@ void CodeVerifier::verifyFunctionLayout(SEXP sexp, ::Context* ctx) {
         SEXP call = cp_pool_at(ctx, cs->call);
         assert(TYPEOF(call) == LANGSXP || TYPEOF(call) == SYMSXP ||
                TYPEOF(call) == NILSXP);
-        if (cs->hasSelector) {
-            assert(!cs->hasTarget);
-            SEXP selector = cp_pool_at(ctx, *cs->selector());
-            assert(TYPEOF(selector) == SYMSXP);
-        } else if (cs->hasTarget) {
-            assert(!cs->hasSelector);
+        if (cs->hasTarget) {
             SEXP selector = cp_pool_at(ctx, *cs->target());
             assert(TYPEOF(selector) == SYMSXP);
         } else {
@@ -198,28 +193,6 @@ void CodeVerifier::verifyFunctionLayout(SEXP sexp, ::Context* ctx) {
                 assert(TYPEOF(sym) == SYMSXP);
                 assert(strlen(CHAR(PRINTNAME(sym))));
             }
-            // TODO(mhyee): Should we also check static_call_ and call_?
-            if (*cptr == Opcode::dispatch_stack_eager_) {
-                unsigned callIdx = *reinterpret_cast<ArgT*>(cptr + 1);
-                CallSite* cs = c->callSite(callIdx);
-                uint32_t nargs = *reinterpret_cast<ArgT*>(cptr + 5);
-                verifyCallSite(cs, nargs);
-
-                if (cs->hasNames) {
-                    for (size_t i = 0, e = nargs; i != e; ++i) {
-                        uint32_t offset = cs->names()[i];
-                        if (offset) {
-                            SEXP name = cp_pool_at(ctx, offset);
-                            assert(TYPEOF(name) == SYMSXP ||
-                                   name == R_NilValue);
-                        }
-                    }
-                }
-                if (*cptr == Opcode::dispatch_stack_eager_) {
-                    SEXP selector = cp_pool_at(ctx, *cs->selector());
-                    assert(TYPEOF(selector) == SYMSXP);
-                }
-            }
             if (*cptr == Opcode::promise_) {
                 unsigned* promidx = reinterpret_cast<ArgT*>(cptr + 1);
                 bool ok = false;
@@ -230,7 +203,7 @@ void CodeVerifier::verifyFunctionLayout(SEXP sexp, ::Context* ctx) {
                     }
                 assert(ok and "Invalid promise offset detected");
             }
-            if (*cptr == Opcode::call_implicit_ || *cptr == Opcode::dispatch_) {
+            if (*cptr == Opcode::call_implicit_) {
                 unsigned callIdx = *reinterpret_cast<ArgT*>(cptr + 1);
                 CallSite* cs = c->callSite(callIdx);
                 uint32_t nargs = *reinterpret_cast<ArgT*>(cptr + 5);
@@ -258,10 +231,6 @@ void CodeVerifier::verifyFunctionLayout(SEXP sexp, ::Context* ctx) {
                                    name == R_NilValue);
                         }
                     }
-                }
-                if (*cptr == Opcode::dispatch_) {
-                    SEXP selector = cp_pool_at(ctx, *cs->selector());
-                    assert(TYPEOF(selector) == SYMSXP);
                 }
             }
             cptr += cur.size();

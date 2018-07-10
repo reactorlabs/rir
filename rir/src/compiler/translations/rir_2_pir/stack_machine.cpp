@@ -441,8 +441,6 @@ bool StackMachine::tryRunCurrentBC(const Rir2Pir& rir2pir, Builder& insert) {
     case Opcode::ldlval_:
     case Opcode::asast_:
     case Opcode::missing_:
-    case Opcode::dispatch_stack_eager_:
-    case Opcode::dispatch_:
     case Opcode::guard_env_:
     case Opcode::beginloop_:
     case Opcode::endcontext_:

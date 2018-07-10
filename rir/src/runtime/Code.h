@@ -201,11 +201,10 @@ struct CallSite {
     uint32_t call;
 
     uint32_t hasNames : 1;
-    uint32_t hasSelector : 1;
     uint32_t hasTarget : 1;
     uint32_t hasImmediateArgs : 1;
     uint32_t hasProfile : 1;
-    uint32_t free : 27;
+    uint32_t free : 28;
 
     // This is duplicated in the BC instruction, not sure how to avoid
     // without making accessing the payload a pain...
@@ -230,11 +229,6 @@ struct CallSite {
 
     uint32_t* target() {
         assert(hasTarget);
-        return &trg;
-    }
-
-    uint32_t* selector() {
-        assert(hasSelector);
         return &trg;
     }
 

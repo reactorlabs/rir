@@ -76,14 +76,6 @@ struct CallContext {
         return ostack_at_cell(stackArgs + i);
     }
 
-    SEXP getFixedupAst() const;
-
-    CallContext fixupAst() const {
-        auto copy = *this;
-        copy.ast = getFixedupAst();
-        return copy;
-    }
-
   protected:
     SEXP callee_;
 };
@@ -433,67 +425,9 @@ void doProfileCall(CallSite* cs, SEXP callee) {
     }
 }
 
-SEXP CallContext::getFixedupAst() const {
-    SEXP ast = this->ast;
-    // This is a hack to support complex assignment's rewritten asts for
-    // getters and setters.
-    // The rewritten ast has target (and value for setters) marked as
-    // placeholders, which we need to fill in here.
-    if ((CADR(ast) == getterPlaceholderSym ||
-         CADR(ast) == setterPlaceholderSym)) {
-        int setter = CADR(ast) == setterPlaceholderSym;
-        ast = Rf_shallow_duplicate(ast);
-        PROTECT(ast);
-
-        SEXP a = CDR(ast);
-
-        SEXP target = ostack_at(ctx, nargs() - 1);
-
-        if (target == R_MissingArg) {
-            assert(!setter);
-            SETCDR(ast, R_NilValue);
-            UNPROTECT(1);
-            return ast;
-        }
-
-        SEXP p = target;
-        // It might be tempting to put the values as consts into the ast, but
-        // then they are converted to consts (named = 2) which is bad.
-        // therefore we wrap them in fake promises.
-        if (TYPEOF(p) != PROMSXP) {
-            p = Rf_mkPROMISE(getterPlaceholderSym, R_NilValue);
-            SET_PRVALUE(p, target);
-        }
-
-        SETCAR(a, p);
-
-        if (setter) {
-            SEXP prev = ast;
-            while (CDR(a) != R_NilValue) {
-                prev = a;
-                a = CDR(a);
-            }
-
-            assert(CAR(a) == setterPlaceholderSym);
-            SEXP val = ostack_top(ctx);
-
-            SEXP p = val;
-            if (TYPEOF(p) != PROMSXP) {
-                p = Rf_mkPROMISE(setterPlaceholderSym, R_NilValue);
-                SET_PRVALUE(p, val);
-            }
-
-            SEXP v = CONS_NR(p, R_NilValue);
-            SET_TAG(v, R_valueSym);
-            SETCDR(prev, v);
-        }
-        UNPROTECT(1);
-    }
-    return ast;
-}
-
 SEXP legacySpecialCall(const CallContext& call, Context* ctx) {
     assert(call.ast != R_NilValue);
+    assert(!call.hasStackArgs());
 
     // get the ccode
     CCODE f = getBuiltin(call.callee());
@@ -725,106 +659,7 @@ SEXP doCall(const CallContext& call, Context* ctx) {
         return R_NilValue;
     };
 
-    CallContext fcall = call.fixupAst();
-    PROTECT(fcall.ast);
-    auto res = apply(fcall);
-    UNPROTECT(1);
-    return res;
-}
-
-SEXP dispatchApply(const CallContext& call, SEXP obj, SEXP actuals,
-                   Context* ctx);
-
-SEXP doDispatch(const CallContext& call, Context* ctx) {
-    SEXP obj = call.hasStackArgs() ? ostack_at(ctx, call.nargs() - 1)
-                                   : ostack_top(ctx);
-    assert(isObject(obj));
-
-    profileCall(call, Rf_install("*dispatch*"));
-
-    if (call.hasStackArgs()) {
-        auto fcall = call.fixupAst();
-        PROTECT(fcall.ast);
-        SEXP actuals = createLegacyLazyArgsList(call, ctx);
-        PROTECT(actuals);
-        SEXP result = dispatchApply(fcall, obj, actuals, ctx);
-        UNPROTECT(2);
-        return result;
-    }
-
-    SEXP actuals = createLegacyLazyArgsList(call, ctx);
-    PROTECT(actuals);
-
-    // Patch the already evaluated object into the first entry of
-    // the promise args list
-    SET_PRVALUE(CAR(actuals), obj);
-    SEXP result = dispatchApply(call, obj, actuals, ctx);
-    UNPROTECT(1);
-    return result;
-}
-
-SEXP dispatchApply(const CallContext& call, SEXP obj, SEXP actuals,
-                   Context* ctx) {
-    CallSite* cs = call.callSite;
-    SEXP ast = call.ast;
-    SEXP selector = cp_pool_at(ctx, *cs->selector());
-    SEXP op = SYMVALUE(selector);
-
-    // ===============================================
-    // First try S4
-    if (IS_S4_OBJECT(obj) && R_has_methods(op)) {
-        SEXP result =
-            R_possible_dispatch(ast, op, actuals, call.callerEnv, TRUE);
-        if (result)
-            return result;
-    }
-
-    // ===============================================
-    // Then try S3
-    const char* generic = CHAR(PRINTNAME(selector));
-    SEXP rho1 = Rf_NewEnvironment(R_NilValue, R_NilValue, call.callerEnv);
-    PROTECT(rho1);
-    RCNTXT cntxt;
-    initClosureContext(call, &cntxt, rho1, call.callerEnv, actuals, op);
-    SEXP result;
-    bool success = Rf_usemethod(generic, obj, ast, actuals, rho1,
-                                call.callerEnv, R_BaseEnv, &result);
-    UNPROTECT(1);
-    endClosureContext(&cntxt, success ? result : R_NilValue);
-    if (success)
-        return result;
-
-    // ===============================================
-    // Now normal dispatch
-    SEXP callee = Rf_findFun(selector, call.callerEnv);
-
-    // TODO something should happen here
-    if (callee == R_UnboundValue)
-        assert(false && "Unbound var");
-    if (callee == R_MissingArg)
-        assert(false && "Missing argument");
-
-    auto fcall = call.resolveTarget(callee);
-
-    switch (TYPEOF(fcall.callee())) {
-    case SPECIALSXP:
-        return legacySpecialCall(fcall, ctx);
-    case BUILTINSXP:
-        // force all promises in the args list. We created a lazy legacy args
-        // list, since we did not know the callee yet. So now we know and need
-        // to make it eager. We use Rf_eval here, since in some circumstances
-        // non-rir promises might be in the list.
-        for (SEXP a = actuals; a != R_NilValue; a = CDR(a))
-            SETCAR(a, Rf_eval(CAR(a), call.callerEnv));
-        return legacyCallWithArgslist(fcall, actuals, ctx);
-    case CLOSXP:
-        if (TYPEOF(BODY(fcall.callee())) != EXTERNALSXP)
-            return legacyCallWithArgslist(fcall, actuals, ctx);
-        return rirCall(fcall, actuals, ctx);
-    }
-
-    assert(false && "Don't know how to run other stuff");
-    return R_NilValue;
+    return apply(call);
 }
 
 #define R_INT_MAX INT_MAX
@@ -1583,45 +1418,6 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env,
             CallContext call(c, id, callee, ostack_cell_at(ctx, n - 1),
                              getenv(), ctx);
             res = doCall(call, ctx);
-            ostack_popn(ctx, n);
-            ostack_push(ctx, res);
-
-            assert(ttt == R_PPStackTop);
-            assert(lll - call.nargs() + 1 == ostack_length(ctx));
-            NEXT();
-        }
-
-        INSTRUCTION(dispatch_) {
-            auto lll = ostack_length(ctx);
-            int ttt = R_PPStackTop;
-
-            // TOS is receiver object
-            // Arguments are immediate (in the CallSite struct), given as
-            // promise code indices.
-            Immediate id = readImmediate();
-            advanceImmediate();
-            advanceImmediate(); // nargs, TODO: remove
-            CallContext call(c, id, getenv(), ctx);
-            res = doDispatch(call, ctx);
-            ostack_pop(ctx); // receiver obj
-            ostack_push(ctx, res);
-
-            assert(ttt == R_PPStackTop);
-            assert(lll == ostack_length(ctx));
-            NEXT();
-        }
-
-        INSTRUCTION(dispatch_stack_eager_) {
-            auto lll = ostack_length(ctx);
-            int ttt = R_PPStackTop;
-
-            // Stack contains [receiver obj (aka arg1), arg2, ..., argn]
-            Immediate id = readImmediate();
-            advanceImmediate();
-            Immediate n = readImmediate();
-            advanceImmediate();
-            CallContext call(c, id, ostack_cell_at(ctx, n - 1), getenv(), ctx);
-            res = doDispatch(call, ctx);
             ostack_popn(ctx, n);
             ostack_push(ctx, res);
 

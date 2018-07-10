@@ -39,6 +39,15 @@ f2 <- rir.compile(function(a, b) {
 })
 f2(o, 1)
 
+o <- 1
+class(o) <- "foo2"
+f2 <- rir.compile(function(a, b) {
+    (a <- a + 1)[[b]];
+    stopifnot(a == 2);
+})
+f2(o, 1)
+
+
 o <- 123
 class(o) <- "Bar"
 stopifnot(f(o, 1) == 123)
