@@ -210,6 +210,19 @@ bool StackMachine::tryRunCurrentBC(const Rir2Pir& rir2pir, Builder& insert) {
         break;
     }
 
+    case Opcode::call_: {
+        unsigned n = bc.immediate.call_args.nargs;
+        rir::CallSite* cs = bc.callSite(srcCode);
+
+        std::vector<Value*> args(n);
+        for (size_t i = 0; i < n; ++i)
+            args[n - i - 1] = pop();
+
+        auto target = pop();
+        push(insert(new Call(env, target, args, cs->call)));
+        break;
+    }
+
     case Opcode::static_call_: {
         unsigned n = bc.immediate.call_args.nargs;
         rir::CallSite* cs = bc.callSite(srcCode);
@@ -422,7 +435,6 @@ bool StackMachine::tryRunCurrentBC(const Rir2Pir& rir2pir, Builder& insert) {
     case Opcode::movloc_:
     case Opcode::isobj_:
     case Opcode::check_missing_:
-    case Opcode::call_:
         assert(false && "Recompiling PIR not supported for now.");
 
     // Unsupported opcodes:
@@ -432,7 +444,6 @@ bool StackMachine::tryRunCurrentBC(const Rir2Pir& rir2pir, Builder& insert) {
     case Opcode::dispatch_stack_eager_:
     case Opcode::dispatch_:
     case Opcode::guard_env_:
-    case Opcode::call_values_:
     case Opcode::beginloop_:
     case Opcode::endcontext_:
     case Opcode::ldddvar_:

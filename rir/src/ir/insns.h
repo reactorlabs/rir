@@ -117,23 +117,10 @@ DEF_INSTR(call_implicit_, 2, 1, 1, 0)
 DEF_INSTR(call_, 2, -1, 1, 0)
 
 /**
- * call_values_:: Like call_implicit_, but expects eager arguments on the stack
- *               on top of the callee.
- */
-DEF_INSTR(call_values_, 2, -1, 1, 0)
-
-/**
  * static_call_:: Like static_call_stack_, but expects promised
  *                           arguments on the stack.
  */
 DEF_INSTR(static_call_, 2, -1, 1, 0)
-
-/**
- * static_call_values_:: Like call_stack_, but the callee is known
- * statically and accessed through the callsite (immediate arg), not on the
- * stack.
- */
-DEF_INSTR(static_call_values_, 2, -1, 1, 0)
 
 /**
  * dispatch_:: Similar to call_implicit_, but also looks for the callee (the
