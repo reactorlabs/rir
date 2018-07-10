@@ -38,7 +38,7 @@ class TheCleanup {
                                 args.push_back(arg->eagerArg());
                         });
                         if (allEager) {
-                            auto eagerCall = new EagerCall(
+                            auto eagerCall = new CallValues(
                                 call->env(), call->cls(), args, call->srcIdx);
                             call->replaceUsesWith(eagerCall);
                             bb->replace(ip, eagerCall);
@@ -59,7 +59,7 @@ class TheCleanup {
                                 args.push_back(arg->eagerArg());
                         });
                         if (allEager) {
-                            auto eagerCall = new StaticEagerCall(
+                            auto eagerCall = new StaticCallValues(
                                 call->env(), call->cls(), args, call->srcIdx,
                                 call->origin());
                             call->replaceUsesWith(eagerCall);

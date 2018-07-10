@@ -108,8 +108,8 @@ class CodeStream {
         cs->hasProfile = false;
         cs->hasNames = hasNames;
         cs->hasSelector = (bc == Opcode::dispatch_stack_eager_);
-        cs->hasTarget = (bc == Opcode::static_call_stack_eager_ ||
-                         bc == Opcode::static_call_stack_promised_);
+        cs->hasTarget =
+            (bc == Opcode::static_call_values_ || bc == Opcode::static_call_);
         cs->hasImmediateArgs = false;
 
         cs->signature = signature;
@@ -123,8 +123,8 @@ class CodeStream {
         if (bc == Opcode::dispatch_stack_eager_) {
             assert(TYPEOF(targOrSelector) == SYMSXP);
             *cs->selector() = Pool::insert(targOrSelector);
-        } else if (bc == Opcode::static_call_stack_eager_ ||
-                   bc == Opcode::static_call_stack_promised_) {
+        } else if (bc == Opcode::static_call_values_ ||
+                   bc == Opcode::static_call_) {
             assert(TYPEOF(targOrSelector) == CLOSXP ||
                    TYPEOF(targOrSelector) == BUILTINSXP);
             *cs->target() = Pool::insert(targOrSelector);
@@ -203,7 +203,7 @@ class CodeStream {
     }
 
     CodeStream& operator<<(const BC& b) {
-        assert(b.bc != Opcode::call_);
+        assert(b.bc != Opcode::call_implicit_);
         if (b.bc == Opcode::label) {
             return *this << b.immediate.offset;
         }
