@@ -34,9 +34,7 @@ bool BC::operator==(const BC& other) const {
 
     case Opcode::dispatch_:
     case Opcode::call_implicit_:
-    case Opcode::call_values_:
     case Opcode::call_:
-    case Opcode::static_call_values_:
     case Opcode::static_call_:
     case Opcode::dispatch_stack_eager_:
         return immediate.call_args.call_id == other.immediate.call_args.call_id;
@@ -176,9 +174,7 @@ void BC::write(CodeStream& cs) const {
     // They have to be inserted by CodeStream::insertCall
     case Opcode::call_implicit_:
     case Opcode::dispatch_:
-    case Opcode::call_values_:
     case Opcode::call_:
-    case Opcode::static_call_values_:
     case Opcode::static_call_:
     case Opcode::dispatch_stack_eager_:
         assert(false);
@@ -367,7 +363,6 @@ void BC::print(CallSite* cs) {
         }
         break;
     }
-    case Opcode::call_values_:
     case Opcode::call_: {
         NumArgsT nargs = immediate.call_args.nargs;
         Rprintf(" %d ", nargs);
@@ -379,8 +374,7 @@ void BC::print(CallSite* cs) {
         }
         break;
     }
-    case Opcode::static_call_:
-    case Opcode::static_call_values_: {
+    case Opcode::static_call_: {
         NumArgsT nargs = immediate.call_args.nargs;
         Rprintf(" %d : ", nargs);
         if (cs) {
