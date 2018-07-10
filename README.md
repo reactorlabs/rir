@@ -4,7 +4,7 @@
 
     git clone https://github.com/reactorlabs/rir
     cd rir
-    cmake .
+    cmake . -DCMAKE_BUILD_TYPE=debug
     # Fetch and build dependencies. This will build gnur from source, which
     # takes a while. Note that on Mac OSX, you will need to install a fortran
     # compiler (eg. brew install gcc). 
