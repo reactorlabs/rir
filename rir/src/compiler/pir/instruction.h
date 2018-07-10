@@ -816,7 +816,7 @@ class ACallInstructionImplementation(Call, Effect::Any, EnvAccess::Leak, true) {
         : CallInstructionImplementation(PirType::valOrLazy(), e) {
         pushArg(fun, RType::closure);
         for (unsigned i = 0; i < args.size(); ++i)
-            pushArg(args[i], RType::prom);
+            pushArg(args[i], PirType::val());
         srcIdx = src;
     }
 };
@@ -837,49 +837,7 @@ class ACallInstructionImplementation(StaticCall, Effect::Any, EnvAccess::Leak,
         : CallInstructionImplementation(PirType::valOrLazy(), e), cls_(cls),
           origin_(origin) {
         for (unsigned i = 0; i < args.size(); ++i)
-            pushArg(args[i], RType::prom);
-    }
-
-    void printArgs(std::ostream&) override;
-};
-
-// Call instruction for eager calls. Closure is
-// passed as first arg.
-class ACallInstructionImplementation(CallValues, Effect::Any, EnvAccess::Leak,
-                                     true) {
-  public:
-    constexpr static size_t clsIdx = 0;
-
-    Value* cls() { return arg(clsIdx).val(); }
-
-    CallValues(Value * e, Value * cls, const std::vector<Value*>& args,
-               unsigned src)
-        : CallInstructionImplementation(PirType::valOrLazy(), e) {
-        pushArg(cls, RType::closure);
-        for (unsigned i = 0; i < args.size(); ++i)
             pushArg(args[i], PirType::val());
-        srcIdx = src;
-    }
-};
-
-// Call instruction for eager, staticatlly resolved calls. Closure is
-// specified as `cls_`, args passed as values.
-class ACallInstructionImplementation(StaticCallValues, Effect::Any,
-                                     EnvAccess::Leak, false) {
-    Closure* cls_;
-    SEXP origin_;
-
-  public:
-    Closure* cls() { return cls_; }
-    SEXP origin() { return origin_; }
-
-    StaticCallValues(Value * e, Closure * cls, const std::vector<Value*>& args,
-                     unsigned src, SEXP origin)
-        : CallInstructionImplementation(PirType::valOrLazy(), e), cls_(cls),
-          origin_(origin) {
-        for (unsigned i = 0; i < args.size(); ++i)
-            pushArg(args[i], PirType::val());
-        srcIdx = src;
     }
 
     void printArgs(std::ostream&) override;

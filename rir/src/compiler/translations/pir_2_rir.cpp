@@ -932,20 +932,6 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                                    Pool::get(call->srcIdx), call->origin());
                 break;
             }
-            case Tag::CallValues: {
-                auto call = CallValues::Cast(instr);
-                cs.insertStackCall(Opcode::call_values_, call->nCallArgs(), {},
-                                   Pool::get(call->srcIdx));
-                break;
-            }
-            case Tag::StaticCallValues: {
-                auto call = StaticCallValues::Cast(instr);
-                compiler.compile(call->cls(), call->origin());
-                cs.insertStackCall(Opcode::static_call_values_,
-                                   call->nCallArgs(), {},
-                                   Pool::get(call->srcIdx), call->origin());
-                break;
-            }
             case Tag::CallBuiltin: {
                 auto blt = CallBuiltin::Cast(instr);
                 cs.insertStackCall(Opcode::static_call_values_,

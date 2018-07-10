@@ -210,7 +210,7 @@ bool StackMachine::tryRunCurrentBC(const Rir2Pir& rir2pir, Builder& insert) {
         break;
     }
 
-    case Opcode::static_call_values_: {
+    case Opcode::static_call_: {
         unsigned n = bc.immediate.call_args.nargs;
         rir::CallSite* cs = bc.callSite(srcCode);
         SEXP target = rir::Pool::get(*cs->target());
@@ -239,8 +239,8 @@ bool StackMachine::tryRunCurrentBC(const Rir2Pir& rir2pir, Builder& insert) {
             rir2pir.compiler.compileClosure(
                 target,
                 [&](Closure* f) {
-                    push(insert(
-                        new StaticCallValues(env, f, args, cs->call, target)));
+                    push(
+                        insert(new StaticCall(env, f, args, cs->call, target)));
                 },
                 [&]() { failed = true; });
             if (failed)
@@ -422,7 +422,6 @@ bool StackMachine::tryRunCurrentBC(const Rir2Pir& rir2pir, Builder& insert) {
     case Opcode::movloc_:
     case Opcode::isobj_:
     case Opcode::check_missing_:
-    case Opcode::static_call_:
     case Opcode::call_:
         assert(false && "Recompiling PIR not supported for now.");
 

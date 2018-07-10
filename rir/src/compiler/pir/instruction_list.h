@@ -25,8 +25,6 @@
     V(ChkClosure)                                                              \
     V(Call)                                                                    \
     V(StaticCall)                                                              \
-    V(StaticCallValues)                                                        \
-    V(CallValues)                                                              \
     V(CallBuiltin)                                                             \
     V(CallSafeBuiltin)                                                         \
     V(MkEnv)                                                                   \
