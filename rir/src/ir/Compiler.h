@@ -4,6 +4,7 @@
 #include "R/r.h"
 #include "R/Preserve.h"
 #include "R/Protect.h"
+#include "utils/Pool.h"
 #include "utils/FunctionWriter.h"
 
 #include <unordered_map>
@@ -112,6 +113,13 @@ class Compiler {
         SET_BODY(closure, vtable->container());
         SET_FORMALS(closure, formals);
         SET_CLOENV(closure, env);
+
+        // TODO: promises which escape a function do not have a pointer back to
+        // the function, but just to the code object, which is inside this
+        // closure. If the closure gets collected before the promise, we have a
+        // dangling pointer. We need to teach the GC to find the function
+        // throught the PROMSXP. As a workaround we never collect closures.
+        Pool::insert(vtable->container());
 
         return closure;
     }

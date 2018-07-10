@@ -580,7 +580,9 @@ SEXP rirCall(const CallContext& call, SEXP actuals, Context* ctx) {
     SEXP result = nullptr;
     if (needsEnv) {
         env = closureArgumentAdaptor(call, actuals, R_NilValue);
+        PROTECT(env);
         result = rirCallTrampoline(call, fun, env, actuals, ctx);
+        UNPROTECT(1);
     } else {
         result = rirCallTrampoline(call, fun, ctx);
     }
@@ -618,8 +620,9 @@ SEXP rirCall(const CallContext& call, Context* ctx) {
         auto arglist = createLegacyLazyArgsList(call, ctx);
         PROTECT(arglist);
         env = closureArgumentAdaptor(call, arglist, R_NilValue);
+        PROTECT(env);
         result = rirCallTrampoline(call, fun, env, arglist, ctx);
-        UNPROTECT(1);
+        UNPROTECT(2);
     } else {
         result = rirCallTrampoline(call, fun, ctx);
     }
