@@ -23,10 +23,9 @@ extern Rboolean R_Visible;
 using namespace rir;
 
 struct CallContext {
-    CallContext(Code* c, unsigned callsiteId, SEXP callee, bool hasEagerArgs,
+    CallContext(Code* c, unsigned callsiteId, SEXP callee,
                 R_bcstack_t* stackArgs, SEXP callerEnv, Context* ctx)
-        : hasEagerArgs(hasEagerArgs), stackArgs(stackArgs),
-          caller(c->function()), callerEnv(callerEnv),
+        : stackArgs(stackArgs), caller(c->function()), callerEnv(callerEnv),
           callSite(c->callSite(callsiteId)),
           ast(cp_pool_at(ctx, callSite->call)), callee_(callee) {
         assert(!callee || TYPEOF(callee) == CLOSXP ||
@@ -34,17 +33,15 @@ struct CallContext {
     }
 
     CallContext(Code* c, unsigned id, SEXP callee, SEXP callerEnv, Context* ctx)
-        : CallContext(c, id, callee, false, nullptr, callerEnv, ctx) {}
+        : CallContext(c, id, callee, nullptr, callerEnv, ctx) {}
 
-    CallContext(Code* c, unsigned id, bool hasEagerArgs, R_bcstack_t* stackArgs,
-                SEXP callerEnv, Context* ctx)
-        : CallContext(c, id, nullptr, hasEagerArgs, stackArgs, callerEnv, ctx) {
-    }
+    CallContext(Code* c, unsigned id, R_bcstack_t* stackArgs, SEXP callerEnv,
+                Context* ctx)
+        : CallContext(c, id, nullptr, stackArgs, callerEnv, ctx) {}
 
     CallContext(Code* c, unsigned id, SEXP callerEnv, Context* ctx)
-        : CallContext(c, id, nullptr, false, nullptr, callerEnv, ctx) {}
+        : CallContext(c, id, nullptr, nullptr, callerEnv, ctx) {}
 
-    bool hasEagerArgs; // TODO(mhyee): do we still need this?
     R_bcstack_t* stackArgs;
     Function* caller;
     SEXP callerEnv;
@@ -227,8 +224,7 @@ SEXP createLegacyArgsListFromStackValues(const CallContext& call,
 
         SEXP arg = call.stackArg(i);
 
-        if (call.hasEagerArgs && !eagerCallee &&
-            (arg == R_MissingArg || arg == R_DotsSymbol)) {
+        if (!eagerCallee && (arg == R_MissingArg || arg == R_DotsSymbol)) {
             // We have to wrap them in a promise, otherwise they are treated
             // as expressions to be evaluated, when in fact they are meant to be
             // asts as values
@@ -439,7 +435,6 @@ void doProfileCall(CallSite* cs, SEXP callee) {
 
 SEXP CallContext::getFixedupAst() const {
     SEXP ast = this->ast;
-    assert(hasEagerArgs);
     // This is a hack to support complex assignment's rewritten asts for
     // getters and setters.
     // The rewritten ast has target (and value for setters) marked as
@@ -730,14 +725,11 @@ SEXP doCall(const CallContext& call, Context* ctx) {
         return R_NilValue;
     };
 
-    if (call.hasEagerArgs) {
-        CallContext fcall = call.fixupAst();
-        PROTECT(fcall.ast);
-        auto res = apply(fcall);
-        UNPROTECT(1);
-        return res;
-    }
-    return apply(call);
+    CallContext fcall = call.fixupAst();
+    PROTECT(fcall.ast);
+    auto res = apply(fcall);
+    UNPROTECT(1);
+    return res;
 }
 
 SEXP dispatchApply(const CallContext& call, SEXP obj, SEXP actuals,
@@ -751,7 +743,7 @@ SEXP doDispatch(const CallContext& call, Context* ctx) {
     profileCall(call, Rf_install("*dispatch*"));
 
     if (call.hasStackArgs()) {
-        auto fcall = call.hasEagerArgs ? call.fixupAst() : call;
+        auto fcall = call.fixupAst();
         PROTECT(fcall.ast);
         SEXP actuals = createLegacyLazyArgsList(call, ctx);
         PROTECT(actuals);
@@ -1567,7 +1559,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env,
             advanceImmediate();
             Immediate n = readImmediate();
             advanceImmediate();
-            CallContext call(c, id, ostack_at(ctx, n), false,
+            CallContext call(c, id, ostack_at(ctx, n),
                              ostack_cell_at(ctx, n - 1), getenv(), ctx);
             res = doCall(call, ctx);
             ostack_popn(ctx, n + 1);
@@ -1588,7 +1580,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env,
             Immediate n = readImmediate();
             advanceImmediate();
             SEXP callee = cp_pool_at(ctx, *c->callSite(id)->target());
-            CallContext call(c, id, callee, false, ostack_cell_at(ctx, n - 1),
+            CallContext call(c, id, callee, ostack_cell_at(ctx, n - 1),
                              getenv(), ctx);
             res = doCall(call, ctx);
             ostack_popn(ctx, n);
@@ -1628,8 +1620,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env,
             advanceImmediate();
             Immediate n = readImmediate();
             advanceImmediate();
-            CallContext call(c, id, true, ostack_cell_at(ctx, n - 1), getenv(),
-                             ctx);
+            CallContext call(c, id, ostack_cell_at(ctx, n - 1), getenv(), ctx);
             res = doDispatch(call, ctx);
             ostack_popn(ctx, n);
             ostack_push(ctx, res);

@@ -23,60 +23,6 @@ class TheCleanup {
             while (ip != bb->end()) {
                 Instruction* i = *ip;
                 auto next = ip + 1;
-
-                // Convert lazy calls to eager calls, if all args are eager.
-                {
-                    auto call = Call::Cast(i);
-                    if (call) {
-                        bool allEager = true;
-                        std::vector<Value*> args;
-                        call->eachCallArg([&](Value* v) {
-                            auto arg = MkArg::Cast(v);
-                            if (arg && arg->eagerArg() == Missing::instance())
-                                allEager = false;
-                            if (allEager)
-                                args.push_back(arg->eagerArg());
-                        });
-                        if (allEager) {
-                            auto eagerCall = new CallValues(
-                                call->env(), call->cls(), args, call->srcIdx);
-                            call->replaceUsesWith(eagerCall);
-                            bb->replace(ip, eagerCall);
-                        }
-                    }
-                }
-
-                {
-                    auto call = StaticCall::Cast(i);
-                    if (call) {
-                        bool allEager = true;
-                        std::vector<Value*> args;
-                        call->eachCallArg([&](Value* v) {
-                            auto arg = MkArg::Cast(v);
-                            if (arg && arg->eagerArg() == Missing::instance())
-                                allEager = false;
-                            if (allEager)
-                                args.push_back(arg->eagerArg());
-                        });
-                        if (allEager) {
-                            auto eagerCall = new StaticCallValues(
-                                call->env(), call->cls(), args, call->srcIdx,
-                                call->origin());
-                            call->replaceUsesWith(eagerCall);
-                            bb->replace(ip, eagerCall);
-                        }
-                    }
-                }
-
-                ip = next;
-            }
-        });
-
-        Visitor::run(function->entry, [&](BB* bb) {
-            auto ip = bb->begin();
-            while (ip != bb->end()) {
-                Instruction* i = *ip;
-                auto next = ip + 1;
                 Force* force = Force::Cast(i);
                 ChkClosure* chkcls = ChkClosure::Cast(i);
                 ChkMissing* missing = ChkMissing::Cast(i);
