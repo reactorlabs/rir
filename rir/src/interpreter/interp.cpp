@@ -44,7 +44,7 @@ struct CallContext {
     CallContext(Code* c, unsigned id, SEXP callerEnv, Context* ctx)
         : CallContext(c, id, nullptr, false, nullptr, callerEnv, ctx) {}
 
-    bool hasEagerArgs;
+    bool hasEagerArgs; // TODO(mhyee): do we still need this?
     R_bcstack_t* stackArgs;
     Function* caller;
     SEXP callerEnv;
@@ -1555,47 +1555,6 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env,
 
             assert(ttt == R_PPStackTop);
             assert(lll == ostack_length(ctx));
-            NEXT();
-        }
-
-        INSTRUCTION(call_values_) {
-            auto lll = ostack_length(ctx);
-            int ttt = R_PPStackTop;
-
-            // Stack contains [callee, arg1, ..., argn]
-            Immediate id = readImmediate();
-            advanceImmediate();
-            Immediate n = readImmediate();
-            advanceImmediate();
-            CallContext call(c, id, ostack_at(ctx, n), true,
-                             ostack_cell_at(ctx, n - 1), getenv(), ctx);
-            res = doCall(call, ctx);
-            ostack_popn(ctx, n + 1);
-            ostack_push(ctx, res);
-
-            assert(ttt == R_PPStackTop);
-            assert(lll - call.nargs() == ostack_length(ctx));
-            NEXT();
-        }
-
-        INSTRUCTION(static_call_values_) {
-            auto lll = ostack_length(ctx);
-            int ttt = R_PPStackTop;
-
-            // Stack contains [arg1, ..., argn], callee is immediate
-            Immediate id = readImmediate();
-            advanceImmediate();
-            Immediate n = readImmediate();
-            advanceImmediate();
-            SEXP callee = cp_pool_at(ctx, *c->callSite(id)->target());
-            CallContext call(c, id, callee, true, ostack_cell_at(ctx, n - 1),
-                             getenv(), ctx);
-            res = doCall(call, ctx);
-            ostack_popn(ctx, n);
-            ostack_push(ctx, res);
-
-            assert(ttt == R_PPStackTop);
-            assert(lll - call.nargs() + 1 == ostack_length(ctx));
             NEXT();
         }
 

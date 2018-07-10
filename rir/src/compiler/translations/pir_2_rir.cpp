@@ -934,29 +934,32 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
             }
             case Tag::CallValues: {
                 auto call = CallValues::Cast(instr);
-                cs.insertStackCall(Opcode::call_values_, call->nCallArgs(), {},
-                                   Pool::get(call->srcIdx));
+                /* cs.insertStackCall(Opcode::call_values_, call->nCallArgs(),
+                 * {}, */
+                /*                    Pool::get(call->srcIdx)); */
                 break;
             }
             case Tag::StaticCallValues: {
                 auto call = StaticCallValues::Cast(instr);
                 compiler.compile(call->cls(), call->origin());
-                cs.insertStackCall(Opcode::static_call_values_,
-                                   call->nCallArgs(), {},
-                                   Pool::get(call->srcIdx), call->origin());
+                /* cs.insertStackCall(Opcode::static_call_values_, */
+                /*                    call->nCallArgs(), {}, */
+                /*                    Pool::get(call->srcIdx), call->origin());
+                 */
                 break;
             }
             case Tag::CallBuiltin: {
+                // TODO(mhyee): all args have to be values, optimize here?
                 auto blt = CallBuiltin::Cast(instr);
-                cs.insertStackCall(Opcode::static_call_values_,
-                                   blt->nCallArgs(), {}, Pool::get(blt->srcIdx),
-                                   blt->blt);
+                cs.insertStackCall(Opcode::static_call_, blt->nCallArgs(), {},
+                                   Pool::get(blt->srcIdx), blt->blt);
                 break;
             }
             case Tag::CallSafeBuiltin: {
+                // TODO(mhyee): all args have to be values, optimize here?
                 auto blt = CallSafeBuiltin::Cast(instr);
-                cs.insertStackCall(Opcode::static_call_values_, blt->nargs(),
-                                   {}, Pool::get(blt->srcIdx), blt->blt);
+                cs.insertStackCall(Opcode::static_call_, blt->nargs(), {},
+                                   Pool::get(blt->srcIdx), blt->blt);
                 break;
             }
             case Tag::MkEnv: {

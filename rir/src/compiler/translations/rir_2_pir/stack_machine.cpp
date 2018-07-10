@@ -210,45 +210,6 @@ bool StackMachine::tryRunCurrentBC(const Rir2Pir& rir2pir, Builder& insert) {
         break;
     }
 
-    case Opcode::static_call_values_: {
-        unsigned n = bc.immediate.call_args.nargs;
-        rir::CallSite* cs = bc.callSite(srcCode);
-        SEXP target = rir::Pool::get(*cs->target());
-
-        std::vector<Value*> args(n);
-        for (size_t i = 0; i < n; ++i)
-            args[n - i - 1] = pop();
-
-        if (TYPEOF(target) == BUILTINSXP) {
-            // TODO: compile a list of safe builtins
-            static int vector = findBuiltin("vector");
-
-            if (getBuiltinNr(target) == vector)
-                push(insert(new CallSafeBuiltin(target, args, cs->call)));
-            else
-                push(insert(new CallBuiltin(env, target, args, cs->call)));
-        } else {
-            assert(TYPEOF(target) == CLOSXP);
-            if (!isValidClosureSEXP(target)) {
-                target = Compiler::compileClosure(target);
-                // TODO: we need to keep track of this compiled rir function.
-                // For now let's just put it in the constant pool.
-                Pool::insert(target);
-            }
-            bool failed = false;
-            rir2pir.compiler.compileClosure(
-                target,
-                [&](Closure* f) {
-                    push(insert(
-                        new StaticCallValues(env, f, args, cs->call, target)));
-                },
-                [&]() { failed = true; });
-            if (failed)
-                return false;
-        }
-        break;
-    }
-
     case Opcode::seq_: {
         auto step = pop();
         auto stop = pop();
@@ -433,7 +394,6 @@ bool StackMachine::tryRunCurrentBC(const Rir2Pir& rir2pir, Builder& insert) {
     case Opcode::dispatch_stack_eager_:
     case Opcode::dispatch_:
     case Opcode::guard_env_:
-    case Opcode::call_values_:
     case Opcode::beginloop_:
     case Opcode::endcontext_:
     case Opcode::ldddvar_:
