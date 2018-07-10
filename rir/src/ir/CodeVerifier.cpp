@@ -199,7 +199,7 @@ void CodeVerifier::verifyFunctionLayout(SEXP sexp, ::Context* ctx) {
                 assert(strlen(CHAR(PRINTNAME(sym))));
             }
             if (*cptr == Opcode::dispatch_stack_eager_ ||
-                *cptr == Opcode::call_stack_eager_) {
+                *cptr == Opcode::call_values_) {
                 unsigned callIdx = *reinterpret_cast<ArgT*>(cptr + 1);
                 CallSite* cs = c->callSite(callIdx);
                 uint32_t nargs = *reinterpret_cast<ArgT*>(cptr + 5);
@@ -230,7 +230,7 @@ void CodeVerifier::verifyFunctionLayout(SEXP sexp, ::Context* ctx) {
                     }
                 assert(ok and "Invalid promise offset detected");
             }
-            if (*cptr == Opcode::call_ || *cptr == Opcode::dispatch_) {
+            if (*cptr == Opcode::call_implicit_ || *cptr == Opcode::dispatch_) {
                 unsigned callIdx = *reinterpret_cast<ArgT*>(cptr + 1);
                 CallSite* cs = c->callSite(callIdx);
                 uint32_t nargs = *reinterpret_cast<ArgT*>(cptr + 5);

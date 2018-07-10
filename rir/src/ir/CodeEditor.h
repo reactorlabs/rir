@@ -342,7 +342,7 @@ class CodeEditor {
                     memcpy(insert->callSite, oldCs, needed);
                 }
                 // Fix prom offsets
-                if (insert->bc.bc == Opcode::call_ ||
+                if (insert->bc.bc == Opcode::call_implicit_ ||
                     insert->bc.bc == Opcode::dispatch_) {
                     auto cs = insert->callSite;
                     for (unsigned i = 0; i < cs->nargs; ++i) {

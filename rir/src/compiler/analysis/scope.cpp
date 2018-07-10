@@ -79,12 +79,12 @@ void TheScopeAnalysis::apply(AS& envs, Instruction* i) const {
         }
     } else if (CallInstruction::CastCall(i) && depth < maxDepth) {
         auto calli = CallInstruction::CastCall(i);
-        if (Call::Cast(i) || EagerCall::Cast(i)) {
+        if (Call::Cast(i) || CallValues::Cast(i)) {
             Value* trg = nullptr;
             if (Call::Cast(i))
                 trg = Call::Cast(i)->cls();
-            else if (EagerCall::Cast(i))
-                trg = EagerCall::Cast(i)->cls();
+            else if (CallValues::Cast(i))
+                trg = CallValues::Cast(i)->cls();
             if (trg) {
                 MkFunCls* cls = envs.findClosure(i->env(), trg);
                 if (cls != AbstractREnvironment::UnknownClosure) {
@@ -102,8 +102,8 @@ void TheScopeAnalysis::apply(AS& envs, Instruction* i) const {
             Closure* trg = nullptr;
             if (StaticCall::Cast(i))
                 trg = StaticCall::Cast(i)->cls();
-            else if (StaticEagerCall::Cast(i))
-                trg = StaticEagerCall::Cast(i)->cls();
+            else if (StaticCallValues::Cast(i))
+                trg = StaticCallValues::Cast(i)->cls();
             if (trg && trg->argNames.size() == calli->nCallArgs()) {
                 TheScopeAnalysis nextFun(trg, trg->argNames, trg->closureEnv(),
                                          trg->entry, envs, depth + 1);

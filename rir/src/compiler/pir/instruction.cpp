@@ -286,7 +286,7 @@ void MkFunCls::printArgs(std::ostream& out) {
     Instruction::printArgs(out);
 }
 
-void StaticEagerCall::printArgs(std::ostream& out) {
+void StaticCallValues::printArgs(std::ostream& out) {
     out << *cls_;
     if (nargs() > 0)
         out << ", ";
@@ -306,10 +306,10 @@ CallInstruction* CallInstruction::CastCall(Value* v) {
         return Call::Cast(v);
     case Tag::StaticCall:
         return StaticCall::Cast(v);
-    case Tag::EagerCall:
-        return EagerCall::Cast(v);
-    case Tag::StaticEagerCall:
-        return StaticEagerCall::Cast(v);
+    case Tag::CallValues:
+        return CallValues::Cast(v);
+    case Tag::StaticCallValues:
+        return StaticCallValues::Cast(v);
     case Tag::CallBuiltin:
         return CallBuiltin::Cast(v);
     case Tag::CallSafeBuiltin:
