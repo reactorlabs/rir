@@ -2066,10 +2066,10 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env,
                 res =
                     dispatchApply(call, val, args, R_SubsetSym, getenv(), ctx);
                 if (!res)
-                    res = do_subset_dflt(R_NilValue, R_Subset2Sym, args,
-                                         getenv());
+                    res =
+                        do_subset_dflt(R_NilValue, R_SubsetSym, args, getenv());
             } else {
-                res = do_subset_dflt(R_NilValue, R_Subset2Sym, args, getenv());
+                res = do_subset_dflt(R_NilValue, R_SubsetSym, args, getenv());
             }
 
             ostack_popn(ctx, 3);
@@ -2094,10 +2094,10 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env,
                 res =
                     dispatchApply(call, val, args, R_SubsetSym, getenv(), ctx);
                 if (!res)
-                    res = do_subset_dflt(R_NilValue, R_Subset2Sym, args,
-                                         getenv());
+                    res =
+                        do_subset_dflt(R_NilValue, R_SubsetSym, args, getenv());
             } else {
-                res = do_subset_dflt(R_NilValue, R_Subset2Sym, args, getenv());
+                res = do_subset_dflt(R_NilValue, R_SubsetSym, args, getenv());
             }
 
             ostack_popn(ctx, 4);
