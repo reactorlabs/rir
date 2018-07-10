@@ -146,6 +146,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
 
     if (fun == symbol::Function && args.length() == 3) {
         auto fun = Compiler::compileFunction(args[1], args[0]);
+        assert(TYPEOF(fun) == EXTERNALSXP);
         cs << BC::push(args[0]) << BC::push(fun) << BC::push(args[2])
            << BC::close();
         return true;
@@ -672,45 +673,35 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
         return true;
     }
 
-    // if (fun == symbol::DoubleBracket || fun == symbol::Bracket) {
-    //     if (args.length() == 2 || args.length() == 3) {
-    //         auto lhs = *args.begin();
-    //         auto idx = args.begin() + 1;
+    if (fun == symbol::DoubleBracket || fun == symbol::Bracket) {
+        if (args.length() == 2 || args.length() == 3) {
+            auto lhs = *args.begin();
+            auto idx = args.begin() + 1;
 
-    //         if (*idx == R_DotsSymbol || idx.hasTag() ||
-    //             *(idx + 1) == R_DotsSymbol || (idx + 1).hasTag())
-    //             return false;
+            if (*idx == R_DotsSymbol || idx.hasTag() ||
+                *(idx + 1) == R_DotsSymbol || (idx + 1).hasTag())
+                return false;
 
-    //         LabelT objBranch = cs.mkLabel();
-    //         LabelT nextBranch = cs.mkLabel();
+            cs << BC::guardNamePrimitive(fun);
+            compileExpr(ctx, lhs);
 
-    //         cs << BC::guardNamePrimitive(fun);
-    //         compileExpr(ctx, lhs);
-    //         cs << BC::brobj(objBranch);
-
-    //         compileExpr(ctx, *idx);
-    //         if (args.length() == 2) {
-    //             if (fun == symbol::DoubleBracket)
-    //                 cs << BC::extract2_1();
-    //             else
-    //                 cs << BC::extract1_1();
-    //         } else {
-    //             compileExpr(ctx, *(idx + 1));
-    //             if (fun == symbol::DoubleBracket)
-    //                 cs << BC::extract2_2();
-    //             else
-    //                 cs << BC::extract1_2();
-    //         }
-
-    //         cs << BC::br(nextBranch);
-
-    //         cs << objBranch;
-    //         // XXX
-
-    //         cs << nextBranch;
-    //         return true;
-    //     }
-    // }
+            compileExpr(ctx, *idx);
+            if (args.length() == 2) {
+                if (fun == symbol::DoubleBracket)
+                    cs << BC::extract2_1();
+                else
+                    cs << BC::extract1_1();
+            } else {
+                compileExpr(ctx, *(idx + 1));
+                if (fun == symbol::DoubleBracket)
+                    cs << BC::extract2_2();
+                else
+                    cs << BC::extract1_2();
+            }
+            cs.addSrc(ast);
+            return true;
+        }
+    }
 
     if (fun == symbol::Missing && args.length() == 1 &&
         TYPEOF(args[0]) == SYMSXP && !DDVAL(args[0])) {

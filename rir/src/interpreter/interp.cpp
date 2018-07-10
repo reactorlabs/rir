@@ -127,18 +127,17 @@ RIR_INLINE SEXP getSrcForCall(Code* c, Opcode* pc, Context* ctx) {
 
 #define readConst(ctx, idx) (cp_pool_at(ctx, idx))
 
-void initClosureContext(const CallContext& call, RCNTXT* cntxt, SEXP rho,
-                        SEXP sysparent, SEXP arglist, SEXP op) {
+void initClosureContext(SEXP ast, RCNTXT* cntxt, SEXP rho, SEXP sysparent,
+                        SEXP arglist, SEXP op) {
     /*  If we have a generic function we need to use the sysparent of
        the generic as the sysparent of the method because the method
        is a straight substitution of the generic.  */
 
     if (R_GlobalContext->callflag == CTXT_GENERIC)
-        Rf_begincontext(cntxt, CTXT_RETURN, call.ast, rho,
+        Rf_begincontext(cntxt, CTXT_RETURN, ast, rho,
                         R_GlobalContext->sysparent, arglist, op);
     else
-        Rf_begincontext(cntxt, CTXT_RETURN, call.ast, rho, sysparent, arglist,
-                        op);
+        Rf_begincontext(cntxt, CTXT_RETURN, ast, rho, sysparent, arglist, op);
 }
 
 void endClosureContext(RCNTXT* cntxt, SEXP result) {
@@ -334,7 +333,7 @@ SEXP rirCallTrampoline(const CallContext& call, Function* fun, SEXP env,
 
     RCNTXT cntxt;
 
-    initClosureContext(call, &cntxt, env, call.callerEnv, arglist,
+    initClosureContext(call.ast, &cntxt, env, call.callerEnv, arglist,
                        call.callee());
     closureDebug(call.ast, call.callee(), env, R_NilValue, &cntxt);
 
@@ -478,7 +477,8 @@ SEXP closureArgumentAdaptor(const CallContext& call, SEXP arglist,
 
     /*  Set up a context with the call in it so error has access to it */
     RCNTXT cntxt;
-    initClosureContext(call, &cntxt, CLOENV(op), call.callerEnv, arglist, op);
+    initClosureContext(call.ast, &cntxt, CLOENV(op), call.callerEnv, arglist,
+                       op);
 
     /*  Build a list which matches the actual (unevaluated) arguments
         to the formal paramters.  Build a new environment which
@@ -663,6 +663,36 @@ SEXP doCall(const CallContext& call, Context* ctx) {
     };
 
     return apply(call);
+}
+
+SEXP dispatchApply(SEXP ast, SEXP obj, SEXP actuals, SEXP selector,
+                   SEXP callerEnv, Context* ctx) {
+    SEXP op = SYMVALUE(selector);
+
+    // ===============================================
+    // First try S4
+    if (IS_S4_OBJECT(obj) && R_has_methods(op)) {
+        SEXP result = R_possible_dispatch(ast, op, actuals, callerEnv, TRUE);
+        if (result)
+            return result;
+    }
+
+    // ===============================================
+    // Then try S3
+    const char* generic = CHAR(PRINTNAME(selector));
+    SEXP rho1 = Rf_NewEnvironment(R_NilValue, R_NilValue, callerEnv);
+    PROTECT(rho1);
+    RCNTXT cntxt;
+    initClosureContext(ast, &cntxt, rho1, callerEnv, actuals, op);
+    SEXP result;
+    bool success = Rf_usemethod(generic, obj, ast, actuals, rho1, callerEnv,
+                                R_BaseEnv, &result);
+    UNPROTECT(1);
+    endClosureContext(&cntxt, success ? result : R_NilValue);
+    if (success)
+        return result;
+
+    return nullptr;
 }
 
 #define R_INT_MAX INT_MAX
@@ -2030,7 +2060,18 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env,
             SEXP args = CONS_NR(idx, R_NilValue);
             args = CONS_NR(val, args);
             ostack_push(ctx, args);
-            res = do_subset_dflt(R_NilValue, R_SubsetSym, args, getenv());
+
+            if (isObject(val)) {
+                SEXP call = getSrcAt(c, pc - 1, ctx);
+                res =
+                    dispatchApply(call, val, args, R_SubsetSym, getenv(), ctx);
+                if (!res)
+                    res = do_subset_dflt(R_NilValue, R_Subset2Sym, args,
+                                         getenv());
+            } else {
+                res = do_subset_dflt(R_NilValue, R_Subset2Sym, args, getenv());
+            }
+
             ostack_popn(ctx, 3);
 
             R_Visible = TRUE;
@@ -2047,7 +2088,18 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env,
             args = CONS_NR(idx, args);
             args = CONS_NR(val, args);
             ostack_push(ctx, args);
-            res = do_subset_dflt(R_NilValue, R_SubsetSym, args, getenv());
+
+            if (isObject(val)) {
+                SEXP call = getSrcAt(c, pc - 1, ctx);
+                res =
+                    dispatchApply(call, val, args, R_SubsetSym, getenv(), ctx);
+                if (!res)
+                    res = do_subset_dflt(R_NilValue, R_Subset2Sym, args,
+                                         getenv());
+            } else {
+                res = do_subset_dflt(R_NilValue, R_Subset2Sym, args, getenv());
+            }
+
             ostack_popn(ctx, 4);
 
             R_Visible = TRUE;
@@ -2142,7 +2194,16 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env,
             SEXP args = CONS_NR(idx, R_NilValue);
             args = CONS_NR(val, args);
             ostack_push(ctx, args);
-            res = do_subset2_dflt(R_NilValue, R_Subset2Sym, args, getenv());
+            if (isObject(val)) {
+                SEXP call = getSrcAt(c, pc - 1, ctx);
+                res =
+                    dispatchApply(call, val, args, R_Subset2Sym, getenv(), ctx);
+                if (!res)
+                    res = do_subset2_dflt(R_NilValue, R_Subset2Sym, args,
+                                          getenv());
+            } else {
+                res = do_subset2_dflt(R_NilValue, R_Subset2Sym, args, getenv());
+            }
             ostack_popn(ctx, 3);
 
             R_Visible = TRUE;
@@ -2160,7 +2221,15 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env,
             args = CONS_NR(idx, args);
             args = CONS_NR(val, args);
             ostack_push(ctx, args);
-            res = do_subset_dflt(R_NilValue, R_Subset2Sym, args, getenv());
+            if (isObject(val)) {
+                SEXP call = getSrcAt(c, pc - 1, ctx);
+                res =
+                    dispatchApply(call, val, args, R_Subset2Sym, getenv(), ctx);
+                if (!res)
+                    res = do_subset2_dflt(call, R_Subset2Sym, args, getenv());
+            } else {
+                res = do_subset2_dflt(R_NilValue, R_Subset2Sym, args, getenv());
+            }
             ostack_popn(ctx, 4);
 
             R_Visible = TRUE;

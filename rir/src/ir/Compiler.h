@@ -68,10 +68,9 @@ class Compiler {
 
     // To compile a function which is not yet closed
     static SEXP compileFunction(SEXP ast, SEXP formals) {
-        Protect p;
-
         Compiler c(ast, formals, nullptr);
-        SEXP res = p(c.finalize());
+        SEXP res = c.finalize();
+        PROTECT(res);
 
         // Allocate a new vtable.
         DispatchTable* vtable = DispatchTable::create();
@@ -81,6 +80,7 @@ class Compiler {
         vtable->put(0, Function::unpack(res));
 
         // Set the closure fields.
+        UNPROTECT(1);
         return vtable->container();
     }
 
