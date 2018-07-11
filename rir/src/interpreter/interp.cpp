@@ -51,7 +51,7 @@ struct CallContext {
     unsigned nargs() const { return callSite->nargs; }
 
     bool hasStackArgs() const { return stackArgs != nullptr; }
-    bool hasCallValuesee() const { return TYPEOF(callee()) == BUILTINSXP; }
+    bool hasEagerCallee() const { return TYPEOF(callee()) == BUILTINSXP; }
 
     SEXP callee() const {
         assert(callee_);
@@ -306,10 +306,10 @@ SEXP createLegacyLazyArgsList(const CallContext& call, Context* ctx) {
 
 SEXP createLegacyArgsList(const CallContext& call, Context* ctx) {
     if (call.hasStackArgs()) {
-        return createLegacyArgsListFromStackValues(call, call.hasCallValuesee(),
+        return createLegacyArgsListFromStackValues(call, call.hasEagerCallee(),
                                                    ctx);
     } else {
-        return createLegacyArgsList(call, call.hasCallValuesee(), ctx);
+        return createLegacyArgsList(call, call.hasEagerCallee(), ctx);
     }
 }
 

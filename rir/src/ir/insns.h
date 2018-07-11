@@ -104,21 +104,23 @@ DEF_INSTR(movloc_, 2, 0, 0, 1)
 
 /**
  * call_implicit_:: Takes a list of code objects, which represent the arguments,
- *         decides on eager/lazy evaluation and does the right thing
- *         with the code objs.
- *         Expects the callee on TOS.
+ *                  decides on eager/lazy evaluation and does the right thing
+ *                  with the code objs
+ *                  Immediates: callsite and numargs
+ *                  Expects the callee on TOS
  */
 DEF_INSTR(call_implicit_, 2, 1, 1, 0)
 
 /**
- * call_:: Like call_implicit_, but expects promised arguments on the
- * stack on top of the callee.
+ * call_:: Like call_implicit_, but expects arguments on stack
+ *         on top of the callee; these arguments can be both
+ *         values and promises (even preseeded w/ a value)
  */
 DEF_INSTR(call_, 2, -1, 1, 0)
 
 /**
- * static_call_:: Like static_call_stack_, but expects promised
- *                           arguments on the stack.
+ * static_call_:: Like call_, but the callee is statically known
+ *                and is accessed via the immediate callsite
  */
 DEF_INSTR(static_call_, 2, -1, 1, 0)
 
