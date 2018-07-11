@@ -47,7 +47,7 @@ REXPORT SEXP rir_compile(SEXP what, SEXP env = NULL) {
     if (TYPEOF(what) == CLOSXP) {
         SEXP body = BODY(what);
         if (TYPEOF(body) == EXTERNALSXP)
-            Rf_error("closure already compiled");
+            return what;
 
         SEXP result = Compiler::compileClosure(what);
         PROTECT(result);
@@ -122,7 +122,7 @@ REXPORT SEXP pir_compile(SEXP what, SEXP verbose) {
     assert(DispatchTable::unpack(BODY(what))->capacity() == 2 &&
            "fix, support for more than 2 slots needed...");
     if (DispatchTable::unpack(BODY(what))->available(1))
-        Rf_error("closure already compiled to pir");
+        return what;
 
     Protect p(what);
 

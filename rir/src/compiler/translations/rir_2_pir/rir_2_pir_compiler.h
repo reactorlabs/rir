@@ -12,13 +12,15 @@ class Rir2PirCompiler : public RirCompiler {
 
     void compileClosure(SEXP, MaybeCls success, Maybe fail) override;
     void compileFunction(rir::Function*, const std::vector<SEXP>&,
-                         MaybeCls success, Maybe fail);
+                         const std::vector<SEXP>&, MaybeCls success,
+                         Maybe fail);
     void optimizeModule();
     void printAfterPass(const std::string&, const std::string&, Closure*,
                         size_t);
   private:
     void compileClosure(rir::Function*, const std::vector<SEXP>&,
-                        Env* closureEnv, MaybeCls success, Maybe fail);
+                        const std::vector<SEXP>&, Env* closureEnv,
+                        MaybeCls success, Maybe fail);
     void applyOptimizations(Closure*, const std::string&);
 };
 } // namespace pir

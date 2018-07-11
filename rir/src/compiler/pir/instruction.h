@@ -631,38 +631,37 @@ class FLI(Subassign2_1D, 3, Effect::None, EnvAccess::None) {
     SEXP sym;
 };
 
-class FLI(Extract1_1D, 2, Effect::None, EnvAccess::None) {
+class FLI(Extract1_1D, 3, Effect::None, EnvAccess::Leak) {
   public:
-    Extract1_1D(Value* vec, Value* idx)
+    Extract1_1D(Value* vec, Value* idx, Value* env)
         : FixedLenInstruction(PirType::val(),
-                              {{PirType::val(), PirType::val()}},
-                              {{vec, idx}}) {}
+                              {{PirType::val(), PirType::val()}}, {{vec, idx}},
+                              env) {}
 };
 
-class FLI(Extract2_1D, 2, Effect::None, EnvAccess::None) {
+class FLI(Extract2_1D, 3, Effect::None, EnvAccess::Leak) {
   public:
-    Extract2_1D(Value* vec, Value* idx)
+    Extract2_1D(Value* vec, Value* idx, Value* env)
         : FixedLenInstruction(PirType::val().scalar(),
-                              {{PirType::val(), PirType::val()}},
-                              {{vec, idx}}) {}
+                              {{PirType::val(), PirType::val()}}, {{vec, idx}},
+                              env) {}
 };
 
-class FLI(Extract1_2D, 3, Effect::None, EnvAccess::None) {
+class FLI(Extract1_2D, 4, Effect::None, EnvAccess::Leak) {
   public:
-    Extract1_2D(Value* vec, Value* idx1, Value* idx2)
-        : FixedLenInstruction(
-              PirType::val(),
-              {{PirType::val(), PirType::val(), PirType::val()}},
-              {{vec, idx1, idx2}}) {}
+    Extract1_2D(Value* vec, Value* idx1, Value* idx2, Value* env)
+        : FixedLenInstruction(PirType::val(), {{PirType::val(), PirType::val(),
+                                                PirType::val()}},
+                              {{vec, idx1, idx2}}, env) {}
 };
 
-class FLI(Extract2_2D, 3, Effect::None, EnvAccess::None) {
+class FLI(Extract2_2D, 4, Effect::None, EnvAccess::Leak) {
   public:
-    Extract2_2D(Value* vec, Value* idx1, Value* idx2)
+    Extract2_2D(Value* vec, Value* idx1, Value* idx2, Value* env)
         : FixedLenInstruction(
               PirType::val().scalar(),
               {{PirType::val(), PirType::val(), PirType::val()}},
-              {{vec, idx1, idx2}}) {}
+              {{vec, idx1, idx2}}, env) {}
 };
 
 class FLI(Inc, 1, Effect::None, EnvAccess::None) {

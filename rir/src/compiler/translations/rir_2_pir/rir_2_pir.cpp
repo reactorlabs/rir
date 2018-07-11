@@ -239,15 +239,17 @@ void Rir2Pir::translate(rir::Code* srcCode, Builder& insert,
             auto fmlsList = RList(fmls);
 
             std::vector<SEXP> fmlsNames;
+            std::vector<SEXP> fmlsDefault;
             for (auto it = fmlsList.begin(); it != fmlsList.end(); ++it) {
                 fmlsNames.push_back(it.tag());
+                fmlsDefault.push_back(*it);
             }
 
             DispatchTable* dt = DispatchTable::unpack(code);
             rir::Function* function = dt->first();
 
             compiler.compileFunction(
-                function, fmlsNames,
+                function, fmlsNames, fmlsDefault,
                 [&](Closure* innerF) {
                     state.push(insert(
                         new MkFunCls(innerF, insert.env, fmls, code, src)));

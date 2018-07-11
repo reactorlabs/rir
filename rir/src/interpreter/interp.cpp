@@ -426,7 +426,6 @@ void doProfileCall(CallSite* cs, SEXP callee) {
 
 SEXP legacySpecialCall(const CallContext& call, Context* ctx) {
     assert(call.ast != R_NilValue);
-    assert(!call.hasStackArgs());
 
     // get the ccode
     CCODE f = getBuiltin(call.callee());
@@ -1448,8 +1447,14 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env,
             Immediate n = readImmediate();
             advanceImmediate();
             SEXP callee = cp_pool_at(ctx, *c->callSite(id)->target());
-            CallContext call(c, id, callee, ostack_cell_at(ctx, n - 1),
-                             getenv(), ctx);
+            // TODO: Static call does not use getenv() but instead bypassess the
+            // asserts and gets the *env directly. This is because this
+            // instruction is used to call safe builtins, ie. builtins which are
+            // not accessing the environment. But, it is also used for other
+            // static calls, so we should probably split the two uses into two
+            // instructions.
+            CallContext call(c, id, callee, ostack_cell_at(ctx, n - 1), *env,
+                             ctx);
             res = doCall(call, ctx);
             ostack_popn(ctx, n);
             ostack_push(ctx, res);

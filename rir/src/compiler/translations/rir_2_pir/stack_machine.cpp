@@ -127,6 +127,9 @@ bool StackMachine::tryRunCurrentBC(const Rir2Pir& rir2pir, Builder& insert) {
     case Opcode::call_implicit_: {
         unsigned n = bc.immediate.call_args.nargs;
         rir::CallSite* cs = bc.callSite(srcCode);
+        // TODO: Named args are not yet supported in pir
+        if (cs->hasNames)
+            return false;
 
         SEXP monomorphic = nullptr;
         if (cs->hasProfile) {
@@ -213,6 +216,9 @@ bool StackMachine::tryRunCurrentBC(const Rir2Pir& rir2pir, Builder& insert) {
     case Opcode::call_: {
         unsigned n = bc.immediate.call_args.nargs;
         rir::CallSite* cs = bc.callSite(srcCode);
+        // TODO: Named args are not yet supported in pir
+        if (cs->hasNames)
+            return false;
 
         std::vector<Value*> args(n);
         for (size_t i = 0; i < n; ++i)
@@ -277,14 +283,14 @@ bool StackMachine::tryRunCurrentBC(const Rir2Pir& rir2pir, Builder& insert) {
     case Opcode::extract1_1_: {
         Value* idx = pop();
         Value* vec = pop();
-        push(insert(new Extract1_1D(vec, idx)));
+        push(insert(new Extract1_1D(vec, idx, env)));
         break;
     }
 
     case Opcode::extract2_1_: {
         Value* idx = pop();
         Value* vec = pop();
-        push(insert(new Extract2_1D(vec, idx)));
+        push(insert(new Extract2_1D(vec, idx, env)));
         break;
     }
 
@@ -292,7 +298,7 @@ bool StackMachine::tryRunCurrentBC(const Rir2Pir& rir2pir, Builder& insert) {
         Value* idx2 = pop();
         Value* idx1 = pop();
         Value* vec = pop();
-        push(insert(new Extract1_2D(vec, idx1, idx2)));
+        push(insert(new Extract1_2D(vec, idx1, idx2, env)));
         break;
     }
 
@@ -300,7 +306,7 @@ bool StackMachine::tryRunCurrentBC(const Rir2Pir& rir2pir, Builder& insert) {
         Value* idx2 = pop();
         Value* idx1 = pop();
         Value* vec = pop();
-        push(insert(new Extract2_2D(vec, idx1, idx2)));
+        push(insert(new Extract2_2D(vec, idx1, idx2, env)));
         break;
     }
 
