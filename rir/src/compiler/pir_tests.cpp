@@ -149,21 +149,6 @@ bool canRemoveEnvironment(const std::string& input) {
     return t;
 }
 
-bool testDelayEnv() {
-    // TODO: counterexample: closure creates circular dependency, need more
-    //       analysis!
-    // auto m = compile("{f <- function()1; arg1[[2]]}");
-
-    pir::Module m;
-    auto res = compile("", "a <- function(b) {f <- b; b[[2]]}", &m);
-    bool t = Visitor::check(res["a"]->entry, [&m](Instruction* i, BB* bb) {
-        if (i->hasEnv())
-            CHECK(Deopt::Cast(bb->last()));
-        return true;
-    });
-    return t;
-}
-
 extern "C" SEXP Rf_NewEnvironment(SEXP, SEXP, SEXP);
 bool testSuperAssign() {
     auto hasAssign = [](pir::Closure* f) {
@@ -328,7 +313,6 @@ static Test tests[] = {
              return compileAndVerify(
                  "fun <- function(a) {f <- function(x) x; f(a[[1]])}");
          }),
-    Test("delay_env", &testDelayEnv),
     Test("context_load",
          []() { return canRemoveEnvironment("f <- function() a"); }),
     Test("super_assign", &testSuperAssign),

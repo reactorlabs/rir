@@ -151,7 +151,7 @@ class BC {
         assert(bc != Opcode::return_);
         if (bc == Opcode::call_)
             return immediate.call_args.nargs + 1;
-        if (bc == Opcode::static_call_ || bc == Opcode::dispatch_stack_eager_)
+        if (bc == Opcode::static_call_)
             return immediate.call_args.nargs;
         return popCount(bc);
     }
@@ -179,14 +179,13 @@ class BC {
     }
 
     bool isCallsite() const {
-        return bc == Opcode::call_implicit_ || bc == Opcode::dispatch_ ||
-               bc == Opcode::dispatch_stack_eager_ || bc == Opcode::call_ ||
+        return bc == Opcode::call_implicit_ || bc == Opcode::call_ ||
                bc == Opcode::static_call_;
     }
 
     bool hasPromargs() const {
-        return bc == Opcode::call_implicit_ || bc == Opcode::dispatch_ ||
-               bc == Opcode::promise_ || bc == Opcode::push_code_;
+        return bc == Opcode::call_implicit_ || bc == Opcode::promise_ ||
+               bc == Opcode::push_code_;
     }
 
     bool isCondJmp() const {
@@ -417,9 +416,7 @@ class BC {
         case Opcode::subassign2_:
             immediate.pool = *(PoolIdxT*)pc;
             break;
-        case Opcode::dispatch_stack_eager_:
         case Opcode::call_implicit_:
-        case Opcode::dispatch_:
         case Opcode::call_:
         case Opcode::static_call_:
             immediate.call_args = *(CallArgs*)pc;

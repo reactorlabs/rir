@@ -55,8 +55,6 @@ DECLARE(value, "value");
 DECLARE(isnull, "is.null");
 DECLARE(islist, "is.list");
 DECLARE(ispairlist, "is.pairlist");
-DECLARE(setterPlaceholder, "*.placeholder.setter.*");
-DECLARE(getterPlaceholder, "*.placeholder.getter.*");
 DECLARE(quote, "quote");
 DECLARE(And, "&&");
 DECLARE(Or, "||");

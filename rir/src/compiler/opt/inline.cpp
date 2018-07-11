@@ -76,7 +76,8 @@ class TheInliner {
                                 // value
                                 auto cast = new CastType(a, RType::prom,
                                                          PirType::any());
-                                next = bb->insert(ip + 1, cast);
+                                ip = bb->insert(ip + 1, cast);
+                                ip--;
                                 a = cast;
                             }
                             ld->replaceUsesWith(a);

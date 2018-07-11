@@ -123,20 +123,6 @@ DEF_INSTR(call_, 2, -1, 1, 0)
 DEF_INSTR(static_call_, 2, -1, 1, 0)
 
 /**
- * dispatch_:: Similar to call_implicit_, but also looks for the callee (the
- * selector is accessed through the callsite immediate). Expects the receiver on
- * TOS.
- */
-DEF_INSTR(dispatch_, 2, 1, 1, 0)
-
-/**
- * dispatch_stack_eager_:: Similar to dispatch_, but expects the receiver and
- *                   all other args on the stack.
- *                   Note: nargs includes the receiver!
- */
-DEF_INSTR(dispatch_stack_eager_, 2, -1, 1, 0)
-
-/**
  * close_:: pop body and argument list, create closure, and push on object stack
  */
 DEF_INSTR(close_, 0, 3, 1, 1)

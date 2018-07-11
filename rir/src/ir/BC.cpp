@@ -32,11 +32,9 @@ bool BC::operator==(const BC& other) const {
     case Opcode::subassign2_:
         return immediate.pool == other.immediate.pool;
 
-    case Opcode::dispatch_:
     case Opcode::call_implicit_:
     case Opcode::call_:
     case Opcode::static_call_:
-    case Opcode::dispatch_stack_eager_:
         return immediate.call_args.call_id == other.immediate.call_args.call_id;
 
     case Opcode::guard_env_:
@@ -173,10 +171,8 @@ void BC::write(CodeStream& cs) const {
 
     // They have to be inserted by CodeStream::insertCall
     case Opcode::call_implicit_:
-    case Opcode::dispatch_:
     case Opcode::call_:
     case Opcode::static_call_:
-    case Opcode::dispatch_stack_eager_:
         assert(false);
         break;
 
@@ -343,16 +339,6 @@ void BC::print(CallSite* cs) {
     case Opcode::num_of:
         assert(false);
         break;
-    case Opcode::dispatch_: {
-        if (cs) {
-            SEXP selector = Pool::get(*cs->selector());
-            Rprintf(" `%s` ", CHAR(PRINTNAME(selector)));
-            Rprintf("\n        # ");
-            Rf_PrintValue(Pool::get(cs->call));
-            printProfile(cs);
-        }
-        break;
-    }
     case Opcode::call_implicit_: {
         if (cs) {
             printArgs(cs);
@@ -381,17 +367,6 @@ void BC::print(CallSite* cs) {
             Rprintf(" (%d) ", *cs->target());
             Rf_PrintValue(Pool::get(*cs->target()));
             Rprintf("        -> ", *cs->target());
-            Rf_PrintValue(Pool::get(cs->call));
-            printProfile(cs);
-        }
-        break;
-    }
-    case Opcode::dispatch_stack_eager_: {
-        if (cs) {
-            Rprintf(" `%s` ", CHAR(PRINTNAME(Pool::get(*cs->selector()))));
-            Rprintf(" %d ", cs->nargs);
-            printNames(cs);
-            Rprintf("\n        -> ");
             Rf_PrintValue(Pool::get(cs->call));
             printProfile(cs);
         }

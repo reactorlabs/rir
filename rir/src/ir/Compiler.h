@@ -4,6 +4,7 @@
 #include "R/r.h"
 #include "R/Preserve.h"
 #include "R/Protect.h"
+#include "utils/Pool.h"
 #include "utils/FunctionWriter.h"
 
 #include <unordered_map>
@@ -67,10 +68,9 @@ class Compiler {
 
     // To compile a function which is not yet closed
     static SEXP compileFunction(SEXP ast, SEXP formals) {
-        Protect p;
-
         Compiler c(ast, formals, nullptr);
-        SEXP res = p(c.finalize());
+        SEXP res = c.finalize();
+        PROTECT(res);
 
         // Allocate a new vtable.
         DispatchTable* vtable = DispatchTable::create();
@@ -80,6 +80,7 @@ class Compiler {
         vtable->put(0, Function::unpack(res));
 
         // Set the closure fields.
+        UNPROTECT(1);
         return vtable->container();
     }
 
@@ -112,6 +113,13 @@ class Compiler {
         SET_BODY(closure, vtable->container());
         SET_FORMALS(closure, formals);
         SET_CLOENV(closure, env);
+
+        // TODO: promises which escape a function do not have a pointer back to
+        // the function, but just to the code object, which is inside this
+        // closure. If the closure gets collected before the promise, we have a
+        // dangling pointer. We need to teach the GC to find the function
+        // throught the PROMSXP. As a workaround we never collect closures.
+        Pool::insert(vtable->container());
 
         return closure;
     }
