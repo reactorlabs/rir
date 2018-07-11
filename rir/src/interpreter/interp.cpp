@@ -2130,7 +2130,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env,
             SEXP idx = ostack_at(ctx, 0);
             int i = -1;
 
-            if (getAttrib(val, R_NamesSymbol) != R_NilValue ||
+            if (getAttrib(val, R_NamesSymbol) != R_NilValue || ATTRIB(val) ||
                 ATTRIB(idx) != R_NilValue)
                 goto fallback;
 
@@ -2199,8 +2199,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env,
                 res =
                     dispatchApply(call, val, args, R_Subset2Sym, getenv(), ctx);
                 if (!res)
-                    res = do_subset2_dflt(R_NilValue, R_Subset2Sym, args,
-                                          getenv());
+                    res = do_subset2_dflt(call, R_Subset2Sym, args, getenv());
             } else {
                 res = do_subset2_dflt(R_NilValue, R_Subset2Sym, args, getenv());
             }
