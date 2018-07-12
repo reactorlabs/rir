@@ -70,6 +70,11 @@ void Rir2PirCompiler::compileClosure(rir::Function* srcFunction,
         if (d != R_MissingArg)
             return fail();
 
+    // TODO: Support elipsis argument
+    for (auto d : arg_names)
+        if (d == R_DotsSymbol)
+            return fail();
+    
     bool failed = false;
     module->createIfMissing(
         srcFunction, arg_names, closureEnv, [&](Closure* pirFunction) {
