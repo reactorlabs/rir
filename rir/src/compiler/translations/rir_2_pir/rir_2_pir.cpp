@@ -8,6 +8,7 @@
 #include "../../util/visitor.h"
 #include "R/RList.h"
 #include "ir/BC.h"
+#include "utils/FormalArgs.h"
 
 #include <deque>
 #include <vector>
@@ -236,20 +237,14 @@ void Rir2Pir::translate(rir::Code* srcCode, Builder& insert,
             SEXP fmls = ldfmls.immediateConst();
             SEXP code = ldcode.immediateConst();
             SEXP src = ldsrc.immediateConst();
-            auto fmlsList = RList(fmls);
 
-            std::vector<SEXP> fmlsNames;
-            std::vector<SEXP> fmlsDefault;
-            for (auto it = fmlsList.begin(); it != fmlsList.end(); ++it) {
-                fmlsNames.push_back(it.tag());
-                fmlsDefault.push_back(*it);
-            }
+            FormalArgs formals(fmls);
 
             DispatchTable* dt = DispatchTable::unpack(code);
             rir::Function* function = dt->first();
 
             compiler.compileFunction(
-                function, fmlsNames, fmlsDefault,
+                function, formals,
                 [&](Closure* innerF) {
                     state.push(insert(
                         new MkFunCls(innerF, insert.env, fmls, code, src)));
@@ -335,7 +330,7 @@ void Rir2Pir::finalize(Value* ret, Builder& insert) {
                     continue;
                 }
                 // Phi where all inputs are the same value (except the phi
-                // itself), then we can remove it. 
+                // itself), then we can remove it.
                 Value* allTheSame = p->arg(0).val();
                 p->eachArg([&](BB*, Value* v) {
                     if (allTheSame == p)

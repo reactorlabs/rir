@@ -37,47 +37,31 @@ void Rir2PirCompiler::compileClosure(SEXP closure, MaybeCls success,
             std::cerr << "Closure already compiled to PIR\n";
     }
 
-    auto formals = RList(FORMALS(closure));
-
-    std::vector<SEXP> arg_names;
-    std::vector<SEXP> default_args;
-    for (auto it = formals.begin(); it != formals.end(); ++it) {
-        // TODO: support default arguments
-        default_args.push_back(*it);
-        arg_names.push_back(it.tag());
-    }
+    FormalArgs formals(FORMALS(closure));
 
     rir::Function* srcFunction = tbl->first();
-    compileClosure(srcFunction, arg_names, default_args,
-                   module->getEnv(CLOENV(closure)), success, fail);
+    compileClosure(srcFunction, formals, module->getEnv(CLOENV(closure)),
+                   success, fail);
 }
 
 void Rir2PirCompiler::compileFunction(rir::Function* srcFunction,
-                                      const std::vector<SEXP>& arg_names,
-                                      const std::vector<SEXP>& default_args,
+                                      FormalArgs const& formals,
                                       MaybeCls success, Maybe fail) {
-    compileClosure(srcFunction, arg_names, default_args, Env::notClosed(),
+    compileClosure(srcFunction, formals, Env::notClosed(),
                    success, fail);
 }
 
 void Rir2PirCompiler::compileClosure(rir::Function* srcFunction,
-                                     const std::vector<SEXP>& arg_names,
-                                     const std::vector<SEXP>& default_args,
-                                     Env* closureEnv, MaybeCls success,
-                                     Maybe fail) {
-    // TODO: Support default arguments
-    for (auto d : default_args)
-        if (d != R_MissingArg)
-            return fail();
+                                     FormalArgs const& formals, Env* closureEnv,
+                                     MaybeCls success, Maybe fail) {
 
-    // TODO: Support elipsis argument
-    for (auto d : arg_names)
-        if (d == R_DotsSymbol)
-            return fail();
-    
+    // TODO: Support default arguments and dots
+    if (formals.hasDefaultArgs || formals.hasDots)
+        return fail();
+
     bool failed = false;
     module->createIfMissing(
-        srcFunction, arg_names, closureEnv, [&](Closure* pirFunction) {
+        srcFunction, formals.names, closureEnv, [&](Closure* pirFunction) {
             Builder builder(pirFunction, closureEnv);
             Rir2Pir rir2pir(*this, srcFunction);
             if (rir2pir.tryCompile(srcFunction->body(), builder)) {
