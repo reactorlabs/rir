@@ -63,7 +63,7 @@ REXPORT SEXP rir_compile(SEXP what, SEXP env = NULL) {
                                cmp.optimizeModule();
                                pir::Pir2RirCompiler p2r;
                                // TODO, next step: run the compiled code
-                               p2r.dryRun = true;
+                               p2r.dryRun = false;
                                p2r.compile(c, result);
                            },
                            ignore);
