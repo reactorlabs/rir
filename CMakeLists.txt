@@ -29,6 +29,7 @@ MARK_AS_ADVANCED(
 file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/_bin_create")
 file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/_bin_create/tests"           "#!/bin/sh\n${CMAKE_SOURCE_DIR}/tools/tests $@")
 file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/_bin_create/R"               "#!/bin/sh\n${CMAKE_SOURCE_DIR}/tools/R $@")
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/_bin_create/Rscript"         "#!/bin/sh\n${CMAKE_SOURCE_DIR}/tools/Rscript $@")
 file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/_bin_create/gnur-make"       "#!/bin/sh\n${CMAKE_SOURCE_DIR}/tools/gnur-make $@")
 file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/_bin_create/gnur-make-tests" "#!/bin/sh\n${CMAKE_SOURCE_DIR}/tools/gnur-make-tests $@")
 
