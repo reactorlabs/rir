@@ -2,19 +2,13 @@
 
 SCRIPTPATH=`cd $(dirname "$0") && pwd`
 
-ROOT_DIR="$SCRIPTPATH/.."
-
-R_HOME=`cat $ROOT_DIR/.R_HOME`
+R_HOME=`cat .R_HOME`
 CHK=$1
 LIBRARY_DIR=`pwd`
-PKG="$ROOT_DIR/rir/"
 
-export EXTRA_LOAD_SO=`ls $ROOT_DIR/librir.*`
+PKG="$SCRIPTPATH/../rir/"
+
+export EXTRA_LOAD_SO="`ls $LIBRARY_DIR/librir.*`"
 export EXTRA_LOAD_R="$PKG/R/rir.R"
 
-if [ "$1" = "-headless" ]
-then
-    $R_HOME/bin/Rscript "${@:2}"
-else
-    $R_HOME/bin/R "$@"
-fi
+$R_HOME/bin/R "$@"
