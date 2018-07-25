@@ -104,3 +104,35 @@ Or use `make setup`
 [performance](http://ginger.ele.fit.cvut.cz/~oli/r-we-fast/)
 
 ![travis](https://api.travis-ci.org/reactorlabs/rir.svg?branch=master) ([travis](https://travis-ci.org/reactorlabs/rir))
+
+### Debugging a Travis build
+
+Debug mode has been enabled for our repository. To simplify the process, we have
+a script `tools/travis-debug.sh`.
+
+To set up, go to your [Travis-CI.org profile](https://travis-ci.org/profile)
+(note travis-ci.org, NOT travis-ci.com) and copy your API token. Paste it in
+a file `.travis_token` in the repository root.
+
+To use the debug script, first find the job you want to debug, e.g.:
+https://travis-ci.org/reactorlabs/rir/jobs/<job id>
+
+Now you can run `tools/travis-debug.sh <job id>` which will POST to the API
+endpoint and restart the build. Then you can go back to the job on the Travis
+website and use the SSH command to access the machine.
+
+The debug VM will be in a state before the `before_install` phase runs. You will
+have to manually run the build phases:
+
+```
+travis_run_before_install
+travis_run_install
+travis_run_before_script
+travis_run_script
+travis_run_after_success
+travis_run_after_failure
+travis_run_after_script
+```
+
+For more information, see:
+https://docs.travis-ci.com/user/running-build-in-debug-mode/
