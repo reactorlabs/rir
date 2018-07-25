@@ -7,8 +7,11 @@ if [ ! -d $SCRIPTPATH ]; then
 fi
 export SCRIPTPATH
 
-export BUILD_DIR=`pwd`
-if [ ! -f $BUILD_DIR/librir.* ]; then
+if [ -z "$RIR_BUILD" ]; then
+    RIR_BUILD=`pwd`
+fi
+export RIR_BUILD
+if [ ! -f $RIR_BUILD/librir.* ]; then
     echo "could not find librjit. are you in the correct directory?"
     exit 1
 fi
@@ -20,7 +23,7 @@ if [ "$#" -eq 1 ]; then
         exit 1
     fi
 else
-    R_HOME=`cat ${BUILD_DIR}/.R_HOME`
+    R_HOME=`cat ${RIR_BUILD}/.R_HOME`
     export R_HOME
 fi
 
@@ -46,9 +49,9 @@ function run_test {
   fi
   
   if test "$(uname)" = "Darwin"; then
-      LIB="dyn.load('${BUILD_DIR}/librir.dylib')"
+      LIB="dyn.load('${RIR_BUILD}/librir.dylib')"
   else
-      LIB="dyn.load('${BUILD_DIR}/librir.so')"
+      LIB="dyn.load('${RIR_BUILD}/librir.so')"
   fi
   
   name=`basename $test`

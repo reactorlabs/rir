@@ -2,16 +2,19 @@
 
 SCRIPTPATH=`cd $(dirname "$0") && pwd`
 
-R_HOME=`cat .R_HOME`
+if [ -z "$RIR_BUILD" ]; then
+    RIR_BUILD=`pwd`
+fi
+
+R_HOME=`cat $RIR_BUILD/.R_HOME`
 CHK=$1
-LIBRARY_DIR=`pwd`
 
 PKG="$SCRIPTPATH/../rir/"
 
-export EXTRA_LOAD_SO="`ls $LIBRARY_DIR/librir.*`"
+export EXTRA_LOAD_SO="`ls $RIR_BUILD/librir.*`"
 export EXTRA_LOAD_R="$PKG/R/rir.R"
-export R_ENABLE_JIT=2
 
+export R_ENABLE_JIT=2
 cd $R_HOME
 
 make $CHK

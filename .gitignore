@@ -32,3 +32,4 @@ benchmarks/
 .R_HOME
 .vscode/
 .travis_token
+/bin
