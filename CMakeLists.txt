@@ -24,6 +24,19 @@ MARK_AS_ADVANCED(
     CMAKE_CXX_FLAGS_SANITIZE
     CMAKE_C_FLAGS_SANITIZE)
 
+
+# Create proxy scripts for the scripts in /tools
+file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/_bin_create")
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/_bin_create/tests"           "#!/bin/sh\n${CMAKE_SOURCE_DIR}/tools/tests $@")
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/_bin_create/R"               "#!/bin/sh\n${CMAKE_SOURCE_DIR}/tools/R $@")
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/_bin_create/Rscript"         "#!/bin/sh\n${CMAKE_SOURCE_DIR}/tools/Rscript $@")
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/_bin_create/gnur-make"       "#!/bin/sh\n${CMAKE_SOURCE_DIR}/tools/gnur-make $@")
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/_bin_create/gnur-make-tests" "#!/bin/sh\n${CMAKE_SOURCE_DIR}/tools/gnur-make-tests $@")
+
+file(GLOB BIN_IN "${CMAKE_CURRENT_BINARY_DIR}/_bin_create/*")
+file(INSTALL ${BIN_IN} DESTINATION "${CMAKE_CURRENT_BINARY_DIR}/bin" FILE_PERMISSIONS OWNER_EXECUTE OWNER_READ GROUP_READ GROUP_EXECUTE)
+file(GLOB BIN "${CMAKE_CURRENT_BINARY_DIR}/bin/*")
+
 if(NOT DEFINED NO_LOCAL_CONFIG)
     #include any local configuration, overriding the default values above
     include(${CMAKE_SOURCE_DIR}/local/cmake.cmake OPTIONAL)
@@ -53,6 +66,11 @@ add_custom_target(default-gnur
     COMMAND cd ${CMAKE_SOURCE_DIR}/external/custom-r && make -j 8
 )
 
+add_custom_target(vanilla-gnur
+    DEPENDS dependencies
+    COMMAND cd ${CMAKE_SOURCE_DIR}/external/vanilla-r && make -j 8
+)
+
 add_custom_target(setup
     DEPENDS dependencies
     DEPENDS default-gnur
@@ -70,36 +88,8 @@ file(GLOB_RECURSE SRC "rir/src/*.cpp" "rir/src/*.c" "rir/*/*.cpp" "rir/src/*.h" 
 add_library(${PROJECT_NAME} SHARED ${SRC})
 add_dependencies(${PROJECT_NAME} setup-build-dir)
 
-set(PACKAGE_NAME "rir_0.1.tar.gz")
-add_custom_target(rpkg
-    COMMAND ${R_COMMAND} CMD build rir WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-)
-
-add_custom_target(rpkg_check
-    DEPENDS rpkg
-    COMMAND ${R_COMMAND} CMD check ${PACKAGE_NAME} --no-manual --no-vignettes
-    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-)
-
-add_custom_target(rpkg_install
-    DEPENDS rpkg
-    COMMAND ${CMAKE_COMMAND} -E make_directory ${R_LIBRARY_TREE} WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-    COMMAND ${R_COMMAND} CMD INSTALL -l ${R_LIBRARY_TREE} ${PACKAGE_NAME} WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-)
-
-
-file(GLOB_RECURSE BENCHMARKS "benchmarks/*.R" "benchmarks/*.r")
-
-add_custom_target(benchmarks SOURCES ${BENCHMARKS})
-
-# dummy target so that IDEs show the local folder in solution explorers. The local
-# folder is ignored by git and can be used for local scripts and stuff
-file(GLOB SCRIPTS "local/*.sh")
-add_custom_target(scripts SOURCES ${SCRIPTS})
-
 # dummy target so that IDEs show the tools folder in solution explorers
-file(GLOB TOOLS "tools/*.*")
-add_custom_target(tools SOURCES ${TOOLS})
+add_custom_target(tools SOURCES ${BIN})
 
 if(APPLE)
     set_target_properties(${PROJECT_NAME} PROPERTIES LINK_FLAGS "-L${R_HOME}/lib")

@@ -11,4 +11,4 @@ PKG="$SCRIPTPATH/../rir/"
 export EXTRA_LOAD_SO="`ls $LIBRARY_DIR/librir.*`"
 export EXTRA_LOAD_R="$PKG/R/rir.R"
 
-$R_HOME/bin/R "$@"
+$R_HOME/bin/Rscript "$@"

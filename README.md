@@ -4,7 +4,7 @@
 
     git clone https://github.com/reactorlabs/rir
     cd rir
-    cmake . -DCMAKE_BUILD_TYPE=debug
+    cmake -DCMAKE_BUILD_TYPE=debug .
     # Fetch and build dependencies. This will build gnur from source, which
     # takes a while. Note that on Mac OSX, you will need to install a fortran
     # compiler (eg. brew install gcc). 
@@ -15,23 +15,23 @@
 
 To run the basic test, just execute
 
-    tools/tests
+    bin/tests
 
 To run tests from gnur with rir enabled as a jit:
 
-    tools/gnur-make check-devel
+    bin/gnur-make check-devel
 
 ## Playing with RIR
 
 To run R with RIR use
 
-    tools/R
+    bin/R
 
 This loads a normal R environment with RIR replacing the R bytecode compiler
 and interpreter. If you want to automatically compile functions when they
 are executed use
 
-    R_ENABLE_JIT=2 tools/R
+    R_ENABLE_JIT=2 bin/R
 
 Functions compiled to RIR can be inspected using `rir.disassemble`.
 
@@ -41,6 +41,25 @@ To make changes to this repository please open a pull request. Ask somebody to
 review your changes and make sure travis is green.
 
 Caveat: we use submodules. If you are in the habit of blindly `git commit .` you are up for surprises. Please make sure that you do not by accident commit an updated submodule reference for external/custom-r.
+
+### Off-Tree builds
+
+You can have multiple builds at the same time.
+If you want to use that feature, you need to *not* run cmake in the main directory.
+Instead do this:
+
+     git clone https://github.com/reactorlabs/rir
+     cd rir
+     mkdir -p build/debug build/release
+     cd build/debug
+     cmake -DCMAKE_BUILD_TYPE=debug ../..
+     make setup && make
+     cd ../release
+     cmake -DCMAKE_BUILD_TYPE=release ../..
+
+### Building with ninja
+
+For faster build use ninja. To generate ninja files instead of makefiles add `-GNinja` to the cmake commands.
 
 ### Making changes to gnur
 
@@ -100,8 +119,6 @@ Fetch updated R:
 Or use `make setup`
 
 ## Build Status
-
-[performance](http://ginger.ele.fit.cvut.cz/~oli/r-we-fast/)
 
 ![travis](https://api.travis-ci.org/reactorlabs/rir.svg?branch=master) ([travis](https://travis-ci.org/reactorlabs/rir))
 
