@@ -327,15 +327,25 @@ bool StackMachine::tryRunCurrentBC(const Rir2Pir& rir2pir, Builder& insert) {
         break;
     }
 
-#define BINOP(Name, Op)                                                        \
+#define BINOP_NOENV(Name, Op)                                                  \
     case Opcode::Op: {                                                         \
         auto rhs = pop();                                                      \
         auto lhs = pop();                                                      \
         push(insert(new Name(lhs, rhs, getSrcIdx())));                         \
         break;                                                                 \
     }
-        BINOP(LOr, lgl_or_);
-        BINOP(LAnd, lgl_and_);
+        BINOP_NOENV(LOr, lgl_or_);
+        BINOP_NOENV(LAnd, lgl_and_);
+#undef BINOP_NOENV
+
+#define BINOP(Name, Op)                                                        \
+    case Opcode::Op: {                                                         \
+        auto rhs = pop();                                                      \
+        auto lhs = pop();                                                      \
+        push(insert(new Name(lhs, rhs, env, getSrcIdx())));                    \
+        break;                                                                 \
+    }
+
         BINOP(Lt, lt_);
         BINOP(Gt, gt_);
         BINOP(Gte, le_);
@@ -362,15 +372,23 @@ bool StackMachine::tryRunCurrentBC(const Rir2Pir& rir2pir, Builder& insert) {
 #define UNOP(Name, Op)                                                         \
     case Opcode::Op: {                                                         \
         v = pop();                                                             \
-        push(insert(new Name(v)));                                             \
+        push(insert(new Name(v, env)));                                        \
         break;                                                                 \
     }
         UNOP(Plus, uplus_);
         UNOP(Minus, uminus_);
-        UNOP(Inc, inc_);
         UNOP(Not, not_);
         UNOP(Length, length_);
 #undef UNOP
+
+#define UNOP_NOENV(Name, Op)                                                   \
+    case Opcode::Op: {                                                         \
+        v = pop();                                                             \
+        push(insert(new Name(v)));                                             \
+        break;                                                                 \
+    }
+        UNOP_NOENV(Inc, inc_);
+#undef UNOP_NOENV
 
     case Opcode::is_:
         push(insert(new Is(bc.immediate.i, pop())));

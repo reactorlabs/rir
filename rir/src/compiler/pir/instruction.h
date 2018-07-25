@@ -706,7 +706,34 @@ class FLI(Identical, 2, Effect::None, EnvAccess::None) {
                               {{PirType::any(), PirType::any()}}, {{a, b}}) {}
 };
 
-#define SAFE_BINOP(Name, Type)                                                 \
+#define BINOP(Name, Type)                                                      \
+    class FLI(Name, 3, Effect::None, EnvAccess::Leak) {                        \
+      public:                                                                  \
+        Name(Value* lhs, Value* rhs, Value* env, unsigned src)                 \
+            : FixedLenInstruction(Type, {{PirType::val(), PirType::val()}},    \
+                                  {{lhs, rhs}}, env) {                         \
+            srcIdx = src;                                                      \
+        }                                                                      \
+    }
+
+BINOP(Gte, PirType::val());
+BINOP(Lte, PirType::val());
+BINOP(Mul, PirType::val());
+BINOP(Div, PirType::val());
+BINOP(IDiv, PirType::val());
+BINOP(Mod, PirType::val());
+BINOP(Add, PirType::val());
+BINOP(Colon, PirType::val());
+BINOP(Pow, PirType::val());
+BINOP(Sub, PirType::val());
+BINOP(Gt, RType::logical);
+BINOP(Lt, RType::logical);
+BINOP(Neq, RType::logical);
+BINOP(Eq, RType::logical);
+
+#undef BINOP
+
+#define BINOP_NOENV(Name, Type)                                                \
     class FLI(Name, 2, Effect::None, EnvAccess::None) {                        \
       public:                                                                  \
         Name(Value* lhs, Value* rhs, unsigned src)                             \
@@ -716,39 +743,25 @@ class FLI(Identical, 2, Effect::None, EnvAccess::None) {
         }                                                                      \
     }
 
-SAFE_BINOP(Gte, PirType::val());
-SAFE_BINOP(Lte, PirType::val());
-SAFE_BINOP(Mul, PirType::val());
-SAFE_BINOP(Div, PirType::val());
-SAFE_BINOP(IDiv, PirType::val());
-SAFE_BINOP(Mod, PirType::val());
-SAFE_BINOP(Add, PirType::val());
-SAFE_BINOP(Colon, PirType::val());
-SAFE_BINOP(Pow, PirType::val());
-SAFE_BINOP(Sub, PirType::val());
-SAFE_BINOP(Gt, RType::logical);
-SAFE_BINOP(Lt, RType::logical);
-SAFE_BINOP(Neq, RType::logical);
-SAFE_BINOP(Eq, RType::logical);
-SAFE_BINOP(LAnd, RType::logical);
-SAFE_BINOP(LOr, RType::logical);
+BINOP_NOENV(LAnd, RType::logical);
+BINOP_NOENV(LOr, RType::logical);
 
-#undef SAFE_BINOP
+#undef BINOP_NOENV
 
-#define SAFE_UNOP(Name)                                                        \
-    class FLI(Name, 1, Effect::None, EnvAccess::None) {                        \
+#define UNOP(Name)                                                             \
+    class FLI(Name, 2, Effect::None, EnvAccess::Leak) {                        \
       public:                                                                  \
-        Name(Value* v)                                                         \
-            : FixedLenInstruction(PirType::val(), {{PirType::val()}}, {{v}}) { \
-        }                                                                      \
+        Name(Value* v, Value* env)                                             \
+            : FixedLenInstruction(PirType::val(), {{PirType::val()}}, {{v}},   \
+                                  env) {}                                      \
     }
 
-SAFE_UNOP(Not);
-SAFE_UNOP(Plus);
-SAFE_UNOP(Minus);
-SAFE_UNOP(Length);
+UNOP(Not);
+UNOP(Plus);
+UNOP(Minus);
+UNOP(Length);
 
-#undef SAFE_UNOP
+#undef UNOP
 #undef FLI
 
 #define VLI(type, io, env)                                                     \
