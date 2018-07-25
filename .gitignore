@@ -33,3 +33,4 @@ benchmarks/
 .vscode/
 .travis_token
 /bin
+.bin_create
