@@ -66,8 +66,12 @@ add_custom_target(default-gnur
     COMMAND cd ${CMAKE_SOURCE_DIR}/external/custom-r && make -j 8
 )
 
+add_custom_target(dependencies-vanilla
+    COMMAND ${CMAKE_SOURCE_DIR}/tools/sync.sh  --vanilla
+)
+
 add_custom_target(vanilla-gnur
-    DEPENDS dependencies
+    DEPENDS dependencies-vanilla
     COMMAND cd ${CMAKE_SOURCE_DIR}/external/vanilla-r && make -j 8
 )
 
