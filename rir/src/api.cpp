@@ -53,21 +53,6 @@ REXPORT SEXP rir_compile(SEXP what, SEXP env) {
 
         Rf_copyMostAttrib(what, result);
 
-#ifdef ENABLE_SLOWASSERT
-        std::unique_ptr<pir::Module> m(new pir::Module);
-        pir::Rir2PirCompiler cmp(m.get());
-        auto ignore = []() {};
-        cmp.compileClosure(result,
-                           [&](pir::Closure* c) {
-                               cmp.optimizeModule();
-                               pir::Pir2RirCompiler p2r;
-                               // TODO, next step: run the compiled code
-                               p2r.dryRun = true;
-                               p2r.compile(c, result);
-                           },
-                           ignore);
-#endif
-
         UNPROTECT(1);
         return result;
     } else {
@@ -110,11 +95,15 @@ REXPORT SEXP rir_body(SEXP cls) {
     return f->container();
 }
 
-REXPORT SEXP pir_compile(SEXP what, SEXP verbose) {
+REXPORT SEXP pir_compile(SEXP what, SEXP verbose, SEXP dryRun_) {
     bool debug = false;
+    bool dryRun = false;
     if (verbose && TYPEOF(verbose) == LGLSXP && Rf_length(verbose) > 0 &&
         LOGICAL(verbose)[0])
         debug = true;
+    if (dryRun_ && TYPEOF(dryRun_) == LGLSXP && Rf_length(dryRun_) > 0 &&
+        LOGICAL(dryRun_)[0])
+        dryRun = true;
 
     if (!isValidClosureSEXP(what))
         Rf_error("not a compiled closure");
@@ -139,6 +128,7 @@ REXPORT SEXP pir_compile(SEXP what, SEXP verbose) {
                            // compile back to rir
                            pir::Pir2RirCompiler p2r;
                            p2r.verbose = debug;
+                           p2r.dryRun = dryRun;
                            p2r.compile(c, what);
                        },
                        [&]() {
@@ -157,12 +147,23 @@ REXPORT SEXP pir_tests() {
 
 // startup ---------------------------------------------------------------------
 
-SEXP pirOpt(SEXP fun) { return pir_compile(fun, R_FalseValue); }
+SEXP pirOpt(SEXP fun) { return pir_compile(fun, R_FalseValue, R_FalseValue); }
 
 bool startup() {
     auto pir = getenv("PIR_ENABLE");
-    if (pir && std::string(pir).compare("1") == 0) {
+    if (pir && std::string(pir).compare("on") == 0) {
         initializeRuntime(rir_compile, pirOpt);
+    } else if (pir && std::string(pir).compare("force") == 0) {
+        initializeRuntime(
+            [](SEXP f, SEXP env) { return pirOpt(rir_compile(f, env)); },
+            [](SEXP f) { return f; });
+    } else if (pir && std::string(pir).compare("force_dryrun") == 0) {
+        initializeRuntime(
+            [](SEXP f, SEXP env) {
+                return pir_compile(rir_compile(f, env), R_FalseValue,
+                                   R_TrueValue);
+            },
+            [](SEXP f) { return f; });
     } else {
         initializeRuntime(rir_compile, [](SEXP f) { return f; });
     }
