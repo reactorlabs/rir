@@ -41,8 +41,7 @@ REXPORT SEXP rir_disassemble(SEXP what, SEXP verbose) {
     return R_NilValue;
 }
 
-REXPORT SEXP rir_compile(SEXP what, SEXP env = NULL) {
-
+REXPORT SEXP rir_compile(SEXP what, SEXP env) {
     // TODO make this nicer
     if (TYPEOF(what) == CLOSXP) {
         SEXP body = BODY(what);
@@ -142,7 +141,10 @@ REXPORT SEXP pir_compile(SEXP what, SEXP verbose) {
                            p2r.verbose = debug;
                            p2r.compile(c, what);
                        },
-                       []() { std::cerr << "Compilation failed\n"; });
+                       [&]() {
+                           if (verbose == R_TrueValue)
+                               std::cerr << "Compilation failed\n";
+                       });
 
     delete m;
     return what;
@@ -155,13 +157,15 @@ REXPORT SEXP pir_tests() {
 
 // startup ---------------------------------------------------------------------
 
-SEXP dummyOpt(SEXP opt) {
-    // Currently unused
-    return opt;
-}
+SEXP pirOpt(SEXP fun) { return pir_compile(fun, R_FalseValue); }
 
 bool startup() {
-    initializeRuntime(rir_compile, dummyOpt);
+    auto pir = getenv("PIR_ENABLE");
+    if (pir && std::string(pir).compare("1") == 0) {
+        initializeRuntime(rir_compile, pirOpt);
+    } else {
+        initializeRuntime(rir_compile, [](SEXP f) { return f; });
+    }
     return true;
 }
 

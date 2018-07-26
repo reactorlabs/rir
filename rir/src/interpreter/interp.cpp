@@ -609,9 +609,16 @@ SEXP rirCall(const CallContext& call, Context* ctx) {
 
     unsigned slot = dispatch(call, table);
     bool needsEnv = slot == 0;
-
     Function* fun = table->at(slot);
+
     fun->registerInvocation();
+    if (slot == 0 && fun->invocationCount == 2) {
+        ctx->optimizer(call.callee());
+        slot = dispatch(call, table);
+        needsEnv = slot == 0;
+        fun = table->at(slot);
+        fun->registerInvocation();
+    }
 
     SEXP env = R_NilValue;
 

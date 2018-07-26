@@ -19,11 +19,12 @@ class TheInliner {
     TheInliner(Closure* function) : function(function) {}
 
     void operator()() {
+        size_t fuel = 5;
 
         Visitor::run(function->entry, [&](BB* bb) {
             // Dangerous iterater usage, works since we do only update it in
             // one place.
-            for (auto it = bb->begin(); it != bb->end(); it++) {
+            for (auto it = bb->begin(); it != bb->end() && fuel; it++) {
                 auto call = CallInstruction::CastCall(*it);
                 if (!call)
                     continue;
@@ -46,6 +47,8 @@ class TheInliner {
                 } else {
                     continue;
                 }
+
+                fuel--;
 
                 BB* split =
                     BBTransform::split(function->nextBBId++, bb, it, function);

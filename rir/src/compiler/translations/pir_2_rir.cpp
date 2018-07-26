@@ -1087,16 +1087,21 @@ rir::Function* Pir2Rir::finalize() {
 
 } // namespace
 
-rir::Function* Pir2RirCompiler::compile(Closure* cls, SEXP origin) {
+void Pir2RirCompiler::compile(Closure* cls, SEXP origin) {
+    if (done.count(cls))
+        return;
+    // Avoid recursivly compiling the same closure
+    done.insert(cls);
+
     auto table = DispatchTable::unpack(BODY(origin));
     if (table->available(1))
-        return table->at(1);
+        return;
 
     Pir2Rir pir2rir(*this, cls);
     auto fun = pir2rir.finalize();
 
     if (dryRun)
-        return fun;
+        return;
 
     Protect p(fun->container());
 
@@ -1110,8 +1115,6 @@ rir::Function* Pir2RirCompiler::compile(Closure* cls, SEXP origin) {
     fun->signature = oldFun->signature;
 
     table->put(1, fun);
-
-    return fun;
 }
 
 } // namespace pir

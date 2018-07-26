@@ -47,6 +47,8 @@ before_script:
 
 script:
   - ./tools/tests
+  - R_ENABLE_JIT=2 ./tools/tests
+  - R_ENABLE_JIT=2 PIR_ENABLE=1 ./tools/tests
   - echo "running make $CHECK on a $BUILD build with CORES=$CORES"
   - TEST_MC_CORES=$CORES ./tools/gnur-make-tests $CHECK
 
