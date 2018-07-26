@@ -11,10 +11,10 @@ matrix:
       env: CORES=2 CHECK=TAGS BUILD=release
     - os: linux
       compiler: gcc
-      env: CORES=2 CHECK=check BUILD=debug ENABLE_VALGRIND=1
+      env: CORES=2 CHECK=check BUILD=debug PIR_ENABLE=force_dryrun
     - os: linux
       compiler: gcc
-      env: CHECK=test-all-devel BUILD=release ENABLE_VALGRIND=1
+      env: CHECK=test-all-devel BUILD=release PIR_ENABLE=force_dryrun ENABLE_VALGRIND=1
     - os: linux
       compiler: gcc
       env: CHECK=check-recommended BUILD=release
@@ -46,9 +46,17 @@ before_script:
   - make -j2
 
 script:
-  - ./tools/tests
+  - ./bin/tests
+  - echo "JIT enabled"
+  - R_ENABLE_JIT=2 ./bin/tests
+  - echo "+ PIR enabled"
+  - R_ENABLE_JIT=2 PIR_ENABLE=on ./bin/tests
+  - echo "+ PIR forced (dryrun)"
+  - R_ENABLE_JIT=2 PIR_ENABLE=force_dryrun ./bin/tests
+  - echo "+ PIR forced"
+  - R_ENABLE_JIT=2 PIR_ENABLE=force ENABLE_VALGRIND=0 ./bin/tests
   - echo "running make $CHECK on a $BUILD build with CORES=$CORES"
-  - TEST_MC_CORES=$CORES ./tools/gnur-make-tests $CHECK
+  - TEST_MC_CORES=$CORES ./bin/gnur-make-tests $CHECK
 
 cache:
   ccache: true

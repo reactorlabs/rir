@@ -1,11 +1,13 @@
 #ifndef API_H_
 #define API_H_
 
+#include "R/r.h"
+
 #define REXPORT extern "C"
 
 extern int R_ENABLE_JIT;
-extern int RJIT_DEBUG;
 
-extern int rjit_startup;
+REXPORT SEXP rir_eval(SEXP, SEXP);
+REXPORT SEXP pir_compile(SEXP, SEXP, SEXP);
 
 #endif // API_H_

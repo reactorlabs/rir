@@ -3,6 +3,8 @@
 #include "../pir/module.h"
 #include "runtime/Function.h"
 
+#include <unordered_set>
+
 namespace rir {
 namespace pir {
 
@@ -11,7 +13,10 @@ class Pir2RirCompiler {
     bool verbose = false;
     bool dryRun = false;
 
-    rir::Function* compile(Closure* cls, SEXP origin);
+    void compile(Closure* cls, SEXP origin);
+
+  private:
+    std::unordered_set<Closure*> done;
 };
 
 } // namespace pir
