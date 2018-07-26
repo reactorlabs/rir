@@ -354,8 +354,9 @@ SEXP rirCallTrampoline(const CallContext& call, Function* fun, SEXP env,
     return result;
 }
 
-SEXP rirCallTrampoline(const CallContext& call, Function* fun, Context* ctx) {
-    return rirCallTrampoline(call, fun, R_NilValue, R_NilValue, call.stackArgs,
+SEXP rirCallTrampoline(const CallContext& call, Function* fun, SEXP arglist,
+                       Context* ctx) {
+    return rirCallTrampoline(call, fun, (SEXP)NULL, arglist, call.stackArgs,
                              ctx);
 }
 
@@ -583,7 +584,7 @@ SEXP rirCall(const CallContext& call, SEXP actuals, Context* ctx) {
         result = rirCallTrampoline(call, fun, env, actuals, ctx);
         UNPROTECT(1);
     } else {
-        result = rirCallTrampoline(call, fun, ctx);
+        result = rirCallTrampoline(call, fun, actuals, ctx);
     }
 
     assert(result);
@@ -623,7 +624,14 @@ SEXP rirCall(const CallContext& call, Context* ctx) {
         result = rirCallTrampoline(call, fun, env, arglist, ctx);
         UNPROTECT(2);
     } else {
-        result = rirCallTrampoline(call, fun, ctx);
+        auto arglist = createLegacyLazyArgsList(call, ctx);
+        PROTECT(arglist);
+        // TODO: find a way to lazily create the argslist,
+        // only when needed. Afaik, the argslist is only accessed ever in
+        // do_usemethod, therefore it should be possible to have our own
+        // do_usemethod, that lazily creates the argslist when needed.
+        result = rirCallTrampoline(call, fun, arglist, ctx);
+        UNPROTECT(1);
     }
 
     assert(result);
@@ -1109,8 +1117,7 @@ SEXP evalRirCodeExtCaller(Code* c, Context* ctx, SEXP* env) {
 
 SEXP evalRirCode(Code* c, Context* ctx, SEXP* env,
                  const CallContext* callCtxt) {
-    assert(*env);
-    assert((*env != R_NilValue) || (callCtxt != nullptr));
+    assert(*env || (callCtxt != nullptr));
 
     extern int R_PPStackTop;
 
@@ -1140,7 +1147,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env,
     R_Visible = TRUE;
 
     auto getenv = [&env]() -> SEXP {
-        assert(*env && *env != R_NilValue);
+        assert(*env);
         return *env;
     };
 
