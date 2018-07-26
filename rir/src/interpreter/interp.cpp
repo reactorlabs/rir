@@ -617,7 +617,6 @@ SEXP rirCall(const CallContext& call, Context* ctx) {
         slot = dispatch(call, table);
         needsEnv = slot == 0;
         fun = table->at(slot);
-        fun->registerInvocation();
     }
 
     SEXP env = R_NilValue;
