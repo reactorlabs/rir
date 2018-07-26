@@ -4,6 +4,7 @@
 #include "R_ext/Parse.h"
 #include "analysis/query.h"
 #include "analysis/verifier.h"
+#include "api.h"
 #include "ir/Compiler.h"
 #include "pir/pir_impl.h"
 #include "translations/pir_2_rir.h"
@@ -231,9 +232,6 @@ bool checkPir2Rir(SEXP expected, SEXP result) {
     return R_compute_identical(expected, result, 15) == TRUE;
 }
 
-extern "C" SEXP rir_eval(SEXP, SEXP);
-extern "C" SEXP pir_compile(SEXP, SEXP);
-
 bool testPir2Rir(std::string name, std::string fun, std::string args,
                  bool useSame = false, bool verbose = false) {
     Protect p;
@@ -277,7 +275,7 @@ bool testPir2Rir(std::string name, std::string fun, std::string args,
         rCall = createRWrapperCall(wrapper);
     }
 
-    pir_compile(rirFun, R_FalseValue);
+    pir_compile(rirFun, R_FalseValue, R_FalseValue);
 
     auto after = p(Rf_eval(rCall, execEnv));
     if (verbose) {
