@@ -95,12 +95,8 @@ REXPORT SEXP rir_body(SEXP cls) {
     return f->container();
 }
 
-REXPORT SEXP pir_compile(SEXP what, SEXP verbose, SEXP dryRun_) {
-    bool debug = false;
+REXPORT SEXP pir_compile(SEXP what, unsigned int verbose, SEXP dryRun_) {
     bool dryRun = false;
-    if (verbose && TYPEOF(verbose) == LGLSXP && Rf_length(verbose) > 0 &&
-        LOGICAL(verbose)[0])
-        debug = true;
     if (dryRun_ && TYPEOF(dryRun_) == LGLSXP && Rf_length(dryRun_) > 0 &&
         LOGICAL(dryRun_)[0])
         dryRun = true;
@@ -117,22 +113,19 @@ REXPORT SEXP pir_compile(SEXP what, SEXP verbose, SEXP dryRun_) {
     // compile to pir
     pir::Module* m = new pir::Module;
     pir::Rir2PirCompiler cmp(m);
-    cmp.setVerbose(debug);
+    cmp.setVerbose(verbose);
     cmp.compileClosure(what,
                        [&](pir::Closure* c) {
                            cmp.optimizeModule();
 
-                           if (debug)
-                               m->print();
-
                            // compile back to rir
                            pir::Pir2RirCompiler p2r;
-                           p2r.verbose = debug;
+                           p2r.verbose = verbose;
                            p2r.dryRun = dryRun;
                            p2r.compile(c, what);
                        },
                        [&]() {
-                           if (verbose == R_TrueValue)
+                           if (verbose > 0)
                                std::cerr << "Compilation failed\n";
                        });
 
@@ -147,7 +140,18 @@ REXPORT SEXP pir_tests() {
 
 // startup ---------------------------------------------------------------------
 
-SEXP pirOpt(SEXP fun) { return pir_compile(fun, R_FalseValue, R_FalseValue); }
+uint pir_verbose = std::stoul(getenv("PIR_VERBOSE"), nullptr, 0);
+/********** VERBOSE BIT MODES ***********
+1: RIR Original version
+2: PIR Raw
+3: PIR Optimization phases
+4: PIR Inlining phases
+5: PIR Convert to CSSA
+6: PIR After liveness analysis phase
+7: RIR After stack allocation phase 
+8: RIR After passing through PIR*/
+
+SEXP pirOpt(SEXP fun) { return pir_compile(fun, pir_verbose, R_FalseValue); }
 
 bool startup() {
     auto pir = getenv("PIR_ENABLE");
@@ -160,7 +164,7 @@ bool startup() {
     } else if (pir && std::string(pir).compare("force_dryrun") == 0) {
         initializeRuntime(
             [](SEXP f, SEXP env) {
-                return pir_compile(rir_compile(f, env), R_FalseValue,
+                return pir_compile(rir_compile(f, env), pir_verbose,
                                    R_TrueValue);
             },
             [](SEXP f) { return f; });

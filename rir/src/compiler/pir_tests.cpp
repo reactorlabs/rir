@@ -275,7 +275,7 @@ bool testPir2Rir(std::string name, std::string fun, std::string args,
         rCall = createRWrapperCall(wrapper);
     }
 
-    pir_compile(rirFun, R_FalseValue, R_FalseValue);
+    pir_compile(rirFun, 0, R_FalseValue);
 
     auto after = p(Rf_eval(rCall, execEnv));
     if (verbose) {

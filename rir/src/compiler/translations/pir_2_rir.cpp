@@ -93,13 +93,13 @@ class SSAAllocator {
 
     SSAAllocator(Code* code, bool verbose)
         : cfg(code), dom(code), code(code), bbsSize(code->nextBBId) {
-        computeLiveness(verbose);
+        computeLiveness(verbose & 0X10000);
         computeStackAllocation();
         computeAllocation();
     }
 
     // Run backwards analysis to compute livenessintervals
-    void computeLiveness(bool verbose = false) {
+    void computeLiveness(bool verbose = 0) {
         // temp list of live out sets for every BB
         std::unordered_map<BB*, std::set<Value*>> liveAtEnd(bbsSize);
 
@@ -621,12 +621,12 @@ class Pir2Rir {
 size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
     toCSSA(code);
 
-    if (compiler.verbose)
+    if (compiler.shouldPrintCSSA())
         code->print(std::cout);
 
     SSAAllocator alloc(code, compiler.verbose);
 
-    if (compiler.verbose)
+    if (compiler.shouldPrintAllocations())
         alloc.print();
 
     alloc.verify();
@@ -1099,6 +1099,11 @@ void Pir2RirCompiler::compile(Closure* cls, SEXP origin) {
 
     Pir2Rir pir2rir(*this, cls);
     auto fun = pir2rir.finalize();
+
+    if (shouldPrintRIRAfterPIR()){
+        std::cout << "============= Final PIR Version ========\n";
+        fun->body()->print();
+    }
 
     if (dryRun)
         return;

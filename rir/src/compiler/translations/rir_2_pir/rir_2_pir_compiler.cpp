@@ -38,7 +38,6 @@ void Rir2PirCompiler::compileClosure(SEXP closure, MaybeCls success,
     }
 
     FormalArgs formals(FORMALS(closure));
-
     rir::Function* srcFunction = tbl->first();
     compileClosure(srcFunction, formals, module->getEnv(CLOENV(closure)),
                    success, fail);
@@ -64,12 +63,20 @@ void Rir2PirCompiler::compileClosure(rir::Function* srcFunction,
         srcFunction, formals.names, closureEnv, [&](Closure* pirFunction) {
             Builder builder(pirFunction, closureEnv);
             Rir2Pir rir2pir(*this, srcFunction);
+            if (isVerbose()) {
+                std::cout << "\n\n**************************************************************\n";
+                std::cout << "*********** Start compiling:" << srcFunction << " **********\n";
+                std::cout << "**************************************************************\n";
+                if (shouldPrintOriginalVersion()) {
+                    std::cout << "=============== Original version:\n";
+                    srcFunction->body()->print();                    
+                }
+            }
+
             if (rir2pir.tryCompile(srcFunction->body(), builder)) {
                 if (isVerbose()) {
-                    std::cout << " ========= Done compiling " << srcFunction
-                              << "\n";
+                    std::cout << " ========= Compiled to PIR Version:";
                     builder.function->print(std::cout);
-                    std::cout << " ==========\n";
                 }
                 if (!Verify::apply(pirFunction)) {
                     failed = true;
@@ -78,14 +85,17 @@ void Rir2PirCompiler::compileClosure(rir::Function* srcFunction,
                                   << srcFunction << "\n";
                     }
                     assert(false);
+                    std::cout << " ========= Finish compiling " << srcFunction << "\n\n";
                     return false;
                 }
+                std::cout << " ========= Finish compiling " << srcFunction << "\n\n";
                 return true;
             }
-            failed = true;
             if (isVerbose()) {
                 std::cout << " Failed p2r compile " << srcFunction << "\n";
+                std::cout << " ========= Finish compiling " << srcFunction << "\n\n";
             }
+            failed = true;
             return false;
         });
 
@@ -113,8 +123,9 @@ void Rir2PirCompiler::optimizeModule() {
             if (verbose)
                 v.saveVersion();
             Inline::apply(f);
-            if (verbose)
+            if (shouldPrintInliningVersions()) {
                 printAfterPass("inline", "Inlining", f, passnr++);
+            }
             applyOptimizations(f, "Optimizations After Inlining");
         });
     }
@@ -133,7 +144,7 @@ void Rir2PirCompiler::applyOptimizations(Closure* f,
     size_t passnr = 0;
     for (auto& translation : this->translations) {
         translation->apply(f);
-        if (isVerbose())
+        if (shouldPrintOptimizations())
             printAfterPass(translation->getName(), category, f, passnr++);
 #if 0
         assert(Verify::apply(f));

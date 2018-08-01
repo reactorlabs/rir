@@ -26,10 +26,14 @@ class RirCompiler {
     }
 
     bool isVerbose() { return verbose; }
-    void setVerbose(bool v) { verbose = v; }
+    bool shouldPrintOriginalVersion() { return verbose & 0X1; }
+    bool shouldPrintCompiledVersion() { return verbose & 0X10; }
+    bool shouldPrintOptimizations() { return verbose & 0X100; }
+    bool shouldPrintInliningVersions() { return verbose & 0X1000; }
+    void setVerbose(uint v) { verbose = v; }
 
   private:
-    bool verbose = false;
+    uint verbose = false;
 
   protected:
     std::vector<PirTranslator*> translations;
