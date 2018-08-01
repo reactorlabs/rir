@@ -5,3 +5,4 @@
 [submodule "external/vanilla-r"]
 	path = external/vanilla-r
 	url = https://github.com/reactorlabs/gnur.git
+	ignore = untracked
