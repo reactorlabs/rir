@@ -64,12 +64,15 @@ void Rir2PirCompiler::compileClosure(rir::Function* srcFunction,
             Builder builder(pirFunction, closureEnv);
             Rir2Pir rir2pir(*this, srcFunction);
             if (isVerbose()) {
-                std::cout << "\n\n**************************************************************\n";
-                std::cout << "*********** Start compiling:" << srcFunction << " **********\n";
-                std::cout << "**************************************************************\n";
+                std::cout << "\n\n*********************************************"
+                             "*****************\n";
+                std::cout << "*********** Start compiling:" << srcFunction
+                          << " **********\n";
+                std::cout << "*************************************************"
+                             "*************\n";
                 if (shouldPrintOriginalVersion()) {
                     std::cout << "=============== Original version:\n";
-                    srcFunction->body()->print();                    
+                    srcFunction->body()->print();
                 }
             }
 
@@ -85,15 +88,18 @@ void Rir2PirCompiler::compileClosure(rir::Function* srcFunction,
                                   << srcFunction << "\n";
                     }
                     assert(false);
-                    std::cout << " ========= Finish compiling " << srcFunction << "\n\n";
+                    std::cout << " ========= Finish compiling " << srcFunction
+                              << "\n\n";
                     return false;
                 }
-                std::cout << " ========= Finish compiling " << srcFunction << "\n\n";
+                std::cout << " ========= Finish compiling " << srcFunction
+                          << "\n\n";
                 return true;
             }
             if (isVerbose()) {
                 std::cout << " Failed p2r compile " << srcFunction << "\n";
-                std::cout << " ========= Finish compiling " << srcFunction << "\n\n";
+                std::cout << " ========= Finish compiling " << srcFunction
+                          << "\n\n";
             }
             failed = true;
             return false;

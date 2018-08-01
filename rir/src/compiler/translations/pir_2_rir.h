@@ -20,7 +20,7 @@ class Pir2RirCompiler {
     bool shouldPrintLiveness() { return verbose & 0X1000000; }
     bool shouldPrintRIRAfterPIR() { return verbose & 0X10000000; }
     bool isVerbose() { return verbose; }
-    
+
   private:
     std::unordered_set<Closure*> done;
 };
