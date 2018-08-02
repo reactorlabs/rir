@@ -1045,7 +1045,7 @@ void Pir2Rir::toCSSA(Code* code) {
 
 size_t Pir2Rir::getPromiseIdx(Context& ctx, Promise* p) {
     if (!promises.count(p)) {
-        ctx.pushPromise(R_NilValue);
+        ctx.pushPromise(src_pool_at(globalContext(), p->ast));
         size_t localsCnt = compileCode(ctx, p);
         promises[p] = ctx.finalizeCode(localsCnt);
     }
@@ -1053,8 +1053,6 @@ size_t Pir2Rir::getPromiseIdx(Context& ctx, Promise* p) {
 }
 
 rir::Function* Pir2Rir::finalize() {
-    // TODO: asts are NIL for now, how to deal with that? after inlining
-    // functions and asts don't correspond anymore
 
     FunctionWriter function = FunctionWriter::create();
     Context ctx(function);
