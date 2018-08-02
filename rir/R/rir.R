@@ -43,3 +43,9 @@ rir.eval <- function(what, env = globalenv()) {
 rir.body <- function(f) {
     .Call("rir_body", f);
 }
+
+# breakpoint during evaluation
+# insert a call to `debug.break()` in R code and get a breakpoint when the function is evaluated
+debug.break <- function() {
+    .Call("debug_break")
+}
