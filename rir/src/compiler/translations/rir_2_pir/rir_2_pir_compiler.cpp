@@ -64,12 +64,11 @@ void Rir2PirCompiler::compileClosure(rir::Function* srcFunction,
             Builder builder(pirFunction, closureEnv);
             Rir2Pir rir2pir(*this, srcFunction);
             if (isVerbose()) {
-                std::cout << "\n\n*********************************************"
-                             "*****************\n";
-                std::cout << "*********** Start compiling:" << srcFunction
-                          << " **********\n";
-                std::cout << "*************************************************"
-                             "*************\n";
+                // clang-format off
+                std::cout << "\n\n**************************************************************\n";
+                std::cout << "*********** Start compiling:" << srcFunction << " **********\n";
+                std::cout << "**************************************************************\n";
+                // clang-format on
                 if (shouldPrintOriginalVersion()) {
                     std::cout << "=============== Original version:\n";
                     auto it = srcFunction->begin();
