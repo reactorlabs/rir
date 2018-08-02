@@ -140,7 +140,9 @@ REXPORT SEXP pir_tests() {
 
 // startup ---------------------------------------------------------------------
 
-uint pir_verbose = std::stoul(getenv("PIR_VERBOSE"), nullptr, 0);
+uint pir_verbose = (getenv("PIR_VERBOSE")) ? 
+     std::stoul(getenv("PIR_VERBOSE"), nullptr, 0) : 0;
+
 /********** VERBOSE BIT MODES ***********
 1: RIR Original version
 2: PIR Raw
