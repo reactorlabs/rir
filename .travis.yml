@@ -5,7 +5,6 @@ language: cpp
 matrix:
   include:
     - os: osx
-      osx_image: xcode9.3
       compiler: clang
       # TAGS is some dummy make rule. currently 'make check' is broken on osx.
       env: CORES=2 CHECK=TAGS BUILD=release
