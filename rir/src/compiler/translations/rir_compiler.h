@@ -27,9 +27,9 @@ class RirCompiler {
 
     bool isVerbose() { return verbose; }
     bool shouldPrintOriginalVersion() { return verbose & 0X1; }
-    bool shouldPrintCompiledVersion() { return verbose & 0X10; }
-    bool shouldPrintOptimizations() { return verbose & 0X100; }
-    bool shouldPrintInliningVersions() { return verbose & 0X1000; }
+    bool shouldPrintCompiledVersion() { return verbose & 0X2; }
+    bool shouldPrintOptimizations() { return verbose & 0X4; }
+    bool shouldPrintInliningVersions() { return verbose & 0X8; }
     void setVerbose(uint v) { verbose = v; }
 
   private:

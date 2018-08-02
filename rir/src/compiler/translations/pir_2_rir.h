@@ -15,10 +15,10 @@ class Pir2RirCompiler {
 
     void compile(Closure* cls, SEXP origin);
 
-    bool shouldPrintCSSA() { return verbose & 0X10000; }
-    bool shouldPrintAllocations() { return verbose & 0X100000; }
-    bool shouldPrintLiveness() { return verbose & 0X1000000; }
-    bool shouldPrintRIRAfterPIR() { return verbose & 0X10000000; }
+    bool shouldPrintCSSA() { return verbose & 0X10; }
+    bool shouldPrintAllocations() { return verbose & 0X20; }
+    bool shouldPrintLiveness() { return verbose & 0X40; }
+    bool shouldPrintRIRAfterPIR() { return verbose & 0X80; }
     bool isVerbose() { return verbose; }
 
   private:
