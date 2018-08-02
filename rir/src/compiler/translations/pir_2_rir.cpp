@@ -1102,7 +1102,11 @@ void Pir2RirCompiler::compile(Closure* cls, SEXP origin) {
 
     if (shouldPrintRIRAfterPIR()) {
         std::cout << "============= Final RIR Version ========\n";
-        fun->body()->print();
+        auto it = fun->begin();
+        while (it != fun->end()) {
+            (*it)->print();
+            ++it;
+        }
     }
 
     if (dryRun)

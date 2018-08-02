@@ -72,12 +72,16 @@ void Rir2PirCompiler::compileClosure(rir::Function* srcFunction,
                              "*************\n";
                 if (shouldPrintOriginalVersion()) {
                     std::cout << "=============== Original version:\n";
-                    srcFunction->body()->print();
+                    auto it = srcFunction->begin();
+                    while (it != srcFunction->end()) {
+                        (*it)->print();
+                        ++it;
+                    }
                 }
             }
 
             if (rir2pir.tryCompile(srcFunction->body(), builder)) {
-                if (isVerbose()) {
+                if (shouldPrintCompiledVersion()) {
                     std::cout << " ========= Compiled to PIR Version:";
                     builder.function->print(std::cout);
                 }
@@ -86,14 +90,12 @@ void Rir2PirCompiler::compileClosure(rir::Function* srcFunction,
                     if (isVerbose()) {
                         std::cout << " Failed verification after p2r compile "
                                   << srcFunction << "\n";
+                        std::cout << " ========= Finish compiling " << srcFunction
+                              << "\n\n";
                     }
                     assert(false);
-                    std::cout << " ========= Finish compiling " << srcFunction
-                              << "\n\n";
                     return false;
                 }
-                std::cout << " ========= Finish compiling " << srcFunction
-                          << "\n\n";
                 return true;
             }
             if (isVerbose()) {
