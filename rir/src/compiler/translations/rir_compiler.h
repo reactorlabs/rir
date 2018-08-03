@@ -1,6 +1,7 @@
 #ifndef RIR__PIR_COMPILER_H
 #define RIR__PIR_COMPILER_H
 
+#include "../pir/pir.h"
 #include "../pir/closure.h"
 #include "../pir/module.h"
 #include "../pir/value.h"
@@ -26,10 +27,10 @@ class RirCompiler {
     }
 
     bool isVerbose() { return verbose; }
-    bool shouldPrintOriginalVersion() { return verbose & 0b1; }
-    bool shouldPrintCompiledVersion() { return verbose & 0b10; }
-    bool shouldPrintOptimizations() { return verbose & 0b100; }
-    bool shouldPrintInliningVersions() { return verbose & 0b1000; }
+    bool shouldPrintOriginalVersion() { return verbose & PRINT_ORIGINAL_MASK; }
+    bool shouldPrintCompiledVersion() { return verbose & PRINT_RAW_PIR_MASK; }
+    bool shouldPrintOptimizations() { return verbose & PRINT_OPT_PHASES_MASK; }
+    bool shouldPrintInliningVersions() { return verbose & PRINT_INLINIG_MASK; }
     void setVerbose(uint v) { verbose = v; }
 
   private:

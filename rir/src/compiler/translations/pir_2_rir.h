@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../pir/pir.h"
 #include "../pir/module.h"
 #include "runtime/Function.h"
 
@@ -15,10 +16,10 @@ class Pir2RirCompiler {
 
     void compile(Closure* cls, SEXP origin);
 
-    bool shouldPrintCSSA() { return verbose & 0b10000; }
-    bool shouldPrintAllocations() { return verbose & 0b100000; }
-    bool shouldPrintLiveness() { return verbose & 0b1000000; }
-    bool shouldPrintRIRAfterPIR() { return verbose & 0b10000000; }
+    bool shouldPrintCSSA() { return verbose & PRINT_CSSA_MASK; }
+    bool shouldPrintAllocations() { return verbose & PRINT_LIVENESS_MASK; }
+    bool shouldPrintLiveness() { return verbose & PRINT_STACK_MASK; }
+    bool shouldPrintRIRAfterPIR() { return verbose & PRINT_FINAL_RIR_MASK; }
     bool isVerbose() { return verbose; }
 
   private:

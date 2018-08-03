@@ -143,16 +143,6 @@ REXPORT SEXP pir_tests() {
 uint pir_verbose = (getenv("PIR_VERBOSE")) ? 
      std::stoul(getenv("PIR_VERBOSE"), nullptr, 0) : 0;
 
-/********** VERBOSE BIT MODES ***********
-1: RIR Original version
-2: PIR Raw
-3: PIR Optimization phases
-4: PIR Inlining phases
-5: PIR Convert to CSSA
-6: PIR After liveness analysis phase
-7: RIR After stack allocation phase 
-8: RIR After passing through PIR*/
-
 SEXP pirOpt(SEXP fun) { return pir_compile(fun, pir_verbose, R_FalseValue); }
 
 bool startup() {
