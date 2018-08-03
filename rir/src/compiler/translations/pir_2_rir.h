@@ -1,7 +1,7 @@
 #pragma once
 
-#include "../pir/pir.h"
 #include "../pir/module.h"
+#include "../pir/pir.h"
 #include "runtime/Function.h"
 
 #include <unordered_set>
