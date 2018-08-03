@@ -11,9 +11,9 @@
 #include <array>
 #include <cassert>
 #include <cstdint>
+#include <deque>
 #include <functional>
 #include <iostream>
-#include <deque>
 
 /*
  * This file provides implementations for all instructions
@@ -492,8 +492,7 @@ class FLI(LdVarSuper, 1, Effect::None, EnvAccess::Read) {
         : FixedLenInstruction(PirType::any(), env), varName(name) {}
 
     LdVarSuper(const char* name, Value* env)
-        : FixedLenInstruction(PirType::any(), env), varName(Rf_install(name)) {
-    }
+        : FixedLenInstruction(PirType::any(), env), varName(Rf_install(name)) {}
 
     SEXP varName;
 
@@ -611,22 +610,22 @@ class FLI(AsTest, 1, Effect::None, EnvAccess::None) {
         : FixedLenInstruction(NativeType::test, {{RType::logical}}, {{in}}) {}
 };
 
-class FLI(Subassign1_1D, 3, Effect::None, EnvAccess::None) {
+class FLI(Subassign1_1D, 4, Effect::None, EnvAccess::Write) {
   public:
-    Subassign1_1D(Value* vec, Value* index, Value* val)
+    Subassign1_1D(Value* vec, Value* index, Value* val, Value* env)
         : FixedLenInstruction(
               PirType::val(),
               {{PirType::val(), PirType::val(), PirType::val()}},
-              {{vec, index, val}}) {}
+              {{vec, index, val}}, env) {}
 };
 
-class FLI(Subassign2_1D, 3, Effect::None, EnvAccess::None) {
+class FLI(Subassign2_1D, 4, Effect::None, EnvAccess::Write) {
   public:
-    Subassign2_1D(Value* vec, Value* index, Value* value, SEXP sym)
+    Subassign2_1D(Value* vec, Value* index, Value* value, SEXP sym, Value* env)
         : FixedLenInstruction(
               PirType::val(),
               {{PirType::val(), PirType::val(), PirType::val()}},
-              {{vec, index, value}}),
+              {{vec, index, value}}, env),
           sym(sym) {}
     SEXP sym;
 };
@@ -676,7 +675,7 @@ class FLI(Is, 1, Effect::None, EnvAccess::None) {
     Is(uint32_t sexpTag, Value* v)
         : FixedLenInstruction(PirType(RType::logical).scalar(),
                               {{PirType::val()}}, {{v}}),
-            sexpTag(sexpTag) {}
+          sexpTag(sexpTag) {}
     uint32_t sexpTag;
 
     void printArgs(std::ostream& out) override;
@@ -864,10 +863,10 @@ class ACallInstructionImplementation(CallBuiltin, Effect::Any, EnvAccess::Write,
     const CCODE builtin;
     int builtinId;
 
-    CallBuiltin(Value* e, SEXP builtin, const std::vector<Value*>& args,
+    CallBuiltin(Value * e, SEXP builtin, const std::vector<Value*>& args,
                 unsigned src);
 
-    void printArgs(std::ostream& out) override;
+    void printArgs(std::ostream & out) override;
 };
 
 class ACallInstructionImplementation(CallSafeBuiltin, Effect::None,
@@ -880,7 +879,7 @@ class ACallInstructionImplementation(CallSafeBuiltin, Effect::None,
     CallSafeBuiltin(SEXP builtin, const std::vector<Value*>& args,
                     unsigned src);
 
-    void printArgs(std::ostream& out) override;
+    void printArgs(std::ostream & out) override;
 };
 
 class VLI(MkEnv, Effect::None, EnvAccess::Capture) {

@@ -314,7 +314,7 @@ bool StackMachine::tryRunCurrentBC(const Rir2Pir& rir2pir, Builder& insert) {
         Value* val = pop();
         Value* idx = pop();
         Value* vec = pop();
-        push(insert(new Subassign1_1D(vec, idx, val)));
+        push(insert(new Subassign1_1D(vec, idx, val, env)));
         break;
     }
 
@@ -323,7 +323,7 @@ bool StackMachine::tryRunCurrentBC(const Rir2Pir& rir2pir, Builder& insert) {
         Value* val = pop();
         Value* idx = pop();
         Value* vec = pop();
-        push(insert(new Subassign2_1D(vec, idx, val, sym)));
+        push(insert(new Subassign2_1D(vec, idx, val, sym, env)));
         break;
     }
 
