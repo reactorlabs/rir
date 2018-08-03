@@ -112,7 +112,7 @@ class TheInliner {
                                 mk->prom = function->promises[newPromId[id]];
                             } else {
                                 Promise* clone =
-                                    function->createProm(mk->prom->ast);
+                                    function->createProm(mk->prom->srcPoolIdx);
                                 BB* promCopy =
                                     BBTransform::clone(mk->prom->entry, clone);
                                 clone->entry = promCopy;

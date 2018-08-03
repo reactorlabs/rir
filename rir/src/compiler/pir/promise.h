@@ -10,7 +10,7 @@ class Promise : public Code {
   public:
     unsigned id;
     Closure* fun;
-    unsigned ast;
+    unsigned srcPoolIdx;
 
     void print(std::ostream& out = std::cout) {
         out << "Prom " << id << ":\n";
@@ -24,8 +24,8 @@ class Promise : public Code {
 
   private:
     friend class Closure;
-    Promise(Closure* fun, unsigned id, unsigned ast)
-        : id(id), fun(fun), ast(ast) {}
+    Promise(Closure* fun, unsigned id, unsigned src)
+        : id(id), fun(fun), srcPoolIdx(src) {}
 };
 }
 }

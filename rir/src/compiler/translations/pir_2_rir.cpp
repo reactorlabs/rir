@@ -1045,7 +1045,7 @@ void Pir2Rir::toCSSA(Code* code) {
 
 size_t Pir2Rir::getPromiseIdx(Context& ctx, Promise* p) {
     if (!promises.count(p)) {
-        ctx.pushPromise(src_pool_at(globalContext(), p->ast));
+        ctx.pushPromise(src_pool_at(globalContext(), p->srcPoolIdx));
         size_t localsCnt = compileCode(ctx, p);
         promises[p] = ctx.finalizeCode(localsCnt);
     }
