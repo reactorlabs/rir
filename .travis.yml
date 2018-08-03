@@ -6,8 +6,7 @@ matrix:
   include:
     - os: osx
       compiler: clang
-      # 'make check' is broken on osx, setting the timezone in env should fix it for now
-      env: CORES=2 CHECK=check BUILD=release TZ=Europe/Prague
+      env: CORES=2 CHECK=check BUILD=release
     - os: linux
       compiler: gcc
       env: CORES=2 CHECK=check BUILD=debug PIR_ENABLE=force_dryrun
