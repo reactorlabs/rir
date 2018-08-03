@@ -148,7 +148,7 @@ bool StackMachine::tryRunCurrentBC(const Rir2Pir& rir2pir, Builder& insert) {
                 return false;
             }
             rir::Code* promiseCode = srcFunction->codeAt(argi);
-            Promise* prom = insert.function->createProm();
+            Promise* prom = insert.function->createProm(promiseCode->src);
             {
                 Builder promiseBuilder(insert.function, prom);
                 if (!Rir2Pir(rir2pir).tryCompile(promiseCode, promiseBuilder))
@@ -203,7 +203,7 @@ bool StackMachine::tryRunCurrentBC(const Rir2Pir& rir2pir, Builder& insert) {
         unsigned promi = bc.immediate.i;
         rir::Code* promiseCode = srcFunction->codeAt(promi);
         Value* val = pop();
-        Promise* prom = insert.function->createProm();
+        Promise* prom = insert.function->createProm(promiseCode->src);
         {
             Builder promiseBuilder(insert.function, prom);
             if (!Rir2Pir(rir2pir).tryCompile(promiseCode, promiseBuilder))

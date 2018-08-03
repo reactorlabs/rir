@@ -19,8 +19,8 @@ void Closure::print(std::ostream& out) {
 
 void Closure::print() { print(std::cout); }
 
-Promise* Closure::createProm() {
-    Promise* p = new Promise(this, promises.size());
+Promise* Closure::createProm(unsigned srcPoolIdx) {
+    Promise* p = new Promise(this, promises.size(), srcPoolIdx);
     promises.push_back(p);
     return p;
 }
@@ -43,7 +43,7 @@ Closure* Closure::clone() {
     for (auto p : promises) {
         if (!p)
             continue;
-        Promise* clonedP = new Promise(c, c->promises.size());
+        Promise* clonedP = new Promise(c, c->promises.size(), p->srcPoolIdx);
         c->promises.push_back(clonedP);
         clonedP->entry = BBTransform::clone(p->entry, clonedP);
         promMap[p] = clonedP;
