@@ -1054,6 +1054,10 @@ size_t Pir2Rir::getPromiseIdx(Context& ctx, Promise* p) {
 
 rir::Function* Pir2Rir::finalize() {
 
+    // TODO: keep track of source ast indices in the source pool
+    // (for now, calls, promises and operators do)
+    // + how to deal with inlined stuff?
+
     FunctionWriter function = FunctionWriter::create();
     Context ctx(function);
 
