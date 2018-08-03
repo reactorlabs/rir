@@ -6,8 +6,7 @@ matrix:
   include:
     - os: osx
       compiler: clang
-      # TAGS is some dummy make rule. currently 'make check' is broken on osx.
-      env: CORES=2 CHECK=TAGS BUILD=release
+      env: CORES=2 CHECK=check BUILD=release
     - os: linux
       compiler: gcc
       env: CORES=2 CHECK=check BUILD=debug PIR_ENABLE=force_dryrun
