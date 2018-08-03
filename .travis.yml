@@ -6,8 +6,8 @@ matrix:
   include:
     - os: osx
       compiler: clang
-      # TAGS is some dummy make rule. currently 'make check' is broken on osx.
-      env: CORES=2 CHECK=TAGS BUILD=release
+      # 'make check' is broken on osx, setting the timezone in env should fix it for now
+      env: CORES=2 CHECK=check BUILD=release TZ=Europe/Prague
     - os: linux
       compiler: gcc
       env: CORES=2 CHECK=check BUILD=debug PIR_ENABLE=force_dryrun
