@@ -37,7 +37,7 @@ class Closure : public Code {
     void print(std::ostream& out);
     void print();
 
-    Promise* createProm(unsigned ast);
+    Promise* createProm(unsigned srcPoolIdx);
 
     friend std::ostream& operator<<(std::ostream& out, const Closure& e) {
         out << "Func(" << (void*)&e << ")";
