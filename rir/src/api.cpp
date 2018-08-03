@@ -145,6 +145,11 @@ REXPORT SEXP pir_tests() {
     return R_NilValue;
 }
 
+REXPORT SEXP debug_break() {
+    asm("int $3");
+    return R_NilValue;
+}
+
 // startup ---------------------------------------------------------------------
 
 SEXP pirOpt(SEXP fun) { return pir_compile(fun, R_FalseValue, R_FalseValue); }
