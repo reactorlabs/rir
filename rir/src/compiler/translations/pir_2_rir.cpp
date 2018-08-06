@@ -873,6 +873,10 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 cs << BC::is(is->sexpTag);
                 break;
             }
+            case Tag::Int3: {
+                cs << BC::int3();
+                break;
+            }
 
 #define SIMPLE_INSTR(Name, Factory)                                            \
     case Tag::Name: {                                                          \
