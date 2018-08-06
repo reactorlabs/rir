@@ -20,8 +20,8 @@ rir.compile <- function(what) {
 }
 
 # optimizes given rir compiled closure
-pir.compile <- function(what, verbose = 0, dryRun = FALSE) {
-    .Call("pir_compile_", what, verbose, dryRun)
+pir.compile <- function(what, verbose = 0L, dryRun = FALSE) {
+    .Call("pir_compile", what, verbose, dryRun)
 }
 
 pir.tests <- function() {

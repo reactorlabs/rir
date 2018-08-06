@@ -95,7 +95,7 @@ REXPORT SEXP rir_body(SEXP cls) {
     return f->container();
 }
 
-REXPORT SEXP pir_compile_(SEXP what, uint32_t verbose, SEXP dryRun_) {
+SEXP pir_compile_(SEXP what, uint32_t verbose, SEXP dryRun_) {
     bool dryRun = false;
     if (dryRun_ && TYPEOF(dryRun_) == LGLSXP && Rf_length(dryRun_) > 0 &&
         LOGICAL(dryRun_)[0])
@@ -134,7 +134,9 @@ REXPORT SEXP pir_compile_(SEXP what, uint32_t verbose, SEXP dryRun_) {
 }
 
 REXPORT SEXP pir_compile(SEXP what, SEXP verbose, SEXP dryRun_) {
-    return pir_compile_(what, (uint32_t)INTEGER(INTEGER(verbose))[0], dryRun_);
+    if (TYPEOF(verbose) != INTSXP || Rf_length(verbose) < 1)
+        Rf_error("pir_compile expects an integer vector as second parameter");
+    return pir_compile_(what, (uint32_t)INTEGER(verbose)[0], dryRun_);
 }
 
 REXPORT SEXP pir_tests() {
