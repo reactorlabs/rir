@@ -144,11 +144,6 @@ REXPORT SEXP pir_tests() {
     return R_NilValue;
 }
 
-REXPORT SEXP debug_break() {
-    asm("int $3");
-    return R_NilValue;
-}
-
 // startup ---------------------------------------------------------------------
 
 uint32_t pir_verbose = (getenv("PIR_VERBOSE")) ? 
