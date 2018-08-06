@@ -2,6 +2,7 @@
 #define API_H_
 
 #include "R/r.h"
+#include <stdint.h>
 
 #define REXPORT extern "C"
 

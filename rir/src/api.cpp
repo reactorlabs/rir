@@ -134,7 +134,7 @@ REXPORT SEXP pir_compile_(SEXP what, uint32_t verbose, SEXP dryRun_) {
 }
 
 REXPORT SEXP pir_compile(SEXP what, SEXP verbose, SEXP dryRun_) {
-    return pir_compile_(what, INTEGER(INTEGER(verbose))[0], dryRun_);
+    return pir_compile_(what, (uint32_t)INTEGER(INTEGER(verbose))[0], dryRun_);
 }
 
 REXPORT SEXP pir_tests() {
