@@ -95,7 +95,7 @@ REXPORT SEXP rir_body(SEXP cls) {
     return f->container();
 }
 
-SEXP pir_compile_(SEXP what, uint32_t verbose, SEXP dryRun_) {
+REXPORT SEXP pir_compile_(SEXP what, uint32_t verbose, SEXP dryRun_) {
     bool dryRun = false;
     if (dryRun_ && TYPEOF(dryRun_) == LGLSXP && Rf_length(dryRun_) > 0 &&
         LOGICAL(dryRun_)[0])
