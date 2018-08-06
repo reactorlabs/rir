@@ -11,7 +11,7 @@ namespace pir {
 
 class Pir2RirCompiler {
   public:
-    uint verbose = 0;
+    uint32_t verbose = 0;
     bool dryRun = false;
 
     void compile(Closure* cls, SEXP origin);

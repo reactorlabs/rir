@@ -93,7 +93,7 @@ class SSAAllocator {
 
     SSAAllocator(Code* code, bool verbose)
         : cfg(code), dom(code), code(code), bbsSize(code->nextBBId) {
-        computeLiveness(verbose & 0X10000);
+        computeLiveness(verbose & PRINT_LIVENESS_MASK);
         computeStackAllocation();
         computeAllocation();
     }

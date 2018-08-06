@@ -31,7 +31,7 @@ class RirCompiler {
     bool shouldPrintCompiledVersion() { return verbose & PRINT_RAW_PIR_MASK; }
     bool shouldPrintOptimizations() { return verbose & PRINT_OPT_PHASES_MASK; }
     bool shouldPrintInliningVersions() { return verbose & PRINT_INLINIG_MASK; }
-    void setVerbose(uint v) { verbose = v; }
+    void setVerbose(uint32_t v) { verbose = v; }
 
   private:
     uint32_t verbose = 0;

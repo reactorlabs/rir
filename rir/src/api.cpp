@@ -95,7 +95,7 @@ REXPORT SEXP rir_body(SEXP cls) {
     return f->container();
 }
 
-REXPORT SEXP pir_compile(SEXP what, unsigned int verbose, SEXP dryRun_) {
+REXPORT SEXP pir_compile(SEXP what, uint32_t verbose, SEXP dryRun_) {
     bool dryRun = false;
     if (dryRun_ && TYPEOF(dryRun_) == LGLSXP && Rf_length(dryRun_) > 0 &&
         LOGICAL(dryRun_)[0])
@@ -140,7 +140,7 @@ REXPORT SEXP pir_tests() {
 
 // startup ---------------------------------------------------------------------
 
-uint pir_verbose = (getenv("PIR_VERBOSE")) ? 
+uint32_t pir_verbose = (getenv("PIR_VERBOSE")) ? 
      std::stoul(getenv("PIR_VERBOSE"), nullptr, 0) : 0;
 
 SEXP pirOpt(SEXP fun) { return pir_compile(fun, pir_verbose, R_FalseValue); }
