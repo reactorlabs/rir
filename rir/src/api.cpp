@@ -95,11 +95,37 @@ REXPORT SEXP rir_body(SEXP cls) {
     return f->container();
 }
 
-SEXP pir_compile_(SEXP what, uint32_t verbose, SEXP dryRun_) {
-    bool dryRun = false;
-    if (dryRun_ && TYPEOF(dryRun_) == LGLSXP && Rf_length(dryRun_) > 0 &&
-        LOGICAL(dryRun_)[0])
-        dryRun = true;
+REXPORT SEXP pir_debugFlags(
+#define V(n) SEXP n,
+    LIST_OF_PIR_DEBUGGING_FLAGS(V)
+#undef V
+        SEXP IHaveTooManyCommasDummy) {
+    pir::DebugOptions opts;
+
+#define V(n)                                                                   \
+    if (Rf_asLogical(n))                                                       \
+        opts.set(pir::DebugFlag::n);
+    LIST_OF_PIR_DEBUGGING_FLAGS(V)
+#undef V
+
+    SEXP res = Rf_allocVector(INTSXP, 1);
+    INTEGER(res)[0] = (int)opts.to_ulong();
+    return res;
+}
+
+static pir::DebugOptions PirDebug(
+    getenv("PIR_VERBOSE") ? std::stoul(getenv("PIR_VERBOSE"), nullptr, 0) : 0);
+
+REXPORT SEXP pir_setDebugFlags(SEXP debugFlags) {
+    if (TYPEOF(debugFlags) != INTSXP || Rf_length(debugFlags) < 1)
+        Rf_error(
+            "pir_setDebugFlags expects an integer vector as second parameter");
+    PirDebug = pir::DebugOptions(INTEGER(debugFlags)[0]);
+    return R_NilValue;
+}
+
+SEXP pirCompile(SEXP what, pir::DebugOptions debug) {
+    debug = debug | PirDebug;
 
     if (!isValidClosureSEXP(what))
         Rf_error("not a compiled closure");
@@ -112,20 +138,17 @@ SEXP pir_compile_(SEXP what, uint32_t verbose, SEXP dryRun_) {
 
     // compile to pir
     pir::Module* m = new pir::Module;
-    pir::Rir2PirCompiler cmp(m);
-    cmp.setVerbose(verbose);
+    pir::Rir2PirCompiler cmp(m, debug);
     cmp.compileClosure(what,
                        [&](pir::Closure* c) {
                            cmp.optimizeModule();
 
                            // compile back to rir
-                           pir::Pir2RirCompiler p2r;
-                           p2r.verbose = verbose;
-                           p2r.dryRun = dryRun;
+                           pir::Pir2RirCompiler p2r(debug);
                            p2r.compile(c, what);
                        },
                        [&]() {
-                           if (verbose > 0)
+                           if (debug.includes(pir::DebugFlag::ShowWarnings))
                                std::cerr << "Compilation failed\n";
                        });
 
@@ -133,10 +156,10 @@ SEXP pir_compile_(SEXP what, uint32_t verbose, SEXP dryRun_) {
     return what;
 }
 
-REXPORT SEXP pir_compile(SEXP what, SEXP verbose, SEXP dryRun_) {
-    if (TYPEOF(verbose) != INTSXP || Rf_length(verbose) < 1)
+REXPORT SEXP pir_compile(SEXP what, SEXP debugFlags) {
+    if (TYPEOF(debugFlags) != INTSXP || Rf_length(debugFlags) < 1)
         Rf_error("pir_compile expects an integer vector as second parameter");
-    return pir_compile_(what, (uint32_t)INTEGER(verbose)[0], dryRun_);
+    return pirCompile(what, pir::DebugOptions(INTEGER(debugFlags)[0]));
 }
 
 REXPORT SEXP pir_tests() {
@@ -146,10 +169,7 @@ REXPORT SEXP pir_tests() {
 
 // startup ---------------------------------------------------------------------
 
-uint32_t pir_verbose = (getenv("PIR_VERBOSE")) ? 
-     std::stoul(getenv("PIR_VERBOSE"), nullptr, 0) : 0;
-
-SEXP pirOpt(SEXP fun) { return pir_compile_(fun, pir_verbose, R_FalseValue); }
+SEXP pirOpt(SEXP fun) { return pirCompile(fun, PirDebug); }
 
 bool startup() {
     auto pir = getenv("PIR_ENABLE");
@@ -162,8 +182,8 @@ bool startup() {
     } else if (pir && std::string(pir).compare("force_dryrun") == 0) {
         initializeRuntime(
             [](SEXP f, SEXP env) {
-                return pir_compile_(rir_compile(f, env), pir_verbose,
-                                    R_TrueValue);
+                return pirCompile(rir_compile(f, env),
+                                  PirDebug | pir::DebugFlag::DryRun);
             },
             [](SEXP f) { return f; });
     } else {

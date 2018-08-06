@@ -138,7 +138,7 @@ void Rir2Pir::translate(rir::Code* srcCode, Builder& insert,
                 break;
             }
             case Opcode::beginloop_:
-                if (compiler.isVerbose())
+                if (compiler.debug.includes(DebugFlag::ShowWarnings))
                     std::cerr
                         << "Cannot compile Function. Unsupported return bc\n";
                 fail();
@@ -204,7 +204,7 @@ void Rir2Pir::translate(rir::Code* srcCode, Builder& insert,
             case Opcode::ret_:
                 break;
             case Opcode::return_:
-                if (compiler.isVerbose())
+                if (compiler.debug.includes(DebugFlag::ShowWarnings))
                     std::cerr
                         << "Cannot compile Function. Unsupported return bc\n";
                 fail();
@@ -262,7 +262,7 @@ void Rir2Pir::translate(rir::Code* srcCode, Builder& insert,
         if (!skip) {
             int size = state.stack_size();
             if (!state.tryRunCurrentBC(*this, insert)) {
-                if (compiler.isVerbose()) {
+                if (compiler.debug.includes(DebugFlag::ShowWarnings)) {
                     std::cout << "Abort r2p due to unsupported bc ";
                     state.getCurrentBC().print();
                     std::cout << "\n";

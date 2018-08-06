@@ -10,6 +10,7 @@
 #include "utils/FunctionWriter.h"
 
 #include <algorithm>
+#include <iomanip>
 
 // #define DEBUGGING
 #define ALLOC_DEBUG 1
@@ -93,7 +94,7 @@ class SSAAllocator {
 
     SSAAllocator(Code* code, bool verbose)
         : cfg(code), dom(code), code(code), bbsSize(code->nextBBId) {
-        computeLiveness(verbose & PRINT_LIVENESS_MASK);
+        computeLiveness(verbose);
         computeStackAllocation();
         computeAllocation();
     }
@@ -621,12 +622,13 @@ class Pir2Rir {
 size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
     toCSSA(code);
 
-    if (compiler.shouldPrintCSSA())
+    if (compiler.debug.includes(DebugFlag::PrintLiveness))
         code->print(std::cout);
 
-    SSAAllocator alloc(code, compiler.verbose);
+    SSAAllocator alloc(code,
+                       compiler.debug.includes(DebugFlag::DebugAllocator));
 
-    if (compiler.shouldPrintAllocations())
+    if (compiler.debug.includes(DebugFlag::PrintStackAllocation))
         alloc.print();
 
     alloc.verify();
@@ -819,7 +821,7 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 if (dt->capacity() > 1 && !dt->available(1)) {
                     Pir2Rir pir2rir(compiler, mkfuncls->fun);
                     auto rirFun = pir2rir.finalize();
-                    if (!compiler.dryRun)
+                    if (!compiler.debug.includes(DebugFlag::DryRun))
                         dt->put(1, rirFun);
                 }
                 cs << BC::push(mkfuncls->fml) << BC::push(mkfuncls->code)
@@ -1106,7 +1108,7 @@ void Pir2RirCompiler::compile(Closure* cls, SEXP origin) {
     Pir2Rir pir2rir(*this, cls);
     auto fun = pir2rir.finalize();
 
-    if (shouldPrintRIRAfterPIR()) {
+    if (debug.includes(DebugFlag::PrintFinalPir)) {
         std::cout << "============= Final RIR Version ========\n";
         auto it = fun->begin();
         while (it != fun->end()) {
@@ -1115,7 +1117,7 @@ void Pir2RirCompiler::compile(Closure* cls, SEXP origin) {
         }
     }
 
-    if (dryRun)
+    if (debug.includes(DebugFlag::DryRun))
         return;
 
     Protect p(fun->container());
@@ -1129,6 +1131,12 @@ void Pir2RirCompiler::compile(Closure* cls, SEXP origin) {
     // TODO: signatures need a rework
     fun->signature = oldFun->signature;
 
+    if (debug.intersects(PrintDebugPasses)) {
+        std::cout << "\n*********** Finished compiling: " << std::setw(17)
+                  << std::left << oldFun << " ************\n";
+        std::cout << "*************************************************"
+                  << "*************\n";
+    }
     table->put(1, fun);
 }
 

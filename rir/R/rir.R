@@ -20,12 +20,36 @@ rir.compile <- function(what) {
 }
 
 # optimizes given rir compiled closure
-pir.compile <- function(what, verbose = 0L, dryRun = FALSE) {
-    .Call("pir_compile", what, verbose, dryRun)
+pir.compile <- function(what, debugFlags = pir.debugFlags()) {
+    .Call("pir_compile", what, debugFlags)
 }
 
 pir.tests <- function() {
     invisible(.Call("pir_tests"))
+}
+
+# creates a bitset with pir debug options
+pir.debugFlags <- function(ShowWarnings = FALSE,
+                           DryRun = FALSE,
+                           PreserveVersions = FALSE,
+                           DebugAllocator = FALSE,
+                           PrintOriginal = FALSE,
+                           PrintRawPir = FALSE,
+                           PrintOptimizationPasses = FALSE,
+                           PrintInlining = FALSE,
+                           PrintLiveness = FALSE,
+                           PrintStackAllocation = FALSE,
+                           PrintFinalPir = FALSE) {
+    .Call("pir_debugFlags", ShowWarnings, DryRun, PreserveVersions,
+          DebugAllocator, PrintOriginal, PrintRawPir, PrintOptimizationPasses,
+          PrintInlining, PrintLiveness, PrintStackAllocation, PrintFinalPir,
+          # wants a dummy parameter at the end for technical reasons
+          NULL)
+}
+
+# sets the default debug options for pir compiler
+pir.setDebugFlags <- function(debugFlags = pir.debugFlags()) {
+    .Call("pir_setDebugFlags", debugFlags)
 }
 
 # compiles code of the given file and returns the list of compiled version.

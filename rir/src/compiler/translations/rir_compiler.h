@@ -1,6 +1,7 @@
 #ifndef RIR__PIR_COMPILER_H
 #define RIR__PIR_COMPILER_H
 
+#include "../debugging.h"
 #include "../pir/closure.h"
 #include "../pir/module.h"
 #include "../pir/pir.h"
@@ -14,7 +15,8 @@ namespace pir {
 
 class RirCompiler {
   public:
-    RirCompiler(Module* module) : module(module) {}
+    RirCompiler(Module* module, const DebugOptions& debug)
+        : debug(debug), module(module) {}
     RirCompiler(const RirCompiler&) = delete;
     void operator=(const RirCompiler&) = delete;
 
@@ -26,15 +28,7 @@ class RirCompiler {
         return compileClosure(cls, success, []() {});
     }
 
-    bool isVerbose() { return verbose; }
-    bool shouldPrintOriginalVersion() { return verbose & PRINT_ORIGINAL_MASK; }
-    bool shouldPrintCompiledVersion() { return verbose & PRINT_RAW_PIR_MASK; }
-    bool shouldPrintOptimizations() { return verbose & PRINT_OPT_PHASES_MASK; }
-    bool shouldPrintInliningVersions() { return verbose & PRINT_INLINIG_MASK; }
-    void setVerbose(uint32_t v) { verbose = v; }
-
-  private:
-    uint32_t verbose = 0;
+    const DebugOptions debug;
 
   protected:
     std::vector<PirTranslator*> translations;

@@ -14,6 +14,7 @@
 #include "../../opt/scope_resolution.h"
 #include "ir/BC.h"
 
+#include <iomanip>
 #include <iostream>
 
 #include "interpreter/runtime.h"
@@ -21,7 +22,8 @@
 namespace rir {
 namespace pir {
 
-Rir2PirCompiler::Rir2PirCompiler(Module* module) : RirCompiler(module) {
+Rir2PirCompiler::Rir2PirCompiler(Module* module, const DebugOptions& debug)
+    : RirCompiler(module, debug) {
     for (auto optimization : pirConfigurations()->pirOptimizations()) {
         translations.push_back(optimization->translator);
     }
@@ -33,7 +35,7 @@ void Rir2PirCompiler::compileClosure(SEXP closure, MaybeCls success,
     DispatchTable* tbl = DispatchTable::unpack(BODY(closure));
 
     if (tbl->available(1)) {
-        if (isVerbose())
+        if (!debug.includes(DebugFlag::ShowWarnings))
             std::cerr << "Closure already compiled to PIR\n";
     }
 
@@ -63,13 +65,12 @@ void Rir2PirCompiler::compileClosure(rir::Function* srcFunction,
         srcFunction, formals.names, closureEnv, [&](Closure* pirFunction) {
             Builder builder(pirFunction, closureEnv);
             Rir2Pir rir2pir(*this, srcFunction);
-            if (isVerbose()) {
-                // clang-format off
-                std::cout << "\n\n**************************************************************\n";
-                std::cout << "*********** Start compiling:" << srcFunction << " **********\n";
-                std::cout << "**************************************************************\n";
-                // clang-format on
-                if (shouldPrintOriginalVersion()) {
+            if (debug.intersects(PrintDebugPasses)) {
+                std::cout << "\n***********************************************"
+                          << "***************\n";
+                std::cout << "*********** Start compiling: " << std::setw(20)
+                          << std::left << srcFunction << " ************\n\n";
+                if (debug.includes(DebugFlag::PrintOriginal)) {
                     std::cout << "=============== Original version:\n";
                     auto it = srcFunction->begin();
                     while (it != srcFunction->end()) {
@@ -80,28 +81,24 @@ void Rir2PirCompiler::compileClosure(rir::Function* srcFunction,
             }
 
             if (rir2pir.tryCompile(srcFunction->body(), builder)) {
-                if (shouldPrintCompiledVersion()) {
+                if (debug.includes(DebugFlag::PrintRawPir)) {
                     std::cout << " ========= Compiled to PIR Version:";
                     builder.function->print(std::cout);
                 }
+                if (debug.intersects(PrintDebugPasses))
+                    std::cout << " ========= Finished optimization passed\n";
                 if (!Verify::apply(pirFunction)) {
                     failed = true;
-                    if (isVerbose()) {
+                    if (debug.includes(DebugFlag::ShowWarnings))
                         std::cout << " Failed verification after p2r compile "
                                   << srcFunction << "\n";
-                        std::cout << " ========= Finish compiling " << srcFunction
-                              << "\n\n";
-                    }
                     assert(false);
                     return false;
                 }
                 return true;
             }
-            if (isVerbose()) {
+            if (debug.includes(DebugFlag::ShowWarnings))
                 std::cout << " Failed p2r compile " << srcFunction << "\n";
-                std::cout << " ========= Finish compiling " << srcFunction
-                          << "\n\n";
-            }
             failed = true;
             return false;
         });
@@ -114,11 +111,9 @@ void Rir2PirCompiler::compileClosure(rir::Function* srcFunction,
 
 void Rir2PirCompiler::optimizeModule() {
     size_t passnr = 0;
-    bool verbose = isVerbose();
-
     module->eachPirFunction([&](Module::VersionedClosure& v) {
         auto f = v.current();
-        if (verbose)
+        if (debug.includes(DebugFlag::PreserveVersions))
             v.saveVersion();
         applyOptimizations(f, "Optimizations 1st Pass");
         applyOptimizations(f, "Optimizations 2nd Pass");
@@ -127,10 +122,10 @@ void Rir2PirCompiler::optimizeModule() {
     for (int i = 0; i < 5; ++i) {
         module->eachPirFunction([&](Module::VersionedClosure& v) {
             auto f = v.current();
-            if (verbose)
+            if (debug.includes(DebugFlag::PreserveVersions))
                 v.saveVersion();
             Inline::apply(f);
-            if (shouldPrintInliningVersions()) {
+            if (debug.includes(DebugFlag::PrintInlining)) {
                 printAfterPass("inline", "Inlining", f, passnr++);
             }
             applyOptimizations(f, "Optimizations After Inlining");
@@ -151,7 +146,7 @@ void Rir2PirCompiler::applyOptimizations(Closure* f,
     size_t passnr = 0;
     for (auto& translation : this->translations) {
         translation->apply(f);
-        if (shouldPrintOptimizations())
+        if (debug.includes(DebugFlag::PrintOptimizationPasses))
             printAfterPass(translation->getName(), category, f, passnr++);
 #if 0
         assert(Verify::apply(f));

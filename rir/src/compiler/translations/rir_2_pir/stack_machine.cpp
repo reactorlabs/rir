@@ -85,7 +85,7 @@ bool StackMachine::tryRunCurrentBC(const Rir2Pir& rir2pir, Builder& insert) {
         break;
 
     case Opcode::guard_fun_:
-        if (rir2pir.compiler.isVerbose()) {
+        if (rir2pir.compiler.debug.includes(DebugFlag::ShowWarnings)) {
             std::cout << "warn: guard ignored "
                       << CHAR(PRINTNAME(
                              rir::Pool::get(bc.immediate.guard_fun_args.name)))
