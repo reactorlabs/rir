@@ -95,12 +95,8 @@ REXPORT SEXP rir_body(SEXP cls) {
     return f->container();
 }
 
-REXPORT SEXP pir_compile(SEXP what, SEXP verbose, SEXP dryRun_) {
-    bool debug = false;
+SEXP pir_compile_(SEXP what, uint32_t verbose, SEXP dryRun_) {
     bool dryRun = false;
-    if (verbose && TYPEOF(verbose) == LGLSXP && Rf_length(verbose) > 0 &&
-        LOGICAL(verbose)[0])
-        debug = true;
     if (dryRun_ && TYPEOF(dryRun_) == LGLSXP && Rf_length(dryRun_) > 0 &&
         LOGICAL(dryRun_)[0])
         dryRun = true;
@@ -117,27 +113,30 @@ REXPORT SEXP pir_compile(SEXP what, SEXP verbose, SEXP dryRun_) {
     // compile to pir
     pir::Module* m = new pir::Module;
     pir::Rir2PirCompiler cmp(m);
-    cmp.setVerbose(debug);
+    cmp.setVerbose(verbose);
     cmp.compileClosure(what,
                        [&](pir::Closure* c) {
                            cmp.optimizeModule();
 
-                           if (debug)
-                               m->print();
-
                            // compile back to rir
                            pir::Pir2RirCompiler p2r;
-                           p2r.verbose = debug;
+                           p2r.verbose = verbose;
                            p2r.dryRun = dryRun;
                            p2r.compile(c, what);
                        },
                        [&]() {
-                           if (verbose == R_TrueValue)
+                           if (verbose > 0)
                                std::cerr << "Compilation failed\n";
                        });
 
     delete m;
     return what;
+}
+
+REXPORT SEXP pir_compile(SEXP what, SEXP verbose, SEXP dryRun_) {
+    if (TYPEOF(verbose) != INTSXP || Rf_length(verbose) < 1)
+        Rf_error("pir_compile expects an integer vector as second parameter");
+    return pir_compile_(what, (uint32_t)INTEGER(verbose)[0], dryRun_);
 }
 
 REXPORT SEXP pir_tests() {
@@ -147,7 +146,10 @@ REXPORT SEXP pir_tests() {
 
 // startup ---------------------------------------------------------------------
 
-SEXP pirOpt(SEXP fun) { return pir_compile(fun, R_FalseValue, R_FalseValue); }
+uint32_t pir_verbose = (getenv("PIR_VERBOSE")) ? 
+     std::stoul(getenv("PIR_VERBOSE"), nullptr, 0) : 0;
+
+SEXP pirOpt(SEXP fun) { return pir_compile_(fun, pir_verbose, R_FalseValue); }
 
 bool startup() {
     auto pir = getenv("PIR_ENABLE");
@@ -160,8 +162,8 @@ bool startup() {
     } else if (pir && std::string(pir).compare("force_dryrun") == 0) {
         initializeRuntime(
             [](SEXP f, SEXP env) {
-                return pir_compile(rir_compile(f, env), R_FalseValue,
-                                   R_TrueValue);
+                return pir_compile_(rir_compile(f, env), pir_verbose,
+                                    R_TrueValue);
             },
             [](SEXP f) { return f; });
     } else {

@@ -3,6 +3,7 @@
 
 #include "../pir/closure.h"
 #include "../pir/module.h"
+#include "../pir/pir.h"
 #include "../pir/value.h"
 #include "pir_translator.h"
 #include "runtime/Function.h"
@@ -26,10 +27,14 @@ class RirCompiler {
     }
 
     bool isVerbose() { return verbose; }
-    void setVerbose(bool v) { verbose = v; }
+    bool shouldPrintOriginalVersion() { return verbose & PRINT_ORIGINAL_MASK; }
+    bool shouldPrintCompiledVersion() { return verbose & PRINT_RAW_PIR_MASK; }
+    bool shouldPrintOptimizations() { return verbose & PRINT_OPT_PHASES_MASK; }
+    bool shouldPrintInliningVersions() { return verbose & PRINT_INLINIG_MASK; }
+    void setVerbose(uint32_t v) { verbose = v; }
 
   private:
-    bool verbose = false;
+    uint32_t verbose = 0;
 
   protected:
     std::vector<PirTranslator*> translations;
