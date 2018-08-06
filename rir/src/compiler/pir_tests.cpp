@@ -46,7 +46,7 @@ compile(const std::string& context, const std::string& expr, pir::Module* m,
     ENCLOS(env) = super;
     eval(expr, env);
 
-    pir::Rir2PirCompiler cmp(m);
+    pir::Rir2PirCompiler cmp(m, pir::DebugOptions());
 
     // Compile every function the expression created
     std::unordered_map<std::string, pir::Closure*> results;
@@ -275,7 +275,7 @@ bool testPir2Rir(std::string name, std::string fun, std::string args,
         rCall = createRWrapperCall(wrapper);
     }
 
-    pir_compile_(rirFun, 0, R_FalseValue);
+    pirCompile(rirFun, rir::pir::DebugOptions());
 
     auto after = p(Rf_eval(rCall, execEnv));
     if (verbose) {

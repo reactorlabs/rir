@@ -54,7 +54,7 @@ bool StackMachine::tryRunCurrentBC(const Rir2Pir& rir2pir, Builder& insert) {
     unsigned srcIdx = getSrcIdx();
     auto consumeSrcIdx = [&]() {
         if (srcIdx == 0)
-            if (rir2pir.compiler.isVerbose()) {
+            if (rir2pir.compiler.debug.includes(DebugFlag::ShowWarnings)) {
                 std::cout << "warn: trying to use nil src idx:";
                 bc.print();
             }
@@ -98,7 +98,7 @@ bool StackMachine::tryRunCurrentBC(const Rir2Pir& rir2pir, Builder& insert) {
         break;
 
     case Opcode::guard_fun_:
-        if (rir2pir.compiler.isVerbose()) {
+        if (rir2pir.compiler.debug.includes(DebugFlag::ShowWarnings)) {
             std::cout << "warn: guard ignored "
                       << CHAR(PRINTNAME(
                              rir::Pool::get(bc.immediate.guard_fun_args.name)))
@@ -477,7 +477,7 @@ bool StackMachine::tryRunCurrentBC(const Rir2Pir& rir2pir, Builder& insert) {
     // TODO: change to assert
     // assert(srcIdx == 0 && "source index is getting lost in translation");
     if (srcIdx)
-        if (rir2pir.compiler.isVerbose()) {
+        if (rir2pir.compiler.debug.includes(DebugFlag::ShowWarnings)) {
             std::cout << "warn: losing src index:";
             bc.print();
         }
