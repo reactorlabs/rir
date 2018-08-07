@@ -45,6 +45,8 @@ rir.body <- function(f) {
 }
 
 # breakpoint during evaluation
-# insert a call to `.debug.break()` in R code and get a breakpoint when the function is evaluated
-# this is an empty function because it gets directly lowered to the "int3_" bytecode
-.debug.break <- function() { }
+# insert a call to `.debug.break()` in R code and get a breakpoint when it is evaluated
+# note: the actual body of this function is replaced by an "int3_" bytecode
+.debug.break <- function() {
+    stop("missed breakpoint, did you re-compile RIR?")
+}
