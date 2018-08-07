@@ -73,6 +73,7 @@ DECLARE(packageSlot, "packageSlot");
 DECLARE(attributes, "attributes");
 DECLARE(c, "c");
 DECLARE(standardGeneric, "standardGeneric");
+DECLARE(debugBreak, ".debug.break");
 
 #undef DECLARE
 } // namespace symbol

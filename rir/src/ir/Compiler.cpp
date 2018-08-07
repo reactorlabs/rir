@@ -935,11 +935,9 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
         return true;
     }
 
-    // Is this a debug breakpoint?
-    // Check if the symbol name is ".debug.break"; if so, generate an int3_
-    // instruction. Push R_NilValue because the function "call" needs to return
-    // something.
-    if (strcmp(CHAR(PRINTNAME(fun)), ".debug.break") == 0) {
+    if (fun == symbol::debugBreak) {
+        // Push R_NilValue because this is a "function call" and needs to return
+        // something.
         cs << BC::push(R_NilValue) << BC::int3();
         cs.addSrc(ast);
         return true;
