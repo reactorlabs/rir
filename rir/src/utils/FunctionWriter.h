@@ -36,13 +36,12 @@ class FunctionWriter {
 
     ~FunctionWriter() { R_ReleaseObject(function->container()); }
 
-    Code* writeCode(SEXP ast, void* bc, unsigned codeSize, char* callSiteBuffer,
-                    unsigned callSiteLength, std::vector<unsigned>& sources,
-                    bool markDefaultArg, size_t localsCnt) {
+    Code* writeCode(SEXP ast, void* bc, unsigned codeSize,
+                    std::vector<unsigned>& sources, bool markDefaultArg,
+                    size_t localsCnt) {
         assert(function->size <= capacity);
 
-        unsigned totalSize =
-            Code::size(codeSize, sources.size(), callSiteLength);
+        unsigned totalSize = Code::size(codeSize, sources.size());
 
         if (function->size + totalSize > capacity) {
             unsigned newCapacity = capacity;
@@ -72,9 +71,8 @@ class FunctionWriter {
         function->size += totalSize;
         assert(function->size <= capacity);
 
-        Code* code =
-            new (insert) Code(ast, codeSize, sources.size(), callSiteLength,
-                              offset, markDefaultArg, localsCnt);
+        Code* code = new (insert) Code(ast, codeSize, sources.size(), offset,
+                                       markDefaultArg, localsCnt);
 
         assert(code->function() == function);
 
@@ -137,9 +135,6 @@ class FunctionWriter {
 
         // set the last code offset
         function->foffset = offset;
-
-        if (callSiteLength)
-            memcpy((void*)code->callSites(), callSiteBuffer, callSiteLength);
 
         return code;
     }

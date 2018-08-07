@@ -274,6 +274,44 @@ BC BC::put(uint32_t i) {
     im.i = i;
     return BC(Opcode::put_, im);
 }
+BC BC::callImplicit(const std::vector<FunIdx>& args, SEXP ast) {
+    ImmediateArguments im;
+    im.callFixedArgs.nargs = args.size();
+    im.callFixedArgs.ast = Pool::insert(ast);
+    return BC(Opcode::call_implicit_, im, args, {});
+}
+BC BC::callImplicit(const std::vector<FunIdx>& args,
+                    const std::vector<SEXP>& names, SEXP ast) {
+    ImmediateArguments im;
+    im.callFixedArgs.nargs = args.size();
+    im.callFixedArgs.ast = Pool::insert(ast);
+    std::vector<PoolIdx> nameIdxs;
+    for (auto n : names)
+        nameIdxs.push_back(Pool::insert(n));
+    return BC(Opcode::named_call_implicit_, im, args, nameIdxs);
+}
+BC BC::call(size_t nargs, SEXP ast) {
+    ImmediateArguments im;
+    im.callFixedArgs.nargs = nargs;
+    im.callFixedArgs.ast = Pool::insert(ast);
+    return BC(Opcode::call_, im);
+}
+BC BC::call(size_t nargs, const std::vector<SEXP>& names, SEXP ast) {
+    ImmediateArguments im;
+    im.callFixedArgs.nargs = nargs;
+    im.callFixedArgs.ast = Pool::insert(ast);
+    std::vector<PoolIdx> nameIdxs;
+    for (auto n : names)
+        nameIdxs.push_back(Pool::insert(n));
+    return BC(Opcode::named_call_, im, {}, nameIdxs);
+}
+BC BC::staticCall(size_t nargs, SEXP ast, SEXP target) {
+    ImmediateArguments im;
+    im.staticCallFixedArgs.nargs = nargs;
+    im.staticCallFixedArgs.ast = Pool::insert(ast);
+    im.staticCallFixedArgs.target = Pool::insert(target);
+    return BC(Opcode::static_call_, im);
+}
 
 } // rir
 

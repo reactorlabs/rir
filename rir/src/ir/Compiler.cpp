@@ -900,7 +900,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
                 cs << BC::guardNamePrimitive(symbol::Internal);
                 for (auto a : args)
                     compileExpr(ctx, a);
-                cs.insertStaticCall(args.length(), inAst, internal);
+                cs << BC::staticCall(args.length(), inAst, internal);
 
                 return true;
             }
@@ -922,7 +922,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
 
         for (auto a : args)
             compileExpr(ctx, a);
-        cs.insertStaticCall(args.length(), ast, builtin);
+        cs << BC::staticCall(args.length(), ast, builtin);
 
         return true;
     }
@@ -1008,16 +1008,9 @@ bool compileWithGuess(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
     // cannot reuse matchArgs from gnur (but could rewrite it)
 
     cs << BC::guardName(fun, cls);
-
-    FunctionSignature* signature = new FunctionSignature();
-    signature->argsOnStack = true;
-
-    for (auto a : args) {
+    for (auto a : args)
         compileExpr(ctx, a);
-        signature->pushArgument({true, TYPEOF(a)});
-    }
-
-    cs.insertStaticCall(args.length(), ast, cls, signature);
+    cs << BC::staticCall(args.length(), ast, cls);
 
     return true;
 }
@@ -1077,9 +1070,9 @@ void compileCall(Context& ctx, SEXP ast, SEXP fun, SEXP args) {
     assert(callArgs.size() < BC::MAX_NUM_ARGS);
 
     if (hasNames)
-        cs.insertNamedCallImplicit(callArgs, names, ast);
+        cs << BC::callImplicit(callArgs, names, ast);
     else
-        cs.insertCallImplicit(callArgs, ast);
+        cs << BC::callImplicit(callArgs, ast);
 }
 
 // Lookup

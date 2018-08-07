@@ -125,15 +125,8 @@ bool StackMachine::tryRunCurrentBC(const Rir2Pir& rir2pir, Builder& insert) {
         break;
 
     case Opcode::call_implicit_: {
-        rir::CallSite* cs = bc.callSite(srcCode);
-
         SEXP monomorphic = nullptr;
-        if (cs->hasProfile) {
-            auto prof = cs->profile();
-            if (prof->numTargets == 1) {
-                monomorphic = prof->targets[0];
-            }
-        }
+        // TODO once we have again profiling data, use it here
 
         std::vector<Value*> args;
         for (auto argi : bc.immediateCallArguments) {
@@ -157,8 +150,9 @@ bool StackMachine::tryRunCurrentBC(const Rir2Pir& rir2pir, Builder& insert) {
             args.push_back(insert(new MkArg(prom, val, env)));
         }
 
+        auto ast = bc.immediate.callFixedArgs.ast;
         auto insertGenericCall = [&]() {
-            push(insert(new Call(insert.env, pop(), args, cs->call)));
+            push(insert(new Call(insert.env, pop(), args, ast)));
         };
         if (monomorphic && isValidClosureSEXP(monomorphic)) {
             rir2pir.compiler.compileClosure(
@@ -172,14 +166,13 @@ bool StackMachine::tryRunCurrentBC(const Rir2Pir& rir2pir, Builder& insert) {
                     BB* fallback = insert.createBB();
                     insert.bb = fallback;
                     curBB->next0 = fallback;
-                    Value* r1 =
-                        insert(new Call(insert.env, pop(), args, cs->call));
+                    Value* r1 = insert(new Call(insert.env, pop(), args, ast));
 
                     BB* asExpected = insert.createBB();
                     insert.bb = asExpected;
                     curBB->next1 = asExpected;
-                    Value* r2 = insert(new StaticCall(insert.env, f, args,
-                                                      monomorphic, cs->call));
+                    Value* r2 = insert(
+                        new StaticCall(insert.env, f, args, monomorphic, ast));
 
                     BB* cont = insert.createBB();
                     fallback->next0 = cont;
@@ -210,19 +203,19 @@ bool StackMachine::tryRunCurrentBC(const Rir2Pir& rir2pir, Builder& insert) {
 
     case Opcode::call_: {
         unsigned n = bc.immediate.callFixedArgs.nargs;
-        rir::CallSite* cs = bc.callSite(srcCode);
         std::vector<Value*> args(n);
         for (size_t i = 0; i < n; ++i)
             args[n - i - 1] = pop();
 
         auto target = pop();
-        push(insert(new Call(env, target, args, cs->call)));
+        push(insert(
+            new Call(env, target, args, bc.immediate.callFixedArgs.ast)));
         break;
     }
 
     case Opcode::static_call_: {
         unsigned n = bc.immediate.staticCallFixedArgs.nargs;
-        rir::CallSite* cs = bc.callSite(srcCode);
+        auto ast = bc.immediate.staticCallFixedArgs.ast;
         SEXP target = rir::Pool::get(bc.immediate.staticCallFixedArgs.target);
 
         std::vector<Value*> args(n);
@@ -234,9 +227,9 @@ bool StackMachine::tryRunCurrentBC(const Rir2Pir& rir2pir, Builder& insert) {
             static int vector = findBuiltin("vector");
 
             if (getBuiltinNr(target) == vector)
-                push(insert(new CallSafeBuiltin(target, args, cs->call)));
+                push(insert(new CallSafeBuiltin(target, args, ast)));
             else
-                push(insert(new CallBuiltin(env, target, args, cs->call)));
+                push(insert(new CallBuiltin(env, target, args, ast)));
         } else {
             assert(TYPEOF(target) == CLOSXP);
             if (!isValidClosureSEXP(target)) {
@@ -249,8 +242,7 @@ bool StackMachine::tryRunCurrentBC(const Rir2Pir& rir2pir, Builder& insert) {
             rir2pir.compiler.compileClosure(
                 target,
                 [&](Closure* f) {
-                    push(
-                        insert(new StaticCall(env, f, args, target, cs->call)));
+                    push(insert(new StaticCall(env, f, args, target, ast)));
                 },
                 [&]() { failed = true; });
             if (failed)

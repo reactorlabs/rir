@@ -923,28 +923,28 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
 
             case Tag::Call: {
                 auto call = Call::Cast(instr);
-                cs.insertCall(call->nCallArgs(), Pool::get(call->srcIdx));
+                cs << BC::call(call->nCallArgs(), Pool::get(call->srcIdx));
                 break;
             }
             case Tag::StaticCall: {
                 auto call = StaticCall::Cast(instr);
                 compiler.compile(call->cls(), call->origin());
-                cs.insertStaticCall(call->nCallArgs(), Pool::get(call->srcIdx),
-                                    call->origin());
+                cs << BC::staticCall(call->nCallArgs(), Pool::get(call->srcIdx),
+                                     call->origin());
                 break;
             }
             case Tag::CallBuiltin: {
                 // TODO(mhyee): all args have to be values, optimize here?
                 auto blt = CallBuiltin::Cast(instr);
-                cs.insertStaticCall(blt->nCallArgs(), Pool::get(blt->srcIdx),
-                                    blt->blt);
+                cs << BC::staticCall(blt->nCallArgs(), Pool::get(blt->srcIdx),
+                                     blt->blt);
                 break;
             }
             case Tag::CallSafeBuiltin: {
                 // TODO(mhyee): all args have to be values, optimize here?
                 auto blt = CallSafeBuiltin::Cast(instr);
-                cs.insertStaticCall(blt->nargs(), Pool::get(blt->srcIdx),
-                                    blt->blt);
+                cs << BC::staticCall(blt->nargs(), Pool::get(blt->srcIdx),
+                                     blt->blt);
                 break;
             }
             case Tag::MkEnv: {

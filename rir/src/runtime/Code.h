@@ -46,17 +46,14 @@ struct FunctionSignature;
 #pragma pack(push)
 #pragma pack(1)
 
-struct CallSite;
-
 struct Code {
     friend class FunctionWriter;
     friend class CodeVerifier;
 
     Code() = delete;
 
-    Code(SEXP ast, unsigned codeSize, unsigned sourceSize,
-         unsigned callSiteLength, unsigned offset, bool isDefaultArg,
-         size_t localsCnt);
+    Code(SEXP ast, unsigned codeSize, unsigned sourceSize, unsigned offset,
+         bool isDefaultArg, size_t localsCnt);
 
     // Magic number that attempts to be PROMSXP already marked by the GC
     unsigned magic;
@@ -76,8 +73,6 @@ struct Code {
     unsigned skiplistLength; /// number of skiplist entries
 
     unsigned srcLength; /// number of instructions
-
-    unsigned callSiteLength; /// length of the call site information
 
     unsigned perfCounter;
 
@@ -99,19 +94,7 @@ struct Code {
      *
      *   srcList       cp_idx (ast)      srcLength * sizeof(unsigned)
      *
-     *   callSites     CallSiteStruct    callSiteLength
-     *
-     *
-     *
-     * CallSiteStructs are laid out next to each other. Since they are variable
-     * length, the call instruction refers to them by offset.
-     *
      */
-
-    CallSite* callSite(uint32_t idx) {
-        assert(idx < callSiteLength);
-        return (CallSite*)(callSites() + idx);
-    }
 
     /** Returns a pointer to the instructions in c.  */
     Opcode* code() { return (Opcode*)data; }
@@ -122,14 +105,12 @@ struct Code {
 
     size_t size() {
         return sizeof(Code) + pad4(codeSize) + srcLength * sizeof(unsigned) +
-               skiplistLength * 2 * sizeof(unsigned) + callSiteLength;
+               skiplistLength * 2 * sizeof(unsigned);
     }
 
-    static size_t size(unsigned codeSize, unsigned sourcesSize,
-                       unsigned callSiteLength) {
+    static size_t size(unsigned codeSize, unsigned sourcesSize) {
         return sizeof(Code) + pad4(codeSize) + sourcesSize * sizeof(unsigned) +
-               calcSkiplistLength(sourcesSize) * 2 * sizeof(unsigned) +
-               callSiteLength;
+               calcSkiplistLength(sourcesSize) * 2 * sizeof(unsigned);
     }
 
     unsigned getSrcIdxAt(Opcode* pc, bool allowMissing) {
@@ -181,54 +162,6 @@ struct Code {
         return (unsigned*)((char*)skiplist() +
                            skiplistLength * 2 * sizeof(unsigned));
     }
-
-    uintptr_t callSites() {
-        return (uintptr_t)raw_src() + srcLength * sizeof(unsigned);
-    }
-};
-
-const static unsigned CallSiteProfile_maxTaken = 1 << 28;
-const static unsigned CallSiteProfile_maxTargets = 4;
-struct CallSiteProfile {
-    uint32_t taken : 28;
-    uint32_t takenOverflow : 1;
-    uint32_t numTargets : 2;
-    uint32_t targetsOverflow : 1;
-    SEXP targets[3];
-};
-
-struct CallSite {
-    uint32_t call;
-
-    uint32_t hasProfile : 1;
-    uint32_t free : 28;
-
-    // This is duplicated in the BC instruction, not sure how to avoid
-    // without making accessing the payload a pain...
-    uint32_t nargs;
-
-    FunctionSignature* signature;
-
-    uint32_t payload[];
-
-    /*
-     * Layout of args is:
-     *
-     * CallSiteProfile           if hasProfile
-     *
-     */
-
-    CallSiteProfile* profile() {
-        assert(hasProfile);
-        return (CallSiteProfile*)&payload[0];
-    }
-
-    static unsigned size(bool hasProfile, uint32_t nargs) {
-        return sizeof(CallSite) + sizeof(uint32_t) * ((0)) +
-               +(hasProfile ? sizeof(CallSiteProfile) : 0);
-    }
-
-    unsigned size() { return size(hasProfile, nargs); }
 };
 
 #pragma pack(pop)

@@ -138,22 +138,13 @@ void CodeVerifier::verifyFunctionLayout(SEXP sexp, ::Context* ctx) {
         assert(oldo == c->stackLength and "Invalid stack layout reported");
 
         assert((uintptr_t)(c + 1) + pad4(c->codeSize) +
-                       c->srcLength * sizeof(unsigned) +
-                       c->skiplistLength * 2 * sizeof(unsigned) +
-                       c->callSiteLength ==
-                   (uintptr_t)objs[i + 1] and
+                   c->srcLength * sizeof(unsigned) +
+                   c->skiplistLength * 2 * sizeof(unsigned) &&
                "Invalid code length reported");
     }
 
     // remove the sentinel
     objs.pop_back();
-
-    auto verifyCallSite = [&ctx](CallSite* cs, uint32_t nargs) {
-        SEXP call = cp_pool_at(ctx, cs->call);
-        assert(TYPEOF(call) == LANGSXP || TYPEOF(call) == SYMSXP ||
-               TYPEOF(call) == NILSXP);
-        assert(cs->nargs == nargs);
-    };
 
     // check that the call instruction has proper arguments and number of
     // instructions is valid
@@ -199,10 +190,7 @@ void CodeVerifier::verifyFunctionLayout(SEXP sexp, ::Context* ctx) {
             }
             if (*cptr == Opcode::call_implicit_ ||
                 *cptr == Opcode::named_call_implicit_) {
-                unsigned callIdx = *reinterpret_cast<Immediate*>(cptr + 1);
-                CallSite* cs = c->callSite(callIdx);
                 uint32_t nargs = *reinterpret_cast<Immediate*>(cptr + 5);
-                verifyCallSite(cs, nargs);
 
                 for (size_t i = 0, e = nargs; i != e; ++i) {
                     uint32_t offset = cur.immediateCallArguments[i];

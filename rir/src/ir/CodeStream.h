@@ -32,7 +32,6 @@ class CodeStream {
 
     std::vector<unsigned> sources;
 
-    std::vector<char> callSites_;
     uint32_t nextCallSiteIdx_ = 0;
 
   public:
@@ -62,176 +61,9 @@ class CodeStream {
         return (needed % align == 0) ? needed
                                      : needed + align - (needed % align);
     }
-    void ensureCallSiteSize(uint32_t needed) {
-        needed = alignedSize(needed);
-        if (callSites_.size() <= nextCallSiteIdx_ + needed) {
-            unsigned newSize = pad4(needed + callSites_.size() * 1.5);
-            callSites_.resize(newSize);
-        }
-    }
-
-    CallSite* getNextCallSite(uint32_t needed) {
-        needed = alignedSize(needed);
-        CallSite* cs = (CallSite*)&callSites_[nextCallSiteIdx_];
-        memset(cs, 0, needed);
-        nextCallSiteIdx_ += needed;
-        return cs;
-    }
-
-    CodeStream& insertCall(uint32_t nargs, SEXP call,
-                           FunctionSignature* signature = nullptr) {
-        insert(Opcode::call_);
-        BC::CallFixedArgs a;
-        a.call_id = nextCallSiteIdx_;
-        a.nargs = nargs;
-        insert(a);
-        sources.push_back(0);
-
-        unsigned needed = CallSite::size(false, nargs);
-        ensureCallSiteSize(needed);
-
-        CallSite* cs = getNextCallSite(needed);
-
-        cs->nargs = nargs;
-        cs->call = Pool::insert(call);
-        cs->hasProfile = false;
-        cs->signature = signature;
-
-        return *this;
-    }
-
-    CodeStream& insertNamedCall(uint32_t nargs, std::vector<SEXP> names,
-                                SEXP call,
-                                FunctionSignature* signature = nullptr) {
-        insert(Opcode::named_call_);
-        BC::CallFixedArgs a;
-        a.call_id = nextCallSiteIdx_;
-        a.nargs = nargs;
-        insert(a);
-
-        unsigned needed = CallSite::size(false, nargs);
-        ensureCallSiteSize(needed);
-
-        CallSite* cs = getNextCallSite(needed);
-
-        cs->nargs = nargs;
-        cs->call = Pool::insert(call);
-        cs->hasProfile = false;
-
-        cs->signature = signature;
-
-        for (unsigned i = 0; i < nargs; ++i) {
-            insert(Pool::insert(names[i]));
-        }
-
-        sources.push_back(0);
-        return *this;
-    }
-
-    CodeStream& insertStaticCall(uint32_t nargs, SEXP call, SEXP target,
-                                 FunctionSignature* signature = nullptr) {
-        insert(Opcode::static_call_);
-        BC::StaticCallFixedArgs a;
-        a.call_id = nextCallSiteIdx_;
-        a.nargs = nargs;
-        assert(TYPEOF(target) == CLOSXP || TYPEOF(target) == BUILTINSXP);
-        a.target = Pool::insert(target);
-        insert(a);
-        sources.push_back(0);
-
-        unsigned needed = CallSite::size(false, nargs);
-        ensureCallSiteSize(needed);
-
-        CallSite* cs = getNextCallSite(needed);
-
-        cs->nargs = nargs;
-        cs->call = Pool::insert(call);
-        cs->hasProfile = false;
-
-        cs->signature = signature;
-
-        return *this;
-    }
-
-    CodeStream& insertNamedCallImplicit(
-        std::vector<BC::FunIdx> args, std::vector<SEXP> names, SEXP call,
-        SEXP selector = nullptr, FunctionSignature* signature = nullptr) {
-        uint32_t nargs = args.size();
-
-        insert(Opcode::named_call_implicit_);
-        BC::CallImplicitFixedArgs a;
-        a.call_id = nextCallSiteIdx_;
-        a.nargs = nargs;
-        insert(a);
-
-        unsigned needed = CallSite::size(true, nargs);
-        ensureCallSiteSize(needed);
-
-        CallSite* cs = getNextCallSite(needed);
-
-        cs->nargs = nargs;
-        cs->call = Pool::insert(call);
-        cs->hasProfile = true;
-
-        cs->signature = signature;
-
-        for (BC::FunIdx arg : args)
-            insert(arg);
-        for (size_t i = 0; i < nargs; ++i)
-            insert(Pool::insert(names[i]));
-
-        sources.push_back(0);
-        return *this;
-    }
-
-    CodeStream& insertCallImplicit(std::vector<BC::FunIdx> args, SEXP call,
-                                   SEXP selector = nullptr,
-                                   FunctionSignature* signature = nullptr) {
-        uint32_t nargs = args.size();
-
-        insert(Opcode::call_implicit_);
-        BC::CallImplicitFixedArgs a;
-        a.call_id = nextCallSiteIdx_;
-        a.nargs = nargs;
-        insert(a);
-
-        unsigned needed = CallSite::size(true, nargs);
-        ensureCallSiteSize(needed);
-
-        CallSite* cs = getNextCallSite(needed);
-
-        cs->nargs = nargs;
-        cs->call = Pool::insert(call);
-        cs->hasProfile = true;
-
-        cs->signature = signature;
-
-        for (BC::FunIdx arg : args) {
-            insert(arg);
-        }
-
-        sources.push_back(0);
-        return *this;
-    }
-
-    CodeStream& insertWithCallSite(Opcode bc, CallSite* callSite) {
-        insert(bc);
-        insert(nextCallSiteIdx_);
-        insert(callSite->nargs);
-        sources.push_back(0);
-
-        unsigned needed = callSite->size();
-        ensureCallSiteSize(needed);
-
-        void* cs = &callSites_[nextCallSiteIdx_];
-        nextCallSiteIdx_ += needed;
-        memcpy(cs, callSite, needed);
-
-        return *this;
-    }
 
     CodeStream& operator<<(const BC& b) {
-        assert(b.bc != Opcode::call_implicit_);
+        b.print();
         if (b.bc == Opcode::label) {
             return *this << b.immediate.offset;
         }
@@ -299,8 +131,7 @@ class CodeStream {
     }
 
     BC::FunIdx finalize(bool markDefaultArg, size_t localsCnt) {
-        Code* res = function.writeCode(ast, &(*code)[0], pos, callSites_.data(),
-                                       callSites_.size(), sources,
+        Code* res = function.writeCode(ast, &(*code)[0], pos, sources,
                                        markDefaultArg, localsCnt);
 
         for (auto p : patchpoints) {
@@ -313,7 +144,6 @@ class CodeStream {
         label2pos.clear();
         patchpoints.clear();
         nextLabel = 0;
-        callSites_.clear();
         nextCallSiteIdx_ = 0;
 
         delete code;

@@ -3,8 +3,8 @@
 #include "utils/Pool.h"
 
 namespace rir {
-Code::Code(SEXP ast, unsigned cs, unsigned sourceSize, unsigned csl,
-           unsigned offset, bool isDefaultArg, size_t localsCnt) {
+Code::Code(SEXP ast, unsigned cs, unsigned sourceSize, unsigned offset,
+           bool isDefaultArg, size_t localsCnt) {
     magic = CODE_MAGIC;
     header = offset;
     src = src_pool_add(globalContext(), ast);
@@ -12,7 +12,6 @@ Code::Code(SEXP ast, unsigned cs, unsigned sourceSize, unsigned csl,
     codeSize = cs;
     skiplistLength = calcSkiplistLength(sourceSize);
     srcLength = sourceSize;
-    callSiteLength = csl;
     perfCounter = 0;
     isDefaultArgument = isDefaultArg;
 }
@@ -45,12 +44,7 @@ void Code::print() {
         }
         Rprintf(" %5d ", ((uintptr_t)pc - (uintptr_t)code()));
         BC bc = BC::advance(&pc);
-        if (bc.isCallsite()) {
-            CallSite* cs = bc.callSite(this);
-            bc.print(cs);
-        } else {
-            bc.print();
-        }
+        bc.print();
     }
 }
 }

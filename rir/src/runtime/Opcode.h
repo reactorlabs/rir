@@ -17,7 +17,7 @@ RIR_INLINE rir::Opcode* advancePc(rir::Opcode* pc) {
         bc == rir::Opcode::named_call_) {
         pc += 1 + sizeof(Immediate);
         Immediate nargs = *((Immediate*)pc);
-        pc += (1 + nargs) * sizeof(Immediate);
+        pc += (2 + nargs) * sizeof(Immediate);
         if (bc == rir::Opcode::named_call_implicit_)
             pc += nargs * sizeof(Immediate);
         return pc;

@@ -46,8 +46,6 @@ namespace rir {
 //
 
 struct Code;
-struct CallSite;
-struct CallSiteProfile;
 
 enum class Opcode : uint8_t {
 
@@ -84,17 +82,15 @@ class BC {
     // jmp offset
     typedef int32_t Jmp;
     typedef Jmp Label;
-    struct CallImplicitFixedArgs {
-        Immediate call_id;
-        NumArgs nargs;
-    };
     struct CallFixedArgs {
-        Immediate call_id;
+        Immediate unused;
         NumArgs nargs;
+        Immediate ast;
     };
     struct StaticCallFixedArgs {
-        Immediate call_id;
+        Immediate unused;
         NumArgs nargs;
+        Immediate ast;
         Immediate target;
     };
     struct GuardFunArgs {
@@ -118,7 +114,6 @@ class BC {
     // On the bytecode stream each immediate argument uses only the actual
     // space required.
     union ImmediateArguments {
-        CallImplicitFixedArgs callImplicitFixedArgs;
         StaticCallFixedArgs staticCallFixedArgs;
         CallFixedArgs callFixedArgs;
         GuardFunArgs guard_fun_args;
@@ -138,6 +133,9 @@ class BC {
         return i;
     }
 
+    Opcode bc;
+    ImmediateArguments immediate;
+
     std::vector<ArgIdx> immediateCallArguments;
     std::vector<PoolIdx> callArgumentNames;
 
@@ -150,16 +148,13 @@ class BC {
         // Read implicit promise argument offsets
         if (bc == Opcode::call_implicit_ ||
             bc == Opcode::named_call_implicit_) {
-            pc += sizeof(CallImplicitFixedArgs) / sizeof(Opcode);
-            for (size_t i = 0; i < immediate.callImplicitFixedArgs.nargs; ++i)
+            pc += sizeof(CallFixedArgs);
+            for (size_t i = 0; i < immediate.callFixedArgs.nargs; ++i)
                 immediateCallArguments.push_back(readImmediate(&pc));
         }
         // Read named arguments
-        if (bc == Opcode::named_call_) {
+        if (bc == Opcode::named_call_ || bc == Opcode::named_call_implicit_) {
             for (size_t i = 0; i < immediate.callFixedArgs.nargs; ++i)
-                callArgumentNames.push_back(readImmediate(&pc));
-        } else if (bc == Opcode::named_call_implicit_) {
-            for (size_t i = 0; i < immediate.callImplicitFixedArgs.nargs; ++i)
                 callArgumentNames.push_back(readImmediate(&pc));
         }
     }
@@ -172,22 +167,25 @@ class BC {
 
     bool is(Opcode aBc) { return bc == aBc; }
 
-    Opcode bc;
-    ImmediateArguments immediate;
-
     inline size_t size() {
         // Those are the 3 variable length BC we have
+        // call implicit has the promise offsets in the bc stream
         if (bc == Opcode::call_implicit_)
-            return immediate.callImplicitFixedArgs.nargs * sizeof(FunIdx) +
+            return immediate.callFixedArgs.nargs * sizeof(FunIdx) +
                    fixedSize(bc);
-        if (bc == Opcode::named_call_implicit_)
-            return immediate.callImplicitFixedArgs.nargs * 2 * sizeof(FunIdx) +
-                   fixedSize(bc);
+        // named call has the names in the bc stream
         if (bc == Opcode::named_call_)
             return immediate.callFixedArgs.nargs * sizeof(FunIdx) +
                    fixedSize(bc);
+        // named call implicit has both the promargs and names in the bc stream
+        if (bc == Opcode::named_call_implicit_)
+            return immediate.callFixedArgs.nargs * 2 * sizeof(FunIdx) +
+                   fixedSize(bc);
+
+        // the others have no variable length part
         return fixedSize(bc);
     }
+
     inline size_t popCount() {
         // return also is a leave
         assert(bc != Opcode::return_);
@@ -203,16 +201,13 @@ class BC {
     void write(CodeStream& cs) const;
 
     // Print it to stdout
-    void print(CallSite* cs = nullptr);
-    void printImmediateArgs();
-    void printNames();
-    void printProfile(CallSite* cs);
+    void print() const;
+    void printImmediateArgs() const;
+    void printNames() const;
+    void printProfile() const;
 
     // Accessors to load immediate constant from the pool
-    SEXP immediateConst();
-
-    // Return the callsite of this BC, needs the cassSites buffer as input
-    CallSite* callSite(Code* code);
+    SEXP immediateConst() const;
 
     inline static Opcode* jmpTarget(Opcode* pos) {
         BC bc = BC::decode(pos);
@@ -220,7 +215,7 @@ class BC {
         return (Opcode*)((uintptr_t)pos + bc.size() + bc.immediate.offset);
     }
 
-    bool isCallsite() const {
+    bool isCall() const {
         return bc == Opcode::call_implicit_ || bc == Opcode::call_ ||
                bc == Opcode::named_call_ ||
                bc == Opcode::named_call_implicit_ || bc == Opcode::static_call_;
@@ -362,11 +357,22 @@ class BC {
     inline static BC isObj();
     inline static BC return_();
     inline static BC int3();
+    inline static BC callImplicit(const std::vector<FunIdx>& args, SEXP ast);
+    inline static BC callImplicit(const std::vector<FunIdx>& args,
+                                  const std::vector<SEXP>& names, SEXP ast);
+    inline static BC call(size_t nargs, SEXP ast);
+    inline static BC call(size_t nargs, const std::vector<SEXP>& names,
+                          SEXP ast);
+    inline static BC staticCall(size_t nargs, SEXP ast, SEXP target);
 
   private:
     explicit BC(Opcode bc) : bc(bc), immediate({{0}}) {}
     BC(Opcode bc, ImmediateArguments immediate)
         : bc(bc), immediate(immediate) {}
+    BC(Opcode bc, ImmediateArguments immediate, const std::vector<FunIdx>& args,
+       const std::vector<PoolIdx>& names)
+        : bc(bc), immediate(immediate), immediateCallArguments(args),
+          callArgumentNames(names) {}
 
     static unsigned fixedSize(Opcode bc) {
         switch (bc) {
@@ -449,8 +455,6 @@ class BC {
             break;
         case Opcode::call_implicit_:
         case Opcode::named_call_implicit_:
-            immediate.callImplicitFixedArgs = *(CallImplicitFixedArgs*)pc;
-            break;
         case Opcode::call_:
         case Opcode::named_call_:
             immediate.callFixedArgs = *(CallFixedArgs*)pc;

@@ -24,36 +24,35 @@ using namespace rir;
 
 struct CallContext {
     CallContext(Code* c, unsigned callsiteId, SEXP callee, size_t nargs,
-                R_bcstack_t* stackArgs, Immediate* implicitArgs,
+                Immediate ast, R_bcstack_t* stackArgs, Immediate* implicitArgs,
                 Immediate* names, SEXP callerEnv, Context* ctx)
         : nargs_(nargs), stackArgs(stackArgs), implicitArgs(implicitArgs),
           names(names), caller(c->function()), callerEnv(callerEnv),
-          callSite(c->callSite(callsiteId)),
-          ast(cp_pool_at(ctx, callSite->call)), callee_(callee) {
+          ast(cp_pool_at(ctx, ast)), callee_(callee) {
         assert(!callee || TYPEOF(callee) == CLOSXP ||
                TYPEOF(callee) == SPECIALSXP || TYPEOF(callee) == BUILTINSXP);
     }
 
-    CallContext(Code* c, unsigned id, SEXP callee, size_t nargs,
+    CallContext(Code* c, unsigned id, SEXP callee, size_t nargs, Immediate ast,
                 Immediate* implicitArgs, Immediate* names, SEXP callerEnv,
                 Context* ctx)
-        : CallContext(c, id, callee, nargs, nullptr, implicitArgs, names,
+        : CallContext(c, id, callee, nargs, ast, nullptr, implicitArgs, names,
                       callerEnv, ctx) {}
 
-    CallContext(Code* c, unsigned id, SEXP callee, size_t nargs,
+    CallContext(Code* c, unsigned id, SEXP callee, size_t nargs, Immediate ast,
                 R_bcstack_t* stackArgs, Immediate* names, SEXP callerEnv,
                 Context* ctx)
-        : CallContext(c, id, callee, nargs, stackArgs, nullptr, names,
+        : CallContext(c, id, callee, nargs, ast, stackArgs, nullptr, names,
                       callerEnv, ctx) {}
 
-    CallContext(Code* c, unsigned id, SEXP callee, size_t nargs,
+    CallContext(Code* c, unsigned id, SEXP callee, size_t nargs, Immediate ast,
                 Immediate* implicitArgs, SEXP callerEnv, Context* ctx)
-        : CallContext(c, id, callee, nargs, nullptr, implicitArgs, nullptr,
+        : CallContext(c, id, callee, nargs, ast, nullptr, implicitArgs, nullptr,
                       callerEnv, ctx) {}
 
-    CallContext(Code* c, unsigned id, SEXP callee, size_t nargs,
+    CallContext(Code* c, unsigned id, SEXP callee, size_t nargs, Immediate ast,
                 R_bcstack_t* stackArgs, SEXP callerEnv, Context* ctx)
-        : CallContext(c, id, callee, nargs, stackArgs, nullptr, nullptr,
+        : CallContext(c, id, callee, nargs, ast, stackArgs, nullptr, nullptr,
                       callerEnv, ctx) {}
 
     size_t nargs_;
@@ -62,7 +61,6 @@ struct CallContext {
     Immediate* names;
     Function* caller;
     SEXP callerEnv;
-    CallSite* callSite;
     SEXP ast;
 
     unsigned nargs() const { return nargs_; }
@@ -226,9 +224,7 @@ SEXP createLegacyArgsListFromStackValues(const CallContext& call,
     SEXP result = R_NilValue;
     SEXP pos = result;
 
-    auto cs = call.callSite;
-
-    for (size_t i = 0; i < cs->nargs; ++i) {
+    for (size_t i = 0; i < call.nargs(); ++i) {
 
         SEXP name = call.hasNames() ? call.name(i, ctx) : R_NilValue;
 
@@ -259,11 +255,10 @@ SEXP createLegacyArgsList(const CallContext& call, bool eagerCallee,
                           Context* ctx) {
     SEXP result = R_NilValue;
     SEXP pos = result;
-    auto cs = call.callSite;
 
     // loop through the arguments and create a promise, unless it is a missing
     // argument
-    for (size_t i = 0; i < cs->nargs; ++i) {
+    for (size_t i = 0; i < call.nargs(); ++i) {
         unsigned argi = call.implicitArgOffset(i);
         SEXP name = call.hasNames() ? call.name(i, ctx) : R_NilValue;
 
@@ -401,44 +396,6 @@ void warnSpecial(SEXP callee, SEXP call) {
     } else {
         Rprintf("warning: calling special: %s\n",
                 R_FunTab[((sexprec_rjit*)callee)->u.i].name);
-    }
-}
-
-/** Performs the call.
-
-  TODO this is currently super simple.
-
- */
-
-void doProfileCall(CallSite*, SEXP);
-RIR_INLINE void profileCall(const CallContext& call, SEXP callee) {
-    if (!call.callSite->hasProfile)
-        return;
-    doProfileCall(call.callSite, callee);
-}
-RIR_INLINE void profileCall(const CallContext& call) {
-    return profileCall(call, call.callee());
-}
-
-void doProfileCall(CallSite* cs, SEXP callee) {
-    CallSiteProfile* p = cs->profile();
-    if (!p->takenOverflow) {
-        if (p->taken + 1 == CallSiteProfile_maxTaken)
-            p->takenOverflow = true;
-        else
-            p->taken++;
-    }
-    if (!p->targetsOverflow) {
-        if (p->numTargets + 1 == CallSiteProfile_maxTargets) {
-            p->targetsOverflow = true;
-        } else {
-            int i = 0;
-            for (; i < p->numTargets; ++i)
-                if (p->targets[i] == callee)
-                    break;
-            if (i == p->numTargets)
-                p->targets[p->numTargets++] = callee;
-        }
     }
 }
 
@@ -680,8 +637,6 @@ SEXP rirCall(const CallContext& call, Context* ctx) {
 
 SEXP doCall(const CallContext& call, Context* ctx) {
     assert(call.callee());
-
-    profileCall(call);
 
     auto apply = [&](const CallContext& call) {
         switch (TYPEOF(call.callee())) {
@@ -1446,7 +1401,9 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env,
             advanceImmediate();
             size_t n = readImmediate();
             advanceImmediate();
-            CallContext call(c, id, ostack_top(ctx), n, (Immediate*)pc,
+            size_t ast = readImmediate();
+            advanceImmediate();
+            CallContext call(c, id, ostack_top(ctx), n, ast, (Immediate*)pc,
                              ((Immediate*)pc) + n, getenv(), ctx);
             res = doCall(call, ctx);
             advanceImmediateN(2 * n);
@@ -1469,7 +1426,9 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env,
             advanceImmediate();
             size_t n = readImmediate();
             advanceImmediate();
-            CallContext call(c, id, ostack_top(ctx), n, (Immediate*)pc,
+            size_t ast = readImmediate();
+            advanceImmediate();
+            CallContext call(c, id, ostack_top(ctx), n, ast, (Immediate*)pc,
                              getenv(), ctx);
             res = doCall(call, ctx);
             advanceImmediateN(n);
@@ -1490,7 +1449,9 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env,
             advanceImmediate();
             Immediate n = readImmediate();
             advanceImmediate();
-            CallContext call(c, id, ostack_at(ctx, n), n,
+            size_t ast = readImmediate();
+            advanceImmediate();
+            CallContext call(c, id, ostack_at(ctx, n), n, ast,
                              ostack_cell_at(ctx, n - 1), getenv(), ctx);
             res = doCall(call, ctx);
             ostack_popn(ctx, n + 1);
@@ -1510,7 +1471,9 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env,
             advanceImmediate();
             Immediate n = readImmediate();
             advanceImmediate();
-            CallContext call(c, id, ostack_at(ctx, n), n,
+            size_t ast = readImmediate();
+            advanceImmediate();
+            CallContext call(c, id, ostack_at(ctx, n), n, ast,
                              ostack_cell_at(ctx, n - 1), (Immediate*)pc,
                              getenv(), ctx);
             res = doCall(call, ctx);
@@ -1532,6 +1495,8 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env,
             advanceImmediate();
             Immediate n = readImmediate();
             advanceImmediate();
+            Immediate ast = readImmediate();
+            advanceImmediate();
             SEXP callee = cp_pool_at(ctx, readImmediate());
             advanceImmediate();
             // TODO: Static call does not use getenv() but instead bypassess the
@@ -1540,8 +1505,8 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env,
             // not accessing the environment. But, it is also used for other
             // static calls, so we should probably split the two uses into two
             // instructions.
-            CallContext call(c, id, callee, n, ostack_cell_at(ctx, n - 1), *env,
-                             ctx);
+            CallContext call(c, id, callee, n, ast, ostack_cell_at(ctx, n - 1),
+                             *env, ctx);
             res = doCall(call, ctx);
             ostack_popn(ctx, n);
             ostack_push(ctx, res);
