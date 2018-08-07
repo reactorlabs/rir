@@ -1468,7 +1468,8 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env,
             advanceImmediate();
             Immediate n = readImmediate();
             advanceImmediate();
-            SEXP callee = cp_pool_at(ctx, *c->callSite(id)->target());
+            SEXP callee = cp_pool_at(ctx, readImmediate());
+            advanceImmediate();
             // TODO: Static call does not use getenv() but instead bypassess the
             // asserts and gets the *env directly. This is because this
             // instruction is used to call safe builtins, ie. builtins which are

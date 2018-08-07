@@ -78,12 +78,10 @@ class CodeStream {
         return cs;
     }
 
-    CodeStream& insertStackCall(Opcode bc, uint32_t nargs,
-                                std::vector<SEXP> names, SEXP call,
-                                SEXP targOrSelector = nullptr,
-                                FunctionSignature* signature = nullptr) {
+    CodeStream& insertCall(Opcode bc, uint32_t nargs, std::vector<SEXP> names,
+                           SEXP call, FunctionSignature* signature = nullptr) {
         insert(bc);
-        BC::CommonCallArgs a;
+        BC::CallFixedArgs a;
         a.call_id = nextCallSiteIdx_;
         a.nargs = nargs;
         insert(a);
@@ -107,7 +105,6 @@ class CodeStream {
         cs->call = Pool::insert(call);
         cs->hasProfile = false;
         cs->hasNames = hasNames;
-        cs->hasTarget = bc == Opcode::static_call_;
 
         cs->signature = signature;
 
@@ -117,10 +114,47 @@ class CodeStream {
             }
         }
 
-        if (cs->hasTarget) {
-            assert(TYPEOF(targOrSelector) == CLOSXP ||
-                   TYPEOF(targOrSelector) == BUILTINSXP);
-            *cs->target() = Pool::insert(targOrSelector);
+        return *this;
+    }
+
+    CodeStream& insertStaticCall(Opcode bc, uint32_t nargs,
+                                 std::vector<SEXP> names, SEXP call,
+                                 SEXP target,
+                                 FunctionSignature* signature = nullptr) {
+        insert(bc);
+        BC::StaticCallFixedArgs a;
+        a.call_id = nextCallSiteIdx_;
+        a.nargs = nargs;
+        assert(TYPEOF(target) == CLOSXP || TYPEOF(target) == BUILTINSXP);
+        a.target = Pool::insert(target);
+        insert(a);
+        sources.push_back(0);
+
+        bool hasNames = false;
+        if (!names.empty())
+            for (auto n : names) {
+                if (n != R_NilValue) {
+                    hasNames = true;
+                    break;
+                }
+            }
+
+        unsigned needed = CallSite::size(hasNames, false, nargs);
+        ensureCallSiteSize(needed);
+
+        CallSite* cs = getNextCallSite(needed);
+
+        cs->nargs = nargs;
+        cs->call = Pool::insert(call);
+        cs->hasProfile = false;
+        cs->hasNames = hasNames;
+
+        cs->signature = signature;
+
+        if (hasNames) {
+            for (unsigned i = 0; i < nargs; ++i) {
+                cs->names()[i] = Pool::insert(names[i]);
+            }
         }
 
         return *this;
@@ -133,7 +167,7 @@ class CodeStream {
         uint32_t nargs = args.size();
 
         insert(bc);
-        BC::CommonCallArgs a;
+        BC::CallImplicitFixedArgs a;
         a.call_id = nextCallSiteIdx_;
         a.nargs = nargs;
         insert(a);

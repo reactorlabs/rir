@@ -900,8 +900,8 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
                 cs << BC::guardNamePrimitive(symbol::Internal);
                 for (auto a : args)
                     compileExpr(ctx, a);
-                cs.insertStackCall(Opcode::static_call_, args.length(), {},
-                                   inAst, internal);
+                cs.insertStaticCall(Opcode::static_call_, args.length(), {},
+                                    inAst, internal);
 
                 return true;
             }
@@ -923,8 +923,8 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
 
         for (auto a : args)
             compileExpr(ctx, a);
-        cs.insertStackCall(Opcode::static_call_, args.length(), {}, ast,
-                           builtin);
+        cs.insertStaticCall(Opcode::static_call_, args.length(), {}, ast,
+                            builtin);
 
         return true;
     }
@@ -1019,8 +1019,8 @@ bool compileWithGuess(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
         signature->pushArgument({true, TYPEOF(a)});
     }
 
-    cs.insertStackCall(Opcode::static_call_, args.length(), {}, ast, cls,
-                       signature);
+    cs.insertStaticCall(Opcode::static_call_, args.length(), {}, ast, cls,
+                        signature);
 
     return true;
 }

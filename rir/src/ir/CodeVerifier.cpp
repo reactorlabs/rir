@@ -152,12 +152,6 @@ void CodeVerifier::verifyFunctionLayout(SEXP sexp, ::Context* ctx) {
         SEXP call = cp_pool_at(ctx, cs->call);
         assert(TYPEOF(call) == LANGSXP || TYPEOF(call) == SYMSXP ||
                TYPEOF(call) == NILSXP);
-        if (cs->hasTarget) {
-            SEXP selector = cp_pool_at(ctx, *cs->target());
-            assert(TYPEOF(selector) == SYMSXP);
-        } else {
-            assert(cs->trg == 0);
-        }
         assert(cs->nargs == nargs);
     };
 

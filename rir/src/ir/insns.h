@@ -122,7 +122,7 @@ DEF_INSTR(call_, 2, -1, 1, 0)
  * static_call_:: Like call_, but the callee is statically known
  *                and is accessed via the immediate callsite
  */
-DEF_INSTR(static_call_, 2, -1, 1, 0)
+DEF_INSTR(static_call_, 3, -1, 1, 0)
 
 /**
  * close_:: pop body and argument list, create closure, and push on object stack

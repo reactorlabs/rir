@@ -87,7 +87,16 @@ class BC {
     typedef struct {
         Immediate call_id;
         NumArgs nargs;
-    } CommonCallArgs;
+    } CallImplicitFixedArgs;
+    typedef struct {
+        Immediate call_id;
+        NumArgs nargs;
+    } CallFixedArgs;
+    typedef struct {
+        Immediate call_id;
+        NumArgs nargs;
+        Immediate target;
+    } StaticCallFixedArgs;
     typedef struct {
         Immediate name;
         Immediate expected;
@@ -109,7 +118,9 @@ class BC {
     // On the bytecode stream each immediate argument uses only the actual
     // space required.
     union ImmediateArguments {
-        CommonCallArgs commonCallArgs;
+        CallImplicitFixedArgs callImplicitFixedArgs;
+        StaticCallFixedArgs staticCallFixedArgs;
+        CallFixedArgs callFixedArgs;
         GuardFunArgs guard_fun_args;
         Guard guard_id;
         PoolIdx pool;
@@ -136,8 +147,8 @@ class BC {
         pc++;
         immediate = decodeImmediateArguments(bc, pc);
         if (bc == Opcode::call_implicit_) {
-            pc += sizeof(CommonCallArgs) / sizeof(Opcode);
-            for (size_t i = 0; i < immediate.commonCallArgs.nargs; ++i)
+            pc += sizeof(CallImplicitFixedArgs) / sizeof(Opcode);
+            for (size_t i = 0; i < immediate.callImplicitFixedArgs.nargs; ++i)
                 immediateCallArguments.push_back(readImmediate(&pc));
         }
     }
@@ -148,8 +159,6 @@ class BC {
         return other;
     }
 
-    bool operator==(const BC& other) const;
-
     bool is(Opcode aBc) { return bc == aBc; }
 
     Opcode bc;
@@ -157,7 +166,7 @@ class BC {
 
     inline size_t size() {
         if (bc == Opcode::call_implicit_)
-            return immediate.commonCallArgs.nargs * sizeof(FunIdx) +
+            return immediate.callImplicitFixedArgs.nargs * sizeof(FunIdx) +
                    fixedSize(bc);
         return fixedSize(bc);
     }
@@ -165,9 +174,9 @@ class BC {
         // return also is a leave
         assert(bc != Opcode::return_);
         if (bc == Opcode::call_)
-            return immediate.commonCallArgs.nargs + 1;
+            return immediate.callFixedArgs.nargs + 1;
         if (bc == Opcode::static_call_)
-            return immediate.commonCallArgs.nargs;
+            return immediate.staticCallFixedArgs.nargs;
         return popCount(bc);
     }
     inline size_t pushCount() { return pushCount(bc); }
@@ -419,9 +428,11 @@ class BC {
             immediate.pool = *(PoolIdx*)pc;
             break;
         case Opcode::call_implicit_:
+            immediate.callImplicitFixedArgs = *(CallImplicitFixedArgs*)pc;
         case Opcode::call_:
+            immediate.callFixedArgs = *(CallFixedArgs*)pc;
         case Opcode::static_call_:
-            immediate.commonCallArgs = *(CommonCallArgs*)pc;
+            immediate.staticCallFixedArgs = *(StaticCallFixedArgs*)pc;
             break;
         case Opcode::guard_env_:
             immediate.guard_id = *(uint32_t*)pc;

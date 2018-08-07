@@ -212,7 +212,7 @@ bool StackMachine::tryRunCurrentBC(const Rir2Pir& rir2pir, Builder& insert) {
     }
 
     case Opcode::call_: {
-        unsigned n = bc.immediate.commonCallArgs.nargs;
+        unsigned n = bc.immediate.callFixedArgs.nargs;
         rir::CallSite* cs = bc.callSite(srcCode);
         // TODO: Named args are not yet supported in pir
         if (cs->hasNames)
@@ -228,9 +228,9 @@ bool StackMachine::tryRunCurrentBC(const Rir2Pir& rir2pir, Builder& insert) {
     }
 
     case Opcode::static_call_: {
-        unsigned n = bc.immediate.commonCallArgs.nargs;
+        unsigned n = bc.immediate.staticCallFixedArgs.nargs;
         rir::CallSite* cs = bc.callSite(srcCode);
-        SEXP target = rir::Pool::get(*cs->target());
+        SEXP target = rir::Pool::get(bc.immediate.staticCallFixedArgs.target);
 
         std::vector<Value*> args(n);
         for (size_t i = 0; i < n; ++i)
