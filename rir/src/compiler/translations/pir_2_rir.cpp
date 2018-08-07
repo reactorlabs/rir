@@ -1,10 +1,8 @@
 #include "pir_2_rir.h"
-#include "../../ir/cleanup.h"
 #include "../pir/pir_impl.h"
 #include "../util/cfg.h"
 #include "../util/visitor.h"
 #include "interpreter/runtime.h"
-#include "ir/CodeEditor.h"
 #include "ir/CodeStream.h"
 #include "ir/CodeVerifier.h"
 #include "utils/FunctionWriter.h"
@@ -1076,19 +1074,12 @@ rir::Function* Pir2Rir::finalize() {
     size_t localsCnt = compileCode(ctx, cls);
     ctx.finalizeCode(localsCnt);
 
-    CodeEditor code(function.function->body());
-
-    for (size_t i = 0; i < code.numPromises(); ++i)
-        if (code.promise(i))
-            BCCleanup::apply(*code.promise(i));
-    BCCleanup::apply(code);
-    auto opt = code.finalize();
-
 #ifdef ENABLE_SLOWASSERT
-    CodeVerifier::verifyFunctionLayout(opt->container(), globalContext());
+    CodeVerifier::verifyFunctionLayout(function.function->container(),
+                                       globalContext());
 #endif
 
-    return opt;
+    return function.function;
 }
 
 } // namespace

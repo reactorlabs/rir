@@ -11,9 +11,7 @@
 
 #include "utils/Pool.h"
 
-#include "CodeEditor.h"
 #include "CodeVerifier.h"
-#include "cleanup.h"
 
 #include <stack>
 
@@ -1170,22 +1168,14 @@ SEXP Compiler::finalize() {
     ctx.cs() << BC::ret();
     ctx.pop();
 
-    CodeEditor code(function.function->body(), formals);
-
-    for (size_t i = 0; i < code.numPromises(); ++i)
-        if (code.promise(i))
-            BCCleanup::apply(*code.promise(i));
-
-    BCCleanup::apply(code);
-
-    Function* opt = code.finalize();
-    opt->signature = signature;
+    function.function->signature = signature;
 
 #ifdef ENABLE_SLOWASSERT
-    CodeVerifier::verifyFunctionLayout(opt->container(), globalContext());
+    CodeVerifier::verifyFunctionLayout(function.function->container(),
+                                       globalContext());
 #endif
 
-    return opt->container();
+    return function.function->container();
 }
 
 }  // namespace rir

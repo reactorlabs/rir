@@ -1,6 +1,5 @@
 #include "Code.h"
 #include "ir/BC.h"
-#include "ir/CodeEditor.h"
 #include "utils/Pool.h"
 
 namespace rir {
