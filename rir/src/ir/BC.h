@@ -31,113 +31,113 @@ BC BC::push(SEXP constant) {
     assert(TYPEOF(constant) != PROMSXP);
 //    assert(!isValidFunctionSEXP(constant));
     assert(!isValidCodeObject(constant));
-    ImmediateT i;
+    Immediate i;
     i.pool = Pool::insert(constant);
     return BC(Opcode::push_, i);
 }
 BC BC::push(double constant) {
-    ImmediateT i;
+    Immediate i;
     i.pool = Pool::getNum(constant);
     return BC(Opcode::push_, i);
 }
 BC BC::push(int constant) {
-    ImmediateT i;
+    Immediate i;
     i.pool = Pool::getInt(constant);
     return BC(Opcode::push_, i);
 }
 BC BC::ldfun(SEXP sym) {
-    ImmediateT i;
+    Immediate i;
     i.pool = Pool::insert(sym);
     return BC(Opcode::ldfun_, i);
 }
 BC BC::ldddvar(SEXP sym) {
     assert(DDVAL(sym));
-    ImmediateT i;
+    Immediate i;
     i.pool = Pool::insert(sym);
     return BC(Opcode::ldddvar_, i);
 }
 BC BC::ldlval(SEXP sym) {
     assert(TYPEOF(sym) == SYMSXP);
     assert(strlen(CHAR(PRINTNAME(sym))));
-    ImmediateT i;
+    Immediate i;
     i.pool = Pool::insert(sym);
     return BC(Opcode::ldlval_, i);
 }
 BC BC::ldvar(SEXP sym) {
     assert(TYPEOF(sym) == SYMSXP);
     assert(strlen(CHAR(PRINTNAME(sym))));
-    ImmediateT i;
+    Immediate i;
     i.pool = Pool::insert(sym);
     return BC(Opcode::ldvar_, i);
 }
 BC BC::ldvarNoForce(SEXP sym) {
     assert(TYPEOF(sym) == SYMSXP);
     assert(strlen(CHAR(PRINTNAME(sym))));
-    ImmediateT i;
+    Immediate i;
     i.pool = Pool::insert(sym);
     return BC(Opcode::ldvar_noforce_, i);
 }
 BC BC::ldvarSuper(SEXP sym) {
     assert(TYPEOF(sym) == SYMSXP);
     assert(strlen(CHAR(PRINTNAME(sym))));
-    ImmediateT i;
+    Immediate i;
     i.pool = Pool::insert(sym);
     return BC(Opcode::ldvar_super_, i);
 }
 BC BC::ldvarNoForceSuper(SEXP sym) {
     assert(TYPEOF(sym) == SYMSXP);
     assert(strlen(CHAR(PRINTNAME(sym))));
-    ImmediateT i;
+    Immediate i;
     i.pool = Pool::insert(sym);
     return BC(Opcode::ldvar_noforce_super_, i);
 }
 BC BC::ldarg(uint32_t offset) {
-    ImmediateT i;
+    Immediate i;
     i.arg_idx = offset;
     return BC(Opcode::ldarg_, i);
 }
 BC BC::ldloc(uint32_t offset) {
-    ImmediateT im;
+    Immediate im;
     im.loc = offset;
     return BC(Opcode::ldloc_, im);
 }
 BC BC::stloc(uint32_t offset) {
-    ImmediateT im;
+    Immediate im;
     im.loc = offset;
     return BC(Opcode::stloc_, im);
 }
 BC BC::copyloc(uint32_t target, uint32_t source) {
-    ImmediateT im;
+    Immediate im;
     im.loc_cpy.target = target;
     im.loc_cpy.source = source;
     return BC(Opcode::movloc_, im);
 }
 BC BC::guardEnv(uint32_t id) {
-    ImmediateT i;
+    Immediate i;
     i.guard_id = id;
     return BC(Opcode::guard_env_, i);
 }
 BC BC::guardName(SEXP sym, SEXP expected) {
-    ImmediateT i;
+    Immediate i;
     i.guard_fun_args = {Pool::insert(sym), Pool::insert(expected),
                         NO_DEOPT_INFO};
     return BC(Opcode::guard_fun_, i);
 }
 BC BC::guardNamePrimitive(SEXP sym) {
-    ImmediateT i;
+    Immediate i;
     assert(TYPEOF(sym) == SYMSXP);
     SEXP prim = CDR(sym);
     assert(TYPEOF(prim) == SPECIALSXP || TYPEOF(prim) == BUILTINSXP);
     i.guard_fun_args = {Pool::insert(sym), Pool::insert(prim), NO_DEOPT_INFO};
     return BC(Opcode::guard_fun_, i);
 }
-BC BC::push_code(FunIdxT prom) {
-    ImmediateT i;
+BC BC::push_code(FunIdx prom) {
+    Immediate i;
     i.fun = prom;
     return BC(Opcode::push_code_, i);
 }
-BC BC::promise(FunIdxT prom) {
-    ImmediateT i;
+BC BC::promise(FunIdx prom) {
+    Immediate i;
     i.fun = prom;
     return BC(Opcode::promise_, i);
 }
@@ -145,7 +145,7 @@ BC BC::asast() { return BC(Opcode::asast_); }
 BC BC::missing(SEXP sym) {
     assert(TYPEOF(sym) == SYMSXP);
     assert(strlen(CHAR(PRINTNAME(sym))));
-    ImmediateT i;
+    Immediate i;
     i.pool = Pool::insert(sym);
     return BC(Opcode::missing_, i);
 }
@@ -153,14 +153,14 @@ BC BC::checkMissing() { return BC(Opcode::check_missing_); }
 BC BC::stvar(SEXP sym) {
     assert(TYPEOF(sym) == SYMSXP);
     assert(strlen(CHAR(PRINTNAME(sym))));
-    ImmediateT i;
+    Immediate i;
     i.pool = Pool::insert(sym);
     return BC(Opcode::stvar_, i);
 }
 BC BC::stvarSuper(SEXP sym) {
     assert(TYPEOF(sym) == SYMSXP);
     assert(strlen(CHAR(PRINTNAME(sym))));
-    ImmediateT i;
+    Immediate i;
     i.pool = Pool::insert(sym);
     return BC(Opcode::stvar_super_, i);
 }
@@ -168,7 +168,7 @@ BC BC::subassign1() { return BC(Opcode::subassign1_); }
 BC BC::subassign2(SEXP sym) {
     assert(sym == R_NilValue ||
            (TYPEOF(sym) == SYMSXP && strlen(CHAR(PRINTNAME(sym)))));
-    ImmediateT i;
+    Immediate i;
     i.pool = Pool::insert(sym);
     return BC(Opcode::subassign2_, i);
 }
@@ -180,40 +180,40 @@ BC BC::length() { return BC(Opcode::length_); }
 BC BC::names() { return BC(Opcode::names_); }
 BC BC::setNames() { return BC(Opcode::set_names_); }
 BC BC::alloc(int type) {
-    ImmediateT i;
+    Immediate i;
     i.i = type;
     return BC(Opcode::alloc_, i);
 }
 
 BC BC::isfun() { return BC(Opcode::isfun_); }
 
-BC BC::label(JmpT j) {
-    ImmediateT i;
+BC BC::label(Jmp j) {
+    Immediate i;
     i.offset = j;
     return BC(Opcode::label, i);
 }
-BC BC::br(JmpT j) {
-    ImmediateT i;
+BC BC::br(Jmp j) {
+    Immediate i;
     i.offset = j;
     return BC(Opcode::br_, i);
 }
-BC BC::brobj(JmpT j) {
-    ImmediateT i;
+BC BC::brobj(Jmp j) {
+    Immediate i;
     i.offset = j;
     return BC(Opcode::brobj_, i);
 }
-BC BC::beginloop(JmpT j) {
-    ImmediateT i;
+BC BC::beginloop(Jmp j) {
+    Immediate i;
     i.offset = j;
     return BC(Opcode::beginloop_, i);
 }
-BC BC::brtrue(JmpT j) {
-    ImmediateT i;
+BC BC::brtrue(Jmp j) {
+    Immediate i;
     i.offset = j;
     return BC(Opcode::brtrue_, i);
 }
-BC BC::brfalse(JmpT j) {
-    ImmediateT i;
+BC BC::brfalse(Jmp j) {
+    Immediate i;
     i.offset = j;
     return BC(Opcode::brfalse_, i);
 }
@@ -255,22 +255,22 @@ BC BC::lglAnd() { return BC(Opcode::lgl_and_); }
 BC BC::lglOr() { return BC(Opcode::lgl_or_); }
 BC BC::isObj() { return BC(Opcode::isobj_); }
 BC BC::pull(uint32_t i) {
-    ImmediateT im;
+    Immediate im;
     im.i = i;
     return BC(Opcode::pull_, im);
 }
 BC BC::pick(uint32_t i) {
-    ImmediateT im;
+    Immediate im;
     im.i = i;
     return BC(Opcode::pick_, im);
 }
 BC BC::is(uint32_t i) {
-    ImmediateT im;
+    Immediate im;
     im.i = i;
     return BC(Opcode::is_, im);
 }
 BC BC::put(uint32_t i) {
-    ImmediateT im;
+    Immediate im;
     im.i = i;
     return BC(Opcode::put_, im);
 }

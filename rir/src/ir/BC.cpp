@@ -350,7 +350,7 @@ void BC::print(CallSite* cs) {
         break;
     }
     case Opcode::call_: {
-        NumArgsT nargs = immediate.call_args.nargs;
+        BC::NumArgs nargs = immediate.call_args.nargs;
         Rprintf(" %d ", nargs);
         if (cs) {
             printNames(cs);
@@ -361,7 +361,7 @@ void BC::print(CallSite* cs) {
         break;
     }
     case Opcode::static_call_: {
-        NumArgsT nargs = immediate.call_args.nargs;
+        BC::NumArgs nargs = immediate.call_args.nargs;
         Rprintf(" %d : ", nargs);
         if (cs) {
             Rprintf(" (%d) ", *cs->target());

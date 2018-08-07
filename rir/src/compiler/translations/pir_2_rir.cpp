@@ -588,7 +588,7 @@ class Context {
         push(ast);
     }
 
-    FunIdxT finalizeCode(size_t localsCnt) {
+    BC::FunIdx finalizeCode(size_t localsCnt) {
         auto idx = cs().finalize(defaultArg.top(), localsCnt);
         delete css.top();
         defaultArg.pop();
@@ -612,7 +612,7 @@ class Pir2Rir {
   private:
     Pir2RirCompiler& compiler;
     Closure* cls;
-    std::unordered_map<Promise*, FunIdxT> promises;
+    std::unordered_map<Promise*, BC::FunIdx> promises;
     std::unordered_map<Promise*, SEXP> argNames;
 };
 
@@ -630,7 +630,7 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
     alloc.verify();
 
     // create labels for all bbs
-    std::unordered_map<BB*, LabelT> bbLabels;
+    std::unordered_map<BB*, BC::Label> bbLabels;
     BreadthFirstVisitor::run(code->entry, [&](BB* bb) {
         if (!bb->isEmpty())
             bbLabels[bb] = ctx.cs().mkLabel();

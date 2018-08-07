@@ -27,7 +27,7 @@ class CodeStream {
     SEXP ast;
 
     unsigned nextLabel = 0;
-    std::map<unsigned, LabelT> patchpoints;
+    std::map<unsigned, BC::Label> patchpoints;
     std::vector<unsigned> label2pos;
 
     std::vector<unsigned> sources;
@@ -36,8 +36,8 @@ class CodeStream {
     uint32_t nextCallSiteIdx_ = 0;
 
   public:
-    LabelT mkLabel() {
-        assert(nextLabel < MAX_JMP);
+    BC::Label mkLabel() {
+        assert(nextLabel < BC::MAX_JMP);
         label2pos.resize(nextLabel + 1);
         return nextLabel++;
     }
@@ -47,9 +47,9 @@ class CodeStream {
         nextLabel = n;
     }
 
-    void patchpoint(LabelT l) {
+    void patchpoint(BC::Label l) {
         patchpoints[pos] = l;
-        insert((JmpT)0);
+        insert((BC::Jmp)0);
     }
 
     CodeStream(FunctionWriter& function, SEXP ast)
@@ -83,7 +83,7 @@ class CodeStream {
                                 SEXP targOrSelector = nullptr,
                                 FunctionSignature* signature = nullptr) {
         insert(bc);
-        CallArgs a;
+        BC::CallArgs a;
         a.call_id = nextCallSiteIdx_;
         a.nargs = nargs;
         insert(a);
@@ -127,14 +127,14 @@ class CodeStream {
         return *this;
     }
 
-    CodeStream& insertCall(Opcode bc, std::vector<FunIdxT> args,
+    CodeStream& insertCall(Opcode bc, std::vector<BC::FunIdx> args,
                            std::vector<SEXP> names, SEXP call,
                            SEXP selector = nullptr,
                            FunctionSignature* signature = nullptr) {
         uint32_t nargs = args.size();
 
         insert(bc);
-        CallArgs a;
+        BC::CallArgs a;
         a.call_id = nextCallSiteIdx_;
         a.nargs = nargs;
         insert(a);
@@ -200,7 +200,7 @@ class CodeStream {
         return *this;
     }
 
-    CodeStream& operator<<(LabelT label) {
+    CodeStream& operator<<(BC::Label label) {
         label2pos[label] = pos;
         return *this;
     }
@@ -255,7 +255,7 @@ class CodeStream {
         sources.insert(sources.begin() + sourceIdx + 1, size - 1, 0);
     }
 
-    FunIdxT finalize(bool markDefaultArg, size_t localsCnt) {
+    BC::FunIdx finalize(bool markDefaultArg, size_t localsCnt) {
         Code* res = function.writeCode(ast, &(*code)[0], pos, callSites_.data(),
                                        callSites_.size(), sources,
                                        markDefaultArg, localsCnt);
@@ -263,8 +263,8 @@ class CodeStream {
         for (auto p : patchpoints) {
             unsigned pos = p.first;
             unsigned target = label2pos[p.second];
-            JmpT j = target - pos - sizeof(JmpT);
-            *(JmpT*)((uintptr_t)res->code() + pos) = j;
+            BC::Jmp j = target - pos - sizeof(BC::Jmp);
+            *(BC::Jmp*)((uintptr_t)res->code() + pos) = j;
         }
 
         label2pos.clear();

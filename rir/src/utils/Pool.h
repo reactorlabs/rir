@@ -17,12 +17,12 @@
 namespace rir {
 
 class Pool {
-    static std::unordered_map<double, PoolIdxT> numbers;
-    static std::unordered_map<int, PoolIdxT> ints;
+    static std::unordered_map<double, BC::PoolIdx> numbers;
+    static std::unordered_map<int, BC::PoolIdx> ints;
     static std::unordered_map<SEXP, size_t> contents;
 
   public:
-    static PoolIdxT insert(SEXP e) {
+    static BC::PoolIdx insert(SEXP e) {
         if (contents.count(e))
             return contents.at(e);
 
@@ -32,10 +32,10 @@ class Pool {
         return i;
     }
 
-    static PoolIdxT getNum(double n);
-    static PoolIdxT getInt(int n);
+    static BC::PoolIdx getNum(double n);
+    static BC::PoolIdx getInt(int n);
 
-    static SEXP get(PoolIdxT i) { return cp_pool_at(globalContext(), i); }
+    static SEXP get(BC::PoolIdx i) { return cp_pool_at(globalContext(), i); }
 };
 }
 
