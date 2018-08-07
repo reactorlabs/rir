@@ -1076,7 +1076,7 @@ void compileCall(Context& ctx, SEXP ast, SEXP fun, SEXP args) {
     }
     assert(callArgs.size() < BC::MAX_NUM_ARGS);
 
-    cs.insertCall(Opcode::call_implicit_, callArgs, names, ast);
+    cs.insertCallImplicit(Opcode::call_implicit_, callArgs, names, ast);
 }
 
 // Lookup

@@ -125,7 +125,6 @@ bool StackMachine::tryRunCurrentBC(const Rir2Pir& rir2pir, Builder& insert) {
         break;
 
     case Opcode::call_implicit_: {
-        unsigned n = bc.immediate.call_args.nargs;
         rir::CallSite* cs = bc.callSite(srcCode);
         // TODO: Named args are not yet supported in pir
         if (cs->hasNames)
@@ -140,8 +139,7 @@ bool StackMachine::tryRunCurrentBC(const Rir2Pir& rir2pir, Builder& insert) {
         }
 
         std::vector<Value*> args;
-        for (size_t i = 0; i < n; ++i) {
-            unsigned argi = cs->args()[i];
+        for (auto argi : bc.immediateCallArguments) {
             if (argi == DOTS_ARG_IDX) {
                 return false;
             } else if (argi == MISSING_ARG_IDX) {
@@ -214,7 +212,7 @@ bool StackMachine::tryRunCurrentBC(const Rir2Pir& rir2pir, Builder& insert) {
     }
 
     case Opcode::call_: {
-        unsigned n = bc.immediate.call_args.nargs;
+        unsigned n = bc.immediate.commonCallArgs.nargs;
         rir::CallSite* cs = bc.callSite(srcCode);
         // TODO: Named args are not yet supported in pir
         if (cs->hasNames)
@@ -230,7 +228,7 @@ bool StackMachine::tryRunCurrentBC(const Rir2Pir& rir2pir, Builder& insert) {
     }
 
     case Opcode::static_call_: {
-        unsigned n = bc.immediate.call_args.nargs;
+        unsigned n = bc.immediate.commonCallArgs.nargs;
         rir::CallSite* cs = bc.callSite(srcCode);
         SEXP target = rir::Pool::get(*cs->target());
 

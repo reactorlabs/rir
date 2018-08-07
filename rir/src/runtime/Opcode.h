@@ -11,10 +11,16 @@
 /** Moves the pc to next instruction, based on the current instruction length
  */
 RIR_INLINE rir::Opcode* advancePc(rir::Opcode* pc) {
+    if (*pc == rir::Opcode::call_implicit_) {
+        pc += 1 + sizeof(Immediate);
+        Immediate nargs = *((Immediate*)pc);
+        pc += (1 + nargs) * sizeof(Immediate);
+        return pc;
+    }
     switch (*pc++) {
 #define DEF_INSTR(name, imm, ...)                                              \
     case rir::Opcode::name:                                                    \
-        pc += sizeof(ArgT) * imm;                                              \
+        pc += sizeof(Immediate) * imm;                                         \
         break;
 #include "ir/insns.h"
     default:

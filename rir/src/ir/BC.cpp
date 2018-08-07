@@ -35,7 +35,8 @@ bool BC::operator==(const BC& other) const {
     case Opcode::call_implicit_:
     case Opcode::call_:
     case Opcode::static_call_:
-        return immediate.call_args.call_id == other.immediate.call_args.call_id;
+        return immediate.commonCallArgs.call_id ==
+               other.immediate.commonCallArgs.call_id;
 
     case Opcode::guard_env_:
         return immediate.guard_id == other.immediate.guard_id;
@@ -278,10 +279,10 @@ void BC::write(CodeStream& cs) const {
 
 SEXP BC::immediateConst() { return Pool::get(immediate.pool); }
 
-void BC::printArgs(CallSite* cs) {
+void BC::printImmediateArgs() {
     Rprintf("[");
-    for (unsigned i = 0; i < cs->nargs; ++i) {
-        auto arg = cs->args()[i];
+    for (unsigned i = 0; i < immediate.commonCallArgs.nargs; ++i) {
+        auto arg = immediateCallArguments[i];
         if (arg == MISSING_ARG_IDX)
             Rprintf(" _");
         else if (arg == DOTS_ARG_IDX)
@@ -325,7 +326,7 @@ void BC::printProfile(CallSite* cs) {
 }
 
 CallSite* BC::callSite(Code* code) {
-    return code->callSite(immediate.call_args.call_id);
+    return code->callSite(immediate.commonCallArgs.call_id);
 }
 
 void BC::print(CallSite* cs) {
@@ -341,7 +342,7 @@ void BC::print(CallSite* cs) {
         break;
     case Opcode::call_implicit_: {
         if (cs) {
-            printArgs(cs);
+            printImmediateArgs();
             printNames(cs);
             Rprintf("\n        -> ");
             Rf_PrintValue(Pool::get(cs->call));
@@ -350,7 +351,7 @@ void BC::print(CallSite* cs) {
         break;
     }
     case Opcode::call_: {
-        BC::NumArgs nargs = immediate.call_args.nargs;
+        BC::NumArgs nargs = immediate.commonCallArgs.nargs;
         Rprintf(" %d ", nargs);
         if (cs) {
             printNames(cs);
@@ -361,7 +362,7 @@ void BC::print(CallSite* cs) {
         break;
     }
     case Opcode::static_call_: {
-        BC::NumArgs nargs = immediate.call_args.nargs;
+        BC::NumArgs nargs = immediate.commonCallArgs.nargs;
         Rprintf(" %d : ", nargs);
         if (cs) {
             Rprintf(" (%d) ", *cs->target());

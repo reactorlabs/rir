@@ -83,7 +83,7 @@ class CodeStream {
                                 SEXP targOrSelector = nullptr,
                                 FunctionSignature* signature = nullptr) {
         insert(bc);
-        BC::CallArgs a;
+        BC::CommonCallArgs a;
         a.call_id = nextCallSiteIdx_;
         a.nargs = nargs;
         insert(a);
@@ -98,7 +98,7 @@ class CodeStream {
                 }
             }
 
-        unsigned needed = CallSite::size(false, hasNames, false, nargs);
+        unsigned needed = CallSite::size(hasNames, false, nargs);
         ensureCallSiteSize(needed);
 
         CallSite* cs = getNextCallSite(needed);
@@ -108,7 +108,6 @@ class CodeStream {
         cs->hasProfile = false;
         cs->hasNames = hasNames;
         cs->hasTarget = bc == Opcode::static_call_;
-        cs->hasImmediateArgs = false;
 
         cs->signature = signature;
 
@@ -127,18 +126,17 @@ class CodeStream {
         return *this;
     }
 
-    CodeStream& insertCall(Opcode bc, std::vector<BC::FunIdx> args,
-                           std::vector<SEXP> names, SEXP call,
-                           SEXP selector = nullptr,
-                           FunctionSignature* signature = nullptr) {
+    CodeStream& insertCallImplicit(Opcode bc, std::vector<BC::FunIdx> args,
+                                   std::vector<SEXP> names, SEXP call,
+                                   SEXP selector = nullptr,
+                                   FunctionSignature* signature = nullptr) {
         uint32_t nargs = args.size();
 
         insert(bc);
-        BC::CallArgs a;
+        BC::CommonCallArgs a;
         a.call_id = nextCallSiteIdx_;
         a.nargs = nargs;
         insert(a);
-        sources.push_back(0);
 
         bool hasNames = false;
         if (!names.empty())
@@ -149,7 +147,7 @@ class CodeStream {
                 }
             }
 
-        unsigned needed = CallSite::size(true, hasNames, true, nargs);
+        unsigned needed = CallSite::size(hasNames, true, nargs);
         ensureCallSiteSize(needed);
 
         CallSite* cs = getNextCallSite(needed);
@@ -158,18 +156,18 @@ class CodeStream {
         cs->call = Pool::insert(call);
         cs->hasProfile = true;
         cs->hasNames = hasNames;
-        cs->hasImmediateArgs = true;
 
         cs->signature = signature;
 
         int i = 0;
-        for (auto arg : args) {
-            cs->args()[i] = arg;
+        for (BC::FunIdx arg : args) {
+            insert(arg);
             if (hasNames)
                 cs->names()[i] = Pool::insert(names[i]);
             ++i;
         }
 
+        sources.push_back(0);
         return *this;
     }
 
@@ -236,18 +234,19 @@ class CodeStream {
 
     void remove(unsigned pc) {
 
-#define INS(pc_) (*reinterpret_cast<Opcode*>(&(*code)[(pc_)]))
+#define INS(pc_) (reinterpret_cast<Opcode*>(&(*code)[(pc_)]))
 
         unsigned size = BC(INS(pc)).size();
 
         for (unsigned i = 0; i < size; ++i) {
-            INS(pc + i) = Opcode::nop_;
+            *INS(pc + i) = Opcode::nop_;
             // patchpoints are fixed by just removing the binding to label
             patchpoints.erase(pc + i);
         }
 
         unsigned tmp = 0, sourceIdx = 0;
         while (tmp != pc) {
+            assert(tmp < pc);
             tmp += BC(INS(tmp)).size();
             sourceIdx++;
         }

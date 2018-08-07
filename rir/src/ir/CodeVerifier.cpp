@@ -177,7 +177,7 @@ void CodeVerifier::verifyFunctionLayout(SEXP sexp, ::Context* ctx) {
                        cptr + cur.size() + off < end);
             }
             if (*cptr == Opcode::guard_env_) {
-                unsigned deoptId = *reinterpret_cast<ArgT*>(cptr + 1);
+                unsigned deoptId = *reinterpret_cast<Immediate*>(cptr + 1);
                 Opcode* deoptPc = (Opcode*)Deoptimizer_pc(deoptId);
                 assert(f->origin());
                 Function* deoptFun = Function::unpack(f->origin());
@@ -186,7 +186,7 @@ void CodeVerifier::verifyFunctionLayout(SEXP sexp, ::Context* ctx) {
                        deoptPc < deoptCode->endCode());
             }
             if (*cptr == Opcode::ldvar_) {
-                unsigned* argsIndex = reinterpret_cast<ArgT*>(cptr + 1);
+                unsigned* argsIndex = reinterpret_cast<Immediate*>(cptr + 1);
                 assert(*argsIndex < cp_pool_length(ctx) and
                        "Invalid arglist index");
                 SEXP sym = cp_pool_at(ctx, *argsIndex);
@@ -194,7 +194,7 @@ void CodeVerifier::verifyFunctionLayout(SEXP sexp, ::Context* ctx) {
                 assert(strlen(CHAR(PRINTNAME(sym))));
             }
             if (*cptr == Opcode::promise_) {
-                unsigned* promidx = reinterpret_cast<ArgT*>(cptr + 1);
+                unsigned* promidx = reinterpret_cast<Immediate*>(cptr + 1);
                 bool ok = false;
                 for (Code* c : objs)
                     if (c->header == *promidx) {
@@ -204,14 +204,13 @@ void CodeVerifier::verifyFunctionLayout(SEXP sexp, ::Context* ctx) {
                 assert(ok and "Invalid promise offset detected");
             }
             if (*cptr == Opcode::call_implicit_) {
-                unsigned callIdx = *reinterpret_cast<ArgT*>(cptr + 1);
+                unsigned callIdx = *reinterpret_cast<Immediate*>(cptr + 1);
                 CallSite* cs = c->callSite(callIdx);
-                uint32_t nargs = *reinterpret_cast<ArgT*>(cptr + 5);
+                uint32_t nargs = *reinterpret_cast<Immediate*>(cptr + 5);
                 verifyCallSite(cs, nargs);
-                assert(cs->hasImmediateArgs);
 
                 for (size_t i = 0, e = nargs; i != e; ++i) {
-                    uint32_t offset = cs->args()[i];
+                    uint32_t offset = cur.immediateCallArguments[i];
                     if (offset == MISSING_ARG_IDX || offset == DOTS_ARG_IDX)
                         continue;
                     bool ok = false;

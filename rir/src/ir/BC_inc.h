@@ -10,8 +10,6 @@
 
 #include <vector>
 
-typedef uint32_t ArgT;
-
 // type  for constant & ast pool indices
 typedef uint32_t Immediate;
 
@@ -89,7 +87,7 @@ class BC {
     typedef struct {
         Immediate call_id;
         NumArgs nargs;
-    } CallArgs;
+    } CommonCallArgs;
     typedef struct {
         Immediate name;
         Immediate expected;
@@ -110,8 +108,8 @@ class BC {
     // This is only used internally in the BC handle objects
     // On the bytecode stream each immediate argument uses only the actual
     // space required.
-    union Immediate {
-        CallArgs call_args;
+    union ImmediateArguments {
+        CommonCallArgs commonCallArgs;
         GuardFunArgs guard_fun_args;
         Guard guard_id;
         PoolIdx pool;
@@ -123,11 +121,25 @@ class BC {
         LocalsCopy loc_cpy;
     };
 
+    static Immediate readImmediate(Opcode** pc) {
+        Immediate i = *(Immediate*)*pc;
+        *pc = (Opcode*)((uintptr_t)*pc + sizeof(Immediate));
+        return i;
+    }
+
+    std::vector<ArgIdx> immediateCallArguments;
+
     BC() : bc(Opcode::invalid_), immediate({{0}}) {}
     
     BC(Opcode* pc) {
         bc = *pc;
-        immediate = decodeImmediate(bc, pc + 1);
+        pc++;
+        immediate = decodeImmediateArguments(bc, pc);
+        if (bc == Opcode::call_implicit_) {
+            pc += sizeof(CommonCallArgs) / sizeof(Opcode);
+            for (size_t i = 0; i < immediate.commonCallArgs.nargs; ++i)
+                immediateCallArguments.push_back(readImmediate(&pc));
+        }
     }
 
     BC operator=(BC other) {
@@ -141,16 +153,21 @@ class BC {
     bool is(Opcode aBc) { return bc == aBc; }
 
     Opcode bc;
-    Immediate immediate;
+    ImmediateArguments immediate;
 
-    inline size_t size() { return size(bc); }
+    inline size_t size() {
+        if (bc == Opcode::call_implicit_)
+            return immediate.commonCallArgs.nargs * sizeof(FunIdx) +
+                   fixedSize(bc);
+        return fixedSize(bc);
+    }
     inline size_t popCount() {
         // return also is a leave
         assert(bc != Opcode::return_);
         if (bc == Opcode::call_)
-            return immediate.call_args.nargs + 1;
+            return immediate.commonCallArgs.nargs + 1;
         if (bc == Opcode::static_call_)
-            return immediate.call_args.nargs;
+            return immediate.commonCallArgs.nargs;
         return popCount(bc);
     }
     inline size_t pushCount() { return pushCount(bc); }
@@ -160,7 +177,7 @@ class BC {
 
     // Print it to stdout
     void print(CallSite* cs = nullptr);
-    void printArgs(CallSite* cs);
+    void printImmediateArgs();
     void printNames(CallSite* cs);
     void printProfile(CallSite* cs);
 
@@ -209,21 +226,18 @@ class BC {
 
     // ==== BC decoding logic
     inline static BC advance(Opcode** pc) {
-        Opcode bc = **pc;
-        BC cur(bc, decodeImmediate(bc, (*pc) + 1));
+        BC cur(*pc);
         *pc = (Opcode*)((uintptr_t)(*pc) + cur.size());
         return cur;
     }
 
     inline static BC decode(Opcode* pc) {
-        Opcode bc = *pc;
-        BC cur(bc, decodeImmediate(bc, pc + 1));
+        BC cur(pc);
         return cur;
     }
 
     inline static Opcode* next(Opcode* pc) {
-        Opcode bc = *pc;
-        BC cur(bc, decodeImmediate(bc, pc + 1));
+        BC cur(pc);
         return (Opcode*)((uintptr_t)pc + cur.size());
     }
 
@@ -322,27 +336,16 @@ class BC {
 
   private:
     explicit BC(Opcode bc) : bc(bc), immediate({{0}}) {}
-    BC(Opcode bc, Immediate immediate) : bc(bc), immediate(immediate) {}
+    BC(Opcode bc, ImmediateArguments immediate)
+        : bc(bc), immediate(immediate) {}
 
-    static unsigned size(Opcode bc) {
+    static unsigned fixedSize(Opcode bc) {
         switch (bc) {
 #define DEF_INSTR(name, imm, opop, opush, pure)                                \
     case Opcode::name:                                                         \
-        return imm * sizeof(ArgT) + 1;
+        return imm * sizeof(Immediate) + 1;
 #include "insns.h"
         default:
-            return 0;
-        }
-    }
-
-    static unsigned immCount(Opcode bc) {
-        switch (bc) {
-#define DEF_INSTR(name, imm, opop, opush, pure)                                \
-    case Opcode::name:                                                         \
-        return imm;
-#include "insns.h"
-        default:
-            assert(false);
             return 0;
         }
     }
@@ -397,8 +400,9 @@ class BC {
         }
     }
 
-    inline static Immediate decodeImmediate(Opcode bc, Opcode* pc) {
-        Immediate immediate = {{0}};
+    inline static ImmediateArguments decodeImmediateArguments(Opcode bc,
+                                                              Opcode* pc) {
+        ImmediateArguments immediate = {{0}};
         switch (bc) {
         case Opcode::push_:
         case Opcode::ldfun_:
@@ -417,7 +421,7 @@ class BC {
         case Opcode::call_implicit_:
         case Opcode::call_:
         case Opcode::static_call_:
-            immediate.call_args = *(CallArgs*)pc;
+            immediate.commonCallArgs = *(CommonCallArgs*)pc;
             break;
         case Opcode::guard_env_:
             immediate.guard_id = *(uint32_t*)pc;
@@ -518,9 +522,6 @@ class BC {
         }
         return immediate;
     }
-
-    friend class CodeEditor;
-    friend class CodeStream;
 };
 
 } // rir

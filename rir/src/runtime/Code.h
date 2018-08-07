@@ -202,7 +202,6 @@ struct CallSite {
 
     uint32_t hasNames : 1;
     uint32_t hasTarget : 1;
-    uint32_t hasImmediateArgs : 1;
     uint32_t hasProfile : 1;
     uint32_t free : 28;
 
@@ -221,7 +220,6 @@ struct CallSite {
     /*
      * Layout of args is:
      *
-     * nargs * promise offset    if hasImmediateArgs
      * nargs * cp_idx of names   if hasNames
      * CallSiteProfile           if hasProfile
      *
@@ -234,31 +232,20 @@ struct CallSite {
 
     uint32_t* names() {
         assert(hasNames);
-        return &payload[(hasImmediateArgs ? nargs : 0)];
-    }
-
-    uint32_t* args() {
-        assert(hasImmediateArgs);
-        return payload;
+        return &payload[0];
     }
 
     CallSiteProfile* profile() {
         assert(hasProfile);
-        return (CallSiteProfile*)&payload[(hasImmediateArgs ? nargs : 0) +
-                                          (hasNames ? nargs : 0)];
+        return (CallSiteProfile*)&payload[(hasNames ? nargs : 0)];
     }
 
-    static unsigned size(bool hasImmediateArgs, bool hasNames, bool hasProfile,
-                         uint32_t nargs) {
-        return sizeof(CallSite) +
-               sizeof(uint32_t) *
-                   ((hasImmediateArgs ? nargs : 0) + (hasNames ? nargs : 0)) +
+    static unsigned size(bool hasNames, bool hasProfile, uint32_t nargs) {
+        return sizeof(CallSite) + sizeof(uint32_t) * ((hasNames ? nargs : 0)) +
                +(hasProfile ? sizeof(CallSiteProfile) : 0);
     }
 
-    unsigned size() {
-        return size(hasImmediateArgs, hasNames, hasProfile, nargs);
-    }
+    unsigned size() { return size(hasNames, hasProfile, nargs); }
 };
 
 #pragma pack(pop)
