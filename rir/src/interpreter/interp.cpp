@@ -559,9 +559,11 @@ unsigned dispatch(const CallContext& call, DispatchTable* vt) {
 
     // TODO: add support to `...` passing, ie. we pass our ellipsis arg
     // to the callee
-    for (size_t i = 0; i < call.nargs(); ++i)
-        if (call.callSite->args()[i] == DOTS_ARG_IDX)
-            return 0;
+    if (!call.hasStackArgs()) {
+        for (size_t i = 0; i < call.nargs(); ++i)
+            if (call.callSite->args()[i] == DOTS_ARG_IDX)
+                return 0;
+    }
 
     return 1;
 };
