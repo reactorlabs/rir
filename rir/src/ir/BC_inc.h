@@ -84,30 +84,30 @@ class BC {
     // jmp offset
     typedef int32_t Jmp;
     typedef Jmp Label;
-    typedef struct {
+    struct CallImplicitFixedArgs {
         Immediate call_id;
         NumArgs nargs;
-    } CallImplicitFixedArgs;
-    typedef struct {
+    };
+    struct CallFixedArgs {
         Immediate call_id;
         NumArgs nargs;
-    } CallFixedArgs;
-    typedef struct {
+    };
+    struct StaticCallFixedArgs {
         Immediate call_id;
         NumArgs nargs;
         Immediate target;
-    } StaticCallFixedArgs;
-    typedef struct {
+    };
+    struct GuardFunArgs {
         Immediate name;
         Immediate expected;
         Immediate id;
-    } GuardFunArgs;
+    };
     typedef Immediate Guard;
     typedef Immediate NumLocals;
-    typedef struct {
+    struct LocalsCopy {
         Immediate target;
         Immediate source;
-    } LocalsCopy;
+    };
 
     static constexpr size_t MAX_NUM_ARGS = 1L << (8 * sizeof(PoolIdx));
     static constexpr size_t MAX_POOL_IDX = 1L << (8 * sizeof(PoolIdx));
@@ -139,6 +139,7 @@ class BC {
     }
 
     std::vector<ArgIdx> immediateCallArguments;
+    std::vector<PoolIdx> callArgumentNames;
 
     BC() : bc(Opcode::invalid_), immediate({{0}}) {}
     
@@ -146,10 +147,20 @@ class BC {
         bc = *pc;
         pc++;
         immediate = decodeImmediateArguments(bc, pc);
-        if (bc == Opcode::call_implicit_) {
+        // Read implicit promise argument offsets
+        if (bc == Opcode::call_implicit_ ||
+            bc == Opcode::named_call_implicit_) {
             pc += sizeof(CallImplicitFixedArgs) / sizeof(Opcode);
             for (size_t i = 0; i < immediate.callImplicitFixedArgs.nargs; ++i)
                 immediateCallArguments.push_back(readImmediate(&pc));
+        }
+        // Read named arguments
+        if (bc == Opcode::named_call_) {
+            for (size_t i = 0; i < immediate.callFixedArgs.nargs; ++i)
+                callArgumentNames.push_back(readImmediate(&pc));
+        } else if (bc == Opcode::named_call_implicit_) {
+            for (size_t i = 0; i < immediate.callImplicitFixedArgs.nargs; ++i)
+                callArgumentNames.push_back(readImmediate(&pc));
         }
     }
 
@@ -165,8 +176,15 @@ class BC {
     ImmediateArguments immediate;
 
     inline size_t size() {
+        // Those are the 3 variable length BC we have
         if (bc == Opcode::call_implicit_)
             return immediate.callImplicitFixedArgs.nargs * sizeof(FunIdx) +
+                   fixedSize(bc);
+        if (bc == Opcode::named_call_implicit_)
+            return immediate.callImplicitFixedArgs.nargs * 2 * sizeof(FunIdx) +
+                   fixedSize(bc);
+        if (bc == Opcode::named_call_)
+            return immediate.callFixedArgs.nargs * sizeof(FunIdx) +
                    fixedSize(bc);
         return fixedSize(bc);
     }
@@ -187,7 +205,7 @@ class BC {
     // Print it to stdout
     void print(CallSite* cs = nullptr);
     void printImmediateArgs();
-    void printNames(CallSite* cs);
+    void printNames();
     void printProfile(CallSite* cs);
 
     // Accessors to load immediate constant from the pool
@@ -204,11 +222,13 @@ class BC {
 
     bool isCallsite() const {
         return bc == Opcode::call_implicit_ || bc == Opcode::call_ ||
-               bc == Opcode::static_call_;
+               bc == Opcode::named_call_ ||
+               bc == Opcode::named_call_implicit_ || bc == Opcode::static_call_;
     }
 
     bool hasPromargs() const {
-        return bc == Opcode::call_implicit_ || bc == Opcode::promise_ ||
+        return bc == Opcode::call_implicit_ ||
+               bc == Opcode::named_call_implicit_ || bc == Opcode::promise_ ||
                bc == Opcode::push_code_;
     }
 
@@ -428,9 +448,13 @@ class BC {
             immediate.pool = *(PoolIdx*)pc;
             break;
         case Opcode::call_implicit_:
+        case Opcode::named_call_implicit_:
             immediate.callImplicitFixedArgs = *(CallImplicitFixedArgs*)pc;
+            break;
         case Opcode::call_:
+        case Opcode::named_call_:
             immediate.callFixedArgs = *(CallFixedArgs*)pc;
+            break;
         case Opcode::static_call_:
             immediate.staticCallFixedArgs = *(StaticCallFixedArgs*)pc;
             break;

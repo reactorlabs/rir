@@ -42,6 +42,8 @@ void BC::write(CodeStream& cs) const {
     // They have to be inserted by CodeStream::insertCall
     case Opcode::call_implicit_:
     case Opcode::call_:
+    case Opcode::named_call_implicit_:
+    case Opcode::named_call_:
     case Opcode::static_call_:
         assert(false);
         break;
@@ -150,8 +152,7 @@ SEXP BC::immediateConst() { return Pool::get(immediate.pool); }
 
 void BC::printImmediateArgs() {
     Rprintf("[");
-    for (unsigned i = 0; i < immediate.callImplicitFixedArgs.nargs; ++i) {
-        auto arg = immediateCallArguments[i];
+    for (auto arg : immediateCallArguments) {
         if (arg == MISSING_ARG_IDX)
             Rprintf(" _");
         else if (arg == DOTS_ARG_IDX)
@@ -162,17 +163,14 @@ void BC::printImmediateArgs() {
     Rprintf(" ] ");
 }
 
-void BC::printNames(CallSite* cs) {
-    if (cs->hasNames) {
-        Rprintf("[");
-        for (unsigned i = 0; i < cs->nargs; ++i) {
-            SEXP n = Pool::get(cs->names()[i]);
-            Rprintf(
-                " %s",
+void BC::printNames() {
+    Rprintf("[");
+    for (auto name : callArgumentNames) {
+        SEXP n = Pool::get(name);
+        Rprintf(" %s",
                 (n == nullptr || n == R_NilValue ? "_" : CHAR(PRINTNAME(n))));
-        }
-        Rprintf(" ]");
     }
+    Rprintf(" ]");
 }
 
 void BC::printProfile(CallSite* cs) {
@@ -211,10 +209,21 @@ void BC::print(CallSite* cs) {
         assert(false);
         break;
     case Opcode::call_implicit_: {
+        printImmediateArgs();
+        Rprintf("\n");
         if (cs) {
-            printImmediateArgs();
-            printNames(cs);
-            Rprintf("\n        -> ");
+            Rprintf("        -> ");
+            Rf_PrintValue(Pool::get(cs->call));
+            printProfile(cs);
+        }
+        break;
+    }
+    case Opcode::named_call_implicit_: {
+        printImmediateArgs();
+        printNames();
+        Rprintf("\n");
+        if (cs) {
+            Rprintf("        -> ");
             Rf_PrintValue(Pool::get(cs->call));
             printProfile(cs);
         }
@@ -224,8 +233,20 @@ void BC::print(CallSite* cs) {
         BC::NumArgs nargs = immediate.callFixedArgs.nargs;
         Rprintf(" %d ", nargs);
         if (cs) {
-            printNames(cs);
             Rprintf("\n        -> ");
+            Rf_PrintValue(Pool::get(cs->call));
+            printProfile(cs);
+        }
+        break;
+    }
+
+    case Opcode::named_call_: {
+        BC::NumArgs nargs = immediate.callFixedArgs.nargs;
+        Rprintf(" %d ", nargs);
+        printNames();
+        Rprintf("\n");
+        if (cs) {
+            Rprintf("        -> ");
             Rf_PrintValue(Pool::get(cs->call));
             printProfile(cs);
         }

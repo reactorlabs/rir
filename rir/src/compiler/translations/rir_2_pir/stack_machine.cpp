@@ -126,9 +126,6 @@ bool StackMachine::tryRunCurrentBC(const Rir2Pir& rir2pir, Builder& insert) {
 
     case Opcode::call_implicit_: {
         rir::CallSite* cs = bc.callSite(srcCode);
-        // TODO: Named args are not yet supported in pir
-        if (cs->hasNames)
-            return false;
 
         SEXP monomorphic = nullptr;
         if (cs->hasProfile) {
@@ -214,10 +211,6 @@ bool StackMachine::tryRunCurrentBC(const Rir2Pir& rir2pir, Builder& insert) {
     case Opcode::call_: {
         unsigned n = bc.immediate.callFixedArgs.nargs;
         rir::CallSite* cs = bc.callSite(srcCode);
-        // TODO: Named args are not yet supported in pir
-        if (cs->hasNames)
-            return false;
-
         std::vector<Value*> args(n);
         for (size_t i = 0; i < n; ++i)
             args[n - i - 1] = pop();
@@ -464,6 +457,8 @@ bool StackMachine::tryRunCurrentBC(const Rir2Pir& rir2pir, Builder& insert) {
         assert(false && "Recompiling PIR not supported for now.");
 
     // Unsupported opcodes:
+    case Opcode::named_call_:
+    case Opcode::named_call_implicit_:
     case Opcode::ldlval_:
     case Opcode::asast_:
     case Opcode::missing_:

@@ -197,7 +197,8 @@ void CodeVerifier::verifyFunctionLayout(SEXP sexp, ::Context* ctx) {
                     }
                 assert(ok and "Invalid promise offset detected");
             }
-            if (*cptr == Opcode::call_implicit_) {
+            if (*cptr == Opcode::call_implicit_ ||
+                *cptr == Opcode::named_call_implicit_) {
                 unsigned callIdx = *reinterpret_cast<Immediate*>(cptr + 1);
                 CallSite* cs = c->callSite(callIdx);
                 uint32_t nargs = *reinterpret_cast<Immediate*>(cptr + 5);
@@ -215,9 +216,9 @@ void CodeVerifier::verifyFunctionLayout(SEXP sexp, ::Context* ctx) {
                         }
                     assert(ok and "Invalid promise offset detected");
                 }
-                if (cs->hasNames) {
+                if (*cptr == Opcode::named_call_implicit_) {
                     for (size_t i = 0, e = nargs; i != e; ++i) {
-                        uint32_t offset = cs->names()[i];
+                        uint32_t offset = cur.callArgumentNames[i];
                         if (offset) {
                             SEXP name = cp_pool_at(ctx, offset);
                             assert(TYPEOF(name) == SYMSXP ||
@@ -226,6 +227,17 @@ void CodeVerifier::verifyFunctionLayout(SEXP sexp, ::Context* ctx) {
                     }
                 }
             }
+            if (*cptr == Opcode::named_call_) {
+                uint32_t nargs = *reinterpret_cast<Immediate*>(cptr + 5);
+                for (size_t i = 0, e = nargs; i != e; ++i) {
+                    uint32_t offset = cur.callArgumentNames[i];
+                    if (offset) {
+                        SEXP name = cp_pool_at(ctx, offset);
+                        assert(TYPEOF(name) == SYMSXP || name == R_NilValue);
+                    }
+                }
+            }
+
             cptr += cur.size();
             if (cptr == start + c->codeSize) {
                 assert(cptr == start + c->codeSize);

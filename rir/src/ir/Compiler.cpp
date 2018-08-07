@@ -900,8 +900,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
                 cs << BC::guardNamePrimitive(symbol::Internal);
                 for (auto a : args)
                     compileExpr(ctx, a);
-                cs.insertStaticCall(Opcode::static_call_, args.length(), {},
-                                    inAst, internal);
+                cs.insertStaticCall(args.length(), inAst, internal);
 
                 return true;
             }
@@ -923,8 +922,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
 
         for (auto a : args)
             compileExpr(ctx, a);
-        cs.insertStaticCall(Opcode::static_call_, args.length(), {}, ast,
-                            builtin);
+        cs.insertStaticCall(args.length(), ast, builtin);
 
         return true;
     }
@@ -1019,8 +1017,7 @@ bool compileWithGuess(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
         signature->pushArgument({true, TYPEOF(a)});
     }
 
-    cs.insertStaticCall(Opcode::static_call_, args.length(), {}, ast, cls,
-                        signature);
+    cs.insertStaticCall(args.length(), ast, cls, signature);
 
     return true;
 }
@@ -1054,6 +1051,7 @@ void compileCall(Context& ctx, SEXP ast, SEXP fun, SEXP args) {
     std::vector<BC::FunIdx> callArgs;
     std::vector<SEXP> names;
 
+    bool hasNames = false;
     for (auto arg = RList(args).begin(); arg != RList::end(); ++arg) {
         if (*arg == R_DotsSymbol) {
             callArgs.push_back(DOTS_ARG_IDX);
@@ -1073,10 +1071,15 @@ void compileCall(Context& ctx, SEXP ast, SEXP fun, SEXP args) {
 
         // (2) remember if the argument had a name associated
         names.push_back(arg.tag());
+        if (arg.tag() != R_NilValue)
+            hasNames = true;
     }
     assert(callArgs.size() < BC::MAX_NUM_ARGS);
 
-    cs.insertCallImplicit(Opcode::call_implicit_, callArgs, names, ast);
+    if (hasNames)
+        cs.insertNamedCallImplicit(callArgs, names, ast);
+    else
+        cs.insertCallImplicit(callArgs, ast);
 }
 
 // Lookup

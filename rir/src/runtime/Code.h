@@ -200,7 +200,6 @@ struct CallSiteProfile {
 struct CallSite {
     uint32_t call;
 
-    uint32_t hasNames : 1;
     uint32_t hasProfile : 1;
     uint32_t free : 28;
 
@@ -215,27 +214,21 @@ struct CallSite {
     /*
      * Layout of args is:
      *
-     * nargs * cp_idx of names   if hasNames
      * CallSiteProfile           if hasProfile
      *
      */
 
-    uint32_t* names() {
-        assert(hasNames);
-        return &payload[0];
-    }
-
     CallSiteProfile* profile() {
         assert(hasProfile);
-        return (CallSiteProfile*)&payload[(hasNames ? nargs : 0)];
+        return (CallSiteProfile*)&payload[0];
     }
 
-    static unsigned size(bool hasNames, bool hasProfile, uint32_t nargs) {
-        return sizeof(CallSite) + sizeof(uint32_t) * ((hasNames ? nargs : 0)) +
+    static unsigned size(bool hasProfile, uint32_t nargs) {
+        return sizeof(CallSite) + sizeof(uint32_t) * ((0)) +
                +(hasProfile ? sizeof(CallSiteProfile) : 0);
     }
 
-    unsigned size() { return size(hasNames, hasProfile, nargs); }
+    unsigned size() { return size(hasProfile, nargs); }
 };
 
 #pragma pack(pop)

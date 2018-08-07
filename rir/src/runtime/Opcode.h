@@ -11,10 +11,15 @@
 /** Moves the pc to next instruction, based on the current instruction length
  */
 RIR_INLINE rir::Opcode* advancePc(rir::Opcode* pc) {
-    if (*pc == rir::Opcode::call_implicit_) {
+    auto bc = *pc;
+    if (bc == rir::Opcode::call_implicit_ ||
+        bc == rir::Opcode::named_call_implicit_ ||
+        bc == rir::Opcode::named_call_) {
         pc += 1 + sizeof(Immediate);
         Immediate nargs = *((Immediate*)pc);
         pc += (1 + nargs) * sizeof(Immediate);
+        if (bc == rir::Opcode::named_call_implicit_)
+            pc += nargs * sizeof(Immediate);
         return pc;
     }
     switch (*pc++) {

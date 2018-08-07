@@ -124,6 +124,10 @@ DEF_INSTR(call_, 2, -1, 1, 0)
  */
 DEF_INSTR(static_call_, 3, -1, 1, 0)
 
+// Same as above, but with named arguments
+DEF_INSTR(named_call_implicit_, 2, 1, 1, 0)
+DEF_INSTR(named_call_, 2, -1, 1, 0)
+
 /**
  * close_:: pop body and argument list, create closure, and push on object stack
  */
