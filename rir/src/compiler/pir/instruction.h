@@ -11,9 +11,9 @@
 #include <array>
 #include <cassert>
 #include <cstdint>
+#include <deque>
 #include <functional>
 #include <iostream>
-#include <deque>
 
 /*
  * This file provides implementations for all instructions
@@ -92,7 +92,8 @@ class Instruction : public Value {
         unsigned idx() const { return second; }
     };
 
-    Instruction(Tag tag, PirType t) : Value(t, tag) {}
+    Instruction(Tag tag, PirType t, unsigned srcIdx)
+        : Value(t, tag), srcIdx(srcIdx) {}
 
     virtual bool mightIO() const = 0;
     virtual bool changesEnv() const = 0;
@@ -176,10 +177,11 @@ class InstructionImplementation : public Instruction {
     ArgStore args_;
 
   public:
-    InstructionImplementation(PirType resultType)
-        : Instruction(ITAG, resultType), args_({}) {}
-    InstructionImplementation(PirType resultType, const ArgStore& args)
-        : Instruction(ITAG, resultType), args_(args) {}
+    InstructionImplementation(PirType resultType, unsigned srcIdx)
+        : Instruction(ITAG, resultType, srcIdx), args_({}) {}
+    InstructionImplementation(PirType resultType, const ArgStore& args,
+                              unsigned srcIdx)
+        : Instruction(ITAG, resultType, srcIdx), args_(args) {}
 
     void operator=(InstructionImplementation&) = delete;
     InstructionImplementation() = delete;
@@ -282,15 +284,16 @@ class FixedLenInstruction
         arg(ENV_SLOT).val() = v;
     }
 
-    FixedLenInstruction(PirType resultType, Value* env)
-        : Super(resultType, ArgsZip(env)) {
+    FixedLenInstruction(PirType resultType, Value* env, unsigned srcIdx = 0)
+        : Super(resultType, ArgsZip(env), srcIdx) {
         assert(env);
         static_assert(Description.HasEnv,
                       "Invalid constructor for instruction without env");
         static_assert(ARGS == 1, "This instruction expects more arguments");
     }
 
-    FixedLenInstruction(PirType resultType) : Super(resultType, {}) {
+    FixedLenInstruction(PirType resultType, unsigned srcIdx = 0)
+        : Super(resultType, {}, srcIdx) {
         static_assert(!Description.HasEnv,
                       "Invalid constructor for instruction with env");
         static_assert(ARGS == 0, "This instruction expects more arguments");
@@ -298,16 +301,18 @@ class FixedLenInstruction
 
     FixedLenInstruction(PirType resultType,
                         const std::array<PirType, ARGS - 1>& at,
-                        const std::array<Value*, ARGS - 1>& arg, Value* env)
-        : Super(resultType, ArgsZip(arg, at, env)) {
+                        const std::array<Value*, ARGS - 1>& arg, Value* env,
+                        unsigned srcIdx = 0)
+        : Super(resultType, ArgsZip(arg, at, env), srcIdx) {
         assert(env);
         static_assert(Description.HasEnv,
                       "Invalid constructor for instruction without env");
     }
 
     FixedLenInstruction(PirType resultType, const std::array<PirType, ARGS>& at,
-                        const std::array<Value*, ARGS>& arg)
-        : Super(resultType, ArgsZip(arg, at)) {
+                        const std::array<Value*, ARGS>& arg,
+                        unsigned srcIdx = 0)
+        : Super(resultType, ArgsZip(arg, at), srcIdx) {
         static_assert(!Description.HasEnv,
                       "Invalid constructor for instruction with env");
     }
@@ -382,12 +387,14 @@ class VarLenInstruction
 
     void pushArg(Value* a) { pushArg(a, a->type); }
 
-    VarLenInstruction(PirType return_type) : Super(return_type) {
+    VarLenInstruction(PirType return_type, unsigned srcIdx = 0)
+        : Super(return_type, srcIdx) {
         static_assert(!Description.HasEnv,
                       "This instruction needs an environment");
     }
 
-    VarLenInstruction(PirType return_type, Value* env) : Super(return_type) {
+    VarLenInstruction(PirType return_type, Value* env, unsigned srcIdx = 0)
+        : Super(return_type, srcIdx) {
         assert(env);
         static_assert(Description.HasEnv,
                       "This instruction has no environment access");
@@ -492,8 +499,7 @@ class FLI(LdVarSuper, 1, Effect::None, EnvAccess::Read) {
         : FixedLenInstruction(PirType::any(), env), varName(name) {}
 
     LdVarSuper(const char* name, Value* env)
-        : FixedLenInstruction(PirType::any(), env), varName(Rf_install(name)) {
-    }
+        : FixedLenInstruction(PirType::any(), env), varName(Rf_install(name)) {}
 
     SEXP varName;
 
@@ -650,9 +656,10 @@ class FLI(Extract2_1D, 3, Effect::None, EnvAccess::Leak) {
 class FLI(Extract1_2D, 4, Effect::None, EnvAccess::Leak) {
   public:
     Extract1_2D(Value* vec, Value* idx1, Value* idx2, Value* env)
-        : FixedLenInstruction(PirType::val(), {{PirType::val(), PirType::val(),
-                                                PirType::val()}},
-                              {{vec, idx1, idx2}}, env) {}
+        : FixedLenInstruction(
+              PirType::val(),
+              {{PirType::val(), PirType::val(), PirType::val()}},
+              {{vec, idx1, idx2}}, env) {}
 };
 
 class FLI(Extract2_2D, 4, Effect::None, EnvAccess::Leak) {
@@ -676,7 +683,7 @@ class FLI(Is, 1, Effect::None, EnvAccess::None) {
     Is(uint32_t sexpTag, Value* v)
         : FixedLenInstruction(PirType(RType::logical).scalar(),
                               {{PirType::val()}}, {{v}}),
-            sexpTag(sexpTag) {}
+          sexpTag(sexpTag) {}
     uint32_t sexpTag;
 
     void printArgs(std::ostream& out) override;
@@ -709,11 +716,9 @@ class FLI(Identical, 2, Effect::None, EnvAccess::None) {
 #define BINOP(Name, Type)                                                      \
     class FLI(Name, 3, Effect::None, EnvAccess::Leak) {                        \
       public:                                                                  \
-        Name(Value* lhs, Value* rhs, Value* env, unsigned src)                 \
+        Name(Value* lhs, Value* rhs, Value* env, unsigned srcIdx)              \
             : FixedLenInstruction(Type, {{PirType::val(), PirType::val()}},    \
-                                  {{lhs, rhs}}, env) {                         \
-            srcIdx = src;                                                      \
-        }                                                                      \
+                                  {{lhs, rhs}}, env, srcIdx) {}                \
     }
 
 BINOP(Gte, PirType::val());
@@ -736,11 +741,9 @@ BINOP(Eq, RType::logical);
 #define BINOP_NOENV(Name, Type)                                                \
     class FLI(Name, 2, Effect::None, EnvAccess::None) {                        \
       public:                                                                  \
-        Name(Value* lhs, Value* rhs, unsigned src)                             \
+        Name(Value* lhs, Value* rhs, unsigned srcIdx)                          \
             : FixedLenInstruction(Type, {{PirType::val(), PirType::val()}},    \
-                                  {{lhs, rhs}}) {                              \
-            srcIdx = src;                                                      \
-        }                                                                      \
+                                  {{lhs, rhs}}, srcIdx) {}                     \
     }
 
 BINOP_NOENV(LAnd, RType::logical);
@@ -751,9 +754,9 @@ BINOP_NOENV(LOr, RType::logical);
 #define UNOP(Name)                                                             \
     class FLI(Name, 2, Effect::None, EnvAccess::Leak) {                        \
       public:                                                                  \
-        Name(Value* v, Value* env)                                             \
+        Name(Value* v, Value* env, unsigned srcIdx)                            \
             : FixedLenInstruction(PirType::val(), {{PirType::val()}}, {{v}},   \
-                                  env) {}                                      \
+                                  env, srcIdx) {}                              \
     }
 
 UNOP(Not);
@@ -785,9 +788,11 @@ class CallInstructionImplementation
       public CallInstruction {
   public:
     typedef VarLenInstruction<ITAG, Base, EFFECT, ENV> Super;
-    CallInstructionImplementation(PirType returnType, Value* env)
-        : Super(returnType, env) {}
-    CallInstructionImplementation(PirType returnType) : Super(returnType) {}
+    CallInstructionImplementation(PirType returnType, Value* env,
+                                  unsigned srcIdx)
+        : Super(returnType, env, srcIdx) {}
+    CallInstructionImplementation(PirType returnType, unsigned srcIdx)
+        : Super(returnType, srcIdx) {}
 
     using Super::arg;
     using Super::args_;
@@ -824,12 +829,12 @@ class ACallInstructionImplementation(Call, Effect::Any, EnvAccess::Leak, true) {
 
     Value* cls() { return arg(clsIdx).val(); }
 
-    Call(Value * e, Value * fun, const std::vector<Value*>& args, unsigned src)
-        : CallInstructionImplementation(PirType::valOrLazy(), e) {
+    Call(Value * e, Value * fun, const std::vector<Value*>& args,
+         unsigned srcIdx)
+        : CallInstructionImplementation(PirType::valOrLazy(), e, srcIdx) {
         pushArg(fun, RType::closure);
         for (unsigned i = 0; i < args.size(); ++i)
             pushArg(args[i], PirType::val());
-        srcIdx = src;
     }
 };
 
@@ -845,9 +850,9 @@ class ACallInstructionImplementation(StaticCall, Effect::Any, EnvAccess::Leak,
     SEXP origin() { return origin_; }
 
     StaticCall(Value * e, Closure * cls, const std::vector<Value*>& args,
-               unsigned src, SEXP origin)
-        : CallInstructionImplementation(PirType::valOrLazy(), e), cls_(cls),
-          origin_(origin) {
+               SEXP origin, unsigned srcIdx)
+        : CallInstructionImplementation(PirType::valOrLazy(), e, srcIdx),
+          cls_(cls), origin_(origin) {
         for (unsigned i = 0; i < args.size(); ++i)
             pushArg(args[i], PirType::val());
     }
@@ -864,10 +869,10 @@ class ACallInstructionImplementation(CallBuiltin, Effect::Any, EnvAccess::Write,
     const CCODE builtin;
     int builtinId;
 
-    CallBuiltin(Value* e, SEXP builtin, const std::vector<Value*>& args,
-                unsigned src);
+    CallBuiltin(Value * e, SEXP builtin, const std::vector<Value*>& args,
+                unsigned srcIdx);
 
-    void printArgs(std::ostream& out) override;
+    void printArgs(std::ostream & out) override;
 };
 
 class ACallInstructionImplementation(CallSafeBuiltin, Effect::None,
@@ -878,9 +883,9 @@ class ACallInstructionImplementation(CallSafeBuiltin, Effect::None,
     int builtinId;
 
     CallSafeBuiltin(SEXP builtin, const std::vector<Value*>& args,
-                    unsigned src);
+                    unsigned srcIdx);
 
-    void printArgs(std::ostream& out) override;
+    void printArgs(std::ostream & out) override;
 };
 
 class VLI(MkEnv, Effect::None, EnvAccess::Capture) {

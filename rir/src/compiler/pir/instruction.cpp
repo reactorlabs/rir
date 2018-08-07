@@ -206,9 +206,7 @@ void Is::printArgs(std::ostream& out) {
 bool Phi::updateType() {
     auto old = type;
     type = arg(0).val()->type;
-    eachArg([&](BB*, Value* v) -> void {
-            type = type | v->type;
-    });
+    eachArg([&](BB*, Value* v) -> void { type = type | v->type; });
     return type != old;
 }
 
@@ -236,21 +234,20 @@ void PirCopy::print(std::ostream& out) {
 }
 
 CallSafeBuiltin::CallSafeBuiltin(SEXP builtin, const std::vector<Value*>& args,
-                                 unsigned src)
-    : CallInstructionImplementation(PirType::valOrLazy()), blt(builtin),
+                                 unsigned srcIdx)
+    : CallInstructionImplementation(PirType::valOrLazy(), srcIdx), blt(builtin),
       builtin(getBuiltin(builtin)), builtinId(getBuiltinNr(builtin)) {
     for (unsigned i = 0; i < args.size(); ++i)
         this->pushArg(args[i], PirType::val());
-    srcIdx = src;
 }
 
 CallBuiltin::CallBuiltin(Value* e, SEXP builtin,
-                         const std::vector<Value*>& args, unsigned src)
-    : CallInstructionImplementation(PirType::valOrLazy(), e), blt(builtin),
-      builtin(getBuiltin(builtin)), builtinId(getBuiltinNr(builtin)) {
+                         const std::vector<Value*>& args, unsigned srcIdx)
+    : CallInstructionImplementation(PirType::valOrLazy(), e, srcIdx),
+      blt(builtin), builtin(getBuiltin(builtin)),
+      builtinId(getBuiltinNr(builtin)) {
     for (unsigned i = 0; i < args.size(); ++i)
         this->pushArg(args[i], PirType::val());
-    srcIdx = src;
 }
 
 void CallBuiltin::printArgs(std::ostream& out) {

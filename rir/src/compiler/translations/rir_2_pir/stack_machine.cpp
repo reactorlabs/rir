@@ -184,7 +184,7 @@ bool StackMachine::tryRunCurrentBC(const Rir2Pir& rir2pir, Builder& insert) {
                     insert.bb = asExpected;
                     curBB->next1 = asExpected;
                     Value* r2 = insert(new StaticCall(insert.env, f, args,
-                                                      cs->call, monomorphic));
+                                                      monomorphic, cs->call));
 
                     BB* cont = insert.createBB();
                     fallback->next0 = cont;
@@ -259,7 +259,7 @@ bool StackMachine::tryRunCurrentBC(const Rir2Pir& rir2pir, Builder& insert) {
                 target,
                 [&](Closure* f) {
                     push(
-                        insert(new StaticCall(env, f, args, cs->call, target)));
+                        insert(new StaticCall(env, f, args, target, cs->call)));
                 },
                 [&]() { failed = true; });
             if (failed)
@@ -372,7 +372,7 @@ bool StackMachine::tryRunCurrentBC(const Rir2Pir& rir2pir, Builder& insert) {
 #define UNOP(Name, Op)                                                         \
     case Opcode::Op: {                                                         \
         v = pop();                                                             \
-        push(insert(new Name(v, env)));                                        \
+        push(insert(new Name(v, env, getSrcIdx())));                           \
         break;                                                                 \
     }
         UNOP(Plus, uplus_);
