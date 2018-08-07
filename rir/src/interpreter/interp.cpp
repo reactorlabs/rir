@@ -535,7 +535,7 @@ unsigned dispatch(const CallContext& call, DispatchTable* vt) {
     // to the callee
     if (!call.hasStackArgs()) {
         for (size_t i = 0; i < call.nargs(); ++i)
-            if (call.callSite->args()[i] == DOTS_ARG_IDX)
+            if (call.implicitArgOffset(i) == DOTS_ARG_IDX)
                 return 0;
     }
 
