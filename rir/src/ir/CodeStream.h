@@ -63,7 +63,6 @@ class CodeStream {
     }
 
     CodeStream& operator<<(const BC& b) {
-        b.print();
         if (b.bc == Opcode::label) {
             return *this << b.immediate.offset;
         }
