@@ -935,6 +935,14 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
         return true;
     }
 
+    if (fun == symbol::debugBreak) {
+        // Push R_NilValue because this is a "function call" and needs to return
+        // something.
+        cs << BC::push(R_NilValue) << BC::int3();
+        cs.addSrc(ast);
+        return true;
+    }
+
     return false;
 }
 

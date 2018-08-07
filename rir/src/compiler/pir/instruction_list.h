@@ -62,6 +62,7 @@
     V(Deopt)                                                                   \
     V(Force)                                                                   \
     V(CastType)                                                                \
-    V(PirCopy)
+    V(PirCopy)                                                                 \
+    V(Int3)
 
 #endif

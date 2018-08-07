@@ -416,6 +416,10 @@ bool StackMachine::tryRunCurrentBC(const Rir2Pir& rir2pir, Builder& insert) {
         break;
     }
 
+    case Opcode::int3_:
+        insert(new Int3());
+        break;
+
     // TODO implement!
     // (silently ignored)
     case Opcode::set_shared_:
@@ -469,7 +473,6 @@ bool StackMachine::tryRunCurrentBC(const Rir2Pir& rir2pir, Builder& insert) {
     case Opcode::beginloop_:
     case Opcode::endcontext_:
     case Opcode::ldddvar_:
-    case Opcode::int3_:
         return false;
     }
     return true;
