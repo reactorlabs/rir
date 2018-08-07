@@ -1,4 +1,5 @@
 #include "Code.h"
+#include "R/Printing.h"
 #include "ir/BC.h"
 #include "utils/Pool.h"
 
@@ -14,6 +15,43 @@ Code::Code(SEXP ast, unsigned cs, unsigned sourceSize, unsigned offset,
     srcLength = sourceSize;
     perfCounter = 0;
     isDefaultArgument = isDefaultArg;
+}
+
+void Code::disassemble() {
+    Opcode* pc = code();
+
+    while (pc < endCode()) {
+        BC bc = BC::decode(pc);
+
+        Rprintf(" %5d ", ((uintptr_t)pc - (uintptr_t)code()));
+
+        unsigned s = getSrcIdxAt(pc, true);
+        if (s != 0)
+            Rprintf("   ; %s\n       ",
+                    dumpSexp(src_pool_at(globalContext(), s)).c_str());
+
+        // Print call ast
+        switch (bc.bc) {
+        case Opcode::call_implicit_:
+        case Opcode::named_call_implicit_:
+        case Opcode::call_:
+        case Opcode::named_call_:
+            Rprintf(
+                "   ; %s\n       ",
+                dumpSexp(Pool::get(bc.immediate.callFixedArgs.ast)).c_str());
+            break;
+        case Opcode::static_call_:
+            Rprintf("   ; %s\n       ",
+                    dumpSexp(Pool::get(bc.immediate.staticCallFixedArgs.ast))
+                        .c_str());
+            break;
+        default: {}
+        }
+
+        bc.print();
+
+        BC::advance(&pc);
+    }
 }
 
 void Code::print() {
@@ -34,17 +72,6 @@ void Code::print() {
         sl += 2;
     }
     Rprintf("\n");
-    Opcode* pc = code();
-
-    while (pc < endCode()) {
-        unsigned s = getSrcIdxAt(pc, true);
-        if (s != 0) {
-            Rprintf("          # (idx %u) : ", s);
-            Rf_PrintValue(src_pool_at(globalContext(), s));
-        }
-        Rprintf(" %5d ", ((uintptr_t)pc - (uintptr_t)code()));
-        BC bc = BC::advance(&pc);
-        bc.print();
-    }
+    disassemble();
 }
 }

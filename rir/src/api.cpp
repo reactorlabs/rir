@@ -33,8 +33,12 @@ REXPORT SEXP rir_disassemble(SEXP what, SEXP verbose) {
         Function* f = t->at(entry);
         Rprintf("= vtable slot <%d> (%p, invoked %u) =\n", entry, f,
                 f->invocationCount);
+        f->body()->disassemble();
         for (auto c : *f) {
-            c->print();
+            if (c != f->body()) {
+                Rprintf("\n [Prom %x]\n", (uintptr_t)c - (uintptr_t)f);
+                c->disassemble();
+            }
         }
     }
 

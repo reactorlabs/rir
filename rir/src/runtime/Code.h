@@ -147,6 +147,7 @@ struct Code {
     }
 
     void print();
+    void disassemble();
 
     Code* next() { return (Code*)((uintptr_t) this + this->size()); }
 

@@ -6,6 +6,7 @@
 
 #include "CodeStream.h"
 #include "R/Funtab.h"
+#include "R/Printing.h"
 #include "R/RList.h"
 #include "R/r.h"
 
@@ -209,16 +210,12 @@ void BC::print() const {
         break;
     case Opcode::call_implicit_: {
         printImmediateArgs();
-        Rprintf("\n        -> ");
-        Rf_PrintValue(Pool::get(immediate.callFixedArgs.ast));
         printProfile();
         break;
     }
     case Opcode::named_call_implicit_: {
         printImmediateArgs();
         printNames();
-        Rprintf("\n        -> ");
-        Rf_PrintValue(Pool::get(immediate.callFixedArgs.ast));
         printProfile();
         break;
     }
@@ -226,8 +223,6 @@ void BC::print() const {
         auto args = immediate.callFixedArgs;
         BC::NumArgs nargs = args.nargs;
         Rprintf(" %d ", nargs);
-        Rprintf("\n        -> ");
-        Rf_PrintValue(Pool::get(args.ast));
         printProfile();
         break;
     }
@@ -237,28 +232,22 @@ void BC::print() const {
         BC::NumArgs nargs = args.nargs;
         Rprintf(" %d ", nargs);
         printNames();
-        Rprintf("\n        -> ");
-        Rf_PrintValue(Pool::get(args.ast));
         printProfile();
         break;
     }
     case Opcode::static_call_: {
         auto args = immediate.staticCallFixedArgs;
         BC::NumArgs nargs = args.nargs;
-        Rprintf(" %d : ", nargs);
-        Rprintf(" -> ");
-        Rf_PrintValue(Pool::get(args.target));
-        Rprintf("          ");
-        Rf_PrintValue(Pool::get(args.ast));
+        auto target = Pool::get(args.target);
+        Rprintf(" %d : %s", nargs, dumpSexp(target).c_str());
         printProfile();
         break;
     }
     case Opcode::push_:
-        Rprintf(" %u # ", immediate.pool);
         if (immediateConst() == R_UnboundValue)
             Rprintf(" -\n");
         else
-            Rf_PrintValue(immediateConst());
+            Rprintf("%s\n", dumpSexp(immediateConst()).c_str());
         return;
     case Opcode::ldfun_:
     case Opcode::ldvar_:
@@ -270,8 +259,7 @@ void BC::print() const {
     case Opcode::stvar_:
     case Opcode::stvar_super_:
     case Opcode::missing_:
-        Rprintf(" %u # %s", immediate.pool,
-                CHAR(PRINTNAME((immediateConst()))));
+        Rprintf(" %s", CHAR(PRINTNAME((immediateConst()))));
         break;
     case Opcode::guard_fun_: {
         SEXP name = Pool::get(immediate.guard_fun_args.name);
