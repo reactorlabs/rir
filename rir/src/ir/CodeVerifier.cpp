@@ -138,8 +138,7 @@ void CodeVerifier::verifyFunctionLayout(SEXP sexp, ::Context* ctx) {
         assert(oldo == c->stackLength and "Invalid stack layout reported");
 
         assert((uintptr_t)(c + 1) + pad4(c->codeSize) +
-                   c->srcLength * sizeof(unsigned) +
-                   c->skiplistLength * 2 * sizeof(unsigned) &&
+                   c->srcLength * sizeof(Code::SrclistEntry) &&
                "Invalid code length reported");
     }
 
@@ -148,6 +147,7 @@ void CodeVerifier::verifyFunctionLayout(SEXP sexp, ::Context* ctx) {
 
     // check that the call instruction has proper arguments and number of
     // instructions is valid
+    bool sawReturnOrBackjump = false;
     for (auto c : objs) {
         Opcode* cptr = c->code();
         Opcode* start = cptr;
@@ -226,20 +226,16 @@ void CodeVerifier::verifyFunctionLayout(SEXP sexp, ::Context* ctx) {
                 }
             }
 
+            if ((cur.isJmp() && cur.immediate.offset < 0) || cur.isReturn())
+                sawReturnOrBackjump = true;
+            else if (cur.bc != Opcode::nop_)
+                sawReturnOrBackjump = false;
+
             cptr += cur.size();
             if (cptr == start + c->codeSize) {
-                assert(cptr == start + c->codeSize);
-                assert(cur.isJmp() || cur.isReturn());
+                assert(sawReturnOrBackjump);
                 break;
             }
-        }
-
-        // check that the astmap indices are within bounds
-        for (auto c : objs) {
-            unsigned* srcIndices = c->raw_src();
-            for (size_t i = 0; i != c->srcLength; ++i)
-                assert(srcIndices[i] < src_pool_length(ctx) and
-                       "Source index for instruction out of bounds");
         }
     }
 }

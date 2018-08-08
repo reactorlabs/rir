@@ -75,9 +75,7 @@ struct Code {
 
     unsigned codeSize; /// bytes of code (not padded)
 
-    unsigned skiplistLength; /// number of skiplist entries
-
-    unsigned srcLength; /// number of instructions
+    unsigned srcLength; /// number of sources attached
 
     unsigned perfCounter;
 
@@ -94,12 +92,17 @@ struct Code {
      *   ---------------------------------------------------------------------
      *   code stream   BC                pad4(codeSize)
      *
-     *   skiplist      (instr offset,    2 * skiplistLength * sizeof(unsigned)
-     *                  src index)
-     *
-     *   srcList       cp_idx (ast)      srcLength * sizeof(unsigned)
+     *   srcList       cp_idx (ast)      srcLength * sizeof(SrcEntry)
      *
      */
+
+    // The source list contains pcOffset to src index
+    struct SrclistEntry {
+        unsigned pcOffset;
+        unsigned srcIdx;
+    };
+    static_assert(sizeof(SrclistEntry) == 2 * sizeof(unsigned),
+                  "Needs to correspond to the size of the record_call_ BC");
 
     /** Returns a pointer to the instructions in c.  */
     Opcode* code() { return (Opcode*)data; }
@@ -109,43 +112,47 @@ struct Code {
     Function* function() { return (Function*)((uintptr_t) this - header); }
 
     size_t size() {
-        return sizeof(Code) + pad4(codeSize) + srcLength * sizeof(unsigned) +
-               skiplistLength * 2 * sizeof(unsigned);
+        return sizeof(Code) + pad4(codeSize) + srcLength * sizeof(SrclistEntry);
     }
 
-    static size_t size(unsigned codeSize, unsigned sourcesSize) {
-        return sizeof(Code) + pad4(codeSize) + sourcesSize * sizeof(unsigned) +
-               calcSkiplistLength(sourcesSize) * 2 * sizeof(unsigned);
+    static size_t size(unsigned codeSize, unsigned sources) {
+        return sizeof(Code) + pad4(codeSize) + sources * sizeof(SrclistEntry);
     }
 
     unsigned getSrcIdxAt(Opcode* pc, bool allowMissing) {
-
-        unsigned* sl = skiplist();
-        unsigned sl_i = 0;
-        Opcode* start = reinterpret_cast<Opcode*>(data);
-
-        SLOWASSERT(allowMissing || *sl <= pc - start);
-
-        if (sl[0] > pc - start)
+        if (srcLength == 0) {
+            assert(allowMissing);
             return 0;
-
-        while (sl[sl_i] <= pc - start && sl_i < 2 * skiplistLength)
-            sl_i += 2;
-
-        // we need to determine index of the current instruction
-        rir::Opcode* x = code() + sl[sl_i - 2];
-        // find the pc of the current instructions
-        unsigned insIdx = sl[sl_i - 1];
-
-        while (x != pc) {
-            x = advancePc(x);
-            ++insIdx;
-            if (insIdx == srcLength) {
-                SLOWASSERT(allowMissing);
-                return 0;
-            }
         }
-        unsigned sidx = raw_src()[insIdx];
+
+        SrclistEntry* sl = srclist();
+        Opcode* start = reinterpret_cast<Opcode*>(data);
+        auto pcOffset = pc - start;
+
+        if (srcLength == 1) {
+            auto sidx = sl[0].pcOffset == pcOffset ? sl[0].srcIdx : 0;
+            SLOWASSERT(allowMissing || sidx);
+            return sidx;
+        }
+
+        // Binary search through src list
+        int lower = 0;
+        int upper = srcLength - 1;
+        int finger = upper / 2;
+        unsigned sidx = 0;
+
+        while (lower <= upper) {
+            if (sl[finger].pcOffset == pcOffset) {
+                sidx = sl[finger].srcIdx;
+                break;
+            }
+            if (sl[finger].pcOffset < pcOffset)
+                lower = finger + 1;
+            else
+                upper = finger - 1;
+            finger = lower + (upper - lower) / 2;
+        }
+        SLOWASSERT(sidx == 0 || sl[finger].pcOffset == pcOffset);
         SLOWASSERT(allowMissing || sidx);
 
         return sidx;
@@ -157,17 +164,7 @@ struct Code {
     Code* next() { return (Code*)((uintptr_t) this + this->size()); }
 
   private:
-    static size_t calcSkiplistLength(unsigned sourcesSize) {
-        size_t s = 0.03 * sourcesSize;
-        return s ? s : 1;
-    }
-
-    unsigned* skiplist() { return (unsigned*)(data + pad4(codeSize)); }
-
-    unsigned* raw_src() {
-        return (unsigned*)((char*)skiplist() +
-                           skiplistLength * 2 * sizeof(unsigned));
-    }
+    SrclistEntry* srclist() { return (SrclistEntry*)(data + pad4(codeSize)); }
 };
 
 #pragma pack(pop)
