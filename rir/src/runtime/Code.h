@@ -131,7 +131,7 @@ struct Code {
                calcSkiplistLength(sourcesSize) * 2 * sizeof(unsigned) +
                callSiteLength;
     }
-friend class CodeStream;
+
     unsigned getSrcIdxAt(Opcode* pc, bool allowMissing) {
 
         unsigned* sl = skiplist();
