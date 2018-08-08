@@ -11,9 +11,7 @@
 
 #include "utils/Pool.h"
 
-#include "CodeEditor.h"
 #include "CodeVerifier.h"
-#include "cleanup.h"
 
 #include <stack>
 
@@ -25,10 +23,10 @@ class Context {
   public:
     class LoopContext {
       public:
-        LabelT next_;
-        LabelT break_;
+        BC::Label next_;
+        BC::Label break_;
         bool context_needed_ = false;
-        LoopContext(LabelT next_, LabelT break_)
+        LoopContext(BC::Label next_, BC::Label break_)
             : next_(next_), break_(break_) {}
     };
 
@@ -45,11 +43,11 @@ class Context {
             return !loops.empty() ||
                     (parent && parent->inLoop());
         }
-        LabelT loopNext() {
+        BC::Label loopNext() {
             assert(!loops.empty());
             return loops.top().next_;
         }
-        LabelT loopBreak() {
+        BC::Label loopBreak() {
             assert(!loops.empty());
             return loops.top().break_;
         }
@@ -104,15 +102,11 @@ class Context {
         return code.top()->loopIsLocal();
     }
 
-    LabelT loopNext() {
-        return code.top()->loopNext();
-    }
+    BC::Label loopNext() { return code.top()->loopNext(); }
 
-    LabelT loopBreak() {
-        return code.top()->loopBreak();
-    }
+    BC::Label loopBreak() { return code.top()->loopBreak(); }
 
-    void pushLoop(LabelT next_, LabelT break_) {
+    void pushLoop(BC::Label next_, BC::Label break_) {
         code.top()->loops.emplace(next_, break_);
     }
 
@@ -125,7 +119,7 @@ class Context {
 
     void pushPromiseContext(SEXP ast) { code.push(new PromiseContext(ast, fun, code.empty() ? nullptr : code.top())); }
 
-    FunIdxT pop(bool isDefaultArg = false) {
+    BC::FunIdx pop(bool isDefaultArg = false) {
         auto idx = cs().finalize(isDefaultArg, 0);
         delete code.top();
         code.pop();
@@ -133,7 +127,7 @@ class Context {
     }
 };
 
-FunIdxT compilePromise(Context& ctx, SEXP exp, bool isFormal = false);
+BC::FunIdx compilePromise(Context& ctx, SEXP exp, bool isFormal = false);
 void compileExpr(Context& ctx, SEXP exp);
 void compileCall(Context& ctx, SEXP ast, SEXP fun, SEXP args);
 
@@ -254,7 +248,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
     if (fun == symbol::And && args.length() == 2) {
         cs << BC::guardNamePrimitive(fun);
 
-        LabelT nextBranch = cs.mkLabel();
+        BC::Label nextBranch = cs.mkLabel();
 
         compileExpr(ctx, args[0]);
 
@@ -277,7 +271,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
     if (fun == symbol::Or && args.length() == 2) {
         cs << BC::guardNamePrimitive(fun);
 
-        LabelT nextBranch = cs.mkLabel();
+        BC::Label nextBranch = cs.mkLabel();
 
         compileExpr(ctx, args[0]);
 
@@ -609,8 +603,8 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
             return false;
 
         cs << BC::guardNamePrimitive(fun);
-        LabelT trueBranch = cs.mkLabel();
-        LabelT nextBranch = cs.mkLabel();
+        BC::Label trueBranch = cs.mkLabel();
+        BC::Label nextBranch = cs.mkLabel();
 
         compileExpr(ctx, args[0]);
         cs << BC::asbool() << BC::brtrue(trueBranch);
@@ -717,8 +711,8 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
 
         cs << BC::guardNamePrimitive(fun);
 
-        LabelT loopBranch = cs.mkLabel();
-        LabelT nextBranch = cs.mkLabel();
+        BC::Label loopBranch = cs.mkLabel();
+        BC::Label nextBranch = cs.mkLabel();
 
         ctx.pushLoop(loopBranch, nextBranch);
 
@@ -757,8 +751,8 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
 
         cs << BC::guardNamePrimitive(fun);
 
-        LabelT loopBranch = cs.mkLabel();
-        LabelT nextBranch = cs.mkLabel();
+        BC::Label loopBranch = cs.mkLabel();
+        BC::Label nextBranch = cs.mkLabel();
 
         ctx.pushLoop(loopBranch, nextBranch);
 
@@ -798,9 +792,9 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
 
         cs << BC::guardNamePrimitive(fun);
 
-        LabelT loopBranch = cs.mkLabel();
-        LabelT breakBranch = cs.mkLabel();
-        LabelT endForBranch = cs.mkLabel();
+        BC::Label loopBranch = cs.mkLabel();
+        BC::Label breakBranch = cs.mkLabel();
+        BC::Label endForBranch = cs.mkLabel();
 
         ctx.pushLoop(loopBranch, breakBranch);
 
@@ -906,8 +900,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
                 cs << BC::guardNamePrimitive(symbol::Internal);
                 for (auto a : args)
                     compileExpr(ctx, a);
-                cs.insertStackCall(Opcode::static_call_, args.length(), {},
-                                   inAst, internal);
+                cs << BC::staticCall(args.length(), inAst, internal);
 
                 return true;
             }
@@ -929,8 +922,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
 
         for (auto a : args)
             compileExpr(ctx, a);
-        cs.insertStackCall(Opcode::static_call_, args.length(), {}, ast,
-                           builtin);
+        cs << BC::staticCall(args.length(), ast, builtin);
 
         return true;
     }
@@ -1016,17 +1008,9 @@ bool compileWithGuess(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
     // cannot reuse matchArgs from gnur (but could rewrite it)
 
     cs << BC::guardName(fun, cls);
-
-    FunctionSignature* signature = new FunctionSignature();
-    signature->argsOnStack = true;
-
-    for (auto a : args) {
+    for (auto a : args)
         compileExpr(ctx, a);
-        signature->pushArgument({true, TYPEOF(a)});
-    }
-
-    cs.insertStackCall(Opcode::static_call_, args.length(), {}, ast, cls,
-                       signature);
+    cs << BC::staticCall(args.length(), ast, cls);
 
     return true;
 }
@@ -1057,9 +1041,10 @@ void compileCall(Context& ctx, SEXP ast, SEXP fun, SEXP args) {
 
     // Process arguments:
     // Arguments can be optionally named
-    std::vector<FunIdxT> callArgs;
+    std::vector<BC::FunIdx> callArgs;
     std::vector<SEXP> names;
 
+    bool hasNames = false;
     for (auto arg = RList(args).begin(); arg != RList::end(); ++arg) {
         if (*arg == R_DotsSymbol) {
             callArgs.push_back(DOTS_ARG_IDX);
@@ -1079,10 +1064,15 @@ void compileCall(Context& ctx, SEXP ast, SEXP fun, SEXP args) {
 
         // (2) remember if the argument had a name associated
         names.push_back(arg.tag());
+        if (arg.tag() != R_NilValue)
+            hasNames = true;
     }
-    assert(callArgs.size() < MAX_NUM_ARGS);
+    assert(callArgs.size() < BC::MAX_NUM_ARGS);
 
-    cs.insertCall(Opcode::call_implicit_, callArgs, names, ast);
+    if (hasNames)
+        cs << BC::callImplicit(callArgs, names, ast);
+    else
+        cs << BC::callImplicit(callArgs, ast);
 }
 
 // Lookup
@@ -1140,7 +1130,7 @@ void compileExpr(Context& ctx, SEXP exp) {
     }
 }
 
-FunIdxT compilePromise(Context& ctx, SEXP exp, bool isFormal) {
+BC::FunIdx compilePromise(Context& ctx, SEXP exp, bool isFormal) {
     ctx.pushPromiseContext(exp);
     compileExpr(ctx, exp);
     ctx.cs() << BC::ret();
@@ -1170,22 +1160,14 @@ SEXP Compiler::finalize() {
     ctx.cs() << BC::ret();
     ctx.pop();
 
-    CodeEditor code(function.function->body(), formals);
-
-    for (size_t i = 0; i < code.numPromises(); ++i)
-        if (code.promise(i))
-            BCCleanup::apply(*code.promise(i));
-
-    BCCleanup::apply(code);
-
-    Function* opt = code.finalize();
-    opt->signature = signature;
+    function.function->signature = signature;
 
 #ifdef ENABLE_SLOWASSERT
-    CodeVerifier::verifyFunctionLayout(opt->container(), globalContext());
+    CodeVerifier::verifyFunctionLayout(function.function->container(),
+                                       globalContext());
 #endif
 
-    return opt->container();
+    return function.function->container();
 }
 
 }  // namespace rir

@@ -10,8 +10,6 @@
 
 #include <vector>
 
-typedef uint32_t ArgT;
-
 // type  for constant & ast pool indices
 typedef uint32_t Immediate;
 
@@ -48,8 +46,6 @@ namespace rir {
 //
 
 struct Code;
-struct CallSite;
-struct CallSiteProfile;
 
 enum class Opcode : uint8_t {
 
@@ -63,42 +59,6 @@ enum class Opcode : uint8_t {
 
 };
 
-// TODO the immediate argument types should follow the C immediate types
-
-// ============================================================
-// ==== immediate argument types
-//
-// index into the constant pool
-typedef uint32_t PoolIdxT;
-// index into a functions array of code objects
-typedef uint32_t FunIdxT;
-typedef uint32_t NumArgsT;
-// index into arguments
-typedef uint32_t ArgIdxT;
-// jmp offset
-typedef int32_t JmpT;
-typedef JmpT LabelT;
-typedef struct {
-    uint32_t call_id;
-    NumArgsT nargs;
-} CallArgs;
-typedef struct {
-    uint32_t name;
-    uint32_t expected;
-    uint32_t id;
-} GuardFunArgs;
-typedef uint32_t GuardT;
-typedef uint32_t NumLocalsT;
-typedef struct {
-    uint32_t target;
-    uint32_t source;
-} LocalsCopyT;
-
-static constexpr size_t MAX_NUM_ARGS = 1L << (8 * sizeof(PoolIdxT));
-static constexpr size_t MAX_POOL_IDX = 1L << (8 * sizeof(PoolIdxT));
-static constexpr size_t MAX_JMP = (1L << ((8 * sizeof(JmpT)) - 1)) - 1;
-static constexpr size_t MIN_JMP = -(1L << ((8 * sizeof(JmpT)) - 1));
-
 // ============================================================
 // ==== Creation and decoding of Bytecodes
 //
@@ -109,27 +69,94 @@ static constexpr size_t MIN_JMP = -(1L << ((8 * sizeof(JmpT)) - 1));
 class CodeStream;
 class BC {
   public:
+    // ============================================================
+    // ==== immediate argument types
+    //
+    // index into the constant pool
+    typedef Immediate PoolIdx;
+    // index into a functions array of code objects
+    typedef Immediate FunIdx;
+    typedef Immediate NumArgs;
+    // index into arguments
+    typedef Immediate ArgIdx;
+    // jmp offset
+    typedef int32_t Jmp;
+    typedef Jmp Label;
+    struct CallFixedArgs {
+        Immediate unused;
+        NumArgs nargs;
+        Immediate ast;
+    };
+    struct StaticCallFixedArgs {
+        Immediate unused;
+        NumArgs nargs;
+        Immediate ast;
+        Immediate target;
+    };
+    struct GuardFunArgs {
+        Immediate name;
+        Immediate expected;
+        Immediate id;
+    };
+    typedef Immediate Guard;
+    typedef Immediate NumLocals;
+    struct LocalsCopy {
+        Immediate target;
+        Immediate source;
+    };
+
+    static constexpr size_t MAX_NUM_ARGS = 1L << (8 * sizeof(PoolIdx));
+    static constexpr size_t MAX_POOL_IDX = 1L << (8 * sizeof(PoolIdx));
+    static constexpr size_t MAX_JMP = (1L << ((8 * sizeof(Jmp)) - 1)) - 1;
+    static constexpr size_t MIN_JMP = -(1L << ((8 * sizeof(Jmp)) - 1));
+
     // This is only used internally in the BC handle objects
     // On the bytecode stream each immediate argument uses only the actual
     // space required.
-    union ImmediateT {
-        CallArgs call_args;
+    union ImmediateArguments {
+        StaticCallFixedArgs staticCallFixedArgs;
+        CallFixedArgs callFixedArgs;
         GuardFunArgs guard_fun_args;
-        GuardT guard_id;
-        PoolIdxT pool;
-        FunIdxT fun;
-        ArgIdxT arg_idx;
-        JmpT offset;
+        Guard guard_id;
+        PoolIdx pool;
+        FunIdx fun;
+        ArgIdx arg_idx;
+        Jmp offset;
         uint32_t i;
-        NumLocalsT loc;
-        LocalsCopyT loc_cpy;
+        NumLocals loc;
+        LocalsCopy loc_cpy;
     };
+
+    static Immediate readImmediate(Opcode** pc) {
+        Immediate i = *(Immediate*)*pc;
+        *pc = (Opcode*)((uintptr_t)*pc + sizeof(Immediate));
+        return i;
+    }
+
+    Opcode bc;
+    ImmediateArguments immediate;
+
+    std::vector<ArgIdx> immediateCallArguments;
+    std::vector<PoolIdx> callArgumentNames;
 
     BC() : bc(Opcode::invalid_), immediate({{0}}) {}
     
     BC(Opcode* pc) {
         bc = *pc;
-        immediate = decodeImmediate(bc, pc + 1);
+        pc++;
+        immediate = decodeImmediateArguments(bc, pc);
+        // Read implicit promise argument offsets
+        if (bc == Opcode::call_implicit_ ||
+            bc == Opcode::named_call_implicit_) {
+            pc += sizeof(CallFixedArgs);
+            for (size_t i = 0; i < immediate.callFixedArgs.nargs; ++i)
+                immediateCallArguments.push_back(readImmediate(&pc));
+        }
+        // Read named arguments
+        if (bc == Opcode::named_call_ || bc == Opcode::named_call_implicit_) {
+            for (size_t i = 0; i < immediate.callFixedArgs.nargs; ++i)
+                callArgumentNames.push_back(readImmediate(&pc));
+        }
     }
 
     BC operator=(BC other) {
@@ -138,21 +165,34 @@ class BC {
         return other;
     }
 
-    bool operator==(const BC& other) const;
-
     bool is(Opcode aBc) { return bc == aBc; }
 
-    Opcode bc;
-    ImmediateT immediate;
+    inline size_t size() {
+        // Those are the 3 variable length BC we have
+        // call implicit has the promise offsets in the bc stream
+        if (bc == Opcode::call_implicit_)
+            return immediate.callFixedArgs.nargs * sizeof(FunIdx) +
+                   fixedSize(bc);
+        // named call has the names in the bc stream
+        if (bc == Opcode::named_call_)
+            return immediate.callFixedArgs.nargs * sizeof(FunIdx) +
+                   fixedSize(bc);
+        // named call implicit has both the promargs and names in the bc stream
+        if (bc == Opcode::named_call_implicit_)
+            return immediate.callFixedArgs.nargs * 2 * sizeof(FunIdx) +
+                   fixedSize(bc);
 
-    inline size_t size() { return size(bc); }
+        // the others have no variable length part
+        return fixedSize(bc);
+    }
+
     inline size_t popCount() {
         // return also is a leave
         assert(bc != Opcode::return_);
         if (bc == Opcode::call_)
-            return immediate.call_args.nargs + 1;
+            return immediate.callFixedArgs.nargs + 1;
         if (bc == Opcode::static_call_)
-            return immediate.call_args.nargs;
+            return immediate.staticCallFixedArgs.nargs;
         return popCount(bc);
     }
     inline size_t pushCount() { return pushCount(bc); }
@@ -161,16 +201,13 @@ class BC {
     void write(CodeStream& cs) const;
 
     // Print it to stdout
-    void print(CallSite* cs = nullptr);
-    void printArgs(CallSite* cs);
-    void printNames(CallSite* cs);
-    void printProfile(CallSite* cs);
+    void print() const;
+    void printImmediateArgs() const;
+    void printNames() const;
+    void printProfile() const;
 
     // Accessors to load immediate constant from the pool
-    SEXP immediateConst();
-
-    // Return the callsite of this BC, needs the cassSites buffer as input
-    CallSite* callSite(Code* code);
+    SEXP immediateConst() const;
 
     inline static Opcode* jmpTarget(Opcode* pos) {
         BC bc = BC::decode(pos);
@@ -178,13 +215,15 @@ class BC {
         return (Opcode*)((uintptr_t)pos + bc.size() + bc.immediate.offset);
     }
 
-    bool isCallsite() const {
+    bool isCall() const {
         return bc == Opcode::call_implicit_ || bc == Opcode::call_ ||
-               bc == Opcode::static_call_;
+               bc == Opcode::named_call_ ||
+               bc == Opcode::named_call_implicit_ || bc == Opcode::static_call_;
     }
 
     bool hasPromargs() const {
-        return bc == Opcode::call_implicit_ || bc == Opcode::promise_ ||
+        return bc == Opcode::call_implicit_ ||
+               bc == Opcode::named_call_implicit_ || bc == Opcode::promise_ ||
                bc == Opcode::push_code_;
     }
 
@@ -211,21 +250,18 @@ class BC {
 
     // ==== BC decoding logic
     inline static BC advance(Opcode** pc) {
-        Opcode bc = **pc;
-        BC cur(bc, decodeImmediate(bc, (*pc) + 1));
+        BC cur(*pc);
         *pc = (Opcode*)((uintptr_t)(*pc) + cur.size());
         return cur;
     }
 
     inline static BC decode(Opcode* pc) {
-        Opcode bc = *pc;
-        BC cur(bc, decodeImmediate(bc, pc + 1));
+        BC cur(pc);
         return cur;
     }
 
     inline static Opcode* next(Opcode* pc) {
-        Opcode bc = *pc;
-        BC cur(bc, decodeImmediate(bc, pc + 1));
+        BC cur(pc);
         return (Opcode*)((uintptr_t)pc + cur.size());
     }
 
@@ -239,7 +275,7 @@ class BC {
     inline static BC push(SEXP constant);
     inline static BC push(double constant);
     inline static BC push(int constant);
-    inline static BC push_code(FunIdxT i);
+    inline static BC push_code(FunIdx i);
     inline static BC ldfun(SEXP sym);
     inline static BC ldvar(SEXP sym);
     inline static BC ldvarNoForce(SEXP sym);
@@ -251,7 +287,7 @@ class BC {
     inline static BC ldloc(uint32_t offset);
     inline static BC stloc(uint32_t offset);
     inline static BC copyloc(uint32_t target, uint32_t source);
-    inline static BC promise(FunIdxT prom);
+    inline static BC promise(FunIdx prom);
     inline static BC ret();
     inline static BC pop();
     inline static BC force();
@@ -267,13 +303,13 @@ class BC {
     inline static BC setNames();
     inline static BC alloc(int type);
     inline static BC asbool();
-    inline static BC beginloop(JmpT);
+    inline static BC beginloop(Jmp);
     inline static BC endcontext();
-    inline static BC brtrue(JmpT);
-    inline static BC brfalse(JmpT);
-    inline static BC br(JmpT);
-    inline static BC brobj(JmpT);
-    inline static BC label(JmpT);
+    inline static BC brtrue(Jmp);
+    inline static BC brfalse(Jmp);
+    inline static BC br(Jmp);
+    inline static BC brobj(Jmp);
+    inline static BC label(Jmp);
     inline static BC dup();
     inline static BC dup2();
     inline static BC forSeqSize();
@@ -321,30 +357,30 @@ class BC {
     inline static BC isObj();
     inline static BC return_();
     inline static BC int3();
+    inline static BC callImplicit(const std::vector<FunIdx>& args, SEXP ast);
+    inline static BC callImplicit(const std::vector<FunIdx>& args,
+                                  const std::vector<SEXP>& names, SEXP ast);
+    inline static BC call(size_t nargs, SEXP ast);
+    inline static BC call(size_t nargs, const std::vector<SEXP>& names,
+                          SEXP ast);
+    inline static BC staticCall(size_t nargs, SEXP ast, SEXP target);
 
   private:
     explicit BC(Opcode bc) : bc(bc), immediate({{0}}) {}
-    BC(Opcode bc, ImmediateT immediate) : bc(bc), immediate(immediate) {}
+    BC(Opcode bc, ImmediateArguments immediate)
+        : bc(bc), immediate(immediate) {}
+    BC(Opcode bc, ImmediateArguments immediate, const std::vector<FunIdx>& args,
+       const std::vector<PoolIdx>& names)
+        : bc(bc), immediate(immediate), immediateCallArguments(args),
+          callArgumentNames(names) {}
 
-    static unsigned size(Opcode bc) {
+    static unsigned fixedSize(Opcode bc) {
         switch (bc) {
 #define DEF_INSTR(name, imm, opop, opush, pure)                                \
     case Opcode::name:                                                         \
-        return imm * sizeof(ArgT) + 1;
+        return imm * sizeof(Immediate) + 1;
 #include "insns.h"
         default:
-            return 0;
-        }
-    }
-
-    static unsigned immCount(Opcode bc) {
-        switch (bc) {
-#define DEF_INSTR(name, imm, opop, opush, pure)                                \
-    case Opcode::name:                                                         \
-        return imm;
-#include "insns.h"
-        default:
-            assert(false);
             return 0;
         }
     }
@@ -399,8 +435,9 @@ class BC {
         }
     }
 
-    inline static ImmediateT decodeImmediate(Opcode bc, Opcode* pc) {
-        ImmediateT immediate = {{0}};
+    inline static ImmediateArguments decodeImmediateArguments(Opcode bc,
+                                                              Opcode* pc) {
+        ImmediateArguments immediate = {{0}};
         switch (bc) {
         case Opcode::push_:
         case Opcode::ldfun_:
@@ -414,12 +451,16 @@ class BC {
         case Opcode::stvar_super_:
         case Opcode::missing_:
         case Opcode::subassign2_:
-            immediate.pool = *(PoolIdxT*)pc;
+            immediate.pool = *(PoolIdx*)pc;
             break;
         case Opcode::call_implicit_:
+        case Opcode::named_call_implicit_:
         case Opcode::call_:
+        case Opcode::named_call_:
+            immediate.callFixedArgs = *(CallFixedArgs*)pc;
+            break;
         case Opcode::static_call_:
-            immediate.call_args = *(CallArgs*)pc;
+            immediate.staticCallFixedArgs = *(StaticCallFixedArgs*)pc;
             break;
         case Opcode::guard_env_:
             immediate.guard_id = *(uint32_t*)pc;
@@ -429,7 +470,7 @@ class BC {
             break;
         case Opcode::promise_:
         case Opcode::push_code_:
-            immediate.fun = *(FunIdxT*)pc;
+            immediate.fun = *(FunIdx*)pc;
             break;
         case Opcode::br_:
         case Opcode::brtrue_:
@@ -437,7 +478,7 @@ class BC {
         case Opcode::brfalse_:
         case Opcode::label:
         case Opcode::beginloop_:
-            immediate.offset = *(JmpT*)pc;
+            immediate.offset = *(Jmp*)pc;
             break;
         case Opcode::pick_:
         case Opcode::pull_:
@@ -447,14 +488,14 @@ class BC {
             immediate.i = *(uint32_t*)pc;
             break;
         case Opcode::ldarg_:
-            immediate.arg_idx = *(ArgIdxT*)pc;
+            immediate.arg_idx = *(ArgIdx*)pc;
             break;
         case Opcode::ldloc_:
         case Opcode::stloc_:
-            immediate.loc = *(NumLocalsT*)pc;
+            immediate.loc = *(NumLocals*)pc;
             break;
         case Opcode::movloc_:
-            immediate.loc_cpy = *(LocalsCopyT*)pc;
+            immediate.loc_cpy = *(LocalsCopy*)pc;
             break;
         case Opcode::nop_:
         case Opcode::make_env_:
@@ -520,9 +561,6 @@ class BC {
         }
         return immediate;
     }
-
-    friend class CodeEditor;
-    friend class CodeStream;
 };
 
 } // rir

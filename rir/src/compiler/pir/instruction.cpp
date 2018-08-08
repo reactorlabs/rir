@@ -133,14 +133,7 @@ void LdConst::printArgs(std::ostream& out) {
     {
         CaptureOut rec;
         Rf_PrintValue(c);
-        val = rec();
-    }
-    if (val.length() > 0)
-        val.pop_back();
-    std::replace(val.begin(), val.end(), '\n', ' ');
-    if (val.length() > 40) {
-        val.resize(47);
-        val.append("...");
+        val = rec.oneline(40);
     }
     out << val;
 }

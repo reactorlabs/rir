@@ -1,10 +1,8 @@
 #include "pir_2_rir.h"
-#include "../../ir/cleanup.h"
 #include "../pir/pir_impl.h"
 #include "../util/cfg.h"
 #include "../util/visitor.h"
 #include "interpreter/runtime.h"
-#include "ir/CodeEditor.h"
 #include "ir/CodeStream.h"
 #include "ir/CodeVerifier.h"
 #include "utils/FunctionWriter.h"
@@ -590,7 +588,7 @@ class Context {
         push(ast);
     }
 
-    FunIdxT finalizeCode(size_t localsCnt) {
+    BC::FunIdx finalizeCode(size_t localsCnt) {
         auto idx = cs().finalize(defaultArg.top(), localsCnt);
         delete css.top();
         defaultArg.pop();
@@ -614,7 +612,7 @@ class Pir2Rir {
   private:
     Pir2RirCompiler& compiler;
     Closure* cls;
-    std::unordered_map<Promise*, FunIdxT> promises;
+    std::unordered_map<Promise*, BC::FunIdx> promises;
     std::unordered_map<Promise*, SEXP> argNames;
 };
 
@@ -632,7 +630,7 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
     alloc.verify();
 
     // create labels for all bbs
-    std::unordered_map<BB*, LabelT> bbLabels;
+    std::unordered_map<BB*, BC::Label> bbLabels;
     BreadthFirstVisitor::run(code->entry, [&](BB* bb) {
         if (!bb->isEmpty())
             bbLabels[bb] = ctx.cs().mkLabel();
@@ -925,29 +923,28 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
 
             case Tag::Call: {
                 auto call = Call::Cast(instr);
-                cs.insertStackCall(Opcode::call_, call->nCallArgs(), {},
-                                   Pool::get(call->srcIdx));
+                cs << BC::call(call->nCallArgs(), Pool::get(call->srcIdx));
                 break;
             }
             case Tag::StaticCall: {
                 auto call = StaticCall::Cast(instr);
                 compiler.compile(call->cls(), call->origin());
-                cs.insertStackCall(Opcode::static_call_, call->nCallArgs(), {},
-                                   Pool::get(call->srcIdx), call->origin());
+                cs << BC::staticCall(call->nCallArgs(), Pool::get(call->srcIdx),
+                                     call->origin());
                 break;
             }
             case Tag::CallBuiltin: {
                 // TODO(mhyee): all args have to be values, optimize here?
                 auto blt = CallBuiltin::Cast(instr);
-                cs.insertStackCall(Opcode::static_call_, blt->nCallArgs(), {},
-                                   Pool::get(blt->srcIdx), blt->blt);
+                cs << BC::staticCall(blt->nCallArgs(), Pool::get(blt->srcIdx),
+                                     blt->blt);
                 break;
             }
             case Tag::CallSafeBuiltin: {
                 // TODO(mhyee): all args have to be values, optimize here?
                 auto blt = CallSafeBuiltin::Cast(instr);
-                cs.insertStackCall(Opcode::static_call_, blt->nargs(), {},
-                                   Pool::get(blt->srcIdx), blt->blt);
+                cs << BC::staticCall(blt->nargs(), Pool::get(blt->srcIdx),
+                                     blt->blt);
                 break;
             }
             case Tag::MkEnv: {
@@ -1076,19 +1073,12 @@ rir::Function* Pir2Rir::finalize() {
     size_t localsCnt = compileCode(ctx, cls);
     ctx.finalizeCode(localsCnt);
 
-    CodeEditor code(function.function->body());
-
-    for (size_t i = 0; i < code.numPromises(); ++i)
-        if (code.promise(i))
-            BCCleanup::apply(*code.promise(i));
-    BCCleanup::apply(code);
-    auto opt = code.finalize();
-
 #ifdef ENABLE_SLOWASSERT
-    CodeVerifier::verifyFunctionLayout(opt->container(), globalContext());
+    CodeVerifier::verifyFunctionLayout(function.function->container(),
+                                       globalContext());
 #endif
 
-    return opt;
+    return function.function;
 }
 
 } // namespace

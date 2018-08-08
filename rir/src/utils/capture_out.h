@@ -1,9 +1,11 @@
 #ifndef CAPTURE_OUT_H
 #define CAPTURE_OUT_H
 
+#include <algorithm>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <iomanip>
 #include <iostream>
 #include <unistd.h>
 
@@ -42,6 +44,16 @@ class CaptureOut {
         if (!read(out_pipe[0], buffer, MAX_LEN))
             buffer[0] = 0;
         return buffer;
+    }
+
+    std::string oneline(size_t maxlen) {
+        auto val = this->operator()();
+        std::replace(val.begin(), val.end(), '\n', ' ');
+        if (val.length() > maxlen) {
+            val.resize(maxlen - 3);
+            val.append("...");
+        }
+        return val;
     }
 
     ~CaptureOut() {

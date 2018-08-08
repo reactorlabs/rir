@@ -106,23 +106,42 @@ DEF_INSTR(movloc_, 2, 0, 0, 1)
  * call_implicit_:: Takes a list of code objects, which represent the arguments,
  *                  decides on eager/lazy evaluation and does the right thing
  *                  with the code objs
- *                  Immediates: callsite and numargs
  *                  Expects the callee on TOS
+ *                  code objects are passed as immediate arguments
+ *
+ *                  THIS IS A VARIABLE LENGTH INSTRUCTION
+ *                  the actual number of immediates is 3 + nargs
  */
-DEF_INSTR(call_implicit_, 2, 1, 1, 0)
+DEF_INSTR(call_implicit_, 3, 1, 1, 0)
+/*
+ * Same as above, but with names for the arguments as immediates
+ *
+ *                  THIS IS A VARIABLE LENGTH INSTRUCTION
+ *                  the actual number of immediates is 3 + 2 * nargs
+ */
+DEF_INSTR(named_call_implicit_, 3, 1, 1, 0)
 
 /**
  * call_:: Like call_implicit_, but expects arguments on stack
  *         on top of the callee; these arguments can be both
  *         values and promises (even preseeded w/ a value)
  */
-DEF_INSTR(call_, 2, -1, 1, 0)
+DEF_INSTR(call_, 3, -1, 1, 0)
+
+/*
+ * Same as above, but with names for the arguments as immediates
+ *
+ *                  THIS IS A VARIABLE LENGTH INSTRUCTION
+ *                  the actual number of immediates is 3 + nargs
+ */
+DEF_INSTR(named_call_, 3, -1, 1, 0)
 
 /**
  * static_call_:: Like call_, but the callee is statically known
  *                and is accessed via the immediate callsite
  */
-DEF_INSTR(static_call_, 2, -1, 1, 0)
+DEF_INSTR(static_call_, 4, -1, 1, 0)
+
 
 /**
  * close_:: pop body and argument list, create closure, and push on object stack

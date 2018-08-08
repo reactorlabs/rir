@@ -9,7 +9,7 @@ std::unordered_map<double, unsigned> Pool::numbers;
 std::unordered_map<int, unsigned> Pool::ints;
 std::unordered_map<SEXP, size_t> Pool::contents;
 
-PoolIdxT Pool::getNum(double n) {
+BC::PoolIdx Pool::getNum(double n) {
     if (numbers.count(n))
         return numbers.at(n);
 
@@ -20,13 +20,13 @@ PoolIdxT Pool::getNum(double n) {
     SET_NAMED(s, 2);
 
     size_t i = cp_pool_add(globalContext(), s);
-    assert(i < MAX_POOL_IDX);
+    assert(i < BC::MAX_POOL_IDX);
 
     numbers[n] = i;
     return i;
 }
 
-PoolIdxT Pool::getInt(int n) {
+BC::PoolIdx Pool::getInt(int n) {
     if (ints.count(n))
         return ints.at(n);
 
@@ -37,7 +37,7 @@ PoolIdxT Pool::getInt(int n) {
     SET_NAMED(s, 2);
 
     size_t i = cp_pool_add(globalContext(), s);
-    assert(i < MAX_POOL_IDX);
+    assert(i < BC::MAX_POOL_IDX);
 
     ints[n] = i;
     return i;

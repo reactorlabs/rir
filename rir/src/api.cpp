@@ -14,8 +14,6 @@
 #include "ir/BC.h"
 #include "ir/Compiler.h"
 
-#include "utils/Printer.h"
-
 #include <memory>
 
 using namespace rir;
@@ -35,7 +33,13 @@ REXPORT SEXP rir_disassemble(SEXP what, SEXP verbose) {
         Function* f = t->at(entry);
         Rprintf("= vtable slot <%d> (%p, invoked %u) =\n", entry, f,
                 f->invocationCount);
-        CodeEditor(f).print(LOGICAL(verbose)[0]);
+        f->body()->disassemble();
+        for (auto c : *f) {
+            if (c != f->body()) {
+                Rprintf("\n [Prom %x]\n", (uintptr_t)c - (uintptr_t)f);
+                c->disassemble();
+            }
+        }
     }
 
     return R_NilValue;

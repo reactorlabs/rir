@@ -27,17 +27,16 @@ class CodeStream {
     SEXP ast;
 
     unsigned nextLabel = 0;
-    std::map<unsigned, LabelT> patchpoints;
+    std::map<unsigned, BC::Label> patchpoints;
     std::vector<unsigned> label2pos;
 
     std::vector<unsigned> sources;
 
-    std::vector<char> callSites_;
     uint32_t nextCallSiteIdx_ = 0;
 
   public:
-    LabelT mkLabel() {
-        assert(nextLabel < MAX_JMP);
+    BC::Label mkLabel() {
+        assert(nextLabel < BC::MAX_JMP);
         label2pos.resize(nextLabel + 1);
         return nextLabel++;
     }
@@ -47,9 +46,9 @@ class CodeStream {
         nextLabel = n;
     }
 
-    void patchpoint(LabelT l) {
+    void patchpoint(BC::Label l) {
         patchpoints[pos] = l;
-        insert((JmpT)0);
+        insert((BC::Jmp)0);
     }
 
     CodeStream(FunctionWriter& function, SEXP ast)
@@ -62,135 +61,8 @@ class CodeStream {
         return (needed % align == 0) ? needed
                                      : needed + align - (needed % align);
     }
-    void ensureCallSiteSize(uint32_t needed) {
-        needed = alignedSize(needed);
-        if (callSites_.size() <= nextCallSiteIdx_ + needed) {
-            unsigned newSize = pad4(needed + callSites_.size() * 1.5);
-            callSites_.resize(newSize);
-        }
-    }
-
-    CallSite* getNextCallSite(uint32_t needed) {
-        needed = alignedSize(needed);
-        CallSite* cs = (CallSite*)&callSites_[nextCallSiteIdx_];
-        memset(cs, 0, needed);
-        nextCallSiteIdx_ += needed;
-        return cs;
-    }
-
-    CodeStream& insertStackCall(Opcode bc, uint32_t nargs,
-                                std::vector<SEXP> names, SEXP call,
-                                SEXP targOrSelector = nullptr,
-                                FunctionSignature* signature = nullptr) {
-        insert(bc);
-        CallArgs a;
-        a.call_id = nextCallSiteIdx_;
-        a.nargs = nargs;
-        insert(a);
-        sources.push_back(0);
-
-        bool hasNames = false;
-        if (!names.empty())
-            for (auto n : names) {
-                if (n != R_NilValue) {
-                    hasNames = true;
-                    break;
-                }
-            }
-
-        unsigned needed = CallSite::size(false, hasNames, false, nargs);
-        ensureCallSiteSize(needed);
-
-        CallSite* cs = getNextCallSite(needed);
-
-        cs->nargs = nargs;
-        cs->call = Pool::insert(call);
-        cs->hasProfile = false;
-        cs->hasNames = hasNames;
-        cs->hasTarget = bc == Opcode::static_call_;
-        cs->hasImmediateArgs = false;
-
-        cs->signature = signature;
-
-        if (hasNames) {
-            for (unsigned i = 0; i < nargs; ++i) {
-                cs->names()[i] = Pool::insert(names[i]);
-            }
-        }
-
-        if (cs->hasTarget) {
-            assert(TYPEOF(targOrSelector) == CLOSXP ||
-                   TYPEOF(targOrSelector) == BUILTINSXP);
-            *cs->target() = Pool::insert(targOrSelector);
-        }
-
-        return *this;
-    }
-
-    CodeStream& insertCall(Opcode bc, std::vector<FunIdxT> args,
-                           std::vector<SEXP> names, SEXP call,
-                           SEXP selector = nullptr,
-                           FunctionSignature* signature = nullptr) {
-        uint32_t nargs = args.size();
-
-        insert(bc);
-        CallArgs a;
-        a.call_id = nextCallSiteIdx_;
-        a.nargs = nargs;
-        insert(a);
-        sources.push_back(0);
-
-        bool hasNames = false;
-        if (!names.empty())
-            for (auto n : names) {
-                if (n != R_NilValue) {
-                    hasNames = true;
-                    break;
-                }
-            }
-
-        unsigned needed = CallSite::size(true, hasNames, true, nargs);
-        ensureCallSiteSize(needed);
-
-        CallSite* cs = getNextCallSite(needed);
-
-        cs->nargs = nargs;
-        cs->call = Pool::insert(call);
-        cs->hasProfile = true;
-        cs->hasNames = hasNames;
-        cs->hasImmediateArgs = true;
-
-        cs->signature = signature;
-
-        int i = 0;
-        for (auto arg : args) {
-            cs->args()[i] = arg;
-            if (hasNames)
-                cs->names()[i] = Pool::insert(names[i]);
-            ++i;
-        }
-
-        return *this;
-    }
-
-    CodeStream& insertWithCallSite(Opcode bc, CallSite* callSite) {
-        insert(bc);
-        insert(nextCallSiteIdx_);
-        insert(callSite->nargs);
-        sources.push_back(0);
-
-        unsigned needed = callSite->size();
-        ensureCallSiteSize(needed);
-
-        void* cs = &callSites_[nextCallSiteIdx_];
-        nextCallSiteIdx_ += needed;
-        memcpy(cs, callSite, needed);
-
-        return *this;
-    }
 
     CodeStream& operator<<(const BC& b) {
-        assert(b.bc != Opcode::call_implicit_);
         if (b.bc == Opcode::label) {
             return *this << b.immediate.offset;
         }
@@ -200,7 +72,7 @@ class CodeStream {
         return *this;
     }
 
-    CodeStream& operator<<(LabelT label) {
+    CodeStream& operator<<(BC::Label label) {
         label2pos[label] = pos;
         return *this;
     }
@@ -236,41 +108,41 @@ class CodeStream {
 
     void remove(unsigned pc) {
 
-#define INS(pc_) (*reinterpret_cast<Opcode*>(&(*code)[(pc_)]))
+#define INS(pc_) (reinterpret_cast<Opcode*>(&(*code)[(pc_)]))
 
         unsigned size = BC(INS(pc)).size();
 
         for (unsigned i = 0; i < size; ++i) {
-            INS(pc + i) = Opcode::nop_;
+            *INS(pc + i) = Opcode::nop_;
             // patchpoints are fixed by just removing the binding to label
             patchpoints.erase(pc + i);
         }
 
         unsigned tmp = 0, sourceIdx = 0;
         while (tmp != pc) {
-            tmp += BC(INS(tmp)).size();
+            assert(tmp < pc);
+            BC cur(INS(tmp));
+            tmp += cur.size();
             sourceIdx++;
         }
         // need to insert source slots for the nops occupying the immediate places
         sources.insert(sources.begin() + sourceIdx + 1, size - 1, 0);
     }
 
-    FunIdxT finalize(bool markDefaultArg, size_t localsCnt) {
-        Code* res = function.writeCode(ast, &(*code)[0], pos, callSites_.data(),
-                                       callSites_.size(), sources,
+    BC::FunIdx finalize(bool markDefaultArg, size_t localsCnt) {
+        Code* res = function.writeCode(ast, &(*code)[0], pos, sources,
                                        markDefaultArg, localsCnt);
 
         for (auto p : patchpoints) {
             unsigned pos = p.first;
             unsigned target = label2pos[p.second];
-            JmpT j = target - pos - sizeof(JmpT);
-            *(JmpT*)((uintptr_t)res->code() + pos) = j;
+            BC::Jmp j = target - pos - sizeof(BC::Jmp);
+            *(BC::Jmp*)((uintptr_t)res->code() + pos) = j;
         }
 
         label2pos.clear();
         patchpoints.clear();
         nextLabel = 0;
-        callSites_.clear();
         nextCallSiteIdx_ = 0;
 
         delete code;

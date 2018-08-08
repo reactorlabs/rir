@@ -138,28 +138,13 @@ void CodeVerifier::verifyFunctionLayout(SEXP sexp, ::Context* ctx) {
         assert(oldo == c->stackLength and "Invalid stack layout reported");
 
         assert((uintptr_t)(c + 1) + pad4(c->codeSize) +
-                       c->srcLength * sizeof(unsigned) +
-                       c->skiplistLength * 2 * sizeof(unsigned) +
-                       c->callSiteLength ==
-                   (uintptr_t)objs[i + 1] and
+                   c->srcLength * sizeof(unsigned) +
+                   c->skiplistLength * 2 * sizeof(unsigned) &&
                "Invalid code length reported");
     }
 
     // remove the sentinel
     objs.pop_back();
-
-    auto verifyCallSite = [&ctx](CallSite* cs, uint32_t nargs) {
-        SEXP call = cp_pool_at(ctx, cs->call);
-        assert(TYPEOF(call) == LANGSXP || TYPEOF(call) == SYMSXP ||
-               TYPEOF(call) == NILSXP);
-        if (cs->hasTarget) {
-            SEXP selector = cp_pool_at(ctx, *cs->target());
-            assert(TYPEOF(selector) == SYMSXP);
-        } else {
-            assert(cs->trg == 0);
-        }
-        assert(cs->nargs == nargs);
-    };
 
     // check that the call instruction has proper arguments and number of
     // instructions is valid
@@ -177,7 +162,7 @@ void CodeVerifier::verifyFunctionLayout(SEXP sexp, ::Context* ctx) {
                        cptr + cur.size() + off < end);
             }
             if (*cptr == Opcode::guard_env_) {
-                unsigned deoptId = *reinterpret_cast<ArgT*>(cptr + 1);
+                unsigned deoptId = *reinterpret_cast<Immediate*>(cptr + 1);
                 Opcode* deoptPc = (Opcode*)Deoptimizer_pc(deoptId);
                 assert(f->origin());
                 Function* deoptFun = Function::unpack(f->origin());
@@ -186,7 +171,7 @@ void CodeVerifier::verifyFunctionLayout(SEXP sexp, ::Context* ctx) {
                        deoptPc < deoptCode->endCode());
             }
             if (*cptr == Opcode::ldvar_) {
-                unsigned* argsIndex = reinterpret_cast<ArgT*>(cptr + 1);
+                unsigned* argsIndex = reinterpret_cast<Immediate*>(cptr + 1);
                 assert(*argsIndex < cp_pool_length(ctx) and
                        "Invalid arglist index");
                 SEXP sym = cp_pool_at(ctx, *argsIndex);
@@ -194,7 +179,7 @@ void CodeVerifier::verifyFunctionLayout(SEXP sexp, ::Context* ctx) {
                 assert(strlen(CHAR(PRINTNAME(sym))));
             }
             if (*cptr == Opcode::promise_) {
-                unsigned* promidx = reinterpret_cast<ArgT*>(cptr + 1);
+                unsigned* promidx = reinterpret_cast<Immediate*>(cptr + 1);
                 bool ok = false;
                 for (Code* c : objs)
                     if (c->header == *promidx) {
@@ -203,15 +188,12 @@ void CodeVerifier::verifyFunctionLayout(SEXP sexp, ::Context* ctx) {
                     }
                 assert(ok and "Invalid promise offset detected");
             }
-            if (*cptr == Opcode::call_implicit_) {
-                unsigned callIdx = *reinterpret_cast<ArgT*>(cptr + 1);
-                CallSite* cs = c->callSite(callIdx);
-                uint32_t nargs = *reinterpret_cast<ArgT*>(cptr + 5);
-                verifyCallSite(cs, nargs);
-                assert(cs->hasImmediateArgs);
+            if (*cptr == Opcode::call_implicit_ ||
+                *cptr == Opcode::named_call_implicit_) {
+                uint32_t nargs = *reinterpret_cast<Immediate*>(cptr + 5);
 
                 for (size_t i = 0, e = nargs; i != e; ++i) {
-                    uint32_t offset = cs->args()[i];
+                    uint32_t offset = cur.immediateCallArguments[i];
                     if (offset == MISSING_ARG_IDX || offset == DOTS_ARG_IDX)
                         continue;
                     bool ok = false;
@@ -222,9 +204,9 @@ void CodeVerifier::verifyFunctionLayout(SEXP sexp, ::Context* ctx) {
                         }
                     assert(ok and "Invalid promise offset detected");
                 }
-                if (cs->hasNames) {
+                if (*cptr == Opcode::named_call_implicit_) {
                     for (size_t i = 0, e = nargs; i != e; ++i) {
-                        uint32_t offset = cs->names()[i];
+                        uint32_t offset = cur.callArgumentNames[i];
                         if (offset) {
                             SEXP name = cp_pool_at(ctx, offset);
                             assert(TYPEOF(name) == SYMSXP ||
@@ -233,6 +215,17 @@ void CodeVerifier::verifyFunctionLayout(SEXP sexp, ::Context* ctx) {
                     }
                 }
             }
+            if (*cptr == Opcode::named_call_) {
+                uint32_t nargs = *reinterpret_cast<Immediate*>(cptr + 5);
+                for (size_t i = 0, e = nargs; i != e; ++i) {
+                    uint32_t offset = cur.callArgumentNames[i];
+                    if (offset) {
+                        SEXP name = cp_pool_at(ctx, offset);
+                        assert(TYPEOF(name) == SYMSXP || name == R_NilValue);
+                    }
+                }
+            }
+
             cptr += cur.size();
             if (cptr == start + c->codeSize) {
                 assert(cptr == start + c->codeSize);
