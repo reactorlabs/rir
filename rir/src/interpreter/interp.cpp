@@ -1403,10 +1403,13 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env,
             advanceImmediate();
             size_t ast = readImmediate();
             advanceImmediate();
-            CallContext call(c, id, ostack_top(ctx), n, ast, (Immediate*)pc,
-                             ((Immediate*)pc) + n, getenv(), ctx);
+            auto arguments = (Immediate*)pc;
+            advanceImmediateN(n);
+            auto names = (Immediate*)pc;
+            advanceImmediateN(n);
+            CallContext call(c, id, ostack_top(ctx), n, ast, arguments, names,
+                             getenv(), ctx);
             res = doCall(call, ctx);
-            advanceImmediateN(2 * n);
             ostack_pop(ctx); // callee
             ostack_push(ctx, res);
 
@@ -1428,10 +1431,11 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env,
             advanceImmediate();
             size_t ast = readImmediate();
             advanceImmediate();
-            CallContext call(c, id, ostack_top(ctx), n, ast, (Immediate*)pc,
+            auto arguments = (Immediate*)pc;
+            advanceImmediateN(n);
+            CallContext call(c, id, ostack_top(ctx), n, ast, arguments,
                              getenv(), ctx);
             res = doCall(call, ctx);
-            advanceImmediateN(n);
             ostack_pop(ctx); // callee
             ostack_push(ctx, res);
 
@@ -1473,11 +1477,11 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env,
             advanceImmediate();
             size_t ast = readImmediate();
             advanceImmediate();
-            CallContext call(c, id, ostack_at(ctx, n), n, ast,
-                             ostack_cell_at(ctx, n - 1), (Immediate*)pc,
-                             getenv(), ctx);
-            res = doCall(call, ctx);
+            auto names = (Immediate*)pc;
             advanceImmediateN(n);
+            CallContext call(c, id, ostack_at(ctx, n), n, ast,
+                             ostack_cell_at(ctx, n - 1), names, getenv(), ctx);
+            res = doCall(call, ctx);
             ostack_popn(ctx, n + 1);
             ostack_push(ctx, res);
 
