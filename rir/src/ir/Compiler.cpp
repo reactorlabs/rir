@@ -811,8 +811,16 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
         pcs.push_back(cs.currentPos());
         cs << BC::put(3);
 
-        cs << BC::inc() << BC::dup2() << BC::lt() << BC::brtrue(endForBranch)
-           << BC::pull(2) << BC::pull(1) << BC::extract2_1();
+        cs << BC::inc() << BC::dup2() << BC::lt();
+        // We know this is an int and won't do dispatch.
+        // TODO: add a integer version of lt_
+        cs.addSrc(R_NilValue);
+
+        cs << BC::brtrue(endForBranch) << BC::pull(2) << BC::pull(1)
+           << BC::extract2_1();
+        // We know this is a loop sequence and won't do dispatch.
+        // TODO: add a non-object version of extract2_1
+        cs.addSrc(R_NilValue);
 
         // Put context back
         pcs.push_back(cs.currentPos());

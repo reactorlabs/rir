@@ -2566,6 +2566,12 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env,
             } else {
                 errorcall(R_NilValue, "invalid for() loop sequence");
             }
+            // TODO: Even when the for loop sequence is an object, R won't
+            // dispatch on it. Since in RIR we use the normals extract2_1
+            // BC on it, we would. To prevent this we strip the object
+            // flag here. What we should do instead, is use a non-dispatching
+            // extract BC.
+            SET_OBJECT(seq, 0);
             ostack_push(ctx, value);
             NEXT();
         }
