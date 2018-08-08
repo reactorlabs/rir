@@ -260,6 +260,17 @@ class CodeStream {
                                        callSites_.size(), sources,
                                        markDefaultArg, localsCnt);
 
+if (res->skiplistLength == 5) {
+    std::cout << "code:\n";
+    res->print();
+    std::cout << "sources:\n";
+    for (size_t i = 0; i < sources.size(); ++i) std::cout << i << "   " << sources[i] << "\n";
+    std::cout << "skiplist:\n";
+    for (size_t i = 0; i < 2*res->skiplistLength; i += 2) std::cout << res->skiplist()[i] << "   " << res->skiplist()[i+1] << "\n";
+    std::cout << "compressed sources:\n";
+    for (size_t i = 0; i < res->srcLength; ++i) std::cout << i << "   " << res->raw_src()[i] << "\n";
+}
+
         for (auto p : patchpoints) {
             unsigned pos = p.first;
             unsigned target = label2pos[p.second];
