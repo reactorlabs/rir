@@ -3,7 +3,7 @@
 #define interpreter_context_h
 
 #include "interp_data.h"
-#include "runtime/Opcode.h"
+#include "ir/BC_inc.h"
 
 #include <stdio.h>
 

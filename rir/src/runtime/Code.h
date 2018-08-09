@@ -1,8 +1,8 @@
 #ifndef RIR_CODE_H
 #define RIR_CODE_H
 
-#include "Opcode.h"
 #include "R/r.h"
+#include "ir/BC_inc.h"
 
 #include <cassert>
 #include <cstdint>
@@ -45,6 +45,11 @@ struct FunctionSignature;
  */
 #pragma pack(push)
 #pragma pack(1)
+
+static unsigned pad4(unsigned sizeInBytes) {
+    unsigned x = sizeInBytes % 4;
+    return (x != 0) ? (sizeInBytes + 4 - x) : sizeInBytes;
+}
 
 struct Code {
     friend class FunctionWriter;

@@ -50,7 +50,7 @@ void Code::disassemble() {
 
         bc.print();
 
-        BC::advance(&pc);
+        pc = BC::next(pc);
     }
 }
 

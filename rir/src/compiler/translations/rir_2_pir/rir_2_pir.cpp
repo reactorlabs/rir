@@ -33,7 +33,7 @@ struct Matcher {
         for (size_t i = 0; i < SIZE; ++i) {
             if (*pc != seq[i])
                 return false;
-            BC::advance(&pc);
+            pc = BC::next(pc);
             if (pc == end)
                 return false;
         }
@@ -51,7 +51,7 @@ void recoverCFG(rir::Code* srcCode, rir::Function* srcFunction,
         if (bc.isJmp()) {
             incom[bc.jmpTarget(pc)].push_back(pc);
         }
-        BC::advance(&pc);
+        pc = BC::next(pc);
     }
     // Mark falltrough to label
     for (auto pc = srcCode->code(); pc != srcCode->endCode();) {
@@ -61,7 +61,7 @@ void recoverCFG(rir::Code* srcCode, rir::Function* srcFunction,
             if (incom.count(next))
                 incom[next].push_back(pc);
         }
-        BC::advance(&pc);
+        pc = BC::next(pc);
     }
     // Create mergepoints
     for (auto m : incom)
@@ -232,7 +232,7 @@ void Rir2Pir::translate(rir::Code* srcCode, Builder& insert,
             BC ldfmls = BC::advance(&pc);
             BC ldcode = BC::advance(&pc);
             BC ldsrc = BC::advance(&pc);
-            BC::advance(&pc); // close
+            pc = BC::next(pc); // close
 
             SEXP fmls = ldfmls.immediateConst();
             SEXP code = ldcode.immediateConst();

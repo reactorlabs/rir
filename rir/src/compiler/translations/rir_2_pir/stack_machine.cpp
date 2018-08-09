@@ -520,7 +520,7 @@ void StackMachine::setPC(Opcode* opcode) { pc = opcode; }
 pir::BB* StackMachine::getEntry() { return entry; }
 void StackMachine::setEntry(pir::BB* ent) { entry = ent; }
 
-void StackMachine::advancePC() { BC::advance(&pc); }
+void StackMachine::advancePC() { pc = BC::next(pc); }
 
 BC StackMachine::getCurrentBC() { return BC::decode(pc); }
 
