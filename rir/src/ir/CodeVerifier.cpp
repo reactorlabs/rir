@@ -160,6 +160,7 @@ static Sources hasSources(Opcode bc) {
     case Opcode::check_missing_:
     case Opcode::lgl_and_:
     case Opcode::lgl_or_:
+    case Opcode::record_call_:
         return Sources::NotNeeded;
 
     case Opcode::aslogical_:

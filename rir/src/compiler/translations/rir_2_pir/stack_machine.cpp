@@ -25,8 +25,14 @@ Value* StackMachine::pop() {
     return v;
 }
 
-Value* StackMachine::top() { return stack.back(); }
-Value* StackMachine::front() { return stack.front(); }
+Value* StackMachine::top() {
+    assert(!stack.empty());
+    return stack.back();
+}
+Value* StackMachine::front() {
+    assert(!stack.empty());
+    return stack.front();
+}
 void StackMachine::push(Value* v) { stack.push_back(v); }
 
 bool StackMachine::empty() { return stack.empty(); }
@@ -137,10 +143,13 @@ bool StackMachine::tryRunCurrentBC(const Rir2Pir& rir2pir, Builder& insert) {
         pop();
         break;
 
-    case Opcode::call_implicit_: {
-        SEXP monomorphic = nullptr;
-        // TODO once we have again profiling data, use it here
+    case Opcode::record_call_: {
+        Value* target = top();
+        callFeedback[target] = bc.immediate.callFeedback;
+        break;
+    }
 
+    case Opcode::call_implicit_: {
         std::vector<Value*> args;
         for (auto argi : bc.immediateCallArguments) {
             if (argi == DOTS_ARG_IDX) {
@@ -163,23 +172,31 @@ bool StackMachine::tryRunCurrentBC(const Rir2Pir& rir2pir, Builder& insert) {
             args.push_back(insert(new MkArg(prom, val, env)));
         }
 
+        Value* callee = pop();
+        SEXP monomorphic = nullptr;
+        if (callFeedback.count(callee)) {
+            auto& feedback = callFeedback.at(callee);
+            if (feedback.numTargets == 1)
+                monomorphic = feedback.targets[0];
+        }
+
         auto ast = bc.immediate.callFixedArgs.ast;
         auto insertGenericCall = [&]() {
-            push(insert(new Call(insert.env, pop(), args, ast)));
+            push(insert(new Call(insert.env, callee, args, ast)));
         };
         if (monomorphic && isValidClosureSEXP(monomorphic)) {
             rir2pir.compiler.compileClosure(
                 monomorphic,
                 [&](Closure* f) {
                     Value* expected = insert(new LdConst(monomorphic));
-                    Value* t = insert(new Identical(top(), expected));
+                    Value* t = insert(new Identical(callee, expected));
                     insert(new Branch(t));
                     BB* curBB = insert.bb;
 
                     BB* fallback = insert.createBB();
                     insert.bb = fallback;
                     curBB->next0 = fallback;
-                    Value* r1 = insert(new Call(insert.env, pop(), args, ast));
+                    Value* r1 = insert(new Call(insert.env, callee, args, ast));
 
                     BB* asExpected = insert.createBB();
                     insert.bb = asExpected;
