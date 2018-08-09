@@ -9,7 +9,7 @@ namespace pir {
 
 class Rir2PirCompiler : public RirCompiler {
   public:
-    Rir2PirCompiler(Module* module);
+    Rir2PirCompiler(Module* module, const DebugOptions& debug);
 
     void compileClosure(SEXP, MaybeCls success, Maybe fail) override;
     void compileFunction(rir::Function*, FormalArgs const&, MaybeCls success,

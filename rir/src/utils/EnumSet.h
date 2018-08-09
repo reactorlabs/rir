@@ -45,6 +45,10 @@ class EnumSet {
         set_.reset(static_cast<size_t>(e));
     }
 
+    RIR_INLINE bool intersects(const EnumSet& s) const {
+        return !EnumSet(s.set_ & set_).empty();
+    }
+
     RIR_INLINE bool includes(const EnumSet& s) const {
         return (s.set_ & set_) == s.set_;
     }
@@ -64,6 +68,8 @@ class EnumSet {
     RIR_INLINE EnumSet operator|(const Element& t) const {
         return *this | EnumSet(t);
     }
+
+    RIR_INLINE unsigned long to_ulong() const { return set_.to_ulong(); }
 
     RIR_INLINE bool empty() const { return set_.none(); }
 
