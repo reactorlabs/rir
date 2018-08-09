@@ -622,14 +622,17 @@ class Pir2Rir {
 size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
     toCSSA(code);
 
-    if (compiler.debug.includes(DebugFlag::PrintLiveness))
+    if (compiler.debug.includes(DebugFlag::PrintCSSA))
         code->print(std::cout);
 
     SSAAllocator alloc(code,
                        compiler.debug.includes(DebugFlag::DebugAllocator));
 
-    if (compiler.debug.includes(DebugFlag::PrintStackAllocation))
+    if (compiler.debug.includes(DebugFlag::PrintLivenessIntervals))
         alloc.print();
+
+    if (compiler.debug.includes(DebugFlag::PrintFinalPir))
+        code->print(std::cout);
 
     alloc.verify();
 
@@ -1108,7 +1111,7 @@ void Pir2RirCompiler::compile(Closure* cls, SEXP origin) {
     Pir2Rir pir2rir(*this, cls);
     auto fun = pir2rir.finalize();
 
-    if (debug.includes(DebugFlag::PrintFinalPir)) {
+    if (debug.includes(DebugFlag::PrintFinalRir)) {
         std::cout << "============= Final RIR Version ========\n";
         auto it = fun->begin();
         while (it != fun->end()) {

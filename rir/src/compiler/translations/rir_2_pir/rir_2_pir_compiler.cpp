@@ -81,7 +81,7 @@ void Rir2PirCompiler::compileClosure(rir::Function* srcFunction,
             }
 
             if (rir2pir.tryCompile(srcFunction->body(), builder)) {
-                if (debug.includes(DebugFlag::PrintRawPir)) {
+                if (debug.includes(DebugFlag::PrintEarlyPir)) {
                     std::cout << " ========= Compiled to PIR Version:";
                     builder.function->print(std::cout);
                 }

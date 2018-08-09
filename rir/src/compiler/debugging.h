@@ -6,14 +6,18 @@
 namespace rir {
 namespace pir {
 
+// !!!  This list of arguments *must* be exactly equal to the   !!!
+// !!!    one in pir.debugFlags in R/rir.R                      !!!
+
 #define LIST_OF_PIR_PRINT_DEBUGGING_FLAGS(V)                                   \
     V(PrintOriginal)                                                           \
-    V(PrintRawPir)                                                             \
+    V(PrintEarlyPir)                                                           \
     V(PrintOptimizationPasses)                                                 \
     V(PrintInlining)                                                           \
-    V(PrintLiveness)                                                           \
-    V(PrintStackAllocation)                                                    \
-    V(PrintFinalPir)
+    V(PrintCSSA)                                                               \
+    V(PrintLivenessIntervals)                                                  \
+    V(PrintFinalPir)                                                           \
+    V(PrintFinalRir)
 
 #define LIST_OF_PIR_DEBUGGING_FLAGS(V)                                         \
     V(ShowWarnings)                                                            \
@@ -28,7 +32,7 @@ enum class DebugFlag {
 #undef V
 
         FIRST = ShowWarnings,
-    LAST = PrintFinalPir
+    LAST = PrintFinalRir
 };
 
 typedef EnumSet<DebugFlag> DebugOptions;
