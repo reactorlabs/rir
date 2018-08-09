@@ -11,6 +11,8 @@
 
 #include <vector>
 
+#include "ir/RuntimeFeedback.h"
+
 // type  for constant & ast pool indices
 typedef uint32_t Immediate;
 
@@ -126,6 +128,7 @@ class BC {
         uint32_t i;
         NumLocals loc;
         LocalsCopy loc_cpy;
+        CallFeedback callFeedback;
     };
 
     static Immediate readImmediate(Opcode** pc) {
@@ -392,6 +395,7 @@ class BC {
     inline static BC call(size_t nargs, const std::vector<SEXP>& names,
                           SEXP ast);
     inline static BC staticCall(size_t nargs, SEXP ast, SEXP target);
+    inline static BC recordCall();
 
   private:
     explicit BC(Opcode bc) : bc(bc), immediate({{0}}) {}
@@ -524,6 +528,9 @@ class BC {
             break;
         case Opcode::movloc_:
             immediate.loc_cpy = *(LocalsCopy*)pc;
+            break;
+        case Opcode::record_call_:
+            immediate.callFeedback = *(CallFeedback*)pc;
             break;
         case Opcode::nop_:
         case Opcode::make_env_:
