@@ -607,8 +607,8 @@ class FLI(CastType, 1, Effect::None, EnvAccess::None) {
 
 class FLI(AsLogical, 1, Effect::Warn, EnvAccess::None) {
   public:
-    AsLogical(Value* in)
-        : FixedLenInstruction(RType::logical, {{PirType::val()}}, {{in}}) {}
+    AsLogical(Value* in, unsigned srcIdx)
+        : FixedLenInstruction(RType::logical, {{PirType::val()}}, {{in}}, srcIdx) {}
 };
 
 class FLI(AsTest, 1, Effect::None, EnvAccess::None) {
@@ -639,36 +639,38 @@ class FLI(Subassign2_1D, 3, Effect::None, EnvAccess::None) {
 
 class FLI(Extract1_1D, 3, Effect::None, EnvAccess::Leak) {
   public:
-    Extract1_1D(Value* vec, Value* idx, Value* env)
+    Extract1_1D(Value* vec, Value* idx, Value* env, unsigned srcIdx)
         : FixedLenInstruction(PirType::val(),
                               {{PirType::val(), PirType::val()}}, {{vec, idx}},
-                              env) {}
+                              env, srcIdx) {}
 };
 
 class FLI(Extract2_1D, 3, Effect::None, EnvAccess::Leak) {
   public:
-    Extract2_1D(Value* vec, Value* idx, Value* env)
+    Extract2_1D(Value* vec, Value* idx, Value* env, unsigned srcIdx)
         : FixedLenInstruction(PirType::val().scalar(),
                               {{PirType::val(), PirType::val()}}, {{vec, idx}},
-                              env) {}
+                              env, srcIdx) {}
 };
 
 class FLI(Extract1_2D, 4, Effect::None, EnvAccess::Leak) {
   public:
-    Extract1_2D(Value* vec, Value* idx1, Value* idx2, Value* env)
+    Extract1_2D(Value* vec, Value* idx1, Value* idx2, Value* env,
+                unsigned srcIdx)
         : FixedLenInstruction(
               PirType::val(),
               {{PirType::val(), PirType::val(), PirType::val()}},
-              {{vec, idx1, idx2}}, env) {}
+              {{vec, idx1, idx2}}, env, srcIdx) {}
 };
 
 class FLI(Extract2_2D, 4, Effect::None, EnvAccess::Leak) {
   public:
-    Extract2_2D(Value* vec, Value* idx1, Value* idx2, Value* env)
+    Extract2_2D(Value* vec, Value* idx1, Value* idx2, Value* env,
+                unsigned srcIdx)
         : FixedLenInstruction(
               PirType::val().scalar(),
               {{PirType::val(), PirType::val(), PirType::val()}},
-              {{vec, idx1, idx2}}, env) {}
+              {{vec, idx1, idx2}}, env, srcIdx) {}
 };
 
 class FLI(Inc, 1, Effect::None, EnvAccess::None) {
@@ -747,9 +749,9 @@ BINOP(Eq, RType::logical);
 #define BINOP_NOENV(Name, Type)                                                \
     class FLI(Name, 2, Effect::None, EnvAccess::None) {                        \
       public:                                                                  \
-        Name(Value* lhs, Value* rhs, unsigned srcIdx)                          \
+        Name(Value* lhs, Value* rhs)                                           \
             : FixedLenInstruction(Type, {{PirType::val(), PirType::val()}},    \
-                                  {{lhs, rhs}}, srcIdx) {}                     \
+                                  {{lhs, rhs}}) {}                             \
     }
 
 BINOP_NOENV(LAnd, RType::logical);

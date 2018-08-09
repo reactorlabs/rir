@@ -50,6 +50,19 @@ bool StackMachine::tryRunCurrentBC(const Rir2Pir& rir2pir, Builder& insert) {
     Value* x;
     Value* y;
     BC bc = this->getCurrentBC();
+
+    unsigned srcIdx = getSrcIdx();
+    auto consumeSrcIdx = [&]() {
+        if (srcIdx == 0)
+            if (rir2pir.compiler.isVerbose()) {
+                std::cout << "warn: trying to use nil src idx:";
+                bc.print();
+            }
+        auto tmp = srcIdx;
+        srcIdx = 0;
+        return tmp;
+    };
+
     switch (bc.bc) {
 
     case Opcode::push_:
@@ -77,7 +90,7 @@ bool StackMachine::tryRunCurrentBC(const Rir2Pir& rir2pir, Builder& insert) {
 
     case Opcode::asbool_:
     case Opcode::aslogical_:
-        push(insert(new AsLogical(pop())));
+        push(insert(new AsLogical(pop(), consumeSrcIdx())));
         break;
 
     case Opcode::ldfun_:
@@ -266,14 +279,14 @@ bool StackMachine::tryRunCurrentBC(const Rir2Pir& rir2pir, Builder& insert) {
     case Opcode::extract1_1_: {
         Value* idx = pop();
         Value* vec = pop();
-        push(insert(new Extract1_1D(vec, idx, env)));
+        push(insert(new Extract1_1D(vec, idx, env, consumeSrcIdx())));
         break;
     }
 
     case Opcode::extract2_1_: {
         Value* idx = pop();
         Value* vec = pop();
-        push(insert(new Extract2_1D(vec, idx, env)));
+        push(insert(new Extract2_1D(vec, idx, env, consumeSrcIdx())));
         break;
     }
 
@@ -281,7 +294,7 @@ bool StackMachine::tryRunCurrentBC(const Rir2Pir& rir2pir, Builder& insert) {
         Value* idx2 = pop();
         Value* idx1 = pop();
         Value* vec = pop();
-        push(insert(new Extract1_2D(vec, idx1, idx2, env)));
+        push(insert(new Extract1_2D(vec, idx1, idx2, env, consumeSrcIdx())));
         break;
     }
 
@@ -289,7 +302,7 @@ bool StackMachine::tryRunCurrentBC(const Rir2Pir& rir2pir, Builder& insert) {
         Value* idx2 = pop();
         Value* idx1 = pop();
         Value* vec = pop();
-        push(insert(new Extract2_2D(vec, idx1, idx2, env)));
+        push(insert(new Extract2_2D(vec, idx1, idx2, env, consumeSrcIdx())));
         break;
     }
 
@@ -314,7 +327,7 @@ bool StackMachine::tryRunCurrentBC(const Rir2Pir& rir2pir, Builder& insert) {
     case Opcode::Op: {                                                         \
         auto rhs = pop();                                                      \
         auto lhs = pop();                                                      \
-        push(insert(new Name(lhs, rhs, getSrcIdx())));                         \
+        push(insert(new Name(lhs, rhs)));                                      \
         break;                                                                 \
     }
         BINOP_NOENV(LOr, lgl_or_);
@@ -325,7 +338,7 @@ bool StackMachine::tryRunCurrentBC(const Rir2Pir& rir2pir, Builder& insert) {
     case Opcode::Op: {                                                         \
         auto rhs = pop();                                                      \
         auto lhs = pop();                                                      \
-        push(insert(new Name(lhs, rhs, env, getSrcIdx())));                    \
+        push(insert(new Name(lhs, rhs, env, consumeSrcIdx())));                \
         break;                                                                 \
     }
 
@@ -355,7 +368,7 @@ bool StackMachine::tryRunCurrentBC(const Rir2Pir& rir2pir, Builder& insert) {
 #define UNOP(Name, Op)                                                         \
     case Opcode::Op: {                                                         \
         v = pop();                                                             \
-        push(insert(new Name(v, env, getSrcIdx())));                           \
+        push(insert(new Name(v, env, consumeSrcIdx())));                       \
         break;                                                                 \
     }
         UNOP(Plus, uplus_);
@@ -460,6 +473,15 @@ bool StackMachine::tryRunCurrentBC(const Rir2Pir& rir2pir, Builder& insert) {
     case Opcode::ldddvar_:
         return false;
     }
+
+    // TODO: change to assert
+    // assert(srcIdx == 0 && "source index is getting lost in translation");
+    if (srcIdx)
+        if (rir2pir.compiler.isVerbose()) {
+            std::cout << "warn: losing src index:";
+            bc.print();
+        }
+
     return true;
 }
 

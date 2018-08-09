@@ -754,14 +754,6 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 cs << BC::ldarg(LdArg::Cast(instr)->id);
                 break;
             }
-            case Tag::ChkMissing: {
-                cs << BC::checkMissing();
-                break;
-            }
-            case Tag::ChkClosure: {
-                cs << BC::isfun();
-                break;
-            }
             case Tag::StVarSuper: {
                 auto stvar = StVarSuper::Cast(instr);
                 cs << BC::stvarSuper(stvar->varName);
@@ -801,14 +793,6 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 cs << BC::promise(getPromiseIdx(ctx, MkArg::Cast(instr)->prom));
                 break;
             }
-            case Tag::Seq: {
-                cs << BC::seq();
-                break;
-            }
-            case Tag::MkCls: {
-                cs << BC::close();
-                break;
-            }
             case Tag::MkFunCls: {
                 auto mkfuncls = MkFunCls::Cast(instr);
 
@@ -824,11 +808,9 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                    << BC::push(mkfuncls->src) << BC::close();
                 break;
             }
-            case Tag::CastType: {
-                break;
-            }
-            case Tag::Subassign1_1D: {
-                cs << BC::subassign1();
+            case Tag::Is: {
+                auto is = Is::Cast(instr);
+                cs << BC::is(is->sexpTag);
                 break;
             }
             case Tag::Subassign2_1D: {
@@ -836,26 +818,15 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 cs << BC::subassign2(res->sym);
                 break;
             }
-            case Tag::Extract1_1D: {
-                cs << BC::extract1_1();
-                break;
-            }
-            case Tag::Extract2_1D: {
-                cs << BC::extract2_1();
-                break;
-            }
-            case Tag::Extract1_2D: {
-                cs << BC::extract1_2();
-                break;
-            }
-            case Tag::Extract2_2D: {
-                cs << BC::extract2_2();
-                break;
-            }
-            case Tag::IsObject: {
-                cs << BC::isObj();
-                break;
-            }
+
+#define EMPTY(Name)                                                            \
+    case Tag::Name: {                                                          \
+        break;                                                                 \
+    }
+                EMPTY(PirCopy);
+                EMPTY(CastType);
+#undef EMPTY
+
             case Tag::LdFunctionEnv: {
                 // TODO: what should happen? For now get the current env (should
                 // be the promise environment that the evaluator was called
@@ -863,63 +834,57 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 cs << BC::getEnv();
                 break;
             }
-            case Tag::PirCopy: {
-                break;
-            }
-            case Tag::Is: {
-                auto is = Is::Cast(instr);
-                cs << BC::is(is->sexpTag);
-                break;
-            }
-            case Tag::Int3: {
-                cs << BC::int3();
-                break;
-            }
 
-#define SIMPLE_INSTR(Name, Factory)                                            \
+#define SIMPLE(Name, Factory)                                                  \
     case Tag::Name: {                                                          \
-        auto simple = Name::Cast(instr);                                       \
         cs << BC::Factory();                                                   \
-        cs.addSrcIdx(simple->srcIdx);                                          \
         break;                                                                 \
     }
-                SIMPLE_INSTR(Inc, inc);
-                SIMPLE_INSTR(Force, force);
-                SIMPLE_INSTR(AsLogical, asLogical);
-                SIMPLE_INSTR(AsTest, asbool);
-                // unary operators are simple, too
-                SIMPLE_INSTR(Plus, uplus);
-                SIMPLE_INSTR(Minus, uminus);
-                SIMPLE_INSTR(Not, Not);
-                SIMPLE_INSTR(Length, length);
+                SIMPLE(Identical, identical);
+                SIMPLE(LOr, lglOr);
+                SIMPLE(LAnd, lglAnd);
+                SIMPLE(Inc, inc);
+                SIMPLE(Force, force);
+                SIMPLE(AsTest, asbool);
+                SIMPLE(Length, length);
+                SIMPLE(ChkMissing, checkMissing);
+                SIMPLE(ChkClosure, isfun);
+                SIMPLE(Seq, seq);
+                SIMPLE(MkCls, close);
+                SIMPLE(Subassign1_1D, subassign1);
+                SIMPLE(IsObject, isObj);
+                SIMPLE(Int3, int3);
+#undef SIMPLE
 
-#undef SIMPLE_INSTR
-
-#define BINOP(Name, Factory)                                                   \
+#define SIMPLE_WITH_SRCIDX(Name, Factory)                                      \
     case Tag::Name: {                                                          \
-        auto binop = Name::Cast(instr);                                        \
         cs << BC::Factory();                                                   \
-        cs.addSrcIdx(binop->srcIdx);                                           \
+        cs.addSrcIdx(instr->srcIdx);                                           \
         break;                                                                 \
     }
-                BINOP(Add, add);
-                BINOP(Sub, sub);
-                BINOP(Mul, mul);
-                BINOP(Div, div);
-                BINOP(IDiv, idiv);
-                BINOP(Mod, mod);
-                BINOP(Pow, pow);
-                BINOP(Lt, lt);
-                BINOP(Gt, gt);
-                BINOP(Lte, ge);
-                BINOP(Gte, le);
-                BINOP(Eq, eq);
-                BINOP(Identical, identical);
-                BINOP(Neq, ne);
-                BINOP(LOr, lglOr);
-                BINOP(LAnd, lglAnd);
-                BINOP(Colon, colon);
-#undef BINOP
+                SIMPLE_WITH_SRCIDX(Add, add);
+                SIMPLE_WITH_SRCIDX(Sub, sub);
+                SIMPLE_WITH_SRCIDX(Mul, mul);
+                SIMPLE_WITH_SRCIDX(Div, div);
+                SIMPLE_WITH_SRCIDX(IDiv, idiv);
+                SIMPLE_WITH_SRCIDX(Mod, mod);
+                SIMPLE_WITH_SRCIDX(Pow, pow);
+                SIMPLE_WITH_SRCIDX(Lt, lt);
+                SIMPLE_WITH_SRCIDX(Gt, gt);
+                SIMPLE_WITH_SRCIDX(Lte, ge);
+                SIMPLE_WITH_SRCIDX(Gte, le);
+                SIMPLE_WITH_SRCIDX(Eq, eq);
+                SIMPLE_WITH_SRCIDX(Neq, ne);
+                SIMPLE_WITH_SRCIDX(Colon, colon);
+                SIMPLE_WITH_SRCIDX(AsLogical, asLogical);
+                SIMPLE_WITH_SRCIDX(Plus, uplus);
+                SIMPLE_WITH_SRCIDX(Minus, uminus);
+                SIMPLE_WITH_SRCIDX(Not, Not);
+                SIMPLE_WITH_SRCIDX(Extract1_1D, extract1_1);
+                SIMPLE_WITH_SRCIDX(Extract2_1D, extract2_1);
+                SIMPLE_WITH_SRCIDX(Extract1_2D, extract1_2);
+                SIMPLE_WITH_SRCIDX(Extract2_2D, extract2_2);
+#undef SIMPLE_WITH_SRCIDX
 
             case Tag::Call: {
                 auto call = Call::Cast(instr);
