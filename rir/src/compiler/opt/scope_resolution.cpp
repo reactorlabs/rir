@@ -101,7 +101,7 @@ class TheScopeResolution {
                             if (ldfun) {
                                 // The force can leak the environment where the ldfun
                                 // we are replacing would be executed
-                                replaceLdFun(val, bb->executionEnv());
+                                replaceLdFun(val, ldfun->env());
                             } else {
                                 ld->replaceUsesWith(val);
                                 next = bb->remove(ip);

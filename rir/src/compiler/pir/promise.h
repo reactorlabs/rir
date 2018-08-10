@@ -22,16 +22,10 @@ class Promise : public Code {
         return out;
     }
 
-    static Promise* Cast(Code* c) {
-        if (c->tag == Code::Tag::Promise)
-            return static_cast<Promise*>(c);
-        return nullptr;
-    }
-
   private:
     friend class Closure;
     Promise(Closure* fun, unsigned id, unsigned src)
-        : Code(Code::Tag::Promise), id(id), fun(fun), srcPoolIdx(src) {}
+        : id(id), fun(fun), srcPoolIdx(src) {}
 };
 
 } // namespace pir

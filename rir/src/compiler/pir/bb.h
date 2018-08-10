@@ -80,8 +80,6 @@ class BB {
     size_t size() { return instrs.size(); }
     Instruction* at(size_t i) { return instrs[i]; }
 
-    Env* executionEnv();
-
     void gc();
 
   private:

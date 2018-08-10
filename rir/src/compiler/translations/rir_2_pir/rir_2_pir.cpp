@@ -355,7 +355,7 @@ void Rir2Pir::finalize(Value* ret, Builder& insert) {
     insert(new Return(ret));
 
     InsertCast c(insert.code->entry);
-    c();
+    c(insert.env);
 
     finalized = true;
 }

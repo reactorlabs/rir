@@ -65,6 +65,8 @@ class Rir2Pir {
 
     friend class StackMachine;
 };
+
 } // namespace pir
 } // namespace rir
+
 #endif

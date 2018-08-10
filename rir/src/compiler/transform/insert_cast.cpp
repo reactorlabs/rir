@@ -5,10 +5,9 @@
 namespace rir {
 namespace pir {
 
-pir::Instruction* InsertCast::cast(pir::Value* v, PirType t) {
+pir::Instruction* InsertCast::cast(pir::Value* v, PirType t, Value* env) {
     if (v->type.maybeLazy() && !t.maybeLazy()) {
-        assert(v->isInstruction());
-        return new pir::Force(v, Instruction::Cast(v)->bb()->executionEnv());
+        return new pir::Force(v, env);
     }
     if (v->type.maybeMissing() && !t.maybeMissing()) {
         return new pir::ChkMissing(v);
@@ -27,11 +26,11 @@ pir::Instruction* InsertCast::cast(pir::Value* v, PirType t) {
     return nullptr;
 }
 
-void InsertCast::operator()() {
-    Visitor::run(start, [&](BB* bb) { apply(bb); });
+void InsertCast::operator()(Value* env) {
+    Visitor::run(start, [&](BB* bb) { apply(bb, env); });
 }
 
-void InsertCast::apply(BB* bb) {
+void InsertCast::apply(BB* bb, Value* env) {
     auto ip = bb->begin();
     while (ip != bb->end()) {
         Instruction* instr = *ip;
@@ -41,7 +40,7 @@ void InsertCast::apply(BB* bb) {
         }
         instr->eachArg([&](InstrArg& arg) {
             while (!arg.type().isSuper(arg.val()->type)) {
-                auto c = cast(arg.val(), arg.type());
+                auto c = cast(arg.val(), arg.type(), env);
                 if (!c) {
                     bb->print(std::cerr);
                     assert(false);
