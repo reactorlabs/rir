@@ -90,7 +90,7 @@ struct Function {
 
     Code* body() { return (Code*)((uintptr_t) this + foffset); }
 
-    Code* codeAt(unsigned offset) {
+    Code* codeAt(unsigned offset) const {
         Code* c = (Code*)((uintptr_t) this + offset);
         assert(c->magic == CODE_MAGIC && "Invalid code offset");
         return c;
