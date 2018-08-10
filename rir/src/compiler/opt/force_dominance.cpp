@@ -44,7 +44,7 @@ using namespace rir::pir;
 
 struct ForcedBy : public std::unordered_map<Value*, Force*> {
     static Force* ambiguous() {
-        static Force f(nullptr);
+        static Force f(nullptr, Env::nil());
         return &f;
     }
 

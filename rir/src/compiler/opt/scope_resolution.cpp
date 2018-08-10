@@ -83,13 +83,13 @@ class TheScopeResolution {
                         // We have no clue what we load, but we know from where
                         ld->env(aload.env);
                     } else if (onlyLocalVals) {
-                        auto replaceLdFun = [&](Value* val) {
+                        auto replaceLdFun = [&](Value* val, Value* env) {
                             if (val->type.isA(PirType::closure())) {
                                 next = bb->remove(ip);
                                 ld->replaceUsesWith(val);
                                 return;
                             }
-                            auto fz = new Force(val);
+                            auto fz = new Force(val, env);
                             auto ch = new ChkClosure(fz);
                             bb->replace(ip, fz);
                             next = bb->insert(ip + 1, ch);
@@ -99,7 +99,9 @@ class TheScopeResolution {
                         // This load can be resolved to a unique value
                         aval.ifSingleValue([&](Value* val) {
                             if (ldfun) {
-                                replaceLdFun(val);
+                                // The force can leak the environment where the ldfun
+                                // we are replacing would be executed
+                                replaceLdFun(val, bb->executionEnv());
                             } else {
                                 ld->replaceUsesWith(val);
                                 next = bb->remove(ip);

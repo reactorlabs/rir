@@ -14,14 +14,23 @@ namespace pir {
  */
 class Code {
   public:
+
+    enum class Tag : uint8_t {
+        Closure,
+        Promise,
+        _UNUSED_,
+    };
+
+    Tag tag;
     BB* entry;
 
     size_t nextBBId = 0;
 
-    Code();
+    Code(Tag tag) : tag(tag) {}
     void print(std::ostream&);
     ~Code();
 };
+
 }
 }
 

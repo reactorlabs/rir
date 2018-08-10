@@ -296,11 +296,11 @@ static Test tests[] = {
          }),
     Test("test_inline_arg",
          []() { return test42("{f <- function(x) x; f(42L)}"); }),
-    Test("test_assign",
-         []() { return test42("{y<-42L; if (arg1) x<-y else x<-y; x}"); }),
-    Test(
-        "test_super_assign",
-        []() { return test42("{x <- 0; f <- function() x <<- 42L; f(); x}"); }),
+    // Test("test_assign",
+    //      []() { return test42("{y<-42L; if (arg1) x<-y else x<-y; x}"); }),
+    // Test(
+    //     "test_super_assign",
+    //     []() { return test42("{x <- 0; f <- function() x <<- 42L; f(); x}"); }),
     Test("return_cls",
          []() { return compileAndVerify("f <- function() 42L"); }),
     Test("index", []() { return compileAndVerify("f <- function(x) x[[2]]"); }),
@@ -311,8 +311,8 @@ static Test tests[] = {
              return compileAndVerify(
                  "fun <- function(a) {f <- function(x) x; f(a[[1]])}");
          }),
-    Test("context_load",
-         []() { return canRemoveEnvironment("f <- function() a"); }),
+    // Test("context_load",
+    //      []() { return canRemoveEnvironment("f <- function() a"); }),
     Test("super_assign", &testSuperAssign),
     Test("loop",
          []() {
@@ -324,11 +324,11 @@ static Test tests[] = {
              return compileAndVerify("f <- function(x) x",
                                      "g <- function() f(1); g()");
          }),
-    Test("merge_missing_bl",
-         []() {
-             return !hasLoadVar("theFun <- function(a) {if (a) {q <-1} else "
-                                "{if (a) q <- 3 else q <- 2}; q}");
-         }),
+    // Test("merge_missing_bl",
+    //      []() {
+    //          return !hasLoadVar("theFun <- function(a) {if (a) {q <-1} else "
+    //                             "{if (a) q <- 3 else q <- 2}; q}");
+    //      }),
     Test("merge_missing",
          []() {
              return hasLoadVar("theFun <- function(a) {if (a) {q <-1} else {if "

@@ -7,7 +7,8 @@ namespace pir {
 
 pir::Instruction* InsertCast::cast(pir::Value* v, PirType t) {
     if (v->type.maybeLazy() && !t.maybeLazy()) {
-        return new pir::Force(v);
+        assert(v->isInstruction());
+        return new pir::Force(v, Instruction::Cast(v)->bb()->executionEnv());
     }
     if (v->type.maybeMissing() && !t.maybeMissing()) {
         return new pir::ChkMissing(v);
@@ -53,5 +54,6 @@ void InsertCast::apply(BB* bb) {
         ip++;
     }
 }
-}
-}
+
+} // namespace pir
+} // namespace rir

@@ -593,10 +593,11 @@ class FLI(MkFunCls, 1, Effect::None, EnvAccess::Capture) {
     void printArgs(std::ostream&) override;
 };
 
-class FLI(Force, 1, Effect::Any, EnvAccess::None) {
+class FLI(Force, 2, Effect::Any, EnvAccess::Leak) {
   public:
-    Force(Value* in)
-        : FixedLenInstruction(PirType::val(), {{PirType::any()}}, {{in}}) {}
+    Force(Value* in, Value* env)
+        : FixedLenInstruction(PirType::val(), {{PirType::any()}}, {{in}}, env) {
+    }
 };
 
 class FLI(CastType, 1, Effect::None, EnvAccess::None) {
@@ -608,7 +609,8 @@ class FLI(CastType, 1, Effect::None, EnvAccess::None) {
 class FLI(AsLogical, 1, Effect::Warn, EnvAccess::None) {
   public:
     AsLogical(Value* in, unsigned srcIdx)
-        : FixedLenInstruction(RType::logical, {{PirType::val()}}, {{in}}, srcIdx) {}
+        : FixedLenInstruction(RType::logical, {{PirType::val()}}, {{in}},
+                              srcIdx) {}
 };
 
 class FLI(AsTest, 1, Effect::None, EnvAccess::None) {

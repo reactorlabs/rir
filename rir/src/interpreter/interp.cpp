@@ -1154,7 +1154,10 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env,
         }
 
         INSTRUCTION(caller_env_) {
-            ostack_push(ctx, callCtxt->callerEnv);
+            if (callCtxt)
+                ostack_push(ctx, callCtxt->callerEnv);
+            else
+                ostack_push(ctx, ENCLOS(*env));
             NEXT();
         }
 

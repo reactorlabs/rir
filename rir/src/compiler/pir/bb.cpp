@@ -82,6 +82,16 @@ BB::Instrs::iterator BB::insert(Instrs::iterator it, Instruction* i) {
     return itup;
 }
 
+Env* BB::executionEnv() {
+    assert(owner);
+    if (auto cls = Closure::Cast(owner))
+        return cls->closureEnv();
+    else if (auto prom = Promise::Cast(owner))
+        return prom->fun->closureEnv();
+    assert(false);
+    return nullptr;
+}
+
 void BB::gc() {
     // Catch double deletes
     std::unordered_set<Instruction*> dup;
@@ -92,5 +102,6 @@ void BB::gc() {
         delete i;
     deleted.clear();
 }
-}
-}
+
+} // namespace pir
+} // namespace rir

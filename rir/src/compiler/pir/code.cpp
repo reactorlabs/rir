@@ -7,8 +7,6 @@
 namespace rir {
 namespace pir {
 
-Code::Code() {}
-
 void Code::print(std::ostream& out) {
     BreadthFirstVisitor::run(entry, [&out](BB* bb) { bb->print(out); });
 }
@@ -23,5 +21,6 @@ Code::~Code() {
         delete d;
     }
 }
-}
-}
+
+} // namespace pir
+} // namespace rir

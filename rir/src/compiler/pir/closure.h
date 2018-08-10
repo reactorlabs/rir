@@ -21,8 +21,10 @@ namespace pir {
 class Closure : public Code {
   private:
     friend class Module;
-    Closure(std::initializer_list<SEXP> a, Env* env) : env(env), argNames(a) {}
-    Closure(const std::vector<SEXP>& a, Env* env) : env(env), argNames(a) {}
+    Closure(std::initializer_list<SEXP> a, Env* env)
+        : Code(Code::Tag::Closure), env(env), argNames(a) {}
+    Closure(const std::vector<SEXP>& a, Env* env)
+        : Code(Code::Tag::Closure), env(env), argNames(a) {}
 
     Env* env;
 
@@ -62,7 +64,13 @@ class Closure : public Code {
                 it(p);
     }
 
+    static Closure* Cast(Code* c) {
+        if (c->tag == Code::Tag::Closure)
+            return static_cast<Closure*>(c);
+        return nullptr;
+    }
 };
+
 } // namespace pir
 } // namespace rir
 
