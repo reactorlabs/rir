@@ -62,6 +62,119 @@ class State {
     }
 };
 
+enum class Sources {
+    Required,
+    May,
+    NotNeeded,
+};
+
+static Sources hasSources(Opcode bc) {
+    switch (bc) {
+    case Opcode::extract1_1_:
+    case Opcode::extract1_2_:
+    case Opcode::extract2_1_:
+    case Opcode::extract2_2_:
+    case Opcode::seq_:
+    case Opcode::add_:
+    case Opcode::mul_:
+    case Opcode::div_:
+    case Opcode::idiv_:
+    case Opcode::mod_:
+    case Opcode::pow_:
+    case Opcode::sub_:
+    case Opcode::uplus_:
+    case Opcode::uminus_:
+    case Opcode::not_:
+    case Opcode::lt_:
+    case Opcode::gt_:
+    case Opcode::le_:
+    case Opcode::ge_:
+    case Opcode::eq_:
+    case Opcode::ne_:
+    case Opcode::colon_:
+        return Sources::Required;
+
+    case Opcode::inc_:
+    case Opcode::subassign1_:
+    case Opcode::subassign2_:
+    case Opcode::identical_:
+    case Opcode::push_:
+    case Opcode::ldfun_:
+    case Opcode::ldddvar_:
+    case Opcode::ldvar_:
+    case Opcode::ldvar_noforce_:
+    case Opcode::ldvar_super_:
+    case Opcode::ldvar_noforce_super_:
+    case Opcode::ldlval_:
+    case Opcode::stvar_:
+    case Opcode::stvar_super_:
+    case Opcode::guard_env_:
+    case Opcode::guard_fun_:
+    case Opcode::call_implicit_:
+    case Opcode::named_call_implicit_:
+    case Opcode::call_:
+    case Opcode::named_call_:
+    case Opcode::static_call_:
+    case Opcode::promise_:
+    case Opcode::push_code_:
+    case Opcode::br_:
+    case Opcode::brtrue_:
+    case Opcode::beginloop_:
+    case Opcode::brobj_:
+    case Opcode::brfalse_:
+    case Opcode::pick_:
+    case Opcode::pull_:
+    case Opcode::is_:
+    case Opcode::put_:
+    case Opcode::alloc_:
+    case Opcode::ldarg_:
+    case Opcode::ldloc_:
+    case Opcode::stloc_:
+    case Opcode::movloc_:
+    case Opcode::nop_:
+    case Opcode::make_env_:
+    case Opcode::get_env_:
+    case Opcode::caller_env_:
+    case Opcode::set_env_:
+    case Opcode::ret_:
+    case Opcode::length_:
+    case Opcode::names_:
+    case Opcode::set_names_:
+    case Opcode::force_:
+    case Opcode::pop_:
+    case Opcode::close_:
+    case Opcode::asast_:
+    case Opcode::dup_:
+    case Opcode::dup2_:
+    case Opcode::for_seq_size_:
+    case Opcode::swap_:
+    case Opcode::int3_:
+    case Opcode::make_unique_:
+    case Opcode::set_shared_:
+    case Opcode::return_:
+    case Opcode::isfun_:
+    case Opcode::invisible_:
+    case Opcode::visible_:
+    case Opcode::endcontext_:
+    case Opcode::isobj_:
+    case Opcode::check_missing_:
+    case Opcode::lgl_and_:
+    case Opcode::lgl_or_:
+        return Sources::NotNeeded;
+
+    case Opcode::aslogical_:
+    case Opcode::asbool_:
+    case Opcode::missing_:
+        return Sources::May;
+
+    case Opcode::invalid_:
+    case Opcode::num_of:
+    case Opcode::label: {
+    }
+    }
+    assert(false);
+    return Sources::NotNeeded;
+}
 } // unnamed namespace
 
 void CodeVerifier::calculateAndVerifyStack(Code* code) {
@@ -138,8 +251,7 @@ void CodeVerifier::verifyFunctionLayout(SEXP sexp, ::Context* ctx) {
         assert(oldo == c->stackLength and "Invalid stack layout reported");
 
         assert((uintptr_t)(c + 1) + pad4(c->codeSize) +
-                   c->srcLength * sizeof(unsigned) +
-                   c->skiplistLength * 2 * sizeof(unsigned) &&
+                   c->srcLength * sizeof(Code::SrclistEntry) &&
                "Invalid code length reported");
     }
 
@@ -148,6 +260,7 @@ void CodeVerifier::verifyFunctionLayout(SEXP sexp, ::Context* ctx) {
 
     // check that the call instruction has proper arguments and number of
     // instructions is valid
+    bool sawReturnOrBackjump = false;
     for (auto c : objs) {
         Opcode* cptr = c->code();
         Opcode* start = cptr;
@@ -155,6 +268,16 @@ void CodeVerifier::verifyFunctionLayout(SEXP sexp, ::Context* ctx) {
         while (true) {
             assert(cptr < end);
             BC cur = BC::decode(cptr);
+            switch (hasSources(cur.bc)) {
+            case Sources::Required:
+                assert(c->getSrcIdxAt(cptr, true) != 0);
+                break;
+            case Sources::NotNeeded:
+                assert(c->getSrcIdxAt(cptr, true) == 0);
+                break;
+            case Sources::May: {
+            }
+            }
             if (*cptr == Opcode::br_ || *cptr == Opcode::brobj_ ||
                 *cptr == Opcode::brtrue_ || *cptr == Opcode::brfalse_) {
                 int off = *reinterpret_cast<int*>(cptr + 1);
@@ -226,20 +349,16 @@ void CodeVerifier::verifyFunctionLayout(SEXP sexp, ::Context* ctx) {
                 }
             }
 
+            if ((cur.isJmp() && cur.immediate.offset < 0) || cur.isReturn())
+                sawReturnOrBackjump = true;
+            else if (cur.bc != Opcode::nop_)
+                sawReturnOrBackjump = false;
+
             cptr += cur.size();
             if (cptr == start + c->codeSize) {
-                assert(cptr == start + c->codeSize);
-                assert(cur.isJmp() || cur.isReturn());
+                assert(sawReturnOrBackjump);
                 break;
             }
-        }
-
-        // check that the astmap indices are within bounds
-        for (auto c : objs) {
-            unsigned* srcIndices = c->raw_src();
-            for (size_t i = 0; i != c->srcLength; ++i)
-                assert(srcIndices[i] < src_pool_length(ctx) and
-                       "Source index for instruction out of bounds");
         }
     }
 }

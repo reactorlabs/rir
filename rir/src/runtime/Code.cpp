@@ -4,18 +4,12 @@
 #include "utils/Pool.h"
 
 namespace rir {
-Code::Code(SEXP ast, unsigned cs, unsigned sourceSize, unsigned offset,
-           bool isDefaultArg, size_t localsCnt) {
-    magic = CODE_MAGIC;
-    header = offset;
-    src = src_pool_add(globalContext(), ast);
-    localsCount = localsCnt;
-    codeSize = cs;
-    skiplistLength = calcSkiplistLength(sourceSize);
-    srcLength = sourceSize;
-    perfCounter = 0;
-    isDefaultArgument = isDefaultArg;
-}
+Code::Code(SEXP ast, unsigned cs, unsigned sourceLength, unsigned offset,
+           bool isDefaultArg, size_t localsCnt)
+    : magic(CODE_MAGIC), header(offset),
+      src(src_pool_add(globalContext(), ast)), localsCount(localsCnt),
+      codeSize(cs), srcLength(sourceLength), perfCounter(0),
+      isDefaultArgument(isDefaultArg) {}
 
 void Code::disassemble() {
     Opcode* pc = code();
@@ -50,7 +44,7 @@ void Code::disassemble() {
 
         bc.print();
 
-        BC::advance(&pc);
+        pc = BC::next(pc);
     }
 }
 
@@ -64,13 +58,6 @@ void Code::print() {
     if (magic != CODE_MAGIC)
         Rf_error("Wrong magic number -- corrupted IR bytecode");
 
-    Rprintf("\n  Skiplist:  %u \n", skiplistLength);
-    unsigned* sl = skiplist();
-    for (unsigned i = 0; i < skiplistLength; ++i) {
-        if (*(sl + 1) != (unsigned)-1)
-            Rprintf("    pc: %u -> src_idx: %u\n", *sl, *(sl + 1));
-        sl += 2;
-    }
     Rprintf("\n");
     disassemble();
 }

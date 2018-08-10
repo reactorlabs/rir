@@ -7,6 +7,7 @@
 #include <cstring>
 
 #include "R/r.h"
+#include "common.h"
 
 #include <vector>
 
@@ -248,8 +249,40 @@ class BC {
         return bc == Opcode::guard_fun_ || bc == Opcode::guard_env_;
     }
 
-    // ==== BC decoding logic
-    inline static BC advance(Opcode** pc) {
+    // This code performs the same as `BC::decode(pc).size()`, but for
+    // performance reasons, it avoids actually creating the BC object.
+    // This is important, as it is very performance critical.
+    RIR_INLINE static unsigned size(rir::Opcode* pc) {
+        auto bc = *pc;
+        switch (bc) {
+        // First handle the varlength BCs. In all three cases the number of
+        // call arguments is the 2nd immediate argument and the
+        // instructions have 3 fixed length immediates. After that there are
+        // narg varlen immediates for the first two and 2*narg varlen
+        // immediates in the last case.
+        case Opcode::call_implicit_:
+        case Opcode::named_call_: {
+            pc++;
+            pc += sizeof(Immediate);
+            Immediate nargs = *(Immediate*)pc;
+            return 1 + (3 + nargs) * sizeof(Immediate);
+        }
+        case Opcode::named_call_implicit_: {
+            pc++;
+            pc += sizeof(Immediate);
+            Immediate nargs = *(Immediate*)pc;
+            return 1 + (3 + 2 * nargs) * sizeof(Immediate);
+        }
+        default: {}
+        }
+        return fixedSize(bc);
+    }
+
+    RIR_INLINE static Opcode* next(rir::Opcode* pc) { return pc + size(pc); }
+
+    // If the decoded BC is not needed, you should use next, since it is much
+    // faster.
+    inline static BC advance(Opcode** pc) __attribute__((warn_unused_result)) {
         BC cur(*pc);
         *pc = (Opcode*)((uintptr_t)(*pc) + cur.size());
         return cur;
@@ -258,11 +291,6 @@ class BC {
     inline static BC decode(Opcode* pc) {
         BC cur(pc);
         return cur;
-    }
-
-    inline static Opcode* next(Opcode* pc) {
-        BC cur(pc);
-        return (Opcode*)((uintptr_t)pc + cur.size());
     }
 
     // ==== Factory methods
@@ -374,7 +402,7 @@ class BC {
         : bc(bc), immediate(immediate), immediateCallArguments(args),
           callArgumentNames(names) {}
 
-    static unsigned fixedSize(Opcode bc) {
+    static unsigned RIR_INLINE fixedSize(Opcode bc) {
         switch (bc) {
 #define DEF_INSTR(name, imm, opop, opush, pure)                                \
     case Opcode::name:                                                         \
