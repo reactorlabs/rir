@@ -102,6 +102,10 @@ void BC::write(CodeStream& cs) const {
         cs.insert(immediate.loc_cpy);
         return;
 
+    case Opcode::record_call_:
+        cs.insert(immediate.callFeedback);
+        return;
+
     case Opcode::nop_:
     case Opcode::make_env_:
     case Opcode::get_env_:
@@ -193,10 +197,6 @@ void BC::printNames() const {
     Rprintf(" ]");
 }
 
-void BC::printProfile() const {
-    // TODO
-}
-
 void BC::print() const {
     if (bc != Opcode::label) {
         Rprintf("   ");
@@ -210,20 +210,17 @@ void BC::print() const {
         break;
     case Opcode::call_implicit_: {
         printImmediateArgs();
-        printProfile();
         break;
     }
     case Opcode::named_call_implicit_: {
         printImmediateArgs();
         printNames();
-        printProfile();
         break;
     }
     case Opcode::call_: {
         auto args = immediate.callFixedArgs;
         BC::NumArgs nargs = args.nargs;
         Rprintf(" %d ", nargs);
-        printProfile();
         break;
     }
 
@@ -232,7 +229,6 @@ void BC::print() const {
         BC::NumArgs nargs = args.nargs;
         Rprintf(" %d ", nargs);
         printNames();
-        printProfile();
         break;
     }
     case Opcode::static_call_: {
@@ -240,7 +236,6 @@ void BC::print() const {
         BC::NumArgs nargs = args.nargs;
         auto target = Pool::get(args.target);
         Rprintf(" %d : %s", nargs, dumpSexp(target).c_str());
-        printProfile();
         break;
     }
     case Opcode::push_:
@@ -291,6 +286,25 @@ void BC::print() const {
         Deoptimizer_print(immediate.guard_id);
         Rprintf("\n");
         break;
+
+    case Opcode::record_call_: {
+        CallFeedback prof = immediate.callFeedback;
+        Rprintf(" [ ");
+        if (prof.taken == CallFeedback::CounterOverflow)
+            Rprintf("*, <");
+        else
+            Rprintf("%u, <", prof.taken);
+        if (prof.numTargets == CallFeedback::MaxTargets)
+            Rprintf("*>, ");
+        else
+            Rprintf("%u> ", prof.numTargets);
+        for (int i = 0; i < prof.numTargets; ++i)
+            Rprintf("%p(%s) ", prof.targets[i],
+                    type2char(TYPEOF(prof.targets[i])));
+        Rprintf("]");
+        break;
+    }
+
     case Opcode::nop_:
     case Opcode::make_env_:
     case Opcode::get_env_:

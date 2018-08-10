@@ -4,8 +4,10 @@
 #include "../../pir/bb.h"
 #include "../../pir/instruction.h"
 #include "../../util/builder.h"
+#include "ir/RuntimeFeedback.h"
 #include "runtime/Function.h"
 #include <queue>
+#include <unordered_map>
 
 namespace rir {
 namespace pir {
@@ -46,6 +48,7 @@ class StackMachine {
     std::deque<Value*> stack;
 
   private:
+    std::unordered_map<Value*, CallFeedback> callFeedback;
     rir::Function* srcFunction;
     rir::Code* srcCode;
     Opcode* pc;

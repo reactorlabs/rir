@@ -1077,10 +1077,11 @@ void compileCall(Context& ctx, SEXP ast, SEXP fun, SEXP args) {
     }
     assert(callArgs.size() < BC::MAX_NUM_ARGS);
 
-    if (hasNames)
+    if (hasNames) {
         cs << BC::callImplicit(callArgs, names, ast);
-    else
-        cs << BC::callImplicit(callArgs, ast);
+    } else {
+        cs << BC::recordCall() << BC::callImplicit(callArgs, ast);
+    }
 }
 
 // Lookup

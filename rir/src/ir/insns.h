@@ -438,4 +438,11 @@ DEF_INSTR(ret_, 0, 1, 0, 1)
  */
 DEF_INSTR(int3_, 0, 0, 0, 1)
 
+/*
+ * recording bytecodes are used to collect information
+ * They keep a struct from RuntimeFeedback.h inline, that's why they are quite
+ * heavy in size.
+ */
+DEF_INSTR(record_call_, 7, 1, 1, 0)
+
 #undef DEF_INSTR

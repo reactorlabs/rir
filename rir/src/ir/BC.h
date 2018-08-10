@@ -312,6 +312,7 @@ BC BC::staticCall(size_t nargs, SEXP ast, SEXP target) {
     im.staticCallFixedArgs.target = Pool::insert(target);
     return BC(Opcode::static_call_, im);
 }
+BC BC::recordCall() { return BC(Opcode::record_call_); }
 
 } // rir
 

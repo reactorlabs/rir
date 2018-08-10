@@ -1418,6 +1418,14 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env,
             NEXT();
         }
 
+        INSTRUCTION(record_call_) {
+            CallFeedback* feedback = (CallFeedback*)pc;
+            SEXP callee = ostack_top(ctx);
+            feedback->record(callee);
+            pc += sizeof(CallFeedback);
+            NEXT();
+        }
+
         INSTRUCTION(call_implicit_) {
             auto lll = ostack_length(ctx);
             int ttt = R_PPStackTop;
