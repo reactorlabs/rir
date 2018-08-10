@@ -143,6 +143,11 @@ bool StackMachine::tryRunCurrentBC(const Rir2Pir& rir2pir, Builder& insert) {
         pop();
         break;
 
+    case Opcode::record_binop_: {
+        // TODO
+        break;
+    }
+
     case Opcode::record_call_: {
         Value* target = top();
         callFeedback[target] = bc.immediate.callFeedback;

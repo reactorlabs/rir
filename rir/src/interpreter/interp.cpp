@@ -1426,6 +1426,16 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env,
             NEXT();
         }
 
+        INSTRUCTION(record_binop_) {
+            TypeFeedback* feedback = (TypeFeedback*)pc;
+            SEXP l = ostack_at(ctx, 1);
+            SEXP r = ostack_top(ctx);
+            feedback[0].record(l);
+            feedback[1].record(r);
+            pc += 2 * sizeof(TypeFeedback);
+            NEXT();
+        }
+
         INSTRUCTION(call_implicit_) {
             auto lll = ostack_length(ctx);
             int ttt = R_PPStackTop;
