@@ -83,25 +83,27 @@ class TheScopeResolution {
                         // We have no clue what we load, but we know from where
                         ld->env(aload.env);
                     } else if (onlyLocalVals) {
-                        auto replaceLdFun = [&](Value* val, Value* env) {
+                        auto replaceLdFun = [&](Value* val) {
                             if (val->type.isA(PirType::closure())) {
                                 next = bb->remove(ip);
                                 ld->replaceUsesWith(val);
                                 return;
                             }
-                            auto fz = new Force(val, env);
-                            auto ch = new ChkClosure(fz);
-                            bb->replace(ip, fz);
-                            next = bb->insert(ip + 1, ch);
-                            next++;
-                            ld->replaceUsesWith(ch);
+                            // TODO: for now, turn this off if the value may
+                            // need forcing
+                            //       (because we need a way to get the
+                            //       environment where the ldfun would be
+                            //       executed)
+                            if (!val->type.maybeLazy()) {
+                                auto ch = new ChkClosure(val);
+                                bb->replace(ip, ch);
+                                ld->replaceUsesWith(ch);
+                            }
                         };
                         // This load can be resolved to a unique value
                         aval.ifSingleValue([&](Value* val) {
                             if (ldfun) {
-                                // The force can leak the environment where the ldfun
-                                // we are replacing would be executed
-                                replaceLdFun(val, ldfun->env());
+                                replaceLdFun(val);
                             } else {
                                 ld->replaceUsesWith(val);
                                 next = bb->remove(ip);
