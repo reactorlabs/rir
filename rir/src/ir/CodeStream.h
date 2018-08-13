@@ -92,7 +92,7 @@ class CodeStream {
             size += 1024;
             code->resize(size);
         }
-        *reinterpret_cast<T*>(&(*code)[pos]) = val;
+        memcpy(&(*code)[pos], &val, s);
         pos += s;
     }
 

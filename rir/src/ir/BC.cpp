@@ -106,6 +106,11 @@ void BC::write(CodeStream& cs) const {
         cs.insert(immediate.callFeedback);
         return;
 
+    case Opcode::record_binop_:
+        cs.insert(immediate.binopFeedback[0]);
+        cs.insert(immediate.binopFeedback[1]);
+        return;
+
     case Opcode::nop_:
     case Opcode::make_env_:
     case Opcode::get_env_:
@@ -198,7 +203,8 @@ void BC::printNames() const {
 }
 
 void BC::print() const {
-    if (bc != Opcode::label) {
+    if (bc != Opcode::label && bc != Opcode::record_call_ &&
+        bc != Opcode::record_binop_) {
         Rprintf("   ");
         Rprintf("%s ", name(bc));
     }
@@ -289,7 +295,7 @@ void BC::print() const {
 
     case Opcode::record_call_: {
         CallFeedback prof = immediate.callFeedback;
-        Rprintf(" [ ");
+        Rprintf("   [ ");
         if (prof.taken == CallFeedback::CounterOverflow)
             Rprintf("*, <");
         else
@@ -302,6 +308,25 @@ void BC::print() const {
             Rprintf("%p(%s) ", prof.targets[i],
                     type2char(TYPEOF(prof.targets[i])));
         Rprintf("]");
+        break;
+    }
+
+    case Opcode::record_binop_: {
+        auto prof = immediate.binopFeedback;
+        Rprintf("   [ ");
+        for (size_t j = 0; j < 2; ++j) {
+            for (size_t i = 0; i < prof[j].numTypes; ++i) {
+                auto t = prof[j].seen[i];
+                Rprintf("%s(%s%s%s)", Rf_type2char(t.sexptype),
+                        t.object ? "o" : "", t.attribs ? "a" : "",
+                        t.scalar ? "s" : "");
+                if (i != (unsigned)prof[j].numTypes - 1)
+                    Rprintf(",");
+            }
+            if (j == 0)
+                Rprintf(" x ");
+        }
+        Rprintf(" ]");
         break;
     }
 

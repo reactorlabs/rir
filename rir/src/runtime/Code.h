@@ -92,7 +92,7 @@ struct Code {
      *   ---------------------------------------------------------------------
      *   code stream   BC                pad4(codeSize)
      *
-     *   srcList       cp_idx (ast)      srcLength * sizeof(SrcEntry)
+     *   srcList       cp_idx (ast)      srcLength * sizeof(SrclistEntry)
      *
      */
 
@@ -101,8 +101,6 @@ struct Code {
         unsigned pcOffset;
         unsigned srcIdx;
     };
-    static_assert(sizeof(SrclistEntry) == 2 * sizeof(unsigned),
-                  "Needs to correspond to the size of the record_call_ BC");
 
     /** Returns a pointer to the instructions in c.  */
     Opcode* code() { return (Opcode*)data; }

@@ -194,6 +194,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
         compileExpr(ctx, args[0]);
         compileExpr(ctx, args[1]);
 
+        cs << BC::recordBinop();
         if (fun == symbol::Add)
             cs << BC::add();
         else if (fun == symbol::Sub)

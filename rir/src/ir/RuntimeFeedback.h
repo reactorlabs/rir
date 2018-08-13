@@ -2,6 +2,7 @@
 #define RIR_RUNTIME_FEEDBACK
 
 #include "R/r.h"
+#include <array>
 #include <cstdint>
 
 namespace rir {
@@ -22,7 +23,8 @@ struct CallFeedback {
     // Effectively this means we have seen MaxTargets or more.
     uint32_t numTargets : TargetBits;
     uint32_t taken : CounterBits;
-    SEXP targets[MaxTargets];
+
+    std::array<SEXP, MaxTargets> targets;
 
     void record(SEXP callee) {
         if (taken < CounterOverflow)
@@ -38,7 +40,41 @@ struct CallFeedback {
     }
 };
 
+struct RecordedType {
+    uint8_t sexptype : 5;
+    uint8_t scalar : 1;
+    uint8_t object : 1;
+    uint8_t attribs : 1;
+    RecordedType() {}
+    RecordedType(SEXP s);
+    bool operator==(const RecordedType& other) {
+        return memcmp(this, &other, sizeof(RecordedType)) == 0;
+    }
+};
 static_assert(sizeof(CallFeedback) == 7 * sizeof(uint32_t),
+              "Size needs to fit inside a record_ bc immediate args");
+
+struct TypeFeedback {
+    static constexpr unsigned MaxTypes = 3;
+    uint8_t numTypes;
+
+    std::array<RecordedType, MaxTypes> seen;
+
+    TypeFeedback() {}
+
+    void record(SEXP e) {
+        RecordedType type(e);
+        if (numTypes < MaxTypes) {
+            int i = 0;
+            for (; i < numTypes; ++i)
+                if (seen[i] == type)
+                    break;
+            if (i == numTypes)
+                seen[numTypes++] = type;
+        }
+    }
+};
+static_assert(sizeof(TypeFeedback) == sizeof(uint32_t),
               "Size needs to fit inside a record_ bc immediate args");
 
 #pragma pack(pop)

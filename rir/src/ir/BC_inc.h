@@ -9,6 +9,7 @@
 #include "R/r.h"
 #include "common.h"
 
+#include <array>
 #include <vector>
 
 #include "ir/RuntimeFeedback.h"
@@ -129,6 +130,8 @@ class BC {
         NumLocals loc;
         LocalsCopy loc_cpy;
         CallFeedback callFeedback;
+        TypeFeedback binopFeedback[2];
+        ImmediateArguments() { memset(this, 0, sizeof(ImmediateArguments)); }
     };
 
     static Immediate readImmediate(Opcode** pc) {
@@ -143,8 +146,8 @@ class BC {
     std::vector<ArgIdx> immediateCallArguments;
     std::vector<PoolIdx> callArgumentNames;
 
-    BC() : bc(Opcode::invalid_), immediate({{0}}) {}
-    
+    BC() : bc(Opcode::invalid_) {}
+
     BC(Opcode* pc) {
         bc = *pc;
         pc++;
@@ -396,9 +399,10 @@ class BC {
                           SEXP ast);
     inline static BC staticCall(size_t nargs, SEXP ast, SEXP target);
     inline static BC recordCall();
+    inline static BC recordBinop();
 
   private:
-    explicit BC(Opcode bc) : bc(bc), immediate({{0}}) {}
+    explicit BC(Opcode bc) : bc(bc) {}
     BC(Opcode bc, ImmediateArguments immediate)
         : bc(bc), immediate(immediate) {}
     BC(Opcode bc, ImmediateArguments immediate, const std::vector<FunIdx>& args,
@@ -469,7 +473,7 @@ class BC {
 
     inline static ImmediateArguments decodeImmediateArguments(Opcode bc,
                                                               Opcode* pc) {
-        ImmediateArguments immediate = {{0}};
+        ImmediateArguments immediate;
         switch (bc) {
         case Opcode::push_:
         case Opcode::ldfun_:
@@ -531,6 +535,10 @@ class BC {
             break;
         case Opcode::record_call_:
             immediate.callFeedback = *(CallFeedback*)pc;
+            break;
+        case Opcode::record_binop_:
+            immediate.binopFeedback[0] = *((TypeFeedback*)pc);
+            immediate.binopFeedback[1] = *((TypeFeedback*)pc + 1);
             break;
         case Opcode::nop_:
         case Opcode::make_env_:

@@ -1,4 +1,3 @@
-
 #ifndef interpreter_context_h
 #define interpreter_context_h
 

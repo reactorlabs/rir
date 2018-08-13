@@ -444,5 +444,6 @@ DEF_INSTR(int3_, 0, 0, 0, 1)
  * heavy in size.
  */
 DEF_INSTR(record_call_, 7, 1, 1, 0)
+DEF_INSTR(record_binop_, 2, 2, 2, 0)
 
 #undef DEF_INSTR

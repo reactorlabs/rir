@@ -313,6 +313,7 @@ BC BC::staticCall(size_t nargs, SEXP ast, SEXP target) {
     return BC(Opcode::static_call_, im);
 }
 BC BC::recordCall() { return BC(Opcode::record_call_); }
+BC BC::recordBinop() { return BC(Opcode::record_binop_); }
 
 } // rir
 
