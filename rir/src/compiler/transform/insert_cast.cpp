@@ -26,11 +26,11 @@ pir::Instruction* InsertCast::cast(pir::Value* v, PirType t, Value* env) {
     return nullptr;
 }
 
-void InsertCast::operator()(Value* env) {
-    Visitor::run(start, [&](BB* bb) { apply(bb, env); });
+void InsertCast::operator()() {
+    Visitor::run(start, [&](BB* bb) { apply(bb); });
 }
 
-void InsertCast::apply(BB* bb, Value* env) {
+void InsertCast::apply(BB* bb) {
     auto ip = bb->begin();
     while (ip != bb->end()) {
         Instruction* instr = *ip;
