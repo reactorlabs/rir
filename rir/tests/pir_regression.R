@@ -7,3 +7,42 @@ f <- pir.compile(rir.compile(function(x) sys.frame(x)))
 g <- pir.compile(rir.compile(function(y) y))
 h <- pir.compile(rir.compile(function() g(f(2))))
 h()  # aborts if g's environment got elided
+
+
+
+
+{
+  f <- pir.compile(rir.compile(function(gpars) {
+    numnotnull <- function(gparname) {
+      match(gparname, names(gpars))
+      gpars[[gparname]]
+    }
+    numnotnull('a')
+    numnotnull('c')
+  }))
+  fc <- pir.compile(rir.compile(function() {
+   f(list(a=1))
+  }))
+  fc()
+}
+
+
+
+
+{
+  validGP <- pir.compile(rir.compile(function(gpars) {
+    check.length <- function(gparname) {
+        NULL
+    }
+    numnotnull <- function(gparname) {
+      if (match(gparname, names(gpars))) {
+          check.length(gparname)
+      }   
+    }
+    numnotnull('a')
+  }))
+  
+  rir.compile(function() {
+     validGP(list(a=1))
+  })()
+}
