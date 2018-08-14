@@ -7,6 +7,8 @@
 #include "ir/Compiler.h"
 #include "rir_2_pir.h"
 
+#include <sstream>
+
 namespace rir {
 namespace pir {
 
@@ -102,12 +104,7 @@ bool StackMachine::tryRunCurrentBC(const Rir2Pir& rir2pir, Builder& insert) {
         break;
 
     case Opcode::guard_fun_:
-        if (rir2pir.compiler.debug.includes(DebugFlag::ShowWarnings)) {
-            std::cout << "warn: guard ignored "
-                      << CHAR(PRINTNAME(
-                             rir::Pool::get(bc.immediate.guard_fun_args.name)))
-                      << "\n";
-        }
+        rir2pir.compiler.getLog().warningBC("Guard ignored", bc);
         break;
 
     case Opcode::swap_:

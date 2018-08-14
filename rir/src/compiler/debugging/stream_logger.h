@@ -46,7 +46,7 @@ class StreamLogger {
     // void afterLiveness(SSAAllocator&);
     void finalPIR(Code*);
     void rirFromPir(rir::Function* function);
-    void warningBC(const char*, rir::BC bc);
+    void warningBC(std::string, rir::BC bc);
     void failCompilingPir();
     void finish(rir::Function*, std::stringstream&);
 

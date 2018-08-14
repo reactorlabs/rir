@@ -1,4 +1,5 @@
 #include "stream_logger.h"
+#include "../../utils/Pool.h"
 #include <iomanip>
 
 namespace rir {
@@ -101,10 +102,14 @@ void StreamLogger::finish(rir::Function* function, std::stringstream& stream) {
     }
 }
 
-void StreamLogger::warningBC(const char* warning, rir::BC bc) {
+void StreamLogger::warningBC(std::string warning, rir::BC bc) {
     if (options.includes(DebugFlag::ShowWarnings)) {
         getLog() << "Warning" << warning << ": ";
-        bc.print(getLog());
+        if (warning.compare("Guard ignored") == 0) {
+            CHAR(PRINTNAME(rir::Pool::get(bc.immediate.guard_fun_args.name)));
+        } else {
+            bc.print(getLog());
+        }
         getLog() << "\n";
     }
 }
