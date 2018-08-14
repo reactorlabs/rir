@@ -19,7 +19,6 @@ class StreamLogger {
   public:
     StreamLogger(DebugOptions options) : options(options) {}
     ~StreamLogger() {
-        std::cout << "Cantidad de streams: " << streams.size() << "\n\n";
         for (std::map<rir::Function*, std::stringstream*>::iterator it =
                  streams.begin();
              it != streams.end(); ++it) {
