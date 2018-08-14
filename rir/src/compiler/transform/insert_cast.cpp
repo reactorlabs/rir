@@ -5,9 +5,9 @@
 namespace rir {
 namespace pir {
 
-pir::Instruction* InsertCast::cast(pir::Value* v, PirType t) {
+pir::Instruction* InsertCast::cast(pir::Value* v, PirType t, Value* env) {
     if (v->type.maybeLazy() && !t.maybeLazy()) {
-        return new pir::Force(v);
+        return new pir::Force(v, env);
     }
     if (v->type.maybeMissing() && !t.maybeMissing()) {
         return new pir::ChkMissing(v);
@@ -40,7 +40,7 @@ void InsertCast::apply(BB* bb) {
         }
         instr->eachArg([&](InstrArg& arg) {
             while (!arg.type().isSuper(arg.val()->type)) {
-                auto c = cast(arg.val(), arg.type());
+                auto c = cast(arg.val(), arg.type(), env);
                 if (!c) {
                     bb->print(std::cerr);
                     assert(false);
@@ -53,5 +53,6 @@ void InsertCast::apply(BB* bb) {
         ip++;
     }
 }
-}
-}
+
+} // namespace pir
+} // namespace rir

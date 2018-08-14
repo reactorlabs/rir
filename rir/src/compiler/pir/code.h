@@ -18,10 +18,11 @@ class Code {
 
     size_t nextBBId = 0;
 
-    Code();
+    Code() {}
     void print(std::ostream&);
     ~Code();
 };
+
 }
 }
 

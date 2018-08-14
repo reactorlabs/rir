@@ -33,7 +33,8 @@ class Builder {
         bb = b;
     }
 };
-}
-}
+
+} // namespace pir
+} // namespace rir
 
 #endif

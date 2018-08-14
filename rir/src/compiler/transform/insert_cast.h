@@ -15,12 +15,13 @@ namespace pir {
  */
 class InsertCast {
     BB* start;
+    Value* env;
     void apply(BB* b);
 
   public:
-    static pir::Instruction* cast(pir::Value* v, PirType t);
+    static pir::Instruction* cast(pir::Value* v, PirType t, Value* env);
 
-    InsertCast(BB* s) : start(s) {}
+    InsertCast(BB* s, Value* e) : start(s), env(e) {}
     void operator()();
 };
 }

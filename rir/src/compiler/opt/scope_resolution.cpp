@@ -89,12 +89,16 @@ class TheScopeResolution {
                                 ld->replaceUsesWith(val);
                                 return;
                             }
-                            auto fz = new Force(val);
-                            auto ch = new ChkClosure(fz);
-                            bb->replace(ip, fz);
-                            next = bb->insert(ip + 1, ch);
-                            next++;
-                            ld->replaceUsesWith(ch);
+                            // TODO: for now, turn this off if the value may
+                            // need forcing
+                            //       (because we need a way to get the
+                            //       environment where the ldfun would be
+                            //       executed)
+                            if (!val->type.maybeLazy()) {
+                                auto ch = new ChkClosure(val);
+                                bb->replace(ip, ch);
+                                ld->replaceUsesWith(ch);
+                            }
                         };
                         // This load can be resolved to a unique value
                         aval.ifSingleValue([&](Value* val) {

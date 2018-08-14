@@ -92,5 +92,6 @@ void BB::gc() {
         delete i;
     deleted.clear();
 }
-}
-}
+
+} // namespace pir
+} // namespace rir

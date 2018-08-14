@@ -63,6 +63,7 @@ class Closure : public Code {
     }
 
 };
+
 } // namespace pir
 } // namespace rir
 

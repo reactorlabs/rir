@@ -27,7 +27,8 @@ class Promise : public Code {
     Promise(Closure* fun, unsigned id, unsigned src)
         : id(id), fun(fun), srcPoolIdx(src) {}
 };
-}
-}
+
+} // namespace pir
+} // namespace rir
 
 #endif

@@ -88,7 +88,7 @@ class BB {
     Instrs deleted;
 };
 
-}
-}
+} // namespace pir
+} // namespace rir
 
 #endif

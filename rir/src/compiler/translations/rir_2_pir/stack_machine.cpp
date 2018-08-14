@@ -77,7 +77,7 @@ bool StackMachine::tryRunCurrentBC(const Rir2Pir& rir2pir, Builder& insert) {
 
     case Opcode::ldvar_:
         v = insert(new LdVar(bc.immediateConst(), env));
-        push(insert(new Force(v)));
+        push(insert(new Force(v, env)));
         break;
 
     case Opcode::stvar_:

@@ -291,13 +291,14 @@ static Test tests[] = {
     Test("test_inline", []() { return test42("{f <- function() 42L; f()}"); }),
     Test("test_inline_two",
          []() {
-             return test42(
-                 "{f <- function(val, fun) fun(val); f(42L, function(x)x)}");
+             return test42("{f <- function(val) (function(x) x)(val); f(42L)}");
          }),
     Test("test_inline_arg",
          []() { return test42("{f <- function(x) x; f(42L)}"); }),
     Test("test_assign",
-         []() { return test42("{y<-42L; if (arg1) x<-y else x<-y; x}"); }),
+         []() {
+             return test42("{y<-42L; t<-FALSE; if (t) x<-y else x<-y; x}");
+         }),
     Test(
         "test_super_assign",
         []() { return test42("{x <- 0; f <- function() x <<- 42L; f(); x}"); }),
@@ -312,7 +313,7 @@ static Test tests[] = {
                  "fun <- function(a) {f <- function(x) x; f(a[[1]])}");
          }),
     Test("context_load",
-         []() { return canRemoveEnvironment("f <- function() a"); }),
+         []() { return canRemoveEnvironment("f <- function() 123"); }),
     Test("super_assign", &testSuperAssign),
     Test("loop",
          []() {
@@ -326,8 +327,9 @@ static Test tests[] = {
          }),
     Test("merge_missing_bl",
          []() {
-             return !hasLoadVar("theFun <- function(a) {if (a) {q <-1} else "
-                                "{if (a) q <- 3 else q <- 2}; q}");
+             return !hasLoadVar(
+                 "theFun <- function() {a<-FALSE; if (a) {q <-1} else "
+                 "{if (a) q <- 3 else q <- 2}; q}");
          }),
     Test("merge_missing",
          []() {
@@ -395,15 +397,12 @@ static Test tests[] = {
                                 "}",
                                 "1L, 10L");
          }),
-    /*
-        fails w/ "Cannot cast val to int$" for the loop index
-        Test("PIR to RIR: simple for loop",
-             []() {
-                 return testPir2Rir("foo",
-                                    "function(x) { s = 0; for (i in 1:x) s = s +
-                                    i; s }", "10L");
-             }),
-    */
+    Test("PIR to RIR: simple for loop",
+         []() {
+             return testPir2Rir(
+                 "foo", "function(x) { s = 0; for (i in 1:x) s = s + i; s }",
+                 "10L");
+         }),
     Test("PIR to RIR: inlined call",
          []() {
              return testPir2Rir("foo",
