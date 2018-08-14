@@ -277,6 +277,8 @@ class AbstractREnvironmentHierarchy
 
     AbstractLoad get(Value* env, SEXP e) const;
     AbstractLoad superGet(Value* env, SEXP e) const;
+
+    std::unordered_set<Value*> potentialParents(Value* env) const;
 };
 }
 }

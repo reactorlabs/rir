@@ -72,6 +72,31 @@ MkFunCls* AbstractREnvironmentHierarchy::findClosure(Value* env, Value* fun) {
     return AbstractREnvironment::UnknownClosure;
 }
 
+std::unordered_set<Value*>
+AbstractREnvironmentHierarchy::potentialParents(Value* env) const {
+    std::unordered_set<Value*> res;
+    assert(env);
+    while (this->count(env)) {
+        res.insert(env);
+        auto aenv = this->at(env);
+        auto parent = at(env).parentEnv();
+        assert(parent);
+        if (parent == AbstractREnvironment::UnknownParent &&
+            Env::parentEnv(env))
+            env = Env::parentEnv(env);
+        else
+            env = parent;
+        if (env == Env::notClosed())
+            return res;
+    }
+    // We did not reach the outer most environment of the current closure.
+    // Therefore we have no clue which envs are the actual parents. The
+    // conservative choice is to return all candidates.
+    for (auto e : *this)
+        res.insert(e.first);
+    return res;
+}
+
 AbstractLoad AbstractREnvironmentHierarchy::get(Value* env, SEXP e) const {
     assert(env);
     while (env != AbstractREnvironment::UnknownParent) {
