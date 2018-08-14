@@ -206,10 +206,10 @@ class BC {
     void write(CodeStream& cs) const;
 
     // Print it to stdout
-    void print() const;
-    void printImmediateArgs() const;
-    void printNames() const;
-    void printProfile() const;
+    void print(std::ostream& out) const;
+    void printImmediateArgs(std::ostream& out) const;
+    void printNames(std::ostream& out) const;
+    void printProfile(std::ostream& out) const;
 
     // Accessors to load immediate constant from the pool
     SEXP immediateConst() const;

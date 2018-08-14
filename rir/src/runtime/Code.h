@@ -6,6 +6,7 @@
 
 #include <cassert>
 #include <cstdint>
+#include <ostream>
 
 namespace rir {
 
@@ -156,8 +157,8 @@ struct Code {
         return sidx;
     }
 
-    void print();
-    void disassemble();
+    void print(std::ostream&);
+    void disassemble(std::ostream&);
 
     Code* next() { return (Code*)((uintptr_t) this + this->size()); }
 

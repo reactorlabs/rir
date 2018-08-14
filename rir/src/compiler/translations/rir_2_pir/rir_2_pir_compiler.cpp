@@ -14,23 +14,20 @@
 #include "../../opt/scope_resolution.h"
 #include "ir/BC.h"
 
-#include <iomanip>
-#include <iostream>
-
 #include "interpreter/runtime.h"
 
 namespace rir {
 namespace pir {
 
 Rir2PirCompiler::Rir2PirCompiler(Module* module, const DebugOptions& debug)
-    : RirCompiler(module, debug) {
+    : RirCompiler(module, debug), log(StreamLogger(debug)) {
     for (auto optimization : pirConfigurations()->pirOptimizations()) {
         translations.push_back(optimization->translator);
     }
 }
 
-void Rir2PirCompiler::compileClosure(SEXP closure, MaybeCls success,
-                                     Maybe fail) {
+void Rir2PirCompiler::compileClosure(SEXP closure, MaybeCls success, Maybe fail,
+                                     bool isIndependent = false) {
     assert(isValidClosureSEXP(closure));
     DispatchTable* tbl = DispatchTable::unpack(BODY(closure));
 
@@ -42,71 +39,57 @@ void Rir2PirCompiler::compileClosure(SEXP closure, MaybeCls success,
     FormalArgs formals(FORMALS(closure));
     rir::Function* srcFunction = tbl->first();
     compileClosure(srcFunction, formals, module->getEnv(CLOENV(closure)),
-                   success, fail);
+                   success, fail, isIndependent);
 }
 
 void Rir2PirCompiler::compileFunction(rir::Function* srcFunction,
                                       FormalArgs const& formals,
                                       MaybeCls success, Maybe fail) {
-    compileClosure(srcFunction, formals, Env::notClosed(),
-                   success, fail);
+    compileClosure(srcFunction, formals, Env::notClosed(), success, fail, true);
 }
 
 void Rir2PirCompiler::compileClosure(rir::Function* srcFunction,
                                      FormalArgs const& formals, Env* closureEnv,
-                                     MaybeCls success, Maybe fail) {
+                                     MaybeCls success, Maybe fail,
+                                     bool isIndependent) {
 
     // TODO: Support default arguments and dots
     if (formals.hasDefaultArgs || formals.hasDots)
         return fail();
+
+    if (isIndependent)
+        log.startLogging(srcFunction);
 
     bool failed = false;
     module->createIfMissing(
         srcFunction, formals.names, closureEnv, [&](Closure* pirFunction) {
             Builder builder(pirFunction, closureEnv);
             Rir2Pir rir2pir(*this, srcFunction);
-            if (debug.intersects(PrintDebugPasses)) {
-                std::cout << "\n***********************************************"
-                          << "***************\n";
-                std::cout << "*********** Start compiling: " << std::setw(20)
-                          << std::left << srcFunction << " ************\n\n";
-                if (debug.includes(DebugFlag::PrintOriginal)) {
-                    std::cout << "=============== Original version:\n";
-                    auto it = srcFunction->begin();
-                    while (it != srcFunction->end()) {
-                        (*it)->print();
-                        ++it;
-                    }
-                }
-            }
+            log.compilationInit();
 
             if (rir2pir.tryCompile(srcFunction->body(), builder)) {
-                if (debug.includes(DebugFlag::PrintEarlyPir)) {
-                    std::cout << " ========= Compiled to PIR Version:";
-                    builder.function->print(std::cout);
-                }
-                if (debug.intersects(PrintDebugPasses))
-                    std::cout << " ========= Finished optimization passed\n";
+                log.compilationEarlyPir(*(builder.function));
                 if (!Verify::apply(pirFunction)) {
                     failed = true;
-                    if (debug.includes(DebugFlag::ShowWarnings))
-                        std::cout << " Failed verification after p2r compile "
-                                  << srcFunction << "\n";
+                    log.failCompilingPir();
                     assert(false);
                     return false;
                 }
                 return true;
             }
-            if (debug.includes(DebugFlag::ShowWarnings))
-                std::cout << " Failed p2r compile " << srcFunction << "\n";
+            log.failCompilingPir();
             failed = true;
             return false;
         });
 
     if (failed)
         fail();
-    else
+    else {
+        module->get(srcFunction)->print(std::cout);
         success(module->get(srcFunction));
+    }
+
+    log.endLogging();
 }
 
 void Rir2PirCompiler::optimizeModule() {
@@ -136,9 +119,7 @@ void Rir2PirCompiler::optimizeModule() {
 void Rir2PirCompiler::printAfterPass(const std::string& pass,
                                      const std::string& category, Closure* f,
                                      size_t passnr) {
-    std::cout << "============== " << category << ": " << pass
-              << " == " << passnr << " ======================\n";
-    f->print(std::cout);
+    log.pirOptimizations(*f, category, pass, passnr);
 }
 
 void Rir2PirCompiler::applyOptimizations(Closure* f,

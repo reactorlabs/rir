@@ -18,7 +18,7 @@ typedef struct {
 } DeoptInfo;
 
 extern uint32_t Deoptimizer_register(rir::Opcode* oldPc);
-extern void Deoptimizer_print(uint32_t);
+extern void Deoptimizer_print(uint32_t, std::ostream&);
 extern rir::Opcode* Deoptimizer_pc(uint32_t);
 
 #ifdef __cplusplus

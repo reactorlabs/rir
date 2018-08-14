@@ -60,10 +60,8 @@ bool StackMachine::tryRunCurrentBC(const Rir2Pir& rir2pir, Builder& insert) {
     unsigned srcIdx = getSrcIdx();
     auto consumeSrcIdx = [&]() {
         if (srcIdx == 0)
-            if (rir2pir.compiler.debug.includes(DebugFlag::ShowWarnings)) {
-                std::cout << "warn: trying to use nil src idx:";
-                bc.print();
-            }
+            rir2pir.compiler.getLog().warningBC("trying to use nil src idx:",
+                                                bc);
         auto tmp = srcIdx;
         srcIdx = 0;
         return tmp;
@@ -215,7 +213,7 @@ bool StackMachine::tryRunCurrentBC(const Rir2Pir& rir2pir, Builder& insert) {
                     insert.bb = cont;
                     push(insert(new Phi({r1, r2}, {fallback, asExpected})));
                 },
-                insertGenericCall);
+                insertGenericCall, false);
         } else {
             insertGenericCall();
         }
@@ -279,7 +277,7 @@ bool StackMachine::tryRunCurrentBC(const Rir2Pir& rir2pir, Builder& insert) {
                 [&](Closure* f) {
                     push(insert(new StaticCall(env, f, args, target, ast)));
                 },
-                [&]() { failed = true; });
+                [&]() { failed = true; }, false);
             if (failed)
                 return false;
         }
@@ -499,10 +497,7 @@ bool StackMachine::tryRunCurrentBC(const Rir2Pir& rir2pir, Builder& insert) {
     // TODO: change to assert
     // assert(srcIdx == 0 && "source index is getting lost in translation");
     if (srcIdx)
-        if (rir2pir.compiler.debug.includes(DebugFlag::ShowWarnings)) {
-            std::cout << "warn: losing src index:";
-            bc.print();
-        }
+        rir2pir.compiler.getLog().warningBC("losing src index", bc);
 
     return true;
 }

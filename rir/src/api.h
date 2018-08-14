@@ -2,7 +2,7 @@
 #define API_H_
 
 #include "R/r.h"
-#include "compiler/debugging.h"
+#include "compiler/debugging/debugging.h"
 #include <stdint.h>
 
 #define REXPORT extern "C"

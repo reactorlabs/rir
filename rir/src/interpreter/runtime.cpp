@@ -1,6 +1,8 @@
 #include "runtime.h"
 #include "interp.h"
 
+#include <sstream>
+
 SEXP envSymbol;
 SEXP callSymbol;
 SEXP execName;
@@ -56,8 +58,10 @@ void printFunction(Function* f) {
         Rf_error("Wrong magic number -- not rir bytecode");
 
     // print respective code objects
+    std::stringstream output;
     for (Code* c : *f)
-        c->print();
+        c->print(output);
+    std::cout << output.str();
 }
 
 // TODO change gnu-r to expect ptr and not bool and we can get rid of the

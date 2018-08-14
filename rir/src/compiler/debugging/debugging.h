@@ -10,7 +10,7 @@ namespace pir {
 // !!!    one in pir.debugFlags in R/rir.R                      !!!
 
 #define LIST_OF_PIR_PRINT_DEBUGGING_FLAGS(V)                                   \
-    V(PrintOriginal)                                                           \
+    V(PrintEarlyRir)                                                           \
     V(PrintEarlyPir)                                                           \
     V(PrintOptimizationPasses)                                                 \
     V(PrintInlining)                                                           \
@@ -24,6 +24,7 @@ namespace pir {
     V(DryRun)                                                                  \
     V(PreserveVersions)                                                        \
     V(DebugAllocator)                                                          \
+    V(PrintIntoFiles)                                                          \
     LIST_OF_PIR_PRINT_DEBUGGING_FLAGS(V)
 
 enum class DebugFlag {

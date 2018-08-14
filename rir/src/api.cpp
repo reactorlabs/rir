@@ -33,13 +33,15 @@ REXPORT SEXP rir_disassemble(SEXP what, SEXP verbose) {
         Function* f = t->at(entry);
         Rprintf("= vtable slot <%d> (%p, invoked %u) =\n", entry, f,
                 f->invocationCount);
-        f->body()->disassemble();
+        std::stringstream output;
+        f->body()->disassemble(output);
         for (auto c : *f) {
             if (c != f->body()) {
                 Rprintf("\n [Prom %x]\n", (uintptr_t)c - (uintptr_t)f);
-                c->disassemble();
+                c->disassemble(output);
             }
         }
+        std::cout << output.str();
     }
 
     return R_NilValue;
@@ -148,13 +150,14 @@ SEXP pirCompile(SEXP what, pir::DebugOptions debug) {
                            cmp.optimizeModule();
 
                            // compile back to rir
-                           pir::Pir2RirCompiler p2r(debug);
+                           pir::Pir2RirCompiler p2r(debug, cmp.getLog());
                            p2r.compile(c, what);
                        },
                        [&]() {
                            if (debug.includes(pir::DebugFlag::ShowWarnings))
                                std::cerr << "Compilation failed\n";
-                       });
+                       },
+                       true);
 
     delete m;
     return what;
