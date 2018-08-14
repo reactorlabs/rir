@@ -87,12 +87,10 @@ class BC {
     typedef int32_t Jmp;
     typedef Jmp Label;
     struct CallFixedArgs {
-        Immediate unused;
         NumArgs nargs;
         Immediate ast;
     };
     struct StaticCallFixedArgs {
-        Immediate unused;
         NumArgs nargs;
         Immediate ast;
         Immediate target;
@@ -263,21 +261,19 @@ class BC {
         switch (bc) {
         // First handle the varlength BCs. In all three cases the number of
         // call arguments is the 2nd immediate argument and the
-        // instructions have 3 fixed length immediates. After that there are
+        // instructions have 2 fixed length immediates. After that there are
         // narg varlen immediates for the first two and 2*narg varlen
         // immediates in the last case.
         case Opcode::call_implicit_:
         case Opcode::named_call_: {
             pc++;
-            pc += sizeof(Immediate);
             Immediate nargs = *(Immediate*)pc;
-            return 1 + (3 + nargs) * sizeof(Immediate);
+            return 1 + (2 + nargs) * sizeof(Immediate);
         }
         case Opcode::named_call_implicit_: {
             pc++;
-            pc += sizeof(Immediate);
             Immediate nargs = *(Immediate*)pc;
-            return 1 + (3 + 2 * nargs) * sizeof(Immediate);
+            return 1 + (2 + 2 * nargs) * sizeof(Immediate);
         }
         default: {}
         }

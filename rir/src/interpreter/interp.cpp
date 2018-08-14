@@ -23,59 +23,54 @@ extern Rboolean R_Visible;
 using namespace rir;
 
 struct CallContext {
-    CallContext(Code* c, unsigned callsiteId, SEXP callee, size_t nargs,
-                Immediate ast, R_bcstack_t* stackArgs, Immediate* implicitArgs,
+    CallContext(Code* c, SEXP callee, size_t nargs, Immediate ast,
+                R_bcstack_t* stackArgs, Immediate* implicitArgs,
                 Immediate* names, SEXP callerEnv, Context* ctx)
-        : nargs_(nargs), stackArgs(stackArgs), implicitArgs(implicitArgs),
+        : nargs(nargs), stackArgs(stackArgs), implicitArgs(implicitArgs),
           names(names), caller(c->function()), callerEnv(callerEnv),
-          ast(cp_pool_at(ctx, ast)), callee_(callee) {
-        assert(!callee || TYPEOF(callee) == CLOSXP ||
-               TYPEOF(callee) == SPECIALSXP || TYPEOF(callee) == BUILTINSXP);
+          ast(cp_pool_at(ctx, ast)), callee(callee) {
+        assert(callee &&
+               (TYPEOF(callee) == CLOSXP || TYPEOF(callee) == SPECIALSXP ||
+                TYPEOF(callee) == BUILTINSXP));
     }
 
-    CallContext(Code* c, unsigned id, SEXP callee, size_t nargs, Immediate ast,
+    CallContext(Code* c, SEXP callee, size_t nargs, Immediate ast,
                 Immediate* implicitArgs, Immediate* names, SEXP callerEnv,
                 Context* ctx)
-        : CallContext(c, id, callee, nargs, ast, nullptr, implicitArgs, names,
+        : CallContext(c, callee, nargs, ast, nullptr, implicitArgs, names,
                       callerEnv, ctx) {}
 
-    CallContext(Code* c, unsigned id, SEXP callee, size_t nargs, Immediate ast,
+    CallContext(Code* c, SEXP callee, size_t nargs, Immediate ast,
                 R_bcstack_t* stackArgs, Immediate* names, SEXP callerEnv,
                 Context* ctx)
-        : CallContext(c, id, callee, nargs, ast, stackArgs, nullptr, names,
+        : CallContext(c, callee, nargs, ast, stackArgs, nullptr, names,
                       callerEnv, ctx) {}
 
-    CallContext(Code* c, unsigned id, SEXP callee, size_t nargs, Immediate ast,
+    CallContext(Code* c, SEXP callee, size_t nargs, Immediate ast,
                 Immediate* implicitArgs, SEXP callerEnv, Context* ctx)
-        : CallContext(c, id, callee, nargs, ast, nullptr, implicitArgs, nullptr,
+        : CallContext(c, callee, nargs, ast, nullptr, implicitArgs, nullptr,
                       callerEnv, ctx) {}
 
-    CallContext(Code* c, unsigned id, SEXP callee, size_t nargs, Immediate ast,
+    CallContext(Code* c, SEXP callee, size_t nargs, Immediate ast,
                 R_bcstack_t* stackArgs, SEXP callerEnv, Context* ctx)
-        : CallContext(c, id, callee, nargs, ast, stackArgs, nullptr, nullptr,
+        : CallContext(c, callee, nargs, ast, stackArgs, nullptr, nullptr,
                       callerEnv, ctx) {}
 
-    size_t nargs_;
-    R_bcstack_t* stackArgs;
-    Immediate* implicitArgs;
-    Immediate* names;
-    Function* caller;
-    SEXP callerEnv;
-    SEXP ast;
-
-    unsigned nargs() const { return nargs_; }
+    const size_t nargs;
+    const R_bcstack_t* stackArgs;
+    const Immediate* implicitArgs;
+    const Immediate* names;
+    const Function* caller;
+    const SEXP callerEnv;
+    const SEXP ast;
+    const SEXP callee;
 
     bool hasStackArgs() const { return stackArgs != nullptr; }
-    bool hasEagerCallee() const { return TYPEOF(callee()) == BUILTINSXP; }
+    bool hasEagerCallee() const { return TYPEOF(callee) == BUILTINSXP; }
     bool hasNames() const { return names; }
 
-    SEXP callee() const {
-        assert(callee_);
-        return callee_;
-    }
-
     Immediate implicitArgOffset(unsigned i) const {
-        assert(implicitArgs && i < nargs());
+        assert(implicitArgs && i < nargs);
         return implicitArgs[i];
     }
 
@@ -84,17 +79,15 @@ struct CallContext {
     }
 
     SEXP stackArg(unsigned i) const {
-        assert(stackArgs && i < nargs());
+        assert(stackArgs && i < nargs);
         return ostack_at_cell(stackArgs + i);
     }
 
     SEXP name(unsigned i, Context* ctx) const {
-        assert(hasNames() && i < nargs());
+        assert(hasNames() && i < nargs);
         return cp_pool_at(ctx, names[i]);
     }
 
-  protected:
-    SEXP callee_;
 };
 
 RIR_INLINE SEXP getSrcAt(Code* c, Opcode* pc, Context* ctx) {
@@ -224,7 +217,7 @@ SEXP createLegacyArgsListFromStackValues(const CallContext& call,
     SEXP result = R_NilValue;
     SEXP pos = result;
 
-    for (size_t i = 0; i < call.nargs(); ++i) {
+    for (size_t i = 0; i < call.nargs; ++i) {
 
         SEXP name = call.hasNames() ? call.name(i, ctx) : R_NilValue;
 
@@ -258,7 +251,7 @@ SEXP createLegacyArgsList(const CallContext& call, bool eagerCallee,
 
     // loop through the arguments and create a promise, unless it is a missing
     // argument
-    for (size_t i = 0; i < call.nargs(); ++i) {
+    for (size_t i = 0; i < call.nargs; ++i) {
         unsigned argi = call.implicitArgOffset(i);
         SEXP name = call.hasNames() ? call.name(i, ctx) : R_NilValue;
 
@@ -326,9 +319,11 @@ SEXP createLegacyArgsList(const CallContext& call, Context* ctx) {
 }
 
 SEXP rirCallTrampoline(const CallContext& call, Function* fun, SEXP env,
-                       SEXP arglist, R_bcstack_t* stackArgs, Context* ctx) {
+                       SEXP arglist, const R_bcstack_t* stackArgs,
+                       Context* ctx) {
     auto trampoline = [](RCNTXT* cntxt, const CallContext* call, Code* code,
-                         SEXP* env, R_bcstack_t* stackArgs, Context* ctx) {
+                         SEXP* env, const R_bcstack_t* stackArgs,
+                         Context* ctx) {
         int trampIn = ostack_length(ctx);
         if ((SETJMP(cntxt->cjmpbuf))) {
             assert(trampIn == ostack_length(ctx));
@@ -346,8 +341,8 @@ SEXP rirCallTrampoline(const CallContext& call, Function* fun, SEXP env,
     RCNTXT cntxt;
 
     initClosureContext(call.ast, &cntxt, env, call.callerEnv, arglist,
-                       call.callee());
-    closureDebug(call.ast, call.callee(), env, R_NilValue, &cntxt);
+                       call.callee);
+    closureDebug(call.ast, call.callee, env, R_NilValue, &cntxt);
 
     // Warning: call.popArgs() between initClosureContext and trampoline will
     // result in broken stack on non-local returns.
@@ -359,7 +354,7 @@ SEXP rirCallTrampoline(const CallContext& call, Function* fun, SEXP env,
         trampoline(&cntxt, &call, code, &cntxt.cloenv, stackArgs, ctx);
     PROTECT(result);
 
-    endClosureDebug(call.ast, call.callee(), env);
+    endClosureDebug(call.ast, call.callee, env);
     endClosureContext(&cntxt, result);
 
     UNPROTECT(1);
@@ -403,11 +398,11 @@ SEXP legacySpecialCall(const CallContext& call, Context* ctx) {
     assert(call.ast != R_NilValue);
 
     // get the ccode
-    CCODE f = getBuiltin(call.callee());
-    int flag = getFlag(call.callee());
+    CCODE f = getBuiltin(call.callee);
+    int flag = getFlag(call.callee);
     R_Visible = static_cast<Rboolean>(flag != 1);
     // call it with the AST only
-    SEXP result = f(call.ast, call.callee(), CDR(call.ast), call.callerEnv);
+    SEXP result = f(call.ast, call.callee, CDR(call.ast), call.callerEnv);
     if (flag < 2)
         R_Visible = static_cast<Rboolean>(flag != 1);
     return result;
@@ -415,22 +410,22 @@ SEXP legacySpecialCall(const CallContext& call, Context* ctx) {
 
 SEXP legacyCallWithArgslist(const CallContext& call, SEXP argslist,
                             Context* ctx) {
-    if (TYPEOF(call.callee()) == BUILTINSXP) {
+    if (TYPEOF(call.callee) == BUILTINSXP) {
         // get the ccode
-        CCODE f = getBuiltin(call.callee());
-        int flag = getFlag(call.callee());
+        CCODE f = getBuiltin(call.callee);
+        int flag = getFlag(call.callee);
         if (flag < 2)
             R_Visible = static_cast<Rboolean>(flag != 1);
         // call it
-        SEXP result = f(call.ast, call.callee(), argslist, call.callerEnv);
+        SEXP result = f(call.ast, call.callee, argslist, call.callerEnv);
         if (flag < 2)
             R_Visible = static_cast<Rboolean>(flag != 1);
         return result;
     }
 
-    assert(TYPEOF(call.callee()) == CLOSXP &&
-           TYPEOF(BODY(call.callee())) != EXTERNALSXP);
-    return Rf_applyClosure(call.ast, call.callee(), argslist, call.callerEnv,
+    assert(TYPEOF(call.callee) == CLOSXP &&
+           TYPEOF(BODY(call.callee)) != EXTERNALSXP);
+    return Rf_applyClosure(call.ast, call.callee, argslist, call.callerEnv,
                            R_NilValue);
 }
 
@@ -445,7 +440,7 @@ SEXP legacyCall(const CallContext& call, Context* ctx) {
 
 SEXP closureArgumentAdaptor(const CallContext& call, SEXP arglist,
                             SEXP suppliedvars) {
-    SEXP op = call.callee();
+    SEXP op = call.callee;
     if (FORMALS(op) == R_NilValue && arglist == R_NilValue)
         return Rf_NewEnvironment(R_NilValue, R_NilValue, CLOENV(op));
 
@@ -527,14 +522,14 @@ unsigned dispatch(const CallContext& call, DispatchTable* vt) {
     // Try to dispatch to slot 1
     if (call.hasNames() ||
         /* TODO: length is waay slow. Will be fixed by signatures */
-        call.nargs() != (size_t)Rf_length(FORMALS(call.callee()))) {
+        call.nargs != (size_t)Rf_length(FORMALS(call.callee))) {
         return 0;
     }
 
     // TODO: add support to `...` passing, ie. we pass our ellipsis arg
     // to the callee
     if (!call.hasStackArgs()) {
-        for (size_t i = 0; i < call.nargs(); ++i)
+        for (size_t i = 0; i < call.nargs; ++i)
             if (call.implicitArgOffset(i) == DOTS_ARG_IDX)
                 return 0;
     }
@@ -546,7 +541,7 @@ unsigned dispatch(const CallContext& call, DispatchTable* vt) {
 // is for example the case, if we tried to dispatch).
 SEXP rirCall(const CallContext& call, SEXP actuals, Context* ctx) {
     assert(actuals);
-    SEXP body = BODY(call.callee());
+    SEXP body = BODY(call.callee);
     assert(isValidDispatchTableSEXP(body));
 
     auto table = DispatchTable::unpack(body);
@@ -584,7 +579,7 @@ SEXP rirCall(const CallContext& call, SEXP actuals, Context* ctx) {
 
 // Call a RIR function. Arguments are still untouched.
 SEXP rirCall(const CallContext& call, Context* ctx) {
-    SEXP body = BODY(call.callee());
+    SEXP body = BODY(call.callee);
     assert(isValidDispatchTableSEXP(body));
 
     auto table = DispatchTable::unpack(body);
@@ -595,7 +590,7 @@ SEXP rirCall(const CallContext& call, Context* ctx) {
 
     fun->registerInvocation();
     if (slot == 0 && fun->invocationCount == 2) {
-        ctx->optimizer(call.callee());
+        ctx->optimizer(call.callee);
         slot = dispatch(call, table);
         needsEnv = slot == 0;
         fun = table->at(slot);
@@ -636,16 +631,16 @@ SEXP rirCall(const CallContext& call, Context* ctx) {
 }
 
 SEXP doCall(const CallContext& call, Context* ctx) {
-    assert(call.callee());
+    assert(call.callee);
 
     auto apply = [&](const CallContext& call) {
-        switch (TYPEOF(call.callee())) {
+        switch (TYPEOF(call.callee)) {
         case SPECIALSXP:
             return legacySpecialCall(call, ctx);
         case BUILTINSXP:
             return legacyCall(call, ctx);
         case CLOSXP: {
-            if (TYPEOF(BODY(call.callee())) != EXTERNALSXP)
+            if (TYPEOF(BODY(call.callee)) != EXTERNALSXP)
                 return legacyCall(call, ctx);
             return rirCall(call, ctx);
         }
@@ -1395,10 +1390,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env,
             int ttt = R_PPStackTop;
 
             // Callee is TOS
-            // Arguments are immediate (in the CallSite struct), given as
-            // promise code indices.
-            Immediate id = readImmediate();
-            advanceImmediate();
+            // Arguments and names are immediate given as promise code indices.
             size_t n = readImmediate();
             advanceImmediate();
             size_t ast = readImmediate();
@@ -1407,7 +1399,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env,
             advanceImmediateN(n);
             auto names = (Immediate*)pc;
             advanceImmediateN(n);
-            CallContext call(c, id, ostack_top(ctx), n, ast, arguments, names,
+            CallContext call(c, ostack_top(ctx), n, ast, arguments, names,
                              getenv(), ctx);
             res = doCall(call, ctx);
             ostack_pop(ctx); // callee
@@ -1441,18 +1433,15 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env,
             int ttt = R_PPStackTop;
 
             // Callee is TOS
-            // Arguments are immediate (in the CallSite struct), given as
-            // promise code indices.
-            Immediate id = readImmediate();
-            advanceImmediate();
+            // Arguments are immediate given as promise code indices.
             size_t n = readImmediate();
             advanceImmediate();
             size_t ast = readImmediate();
             advanceImmediate();
             auto arguments = (Immediate*)pc;
             advanceImmediateN(n);
-            CallContext call(c, id, ostack_top(ctx), n, ast, arguments,
-                             getenv(), ctx);
+            CallContext call(c, ostack_top(ctx), n, ast, arguments, getenv(),
+                             ctx);
             res = doCall(call, ctx);
             ostack_pop(ctx); // callee
             ostack_push(ctx, res);
@@ -1467,20 +1456,18 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env,
             int ttt = R_PPStackTop;
 
             // Stack contains [callee, arg1, ..., argn]
-            Immediate id = readImmediate();
-            advanceImmediate();
             Immediate n = readImmediate();
             advanceImmediate();
             size_t ast = readImmediate();
             advanceImmediate();
-            CallContext call(c, id, ostack_at(ctx, n), n, ast,
+            CallContext call(c, ostack_at(ctx, n), n, ast,
                              ostack_cell_at(ctx, n - 1), getenv(), ctx);
             res = doCall(call, ctx);
             ostack_popn(ctx, n + 1);
             ostack_push(ctx, res);
 
             assert(ttt == R_PPStackTop);
-            assert(lll - call.nargs() == ostack_length(ctx));
+            assert(lll - call.nargs == (unsigned)ostack_length(ctx));
             NEXT();
         }
 
@@ -1489,22 +1476,20 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env,
             int ttt = R_PPStackTop;
 
             // Stack contains [callee, arg1, ..., argn]
-            Immediate id = readImmediate();
-            advanceImmediate();
             Immediate n = readImmediate();
             advanceImmediate();
             size_t ast = readImmediate();
             advanceImmediate();
             auto names = (Immediate*)pc;
             advanceImmediateN(n);
-            CallContext call(c, id, ostack_at(ctx, n), n, ast,
+            CallContext call(c, ostack_at(ctx, n), n, ast,
                              ostack_cell_at(ctx, n - 1), names, getenv(), ctx);
             res = doCall(call, ctx);
             ostack_popn(ctx, n + 1);
             ostack_push(ctx, res);
 
             assert(ttt == R_PPStackTop);
-            assert(lll - call.nargs() == ostack_length(ctx));
+            assert(lll - call.nargs == (unsigned)ostack_length(ctx));
             NEXT();
         }
 
@@ -1513,8 +1498,6 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env,
             int ttt = R_PPStackTop;
 
             // Stack contains [arg1, ..., argn], callee is immediate
-            Immediate id = readImmediate();
-            advanceImmediate();
             Immediate n = readImmediate();
             advanceImmediate();
             Immediate ast = readImmediate();
@@ -1527,14 +1510,14 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env,
             // not accessing the environment. But, it is also used for other
             // static calls, so we should probably split the two uses into two
             // instructions.
-            CallContext call(c, id, callee, n, ast, ostack_cell_at(ctx, n - 1),
+            CallContext call(c, callee, n, ast, ostack_cell_at(ctx, n - 1),
                              *env, ctx);
             res = doCall(call, ctx);
             ostack_popn(ctx, n);
             ostack_push(ctx, res);
 
             assert(ttt == R_PPStackTop);
-            assert(lll - call.nargs() + 1 == ostack_length(ctx));
+            assert(lll - call.nargs + 1 == (unsigned)ostack_length(ctx));
             NEXT();
         }
 
