@@ -1160,6 +1160,9 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env,
         }
 
         INSTRUCTION(set_env_) {
+            // We need to clear the bindings cache, when we change the
+            // environment
+            memset(&bindingCache, 0, sizeof(bindingCache));
             SEXP e = ostack_pop(ctx);
             assert(TYPEOF(e) == ENVSXP && "Expected an environment on TOS.");
             *env = e;
