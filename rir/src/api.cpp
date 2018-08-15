@@ -178,7 +178,8 @@ REXPORT SEXP pir_tests() {
 // startup ---------------------------------------------------------------------
 
 SEXP pirOpt(SEXP fun) {
-    if (DispatchTable::check(fun))
+    assert(isValidClosureSEXP(fun));
+    if (DispatchTable::check(BODY(fun)))
         return pirCompile(fun, PirDebug);
     else
         return fun;
