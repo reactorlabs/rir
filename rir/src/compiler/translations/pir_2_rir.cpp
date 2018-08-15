@@ -666,7 +666,7 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                     if (Env::isStaticEnv(what)) {
                         cs << BC::push(Env::Cast(what)->rho);
                     } else if (what == Env::notClosed()) {
-                        cs << BC::callerEnv();
+                        cs << BC::parentEnv();
                     } else {
                         if (!alloc.hasSlot(what)) {
                             std::cerr << "Don't know how to load the env ";

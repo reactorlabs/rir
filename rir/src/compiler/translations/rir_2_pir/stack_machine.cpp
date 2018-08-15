@@ -471,7 +471,7 @@ bool StackMachine::tryRunCurrentBC(const Rir2Pir& rir2pir, Builder& insert) {
     // Opcodes that only come from PIR
     case Opcode::make_env_:
     case Opcode::get_env_:
-    case Opcode::caller_env_:
+    case Opcode::parent_env_:
     case Opcode::set_env_:
     case Opcode::ldvar_noforce_:
     case Opcode::ldvar_noforce_super_:

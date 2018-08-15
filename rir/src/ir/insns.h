@@ -20,9 +20,9 @@ DEF_INSTR(nop_, 0, 0, 0, 1)
 DEF_INSTR(make_env_, 0, 1, 1, 1)
 
 /**
- * caller_env_:: push caller env to tos
+ * parent_env_:: push lexically outer env to tos
  */
-DEF_INSTR(caller_env_, 0, 0, 1, 1)
+DEF_INSTR(parent_env_, 0, 0, 1, 1)
 
 /**
  * get_env_:: push current env to tos

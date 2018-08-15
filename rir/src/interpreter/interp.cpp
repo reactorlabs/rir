@@ -1148,8 +1148,10 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env,
             NEXT();
         }
 
-        INSTRUCTION(caller_env_) {
-            ostack_push(ctx, callCtxt->callerEnv);
+        INSTRUCTION(parent_env_) {
+            // Can only be used for pir. In pir we always have a closure that
+            // stores the lexical envrionment
+            ostack_push(ctx, CLOENV(callCtxt->callee));
             NEXT();
         }
 
