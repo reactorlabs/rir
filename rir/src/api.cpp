@@ -177,8 +177,8 @@ SEXP pirOpt(SEXP fun) { return pirCompile(fun, PirDebug); }
 
 bool startup() {
     auto pir = getenv("PIR_ENABLE");
-    if (pir && std::string(pir).compare("on") == 0) {
-        initializeRuntime(rir_compile, pirOpt);
+    if (pir && std::string(pir).compare("off") == 0) {
+        initializeRuntime(rir_compile, [](SEXP f) { return f; });
     } else if (pir && std::string(pir).compare("force") == 0) {
         initializeRuntime(
             [](SEXP f, SEXP env) { return pirOpt(rir_compile(f, env)); },
@@ -191,7 +191,8 @@ bool startup() {
             },
             [](SEXP f) { return f; });
     } else {
-        initializeRuntime(rir_compile, [](SEXP f) { return f; });
+        // default on
+        initializeRuntime(rir_compile, pirOpt);
     }
     return true;
 }
