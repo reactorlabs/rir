@@ -184,6 +184,10 @@ bool StackMachine::tryRunCurrentBC(const Rir2Pir& rir2pir, Builder& insert) {
             if (feedback.numTargets == 1)
                 monomorphic = feedback.targets[0];
         }
+        // TODO: currently speculative static calls break our tests, so we
+        // disable them here. But most probably we are just hiding some actual
+        // bugs with this, so we should REALLY REALLY enable it again!
+        monomorphic = nullptr;
 
         auto ast = bc.immediate.callFixedArgs.ast;
         auto insertGenericCall = [&]() {
