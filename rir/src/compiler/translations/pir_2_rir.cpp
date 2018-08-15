@@ -620,7 +620,7 @@ class Pir2Rir {
 size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
     toCSSA(code);
 
-    compiler.getLog().afterCSSA(code);
+    LOGGING(compiler.getLog().afterCSSA(code));
 
     SSAAllocator alloc(code,
                        compiler.debug.includes(DebugFlag::DebugAllocator));
@@ -1003,7 +1003,7 @@ void Pir2Rir::toCSSA(Code* code) {
         }
     });
 
-    DEBUGCODE(PHI_REMOVE_DEBUG, { log.phiInsertion(code); });
+    LOGGING(compiler.getLog().phiInsertion(code));
 }
 
 size_t Pir2Rir::getPromiseIdx(Context& ctx, Promise* p) {
@@ -1021,7 +1021,7 @@ rir::Function* Pir2Rir::finalize() {
     // (for now, calls, promises and operators do)
     // + how to deal with inlined stuff?
 
-    compiler.getLog().startLogging(cls->rirVersion());
+    LOGGING(compiler.getLog().startLogging(cls->rirVersion()));
     FunctionWriter function = FunctionWriter::create();
     Context ctx(function);
 
@@ -1035,13 +1035,13 @@ rir::Function* Pir2Rir::finalize() {
     ctx.pushBody(R_NilValue);
     size_t localsCnt = compileCode(ctx, cls);
     ctx.finalizeCode(localsCnt);
-    compiler.getLog().finalPIR(cls);
+    LOGGING(compiler.getLog().finalPIR(cls));
 #ifdef ENABLE_SLOWASSERT
     CodeVerifier::verifyFunctionLayout(function.function->container(),
                                        globalContext());
 #endif
-    compiler.getLog().rirFromPir(function.function);
-    compiler.getLog().endLogging();
+    LOGGING(compiler.getLog().rirFromPir(function.function));
+    LOGGING(compiler.getLog().endLogging());
     return function.function;
 }
 

@@ -8,8 +8,7 @@ namespace pir {
 void StreamLogger::startLogging(rir::Function* function) {
     if (options.intersects(PrintDebugPasses)) {
         if (!streams.count(function)) {
-            streams.insert(std::pair<rir::Function*, std::stringstream*>(
-                function, new std::stringstream()));
+            streams.emplace(function, new std::stringstream());
         }
         currentFunction.push(function);
     }
@@ -20,63 +19,58 @@ void StreamLogger::endLogging() {
         currentFunction.pop();
 }
 
-void StreamLogger::compilationInit() {
+void StreamLogger::compilationInit() const {
     if (options.intersects(PrintDebugPasses)) {
-        getLog() << "\n***********************************************"
-                 << "***************\n";
-        getLog() << "*********** Start compiling: " << std::setw(20)
-                 << std::left << currentFunction.top() << " ************\n\n";
+        this->header("Start compiling:", currentFunction.top(), getLog(), true);
         if (options.includes(DebugFlag::PrintEarlyRir)) {
-            getLog() << "=============== Original version:" << std::setw(16)
-                     << std::left << " ==========\n\n";
-            auto it = currentFunction.top()->begin();
-            while (it != currentFunction.top()->end()) {
-                (*it)->print(getLog());
-                ++it;
+            innerHeader(" Original version ");
+            for (auto code : *(currentFunction.top())) {
+                code->print(getLog());
             }
             getLog() << "\n";
         }
     }
 }
 
-void StreamLogger::compilationEarlyPir(Closure& closure) {
+void StreamLogger::compilationEarlyPir(Closure& closure) const {
     if (options.includes(DebugFlag::PrintEarlyPir)) {
-        getLog() << "\n========= Compiled to PIR Version" << std::setw(16)
-                 << std::left << " ==========\n";
+        innerHeader(" Compiled to PIR Version ");
         closure.print(getLog());
     }
 }
 
-void StreamLogger::pirOptimizations(Closure& closure,
+void StreamLogger::pirOptimizations(const Closure& closure,
                                     const std::string& category,
-                                    const std::string& pass, size_t passnr) {
-    getLog() << "============== " << category << ": " << pass
-             << " == " << passnr << std::setw(10) << std::left
-             << " ======================\n";
-    closure.print(getLog());
-}
-
-void StreamLogger::phiInsertion(Closure& closure) {
-    getLog() << "========= After phi copies inserted" << std::setw(14)
-             << std::left << " ==========\n";
-    closure.print(getLog());
-}
-
-void StreamLogger::rirFromPir(rir::Function* function) {
-    if (options.includes(DebugFlag::PrintFinalRir)) {
-        getLog() << "\n============= Final RIR Version" << std::setw(16)
-                 << std::left << " ==========\n";
-        auto it = function->begin();
-        while (it != function->end()) {
-            (*it)->print(getLog());
-            ++it;
-        }
+                                    const std::string& pass,
+                                    size_t passnr) const {
+    if (options.includes(DebugFlag::PrintOptimizationPasses)) {
+        std::stringstream ss;
+        ss << category << ": " << pass << " == " << passnr;
+        innerHeader(ss.str());
+        closure.print(getLog());
     }
 }
 
-void StreamLogger::afterCSSA(Code* code) {
+void StreamLogger::rirFromPir(rir::Function* function) const {
+    if (options.includes(DebugFlag::PrintFinalRir)) {
+        innerHeader(" Final RIR Version ");
+        for (auto code : *function) {
+            code->print(getLog());
+        }
+        getLog() << "\n";
+    }
+}
+
+void StreamLogger::phiInsertion(Code* code) const {
     if (options.includes(DebugFlag::PrintCSSA)) {
-        getLog() << " ========== PIR After Converting to CSSA\n";
+        innerHeader(" After Phi Copies Inserted ");
+        code->print(getLog());
+    }
+}
+
+void StreamLogger::afterCSSA(Code* code) const {
+    if (options.includes(DebugFlag::PrintCSSA)) {
+        innerHeader(" PIR After Converting to CSSA ");
         code->print(getLog());
     }
 }
@@ -86,26 +80,24 @@ void StreamLogger::afterCSSA(Code* code) {
             allocator.print(getLog());
 }*/
 
-void StreamLogger::finalPIR(Code* code) {
+void StreamLogger::finalPIR(Code* code) const {
     if (options.includes(DebugFlag::PrintFinalPir)) {
-        getLog() << "\n ========== Final PIR Version\n";
+        innerHeader(" Final PIR Version ");
         code->print(getLog());
     }
 }
 
-void StreamLogger::finish(rir::Function* function, std::stringstream& stream) {
+void StreamLogger::finish(rir::Function* function,
+                          std::stringstream& stream) const {
     if (options.intersects(PrintDebugPasses)) {
-        stream << "\n*********** Finished compiling: " << std::setw(17)
-               << std::left << function << " ************\n";
-        stream << "*************************************************"
-               << "*************\n";
+        header("Finished compiling:", function, stream, false);
     }
 }
 
-void StreamLogger::warningBC(std::string warning, rir::BC bc) {
+void StreamLogger::warningBC(std::string warning, rir::BC bc) const {
     if (options.includes(DebugFlag::ShowWarnings)) {
         getLog() << "Warning" << warning << ": ";
-        if (warning.compare("Guard ignored") == 0) {
+        if (warning.compare(WARNING_GUARD_STRING) == 0) {
             CHAR(PRINTNAME(rir::Pool::get(bc.immediate.guard_fun_args.name)));
         } else {
             bc.print(getLog());
@@ -114,11 +106,35 @@ void StreamLogger::warningBC(std::string warning, rir::BC bc) {
     }
 }
 
-void StreamLogger::failCompilingPir() {
+void StreamLogger::failCompilingPir() const {
     if (options.includes(DebugFlag::ShowWarnings))
         getLog() << " Failed verification after p2r compile "
                  << &currentFunction.top() << "\n";
 }
 
+void StreamLogger::header(std::string header, rir::Function* function,
+                          std::stringstream& stream, bool opening) const {
+    std::stringstream ss;
+    ss << " " << header << " " << function << " ";
+    stream << std::setfill('*') << std::left;
+    if (opening)
+        stream << "\n"
+               << std::setw(70) << ""
+               << "\n";
+    else
+        stream << "\n";
+    stream << std::left << std::setw(21) << "" << std::setw(49) << ss.str()
+           << "\n";
+    if (!opening)
+        stream << std::setw(70) << ""
+               << "\n";
+    stream << std::setfill(' ') << "\n";
+}
+
+void StreamLogger::innerHeader(std::string header) const {
+    getLog() << "\n"
+             << std::setfill('=') << std::setw(15) << "" << std::left
+             << std::setw(39) << header << std::setfill(' ') << "\n";
+}
 } // namespace pir
 } // namespace rir

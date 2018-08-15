@@ -187,7 +187,7 @@ void BC::printImmediateArgs(std::ostream& out) const {
         else if (arg == DOTS_ARG_IDX)
             out << " ...";
         else
-            out << std::hex << arg;
+            out << std::hex << arg << std::dec;
     }
     Rprintf(" ] ");
 }
@@ -258,7 +258,7 @@ void BC::print(std::ostream& out) const {
     case Opcode::stvar_:
     case Opcode::stvar_super_:
     case Opcode::missing_:
-        out << " " << CHAR(PRINTNAME((immediateConst())));
+        out << " " << CHAR(PRINTNAME(immediateConst()));
         break;
     case Opcode::guard_fun_: {
         SEXP name = Pool::get(immediate.guard_fun_args.name);
@@ -276,10 +276,10 @@ void BC::print(std::ostream& out) const {
         break;
     case Opcode::ldloc_:
     case Opcode::stloc_:
-        out << " " << immediate.loc;
+        out << " @" << immediate.loc;
         break;
     case Opcode::movloc_:
-        out << " " << immediate.loc_cpy.source << " -> "
+        out << " @" << immediate.loc_cpy.source << " -> @"
             << immediate.loc_cpy.target;
         break;
     case Opcode::is_:
@@ -388,7 +388,7 @@ void BC::print(std::ostream& out) const {
         break;
     case Opcode::promise_:
     case Opcode::push_code_:
-        out << " " << std::hex << immediate.fun;
+        out << " " << std::hex << immediate.fun << std::dec;
         break;
     case Opcode::beginloop_:
     case Opcode::brtrue_:

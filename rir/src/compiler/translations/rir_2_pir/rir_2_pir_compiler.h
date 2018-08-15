@@ -18,8 +18,6 @@ class Rir2PirCompiler : public RirCompiler {
     void compileFunction(rir::Function*, FormalArgs const&, MaybeCls success,
                          Maybe fail);
     void optimizeModule();
-    void printAfterPass(const std::string&, const std::string&, Closure*,
-                        size_t);
 
     StreamLogger& getLog() { return log; }
 

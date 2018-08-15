@@ -20,7 +20,7 @@ namespace rir {
 namespace pir {
 
 Rir2PirCompiler::Rir2PirCompiler(Module* module, const DebugOptions& debug)
-    : RirCompiler(module, debug), log(StreamLogger(debug)) {
+    : RirCompiler(module, debug), log(debug) {
     for (auto optimization : pirConfigurations()->pirOptimizations()) {
         translations.push_back(optimization->translator);
     }
@@ -58,42 +58,40 @@ void Rir2PirCompiler::compileClosure(rir::Function* srcFunction,
         return fail();
 
     if (isIndependent)
-        log.startLogging(srcFunction);
+        LOGGING(log.startLogging(srcFunction));
 
     bool failed = false;
     module->createIfMissing(
         srcFunction, formals.names, closureEnv, [&](Closure* pirFunction) {
             Builder builder(pirFunction, closureEnv);
             Rir2Pir rir2pir(*this, srcFunction);
-            log.compilationInit();
+            LOGGING(log.compilationInit());
 
             if (rir2pir.tryCompile(srcFunction->body(), builder)) {
-                log.compilationEarlyPir(*(builder.function));
+                LOGGING(log.compilationEarlyPir(*(builder.function)));
                 if (!Verify::apply(pirFunction)) {
                     failed = true;
-                    log.failCompilingPir();
+                    LOGGING(log.failCompilingPir());
                     assert(false);
                     return false;
                 }
                 return true;
             }
-            log.failCompilingPir();
+            LOGGING(log.failCompilingPir());
             failed = true;
             return false;
         });
 
     if (failed)
         fail();
-    else {
-        module->get(srcFunction)->print(std::cout);
+    else
         success(module->get(srcFunction));
-    }
 
-    log.endLogging();
+    LOGGING(log.endLogging());
 }
 
 void Rir2PirCompiler::optimizeModule() {
-    size_t passnr = 0;
+    LOGGING(size_t passnr = 0);
     module->eachPirFunction([&](Module::VersionedClosure& v) {
         auto f = v.current();
         if (debug.includes(DebugFlag::PreserveVersions))
@@ -109,26 +107,22 @@ void Rir2PirCompiler::optimizeModule() {
                 v.saveVersion();
             Inline::apply(f);
             if (debug.includes(DebugFlag::PrintInlining)) {
-                printAfterPass("inline", "Inlining", f, passnr++);
+                LOGGING(
+                    log.pirOptimizations(*f, "inline", "Inlining", passnr++));
             }
             applyOptimizations(f, "Optimizations After Inlining");
         });
     }
 }
 
-void Rir2PirCompiler::printAfterPass(const std::string& pass,
-                                     const std::string& category, Closure* f,
-                                     size_t passnr) {
-    log.pirOptimizations(*f, category, pass, passnr);
-}
-
 void Rir2PirCompiler::applyOptimizations(Closure* f,
                                          const std::string& category) {
-    size_t passnr = 0;
+    LOGGING(size_t passnr = 0);
     for (auto& translation : this->translations) {
         translation->apply(f);
-        if (debug.includes(DebugFlag::PrintOptimizationPasses))
-            printAfterPass(translation->getName(), category, f, passnr++);
+        LOGGING(log.pirOptimizations(*f, category, translation->getName(),
+                                     passnr++));
+
 #if 0
         assert(Verify::apply(f));
 #endif

@@ -205,7 +205,7 @@ class BC {
     // Used to serialize bc to CodeStream
     void write(CodeStream& cs) const;
 
-    // Print it to stdout
+    // Print it to the stream passed as argument
     void print(std::ostream& out) const;
     void printImmediateArgs(std::ostream& out) const;
     void printNames(std::ostream& out) const;

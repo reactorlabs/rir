@@ -19,7 +19,7 @@ class Code {
     size_t nextBBId = 0;
 
     Code() {}
-    void print(std::ostream&);
+    void print(std::ostream&) const;
     ~Code();
 };
 

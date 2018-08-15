@@ -8,7 +8,7 @@
 namespace rir {
 namespace pir {
 
-void Closure::print(std::ostream& out) {
+void Closure::print(std::ostream& out) const {
     out << "Closure " << this << "\n";
     Code::print(out);
     for (auto p : promises) {
@@ -17,7 +17,7 @@ void Closure::print(std::ostream& out) {
     }
 }
 
-void Closure::print() { print(std::cout); }
+const void Closure::print() { print(std::cout); }
 
 Promise* Closure::createProm(unsigned srcPoolIdx) {
     Promise* p = new Promise(this, promises.size(), srcPoolIdx);

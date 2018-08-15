@@ -104,7 +104,7 @@ bool StackMachine::tryRunCurrentBC(const Rir2Pir& rir2pir, Builder& insert) {
         break;
 
     case Opcode::guard_fun_:
-        rir2pir.compiler.getLog().warningBC("Guard ignored", bc);
+        rir2pir.compiler.getLog().warningBC(WARNING_GUARD_STRING, bc);
         break;
 
     case Opcode::swap_:

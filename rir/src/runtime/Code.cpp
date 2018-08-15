@@ -3,6 +3,8 @@
 #include "ir/BC.h"
 #include "utils/Pool.h"
 
+#include <iomanip>
+
 namespace rir {
 Code::Code(SEXP ast, unsigned cs, unsigned sourceLength, unsigned offset,
            bool isDefaultArg, size_t localsCnt)
@@ -17,11 +19,11 @@ void Code::disassemble(std::ostream& out) {
     while (pc < endCode()) {
         BC bc = BC::decode(pc);
 
-        out << " %5d " << ((uintptr_t)pc - (uintptr_t)code());
+        out << std::setw(5) << ((uintptr_t)pc - (uintptr_t)code());
 
         unsigned s = getSrcIdxAt(pc, true);
         if (s != 0)
-            out << "   ; " << dumpSexp(src_pool_at(globalContext(), s)).c_str()
+            out << "   ; " << dumpSexp(src_pool_at(globalContext(), s))
                 << "\n       ";
 
         // Print call ast
@@ -51,15 +53,16 @@ void Code::disassemble(std::ostream& out) {
 void Code::print(std::ostream& out) {
     out << "Code object (" << this << "offset" << std::hex << header << "(hex))"
         << "\n";
-    out << "Source: " << src << " index to src pool\n";
-    out << "Magic: " << std::hex << magic << "(hex)\n";
-    out << "Stack (o): " << stackLength << "\n";
-    out << "Code size: " << codeSize << "[B]\n";
+    out << "   Source: " << src << " index to src pool\n";
+    out << "   Magic: " << std::hex << magic << "(hex)\n";
+    out << "   Stack (o): " << stackLength << "\n";
+    out << "   Code size: " << codeSize << "[B]\n";
 
-    out << "Default arg? ";
-    isDefaultArgument ? out << "yes\n" : out << "no\n";
-    if (magic != CODE_MAGIC)
+    out << "   Default arg? " << (isDefaultArgument ? "yes\n" : "no") << "\n";
+    if (magic != CODE_MAGIC) {
         out << "Wrong magic number -- corrupted IR bytecode";
+        Rf_error("Wrong magic number -- corrupted IR bytecode");
+    }
 
     out << "\n";
     disassemble(out);
