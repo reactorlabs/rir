@@ -87,7 +87,8 @@ void Rir2PirCompiler::compileClosure(rir::Function* srcFunction,
     else
         success(module->get(srcFunction));
 
-    LOGGING(log.endLogging());
+    if (isIndependent)
+        LOGGING(log.endLogging());
 }
 
 void Rir2PirCompiler::optimizeModule() {

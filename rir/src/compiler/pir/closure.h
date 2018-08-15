@@ -2,7 +2,6 @@
 #define COMPILER_FUNCTION_H
 
 #include "../../runtime/Function.h"
-#include "R/r.h"
 #include "code.h"
 #include "pir.h"
 #include <functional>

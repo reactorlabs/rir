@@ -8,9 +8,18 @@ namespace pir {
 void StreamLogger::startLogging(rir::Function* function) {
     if (options.intersects(PrintDebugPasses)) {
         if (!streams.count(function)) {
-            streams.emplace(function, new std::stringstream());
+            std::ostream* o;
+            if (options.includes(DebugFlag::PrintIntoFiles)) {
+                // o = new std::ofstream();
+                //((std::ofstream*)o)->open(".pir/pirCompilation.data");
+            } else if (options.includes(DebugFlag::PrintIntoStdout)) {
+                o = &std::cout;
+            } else {
+                o = new std::stringstream();
+            }
+            streams.emplace(function, o);
+            currentFunction.push(function);
         }
-        currentFunction.push(function);
     }
 }
 
@@ -87,8 +96,7 @@ void StreamLogger::finalPIR(Code* code) const {
     }
 }
 
-void StreamLogger::finish(rir::Function* function,
-                          std::stringstream& stream) const {
+void StreamLogger::finish(rir::Function* function, std::ostream& stream) const {
     if (options.intersects(PrintDebugPasses)) {
         header("Finished compiling:", function, stream, false);
     }
@@ -113,7 +121,7 @@ void StreamLogger::failCompilingPir() const {
 }
 
 void StreamLogger::header(std::string header, rir::Function* function,
-                          std::stringstream& stream, bool opening) const {
+                          std::ostream& stream, bool opening) const {
     std::stringstream ss;
     ss << " " << header << " " << function << " ";
     stream << std::setfill('*') << std::left;

@@ -1,7 +1,6 @@
 #ifndef RIR_CODE_H
 #define RIR_CODE_H
 
-#include "R/r.h"
 #include "ir/BC_inc.h"
 
 #include <cassert>

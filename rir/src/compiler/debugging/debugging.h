@@ -33,6 +33,7 @@ const std::string WARNING_GUARD_STRING = "Guard ignored";
     V(PreserveVersions)                                                        \
     V(DebugAllocator)                                                          \
     V(PrintIntoFiles)                                                          \
+    V(PrintIntoStdout)                                                         \
     LIST_OF_PIR_PRINT_DEBUGGING_FLAGS(V)
 
 enum class DebugFlag {

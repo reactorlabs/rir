@@ -8,6 +8,7 @@
 #include <iostream>
 #include <map>
 //#include <fstream>
+#include <ostream>
 #include <sstream>
 #include <stack>
 
@@ -20,14 +21,15 @@ class StreamLogger {
     ~StreamLogger() {
         for (auto fun2stream : streams) {
             finish(fun2stream.first, *streams.at(fun2stream.first));
-            if (options.includes(DebugFlag::PrintIntoFiles)) {
-                // std::ofstream outFile;
-                // outFile.open(".pir/pirCompilation.data");
-                // outFile << stream.str();
-                // outFile.close();
-            } else
-                std::cout << fun2stream.second->str();
-            delete fun2stream.second;
+            if (options.includes(DebugFlag::PrintIntoStdout))
+                continue;
+            else {
+                if (options.includes(DebugFlag::PrintIntoFiles)) {
+                    //((std::ofstream*)fun2stream.second)->close();
+                } else
+                    std::cout << ((std::stringstream*)fun2stream.second)->str();
+                delete fun2stream.second;
+            }
         }
     }
 
@@ -47,16 +49,14 @@ class StreamLogger {
     void rirFromPir(rir::Function* function) const;
     void warningBC(std::string, rir::BC bc) const;
     void failCompilingPir() const;
-    void header(std::string, rir::Function*, std::stringstream&, bool) const;
+    void header(std::string, rir::Function*, std::ostream&, bool) const;
     void innerHeader(std::string) const;
-    void finish(rir::Function*, std::stringstream&) const;
+    void finish(rir::Function*, std::ostream&) const;
 
-    std::stringstream& getLog() const {
-        return *streams.at(currentFunction.top());
-    };
+    std::ostream& getLog() const { return *streams.at(currentFunction.top()); };
 
   private:
-    std::map<rir::Function*, std::stringstream*> streams;
+    std::map<rir::Function*, std::ostream*> streams;
     const DebugOptions options;
     std::stack<rir::Function*> currentFunction;
 };

@@ -1041,7 +1041,6 @@ rir::Function* Pir2Rir::finalize() {
                                        globalContext());
 #endif
     LOGGING(compiler.getLog().rirFromPir(function.function));
-    LOGGING(compiler.getLog().endLogging());
     return function.function;
 }
 
