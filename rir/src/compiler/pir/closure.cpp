@@ -17,7 +17,7 @@ void Closure::print(std::ostream& out) const {
     }
 }
 
-const void Closure::print() { print(std::cout); }
+void Closure::print() const { print(std::cout); }
 
 Promise* Closure::createProm(unsigned srcPoolIdx) {
     Promise* p = new Promise(this, promises.size(), srcPoolIdx);
