@@ -35,7 +35,7 @@ void Rir2PirCompiler::compileClosure(SEXP closure, MaybeCls success,
     DispatchTable* tbl = DispatchTable::unpack(BODY(closure));
 
     if (tbl->available(1)) {
-        if (!debug.includes(DebugFlag::ShowWarnings))
+        if (debug.includes(DebugFlag::ShowWarnings))
             std::cerr << "Closure already compiled to PIR\n";
     }
 
