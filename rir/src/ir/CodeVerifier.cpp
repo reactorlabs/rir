@@ -148,7 +148,6 @@ static Sources hasSources(Opcode bc) {
     case Opcode::dup2_:
     case Opcode::for_seq_size_:
     case Opcode::swap_:
-    case Opcode::int3_:
     case Opcode::make_unique_:
     case Opcode::set_shared_:
     case Opcode::return_:
@@ -167,6 +166,7 @@ static Sources hasSources(Opcode bc) {
     case Opcode::aslogical_:
     case Opcode::asbool_:
     case Opcode::missing_:
+    case Opcode::int3_:
         return Sources::May;
 
     case Opcode::invalid_:

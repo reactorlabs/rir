@@ -174,7 +174,9 @@ ScopeAnalysis::ScopeAnalysis(Closure* function) {
                              [&](AbstractLoad load) {
                                  loads.emplace(i, load);
                                  if (load.result.isUnknown()) {
-                                     allStoresObserved.insert(i->env());
+                                     for (auto env :
+                                          envs.potentialParents(i->env()))
+                                         allStoresObserved.insert(env);
                                  } else {
                                      load.result.eachSource([&](ValOrig& src) {
                                          observedStores.insert(src.origin);
@@ -182,7 +184,8 @@ ScopeAnalysis::ScopeAnalysis(Closure* function) {
                                  }
                              });
             if (i->leaksEnv()) {
-                allStoresObserved.insert(i->env());
+                for (auto env : envs.potentialParents(i->env()))
+                    allStoresObserved.insert(env);
             }
         });
 }
