@@ -2717,5 +2717,11 @@ SEXP rirEval_f(SEXP what, SEXP env) {
         return evalRirCodeExtCaller(fun->body(), globalContext(), &lenv);
     }
 
+    if (Function::check(what)) {
+        auto fun = Function::unpack(what);
+        fun->registerInvocation();
+        return evalRirCodeExtCaller(fun->body(), globalContext(), &lenv);
+    }
+
     assert(false && "Expected a code object or a dispatch table");
 }
