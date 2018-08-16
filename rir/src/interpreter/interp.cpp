@@ -1186,7 +1186,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env,
                 // special and builtin functions are ok
                 break;
             default:
-                error("attempt to apply non-function");
+                Rf_error("attempt to apply non-function");
             }
             ostack_push(ctx, res);
             NEXT();
@@ -1285,7 +1285,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env,
             if (res == R_UnboundValue) {
                 Rf_error("object not found");
             } else if (res == R_MissingArg) {
-                error("argument is missing, with no default");
+                Rf_error("argument is missing, with no default");
             }
 
             // if promise, evaluate & return
@@ -1549,7 +1549,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env,
                 // TODO for now - we might be fancier here later
                 break;
             default:
-                error("attempt to apply non-function");
+                Rf_error("attempt to apply non-function");
             }
             NEXT();
         }
