@@ -1,5 +1,8 @@
 #include "stream_logger.h"
-#include "../../utils/Pool.h"
+#include "../pir/pir_impl.h"
+#include "runtime/Function.h"
+#include "utils/Pool.h"
+
 #include <iomanip>
 
 namespace rir {
@@ -10,8 +13,9 @@ void StreamLogger::startLogging(rir::Function* function) {
         if (!streams.count(function)) {
             std::ostream* o;
             if (options.includes(DebugFlag::PrintIntoFiles)) {
-                // o = new std::ofstream();
-                //((std::ofstream*)o)->open(".pir/pirCompilation.data");
+                o = new std::ofstream();
+                // TODO: shouldn't the function identifier be part of the name?
+                ((std::ofstream*)o)->open(".pir/pirCompilation.data");
             } else if (options.includes(DebugFlag::PrintIntoStdout)) {
                 o = &std::cout;
             } else {

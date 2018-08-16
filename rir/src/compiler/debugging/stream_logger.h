@@ -1,25 +1,22 @@
 #ifndef PIR_LOGGER_H
 #define PIR_LOGGER_H
 
-#include "../../runtime/Function.h"
-#include "../pir/pir_impl.h"
+#include "../pir/pir.h"
 #include "debugging.h"
 
+#include <fstream>
 #include <iostream>
 #include <map>
-//#include <fstream>
 #include <ostream>
 #include <sstream>
 #include <stack>
 
 namespace rir {
-namespace pir {
 
-/*
-  Support for streams is currently commented because including fstream
-  raises a compilation error. The problem is that fstream uses error
-  which is redefined in RInternals inlcuded in api.h
-*/
+struct Function;
+class BC;
+
+namespace pir {
 
 class StreamLogger {
   public:
@@ -31,7 +28,7 @@ class StreamLogger {
                 continue;
             else {
                 if (options.includes(DebugFlag::PrintIntoFiles)) {
-                    //((std::ofstream*)fun2stream.second)->close();
+                    ((std::ofstream*)fun2stream.second)->close();
                 } else
                     std::cout << ((std::stringstream*)fun2stream.second)->str();
                 delete fun2stream.second;
