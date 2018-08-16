@@ -60,6 +60,12 @@ void Rir2PirCompiler::compileClosure(rir::Function* srcFunction,
     if (formals.hasDefaultArgs || formals.hasDots)
         return fail();
 
+    // TODO: we can only compile for a fixed closure env, if we have a guard if
+    // someone where to change it! Most probably this would not trip any
+    // problems as closure envs don't get changed often. But let's better be
+    // safe than sorry.
+    closureEnv = Env::notClosed();
+
     bool failed = false;
     module->createIfMissing(
         srcFunction, formals.names, closureEnv, [&](Closure* pirFunction) {

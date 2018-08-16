@@ -20,7 +20,7 @@ class CodeStream;
 
 BC BC::nop() { return BC(Opcode::nop_); }
 BC BC::makeEnv() { return BC(Opcode::make_env_); }
-BC BC::callerEnv() { return BC(Opcode::caller_env_); }
+BC BC::parentEnv() { return BC(Opcode::parent_env_); }
 BC BC::getEnv() { return BC(Opcode::get_env_); }
 BC BC::setEnv() { return BC(Opcode::set_env_); }
 BC BC::ret() { return BC(Opcode::ret_); }

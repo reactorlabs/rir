@@ -86,7 +86,7 @@ AbstractREnvironmentHierarchy::potentialParents(Value* env) const {
             env = Env::parentEnv(env);
         else
             env = parent;
-        if (env == Env::notClosed())
+        if (env == Env::nil())
             return res;
     }
     // We did not reach the outer most environment of the current closure.
