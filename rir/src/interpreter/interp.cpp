@@ -1148,8 +1148,10 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env,
             NEXT();
         }
 
-        INSTRUCTION(caller_env_) {
-            ostack_push(ctx, callCtxt->callerEnv);
+        INSTRUCTION(parent_env_) {
+            // Can only be used for pir. In pir we always have a closure that
+            // stores the lexical envrionment
+            ostack_push(ctx, CLOENV(callCtxt->callee));
             NEXT();
         }
 
@@ -1160,6 +1162,9 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env,
         }
 
         INSTRUCTION(set_env_) {
+            // We need to clear the bindings cache, when we change the
+            // environment
+            memset(&bindingCache, 0, sizeof(bindingCache));
             SEXP e = ostack_pop(ctx);
             assert(TYPEOF(e) == ENVSXP && "Expected an environment on TOS.");
             *env = e;
@@ -2711,6 +2716,12 @@ SEXP rirEval_f(SEXP what, SEXP env) {
         Function* fun = table->at(offset);
         fun->registerInvocation();
 
+        return evalRirCodeExtCaller(fun->body(), globalContext(), &lenv);
+    }
+
+    if (Function::check(what)) {
+        auto fun = Function::unpack(what);
+        fun->registerInvocation();
         return evalRirCodeExtCaller(fun->body(), globalContext(), &lenv);
     }
 

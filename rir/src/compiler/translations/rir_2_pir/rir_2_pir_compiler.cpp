@@ -32,7 +32,7 @@ void Rir2PirCompiler::compileClosure(SEXP closure, MaybeCls success, Maybe fail,
     DispatchTable* tbl = DispatchTable::unpack(BODY(closure));
 
     if (tbl->available(1)) {
-        if (!debug.includes(DebugFlag::ShowWarnings))
+        if (debug.includes(DebugFlag::ShowWarnings))
             std::cerr << "Closure already compiled to PIR\n";
     }
 
@@ -59,6 +59,12 @@ void Rir2PirCompiler::compileClosure(rir::Function* srcFunction,
 
     if (isIndependent)
         LOGGING(log.startLogging(srcFunction));
+  
+    // TODO: we can only compile for a fixed closure env, if we have a guard if
+    // someone where to change it! Most probably this would not trip any
+    // problems as closure envs don't get changed often. But let's better be
+    // safe than sorry.
+    closureEnv = Env::notClosed();
 
     bool failed = false;
     module->createIfMissing(

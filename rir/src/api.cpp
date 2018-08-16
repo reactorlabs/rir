@@ -133,8 +133,12 @@ REXPORT SEXP pir_setDebugFlags(SEXP debugFlags) {
 SEXP pirCompile(SEXP what, pir::DebugOptions debug) {
     debug = debug | PirDebug;
 
-    if (!isValidClosureSEXP(what))
+    if (!isValidClosureSEXP(what)) {
         Rf_error("not a compiled closure");
+    }
+    if (!DispatchTable::check(BODY(what))) {
+        Rf_error("Cannot optimize compiled expression, only closure");
+    }
     assert(DispatchTable::unpack(BODY(what))->capacity() == 2 &&
            "fix, support for more than 2 slots needed...");
     if (DispatchTable::unpack(BODY(what))->available(1))
@@ -176,16 +180,22 @@ REXPORT SEXP pir_tests() {
 
 // startup ---------------------------------------------------------------------
 
-SEXP pirOpt(SEXP fun) { return pirCompile(fun, PirDebug); }
+SEXP pirOpt(SEXP fun) {
+    // PIR can only optimize closures, not expressions
+    if (isValidClosureSEXP(fun) && DispatchTable::check(BODY(fun)))
+        return pirCompile(fun, PirDebug);
+    else
+        return fun;
+}
 
 bool startup() {
     auto pir = getenv("PIR_ENABLE");
-    if (pir && std::string(pir).compare("on") == 0) {
-        initializeRuntime(rir_compile, pirOpt);
+    if (pir && std::string(pir).compare("off") == 0) {
+        initializeRuntime(rir_compile, [](SEXP f) { return f; });
     } else if (pir && std::string(pir).compare("force") == 0) {
         initializeRuntime(
             [](SEXP f, SEXP env) { return pirOpt(rir_compile(f, env)); },
-            [](SEXP f) { return f; });
+            [](SEXP f) { return pirOpt(f); });
     } else if (pir && std::string(pir).compare("force_dryrun") == 0) {
         initializeRuntime(
             [](SEXP f, SEXP env) {
@@ -194,7 +204,8 @@ bool startup() {
             },
             [](SEXP f) { return f; });
     } else {
-        initializeRuntime(rir_compile, [](SEXP f) { return f; });
+        // default on
+        initializeRuntime(rir_compile, pirOpt);
     }
     return true;
 }

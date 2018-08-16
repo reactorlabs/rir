@@ -114,7 +114,7 @@ void BC::write(CodeStream& cs) const {
     case Opcode::nop_:
     case Opcode::make_env_:
     case Opcode::get_env_:
-    case Opcode::caller_env_:
+    case Opcode::parent_env_:
     case Opcode::set_env_:
     case Opcode::extract1_1_:
     case Opcode::extract1_2_:
@@ -331,7 +331,7 @@ void BC::print(std::ostream& out) const {
     case Opcode::nop_:
     case Opcode::make_env_:
     case Opcode::get_env_:
-    case Opcode::caller_env_:
+    case Opcode::parent_env_:
     case Opcode::set_env_:
     case Opcode::force_:
     case Opcode::pop_:

@@ -299,7 +299,7 @@ class BC {
     // to create new BC objects, which can be streamed to a CodeStream
     inline static BC nop();
     inline static BC makeEnv();
-    inline static BC callerEnv();
+    inline static BC parentEnv();
     inline static BC getEnv();
     inline static BC setEnv();
     inline static BC push(SEXP constant);
@@ -539,7 +539,7 @@ class BC {
         case Opcode::nop_:
         case Opcode::make_env_:
         case Opcode::get_env_:
-        case Opcode::caller_env_:
+        case Opcode::parent_env_:
         case Opcode::set_env_:
         case Opcode::for_seq_size_:
         case Opcode::extract1_1_:

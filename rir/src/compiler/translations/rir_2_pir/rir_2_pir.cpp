@@ -139,8 +139,8 @@ void Rir2Pir::translate(rir::Code* srcCode, Builder& insert,
             }
             case Opcode::beginloop_:
                 if (compiler.debug.includes(DebugFlag::ShowWarnings))
-                    std::cerr
-                        << "Cannot compile Function. Unsupported return bc\n";
+                    std::cerr << "Cannot compile Function. Unsupported "
+                                 "beginloop bc\n";
                 fail();
                 return;
             default:

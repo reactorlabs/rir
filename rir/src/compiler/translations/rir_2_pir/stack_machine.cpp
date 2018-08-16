@@ -179,6 +179,10 @@ bool StackMachine::tryRunCurrentBC(const Rir2Pir& rir2pir, Builder& insert) {
             if (feedback.numTargets == 1)
                 monomorphic = feedback.targets[0];
         }
+        // TODO: currently speculative static calls break our tests, so we
+        // disable them here. But most probably we are just hiding some actual
+        // bugs with this, so we should REALLY REALLY enable it again!
+        monomorphic = nullptr;
 
         auto ast = bc.immediate.callFixedArgs.ast;
         auto insertGenericCall = [&]() {
@@ -466,7 +470,7 @@ bool StackMachine::tryRunCurrentBC(const Rir2Pir& rir2pir, Builder& insert) {
     // Opcodes that only come from PIR
     case Opcode::make_env_:
     case Opcode::get_env_:
-    case Opcode::caller_env_:
+    case Opcode::parent_env_:
     case Opcode::set_env_:
     case Opcode::ldvar_noforce_:
     case Opcode::ldvar_noforce_super_:
