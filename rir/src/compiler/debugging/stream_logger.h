@@ -15,6 +15,12 @@
 namespace rir {
 namespace pir {
 
+/*
+  Support for streams is currently commented because including fstream
+  raises a compilation error. The problem is that fstream uses error
+  which is redefined in RInternals inlcuded in api.h
+*/
+
 class StreamLogger {
   public:
     StreamLogger(DebugOptions options) : options(options) {}
@@ -39,19 +45,19 @@ class StreamLogger {
     void startLogging(rir::Function* function);
     void endLogging();
     void compilationInit() const;
-    void compilationEarlyPir(Closure&) const;
+    void compilationEarlyPir(const Closure&) const;
     void pirOptimizations(const Closure&, const std::string&,
                           const std::string&, size_t) const;
-    void phiInsertion(Code*) const;
-    void afterCSSA(Code*) const;
+    void phiInsertion(const Code*) const;
+    void afterCSSA(const Code*) const;
     // void afterLiveness(SSAAllocator&);
-    void finalPIR(Code*) const;
+    void finalPIR(const Code*) const;
     void rirFromPir(rir::Function* function) const;
     void warningBC(std::string, rir::BC bc) const;
     void failCompilingPir() const;
-    void header(std::string, rir::Function*, std::ostream&, bool) const;
+    void header(std::string, const rir::Function*, std::ostream&, bool) const;
     void innerHeader(std::string) const;
-    void finish(rir::Function*, std::ostream&) const;
+    void finish(const rir::Function*, std::ostream&) const;
 
     std::ostream& getLog() const { return *streams.at(currentFunction.top()); };
 

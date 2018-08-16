@@ -64,7 +64,7 @@ static DeoptInfo* DeoptInfo_get(uint32_t idx) {
 void Deoptimizer_print(uint32_t idx, std::ostream& out) {
     assert(idx != NO_DEOPT_INFO);
     DeoptInfo* i = DeoptInfo_get(idx);
-    out << "d#" << idx << ": " << static_cast<void*>(i->oldPc);
+    out << "[d#" << idx << ": " << static_cast<void*>(i->oldPc) << "]";
 }
 
 Opcode* Deoptimizer_pc(uint32_t idx) {

@@ -625,6 +625,9 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
     SSAAllocator alloc(code,
                        compiler.debug.includes(DebugFlag::DebugAllocator));
 
+    // It is not clear still if we are going to need this information for
+    // debugging purposes. In addition, SSAAllocator is defined internally and
+    // passing it outside would require some extra hacking.
     // compiler.getLog().afterLiveness(&alloc);
 
     alloc.verify();

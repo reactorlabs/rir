@@ -51,7 +51,8 @@ void Code::disassemble(std::ostream& out) {
 }
 
 void Code::print(std::ostream& out) {
-    out << "Code object (" << this << "offset" << std::hex << header << "(hex))"
+    out << "Code object (" << this << " offset " << std::hex << header
+        << " (hex))"
         << "\n";
     out << "   Source: " << src << " index to src pool\n";
     out << "   Magic: " << std::hex << magic << "(hex)\n";

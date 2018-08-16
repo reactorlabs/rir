@@ -41,7 +41,7 @@ void StreamLogger::compilationInit() const {
     }
 }
 
-void StreamLogger::compilationEarlyPir(Closure& closure) const {
+void StreamLogger::compilationEarlyPir(const Closure& closure) const {
     if (options.includes(DebugFlag::PrintEarlyPir)) {
         innerHeader(" Compiled to PIR Version ");
         closure.print(getLog());
@@ -70,14 +70,14 @@ void StreamLogger::rirFromPir(rir::Function* function) const {
     }
 }
 
-void StreamLogger::phiInsertion(Code* code) const {
+void StreamLogger::phiInsertion(const Code* code) const {
     if (options.includes(DebugFlag::PrintCSSA)) {
         innerHeader(" After Phi Copies Inserted ");
         code->print(getLog());
     }
 }
 
-void StreamLogger::afterCSSA(Code* code) const {
+void StreamLogger::afterCSSA(const Code* code) const {
     if (options.includes(DebugFlag::PrintCSSA)) {
         innerHeader(" PIR After Converting to CSSA ");
         code->print(getLog());
@@ -89,14 +89,15 @@ void StreamLogger::afterCSSA(Code* code) const {
             allocator.print(getLog());
 }*/
 
-void StreamLogger::finalPIR(Code* code) const {
+void StreamLogger::finalPIR(const Code* code) const {
     if (options.includes(DebugFlag::PrintFinalPir)) {
         innerHeader(" Final PIR Version ");
         code->print(getLog());
     }
 }
 
-void StreamLogger::finish(rir::Function* function, std::ostream& stream) const {
+void StreamLogger::finish(const rir::Function* function,
+                          std::ostream& stream) const {
     if (options.intersects(PrintDebugPasses)) {
         header("Finished compiling:", function, stream, false);
     }
@@ -120,7 +121,7 @@ void StreamLogger::failCompilingPir() const {
                  << &currentFunction.top() << "\n";
 }
 
-void StreamLogger::header(std::string header, rir::Function* function,
+void StreamLogger::header(std::string header, const rir::Function* function,
                           std::ostream& stream, bool opening) const {
     std::stringstream ss;
     ss << " " << header << " " << function << " ";
