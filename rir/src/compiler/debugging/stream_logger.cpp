@@ -64,10 +64,10 @@ void StreamLogger::pirOptimizations(const Closure& closure,
     }
 }
 
-void StreamLogger::rirFromPir(rir::Function* function) const {
+void StreamLogger::rirFromPir(const rir::Function* function) const {
     if (options.includes(DebugFlag::PrintFinalRir)) {
         innerHeader(" Final RIR Version ");
-        for (auto code : *function) {
+        for (const auto code : *function) {
             code->print(getLog());
         }
         getLog() << "\n";

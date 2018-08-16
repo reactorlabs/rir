@@ -103,13 +103,12 @@ struct Code {
     };
 
     /** Returns a pointer to the instructions in c.  */
-    Opcode* code() { return (Opcode*)data; }
-
-    Opcode* endCode() { return (Opcode*)((uintptr_t)code() + codeSize); }
+    Opcode* code() const { return (Opcode*)data; }
+    Opcode* endCode() const { return (Opcode*)((uintptr_t)code() + codeSize); }
 
     Function* function() { return (Function*)((uintptr_t) this - header); }
 
-    size_t size() {
+    size_t size() const {
         return sizeof(Code) + pad4(codeSize) + srcLength * sizeof(SrclistEntry);
     }
 
@@ -117,14 +116,14 @@ struct Code {
         return sizeof(Code) + pad4(codeSize) + sources * sizeof(SrclistEntry);
     }
 
-    unsigned getSrcIdxAt(Opcode* pc, bool allowMissing) {
+    unsigned getSrcIdxAt(Opcode* pc, bool allowMissing) const {
         if (srcLength == 0) {
             assert(allowMissing);
             return 0;
         }
 
         SrclistEntry* sl = srclist();
-        Opcode* start = reinterpret_cast<Opcode*>(data);
+        Opcode* start = code();
         auto pcOffset = pc - start;
 
         if (srcLength == 1) {
@@ -156,28 +155,38 @@ struct Code {
         return sidx;
     }
 
-    void print(std::ostream&);
-    void disassemble(std::ostream&);
+    void print(std::ostream&) const;
+    void disassemble(std::ostream&) const;
 
     Code* next() { return (Code*)((uintptr_t) this + this->size()); }
 
   private:
-    SrclistEntry* srclist() { return (SrclistEntry*)(data + pad4(codeSize)); }
+    SrclistEntry* srclist() const {
+        return (SrclistEntry*)(data + pad4(codeSize));
+    }
 };
 
 #pragma pack(pop)
 
 class CodeHandleIterator {
     Code* code;
+  public:
+    CodeHandleIterator(Code* code) : code(code) {}
+    void operator++() { code = (Code*)((uintptr_t)code + code->size()); }
+    bool operator!=(CodeHandleIterator other) { return code != other.code; }
+    Code* operator*() { return code; }
+};
+
+class ConstCodeHandleIterator {
+    const Code* code;
 
   public:
-    CodeHandleIterator(Code* code) { this->code = code; }
-
+    ConstCodeHandleIterator(const Code* code) : code(code) {}
     void operator++() { code = (Code*)((uintptr_t)code + code->size()); }
-
-    bool operator!=(CodeHandleIterator other) { return code != other.code; }
-
-    Code* operator*() { return code; }
+    bool operator!=(ConstCodeHandleIterator other) {
+        return code != other.code;
+    }
+    const Code* operator*() { return code; }
 };
 }
 

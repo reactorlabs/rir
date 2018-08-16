@@ -49,7 +49,7 @@ class StreamLogger {
     void afterCSSA(const Code*) const;
     // void afterLiveness(SSAAllocator&);
     void finalPIR(const Code*) const;
-    void rirFromPir(rir::Function* function) const;
+    void rirFromPir(const rir::Function* function) const;
     void warningBC(std::string, rir::BC bc) const;
     void failCompilingPir() const;
     void header(std::string, const rir::Function*, std::ostream&, bool) const;

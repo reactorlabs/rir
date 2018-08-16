@@ -13,7 +13,7 @@ Code::Code(SEXP ast, unsigned cs, unsigned sourceLength, unsigned offset,
       codeSize(cs), srcLength(sourceLength), perfCounter(0),
       isDefaultArgument(isDefaultArg) {}
 
-void Code::disassemble(std::ostream& out) {
+void Code::disassemble(std::ostream& out) const {
     Opcode* pc = code();
 
     while (pc < endCode()) {
@@ -50,7 +50,7 @@ void Code::disassemble(std::ostream& out) {
     }
 }
 
-void Code::print(std::ostream& out) {
+void Code::print(std::ostream& out) const {
     out << "Code object (" << this << " offset " << std::hex << header
         << " (hex))"
         << "\n";
