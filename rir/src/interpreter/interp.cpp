@@ -619,24 +619,20 @@ SEXP rirCall(const CallContext& call, Context* ctx) {
 SEXP doCall(const CallContext& call, Context* ctx) {
     assert(call.callee);
 
-    auto apply = [&](const CallContext& call) {
-        switch (TYPEOF(call.callee)) {
-        case SPECIALSXP:
-            return legacySpecialCall(call, ctx);
-        case BUILTINSXP:
+    switch (TYPEOF(call.callee)) {
+    case SPECIALSXP:
+        return legacySpecialCall(call, ctx);
+    case BUILTINSXP:
+        return legacyCall(call, ctx);
+    case CLOSXP: {
+        if (TYPEOF(BODY(call.callee)) != EXTERNALSXP)
             return legacyCall(call, ctx);
-        case CLOSXP: {
-            if (TYPEOF(BODY(call.callee)) != EXTERNALSXP)
-                return legacyCall(call, ctx);
-            return rirCall(call, ctx);
-        }
-        default:
-            Rf_error("Invalid Callee");
-        };
-        return R_NilValue;
+        return rirCall(call, ctx);
+    }
+    default:
+        Rf_error("Invalid Callee");
     };
-
-    return apply(call);
+    return R_NilValue;
 }
 
 SEXP dispatchApply(SEXP ast, SEXP obj, SEXP actuals, SEXP selector,
@@ -1137,6 +1133,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env,
         INSTRUCTION(parent_env_) {
             // Can only be used for pir. In pir we always have a closure that
             // stores the lexical envrionment
+            assert(callCtxt);
             ostack_push(ctx, CLOENV(callCtxt->callee));
             NEXT();
         }
@@ -2678,8 +2675,9 @@ SEXP rirEval_f(SEXP what, SEXP env) {
     SEXP lenv = env;
     // TODO: do we not need an RCNTXT here?
 
-    if (isValidCodeObject(what))
+    if (isValidCodeObject(what)) {
         return evalRirCodeExtCaller((Code*)what, globalContext(), &lenv);
+    }
 
     if (DispatchTable::check(what)) {
         auto table = DispatchTable::unpack(what);

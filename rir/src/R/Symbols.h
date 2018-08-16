@@ -77,6 +77,7 @@ DECLARE(attributes, "attributes");
 DECLARE(c, "c");
 DECLARE(standardGeneric, "standardGeneric");
 DECLARE(debugBreak, ".debug.break");
+DECLARE(UseMethod, "UseMethod");
 
 #undef DECLARE
 } // namespace symbol

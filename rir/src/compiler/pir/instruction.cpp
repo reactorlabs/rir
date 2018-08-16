@@ -128,6 +128,16 @@ void Instruction::replaceUsesWith(Value* replace) {
     replaceUsesIn(replace, bb());
 }
 
+Value* Instruction::baseValue() {
+    if (auto cast = CastType::Cast(this))
+        return cast->arg<0>().val()->baseValue();
+    if (auto force = Force::Cast(this))
+        return force->arg<0>().val()->baseValue();
+    if (auto shared = SetShared::Cast(this))
+        return shared->arg<0>().val()->baseValue();
+    return this;
+}
+
 void LdConst::printArgs(std::ostream& out) {
     std::string val;
     {

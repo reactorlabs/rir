@@ -140,7 +140,7 @@ SEXP pirCompile(SEXP what, pir::DebugOptions debug) {
     if (DispatchTable::unpack(BODY(what))->available(1))
         return what;
 
-    Protect p(what);
+    PROTECT(what);
 
     // compile to pir
     pir::Module* m = new pir::Module;
@@ -160,6 +160,7 @@ SEXP pirCompile(SEXP what, pir::DebugOptions debug) {
                        true);
 
     delete m;
+    UNPROTECT(1);
     return what;
 }
 
@@ -191,7 +192,7 @@ bool startup() {
     } else if (pir && std::string(pir).compare("force") == 0) {
         initializeRuntime(
             [](SEXP f, SEXP env) { return pirOpt(rir_compile(f, env)); },
-            [](SEXP f) { return pirOpt(f); });
+            [](SEXP f) { return f; });
     } else if (pir && std::string(pir).compare("force_dryrun") == 0) {
         initializeRuntime(
             [](SEXP f, SEXP env) {

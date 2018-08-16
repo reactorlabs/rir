@@ -21,7 +21,7 @@ void ElideEnv::apply(Closure* function) {
     });
 
     Visitor::run(function->entry, [&](Instruction* i) {
-        if (i->mightIO() || i->type != PirType::voyd() || Return::Cast(i) ||
+        if (i->hasEffect() || i->type != PirType::voyd() || Return::Cast(i) ||
             Deopt::Cast(i)) {
             i->eachArg([&](Value* v) {
                 if (envDependency.count(v))

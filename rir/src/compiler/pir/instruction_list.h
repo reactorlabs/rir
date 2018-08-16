@@ -62,6 +62,7 @@
     V(Deopt)                                                                   \
     V(Force)                                                                   \
     V(CastType)                                                                \
+    V(SetShared)                                                               \
     V(PirCopy)                                                                 \
     V(Int3)
 

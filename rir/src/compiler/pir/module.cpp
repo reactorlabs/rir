@@ -25,12 +25,14 @@ void Module::printEachVersion(std::ostream& out) {
 
 void Module::createIfMissing(rir::Function* f, const std::vector<SEXP>& a,
                              Env* env, MaybeCreate create) {
-    if (functions.count(f))
+    auto idx = FunctionAndEnv(f, env);
+    if (functions.count(idx)) {
         return;
+    }
     Closure* cls = declare(f, a, env);
     if (!create(cls)) {
         // creation failed, delete declaration
-        auto it = functions.find(f);
+        auto it = functions.find(idx);
         delete cls;
         functions.erase(it);
     }
@@ -38,9 +40,10 @@ void Module::createIfMissing(rir::Function* f, const std::vector<SEXP>& a,
 
 Closure* Module::declare(rir::Function* fun, const std::vector<SEXP>& args,
                          Env* env) {
-    assert(functions.count(fun) == 0);
+    auto idx = FunctionAndEnv(fun, env);
+    assert(functions.count(idx) == 0);
     auto* f = new pir::Closure(args, env, fun);
-    functions.emplace(fun, f);
+    functions.emplace(idx, f);
     return f;
 }
 
