@@ -205,11 +205,11 @@ class BC {
     // Used to serialize bc to CodeStream
     void write(CodeStream& cs) const;
 
-    // Print it to stdout
-    void print() const;
-    void printImmediateArgs() const;
-    void printNames() const;
-    void printProfile() const;
+    // Print it to the stream passed as argument
+    void print(std::ostream& out) const;
+    void printImmediateArgs(std::ostream& out) const;
+    void printNames(std::ostream& out) const;
+    void printProfile(std::ostream& out) const;
 
     // Accessors to load immediate constant from the pool
     SEXP immediateConst() const;

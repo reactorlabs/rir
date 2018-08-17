@@ -1,7 +1,7 @@
 #ifndef RIR__PIR_COMPILER_H
 #define RIR__PIR_COMPILER_H
 
-#include "../debugging.h"
+#include "../debugging/debugging.h"
 #include "../pir/closure.h"
 #include "../pir/module.h"
 #include "../pir/pir.h"
@@ -23,9 +23,9 @@ class RirCompiler {
     typedef std::function<void()> Maybe;
     typedef std::function<void(Closure*)> MaybeCls;
 
-    virtual void compileClosure(SEXP, MaybeCls, Maybe) = 0;
-    void compileClosure(SEXP cls, MaybeCls success) {
-        return compileClosure(cls, success, []() {});
+    virtual void compileClosure(SEXP, MaybeCls, Maybe, bool) = 0;
+    void compileClosure(SEXP cls, MaybeCls success, bool isIndependent) {
+        return compileClosure(cls, success, []() {}, isIndependent);
     }
 
     const DebugOptions debug;

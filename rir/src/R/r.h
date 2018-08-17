@@ -8,10 +8,12 @@
 // r print statement
 #include <R_ext/Print.h>
 
+#undef error
 #undef TRUE
 #undef FALSE
 #undef length
 #undef eval
+#undef cons
 
 extern "C" {
 extern SEXP R_TrueValue;

@@ -262,11 +262,8 @@ void Rir2Pir::translate(rir::Code* srcCode, Builder& insert,
         if (!skip) {
             int size = state.stack_size();
             if (!state.tryRunCurrentBC(*this, insert)) {
-                if (compiler.debug.includes(DebugFlag::ShowWarnings)) {
-                    std::cout << "Abort r2p due to unsupported bc ";
-                    state.getCurrentBC().print();
-                    std::cout << "\n";
-                }
+                compiler.getLog().warningBC("Abort r2p due to unsupported bc",
+                                            state.getCurrentBC());
                 fail();
                 return;
             }

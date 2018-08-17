@@ -3,6 +3,8 @@
 #include "ir/BC.h"
 #include "utils/Pool.h"
 
+#include <iomanip>
+
 namespace rir {
 Code::Code(SEXP ast, unsigned cs, unsigned sourceLength, unsigned offset,
            bool isDefaultArg, size_t localsCnt)
@@ -11,18 +13,18 @@ Code::Code(SEXP ast, unsigned cs, unsigned sourceLength, unsigned offset,
       codeSize(cs), srcLength(sourceLength), perfCounter(0),
       isDefaultArgument(isDefaultArg) {}
 
-void Code::disassemble() {
+void Code::disassemble(std::ostream& out) const {
     Opcode* pc = code();
 
     while (pc < endCode()) {
         BC bc = BC::decode(pc);
 
-        Rprintf(" %5d ", ((uintptr_t)pc - (uintptr_t)code()));
+        out << std::setw(5) << ((uintptr_t)pc - (uintptr_t)code());
 
         unsigned s = getSrcIdxAt(pc, true);
         if (s != 0)
-            Rprintf("   ; %s\n       ",
-                    dumpSexp(src_pool_at(globalContext(), s)).c_str());
+            out << "   ; " << dumpSexp(src_pool_at(globalContext(), s))
+                << "\n       ";
 
         // Print call ast
         switch (bc.bc) {
@@ -30,35 +32,40 @@ void Code::disassemble() {
         case Opcode::named_call_implicit_:
         case Opcode::call_:
         case Opcode::named_call_:
-            Rprintf(
-                "   ; %s\n       ",
-                dumpSexp(Pool::get(bc.immediate.callFixedArgs.ast)).c_str());
+            out << "   ; "
+                << dumpSexp(Pool::get(bc.immediate.callFixedArgs.ast)).c_str()
+                << "\n       ";
             break;
         case Opcode::static_call_:
-            Rprintf("   ; %s\n       ",
-                    dumpSexp(Pool::get(bc.immediate.staticCallFixedArgs.ast))
-                        .c_str());
+            out << "   ; "
+                << dumpSexp(Pool::get(bc.immediate.staticCallFixedArgs.ast))
+                       .c_str();
             break;
         default: {}
         }
 
-        bc.print();
+        bc.print(out);
 
         pc = BC::next(pc);
     }
 }
 
-void Code::print() {
-    Rprintf("Code object (%p offset %x (hex))\n", this, header);
-    Rprintf("  Source:      %u (index to src pool)\n", src);
-    Rprintf("  Magic:       %x (hex)\n", magic);
-    Rprintf("  Stack (o):   %u\n", stackLength);
-    Rprintf("  Code size:   %u [B]\n", codeSize);
-    Rprintf("  Default arg? %s\n", isDefaultArgument ? "yes" : "no");
-    if (magic != CODE_MAGIC)
-        Rf_error("Wrong magic number -- corrupted IR bytecode");
+void Code::print(std::ostream& out) const {
+    out << "Code object (" << this << " offset " << std::hex << header
+        << " (hex))"
+        << "\n";
+    out << "   Source: " << src << " index to src pool\n";
+    out << "   Magic: " << std::hex << magic << "(hex)\n";
+    out << "   Stack (o): " << stackLength << "\n";
+    out << "   Code size: " << codeSize << "[B]\n";
 
-    Rprintf("\n");
-    disassemble();
+    out << "   Default arg? " << (isDefaultArgument ? "yes\n" : "no") << "\n";
+    if (magic != CODE_MAGIC) {
+        out << "Wrong magic number -- corrupted IR bytecode";
+        Rf_error("Wrong magic number -- corrupted IR bytecode");
+    }
+
+    out << "\n";
+    disassemble(out);
 }
 }

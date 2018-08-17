@@ -6,9 +6,8 @@
 #include <iostream>
 #include <vector>
 
+#include "R/r_incl.h"
 #include "utils/EnumSet.h"
-
-#include "R/r.h"
 
 namespace rir {
 namespace pir {

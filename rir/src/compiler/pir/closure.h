@@ -1,10 +1,9 @@
 #ifndef COMPILER_FUNCTION_H
 #define COMPILER_FUNCTION_H
 
-#include "R/r.h"
+#include "../../runtime/Function.h"
 #include "code.h"
 #include "pir.h"
-
 #include <functional>
 
 namespace rir {
@@ -21,21 +20,25 @@ namespace pir {
 class Closure : public Code {
   private:
     friend class Module;
-    Closure(std::initializer_list<SEXP> a, Env* env) : env(env), argNames(a) {}
-    Closure(const std::vector<SEXP>& a, Env* env) : env(env), argNames(a) {}
+    Closure(std::initializer_list<SEXP> a, Env* env, rir::Function* function)
+        : env(env), function(function), argNames(a) {}
+    Closure(const std::vector<SEXP>& a, Env* env, rir::Function* function)
+        : env(env), function(function), argNames(a) {}
 
     Env* env;
+    rir::Function* function;
 
   public:
     Env* closureEnv() { return env; }
+    rir::Function* rirVersion() { return function; }
 
     std::vector<SEXP> argNames;
     std::vector<Promise*> defaultArgs;
 
     std::vector<Promise*> promises;
 
-    void print(std::ostream& out);
-    void print();
+    void print(std::ostream& out) const;
+    void print() const;
 
     Promise* createProm(unsigned srcPoolIdx);
 

@@ -620,17 +620,15 @@ class Pir2Rir {
 size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
     toCSSA(code);
 
-    if (compiler.debug.includes(DebugFlag::PrintCSSA))
-        code->print(std::cout);
+    LOGGING(compiler.getLog().afterCSSA(code));
 
     SSAAllocator alloc(code,
                        compiler.debug.includes(DebugFlag::DebugAllocator));
 
-    if (compiler.debug.includes(DebugFlag::PrintLivenessIntervals))
-        alloc.print();
-
-    if (compiler.debug.includes(DebugFlag::PrintFinalPir))
-        code->print(std::cout);
+    // It is not clear still if we are going to need this information for
+    // debugging purposes. In addition, SSAAllocator is defined internally and
+    // passing it outside would require some extra hacking.
+    // compiler.getLog().afterLiveness(&alloc);
 
     alloc.verify();
 
@@ -1008,10 +1006,7 @@ void Pir2Rir::toCSSA(Code* code) {
         }
     });
 
-    DEBUGCODE(PHI_REMOVE_DEBUG, {
-        std::cout << "--- phi copies inserted ---\n";
-        code->print(std::cout);
-    });
+    LOGGING(compiler.getLog().phiInsertion(code));
 }
 
 size_t Pir2Rir::getPromiseIdx(Context& ctx, Promise* p) {
@@ -1029,6 +1024,7 @@ rir::Function* Pir2Rir::finalize() {
     // (for now, calls, promises and operators do)
     // + how to deal with inlined stuff?
 
+    LOGGING(compiler.getLog().startLogging(cls->rirVersion()));
     FunctionWriter function = FunctionWriter::create();
     Context ctx(function);
 
@@ -1042,12 +1038,12 @@ rir::Function* Pir2Rir::finalize() {
     ctx.pushBody(R_NilValue);
     size_t localsCnt = compileCode(ctx, cls);
     ctx.finalizeCode(localsCnt);
-
+    LOGGING(compiler.getLog().finalPIR(cls));
 #ifdef ENABLE_SLOWASSERT
     CodeVerifier::verifyFunctionLayout(function.function->container(),
                                        globalContext());
 #endif
-
+    LOGGING(compiler.getLog().rirFromPir(function.function));
     return function.function;
 }
 
@@ -1066,15 +1062,6 @@ void Pir2RirCompiler::compile(Closure* cls, SEXP origin) {
     Pir2Rir pir2rir(*this, cls);
     auto fun = pir2rir.finalize();
 
-    if (debug.includes(DebugFlag::PrintFinalRir)) {
-        std::cout << "============= Final RIR Version ========\n";
-        auto it = fun->begin();
-        while (it != fun->end()) {
-            (*it)->print();
-            ++it;
-        }
-    }
-
     if (debug.includes(DebugFlag::DryRun))
         return;
 
@@ -1089,12 +1076,6 @@ void Pir2RirCompiler::compile(Closure* cls, SEXP origin) {
     // TODO: signatures need a rework
     fun->signature = oldFun->signature;
 
-    if (debug.intersects(PrintDebugPasses)) {
-        std::cout << "\n*********** Finished compiling: " << std::setw(17)
-                  << std::left << oldFun << " ************\n";
-        std::cout << "*************************************************"
-                  << "*************\n";
-    }
     table->put(1, fun);
 }
 

@@ -179,35 +179,33 @@ void BC::write(CodeStream& cs) const {
 
 SEXP BC::immediateConst() const { return Pool::get(immediate.pool); }
 
-void BC::printImmediateArgs() const {
+void BC::printImmediateArgs(std::ostream& out) const {
     Rprintf("[");
     for (auto arg : immediateCallArguments) {
         if (arg == MISSING_ARG_IDX)
-            Rprintf(" _");
+            out << " _";
         else if (arg == DOTS_ARG_IDX)
-            Rprintf(" ...");
+            out << " ...";
         else
-            Rprintf(" %x", arg);
+            out << std::hex << arg << std::dec;
     }
     Rprintf(" ] ");
 }
 
-void BC::printNames() const {
-    Rprintf("[");
+void BC::printNames(std::ostream& out) const {
+    out << "[";
     for (auto name : callArgumentNames) {
         SEXP n = Pool::get(name);
-        Rprintf(" %s",
-                (n == nullptr || n == R_NilValue ? "_" : CHAR(PRINTNAME(n))));
+        out << " "
+            << (n == nullptr || n == R_NilValue ? "_" : CHAR(PRINTNAME(n)));
     }
-    Rprintf(" ]");
+    out << " ]";
 }
 
-void BC::print() const {
+void BC::print(std::ostream& out) const {
     if (bc != Opcode::label && bc != Opcode::record_call_ &&
-        bc != Opcode::record_binop_) {
-        Rprintf("   ");
-        Rprintf("%s ", name(bc));
-    }
+        bc != Opcode::record_binop_)
+        out << "   " << name(bc) << " ";
 
     switch (bc) {
     case Opcode::invalid_:
@@ -215,40 +213,40 @@ void BC::print() const {
         assert(false);
         break;
     case Opcode::call_implicit_: {
-        printImmediateArgs();
+        printImmediateArgs(out);
         break;
     }
     case Opcode::named_call_implicit_: {
-        printImmediateArgs();
-        printNames();
+        printImmediateArgs(out);
+        printNames(out);
         break;
     }
     case Opcode::call_: {
         auto args = immediate.callFixedArgs;
         BC::NumArgs nargs = args.nargs;
-        Rprintf(" %d ", nargs);
+        out << " " << nargs << " ";
         break;
     }
 
     case Opcode::named_call_: {
         auto args = immediate.callFixedArgs;
         BC::NumArgs nargs = args.nargs;
-        Rprintf(" %d ", nargs);
-        printNames();
+        out << " " << nargs << " ";
+        printNames(out);
         break;
     }
     case Opcode::static_call_: {
         auto args = immediate.staticCallFixedArgs;
         BC::NumArgs nargs = args.nargs;
         auto target = Pool::get(args.target);
-        Rprintf(" %d : %s", nargs, dumpSexp(target).c_str());
+        out << " " << nargs << " : " << dumpSexp(target).c_str();
         break;
     }
     case Opcode::push_:
         if (immediateConst() == R_UnboundValue)
-            Rprintf(" -\n");
+            out << " -\n";
         else
-            Rprintf("%s\n", dumpSexp(immediateConst()).c_str());
+            out << dumpSexp(immediateConst()).c_str() << "\n";
         return;
     case Opcode::ldfun_:
     case Opcode::ldvar_:
@@ -260,37 +258,37 @@ void BC::print() const {
     case Opcode::stvar_:
     case Opcode::stvar_super_:
     case Opcode::missing_:
-        Rprintf(" %s", CHAR(PRINTNAME((immediateConst()))));
+        out << " " << CHAR(PRINTNAME(immediateConst()));
         break;
     case Opcode::guard_fun_: {
         SEXP name = Pool::get(immediate.guard_fun_args.name);
-        Rprintf(" %s == %p", CHAR(PRINTNAME(name)),
-                Pool::get(immediate.guard_fun_args.expected));
+        out << " " << CHAR(PRINTNAME(name))
+            << " == " << Pool::get(immediate.guard_fun_args.expected);
         break;
     }
     case Opcode::pick_:
     case Opcode::pull_:
     case Opcode::put_:
-        Rprintf(" %i", immediate.i);
+        out << " " << immediate.i;
         break;
     case Opcode::ldarg_:
-        Rprintf(" %u", immediate.arg_idx);
+        out << " " << immediate.arg_idx;
         break;
     case Opcode::ldloc_:
     case Opcode::stloc_:
-        Rprintf(" @%i", immediate.loc);
+        out << " @" << immediate.loc;
         break;
     case Opcode::movloc_:
-        Rprintf(" @%i -> @%i", immediate.loc_cpy.source,
-                immediate.loc_cpy.target);
+        out << " @" << immediate.loc_cpy.source << " -> @"
+            << immediate.loc_cpy.target;
         break;
     case Opcode::is_:
     case Opcode::alloc_:
-        Rprintf(" %s", type2char(immediate.i));
+        out << " " << type2char(immediate.i);
         break;
     case Opcode::guard_env_:
-        Deoptimizer_print(immediate.guard_id);
-        Rprintf("\n");
+        Deoptimizer_print(immediate.guard_id, out);
+        out << "\n";
         break;
 
     case Opcode::record_call_: {
@@ -390,19 +388,19 @@ void BC::print() const {
         break;
     case Opcode::promise_:
     case Opcode::push_code_:
-        Rprintf(" %x", immediate.fun);
+        out << " " << std::hex << immediate.fun << std::dec;
         break;
     case Opcode::beginloop_:
     case Opcode::brtrue_:
     case Opcode::brobj_:
     case Opcode::brfalse_:
     case Opcode::br_:
-        Rprintf(" %d", immediate.offset);
+        out << " " << immediate.offset;
         break;
     case Opcode::label:
-        Rprintf("%d:", immediate.offset);
+        out << immediate.offset << ":";
         break;
     }
-    Rprintf("\n");
+    out << "\n";
 }
 }

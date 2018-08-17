@@ -39,7 +39,7 @@ void Module::createIfMissing(rir::Function* f, const std::vector<SEXP>& a,
 Closure* Module::declare(rir::Function* fun, const std::vector<SEXP>& args,
                          Env* env) {
     assert(functions.count(fun) == 0);
-    auto* f = new pir::Closure(args, env);
+    auto* f = new pir::Closure(args, env, fun);
     functions.emplace(fun, f);
     return f;
 }

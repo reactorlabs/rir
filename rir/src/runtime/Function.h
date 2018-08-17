@@ -85,8 +85,10 @@ struct Function {
     }
 
     Code* first() { return (Code*)data; }
-
     Code* codeEnd() { return (Code*)((uintptr_t) this + size); }
+
+    const Code* first() const { return (Code*)data; }
+    const Code* codeEnd() const { return (Code*)((uintptr_t)this + size); }
 
     Code* body() { return (Code*)((uintptr_t) this + foffset); }
 
@@ -97,8 +99,13 @@ struct Function {
     }
 
     CodeHandleIterator begin() { return CodeHandleIterator(first()); }
-
     CodeHandleIterator end() { return CodeHandleIterator(codeEnd()); }
+    ConstCodeHandleIterator begin() const {
+        return ConstCodeHandleIterator(first());
+    }
+    ConstCodeHandleIterator end() const {
+        return ConstCodeHandleIterator(codeEnd());
+    }
 
     unsigned indexOf(Code* code) {
         unsigned idx = 0;

@@ -1,4 +1,5 @@
 #include "type.h"
+#include "R/r.h"
 
 extern "C" Rboolean(Rf_isObject)(SEXP s);
 
