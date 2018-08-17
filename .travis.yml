@@ -9,25 +9,19 @@ matrix:
 
     # macOS clang
     - os: osx
-      compiler: clang
-      env: CORES=2 CHECK=check BUILD=release
+      env: COMPILER=clang CORES=2 CHECK=check BUILD=release
 
     - os: osx
-      compiler: clang
-      env: CORES=2 CHECK=check BUILD=release PIR_ENABLE=force
+      env: COMPILER=clang CORES=2 CHECK=check BUILD=release PIR_ENABLE=force
 
     # linux gcc
-    - compiler: g++-7
-      env: CHECK=check BUILD=release
+    - env: COMPILER=g++-7 CHECK=check BUILD=release
 
-    - compiler: g++-7
-      env: CORES=2 CHECK=check BUILD=debug PIR_ENABLE=force
+    - env: COMPILER=g++-7 CORES=2 CHECK=check BUILD=debug PIR_ENABLE=force
 
-    - compiler: g++-7
-      env: CHECK=test-all-devel BUILD=release PIR_ENABLE=force ENABLE_VALGRIND=1
+    - env: COMPILER=g++-7 CHECK=test-all-devel BUILD=release PIR_ENABLE=force ENABLE_VALGRIND=1
 
-    - compiler: g++-7
-      env: CHECK=check-recommended BUILD=release
+    - env: COMPILER=g++-7 CHECK=check-recommended BUILD=release
 
 addons:
   apt:
@@ -54,6 +48,8 @@ before_install:
   - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then . ./tools/ci/before_install-linux.sh; fi
 
 before_script:
+  - export CXX=${COMPILER}
+  - ${CXX} --version
   - cd "${TRAVIS_BUILD_DIR}"
   - mkdir build && cd build
   - cmake -DCMAKE_BUILD_TYPE=$BUILD ..
