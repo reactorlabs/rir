@@ -1,27 +1,41 @@
-dist: trusty
-
 language: cpp
+
+# Use linux unless specified otherwise
+os: linux
+dist: trusty
 
 matrix:
   include:
+
+    # macOS clang
     - os: osx
       compiler: clang
       env: CORES=2 CHECK=check BUILD=release
+
     - os: osx
       compiler: clang
       env: CORES=2 CHECK=check BUILD=release PIR_ENABLE=force
-    - os: linux
-      compiler: gcc
+
+    # linux gcc
+    - compiler: g++-7
       env: CHECK=check BUILD=release
-    - os: linux
-      compiler: gcc
+      addons: &gcc7
+        apt:
+          packages: g++-7
+          sources:
+            - ubuntu-toolchain-r-test
+
+    - compiler: g++-7
       env: CORES=2 CHECK=check BUILD=debug PIR_ENABLE=force
-    - os: linux
-      compiler: gcc
+      addons: *gcc7
+
+    - compiler: g++-7
       env: CHECK=test-all-devel BUILD=release PIR_ENABLE=force ENABLE_VALGRIND=1
-    - os: linux
-      compiler: gcc
+      addons: *gcc7
+
+    - compiler: g++-7
       env: CHECK=check-recommended BUILD=release
+      addons: *gcc7
 
 addons:
   apt:
@@ -45,7 +59,9 @@ before_install:
   - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then . ./tools/ci/before_install-linux.sh; fi
 
 before_script:
-  - cmake -DCMAKE_BUILD_TYPE=$BUILD .
+  - cd "${TRAVIS_BUILD_DIR}"
+  - mkdir build && cd build
+  - cmake -DCMAKE_BUILD_TYPE=$BUILD ..
   - make setup
   - make -j2
 
@@ -61,5 +77,4 @@ script:
 cache:
   ccache: true
   directories:
-  - external
-
+    - external
