@@ -19,27 +19,20 @@ matrix:
     # linux gcc
     - compiler: g++-7
       env: CHECK=check BUILD=release
-      addons: &gcc7
-        apt:
-          packages: g++-7
-          sources:
-            - ubuntu-toolchain-r-test
 
     - compiler: g++-7
       env: CORES=2 CHECK=check BUILD=debug PIR_ENABLE=force
-      addons: *gcc7
 
     - compiler: g++-7
       env: CHECK=test-all-devel BUILD=release PIR_ENABLE=force ENABLE_VALGRIND=1
-      addons: *gcc7
 
     - compiler: g++-7
       env: CHECK=check-recommended BUILD=release
-      addons: *gcc7
 
 addons:
   apt:
     packages:
+      - g++-7
       - xdg-utils
       - gfortran
       - subversion
@@ -53,6 +46,8 @@ addons:
       - rsync
       - xorg-dev
       - valgrind
+    sources:
+      - ubuntu-toolchain-r-test
 
 before_install:
   - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then . ./tools/ci/before_install-osx.sh; fi
