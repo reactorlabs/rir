@@ -1083,9 +1083,6 @@ void Pir2RirCompiler::compile(Closure* cls, SEXP origin) {
     auto oldFun = table->first();
 
     fun->invocationCount = oldFun->invocationCount;
-    // TODO: are these still needed / used?
-    fun->envLeaked = oldFun->envLeaked;
-    fun->envChanged = oldFun->envChanged;
     // TODO: signatures need a rework
     fun->signature = oldFun->signature;
 

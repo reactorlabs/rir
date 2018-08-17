@@ -84,35 +84,30 @@ class Compiler {
         return vtable->container();
     }
 
-    static SEXP compileClosure(SEXP inClosure) {
-        Protect p;
+    static void compileClosure(SEXP inClosure) {
+
         assert(TYPEOF(inClosure) == CLOSXP);
 
-        SEXP body = BODY(inClosure);
-        SEXP formals = FORMALS(inClosure);
-        SEXP env = CLOENV(inClosure);
+        Protect p;
 
+        SEXP body = BODY(inClosure);
         if (TYPEOF(body) == BCODESXP) {
             R_PreserveObject(body);
             body = VECTOR_ELT(CDR(body), 0);
         }
 
-        SEXP closure = p(allocSExp(CLOSXP));
-
-        Compiler c(body, formals, env);
-        SEXP res = p(c.finalize());
+        Compiler c(body, FORMALS(inClosure), CLOENV(inClosure));
+        SEXP compiledFun = p(c.finalize());
 
         // Allocate a new vtable.
         DispatchTable* vtable = DispatchTable::create();
 
         // Initialize the vtable. Initially the table has one entry, which is
         // the compiled function.
-        vtable->put(0, Function::unpack(res));
+        vtable->put(0, Function::unpack(compiledFun));
 
         // Set the closure fields.
-        SET_BODY(closure, vtable->container());
-        SET_FORMALS(closure, formals);
-        SET_CLOENV(closure, env);
+        SET_BODY(inClosure, vtable->container());
 
         // TODO: promises which escape a function do not have a pointer back to
         // the function, but just to the code object, which is inside this
@@ -120,8 +115,6 @@ class Compiler {
         // dangling pointer. We need to teach the GC to find the function
         // throught the PROMSXP. As a workaround we never collect closures.
         Pool::insert(vtable->container());
-
-        return closure;
     }
 };
 

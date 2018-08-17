@@ -46,19 +46,15 @@ REXPORT SEXP rir_disassemble(SEXP what, SEXP verbose) {
 }
 
 REXPORT SEXP rir_compile(SEXP what, SEXP env) {
-    // TODO make this nicer
     if (TYPEOF(what) == CLOSXP) {
         SEXP body = BODY(what);
         if (TYPEOF(body) == EXTERNALSXP)
             return what;
 
-        SEXP result = Compiler::compileClosure(what);
-        PROTECT(result);
+        // Change the input closure inplace
+        Compiler::compileClosure(what);
 
-        Rf_copyMostAttrib(what, result);
-
-        UNPROTECT(1);
-        return result;
+        return what;
     } else {
         if (TYPEOF(what) == BCODESXP) {
             what = VECTOR_ELT(CDR(what), 0);

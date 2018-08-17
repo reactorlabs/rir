@@ -12,17 +12,13 @@ namespace rir {
 struct Function;
 struct FunctionSignature;
 
-// Offset between function SEXP and Function* struct
-// This is basically sizeof(SEXPREC_ALIGN)
-#define FUNCTION_OFFSET 40
-
 // Code magic constant is intended to trick the GC into believing that it is
 // dealing with already marked SEXP.
 // Note: gcgen needs to be 1, otherwise the write barrier will trigger and
-//       named count is 2 to make it stable
-//  It also has an unique bitpattern for gp (0xee) so that we can keep it apart
-//  from functions
-#define CODE_MAGIC (unsigned)0x1100ee9a
+//       named count is 3 (ie. NAMEDMAX) to make it stable
+//  It also has an unique bitpattern for gp (0xeeee) so that we can keep it
+//  apart from functions
+#define CODE_MAGIC (uint64_t)0x311eeee1a
 
 /**
  * Code holds a sequence of instructions; for each instruction
@@ -61,7 +57,7 @@ struct Code {
          bool isDefaultArg, size_t localsCnt);
 
     // Magic number that attempts to be PROMSXP already marked by the GC
-    unsigned magic;
+    uint64_t magic;
 
     unsigned header; /// offset to Function object
 
