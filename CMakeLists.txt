@@ -11,11 +11,11 @@ set(R_INCLUDE_DIR ${R_HOME}/include)
 set(R_COMMAND ${R_HOME}/bin/R)
 
 add_definitions(-g3)
-set(CMAKE_CXX_FLAGS_RELEASE "-O2 -std=c++11")
-set(CMAKE_CXX_FLAGS_DEBUG "-O0 -Wall -std=c++11 -DENABLE_SLOWASSERT")
-set(CMAKE_CXX_FLAGS "-Wall -std=c++11 -fno-rtti")
-set(CMAKE_C_FLAGS_RELEASE "-O2 -std=gnu99")
-set(CMAKE_C_FLAGS_DEBUG "-Og -std=gnu99 -DENABLE_SLOWASSERT")
+set(CMAKE_CXX_FLAGS_RELEASE "-O2")
+set(CMAKE_CXX_FLAGS_DEBUG "-O0 -DENABLE_SLOWASSERT")
+set(CMAKE_CXX_FLAGS "-Wall -std=c++17 -fno-rtti")
+set(CMAKE_C_FLAGS_RELEASE "-O2")
+set(CMAKE_C_FLAGS_DEBUG "-O0 -DENABLE_SLOWASSERT")
 set(CMAKE_C_FLAGS "-std=gnu99")
 
 SET(CMAKE_CXX_FLAGS_SANITIZE "${CMAKE_CXX_FLAGS_DEBUG} -Og -fsanitize=undefined -fno-sanitize=alignment -fsanitize-undefined-trap-on-error -fstack-protector")
@@ -45,7 +45,6 @@ endif(NOT DEFINED NO_LOCAL_CONFIG)
 if(${NO_LOCAL_CONFIG})
     message(STATUS "Local configuration files ignored")
 endif(${NO_LOCAL_CONFIG})
-
 
 
 include_directories(${R_INCLUDE_DIR})
@@ -85,10 +84,10 @@ add_custom_target(tests
   COMMAND ${CMAKE_SOURCE_DIR}/tools/tests
 )
 
-set(MAKEVARS_SRC "SOURCES = $(wildcard *.cpp ir/*.cpp passes/codegen/*.cpp)\nOBJECTS = $(SOURCES:.cpp=.o)")
+set(MAKEVARS_SRC "SOURCES = $(wildcard *.cpp)\nOBJECTS = $(SOURCES:.cpp=.o)")
 
 # build the shared library for the JIT
-file(GLOB_RECURSE SRC "rir/src/*.cpp" "rir/src/*.c" "rir/*/*.cpp" "rir/src/*.h" "local/*" "rir/R/*.R" "rir/tests/*.R")
+file(GLOB_RECURSE SRC "rir/src/*.cpp" "rir/src/*.c" "rir/*/*.cpp" "rir/src/*.h")
 add_library(${PROJECT_NAME} SHARED ${SRC})
 add_dependencies(${PROJECT_NAME} setup-build-dir)
 
