@@ -15,13 +15,29 @@ matrix:
       env: COMPILER=clang CORES=2 CHECK=check BUILD=release PIR_ENABLE=force
 
     # linux gcc
-    - env: COMPILER=g++-7 CHECK=check BUILD=release
+    - env:
+        - COMPILER=g++-7
+        - CHECK=check
+        - BUILD=release
 
-    - env: COMPILER=g++-7 CORES=2 CHECK=check BUILD=debug PIR_ENABLE=force
+    - env:
+        - CORES=2
+        - COMPILER=g++-7
+        - CHECK=check
+        - BUILD=debug
+        - PIR_ENABLE=force
 
-    - env: COMPILER=g++-7 CHECK=test-all-devel BUILD=release PIR_ENABLE=force ENABLE_VALGRIND=1
+    - env:
+        - COMPILER=g++-7
+        - CHECK=test-all-devel
+        - BUILD=release
+        - PIR_ENABLE=force
+        - ENABLE_VALGRIND=1
 
-    - env: COMPILER=g++-7 CHECK=check-recommended BUILD=release
+    - env:
+        - COMPILER=g++-7
+        - CHECK=check-recommended
+        - BUILD=release
 
 addons:
   apt:
@@ -48,6 +64,7 @@ before_install:
   - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then . ./tools/ci/before_install-linux.sh; fi
 
 before_script:
+  - export TZ=""
   - export CXX=${COMPILER}
   - ${CXX} --version
   - cd "${TRAVIS_BUILD_DIR}"
