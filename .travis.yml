@@ -75,6 +75,7 @@ before_install:
   - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then . ./tools/ci/before_install-linux.sh; fi
 
 before_script:
+  - export TZ=""
   - export CXX=${COMPILER}
   - ${CXX} --version
   - cd "${TRAVIS_BUILD_DIR}"
