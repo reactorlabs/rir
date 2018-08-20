@@ -9,10 +9,21 @@ matrix:
 
     # macOS clang
     - os: osx
-      env: COMPILER=clang CORES=2 CHECK=check BUILD=release
+      env:
+        - CORES=2
+        - COMPILER=clang++
+        - CHECK=check
+        - BUILD=release
+      compiler: clang
 
     - os: osx
-      env: COMPILER=clang CORES=2 CHECK=check BUILD=release PIR_ENABLE=force
+      env:
+        - CORES=2
+        - COMPILER=clang++
+        - CHECK=check
+        - BUILD=debug
+        - PIR_ENABLE=force
+      compiler: clang
 
     # linux gcc
     - env:
