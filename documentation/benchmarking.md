@@ -1,22 +1,14 @@
 # Performance
 RIR was devise as an speculative compiler for boosting the speed of the R programming 
 language. As such, its performance results are an essential information to trace and 
-analyze. Consequently, we periodically measure RIR performance.
+analyze. Consequently, we periodically measure RIR performance. The results can be 
+found at: [http://rflies.rir.o1o.ch/](http://rflies.rir.o1o.ch/).
 
 ## Infraestructure
 We track the performance of (almost) every commit made to the master branch. To share these 
 results, and analyze the series of data our benchmarking infrastructure uses a 
 [codespeed web server](https://github.com/tobami/codespeed). For running the benchmarks 
 and generating the raw data we resort to [ReBench](https://github.com/smarr/reBench/).
-
-## Web Server
-The results can be found at: [http://rirflies.prl.r.com/](http://rirflies.prl.r.com/).
-Since the domain is not public, visitors should manually bind it to our web server IP 
-before the first access. This is pretty simple. Just open the file `/etc/hosts` in your 
-favorite text editor (admin permissions are needed) and add the  following two lines:
-
-    # RIR Benchmarking
-    147.32.232.108 rirflies.prl.r.com
 
 ## Benchmarks
 Currently we are using the Bounce and Mandelbrot benchmarks from the 
