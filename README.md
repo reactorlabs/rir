@@ -52,6 +52,8 @@ To print intermediate debug information, `pir.compile` takes a `debugFlags` argu
 Debug flags can be created using `pir.debugFlags`, for example to debug the register allocator, you could use `pir.compile(f, debugFlags=pir.debugFlags(PrintFinalPir=TRUE,DebugAllocator=TRUE))`.
 To change the default debug flags use `pir.setDebugFlags(pir.debugFlags(...))`.
 
+We periodically [benchmark](documentation/benchmarking.md) the performance of the optimizer
+
 ### Off-Tree builds
 
 You can have multiple builds at the same time.
