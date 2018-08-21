@@ -82,11 +82,11 @@ R with RIR patches is a submodule under external/custom-r. This is how you edit:
     # one of the R version branches. If you want to make changes
     # you have to make sure to be on that branch locally, before
     # creating commits.
-    git checkout rir-patch-3-3-branch
-    git pull origin rir-patch-3-3-branch
+    git checkout R-3.5.1-rir-patch
+    git pull origin R-3.5.1-rir-patch
     # edit some stuff ... 
     git commit
-    git push origin rir-patch-3-3-branch
+    git push origin R-3.5.1-rir-patch
     cd ../..
     # now the updated submodule needs to be commited to rir 
     git commit external/custom-r -m "bump R module version"
@@ -109,10 +109,10 @@ If you want to test your R changes on travis, before pushing to the main branch 
     # Now, with travis green, before merging, change it back:
 
     cd external/custom-r
-    git checkout rir-patch-3-3-branch
-    git pull origin rir-patch-3-3-branch
+    git checkout R-3.5.1-rir-patch
+    git pull origin R-3.5.1-rir-patch
     git merge --fast-forward-only my-gnur-feature-branch
-    git push origin rir-patch-3-3-branch
+    git push origin R-3.5.1-rir-patch
     # delete old branch
     git push origin :my-gnur-feature-branch
     cd ../..
