@@ -41,6 +41,7 @@ class StackMachine {
     Value* front();
     Value* top();
     void push(Value*);
+    void push(Instruction*);
     Value* pop();
     BC getCurrentBC();
     void advancePC();

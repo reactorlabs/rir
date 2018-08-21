@@ -15,8 +15,7 @@ void DelayInstr::apply(Closure* function) {
             auto i = *ip;
             auto next = ip + 1;
 
-            if (i->accessesEnv() == false && i->mightIO() == false &&
-                !Phi::Cast(i)) {
+            if (!i->accessesEnv() && !i->hasEffect() && !Phi::Cast(i)) {
                 Instruction* usage = i->hasSingleUse();
                 if (usage && usage->bb() != bb) {
                     auto phi = Phi::Cast(usage);

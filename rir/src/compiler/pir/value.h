@@ -24,9 +24,10 @@ class Value {
     PirType type;
     Tag tag;
     Value(PirType type, Tag tag) : type(type), tag(tag) {}
-    void printRef(std::ostream& out);
+    virtual void printRef(std::ostream& out) = 0;
     void printRef() { printRef(std::cerr); }
-    bool isInstruction();
+    virtual bool isInstruction() { return false; }
+    virtual Value* baseValue() { return this; }
 };
 
 }

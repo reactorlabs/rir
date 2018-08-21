@@ -17,41 +17,43 @@ class TheCleanup {
     void operator()() {
         std::unordered_set<size_t> used_p;
         std::unordered_map<BB*, std::unordered_set<Phi*>> used_bb;
+        std::unordered_map<SetShared*, int> isShared;
 
         Visitor::run(function->entry, [&](BB* bb) {
             auto ip = bb->begin();
             while (ip != bb->end()) {
                 Instruction* i = *ip;
                 auto next = ip + 1;
-                Force* force = Force::Cast(i);
-                ChkClosure* chkcls = ChkClosure::Cast(i);
-                ChkMissing* missing = ChkMissing::Cast(i);
-                Phi* phi = Phi::Cast(i);
-                MkArg* arg = MkArg::Cast(i);
-                if (!i->mightIO() && !i->changesEnv() && i->unused()) {
+                bool removed = false;
+                if (!i->hasEffect() && !i->changesEnv() && i->unused()) {
+                    removed = true;
                     next = bb->remove(ip);
-                } else if (force) {
+                } else if (auto force = Force::Cast(i)) {
                     Value* arg = force->arg<0>().val();
                     if (PirType::valOrMissing().isSuper(arg->type)) {
+                        removed = true;
                         force->replaceUsesWith(arg);
                         next = bb->remove(ip);
                     }
-                } else if (chkcls) {
+                } else if (auto chkcls = ChkClosure::Cast(i)) {
                     Value* arg = chkcls->arg<0>().val();
                     if (arg->type.isA(RType::closure)) {
+                        removed = true;
                         chkcls->replaceUsesWith(arg);
                         next = bb->remove(ip);
                     }
-                } else if (missing) {
+                } else if (auto missing = ChkMissing::Cast(i)) {
                     Value* arg = missing->arg<0>().val();
                     if (PirType::val().isSuper(arg->type)) {
+                        removed = true;
                         missing->replaceUsesWith(arg);
                         next = bb->remove(ip);
                     }
-                } else if (phi) {
+                } else if (auto phi = Phi::Cast(i)) {
                     std::unordered_set<Value*> phin;
                     phi->eachArg([&](BB*, Value* v) { phin.insert(v); });
                     if (phin.size() == 1) {
+                        removed = true;
                         phi->replaceUsesWith(*phin.begin());
                         next = bb->remove(ip);
                     } else {
@@ -59,12 +61,38 @@ class TheCleanup {
                         for (auto bb : phi->input)
                             used_bb[bb].insert(phi);
                     }
-                } else if (arg) {
+                } else if (auto arg = MkArg::Cast(i)) {
                     used_p.insert(arg->prom->id);
+                } else if (auto shared = SetShared::Cast(i)) {
+                    if (i->unused()) {
+                        removed = true;
+                        next = bb->remove(ip);
+                    } else {
+                        if (!isShared.count(shared))
+                            isShared[shared] = 0;
+                    }
+                }
+                if (!removed) {
+                    i->eachArg([&](Value* arg) {
+                        if (auto shared = SetShared::Cast(arg)) {
+                            // Count how many times a shared value is used. If
+                            // it leaks, it really needs to be marked shared.
+                            isShared[shared]++;
+                            if (i->leaksArg(arg))
+                                isShared[shared]++;
+                        }
+                    });
                 }
                 ip = next;
             }
         });
+
+        // SetShared instructions with only one use, do not need to be set to
+        // shared
+        for (auto shared : isShared) {
+            if (shared.second <= 1)
+                shared.first->replaceUsesWith(shared.first->arg<0>().val());
+        }
 
         // Recursively serach promises for referencs to other promises
         std::deque<Promise*> todo;

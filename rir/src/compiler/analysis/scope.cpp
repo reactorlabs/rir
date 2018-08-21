@@ -80,17 +80,17 @@ void TheScopeAnalysis::apply(AS& envs, Instruction* i) const {
     } else if (CallInstruction::CastCall(i) && depth < maxDepth) {
         auto calli = CallInstruction::CastCall(i);
         if (auto call = Call::Cast(i)) {
-            if (auto trg = call->cls()) {
-                MkFunCls* cls = envs.findClosure(i->env(), trg);
-                if (cls != AbstractREnvironment::UnknownClosure) {
-                    if (cls->fun->argNames.size() == calli->nCallArgs()) {
-                        TheScopeAnalysis nextFun(cls->fun, cls->fun->argNames,
-                                                 cls->env(), cls->fun->entry,
-                                                 envs, depth + 1);
-                        nextFun();
-                        envs.merge(nextFun.result());
-                        handled = true;
-                    }
+            auto trg = call->cls()->baseValue();
+            assert(trg);
+            MkFunCls* cls = envs.findClosure(i->env(), trg);
+            if (cls != AbstractREnvironment::UnknownClosure) {
+                if (cls->fun->argNames.size() == calli->nCallArgs()) {
+                    TheScopeAnalysis nextFun(cls->fun, cls->fun->argNames,
+                                             cls->env(), cls->fun->entry, envs,
+                                             depth + 1);
+                    nextFun();
+                    envs.merge(nextFun.result());
+                    handled = true;
                 }
             }
         } else if (auto call = StaticCall::Cast(i)) {
@@ -102,6 +102,8 @@ void TheScopeAnalysis::apply(AS& envs, Instruction* i) const {
                 envs.merge(nextFun.result());
                 handled = true;
             }
+        } else {
+            assert(CallBuiltin::Cast(i) || CallSafeBuiltin::Cast(i));
         }
     }
 

@@ -80,6 +80,7 @@ enum class Effect : uint8_t {
     Warn,
     Error,
     Print,
+    Write,
     Any,
 };
 
@@ -95,7 +96,7 @@ class Instruction : public Value {
     Instruction(Tag tag, PirType t, unsigned srcIdx)
         : Value(t, tag), srcIdx(srcIdx) {}
 
-    virtual bool mightIO() const = 0;
+    virtual bool hasEffect() const = 0;
     virtual bool changesEnv() const = 0;
     virtual bool leaksEnv() const = 0;
     virtual bool hasEnv() const = 0;
@@ -108,7 +109,10 @@ class Instruction : public Value {
 
     virtual Instruction* clone() const = 0;
 
-    BB* bb_;
+    Value* baseValue() override;
+    bool isInstruction() final { return true; }
+
+    BB* bb_ = nullptr;
     BB* bb() {
         assert(bb_);
         return bb_;
@@ -129,11 +133,18 @@ class Instruction : public Value {
 
     virtual void printArgs(std::ostream& out);
     virtual void print(std::ostream&);
-    void printRef(std::ostream& out);
+    void printRef(std::ostream& out) override;
     void print() { print(std::cerr); }
 
     virtual InstrArg& arg(size_t pos) = 0;
     virtual const InstrArg& arg(size_t pos) const = 0;
+
+    bool leaksArg(Value* val) {
+        // TODO: for escape analysis we use hasEnv || hasEffect as a very crude
+        // approximation whether this instruction leaks arguments. We should do
+        // better.
+        return hasEnv() || hasEffect();
+    }
 
     typedef std::function<void(Value*)> ArgumentValueIterator;
     typedef std::function<void(const InstrArg&)> ArgumentIterator;
@@ -192,7 +203,7 @@ class InstructionImplementation : public Instruction {
     }
 
     struct InstrDescription {
-        bool MightIO;
+        bool HasEffect;
         bool ChangesEnv;
         bool LeaksEnv;
         bool HasEnv;
@@ -203,7 +214,7 @@ class InstructionImplementation : public Instruction {
         EFFECT > Effect::None, ENV >= EnvAccess::Write, ENV == EnvAccess::Leak,
         ENV > EnvAccess::None, ENV > EnvAccess::Capture};
 
-    bool mightIO() const final { return Description.MightIO; }
+    bool hasEffect() const final { return Description.HasEffect; }
     bool changesEnv() const final { return Description.ChangesEnv; }
     bool leaksEnv() const final { return Description.LeaksEnv; }
     bool hasEnv() const final { return Description.HasEnv; }
@@ -704,6 +715,11 @@ class FLI(LdFunctionEnv, 0, Effect::None, EnvAccess::None) {
     LdFunctionEnv() : FixedLenInstruction(RType::env) {}
 };
 
+class FLI(SetShared, 1, Effect::Write, EnvAccess::None) {
+  public:
+    SetShared(Value* v) : FixedLenInstruction(v->type, {{v->type}}, {{v}}) {}
+};
+
 class FLI(PirCopy, 1, Effect::None, EnvAccess::None) {
   public:
     PirCopy(Value* v) : FixedLenInstruction(v->type, {{v->type}}, {{v}}) {}
@@ -872,7 +888,7 @@ class ACallInstructionImplementation(StaticCall, Effect::Any, EnvAccess::Leak,
 
 typedef SEXP (*CCODE)(SEXP, SEXP, SEXP, SEXP);
 
-class ACallInstructionImplementation(CallBuiltin, Effect::Any, EnvAccess::Write,
+class ACallInstructionImplementation(CallBuiltin, Effect::Any, EnvAccess::Leak,
                                      false) {
   public:
     SEXP blt;

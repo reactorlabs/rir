@@ -35,6 +35,10 @@ Value* StackMachine::front() {
     assert(!stack.empty());
     return stack.front();
 }
+void StackMachine::push(Instruction* i) {
+    assert(i->bb() != nullptr && "Insert instruction before pushing");
+    stack.push_back(i);
+}
 void StackMachine::push(Value* v) { stack.push_back(v); }
 
 bool StackMachine::empty() { return stack.empty(); }
@@ -179,10 +183,6 @@ bool StackMachine::tryRunCurrentBC(const Rir2Pir& rir2pir, Builder& insert) {
             if (feedback.numTargets == 1)
                 monomorphic = feedback.targets[0];
         }
-        // TODO: currently speculative static calls break our tests, so we
-        // disable them here. But most probably we are just hiding some actual
-        // bugs with this, so we should REALLY REALLY enable it again!
-        monomorphic = nullptr;
 
         auto ast = bc.immediate.callFixedArgs.ast;
         auto insertGenericCall = [&]() {
@@ -430,26 +430,28 @@ bool StackMachine::tryRunCurrentBC(const Rir2Pir& rir2pir, Builder& insert) {
         break;
     }
 
+    case Opcode::set_shared_:
+        push(insert(new SetShared(pop())));
+        break;
+
     case Opcode::int3_:
         insert(new Int3());
         break;
 
     // TODO implement!
     // (silently ignored)
-    case Opcode::set_shared_:
     case Opcode::invisible_:
     case Opcode::visible_:
     case Opcode::isfun_:
-    case Opcode::make_unique_:
-    case Opcode::brobj_:
         break;
 
     // Currently unused opcodes:
+    case Opcode::brobj_:
     case Opcode::alloc_:
     case Opcode::push_code_:
     case Opcode::set_names_:
     case Opcode::names_:
-    case Opcode::force_:
+    case Opcode::make_unique_:
 
     // Invalid opcodes:
     case Opcode::label:
@@ -465,6 +467,7 @@ bool StackMachine::tryRunCurrentBC(const Rir2Pir& rir2pir, Builder& insert) {
         assert(false);
 
     // Opcodes that only come from PIR
+    case Opcode::force_:
     case Opcode::make_env_:
     case Opcode::get_env_:
     case Opcode::parent_env_:

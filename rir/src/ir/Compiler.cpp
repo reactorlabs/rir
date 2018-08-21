@@ -331,7 +331,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
             Case(SYMSXP) {
                 cs << BC::guardNamePrimitive(fun);
                 compileExpr(ctx, rhs);
-                cs << BC::dup() << BC::setShared()
+                cs << BC::setShared() << BC::dup()
                    << (superAssign ? BC::stvarSuper(lhs) : BC::stvar(lhs))
                    << BC::invisible();
                 return true;

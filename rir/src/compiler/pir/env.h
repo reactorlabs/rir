@@ -48,6 +48,8 @@ class Env : public Value {
 
     static bool isParentEnv(Value* a, Value* b);
     static Value* parentEnv(Value* e);
+
+    virtual ~Env() {}
 };
 }
 }

@@ -1,9 +1,10 @@
 #ifndef PIR_MODULE_H
 #define PIR_MODULE_H
 
-#include <functional>
 #include "R/r.h"
+#include <functional>
 #include <iostream>
+#include <map>
 #include <unordered_map>
 #include <vector>
 
@@ -45,9 +46,10 @@ class Module {
         std::vector<pir::Closure*> translations;
     };
 
-    pir::Closure* get(rir::Function* f) {
-        assert(functions.count(f));
-        return functions.at(f).current();
+    typedef std::pair<rir::Function*, Env*> FunctionAndEnv;
+    pir::Closure* get(FunctionAndEnv idx) {
+        assert(functions.count(idx));
+        return functions.at(idx).current();
     }
 
     typedef std::function<bool(Closure* f)> MaybeCreate;
@@ -62,7 +64,7 @@ class Module {
 
   private:
     Closure* declare(rir::Function*, const std::vector<SEXP>& a, Env* env);
-    std::unordered_map<rir::Function*, VersionedClosure> functions;
+    std::map<FunctionAndEnv, VersionedClosure> functions;
 };
 
 }
