@@ -22,11 +22,11 @@ favorite text editor (admin permissions are needed) and add the  following two l
 Currently we are using the Bounce and Mandelbrot benchmarks from the 
 [are-we-fast-yet suite](https://github.com/smarr/are-we-fast-yet/). Below we provide some
 basic information about each. For a more detailed information regarding different kind of
-metrics, [visit the original paper documentation](https://github.com/smarr/are-we-fast-yet/blob/master/docs/metrics.md).
+metrics [visit the original paper documentation](https://github.com/smarr/are-we-fast-yet/blob/master/docs/metrics.md).
 
 ### Bounce
 Bounce is a micro benchmark that simulates a box with bouncing balls. For each iteration, 
-the benchmark mainly computes the x and y coordinates of a list of balls based on the current 
+the benchmark mainly computes the *x* and *y* coordinates of a list of balls based on the current 
 position plus the current velocity. As such, the benchmark mainly challenges the usage of loops, 
 and basic arithmetic operations over a list of objects (balls). 
  
@@ -36,5 +36,5 @@ it mainly performs floating point operations and some basic binary arithmetic li
 binary logical operators. 
 
 ## Results
-
+TODO
 
