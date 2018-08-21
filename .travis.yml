@@ -1,29 +1,59 @@
-dist: trusty
-
 language: cpp
+
+# Use linux unless specified otherwise
+os: linux
+dist: trusty
 
 matrix:
   include:
+
+    # macOS clang
     - os: osx
+      env:
+        - CORES=2
+        - COMPILER=clang++
+        - CHECK=check
+        - BUILD=release
       compiler: clang
-      # TAGS is some dummy make rule. currently 'make check' is broken on osx.
-      env: CORES=2 CHECK=TAGS BUILD=release
-    - os: linux
-      compiler: gcc
-      env: CHECK=check BUILD=release
-    - os: linux
-      compiler: gcc
-      env: CORES=2 CHECK=check BUILD=debug PIR_ENABLE=force
-    - os: linux
-      compiler: gcc
-      env: CHECK=test-all-devel BUILD=release PIR_ENABLE=force ENABLE_VALGRIND=1
-    - os: linux
-      compiler: gcc
-      env: CHECK=check-recommended BUILD=release
+
+    - os: osx
+      env:
+        - CORES=2
+        - COMPILER=clang++
+        - CHECK=check
+        - BUILD=debug
+        - PIR_ENABLE=force
+      compiler: clang
+
+    # linux gcc
+    - env:
+        - COMPILER=g++-7
+        - CHECK=check
+        - BUILD=release
+
+    - env:
+        - CORES=2
+        - COMPILER=g++-7
+        - CHECK=check
+        - BUILD=debug
+        - PIR_ENABLE=force
+
+    - env:
+        - COMPILER=g++-7
+        - CHECK=test-all-devel
+        - BUILD=release
+        - PIR_ENABLE=force
+        - ENABLE_VALGRIND=1
+
+    - env:
+        - COMPILER=g++-7
+        - CHECK=check-recommended
+        - BUILD=release
 
 addons:
   apt:
     packages:
+      - g++-7
       - xdg-utils
       - gfortran
       - subversion
@@ -37,13 +67,20 @@ addons:
       - rsync
       - xorg-dev
       - valgrind
+    sources:
+      - ubuntu-toolchain-r-test
 
 before_install:
   - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then . ./tools/ci/before_install-osx.sh; fi
   - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then . ./tools/ci/before_install-linux.sh; fi
 
 before_script:
-  - cmake -DCMAKE_BUILD_TYPE=$BUILD .
+  - export TZ=""
+  - export CXX=${COMPILER}
+  - ${CXX} --version
+  - cd "${TRAVIS_BUILD_DIR}"
+  - mkdir build && cd build
+  - cmake -DCMAKE_BUILD_TYPE=$BUILD ..
   - make setup
   - make -j2
 
@@ -59,5 +96,4 @@ script:
 cache:
   ccache: true
   directories:
-  - external
-
+    - external

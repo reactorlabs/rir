@@ -566,13 +566,6 @@ SEXP rirCall(const CallContext& call, SEXP actuals, Context* ctx) {
 
     assert(result);
 
-    if (env) {
-        if (!fun->envLeaked && FRAME_LEAKED(env))
-            fun->envLeaked = true;
-        if (!fun->envChanged && FRAME_CHANGED(env))
-            fun->envChanged = true;
-    }
-
     assert(!fun->deopt);
     return result;
 }
@@ -618,13 +611,6 @@ SEXP rirCall(const CallContext& call, Context* ctx) {
     }
 
     assert(result);
-
-    if (env) {
-        if (!fun->envLeaked && FRAME_LEAKED(env))
-            fun->envLeaked = true;
-        if (!fun->envChanged && FRAME_CHANGED(env))
-            fun->envChanged = true;
-    }
 
     assert(!fun->deopt);
     return result;
@@ -1353,13 +1339,10 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env,
         INSTRUCTION(stvar_) {
             Immediate id = readImmediate();
             advanceImmediate();
-            int wasChanged = FRAME_CHANGED(getenv());
             SEXP val = ostack_pop(ctx);
 
             cachedSetVar(val, getenv(), id, ctx, bindingCache);
 
-            if (!wasChanged)
-                CLEAR_FRAME_CHANGED(getenv());
             NEXT();
         }
 
@@ -2203,17 +2186,17 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env,
 
             switch (TYPEOF(idx)) {
             case REALSXP:
-                if (SHORT_VEC_LENGTH(idx) != 1 || *REAL(idx) == NA_REAL)
+                if (STDVEC_LENGTH(idx) != 1 || *REAL(idx) == NA_REAL)
                     goto fallback;
                 i = (int)*REAL(idx) - 1;
                 break;
             case INTSXP:
-                if (SHORT_VEC_LENGTH(idx) != 1 || *INTEGER(idx) == NA_INTEGER)
+                if (STDVEC_LENGTH(idx) != 1 || *INTEGER(idx) == NA_INTEGER)
                     goto fallback;
                 i = *INTEGER(idx) - 1;
                 break;
             case LGLSXP:
-                if (SHORT_VEC_LENGTH(idx) != 1 || *LOGICAL(idx) == NA_LOGICAL)
+                if (STDVEC_LENGTH(idx) != 1 || *LOGICAL(idx) == NA_LOGICAL)
                     goto fallback;
                 i = (int)*LOGICAL(idx) - 1;
                 break;
@@ -2412,19 +2395,8 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env,
         }
 
         INSTRUCTION(guard_env_) {
-            uint32_t deoptId = readImmediate();
+            // TODO: nop for now since we don't have deoptimization
             advanceImmediate();
-            if (FRAME_CHANGED(getenv()) || FRAME_LEAKED(getenv())) {
-                Function* fun = c->function();
-                assert(fun->body() == c && "Cannot deopt from promise");
-                fun->deopt = true;
-                SEXP val = fun->origin();
-                Function* deoptFun = Function::unpack(val);
-                Code* deoptCode = deoptFun->body();
-                c = deoptCode;
-                pc = Deoptimizer_pc(deoptId);
-                PC_BOUNDSCHECK(pc, c);
-            }
             NEXT();
         }
 

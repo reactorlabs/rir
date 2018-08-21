@@ -267,10 +267,7 @@ bool StackMachine::tryRunCurrentBC(const Rir2Pir& rir2pir, Builder& insert) {
         } else {
             assert(TYPEOF(target) == CLOSXP);
             if (!isValidClosureSEXP(target)) {
-                target = Compiler::compileClosure(target);
-                // TODO: we need to keep track of this compiled rir function.
-                // For now let's just put it in the constant pool.
-                Pool::insert(target);
+                Compiler::compileClosure(target);
             }
             bool failed = false;
             rir2pir.compiler.compileClosure(

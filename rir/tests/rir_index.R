@@ -54,5 +54,5 @@ stopifnot(f(o, 1) == 123)
 
 stopifnot(f(NULL,1) == NULL)
 stopifnot(f(NULL,13) == NULL)
-stopifnot(rir.compile(function() NULL[[1]]) == NULL)
-stopifnot(rir.compile(function() NULL[[12]]) == NULL)
+stopifnot(rir.compile(function() NULL[[1]])() == NULL)
+stopifnot(rir.compile(function() NULL[[12]])() == NULL)

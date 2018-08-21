@@ -57,8 +57,6 @@ struct Function {
         size = sizeof(Function);
         signature = nullptr;
         invocationCount = 0;
-        envLeaked = false;
-        envChanged = false;
         deopt = false;
         markOpt = false;
         codeLength = 0;
@@ -149,11 +147,9 @@ struct Function {
 
     unsigned invocationCount;
 
-    unsigned envLeaked : 1;
-    unsigned envChanged : 1;
     unsigned deopt : 1;
     unsigned markOpt : 1;
-    unsigned spare : 28;
+    unsigned spare : 30;
 
     unsigned codeLength; /// number of Code objects in the Function
 
