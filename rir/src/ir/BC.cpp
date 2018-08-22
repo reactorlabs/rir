@@ -187,7 +187,7 @@ void BC::printImmediateArgs(std::ostream& out) const {
         else if (arg == DOTS_ARG_IDX)
             out << " ...";
         else
-            out << std::hex << arg << std::dec;
+            out << " " << std::hex << arg << std::dec;
     }
     out << " ] ";
 }
@@ -301,7 +301,7 @@ void BC::print(std::ostream& out) const {
         if (prof.numTargets == CallFeedback::MaxTargets)
             out << "*>, ";
         else
-            out << prof.numTargets << "> ";
+            out << prof.numTargets << ">, ";
         for (int i = 0; i < prof.numTargets; ++i)
             out << prof.targets[i] << "(" << type2char(TYPEOF(prof.targets[i]))
                 << ") ";
@@ -318,7 +318,7 @@ void BC::print(std::ostream& out) const {
                 out << Rf_type2char(t.sexptype) << "(" << (t.object ? "o" : "")
                     << (t.attribs ? "a" : "") << (t.scalar ? "s" : "") << ")";
                 if (i != (unsigned)prof[j].numTypes - 1)
-                    out << ",";
+                    out << ", ";
             }
             if (j == 0)
                 out << " x ";
