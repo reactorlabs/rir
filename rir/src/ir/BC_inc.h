@@ -100,7 +100,6 @@ class BC {
         Immediate expected;
         Immediate id;
     };
-    typedef Immediate Guard;
     typedef Immediate NumLocals;
     struct LocalsCopy {
         Immediate target;
@@ -119,7 +118,6 @@ class BC {
         StaticCallFixedArgs staticCallFixedArgs;
         CallFixedArgs callFixedArgs;
         GuardFunArgs guard_fun_args;
-        Guard guard_id;
         PoolIdx pool;
         FunIdx fun;
         ArgIdx arg_idx;
@@ -249,10 +247,6 @@ class BC {
 
     bool isLabel() const { return bc == Opcode::label; }
 
-    bool isGuard() const {
-        return bc == Opcode::guard_fun_ || bc == Opcode::guard_env_;
-    }
-
     // This code performs the same as `BC::decode(pc).size()`, but for
     // performance reasons, it avoids actually creating the BC object.
     // This is important, as it is very performance critical.
@@ -371,7 +365,6 @@ class BC {
     inline static BC lglAnd();
     inline static BC guardName(SEXP, SEXP);
     inline static BC guardNamePrimitive(SEXP);
-    inline static BC guardEnv(uint32_t id);
     inline static BC isfun();
     inline static BC invisible();
     inline static BC visible();
@@ -387,6 +380,7 @@ class BC {
     inline static BC isObj();
     inline static BC return_();
     inline static BC int3();
+    inline static BC deopt(Opcode*, Code*);
     inline static BC callImplicit(const std::vector<FunIdx>& args, SEXP ast);
     inline static BC callImplicit(const std::vector<FunIdx>& args,
                                   const std::vector<SEXP>& names, SEXP ast);
@@ -471,6 +465,7 @@ class BC {
                                                               Opcode* pc) {
         ImmediateArguments immediate;
         switch (bc) {
+        case Opcode::deopt_:
         case Opcode::push_:
         case Opcode::ldfun_:
         case Opcode::ldvar_:
@@ -493,9 +488,6 @@ class BC {
             break;
         case Opcode::static_call_:
             immediate.staticCallFixedArgs = *(StaticCallFixedArgs*)pc;
-            break;
-        case Opcode::guard_env_:
-            immediate.guard_id = *(uint32_t*)pc;
             break;
         case Opcode::guard_fun_:
             immediate.guard_fun_args = *(GuardFunArgs*)pc;

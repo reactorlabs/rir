@@ -10,14 +10,13 @@
 #include "R/RList.h"
 #include "R/r.h"
 
-#include "interpreter/deoptimizer.h"
-
 namespace rir {
 
 void BC::write(CodeStream& cs) const {
     cs.insert(bc);
     switch (bc) {
     case Opcode::push_:
+    case Opcode::deopt_:
     case Opcode::ldfun_:
     case Opcode::ldddvar_:
     case Opcode::ldvar_:
@@ -30,10 +29,6 @@ void BC::write(CodeStream& cs) const {
     case Opcode::missing_:
     case Opcode::subassign2_:
         cs.insert(immediate.pool);
-        return;
-
-    case Opcode::guard_env_:
-        cs.insert(immediate.guard_id);
         return;
 
     case Opcode::guard_fun_:
@@ -242,12 +237,17 @@ void BC::print(std::ostream& out) const {
         out << " " << nargs << " : " << dumpSexp(target).c_str();
         break;
     }
+    case Opcode::deopt_: {
+        DeoptMetadata* m = (DeoptMetadata*)DATAPTR(immediateConst());
+        m->print(out);
+        break;
+    }
     case Opcode::push_:
         if (immediateConst() == R_UnboundValue)
             out << " -\n";
         else
-            out << dumpSexp(immediateConst()).c_str() << "\n";
-        return;
+            out << dumpSexp(immediateConst()).c_str();
+        break;
     case Opcode::ldfun_:
     case Opcode::ldvar_:
     case Opcode::ldvar_noforce_:
@@ -285,10 +285,6 @@ void BC::print(std::ostream& out) const {
     case Opcode::is_:
     case Opcode::alloc_:
         out << " " << type2char(immediate.i);
-        break;
-    case Opcode::guard_env_:
-        Deoptimizer_print(immediate.guard_id, out);
-        out << "\n";
         break;
 
     case Opcode::record_call_: {

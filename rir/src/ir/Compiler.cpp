@@ -965,6 +965,7 @@ SEXP findClosure(SEXP sym, SEXP rho) {
 
 // try to look up a closure
 bool compileWithGuess(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
+    return false;
     if (!ctx.env())
         return false;
 

@@ -37,3 +37,19 @@ rir.disassemble(f)
 
 stopifnot(42 == f(function() leak <<- sys.frame(-1), assign("localVar", 42, leak)))
 rir.disassemble(f)
+
+
+{
+    f <- function(x,y) x-y
+    g <- rir.compile(function() f(44,2));
+    h <- function() g();
+    h();
+    rir.markOptimize(g);
+    h();
+    stopifnot(h() == 42);
+    rir.disassemble(g);
+    h();
+    f <- function(x,y) y-x;
+    stopifnot(h() == -42);
+    h()
+}

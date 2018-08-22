@@ -657,7 +657,7 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 instr->type != PirType::voyd() && !Phi::Cast(instr);
 
             auto explicitEnvValue = [](Instruction* instr) {
-                return MkEnv::Cast(instr) || Deopt::Cast(instr);
+                return MkEnv::Cast(instr);
             };
 
             // Load Arguments to the stack
@@ -956,9 +956,11 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 break;
             }
             case Tag::Deopt: {
-                Deopt::Cast(instr)->eachArg([&](Value*) { cs << BC::pop(); });
-                // TODO
-                cs << BC::int3() << BC::push(R_NilValue) << BC::ret();
+                auto deopt = Deopt::Cast(instr);
+                assert(deopt->frames.size() == 1 &&
+                       "rir deopt cannot synthesize frames yet");
+                auto frame = deopt->frames[0];
+                cs << BC::deopt(frame.pc, frame.code);
                 return;
             }
             // values, not instructions

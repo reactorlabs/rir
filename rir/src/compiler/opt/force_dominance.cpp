@@ -1,5 +1,6 @@
 #include "force_dominance.h"
 #include "../analysis/generic_static_analysis.h"
+#include "../analysis/query.h"
 #include "../pir/pir_impl.h"
 #include "../transform/bb.h"
 #include "../transform/replace.h"
@@ -122,6 +123,18 @@ class ForceDominanceAnalysisResult {
     }
 
     bool isSafeToInline(MkArg* a) {
+        // To inline promises with a deopt instruction we need to be able to
+        // synthesize promises and promise call framse.
+        auto prom = a->prom;
+        if (hasDeopt.count(prom)) {
+            if (hasDeopt.at(prom))
+                return false;
+        } else {
+            auto deopt = !Query::noDeopt(prom);
+            hasDeopt[prom] = deopt;
+            if (deopt)
+                return false;
+        }
         return exit.count(a) && exit.at(a) != ForcedBy::ambiguous();
     }
     bool isDominating(Force* f) { return dom.find(f) != dom.end(); }
@@ -134,6 +147,7 @@ class ForceDominanceAnalysisResult {
     ForcedBy exit;
     std::unordered_map<Force*, Force*> domBy;
     std::unordered_set<Force*> dom;
+    std::unordered_map<Promise*, bool> hasDeopt;
 };
 }
 

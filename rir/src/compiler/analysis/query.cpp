@@ -5,6 +5,11 @@
 namespace rir {
 namespace pir {
 
+bool Query::noDeopt(Code* c) {
+    return Visitor::check(c->entry,
+                          [](Instruction* i) { return !Deopt::Cast(i); });
+}
+
 bool Query::noEnv(Code* c) {
     return Visitor::check(c->entry,
                           [](Instruction* i) { return !MkEnv::Cast(i); });
