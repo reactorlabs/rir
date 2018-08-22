@@ -39,7 +39,8 @@ void Code::disassemble(std::ostream& out) const {
         case Opcode::static_call_:
             out << "   ; "
                 << dumpSexp(Pool::get(bc.immediate.staticCallFixedArgs.ast))
-                       .c_str();
+                       .c_str()
+                << "\n       ";
             break;
         default: {}
         }
