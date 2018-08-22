@@ -301,7 +301,7 @@ void BC::print(std::ostream& out) const {
         if (prof.numTargets == CallFeedback::MaxTargets)
             out << "*>, ";
         else
-            out << prof.numTargets << ">, ";
+            out << prof.numTargets << ">" << (prof.numTargets ? ", " : " ");
         for (int i = 0; i < prof.numTargets; ++i)
             out << prof.targets[i] << "(" << type2char(TYPEOF(prof.targets[i]))
                 << ") ";
@@ -313,12 +313,17 @@ void BC::print(std::ostream& out) const {
         auto prof = immediate.binopFeedback;
         out << "   [ ";
         for (size_t j = 0; j < 2; ++j) {
-            for (size_t i = 0; i < prof[j].numTypes; ++i) {
-                auto t = prof[j].seen[i];
-                out << Rf_type2char(t.sexptype) << "(" << (t.object ? "o" : "")
-                    << (t.attribs ? "a" : "") << (t.scalar ? "s" : "") << ")";
-                if (i != (unsigned)prof[j].numTypes - 1)
-                    out << ", ";
+            if (prof[j].numTypes) {
+                for (size_t i = 0; i < prof[j].numTypes; ++i) {
+                    auto t = prof[j].seen[i];
+                    out << Rf_type2char(t.sexptype) << "("
+                        << (t.object ? "o" : "") << (t.attribs ? "a" : "")
+                        << (t.scalar ? "s" : "") << ")";
+                    if (i != (unsigned)prof[j].numTypes - 1)
+                        out << ", ";
+                }
+            } else {
+                out << "<?>";
             }
             if (j == 0)
                 out << " x ";
