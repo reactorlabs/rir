@@ -26,18 +26,20 @@ REXPORT SEXP rir_disassemble(SEXP what, SEXP verbose) {
     if (!t)
         Rf_error("Not a rir compiled code");
 
-    Rprintf("* closure %p (vtable %p, env %p)\n", what, t, CLOENV(what));
+    std::cout << "* closure " << what << " (vtable " << t << ", env "
+              << CLOENV(what) << ")\n";
     for (size_t entry = 0; entry < t->capacity(); ++entry) {
         if (!t->available(entry))
             continue;
         Function* f = t->at(entry);
-        Rprintf("= vtable slot <%d> (%p, invoked %u) =\n", entry, f,
-                f->invocationCount);
         std::stringstream output;
+        output << "= vtable slot <" << entry << "> (" << f << ", invoked "
+               << f->invocationCount << ") =\n";
         f->body()->disassemble(output);
         for (auto c : *f) {
             if (c != f->body()) {
-                Rprintf("\n [Prom %x]\n", (uintptr_t)c - (uintptr_t)f);
+                output << "\n [Prom " << std::hex
+                       << ((uintptr_t)c - (uintptr_t)f) << std::dec << "]\n";
                 c->disassemble(output);
             }
         }
