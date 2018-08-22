@@ -52,10 +52,9 @@ void Code::disassemble(std::ostream& out) const {
 
 void Code::print(std::ostream& out) const {
     out << "Code object (" << this << " offset " << std::hex << header
-        << " (hex))"
-        << "\n";
+        << std::dec << " (hex))\n";
     out << "   Source: " << src << " index to src pool\n";
-    out << "   Magic: " << std::hex << magic << "(hex)\n";
+    out << "   Magic: " << std::hex << magic << std::dec << "(hex)\n";
     out << "   Stack (o): " << stackLength << "\n";
     out << "   Code size: " << codeSize << "[B]\n";
 
@@ -68,4 +67,5 @@ void Code::print(std::ostream& out) const {
     out << "\n";
     disassemble(out);
 }
-}
+
+} // namespace rir

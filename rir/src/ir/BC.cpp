@@ -180,7 +180,7 @@ void BC::write(CodeStream& cs) const {
 SEXP BC::immediateConst() const { return Pool::get(immediate.pool); }
 
 void BC::printImmediateArgs(std::ostream& out) const {
-    Rprintf("[");
+    out << "[";
     for (auto arg : immediateCallArguments) {
         if (arg == MISSING_ARG_IDX)
             out << " _";
@@ -189,7 +189,7 @@ void BC::printImmediateArgs(std::ostream& out) const {
         else
             out << std::hex << arg << std::dec;
     }
-    Rprintf(" ] ");
+    out << " ] ";
 }
 
 void BC::printNames(std::ostream& out) const {
@@ -293,38 +293,37 @@ void BC::print(std::ostream& out) const {
 
     case Opcode::record_call_: {
         CallFeedback prof = immediate.callFeedback;
-        Rprintf("   [ ");
+        out << "   [ ";
         if (prof.taken == CallFeedback::CounterOverflow)
-            Rprintf("*, <");
+            out << "*, <";
         else
-            Rprintf("%u, <", prof.taken);
+            out << prof.taken << ", <";
         if (prof.numTargets == CallFeedback::MaxTargets)
-            Rprintf("*>, ");
+            out << "*>, ";
         else
-            Rprintf("%u> ", prof.numTargets);
+            out << prof.numTargets << "> ";
         for (int i = 0; i < prof.numTargets; ++i)
-            Rprintf("%p(%s) ", prof.targets[i],
-                    type2char(TYPEOF(prof.targets[i])));
-        Rprintf("]");
+            out << prof.targets[i] << "(" << type2char(TYPEOF(prof.targets[i]))
+                << ") ";
+        out << "]";
         break;
     }
 
     case Opcode::record_binop_: {
         auto prof = immediate.binopFeedback;
-        Rprintf("   [ ");
+        out << "   [ ";
         for (size_t j = 0; j < 2; ++j) {
             for (size_t i = 0; i < prof[j].numTypes; ++i) {
                 auto t = prof[j].seen[i];
-                Rprintf("%s(%s%s%s)", Rf_type2char(t.sexptype),
-                        t.object ? "o" : "", t.attribs ? "a" : "",
-                        t.scalar ? "s" : "");
+                out << Rf_type2char(t.sexptype) << "(" << (t.object ? "o" : "")
+                    << (t.attribs ? "a" : "") << (t.scalar ? "s" : "") << ")";
                 if (i != (unsigned)prof[j].numTypes - 1)
-                    Rprintf(",");
+                    out << ",";
             }
             if (j == 0)
-                Rprintf(" x ");
+                out << " x ";
         }
-        Rprintf(" ]");
+        out << " ]";
         break;
     }
 
@@ -403,4 +402,5 @@ void BC::print(std::ostream& out) const {
     }
     out << "\n";
 }
-}
+
+} // namespace rir
