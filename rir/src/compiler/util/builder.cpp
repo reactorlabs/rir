@@ -20,16 +20,16 @@ bool Builder::isDone(BB* bb) {
 
 void Builder::setNextBB(BB* next0, BB* next1) {
     assert(bb);
-    assert(bb->next0 == nullptr);
-    assert(bb->next1 == nullptr);
     markDone(bb);
-    bb->next0 = next0;
+    bb->setNextBranches(next0, next1);
     if (next1)
-        bb->next1 = next1;
+        assert(!bb->isEmpty() && Branch::Cast(bb->last()));
 }
 
 void Builder::enterBB(BB* next) {
     assert(!isDone(next));
+    if (bb)
+        markDone(bb);
     bb = next;
 }
 
@@ -40,29 +40,18 @@ void Builder::createNextBB() {
     bb = n;
 }
 
-void Builder::ifThenElse(BBCompile ifblock, BBCompile thenblock) {
-    assert(bb);
-    auto a = createBB();
-    auto b = createBB();
-    setNextBB(a, b);
+void Builder::deoptUnless(Value* condition, rir::Code* srcCode, Opcode* pos,
+                          const RirStack& stack) {
+    add(new Branch(condition));
+    auto cont = createBB();
+    auto fail = createBB();
+    setNextBB(cont, fail);
 
-    auto j = createBB();
+    enterBB(fail);
+    auto sp = add(new Safepoint(env, srcCode, pos, stack));
+    add(new Deopt(sp));
 
-    enterBB(a);
-    ifblock();
-    setNextBB(j);
-
-    enterBB(b);
-    thenblock();
-    setNextBB(j);
-
-    enterBB(j);
-}
-
-void Builder::deopt(rir::Code* srcCode, Opcode* pos,
-                    const std::deque<Value*>& stack) {
-    auto sp = operator()(new Safepoint(env, srcCode, pos, stack));
-    operator()(new Deopt(sp));
+    enterBB(cont);
 };
 
 Builder::Builder(Closure* fun, Value* closureEnv)
@@ -73,7 +62,7 @@ Builder::Builder(Closure* fun, Value* closureEnv)
     std::vector<Value*> args(fun->argNames.size());
     for (long i = fun->argNames.size() - 1; i >= 0; --i)
         args[i] = this->operator()(new LdArg(i));
-    env = this->operator()(new MkEnv(closureEnv, fun->argNames, args.data()));
+    env = add(new MkEnv(closureEnv, fun->argNames, args.data()));
 }
 
 Builder::Builder(Closure* fun, Promise* prom)
@@ -81,7 +70,7 @@ Builder::Builder(Closure* fun, Promise* prom)
     createNextBB();
     assert(!prom->entry);
     prom->entry = bb;
-    env = this->operator()(new LdFunctionEnv());
+    env = add(new LdFunctionEnv());
 }
 }
 }

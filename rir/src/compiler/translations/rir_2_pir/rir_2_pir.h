@@ -10,6 +10,8 @@
 namespace rir {
 namespace pir {
 
+struct RirStack;
+
 class Rir2Pir {
   public:
     Rir2Pir(Rir2PirCompiler& cmp, rir::Function* srcFunction)
@@ -66,47 +68,8 @@ class Rir2Pir {
     Rir2PirCompiler& compiler;
     rir::Function* srcFunction;
 
-    struct State {
-        bool seen = false;
-        BB* entryBB = nullptr;
-        Opcode* entryPC = 0;
-
-        State() {}
-        State(State&&) = default;
-        State(const State&) = delete;
-        State(const State& other, bool seen, BB* entryBB, Opcode* entryPC)
-            : seen(seen), entryBB(entryBB), entryPC(entryPC),
-              stack(other.stack){};
-
-        void operator=(const State&) = delete;
-        State& operator=(State&&) = default;
-
-        void push(Value* v) { stack.push_back(v); }
-        Value* pop() {
-            auto v = stack.back();
-            stack.pop_back();
-            return v;
-        }
-        Value*& at(unsigned i) { return stack[stack.size() - 1 - i]; }
-        Value* at(unsigned i) const { return stack[stack.size() - 1 - i]; }
-        Value* top() const { return stack.back(); }
-        bool empty() const { return stack.empty(); }
-        size_t size() const { return stack.size(); }
-        void clear() {
-            stack.clear();
-            entryBB = nullptr;
-            entryPC = nullptr;
-        }
-
-        void mergeIn(const State& incom, BB* incomBB);
-        void createMergepoint(Builder&);
-
-        std::deque<Value*> stack;
-    };
-
-    bool interpret(BC bc, Opcode* pos, rir::Code* srcCode, State&,
-                   Builder&) const;
-    std::unordered_set<Opcode*> findMergepoints(rir::Code*) const;
+    bool interpret(BC bc, Opcode* pos, rir::Code* srcCode, RirStack&, Builder&,
+                   std::unordered_map<Value*, CallFeedback>&) const;
 };
 
 } // namespace pir

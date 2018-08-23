@@ -2394,7 +2394,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env,
         INSTRUCTION(deopt_) {
             SEXP r = readConst(ctx, readImmediate());
             assert(TYPEOF(r) == RAWSXP);
-            assert(XLENGTH(r) >= sizeof(DeoptMetadata));
+            assert(XLENGTH(r) >= (int)sizeof(DeoptMetadata));
             auto m = (DeoptMetadata*)DATAPTR(r);
             advanceImmediate();
             pc = (Opcode*)m->frames[0].pc;

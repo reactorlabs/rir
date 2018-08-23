@@ -13,6 +13,7 @@ namespace rir {
 namespace pir {
 
 class Safepoint;
+struct RirStack;
 
 class Builder {
   public:
@@ -26,10 +27,14 @@ class Builder {
     Value* buildDefaultEnv(Closure* fun);
 
     template <class T>
-    T* operator()(T* i) {
+    T* add(T* i) {
         assert(i->tag != Tag::_UNUSED_);
         bb->append(i);
         return i;
+    }
+    template <class T>
+    T* operator()(T* i) {
+        return add(i);
     }
 
     void markDone(BB*);
@@ -40,11 +45,8 @@ class Builder {
     void enterBB(BB* bb);
     void setNextBB(BB* bb1, BB* bb2 = nullptr);
 
-    typedef std::function<void()> BBCompile;
-    void ifThenElse(BBCompile ifblock, BBCompile thenblock);
-
-    void deopt(rir::Code* srcCode, Opcode* pos,
-               const std::deque<Value*>& stack);
+    void deoptUnless(Value* condition, rir::Code* srcCode, Opcode* pos,
+                     const RirStack& stack);
 
     // Use with care, let the builder keep track of BB. Prefer the highlevel
     // api above.

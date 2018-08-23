@@ -12,7 +12,7 @@
 #include "ir/Compiler.h"
 #include "utils/FormalArgs.h"
 
-#include <deque>
+#include <unordered_map>
 #include <vector>
 
 namespace {
@@ -44,12 +44,58 @@ struct Matcher {
     }
 };
 
-} // namespace
+struct State {
+    bool seen = false;
+    BB* entryBB = nullptr;
+    Opcode* entryPC = 0;
 
-namespace rir {
-namespace pir {
+    State() {}
+    State(State&&) = default;
+    State(const State&) = delete;
+    State(const State& other, bool seen, BB* entryBB, Opcode* entryPC)
+        : seen(seen), entryBB(entryBB), entryPC(entryPC), stack(other.stack){};
 
-std::unordered_set<Opcode*> Rir2Pir::findMergepoints(rir::Code* srcCode) const {
+    void operator=(const State&) = delete;
+    State& operator=(State&&) = default;
+
+    void mergeIn(const State& incom, BB* incomBB);
+    void createMergepoint(Builder&);
+
+    void clear() {
+        stack.clear();
+        entryBB = nullptr;
+        entryPC = nullptr;
+    }
+
+    RirStack stack;
+};
+
+void State::createMergepoint(Builder& insert) {
+    BB* oldBB = insert.getCurrentBB();
+    insert.createNextBB();
+    for (size_t i = 0; i < stack.size(); ++i) {
+        auto v = stack.at(i);
+        auto p = insert(new Phi);
+        p->addInput(oldBB, v);
+        stack.at(i) = p;
+    }
+}
+
+void State::mergeIn(const State& incom, BB* incomBB) {
+    assert(stack.size() == incom.stack.size());
+
+    for (size_t i = 0; i < stack.size(); ++i) {
+        Phi* p = Phi::Cast(stack.at(i));
+        assert(p);
+        Value* in = incom.stack.at(i);
+        if (in != p) {
+            p->addInput(incomBB, in);
+        }
+    }
+    incomBB->next(entryBB);
+}
+
+std::unordered_set<Opcode*> findMergepoints(rir::Code* srcCode) {
     std::unordered_map<Opcode*, std::vector<Opcode*>> incom;
     // Mark incoming jmps
     for (auto pc = srcCode->code(); pc != srcCode->endCode();) {
@@ -78,8 +124,14 @@ std::unordered_set<Opcode*> Rir2Pir::findMergepoints(rir::Code* srcCode) const {
     return mergepoints;
 }
 
-bool Rir2Pir::interpret(BC bc, Opcode* pos, rir::Code* srcCode, State& state,
-                        Builder& insert) const {
+} // namespace
+
+namespace rir {
+namespace pir {
+
+bool Rir2Pir::interpret(
+    BC bc, Opcode* pos, rir::Code* srcCode, RirStack& stack, Builder& insert,
+    std::unordered_map<Value*, CallFeedback>& callFeedback) const {
     Value* env = insert.env;
 
     Value* v;
@@ -88,11 +140,11 @@ bool Rir2Pir::interpret(BC bc, Opcode* pos, rir::Code* srcCode, State& state,
 
     auto consumeSrcIdx = [&]() { return srcCode->getSrcIdxAt(pos, true); };
 
-    auto push = [&state](Value* v) { state.push(v); };
-    auto pop = [&state]() { return state.pop(); };
-    auto at = [&state](unsigned i) { return state.at(i); };
-    auto top = [&state]() { return state.at(0); };
-    auto set = [&state](unsigned i, Value* v) { state.at(i) = v; };
+    auto push = [&stack](Value* v) { stack.push(v); };
+    auto pop = [&stack]() { return stack.pop(); };
+    auto at = [&stack](unsigned i) { return stack.at(i); };
+    auto top = [&stack]() { return stack.at(0); };
+    auto set = [&stack](unsigned i, Value* v) { stack.at(i) = v; };
 
     switch (bc.bc) {
 
@@ -169,8 +221,8 @@ bool Rir2Pir::interpret(BC bc, Opcode* pos, rir::Code* srcCode, State& state,
     }
 
     case Opcode::record_call_: {
-        // Value* target = top();
-        // callFeedback[target] = bc.immediate.callFeedback;
+        Value* target = top();
+        callFeedback[target] = bc.immediate.callFeedback;
         break;
     }
 
@@ -199,11 +251,11 @@ bool Rir2Pir::interpret(BC bc, Opcode* pos, rir::Code* srcCode, State& state,
 
         Value* callee = top();
         SEXP monomorphic = nullptr;
-        // if (callFeedback.count(callee)) {
-        //    auto& feedback = callFeedback.at(callee);
-        //    if (feedback.numTargets == 1)
-        //        monomorphic = feedback.targets[0];
-        //}
+        if (callFeedback.count(callee)) {
+            auto& feedback = callFeedback.at(callee);
+            if (feedback.numTargets == 1)
+                monomorphic = feedback.targets[0];
+        }
 
         auto ast = bc.immediate.callFixedArgs.ast;
         auto insertGenericCall = [&]() {
@@ -215,15 +267,11 @@ bool Rir2Pir::interpret(BC bc, Opcode* pos, rir::Code* srcCode, State& state,
                 [&](Closure* f) {
                     Value* expected = insert(new LdConst(monomorphic));
                     Value* t = insert(new Identical(callee, expected));
-                    insert(new Branch(t));
 
-                    insert.ifThenElse(
-                        [&]() {
-                            pop();
-                            push(insert(new StaticCall(insert.env, f, args,
-                                                       monomorphic, ast)));
-                        },
-                        [&]() { insert.deopt(srcCode, pos, state.stack); });
+                    insert.deoptUnless(t, srcCode, pos, stack);
+                    pop();
+                    push(insert(
+                        new StaticCall(insert.env, f, args, monomorphic, ast)));
                 },
                 insertGenericCall);
         } else {
@@ -509,36 +557,9 @@ bool Rir2Pir::interpret(BC bc, Opcode* pos, rir::Code* srcCode, State& state,
     return true;
 }
 
-void Rir2Pir::State::createMergepoint(Builder& insert) {
-    BB* oldBB = insert.getCurrentBB();
-    insert.createNextBB();
-    for (size_t i = 0; i < size(); ++i) {
-        auto v = stack.at(i);
-        auto p = insert(new Phi);
-        p->addInput(oldBB, v);
-        stack.at(i) = p;
-    }
-}
-
-void Rir2Pir::State::mergeIn(const State& incom, BB* incomBB) {
-    assert(size() == incom.size());
-
-    for (size_t i = 0; i < size(); ++i) {
-        Phi* p = Phi::Cast(at(i));
-        assert(p);
-        Value* in = incom.at(i);
-        if (in != p) {
-            p->addInput(incomBB, in);
-        }
-    }
-    assert(!incomBB->next0);
-    incomBB->next0 = entryBB;
-}
-
 void Rir2Pir::translate(rir::Code* srcCode, Builder& insert,
                         MaybeVal<void> success, Maybe<void> fail) const {
     assert(!finalized);
-    srcCode->print(std::cout);
 
     std::vector<ReturnSite> results;
 
@@ -549,6 +570,8 @@ void Rir2Pir::translate(rir::Code* srcCode, Builder& insert,
     std::deque<State> worklist;
     State cur;
     cur.seen = true;
+
+    std::unordered_map<Value*, CallFeedback> callFeedback;
 
     Opcode* end = srcCode->endCode();
     Opcode* finger = srcCode->code();
@@ -598,12 +621,12 @@ void Rir2Pir::translate(rir::Code* srcCode, Builder& insert,
             switch (bc.bc) {
             case Opcode::brtrue_:
             case Opcode::brfalse_: {
-                Value* v = cur.pop();
+                Value* v = cur.stack.pop();
                 insert(new Branch(v));
                 break;
             }
             case Opcode::brobj_: {
-                Value* v = insert(new IsObject(cur.top()));
+                Value* v = insert(new IsObject(cur.stack.top()));
                 insert(new Branch(v));
                 break;
             }
@@ -620,7 +643,7 @@ void Rir2Pir::translate(rir::Code* srcCode, Builder& insert,
             auto edgeSplit = [&](Opcode* trg, BB* branch) {
                 if (mergepoints.count(trg)) {
                     BB* next = insert.createBB();
-                    branch->next0 = next;
+                    branch->next(next);
                     branch = next;
                 }
                 return branch;
@@ -629,14 +652,13 @@ void Rir2Pir::translate(rir::Code* srcCode, Builder& insert,
             BB* branch = edgeSplit(trg, insert.createBB());
             BB* fall = edgeSplit(nextPos, insert.createBB());
 
-            // TOS == TRUE goes to next1, TOS == FALSE goes to next0
             switch (bc.bc) {
             case Opcode::brtrue_:
-                insert.setNextBB(fall, branch);
+                insert.setNextBB(branch, fall);
                 break;
             case Opcode::brfalse_:
             case Opcode::brobj_:
-                insert.setNextBB(branch, fall);
+                insert.setNextBB(fall, branch);
                 break;
             default:
                 assert(false);
@@ -661,8 +683,9 @@ void Rir2Pir::translate(rir::Code* srcCode, Builder& insert,
             default:
                 assert(false);
             }
-            results.push_back(ReturnSite(insert.getCurrentBB(), cur.pop()));
-            assert(cur.empty());
+            results.push_back(
+                ReturnSite(insert.getCurrentBB(), cur.stack.pop()));
+            assert(cur.stack.empty());
             // Setting the position to end, will either terminate the loop, or
             // pop from the worklist
             finger = end;
@@ -694,7 +717,7 @@ void Rir2Pir::translate(rir::Code* srcCode, Builder& insert,
             compiler.compileFunction(
                 function, formals,
                 [&](Closure* innerF) {
-                    cur.push(insert(
+                    cur.stack.push(insert(
                         new MkFunCls(innerF, insert.env, fmls, code, src)));
 
                     // Skip those instructions
@@ -709,29 +732,28 @@ void Rir2Pir::translate(rir::Code* srcCode, Builder& insert,
         });
 
         if (!skip) {
-            int size = cur.size();
-            if (!interpret(bc, pos, srcCode, cur, insert)) {
+            int size = cur.stack.size();
+            if (!interpret(bc, pos, srcCode, cur.stack, insert, callFeedback)) {
                 compiler.getLog().warningBC(srcFunction,
                                             "Abort r2p due to unsupported bc",
                                             pos);
                 fail();
                 return;
             }
-            if (cur.size() != size - bc.popCount() + bc.pushCount()) {
+            if (cur.stack.size() != size - bc.popCount() + bc.pushCount()) {
                 srcCode->print(std::cerr);
                 std::cerr << "After interpreting '";
                 bc.print(std::cerr);
                 std::cerr << "' which is supposed to pop " << bc.popCount()
                           << " and push " << bc.pushCount() << " we got from "
-                          << size << " to " << cur.size() << "\n";
+                          << size << " to " << cur.stack.size() << "\n";
                 assert(false);
                 fail();
                 return;
             }
         }
     }
-    insert.code->print(std::cout);
-    assert(cur.empty());
+    assert(cur.stack.empty());
 
     if (results.size() == 0) {
         // Cannot compile functions with infinite loop
@@ -748,8 +770,7 @@ void Rir2Pir::translate(rir::Code* srcCode, Builder& insert,
         insert.enterBB(merge);
         Phi* phi = insert(new Phi());
         for (auto r : results) {
-            assert(!r.first->next0);
-            r.first->next0 = merge;
+            r.first->next(merge);
             phi->addInput(r.first, r.second);
         }
         phi->updateType();
@@ -764,7 +785,7 @@ void Rir2Pir::translate(rir::Code* srcCode, Builder& insert,
 void Rir2Pir::finalize(Value* ret, Builder& insert) {
     assert(!finalized);
     assert(ret);
-    assert(!insert.getCurrentBB()->next0 && !insert.getCurrentBB()->next1 &&
+    assert(insert.getCurrentBB()->isExit() &&
            "Builder needs to be on an exit-block to insert return");
 
     bool changed = true;

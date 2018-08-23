@@ -181,7 +181,7 @@ void ForceDominance::apply(Closure* cls) {
                                                            ip, cls);
                             BB* prom_copy =
                                 BBTransform::clone(prom->entry, cls);
-                            bb->next0 = prom_copy;
+                            bb->overrideNext(prom_copy);
 
                             // For now we assume every promise starts with a
                             // LdFunctionEnv instruction. We replace it's usages

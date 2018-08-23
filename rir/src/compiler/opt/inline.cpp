@@ -123,11 +123,11 @@ class TheInliner {
 
                 if (fail) {
                     delete copy;
-                    bb->next0 = split;
+                    bb->overrideNext(split);
 
                 } else {
 
-                    bb->next0 = copy;
+                    bb->overrideNext(copy);
 
                     // Copy over promises used by the inner function
                     std::vector<bool> copiedPromise;

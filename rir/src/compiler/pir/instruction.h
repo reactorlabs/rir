@@ -982,6 +982,34 @@ class VLI(Phi, Effect::None, EnvAccess::None) {
     }
 };
 
+struct RirStack {
+    void push(Value* v) { stack.push_back(v); }
+    Value* pop() {
+        assert(!empty());
+        auto v = stack.back();
+        stack.pop_back();
+        return v;
+    }
+    Value*& at(unsigned i) {
+        assert(i < size());
+        return stack[stack.size() - 1 - i];
+    }
+    Value* at(unsigned i) const {
+        assert(i < size());
+        return stack[stack.size() - 1 - i];
+    }
+    Value* top() const {
+        assert(!empty());
+        return stack.back();
+    }
+    bool empty() const { return stack.empty(); }
+    size_t size() const { return stack.size(); }
+    void clear() { stack.clear(); }
+
+  private:
+    std::deque<Value*> stack;
+};
+
 class VLI(Safepoint, Effect::Any, EnvAccess::Leak) {
   public:
     struct Frame {
@@ -991,12 +1019,11 @@ class VLI(Safepoint, Effect::Any, EnvAccess::Leak) {
     };
     std::vector<Frame> frames;
 
-    Safepoint(Value* env, rir::Code* code, Opcode* pc,
-              const std::deque<Value*>& stack)
+    Safepoint(Value* env, rir::Code* code, Opcode* pc, const RirStack& stack)
         : VarLenInstruction(NativeType::safepoint, env) {
         frames.push_back({env, pc, code});
         for (size_t i = 0; i < stack.size(); ++i)
-            pushArg(stack[i], PirType::any());
+            pushArg(stack.at(i), PirType::any());
     }
 
     void printArgs(std::ostream& out) override;
