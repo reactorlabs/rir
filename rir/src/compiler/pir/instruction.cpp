@@ -264,10 +264,13 @@ void CallSafeBuiltin::printArgs(std::ostream& out) {
 }
 
 void Deopt::printArgs(std::ostream& out) {
-    out << "@" << pc << ", stack=[";
-    for (size_t i = 1; i < nargs(); ++i) {
+    out << " ";
+    for (auto frame : frames)
+        out << frame.code << "@" << frame.pc;
+    out << ", stack=[";
+    for (size_t i = 0; i < nargs() - 1; ++i) {
         arg(i).val()->printRef(out);
-        if (i + 1 < nargs())
+        if (i + 2 < nargs())
             out << ", ";
     }
     out << "], env=";

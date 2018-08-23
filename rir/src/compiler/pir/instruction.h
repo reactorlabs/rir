@@ -45,6 +45,7 @@
 
 namespace rir {
 enum class Opcode : uint8_t;
+struct Code;
 
 namespace pir {
 
@@ -984,11 +985,17 @@ class VLI(Phi, Effect::None, EnvAccess::None) {
 
 class VLI(Deopt, Effect::Any, EnvAccess::Leak) {
   public:
-    Opcode* pc;
+    struct Frame {
+        Opcode* pc;
+        rir::Code* code;
+    };
+    std::vector<Frame> frames;
 
-    Deopt(Value* env, Opcode* pc, const std::deque<Value*>& stack)
-        : VarLenInstruction(PirType::voyd(), env), pc(pc) {
-        for (unsigned i = 0; i < stack.size(); ++i)
+    Deopt(Value* env, rir::Code* code, Opcode* pc,
+          const std::deque<Value*>& stack)
+        : VarLenInstruction(PirType::voyd(), env) {
+        frames.push_back({pc, code});
+        for (size_t i = 0; i < stack.size(); ++i)
             pushArg(stack[i], PirType::any());
     }
 

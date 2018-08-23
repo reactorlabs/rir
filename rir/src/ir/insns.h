@@ -353,7 +353,6 @@ DEF_INSTR(subassign2_, 1, 3, 1, 1)
  * guard_fun_:: takes symbol, target, id, checks findFun(symbol) == target
  */
 DEF_INSTR(guard_fun_, 3, 0, 0, 1)
-DEF_INSTR(guard_env_, 1, 0, 0, 1)
 
 /**
  * seq_ :: seq(scalar, scalar, scalar)
@@ -436,6 +435,11 @@ DEF_INSTR(ret_, 0, 1, 0, 1)
  * int3_ :: low-level breakpoint
  */
 DEF_INSTR(int3_, 0, 0, 0, 1)
+
+/**
+ * deopt_ :: jumps to the immediate bc location
+ */
+DEF_INSTR(deopt_, 1, -1, 0, 0)
 
 /*
  * recording bytecodes are used to collect information

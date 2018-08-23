@@ -6,7 +6,6 @@
 #include "BC.h"
 #include "CodeVerifier.h"
 #include "R/Symbols.h"
-#include "interpreter/deoptimizer.h"
 
 namespace rir {
 
@@ -47,7 +46,7 @@ class State {
 
     void advance() {
         BC bc = BC::advance(&pc);
-        if (bc.bc == Opcode::return_)
+        if (bc.bc == Opcode::return_ || bc.bc == Opcode::deopt_)
             ostack = 0;
         else
             ostack -= bc.popCount();
@@ -108,7 +107,6 @@ static Sources hasSources(Opcode bc) {
     case Opcode::ldlval_:
     case Opcode::stvar_:
     case Opcode::stvar_super_:
-    case Opcode::guard_env_:
     case Opcode::guard_fun_:
     case Opcode::call_implicit_:
     case Opcode::named_call_implicit_:
@@ -161,6 +159,7 @@ static Sources hasSources(Opcode bc) {
     case Opcode::lgl_or_:
     case Opcode::record_call_:
     case Opcode::record_binop_:
+    case Opcode::deopt_:
         return Sources::NotNeeded;
 
     case Opcode::aslogical_:
@@ -204,7 +203,8 @@ void CodeVerifier::calculateAndVerifyStack(Code* code) {
             BC cur = BC::decode(pc);
             i.advance();
             max.updateMax(i);
-            if (cur.bc == Opcode::ret_ || cur.bc == Opcode::return_) {
+            if (cur.bc == Opcode::ret_ || cur.bc == Opcode::return_ ||
+                cur.bc == Opcode::deopt_) {
                 i.checkClear();
                 break;
             } else if (cur.bc == Opcode::br_) {
@@ -286,15 +286,6 @@ void CodeVerifier::verifyFunctionLayout(SEXP sexp, ::Context* ctx) {
                 assert(cptr + cur.size() + off >= start &&
                        cptr + cur.size() + off < end);
             }
-            if (*cptr == Opcode::guard_env_) {
-                unsigned deoptId = *reinterpret_cast<Immediate*>(cptr + 1);
-                Opcode* deoptPc = (Opcode*)Deoptimizer_pc(deoptId);
-                assert(f->origin());
-                Function* deoptFun = Function::unpack(f->origin());
-                Code* deoptCode = deoptFun->body();
-                assert(deoptPc >= deoptCode->code() &&
-                       deoptPc < deoptCode->endCode());
-            }
             if (*cptr == Opcode::ldvar_) {
                 unsigned* argsIndex = reinterpret_cast<Immediate*>(cptr + 1);
                 assert(*argsIndex < cp_pool_length(ctx) and
@@ -351,7 +342,8 @@ void CodeVerifier::verifyFunctionLayout(SEXP sexp, ::Context* ctx) {
                 }
             }
 
-            if ((cur.isJmp() && cur.immediate.offset < 0) || cur.isReturn())
+            if ((cur.isJmp() && cur.immediate.offset < 0) || cur.isReturn() ||
+                cur.bc == Opcode::deopt_)
                 sawReturnOrBackjump = true;
             else if (cur.bc != Opcode::nop_)
                 sawReturnOrBackjump = false;

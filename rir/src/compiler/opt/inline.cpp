@@ -88,6 +88,13 @@ class TheInliner {
                                 return;
                             }
                         }
+                        // TODO: currently we are not able to inline deopt
+                        // instructions. We will need the ability to construct
+                        // extra call frames before we can do so.
+                        if (Deopt::Cast(i)) {
+                            fail = true;
+                            return;
+                        }
                         // If the inlining resolved some env, we need to
                         // update. For example this happens if we inline an
                         // inner function. Then the lexical env is the current

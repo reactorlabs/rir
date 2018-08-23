@@ -4,7 +4,7 @@
 #include "R/Funtab.h"
 #include "interp.h"
 #include "interp_context.h"
-#include "interpreter/deoptimizer.h"
+#include "ir/Deoptimization.h"
 #include "runtime.h"
 
 #define NOT_IMPLEMENTED assert(false)
@@ -2391,9 +2391,15 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env,
             NEXT();
         }
 
-        INSTRUCTION(guard_env_) {
-            // TODO: nop for now since we don't have deoptimization
+        INSTRUCTION(deopt_) {
+            SEXP r = readConst(ctx, readImmediate());
+            assert(TYPEOF(r) == RAWSXP);
+            assert(XLENGTH(r) >= sizeof(DeoptMetadata));
+            auto m = (DeoptMetadata*)DATAPTR(r);
             advanceImmediate();
+            pc = (Opcode*)m->frames[0].pc;
+            c = (Code*)m->frames[0].code;
+            assert(c->code() <= pc && pc < c->endCode());
             NEXT();
         }
 

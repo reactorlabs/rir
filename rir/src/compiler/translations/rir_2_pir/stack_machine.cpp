@@ -176,7 +176,7 @@ bool StackMachine::tryRunCurrentBC(const Rir2Pir& rir2pir, Builder& insert) {
             args.push_back(insert(new MkArg(prom, val, env)));
         }
 
-        Value* callee = pop();
+        Value* callee = top();
         SEXP monomorphic = nullptr;
         if (callFeedback.count(callee)) {
             auto& feedback = callFeedback.at(callee);
@@ -186,7 +186,7 @@ bool StackMachine::tryRunCurrentBC(const Rir2Pir& rir2pir, Builder& insert) {
 
         auto ast = bc.immediate.callFixedArgs.ast;
         auto insertGenericCall = [&]() {
-            push(insert(new Call(insert.env, callee, args, ast)));
+            push(insert(new Call(insert.env, pop(), args, ast)));
         };
         if (monomorphic && isValidClosureSEXP(monomorphic)) {
             rir2pir.compiler.compileClosure(
@@ -200,19 +200,20 @@ bool StackMachine::tryRunCurrentBC(const Rir2Pir& rir2pir, Builder& insert) {
                     BB* fallback = insert.createBB();
                     insert.bb = fallback;
                     curBB->next0 = fallback;
-                    Value* r1 = insert(new Call(insert.env, callee, args, ast));
+                    assert(top() == callee);
+                    insert(new Deopt(insert.env, srcCode, pc, stack));
 
                     BB* asExpected = insert.createBB();
                     insert.bb = asExpected;
                     curBB->next1 = asExpected;
-                    Value* r2 = insert(
-                        new StaticCall(insert.env, f, args, monomorphic, ast));
+                    assert(top() == callee);
+                    pop();
+                    push(insert(
+                        new StaticCall(insert.env, f, args, monomorphic, ast)));
 
                     BB* cont = insert.createBB();
-                    fallback->next0 = cont;
                     asExpected->next0 = cont;
                     insert.bb = cont;
-                    push(insert(new Phi({r1, r2}, {fallback, asExpected})));
                 },
                 insertGenericCall, false);
         } else {
@@ -467,6 +468,7 @@ bool StackMachine::tryRunCurrentBC(const Rir2Pir& rir2pir, Builder& insert) {
         assert(false);
 
     // Opcodes that only come from PIR
+    case Opcode::deopt_:
     case Opcode::force_:
     case Opcode::make_env_:
     case Opcode::get_env_:
@@ -488,7 +490,6 @@ bool StackMachine::tryRunCurrentBC(const Rir2Pir& rir2pir, Builder& insert) {
     case Opcode::ldlval_:
     case Opcode::asast_:
     case Opcode::missing_:
-    case Opcode::guard_env_:
     case Opcode::beginloop_:
     case Opcode::endcontext_:
     case Opcode::ldddvar_:
