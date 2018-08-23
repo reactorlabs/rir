@@ -422,6 +422,11 @@ extern std::ostream& operator<<(std::ostream& out,
   public                                                                       \
     FixedLenInstruction<Tag::type, type, nargs, io, env>
 
+#define VLI(type, io, env)                                                     \
+    type:                                                                      \
+  public                                                                       \
+    VarLenInstruction<Tag::type, type, io, env>
+
 class FLI(LdConst, 0, Effect::None, EnvAccess::None) {
   public:
     LdConst(SEXP c, PirType t) : FixedLenInstruction(t), c(c) {}
@@ -792,12 +797,6 @@ UNOP(Minus);
 UNOP(Length);
 
 #undef UNOP
-#undef FLI
-
-#define VLI(type, io, env)                                                     \
-    type:                                                                      \
-  public                                                                       \
-    VarLenInstruction<Tag::type, type, io, env>
 
 // Common interface to all call instructions
 class CallInstruction {
@@ -983,18 +982,19 @@ class VLI(Phi, Effect::None, EnvAccess::None) {
     }
 };
 
-class VLI(Deopt, Effect::Any, EnvAccess::Leak) {
+class VLI(Safepoint, Effect::Any, EnvAccess::Leak) {
   public:
     struct Frame {
+        Value* env;
         Opcode* pc;
         rir::Code* code;
     };
     std::vector<Frame> frames;
 
-    Deopt(Value* env, rir::Code* code, Opcode* pc,
-          const std::deque<Value*>& stack)
-        : VarLenInstruction(PirType::voyd(), env) {
-        frames.push_back({pc, code});
+    Safepoint(Value* env, rir::Code* code, Opcode* pc,
+              const std::deque<Value*>& stack)
+        : VarLenInstruction(NativeType::safepoint, env) {
+        frames.push_back({env, pc, code});
         for (size_t i = 0; i < stack.size(); ++i)
             pushArg(stack[i], PirType::any());
     }
@@ -1002,6 +1002,14 @@ class VLI(Deopt, Effect::Any, EnvAccess::Leak) {
     void printArgs(std::ostream& out) override;
 };
 
+class FLI(Deopt, 1, Effect::Any, EnvAccess::None) {
+  public:
+    Deopt(Safepoint* safepoint)
+        : FixedLenInstruction(PirType::voyd(), {{NativeType::safepoint}},
+                              {{safepoint}}) {}
+};
+
+#undef FLI
 #undef VLI
 } // namespace pir
 } // namespace rir

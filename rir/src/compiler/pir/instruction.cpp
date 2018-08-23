@@ -263,10 +263,9 @@ void CallSafeBuiltin::printArgs(std::ostream& out) {
     Instruction::printArgs(out);
 }
 
-void Deopt::printArgs(std::ostream& out) {
-    out << " ";
+void Safepoint::printArgs(std::ostream& out) {
     for (auto frame : frames)
-        out << frame.code << "@" << frame.pc;
+        out << frame.code << "+" << frame.pc - frame.code->code();
     out << ", stack=[";
     for (size_t i = 0; i < nargs() - 1; ++i) {
         arg(i).val()->printRef(out);

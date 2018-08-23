@@ -956,10 +956,16 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 break;
             }
             case Tag::Deopt: {
-                auto deopt = Deopt::Cast(instr);
-                assert(deopt->frames.size() == 1 &&
+                assert(Safepoint::Cast(*(it - 1)) &&
+                       "Deopt MUST be scheudled after Safepoint");
+            }
+            case Tag::Safepoint: {
+                assert(Deopt::Cast(*(it + 1)) &&
+                       "Unused Safepoint must be removed");
+                auto sp = Safepoint::Cast(instr);
+                assert(sp->frames.size() == 1 &&
                        "rir deopt cannot synthesize frames yet");
-                auto frame = deopt->frames[0];
+                auto frame = sp->frames[0];
                 cs << BC::deopt(frame.pc, frame.code);
                 return;
             }
