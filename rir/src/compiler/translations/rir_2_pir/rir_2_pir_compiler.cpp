@@ -26,8 +26,8 @@ Rir2PirCompiler::Rir2PirCompiler(Module* module, const DebugOptions& debug)
     }
 }
 
-void Rir2PirCompiler::compileClosure(SEXP closure, MaybeCls success, Maybe fail,
-                                     bool isIndependent = false) {
+void Rir2PirCompiler::compileClosure(SEXP closure, MaybeCls success,
+                                     Maybe fail) {
     assert(isValidClosureSEXP(closure));
     DispatchTable* tbl = DispatchTable::unpack(BODY(closure));
 
@@ -39,27 +39,23 @@ void Rir2PirCompiler::compileClosure(SEXP closure, MaybeCls success, Maybe fail,
     FormalArgs formals(FORMALS(closure));
     rir::Function* srcFunction = tbl->first();
     compileClosure(srcFunction, formals, module->getEnv(CLOENV(closure)),
-                   success, fail, isIndependent);
+                   success, fail);
 }
 
 void Rir2PirCompiler::compileFunction(rir::Function* srcFunction,
                                       FormalArgs const& formals,
                                       MaybeCls success, Maybe fail) {
-    compileClosure(srcFunction, formals, Env::notClosed(), success, fail, true);
+    compileClosure(srcFunction, formals, Env::notClosed(), success, fail);
 }
 
 void Rir2PirCompiler::compileClosure(rir::Function* srcFunction,
                                      FormalArgs const& formals, Env* closureEnv,
-                                     MaybeCls success, Maybe fail,
-                                     bool isIndependent) {
+                                     MaybeCls success, Maybe fail) {
 
     // TODO: Support default arguments and dots
     if (formals.hasDefaultArgs || formals.hasDots)
         return fail();
 
-    if (isIndependent)
-        LOGGING(log.startLogging(srcFunction));
-  
     // TODO: we can only compile for a fixed closure env, if we have a guard if
     // someone where to change it! Most probably this would not trip any
     // problems as closure envs don't get changed often. But let's better be
@@ -71,19 +67,18 @@ void Rir2PirCompiler::compileClosure(rir::Function* srcFunction,
         srcFunction, formals.names, closureEnv, [&](Closure* pirFunction) {
             Builder builder(pirFunction, closureEnv);
             Rir2Pir rir2pir(*this, srcFunction);
-            LOGGING(log.compilationInit());
 
             if (rir2pir.tryCompile(srcFunction->body(), builder)) {
                 LOGGING(log.compilationEarlyPir(*(builder.function)));
                 if (!Verify::apply(pirFunction)) {
                     failed = true;
-                    LOGGING(log.failCompilingPir());
+                    LOGGING(log.failCompilingPir(srcFunction));
                     assert(false);
                     return false;
                 }
                 return true;
             }
-            LOGGING(log.failCompilingPir());
+            LOGGING(log.failCompilingPir(srcFunction));
             failed = true;
             return false;
         });
@@ -92,9 +87,6 @@ void Rir2PirCompiler::compileClosure(rir::Function* srcFunction,
         fail();
     else
         success(module->get(srcFunction));
-
-    if (isIndependent)
-        LOGGING(log.endLogging());
 }
 
 void Rir2PirCompiler::optimizeModule() {

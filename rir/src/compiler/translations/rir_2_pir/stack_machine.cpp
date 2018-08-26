@@ -62,8 +62,8 @@ bool StackMachine::tryRunCurrentBC(const Rir2Pir& rir2pir, Builder& insert) {
     unsigned srcIdx = getSrcIdx();
     auto consumeSrcIdx = [&]() {
         if (srcIdx == 0)
-            rir2pir.compiler.getLog().warningBC("trying to use nil src idx:",
-                                                bc);
+            rir2pir.compiler.getLog().warningBC(
+                srcFunction, "trying to use nil src idx:", bc);
         auto tmp = srcIdx;
         srcIdx = 0;
         return tmp;
@@ -104,7 +104,8 @@ bool StackMachine::tryRunCurrentBC(const Rir2Pir& rir2pir, Builder& insert) {
         break;
 
     case Opcode::guard_fun_:
-        rir2pir.compiler.getLog().warningBC(WARNING_GUARD_STRING, bc);
+        rir2pir.compiler.getLog().warningBC(srcFunction, WARNING_GUARD_STRING,
+                                            bc);
         break;
 
     case Opcode::swap_:
@@ -214,7 +215,7 @@ bool StackMachine::tryRunCurrentBC(const Rir2Pir& rir2pir, Builder& insert) {
                     insert.bb = cont;
                     push(insert(new Phi({r1, r2}, {fallback, asExpected})));
                 },
-                insertGenericCall, false);
+                insertGenericCall);
         } else {
             insertGenericCall();
         }
@@ -278,7 +279,7 @@ bool StackMachine::tryRunCurrentBC(const Rir2Pir& rir2pir, Builder& insert) {
                 [&](Closure* f) {
                     push(insert(new StaticCall(env, f, args, target, ast)));
                 },
-                [&]() { failed = true; }, false);
+                [&]() { failed = true; });
             if (failed)
                 return false;
         }
@@ -495,10 +496,10 @@ bool StackMachine::tryRunCurrentBC(const Rir2Pir& rir2pir, Builder& insert) {
         return false;
     }
 
-    // TODO: change to assert
     // assert(srcIdx == 0 && "source index is getting lost in translation");
     if (srcIdx)
-        rir2pir.compiler.getLog().warningBC("losing src index", bc);
+        rir2pir.compiler.getLog().warningBC(
+            srcFunction, "source index got lost in translation", bc);
 
     return true;
 }

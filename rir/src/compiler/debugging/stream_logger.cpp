@@ -10,81 +10,64 @@ namespace pir {
 
 void StreamLogger::startLogging(rir::Function* function) {
     if (options.intersects(PrintDebugPasses)) {
-        if (!streams.count(function)) {
-            std::ostream* o;
-            if (options.includes(DebugFlag::PrintIntoFiles)) {
-                o = new std::ofstream();
-                // TODO: shouldn't the function identifier be part of the name?
-                ((std::ofstream*)o)->open(".pir/pirCompilation.data");
-            } else if (options.includes(DebugFlag::PrintIntoStdout)) {
-                o = &std::cout;
-            } else {
-                o = new std::stringstream();
-            }
-            streams.emplace(function, o);
-            currentFunction.push(function);
+        std::ostream* o;
+        if (options.includes(DebugFlag::PrintIntoFiles)) {
+            o = new std::ofstream();
+            // TODO: shouldn't the function identifier be part of the name?
+            ((std::ofstream*)o)->open(".pir/pirCompilation.data");
+        } else if (options.includes(DebugFlag::PrintIntoStdout)) {
+            o = &std::cout;
+        } else {
+            o = new std::stringstream();
         }
+        streams.emplace(function, o);
+        compilationInit(function);
     }
 }
 
-void StreamLogger::endLogging() {
-    if (options.intersects(PrintDebugPasses))
-        currentFunction.pop();
-}
-
-void StreamLogger::compilationInit() const {
-    if (options.intersects(PrintDebugPasses)) {
-        this->header("Start compiling:", currentFunction.top(), getLog(), true);
-        if (options.includes(DebugFlag::PrintEarlyRir)) {
-            innerHeader(" Original version ");
-            for (auto code : *(currentFunction.top())) {
-                code->print(getLog());
-            }
-            getLog() << "\n";
+void StreamLogger::compilationInit(rir::Function* function) {
+    this->header("Start compiling:", function, getLog(function), true);
+    if (options.includes(DebugFlag::PrintEarlyRir)) {
+        innerHeader(function, " Original version ");
+        for (auto code : *function) {
+            code->print(getLog(function));
         }
+        getLog(function) << "\n";
     }
 }
 
-void StreamLogger::compilationEarlyPir(const Closure& closure) const {
+void StreamLogger::compilationEarlyPir(Closure& closure) {
     if (options.includes(DebugFlag::PrintEarlyPir)) {
-        innerHeader(" Compiled to PIR Version ");
-        closure.print(getLog());
+        innerHeader(closure.rirVersion(), " Compiled to PIR Version ");
+        closure.print(getLog(closure.rirVersion()));
     }
 }
 
-void StreamLogger::pirOptimizations(const Closure& closure,
+void StreamLogger::pirOptimizations(Closure& closure,
                                     const std::string& category,
-                                    const std::string& pass,
-                                    size_t passnr) const {
+                                    const std::string& pass, size_t passnr) {
     if (options.includes(DebugFlag::PrintOptimizationPasses)) {
         std::stringstream ss;
         ss << category << ": " << pass << " == " << passnr;
-        innerHeader(ss.str());
-        closure.print(getLog());
+        innerHeader(closure.rirVersion(), ss.str());
+        closure.print(getLog(closure.rirVersion()));
     }
 }
 
-void StreamLogger::rirFromPir(const rir::Function* function) const {
+void StreamLogger::rirFromPir(rir::Function* function) {
     if (options.includes(DebugFlag::PrintFinalRir)) {
-        innerHeader(" Final RIR Version ");
+        innerHeader(function, " Final RIR Version ");
         for (const auto code : *function) {
-            code->print(getLog());
+            code->print(getLog(function));
         }
-        getLog() << "\n";
+        getLog(function) << "\n";
     }
 }
 
-void StreamLogger::phiInsertion(const Code* code) const {
+void StreamLogger::afterCSSA(Closure& closure, const Code* code) {
     if (options.includes(DebugFlag::PrintCSSA)) {
-        innerHeader(" After Phi Copies Inserted ");
-        code->print(getLog());
-    }
-}
-
-void StreamLogger::afterCSSA(const Code* code) const {
-    if (options.includes(DebugFlag::PrintCSSA)) {
-        innerHeader(" PIR After Converting to CSSA ");
-        code->print(getLog());
+        innerHeader(closure.rirVersion(), " PIR After Converting to CSSA ");
+        code->print(getLog(closure.rirVersion()));
     }
 }
 
@@ -93,40 +76,40 @@ void StreamLogger::afterCSSA(const Code* code) const {
             allocator.print(getLog());
 }*/
 
-void StreamLogger::finalPIR(const Code* code) const {
+void StreamLogger::finalPIR(Closure& closure) {
     if (options.includes(DebugFlag::PrintFinalPir)) {
-        innerHeader(" Final PIR Version ");
-        code->print(getLog());
+        innerHeader(closure.rirVersion(), " Final PIR Version ");
+        closure.print(getLog(closure.rirVersion()));
     }
 }
 
-void StreamLogger::finish(const rir::Function* function,
-                          std::ostream& stream) const {
+void StreamLogger::finish(const rir::Function* function, std::ostream& stream) {
     if (options.intersects(PrintDebugPasses)) {
         header("Finished compiling:", function, stream, false);
     }
 }
 
-void StreamLogger::warningBC(std::string warning, rir::BC bc) const {
+void StreamLogger::warningBC(rir::Function* function, std::string warning,
+                             rir::BC bc) {
     if (options.includes(DebugFlag::ShowWarnings)) {
-        getLog() << "Warning" << warning << ": ";
+        getLog(function) << "Warning" << warning << ": ";
         if (warning.compare(WARNING_GUARD_STRING) == 0) {
             CHAR(PRINTNAME(rir::Pool::get(bc.immediate.guard_fun_args.name)));
         } else {
-            bc.print(getLog());
+            bc.print(getLog(function));
         }
-        getLog() << "\n";
+        getLog(function) << "\n";
     }
 }
 
-void StreamLogger::failCompilingPir() const {
+void StreamLogger::failCompilingPir(rir::Function* function) {
     if (options.includes(DebugFlag::ShowWarnings))
-        getLog() << " Failed verification after p2r compile "
-                 << &currentFunction.top() << "\n";
+        getLog(function) << " Failed verification after p2r compile "
+                         << function << "\n";
 }
 
 void StreamLogger::header(std::string header, const rir::Function* function,
-                          std::ostream& stream, bool opening) const {
+                          std::ostream& stream, bool opening) {
     std::stringstream ss;
     ss << " " << header << " " << function << " ";
     stream << std::setfill('*') << std::left;
@@ -144,10 +127,11 @@ void StreamLogger::header(std::string header, const rir::Function* function,
     stream << std::setfill(' ') << "\n";
 }
 
-void StreamLogger::innerHeader(std::string header) const {
-    getLog() << "\n"
-             << std::setfill('=') << std::setw(15) << "" << std::left
-             << std::setw(39) << header << std::setfill(' ') << "\n";
+void StreamLogger::innerHeader(rir::Function* function, std::string header) {
+    getLog(function) << "\n"
+                     << std::setfill('=') << std::setw(15) << "" << std::left
+                     << std::setw(39) << header << std::setfill(' ') << "\n";
 }
+
 } // namespace pir
 } // namespace rir

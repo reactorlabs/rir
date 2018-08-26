@@ -160,8 +160,7 @@ SEXP pirCompile(SEXP what, pir::DebugOptions debug) {
                        [&]() {
                            if (debug.includes(pir::DebugFlag::ShowWarnings))
                                std::cerr << "Compilation failed\n";
-                       },
-                       true);
+                       });
 
     delete m;
     return what;

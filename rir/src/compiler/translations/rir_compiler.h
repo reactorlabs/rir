@@ -23,9 +23,9 @@ class RirCompiler {
     typedef std::function<void()> Maybe;
     typedef std::function<void(Closure*)> MaybeCls;
 
-    virtual void compileClosure(SEXP, MaybeCls, Maybe, bool) = 0;
-    void compileClosure(SEXP cls, MaybeCls success, bool isIndependent) {
-        return compileClosure(cls, success, []() {}, isIndependent);
+    virtual void compileClosure(SEXP, MaybeCls, Maybe) = 0;
+    void compileClosure(SEXP cls, MaybeCls success) {
+        return compileClosure(cls, success, []() {});
     }
 
     const DebugOptions debug;

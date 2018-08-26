@@ -60,7 +60,7 @@ compile(const std::string& context, const std::string& expr, pir::Module* m,
                                [&](pir::Closure* cls) {
                                    results[CHAR(PRINTNAME(f.tag()))] = cls;
                                },
-                               []() { assert(false); }, true);
+                               []() { assert(false); });
         }
     }
 
