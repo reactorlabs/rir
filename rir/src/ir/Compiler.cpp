@@ -331,7 +331,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
             Case(SYMSXP) {
                 cs << BC::guardNamePrimitive(fun);
                 compileExpr(ctx, rhs);
-                cs << BC::dup() << BC::setShared()
+                cs << BC::setShared() << BC::dup()
                    << (superAssign ? BC::stvarSuper(lhs) : BC::stvar(lhs))
                    << BC::invisible();
                 return true;
@@ -947,83 +947,6 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
     return false;
 }
 
-SEXP findClosure(SEXP sym, SEXP rho) {
-    SEXP fun;
-    while (rho != R_EmptyEnv) {
-        fun = findVarInFrame3(rho, sym, TRUE);
-        if (fun != R_UnboundValue) {
-            if (TYPEOF(fun) == PROMSXP || TYPEOF(fun) == BUILTINSXP ||
-                    TYPEOF(fun) == SPECIALSXP || fun == R_MissingArg)
-                return nullptr;
-            if (TYPEOF(fun) == CLOSXP)
-                return fun;
-        }
-        rho = ENCLOS(rho);
-    }
-    return nullptr;
-}
-
-// try to look up a closure
-bool compileWithGuess(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
-    if (!ctx.env())
-        return false;
-
-    RList args(args_);
-    CodeStream& cs = ctx.cs();
-
-    SEXP cls = findClosure(fun, ctx.env());
-    if (!cls)
-        return false;
-
-    RList formals(FORMALS(cls));
-    if (formals.length() != args.length())
-        return false;
-
-    for (auto farg : formals)
-        if (farg == R_DotsSymbol)
-            return false;
-
-    for (auto a = args.begin(); a != args.end(); ++a) {
-        if (a.hasTag())
-            return false;
-        switch (TYPEOF(*a)) {
-        case NILSXP:
-        case LISTSXP:
-        case LGLSXP:
-        case INTSXP:
-        case REALSXP:
-        case STRSXP:
-        case CPLXSXP:
-        case RAWSXP:
-        case S4SXP:
-        case SPECIALSXP:
-        case BUILTINSXP:
-        case ENVSXP:
-        case CLOSXP:
-        case VECSXP:
-        case EXTPTRSXP:
-        case WEAKREFSXP:
-        case EXPRSXP:
-            break;
-        default:
-            return false;
-        }
-    }
-
-    // maybe use promise_ and compile everything either as push or
-    // as promise?
-
-    // do argument matching / shuffling?
-    // cannot reuse matchArgs from gnur (but could rewrite it)
-
-    cs << BC::guardName(fun, cls);
-    for (auto a : args)
-        compileExpr(ctx, a);
-    cs << BC::staticCall(args.length(), ast, cls);
-
-    return true;
-}
-
 // function application
 void compileCall(Context& ctx, SEXP ast, SEXP fun, SEXP args) {
     CodeStream& cs = ctx.cs();
@@ -1035,9 +958,6 @@ void compileCall(Context& ctx, SEXP ast, SEXP fun, SEXP args) {
     Match(fun) {
         Case(SYMSXP) {
             if (compileSpecialCall(ctx, ast, fun, args))
-                return;
-
-            if (compileWithGuess(ctx, ast, fun, args))
                 return;
 
             cs << BC::ldfun(fun);

@@ -604,7 +604,8 @@ class Context {
 
 class Pir2Rir {
   public:
-    Pir2Rir(Pir2RirCompiler& cmp, Closure* cls) : compiler(cmp), cls(cls) {}
+    Pir2Rir(Pir2RirCompiler& cmp, Closure* cls, SEXP origin)
+        : compiler(cmp), cls(cls), originCls(origin) {}
     size_t compileCode(Context& ctx, Code* code);
     size_t getPromiseIdx(Context& ctx, Promise* code);
     void toCSSA(Code* code);
@@ -613,6 +614,7 @@ class Pir2Rir {
   private:
     Pir2RirCompiler& compiler;
     Closure* cls;
+    SEXP originCls;
     std::unordered_map<Promise*, BC::FunIdx> promises;
     std::unordered_map<Promise*, SEXP> argNames;
 };
@@ -655,16 +657,25 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 instr->type != PirType::voyd() && !Phi::Cast(instr);
 
             auto explicitEnvValue = [](Instruction* instr) {
-                return MkEnv::Cast(instr) || Deopt::Cast(instr);
+                return MkEnv::Cast(instr);
             };
 
             // Load Arguments to the stack
             {
                 auto loadEnv = [&](BB::Instrs::iterator it, Value* what) {
-                    if (Env::isStaticEnv(what)) {
-                        cs << BC::push(Env::Cast(what)->rho);
-                    } else if (what == Env::notClosed()) {
+                    if (what == Env::notClosed()) {
                         cs << BC::parentEnv();
+                    } else if (what == Env::nil()) {
+                        cs << BC::push(R_NilValue);
+                    } else if (Env::isStaticEnv(what)) {
+                        auto env = Env::Cast(what);
+                        // Here we could also load env->rho, but if the user
+                        // were to change the environment on the closure our
+                        // code would be wrong.
+                        if (originCls && env->rho == CLOENV(originCls))
+                            cs << BC::parentEnv();
+                        else
+                            cs << BC::push(env->rho);
                     } else {
                         if (!alloc.hasSlot(what)) {
                             std::cerr << "Don't know how to load the env ";
@@ -802,7 +813,7 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 auto dt = DispatchTable::unpack(mkfuncls->code);
 
                 if (dt->capacity() > 1 && !dt->available(1)) {
-                    Pir2Rir pir2rir(compiler, mkfuncls->fun);
+                    Pir2Rir pir2rir(compiler, mkfuncls->fun, nullptr);
                     auto rirFun = pir2rir.finalize();
                     if (!compiler.debug.includes(DebugFlag::DryRun))
                         dt->put(1, rirFun);
@@ -857,6 +868,7 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 SIMPLE(Subassign1_1D, subassign1);
                 SIMPLE(IsObject, isObj);
                 SIMPLE(Int3, int3);
+                SIMPLE(SetShared, setShared);
 #undef SIMPLE
 
 #define SIMPLE_WITH_SRCIDX(Name, Factory)                                      \
@@ -944,9 +956,11 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 break;
             }
             case Tag::Deopt: {
-                Deopt::Cast(instr)->eachArg([&](Value*) { cs << BC::pop(); });
-                // TODO
-                cs << BC::int3() << BC::push(R_NilValue) << BC::ret();
+                auto deopt = Deopt::Cast(instr);
+                assert(deopt->frames.size() == 1 &&
+                       "rir deopt cannot synthesize frames yet");
+                auto frame = deopt->frames[0];
+                cs << BC::deopt(frame.pc, frame.code);
                 return;
             }
             // values, not instructions
@@ -1056,7 +1070,7 @@ void Pir2RirCompiler::compile(Closure* cls, SEXP origin) {
     if (table->available(1))
         return;
 
-    Pir2Rir pir2rir(*this, cls);
+    Pir2Rir pir2rir(*this, cls, origin);
     auto fun = pir2rir.finalize();
 
     if (debug.includes(DebugFlag::DryRun))
@@ -1067,9 +1081,6 @@ void Pir2RirCompiler::compile(Closure* cls, SEXP origin) {
     auto oldFun = table->first();
 
     fun->invocationCount = oldFun->invocationCount;
-    // TODO: are these still needed / used?
-    fun->envLeaked = oldFun->envLeaked;
-    fun->envChanged = oldFun->envChanged;
     // TODO: signatures need a rework
     fun->signature = oldFun->signature;
 

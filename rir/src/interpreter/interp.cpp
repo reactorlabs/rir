@@ -4,7 +4,7 @@
 #include "R/Funtab.h"
 #include "interp.h"
 #include "interp_context.h"
-#include "interpreter/deoptimizer.h"
+#include "ir/Deoptimization.h"
 #include "runtime.h"
 
 #define NOT_IMPLEMENTED assert(false)
@@ -566,13 +566,6 @@ SEXP rirCall(const CallContext& call, SEXP actuals, Context* ctx) {
 
     assert(result);
 
-    if (env) {
-        if (!fun->envLeaked && FRAME_LEAKED(env))
-            fun->envLeaked = true;
-        if (!fun->envChanged && FRAME_CHANGED(env))
-            fun->envChanged = true;
-    }
-
     assert(!fun->deopt);
     return result;
 }
@@ -619,13 +612,6 @@ SEXP rirCall(const CallContext& call, Context* ctx) {
 
     assert(result);
 
-    if (env) {
-        if (!fun->envLeaked && FRAME_LEAKED(env))
-            fun->envLeaked = true;
-        if (!fun->envChanged && FRAME_CHANGED(env))
-            fun->envChanged = true;
-    }
-
     assert(!fun->deopt);
     return result;
 }
@@ -633,24 +619,20 @@ SEXP rirCall(const CallContext& call, Context* ctx) {
 SEXP doCall(const CallContext& call, Context* ctx) {
     assert(call.callee);
 
-    auto apply = [&](const CallContext& call) {
-        switch (TYPEOF(call.callee)) {
-        case SPECIALSXP:
-            return legacySpecialCall(call, ctx);
-        case BUILTINSXP:
+    switch (TYPEOF(call.callee)) {
+    case SPECIALSXP:
+        return legacySpecialCall(call, ctx);
+    case BUILTINSXP:
+        return legacyCall(call, ctx);
+    case CLOSXP: {
+        if (TYPEOF(BODY(call.callee)) != EXTERNALSXP)
             return legacyCall(call, ctx);
-        case CLOSXP: {
-            if (TYPEOF(BODY(call.callee)) != EXTERNALSXP)
-                return legacyCall(call, ctx);
-            return rirCall(call, ctx);
-        }
-        default:
-            Rf_error("Invalid Callee");
-        };
-        return R_NilValue;
+        return rirCall(call, ctx);
+    }
+    default:
+        Rf_error("Invalid Callee");
     };
-
-    return apply(call);
+    return R_NilValue;
 }
 
 SEXP dispatchApply(SEXP ast, SEXP obj, SEXP actuals, SEXP selector,
@@ -1151,6 +1133,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env,
         INSTRUCTION(parent_env_) {
             // Can only be used for pir. In pir we always have a closure that
             // stores the lexical envrionment
+            assert(callCtxt);
             ostack_push(ctx, CLOENV(callCtxt->callee));
             NEXT();
         }
@@ -1353,13 +1336,10 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env,
         INSTRUCTION(stvar_) {
             Immediate id = readImmediate();
             advanceImmediate();
-            int wasChanged = FRAME_CHANGED(getenv());
             SEXP val = ostack_pop(ctx);
 
             cachedSetVar(val, getenv(), id, ctx, bindingCache);
 
-            if (!wasChanged)
-                CLEAR_FRAME_CHANGED(getenv());
             NEXT();
         }
 
@@ -2203,17 +2183,17 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env,
 
             switch (TYPEOF(idx)) {
             case REALSXP:
-                if (SHORT_VEC_LENGTH(idx) != 1 || *REAL(idx) == NA_REAL)
+                if (STDVEC_LENGTH(idx) != 1 || *REAL(idx) == NA_REAL)
                     goto fallback;
                 i = (int)*REAL(idx) - 1;
                 break;
             case INTSXP:
-                if (SHORT_VEC_LENGTH(idx) != 1 || *INTEGER(idx) == NA_INTEGER)
+                if (STDVEC_LENGTH(idx) != 1 || *INTEGER(idx) == NA_INTEGER)
                     goto fallback;
                 i = *INTEGER(idx) - 1;
                 break;
             case LGLSXP:
-                if (SHORT_VEC_LENGTH(idx) != 1 || *LOGICAL(idx) == NA_LOGICAL)
+                if (STDVEC_LENGTH(idx) != 1 || *LOGICAL(idx) == NA_LOGICAL)
                     goto fallback;
                 i = (int)*LOGICAL(idx) - 1;
                 break;
@@ -2411,20 +2391,15 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env,
             NEXT();
         }
 
-        INSTRUCTION(guard_env_) {
-            uint32_t deoptId = readImmediate();
+        INSTRUCTION(deopt_) {
+            SEXP r = readConst(ctx, readImmediate());
+            assert(TYPEOF(r) == RAWSXP);
+            assert(XLENGTH(r) >= sizeof(DeoptMetadata));
+            auto m = (DeoptMetadata*)DATAPTR(r);
             advanceImmediate();
-            if (FRAME_CHANGED(getenv()) || FRAME_LEAKED(getenv())) {
-                Function* fun = c->function();
-                assert(fun->body() == c && "Cannot deopt from promise");
-                fun->deopt = true;
-                SEXP val = fun->origin();
-                Function* deoptFun = Function::unpack(val);
-                Code* deoptCode = deoptFun->body();
-                c = deoptCode;
-                pc = Deoptimizer_pc(deoptId);
-                PC_BOUNDSCHECK(pc, c);
-            }
+            pc = (Opcode*)m->frames[0].pc;
+            c = (Code*)m->frames[0].code;
+            assert(c->code() <= pc && pc < c->endCode());
             NEXT();
         }
 
@@ -2706,8 +2681,9 @@ SEXP rirEval_f(SEXP what, SEXP env) {
     SEXP lenv = env;
     // TODO: do we not need an RCNTXT here?
 
-    if (isValidCodeObject(what))
+    if (isValidCodeObject(what)) {
         return evalRirCodeExtCaller((Code*)what, globalContext(), &lenv);
+    }
 
     if (DispatchTable::check(what)) {
         auto table = DispatchTable::unpack(what);

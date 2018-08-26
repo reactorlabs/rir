@@ -43,7 +43,7 @@ flags = [
     '-I'+DirectoryOfThisScript()+'/external/custom-r/include',
     '-I'+DirectoryOfThisScript()+'/rir/src',
     '-Wall',
-    '-std=c++11',
+    '-std=c++17',
 ]
 
 

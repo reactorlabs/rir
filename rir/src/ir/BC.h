@@ -14,6 +14,8 @@
 
 #include "interpreter/runtime.h"
 
+#include "ir/Deoptimization.h"
+
 namespace rir {
 
 class CodeStream;
@@ -111,11 +113,6 @@ BC BC::copyloc(uint32_t target, uint32_t source) {
     im.loc_cpy.target = target;
     im.loc_cpy.source = source;
     return BC(Opcode::movloc_, im);
-}
-BC BC::guardEnv(uint32_t id) {
-    ImmediateArguments i;
-    i.guard_id = id;
-    return BC(Opcode::guard_env_, i);
 }
 BC BC::guardName(SEXP sym, SEXP expected) {
     ImmediateArguments i;
@@ -314,6 +311,17 @@ BC BC::staticCall(size_t nargs, SEXP ast, SEXP target) {
 }
 BC BC::recordCall() { return BC(Opcode::record_call_); }
 BC BC::recordBinop() { return BC(Opcode::record_binop_); }
+
+BC BC::deopt(Opcode* pc, Code* orig) {
+    SEXP store = Rf_allocVector(RAWSXP, sizeof(DeoptMetadata));
+    auto m = new (DATAPTR(store)) DeoptMetadata;
+    m->frames[0].pc = pc;
+    m->frames[0].code = orig;
+
+    ImmediateArguments i;
+    i.pool = Pool::insert(store);
+    return BC(Opcode::deopt_, i);
+}
 
 } // rir
 

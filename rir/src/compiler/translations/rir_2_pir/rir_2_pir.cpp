@@ -186,7 +186,8 @@ void Rir2Pir::translate(rir::Code* srcCode, Builder& insert,
                 state.setPC(trg);
                 state.setEntry(branch);
                 insert.bb = branch;
-                insert(new Deopt(insert.env, state.getPC(), state.stack));
+                insert(
+                    new Deopt(insert.env, srcCode, state.getPC(), state.stack));
                 break;
             }
             default:

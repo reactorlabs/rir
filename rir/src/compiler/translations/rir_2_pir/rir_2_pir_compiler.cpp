@@ -29,6 +29,14 @@ Rir2PirCompiler::Rir2PirCompiler(Module* module, const DebugOptions& debug)
 void Rir2PirCompiler::compileClosure(SEXP closure, MaybeCls success,
                                      Maybe fail) {
     assert(isValidClosureSEXP(closure));
+
+    // TODO: we need to keep track of this compiled closure, since for example
+    // the parent_env_ instruction refers back to the closure. What we should do
+    // is have the code object link back to the closure object. But for that we
+    // will need to make Code objects proper objects. For now let's just put it
+    // in the constant pool, so it never gets GC'd.
+    Pool::insert(closure);
+
     DispatchTable* tbl = DispatchTable::unpack(BODY(closure));
 
     if (tbl->available(1)) {
@@ -38,8 +46,9 @@ void Rir2PirCompiler::compileClosure(SEXP closure, MaybeCls success,
 
     FormalArgs formals(FORMALS(closure));
     rir::Function* srcFunction = tbl->first();
-    compileClosure(srcFunction, formals, module->getEnv(CLOENV(closure)),
-                   success, fail);
+    auto env = module->getEnv(CLOENV(closure));
+    assert(env != Env::notClosed());
+    compileClosure(srcFunction, formals, env, success, fail);
 }
 
 void Rir2PirCompiler::compileFunction(rir::Function* srcFunction,
@@ -55,12 +64,6 @@ void Rir2PirCompiler::compileClosure(rir::Function* srcFunction,
     // TODO: Support default arguments and dots
     if (formals.hasDefaultArgs || formals.hasDots)
         return fail();
-
-    // TODO: we can only compile for a fixed closure env, if we have a guard if
-    // someone where to change it! Most probably this would not trip any
-    // problems as closure envs don't get changed often. But let's better be
-    // safe than sorry.
-    closureEnv = Env::notClosed();
 
     bool failed = false;
     module->createIfMissing(
@@ -86,7 +89,7 @@ void Rir2PirCompiler::compileClosure(rir::Function* srcFunction,
     if (failed)
         fail();
     else
-        success(module->get(srcFunction));
+        success(module->get(Module::FunctionAndEnv(srcFunction, closureEnv)));
 }
 
 void Rir2PirCompiler::optimizeModule() {

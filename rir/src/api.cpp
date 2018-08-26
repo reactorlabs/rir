@@ -26,18 +26,20 @@ REXPORT SEXP rir_disassemble(SEXP what, SEXP verbose) {
     if (!t)
         Rf_error("Not a rir compiled code");
 
-    Rprintf("* closure %p (vtable %p, env %p)\n", what, t, CLOENV(what));
+    std::cout << "* closure " << what << " (vtable " << t << ", env "
+              << CLOENV(what) << ")\n";
     for (size_t entry = 0; entry < t->capacity(); ++entry) {
         if (!t->available(entry))
             continue;
         Function* f = t->at(entry);
-        Rprintf("= vtable slot <%d> (%p, invoked %u) =\n", entry, f,
-                f->invocationCount);
         std::stringstream output;
+        output << "= vtable slot <" << entry << "> (" << f << ", invoked "
+               << f->invocationCount << ") =\n";
         f->body()->disassemble(output);
         for (auto c : *f) {
             if (c != f->body()) {
-                Rprintf("\n [Prom %x]\n", (uintptr_t)c - (uintptr_t)f);
+                output << "\n [Prom " << std::hex
+                       << ((uintptr_t)c - (uintptr_t)f) << std::dec << "]\n";
                 c->disassemble(output);
             }
         }
@@ -48,19 +50,15 @@ REXPORT SEXP rir_disassemble(SEXP what, SEXP verbose) {
 }
 
 REXPORT SEXP rir_compile(SEXP what, SEXP env) {
-    // TODO make this nicer
     if (TYPEOF(what) == CLOSXP) {
         SEXP body = BODY(what);
         if (TYPEOF(body) == EXTERNALSXP)
             return what;
 
-        SEXP result = Compiler::compileClosure(what);
-        PROTECT(result);
+        // Change the input closure inplace
+        Compiler::compileClosure(what);
 
-        Rf_copyMostAttrib(what, result);
-
-        UNPROTECT(1);
-        return result;
+        return what;
     } else {
         if (TYPEOF(what) == BCODESXP) {
             what = VECTOR_ELT(CDR(what), 0);
@@ -144,7 +142,7 @@ SEXP pirCompile(SEXP what, pir::DebugOptions debug) {
     if (DispatchTable::unpack(BODY(what))->available(1))
         return what;
 
-    Protect p(what);
+    PROTECT(what);
 
     // compile to pir
     pir::Module* m = new pir::Module;
@@ -163,6 +161,7 @@ SEXP pirCompile(SEXP what, pir::DebugOptions debug) {
                        });
 
     delete m;
+    UNPROTECT(1);
     return what;
 }
 
@@ -194,7 +193,7 @@ bool startup() {
     } else if (pir && std::string(pir).compare("force") == 0) {
         initializeRuntime(
             [](SEXP f, SEXP env) { return pirOpt(rir_compile(f, env)); },
-            [](SEXP f) { return pirOpt(f); });
+            [](SEXP f) { return f; });
     } else if (pir && std::string(pir).compare("force_dryrun") == 0) {
         initializeRuntime(
             [](SEXP f, SEXP env) {
