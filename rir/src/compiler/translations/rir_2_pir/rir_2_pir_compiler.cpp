@@ -26,8 +26,8 @@ Rir2PirCompiler::Rir2PirCompiler(Module* module, const DebugOptions& debug)
     }
 }
 
-void Rir2PirCompiler::compileClosure(SEXP closure, MaybeCls success, Maybe fail,
-                                     bool isIndependent = false) {
+void Rir2PirCompiler::compileClosure(SEXP closure, MaybeCls success,
+                                     Maybe fail) {
     assert(isValidClosureSEXP(closure));
 
     // TODO: we need to keep track of this compiled closure, since for example
@@ -48,45 +48,40 @@ void Rir2PirCompiler::compileClosure(SEXP closure, MaybeCls success, Maybe fail,
     rir::Function* srcFunction = tbl->first();
     auto env = module->getEnv(CLOENV(closure));
     assert(env != Env::notClosed());
-    compileClosure(srcFunction, formals, env, success, fail, isIndependent);
+    compileClosure(srcFunction, formals, env, success, fail);
 }
 
 void Rir2PirCompiler::compileFunction(rir::Function* srcFunction,
                                       FormalArgs const& formals,
                                       MaybeCls success, Maybe fail) {
-    compileClosure(srcFunction, formals, Env::notClosed(), success, fail, true);
+    compileClosure(srcFunction, formals, Env::notClosed(), success, fail);
 }
 
 void Rir2PirCompiler::compileClosure(rir::Function* srcFunction,
                                      FormalArgs const& formals, Env* closureEnv,
-                                     MaybeCls success, Maybe fail,
-                                     bool isIndependent) {
+                                     MaybeCls success, Maybe fail) {
 
     // TODO: Support default arguments and dots
     if (formals.hasDefaultArgs || formals.hasDots)
         return fail();
 
-    if (isIndependent)
-        LOGGING(log.startLogging(srcFunction));
-  
     bool failed = false;
     module->createIfMissing(
         srcFunction, formals.names, closureEnv, [&](Closure* pirFunction) {
             Builder builder(pirFunction, closureEnv);
             Rir2Pir rir2pir(*this, srcFunction);
-            LOGGING(log.compilationInit());
 
             if (rir2pir.tryCompile(srcFunction->body(), builder)) {
                 LOGGING(log.compilationEarlyPir(*(builder.function)));
                 if (!Verify::apply(pirFunction)) {
                     failed = true;
-                    LOGGING(log.failCompilingPir());
+                    LOGGING(log.failCompilingPir(srcFunction));
                     assert(false);
                     return false;
                 }
                 return true;
             }
-            LOGGING(log.failCompilingPir());
+            LOGGING(log.failCompilingPir(srcFunction));
             failed = true;
             return false;
         });
@@ -95,9 +90,6 @@ void Rir2PirCompiler::compileClosure(rir::Function* srcFunction,
         fail();
     else
         success(module->get(Module::FunctionAndEnv(srcFunction, closureEnv)));
-
-    if (isIndependent)
-        LOGGING(log.endLogging());
 }
 
 void Rir2PirCompiler::optimizeModule() {

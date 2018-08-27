@@ -39,29 +39,31 @@ class StreamLogger {
     StreamLogger(const StreamLogger&) = delete;
     StreamLogger& operator=(StreamLogger other) = delete;
 
-    void startLogging(rir::Function* function);
-    void endLogging();
-    void compilationInit() const;
-    void compilationEarlyPir(const Closure&) const;
-    void pirOptimizations(const Closure&, const std::string&,
-                          const std::string&, size_t) const;
-    void phiInsertion(const Code*) const;
-    void afterCSSA(const Code*) const;
+    void compilationEarlyPir(Closure&);
+    void pirOptimizations(Closure&, const std::string&, const std::string&,
+                          size_t);
+    void afterCSSA(Closure&, const Code*);
     // void afterLiveness(SSAAllocator&);
-    void finalPIR(const Code*) const;
-    void rirFromPir(const rir::Function* function) const;
-    void warningBC(std::string, rir::BC bc) const;
-    void failCompilingPir() const;
-    void header(std::string, const rir::Function*, std::ostream&, bool) const;
-    void innerHeader(std::string) const;
-    void finish(const rir::Function*, std::ostream&) const;
+    void finalPIR(Closure&);
+    void rirFromPir(rir::Function*);
+    void warningBC(rir::Function*, std::string, rir::BC);
+    void failCompilingPir(rir::Function*);
+    void header(std::string, const rir::Function*, std::ostream&, bool);
+    void innerHeader(rir::Function*, std::string);
 
-    std::ostream& getLog() const { return *streams.at(currentFunction.top()); };
+    std::ostream& getLog(rir::Function* function) {
+        if (!streams.count(function))
+            startLogging(function);
+        return *streams.at(function);
+    };
 
   private:
     std::map<rir::Function*, std::ostream*> streams;
     const DebugOptions options;
-    std::stack<rir::Function*> currentFunction;
+
+    void startLogging(rir::Function* function);
+    void compilationInit(rir::Function*);
+    void finish(const rir::Function*, std::ostream&);
 };
 } // namespace pir
 } // namespace rir

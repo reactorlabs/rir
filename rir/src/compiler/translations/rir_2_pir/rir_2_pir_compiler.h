@@ -13,8 +13,7 @@ class Rir2PirCompiler : public RirCompiler {
   public:
     Rir2PirCompiler(Module* module, const DebugOptions& debug);
 
-    void compileClosure(SEXP, MaybeCls success, Maybe fail,
-                        bool isIndependent) override;
+    void compileClosure(SEXP, MaybeCls success, Maybe fail) override;
     void compileFunction(rir::Function*, FormalArgs const&, MaybeCls success,
                          Maybe fail);
     void optimizeModule();
@@ -23,7 +22,7 @@ class Rir2PirCompiler : public RirCompiler {
 
   private:
     void compileClosure(rir::Function*, FormalArgs const&, Env* closureEnv,
-                        MaybeCls success, Maybe fail, bool isIndependent);
+                        MaybeCls success, Maybe fail);
     void applyOptimizations(Closure*, const std::string&);
 
     StreamLogger log;
