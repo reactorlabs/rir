@@ -50,7 +50,7 @@ class TheVerifier {
         for (auto i : *bb)
             verify(i, bb, dom, cfg);
         if (bb->isEmpty()) {
-            if (!bb->next0 && !bb->next1) {
+            if (bb->isExit()) {
                 std::cerr << "bb" << bb->id << " has no successor\n";
                 ok = false;
             }
@@ -78,10 +78,11 @@ class TheVerifier {
             */
             if (cfg.isMergeBlock(bb)) {
                 for (auto in : cfg.immediatePredecessors(bb)) {
-                    if (in->next1) {
+                    if (in->falseBranch()) {
                         std::cerr << "BB " << in->id << " merges into "
                                   << bb->id << " and branches into "
-                                  << in->next1->id << " at the same time.\n";
+                                  << in->falseBranch()->id
+                                  << " at the same time.\n";
                         ok = false;
                     }
                 }
@@ -89,19 +90,20 @@ class TheVerifier {
         } else {
             Instruction* last = bb->last();
             if ((Branch::Cast(last))) {
-                if (!bb->next0 || !bb->next1) {
+                if (!bb->falseBranch() || !bb->trueBranch()) {
                     std::cerr << "split bb" << bb->id
                               << " must end in branch\n";
                     ok = false;
                 }
             } else if ((Deopt::Cast(last)) || (Return::Cast(last))) {
-                if (bb->next0 || bb->next1) {
+                if (bb->trueBranch() || bb->falseBranch()) {
                     std::cerr << "exit bb" << bb->id << " must end in return\n";
                     ok = false;
                 }
             } else {
-                if (!bb->next0 || bb->next1) {
-                    std::cerr << "bb" << bb->id << " has next1 but no next0\n";
+                if (!bb->trueBranch() || bb->falseBranch()) {
+                    std::cerr << "bb" << bb->id
+                              << " has falseBranch but no trueBranch\n";
                     ok = false;
                 }
             }

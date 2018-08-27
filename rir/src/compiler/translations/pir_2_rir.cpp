@@ -257,10 +257,10 @@ class SSAAllocator {
                         break;
                     bool argsInRightOrder = true;
                     phi->eachArg([&](BB* in, Value* v) {
-                        if (in->next0 != bb || in->size() < pos ||
-                            *(in->end() - pos) != v) {
-                            argsInRightOrder = false;
-                        }
+                        argsInRightOrder = argsInRightOrder && in->isJmp() &&
+                                           in->next() == bb &&
+                                           in->size() >= pos &&
+                                           *(in->end() - pos) == v;
                     });
                     if (!argsInRightOrder)
                         break;
@@ -514,7 +514,7 @@ class SSAAllocator {
                 }
             }
 
-            if (!bb->next0 && !bb->next1) {
+            if (bb->isExit()) {
                 if (stack.size() != 0) {
                     std::cerr << "REG alloc fail: BB " << bb->id
                               << " tries to return with " << stack.size()
@@ -523,20 +523,23 @@ class SSAAllocator {
                 }
             }
 
-            if (bb->next0 && !branchTaken.count(Jmp(bb, bb->next0))) {
-                branchTaken.insert(Jmp(bb, bb->next0));
-                if (!bb->next1) {
-                    verifyBB(bb->next0, reg, stack);
+            if (bb->trueBranch() &&
+                !branchTaken.count(Jmp(bb, bb->trueBranch()))) {
+                branchTaken.insert(Jmp(bb, bb->trueBranch()));
+                if (!bb->falseBranch()) {
+                    verifyBB(bb->trueBranch(), reg, stack);
                 } else {
-                    // Need to copy here, since we are gonna explore next1 next
+                    // Need to copy here, since we are gonna explore
+                    // falseBranch() next
                     RegisterFile regC = reg;
                     Stack stackC = stack;
-                    verifyBB(bb->next0, regC, stackC);
+                    verifyBB(bb->trueBranch(), regC, stackC);
                 }
             }
-            if (bb->next1 && !branchTaken.count(Jmp(bb, bb->next1))) {
-                branchTaken.insert(Jmp(bb, bb->next1));
-                verifyBB(bb->next1, reg, stack);
+            if (bb->falseBranch() &&
+                !branchTaken.count(Jmp(bb, bb->falseBranch()))) {
+                branchTaken.insert(Jmp(bb, bb->falseBranch()));
+                verifyBB(bb->falseBranch(), reg, stack);
             }
         };
 
@@ -785,14 +788,15 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
             }
             case Tag::Branch: {
                 // jump through empty blocks
-                auto next0 = bb->next0;
-                while (next0->isEmpty())
-                    next0 = next0->next0;
-                auto next1 = bb->next1;
-                while (next1->isEmpty())
-                    next1 = next1->next0;
+                auto trueBranch = bb->trueBranch();
+                while (trueBranch->isEmpty())
+                    trueBranch = trueBranch->next();
+                auto falseBranch = bb->falseBranch();
+                while (falseBranch->isEmpty())
+                    falseBranch = falseBranch->next();
 
-                cs << BC::brfalse(bbLabels[next0]) << BC::br(bbLabels[next1]);
+                cs << BC::brfalse(bbLabels[falseBranch])
+                   << BC::br(bbLabels[trueBranch]);
 
                 // this is the end of this BB
                 return;
@@ -956,10 +960,16 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 break;
             }
             case Tag::Deopt: {
-                auto deopt = Deopt::Cast(instr);
-                assert(deopt->frames.size() == 1 &&
+                assert(Safepoint::Cast(*(it - 1)) &&
+                       "Deopt MUST be scheudled after Safepoint");
+            }
+            case Tag::Safepoint: {
+                assert(Deopt::Cast(*(it + 1)) &&
+                       "Unused Safepoint must be removed");
+                auto sp = Safepoint::Cast(instr);
+                assert(sp->frames.size() == 1 &&
                        "rir deopt cannot synthesize frames yet");
-                auto frame = deopt->frames[0];
+                auto frame = sp->frames[0];
                 cs << BC::deopt(frame.pc, frame.code);
                 return;
             }
@@ -982,12 +992,12 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
             };
         }
 
-        // this BB has exactly one successor, next0
+        // this BB has exactly one successor, trueBranch()
         // jump through empty blocks
-        assert(bb->next0);
-        auto next = bb->next0;
+        assert(bb->trueBranch());
+        auto next = bb->trueBranch();
         while (next->isEmpty())
-            next = next->next0;
+            next = next->trueBranch();
         cs << BC::br(bbLabels[next]);
     });
 

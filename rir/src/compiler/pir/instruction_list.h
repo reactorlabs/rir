@@ -59,6 +59,7 @@
     V(Subassign1_1D)                                                           \
     V(Subassign2_1D)                                                           \
     V(ForSeqSize)                                                              \
+    V(Safepoint)                                                               \
     V(Deopt)                                                                   \
     V(Force)                                                                   \
     V(CastType)                                                                \

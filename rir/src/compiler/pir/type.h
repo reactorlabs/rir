@@ -69,9 +69,10 @@ enum class NativeType : uint8_t {
     _UNUSED_,
 
     test,
+    safepoint,
 
     FIRST = test,
-    LAST = test
+    LAST = safepoint
 };
 
 enum class TypeFlags : uint8_t {
@@ -246,6 +247,9 @@ inline std::ostream& operator<<(std::ostream& out, NativeType t) {
     switch (t) {
     case NativeType::test:
         out << "t";
+        break;
+    case NativeType::safepoint:
+        out << "s";
         break;
     case NativeType::_UNUSED_:
         assert(false);

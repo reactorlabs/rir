@@ -150,8 +150,8 @@ void LdConst::printArgs(std::ostream& out) {
 
 void Branch::printArgs(std::ostream& out) {
     FixedLenInstruction::printArgs(out);
-    out << " -> BB" << bb()->next1->id << " (if true) | BB" << bb()->next0->id
-        << " (if false)";
+    out << " -> BB" << bb()->trueBranch()->id << " (if true) | BB"
+        << bb()->falseBranch()->id << " (if false)";
 }
 
 void MkArg::printArgs(std::ostream& out) {
@@ -263,10 +263,9 @@ void CallSafeBuiltin::printArgs(std::ostream& out) {
     Instruction::printArgs(out);
 }
 
-void Deopt::printArgs(std::ostream& out) {
-    out << " ";
+void Safepoint::printArgs(std::ostream& out) {
     for (auto frame : frames)
-        out << frame.code << "@" << frame.pc;
+        out << frame.code << "+" << frame.pc - frame.code->code();
     out << ", stack=[";
     for (size_t i = 0; i < nargs() - 1; ++i) {
         arg(i).val()->printRef(out);

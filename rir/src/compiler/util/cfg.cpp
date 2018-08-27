@@ -45,9 +45,9 @@ CFG::CFG(Code* start)
                 transitivePredecessors[next->id].push_back(bb);
             }
         };
-        apply(bb->next0);
-        apply(bb->next1);
-        if (!bb->next0 && !bb->next1)
+        apply(bb->trueBranch());
+        apply(bb->falseBranch());
+        if (!bb->trueBranch() && !bb->falseBranch())
             exits_.push_back(bb);
     });
 
@@ -121,8 +121,8 @@ DominanceGraph::DominanceGraph(Code* start) : dominating(start->nextBBId) {
             if (d.merge(front))
                 todo.push(bb);
         };
-        apply(cur->next0);
-        apply(cur->next1);
+        apply(cur->trueBranch());
+        apply(cur->falseBranch());
     }
 
     for (size_t i = 0; i < start->nextBBId; ++i) {
