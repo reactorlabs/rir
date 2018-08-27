@@ -225,7 +225,7 @@ class TheCleanup {
 namespace rir {
 namespace pir {
 
-void Cleanup::apply(Closure* function) {
+void Cleanup::apply(Closure* function) const {
     TheCleanup s(function);
     s();
 }

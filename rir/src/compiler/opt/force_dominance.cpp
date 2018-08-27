@@ -154,7 +154,7 @@ class ForceDominanceAnalysisResult {
 namespace rir {
 namespace pir {
 
-void ForceDominance::apply(Closure* cls) {
+void ForceDominance::apply(Closure* cls) const {
     ForceDominanceAnalysisResult analysis(cls);
 
     std::unordered_map<Force*, Value*> inlinedPromise;

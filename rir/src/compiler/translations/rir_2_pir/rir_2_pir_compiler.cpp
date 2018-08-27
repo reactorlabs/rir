@@ -21,8 +21,8 @@ namespace pir {
 
 Rir2PirCompiler::Rir2PirCompiler(Module* module, const DebugOptions& debug)
     : RirCompiler(module, debug), log(debug) {
-    for (auto optimization : pirConfigurations()->pirOptimizations()) {
-        translations.push_back(optimization->translator);
+    for (auto& optimization : pirConfigurations()->pirOptimizations()) {
+        translations.push_back(optimization);
     }
 }
 
@@ -93,44 +93,30 @@ void Rir2PirCompiler::compileClosure(rir::Function* srcFunction,
 }
 
 void Rir2PirCompiler::optimizeModule() {
-    LOGGING(size_t passnr = 0);
+    auto applyOptimizations = [&](Closure* f) {
+        LOGGING(size_t passnr = 0);
+        for (auto& translation : translations) {
+            translation->apply(f);
+            // std::cout << "================ " << translation->getName() << "
+            // ================\n"; f->print(std::cout);
+
+            LOGGING(log.pirOptimizations(*f, translation->getName(), passnr++));
+
+#ifdef ENABLE_SLOWASSER
+            assert(Verify::apply(f));
+#endif
+        }
+#ifndef ENABLE_SLOWASSER
+        assert(Verify::apply(f));
+#endif
+    };
+
     module->eachPirFunction([&](Module::VersionedClosure& v) {
         auto f = v.current();
         if (debug.includes(DebugFlag::PreserveVersions))
             v.saveVersion();
-        applyOptimizations(f, "Optimizations 1st Pass");
-        applyOptimizations(f, "Optimizations 2nd Pass");
+        applyOptimizations(f);
     });
-
-    for (int i = 0; i < 5; ++i) {
-        module->eachPirFunction([&](Module::VersionedClosure& v) {
-            auto f = v.current();
-            if (debug.includes(DebugFlag::PreserveVersions))
-                v.saveVersion();
-            Inline::apply(f);
-            if (debug.includes(DebugFlag::PrintInlining)) {
-                LOGGING(
-                    log.pirOptimizations(*f, "inline", "Inlining", passnr++));
-            }
-            applyOptimizations(f, "Optimizations After Inlining");
-        });
-    }
 }
-
-void Rir2PirCompiler::applyOptimizations(Closure* f,
-                                         const std::string& category) {
-    LOGGING(size_t passnr = 0);
-    for (auto& translation : this->translations) {
-        translation->apply(f);
-        LOGGING(log.pirOptimizations(*f, category, translation->getName(),
-                                     passnr++));
-
-#if 0
-        assert(Verify::apply(f));
-#endif
-    }
-    assert(Verify::apply(f));
-}
-
 } // namespace pir
 } // namespace rir

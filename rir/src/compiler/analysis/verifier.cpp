@@ -101,9 +101,13 @@ class TheVerifier {
                     ok = false;
                 }
             } else {
-                if (!bb->trueBranch() || bb->falseBranch()) {
+                if (bb->falseBranch()) {
                     std::cerr << "bb" << bb->id
-                              << " has falseBranch but no trueBranch\n";
+                              << " has false branch but no branch instr\n";
+                    ok = false;
+                }
+                if (!bb->trueBranch()) {
+                    std::cerr << "bb" << bb->id << " has no successor\n";
                     ok = false;
                 }
             }
