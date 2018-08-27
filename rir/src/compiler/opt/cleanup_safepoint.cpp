@@ -4,14 +4,10 @@
 #include "../util/cfg.h"
 #include "../util/visitor.h"
 
-#include <unordered_set>
-
 namespace rir {
 namespace pir {
 
 void CleanupSafepoint::apply(Closure* function) const {
-    std::unordered_map<Deopt*, Safepoint*> scheduled;
-
     auto apply = [](Code* code) {
         Visitor::run(code->entry, [&](BB* bb) {
             for (auto it = bb->begin(); it != bb->end(); ++it) {

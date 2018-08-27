@@ -257,10 +257,18 @@ class SSAAllocator {
                         break;
                     bool argsInRightOrder = true;
                     phi->eachArg([&](BB* in, Value* v) {
-                        argsInRightOrder = argsInRightOrder && in->isJmp() &&
-                                           in->next() == bb &&
-                                           in->size() >= pos &&
-                                           *(in->end() - pos) == v;
+                        argsInRightOrder =
+                            argsInRightOrder &&
+                            /* 1. the phi input block must not be a branch block
+                             *    and it must be the direct predecessor of
+                             *    the merge block. */
+                            in->isJmp() && in->next() == bb &&
+                            /* 2. the phi input value must be pushed in stack
+                             *    order. i.e. if we are currently looking for
+                             *    the inputs to the pos-th phi, then the phi
+                             *    input value must have been pushed as the
+                             *    pos-th last value. */
+                            in->size() >= pos && *(in->end() - pos) == v;
                     });
                     if (!argsInRightOrder)
                         break;
