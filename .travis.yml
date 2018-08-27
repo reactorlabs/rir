@@ -11,7 +11,8 @@ matrix:
     - os: osx
       env:
         - CORES=2
-        - COMPILER=clang++
+        - CXX_OVERRIDE=clang++
+        - CC_OVERRIDE=clang
         - CHECK=check
         - BUILD=release
       compiler: clang
@@ -19,7 +20,8 @@ matrix:
     - os: osx
       env:
         - CORES=2
-        - COMPILER=clang++
+        - CXX_OVERRIDE=clang++
+        - CC_OVERRIDE=clang
         - CHECK=check
         - BUILD=debug
         - PIR_ENABLE=force
@@ -27,26 +29,30 @@ matrix:
 
     # linux gcc
     - env:
-        - COMPILER=g++-7
+        - CXX_OVERRIDE=g++-7
+        - CC_OVERRIDE=gcc-7
         - CHECK=check
         - BUILD=release
 
     - env:
         - CORES=2
-        - COMPILER=g++-7
+        - CXX_OVERRIDE=g++-7
+        - CC_OVERRIDE=gcc-7
         - CHECK=check
         - BUILD=debug
         - PIR_ENABLE=force
 
     - env:
-        - COMPILER=g++-7
+        - CXX_OVERRIDE=g++-7
+        - CC_OVERRIDE=gcc-7
         - CHECK=test-all-devel
         - BUILD=release
         - PIR_ENABLE=force
         - ENABLE_VALGRIND=1
 
     - env:
-        - COMPILER=g++-7
+        - CXX_OVERRIDE=g++-7
+        - CC_OVERRIDE=gcc-7
         - CHECK=check-recommended
         - BUILD=release
 
@@ -76,8 +82,10 @@ before_install:
 
 before_script:
   - export TZ=""
-  - export CXX=${COMPILER}
+  - export CXX=$CXX_OVERRIDE
+  - export CC=$CC_OVERRIDE
   - ${CXX} --version
+  - ${CC} --version
   - cd "${TRAVIS_BUILD_DIR}"
   - mkdir build && cd build
   - cmake -DCMAKE_BUILD_TYPE=$BUILD ..
@@ -92,6 +100,7 @@ script:
   - R_ENABLE_JIT=3 ./bin/tests
   - echo "running make $CHECK on a $BUILD build with CORES=$CORES and PIR_ENABLE=$PIR_ENABLE"
   - TEST_MC_CORES=$CORES ./bin/gnur-make-tests $CHECK
+
 
 cache:
   ccache: true

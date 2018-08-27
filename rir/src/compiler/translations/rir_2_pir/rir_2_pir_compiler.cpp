@@ -97,8 +97,6 @@ void Rir2PirCompiler::optimizeModule() {
         LOGGING(size_t passnr = 0);
         for (auto& translation : translations) {
             translation->apply(f);
-            // std::cout << "================ " << translation->getName() << "
-            // ================\n"; f->print(std::cout);
 
             LOGGING(log.pirOptimizations(*f, translation->getName(), passnr++));
 
