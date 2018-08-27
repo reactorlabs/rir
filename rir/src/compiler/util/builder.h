@@ -26,19 +26,12 @@ class Builder {
 
     Value* buildDefaultEnv(Closure* fun);
 
-    template <class T>
-    T* add(T* i) {
-        assert(i->tag != Tag::_UNUSED_);
-        bb->append(i);
-        return i;
-    }
+    void add(Instruction* i);
     template <class T>
     T* operator()(T* i) {
-        return add(i);
+        add(i);
+        return i;
     }
-
-    void markDone(BB*);
-    bool isDone(BB*);
 
     BB* createBB();
     void createNextBB();
@@ -46,6 +39,8 @@ class Builder {
     void setNext(BB* bb1);
     void setBranch(BB* bb1, BB* bb2);
 
+    Safepoint* registerSafepoint(rir::Code* srcCode, Opcode* pos,
+                                 const RirStack& stack);
     void deoptUnless(Value* condition, rir::Code* srcCode, Opcode* pos,
                      const RirStack& stack);
 
@@ -56,6 +51,9 @@ class Builder {
     void reenterBB(BB* bb) { this->bb = bb; }
 
   private:
+    void markDone(BB*);
+    bool isDone(BB*);
+
     std::vector<bool> done;
     BB* bb = nullptr;
 };

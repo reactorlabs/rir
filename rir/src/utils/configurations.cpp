@@ -4,6 +4,7 @@
 #include "configurations.h"
 
 #include "../compiler/opt/cleanup.h"
+#include "../compiler/opt/cleanup_safepoint.h"
 #include "../compiler/opt/delay_env.h"
 #include "../compiler/opt/delay_instr.h"
 #include "../compiler/opt/elide_env.h"

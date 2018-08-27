@@ -45,6 +45,18 @@ void Builder::createNextBB() {
     bb = n;
 }
 
+void Builder::add(Instruction* i) {
+    assert(i->tag != Tag::_UNUSED_);
+    bb->append(i);
+}
+
+Safepoint* Builder::registerSafepoint(rir::Code* srcCode, Opcode* pos,
+                                      const RirStack& stack) {
+    auto sp = new Safepoint(env, srcCode, pos, stack);
+    add(sp);
+    return sp;
+};
+
 void Builder::deoptUnless(Value* condition, rir::Code* srcCode, Opcode* pos,
                           const RirStack& stack) {
     add(new Branch(condition));
@@ -53,7 +65,7 @@ void Builder::deoptUnless(Value* condition, rir::Code* srcCode, Opcode* pos,
     setBranch(cont, fail);
 
     enterBB(fail);
-    auto sp = add(new Safepoint(env, srcCode, pos, stack));
+    auto sp = registerSafepoint(srcCode, pos, stack);
     add(new Deopt(sp));
 
     enterBB(cont);
@@ -67,7 +79,9 @@ Builder::Builder(Closure* fun, Value* closureEnv)
     std::vector<Value*> args(fun->argNames.size());
     for (long i = fun->argNames.size() - 1; i >= 0; --i)
         args[i] = this->operator()(new LdArg(i));
-    env = add(new MkEnv(closureEnv, fun->argNames, args.data()));
+    auto mkenv = new MkEnv(closureEnv, fun->argNames, args.data());
+    add(mkenv);
+    env = mkenv;
 }
 
 Builder::Builder(Closure* fun, Promise* prom)
@@ -75,7 +89,9 @@ Builder::Builder(Closure* fun, Promise* prom)
     createNextBB();
     assert(!prom->entry);
     prom->entry = bb;
-    env = add(new LdFunctionEnv());
+    auto ldenv = new LdFunctionEnv();
+    add(ldenv);
+    env = ldenv;
 }
 }
 }
