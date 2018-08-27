@@ -92,7 +92,7 @@ void State::mergeIn(const State& incom, BB* incomBB) {
             p->addInput(incomBB, in);
         }
     }
-    incomBB->next(entryBB);
+    incomBB->setNext(entryBB);
 }
 
 std::unordered_set<Opcode*> findMergepoints(rir::Code* srcCode) {
@@ -129,7 +129,7 @@ std::unordered_set<Opcode*> findMergepoints(rir::Code* srcCode) {
 namespace rir {
 namespace pir {
 
-bool Rir2Pir::interpret(
+bool Rir2Pir::compileBC(
     BC bc, Opcode* pos, rir::Code* srcCode, RirStack& stack, Builder& insert,
     std::unordered_map<Value*, CallFeedback>& callFeedback) const {
     Value* env = insert.env;
@@ -643,7 +643,7 @@ void Rir2Pir::translate(rir::Code* srcCode, Builder& insert,
             auto edgeSplit = [&](Opcode* trg, BB* branch) {
                 if (mergepoints.count(trg)) {
                     BB* next = insert.createBB();
-                    branch->next(next);
+                    branch->setNext(next);
                     branch = next;
                 }
                 return branch;
@@ -654,11 +654,11 @@ void Rir2Pir::translate(rir::Code* srcCode, Builder& insert,
 
             switch (bc.bc) {
             case Opcode::brtrue_:
-                insert.setNextBB(branch, fall);
+                insert.setBranch(branch, fall);
                 break;
             case Opcode::brfalse_:
             case Opcode::brobj_:
-                insert.setNextBB(fall, branch);
+                insert.setBranch(fall, branch);
                 break;
             default:
                 assert(false);
@@ -733,7 +733,7 @@ void Rir2Pir::translate(rir::Code* srcCode, Builder& insert,
 
         if (!skip) {
             int size = cur.stack.size();
-            if (!interpret(bc, pos, srcCode, cur.stack, insert, callFeedback)) {
+            if (!compileBC(bc, pos, srcCode, cur.stack, insert, callFeedback)) {
                 compiler.getLog().warningBC(srcFunction,
                                             "Abort r2p due to unsupported bc",
                                             pos);
@@ -770,7 +770,7 @@ void Rir2Pir::translate(rir::Code* srcCode, Builder& insert,
         insert.enterBB(merge);
         Phi* phi = insert(new Phi());
         for (auto r : results) {
-            r.first->next(merge);
+            r.first->setNext(merge);
             phi->addInput(r.first, r.second);
         }
         phi->updateType();

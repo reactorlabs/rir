@@ -43,7 +43,8 @@ class Builder {
     BB* createBB();
     void createNextBB();
     void enterBB(BB* bb);
-    void setNextBB(BB* bb1, BB* bb2 = nullptr);
+    void setNext(BB* bb1);
+    void setBranch(BB* bb1, BB* bb2);
 
     void deoptUnless(Value* condition, rir::Code* srcCode, Opcode* pos,
                      const RirStack& stack);

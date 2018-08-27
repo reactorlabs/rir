@@ -81,31 +81,22 @@ class BB {
 
     bool isExit() const { return !next0 && !next1; }
 
-    void replaceNextBranches(BB* from) {
-        next0 = from->next0;
-        next1 = from->next1;
-    }
-
-    void setNextBranches(BB* trueBranch, BB* falseBranch) {
+    void setBranch(BB* trueBranch, BB* falseBranch) {
         assert(!next0 && !next1);
         this->next0 = trueBranch;
         this->next1 = falseBranch;
     }
-
     BB* trueBranch() { return next0; }
-
     BB* falseBranch() { return next1; }
 
     void overrideNext(BB* bb) {
         assert(next0 && !next1);
         next0 = bb;
     }
-
-    void next(BB* bb) {
+    void setNext(BB* bb) {
         assert(!next0 && !next1);
         next0 = bb;
     }
-
     BB* next() {
         assert(next0 && !next1);
         return next0;

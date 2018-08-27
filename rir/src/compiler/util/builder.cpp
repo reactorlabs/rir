@@ -18,12 +18,17 @@ bool Builder::isDone(BB* bb) {
     return done[bb->id];
 }
 
-void Builder::setNextBB(BB* next0, BB* next1) {
+void Builder::setBranch(BB* next0, BB* next1) {
+    assert(bb);
+    assert(!bb->isEmpty() && Branch::Cast(bb->last()));
+    markDone(bb);
+    bb->setBranch(next0, next1);
+}
+
+void Builder::setNext(BB* next) {
     assert(bb);
     markDone(bb);
-    bb->setNextBranches(next0, next1);
-    if (next1)
-        assert(!bb->isEmpty() && Branch::Cast(bb->last()));
+    bb->setNext(next);
 }
 
 void Builder::enterBB(BB* next) {
@@ -36,7 +41,7 @@ void Builder::enterBB(BB* next) {
 void Builder::createNextBB() {
     auto n = createBB();
     if (bb)
-        setNextBB(n);
+        setNext(n);
     bb = n;
 }
 
@@ -45,7 +50,7 @@ void Builder::deoptUnless(Value* condition, rir::Code* srcCode, Opcode* pos,
     add(new Branch(condition));
     auto cont = createBB();
     auto fail = createBB();
-    setNextBB(cont, fail);
+    setBranch(cont, fail);
 
     enterBB(fail);
     auto sp = add(new Safepoint(env, srcCode, pos, stack));

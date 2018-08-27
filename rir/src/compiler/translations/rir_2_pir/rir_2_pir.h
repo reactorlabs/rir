@@ -68,7 +68,7 @@ class Rir2Pir {
     Rir2PirCompiler& compiler;
     rir::Function* srcFunction;
 
-    bool interpret(BC bc, Opcode* pos, rir::Code* srcCode, RirStack&, Builder&,
+    bool compileBC(BC bc, Opcode* pos, rir::Code* srcCode, RirStack&, Builder&,
                    std::unordered_map<Value*, CallFeedback>&) const;
 };
 
