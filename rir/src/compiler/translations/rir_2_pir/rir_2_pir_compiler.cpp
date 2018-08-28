@@ -30,19 +30,19 @@ void Rir2PirCompiler::compileClosure(SEXP closure, MaybeCls success,
                                      Maybe fail) {
     assert(isValidClosureSEXP(closure));
 
-    // TODO: we need to keep track of this compiled closure, since for example
-    // the parent_env_ instruction refers back to the closure. What we should do
-    // is have the code object link back to the closure object. But for that we
-    // will need to make Code objects proper objects. For now let's just put it
-    // in the constant pool, so it never gets GC'd.
-    Pool::insert(closure);
-
     DispatchTable* tbl = DispatchTable::unpack(BODY(closure));
 
     if (tbl->available(1)) {
         if (debug.includes(DebugFlag::ShowWarnings))
             std::cerr << "Closure already compiled to PIR\n";
     }
+
+    // TODO: we need to keep track of this compiled closure, since for example
+    // the parent_env_ instruction refers back to the closure. What we should do
+    // is have the code object link back to the closure object. But for that we
+    // will need to make Code objects proper objects. For now let's just put it
+    // in the constant pool, so it never gets GC'd.
+    Pool::insert(closure);
 
     FormalArgs formals(FORMALS(closure));
     rir::Function* srcFunction = tbl->first();
