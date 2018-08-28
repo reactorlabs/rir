@@ -93,28 +93,26 @@ void Rir2PirCompiler::compileClosure(rir::Function* srcFunction,
 }
 
 void Rir2PirCompiler::optimizeModule() {
-    auto applyOptimizations = [&](Closure* f) {
-        LOGGING(size_t passnr = 0);
-        for (auto& translation : translations) {
-            translation->apply(f);
+    LOGGING(size_t passnr = 0);
+    for (auto& translation : translations) {
+        module->eachPirFunction([&](Module::VersionedClosure& v) {
+            auto f = v.current();
+            if (debug.includes(DebugFlag::PreserveVersions))
+                v.saveVersion();
 
+            translation->apply(f);
             LOGGING(log.pirOptimizations(*f, translation->getName(), passnr++));
 
-#ifdef ENABLE_SLOWASSER
+#ifdef ENABLE_SLOWASSERT
             assert(Verify::apply(f));
 #endif
-        }
-#ifndef ENABLE_SLOWASSER
-        assert(Verify::apply(f));
-#endif
-    };
-
+        });
+    }
+#ifndef ENABLE_SLOWASSERT
     module->eachPirFunction([&](Module::VersionedClosure& v) {
-        auto f = v.current();
-        if (debug.includes(DebugFlag::PreserveVersions))
-            v.saveVersion();
-        applyOptimizations(f);
+        assert(Verify::apply(v.current()));
     });
+#endif
 }
 } // namespace pir
 } // namespace rir
