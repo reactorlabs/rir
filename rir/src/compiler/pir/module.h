@@ -48,8 +48,8 @@ class Module {
 
     typedef std::pair<rir::Function*, Env*> FunctionAndEnv;
     pir::Closure* get(FunctionAndEnv idx) {
-        assert(functions.count(idx));
-        return functions.at(idx).current();
+        assert(functionMap.count(idx));
+        return functions[functionMap.at(idx)].current();
     }
 
     typedef std::function<bool(Closure* f)> MaybeCreate;
@@ -63,8 +63,8 @@ class Module {
     ~Module();
 
   private:
-    Closure* declare(rir::Function*, const std::vector<SEXP>& a, Env* env);
-    std::map<FunctionAndEnv, VersionedClosure> functions;
+    std::map<FunctionAndEnv, size_t> functionMap;
+    std::vector<VersionedClosure> functions;
 };
 
 }

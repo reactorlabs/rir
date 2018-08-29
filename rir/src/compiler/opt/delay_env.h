@@ -18,7 +18,7 @@ class DelayEnv : public PirTranslator {
   public:
     DelayEnv() : PirTranslator("Delay Environment"){};
 
-    void apply(Closure* function) override;
+    void apply(Closure* function) const final override;
 };
 }
 }

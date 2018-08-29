@@ -18,7 +18,7 @@ class ScopeResolution : public PirTranslator {
   public:
     ScopeResolution() : PirTranslator("scope resulotion"){};
 
-    void apply(Closure* function) override;
+    void apply(Closure* function) const final override;
 };
 }
 }

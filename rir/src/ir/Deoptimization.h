@@ -7,18 +7,18 @@ namespace rir {
 #pragma pack(push)
 #pragma pack(1)
 
+enum class Opcode : uint8_t;
+struct Code;
+
 struct FrameInfo {
-    void* pc;
-    void* code;
+    Opcode* pc;
+    Code* code;
 };
 
 struct DeoptMetadata {
     FrameInfo frames[1];
 
-    void print(std::ostream& out) const {
-        for (auto f : frames)
-            out << f.code << "@" << f.pc << " ";
-    }
+    void print(std::ostream& out) const;
 };
 
 #pragma pack(pop)

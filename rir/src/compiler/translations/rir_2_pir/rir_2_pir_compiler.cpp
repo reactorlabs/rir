@@ -21,8 +21,8 @@ namespace pir {
 
 Rir2PirCompiler::Rir2PirCompiler(Module* module, const DebugOptions& debug)
     : RirCompiler(module, debug), log(debug) {
-    for (auto optimization : pirConfigurations()->pirOptimizations()) {
-        translations.push_back(optimization->translator);
+    for (auto& optimization : pirConfigurations()->pirOptimizations()) {
+        translations.push_back(optimization);
     }
 }
 
@@ -30,19 +30,19 @@ void Rir2PirCompiler::compileClosure(SEXP closure, MaybeCls success,
                                      Maybe fail) {
     assert(isValidClosureSEXP(closure));
 
-    // TODO: we need to keep track of this compiled closure, since for example
-    // the parent_env_ instruction refers back to the closure. What we should do
-    // is have the code object link back to the closure object. But for that we
-    // will need to make Code objects proper objects. For now let's just put it
-    // in the constant pool, so it never gets GC'd.
-    Pool::insert(closure);
-
     DispatchTable* tbl = DispatchTable::unpack(BODY(closure));
 
     if (tbl->available(1)) {
         if (debug.includes(DebugFlag::ShowWarnings))
             std::cerr << "Closure already compiled to PIR\n";
     }
+
+    // TODO: we need to keep track of this compiled closure, since for example
+    // the parent_env_ instruction refers back to the closure. What we should do
+    // is have the code object link back to the closure object. But for that we
+    // will need to make Code objects proper objects. For now let's just put it
+    // in the constant pool, so it never gets GC'd.
+    Pool::insert(closure);
 
     FormalArgs formals(FORMALS(closure));
     rir::Function* srcFunction = tbl->first();
@@ -94,43 +94,25 @@ void Rir2PirCompiler::compileClosure(rir::Function* srcFunction,
 
 void Rir2PirCompiler::optimizeModule() {
     LOGGING(size_t passnr = 0);
-    module->eachPirFunction([&](Module::VersionedClosure& v) {
-        auto f = v.current();
-        if (debug.includes(DebugFlag::PreserveVersions))
-            v.saveVersion();
-        applyOptimizations(f, "Optimizations 1st Pass");
-        applyOptimizations(f, "Optimizations 2nd Pass");
-    });
-
-    for (int i = 0; i < 5; ++i) {
+    for (auto& translation : translations) {
         module->eachPirFunction([&](Module::VersionedClosure& v) {
             auto f = v.current();
             if (debug.includes(DebugFlag::PreserveVersions))
                 v.saveVersion();
-            Inline::apply(f);
-            if (debug.includes(DebugFlag::PrintInlining)) {
-                LOGGING(
-                    log.pirOptimizations(*f, "inline", "Inlining", passnr++));
-            }
-            applyOptimizations(f, "Optimizations After Inlining");
+
+            translation->apply(f);
+            LOGGING(log.pirOptimizations(*f, translation->getName(), passnr++));
+
+#ifdef ENABLE_SLOWASSERT
+            assert(Verify::apply(f));
+#endif
         });
     }
-}
-
-void Rir2PirCompiler::applyOptimizations(Closure* f,
-                                         const std::string& category) {
-    LOGGING(size_t passnr = 0);
-    for (auto& translation : this->translations) {
-        translation->apply(f);
-        LOGGING(log.pirOptimizations(*f, category, translation->getName(),
-                                     passnr++));
-
-#if 0
-        assert(Verify::apply(f));
+#ifndef ENABLE_SLOWASSERT
+    module->eachPirFunction([&](Module::VersionedClosure& v) {
+        assert(Verify::apply(v.current()));
+    });
 #endif
-    }
-    assert(Verify::apply(f));
 }
-
 } // namespace pir
 } // namespace rir

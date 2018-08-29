@@ -1034,6 +1034,8 @@ class FLI(Deopt, 1, Effect::Any, EnvAccess::None) {
     Deopt(Safepoint* safepoint)
         : FixedLenInstruction(PirType::voyd(), {{NativeType::safepoint}},
                               {{safepoint}}) {}
+    Safepoint* safepoint();
+    void safepoint(Safepoint* sp) { arg<0>().val() = sp; }
 };
 
 #undef FLI

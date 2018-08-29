@@ -8,39 +8,20 @@
 
 namespace rir {
 
-struct Optimization {
-    Optimization(pir::PirTranslator* translator, short order)
-        : translator(translator), order(order) {}
-    ~Optimization() { delete translator; }
-
-    pir::PirTranslator* translator;
-    short order;
-};
-
-struct OptmizationCmp {
-    bool operator()(const Optimization* opt,
-                    const Optimization* anotherOpt) const {
-        auto T = [&](const Optimization* o) {
-            return std::tuple<unsigned, unsigned, std::string>(
-                o->order, o->translator->getName() == "cleanup" ? 1 : 0,
-                o->translator->getName());
-        };
-        return T(opt) < T(anotherOpt);
-    }
-};
-
 class Configurations {
   public:
     Configurations() { parseINIFile(); }
-    std::multiset<Optimization*, OptmizationCmp>& pirOptimizations() {
+    const std::vector<const pir::PirTranslator*>& pirOptimizations() {
         return optimizations;
     }
-    ~Configurations() { optimizations.clear(); }
+    ~Configurations() {
+        for (auto o : optimizations)
+            delete o;
+    }
 
   private:
-    std::multiset<Optimization*, OptmizationCmp> optimizations;
+    std::vector<const pir::PirTranslator*> optimizations;
     void defaultOptimizations();
-    void read(INIReader&, std::string);
     void parseINIFile();
 };
 

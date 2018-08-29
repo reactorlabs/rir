@@ -134,11 +134,11 @@ bool Rir2Pir::compileBC(
     std::unordered_map<Value*, CallFeedback>& callFeedback) const {
     Value* env = insert.env;
 
+    unsigned srcIdx = srcCode->getSrcIdxAt(pos, true);
+
     Value* v;
     Value* x;
     Value* y;
-
-    auto consumeSrcIdx = [&]() { return srcCode->getSrcIdxAt(pos, true); };
 
     auto push = [&stack](Value* v) { stack.push(v); };
     auto pop = [&stack]() { return stack.pop(); };
@@ -173,7 +173,7 @@ bool Rir2Pir::compileBC(
 
     case Opcode::asbool_:
     case Opcode::aslogical_:
-        push(insert(new AsLogical(pop(), consumeSrcIdx())));
+        push(insert(new AsLogical(pop(), srcIdx)));
         break;
 
     case Opcode::ldfun_:
@@ -356,14 +356,14 @@ bool Rir2Pir::compileBC(
     case Opcode::extract1_1_: {
         Value* idx = pop();
         Value* vec = pop();
-        push(insert(new Extract1_1D(vec, idx, env, consumeSrcIdx())));
+        push(insert(new Extract1_1D(vec, idx, env, srcIdx)));
         break;
     }
 
     case Opcode::extract2_1_: {
         Value* idx = pop();
         Value* vec = pop();
-        push(insert(new Extract2_1D(vec, idx, env, consumeSrcIdx())));
+        push(insert(new Extract2_1D(vec, idx, env, srcIdx)));
         break;
     }
 
@@ -371,7 +371,7 @@ bool Rir2Pir::compileBC(
         Value* idx2 = pop();
         Value* idx1 = pop();
         Value* vec = pop();
-        push(insert(new Extract1_2D(vec, idx1, idx2, env, consumeSrcIdx())));
+        push(insert(new Extract1_2D(vec, idx1, idx2, env, srcIdx)));
         break;
     }
 
@@ -379,7 +379,7 @@ bool Rir2Pir::compileBC(
         Value* idx2 = pop();
         Value* idx1 = pop();
         Value* vec = pop();
-        push(insert(new Extract2_2D(vec, idx1, idx2, env, consumeSrcIdx())));
+        push(insert(new Extract2_2D(vec, idx1, idx2, env, srcIdx)));
         break;
     }
 
@@ -415,7 +415,7 @@ bool Rir2Pir::compileBC(
     case Opcode::Op: {                                                         \
         auto rhs = pop();                                                      \
         auto lhs = pop();                                                      \
-        push(insert(new Name(lhs, rhs, env, consumeSrcIdx())));                \
+        push(insert(new Name(lhs, rhs, env, srcIdx)));                         \
         break;                                                                 \
     }
 
@@ -445,7 +445,7 @@ bool Rir2Pir::compileBC(
 #define UNOP(Name, Op)                                                         \
     case Opcode::Op: {                                                         \
         v = pop();                                                             \
-        push(insert(new Name(v, env, consumeSrcIdx())));                       \
+        push(insert(new Name(v, env, srcIdx)));                                \
         break;                                                                 \
     }
         UNOP(Plus, uplus_);
@@ -751,6 +751,8 @@ void Rir2Pir::translate(rir::Code* srcCode, Builder& insert,
                 fail();
                 return;
             }
+            if (bc.isCall())
+                insert.registerSafepoint(srcCode, nextPos, cur.stack);
         }
     }
     assert(cur.stack.empty());

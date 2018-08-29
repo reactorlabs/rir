@@ -310,5 +310,7 @@ CallInstruction* CallInstruction::CastCall(Value* v) {
     return nullptr;
 }
 
+Safepoint* Deopt::safepoint() { return Safepoint::Cast(arg<0>().val()); }
+
 } // namespace pir
 } // namespace rir

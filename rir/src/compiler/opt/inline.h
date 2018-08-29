@@ -1,6 +1,8 @@
 #ifndef PIR_INLINE_H
 #define PIR_INLINE_H
 
+#include "../translations/pir_translator.h"
+
 namespace rir {
 namespace pir {
 
@@ -15,9 +17,10 @@ namespace pir {
  *
  */
 class Closure;
-class Inline {
+class Inline : public PirTranslator {
   public:
-    static void apply(Closure* function);
+    Inline() : PirTranslator("Inline"){};
+    void apply(Closure* function) const final override;
 };
 }
 }

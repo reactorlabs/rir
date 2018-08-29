@@ -184,7 +184,7 @@ class TheInliner {
 namespace rir {
 namespace pir {
 
-void Inline::apply(Closure* function) {
+void Inline::apply(Closure* function) const {
     TheInliner s(function);
     s();
 }

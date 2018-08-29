@@ -6,9 +6,6 @@
 namespace rir {
 namespace pir {
 
-// !!!  This list of arguments *must* be exactly equal to the   !!!
-// !!!    one in pir.debugFlags in R/rir.R                      !!!
-
 #ifdef ENABLE_SLOWASSERT
 #define LOGGING(code) code
 #else
@@ -17,11 +14,13 @@ namespace pir {
 
 const std::string WARNING_GUARD_STRING = "Guard ignored";
 
+// !!!  This list of arguments *must* be exactly equal to the   !!!
+// !!!    one in pir.debugFlags in R/rir.R                      !!!
+
 #define LIST_OF_PIR_PRINT_DEBUGGING_FLAGS(V)                                   \
     V(PrintEarlyRir)                                                           \
     V(PrintEarlyPir)                                                           \
     V(PrintOptimizationPasses)                                                 \
-    V(PrintInlining)                                                           \
     V(PrintCSSA)                                                               \
     V(PrintLivenessIntervals)                                                  \
     V(PrintFinalPir)                                                           \
