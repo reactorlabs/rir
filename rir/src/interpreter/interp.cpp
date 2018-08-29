@@ -2575,7 +2575,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env,
 
         INSTRUCTION(make_unique_) {
             SEXP val = ostack_top(ctx);
-            if (NAMED(val) > 2) {
+            if (NAMED(val) >= 2) {
                 val = shallow_duplicate(val);
                 ostack_set(ctx, 0, val);
                 SET_NAMED(val, 1);
