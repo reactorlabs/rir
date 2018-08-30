@@ -100,13 +100,9 @@ class Instruction : public Value {
     virtual bool hasEffect() const = 0;
     virtual bool changesEnv() const = 0;
     virtual bool leaksEnv() const = 0;
-    virtual bool hasEnv() const = 0;
     virtual bool accessesEnv() const = 0;
 
     virtual size_t nargs() const = 0;
-    virtual size_t envSlot() const = 0;
-    virtual Value* env() const = 0;
-    virtual void env(Value*) = 0;
 
     virtual Instruction* clone() const = 0;
 
@@ -144,7 +140,7 @@ class Instruction : public Value {
         // TODO: for escape analysis we use hasEnv || hasEffect as a very crude
         // approximation whether this instruction leaks arguments. We should do
         // better.
-        return hasEnv() || hasEffect();
+        return accessesEnv() || hasEffect();
     }
 
     typedef std::function<void(Value*)> ArgumentValueIterator;
@@ -181,6 +177,20 @@ class Instruction : public Value {
         }
         return nullptr;
     }
+
+    virtual Value* env() const {
+        assert(!accessesEnv() && "subclass must override env() if it uses env");
+        assert(false && "this instruction has no env");
+    }
+    virtual void env(Value* env) {
+        assert(!accessesEnv() && "subclass must override env() if it uses env");
+        assert(false && "this instruction has no env");
+    }
+    virtual size_t envSlot() const {
+        assert(!accessesEnv() &&
+               "subclass must override envSlot() if it uses env");
+        assert(false && "this instruction has no env");
+    }
 };
 
 template <Tag ITAG, class Base, Effect EFFECT, EnvAccess ENV, class ArgStore>
@@ -205,21 +215,19 @@ class InstructionImplementation : public Instruction {
 
     struct InstrDescription {
         bool HasEffect;
+        bool AccessesEnv;
         bool ChangesEnv;
         bool LeaksEnv;
-        bool HasEnv;
-        bool AccessesEnv;
     };
 
     static constexpr InstrDescription Description = {
-        EFFECT > Effect::None, ENV >= EnvAccess::Write, ENV == EnvAccess::Leak,
-        ENV > EnvAccess::None, ENV > EnvAccess::Capture};
+        EFFECT > Effect::None, ENV > EnvAccess::None, ENV >= EnvAccess::Write,
+        ENV == EnvAccess::Leak};
 
     bool hasEffect() const final { return Description.HasEffect; }
+    bool accessesEnv() const final { return Description.AccessesEnv; }
     bool changesEnv() const final { return Description.ChangesEnv; }
     bool leaksEnv() const final { return Description.LeaksEnv; }
-    bool hasEnv() const final { return Description.HasEnv; }
-    bool accessesEnv() const final { return Description.AccessesEnv; }
 
     static const Base* Cast(const Value* i) {
         if (i->tag == ITAG)
@@ -268,86 +276,84 @@ class FixedLenInstruction
         Super;
     using Super::arg;
     using Super::Description;
-
-    static_assert(
-        !Description.HasEnv || ARGS > 0,
-        "This instruction needs at least 1 argument slot for the env");
-
-    constexpr static size_t ENV_SLOT = Description.HasEnv ? ARGS - 1 : -1;
-
     size_t nargs() const override { return ARGS; }
-    size_t envSlot() const override { return ENV_SLOT; }
 
     template <unsigned POS>
     InstrArg& arg() {
-        static_assert(POS != ENV_SLOT, "use env() instead");
         static_assert(POS < ARGS, "This instruction has fewer arguments");
         return arg(POS);
     }
 
-    Value* env() const override {
-        assert(Description.HasEnv);
-        return arg(ENV_SLOT).val();
-    }
-
-    void env(Value* v) override {
-        assert(v);
-        assert(Description.HasEnv);
-        arg(ENV_SLOT).val() = v;
-    }
-
-    FixedLenInstruction(PirType resultType, Value* env, unsigned srcIdx = 0)
-        : Super(resultType, ArgsZip(env), srcIdx) {
-        assert(env);
-        static_assert(Description.HasEnv,
-                      "Invalid constructor for instruction without env");
-        static_assert(ARGS == 1, "This instruction expects more arguments");
+    template <unsigned POS>
+    InstrArg& arg() const {
+        static_assert(POS < ARGS, "This instruction has fewer arguments");
+        return arg(POS);
     }
 
     FixedLenInstruction(PirType resultType, unsigned srcIdx = 0)
         : Super(resultType, {}, srcIdx) {
-        static_assert(!Description.HasEnv,
-                      "Invalid constructor for instruction with env");
         static_assert(ARGS == 0, "This instruction expects more arguments");
-    }
-
-    FixedLenInstruction(PirType resultType,
-                        const std::array<PirType, ARGS - 1>& at,
-                        const std::array<Value*, ARGS - 1>& arg, Value* env,
-                        unsigned srcIdx = 0)
-        : Super(resultType, ArgsZip(arg, at, env), srcIdx) {
-        assert(env);
-        static_assert(Description.HasEnv,
-                      "Invalid constructor for instruction without env");
     }
 
     FixedLenInstruction(PirType resultType, const std::array<PirType, ARGS>& at,
                         const std::array<Value*, ARGS>& arg,
                         unsigned srcIdx = 0)
-        : Super(resultType, ArgsZip(arg, at), srcIdx) {
-        static_assert(!Description.HasEnv,
-                      "Invalid constructor for instruction with env");
-    }
+        : Super(resultType, ArgsZip(arg, at), srcIdx) {}
+
+    FixedLenInstruction(PirType resultType,
+                        const std::array<InstrArg, ARGS>& args,
+                        unsigned srcIdx = 0)
+        : Super(resultType, args, srcIdx) {}
 
   private:
     // Some helpers to combine args and environment into one array
     struct ArgsZip : public std::array<InstrArg, ARGS> {
-        ArgsZip(const std::array<Value*, ARGS - 1>& a,
-                const std::array<PirType, ARGS - 1>& t, Value* env) {
-            static_assert(ENV_SLOT < ARGS, "");
-            (*this)[ENV_SLOT].val() = env;
-            (*this)[ENV_SLOT].type() = RType::env;
-            for (size_t i = 0; i < ARGS - 1; ++i) {
+        ArgsZip(const std::array<Value*, ARGS>& a,
+                const std::array<PirType, ARGS>& t) {
+            for (size_t i = 0; i < ARGS; ++i) {
                 (*this)[i].val() = a[i];
                 (*this)[i].type() = t[i];
             }
         }
-        ArgsZip(Value* env)
-            : std::array<InstrArg, ARGS>({{InstrArg(env, RType::env)}}) {}
+    };
+};
 
-        ArgsZip(const std::array<Value*, ARGS>& a,
-                const std::array<PirType, ARGS>& t) {
-            for (size_t i = 0; i < ARGS; ++i) {
+template <Tag ITAG, class Base, size_t ARGS, Effect EFFECT, EnvAccess ENV>
+class FixedLenInstructionWithEnvSlot
+    : public FixedLenInstruction<ITAG, Base, ARGS, EFFECT, ENV> {
+  public:
+    typedef FixedLenInstruction<ITAG, Base, ARGS, EFFECT, ENV> Super;
+    using Super::arg;
+    using Super::Description;
+
+    static constexpr size_t EnvSlot = ARGS - 1;
+
+    FixedLenInstructionWithEnvSlot(PirType resultType, Value* env,
+                                   unsigned srcIdx = 0)
+        : Super(resultType, ArgsZip({}, {}, env), srcIdx) {
+        static_assert(ARGS <= 1, "This instruction expects more arguments");
+    }
+
+    FixedLenInstructionWithEnvSlot(PirType resultType,
+                                   const std::array<PirType, ARGS - 1>& at,
+                                   const std::array<Value*, ARGS - 1>& arg,
+                                   Value* env, unsigned srcIdx = 0)
+        : Super(resultType, ArgsZip(arg, at, env), srcIdx) {}
+
+    Value* env() const final override { return arg(EnvSlot).val(); }
+    void env(Value* env) final override { arg(EnvSlot).val() = env; }
+    size_t envSlot() const final override { return EnvSlot; }
+
+  private:
+    // Combines args and types into one array and adds the environment at the
+    // EnvSlot position into it.
+    struct ArgsZip : public std::array<InstrArg, ARGS> {
+        ArgsZip(const std::array<Value*, ARGS - 1>& a,
+                const std::array<PirType, ARGS - 1>& t, Value* env) {
+            static_assert(EnvSlot == ARGS - 1, "");
+            (*this)[EnvSlot].val() = env;
+            (*this)[EnvSlot].type() = RType::env;
+            for (size_t i = 0; i < EnvSlot; ++i) {
                 (*this)[i].val() = a[i];
                 (*this)[i].type() = t[i];
             }
@@ -369,49 +375,57 @@ class VarLenInstruction
     using Super::Description;
     using Super::nargs;
 
-    size_t envSlot() const override {
-        assert(nargs() > 0);
-        return nargs() - 1;
-    }
-
-    Value* env() const override {
-        assert(Description.HasEnv);
-        assert(arg(envSlot()).type() == RType::env);
-        return arg(envSlot()).val();
-    }
-
-    void env(Value* v) override {
-        assert(v);
-        assert(Description.HasEnv);
-        assert(arg(envSlot()).type() == RType::env);
-        arg(envSlot()).val() = v;
-    }
-
-    void pushArg(Value* a, PirType t) {
+    virtual void pushArg(Value* a, PirType t) {
         assert(a);
-        if (!Description.HasEnv) {
-            args_.push_back(InstrArg(a, t));
-            return;
-        }
-        args_.push_back(args_.back());
-        args_[nargs() - 2] = InstrArg(a, t);
+        args_.push_back(InstrArg(a, t));
     }
-
     void pushArg(Value* a) { pushArg(a, a->type); }
+    virtual void popArg() {
+        assert(args_.size() > 0);
+        args_.pop_back();
+    }
 
     VarLenInstruction(PirType return_type, unsigned srcIdx = 0)
-        : Super(return_type, srcIdx) {
-        static_assert(!Description.HasEnv,
-                      "This instruction needs an environment");
+        : Super(return_type, srcIdx) {}
+};
+
+template <Tag ITAG, class Base, Effect EFFECT, EnvAccess ENV>
+class VarLenInstructionWithEnvSlot
+    : public VarLenInstruction<ITAG, Base, EFFECT, ENV> {
+  public:
+    typedef VarLenInstruction<ITAG, Base, EFFECT, ENV> Super;
+    using Super::arg;
+    using Super::args_;
+    using Super::Description;
+    using Super::pushArg;
+
+    // The env slot is always the last element of the args_ vector
+    VarLenInstructionWithEnvSlot(PirType resultType, Value* env,
+                                 unsigned srcIdx = 0)
+        : Super(resultType, srcIdx) {
+        Super::pushArg(env, RType::env);
     }
 
-    VarLenInstruction(PirType return_type, Value* env, unsigned srcIdx = 0)
-        : Super(return_type, srcIdx) {
-        assert(env);
-        static_assert(Description.HasEnv,
-                      "This instruction has no environment access");
-        args_.push_back(InstrArg(env, RType::env));
+    void pushArg(Value* a, PirType t) override final {
+        assert(a);
+        assert(args_.size() > 0);
+        assert(args_.back().type() == RType::env);
+        // extend vector and move the environment to the end
+        args_.push_back(args_.back());
+        args_[args_.size() - 2] = InstrArg(a, t);
     }
+    void popArg() override final {
+        assert(args_.size() > 1);
+        assert(args_.back().type() == RType::env);
+        args_[args_.size() - 2] = args_[args_.size() - 1];
+        args_.pop_back();
+        assert(args_.back().type() == RType::env);
+    }
+
+    Value* env() const final override { return args_.back().val(); }
+    void env(Value* env) final override { args_.back().val() = env; }
+
+    size_t envSlot() const final override { return args_.size() - 1; }
 };
 
 extern std::ostream& operator<<(std::ostream& out,
@@ -422,10 +436,20 @@ extern std::ostream& operator<<(std::ostream& out,
   public                                                                       \
     FixedLenInstruction<Tag::type, type, nargs, io, env>
 
+#define FLIE(type, nargs, io, env)                                             \
+    type:                                                                      \
+  public                                                                       \
+    FixedLenInstructionWithEnvSlot<Tag::type, type, nargs, io, env>
+
 #define VLI(type, io, env)                                                     \
     type:                                                                      \
   public                                                                       \
     VarLenInstruction<Tag::type, type, io, env>
+
+#define VLIE(type, io, env)                                                    \
+    type:                                                                      \
+  public                                                                       \
+    VarLenInstructionWithEnvSlot<Tag::type, type, io, env>
 
 class FLI(LdConst, 0, Effect::None, EnvAccess::None) {
   public:
@@ -435,28 +459,30 @@ class FLI(LdConst, 0, Effect::None, EnvAccess::None) {
     void printArgs(std::ostream& out) override;
 };
 
-class FLI(LdFun, 1, Effect::Any, EnvAccess::Write) {
+class FLIE(LdFun, 1, Effect::Any, EnvAccess::Write) {
   public:
     SEXP varName;
 
     LdFun(const char* name, Value* env)
-        : FixedLenInstruction(RType::closure, env), varName(Rf_install(name)) {}
+        : FixedLenInstructionWithEnvSlot(RType::closure, env),
+          varName(Rf_install(name)) {}
     LdFun(SEXP name, Value* env)
-        : FixedLenInstruction(RType::closure, env), varName(name) {
+        : FixedLenInstructionWithEnvSlot(RType::closure, env), varName(name) {
         assert(TYPEOF(name) == SYMSXP);
     }
 
     void printArgs(std::ostream& out) override;
 };
 
-class FLI(LdVar, 1, Effect::None, EnvAccess::Read) {
+class FLIE(LdVar, 1, Effect::None, EnvAccess::Read) {
   public:
     SEXP varName;
 
     LdVar(const char* name, Value* env)
-        : FixedLenInstruction(PirType::any(), env), varName(Rf_install(name)) {}
+        : FixedLenInstructionWithEnvSlot(PirType::any(), env),
+          varName(Rf_install(name)) {}
     LdVar(SEXP name, Value* env)
-        : FixedLenInstruction(PirType::any(), env), varName(name) {
+        : FixedLenInstructionWithEnvSlot(PirType::any(), env), varName(name) {
         assert(TYPEOF(name) == SYMSXP);
     }
 
@@ -492,51 +518,54 @@ class FLI(ChkClosure, 1, Effect::Warn, EnvAccess::None) {
         : FixedLenInstruction(RType::closure, {{PirType::val()}}, {{in}}) {}
 };
 
-class FLI(StVarSuper, 2, Effect::None, EnvAccess::Write) {
+class FLIE(StVarSuper, 2, Effect::None, EnvAccess::Write) {
   public:
     StVarSuper(SEXP name, Value* val, Value* env)
-        : FixedLenInstruction(PirType::voyd(), {{PirType::val()}}, {{val}},
-                              env),
+        : FixedLenInstructionWithEnvSlot(PirType::voyd(), {{PirType::val()}},
+                                         {{val}}, env),
           varName(name) {}
 
     StVarSuper(const char* name, Value* val, Value* env)
-        : FixedLenInstruction(PirType::voyd(), {{PirType::val()}}, {{val}},
-                              env),
+        : FixedLenInstructionWithEnvSlot(PirType::voyd(), {{PirType::val()}},
+                                         {{val}}, env),
           varName(Rf_install(name)) {}
 
     SEXP varName;
-    Value* val() { return arg<0>().val(); }
+    Value* val() { return arg(0).val(); }
+    using FixedLenInstructionWithEnvSlot::env;
 
     void printArgs(std::ostream& out) override;
 };
 
-class FLI(LdVarSuper, 1, Effect::None, EnvAccess::Read) {
+class FLIE(LdVarSuper, 1, Effect::None, EnvAccess::Read) {
   public:
     LdVarSuper(SEXP name, Value* env)
-        : FixedLenInstruction(PirType::any(), env), varName(name) {}
+        : FixedLenInstructionWithEnvSlot(PirType::any(), env), varName(name) {}
 
     LdVarSuper(const char* name, Value* env)
-        : FixedLenInstruction(PirType::any(), env), varName(Rf_install(name)) {}
+        : FixedLenInstructionWithEnvSlot(PirType::any(), env),
+          varName(Rf_install(name)) {}
 
     SEXP varName;
 
     void printArgs(std::ostream& out) override;
 };
 
-class FLI(StVar, 2, Effect::None, EnvAccess::Write) {
+class FLIE(StVar, 2, Effect::None, EnvAccess::Write) {
   public:
     StVar(SEXP name, Value* val, Value* env)
-        : FixedLenInstruction(PirType::voyd(), {{PirType::val()}}, {{val}},
-                              env),
+        : FixedLenInstructionWithEnvSlot(PirType::voyd(), {{PirType::val()}},
+                                         {{val}}, env),
           varName(name) {}
 
     StVar(const char* name, Value* val, Value* env)
-        : FixedLenInstruction(PirType::voyd(), {{PirType::val()}}, {{val}},
-                              env),
+        : FixedLenInstructionWithEnvSlot(PirType::voyd(), {{PirType::val()}},
+                                         {{val}}, env),
           varName(Rf_install(name)) {}
 
     SEXP varName;
-    Value* val() { return arg<0>().val(); }
+    Value* val() { return arg(0).val(); }
+    using FixedLenInstructionWithEnvSlot::env;
 
     void printArgs(std::ostream& out) override;
 };
@@ -556,17 +585,18 @@ class FLI(Return, 1, Effect::None, EnvAccess::None) {
 };
 
 class Promise;
-class FLI(MkArg, 2, Effect::None, EnvAccess::Capture) {
+class FLIE(MkArg, 2, Effect::None, EnvAccess::Capture) {
   public:
     Promise* prom;
     MkArg(Promise* prom, Value* v, Value* env)
-        : FixedLenInstruction(RType::prom, {{PirType::valOrMissing()}}, {{v}},
-                              env),
+        : FixedLenInstructionWithEnvSlot(
+              RType::prom, {{PirType::valOrMissing()}}, {{v}}, env),
           prom(prom) {
         assert(eagerArg() == v);
     }
     MkArg(Value* v, Value* env)
-        : FixedLenInstruction(RType::prom, {{PirType::val()}}, {{v}}, env),
+        : FixedLenInstructionWithEnvSlot(RType::prom, {{PirType::val()}}, {{v}},
+                                         env),
           prom(nullptr) {
         assert(eagerArg() == v);
     }
@@ -574,7 +604,7 @@ class FLI(MkArg, 2, Effect::None, EnvAccess::Capture) {
     typedef std::function<void(Promise*)> PromMaybe;
     typedef std::function<void(Value*)> EagerMaybe;
 
-    Value* eagerArg() { return arg<0>().val(); }
+    Value* eagerArg() { return arg(0).val(); }
 
     void ifEager(EagerMaybe maybe) {
         if (eagerArg() != Missing::instance())
@@ -582,6 +612,8 @@ class FLI(MkArg, 2, Effect::None, EnvAccess::Capture) {
     }
 
     void printArgs(std::ostream& out) override;
+
+    Value* promEnv() const { return env(); }
 };
 
 class FLI(Seq, 3, Effect::None, EnvAccess::None) {
@@ -594,27 +626,35 @@ class FLI(Seq, 3, Effect::None, EnvAccess::None) {
               {{start, end, step}}) {}
 };
 
-class FLI(MkCls, 4, Effect::None, EnvAccess::Capture) {
+class FLIE(MkCls, 4, Effect::None, EnvAccess::Capture) {
   public:
-    MkCls(Value* fml, Value* code, Value* src, Value* parent)
-        : FixedLenInstruction(RType::closure,
-                              {{PirType::list(), RType::code, PirType::any()}},
-                              {{fml, code, src}}, parent) {}
+    MkCls(Value* fml, Value* code, Value* src, Value* lexicalEnv)
+        : FixedLenInstructionWithEnvSlot(
+              RType::closure, {{PirType::list(), RType::code, PirType::any()}},
+              {{fml, code, src}}, lexicalEnv) {}
+
+    Value* lexicalEnv() const { return env(); }
+
+  private:
+    using FixedLenInstructionWithEnvSlot::env;
 };
 
-class FLI(MkFunCls, 1, Effect::None, EnvAccess::Capture) {
+class FLIE(MkFunCls, 1, Effect::None, EnvAccess::Capture) {
   public:
     Closure* fun;
     SEXP fml, code, src;
-    MkFunCls(Closure* fun, Value* parent, SEXP fml, SEXP code, SEXP src);
+    MkFunCls(Closure* fun, Value* lexicalEnv, SEXP fml, SEXP code, SEXP src);
     void printArgs(std::ostream&) override;
+
+    Value* lexicalEnv() const { return env(); }
 };
 
-class FLI(Force, 2, Effect::Any, EnvAccess::Leak) {
+class FLIE(Force, 2, Effect::Any, EnvAccess::Leak) {
   public:
     Force(Value* in, Value* env)
-        : FixedLenInstruction(PirType::val(), {{PirType::any()}}, {{in}}, env) {
-    }
+        : FixedLenInstructionWithEnvSlot(PirType::val(), {{PirType::any()}},
+                                         {{in}}, env) {}
+    Value* input() const { return arg(0).val(); }
 };
 
 class FLI(CastType, 1, Effect::None, EnvAccess::None) {
@@ -656,37 +696,37 @@ class FLI(Subassign2_1D, 3, Effect::None, EnvAccess::None) {
     SEXP sym;
 };
 
-class FLI(Extract1_1D, 3, Effect::None, EnvAccess::Leak) {
+class FLIE(Extract1_1D, 3, Effect::None, EnvAccess::Leak) {
   public:
     Extract1_1D(Value* vec, Value* idx, Value* env, unsigned srcIdx)
-        : FixedLenInstruction(PirType::val(),
-                              {{PirType::val(), PirType::val()}}, {{vec, idx}},
-                              env, srcIdx) {}
+        : FixedLenInstructionWithEnvSlot(PirType::val(),
+                                         {{PirType::val(), PirType::val()}},
+                                         {{vec, idx}}, env, srcIdx) {}
 };
 
-class FLI(Extract2_1D, 3, Effect::None, EnvAccess::Leak) {
+class FLIE(Extract2_1D, 3, Effect::None, EnvAccess::Leak) {
   public:
     Extract2_1D(Value* vec, Value* idx, Value* env, unsigned srcIdx)
-        : FixedLenInstruction(PirType::val().scalar(),
-                              {{PirType::val(), PirType::val()}}, {{vec, idx}},
-                              env, srcIdx) {}
+        : FixedLenInstructionWithEnvSlot(PirType::val().scalar(),
+                                         {{PirType::val(), PirType::val()}},
+                                         {{vec, idx}}, env, srcIdx) {}
 };
 
-class FLI(Extract1_2D, 4, Effect::None, EnvAccess::Leak) {
+class FLIE(Extract1_2D, 4, Effect::None, EnvAccess::Leak) {
   public:
     Extract1_2D(Value* vec, Value* idx1, Value* idx2, Value* env,
                 unsigned srcIdx)
-        : FixedLenInstruction(
+        : FixedLenInstructionWithEnvSlot(
               PirType::val(),
               {{PirType::val(), PirType::val(), PirType::val()}},
               {{vec, idx1, idx2}}, env, srcIdx) {}
 };
 
-class FLI(Extract2_2D, 4, Effect::None, EnvAccess::Leak) {
+class FLIE(Extract2_2D, 4, Effect::None, EnvAccess::Leak) {
   public:
     Extract2_2D(Value* vec, Value* idx1, Value* idx2, Value* env,
                 unsigned srcIdx)
-        : FixedLenInstruction(
+        : FixedLenInstructionWithEnvSlot(
               PirType::val().scalar(),
               {{PirType::val(), PirType::val(), PirType::val()}},
               {{vec, idx1, idx2}}, env, srcIdx) {}
@@ -746,11 +786,12 @@ class FLI(Int3, 0, Effect::Any, EnvAccess::None) {
 };
 
 #define BINOP(Name, Type)                                                      \
-    class FLI(Name, 3, Effect::None, EnvAccess::Leak) {                        \
+    class FLIE(Name, 3, Effect::None, EnvAccess::Leak) {                       \
       public:                                                                  \
         Name(Value* lhs, Value* rhs, Value* env, unsigned srcIdx)              \
-            : FixedLenInstruction(Type, {{PirType::val(), PirType::val()}},    \
-                                  {{lhs, rhs}}, env, srcIdx) {}                \
+            : FixedLenInstructionWithEnvSlot(                                  \
+                  Type, {{PirType::val(), PirType::val()}}, {{lhs, rhs}}, env, \
+                  srcIdx) {}                                                   \
     }
 
 BINOP(Gte, PirType::val());
@@ -784,11 +825,11 @@ BINOP_NOENV(LOr, RType::logical);
 #undef BINOP_NOENV
 
 #define UNOP(Name)                                                             \
-    class FLI(Name, 2, Effect::None, EnvAccess::Leak) {                        \
+    class FLIE(Name, 2, Effect::None, EnvAccess::Leak) {                       \
       public:                                                                  \
         Name(Value* v, Value* env, unsigned srcIdx)                            \
-            : FixedLenInstruction(PirType::val(), {{PirType::val()}}, {{v}},   \
-                                  env, srcIdx) {}                              \
+            : FixedLenInstructionWithEnvSlot(                                  \
+                  PirType::val(), {{PirType::val()}}, {{v}}, env, srcIdx) {}   \
     }
 
 UNOP(Not);
@@ -803,84 +844,54 @@ class CallInstruction {
   public:
     virtual size_t nCallArgs() = 0;
     virtual void eachCallArg(Instruction::ArgumentValueIterator it) = 0;
-    virtual void eachCallArgRev(Instruction::ArgumentValueIterator it) = 0;
     static CallInstruction* CastCall(Value* v);
 };
 
-template <Tag ITAG, class Base, Effect EFFECT, EnvAccess ENV,
-          bool HAS_TARGET_ARG>
-class CallInstructionImplementation
-    : public VarLenInstruction<ITAG, Base, EFFECT, ENV>,
-      public CallInstruction {
-  public:
-    typedef VarLenInstruction<ITAG, Base, EFFECT, ENV> Super;
-    CallInstructionImplementation(PirType returnType, Value* env,
-                                  unsigned srcIdx)
-        : Super(returnType, env, srcIdx) {}
-    CallInstructionImplementation(PirType returnType, unsigned srcIdx)
-        : Super(returnType, srcIdx) {}
-
-    using Super::arg;
-    using Super::args_;
-    using Super::Description;
-    using Super::nargs;
-
-    static constexpr size_t CallArgOffset = (HAS_TARGET_ARG ? 1 : 0);
-    size_t nCallArgs() final {
-        return nargs() - (HAS_TARGET_ARG ? 1 : 0) -
-               (Description.HasEnv ? 1 : 0);
-    }
-
-    void eachCallArg(Instruction::ArgumentValueIterator it) override {
-        for (size_t i = 0; i < nCallArgs(); ++i)
-            it(arg(i + CallArgOffset).val());
-    }
-
-    void eachCallArgRev(Instruction::ArgumentValueIterator it) override {
-        for (int i = nCallArgs() - 1; i >= 0; --i)
-            it(arg(i + CallArgOffset).val());
-    }
-};
-
-#define ACallInstructionImplementation(type, io, env, callArgOffset)           \
-    type:                                                                      \
-  public                                                                       \
-    CallInstructionImplementation<Tag::type, type, io, env, callArgOffset>
-
 // Default call instruction. Closure expression (ie. expr left of `(`) is
 // evaluated at runtime and arguments are passed as promises.
-class ACallInstructionImplementation(Call, Effect::Any, EnvAccess::Leak, true) {
+class VLIE(Call, Effect::Any, EnvAccess::Leak), public CallInstruction {
   public:
-    constexpr static size_t clsIdx = 0;
+    Value* cls() { return arg(0).val(); }
 
-    Value* cls() { return arg(clsIdx).val(); }
-
-    Call(Value * e, Value * fun, const std::vector<Value*>& args,
+    Call(Value * callerEnv, Value * fun, const std::vector<Value*>& args,
          unsigned srcIdx)
-        : CallInstructionImplementation(PirType::valOrLazy(), e, srcIdx) {
+        : VarLenInstructionWithEnvSlot(PirType::valOrLazy(), callerEnv,
+                                       srcIdx) {
         pushArg(fun, RType::closure);
         for (unsigned i = 0; i < args.size(); ++i)
             pushArg(args[i], PirType::val());
     }
+
+    size_t nCallArgs() override { return nargs() - 2; };
+    void eachCallArg(Instruction::ArgumentValueIterator it) override {
+        for (size_t i = 0; i < nCallArgs(); ++i)
+            it(arg(i + 1).val());
+    }
+
+    Value* callerEnv() { return env(); }
 };
 
 // Call instruction for lazy, but staticatlly resolved calls. Closure is
 // specified as `cls_`, args passed as promises.
-class ACallInstructionImplementation(StaticCall, Effect::Any, EnvAccess::Leak,
-                                     false) {
+class VLIE(StaticCall, Effect::Any, EnvAccess::Leak), public CallInstruction {
     Closure* cls_;
     SEXP origin_;
-
   public:
     Closure* cls() { return cls_; }
     SEXP origin() { return origin_; }
 
-    StaticCall(Value * e, Closure * cls, const std::vector<Value*>& args,
-               SEXP origin, unsigned srcIdx)
-        : CallInstructionImplementation(PirType::valOrLazy(), e, srcIdx),
+    StaticCall(Value * callerEnv, Closure * cls,
+               const std::vector<Value*>& args, SEXP origin, unsigned srcIdx)
+        : VarLenInstructionWithEnvSlot(PirType::valOrLazy(), callerEnv, srcIdx),
           cls_(cls), origin_(origin) {
         for (unsigned i = 0; i < args.size(); ++i)
             pushArg(args[i], PirType::val());
+    }
+
+    size_t nCallArgs() override { return nargs() - 1; };
+    void eachCallArg(Instruction::ArgumentValueIterator it) override {
+        for (size_t i = 0; i < nCallArgs(); ++i)
+            it(arg(i).val());
     }
 
     void printArgs(std::ostream&) override;
@@ -888,21 +899,25 @@ class ACallInstructionImplementation(StaticCall, Effect::Any, EnvAccess::Leak,
 
 typedef SEXP (*CCODE)(SEXP, SEXP, SEXP, SEXP);
 
-class ACallInstructionImplementation(CallBuiltin, Effect::Any, EnvAccess::Leak,
-                                     false) {
+class VLIE(CallBuiltin, Effect::Any, EnvAccess::Leak), public CallInstruction {
   public:
     SEXP blt;
     const CCODE builtin;
     int builtinId;
 
-    CallBuiltin(Value * e, SEXP builtin, const std::vector<Value*>& args,
-                unsigned srcIdx);
+    CallBuiltin(Value * callerEnv, SEXP builtin,
+                const std::vector<Value*>& args, unsigned srcIdx);
 
+    size_t nCallArgs() override { return nargs() - 1; };
+    void eachCallArg(Instruction::ArgumentValueIterator it) override {
+        for (size_t i = 0; i < nCallArgs(); ++i)
+            it(arg(i).val());
+    }
     void printArgs(std::ostream & out) override;
 };
 
-class ACallInstructionImplementation(CallSafeBuiltin, Effect::None,
-                                     EnvAccess::None, false) {
+class VLI(CallSafeBuiltin, Effect::None, EnvAccess::None),
+    public CallInstruction {
   public:
     SEXP blt;
     const CCODE builtin;
@@ -911,10 +926,15 @@ class ACallInstructionImplementation(CallSafeBuiltin, Effect::None,
     CallSafeBuiltin(SEXP builtin, const std::vector<Value*>& args,
                     unsigned srcIdx);
 
+    size_t nCallArgs() override { return nargs(); };
+    void eachCallArg(Instruction::ArgumentValueIterator it) override {
+        eachArg(it);
+    }
+
     void printArgs(std::ostream & out) override;
 };
 
-class VLI(MkEnv, Effect::None, EnvAccess::Capture) {
+class VLIE(MkEnv, Effect::None, EnvAccess::Capture) {
   public:
     std::vector<SEXP> varName;
 
@@ -936,14 +956,13 @@ class VLI(MkEnv, Effect::None, EnvAccess::Capture) {
             it(varName[i], arg(i).val());
     }
 
-    MkEnv(Value* parent, const std::vector<SEXP>& names, Value** args)
-        : VarLenInstruction(RType::env, parent), varName(names) {
+    MkEnv(Value* lexicalEnv, const std::vector<SEXP>& names, Value** args)
+        : VarLenInstructionWithEnvSlot(RType::env, lexicalEnv), varName(names) {
         for (unsigned i = 0; i < varName.size(); ++i)
             pushArg(args[i], PirType::any());
     }
 
-    Value* parent() { return env(); }
-    void parent(Value* v) { env(v); }
+    Value* lexicalEnv() const { return env(); }
 
     void printArgs(std::ostream& out) override;
 
@@ -983,6 +1002,11 @@ class VLI(Phi, Effect::None, EnvAccess::None) {
 };
 
 struct RirStack {
+  private:
+    typedef std::deque<Value*> Stack;
+    Stack stack;
+
+  public:
     void push(Value* v) { stack.push_back(v); }
     Value* pop() {
         assert(!empty());
@@ -1005,25 +1029,40 @@ struct RirStack {
     bool empty() const { return stack.empty(); }
     size_t size() const { return stack.size(); }
     void clear() { stack.clear(); }
-
-  private:
-    std::deque<Value*> stack;
+    Stack::const_iterator begin() const { return stack.cbegin(); }
+    Stack::const_iterator end() const { return stack.cend(); }
+    Stack::iterator begin() { return stack.begin(); }
+    Stack::iterator end() { return stack.end(); }
 };
 
-class VLI(Safepoint, Effect::Any, EnvAccess::Leak) {
+class VLIE(Safepoint, Effect::Any, EnvAccess::Leak) {
   public:
-    struct Frame {
-        Value* env;
-        Opcode* pc;
-        rir::Code* code;
-    };
-    std::vector<Frame> frames;
+    bool inlined = false;
+    Opcode* pc;
+    rir::Code* code;
+    size_t stackSize;
 
     Safepoint(Value* env, rir::Code* code, Opcode* pc, const RirStack& stack)
-        : VarLenInstruction(NativeType::safepoint, env) {
-        frames.push_back({env, pc, code});
-        for (size_t i = 0; i < stack.size(); ++i)
-            pushArg(stack.at(i), PirType::any());
+        : VarLenInstructionWithEnvSlot(NativeType::safepoint, env), pc(pc),
+          code(code), stackSize(stack.size()) {
+        for (auto& v : stack)
+            pushArg(v);
+    }
+
+    void next(Safepoint* s) {
+        assert(!inlined);
+        inlined = true;
+        pushArg(s, NativeType::safepoint);
+    }
+
+    Safepoint* next() {
+        if (inlined) {
+            auto r = Safepoint::Cast(arg(nargs() - 2).val());
+            assert(r);
+            return r;
+        } else {
+            return nullptr;
+        }
     }
 
     void printArgs(std::ostream& out) override;
@@ -1040,6 +1079,8 @@ class FLI(Deopt, 1, Effect::Any, EnvAccess::None) {
 
 #undef FLI
 #undef VLI
+#undef FLIE
+#undef VLIE
 } // namespace pir
 } // namespace rir
 

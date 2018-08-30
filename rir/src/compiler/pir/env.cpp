@@ -44,7 +44,7 @@ Value* Env::parentEnv(Value* e) {
     if (Cast(e))
         return Cast(e)->parent;
     if (MkEnv::Cast(e))
-        return MkEnv::Cast(e)->parent();
+        return MkEnv::Cast(e)->lexicalEnv();
     assert(false);
     return nullptr;
 }

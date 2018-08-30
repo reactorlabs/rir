@@ -66,7 +66,7 @@ void DelayEnv::apply(Closure* function) const {
                     }
                 }
 
-                if (next->hasEnv() && next->env() == e)
+                if (next->accessesEnv() && next->env() == e)
                     break;
 
                 bb->swapWithNext(it);
