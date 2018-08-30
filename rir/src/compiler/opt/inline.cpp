@@ -41,7 +41,7 @@ class TheInliner {
                     inlinee = mkcls->fun;
                     if (inlinee->argNames.size() != call->nCallArgs())
                         continue;
-                    staticEnv = mkcls->env();
+                    staticEnv = mkcls->lexicalEnv();
                 } else if (auto call = StaticCall::Cast(*it)) {
                     inlinee = call->cls();
                     // if we don't know the closure of the inlinee, we can't
@@ -68,6 +68,9 @@ class TheInliner {
                 std::vector<Value*> arguments;
                 theCallInstruction->eachCallArg(
                     [&](Value* v) { arguments.push_back(v); });
+                auto callerSafepoint =
+                    split->size() > 1 ? Safepoint::Cast(*(split->begin() + 1))
+                                      : nullptr;
 
                 // Clone the function
                 BB* copy = BBTransform::clone(inlinee->entry, function);
@@ -88,18 +91,43 @@ class TheInliner {
                                 return;
                             }
                         }
-                        // TODO: currently we are not able to inline deopt
-                        // instructions. We will need the ability to construct
-                        // extra call frames before we can do so.
-                        if (Deopt::Cast(i)) {
-                            fail = true;
+                        if (auto sp = Safepoint::Cast(i)) {
+                            if (!sp->next() && !callerSafepoint) {
+                                fail = true;
+                                return;
+                            }
+
+                            // TODO: support chained safepoints in backend and
+                            // rir
                             return;
+
+                            // When inlining a safepoint we need to chain it
+                            // with the safepoints after the call to the
+                            // inlinee
+                            Safepoint* prevSp = sp;
+                            Safepoint* nextSp = callerSafepoint;
+                            size_t created = 0;
+                            while (nextSp) {
+                                auto clone = Safepoint::Cast(nextSp->clone());
+                                // Remove the return value of the inlinee
+                                if (nextSp == callerSafepoint) {
+                                    clone->popArg();
+                                    clone->stackSize--;
+                                }
+                                // Insert the safepoint
+                                ip = bb->insert(ip, clone);
+                                created++;
+                                prevSp->next(clone);
+                                prevSp = nextSp;
+                                nextSp = nextSp->next();
+                            }
+                            next = ip + created + 1;
                         }
                         // If the inlining resolved some env, we need to
                         // update. For example this happens if we inline an
                         // inner function. Then the lexical env is the current
                         // functions env.
-                        if (needsEnvPatching && i->hasEnv() &&
+                        if (needsEnvPatching && i->accessesEnv() &&
                             i->env() == inlinee->closureEnv()) {
                             i->env(staticEnv);
                         }

@@ -189,7 +189,8 @@ void ForceDominance::apply(Closure* cls) const {
                             LdFunctionEnv* e =
                                 LdFunctionEnv::Cast(*prom_copy->begin());
                             assert(e);
-                            Replace::usesOfValue(prom_copy, e, mkarg->env());
+                            Replace::usesOfValue(prom_copy, e,
+                                                 mkarg->promEnv());
                             prom_copy->remove(prom_copy->begin());
 
                             // Create a return value phi of the promise
@@ -201,8 +202,8 @@ void ForceDominance::apply(Closure* cls) const {
                             f->replaceUsesWith(promRes);
                             split->remove(split->begin());
 
-                            MkArg* fixedMkArg =
-                                new MkArg(mkarg->prom, promRes, mkarg->env());
+                            MkArg* fixedMkArg = new MkArg(mkarg->prom, promRes,
+                                                          mkarg->promEnv());
                             next = split->insert(split->begin(), fixedMkArg);
                             forcedMkArg[mkarg] = fixedMkArg;
 
