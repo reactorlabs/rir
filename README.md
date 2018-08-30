@@ -73,6 +73,8 @@ Instead do this:
 
 For faster build use ninja. To generate ninja files instead of makefiles add `-GNinja` to the cmake commands.
 
+Using ninja means GCC and Clang will disable color output. To force color, run cmake with `-DFORCE_COLORED_OUTPUT=true`.
+
 ### Making changes to gnur
 
 R with RIR patches is a submodule under external/custom-r. This is how you edit:
