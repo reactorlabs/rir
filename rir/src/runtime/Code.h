@@ -1,6 +1,7 @@
 #ifndef RIR_CODE_H
 #define RIR_CODE_H
 
+#include "RirHeader.h"
 #include "ir/BC_inc.h"
 
 #include <cassert>
@@ -9,25 +10,22 @@
 
 namespace rir {
 
+typedef SEXP FunctionSEXP;
+typedef SEXP CodeSEXP;
+
 struct Function;
 struct FunctionSignature;
 
-// Code magic constant is intended to trick the GC into believing that it is
-// dealing with already marked SEXP.
-// Note: gcgen needs to be 1, otherwise the write barrier will trigger and
-//       named count is 3 (ie. NAMEDMAX) to make it stable
-//  It also has an unique bitpattern for gp (0xeeee) so that we can keep it
-//  apart from functions
-#define CODE_MAGIC (uint64_t)0x311eeee1a
+#define CODE_MAGIC 0x3111eeee
 
 /**
  * Code holds a sequence of instructions; for each instruction
  * it records the index of the source AST. Code is part of a
  * Function.
  *
- * Code objects are allocated contiguously within the data
- * section of a Function. The Function header can be found,
- * at an offset from the start of each Code object
+ * Each Code object is embedded inside a SEXP, and needs to
+ * be unpacked. The Function object has an array of SEXPs
+ * pointing to Code objects.
  *
  * Instructions are variable size; Code knows how many bytes
  * are required for instructions.
@@ -48,18 +46,23 @@ static unsigned pad4(unsigned sizeInBytes) {
 }
 
 struct Code {
+    friend struct Function;
     friend class FunctionWriter;
     friend class CodeVerifier;
 
     Code() = delete;
 
-    Code(SEXP ast, unsigned codeSize, unsigned sourceSize, unsigned offset,
-         bool isDefaultArg, size_t localsCnt);
+    Code(FunctionSEXP fun, size_t index, SEXP ast, unsigned codeSize,
+         unsigned sourceSize, bool isDefaultArg, size_t localsCnt);
 
-    // Magic number that attempts to be PROMSXP already marked by the GC
-    uint64_t magic;
+    // expose Code as an SEXP to the R gc
+    rir::rir_header info;
 
-    unsigned header; /// offset to Function object
+  private:
+    FunctionSEXP function_;
+
+  public:
+    size_t index; /// index of this Code object in the Function array
 
     // TODO comment these
     unsigned src; /// AST of the function (or promise) represented by the code
@@ -98,11 +101,33 @@ struct Code {
         unsigned srcIdx;
     };
 
+    SEXP container() {
+        SEXP result = (SEXP)((uintptr_t)this - sizeof(VECTOR_SEXPREC));
+        assert(TYPEOF(result) == EXTERNALSXP &&
+               "Code object not embedded in SEXP container, or corrupt.");
+        return result;
+    }
+
+    static Code* unpack(SEXP s) {
+        Code* c = (Code*)INTEGER(s);
+        assert(c->info.magic == CODE_MAGIC &&
+               "This container does not contain a Code object.");
+        return c;
+    }
+
+    static Code* check(SEXP s) {
+        if (TYPEOF(s) != EXTERNALSXP) {
+            return nullptr;
+        }
+        Code* c = (Code*)INTEGER(s);
+        return c->info.magic == CODE_MAGIC ? c : nullptr;
+    }
+
     /** Returns a pointer to the instructions in c.  */
     Opcode* code() const { return (Opcode*)data; }
     Opcode* endCode() const { return (Opcode*)((uintptr_t)code() + codeSize); }
 
-    Function* function() { return (Function*)((uintptr_t) this - header); }
+    Function* function();
 
     size_t size() const {
         return sizeof(Code) + pad4(codeSize) + srcLength * sizeof(SrclistEntry);
@@ -112,49 +137,10 @@ struct Code {
         return sizeof(Code) + pad4(codeSize) + sources * sizeof(SrclistEntry);
     }
 
-    unsigned getSrcIdxAt(const Opcode* pc, bool allowMissing) const {
-        if (srcLength == 0) {
-            assert(allowMissing);
-            return 0;
-        }
+    unsigned getSrcIdxAt(const Opcode* pc, bool allowMissing) const;
 
-        SrclistEntry* sl = srclist();
-        Opcode* start = code();
-        auto pcOffset = pc - start;
-
-        if (srcLength == 1) {
-            auto sidx = sl[0].pcOffset == pcOffset ? sl[0].srcIdx : 0;
-            SLOWASSERT(allowMissing || sidx);
-            return sidx;
-        }
-
-        // Binary search through src list
-        int lower = 0;
-        int upper = srcLength - 1;
-        int finger = upper / 2;
-        unsigned sidx = 0;
-
-        while (lower <= upper) {
-            if (sl[finger].pcOffset == pcOffset) {
-                sidx = sl[finger].srcIdx;
-                break;
-            }
-            if (sl[finger].pcOffset < pcOffset)
-                lower = finger + 1;
-            else
-                upper = finger - 1;
-            finger = lower + (upper - lower) / 2;
-        }
-        SLOWASSERT(sidx == 0 || sl[finger].pcOffset == pcOffset);
-        SLOWASSERT(allowMissing || sidx);
-
-        return sidx;
-    }
-
-    void print(std::ostream&) const;
     void disassemble(std::ostream&) const;
-
-    Code* next() { return (Code*)((uintptr_t) this + this->size()); }
+    void print(std::ostream&) const;
 
   private:
     SrclistEntry* srclist() const {
@@ -164,25 +150,26 @@ struct Code {
 
 #pragma pack(pop)
 
-class CodeHandleIterator {
-    Code* code;
+class FunctionCodeIterator {
+    Function const* const function;
+    size_t index;
+
   public:
-    CodeHandleIterator(Code* code) : code(code) {}
-    void operator++() { code = (Code*)((uintptr_t)code + code->size()); }
-    bool operator!=(CodeHandleIterator other) { return code != other.code; }
-    Code* operator*() { return code; }
+    FunctionCodeIterator(Function const* const function, size_t index);
+    void operator++();
+    bool operator!=(FunctionCodeIterator other);
+    Code* operator*();
 };
 
-class ConstCodeHandleIterator {
-    const Code* code;
+class ConstFunctionCodeIterator {
+    Function const* const function;
+    size_t index;
 
   public:
-    ConstCodeHandleIterator(const Code* code) : code(code) {}
-    void operator++() { code = (Code*)((uintptr_t)code + code->size()); }
-    bool operator!=(ConstCodeHandleIterator other) {
-        return code != other.code;
-    }
-    const Code* operator*() { return code; }
+    ConstFunctionCodeIterator(Function const* const function, size_t index);
+    void operator++();
+    bool operator!=(ConstFunctionCodeIterator other);
+    const Code* operator*();
 };
 }
 

@@ -158,7 +158,7 @@ void endClosureContext(RCNTXT* cntxt, SEXP result) {
 }
 
 RIR_INLINE SEXP createPromise(Code* code, SEXP env) {
-    SEXP p = Rf_mkPROMISE((SEXP)code, env);
+    SEXP p = Rf_mkPROMISE(code->container(), env);
     return p;
 }
 
@@ -479,21 +479,19 @@ SEXP closureArgumentAdaptor(const CallContext& call, SEXP arglist,
     f = FORMALS(op);
     a = actuals;
     // get the first Code that is a compiled default value of a formal arg
-    // (or end() if no such exist)
+    // (or nullptr if no such exist)
     Function* fun = DispatchTable::unpack(BODY(op))->first();
-    Code* c = findDefaultArgument(fun->first());
-    Code* e = fun->codeEnd();
+    Code* c = fun->findDefaultArg(0);
     while (f != R_NilValue) {
         if (CAR(f) != R_MissingArg) {
             if (CAR(a) == R_MissingArg) {
-                assert(c != e && "No more compiled formals available.");
+                assert(c != nullptr && "No more compiled formals available.");
                 SETCAR(a, createPromise(c, newrho));
                 SET_MISSING(a, 2);
             }
             // Either just used the compiled formal or it was not needed.
-            // Skip to next Code (at least the body Code is always there),
-            // then find the following compiled formal
-            c = findDefaultArgument(c->next());
+            // Skip over current compiled formal and find the next default arg.
+            c = fun->findDefaultArg(c->index + 1);
         }
         assert(CAR(f) != R_DotsSymbol || TYPEOF(CAR(a)) == DOTSXP);
         f = CDR(f);
@@ -543,7 +541,7 @@ unsigned dispatch(const CallContext& call, DispatchTable* vt) {
 SEXP rirCall(const CallContext& call, SEXP actuals, Context* ctx) {
     assert(actuals);
     SEXP body = BODY(call.callee);
-    assert(isValidDispatchTableSEXP(body));
+    assert(DispatchTable::check(body));
 
     auto table = DispatchTable::unpack(body);
 
@@ -574,7 +572,7 @@ SEXP rirCall(const CallContext& call, SEXP actuals, Context* ctx) {
 // Call a RIR function. Arguments are still untouched.
 SEXP rirCall(const CallContext& call, Context* ctx) {
     SEXP body = BODY(call.callee);
-    assert(isValidDispatchTableSEXP(body));
+    assert(DispatchTable::check(body));
 
     auto table = DispatchTable::unpack(body);
 
@@ -1090,7 +1088,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
 #endif
 
     std::vector<FrameInfo*> synthesizeFrames;
-    assert(c->magic == CODE_MAGIC);
+    assert(c->info.magic == CODE_MAGIC);
 
     Locals locals(c->localsCount);
 
@@ -1511,7 +1509,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
             SEXP body = ostack_at(ctx, 1);
             SEXP formals = ostack_at(ctx, 2);
             res = allocSExp(CLOSXP);
-            assert(isValidDispatchTableObject(body));
+            assert(DispatchTable::check(body));
             SET_FORMALS(res, formals);
             SET_BODY(res, body);
             SET_CLOENV(res, getenv());
@@ -2710,22 +2708,19 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env,
     return evalRirCode(c, ctx, env, callCtxt, nullptr);
 }
 
-SEXP rirExpr(SEXP f) {
-    if (isValidCodeObject(f)) {
-        Code* c = (Code*)f;
+SEXP rirExpr(SEXP s) {
+    if (auto c = Code::check(s)) {
         return src_pool_at(globalContext(), c->src);
     }
-    Function* ff;
-    if ((ff = Function::check(f))) {
-        return src_pool_at(globalContext(), ff->body()->src);
+    if (auto f = Function::check(s)) {
+        return src_pool_at(globalContext(), f->body()->src);
     }
-    DispatchTable* t;
-    if ((t = DispatchTable::check(f))) {
+    if (auto t = DispatchTable::check(s)) {
         // Default is the source of the first function in the dispatch table
-        Function* ff = t->first();
-        return src_pool_at(globalContext(), ff->body()->src);
+        Function* f = t->first();
+        return src_pool_at(globalContext(), f->body()->src);
     }
-    return f;
+    return s;
 }
 
 SEXP rirEval_f(SEXP what, SEXP env) {
@@ -2734,12 +2729,11 @@ SEXP rirEval_f(SEXP what, SEXP env) {
     SEXP lenv = env;
     // TODO: do we not need an RCNTXT here?
 
-    if (isValidCodeObject(what)) {
-        return evalRirCodeExtCaller((Code*)what, globalContext(), &lenv);
+    if (auto code = Code::check(what)) {
+        return evalRirCodeExtCaller(code, globalContext(), &lenv);
     }
 
-    if (DispatchTable::check(what)) {
-        auto table = DispatchTable::unpack(what);
+    if (auto table = DispatchTable::check(what)) {
         size_t offset = 0; // Default target is the first version
 
         Function* fun = table->at(offset);
@@ -2748,8 +2742,7 @@ SEXP rirEval_f(SEXP what, SEXP env) {
         return evalRirCodeExtCaller(fun->body(), globalContext(), &lenv);
     }
 
-    if (Function::check(what)) {
-        auto fun = Function::unpack(what);
+    if (auto fun = Function::check(what)) {
         fun->registerInvocation();
         return evalRirCodeExtCaller(fun->body(), globalContext(), &lenv);
     }

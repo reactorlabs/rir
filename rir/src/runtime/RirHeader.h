@@ -25,9 +25,6 @@ struct rir_header {
     // TODO:  Later maybe also add type of the object here and have just
     //        one EXTERNALSXP with a union of other types.
     // For now just make sure that this header is in all RIR
-    
-    // The exception is Code, since it is not a valid SEXP in the
-    // first place.
 };
 
 }

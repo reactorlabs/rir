@@ -32,6 +32,9 @@ struct DispatchTable {
     }
 
     static DispatchTable* check(SEXP s) {
+        if (TYPEOF(s) != EXTERNALSXP) {
+            return nullptr;
+        }
         DispatchTable* d = (DispatchTable*)INTEGER(s);
         return d->info.magic == DISPATCH_TABLE_MAGIC ? d : nullptr;
     }

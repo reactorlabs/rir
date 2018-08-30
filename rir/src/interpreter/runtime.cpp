@@ -10,33 +10,19 @@ SEXP promExecName;
 Context* globalContext_;
 rir::Configurations* configurations;
 
-DispatchTable* isValidDispatchTableSEXP(SEXP wrapper) {
-    return isValidDispatchTableObject(wrapper);
-}
-
-Function* isValidFunctionSEXP(SEXP wrapper) {
-    return isValidFunctionObject(wrapper);
-}
-
 /** Checks if given closure should be executed using RIR.
 
   If the given closure is RIR function, returns its Function object, otherwise
   returns nullptr.
  */
 Function* isValidClosureSEXP(SEXP closure) {
-    if (TYPEOF(closure) != CLOSXP)
+    if (TYPEOF(closure) != CLOSXP) {
         return nullptr;
-    if (!isValidDispatchTableObject(BODY(closure)))
-        return nullptr;
-    DispatchTable* t = isValidDispatchTableObject(BODY(closure));
-    Function* f = t->first();
-    if (f->info.magic != FUNCTION_MAGIC)
-        return nullptr;
-    return f;
-}
-
-Code* isValidPromiseSEXP(SEXP promise) {
-    return isValidCodeObject(PRCODE(promise));
+    }
+    if (auto t = DispatchTable::check(BODY(closure))) {
+        return t->first();
+    }
+    return nullptr;
 }
 
 // for now, we will have to rewrite this when it goes to GNU-R proper
@@ -48,7 +34,7 @@ void printFunction(Function* f) {
     Rprintf("  Origin:          %p %s\n", f->origin(), f->origin() ? "" : "(unoptimized)");
     Rprintf("  Next:            %p\n", f->next());
     Rprintf("  Code objects:    %u\n", f->codeLength);
-    Rprintf("  Fun code offset: %x (hex)\n", f->foffset);
+    Rprintf("  Fun code addr:   %x (hex)\n", f->body());
     Rprintf("  Invoked:         %u\n", f->invocationCount);
     Rprintf("  Signature:       %p\n", f->signature);
     if (f->signature)
@@ -62,16 +48,6 @@ void printFunction(Function* f) {
     for (Code* c : *f)
         c->print(output);
     std::cout << output.str();
-}
-
-// TODO change gnu-r to expect ptr and not bool and we can get rid of the
-// wrapper
-int isValidFunctionObject_int_wrapper(SEXP closure) {
-    return isValidFunctionObject(closure) != nullptr;
-}
-
-int isValidCodeObject_int_wrapper(SEXP code) {
-    return isValidCodeObject(code) != nullptr;
 }
 
 void initializeRuntime(CompilerCallback compiler, OptimizerCallback optimizer) {

@@ -21,7 +21,7 @@ using namespace rir;
 REXPORT SEXP rir_disassemble(SEXP what, SEXP verbose) {
     if (!what || TYPEOF(what) != CLOSXP)
         Rf_error("Not a rir compiled code");
-    DispatchTable* t = isValidDispatchTableObject(BODY(what));
+    DispatchTable* t = DispatchTable::check(BODY(what));
 
     if (!t)
         Rf_error("Not a rir compiled code");
@@ -38,8 +38,7 @@ REXPORT SEXP rir_disassemble(SEXP what, SEXP verbose) {
         f->body()->disassemble(output);
         for (auto c : *f) {
             if (c != f->body()) {
-                output << "\n [Prom " << std::hex
-                       << ((uintptr_t)c - (uintptr_t)f) << std::dec << "]\n";
+                output << "\n [Prom (index " << c->index << ")]\n";
                 c->disassemble(output);
             }
         }
@@ -83,7 +82,7 @@ REXPORT SEXP rir_markOptimize(SEXP what) {
 }
 
 REXPORT SEXP rir_eval(SEXP what, SEXP env) {
-    ::Function* f = isValidFunctionObject(what);
+    Function* f = Function::check(what);
     if (f == nullptr)
         f = isValidClosureSEXP(what);
     if (f == nullptr)

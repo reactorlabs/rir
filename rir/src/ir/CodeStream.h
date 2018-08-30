@@ -140,7 +140,7 @@ class CodeStream {
         pos = 0;
 
         CodeVerifier::calculateAndVerifyStack(res);
-        return res->header;
+        return res->index;
     }
 };
 }

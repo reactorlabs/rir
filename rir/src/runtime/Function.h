@@ -47,20 +47,32 @@ typedef SEXP FunctionSEXP;
 #pragma pack(push)
 #pragma pack(1)
 struct Function {
-  public:
-    Function() {
-        info.gc_area_start = sizeof(rir_header); // just after the header
-        info.gc_area_length = 2;                 // origin, next
+    friend class FunctionCodeIterator;
+    friend class ConstFunctionCodeIterator;
+
+    static constexpr size_t CODEOBJ_OFFSET = 2;
+
+    Function(size_t functionSize, const std::vector<SEXP>& codeVec)
+        : size(functionSize), signature(nullptr), invocationCount(0),
+          deopt(false), markOpt(false), codeLength(codeVec.size()),
+          origin_(nullptr), next_(nullptr) {
+        // GC area starts just before the end of Function
+        info.gc_area_start =
+            sizeof(Function) - CODEOBJ_OFFSET * sizeof(FunctionSEXP);
+        info.gc_area_length = CODEOBJ_OFFSET + codeLength;
         info.magic = FUNCTION_MAGIC;
-        origin_ = nullptr;
-        next_ = nullptr;
-        size = sizeof(Function);
-        signature = nullptr;
-        invocationCount = 0;
-        deopt = false;
-        markOpt = false;
-        codeLength = 0;
-        foffset = 0;
+        // initialize codeObjects array to nullptr first!
+        for (size_t i = 0; i < codeLength; ++i) {
+            codeObjects[i] = nullptr;
+        }
+        for (size_t i = 0; i < codeLength; ++i) {
+            Code* c = Code::unpack(codeVec[i]);
+            // Set c->function_ to point to this Function's container
+            EXTERNALSXP_SET_ENTRY(c->container(), 0, this->container());
+            // Set codeObjects[i] to point to Code object c's container
+            EXTERNALSXP_SET_ENTRY(container(), CODEOBJ_OFFSET + i,
+                                  c->container());
+        }
     }
 
     SEXP container() {
@@ -70,39 +82,36 @@ struct Function {
         return result;
     }
 
+    static Function* unpack(SEXP s) {
+        Function* f = (Function*)INTEGER(s);
+        assert(f->info.magic == FUNCTION_MAGIC &&
+               "This container does not contain a Function");
+        return f;
+    }
+
     static Function* check(SEXP s) {
+        if (TYPEOF(s) != EXTERNALSXP) {
+            return nullptr;
+        }
         Function* f = (Function*)INTEGER(s);
         return f->info.magic == FUNCTION_MAGIC ? f : nullptr;
     }
 
-    static Function* unpack(SEXP s) {
-        Function* f = (Function*)INTEGER(s);
-        assert(f->info.magic == FUNCTION_MAGIC &&
-               "This container does not conatin a Function");
-        return f;
+    Code* body() { return Code::unpack(codeObjects[codeLength - 1]); }
+
+    Code* codeAt(unsigned index) const {
+        return Code::unpack(codeObjects[index]);
     }
 
-    Code* first() { return (Code*)data; }
-    Code* codeEnd() { return (Code*)((uintptr_t) this + size); }
-
-    const Code* first() const { return (Code*)data; }
-    const Code* codeEnd() const { return (Code*)((uintptr_t)this + size); }
-
-    Code* body() { return (Code*)((uintptr_t) this + foffset); }
-
-    Code* codeAt(unsigned offset) const {
-        Code* c = (Code*)((uintptr_t) this + offset);
-        assert(c->magic == CODE_MAGIC && "Invalid code offset");
-        return c;
+    FunctionCodeIterator begin() { return FunctionCodeIterator(this, 0); }
+    FunctionCodeIterator end() {
+        return FunctionCodeIterator(this, codeLength);
     }
-
-    CodeHandleIterator begin() { return CodeHandleIterator(first()); }
-    CodeHandleIterator end() { return CodeHandleIterator(codeEnd()); }
-    ConstCodeHandleIterator begin() const {
-        return ConstCodeHandleIterator(first());
+    ConstFunctionCodeIterator begin() const {
+        return ConstFunctionCodeIterator(this, 0);
     }
-    ConstCodeHandleIterator end() const {
-        return ConstCodeHandleIterator(codeEnd());
+    ConstFunctionCodeIterator end() const {
+        return ConstFunctionCodeIterator(this, codeLength);
     }
 
     unsigned indexOf(Code* code) {
@@ -133,14 +142,21 @@ struct Function {
             invocationCount++;
     }
 
+    Code* findDefaultArg(size_t index) const {
+        while (index < codeLength) {
+            Code* c = Code::unpack(codeObjects[index++]);
+            if (c->isDefaultArgument) {
+                return c;
+            }
+        }
+        assert(index == codeLength && "Did not find default arg so all Code "
+                                      "objects should have been iterated "
+                                      "over.");
+        return nullptr;
+    }
+
     rir::rir_header info; /// for exposing SEXPs to GC
 
-  private:
-    FunctionSEXP origin_; /// Same Function with fewer optimizations,
-                          //   NULL if original
-    FunctionSEXP next_;
-
-  public:
     unsigned size; /// Size, in bytes, of the function and its data
 
     FunctionSignature* signature; /// pointer to this version's signature
@@ -153,11 +169,18 @@ struct Function {
 
     unsigned codeLength; /// number of Code objects in the Function
 
-    // We can get to this by searching, but this is faster and so worth the
-    // extra four bytes
-    unsigned foffset; ///< Offset to the code of the function (last code)
+  private:
+    // !!! SEXPs traceable by the GC must be declared here !!!
+    // !!!   *before* the CodeSEXP array.                  !!!
+    // !!! Furthermore, you need to update                 !!!
+    // !!!     the CODEOBJ_OFFSET constant.                !!!
 
-    uint8_t data[]; // Code objects stored inline
+    FunctionSEXP origin_; /// Same Function with fewer optimizations,
+                          //   NULL if original
+    FunctionSEXP next_;
+
+    CodeSEXP codeObjects[]; /// Pointers to CodeSEXPs (Code objects embedded
+                            //   inside EXTERNALSXP)
 };
 #pragma pack(pop)
 }

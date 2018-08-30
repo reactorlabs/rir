@@ -7,78 +7,70 @@
 
 #include "ir/CodeVerifier.h"
 #include "runtime/Function.h"
+#include "utils/Pool.h"
 
 #include <iostream>
+#include <vector>
 
 namespace rir {
 
 class FunctionWriter {
+  private:
+    Function* function_;
+
   public:
     typedef unsigned PcOffset;
-    constexpr static unsigned initialSize = 2 * sizeof(Function);
 
-    Function* function;
+    size_t functionSize; // size of the Function, including pointers to its code
+                         // objects
 
-    size_t capacity;
+    std::vector<SEXP> codeVec;
 
-    FunctionWriter() = delete;
-    // also copy and move ctors = default ?
+    FunctionWriter() : function_(nullptr), functionSize(sizeof(Function)) {}
 
-    static FunctionWriter create() {
-        assert(initialSize > sizeof(Function));
-        assert(initialSize % sizeof(int) == 0);
-        SEXP store = Rf_allocVector(EXTERNALSXP, initialSize);
-        void* payload = INTEGER(store);
+    ~FunctionWriter() { R_ReleaseObject(function_->container()); }
 
-        Function* function = new (payload) Function;
-        FunctionWriter res(function, initialSize);
-        return res;
+    Function* function() {
+        assert(function_ && "FunctionWriter has not been finalized");
+        return function_;
     }
 
-    ~FunctionWriter() { R_ReleaseObject(function->container()); }
+    void finalize() {
+        assert(function_ == nullptr && "Trying to finalize a second time");
+
+        size_t dataSize = codeVec.size() * sizeof(SEXP);
+        assert(functionSize == sizeof(Function) + dataSize);
+        assert(functionSize % sizeof(int) == 0);
+
+        SEXP store = Rf_allocVector(EXTERNALSXP, functionSize);
+        void* payload = INTEGER(store);
+        Function* fun = new (payload) Function(functionSize, codeVec);
+        R_PreserveObject(fun->container());
+
+        assert(fun->info.magic == FUNCTION_MAGIC);
+
+        function_ = fun;
+    }
 
     Code* writeCode(SEXP ast, void* bc, unsigned originalCodeSize,
                     const std::map<PcOffset, BC::PoolIdx>& sources,
                     const std::map<PcOffset, BC::Label>& patchpoints,
                     const std::map<PcOffset, std::vector<BC::Label>>& labels,
                     bool markDefaultArg, size_t localsCnt, size_t nops) {
-        assert(function->size <= capacity);
-
+        assert(function_ == nullptr &&
+               "Trying to add more code after finalizing");
         unsigned codeSize = originalCodeSize - nops;
         unsigned totalSize = Code::size(codeSize, sources.size());
+        size_t index = codeVec.size();
 
-        if (function->size + totalSize > capacity) {
-            unsigned newCapacity = capacity;
-            while (function->size + totalSize > newCapacity)
-                newCapacity *= 1.5;
-            newCapacity = pad4(newCapacity);
-
-            assert(newCapacity % sizeof(int) == 0);
-            assert(function->size + totalSize <= newCapacity);
-
-            SEXP newStore = Rf_allocVector(EXTERNALSXP, newCapacity);
-            void* newPayload = INTEGER(newStore);
-
-            // it is ok to bypass write barrier here, since newPayload is a new
-            // object
-            memcpy(newPayload, function, capacity);
-
-            R_PreserveObject(newStore);
-            R_ReleaseObject(function->container());
-
-            function = reinterpret_cast<Function*>(newPayload);
-            capacity = newCapacity;
-        }
-
-        unsigned offset = function->size;
-        void* insert = (void*)((uintptr_t)function + function->size);
-        function->size += totalSize;
-        assert(function->size <= capacity);
-
-        Code* code = new (insert) Code(ast, codeSize, sources.size(), offset,
-                                       markDefaultArg, localsCnt);
-
-        assert(code->function() == function);
+        SEXP store = Rf_allocVector(EXTERNALSXP, totalSize);
+        void* payload = INTEGER(store);
+        Code* code =
+            new (payload) Code(nullptr, index, ast, codeSize, sources.size(),
+                               markDefaultArg, localsCnt);
+        Pool::insert(store);
+        codeVec.push_back(store);
+        functionSize += sizeof(SEXP);
 
         size_t numberOfSources = 0;
 
@@ -193,20 +185,8 @@ class FunctionWriter {
         }
 
         assert(numberOfSources == sources.size());
-        function->codeLength++;
-
-        // set the last code offset
-        function->foffset = offset;
 
         return code;
-    }
-
-  private:
-    explicit FunctionWriter(Function* function, size_t capacity)
-        : function(function), capacity(capacity) {
-        assert(function->info.magic == FUNCTION_MAGIC);
-        assert(function->size <= capacity);
-        R_PreserveObject(function->container());
     }
 };
 }

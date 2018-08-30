@@ -31,8 +31,7 @@ BC BC::force() { return BC(Opcode::force_); }
 BC BC::pop() { return BC(Opcode::pop_); }
 BC BC::push(SEXP constant) {
     assert(TYPEOF(constant) != PROMSXP);
-//    assert(!isValidFunctionSEXP(constant));
-    assert(!isValidCodeObject(constant));
+    assert(!Code::check(constant));
     ImmediateArguments i;
     i.pool = Pool::insert(constant);
     return BC(Opcode::push_, i);
