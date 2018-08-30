@@ -737,7 +737,7 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
 
                 // Step one: load and set env
                 if (!Phi::Cast(instr)) {
-                    if (instr->hasEnv() && !explicitEnvValue(instr)) {
+                    if (instr->accessesEnv() && !explicitEnvValue(instr)) {
                         // If the env is passed on the stack, it needs
                         // to be TOS here. To relax this condition some
                         // stack shuffling would be needed.
@@ -757,7 +757,7 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 // Step two: load the rest
                 if (!Phi::Cast(instr)) {
                     instr->eachArg([&](Value* what) {
-                        if (instr->hasEnv() && instr->env() == what) {
+                        if (instr->accessesEnv() && instr->env() == what) {
                             if (explicitEnvValue(instr))
                                 loadEnv(it, what);
                         } else {
@@ -986,16 +986,14 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
             case Tag::Deopt: {
                 assert(Safepoint::Cast(*(it - 1)) &&
                        "Deopt MUST be scheudled after Safepoint");
+                return;
             }
             case Tag::Safepoint: {
-                assert(Deopt::Cast(*(it + 1)) &&
-                       "Unused Safepoint must be removed");
                 auto sp = Safepoint::Cast(instr);
-                assert(sp->frames.size() == 1 &&
-                       "rir deopt cannot synthesize frames yet");
-                auto frame = sp->frames[0];
-                cs << BC::deopt(frame.pc, frame.code);
-                return;
+                assert(!sp->unused() && "Unused Safepoint must be removed");
+                assert(!sp->next() && "rir deopt cannot synthesize frames yet");
+                cs << BC::deopt(sp->pc, sp->code);
+                break;
             }
             // values, not instructions
             case Tag::Missing:
