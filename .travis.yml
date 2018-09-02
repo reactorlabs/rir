@@ -93,6 +93,7 @@ before_script:
   - make -j2
 
 script:
+  - export R_GCTORTURE=1000
   - ./bin/tests
   - echo "JIT enabled"
   - R_ENABLE_JIT=2 ./bin/tests
