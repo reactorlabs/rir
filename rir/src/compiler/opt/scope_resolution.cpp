@@ -116,6 +116,9 @@ class TheScopeResolution {
                             !ldfun) {
                             auto hasAllInputs = [&](BB* load) -> bool {
                                 return aval.checkEachSource([&](ValOrig& src) {
+                                    // we cannot move the phi above its src
+                                    if (src.origin->bb() == load)
+                                        return false;
                                     return cfg.isPredecessor(src.origin->bb(),
                                                              load);
                                 });
@@ -127,7 +130,7 @@ class TheScopeResolution {
                                 auto preds =
                                     cfg.immediatePredecessors(phiBlock);
                                 for (auto pre : preds)
-                                    up = up & hasAllInputs(pre);
+                                    up = up && hasAllInputs(pre);
                                 if (up)
                                     phiBlock = *preds.begin();
                             }
@@ -149,7 +152,7 @@ class TheScopeResolution {
         });
     }
 };
-}
+} // namespace
 
 namespace rir {
 namespace pir {
@@ -158,5 +161,6 @@ void ScopeResolution::apply(Closure* function) const {
     TheScopeResolution s(function);
     s();
 }
-}
-}
+
+} // namespace pir
+} // namespace rir
