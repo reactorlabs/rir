@@ -3,6 +3,7 @@
 
 #include "R/r.h"
 #include "instruction_list.h"
+#include "ir/Deoptimization.h"
 #include "pir.h"
 #include "singleton_values.h"
 #include "tag.h"
@@ -676,11 +677,11 @@ class FLI(AsTest, 1, Effect::None, EnvAccess::None) {
         : FixedLenInstruction(NativeType::test, {{RType::logical}}, {{in}}) {}
 };
 
-class FLI(Subassign1_1D, 4, Effect::None, EnvAccess::Leak) {
+class FLIE(Subassign1_1D, 4, Effect::None, EnvAccess::Leak) {
   public:
     Subassign1_1D(Value* val, Value* vec, Value* idx, Value* env,
                   unsigned srcIdx)
-        : FixedLenInstruction(
+        : FixedLenInstructionWithEnvSlot(
               PirType::val(),
               {{PirType::val(), PirType::val(), PirType::val()}},
               {{val, vec, idx}}, env, srcIdx) {}
@@ -689,11 +690,11 @@ class FLI(Subassign1_1D, 4, Effect::None, EnvAccess::Leak) {
     Value* idx() { return arg(2).val(); }
 };
 
-class FLI(Subassign2_1D, 4, Effect::None, EnvAccess::Leak) {
+class FLIE(Subassign2_1D, 4, Effect::None, EnvAccess::Leak) {
   public:
     Subassign2_1D(Value* val, Value* vec, Value* idx, Value* env,
                   unsigned srcIdx)
-        : FixedLenInstruction(
+        : FixedLenInstructionWithEnvSlot(
               PirType::val(),
               {{PirType::val(), PirType::val(), PirType::val()}},
               {{val, vec, idx}}, env, srcIdx) {}
@@ -1080,7 +1081,14 @@ class FLI(Deopt, 1, Effect::Any, EnvAccess::None) {
         : FixedLenInstruction(PirType::voyd(), {{NativeType::safepoint}},
                               {{safepoint}}) {}
     Safepoint* safepoint();
-    void safepoint(Safepoint* sp) { arg<0>().val() = sp; }
+};
+
+class VLI(ScheduledDeopt, Effect::Any, EnvAccess::None) {
+  public:
+    std::vector<FrameInfo> frames;
+    ScheduledDeopt() : VarLenInstruction(PirType::voyd()) {}
+    void consumeSafepoints(Deopt* deopt);
+    void printArgs(std::ostream& out) override;
 };
 
 #undef FLI

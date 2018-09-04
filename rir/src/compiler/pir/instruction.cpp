@@ -283,6 +283,49 @@ void Safepoint::printArgs(std::ostream& out) {
     }
 }
 
+void ScheduledDeopt::consumeSafepoints(Deopt* deopt) {
+    std::vector<Safepoint*> safepoints;
+    {
+        auto sp = deopt->safepoint();
+        do {
+            safepoints.push_back(sp);
+            sp = sp->next();
+        } while (sp);
+    }
+    for (auto spi = safepoints.rbegin(); spi != safepoints.rend(); spi++) {
+        auto sp = *spi;
+        frames.push_back({sp->pc, sp->code, sp->stackSize});
+        for (size_t i = 0; i < sp->stackSize; i++)
+            pushArg(sp->arg(i).val());
+        pushArg(sp->env());
+    }
+}
+
+void ScheduledDeopt::printArgs(std::ostream& out) {
+    size_t n = 0;
+    for (auto& f : frames)
+        n += f.stackSize + 1;
+    assert(n == nargs());
+
+    size_t argpos = 0;
+    for (auto& f : frames) {
+        out << f.code << "+" << f.pc - f.code->code();
+        out << ": [";
+        long s = f.stackSize;
+        while (s) {
+            s--;
+            arg(argpos++).val()->printRef(out);
+            if (s)
+                out << ", ";
+        }
+        out << "], env=";
+        arg(argpos++).val()->printRef(out);
+        if (argpos < nargs()) {
+            out << "; ";
+        }
+    }
+}
+
 MkFunCls::MkFunCls(Closure* fun, Value* lexicalEnv, SEXP fml, SEXP code,
                    SEXP src)
     : FixedLenInstructionWithEnvSlot(RType::closure, lexicalEnv), fun(fun),

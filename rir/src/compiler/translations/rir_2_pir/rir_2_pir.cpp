@@ -749,8 +749,9 @@ void Rir2Pir::translate(rir::Code* srcCode, Builder& insert,
                 fail();
                 return;
             }
-            if (bc.isCall())
+            if (bc.isCall()) {
                 insert.registerSafepoint(srcCode, nextPos, cur.stack);
+            }
         }
     }
     assert(cur.stack.empty());

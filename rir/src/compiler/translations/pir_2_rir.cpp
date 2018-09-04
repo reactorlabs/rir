@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <iomanip>
+#include <sstream>
 
 // #define DEBUGGING
 #define ALLOC_DEBUG 1
@@ -133,7 +134,6 @@ class SSAAllocator {
                     --ip;
                     --pos;
                     Instruction* i = *ip;
-                    Phi* phi = Phi::Cast(i);
 
                     auto markIfNotSeen = [&](Value* v) {
                         if (!livenessInterval.count(v)) {
@@ -152,16 +152,17 @@ class SSAAllocator {
                     };
 
                     // First set all arguments to be live
-                    if (phi)
+                    if (auto phi = Phi::Cast(i)) {
                         phi->eachArg([&](BB* in, Value* v) {
                             if (markIfNotSeen(v))
                                 accumulatedPhiInput[in].insert(v);
                         });
-                    else
+                    } else {
                         i->eachArg([&](Value* v) {
                             if (markIfNotSeen(v))
                                 accumulated.insert(v);
                         });
+                    }
 
                     // Mark the end of the current instructions liveness
                     if (accumulated.count(i)) {
@@ -641,6 +642,7 @@ class Pir2Rir {
     size_t compileCode(Context& ctx, Code* code);
     size_t getPromiseIdx(Context& ctx, Promise* code);
     void toCSSA(Code* code);
+    void collapseSafepoints(Code* code);
     rir::Function* finalize();
 
   private:
@@ -652,7 +654,7 @@ class Pir2Rir {
 };
 
 size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
-
+    collapseSafepoints(code);
     toCSSA(code);
     LOGGING(compiler.getLogger().afterCSSA(*cls, code));
 
@@ -673,6 +675,12 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
             return;
 
         CodeStream& cs = ctx.cs();
+        auto debugAddVariableName = [&cs](Value* v) {
+            std::stringstream ss;
+            v->printRef(ss);
+            cs.addSrc(Rf_install(ss.str().c_str()));
+        };
+
         cs << bbLabels[bb];
 
         Value* currentEnv = nullptr;
@@ -710,8 +718,10 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                             std::cerr << " (" << tagToStr(what->tag) << ")\n";
                             assert(false);
                         }
-                        if (!alloc.onStack(what))
+                        if (!alloc.onStack(what)) {
                             cs << BC::ldloc(alloc[what]);
+                            debugAddVariableName(what);
+                        }
                     }
                 };
 
@@ -730,8 +740,10 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                             std::cerr << " (" << tagToStr(what->tag) << ")\n";
                             assert(false);
                         }
-                        if (!alloc.onStack(what))
+                        if (!alloc.onStack(what)) {
                             cs << BC::ldloc(alloc[what]);
+                            debugAddVariableName(what);
+                        }
                     }
                 };
 
@@ -758,8 +770,9 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 if (!Phi::Cast(instr)) {
                     instr->eachArg([&](Value* what) {
                         if (instr->accessesEnv() && instr->env() == what) {
-                            if (explicitEnvValue(instr))
+                            if (explicitEnvValue(instr)) {
                                 loadEnv(it, what);
+                            }
                         } else {
                             loadArg(it, instr, what);
                         }
@@ -984,15 +997,35 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 break;
             }
             case Tag::Deopt: {
-                assert(Safepoint::Cast(*(it - 1)) &&
-                       "Deopt MUST be scheudled after Safepoint");
+                assert(false && "Deopt must be folded into scheduled deopt, "
+                                "before pir_2_rir");
+                break;
+            }
+            case Tag::ScheduledDeopt: {
+                auto deopt = ScheduledDeopt::Cast(instr);
+
+                size_t nframes = deopt->frames.size();
+
+                SEXP store =
+                    Rf_allocVector(RAWSXP, sizeof(DeoptMetadata) +
+                                               nframes * sizeof(FrameInfo));
+                auto m = new (DATAPTR(store)) DeoptMetadata;
+                m->numFrames = nframes;
+
+                size_t i = 0;
+                // Frames in the ScheduledDeopt are in pir argument order (from
+                // left to right). On the other hand frames in the rir deopt_
+                // instruction are in stack order, from tos down.
+                for (auto fi = deopt->frames.rbegin();
+                     fi != deopt->frames.rend(); fi++)
+                    m->frames[i++] = *fi;
+
+                cs << BC::deopt(store);
                 return;
             }
             case Tag::Safepoint: {
-                auto sp = Safepoint::Cast(instr);
-                assert(!sp->unused() && "Unused Safepoint must be removed");
-                assert(!sp->next() && "rir deopt cannot synthesize frames yet");
-                cs << BC::deopt(sp->pc, sp->code);
+                assert(false && "Safepoint must be folded into scheduled "
+                                "deopt, before pir_2_rir");
                 break;
             }
             // values, not instructions
@@ -1024,6 +1057,32 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
     });
 
     return alloc.slots();
+}
+
+void Pir2Rir::collapseSafepoints(Code* code) {
+    Visitor::run(code->entry, [&](BB* bb) {
+        auto it = bb->begin();
+        while (it != bb->end()) {
+            auto next = it + 1;
+            if (auto deopt = Deopt::Cast(*it)) {
+                auto newDeopt = new ScheduledDeopt();
+                newDeopt->consumeSafepoints(deopt);
+                auto newDeoptPos = bb->insert(it, newDeopt);
+                next = newDeoptPos + 2;
+            }
+            it = next;
+        }
+    });
+    Visitor::run(code->entry, [&](BB* bb) {
+        auto it = bb->begin();
+        while (it != bb->end()) {
+            auto next = it + 1;
+            if (Safepoint::Cast(*it) || Deopt::Cast(*it)) {
+                next = bb->remove(it);
+            }
+            it = next;
+        }
+    });
 }
 
 void Pir2Rir::toCSSA(Code* code) {

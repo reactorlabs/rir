@@ -13,6 +13,7 @@ namespace rir {
 namespace pir {
 
 class Safepoint;
+class CallInstruction;
 struct RirStack;
 
 class Builder {

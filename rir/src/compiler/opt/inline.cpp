@@ -68,9 +68,20 @@ class TheInliner {
                 std::vector<Value*> arguments;
                 theCallInstruction->eachCallArg(
                     [&](Value* v) { arguments.push_back(v); });
-                auto callerSafepoint =
-                    split->size() > 1 ? Safepoint::Cast(*(split->begin() + 1))
-                                      : nullptr;
+                Safepoint* callerSafepoint = nullptr;
+                // try to find a safepoint for this call instruction
+                for (auto p = split->begin(); p != split->end(); ++p) {
+                    if (auto sp = Safepoint::Cast(*p)) {
+                        if (sp->arg(sp->nargs() - 1).val() == theCall) {
+                            callerSafepoint = sp;
+                            break;
+                        }
+                    } else if ((*p)->hasEffect() || (*p)->changesEnv()) {
+                        break;
+                    }
+                }
+                assert(callerSafepoint ? callerSafepoint->stackSize >= 1
+                                       : true);
 
                 // Clone the function
                 BB* copy = BBTransform::clone(inlinee->entry, function);
@@ -92,14 +103,10 @@ class TheInliner {
                             }
                         }
                         if (auto sp = Safepoint::Cast(i)) {
-                            if (!sp->next() && !callerSafepoint) {
+                            if (!callerSafepoint) {
                                 fail = true;
                                 return;
                             }
-
-                            // TODO: support chained safepoints in backend and
-                            // rir
-                            return;
 
                             // When inlining a safepoint we need to chain it
                             // with the safepoints after the call to the
@@ -109,14 +116,19 @@ class TheInliner {
                             size_t created = 0;
                             while (nextSp) {
                                 auto clone = Safepoint::Cast(nextSp->clone());
-                                // Remove the return value of the inlinee
+                                // Insert the safepoint
+                                ip = bb->insert(ip, clone);
+                                created++;
+
+                                // Remove the inlinee result from the
+                                // caller safepoint. The result will only
+                                // become available after the (deoptimized)
+                                // inlinee returns.
                                 if (nextSp == callerSafepoint) {
                                     clone->popArg();
                                     clone->stackSize--;
                                 }
-                                // Insert the safepoint
-                                ip = bb->insert(ip, clone);
-                                created++;
+
                                 prevSp->next(clone);
                                 prevSp = nextSp;
                                 nextSp = nextSp->next();
