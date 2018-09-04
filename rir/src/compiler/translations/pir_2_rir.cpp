@@ -451,12 +451,19 @@ class SSAAllocator {
                         auto i = Instruction::Cast(arg);
                         if (!i)
                             return;
-                        if (allocation[i] != slot) {
+                        if (!allocation.count(i)) {
+                            std::cerr << "REG alloc fail: ";
+                            phi->printRef(std::cerr);
+                            std::cerr << " needs ";
+                            i->printRef(std::cerr);
+                            std::cerr << " but is not allocated\n";
+                            assert(false);
+                        } else if (allocation[i] != slot) {
                             std::cerr << "REG alloc fail: ";
                             phi->printRef(std::cerr);
                             std::cerr << " and it's input ";
                             i->printRef(std::cerr);
-                            std::cerr << " have different allocations : ";
+                            std::cerr << " have different allocations: ";
                             if (allocation[phi] == stackSlot)
                                 std::cerr << "stack";
                             else
@@ -470,6 +477,13 @@ class SSAAllocator {
                             assert(false);
                         }
                     });
+                    // Make sure the argument slot is initialized
+                    if (slot != stackSlot && reg.count(slot) == 0) {
+                        std::cerr << "REG alloc fail: phi ";
+                        phi->printRef(std::cerr);
+                        std::cerr << " is reading from an unititialized slot\n";
+                        assert(false);
+                    }
                     if (slot == stackSlot)
                         stack.pop_back();
                 } else {
@@ -492,6 +506,15 @@ class SSAAllocator {
                                 given = stack.back();
                                 stack.pop_back();
                             } else {
+                                // Make sure the argument slot is initialized
+                                if (reg.count(slot) == 0) {
+                                    std::cerr << "REG alloc fail: ";
+                                    i->printRef(std::cerr);
+                                    std::cerr << " is reading its argument ";
+                                    a->printRef(std::cerr);
+                                    std::cerr << "from an unititialized slot\n";
+                                    assert(false);
+                                }
                                 given = reg.at(slot);
                             }
                             if (given != a) {
