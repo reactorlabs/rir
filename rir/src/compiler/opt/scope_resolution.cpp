@@ -154,7 +154,7 @@ class TheScopeResolution {
 namespace rir {
 namespace pir {
 
-void ScopeResolution::apply(Closure* function) {
+void ScopeResolution::apply(Closure* function) const {
     TheScopeResolution s(function);
     s();
 }

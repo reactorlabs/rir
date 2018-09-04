@@ -112,7 +112,7 @@ struct Code {
         return sizeof(Code) + pad4(codeSize) + sources * sizeof(SrclistEntry);
     }
 
-    unsigned getSrcIdxAt(Opcode* pc, bool allowMissing) const {
+    unsigned getSrcIdxAt(const Opcode* pc, bool allowMissing) const {
         if (srcLength == 0) {
             assert(allowMissing);
             return 0;

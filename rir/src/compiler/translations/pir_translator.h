@@ -12,8 +12,8 @@ class PirTranslator {
   public:
     PirTranslator(std::string name) : name(name) {}
 
-    virtual void apply(Closure* function) = 0;
-    std::string getName() { return this->name; }
+    virtual void apply(Closure* function) const = 0;
+    std::string getName() const { return this->name; }
     virtual ~PirTranslator() {}
 
   protected:

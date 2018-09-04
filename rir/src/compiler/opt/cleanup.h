@@ -11,7 +11,7 @@ class Cleanup : public PirTranslator {
   public:
     Cleanup() : PirTranslator("cleanup"){};
 
-    void apply(Closure* function) override;
+    void apply(Closure* function) const final override;
 };
 }
 }

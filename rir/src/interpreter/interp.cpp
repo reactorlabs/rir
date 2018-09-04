@@ -166,7 +166,7 @@ RIR_INLINE SEXP promiseValue(SEXP promise, Context* ctx) {
     if (PRVALUE(promise) && PRVALUE(promise) != R_UnboundValue) {
         promise = PRVALUE(promise);
         assert(TYPEOF(promise) != PROMSXP);
-        SET_NAMED(promise, 2);
+        ENSURE_NAMEDMAX(promise);
         return promise;
     } else {
         SEXP res = forcePromise(promise);
@@ -2394,7 +2394,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env,
         INSTRUCTION(deopt_) {
             SEXP r = readConst(ctx, readImmediate());
             assert(TYPEOF(r) == RAWSXP);
-            assert(XLENGTH(r) >= sizeof(DeoptMetadata));
+            assert(XLENGTH(r) >= (int)sizeof(DeoptMetadata));
             auto m = (DeoptMetadata*)DATAPTR(r);
             advanceImmediate();
             pc = (Opcode*)m->frames[0].pc;
@@ -2569,15 +2569,13 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env,
 
         INSTRUCTION(set_shared_) {
             SEXP val = ostack_top(ctx);
-            if (NAMED(val) < 2) {
-                SET_NAMED(val, 2);
-            }
+            ENSURE_NAMEDMAX(val);
             NEXT();
         }
 
         INSTRUCTION(make_unique_) {
             SEXP val = ostack_top(ctx);
-            if (NAMED(val) == 2) {
+            if (NAMED(val) >= 2) {
                 val = shallow_duplicate(val);
                 ostack_set(ctx, 0, val);
                 SET_NAMED(val, 1);

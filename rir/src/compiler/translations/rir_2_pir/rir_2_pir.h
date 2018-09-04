@@ -1,19 +1,21 @@
 #ifndef RIR_2_PIR_H
 #define RIR_2_PIR_H
 
+#include "../../util/builder.h"
 #include "../pir_translator.h"
 #include "rir_2_pir_compiler.h"
-#include "stack_machine.h"
-#include <unordered_map>
+
+#include <unordered_set>
 
 namespace rir {
 namespace pir {
+
+struct RirStack;
 
 class Rir2Pir {
   public:
     Rir2Pir(Rir2PirCompiler& cmp, rir::Function* srcFunction)
         : compiler(cmp), srcFunction(srcFunction) {}
-    Rir2Pir(const Rir2Pir& r2p) : Rir2Pir(r2p.compiler, r2p.srcFunction) {}
 
     // Tries to compile the srcCode. Return value indicates failure. Builder
     // has to be discarded, if compilation fails!
@@ -28,6 +30,11 @@ class Rir2Pir {
     }
 
   private:
+    bool tryCompilePromise(rir::Code* prom, Builder& insert) const
+        __attribute__((warn_unused_result)) {
+        return Rir2Pir(compiler, srcFunction).tryCompile(prom, insert);
+    }
+
     template <typename T>
     using Maybe = std::function<T()>;
     template <typename T>
@@ -61,9 +68,8 @@ class Rir2Pir {
     Rir2PirCompiler& compiler;
     rir::Function* srcFunction;
 
-    bool doMerge(Opcode* trg);
-
-    friend class StackMachine;
+    bool compileBC(BC bc, Opcode* pos, rir::Code* srcCode, RirStack&, Builder&,
+                   std::unordered_map<Value*, CallFeedback>&) const;
 };
 
 } // namespace pir

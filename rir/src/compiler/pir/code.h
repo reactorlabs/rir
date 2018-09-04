@@ -14,7 +14,7 @@ namespace pir {
  */
 class Code {
   public:
-    BB* entry;
+    BB* entry = nullptr;
 
     size_t nextBBId = 0;
 

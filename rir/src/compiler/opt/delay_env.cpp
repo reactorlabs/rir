@@ -9,7 +9,7 @@
 namespace rir {
 namespace pir {
 
-void DelayEnv::apply(Closure* function) {
+void DelayEnv::apply(Closure* function) const {
     std::vector<MkEnv*> envs;
 
     Visitor::run(function->entry, [&](BB* bb) {
@@ -76,16 +76,16 @@ void DelayEnv::apply(Closure* function) {
             if (it != bb->end() && (it + 1) != bb->end()) {
                 auto b = Branch::Cast(*(it + 1));
                 if (e && b) {
-                    if (!bb->next0->isEmpty()) {
-                        auto d = Deopt::Cast(bb->next0->last());
+                    if (!bb->falseBranch()->isEmpty()) {
+                        auto d = Deopt::Cast(bb->falseBranch()->last());
                         if (d) {
                             auto newE = e->clone();
                             it = bb->insert(it, newE);
-                            e->replaceUsesIn(newE, bb->next0);
+                            e->replaceUsesIn(newE, bb->trueBranch());
                             // Closure wrapper in MkEnv can be circular
                             Replace::usesOfValue(newE, e, newE);
-                            it = bb->moveToBegin(it, bb->next0);
-                            it = bb->moveToBegin(it, bb->next1);
+                            it = bb->moveToBegin(it, bb->trueBranch());
+                            it = bb->moveToBegin(it, bb->falseBranch());
                         }
                     }
                 }

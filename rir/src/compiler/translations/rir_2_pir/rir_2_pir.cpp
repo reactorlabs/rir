@@ -6,11 +6,13 @@
 #include "../../util/builder.h"
 #include "../../util/cfg.h"
 #include "../../util/visitor.h"
+#include "R/Funtab.h"
 #include "R/RList.h"
 #include "ir/BC.h"
+#include "ir/Compiler.h"
 #include "utils/FormalArgs.h"
 
-#include <deque>
+#include <unordered_map>
 #include <vector>
 
 namespace {
@@ -29,7 +31,7 @@ struct Matcher {
 
     typedef std::function<void(Opcode*)> MatcherMaybe;
 
-    bool operator()(Opcode* pc, Opcode* end, MatcherMaybe m) const {
+    bool operator()(Opcode* pc, const Opcode* end, MatcherMaybe m) const {
         for (size_t i = 0; i < SIZE; ++i) {
             if (*pc != seq[i])
                 return false;
@@ -42,8 +44,58 @@ struct Matcher {
     }
 };
 
-void recoverCFG(rir::Code* srcCode, rir::Function* srcFunction,
-                std::unordered_map<Opcode*, StackMachine>& mergepoint) {
+struct State {
+    bool seen = false;
+    BB* entryBB = nullptr;
+    Opcode* entryPC = 0;
+
+    State() {}
+    State(State&&) = default;
+    State(const State&) = delete;
+    State(const State& other, bool seen, BB* entryBB, Opcode* entryPC)
+        : seen(seen), entryBB(entryBB), entryPC(entryPC), stack(other.stack){};
+
+    void operator=(const State&) = delete;
+    State& operator=(State&&) = default;
+
+    void mergeIn(const State& incom, BB* incomBB);
+    void createMergepoint(Builder&);
+
+    void clear() {
+        stack.clear();
+        entryBB = nullptr;
+        entryPC = nullptr;
+    }
+
+    RirStack stack;
+};
+
+void State::createMergepoint(Builder& insert) {
+    BB* oldBB = insert.getCurrentBB();
+    insert.createNextBB();
+    for (size_t i = 0; i < stack.size(); ++i) {
+        auto v = stack.at(i);
+        auto p = insert(new Phi);
+        p->addInput(oldBB, v);
+        stack.at(i) = p;
+    }
+}
+
+void State::mergeIn(const State& incom, BB* incomBB) {
+    assert(stack.size() == incom.stack.size());
+
+    for (size_t i = 0; i < stack.size(); ++i) {
+        Phi* p = Phi::Cast(stack.at(i));
+        assert(p);
+        Value* in = incom.stack.at(i);
+        if (in != p) {
+            p->addInput(incomBB, in);
+        }
+    }
+    incomBB->setNext(entryBB);
+}
+
+std::unordered_set<Opcode*> findMergepoints(rir::Code* srcCode) {
     std::unordered_map<Opcode*, std::vector<Opcode*>> incom;
     // Mark incoming jmps
     for (auto pc = srcCode->code(); pc != srcCode->endCode();) {
@@ -63,11 +115,13 @@ void recoverCFG(rir::Code* srcCode, rir::Function* srcFunction,
         }
         pc = BC::next(pc);
     }
+
+    std::unordered_set<Opcode*> mergepoints;
     // Create mergepoints
     for (auto m : incom)
         if (std::get<1>(m).size() > 1)
-            mergepoint.emplace(m.first,
-                               StackMachine(srcFunction, srcCode, m.first));
+            mergepoints.insert(m.first);
+    return mergepoints;
 }
 
 } // namespace
@@ -75,52 +129,491 @@ void recoverCFG(rir::Code* srcCode, rir::Function* srcFunction,
 namespace rir {
 namespace pir {
 
+bool Rir2Pir::compileBC(
+    BC bc, Opcode* pos, rir::Code* srcCode, RirStack& stack, Builder& insert,
+    std::unordered_map<Value*, CallFeedback>& callFeedback) const {
+    Value* env = insert.env;
+
+    unsigned srcIdx = srcCode->getSrcIdxAt(pos, true);
+
+    Value* v;
+    Value* x;
+    Value* y;
+
+    auto push = [&stack](Value* v) { stack.push(v); };
+    auto pop = [&stack]() { return stack.pop(); };
+    auto at = [&stack](unsigned i) { return stack.at(i); };
+    auto top = [&stack]() { return stack.at(0); };
+    auto set = [&stack](unsigned i, Value* v) { stack.at(i) = v; };
+
+    switch (bc.bc) {
+
+    case Opcode::push_:
+        push(insert(new LdConst(bc.immediateConst())));
+        break;
+
+    case Opcode::ldvar_:
+        v = insert(new LdVar(bc.immediateConst(), env));
+        push(insert(new Force(v, env)));
+        break;
+
+    case Opcode::stvar_:
+        v = pop();
+        insert(new StVar(bc.immediateConst(), v, env));
+        break;
+
+    case Opcode::ldvar_super_:
+        push(insert(new LdVarSuper(bc.immediateConst(), env)));
+        break;
+
+    case Opcode::stvar_super_:
+        v = pop();
+        insert(new StVarSuper(bc.immediateConst(), v, env));
+        break;
+
+    case Opcode::asbool_:
+    case Opcode::aslogical_:
+        push(insert(new AsLogical(pop(), srcIdx)));
+        break;
+
+    case Opcode::ldfun_:
+        push(insert(new LdFun(bc.immediateConst(), env)));
+        break;
+
+    case Opcode::guard_fun_:
+        compiler.getLog().warningBC(srcFunction, WARNING_GUARD_STRING, bc);
+        break;
+
+    case Opcode::swap_:
+        x = pop();
+        y = pop();
+        push(x);
+        push(y);
+        break;
+
+    case Opcode::dup_:
+        push(top());
+        break;
+
+    case Opcode::dup2_:
+        push(at(1));
+        push(at(1));
+        break;
+
+    case Opcode::close_: {
+        Value* srcref = pop();
+        Value* body = pop();
+        Value* formals = pop();
+        push(insert(new MkCls(formals, body, srcref, env)));
+        break;
+    }
+
+    case Opcode::nop_:
+        break;
+
+    case Opcode::pop_:
+        pop();
+        break;
+
+    case Opcode::record_binop_: {
+        // TODO
+        break;
+    }
+
+    case Opcode::record_call_: {
+        Value* target = top();
+        callFeedback[target] = bc.immediate.callFeedback;
+        break;
+    }
+
+    case Opcode::call_implicit_: {
+        std::vector<Value*> args;
+        for (auto argi : bc.immediateCallArguments) {
+            if (argi == DOTS_ARG_IDX) {
+                return false;
+            } else if (argi == MISSING_ARG_IDX) {
+                return false;
+            }
+            rir::Code* promiseCode = srcFunction->codeAt(argi);
+            Promise* prom = insert.function->createProm(promiseCode->src);
+            {
+                Builder promiseBuilder(insert.function, prom);
+                if (!tryCompilePromise(promiseCode, promiseBuilder))
+                    return false;
+            }
+            Value* val = Missing::instance();
+            if (Query::pure(prom)) {
+                translate(promiseCode, insert,
+                          [&](Value* success) { val = success; });
+            }
+            args.push_back(insert(new MkArg(prom, val, env)));
+        }
+
+        Value* callee = top();
+        SEXP monomorphic = nullptr;
+        if (callFeedback.count(callee)) {
+            auto& feedback = callFeedback.at(callee);
+            if (feedback.numTargets == 1)
+                monomorphic = feedback.targets[0];
+        }
+
+        auto ast = bc.immediate.callFixedArgs.ast;
+        auto insertGenericCall = [&]() {
+            push(insert(new Call(insert.env, pop(), args, ast)));
+        };
+        if (monomorphic && isValidClosureSEXP(monomorphic)) {
+            compiler.compileClosure(
+                monomorphic,
+                [&](Closure* f) {
+                    Value* expected = insert(new LdConst(monomorphic));
+                    Value* t = insert(new Identical(callee, expected));
+
+                    insert.deoptUnless(t, srcCode, pos, stack);
+                    pop();
+                    push(insert(
+                        new StaticCall(insert.env, f, args, monomorphic, ast)));
+                },
+                insertGenericCall);
+        } else {
+            insertGenericCall();
+        }
+        break;
+    }
+
+    case Opcode::promise_: {
+        unsigned promi = bc.immediate.i;
+        rir::Code* promiseCode = srcFunction->codeAt(promi);
+        Value* val = pop();
+        Promise* prom = insert.function->createProm(promiseCode->src);
+        {
+            Builder promiseBuilder(insert.function, prom);
+            if (tryCompilePromise(promiseCode, promiseBuilder))
+                return false;
+        }
+        push(insert(new MkArg(prom, val, env)));
+        break;
+    }
+
+    case Opcode::call_: {
+        unsigned n = bc.immediate.callFixedArgs.nargs;
+        std::vector<Value*> args(n);
+        for (size_t i = 0; i < n; ++i)
+            args[n - i - 1] = pop();
+
+        auto target = pop();
+        push(insert(
+            new Call(env, target, args, bc.immediate.callFixedArgs.ast)));
+        break;
+    }
+
+    case Opcode::static_call_: {
+        unsigned n = bc.immediate.staticCallFixedArgs.nargs;
+        auto ast = bc.immediate.staticCallFixedArgs.ast;
+        SEXP target = rir::Pool::get(bc.immediate.staticCallFixedArgs.target);
+
+        std::vector<Value*> args(n);
+        for (size_t i = 0; i < n; ++i)
+            args[n - i - 1] = pop();
+
+        if (TYPEOF(target) == BUILTINSXP) {
+            // TODO: compile a list of safe builtins
+            static int vector = findBuiltin("vector");
+
+            if (getBuiltinNr(target) == vector)
+                push(insert(new CallSafeBuiltin(target, args, ast)));
+            else
+                push(insert(new CallBuiltin(env, target, args, ast)));
+        } else {
+            assert(TYPEOF(target) == CLOSXP);
+            if (!isValidClosureSEXP(target)) {
+                Compiler::compileClosure(target);
+            }
+            bool failed = false;
+            compiler.compileClosure(
+                target,
+                [&](Closure* f) {
+                    push(insert(new StaticCall(env, f, args, target, ast)));
+                },
+                [&]() { failed = true; });
+            if (failed)
+                return false;
+        }
+        break;
+    }
+
+    case Opcode::seq_: {
+        auto step = pop();
+        auto stop = pop();
+        auto start = pop();
+        push(insert(new Seq(start, stop, step)));
+        break;
+    }
+
+    case Opcode::for_seq_size_:
+        push(insert(new ForSeqSize(top())));
+        break;
+
+    case Opcode::extract1_1_: {
+        Value* idx = pop();
+        Value* vec = pop();
+        push(insert(new Extract1_1D(vec, idx, env, srcIdx)));
+        break;
+    }
+
+    case Opcode::extract2_1_: {
+        Value* idx = pop();
+        Value* vec = pop();
+        push(insert(new Extract2_1D(vec, idx, env, srcIdx)));
+        break;
+    }
+
+    case Opcode::extract1_2_: {
+        Value* idx2 = pop();
+        Value* idx1 = pop();
+        Value* vec = pop();
+        push(insert(new Extract1_2D(vec, idx1, idx2, env, srcIdx)));
+        break;
+    }
+
+    case Opcode::extract2_2_: {
+        Value* idx2 = pop();
+        Value* idx1 = pop();
+        Value* vec = pop();
+        push(insert(new Extract2_2D(vec, idx1, idx2, env, srcIdx)));
+        break;
+    }
+
+    case Opcode::subassign1_: {
+        Value* val = pop();
+        Value* idx = pop();
+        Value* vec = pop();
+        push(insert(new Subassign1_1D(vec, idx, val)));
+        break;
+    }
+
+    case Opcode::subassign2_: {
+        SEXP sym = rir::Pool::get(bc.immediate.pool);
+        Value* val = pop();
+        Value* idx = pop();
+        Value* vec = pop();
+        push(insert(new Subassign2_1D(vec, idx, val, sym)));
+        break;
+    }
+
+#define BINOP_NOENV(Name, Op)                                                  \
+    case Opcode::Op: {                                                         \
+        auto rhs = pop();                                                      \
+        auto lhs = pop();                                                      \
+        push(insert(new Name(lhs, rhs)));                                      \
+        break;                                                                 \
+    }
+        BINOP_NOENV(LOr, lgl_or_);
+        BINOP_NOENV(LAnd, lgl_and_);
+#undef BINOP_NOENV
+
+#define BINOP(Name, Op)                                                        \
+    case Opcode::Op: {                                                         \
+        auto rhs = pop();                                                      \
+        auto lhs = pop();                                                      \
+        push(insert(new Name(lhs, rhs, env, srcIdx)));                         \
+        break;                                                                 \
+    }
+
+        BINOP(Lt, lt_);
+        BINOP(Gt, gt_);
+        BINOP(Gte, le_);
+        BINOP(Lte, ge_);
+        BINOP(Mod, mod_);
+        BINOP(Div, div_);
+        BINOP(IDiv, idiv_);
+        BINOP(Add, add_);
+        BINOP(Mul, mul_);
+        BINOP(Colon, colon_);
+        BINOP(Pow, pow_);
+        BINOP(Sub, sub_);
+        BINOP(Eq, eq_);
+        BINOP(Neq, ne_);
+#undef BINOP
+
+    case Opcode::identical_: {
+        auto rhs = pop();
+        auto lhs = pop();
+        push(insert(new Identical(lhs, rhs)));
+        break;
+    }
+
+#define UNOP(Name, Op)                                                         \
+    case Opcode::Op: {                                                         \
+        v = pop();                                                             \
+        push(insert(new Name(v, env, srcIdx)));                                \
+        break;                                                                 \
+    }
+        UNOP(Plus, uplus_);
+        UNOP(Minus, uminus_);
+        UNOP(Not, not_);
+        UNOP(Length, length_);
+#undef UNOP
+
+#define UNOP_NOENV(Name, Op)                                                   \
+    case Opcode::Op: {                                                         \
+        v = pop();                                                             \
+        push(insert(new Name(v)));                                             \
+        break;                                                                 \
+    }
+        UNOP_NOENV(Inc, inc_);
+#undef UNOP_NOENV
+
+    case Opcode::is_:
+        push(insert(new Is(bc.immediate.i, pop())));
+        break;
+
+    case Opcode::pull_: {
+        size_t i = bc.immediate.i;
+        push(at(i));
+        break;
+    }
+
+    case Opcode::pick_: {
+        x = at(bc.immediate.i);
+        for (int i = bc.immediate.i; i > 0; --i)
+            set(i, at(i - 1));
+        set(0, x);
+        break;
+    }
+
+    case Opcode::put_: {
+        x = top();
+        for (size_t i = 0; i < bc.immediate.i - 1; ++i)
+            set(i, at(i + 1));
+        set(bc.immediate.i, x);
+        break;
+    }
+
+    case Opcode::set_shared_:
+        push(insert(new SetShared(pop())));
+        break;
+
+    case Opcode::int3_:
+        insert(new Int3());
+        break;
+
+    // TODO implement!
+    // (silently ignored)
+    case Opcode::invisible_:
+    case Opcode::visible_:
+    case Opcode::isfun_:
+        break;
+
+    // Currently unused opcodes:
+    case Opcode::brobj_:
+    case Opcode::alloc_:
+    case Opcode::push_code_:
+    case Opcode::set_names_:
+    case Opcode::names_:
+    case Opcode::make_unique_:
+
+    // Invalid opcodes:
+    case Opcode::label:
+    case Opcode::invalid_:
+    case Opcode::num_of:
+
+    // Opcodes handled elsewhere
+    case Opcode::brtrue_:
+    case Opcode::brfalse_:
+    case Opcode::br_:
+    case Opcode::ret_:
+    case Opcode::return_:
+        assert(false);
+
+    // Opcodes that only come from PIR
+    case Opcode::deopt_:
+    case Opcode::force_:
+    case Opcode::make_env_:
+    case Opcode::get_env_:
+    case Opcode::parent_env_:
+    case Opcode::set_env_:
+    case Opcode::ldvar_noforce_:
+    case Opcode::ldvar_noforce_super_:
+    case Opcode::ldarg_:
+    case Opcode::ldloc_:
+    case Opcode::stloc_:
+    case Opcode::movloc_:
+    case Opcode::isobj_:
+    case Opcode::check_missing_:
+        assert(false && "Recompiling PIR not supported for now.");
+
+    // Unsupported opcodes:
+    case Opcode::named_call_:
+    case Opcode::named_call_implicit_:
+    case Opcode::ldlval_:
+    case Opcode::asast_:
+    case Opcode::missing_:
+    case Opcode::beginloop_:
+    case Opcode::endcontext_:
+    case Opcode::ldddvar_:
+        return false;
+    }
+
+    return true;
+}
+
 void Rir2Pir::translate(rir::Code* srcCode, Builder& insert,
                         MaybeVal<void> success, Maybe<void> fail) const {
     assert(!finalized);
 
-    std::unordered_map<Opcode*, StackMachine> mergepoint;
     std::vector<ReturnSite> results;
 
-    recoverCFG(srcCode, srcFunction, mergepoint);
+    std::unordered_map<Opcode*, State> mergepoints;
+    for (auto p : findMergepoints(srcCode))
+        mergepoints.emplace(p, State());
 
-    std::deque<StackMachine> worklist;
+    std::deque<State> worklist;
+    State cur;
+    cur.seen = true;
 
-    StackMachine state(srcFunction, srcCode);
+    std::unordered_map<Value*, CallFeedback> callFeedback;
 
-    auto popFromWorklist = [&]() {
+    Opcode* end = srcCode->endCode();
+    Opcode* finger = srcCode->code();
+
+    auto popWorklist = [&]() {
         assert(!worklist.empty());
-        state = worklist.back();
+        cur = std::move(worklist.back());
         worklist.pop_back();
-        insert.bb = state.getEntry();
+        insert.enterBB(cur.entryBB);
+        return cur.entryPC;
+    };
+    auto pushWorklist = [&](BB* bb, Opcode* pos) {
+        worklist.push_back(State(cur, false, bb, pos));
     };
 
-    while (!state.atEnd() || !worklist.empty()) {
-        if (state.atEnd())
-            popFromWorklist();
+    while (finger != end || !worklist.empty()) {
+        if (finger == end)
+            finger = popWorklist();
+        assert(finger != end);
 
-        BC bc = state.getCurrentBC();
-
-        if (mergepoint.count(state.getPC()) > 0) {
-            StackMachine* other = &mergepoint.at(state.getPC());
-            bool todo = state.doMerge(state.getPC(), insert, other);
-            state = mergepoint.at(state.getPC());
-            insert.next(state.getEntry());
-            if (!todo) {
-                if (worklist.empty()) {
-                    state.clear();
+        if (mergepoints.count(finger)) {
+            State& other = mergepoints.at(finger);
+            if (other.seen) {
+                other.mergeIn(cur, insert.getCurrentBB());
+                cur.clear();
+                if (worklist.empty())
                     break;
-                }
-                popFromWorklist();
+                finger = popWorklist();
                 continue;
             }
+            cur.createMergepoint(insert);
+            other = State(cur, true, insert.getCurrentBB(), finger);
         }
+        const auto pos = finger;
+        BC bc = BC::advance(&finger);
+        const auto nextPos = finger;
 
+        assert(pos != end);
         if (bc.isJmp()) {
-            auto trg = bc.jmpTarget(state.getPC());
-            Opcode* fallpc = BC::next(state.getPC());
+            auto trg = bc.jmpTarget(pos);
             if (bc.isUncondJmp()) {
-                state.setPC(trg);
+                finger = trg;
                 continue;
             }
 
@@ -128,12 +621,12 @@ void Rir2Pir::translate(rir::Code* srcCode, Builder& insert,
             switch (bc.bc) {
             case Opcode::brtrue_:
             case Opcode::brfalse_: {
-                Value* v = state.pop();
+                Value* v = cur.stack.pop();
                 insert(new Branch(v));
                 break;
             }
             case Opcode::brobj_: {
-                Value* v = insert(new IsObject(state.top()));
+                Value* v = insert(new IsObject(cur.stack.top()));
                 insert(new Branch(v));
                 break;
             }
@@ -148,55 +641,32 @@ void Rir2Pir::translate(rir::Code* srcCode, Builder& insert,
             }
 
             auto edgeSplit = [&](Opcode* trg, BB* branch) {
-                if (mergepoint.count(trg)) {
+                if (mergepoints.count(trg)) {
                     BB* next = insert.createBB();
-                    branch->next0 = next;
+                    branch->setNext(next);
                     branch = next;
                 }
                 return branch;
             };
 
             BB* branch = edgeSplit(trg, insert.createBB());
-            BB* fall = edgeSplit(fallpc, insert.createBB());
+            BB* fall = edgeSplit(nextPos, insert.createBB());
 
-            // TOS == TRUE goes to next1, TOS == FALSE goes to next0
             switch (bc.bc) {
             case Opcode::brtrue_:
-                insert.bb->next0 = fall;
-                insert.bb->next1 = branch;
+                insert.setBranch(branch, fall);
                 break;
             case Opcode::brfalse_:
             case Opcode::brobj_:
-                insert.bb->next0 = branch;
-                insert.bb->next1 = fall;
+                insert.setBranch(fall, branch);
                 break;
             default:
                 assert(false);
             }
 
-            switch (bc.bc) {
-            case Opcode::brtrue_:
-            case Opcode::brfalse_: {
-                state.setPC(trg);
-                state.setEntry(branch);
-                worklist.push_back(state);
-                break;
-            }
-            case Opcode::brobj_: {
-                state.setPC(trg);
-                state.setEntry(branch);
-                insert.bb = branch;
-                insert(
-                    new Deopt(insert.env, srcCode, state.getPC(), state.stack));
-                break;
-            }
-            default:
-                assert(false);
-            }
+            pushWorklist(branch, trg);
 
-            state.setPC(fallpc);
-            state.setEntry(fall);
-            insert.bb = fall;
+            insert.enterBB(fall);
             continue;
         }
 
@@ -213,23 +683,23 @@ void Rir2Pir::translate(rir::Code* srcCode, Builder& insert,
             default:
                 assert(false);
             }
-            results.push_back(ReturnSite(insert.bb, state.pop()));
-            assert(state.empty());
-            if (worklist.empty()) {
-                state.clear();
-                break;
-            }
-            popFromWorklist();
+            results.push_back(
+                ReturnSite(insert.getCurrentBB(), cur.stack.pop()));
+            assert(cur.stack.empty());
+            // Setting the position to end, will either terminate the loop, or
+            // pop from the worklist
+            finger = end;
             continue;
         }
 
+        assert(pos != end);
         const static Matcher<4> ifFunctionLiteral(
             {{{Opcode::push_, Opcode::push_, Opcode::push_, Opcode::close_}}});
 
         bool skip = false;
 
-        ifFunctionLiteral(state.getPC(), srcCode->endCode(), [&](Opcode* next) {
-            Opcode* pc = state.getPC();
+        ifFunctionLiteral(pos, end, [&](Opcode* next) {
+            Opcode* pc = pos;
             BC ldfmls = BC::advance(&pc);
             BC ldcode = BC::advance(&pc);
             BC ldsrc = BC::advance(&pc);
@@ -247,11 +717,12 @@ void Rir2Pir::translate(rir::Code* srcCode, Builder& insert,
             compiler.compileFunction(
                 function, formals,
                 [&](Closure* innerF) {
-                    state.push(insert(
+                    cur.stack.push(insert(
                         new MkFunCls(innerF, insert.env, fmls, code, src)));
 
+                    // Skip those instructions
+                    finger = pc;
                     skip = true;
-                    state.setPC(next);
                 },
                 []() {
                     // If the closure does not compile, we can still call the
@@ -261,19 +732,30 @@ void Rir2Pir::translate(rir::Code* srcCode, Builder& insert,
         });
 
         if (!skip) {
-            int size = state.stack_size();
-            if (!state.tryRunCurrentBC(*this, insert)) {
+            int size = cur.stack.size();
+            if (!compileBC(bc, pos, srcCode, cur.stack, insert, callFeedback)) {
                 compiler.getLog().warningBC(srcFunction,
                                             "Abort r2p due to unsupported bc",
-                                            state.getCurrentBC());
+                                            pos);
                 fail();
                 return;
             }
-            assert(state.stack_size() == size - bc.popCount() + bc.pushCount());
-            state.advancePC();
+            if (cur.stack.size() != size - bc.popCount() + bc.pushCount()) {
+                srcCode->print(std::cerr);
+                std::cerr << "After interpreting '";
+                bc.print(std::cerr);
+                std::cerr << "' which is supposed to pop " << bc.popCount()
+                          << " and push " << bc.pushCount() << " we got from "
+                          << size << " to " << cur.stack.size() << "\n";
+                assert(false);
+                fail();
+                return;
+            }
+            if (bc.isCall())
+                insert.registerSafepoint(srcCode, nextPos, cur.stack);
         }
     }
-    assert(state.empty());
+    assert(cur.stack.empty());
 
     if (results.size() == 0) {
         // Cannot compile functions with infinite loop
@@ -283,14 +765,14 @@ void Rir2Pir::translate(rir::Code* srcCode, Builder& insert,
 
     Value* res;
     if (results.size() == 1) {
-        insert.bb = results.back().first;
         res = results.back().second;
+        insert.reenterBB(results.back().first);
     } else {
         BB* merge = insert.createBB();
-        insert.bb = merge;
+        insert.enterBB(merge);
         Phi* phi = insert(new Phi());
         for (auto r : results) {
-            r.first->next0 = merge;
+            r.first->setNext(merge);
             phi->addInput(r.first, r.second);
         }
         phi->updateType();
@@ -305,7 +787,7 @@ void Rir2Pir::translate(rir::Code* srcCode, Builder& insert,
 void Rir2Pir::finalize(Value* ret, Builder& insert) {
     assert(!finalized);
     assert(ret);
-    assert(!insert.bb->next0 && !insert.bb->next1 &&
+    assert(insert.getCurrentBB()->isExit() &&
            "Builder needs to be on an exit-block to insert return");
 
     bool changed = true;

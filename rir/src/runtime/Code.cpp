@@ -19,12 +19,13 @@ void Code::disassemble(std::ostream& out) const {
     while (pc < endCode()) {
         BC bc = BC::decode(pc);
 
-        out << std::setw(5) << ((uintptr_t)pc - (uintptr_t)code());
+        const size_t OFFSET_WIDTH = 5;
+        out << std::setw(OFFSET_WIDTH) << ((uintptr_t)pc - (uintptr_t)code());
 
         unsigned s = getSrcIdxAt(pc, true);
         if (s != 0)
-            out << "   ; " << dumpSexp(src_pool_at(globalContext(), s))
-                << "\n       ";
+            out << "   ; " << dumpSexp(src_pool_at(globalContext(), s)) << "\n"
+                << std::setw(OFFSET_WIDTH) << "";
 
         // Print call ast
         switch (bc.bc) {
@@ -34,13 +35,15 @@ void Code::disassemble(std::ostream& out) const {
         case Opcode::named_call_:
             out << "   ; "
                 << dumpSexp(Pool::get(bc.immediate.callFixedArgs.ast)).c_str()
-                << "\n       ";
+                << "\n"
+                << std::setw(OFFSET_WIDTH) << "";
             break;
         case Opcode::static_call_:
             out << "   ; "
                 << dumpSexp(Pool::get(bc.immediate.staticCallFixedArgs.ast))
                        .c_str()
-                << "\n       ";
+                << "\n"
+                << std::setw(OFFSET_WIDTH) << "";
             break;
         default: {}
         }

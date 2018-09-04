@@ -146,7 +146,7 @@ class StaticAnalysis {
                     }
                 }
 
-                if (!bb->next0 && !bb->next1) {
+                if (bb->isExit()) {
                     if (!Deopt::Cast(bb->last())) {
                         if (reachedExit) {
                             exitpoint.merge(state);
@@ -158,27 +158,27 @@ class StaticAnalysis {
                     return;
                 }
 
-                if (bb->next0) {
-                    if (mergepoint[bb->next0->id].empty()) {
-                        mergepoint[bb->next0->id].push_back(state);
+                if (bb->trueBranch()) {
+                    if (mergepoint[bb->trueBranch()->id].empty()) {
+                        mergepoint[bb->trueBranch()->id].push_back(state);
                         done = false;
-                        changed[bb->next0->id] = true;
+                        changed[bb->trueBranch()->id] = true;
                     } else {
-                        if (mergepoint[bb->next0->id][0].merge(state)) {
+                        if (mergepoint[bb->trueBranch()->id][0].merge(state)) {
                             done = false;
-                            changed[bb->next0->id] = true;
+                            changed[bb->trueBranch()->id] = true;
                         }
                     }
                 }
-                if (bb->next1) {
-                    if (mergepoint[bb->next1->id].empty()) {
-                        mergepoint[bb->next1->id].push_back(state);
+                if (bb->falseBranch()) {
+                    if (mergepoint[bb->falseBranch()->id].empty()) {
+                        mergepoint[bb->falseBranch()->id].push_back(state);
                         done = false;
-                        changed[bb->next1->id] = true;
+                        changed[bb->falseBranch()->id] = true;
                     } else {
-                        if (mergepoint[bb->next1->id][0].merge(state)) {
+                        if (mergepoint[bb->falseBranch()->id][0].merge(state)) {
                             done = false;
-                            changed[bb->next1->id] = true;
+                            changed[bb->falseBranch()->id] = true;
                         }
                     }
                 }

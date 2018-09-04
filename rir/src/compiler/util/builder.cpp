@@ -6,18 +6,92 @@ namespace pir {
 
 BB* Builder::createBB() { return new BB(code, code->nextBBId++); }
 
+void Builder::markDone(BB* bb) {
+    if (done.size() <= bb->id)
+        done.resize(bb->id + 1);
+    done[bb->id] = true;
+}
+
+bool Builder::isDone(BB* bb) {
+    if (done.size() <= bb->id)
+        done.resize(bb->id + 1);
+    return done[bb->id];
+}
+
+void Builder::setBranch(BB* next0, BB* next1) {
+    assert(bb);
+    assert(!bb->isEmpty() && Branch::Cast(bb->last()));
+    markDone(bb);
+    bb->setBranch(next0, next1);
+}
+
+void Builder::setNext(BB* next) {
+    assert(bb);
+    markDone(bb);
+    bb->setNext(next);
+}
+
+void Builder::enterBB(BB* next) {
+    assert(!isDone(next));
+    if (bb)
+        markDone(bb);
+    bb = next;
+}
+
+void Builder::createNextBB() {
+    auto n = createBB();
+    if (bb)
+        setNext(n);
+    bb = n;
+}
+
+void Builder::add(Instruction* i) {
+    assert(i->tag != Tag::_UNUSED_);
+    bb->append(i);
+}
+
+Safepoint* Builder::registerSafepoint(rir::Code* srcCode, Opcode* pos,
+                                      const RirStack& stack) {
+    auto sp = new Safepoint(env, srcCode, pos, stack);
+    add(sp);
+    return sp;
+};
+
+void Builder::deoptUnless(Value* condition, rir::Code* srcCode, Opcode* pos,
+                          const RirStack& stack) {
+    add(new Branch(condition));
+    auto cont = createBB();
+    auto fail = createBB();
+    setBranch(cont, fail);
+
+    enterBB(fail);
+    auto sp = registerSafepoint(srcCode, pos, stack);
+    add(new Deopt(sp));
+
+    enterBB(cont);
+};
+
 Builder::Builder(Closure* fun, Value* closureEnv)
-    : function(fun), code(fun), env(nullptr), bb(fun->entry) {
-    bb = function->entry = createBB();
+    : function(fun), code(fun), env(nullptr) {
+    createNextBB();
+    assert(!function->entry);
+    function->entry = bb;
     std::vector<Value*> args(fun->argNames.size());
     for (long i = fun->argNames.size() - 1; i >= 0; --i)
         args[i] = this->operator()(new LdArg(i));
-    env = this->operator()(new MkEnv(closureEnv, fun->argNames, args.data()));
+    auto mkenv = new MkEnv(closureEnv, fun->argNames, args.data());
+    add(mkenv);
+    env = mkenv;
 }
+
 Builder::Builder(Closure* fun, Promise* prom)
-    : function(fun), code(prom), env(nullptr), bb(prom->entry) {
-    bb = prom->entry = createBB();
-    env = this->operator()(new LdFunctionEnv());
+    : function(fun), code(prom), env(nullptr) {
+    createNextBB();
+    assert(!prom->entry);
+    prom->entry = bb;
+    auto ldenv = new LdFunctionEnv();
+    add(ldenv);
+    env = ldenv;
 }
 }
 }

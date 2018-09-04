@@ -31,7 +31,7 @@ class RirCompiler {
     const DebugOptions debug;
 
   protected:
-    std::vector<PirTranslator*> translations;
+    std::vector<const PirTranslator*> translations;
     Module* module;
 };
 } // namespace pir

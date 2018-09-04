@@ -53,9 +53,6 @@ class BB {
 
     Instruction* last();
 
-    BB* next0 = nullptr;
-    BB* next1 = nullptr;
-
     bool isJmp() { return next0 && !next1; }
     bool isEmpty() { return instrs.size() == 0; }
 
@@ -81,6 +78,36 @@ class BB {
     Instruction* at(size_t i) { return instrs[i]; }
 
     void gc();
+
+    bool isExit() const { return !next0 && !next1; }
+
+    void setBranch(BB* trueBranch, BB* falseBranch) {
+        assert(!next0 && !next1);
+        this->next0 = trueBranch;
+        this->next1 = falseBranch;
+    }
+    BB* trueBranch() { return next0; }
+    BB* falseBranch() { return next1; }
+
+    void overrideNext(BB* bb) {
+        assert(next0 && !next1);
+        next0 = bb;
+    }
+    void setNext(BB* bb) {
+        assert(!next0 && !next1);
+        next0 = bb;
+    }
+    BB* next() {
+        assert(next0 && !next1);
+        return next0;
+    }
+
+    // don't use them directly unless you know what you are doing
+    // We don't want to make them private, since we are all adults. But there
+    // are probably not many reasons to use them outside the cleanup pass and
+    // BBTransformer.
+    BB* next0 = nullptr;
+    BB* next1 = nullptr;
 
   private:
     Instrs instrs;
