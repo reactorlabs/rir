@@ -5,6 +5,7 @@
 #include "interpreter/runtime.h"
 #include "ir/BC_inc.h"
 
+#include "R/Preserve.h"
 #include "ir/CodeVerifier.h"
 #include "runtime/Function.h"
 #include "utils/Pool.h"
@@ -26,9 +27,11 @@ class FunctionWriter {
 
     std::vector<SEXP> codeVec;
 
+    Preserve preserve;
+
     FunctionWriter() : function_(nullptr), functionSize(sizeof(Function)) {}
 
-    ~FunctionWriter() { R_ReleaseObject(function_->container()); }
+    ~FunctionWriter() {}
 
     Function* function() {
         assert(function_ && "FunctionWriter has not been finalized");
@@ -45,7 +48,7 @@ class FunctionWriter {
         SEXP store = Rf_allocVector(EXTERNALSXP, functionSize);
         void* payload = INTEGER(store);
         Function* fun = new (payload) Function(functionSize, codeVec);
-        R_PreserveObject(fun->container());
+        preserve(store);
 
         assert(fun->info.magic == FUNCTION_MAGIC);
 
@@ -68,7 +71,7 @@ class FunctionWriter {
         Code* code =
             new (payload) Code(nullptr, index, ast, codeSize, sources.size(),
                                markDefaultArg, localsCnt);
-        Pool::insert(store);
+        preserve(store);
         codeVec.push_back(store);
         functionSize += sizeof(SEXP);
 
