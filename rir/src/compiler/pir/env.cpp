@@ -12,11 +12,13 @@ void Env::printRef(std::ostream& out) {
     if (this == notClosed()) {
         out << "?";
         return;
-    }
-    if (this == nil()) {
+    } else if (this == elided()) {
+        out << "elided";
+        return;
+    } else if (this == nil()) {
         out << "nil";
         return;
-    }
+    } 
     assert(rho);
     std::string val;
     {
@@ -28,7 +30,7 @@ void Env::printRef(std::ostream& out) {
 }
 
 bool Env::isStaticEnv(Value* v) {
-    return Env::Cast(v) && v != Env::notClosed() && v != Env::nil();
+    return Env::Cast(v) && v != Env::notClosed() && v != Env::nil() && v != Env::elided();
 }
 
 bool Env::isPirEnv(Value* v) {

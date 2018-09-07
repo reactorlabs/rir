@@ -73,6 +73,7 @@ enum class EnvAccess : uint8_t {
     Read,
     Write,
     Leak,
+    NoneOrLeak,
 };
 
 // Effect that can be produced by an instruction.
@@ -209,11 +210,12 @@ class InstructionImplementation : public Instruction {
         bool LeaksEnv;
         bool HasEnv;
         bool AccessesEnv;
+        bool mayElideEnv;
     };
 
     static constexpr InstrDescription Description = {
         EFFECT > Effect::None, ENV >= EnvAccess::Write, ENV == EnvAccess::Leak,
-        ENV > EnvAccess::None, ENV > EnvAccess::Capture};
+        ENV > EnvAccess::None, ENV > EnvAccess::Capture, ENV >= EnvAccess::NoneOrLeak};
 
     bool hasEffect() const final { return Description.HasEffect; }
     bool changesEnv() const final { return Description.ChangesEnv; }
@@ -746,15 +748,13 @@ class FLI(Int3, 0, Effect::Any, EnvAccess::None) {
 };
 
 #define BINOP(Name, Type)                                                      \
-    class FLI(Name, 3, Effect::None, EnvAccess::Leak) {                        \
+    class FLI(Name, 3, Effect::None, EnvAccess::NoneOrLeak) {                  \
       public:                                                                  \
         Name(Value* lhs, Value* rhs, Value* env, unsigned srcIdx)              \
             : FixedLenInstruction(Type, {{PirType::val(), PirType::val()}},    \
                                   {{lhs, rhs}}, env, srcIdx) {}                \
     }
 
-BINOP(Gte, PirType::val());
-BINOP(Lte, PirType::val());
 BINOP(Mul, PirType::val());
 BINOP(Div, PirType::val());
 BINOP(IDiv, PirType::val());
@@ -763,6 +763,8 @@ BINOP(Add, PirType::val());
 BINOP(Colon, PirType::val());
 BINOP(Pow, PirType::val());
 BINOP(Sub, PirType::val());
+BINOP(Gte, RType::logical);
+BINOP(Lte, RType::logical);
 BINOP(Gt, RType::logical);
 BINOP(Lt, RType::logical);
 BINOP(Neq, RType::logical);

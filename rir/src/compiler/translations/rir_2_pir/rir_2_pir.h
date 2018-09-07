@@ -69,7 +69,7 @@ class Rir2Pir {
     rir::Function* srcFunction;
 
     bool compileBC(BC bc, Opcode* pos, rir::Code* srcCode, RirStack&, Builder&,
-                   std::unordered_map<Value*, CallFeedback>&) const;
+                   std::unordered_map<Value*, CallFeedback>&, std::array<TypeFeedback, 2>&) const;
 };
 
 } // namespace pir

@@ -20,7 +20,7 @@ pir::Instruction* InsertCast::cast(pir::Value* v, PirType t, Value* env) {
     }
 
     std::cerr << "Cannot cast " << v->type << " to " << t;
-    std::cerr << " for at ";
+    std::cerr << " at ";
     v->printRef(std::cerr);
     std::cerr << "\n";
     return nullptr;

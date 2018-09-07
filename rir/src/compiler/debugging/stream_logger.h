@@ -41,6 +41,7 @@ class StreamLogger {
 
     void compilationEarlyPir(Closure&);
     void pirOptimizations(Closure&, const std::string&, size_t);
+    void pirOptimizationsFinished(Closure&);
     void afterCSSA(Closure&, const Code*);
     // void afterLiveness(SSAAllocator&);
     void finalPIR(Closure&);

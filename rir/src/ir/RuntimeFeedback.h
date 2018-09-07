@@ -50,12 +50,14 @@ struct RecordedType {
     bool operator==(const RecordedType& other) {
         return memcmp(this, &other, sizeof(RecordedType)) == 0;
     }
+
+    bool isObj() const { return object; } 
 };
 static_assert(sizeof(CallFeedback) == 7 * sizeof(uint32_t),
               "Size needs to fit inside a record_ bc immediate args");
 
 struct TypeFeedback {
-    static constexpr unsigned MaxTypes = 3;
+    static const unsigned MaxTypes = 3;
     uint8_t numTypes;
 
     std::array<RecordedType, MaxTypes> seen;
@@ -72,6 +74,18 @@ struct TypeFeedback {
             if (i == numTypes)
                 seen[numTypes++] = type;
         }
+    }
+
+    bool observedObject() {
+        bool answer = false;
+        for (const auto& record : seen)
+        {
+            if (record.isObj()) {
+                answer = true;
+                break;
+            }
+        }
+        return answer;
     }
 };
 static_assert(sizeof(TypeFeedback) == sizeof(uint32_t),

@@ -131,7 +131,7 @@ namespace pir {
 
 bool Rir2Pir::compileBC(
     BC bc, Opcode* pos, rir::Code* srcCode, RirStack& stack, Builder& insert,
-    std::unordered_map<Value*, CallFeedback>& callFeedback) const {
+    std::unordered_map<Value*, CallFeedback>& callFeedback, std::array<TypeFeedback, 2>& typeFeedback) const {
     Value* env = insert.env;
 
     unsigned srcIdx = srcCode->getSrcIdxAt(pos, true);
@@ -216,7 +216,8 @@ bool Rir2Pir::compileBC(
         break;
 
     case Opcode::record_binop_: {
-        // TODO
+        typeFeedback[0] = bc.immediate.binopFeedback[0];
+        typeFeedback[1] = bc.immediate.binopFeedback[1];
         break;
     }
 
@@ -268,7 +269,7 @@ bool Rir2Pir::compileBC(
                     Value* expected = insert(new LdConst(monomorphic));
                     Value* t = insert(new Identical(callee, expected));
 
-                    insert.deoptUnless(t, srcCode, pos, stack);
+                    insert.conditionalDeopt(t, srcCode, pos, stack, true);
                     pop();
                     push(insert(
                         new StaticCall(insert.env, f, args, monomorphic, ast)));
@@ -411,12 +412,21 @@ bool Rir2Pir::compileBC(
         BINOP_NOENV(LAnd, lgl_and_);
 #undef BINOP_NOENV
 
-#define BINOP(Name, Op)                                                        \
-    case Opcode::Op: {                                                         \
-        auto rhs = pop();                                                      \
-        auto lhs = pop();                                                      \
-        push(insert(new Name(lhs, rhs, env, srcIdx)));                         \
-        break;                                                                 \
+#define BINOP(Name, Op)                                                               \
+    case Opcode::Op: {                                                                \
+        auto rhs = pop();                                                             \
+        auto lhs = pop();                                                             \
+        if (typeFeedback[0].numTypes > 0 && typeFeedback[1].numTypes > 0 &&           \
+            !typeFeedback[0].observedObject() && !typeFeedback[1].observedObject()) { \
+            Value* leftIsObj = insert(new IsObject(lhs));                             \
+            insert.conditionalDeopt(leftIsObj, srcCode, pos, stack, false);           \
+            Value* rightIsObj = insert(new IsObject(rhs));                            \
+            insert.conditionalDeopt(rightIsObj, srcCode, pos, stack, false);          \
+            push(insert(new Name(lhs, rhs, Env::elided(), srcIdx)));                  \
+        } else {                                                                      \
+            push(insert(new Name(lhs, rhs, env, srcIdx)));                            \
+        }                                                                             \
+        break;                                                                        \
     }
 
         BINOP(Lt, lt_);
@@ -572,6 +582,11 @@ void Rir2Pir::translate(rir::Code* srcCode, Builder& insert,
     cur.seen = true;
 
     std::unordered_map<Value*, CallFeedback> callFeedback;
+    
+    /* Captures the last type feedback observed. The assumption is that this type
+       feedback will be used in subsequent operations. Also that the feedback 
+       needed concerns, at most, two operands */ 
+    std::array<TypeFeedback, 2> lastTypeFeedback;
 
     Opcode* end = srcCode->endCode();
     Opcode* finger = srcCode->code();
@@ -733,7 +748,7 @@ void Rir2Pir::translate(rir::Code* srcCode, Builder& insert,
 
         if (!skip) {
             int size = cur.stack.size();
-            if (!compileBC(bc, pos, srcCode, cur.stack, insert, callFeedback)) {
+            if (!compileBC(bc, pos, srcCode, cur.stack, insert, callFeedback, lastTypeFeedback)) {
                 compiler.getLog().warningBC(srcFunction,
                                             "Abort r2p due to unsupported bc",
                                             pos);

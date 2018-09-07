@@ -57,12 +57,15 @@ Safepoint* Builder::registerSafepoint(rir::Code* srcCode, Opcode* pos,
     return sp;
 };
 
-void Builder::deoptUnless(Value* condition, rir::Code* srcCode, Opcode* pos,
-                          const RirStack& stack) {
+void Builder::conditionalDeopt(Value* condition, rir::Code* srcCode, Opcode* pos,
+                          const RirStack& stack, bool unlessInsteadOfIf) {
     add(new Branch(condition));
     auto cont = createBB();
     auto fail = createBB();
-    setBranch(cont, fail);
+    if (unlessInsteadOfIf)
+        setBranch(cont, fail);
+    else
+        setBranch(fail, cont);
 
     enterBB(fail);
     auto sp = registerSafepoint(srcCode, pos, stack);

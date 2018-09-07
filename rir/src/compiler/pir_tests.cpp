@@ -16,9 +16,8 @@
 namespace {
 using namespace rir;
 
-std::unordered_map<std::string, pir::Closure*>
-compile(const std::string& context, const std::string& expr, pir::Module* m,
-        SEXP super = R_GlobalEnv) {
+
+SEXP compileToRir(const std::string& context, const std::string& expr, SEXP super = R_GlobalEnv) {
     Protect p;
 
     auto eval = [&p](const std::string& expr, SEXP env) {
@@ -45,10 +44,14 @@ compile(const std::string& context, const std::string& expr, pir::Module* m,
     SEXP env = p(Rf_allocSExp(ENVSXP));
     ENCLOS(env) = super;
     eval(expr, env);
+    return env;
+}
 
-    pir::Rir2PirCompiler cmp(m, pir::DebugOptions());
+std::unordered_map<std::string, pir::Closure*>
+compileRir2Pir(SEXP env, pir::Module* m){
+    pir::Rir2PirCompiler cmp(m, pir::DebugOptions() | pir::DebugFlag::PrintFinalPir);
 
-    // Compile every function the expression created
+    // Compile every function in the environment
     std::unordered_map<std::string, pir::Closure*> results;
     auto envlist = RList(FRAME(env));
     for (auto f = envlist.begin(); f != envlist.end(); ++f) {
@@ -67,6 +70,13 @@ compile(const std::string& context, const std::string& expr, pir::Module* m,
     // cmp.setVerbose(true);
     cmp.optimizeModule();
     return results;
+}
+
+std::unordered_map<std::string, pir::Closure*>
+compile(const std::string& context, const std::string& expr, pir::Module* m,
+        SEXP super = R_GlobalEnv) {
+    SEXP env = compileToRir(context, expr, super);
+    return compileRir2Pir(env, m);
 }
 
 using namespace rir::pir;
@@ -142,6 +152,51 @@ bool compileAndVerify(const std::string& input) {
     return compileAndVerify("", input);
 }
 
+void insertTypeFeedbackForBinops(rir::Function* srcFunction, std::array<SEXP, 2> typeFeedback){
+    auto it = srcFunction->begin();
+    while (it != srcFunction->end()) {
+        Opcode* end = (*it)->endCode();
+        Opcode* finger = (*it)->code();
+        while (finger != end) {
+            Opcode* prev = finger;
+            BC bc = BC::advance(&finger);
+            if (bc.bc == Opcode::record_binop_) {
+                TypeFeedback* feedback = (TypeFeedback*)++prev;
+                feedback[0].record(typeFeedback[0]);
+                feedback[1].record(typeFeedback[1]);
+            }
+        } 
+        ++it;
+    }
+}
+
+extern "C" SEXP Rf_NewEnvironment(SEXP, SEXP, SEXP);
+SEXP parseCompileToRir(std::string);
+
+bool canRemoveEnvironmentOnBinaryWithTypeFeedback(const std::string& input) {
+    Protect p;
+    std::array<SEXP,2> types;
+    SEXP res = p(Rf_allocVector(INTSXP, 1));
+    INTEGER(res)[0] = 1;
+    types[0] = res;
+    types[1] = res;
+    auto execEnv = p(Rf_NewEnvironment(R_NilValue, R_NilValue, R_GlobalEnv));
+    auto rirFun = p(parseCompileToRir(input));
+    SET_CLOENV(rirFun, execEnv);
+    Rf_defineVar(Rf_install("removeEnvInBinopTest"), rirFun, execEnv);
+    if (TYPEOF(rirFun) == CLOSXP) {
+        assert(isValidClosureSEXP(rirFun));
+        DispatchTable* tbl = DispatchTable::unpack(BODY(rirFun));
+        rir::Function* srcFunction = tbl->first();
+        insertTypeFeedbackForBinops(srcFunction, types);
+    }
+    pir::Module m;
+    compileRir2Pir(execEnv, &m);
+    bool t = verify(&m);
+    m.eachPirFunction([&t](pir::Closure* f) { t = t && Query::envOnlyBeforeDeopt(f); });
+    return t;
+}
+
 bool canRemoveEnvironment(const std::string& input) {
     pir::Module m;
     compile("", input, &m);
@@ -150,7 +205,6 @@ bool canRemoveEnvironment(const std::string& input) {
     return t;
 }
 
-extern "C" SEXP Rf_NewEnvironment(SEXP, SEXP, SEXP);
 bool testSuperAssign() {
     auto hasAssign = [](pir::Closure* f) {
         return !Visitor::check(f->entry, [](Instruction* i) {
@@ -316,6 +370,8 @@ static Test tests[] = {
          }),
     Test("context_load",
          []() { return canRemoveEnvironment("f <- function() 123"); }),
+    Test("binop_nonobjects",
+         []() { return canRemoveEnvironmentOnBinaryWithTypeFeedback("f <- function() 1 + 2"); }),     
     Test("super_assign", &testSuperAssign),
     Test("loop",
          []() {
