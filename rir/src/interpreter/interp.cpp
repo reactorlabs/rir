@@ -87,7 +87,6 @@ struct CallContext {
         assert(hasNames() && i < nargs);
         return cp_pool_at(ctx, names[i]);
     }
-
 };
 
 RIR_INLINE SEXP getSrcAt(Code* c, Opcode* pc, Context* ctx) {
@@ -2333,9 +2332,10 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env,
                         if (idx_ >= 0 && idx_ < XLENGTH(vec)) {
                             switch (vectorT) {
                             case REALSXP:
-                                REAL(vec)[idx_] = valT == REALSXP
-                                                       ? *REAL(val)
-                                                       : (double)*INTEGER(val);
+                                REAL(vec)
+                                [idx_] =
+                                    valT == REALSXP ? *REAL(val)
+                                                    : (double)*INTEGER(val);
                                 break;
                             case INTSXP:
                                 INTEGER(vec)[idx_] = *INTEGER(val);

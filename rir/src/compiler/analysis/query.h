@@ -20,7 +20,7 @@ class Query {
     static bool noDeopt(Code* c);
     static std::unordered_set<Value*> returned(Code* c);
 };
-}
-}
+} // namespace pir
+} // namespace rir
 
 #endif

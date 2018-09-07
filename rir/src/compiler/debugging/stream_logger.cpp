@@ -43,8 +43,8 @@ void StreamLogger::compilationEarlyPir(Closure& closure) {
     }
 }
 
-void StreamLogger::pirOptimizations(Closure& closure,
-                                    const std::string& pass, size_t passnr) {
+void StreamLogger::pirOptimizations(Closure& closure, const std::string& pass,
+                                    size_t passnr) {
     if (options.includes(DebugFlag::PrintOptimizationPasses)) {
         std::stringstream ss;
         ss << pass << ": == " << passnr;

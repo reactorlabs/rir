@@ -51,7 +51,7 @@ struct RecordedType {
         return memcmp(this, &other, sizeof(RecordedType)) == 0;
     }
 
-    bool isObj() const { return object; } 
+    bool isObj() const { return object; }
 };
 static_assert(sizeof(CallFeedback) == 7 * sizeof(uint32_t),
               "Size needs to fit inside a record_ bc immediate args");
@@ -78,8 +78,7 @@ struct TypeFeedback {
 
     bool observedObject() {
         bool answer = false;
-        for (const auto& record : seen)
-        {
+        for (const auto& record : seen) {
             if (record.isObj()) {
                 answer = true;
                 break;

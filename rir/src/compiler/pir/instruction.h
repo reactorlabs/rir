@@ -214,8 +214,9 @@ class InstructionImplementation : public Instruction {
     };
 
     static constexpr InstrDescription Description = {
-        EFFECT > Effect::None, ENV >= EnvAccess::Write, ENV == EnvAccess::Leak,
-        ENV > EnvAccess::None, ENV > EnvAccess::Capture, ENV >= EnvAccess::NoneOrLeak};
+        EFFECT > Effect::None,    ENV >= EnvAccess::Write,
+        ENV == EnvAccess::Leak,   ENV > EnvAccess::None,
+        ENV > EnvAccess::Capture, ENV >= EnvAccess::NoneOrLeak};
 
     bool hasEffect() const final { return Description.HasEffect; }
     bool changesEnv() const final { return Description.ChangesEnv; }

@@ -17,15 +17,16 @@ bool Query::noEnv(Code* c) {
 
 bool Query::envOnlyBeforeDeopt(Code* c) {
     bool lastMkEnv = false;
-    return Visitor::check(c->entry, [&](Instruction* i) { 
-        if (lastMkEnv){
-            if (Safepoint::Cast(i)){
+    return Visitor::check(c->entry, [&](Instruction* i) {
+        if (lastMkEnv) {
+            if (Safepoint::Cast(i)) {
                 lastMkEnv = false;
             } else {
                 return false;
             }
         } else {
-            if (MkEnv::Cast(i)) lastMkEnv = true;
+            if (MkEnv::Cast(i))
+                lastMkEnv = true;
         }
         return true;
     });
@@ -45,5 +46,5 @@ std::unordered_set<Value*> Query::returned(Code* c) {
     });
     return returned;
 }
-}
-}
+} // namespace pir
+} // namespace rir

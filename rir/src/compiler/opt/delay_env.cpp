@@ -71,7 +71,8 @@ void DelayEnv::apply(Closure* function) const {
                 it++;
             }
 
-            auto moveMkEnvToDeoptBranch = [&](BB* deoptBranch, BB* fastPathBranch) {
+            auto moveMkEnvToDeoptBranch = [&](BB* deoptBranch,
+                                              BB* fastPathBranch) {
                 auto newEnvInstr = envInstr->clone();
                 it = bb->insert(it, newEnvInstr);
                 envInstr->replaceUsesIn(newEnvInstr, fastPathBranch);
@@ -85,15 +86,20 @@ void DelayEnv::apply(Closure* function) const {
                 auto branch = Branch::Cast(*(it + 1));
                 if (envInstr && branch) {
                     Deopt* deopt;
-                    if (!bb->falseBranch()->isEmpty() && (deopt = Deopt::Cast(bb->falseBranch()->last()))) {
-                        moveMkEnvToDeoptBranch(bb->falseBranch(), bb->trueBranch());
-                    } else if (!bb->trueBranch()->isEmpty() && (deopt = Deopt::Cast(bb->trueBranch()->last()))) {
-                        moveMkEnvToDeoptBranch(bb->trueBranch(), bb->falseBranch());
+                    if (!bb->falseBranch()->isEmpty() &&
+                        (deopt = Deopt::Cast(bb->falseBranch()->last()))) {
+                        moveMkEnvToDeoptBranch(bb->falseBranch(),
+                                               bb->trueBranch());
+                    } else if (!bb->trueBranch()->isEmpty() &&
+                               (deopt =
+                                    Deopt::Cast(bb->trueBranch()->last()))) {
+                        moveMkEnvToDeoptBranch(bb->trueBranch(),
+                                               bb->falseBranch());
                     }
                 }
             }
         }
     });
 }
-}
-}
+} // namespace pir
+} // namespace rir

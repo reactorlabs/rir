@@ -112,7 +112,7 @@ void Rir2PirCompiler::optimizeModule() {
     module->eachPirFunction([&](Module::VersionedClosure& v) {
         assert(Verify::apply(v.current()));
     });
-#else 
+#else
     module->eachPirFunction([&](Module::VersionedClosure& v) {
         LOGGING(log.pirOptimizationsFinished(*(v.current())));
     });
