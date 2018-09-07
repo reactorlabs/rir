@@ -27,7 +27,6 @@ void BC::write(CodeStream& cs) const {
     case Opcode::stvar_:
     case Opcode::stvar_super_:
     case Opcode::missing_:
-    case Opcode::subassign2_:
         cs.insert(immediate.pool);
         return;
 
@@ -160,6 +159,7 @@ void BC::write(CodeStream& cs) const {
     case Opcode::visible_:
     case Opcode::endcontext_:
     case Opcode::subassign1_:
+    case Opcode::subassign2_:
     case Opcode::isobj_:
     case Opcode::check_missing_:
         return;

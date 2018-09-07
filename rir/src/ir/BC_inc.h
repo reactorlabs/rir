@@ -321,7 +321,7 @@ class BC {
     inline static BC missing(SEXP sym);
     inline static BC checkMissing();
     inline static BC subassign1();
-    inline static BC subassign2(SEXP sym);
+    inline static BC subassign2();
     inline static BC length();
     inline static BC names();
     inline static BC setNames();
@@ -477,7 +477,6 @@ class BC {
         case Opcode::stvar_:
         case Opcode::stvar_super_:
         case Opcode::missing_:
-        case Opcode::subassign2_:
             immediate.pool = *(PoolIdx*)pc;
             break;
         case Opcode::call_implicit_:
@@ -579,6 +578,7 @@ class BC {
         case Opcode::visible_:
         case Opcode::endcontext_:
         case Opcode::subassign1_:
+        case Opcode::subassign2_:
         case Opcode::length_:
         case Opcode::names_:
         case Opcode::set_names_:

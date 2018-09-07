@@ -384,19 +384,18 @@ bool Rir2Pir::compileBC(
     }
 
     case Opcode::subassign1_: {
-        Value* val = pop();
         Value* idx = pop();
         Value* vec = pop();
-        push(insert(new Subassign1_1D(vec, idx, val)));
+        Value* val = pop();
+        push(insert(new Subassign1_1D(val, vec, idx, env, srcIdx)));
         break;
     }
 
     case Opcode::subassign2_: {
-        SEXP sym = rir::Pool::get(bc.immediate.pool);
-        Value* val = pop();
         Value* idx = pop();
         Value* vec = pop();
-        push(insert(new Subassign2_1D(vec, idx, val, sym)));
+        Value* val = pop();
+        push(insert(new Subassign2_1D(val, vec, idx, env, srcIdx)));
         break;
     }
 

@@ -339,247 +339,83 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
             Else(break)
         }
 
-        //// Find all parts of the lhs
-        // SEXP target = nullptr;
-        // l = lhs;
-        // std::vector<SEXP> lhsParts;
-        // while (!target) {
-        //    Match(l) {
-        //        Case(LANGSXP, fun, args) {
-        //            assert(TYPEOF(fun) == SYMSXP);
-        //            lhsParts.push_back(l);
-        //            l = CAR(args);
-        //        }
-        //        Case(SYMSXP) {
-        //            lhsParts.push_back(l);
-        //            target = l;
-        //        }
-        //        Case(STRSXP) {
-        //            assert(Rf_length(l) == 1);
-        //            target = Rf_install(CHAR(STRING_ELT(l, 0)));
-        //            lhsParts.push_back(target);
-        //        }
-        //        Else({
-        //            errorcall(ast,
-        //                      "invalid (do_set) left-hand side to
-        //                      assignment");
-        //        })
-        //    }
-        //}
+        // Find all parts of the lhs
+        SEXP target = nullptr;
+        l = lhs;
+        std::vector<SEXP> lhsParts;
+        while (!target) {
+            Match(l) {
+                Case(LANGSXP, fun, args) {
+                    assert(TYPEOF(fun) == SYMSXP);
+                    lhsParts.push_back(l);
+                    l = CAR(args);
+                }
+                Case(SYMSXP) {
+                    lhsParts.push_back(l);
+                    target = l;
+                }
+                Case(STRSXP) {
+                    assert(Rf_length(l) == 1);
+                    target = Rf_install(CHAR(STRING_ELT(l, 0)));
+                    lhsParts.push_back(target);
+                }
+                Else({
+                    errorcall(ast,
+                              "invalid (do_set) left-hand side to assignment");
+                })
+            }
+        }
 
-        //// 3) Special case [ and [[
-        // if (lhsParts.size() == 2) {
-        //    RList g(lhsParts[0]);
-        //    if (g.length() == 3) {
-        //        SEXP fun2 = *g.begin();
-        //        auto idx = g.begin() + 2;
-        //        if (*idx != R_DotsSymbol && *idx != R_MissingArg &&
-        //            !idx.hasTag()) {
-        //            if (fun2 == symbol::DoubleBracket ||
-        //                fun2 == symbol::Bracket) {
+        // TODO: There is some issue with supper assing and probably [[, needs
+        // to investigate more...
+        if (superAssign)
+            return false;
 
-        //                LabelT objBranch = cs.mkLabel();
-        //                LabelT nextBranch = cs.mkLabel();
+        // 3) Special case [ and [[
+        if (lhsParts.size() == 2) {
+            RList g(lhsParts[0]);
+            if (g.length() == 3) {
+                SEXP fun2 = *g.begin();
+                auto idx = g.begin() + 2;
+                if (*idx != R_DotsSymbol && *idx != R_MissingArg &&
+                    !idx.hasTag()) {
+                    if (fun2 == symbol::DoubleBracket ||
+                        fun2 == symbol::Bracket) {
 
-        //                cs << BC::guardNamePrimitive(fun);
+                        cs << BC::guardNamePrimitive(fun);
 
-        //                // First rhs (assign is right-associative)
-        //                compileExpr(ctx, rhs);
-        //                // Keep a copy of rhs since its the result of this
-        //                // expression
-        //                cs << BC::dup()
-        //                   << BC::setShared();
+                        // First rhs (assign is right-associative)
+                        compileExpr(ctx, rhs);
+                        // Keep a copy of rhs since its the result of this
+                        // expression
+                        cs << BC::dup() << BC::setShared();
 
-        //                // Now load index and target
-        //                compileExpr(ctx, *idx);
-        //                cs << BC::swap()
-        //                   << (superAssign ? BC::ldvarSuper(target)
-        //                                   : BC::ldvar(target));
+                        // Now load index and target
+                        cs << (superAssign ? BC::ldvarSuper(target)
+                                           : BC::ldvar(target));
+                        if (superAssign)
+                            cs << BC::setShared();
+                        compileExpr(ctx, *idx);
 
-        //                // We now have [... val idx val vec]
-        //                // check for object case
-        //                cs << BC::brobj(objBranch)
-        //                   << BC::put(2);
+                        // do the thing
+                        if (fun2 == symbol::DoubleBracket)
+                            cs << BC::subassign2();
+                        else
+                            cs << BC::subassign1();
+                        cs.addSrc(ast);
 
-        //                // do the thing
-        //                if (fun2 == symbol::DoubleBracket)
-        //                    cs << BC::subassign2(target);
-        //                else
-        //                    cs << BC::subassign1();
+                        // store the result as "target"
+                        cs << (superAssign ? BC::stvarSuper(target)
+                                           : BC::stvar(target));
 
-        //                cs << (superAssign ? BC::stvarSuper(target)
-        //                                   : BC::stvar(target));
-        //                cs << BC::br(nextBranch);
+                        cs << BC::invisible();
+                        return true;
+                    }
+                }
+            }
+        }
 
-        //                // In the case the target is an object:
-        //                cs << objBranch;
-
-        //                // We need a patched ast again :(
-        //                SEXP setter = fun2 == symbol::DoubleBracket
-        //                                   ? symbol::AssignDoubleBracket
-        //                                   : symbol::AssignBracket;
-        //                SEXP rewrite = Rf_shallow_duplicate(lhs);
-        //                ctx.preserve(rewrite);
-        //                SETCAR(rewrite, setter);
-
-        //                SEXP a = CDR(rewrite);
-        //                SETCAR(a, symbol::setterPlaceholder);
-        //                while (CDR(a) != R_NilValue)
-        //                    a = CDR(a);
-        //                SEXP value =
-        //                    CONS_NR(symbol::setterPlaceholder, R_NilValue);
-        //                SET_TAG(value, symbol::value);
-        //                SETCDR(a, value);
-
-        //                // Reorder stack into correct ordering
-        //                cs << BC::put(2);
-
-        //                // Do dispatch using args from the stack
-        //                cs.insertStackCall(
-        //                    Opcode::dispatch_stack_eager_, 3,
-        //                    {R_NilValue, R_NilValue, symbol::value}, rewrite,
-        //                    setter);
-
-        //                // store the result as "target"
-        //                cs << (superAssign ? BC::stvarSuper(target)
-        //                                   : BC::stvar(target));
-
-        //                cs << nextBranch
-        //                   << BC::invisible();
-        //                return true;
-        //            }
-        //        }
-        //    }
-
-        //    //            if (getter == symbol::Bracket)
-        //}
-
-        // if (superAssign) {
-        //    return false;
-        //}
-
-        // cs << BC::guardNamePrimitive(fun);
-
-        // compileExpr(ctx, rhs);
-        // cs << BC::dup()
-        //   << BC::setShared();
-
-        //// Evaluate the getter list and push it to the stack in reverse order
-        // for (unsigned i = lhsParts.size() - 1; i > 0; --i) {
-        //    auto g = lhsParts[i];
-
-        //    Match(g) {
-        //        Case(SYMSXP) { cs << BC::ldvar(g); }
-        //        Case(LANGSXP) {
-        //            SEXP fun = CAR(g);
-        //            RList args(CDR(g));
-        //            std::vector<SEXP> names;
-
-        //            auto arg = args.begin();
-        //            // Skip first arg (is already on the stack)
-        //            ++arg;
-        //            names.push_back(R_NilValue);
-
-        //            // Load function and push it before the first arg
-        //            cs << BC::ldfun(fun) << BC::swap();
-
-        //            for (; arg != RList::end(); ++arg) {
-        //                if (*arg == R_DotsSymbol || *arg == R_MissingArg) {
-        //                    names.push_back(R_NilValue);
-        //                    cs << BC::push(*arg);
-        //                    continue;
-        //                }
-
-        //                names.push_back(arg.tag());
-        //                if (TYPEOF(*arg) == LANGSXP || TYPEOF(*arg) == SYMSXP)
-        //                {
-        //                    auto p = compilePromise(ctx, *arg);
-        //                    cs << BC::push(R_UnboundValue) << BC::promise(p);
-        //                } else {
-        //                    compileExpr(ctx, *arg);
-        //                }
-        //            }
-
-        //            SEXP rewrite = Rf_shallow_duplicate(g);
-        //            ctx.preserve(rewrite);
-        //            SETCAR(CDR(rewrite), symbol::getterPlaceholder);
-        //            cs.insertStackCall(Opcode::call_values_, names.size(),
-        //                               names, rewrite);
-        //        }
-        //        Else(assert(false);)
-        //    }
-        //    if (i > 1) {
-        //        cs << BC::dup();
-        //    }
-        //}
-
-        //// Get down the initial rhs value
-        // cs << BC::pick(lhsParts.size() - 1);
-
-        //// Run the setters
-        // for (auto g = lhsParts.begin(); (g + 1) != lhsParts.end(); ++g) {
-        //    SEXP fun = CAR(*g);
-        //    RList args(CDR(*g));
-        //    std::string name(CHAR(PRINTNAME(fun)));
-        //    name.append("<-");
-        //    SEXP setterName = Rf_install(name.c_str());
-
-        //    std::vector<SEXP> names;
-
-        //    auto arg = RList(args).begin();
-
-        //    unsigned nargs = 0;
-        //    // Skip first arg (is already on the stack)
-        //    ++arg;
-        //    names.push_back(R_NilValue);
-
-        //    cs << BC::pick(1)
-        //       << BC::makeUnique()
-        //       << BC::put(1);
-
-        //    // Load function and push it before the first arg and the value
-        //    // from the last setter.
-        //    cs << BC::ldfun(setterName)
-        //       << BC::put(2);
-
-        //    for (; arg != RList::end(); ++arg) {
-        //        nargs++;
-        //        names.push_back(arg.tag());
-        //        if (TYPEOF(*arg) == LANGSXP || TYPEOF(*arg) == SYMSXP) {
-        //            auto p = compilePromise(ctx, *arg);
-        //            cs << BC::push(R_UnboundValue) << BC::promise(p);
-        //        } else {
-        //            compileExpr(ctx, *arg);
-        //        }
-        //    }
-
-        //    names.push_back(symbol::value);
-        //    // the rhs (aka "value") needs to come last, if we pushed some
-        //    args
-        //    // we need to swap the order
-        //    if (nargs > 0)
-        //        cs << BC::pick(nargs);
-
-        //    SEXP rewrite = Rf_shallow_duplicate(*g);
-        //    ctx.preserve(rewrite);
-        //    SETCAR(rewrite, setterName);
-
-        //    SEXP a = CDR(rewrite);
-        //    SETCAR(a, symbol::setterPlaceholder);
-        //    while (CDR(a) != R_NilValue)
-        //        a = CDR(a);
-        //    SEXP value = CONS_NR(symbol::setterPlaceholder, R_NilValue);
-        //    SET_TAG(value, symbol::value);
-        //    SETCDR(a, value);
-
-        //    cs.insertStackCall(Opcode::call_values_, names.size(), names,
-        //                       rewrite);
-        //}
-
-        // cs << BC::stvar(target)
-        //   << BC::invisible();
-
-        // return true;
+        return false;
     }
 
     if (fun == symbol::Block) {

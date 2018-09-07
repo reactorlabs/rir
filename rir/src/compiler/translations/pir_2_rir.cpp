@@ -863,8 +863,8 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 break;
             }
             case Tag::Subassign2_1D: {
-                auto res = Subassign2_1D::Cast(instr);
-                cs << BC::subassign2(res->sym);
+                cs << BC::subassign2();
+                cs.addSrcIdx(instr->srcIdx);
                 break;
             }
 
@@ -900,7 +900,6 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 SIMPLE(ChkClosure, isfun);
                 SIMPLE(Seq, seq);
                 SIMPLE(MkCls, close);
-                SIMPLE(Subassign1_1D, subassign1);
                 SIMPLE(IsObject, isObj);
                 SIMPLE(Int3, int3);
                 SIMPLE(SetShared, setShared);
@@ -934,6 +933,7 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 SIMPLE_WITH_SRCIDX(Extract2_1D, extract2_1);
                 SIMPLE_WITH_SRCIDX(Extract1_2D, extract1_2);
                 SIMPLE_WITH_SRCIDX(Extract2_2D, extract2_2);
+                SIMPLE_WITH_SRCIDX(Subassign1_1D, subassign1);
 #undef SIMPLE_WITH_SRCIDX
 
             case Tag::Call: {
