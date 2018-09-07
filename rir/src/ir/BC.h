@@ -162,13 +162,7 @@ BC BC::stvarSuper(SEXP sym) {
     return BC(Opcode::stvar_super_, i);
 }
 BC BC::subassign1() { return BC(Opcode::subassign1_); }
-BC BC::subassign2(SEXP sym) {
-    assert(sym == R_NilValue ||
-           (TYPEOF(sym) == SYMSXP && strlen(CHAR(PRINTNAME(sym)))));
-    ImmediateArguments i;
-    i.pool = Pool::insert(sym);
-    return BC(Opcode::subassign2_, i);
-}
+BC BC::subassign2() { return BC(Opcode::subassign2_); }
 BC BC::seq() { return BC(Opcode::seq_); }
 BC BC::colon() { return BC(Opcode::colon_); }
 BC BC::asbool() { return BC(Opcode::asbool_); }
