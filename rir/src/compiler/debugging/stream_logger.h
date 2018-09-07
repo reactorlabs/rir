@@ -51,6 +51,7 @@ class StreamLogger {
     void innerHeader(rir::Function*, std::string);
 
     std::ostream& getLog(rir::Function* function) {
+        return std::cout;
         if (!streams.count(function))
             startLogging(function);
         return *streams.at(function);

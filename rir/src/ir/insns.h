@@ -347,7 +347,7 @@ DEF_INSTR(extract2_2_, 0, 3, 1, 1)
 /**
  * subassign2_ :: [[<-(a,b,c)
  */
-DEF_INSTR(subassign2_, 1, 3, 1, 1)
+DEF_INSTR(subassign2_, 0, 3, 1, 1)
 
 /**
  * guard_fun_:: takes symbol, target, id, checks findFun(symbol) == target
