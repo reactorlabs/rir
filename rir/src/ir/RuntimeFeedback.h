@@ -57,12 +57,12 @@ static_assert(sizeof(CallFeedback) == 7 * sizeof(uint32_t),
               "Size needs to fit inside a record_ bc immediate args");
 
 struct TypeFeedback {
-    static const unsigned MaxTypes = 3;
+    static constexpr unsigned MaxTypes = 3;
     uint8_t numTypes;
 
     std::array<RecordedType, MaxTypes> seen;
 
-    TypeFeedback() {}
+    TypeFeedback() : numTypes(0) {}
 
     void record(SEXP e) {
         RecordedType type(e);
