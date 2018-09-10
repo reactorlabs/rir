@@ -18,14 +18,14 @@ class Rir2PirCompiler : public RirCompiler {
                          Maybe fail);
     void optimizeModule();
 
-    StreamLogger& getLog() { return log; }
+    StreamLogger& getLogger() { return logger; }
 
   private:
     void compileClosure(rir::Function*, FormalArgs const&, Env* closureEnv,
                         MaybeCls success, Maybe fail);
     void applyOptimizations(Closure*, const std::string&);
 
-    StreamLogger log;
+    StreamLogger logger;
 };
 } // namespace pir
 } // namespace rir

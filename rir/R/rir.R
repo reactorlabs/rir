@@ -20,8 +20,8 @@ rir.compile <- function(what) {
 }
 
 # optimizes given rir compiled closure
-pir.compile <- function(what, debugFlags = pir.debugFlags()) {
-    .Call("pir_compile", what, debugFlags)
+pir.compile <- function(what, debugFlags) {
+    .Call("pir_compile", what, if (missing(debugFlags)) NULL else debugFlags)
 }
 
 pir.tests <- function() {
@@ -32,28 +32,28 @@ pir.tests <- function() {
 pir.debugFlags <- function(ShowWarnings = FALSE,
                            DryRun = FALSE,
                            PreserveVersions = FALSE,
-                           DebugAllocator = FALSE,
                            PrintIntoFiles = FALSE,
                            PrintIntoStdout = FALSE,
                            PrintEarlyRir = FALSE,
                            PrintEarlyPir = FALSE,
                            PrintOptimizationPasses = FALSE,
                            PrintCSSA = FALSE,
-                           PrintLivenessIntervals = FALSE,
+                           PrintAllocator = FALSE,
                            PrintFinalPir = FALSE,
                            PrintFinalRir = FALSE) {
     # !!!  This list of arguments *must* be exactly equal to the   !!!
     # !!!    LIST_OF_PIR_DEBUGGING_FLAGS in compiler/debugging.h   !!!
     .Call("pir_debugFlags", ShowWarnings, DryRun, PreserveVersions,
-          DebugAllocator, PrintIntoFiles, PrintIntoStdout, PrintEarlyRir, PrintEarlyPir, PrintOptimizationPasses,
-          PrintCSSA, PrintLivenessIntervals, PrintFinalPir, PrintFinalRir,
+          PrintIntoFiles, PrintIntoStdout, PrintEarlyRir, PrintEarlyPir,
+          PrintOptimizationPasses, PrintCSSA, PrintAllocator, PrintFinalPir,
+          PrintFinalRir,
           # wants a dummy parameter at the end for technical reasons
           NULL)
 }
 
 # sets the default debug options for pir compiler
 pir.setDebugFlags <- function(debugFlags = pir.debugFlags()) {
-    .Call("pir_setDebugFlags", debugFlags)
+    invisible(.Call("pir_setDebugFlags", debugFlags))
 }
 
 # compiles code of the given file and returns the list of compiled version.

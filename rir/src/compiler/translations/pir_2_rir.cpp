@@ -90,15 +90,15 @@ class SSAAllocator {
     };
     std::unordered_map<Value*, Liveness> livenessInterval;
 
-    SSAAllocator(Code* code, bool verbose)
+    SSAAllocator(Code* code)
         : cfg(code), dom(code), code(code), bbsSize(code->nextBBId) {
-        computeLiveness(verbose);
+        computeLiveness();
         computeStackAllocation();
         computeAllocation();
     }
 
     // Run backwards analysis to compute livenessintervals
-    void computeLiveness(bool verbose = 0) {
+    void computeLiveness() {
         // temp list of live out sets for every BB
         std::unordered_map<BB*, std::set<Value*>> liveAtEnd(bbsSize);
 
@@ -222,24 +222,6 @@ class SSAAllocator {
                     mergePhiInp(pre);
                 }
             }
-        }
-
-        if (verbose) {
-            std::cout << "======= Liveness ========\n";
-            for (auto ll : livenessInterval) {
-                auto& l = ll.second;
-                ll.first->printRef(std::cout);
-                std::cout << " is live : ";
-                for (size_t i = 0; i < bbsSize; ++i) {
-                    if (l[i].live) {
-                        std::cout << "BB" << i << " [";
-                        std::cout << l[i].begin << ",";
-                        std::cout << l[i].end << "]  ";
-                    }
-                }
-                std::cout << "\n";
-            }
-            std::cout << "======= End Liveness ========\n";
         }
     }
 
@@ -404,8 +386,24 @@ class SSAAllocator {
         });
     }
 
-    void print(std::ostream& out = std::cout) {
-        out << "======= Allocation ========\n";
+    void print(std::ostream& out) {
+
+        out << "Liveness intervals:\n";
+        for (auto ll : livenessInterval) {
+            auto& l = ll.second;
+            ll.first->printRef(out);
+            out << " is live : ";
+            for (size_t i = 0; i < bbsSize; ++i) {
+                if (l[i].live) {
+                    out << "BB" << i << " [";
+                    out << l[i].begin << ",";
+                    out << l[i].end << "]  ";
+                }
+            }
+            out << "\n";
+        }
+
+        out << "Allocations:\n";
         BreadthFirstVisitor::run(code->entry, [&](BB* bb) {
             out << "BB" << bb->id << ": ";
             for (auto a : allocation) {
@@ -431,7 +429,7 @@ class SSAAllocator {
                 }
             }
         });
-        out << "\nslots: " << slots() << "\n======= End Allocation ========\n";
+        out << "\nnumber of slots: " << slots() << "\n";
     }
 
     void verify() {
@@ -654,18 +652,13 @@ class Pir2Rir {
 };
 
 size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
+
     toCSSA(code);
+    LOGGING(compiler.getLogger().afterCSSA(*cls, code));
 
-    LOGGING(compiler.getLog().afterCSSA(*cls, code));
-
-    SSAAllocator alloc(code,
-                       compiler.debug.includes(DebugFlag::DebugAllocator));
-
-    // It is not clear still if we are going to need this information for
-    // debugging purposes. In addition, SSAAllocator is defined internally and
-    // passing it outside would require some extra hacking.
-    // compiler.getLog().afterLiveness(&alloc);
-
+    SSAAllocator alloc(code);
+    LOGGING(compiler.getLogger().afterAllocator(
+        *cls, [&](std::ostream& os) { alloc.print(os); }));
     alloc.verify();
 
     // create labels for all bbs
@@ -1090,12 +1083,12 @@ rir::Function* Pir2Rir::finalize() {
     ctx.pushBody(R_NilValue);
     size_t localsCnt = compileCode(ctx, cls);
     ctx.finalizeCode(localsCnt);
-    LOGGING(compiler.getLog().finalPIR(*cls));
+    LOGGING(compiler.getLogger().finalPIR(*cls));
 #ifdef ENABLE_SLOWASSERT
     CodeVerifier::verifyFunctionLayout(function.function->container(),
                                        globalContext());
 #endif
-    LOGGING(compiler.getLog().rirFromPir(function.function));
+    LOGGING(compiler.getLogger().rirFromPir(function.function));
     return function.function;
 }
 
