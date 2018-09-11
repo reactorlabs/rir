@@ -2,6 +2,7 @@
 #include <assert.h>
 
 #include "R/Funtab.h"
+#include "R/Symbols.h"
 #include "interp.h"
 #include "interp_context.h"
 #include "ir/Deoptimization.h"
@@ -1186,7 +1187,8 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env,
             R_Visible = TRUE;
 
             if (res == R_UnboundValue) {
-                Rf_error("object not found");
+                SEXP sym = cp_pool_at(ctx, id);
+                Rf_error("object \"%s\" not found", CHAR(PRINTNAME(sym)));
             } else if (res == R_MissingArg) {
                 SEXP sym = cp_pool_at(ctx, id);
                 Rf_error("argument \"%s\" is missing, with no default",
@@ -1211,7 +1213,8 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env,
             R_Visible = TRUE;
 
             if (res == R_UnboundValue) {
-                Rf_error("object not found");
+                SEXP sym = cp_pool_at(ctx, id);
+                Rf_error("object \"%s\" not found", CHAR(PRINTNAME(sym)));
             }
 
             if (NAMED(res) == 0 && res != R_NilValue)
@@ -1228,10 +1231,10 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env,
             R_Visible = TRUE;
 
             if (res == R_UnboundValue) {
-                Rf_error("object not found");
+                Rf_error("object \"%s\" not found", CHAR(PRINTNAME(sym)));
             } else if (res == R_MissingArg) {
                 Rf_error("argument \"%s\" is missing, with no default",
-                         CHAR(PRINTNAME(res)));
+                         CHAR(PRINTNAME(sym)));
             }
 
             // if promise, evaluate & return
@@ -1252,7 +1255,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env,
             R_Visible = TRUE;
 
             if (res == R_UnboundValue) {
-                Rf_error("object not found");
+                Rf_error("object \"%s\" not found", CHAR(PRINTNAME(sym)));
             }
 
             if (NAMED(res) == 0 && res != R_NilValue)
@@ -1268,11 +1271,11 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env,
             res = Rf_ddfindVar(sym, getenv());
             R_Visible = TRUE;
 
-            // TODO better errors
             if (res == R_UnboundValue) {
-                Rf_error("object not found");
+                Rf_error("object \"%s\" not found", CHAR(PRINTNAME(sym)));
             } else if (res == R_MissingArg) {
-                Rf_error("argument is missing, with no default");
+                Rf_error("argument \"%s\" is missing, with no default",
+                         CHAR(PRINTNAME(sym)));
             }
 
             // if promise, evaluate & return
@@ -2108,7 +2111,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env,
             ostack_push(ctx, args);
 
             if (isObject(val)) {
-                SEXP call = getSrcAt(c, pc - 1, ctx);
+                SEXP call = getSrcForCall(c, pc - 1, ctx);
                 res =
                     dispatchApply(call, val, args, R_SubsetSym, getenv(), ctx);
                 if (!res)
@@ -2136,7 +2139,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env,
             ostack_push(ctx, args);
 
             if (isObject(val)) {
-                SEXP call = getSrcAt(c, pc - 1, ctx);
+                SEXP call = getSrcForCall(c, pc - 1, ctx);
                 res =
                     dispatchApply(call, val, args, R_SubsetSym, getenv(), ctx);
                 if (!res)
@@ -2154,16 +2157,34 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env,
         }
 
         INSTRUCTION(subassign1_) {
-            SEXP vec = ostack_at(ctx, 2);
-            SEXP idx = ostack_at(ctx, 1);
-            SEXP val = ostack_at(ctx, 0);
+            SEXP idx = ostack_at(ctx, 0);
+            SEXP vec = ostack_at(ctx, 1);
+            SEXP val = ostack_at(ctx, 2);
 
-            INCREMENT_NAMED(vec);
+            if (MAYBE_SHARED(vec)) {
+                vec = duplicate(vec);
+                ostack_at(ctx, 1) = vec;
+            }
+
             SEXP args = CONS_NR(val, R_NilValue);
+            SET_TAG(args, symbol::value);
             args = CONS_NR(idx, args);
             args = CONS_NR(vec, args);
             PROTECT(args);
-            res = do_subassign_dflt(R_NilValue, R_SubassignSym, args, getenv());
+            res = nullptr;
+            SEXP call = getSrcForCall(c, pc - 1, ctx);
+            SEXP selector = CAR(call) == symbol::SuperAssign
+                                ? symbol::SuperAssignBracket
+                                : symbol::AssignBracket;
+            if (isObject(vec)) {
+                res = dispatchApply(call, vec, args, selector, getenv(), ctx);
+            }
+            if (!res) {
+                res = do_subassign_dflt(call, selector, args, getenv());
+                // We duplicated the vector above, and there is a stvar
+                // following
+                SET_NAMED(res, 0);
+            }
             ostack_popn(ctx, 3);
             UNPROTECT(1);
 
@@ -2267,7 +2288,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env,
             args = CONS_NR(val, args);
             ostack_push(ctx, args);
             if (isObject(val)) {
-                SEXP call = getSrcAt(c, pc - 1, ctx);
+                SEXP call = getSrcForCall(c, pc - 1, ctx);
                 res =
                     dispatchApply(call, val, args, R_Subset2Sym, getenv(), ctx);
                 if (!res)
@@ -2283,15 +2304,12 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env,
         }
 
         INSTRUCTION(subassign2_) {
-            SEXP vec = ostack_at(ctx, 2);
-            SEXP idx = ostack_at(ctx, 1);
-            SEXP val = ostack_at(ctx, 0);
-
-            unsigned targetI = readImmediate();
-            advanceImmediate();
+            SEXP idx = ostack_at(ctx, 0);
+            SEXP vec = ostack_at(ctx, 1);
+            SEXP val = ostack_at(ctx, 2);
 
             // Fast case
-            if (!MAYBE_SHARED(vec)) {
+            if (!MAYBE_SHARED(vec) && !isObject(vec)) {
                 SEXPTYPE vectorT = TYPEOF(vec);
                 SEXPTYPE valT = TYPEOF(val);
                 SEXPTYPE idxT = TYPEOF(idx);
@@ -2310,15 +2328,6 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env,
                      (vectorT == VECSXP)) &&
                     (XLENGTH(val) == 1 || vectorT == VECSXP)) { // 3
 
-                    // if the target == R_NilValue that means this is a stack
-                    // allocated
-                    // vector
-                    SEXP target = cp_pool_at(ctx, targetI);
-                    bool localBinding = (target == R_NilValue) ||
-                                        !R_VARLOC_IS_NULL(R_findVarLocInFrame(
-                                            getenv(), target));
-
-                    if (localBinding) {
                         int idx_ = -1;
 
                         if (idxT == REALSXP) {
@@ -2346,32 +2355,38 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env,
                             }
                             ostack_popn(ctx, 3);
 
-                            // this is a very nice and dirty hack...
-                            // if the next instruction is a matching stvar
-                            // (which is highly probably) then we do not
-                            // have to execute it, since we changed the value
-                            // inline
-                            if (target != R_NilValue && *pc == Opcode::stvar_ &&
-                                *(int*)(pc - sizeof(int)) == *(int*)(pc + 1)) {
-                                pc = pc + sizeof(int) + 1;
-                                if (NAMED(vec) == 0)
-                                    SET_NAMED(vec, 1);
-                            } else {
-                                ostack_push(ctx, vec);
-                            }
+                            ostack_push(ctx, vec);
                             NEXT();
                         }
                     }
-                }
             }
 
-            INCREMENT_NAMED(vec);
+            if (MAYBE_SHARED(vec)) {
+                vec = duplicate(vec);
+                ostack_at(ctx, 1) = vec;
+            }
+
             SEXP args = CONS_NR(val, R_NilValue);
+            SET_TAG(args, symbol::value);
             args = CONS_NR(idx, args);
             args = CONS_NR(vec, args);
             PROTECT(args);
-            res =
-                do_subassign2_dflt(R_NilValue, R_Subassign2Sym, args, getenv());
+            res = nullptr;
+
+            SEXP call = getSrcForCall(c, pc - 1, ctx);
+            SEXP selector = CAR(call) == symbol::SuperAssign
+                                ? symbol::SuperAssignDoubleBracket
+                                : symbol::AssignDoubleBracket;
+            if (isObject(vec)) {
+                res = dispatchApply(call, vec, args, selector, getenv(), ctx);
+            }
+
+            if (!res) {
+                res = do_subassign2_dflt(call, selector, args, getenv());
+                // We duplicated the vector above, and there is a stvar
+                // following
+                SET_NAMED(res, 0);
+            }
             ostack_popn(ctx, 3);
             UNPROTECT(1);
 
@@ -2569,7 +2584,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env,
 
         INSTRUCTION(set_shared_) {
             SEXP val = ostack_top(ctx);
-            ENSURE_NAMEDMAX(val);
+            INCREMENT_NAMED(val);
             NEXT();
         }
 

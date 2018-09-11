@@ -23,7 +23,7 @@ const std::string WARNING_GUARD_STRING = "Guard ignored";
     V(PrintOptimizationPasses)                                                 \
     V(PrintPirAfterOpt)                                                        \
     V(PrintCSSA)                                                               \
-    V(PrintLivenessIntervals)                                                  \
+    V(PrintAllocator)                                                          \
     V(PrintFinalPir)                                                           \
     V(PrintFinalRir)
 
@@ -31,7 +31,6 @@ const std::string WARNING_GUARD_STRING = "Guard ignored";
     V(ShowWarnings)                                                            \
     V(DryRun)                                                                  \
     V(PreserveVersions)                                                        \
-    V(DebugAllocator)                                                          \
     V(PrintIntoFiles)                                                          \
     V(PrintIntoStdout)                                                         \
     LIST_OF_PIR_PRINT_DEBUGGING_FLAGS(V)
@@ -55,4 +54,5 @@ const static DebugOptions PrintDebugPasses =
 
 } // namespace pir
 } // namespace rir
+
 #endif

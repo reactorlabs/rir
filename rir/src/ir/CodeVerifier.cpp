@@ -91,11 +91,11 @@ static Sources hasSources(Opcode bc) {
     case Opcode::eq_:
     case Opcode::ne_:
     case Opcode::colon_:
+    case Opcode::subassign1_:
+    case Opcode::subassign2_:
         return Sources::Required;
 
     case Opcode::inc_:
-    case Opcode::subassign1_:
-    case Opcode::subassign2_:
     case Opcode::identical_:
     case Opcode::push_:
     case Opcode::ldfun_:

@@ -639,24 +639,30 @@ class FLI(AsTest, 1, Effect::None, EnvAccess::None) {
         : FixedLenInstruction(NativeType::test, {{RType::logical}}, {{in}}) {}
 };
 
-class FLI(Subassign1_1D, 3, Effect::None, EnvAccess::None) {
+class FLI(Subassign1_1D, 4, Effect::None, EnvAccess::Leak) {
   public:
-    Subassign1_1D(Value* vec, Value* index, Value* val)
+    Subassign1_1D(Value* val, Value* vec, Value* idx, Value* env,
+                  unsigned srcIdx)
         : FixedLenInstruction(
               PirType::val(),
               {{PirType::val(), PirType::val(), PirType::val()}},
-              {{vec, index, val}}) {}
+              {{val, vec, idx}}, env, srcIdx) {}
+    Value* rhs() { return arg(0).val(); }
+    Value* lhsValue() { return arg(1).val(); }
+    Value* idx() { return arg(2).val(); }
 };
 
-class FLI(Subassign2_1D, 3, Effect::None, EnvAccess::None) {
+class FLI(Subassign2_1D, 4, Effect::None, EnvAccess::Leak) {
   public:
-    Subassign2_1D(Value* vec, Value* index, Value* value, SEXP sym)
+    Subassign2_1D(Value* val, Value* vec, Value* idx, Value* env,
+                  unsigned srcIdx)
         : FixedLenInstruction(
               PirType::val(),
               {{PirType::val(), PirType::val(), PirType::val()}},
-              {{vec, index, value}}),
-          sym(sym) {}
-    SEXP sym;
+              {{val, vec, idx}}, env, srcIdx) {}
+    Value* rhs() { return arg(0).val(); }
+    Value* lhsValue() { return arg(1).val(); }
+    Value* idx() { return arg(2).val(); }
 };
 
 class FLI(Extract1_1D, 3, Effect::None, EnvAccess::Leak) {

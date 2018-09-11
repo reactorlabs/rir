@@ -20,7 +20,7 @@ namespace rir {
 namespace pir {
 
 Rir2PirCompiler::Rir2PirCompiler(Module* module, const DebugOptions& debug)
-    : RirCompiler(module, debug), log(debug) {
+    : RirCompiler(module, debug), logger(debug) {
     for (auto& optimization : pirConfigurations()->pirOptimizations()) {
         translations.push_back(optimization);
     }
@@ -72,16 +72,16 @@ void Rir2PirCompiler::compileClosure(rir::Function* srcFunction,
             Rir2Pir rir2pir(*this, srcFunction);
 
             if (rir2pir.tryCompile(srcFunction->body(), builder)) {
-                LOGGING(log.compilationEarlyPir(*(builder.function)));
+                LOGGING(logger.compilationEarlyPir(*(builder.function)));
                 if (!Verify::apply(pirFunction)) {
                     failed = true;
-                    LOGGING(log.failCompilingPir(srcFunction));
+                    LOGGING(logger.failCompilingPir(srcFunction));
                     assert(false);
                     return false;
                 }
                 return true;
             }
-            LOGGING(log.failCompilingPir(srcFunction));
+            LOGGING(logger.failCompilingPir(srcFunction));
             failed = true;
             return false;
         });
@@ -101,7 +101,8 @@ void Rir2PirCompiler::optimizeModule() {
                 v.saveVersion();
 
             translation->apply(f);
-            LOGGING(log.pirOptimizations(*f, translation->getName(), passnr++));
+            LOGGING(
+                logger.pirOptimizations(*f, translation->getName(), passnr++));
 
 #ifdef ENABLE_SLOWASSERT
             assert(Verify::apply(f));
@@ -114,9 +115,10 @@ void Rir2PirCompiler::optimizeModule() {
     });
 #else
     module->eachPirFunction([&](Module::VersionedClosure& v) {
-        LOGGING(log.pirOptimizationsFinished(*(v.current())));
+        LOGGING(logger.pirOptimizationsFinished(*(v.current())));
     });
 #endif
 }
+
 } // namespace pir
 } // namespace rir

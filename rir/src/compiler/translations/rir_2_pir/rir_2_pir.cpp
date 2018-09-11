@@ -182,7 +182,7 @@ bool Rir2Pir::compileBC(BC bc, Opcode* pos, rir::Code* srcCode, RirStack& stack,
         break;
 
     case Opcode::guard_fun_:
-        compiler.getLog().warningBC(srcFunction, WARNING_GUARD_STRING, bc);
+        compiler.getLogger().warningBC(srcFunction, WARNING_GUARD_STRING, bc);
         break;
 
     case Opcode::swap_:
@@ -386,19 +386,18 @@ bool Rir2Pir::compileBC(BC bc, Opcode* pos, rir::Code* srcCode, RirStack& stack,
     }
 
     case Opcode::subassign1_: {
-        Value* val = pop();
         Value* idx = pop();
         Value* vec = pop();
-        push(insert(new Subassign1_1D(vec, idx, val)));
+        Value* val = pop();
+        push(insert(new Subassign1_1D(val, vec, idx, env, srcIdx)));
         break;
     }
 
     case Opcode::subassign2_: {
-        SEXP sym = rir::Pool::get(bc.immediate.pool);
-        Value* val = pop();
         Value* idx = pop();
         Value* vec = pop();
-        push(insert(new Subassign2_1D(vec, idx, val, sym)));
+        Value* val = pop();
+        push(insert(new Subassign2_1D(val, vec, idx, env, srcIdx)));
         break;
     }
 
@@ -752,7 +751,7 @@ void Rir2Pir::translate(rir::Code* srcCode, Builder& insert,
             int size = cur.stack.size();
             if (!compileBC(bc, pos, srcCode, cur.stack, insert, callFeedback,
                            lastTypeFeedback)) {
-                compiler.getLog().warningBC(
+                compiler.getLogger().warningBC(
                     srcFunction, "Abort r2p due to unsupported bc", pos);
                 fail();
                 return;
