@@ -1,0 +1,24 @@
+{
+   not_our_bug
+   Memcheck:Cond
+   fun:__gconv_transform_internal_utf8
+   fun:wcsrtombs
+   fun:wcstombs
+   fun:tre_parse_bracket_items
+   fun:tre_parse_bracket
+   fun:tre_parse
+   fun:tre_compile
+   fun:tre_regcompb
+}
+{
+   not_our_bug_either
+   Memcheck:Cond
+   fun:__wcsnlen_avx2
+   fun:wcsrtombs
+   fun:wcstombs
+   fun:tre_parse_bracket_items
+   fun:tre_parse_bracket
+   fun:tre_parse
+   fun:tre_compile
+   fun:tre_regcompb
+}
