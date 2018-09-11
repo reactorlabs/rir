@@ -129,7 +129,6 @@ REXPORT SEXP pir_setDebugFlags(SEXP debugFlags) {
 }
 
 SEXP pirCompile(SEXP what, pir::DebugOptions debug) {
-    debug = debug | PirDebug;
 
     if (!isValidClosureSEXP(what)) {
         Rf_error("not a compiled closure");
@@ -152,7 +151,7 @@ SEXP pirCompile(SEXP what, pir::DebugOptions debug) {
                            cmp.optimizeModule();
 
                            // compile back to rir
-                           pir::Pir2RirCompiler p2r(debug, cmp.getLog());
+                           pir::Pir2RirCompiler p2r(debug, cmp.getLogger());
                            p2r.compile(c, what);
                        },
                        [&]() {
@@ -166,9 +165,12 @@ SEXP pirCompile(SEXP what, pir::DebugOptions debug) {
 }
 
 REXPORT SEXP pir_compile(SEXP what, SEXP debugFlags) {
-    if (TYPEOF(debugFlags) != INTSXP || Rf_length(debugFlags) < 1)
+    if (debugFlags != R_NilValue &&
+        (TYPEOF(debugFlags) != INTSXP || Rf_length(debugFlags) < 1))
         Rf_error("pir_compile expects an integer vector as second parameter");
-    return pirCompile(what, pir::DebugOptions(INTEGER(debugFlags)[0]));
+    return pirCompile(what, debugFlags == R_NilValue
+                                ? PirDebug
+                                : pir::DebugOptions(INTEGER(debugFlags)[0]));
 }
 
 REXPORT SEXP pir_tests() {

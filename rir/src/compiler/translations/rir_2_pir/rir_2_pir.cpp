@@ -181,7 +181,7 @@ bool Rir2Pir::compileBC(
         break;
 
     case Opcode::guard_fun_:
-        compiler.getLog().warningBC(srcFunction, WARNING_GUARD_STRING, bc);
+        compiler.getLogger().warningBC(srcFunction, WARNING_GUARD_STRING, bc);
         break;
 
     case Opcode::swap_:
@@ -733,9 +733,8 @@ void Rir2Pir::translate(rir::Code* srcCode, Builder& insert,
         if (!skip) {
             int size = cur.stack.size();
             if (!compileBC(bc, pos, srcCode, cur.stack, insert, callFeedback)) {
-                compiler.getLog().warningBC(srcFunction,
-                                            "Abort r2p due to unsupported bc",
-                                            pos);
+                compiler.getLogger().warningBC(
+                    srcFunction, "Abort r2p due to unsupported bc", pos);
                 fail();
                 return;
             }

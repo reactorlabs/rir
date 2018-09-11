@@ -4,9 +4,10 @@
 #include "../pir/pir.h"
 #include "debugging.h"
 
-#include <fstream>
+#include <functional>
 #include <iostream>
 #include <map>
+#include <memory>
 #include <ostream>
 #include <sstream>
 #include <stack>
@@ -19,30 +20,19 @@ class BC;
 namespace pir {
 
 class StreamLogger {
+    static uint64_t logId;
+
   public:
     StreamLogger(DebugOptions options) : options(options) {}
-    ~StreamLogger() {
-        for (auto fun2stream : streams) {
-            finish(fun2stream.first, *streams.at(fun2stream.first));
-            if (options.includes(DebugFlag::PrintIntoStdout))
-                continue;
-            else {
-                if (options.includes(DebugFlag::PrintIntoFiles)) {
-                    ((std::ofstream*)fun2stream.second)->close();
-                } else
-                    std::cout << ((std::stringstream*)fun2stream.second)->str();
-                delete fun2stream.second;
-            }
-        }
-    }
+    ~StreamLogger();
 
     StreamLogger(const StreamLogger&) = delete;
-    StreamLogger& operator=(StreamLogger other) = delete;
+    StreamLogger& operator=(const StreamLogger&) = delete;
 
     void compilationEarlyPir(Closure&);
     void pirOptimizations(Closure&, const std::string&, size_t);
     void afterCSSA(Closure&, const Code*);
-    // void afterLiveness(SSAAllocator&);
+    void afterAllocator(Closure&, std::function<void(std::ostream&)>);
     void finalPIR(Closure&);
     void rirFromPir(rir::Function*);
     void warningBC(rir::Function*, std::string, rir::BC);
@@ -57,13 +47,14 @@ class StreamLogger {
     };
 
   private:
-    std::map<rir::Function*, std::ostream*> streams;
+    std::map<rir::Function*, std::unique_ptr<std::stringstream>> streams;
     const DebugOptions options;
 
     void startLogging(rir::Function* function);
     void compilationInit(rir::Function*);
     void finish(const rir::Function*, std::ostream&);
 };
+
 } // namespace pir
 } // namespace rir
 

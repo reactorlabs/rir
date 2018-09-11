@@ -14,16 +14,16 @@ namespace pir {
 
 class Pir2RirCompiler {
   public:
-    Pir2RirCompiler(const DebugOptions& debug, StreamLogger& log)
-        : debug(debug), log(log) {}
+    Pir2RirCompiler(const DebugOptions& debug, StreamLogger& logger)
+        : debug(debug), logger(logger) {}
 
     const DebugOptions debug;
 
     void compile(Closure* cls, SEXP origin);
-    StreamLogger& getLog() { return log; }
+    StreamLogger& getLogger() { return logger; }
 
   private:
-    StreamLogger& log;
+    StreamLogger& logger;
     std::unordered_set<Closure*> done;
 };
 

@@ -3,30 +3,41 @@
 #include "runtime/Function.h"
 #include "utils/Pool.h"
 
+#include <fstream>
 #include <iomanip>
+#include <sstream>
 
 namespace rir {
 namespace pir {
 
+uint64_t StreamLogger::logId = 0;
+
+StreamLogger::~StreamLogger() {
+    for (auto const& fun2stream : streams) {
+        finish(fun2stream.first, *fun2stream.second);
+        if (options.includes(DebugFlag::PrintIntoFiles)) {
+            std::stringstream filename;
+            filename << ".pirlog"
+                     << "-" << std::setfill('0') << std::setw(5) << logId++
+                     << "-" << fun2stream.first;
+            std::ofstream file(filename.str());
+            file << fun2stream.second->rdbuf();
+        }
+        if (options.includes(DebugFlag::PrintIntoStdout)) {
+            std::cout << fun2stream.second->rdbuf();
+        }
+    }
+}
+
 void StreamLogger::startLogging(rir::Function* function) {
     if (options.intersects(PrintDebugPasses)) {
-        std::ostream* o;
-        if (options.includes(DebugFlag::PrintIntoFiles)) {
-            o = new std::ofstream();
-            // TODO: shouldn't the function identifier be part of the name?
-            ((std::ofstream*)o)->open(".pir/pirCompilation.data");
-        } else if (options.includes(DebugFlag::PrintIntoStdout)) {
-            o = &std::cout;
-        } else {
-            o = new std::stringstream();
-        }
-        streams.emplace(function, o);
+        streams.emplace(function, std::make_unique<std::stringstream>());
         compilationInit(function);
     }
 }
 
 void StreamLogger::compilationInit(rir::Function* function) {
-    this->header("Start compiling:", function, getLog(function), true);
+    header("Start compiling:", function, getLog(function), true);
     if (options.includes(DebugFlag::PrintEarlyRir)) {
         innerHeader(function, " Original version ");
         for (auto code : *function) {
@@ -43,8 +54,8 @@ void StreamLogger::compilationEarlyPir(Closure& closure) {
     }
 }
 
-void StreamLogger::pirOptimizations(Closure& closure,
-                                    const std::string& pass, size_t passnr) {
+void StreamLogger::pirOptimizations(Closure& closure, const std::string& pass,
+                                    size_t passnr) {
     if (options.includes(DebugFlag::PrintOptimizationPasses)) {
         std::stringstream ss;
         ss << pass << ": == " << passnr;
@@ -70,10 +81,13 @@ void StreamLogger::afterCSSA(Closure& closure, const Code* code) {
     }
 }
 
-/*void StreamLogger::afterLiveness(SSAAllocator& allocator) {
-    if (options.includes(DebugFlag::PrintLivenessIntervals))
-            allocator.print(getLog());
-}*/
+void StreamLogger::afterAllocator(
+    Closure& closure, std::function<void(std::ostream&)> maybePrint) {
+    if (options.includes(DebugFlag::PrintAllocator)) {
+        innerHeader(closure.rirVersion(), " PIR SSA allocator ");
+        maybePrint(getLog(closure.rirVersion()));
+    }
+}
 
 void StreamLogger::finalPIR(Closure& closure) {
     if (options.includes(DebugFlag::PrintFinalPir)) {
@@ -91,9 +105,10 @@ void StreamLogger::finish(const rir::Function* function, std::ostream& stream) {
 void StreamLogger::warningBC(rir::Function* function, std::string warning,
                              rir::BC bc) {
     if (options.includes(DebugFlag::ShowWarnings)) {
-        getLog(function) << "Warning" << warning << ": ";
+        getLog(function) << "Warning: " << warning << ": ";
         if (warning.compare(WARNING_GUARD_STRING) == 0) {
-            CHAR(PRINTNAME(rir::Pool::get(bc.immediate.guard_fun_args.name)));
+            getLog(function) << CHAR(
+                PRINTNAME(rir::Pool::get(bc.immediate.guard_fun_args.name)));
         } else {
             bc.print(getLog(function));
         }
