@@ -1,7 +1,7 @@
 #ifndef RIR_CODE_H
 #define RIR_CODE_H
 
-#include "RirHeader.h"
+#include "RirRuntimeObject.h"
 #include "ir/BC_inc.h"
 
 #include <cassert>
@@ -16,7 +16,7 @@ typedef SEXP CodeSEXP;
 struct Function;
 struct FunctionSignature;
 
-#define CODE_MAGIC 0x3111eeee
+#define CODE_MAGIC 0xc0de0000
 
 /**
  * Code holds a sequence of instructions; for each instruction
@@ -45,7 +45,7 @@ static unsigned pad4(unsigned sizeInBytes) {
     return (x != 0) ? (sizeInBytes + 4 - x) : sizeInBytes;
 }
 
-struct Code {
+struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
     friend struct Function;
     friend class FunctionWriter;
     friend class CodeVerifier;
@@ -54,9 +54,6 @@ struct Code {
 
     Code(FunctionSEXP fun, size_t index, SEXP ast, unsigned codeSize,
          unsigned sourceSize, bool isDefaultArg, size_t localsCnt);
-
-    // expose Code as an SEXP to the R gc
-    rir::rir_header info;
 
   private:
     FunctionSEXP function_;
@@ -100,28 +97,6 @@ struct Code {
         unsigned pcOffset;
         unsigned srcIdx;
     };
-
-    SEXP container() {
-        SEXP result = (SEXP)((uintptr_t)this - sizeof(VECTOR_SEXPREC));
-        assert(TYPEOF(result) == EXTERNALSXP &&
-               "Code object not embedded in SEXP container, or corrupt.");
-        return result;
-    }
-
-    static Code* unpack(SEXP s) {
-        Code* c = (Code*)INTEGER(s);
-        assert(c->info.magic == CODE_MAGIC &&
-               "This container does not contain a Code object.");
-        return c;
-    }
-
-    static Code* check(SEXP s) {
-        if (TYPEOF(s) != EXTERNALSXP) {
-            return nullptr;
-        }
-        Code* c = (Code*)INTEGER(s);
-        return c->info.magic == CODE_MAGIC ? c : nullptr;
-    }
 
     /** Returns a pointer to the instructions in c.  */
     Opcode* code() const { return (Opcode*)data; }

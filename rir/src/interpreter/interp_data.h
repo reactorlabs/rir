@@ -6,7 +6,6 @@
 #include "../config.h"
 
 #include "runtime/Code.h"
-#include "runtime/RirHeader.h"
 #include "runtime/Function.h"
 #include "runtime/DispatchTable.h"
 

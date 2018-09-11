@@ -4,7 +4,7 @@
 #include "Code.h"
 #include "FunctionSignature.h"
 #include "R/r.h"
-#include "RirHeader.h"
+#include "RirRuntimeObject.h"
 
 namespace rir {
 
@@ -18,7 +18,7 @@ typedef SEXP FunctionSEXP;
 // creative user might try to assign arbitrary EXTERNAL to a closure which we
 // would like to spot. Of course, such a creative user might actually put the
 // magic in his vector too...
-#define FUNCTION_MAGIC (unsigned)0xCAFEBABE
+#define FUNCTION_MAGIC (unsigned)0xca11ab1e
 
 // TODO removed src reference, now each code has its own
 /** A Function holds the RIR code for some GNU R function.
@@ -46,55 +46,28 @@ typedef SEXP FunctionSEXP;
  */
 #pragma pack(push)
 #pragma pack(1)
-struct Function {
+struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
     friend class FunctionCodeIterator;
     friend class ConstFunctionCodeIterator;
 
     static constexpr size_t CODEOBJ_OFFSET = 2;
 
     Function(size_t functionSize, const std::vector<SEXP>& codeVec)
-        : size(functionSize), signature(nullptr), invocationCount(0),
+        : RirRuntimeObject(
+              // GC area starts just before the end of the Function
+              sizeof(Function) - CODEOBJ_OFFSET * sizeof(FunctionSEXP),
+              // GC area includes the SEXPs before the Code objects array
+              CODEOBJ_OFFSET + codeVec.size()),
+          size(functionSize), signature(nullptr), invocationCount(0),
           deopt(false), markOpt(false), codeLength(codeVec.size()),
           origin_(nullptr), next_(nullptr) {
-        // GC area starts just before the end of Function
-        info.gc_area_start =
-            sizeof(Function) - CODEOBJ_OFFSET * sizeof(FunctionSEXP);
-        info.gc_area_length = CODEOBJ_OFFSET + codeLength;
-        info.magic = FUNCTION_MAGIC;
-        // initialize codeObjects array to nullptr first!
-        for (size_t i = 0; i < codeLength; ++i) {
-            codeObjects[i] = nullptr;
-        }
         for (size_t i = 0; i < codeLength; ++i) {
             Code* c = Code::unpack(codeVec[i]);
             // Set c->function_ to point to this Function's container
-            EXTERNALSXP_SET_ENTRY(c->container(), 0, this->container());
+            c->setEntry(0, container());
             // Set codeObjects[i] to point to Code object c's container
-            EXTERNALSXP_SET_ENTRY(container(), CODEOBJ_OFFSET + i,
-                                  c->container());
+            setEntry(CODEOBJ_OFFSET + i, c->container());
         }
-    }
-
-    SEXP container() {
-        SEXP result = (SEXP)((uintptr_t) this - sizeof(VECTOR_SEXPREC));
-        assert(TYPEOF(result) == EXTERNALSXP &&
-               "Cannot get function container. Is it embedded in a SEXP?");
-        return result;
-    }
-
-    static Function* unpack(SEXP s) {
-        Function* f = (Function*)INTEGER(s);
-        assert(f->info.magic == FUNCTION_MAGIC &&
-               "This container does not contain a Function");
-        return f;
-    }
-
-    static Function* check(SEXP s) {
-        if (TYPEOF(s) != EXTERNALSXP) {
-            return nullptr;
-        }
-        Function* f = (Function*)INTEGER(s);
-        return f->info.magic == FUNCTION_MAGIC ? f : nullptr;
     }
 
     Code* body() { return Code::unpack(codeObjects[codeLength - 1]); }
@@ -127,15 +100,11 @@ struct Function {
 
     FunctionSEXP origin() { return origin_; }
 
-    void origin(Function* s) {
-        EXTERNALSXP_SET_ENTRY(container(), 0, s->container());
-    }
+    void origin(Function* s) { setEntry(0, s->container()); }
 
     FunctionSEXP next() { return next_; }
 
-    void next(Function* s) {
-        EXTERNALSXP_SET_ENTRY(container(), 1, s->container());
-    }
+    void next(Function* s) { setEntry(1, s->container()); }
 
     void registerInvocation() {
         if (invocationCount < UINT_MAX)
@@ -154,8 +123,6 @@ struct Function {
                                       "over.");
         return nullptr;
     }
-
-    rir::rir_header info; /// for exposing SEXPs to GC
 
     unsigned size; /// Size, in bytes, of the function and its data
 

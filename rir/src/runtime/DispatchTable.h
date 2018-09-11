@@ -2,11 +2,11 @@
 #define RIR_DISPATCH_TABLE_H
 
 #include "Function.h"
-#include "RirHeader.h"
+#include "RirRuntimeObject.h"
 
 namespace rir {
 
-#define DISPATCH_TABLE_MAGIC (unsigned)0xBEEF1234
+#define DISPATCH_TABLE_MAGIC (unsigned)0xd7ab1e00
 
 typedef SEXP DispatchTableEntry;
 
@@ -16,29 +16,8 @@ typedef SEXP DispatchTableEntry;
  */
 #pragma pack(push)
 #pragma pack(1)
-struct DispatchTable {
-    SEXP container() {
-        SEXP result = (SEXP)((uintptr_t) this - sizeof(VECTOR_SEXPREC));
-        assert(TYPEOF(result) == EXTERNALSXP &&
-               "Dispatch table not embedded in container, or corrupt.");
-        return result;
-    }
-
-    static DispatchTable* unpack(SEXP s) {
-        DispatchTable* d = (DispatchTable*)INTEGER(s);
-        assert(d->info.magic == DISPATCH_TABLE_MAGIC &&
-               "This container does not contain a dispatch table.");
-        return d;
-    }
-
-    static DispatchTable* check(SEXP s) {
-        if (TYPEOF(s) != EXTERNALSXP) {
-            return nullptr;
-        }
-        DispatchTable* d = (DispatchTable*)INTEGER(s);
-        return d->info.magic == DISPATCH_TABLE_MAGIC ? d : nullptr;
-    }
-
+struct DispatchTable
+    : public RirRuntimeObject<DispatchTable, DISPATCH_TABLE_MAGIC> {
     bool available(size_t i) {
         assert(i < capacity());
         return entry[i];
@@ -48,7 +27,7 @@ struct DispatchTable {
 
     void put(size_t i, Function* f) {
         assert(i < capacity());
-        EXTERNALSXP_SET_ENTRY(container(), i, f->container());
+        setEntry(i, f->container());
     }
 
     Function* first() {
@@ -60,8 +39,6 @@ struct DispatchTable {
         // TODO: Actually do some matching when we have multiple signatures.
         return first();
     }
-
-    rir::rir_header info;
 
     static DispatchTable* create(size_t capacity = 2) {
         // capacity default is 2 for now (rir and pir versions)
@@ -75,13 +52,12 @@ struct DispatchTable {
 
   private:
     DispatchTable() = delete;
-    DispatchTable(size_t cap) {
-        info.gc_area_start = sizeof(DispatchTable);
-        info.gc_area_length = cap;
-        info.magic = DISPATCH_TABLE_MAGIC;
-        for (size_t c = 0; c < cap; ++c)
-            entry[c] = nullptr;
-    }
+    explicit DispatchTable(size_t cap)
+        : RirRuntimeObject(
+              // GC area starts at the end of the DispatchTable
+              sizeof(DispatchTable),
+              // GC area is just the pointers in the entry array
+              cap) {}
 
     DispatchTableEntry entry[];
 };

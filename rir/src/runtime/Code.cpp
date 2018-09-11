@@ -9,13 +9,14 @@
 namespace rir {
 Code::Code(FunctionSEXP fun, size_t index, SEXP ast, unsigned cs,
            unsigned sourceLength, bool isDefaultArg, size_t localsCnt)
-    : function_(fun), index(index), src(src_pool_add(globalContext(), ast)),
+    : RirRuntimeObject(
+          // GC area starts just after the header
+          sizeof(rir_header),
+          // GC area has only 1 pointer
+          1),
+      function_(fun), index(index), src(src_pool_add(globalContext(), ast)),
       localsCount(localsCnt), codeSize(cs), srcLength(sourceLength),
-      perfCounter(0), isDefaultArgument(isDefaultArg) {
-    info.gc_area_start = sizeof(rir_header);
-    info.gc_area_length = 1;
-    info.magic = CODE_MAGIC;
-}
+      perfCounter(0), isDefaultArgument(isDefaultArg) {}
 
 Function* Code::function() { return Function::unpack(function_); }
 
