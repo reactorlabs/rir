@@ -77,14 +77,12 @@ struct TypeFeedback {
     }
 
     bool observedObject() {
-        bool answer = false;
         for (const auto& record : seen) {
             if (record.isObj()) {
-                answer = true;
-                break;
+                return true;
             }
         }
-        return answer;
+        return false;
     }
 };
 static_assert(sizeof(TypeFeedback) == sizeof(uint32_t),

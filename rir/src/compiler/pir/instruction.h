@@ -2,6 +2,7 @@
 #define COMPILER_INSTRUCTION_H
 
 #include "R/r.h"
+#include "env.h"
 #include "instruction_list.h"
 #include "pir.h"
 #include "singleton_values.h"
@@ -73,7 +74,6 @@ enum class EnvAccess : uint8_t {
     Read,
     Write,
     Leak,
-    NoneOrLeak,
 };
 
 // Effect that can be produced by an instruction.
@@ -208,20 +208,20 @@ class InstructionImplementation : public Instruction {
         bool HasEffect;
         bool ChangesEnv;
         bool LeaksEnv;
-        bool HasEnv;
+        bool MightHaveEnv;
         bool AccessesEnv;
-        bool mayElideEnv;
     };
 
     static constexpr InstrDescription Description = {
-        EFFECT > Effect::None,    ENV >= EnvAccess::Write,
-        ENV == EnvAccess::Leak,   ENV > EnvAccess::None,
-        ENV > EnvAccess::Capture, ENV >= EnvAccess::NoneOrLeak};
+        EFFECT > Effect::None, ENV >= EnvAccess::Write, ENV == EnvAccess::Leak,
+        ENV > EnvAccess::None, ENV > EnvAccess::Capture};
 
     bool hasEffect() const final { return Description.HasEffect; }
     bool changesEnv() const final { return Description.ChangesEnv; }
     bool leaksEnv() const final { return Description.LeaksEnv; }
-    bool hasEnv() const final { return Description.HasEnv; }
+    bool hasEnv() const final {
+        return Description.MightHaveEnv && env() != Env::elided();
+    }
     bool accessesEnv() const final { return Description.AccessesEnv; }
 
     static const Base* Cast(const Value* i) {
@@ -273,10 +273,10 @@ class FixedLenInstruction
     using Super::Description;
 
     static_assert(
-        !Description.HasEnv || ARGS > 0,
+        !Description.MightHaveEnv || ARGS > 0,
         "This instruction needs at least 1 argument slot for the env");
 
-    constexpr static size_t ENV_SLOT = Description.HasEnv ? ARGS - 1 : -1;
+    constexpr static size_t ENV_SLOT = Description.MightHaveEnv ? ARGS - 1 : -1;
 
     size_t nargs() const override { return ARGS; }
     size_t envSlot() const override { return ENV_SLOT; }
@@ -289,27 +289,27 @@ class FixedLenInstruction
     }
 
     Value* env() const override {
-        assert(Description.HasEnv);
+        assert(Description.MightHaveEnv);
         return arg(ENV_SLOT).val();
     }
 
     void env(Value* v) override {
         assert(v);
-        assert(Description.HasEnv);
+        assert(Description.MightHaveEnv);
         arg(ENV_SLOT).val() = v;
     }
 
     FixedLenInstruction(PirType resultType, Value* env, unsigned srcIdx = 0)
         : Super(resultType, ArgsZip(env), srcIdx) {
         assert(env);
-        static_assert(Description.HasEnv,
+        static_assert(Description.MightHaveEnv,
                       "Invalid constructor for instruction without env");
         static_assert(ARGS == 1, "This instruction expects more arguments");
     }
 
     FixedLenInstruction(PirType resultType, unsigned srcIdx = 0)
         : Super(resultType, {}, srcIdx) {
-        static_assert(!Description.HasEnv,
+        static_assert(!Description.MightHaveEnv,
                       "Invalid constructor for instruction with env");
         static_assert(ARGS == 0, "This instruction expects more arguments");
     }
@@ -320,7 +320,7 @@ class FixedLenInstruction
                         unsigned srcIdx = 0)
         : Super(resultType, ArgsZip(arg, at, env), srcIdx) {
         assert(env);
-        static_assert(Description.HasEnv,
+        static_assert(Description.MightHaveEnv,
                       "Invalid constructor for instruction without env");
     }
 
@@ -328,7 +328,7 @@ class FixedLenInstruction
                         const std::array<Value*, ARGS>& arg,
                         unsigned srcIdx = 0)
         : Super(resultType, ArgsZip(arg, at), srcIdx) {
-        static_assert(!Description.HasEnv,
+        static_assert(!Description.MightHaveEnv,
                       "Invalid constructor for instruction with env");
     }
 
@@ -378,21 +378,21 @@ class VarLenInstruction
     }
 
     Value* env() const override {
-        assert(Description.HasEnv);
+        assert(Description.MightHaveEnv);
         assert(arg(envSlot()).type() == RType::env);
         return arg(envSlot()).val();
     }
 
     void env(Value* v) override {
         assert(v);
-        assert(Description.HasEnv);
+        assert(Description.MightHaveEnv);
         assert(arg(envSlot()).type() == RType::env);
         arg(envSlot()).val() = v;
     }
 
     void pushArg(Value* a, PirType t) {
         assert(a);
-        if (!Description.HasEnv) {
+        if (!Description.MightHaveEnv) {
             args_.push_back(InstrArg(a, t));
             return;
         }
@@ -404,14 +404,14 @@ class VarLenInstruction
 
     VarLenInstruction(PirType return_type, unsigned srcIdx = 0)
         : Super(return_type, srcIdx) {
-        static_assert(!Description.HasEnv,
+        static_assert(!Description.MightHaveEnv,
                       "This instruction needs an environment");
     }
 
     VarLenInstruction(PirType return_type, Value* env, unsigned srcIdx = 0)
         : Super(return_type, srcIdx) {
         assert(env);
-        static_assert(Description.HasEnv,
+        static_assert(Description.MightHaveEnv,
                       "This instruction has no environment access");
         args_.push_back(InstrArg(env, RType::env));
     }
@@ -749,7 +749,7 @@ class FLI(Int3, 0, Effect::Any, EnvAccess::None) {
 };
 
 #define BINOP(Name, Type)                                                      \
-    class FLI(Name, 3, Effect::None, EnvAccess::NoneOrLeak) {                  \
+    class FLI(Name, 3, Effect::None, EnvAccess::Leak) {                        \
       public:                                                                  \
         Name(Value* lhs, Value* rhs, Value* env, unsigned srcIdx)              \
             : FixedLenInstruction(Type, {{PirType::val(), PirType::val()}},    \
@@ -831,7 +831,7 @@ class CallInstructionImplementation
     static constexpr size_t CallArgOffset = (HAS_TARGET_ARG ? 1 : 0);
     size_t nCallArgs() final {
         return nargs() - (HAS_TARGET_ARG ? 1 : 0) -
-               (Description.HasEnv ? 1 : 0);
+               (Description.MightHaveEnv ? 1 : 0);
     }
 
     void eachCallArg(Instruction::ArgumentValueIterator it) override {

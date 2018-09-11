@@ -678,10 +678,6 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                         cs << BC::parentEnv();
                     } else if (what == Env::nil()) {
                         cs << BC::push(R_NilValue);
-                    } else if (what == Env::elided()) {
-                        // An instruction that may need an environment but it was mark
-                        // speculatively as not needing it currently based on profiling 
-                        cs << BC::push(R_NilValue);
                     } else if (Env::isStaticEnv(what)) {
                         auto env = Env::Cast(what);
                         // Here we could also load env->rho, but if the user
@@ -731,7 +727,7 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                         // stack shuffling would be needed.
                         assert(instr->envSlot() == instr->nargs() - 1);
                         auto env = instr->env();
-                        if (currentEnv != env && env != Env::elided()) {
+                        if (currentEnv != env) {
                             loadEnv(it, env);
                             cs << BC::setEnv();
                             currentEnv = env;
@@ -748,7 +744,7 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                         if (instr->hasEnv() && instr->env() == what) {
                             if (explicitEnvValue(instr))
                                 loadEnv(it, what);
-                        } else {
+                        } else if (what != Env::elided()) {
                             loadArg(it, instr, what);
                         }
                     });
@@ -1014,7 +1010,7 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
     });
 
     return alloc.slots();
-}
+} // namespace
 
 void Pir2Rir::toCSSA(Code* code) {
 
