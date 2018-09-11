@@ -61,6 +61,7 @@
     V(ForSeqSize)                                                              \
     V(Safepoint)                                                               \
     V(Deopt)                                                                   \
+    V(ScheduledDeopt)                                                          \
     V(Force)                                                                   \
     V(CastType)                                                                \
     V(SetShared)                                                               \

@@ -380,7 +380,7 @@ class BC {
     inline static BC isObj();
     inline static BC return_();
     inline static BC int3();
-    inline static BC deopt(Opcode*, Code*);
+    inline static BC deopt(SEXP);
     inline static BC callImplicit(const std::vector<FunIdx>& args, SEXP ast);
     inline static BC callImplicit(const std::vector<FunIdx>& args,
                                   const std::vector<SEXP>& names, SEXP ast);

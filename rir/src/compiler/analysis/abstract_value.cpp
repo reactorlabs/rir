@@ -57,7 +57,7 @@ void AbstractPirValue::print(std::ostream& out) {
 MkFunCls* AbstractREnvironmentHierarchy::findClosure(Value* env, Value* fun) {
     for (;;) {
         if (Force::Cast(fun)) {
-            fun = Force::Cast(fun)->arg<0>().val();
+            fun = Force::Cast(fun)->input();
         } else if (ChkClosure::Cast(fun)) {
             fun = ChkClosure::Cast(fun)->arg<0>().val();
         } else {

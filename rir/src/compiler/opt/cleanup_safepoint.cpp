@@ -10,13 +10,14 @@ namespace pir {
 void CleanupSafepoint::apply(Closure* function) const {
     auto apply = [](Code* code) {
         Visitor::run(code->entry, [&](BB* bb) {
-            for (auto it = bb->begin(); it != bb->end(); ++it) {
+            auto it = bb->begin();
+            while (it != bb->end()) {
+                auto next = it + 1;
                 if (auto sp = Safepoint::Cast(*it)) {
                     if (sp->unused())
-                        it = bb->remove(it);
+                        next = bb->remove(it);
                 }
-                if (it == bb->end())
-                    break;
+                it = next;
             }
         });
     };

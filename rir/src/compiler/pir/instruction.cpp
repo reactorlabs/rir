@@ -132,7 +132,7 @@ Value* Instruction::baseValue() {
     if (auto cast = CastType::Cast(this))
         return cast->arg<0>().val()->baseValue();
     if (auto force = Force::Cast(this))
-        return force->arg<0>().val()->baseValue();
+        return force->input()->baseValue();
     if (auto shared = SetShared::Cast(this))
         return shared->arg<0>().val()->baseValue();
     return this;
@@ -198,7 +198,7 @@ void MkEnv::printArgs(std::ostream& out) {
         out << ", ";
     });
     out << "parent=";
-    parent()->printRef(out);
+    lexicalEnv()->printRef(out);
 }
 
 void Is::printArgs(std::ostream& out) {
@@ -238,15 +238,15 @@ void PirCopy::print(std::ostream& out) {
 
 CallSafeBuiltin::CallSafeBuiltin(SEXP builtin, const std::vector<Value*>& args,
                                  unsigned srcIdx)
-    : CallInstructionImplementation(PirType::valOrLazy(), srcIdx), blt(builtin),
+    : VarLenInstruction(PirType::valOrLazy(), srcIdx), blt(builtin),
       builtin(getBuiltin(builtin)), builtinId(getBuiltinNr(builtin)) {
     for (unsigned i = 0; i < args.size(); ++i)
         this->pushArg(args[i], PirType::val());
 }
 
-CallBuiltin::CallBuiltin(Value* e, SEXP builtin,
+CallBuiltin::CallBuiltin(Value* env, SEXP builtin,
                          const std::vector<Value*>& args, unsigned srcIdx)
-    : CallInstructionImplementation(PirType::valOrLazy(), e, srcIdx),
+    : VarLenInstructionWithEnvSlot(PirType::valOrLazy(), env, srcIdx),
       blt(builtin), builtin(getBuiltin(builtin)),
       builtinId(getBuiltinNr(builtin)) {
     for (unsigned i = 0; i < args.size(); ++i)
@@ -264,21 +264,72 @@ void CallSafeBuiltin::printArgs(std::ostream& out) {
 }
 
 void Safepoint::printArgs(std::ostream& out) {
-    for (auto frame : frames)
-        out << frame.code << "+" << frame.pc - frame.code->code();
-    out << ", stack=[";
-    for (size_t i = 0; i < nargs() - 1; ++i) {
-        arg(i).val()->printRef(out);
-        if (i + 2 < nargs())
-            out << ", ";
-    }
+    out << code << "+" << pc - code->code();
+    out << ": [";
+    long s = stackSize;
+    eachArg([&](Value* i) {
+        if (s) {
+            s--;
+            i->printRef(out);
+            if (s)
+                out << ", ";
+        }
+    });
     out << "], env=";
     env()->printRef(out);
+    if (next()) {
+        out << ", next=";
+        next()->printRef(out);
+    }
 }
 
-MkFunCls::MkFunCls(Closure* fun, Value* parent, SEXP fml, SEXP code, SEXP src)
-    : FixedLenInstruction(RType::closure, parent), fun(fun), fml(fml),
-      code(code), src(src) {
+void ScheduledDeopt::consumeSafepoints(Deopt* deopt) {
+    std::vector<Safepoint*> safepoints;
+    {
+        auto sp = deopt->safepoint();
+        do {
+            safepoints.push_back(sp);
+            sp = sp->next();
+        } while (sp);
+    }
+    for (auto spi = safepoints.rbegin(); spi != safepoints.rend(); spi++) {
+        auto sp = *spi;
+        frames.push_back({sp->pc, sp->code, sp->stackSize});
+        for (size_t i = 0; i < sp->stackSize; i++)
+            pushArg(sp->arg(i).val());
+        pushArg(sp->env());
+    }
+}
+
+void ScheduledDeopt::printArgs(std::ostream& out) {
+    size_t n = 0;
+    for (auto& f : frames)
+        n += f.stackSize + 1;
+    assert(n == nargs());
+
+    size_t argpos = 0;
+    for (auto& f : frames) {
+        out << f.code << "+" << f.pc - f.code->code();
+        out << ": [";
+        long s = f.stackSize;
+        while (s) {
+            s--;
+            arg(argpos++).val()->printRef(out);
+            if (s)
+                out << ", ";
+        }
+        out << "], env=";
+        arg(argpos++).val()->printRef(out);
+        if (argpos < nargs()) {
+            out << "; ";
+        }
+    }
+}
+
+MkFunCls::MkFunCls(Closure* fun, Value* lexicalEnv, SEXP fml, SEXP code,
+                   SEXP src)
+    : FixedLenInstructionWithEnvSlot(RType::closure, lexicalEnv), fun(fun),
+      fml(fml), code(code), src(src) {
     assert(fun->closureEnv() == Env::notClosed());
 }
 

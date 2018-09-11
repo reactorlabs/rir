@@ -14,10 +14,12 @@ void ElideEnv::apply(Closure* function) const {
     std::unordered_map<Value*, Value*> envDependency;
 
     Visitor::run(function->entry, [&](Instruction* i) {
-        if (i->hasEnv() && !StVar::Cast(i))
-            envNeeded.insert(i->env());
-        if (!Env::isPirEnv(i) && i->hasEnv())
-            envDependency[i] = i->env();
+        if (i->accessesEnv()) {
+            if (!StVar::Cast(i))
+                envNeeded.insert(i->env());
+            if (!Env::isPirEnv(i))
+                envDependency[i] = i->env();
+        }
     });
 
     Visitor::run(function->entry, [&](Instruction* i) {
@@ -39,7 +41,7 @@ void ElideEnv::apply(Closure* function) const {
                     ip = bb->remove(ip);
                 else
                     ip++;
-            } else if (i->hasEnv() && Env::isPirEnv(i->env()) &&
+            } else if (i->accessesEnv() && Env::isPirEnv(i->env()) &&
                        envNeeded.find(i->env()) == envNeeded.end()) {
                 ip = bb->remove(ip);
             } else {
