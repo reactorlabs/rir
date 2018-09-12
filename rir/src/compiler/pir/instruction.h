@@ -2,6 +2,7 @@
 #define COMPILER_INSTRUCTION_H
 
 #include "R/r.h"
+#include "env.h"
 #include "instruction_list.h"
 #include "ir/Deoptimization.h"
 #include "pir.h"
@@ -101,7 +102,8 @@ class Instruction : public Value {
     virtual bool hasEffect() const = 0;
     virtual bool changesEnv() const = 0;
     virtual bool leaksEnv() const = 0;
-    virtual bool accessesEnv() const = 0;
+    virtual bool mayAccessEnv() const = 0;
+    virtual bool hasEnv() const = 0;
 
     virtual size_t nargs() const = 0;
 
@@ -141,7 +143,7 @@ class Instruction : public Value {
         // TODO: for escape analysis we use hasEnv || hasEffect as a very crude
         // approximation whether this instruction leaks arguments. We should do
         // better.
-        return accessesEnv() || hasEffect();
+        return hasEnv() || hasEffect();
     }
 
     typedef std::function<void(Value*)> ArgumentValueIterator;
@@ -180,15 +182,17 @@ class Instruction : public Value {
     }
 
     virtual Value* env() const {
-        assert(!accessesEnv() && "subclass must override env() if it uses env");
+        assert(!mayAccessEnv() &&
+               "subclass must override env() if it uses env");
         assert(false && "this instruction has no env");
     }
     virtual void env(Value* env) {
-        assert(!accessesEnv() && "subclass must override env() if it uses env");
+        assert(!mayAccessEnv() &&
+               "subclass must override env() if it uses env");
         assert(false && "this instruction has no env");
     }
     virtual size_t envSlot() const {
-        assert(!accessesEnv() &&
+        assert(!mayAccessEnv() &&
                "subclass must override envSlot() if it uses env");
         assert(false && "this instruction has no env");
     }
@@ -216,7 +220,7 @@ class InstructionImplementation : public Instruction {
 
     struct InstrDescription {
         bool HasEffect;
-        bool AccessesEnv;
+        bool MayAccessEnv;
         bool ChangesEnv;
         bool LeaksEnv;
     };
@@ -226,9 +230,12 @@ class InstructionImplementation : public Instruction {
         ENV == EnvAccess::Leak};
 
     bool hasEffect() const final { return Description.HasEffect; }
-    bool accessesEnv() const final { return Description.AccessesEnv; }
+    bool mayAccessEnv() const final { return Description.MayAccessEnv; }
     bool changesEnv() const final { return Description.ChangesEnv; }
     bool leaksEnv() const final { return Description.LeaksEnv; }
+    bool hasEnv() const final {
+        return mayAccessEnv() && env() != Env::elided();
+    }
 
     static const Base* Cast(const Value* i) {
         if (i->tag == ITAG)
@@ -801,8 +808,6 @@ class FLI(Int3, 0, Effect::Any, EnvAccess::None) {
                   srcIdx) {}                                                   \
     }
 
-BINOP(Gte, PirType::val());
-BINOP(Lte, PirType::val());
 BINOP(Mul, PirType::val());
 BINOP(Div, PirType::val());
 BINOP(IDiv, PirType::val());
@@ -811,6 +816,8 @@ BINOP(Add, PirType::val());
 BINOP(Colon, PirType::val());
 BINOP(Pow, PirType::val());
 BINOP(Sub, PirType::val());
+BINOP(Gte, RType::logical);
+BINOP(Lte, RType::logical);
 BINOP(Gt, RType::logical);
 BINOP(Lt, RType::logical);
 BINOP(Neq, RType::logical);
@@ -883,6 +890,7 @@ class VLIE(Call, Effect::Any, EnvAccess::Leak), public CallInstruction {
 class VLIE(StaticCall, Effect::Any, EnvAccess::Leak), public CallInstruction {
     Closure* cls_;
     SEXP origin_;
+
   public:
     Closure* cls() { return cls_; }
     SEXP origin() { return origin_; }

@@ -37,15 +37,16 @@ pir.debugFlags <- function(ShowWarnings = FALSE,
                            PrintEarlyRir = FALSE,
                            PrintEarlyPir = FALSE,
                            PrintOptimizationPasses = FALSE,
+                           PrintPirAfterOpt = FALSE,
                            PrintCSSA = FALSE,
                            PrintAllocator = FALSE,
                            PrintFinalPir = FALSE,
-                           PrintFinalRir = FALSE) {
+                           PrintFinalRir = FALSE ) {
     # !!!  This list of arguments *must* be exactly equal to the   !!!
     # !!!    LIST_OF_PIR_DEBUGGING_FLAGS in compiler/debugging.h   !!!
     .Call("pir_debugFlags", ShowWarnings, DryRun, PreserveVersions,
           PrintIntoFiles, PrintIntoStdout, PrintEarlyRir, PrintEarlyPir,
-          PrintOptimizationPasses, PrintCSSA, PrintAllocator, PrintFinalPir,
+          PrintOptimizationPasses, PrintPirAfterOpt, PrintCSSA, PrintAllocator, PrintFinalPir,
           PrintFinalRir,
           # wants a dummy parameter at the end for technical reasons
           NULL)

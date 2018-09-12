@@ -10,31 +10,29 @@ namespace rir {
 namespace pir {
 
 void DelayEnv::apply(Closure* function) const {
-    std::vector<MkEnv*> envs;
-
     Visitor::run(function->entry, [&](BB* bb) {
         std::unordered_set<MkEnv*> done;
-        MkEnv* e;
+        MkEnv* envInstr;
 
         while (true) {
-            e = nullptr;
+            envInstr = nullptr;
 
             auto it = bb->end();
             while (it != bb->begin()) {
                 it--;
                 auto t = MkEnv::Cast(*it);
                 if (t && done.find(t) == done.end()) {
-                    e = t;
+                    envInstr = t;
                     break;
                 }
             }
 
-            if (!e)
+            if (!envInstr)
                 break;
-            done.insert(e);
+            done.insert(envInstr);
 
             while (it != bb->end() && (it + 1) != bb->end()) {
-                assert(*it == e);
+                assert(*it == envInstr);
 
                 auto next = *(it + 1);
 
@@ -44,21 +42,21 @@ void DelayEnv::apply(Closure* function) const {
 
                 auto consumeStVar = [&](StVar* st) {
                     bool exists = false;
-                    e->eachLocalVar([&](SEXP name, InstrArg& arg) {
+                    envInstr->eachLocalVar([&](SEXP name, InstrArg& arg) {
                         if (name == st->varName) {
                             exists = true;
                             arg.val() = st->val();
                         }
                     });
                     if (!exists) {
-                        e->pushArg(st->val(), PirType::any());
-                        e->varName.push_back(st->varName);
+                        envInstr->pushArg(st->val(), PirType::any());
+                        envInstr->varName.push_back(st->varName);
                     }
                 };
 
                 {
                     auto st = StVar::Cast(next);
-                    if (st && st->env() == e) {
+                    if (st && st->env() == envInstr) {
                         consumeStVar(st);
                         it = bb->remove(it + 1);
                         it--;
@@ -66,32 +64,42 @@ void DelayEnv::apply(Closure* function) const {
                     }
                 }
 
-                if (next->accessesEnv() && next->env() == e)
+                if (next->hasEnv() && next->env() == envInstr)
                     break;
 
                 bb->swapWithNext(it);
                 it++;
             }
 
+            auto moveMkEnvToDeoptBranch = [&](BB* deoptBranch,
+                                              BB* fastPathBranch) {
+                auto newEnvInstr = envInstr->clone();
+                it = bb->insert(it, newEnvInstr);
+                envInstr->replaceUsesIn(newEnvInstr, fastPathBranch);
+                // Closure wrapper in MkEnv can be circular
+                Replace::usesOfValue(newEnvInstr, envInstr, newEnvInstr);
+                it = bb->moveToBegin(it, fastPathBranch);
+                it = bb->moveToBegin(it, deoptBranch);
+            };
+
             if (it != bb->end() && (it + 1) != bb->end()) {
-                auto b = Branch::Cast(*(it + 1));
-                if (e && b) {
-                    if (!bb->falseBranch()->isEmpty()) {
-                        auto d = Deopt::Cast(bb->falseBranch()->last());
-                        if (d) {
-                            auto newE = e->clone();
-                            it = bb->insert(it, newE);
-                            e->replaceUsesIn(newE, bb->trueBranch());
-                            // Closure wrapper in MkEnv can be circular
-                            Replace::usesOfValue(newE, e, newE);
-                            it = bb->moveToBegin(it, bb->trueBranch());
-                            it = bb->moveToBegin(it, bb->falseBranch());
-                        }
+                auto branch = Branch::Cast(*(it + 1));
+                if (envInstr && branch) {
+                    Deopt* deopt;
+                    if (!bb->falseBranch()->isEmpty() &&
+                        (deopt = Deopt::Cast(bb->falseBranch()->last()))) {
+                        moveMkEnvToDeoptBranch(bb->falseBranch(),
+                                               bb->trueBranch());
+                    } else if (!bb->trueBranch()->isEmpty() &&
+                               (deopt =
+                                    Deopt::Cast(bb->trueBranch()->last()))) {
+                        moveMkEnvToDeoptBranch(bb->trueBranch(),
+                                               bb->falseBranch());
                     }
                 }
             }
         }
     });
 }
-}
-}
+} // namespace pir
+} // namespace rir

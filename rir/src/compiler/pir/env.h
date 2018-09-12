@@ -36,6 +36,11 @@ class Env : public Value {
         return &u;
     }
 
+    static Env* elided() {
+        static Env u(nullptr, nullptr);
+        return &u;
+    }
+
     void printRef(std::ostream& out);
 
     static Env* Cast(Value* v) {

@@ -139,7 +139,7 @@ class TheInliner {
                         // update. For example this happens if we inline an
                         // inner function. Then the lexical env is the current
                         // functions env.
-                        if (needsEnvPatching && i->accessesEnv() &&
+                        if (needsEnvPatching && i->hasEnv() &&
                             i->env() == inlinee->closureEnv()) {
                             i->env(staticEnv);
                         }
@@ -219,7 +219,7 @@ class TheInliner {
         });
     }
 };
-}
+} // namespace
 
 namespace rir {
 namespace pir {
@@ -228,5 +228,5 @@ void Inline::apply(Closure* function) const {
     TheInliner s(function);
     s();
 }
-}
-}
+} // namespace pir
+} // namespace rir

@@ -42,8 +42,8 @@ class Builder {
 
     Safepoint* registerSafepoint(rir::Code* srcCode, Opcode* pos,
                                  const RirStack& stack);
-    void deoptUnless(Value* condition, rir::Code* srcCode, Opcode* pos,
-                     const RirStack& stack);
+    void conditionalDeopt(Value* condition, rir::Code* srcCode, Opcode* pos,
+                          const RirStack& stack, bool);
 
     // Use with care, let the builder keep track of BB. Prefer the highlevel
     // api above.

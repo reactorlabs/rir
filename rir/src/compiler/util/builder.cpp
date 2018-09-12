@@ -57,12 +57,17 @@ Safepoint* Builder::registerSafepoint(rir::Code* srcCode, Opcode* pos,
     return sp;
 };
 
-void Builder::deoptUnless(Value* condition, rir::Code* srcCode, Opcode* pos,
-                          const RirStack& stack) {
+void Builder::conditionalDeopt(Value* condition, rir::Code* srcCode,
+                               Opcode* pos, const RirStack& stack,
+                               bool deoptUnless) {
     add(new Branch(condition));
     auto cont = createBB();
     auto fail = createBB();
-    setBranch(cont, fail);
+    // We may deoptimize if the condition holds or unless the condition holds
+    if (deoptUnless)
+        setBranch(cont, fail);
+    else
+        setBranch(fail, cont);
 
     enterBB(fail);
     auto sp = registerSafepoint(srcCode, pos, stack);
@@ -93,5 +98,5 @@ Builder::Builder(Closure* fun, Promise* prom)
     add(ldenv);
     env = ldenv;
 }
-}
-}
+} // namespace pir
+} // namespace rir

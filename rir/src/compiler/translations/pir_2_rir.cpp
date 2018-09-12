@@ -749,7 +749,7 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
 
                 // Step one: load and set env
                 if (!Phi::Cast(instr)) {
-                    if (instr->accessesEnv() && !explicitEnvValue(instr)) {
+                    if (instr->hasEnv() && !explicitEnvValue(instr)) {
                         // If the env is passed on the stack, it needs
                         // to be TOS here. To relax this condition some
                         // stack shuffling would be needed.
@@ -769,11 +769,10 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 // Step two: load the rest
                 if (!Phi::Cast(instr)) {
                     instr->eachArg([&](Value* what) {
-                        if (instr->accessesEnv() && instr->env() == what) {
-                            if (explicitEnvValue(instr)) {
+                        if (instr->hasEnv() && instr->env() == what) {
+                            if (explicitEnvValue(instr))
                                 loadEnv(it, what);
-                            }
-                        } else {
+                        } else if (what != Env::elided()) {
                             loadArg(it, instr, what);
                         }
                     });
@@ -797,10 +796,10 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
             }
             case Tag::ForSeqSize: {
                 cs << BC::forSeqSize();
-                // TODO: currently we always pop the sequence, since we cannot
-                // deal with instructions that do not pop the value after use.
-                // If it is used in a later instruction, it will be loaded
-                // from a local variable again.
+                // TODO: currently we always pop the sequence, since we
+                // cannot deal with instructions that do not pop the value
+                // after use. If it is used in a later instruction, it will
+                // be loaded from a local variable again.
                 cs << BC::swap() << BC::pop();
                 break;
             }
@@ -883,9 +882,10 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
 #undef EMPTY
 
             case Tag::LdFunctionEnv: {
-                // TODO: what should happen? For now get the current env (should
-                // be the promise environment that the evaluator was called
-                // with) and store it into local and leave it set as current
+                // TODO: what should happen? For now get the current env
+                // (should be the promise environment that the evaluator was
+                // called with) and store it into local and leave it set as
+                // current
                 cs << BC::getEnv();
                 break;
             }
@@ -985,9 +985,9 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 break;
             }
             case Tag::Phi: {
-                // Phi functions are no-ops, because after allocation on CSSA
-                // form, all arguments and the funcion itself are allocated to
-                // the same place
+                // Phi functions are no-ops, because after allocation on
+                // CSSA form, all arguments and the funcion itself are
+                // allocated to the same place
                 auto phi = Phi::Cast(instr);
                 phi->eachArg([&](BB*, Value* arg) {
                     assert(((alloc.onStack(phi) && alloc.onStack(arg)) ||
@@ -1013,9 +1013,9 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 m->numFrames = nframes;
 
                 size_t i = 0;
-                // Frames in the ScheduledDeopt are in pir argument order (from
-                // left to right). On the other hand frames in the rir deopt_
-                // instruction are in stack order, from tos down.
+                // Frames in the ScheduledDeopt are in pir argument order
+                // (from left to right). On the other hand frames in the rir
+                // deopt_ instruction are in stack order, from tos down.
                 for (auto fi = deopt->frames.rbegin();
                      fi != deopt->frames.rend(); fi++)
                     m->frames[i++] = *fi;
@@ -1057,7 +1057,7 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
     });
 
     return alloc.slots();
-}
+} // namespace
 
 void Pir2Rir::collapseSafepoints(Code* code) {
     Visitor::run(code->entry, [&](BB* bb) {
@@ -1086,7 +1086,6 @@ void Pir2Rir::collapseSafepoints(Code* code) {
 }
 
 void Pir2Rir::toCSSA(Code* code) {
-
     // For each Phi, insert copies
     BreadthFirstVisitor::run(code->entry, [&](BB* bb) {
         // TODO: move all phi's to the beginning, then insert the copies not
@@ -1122,7 +1121,6 @@ size_t Pir2Rir::getPromiseIdx(Context& ctx, Promise* p) {
 }
 
 rir::Function* Pir2Rir::finalize() {
-
     // TODO: keep track of source ast indices in the source pool
     // (for now, calls, promises and operators do)
     // + how to deal with inlined stuff?

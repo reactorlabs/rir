@@ -21,6 +21,7 @@ const std::string WARNING_GUARD_STRING = "Guard ignored";
     V(PrintEarlyRir)                                                           \
     V(PrintEarlyPir)                                                           \
     V(PrintOptimizationPasses)                                                 \
+    V(PrintPirAfterOpt)                                                        \
     V(PrintCSSA)                                                               \
     V(PrintAllocator)                                                          \
     V(PrintFinalPir)                                                           \

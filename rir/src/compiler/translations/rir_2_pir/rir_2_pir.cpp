@@ -131,7 +131,8 @@ namespace pir {
 
 bool Rir2Pir::compileBC(
     BC bc, Opcode* pos, rir::Code* srcCode, RirStack& stack, Builder& insert,
-    std::unordered_map<Value*, CallFeedback>& callFeedback) const {
+    std::unordered_map<Value*, CallFeedback>& callFeedback,
+    std::unordered_map<Value*, TypeFeedback>& typeFeedback) const {
     Value* env = insert.env;
 
     unsigned srcIdx = srcCode->getSrcIdxAt(pos, true);
@@ -216,7 +217,8 @@ bool Rir2Pir::compileBC(
         break;
 
     case Opcode::record_binop_: {
-        // TODO
+        typeFeedback[at(0)] = bc.immediate.binopFeedback[0];
+        typeFeedback[at(1)] = bc.immediate.binopFeedback[1];
         break;
     }
 
@@ -268,7 +270,7 @@ bool Rir2Pir::compileBC(
                     Value* expected = insert(new LdConst(monomorphic));
                     Value* t = insert(new Identical(callee, expected));
 
-                    insert.deoptUnless(t, srcCode, pos, stack);
+                    insert.conditionalDeopt(t, srcCode, pos, stack, true);
                     pop();
                     push(insert(
                         new StaticCall(insert.env, f, args, monomorphic, ast)));
@@ -414,7 +416,18 @@ bool Rir2Pir::compileBC(
     case Opcode::Op: {                                                         \
         auto rhs = pop();                                                      \
         auto lhs = pop();                                                      \
-        push(insert(new Name(lhs, rhs, env, srcIdx)));                         \
+        if (typeFeedback[rhs].numTypes > 0 &&                                  \
+            typeFeedback[lhs].numTypes > 0 &&                                  \
+            !typeFeedback[rhs].observedObject() &&                             \
+            !typeFeedback[lhs].observedObject()) {                             \
+            Value* leftIsObj = insert(new IsObject(lhs));                      \
+            insert.conditionalDeopt(leftIsObj, srcCode, pos, stack, false);    \
+            Value* rightIsObj = insert(new IsObject(rhs));                     \
+            insert.conditionalDeopt(rightIsObj, srcCode, pos, stack, false);   \
+            push(insert(new Name(lhs, rhs, Env::elided(), srcIdx)));           \
+        } else {                                                               \
+            push(insert(new Name(lhs, rhs, env, srcIdx)));                     \
+        }                                                                      \
         break;                                                                 \
     }
 
@@ -570,6 +583,7 @@ void Rir2Pir::translate(rir::Code* srcCode, Builder& insert,
     cur.seen = true;
 
     std::unordered_map<Value*, CallFeedback> callFeedback;
+    std::unordered_map<Value*, TypeFeedback> typeFeedback;
 
     Opcode* end = srcCode->endCode();
     Opcode* finger = srcCode->code();
@@ -731,7 +745,8 @@ void Rir2Pir::translate(rir::Code* srcCode, Builder& insert,
 
         if (!skip) {
             int size = cur.stack.size();
-            if (!compileBC(bc, pos, srcCode, cur.stack, insert, callFeedback)) {
+            if (!compileBC(bc, pos, srcCode, cur.stack, insert, callFeedback,
+                           typeFeedback)) {
                 compiler.getLogger().warningBC(
                     srcFunction, "Abort r2p due to unsupported bc", pos);
                 fail();

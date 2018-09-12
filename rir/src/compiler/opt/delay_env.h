@@ -20,7 +20,7 @@ class DelayEnv : public PirTranslator {
 
     void apply(Closure* function) const final override;
 };
-}
-}
+} // namespace pir
+} // namespace rir
 
 #endif

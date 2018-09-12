@@ -64,6 +64,13 @@ void StreamLogger::pirOptimizations(Closure& closure, const std::string& pass,
     }
 }
 
+void StreamLogger::pirOptimizationsFinished(Closure& closure) {
+    if (options.includes(DebugFlag::PrintPirAfterOpt)) {
+        innerHeader(closure.rirVersion(), " PIR Version After Optimizations ");
+        closure.print(getLog(closure.rirVersion()));
+    }
+}
+
 void StreamLogger::rirFromPir(rir::Function* function) {
     if (options.includes(DebugFlag::PrintFinalRir)) {
         innerHeader(function, " Final RIR Version ");
