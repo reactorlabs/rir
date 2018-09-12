@@ -106,3 +106,5 @@ cache:
   ccache: true
   directories:
     - external
+    # cache homebrew formulas
+    - /usr/local/Homebrew/Library/Taps/homebrew/homebrew-core
