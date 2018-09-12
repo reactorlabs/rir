@@ -2195,8 +2195,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
             SEXP idx = ostack_at(ctx, 0);
             int i = -1;
 
-            if (getAttrib(val, R_NamesSymbol) != R_NilValue || ATTRIB(val) ||
-                ATTRIB(idx) != R_NilValue)
+            if (ATTRIB(val) != R_NilValue || ATTRIB(idx) != R_NilValue)
                 goto fallback;
 
             switch (TYPEOF(idx)) {
@@ -2229,7 +2228,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
         if (XLENGTH(val) == 1 && NO_REFERENCES(val)) {                         \
             res = val;                                                         \
         } else {                                                               \
-            res = allocVector(vectype, 1);                                     \
+            res = Rf_allocVector(vectype, 1);                                  \
             vecaccess(res)[0] = vecaccess(val)[i];                             \
         }                                                                      \
         break;                                                                 \
