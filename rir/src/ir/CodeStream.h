@@ -72,8 +72,6 @@ class CodeStream {
     }
 
     CodeStream& operator<<(const BC& b) {
-        if (b.bc == Opcode::label)
-            return *this << b.immediate.offset;
         if (b.bc == Opcode::nop_)
             nops++;
         b.write(*this);
