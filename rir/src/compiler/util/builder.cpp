@@ -12,9 +12,9 @@ void Builder::markDone(BB* bb) {
     done[bb->id] = true;
 }
 
-bool Builder::isDone(BB* bb) {
+bool Builder::isDone(BB* bb) const {
     if (done.size() <= bb->id)
-        done.resize(bb->id + 1);
+        return false;
     return done[bb->id];
 }
 
@@ -86,7 +86,7 @@ Builder::Builder(Closure* fun, Value* closureEnv)
         args[i] = this->operator()(new LdArg(i));
     auto mkenv = new MkEnv(closureEnv, fun->argNames, args.data());
     add(mkenv);
-    env = mkenv;
+    this->env = mkenv;
 }
 
 Builder::Builder(Closure* fun, Promise* prom)
@@ -96,7 +96,7 @@ Builder::Builder(Closure* fun, Promise* prom)
     prom->entry = bb;
     auto ldenv = new LdFunctionEnv();
     add(ldenv);
-    env = ldenv;
+    this->env = ldenv;
 }
 } // namespace pir
 } // namespace rir

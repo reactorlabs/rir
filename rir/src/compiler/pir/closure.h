@@ -29,7 +29,7 @@ class Closure : public Code {
     rir::Function* function;
 
   public:
-    Env* closureEnv() { return env; }
+    Env* closureEnv() const { return env; }
     rir::Function* rirVersion() { return function; }
 
     std::vector<SEXP> argNames;

@@ -91,7 +91,7 @@ class SSAAllocator {
     };
     std::unordered_map<Value*, Liveness> livenessInterval;
 
-    SSAAllocator(Code* code)
+    explicit SSAAllocator(Code* code)
         : cfg(code), dom(code), code(code), bbsSize(code->nextBBId) {
         computeLiveness();
         computeStackAllocation();
@@ -604,7 +604,7 @@ class Context {
     std::stack<CodeStream*> css;
     FunctionWriter& fun;
 
-    Context(FunctionWriter& fun) : fun(fun) {}
+    explicit Context(FunctionWriter& fun) : fun(fun) {}
     ~Context() { assert(css.empty()); }
 
     CodeStream& cs() { return *css.top(); }

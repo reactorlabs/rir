@@ -49,8 +49,6 @@ namespace rir {
 // ==== BC types
 //
 
-struct Code;
-
 enum class Opcode : uint8_t {
 
 #define DEF_INSTR(name, ...) name,
@@ -127,7 +125,8 @@ class BC {
     };
 
     static Immediate readImmediate(Opcode** pc) {
-        Immediate i = *(Immediate*)*pc;
+        Immediate i;
+        memcpy(&i, *pc, sizeof(Immediate));
         *pc = (Opcode*)((uintptr_t)*pc + sizeof(Immediate));
         return i;
     }
@@ -140,33 +139,24 @@ class BC {
 
     BC() : bc(Opcode::invalid_) {}
 
-    BC(Opcode* pc) {
-        bc = *pc;
-        pc++;
-        immediate = decodeImmediateArguments(bc, pc);
-        // Read implicit promise argument offsets
-        if (bc == Opcode::call_implicit_ ||
-            bc == Opcode::named_call_implicit_) {
-            pc += sizeof(CallFixedArgs);
-            for (size_t i = 0; i < immediate.callFixedArgs.nargs; ++i)
-                immediateCallArguments.push_back(readImmediate(&pc));
-        }
-        // Read named arguments
-        if (bc == Opcode::named_call_ || bc == Opcode::named_call_implicit_) {
-            for (size_t i = 0; i < immediate.callFixedArgs.nargs; ++i)
-                callArgumentNames.push_back(readImmediate(&pc));
-        }
-    }
+    BC(const BC& other) = delete;
+    BC& operator=(const BC& other) = delete;
 
-    BC operator=(BC other) {
+    BC(BC&& other)
+        : bc(other.bc), immediate(other.immediate),
+          immediateCallArguments(std::move(other.immediateCallArguments)),
+          callArgumentNames(std::move(other.callArgumentNames)){};
+    BC& operator=(BC&& other) {
         bc = other.bc;
         immediate = other.immediate;
-        return other;
+        immediateCallArguments = std::move(other.immediateCallArguments);
+        callArgumentNames = std::move(other.callArgumentNames);
+        return *this;
     }
 
     bool is(Opcode aBc) { return bc == aBc; }
 
-    inline size_t size() {
+    inline size_t size() const {
         // Those are the 3 variable length BC we have
         // call implicit has the promise offsets in the bc stream
         if (bc == Opcode::call_implicit_)
@@ -210,7 +200,7 @@ class BC {
     SEXP immediateConst() const;
 
     inline static Opcode* jmpTarget(Opcode* pos) {
-        BC bc = BC::decode(pos);
+        BC bc = decode(pos);
         assert(bc.isJmp());
         return (Opcode*)((uintptr_t)pos + bc.size() + bc.immediate.offset);
     }
@@ -256,12 +246,14 @@ class BC {
         case Opcode::call_implicit_:
         case Opcode::named_call_: {
             pc++;
-            Immediate nargs = *(Immediate*)pc;
+            Immediate nargs;
+            memcpy(&nargs, pc, sizeof(Immediate));
             return 1 + (2 + nargs) * sizeof(Immediate);
         }
         case Opcode::named_call_implicit_: {
             pc++;
-            Immediate nargs = *(Immediate*)pc;
+            Immediate nargs;
+            memcpy(&nargs, pc, sizeof(Immediate));
             return 1 + (2 + 2 * nargs) * sizeof(Immediate);
         }
         default: {}
@@ -387,11 +379,29 @@ class BC {
     inline static BC recordBinop();
 
   private:
+    explicit BC(Opcode* pc) {
+        bc = *pc;
+        pc++;
+        immediate = decodeImmediateArguments(bc, pc);
+        // Read implicit promise argument offsets
+        if (bc == Opcode::call_implicit_ ||
+            bc == Opcode::named_call_implicit_) {
+            pc += sizeof(CallFixedArgs);
+            for (size_t i = 0; i < immediate.callFixedArgs.nargs; ++i)
+                immediateCallArguments.push_back(readImmediate(&pc));
+        }
+        // Read named arguments
+        if (bc == Opcode::named_call_ || bc == Opcode::named_call_implicit_) {
+            for (size_t i = 0; i < immediate.callFixedArgs.nargs; ++i)
+                callArgumentNames.push_back(readImmediate(&pc));
+        }
+    }
+
     explicit BC(Opcode bc) : bc(bc) {}
-    BC(Opcode bc, ImmediateArguments immediate)
+    BC(Opcode bc, const ImmediateArguments& immediate)
         : bc(bc), immediate(immediate) {}
-    BC(Opcode bc, ImmediateArguments immediate, const std::vector<FunIdx>& args,
-       const std::vector<PoolIdx>& names)
+    BC(Opcode bc, const ImmediateArguments& immediate,
+       const std::vector<FunIdx>& args, const std::vector<PoolIdx>& names)
         : bc(bc), immediate(immediate), immediateCallArguments(args),
           callArgumentNames(names) {}
 
@@ -470,54 +480,54 @@ class BC {
         case Opcode::stvar_:
         case Opcode::stvar_super_:
         case Opcode::missing_:
-            immediate.pool = *(PoolIdx*)pc;
+            memcpy(&immediate.pool, pc, sizeof(PoolIdx));
             break;
         case Opcode::call_implicit_:
         case Opcode::named_call_implicit_:
         case Opcode::call_:
         case Opcode::named_call_:
-            immediate.callFixedArgs = *(CallFixedArgs*)pc;
+            memcpy(&immediate.callFixedArgs, pc, sizeof(CallFixedArgs));
             break;
         case Opcode::static_call_:
-            immediate.staticCallFixedArgs = *(StaticCallFixedArgs*)pc;
+            memcpy(&immediate.staticCallFixedArgs, pc,
+                   sizeof(StaticCallFixedArgs));
             break;
         case Opcode::guard_fun_:
-            immediate.guard_fun_args = *(GuardFunArgs*)pc;
+            memcpy(&immediate.guard_fun_args, pc, sizeof(GuardFunArgs));
             break;
         case Opcode::promise_:
         case Opcode::push_code_:
-            immediate.fun = *(FunIdx*)pc;
+            memcpy(&immediate.fun, pc, sizeof(FunIdx));
             break;
         case Opcode::br_:
         case Opcode::brtrue_:
         case Opcode::brobj_:
         case Opcode::brfalse_:
         case Opcode::beginloop_:
-            immediate.offset = *(Jmp*)pc;
+            memcpy(&immediate.offset, pc, sizeof(Jmp));
             break;
         case Opcode::pick_:
         case Opcode::pull_:
         case Opcode::is_:
         case Opcode::put_:
         case Opcode::alloc_:
-            immediate.i = *(uint32_t*)pc;
+            memcpy(&immediate.i, pc, sizeof(uint32_t));
             break;
         case Opcode::ldarg_:
-            immediate.arg_idx = *(ArgIdx*)pc;
+            memcpy(&immediate.arg_idx, pc, sizeof(ArgIdx));
             break;
         case Opcode::ldloc_:
         case Opcode::stloc_:
-            immediate.loc = *(NumLocals*)pc;
+            memcpy(&immediate.loc, pc, sizeof(NumLocals));
             break;
         case Opcode::movloc_:
-            immediate.loc_cpy = *(LocalsCopy*)pc;
+            memcpy(&immediate.loc_cpy, pc, sizeof(LocalsCopy));
             break;
         case Opcode::record_call_:
-            immediate.callFeedback = *(CallFeedback*)pc;
+            memcpy(&immediate.callFeedback, pc, sizeof(CallFeedback));
             break;
         case Opcode::record_binop_:
-            immediate.binopFeedback[0] = *((TypeFeedback*)pc);
-            immediate.binopFeedback[1] = *((TypeFeedback*)pc + 1);
+            memcpy(&immediate.binopFeedback, pc, sizeof(TypeFeedback) * 2);
             break;
         case Opcode::nop_:
         case Opcode::make_env_:

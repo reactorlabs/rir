@@ -17,7 +17,7 @@ class Rir2PirCompiler : public RirCompiler {
                         Maybe fail);
     void compileFunction(rir::Function*, const std::string& name,
                          FormalArgs const&, MaybeCls success, Maybe fail);
-    void optimizeModule(StreamLogger& logger, bool preserveVersions = false);
+    void optimizeModule(bool preserveVersions = false);
 
   private:
     StreamLogger& logger;

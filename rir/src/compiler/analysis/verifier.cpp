@@ -10,7 +10,7 @@ class TheVerifier {
   public:
     Closure* f;
 
-    TheVerifier(Closure* f) : f(f) {}
+    explicit TheVerifier(Closure* f) : f(f) {}
 
     bool ok = true;
 

@@ -48,6 +48,9 @@ class CodeStream {
     uint32_t nextCallSiteIdx_ = 0;
 
   public:
+    CodeStream(const CodeStream& other) = delete;
+    CodeStream& operator=(const CodeStream& other) = delete;
+
     BC::Label mkLabel() {
         assert(nextLabel < BC::MAX_JMP);
         return nextLabel++;
@@ -110,16 +113,16 @@ class CodeStream {
 
 #define INS(pc_) (reinterpret_cast<Opcode*>(&(*code)[(pc_)]))
 
-        unsigned size = BC(INS(pc)).size();
+        unsigned bcSize = BC::decode(INS(pc)).size();
 
-        for (unsigned i = 0; i < size; ++i) {
+        for (unsigned i = 0; i < bcSize; ++i) {
             *INS(pc + i) = Opcode::nop_;
             nops++;
             // patchpoints are fixed by just removing the binding to label
             patchpoints.erase(pc + i);
         }
 
-        sources.erase(pc + size);
+        sources.erase(pc + bcSize);
     }
 
     BC::FunIdx finalize(bool markDefaultArg, size_t localsCnt) {

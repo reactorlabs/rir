@@ -210,7 +210,7 @@ class InstructionImplementation : public Instruction {
                               unsigned srcIdx)
         : Instruction(ITAG, resultType, srcIdx), args_(args) {}
 
-    void operator=(InstructionImplementation&) = delete;
+    InstructionImplementation& operator=(InstructionImplementation&) = delete;
     InstructionImplementation() = delete;
 
     Instruction* clone() const override {
@@ -275,6 +275,7 @@ class InstructionImplementation : public Instruction {
 };
 
 template <Tag ITAG, class Base, size_t ARGS, Effect EFFECT, EnvAccess ENV>
+// cppcheck-suppress noConstructor
 class FixedLenInstruction
     : public InstructionImplementation<ITAG, Base, EFFECT, ENV,
                                        std::array<InstrArg, ARGS>> {
@@ -387,7 +388,7 @@ class VarLenInstruction
         assert(a);
         args_.push_back(InstrArg(a, t));
     }
-    void pushArg(Value* a) { pushArg(a, a->type); }
+    virtual void pushArg(Value* a) { pushArg(a, a->type); }
     virtual void popArg() {
         assert(args_.size() > 0);
         args_.pop_back();
@@ -462,7 +463,7 @@ extern std::ostream& operator<<(std::ostream& out,
 class FLI(LdConst, 0, Effect::None, EnvAccess::None) {
   public:
     LdConst(SEXP c, PirType t) : FixedLenInstruction(t), c(c) {}
-    LdConst(SEXP c) : FixedLenInstruction(PirType(c)), c(c) {}
+    explicit LdConst(SEXP c) : FixedLenInstruction(PirType(c)), c(c) {}
     SEXP c;
     void printArgs(std::ostream& out) override;
 };
@@ -499,7 +500,7 @@ class FLIE(LdVar, 1, Effect::None, EnvAccess::Read) {
 
 class FLI(ForSeqSize, 1, Effect::Error, EnvAccess::None) {
   public:
-    ForSeqSize(Value* val)
+    explicit ForSeqSize(Value* val)
         : FixedLenInstruction(PirType(RType::integer).scalar(),
                               {{PirType::val()}}, {{val}}) {}
 };
@@ -508,21 +509,22 @@ class FLI(LdArg, 0, Effect::None, EnvAccess::None) {
   public:
     size_t id;
 
-    LdArg(size_t id) : FixedLenInstruction(PirType::valOrLazy()), id(id) {}
+    explicit LdArg(size_t id)
+        : FixedLenInstruction(PirType::valOrLazy()), id(id) {}
 
     void printArgs(std::ostream& out) override;
 };
 
 class FLI(ChkMissing, 1, Effect::Warn, EnvAccess::None) {
   public:
-    ChkMissing(Value* in)
+    explicit ChkMissing(Value* in)
         : FixedLenInstruction(PirType::valOrLazy(), {{PirType::any()}},
                               {{in}}) {}
 };
 
 class FLI(ChkClosure, 1, Effect::Warn, EnvAccess::None) {
   public:
-    ChkClosure(Value* in)
+    explicit ChkClosure(Value* in)
         : FixedLenInstruction(RType::closure, {{PirType::val()}}, {{in}}) {}
 };
 
@@ -580,7 +582,7 @@ class FLIE(StVar, 2, Effect::None, EnvAccess::Write) {
 
 class FLI(Branch, 1, Effect::None, EnvAccess::None) {
   public:
-    Branch(Value* test)
+    explicit Branch(Value* test)
         : FixedLenInstruction(PirType::voyd(), {{NativeType::test}}, {{test}}) {
     }
     void printArgs(std::ostream& out) override;
@@ -588,7 +590,7 @@ class FLI(Branch, 1, Effect::None, EnvAccess::None) {
 
 class FLI(Return, 1, Effect::None, EnvAccess::None) {
   public:
-    Return(Value* ret)
+    explicit Return(Value* ret)
         : FixedLenInstruction(PirType::voyd(), {{PirType::val()}}, {{ret}}) {}
 };
 
@@ -596,10 +598,10 @@ class Promise;
 class FLIE(MkArg, 2, Effect::None, EnvAccess::Capture) {
   public:
     Promise* prom;
-    MkArg(Promise* prom, Value* v, Value* env)
+    MkArg(Promise* prom_, Value* v, Value* env)
         : FixedLenInstructionWithEnvSlot(
               RType::prom, {{PirType::valOrMissing()}}, {{v}}, env),
-          prom(prom) {
+          prom(prom_) {
         assert(eagerArg() == v);
     }
     MkArg(Value* v, Value* env)
@@ -612,7 +614,7 @@ class FLIE(MkArg, 2, Effect::None, EnvAccess::Capture) {
     typedef std::function<void(Promise*)> PromMaybe;
     typedef std::function<void(Value*)> EagerMaybe;
 
-    Value* eagerArg() { return arg(0).val(); }
+    Value* eagerArg() const { return arg(0).val(); }
 
     void ifEager(EagerMaybe maybe) {
         if (eagerArg() != Missing::instance())
@@ -680,7 +682,7 @@ class FLI(AsLogical, 1, Effect::Warn, EnvAccess::None) {
 
 class FLI(AsTest, 1, Effect::None, EnvAccess::None) {
   public:
-    AsTest(Value* in)
+    explicit AsTest(Value* in)
         : FixedLenInstruction(NativeType::test, {{RType::logical}}, {{in}}) {}
 };
 
@@ -748,7 +750,7 @@ class FLIE(Extract2_2D, 4, Effect::None, EnvAccess::Leak) {
 
 class FLI(Inc, 1, Effect::None, EnvAccess::None) {
   public:
-    Inc(Value* v)
+    explicit Inc(Value* v)
         : FixedLenInstruction(PirType(RType::integer).scalar(),
                               {{PirType(RType::integer).scalar()}}, {{v}}) {}
 };
@@ -766,7 +768,7 @@ class FLI(Is, 1, Effect::None, EnvAccess::None) {
 
 class FLI(IsObject, 1, Effect::None, EnvAccess::None) {
   public:
-    IsObject(Value* v)
+    explicit IsObject(Value* v)
         : FixedLenInstruction(NativeType::test, {{PirType::val()}}, {{v}}) {}
 };
 
@@ -777,12 +779,14 @@ class FLI(LdFunctionEnv, 0, Effect::None, EnvAccess::None) {
 
 class FLI(SetShared, 1, Effect::Write, EnvAccess::None) {
   public:
-    SetShared(Value* v) : FixedLenInstruction(v->type, {{v->type}}, {{v}}) {}
+    explicit SetShared(Value* v)
+        : FixedLenInstruction(v->type, {{v->type}}, {{v}}) {}
 };
 
 class FLI(PirCopy, 1, Effect::None, EnvAccess::None) {
   public:
-    PirCopy(Value* v) : FixedLenInstruction(v->type, {{v->type}}, {{v}}) {}
+    explicit PirCopy(Value* v)
+        : FixedLenInstruction(v->type, {{v->type}}, {{v}}) {}
     void print(std::ostream& out) override;
 };
 
@@ -1000,13 +1004,13 @@ class VLI(Phi, Effect::None, EnvAccess::None) {
     }
     void printArgs(std::ostream& out) override;
     bool updateType();
-    template <bool E = false>
-    inline void pushArg(Value* a) {
-        static_assert(E, "use addInput");
+    void pushArg(Value* a, PirType t) override {
+        assert(false && "use addInput");
     }
+    void pushArg(Value* a) override { assert(false && "use addInput"); }
     void addInput(BB* in, Value* arg) {
         input.push_back(in);
-        VarLenInstruction::pushArg(arg);
+        args_.push_back(InstrArg(arg, arg->type));
     }
     typedef std::function<void(BB* bb, Value*)> PhiArgumentIterator;
 
@@ -1072,7 +1076,7 @@ class VLIE(Safepoint, Effect::Any, EnvAccess::Leak) {
 
     Safepoint* next() {
         if (inlined) {
-            auto r = Safepoint::Cast(arg(nargs() - 2).val());
+            auto r = Cast(arg(nargs() - 2).val());
             assert(r);
             return r;
         } else {
@@ -1085,7 +1089,7 @@ class VLIE(Safepoint, Effect::Any, EnvAccess::Leak) {
 
 class FLI(Deopt, 1, Effect::Any, EnvAccess::None) {
   public:
-    Deopt(Safepoint* safepoint)
+    explicit Deopt(Safepoint* safepoint)
         : FixedLenInstruction(PirType::voyd(), {{NativeType::safepoint}},
                               {{safepoint}}) {}
     Safepoint* safepoint();

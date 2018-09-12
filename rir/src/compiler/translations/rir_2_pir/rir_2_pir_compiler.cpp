@@ -110,8 +110,7 @@ void Rir2PirCompiler::compileClosure(rir::Function* srcFunction,
         success(module->get(Module::FunctionAndEnv(srcFunction, closureEnv)));
 }
 
-void Rir2PirCompiler::optimizeModule(StreamLogger& logger,
-                                     bool preserveVersions) {
+void Rir2PirCompiler::optimizeModule(bool preserveVersions) {
     size_t passnr = 0;
     for (auto& translation : translations) {
         module->eachPirFunction([&](Module::VersionedClosure& v) {

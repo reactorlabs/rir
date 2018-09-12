@@ -127,7 +127,6 @@ RIR_INLINE SEXP getSrcForCall(Code* c, Opcode* pc, Context* ctx) {
 #endif
 
 // bytecode accesses
-
 #define advanceOpcode() (*pc++)
 #define readImmediate() (*(Immediate*)pc)
 #define readSignedImmediate() (*(SignedImmediate*)pc)
@@ -373,9 +372,10 @@ SEXP rirCallTrampoline(const CallContext& call, Function* fun, SEXP env,
 }
 
 void warnSpecial(SEXP callee, SEXP call) {
-    // TODO: turn this on?
     return;
 
+    // Enable this to find specials which are not implemented in RIR bytecodes
+#if 0
     static bool isWarning = false;
 
     if (!isWarning) {
@@ -392,6 +392,7 @@ void warnSpecial(SEXP callee, SEXP call) {
         Rprintf("warning: calling special: %s\n",
                 R_FunTab[((sexprec_rjit*)callee)->u.i].name);
     }
+#endif
 }
 
 SEXP legacySpecialCall(const CallContext& call, Context* ctx) {
@@ -990,20 +991,22 @@ RIR_INLINE void incPerfCount(Code* c) {
     }
 }
 
-static int debugging = 0;
 void debug(Code* c, Opcode* pc, const char* name, unsigned depth,
            Context* ctx) {
     return;
+    // Enable this to trace the execution of every BC
+#if 0
     if (debugging == 0) {
         debugging = 1;
-        printf("%p : %d, %s, s: %d\n", c, (int)*pc, name, depth);
+        printf("%p : %d, %s, s: %u\n", c, (int)*pc, name, depth);
         for (unsigned i = 0; i < depth; ++i) {
-            printf("%3d: ", i);
+            printf("%3u: ", i);
             Rf_PrintValue(ostack_at(ctx, i));
         }
         printf("\n");
         debugging = 0;
     }
+#endif
 }
 
 #define BINDING_CACHE_SIZE 5
@@ -1071,6 +1074,9 @@ static void cachedSetVar(SEXP val, SEXP env, Immediate idx, Context* ctx,
     Rf_defineVar(sym, val, env);
     UNPROTECT(1);
 }
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wcast-align"
 
 SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
                  Opcode* initialPC) {
@@ -2622,9 +2628,11 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
 
             RCNTXT* cntxt = (RCNTXT*)RAW(val);
 
-            // (ab)use the same buffe to store the current pc
-            Opcode** oldPc = (Opcode**)(cntxt + 1);
-            *oldPc = pc;
+            {
+                // (ab)use the same buffer to store the current pc
+                Opcode** oldPc = (Opcode**)(cntxt + 1);
+                *oldPc = pc;
+            }
 
             Rf_begincontext(cntxt, CTXT_LOOP, R_NilValue, getenv(), R_BaseEnv,
                             R_NilValue, R_NilValue);
@@ -2697,6 +2705,8 @@ eval_done:
     }
     return ostack_pop(ctx);
 }
+
+#pragma GCC diagnostic pop
 
 SEXP evalRirCodeExtCaller(Code* c, Context* ctx, SEXP* env) {
     return evalRirCode(c, ctx, env, nullptr);

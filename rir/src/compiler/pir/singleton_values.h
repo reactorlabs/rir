@@ -18,7 +18,7 @@ class SingletonValue : public Value {
 
   public:
     SingletonValue(const SingletonValue&) = delete;
-    void operator=(const SingletonValue&) = delete;
+    SingletonValue& operator=(const SingletonValue&) = delete;
 
     static T* instance() {
         static T i;

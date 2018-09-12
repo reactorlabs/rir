@@ -12,7 +12,7 @@ class Protect {
     Protect(const Protect& other) = delete;
 
     Protect() {}
-    Protect(SEXP init) {
+    explicit Protect(SEXP init) {
         Rf_protect(init);
         ++protectedValues_;
     }

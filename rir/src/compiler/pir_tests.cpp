@@ -68,8 +68,7 @@ closuresByName compileRir2Pir(SEXP env, pir::Module* m) {
         }
     }
 
-    // cmp.setVerbose(true);
-    cmp.optimizeModule(logger);
+    cmp.optimizeModule();
     return results;
 }
 
@@ -302,8 +301,9 @@ bool checkPir2Rir(SEXP expected, SEXP result) {
     return R_compute_identical(expected, result, 15) == TRUE;
 }
 
-bool testPir2Rir(std::string name, std::string fun, std::string args,
-                 bool useSame = false, bool verbose = false) {
+bool testPir2Rir(const std::string& name, const std::string& fun,
+                 const std::string& args, bool useSame = false,
+                 bool verbose = false) {
     Protect p;
 
     std::string wrapper =

@@ -12,11 +12,11 @@ using namespace rir::pir;
 
 class TheCleanup {
   public:
-    TheCleanup(Closure* function) : function(function) {}
+    explicit TheCleanup(Closure* function) : function(function) {}
     Closure* function;
     void operator()() {
         std::unordered_set<size_t> used_p;
-        std::unordered_map<BB*, std::unordered_set<Phi*>> used_bb;
+        std::unordered_map<BB*, std::unordered_set<Phi*>> usedBB;
         std::unordered_map<SetShared*, int> isShared;
 
         Visitor::run(function->entry, [&](BB* bb) {
@@ -58,8 +58,8 @@ class TheCleanup {
                         next = bb->remove(ip);
                     } else {
                         phi->updateType();
-                        for (auto bb : phi->input)
-                            used_bb[bb].insert(phi);
+                        for (auto curBB : phi->input)
+                            usedBB[curBB].insert(phi);
                     }
                 } else if (auto arg = MkArg::Cast(i)) {
                     used_p.insert(arg->prom->id);
@@ -126,7 +126,7 @@ class TheCleanup {
         }
 
         auto fixupPhiInput = [&](BB* old, BB* n) {
-            for (auto phi : used_bb[old]) {
+            for (auto phi : usedBB[old]) {
                 for (auto& in : phi->input)
                     if (in == old)
                         in = n;
@@ -156,7 +156,7 @@ class TheCleanup {
             // Remove empty jump-through blocks
             if (bb->isJmp() && bb->next0->isEmpty() && bb->next0->isJmp() &&
                 cfg.hasSinglePred(bb->next0->next0)) {
-                assert(used_bb.find(bb->next0) == used_bb.end());
+                assert(usedBB.find(bb->next0) == usedBB.end());
                 toDel[bb->next0] = bb->next0->next0;
             }
         });
@@ -165,8 +165,8 @@ class TheCleanup {
             if (bb->next0 && bb->next1) {
                 if (bb->next0->isEmpty() && bb->next1->isEmpty() &&
                     bb->next0->next0 == bb->next1->next0 &&
-                    used_bb.find(bb->next0) == used_bb.end() &&
-                    used_bb.find(bb->next1) == used_bb.end()) {
+                    usedBB.find(bb->next0) == usedBB.end() &&
+                    usedBB.find(bb->next1) == usedBB.end()) {
                     toDel[bb->next0] = bb->next0->next0;
                     toDel[bb->next1] = bb->next0->next0;
                     bb->next1 = nullptr;

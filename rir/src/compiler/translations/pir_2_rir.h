@@ -14,7 +14,7 @@ namespace pir {
 
 class Pir2RirCompiler {
   public:
-    Pir2RirCompiler(StreamLogger& logger) : logger(logger) {}
+    explicit Pir2RirCompiler(StreamLogger& logger) : logger(logger) {}
     Pir2RirCompiler(const Pir2RirCompiler&) = delete;
     Pir2RirCompiler& operator=(const Pir2RirCompiler&) = delete;
 

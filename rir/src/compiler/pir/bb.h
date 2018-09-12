@@ -31,7 +31,7 @@ class BB {
     Code* owner;
 
     BB(const BB&) = delete;
-    void operator=(const BB&) = delete;
+    BB& operator=(const BB&) = delete;
 
     BB(Code* fun, unsigned id);
     ~BB();
@@ -51,10 +51,10 @@ class BB {
         return 0;
     }
 
-    Instruction* last();
+    Instruction* last() const;
 
-    bool isJmp() { return next0 && !next1; }
-    bool isEmpty() { return instrs.size() == 0; }
+    bool isJmp() const { return next0 && !next1; }
+    bool isEmpty() const { return instrs.size() == 0; }
 
     typedef std::vector<Instruction*> Instrs;
 
@@ -74,7 +74,7 @@ class BB {
 
     Instrs::iterator begin() { return instrs.begin(); }
     Instrs::iterator end() { return instrs.end(); }
-    size_t size() { return instrs.size(); }
+    size_t size() const { return instrs.size(); }
     Instruction* at(size_t i) { return instrs[i]; }
 
     void gc();

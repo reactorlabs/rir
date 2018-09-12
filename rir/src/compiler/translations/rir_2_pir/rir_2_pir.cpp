@@ -131,8 +131,8 @@ namespace rir {
 namespace pir {
 
 bool Rir2Pir::compileBC(
-    BC bc, Opcode* pos, rir::Code* srcCode, RirStack& stack, Builder& insert,
-    std::unordered_map<Value*, CallFeedback>& callFeedback,
+    const BC& bc, Opcode* pos, rir::Code* srcCode, RirStack& stack,
+    Builder& insert, std::unordered_map<Value*, CallFeedback>& callFeedback,
     std::unordered_map<Value*, TypeFeedback>& typeFeedback) const {
     Value* env = insert.env;
 
@@ -727,15 +727,12 @@ void Rir2Pir::translate(rir::Code* srcCode, Builder& insert,
             inner << name;
             // Try to find the name of this inner function by peeking for the
             // stvar
-            if (pc < end) {
-                auto n = BC::next(pc);
+            {
+                auto n = pc;
+                for (int i = 0; i < 2 && n < end; ++i, n = BC::next(n))
+                    ;
                 if (n < end) {
                     auto nextbc = BC::decode(n);
-                    if (nextbc.bc != Opcode::stvar_) {
-                        n = BC::next(n);
-                        if (n < end)
-                            nextbc = BC::decode(n);
-                    }
                     if (nextbc.bc == Opcode::stvar_)
                         inner << ">"
                               << CHAR(PRINTNAME(nextbc.immediateConst()));

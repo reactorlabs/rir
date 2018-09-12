@@ -7,6 +7,7 @@
 #include <iomanip>
 
 namespace rir {
+// cppcheck-suppress uninitMemberVar symbol=data
 Code::Code(FunctionSEXP fun, size_t index, SEXP ast, unsigned cs,
            unsigned sourceLength, bool isDefaultArg, size_t localsCnt)
     : RirRuntimeObject(
@@ -15,8 +16,9 @@ Code::Code(FunctionSEXP fun, size_t index, SEXP ast, unsigned cs,
           // GC area has only 1 pointer
           1),
       function_(fun), index(index), src(src_pool_add(globalContext(), ast)),
-      localsCount(localsCnt), codeSize(cs), srcLength(sourceLength),
-      perfCounter(0), isDefaultArgument(isDefaultArg) {}
+      stackLength(0), localsCount(localsCnt), codeSize(cs),
+      srcLength(sourceLength), perfCounter(0), isDefaultArgument(isDefaultArg) {
+}
 
 Function* Code::function() { return Function::unpack(function_); }
 
@@ -158,8 +160,7 @@ bool FunctionCodeIterator::operator!=(FunctionCodeIterator other) {
 }
 
 Code* FunctionCodeIterator::operator*() {
-    assert(0 <= index && index < function->codeLength &&
-           "Iterator index out of bounds.");
+    assert(index < function->codeLength && "Iterator index out of bounds.");
     return Code::unpack(function->codeObjects[index]);
 }
 
@@ -174,8 +175,7 @@ bool ConstFunctionCodeIterator::operator!=(ConstFunctionCodeIterator other) {
 }
 
 const Code* ConstFunctionCodeIterator::operator*() {
-    assert(0 <= index && index < function->codeLength &&
-           "Iterator index out of bounds.");
+    assert(index < function->codeLength && "Iterator index out of bounds.");
     return Code::unpack(function->codeObjects[index]);
 }
 } // namespace rir

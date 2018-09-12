@@ -80,7 +80,7 @@ struct ForcedBy : public std::unordered_map<Value*, Force*> {
 
 class ForceDominanceAnalysis : public StaticAnalysis<ForcedBy> {
   public:
-    ForceDominanceAnalysis(Closure* cls) : StaticAnalysis(cls) {}
+    explicit ForceDominanceAnalysis(Closure* cls) : StaticAnalysis(cls) {}
 
     void apply(ForcedBy& d, Instruction* i) const override {
         auto f = Force::Cast(i);
@@ -100,7 +100,7 @@ class ForceDominanceAnalysis : public StaticAnalysis<ForcedBy> {
 
 class ForceDominanceAnalysisResult {
   public:
-    ForceDominanceAnalysisResult(Closure* cls) {
+    explicit ForceDominanceAnalysisResult(Closure* cls) {
         ForceDominanceAnalysis analysis(cls);
         analysis();
         analysis.foreach<PositioningStyle::AfterInstruction>(
