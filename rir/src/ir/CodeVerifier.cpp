@@ -169,9 +169,7 @@ static Sources hasSources(Opcode bc) {
         return Sources::May;
 
     case Opcode::invalid_:
-    case Opcode::num_of:
-    case Opcode::label: {
-    }
+    case Opcode::num_of: {}
     }
     assert(false);
     return Sources::NotNeeded;

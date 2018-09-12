@@ -177,12 +177,6 @@ BC BC::alloc(int type) {
 }
 
 BC BC::isfun() { return BC(Opcode::isfun_); }
-
-BC BC::label(Jmp j) {
-    ImmediateArguments i;
-    i.offset = j;
-    return BC(Opcode::label, i);
-}
 BC BC::br(Jmp j) {
     ImmediateArguments i;
     i.offset = j;

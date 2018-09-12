@@ -15,8 +15,32 @@ Code::Code(SEXP ast, unsigned cs, unsigned sourceLength, unsigned offset,
 
 void Code::disassemble(std::ostream& out) const {
     Opcode* pc = code();
-
+    size_t label = 0;
+    std::map<Opcode*, size_t> targets;
+    targets[pc] = label++;
     while (pc < endCode()) {
+        if (BC::decode(pc).isJmp()) {
+            auto t = BC::jmpTarget(pc);
+            if (!targets.count(t))
+                targets[t] = label++;
+        }
+        pc = BC::next(pc);
+    }
+    // sort labels ascending
+    label = 0;
+    for (auto& t : targets)
+        t.second = label++;
+
+    auto formatLabel = [&](size_t label) { out << label; };
+
+    pc = code();
+    while (pc < endCode()) {
+
+        if (targets.count(pc)) {
+            formatLabel(targets[pc]);
+            out << ":\n";
+        }
+
         BC bc = BC::decode(pc);
 
         const size_t OFFSET_WIDTH = 5;
@@ -48,7 +72,13 @@ void Code::disassemble(std::ostream& out) const {
         default: {}
         }
 
-        bc.print(out);
+        if (bc.isJmp()) {
+            bc.printOpcode(out);
+            formatLabel(targets[BC::jmpTarget(pc)]);
+            out << "\n";
+        } else {
+            bc.print(out);
+        }
 
         pc = BC::next(pc);
     }
