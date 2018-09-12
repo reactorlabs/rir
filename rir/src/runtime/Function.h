@@ -98,6 +98,8 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
         return 0;
     }
 
+    void disassemble(std::ostream&);
+
     FunctionSEXP origin() { return origin_; }
 
     void origin(Function* s) { setEntry(0, s->container()); }

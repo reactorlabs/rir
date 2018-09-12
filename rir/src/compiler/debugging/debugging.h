@@ -12,8 +12,6 @@ namespace pir {
 #define LOGGING(code) /* nothing */
 #endif
 
-const std::string WARNING_GUARD_STRING = "Guard ignored";
-
 // !!!  This list of arguments *must* be exactly equal to the   !!!
 // !!!    one in pir.debugFlags in R/rir.R                      !!!
 
