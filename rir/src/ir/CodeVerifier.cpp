@@ -126,7 +126,6 @@ static Sources hasSources(Opcode bc) {
     case Opcode::put_:
     case Opcode::alloc_:
     case Opcode::ldarg_:
-    case Opcode::ldloc_:
     case Opcode::stloc_:
     case Opcode::movloc_:
     case Opcode::nop_:
@@ -162,6 +161,7 @@ static Sources hasSources(Opcode bc) {
     case Opcode::deopt_:
         return Sources::NotNeeded;
 
+    case Opcode::ldloc_:
     case Opcode::aslogical_:
     case Opcode::asbool_:
     case Opcode::missing_:

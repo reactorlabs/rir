@@ -15,7 +15,7 @@ void DelayInstr::apply(Closure* function) const {
             auto i = *ip;
             auto next = ip + 1;
 
-            if (!i->accessesEnv() && !i->hasEffect() && !Phi::Cast(i)) {
+            if (!i->hasEnv() && !i->hasEffect() && !Phi::Cast(i)) {
                 Instruction* usage = i->hasSingleUse();
                 if (usage && usage->bb() != bb) {
                     auto phi = Phi::Cast(usage);
@@ -47,5 +47,5 @@ void DelayInstr::apply(Closure* function) const {
         }
     });
 }
-}
-}
+} // namespace pir
+} // namespace rir

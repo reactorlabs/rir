@@ -1074,12 +1074,8 @@ static void cachedSetVar(SEXP val, SEXP env, Immediate idx, Context* ctx,
     UNPROTECT(1);
 }
 
-SEXP evalRirCodeExtCaller(Code* c, Context* ctx, SEXP* env) {
-    return evalRirCode(c, ctx, env, nullptr);
-}
-
-SEXP evalRirCode(Code* c, Context* ctx, SEXP* env,
-                 const CallContext* callCtxt) {
+SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
+                 Opcode* initialPC) {
     assert(*env || (callCtxt != nullptr));
 
     extern int R_PPStackTop;
@@ -1092,6 +1088,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env,
     };
 #endif
 
+    std::vector<FrameInfo*> synthesizeFrames;
     assert(c->magic == CODE_MAGIC);
 
     Locals locals(c->localsCount);
@@ -1104,7 +1101,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env,
     // some intermediate values on the stack
     ostack_ensureSize(ctx, c->stackLength + 5);
 
-    Opcode* pc = c->code();
+    Opcode* pc = initialPC ? initialPC : c->code();
     SEXP res;
 
     R_Visible = TRUE;
@@ -2408,13 +2405,36 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env,
 
         INSTRUCTION(deopt_) {
             SEXP r = readConst(ctx, readImmediate());
+            advanceImmediate();
             assert(TYPEOF(r) == RAWSXP);
             assert(XLENGTH(r) >= (int)sizeof(DeoptMetadata));
             auto m = (DeoptMetadata*)DATAPTR(r);
-            advanceImmediate();
-            pc = (Opcode*)m->frames[0].pc;
-            c = (Code*)m->frames[0].code;
+            assert(m->numFrames >= 1);
+
+#if 0
+            size_t pos = 0;
+            for (size_t i = 0; i < m->numFrames; ++i) {
+                std::cout << "Code " << m->frames[i].code << "\n";
+                std::cout << "Frame " << i << ":\n";
+                std::cout << "  - env\n";
+                Rf_PrintValue(ostack_at(ctx, pos++));
+                for( size_t j = 0; j < m->frames[i].stackSize; ++j) {
+                    std::cout << "  - stack " << j <<"\n";
+                    Rf_PrintValue(ostack_at(ctx, pos++));
+                }
+            }
+#endif
+
+            for (size_t i = 1; i < m->numFrames; ++i)
+                synthesizeFrames.push_back(&m->frames[i]);
+
+            FrameInfo& f = m->frames[0];
+            pc = f.pc;
+            c = f.code;
             assert(c->code() <= pc && pc < c->endCode());
+            SEXP e = ostack_pop(ctx);
+            assert(TYPEOF(e) == ENVSXP);
+            *env = e;
             NEXT();
         }
 
@@ -2667,7 +2687,27 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env,
     }
 
 eval_done:
+    while (!synthesizeFrames.empty()) {
+        FrameInfo* f = synthesizeFrames.back();
+        synthesizeFrames.pop_back();
+        SEXP res = ostack_pop(ctx);
+        SEXP e = ostack_pop(ctx);
+        assert(TYPEOF(e) == ENVSXP);
+        *env = e;
+        ostack_push(ctx, res);
+        res = evalRirCode(f->code, ctx, env, callCtxt, f->pc);
+        ostack_push(ctx, res);
+    }
     return ostack_pop(ctx);
+}
+
+SEXP evalRirCodeExtCaller(Code* c, Context* ctx, SEXP* env) {
+    return evalRirCode(c, ctx, env, nullptr);
+}
+
+SEXP evalRirCode(Code* c, Context* ctx, SEXP* env,
+                 const CallContext* callCtxt) {
+    return evalRirCode(c, ctx, env, callCtxt, nullptr);
 }
 
 SEXP rirExpr(SEXP f) {

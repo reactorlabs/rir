@@ -34,44 +34,35 @@ class TheScopeAnalysis : public StaticAnalysis<AbstractREnvironmentHierarchy> {
 
 void TheScopeAnalysis::tryLoad(const AS& envs, Instruction* i,
                                LoadMaybe aLoad) const {
-    LdVar* ld = LdVar::Cast(i);
-    LdVarSuper* sld = LdVarSuper::Cast(i);
-    LdFun* ldf = LdFun::Cast(i);
-    StVarSuper* sts = StVarSuper::Cast(i);
-
-    if (ld) {
+    if (auto ld = LdVar::Cast(i)) {
         aLoad(envs.get(ld->env(), ld->varName));
-    } else if (sld) {
+    } else if (auto sld = LdVarSuper::Cast(i)) {
         aLoad(envs.superGet(sld->env(), sld->varName));
-    } else if (ldf) {
+    } else if (auto ldf = LdFun::Cast(i)) {
         aLoad(envs.get(ldf->env(), ldf->varName));
-    } else if (sts) {
+    } else if (auto sts = StVarSuper::Cast(i)) {
         aLoad(envs.superGet(sts->env(), sts->varName));
     }
 }
 
 void TheScopeAnalysis::apply(AS& envs, Instruction* i) const {
-    StVar* s = StVar::Cast(i);
-    StVarSuper* ss = StVarSuper::Cast(i);
-    MkEnv* mk = MkEnv::Cast(i);
-
     bool handled = false;
 
-    if (mk) {
-        Value* parentEnv = mk->env();
+    if (auto mk = MkEnv::Cast(i)) {
+        Value* lexicalEnv = mk->lexicalEnv();
         // If we know the caller, we can fill in the parent env
-        if (parentEnv == Env::notClosed() &&
+        if (lexicalEnv == Env::notClosed() &&
             staticClosureEnv != Env::notClosed()) {
-            parentEnv = staticClosureEnv;
+            lexicalEnv = staticClosureEnv;
         }
-        envs[mk].parentEnv(parentEnv);
+        envs[mk].parentEnv(lexicalEnv);
         mk->eachLocalVar(
             [&](SEXP name, Value* val) { envs[mk].set(name, val, mk); });
         handled = true;
-    } else if (s) {
+    } else if (auto s = StVar::Cast(i)) {
         envs[s->env()].set(s->varName, s->val(), s);
         handled = true;
-    } else if (ss) {
+    } else if (auto ss = StVarSuper::Cast(i)) {
         auto superEnv = envs[ss->env()].parentEnv();
         if (superEnv != AbstractREnvironment::UnknownParent) {
             envs[superEnv].set(ss->varName, ss->val(), ss);
@@ -82,12 +73,12 @@ void TheScopeAnalysis::apply(AS& envs, Instruction* i) const {
         if (auto call = Call::Cast(i)) {
             auto trg = call->cls()->baseValue();
             assert(trg);
-            MkFunCls* cls = envs.findClosure(i->env(), trg);
+            MkFunCls* cls = envs.findClosure(call->callerEnv(), trg);
             if (cls != AbstractREnvironment::UnknownClosure) {
                 if (cls->fun->argNames.size() == calli->nCallArgs()) {
                     TheScopeAnalysis nextFun(cls->fun, cls->fun->argNames,
-                                             cls->env(), cls->fun->entry, envs,
-                                             depth + 1);
+                                             cls->lexicalEnv(), cls->fun->entry,
+                                             envs, depth + 1);
                     nextFun();
                     envs.merge(nextFun.result());
                     handled = true;
@@ -118,7 +109,7 @@ void TheScopeAnalysis::apply(AS& envs, Instruction* i) const {
                         [&](Value* val) { mkfun = MkFunCls::Cast(val); });
             });
     if (mkfun)
-        envs[i->env()].mkClosures[i] = mkfun;
+        envs[mkfun->lexicalEnv()].mkClosures[i] = mkfun;
 
     if (!handled) {
         if (i->leaksEnv()) {

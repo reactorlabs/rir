@@ -13,12 +13,13 @@ struct Code;
 struct FrameInfo {
     Opcode* pc;
     Code* code;
+    size_t stackSize;
 };
 
 struct DeoptMetadata {
-    FrameInfo frames[1];
-
     void print(std::ostream& out) const;
+    size_t numFrames;
+    FrameInfo frames[];
 };
 
 #pragma pack(pop)

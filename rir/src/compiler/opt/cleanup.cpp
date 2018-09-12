@@ -29,7 +29,7 @@ class TheCleanup {
                     removed = true;
                     next = bb->remove(ip);
                 } else if (auto force = Force::Cast(i)) {
-                    Value* arg = force->arg<0>().val();
+                    Value* arg = force->input();
                     if (PirType::valOrMissing().isSuper(arg->type)) {
                         removed = true;
                         force->replaceUsesWith(arg);

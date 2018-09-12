@@ -306,14 +306,9 @@ BC BC::staticCall(size_t nargs, SEXP ast, SEXP target) {
 BC BC::recordCall() { return BC(Opcode::record_call_); }
 BC BC::recordBinop() { return BC(Opcode::record_binop_); }
 
-BC BC::deopt(Opcode* pc, Code* orig) {
-    SEXP store = Rf_allocVector(RAWSXP, sizeof(DeoptMetadata));
-    auto m = new (DATAPTR(store)) DeoptMetadata;
-    m->frames[0].pc = pc;
-    m->frames[0].code = orig;
-
+BC BC::deopt(SEXP deoptMetadata) {
     ImmediateArguments i;
-    i.pool = Pool::insert(store);
+    i.pool = Pool::insert(deoptMetadata);
     return BC(Opcode::deopt_, i);
 }
 

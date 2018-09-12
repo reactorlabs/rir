@@ -9,7 +9,7 @@ namespace rir {
 namespace pir {
 
 void Closure::print(std::ostream& out) const {
-    out << "Closure " << this << "\n";
+    out << "Closure " << this << "(" << function << ")\n";
     Code::print(out);
     for (auto p : promises) {
         if (p)
