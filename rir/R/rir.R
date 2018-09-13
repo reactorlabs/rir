@@ -41,7 +41,7 @@ pir.debugFlags <- function(ShowWarnings = FALSE,
                            PrintCSSA = FALSE,
                            PrintAllocator = FALSE,
                            PrintFinalPir = FALSE,
-                           PrintFinalRir = FALSE ) {
+                           PrintFinalRir = FALSE) {
     # !!!  This list of arguments *must* be exactly equal to the   !!!
     # !!!    LIST_OF_PIR_DEBUGGING_FLAGS in compiler/debugging.h   !!!
     .Call("pir_debugFlags", ShowWarnings, DryRun, PreserveVersions,
