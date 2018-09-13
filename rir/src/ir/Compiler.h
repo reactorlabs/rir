@@ -65,13 +65,6 @@ class Compiler {
         Compiler c(ast);
         auto res = c.finalize();
 
-        // TODO: promises which escape a function do not have a pointer back to
-        // the function, but just to the code object, which is inside this
-        // closure. If the closure gets collected before the promise, we have a
-        // dangling pointer. We need to teach the GC to find the function
-        // throught the PROMSXP. As a workaround we never collect closures.
-        Pool::insert(res);
-
         return res;
     }
 
@@ -117,13 +110,6 @@ class Compiler {
 
         // Set the closure fields.
         SET_BODY(inClosure, vtable->container());
-
-        // TODO: promises which escape a function do not have a pointer back to
-        // the function, but just to the code object, which is inside this
-        // closure. If the closure gets collected before the promise, we have a
-        // dangling pointer. We need to teach the GC to find the function
-        // throught the PROMSXP. As a workaround we never collect closures.
-        Pool::insert(vtable->container());
     }
 };
 

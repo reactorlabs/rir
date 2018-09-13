@@ -4,8 +4,7 @@ echo
 echo Running before_install-osx.sh...
 echo
 
-brew install gcc
+brew install gcc ccache
 brew link --overwrite gcc
 
-brew install xz
-#brew install valgrind
+export PATH="/usr/local/opt/ccache/libexec:$PATH"

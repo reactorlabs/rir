@@ -166,7 +166,6 @@ void BC::write(CodeStream& cs) const {
 
     case Opcode::invalid_:
     case Opcode::num_of:
-    case Opcode::label:
         assert(false);
         return;
     }
@@ -198,7 +197,7 @@ void BC::printNames(std::ostream& out) const {
 }
 
 void BC::print(std::ostream& out) const {
-    if (bc != Opcode::label && bc != Opcode::record_call_ &&
+    if (bc != Opcode::record_call_ &&
         bc != Opcode::record_binop_)
         out << "   " << name(bc) << " ";
 
@@ -397,11 +396,12 @@ void BC::print(std::ostream& out) const {
     case Opcode::br_:
         out << " " << immediate.offset;
         break;
-    case Opcode::label:
-        out << immediate.offset << ":";
-        break;
     }
     out << "\n";
+}
+
+void BC::printOpcode(std::ostream& out) const {
+    out << "   " << name(bc) << " ";
 }
 
 } // namespace rir

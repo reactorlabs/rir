@@ -169,9 +169,7 @@ static Sources hasSources(Opcode bc) {
         return Sources::May;
 
     case Opcode::invalid_:
-    case Opcode::num_of:
-    case Opcode::label: {
-    }
+    case Opcode::num_of: {}
     }
     assert(false);
     return Sources::NotNeeded;
@@ -241,11 +239,11 @@ void CodeVerifier::verifyFunctionLayout(SEXP sexp, ::Context* ctx) {
     assert(f->codeLength == objs.size() and "Invalid number of code objects");
 
     // add the end sentinel
-    objs.push_back(f->codeEnd());
+    objs.push_back(nullptr);
     // check the code headers
     for (size_t i = 0, e = objs.size() - 1; i != e; ++i) {
         Code* c = objs[i];
-        assert(c->magic == CODE_MAGIC and "Invalid code magic number");
+        assert(c->info.magic == CODE_MAGIC and "Invalid code magic number");
         assert(c->function() == f and "Invalid code offset");
         assert(c->src != 0 and "Code must have AST");
         unsigned oldo = c->stackLength;
@@ -298,7 +296,7 @@ void CodeVerifier::verifyFunctionLayout(SEXP sexp, ::Context* ctx) {
                 unsigned* promidx = reinterpret_cast<Immediate*>(cptr + 1);
                 bool ok = false;
                 for (Code* c : objs)
-                    if (c->header == *promidx) {
+                    if (c->index == *promidx) {
                         ok = true;
                         break;
                     }
@@ -314,7 +312,7 @@ void CodeVerifier::verifyFunctionLayout(SEXP sexp, ::Context* ctx) {
                         continue;
                     bool ok = false;
                     for (Code* c : objs)
-                        if (c->header == offset) {
+                        if (c->index == offset) {
                             ok = true;
                             break;
                         }

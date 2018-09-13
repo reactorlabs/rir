@@ -56,11 +56,7 @@ enum class Opcode : uint8_t {
 #define DEF_INSTR(name, ...) name,
 #include "insns.h"
 
-    // A label/jump target (used internally by CodeEditor only!)
-    label,
-
     num_of
-
 };
 
 // ============================================================
@@ -208,6 +204,7 @@ class BC {
     void printImmediateArgs(std::ostream& out) const;
     void printNames(std::ostream& out) const;
     void printProfile(std::ostream& out) const;
+    void printOpcode(std::ostream& out) const;
 
     // Accessors to load immediate constant from the pool
     SEXP immediateConst() const;
@@ -244,8 +241,6 @@ class BC {
     bool isReturn() const {
         return bc == Opcode::ret_ || bc == Opcode::return_;
     }
-
-    bool isLabel() const { return bc == Opcode::label; }
 
     // This code performs the same as `BC::decode(pc).size()`, but for
     // performance reasons, it avoids actually creating the BC object.
@@ -453,8 +448,6 @@ class BC {
     case Opcode::name:                                                         \
         return pure;
 #include "insns.h"
-        case Opcode::label:
-            return false;
         default:
             assert(false);
             return 0;
@@ -499,7 +492,6 @@ class BC {
         case Opcode::brtrue_:
         case Opcode::brobj_:
         case Opcode::brfalse_:
-        case Opcode::label:
         case Opcode::beginloop_:
             immediate.offset = *(Jmp*)pc;
             break;

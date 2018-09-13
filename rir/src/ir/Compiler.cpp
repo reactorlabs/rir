@@ -906,10 +906,7 @@ BC::FunIdx compilePromise(Context& ctx, SEXP exp, bool isFormal) {
 }  // anonymous namespace
 
 SEXP Compiler::finalize() {
-    // Rprintf("****************************************************\n");
-    // Rprintf("Compiling function\n");
-
-    FunctionWriter function = FunctionWriter::create();
+    FunctionWriter function;
     Context ctx(function, preserve);
 
     FunctionSignature* signature = new FunctionSignature();
@@ -925,15 +922,16 @@ SEXP Compiler::finalize() {
     compileExpr(ctx, exp);
     ctx.cs() << BC::ret();
     ctx.pop();
+    function.finalize();
 
-    function.function->signature = signature;
+    function.function()->signature = signature;
 
 #ifdef ENABLE_SLOWASSERT
-    CodeVerifier::verifyFunctionLayout(function.function->container(),
+    CodeVerifier::verifyFunctionLayout(function.function()->container(),
                                        globalContext());
 #endif
 
-    return function.function->container();
+    return function.function()->container();
 }
 
 }  // namespace rir

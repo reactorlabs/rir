@@ -1125,7 +1125,7 @@ rir::Function* Pir2Rir::finalize() {
     // (for now, calls, promises and operators do)
     // + how to deal with inlined stuff?
 
-    FunctionWriter function = FunctionWriter::create();
+    FunctionWriter function;
     Context ctx(function);
 
     size_t i = 0;
@@ -1138,13 +1138,14 @@ rir::Function* Pir2Rir::finalize() {
     ctx.pushBody(R_NilValue);
     size_t localsCnt = compileCode(ctx, cls);
     ctx.finalizeCode(localsCnt);
+    function.finalize();
     LOGGING(compiler.getLogger().finalPIR(*cls));
 #ifdef ENABLE_SLOWASSERT
-    CodeVerifier::verifyFunctionLayout(function.function->container(),
+    CodeVerifier::verifyFunctionLayout(function.function()->container(),
                                        globalContext());
 #endif
-    LOGGING(compiler.getLogger().rirFromPir(function.function));
-    return function.function;
+    LOGGING(compiler.getLogger().rirFromPir(function.function()));
+    return function.function();
 }
 
 } // namespace

@@ -525,7 +525,6 @@ bool Rir2Pir::compileBC(
     case Opcode::make_unique_:
 
     // Invalid opcodes:
-    case Opcode::label:
     case Opcode::invalid_:
     case Opcode::num_of:
 

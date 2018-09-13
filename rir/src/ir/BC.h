@@ -31,8 +31,7 @@ BC BC::force() { return BC(Opcode::force_); }
 BC BC::pop() { return BC(Opcode::pop_); }
 BC BC::push(SEXP constant) {
     assert(TYPEOF(constant) != PROMSXP);
-//    assert(!isValidFunctionSEXP(constant));
-    assert(!isValidCodeObject(constant));
+    assert(!Code::check(constant));
     ImmediateArguments i;
     i.pool = Pool::insert(constant);
     return BC(Opcode::push_, i);
@@ -177,12 +176,6 @@ BC BC::alloc(int type) {
 }
 
 BC BC::isfun() { return BC(Opcode::isfun_); }
-
-BC BC::label(Jmp j) {
-    ImmediateArguments i;
-    i.offset = j;
-    return BC(Opcode::label, i);
-}
 BC BC::br(Jmp j) {
     ImmediateArguments i;
     i.offset = j;
