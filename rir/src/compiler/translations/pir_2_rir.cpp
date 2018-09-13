@@ -660,10 +660,10 @@ class Pir2Rir {
 size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
     collapseSafepoints(code);
     toCSSA(code);
-    LOGGING(log.CSSA(code));
+    log.CSSA(code);
 
     SSAAllocator alloc(code);
-    LOGGING(log.afterAllocator(code, [&](std::ostream& o) { alloc.print(o); }));
+    log.afterAllocator(code, [&](std::ostream& o) { alloc.print(o); });
     alloc.verify();
 
     // create labels for all bbs
@@ -1143,12 +1143,12 @@ rir::Function* Pir2Rir::finalize() {
     size_t localsCnt = compileCode(ctx, cls);
     ctx.finalizeCode(localsCnt);
     function.finalize();
-    LOGGING(log.finalPIR(cls));
+    log.finalPIR(cls);
 #ifdef ENABLE_SLOWASSERT
     CodeVerifier::verifyFunctionLayout(function.function()->container(),
                                        globalContext());
 #endif
-    LOGGING(log.finalRIR(function.function()));
+    log.finalRIR(function.function());
     return function.function();
 }
 

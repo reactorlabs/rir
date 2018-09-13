@@ -6,12 +6,6 @@
 namespace rir {
 namespace pir {
 
-#ifdef ENABLE_SLOWASSERT
-#define LOGGING(code) code
-#else
-#define LOGGING(code) /* nothing */
-#endif
-
 // !!!  This list of arguments *must* be exactly equal to the   !!!
 // !!!    one in pir.debugFlags in R/rir.R                      !!!
 

@@ -85,10 +85,10 @@ void Rir2PirCompiler::compileClosure(rir::Function* srcFunction,
             Rir2Pir rir2pir(*this, srcFunction, log, name);
 
             if (rir2pir.tryCompile(srcFunction->body(), builder)) {
-                LOGGING(log.compilationEarlyPir(pirFunction));
+                log.compilationEarlyPir(pirFunction);
                 if (!Verify::apply(pirFunction)) {
                     failed = true;
-                    LOGGING(log.failed("rir2pir failed to verify"));
+                    log.failed("rir2pir failed to verify");
                     log.flush();
                     logger.close(pirFunction);
                     assert(false);
@@ -97,7 +97,7 @@ void Rir2PirCompiler::compileClosure(rir::Function* srcFunction,
                 log.flush();
                 return true;
             }
-            LOGGING(log.failed("rir2pir aborted"));
+            log.failed("rir2pir aborted");
             failed = true;
             log.flush();
             logger.close(pirFunction);
@@ -112,7 +112,7 @@ void Rir2PirCompiler::compileClosure(rir::Function* srcFunction,
 
 void Rir2PirCompiler::optimizeModule(StreamLogger& logger,
                                      bool preserveVersions) {
-    LOGGING(size_t passnr = 0);
+    size_t passnr = 0;
     for (auto& translation : translations) {
         module->eachPirFunction([&](Module::VersionedClosure& v) {
             auto f = v.current();
@@ -121,19 +121,17 @@ void Rir2PirCompiler::optimizeModule(StreamLogger& logger,
 
             auto& log = logger.get(f);
             translation->apply(f);
-            LOGGING(log.pirOptimizations(f, translation->getName(), passnr++));
+            log.pirOptimizations(f, translation->getName(), passnr++);
 
 #ifdef ENABLE_SLOWASSERT
             assert(Verify::apply(f));
 #endif
         });
     }
-#ifdef ENABLE_SLOWASSERT
     module->eachPirFunction([&](Module::VersionedClosure& v) {
         logger.get(v.current()).pirOptimizationsFinished(v.current());
         assert(Verify::apply(v.current()));
     });
-#endif
     logger.flush();
 }
 
