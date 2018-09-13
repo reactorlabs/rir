@@ -637,8 +637,10 @@ class Context {
 
 class Pir2Rir {
   public:
-    Pir2Rir(Pir2RirCompiler& cmp, Closure* cls, SEXP origin)
-        : compiler(cmp), cls(cls), originCls(origin) {}
+    Pir2Rir(Pir2RirCompiler& cmp, Closure* cls, SEXP origin, bool dryRun,
+            LogStream& log)
+        : compiler(cmp), cls(cls), originCls(origin), dryRun(dryRun), log(log) {
+    }
     size_t compileCode(Context& ctx, Code* code);
     size_t getPromiseIdx(Context& ctx, Promise* code);
     void toCSSA(Code* code);
@@ -651,16 +653,17 @@ class Pir2Rir {
     SEXP originCls;
     std::unordered_map<Promise*, BC::FunIdx> promises;
     std::unordered_map<Promise*, SEXP> argNames;
+    bool dryRun;
+    LogStream& log;
 };
 
 size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
     collapseSafepoints(code);
     toCSSA(code);
-    LOGGING(compiler.getLogger().afterCSSA(*cls, code));
+    log.CSSA(code);
 
     SSAAllocator alloc(code);
-    LOGGING(compiler.getLogger().afterAllocator(
-        *cls, [&](std::ostream& os) { alloc.print(os); }));
+    log.afterAllocator(code, [&](std::ostream& o) { alloc.print(o); });
     alloc.verify();
 
     // create labels for all bbs
@@ -853,9 +856,10 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 auto dt = DispatchTable::unpack(mkfuncls->code);
 
                 if (dt->capacity() > 1 && !dt->available(1)) {
-                    Pir2Rir pir2rir(compiler, mkfuncls->fun, nullptr);
+                    Pir2Rir pir2rir(compiler, mkfuncls->fun, nullptr, dryRun,
+                                    compiler.logger.get(mkfuncls->fun));
                     auto rirFun = pir2rir.finalize();
-                    if (!compiler.debug.includes(DebugFlag::DryRun))
+                    if (!dryRun)
                         dt->put(1, rirFun);
                 }
                 cs << BC::push(mkfuncls->fml) << BC::push(mkfuncls->code)
@@ -949,7 +953,7 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
             }
             case Tag::StaticCall: {
                 auto call = StaticCall::Cast(instr);
-                compiler.compile(call->cls(), call->origin());
+                compiler.compile(call->cls(), call->origin(), dryRun);
                 cs << BC::staticCall(call->nCallArgs(), Pool::get(call->srcIdx),
                                      call->origin());
                 break;
@@ -1139,18 +1143,18 @@ rir::Function* Pir2Rir::finalize() {
     size_t localsCnt = compileCode(ctx, cls);
     ctx.finalizeCode(localsCnt);
     function.finalize();
-    LOGGING(compiler.getLogger().finalPIR(*cls));
+    log.finalPIR(cls);
 #ifdef ENABLE_SLOWASSERT
     CodeVerifier::verifyFunctionLayout(function.function()->container(),
                                        globalContext());
 #endif
-    LOGGING(compiler.getLogger().rirFromPir(function.function()));
+    log.finalRIR(function.function());
     return function.function();
 }
 
 } // namespace
 
-void Pir2RirCompiler::compile(Closure* cls, SEXP origin) {
+void Pir2RirCompiler::compile(Closure* cls, SEXP origin, bool dryRun) {
     if (done.count(cls))
         return;
     // Avoid recursivly compiling the same closure
@@ -1160,10 +1164,11 @@ void Pir2RirCompiler::compile(Closure* cls, SEXP origin) {
     if (table->available(1))
         return;
 
-    Pir2Rir pir2rir(*this, cls, origin);
+    auto& log = logger.get(cls);
+    Pir2Rir pir2rir(*this, cls, origin, dryRun, logger.get(cls));
     auto fun = pir2rir.finalize();
 
-    if (debug.includes(DebugFlag::DryRun))
+    if (dryRun)
         return;
 
     Protect p(fun->container());
@@ -1175,6 +1180,8 @@ void Pir2RirCompiler::compile(Closure* cls, SEXP origin) {
     fun->signature = oldFun->signature;
 
     table->put(1, fun);
+
+    log.flush();
 }
 
 } // namespace pir

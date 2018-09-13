@@ -15,6 +15,7 @@
 #include "ir/Compiler.h"
 
 #include <memory>
+#include <string>
 
 using namespace rir;
 
@@ -32,17 +33,9 @@ REXPORT SEXP rir_disassemble(SEXP what, SEXP verbose) {
         if (!t->available(entry))
             continue;
         Function* f = t->at(entry);
-        std::stringstream output;
-        output << "= vtable slot <" << entry << "> (" << f << ", invoked "
-               << f->invocationCount << ") =\n";
-        f->body()->disassemble(output);
-        for (auto c : *f) {
-            if (c != f->body()) {
-                output << "\n [Prom (index " << c->index << ")]\n";
-                c->disassemble(output);
-            }
-        }
-        std::cout << output.str();
+        std::cout << "= vtable slot <" << entry << "> (" << f << ", invoked "
+                  << f->invocationCount << ") =\n";
+        f->disassemble(std::cout);
     }
 
     return R_NilValue;
@@ -116,8 +109,41 @@ REXPORT SEXP pir_debugFlags(
     return res;
 }
 
-static pir::DebugOptions PirDebug(
-    getenv("PIR_VERBOSE") ? std::stoul(getenv("PIR_VERBOSE"), nullptr, 0) : 0);
+static long getInitialDebugOptions() {
+    auto verb = getenv("PIR_DEBUG");
+    if (!verb)
+        return 0;
+    std::istringstream in(verb);
+
+    pir::DebugOptions flags;
+    while (!in.fail()) {
+        std::string opt;
+        std::getline(in, opt, ',');
+        if (opt.empty())
+            continue;
+
+        bool success = false;
+
+#define V(flag)                                                                \
+    if (opt.compare(#flag) == 0) {                                             \
+        success = true;                                                        \
+        flags = flags | pir::DebugFlag::flag;                                  \
+    }
+        LIST_OF_PIR_DEBUGGING_FLAGS(V)
+#undef V
+        if (!success) {
+            std::cerr << "Unknown PIR debug flag " << opt << "\n"
+                      << "Valid flags are:\n";
+#define V(flag) std::cerr << "- " << #flag << "\n";
+            LIST_OF_PIR_DEBUGGING_FLAGS(V)
+#undef V
+            exit(1);
+        }
+    }
+    return flags.to_ulong();
+}
+
+static pir::DebugOptions PirDebug(getInitialDebugOptions());
 
 REXPORT SEXP pir_setDebugFlags(SEXP debugFlags) {
     if (TYPEOF(debugFlags) != INTSXP || Rf_length(debugFlags) < 1)
@@ -127,7 +153,7 @@ REXPORT SEXP pir_setDebugFlags(SEXP debugFlags) {
     return R_NilValue;
 }
 
-SEXP pirCompile(SEXP what, pir::DebugOptions debug) {
+SEXP pirCompile(SEXP what, const std::string& name, pir::DebugOptions debug) {
 
     if (!isValidClosureSEXP(what)) {
         Rf_error("not a compiled closure");
@@ -142,16 +168,19 @@ SEXP pirCompile(SEXP what, pir::DebugOptions debug) {
 
     PROTECT(what);
 
+    bool dryRun = debug.includes(pir::DebugFlag::DryRun);
+    bool preserveVersions = debug.includes(pir::DebugFlag::PreserveVersions);
     // compile to pir
     pir::Module* m = new pir::Module;
-    pir::Rir2PirCompiler cmp(m, debug);
-    cmp.compileClosure(what,
+    pir::StreamLogger logger(debug);
+    pir::Rir2PirCompiler cmp(m, logger);
+    cmp.compileClosure(what, name,
                        [&](pir::Closure* c) {
-                           cmp.optimizeModule();
+                           cmp.optimizeModule(logger, preserveVersions);
 
                            // compile back to rir
-                           pir::Pir2RirCompiler p2r(debug, cmp.getLogger());
-                           p2r.compile(c, what);
+                           pir::Pir2RirCompiler p2r(logger);
+                           p2r.compile(c, what, dryRun);
                        },
                        [&]() {
                            if (debug.includes(pir::DebugFlag::ShowWarnings))
@@ -163,13 +192,17 @@ SEXP pirCompile(SEXP what, pir::DebugOptions debug) {
     return what;
 }
 
-REXPORT SEXP pir_compile(SEXP what, SEXP debugFlags) {
+REXPORT SEXP pir_compile(SEXP what, SEXP name, SEXP debugFlags) {
     if (debugFlags != R_NilValue &&
         (TYPEOF(debugFlags) != INTSXP || Rf_length(debugFlags) < 1))
         Rf_error("pir_compile expects an integer vector as second parameter");
-    return pirCompile(what, debugFlags == R_NilValue
-                                ? PirDebug
-                                : pir::DebugOptions(INTEGER(debugFlags)[0]));
+    std::string n;
+    if (TYPEOF(name) == SYMSXP)
+        n = CHAR(PRINTNAME(name));
+    return pirCompile(what, n,
+                      debugFlags == R_NilValue
+                          ? PirDebug
+                          : pir::DebugOptions(INTEGER(debugFlags)[0]));
 }
 
 REXPORT SEXP pir_tests() {
@@ -182,7 +215,7 @@ REXPORT SEXP pir_tests() {
 SEXP pirOpt(SEXP fun) {
     // PIR can only optimize closures, not expressions
     if (isValidClosureSEXP(fun) && DispatchTable::check(BODY(fun)))
-        return pirCompile(fun, PirDebug);
+        return pirCompile(fun, "", PirDebug);
     else
         return fun;
 }
@@ -198,7 +231,7 @@ bool startup() {
     } else if (pir && std::string(pir).compare("force_dryrun") == 0) {
         initializeRuntime(
             [](SEXP f, SEXP env) {
-                return pirCompile(rir_compile(f, env),
+                return pirCompile(rir_compile(f, env), "",
                                   PirDebug | pir::DebugFlag::DryRun);
             },
             [](SEXP f) { return f; });

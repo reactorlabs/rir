@@ -48,9 +48,11 @@ To try out the [PIR optimizer](documentation/pir.md) you can use `pir.compile` t
 Or you can pass the environment variable PIR_ENABLE, and set it to 'on' or 'force'.
 Those flags will either use the PIR optimizer for hot RIR functions, or always.
 
-To print intermediate debug information, `pir.compile` takes a `debugFlags` argument.
-Debug flags can be created using `pir.debugFlags`, for example to debug the register allocator, you could use `pir.compile(f, debugFlags=pir.debugFlags(PrintFinalPir=TRUE,DebugAllocator=TRUE))`.
-To change the default debug flags use `pir.setDebugFlags(pir.debugFlags(...))`.
+To print intermediate debug information, you have a number of options:
+* Use the shorthand flags on `pir.compile`, such as `WARN`, or `P_FINAL`.
+* Set the `PIR_DEBUG` environment variable to a comma separated list of flags to enable by default.
+* Or for even specific debugging use the `debugFlags` argument of `pir.compile`. Debug flags can be created using `pir.debugFlags`, for example to debug the register allocator, you could use `pir.compile(f, debugFlags=pir.debugFlags(PrintFinalPir=TRUE,DebugAllocator=TRUE))`.
+* To change the default debug flags at runtime use `pir.setDebugFlags(pir.debugFlags(...))`.
 
 We periodically [benchmark](documentation/benchmarking.md) the performance of the optimizer
 

@@ -10,7 +10,7 @@
 extern int R_ENABLE_JIT;
 
 REXPORT SEXP rir_eval(SEXP, SEXP);
-REXPORT SEXP pir_compile(SEXP, SEXP);
-SEXP pirCompile(SEXP, const rir::pir::DebugOptions);
+REXPORT SEXP pir_compile(SEXP, SEXP, SEXP);
+SEXP pirCompile(SEXP, const std::string&, const rir::pir::DebugOptions);
 
 #endif // API_H_
