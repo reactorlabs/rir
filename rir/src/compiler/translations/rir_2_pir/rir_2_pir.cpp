@@ -12,6 +12,7 @@
 #include "ir/Compiler.h"
 #include "utils/FormalArgs.h"
 
+#include <sstream>
 #include <unordered_map>
 #include <vector>
 
@@ -182,7 +183,7 @@ bool Rir2Pir::compileBC(
         break;
 
     case Opcode::guard_fun_:
-        compiler.getLogger().warningBC(srcFunction, WARNING_GUARD_STRING, bc);
+        log.unsupportedBC("Guard ignored", bc);
         break;
 
     case Opcode::swap_:
@@ -265,7 +266,7 @@ bool Rir2Pir::compileBC(
         };
         if (monomorphic && isValidClosureSEXP(monomorphic)) {
             compiler.compileClosure(
-                monomorphic,
+                monomorphic, "",
                 [&](Closure* f) {
                     Value* expected = insert(new LdConst(monomorphic));
                     Value* t = insert(new Identical(callee, expected));
@@ -332,7 +333,7 @@ bool Rir2Pir::compileBC(
             }
             bool failed = false;
             compiler.compileClosure(
-                target,
+                target, "",
                 [&](Closure* f) {
                     push(insert(new StaticCall(env, f, args, target, ast)));
                 },
@@ -643,9 +644,7 @@ void Rir2Pir::translate(rir::Code* srcCode, Builder& insert,
                 break;
             }
             case Opcode::beginloop_:
-                if (compiler.debug.includes(DebugFlag::ShowWarnings))
-                    std::cerr << "Cannot compile Function. Unsupported "
-                                 "beginloop bc\n";
+                log.warn("Cannot compile Function. Unsupported beginloop bc");
                 fail();
                 return;
             default:
@@ -687,9 +686,7 @@ void Rir2Pir::translate(rir::Code* srcCode, Builder& insert,
             case Opcode::ret_:
                 break;
             case Opcode::return_:
-                if (compiler.debug.includes(DebugFlag::ShowWarnings))
-                    std::cerr
-                        << "Cannot compile Function. Unsupported return bc\n";
+                log.warn("Cannot compile Function. Unsupported return bc");
                 fail();
                 return;
             default:
@@ -726,8 +723,28 @@ void Rir2Pir::translate(rir::Code* srcCode, Builder& insert,
             DispatchTable* dt = DispatchTable::unpack(code);
             rir::Function* function = dt->first();
 
+            std::stringstream inner;
+            inner << name;
+            // Try to find the name of this inner function by peeking for the
+            // stvar
+            if (pc < end) {
+                auto n = BC::next(pc);
+                if (n < end) {
+                    auto nextbc = BC::decode(n);
+                    if (nextbc.bc != Opcode::stvar_) {
+                        n = BC::next(n);
+                        if (n < end)
+                            nextbc = BC::decode(n);
+                    }
+                    if (nextbc.bc == Opcode::stvar_)
+                        inner << ">"
+                              << CHAR(PRINTNAME(nextbc.immediateConst()));
+                }
+            }
+            inner << "@" << (pos - srcCode->code());
+
             compiler.compileFunction(
-                function, formals,
+                function, inner.str(), formals,
                 [&](Closure* innerF) {
                     cur.stack.push(insert(
                         new MkFunCls(innerF, insert.env, fmls, code, src)));
@@ -747,8 +764,7 @@ void Rir2Pir::translate(rir::Code* srcCode, Builder& insert,
             int size = cur.stack.size();
             if (!compileBC(bc, pos, srcCode, cur.stack, insert, callFeedback,
                            typeFeedback)) {
-                compiler.getLogger().warningBC(
-                    srcFunction, "Abort r2p due to unsupported bc", pos);
+                log.failed("Abort r2p due to unsupported bc");
                 fail();
                 return;
             }

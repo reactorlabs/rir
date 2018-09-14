@@ -49,7 +49,9 @@ SEXP compileToRir(const std::string& context, const std::string& expr,
 typedef std::unordered_map<std::string, pir::Closure*> closuresByName;
 
 closuresByName compileRir2Pir(SEXP env, pir::Module* m) {
-    pir::Rir2PirCompiler cmp(m, pir::DebugOptions());
+    pir::StreamLogger logger(pir::DebugOptions() |
+                             pir::DebugFlag::PrintFinalPir);
+    pir::Rir2PirCompiler cmp(m, logger);
 
     // Compile every function in the environment
     closuresByName results;
@@ -58,8 +60,7 @@ closuresByName compileRir2Pir(SEXP env, pir::Module* m) {
         auto fun = *f;
         if (TYPEOF(fun) == CLOSXP) {
             assert(isValidClosureSEXP(fun));
-            // isValidClosureSEXP(fun)->body()->print();
-            cmp.compileClosure(fun,
+            cmp.compileClosure(fun, "test_function",
                                [&](pir::Closure* cls) {
                                    results[CHAR(PRINTNAME(f.tag()))] = cls;
                                },
@@ -68,7 +69,7 @@ closuresByName compileRir2Pir(SEXP env, pir::Module* m) {
     }
 
     // cmp.setVerbose(true);
-    cmp.optimizeModule();
+    cmp.optimizeModule(logger);
     return results;
 }
 
@@ -344,7 +345,7 @@ bool testPir2Rir(std::string name, std::string fun, std::string args,
         rCall = createRWrapperCall(wrapper);
     }
 
-    pirCompile(rirFun, rir::pir::DebugOptions());
+    pirCompile(rirFun, "from_testPir2Rir", rir::pir::DebugOptions());
 
     auto after = p(Rf_eval(rCall, execEnv));
     if (verbose) {

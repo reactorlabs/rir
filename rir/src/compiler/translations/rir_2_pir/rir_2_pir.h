@@ -14,8 +14,9 @@ struct RirStack;
 
 class Rir2Pir {
   public:
-    Rir2Pir(Rir2PirCompiler& cmp, rir::Function* srcFunction)
-        : compiler(cmp), srcFunction(srcFunction) {}
+    Rir2Pir(Rir2PirCompiler& cmp, rir::Function* srcFunction, LogStream& log,
+            const std::string& name)
+        : compiler(cmp), srcFunction(srcFunction), log(log), name(name) {}
 
     // Tries to compile the srcCode. Return value indicates failure. Builder
     // has to be discarded, if compilation fails!
@@ -32,7 +33,8 @@ class Rir2Pir {
   private:
     bool tryCompilePromise(rir::Code* prom, Builder& insert) const
         __attribute__((warn_unused_result)) {
-        return Rir2Pir(compiler, srcFunction).tryCompile(prom, insert);
+        return Rir2Pir(compiler, srcFunction, log, name)
+            .tryCompile(prom, insert);
     }
 
     template <typename T>
@@ -67,6 +69,8 @@ class Rir2Pir {
 
     Rir2PirCompiler& compiler;
     rir::Function* srcFunction;
+    LogStream& log;
+    std::string name;
 
     bool compileBC(BC bc, Opcode* pos, rir::Code* srcCode, RirStack&, Builder&,
                    std::unordered_map<Value*, CallFeedback>&,

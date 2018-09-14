@@ -20,8 +20,25 @@ rir.compile <- function(what) {
 }
 
 # optimizes given rir compiled closure
-pir.compile <- function(what, debugFlags) {
-    .Call("pir_compile", what, if (missing(debugFlags)) NULL else debugFlags)
+pir.compile <- function(what, debugFlags, P_EARLY=FALSE, P_FINAL=FALSE, P_OPT=FALSE, WARN=FALSE) {
+    debugFlags <-
+        if (missing(debugFlags)) {
+            if (P_EARLY)
+                pir.debugFlags(PrintEarlyPir=TRUE)
+            else if (P_FINAL)
+                pir.debugFlags(PrintFinalPir=TRUE)
+            else if (P_OPT)
+                pir.debugFlags(PrintOptimizationPasses=TRUE)
+            else if (WARN)
+                pir.debugFlags(ShowWarnings=TRUE)
+        } else {
+            debugFlags
+        }
+
+    .Call("pir_compile",
+          what,
+          as.name(as.character(substitute(what))),
+          debugFlags)
 }
 
 pir.tests <- function() {
