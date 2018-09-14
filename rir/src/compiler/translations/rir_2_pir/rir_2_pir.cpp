@@ -233,16 +233,20 @@ bool Rir2Pir::compileBC(
         std::vector<Value*> args;
         for (auto argi : bc.immediateCallArguments) {
             if (argi == DOTS_ARG_IDX) {
+                log.warn("Cannot compile call with ... arguments");
                 return false;
             } else if (argi == MISSING_ARG_IDX) {
+                log.warn("Cannot compile call with explicit missing arguments");
                 return false;
             }
             rir::Code* promiseCode = srcFunction->codeAt(argi);
             Promise* prom = insert.function->createProm(promiseCode->src);
             {
                 Builder promiseBuilder(insert.function, prom);
-                if (!tryCompilePromise(promiseCode, promiseBuilder))
+                if (!tryCompilePromise(promiseCode, promiseBuilder)) {
+                    log.warn("Failed to compile a promise for call");
                     return false;
+                }
             }
             Value* val = Missing::instance();
             if (Query::pure(prom)) {
@@ -290,8 +294,10 @@ bool Rir2Pir::compileBC(
         Promise* prom = insert.function->createProm(promiseCode->src);
         {
             Builder promiseBuilder(insert.function, prom);
-            if (tryCompilePromise(promiseCode, promiseBuilder))
+            if (!tryCompilePromise(promiseCode, promiseBuilder)) {
+                log.warn("Failed to compile a promise");
                 return false;
+            }
         }
         push(insert(new MkArg(prom, val, env)));
         break;
@@ -338,8 +344,10 @@ bool Rir2Pir::compileBC(
                     push(insert(new StaticCall(env, f, args, target, ast)));
                 },
                 [&]() { failed = true; });
-            if (failed)
+            if (failed) {
+                log.warn("Failed to compile the target of a static call");
                 return false;
+            }
         }
         break;
     }
@@ -552,6 +560,7 @@ bool Rir2Pir::compileBC(
     case Opcode::movloc_:
     case Opcode::isobj_:
     case Opcode::check_missing_:
+        log.unsupportedBC("Unsupported BC (are you recompiling?)", bc);
         assert(false && "Recompiling PIR not supported for now.");
 
     // Unsupported opcodes:
@@ -563,6 +572,7 @@ bool Rir2Pir::compileBC(
     case Opcode::beginloop_:
     case Opcode::endcontext_:
     case Opcode::ldddvar_:
+        log.unsupportedBC("Unsupported BC", bc);
         return false;
     }
 
@@ -785,6 +795,7 @@ void Rir2Pir::translate(rir::Code* srcCode, Builder& insert,
 
     if (results.size() == 0) {
         // Cannot compile functions with infinite loop
+        log.warn("Aborting, it looks like this function has an infinite loop");
         fail();
         return;
     }

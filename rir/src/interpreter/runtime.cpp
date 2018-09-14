@@ -1,4 +1,5 @@
 #include "runtime.h"
+#include "api.h"
 #include "interp.h"
 
 #include <sstream>
@@ -50,7 +51,7 @@ void printFunction(Function* f) {
     std::cout << output.str();
 }
 
-void initializeRuntime(CompilerCallback compiler, OptimizerCallback optimizer) {
+void initializeRuntime() {
     envSymbol = Rf_install("environment");
     callSymbol = Rf_install(".Call");
     execName = Rf_mkString("rir_executeWrapper");
@@ -58,8 +59,8 @@ void initializeRuntime(CompilerCallback compiler, OptimizerCallback optimizer) {
     promExecName = Rf_mkString("rir_executePromiseWrapper");
     R_PreserveObject(promExecName);
     // initialize the global context
-    globalContext_ = context_create(compiler, optimizer);
-    registerExternalCode(rirEval_f, compiler, rirExpr);
+    globalContext_ = context_create();
+    registerExternalCode(rirEval_f, rir_compile, rirExpr);
     configurations = new rir::Configurations();
 }
 

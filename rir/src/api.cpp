@@ -173,9 +173,11 @@ SEXP pirCompile(SEXP what, const std::string& name, pir::DebugOptions debug) {
     // compile to pir
     pir::Module* m = new pir::Module;
     pir::StreamLogger logger(debug);
+    logger.title("Compiling " + name);
     pir::Rir2PirCompiler cmp(m, logger);
     cmp.compileClosure(what, name,
                        [&](pir::Closure* c) {
+                           logger.flush();
                            cmp.optimizeModule(preserveVersions);
 
                            // compile back to rir
@@ -210,35 +212,30 @@ REXPORT SEXP pir_tests() {
     return R_NilValue;
 }
 
-// startup ---------------------------------------------------------------------
-
-SEXP pirOpt(SEXP fun) {
+SEXP pirOptDefaultOpts(SEXP closure, SEXP name) {
+    std::string n = "";
+    if (TYPEOF(name) == SYMSXP)
+        n = CHAR(PRINTNAME(name));
     // PIR can only optimize closures, not expressions
-    if (isValidClosureSEXP(fun) && DispatchTable::check(BODY(fun)))
-        return pirCompile(fun, "", PirDebug);
+    if (isValidClosureSEXP(closure))
+        return pirCompile(closure, n, PirDebug);
     else
-        return fun;
+        return closure;
+}
+
+SEXP pirOptDefaultOptsDryrun(SEXP closure, SEXP name) {
+    std::string n = "";
+    if (TYPEOF(name) == SYMSXP)
+        n = CHAR(PRINTNAME(name));
+    // PIR can only optimize closures, not expressions
+    if (isValidClosureSEXP(closure))
+        return pirCompile(closure, n, PirDebug | pir::DebugFlag::DryRun);
+    else
+        return closure;
 }
 
 bool startup() {
-    auto pir = getenv("PIR_ENABLE");
-    if (pir && std::string(pir).compare("off") == 0) {
-        initializeRuntime(rir_compile, [](SEXP f) { return f; });
-    } else if (pir && std::string(pir).compare("force") == 0) {
-        initializeRuntime(
-            [](SEXP f, SEXP env) { return pirOpt(rir_compile(f, env)); },
-            [](SEXP f) { return f; });
-    } else if (pir && std::string(pir).compare("force_dryrun") == 0) {
-        initializeRuntime(
-            [](SEXP f, SEXP env) {
-                return pirCompile(rir_compile(f, env), "",
-                                  PirDebug | pir::DebugFlag::DryRun);
-            },
-            [](SEXP f) { return f; });
-    } else {
-        // default on
-        initializeRuntime(rir_compile, pirOpt);
-    }
+    initializeRuntime();
     return true;
 }
 

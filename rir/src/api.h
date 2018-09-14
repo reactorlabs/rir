@@ -9,8 +9,12 @@
 
 extern int R_ENABLE_JIT;
 
-REXPORT SEXP rir_eval(SEXP, SEXP);
-REXPORT SEXP pir_compile(SEXP, SEXP, SEXP);
-SEXP pirCompile(SEXP, const std::string&, const rir::pir::DebugOptions);
+REXPORT SEXP rir_eval(SEXP exp, SEXP env);
+REXPORT SEXP pir_compile(SEXP closure, SEXP name, SEXP sebugFlags);
+REXPORT SEXP rir_compile(SEXP what, SEXP env);
+SEXP pirCompile(SEXP closure, const std::string& name,
+                const rir::pir::DebugOptions);
+SEXP pirOptDefaultOpts(SEXP closure, SEXP name);
+SEXP pirOptDefaultOptsDryrun(SEXP closure, SEXP name);
 
 #endif // API_H_
