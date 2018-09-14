@@ -127,7 +127,7 @@ void LogStream::finalPIR(Closure* code) {
     }
 }
 
-void LogStream::unsupportedBC(const std::string& warning, rir::BC bc) {
+void LogStream::unsupportedBC(const std::string& warning, const rir::BC& bc) {
     if (options.includes(DebugFlag::ShowWarnings)) {
         preparePrint();
         out << "Warning: " << warning << ": ";

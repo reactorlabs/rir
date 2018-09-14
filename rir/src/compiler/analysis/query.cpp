@@ -16,17 +16,10 @@ bool Query::noEnv(Code* c) {
 }
 
 bool Query::envOnlyBeforeDeopt(Code* c) {
-    bool lastMkEnv = false;
-    return Visitor::check(c->entry, [&](Instruction* i) {
-        if (lastMkEnv) {
-            if (Safepoint::Cast(i)) {
-                lastMkEnv = false;
-            } else {
-                return false;
-            }
-        } else {
+    return Visitor::check(c->entry, [&](BB* bb) -> bool {
+        for (auto& i : *bb) {
             if (MkEnv::Cast(i))
-                lastMkEnv = true;
+                return Deopt::Cast(bb->last());
         }
         return true;
     });

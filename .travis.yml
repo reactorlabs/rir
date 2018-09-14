@@ -15,6 +15,7 @@ matrix:
         - CC_OVERRIDE=clang
         - CHECK=check
         - BUILD=release
+        - CPPCHECK=true
       compiler: clang
 
     - os: osx
@@ -25,6 +26,7 @@ matrix:
         - CHECK=check
         - BUILD=debug
         - PIR_ENABLE=force
+        - CPPCHECK=true
       compiler: clang
 
     # linux gcc
@@ -33,6 +35,7 @@ matrix:
         - CC_OVERRIDE=gcc-7
         - CHECK=check
         - BUILD=release
+        - CPPCHECK="../tools/cppcheck"
 
     - env:
         - CORES=2
@@ -41,6 +44,7 @@ matrix:
         - CHECK=check
         - BUILD=debug
         - PIR_ENABLE=force
+        - CPPCHECK=true
 
     - env:
         - CXX_OVERRIDE=g++-7
@@ -49,12 +53,14 @@ matrix:
         - BUILD=release
         - PIR_ENABLE=force
         - ENABLE_VALGRIND=1
+        - CPPCHECK=true
 
     - env:
         - CXX_OVERRIDE=g++-7
         - CC_OVERRIDE=gcc-7
         - CHECK=check-recommended
         - BUILD=release
+        - CPPCHECK=true
 
 addons:
   apt:
@@ -73,6 +79,7 @@ addons:
       - rsync
       - xorg-dev
       - valgrind
+      - cppcheck
     sources:
       - ubuntu-toolchain-r-test
 
@@ -93,6 +100,7 @@ before_script:
   - make -j2
 
 script:
+  - $CPPCHECK
   - ./bin/tests
   - echo "JIT enabled"
   - R_ENABLE_JIT=2 ./bin/tests

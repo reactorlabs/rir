@@ -46,7 +46,7 @@ struct RecordedType {
     uint8_t object : 1;
     uint8_t attribs : 1;
     RecordedType() {}
-    RecordedType(SEXP s);
+    explicit RecordedType(SEXP s);
     bool operator==(const RecordedType& other) {
         return memcmp(this, &other, sizeof(RecordedType)) == 0;
     }

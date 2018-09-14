@@ -89,7 +89,7 @@ class Context {
 
     ~Context() { assert(code.empty()); }
 
-    bool inLoop() { return code.top()->inLoop(); }
+    bool inLoop() const { return code.top()->inLoop(); }
 
     LoopContext& loop() { return code.top()->loops.top(); }
 
@@ -391,10 +391,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
                         cs << BC::dup() << BC::setShared();
 
                         // Now load index and target
-                        cs << (superAssign ? BC::ldvarSuper(target)
-                                           : BC::ldvar(target));
-                        if (superAssign)
-                            cs << BC::setShared();
+                        cs << BC::ldvar(target);
                         compileExpr(ctx, *idx);
 
                         // do the thing
@@ -405,8 +402,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
                         cs.addSrc(ast);
 
                         // store the result as "target"
-                        cs << (superAssign ? BC::stvarSuper(target)
-                                           : BC::stvar(target));
+                        cs << BC::stvar(target);
 
                         cs << BC::invisible();
                         return true;

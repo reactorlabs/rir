@@ -12,7 +12,7 @@ struct FunctionSignature {
         int length = -1;
 
         ArgumentType() = default;
-        ArgumentType(SEXP s) : type(TYPEOF(s)) {
+        explicit ArgumentType(SEXP s) : type(TYPEOF(s)) {
             if (type == PROMSXP) {
                 isEvaluated = PRVALUE(s) != R_UnboundValue;
             }

@@ -74,7 +74,7 @@ class StaticAnalysis {
 
         BB* bb = i->bb();
         size_t segment = 0;
-        AbstractState state = mergepoint[bb->id][segment];
+        const AbstractState& state = mergepoint[bb->id][segment];
         for (auto j : *bb) {
             if (POS == PositioningStyle::BeforeInstruction && i == j)
                 return state;

@@ -32,7 +32,7 @@ class Module {
 
         VersionedClosure(SEXP closure, pir::Closure* pir)
             : closure(closure), pirClosure(pir) {}
-        VersionedClosure(pir::Closure* pir) : pirClosure(pir) {}
+        explicit VersionedClosure(pir::Closure* pir) : pirClosure(pir) {}
 
         pir::Closure* current() { return pirClosure; }
 

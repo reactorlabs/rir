@@ -78,18 +78,17 @@ int ini_parse_stream(ini_reader reader, void* stream, ini_handler handler,
 #if INI_USE_STACK
     char line[INI_MAX_LINE];
     int max_line = INI_MAX_LINE;
-#else
+#endif
+#if INI_ALLOW_REALLOC
     char* line;
     int max_line = INI_INITIAL_ALLOC;
 #endif
 #if INI_ALLOW_REALLOC
     char* new_line;
-    int offset;
 #endif
     char section[MAX_SECTION] = "";
     char prev_name[MAX_NAME] = "";
 
-    char* start;
     char* end;
     char* name;
     char* value;
@@ -112,7 +111,7 @@ int ini_parse_stream(ini_reader reader, void* stream, ini_handler handler,
     /* Scan through stream line by line */
     while (reader(line, max_line, stream) != NULL) {
 #if INI_ALLOW_REALLOC
-        offset = strlen(line);
+        int offset = strlen(line);
         while (offset == max_line - 1 && line[offset - 1] != '\n') {
             max_line *= 2;
             if (max_line > INI_MAX_LINE)
@@ -133,7 +132,7 @@ int ini_parse_stream(ini_reader reader, void* stream, ini_handler handler,
 
         lineno++;
 
-        start = line;
+        char* start = line;
 #if INI_ALLOW_BOM
         if (lineno == 1 && (unsigned char)start[0] == 0xEF &&
             (unsigned char)start[1] == 0xBB &&
@@ -228,13 +227,12 @@ static char* ini_reader_string(char* str, int num, void* stream) {
     const char* ctx_ptr = ctx->ptr;
     size_t ctx_num_left = ctx->num_left;
     char* strp = str;
-    char c;
 
     if (ctx_num_left == 0 || num < 2)
         return NULL;
 
     while (num > 1 && ctx_num_left != 0) {
-        c = *ctx_ptr++;
+        char c = *ctx_ptr++;
         ctx_num_left--;
         *strp++ = c;
         if (c == '\n')

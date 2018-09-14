@@ -120,18 +120,24 @@ struct PirType {
     static FlagSet defaultRTypeFlags() { return FlagSet() | TypeFlags::rtype; }
 
     PirType() : PirType(RTypeSet()) {}
+    // cppcheck-suppress noExplicitConstructor
     PirType(const RType& t) : flags_(defaultRTypeFlags()), t_(t) {}
+    // cppcheck-suppress noExplicitConstructor
     PirType(const NativeType& t) : t_(t) {}
+    // cppcheck-suppress noExplicitConstructor
     PirType(const RTypeSet& t) : flags_(defaultRTypeFlags()), t_(t) {}
+    // cppcheck-suppress noExplicitConstructor
     PirType(const NativeTypeSet& t) : t_(t) {}
-    PirType(SEXP);
+    explicit PirType(SEXP);
+    PirType(const PirType& other) : flags_(other.flags_), t_(other.t_) {}
 
-    RIR_INLINE void operator=(const PirType& o) {
+    PirType& operator=(const PirType& o) {
         flags_ = o.flags_;
         if (isRType())
             t_.r = o.t_.r;
         else
             t_.n = o.t_.n;
+        return *this;
     }
 
     static PirType num() {

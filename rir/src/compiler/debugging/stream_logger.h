@@ -25,14 +25,15 @@ class StreamLogger;
 
 class LogStream {
   private:
-    LogStream(const LogStream&) = delete;
-    LogStream& operator=(const LogStream&) = delete;
     const std::string id;
     std::ostream& out;
     DebugOptions options;
     bool printedAnything = false;
 
   public:
+    LogStream(const LogStream&) = delete;
+    LogStream& operator=(const LogStream&) = delete;
+
     void pirOptimizationsFinished(Closure*);
     void compilationEarlyPir(Closure*);
     void pirOptimizations(Closure*, const std::string&, size_t);
@@ -40,7 +41,7 @@ class LogStream {
     void CSSA(Code*);
     void finalPIR(Closure*);
     void finalRIR(Function*);
-    void unsupportedBC(const std::string&, rir::BC);
+    void unsupportedBC(const std::string&, const rir::BC&);
     void failed(const std::string& msg);
     void warn(const std::string& msg);
 
@@ -111,7 +112,7 @@ class BufferedLogStream : public LogStream {
 
 class StreamLogger {
   public:
-    StreamLogger(DebugOptions options) : options(options) {}
+    explicit StreamLogger(DebugOptions options) : options(options) {}
     ~StreamLogger();
 
     static uint64_t logId;

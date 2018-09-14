@@ -16,7 +16,8 @@ class TheScopeResolution {
   public:
     Closure* function;
     CFG cfg;
-    TheScopeResolution(Closure* function) : function(function), cfg(function) {}
+    explicit TheScopeResolution(Closure* function)
+        : function(function), cfg(function) {}
     void operator()() {
         ScopeAnalysis analysis(function);
 

@@ -16,10 +16,6 @@
 #  define THREADED_CODE
 #endif
 
-typedef rir::Code Code;
-typedef rir::Function Function;
-typedef rir::DispatchTable DispatchTable;
-
 // Indicates an argument is missing
 #define MISSING_ARG_IDX ((unsigned)-1)
 // Indicates an argument does not correspond to a valid CodeObject

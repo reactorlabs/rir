@@ -22,8 +22,8 @@ class RVectorIter {
 
 class RVector {
   public:
-    RVector(SEXP vector);
-    RVector(size_t init_size = slack);
+    explicit RVector(SEXP vector);
+    explicit RVector(size_t init_size = slack);
 
     ~RVector() {
         R_ReleaseObject(vector);

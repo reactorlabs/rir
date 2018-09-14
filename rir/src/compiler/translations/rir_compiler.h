@@ -15,9 +15,9 @@ namespace pir {
 
 class RirCompiler {
   public:
-    RirCompiler(Module* module) : module(module) {}
+    explicit RirCompiler(Module* module) : module(module) {}
     RirCompiler(const RirCompiler&) = delete;
-    void operator=(const RirCompiler&) = delete;
+    RirCompiler& operator=(const RirCompiler&) = delete;
 
     typedef std::function<void()> Maybe;
     typedef std::function<void(Closure*)> MaybeCls;

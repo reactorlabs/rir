@@ -28,7 +28,7 @@ class ScopeAnalysis {
     }
     std::unordered_map<Instruction*, AbstractLoad> loads;
     AbstractREnvironmentHierarchy finalState;
-    ScopeAnalysis(Closure* fun);
+    explicit ScopeAnalysis(Closure* fun);
 };
 }
 }

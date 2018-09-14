@@ -214,7 +214,7 @@ class DominatorTreeVisitor {
     const DominanceGraph& dom;
 
   public:
-    DominatorTreeVisitor(const DominanceGraph& dom) : dom(dom) {}
+    explicit DominatorTreeVisitor(const DominanceGraph& dom) : dom(dom) {}
 
     void run(Code* code, BBAction action) {
         Marker done;

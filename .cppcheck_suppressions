@@ -1,0 +1,3 @@
+// cppcheck does not seem to understand the scoping with
+// enum classes. This just produces false positives for us
+variableHidingEnum

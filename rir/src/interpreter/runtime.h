@@ -12,6 +12,9 @@
 
   If the given closure is RIR function, returns its Function object, otherwise returns nullptr.
  */
+typedef rir::Function Function;
+typedef rir::DispatchTable DispatchTable;
+
 C_OR_CPP Function* isValidClosureSEXP(SEXP closure);
 
 C_OR_CPP void printFunction(Function* f);

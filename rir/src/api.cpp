@@ -176,7 +176,7 @@ SEXP pirCompile(SEXP what, const std::string& name, pir::DebugOptions debug) {
     pir::Rir2PirCompiler cmp(m, logger);
     cmp.compileClosure(what, name,
                        [&](pir::Closure* c) {
-                           cmp.optimizeModule(logger, preserveVersions);
+                           cmp.optimizeModule(preserveVersions);
 
                            // compile back to rir
                            pir::Pir2RirCompiler p2r(logger);

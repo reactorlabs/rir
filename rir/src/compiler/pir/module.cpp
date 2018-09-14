@@ -32,7 +32,7 @@ void Module::createIfMissing(rir::Function* f, const std::vector<SEXP>& a,
     assert(functionMap.count(idx) == 0);
     auto* cls = new pir::Closure(a, env, f);
     auto functionsIdx = functions.size();
-    functions.push_back(cls);
+    functions.push_back(VersionedClosure(cls));
     functionMap.emplace(idx, functionsIdx);
 
     if (!create(cls)) {

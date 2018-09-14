@@ -10,6 +10,8 @@
 #include <functional>
 
 namespace rir {
+struct Code;
+
 namespace pir {
 
 class Safepoint;
@@ -47,13 +49,13 @@ class Builder {
 
     // Use with care, let the builder keep track of BB. Prefer the highlevel
     // api above.
-    BB* getCurrentBB() { return bb; }
+    BB* getCurrentBB() const { return bb; }
     // Use with even more care, no checks
     void reenterBB(BB* bb) { this->bb = bb; }
 
   private:
     void markDone(BB*);
-    bool isDone(BB*);
+    bool isDone(BB*) const;
 
     std::vector<bool> done;
     BB* bb = nullptr;

@@ -43,6 +43,7 @@ struct RirRuntimeObject {
     }
 
     SEXP container() {
+        // cppcheck-suppress thisSubtraction
         SEXP result = (SEXP)((uintptr_t)this - sizeof(VECTOR_SEXPREC));
         assert(TYPEOF(result) == EXTERNALSXP &&
                "RIR object not embedded in container, or corrupt.");

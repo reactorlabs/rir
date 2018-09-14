@@ -178,7 +178,8 @@ class Locals final {
     unsigned localsCount;
 
   public:
-    Locals(unsigned count) : base(R_BCNodeStackTop), localsCount(count) {
+    explicit Locals(unsigned count)
+        : base(R_BCNodeStackTop), localsCount(count) {
         R_BCNodeStackTop += localsCount;
     }
 

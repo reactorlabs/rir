@@ -11,7 +11,7 @@ class RListIter {
   public:
     SEXP pos;
 
-    RListIter(SEXP pos) : pos(pos) {}
+    explicit RListIter(SEXP pos) : pos(pos) {}
 
     SEXP tag();
     bool hasTag();
@@ -29,7 +29,7 @@ class RList {
     SEXP list;
 
   public:
-    RList(SEXP list);
+    explicit RList(SEXP list);
 
     RListIter begin() { return RListIter(list); }
 

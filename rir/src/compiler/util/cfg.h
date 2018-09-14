@@ -16,7 +16,7 @@ class CFG {
     BBList exits_;
 
   public:
-    CFG(Code*);
+    explicit CFG(Code*);
     bool isPredecessor(BB* a, BB* b) const;
     bool isImmediatePredecessor(BB* a, BB* b) const;
     bool hasSinglePred(BB* a) const;
@@ -32,7 +32,7 @@ class DominanceGraph {
   public:
 
     size_t size() const { return dominating.size(); }
-    DominanceGraph(Code*);
+    explicit DominanceGraph(Code*);
 
     bool dominates(BB* a, BB* b) const;
 };

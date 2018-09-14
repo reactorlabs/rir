@@ -18,7 +18,7 @@ using namespace rir::pir;
 class TheInliner {
   public:
     Closure* function;
-    TheInliner(Closure* function) : function(function) {}
+    explicit TheInliner(Closure* function) : function(function) {}
 
     void operator()() {
         size_t fuel = 5;
@@ -27,8 +27,7 @@ class TheInliner {
             // Dangerous iterater usage, works since we do only update it in
             // one place.
             for (auto it = bb->begin(); it != bb->end() && fuel; it++) {
-                auto call = CallInstruction::CastCall(*it);
-                if (!call)
+                if (!CallInstruction::CastCall(*it))
                     continue;
 
                 Closure* inlinee = nullptr;
