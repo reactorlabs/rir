@@ -59,12 +59,12 @@ Safepoint* Builder::registerSafepoint(rir::Code* srcCode, Opcode* pos,
 
 void Builder::conditionalDeopt(Value* condition, rir::Code* srcCode,
                                Opcode* pos, const RirStack& stack,
-                               bool deoptUnless) {
+                               bool deoptOnFalseBranch) {
     add(new Branch(condition));
     auto cont = createBB();
     auto fail = createBB();
     // We may deoptimize if the condition holds or unless the condition holds
-    if (deoptUnless)
+    if (deoptOnFalseBranch)
         setBranch(cont, fail);
     else
         setBranch(fail, cont);

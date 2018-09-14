@@ -18,7 +18,7 @@ void Env::printRef(std::ostream& out) {
     } else if (this == nil()) {
         out << "nil";
         return;
-    } 
+    }
     assert(rho);
     std::string val;
     {
@@ -30,7 +30,8 @@ void Env::printRef(std::ostream& out) {
 }
 
 bool Env::isStaticEnv(Value* v) {
-    return Env::Cast(v) && v != Env::notClosed() && v != Env::nil() && v != Env::elided();
+    return Env::Cast(v) && v != Env::notClosed() && v != Env::nil() &&
+           v != Env::elided();
 }
 
 bool Env::isPirEnv(Value* v) {
@@ -62,5 +63,5 @@ bool Env::isParentEnv(Value* a, Value* b) {
     }
     return false;
 }
-}
-}
+} // namespace pir
+} // namespace rir
