@@ -229,6 +229,7 @@ bool Rir2Pir::compileBC(
         break;
     }
 
+    case Opcode::named_call_implicit_:
     case Opcode::call_implicit_: {
         std::vector<Value*> args;
         for (auto argi : bc.immediateCallArguments) {
@@ -266,7 +267,11 @@ bool Rir2Pir::compileBC(
 
         auto ast = bc.immediate.callFixedArgs.ast;
         auto insertGenericCall = [&]() {
-            push(insert(new Call(insert.env, pop(), args, ast)));
+            if (bc.bc == Opcode::named_call_implicit_)
+                push(insert(new NamedCall(insert.env, pop(), args,
+                                          bc.callArgumentNames, ast)));
+            else
+                push(insert(new Call(insert.env, pop(), args, ast)));
         };
         if (monomorphic && isValidClosureSEXP(monomorphic)) {
             compiler.compileClosure(
@@ -303,6 +308,7 @@ bool Rir2Pir::compileBC(
         break;
     }
 
+    case Opcode::named_call_:
     case Opcode::call_: {
         unsigned n = bc.immediate.callFixedArgs.nargs;
         std::vector<Value*> args(n);
@@ -310,8 +316,12 @@ bool Rir2Pir::compileBC(
             args[n - i - 1] = pop();
 
         auto target = pop();
-        push(insert(
-            new Call(env, target, args, bc.immediate.callFixedArgs.ast)));
+        if (bc.bc == Opcode::named_call_)
+            push(insert(new NamedCall(env, target, args, bc.callArgumentNames,
+                                      bc.immediate.callFixedArgs.ast)));
+        else
+            push(insert(
+                new Call(env, target, args, bc.immediate.callFixedArgs.ast)));
         break;
     }
 
@@ -564,8 +574,6 @@ bool Rir2Pir::compileBC(
         assert(false && "Recompiling PIR not supported for now.");
 
     // Unsupported opcodes:
-    case Opcode::named_call_:
-    case Opcode::named_call_implicit_:
     case Opcode::ldlval_:
     case Opcode::asast_:
     case Opcode::missing_:

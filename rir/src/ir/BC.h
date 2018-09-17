@@ -287,7 +287,7 @@ BC BC::call(size_t nargs, const std::vector<SEXP>& names, SEXP ast) {
     std::vector<PoolIdx> nameIdxs;
     for (auto n : names)
         nameIdxs.push_back(Pool::insert(n));
-    return BC(Opcode::named_call_, im, {}, nameIdxs);
+    return BC(Opcode::named_call_, im, {}, std::move(nameIdxs));
 }
 BC BC::staticCall(size_t nargs, SEXP ast, SEXP target) {
     ImmediateArguments im;

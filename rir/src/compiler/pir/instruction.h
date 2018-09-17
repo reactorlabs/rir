@@ -4,6 +4,7 @@
 #include "R/r.h"
 #include "env.h"
 #include "instruction_list.h"
+#include "ir/BC_inc.h"
 #include "ir/Deoptimization.h"
 #include "pir.h"
 #include "singleton_values.h"
@@ -887,6 +888,28 @@ class VLIE(Call, Effect::Any, EnvAccess::Leak), public CallInstruction {
     }
 
     Value* callerEnv() { return env(); }
+
+    void printArgs(std::ostream&) override;
+};
+
+class VLIE(NamedCall, Effect::Any, EnvAccess::Leak), public CallInstruction {
+  public:
+    std::vector<SEXP> names;
+
+    Value* cls() { return arg(0).val(); }
+
+    NamedCall(Value * callerEnv, Value * fun, const std::vector<Value*>& args,
+              const std::vector<BC::PoolIdx>& names_, unsigned srcIdx);
+
+    size_t nCallArgs() override { return nargs() - 2; };
+    void eachCallArg(Instruction::ArgumentValueIterator it) override {
+        for (size_t i = 0; i < nCallArgs(); ++i)
+            it(arg(i + 1).val());
+    }
+
+    Value* callerEnv() { return env(); }
+
+    void printArgs(std::ostream&) override;
 };
 
 // Call instruction for lazy, but staticatlly resolved calls. Closure is

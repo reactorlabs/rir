@@ -3,6 +3,7 @@
 
 #include "../util/visitor.h"
 #include "R/Funtab.h"
+#include "utils/Pool.h"
 #include "utils/capture_out.h"
 
 #include <algorithm>
@@ -359,6 +360,44 @@ CallInstruction* CallInstruction::CastCall(Value* v) {
     default: {}
     }
     return nullptr;
+}
+
+NamedCall::NamedCall(Value* callerEnv, Value* fun,
+                     const std::vector<Value*>& args,
+                     const std::vector<BC::PoolIdx>& names_, unsigned srcIdx)
+    : VarLenInstructionWithEnvSlot(PirType::valOrLazy(), callerEnv, srcIdx) {
+    assert(names_.size() == args.size());
+    pushArg(fun, RType::closure);
+    for (unsigned i = 0; i < args.size(); ++i) {
+        pushArg(args[i], PirType::val());
+        auto name = Pool::get(names_[i]);
+        assert(TYPEOF(name) == SYMSXP || name == R_NilValue);
+        names.push_back(name);
+    }
+}
+
+void Call::printArgs(std::ostream& out) {
+    for (size_t i = 0; i < nCallArgs(); ++i) {
+        arg(i).val()->printRef(out);
+        if (i < nCallArgs() - 1)
+            out << ", ";
+    }
+    out << "  (";
+    callerEnv()->printRef(out);
+    out << ")";
+}
+
+void NamedCall::printArgs(std::ostream& out) {
+    for (size_t i = 0; i < nCallArgs(); ++i) {
+        if (names[i] != R_NilValue)
+            out << CHAR(PRINTNAME(names[i])) << "=";
+        arg(i).val()->printRef(out);
+        if (i < nCallArgs() - 1)
+            out << ", ";
+    }
+    out << "  (";
+    callerEnv()->printRef(out);
+    out << ")";
 }
 
 Safepoint* Deopt::safepoint() { return Safepoint::Cast(arg<0>().val()); }

@@ -951,6 +951,12 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 cs << BC::call(call->nCallArgs(), Pool::get(call->srcIdx));
                 break;
             }
+            case Tag::NamedCall: {
+                auto call = NamedCall::Cast(instr);
+                cs << BC::call(call->nCallArgs(), call->names,
+                               Pool::get(call->srcIdx));
+                break;
+            }
             case Tag::StaticCall: {
                 auto call = StaticCall::Cast(instr);
                 compiler.compile(call->cls(), call->origin(), dryRun);
