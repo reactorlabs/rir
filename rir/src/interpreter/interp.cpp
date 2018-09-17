@@ -165,7 +165,6 @@ RIR_INLINE SEXP promiseValue(SEXP promise, Context* ctx) {
     if (PRVALUE(promise) && PRVALUE(promise) != R_UnboundValue) {
         promise = PRVALUE(promise);
         assert(TYPEOF(promise) != PROMSXP);
-        ENSURE_NAMEDMAX(promise);
         return promise;
     } else {
         SEXP res = forcePromise(promise);
