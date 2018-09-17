@@ -6,4 +6,5 @@ SRC="$ROOT/rir/src/"
 
 trap 'echo "   skipping" && exit 0' INT
 
+cppcheck --version
 cppcheck -q --inline-suppr --suppressions-list=$ROOT/.cppcheck_suppressions --enable=portability,warning,performance,style --suppress=unusedLabel:$SRC/interpreter/interp.cpp --suppress=unusedStructMember:$SRC/interpreter/interp.cpp $SRC --suppress=cstyleCast --error-exitcode=2 "$@"
