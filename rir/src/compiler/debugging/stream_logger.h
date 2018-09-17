@@ -53,6 +53,8 @@ class LogStream {
         printedAnything = true;
     }
 
+    virtual ~LogStream() { assert(!printedAnything && "Forgot to flush"); }
+
     virtual void flush() {
         if (printedAnything) {
             footer();
@@ -60,7 +62,6 @@ class LogStream {
         }
         printedAnything = false;
     }
-    virtual ~LogStream() { assert(!printedAnything && "Forgot to flush"); }
 
   protected:
     virtual void highlightOn();
@@ -128,7 +129,9 @@ class StreamLogger {
 
     void warn(const std::string& msg);
 
+    void title(const std::string& msg);
     void flush();
+
     void close(Closure* cls) { streams.erase(cls); }
 
   private:

@@ -20,12 +20,6 @@ StreamLogger::~StreamLogger() {
     }
 }
 
-void StreamLogger::flush() {
-    for (auto& e : streams) {
-        (*e.second).flush();
-    }
-}
-
 FileLogStream::~FileLogStream() { fstream.close(); }
 
 LogStream& StreamLogger::begin(Closure* cls, const std::string& name) {
@@ -162,7 +156,8 @@ void LogStream::failed(const std::string& msg) {
 }
 
 static const std::string RED = "\033[1;31m";
-static const std::string CLEAR = "\033[1;31m";
+static const std::string BLUE = "\033[1;34m";
+static const std::string CLEAR = "\033[0m";
 
 void LogStream::highlightOn() { out << RED; }
 
@@ -170,7 +165,7 @@ void LogStream::highlightOff() { out << CLEAR; }
 
 void LogStream::header() {
     highlightOn();
-    out << "┌";
+    out << "\n┌";
     for (size_t i = 0; i < 78; ++i)
         out << "─";
     out << "┐\n";
@@ -196,6 +191,30 @@ void LogStream::section(const std::string& title) {
         out << "(" << id << ")";
     out << "\n";
     highlightOff();
+}
+
+void StreamLogger::title(const std::string& msg) {
+    if (!options.includes(DebugFlag::PrintIntoFiles) &&
+        (options.intersects(PrintDebugPasses) ||
+         options.includes(DebugFlag::ShowWarnings))) {
+        std::cout << BLUE;
+        int l = 36 - (int)msg.length() / 2;
+        int r = l - msg.length() % 2;
+        std::cout << "\n╞";
+        for (int i = 0; i < l; ++i)
+            std::cout << "═";
+        std::cout << "╡  " << CLEAR << msg << BLUE << "  ╞";
+        for (int i = 0; i < r; ++i)
+            std::cout << "═";
+        std::cout << "╡\n";
+        std::cout << CLEAR;
+    }
+}
+
+void StreamLogger::flush() {
+    for (auto& e : streams) {
+        (*e.second).flush();
+    }
 }
 
 } // namespace pir

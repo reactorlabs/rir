@@ -111,6 +111,7 @@ void Rir2PirCompiler::compileClosure(rir::Function* srcFunction,
 }
 
 void Rir2PirCompiler::optimizeModule(bool preserveVersions) {
+    logger.flush();
     size_t passnr = 0;
     for (auto& translation : translations) {
         module->eachPirFunction([&](Module::VersionedClosure& v) {
