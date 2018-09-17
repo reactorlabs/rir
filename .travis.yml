@@ -10,7 +10,6 @@ matrix:
     # macOS clang
     - os: osx
       env:
-        - CORES=2
         - CXX_OVERRIDE=clang++
         - CC_OVERRIDE=clang
         - CHECK=check
@@ -20,7 +19,6 @@ matrix:
 
     - os: osx
       env:
-        - CORES=2
         - CXX_OVERRIDE=clang++
         - CC_OVERRIDE=clang
         - CHECK=check
@@ -38,7 +36,6 @@ matrix:
         - CPPCHECK="../tools/cppcheck"
 
     - env:
-        - CORES=2
         - CXX_OVERRIDE=g++-7
         - CC_OVERRIDE=gcc-7
         - CHECK=check
@@ -107,7 +104,7 @@ script:
   - R_ENABLE_JIT=2 PIR_ENABLE=force ./bin/tests
   - R_ENABLE_JIT=3 ./bin/tests
   - echo "running make $CHECK on a $BUILD build with CORES=$CORES and PIR_ENABLE=$PIR_ENABLE"
-  - TEST_MC_CORES=$CORES ./bin/gnur-make-tests $CHECK
+  - ./bin/gnur-make-tests $CHECK
 
 
 cache:
