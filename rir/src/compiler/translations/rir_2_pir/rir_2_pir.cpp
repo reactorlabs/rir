@@ -109,7 +109,7 @@ std::unordered_set<Opcode*> findMergepoints(rir::Code* srcCode) {
     // Mark falltrough to label
     for (auto pc = srcCode->code(); pc != srcCode->endCode();) {
         BC bc = BC::decode(pc);
-        if (!bc.isUncondJmp() && !bc.isReturn()) {
+        if (!bc.isUncondJmp() && !bc.isExit()) {
             Opcode* next = BC::next(pc);
             if (incom.count(next))
                 incom[next].push_back(pc);
@@ -250,10 +250,9 @@ bool Rir2Pir::compileBC(
                 }
             }
             Value* val = Missing::instance();
-            if (Query::pure(prom)) {
-                translate(promiseCode, insert,
-                          [&](Value* success) { val = success; });
-            }
+            if (Query::pure(prom))
+                if (auto inlineProm = tryTranslate(promiseCode, insert))
+                    val = inlineProm;
             args.push_back(insert(new MkArg(prom, val, env)));
         }
 
@@ -587,8 +586,20 @@ bool Rir2Pir::compileBC(
     return true;
 }
 
-void Rir2Pir::translate(rir::Code* srcCode, Builder& insert,
-                        MaybeVal<void> success, Maybe<void> fail) const {
+bool Rir2Pir::tryCompile(rir::Code* srcCode, Builder& insert) {
+    if (auto res = tryTranslate(srcCode, insert)) {
+        finalize(res, insert);
+        return true;
+    }
+    return false;
+}
+
+bool Rir2Pir::tryCompilePromise(rir::Code* prom, Builder& insert) const {
+    return PromiseRir2Pir(compiler, srcFunction, log, name)
+        .tryCompile(prom, insert);
+}
+
+Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) const {
     assert(!finalized);
 
     std::vector<ReturnSite> results;
@@ -663,8 +674,7 @@ void Rir2Pir::translate(rir::Code* srcCode, Builder& insert,
             }
             case Opcode::beginloop_:
                 log.warn("Cannot compile Function. Unsupported beginloop bc");
-                fail();
-                return;
+                return nullptr;
             default:
                 assert(false);
             }
@@ -699,20 +709,31 @@ void Rir2Pir::translate(rir::Code* srcCode, Builder& insert,
             continue;
         }
 
-        if (bc.isReturn()) {
+        if (bc.isExit()) {
+            Value* tos = cur.stack.top();
             switch (bc.bc) {
             case Opcode::ret_:
+                cur.stack.pop();
                 break;
             case Opcode::return_:
-                log.warn("Cannot compile Function. Unsupported return bc");
-                fail();
-                return;
+                if (inPromise()) {
+                    log.warn("Cannot compile Function. Unsupported return bc "
+                             "in promise");
+                    return nullptr;
+                }
+                // Return bytecode as top-level statement cannot cause non-local
+                // return. Therefore we can treat it as normal local return
+                // instruction. We just need to make sure to empty the stack.
+                cur.stack.clear();
+                break;
+            case Opcode::deopt_:
+                log.warn("Cannot compile Function. Unsupported deopt bc");
+                return nullptr;
             default:
                 assert(false);
             }
-            results.push_back(
-                ReturnSite(insert.getCurrentBB(), cur.stack.pop()));
             assert(cur.stack.empty());
+            results.push_back(ReturnSite(insert.getCurrentBB(), tos));
             // Setting the position to end, will either terminate the loop, or
             // pop from the worklist
             finger = end;
@@ -780,8 +801,7 @@ void Rir2Pir::translate(rir::Code* srcCode, Builder& insert,
             if (!compileBC(bc, pos, srcCode, cur.stack, insert, callFeedback,
                            typeFeedback)) {
                 log.failed("Abort r2p due to unsupported bc");
-                fail();
-                return;
+                return nullptr;
             }
             if (cur.stack.size() != size - bc.popCount() + bc.pushCount()) {
                 srcCode->print(std::cerr);
@@ -791,8 +811,7 @@ void Rir2Pir::translate(rir::Code* srcCode, Builder& insert,
                           << " and push " << bc.pushCount() << " we got from "
                           << size << " to " << cur.stack.size() << "\n";
                 assert(false);
-                fail();
-                return;
+                return nullptr;
             }
             if (bc.isCall()) {
                 insert.registerSafepoint(srcCode, nextPos, cur.stack);
@@ -804,8 +823,7 @@ void Rir2Pir::translate(rir::Code* srcCode, Builder& insert,
     if (results.size() == 0) {
         // Cannot compile functions with infinite loop
         log.warn("Aborting, it looks like this function has an infinite loop");
-        fail();
-        return;
+        return nullptr;
     }
 
     Value* res;
@@ -826,7 +844,7 @@ void Rir2Pir::translate(rir::Code* srcCode, Builder& insert,
 
     results.clear();
 
-    success(res);
+    return res;
 }
 
 void Rir2Pir::finalize(Value* ret, Builder& insert) {
