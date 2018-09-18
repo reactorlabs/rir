@@ -7,8 +7,8 @@
 namespace rir {
 namespace pir {
 
-void Code::print(std::ostream& out) const {
-    BreadthFirstVisitor::run(entry, [&out](BB* bb) { bb->print(out); });
+void Code::printCode(std::ostream& out, bool tty) const {
+    BreadthFirstVisitor::run(entry, [&](BB* bb) { bb->print(out, tty); });
 }
 
 Code::~Code() {

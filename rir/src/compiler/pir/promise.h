@@ -12,9 +12,9 @@ class Promise : public Code {
     Closure* fun;
     unsigned srcPoolIdx;
 
-    void print(std::ostream& out = std::cout) {
+    void print(std::ostream& out, bool tty) const {
         out << "Prom " << id << ":\n";
-        Code::print(out);
+        printCode(out, tty);
     }
 
     friend std::ostream& operator<<(std::ostream& out, const Promise& p) {

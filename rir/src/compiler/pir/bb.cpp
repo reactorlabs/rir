@@ -10,11 +10,11 @@ BB::BB(Code* owner, unsigned id) : id(id), owner(owner) {
     assert(id < owner->nextBBId);
 }
 
-void BB::print(std::ostream& out) {
+void BB::print(std::ostream& out, bool tty) {
     out << "BB" << id << "\n";
     for (auto i : instrs) {
         out << "  ";
-        i->print(out);
+        i->print(out, tty);
         out << "\n";
     }
     if (isJmp()) {

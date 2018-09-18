@@ -37,8 +37,7 @@ class Closure : public Code {
 
     std::vector<Promise*> promises;
 
-    void print(std::ostream& out) const;
-    void print() const;
+    void print(std::ostream& out, bool tty) const;
 
     Promise* createProm(unsigned srcPoolIdx);
 
