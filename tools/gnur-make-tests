@@ -19,5 +19,7 @@ cd $R_HOME
 
 git clean -fx -e Makefile tests/
 
+CORES=`nproc 2> /dev/null || echo 8`
+
 cd tests
-make $CHK
+TEST_MC_CORES=$CORES make $CHK
