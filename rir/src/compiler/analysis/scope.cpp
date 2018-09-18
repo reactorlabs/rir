@@ -93,9 +93,12 @@ void TheScopeAnalysis::apply(AS& envs, Instruction* i) const {
                 envs.merge(nextFun.result());
                 handled = true;
             }
+        } else {
+            // TODO: support for NamedCall
+            assert((CallBuiltin::Cast(i) || CallSafeBuiltin::Cast(i) ||
+                    NamedCall::Cast(i)) &&
+                   "New call instruction not handled?");
         }
-        // Not handled:
-        // CallBuiltin, CallSafeBuiltin, CallImplicit, CallNamed
     }
 
     // Keep track of closures

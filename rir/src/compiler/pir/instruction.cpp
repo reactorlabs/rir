@@ -129,6 +129,12 @@ void Instruction::replaceUsesWith(Value* replace) {
     replaceUsesIn(replace, bb());
 }
 
+void Instruction::replaceUsesAndSwapWith(
+    Instruction* replace, std::vector<Instruction*>::iterator it) {
+    replaceUsesWith(replace);
+    bb()->replace(it, replace);
+}
+
 Value* Instruction::baseValue() {
     if (auto cast = CastType::Cast(this))
         return cast->arg<0>().val()->baseValue();
@@ -398,8 +404,8 @@ void NamedCall::printArgs(std::ostream& out) {
     size_t nargs = nCallArgs();
     out << "(";
     for (size_t i = 0; i < nargs; ++i) {
-        if (names.size() > i && names.at(i) != R_NilValue)
-            out << CHAR(PRINTNAME(names.at(i))) << "=";
+        if (names[i] != R_NilValue)
+            out << CHAR(PRINTNAME(names.at(i))) << " = ";
         arg(i).val()->printRef(out);
         if (i < nargs - 1)
             out << ", ";

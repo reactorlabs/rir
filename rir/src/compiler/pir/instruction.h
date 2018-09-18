@@ -129,6 +129,8 @@ class Instruction : public Value {
 
     Instruction* hasSingleUse();
     void replaceUsesWith(Value* val);
+    void replaceUsesAndSwapWith(Instruction* val,
+                                std::vector<Instruction*>::iterator it);
     void replaceUsesIn(Value* val, BB* target);
     bool unused();
 

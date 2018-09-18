@@ -643,9 +643,9 @@ class Pir2Rir {
     }
     size_t compileCode(Context& ctx, Code* code);
     size_t getPromiseIdx(Context& ctx, Promise* code);
+
+    void lower(Code* code);
     void toCSSA(Code* code);
-    void collapseSafepoints(Code* code);
-    void convertImplicitCalls(Code* code);
     rir::Function* finalize();
 
   private:
@@ -659,8 +659,7 @@ class Pir2Rir {
 };
 
 size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
-    collapseSafepoints(code);
-    convertImplicitCalls(code);
+    lower(code);
     toCSSA(code);
     log.CSSA(code);
 
@@ -1084,17 +1083,52 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
     return alloc.slots();
 } // namespace
 
-void Pir2Rir::collapseSafepoints(Code* code) {
+template <typename CallType>
+static bool allLazy(CallType* call, std::vector<Promise*>& args) {
+    bool allLazy = true;
+    call->eachArg([&](Value* v) {
+        if (auto arg = MkArg::Cast(v)) {
+            if (arg->eagerArg() != Missing::instance()) {
+                allLazy = false;
+            } else if (allLazy) {
+                args.push_back(arg->prom);
+            }
+        }
+    });
+    return allLazy;
+}
+
+void Pir2Rir::lower(Code* code) {
     Visitor::run(code->entry, [&](BB* bb) {
         auto it = bb->begin();
         while (it != bb->end()) {
             auto next = it + 1;
             if (auto deopt = Deopt::Cast(*it)) {
+                // Lower Deopt instructions + their Safepoints to a
+                // ScheduledDeopt.
                 auto newDeopt = new ScheduledDeopt();
                 newDeopt->consumeSafepoints(deopt);
                 auto newDeoptPos = bb->insert(it, newDeopt);
                 next = newDeoptPos + 2;
+            } else if (auto call = Call::Cast(*it)) {
+                // Lower calls to call implicit
+                std::vector<Promise*> args;
+                if (allLazy(call, args))
+                    call->replaceUsesAndSwapWith(
+                        new CallImplicit(call->callerEnv(), call->cls(),
+                                         std::move(args), {}, call->srcIdx),
+                        it);
+            } else if (auto call = NamedCall::Cast(*it)) {
+                // Lower named calls to call implicit
+                std::vector<Promise*> args;
+                if (allLazy(call, args))
+                    call->replaceUsesAndSwapWith(
+                        new CallImplicit(call->callerEnv(), call->cls(),
+                                         std::move(args), call->names,
+                                         call->srcIdx),
+                        it);
             }
+
             it = next;
         }
     });
@@ -1104,64 +1138,7 @@ void Pir2Rir::collapseSafepoints(Code* code) {
             auto next = it + 1;
             if (Safepoint::Cast(*it) || Deopt::Cast(*it)) {
                 next = bb->remove(it);
-            }
-            it = next;
-        }
-    });
-}
-
-void Pir2Rir::convertImplicitCalls(Code* code) {
-    Visitor::run(code->entry, [&](BB* bb) {
-        auto it = bb->begin();
-        while (it != bb->end()) {
-            auto next = it + 1;
-            if (auto call = Call::Cast(*it)) {
-                bool allLazy = true;
-                std::vector<Promise*> args;
-                call->eachArg([&](Value* v) {
-                    if (auto arg = MkArg::Cast(v)) {
-                        if (arg->eagerArg() != Missing::instance()) {
-                            allLazy = false;
-                        } else if (allLazy) {
-                            args.push_back(arg->prom);
-                        }
-                    }
-                });
-                if (allLazy) {
-                    auto impl = new CallImplicit(call->callerEnv(), call->cls(),
-                                                 args, {}, call->srcIdx);
-                    call->replaceUsesWith(impl);
-                    bb->replace(it, impl);
-                }
-            } else if (auto call = NamedCall::Cast(*it)) {
-                bool allLazy = true;
-                std::vector<Promise*> args;
-                call->eachArg([&](Value* v) {
-                    if (auto arg = MkArg::Cast(v)) {
-                        if (arg->eagerArg() != Missing::instance()) {
-                            allLazy = false;
-                        } else if (allLazy) {
-                            args.push_back(arg->prom);
-                        }
-                    }
-                });
-                if (allLazy) {
-                    auto impl =
-                        new CallImplicit(call->callerEnv(), call->cls(), args,
-                                         call->names, call->srcIdx);
-                    call->replaceUsesWith(impl);
-                    bb->replace(it, impl);
-                }
-            }
-
-            it = next;
-        }
-    });
-    Visitor::run(code->entry, [&](BB* bb) {
-        auto it = bb->begin();
-        while (it != bb->end()) {
-            auto next = it + 1;
-            if (MkArg::Cast(*it) && (*it)->unused()) {
+            } else if (MkArg::Cast(*it) && (*it)->unused()) {
                 next = bb->remove(it);
             }
             it = next;
