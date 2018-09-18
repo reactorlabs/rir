@@ -254,14 +254,28 @@ CallBuiltin::CallBuiltin(Value* env, SEXP builtin,
         this->pushArg(args[i], PirType::val());
 }
 
+static void printCallArgs(std::ostream& out, Instruction* call,
+                          Value* callerEnv = nullptr) {
+    size_t nargs = CallInstruction::CastCall(call)->nCallArgs();
+    out << "(";
+    for (size_t i = 0; i < nargs; ++i) {
+        call->arg(i).val()->printRef(out);
+        if (i < nargs - 1)
+            out << ", ";
+    }
+    out << ") ";
+    if (callerEnv)
+        callerEnv->printRef(out);
+}
+
 void CallBuiltin::printArgs(std::ostream& out) {
-    std::cout << getBuiltinName(builtinId) << ", ";
-    Instruction::printArgs(out);
+    std::cout << getBuiltinName(builtinId);
+    printCallArgs(out, this, callerEnv());
 }
 
 void CallSafeBuiltin::printArgs(std::ostream& out) {
-    std::cout << getBuiltinName(builtinId) << ", ";
-    Instruction::printArgs(out);
+    std::cout << getBuiltinName(builtinId);
+    printCallArgs(out, this);
 }
 
 void Safepoint::printArgs(std::ostream& out) {
@@ -342,9 +356,7 @@ void MkFunCls::printArgs(std::ostream& out) {
 
 void StaticCall::printArgs(std::ostream& out) {
     out << *cls_;
-    if (nargs() > 0)
-        out << ", ";
-    Instruction::printArgs(out);
+    printCallArgs(out, this, callerEnv());
 }
 
 CallInstruction* CallInstruction::CastCall(Value* v) {
@@ -357,6 +369,8 @@ CallInstruction* CallInstruction::CastCall(Value* v) {
         return CallBuiltin::Cast(v);
     case Tag::CallSafeBuiltin:
         return CallSafeBuiltin::Cast(v);
+    case Tag::NamedCall:
+        return NamedCall::Cast(v);
     default: {}
     }
     return nullptr;
@@ -377,27 +391,35 @@ NamedCall::NamedCall(Value* callerEnv, Value* fun,
 }
 
 void Call::printArgs(std::ostream& out) {
-    for (size_t i = 0; i < nCallArgs(); ++i) {
-        arg(i).val()->printRef(out);
-        if (i < nCallArgs() - 1)
-            out << ", ";
-    }
-    out << "  (";
-    callerEnv()->printRef(out);
-    out << ")";
+    printCallArgs(out, this, callerEnv());
 }
 
 void NamedCall::printArgs(std::ostream& out) {
-    for (size_t i = 0; i < nCallArgs(); ++i) {
-        if (names[i] != R_NilValue)
-            out << CHAR(PRINTNAME(names[i])) << "=";
+    size_t nargs = nCallArgs();
+    out << "(";
+    for (size_t i = 0; i < nargs; ++i) {
+        if (names.size() > i && names.at(i) != R_NilValue)
+            out << CHAR(PRINTNAME(names.at(i))) << "=";
         arg(i).val()->printRef(out);
-        if (i < nCallArgs() - 1)
+        if (i < nargs - 1)
             out << ", ";
     }
-    out << "  (";
+    out << ") ";
+    if (callerEnv())
+        callerEnv()->printRef(out);
+}
+
+void CallImplicit::printArgs(std::ostream& out) {
+    out << "(";
+    for (size_t i = 0; i < promises.size(); ++i) {
+        if (i < names.size() && names[i] != R_NilValue)
+            out << CHAR(PRINTNAME(names[i])) << "=";
+        out << "Prom(" << promises[i]->id << ")";
+        if (i < promises.size() - 1)
+            out << ", ";
+    }
+    out << ") ";
     callerEnv()->printRef(out);
-    out << ")";
 }
 
 Safepoint* Deopt::safepoint() { return Safepoint::Cast(arg<0>().val()); }

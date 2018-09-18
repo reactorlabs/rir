@@ -93,9 +93,9 @@ void TheScopeAnalysis::apply(AS& envs, Instruction* i) const {
                 envs.merge(nextFun.result());
                 handled = true;
             }
-        } else {
-            assert(CallBuiltin::Cast(i) || CallSafeBuiltin::Cast(i));
         }
+        // Not handled:
+        // CallBuiltin, CallSafeBuiltin, CallImplicit, CallNamed
     }
 
     // Keep track of closures
