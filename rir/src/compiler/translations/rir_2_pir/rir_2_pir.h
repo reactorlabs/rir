@@ -18,50 +18,20 @@ class Rir2Pir {
             const std::string& name)
         : compiler(cmp), srcFunction(srcFunction), log(log), name(name) {}
 
-    // Tries to compile the srcCode. Return value indicates failure. Builder
-    // has to be discarded, if compilation fails!
-    bool tryCompile(rir::Code* srcCode, Builder& insert)
-        __attribute__((warn_unused_result)) {
-        return translate<bool>(srcCode, insert,
-                               [&](Value* v) {
-                                   finalize(v, insert);
-                                   return true;
-                               },
-                               []() { return false; });
+    bool tryCompile(Builder& insert) __attribute__((warn_unused_result)) {
+        return tryCompile(srcFunction->body(), insert);
     }
 
   private:
+    // Tries to compile the srcCode. Return value indicates failure. Builder
+    // has to be discarded, if compilation fails!
+    bool tryCompile(rir::Code* srcCode, Builder& insert)
+        __attribute__((warn_unused_result));
     bool tryCompilePromise(rir::Code* prom, Builder& insert) const
-        __attribute__((warn_unused_result)) {
-        return Rir2Pir(compiler, srcFunction, log, name)
-            .tryCompile(prom, insert);
-    }
+        __attribute__((warn_unused_result));
 
-    template <typename T>
-    using Maybe = std::function<T()>;
-    template <typename T>
-    using MaybeVal = std::function<T(Value*)>;
-
-    // Try to translate. On success and on fail "callbacks" are passed
-    void translate(rir::Code* srcCode, Builder& insert, MaybeVal<void> success,
-                   Maybe<void> fail) const;
-
-    // Try to translate. On fail is silent.
-    void translate(rir::Code* srcCode, Builder& insert,
-                   MaybeVal<void> success) const {
-        translate(srcCode, insert, success, []() {});
-    }
-
-    // Try to translate. Either fail or success is invoked. The final result is
-    // the return value of either of those.
-    template <typename T>
-    T translate(rir::Code* srcCode, Builder& insert, MaybeVal<T> success,
-                Maybe<T> fail) const {
-        T res;
-        translate(srcCode, insert, [&](Value* v) { res = success(v); },
-                  [&]() { res = fail(); });
-        return res;
-    }
+    Value* tryTranslate(rir::Code* srcCode, Builder& insert) const
+        __attribute__((warn_unused_result));
 
     void finalize(Value*, Builder& insert);
 
@@ -75,6 +45,17 @@ class Rir2Pir {
     bool compileBC(const BC& bc, Opcode* pos, rir::Code* srcCode, RirStack&,
                    Builder&, std::unordered_map<Value*, CallFeedback>&,
                    std::unordered_map<Value*, TypeFeedback>&) const;
+    virtual bool inPromise() const { return false; }
+};
+
+class PromiseRir2Pir : public Rir2Pir {
+  public:
+    PromiseRir2Pir(Rir2PirCompiler& cmp, rir::Function* srcFunction,
+                   LogStream& log, const std::string& name)
+        : Rir2Pir(cmp, srcFunction, log, name) {}
+
+  private:
+    bool inPromise() const override final { return true; }
 };
 
 } // namespace pir

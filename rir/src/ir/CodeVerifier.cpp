@@ -46,6 +46,10 @@ class State {
 
     void advance() {
         BC bc = BC::advance(&pc);
+        // Those two instructions deal with cleanly returning from the function
+        // themselves, so we can ignore leftover values on the stack. Note that
+        // ret_ should not be added here, as it requires the stack to have
+        // *only* the result value left.
         if (bc.bc == Opcode::return_ || bc.bc == Opcode::deopt_)
             ostack = 0;
         else
@@ -201,8 +205,7 @@ void CodeVerifier::calculateAndVerifyStack(Code* code) {
             BC cur = BC::decode(pc);
             i.advance();
             max.updateMax(i);
-            if (cur.bc == Opcode::ret_ || cur.bc == Opcode::return_ ||
-                cur.bc == Opcode::deopt_) {
+            if (cur.isExit()) {
                 i.checkClear();
                 break;
             } else if (cur.bc == Opcode::br_) {
@@ -340,8 +343,7 @@ void CodeVerifier::verifyFunctionLayout(SEXP sexp, ::Context* ctx) {
                 }
             }
 
-            if ((cur.isJmp() && cur.immediate.offset < 0) || cur.isReturn() ||
-                cur.bc == Opcode::deopt_)
+            if ((cur.isJmp() && cur.immediate.offset < 0) || cur.isExit())
                 sawReturnOrBackjump = true;
             else if (cur.bc != Opcode::nop_)
                 sawReturnOrBackjump = false;

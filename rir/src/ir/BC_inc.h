@@ -228,8 +228,9 @@ class BC {
 
     bool isPure() { return isPure(bc); }
 
-    bool isReturn() const {
-        return bc == Opcode::ret_ || bc == Opcode::return_;
+    bool isExit() const {
+        return bc == Opcode::ret_ || bc == Opcode::return_ ||
+               bc == Opcode::deopt_;
     }
 
     // This code performs the same as `BC::decode(pc).size()`, but for

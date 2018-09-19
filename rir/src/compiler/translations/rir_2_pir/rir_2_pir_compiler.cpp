@@ -84,7 +84,7 @@ void Rir2PirCompiler::compileClosure(rir::Function* srcFunction,
             auto& log = logger.begin(pirFunction, name);
             Rir2Pir rir2pir(*this, srcFunction, log, name);
 
-            if (rir2pir.tryCompile(srcFunction->body(), builder)) {
+            if (rir2pir.tryCompile(builder)) {
                 log.compilationEarlyPir(pirFunction);
                 if (!Verify::apply(pirFunction)) {
                     failed = true;
