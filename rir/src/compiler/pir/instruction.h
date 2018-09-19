@@ -4,6 +4,7 @@
 #include "R/r.h"
 #include "env.h"
 #include "instruction_list.h"
+#include "ir/BC_inc.h"
 #include "ir/Deoptimization.h"
 #include "pir.h"
 #include "singleton_values.h"
@@ -128,6 +129,8 @@ class Instruction : public Value {
 
     Instruction* hasSingleUse();
     void replaceUsesWith(Value* val);
+    void replaceUsesAndSwapWith(Instruction* val,
+                                std::vector<Instruction*>::iterator it);
     void replaceUsesIn(Value* val, BB* target);
     bool unused();
 
@@ -887,6 +890,46 @@ class VLIE(Call, Effect::Any, EnvAccess::Leak), public CallInstruction {
     }
 
     Value* callerEnv() { return env(); }
+
+    void printArgs(std::ostream&) override;
+};
+
+class VLIE(NamedCall, Effect::Any, EnvAccess::Leak), public CallInstruction {
+  public:
+    std::vector<SEXP> names;
+
+    Value* cls() { return arg(0).val(); }
+
+    NamedCall(Value * callerEnv, Value * fun, const std::vector<Value*>& args,
+              const std::vector<BC::PoolIdx>& names_, unsigned srcIdx);
+
+    size_t nCallArgs() override { return nargs() - 2; };
+    void eachCallArg(Instruction::ArgumentValueIterator it) override {
+        for (size_t i = 0; i < nCallArgs(); ++i)
+            it(arg(i + 1).val());
+    }
+
+    Value* callerEnv() { return env(); }
+    void printArgs(std::ostream&) override;
+};
+
+class FLIE(CallImplicit, 2, Effect::Any, EnvAccess::Leak) {
+  public:
+    std::vector<Promise*> promises;
+    std::vector<SEXP> names;
+
+    Value* cls() { return arg(0).val(); }
+
+    CallImplicit(Value* callerEnv, Value* fun,
+                 const std::vector<Promise*>& args,
+                 const std::vector<SEXP>& names_, unsigned srcIdx)
+        : FixedLenInstructionWithEnvSlot(PirType::valOrLazy(),
+                                         {{PirType::closure()}}, {{fun}},
+                                         callerEnv, srcIdx),
+          promises(args), names(names_) {}
+
+    Value* callerEnv() { return env(); }
+    void printArgs(std::ostream&) override;
 };
 
 // Call instruction for lazy, but staticatlly resolved calls. Closure is
@@ -914,6 +957,7 @@ class VLIE(StaticCall, Effect::Any, EnvAccess::Leak), public CallInstruction {
     }
 
     void printArgs(std::ostream&) override;
+    Value* callerEnv() { return env(); }
 };
 
 typedef SEXP (*CCODE)(SEXP, SEXP, SEXP, SEXP);
@@ -933,6 +977,7 @@ class VLIE(CallBuiltin, Effect::Any, EnvAccess::Leak), public CallInstruction {
             it(arg(i).val());
     }
     void printArgs(std::ostream & out) override;
+    Value* callerEnv() { return env(); }
 };
 
 class VLI(CallSafeBuiltin, Effect::None, EnvAccess::None),

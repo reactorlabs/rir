@@ -94,7 +94,10 @@ void TheScopeAnalysis::apply(AS& envs, Instruction* i) const {
                 handled = true;
             }
         } else {
-            assert(CallBuiltin::Cast(i) || CallSafeBuiltin::Cast(i));
+            // TODO: support for NamedCall
+            assert((CallBuiltin::Cast(i) || CallSafeBuiltin::Cast(i) ||
+                    NamedCall::Cast(i)) &&
+                   "New call instruction not handled?");
         }
     }
 

@@ -330,7 +330,7 @@ void CodeVerifier::verifyFunctionLayout(SEXP sexp, ::Context* ctx) {
                 }
             }
             if (*cptr == Opcode::named_call_) {
-                uint32_t nargs = *reinterpret_cast<Immediate*>(cptr + 5);
+                uint32_t nargs = *reinterpret_cast<Immediate*>(cptr + 1);
                 for (size_t i = 0, e = nargs; i != e; ++i) {
                     uint32_t offset = cur.callArgumentNames[i];
                     if (offset) {
