@@ -70,7 +70,7 @@ class BB {
 
     void swapWithNext(Instrs::iterator);
 
-    void print(std::ostream& = std::cout);
+    void print(std::ostream& = std::cout, bool tty = false);
 
     Instrs::iterator begin() { return instrs.begin(); }
     Instrs::iterator end() { return instrs.end(); }

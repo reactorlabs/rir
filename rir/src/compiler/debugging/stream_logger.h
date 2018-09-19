@@ -26,7 +26,6 @@ class StreamLogger;
 class LogStream {
   private:
     const std::string id;
-    std::ostream& out;
     DebugOptions options;
     bool printedAnything = false;
 
@@ -46,6 +45,7 @@ class LogStream {
     void warn(const std::string& msg);
 
     void section(const std::string&);
+    virtual bool tty();
 
     void preparePrint() {
         if (!printedAnything)
@@ -67,12 +67,13 @@ class LogStream {
     virtual void highlightOn();
     virtual void highlightOff();
 
+    std::ostream& out;
     void header();
     void footer();
 
     LogStream(const DebugOptions& options, const std::string& id,
               std::ostream& stream = std::cout)
-        : id(id), out(stream), options(options) {}
+        : id(id), options(options), out(stream) {}
     friend class StreamLogger;
 };
 
@@ -84,8 +85,7 @@ class FileLogStream : public LogStream {
     std::ofstream fstream;
 
   protected:
-    void highlightOn() override{};
-    void highlightOff() override{};
+    bool tty() override { return false; }
 
     FileLogStream(const DebugOptions& options, const std::string& id,
                   const std::string& fileName)
@@ -106,6 +106,8 @@ class BufferedLogStream : public LogStream {
     std::stringstream sstream;
 
   protected:
+    bool tty() override { return true; }
+
     BufferedLogStream(const DebugOptions& options, const std::string& id)
         : LogStream(options, id, sstream) {}
     friend class StreamLogger;
