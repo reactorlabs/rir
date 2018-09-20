@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 SCRIPTPATH=`cd $(dirname "$0") && pwd`
 
@@ -14,10 +14,31 @@ PKG="$SCRIPTPATH/../rir/"
 export EXTRA_LOAD_SO="`ls $RIR_BUILD/librir.*`"
 export EXTRA_LOAD_R="$PKG/R/rir.R"
 
-export R_ENABLE_JIT=2
 cd $R_HOME
 
-git clean -fx -e Makefile tests/
+git clean -dfx -e Makefile tests/
 
 cd tests
-make $CHK
+
+XVFB=`which Xvfb 2> /dev/null`
+
+if [[ "$DISPLAY" == "" && "$XVFB" != "" ]]; then
+  # Some tests fail without display
+  echo "Starting virtual FB display"
+  Xvfb :0 -ac -screen 0 800x166x16&
+  export DISPLAY=:0
+  USING_XVFB=true
+fi
+
+CORES=`nproc 2> /dev/null || echo 1`
+let CORES=$CORES*2
+TEST_MC_CORES=$CORES make $CHK
+
+RESULT=$?
+
+if [[ "$USING_XVFB" != "" ]]; then
+  #Kill virtual fb
+  kill %1
+fi
+
+exit $RESULT

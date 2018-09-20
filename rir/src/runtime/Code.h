@@ -49,6 +49,7 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
     friend struct Function;
     friend class FunctionWriter;
     friend class CodeVerifier;
+    static constexpr size_t NumLocals = 2;
 
     Code() = delete;
 
@@ -56,7 +57,13 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
          unsigned sourceSize, bool isDefaultArg, size_t localsCnt);
 
   private:
-    FunctionSEXP function_;
+    /*
+     * This array contains the GC reachable pointers. Currently there are two
+     * of them.
+     * 0 : the function that contains this code object, through function()
+     * 1 : the extra pool for attaching additional GC'd object to the code.
+     */
+    SEXP locals_[NumLocals];
 
   public:
     size_t index; /// index of this Code object in the Function array
@@ -74,6 +81,8 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
     unsigned srcLength; /// number of sources attached
 
     unsigned perfCounter;
+
+    unsigned extraPoolSize; /// Number of elements in the per code constant pool
 
     unsigned isDefaultArgument : 1; /// is this a compiled default value
                                     /// of a formal argument
@@ -103,6 +112,17 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
     Opcode* endCode() const { return (Opcode*)((uintptr_t)code() + codeSize); }
 
     Function* function();
+
+    // Usually SEXP pointers are loaded through the const pool. But sometimes
+    // we want to be able to attach things to the code objects which:
+    // 1. should get collected when the code is not longer needed
+    // 2. is added at runtime
+    // Those elements can be added to the extra pool.
+    unsigned addExtraPoolEntry(SEXP v);
+    SEXP getExtraPoolEntry(unsigned i) {
+        assert(i < extraPoolSize);
+        return VECTOR_ELT(getEntry(1), i);
+    }
 
     size_t size() const {
         return sizeof(Code) + pad4(codeSize) + srcLength * sizeof(SrclistEntry);

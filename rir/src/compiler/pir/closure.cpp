@@ -49,15 +49,13 @@ Closure* Closure::clone() {
 
     // fix promise references in body code and promise code
     Visitor::run(c->entry, [&](Instruction* i) {
-        auto a = MkArg::Cast(i);
-        if (a)
-            a->prom = promMap[a->prom];
+        if (auto a = MkArg::Cast(i))
+            a->updatePromise(promMap.at(a->prom()));
     });
     for (auto p : c->promises)
         Visitor::run(p->entry, [&](Instruction* i) {
-            auto a = MkArg::Cast(i);
-            if (a)
-                a->prom = promMap[a->prom];
+            if (auto a = MkArg::Cast(i))
+                a->updatePromise(promMap.at(a->prom()));
         });
 
     return c;

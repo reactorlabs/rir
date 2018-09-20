@@ -134,8 +134,7 @@ class TheVerifier {
         i->eachArg([&](const InstrArg& a) -> void {
             auto v = a.val();
             auto t = a.type();
-            Instruction* iv = Instruction::Cast(v);
-            if (iv) {
+            if (auto iv = Instruction::Cast(v)) {
                 if (phi) {
                     if (!cfg.isPredecessor(iv->bb(), i->bb())) {
                         std::cerr << "Error at instruction '";
@@ -176,7 +175,6 @@ class TheVerifier {
                           << " which is not a subtype of " << t << "\n";
                 ok = false;
             }
-
         });
     }
 };

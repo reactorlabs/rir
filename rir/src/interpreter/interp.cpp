@@ -3,9 +3,11 @@
 
 #include "R/Funtab.h"
 #include "R/Symbols.h"
+#include "R/r.h"
 #include "interp.h"
 #include "interp_context.h"
 #include "ir/Deoptimization.h"
+#include "ir/RuntimeFeedback_inl.h"
 #include "runtime.h"
 
 #define NOT_IMPLEMENTED assert(false)
@@ -1324,8 +1326,12 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
             if (callCtxt->hasStackArgs()) {
                 ostack_push(ctx, callCtxt->stackArg(idx));
             } else {
-                Code* arg = callCtxt->implicitArg(idx);
-                res = createPromise(arg, callCtxt->callerEnv);
+                if (callCtxt->implicitArgOffset(idx) == MISSING_ARG_IDX) {
+                    res = Rf_mkPROMISE(R_UnboundValue, callCtxt->callerEnv);
+                } else {
+                    Code* arg = callCtxt->implicitArg(idx);
+                    res = createPromise(arg, callCtxt->callerEnv);
+                }
                 ostack_push(ctx, res);
             }
             NEXT();
@@ -1404,7 +1410,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
         INSTRUCTION(record_call_) {
             CallFeedback* feedback = (CallFeedback*)pc;
             SEXP callee = ostack_top(ctx);
-            feedback->record(callee);
+            feedback->record(c, callee);
             pc += sizeof(CallFeedback);
             NEXT();
         }
@@ -2180,6 +2186,9 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
             SEXP selector = CAR(call) == symbol::SuperAssign
                                 ? symbol::SuperAssignBracket
                                 : symbol::AssignBracket;
+            RCNTXT assignContext;
+            Rf_begincontext(&assignContext, CTXT_RETURN, call, getenv(),
+                            ENCLOS(getenv()), args, selector);
             if (isObject(vec)) {
                 res = dispatchApply(call, vec, args, selector, getenv(), ctx);
             }
@@ -2189,6 +2198,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
                 // following
                 SET_NAMED(res, 0);
             }
+            Rf_endcontext(&assignContext);
             ostack_popn(ctx, 3);
             UNPROTECT(1);
 
@@ -2380,6 +2390,10 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
             SEXP selector = CAR(call) == symbol::SuperAssign
                                 ? symbol::SuperAssignDoubleBracket
                                 : symbol::AssignDoubleBracket;
+
+            RCNTXT assignContext;
+            Rf_begincontext(&assignContext, CTXT_RETURN, call, getenv(),
+                            ENCLOS(getenv()), args, selector);
             if (isObject(vec)) {
                 res = dispatchApply(call, vec, args, selector, getenv(), ctx);
             }
@@ -2390,6 +2404,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
                 // following
                 SET_NAMED(res, 0);
             }
+            Rf_endcontext(&assignContext);
             ostack_popn(ctx, 3);
             UNPROTECT(1);
 

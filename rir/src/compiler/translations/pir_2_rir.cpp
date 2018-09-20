@@ -848,7 +848,8 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 return;
             }
             case Tag::MkArg: {
-                cs << BC::promise(getPromiseIdx(ctx, MkArg::Cast(instr)->prom));
+                cs << BC::promise(
+                    getPromiseIdx(ctx, MkArg::Cast(instr)->prom()));
                 break;
             }
             case Tag::MkFunCls: {
@@ -1091,7 +1092,7 @@ static bool allLazy(CallType* call, std::vector<Promise*>& args) {
             if (arg->eagerArg() != Missing::instance()) {
                 allLazy = false;
             } else if (allLazy) {
-                args.push_back(arg->prom);
+                args.push_back(arg->prom());
             }
         }
     });

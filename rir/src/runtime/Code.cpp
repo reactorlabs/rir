@@ -12,15 +12,17 @@ Code::Code(FunctionSEXP fun, size_t index, SEXP ast, unsigned cs,
            unsigned sourceLength, bool isDefaultArg, size_t localsCnt)
     : RirRuntimeObject(
           // GC area starts just after the header
-          sizeof(rir_header),
+          (intptr_t)&locals_ - (intptr_t)this,
           // GC area has only 1 pointer
-          1),
-      function_(fun), index(index), src(src_pool_add(globalContext(), ast)),
-      stackLength(0), localsCount(localsCnt), codeSize(cs),
-      srcLength(sourceLength), perfCounter(0), isDefaultArgument(isDefaultArg) {
+          NumLocals),
+      index(index), src(src_pool_add(globalContext(), ast)), stackLength(0),
+      localsCount(localsCnt), codeSize(cs), srcLength(sourceLength),
+      perfCounter(0), extraPoolSize(0), isDefaultArgument(isDefaultArg) {
+    setEntry(0, fun);
+    setEntry(1, R_NilValue);
 }
 
-Function* Code::function() { return Function::unpack(function_); }
+Function* Code::function() { return Function::unpack(getEntry(0)); }
 
 unsigned Code::getSrcIdxAt(const Opcode* pc, bool allowMissing) const {
     if (srcLength == 0) {
@@ -152,6 +154,23 @@ void Code::print(std::ostream& out) const {
 
     out << "\n";
     disassemble(out);
+}
+
+unsigned Code::addExtraPoolEntry(SEXP v) {
+    SEXP cur = getEntry(1);
+    unsigned curLen = cur == R_NilValue ? 0 : (unsigned)LENGTH(cur);
+    if (curLen == extraPoolSize) {
+        unsigned newCapacity = curLen ? curLen * 2 : 2;
+        SEXP newPool = PROTECT(Rf_allocVector(VECSXP, newCapacity));
+        for (unsigned i = 0; i < curLen; ++i) {
+            SET_VECTOR_ELT(newPool, i, VECTOR_ELT(cur, i));
+        }
+        setEntry(1, newPool);
+        UNPROTECT(1);
+        cur = newPool;
+    }
+    SET_VECTOR_ELT(cur, extraPoolSize, v);
+    return extraPoolSize++;
 }
 
 FunctionCodeIterator::FunctionCodeIterator(Function const* const function,

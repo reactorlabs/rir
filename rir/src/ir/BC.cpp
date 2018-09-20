@@ -298,8 +298,8 @@ void BC::print(std::ostream& out) const {
         else
             out << prof.numTargets << ">" << (prof.numTargets ? ", " : " ");
         for (int i = 0; i < prof.numTargets; ++i)
-            out << prof.targets[i] << "(" << type2char(TYPEOF(prof.targets[i]))
-                << ") ";
+            out << prof.getTarget(i) << "("
+                << type2char(TYPEOF(prof.getTarget(i))) << ") ";
         out << "]";
         break;
     }
