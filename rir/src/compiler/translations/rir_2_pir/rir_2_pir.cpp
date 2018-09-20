@@ -258,10 +258,14 @@ bool Rir2Pir::compileBC(
 
         Value* callee = top();
         SEXP monomorphic = nullptr;
-        if (callFeedback.count(callee)) {
-            auto& feedback = callFeedback.at(callee);
-            if (feedback.numTargets == 1)
-                monomorphic = feedback.targets[0];
+
+        // TODO: static named argument matching
+        if (bc.bc != Opcode::named_call_implicit_) {
+            if (callFeedback.count(callee)) {
+                auto& feedback = callFeedback.at(callee);
+                if (feedback.numTargets == 1)
+                    monomorphic = feedback.targets[0];
+            }
         }
 
         auto ast = bc.immediate.callFixedArgs.ast;
