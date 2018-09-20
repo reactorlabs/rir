@@ -251,8 +251,7 @@ void Phi::printArgs(std::ostream& out, bool tty) {
 
 void PirCopy::print(std::ostream& out, bool tty) {
     printPaddedTypeAndRef(out, this);
-    std::ostringstream buf;
-    arg(0).val()->printRef(buf);
+    arg(0).val()->printRef(out);
 }
 
 CallSafeBuiltin::CallSafeBuiltin(SEXP builtin, const std::vector<Value*>& args,
@@ -272,14 +271,17 @@ CallBuiltin::CallBuiltin(Value* env, SEXP builtin,
         this->pushArg(args[i], PirType::val());
 }
 
-static void printCallArgs(std::ostream& out, Instruction* call) {
-    size_t nargs = CallInstruction::CastCall(call)->nCallArgs();
+static void printCallArgs(std::ostream& out, CallInstruction* call) {
     out << "(";
-    for (size_t i = 0; i < nargs; ++i) {
-        call->arg(i).val()->printRef(out);
-        if (i < nargs - 1)
+
+    size_t i = 0;
+    size_t n = call->nCallArgs();
+    call->eachCallArg([&](Value* v) {
+        v->printRef(out);
+        if (i < n - 1)
             out << ", ";
-    }
+        i++;
+    });
     out << ") ";
 }
 
@@ -409,22 +411,29 @@ NamedCall::NamedCall(Value* callerEnv, Value* fun,
     }
 }
 
-void Call::printArgs(std::ostream& out, bool tty) { printCallArgs(out, this); }
+void Call::printArgs(std::ostream& out, bool tty) {
+    cls()->printRef(out);
+    printCallArgs(out, this);
+}
 
 void NamedCall::printArgs(std::ostream& out, bool tty) {
+    cls()->printRef(out);
     size_t nargs = nCallArgs();
+    size_t i = 0;
     out << "(";
-    for (size_t i = 0; i < nargs; ++i) {
+    eachCallArg([&](Value* a) {
         if (names[i] != R_NilValue)
             out << CHAR(PRINTNAME(names.at(i))) << " = ";
-        arg(i).val()->printRef(out);
+        a->printRef(out);
         if (i < nargs - 1)
             out << ", ";
-    }
+        i++;
+    });
     out << ") ";
 }
 
 void CallImplicit::printArgs(std::ostream& out, bool tty) {
+    cls()->printRef(out);
     out << "(";
     for (size_t i = 0; i < promises.size(); ++i) {
         if (i < names.size() && names[i] != R_NilValue)
