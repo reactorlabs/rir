@@ -45,15 +45,15 @@ Context* context_create() {
     c->closureCompiler = [](SEXP closure, SEXP name) {
         return rir_compile(closure, R_NilValue);
     };
+    c->closureOptimizer = [](SEXP f, SEXP n) { return f; };
 
     if (pir && std::string(pir).compare("off") == 0) {
-        c->closureOptimizer = [](SEXP f, SEXP n) { return f; };
+        // do nothing; use defaults
     } else if (pir && std::string(pir).compare("force") == 0) {
         c->closureCompiler = [](SEXP f, SEXP n) {
             SEXP rir = rir_compile(f, R_NilValue);
             return pirOptDefaultOpts(rir, n);
         };
-        c->closureOptimizer = [](SEXP f, SEXP n) { return f; };
     } else if (pir && std::string(pir).compare("force_dryrun") == 0) {
         c->closureCompiler = [](SEXP f, SEXP n) {
             SEXP rir = rir_compile(f, R_NilValue);
