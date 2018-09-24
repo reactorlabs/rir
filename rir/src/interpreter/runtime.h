@@ -17,8 +17,7 @@ typedef rir::DispatchTable DispatchTable;
 
 Function* isValidClosureSEXP(SEXP closure);
 
-void printFunction(Function* f);
-void printFunctionFancy(SEXP f);
+void printFunction(Function* f, std::ostream& out = std::cout);
 
 void initializeRuntime();
 

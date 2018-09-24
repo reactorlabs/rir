@@ -246,7 +246,7 @@ struct PirType {
         return t_.r.includes(o.t_.r);
     }
 
-    void print();
+    void print(std::ostream& out = std::cout);
 };
 
 inline std::ostream& operator<<(std::ostream& out, NativeType t) {
