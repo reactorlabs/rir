@@ -22,8 +22,8 @@ class Module {
   public:
     Env* getEnv(SEXP);
 
-    void print(std::ostream& out = std::cout);
-    void printEachVersion(std::ostream& out = std::cout);
+    void print(std::ostream& out = std::cout, bool tty = false);
+    void printEachVersion(std::ostream& out = std::cout, bool tty = false);
 
     typedef std::function<void(pir::Closure*)> PirClosureIterator;
     struct VersionedClosure {

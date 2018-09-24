@@ -178,7 +178,7 @@ class BC {
     inline size_t popCount() {
         // return also is a leave
         assert(bc != Opcode::return_);
-        if (bc == Opcode::call_)
+        if (bc == Opcode::call_ || bc == Opcode::named_call_)
             return immediate.callFixedArgs.nargs + 1;
         if (bc == Opcode::static_call_)
             return immediate.staticCallFixedArgs.nargs;
@@ -228,8 +228,9 @@ class BC {
 
     bool isPure() { return isPure(bc); }
 
-    bool isReturn() const {
-        return bc == Opcode::ret_ || bc == Opcode::return_;
+    bool isExit() const {
+        return bc == Opcode::ret_ || bc == Opcode::return_ ||
+               bc == Opcode::deopt_;
     }
 
     // This code performs the same as `BC::decode(pc).size()`, but for
@@ -383,10 +384,10 @@ class BC {
         bc = *pc;
         pc++;
         immediate = decodeImmediateArguments(bc, pc);
+        pc += sizeof(CallFixedArgs);
         // Read implicit promise argument offsets
         if (bc == Opcode::call_implicit_ ||
             bc == Opcode::named_call_implicit_) {
-            pc += sizeof(CallFixedArgs);
             for (size_t i = 0; i < immediate.callFixedArgs.nargs; ++i)
                 immediateCallArguments.push_back(readImmediate(&pc));
         }

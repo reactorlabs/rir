@@ -84,7 +84,7 @@ void Rir2PirCompiler::compileClosure(rir::Function* srcFunction,
             auto& log = logger.begin(pirFunction, name);
             Rir2Pir rir2pir(*this, srcFunction, log, name);
 
-            if (rir2pir.tryCompile(srcFunction->body(), builder)) {
+            if (rir2pir.tryCompile(builder)) {
                 log.compilationEarlyPir(pirFunction);
                 if (!Verify::apply(pirFunction)) {
                     failed = true;
@@ -111,6 +111,7 @@ void Rir2PirCompiler::compileClosure(rir::Function* srcFunction,
 }
 
 void Rir2PirCompiler::optimizeModule(bool preserveVersions) {
+    logger.flush();
     size_t passnr = 0;
     for (auto& translation : translations) {
         module->eachPirFunction([&](Module::VersionedClosure& v) {

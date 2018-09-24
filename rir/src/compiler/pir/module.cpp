@@ -4,20 +4,20 @@
 namespace rir {
 namespace pir {
 
-void Module::print(std::ostream& out) {
+void Module::print(std::ostream& out, bool tty) {
     for (auto f : functions) {
-        f.current()->print(out);
+        f.current()->print(out, tty);
         out << "\n-------------------------------\n";
     }
 }
 
-void Module::printEachVersion(std::ostream& out) {
+void Module::printEachVersion(std::ostream& out, bool tty) {
     for (auto f : functions) {
         out << "\n======= Function ========================\n";
-        f.current()->print(out);
+        f.current()->print(out, tty);
         f.eachVersion([&](Closure* f) {
             out << "\n     == Version ========================\n";
-            f->print(out);
+            f->print(out, tty);
         });
         out << "\n=========================================\n";
     }

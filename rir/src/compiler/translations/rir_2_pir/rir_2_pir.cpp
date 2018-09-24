@@ -109,7 +109,7 @@ std::unordered_set<Opcode*> findMergepoints(rir::Code* srcCode) {
     // Mark falltrough to label
     for (auto pc = srcCode->code(); pc != srcCode->endCode();) {
         BC bc = BC::decode(pc);
-        if (!bc.isUncondJmp() && !bc.isReturn()) {
+        if (!bc.isUncondJmp() && !bc.isExit()) {
             Opcode* next = BC::next(pc);
             if (incom.count(next))
                 incom[next].push_back(pc);
@@ -229,40 +229,52 @@ bool Rir2Pir::compileBC(
         break;
     }
 
+    case Opcode::named_call_implicit_:
     case Opcode::call_implicit_: {
         std::vector<Value*> args;
         for (auto argi : bc.immediateCallArguments) {
             if (argi == DOTS_ARG_IDX) {
+                log.warn("Cannot compile call with ... arguments");
                 return false;
             } else if (argi == MISSING_ARG_IDX) {
+                log.warn("Cannot compile call with explicit missing arguments");
                 return false;
             }
             rir::Code* promiseCode = srcFunction->codeAt(argi);
             Promise* prom = insert.function->createProm(promiseCode->src);
             {
                 Builder promiseBuilder(insert.function, prom);
-                if (!tryCompilePromise(promiseCode, promiseBuilder))
+                if (!tryCompilePromise(promiseCode, promiseBuilder)) {
+                    log.warn("Failed to compile a promise for call");
                     return false;
+                }
             }
             Value* val = Missing::instance();
-            if (Query::pure(prom)) {
-                translate(promiseCode, insert,
-                          [&](Value* success) { val = success; });
-            }
+            if (Query::pure(prom))
+                if (auto inlineProm = tryTranslate(promiseCode, insert))
+                    val = inlineProm;
             args.push_back(insert(new MkArg(prom, val, env)));
         }
 
         Value* callee = top();
         SEXP monomorphic = nullptr;
-        if (callFeedback.count(callee)) {
-            auto& feedback = callFeedback.at(callee);
-            if (feedback.numTargets == 1)
-                monomorphic = feedback.targets[0];
+
+        // TODO: static named argument matching
+        if (bc.bc != Opcode::named_call_implicit_) {
+            if (callFeedback.count(callee)) {
+                auto& feedback = callFeedback.at(callee);
+                if (feedback.numTargets == 1)
+                    monomorphic = feedback.targets[0];
+            }
         }
 
         auto ast = bc.immediate.callFixedArgs.ast;
         auto insertGenericCall = [&]() {
-            push(insert(new Call(insert.env, pop(), args, ast)));
+            if (bc.bc == Opcode::named_call_implicit_)
+                push(insert(new NamedCall(insert.env, pop(), args,
+                                          bc.callArgumentNames, ast)));
+            else
+                push(insert(new Call(insert.env, pop(), args, ast)));
         };
         if (monomorphic && isValidClosureSEXP(monomorphic)) {
             compiler.compileClosure(
@@ -290,13 +302,16 @@ bool Rir2Pir::compileBC(
         Promise* prom = insert.function->createProm(promiseCode->src);
         {
             Builder promiseBuilder(insert.function, prom);
-            if (tryCompilePromise(promiseCode, promiseBuilder))
+            if (!tryCompilePromise(promiseCode, promiseBuilder)) {
+                log.warn("Failed to compile a promise");
                 return false;
+            }
         }
         push(insert(new MkArg(prom, val, env)));
         break;
     }
 
+    case Opcode::named_call_:
     case Opcode::call_: {
         unsigned n = bc.immediate.callFixedArgs.nargs;
         std::vector<Value*> args(n);
@@ -304,8 +319,12 @@ bool Rir2Pir::compileBC(
             args[n - i - 1] = pop();
 
         auto target = pop();
-        push(insert(
-            new Call(env, target, args, bc.immediate.callFixedArgs.ast)));
+        if (bc.bc == Opcode::named_call_)
+            push(insert(new NamedCall(env, target, args, bc.callArgumentNames,
+                                      bc.immediate.callFixedArgs.ast)));
+        else
+            push(insert(
+                new Call(env, target, args, bc.immediate.callFixedArgs.ast)));
         break;
     }
 
@@ -338,8 +357,10 @@ bool Rir2Pir::compileBC(
                     push(insert(new StaticCall(env, f, args, target, ast)));
                 },
                 [&]() { failed = true; });
-            if (failed)
+            if (failed) {
+                log.warn("Failed to compile the target of a static call");
                 return false;
+            }
         }
         break;
     }
@@ -552,25 +573,37 @@ bool Rir2Pir::compileBC(
     case Opcode::movloc_:
     case Opcode::isobj_:
     case Opcode::check_missing_:
+        log.unsupportedBC("Unsupported BC (are you recompiling?)", bc);
         assert(false && "Recompiling PIR not supported for now.");
 
     // Unsupported opcodes:
-    case Opcode::named_call_:
-    case Opcode::named_call_implicit_:
     case Opcode::ldlval_:
     case Opcode::asast_:
     case Opcode::missing_:
     case Opcode::beginloop_:
     case Opcode::endcontext_:
     case Opcode::ldddvar_:
+        log.unsupportedBC("Unsupported BC", bc);
         return false;
     }
 
     return true;
 }
 
-void Rir2Pir::translate(rir::Code* srcCode, Builder& insert,
-                        MaybeVal<void> success, Maybe<void> fail) const {
+bool Rir2Pir::tryCompile(rir::Code* srcCode, Builder& insert) {
+    if (auto res = tryTranslate(srcCode, insert)) {
+        finalize(res, insert);
+        return true;
+    }
+    return false;
+}
+
+bool Rir2Pir::tryCompilePromise(rir::Code* prom, Builder& insert) const {
+    return PromiseRir2Pir(compiler, srcFunction, log, name)
+        .tryCompile(prom, insert);
+}
+
+Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) const {
     assert(!finalized);
 
     std::vector<ReturnSite> results;
@@ -645,8 +678,7 @@ void Rir2Pir::translate(rir::Code* srcCode, Builder& insert,
             }
             case Opcode::beginloop_:
                 log.warn("Cannot compile Function. Unsupported beginloop bc");
-                fail();
-                return;
+                return nullptr;
             default:
                 assert(false);
             }
@@ -681,20 +713,31 @@ void Rir2Pir::translate(rir::Code* srcCode, Builder& insert,
             continue;
         }
 
-        if (bc.isReturn()) {
+        if (bc.isExit()) {
+            Value* tos = cur.stack.top();
             switch (bc.bc) {
             case Opcode::ret_:
+                cur.stack.pop();
                 break;
             case Opcode::return_:
-                log.warn("Cannot compile Function. Unsupported return bc");
-                fail();
-                return;
+                if (inPromise()) {
+                    log.warn("Cannot compile Function. Unsupported return bc "
+                             "in promise");
+                    return nullptr;
+                }
+                // Return bytecode as top-level statement cannot cause non-local
+                // return. Therefore we can treat it as normal local return
+                // instruction. We just need to make sure to empty the stack.
+                cur.stack.clear();
+                break;
+            case Opcode::deopt_:
+                log.warn("Cannot compile Function. Unsupported deopt bc");
+                return nullptr;
             default:
                 assert(false);
             }
-            results.push_back(
-                ReturnSite(insert.getCurrentBB(), cur.stack.pop()));
             assert(cur.stack.empty());
+            results.push_back(ReturnSite(insert.getCurrentBB(), tos));
             // Setting the position to end, will either terminate the loop, or
             // pop from the worklist
             finger = end;
@@ -762,8 +805,7 @@ void Rir2Pir::translate(rir::Code* srcCode, Builder& insert,
             if (!compileBC(bc, pos, srcCode, cur.stack, insert, callFeedback,
                            typeFeedback)) {
                 log.failed("Abort r2p due to unsupported bc");
-                fail();
-                return;
+                return nullptr;
             }
             if (cur.stack.size() != size - bc.popCount() + bc.pushCount()) {
                 srcCode->print(std::cerr);
@@ -773,8 +815,7 @@ void Rir2Pir::translate(rir::Code* srcCode, Builder& insert,
                           << " and push " << bc.pushCount() << " we got from "
                           << size << " to " << cur.stack.size() << "\n";
                 assert(false);
-                fail();
-                return;
+                return nullptr;
             }
             if (bc.isCall()) {
                 insert.registerSafepoint(srcCode, nextPos, cur.stack);
@@ -785,8 +826,8 @@ void Rir2Pir::translate(rir::Code* srcCode, Builder& insert,
 
     if (results.size() == 0) {
         // Cannot compile functions with infinite loop
-        fail();
-        return;
+        log.warn("Aborting, it looks like this function has an infinite loop");
+        return nullptr;
     }
 
     Value* res;
@@ -807,7 +848,7 @@ void Rir2Pir::translate(rir::Code* srcCode, Builder& insert,
 
     results.clear();
 
-    success(res);
+    return res;
 }
 
 void Rir2Pir::finalize(Value* ret, Builder& insert) {

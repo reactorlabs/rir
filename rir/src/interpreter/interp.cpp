@@ -165,7 +165,6 @@ RIR_INLINE SEXP promiseValue(SEXP promise, Context* ctx) {
     if (PRVALUE(promise) && PRVALUE(promise) != R_UnboundValue) {
         promise = PRVALUE(promise);
         assert(TYPEOF(promise) != PROMSXP);
-        ENSURE_NAMEDMAX(promise);
         return promise;
     } else {
         SEXP res = forcePromise(promise);
@@ -174,11 +173,11 @@ RIR_INLINE SEXP promiseValue(SEXP promise, Context* ctx) {
     }
 }
 
-static void jit(SEXP cls, Context* ctx) {
+static void jit(SEXP cls, SEXP name, Context* ctx) {
     assert(TYPEOF(cls) == CLOSXP);
     if (TYPEOF(BODY(cls)) == EXTERNALSXP)
         return;
-    SEXP cmp = ctx->compiler(cls, NULL);
+    SEXP cmp = ctx->closureCompiler(cls, name);
     SET_BODY(cls, BODY(cmp));
 }
 
@@ -582,7 +581,11 @@ SEXP rirCall(const CallContext& call, Context* ctx) {
 
     fun->registerInvocation();
     if (slot == 0 && fun->invocationCount == 2) {
-        ctx->optimizer(call.callee);
+        SEXP lhs = CAR(call.ast);
+        SEXP name = R_NilValue;
+        if (TYPEOF(lhs) == SYMSXP)
+            name = lhs;
+        ctx->closureOptimizer(call.callee, name);
         slot = dispatch(call, table);
         needsEnv = slot == 0;
         fun = table->at(slot);
@@ -1168,7 +1171,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
 
             switch (TYPEOF(res)) {
             case CLOSXP:
-                jit(res, ctx);
+                jit(res, sym, ctx);
                 break;
             case SPECIALSXP:
             case BUILTINSXP:
@@ -1529,7 +1532,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
 
             switch (TYPEOF(val)) {
             case CLOSXP:
-                jit(val, ctx);
+                jit(val, R_NilValue, ctx);
                 break;
             case SPECIALSXP:
             case BUILTINSXP:

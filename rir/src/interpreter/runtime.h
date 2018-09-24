@@ -15,13 +15,12 @@
 typedef rir::Function Function;
 typedef rir::DispatchTable DispatchTable;
 
-C_OR_CPP Function* isValidClosureSEXP(SEXP closure);
+Function* isValidClosureSEXP(SEXP closure);
 
-C_OR_CPP void printFunction(Function* f);
-C_OR_CPP void printFunctionFancy(SEXP f);
+void printFunction(Function* f);
+void printFunctionFancy(SEXP f);
 
-C_OR_CPP void initializeRuntime(CompilerCallback compiler,
-                                OptimizerCallback optimizer);
+void initializeRuntime();
 
 /** Returns the global context for the interpreter - important to get access to
   the shared constant and source pools.
@@ -29,7 +28,7 @@ C_OR_CPP void initializeRuntime(CompilerCallback compiler,
   TODO Even in multithreaded mode we probably want to have cp and src pools
   shared - it is not that we add stuff to them often.
  */
-C_OR_CPP Context* globalContext();
+Context* globalContext();
 rir::Configurations* pirConfigurations();
 
 #endif

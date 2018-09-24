@@ -2,6 +2,7 @@
 #include "../pir/pir_impl.h"
 #include "runtime/Function.h"
 #include "utils/Pool.h"
+#include "utils/Terminal.h"
 
 #include <fstream>
 #include <iomanip>
@@ -20,13 +21,9 @@ StreamLogger::~StreamLogger() {
     }
 }
 
-void StreamLogger::flush() {
-    for (auto& e : streams) {
-        (*e.second).flush();
-    }
-}
-
 FileLogStream::~FileLogStream() { fstream.close(); }
+
+bool LogStream::tty() { return ConsoleColor::isTTY(out); }
 
 LogStream& StreamLogger::begin(Closure* cls, const std::string& name) {
     assert(!streams.count(cls) && "You already started this function");
@@ -65,7 +62,7 @@ void LogStream::compilationEarlyPir(Closure* closure) {
     if (options.includes(DebugFlag::PrintEarlyPir)) {
         preparePrint();
         section("Compiled to PIR Version");
-        closure->print(out);
+        closure->print(out, tty());
     }
 }
 
@@ -73,7 +70,7 @@ void LogStream::pirOptimizationsFinished(Closure* closure) {
     if (options.includes(DebugFlag::PrintPirAfterOpt)) {
         preparePrint();
         section("PIR Version After Optimizations");
-        closure->print(out);
+        closure->print(out, tty());
         out << "\n";
     }
 }
@@ -85,7 +82,7 @@ void LogStream::pirOptimizations(Closure* closure, const std::string& pass,
         std::stringstream ss;
         ss << pass << ": == " << passnr;
         section(ss.str());
-        closure->print(out);
+        closure->print(out, tty());
     }
 }
 
@@ -103,7 +100,7 @@ void LogStream::afterAllocator(Code* code,
     if (options.includes(DebugFlag::PrintAllocator)) {
         preparePrint();
         section("PIR SSA allocator");
-        code->print(out);
+        code->printCode(out, tty());
         out << "\n";
         allocDebug(out);
     }
@@ -113,7 +110,7 @@ void LogStream::CSSA(Code* code) {
     if (options.includes(DebugFlag::PrintCSSA)) {
         preparePrint();
         section("CSSA Version");
-        code->print(out);
+        code->printCode(out, tty());
         out << "\n";
     }
 }
@@ -122,7 +119,7 @@ void LogStream::finalPIR(Closure* code) {
     if (options.includes(DebugFlag::PrintFinalPir)) {
         preparePrint();
         section("Final PIR Version");
-        code->print(out);
+        code->print(out, tty());
         out << "\n";
     }
 }
@@ -161,16 +158,18 @@ void LogStream::failed(const std::string& msg) {
     }
 }
 
-static const std::string RED = "\033[1;31m";
-static const std::string CLEAR = "\033[1;31m";
-
-void LogStream::highlightOn() { out << RED; }
-
-void LogStream::highlightOff() { out << CLEAR; }
+void LogStream::highlightOn() {
+    if (tty())
+        ConsoleColor::red(out);
+}
+void LogStream::highlightOff() {
+    if (tty())
+        ConsoleColor::clear(out);
+}
 
 void LogStream::header() {
     highlightOn();
-    out << "┌";
+    out << "\n┌";
     for (size_t i = 0; i < 78; ++i)
         out << "─";
     out << "┐\n";
@@ -196,6 +195,34 @@ void LogStream::section(const std::string& title) {
         out << "(" << id << ")";
     out << "\n";
     highlightOff();
+}
+
+void StreamLogger::title(const std::string& msg) {
+    if (!options.includes(DebugFlag::PrintIntoFiles) &&
+        (options.intersects(PrintDebugPasses) ||
+         options.includes(DebugFlag::ShowWarnings))) {
+        ConsoleColor::blue(std::cout);
+        int l = 36 - (int)msg.length() / 2;
+        int r = l - msg.length() % 2;
+        std::cout << "\n╞";
+        for (int i = 0; i < l; ++i)
+            std::cout << "═";
+        std::cout << "╡  ";
+        ConsoleColor::clear(std::cout);
+        std::cout << msg;
+        ConsoleColor::blue(std::cout);
+        std::cout << "  ╞";
+        for (int i = 0; i < r; ++i)
+            std::cout << "═";
+        std::cout << "╡\n";
+        ConsoleColor::clear(std::cout);
+    }
+}
+
+void StreamLogger::flush() {
+    for (auto& e : streams) {
+        (*e.second).flush();
+    }
 }
 
 } // namespace pir

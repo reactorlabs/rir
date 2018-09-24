@@ -7,6 +7,7 @@
 #include <stdio.h>
 
 #include <assert.h>
+#include <functional>
 #include <stdint.h>
 
 /** Compiler API. Given a language object, compiles it and returns the
@@ -14,12 +15,9 @@
 
   The idea is to call this if we want on demand compilation of closures.
  */
-typedef SEXP (*CompilerCallback)(SEXP, SEXP);
-typedef SEXP (*OptimizerCallback)(SEXP);
-
-#ifdef __cplusplus
-extern "C" {
-#endif
+typedef std::function<SEXP(SEXP expr, SEXP env)> ExprCompiler;
+typedef std::function<SEXP(SEXP closure, SEXP name)> ClosureCompiler;
+typedef std::function<SEXP(SEXP closure, SEXP name)> ClosureOptimizer;
 
 #define POOL_CAPACITY 4096
 #define STACK_CAPACITY 4096
@@ -52,8 +50,9 @@ typedef struct {
     SEXP list;
     ResizeableList cp;
     ResizeableList src;
-    CompilerCallback compiler;
-    OptimizerCallback optimizer;
+    ExprCompiler exprCompiler;
+    ClosureCompiler closureCompiler;
+    ClosureOptimizer closureOptimizer;
 } Context;
 
 // Some symbols
@@ -213,7 +212,7 @@ class Locals final {
     static void* operator new(size_t) = delete;
 };
 
-Context* context_create(CompilerCallback, OptimizerCallback);
+Context* context_create();
 
 #define cp_pool_length(c) (rl_length(&(c)->cp))
 #define src_pool_length(c) (rl_length(&(c)->src))
@@ -232,9 +231,5 @@ RIR_INLINE size_t src_pool_add(Context* c, SEXP v) {
 
 #define cp_pool_at(c, index) (VECTOR_ELT((c)->cp.list, (index)))
 #define src_pool_at(c, value) (VECTOR_ELT((c)->src.list, (value)))
-
-#ifdef __cplusplus
-}
-#endif
 
 #endif // interpreter_context_h

@@ -3,6 +3,8 @@
 
 #include "../util/visitor.h"
 #include "R/Funtab.h"
+#include "utils/Pool.h"
+#include "utils/Terminal.h"
 #include "utils/capture_out.h"
 
 #include <algorithm>
@@ -44,35 +46,57 @@ void printPaddedInstructionName(std::ostream& out, const std::string& name) {
     out << std::left << std::setw(maxInstructionNameLength + 1) << name << " ";
 }
 
-void Instruction::printArgs(std::ostream& out) {
-    if (nargs() > 0) {
-        for (size_t i = 0; i < nargs(); ++i) {
-            arg(i).val()->printRef(out);
-            if (i + 1 < nargs())
-                out << ", ";
-        }
-    }
-}
-
-void Instruction::print(std::ostream& out) {
+void printPaddedTypeAndRef(std::ostream& out, Instruction* i) {
     std::ostringstream buf;
-    buf << type;
+    buf << i->type;
     out << std::left << std::setw(7) << buf.str() << " ";
     buf.str("");
-    if (type != PirType::voyd()) {
-        printRef(buf);
+    if (i->type != PirType::voyd()) {
+        i->printRef(buf);
         out << std::setw(5) << buf.str() << " = ";
-        buf.str("");
     } else {
         out << "        ";
     }
+}
 
+void Instruction::printArgs(std::ostream& out, bool tty) {
+    size_t n = nargs();
+    size_t env = hasEnv() ? envSlot() : n + 1;
+
+    for (size_t i = 0; i < n; ++i) {
+        if (i != env) {
+            arg(i).val()->printRef(out);
+            if (i + 1 < n && (i + 1) != env)
+                out << ", ";
+        }
+    }
+    if (hasEnv())
+        out << ", ";
+}
+
+void Instruction::print(std::ostream& out, bool tty) {
+    printPaddedTypeAndRef(out, this);
     printPaddedInstructionName(out, name());
-    printArgs(buf);
-    out << std::setw(50) << buf.str();
+    printArgs(out, tty);
+    printEnv(out, tty);
+}
 
-    if (leaksEnv())
-        out << " ; env leak";
+void Instruction::printEnv(std::ostream& out, bool tty) {
+    if (hasEnv()) {
+        if (tty) {
+            if (leaksEnv())
+                ConsoleColor::magenta(out);
+            else if (changesEnv())
+                ConsoleColor::red(out);
+            else
+                ConsoleColor::yellow(out);
+        }
+
+        env()->printRef(out);
+
+        if (tty)
+            ConsoleColor::clear(out);
+    }
 }
 
 void Instruction::printRef(std::ostream& out) {
@@ -128,6 +152,12 @@ void Instruction::replaceUsesWith(Value* replace) {
     replaceUsesIn(replace, bb());
 }
 
+void Instruction::replaceUsesAndSwapWith(
+    Instruction* replace, std::vector<Instruction*>::iterator it) {
+    replaceUsesWith(replace);
+    bb()->replace(it, replace);
+}
+
 Value* Instruction::baseValue() {
     if (auto cast = CastType::Cast(this))
         return cast->arg<0>().val()->baseValue();
@@ -138,7 +168,7 @@ Value* Instruction::baseValue() {
     return this;
 }
 
-void LdConst::printArgs(std::ostream& out) {
+void LdConst::printArgs(std::ostream& out, bool tty) {
     std::string val;
     {
         CaptureOut rec;
@@ -148,60 +178,55 @@ void LdConst::printArgs(std::ostream& out) {
     out << val;
 }
 
-void Branch::printArgs(std::ostream& out) {
-    FixedLenInstruction::printArgs(out);
+void Branch::printArgs(std::ostream& out, bool tty) {
+    FixedLenInstruction::printArgs(out, tty);
     out << " -> BB" << bb()->trueBranch()->id << " (if true) | BB"
         << bb()->falseBranch()->id << " (if false)";
 }
 
-void MkArg::printArgs(std::ostream& out) {
+void MkArg::printArgs(std::ostream& out, bool tty) {
     eagerArg()->printRef(out);
     out << ", " << *prom << ", ";
-    env()->printRef(out);
 }
 
-void LdVar::printArgs(std::ostream& out) {
+void LdVar::printArgs(std::ostream& out, bool tty) {
     out << CHAR(PRINTNAME(varName)) << ", ";
-    env()->printRef(out);
 }
 
-void LdFun::printArgs(std::ostream& out) {
+void LdFun::printArgs(std::ostream& out, bool tty) {
     out << CHAR(PRINTNAME(varName)) << ", ";
-    env()->printRef(out);
 }
 
-void LdArg::printArgs(std::ostream& out) { out << id; }
+void LdArg::printArgs(std::ostream& out, bool tty) { out << id; }
 
-void StVar::printArgs(std::ostream& out) {
+void StVar::printArgs(std::ostream& out, bool tty) {
     out << CHAR(PRINTNAME(varName)) << ", ";
     val()->printRef(out);
     out << ", ";
-    env()->printRef(out);
 }
 
-void StVarSuper::printArgs(std::ostream& out) {
+void StVarSuper::printArgs(std::ostream& out, bool tty) {
     out << CHAR(PRINTNAME(varName)) << ", ";
     val()->printRef(out);
     out << ", ";
-    env()->printRef(out);
 }
 
-void LdVarSuper::printArgs(std::ostream& out) {
-    out << CHAR(PRINTNAME(varName)) << ", ";
-    env()->printRef(out);
+void LdVarSuper::printArgs(std::ostream& out, bool tty) {
+    out << CHAR(PRINTNAME(varName));
+    out << ", ";
 }
 
-void MkEnv::printArgs(std::ostream& out) {
+void MkEnv::printArgs(std::ostream& out, bool tty) {
     eachLocalVar([&](SEXP name, Value* v) {
         out << CHAR(PRINTNAME(name)) << "=";
         v->printRef(out);
         out << ", ";
     });
     out << "parent=";
-    lexicalEnv()->printRef(out);
+    Instruction::printEnv(out, tty);
 }
 
-void Is::printArgs(std::ostream& out) {
+void Is::printArgs(std::ostream& out, bool tty) {
     arg<0>().val()->printRef(out);
     out << ", " << Rf_type2char(sexpTag);
 }
@@ -213,7 +238,7 @@ bool Phi::updateType() {
     return type != old;
 }
 
-void Phi::printArgs(std::ostream& out) {
+void Phi::printArgs(std::ostream& out, bool tty) {
     if (nargs() > 0) {
         for (size_t i = 0; i < nargs(); ++i) {
             arg(i).val()->printRef(out);
@@ -224,16 +249,9 @@ void Phi::printArgs(std::ostream& out) {
     }
 }
 
-void PirCopy::print(std::ostream& out) {
-    std::ostringstream buf;
-    buf << type;
-    out << std::left << std::setw(7) << buf.str() << " ";
-    buf.str("");
-    printRef(buf);
-    out << std::setw(5) << buf.str() << " = ";
-    buf.str("");
-    arg(0).val()->printRef(buf);
-    out << std::setw(50) << buf.str();
+void PirCopy::print(std::ostream& out, bool tty) {
+    printPaddedTypeAndRef(out, this);
+    arg(0).val()->printRef(out);
 }
 
 CallSafeBuiltin::CallSafeBuiltin(SEXP builtin, const std::vector<Value*>& args,
@@ -253,17 +271,31 @@ CallBuiltin::CallBuiltin(Value* env, SEXP builtin,
         this->pushArg(args[i], PirType::val());
 }
 
-void CallBuiltin::printArgs(std::ostream& out) {
-    std::cout << getBuiltinName(builtinId) << ", ";
-    Instruction::printArgs(out);
+static void printCallArgs(std::ostream& out, CallInstruction* call) {
+    out << "(";
+
+    size_t i = 0;
+    size_t n = call->nCallArgs();
+    call->eachCallArg([&](Value* v) {
+        v->printRef(out);
+        if (i < n - 1)
+            out << ", ";
+        i++;
+    });
+    out << ") ";
 }
 
-void CallSafeBuiltin::printArgs(std::ostream& out) {
-    std::cout << getBuiltinName(builtinId) << ", ";
-    Instruction::printArgs(out);
+void CallBuiltin::printArgs(std::ostream& out, bool tty) {
+    std::cout << getBuiltinName(builtinId);
+    printCallArgs(out, this);
 }
 
-void Safepoint::printArgs(std::ostream& out) {
+void CallSafeBuiltin::printArgs(std::ostream& out, bool tty) {
+    std::cout << getBuiltinName(builtinId);
+    printCallArgs(out, this);
+}
+
+void Safepoint::printArgs(std::ostream& out, bool tty) {
     out << code << "+" << pc - code->code();
     out << ": [";
     long s = stackSize;
@@ -276,7 +308,7 @@ void Safepoint::printArgs(std::ostream& out) {
         }
     });
     out << "], env=";
-    env()->printRef(out);
+    Instruction::printEnv(out, tty);
     if (next()) {
         out << ", next=";
         next()->printRef(out);
@@ -301,7 +333,7 @@ void ScheduledDeopt::consumeSafepoints(Deopt* deopt) {
     }
 }
 
-void ScheduledDeopt::printArgs(std::ostream& out) {
+void ScheduledDeopt::printArgs(std::ostream& out, bool tty) {
     size_t n = 0;
     for (auto& f : frames)
         n += f.stackSize + 1;
@@ -319,7 +351,11 @@ void ScheduledDeopt::printArgs(std::ostream& out) {
                 out << ", ";
         }
         out << "], env=";
+        if (tty)
+            ConsoleColor::magenta(out);
         arg(argpos++).val()->printRef(out);
+        if (tty)
+            ConsoleColor::clear(out);
         if (argpos < nargs()) {
             out << "; ";
         }
@@ -333,17 +369,15 @@ MkFunCls::MkFunCls(Closure* fun, Value* lexicalEnv, SEXP fml, SEXP code,
     assert(fun->closureEnv() == Env::notClosed());
 }
 
-void MkFunCls::printArgs(std::ostream& out) {
+void MkFunCls::printArgs(std::ostream& out, bool tty) {
     out << *fun;
     out << ", ";
-    Instruction::printArgs(out);
+    Instruction::printArgs(out, tty);
 }
 
-void StaticCall::printArgs(std::ostream& out) {
+void StaticCall::printArgs(std::ostream& out, bool tty) {
     out << *cls_;
-    if (nargs() > 0)
-        out << ", ";
-    Instruction::printArgs(out);
+    printCallArgs(out, this);
 }
 
 CallInstruction* CallInstruction::CastCall(Value* v) {
@@ -356,9 +390,59 @@ CallInstruction* CallInstruction::CastCall(Value* v) {
         return CallBuiltin::Cast(v);
     case Tag::CallSafeBuiltin:
         return CallSafeBuiltin::Cast(v);
+    case Tag::NamedCall:
+        return NamedCall::Cast(v);
     default: {}
     }
     return nullptr;
+}
+
+NamedCall::NamedCall(Value* callerEnv, Value* fun,
+                     const std::vector<Value*>& args,
+                     const std::vector<BC::PoolIdx>& names_, unsigned srcIdx)
+    : VarLenInstructionWithEnvSlot(PirType::valOrLazy(), callerEnv, srcIdx) {
+    assert(names_.size() == args.size());
+    pushArg(fun, RType::closure);
+    for (unsigned i = 0; i < args.size(); ++i) {
+        pushArg(args[i], PirType::val());
+        auto name = Pool::get(names_[i]);
+        assert(TYPEOF(name) == SYMSXP || name == R_NilValue);
+        names.push_back(name);
+    }
+}
+
+void Call::printArgs(std::ostream& out, bool tty) {
+    cls()->printRef(out);
+    printCallArgs(out, this);
+}
+
+void NamedCall::printArgs(std::ostream& out, bool tty) {
+    cls()->printRef(out);
+    size_t nargs = nCallArgs();
+    size_t i = 0;
+    out << "(";
+    eachCallArg([&](Value* a) {
+        if (names[i] != R_NilValue)
+            out << CHAR(PRINTNAME(names.at(i))) << " = ";
+        a->printRef(out);
+        if (i < nargs - 1)
+            out << ", ";
+        i++;
+    });
+    out << ") ";
+}
+
+void CallImplicit::printArgs(std::ostream& out, bool tty) {
+    cls()->printRef(out);
+    out << "(";
+    for (size_t i = 0; i < promises.size(); ++i) {
+        if (i < names.size() && names[i] != R_NilValue)
+            out << CHAR(PRINTNAME(names[i])) << "=";
+        out << "Prom(" << promises[i]->id << ")";
+        if (i < promises.size() - 1)
+            out << ", ";
+    }
+    out << ") ";
 }
 
 Safepoint* Deopt::safepoint() { return Safepoint::Cast(arg<0>().val()); }

@@ -21,7 +21,7 @@ class TheVerifier {
 
         if (!ok) {
             std::cerr << "Verification of function " << *f << " failed\n";
-            f->print(std::cerr);
+            f->print(std::cerr, true);
             assert(false);
             return;
         }
@@ -31,7 +31,7 @@ class TheVerifier {
                 verify(p);
             if (!ok) {
                 std::cerr << "Verification of promise failed\n";
-                p->print(std::cerr);
+                p->print(std::cerr, true);
                 return;
             }
         }
@@ -40,7 +40,7 @@ class TheVerifier {
                 verify(p);
             if (!ok) {
                 std::cerr << "Verification of argument failed\n";
-                p->print(std::cerr);
+                p->print(std::cerr, true);
                 return;
             }
         }

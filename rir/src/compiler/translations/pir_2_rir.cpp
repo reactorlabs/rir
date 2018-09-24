@@ -643,8 +643,9 @@ class Pir2Rir {
     }
     size_t compileCode(Context& ctx, Code* code);
     size_t getPromiseIdx(Context& ctx, Promise* code);
+
+    void lower(Code* code);
     void toCSSA(Code* code);
-    void collapseSafepoints(Code* code);
     rir::Function* finalize();
 
   private:
@@ -658,7 +659,7 @@ class Pir2Rir {
 };
 
 size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
-    collapseSafepoints(code);
+    lower(code);
     toCSSA(code);
     log.CSSA(code);
 
@@ -946,9 +947,28 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 SIMPLE_WITH_SRCIDX(Subassign1_1D, subassign1);
 #undef SIMPLE_WITH_SRCIDX
 
+            case Tag::CallImplicit: {
+                auto call = CallImplicit::Cast(instr);
+                std::vector<BC::FunIdx> args;
+                for (auto& p : call->promises)
+                    args.push_back(getPromiseIdx(ctx, p));
+
+                if (call->names.empty())
+                    cs << BC::callImplicit(args, Pool::get(call->srcIdx));
+                else
+                    cs << BC::callImplicit(args, call->names,
+                                           Pool::get(call->srcIdx));
+                break;
+            }
             case Tag::Call: {
                 auto call = Call::Cast(instr);
                 cs << BC::call(call->nCallArgs(), Pool::get(call->srcIdx));
+                break;
+            }
+            case Tag::NamedCall: {
+                auto call = NamedCall::Cast(instr);
+                cs << BC::call(call->nCallArgs(), call->names,
+                               Pool::get(call->srcIdx));
                 break;
             }
             case Tag::StaticCall: {
@@ -1063,17 +1083,52 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
     return alloc.slots();
 } // namespace
 
-void Pir2Rir::collapseSafepoints(Code* code) {
+template <typename CallType>
+static bool allLazy(CallType* call, std::vector<Promise*>& args) {
+    bool allLazy = true;
+    call->eachArg([&](Value* v) {
+        if (auto arg = MkArg::Cast(v)) {
+            if (arg->eagerArg() != Missing::instance()) {
+                allLazy = false;
+            } else if (allLazy) {
+                args.push_back(arg->prom);
+            }
+        }
+    });
+    return allLazy;
+}
+
+void Pir2Rir::lower(Code* code) {
     Visitor::run(code->entry, [&](BB* bb) {
         auto it = bb->begin();
         while (it != bb->end()) {
             auto next = it + 1;
             if (auto deopt = Deopt::Cast(*it)) {
+                // Lower Deopt instructions + their Safepoints to a
+                // ScheduledDeopt.
                 auto newDeopt = new ScheduledDeopt();
                 newDeopt->consumeSafepoints(deopt);
                 auto newDeoptPos = bb->insert(it, newDeopt);
                 next = newDeoptPos + 2;
+            } else if (auto call = Call::Cast(*it)) {
+                // Lower calls to call implicit
+                std::vector<Promise*> args;
+                if (allLazy(call, args))
+                    call->replaceUsesAndSwapWith(
+                        new CallImplicit(call->callerEnv(), call->cls(),
+                                         std::move(args), {}, call->srcIdx),
+                        it);
+            } else if (auto call = NamedCall::Cast(*it)) {
+                // Lower named calls to call implicit
+                std::vector<Promise*> args;
+                if (allLazy(call, args))
+                    call->replaceUsesAndSwapWith(
+                        new CallImplicit(call->callerEnv(), call->cls(),
+                                         std::move(args), call->names,
+                                         call->srcIdx),
+                        it);
             }
+
             it = next;
         }
     });
@@ -1082,6 +1137,8 @@ void Pir2Rir::collapseSafepoints(Code* code) {
         while (it != bb->end()) {
             auto next = it + 1;
             if (Safepoint::Cast(*it) || Deopt::Cast(*it)) {
+                next = bb->remove(it);
+            } else if (MkArg::Cast(*it) && (*it)->unused()) {
                 next = bb->remove(it);
             }
             it = next;
