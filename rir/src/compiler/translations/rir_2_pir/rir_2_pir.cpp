@@ -436,8 +436,8 @@ bool Rir2Pir::compileBC(
 
 #define BINOP(Name, Op)                                                        \
     case Opcode::Op: {                                                         \
-        auto rhs = pop();                                                      \
-        auto lhs = pop();                                                      \
+        auto rhs = at(0);                                                      \
+        auto lhs = at(1);                                                      \
         if (typeFeedback[rhs].numTypes > 0 &&                                  \
             typeFeedback[lhs].numTypes > 0 &&                                  \
             !typeFeedback[rhs].observedObject() &&                             \
@@ -446,8 +446,12 @@ bool Rir2Pir::compileBC(
             insert.conditionalDeopt(leftIsObj, srcCode, pos, stack, false);    \
             Value* rightIsObj = insert(new IsObject(rhs));                     \
             insert.conditionalDeopt(rightIsObj, srcCode, pos, stack, false);   \
+            pop();                                                             \
+            pop();                                                             \
             push(insert(new Name(lhs, rhs, Env::elided(), srcIdx)));           \
         } else {                                                               \
+            pop();                                                             \
+            pop();                                                             \
             push(insert(new Name(lhs, rhs, env, srcIdx)));                     \
         }                                                                      \
         break;                                                                 \

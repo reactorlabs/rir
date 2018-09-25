@@ -46,3 +46,11 @@ h()  # aborts if g's environment got elided
      validGP(list(a=1))
   })()
 }
+
+# speculative binop with deopt
+rir.compile(function(){
+    f <- rir.compile(function(a) a+2);
+    f(1);
+    f <- pir.compile(f);
+    f(structure(1, class="foo"))
+})()
