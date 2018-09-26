@@ -26,25 +26,20 @@ FileLogStream::~FileLogStream() { fstream.close(); }
 bool LogStream::tty() { return ConsoleColor::isTTY(out); }
 bool BufferedLogStream::tty() { return ConsoleColor::isTTY(actualOut); }
 
-LogStream& StreamLogger::begin(Closure* cls, const std::string& name) {
+LogStream& StreamLogger::begin(Closure* cls) {
     assert(!streams.count(cls) && "You already started this function");
-    std::stringstream id;
-    id << name;
-    if (name.empty())
-        id << "?";
-    id << "_" << *cls;
 
     if (options.includes(DebugFlag::PrintIntoFiles)) {
         std::stringstream filename;
         filename << "pir-function-" << std::setfill('0') << std::setw(5)
-                 << logId++ << "-" << id.str() << ".log";
+                 << logId++ << "-" << cls->name << ".log";
         streams.emplace(cls,
-                        new FileLogStream(options, id.str(), filename.str()));
+                        new FileLogStream(options, cls->name, filename.str()));
     } else {
         if (options.includes(DebugFlag::PrintIntoStdout))
-            streams.emplace(cls, new LogStream(options, id.str()));
+            streams.emplace(cls, new LogStream(options, cls->name));
         else
-            streams.emplace(cls, new BufferedLogStream(options, id.str()));
+            streams.emplace(cls, new BufferedLogStream(options, cls->name));
     }
 
     auto& logger = get(cls);

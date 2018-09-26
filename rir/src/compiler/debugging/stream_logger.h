@@ -125,7 +125,7 @@ class StreamLogger {
     StreamLogger(const StreamLogger&) = delete;
     StreamLogger& operator=(const StreamLogger&) = delete;
 
-    LogStream& begin(Closure* cls, const std::string& name);
+    LogStream& begin(Closure* cls);
     LogStream& get(Closure* cls) {
         assert(streams.count(cls) && "You need to call begin first");
         return *streams.at(cls);
