@@ -286,12 +286,12 @@ static void printCallArgs(std::ostream& out, CallInstruction* call) {
 }
 
 void CallBuiltin::printArgs(std::ostream& out, bool tty) {
-    std::cout << getBuiltinName(builtinId);
+    out << getBuiltinName(builtinId);
     printCallArgs(out, this);
 }
 
 void CallSafeBuiltin::printArgs(std::ostream& out, bool tty) {
-    std::cout << getBuiltinName(builtinId);
+    out << getBuiltinName(builtinId);
     printCallArgs(out, this);
 }
 

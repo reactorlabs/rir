@@ -2,7 +2,7 @@
 #include "api.h"
 #include "interp.h"
 
-#include <sstream>
+#include <iomanip>
 
 SEXP envSymbol;
 SEXP callSymbol;
@@ -28,27 +28,45 @@ Function* isValidClosureSEXP(SEXP closure) {
 
 // for now, we will have to rewrite this when it goes to GNU-R proper
 
-void printFunction(Function* f) {
-    Rprintf("Function object (%p):\n", f);
-    Rprintf("  Magic:           %x (hex)\n", f->info.magic);
-    Rprintf("  Size:            %u\n", f->size);
-    Rprintf("  Origin:          %p %s\n", f->origin(), f->origin() ? "" : "(unoptimized)");
-    Rprintf("  Next:            %p\n", f->next());
-    Rprintf("  Code objects:    %u\n", f->codeLength);
-    Rprintf("  Fun code addr:   %x (hex)\n", f->body());
-    Rprintf("  Invoked:         %u\n", f->invocationCount);
-    Rprintf("  Signature:       %p\n", f->signature);
-    if (f->signature)
-        f->signature->print();
+void printFunction(Function* f, std::ostream& out) {
+    out << "Function object (" << static_cast<void*>(f) << "):\n";
+    out << std::left << std::setw(20) << "  Magic:" << std::hex << f->info.magic
+        << std::dec << " (hex)\n";
+    out << std::left << std::setw(20) << "  Size:" << f->size << "\n";
+    out << std::left << std::setw(20) << "  Origin:";
+    if (f->origin()) {
+        out << static_cast<void*>(f->origin()) << "\n";
+    } else {
+        out << "(nil) (unoptimized)\n";
+    }
+    out << std::left << std::setw(20) << "  Next:";
+    if (f->next()) {
+        out << f->next() << "\n";
+    } else {
+        out << "(nil)"
+            << "\n";
+    }
+    out << std::left << std::setw(20) << "  Code objects:" << f->codeLength
+        << "\n";
+    out << std::left << std::setw(20)
+        << "  Fun code addr:" << static_cast<void*>(f->body()) << "\n";
+    out << std::left << std::setw(20) << "  Invoked:" << f->invocationCount
+        << "\n";
+    out << std::left << std::setw(20) << "  Signature:";
+    if (f->signature) {
+        out << static_cast<void*>(f->signature) << "\n";
+        f->signature->print(out);
+    } else {
+        out << "(nil)"
+            << "\n";
+    }
 
     if (f->info.magic != FUNCTION_MAGIC)
         Rf_error("Wrong magic number -- not rir bytecode");
 
     // print respective code objects
-    std::stringstream output;
     for (Code* c : *f)
-        c->print(output);
-    std::cout << output.str();
+        c->print(out);
 }
 
 void initializeRuntime() {

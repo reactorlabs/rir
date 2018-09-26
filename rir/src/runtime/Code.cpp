@@ -134,12 +134,17 @@ void Code::disassemble(std::ostream& out) const {
 
 void Code::print(std::ostream& out) const {
     out << "Code object (" << this << " index " << index << ")\n";
-    out << "   Source: " << src << " index to src pool\n";
-    out << "   Magic: " << std::hex << info.magic << std::dec << "(hex)\n";
-    out << "   Stack (o): " << stackLength << "\n";
-    out << "   Code size: " << codeSize << "[B]\n";
+    out << std::left << std::setw(20) << "   Source: " << src
+        << " (index into src pool)\n";
+    out << std::left << std::setw(20) << "   Magic: " << std::hex << info.magic
+        << std::dec << " (hex)\n";
+    out << std::left << std::setw(20) << "   Stack (o): " << stackLength
+        << "\n";
+    out << std::left << std::setw(20) << "   Code size: " << codeSize
+        << "[B]\n";
+    out << std::left << std::setw(20) << "   Default arg? "
+        << (isDefaultArgument ? "yes" : "no") << "\n";
 
-    out << "   Default arg? " << (isDefaultArgument ? "yes\n" : "no") << "\n";
     if (info.magic != CODE_MAGIC) {
         out << "Wrong magic number -- corrupted IR bytecode";
         Rf_error("Wrong magic number -- corrupted IR bytecode");
