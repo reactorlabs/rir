@@ -24,6 +24,7 @@ StreamLogger::~StreamLogger() {
 FileLogStream::~FileLogStream() { fstream.close(); }
 
 bool LogStream::tty() { return ConsoleColor::isTTY(out); }
+bool BufferedLogStream::tty() { return ConsoleColor::isTTY(actualOut); }
 
 LogStream& StreamLogger::begin(Closure* cls, const std::string& name) {
     assert(!streams.count(cls) && "You already started this function");
@@ -31,7 +32,7 @@ LogStream& StreamLogger::begin(Closure* cls, const std::string& name) {
     id << name;
     if (name.empty())
         id << "?";
-    id << "_" << cls->rirVersion();
+    id << "_" << *cls;
 
     if (options.includes(DebugFlag::PrintIntoFiles)) {
         std::stringstream filename;
@@ -201,21 +202,25 @@ void StreamLogger::title(const std::string& msg) {
     if (!options.includes(DebugFlag::PrintIntoFiles) &&
         (options.intersects(PrintDebugPasses) ||
          options.includes(DebugFlag::ShowWarnings))) {
-        ConsoleColor::blue(std::cout);
+        if (ConsoleColor::isTTY(std::cout))
+            ConsoleColor::blue(std::cout);
         int l = 36 - (int)msg.length() / 2;
         int r = l - msg.length() % 2;
         std::cout << "\n╞";
         for (int i = 0; i < l; ++i)
             std::cout << "═";
         std::cout << "╡  ";
-        ConsoleColor::clear(std::cout);
+        if (ConsoleColor::isTTY(std::cout))
+            ConsoleColor::clear(std::cout);
         std::cout << msg;
-        ConsoleColor::blue(std::cout);
+        if (ConsoleColor::isTTY(std::cout))
+            ConsoleColor::blue(std::cout);
         std::cout << "  ╞";
         for (int i = 0; i < r; ++i)
             std::cout << "═";
         std::cout << "╡\n";
-        ConsoleColor::clear(std::cout);
+        if (ConsoleColor::isTTY(std::cout))
+            ConsoleColor::clear(std::cout);
     }
 }
 
