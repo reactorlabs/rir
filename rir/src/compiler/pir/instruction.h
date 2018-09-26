@@ -1134,6 +1134,8 @@ class VLIE(Safepoint, Effect::Any, EnvAccess::Leak) {
         }
     }
 
+    Value* tos() { return arg(stackSize - 1).val(); }
+
     void printArgs(std::ostream& out, bool tty) override;
     void printEnv(std::ostream& out, bool tty) override final{};
 };

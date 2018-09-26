@@ -21,7 +21,7 @@ class TheInliner {
     explicit TheInliner(Closure* function) : function(function) {}
 
     void operator()() {
-        size_t fuel = 5;
+        size_t fuel = 10;
 
         Visitor::run(function->entry, [&](BB* bb) {
             // Dangerous iterater usage, works since we do only update it in
@@ -68,19 +68,20 @@ class TheInliner {
                 theCallInstruction->eachCallArg(
                     [&](Value* v) { arguments.push_back(v); });
                 Safepoint* callerSafepoint = nullptr;
+
                 // try to find a safepoint for this call instruction
-                for (auto p = split->begin(); p != split->end(); ++p) {
-                    if (auto sp = Safepoint::Cast(*p)) {
-                        if (sp->arg(sp->nargs() - 1).val() == theCall) {
-                            callerSafepoint = sp;
-                            break;
-                        }
-                    } else if ((*p)->hasEffect() || (*p)->changesEnv()) {
-                        break;
-                    }
+                {
+                    auto block = split;
+                    auto pos = block->begin() + 1; // skip the call instruction
+                    if (pos == split->end() && split->isJmp())
+                        pos = split->next()->begin();
+
+                    if (pos != split->end())
+                        if (auto sp = Safepoint::Cast(*pos))
+                            if (sp->stackSize > 0 && sp->tos() == theCall &&
+                                !sp->next())
+                                callerSafepoint = sp;
                 }
-                assert(callerSafepoint ? callerSafepoint->stackSize >= 1
-                                       : true);
 
                 // Clone the function
                 BB* copy = BBTransform::clone(inlinee->entry, function);
