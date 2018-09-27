@@ -96,7 +96,8 @@ class TheInliner {
                         Instruction* i = *ip;
                         // We should never inline UseMethod
                         if (auto ld = LdFun::Cast(i)) {
-                            if (ld->varName == rir::symbol::UseMethod) {
+                            if (ld->varName == rir::symbol::UseMethod ||
+                                ld->varName == rir::symbol::standardGeneric) {
                                 fail = true;
                                 return;
                             }
@@ -169,7 +170,7 @@ class TheInliner {
                     bb->overrideNext(copy);
 
                     // Copy over promises used by the inner function
-                    std::vector<bool> copiedPromise;
+                    std::vector<bool> copiedPromise(false);
                     std::vector<size_t> newPromId;
                     copiedPromise.resize(inlinee->promises.size(), false);
                     newPromId.resize(inlinee->promises.size());
@@ -181,21 +182,21 @@ class TheInliner {
                             if (!mk)
                                 continue;
 
-                            size_t id = mk->prom->id;
-                            if (mk->prom->fun == inlinee) {
+                            size_t id = mk->prom()->id;
+                            if (mk->prom()->fun == inlinee) {
                                 assert(id < copiedPromise.size());
                                 if (copiedPromise[id]) {
-                                    mk->prom =
-                                        function->promises[newPromId[id]];
+                                    mk->updatePromise(
+                                        function->promises.at(newPromId[id]));
                                 } else {
                                     Promise* clone = function->createProm(
-                                        mk->prom->srcPoolIdx);
+                                        mk->prom()->srcPoolIdx);
                                     BB* promCopy = BBTransform::clone(
-                                        mk->prom->entry, clone);
+                                        mk->prom()->entry, clone);
                                     clone->entry = promCopy;
                                     newPromId[id] = clone->id;
                                     copiedPromise[id] = true;
-                                    mk->prom = clone;
+                                    mk->updatePromise(clone);
                                 }
                             }
                         }

@@ -10,61 +10,79 @@ matrix:
     # macOS clang
     - os: osx
       env:
-        - CORES=2
         - CXX_OVERRIDE=clang++
         - CC_OVERRIDE=clang
-        - CHECK=check
         - BUILD=release
-        - CPPCHECK=true
       compiler: clang
 
     - os: osx
       env:
-        - CORES=2
         - CXX_OVERRIDE=clang++
         - CC_OVERRIDE=clang
-        - CHECK=check
         - BUILD=debug
-        - PIR_ENABLE=force
-        - CPPCHECK=true
+        - CHECK=check
       compiler: clang
 
     # linux gcc
+    #  check-all = check test-all-devel check-recommended
     - env:
-        - CXX_OVERRIDE=g++-7
-        - CC_OVERRIDE=gcc-7
-        - CHECK=check
-        - BUILD=release
-        - CPPCHECK="../tools/cppcheck"
-
-    - env:
-        - CORES=2
         - CXX_OVERRIDE=g++-7
         - CC_OVERRIDE=gcc-7
         - CHECK=check
         - BUILD=debug
         - PIR_ENABLE=force
-        - CPPCHECK=true
+        - ENABLE_CPPCHECK=1
 
     - env:
         - CXX_OVERRIDE=g++-7
         - CC_OVERRIDE=gcc-7
         - CHECK=test-all-devel
         - BUILD=release
-        - PIR_ENABLE=force
         - ENABLE_VALGRIND=1
-        - CPPCHECK=true
 
     - env:
         - CXX_OVERRIDE=g++-7
         - CC_OVERRIDE=gcc-7
         - CHECK=check-recommended
         - BUILD=release
-        - CPPCHECK=true
 
 addons:
   apt:
     packages:
+      - texlive-latex-extra
+      - texlive-latex-base
+      - texlive-fonts-recommended
+      - texlive-fonts-extra
+      - texlive-latex-recommended
+      - texlive-font-utils
+      - dvipng
+      - cm-super
+      - bison
+      - ca-certificates-java
+      - java-common
+      - libbison-dev
+      - libcairo-script-interpreter2
+      - libcairo2-dev
+      - libjbig-dev
+      - libmime-charset-perl
+      - libpango1.0-dev
+      - libpcsclite1
+      - libpixman-1-dev
+      - libsombok3
+      - libtext-unidecode-perl
+      - libtiff5-dev
+      - libtiffxx5
+      - libunicode-linebreak-perl
+      - libxcb-render0-dev
+      - libxcb-shm0-dev
+      - libxml-libxml-perl
+      - libxml-namespacesupport-perl
+      - libxml-sax-base-perl
+      - libxml-sax-perl
+      - mpack
+      - openjdk-11-jre
+      - openjdk-11-jre-headless
+      - texinfo
       - g++-7
       - xdg-utils
       - gfortran
@@ -80,6 +98,10 @@ addons:
       - xorg-dev
       - valgrind
       - cppcheck
+      - xvfb
+      - xauth
+      - xfonts-base
+      - tk-dev
     sources:
       - ubuntu-toolchain-r-test
 
@@ -88,6 +110,7 @@ before_install:
   - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then . ./tools/ci/before_install-linux.sh; fi
 
 before_script:
+  - if [[ "$ENABLE_CPPCHECK" != "" ]]; then ./tools/cppcheck; fi
   - export TZ=""
   - export CXX=$CXX_OVERRIDE
   - export CC=$CC_OVERRIDE
@@ -98,20 +121,24 @@ before_script:
   - cmake -DCMAKE_BUILD_TYPE=$BUILD ..
   - make setup
   - make -j2
+  - echo "running make $CHECK on a $BUILD build with and PIR_ENABLE=$PIR_ENABLE"
 
 script:
-  - $CPPCHECK
-  - ./bin/tests
-  - echo "JIT enabled"
+  # Run the internal testsuite in all combinations
+  - R_ENABLE_JIT=0 ./bin/tests
+  - R_ENABLE_JIT=1 ./bin/tests
   - R_ENABLE_JIT=2 ./bin/tests
-  - R_ENABLE_JIT=2 PIR_ENABLE=force ./bin/tests
   - R_ENABLE_JIT=3 ./bin/tests
-  - echo "running make $CHECK on a $BUILD build with CORES=$CORES and PIR_ENABLE=$PIR_ENABLE"
-  - TEST_MC_CORES=$CORES ./bin/gnur-make-tests $CHECK
+  - PIR_ENABLE=off ./bin/tests
+  - PIR_ENABLE=force ./bin/tests
+  # Run a particular portion of the gnur testsuite
+  - if [[ "$CHECK" != "" ]]; then ./bin/gnur-make-tests $CHECK; fi
+  - ../tools/check-gnur-make-tests-error
 
 
 cache:
   ccache: true
+  apt: true
   directories:
     - external
     # cache homebrew formulas

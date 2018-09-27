@@ -125,7 +125,7 @@ class ForceDominanceAnalysisResult {
     bool isSafeToInline(MkArg* a) {
         // To inline promises with a deopt instruction we need to be able to
         // synthesize promises and promise call framse.
-        auto prom = a->prom;
+        auto prom = a->prom();
         if (hasDeopt.count(prom)) {
             if (hasDeopt.at(prom))
                 return false;
@@ -176,7 +176,7 @@ void ForceDominance::apply(Closure* cls) const {
                             next = bb->remove(ip);
                             inlinedPromise[f] = strict;
                         } else if (analysis.isSafeToInline(mkarg)) {
-                            Promise* prom = mkarg->prom;
+                            Promise* prom = mkarg->prom();
                             BB* split = BBTransform::split(cls->nextBBId++, bb,
                                                            ip, cls);
                             BB* prom_copy =
@@ -202,8 +202,8 @@ void ForceDominance::apply(Closure* cls) const {
                             f->replaceUsesWith(promRes);
                             split->remove(split->begin());
 
-                            MkArg* fixedMkArg = new MkArg(mkarg->prom, promRes,
-                                                          mkarg->promEnv());
+                            MkArg* fixedMkArg = new MkArg(
+                                mkarg->prom(), promRes, mkarg->promEnv());
                             next = split->insert(split->begin(), fixedMkArg);
                             forcedMkArg[mkarg] = fixedMkArg;
 

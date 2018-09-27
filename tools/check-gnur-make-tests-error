@@ -1,0 +1,19 @@
+#!/bin/bash
+
+SCRIPTPATH=`cd $(dirname "$0") && pwd`
+
+ERRORS=`grep -l 'Status.*ERROR' $SCRIPTPATH/../external/custom-r/tests/*/*check.log`
+RESULT=$?
+
+echo $ERRORS
+if [[ $RESULT -eq 0 ]]; then
+  echo "================= LOGS OF FAILED TESTS ===================="
+  for f in $ERRORS; do
+      echo
+      echo
+      echo "----------------- $f"
+      echo
+      cat $f
+  done
+  exit 1
+fi
