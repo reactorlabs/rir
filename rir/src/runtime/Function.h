@@ -72,8 +72,10 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
 
     Code* body() { return Code::unpack(codeObjects[codeLength - 1]); }
 
+    SEXP codeObjectAt(unsigned index) const { return codeObjects[index]; }
+
     Code* codeAt(unsigned index) const {
-        return Code::unpack(codeObjects[index]);
+        return Code::unpack(codeObjectAt(index));
     }
 
     FunctionCodeIterator begin() { return FunctionCodeIterator(this, 0); }
