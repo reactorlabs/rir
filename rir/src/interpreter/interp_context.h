@@ -116,17 +116,17 @@ RIR_INLINE void rl_append(ResizeableList* l, SEXP val, SEXP parent,
 #ifdef TYPED_STACK
 #define ostack_set(c, i, v)                                                    \
     do {                                                                       \
-        SEXP tmp = (v);                                                        \
+        SEXP __tmp__ = (v);                                                    \
         int idx = (i);                                                         \
-        (R_BCNodeStackTop - 1 - idx)->u.sxpval = tmp;                          \
+        (R_BCNodeStackTop - 1 - idx)->u.sxpval = __tmp__;                      \
         (R_BCNodeStackTop - 1 - idx)->tag = 0;                                 \
     } while (0)
 #else
 #define ostack_set(c, i, v)                                                    \
     do {                                                                       \
-        SEXP tmp = (v);                                                        \
+        SEXP __tmp__ = (v);                                                    \
         int idx = (i);                                                         \
-        *(R_BCNodeStackTop - 1 - idx) = tmp;                                   \
+        *(R_BCNodeStackTop - 1 - idx) = __tmp__;                               \
     } while (0)
 #endif
 
@@ -148,16 +148,16 @@ RIR_INLINE void rl_append(ResizeableList* l, SEXP val, SEXP parent,
 #ifdef TYPED_STACK
 #define ostack_push(c, v)                                                      \
     do {                                                                       \
-        SEXP tmp = (v);                                                        \
-        R_BCNodeStackTop->u.sxpval = tmp;                                      \
+        SEXP __tmp__ = (v);                                                    \
+        R_BCNodeStackTop->u.sxpval = __tmp__;                                  \
         R_BCNodeStackTop->tag = 0;                                             \
         ++R_BCNodeStackTop;                                                    \
     } while (0)
 #else
 #define ostack_push(c, v)                                                      \
     do {                                                                       \
-        SEXP tmp = (v);                                                        \
-        *R_BCNodeStackTop = tmp;                                               \
+        SEXP __tmp__ = (v);                                                    \
+        *R_BCNodeStackTop = __tmp__;                                           \
         ++R_BCNodeStackTop;                                                    \
     } while (0)
 #endif
