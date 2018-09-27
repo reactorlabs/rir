@@ -135,8 +135,7 @@ void TheScopeAnalysis::print(std::ostream& out) {
                 for (auto& entry : e) {
                     auto ptr = entry.first;
                     auto env = entry.second;
-                    std::cout << "Env(" << ptr << "), leaked " << env.leaked
-                              << ":\n";
+                    out << "Env(" << ptr << "), leaked " << env.leaked << ":\n";
                     env.print(out);
                 }
             }
@@ -147,7 +146,7 @@ void TheScopeAnalysis::print(std::ostream& out) {
     for (auto& entry : result()) {
         auto ptr = entry.first;
         auto env = entry.second;
-        std::cout << "Env(" << ptr << "), leaked " << env.leaked << ":\n";
+        out << "Env(" << ptr << "), leaked " << env.leaked << ":\n";
         env.print(out);
     }
     out << "-------------------------------------\n";
@@ -161,7 +160,7 @@ ScopeAnalysis::ScopeAnalysis(Closure* function) {
     TheScopeAnalysis analysis(function, function->argNames);
     analysis();
     if (false)
-        analysis.print();
+        analysis.print(std::cout);
 
     // Collect all abstract values of all loads
     analysis.foreach<PositioningStyle::BeforeInstruction>(

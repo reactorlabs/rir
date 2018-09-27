@@ -2,6 +2,10 @@
 
 #include "R/r.h"
 
+#include <iomanip>
+#include <iostream>
+#include <vector>
+
 namespace rir {
 
 struct FunctionSignature {
@@ -30,9 +34,11 @@ struct FunctionSignature {
                    length == other.length;
         }
 
-        void print() const {
-            Rprintf("                   isEvaluated=%s, type=%u, length=%d\n",
-                    isEvaluated ? "true" : "false", type, length);
+        void print(std::ostream& out = std::cout) const {
+            out << std::setw(22) << " "
+                << "isEvaluated=" << (isEvaluated ? "true" : "false")
+                << ", type=" << Rf_type2char(type) << ", length=" << length
+                << "\n";
         }
     };
 
@@ -56,14 +62,16 @@ struct FunctionSignature {
         return true;
     }
 
-    void print() const {
-        Rprintf("    environment?   %s\n",
-                createEnvironment ? "true" : "false");
-        Rprintf("    on stack?      %s\n", argsOnStack ? "true" : "false");
-        Rprintf("    args (%u):\n", arguments.size());
+    void print(std::ostream& out = std::cout) const {
+        out << std::left << std::setw(20) << "    environment?"
+            << (createEnvironment ? "true" : "false") << "\n";
+        out << std::left << std::setw(20) << "    on stack?"
+            << (argsOnStack ? "true" : "false") << "\n";
+        out << std::left << std::setw(20) << "    args"
+            << "size=" << arguments.size() << "\n";
         for (auto arg : arguments)
-            arg.print();
-        Rprintf("\n");
+            arg.print(out);
+        out << "\n";
     }
 
     FunctionSignature() = default;

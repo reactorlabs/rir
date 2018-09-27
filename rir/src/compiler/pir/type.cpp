@@ -6,7 +6,7 @@ extern "C" Rboolean(Rf_isObject)(SEXP s);
 namespace rir {
 namespace pir {
 
-void PirType::print() { std::cout << *this << "\n"; }
+void PirType::print(std::ostream& out) { out << *this << "\n"; }
 
 PirType::PirType(SEXP e) : flags_(defaultRTypeFlags()), t_(RTypeSet()) {
     switch (TYPEOF(e)) {
