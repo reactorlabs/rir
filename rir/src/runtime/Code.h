@@ -119,7 +119,7 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
     // 2. is added at runtime
     // Those elements can be added to the extra pool.
     unsigned addExtraPoolEntry(SEXP v);
-    SEXP getExtraPoolEntry(unsigned i) {
+    SEXP getExtraPoolEntry(unsigned i) const {
         assert(i < extraPoolSize);
         return VECTOR_ELT(getEntry(1), i);
     }

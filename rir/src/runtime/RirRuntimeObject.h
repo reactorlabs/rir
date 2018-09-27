@@ -42,11 +42,11 @@ struct RirRuntimeObject {
         EXTERNALSXP_SET_ENTRY(this->container(), pos, v);
     }
 
-    SEXP getEntry(size_t pos) {
+    SEXP getEntry(size_t pos) const {
         return EXTERNALSXP_ENTRY(this->container(), pos);
     }
 
-    SEXP container() {
+    SEXP container() const {
         // cppcheck-suppress thisSubtraction
         SEXP result = (SEXP)((uintptr_t)this - sizeof(VECTOR_SEXPREC));
         assert(TYPEOF(result) == EXTERNALSXP &&

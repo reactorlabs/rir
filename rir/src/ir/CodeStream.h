@@ -113,7 +113,7 @@ class CodeStream {
 
 #define INS(pc_) (reinterpret_cast<Opcode*>(&(*code)[(pc_)]))
 
-        unsigned bcSize = BC::decode(INS(pc)).size();
+        unsigned bcSize = BC::decode_shallow(INS(pc)).size();
 
         for (unsigned i = 0; i < bcSize; ++i) {
             *INS(pc + i) = Opcode::nop_;

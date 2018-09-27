@@ -262,7 +262,10 @@ BC BC::callImplicit(const std::vector<FunIdx>& args, SEXP ast) {
     ImmediateArguments im;
     im.callFixedArgs.nargs = args.size();
     im.callFixedArgs.ast = Pool::insert(ast);
-    return BC(Opcode::call_implicit_, im, args, {});
+    BC cur(Opcode::call_implicit_, im);
+    cur.allocExtraInformation();
+    cur.callExtra().immediateCallArguments = args;
+    return cur;
 }
 BC BC::callImplicit(const std::vector<FunIdx>& args,
                     const std::vector<SEXP>& names, SEXP ast) {
@@ -272,7 +275,11 @@ BC BC::callImplicit(const std::vector<FunIdx>& args,
     std::vector<PoolIdx> nameIdxs;
     for (auto n : names)
         nameIdxs.push_back(Pool::insert(n));
-    return BC(Opcode::named_call_implicit_, im, args, std::move(nameIdxs));
+    BC cur(Opcode::named_call_implicit_, im);
+    cur.allocExtraInformation();
+    cur.callExtra().immediateCallArguments = args;
+    cur.callExtra().callArgumentNames = nameIdxs;
+    return cur;
 }
 BC BC::call(size_t nargs, SEXP ast) {
     ImmediateArguments im;
@@ -287,7 +294,10 @@ BC BC::call(size_t nargs, const std::vector<SEXP>& names, SEXP ast) {
     std::vector<PoolIdx> nameIdxs;
     for (auto n : names)
         nameIdxs.push_back(Pool::insert(n));
-    return BC(Opcode::named_call_, im, {}, std::move(nameIdxs));
+    BC cur(Opcode::named_call_, im);
+    cur.allocExtraInformation();
+    cur.callExtra().callArgumentNames = nameIdxs;
+    return cur;
 }
 BC BC::staticCall(size_t nargs, SEXP ast, SEXP target) {
     ImmediateArguments im;
