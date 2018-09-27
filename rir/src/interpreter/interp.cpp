@@ -7,7 +7,6 @@
 #include "ir/RuntimeFeedback_inl.h"
 #include "runtime.h"
 
-#include <alloca.h>
 #include <assert.h>
 #include <deque>
 

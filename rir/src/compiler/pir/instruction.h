@@ -419,7 +419,7 @@ class VarLenInstructionWithEnvSlot
         Super::pushArg(env, RType::env);
     }
 
-    void pushArg(Value* a, PirType t) override {
+    void pushArg(Value* a, PirType t) override final {
         assert(a);
         assert(args_.size() > 0);
         assert(args_.back().type() == RType::env);
@@ -427,7 +427,7 @@ class VarLenInstructionWithEnvSlot
         args_.push_back(args_.back());
         args_[args_.size() - 2] = InstrArg(a, t);
     }
-    void popArg() override {
+    void popArg() override final {
         assert(args_.size() > 1);
         assert(args_.back().type() == RType::env);
         args_[args_.size() - 2] = args_[args_.size() - 1];

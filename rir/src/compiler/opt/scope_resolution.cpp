@@ -79,7 +79,8 @@ class TheScopeResolution {
                         if (src.origin->bb()->owner != function)
                             onlyLocalVals = false;
                     });
-                    if (aval.isUnknown() &&
+                    if (!ldfun && // for ldfun more thinking is required...
+                        aval.isUnknown() &&
                         aload.env != AbstractREnvironment::UnknownParent) {
                         // We have no clue what we load, but we know from where
                         ld->env(aload.env);
