@@ -1603,9 +1603,10 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
         }
 
         INSTRUCTION(swap_) {
-            SEXP tmp = ostack_at(ctx, 1);
-            ostack_set(ctx, 1, ostack_pop(ctx));
-            ostack_push(ctx, tmp);
+            SEXP lhs = ostack_pop(ctx);
+            SEXP rhs = ostack_pop(ctx);
+            ostack_push(ctx, lhs);
+            ostack_push(ctx, rhs);
             NEXT();
         }
 
