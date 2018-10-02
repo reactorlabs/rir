@@ -135,7 +135,6 @@ class BC {
     Opcode bc;
     ImmediateArguments immediate;
 
-
     BC() : bc(Opcode::invalid_) {}
 
     BC(const BC& other) = delete;
@@ -197,7 +196,7 @@ class BC {
     SEXP immediateConst() const;
 
     inline static Opcode* jmpTarget(Opcode* pos) {
-        BC bc = decode_shallow(pos);
+        BC bc = BC::decodeShallow(pos);
         assert(bc.isJmp());
         return (Opcode*)((uintptr_t)pos + bc.size() + bc.immediate.offset);
     }
@@ -372,40 +371,16 @@ class BC {
     inline static BC recordCall();
     inline static BC recordBinop();
 
-    inline static BC decode_shallow(Opcode* pc) {
-        auto bc = *pc;
-        BC cur(bc);
-        pc++;
-        cur.immediate = decodeImmediateArguments(bc, pc);
+    inline static BC decode(Opcode* pc, const Code* code) {
+        BC cur;
+        cur.decodeFixlen(pc);
+        cur.decodeExtraInformation(pc, code);
         return cur;
     }
 
-    inline static BC decode(Opcode* pc, const Code* code) {
-        BC cur = decode_shallow(pc);
-
-        pc++;
-        cur.allocExtraInformation();
-
-        // Read call target feedback from the extra pool
-        if (cur.bc == Opcode::record_call_)
-            for (size_t i = 0; i < cur.immediate.callFeedback.numTargets; ++i)
-                cur.callFeedbackExtra().targets.push_back(
-                    cur.immediate.callFeedback.getTarget(code, i));
-
-        pc += sizeof(CallFixedArgs);
-        // Read implicit promise argument offsets
-        if (cur.bc == Opcode::call_implicit_ ||
-            cur.bc == Opcode::named_call_implicit_) {
-            for (size_t i = 0; i < cur.immediate.callFixedArgs.nargs; ++i)
-                cur.callExtra().immediateCallArguments.push_back(
-                    readImmediate(&pc));
-        }
-        // Read named arguments
-        if (cur.bc == Opcode::named_call_ ||
-            cur.bc == Opcode::named_call_implicit_) {
-            for (size_t i = 0; i < cur.immediate.callFixedArgs.nargs; ++i)
-                cur.callExtra().callArgumentNames.push_back(readImmediate(&pc));
-        }
+    inline static BC decodeShallow(Opcode* pc) {
+        BC cur;
+        cur.decodeFixlen(pc);
         return cur;
     }
 
@@ -433,10 +408,10 @@ class BC {
         case Opcode::named_call_:
             break;
         default:
-            assert(false && "Not a valen call instruction");
+            assert(false && "Not a varlen call instruction");
         }
         assert(extraInformation.get() &&
-               "missing extra information. created through decode_shallow?");
+               "missing extra information. created through decodeShallow?");
         return *static_cast<CallInstructionExtraInformation*>(
             extraInformation.get());
     }
@@ -444,7 +419,7 @@ class BC {
     CallFeedbackExtraInformation& callFeedbackExtra() const {
         assert(bc == Opcode::record_call_ && "not a record call instruction");
         assert(extraInformation.get() &&
-               "missing extra information. created through decode_shallow?");
+               "missing extra information. created through decodeShallow?");
         return *static_cast<CallFeedbackExtraInformation*>(
             extraInformation.get());
     }
@@ -452,26 +427,75 @@ class BC {
   private:
     void allocExtraInformation() {
         assert(extraInformation == nullptr);
-        ExtraInformation* extra = nullptr;
+
+        switch (bc) {
+        case Opcode::invalid_:
+            assert(false && "run decodeFixlen first!");
+            break;
+
+        case Opcode::call_implicit_:
+        case Opcode::named_call_implicit_:
+        case Opcode::named_call_: {
+            extraInformation.reset(new CallInstructionExtraInformation);
+            break;
+        }
+        case Opcode::record_call_: {
+            extraInformation.reset(new CallFeedbackExtraInformation);
+            break;
+        }
+        default: {}
+        }
+    }
+
+    void decodeExtraInformation(Opcode* pc, const Code* code) {
+        allocExtraInformation();
+        pc++; // skip bc
+
         switch (bc) {
         case Opcode::call_implicit_:
         case Opcode::named_call_implicit_:
-        case Opcode::named_call_:
-            extra = new CallInstructionExtraInformation;
+        case Opcode::named_call_: {
+            pc += sizeof(CallFixedArgs);
+
+            // Read implicit promise argument offsets
+            if (bc == Opcode::call_implicit_ ||
+                bc == Opcode::named_call_implicit_) {
+                for (size_t i = 0; i < immediate.callFixedArgs.nargs; ++i)
+                    callExtra().immediateCallArguments.push_back(
+                        readImmediate(&pc));
+            }
+            // Read named arguments
+            if (bc == Opcode::named_call_ ||
+                bc == Opcode::named_call_implicit_) {
+                for (size_t i = 0; i < immediate.callFixedArgs.nargs; ++i)
+                    callExtra().callArgumentNames.push_back(readImmediate(&pc));
+            }
+
             break;
-        case Opcode::record_call_:
-            extra = new CallFeedbackExtraInformation;
-            break;
-        default:
-            return;
         }
-        extraInformation.reset(extra);
+        case Opcode::record_call_: {
+            // Read call target feedback from the extra pool
+            for (size_t i = 0; i < immediate.callFeedback.numTargets; ++i)
+                callFeedbackExtra().targets.push_back(
+                    immediate.callFeedback.getTarget(code, i));
+            break;
+        }
+        default: {}
+        }
+    }
+
+    inline void decodeFixlen(Opcode* pc) {
+        bc = *pc;
+        pc++;
+        immediate = decodeImmediateArguments(bc, pc);
     }
 
     // Those two should stay private. If you want to decode a BC use BC::decode
     // instead. To create BC's use the static builder methods.
-    explicit BC(Opcode bc) : bc(bc) {}
-    BC(Opcode bc, const ImmediateArguments& i) : bc(bc), immediate(i) {}
+    explicit BC(Opcode bc) : bc(bc) { allocExtraInformation(); }
+    BC(Opcode bc, const ImmediateArguments& i) : bc(bc), immediate(i) {
+        allocExtraInformation();
+    }
 
     static unsigned RIR_INLINE fixedSize(Opcode bc) {
         switch (bc) {

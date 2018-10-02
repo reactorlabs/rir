@@ -263,7 +263,6 @@ BC BC::callImplicit(const std::vector<FunIdx>& args, SEXP ast) {
     im.callFixedArgs.nargs = args.size();
     im.callFixedArgs.ast = Pool::insert(ast);
     BC cur(Opcode::call_implicit_, im);
-    cur.allocExtraInformation();
     cur.callExtra().immediateCallArguments = args;
     return cur;
 }
@@ -276,7 +275,6 @@ BC BC::callImplicit(const std::vector<FunIdx>& args,
     for (auto n : names)
         nameIdxs.push_back(Pool::insert(n));
     BC cur(Opcode::named_call_implicit_, im);
-    cur.allocExtraInformation();
     cur.callExtra().immediateCallArguments = args;
     cur.callExtra().callArgumentNames = nameIdxs;
     return cur;
@@ -295,7 +293,6 @@ BC BC::call(size_t nargs, const std::vector<SEXP>& names, SEXP ast) {
     for (auto n : names)
         nameIdxs.push_back(Pool::insert(n));
     BC cur(Opcode::named_call_, im);
-    cur.allocExtraInformation();
     cur.callExtra().callArgumentNames = nameIdxs;
     return cur;
 }

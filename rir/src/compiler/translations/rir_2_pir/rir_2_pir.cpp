@@ -100,7 +100,7 @@ std::unordered_set<Opcode*> findMergepoints(rir::Code* srcCode) {
     std::unordered_map<Opcode*, std::vector<Opcode*>> incom;
     // Mark incoming jmps
     for (auto pc = srcCode->code(); pc != srcCode->endCode();) {
-        BC bc = BC::decode_shallow(pc);
+        BC bc = BC::decodeShallow(pc);
         if (bc.isJmp()) {
             incom[bc.jmpTarget(pc)].push_back(pc);
         }
@@ -108,7 +108,7 @@ std::unordered_set<Opcode*> findMergepoints(rir::Code* srcCode) {
     }
     // Mark falltrough to label
     for (auto pc = srcCode->code(); pc != srcCode->endCode();) {
-        BC bc = BC::decode_shallow(pc);
+        BC bc = BC::decodeShallow(pc);
         if (!bc.isUncondJmp() && !bc.isExit()) {
             Opcode* next = BC::next(pc);
             if (incom.count(next))
@@ -782,7 +782,7 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) const {
                 for (int i = 0; i < 2 && n < end; ++i, n = BC::next(n))
                     ;
                 if (n < end) {
-                    auto nextbc = BC::decode(n, srcCode);
+                    auto nextbc = BC::decodeShallow(n);
                     if (nextbc.bc == Opcode::stvar_)
                         inner << ">"
                               << CHAR(PRINTNAME(nextbc.immediateConst()));

@@ -12,7 +12,7 @@ void CallFeedback::record(Code* caller, SEXP callee) {
     if (numTargets < MaxTargets) {
         int i = 0;
         for (; i < numTargets; ++i)
-            if (caller->getEntry(targets[i]) == callee)
+            if (caller->getExtraPoolEntry(targets[i]) == callee)
                 break;
         if (i == numTargets) {
             auto idx = caller->addExtraPoolEntry(callee);

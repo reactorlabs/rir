@@ -69,7 +69,7 @@ void Code::disassemble(std::ostream& out) const {
     std::map<Opcode*, size_t> targets;
     targets[pc] = label++;
     while (pc < endCode()) {
-        if (BC::decode_shallow(pc).isJmp()) {
+        if (BC::decodeShallow(pc).isJmp()) {
             auto t = BC::jmpTarget(pc);
             if (!targets.count(t))
                 targets[t] = label++;

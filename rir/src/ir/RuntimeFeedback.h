@@ -28,7 +28,7 @@ struct CallFeedback {
     uint32_t taken : CounterBits;
 
     RIR_INLINE void record(Code* caller, SEXP callee);
-    SEXP getTarget(const Code* code, size_t pos);
+    SEXP getTarget(const Code* code, size_t pos) const;
 
     std::array<unsigned, MaxTargets> targets;
 };
