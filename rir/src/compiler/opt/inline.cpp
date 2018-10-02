@@ -68,19 +68,23 @@ class TheInliner {
                 theCallInstruction->eachCallArg(
                     [&](Value* v) { arguments.push_back(v); });
                 Safepoint* callerSafepoint = nullptr;
+
                 // try to find a safepoint for this call instruction
-                for (auto p = split->begin(); p != split->end(); ++p) {
-                    if (auto sp = Safepoint::Cast(*p)) {
-                        if (sp->arg(sp->nargs() - 1).val() == theCall) {
-                            callerSafepoint = sp;
-                            break;
+                if (split->size() > 1) {
+                    auto pos = split->begin() + 1; // skip the call instruction
+                    if (auto sp = Safepoint::Cast(*pos)) {
+                        while (sp) {
+                            if (sp->stackSize > 0 && sp->tos() == theCall) {
+                                callerSafepoint = sp;
+                                break;
+                            }
+                            pos++;
+                            if (pos == split->end())
+                                break;
+                            sp = Safepoint::Cast(*pos);
                         }
-                    } else if ((*p)->hasEffect() || (*p)->changesEnv()) {
-                        break;
-                    }
+                        }
                 }
-                assert(callerSafepoint ? callerSafepoint->stackSize >= 1
-                                       : true);
 
                 // Clone the function
                 BB* copy = BBTransform::clone(inlinee->entry, function);
@@ -109,31 +113,37 @@ class TheInliner {
                             }
 
                             // When inlining a safepoint we need to chain it
-                            // with the safepoints after the call to the
-                            // inlinee
-                            Safepoint* prevSp = sp;
-                            Safepoint* nextSp = callerSafepoint;
-                            size_t created = 0;
-                            while (nextSp) {
-                                auto clone = Safepoint::Cast(nextSp->clone());
-                                // Insert the safepoint
-                                ip = bb->insert(ip, clone);
-                                created++;
+                            // with the safepoints after the call to the inlinee
+                            if (!sp->next()) {
+                                auto copyFromSp = callerSafepoint;
+                                auto cloneSp =
+                                    Safepoint::Cast(copyFromSp->clone());
 
                                 // Remove the inlinee result from the
                                 // caller safepoint. The result will only
                                 // become available after the (deoptimized)
                                 // inlinee returns.
-                                if (nextSp == callerSafepoint) {
-                                    clone->popArg();
-                                    clone->stackSize--;
+                                cloneSp->popStack();
+                                ip = bb->insert(ip, cloneSp);
+                                sp->next(cloneSp);
+
+                                size_t created = 1;
+                                while (copyFromSp->next()) {
+                                    assert(copyFromSp->next() ==
+                                           cloneSp->next());
+                                    copyFromSp = copyFromSp->next();
+                                    auto prevClone = cloneSp;
+                                    cloneSp =
+                                        Safepoint::Cast(copyFromSp->clone());
+
+                                    ip = bb->insert(ip, cloneSp);
+                                    created++;
+
+                                    prevClone->updateNext(cloneSp);
                                 }
 
-                                prevSp->next(clone);
-                                prevSp = nextSp;
-                                nextSp = nextSp->next();
+                                next = ip + created + 1;
                             }
-                            next = ip + created + 1;
                         }
                         // If the inlining resolved some env, we need to
                         // update. For example this happens if we inline an

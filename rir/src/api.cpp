@@ -194,6 +194,21 @@ SEXP pirCompile(SEXP what, const std::string& name, pir::DebugOptions debug) {
     return what;
 }
 
+REXPORT SEXP rir_invocation_count(SEXP what) {
+    if (!isValidClosureSEXP(what)) {
+        Rf_error("not a compiled closure");
+    }
+    auto dt = DispatchTable::check(BODY(what));
+    assert(dt);
+
+    SEXP res = Rf_allocVector(INTSXP, dt->capacity());
+    for (size_t i = 0; i < dt->capacity(); ++i) {
+        INTEGER(res)[i] = dt->available(i) ? dt->at(i)->invocationCount : 0;
+    }
+
+    return res;
+}
+
 REXPORT SEXP pir_compile(SEXP what, SEXP name, SEXP debugFlags) {
     if (debugFlags != R_NilValue &&
         (TYPEOF(debugFlags) != INTSXP || Rf_length(debugFlags) < 1))

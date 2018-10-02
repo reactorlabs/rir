@@ -854,16 +854,6 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
             }
             case Tag::MkFunCls: {
                 auto mkfuncls = MkFunCls::Cast(instr);
-
-                auto dt = DispatchTable::unpack(mkfuncls->code);
-
-                if (dt->capacity() > 1 && !dt->available(1)) {
-                    Pir2Rir pir2rir(compiler, mkfuncls->fun, nullptr, dryRun,
-                                    compiler.logger.get(mkfuncls->fun));
-                    auto rirFun = pir2rir.finalize();
-                    if (!dryRun)
-                        dt->put(1, rirFun);
-                }
                 cs << BC::push(mkfuncls->fml) << BC::push(mkfuncls->code)
                    << BC::push(mkfuncls->src) << BC::close();
                 break;
