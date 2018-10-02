@@ -196,7 +196,7 @@ class BC {
     SEXP immediateConst() const;
 
     inline static Opcode* jmpTarget(Opcode* pos) {
-        BC bc = BC::decodeShallow(pos);
+        BC bc = decodeShallow(pos);
         assert(bc.isJmp());
         return (Opcode*)((uintptr_t)pos + bc.size() + bc.immediate.offset);
     }
