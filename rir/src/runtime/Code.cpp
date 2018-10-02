@@ -69,7 +69,7 @@ void Code::disassemble(std::ostream& out) const {
     std::map<Opcode*, size_t> targets;
     targets[pc] = label++;
     while (pc < endCode()) {
-        if (BC::decode(pc).isJmp()) {
+        if (BC::decodeShallow(pc).isJmp()) {
             auto t = BC::jmpTarget(pc);
             if (!targets.count(t))
                 targets[t] = label++;
@@ -91,7 +91,7 @@ void Code::disassemble(std::ostream& out) const {
             out << ":\n";
         }
 
-        BC bc = BC::decode(pc);
+        BC bc = BC::decode(pc, this);
 
         const size_t OFFSET_WIDTH = 5;
         out << std::setw(OFFSET_WIDTH) << ((uintptr_t)pc - (uintptr_t)code());

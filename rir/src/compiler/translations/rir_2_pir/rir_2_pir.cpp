@@ -100,7 +100,7 @@ std::unordered_set<Opcode*> findMergepoints(rir::Code* srcCode) {
     std::unordered_map<Opcode*, std::vector<Opcode*>> incom;
     // Mark incoming jmps
     for (auto pc = srcCode->code(); pc != srcCode->endCode();) {
-        BC bc = BC::decode(pc);
+        BC bc = BC::decodeShallow(pc);
         if (bc.isJmp()) {
             incom[bc.jmpTarget(pc)].push_back(pc);
         }
@@ -108,7 +108,7 @@ std::unordered_set<Opcode*> findMergepoints(rir::Code* srcCode) {
     }
     // Mark falltrough to label
     for (auto pc = srcCode->code(); pc != srcCode->endCode();) {
-        BC bc = BC::decode(pc);
+        BC bc = BC::decodeShallow(pc);
         if (!bc.isUncondJmp() && !bc.isExit()) {
             Opcode* next = BC::next(pc);
             if (incom.count(next))
@@ -132,7 +132,8 @@ namespace pir {
 
 bool Rir2Pir::compileBC(
     const BC& bc, Opcode* pos, rir::Code* srcCode, RirStack& stack,
-    Builder& insert, std::unordered_map<Value*, CallFeedback>& callFeedback,
+    Builder& insert,
+    std::unordered_map<Value*, std::vector<SEXP>>& callFeedback,
     std::unordered_map<Value*, TypeFeedback>& typeFeedback) const {
     Value* env = insert.env;
 
@@ -225,14 +226,14 @@ bool Rir2Pir::compileBC(
 
     case Opcode::record_call_: {
         Value* target = top();
-        callFeedback[target] = bc.immediate.callFeedback;
+        callFeedback[target] = bc.callFeedbackExtra().targets;
         break;
     }
 
     case Opcode::named_call_implicit_:
     case Opcode::call_implicit_: {
         std::vector<Value*> args;
-        for (auto argi : bc.immediateCallArguments) {
+        for (auto argi : bc.callExtra().immediateCallArguments) {
             if (argi == DOTS_ARG_IDX) {
                 log.warn("Cannot compile call with ... arguments");
                 return false;
@@ -263,8 +264,8 @@ bool Rir2Pir::compileBC(
         if (bc.bc != Opcode::named_call_implicit_) {
             if (callFeedback.count(callee)) {
                 auto& feedback = callFeedback.at(callee);
-                if (feedback.numTargets == 1)
-                    monomorphic = feedback.targets[0];
+                if (feedback.size() == 1)
+                    monomorphic = feedback.at(0);
             }
         }
 
@@ -272,7 +273,8 @@ bool Rir2Pir::compileBC(
         auto insertGenericCall = [&]() {
             if (bc.bc == Opcode::named_call_implicit_)
                 push(insert(new NamedCall(insert.env, pop(), args,
-                                          bc.callArgumentNames, ast)));
+                                          bc.callExtra().callArgumentNames,
+                                          ast)));
             else
                 push(insert(new Call(insert.env, pop(), args, ast)));
         };
@@ -323,7 +325,8 @@ bool Rir2Pir::compileBC(
 
         auto target = pop();
         if (bc.bc == Opcode::named_call_)
-            push(insert(new NamedCall(env, target, args, bc.callArgumentNames,
+            push(insert(new NamedCall(env, target, args,
+                                      bc.callExtra().callArgumentNames,
                                       bc.immediate.callFixedArgs.ast)));
         else
             push(insert(
@@ -623,7 +626,7 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) const {
     State cur;
     cur.seen = true;
 
-    std::unordered_map<Value*, CallFeedback> callFeedback;
+    std::unordered_map<Value*, std::vector<SEXP>> callFeedback;
     std::unordered_map<Value*, TypeFeedback> typeFeedback;
 
     Opcode* end = srcCode->endCode();
@@ -659,7 +662,7 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) const {
             other = State(cur, true, insert.getCurrentBB(), finger);
         }
         const auto pos = finger;
-        BC bc = BC::advance(&finger);
+        BC bc = BC::advance(&finger, srcCode);
         const auto nextPos = finger;
 
         assert(pos != end);
@@ -759,9 +762,9 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) const {
 
         ifFunctionLiteral(pos, end, [&](Opcode* next) {
             Opcode* pc = pos;
-            BC ldfmls = BC::advance(&pc);
-            BC ldcode = BC::advance(&pc);
-            BC ldsrc = BC::advance(&pc);
+            BC ldfmls = BC::advance(&pc, srcCode);
+            BC ldcode = BC::advance(&pc, srcCode);
+            BC ldsrc = BC::advance(&pc, srcCode);
             pc = BC::next(pc); // close
 
             SEXP fmls = ldfmls.immediateConst();
@@ -782,7 +785,7 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) const {
                 for (int i = 0; i < 2 && n < end; ++i, n = BC::next(n))
                     ;
                 if (n < end) {
-                    auto nextbc = BC::decode(n);
+                    auto nextbc = BC::decodeShallow(n);
                     if (nextbc.bc == Opcode::stvar_)
                         inner << ">"
                               << CHAR(PRINTNAME(nextbc.immediateConst()));

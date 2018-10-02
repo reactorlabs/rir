@@ -44,8 +44,8 @@ class State {
 
     void check() const { assert(ostack >= 0 and "Too many pops"); }
 
-    void advance() {
-        BC bc = BC::advance(&pc);
+    void advance(Code* code) {
+        BC bc = BC::advance(&pc, code);
         // Those two instructions deal with cleanly returning from the function
         // themselves, so we can ignore leftover values on the stack. Note that
         // ret_ should not be added here, as it requires the stack to have
@@ -58,7 +58,7 @@ class State {
         ostack += bc.pushCount();
     }
 
-    BC cur() { return BC::decode(pc); }
+    BC cur(Code* code) { return BC::decode(pc, code); }
 
     void checkClear() const {
         assert(ostack == 0 and "Stack imbalance when exitting the function");
@@ -202,8 +202,8 @@ void CodeVerifier::calculateAndVerifyStack(Code* code) {
             state[i.pc] = i;
             Opcode* pc = i.pc;
             assert(pc >= code->code() && pc < code->endCode());
-            BC cur = BC::decode(pc);
-            i.advance();
+            BC cur = BC::decode(pc, code);
+            i.advance(code);
             max.updateMax(i);
             if (cur.isExit()) {
                 i.checkClear();
@@ -270,7 +270,7 @@ void CodeVerifier::verifyFunctionLayout(SEXP sexp, ::Context* ctx) {
         Opcode* end = start + c->codeSize;
         while (true) {
             assert(cptr < end);
-            BC cur = BC::decode(cptr);
+            BC cur = BC::decode(cptr, c);
             switch (hasSources(cur.bc)) {
             case Sources::Required:
                 assert(c->getSrcIdxAt(cptr, true) != 0);
@@ -310,7 +310,7 @@ void CodeVerifier::verifyFunctionLayout(SEXP sexp, ::Context* ctx) {
                 uint32_t nargs = *reinterpret_cast<Immediate*>(cptr + 1);
 
                 for (size_t i = 0, e = nargs; i != e; ++i) {
-                    uint32_t offset = cur.immediateCallArguments[i];
+                    uint32_t offset = cur.callExtra().immediateCallArguments[i];
                     if (offset == MISSING_ARG_IDX || offset == DOTS_ARG_IDX)
                         continue;
                     bool ok = false;
@@ -323,7 +323,7 @@ void CodeVerifier::verifyFunctionLayout(SEXP sexp, ::Context* ctx) {
                 }
                 if (*cptr == Opcode::named_call_implicit_) {
                     for (size_t i = 0, e = nargs; i != e; ++i) {
-                        uint32_t offset = cur.callArgumentNames[i];
+                        uint32_t offset = cur.callExtra().callArgumentNames[i];
                         if (offset) {
                             SEXP name = cp_pool_at(ctx, offset);
                             assert(TYPEOF(name) == SYMSXP ||
@@ -335,7 +335,7 @@ void CodeVerifier::verifyFunctionLayout(SEXP sexp, ::Context* ctx) {
             if (*cptr == Opcode::named_call_) {
                 uint32_t nargs = *reinterpret_cast<Immediate*>(cptr + 1);
                 for (size_t i = 0, e = nargs; i != e; ++i) {
-                    uint32_t offset = cur.callArgumentNames[i];
+                    uint32_t offset = cur.callExtra().callArgumentNames[i];
                     if (offset) {
                         SEXP name = cp_pool_at(ctx, offset);
                         assert(TYPEOF(name) == SYMSXP || name == R_NilValue);
