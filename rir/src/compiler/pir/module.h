@@ -53,7 +53,8 @@ class Module {
     }
 
     typedef std::function<bool(Closure* f)> MaybeCreate;
-    void createIfMissing(rir::Function* f, const std::vector<SEXP>& a, Env* env,
+    void createIfMissing(const std::string& name, rir::Function* f,
+                         const std::vector<SEXP>& a, Env* env,
                          MaybeCreate create);
 
     typedef std::function<void(VersionedClosure&)> PirClosureVersionIterator;

@@ -277,8 +277,11 @@ bool Rir2Pir::compileBC(
                 push(insert(new Call(insert.env, pop(), args, ast)));
         };
         if (monomorphic && isValidClosureSEXP(monomorphic)) {
+            std::string name = "";
+            if (auto ldfun = LdFun::Cast(callee))
+                name = CHAR(PRINTNAME(ldfun->varName));
             compiler.compileClosure(
-                monomorphic, "",
+                monomorphic, name,
                 [&](Closure* f) {
                     Value* expected = insert(new LdConst(monomorphic));
                     Value* t = insert(new Identical(callee, expected));
@@ -785,7 +788,18 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) const {
                               << CHAR(PRINTNAME(nextbc.immediateConst()));
                 }
             }
-            inner << "@" << (pos - srcCode->code());
+            inner << "@";
+            if (srcCode != srcCode->function()->body()) {
+                size_t i = 0;
+                for (auto c : insert.function->promises) {
+                    if (c == insert.code) {
+                        inner << "Prom(" << i << ")";
+                        break;
+                    }
+                    i++;
+                }
+            }
+            inner << (pos - srcCode->code());
 
             compiler.compileFunction(
                 function, inner.str(), formals,

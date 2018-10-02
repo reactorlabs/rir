@@ -97,19 +97,21 @@ class BufferedLogStream : public LogStream {
   public:
     void flush() override {
         LogStream::flush();
-        std::cout << sstream.str();
+        actualOut << sstream.str();
         sstream.str("");
-        std::cout.flush();
+        actualOut.flush();
     }
 
   private:
     std::stringstream sstream;
+    std::ostream& actualOut;
 
   protected:
-    bool tty() override { return true; }
+    bool tty() override;
 
-    BufferedLogStream(const DebugOptions& options, const std::string& id)
-        : LogStream(options, id, sstream) {}
+    BufferedLogStream(const DebugOptions& options, const std::string& id,
+                      std::ostream& actualOut = std::cout)
+        : LogStream(options, id, sstream), actualOut(actualOut) {}
     friend class StreamLogger;
 };
 
@@ -123,7 +125,7 @@ class StreamLogger {
     StreamLogger(const StreamLogger&) = delete;
     StreamLogger& operator=(const StreamLogger&) = delete;
 
-    LogStream& begin(Closure* cls, const std::string& name);
+    LogStream& begin(Closure* cls);
     LogStream& get(Closure* cls) {
         assert(streams.count(cls) && "You need to call begin first");
         return *streams.at(cls);
