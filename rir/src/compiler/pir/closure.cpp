@@ -28,6 +28,7 @@ Closure::~Closure() {
         delete p;
     for (auto p : defaultArgs)
         delete p;
+    delete runtimeFeedback;
 }
 
 Closure* Closure::clone() {

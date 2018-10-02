@@ -1,9 +1,9 @@
-#include "force_dominance.h"
 #include "../analysis/generic_static_analysis.h"
 #include "../analysis/query.h"
 #include "../pir/pir_impl.h"
 #include "../transform/bb.h"
 #include "../transform/replace.h"
+#include "phase_definitions.h"
 
 namespace {
 
@@ -149,7 +149,7 @@ class ForceDominanceAnalysisResult {
     std::unordered_set<Force*> dom;
     std::unordered_map<Promise*, bool> hasDeopt;
 };
-}
+} // namespace
 
 namespace rir {
 namespace pir {
@@ -250,5 +250,5 @@ void ForceDominance::apply(Closure* cls) const {
     for (auto m : forcedMkArg)
         m.first->replaceUsesIn(m.second, m.second->bb());
 }
-}
-}
+} // namespace pir
+} // namespace rir

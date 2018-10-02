@@ -1402,20 +1402,20 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
         }
 
         INSTRUCTION(record_call_) {
-            CallFeedback* feedback = (CallFeedback*)pc;
+            ObservedCalles* feedback = (ObservedCalles*)pc;
             SEXP callee = ostack_top(ctx);
             feedback->record(callee);
-            pc += sizeof(CallFeedback);
+            pc += sizeof(ObservedCalles);
             NEXT();
         }
 
         INSTRUCTION(record_binop_) {
-            TypeFeedback* feedback = (TypeFeedback*)pc;
+            ObservedValues* feedback = (ObservedValues*)pc;
             SEXP l = ostack_at(ctx, 1);
             SEXP r = ostack_top(ctx);
             feedback[0].record(l);
             feedback[1].record(r);
-            pc += 2 * sizeof(TypeFeedback);
+            pc += 2 * sizeof(ObservedValues);
             NEXT();
         }
 

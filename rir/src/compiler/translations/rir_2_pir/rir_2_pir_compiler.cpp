@@ -5,13 +5,7 @@
 
 #include "../../analysis/query.h"
 #include "../../analysis/verifier.h"
-#include "../../opt/cleanup.h"
-#include "../../opt/delay_env.h"
-#include "../../opt/delay_instr.h"
-#include "../../opt/elide_env.h"
-#include "../../opt/force_dominance.h"
-#include "../../opt/inline.h"
-#include "../../opt/scope_resolution.h"
+#include "../../opt/phase_definitions.h"
 #include "ir/BC.h"
 
 #include "interpreter/runtime.h"
@@ -78,31 +72,31 @@ void Rir2PirCompiler::compileClosure(rir::Function* srcFunction,
     // TODO: if compilation fails, we should remember that somehow. Otherwise
     // we will continue on trying to compile the same function over and over
     // again.
-    module->createIfMissing(
-        srcFunction, formals.names, closureEnv, [&](Closure* pirFunction) {
-            Builder builder(pirFunction, closureEnv);
-            auto& log = logger.begin(pirFunction, name);
-            Rir2Pir rir2pir(*this, srcFunction, log, name);
+    module->createIfMissing(srcFunction, formals.names, closureEnv,
+                            [&](Closure* pirFunction) {
+                                Builder builder(pirFunction, closureEnv);
+                                auto& log = logger.begin(pirFunction, name);
+                                Rir2Pir rir2pir(*this, srcFunction, log, name);
 
-            if (rir2pir.tryCompile(builder)) {
-                log.compilationEarlyPir(pirFunction);
-                if (!Verify::apply(pirFunction)) {
-                    failed = true;
-                    log.failed("rir2pir failed to verify");
-                    log.flush();
-                    logger.close(pirFunction);
-                    assert(false);
-                    return false;
-                }
-                log.flush();
-                return true;
-            }
-            log.failed("rir2pir aborted");
-            failed = true;
-            log.flush();
-            logger.close(pirFunction);
-            return false;
-        });
+                                if (rir2pir.tryCompile(builder)) {
+                                    log.compilationEarlyPir(pirFunction);
+                                    if (!Verify::apply(pirFunction)) {
+                                        failed = true;
+                                        log.failed("rir2pir failed to verify");
+                                        log.flush();
+                                        logger.close(pirFunction);
+                                        assert(false);
+                                        return false;
+                                    }
+                                    log.flush();
+                                    return true;
+                                }
+                                log.failed("rir2pir aborted");
+                                failed = true;
+                                log.flush();
+                                logger.close(pirFunction);
+                                return false;
+                            });
 
     if (failed)
         fail();

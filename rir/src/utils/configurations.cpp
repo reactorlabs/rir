@@ -3,15 +3,7 @@
 
 #include "configurations.h"
 
-#include "../compiler/opt/cleanup.h"
-#include "../compiler/opt/cleanup_safepoint.h"
-#include "../compiler/opt/delay_env.h"
-#include "../compiler/opt/delay_instr.h"
-#include "../compiler/opt/elide_env.h"
-#include "../compiler/opt/force_dominance.h"
-#include "../compiler/opt/inline.h"
-#include "../compiler/opt/scope_resolution.h"
-
+#include "../compiler/opt/phase_definitions.h"
 #include <deque>
 
 namespace rir {
@@ -52,6 +44,7 @@ void Configurations::defaultOptimizations() {
         optimizations.push_back(new pir::ScopeResolution());
         optimizations.push_back(new pir::Cleanup());
         optimizations.push_back(new pir::DelayInstr());
+        optimizations.push_back(new pir::ElideEnvSpec());
         optimizations.push_back(new pir::ElideEnv());
         optimizations.push_back(new pir::DelayEnv());
     };

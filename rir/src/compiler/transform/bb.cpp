@@ -95,5 +95,22 @@ Value* BBTransform::forInline(BB* inlinee, BB* splice) {
     assert(found);
     return found;
 }
+
+void BBTransform::addConditionalDeopt(Closure* closure, BB* src,
+                                      BB::Instrs::iterator position,
+                                      Instruction* condition,
+                                      Safepoint* safepoint) {
+    auto split =
+        BBTransform::split(closure->nextBBId++, src, position, closure);
+    src->append(condition);
+    src->append(new Branch(condition));
+    auto deoptBlock = new BB(closure, closure->nextBBId++);
+
+    src->next0 = deoptBlock;
+    src->next1 = split;
+    Safepoint* spClone = Safepoint::Cast(safepoint->clone());
+    deoptBlock->append(spClone);
+    deoptBlock->append(new Deopt(spClone));
 }
-}
+} // namespace pir
+} // namespace rir

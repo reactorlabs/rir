@@ -1,10 +1,10 @@
-#include "scope_resolution.h"
 #include "../analysis/query.h"
 #include "../analysis/scope.h"
 #include "../pir/pir_impl.h"
 #include "../util/cfg.h"
 #include "../util/visitor.h"
 #include "R/r.h"
+#include "phase_definitions.h"
 
 #include <algorithm>
 #include <unordered_map>

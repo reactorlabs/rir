@@ -119,8 +119,8 @@ class BC {
         uint32_t i;
         NumLocals loc;
         LocalsCopy loc_cpy;
-        CallFeedback callFeedback;
-        TypeFeedback binopFeedback[2];
+        ObservedCalles callFeedback;
+        ObservedValues binopFeedback[2];
         ImmediateArguments() { memset(this, 0, sizeof(ImmediateArguments)); }
     };
 
@@ -525,10 +525,10 @@ class BC {
             memcpy(&immediate.loc_cpy, pc, sizeof(LocalsCopy));
             break;
         case Opcode::record_call_:
-            memcpy(&immediate.callFeedback, pc, sizeof(CallFeedback));
+            memcpy(&immediate.callFeedback, pc, sizeof(ObservedCalles));
             break;
         case Opcode::record_binop_:
-            memcpy(&immediate.binopFeedback, pc, sizeof(TypeFeedback) * 2);
+            memcpy(&immediate.binopFeedback, pc, sizeof(ObservedValues) * 2);
             break;
         case Opcode::nop_:
         case Opcode::make_env_:
@@ -597,6 +597,6 @@ class BC {
     }
 };
 
-} // rir
+} // namespace rir
 
 #endif

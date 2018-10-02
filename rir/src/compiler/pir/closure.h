@@ -21,9 +21,11 @@ class Closure : public Code {
   private:
     friend class Module;
     Closure(std::initializer_list<SEXP> a, Env* env, rir::Function* function)
-        : env(env), function(function), argNames(a) {}
+        : env(env), function(function), argNames(a),
+          runtimeFeedback(new ProfiledValues()) {}
     Closure(const std::vector<SEXP>& a, Env* env, rir::Function* function)
-        : env(env), function(function), argNames(a) {}
+        : env(env), function(function), argNames(a),
+          runtimeFeedback(new ProfiledValues()) {}
 
     Env* env;
     rir::Function* function;
@@ -34,8 +36,8 @@ class Closure : public Code {
 
     std::vector<SEXP> argNames;
     std::vector<Promise*> defaultArgs;
-
     std::vector<Promise*> promises;
+    ProfiledValues* runtimeFeedback;
 
     void print(std::ostream& out, bool tty) const;
 
@@ -63,7 +65,6 @@ class Closure : public Code {
             if (p)
                 it(p);
     }
-
 };
 
 } // namespace pir

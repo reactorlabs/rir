@@ -1,8 +1,8 @@
-#include "cleanup_safepoint.h"
 #include "../pir/pir_impl.h"
 #include "../transform/replace.h"
 #include "../util/cfg.h"
 #include "../util/visitor.h"
+#include "phase_definitions.h"
 
 namespace rir {
 namespace pir {

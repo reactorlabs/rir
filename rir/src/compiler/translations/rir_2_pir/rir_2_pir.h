@@ -43,8 +43,7 @@ class Rir2Pir {
     std::string name;
 
     bool compileBC(const BC& bc, Opcode* pos, rir::Code* srcCode, RirStack&,
-                   Builder&, std::unordered_map<Value*, CallFeedback>&,
-                   std::unordered_map<Value*, TypeFeedback>&) const;
+                   Builder&) const;
     virtual bool inPromise() const { return false; }
 };
 

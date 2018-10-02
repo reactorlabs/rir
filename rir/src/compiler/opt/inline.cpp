@@ -1,4 +1,3 @@
-#include "inline.h"
 #include "../pir/pir_impl.h"
 #include "../transform/bb.h"
 #include "../transform/replace.h"
@@ -7,6 +6,7 @@
 #include "R/Funtab.h"
 #include "R/Symbols.h"
 #include "R/r.h"
+#include "phase_definitions.h"
 
 #include <algorithm>
 #include <unordered_map>
