@@ -3,9 +3,11 @@
 
 #include "R/Funtab.h"
 #include "R/Symbols.h"
+#include "R/r.h"
 #include "interp.h"
 #include "interp_context.h"
 #include "ir/Deoptimization.h"
+#include "ir/RuntimeFeedback_inl.h"
 #include "runtime.h"
 
 #define NOT_IMPLEMENTED assert(false)
@@ -795,7 +797,7 @@ enum op { PLUSOP, MINUSOP, TIMESOP, DIVOP, POWOP, MODOP, IDIVOP };
     do {                                                                       \
         res = ostack_at(ctx, 1);                                               \
         if (TYPEOF(res) != res_type || !NO_REFERENCES(res)) {                  \
-            res = allocVector(res_type, 1);                                    \
+            res = Rf_allocVector(res_type, 1);                                 \
         }                                                                      \
         switch (res_type) {                                                    \
         case INTSXP:                                                           \
@@ -841,7 +843,7 @@ static double myfmod(double x1, double x2) {
         return R_NaN;
     double q = x1 / x2, tmp = x1 - floor(q) * x2;
     if (R_FINITE(q) && (fabs(q) > 1 / R_AccuracyInfo.eps))
-        warning("probable complete loss of accuracy in modulus");
+        Rf_warning("probable complete loss of accuracy in modulus");
     q = floor(tmp / x2);
     return tmp - q * x2;
 }
@@ -1203,8 +1205,8 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
             if (TYPEOF(res) == PROMSXP)
                 res = promiseValue(res, ctx);
 
-            if (NAMED(res) == 0 && res != R_NilValue)
-                SET_NAMED(res, 1);
+            if (res != R_NilValue)
+                ENSURE_NAMED(res);
 
             ostack_push(ctx, res);
             NEXT();
@@ -1221,8 +1223,8 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
                 Rf_error("object \"%s\" not found", CHAR(PRINTNAME(sym)));
             }
 
-            if (NAMED(res) == 0 && res != R_NilValue)
-                SET_NAMED(res, 1);
+            if (res != R_NilValue)
+                ENSURE_NAMED(res);
 
             ostack_push(ctx, res);
             NEXT();
@@ -1245,8 +1247,8 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
             if (TYPEOF(res) == PROMSXP)
                 res = promiseValue(res, ctx);
 
-            if (NAMED(res) == 0 && res != R_NilValue)
-                SET_NAMED(res, 1);
+            if (res != R_NilValue)
+                ENSURE_NAMED(res);
 
             ostack_push(ctx, res);
             NEXT();
@@ -1262,8 +1264,8 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
                 Rf_error("object \"%s\" not found", CHAR(PRINTNAME(sym)));
             }
 
-            if (NAMED(res) == 0 && res != R_NilValue)
-                SET_NAMED(res, 1);
+            if (res != R_NilValue)
+                ENSURE_NAMED(res);
 
             ostack_push(ctx, res);
             NEXT();
@@ -1286,8 +1288,8 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
             if (TYPEOF(res) == PROMSXP)
                 res = promiseValue(res, ctx);
 
-            if (NAMED(res) == 0 && res != R_NilValue)
-                SET_NAMED(res, 1);
+            if (res != R_NilValue)
+                ENSURE_NAMED(res);
 
             ostack_push(ctx, res);
             NEXT();
@@ -1309,8 +1311,8 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
             assert(res != R_UnboundValue);
             assert(res != R_MissingArg);
 
-            if (NAMED(res) == 0 && res != R_NilValue)
-                SET_NAMED(res, 1);
+            if (res != R_NilValue)
+                ENSURE_NAMED(res);
 
             ostack_push(ctx, res);
             NEXT();
@@ -1324,8 +1326,12 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
             if (callCtxt->hasStackArgs()) {
                 ostack_push(ctx, callCtxt->stackArg(idx));
             } else {
-                Code* arg = callCtxt->implicitArg(idx);
-                res = createPromise(arg, callCtxt->callerEnv);
+                if (callCtxt->implicitArgOffset(idx) == MISSING_ARG_IDX) {
+                    res = Rf_mkPROMISE(R_UnboundValue, callCtxt->callerEnv);
+                } else {
+                    Code* arg = callCtxt->implicitArg(idx);
+                    res = createPromise(arg, callCtxt->callerEnv);
+                }
                 ostack_push(ctx, res);
             }
             NEXT();
@@ -1404,7 +1410,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
         INSTRUCTION(record_call_) {
             ObservedCalles* feedback = (ObservedCalles*)pc;
             SEXP callee = ostack_top(ctx);
-            feedback->record(callee);
+            feedback->record(c, callee);
             pc += sizeof(ObservedCalles);
             NEXT();
         }
@@ -1516,7 +1522,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
             SEXP srcref = ostack_at(ctx, 0);
             SEXP body = ostack_at(ctx, 1);
             SEXP formals = ostack_at(ctx, 2);
-            res = allocSExp(CLOSXP);
+            res = Rf_allocSExp(CLOSXP);
             assert(DispatchTable::check(body));
             SET_FORMALS(res, formals);
             SET_BODY(res, body);
@@ -1546,12 +1552,9 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
         }
 
         INSTRUCTION(promise_) {
-            // get the Code * pointer we need
             Immediate id = readImmediate();
             advanceImmediate();
-            Code* promiseCode = c->function()->codeAt(id);
-            // create the promise and push it on stack
-            SEXP prom = createPromise(promiseCode, getenv());
+            SEXP prom = Rf_mkPROMISE(c->function()->codeObjectAt(id), getenv());
             SET_PRVALUE(prom, ostack_pop(ctx));
             ostack_push(ctx, prom);
             NEXT();
@@ -1577,12 +1580,9 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
         }
 
         INSTRUCTION(push_code_) {
-            // get the Code * pointer we need
             Immediate n = readImmediate();
             advanceImmediate();
-            Code* promiseCode = c->function()->codeAt(n);
-            // create the promise and push it on stack
-            ostack_push(ctx, (SEXP)promiseCode);
+            ostack_push(ctx, c->function()->codeObjectAt(n));
             NEXT();
         }
 
@@ -1941,9 +1941,10 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
             SEXP val = ostack_top(ctx);
             int cond = NA_LOGICAL;
             if (XLENGTH(val) > 1)
-                warningcall(getSrcAt(c, pc - 1, ctx),
-                            ("the condition has length > 1 and only the first "
-                             "element will be used"));
+                Rf_warningcall(
+                    getSrcAt(c, pc - 1, ctx),
+                    "the condition has length > 1 and only the first "
+                    "element will be used");
 
             if (XLENGTH(val) > 0) {
                 switch (TYPEOF(val)) {
@@ -1966,7 +1967,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
                                ? ("missing value where TRUE/FALSE needed")
                                : ("argument is not interpretable as logical"))
                         : ("argument is of length zero");
-                errorcall(getSrcAt(c, pc - 1, ctx), msg);
+                Rf_errorcall(getSrcAt(c, pc - 1, ctx), msg);
             }
 
             ostack_pop(ctx);
@@ -1978,9 +1979,10 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
             SEXP val = ostack_pop(ctx);
             assert(TYPEOF(val) == PROMSXP);
             res = PRCODE(val);
-            // if the code is NILSXP then it is rir Code object, get its ast
-            if (TYPEOF(res) == NILSXP)
-                res = cp_pool_at(ctx, ((Code*)res)->src);
+            // if the code is EXTERNALSXP then it is rir Code object, get its
+            // ast
+            if (TYPEOF(res) == EXTERNALSXP)
+                res = cp_pool_at(ctx, Code::unpack(res)->src);
             // otherwise return whatever we had, make sure we do not see
             // bytecode
             assert(TYPEOF(res) != BCODESXP);
@@ -2030,8 +2032,8 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
             assert(env);
             SEXP val = R_findVarLocInFrame(getenv(), sym).cell;
             if (val == NULL)
-                errorcall(getSrcAt(c, pc - 1, ctx),
-                          "'missing' can only be used for arguments");
+                Rf_errorcall(getSrcAt(c, pc - 1, ctx),
+                             "'missing' can only be used for arguments");
 
             if (MISSING(val) || CAR(val) == R_MissingArg) {
                 ostack_push(ctx, R_TrueValue);
@@ -2066,8 +2068,8 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
         INSTRUCTION(brobj_) {
             JumpOffset offset = readJumpOffset();
             advanceJump();
-            if (OBJECT(ostack_top(ctx)))
-                pc = pc + offset;
+            if (isObject(ostack_top(ctx)))
+                pc += offset;
             PC_BOUNDSCHECK(pc, c);
             NEXT();
         }
@@ -2076,7 +2078,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
             JumpOffset offset = readJumpOffset();
             advanceJump();
             if (ostack_pop(ctx) == R_TrueValue) {
-                pc = pc + offset;
+                pc += offset;
                 if (offset < 0)
                     incPerfCount(c);
             }
@@ -2088,7 +2090,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
             JumpOffset offset = readJumpOffset();
             advanceJump();
             if (ostack_pop(ctx) == R_FalseValue) {
-                pc = pc + offset;
+                pc += offset;
                 if (offset < 0)
                     incPerfCount(c);
             }
@@ -2101,7 +2103,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
             advanceJump();
             if (offset < 0)
                 incPerfCount(c);
-            pc = pc + offset;
+            pc += offset;
             PC_BOUNDSCHECK(pc, c);
             NEXT();
         }
@@ -2110,8 +2112,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
             SEXP val = ostack_at(ctx, 1);
             SEXP idx = ostack_at(ctx, 0);
 
-            SEXP args = CONS_NR(idx, R_NilValue);
-            args = CONS_NR(val, args);
+            SEXP args = CONS_NR(val, CONS_NR(idx, R_NilValue));
             ostack_push(ctx, args);
 
             if (isObject(val)) {
@@ -2137,9 +2138,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
             SEXP idx = ostack_at(ctx, 1);
             SEXP idx2 = ostack_at(ctx, 0);
 
-            SEXP args = CONS_NR(idx2, R_NilValue);
-            args = CONS_NR(idx, args);
-            args = CONS_NR(val, args);
+            SEXP args = CONS_NR(val, CONS_NR(idx, CONS_NR(idx2, R_NilValue)));
             ostack_push(ctx, args);
 
             if (isObject(val)) {
@@ -2166,20 +2165,22 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
             SEXP val = ostack_at(ctx, 2);
 
             if (MAYBE_SHARED(vec)) {
-                vec = duplicate(vec);
-                ostack_at(ctx, 1) = vec;
+                vec = Rf_duplicate(vec);
+                ostack_set(ctx, 1, vec);
             }
 
-            SEXP args = CONS_NR(val, R_NilValue);
-            SET_TAG(args, symbol::value);
-            args = CONS_NR(idx, args);
-            args = CONS_NR(vec, args);
+            SEXP args = CONS_NR(vec, CONS_NR(idx, CONS_NR(val, R_NilValue)));
+            SET_TAG(CDDR(args), symbol::value);
             PROTECT(args);
+
             res = nullptr;
             SEXP call = getSrcForCall(c, pc - 1, ctx);
             SEXP selector = CAR(call) == symbol::SuperAssign
                                 ? symbol::SuperAssignBracket
                                 : symbol::AssignBracket;
+            RCNTXT assignContext;
+            Rf_begincontext(&assignContext, CTXT_RETURN, call, getenv(),
+                            ENCLOS(getenv()), args, selector);
             if (isObject(vec)) {
                 res = dispatchApply(call, vec, args, selector, getenv(), ctx);
             }
@@ -2189,6 +2190,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
                 // following
                 SET_NAMED(res, 0);
             }
+            Rf_endcontext(&assignContext);
             ostack_popn(ctx, 3);
             UNPROTECT(1);
 
@@ -2261,8 +2263,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
 
         // ---------
         fallback : {
-            SEXP args = CONS_NR(idx, R_NilValue);
-            args = CONS_NR(val, args);
+            SEXP args = CONS_NR(val, CONS_NR(idx, R_NilValue));
             ostack_push(ctx, args);
             if (isObject(val)) {
                 SEXP call = getSrcAt(c, pc - 1, ctx);
@@ -2286,10 +2287,9 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
             SEXP idx = ostack_at(ctx, 1);
             SEXP idx2 = ostack_at(ctx, 0);
 
-            SEXP args = CONS_NR(idx2, R_NilValue);
-            args = CONS_NR(idx, args);
-            args = CONS_NR(val, args);
+            SEXP args = CONS_NR(val, CONS_NR(idx, CONS_NR(idx2, R_NilValue)));
             ostack_push(ctx, args);
+
             if (isObject(val)) {
                 SEXP call = getSrcForCall(c, pc - 1, ctx);
                 res =
@@ -2312,7 +2312,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
             SEXP val = ostack_at(ctx, 2);
 
             // Fast case
-            if (!MAYBE_SHARED(vec) && !isObject(vec)) {
+            if (NOT_SHARED(vec) && !isObject(vec)) {
                 SEXPTYPE vectorT = TYPEOF(vec);
                 SEXPTYPE valT = TYPEOF(val);
                 SEXPTYPE idxT = TYPEOF(idx);
@@ -2331,55 +2331,56 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
                      (vectorT == VECSXP)) &&
                     (XLENGTH(val) == 1 || vectorT == VECSXP)) { // 3
 
-                        int idx_ = -1;
+                    int idx_ = -1;
 
-                        if (idxT == REALSXP) {
-                            if (*REAL(idx) != NA_REAL)
-                                idx_ = (int)*REAL(idx) - 1;
-                        } else {
-                            if (*INTEGER(idx) != NA_INTEGER)
-                                idx_ = *INTEGER(idx) - 1;
-                        }
-
-                        if (idx_ >= 0 && idx_ < XLENGTH(vec)) {
-                            switch (vectorT) {
-                            case REALSXP:
-                                REAL(vec)
-                                [idx_] =
-                                    valT == REALSXP ? *REAL(val)
-                                                    : (double)*INTEGER(val);
-                                break;
-                            case INTSXP:
-                                INTEGER(vec)[idx_] = *INTEGER(val);
-                                break;
-                            case VECSXP:
-                                SET_VECTOR_ELT(vec, idx_, val);
-                                break;
-                            }
-                            ostack_popn(ctx, 3);
-
-                            ostack_push(ctx, vec);
-                            NEXT();
-                        }
+                    if (idxT == REALSXP) {
+                        if (*REAL(idx) != NA_REAL)
+                            idx_ = (int)*REAL(idx) - 1;
+                    } else {
+                        if (*INTEGER(idx) != NA_INTEGER)
+                            idx_ = *INTEGER(idx) - 1;
                     }
+
+                    if (idx_ >= 0 && idx_ < XLENGTH(vec)) {
+                        switch (vectorT) {
+                        case REALSXP:
+                            REAL(vec)
+                            [idx_] = valT == REALSXP ? *REAL(val)
+                                                     : (double)*INTEGER(val);
+                            break;
+                        case INTSXP:
+                            INTEGER(vec)[idx_] = *INTEGER(val);
+                            break;
+                        case VECSXP:
+                            SET_VECTOR_ELT(vec, idx_, val);
+                            break;
+                        }
+                        ostack_popn(ctx, 3);
+
+                        ostack_push(ctx, vec);
+                        NEXT();
+                    }
+                }
             }
 
             if (MAYBE_SHARED(vec)) {
-                vec = duplicate(vec);
-                ostack_at(ctx, 1) = vec;
+                vec = Rf_duplicate(vec);
+                ostack_set(ctx, 1, vec);
             }
 
-            SEXP args = CONS_NR(val, R_NilValue);
-            SET_TAG(args, symbol::value);
-            args = CONS_NR(idx, args);
-            args = CONS_NR(vec, args);
+            SEXP args = CONS_NR(vec, CONS_NR(idx, CONS_NR(val, R_NilValue)));
+            SET_TAG(CDDR(args), symbol::value);
             PROTECT(args);
-            res = nullptr;
 
+            res = nullptr;
             SEXP call = getSrcForCall(c, pc - 1, ctx);
             SEXP selector = CAR(call) == symbol::SuperAssign
                                 ? symbol::SuperAssignDoubleBracket
                                 : symbol::AssignDoubleBracket;
+
+            RCNTXT assignContext;
+            Rf_begincontext(&assignContext, CTXT_RETURN, call, getenv(),
+                            ENCLOS(getenv()), args, selector);
             if (isObject(vec)) {
                 res = dispatchApply(call, vec, args, selector, getenv(), ctx);
             }
@@ -2390,6 +2391,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
                 // following
                 SET_NAMED(res, 0);
             }
+            Rf_endcontext(&assignContext);
             ostack_popn(ctx, 3);
             UNPROTECT(1);
 
@@ -2448,8 +2450,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
             static SEXP prim = NULL;
             if (!prim) {
                 // TODO: we could call seq.default here, but it messes up the
-                // error
-                // call :(
+                // error call :(
                 prim = Rf_findFun(Rf_install("seq"), R_GlobalEnv);
             }
 
@@ -2488,7 +2489,8 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
                 SEXP argslist =
                     CONS_NR(from, CONS_NR(to, CONS_NR(by, R_NilValue)));
                 ostack_push(ctx, argslist);
-                res = applyClosure(call, prim, argslist, getenv(), R_NilValue);
+                res =
+                    Rf_applyClosure(call, prim, argslist, getenv(), R_NilValue);
                 ostack_pop(ctx);
             }
 
@@ -2547,14 +2549,14 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
         }
 
         INSTRUCTION(names_) {
-            ostack_push(ctx, getAttrib(ostack_pop(ctx), R_NamesSymbol));
+            ostack_push(ctx, Rf_getAttrib(ostack_pop(ctx), R_NamesSymbol));
             NEXT();
         }
 
         INSTRUCTION(set_names_) {
             SEXP val = ostack_pop(ctx);
             if (!isNull(val))
-                setAttrib(ostack_top(ctx), R_NamesSymbol, val);
+                Rf_setAttrib(ostack_top(ctx), R_NamesSymbol, val);
             NEXT();
         }
 
@@ -2580,13 +2582,13 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
             SEXP seq = ostack_at(ctx, 0);
             // TODO: we should extract the length just once at the begining of
             // the loop and generally have somthing more clever here...
-            SEXP value = allocVector(INTSXP, 1);
-            if (isVector(seq)) {
+            SEXP value = Rf_allocVector(INTSXP, 1);
+            if (Rf_isVector(seq)) {
                 INTEGER(value)[0] = LENGTH(seq);
-            } else if (isList(seq) || isNull(seq)) {
+            } else if (Rf_isList(seq) || isNull(seq)) {
                 INTEGER(value)[0] = Rf_length(seq);
             } else {
-                errorcall(R_NilValue, "invalid for() loop sequence");
+                Rf_errorcall(R_NilValue, "invalid for() loop sequence");
             }
             // TODO: Even when the for loop sequence is an object, R won't
             // dispatch on it. Since in RIR we use the normals extract2_1
@@ -2616,8 +2618,8 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
 
         INSTRUCTION(make_unique_) {
             SEXP val = ostack_top(ctx);
-            if (NAMED(val) >= 2) {
-                val = shallow_duplicate(val);
+            if (MAYBE_SHARED(val)) {
+                val = Rf_shallow_duplicate(val);
                 ostack_set(ctx, 0, val);
                 SET_NAMED(val, 1);
             }
@@ -2661,7 +2663,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
                 advanceJump();
 
                 if (s == CTXT_BREAK)
-                    pc = pc + offset;
+                    pc += offset;
                 PC_BOUNDSCHECK(pc, c);
             }
             NEXT();

@@ -186,7 +186,7 @@ void Branch::printArgs(std::ostream& out, bool tty) {
 
 void MkArg::printArgs(std::ostream& out, bool tty) {
     eagerArg()->printRef(out);
-    out << ", " << *prom << ", ";
+    out << ", " << *prom() << ", ";
 }
 
 void LdVar::printArgs(std::ostream& out, bool tty) {

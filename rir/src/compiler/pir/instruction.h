@@ -606,18 +606,19 @@ class FLI(Return, 1, Effect::None, EnvAccess::None) {
 
 class Promise;
 class FLIE(MkArg, 2, Effect::None, EnvAccess::Capture) {
+    Promise* prom_;
+
   public:
-    Promise* prom;
-    MkArg(Promise* prom_, Value* v, Value* env)
+    MkArg(Promise* prom, Value* v, Value* env)
         : FixedLenInstructionWithEnvSlot(
               RType::prom, {{PirType::valOrMissing()}}, {{v}}, env),
-          prom(prom_) {
+          prom_(prom) {
         assert(eagerArg() == v);
     }
     MkArg(Value* v, Value* env)
         : FixedLenInstructionWithEnvSlot(RType::prom, {{PirType::val()}}, {{v}},
                                          env),
-          prom(nullptr) {
+          prom_(nullptr) {
         assert(eagerArg() == v);
     }
 
@@ -625,6 +626,8 @@ class FLIE(MkArg, 2, Effect::None, EnvAccess::Capture) {
     typedef std::function<void(Value*)> EagerMaybe;
 
     Value* eagerArg() const { return arg(0).val(); }
+    void updatePromise(Promise* p) { prom_ = p; }
+    Promise* prom() { return prom_; }
 
     void ifEager(EagerMaybe maybe) {
         if (eagerArg() != Missing::instance())

@@ -18,6 +18,7 @@ class TheCleanup {
         std::unordered_set<size_t> used_p;
         std::unordered_map<BB*, std::unordered_set<Phi*>> usedBB;
         std::unordered_map<SetShared*, int> isShared;
+        std::deque<Promise*> todo;
 
         Visitor::run(function->entry, [&](BB* bb) {
             auto ip = bb->begin();
@@ -62,7 +63,8 @@ class TheCleanup {
                             usedBB[curBB].insert(phi);
                     }
                 } else if (auto arg = MkArg::Cast(i)) {
-                    used_p.insert(arg->prom->id);
+                    used_p.insert(arg->prom()->id);
+                    todo.push_back(arg->prom());
                 } else if (auto shared = SetShared::Cast(i)) {
                     if (i->unused()) {
                         removed = true;
@@ -94,25 +96,17 @@ class TheCleanup {
                 shared.first->replaceUsesWith(shared.first->arg<0>().val());
         }
 
-        // Recursively serach promises for referencs to other promises
-        std::deque<Promise*> todo;
-        for (size_t i = 0; i < function->promises.size(); ++i) {
-            Promise* p = function->promises[i];
-            if (p && used_p.find(i) != used_p.end()) {
-                todo.push_back(p);
-            }
-        }
         while (!todo.empty()) {
             Promise* p = todo.back();
             todo.pop_back();
             Visitor::run(p->entry, [&](Instruction* i) {
                 MkArg* mk = MkArg::Cast(i);
                 if (mk) {
-                    size_t id = mk->prom->id;
+                    size_t id = mk->prom()->id;
                     if (used_p.find(id) == used_p.end()) {
                         // found a new used promise...
-                        todo.push_back(mk->prom);
-                        used_p.insert(mk->prom->id);
+                        todo.push_back(mk->prom());
+                        used_p.insert(mk->prom()->id);
                     }
                 }
             });

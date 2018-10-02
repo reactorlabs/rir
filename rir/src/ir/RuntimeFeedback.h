@@ -3,11 +3,14 @@
 
 #include "../compiler/pir/value.h"
 #include "R/r.h"
+#include "common.h"
 #include <array>
 #include <cstdint>
 #include <unordered_map>
 
 namespace rir {
+
+struct Code;
 
 #pragma pack(push)
 #pragma pack(1)
@@ -26,20 +29,10 @@ struct ObservedCalles {
     uint32_t numTargets : TargetBits;
     uint32_t taken : CounterBits;
 
-    std::array<SEXP, MaxTargets> targets;
+    RIR_INLINE void record(Code* caller, SEXP callee);
+    SEXP getTarget(size_t pos);
 
-    void record(SEXP callee) {
-        if (taken < CounterOverflow)
-            taken++;
-        if (numTargets < MaxTargets) {
-            int i = 0;
-            for (; i < numTargets; ++i)
-                if (targets[i] == callee)
-                    break;
-            if (i == numTargets)
-                targets[numTargets++] = callee;
-        }
-    }
+    std::array<SEXP, MaxTargets> targets;
 };
 
 struct ObservedType {
