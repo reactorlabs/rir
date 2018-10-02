@@ -34,3 +34,5 @@ benchmarks/
 .travis_token
 /bin
 .bin_create
+*.DS_Store
+*.code-workspace

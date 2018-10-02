@@ -160,7 +160,7 @@ void LogStream::failed(const std::string& msg) {
 
 void LogStream::highlightOn() {
     if (tty())
-        ConsoleColor::red(out);
+        ConsoleColor::cyan(out);
 }
 void LogStream::highlightOff() {
     if (tty())
