@@ -10,6 +10,7 @@
 #include "runtime/Function.h"
 #include "utils/Pool.h"
 
+#include <algorithm>
 #include <iostream>
 #include <vector>
 
@@ -59,23 +60,17 @@ class FunctionWriter {
                     const std::map<PcOffset, BC::PoolIdx>& sources,
                     const std::map<PcOffset, BC::Label>& patchpoints,
                     const std::map<PcOffset, std::vector<BC::Label>>& labels,
-                    bool markDefaultArg, size_t localsCnt, size_t nops) {
+                    bool markDefaultArg, size_t localsCnt) {
         assert(function_ == nullptr &&
                "Trying to add more code after finalizing");
-        unsigned codeSize = originalCodeSize - nops;
-        unsigned totalSize = Code::size(codeSize, sources.size());
-        size_t index = codeVec.size();
-
-        SEXP store = Rf_allocVector(EXTERNALSXP, totalSize);
-        void* payload = INTEGER(store);
-        Code* code =
-            new (payload) Code(nullptr, index, ast, codeSize, sources.size(),
-                               markDefaultArg, localsCnt);
-        preserve(store);
-        codeVec.push_back(store);
-        functionSize += sizeof(SEXP);
 
         size_t numberOfSources = 0;
+        size_t skippedPatchpoints = 0;
+        size_t codeSize = 0;
+
+        auto buffer = std::make_unique<Opcode[]>(originalCodeSize);
+        auto sourcesBuffer =
+            std::make_unique<Code::SrclistEntry[]>(sources.size());
 
         // Since we are removing instructions from the BC stream, we need to
         // update labels and patchpoint offsets.
@@ -83,11 +78,10 @@ class FunctionWriter {
         std::unordered_map<PcOffset, BC::Label> updatedPatchpoints;
         {
             Opcode* from = (Opcode*)bc;
-            Opcode* to = code->code();
+            Opcode* to = buffer.get();
             const Opcode* from_start = (Opcode*)bc;
-            const Opcode* to_start = code->code();
+            const Opcode* to_start = buffer.get();
             const Opcode* from_end = from + originalCodeSize;
-            const Opcode* to_end = to + codeSize;
 
             // Since those are ordered maps, the elements appear in order. Our
             // strategy is thus, to wait for the next element to show up in the
@@ -98,7 +92,7 @@ class FunctionWriter {
             auto label = labels.begin();
 
             while (from != from_end) {
-                assert(to < to_start + codeSize);
+                assert(to < to_start + originalCodeSize);
 
                 unsigned bcSize = BC::size(from);
                 PcOffset fromOffset = from - from_start;
@@ -123,9 +117,21 @@ class FunctionWriter {
 
                 // We skip nops (and maybe potentially other instructions)
                 if (*from == Opcode::nop_) {
-                    nops--;
                     from++;
                     continue;
+                }
+
+                if (*from == Opcode::br_) {
+                    auto t = patchpoints.find(fromOffset + 1)->second;
+                    if (labels.count(fromOffsetAfter)) {
+                        auto v = labels.at(fromOffsetAfter);
+                        if (std::find(v.begin(), v.end(), t) != v.end()) {
+                            patchpoint++;
+                            skippedPatchpoints++;
+                            from += bcSize;
+                            continue;
+                        }
+                    }
                 }
 
                 // Copy the bytecode from 'from' to 'to'
@@ -138,9 +144,8 @@ class FunctionWriter {
                 if (source != sources.end()) {
                     assert(source->first >= fromOffsetAfter);
                     if (source->first == fromOffsetAfter) {
-                        code->srclist()[numberOfSources].pcOffset = toOffset;
-                        code->srclist()[numberOfSources].srcIdx =
-                            source->second;
+                        sourcesBuffer[numberOfSources].pcOffset = toOffset;
+                        sourcesBuffer[numberOfSources].srcIdx = source->second;
                         numberOfSources++;
                         source++;
                     }
@@ -163,17 +168,11 @@ class FunctionWriter {
                 from += bcSize;
                 to += bcSize;
             }
-
-            // Make sure that there is no dangling garbage at the end, if we
-            // skipped more instructions than anticipated
-            while (to != to_end) {
-                *to++ = Opcode::nop_;
-            }
-
-            assert(to == to_end);
+            codeSize = to - to_start;
         }
-        assert(nops == 0 && "Client reported wrong number of nops");
-        assert(patchpoints.size() == updatedPatchpoints.size());
+        assert(patchpoints.size() ==
+               updatedPatchpoints.size() + skippedPatchpoints);
+        assert(sources.size() == numberOfSources);
 
         // Patch jumps with actual offset in bytes
         for (auto p : updatedPatchpoints) {
@@ -184,10 +183,25 @@ class FunctionWriter {
             unsigned target = updatedLabel2Pos[labelNr];
             assert(target != (unsigned)-1 && "Jump to missing label");
             BC::Jmp j = target - pos - sizeof(BC::Jmp);
-            *(BC::Jmp*)((uintptr_t)code->code() + pos) = j;
+            *(BC::Jmp*)((uintptr_t)buffer.get() + pos) = j;
         }
 
-        assert(numberOfSources == sources.size());
+        unsigned totalSize = Code::size(codeSize, sources.size());
+        size_t index = codeVec.size();
+
+        SEXP store = Rf_allocVector(EXTERNALSXP, totalSize);
+        void* payload = INTEGER(store);
+        Code* code =
+            new (payload) Code(nullptr, index, ast, codeSize, sources.size(),
+                               markDefaultArg, localsCnt);
+        preserve(store);
+        codeVec.push_back(store);
+        functionSize += sizeof(SEXP);
+
+        auto to = code->code();
+        memcpy(to, buffer.get(), codeSize);
+        memcpy(to + pad4(codeSize), sourcesBuffer.get(),
+               sizeof(Code::SrclistEntry) * sources.size());
 
         return code;
     }
