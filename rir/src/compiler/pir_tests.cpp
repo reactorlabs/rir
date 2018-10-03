@@ -158,7 +158,7 @@ void insertTypeFeedbackForBinops(rir::Function* srcFunction,
         Opcode* finger = function->code();
         while (finger != end) {
             Opcode* prev = finger;
-            BC bc = BC::advance(&finger);
+            BC bc = BC::advance(&finger, function);
             if (bc.bc == Opcode::record_binop_) {
                 prev++;
                 ObservedValues* feedback = (ObservedValues*)prev;

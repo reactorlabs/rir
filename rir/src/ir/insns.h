@@ -446,7 +446,7 @@ DEF_INSTR(deopt_, 1, -1, 0, 0)
  * They keep a struct from RuntimeFeedback.h inline, that's why they are quite
  * heavy in size.
  */
-DEF_INSTR(record_call_, 7, 1, 1, 0)
+DEF_INSTR(record_call_, 4, 1, 1, 0)
 DEF_INSTR(record_binop_, 2, 2, 2, 0)
 
 #undef DEF_INSTR

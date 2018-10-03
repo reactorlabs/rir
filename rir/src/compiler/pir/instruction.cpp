@@ -371,7 +371,6 @@ MkFunCls::MkFunCls(Closure* fun, Value* lexicalEnv, SEXP fml, SEXP code,
 
 void MkFunCls::printArgs(std::ostream& out, bool tty) {
     out << *fun;
-    out << ", ";
     Instruction::printArgs(out, tty);
 }
 

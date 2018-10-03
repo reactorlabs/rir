@@ -12,11 +12,11 @@ void ObservedCalles::record(Code* caller, SEXP callee) {
     if (numTargets < MaxTargets) {
         int i = 0;
         for (; i < numTargets; ++i)
-            if (targets[i] == callee)
+            if (caller->getExtraPoolEntry(targets[i]) == callee)
                 break;
         if (i == numTargets) {
-            caller->addExtraPoolEntry(callee);
-            targets[numTargets++] = callee;
+            auto idx = caller->addExtraPoolEntry(callee);
+            targets[numTargets++] = idx;
         }
     }
 }

@@ -100,7 +100,7 @@ std::unordered_set<Opcode*> findMergepoints(rir::Code* srcCode) {
     std::unordered_map<Opcode*, std::vector<Opcode*>> incom;
     // Mark incoming jmps
     for (auto pc = srcCode->code(); pc != srcCode->endCode();) {
-        BC bc = BC::decode(pc);
+        BC bc = BC::decodeShallow(pc);
         if (bc.isJmp()) {
             incom[bc.jmpTarget(pc)].push_back(pc);
         }
@@ -108,7 +108,7 @@ std::unordered_set<Opcode*> findMergepoints(rir::Code* srcCode) {
     }
     // Mark falltrough to label
     for (auto pc = srcCode->code(); pc != srcCode->endCode();) {
-        BC bc = BC::decode(pc);
+        BC bc = BC::decodeShallow(pc);
         if (!bc.isUncondJmp() && !bc.isExit()) {
             Opcode* next = BC::next(pc);
             if (incom.count(next))
@@ -233,7 +233,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, rir::Code* srcCode,
     case Opcode::named_call_implicit_:
     case Opcode::call_implicit_: {
         std::vector<Value*> args;
-        for (auto argi : bc.immediateCallArguments) {
+        for (auto argi : bc.callExtra().immediateCallArguments) {
             if (argi == DOTS_ARG_IDX) {
                 log.warn("Cannot compile call with ... arguments");
                 return false;
@@ -266,7 +266,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, rir::Code* srcCode,
                 auto& feedback =
                     insert.function->runtimeFeedback->calles->at(callee);
                 if (feedback.numTargets == 1)
-                    monomorphic = feedback.targets[0];
+                    monomorphic = feedback.getTarget(srcCode, 0);
             }
         }
 
@@ -274,13 +274,17 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, rir::Code* srcCode,
         auto insertGenericCall = [&]() {
             if (bc.bc == Opcode::named_call_implicit_)
                 push(insert(new NamedCall(insert.env, pop(), args,
-                                          bc.callArgumentNames, ast)));
+                                          bc.callExtra().callArgumentNames,
+                                          ast)));
             else
                 push(insert(new Call(insert.env, pop(), args, ast)));
         };
         if (monomorphic && isValidClosureSEXP(monomorphic)) {
+            std::string name = "";
+            if (auto ldfun = LdFun::Cast(callee))
+                name = CHAR(PRINTNAME(ldfun->varName));
             compiler.compileClosure(
-                monomorphic, "",
+                monomorphic, name,
                 [&](Closure* f) {
                     Value* expected = insert(new LdConst(monomorphic));
                     Value* t = insert(new Identical(callee, expected));
@@ -322,7 +326,8 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, rir::Code* srcCode,
 
         auto target = pop();
         if (bc.bc == Opcode::named_call_)
-            push(insert(new NamedCall(env, target, args, bc.callArgumentNames,
+            push(insert(new NamedCall(env, target, args,
+                                      bc.callExtra().callArgumentNames,
                                       bc.immediate.callFixedArgs.ast)));
         else
             push(insert(
@@ -643,7 +648,7 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) const {
             other = State(cur, true, insert.getCurrentBB(), finger);
         }
         const auto pos = finger;
-        BC bc = BC::advance(&finger);
+        BC bc = BC::advance(&finger, srcCode);
         const auto nextPos = finger;
 
         assert(pos != end);
@@ -743,9 +748,9 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) const {
 
         ifFunctionLiteral(pos, end, [&](Opcode* next) {
             Opcode* pc = pos;
-            BC ldfmls = BC::advance(&pc);
-            BC ldcode = BC::advance(&pc);
-            BC ldsrc = BC::advance(&pc);
+            BC ldfmls = BC::advance(&pc, srcCode);
+            BC ldcode = BC::advance(&pc, srcCode);
+            BC ldsrc = BC::advance(&pc, srcCode);
             pc = BC::next(pc); // close
 
             SEXP fmls = ldfmls.immediateConst();
@@ -766,13 +771,24 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) const {
                 for (int i = 0; i < 2 && n < end; ++i, n = BC::next(n))
                     ;
                 if (n < end) {
-                    auto nextbc = BC::decode(n);
+                    auto nextbc = BC::decodeShallow(n);
                     if (nextbc.bc == Opcode::stvar_)
                         inner << ">"
                               << CHAR(PRINTNAME(nextbc.immediateConst()));
                 }
             }
-            inner << "@" << (pos - srcCode->code());
+            inner << "@";
+            if (srcCode != srcCode->function()->body()) {
+                size_t i = 0;
+                for (auto c : insert.function->promises) {
+                    if (c == insert.code) {
+                        inner << "Prom(" << i << ")";
+                        break;
+                    }
+                    i++;
+                }
+            }
+            inner << (pos - srcCode->code());
 
             compiler.compileFunction(
                 function, inner.str(), formals,

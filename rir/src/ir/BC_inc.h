@@ -5,6 +5,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <memory>
 
 #include "R/r.h"
 #include "common.h"
@@ -134,9 +135,6 @@ class BC {
     Opcode bc;
     ImmediateArguments immediate;
 
-    std::vector<ArgIdx> immediateCallArguments;
-    std::vector<PoolIdx> callArgumentNames;
-
     BC() : bc(Opcode::invalid_) {}
 
     BC(const BC& other) = delete;
@@ -144,13 +142,11 @@ class BC {
 
     BC(BC&& other)
         : bc(other.bc), immediate(other.immediate),
-          immediateCallArguments(std::move(other.immediateCallArguments)),
-          callArgumentNames(std::move(other.callArgumentNames)){};
+          extraInformation(std::move(other.extraInformation)) {}
     BC& operator=(BC&& other) {
         bc = other.bc;
-        immediate = other.immediate;
-        immediateCallArguments = std::move(other.immediateCallArguments);
-        callArgumentNames = std::move(other.callArgumentNames);
+        immediate = std::move(other.immediate);
+        extraInformation = std::move(other.extraInformation);
         return *this;
     }
 
@@ -200,7 +196,7 @@ class BC {
     SEXP immediateConst() const;
 
     inline static Opcode* jmpTarget(Opcode* pos) {
-        BC bc = decode(pos);
+        BC bc = decodeShallow(pos);
         assert(bc.isJmp());
         return (Opcode*)((uintptr_t)pos + bc.size() + bc.immediate.offset);
     }
@@ -266,14 +262,10 @@ class BC {
 
     // If the decoded BC is not needed, you should use next, since it is much
     // faster.
-    inline static BC advance(Opcode** pc) __attribute__((warn_unused_result)) {
-        BC cur(*pc);
+    inline static BC advance(Opcode** pc, Code* code)
+        __attribute__((warn_unused_result)) {
+        BC cur = decode(*pc, code);
         *pc = (Opcode*)((uintptr_t)(*pc) + cur.size());
-        return cur;
-    }
-
-    inline static BC decode(Opcode* pc) {
-        BC cur(pc);
         return cur;
     }
 
@@ -379,32 +371,131 @@ class BC {
     inline static BC recordCall();
     inline static BC recordBinop();
 
+    inline static BC decode(Opcode* pc, const Code* code) {
+        BC cur;
+        cur.decodeFixlen(pc);
+        cur.decodeExtraInformation(pc, code);
+        return cur;
+    }
+
+    inline static BC decodeShallow(Opcode* pc) {
+        BC cur;
+        cur.decodeFixlen(pc);
+        return cur;
+    }
+
   private:
-    explicit BC(Opcode* pc) {
-        bc = *pc;
-        pc++;
-        immediate = decodeImmediateArguments(bc, pc);
-        pc += sizeof(CallFixedArgs);
-        // Read implicit promise argument offsets
-        if (bc == Opcode::call_implicit_ ||
-            bc == Opcode::named_call_implicit_) {
-            for (size_t i = 0; i < immediate.callFixedArgs.nargs; ++i)
-                immediateCallArguments.push_back(readImmediate(&pc));
+    // Some Bytecodes need extra information. For example in the case of the
+    // call feedback bytecode, the recorded call targets are in the code
+    // objects extra pool. Or for the variable length call bytecodes we need a
+    // vector to store arguments. For those bytecodes we allocate an extra
+    // information struct to hold those things.
+    struct ExtraInformation {};
+    struct CallInstructionExtraInformation : public ExtraInformation {
+        std::vector<BC::ArgIdx> immediateCallArguments;
+        std::vector<BC::PoolIdx> callArgumentNames;
+    };
+    struct CallFeedbackExtraInformation : public ExtraInformation {
+        std::vector<SEXP> targets;
+    };
+    std::unique_ptr<ExtraInformation> extraInformation = nullptr;
+
+  public:
+    CallInstructionExtraInformation& callExtra() const {
+        switch (bc) {
+        case Opcode::call_implicit_:
+        case Opcode::named_call_implicit_:
+        case Opcode::named_call_:
+            break;
+        default:
+            assert(false && "Not a varlen call instruction");
         }
-        // Read named arguments
-        if (bc == Opcode::named_call_ || bc == Opcode::named_call_implicit_) {
-            for (size_t i = 0; i < immediate.callFixedArgs.nargs; ++i)
-                callArgumentNames.push_back(readImmediate(&pc));
+        assert(extraInformation.get() &&
+               "missing extra information. created through decodeShallow?");
+        return *static_cast<CallInstructionExtraInformation*>(
+            extraInformation.get());
+    }
+
+    CallFeedbackExtraInformation& callFeedbackExtra() const {
+        assert(bc == Opcode::record_call_ && "not a record call instruction");
+        assert(extraInformation.get() &&
+               "missing extra information. created through decodeShallow?");
+        return *static_cast<CallFeedbackExtraInformation*>(
+            extraInformation.get());
+    }
+
+  private:
+    void allocExtraInformation() {
+        assert(extraInformation == nullptr);
+
+        switch (bc) {
+        case Opcode::invalid_:
+            assert(false && "run decodeFixlen first!");
+            break;
+
+        case Opcode::call_implicit_:
+        case Opcode::named_call_implicit_:
+        case Opcode::named_call_: {
+            extraInformation.reset(new CallInstructionExtraInformation);
+            break;
+        }
+        case Opcode::record_call_: {
+            extraInformation.reset(new CallFeedbackExtraInformation);
+            break;
+        }
+        default: {}
         }
     }
 
-    explicit BC(Opcode bc) : bc(bc) {}
-    BC(Opcode bc, const ImmediateArguments& immediate)
-        : bc(bc), immediate(immediate) {}
-    BC(Opcode bc, const ImmediateArguments& immediate,
-       const std::vector<FunIdx>& args, const std::vector<PoolIdx>& names)
-        : bc(bc), immediate(immediate), immediateCallArguments(args),
-          callArgumentNames(names) {}
+    void decodeExtraInformation(Opcode* pc, const Code* code) {
+        allocExtraInformation();
+        pc++; // skip bc
+
+        switch (bc) {
+        case Opcode::call_implicit_:
+        case Opcode::named_call_implicit_:
+        case Opcode::named_call_: {
+            pc += sizeof(CallFixedArgs);
+
+            // Read implicit promise argument offsets
+            if (bc == Opcode::call_implicit_ ||
+                bc == Opcode::named_call_implicit_) {
+                for (size_t i = 0; i < immediate.callFixedArgs.nargs; ++i)
+                    callExtra().immediateCallArguments.push_back(
+                        readImmediate(&pc));
+            }
+            // Read named arguments
+            if (bc == Opcode::named_call_ ||
+                bc == Opcode::named_call_implicit_) {
+                for (size_t i = 0; i < immediate.callFixedArgs.nargs; ++i)
+                    callExtra().callArgumentNames.push_back(readImmediate(&pc));
+            }
+
+            break;
+        }
+        case Opcode::record_call_: {
+            // Read call target feedback from the extra pool
+            for (size_t i = 0; i < immediate.callFeedback.numTargets; ++i)
+                callFeedbackExtra().targets.push_back(
+                    immediate.callFeedback.getTarget(code, i));
+            break;
+        }
+        default: {}
+        }
+    }
+
+    inline void decodeFixlen(Opcode* pc) {
+        bc = *pc;
+        pc++;
+        immediate = decodeImmediateArguments(bc, pc);
+    }
+
+    // Those two should stay private. If you want to decode a BC use BC::decode
+    // instead. To create BC's use the static builder methods.
+    explicit BC(Opcode bc) : bc(bc) { allocExtraInformation(); }
+    BC(Opcode bc, const ImmediateArguments& i) : bc(bc), immediate(i) {
+        allocExtraInformation();
+    }
 
     static unsigned RIR_INLINE fixedSize(Opcode bc) {
         switch (bc) {
@@ -595,6 +686,8 @@ class BC {
         }
         return immediate;
     }
+
+    friend class CodeVerifier;
 };
 
 } // namespace rir

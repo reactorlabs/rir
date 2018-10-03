@@ -9,7 +9,7 @@ namespace rir {
 namespace pir {
 
 void Closure::print(std::ostream& out, bool tty) const {
-    out << "Closure " << this << "(" << function << ")\n";
+    out << *this << "\n";
     printCode(out, tty);
     for (auto p : promises) {
         if (p)
@@ -32,7 +32,7 @@ Closure::~Closure() {
 }
 
 Closure* Closure::clone() {
-    Closure* c = new Closure(argNames, env, function);
+    Closure* c = new Closure(name, argNames, env, function);
 
     // clone code
     c->entry = BBTransform::clone(entry, c);

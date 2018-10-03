@@ -1,6 +1,3 @@
-#include <alloca.h>
-#include <assert.h>
-
 #include "R/Funtab.h"
 #include "R/Symbols.h"
 #include "R/r.h"
@@ -9,6 +6,9 @@
 #include "ir/Deoptimization.h"
 #include "ir/RuntimeFeedback_inl.h"
 #include "runtime.h"
+
+#include <assert.h>
+#include <deque>
 
 #define NOT_IMPLEMENTED assert(false)
 
@@ -1097,7 +1097,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
     };
 #endif
 
-    std::vector<FrameInfo*> synthesizeFrames;
+    std::deque<FrameInfo*> synthesizeFrames;
     assert(c->info.magic == CODE_MAGIC);
 
     Locals locals(c->localsCount);
@@ -2439,6 +2439,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
             FrameInfo& f = m->frames[0];
             pc = f.pc;
             c = f.code;
+            c->function()->registerInvocation();
             assert(c->code() <= pc && pc < c->endCode());
             SEXP e = ostack_pop(ctx);
             assert(TYPEOF(e) == ENVSXP);
@@ -2698,13 +2699,14 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
 
 eval_done:
     while (!synthesizeFrames.empty()) {
-        FrameInfo* f = synthesizeFrames.back();
-        synthesizeFrames.pop_back();
+        FrameInfo* f = synthesizeFrames.front();
+        synthesizeFrames.pop_front();
         SEXP res = ostack_pop(ctx);
         SEXP e = ostack_pop(ctx);
         assert(TYPEOF(e) == ENVSXP);
         *env = e;
         ostack_push(ctx, res);
+        f->code->function()->registerInvocation();
         res = evalRirCode(f->code, ctx, env, callCtxt, f->pc);
         ostack_push(ctx, res);
     }

@@ -72,10 +72,10 @@ void Rir2PirCompiler::compileClosure(rir::Function* srcFunction,
     // TODO: if compilation fails, we should remember that somehow. Otherwise
     // we will continue on trying to compile the same function over and over
     // again.
-    module->createIfMissing(srcFunction, formals.names, closureEnv,
+    module->createIfMissing(name, srcFunction, formals.names, closureEnv,
                             [&](Closure* pirFunction) {
                                 Builder builder(pirFunction, closureEnv);
-                                auto& log = logger.begin(pirFunction, name);
+                                auto& log = logger.begin(pirFunction);
                                 Rir2Pir rir2pir(*this, srcFunction, log, name);
 
                                 if (rir2pir.tryCompile(builder)) {

@@ -23,14 +23,15 @@ void Module::printEachVersion(std::ostream& out, bool tty) {
     }
 }
 
-void Module::createIfMissing(rir::Function* f, const std::vector<SEXP>& a,
-                             Env* env, MaybeCreate create) {
+void Module::createIfMissing(const std::string& name, rir::Function* f,
+                             const std::vector<SEXP>& a, Env* env,
+                             MaybeCreate create) {
     auto idx = FunctionAndEnv(f, env);
     if (functionMap.count(idx)) {
         return;
     }
     assert(functionMap.count(idx) == 0);
-    auto* cls = new pir::Closure(a, env, f);
+    auto* cls = new pir::Closure(name, a, env, f);
     auto functionsIdx = functions.size();
     functions.push_back(VersionedClosure(cls));
     functionMap.emplace(idx, functionsIdx);

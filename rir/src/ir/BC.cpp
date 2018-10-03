@@ -36,15 +36,15 @@ void BC::write(CodeStream& cs) const {
 
     case Opcode::call_implicit_:
         cs.insert(immediate.callFixedArgs);
-        for (FunIdx arg : immediateCallArguments)
+        for (FunIdx arg : callExtra().immediateCallArguments)
             cs.insert(arg);
         break;
 
     case Opcode::named_call_implicit_:
         cs.insert(immediate.callFixedArgs);
-        for (FunIdx arg : immediateCallArguments)
+        for (FunIdx arg : callExtra().immediateCallArguments)
             cs.insert(arg);
-        for (PoolIdx name : callArgumentNames)
+        for (PoolIdx name : callExtra().callArgumentNames)
             cs.insert(name);
         break;
 
@@ -54,7 +54,7 @@ void BC::write(CodeStream& cs) const {
 
     case Opcode::named_call_:
         cs.insert(immediate.callFixedArgs);
-        for (PoolIdx name : callArgumentNames)
+        for (PoolIdx name : callExtra().callArgumentNames)
             cs.insert(name);
         break;
 
@@ -97,6 +97,11 @@ void BC::write(CodeStream& cs) const {
         return;
 
     case Opcode::record_call_:
+        // Call feedback targets are stored in the code extra pool. We don't
+        // have access to them here, so we can't write a call feedback with
+        // preseeded values.
+        assert(immediate.callFeedback.numTargets == 0 &&
+               "cannot write call feedback targets");
         cs.insert(immediate.callFeedback);
         return;
 
@@ -175,7 +180,7 @@ SEXP BC::immediateConst() const { return Pool::get(immediate.pool); }
 
 void BC::printImmediateArgs(std::ostream& out) const {
     out << "[";
-    for (auto arg : immediateCallArguments) {
+    for (auto arg : callExtra().immediateCallArguments) {
         if (arg == MISSING_ARG_IDX)
             out << " _";
         else if (arg == DOTS_ARG_IDX)
@@ -188,7 +193,7 @@ void BC::printImmediateArgs(std::ostream& out) const {
 
 void BC::printNames(std::ostream& out) const {
     out << "[";
-    for (auto name : callArgumentNames) {
+    for (auto name : callExtra().callArgumentNames) {
         SEXP n = Pool::get(name);
         out << " "
             << (n == nullptr || n == R_NilValue ? "_" : CHAR(PRINTNAME(n)));
@@ -298,8 +303,8 @@ void BC::print(std::ostream& out) const {
         else
             out << prof.numTargets << ">" << (prof.numTargets ? ", " : " ");
         for (int i = 0; i < prof.numTargets; ++i)
-            out << prof.getTarget(i) << "("
-                << type2char(TYPEOF(prof.getTarget(i))) << ") ";
+            out << callFeedbackExtra().targets[i] << "("
+                << type2char(TYPEOF(callFeedbackExtra().targets[i])) << ") ";
         out << "]";
         break;
     }

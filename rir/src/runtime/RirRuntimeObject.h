@@ -38,15 +38,7 @@ template <typename BASE, uint32_t MAGIC>
 struct RirRuntimeObject {
     rir_header info;
 
-    void setEntry(size_t pos, SEXP v) {
-        EXTERNALSXP_SET_ENTRY(this->container(), pos, v);
-    }
-
-    SEXP getEntry(size_t pos) {
-        return EXTERNALSXP_ENTRY(this->container(), pos);
-    }
-
-    SEXP container() {
+    SEXP container() const {
         // cppcheck-suppress thisSubtraction
         SEXP result = (SEXP)((uintptr_t)this - sizeof(VECTOR_SEXPREC));
         assert(TYPEOF(result) == EXTERNALSXP &&
@@ -71,6 +63,14 @@ struct RirRuntimeObject {
     }
 
   protected:
+    void setEntry(size_t pos, SEXP v) {
+        EXTERNALSXP_SET_ENTRY(this->container(), pos, v);
+    }
+
+    SEXP getEntry(size_t pos) const {
+        return EXTERNALSXP_ENTRY(this->container(), pos);
+    }
+
     RirRuntimeObject(uint32_t gc_area_start, uint32_t gc_area_length)
         : info{gc_area_start, gc_area_length, MAGIC} {
         uint8_t* start = (uint8_t*)this + gc_area_start;

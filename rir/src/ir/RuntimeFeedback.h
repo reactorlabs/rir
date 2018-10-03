@@ -30,9 +30,9 @@ struct ObservedCalles {
     uint32_t taken : CounterBits;
 
     RIR_INLINE void record(Code* caller, SEXP callee);
-    SEXP getTarget(size_t pos);
+    SEXP getTarget(const Code* code, size_t pos) const;
 
-    std::array<SEXP, MaxTargets> targets;
+    std::array<unsigned, MaxTargets> targets;
 };
 
 struct ObservedType {
@@ -48,7 +48,7 @@ struct ObservedType {
 
     bool isObj() const { return object; }
 };
-static_assert(sizeof(ObservedCalles) == 7 * sizeof(uint32_t),
+static_assert(sizeof(ObservedCalles) == 4 * sizeof(uint32_t),
               "Size needs to fit inside a record_ bc immediate args");
 
 struct ObservedValues {

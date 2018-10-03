@@ -5,6 +5,7 @@
 #include "code.h"
 #include "pir.h"
 #include <functional>
+#include <sstream>
 
 namespace rir {
 namespace pir {
@@ -20,17 +21,27 @@ namespace pir {
 class Closure : public Code {
   private:
     friend class Module;
-    Closure(std::initializer_list<SEXP> a, Env* env, rir::Function* function)
-        : env(env), function(function), argNames(a),
-          runtimeFeedback(new ProfiledValues()) {}
-    Closure(const std::vector<SEXP>& a, Env* env, rir::Function* function)
-        : env(env), function(function), argNames(a),
-          runtimeFeedback(new ProfiledValues()) {}
+    static std::string uniqueName(const Closure* c, const std::string& name) {
+        std::stringstream id;
+        id << name << "[" << c << "]";
+        return id.str();
+    }
+
+    Closure(const std::string& name, std::initializer_list<SEXP> a, Env* env,
+            rir::Function* function)
+        : env(env), function(function), name(uniqueName(this, name)),
+          argNames(a), runtimeFeedback(new ProfiledValues()) {}
+    Closure(const std::string& name, const std::vector<SEXP>& a, Env* env,
+            rir::Function* function)
+        : env(env), function(function), name(uniqueName(this, name)),
+          argNames(a), runtimeFeedback(new ProfiledValues()) {}
 
     Env* env;
     rir::Function* function;
 
   public:
+    const std::string name;
+
     Env* closureEnv() const { return env; }
     rir::Function* rirVersion() { return function; }
 
@@ -44,7 +55,7 @@ class Closure : public Code {
     Promise* createProm(unsigned srcPoolIdx);
 
     friend std::ostream& operator<<(std::ostream& out, const Closure& e) {
-        out << "Func(" << (void*)&e << ")";
+        out << e.name;
         return out;
     }
 

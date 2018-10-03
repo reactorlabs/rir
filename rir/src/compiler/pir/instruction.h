@@ -1124,20 +1124,36 @@ class VLIE(Safepoint, Effect::Any, EnvAccess::Leak) {
             pushArg(v);
     }
 
+    void updateNext(Safepoint* s) {
+        assert(inlined);
+        assert(arg(stackSize).type() == NativeType::safepoint);
+        arg(stackSize).val() = s;
+    }
+
     void next(Safepoint* s) {
         assert(!inlined);
         inlined = true;
         pushArg(s, NativeType::safepoint);
     }
 
-    Safepoint* next() {
+    Safepoint* next() const {
         if (inlined) {
-            auto r = Cast(arg(nargs() - 2).val());
+            auto r = Cast(arg(stackSize).val());
             assert(r);
             return r;
         } else {
             return nullptr;
         }
+    }
+
+    Value* tos() { return arg(stackSize - 1).val(); }
+
+    void popStack() {
+        stackSize--;
+        // Move the next() ptr
+        if (inlined)
+            arg(stackSize) = arg(stackSize + 1);
+        popArg();
     }
 
     void printArgs(std::ostream& out, bool tty) override;
