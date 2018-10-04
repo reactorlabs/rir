@@ -20,15 +20,19 @@ void ElideEnvSpec::apply(Closure* function) const {
         while (ip != bb->end()) {
             Instruction* i = *ip;
 
-            // We assume that always before a binop that enables speculation
-            // there will be a safepoint inserted only for that purpose
+            // Initially before a binop that enables speculation there should
+            // always be a safepoint inserted only for that purpose. However,
+            // interleavings with other optimization passes may change this.
             if (Safepoint::Cast(i)) {
                 lastSafepoint = Safepoint::Cast(i);
                 ip++;
                 continue;
             } else {
-                if (i->hasEffect())
+                if (i->hasEffect()) {
                     lastSafepoint = nullptr;
+                    ip++;
+                    continue;
+                }
             }
 
             if ((Lte::Cast(i) || Gte::Cast(i) || Lt::Cast(i) || Gt::Cast(i) ||
