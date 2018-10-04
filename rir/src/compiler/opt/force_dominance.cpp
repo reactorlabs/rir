@@ -3,7 +3,7 @@
 #include "../pir/pir_impl.h"
 #include "../transform/bb.h"
 #include "../transform/replace.h"
-#include "phase_definitions.h"
+#include "pass_definitions.h"
 
 namespace {
 

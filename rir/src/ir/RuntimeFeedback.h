@@ -6,7 +6,6 @@
 #include "common.h"
 #include <array>
 #include <cstdint>
-#include <unordered_map>
 
 namespace rir {
 
@@ -83,28 +82,7 @@ struct ObservedValues {
 static_assert(sizeof(ObservedValues) == sizeof(uint32_t),
               "Size needs to fit inside a record_ bc immediate args");
 
-namespace pir {
-
-struct ProfiledValues {
-    std::unordered_map<Value*, ObservedCalles>* calles;
-    std::unordered_map<Value*, ObservedValues>* types;
-
-    ProfiledValues()
-        : calles(new std::unordered_map<Value*, ObservedCalles>()),
-          types(new std::unordered_map<Value*, ObservedValues>()){};
-
-    ~ProfiledValues() {
-        delete types;
-        delete calles;
-    }
-
-    bool hasTypesFor(Value* value) {
-        return types->count(value) && types->at(value).numTypes;
-    }
-}; // namespace pir
-
 #pragma pack(pop)
 
-} // namespace pir
 } // namespace rir
 #endif

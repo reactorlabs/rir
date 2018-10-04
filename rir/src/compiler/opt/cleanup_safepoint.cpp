@@ -2,7 +2,7 @@
 #include "../transform/replace.h"
 #include "../util/cfg.h"
 #include "../util/visitor.h"
-#include "phase_definitions.h"
+#include "pass_definitions.h"
 
 namespace rir {
 namespace pir {

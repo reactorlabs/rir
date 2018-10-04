@@ -6,7 +6,7 @@
 #include "R/Funtab.h"
 #include "R/Symbols.h"
 #include "R/r.h"
-#include "phase_definitions.h"
+#include "pass_definitions.h"
 
 #include <algorithm>
 #include <unordered_map>

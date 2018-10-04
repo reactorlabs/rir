@@ -195,11 +195,7 @@ class Instruction : public Value {
                "subclass must override env() if it uses env");
         assert(false && "this instruction has no env");
     }
-    virtual void elideEnv() {
-        assert(!mayAccessEnv() && "subclass must override elideEnv() if it "
-                                  "speculatively removes environments");
-        assert(false && "this instruction has no env");
-    }
+    void elideEnv() { arg(envSlot()).val() = Env::elided(); }
     virtual size_t envSlot() const {
         assert(!mayAccessEnv() &&
                "subclass must override envSlot() if it uses env");
@@ -360,7 +356,6 @@ class FixedLenInstructionWithEnvSlot
 
     Value* env() const final override { return arg(EnvSlot).val(); }
     void env(Value* env) final override { arg(EnvSlot).val() = env; }
-    void elideEnv() final override { arg(EnvSlot).val() = Env::elided(); }
     size_t envSlot() const final override { return EnvSlot; }
 
   private:

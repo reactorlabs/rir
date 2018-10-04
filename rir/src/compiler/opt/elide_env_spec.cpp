@@ -3,7 +3,7 @@
 #include "../util/cfg.h"
 #include "../util/visitor.h"
 #include "R/r.h"
-#include "phase_definitions.h"
+#include "pass_definitions.h"
 
 #include <unordered_map>
 
@@ -16,7 +16,7 @@ void ElideEnvSpec::apply(Closure* function) const {
     // primitive values
     Visitor::run(function->entry, [&](BB* bb) {
         auto ip = bb->begin();
-        Safepoint* lastSafepoint;
+        Safepoint* lastSafepoint = nullptr;
         while (ip != bb->end()) {
             Instruction* i = *ip;
 
@@ -26,22 +26,25 @@ void ElideEnvSpec::apply(Closure* function) const {
                 lastSafepoint = Safepoint::Cast(i);
                 ip++;
                 continue;
+            } else {
+                if (i->hasEffect())
+                    lastSafepoint = nullptr;
             }
 
             if ((Lte::Cast(i) || Gte::Cast(i) || Lt::Cast(i) || Gt::Cast(i) ||
                  Mod::Cast(i) || Add::Cast(i) || Div::Cast(i) ||
                  IDiv::Cast(i) || Colon::Cast(i) || Pow::Cast(i) ||
                  Sub::Cast(i) || Mul::Cast(i) || Neq::Cast(i) || Eq::Cast(i)) &&
-                (i->env() != Env::elided())) {
+                (i->env() != Env::elided()) && lastSafepoint != nullptr) {
 
-                ProfiledValues* profile = function->runtimeFeedback;
+                ProfiledValues* profile = &function->runtimeFeedback;
                 Value* opLeft = i->arg(0).val();
                 Value* opRight = i->arg(1).val();
 
                 if (profile->hasTypesFor(opLeft) &&
                     profile->hasTypesFor(opRight) &&
-                    !profile->types->at(opLeft).observedObject() &&
-                    !profile->types->at(opRight).observedObject()) {
+                    !profile->types.at(opLeft).observedObject() &&
+                    !profile->types.at(opRight).observedObject()) {
                     i->elideEnv();
                     BBTransform::addConditionalDeopt(
                         function, bb, ip, new IsObject(opLeft), lastSafepoint);

@@ -6,9 +6,19 @@
 #include "pir.h"
 #include <functional>
 #include <sstream>
+#include <unordered_map>
 
 namespace rir {
 namespace pir {
+
+struct ProfiledValues {
+    std::unordered_map<Value*, ObservedCalles> callTargets;
+    std::unordered_map<Value*, ObservedValues> types;
+
+    bool hasTypesFor(Value* value) {
+        return types.count(value) && types.at(value).numTypes;
+    }
+};
 
 /*
  * Closure
@@ -30,11 +40,11 @@ class Closure : public Code {
     Closure(const std::string& name, std::initializer_list<SEXP> a, Env* env,
             rir::Function* function)
         : env(env), function(function), name(uniqueName(this, name)),
-          argNames(a), runtimeFeedback(new ProfiledValues()) {}
+          argNames(a) {}
     Closure(const std::string& name, const std::vector<SEXP>& a, Env* env,
             rir::Function* function)
         : env(env), function(function), name(uniqueName(this, name)),
-          argNames(a), runtimeFeedback(new ProfiledValues()) {}
+          argNames(a) {}
 
     Env* env;
     rir::Function* function;
@@ -48,7 +58,7 @@ class Closure : public Code {
     std::vector<SEXP> argNames;
     std::vector<Promise*> defaultArgs;
     std::vector<Promise*> promises;
-    ProfiledValues* runtimeFeedback;
+    ProfiledValues runtimeFeedback;
 
     void print(std::ostream& out, bool tty) const;
 

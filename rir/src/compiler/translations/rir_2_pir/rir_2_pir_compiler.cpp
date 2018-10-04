@@ -5,7 +5,7 @@
 
 #include "../../analysis/query.h"
 #include "../../analysis/verifier.h"
-#include "../../opt/phase_definitions.h"
+#include "../../opt/pass_definitions.h"
 #include "ir/BC.h"
 
 #include "interpreter/runtime.h"

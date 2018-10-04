@@ -4,7 +4,7 @@
 #include "../util/cfg.h"
 #include "../util/visitor.h"
 #include "R/r.h"
-#include "phase_definitions.h"
+#include "pass_definitions.h"
 
 #include <algorithm>
 #include <unordered_map>

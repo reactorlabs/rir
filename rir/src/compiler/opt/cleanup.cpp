@@ -2,7 +2,7 @@
 #include "../util/cfg.h"
 #include "../util/visitor.h"
 #include "R/r.h"
-#include "phase_definitions.h"
+#include "pass_definitions.h"
 
 #include <unordered_map>
 #include <unordered_set>

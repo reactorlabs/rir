@@ -3,7 +3,7 @@
 
 #include "configurations.h"
 
-#include "../compiler/opt/phase_definitions.h"
+#include "../compiler/opt/pass_definitions.h"
 #include <deque>
 
 namespace rir {

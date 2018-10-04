@@ -216,16 +216,16 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, rir::Code* srcCode,
         break;
 
     case Opcode::record_binop_: {
-        insert.function->runtimeFeedback->types->emplace(
+        insert.function->runtimeFeedback.types.emplace(
             at(0), bc.immediate.binopFeedback[0]);
-        insert.function->runtimeFeedback->types->emplace(
+        insert.function->runtimeFeedback.types.emplace(
             at(1), bc.immediate.binopFeedback[1]);
         break;
     }
 
     case Opcode::record_call_: {
         Value* target = top();
-        insert.function->runtimeFeedback->calles->emplace(
+        insert.function->runtimeFeedback.callTargets.emplace(
             target, bc.immediate.callFeedback);
         break;
     }
@@ -262,9 +262,9 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, rir::Code* srcCode,
 
         // TODO: static named argument matching
         if (bc.bc != Opcode::named_call_implicit_) {
-            if (insert.function->runtimeFeedback->calles->count(callee)) {
+            if (insert.function->runtimeFeedback.callTargets.count(callee)) {
                 auto& feedback =
-                    insert.function->runtimeFeedback->calles->at(callee);
+                    insert.function->runtimeFeedback.callTargets.at(callee);
                 if (feedback.numTargets == 1)
                     monomorphic = feedback.getTarget(srcCode, 0);
             }
