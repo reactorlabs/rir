@@ -188,7 +188,7 @@ void BC::printImmediateArgs(std::ostream& out) const {
         else
             out << " " << std::hex << arg << std::dec;
     }
-    out << " ] ";
+    out << " ]";
 }
 
 void BC::printNames(std::ostream& out) const {
@@ -201,10 +201,13 @@ void BC::printNames(std::ostream& out) const {
     out << " ]";
 }
 
+void BC::printOpcode(std::ostream& out) const { out << name(bc) << "  "; }
+
 void BC::print(std::ostream& out) const {
+    out << "   ";
     if (bc != Opcode::record_call_ &&
         bc != Opcode::record_binop_)
-        out << "   " << name(bc) << " ";
+        printOpcode(out);
 
     switch (bc) {
     case Opcode::invalid_:
@@ -217,20 +220,21 @@ void BC::print(std::ostream& out) const {
     }
     case Opcode::named_call_implicit_: {
         printImmediateArgs(out);
+        out << " ";
         printNames(out);
         break;
     }
     case Opcode::call_: {
         auto args = immediate.callFixedArgs;
         BC::NumArgs nargs = args.nargs;
-        out << " " << nargs << " ";
+        out << nargs;
         break;
     }
 
     case Opcode::named_call_: {
         auto args = immediate.callFixedArgs;
         BC::NumArgs nargs = args.nargs;
-        out << " " << nargs << " ";
+        out << nargs << " ";
         printNames(out);
         break;
     }
@@ -238,7 +242,7 @@ void BC::print(std::ostream& out) const {
         auto args = immediate.staticCallFixedArgs;
         BC::NumArgs nargs = args.nargs;
         auto target = Pool::get(args.target);
-        out << " " << nargs << " : " << dumpSexp(target).c_str();
+        out << nargs << " : " << dumpSexp(target).c_str();
         break;
     }
     case Opcode::deopt_: {
@@ -247,10 +251,7 @@ void BC::print(std::ostream& out) const {
         break;
     }
     case Opcode::push_:
-        if (immediateConst() == R_UnboundValue)
-            out << " -\n";
-        else
-            out << dumpSexp(immediateConst()).c_str();
+        out << dumpSexp(immediateConst()).c_str();
         break;
     case Opcode::ldfun_:
     case Opcode::ldvar_:
@@ -262,38 +263,38 @@ void BC::print(std::ostream& out) const {
     case Opcode::stvar_:
     case Opcode::stvar_super_:
     case Opcode::missing_:
-        out << " " << CHAR(PRINTNAME(immediateConst()));
+        out << CHAR(PRINTNAME(immediateConst()));
         break;
     case Opcode::guard_fun_: {
         SEXP name = Pool::get(immediate.guard_fun_args.name);
-        out << " " << CHAR(PRINTNAME(name))
+        out << CHAR(PRINTNAME(name))
             << " == " << Pool::get(immediate.guard_fun_args.expected);
         break;
     }
     case Opcode::pick_:
     case Opcode::pull_:
     case Opcode::put_:
-        out << " " << immediate.i;
+        out << immediate.i;
         break;
     case Opcode::ldarg_:
-        out << " " << immediate.arg_idx;
+        out << immediate.arg_idx;
         break;
     case Opcode::ldloc_:
     case Opcode::stloc_:
-        out << " @" << immediate.loc;
+        out << "@" << immediate.loc;
         break;
     case Opcode::movloc_:
-        out << " @" << immediate.loc_cpy.source << " -> @"
+        out << "@" << immediate.loc_cpy.source << " -> @"
             << immediate.loc_cpy.target;
         break;
     case Opcode::is_:
     case Opcode::alloc_:
-        out << " " << type2char(immediate.i);
+        out << type2char(immediate.i);
         break;
 
     case Opcode::record_call_: {
         CallFeedback prof = immediate.callFeedback;
-        out << "   [ ";
+        out << "[ ";
         if (prof.taken == CallFeedback::CounterOverflow)
             out << "*, <";
         else
@@ -311,7 +312,7 @@ void BC::print(std::ostream& out) const {
 
     case Opcode::record_binop_: {
         auto prof = immediate.binopFeedback;
-        out << "   [ ";
+        out << "[ ";
         for (size_t j = 0; j < 2; ++j) {
             if (prof[j].numTypes) {
                 for (size_t i = 0; i < prof[j].numTypes; ++i) {
@@ -392,21 +393,17 @@ void BC::print(std::ostream& out) const {
         break;
     case Opcode::promise_:
     case Opcode::push_code_:
-        out << " " << std::hex << immediate.fun << std::dec;
+        out << std::hex << immediate.fun << std::dec;
         break;
     case Opcode::beginloop_:
     case Opcode::brtrue_:
     case Opcode::brobj_:
     case Opcode::brfalse_:
     case Opcode::br_:
-        out << " " << immediate.offset;
+        out << immediate.offset;
         break;
     }
     out << "\n";
-}
-
-void BC::printOpcode(std::ostream& out) const {
-    out << "   " << name(bc) << " ";
 }
 
 } // namespace rir
