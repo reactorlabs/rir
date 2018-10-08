@@ -22,7 +22,6 @@ class CodeStream {
     typedef unsigned PcOffset;
     PcOffset pos = 0;
     unsigned size = 1024;
-    unsigned nops = 0;
 
     FunctionWriter& function;
 
@@ -75,8 +74,6 @@ class CodeStream {
     }
 
     CodeStream& operator<<(const BC& b) {
-        if (b.bc == Opcode::nop_)
-            nops++;
         b.write(*this);
         return *this;
     }
@@ -117,7 +114,6 @@ class CodeStream {
 
         for (unsigned i = 0; i < bcSize; ++i) {
             *INS(pc + i) = Opcode::nop_;
-            nops++;
             // patchpoints are fixed by just removing the binding to label
             patchpoints.erase(pc + i);
         }
@@ -128,7 +124,7 @@ class CodeStream {
     BC::FunIdx finalize(bool markDefaultArg, size_t localsCnt) {
         Code* res =
             function.writeCode(ast, &(*code)[0], pos, sources, patchpoints,
-                               labels, markDefaultArg, localsCnt, nops);
+                               labels, markDefaultArg, localsCnt);
 
         labels.clear();
         patchpoints.clear();
