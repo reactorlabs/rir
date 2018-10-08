@@ -82,6 +82,22 @@ class CodeStream {
     }
 
     CodeStream& operator<<(BC::Label label) {
+
+        // get rid of unnecessary jumps
+        {
+            unsigned imm = pos - sizeof(BC::Jmp);
+            unsigned op = imm - sizeof(Opcode);
+            if (patchpoints.count(imm) && patchpoints[imm] == label) {
+                switch ((Opcode)(*code)[op]) {
+                case Opcode::br_:
+                    remove(op);
+                    break;
+                default:
+                    break;
+                }
+            }
+        }
+
         labels[pos].push_back(label);
         return *this;
     }
@@ -144,6 +160,7 @@ class CodeStream {
         return res->index;
     }
 };
-}
+
+} // namespace rir
 
 #endif
