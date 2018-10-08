@@ -16,20 +16,20 @@ void ElideEnvSpec::apply(Closure* function) const {
     // primitive values
     Visitor::run(function->entry, [&](BB* bb) {
         auto ip = bb->begin();
-        Safepoint* lastSafepoint = nullptr;
+        FrameState* lastFrameState = nullptr;
         while (ip != bb->end()) {
             Instruction* i = *ip;
 
             // Initially before a binop that enables speculation there should
-            // always be a safepoint inserted only for that purpose. However,
+            // always be a frameState inserted only for that purpose. However,
             // interleavings with other optimization passes may change this.
-            if (Safepoint::Cast(i)) {
-                lastSafepoint = Safepoint::Cast(i);
+            if (FrameState::Cast(i)) {
+                lastFrameState = FrameState::Cast(i);
                 ip++;
                 continue;
             } else {
                 if (i->hasEffect()) {
-                    lastSafepoint = nullptr;
+                    lastFrameState = nullptr;
                     ip++;
                     continue;
                 }
@@ -39,8 +39,7 @@ void ElideEnvSpec::apply(Closure* function) const {
                  Mod::Cast(i) || Add::Cast(i) || Div::Cast(i) ||
                  IDiv::Cast(i) || Colon::Cast(i) || Pow::Cast(i) ||
                  Sub::Cast(i) || Mul::Cast(i) || Neq::Cast(i) || Eq::Cast(i)) &&
-                (i->env() != Env::elided()) && lastSafepoint != nullptr) {
-
+                i->env() != Env::elided() && lastFrameState != nullptr) {
                 ProfiledValues* profile = &function->runtimeFeedback;
                 Value* opLeft = i->arg(0).val();
                 Value* opRight = i->arg(1).val();
@@ -50,14 +49,19 @@ void ElideEnvSpec::apply(Closure* function) const {
                     !profile->types.at(opLeft).observedObject() &&
                     !profile->types.at(opRight).observedObject()) {
                     i->elideEnv();
+                    BB* split = BBTransform::addConditionalDeopt(
+                        function, bb, ip, new IsObject(opRight),
+                        lastFrameState);
                     BBTransform::addConditionalDeopt(
-                        function, bb, ip, new IsObject(opLeft), lastSafepoint);
-                    BBTransform::addConditionalDeopt(
-                        function, bb, ip, new IsObject(opRight), lastSafepoint);
+                        function, split, split->begin(), new IsObject(opLeft),
+                        lastFrameState);
+                    ip = bb->end();
+                } else {
+                    ip++;
                 }
+            } else {
+                ip++;
             }
-
-            ip++;
         }
     });
 }

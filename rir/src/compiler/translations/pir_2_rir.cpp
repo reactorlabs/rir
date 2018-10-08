@@ -1038,8 +1038,8 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 cs << BC::deopt(store);
                 return;
             }
-            case Tag::Safepoint: {
-                assert(false && "Safepoint must be folded into scheduled "
+            case Tag::FrameState: {
+                assert(false && "FrameState must be folded into scheduled "
                                 "deopt, before pir_2_rir");
                 break;
             }
@@ -1095,10 +1095,10 @@ void Pir2Rir::lower(Code* code) {
         while (it != bb->end()) {
             auto next = it + 1;
             if (auto deopt = Deopt::Cast(*it)) {
-                // Lower Deopt instructions + their Safepoints to a
+                // Lower Deopt instructions + their FrameStates to a
                 // ScheduledDeopt.
                 auto newDeopt = new ScheduledDeopt();
-                newDeopt->consumeSafepoints(deopt);
+                newDeopt->consumeFrameStates(deopt);
                 auto newDeoptPos = bb->insert(it, newDeopt);
                 next = newDeoptPos + 2;
             } else if (auto call = Call::Cast(*it)) {
@@ -1127,7 +1127,7 @@ void Pir2Rir::lower(Code* code) {
         auto it = bb->begin();
         while (it != bb->end()) {
             auto next = it + 1;
-            if (Safepoint::Cast(*it) || Deopt::Cast(*it)) {
+            if (FrameState::Cast(*it) || Deopt::Cast(*it)) {
                 next = bb->remove(it);
             } else if (MkArg::Cast(*it) && (*it)->unused()) {
                 next = bb->remove(it);

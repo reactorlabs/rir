@@ -7,13 +7,13 @@
 namespace rir {
 namespace pir {
 
-void CleanupSafepoint::apply(Closure* function) const {
+void CleanupFrameState::apply(Closure* function) const {
     auto apply = [](Code* code) {
         Visitor::run(code->entry, [&](BB* bb) {
             auto it = bb->begin();
             while (it != bb->end()) {
                 auto next = it + 1;
-                if (auto sp = Safepoint::Cast(*it)) {
+                if (auto sp = FrameState::Cast(*it)) {
                     if (sp->unused())
                         next = bb->remove(it);
                 }

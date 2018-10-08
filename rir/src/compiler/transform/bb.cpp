@@ -96,21 +96,25 @@ Value* BBTransform::forInline(BB* inlinee, BB* splice) {
     return found;
 }
 
-void BBTransform::addConditionalDeopt(Closure* closure, BB* src,
-                                      BB::Instrs::iterator position,
-                                      Instruction* condition,
-                                      Safepoint* safepoint) {
+BB* BBTransform::addConditionalDeopt(Closure* closure, BB* src,
+                                     BB::Instrs::iterator position,
+                                     Instruction* condition,
+                                     FrameState* frameState) {
     auto split =
         BBTransform::split(closure->nextBBId++, src, position, closure);
+    std::cout << "===== Split:\n";
+    split->print();
+    std::cout << "-------\n";
     src->append(condition);
     src->append(new Branch(condition));
     auto deoptBlock = new BB(closure, closure->nextBBId++);
 
-    src->next0 = deoptBlock;
     src->next1 = split;
-    Safepoint* spClone = Safepoint::Cast(safepoint->clone());
+    src->next0 = deoptBlock;
+    FrameState* fsClone = FrameState::Cast(frameState->clone());
     deoptBlock->append(spClone);
-    deoptBlock->append(new Deopt(spClone));
+    deoptBlock->append(new Deopt(fsClone));
+    return split;
 }
 } // namespace pir
 } // namespace rir

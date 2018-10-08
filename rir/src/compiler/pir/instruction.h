@@ -1105,33 +1105,33 @@ struct RirStack {
     Stack::iterator end() { return stack.end(); }
 };
 
-class VLIE(Safepoint, Effect::Any, EnvAccess::Leak) {
+class VLIE(FrameState, Effect::Any, EnvAccess::Leak) {
   public:
     bool inlined = false;
     Opcode* pc;
     rir::Code* code;
     size_t stackSize;
 
-    Safepoint(Value* env, rir::Code* code, Opcode* pc, const RirStack& stack)
-        : VarLenInstructionWithEnvSlot(NativeType::safepoint, env), pc(pc),
+    FrameState(Value* env, rir::Code* code, Opcode* pc, const RirStack& stack)
+        : VarLenInstructionWithEnvSlot(NativeType::frameState, env), pc(pc),
           code(code), stackSize(stack.size()) {
         for (auto& v : stack)
             pushArg(v);
     }
 
-    void updateNext(Safepoint* s) {
+    void updateNext(FrameState* s) {
         assert(inlined);
-        assert(arg(stackSize).type() == NativeType::safepoint);
+        assert(arg(stackSize).type() == NativeType::frameState);
         arg(stackSize).val() = s;
     }
 
-    void next(Safepoint* s) {
+    void next(FrameState* s) {
         assert(!inlined);
         inlined = true;
-        pushArg(s, NativeType::safepoint);
+        pushArg(s, NativeType::frameState);
     }
 
-    Safepoint* next() const {
+    FrameState* next() const {
         if (inlined) {
             auto r = Cast(arg(stackSize).val());
             assert(r);
@@ -1157,17 +1157,17 @@ class VLIE(Safepoint, Effect::Any, EnvAccess::Leak) {
 
 class FLI(Deopt, 1, Effect::Any, EnvAccess::None) {
   public:
-    explicit Deopt(Safepoint* safepoint)
-        : FixedLenInstruction(PirType::voyd(), {{NativeType::safepoint}},
-                              {{safepoint}}) {}
-    Safepoint* safepoint();
+    explicit Deopt(FrameState* frameState)
+        : FixedLenInstruction(PirType::voyd(), {{NativeType::frameState}},
+                              {{frameState}}) {}
+    FrameState* frameState();
 };
 
 class VLI(ScheduledDeopt, Effect::Any, EnvAccess::None) {
   public:
     std::vector<FrameInfo> frames;
     ScheduledDeopt() : VarLenInstruction(PirType::voyd()) {}
-    void consumeSafepoints(Deopt* deopt);
+    void consumeFrameStates(Deopt* deopt);
     void printArgs(std::ostream& out, bool tty) override;
 };
 

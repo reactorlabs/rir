@@ -445,7 +445,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, rir::Code* srcCode,
     case Opcode::Op: {                                                         \
         auto rhs = at(0);                                                      \
         auto lhs = at(1);                                                      \
-        insert.registerSafepoint(srcCode, pos, stack);                         \
+        insert.registerFrameState(srcCode, pos, stack);                        \
         pop();                                                                 \
         pop();                                                                 \
         push(insert(new Name(lhs, rhs, env, srcIdx)));                         \
@@ -824,7 +824,7 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) const {
                 return nullptr;
             }
             if (bc.isCall()) {
-                insert.registerSafepoint(srcCode, nextPos, cur.stack);
+                insert.registerFrameState(srcCode, nextPos, cur.stack);
             }
         }
     }

@@ -31,7 +31,7 @@ void Configurations::parseINIFile() {
     PARSE_OPT("delayEnvironments", front, DelayEnv());
     PARSE_OPT("inline", front, Inline());
     PARSE_OPT("cleanup", back, Cleanup());
-    PARSE_OPT("cleanupSafepoints", back, CleanupSafepoint());
+    PARSE_OPT("cleanupFrameStates", back, CleanupFrameState());
 #undef PARSE_OPT
     for (auto& optlist : opts)
         for (auto& opt : optlist.second)
@@ -55,7 +55,7 @@ void Configurations::defaultOptimizations() {
             optimizations.push_back(new pir::Cleanup());
             optimizations.push_back(new pir::Inline());
         }
-        optimizations.push_back(new pir::CleanupSafepoint());
+        optimizations.push_back(new pir::CleanupFrameState());
     }
 }
 

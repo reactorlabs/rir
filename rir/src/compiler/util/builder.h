@@ -14,7 +14,7 @@ struct Code;
 
 namespace pir {
 
-class Safepoint;
+class FrameState;
 class CallInstruction;
 struct RirStack;
 
@@ -42,8 +42,8 @@ class Builder {
     void setNext(BB* bb1);
     void setBranch(BB* bb1, BB* bb2);
 
-    Safepoint* registerSafepoint(rir::Code* srcCode, Opcode* pos,
-                                 const RirStack& stack);
+    FrameState* registerFrameState(rir::Code* srcCode, Opcode* pos,
+                                   const RirStack& stack);
     void conditionalDeopt(Value* condition, rir::Code* srcCode, Opcode* pos,
                           const RirStack& stack, bool deoptOnFalseBranch);
 

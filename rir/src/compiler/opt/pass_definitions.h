@@ -83,7 +83,7 @@ class PHASE(Inline, "Inline closure");
 class PHASE(ElideEnvSpec, "Speculate on values to elide environments");
 
 class PHASE(Cleanup, "...");
-class PHASE(CleanupSafepoint, "...");
+class PHASE(CleanupFrameState, "...");
 
 } // namespace pir
 } // namespace rir
