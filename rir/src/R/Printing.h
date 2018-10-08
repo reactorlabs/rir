@@ -8,7 +8,11 @@ namespace rir {
 
 static std::string dumpSexp(SEXP src, size_t length = 50) {
     CaptureOut rec;
-    Rf_PrintValue(src);
+    if (src == R_UnboundValue) {
+        std::cout << "-";
+    } else {
+        Rf_PrintValue(src);
+    }
     return rec.oneline(length);
 }
 

@@ -93,8 +93,9 @@ void Code::disassemble(std::ostream& out) const {
 
         BC bc = BC::decode(pc, this);
 
-        const size_t OFFSET_WIDTH = 5;
-        out << std::setw(OFFSET_WIDTH) << ((uintptr_t)pc - (uintptr_t)code());
+        const size_t OFFSET_WIDTH = 7;
+        out << std::right << std::setw(OFFSET_WIDTH)
+            << ((uintptr_t)pc - (uintptr_t)code()) << std::left;
 
         unsigned s = getSrcIdxAt(pc, true);
         if (s != 0)
@@ -123,6 +124,7 @@ void Code::disassemble(std::ostream& out) const {
         }
 
         if (bc.isJmp()) {
+            out << "   ";
             bc.printOpcode(out);
             formatLabel(targets[BC::jmpTarget(pc)]);
             out << "\n";
