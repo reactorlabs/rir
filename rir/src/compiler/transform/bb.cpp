@@ -112,7 +112,7 @@ BB* BBTransform::addConditionalDeopt(Closure* closure, BB* src,
     src->next1 = split;
     src->next0 = deoptBlock;
     FrameState* fsClone = FrameState::Cast(frameState->clone());
-    deoptBlock->append(spClone);
+    deoptBlock->append(fsClone);
     deoptBlock->append(new Deopt(fsClone));
     return split;
 }
