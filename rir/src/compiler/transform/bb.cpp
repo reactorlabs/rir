@@ -102,9 +102,6 @@ BB* BBTransform::addConditionalDeopt(Closure* closure, BB* src,
                                      FrameState* frameState) {
     auto split =
         BBTransform::split(closure->nextBBId++, src, position, closure);
-    std::cout << "===== Split:\n";
-    split->print();
-    std::cout << "-------\n";
     src->append(condition);
     src->append(new Branch(condition));
     auto deoptBlock = new BB(closure, closure->nextBBId++);
