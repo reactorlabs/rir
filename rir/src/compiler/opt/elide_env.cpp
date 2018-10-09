@@ -1,8 +1,8 @@
-#include "elide_env.h"
 #include "../pir/pir_impl.h"
 #include "../util/cfg.h"
 #include "../util/visitor.h"
 #include "R/r.h"
+#include "pass_definitions.h"
 
 #include <unordered_map>
 

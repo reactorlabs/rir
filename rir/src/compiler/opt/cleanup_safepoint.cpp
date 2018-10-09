@@ -1,19 +1,19 @@
-#include "cleanup_safepoint.h"
 #include "../pir/pir_impl.h"
 #include "../transform/replace.h"
 #include "../util/cfg.h"
 #include "../util/visitor.h"
+#include "pass_definitions.h"
 
 namespace rir {
 namespace pir {
 
-void CleanupSafepoint::apply(Closure* function) const {
+void CleanupFrameState::apply(Closure* function) const {
     auto apply = [](Code* code) {
         Visitor::run(code->entry, [&](BB* bb) {
             auto it = bb->begin();
             while (it != bb->end()) {
                 auto next = it + 1;
-                if (auto sp = Safepoint::Cast(*it)) {
+                if (auto sp = FrameState::Cast(*it)) {
                     if (sp->unused())
                         next = bb->remove(it);
                 }

@@ -56,6 +56,8 @@ To print intermediate debug information, you have a number of options:
 
 We periodically [benchmark](documentation/benchmarking.md) the performance of the optimizer
 
+We periodically [benchmark](documentation/benchmarking.md) the performance of the optimizer
+
 ### Off-Tree builds
 
 You can have multiple builds at the same time.

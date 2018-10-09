@@ -295,7 +295,7 @@ void CallSafeBuiltin::printArgs(std::ostream& out, bool tty) {
     printCallArgs(out, this);
 }
 
-void Safepoint::printArgs(std::ostream& out, bool tty) {
+void FrameState::printArgs(std::ostream& out, bool tty) {
     out << code << "+" << pc - code->code();
     out << ": [";
     long s = stackSize;
@@ -315,16 +315,16 @@ void Safepoint::printArgs(std::ostream& out, bool tty) {
     }
 }
 
-void ScheduledDeopt::consumeSafepoints(Deopt* deopt) {
-    std::vector<Safepoint*> safepoints;
+void ScheduledDeopt::consumeFrameStates(Deopt* deopt) {
+    std::vector<FrameState*> frameStates;
     {
-        auto sp = deopt->safepoint();
+        auto sp = deopt->frameState();
         do {
-            safepoints.push_back(sp);
+            frameStates.push_back(sp);
             sp = sp->next();
         } while (sp);
     }
-    for (auto spi = safepoints.rbegin(); spi != safepoints.rend(); spi++) {
+    for (auto spi = frameStates.rbegin(); spi != frameStates.rend(); spi++) {
         auto sp = *spi;
         frames.push_back({sp->pc, sp->code, sp->stackSize});
         for (size_t i = 0; i < sp->stackSize; i++)
@@ -444,7 +444,7 @@ void CallImplicit::printArgs(std::ostream& out, bool tty) {
     out << ") ";
 }
 
-Safepoint* Deopt::safepoint() { return Safepoint::Cast(arg<0>().val()); }
+FrameState* Deopt::frameState() { return FrameState::Cast(arg<0>().val()); }
 
 } // namespace pir
 } // namespace rir

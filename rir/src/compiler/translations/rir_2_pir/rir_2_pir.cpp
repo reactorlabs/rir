@@ -130,11 +130,8 @@ std::unordered_set<Opcode*> findMergepoints(rir::Code* srcCode) {
 namespace rir {
 namespace pir {
 
-bool Rir2Pir::compileBC(
-    const BC& bc, Opcode* pos, rir::Code* srcCode, RirStack& stack,
-    Builder& insert,
-    std::unordered_map<Value*, std::vector<SEXP>>& callFeedback,
-    std::unordered_map<Value*, TypeFeedback>& typeFeedback) const {
+bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, rir::Code* srcCode,
+                        RirStack& stack, Builder& insert) const {
     Value* env = insert.env;
 
     unsigned srcIdx = srcCode->getSrcIdxAt(pos, true);
@@ -219,14 +216,17 @@ bool Rir2Pir::compileBC(
         break;
 
     case Opcode::record_binop_: {
-        typeFeedback[at(0)] = bc.immediate.binopFeedback[0];
-        typeFeedback[at(1)] = bc.immediate.binopFeedback[1];
+        insert.function->runtimeFeedback.types.emplace(
+            at(0), bc.immediate.binopFeedback[0]);
+        insert.function->runtimeFeedback.types.emplace(
+            at(1), bc.immediate.binopFeedback[1]);
         break;
     }
 
     case Opcode::record_call_: {
         Value* target = top();
-        callFeedback[target] = bc.callFeedbackExtra().targets;
+        insert.function->runtimeFeedback.callTargets.emplace(
+            target, bc.immediate.callFeedback);
         break;
     }
 
@@ -262,10 +262,11 @@ bool Rir2Pir::compileBC(
 
         // TODO: static named argument matching
         if (bc.bc != Opcode::named_call_implicit_) {
-            if (callFeedback.count(callee)) {
-                auto& feedback = callFeedback.at(callee);
-                if (feedback.size() == 1)
-                    monomorphic = feedback.at(0);
+            if (insert.function->runtimeFeedback.callTargets.count(callee)) {
+                auto& feedback =
+                    insert.function->runtimeFeedback.callTargets.at(callee);
+                if (feedback.numTargets == 1)
+                    monomorphic = feedback.getTarget(srcCode, 0);
             }
         }
 
@@ -444,22 +445,10 @@ bool Rir2Pir::compileBC(
     case Opcode::Op: {                                                         \
         auto rhs = at(0);                                                      \
         auto lhs = at(1);                                                      \
-        if (typeFeedback[rhs].numTypes > 0 &&                                  \
-            typeFeedback[lhs].numTypes > 0 &&                                  \
-            !typeFeedback[rhs].observedObject() &&                             \
-            !typeFeedback[lhs].observedObject()) {                             \
-            Value* leftIsObj = insert(new IsObject(lhs));                      \
-            insert.conditionalDeopt(leftIsObj, srcCode, pos, stack, false);    \
-            Value* rightIsObj = insert(new IsObject(rhs));                     \
-            insert.conditionalDeopt(rightIsObj, srcCode, pos, stack, false);   \
-            pop();                                                             \
-            pop();                                                             \
-            push(insert(new Name(lhs, rhs, Env::elided(), srcIdx)));           \
-        } else {                                                               \
-            pop();                                                             \
-            pop();                                                             \
-            push(insert(new Name(lhs, rhs, env, srcIdx)));                     \
-        }                                                                      \
+        insert.registerFrameState(srcCode, pos, stack);                        \
+        pop();                                                                 \
+        pop();                                                                 \
+        push(insert(new Name(lhs, rhs, env, srcIdx)));                         \
         break;                                                                 \
     }
 
@@ -598,7 +587,7 @@ bool Rir2Pir::compileBC(
     }
 
     return true;
-}
+} // namespace pir
 
 bool Rir2Pir::tryCompile(rir::Code* srcCode, Builder& insert) {
     if (auto res = tryTranslate(srcCode, insert)) {
@@ -625,9 +614,6 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) const {
     std::deque<State> worklist;
     State cur;
     cur.seen = true;
-
-    std::unordered_map<Value*, std::vector<SEXP>> callFeedback;
-    std::unordered_map<Value*, TypeFeedback> typeFeedback;
 
     Opcode* end = srcCode->endCode();
     Opcode* finger = srcCode->code();
@@ -823,8 +809,7 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) const {
 
         if (!skip) {
             int size = cur.stack.size();
-            if (!compileBC(bc, pos, srcCode, cur.stack, insert, callFeedback,
-                           typeFeedback)) {
+            if (!compileBC(bc, pos, srcCode, cur.stack, insert)) {
                 log.failed("Abort r2p due to unsupported bc");
                 return nullptr;
             }
@@ -839,7 +824,7 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) const {
                 return nullptr;
             }
             if (bc.isCall()) {
-                insert.registerSafepoint(srcCode, nextPos, cur.stack);
+                insert.registerFrameState(srcCode, nextPos, cur.stack);
             }
         }
     }

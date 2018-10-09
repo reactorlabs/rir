@@ -1,7 +1,7 @@
+#include "interp.h"
 #include "R/Funtab.h"
 #include "R/Symbols.h"
 #include "R/r.h"
-#include "interp.h"
 #include "interp_context.h"
 #include "ir/Deoptimization.h"
 #include "ir/RuntimeFeedback_inl.h"
@@ -1408,20 +1408,20 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
         }
 
         INSTRUCTION(record_call_) {
-            CallFeedback* feedback = (CallFeedback*)pc;
+            ObservedCalles* feedback = (ObservedCalles*)pc;
             SEXP callee = ostack_top(ctx);
             feedback->record(c, callee);
-            pc += sizeof(CallFeedback);
+            pc += sizeof(ObservedCalles);
             NEXT();
         }
 
         INSTRUCTION(record_binop_) {
-            TypeFeedback* feedback = (TypeFeedback*)pc;
+            ObservedValues* feedback = (ObservedValues*)pc;
             SEXP l = ostack_at(ctx, 1);
             SEXP r = ostack_top(ctx);
             feedback[0].record(l);
             feedback[1].record(r);
-            pc += 2 * sizeof(TypeFeedback);
+            pc += 2 * sizeof(ObservedValues);
             NEXT();
         }
 
@@ -2331,37 +2331,36 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
                      (vectorT == VECSXP)) &&
                     (XLENGTH(val) == 1 || vectorT == VECSXP)) { // 3
 
-                        int idx_ = -1;
+                    int idx_ = -1;
 
-                        if (idxT == REALSXP) {
-                            if (*REAL(idx) != NA_REAL)
-                                idx_ = (int)*REAL(idx) - 1;
-                        } else {
-                            if (*INTEGER(idx) != NA_INTEGER)
-                                idx_ = *INTEGER(idx) - 1;
-                        }
-
-                        if (idx_ >= 0 && idx_ < XLENGTH(vec)) {
-                            switch (vectorT) {
-                            case REALSXP:
-                                REAL(vec)
-                                [idx_] =
-                                    valT == REALSXP ? *REAL(val)
-                                                    : (double)*INTEGER(val);
-                                break;
-                            case INTSXP:
-                                INTEGER(vec)[idx_] = *INTEGER(val);
-                                break;
-                            case VECSXP:
-                                SET_VECTOR_ELT(vec, idx_, val);
-                                break;
-                            }
-                            ostack_popn(ctx, 3);
-
-                            ostack_push(ctx, vec);
-                            NEXT();
-                        }
+                    if (idxT == REALSXP) {
+                        if (*REAL(idx) != NA_REAL)
+                            idx_ = (int)*REAL(idx) - 1;
+                    } else {
+                        if (*INTEGER(idx) != NA_INTEGER)
+                            idx_ = *INTEGER(idx) - 1;
                     }
+
+                    if (idx_ >= 0 && idx_ < XLENGTH(vec)) {
+                        switch (vectorT) {
+                        case REALSXP:
+                            REAL(vec)
+                            [idx_] = valT == REALSXP ? *REAL(val)
+                                                     : (double)*INTEGER(val);
+                            break;
+                        case INTSXP:
+                            INTEGER(vec)[idx_] = *INTEGER(val);
+                            break;
+                        case VECSXP:
+                            SET_VECTOR_ELT(vec, idx_, val);
+                            break;
+                        }
+                        ostack_popn(ctx, 3);
+
+                        ostack_push(ctx, vec);
+                        NEXT();
+                    }
+                }
             }
 
             if (MAYBE_SHARED(vec)) {

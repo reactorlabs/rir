@@ -5,13 +5,7 @@
 
 #include "../../analysis/query.h"
 #include "../../analysis/verifier.h"
-#include "../../opt/cleanup.h"
-#include "../../opt/delay_env.h"
-#include "../../opt/delay_instr.h"
-#include "../../opt/elide_env.h"
-#include "../../opt/force_dominance.h"
-#include "../../opt/inline.h"
-#include "../../opt/scope_resolution.h"
+#include "../../opt/pass_definitions.h"
 #include "ir/BC.h"
 
 #include "interpreter/runtime.h"

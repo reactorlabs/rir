@@ -3,15 +3,7 @@
 
 #include "configurations.h"
 
-#include "../compiler/opt/cleanup.h"
-#include "../compiler/opt/cleanup_safepoint.h"
-#include "../compiler/opt/delay_env.h"
-#include "../compiler/opt/delay_instr.h"
-#include "../compiler/opt/elide_env.h"
-#include "../compiler/opt/force_dominance.h"
-#include "../compiler/opt/inline.h"
-#include "../compiler/opt/scope_resolution.h"
-
+#include "../compiler/opt/pass_definitions.h"
 #include <deque>
 
 namespace rir {
@@ -39,7 +31,7 @@ void Configurations::parseINIFile() {
     PARSE_OPT("delayEnvironments", front, DelayEnv());
     PARSE_OPT("inline", front, Inline());
     PARSE_OPT("cleanup", back, Cleanup());
-    PARSE_OPT("cleanupSafepoints", back, CleanupSafepoint());
+    PARSE_OPT("cleanupFrameStates", back, CleanupFrameState());
 #undef PARSE_OPT
     for (auto& optlist : opts)
         for (auto& opt : optlist.second)
@@ -52,6 +44,7 @@ void Configurations::defaultOptimizations() {
         optimizations.push_back(new pir::ScopeResolution());
         optimizations.push_back(new pir::Cleanup());
         optimizations.push_back(new pir::DelayInstr());
+        optimizations.push_back(new pir::ElideEnvSpec());
         optimizations.push_back(new pir::ElideEnv());
         optimizations.push_back(new pir::DelayEnv());
     };
@@ -62,7 +55,7 @@ void Configurations::defaultOptimizations() {
             optimizations.push_back(new pir::Cleanup());
             optimizations.push_back(new pir::Inline());
         }
-        optimizations.push_back(new pir::CleanupSafepoint());
+        optimizations.push_back(new pir::CleanupFrameState());
     }
 }
 
