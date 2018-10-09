@@ -8,7 +8,7 @@ namespace pir {
 
 class Closure;
 
-#define PHASE(name, desc)                                                      \
+#define PASS(name, desc)                                                       \
     name:                                                                      \
   public                                                                       \
     PirTranslator {                                                            \
@@ -24,7 +24,7 @@ class Closure;
  * environment, to pir SSA variables.
  *
  */
-class PHASE(ScopeResolution, "Dead store elimination");
+class PASS(ScopeResolution, "Dead store elimination");
 
 /*
  * ElideEnv removes envrionments which are not needed. It looks at all uses of
@@ -34,7 +34,7 @@ class PHASE(ScopeResolution, "Dead store elimination");
  *
  */
 
-class PHASE(ElideEnv, "Elide environments not needed");
+class PASS(ElideEnv, "Elide environments not needed");
 
 /*
  * This pass searches for dominating force instructions.
@@ -44,13 +44,13 @@ class PHASE(ElideEnv, "Elide environments not needed");
  * dominating force, and replaces all subsequent forces with it's result.
  *
  */
-class PHASE(ForceDominance, "Eliminate redudant force instructions");
+class PASS(ForceDominance, "Eliminate redudant force instructions");
 
 /*
  * DelayInstr tries to schedule instruction right before they are needed.
  *
  */
-class PHASE(DelayInstr, "Eliminate redudant force instructions");
+class PASS(DelayInstr, "Eliminate redudant force instructions");
 
 /*
  * The DelayEnv pass tries to delay the scheduling of `MkEnv` instructions as
@@ -58,32 +58,40 @@ class PHASE(DelayInstr, "Eliminate redudant force instructions");
  * the goal is to move it out of the others.
  *
  */
-class PHASE(DelayEnv, "Move environment creation as far as possible");
+class PASS(DelayEnv, "Move environment creation as far as possible");
 
 /*
- * Inlines a closure.
- *
- * This pass is intentionally stupid. It does not resolve inner environments,
- * but rather just copies instructions and leads to functions with multiple
- * environments.
- *
- * Later scope resolution and force dominance passes will do the smart parts.
- *
+ * Inlines a closure. Intentionally stupid. It does not resolve inner
+ * environments, but rather just copies instructions and leads to functions
+ * with multiple environments. Later scope resolution and force dominance
+ * passes will do the smart parts.
  */
-class PHASE(Inline, "Inline closure");
+class PASS(Inline, "Inline closures");
 
 /*
- * This phase goes through every operation that for the general case needs
- * an environment, but it could elide it for some particular inputs. The phase
+ * This PASS goes through every operation that for the general case needs
+ * an environment, but it could elide it for some particular inputs. The PASS
  * then analyzes the profiling information and if all the observed inputs are
  * compatible with the operation without an environment, it avoids creating the
  * environment and add the corresponding guard to deoptimize in case an
  * incompatible input appears at run time.
  */
-class PHASE(ElideEnvSpec, "Speculate on values to elide environments");
+class PASS(
+    AdaptForSpec,
+    "Adapt the CFG to the format required by pir's speculative operations");
 
-class PHASE(Cleanup, "...");
-class PHASE(CleanupFrameState, "...");
+/*
+ * Goes through every operation that for the general case needs an environment
+ * but could be elided for some particular inputs. Analyzes the profiling
+ * information of the inputs and if all the observed values are compatible with
+ * the version operation without an environment, it avoids creating the
+ * environment and add the corresponding guard to deoptimize in case an
+ * incompatible input appears at run time.
+ */
+class PASS(ElideEnvSpec, "Speculate on values to elide environments");
+
+class PASS(Cleanup, "...");
+class PASS(CleanupFrameState, "...");
 
 } // namespace pir
 } // namespace rir

@@ -1011,8 +1011,12 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 });
                 break;
             }
-            case Tag::Deopt: {
-                assert(false && "Deopt must be folded into scheduled deopt, "
+            case Tag::Deopt:
+            case Tag::Expect:
+            case Tag::Checkpoint: {
+                code->printCode(std::cout, true);
+                assert(false && "Deopt instructions must be lowered into "
+                                "standard branches and scheduled deopt, "
                                 "before pir_2_rir");
                 break;
             }

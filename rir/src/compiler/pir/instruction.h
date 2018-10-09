@@ -1071,6 +1071,8 @@ class VLI(Phi, Effect::None, EnvAccess::None) {
     }
 };
 
+// Instructions targeted specially for speculative optimization
+
 struct RirStack {
   private:
     typedef std::deque<Value*> Stack;
@@ -1105,6 +1107,10 @@ struct RirStack {
     Stack::iterator end() { return stack.end(); }
 };
 
+/*
+ *  Collects metadata about the current state of variables
+ *  eventually needed for deoptimization purposes
+ */
 class VLIE(FrameState, Effect::Any, EnvAccess::Leak) {
   public:
     bool inlined = false;
@@ -1155,12 +1161,41 @@ class VLIE(FrameState, Effect::Any, EnvAccess::Leak) {
     void printEnv(std::ostream& out, bool tty) override final{};
 };
 
+/*
+ *  Must be the last instruction of a BB with two childs. One should
+ *  contain a deopt. Checkpoint takes either branch at random
+ *  to ensure the optimizer consider deopt and non-deopt cases.
+ */
+class FLI(Checkpoint, 0, Effect::None, EnvAccess::None) {
+  public:
+    Checkpoint() : FixedLenInstruction(PirType::voyd()) {}
+    void printArgs(std::ostream& out, bool tty) override;
+};
+
+/*
+ * Replaces the current execution context with the one described by the
+ * referenced framestate and jump to the deoptimized version of the
+ * code at the point the framestate stores
+ */
+
 class FLI(Deopt, 1, Effect::Any, EnvAccess::None) {
   public:
     explicit Deopt(FrameState* frameState)
         : FixedLenInstruction(PirType::voyd(), {{NativeType::frameState}},
                               {{frameState}}) {}
     FrameState* frameState();
+};
+
+/*
+ * if the test fails, jump to the deopt branch of the checkpoint.
+ */
+
+class FLI(Expect, 2, Effect::Any, EnvAccess::None) {
+  public:
+    Expect(Value* test, Checkpoint* checkpoint)
+        : FixedLenInstruction(PirType::voyd(),
+                              {{NativeType::test, NativeType::test}},
+                              {{test, checkpoint}}) {}
 };
 
 class VLI(ScheduledDeopt, Effect::Any, EnvAccess::None) {

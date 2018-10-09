@@ -112,7 +112,7 @@ Instruction::InstructionUID Instruction::id() {
 
 bool Instruction::unused() {
     // TODO: better solution?
-    if (tag == Tag::Branch || tag == Tag::Return)
+    if (tag == Tag::Branch || tag == Tag::Return || tag == Tag::Checkpoint)
         return false;
 
     return Visitor::check(bb(), [&](Instruction* i) {
@@ -445,6 +445,12 @@ void CallImplicit::printArgs(std::ostream& out, bool tty) {
 }
 
 FrameState* Deopt::frameState() { return FrameState::Cast(arg<0>().val()); }
+
+void Checkpoint::printArgs(std::ostream& out, bool tty) {
+    FixedLenInstruction::printArgs(out, tty);
+    out << " -> BB" << bb()->trueBranch()->id << " (if speculations hold) | BB"
+        << bb()->falseBranch()->id << " (deopt branch)";
+}
 
 } // namespace pir
 } // namespace rir

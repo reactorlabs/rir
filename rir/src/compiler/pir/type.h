@@ -69,6 +69,7 @@ enum class NativeType : uint8_t {
     _UNUSED_,
 
     test,
+    checkpoint,
     frameState,
 
     FIRST = test,
@@ -253,6 +254,9 @@ inline std::ostream& operator<<(std::ostream& out, NativeType t) {
     switch (t) {
     case NativeType::test:
         out << "t";
+        break;
+    case NativeType::checkpoint:
+        out << "cp";
         break;
     case NativeType::frameState:
         out << "fs";

@@ -62,6 +62,8 @@
     V(Subassign2_1D)                                                           \
     V(ForSeqSize)                                                              \
     V(FrameState)                                                              \
+    V(Checkpoint)                                                              \
+    V(Expect)                                                                  \
     V(Deopt)                                                                   \
     V(ScheduledDeopt)                                                          \
     V(Force)                                                                   \

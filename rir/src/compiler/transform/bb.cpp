@@ -113,5 +113,18 @@ BB* BBTransform::addConditionalDeopt(Closure* closure, BB* src,
     deoptBlock->append(new Deopt(fsClone));
     return split;
 }
+
+BB* BBTransform::addCheckpoint(Closure* closure, BB* src,
+                               BB::Instrs::iterator position) {
+    FrameState* framestate = FrameState::Cast(*(position - 1));
+    auto split =
+        BBTransform::split(closure->nextBBId++, src, position, closure);
+    src->append(new Checkpoint());
+    auto deoptBlock = new BB(closure, closure->nextBBId++);
+    src->next0 = split;
+    src->next1 = deoptBlock;
+    deoptBlock->append(new Deopt(framestate));
+    return split;
+}
 } // namespace pir
 } // namespace rir

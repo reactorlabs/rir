@@ -18,6 +18,8 @@ class BBTransform {
                                    BB::Instrs::iterator position,
                                    Instruction* condition,
                                    FrameState* frameState);
+    static BB* addCheckpoint(Closure* closure, BB* src,
+                             BB::Instrs::iterator position);
 };
 } // namespace pir
 } // namespace rir

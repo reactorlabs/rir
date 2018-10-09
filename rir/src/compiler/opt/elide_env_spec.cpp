@@ -14,56 +14,50 @@ void ElideEnvSpec::apply(Closure* function) const {
 
     // Elide environments of binary operators in which both operators are
     // primitive values
+    std::unordered_map<BB*, Checkpoint*> checkpoints;
+
+    auto insertExpectAndAdvance = [&](BB* src, Value* operand,
+                                      BB::Instrs::iterator position) {
+        Instruction* condition = new IsObject(operand);
+        position = src->insert(position, condition);
+        position++;
+        position =
+            src->insert(position, new Expect(condition, checkpoints[src]));
+        position++;
+        return position;
+    };
+
     Visitor::run(function->entry, [&](BB* bb) {
         auto ip = bb->begin();
-        FrameState* lastFrameState = nullptr;
         while (ip != bb->end()) {
             Instruction* i = *ip;
-
-            // Initially before a binop that enables speculation there should
-            // always be a frameState inserted only for that purpose. However,
-            // interleavings with other optimization passes may change this.
-            if (FrameState::Cast(i)) {
-                lastFrameState = FrameState::Cast(i);
-                ip++;
-                continue;
-            } else {
-                if (i->hasEffect()) {
-                    lastFrameState = nullptr;
-                    ip++;
-                    continue;
-                }
-            }
 
             if ((Lte::Cast(i) || Gte::Cast(i) || Lt::Cast(i) || Gt::Cast(i) ||
                  Mod::Cast(i) || Add::Cast(i) || Div::Cast(i) ||
                  IDiv::Cast(i) || Colon::Cast(i) || Pow::Cast(i) ||
                  Sub::Cast(i) || Mul::Cast(i) || Neq::Cast(i) || Eq::Cast(i)) &&
-                i->env() != Env::elided() && lastFrameState != nullptr) {
-                ProfiledValues* profile = &function->runtimeFeedback;
+                i->env() != Env::elided()) {
+
+                // ProfiledValues* profile = &function->runtimeFeedback;
                 Value* opLeft = i->arg(0).val();
                 Value* opRight = i->arg(1).val();
 
-                if (profile->hasTypesFor(opLeft) &&
-                    profile->hasTypesFor(opRight) &&
-                    !profile->types.at(opLeft).observedObject() &&
-                    !profile->types.at(opRight).observedObject()) {
-                    i->elideEnv();
-                    BB* split = BBTransform::addConditionalDeopt(
-                        function, bb, ip, new IsObject(opRight),
-                        lastFrameState);
-                    BBTransform::addConditionalDeopt(
-                        function, split, split->begin(), new IsObject(opLeft),
-                        lastFrameState);
-                    ip = bb->end();
-                } else {
-                    ip++;
-                }
+                // if (profile->hasTypesFor(opLeft) &&
+                //    profile->hasTypesFor(opRight) &&
+                //    !profile->types.at(opLeft).observedObject() &&
+                //    !profile->types.at(opRight).observedObject()) {
+                i->elideEnv();
+                ip = insertExpectAndAdvance(bb, opLeft, ip);
+                ip = insertExpectAndAdvance(bb, opRight, ip);
+                //}
             } else {
-                ip++;
+                if (Checkpoint* cp = Checkpoint::Cast(i))
+                    checkpoints.emplace(bb->trueBranch(), cp);
             }
+            ip++;
         }
     });
-}
+
+} // namespace pir
 } // namespace pir
 } // namespace rir
