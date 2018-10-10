@@ -57,7 +57,6 @@ void ElideEnvSpec::apply(Closure* function) const {
             ip++;
         }
     });
-
-} // namespace pir
+}
 } // namespace pir
 } // namespace rir
