@@ -58,9 +58,9 @@ void Builder::add(Instruction* i) {
     bb->append(i);
 }
 
-Safepoint* Builder::registerSafepoint(rir::Code* srcCode, Opcode* pos,
-                                      const RirStack& stack) {
-    auto sp = new Safepoint(env, srcCode, pos, stack);
+FrameState* Builder::registerFrameState(rir::Code* srcCode, Opcode* pos,
+                                        const RirStack& stack) {
+    auto sp = new FrameState(env, srcCode, pos, stack);
     add(sp);
     return sp;
 };
@@ -78,7 +78,7 @@ void Builder::conditionalDeopt(Value* condition, rir::Code* srcCode,
         setBranch(fail, cont);
 
     enterBB(fail);
-    auto sp = registerSafepoint(srcCode, pos, stack);
+    auto sp = registerFrameState(srcCode, pos, stack);
     add(new Deopt(sp));
 
     enterBB(cont);

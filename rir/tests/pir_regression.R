@@ -56,7 +56,7 @@ rir.compile(function(){
 })()
 
 
-# inlined safepoints:
+# inlined frameStates:
 f <- rir.compile(function(x) g(x))
 g <- rir.compile(function(x) h(x))
 h <- rir.compile(function(x) 1+i(x))

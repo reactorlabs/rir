@@ -1,4 +1,3 @@
-#include "inline.h"
 #include "../pir/pir_impl.h"
 #include "../transform/bb.h"
 #include "../transform/replace.h"
@@ -7,6 +6,7 @@
 #include "R/Funtab.h"
 #include "R/Symbols.h"
 #include "R/r.h"
+#include "pass_definitions.h"
 
 #include <algorithm>
 #include <unordered_map>
@@ -67,21 +67,21 @@ class TheInliner {
                 std::vector<Value*> arguments;
                 theCallInstruction->eachCallArg(
                     [&](Value* v) { arguments.push_back(v); });
-                Safepoint* callerSafepoint = nullptr;
+                FrameState* callerFrameState = nullptr;
 
-                // try to find a safepoint for this call instruction
+                // try to find a frameState for this call instruction
                 if (split->size() > 1) {
                     auto pos = split->begin() + 1; // skip the call instruction
-                    if (auto sp = Safepoint::Cast(*pos)) {
+                    if (auto sp = FrameState::Cast(*pos)) {
                         while (sp) {
                             if (sp->stackSize > 0 && sp->tos() == theCall) {
-                                callerSafepoint = sp;
+                                callerFrameState = sp;
                                 break;
                             }
                             pos++;
                             if (pos == split->end())
                                 break;
-                            sp = Safepoint::Cast(*pos);
+                            sp = FrameState::Cast(*pos);
                         }
                         }
                 }
@@ -106,21 +106,22 @@ class TheInliner {
                                 return;
                             }
                         }
-                        if (auto sp = Safepoint::Cast(i)) {
-                            if (!callerSafepoint) {
+                        if (auto sp = FrameState::Cast(i)) {
+                            if (!callerFrameState) {
                                 fail = true;
                                 return;
                             }
 
-                            // When inlining a safepoint we need to chain it
-                            // with the safepoints after the call to the inlinee
+                            // When inlining a frameState we need to chain it
+                            // with the frameStates after the call to the
+                            // inlinee
                             if (!sp->next()) {
-                                auto copyFromSp = callerSafepoint;
+                                auto copyFromFs = callerFrameState;
                                 auto cloneSp =
-                                    Safepoint::Cast(copyFromSp->clone());
+                                    FrameState::Cast(copyFromFs->clone());
 
                                 // Remove the inlinee result from the
-                                // caller safepoint. The result will only
+                                // caller frameState. The result will only
                                 // become available after the (deoptimized)
                                 // inlinee returns.
                                 cloneSp->popStack();
@@ -128,13 +129,13 @@ class TheInliner {
                                 sp->next(cloneSp);
 
                                 size_t created = 1;
-                                while (copyFromSp->next()) {
-                                    assert(copyFromSp->next() ==
+                                while (copyFromFs->next()) {
+                                    assert(copyFromFs->next() ==
                                            cloneSp->next());
-                                    copyFromSp = copyFromSp->next();
+                                    copyFromFs = copyFromFs->next();
                                     auto prevClone = cloneSp;
                                     cloneSp =
-                                        Safepoint::Cast(copyFromSp->clone());
+                                        FrameState::Cast(copyFromFs->clone());
 
                                     ip = bb->insert(ip, cloneSp);
                                     created++;

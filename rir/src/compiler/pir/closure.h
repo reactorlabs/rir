@@ -6,9 +6,19 @@
 #include "pir.h"
 #include <functional>
 #include <sstream>
+#include <unordered_map>
 
 namespace rir {
 namespace pir {
+
+struct ProfiledValues {
+    std::unordered_map<Value*, ObservedCalles> callTargets;
+    std::unordered_map<Value*, ObservedValues> types;
+
+    bool hasTypesFor(Value* value) {
+        return types.count(value) && types.at(value).numTypes;
+    }
+};
 
 /*
  * Closure
@@ -21,6 +31,7 @@ namespace pir {
 class Closure : public Code {
   private:
     friend class Module;
+
     static std::string uniqueName(const Closure* c, const std::string& name) {
         std::stringstream id;
         id << name << "[" << c << "]";
@@ -47,8 +58,8 @@ class Closure : public Code {
 
     std::vector<SEXP> argNames;
     std::vector<Promise*> defaultArgs;
-
     std::vector<Promise*> promises;
+    ProfiledValues runtimeFeedback;
 
     void print(std::ostream& out, bool tty) const;
 
@@ -76,7 +87,6 @@ class Closure : public Code {
             if (p)
                 it(p);
     }
-
 };
 
 } // namespace pir

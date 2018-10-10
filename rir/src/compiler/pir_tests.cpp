@@ -161,7 +161,7 @@ void insertTypeFeedbackForBinops(rir::Function* srcFunction,
             BC bc = BC::advance(&finger, function);
             if (bc.bc == Opcode::record_binop_) {
                 prev++;
-                TypeFeedback* feedback = (TypeFeedback*)prev;
+                ObservedValues* feedback = (ObservedValues*)prev;
                 feedback[0].record(typeFeedback[0]);
                 feedback[1].record(typeFeedback[1]);
             }
