@@ -63,7 +63,7 @@
     V(ForSeqSize)                                                              \
     V(FrameState)                                                              \
     V(Checkpoint)                                                              \
-    V(Expect)                                                                  \
+    V(ExpectNot)                                                               \
     V(Deopt)                                                                   \
     V(ScheduledDeopt)                                                          \
     V(Force)                                                                   \

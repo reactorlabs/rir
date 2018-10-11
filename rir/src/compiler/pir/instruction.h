@@ -1198,9 +1198,9 @@ class FLI(Deopt, 1, Effect::Any, EnvAccess::None) {
  * if the test fails, jump to the deopt branch of the checkpoint.
  */
 
-class FLI(Expect, 2, Effect::Any, EnvAccess::None) {
+class FLI(ExpectNot, 2, Effect::Any, EnvAccess::None) {
   public:
-    Expect(Value* test, Checkpoint* checkpoint)
+    ExpectNot(Value* test, Checkpoint* checkpoint)
         : FixedLenInstruction(PirType::voyd(),
                               {{NativeType::test, NativeType::test}},
                               {{test, checkpoint}}) {}

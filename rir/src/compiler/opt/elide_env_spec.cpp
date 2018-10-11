@@ -19,11 +19,12 @@ void ElideEnvSpec::apply(Closure* function) const {
     auto insertExpectAndAdvance = [&](BB* src, Value* operand,
                                       BB::Instrs::iterator position) {
         Instruction* condition = new IsObject(operand);
+
         position = src->insert(position, condition);
         position++;
         assert(checkpoints[src]);
         position =
-            src->insert(position, new Expect(condition, checkpoints[src]));
+            src->insert(position, new ExpectNot(condition, checkpoints[src]));
         position++;
         return position;
     };

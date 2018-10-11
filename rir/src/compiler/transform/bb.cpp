@@ -100,8 +100,8 @@ BB* BBTransform::lowerExpect(Code* code, BB* src, BB::Instrs::iterator position,
                              Value* condition, BB* deoptBlock) {
     auto split = BBTransform::split(code->nextBBId++, src, position + 1, code);
     src->replace(position, new Branch(condition));
-    src->next0 = split;
-    src->next1 = deoptBlock;
+    src->next0 = deoptBlock;
+    src->next1 = split;
     return split;
 }
 

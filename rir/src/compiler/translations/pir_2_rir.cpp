@@ -1013,7 +1013,7 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 break;
             }
             case Tag::Deopt:
-            case Tag::Expect:
+            case Tag::ExpectNot:
             case Tag::Checkpoint: {
                 code->printCode(std::cout, true);
                 assert(false && "Deopt instructions must be lowered into "
@@ -1107,7 +1107,7 @@ void Pir2Rir::lower(Code* code) {
                     auto newDeopt = new ScheduledDeopt();
                     newDeopt->consumeFrameStates(deopt);
                     bb->replace(it, newDeopt);
-                } else if (auto expect = Expect::Cast(*it)) {
+                } else if (auto expect = ExpectNot::Cast(*it)) {
                     BBTransform::lowerExpect(
                         code, bb, it, expect->condition(),
                         expect->checkpoint()->bb()->falseBranch());
