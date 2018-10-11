@@ -31,6 +31,7 @@ struct ProfiledValues {
 class Closure : public Code {
   private:
     friend class Module;
+
     static std::string uniqueName(const Closure* c, const std::string& name) {
         std::stringstream id;
         id << name << "[" << c << "]";
