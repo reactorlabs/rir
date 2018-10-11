@@ -120,7 +120,7 @@ class BC {
         uint32_t i;
         NumLocals loc;
         LocalsCopy loc_cpy;
-        ObservedCalles callFeedback;
+        ObservedCallees callFeedback;
         ObservedValues binopFeedback[2];
         ImmediateArguments() { memset(this, 0, sizeof(ImmediateArguments)); }
     };
@@ -616,7 +616,7 @@ class BC {
             memcpy(&immediate.loc_cpy, pc, sizeof(LocalsCopy));
             break;
         case Opcode::record_call_:
-            memcpy(&immediate.callFeedback, pc, sizeof(ObservedCalles));
+            memcpy(&immediate.callFeedback, pc, sizeof(ObservedCallees));
             break;
         case Opcode::record_binop_:
             memcpy(&immediate.binopFeedback, pc, sizeof(ObservedValues) * 2);

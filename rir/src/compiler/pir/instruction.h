@@ -112,6 +112,7 @@ class Instruction : public Value {
 
     Value* baseValue() override;
     bool isInstruction() final { return true; }
+    bool maySpecialize();
 
     BB* bb_ = nullptr;
     BB* bb() {
@@ -201,7 +202,7 @@ class Instruction : public Value {
                "subclass must override envSlot() if it uses env");
         assert(false && "this instruction has no env");
     }
-};
+}; // namespace pir
 
 template <Tag ITAG, class Base, Effect EFFECT, EnvAccess ENV, class ArgStore>
 class InstructionImplementation : public Instruction {
@@ -585,12 +586,18 @@ class FLIE(StVar, 2, Effect::None, EnvAccess::Write) {
     void printArgs(std::ostream& out, bool tty) override;
 };
 
-class FLI(Branch, 1, Effect::None, EnvAccess::None) {
+// Common interface to all branch instructions
+class BranchInstruction {
   public:
-    explicit Branch(Value* test)
+    static BranchInstruction* CastBranch(Value* v);
+};
+
+class FLI(Branch, 1, Effect::None, EnvAccess::None), public BranchInstruction {
+  public:
+    explicit Branch(Value * test)
         : FixedLenInstruction(PirType::voyd(), {{NativeType::test}}, {{test}}) {
     }
-    void printArgs(std::ostream& out, bool tty) override;
+    void printArgs(std::ostream & out, bool tty) override;
 };
 
 class FLI(Return, 1, Effect::None, EnvAccess::None) {
@@ -1166,10 +1173,11 @@ class VLIE(FrameState, Effect::Any, EnvAccess::Leak) {
  *  contain a deopt. Checkpoint takes either branch at random
  *  to ensure the optimizer consider deopt and non-deopt cases.
  */
-class FLI(Checkpoint, 0, Effect::None, EnvAccess::None) {
+class FLI(Checkpoint, 0, Effect::None, EnvAccess::None),
+    public BranchInstruction {
   public:
     Checkpoint() : FixedLenInstruction(PirType::voyd()) {}
-    void printArgs(std::ostream& out, bool tty) override;
+    void printArgs(std::ostream & out, bool tty) override;
 };
 
 /*
@@ -1196,6 +1204,9 @@ class FLI(Expect, 2, Effect::Any, EnvAccess::None) {
         : FixedLenInstruction(PirType::voyd(),
                               {{NativeType::test, NativeType::test}},
                               {{test, checkpoint}}) {}
+
+    Checkpoint* checkpoint() { return Checkpoint::Cast(arg(1).val()); }
+    Value* condition() { return arg(0).val(); }
 };
 
 class VLI(ScheduledDeopt, Effect::Any, EnvAccess::None) {

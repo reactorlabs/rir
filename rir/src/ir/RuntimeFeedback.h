@@ -14,7 +14,7 @@ struct Code;
 #pragma pack(push)
 #pragma pack(1)
 
-struct ObservedCalles {
+struct ObservedCallees {
     static constexpr unsigned CounterBits = 30;
     static constexpr unsigned CounterOverflow = (1 << CounterBits) - 1;
     static constexpr unsigned TargetBits = 2;
@@ -47,7 +47,7 @@ struct ObservedType {
 
     bool isObj() const { return object; }
 };
-static_assert(sizeof(ObservedCalles) == 4 * sizeof(uint32_t),
+static_assert(sizeof(ObservedCallees) == 4 * sizeof(uint32_t),
               "Size needs to fit inside a record_ bc immediate args");
 
 struct ObservedValues {

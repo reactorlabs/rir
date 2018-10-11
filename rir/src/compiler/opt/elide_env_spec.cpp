@@ -21,6 +21,7 @@ void ElideEnvSpec::apply(Closure* function) const {
         Instruction* condition = new IsObject(operand);
         position = src->insert(position, condition);
         position++;
+        assert(checkpoints[src]);
         position =
             src->insert(position, new Expect(condition, checkpoints[src]));
         position++;
@@ -32,24 +33,19 @@ void ElideEnvSpec::apply(Closure* function) const {
         while (ip != bb->end()) {
             Instruction* i = *ip;
 
-            if ((Lte::Cast(i) || Gte::Cast(i) || Lt::Cast(i) || Gt::Cast(i) ||
-                 Mod::Cast(i) || Add::Cast(i) || Div::Cast(i) ||
-                 IDiv::Cast(i) || Colon::Cast(i) || Pow::Cast(i) ||
-                 Sub::Cast(i) || Mul::Cast(i) || Neq::Cast(i) || Eq::Cast(i)) &&
-                i->env() != Env::elided()) {
-
-                // ProfiledValues* profile = &function->runtimeFeedback;
+            if (i->maySpecialize() && i->env() != Env::elided()) {
+                ProfiledValues* profile = &function->runtimeFeedback;
                 Value* opLeft = i->arg(0).val();
                 Value* opRight = i->arg(1).val();
 
-                // if (profile->hasTypesFor(opLeft) &&
-                //    profile->hasTypesFor(opRight) &&
-                //    !profile->types.at(opLeft).observedObject() &&
-                //    !profile->types.at(opRight).observedObject()) {
-                i->elideEnv();
-                ip = insertExpectAndAdvance(bb, opLeft, ip);
-                ip = insertExpectAndAdvance(bb, opRight, ip);
-                //}
+                if (profile->hasTypesFor(opLeft) &&
+                    profile->hasTypesFor(opRight) &&
+                    !profile->types.at(opLeft).observedObject() &&
+                    !profile->types.at(opRight).observedObject()) {
+                    i->elideEnv();
+                    ip = insertExpectAndAdvance(bb, opLeft, ip);
+                    ip = insertExpectAndAdvance(bb, opRight, ip);
+                }
             } else {
                 if (Checkpoint* cp = Checkpoint::Cast(i))
                     checkpoints.emplace(bb->trueBranch(), cp);

@@ -6,7 +6,7 @@
 
 namespace rir {
 
-void ObservedCalles::record(Code* caller, SEXP callee) {
+void ObservedCallees::record(Code* caller, SEXP callee) {
     if (taken < CounterOverflow)
         taken++;
     if (numTargets < MaxTargets) {

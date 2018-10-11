@@ -37,7 +37,7 @@ void DelayEnv::apply(Closure* function) const {
                 auto next = *(it + 1);
 
                 if (Branch::Cast(next) || Return::Cast(next) ||
-                    Deopt::Cast(next))
+                    Deopt::Cast(next) || Checkpoint::Cast(next))
                     break;
 
                 auto consumeStVar = [&](StVar* st) {
@@ -83,7 +83,7 @@ void DelayEnv::apply(Closure* function) const {
             };
 
             if (it != bb->end() && (it + 1) != bb->end()) {
-                auto branch = Branch::Cast(*(it + 1));
+                auto branch = BranchInstruction::CastBranch(*(it + 1));
                 if (envInstr && branch) {
                     Deopt* deopt;
                     if (!bb->falseBranch()->isEmpty() &&

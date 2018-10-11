@@ -14,11 +14,10 @@ class BBTransform {
     static BB* split(size_t next_id, BB* src, BB::Instrs::iterator,
                      Code* target);
     static Value* forInline(BB* inlinee, BB* cont);
-    static BB* addConditionalDeopt(Closure* closure, BB* src,
-                                   BB::Instrs::iterator position,
-                                   Instruction* condition,
-                                   FrameState* frameState);
-    static BB* addCheckpoint(Closure* closure, BB* src,
+    static BB* lowerExpect(Code* closure, BB* src,
+                           BB::Instrs::iterator position, Value* condition,
+                           BB* deoptBlock);
+    static BB* addCheckpoint(Code* closure, BB* src,
                              BB::Instrs::iterator position);
 };
 } // namespace pir

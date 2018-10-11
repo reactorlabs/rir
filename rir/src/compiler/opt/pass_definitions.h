@@ -41,13 +41,13 @@ class PASS(ElideEnv, "Elide environments not needed");
  *
  * If we identify such an instruction, and we statically know which promise is
  * being forced, then it inlines the promise code at the place of the
- * dominating force, and replaces all subsequent forces with it's result.
+ * dominating force, and replaces all subsequent forces with its result.
  *
  */
 class PASS(ForceDominance, "Eliminate redudant force instructions");
 
 /*
- * DelayInstr tries to schedule instruction right before they are needed.
+ * DelayInstr tries to schedule instructions right before they are needed.
  *
  */
 class PASS(DelayInstr, "Eliminate redudant force instructions");

@@ -47,7 +47,12 @@ void InsertCast::apply(BB* bb) {
                 }
                 c->bb_ = bb;
                 arg.val() = c;
-                ip = bb->insert(ip, c) + 1;
+                if (instr->maySpecialize() && ip != bb->begin() &&
+                    FrameState::Cast(*(ip - 1))) {
+                    ip = bb->insert(ip - 1, c) + 2;
+                } else {
+                    ip = bb->insert(ip, c) + 1;
+                }
             }
         });
         ip++;

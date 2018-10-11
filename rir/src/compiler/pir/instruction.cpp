@@ -168,6 +168,20 @@ Value* Instruction::baseValue() {
     return this;
 }
 
+bool Instruction::maySpecialize() {
+    bool may = false;
+    if (false) {
+        // Do nothing
+    }
+#define V(Name)                                                                \
+    else if (Name::Cast(this)) {                                               \
+        may = true;                                                            \
+    }
+    BINOP_INSTRUCTIONS(V)
+#undef V
+    return may;
+}
+
 void LdConst::printArgs(std::ostream& out, bool tty) {
     std::string val;
     {
@@ -448,8 +462,19 @@ FrameState* Deopt::frameState() { return FrameState::Cast(arg<0>().val()); }
 
 void Checkpoint::printArgs(std::ostream& out, bool tty) {
     FixedLenInstruction::printArgs(out, tty);
-    out << " -> BB" << bb()->trueBranch()->id << " (if speculations hold) | BB"
-        << bb()->falseBranch()->id << " (deopt branch)";
+    out << " -> BB" << bb()->trueBranch()->id << " (by default) | BB"
+        << bb()->falseBranch()->id << " (if coming from expect)";
+}
+
+BranchInstruction* BranchInstruction::CastBranch(Value* v) {
+    switch (v->tag) {
+    case Tag::Branch:
+        return Branch::Cast(v);
+    case Tag::Checkpoint:
+        return Checkpoint::Cast(v);
+    default: {}
+    }
+    return nullptr;
 }
 
 } // namespace pir
