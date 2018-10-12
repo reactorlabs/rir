@@ -27,23 +27,6 @@ void AdaptForSpec::apply(Closure* function) const {
             }
             ip++;
         }
-
-        /*
-         * Now lets try to move the instructions previous to the framestate
-         * to the newly created bb because that will probably make
-         * the code easier to read
-         */
-
-        /*ip = bb->end() - 2;
-        while (ip != bb->begin()) {
-            ip--;
-            Instruction* i = *ip;
-            if (!(i->hasEffect() | i->mayAccessEnv()))
-                bb->moveToBegin(ip, split);
-            else
-                break;
-        }
-        */
     });
 }
 } // namespace pir

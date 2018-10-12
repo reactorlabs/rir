@@ -1015,7 +1015,6 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
             case Tag::Deopt:
             case Tag::ExpectNot:
             case Tag::Checkpoint: {
-                code->printCode(std::cout, true);
                 assert(false && "Deopt instructions must be lowered into "
                                 "standard branches and scheduled deopt, "
                                 "before pir_2_rir");

@@ -202,7 +202,7 @@ class Instruction : public Value {
                "subclass must override envSlot() if it uses env");
         assert(false && "this instruction has no env");
     }
-}; // namespace pir
+};
 
 template <Tag ITAG, class Base, Effect EFFECT, EnvAccess ENV, class ArgStore>
 class InstructionImplementation : public Instruction {
