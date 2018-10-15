@@ -129,15 +129,11 @@ class TheCleanup {
         CFG cfg(function);
         std::unordered_map<BB*, BB*> toDel;
         Visitor::run(function->entry, [&](BB* bb) {
-            // Remove unnecessary splits
-            if (bb->isJmp() && cfg.hasSinglePred(bb->next0) &&
-                /* this condition keeps graph in split-edge: */
-                cfg.hasSinglePred(bb) &&
-                cfg.immediatePredecessors(bb)[0]->isJmp()) {
+            // If bb is a jump to non-merge block, we merge it with the next
+            if (bb->isJmp() && cfg.hasSinglePred(bb->next0)) {
                 BB* d = bb->next0;
-                while (!d->isEmpty()) {
+                while (!d->isEmpty())
                     d->moveToEnd(d->begin(), bb);
-                }
                 bb->next0 = d->next0;
                 bb->next1 = d->next1;
                 d->next0 = nullptr;
