@@ -14,6 +14,11 @@ rir.disassemble <- function(what, verbose = FALSE) {
     invisible(.Call("rir_disassemble", what, verbose))
 }
 
+# prints how many times the (optimized) rir function was called
+rir.printInvocation <- function(what) {
+    invisible(.Call("rir_printInvocation", what))
+}
+
 # compiles given closure, or expression and returns the compiled version.
 rir.compile <- function(what) {
     .Call("rir_compile", what)
