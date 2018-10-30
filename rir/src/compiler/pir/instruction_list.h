@@ -68,6 +68,7 @@
     V(CastType)                                                                \
     V(SetShared)                                                               \
     V(PirCopy)                                                                 \
-    V(Int3)
+    V(Int3)                                                                    \
+    V(PrintInvocation)
 
 #endif

@@ -133,6 +133,7 @@ void BC::write(CodeStream& cs) const {
     case Opcode::for_seq_size_:
     case Opcode::swap_:
     case Opcode::int3_:
+    case Opcode::printInvocation_:
     case Opcode::make_unique_:
     case Opcode::set_shared_:
     case Opcode::aslogical_:
@@ -344,6 +345,7 @@ void BC::print(std::ostream& out) const {
     case Opcode::ret_:
     case Opcode::swap_:
     case Opcode::int3_:
+    case Opcode::printInvocation_:
     case Opcode::make_unique_:
     case Opcode::set_shared_:
     case Opcode::dup_:

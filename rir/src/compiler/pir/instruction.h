@@ -811,6 +811,12 @@ class FLI(Int3, 0, Effect::Any, EnvAccess::None) {
     Int3() : FixedLenInstruction(PirType::voyd()) {}
 };
 
+// Effect::Any prevents this instruction from being optimized away
+class FLI(PrintInvocation, 0, Effect::Any, EnvAccess::None) {
+  public:
+    PrintInvocation() : FixedLenInstruction(PirType::voyd()) {}
+};
+
 #define BINOP(Name, Type)                                                      \
     class FLIE(Name, 3, Effect::None, EnvAccess::Leak) {                       \
       public:                                                                  \

@@ -232,6 +232,7 @@ BC BC::extract2_1() { return BC(Opcode::extract2_1_); }
 BC BC::extract2_2() { return BC(Opcode::extract2_2_); }
 BC BC::swap() { return BC(Opcode::swap_); }
 BC BC::int3() { return BC(Opcode::int3_); }
+BC BC::printInvocation() { return BC(Opcode::printInvocation_); }
 BC BC::makeUnique() { return BC(Opcode::make_unique_); }
 BC BC::setShared() { return BC(Opcode::set_shared_); }
 BC BC::asLogical() { return BC(Opcode::aslogical_); }

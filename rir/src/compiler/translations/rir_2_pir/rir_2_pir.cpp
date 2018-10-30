@@ -530,6 +530,10 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, rir::Code* srcCode,
         insert(new Int3());
         break;
 
+    case Opcode::printInvocation_:
+        insert(new PrintInvocation());
+        break;
+
     // TODO implement!
     // (silently ignored)
     case Opcode::invisible_:

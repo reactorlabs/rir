@@ -10,4 +10,9 @@ void Function::disassemble(std::ostream& out) {
         }
     }
 }
+
+void Function::printInvocation(std::ostream& out) {
+    out << "Invocation count: " << invocationCount << "\n";
+}
+
 } // namespace rir

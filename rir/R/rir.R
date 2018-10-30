@@ -95,6 +95,13 @@ rir.body <- function(f) {
     .Call("rir_body", f);
 }
 
+# prints invocation during evaluation
+# insert a call to .printInvocation()' in R code and the invocation count of the
+# enclosing function will be printed
+.printInvocation <- function() {
+    cat("Invocation count: 0 (not compiled)\n")
+}
+
 # breakpoint during evaluation
 # insert a call to `.debug.break()` in R code and get a breakpoint when it is evaluated
 # note: the actual body of this function is replaced by an "int3_" bytecode

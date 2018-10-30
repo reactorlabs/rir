@@ -360,6 +360,7 @@ class BC {
     inline static BC isObj();
     inline static BC return_();
     inline static BC int3();
+    inline static BC printInvocation();
     inline static BC deopt(SEXP);
     inline static BC callImplicit(const std::vector<FunIdx>& args, SEXP ast);
     inline static BC callImplicit(const std::vector<FunIdx>& args,
@@ -641,6 +642,7 @@ class BC {
         case Opcode::dup2_:
         case Opcode::swap_:
         case Opcode::int3_:
+        case Opcode::printInvocation_:
         case Opcode::make_unique_:
         case Opcode::set_shared_:
         case Opcode::aslogical_:

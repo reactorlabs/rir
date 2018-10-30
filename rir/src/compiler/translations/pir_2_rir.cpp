@@ -904,6 +904,7 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 SIMPLE(MkCls, close);
                 SIMPLE(IsObject, isObj);
                 SIMPLE(Int3, int3);
+                SIMPLE(PrintInvocation, printInvocation);
                 SIMPLE(SetShared, setShared);
 #undef SIMPLE
 
