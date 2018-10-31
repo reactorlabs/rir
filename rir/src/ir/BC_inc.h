@@ -213,7 +213,7 @@ class BC {
                bc == Opcode::push_code_;
     }
 
-    void addPromargsTo(std::vector<FunIdx>& proms) {
+    void addMyPromArgsTo(std::vector<FunIdx>& proms) {
         switch (bc) {
         case Opcode::push_code_:
         case Opcode::promise_:

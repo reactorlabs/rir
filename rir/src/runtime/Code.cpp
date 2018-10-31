@@ -92,7 +92,7 @@ void Code::disassemble(std::ostream& out, std::string prefix) const {
         }
 
         BC bc = BC::decode(pc, this);
-        bc.addPromargsTo(promises);
+        bc.addMyPromArgsTo(promises);
 
         const size_t OFFSET_WIDTH = 7;
         out << std::right << std::setw(OFFSET_WIDTH)

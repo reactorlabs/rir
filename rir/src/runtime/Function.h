@@ -20,29 +20,18 @@ typedef SEXP FunctionSEXP;
 // magic in his vector too...
 #define FUNCTION_MAGIC (unsigned)0xca11ab1e
 
-// TODO removed src reference, now each code has its own
-/** A Function holds the RIR code for some GNU R function.
- *  Each function start with a header and a sequence of
- *  Code objects for the body and all of the promises
- *  in the code.
+/** A RIR function represents GNU R function.
  *
- *  The header start with a magic constant. This is a
- *  temporary hack so that it is possible to differentiate
- *  an R int vector from a Function. Eventually, we will
- *  add a new SEXP type for this purpose.
- *
- *  The size of the function, in bytes, includes the size
- *  of all of its Code objects and is padded to a word
- *  boundary.
+ *  Each function start with a header and some metadata. Then there are
+ *  (GC traceable) pointers to the body and the compiled default arguments.
+ *  If an argument has no default, the default arg is null.
  *
  *  A Function may be the result of optimizing another
  *  Function, in which case the origin field stores that
  *  Function as a SEXP pointer.
  *
- *  A Function has a source AST, stored in src.
+ *  A Function source is stored in the body code object
  *
- *  A Function has a number of Code objects, codeLen, stored
- *  inline in data.
  */
 #pragma pack(push)
 #pragma pack(1)
@@ -52,26 +41,23 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
 
     static constexpr size_t NUM_PTRS = 3;
 
-    Function(size_t functionSize, SEXP body,
+    Function(size_t functionSize, SEXP body_,
              const std::vector<SEXP>& defaultArgs)
         : RirRuntimeObject(
-              // GC area starts just before the end of the Function
+              // GC area starts at &locals and goes to the end of defaultArg_
               sizeof(Function) - NUM_PTRS * sizeof(FunctionSEXP),
-              // GC area includes the SEXPs before the Code objects array
               NUM_PTRS + defaultArgs.size()),
           size(functionSize), signature(nullptr), deopt(false), markOpt(false),
           numArgs(defaultArgs.size()) {
         origin(nullptr);
         next(nullptr);
-        for (size_t i = 0; i < numArgs; ++i) {
-            // Set codeObjects[i] to point to Code object c's container
+        for (size_t i = 0; i < numArgs; ++i)
             setEntry(NUM_PTRS + i, defaultArgs[i]);
-        }
-        setBody(body);
+        body(body_);
     }
 
     Code* body() { return Code::unpack(getEntry(2)); }
-    void setBody(SEXP body) { setEntry(2, body); }
+    void body(SEXP body) { setEntry(2, body); }
 
     void disassemble(std::ostream&);
 
@@ -103,10 +89,7 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
 
   private:
     // !!! SEXPs traceable by the GC must be declared here !!!
-    // !!!   *before* the CodeSEXP array.                  !!!
-    // !!! Furthermore, you need to update                 !!!
-    // !!!     the CODEOBJ_OFFSET constant.                !!!
-
+    // locals contains: origin, next, body
     CodeSEXP locals[NUM_PTRS];
     CodeSEXP defaultArg_[];
 };

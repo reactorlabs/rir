@@ -983,9 +983,6 @@ RIR_INLINE SEXP findRootPromise(SEXP p) {
     return p;
 }
 
-extern void printCode(Code* c);
-extern void printFunction(Function* f);
-
 extern SEXP Rf_deparse1(SEXP call, Rboolean abbrev, int opts);
 
 void debug(Code* c, Opcode* pc, const char* name, unsigned depth,
