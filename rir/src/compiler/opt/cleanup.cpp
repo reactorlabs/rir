@@ -206,7 +206,6 @@ class TheCleanup {
         };
         renumberBBs(function);
         function->eachPromise(renumberBBs);
-        function->eachDefaultArg(renumberBBs);
     }
 };
 

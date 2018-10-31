@@ -57,9 +57,10 @@ class Closure : public Code {
     rir::Function* rirVersion() { return function; }
 
     std::vector<SEXP> argNames;
-    std::vector<Promise*> defaultArgs;
     std::vector<Promise*> promises;
     ProfiledValues runtimeFeedback;
+
+    size_t nargs() const { return argNames.size(); }
 
     void print(std::ostream& out, bool tty) const;
 
@@ -75,12 +76,6 @@ class Closure : public Code {
     ~Closure();
 
     typedef std::function<void(Promise*)> PromiseIterator;
-
-    void eachDefaultArg(PromiseIterator it) const {
-        for (auto p : defaultArgs)
-            if (p)
-                it(p);
-    }
 
     void eachPromise(PromiseIterator it) const {
         for (auto p : promises)

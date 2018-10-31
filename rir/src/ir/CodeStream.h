@@ -18,6 +18,7 @@ class CodeStream {
     friend class Compiler;
 
     std::vector<char>* code;
+    std::vector<Code*> promises;
 
     typedef unsigned PcOffset;
     PcOffset pos = 0;
@@ -45,11 +46,15 @@ class CodeStream {
     // the beginning of an instruction in the final Code object.
     std::map<PcOffset, BC::PoolIdx> sources;
 
-    uint32_t nextCallSiteIdx_ = 0;
-
   public:
     CodeStream(const CodeStream& other) = delete;
     CodeStream& operator=(const CodeStream& other) = delete;
+
+    size_t addPromise(Code* code) {
+        auto s = promises.size();
+        promises.push_back(code);
+        return s;
+    }
 
     BC::Label mkLabel() {
         assert(nextLabel < BC::MAX_JMP);
@@ -141,23 +146,25 @@ class CodeStream {
         sources.erase(pc + bcSize);
     }
 
-    BC::FunIdx finalize(bool markDefaultArg, size_t localsCnt) {
-        Code* res =
-            function.writeCode(ast, &(*code)[0], pos, sources, patchpoints,
-                               labels, markDefaultArg, localsCnt, nops);
+    Code* finalize(size_t localsCnt) {
+        Code* res = function.writeCode(ast, &(*code)[0], pos, sources,
+                                       patchpoints, labels, localsCnt, nops);
+        assert(res->extraPoolSize == 0 &&
+               "promise indices and src pool idx need to be aligned");
+        for (auto c : promises)
+            res->addExtraPoolEntry(c->container());
 
         labels.clear();
         patchpoints.clear();
         sources.clear();
         nextLabel = 0;
-        nextCallSiteIdx_ = 0;
 
         delete code;
         code = nullptr;
         pos = 0;
 
         CodeVerifier::calculateAndVerifyStack(res);
-        return res->index;
+        return res;
     }
 };
 

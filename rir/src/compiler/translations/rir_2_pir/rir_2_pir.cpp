@@ -241,7 +241,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, rir::Code* srcCode,
                 log.warn("Cannot compile call with explicit missing arguments");
                 return false;
             }
-            rir::Code* promiseCode = srcFunction->codeAt(argi);
+            rir::Code* promiseCode = srcCode->getPromise(argi);
             Promise* prom = insert.function->createProm(promiseCode->src);
             {
                 Builder promiseBuilder(insert.function, prom);
@@ -303,7 +303,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, rir::Code* srcCode,
 
     case Opcode::promise_: {
         unsigned promi = bc.immediate.i;
-        rir::Code* promiseCode = srcFunction->codeAt(promi);
+        rir::Code* promiseCode = srcCode->getPromise(promi);
         Value* val = pop();
         Promise* prom = insert.function->createProm(promiseCode->src);
         {
@@ -778,7 +778,7 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) const {
                 }
             }
             inner << "@";
-            if (srcCode != srcCode->function()->body()) {
+            if (srcCode != srcFunction->body()) {
                 size_t i = 0;
                 for (auto c : insert.function->promises) {
                     if (c == insert.code) {

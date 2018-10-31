@@ -34,7 +34,7 @@ REXPORT SEXP rir_disassemble(SEXP what, SEXP verbose) {
             continue;
         Function* f = t->at(entry);
         std::cout << "= vtable slot <" << entry << "> (" << f << ", invoked "
-                  << f->invocationCount << ") =\n";
+                  << f->invocationCount() << ") =\n";
         f->disassemble(std::cout);
     }
 
@@ -194,6 +194,7 @@ SEXP pirCompile(SEXP what, const std::string& name, pir::DebugOptions debug) {
     return what;
 }
 
+// Used in test infrastructure for counting invocation of different versions
 REXPORT SEXP rir_invocation_count(SEXP what) {
     if (!isValidClosureSEXP(what)) {
         Rf_error("not a compiled closure");
@@ -202,9 +203,8 @@ REXPORT SEXP rir_invocation_count(SEXP what) {
     assert(dt);
 
     SEXP res = Rf_allocVector(INTSXP, dt->capacity());
-    for (size_t i = 0; i < dt->capacity(); ++i) {
-        INTEGER(res)[i] = dt->available(i) ? dt->at(i)->invocationCount : 0;
-    }
+    for (size_t i = 0; i < dt->capacity(); ++i)
+        INTEGER(res)[i] = dt->available(i) ? dt->at(i)->invocationCount() : 0;
 
     return res;
 }

@@ -227,9 +227,10 @@ void CodeVerifier::verifyFunctionLayout(SEXP sexp, ::Context* ctx) {
 
     // get the code objects
     std::vector<Code*> objs;
-    for (auto c : *f) {
-        objs.push_back(c);
-    }
+    objs.push_back(f->body());
+    for (size_t i = 0; i < f->numArgs; ++i)
+        if (f->defaultArg(i))
+            objs.push_back(f->defaultArg(i));
 
     assert(f->size <= XLENGTH(sexp) and
            "Reported size must be smaller than the size of the vector");
@@ -239,15 +240,15 @@ void CodeVerifier::verifyFunctionLayout(SEXP sexp, ::Context* ctx) {
         assert(Function::unpack(f->origin())->info.magic == FUNCTION_MAGIC and
                "Origin does not seem to be function bytecode");
     }
-    assert(f->codeLength == objs.size() and "Invalid number of code objects");
 
-    // add the end sentinel
-    objs.push_back(nullptr);
-    // check the code headers
-    for (size_t i = 0, e = objs.size() - 1; i != e; ++i) {
-        Code* c = objs[i];
+    // check that the call instruction has proper arguments and number of
+    // instructions is valid
+    bool sawReturnOrBackjump = false;
+    while (!objs.empty()) {
+        auto c = objs.back();
+        objs.pop_back();
+
         assert(c->info.magic == CODE_MAGIC and "Invalid code magic number");
-        assert(c->function() == f and "Invalid code offset");
         assert(c->src != 0 and "Code must have AST");
         unsigned oldo = c->stackLength;
         calculateAndVerifyStack(c);
@@ -256,15 +257,7 @@ void CodeVerifier::verifyFunctionLayout(SEXP sexp, ::Context* ctx) {
         assert((uintptr_t)(c + 1) + pad4(c->codeSize) +
                    c->srcLength * sizeof(Code::SrclistEntry) &&
                "Invalid code length reported");
-    }
 
-    // remove the sentinel
-    objs.pop_back();
-
-    // check that the call instruction has proper arguments and number of
-    // instructions is valid
-    bool sawReturnOrBackjump = false;
-    for (auto c : objs) {
         Opcode* cptr = c->code();
         Opcode* start = cptr;
         Opcode* end = start + c->codeSize;
@@ -297,13 +290,7 @@ void CodeVerifier::verifyFunctionLayout(SEXP sexp, ::Context* ctx) {
             }
             if (*cptr == Opcode::promise_) {
                 unsigned* promidx = reinterpret_cast<Immediate*>(cptr + 1);
-                bool ok = false;
-                for (Code* c : objs)
-                    if (c->index == *promidx) {
-                        ok = true;
-                        break;
-                    }
-                assert(ok and "Invalid promise offset detected");
+                objs.push_back(c->getPromise(*promidx));
             }
             if (*cptr == Opcode::call_implicit_ ||
                 *cptr == Opcode::named_call_implicit_) {
@@ -313,13 +300,7 @@ void CodeVerifier::verifyFunctionLayout(SEXP sexp, ::Context* ctx) {
                     uint32_t offset = cur.callExtra().immediateCallArguments[i];
                     if (offset == MISSING_ARG_IDX || offset == DOTS_ARG_IDX)
                         continue;
-                    bool ok = false;
-                    for (Code* c : objs)
-                        if (c->index == offset) {
-                            ok = true;
-                            break;
-                        }
-                    assert(ok and "Invalid promise offset detected");
+                    objs.push_back(c->getPromise(offset));
                 }
                 if (*cptr == Opcode::named_call_implicit_) {
                     for (size_t i = 0, e = nargs; i != e; ++i) {
