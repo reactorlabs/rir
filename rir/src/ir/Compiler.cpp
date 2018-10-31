@@ -908,15 +908,13 @@ SEXP Compiler::finalize() {
 
     FunctionSignature* signature = new FunctionSignature();
 
-    std::vector<SEXP> defaultArgs;
-
     // Compile formals (if any) and create signature
     for (auto arg = RList(formals).begin(); arg != RList::end(); ++arg) {
         if (*arg == R_MissingArg) {
-            defaultArgs.push_back(nullptr);
+            function.addArgWithoutDefault();
         } else {
             auto compiled = compilePromise(ctx, *arg);
-            defaultArgs.push_back(compiled->container());
+            function.addDefaultArg(compiled);
         }
         signature->pushDefaultArgument();
     }
@@ -925,7 +923,7 @@ SEXP Compiler::finalize() {
     compileExpr(ctx, exp);
     ctx.cs() << BC::ret();
     auto body = ctx.pop();
-    function.finalize(body, defaultArgs);
+    function.finalize(body);
 
     function.function()->signature = signature;
 

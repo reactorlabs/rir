@@ -26,6 +26,7 @@ class CodeStream {
     unsigned nops = 0;
 
     FunctionWriter& function;
+    Preserve preserve;
 
     SEXP ast;
 
@@ -51,6 +52,7 @@ class CodeStream {
     CodeStream& operator=(const CodeStream& other) = delete;
 
     size_t addPromise(Code* code) {
+        preserve(code->container());
         auto s = promises.size();
         promises.push_back(code);
         return s;
