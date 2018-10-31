@@ -35,15 +35,6 @@ class TheVerifier {
                 return;
             }
         }
-        for (auto p : f->defaultArgs) {
-            if (p)
-                verify(p);
-            if (!ok) {
-                std::cerr << "Verification of argument failed\n";
-                p->print(std::cerr, true);
-                return;
-            }
-        }
     }
 
     void verify(BB* bb, const DominanceGraph& dom, const CFG& cfg) {

@@ -213,6 +213,21 @@ class BC {
                bc == Opcode::push_code_;
     }
 
+    void addPromargsTo(std::vector<FunIdx>& proms) {
+        switch (bc) {
+        case Opcode::push_code_:
+        case Opcode::promise_:
+            proms.push_back(immediate.arg_idx);
+            break;
+        case Opcode::named_call_implicit_:
+        case Opcode::call_implicit_:
+            for (auto a : callExtra().immediateCallArguments)
+                proms.push_back(a);
+            break;
+        default: {}
+        }
+    }
+
     bool isCondJmp() const {
         return bc == Opcode::brtrue_ || bc == Opcode::brfalse_ ||
                bc == Opcode::brobj_ || bc == Opcode::beginloop_;

@@ -29,8 +29,8 @@ struct CallContext {
     CallContext(Code* c, SEXP callee, size_t nargs, Immediate ast,
                 R_bcstack_t* stackArgs, Immediate* implicitArgs,
                 Immediate* names, SEXP callerEnv, Context* ctx)
-        : nargs(nargs), stackArgs(stackArgs), implicitArgs(implicitArgs),
-          names(names), caller(c->function()), callerEnv(callerEnv),
+        : caller(c), nargs(nargs), stackArgs(stackArgs),
+          implicitArgs(implicitArgs), names(names), callerEnv(callerEnv),
           ast(cp_pool_at(ctx, ast)), callee(callee) {
         assert(callee &&
                (TYPEOF(callee) == CLOSXP || TYPEOF(callee) == SPECIALSXP ||
@@ -59,11 +59,11 @@ struct CallContext {
         : CallContext(c, callee, nargs, ast, stackArgs, nullptr, nullptr,
                       callerEnv, ctx) {}
 
+    const Code* caller;
     const size_t nargs;
     const R_bcstack_t* stackArgs;
     const Immediate* implicitArgs;
     const Immediate* names;
-    const Function* caller;
     const SEXP callerEnv;
     const SEXP ast;
     const SEXP callee;
@@ -72,13 +72,13 @@ struct CallContext {
     bool hasEagerCallee() const { return TYPEOF(callee) == BUILTINSXP; }
     bool hasNames() const { return names; }
 
-    Immediate implicitArgOffset(unsigned i) const {
+    Immediate implicitArgIdx(unsigned i) const {
         assert(implicitArgs && i < nargs);
         return implicitArgs[i];
     }
 
     Code* implicitArg(unsigned i) const {
-        return caller->codeAt(implicitArgOffset(i));
+        return caller->getPromise(implicitArgIdx(i));
     }
 
     SEXP stackArg(unsigned i) const {
@@ -252,7 +252,7 @@ SEXP createLegacyArgsList(const CallContext& call, bool eagerCallee,
     // loop through the arguments and create a promise, unless it is a missing
     // argument
     for (size_t i = 0; i < call.nargs; ++i) {
-        unsigned argi = call.implicitArgOffset(i);
+        unsigned argi = call.implicitArgIdx(i);
         SEXP name = call.hasNames() ? call.name(i, ctx) : R_NilValue;
 
         // if the argument is an ellipsis, then retrieve it from the environment
@@ -482,8 +482,9 @@ SEXP closureArgumentAdaptor(const CallContext& call, SEXP arglist,
     // get the first Code that is a compiled default value of a formal arg
     // (or nullptr if no such exist)
     Function* fun = DispatchTable::unpack(BODY(op))->first();
-    Code* c = fun->findDefaultArg(0);
+    size_t pos = 0;
     while (f != R_NilValue) {
+        Code* c = fun->defaultArg(pos++);
         if (CAR(f) != R_MissingArg) {
             if (CAR(a) == R_MissingArg) {
                 assert(c != nullptr && "No more compiled formals available.");
@@ -492,7 +493,6 @@ SEXP closureArgumentAdaptor(const CallContext& call, SEXP arglist,
             }
             // Either just used the compiled formal or it was not needed.
             // Skip over current compiled formal and find the next default arg.
-            c = fun->findDefaultArg(c->index + 1);
         }
         assert(CAR(f) != R_DotsSymbol || TYPEOF(CAR(a)) == DOTSXP);
         f = CDR(f);
@@ -530,7 +530,7 @@ unsigned dispatch(const CallContext& call, DispatchTable* vt) {
     // to the callee
     if (!call.hasStackArgs()) {
         for (size_t i = 0; i < call.nargs; ++i)
-            if (call.implicitArgOffset(i) == DOTS_ARG_IDX)
+            if (call.implicitArgIdx(i) == DOTS_ARG_IDX)
                 return 0;
     }
 
@@ -582,7 +582,7 @@ SEXP rirCall(const CallContext& call, Context* ctx) {
     Function* fun = table->at(slot);
 
     fun->registerInvocation();
-    if (slot == 0 && fun->invocationCount == 2) {
+    if (slot == 0 && fun->invocationCount() == 2) {
         SEXP lhs = CAR(call.ast);
         SEXP name = R_NilValue;
         if (TYPEOF(lhs) == SYMSXP)
@@ -988,14 +988,6 @@ extern void printFunction(Function* f);
 
 extern SEXP Rf_deparse1(SEXP call, Rboolean abbrev, int opts);
 
-RIR_INLINE void incPerfCount(Code* c) {
-    if (c->perfCounter < UINT_MAX) {
-        c->perfCounter++;
-        // if (c->perfCounter == 200000)
-        //     printCode(c);
-    }
-}
-
 void debug(Code* c, Opcode* pc, const char* name, unsigned depth,
            Context* ctx) {
     return;
@@ -1326,7 +1318,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
             if (callCtxt->hasStackArgs()) {
                 ostack_push(ctx, callCtxt->stackArg(idx));
             } else {
-                if (callCtxt->implicitArgOffset(idx) == MISSING_ARG_IDX) {
+                if (callCtxt->implicitArgIdx(idx) == MISSING_ARG_IDX) {
                     res = Rf_mkPROMISE(R_UnboundValue, callCtxt->callerEnv);
                 } else {
                     Code* arg = callCtxt->implicitArg(idx);
@@ -1554,7 +1546,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
         INSTRUCTION(promise_) {
             Immediate id = readImmediate();
             advanceImmediate();
-            SEXP prom = Rf_mkPROMISE(c->function()->codeObjectAt(id), getenv());
+            SEXP prom = Rf_mkPROMISE(c->getPromise(id)->container(), getenv());
             SET_PRVALUE(prom, ostack_pop(ctx));
             ostack_push(ctx, prom);
             NEXT();
@@ -1582,7 +1574,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
         INSTRUCTION(push_code_) {
             Immediate n = readImmediate();
             advanceImmediate();
-            ostack_push(ctx, c->function()->codeObjectAt(n));
+            ostack_push(ctx, c->getPromise(n)->container());
             NEXT();
         }
 
@@ -2079,8 +2071,6 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
             advanceJump();
             if (ostack_pop(ctx) == R_TrueValue) {
                 pc += offset;
-                if (offset < 0)
-                    incPerfCount(c);
             }
             PC_BOUNDSCHECK(pc, c);
             NEXT();
@@ -2091,8 +2081,6 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
             advanceJump();
             if (ostack_pop(ctx) == R_FalseValue) {
                 pc += offset;
-                if (offset < 0)
-                    incPerfCount(c);
             }
             PC_BOUNDSCHECK(pc, c);
             NEXT();
@@ -2101,8 +2089,6 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
         INSTRUCTION(br_) {
             JumpOffset offset = readJumpOffset();
             advanceJump();
-            if (offset < 0)
-                incPerfCount(c);
             pc += offset;
             PC_BOUNDSCHECK(pc, c);
             NEXT();
@@ -2439,7 +2425,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
             FrameInfo& f = m->frames[0];
             pc = f.pc;
             c = f.code;
-            c->function()->registerInvocation();
+            c->registerInvocation();
             assert(c->code() <= pc && pc < c->endCode());
             SEXP e = ostack_pop(ctx);
             assert(TYPEOF(e) == ENVSXP);
@@ -2706,7 +2692,7 @@ eval_done:
         assert(TYPEOF(e) == ENVSXP);
         *env = e;
         ostack_push(ctx, res);
-        f->code->function()->registerInvocation();
+        f->code->registerInvocation();
         res = evalRirCode(f->code, ctx, env, callCtxt, f->pc);
         ostack_push(ctx, res);
     }

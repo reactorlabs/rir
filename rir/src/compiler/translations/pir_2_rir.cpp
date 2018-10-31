@@ -609,29 +609,13 @@ class Context {
 
     CodeStream& cs() { return *css.top(); }
 
-    void pushDefaultArg(SEXP ast) {
-        defaultArg.push(true);
-        push(ast);
-    }
-    void pushPromise(SEXP ast) {
-        defaultArg.push(false);
-        push(ast);
-    }
-    void pushBody(SEXP ast) {
-        defaultArg.push(false);
-        push(ast);
-    }
-
-    BC::FunIdx finalizeCode(size_t localsCnt) {
-        auto idx = cs().finalize(defaultArg.top(), localsCnt);
+    rir::Code* finalizeCode(size_t localsCnt) {
+        auto res = cs().finalize(localsCnt);
         delete css.top();
-        defaultArg.pop();
         css.pop();
-        return idx;
+        return res;
     }
 
-  private:
-    std::stack<bool> defaultArg;
     void push(SEXP ast) { css.push(new CodeStream(fun, ast)); }
 };
 
@@ -642,7 +626,7 @@ class Pir2Rir {
         : compiler(cmp), cls(cls), originCls(origin), dryRun(dryRun), log(log) {
     }
     size_t compileCode(Context& ctx, Code* code);
-    size_t getPromiseIdx(Context& ctx, Promise* code);
+    rir::Code* getPromise(Context& ctx, Promise* code);
 
     void lower(Code* code);
     void toCSSA(Code* code);
@@ -652,8 +636,7 @@ class Pir2Rir {
     Pir2RirCompiler& compiler;
     Closure* cls;
     SEXP originCls;
-    std::unordered_map<Promise*, BC::FunIdx> promises;
-    std::unordered_map<Promise*, SEXP> argNames;
+    std::unordered_map<Promise*, rir::Code*> promises;
     bool dryRun;
     LogStream& log;
 };
@@ -849,7 +832,7 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
             }
             case Tag::MkArg: {
                 cs << BC::promise(
-                    getPromiseIdx(ctx, MkArg::Cast(instr)->prom()));
+                    cs.addPromise(getPromise(ctx, MkArg::Cast(instr)->prom())));
                 break;
             }
             case Tag::MkFunCls: {
@@ -942,7 +925,7 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 auto call = CallImplicit::Cast(instr);
                 std::vector<BC::FunIdx> args;
                 for (auto& p : call->promises)
-                    args.push_back(getPromiseIdx(ctx, p));
+                    args.push_back(cs.addPromise(getPromise(ctx, p)));
 
                 if (call->names.empty())
                     cs << BC::callImplicit(args, Pool::get(call->srcIdx));
@@ -1163,9 +1146,9 @@ void Pir2Rir::toCSSA(Code* code) {
     });
 }
 
-size_t Pir2Rir::getPromiseIdx(Context& ctx, Promise* p) {
+rir::Code* Pir2Rir::getPromise(Context& ctx, Promise* p) {
     if (!promises.count(p)) {
-        ctx.pushPromise(src_pool_at(globalContext(), p->srcPoolIdx));
+        ctx.push(src_pool_at(globalContext(), p->srcPoolIdx));
         size_t localsCnt = compileCode(ctx, p);
         promises[p] = ctx.finalizeCode(localsCnt);
     }
@@ -1180,17 +1163,16 @@ rir::Function* Pir2Rir::finalize() {
     FunctionWriter function;
     Context ctx(function);
 
-    size_t i = 0;
-    for (auto arg : cls->defaultArgs) {
-        if (!arg)
-            continue;
-        getPromiseIdx(ctx, arg);
-        argNames[arg] = cls->argNames[i++];
-    }
-    ctx.pushBody(R_NilValue);
+    // PIR does not support default args currently. So we just pass an empty
+    // array, since functions are expected to have a slot reserved for every
+    // argument.
+    std::vector<SEXP> defaultArgs;
+    defaultArgs.resize(cls->nargs());
+
+    ctx.push(R_NilValue);
     size_t localsCnt = compileCode(ctx, cls);
-    ctx.finalizeCode(localsCnt);
-    function.finalize();
+    auto body = ctx.finalizeCode(localsCnt);
+    function.finalize(body, defaultArgs);
     log.finalPIR(cls);
 #ifdef ENABLE_SLOWASSERT
     CodeVerifier::verifyFunctionLayout(function.function()->container(),
@@ -1223,7 +1205,7 @@ void Pir2RirCompiler::compile(Closure* cls, SEXP origin, bool dryRun) {
 
     auto oldFun = table->first();
 
-    fun->invocationCount = oldFun->invocationCount;
+    fun->body()->funInvocationCount = oldFun->body()->funInvocationCount;
     // TODO: signatures need a rework
     fun->signature = oldFun->signature;
 

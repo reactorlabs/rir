@@ -119,15 +119,15 @@ class Context {
 
     void pushPromiseContext(SEXP ast) { code.push(new PromiseContext(ast, fun, code.empty() ? nullptr : code.top())); }
 
-    BC::FunIdx pop(bool isDefaultArg = false) {
-        auto idx = cs().finalize(isDefaultArg, 0);
+    Code* pop() {
+        auto res = cs().finalize(0);
         delete code.top();
         code.pop();
-        return idx;
+        return res;
     }
 };
 
-BC::FunIdx compilePromise(Context& ctx, SEXP exp, bool isFormal = false);
+Code* compilePromise(Context& ctx, SEXP exp);
 void compileExpr(Context& ctx, SEXP exp);
 void compileCall(Context& ctx, SEXP ast, SEXP fun, SEXP args);
 
@@ -820,8 +820,9 @@ void compileCall(Context& ctx, SEXP ast, SEXP fun, SEXP args) {
 
         // (1) Arguments are wrapped as Promises:
         //     create a new Code object for the promise
-        size_t prom = compilePromise(ctx, *arg);
-        callArgs.push_back(prom);
+        Code* prom = compilePromise(ctx, *arg);
+        auto idx = cs.addPromise(prom);
+        callArgs.push_back(idx);
 
         // (2) remember if the argument had a name associated
         names.push_back(arg.tag());
@@ -892,11 +893,11 @@ void compileExpr(Context& ctx, SEXP exp) {
     }
 }
 
-BC::FunIdx compilePromise(Context& ctx, SEXP exp, bool isFormal) {
+Code* compilePromise(Context& ctx, SEXP exp) {
     ctx.pushPromiseContext(exp);
     compileExpr(ctx, exp);
     ctx.cs() << BC::ret();
-    return ctx.pop(isFormal);
+    return ctx.pop();
 }
 
 }  // anonymous namespace
@@ -907,18 +908,24 @@ SEXP Compiler::finalize() {
 
     FunctionSignature* signature = new FunctionSignature();
 
+    std::vector<SEXP> defaultArgs;
+
     // Compile formals (if any) and create signature
     for (auto arg = RList(formals).begin(); arg != RList::end(); ++arg) {
-        if (*arg != R_MissingArg)
-            compilePromise(ctx, *arg, true);
+        if (*arg == R_MissingArg) {
+            defaultArgs.push_back(nullptr);
+        } else {
+            auto compiled = compilePromise(ctx, *arg);
+            defaultArgs.push_back(compiled->container());
+        }
         signature->pushDefaultArgument();
     }
 
     ctx.push(exp, closureEnv);
     compileExpr(ctx, exp);
     ctx.cs() << BC::ret();
-    ctx.pop();
-    function.finalize();
+    auto body = ctx.pop();
+    function.finalize(body, defaultArgs);
 
     function.function()->signature = signature;
 

@@ -26,8 +26,6 @@ Promise* Closure::createProm(unsigned srcPoolIdx) {
 Closure::~Closure() {
     for (auto p : promises)
         delete p;
-    for (auto p : defaultArgs)
-        delete p;
 }
 
 Closure* Closure::clone() {

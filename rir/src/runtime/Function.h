@@ -50,95 +50,56 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
     friend class FunctionCodeIterator;
     friend class ConstFunctionCodeIterator;
 
-    static constexpr size_t CODEOBJ_OFFSET = 2;
+    static constexpr size_t NUM_PTRS = 3;
 
-    Function(size_t functionSize, const std::vector<SEXP>& codeVec)
+    Function(size_t functionSize, SEXP body,
+             const std::vector<SEXP>& defaultArgs)
         : RirRuntimeObject(
               // GC area starts just before the end of the Function
-              sizeof(Function) - CODEOBJ_OFFSET * sizeof(FunctionSEXP),
+              sizeof(Function) - NUM_PTRS * sizeof(FunctionSEXP),
               // GC area includes the SEXPs before the Code objects array
-              CODEOBJ_OFFSET + codeVec.size()),
-          size(functionSize), signature(nullptr), invocationCount(0),
-          deopt(false), markOpt(false), codeLength(codeVec.size()),
-          origin_(nullptr), next_(nullptr) {
-        for (size_t i = 0; i < codeLength; ++i) {
-            Code* c = Code::unpack(codeVec[i]);
-            // Set c->function_ to point to this Function's container
-            c->setEntry(0, container());
+              NUM_PTRS + defaultArgs.size()),
+          size(functionSize), signature(nullptr), deopt(false), markOpt(false),
+          numArgs(defaultArgs.size()) {
+        origin(nullptr);
+        next(nullptr);
+        for (size_t i = 0; i < numArgs; ++i) {
             // Set codeObjects[i] to point to Code object c's container
-            setEntry(CODEOBJ_OFFSET + i, c->container());
+            setEntry(NUM_PTRS + i, defaultArgs[i]);
         }
+        setBody(body);
     }
 
-    Code* body() { return Code::unpack(codeObjects[codeLength - 1]); }
-
-    SEXP codeObjectAt(unsigned index) const { return codeObjects[index]; }
-
-    Code* codeAt(unsigned index) const {
-        return Code::unpack(codeObjectAt(index));
-    }
-
-    FunctionCodeIterator begin() { return FunctionCodeIterator(this, 0); }
-    FunctionCodeIterator end() {
-        return FunctionCodeIterator(this, codeLength);
-    }
-    ConstFunctionCodeIterator begin() const {
-        return ConstFunctionCodeIterator(this, 0);
-    }
-    ConstFunctionCodeIterator end() const {
-        return ConstFunctionCodeIterator(this, codeLength);
-    }
-
-    unsigned indexOf(Code* code) {
-        unsigned idx = 0;
-        for (Code* c : *this) {
-            if (c == code)
-                return idx;
-            ++idx;
-        }
-        assert(false);
-        return 0;
-    }
+    Code* body() { return Code::unpack(getEntry(2)); }
+    void setBody(SEXP body) { setEntry(2, body); }
 
     void disassemble(std::ostream&);
 
-    FunctionSEXP origin() { return origin_; }
+    FunctionSEXP origin() { return getEntry(0); }
+    void origin(FunctionSEXP s) { setEntry(0, s); }
 
-    void origin(Function* s) { setEntry(0, s->container()); }
+    FunctionSEXP next() { return getEntry(1); }
+    void next(FunctionSEXP s) { setEntry(1, s); }
 
-    FunctionSEXP next() { return next_; }
-
-    void next(Function* s) { setEntry(1, s->container()); }
-
-    void registerInvocation() {
-        if (invocationCount < UINT_MAX)
-            invocationCount++;
+    Code* defaultArg(size_t i) const {
+        assert(i < numArgs);
+        if (!defaultArg_[i])
+            return nullptr;
+        return Code::unpack(defaultArg_[i]);
     }
 
-    Code* findDefaultArg(size_t index) const {
-        while (index < codeLength) {
-            Code* c = Code::unpack(codeObjects[index++]);
-            if (c->isDefaultArgument) {
-                return c;
-            }
-        }
-        assert(index == codeLength && "Did not find default arg so all Code "
-                                      "objects should have been iterated "
-                                      "over.");
-        return nullptr;
-    }
+    void registerInvocation() { body()->registerInvocation(); }
+    size_t invocationCount() { return body()->funInvocationCount; }
 
     unsigned size; /// Size, in bytes, of the function and its data
 
     FunctionSignature* signature; /// pointer to this version's signature
 
-    unsigned invocationCount;
-
     unsigned deopt : 1;
     unsigned markOpt : 1;
     unsigned spare : 30;
 
-    unsigned codeLength; /// number of Code objects in the Function
+    unsigned numArgs;
 
   private:
     // !!! SEXPs traceable by the GC must be declared here !!!
@@ -146,12 +107,8 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
     // !!! Furthermore, you need to update                 !!!
     // !!!     the CODEOBJ_OFFSET constant.                !!!
 
-    FunctionSEXP origin_; /// Same Function with fewer optimizations,
-                          //   NULL if original
-    FunctionSEXP next_;
-
-    CodeSEXP codeObjects[]; /// Pointers to CodeSEXPs (Code objects embedded
-                            //   inside EXTERNALSXP)
+    CodeSEXP locals[NUM_PTRS];
+    CodeSEXP defaultArg_[];
 };
 #pragma pack(pop)
 }

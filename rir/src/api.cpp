@@ -34,7 +34,7 @@ REXPORT SEXP rir_disassemble(SEXP what, SEXP verbose) {
             continue;
         Function* f = t->at(entry);
         std::cout << "= vtable slot <" << entry << "> (" << f << ", invoked "
-                  << f->invocationCount << ") =\n";
+                  << f->invocationCount() << ") =\n";
         f->disassemble(std::cout);
     }
 
@@ -203,7 +203,7 @@ REXPORT SEXP rir_invocation_count(SEXP what) {
 
     SEXP res = Rf_allocVector(INTSXP, dt->capacity());
     for (size_t i = 0; i < dt->capacity(); ++i) {
-        INTEGER(res)[i] = dt->available(i) ? dt->at(i)->invocationCount : 0;
+        INTEGER(res)[i] = dt->available(i) ? dt->at(i)->invocationCount() : 0;
     }
 
     return res;

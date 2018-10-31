@@ -5,24 +5,22 @@
 #include "utils/Pool.h"
 
 #include <iomanip>
+#include <sstream>
 
 namespace rir {
 // cppcheck-suppress uninitMemberVar symbol=data
-Code::Code(FunctionSEXP fun, size_t index, SEXP ast, unsigned cs,
-           unsigned sourceLength, bool isDefaultArg, size_t localsCnt)
+Code::Code(FunctionSEXP fun, SEXP ast, unsigned cs, unsigned sourceLength,
+           size_t localsCnt)
     : RirRuntimeObject(
           // GC area starts just after the header
           (intptr_t)&locals_ - (intptr_t)this,
           // GC area has only 1 pointer
           NumLocals),
-      index(index), src(src_pool_add(globalContext(), ast)), stackLength(0),
-      localsCount(localsCnt), codeSize(cs), srcLength(sourceLength),
-      perfCounter(0), extraPoolSize(0), isDefaultArgument(isDefaultArg) {
-    setEntry(0, fun);
-    setEntry(1, R_NilValue);
+      funInvocationCount(0), src(src_pool_add(globalContext(), ast)),
+      stackLength(0), localsCount(localsCnt), codeSize(cs),
+      srcLength(sourceLength), extraPoolSize(0) {
+    setEntry(0, R_NilValue);
 }
-
-Function* Code::function() { return Function::unpack(getEntry(0)); }
 
 unsigned Code::getSrcIdxAt(const Opcode* pc, bool allowMissing) const {
     if (srcLength == 0) {
@@ -63,7 +61,7 @@ unsigned Code::getSrcIdxAt(const Opcode* pc, bool allowMissing) const {
     return sidx;
 }
 
-void Code::disassemble(std::ostream& out) const {
+void Code::disassemble(std::ostream& out, std::string prefix) const {
     Opcode* pc = code();
     size_t label = 0;
     std::map<Opcode*, size_t> targets;
@@ -84,6 +82,8 @@ void Code::disassemble(std::ostream& out) const {
     auto formatLabel = [&](size_t label) { out << label; };
 
     pc = code();
+    std::vector<BC::FunIdx> promises;
+
     while (pc < endCode()) {
 
         if (targets.count(pc)) {
@@ -92,6 +92,7 @@ void Code::disassemble(std::ostream& out) const {
         }
 
         BC bc = BC::decode(pc, this);
+        bc.addPromargsTo(promises);
 
         const size_t OFFSET_WIDTH = 7;
         out << std::right << std::setw(OFFSET_WIDTH)
@@ -134,10 +135,18 @@ void Code::disassemble(std::ostream& out) const {
 
         pc = BC::next(pc);
     }
+
+    for (auto i : promises) {
+        auto c = getPromise(i);
+        out << "\n[Prom (index " << prefix << i << ")]\n";
+        std::stringstream ss;
+        ss << prefix << i << ".";
+        c->disassemble(out, ss.str());
+    }
 }
 
 void Code::print(std::ostream& out) const {
-    out << "Code object (" << this << " index " << index << ")\n";
+    out << "Code object\n";
     out << std::left << std::setw(20) << "   Source: " << src
         << " (index into src pool)\n";
     out << std::left << std::setw(20) << "   Magic: " << std::hex << info.magic
@@ -146,8 +155,6 @@ void Code::print(std::ostream& out) const {
         << "\n";
     out << std::left << std::setw(20) << "   Code size: " << codeSize
         << "[B]\n";
-    out << std::left << std::setw(20) << "   Default arg? "
-        << (isDefaultArgument ? "yes" : "no") << "\n";
 
     if (info.magic != CODE_MAGIC) {
         out << "Wrong magic number -- corrupted IR bytecode";
@@ -159,7 +166,7 @@ void Code::print(std::ostream& out) const {
 }
 
 unsigned Code::addExtraPoolEntry(SEXP v) {
-    SEXP cur = getEntry(1);
+    SEXP cur = getEntry(0);
     unsigned curLen = cur == R_NilValue ? 0 : (unsigned)LENGTH(cur);
     if (curLen == extraPoolSize) {
         unsigned newCapacity = curLen ? curLen * 2 : 2;
@@ -167,7 +174,7 @@ unsigned Code::addExtraPoolEntry(SEXP v) {
         for (unsigned i = 0; i < curLen; ++i) {
             SET_VECTOR_ELT(newPool, i, VECTOR_ELT(cur, i));
         }
-        setEntry(1, newPool);
+        setEntry(0, newPool);
         UNPROTECT(1);
         cur = newPool;
     }
@@ -175,33 +182,4 @@ unsigned Code::addExtraPoolEntry(SEXP v) {
     return extraPoolSize++;
 }
 
-FunctionCodeIterator::FunctionCodeIterator(Function const* const function,
-                                           size_t index)
-    : function(function), index(index) {}
-
-void FunctionCodeIterator::operator++() { ++index; }
-
-bool FunctionCodeIterator::operator!=(FunctionCodeIterator other) {
-    return function != other.function || index != other.index;
-}
-
-Code* FunctionCodeIterator::operator*() {
-    assert(index < function->codeLength && "Iterator index out of bounds.");
-    return Code::unpack(function->codeObjects[index]);
-}
-
-ConstFunctionCodeIterator::ConstFunctionCodeIterator(
-    Function const* const function, size_t index)
-    : function(function), index(index) {}
-
-void ConstFunctionCodeIterator::operator++() { ++index; }
-
-bool ConstFunctionCodeIterator::operator!=(ConstFunctionCodeIterator other) {
-    return function != other.function || index != other.index;
-}
-
-const Code* ConstFunctionCodeIterator::operator*() {
-    assert(index < function->codeLength && "Iterator index out of bounds.");
-    return Code::unpack(function->codeObjects[index]);
-}
 } // namespace rir

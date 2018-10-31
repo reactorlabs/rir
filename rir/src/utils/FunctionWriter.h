@@ -22,14 +22,9 @@ class FunctionWriter {
   public:
     typedef unsigned PcOffset;
 
-    size_t functionSize; // size of the Function, including pointers to its code
-                         // objects
-
-    std::vector<SEXP> codeVec;
-
     Preserve preserve;
 
-    FunctionWriter() : function_(nullptr), functionSize(sizeof(Function)) {}
+    FunctionWriter() : function_(nullptr) {}
 
     ~FunctionWriter() {}
 
@@ -38,16 +33,16 @@ class FunctionWriter {
         return function_;
     }
 
-    void finalize() {
+    void finalize(Code* body, std::vector<SEXP>& defaultArgs) {
         assert(function_ == nullptr && "Trying to finalize a second time");
 
-        size_t dataSize = codeVec.size() * sizeof(SEXP);
-        assert(functionSize == sizeof(Function) + dataSize);
-        assert(functionSize % sizeof(int) == 0);
+        size_t dataSize = defaultArgs.size() * sizeof(SEXP);
+        size_t functionSize = sizeof(Function) + dataSize;
 
         SEXP store = Rf_allocVector(EXTERNALSXP, functionSize);
         void* payload = INTEGER(store);
-        Function* fun = new (payload) Function(functionSize, codeVec);
+        Function* fun = new (payload)
+            Function(functionSize, body->container(), defaultArgs);
         preserve(store);
 
         assert(fun->info.magic == FUNCTION_MAGIC);
@@ -59,21 +54,17 @@ class FunctionWriter {
                     const std::map<PcOffset, BC::PoolIdx>& sources,
                     const std::map<PcOffset, BC::Label>& patchpoints,
                     const std::map<PcOffset, std::vector<BC::Label>>& labels,
-                    bool markDefaultArg, size_t localsCnt, size_t nops) {
+                    size_t localsCnt, size_t nops) {
         assert(function_ == nullptr &&
                "Trying to add more code after finalizing");
         unsigned codeSize = originalCodeSize - nops;
         unsigned totalSize = Code::size(codeSize, sources.size());
-        size_t index = codeVec.size();
 
         SEXP store = Rf_allocVector(EXTERNALSXP, totalSize);
         void* payload = INTEGER(store);
-        Code* code =
-            new (payload) Code(nullptr, index, ast, codeSize, sources.size(),
-                               markDefaultArg, localsCnt);
+        Code* code = new (payload)
+            Code(nullptr, ast, codeSize, sources.size(), localsCnt);
         preserve(store);
-        codeVec.push_back(store);
-        functionSize += sizeof(SEXP);
 
         size_t numberOfSources = 0;
 

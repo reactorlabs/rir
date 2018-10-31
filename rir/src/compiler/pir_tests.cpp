@@ -153,18 +153,17 @@ bool compileAndVerify(const std::string& input) {
 
 void insertTypeFeedbackForBinops(rir::Function* srcFunction,
                                  std::array<SEXP, 2> typeFeedback) {
-    for (auto function : *srcFunction) {
-        Opcode* end = function->endCode();
-        Opcode* finger = function->code();
-        while (finger != end) {
-            Opcode* prev = finger;
-            BC bc = BC::advance(&finger, function);
-            if (bc.bc == Opcode::record_binop_) {
-                prev++;
-                ObservedValues* feedback = (ObservedValues*)prev;
-                feedback[0].record(typeFeedback[0]);
-                feedback[1].record(typeFeedback[1]);
-            }
+    auto function = srcFunction->body();
+    Opcode* end = function->endCode();
+    Opcode* finger = function->code();
+    while (finger != end) {
+        Opcode* prev = finger;
+        BC bc = BC::advance(&finger, function);
+        if (bc.bc == Opcode::record_binop_) {
+            prev++;
+            ObservedValues* feedback = (ObservedValues*)prev;
+            feedback[0].record(typeFeedback[0]);
+            feedback[1].record(typeFeedback[1]);
         }
     }
 }
