@@ -88,6 +88,13 @@ enum class Effect : uint8_t {
     Any,
 };
 
+// Controlflow of instruction.
+enum class Controlflow : uint8_t {
+    None,
+    Exit,
+    Branch,
+};
+
 class Instruction : public Value {
   public:
     struct InstructionUID : public std::pair<unsigned, unsigned> {
@@ -105,6 +112,9 @@ class Instruction : public Value {
     virtual bool leaksEnv() const = 0;
     virtual bool mayAccessEnv() const = 0;
     virtual bool hasEnv() const = 0;
+    virtual bool exits() const = 0;
+    virtual bool branches() const = 0;
+    virtual bool branchOrExit() const = 0;
 
     virtual size_t nargs() const = 0;
 
@@ -204,7 +214,8 @@ class Instruction : public Value {
     }
 };
 
-template <Tag ITAG, class Base, Effect EFFECT, EnvAccess ENV, class ArgStore>
+template <Tag ITAG, class Base, Effect EFFECT, EnvAccess ENV, Controlflow CF,
+          class ArgStore>
 class InstructionImplementation : public Instruction {
   protected:
     ArgStore args_;
@@ -229,11 +240,14 @@ class InstructionImplementation : public Instruction {
         bool MayAccessEnv;
         bool ChangesEnv;
         bool LeaksEnv;
+        bool Exits;
+        bool Branches;
     };
 
     static constexpr InstrDescription Description = {
-        EFFECT > Effect::None, ENV > EnvAccess::None, ENV >= EnvAccess::Write,
-        ENV == EnvAccess::Leak};
+        EFFECT > Effect::None,   ENV > EnvAccess::None,
+        ENV >= EnvAccess::Write, ENV == EnvAccess::Leak,
+        CF == Controlflow::Exit, CF == Controlflow::Branch};
 
     bool hasEffect() const final { return Description.HasEffect; }
     bool mayAccessEnv() const final { return Description.MayAccessEnv; }
@@ -241,6 +255,11 @@ class InstructionImplementation : public Instruction {
     bool leaksEnv() const final { return Description.LeaksEnv; }
     bool hasEnv() const final {
         return mayAccessEnv() && env() != Env::elided();
+    }
+    bool exits() const final { return Description.Exits; }
+    bool branches() const final { return Description.Branches; }
+    bool branchOrExit() const final {
+        return Description.Branches || Description.Exits;
     }
 
     static const Base* Cast(const Value* i) {
@@ -280,13 +299,14 @@ class InstructionImplementation : public Instruction {
     }
 };
 
-template <Tag ITAG, class Base, size_t ARGS, Effect EFFECT, EnvAccess ENV>
+template <Tag ITAG, class Base, size_t ARGS, Effect EFFECT, EnvAccess ENV,
+          Controlflow CF = Controlflow::None>
 // cppcheck-suppress noConstructor
 class FixedLenInstruction
-    : public InstructionImplementation<ITAG, Base, EFFECT, ENV,
+    : public InstructionImplementation<ITAG, Base, EFFECT, ENV, CF,
                                        std::array<InstrArg, ARGS>> {
   public:
-    typedef InstructionImplementation<ITAG, Base, EFFECT, ENV,
+    typedef InstructionImplementation<ITAG, Base, EFFECT, ENV, CF,
                                       std::array<InstrArg, ARGS>>
         Super;
     using Super::arg;
@@ -333,11 +353,12 @@ class FixedLenInstruction
     };
 };
 
-template <Tag ITAG, class Base, size_t ARGS, Effect EFFECT, EnvAccess ENV>
+template <Tag ITAG, class Base, size_t ARGS, Effect EFFECT, EnvAccess ENV,
+          Controlflow CF = Controlflow::None>
 class FixedLenInstructionWithEnvSlot
-    : public FixedLenInstruction<ITAG, Base, ARGS, EFFECT, ENV> {
+    : public FixedLenInstruction<ITAG, Base, ARGS, EFFECT, ENV, CF> {
   public:
-    typedef FixedLenInstruction<ITAG, Base, ARGS, EFFECT, ENV> Super;
+    typedef FixedLenInstruction<ITAG, Base, ARGS, EFFECT, ENV, CF> Super;
     using Super::arg;
     using Super::Description;
 
@@ -376,13 +397,14 @@ class FixedLenInstructionWithEnvSlot
     };
 };
 
-template <Tag ITAG, class Base, Effect EFFECT, EnvAccess ENV>
+template <Tag ITAG, class Base, Effect EFFECT, EnvAccess ENV,
+          Controlflow CF = Controlflow::None>
 class VarLenInstruction
-    : public InstructionImplementation<ITAG, Base, EFFECT, ENV,
+    : public InstructionImplementation<ITAG, Base, EFFECT, ENV, CF,
                                        std::vector<InstrArg>> {
 
   public:
-    typedef InstructionImplementation<ITAG, Base, EFFECT, ENV,
+    typedef InstructionImplementation<ITAG, Base, EFFECT, ENV, CF,
                                       std::vector<InstrArg>>
         Super;
     using Super::arg;
@@ -404,11 +426,12 @@ class VarLenInstruction
         : Super(return_type, srcIdx) {}
 };
 
-template <Tag ITAG, class Base, Effect EFFECT, EnvAccess ENV>
+template <Tag ITAG, class Base, Effect EFFECT, EnvAccess ENV,
+          Controlflow CF = Controlflow::None>
 class VarLenInstructionWithEnvSlot
-    : public VarLenInstruction<ITAG, Base, EFFECT, ENV> {
+    : public VarLenInstruction<ITAG, Base, EFFECT, ENV, CF> {
   public:
-    typedef VarLenInstruction<ITAG, Base, EFFECT, ENV> Super;
+    typedef VarLenInstruction<ITAG, Base, EFFECT, ENV, CF> Super;
     using Super::arg;
     using Super::args_;
     using Super::Description;
@@ -586,14 +609,9 @@ class FLIE(StVar, 2, Effect::None, EnvAccess::Write) {
     void printArgs(std::ostream& out, bool tty) override;
 };
 
-// Common interface to all branch instructions
-class BranchingInstruction {
-  public:
-    static BranchingInstruction* CastBranch(Value* v);
-};
-
-class FLI(Branch, 1, Effect::None, EnvAccess::None),
-    public BranchingInstruction {
+class Branch
+    : public FixedLenInstruction<Tag::Branch, Branch, 1, Effect::None,
+                                 EnvAccess::None, Controlflow::Branch> {
   public:
     explicit Branch(Value * test)
         : FixedLenInstruction(PirType::voyd(), {{NativeType::test}}, {{test}}) {
@@ -601,7 +619,8 @@ class FLI(Branch, 1, Effect::None, EnvAccess::None),
     void printArgs(std::ostream & out, bool tty) override;
 };
 
-class FLI(Return, 1, Effect::None, EnvAccess::None) {
+class Return : public FixedLenInstruction<Tag::Return, Return, 1, Effect::None,
+                                          EnvAccess::None, Controlflow::Exit> {
   public:
     explicit Return(Value* ret)
         : FixedLenInstruction(PirType::voyd(), {{PirType::val()}}, {{ret}}) {}
@@ -1119,7 +1138,7 @@ struct RirStack {
  *  Collects metadata about the current state of variables
  *  eventually needed for deoptimization purposes
  */
-class VLIE(FrameState, Effect::Any, EnvAccess::Leak) {
+class VLIE(FrameState, Effect::Any, EnvAccess::Read) {
   public:
     bool inlined = false;
     Opcode* pc;
@@ -1174,8 +1193,9 @@ class VLIE(FrameState, Effect::Any, EnvAccess::Leak) {
  *  contain a deopt. Checkpoint takes either branch at random
  *  to ensure the optimizer consider deopt and non-deopt cases.
  */
-class FLI(Checkpoint, 0, Effect::None, EnvAccess::None),
-    public BranchingInstruction {
+class Checkpoint
+    : public FixedLenInstruction<Tag::Checkpoint, Checkpoint, 0, Effect::None,
+                                 EnvAccess::None, Controlflow::Branch> {
   public:
     Checkpoint() : FixedLenInstruction(PirType::voyd()) {}
     void printArgs(std::ostream & out, bool tty) override;
@@ -1187,7 +1207,8 @@ class FLI(Checkpoint, 0, Effect::None, EnvAccess::None),
  * code at the point the framestate stores
  */
 
-class FLI(Deopt, 1, Effect::Any, EnvAccess::None) {
+class Deopt : public FixedLenInstruction<Tag::Deopt, Deopt, 1, Effect::None,
+                                         EnvAccess::None, Controlflow::Exit> {
   public:
     explicit Deopt(FrameState* frameState)
         : FixedLenInstruction(PirType::voyd(), {{NativeType::frameState}},
@@ -1210,7 +1231,10 @@ class FLI(assumeNot, 2, Effect::Any, EnvAccess::None) {
     Value* condition() { return arg(0).val(); }
 };
 
-class VLI(ScheduledDeopt, Effect::Any, EnvAccess::None) {
+class ScheduledDeopt
+    : public VarLenInstruction<Tag::ScheduledDeopt, ScheduledDeopt,
+                               Effect::None, EnvAccess::None,
+                               Controlflow::Exit> {
   public:
     std::vector<FrameInfo> frames;
     ScheduledDeopt() : VarLenInstruction(PirType::voyd()) {}

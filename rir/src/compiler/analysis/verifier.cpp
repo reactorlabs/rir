@@ -80,18 +80,19 @@ class TheVerifier {
             }
         } else {
             Instruction* last = bb->last();
-            if (BranchingInstruction::CastBranch(last)) {
+            if (last->branches()) {
                 if (!bb->falseBranch() || !bb->trueBranch()) {
                     std::cerr << "split bb" << bb->id
                               << " must end in branch\n";
                     ok = false;
                 }
-            } else if ((Deopt::Cast(last)) || (Return::Cast(last))) {
+            } else if (last->exits()) {
                 if (bb->trueBranch() || bb->falseBranch()) {
                     std::cerr << "exit bb" << bb->id << " must end in return\n";
                     ok = false;
                 }
             } else {
+                assert(!last->branchOrExit());
                 if (bb->falseBranch()) {
                     std::cerr << "bb" << bb->id
                               << " has false branch but no branch instr\n";
@@ -120,6 +121,10 @@ class TheVerifier {
                       << " but points to " << i->bb() << "\n";
             ok = false;
         }
+
+        if (i->branchOrExit())
+            assert(i == bb->last() &&
+                   "Only last instruction of BB can have controlflow");
 
         Phi* phi = Phi::Cast(i);
         i->eachArg([&](const InstrArg& a) -> void {
