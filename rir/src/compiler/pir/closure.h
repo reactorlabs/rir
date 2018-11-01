@@ -12,7 +12,7 @@ namespace rir {
 namespace pir {
 
 struct ProfiledValues {
-    std::unordered_map<Value*, ObservedCalles> callTargets;
+    std::unordered_map<Value*, ObservedCallees> callTargets;
     std::unordered_map<Value*, ObservedValues> types;
 
     bool hasTypesFor(Value* value) {

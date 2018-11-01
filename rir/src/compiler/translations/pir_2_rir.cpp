@@ -1,5 +1,6 @@
 #include "pir_2_rir.h"
 #include "../pir/pir_impl.h"
+#include "../transform/bb.h"
 #include "../util/cfg.h"
 #include "../util/visitor.h"
 #include "interpreter/runtime.h"
@@ -994,8 +995,11 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 });
                 break;
             }
-            case Tag::Deopt: {
-                assert(false && "Deopt must be folded into scheduled deopt, "
+            case Tag::Deopt:
+            case Tag::assumeNot:
+            case Tag::Checkpoint: {
+                assert(false && "Deopt instructions must be lowered into "
+                                "standard branches and scheduled deopt, "
                                 "before pir_2_rir");
                 break;
             }
@@ -1073,45 +1077,60 @@ static bool allLazy(CallType* call, std::vector<Promise*>& args) {
 }
 
 void Pir2Rir::lower(Code* code) {
-    Visitor::run(code->entry, [&](BB* bb) {
-        auto it = bb->begin();
-        while (it != bb->end()) {
-            auto next = it + 1;
-            if (auto deopt = Deopt::Cast(*it)) {
-                // Lower Deopt instructions + their FrameStates to a
-                // ScheduledDeopt.
-                auto newDeopt = new ScheduledDeopt();
-                newDeopt->consumeFrameStates(deopt);
-                auto newDeoptPos = bb->insert(it, newDeopt);
-                next = newDeoptPos + 2;
-            } else if (auto call = Call::Cast(*it)) {
-                // Lower calls to call implicit
-                std::vector<Promise*> args;
-                if (allLazy(call, args))
-                    call->replaceUsesAndSwapWith(
-                        new CallImplicit(call->callerEnv(), call->cls(),
-                                         std::move(args), {}, call->srcIdx),
-                        it);
-            } else if (auto call = NamedCall::Cast(*it)) {
-                // Lower named calls to call implicit
-                std::vector<Promise*> args;
-                if (allLazy(call, args))
-                    call->replaceUsesAndSwapWith(
-                        new CallImplicit(call->callerEnv(), call->cls(),
-                                         std::move(args), call->names,
-                                         call->srcIdx),
-                        it);
-            }
+    Visitor::run(
+        code->entry,
+        [&](BB* bb) {
+            auto it = bb->begin();
+            while (it != bb->end()) {
+                auto next = it + 1;
+                if (auto deopt = Deopt::Cast(*it)) {
+                    // Lower Deopt instructions + their FrameStates to a
+                    // ScheduledDeopt.
+                    auto newDeopt = new ScheduledDeopt();
+                    newDeopt->consumeFrameStates(deopt);
+                    bb->replace(it, newDeopt);
+                } else if (auto expect = assumeNot::Cast(*it)) {
+                    BBTransform::lowerExpect(
+                        code, bb, it, expect->condition(),
+                        expect->checkpoint()->bb()->falseBranch());
+                    // lowerExpect splits the bb from current position. There
+                    // remains nothing to process. Breaking seems more robust
+                    // than trusting the modified iterator.
+                    break;
+                } else if (auto call = Call::Cast(*it)) {
+                    // Lower calls to call implicit
+                    std::vector<Promise*> args;
+                    if (allLazy(call, args))
+                        call->replaceUsesAndSwapWith(
+                            new CallImplicit(call->callerEnv(), call->cls(),
+                                             std::move(args), {}, call->srcIdx),
+                            it);
+                } else if (auto call = NamedCall::Cast(*it)) {
+                    // Lower named calls to call implicit
+                    std::vector<Promise*> args;
+                    if (allLazy(call, args))
+                        call->replaceUsesAndSwapWith(
+                            new CallImplicit(call->callerEnv(), call->cls(),
+                                             std::move(args), call->names,
+                                             call->srcIdx),
+                            it);
+                }
 
-            it = next;
-        }
-    });
+                it = next;
+            }
+        },
+        true);
+
     Visitor::run(code->entry, [&](BB* bb) {
         auto it = bb->begin();
         while (it != bb->end()) {
             auto next = it + 1;
-            if (FrameState::Cast(*it) || Deopt::Cast(*it)) {
+            if (FrameState::Cast(*it)) {
                 next = bb->remove(it);
+            } else if (Checkpoint::Cast(*it)) {
+                next = bb->remove(it);
+                // Branching removed. Preserve invariant
+                bb->next1 = nullptr;
             } else if (MkArg::Cast(*it) && (*it)->unused()) {
                 next = bb->remove(it);
             }

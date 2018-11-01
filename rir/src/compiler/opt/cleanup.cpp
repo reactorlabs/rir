@@ -8,6 +8,7 @@
 #include <unordered_set>
 
 namespace {
+
 using namespace rir::pir;
 
 class TheCleanup {
@@ -208,7 +209,6 @@ class TheCleanup {
         function->eachPromise(renumberBBs);
     }
 };
-
 } // namespace
 
 namespace rir {

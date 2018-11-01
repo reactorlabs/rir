@@ -83,7 +83,7 @@ class TheInliner {
                                 break;
                             sp = FrameState::Cast(*pos);
                         }
-                        }
+                    }
                 }
 
                 // Clone the function

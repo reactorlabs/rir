@@ -80,7 +80,7 @@ class TheVerifier {
             }
         } else {
             Instruction* last = bb->last();
-            if ((Branch::Cast(last))) {
+            if (BranchingInstruction::CastBranch(last)) {
                 if (!bb->falseBranch() || !bb->trueBranch()) {
                     std::cerr << "split bb" << bb->id
                               << " must end in branch\n";
@@ -169,7 +169,7 @@ class TheVerifier {
         });
     }
 };
-}
+} // namespace
 
 namespace rir {
 namespace pir {
@@ -179,5 +179,5 @@ bool Verify::apply(Closure* f) {
     v();
     return v.ok;
 }
-}
-}
+} // namespace pir
+} // namespace rir

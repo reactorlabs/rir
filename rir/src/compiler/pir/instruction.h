@@ -112,6 +112,7 @@ class Instruction : public Value {
 
     Value* baseValue() override;
     bool isInstruction() final { return true; }
+    bool maySpecialize();
 
     BB* bb_ = nullptr;
     BB* bb() {
@@ -585,12 +586,19 @@ class FLIE(StVar, 2, Effect::None, EnvAccess::Write) {
     void printArgs(std::ostream& out, bool tty) override;
 };
 
-class FLI(Branch, 1, Effect::None, EnvAccess::None) {
+// Common interface to all branch instructions
+class BranchingInstruction {
   public:
-    explicit Branch(Value* test)
+    static BranchingInstruction* CastBranch(Value* v);
+};
+
+class FLI(Branch, 1, Effect::None, EnvAccess::None),
+    public BranchingInstruction {
+  public:
+    explicit Branch(Value * test)
         : FixedLenInstruction(PirType::voyd(), {{NativeType::test}}, {{test}}) {
     }
-    void printArgs(std::ostream& out, bool tty) override;
+    void printArgs(std::ostream & out, bool tty) override;
 };
 
 class FLI(Return, 1, Effect::None, EnvAccess::None) {
@@ -1071,6 +1079,8 @@ class VLI(Phi, Effect::None, EnvAccess::None) {
     }
 };
 
+// Instructions targeted specially for speculative optimization
+
 struct RirStack {
   private:
     typedef std::deque<Value*> Stack;
@@ -1105,6 +1115,10 @@ struct RirStack {
     Stack::iterator end() { return stack.end(); }
 };
 
+/*
+ *  Collects metadata about the current state of variables
+ *  eventually needed for deoptimization purposes
+ */
 class VLIE(FrameState, Effect::Any, EnvAccess::Leak) {
   public:
     bool inlined = false;
@@ -1155,12 +1169,45 @@ class VLIE(FrameState, Effect::Any, EnvAccess::Leak) {
     void printEnv(std::ostream& out, bool tty) override final{};
 };
 
+/*
+ *  Must be the last instruction of a BB with two childs. One should
+ *  contain a deopt. Checkpoint takes either branch at random
+ *  to ensure the optimizer consider deopt and non-deopt cases.
+ */
+class FLI(Checkpoint, 0, Effect::None, EnvAccess::None),
+    public BranchingInstruction {
+  public:
+    Checkpoint() : FixedLenInstruction(PirType::voyd()) {}
+    void printArgs(std::ostream & out, bool tty) override;
+};
+
+/*
+ * Replaces the current execution context with the one described by the
+ * referenced framestate and jump to the deoptimized version of the
+ * code at the point the framestate stores
+ */
+
 class FLI(Deopt, 1, Effect::Any, EnvAccess::None) {
   public:
     explicit Deopt(FrameState* frameState)
         : FixedLenInstruction(PirType::voyd(), {{NativeType::frameState}},
                               {{frameState}}) {}
     FrameState* frameState();
+};
+
+/*
+ * if the test fails, jump to the deopt branch of the checkpoint.
+ */
+
+class FLI(assumeNot, 2, Effect::Any, EnvAccess::None) {
+  public:
+    assumeNot(Value* test, Checkpoint* checkpoint)
+        : FixedLenInstruction(PirType::voyd(),
+                              {{NativeType::test, NativeType::test}},
+                              {{test, checkpoint}}) {}
+
+    Checkpoint* checkpoint() { return Checkpoint::Cast(arg(1).val()); }
+    Value* condition() { return arg(0).val(); }
 };
 
 class VLI(ScheduledDeopt, Effect::Any, EnvAccess::None) {

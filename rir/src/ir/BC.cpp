@@ -292,13 +292,13 @@ void BC::print(std::ostream& out) const {
         break;
 
     case Opcode::record_call_: {
-        ObservedCalles prof = immediate.callFeedback;
+        ObservedCallees prof = immediate.callFeedback;
         out << "[ ";
-        if (prof.taken == ObservedCalles::CounterOverflow)
+        if (prof.taken == ObservedCallees::CounterOverflow)
             out << "*, <";
         else
             out << prof.taken << ", <";
-        if (prof.numTargets == ObservedCalles::MaxTargets)
+        if (prof.numTargets == ObservedCallees::MaxTargets)
             out << "*>, ";
         else
             out << prof.numTargets << ">" << (prof.numTargets ? ", " : " ");

@@ -67,7 +67,7 @@ struct PointerMarker {
     void set(BB* bb) { done.insert(bb); }
     bool check(BB* bb) { return done.find(bb) != done.end(); }
 };
-};
+}; // namespace VisitorHelpers
 
 enum class Order { Depth, Breadth, Random };
 enum class Direction { Forward, Backward };
@@ -130,25 +130,26 @@ class VisitorImplementation {
      * BB Visitors
      *
      */
-    static void run(BB* bb, BBAction action) { genericRun(bb, action); }
+    static void run(BB* bb, BBAction action, bool processNewNodes = false) {
+        genericRun(bb, action, processNewNodes);
+    }
 
     static bool check(BB* bb, BBActionPredicate action) {
-        return genericRun(bb, action);
+        return genericRun(bb, action, false);
     }
 
     template <typename ActionKind>
-    static bool genericRun(BB* bb, ActionKind action) {
+    static bool genericRun(BB* bb, ActionKind action, bool processNewNodes) {
         typedef VisitorHelpers::PredicateWrapper<ActionKind> PredicateWrapper;
         const PredicateWrapper predicate = {action};
 
         BB* cur = bb;
         std::deque<BB*> todo;
         Marker done;
+        BB* next = nullptr;
         done.set(cur);
 
-        while (cur) {
-            BB* next = nullptr;
-
+        auto addChildren = [&]() {
             if (cur->next0 && !done.check(cur->next0)) {
                 if (todo.empty())
                     next = cur->next0;
@@ -165,6 +166,17 @@ class VisitorImplementation {
                 }
                 done.set(cur->next1);
             }
+        };
+
+        while (cur) {
+            next = nullptr;
+
+            if (!processNewNodes)
+                addChildren();
+            if (!predicate(cur))
+                return false;
+            if (processNewNodes)
+                addChildren();
 
             if (!next) {
                 if (!todo.empty()) {
@@ -172,9 +184,6 @@ class VisitorImplementation {
                     todo.pop_front();
                 }
             }
-
-            if (!predicate(cur))
-                return false;
 
             cur = next;
         }
@@ -253,7 +262,7 @@ class DominatorTreeVisitor {
         }
     }
 };
-}
-}
+} // namespace pir
+} // namespace rir
 
 #endif

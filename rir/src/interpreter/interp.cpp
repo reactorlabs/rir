@@ -1397,10 +1397,10 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
         }
 
         INSTRUCTION(record_call_) {
-            ObservedCalles* feedback = (ObservedCalles*)pc;
+            ObservedCallees* feedback = (ObservedCallees*)pc;
             SEXP callee = ostack_top(ctx);
             feedback->record(c, callee);
-            pc += sizeof(ObservedCalles);
+            pc += sizeof(ObservedCallees);
             NEXT();
         }
 

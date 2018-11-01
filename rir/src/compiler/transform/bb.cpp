@@ -96,21 +96,25 @@ Value* BBTransform::forInline(BB* inlinee, BB* splice) {
     return found;
 }
 
-BB* BBTransform::addConditionalDeopt(Closure* closure, BB* src,
-                                     BB::Instrs::iterator position,
-                                     Instruction* condition,
-                                     FrameState* frameState) {
-    auto split =
-        BBTransform::split(closure->nextBBId++, src, position, closure);
-    src->append(condition);
-    src->append(new Branch(condition));
-    auto deoptBlock = new BB(closure, closure->nextBBId++);
-
-    src->next1 = split;
+BB* BBTransform::lowerExpect(Code* code, BB* src, BB::Instrs::iterator position,
+                             Value* condition, BB* deoptBlock) {
+    auto split = BBTransform::split(code->nextBBId++, src, position + 1, code);
+    src->replace(position, new Branch(condition));
     src->next0 = deoptBlock;
-    FrameState* fsClone = FrameState::Cast(frameState->clone());
-    deoptBlock->append(fsClone);
-    deoptBlock->append(new Deopt(fsClone));
+    src->next1 = split;
+    return split;
+}
+
+BB* BBTransform::addCheckpoint(Code* code, BB* src,
+                               BB::Instrs::iterator position) {
+    FrameState* framestate = FrameState::Cast(*position);
+    auto deoptBlock = new BB(code, code->nextBBId++);
+    position = src->moveToBegin(position, deoptBlock);
+    deoptBlock->append(new Deopt(framestate));
+    auto split = BBTransform::split(code->nextBBId++, src, position, code);
+    src->append(new Checkpoint());
+    src->next0 = split;
+    src->next1 = deoptBlock;
     return split;
 }
 } // namespace pir

@@ -112,7 +112,7 @@ Instruction::InstructionUID Instruction::id() {
 
 bool Instruction::unused() {
     // TODO: better solution?
-    if (tag == Tag::Branch || tag == Tag::Return)
+    if (tag == Tag::Branch || tag == Tag::Return || tag == Tag::Checkpoint)
         return false;
 
     return Visitor::check(bb(), [&](Instruction* i) {
@@ -166,6 +166,16 @@ Value* Instruction::baseValue() {
     if (auto shared = SetShared::Cast(this))
         return shared->arg<0>().val()->baseValue();
     return this;
+}
+
+bool Instruction::maySpecialize() {
+#define V(Name)                                                                \
+    if (Name::Cast(this)) {                                                    \
+        return true;                                                           \
+    }
+    BINOP_INSTRUCTIONS(V)
+#undef V
+    return false;
 }
 
 void LdConst::printArgs(std::ostream& out, bool tty) {
@@ -445,6 +455,23 @@ void CallImplicit::printArgs(std::ostream& out, bool tty) {
 }
 
 FrameState* Deopt::frameState() { return FrameState::Cast(arg<0>().val()); }
+
+void Checkpoint::printArgs(std::ostream& out, bool tty) {
+    FixedLenInstruction::printArgs(out, tty);
+    out << " -> BB" << bb()->trueBranch()->id << " (by default) | BB"
+        << bb()->falseBranch()->id << " (if coming from expect)";
+}
+
+BranchingInstruction* BranchingInstruction::CastBranch(Value* v) {
+    switch (v->tag) {
+    case Tag::Branch:
+        return Branch::Cast(v);
+    case Tag::Checkpoint:
+        return Checkpoint::Cast(v);
+    default: {}
+    }
+    return nullptr;
+}
 
 } // namespace pir
 } // namespace rir
