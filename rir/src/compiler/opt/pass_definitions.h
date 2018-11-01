@@ -44,13 +44,13 @@ class PASS(ElideEnv, "Elide environments not needed");
  * dominating force, and replaces all subsequent forces with its result.
  *
  */
-class PASS(ForceDominance, "Eliminate redudant force instructions");
+class PASS(ForceDominance, "Eliminate redundant force instructions");
 
 /*
  * DelayInstr tries to schedule instructions right before they are needed.
  *
  */
-class PASS(DelayInstr, "Eliminate redudant force instructions");
+class PASS(DelayInstr, "Eliminate redundant force instructions");
 
 /*
  * The DelayEnv pass tries to delay the scheduling of `MkEnv` instructions as
