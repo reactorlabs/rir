@@ -13,6 +13,7 @@ matrix:
         - CXX_OVERRIDE=clang++
         - CC_OVERRIDE=clang
         - BUILD=release
+        - TEST_GCTORTURE=1
       compiler: clang
 
     - os: osx
@@ -31,20 +32,21 @@ matrix:
         - CHECK=check
         - BUILD=debug
         - PIR_ENABLE=force
-        - ENABLE_CPPCHECK=1
+        - TEST_CPPCHECK=1
 
     - env:
         - CXX_OVERRIDE=g++-7
         - CC_OVERRIDE=gcc-7
         - CHECK=test-all-devel
         - BUILD=release
-        - ENABLE_VALGRIND=1
+        - TEST_VALGRIND=1
 
     - env:
         - CXX_OVERRIDE=g++-7
         - CC_OVERRIDE=gcc-7
         - CHECK=check-recommended
         - BUILD=release
+        - TEST_GCTORTURE=1
 
 addons:
   apt:
@@ -106,11 +108,11 @@ addons:
       - ubuntu-toolchain-r-test
 
 before_install:
-  - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then . ./tools/ci/before_install-osx.sh; fi
+  - if [[ "$TRAVIS_OS_NAME" == "osx" ]];   then . ./tools/ci/before_install-osx.sh;   fi
   - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then . ./tools/ci/before_install-linux.sh; fi
 
 before_script:
-  - if [[ "$ENABLE_CPPCHECK" != "" ]]; then ./tools/cppcheck; fi
+  - if [[ "$TEST_CPPCHECK" != "" ]]; then ./tools/cppcheck; fi
   - export TZ=""
   - export CXX=$CXX_OVERRIDE
   - export CC=$CC_OVERRIDE
@@ -125,6 +127,8 @@ before_script:
 
 script:
   # Run the internal testsuite in all combinations
+  - if [[ "$TEST_VALGRIND"  != "" ]];  then  ENABLE_VALGRIND=1 ./bin/tests; fi
+  - if [[ "$TEST_GCTORTURE" != "" ]];  then  R_GCTORTURE=100   ./bin/tests; fi
   - R_ENABLE_JIT=0 ./bin/tests
   - R_ENABLE_JIT=1 ./bin/tests
   - R_ENABLE_JIT=2 ./bin/tests
