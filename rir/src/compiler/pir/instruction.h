@@ -587,12 +587,13 @@ class FLIE(StVar, 2, Effect::None, EnvAccess::Write) {
 };
 
 // Common interface to all branch instructions
-class BranchInstruction {
+class BranchingInstruction {
   public:
-    static BranchInstruction* CastBranch(Value* v);
+    static BranchingInstruction* CastBranch(Value* v);
 };
 
-class FLI(Branch, 1, Effect::None, EnvAccess::None), public BranchInstruction {
+class FLI(Branch, 1, Effect::None, EnvAccess::None),
+    public BranchingInstruction {
   public:
     explicit Branch(Value * test)
         : FixedLenInstruction(PirType::voyd(), {{NativeType::test}}, {{test}}) {
@@ -1174,7 +1175,7 @@ class VLIE(FrameState, Effect::Any, EnvAccess::Leak) {
  *  to ensure the optimizer consider deopt and non-deopt cases.
  */
 class FLI(Checkpoint, 0, Effect::None, EnvAccess::None),
-    public BranchInstruction {
+    public BranchingInstruction {
   public:
     Checkpoint() : FixedLenInstruction(PirType::voyd()) {}
     void printArgs(std::ostream & out, bool tty) override;
@@ -1198,9 +1199,9 @@ class FLI(Deopt, 1, Effect::Any, EnvAccess::None) {
  * if the test fails, jump to the deopt branch of the checkpoint.
  */
 
-class FLI(ExpectNot, 2, Effect::Any, EnvAccess::None) {
+class FLI(assumeNot, 2, Effect::Any, EnvAccess::None) {
   public:
-    ExpectNot(Value* test, Checkpoint* checkpoint)
+    assumeNot(Value* test, Checkpoint* checkpoint)
         : FixedLenInstruction(PirType::voyd(),
                               {{NativeType::test, NativeType::test}},
                               {{test, checkpoint}}) {}

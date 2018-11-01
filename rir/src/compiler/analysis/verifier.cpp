@@ -89,7 +89,7 @@ class TheVerifier {
             }
         } else {
             Instruction* last = bb->last();
-            if ((Branch::Cast(last) || Checkpoint::Cast(last))) {
+            if (BranchingInstruction::CastBranch(last)) {
                 if (!bb->falseBranch() || !bb->trueBranch()) {
                     std::cerr << "split bb" << bb->id
                               << " must end in branch\n";

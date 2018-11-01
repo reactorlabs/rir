@@ -49,7 +49,7 @@ void Configurations::defaultOptimizations() {
         optimizations.push_back(new pir::DelayEnv());
     };
 
-    optimizations.push_back(new pir::AdaptForSpec);
+    optimizations.push_back(new pir::insertCheckpoints);
     for (int j = 0; j < 3; ++j) {
         for (int i = 0; i < 3; ++i) {
             addDefaultOpt();

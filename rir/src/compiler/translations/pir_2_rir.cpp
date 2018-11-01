@@ -1013,7 +1013,7 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 break;
             }
             case Tag::Deopt:
-            case Tag::ExpectNot:
+            case Tag::assumeNot:
             case Tag::Checkpoint: {
                 assert(false && "Deopt instructions must be lowered into "
                                 "standard branches and scheduled deopt, "
@@ -1106,7 +1106,7 @@ void Pir2Rir::lower(Code* code) {
                     auto newDeopt = new ScheduledDeopt();
                     newDeopt->consumeFrameStates(deopt);
                     bb->replace(it, newDeopt);
-                } else if (auto expect = ExpectNot::Cast(*it)) {
+                } else if (auto expect = assumeNot::Cast(*it)) {
                     BBTransform::lowerExpect(
                         code, bb, it, expect->condition(),
                         expect->checkpoint()->bb()->falseBranch());
@@ -1146,11 +1146,8 @@ void Pir2Rir::lower(Code* code) {
                 next = bb->remove(it);
             } else if (Checkpoint::Cast(*it)) {
                 next = bb->remove(it);
-                // If a bb ending with a checkpoint is emptied we must
-                // "inform" the cleanup that it could replace it with the
-                // true branch
-                if (bb->isEmpty())
-                    bb->next1 = nullptr;
+                // Branching removed. Preserve invariant
+                bb->next1 = nullptr;
             } else if (MkArg::Cast(*it) && (*it)->unused()) {
                 next = bb->remove(it);
             }

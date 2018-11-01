@@ -169,17 +169,13 @@ Value* Instruction::baseValue() {
 }
 
 bool Instruction::maySpecialize() {
-    bool may = false;
-    if (false) {
-        // Do nothing
-    }
 #define V(Name)                                                                \
-    else if (Name::Cast(this)) {                                               \
-        may = true;                                                            \
+    if (Name::Cast(this)) {                                                    \
+        return true;                                                           \
     }
     BINOP_INSTRUCTIONS(V)
 #undef V
-    return may;
+    return false;
 }
 
 void LdConst::printArgs(std::ostream& out, bool tty) {
@@ -466,7 +462,7 @@ void Checkpoint::printArgs(std::ostream& out, bool tty) {
         << bb()->falseBranch()->id << " (if coming from expect)";
 }
 
-BranchInstruction* BranchInstruction::CastBranch(Value* v) {
+BranchingInstruction* BranchingInstruction::CastBranch(Value* v) {
     switch (v->tag) {
     case Tag::Branch:
         return Branch::Cast(v);

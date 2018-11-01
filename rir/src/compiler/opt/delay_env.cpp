@@ -83,7 +83,7 @@ void DelayEnv::apply(Closure* function) const {
             };
 
             if (it != bb->end() && (it + 1) != bb->end()) {
-                auto branch = BranchInstruction::CastBranch(*(it + 1));
+                auto branch = BranchingInstruction::CastBranch(*(it + 1));
                 if (envInstr && branch) {
                     Deopt* deopt;
                     if (!bb->falseBranch()->isEmpty() &&

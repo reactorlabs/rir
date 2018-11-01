@@ -69,15 +69,17 @@ class PASS(DelayEnv, "Move environment creation as far as possible");
 class PASS(Inline, "Inline closures");
 
 /*
- * This PASS goes through every operation that for the general case needs
- * an environment, but it could elide it for some particular inputs. The PASS
- * then analyzes the profiling information and if all the observed inputs are
- * compatible with the operation without an environment, it avoids creating the
- * environment and add the corresponding guard to deoptimize in case an
- * incompatible input appears at run time.
+ * Goes through every operation that for the general case needs an
+ * environment, but it could elide it for some particular inputs. All
+ * of them, should have a frameState operation just above. The PASS
+ * transforms the CFG so that it becomes easier to work with speculative
+ * optimizations. Essentially, it adds a checkpoint befor executing the
+ * operation. Checkpoints should jump to a new basic block in case the
+ * speculative conditions do not hold. Then, rest of code could assume
+ * the conditions hold and edit operations.
  */
 class PASS(
-    AdaptForSpec,
+    insertCheckpoints,
     "Adapt the CFG to the format required by pir's speculative operations");
 
 /*
@@ -90,8 +92,8 @@ class PASS(
  */
 class PASS(ElideEnvSpec, "Speculate on values to elide environments");
 
-class PASS(Cleanup, "...");
-class PASS(CleanupFrameState, "...");
+class PASS(Cleanup, "Cleanup redundant operations");
+class PASS(CleanupFrameState, "Cleanup targeted only to frameStates");
 
 } // namespace pir
 } // namespace rir

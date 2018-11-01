@@ -7,8 +7,9 @@
 #include <unordered_map>
 #include <unordered_set>
 
-namespace rir {
-namespace pir {
+namespace {
+
+using namespace rir::pir;
 
 class TheCleanup {
   public:
@@ -213,6 +214,10 @@ class TheCleanup {
         function->eachDefaultArg(renumberBBs);
     }
 };
+} // namespace
+
+namespace rir {
+namespace pir {
 
 void Cleanup::apply(Closure* function) const {
     TheCleanup s(function);

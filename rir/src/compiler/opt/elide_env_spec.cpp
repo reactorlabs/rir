@@ -24,7 +24,7 @@ void ElideEnvSpec::apply(Closure* function) const {
         position++;
         assert(checkpoints[src]);
         position =
-            src->insert(position, new ExpectNot(condition, checkpoints[src]));
+            src->insert(position, new assumeNot(condition, checkpoints[src]));
         position++;
         return position;
     };
@@ -54,7 +54,6 @@ void ElideEnvSpec::apply(Closure* function) const {
             ip++;
         }
     });
-
-} // namespace pir
+}
 } // namespace pir
 } // namespace rir

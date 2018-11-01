@@ -146,11 +146,10 @@ class VisitorImplementation {
         BB* cur = bb;
         std::deque<BB*> todo;
         Marker done;
+        BB* next = nullptr;
         done.set(cur);
 
-        while (cur) {
-            BB* next = nullptr;
-
+        auto addChildren = [&]() {
             if (cur->next0 && !done.check(cur->next0)) {
                 if (todo.empty())
                     next = cur->next0;
@@ -167,28 +166,17 @@ class VisitorImplementation {
                 }
                 done.set(cur->next1);
             }
+        };
 
+        while (cur) {
+            next = nullptr;
+
+            if (!processNewNodes)
+                addChildren();
             if (!predicate(cur))
                 return false;
-
-            if (processNewNodes) {
-                if (cur->next0 && !done.check(cur->next0)) {
-                    if (todo.empty())
-                        next = cur->next0;
-                    else
-                        enqueue(todo, cur->next0);
-                    done.set(cur->next0);
-                }
-
-                if (cur->next1 && !done.check(cur->next1)) {
-                    if (!next && todo.empty()) {
-                        next = cur->next1;
-                    } else {
-                        enqueue(todo, cur->next1);
-                    }
-                    done.set(cur->next1);
-                }
-            }
+            if (processNewNodes)
+                addChildren();
 
             if (!next) {
                 if (!todo.empty()) {
