@@ -3,6 +3,7 @@
 
 #include "../pir/bb.h"
 #include "../pir/code.h"
+#include "../pir/instruction.h"
 #include "../pir/pir.h"
 #include "../util/cfg.h"
 
@@ -69,7 +70,7 @@ struct PointerMarker {
 };
 }; // namespace VisitorHelpers
 
-enum class Order { Depth, Breadth, Random };
+enum class Order { Depth, Breadth, Random, Lowering };
 enum class Direction { Forward, Backward };
 
 template <Order ORDER, class Marker>
@@ -145,26 +146,35 @@ class VisitorImplementation {
 
         BB* cur = bb;
         std::deque<BB*> todo;
+        std::deque<BB*> delayed;
         Marker done;
         BB* next = nullptr;
         done.set(cur);
 
-        auto addChildren = [&]() {
-            if (cur->next0 && !done.check(cur->next0)) {
-                if (todo.empty())
-                    next = cur->next0;
-                else
-                    enqueue(todo, cur->next0);
-                done.set(cur->next0);
+        auto schedule = [&](BB* bb) {
+            if (!bb || done.check(bb))
+                return;
+            bool deoptBranch =
+                !bb->isEmpty() && ScheduledDeopt::Cast(bb->last());
+            if (ORDER == Order::Lowering && deoptBranch) {
+                delayed.push_back(bb);
+            } else if (!next && todo.empty()) {
+                next = bb;
+            } else {
+                enqueue(todo, bb);
             }
+            done.set(bb);
+        };
 
-            if (cur->next1 && !done.check(cur->next1)) {
-                if (!next && todo.empty()) {
-                    next = cur->next1;
-                } else {
-                    enqueue(todo, cur->next1);
-                }
-                done.set(cur->next1);
+        auto scheduleNext = [&]() {
+            if (ORDER == Order::Lowering) {
+                // Curently we emit only brtrue in pir2rir, therefore we always
+                // want next1 to be the fallthrough case.
+                schedule(cur->next1);
+                schedule(cur->next0);
+            } else {
+                schedule(cur->next0);
+                schedule(cur->next1);
             }
         };
 
@@ -172,16 +182,19 @@ class VisitorImplementation {
             next = nullptr;
 
             if (!processNewNodes)
-                addChildren();
+                scheduleNext();
             if (!predicate(cur))
                 return false;
             if (processNewNodes)
-                addChildren();
+                scheduleNext();
 
             if (!next) {
                 if (!todo.empty()) {
                     next = todo.front();
                     todo.pop_front();
+                } else if (!delayed.empty()) {
+                    next = delayed.front();
+                    delayed.pop_front();
                 }
             }
 
@@ -202,7 +215,8 @@ class VisitorImplementation {
 
     static void enqueue(std::deque<BB*>& todo, BB* bb) {
         // For analysis random search is faster
-        if (ORDER == Order::Breadth || (ORDER == Order::Random && coinFlip()))
+        if (ORDER == Order::Breadth || ORDER == Order::Lowering ||
+            (ORDER == Order::Random && coinFlip()))
             todo.push_back(bb);
         else
             todo.push_front(bb);
@@ -215,6 +229,9 @@ class BreadthFirstVisitor
     : public VisitorImplementation<Order::Breadth, VisitorHelpers::IDMarker> {};
 class DepthFirstVisitor
     : public VisitorImplementation<Order::Depth, VisitorHelpers::IDMarker> {};
+class LoweringVisitor
+    : public VisitorImplementation<Order::Lowering, VisitorHelpers::IDMarker> {
+};
 
 template <class Marker = VisitorHelpers::IDMarker>
 class DominatorTreeVisitor {
