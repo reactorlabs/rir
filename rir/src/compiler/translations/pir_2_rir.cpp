@@ -1163,16 +1163,14 @@ rir::Function* Pir2Rir::finalize() {
     FunctionWriter function;
     Context ctx(function);
 
-    // PIR does not support default args currently. So we just pass an empty
-    // array, since functions are expected to have a slot reserved for every
-    // argument.
-    std::vector<SEXP> defaultArgs;
-    defaultArgs.resize(cls->nargs());
+    // PIR does not support default args currently.
+    for (size_t i = 0; i < cls->nargs(); ++i)
+        function.addArgWithoutDefault();
 
     ctx.push(R_NilValue);
     size_t localsCnt = compileCode(ctx, cls);
     auto body = ctx.finalizeCode(localsCnt);
-    function.finalize(body, defaultArgs);
+    function.finalize(body);
     log.finalPIR(cls);
 #ifdef ENABLE_SLOWASSERT
     CodeVerifier::verifyFunctionLayout(function.function()->container(),

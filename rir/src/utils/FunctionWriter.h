@@ -18,11 +18,11 @@ namespace rir {
 class FunctionWriter {
   private:
     Function* function_;
+    std::vector<SEXP> defaultArgs;
+    Preserve preserve;
 
   public:
     typedef unsigned PcOffset;
-
-    Preserve preserve;
 
     FunctionWriter() : function_(nullptr) {}
 
@@ -33,7 +33,14 @@ class FunctionWriter {
         return function_;
     }
 
-    void finalize(Code* body, std::vector<SEXP>& defaultArgs) {
+    void addArgWithoutDefault() { defaultArgs.push_back(nullptr); }
+
+    void addDefaultArg(Code* code) {
+        preserve(code->container());
+        defaultArgs.push_back(code->container());
+    }
+
+    void finalize(Code* body) {
         assert(function_ == nullptr && "Trying to finalize a second time");
 
         size_t dataSize = defaultArgs.size() * sizeof(SEXP);
