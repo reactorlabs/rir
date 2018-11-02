@@ -108,6 +108,7 @@ BB* BBTransform::lowerExpect(Code* code, BB* src, BB::Instrs::iterator position,
 BB* BBTransform::addCheckpoint(Code* code, BB* src,
                                BB::Instrs::iterator position) {
     FrameState* framestate = FrameState::Cast(*position);
+    assert(framestate);
     auto deoptBlock = new BB(code, code->nextBBId++);
     position = src->moveToBegin(position, deoptBlock);
     deoptBlock->append(new Deopt(framestate));

@@ -111,10 +111,8 @@ Instruction::InstructionUID Instruction::id() {
 }
 
 bool Instruction::unused() {
-    // TODO: better solution?
-    if (tag == Tag::Branch || tag == Tag::Return || tag == Tag::Checkpoint)
-        return false;
-
+    if (type == PirType::voyd())
+        return true;
     return Visitor::check(bb(), [&](Instruction* i) {
         bool unused = true;
         i->eachArg([&](Value* v) { unused = unused && (v != this); });
@@ -460,17 +458,6 @@ void Checkpoint::printArgs(std::ostream& out, bool tty) {
     FixedLenInstruction::printArgs(out, tty);
     out << " -> BB" << bb()->trueBranch()->id << " (by default) | BB"
         << bb()->falseBranch()->id << " (if coming from expect)";
-}
-
-BranchingInstruction* BranchingInstruction::CastBranch(Value* v) {
-    switch (v->tag) {
-    case Tag::Branch:
-        return Branch::Cast(v);
-    case Tag::Checkpoint:
-        return Checkpoint::Cast(v);
-    default: {}
-    }
-    return nullptr;
 }
 
 } // namespace pir
