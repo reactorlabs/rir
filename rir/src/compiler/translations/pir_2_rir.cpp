@@ -658,7 +658,7 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
             bbLabels[bb] = ctx.cs().mkLabel();
     });
 
-    BreadthFirstVisitor::run(code->entry, [&](BB* bb) {
+    LoweringVisitor::run(code->entry, [&](BB* bb) {
         if (bb->isEmpty())
             return;
 
@@ -819,8 +819,8 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 while (falseBranch->isEmpty())
                     falseBranch = falseBranch->next();
 
-                cs << BC::brfalse(bbLabels[falseBranch])
-                   << BC::br(bbLabels[trueBranch]);
+                cs << BC::brtrue(bbLabels[trueBranch])
+                   << BC::br(bbLabels[falseBranch]);
 
                 // this is the end of this BB
                 return;
