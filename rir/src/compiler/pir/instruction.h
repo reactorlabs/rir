@@ -892,34 +892,130 @@ UNOP(Length);
 
 #undef UNOP
 
+struct RirStack {
+  private:
+    typedef std::deque<Value*> Stack;
+    Stack stack;
+
+  public:
+    void push(Value* v) { stack.push_back(v); }
+    Value* pop() {
+        assert(!empty());
+        auto v = stack.back();
+        stack.pop_back();
+        return v;
+    }
+    Value*& at(unsigned i) {
+        assert(i < size());
+        return stack[stack.size() - 1 - i];
+    }
+    Value* at(unsigned i) const {
+        assert(i < size());
+        return stack[stack.size() - 1 - i];
+    }
+    Value* top() const {
+        assert(!empty());
+        return stack.back();
+    }
+    bool empty() const { return stack.empty(); }
+    size_t size() const { return stack.size(); }
+    void clear() { stack.clear(); }
+    Stack::const_iterator begin() const { return stack.cbegin(); }
+    Stack::const_iterator end() const { return stack.cend(); }
+    Stack::iterator begin() { return stack.begin(); }
+    Stack::iterator end() { return stack.end(); }
+};
+
+/*
+ *  Collects metadata about the current state of variables
+ *  eventually needed for deoptimization purposes
+ */
+class VLIE(FrameState, Effect::Any, EnvAccess::Read) {
+  public:
+    bool inlined = false;
+    Opcode* pc;
+    rir::Code* code;
+    size_t stackSize;
+
+    FrameState(Value* env, rir::Code* code, Opcode* pc, const RirStack& stack)
+        : VarLenInstructionWithEnvSlot(NativeType::frameState, env), pc(pc),
+          code(code), stackSize(stack.size()) {
+        for (auto& v : stack)
+            pushArg(v);
+    }
+
+    void updateNext(FrameState* s) {
+        assert(inlined);
+        assert(arg(stackSize).type() == NativeType::frameState);
+        arg(stackSize).val() = s;
+    }
+
+    void next(FrameState* s) {
+        assert(!inlined);
+        inlined = true;
+        pushArg(s, NativeType::frameState);
+    }
+
+    FrameState* next() const {
+        if (inlined) {
+            auto r = Cast(arg(stackSize).val());
+            assert(r);
+            return r;
+        } else {
+            return nullptr;
+        }
+    }
+
+    Value* tos() { return arg(stackSize - 1).val(); }
+
+    void popStack() {
+        stackSize--;
+        // Move the next() ptr
+        if (inlined)
+            arg(stackSize) = arg(stackSize + 1);
+        popArg();
+    }
+
+    void printArgs(std::ostream& out, bool tty) override;
+    void printEnv(std::ostream& out, bool tty) override final{};
+};
+
 // Common interface to all call instructions
 class CallInstruction {
   public:
     virtual size_t nCallArgs() = 0;
     virtual void eachCallArg(Instruction::ArgumentValueIterator it) = 0;
     static CallInstruction* CastCall(Value* v);
+    virtual void clearFrameState(){};
 };
 
 // Default call instruction. Closure expression (ie. expr left of `(`) is
 // evaluated at runtime and arguments are passed as promises.
 class VLIE(Call, Effect::Any, EnvAccess::Leak), public CallInstruction {
   public:
-    Value* cls() { return arg(0).val(); }
+    Value* cls() { return arg(1).val(); }
 
     Call(Value * callerEnv, Value * fun, const std::vector<Value*>& args,
-         unsigned srcIdx)
+         FrameState* fs, unsigned srcIdx)
         : VarLenInstructionWithEnvSlot(PirType::valOrLazy(), callerEnv,
                                        srcIdx) {
+        assert(fs);
+        pushArg(fs, NativeType::frameState);
         pushArg(fun, RType::closure);
         for (unsigned i = 0; i < args.size(); ++i)
             pushArg(args[i], PirType::val());
     }
 
-    size_t nCallArgs() override { return nargs() - 2; };
+    size_t nCallArgs() override { return nargs() - 3; };
     void eachCallArg(Instruction::ArgumentValueIterator it) override {
         for (size_t i = 0; i < nCallArgs(); ++i)
-            it(arg(i + 1).val());
+            it(arg(i + 2).val());
     }
+
+    FrameState* frameState() {
+        return FrameState::Cast(arg(0).val());
+    }
+    void clearFrameState() override { arg(0).val() = Tombstone::instance(); };
 
     Value* callerEnv() { return env(); }
 
@@ -975,18 +1071,24 @@ class VLIE(StaticCall, Effect::Any, EnvAccess::Leak), public CallInstruction {
     SEXP origin() { return origin_; }
 
     StaticCall(Value * callerEnv, Closure * cls,
-               const std::vector<Value*>& args, SEXP origin, unsigned srcIdx)
+               const std::vector<Value*>& args, SEXP origin, FrameState* fs,
+               unsigned srcIdx)
         : VarLenInstructionWithEnvSlot(PirType::valOrLazy(), callerEnv, srcIdx),
           cls_(cls), origin_(origin) {
+        assert(fs);
+        pushArg(fs, NativeType::frameState);
         for (unsigned i = 0; i < args.size(); ++i)
             pushArg(args[i], PirType::val());
     }
 
-    size_t nCallArgs() override { return nargs() - 1; };
+    size_t nCallArgs() override { return nargs() - 2; };
     void eachCallArg(Instruction::ArgumentValueIterator it) override {
         for (size_t i = 0; i < nCallArgs(); ++i)
-            it(arg(i).val());
+            it(arg(i + 1).val());
     }
+
+    FrameState* frameState() { return FrameState::Cast(arg(0).val()); }
+    void clearFrameState() override { arg(0).val() = Tombstone::instance(); };
 
     void printArgs(std::ostream & out, bool tty) override;
     Value* callerEnv() { return env(); }
@@ -1099,94 +1201,6 @@ class VLI(Phi, Effect::None, EnvAccess::None) {
 };
 
 // Instructions targeted specially for speculative optimization
-
-struct RirStack {
-  private:
-    typedef std::deque<Value*> Stack;
-    Stack stack;
-
-  public:
-    void push(Value* v) { stack.push_back(v); }
-    Value* pop() {
-        assert(!empty());
-        auto v = stack.back();
-        stack.pop_back();
-        return v;
-    }
-    Value*& at(unsigned i) {
-        assert(i < size());
-        return stack[stack.size() - 1 - i];
-    }
-    Value* at(unsigned i) const {
-        assert(i < size());
-        return stack[stack.size() - 1 - i];
-    }
-    Value* top() const {
-        assert(!empty());
-        return stack.back();
-    }
-    bool empty() const { return stack.empty(); }
-    size_t size() const { return stack.size(); }
-    void clear() { stack.clear(); }
-    Stack::const_iterator begin() const { return stack.cbegin(); }
-    Stack::const_iterator end() const { return stack.cend(); }
-    Stack::iterator begin() { return stack.begin(); }
-    Stack::iterator end() { return stack.end(); }
-};
-
-/*
- *  Collects metadata about the current state of variables
- *  eventually needed for deoptimization purposes
- */
-class VLIE(FrameState, Effect::Any, EnvAccess::Read) {
-  public:
-    bool inlined = false;
-    Opcode* pc;
-    rir::Code* code;
-    size_t stackSize;
-
-    FrameState(Value* env, rir::Code* code, Opcode* pc, const RirStack& stack)
-        : VarLenInstructionWithEnvSlot(NativeType::frameState, env), pc(pc),
-          code(code), stackSize(stack.size()) {
-        for (auto& v : stack)
-            pushArg(v);
-    }
-
-    void updateNext(FrameState* s) {
-        assert(inlined);
-        assert(arg(stackSize).type() == NativeType::frameState);
-        arg(stackSize).val() = s;
-    }
-
-    void next(FrameState* s) {
-        assert(!inlined);
-        inlined = true;
-        pushArg(s, NativeType::frameState);
-    }
-
-    FrameState* next() const {
-        if (inlined) {
-            auto r = Cast(arg(stackSize).val());
-            assert(r);
-            return r;
-        } else {
-            return nullptr;
-        }
-    }
-
-    Value* tos() { return arg(stackSize - 1).val(); }
-
-    void popStack() {
-        stackSize--;
-        // Move the next() ptr
-        if (inlined)
-            arg(stackSize) = arg(stackSize + 1);
-        popArg();
-    }
-
-    void printArgs(std::ostream& out, bool tty) override;
-    void printEnv(std::ostream& out, bool tty) override final{};
-};
 
 /*
  *  Must be the last instruction of a BB with two childs. One should

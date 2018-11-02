@@ -42,7 +42,7 @@ class Rir2Pir {
     LogStream& log;
     std::string name;
 
-    bool compileBC(const BC& bc, Opcode* pos, rir::Code* srcCode, RirStack&,
+    bool compileBC(const BC& bc, Opcode* pos, Opcode* nextPos, rir::Code* srcCode, RirStack&,
                    Builder&) const;
     virtual bool inPromise() const { return false; }
 };
