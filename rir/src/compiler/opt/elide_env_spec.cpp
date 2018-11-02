@@ -38,14 +38,23 @@ void ElideEnvSpec::apply(Closure* function) const {
                 ProfiledValues* profile = &function->runtimeFeedback;
                 Value* opLeft = i->arg(0).val();
                 Value* opRight = i->arg(1).val();
-
-                if (profile->hasTypesFor(opLeft) &&
+                bool maybeObjL = !LdConst::Cast(opLeft) ||
+                                 isObject(LdConst::Cast(opLeft)->c);
+                bool maybeObjR = !LdConst::Cast(opRight) ||
+                                 isObject(LdConst::Cast(opRight)->c);
+                bool assumeNonObjL =
+                    profile->hasTypesFor(opLeft) &&
+                    !profile->types.at(opLeft).observedObject();
+                bool assumeNonObjR =
                     profile->hasTypesFor(opRight) &&
-                    !profile->types.at(opLeft).observedObject() &&
-                    !profile->types.at(opRight).observedObject()) {
+                    !profile->types.at(opRight).observedObject();
+
+                if (assumeNonObjL && assumeNonObjR) {
                     i->elideEnv();
-                    ip = insertExpectAndAdvance(bb, opLeft, ip);
-                    ip = insertExpectAndAdvance(bb, opRight, ip);
+                    if (maybeObjL)
+                        ip = insertExpectAndAdvance(bb, opLeft, ip);
+                    if (maybeObjR)
+                        ip = insertExpectAndAdvance(bb, opRight, ip);
                 }
             } else {
                 if (Checkpoint* cp = Checkpoint::Cast(i))
