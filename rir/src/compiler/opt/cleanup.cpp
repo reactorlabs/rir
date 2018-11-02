@@ -1,6 +1,8 @@
 #include "../pir/pir_impl.h"
+#include "../translations/pir_translator.h"
 #include "../util/cfg.h"
 #include "../util/visitor.h"
+
 #include "R/r.h"
 #include "pass_definitions.h"
 
@@ -74,6 +76,30 @@ class TheCleanup {
                     } else {
                         if (!isShared.count(shared))
                             isShared[shared] = 0;
+                    }
+                } else if (auto tst = AsTest::Cast(i)) {
+                    // Converting to bool might trow warning if the size is not
+                    // 1, or if the value is NA
+                    if (tst->unused()) {
+                        auto arg = tst->arg<0>().val();
+                        bool canBeRemoved = false;
+                        if (arg->type.isScalar() &&
+                            !arg->type.maybe(RType::logical)) {
+                            canBeRemoved = true;
+                        }
+                        if (auto lgl = AsLogical::Cast(tst->arg<0>().val())) {
+                            if (auto cst = LdConst::Cast(lgl->arg<0>().val())) {
+                                SEXP c = cst->c;
+                                if (XLENGTH(c) == 1 &&
+                                    Rf_asLogical(c) != NA_LOGICAL) {
+                                    canBeRemoved = true;
+                                }
+                            }
+                        }
+                        if (canBeRemoved) {
+                            removed = true;
+                            next = bb->remove(ip);
+                        }
                     }
                 }
                 if (!removed) {
@@ -215,7 +241,7 @@ class TheCleanup {
 namespace rir {
 namespace pir {
 
-void Cleanup::apply(Closure* function) const {
+void Cleanup::apply(RirCompiler&, Closure* function) const {
     TheCleanup s(function);
     s();
 }

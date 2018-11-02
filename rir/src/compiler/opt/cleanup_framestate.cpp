@@ -7,7 +7,7 @@
 namespace rir {
 namespace pir {
 
-void CleanupFrameState::apply(Closure* function) const {
+void CleanupFrameState::apply(RirCompiler&, Closure* function) const {
     auto apply = [](Code* code) {
         Visitor::run(code->entry, [&](Instruction* i) {
             if (auto call = CallInstruction::CastCall(i)) {

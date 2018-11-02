@@ -10,8 +10,7 @@
 namespace rir {
 namespace pir {
 
-void insertCheckpoints::apply(Closure* function) const {
-
+void insertCheckpoints::apply(RirCompiler&, Closure* function) const {
     Visitor::run(function->entry, [&](BB* bb) {
         if (bb->isEmpty())
             return;

@@ -9,7 +9,7 @@
 namespace rir {
 namespace pir {
 
-void DelayEnv::apply(Closure* function) const {
+void DelayEnv::apply(RirCompiler&, Closure* function) const {
     Visitor::run(function->entry, [&](BB* bb) {
         std::unordered_set<MkEnv*> done;
         MkEnv* envInstr;

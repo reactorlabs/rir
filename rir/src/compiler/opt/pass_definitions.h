@@ -14,7 +14,7 @@ class Closure;
     PirTranslator {                                                            \
       public:                                                                  \
         name() : PirTranslator(desc){};                                        \
-        void apply(Closure* function) const final override;                    \
+        void apply(RirCompiler&, Closure* function) const final override;      \
     };
 
 /*
@@ -91,11 +91,14 @@ class PASS(
  * incompatible input appears at run time.
  */
 class PASS(ElideEnvSpec, "Speculate on values to elide environments");
+class PASS(Constantfold, "Constant folding");
 
 class PASS(Cleanup, "Cleanup redundant operations");
 class PASS(CleanupFrameState, "Cleanup targeted only to frameStates");
 
 } // namespace pir
 } // namespace rir
+
+#undef PASS
 
 #endif
