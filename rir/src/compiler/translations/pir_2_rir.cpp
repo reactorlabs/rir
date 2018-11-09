@@ -715,7 +715,7 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
 
                 auto loadArg = [&](BB::Instrs::iterator it, Instruction* instr,
                                    Value* what) {
-                    if (what == Tombstone::instance()) {
+                    if (what->tag == Tag::Tombstone) {
                         return;
                     }
                     if (what == Missing::instance()) {
@@ -1087,7 +1087,16 @@ void Pir2Rir::lower(Code* code) {
             auto it = bb->begin();
             while (it != bb->end()) {
                 auto next = it + 1;
-                if (auto deopt = Deopt::Cast(*it)) {
+                if (auto call = CallInstruction::CastCall(*it))
+                    call->clearFrameState();
+                if (auto ldfun = LdFun::Cast(*it)) {
+                    // the guessed binding in ldfun is just used as a temporary
+                    // store. If we did not manage to resolve ldfun by now, we
+                    // have to remove the guess again, since apparently we
+                    // where not sure it is correct.
+                    if (ldfun->guessedBinding())
+                        ldfun->clearGuessedBinding();
+                } else if (auto deopt = Deopt::Cast(*it)) {
                     // Lower Deopt instructions + their FrameStates to a
                     // ScheduledDeopt.
                     auto newDeopt = new ScheduledDeopt();

@@ -118,5 +118,35 @@ BB* BBTransform::addCheckpoint(Code* code, BB* src,
     src->next1 = deoptBlock;
     return split;
 }
+
+void BBTransform::removeBBsWithChildren(
+    DominanceGraph& dom, Code* code, const std::unordered_set<BB*>& toDelete_) {
+    std::unordered_set<BB*> toDelete;
+
+    for (auto bb : toDelete_) {
+        Visitor::run(bb, [&](BB* child) {
+            if (dom.dominates(child, bb))
+                toDelete.insert(child);
+        });
+        toDelete.insert(bb);
+    }
+    removeBBs(code, toDelete);
+}
+
+void BBTransform::removeBBs(Code* code,
+                            const std::unordered_set<BB*>& toDelete) {
+    // Dead code can still appear as phi inputs in live blocks
+    Visitor::run(code->entry, [&](BB* bb) {
+        for (auto i : *bb) {
+            if (auto phi = Phi::Cast(i)) {
+                phi->removeInputs(toDelete);
+            }
+        }
+    });
+    for (auto bb : toDelete) {
+        delete bb;
+    }
+}
+
 } // namespace pir
 } // namespace rir

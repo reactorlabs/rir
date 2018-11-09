@@ -11,13 +11,14 @@
 #include "tag.h"
 #include "value.h"
 
+#include <algorithm>
 #include <array>
 #include <cassert>
 #include <cstdint>
 #include <deque>
 #include <functional>
 #include <iostream>
-#include <algorithm>
+#include <unordered_set>
 
 /*
  * This file provides implementations for all instructions
@@ -321,7 +322,7 @@ class FixedLenInstruction
     }
 
     template <unsigned POS>
-    InstrArg& arg() const {
+    const InstrArg& arg() const {
         static_assert(POS < ARGS, "This instruction has fewer arguments");
         return arg(POS);
     }
@@ -498,16 +499,29 @@ class FLI(LdConst, 0, Effect::None, EnvAccess::None) {
     void printArgs(std::ostream& out, bool tty) override;
 };
 
-class FLIE(LdFun, 1, Effect::Any, EnvAccess::Write) {
+class FLIE(LdFun, 2, Effect::Any, EnvAccess::Write) {
   public:
     SEXP varName;
 
     LdFun(const char* name, Value* env)
-        : FixedLenInstructionWithEnvSlot(RType::closure, env),
+        : FixedLenInstructionWithEnvSlot(RType::closure, {PirType::any()},
+                                         {Tombstone::closure()}, env),
           varName(Rf_install(name)) {}
     LdFun(SEXP name, Value* env)
-        : FixedLenInstructionWithEnvSlot(RType::closure, env), varName(name) {
+        : FixedLenInstructionWithEnvSlot(RType::closure, {PirType::any()},
+                                         {Tombstone::closure()}, env),
+          varName(name) {
         assert(TYPEOF(name) == SYMSXP);
+    }
+
+    void clearGuessedBinding() { arg<0>().val() = Tombstone::closure(); }
+
+    void guessedBinding(Value* val) { arg<0>().val() = val; }
+
+    Value* guessedBinding() const {
+        if (arg<0>().val() != Tombstone::closure())
+            return arg<0>().val();
+        return nullptr;
     }
 
     void printArgs(std::ostream& out, bool tty) override;
@@ -931,7 +945,7 @@ struct RirStack {
  *  Collects metadata about the current state of variables
  *  eventually needed for deoptimization purposes
  */
-class VLIE(FrameState, Effect::Any, EnvAccess::Read) {
+class VLIE(FrameState, Effect::None, EnvAccess::Read) {
   public:
     bool inlined = false;
     Opcode* pc;
@@ -1016,7 +1030,7 @@ class VLIE(Call, Effect::Any, EnvAccess::Leak), public CallInstruction {
     FrameState* frameState() {
         return FrameState::Cast(arg(0).val());
     }
-    void clearFrameState() override { arg(0).val() = Tombstone::instance(); };
+    void clearFrameState() override { arg(0).val() = Tombstone::framestate(); };
 
     Value* callerEnv() { return env(); }
 
@@ -1089,7 +1103,7 @@ class VLIE(StaticCall, Effect::Any, EnvAccess::Leak), public CallInstruction {
     }
 
     FrameState* frameState() { return FrameState::Cast(arg(0).val()); }
-    void clearFrameState() override { arg(0).val() = Tombstone::instance(); };
+    void clearFrameState() override { arg(0).val() = Tombstone::framestate(); };
 
     void printArgs(std::ostream & out, bool tty) override;
     Value* callerEnv() { return env(); }
@@ -1193,7 +1207,7 @@ class VLI(Phi, Effect::None, EnvAccess::None) {
         input.push_back(in);
         args_.push_back(InstrArg(arg, arg->type));
     }
-    void removeInputs(std::vector<BB*>& del) {
+    void removeInputs(const std::unordered_set<BB*>& del) {
         auto ii = input.begin();
         auto ai = args_.begin();
         while (ii != input.end()) {
@@ -1227,7 +1241,7 @@ class Checkpoint
     : public FixedLenInstruction<Tag::Checkpoint, Checkpoint, 0, Effect::None,
                                  EnvAccess::None, Controlflow::Branch> {
   public:
-    Checkpoint() : FixedLenInstruction(PirType::voyd()) {}
+    Checkpoint() : FixedLenInstruction(NativeType::checkpoint) {}
     void printArgs(std::ostream & out, bool tty) override;
 };
 
@@ -1254,7 +1268,7 @@ class FLI(assumeNot, 2, Effect::Any, EnvAccess::None) {
   public:
     assumeNot(Value* test, Checkpoint* checkpoint)
         : FixedLenInstruction(PirType::voyd(),
-                              {{NativeType::test, NativeType::test}},
+                              {{NativeType::test, NativeType::checkpoint}},
                               {{test, checkpoint}}) {}
 
     Checkpoint* checkpoint() { return Checkpoint::Cast(arg(1).val()); }

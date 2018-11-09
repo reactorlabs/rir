@@ -61,6 +61,9 @@ class TheInliner {
                     continue;
                 }
 
+                if (inlinee == function && fuel < 5)
+                    continue;
+
                 fuel--;
 
                 BB* split =

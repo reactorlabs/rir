@@ -44,13 +44,28 @@ class Missing : public SingletonValue<Missing> {
     Missing() : SingletonValue(PirType::missing(), Tag::Missing) {}
 };
 
-class Tombstone : public SingletonValue<Tombstone> {
+class Tombstone : public Value {
   public:
-    void printRef(std::ostream& out) { out << "~"; }
+    void printRef(std::ostream& out) {
+        out << "~";
+        if (this == closure())
+            out << "cls";
+        else if (this == framestate())
+            out << "fs";
+        else
+            assert(false);
+    }
+    static Tombstone* closure() {
+        static Tombstone cls(RType::closure);
+        return &cls;
+    }
+    static Tombstone* framestate() {
+        static Tombstone cls(NativeType::frameState);
+        return &cls;
+    }
 
   private:
-    friend class SingletonValue;
-    Tombstone() : SingletonValue(PirType::voyd(), Tag::Tombstone) {}
+    Tombstone(PirType t) : Value(t, Tag::Tombstone) {}
 };
 }
 }
