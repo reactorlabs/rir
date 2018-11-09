@@ -1,4 +1,5 @@
 #include "../pir/pir_impl.h"
+#include "../transform/bb.h"
 #include "../transform/replace.h"
 #include "../translations/rir_compiler.h"
 #include "../util/cfg.h"
@@ -108,24 +109,18 @@ void Constantfold::apply(RirCompiler& cmp, Closure* function) const {
         }
     });
 
-    std::vector<BB*> deleted;
+    std::unordered_set<BB*> toDelete;
     // Find all dead basic blocks
     for (auto e : branchRemoval) {
-        auto branch = e.first;
-        auto dead = e.second ? branch->next1 : branch->next0;
-        Visitor::run(dead, [&](BB* child) {
-            if (dead != branch && dom.dominates(child, dead))
-                deleted.push_back(child);
-        });
-        deleted.push_back(dead);
+        auto bb = e.first;
+        if (e.second)
+            toDelete.insert(bb->next1);
+        else
+            toDelete.insert(bb->next0);
     }
-    // Dead code can still appear as phi inputs in live blocks
-    Visitor::run(function->entry, [&](Instruction* i) {
-        if (auto phi = Phi::Cast(i)) {
-            phi->removeInputs(deleted);
-        }
-    });
-    // Remove the actual branch instruction
+
+    BBTransform::removeBBsWithChildren(dom, function, toDelete);
+
     for (auto e : branchRemoval) {
         auto branch = e.first;
         auto condition = e.second;
@@ -137,9 +132,6 @@ void Constantfold::apply(RirCompiler& cmp, Closure* function) const {
             branch->next1 = nullptr;
         }
     }
-    // Delete dead blocks
-    for (auto bb : deleted)
-        delete bb;
 }
 } // namespace pir
 } // namespace rir

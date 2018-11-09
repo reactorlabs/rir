@@ -317,7 +317,7 @@ bool checkPir2Rir(SEXP expected, SEXP result) {
 
 bool testPir2Rir(const std::string& name, const std::string& fun,
                  const std::string& args, bool useSame = false,
-                 bool verbose = false) {
+                 bool verbose = true) {
     Protect p;
 
     std::string wrapper =
@@ -540,6 +540,27 @@ static Test tests[] = {
                                 "  sum\n"
                                 "}",
                                 "4");
+         }),
+    Test(
+        "Elide ldfun through promise",
+        []() { return test42("{f <- function() 42L; (function(x) x())(f)}"); }),
+    Test("Constantfolding1", []() { return test42("{if (1<2) 42L}"); }),
+    Test("Constantfolding2",
+         []() {
+             return test42("{a<- 41L; b<- 1L; f <- function(x,y) x+y; f(a,b)}");
+         }),
+    Test("Inlining promises and closures with Constantfolding",
+         []() {
+             return test42("{a<- function() 41L; b<- function() 1L; f <- "
+                           "function(x,y) x()+y; f(a,b())}");
+         }),
+    Test("more cf",
+         []() {
+             return test42("{x <- function() 42;"
+                           " y <- function() 41;"
+                           " z <- 1;"
+                           " f <- function(a,b,c) if (a() == (b+c)) 42L;"
+                           " f(x,y(),z)}");
          }),
 };
 } // namespace

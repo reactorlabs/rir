@@ -67,8 +67,13 @@ class TheCleanup {
                             usedBB[curBB].insert(phi);
                     }
                 } else if (auto arg = MkArg::Cast(i)) {
-                    used_p.insert(arg->prom()->id);
-                    todo.push_back(arg->prom());
+                    if (arg->unused()) {
+                        removed = true;
+                        next = bb->remove(ip);
+                    } else {
+                        used_p.insert(arg->prom()->id);
+                        todo.push_back(arg->prom());
+                    }
                 } else if (auto shared = SetShared::Cast(i)) {
                     if (i->unused()) {
                         removed = true;

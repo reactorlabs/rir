@@ -24,7 +24,7 @@ class Closure;
  * environment, to pir SSA variables.
  *
  */
-class PASS(ScopeResolution, "Dead store elimination");
+class PASS(ScopeResolution, "Scope resolution");
 
 /*
  * ElideEnv removes envrionments which are not needed. It looks at all uses of
@@ -44,13 +44,13 @@ class PASS(ElideEnv, "Elide environments not needed");
  * dominating force, and replaces all subsequent forces with its result.
  *
  */
-class PASS(ForceDominance, "Eliminate redundant force instructions");
+class PASS(ForceDominance, "Inline Promises");
 
 /*
  * DelayInstr tries to schedule instructions right before they are needed.
  *
  */
-class PASS(DelayInstr, "Eliminate redundant force instructions");
+class PASS(DelayInstr, "Delay instructions");
 
 /*
  * The DelayEnv pass tries to delay the scheduling of `MkEnv` instructions as
@@ -91,10 +91,31 @@ class PASS(
  * incompatible input appears at run time.
  */
 class PASS(ElideEnvSpec, "Speculate on values to elide environments");
+
+/*
+ * Constantfolding and dead branch removal.
+ */
 class PASS(Constantfold, "Constant folding");
 
+/*
+ * Generic instruction and controlflow cleanup pass.
+ */
 class PASS(Cleanup, "Cleanup redundant operations");
-class PASS(CleanupFrameState, "Cleanup targeted only to frameStates");
+
+/*
+ * Checkpoints keep values alive. Thus it makes sense to remove them if they
+ * are unused after a while.
+ */
+class PASS(CleanupCheckpoints, "Cleanup unused checkpoints");
+
+/*
+ * Unused framestate instructions usually get removed automatically. Except
+ * some call instructions consume framestates, but just for the case where we
+ * want to inline. This pass removes those framestates from the calls, such
+ * that they can be removed later, if they are not actually used by any
+ * checkpoint/deopt.
+ */
+class PASS(CleanupFramestate, "Cleanup framestates unused by checkpoints");
 
 } // namespace pir
 } // namespace rir

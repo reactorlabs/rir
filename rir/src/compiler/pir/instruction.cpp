@@ -203,6 +203,11 @@ void LdVar::printArgs(std::ostream& out, bool tty) {
 
 void LdFun::printArgs(std::ostream& out, bool tty) {
     out << CHAR(PRINTNAME(varName)) << ", ";
+    if (guessedBinding()) {
+        out << "<";
+        guessedBinding()->printRef(out);
+        out << ">, ";
+    }
 }
 
 void LdArg::printArgs(std::ostream& out, bool tty) { out << id; }

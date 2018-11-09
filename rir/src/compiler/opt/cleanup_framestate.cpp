@@ -1,4 +1,5 @@
 #include "../pir/pir_impl.h"
+#include "../transform/bb.h"
 #include "../transform/replace.h"
 #include "../util/cfg.h"
 #include "../util/visitor.h"
@@ -7,23 +8,11 @@
 namespace rir {
 namespace pir {
 
-void CleanupFrameState::apply(RirCompiler&, Closure* function) const {
+void CleanupFramestate::apply(RirCompiler&, Closure* function) const {
     auto apply = [](Code* code) {
         Visitor::run(code->entry, [&](Instruction* i) {
             if (auto call = CallInstruction::CastCall(i)) {
                 call->clearFrameState();
-            }
-        });
-
-        Visitor::run(code->entry, [&](BB* bb) {
-            auto it = bb->begin();
-            while (it != bb->end()) {
-                auto next = it + 1;
-                if (auto sp = FrameState::Cast(*it)) {
-                    if (sp->unused())
-                        next = bb->remove(it);
-                }
-                it = next;
             }
         });
     };
