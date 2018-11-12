@@ -277,8 +277,9 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos, rir::Code* s
                                           bc.callExtra().callArgumentNames,
                                           ast)));
             } else {
+                auto callee = pop();
                 auto fs = insert.registerFrameState(srcCode, nextPos, stack);
-                push(insert(new Call(insert.env, pop(), args, fs, ast)));
+                push(insert(new Call(insert.env, callee, args, fs, ast)));
             }
         };
         if (monomorphic && isValidClosureSEXP(monomorphic)) {

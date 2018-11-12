@@ -374,7 +374,6 @@ MkFunCls::MkFunCls(Closure* fun, Value* lexicalEnv, SEXP fml, SEXP code,
                    SEXP src)
     : FixedLenInstructionWithEnvSlot(RType::closure, lexicalEnv), fun(fun),
       fml(fml), code(code), src(src) {
-    assert(fun->closureEnv() == Env::notClosed());
 }
 
 void MkFunCls::printArgs(std::ostream& out, bool tty) {
