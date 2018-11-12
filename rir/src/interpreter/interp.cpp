@@ -570,6 +570,9 @@ SEXP rirCall(const CallContext& call, SEXP actuals, Context* ctx) {
     return result;
 }
 
+static unsigned RIR_WARMUP =
+    getenv("RIR_WARMUP") ? atoi(getenv("RIR_WARMUP")) : 3;
+
 // Call a RIR function. Arguments are still untouched.
 SEXP rirCall(const CallContext& call, Context* ctx) {
     SEXP body = BODY(call.callee);
@@ -582,7 +585,7 @@ SEXP rirCall(const CallContext& call, Context* ctx) {
     Function* fun = table->at(slot);
 
     fun->registerInvocation();
-    if (slot == 0 && fun->invocationCount() == 2) {
+    if (slot == 0 && fun->invocationCount() == RIR_WARMUP) {
         SEXP lhs = CAR(call.ast);
         SEXP name = R_NilValue;
         if (TYPEOF(lhs) == SYMSXP)
