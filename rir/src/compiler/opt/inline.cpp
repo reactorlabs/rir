@@ -33,6 +33,7 @@ class TheInliner {
                 Closure* inlinee = nullptr;
                 Value* staticEnv = nullptr;
 
+                FrameState* callerFrameState = nullptr;
                 if (auto call = Call::Cast(*it)) {
                     auto mkcls = MkFunCls::Cast(call->cls()->baseValue());
                     if (!mkcls)
@@ -41,6 +42,7 @@ class TheInliner {
                     if (inlinee->argNames.size() != call->nCallArgs())
                         continue;
                     staticEnv = mkcls->lexicalEnv();
+                    callerFrameState = call->frameState();
                 } else if (auto call = StaticCall::Cast(*it)) {
                     inlinee = call->cls();
                     // if we don't know the closure of the inlinee, we can't
@@ -54,6 +56,7 @@ class TheInliner {
                         R_IsNamespaceEnv(inlinee->closureEnv()->rho))
                         continue;
                     staticEnv = inlinee->closureEnv();
+                    callerFrameState = call->frameState();
                 } else {
                     continue;
                 }
@@ -67,24 +70,6 @@ class TheInliner {
                 std::vector<Value*> arguments;
                 theCallInstruction->eachCallArg(
                     [&](Value* v) { arguments.push_back(v); });
-                FrameState* callerFrameState = nullptr;
-
-                // try to find a frameState for this call instruction
-                if (split->size() > 1) {
-                    auto pos = split->begin() + 1; // skip the call instruction
-                    if (auto sp = FrameState::Cast(*pos)) {
-                        while (sp) {
-                            if (sp->stackSize > 0 && sp->tos() == theCall) {
-                                callerFrameState = sp;
-                                break;
-                            }
-                            pos++;
-                            if (pos == split->end())
-                                break;
-                            sp = FrameState::Cast(*pos);
-                        }
-                    }
-                }
 
                 // Clone the function
                 BB* copy = BBTransform::clone(inlinee->entry, function);
@@ -120,11 +105,6 @@ class TheInliner {
                                 auto cloneSp =
                                     FrameState::Cast(copyFromFs->clone());
 
-                                // Remove the inlinee result from the
-                                // caller frameState. The result will only
-                                // become available after the (deoptimized)
-                                // inlinee returns.
-                                cloneSp->popStack();
                                 ip = bb->insert(ip, cloneSp);
                                 sp->next(cloneSp);
 

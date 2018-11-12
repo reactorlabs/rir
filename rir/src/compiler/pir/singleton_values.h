@@ -43,6 +43,15 @@ class Missing : public SingletonValue<Missing> {
     friend class SingletonValue;
     Missing() : SingletonValue(PirType::missing(), Tag::Missing) {}
 };
+
+class Tombstone : public SingletonValue<Tombstone> {
+  public:
+    void printRef(std::ostream& out) { out << "~"; }
+
+  private:
+    friend class SingletonValue;
+    Tombstone() : SingletonValue(PirType::voyd(), Tag::Tombstone) {}
+};
 }
 }
 

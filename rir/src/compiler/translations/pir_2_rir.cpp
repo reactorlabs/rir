@@ -715,6 +715,9 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
 
                 auto loadArg = [&](BB::Instrs::iterator it, Instruction* instr,
                                    Value* what) {
+                    if (what == Tombstone::instance()) {
+                        return;
+                    }
                     if (what == Missing::instance()) {
                         // if missing flows into instructions with more than one
                         // arg we will need stack shuffling here
@@ -1031,6 +1034,7 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 break;
             }
             // values, not instructions
+            case Tag::Tombstone:
             case Tag::Missing:
             case Tag::Env:
             case Tag::Nil:
@@ -1188,9 +1192,9 @@ rir::Function* Pir2Rir::finalize() {
 
     ctx.push(R_NilValue);
     size_t localsCnt = compileCode(ctx, cls);
+    log.finalPIR(cls);
     auto body = ctx.finalizeCode(localsCnt);
     function.finalize(body);
-    log.finalPIR(cls);
 #ifdef ENABLE_SLOWASSERT
     CodeVerifier::verifyFunctionLayout(function.function()->container(),
                                        globalContext());

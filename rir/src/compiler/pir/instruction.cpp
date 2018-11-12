@@ -385,6 +385,10 @@ void MkFunCls::printArgs(std::ostream& out, bool tty) {
 void StaticCall::printArgs(std::ostream& out, bool tty) {
     out << *cls_;
     printCallArgs(out, this);
+    if (frameState()) {
+        frameState()->printRef(out);
+        out << ", ";
+    }
 }
 
 CallInstruction* CallInstruction::CastCall(Value* v) {
@@ -421,6 +425,10 @@ NamedCall::NamedCall(Value* callerEnv, Value* fun,
 void Call::printArgs(std::ostream& out, bool tty) {
     cls()->printRef(out);
     printCallArgs(out, this);
+    if (frameState()) {
+        frameState()->printRef(out);
+        out << ", ";
+    }
 }
 
 void NamedCall::printArgs(std::ostream& out, bool tty) {

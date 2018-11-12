@@ -9,6 +9,12 @@ namespace pir {
 
 void CleanupFrameState::apply(Closure* function) const {
     auto apply = [](Code* code) {
+        Visitor::run(code->entry, [&](Instruction* i) {
+            if (auto call = CallInstruction::CastCall(i)) {
+                call->clearFrameState();
+            }
+        });
+
         Visitor::run(code->entry, [&](BB* bb) {
             auto it = bb->begin();
             while (it != bb->end()) {

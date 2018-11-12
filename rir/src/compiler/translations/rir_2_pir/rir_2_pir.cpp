@@ -130,7 +130,7 @@ std::unordered_set<Opcode*> findMergepoints(rir::Code* srcCode) {
 namespace rir {
 namespace pir {
 
-bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, rir::Code* srcCode,
+bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos, rir::Code* srcCode,
                         RirStack& stack, Builder& insert) const {
     Value* env = insert.env;
 
@@ -272,12 +272,14 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, rir::Code* srcCode,
 
         auto ast = bc.immediate.callFixedArgs.ast;
         auto insertGenericCall = [&]() {
-            if (bc.bc == Opcode::named_call_implicit_)
+            if (bc.bc == Opcode::named_call_implicit_) {
                 push(insert(new NamedCall(insert.env, pop(), args,
                                           bc.callExtra().callArgumentNames,
                                           ast)));
-            else
-                push(insert(new Call(insert.env, pop(), args, ast)));
+            } else {
+                auto fs = insert.registerFrameState(srcCode, nextPos, stack);
+                push(insert(new Call(insert.env, pop(), args, fs, ast)));
+            }
         };
         if (monomorphic && isValidClosureSEXP(monomorphic)) {
             std::string name = "";
@@ -291,8 +293,9 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, rir::Code* srcCode,
 
                     insert.conditionalDeopt(t, srcCode, pos, stack, true);
                     pop();
+                    auto fs = insert.registerFrameState(srcCode, nextPos, stack);
                     push(insert(
-                        new StaticCall(insert.env, f, args, monomorphic, ast)));
+                        new StaticCall(insert.env, f, args, monomorphic, fs, ast)));
                 },
                 insertGenericCall);
         } else {
@@ -325,13 +328,15 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, rir::Code* srcCode,
             args[n - i - 1] = pop();
 
         auto target = pop();
-        if (bc.bc == Opcode::named_call_)
+        if (bc.bc == Opcode::named_call_) {
             push(insert(new NamedCall(env, target, args,
                                       bc.callExtra().callArgumentNames,
                                       bc.immediate.callFixedArgs.ast)));
-        else
+        } else {
+            auto fs = insert.registerFrameState(srcCode, nextPos, stack);
             push(insert(
-                new Call(env, target, args, bc.immediate.callFixedArgs.ast)));
+                new Call(env, target, args, fs, bc.immediate.callFixedArgs.ast)));
+        }
         break;
     }
 
@@ -361,7 +366,8 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, rir::Code* srcCode,
             compiler.compileClosure(
                 target, "",
                 [&](Closure* f) {
-                    push(insert(new StaticCall(env, f, args, target, ast)));
+                    auto fs = insert.registerFrameState(srcCode, nextPos, stack);
+                    push(insert(new StaticCall(env, f, args, target, fs, ast)));
                 },
                 [&]() { failed = true; });
             if (failed) {
@@ -809,7 +815,7 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) const {
 
         if (!skip) {
             int size = cur.stack.size();
-            if (!compileBC(bc, pos, srcCode, cur.stack, insert)) {
+            if (!compileBC(bc, pos, nextPos, srcCode, cur.stack, insert)) {
                 log.failed("Abort r2p due to unsupported bc");
                 return nullptr;
             }
@@ -822,9 +828,6 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) const {
                           << size << " to " << cur.stack.size() << "\n";
                 assert(false);
                 return nullptr;
-            }
-            if (bc.isCall()) {
-                insert.registerFrameState(srcCode, nextPos, cur.stack);
             }
         }
     }
