@@ -138,7 +138,7 @@ class Instruction : public Value {
 
     InstructionUID id();
 
-    const char* name() { return tagToStr(tag); }
+    virtual const char* name() { return tagToStr(tag); }
 
     Instruction* hasSingleUse();
     void replaceUsesWith(Value* val);
@@ -1271,15 +1271,22 @@ class Deopt : public FixedLenInstruction<Tag::Deopt, Deopt, 1, Effect::None,
  * if the test fails, jump to the deopt branch of the checkpoint.
  */
 
-class FLI(assumeNot, 2, Effect::Any, EnvAccess::None) {
+class FLI(Assume, 2, Effect::Any, EnvAccess::None) {
   public:
-    assumeNot(Value* test, Checkpoint* checkpoint)
+    bool assumeTrue = true;
+    Assume(Value* test, Value* checkpoint)
         : FixedLenInstruction(PirType::voyd(),
                               {{NativeType::test, NativeType::checkpoint}},
                               {{test, checkpoint}}) {}
 
     Checkpoint* checkpoint() { return Checkpoint::Cast(arg(1).val()); }
+    void checkpoint(Checkpoint* cp) { arg(1).val() = cp; }
     Value* condition() { return arg(0).val(); }
+    Assume* Not() {
+        assumeTrue = !assumeTrue;
+        return this;
+    }
+    const char* name() override { return assumeTrue ? "Assume" : "AssumeNot"; }
 };
 
 class ScheduledDeopt

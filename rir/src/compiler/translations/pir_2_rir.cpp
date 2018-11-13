@@ -999,7 +999,7 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 break;
             }
             case Tag::Deopt:
-            case Tag::assumeNot:
+            case Tag::Assume:
             case Tag::Checkpoint: {
                 assert(false && "Deopt instructions must be lowered into "
                                 "standard branches and scheduled deopt, "
@@ -1081,9 +1081,8 @@ static bool allLazy(CallType* call, std::vector<Promise*>& args) {
 }
 
 void Pir2Rir::lower(Code* code) {
-    Visitor::run(
-        code->entry,
-        [&](BB* bb) {
+    Visitor::runPostChange(
+        code->entry, [&](BB* bb) {
             auto it = bb->begin();
             while (it != bb->end()) {
                 auto next = it + 1;
@@ -1102,9 +1101,9 @@ void Pir2Rir::lower(Code* code) {
                     auto newDeopt = new ScheduledDeopt();
                     newDeopt->consumeFrameStates(deopt);
                     bb->replace(it, newDeopt);
-                } else if (auto expect = assumeNot::Cast(*it)) {
+                } else if (auto expect = Assume::Cast(*it)) {
                     BBTransform::lowerExpect(
-                        code, bb, it, expect->condition(),
+                        code, bb, it, expect->condition(), expect->assumeTrue,
                         expect->checkpoint()->bb()->falseBranch());
                     // lowerExpect splits the bb from current position. There
                     // remains nothing to process. Breaking seems more robust
@@ -1131,8 +1130,7 @@ void Pir2Rir::lower(Code* code) {
 
                 it = next;
             }
-        },
-        true);
+        });
 
     Visitor::run(code->entry, [&](BB* bb) {
         auto it = bb->begin();

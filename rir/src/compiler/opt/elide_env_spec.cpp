@@ -11,62 +11,72 @@ namespace rir {
 namespace pir {
 
 void ElideEnvSpec::apply(RirCompiler&, Closure* function) const {
+    ProfiledValues& profile = function->runtimeFeedback;
 
     // Elide environments of binary operators in which both operators are
     // primitive values
     std::unordered_map<BB*, Checkpoint*> checkpoints;
 
-    auto insertExpectAndAdvance = [&](BB* src, Value* operand,
-                                      BB::Instrs::iterator position) {
-        Instruction* condition = new IsObject(operand);
-
-        position = src->insert(position, condition);
-        position++;
+    auto insertExpect = [&](BB* src, Value* condition, Value* operand,
+                            Checkpoint* cp, BB::Instrs::iterator position) {
         assert(checkpoints[src]);
-        position =
-            src->insert(position, new assumeNot(condition, checkpoints[src]));
+        position = src->insert(position, (new Assume(condition, cp))->Not());
         position++;
         return position;
+    };
+    auto insertExpectNotObj = [&](BB* src, Value* operand, Checkpoint* cp,
+                                  BB::Instrs::iterator position) {
+        auto condition = new IsObject(operand);
+        position = src->insert(position, condition);
+        position++;
+        return insertExpect(src, condition, operand, cp, position);
     };
 
     Visitor::run(function->entry, [&](BB* bb) {
         if (bb->isEmpty())
             return;
-
         if (auto cp = Checkpoint::Cast(bb->last()))
             checkpoints.emplace(bb->trueBranch(), cp);
+    });
 
+    Visitor::run(function->entry, [&](BB* bb) {
         if (!checkpoints.count(bb))
             return;
+        auto cp = checkpoints.at(bb);
 
         auto ip = bb->begin();
         while (ip != bb->end()) {
             Instruction* i = *ip;
+            auto next = ip + 1;
 
             if (i->maySpecialize() && i->env() != Env::elided()) {
-                ProfiledValues* profile = &function->runtimeFeedback;
                 Value* opLeft = i->arg(0).val();
                 Value* opRight = i->arg(1).val();
                 bool maybeObjL = opLeft->type.maybeObj();
                 bool maybeObjR = opRight->type.maybeObj();
-                bool assumeNonObjL =
-                    profile->hasTypesFor(opLeft) &&
-                    !profile->types.at(opLeft).observedObject();
+                bool assumeNonObjL = profile.hasTypesFor(opLeft) &&
+                                     !profile.types.at(opLeft).observedObject();
                 bool assumeNonObjR =
-                    profile->hasTypesFor(opRight) &&
-                    !profile->types.at(opRight).observedObject();
+                    profile.hasTypesFor(opRight) &&
+                    !profile.types.at(opRight).observedObject();
 
                 if ((!maybeObjL && !maybeObjR) ||
                     (assumeNonObjL && assumeNonObjR)) {
                     i->elideEnv();
                     if (maybeObjL)
-                        ip = insertExpectAndAdvance(bb, opLeft, ip);
+                        ip = insertExpectNotObj(bb, opLeft, cp, ip);
                     if (maybeObjR)
-                        ip = insertExpectAndAdvance(bb, opRight, ip);
+                        ip = insertExpectNotObj(bb, opRight, cp, ip);
+                    next = ip + 1;
                     i->type = i->type.notObject();
                 }
             }
-            ip++;
+
+            // Effect between assume and checkpoint is not allowed
+            if (i->changesEnv() || i->hasEffect())
+                break;
+
+            ip = next;
         }
     });
 }

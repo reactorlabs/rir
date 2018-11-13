@@ -50,8 +50,6 @@ void Configurations::defaultOptimizations() {
         optimizations.push_back(new pir::DelayEnv());
     };
 
-    optimizations.push_back(new pir::insertCheckpoints);
-
     for (int i = 0; i < 3; ++i) {
         for (int j = 0; j < 2; ++j) {
             addDefaultOpt();

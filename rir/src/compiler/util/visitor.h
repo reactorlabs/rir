@@ -131,8 +131,10 @@ class VisitorImplementation {
      * BB Visitors
      *
      */
-    static void run(BB* bb, BBAction action, bool processNewNodes = false) {
-        genericRun(bb, action, processNewNodes);
+    static void run(BB* bb, BBAction action) { genericRun(bb, action, false); }
+
+    static void runPostChange(BB* bb, BBAction action) {
+        genericRun(bb, action, true);
     }
 
     static bool check(BB* bb, BBActionPredicate action) {

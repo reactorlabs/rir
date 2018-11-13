@@ -65,23 +65,20 @@ FrameState* Builder::registerFrameState(rir::Code* srcCode, Opcode* pos,
     return sp;
 };
 
-void Builder::conditionalDeopt(Value* condition, rir::Code* srcCode,
-                               Opcode* pos, const RirStack& stack,
-                               bool deoptOnFalseBranch) {
-    add(new Branch(condition));
+Checkpoint* Builder::addCheckpoint(rir::Code* srcCode, Opcode* pos,
+                                   const RirStack& stack) {
+    auto cp = new Checkpoint();
+    add(cp);
     auto cont = createBB();
     auto fail = createBB();
-    // We may deoptimize if the condition holds or unless the condition holds
-    if (deoptOnFalseBranch)
-        setBranch(cont, fail);
-    else
-        setBranch(fail, cont);
-
+    setBranch(cont, fail);
     enterBB(fail);
     auto sp = registerFrameState(srcCode, pos, stack);
     add(new Deopt(sp));
+    markDone(fail);
 
     enterBB(cont);
+    return cp;
 };
 
 Builder::Builder(Closure* fun, Value* closureEnv)

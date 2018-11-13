@@ -291,8 +291,8 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos, rir::Code* s
                 [&](Closure* f) {
                     Value* expected = insert(new LdConst(monomorphic));
                     Value* t = insert(new Identical(callee, expected));
-
-                    insert.conditionalDeopt(t, srcCode, pos, stack, true);
+                    auto cp = insert.addCheckpoint(srcCode, pos, stack);
+                    insert(new Assume(t, cp));
                     pop();
                     auto fs = insert.registerFrameState(srcCode, nextPos, stack);
                     push(insert(
@@ -392,6 +392,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos, rir::Code* s
         break;
 
     case Opcode::extract1_1_: {
+        insert.addCheckpoint(srcCode, pos, stack);
         Value* idx = pop();
         Value* vec = pop();
         push(insert(new Extract1_1D(vec, idx, env, srcIdx)));
@@ -399,6 +400,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos, rir::Code* s
     }
 
     case Opcode::extract2_1_: {
+        insert.addCheckpoint(srcCode, pos, stack);
         Value* idx = pop();
         Value* vec = pop();
         push(insert(new Extract2_1D(vec, idx, env, srcIdx)));
@@ -452,7 +454,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos, rir::Code* s
     case Opcode::Op: {                                                         \
         auto rhs = at(0);                                                      \
         auto lhs = at(1);                                                      \
-        insert.registerFrameState(srcCode, pos, stack);                        \
+        insert.addCheckpoint(srcCode, pos, stack);                             \
         pop();                                                                 \
         pop();                                                                 \
         push(insert(new Name(lhs, rhs, env, srcIdx)));                         \

@@ -19,9 +19,7 @@
     V(Neq)                                                                     \
     V(Eq)                                                                      \
     V(Extract1_1D)                                                             \
-    V(Extract1_2D)                                                             \
-    V(Extract2_1D)                                                             \
-    V(Extract2_2D)
+    V(Extract2_1D)
 
 #define COMPILER_INSTRUCTIONS(V)                                               \
     BINOP_INSTRUCTIONS(V)                                                      \
@@ -45,6 +43,8 @@
     V(ChkMissing)                                                              \
     V(ChkClosure)                                                              \
     V(Call)                                                                    \
+    V(Extract2_2D)                                                             \
+    V(Extract1_2D)                                                             \
     V(NamedCall)                                                               \
     V(StaticCall)                                                              \
     V(CallBuiltin)                                                             \
@@ -66,7 +66,7 @@
     V(ForSeqSize)                                                              \
     V(FrameState)                                                              \
     V(Checkpoint)                                                              \
-    V(assumeNot)                                                               \
+    V(Assume)                                                                  \
     V(Deopt)                                                                   \
     V(ScheduledDeopt)                                                          \
     V(Force)                                                                   \

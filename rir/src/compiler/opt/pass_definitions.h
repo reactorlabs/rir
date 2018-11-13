@@ -69,20 +69,6 @@ class PASS(DelayEnv, "Move environment creation as far as possible");
 class PASS(Inline, "Inline closures");
 
 /*
- * Goes through every operation that for the general case needs an
- * environment, but it could elide it for some particular inputs. All
- * of them, should have a frameState operation just above. The PASS
- * transforms the CFG so that it becomes easier to work with speculative
- * optimizations. Essentially, it adds a checkpoint befor executing the
- * operation. Checkpoints should jump to a new basic block in case the
- * speculative conditions do not hold. Then, rest of code could assume
- * the conditions hold and edit operations.
- */
-class PASS(
-    insertCheckpoints,
-    "Adapt the CFG to the format required by pir's speculative operations");
-
-/*
  * Goes through every operation that for the general case needs an environment
  * but could be elided for some particular inputs. Analyzes the profiling
  * information of the inputs and if all the observed values are compatible with
