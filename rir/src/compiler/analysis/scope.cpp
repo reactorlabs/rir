@@ -5,10 +5,21 @@
 namespace {
 using namespace rir::pir;
 
-class TheScopeAnalysis : public StaticAnalysis<AbstractREnvironmentHierarchy> {
+struct ScopeAnalysisState {
+    AbstractREnvironmentHierarchy envs;
+    std::unordered_map<Closure*, PirType> funTypes;
+    bool merge(const ScopeAnalysisState& other) {
+        bool changed = false;
+        std::unordered_set<Closure*> ks;
+        for (const auto& f : other.funTypes)
+            changed = funTypes[f.first].merge(f.second) || changed;
+        return envs.merge(other.envs) || changed;
+    }
+};
+
+class TheScopeAnalysis : public StaticAnalysis<ScopeAnalysisState> {
   public:
-    typedef AbstractREnvironmentHierarchy AS;
-    typedef StaticAnalysis<AS> Super;
+    typedef StaticAnalysis<ScopeAnalysisState> Super;
 
     const std::vector<SEXP>& args;
 
@@ -19,35 +30,44 @@ class TheScopeAnalysis : public StaticAnalysis<AbstractREnvironmentHierarchy> {
     TheScopeAnalysis(Closure* cls, const std::vector<SEXP>& args)
         : Super(cls), args(args), depth(0) {}
     TheScopeAnalysis(Closure* cls, const std::vector<SEXP>& args,
-                     Value* staticClosureEnv, BB* bb, const AS& initialState,
-                     size_t depth)
+                     Value* staticClosureEnv, BB* bb,
+                     const ScopeAnalysisState& initialState, size_t depth)
         : Super(cls, initialState), args(args), depth(depth),
           staticClosureEnv(staticClosureEnv) {}
 
-    void apply(AS& envs, Instruction* i) const override;
+    void apply(ScopeAnalysisState& state, Instruction* i) const override;
 
     typedef std::function<void(AbstractLoad)> LoadMaybe;
-    void tryLoad(const AS& envs, Instruction* i, LoadMaybe) const;
+    void tryLoad(const ScopeAnalysisState& envs, Instruction* i,
+                 LoadMaybe) const;
 
     void print(std::ostream& out = std::cout);
 };
 
-void TheScopeAnalysis::tryLoad(const AS& envs, Instruction* i,
+void TheScopeAnalysis::tryLoad(const ScopeAnalysisState& s, Instruction* i,
                                LoadMaybe aLoad) const {
     if (auto ld = LdVar::Cast(i)) {
-        aLoad(envs.get(ld->env(), ld->varName));
+        aLoad(s.envs.get(ld->env(), ld->varName));
     } else if (auto sld = LdVarSuper::Cast(i)) {
-        aLoad(envs.superGet(sld->env(), sld->varName));
+        aLoad(s.envs.superGet(sld->env(), sld->varName));
     } else if (auto ldf = LdFun::Cast(i)) {
-        aLoad(envs.get(ldf->env(), ldf->varName));
+        aLoad(s.envs.get(ldf->env(), ldf->varName));
     } else if (auto sts = StVarSuper::Cast(i)) {
-        aLoad(envs.superGet(sts->env(), sts->varName));
+        aLoad(s.envs.superGet(sts->env(), sts->varName));
     }
 }
 
-void TheScopeAnalysis::apply(AS& envs, Instruction* i) const {
+void TheScopeAnalysis::apply(ScopeAnalysisState& state, Instruction* i) const {
     bool handled = false;
 
+    if (auto ret = Return::Cast(i)) {
+        auto t = ret->arg<0>().val()->type;
+        if (state.funTypes.count(closure))
+            state.funTypes.at(closure).merge(t);
+        else
+            state.funTypes.emplace(closure, t);
+        handled = true;
+    }
     if (auto mk = MkEnv::Cast(i)) {
         Value* lexicalEnv = mk->lexicalEnv();
         // If we know the caller, we can fill in the parent env
@@ -55,17 +75,17 @@ void TheScopeAnalysis::apply(AS& envs, Instruction* i) const {
             staticClosureEnv != Env::notClosed()) {
             lexicalEnv = staticClosureEnv;
         }
-        envs[mk].parentEnv(lexicalEnv);
+        state.envs[mk].parentEnv(lexicalEnv);
         mk->eachLocalVar(
-            [&](SEXP name, Value* val) { envs[mk].set(name, val, mk); });
+            [&](SEXP name, Value* val) { state.envs[mk].set(name, val, mk); });
         handled = true;
     } else if (auto s = StVar::Cast(i)) {
-        envs[s->env()].set(s->varName, s->val(), s);
+        state.envs[s->env()].set(s->varName, s->val(), s);
         handled = true;
     } else if (auto ss = StVarSuper::Cast(i)) {
-        auto superEnv = envs[ss->env()].parentEnv();
+        auto superEnv = state.envs[ss->env()].parentEnv();
         if (superEnv != AbstractREnvironment::UnknownParent) {
-            envs[superEnv].set(ss->varName, ss->val(), ss);
+            state.envs[superEnv].set(ss->varName, ss->val(), ss);
             handled = true;
         }
     } else if (CallInstruction::CastCall(i) && depth < maxDepth) {
@@ -73,14 +93,14 @@ void TheScopeAnalysis::apply(AS& envs, Instruction* i) const {
         if (auto call = Call::Cast(i)) {
             auto trg = call->cls()->baseValue();
             assert(trg);
-            MkFunCls* cls = envs.findClosure(call->callerEnv(), trg);
+            MkFunCls* cls = state.envs.findClosure(call->callerEnv(), trg);
             if (cls != AbstractREnvironment::UnknownClosure) {
                 if (cls->fun->argNames.size() == calli->nCallArgs()) {
                     TheScopeAnalysis nextFun(cls->fun, cls->fun->argNames,
                                              cls->lexicalEnv(), cls->fun->entry,
-                                             envs, depth + 1);
+                                             state, depth + 1);
                     nextFun();
-                    envs.merge(nextFun.result());
+                    state.merge(nextFun.result());
                     handled = true;
                 }
             }
@@ -88,9 +108,9 @@ void TheScopeAnalysis::apply(AS& envs, Instruction* i) const {
             auto trg = call->cls();
             if (trg && trg->argNames.size() == calli->nCallArgs()) {
                 TheScopeAnalysis nextFun(trg, trg->argNames, trg->closureEnv(),
-                                         trg->entry, envs, depth + 1);
+                                         trg->entry, state, depth + 1);
                 nextFun();
-                envs.merge(nextFun.result());
+                state.merge(nextFun.result());
                 handled = true;
             }
         } else {
@@ -103,7 +123,7 @@ void TheScopeAnalysis::apply(AS& envs, Instruction* i) const {
 
     // Keep track of closures
     auto mkfun = MkFunCls::Cast(i);
-    tryLoad(envs, i,
+    tryLoad(state, i,
             [&](AbstractLoad load) {
                 handled = true;
                 // let's check if we loaded a closure
@@ -112,14 +132,14 @@ void TheScopeAnalysis::apply(AS& envs, Instruction* i) const {
                         [&](Value* val) { mkfun = MkFunCls::Cast(val); });
             });
     if (mkfun)
-        envs[mkfun->lexicalEnv()].mkClosures[i] = mkfun;
+        state.envs[mkfun->lexicalEnv()].mkClosures[i] = mkfun;
 
     if (!handled) {
         if (i->leaksEnv()) {
-            envs[i->env()].leaked = true;
+            state.envs[i->env()].leaked = true;
         }
         if (i->changesEnv()) {
-            envs[i->env()].taint();
+            state.envs[i->env()].taint();
         }
     }
 }
@@ -132,7 +152,7 @@ void TheScopeAnalysis::print(std::ostream& out) {
             size_t segment = 0;
             for (auto& e : m) {
                 out << "    segm -- " << segment++ << "\n";
-                for (auto& entry : e) {
+                for (auto& entry : e.envs) {
                     auto ptr = entry.first;
                     auto env = entry.second;
                     out << "Env(" << ptr << "), leaked " << env.leaked << ":\n";
@@ -143,7 +163,7 @@ void TheScopeAnalysis::print(std::ostream& out) {
         }
     }
     out << "---- exit -----------------------------\n";
-    for (auto& entry : result()) {
+    for (auto& entry : result().envs) {
         auto ptr = entry.first;
         auto env = entry.second;
         out << "Env(" << ptr << "), leaked " << env.leaked << ":\n";
@@ -179,25 +199,24 @@ ScopeAnalysis::ScopeAnalysis(Closure* function) {
 
     // Collect all abstract values of all loads
     analysis.foreach<PositioningStyle::BeforeInstruction>(
-        [&](const AbstractREnvironmentHierarchy& envs, Instruction* i) {
-            analysis.tryLoad(envs, i,
-                             [&](AbstractLoad load) {
-                                 loads.emplace(i, load);
-                                 if (load.result.isUnknown()) {
-                                     for (auto env :
-                                          envs.potentialParents(i->env()))
-                                         allStoresObserved.insert(env);
-                                 } else {
-                                     load.result.eachSource([&](ValOrig& src) {
-                                         observedStores.insert(src.origin);
-                                     });
-                                 }
-                             });
+        [&](const ScopeAnalysisState& state, Instruction* i) {
+            analysis.tryLoad(state, i, [&](AbstractLoad load) {
+                loads.emplace(i, load);
+                if (load.result.isUnknown()) {
+                    for (auto env : state.envs.potentialParents(i->env()))
+                        allStoresObserved.insert(env);
+                } else {
+                    load.result.eachSource([&](ValOrig& src) {
+                        observedStores.insert(src.origin);
+                    });
+                }
+            });
             if (i->leaksEnv()) {
-                for (auto env : envs.potentialParents(i->env()))
+                for (auto env : state.envs.potentialParents(i->env()))
                     allStoresObserved.insert(env);
             }
         });
+    funTypes = std::move(analysis.result().funTypes);
 }
 }
 }

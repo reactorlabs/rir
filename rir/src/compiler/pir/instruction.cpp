@@ -163,6 +163,8 @@ Value* Instruction::baseValue() {
         return force->input()->baseValue();
     if (auto shared = SetShared::Cast(this))
         return shared->arg<0>().val()->baseValue();
+    if (auto chk = ChkClosure::Cast(this))
+        return chk->arg<0>().val()->baseValue();
     return this;
 }
 

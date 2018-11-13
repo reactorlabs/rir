@@ -30,6 +30,15 @@ void ElideEnvSpec::apply(RirCompiler&, Closure* function) const {
     };
 
     Visitor::run(function->entry, [&](BB* bb) {
+        if (bb->isEmpty())
+            return;
+
+        if (auto cp = Checkpoint::Cast(bb->last()))
+            checkpoints.emplace(bb->trueBranch(), cp);
+
+        if (!checkpoints.count(bb))
+            return;
+
         auto ip = bb->begin();
         while (ip != bb->end()) {
             Instruction* i = *ip;
@@ -54,11 +63,8 @@ void ElideEnvSpec::apply(RirCompiler&, Closure* function) const {
                         ip = insertExpectAndAdvance(bb, opLeft, ip);
                     if (maybeObjR)
                         ip = insertExpectAndAdvance(bb, opRight, ip);
-                    i->type.setNotObject();
+                    i->type = i->type.notObject();
                 }
-            } else {
-                if (Checkpoint* cp = Checkpoint::Cast(i))
-                    checkpoints.emplace(bb->trueBranch(), cp);
             }
             ip++;
         }

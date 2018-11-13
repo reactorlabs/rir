@@ -37,8 +37,19 @@ class TheScopeResolution {
                 else if (ldfun)
                     ld = ldfun;
 
-                if (ldfun && ldfun->guessedBinding() &&
-                    ldfun->guessedBinding()->type.isA(PirType::closure())) {
+                if (auto call = CallInstruction::CastCall(i)) {
+                    if (auto cls = call->tryGetCls()) {
+                        // If we know the target of the call and the analysis
+                        // a more precise type of the function we can update
+                        // callsite.
+                        if (analysis.funTypes.count(cls) &&
+                            !i->type.isA(analysis.funTypes.at(cls))) {
+                            i->type = analysis.funTypes.at(cls);
+                        }
+                    }
+                } else if (ldfun && ldfun->guessedBinding() &&
+                           ldfun->guessedBinding()->type.isA(
+                               PirType::closure())) {
                     // If we inferred that a guessd ldfun binding is a closure
                     // for sure, then we can replace the ldfun with the guess.
                     ldfun->replaceUsesWith(ldfun->guessedBinding());

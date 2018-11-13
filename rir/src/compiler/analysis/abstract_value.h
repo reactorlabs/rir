@@ -128,7 +128,6 @@ struct AbstractREnvironment {
     std::unordered_map<SEXP, AbstractPirValue> entries;
     std::unordered_map<Value*, MkFunCls*> mkClosures;
 
-
     bool leaked = false;
     bool tainted = false;
 

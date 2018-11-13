@@ -547,7 +547,7 @@ class FLIE(LdVar, 1, Effect::None, EnvAccess::Read) {
 class FLI(ForSeqSize, 1, Effect::Error, EnvAccess::None) {
   public:
     explicit ForSeqSize(Value* val)
-        : FixedLenInstruction(PirType(RType::integer).scalar(),
+        : FixedLenInstruction(PirType(RType::integer).scalar().notObject(),
                               {{PirType::val()}}, {{val}}) {}
 };
 
@@ -803,8 +803,9 @@ class FLIE(Extract2_2D, 4, Effect::None, EnvAccess::Leak) {
 class FLI(Inc, 1, Effect::None, EnvAccess::None) {
   public:
     explicit Inc(Value* v)
-        : FixedLenInstruction(PirType(RType::integer).scalar(),
-                              {{PirType(RType::integer).scalar()}}, {{v}}) {}
+        : FixedLenInstruction(PirType(RType::integer).scalar().notObject(),
+                              {{PirType(RType::integer).scalar().notObject()}},
+                              {{v}}) {}
 };
 
 class FLI(Is, 1, Effect::None, EnvAccess::None) {
@@ -1006,6 +1007,7 @@ class CallInstruction {
     virtual void eachCallArg(Instruction::ArgumentValueIterator it) = 0;
     static CallInstruction* CastCall(Value* v);
     virtual void clearFrameState(){};
+    virtual Closure* tryGetCls() { return nullptr; }
 };
 
 // Default call instruction. Closure expression (ie. expr left of `(`) is
@@ -1023,6 +1025,12 @@ class VLIE(Call, Effect::Any, EnvAccess::Leak), public CallInstruction {
         pushArg(fun, RType::closure);
         for (unsigned i = 0; i < args.size(); ++i)
             pushArg(args[i], PirType::val());
+    }
+
+    Closure* tryGetCls() override final {
+        if (auto mk = MkFunCls::Cast(cls()->baseValue()))
+            return mk->fun;
+        return nullptr;
     }
 
     size_t nCallArgs() override { return nargs() - 3; };
@@ -1046,6 +1054,12 @@ class VLIE(NamedCall, Effect::Any, EnvAccess::Leak), public CallInstruction {
     std::vector<SEXP> names;
 
     Value* cls() { return arg(0).val(); }
+
+    Closure* tryGetCls() override final {
+        if (auto mk = MkFunCls::Cast(cls()->baseValue()))
+            return mk->fun;
+        return nullptr;
+    }
 
     NamedCall(Value * callerEnv, Value * fun, const std::vector<Value*>& args,
               const std::vector<BC::PoolIdx>& names_, unsigned srcIdx);
@@ -1088,6 +1102,8 @@ class VLIE(StaticCall, Effect::Any, EnvAccess::Leak), public CallInstruction {
   public:
     Closure* cls() { return cls_; }
     SEXP origin() { return origin_; }
+
+    Closure* tryGetCls() override final { return cls(); }
 
     StaticCall(Value * callerEnv, Closure * cls,
                const std::vector<Value*>& args, SEXP origin, FrameState* fs,
