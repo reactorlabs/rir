@@ -15,16 +15,6 @@ bool Query::noEnv(Code* c) {
                           [](Instruction* i) { return !MkEnv::Cast(i); });
 }
 
-bool Query::envOnlyBeforeDeopt(Code* c) {
-    return Visitor::check(c->entry, [&](BB* bb) -> bool {
-        for (auto& i : *bb) {
-            if (MkEnv::Cast(i))
-                return Deopt::Cast(bb->last());
-        }
-        return true;
-    });
-}
-
 bool Query::pure(Code* c) {
     return Visitor::check(c->entry, [](Instruction* i) {
         return !i->hasEffect() && !i->changesEnv();

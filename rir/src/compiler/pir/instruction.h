@@ -17,6 +17,7 @@
 #include <deque>
 #include <functional>
 #include <iostream>
+#include <algorithm>
 
 /*
  * This file provides implementations for all instructions
@@ -708,14 +709,14 @@ class FLI(CastType, 1, Effect::None, EnvAccess::None) {
         : FixedLenInstruction(to, {{from}}, {{in}}) {}
 };
 
-class FLI(AsLogical, 1, Effect::Warn, EnvAccess::None) {
+class FLI(AsLogical, 1, Effect::None, EnvAccess::None) {
   public:
     AsLogical(Value* in, unsigned srcIdx)
         : FixedLenInstruction(RType::logical, {{PirType::val()}}, {{in}},
                               srcIdx) {}
 };
 
-class FLI(AsTest, 1, Effect::None, EnvAccess::None) {
+class FLI(AsTest, 1, Effect::Warn, EnvAccess::None) {
   public:
     explicit AsTest(Value* in)
         : FixedLenInstruction(NativeType::test, {{RType::logical}}, {{in}}) {}
@@ -1192,6 +1193,21 @@ class VLI(Phi, Effect::None, EnvAccess::None) {
         input.push_back(in);
         args_.push_back(InstrArg(arg, arg->type));
     }
+    void removeInputs(std::vector<BB*>& del) {
+        auto ii = input.begin();
+        auto ai = args_.begin();
+        while (ii != input.end()) {
+            if (std::find(del.begin(), del.end(), *ii) != del.end()) {
+                ii = input.erase(ii);
+                ai = args_.erase(ai);
+            } else {
+                ii++;
+                ai++;
+            }
+        }
+        assert(ai == args_.end());
+    }
+
     typedef std::function<void(BB* bb, Value*)> PhiArgumentIterator;
 
     void eachArg(PhiArgumentIterator it) const {

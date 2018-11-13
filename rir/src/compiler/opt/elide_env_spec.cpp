@@ -10,7 +10,7 @@
 namespace rir {
 namespace pir {
 
-void ElideEnvSpec::apply(Closure* function) const {
+void ElideEnvSpec::apply(RirCompiler&, Closure* function) const {
 
     // Elide environments of binary operators in which both operators are
     // primitive values

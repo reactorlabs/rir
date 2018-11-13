@@ -170,6 +170,9 @@ struct PirType {
     RIR_INLINE bool isRType() const {
         return flags_.includes(TypeFlags::rtype);
     }
+    RIR_INLINE bool maybe(RType type) const {
+        return isRType() && t_.r.includes(type);
+    }
 
     RIR_INLINE PirType scalar() const {
         assert(isRType());
