@@ -244,11 +244,9 @@ void Is::printArgs(std::ostream& out, bool tty) {
     out << ", " << Rf_type2char(sexpTag);
 }
 
-bool Phi::updateType() {
-    auto old = type;
+void Phi::updateType() {
     type = arg(0).val()->type;
     eachArg([&](BB*, Value* v) -> void { type = type | v->type; });
-    return type != old;
 }
 
 void Phi::printArgs(std::ostream& out, bool tty) {

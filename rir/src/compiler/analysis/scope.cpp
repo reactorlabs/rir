@@ -162,6 +162,21 @@ ScopeAnalysis::ScopeAnalysis(Closure* function) {
     if (false)
         analysis.print(std::cout);
 
+    // if (function->entry->isExit()) {
+    //     analysis.foreach<PositioningStyle::AfterInstruction>(
+    //         [&](auto res, Instruction* i) {
+    //             i->printRef(std::cout);
+    //             std::cout << ": \n";
+    //             for (auto& entry : res) {
+    //                 auto ptr = entry.first;
+    //                 auto env = entry.second;
+    //                 std::cout << "Env(" << ptr << "), leaked " << env.leaked
+    //                           << ":\n";
+    //                 env.print(std::cout);
+    //             }
+    //         });
+    // }
+
     // Collect all abstract values of all loads
     analysis.foreach<PositioningStyle::BeforeInstruction>(
         [&](const AbstractREnvironmentHierarchy& envs, Instruction* i) {

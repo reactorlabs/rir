@@ -82,6 +82,7 @@ enum class TypeFlags : uint8_t {
     lazy,
     missing,
     is_scalar,
+    noObject,
     rtype,
 
     FIRST = lazy,
@@ -173,6 +174,11 @@ struct PirType {
     RIR_INLINE bool maybe(RType type) const {
         return isRType() && t_.r.includes(type);
     }
+    RIR_INLINE bool maybeObj() const {
+        return isRType() && !flags_.includes(TypeFlags::noObject);
+    }
+
+    void setNotObject() { flags_.set(TypeFlags::noObject); }
 
     RIR_INLINE PirType scalar() const {
         assert(isRType());
@@ -368,6 +374,8 @@ inline std::ostream& operator<<(std::ostream& out, PirType t) {
         out << "^";
     if (t.maybeMissing())
         out << "?";
+    if (!t.maybeObj())
+        out << "'";
 
     return out;
 }

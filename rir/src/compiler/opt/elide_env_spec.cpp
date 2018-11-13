@@ -38,10 +38,8 @@ void ElideEnvSpec::apply(RirCompiler&, Closure* function) const {
                 ProfiledValues* profile = &function->runtimeFeedback;
                 Value* opLeft = i->arg(0).val();
                 Value* opRight = i->arg(1).val();
-                bool maybeObjL = !LdConst::Cast(opLeft) ||
-                                 isObject(LdConst::Cast(opLeft)->c);
-                bool maybeObjR = !LdConst::Cast(opRight) ||
-                                 isObject(LdConst::Cast(opRight)->c);
+                bool maybeObjL = opLeft->type.maybeObj();
+                bool maybeObjR = opRight->type.maybeObj();
                 bool assumeNonObjL =
                     profile->hasTypesFor(opLeft) &&
                     !profile->types.at(opLeft).observedObject();
@@ -49,12 +47,14 @@ void ElideEnvSpec::apply(RirCompiler&, Closure* function) const {
                     profile->hasTypesFor(opRight) &&
                     !profile->types.at(opRight).observedObject();
 
-                if (assumeNonObjL && assumeNonObjR) {
+                if ((!maybeObjL && !maybeObjR) ||
+                    (assumeNonObjL && assumeNonObjR)) {
                     i->elideEnv();
                     if (maybeObjL)
                         ip = insertExpectAndAdvance(bb, opLeft, ip);
                     if (maybeObjR)
                         ip = insertExpectAndAdvance(bb, opRight, ip);
+                    i->type.setNotObject();
                 }
             } else {
                 if (Checkpoint* cp = Checkpoint::Cast(i))

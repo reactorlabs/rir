@@ -95,7 +95,7 @@ class StaticAnalysis {
     typedef std::function<void(const AbstractState&, Instruction*)> Collect;
 
     template <PositioningStyle POS>
-    void foreach (Collect collect) {
+    void foreach (Collect collect) const {
         assert(done);
 
         Visitor::run(entry, [&](BB* bb) {

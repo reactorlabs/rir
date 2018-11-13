@@ -902,9 +902,10 @@ void Rir2Pir::finalize(Value* ret, Builder& insert) {
                     changed = true;
                     continue;
                 }
-                if (p->updateType()) {
+                auto t = p->type;
+                p->updateType();
+                if (t != p->type)
                     changed = true;
-                }
                 it++;
             }
         });

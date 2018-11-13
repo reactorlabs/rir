@@ -147,6 +147,8 @@ class Instruction : public Value {
     void replaceUsesIn(Value* val, BB* target);
     bool unused();
 
+    virtual void updateType(){};
+
     virtual void printEnv(std::ostream& out, bool tty);
     virtual void printArgs(std::ostream& out, bool tty);
     virtual void print(std::ostream& out, bool tty = false);
@@ -253,8 +255,8 @@ class InstructionImplementation : public Instruction {
 
     bool hasEffect() const final { return Description.HasEffect; }
     bool mayAccessEnv() const final { return Description.MayAccessEnv; }
-    bool changesEnv() const final { return Description.ChangesEnv; }
-    bool leaksEnv() const final { return Description.LeaksEnv; }
+    bool changesEnv() const final { return hasEnv() && Description.ChangesEnv; }
+    bool leaksEnv() const final { return hasEnv() && Description.LeaksEnv; }
     bool hasEnv() const final {
         return mayAccessEnv() && env() != Env::elided();
     }
@@ -831,6 +833,7 @@ class FLI(SetShared, 1, Effect::Write, EnvAccess::None) {
   public:
     explicit SetShared(Value* v)
         : FixedLenInstruction(v->type, {{v->type}}, {{v}}) {}
+    void updateType() override final { type = arg<0>().val()->type; }
 };
 
 class FLI(PirCopy, 1, Effect::None, EnvAccess::None) {
@@ -838,6 +841,7 @@ class FLI(PirCopy, 1, Effect::None, EnvAccess::None) {
     explicit PirCopy(Value* v)
         : FixedLenInstruction(v->type, {{v->type}}, {{v}}) {}
     void print(std::ostream& out, bool tty) override;
+    void updateType() override final { type = arg<0>().val()->type; }
 };
 
 class FLI(Identical, 2, Effect::None, EnvAccess::None) {
@@ -1198,7 +1202,7 @@ class VLI(Phi, Effect::None, EnvAccess::None) {
         assert(nargs() == inputs.size());
     }
     void printArgs(std::ostream& out, bool tty) override;
-    bool updateType();
+    void updateType() override final;
     void pushArg(Value* a, PirType t) override {
         assert(false && "use addInput");
     }

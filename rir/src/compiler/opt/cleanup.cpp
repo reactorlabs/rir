@@ -62,7 +62,6 @@ class TheCleanup {
                         phi->replaceUsesWith(*phin.begin());
                         next = bb->remove(ip);
                     } else {
-                        phi->updateType();
                         for (auto curBB : phi->input)
                             usedBB[curBB].insert(phi);
                     }
@@ -117,6 +116,7 @@ class TheCleanup {
                                 isShared[shared]++;
                         }
                     });
+                    i->updateType();
                 }
                 ip = next;
             }

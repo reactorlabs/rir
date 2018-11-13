@@ -72,9 +72,9 @@ PirType::PirType(SEXP e) : flags_(defaultRTypeFlags()), t_(RTypeSet()) {
         t_.r = val().t_.r;
     }
 
-    // if (Rf_isObject(e)) {
-    //     flags_.set(TypeFlags::obj);
-    // }
+    if (!Rf_isObject(e)) {
+        setNotObject();
+    }
 
     if (PirType::vecs().isSuper(*this)) {
         if (Rf_length(e) == 1)
