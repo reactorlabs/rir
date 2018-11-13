@@ -5,8 +5,6 @@
 #include "../pir/pir.h"
 #include "../util/cfg.h"
 
-#include <unordered_set>
-
 namespace rir {
 namespace pir {
 
@@ -19,7 +17,7 @@ class BBTransform {
     static Value* forInline(BB* inlinee, BB* cont);
     static BB* lowerExpect(Code* closure, BB* src,
                            BB::Instrs::iterator position, Value* condition,
-                           BB* deoptBlock);
+                           bool expected, BB* deoptBlock);
     static BB* addCheckpoint(Code* closure, BB* src,
                              BB::Instrs::iterator position);
     static void removeBBsWithChildren(DominanceGraph& dom, Code* code,

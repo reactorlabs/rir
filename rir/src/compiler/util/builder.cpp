@@ -20,7 +20,7 @@ bool Builder::isDone(BB* bb) const {
 
 void Builder::setBranch(BB* next0, BB* next1) {
     assert(bb);
-    assert(!bb->isEmpty() && Branch::Cast(bb->last()));
+    assert(!bb->isEmpty() && bb->last()->branches());
     markDone(bb);
     bb->setBranch(next0, next1);
 }

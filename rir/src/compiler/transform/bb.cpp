@@ -125,7 +125,7 @@ void BBTransform::removeBBsWithChildren(
 
     for (auto bb : toDelete_) {
         Visitor::run(bb, [&](BB* child) {
-            if (dom.dominates(child, bb))
+            if (dom.dominates(bb, child))
                 toDelete.insert(child);
         });
         toDelete.insert(bb);
