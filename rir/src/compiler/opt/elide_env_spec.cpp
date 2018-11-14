@@ -10,7 +10,7 @@
 namespace rir {
 namespace pir {
 
-void ElideEnvSpec::apply(RirCompiler&, Closure* function) const {
+void ElideEnvSpec::apply(RirCompiler&, Closure* function, LogStream&) const {
     ProfiledValues& profile = function->runtimeFeedback;
 
     // Elide environments of binary operators in which both operators are

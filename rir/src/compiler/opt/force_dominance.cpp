@@ -76,11 +76,24 @@ struct ForcedBy : public std::unordered_map<Value*, Force*> {
         }
         return changed;
     }
+    void print(std::ostream& out, bool tty) {
+        for (auto& e : *this) {
+            e.first->printRef(out);
+            if (e.second == ambiguous()) {
+                out << " force is ambiguous\n";
+            } else {
+                out << " is forced by ";
+                e.second->printRef(out);
+                out << "\n";
+            }
+        }
+    }
 };
 
 class ForceDominanceAnalysis : public StaticAnalysis<ForcedBy> {
   public:
-    explicit ForceDominanceAnalysis(Closure* cls) : StaticAnalysis(cls) {}
+    explicit ForceDominanceAnalysis(Closure* cls, LogStream& log)
+        : StaticAnalysis("ForceDominance", cls, log) {}
 
     void apply(ForcedBy& d, Instruction* i) const override {
         auto f = Force::Cast(i);
@@ -100,8 +113,8 @@ class ForceDominanceAnalysis : public StaticAnalysis<ForcedBy> {
 
 class ForceDominanceAnalysisResult {
   public:
-    explicit ForceDominanceAnalysisResult(Closure* cls) {
-        ForceDominanceAnalysis analysis(cls);
+    explicit ForceDominanceAnalysisResult(Closure* cls, LogStream& log) {
+        ForceDominanceAnalysis analysis(cls, log);
         analysis();
         analysis.foreach<PositioningStyle::AfterInstruction>(
             [&](const ForcedBy& p, Instruction* i) {
@@ -154,8 +167,8 @@ class ForceDominanceAnalysisResult {
 namespace rir {
 namespace pir {
 
-void ForceDominance::apply(RirCompiler&, Closure* cls) const {
-    ForceDominanceAnalysisResult analysis(cls);
+void ForceDominance::apply(RirCompiler&, Closure* cls, LogStream& log) const {
+    ForceDominanceAnalysisResult analysis(cls, log);
 
     std::unordered_map<Force*, Value*> inlinedPromise;
     std::unordered_map<Instruction*, MkArg*> forcedMkArg;

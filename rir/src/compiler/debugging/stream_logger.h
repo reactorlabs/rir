@@ -63,6 +63,21 @@ class LogStream {
         printedAnything = false;
     }
 
+    template <typename T>
+    friend LogStream& operator<<(LogStream& log, T dump) {
+        log.out << dump;
+        return log;
+    }
+
+    template <typename T>
+    void operator()(T* dump) {
+        dump->print(out, tty());
+    }
+    template <typename T>
+    void operator()(T dump) {
+        dump.print(out, tty());
+    }
+
   protected:
     virtual void highlightOn();
     virtual void highlightOff();

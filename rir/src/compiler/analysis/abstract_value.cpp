@@ -12,6 +12,30 @@ AbstractPirValue::AbstractPirValue(Value* v, Instruction* o) : type(v->type) {
     vals.insert(ValOrig(v, o));
 }
 
+void AbstractREnvironmentHierarchy::print(std::ostream& out, bool tty) {
+    for (auto& e : *this) {
+        out << "== [";
+        e.first->printRef(out);
+        out << "]\n";
+        e.second.print(out);
+    }
+}
+
+void AbstractREnvironment::print(std::ostream& out, bool tty) {
+    if (leaked)
+        out << "* leaked\n";
+    if (tainted)
+        out << "* tainted\n";
+
+    for (auto e : entries) {
+        SEXP name = std::get<0>(e);
+        out << "   " << CHAR(PRINTNAME(name)) << " -> ";
+        AbstractPirValue v = std::get<1>(e);
+        v.print(out);
+        out << "\n";
+    }
+}
+
 bool AbstractPirValue::merge(const AbstractPirValue& other) {
     assert(other.type != PirType::bottom());
 
@@ -36,7 +60,7 @@ bool AbstractPirValue::merge(const AbstractPirValue& other) {
     return changed;
 }
 
-void AbstractPirValue::print(std::ostream& out) {
+void AbstractPirValue::print(std::ostream& out, bool tty) {
     if (unknown) {
         out << "??";
         return;

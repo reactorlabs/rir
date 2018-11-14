@@ -1,6 +1,7 @@
 #ifndef PASS_DEFINITIONS_H
 #define PASS_DEFINITIONS_H
 
+#include "../debugging/stream_logger.h"
 #include "../translations/pir_translator.h"
 
 namespace rir {
@@ -14,7 +15,8 @@ class Closure;
     PirTranslator {                                                            \
       public:                                                                  \
         name() : PirTranslator(desc){};                                        \
-        void apply(RirCompiler&, Closure* function) const final override;      \
+        void apply(RirCompiler&, Closure* function, LogStream& log)            \
+            const final override;                                              \
     };
 
 /*

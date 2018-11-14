@@ -16,10 +16,12 @@ class TheScopeResolution {
   public:
     Closure* function;
     CFG cfg;
-    explicit TheScopeResolution(Closure* function)
-        : function(function), cfg(function) {}
+    LogStream& log;
+    explicit TheScopeResolution(Closure* function, LogStream& log)
+        : function(function), cfg(function), log(log) {}
+
     void operator()() {
-        ScopeAnalysis analysis(function);
+        ScopeAnalysis analysis(function, log);
 
         Visitor::run(function->entry, [&](BB* bb) {
             auto ip = bb->begin();
@@ -174,8 +176,9 @@ class TheScopeResolution {
 namespace rir {
 namespace pir {
 
-void ScopeResolution::apply(RirCompiler&, Closure* function) const {
-    TheScopeResolution s(function);
+void ScopeResolution::apply(RirCompiler&, Closure* function,
+                            LogStream& log) const {
+    TheScopeResolution s(function, log);
     s();
 }
 

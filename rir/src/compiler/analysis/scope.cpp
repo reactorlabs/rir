@@ -15,6 +15,15 @@ struct ScopeAnalysisState {
             changed = funTypes[f.first].merge(f.second) || changed;
         return envs.merge(other.envs) || changed;
     }
+    void print(std::ostream& out, bool tty) {
+        envs.print(out, tty);
+        if (funTypes.size() > 0) {
+            out << "== Infered function types:\n";
+            for (auto& t : funTypes) {
+                out << "* " << t.first->name << " : " << t.second << "\n";
+            }
+        }
+    }
 };
 
 class TheScopeAnalysis : public StaticAnalysis<ScopeAnalysisState> {
@@ -27,21 +36,21 @@ class TheScopeAnalysis : public StaticAnalysis<ScopeAnalysisState> {
     size_t depth;
     Value* staticClosureEnv = Env::notClosed();
 
-    TheScopeAnalysis(Closure* cls, const std::vector<SEXP>& args)
-        : Super(cls), args(args), depth(0) {}
+    TheScopeAnalysis(Closure* cls, const std::vector<SEXP>& args,
+                     LogStream& log, DebugLevel debug = DebugLevel::None)
+        : Super("Scope", cls, log, debug), args(args), depth(0) {}
     TheScopeAnalysis(Closure* cls, const std::vector<SEXP>& args,
                      Value* staticClosureEnv, BB* bb,
-                     const ScopeAnalysisState& initialState, size_t depth)
-        : Super(cls, initialState), args(args), depth(depth),
-          staticClosureEnv(staticClosureEnv) {}
+                     const ScopeAnalysisState& initialState, size_t depth,
+                     LogStream& log, DebugLevel debug)
+        : Super("Scope", cls, initialState, log, debug), args(args),
+          depth(depth), staticClosureEnv(staticClosureEnv) {}
 
     void apply(ScopeAnalysisState& state, Instruction* i) const override;
 
     typedef std::function<void(AbstractLoad)> LoadMaybe;
     void tryLoad(const ScopeAnalysisState& envs, Instruction* i,
                  LoadMaybe) const;
-
-    void print(std::ostream& out = std::cout);
 };
 
 void TheScopeAnalysis::tryLoad(const ScopeAnalysisState& s, Instruction* i,
@@ -98,7 +107,7 @@ void TheScopeAnalysis::apply(ScopeAnalysisState& state, Instruction* i) const {
                 if (cls->fun->argNames.size() == calli->nCallArgs()) {
                     TheScopeAnalysis nextFun(cls->fun, cls->fun->argNames,
                                              cls->lexicalEnv(), cls->fun->entry,
-                                             state, depth + 1);
+                                             state, depth + 1, log, debug);
                     nextFun();
                     state.merge(nextFun.result());
                     handled = true;
@@ -108,7 +117,8 @@ void TheScopeAnalysis::apply(ScopeAnalysisState& state, Instruction* i) const {
             auto trg = call->cls();
             if (trg && trg->argNames.size() == calli->nCallArgs()) {
                 TheScopeAnalysis nextFun(trg, trg->argNames, trg->closureEnv(),
-                                         trg->entry, state, depth + 1);
+                                         trg->entry, state, depth + 1, log,
+                                         debug);
                 nextFun();
                 state.merge(nextFun.result());
                 handled = true;
@@ -143,59 +153,15 @@ void TheScopeAnalysis::apply(ScopeAnalysisState& state, Instruction* i) const {
         }
     }
 }
-
-void TheScopeAnalysis::print(std::ostream& out) {
-    for (size_t id = 0; id < getMergepoints().size(); ++id) {
-        auto& m = getMergepoints()[id];
-        if (!m.empty()) {
-            out << "---- BB_" << id << " -----------------------------\n";
-            size_t segment = 0;
-            for (auto& e : m) {
-                out << "    segm -- " << segment++ << "\n";
-                for (auto& entry : e.envs) {
-                    auto ptr = entry.first;
-                    auto env = entry.second;
-                    out << "Env(" << ptr << "), leaked " << env.leaked << ":\n";
-                    env.print(out);
-                }
-            }
-            out << "-------------------------------------\n";
-        }
-    }
-    out << "---- exit -----------------------------\n";
-    for (auto& entry : result().envs) {
-        auto ptr = entry.first;
-        auto env = entry.second;
-        out << "Env(" << ptr << "), leaked " << env.leaked << ":\n";
-        env.print(out);
-    }
-    out << "-------------------------------------\n";
-}
 }
 
 namespace rir {
 namespace pir {
 
-ScopeAnalysis::ScopeAnalysis(Closure* function) {
-    TheScopeAnalysis analysis(function, function->argNames);
+ScopeAnalysis::ScopeAnalysis(Closure* function, LogStream& log) {
+    TheScopeAnalysis analysis(function, function->argNames,
+                              log /* , TheScopeAnalysis::DebugLevel::BB */);
     analysis();
-    if (false)
-        analysis.print(std::cout);
-
-    // if (function->entry->isExit()) {
-    //     analysis.foreach<PositioningStyle::AfterInstruction>(
-    //         [&](auto res, Instruction* i) {
-    //             i->printRef(std::cout);
-    //             std::cout << ": \n";
-    //             for (auto& entry : res) {
-    //                 auto ptr = entry.first;
-    //                 auto env = entry.second;
-    //                 std::cout << "Env(" << ptr << "), leaked " << env.leaked
-    //                           << ":\n";
-    //                 env.print(std::cout);
-    //             }
-    //         });
-    // }
 
     // Collect all abstract values of all loads
     analysis.foreach<PositioningStyle::BeforeInstruction>(

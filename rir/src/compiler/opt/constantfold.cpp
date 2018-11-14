@@ -55,7 +55,8 @@ static LdConst* isConst(Value* instr) {
 namespace rir {
 namespace pir {
 
-void Constantfold::apply(RirCompiler& cmp, Closure* function) const {
+void Constantfold::apply(RirCompiler& cmp, Closure* function,
+                         LogStream&) const {
     std::unordered_map<BB*, bool> branchRemoval;
     DominanceGraph dom(function);
 

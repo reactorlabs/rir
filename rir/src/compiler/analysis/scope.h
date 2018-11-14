@@ -29,7 +29,7 @@ class ScopeAnalysis {
         return !allStoresObserved.count(i->env()) && !observedStores.count(i);
     }
     AbstractREnvironmentHierarchy finalState;
-    explicit ScopeAnalysis(Closure* fun);
+    ScopeAnalysis(Closure* fun, LogStream& log);
 };
 }
 }

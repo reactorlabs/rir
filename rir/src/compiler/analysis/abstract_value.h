@@ -103,7 +103,7 @@ struct AbstractPirValue {
 
     bool merge(const AbstractPirValue& other);
 
-    void print(std::ostream& out = std::cout);
+    void print(std::ostream& out, bool tty = false);
 };
 
 /*
@@ -142,16 +142,7 @@ struct AbstractREnvironment {
         entries[n] = AbstractPirValue(v, origin);
     }
 
-    void print(std::ostream& out = std::cout) {
-        for (auto e : entries) {
-            SEXP name = std::get<0>(e);
-            out << "   " << CHAR(PRINTNAME(name)) << " -> ";
-            AbstractPirValue v = std::get<1>(e);
-            v.print(out);
-            out << "\n";
-        }
-        out << "\n";
-    }
+    void print(std::ostream& out, bool tty = false);
 
     const AbstractPirValue& get(SEXP e) const {
         static AbstractPirValue t = AbstractPirValue::tainted();
@@ -271,6 +262,8 @@ class AbstractREnvironmentHierarchy
             }
         return changed;
     }
+
+    void print(std::ostream& out, bool tty = false);
 
     MkFunCls* findClosure(Value* env, Value* fun);
 

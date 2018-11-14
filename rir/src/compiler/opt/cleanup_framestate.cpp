@@ -8,7 +8,8 @@
 namespace rir {
 namespace pir {
 
-void CleanupFramestate::apply(RirCompiler&, Closure* function) const {
+void CleanupFramestate::apply(RirCompiler&, Closure* function,
+                              LogStream&) const {
     auto apply = [](Code* code) {
         Visitor::run(code->entry, [&](Instruction* i) {
             if (auto call = CallInstruction::CastCall(i)) {

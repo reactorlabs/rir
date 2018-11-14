@@ -218,7 +218,7 @@ class TheInliner {
 namespace rir {
 namespace pir {
 
-void Inline::apply(RirCompiler&, Closure* function) const {
+void Inline::apply(RirCompiler&, Closure* function, LogStream&) const {
     TheInliner s(function);
     s();
 }

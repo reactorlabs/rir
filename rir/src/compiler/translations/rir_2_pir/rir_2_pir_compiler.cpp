@@ -114,7 +114,7 @@ void Rir2PirCompiler::optimizeModule(bool preserveVersions) {
                 v.saveVersion();
 
             auto& log = logger.get(f);
-            translation->apply(*this, f);
+            translation->apply(*this, f, logger.get(f));
             log.pirOptimizations(f, translation->getName(), passnr++);
 
 #ifdef ENABLE_SLOWASSERT
