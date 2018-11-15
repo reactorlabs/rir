@@ -46,6 +46,7 @@ using namespace rir::pir;
 struct ForcedBy {
     std::unordered_map<Value*, Force*> forcedBy;
     std::unordered_set<Value*> declared;
+    std::unordered_set<Value*> escaped;
 
     static Force* ambiguous() {
         static Force f(Nil::instance(), Env::nil());
@@ -53,15 +54,21 @@ struct ForcedBy {
     }
 
     void declare(MkArg* arg) { declared.insert(arg); }
+
+    void sideeffect() {
+        // when we execute an instruction that could force promises as a
+        // sideeffect, we have to assume that all escaped promises might have
+        // been forced
+        for (auto& e : escaped)
+            if (!forcedBy.count(e))
+                forcedBy[e] = ambiguous();
+    }
+
     void forcedAt(MkArg* val, Force* force) {
         if (!forcedBy.count(val))
             forcedBy[val] = force;
     }
-    void used(MkArg* val) {
-        // Used before force, this means we need to keep the promise as is
-        if (!forcedBy.count(val))
-            forcedBy[val] = ambiguous();
-    }
+    void escape(MkArg* val) { escaped.insert(val); }
     bool merge(const ForcedBy& other) {
         bool changed = false;
         for (auto& e : forcedBy) {
@@ -72,24 +79,73 @@ struct ForcedBy {
                     e.second = ambiguous();
                     changed = true;
                 }
-            } else {
-                if (other.declared.count(v)) {
-                    e.second = ambiguous();
-                    changed = true;
-                }
+            } else if (other.declared.count(v)) {
+                e.second = ambiguous();
+                changed = true;
             }
         }
         for (auto& e : other.forcedBy) {
-            if (!forcedBy.count(e.first) && declared.count(e.first)) {
-                forcedBy[e.first] = ambiguous();
+            if (!forcedBy.count(e.first)) {
+                if (declared.count(e.first)) {
+                    forcedBy[e.first] = ambiguous();
+                } else {
+                    declared.insert(e.first);
+                    forcedBy[e.first] = e.second;
+                }
+                changed = true;
+            }
+        }
+        for (auto& e : other.escaped) {
+            if (!escaped.count(e)) {
+                escaped.insert(e);
                 changed = true;
             }
         }
         return changed;
     }
+
+    bool isDominatingForce(Force* f) const {
+        return f == getDominatingForce(f);
+    }
+
+    Force* getDominatingForce(Force* f) const {
+        auto a = f->arg<0>().val()->baseValue();
+        if (!forcedBy.count(a))
+            return nullptr;
+        auto res = forcedBy.at(a);
+        if (res == ambiguous())
+            return nullptr;
+        return res;
+    }
+
+    bool isSafeToInline(MkArg* a) const {
+        // To inline promises with a deopt instruction we need to be able to
+        // synthesize promises and promise call framse.
+        auto prom = a->prom();
+        if (hasDeopt.count(prom)) {
+            if (hasDeopt.at(prom))
+                return false;
+        } else {
+            auto deopt = !Query::noDeopt(prom);
+            const_cast<ForcedBy*>(this)->hasDeopt[prom] = deopt;
+            if (deopt)
+                return false;
+        }
+        // We cannot inline escaped promises, since we have currently no way of
+        // updating the promise value slot
+        return !escaped.count(a);
+    }
+    std::unordered_map<Promise*, bool> hasDeopt;
+
     void print(std::ostream& out, bool tty) {
         out << "Known proms: ";
         for (auto& p : declared) {
+            p->printRef(out);
+            out << " ";
+        }
+        out << "\n";
+        out << "Escaped proms: ";
+        for (auto& p : escaped) {
             p->printRef(out);
             out << " ";
         }
@@ -122,70 +178,24 @@ class ForceDominanceAnalysis : public StaticAnalysis<ForcedBy> {
         } else if (!CastType::Cast(i)) {
             i->eachArg([&](Value* v) {
                 if (auto arg = MkArg::Cast(v->baseValue()))
-                    d.used(arg);
+                    d.escape(arg);
             });
+            if (i->mayForcePromises())
+                d.sideeffect();
         }
     }
 };
 
-class ForceDominanceAnalysisResult {
-  public:
-    explicit ForceDominanceAnalysisResult(Closure* cls, LogStream& log) {
-        ForceDominanceAnalysis analysis(
-            cls, log /* , ForceDominanceAnalysis::DebugLevel::BB */);
-        analysis();
-        analysis.foreach<PositioningStyle::AfterInstruction>(
-            [&](const ForcedBy& p, Instruction* i) {
-                if (auto f = Force::Cast(i)) {
-                    auto base = f->baseValue();
-                    if (p.forcedBy.count(base)) {
-                        auto o = p.forcedBy.at(base);
-                        if (o != ForcedBy::ambiguous()) {
-                            if (f != o)
-                                domBy[f] = o;
-                            else
-                                dom.insert(f);
-                        }
-                    }
-                }
-            });
-        exit = std::move(analysis.result());
-    }
-
-    bool isSafeToInline(MkArg* a) {
-        // To inline promises with a deopt instruction we need to be able to
-        // synthesize promises and promise call framse.
-        auto prom = a->prom();
-        if (hasDeopt.count(prom)) {
-            if (hasDeopt.at(prom))
-                return false;
-        } else {
-            auto deopt = !Query::noDeopt(prom);
-            hasDeopt[prom] = deopt;
-            if (deopt)
-                return false;
-        }
-        return true;
-    }
-    bool isDominating(Force* f) { return dom.find(f) != dom.end(); }
-    void mapToDominator(Force* f, std::function<void(Force* f)> action) {
-        if (domBy.count(f))
-            action(domBy.at(f));
-    }
-
-  private:
-    ForcedBy exit;
-    std::unordered_map<Force*, Force*> domBy;
-    std::unordered_set<Force*> dom;
-    std::unordered_map<Promise*, bool> hasDeopt;
-};
 } // namespace
 
 namespace rir {
 namespace pir {
 
 void ForceDominance::apply(RirCompiler&, Closure* cls, LogStream& log) const {
-    ForceDominanceAnalysisResult analysis(cls, log);
+    ForceDominanceAnalysis analysis(
+        cls, log /*, ForceDominanceAnalysis::DebugLevel::Instruction */);
+    analysis();
+    auto& result = analysis.result();
 
     std::unordered_map<Force*, Value*> inlinedPromise;
     std::unordered_map<Instruction*, MkArg*> forcedMkArg;
@@ -197,13 +207,13 @@ void ForceDominance::apply(RirCompiler&, Closure* cls, LogStream& log) const {
             auto next = ip + 1;
             if (auto f = Force::Cast(*ip)) {
                 if (auto mkarg = MkArg::Cast(f->baseValue())) {
-                    if (analysis.isDominating(f)) {
+                    if (result.isDominatingForce(f)) {
                         Value* strict = mkarg->eagerArg();
                         if (strict != Missing::instance()) {
                             f->replaceUsesWith(strict);
                             next = bb->remove(ip);
                             inlinedPromise[f] = strict;
-                        } else if (analysis.isSafeToInline(mkarg)) {
+                        } else if (result.isSafeToInline(mkarg)) {
                             Promise* prom = mkarg->prom();
                             BB* split = BBTransform::split(cls->nextBBId++, bb,
                                                            ip, cls);
@@ -237,6 +247,8 @@ void ForceDominance::apply(RirCompiler&, Closure* cls, LogStream& log) const {
 
                             inlinedPromise[f] = promRes;
                             bb = split;
+                        } else {
+                            f->strict = true;
                         }
                     }
                 }
@@ -262,20 +274,21 @@ void ForceDominance::apply(RirCompiler&, Closure* cls, LogStream& log) const {
             if (f) {
                 // If this force instruction is dominated by another force we
                 // can replace it with the dominating instruction
-                analysis.mapToDominator(f, [&](Force* r) {
-                    if (inlinedPromise.count(r))
-                        f->replaceUsesWith(inlinedPromise.at(r));
-                    else
-                        f->replaceUsesWith(r);
-                    next = bb->remove(ip);
-                });
+                if (auto dom = result.getDominatingForce(f)) {
+                    if (f != dom) {
+                        if (inlinedPromise.count(dom))
+                            f->replaceUsesWith(inlinedPromise.at(dom));
+                        else
+                            f->replaceUsesWith(dom);
+                        next = bb->remove(ip);
+                    }
+                }
             }
             if (cast) {
                 // Collect aliases of promises for step 3 bellow
                 auto in = Instruction::Cast(cast->arg<0>().val());
-                if (in && forcedMkArg.count(in)) {
+                if (in && forcedMkArg.count(in))
                     forcedMkArg[cast] = forcedMkArg.at(in);
-                }
             }
             ip = next;
         }

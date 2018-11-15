@@ -87,6 +87,7 @@ enum class Effect : uint8_t {
     Error,
     Print,
     Write,
+    Force,
     Any,
 };
 
@@ -110,6 +111,7 @@ class Instruction : public Value {
         : Value(t, tag), srcIdx(srcIdx) {}
 
     virtual bool hasEffect() const = 0;
+    virtual bool mayForcePromises() const = 0;
     virtual bool changesEnv() const = 0;
     virtual bool leaksEnv() const = 0;
     virtual bool mayAccessEnv() const = 0;
@@ -239,32 +241,21 @@ class InstructionImplementation : public Instruction {
         return new Base(*static_cast<const Base*>(this));
     }
 
-    struct InstrDescription {
-        bool HasEffect;
-        bool MayAccessEnv;
-        bool ChangesEnv;
-        bool LeaksEnv;
-        bool Exits;
-        bool Branches;
-    };
+    static constexpr bool mayAccessEnv_ = ENV > EnvAccess::None;
+    static constexpr bool mayChangeEnv_ = ENV >= EnvAccess::Write;
+    static constexpr bool mayLeakEnv_ = ENV >= EnvAccess::Leak;
 
-    static constexpr InstrDescription Description = {
-        EFFECT > Effect::None,   ENV > EnvAccess::None,
-        ENV >= EnvAccess::Write, ENV == EnvAccess::Leak,
-        CF == Controlflow::Exit, CF == Controlflow::Branch};
-
-    bool hasEffect() const final { return Description.HasEffect; }
-    bool mayAccessEnv() const final { return Description.MayAccessEnv; }
-    bool changesEnv() const final { return hasEnv() && Description.ChangesEnv; }
-    bool leaksEnv() const final { return hasEnv() && Description.LeaksEnv; }
+    bool hasEffect() const final { return EFFECT > Effect::None; }
+    bool mayForcePromises() const final { return EFFECT >= Effect::Force; }
+    bool mayAccessEnv() const final { return mayAccessEnv_; }
+    bool changesEnv() const final { return hasEnv() && mayChangeEnv_; }
+    bool leaksEnv() const final { return hasEnv() && mayLeakEnv_; }
     bool hasEnv() const final {
         return mayAccessEnv() && env() != Env::elided();
     }
-    bool exits() const final { return Description.Exits; }
-    bool branches() const final { return Description.Branches; }
-    bool branchOrExit() const final {
-        return Description.Branches || Description.Exits;
-    }
+    bool exits() const final { return CF == Controlflow::Exit; }
+    bool branches() const final { return CF == Controlflow::Branch; }
+    bool branchOrExit() const final { return branches() || exits(); }
 
     static const Base* Cast(const Value* i) {
         if (i->tag == ITAG)
@@ -314,7 +305,6 @@ class FixedLenInstruction
                                       std::array<InstrArg, ARGS>>
         Super;
     using Super::arg;
-    using Super::Description;
     size_t nargs() const override { return ARGS; }
 
     template <unsigned POS>
@@ -364,7 +354,6 @@ class FixedLenInstructionWithEnvSlot
   public:
     typedef FixedLenInstruction<ITAG, Base, ARGS, EFFECT, ENV, CF> Super;
     using Super::arg;
-    using Super::Description;
 
     static constexpr size_t EnvSlot = ARGS - 1;
 
@@ -413,7 +402,6 @@ class VarLenInstruction
         Super;
     using Super::arg;
     using Super::args_;
-    using Super::Description;
     using Super::nargs;
 
     virtual void pushArg(Value* a, PirType t) {
@@ -438,7 +426,6 @@ class VarLenInstructionWithEnvSlot
     typedef VarLenInstruction<ITAG, Base, EFFECT, ENV, CF> Super;
     using Super::arg;
     using Super::args_;
-    using Super::Description;
     using Super::pushArg;
 
     // The env slot is always the last element of the args_ vector
@@ -713,10 +700,13 @@ class FLIE(MkFunCls, 1, Effect::None, EnvAccess::Capture) {
 
 class FLIE(Force, 2, Effect::Any, EnvAccess::Leak) {
   public:
+    // Set to true if we are sure that the promise will be forced here
+    bool strict = false;
     Force(Value* in, Value* env)
         : FixedLenInstructionWithEnvSlot(PirType::val(), {{PirType::any()}},
                                          {{in}}, env) {}
     Value* input() const { return arg(0).val(); }
+    const char* name() override { return strict ? "Force!" : "Force"; }
 };
 
 class FLI(CastType, 1, Effect::None, EnvAccess::None) {
