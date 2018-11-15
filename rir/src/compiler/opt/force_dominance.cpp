@@ -43,41 +43,58 @@ using namespace rir::pir;
  * branch) or not. Thus we cannot inline it.
  */
 
-struct ForcedBy : public std::unordered_map<Value*, Force*> {
+struct ForcedBy {
+    std::unordered_map<Value*, Force*> forcedBy;
+    std::unordered_set<Value*> declared;
+
     static Force* ambiguous() {
         static Force f(Nil::instance(), Env::nil());
         return &f;
     }
 
+    void declare(MkArg* arg) { declared.insert(arg); }
     void forcedAt(MkArg* val, Force* force) {
-        if (!count(val))
-            (*this)[val] = force;
+        if (!forcedBy.count(val))
+            forcedBy[val] = force;
     }
-    void usedAt(MkArg* val, Force* force) {
+    void used(MkArg* val) {
         // Used before force, this means we need to keep the promise as is
-        if (!count(val))
-            (*this)[val] = ambiguous();
+        if (!forcedBy.count(val))
+            forcedBy[val] = ambiguous();
     }
-    bool merge(ForcedBy& other) {
+    bool merge(const ForcedBy& other) {
         bool changed = false;
-        for (auto& e : *this) {
+        for (auto& e : forcedBy) {
             auto v = e.first;
             auto f = e.second;
-            if (f != ambiguous() && (!other.count(v) || f != other.at(v))) {
-                e.second = ambiguous();
-                changed = true;
+            if (other.forcedBy.count(v)) {
+                if (f != other.forcedBy.at(v)) {
+                    e.second = ambiguous();
+                    changed = true;
+                }
+            } else {
+                if (other.declared.count(v)) {
+                    e.second = ambiguous();
+                    changed = true;
+                }
             }
         }
-        for (auto& e : other) {
-            if (!count(e.first)) {
-                (*this)[e.first] = ambiguous();
+        for (auto& e : other.forcedBy) {
+            if (!forcedBy.count(e.first) && declared.count(e.first)) {
+                forcedBy[e.first] = ambiguous();
                 changed = true;
             }
         }
         return changed;
     }
     void print(std::ostream& out, bool tty) {
-        for (auto& e : *this) {
+        out << "Known proms: ";
+        for (auto& p : declared) {
+            p->printRef(out);
+            out << " ";
+        }
+        out << "\n";
+        for (auto& e : forcedBy) {
             e.first->printRef(out);
             if (e.second == ambiguous()) {
                 out << " force is ambiguous\n";
@@ -92,20 +109,20 @@ struct ForcedBy : public std::unordered_map<Value*, Force*> {
 
 class ForceDominanceAnalysis : public StaticAnalysis<ForcedBy> {
   public:
-    explicit ForceDominanceAnalysis(Closure* cls, LogStream& log)
-        : StaticAnalysis("ForceDominance", cls, log) {}
+    explicit ForceDominanceAnalysis(Closure* cls, LogStream& log,
+                                    DebugLevel debug = DebugLevel::None)
+        : StaticAnalysis("ForceDominance", cls, log, debug) {}
 
     void apply(ForcedBy& d, Instruction* i) const override {
-        auto f = Force::Cast(i);
-        if (f) {
-            MkArg* arg = MkArg::Cast(i->baseValue());
-            if (arg)
+        if (auto f = Force::Cast(i)) {
+            if (MkArg* arg = MkArg::Cast(i->baseValue()))
                 d.forcedAt(arg, f);
+        } else if (auto mk = MkArg::Cast(i)) {
+            d.declare(mk);
         } else if (!CastType::Cast(i)) {
             i->eachArg([&](Value* v) {
-                MkArg* arg = MkArg::Cast(v);
-                if (arg)
-                    d.usedAt(arg, f);
+                if (auto arg = MkArg::Cast(v->baseValue()))
+                    d.used(arg);
             });
         }
     }
@@ -114,15 +131,15 @@ class ForceDominanceAnalysis : public StaticAnalysis<ForcedBy> {
 class ForceDominanceAnalysisResult {
   public:
     explicit ForceDominanceAnalysisResult(Closure* cls, LogStream& log) {
-        ForceDominanceAnalysis analysis(cls, log);
+        ForceDominanceAnalysis analysis(
+            cls, log /* , ForceDominanceAnalysis::DebugLevel::BB */);
         analysis();
         analysis.foreach<PositioningStyle::AfterInstruction>(
             [&](const ForcedBy& p, Instruction* i) {
-                auto f = Force::Cast(i);
-                if (f) {
+                if (auto f = Force::Cast(i)) {
                     auto base = f->baseValue();
-                    if (p.find(base) != p.end()) {
-                        auto o = p.at(base);
+                    if (p.forcedBy.count(base)) {
+                        auto o = p.forcedBy.at(base);
                         if (o != ForcedBy::ambiguous()) {
                             if (f != o)
                                 domBy[f] = o;
@@ -148,7 +165,7 @@ class ForceDominanceAnalysisResult {
             if (deopt)
                 return false;
         }
-        return exit.count(a) && exit.at(a) != ForcedBy::ambiguous();
+        return true;
     }
     bool isDominating(Force* f) { return dom.find(f) != dom.end(); }
     void mapToDominator(Force* f, std::function<void(Force* f)> action) {

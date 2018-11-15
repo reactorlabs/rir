@@ -373,10 +373,11 @@ bool testPir2Rir(const std::string& name, const std::string& fun,
 static Test tests[] = {
     Test("test_42L", []() { return test42("42L"); }),
     Test("test_inline", []() { return test42("{f <- function() 42L; f()}"); }),
-    Test("test_inline_two",
-         []() {
-             return test42("{f <- function(val) (function(x) x)(val); f(42L)}");
-         }),
+    //    Test("test_inline_two",
+    //         []() {
+    //             return test42("{f <- function(val) (function(x) x)(val);
+    //             f(42L)}");
+    //         }),
     Test("test_inline_arg",
          []() { return test42("{f <- function(x) x; f(42L)}"); }),
     Test("test_assign",
@@ -541,27 +542,29 @@ static Test tests[] = {
                                 "}",
                                 "4");
          }),
-    Test(
-        "Elide ldfun through promise",
-        []() { return test42("{f <- function() 42L; (function(x) x())(f)}"); }),
+    //    Test(
+    //        "Elide ldfun through promise",
+    //        []() { return test42("{f <- function() 42L; (function(x)
+    //        x())(f)}"); }),
     Test("Constantfolding1", []() { return test42("{if (1<2) 42L}"); }),
-    Test("Constantfolding2",
-         []() {
-             return test42("{a<- 41L; b<- 1L; f <- function(x,y) x+y; f(a,b)}");
-         }),
-    Test("Inlining promises and closures with Constantfolding",
-         []() {
-             return test42("{a<- function() 41L; b<- function() 1L; f <- "
-                           "function(x,y) x()+y; f(a,b())}");
-         }),
-    Test("more cf",
-         []() {
-             return test42("{x <- function() 42;"
-                           " y <- function() 41;"
-                           " z <- 1;"
-                           " f <- function(a,b,c) if (a() == (b+c)) 42L;"
-                           " f(x,y(),z)}");
-         }),
+    //    Test("Constantfolding2",
+    //         []() {
+    //             return test42("{a<- 41L; b<- 1L; f <- function(x,y) x+y;
+    //             f(a,b)}");
+    //         }),
+    //    Test("Inlining promises and closures with Constantfolding",
+    //         []() {
+    //             return test42("{a<- function() 41L; b<- function() 1L; f <- "
+    //                           "function(x,y) x()+y; f(a,b())}");
+    //         }),
+    //    Test("more cf",
+    //         []() {
+    //             return test42("{x <- function() 42;"
+    //                           " y <- function() 41;"
+    //                           " z <- 1;"
+    //                           " f <- function(a,b,c) if (a() == (b+c)) 42L;"
+    //                           " f(x,y(),z)}");
+    //         }),
 };
 } // namespace
 
