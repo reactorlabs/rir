@@ -236,31 +236,50 @@ struct AbstractLoad {
     }
 };
 
-class AbstractREnvironmentHierarchy
-    : public std::unordered_map<Value*, AbstractREnvironment> {
+class AbstractREnvironmentHierarchy {
+  private:
+    std::unordered_map<Value*, AbstractREnvironment> envs;
+
   public:
+    std::unordered_map<Value*, Value*> aliases;
+
     bool merge(const AbstractREnvironmentHierarchy& other) {
         bool changed = false;
         std::unordered_set<Value*> k;
-        for (auto e : *this)
+        for (auto e : envs)
             k.insert(e.first);
-        for (auto e : other)
+        for (auto e : other.envs)
             k.insert(e.first);
         for (auto i : k)
-            if (this->count(i)) {
-                if (other.count(i) == 0) {
-                    if (!at(i).tainted) {
+            if (envs.count(i)) {
+                if (other.envs.count(i) == 0) {
+                    if (!envs.at(i).tainted) {
                         changed = true;
-                        at(i).taint();
+                        envs.at(i).taint();
                     }
-                } else if (at(i).merge(other.at(i))) {
+                } else if (envs.at(i).merge(other.envs.at(i))) {
                     changed = true;
                 }
             } else {
-                (*this)[i].taint();
+                envs[i].taint();
                 changed = true;
             }
+        for (auto& a : other.aliases) {
+            if (!aliases.count(a.first)) {
+                aliases.emplace(a);
+                changed = true;
+            } else {
+                SLOWASSERT(a.second == aliases.at(a.first));
+            }
+        }
         return changed;
+    }
+
+    AbstractREnvironment& operator[](Value* env) {
+        if (aliases.count(env))
+            return envs[aliases.at(env)];
+        else
+            return envs[env];
     }
 
     void print(std::ostream& out, bool tty = false);

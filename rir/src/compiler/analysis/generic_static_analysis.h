@@ -66,18 +66,21 @@ class StaticAnalysis {
     const DebugLevel debug;
 
     Closure* closure;
+    Code* code;
     BB* entry;
 
-    StaticAnalysis(std::string name, Closure* cls, LogStream& log,
+    StaticAnalysis(std::string name, Closure* cls, Code* code, LogStream& log,
                    DebugLevel debug = DebugLevel::None)
-        : name(name), log(log), debug(debug), closure(cls), entry(cls->entry) {
+        : name(name), log(log), debug(debug), closure(cls), code(code),
+          entry(code->entry) {
         mergepoint.resize(cls->nextBBId);
         mergepoint[entry->id].resize(1);
     }
-    StaticAnalysis(std::string name, Closure* cls,
+    StaticAnalysis(std::string name, Closure* cls, Code* code,
                    const AbstractState& initialState, LogStream& log,
                    DebugLevel debug)
-        : name(name), log(log), debug(debug), closure(cls), entry(cls->entry) {
+        : name(name), log(log), debug(debug), closure(cls), code(code),
+          entry(code->entry) {
         mergepoint.resize(cls->nextBBId);
         mergepoint[entry->id].push_back(initialState);
     }
@@ -141,9 +144,15 @@ class StaticAnalysis {
         std::vector<bool> changed(mergepoint.size(), false);
         changed[entry->id] = true;
 
-        if (debug > DebugLevel::None)
+        if (debug > DebugLevel::None) {
             log << "=========== Starting " << name << " Analysis on "
-                << closure->name << "\n";
+                << closure->name << " ";
+            if (code == closure)
+                log << "body";
+            else
+                log << "Prom(" << closure->promiseId(code) << ")";
+            log << "\n";
+        }
 
         do {
             done = true;

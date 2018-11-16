@@ -30,21 +30,28 @@ class TheScopeAnalysis : public StaticAnalysis<ScopeAnalysisState> {
   public:
     typedef StaticAnalysis<ScopeAnalysisState> Super;
 
-    const std::vector<SEXP>& args;
+    static const std::vector<SEXP> noArgs;
+    const std::vector<SEXP>& args = noArgs;
 
     static constexpr size_t maxDepth = 5;
     size_t depth;
     Value* staticClosureEnv = Env::notClosed();
+    Value* promiseEnv = nullptr;
 
     TheScopeAnalysis(Closure* cls, const std::vector<SEXP>& args,
                      LogStream& log, DebugLevel debug = DebugLevel::None)
-        : Super("Scope", cls, log, debug), args(args), depth(0) {}
+        : Super("Scope", cls, cls, log, debug), args(args), depth(0) {}
     TheScopeAnalysis(Closure* cls, const std::vector<SEXP>& args,
-                     Value* staticClosureEnv, BB* bb,
+                     Value* staticClosureEnv,
                      const ScopeAnalysisState& initialState, size_t depth,
                      LogStream& log, DebugLevel debug)
-        : Super("Scope", cls, initialState, log, debug), args(args),
+        : Super("Scope", cls, cls, initialState, log, debug), args(args),
           depth(depth), staticClosureEnv(staticClosureEnv) {}
+    TheScopeAnalysis(Closure* cls, Promise* prom, Value* promEnv,
+                     const ScopeAnalysisState& initialState, size_t depth,
+                     LogStream& log, DebugLevel debug)
+        : Super("Scope", cls, prom, initialState, log, debug), depth(depth),
+          promiseEnv(promEnv) {}
 
     void apply(ScopeAnalysisState& state, Instruction* i) const override;
 
@@ -52,6 +59,7 @@ class TheScopeAnalysis : public StaticAnalysis<ScopeAnalysisState> {
     void tryLoad(const ScopeAnalysisState& envs, Instruction* i,
                  LoadMaybe) const;
 };
+const std::vector<SEXP> TheScopeAnalysis::noArgs;
 
 void TheScopeAnalysis::tryLoad(const ScopeAnalysisState& s, Instruction* i,
                                LoadMaybe aLoad) const {
@@ -70,14 +78,15 @@ void TheScopeAnalysis::apply(ScopeAnalysisState& state, Instruction* i) const {
     bool handled = false;
 
     if (auto ret = Return::Cast(i)) {
-        auto t = ret->arg<0>().val()->type;
-        if (state.funTypes.count(closure))
-            state.funTypes.at(closure).merge(t);
-        else
-            state.funTypes.emplace(closure, t);
-        handled = true;
-    }
-    if (auto mk = MkEnv::Cast(i)) {
+        if (closure == code) {
+            auto t = ret->arg<0>().val()->type;
+            if (state.funTypes.count(closure))
+                state.funTypes.at(closure).merge(t);
+            else
+                state.funTypes.emplace(closure, t);
+            handled = true;
+        }
+    } else if (auto mk = MkEnv::Cast(i)) {
         Value* lexicalEnv = mk->lexicalEnv();
         // If we know the caller, we can fill in the parent env
         if (lexicalEnv == Env::notClosed() &&
@@ -88,6 +97,11 @@ void TheScopeAnalysis::apply(ScopeAnalysisState& state, Instruction* i) const {
         mk->eachLocalVar(
             [&](SEXP name, Value* val) { state.envs[mk].set(name, val, mk); });
         handled = true;
+    } else if (auto le = LdFunctionEnv::Cast(i)) {
+        assert(promiseEnv);
+        assert(!state.envs.aliases.count(le) ||
+               state.envs.aliases.at(le) == promiseEnv);
+        state.envs.aliases[le] = promiseEnv;
     } else if (auto s = StVar::Cast(i)) {
         state.envs[s->env()].set(s->varName, s->val(), s);
         handled = true;
@@ -96,6 +110,17 @@ void TheScopeAnalysis::apply(ScopeAnalysisState& state, Instruction* i) const {
         if (superEnv != AbstractREnvironment::UnknownParent) {
             state.envs[superEnv].set(ss->varName, ss->val(), ss);
             handled = true;
+        }
+    } else if (Force::Cast(i) && depth < maxDepth) {
+        auto force = Force::Cast(i);
+        if (force->strict) {
+            if (auto arg = MkArg::Cast(force->arg<0>().val()->baseValue())) {
+                TheScopeAnalysis prom(closure, arg->prom(), arg->env(), state,
+                                      depth + 1, log, debug);
+                prom();
+                state.merge(prom.result());
+                handled = true;
+            }
         }
     } else if (CallInstruction::CastCall(i) && depth < maxDepth) {
         auto calli = CallInstruction::CastCall(i);
@@ -106,8 +131,8 @@ void TheScopeAnalysis::apply(ScopeAnalysisState& state, Instruction* i) const {
             if (cls != AbstractREnvironment::UnknownClosure) {
                 if (cls->fun->argNames.size() == calli->nCallArgs()) {
                     TheScopeAnalysis nextFun(cls->fun, cls->fun->argNames,
-                                             cls->lexicalEnv(), cls->fun->entry,
-                                             state, depth + 1, log, debug);
+                                             cls->lexicalEnv(), state,
+                                             depth + 1, log, debug);
                     nextFun();
                     state.merge(nextFun.result());
                     handled = true;
@@ -117,8 +142,7 @@ void TheScopeAnalysis::apply(ScopeAnalysisState& state, Instruction* i) const {
             auto trg = call->cls();
             if (trg && trg->argNames.size() == calli->nCallArgs()) {
                 TheScopeAnalysis nextFun(trg, trg->argNames, trg->closureEnv(),
-                                         trg->entry, state, depth + 1, log,
-                                         debug);
+                                         state, depth + 1, log, debug);
                 nextFun();
                 state.merge(nextFun.result());
                 handled = true;
@@ -159,8 +183,8 @@ namespace rir {
 namespace pir {
 
 ScopeAnalysis::ScopeAnalysis(Closure* function, LogStream& log) {
-    TheScopeAnalysis analysis(function, function->argNames,
-                              log /* , TheScopeAnalysis::DebugLevel::BB */);
+    TheScopeAnalysis analysis(function, function->argNames, log,
+                              TheScopeAnalysis::DebugLevel::Instruction);
     analysis();
 
     // Collect all abstract values of all loads
