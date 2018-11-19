@@ -68,12 +68,36 @@ struct PointerMarker {
     void set(BB* bb) { done.insert(bb); }
     bool check(BB* bb) { return done.find(bb) != done.end(); }
 };
+
+/*
+ * Support for reverse iteration in range-based for loops.
+ */
+template <typename T>
+struct reverse_wrapper {
+    T& iterable;
+};
+
+template <typename T>
+auto begin(reverse_wrapper<T> w) {
+    return w.iterable.rbegin();
+}
+
+template <typename T>
+auto end(reverse_wrapper<T> w) {
+    return w.iterable.rend();
+}
+
+template <typename T>
+reverse_wrapper<T> reverse(T&& iterable) {
+    return {iterable};
+}
+
 }; // namespace VisitorHelpers
 
 enum class Order { Depth, Breadth, Random, Lowering };
 enum class Direction { Forward, Backward };
 
-template <Order ORDER, class Marker>
+template <Order ORDER, Direction DIR, class Marker>
 class VisitorImplementation {
   public:
     typedef std::function<bool(Instruction*)> InstrActionPredicate;
@@ -88,13 +112,26 @@ class VisitorImplementation {
      *
      */
     static void run(BB* bb, InstrAction action) {
+        static_assert(DIR == Direction::Forward,
+                      "Backward visitors need a CFG.");
         run(bb, [action](BB* bb) {
             for (auto i : *bb)
                 action(i);
         });
     }
 
+    static void run(CFG const& cfg, BB* bb, InstrAction action) {
+        static_assert(DIR == Direction::Backward,
+                      "Only backward visitors can take a CFG.");
+        run(cfg, bb, [action](BB* bb) {
+            for (auto i : VisitorHelpers::reverse(*bb))
+                action(i);
+        });
+    }
+
     static bool check(BB* bb, InstrActionPredicate action) {
+        static_assert(DIR == Direction::Forward,
+                      "Backward visitors need a CFG.");
         return check(bb, [action](BB* bb) {
             bool holds = true;
             for (auto i : *bb) {
@@ -107,17 +144,60 @@ class VisitorImplementation {
         });
     }
 
+    static bool check(CFG const& cfg, BB* bb, InstrActionPredicate action) {
+        static_assert(DIR == Direction::Backward,
+                      "Only backward visitors can take a CFG.");
+        return check(cfg, bb, [action](BB* bb) {
+            bool holds = true;
+            for (auto i : VisitorHelpers::reverse(*bb)) {
+                if (!action(i)) {
+                    holds = false;
+                    break;
+                }
+            }
+            return holds;
+        });
+    }
+
     static void run(BB* bb, InstrBBAction action) {
+        static_assert(DIR == Direction::Forward,
+                      "Backward visitors need a CFG.");
         run(bb, [action](BB* bb) {
             for (auto i : *bb)
                 action(i, bb);
         });
     }
 
+    static void run(CFG const& cfg, BB* bb, InstrBBAction action) {
+        static_assert(DIR == Direction::Backward,
+                      "Only backward visitors can take a CFG.");
+        run(cfg, bb, [action](BB* bb) {
+            for (auto i : VisitorHelpers::reverse(*bb))
+                action(i, bb);
+        });
+    }
+
     static bool check(BB* bb, InstrBBActionPredicate action) {
+        static_assert(DIR == Direction::Forward,
+                      "Backward visitors need a CFG.");
         return check(bb, [action](BB* bb) {
             bool holds = true;
             for (auto i : *bb) {
+                if (!action(i, bb)) {
+                    holds = false;
+                    break;
+                }
+            }
+            return holds;
+        });
+    }
+
+    static bool check(CFG const& cfg, BB* bb, InstrBBActionPredicate action) {
+        static_assert(DIR == Direction::Backward,
+                      "Only backward visitors can take a CFG.");
+        return check(cfg, bb, [action](BB* bb) {
+            bool holds = true;
+            for (auto i : VisitorHelpers::reverse(*bb)) {
                 if (!action(i, bb)) {
                     holds = false;
                     break;
@@ -132,15 +212,34 @@ class VisitorImplementation {
      *
      */
     static void run(BB* bb, BBAction action, bool processNewNodes = false) {
-        genericRun(bb, action, processNewNodes);
+        static_assert(DIR == Direction::Forward,
+                      "Backward visitors need a CFG.");
+        genericRun(bb, action, nullptr, processNewNodes);
+    }
+
+    static void run(CFG const& cfg, BB* bb, BBAction action,
+                    bool processNewNodes = false) {
+        static_assert(DIR == Direction::Backward,
+                      "Only backward visitors can take a CFG.");
+        genericRun(bb, action, &cfg, processNewNodes);
     }
 
     static bool check(BB* bb, BBActionPredicate action) {
-        return genericRun(bb, action, false);
+        static_assert(DIR == Direction::Forward,
+                      "Backward visitors need a CFG.");
+        return genericRun(bb, action, nullptr, false);
     }
 
+    static bool check(CFG const& cfg, BB* bb, BBActionPredicate action) {
+        static_assert(DIR == Direction::Backward,
+                      "Only backward visitors can take a CFG.");
+        return genericRun(bb, action, &cfg, false);
+    }
+
+  protected:
     template <typename ActionKind>
-    static bool genericRun(BB* bb, ActionKind action, bool processNewNodes) {
+    static bool genericRun(BB* bb, ActionKind action, CFG const* cfg,
+                           bool processNewNodes) {
         typedef VisitorHelpers::PredicateWrapper<ActionKind> PredicateWrapper;
         const PredicateWrapper predicate = {action};
 
@@ -167,14 +266,19 @@ class VisitorImplementation {
         };
 
         auto scheduleNext = [&]() {
-            if (ORDER == Order::Lowering) {
-                // Curently we emit only brtrue in pir2rir, therefore we always
-                // want next1 to be the fallthrough case.
-                schedule(cur->next1);
-                schedule(cur->next0);
+            if (DIR == Direction::Forward) {
+                if (ORDER == Order::Lowering) {
+                    // Curently we emit only brtrue in pir2rir, therefore we
+                    // always want next1 to be the fallthrough case.
+                    schedule(cur->next1);
+                    schedule(cur->next0);
+                } else {
+                    schedule(cur->next0);
+                    schedule(cur->next1);
+                }
             } else {
-                schedule(cur->next0);
-                schedule(cur->next1);
+                for (auto pred : cfg->immediatePredecessors(cur))
+                    schedule(pred);
             }
         };
 
@@ -223,15 +327,28 @@ class VisitorImplementation {
     }
 };
 
-class Visitor
-    : public VisitorImplementation<Order::Random, VisitorHelpers::IDMarker> {};
+class Visitor : public VisitorImplementation<Order::Random, Direction::Forward,
+                                             VisitorHelpers::IDMarker> {};
+
 class BreadthFirstVisitor
-    : public VisitorImplementation<Order::Breadth, VisitorHelpers::IDMarker> {};
+    : public VisitorImplementation<Order::Breadth, Direction::Forward,
+                                   VisitorHelpers::IDMarker> {};
+
 class DepthFirstVisitor
-    : public VisitorImplementation<Order::Depth, VisitorHelpers::IDMarker> {};
+    : public VisitorImplementation<Order::Depth, Direction::Forward,
+                                   VisitorHelpers::IDMarker> {};
+
 class LoweringVisitor
-    : public VisitorImplementation<Order::Lowering, VisitorHelpers::IDMarker> {
-};
+    : public VisitorImplementation<Order::Lowering, Direction::Forward,
+                                   VisitorHelpers::IDMarker> {};
+
+class BackwardVisitor
+    : public VisitorImplementation<Order::Random, Direction::Backward,
+                                   VisitorHelpers::IDMarker> {};
+
+class BreadthFirstBackwardVisitor
+    : public VisitorImplementation<Order::Breadth, Direction::Backward,
+                                   VisitorHelpers::IDMarker> {};
 
 template <class Marker = VisitorHelpers::IDMarker>
 class DominatorTreeVisitor {
@@ -279,6 +396,7 @@ class DominatorTreeVisitor {
         }
     }
 };
+
 } // namespace pir
 } // namespace rir
 

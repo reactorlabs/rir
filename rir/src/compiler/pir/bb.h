@@ -74,6 +74,10 @@ class BB {
 
     Instrs::iterator begin() { return instrs.begin(); }
     Instrs::iterator end() { return instrs.end(); }
+
+    Instrs::reverse_iterator rbegin() { return instrs.rbegin(); }
+    Instrs::reverse_iterator rend() { return instrs.rend(); }
+
     size_t size() const { return instrs.size(); }
     Instruction* at(size_t i) { return instrs[i]; }
 
