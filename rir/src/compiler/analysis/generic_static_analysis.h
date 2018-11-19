@@ -73,7 +73,7 @@ class StaticAnalysis {
                    DebugLevel debug = DebugLevel::None)
         : name(name), log(log), debug(debug), closure(cls), code(code),
           entry(code->entry) {
-        mergepoint.resize(cls->nextBBId);
+        mergepoint.resize(code->nextBBId);
         mergepoint[entry->id].resize(1);
     }
     StaticAnalysis(std::string name, Closure* cls, Code* code,
@@ -81,7 +81,7 @@ class StaticAnalysis {
                    DebugLevel debug)
         : name(name), log(log), debug(debug), closure(cls), code(code),
           entry(code->entry) {
-        mergepoint.resize(cls->nextBBId);
+        mergepoint.resize(code->nextBBId);
         mergepoint[entry->id].push_back(initialState);
     }
 

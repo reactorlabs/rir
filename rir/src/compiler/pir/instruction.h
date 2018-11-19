@@ -88,6 +88,7 @@ enum class Effect : uint8_t {
     Print,
     Write,
     Force,
+    Reflection,
     Any,
 };
 
@@ -111,6 +112,7 @@ class Instruction : public Value {
         : Value(t, tag), srcIdx(srcIdx) {}
 
     virtual bool hasEffect() const = 0;
+    virtual bool mayUseReflection() const = 0;
     virtual bool mayForcePromises() const = 0;
     virtual bool changesEnv() const = 0;
     virtual bool leaksEnv() const = 0;
@@ -124,9 +126,10 @@ class Instruction : public Value {
 
     virtual Instruction* clone() const = 0;
 
-    Value* baseValue() override;
+    Value* followCasts() override;
+    Value* followCastsAndForce() override;
     bool isInstruction() final { return true; }
-    bool maySpecialize();
+    bool envOnlyForObj();
 
     BB* bb_ = nullptr;
     BB* bb() {
@@ -143,6 +146,7 @@ class Instruction : public Value {
     virtual const char* name() { return tagToStr(tag); }
 
     Instruction* hasSingleUse();
+    void eraseAndRemove();
     void replaceUsesWith(Value* val);
     void replaceUsesAndSwapWith(Instruction* val,
                                 std::vector<Instruction*>::iterator it);
@@ -247,6 +251,7 @@ class InstructionImplementation : public Instruction {
 
     bool hasEffect() const final { return EFFECT > Effect::None; }
     bool mayForcePromises() const final { return EFFECT >= Effect::Force; }
+    bool mayUseReflection() const final { return EFFECT > Effect::Reflection; }
     bool mayAccessEnv() const final { return mayAccessEnv_; }
     bool changesEnv() const final { return hasEnv() && mayChangeEnv_; }
     bool leaksEnv() const final { return hasEnv() && mayLeakEnv_; }
@@ -1018,7 +1023,7 @@ class VLIE(Call, Effect::Any, EnvAccess::Leak), public CallInstruction {
     }
 
     Closure* tryGetCls() override final {
-        if (auto mk = MkFunCls::Cast(cls()->baseValue()))
+        if (auto mk = MkFunCls::Cast(cls()->followCastsAndForce()))
             return mk->fun;
         return nullptr;
     }
@@ -1046,7 +1051,7 @@ class VLIE(NamedCall, Effect::Any, EnvAccess::Leak), public CallInstruction {
     Value* cls() { return arg(0).val(); }
 
     Closure* tryGetCls() override final {
-        if (auto mk = MkFunCls::Cast(cls()->baseValue()))
+        if (auto mk = MkFunCls::Cast(cls()->followCastsAndForce()))
             return mk->fun;
         return nullptr;
     }

@@ -40,16 +40,16 @@ void ElideEnvSpec::apply(RirCompiler&, Closure* function, LogStream&) const {
     });
 
     Visitor::run(function->entry, [&](BB* bb) {
-        if (!checkpoints.count(bb))
-            return;
-        auto cp = checkpoints.at(bb);
+        Checkpoint* cp = nullptr;
+        if (checkpoints.count(bb))
+            cp = checkpoints.at(bb);
 
         auto ip = bb->begin();
         while (ip != bb->end()) {
             Instruction* i = *ip;
             auto next = ip + 1;
 
-            if (i->maySpecialize() && i->env() != Env::elided()) {
+            if (i->envOnlyForObj() && i->env() != Env::elided()) {
                 Value* opLeft = i->arg(0).val();
                 Value* opRight = i->arg(1).val();
                 bool maybeObjL = opLeft->type.maybeObj();
@@ -61,7 +61,7 @@ void ElideEnvSpec::apply(RirCompiler&, Closure* function, LogStream&) const {
                     !profile.types.at(opRight).observedObject();
 
                 if ((!maybeObjL && !maybeObjR) ||
-                    (assumeNonObjL && assumeNonObjR)) {
+                    (cp && assumeNonObjL && assumeNonObjR)) {
                     i->elideEnv();
                     if (maybeObjL)
                         ip = insertExpectNotObj(bb, opLeft, cp, ip);
@@ -74,7 +74,7 @@ void ElideEnvSpec::apply(RirCompiler&, Closure* function, LogStream&) const {
 
             // Effect between assume and checkpoint is not allowed
             if (i->changesEnv() || i->hasEffect())
-                break;
+                cp = nullptr;
 
             ip = next;
         }

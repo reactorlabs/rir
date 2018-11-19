@@ -23,8 +23,9 @@ class ScopeAnalysis {
     std::unordered_set<Value*> allStoresObserved;
 
   public:
-    std::unordered_map<Closure*, PirType> funTypes;
+    std::unordered_map<Instruction*, AbstractPirValue> returnValues;
     std::unordered_map<Instruction*, AbstractLoad> loads;
+    bool mayUseReflection;
     bool deadStore(Instruction* i) {
         return !allStoresObserved.count(i->env()) && !observedStores.count(i);
     }

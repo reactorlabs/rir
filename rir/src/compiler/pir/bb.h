@@ -64,6 +64,8 @@ class BB {
 
     void replace(Instrs::iterator it, Instruction* i);
 
+    void remove(Instruction* i);
+
     Instrs::iterator remove(Instrs::iterator it);
     Instrs::iterator moveToEnd(Instrs::iterator it, BB* other);
     Instrs::iterator moveToBegin(Instrs::iterator it, BB* other);

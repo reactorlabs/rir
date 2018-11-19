@@ -16,9 +16,10 @@ class TheScopeResolution {
   public:
     Closure* function;
     CFG cfg;
+    DominanceGraph doms;
     LogStream& log;
     explicit TheScopeResolution(Closure* function, LogStream& log)
-        : function(function), cfg(function), log(log) {}
+        : function(function), cfg(function), doms(function), log(log) {}
 
     void operator()() {
         ScopeAnalysis analysis(function, log);
@@ -39,15 +40,20 @@ class TheScopeResolution {
                 else if (ldfun)
                     ld = ldfun;
 
-                if (auto call = CallInstruction::CastCall(i)) {
-                    if (auto cls = call->tryGetCls()) {
-                        // If we know the target of the call and the analysis
-                        // a more precise type of the function we can update
-                        // callsite.
-                        if (analysis.funTypes.count(cls) &&
-                            !i->type.isA(analysis.funTypes.at(cls))) {
-                            i->type = analysis.funTypes.at(cls);
-                        }
+                if (analysis.returnValues.count(i)) {
+                    auto force = Force::Cast(i);
+                    auto res = analysis.returnValues.at(i);
+                    if (res.isSingleValue() &&
+                        res.singleValue().origin->bb()->owner == function &&
+                        doms.dominates(res.singleValue().origin->bb(), bb)) {
+                        i->replaceUsesWith(res.singleValue().val);
+                        next = bb->remove(ip);
+                    } else {
+                        auto type = res.type;
+                        if (!i->type.isA(type))
+                            i->type = type;
+                        if (force && !analysis.mayUseReflection)
+                            force->elideEnv();
                     }
                 } else if (ldfun && ldfun->guessedBinding() &&
                            ldfun->guessedBinding()->type.isA(

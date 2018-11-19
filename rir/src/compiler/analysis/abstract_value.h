@@ -80,6 +80,11 @@ struct AbstractPirValue {
         return vals.size() == 1;
     }
 
+    const ValOrig& singleValue() const {
+        assert(vals.size() == 1);
+        return *vals.begin();
+    }
+
     typedef std::function<void(Value*)> ValMaybe;
     typedef std::function<void(ValOrig&)> ValOrigMaybe;
     typedef std::function<bool(ValOrig&)> ValOrigMaybePredicate;
@@ -99,6 +104,10 @@ struct AbstractPirValue {
             if (!apply(v))
                 return false;
         return true;
+    }
+
+    bool merge(const ValOrig& other) {
+        return merge(AbstractPirValue(other.val, other.origin));
     }
 
     bool merge(const AbstractPirValue& other);

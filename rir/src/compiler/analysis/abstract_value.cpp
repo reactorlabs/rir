@@ -88,7 +88,7 @@ void AbstractPirValue::print(std::ostream& out, bool tty) {
 MkFunCls* AbstractREnvironmentHierarchy::findClosure(Value* env, Value* fun) {
     if (aliases.count(env))
         env = aliases.at(env);
-    fun = fun->baseValue();
+    fun = fun->followCastsAndForce();
     while (env && env != AbstractREnvironment::UnknownParent) {
         if (envs[env].mkClosures.count(fun))
             return envs[env].mkClosures.at(fun);

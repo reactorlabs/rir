@@ -35,7 +35,8 @@ class TheInliner {
 
                 FrameState* callerFrameState = nullptr;
                 if (auto call = Call::Cast(*it)) {
-                    auto mkcls = MkFunCls::Cast(call->cls()->baseValue());
+                    auto mkcls =
+                        MkFunCls::Cast(call->cls()->followCastsAndForce());
                     if (!mkcls)
                         continue;
                     inlinee = mkcls->fun;

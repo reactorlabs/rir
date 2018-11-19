@@ -27,7 +27,8 @@ class Value {
     virtual void printRef(std::ostream& out) = 0;
     void printRef() { printRef(std::cerr); }
     virtual bool isInstruction() { return false; }
-    virtual Value* baseValue() { return this; }
+    virtual Value* followCasts() { return this; }
+    virtual Value* followCastsAndForce() { return this; }
 };
 
 }

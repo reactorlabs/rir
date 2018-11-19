@@ -115,7 +115,7 @@ struct ForcedBy {
     }
 
     Force* getDominatingForce(Force* f) const {
-        auto a = f->arg<0>().val()->baseValue();
+        auto a = f->arg<0>().val()->followCasts();
         if (!forcedBy.count(a))
             return nullptr;
         auto res = forcedBy.at(a);
@@ -177,9 +177,9 @@ class ForceDominanceAnalysis : public StaticAnalysis<ForcedBy> {
 
     void apply(ForcedBy& d, Instruction* i) const override {
         if (auto f = Force::Cast(i)) {
-            if (MkArg* arg = MkArg::Cast(i->baseValue()))
+            if (MkArg* arg = MkArg::Cast(f->arg<0>().val()->followCasts()))
                 d.forcedAt(arg, f);
-            if (LdArg* arg = LdArg::Cast(i->baseValue()))
+            if (LdArg* arg = LdArg::Cast(f->arg<0>().val()->followCasts()))
                 d.forcedAt(arg, f);
         } else if (auto mk = MkArg::Cast(i)) {
             d.declare(mk);
@@ -187,9 +187,10 @@ class ForceDominanceAnalysis : public StaticAnalysis<ForcedBy> {
             d.declare(ld);
         } else if (!CastType::Cast(i)) {
             i->eachArg([&](Value* v) {
-                if (auto arg = MkArg::Cast(v->baseValue()))
+                v = v->followCasts();
+                if (auto arg = MkArg::Cast(v))
                     d.escape(arg);
-                if (auto arg = LdArg::Cast(v->baseValue()))
+                if (auto arg = LdArg::Cast(v))
                     d.escape(arg);
             });
             if (i->mayForcePromises())
@@ -206,7 +207,8 @@ namespace pir {
 void ForceDominance::apply(RirCompiler&, Closure* cls, LogStream& log) const {
     auto apply = [&](Code* code) {
         ForceDominanceAnalysis analysis(
-            cls, code, log, ForceDominanceAnalysis::DebugLevel::Instruction);
+            cls, code,
+            log /* , ForceDominanceAnalysis::DebugLevel::Instruction */);
         analysis();
         auto& result = analysis.result();
 
@@ -221,7 +223,8 @@ void ForceDominance::apply(RirCompiler&, Closure* cls, LogStream& log) const {
                 if (auto f = Force::Cast(*ip)) {
                     if (result.isDominatingForce(f)) {
                         f->strict = true;
-                        if (auto mkarg = MkArg::Cast(f->baseValue())) {
+                        if (auto mkarg =
+                                MkArg::Cast(f->followCastsAndForce())) {
                             Value* strict = mkarg->eagerArg();
                             if (strict != Missing::instance()) {
                                 f->replaceUsesWith(strict);
@@ -308,8 +311,10 @@ void ForceDominance::apply(RirCompiler&, Closure* cls, LogStream& log) const {
         });
 
         // 3. replace remaining uses of the mkarg itself
-        for (auto m : forcedMkArg)
+        for (auto m : forcedMkArg) {
             m.first->replaceUsesIn(m.second, m.second->bb());
+            m.first->eraseAndRemove();
+        }
     };
     apply(cls);
     cls->eachPromise([&](Promise* p) { apply(p); });

@@ -10,6 +10,16 @@ BB::BB(Code* owner, unsigned id) : id(id), owner(owner) {
     assert(id < owner->nextBBId);
 }
 
+void BB::remove(Instruction* i) {
+    for (auto it = instrs.begin(); it != instrs.end(); ++it) {
+        if (*it == i) {
+            remove(it);
+            return;
+        }
+    }
+    assert(false);
+}
+
 void BB::print(std::ostream& out, bool tty) {
     out << "BB" << id << "\n";
     for (auto i : instrs) {
