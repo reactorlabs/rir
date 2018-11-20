@@ -2,6 +2,7 @@
 #define PIR_ABSTRACT_VALUE_H
 
 #include "../pir/pir.h"
+#include "abstract_result.h"
 
 #include <functional>
 #include <set>
@@ -10,6 +11,7 @@
 
 namespace rir {
 namespace pir {
+
 struct ValOrig {
     Value* val;
     Instruction* origin;
@@ -74,7 +76,7 @@ struct AbstractPirValue {
 
     bool isUnknown() const { return unknown; }
 
-    bool isSingleValue() {
+    bool isSingleValue() const {
         if (unknown)
             return false;
         return vals.size() == 1;
@@ -106,11 +108,11 @@ struct AbstractPirValue {
         return true;
     }
 
-    bool merge(const ValOrig& other) {
+    AbstractResult merge(const ValOrig& other) {
         return merge(AbstractPirValue(other.val, other.origin));
     }
 
-    bool merge(const AbstractPirValue& other);
+    AbstractResult merge(const AbstractPirValue& other);
 
     void print(std::ostream& out, bool tty = false);
 };
@@ -162,27 +164,32 @@ struct AbstractREnvironment {
 
     const bool absent(SEXP e) const { return !tainted && !entries.count(e); }
 
-    bool merge(const AbstractREnvironment& other) {
-        bool changed = false;
-        if (!leaked && other.leaked)
-            changed = leaked = true;
-        if (!tainted && other.tainted)
-            changed = tainted = true;
+    AbstractResult merge(const AbstractREnvironment& other) {
+        AbstractResult res;
+
+        if (!leaked && other.leaked) {
+            leaked = true;
+            res.lostPrecision();
+        }
+        if (!tainted && other.tainted) {
+            tainted = true;
+            res.taint();
+        }
 
         for (auto entry : other.entries) {
             auto name = entry.first;
             if (!entries.count(name)) {
                 entries[name].taint();
-                changed = true;
-            } else if (entries[name].merge(other.get(name))) {
-                changed = true;
+                res.lostPrecision();
+            } else {
+                res.max(entries[name].merge(other.get(name)));
             }
         }
         for (auto entry : entries) {
             auto name = entry.first;
             if (!other.entries.count(name) && !entries.at(name).isUnknown()) {
                 entries.at(name).taint();
-                changed = true;
+                res.lostPrecision();
             }
         }
 
@@ -202,15 +209,15 @@ struct AbstractREnvironment {
         if (parentEnv_ == UninitializedParent &&
             other.parentEnv_ != UninitializedParent) {
             parentEnv(other.parentEnv());
-            changed = true;
+            res.update();
         } else if (parentEnv_ != UninitializedParent &&
                    parentEnv_ != UnknownParent &&
                    other.parentEnv_ != parentEnv_) {
             parentEnv_ = UnknownParent;
-            changed = true;
+            res.lostPrecision();
         }
 
-        return changed;
+        return res;
     }
 
     Value* parentEnv() const {
@@ -252,8 +259,9 @@ class AbstractREnvironmentHierarchy {
   public:
     std::unordered_map<Value*, Value*> aliases;
 
-    bool merge(const AbstractREnvironmentHierarchy& other) {
-        bool changed = false;
+    AbstractResult merge(const AbstractREnvironmentHierarchy& other) {
+        AbstractResult res;
+
         std::unordered_set<Value*> k;
         for (auto e : envs)
             k.insert(e.first);
@@ -263,25 +271,25 @@ class AbstractREnvironmentHierarchy {
             if (envs.count(i)) {
                 if (other.envs.count(i) == 0) {
                     if (!envs.at(i).tainted) {
-                        changed = true;
                         envs.at(i).taint();
+                        res.taint();
                     }
-                } else if (envs.at(i).merge(other.envs.at(i))) {
-                    changed = true;
+                } else {
+                    res.max(envs.at(i).merge(other.envs.at(i)));
                 }
             } else {
                 envs[i].taint();
-                changed = true;
+                res.taint();
             }
         for (auto& a : other.aliases) {
             if (!aliases.count(a.first)) {
                 aliases.emplace(a);
-                changed = true;
+                res.update();
             } else {
                 SLOWASSERT(a.second == aliases.at(a.first));
             }
         }
-        return changed;
+        return res;
     }
 
     AbstractREnvironment& operator[](Value* env) {

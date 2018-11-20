@@ -748,25 +748,24 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
         }
     }
 
+    // SEXP builtin = fun->u.symsxp.value;
+    // if (TYPEOF(builtin) == BUILTINSXP) {
+    //     for (auto a = args.begin(); a != args.end(); ++a)
+    //         if (a.hasTag() || *a == R_DotsSymbol || *a == R_MissingArg)
+    //             return false;
 
-    SEXP builtin = fun->u.symsxp.value;
-    if (TYPEOF(builtin) == BUILTINSXP) {
-        for (auto a = args.begin(); a != args.end(); ++a)
-            if (a.hasTag() || *a == R_DotsSymbol || *a == R_MissingArg)
-                return false;
+    //     // Those are somehow overloaded in std libs
+    //     if (fun == symbol::standardGeneric)
+    //         return false;
 
-        // Those are somehow overloaded in std libs
-        if (fun == symbol::standardGeneric)
-            return false;
+    //     cs << BC::guardNamePrimitive(fun);
 
-        cs << BC::guardNamePrimitive(fun);
+    //     for (auto a : args)
+    //         compileExpr(ctx, a);
+    //     cs << BC::staticCall(args.length(), ast, builtin);
 
-        for (auto a : args)
-            compileExpr(ctx, a);
-        cs << BC::staticCall(args.length(), ast, builtin);
-
-        return true;
-    }
+    //     return true;
+    // }
 
     if (fun == symbol::debugBreak) {
         // Push R_NilValue because this is a "function call" and needs to return

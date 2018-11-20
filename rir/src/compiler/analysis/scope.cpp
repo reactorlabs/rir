@@ -14,48 +14,56 @@ struct ScopeAnalysisState {
 
     bool mayUseReflection = false;
 
-    bool merge(const ScopeAnalysisState& other) {
-        bool changed = false;
+    AbstractResult merge(const ScopeAnalysisState& other) {
+        AbstractResult res;
+
         std::unordered_set<Closure*> ks;
         for (const auto& f : other.returnValues)
-            changed = returnValues[f.first].merge(f.second) || changed;
-        if (!mayUseReflection && other.mayUseReflection)
-            mayUseReflection = changed = true;
+            res.max(returnValues[f.first].merge(f.second));
+        if (!mayUseReflection && other.mayUseReflection) {
+            mayUseReflection = true;
+            res.lostPrecision();
+        }
         allStoresObserved.insert(other.allStoresObserved.begin(),
                                  other.allStoresObserved.end());
         for (auto s : other.observedStores) {
             if (!observedStores.count(s)) {
                 observedStores.insert(s);
-                changed = true;
+                res.update();
             }
         }
         for (auto s : other.allStoresObserved) {
             if (!allStoresObserved.count(s)) {
                 allStoresObserved.insert(s);
-                changed = true;
+                res.update();
             }
         }
-        return envs.merge(other.envs) || changed;
+        res.max(envs.merge(other.envs));
+        return res;
     }
 
-    bool mergeCall(Code* cur, const ScopeAnalysisState& other) {
-        bool changed = false;
+    AbstractResult mergeCall(Code* cur, const ScopeAnalysisState& other) {
+        AbstractResult res;
+
         std::unordered_set<Closure*> ks;
-        if (!mayUseReflection && other.mayUseReflection)
-            mayUseReflection = changed = true;
+        if (!mayUseReflection && other.mayUseReflection) {
+            mayUseReflection = true;
+            res.lostPrecision();
+        }
         for (auto s : other.observedStores) {
             if (!observedStores.count(s)) {
                 observedStores.insert(s);
-                changed = true;
+                res.update();
             }
         }
         for (auto s : other.allStoresObserved) {
             if (!allStoresObserved.count(s)) {
                 allStoresObserved.insert(s);
-                changed = true;
+                res.update();
             }
         }
-        return envs.merge(other.envs) || changed;
+        res.max(envs.merge(other.envs));
+        return res;
     }
 
     void print(std::ostream& out, bool tty) {
@@ -105,7 +113,8 @@ class TheScopeAnalysis : public StaticAnalysis<ScopeAnalysisState> {
         : Super("Scope", cls, prom, initialState, log, debug), depth(depth),
           promiseEnv(promEnv) {}
 
-    void apply(ScopeAnalysisState& state, Instruction* i) const override;
+    AbstractResult apply(ScopeAnalysisState& state,
+                         Instruction* i) const override;
 
     typedef std::function<void(AbstractLoad)> LoadMaybe;
     RIR_INLINE void tryLoad(const ScopeAnalysisState& envs, Value* i,
@@ -126,8 +135,10 @@ void TheScopeAnalysis::tryLoad(const ScopeAnalysisState& s, Value* i,
     }
 }
 
-void TheScopeAnalysis::apply(ScopeAnalysisState& state, Instruction* i) const {
+AbstractResult TheScopeAnalysis::apply(ScopeAnalysisState& state,
+                                       Instruction* i) const {
     bool handled = false;
+    AbstractResult effect = AbstractResult::None;
 
     // As we go, the analysis records stores and it records the results of
     // interprocedurally followed calls and forces.
@@ -135,23 +146,23 @@ void TheScopeAnalysis::apply(ScopeAnalysisState& state, Instruction* i) const {
     // if for a particular value we have already a result available from the
     // above.
     std::function<ValOrig(Value*, Instruction*)> drillDown =
-        [&](Value* v, Instruction* orig) {
+        [=, &drillDown](Value* v, Instruction* orig) {
             ValOrig real(v, orig);
-            bool changed = false;
+            bool followed = false;
             tryLoad(state, v, [&](AbstractLoad ld) {
                 if (ld.result.isSingleValue()) {
                     real = ld.result.singleValue();
-                    changed = true;
+                    followed = true;
                 }
             });
             auto* i = Instruction::Cast(v);
             if (i && state.returnValues.count(i)) {
                 if (state.returnValues.at(i).isSingleValue()) {
                     real = state.returnValues.at(i).singleValue();
-                    changed = true;
+                    followed = true;
                 }
             }
-            if (changed)
+            if (followed)
                 return drillDown(real.val, real.origin);
             else
                 return real;
@@ -160,6 +171,7 @@ void TheScopeAnalysis::apply(ScopeAnalysisState& state, Instruction* i) const {
     if (auto ret = Return::Cast(i)) {
         auto res = drillDown(ret->arg<0>().val(), i);
         state.result.merge(res);
+        effect.max(AbstractResult::Updated);
     } else if (auto mk = MkEnv::Cast(i)) {
         Value* lexicalEnv = mk->lexicalEnv();
         // If we know the caller, we can fill in the parent env
@@ -171,6 +183,7 @@ void TheScopeAnalysis::apply(ScopeAnalysisState& state, Instruction* i) const {
         mk->eachLocalVar(
             [&](SEXP name, Value* val) { state.envs[mk].set(name, val, mk); });
         handled = true;
+        effect.max(AbstractResult::Updated);
     } else if (auto le = LdFunctionEnv::Cast(i)) {
         // LdFunctionEnv happen inside promises and refer back to the caller
         // environment, ie. the instruction that created the promise.
@@ -181,11 +194,14 @@ void TheScopeAnalysis::apply(ScopeAnalysisState& state, Instruction* i) const {
     } else if (auto ldfun = LdFun::Cast(i)) {
         // Avoid sideeffect if we know that we load a function without forcing
         if (state.envs.get(ldfun->env(), ldfun->varName)
-                .result.type.isA(PirType::closure()))
+                .result.type.isA(PirType::closure())) {
+            effect.max(AbstractResult::Updated);
             handled = true;
+        }
     } else if (auto s = StVar::Cast(i)) {
         state.envs[s->env()].set(s->varName, s->val(), s);
         handled = true;
+        effect.max(AbstractResult::Updated);
     } else if (auto ss = StVarSuper::Cast(i)) {
         auto superEnv = state.envs[ss->env()].parentEnv();
         if (superEnv != AbstractREnvironment::UnknownParent) {
@@ -197,6 +213,7 @@ void TheScopeAnalysis::apply(ScopeAnalysisState& state, Instruction* i) const {
                 });
                 state.envs[superEnv].set(ss->varName, ss->val(), ss);
                 handled = true;
+                effect.max(AbstractResult::Updated);
             }
         }
     } else if (Force::Cast(i)) {
@@ -207,6 +224,7 @@ void TheScopeAnalysis::apply(ScopeAnalysisState& state, Instruction* i) const {
         if (!arg.val->type.maybeLazy()) {
             state.returnValues[i].merge(arg);
             handled = true;
+            effect.max(AbstractResult::Updated);
         } else if (depth < maxDepth) {
             if (force->strict) {
                 // We are certain that we do force something here. Let's peek
@@ -219,17 +237,20 @@ void TheScopeAnalysis::apply(ScopeAnalysisState& state, Instruction* i) const {
                     state.mergeCall(code, prom.result());
                     state.returnValues[i].merge(prom.result().result);
                     handled = true;
+                    effect.max(AbstractResult::Updated);
                 }
             }
         }
-        if (!handled)
+        if (!handled) {
             state.returnValues[i].merge(AbstractPirValue::tainted());
+            effect.max(AbstractResult::Tainted);
+        }
     } else if (CallInstruction::CastCall(i) && depth < maxDepth) {
         auto calli = CallInstruction::CastCall(i);
         if (auto call = Call::Cast(i)) {
             auto trg = drillDown(call->cls()->followCastsAndForce(), i).val;
             assert(trg);
-            MkFunCls* cls = state.envs.findClosure(call->callerEnv(), trg);
+            auto cls = state.envs.findClosure(call->callerEnv(), trg);
             if (cls != AbstractREnvironment::UnknownClosure) {
                 if (cls->fun->argNames.size() == calli->nCallArgs()) {
                     if (cls->fun != closure) {
@@ -240,6 +261,7 @@ void TheScopeAnalysis::apply(ScopeAnalysisState& state, Instruction* i) const {
                         state.mergeCall(code, nextFun.result());
                         state.returnValues[i].merge(nextFun.result().result);
                         handled = true;
+                        effect.max(AbstractResult::Updated);
                     }
                 }
             }
@@ -254,6 +276,7 @@ void TheScopeAnalysis::apply(ScopeAnalysisState& state, Instruction* i) const {
                     state.mergeCall(code, nextFun.result());
                     state.returnValues[i].merge(nextFun.result().result);
                     handled = true;
+                    effect.max(AbstractResult::Updated);
                 }
             }
         } else {
@@ -264,8 +287,10 @@ void TheScopeAnalysis::apply(ScopeAnalysisState& state, Instruction* i) const {
             if (!CallSafeBuiltin::Cast(i))
                 state.mayUseReflection = true;
         }
-        if (!handled)
+        if (!handled) {
+            effect.max(AbstractResult::Tainted);
             state.returnValues[i].merge(AbstractPirValue::tainted());
+        }
     }
 
     // Keep track of closures
@@ -295,14 +320,18 @@ void TheScopeAnalysis::apply(ScopeAnalysisState& state, Instruction* i) const {
                     state.envs[i->env()].leaked = true;
                     for (auto env : state.envs.potentialParents(i->env()))
                         state.allStoresObserved.insert(env);
+                    effect.max(AbstractResult::Updated);
                 }
                 if (i->changesEnv()) {
                     state.envs[i->env()].taint();
+                    effect.max(AbstractResult::Tainted);
                 }
             }
         }
-        if (i->mayUseReflection())
+        if (i->mayUseReflection()) {
             state.mayUseReflection = true;
+            effect.max(AbstractResult::Updated);
+        }
     }
 
     tryLoad(state, i, [&](AbstractLoad load) {
@@ -314,6 +343,7 @@ void TheScopeAnalysis::apply(ScopeAnalysisState& state, Instruction* i) const {
                 [&](ValOrig& src) { state.observedStores.insert(src.origin); });
         }
     });
+    return effect;
 }
 }
 
@@ -321,12 +351,12 @@ namespace rir {
 namespace pir {
 
 ScopeAnalysis::ScopeAnalysis(Closure* function, LogStream& log) {
-    TheScopeAnalysis analysis(function, function->argNames, log
-                              /*, TheScopeAnalysis::DebugLevel::Instruction*/);
+    TheScopeAnalysis analysis(function, function->argNames, log,
+                              TheScopeAnalysis::DebugLevel::Taint);
     analysis();
 
     // Collect all abstract values of all loads
-    analysis.foreach<PositioningStyle::BeforeInstruction>(
+    analysis.foreach<TheScopeAnalysis::PositioningStyle::BeforeInstruction>(
         [&](const ScopeAnalysisState& state, Instruction* i) {
             analysis.tryLoad(
                 state, i, [&](AbstractLoad load) { loads.emplace(i, load); });

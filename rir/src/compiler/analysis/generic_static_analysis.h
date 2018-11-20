@@ -8,14 +8,13 @@
 #include "../util/cfg.h"
 #include "../util/visitor.h"
 #include "R/r.h"
+#include "abstract_result.h"
 
 #include <stack>
 #include <unordered_map>
 
 namespace rir {
 namespace pir {
-
-enum class PositioningStyle { BeforeInstruction, AfterInstruction };
 
 /*
  * Generic implementation of a (forward) static analysis.
@@ -40,11 +39,22 @@ enum class PositioningStyle { BeforeInstruction, AfterInstruction };
 
 template <class AbstractState>
 class StaticAnalysis {
+  public:
+    enum class PositioningStyle { BeforeInstruction, AfterInstruction };
+    enum class DebugLevel {
+        None,
+        Taint,
+        Exit,
+        Merge,
+        BB,
+        Instruction,
+    };
+
   private:
     const std::string name;
 
     std::vector<std::vector<AbstractState>> mergepoint;
-    virtual void apply(AbstractState&, Instruction*) const = 0;
+    virtual AbstractResult apply(AbstractState&, Instruction*) const = 0;
     AbstractState exitpoint;
     bool done = false;
 
@@ -55,20 +65,13 @@ class StaticAnalysis {
 
     LogStream& log;
 
-  public:
-    enum class DebugLevel {
-        None,
-        Exit,
-        Merge,
-        BB,
-        Instruction,
-    };
     const DebugLevel debug;
 
     Closure* closure;
     Code* code;
     BB* entry;
 
+  public:
     StaticAnalysis(std::string name, Closure* cls, Code* code, LogStream& log,
                    DebugLevel debug = DebugLevel::None)
         : name(name), log(log), debug(debug), closure(cls), code(code),
@@ -173,10 +176,26 @@ class StaticAnalysis {
                 }
 
                 for (auto i : *bb) {
-                    apply(state, i);
-                    if (debug >= DebugLevel::Instruction) {
+                    AbstractState old;
+                    if (debug == DebugLevel::Taint)
+                        old = state;
+                    auto res = apply(state, i);
+                    if ((debug >= DebugLevel::Instruction &&
+                         res >= AbstractResult::None) ||
+                        (debug >= DebugLevel::Taint &&
+                         res >= AbstractResult::Tainted)) {
+                        if (res == AbstractResult::Tainted) {
+                            log << "===== Before applying instruction ";
+                            log(i);
+                            log << " we have\n";
+                            log(old);
+                        }
                         log << "===== After applying instruction ";
-                        log(i);
+                        if (res == AbstractResult::Tainted) {
+                            log << " (State got tainted)";
+                        } else {
+                            log(i);
+                        }
                         log << " we have\n";
                         log(state);
                     }
@@ -206,62 +225,54 @@ class StaticAnalysis {
                     return;
                 }
 
-                if (bb->trueBranch()) {
-                    if (mergepoint[bb->trueBranch()->id].empty()) {
-                        mergepoint[bb->trueBranch()->id].push_back(state);
-                        done = false;
-                        changed[bb->trueBranch()->id] = true;
-                    } else {
-                        if (debug >= DebugLevel::Merge) {
-                            log << "===== State to merge is:\n";
-                            log(state);
-                        }
-                        if (mergepoint[bb->trueBranch()->id][0].merge(state)) {
-                            if (debug >= DebugLevel::Merge) {
-                                log << "===== Merging into trueBranch BB"
-                                    << bb->trueBranch()->id
-                                    << " updated state:\n";
-                                log(mergepoint[bb->trueBranch()->id][0]);
-                            }
-                            done = false;
-                            changed[bb->trueBranch()->id] = true;
-                        } else if (debug >= DebugLevel::Merge) {
-                            log << "===== Merging into trueBranch BB"
-                                << bb->trueBranch()->id
-                                << " reached fixpoint\n";
-                        }
-                    }
-                }
-                if (bb->falseBranch()) {
-                    if (mergepoint[bb->falseBranch()->id].empty()) {
-                        mergepoint[bb->falseBranch()->id].push_back(state);
-                        done = false;
-                        changed[bb->falseBranch()->id] = true;
-                    } else {
-                        if (debug >= DebugLevel::Merge) {
-                            log << "===== State to merge is:\n";
-                            log(state);
-                        }
-                        if (mergepoint[bb->falseBranch()->id][0].merge(state)) {
-                            if (debug >= DebugLevel::Merge) {
-                                log << "===== Merging into falseBranch BB"
-                                    << bb->trueBranch()->id
-                                    << " updated state:\n";
-                                log(mergepoint[bb->trueBranch()->id][0]);
-                            }
-                            done = false;
-                            changed[bb->falseBranch()->id] = true;
-                        } else if (debug >= DebugLevel::Merge) {
-                            log << "===== Merging into falseBranch BB"
-                                << bb->trueBranch()->id
-                                << " reached fixpoint\n";
-                        }
-                    }
-                }
+                mergeBranch(bb, bb->trueBranch(), state, changed);
+                mergeBranch(bb, bb->falseBranch(), state, changed);
 
                 changed[id] = false;
             });
         } while (!done);
+    }
+
+    void mergeBranch(BB* in, BB* branch, const AbstractState& state,
+                     std::vector<bool>& changed) {
+        if (!branch)
+            return;
+
+        auto id = branch->id;
+        if (mergepoint[id].empty()) {
+            mergepoint[id].push_back(state);
+            done = false;
+            changed[id] = true;
+        } else {
+            AbstractState old;
+            if (debug >= DebugLevel::Taint) {
+                old = mergepoint[id][0];
+            }
+            AbstractResult mres = mergepoint[id][0].merge(state);
+            if (mres > AbstractResult::None) {
+                if (debug >= DebugLevel::Merge ||
+                    (mres == AbstractResult::Tainted &&
+                     debug == DebugLevel::Taint)) {
+                    log << "===== Merging BB" << in->id << " into BB" << id
+                        << (mres == AbstractResult::Tainted ? " tainted" : "")
+                        << (mres == AbstractResult::LostPrecision
+                                ? " lost precision"
+                                : "")
+                        << " updated state:\n";
+                    log << "===- In state is:\n";
+                    log(state);
+                    log << "===- Old state is:\n";
+                    log(old);
+                    log << "===- Merged state is:\n";
+                    log(mergepoint[id][0]);
+                }
+                done = false;
+                changed[id] = true;
+            } else if (debug >= DebugLevel::Merge) {
+                log << "===== Merging into trueBranch BB" << id
+                    << " reached fixpoint\n";
+            }
+        }
     }
 };
 }

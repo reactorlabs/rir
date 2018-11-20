@@ -53,26 +53,46 @@ struct ForcedBy {
         return &f;
     }
 
-    void declare(Value* arg) { declared.insert(arg); }
+    bool declare(Value* arg) {
+        if (!declared.count(arg)) {
+            declared.insert(arg);
+            return true;
+        }
+        return false;
+    }
 
-    void sideeffect() {
+    bool sideeffect() {
+        bool changed = false;
         // when we execute an instruction that could force promises as a
         // sideeffect, we have to assume that all escaped promises might have
         // been forced
         for (auto& e : escaped)
-            if (!forcedBy.count(e))
+            if (!forcedBy.count(e)) {
                 forcedBy[e] = ambiguous();
+                changed = true;
+            }
+        return changed;
     }
 
-    void forcedAt(Value* val, Force* force) {
-        if (!forcedBy.count(val))
+    bool forcedAt(Value* val, Force* force) {
+        if (!forcedBy.count(val)) {
             forcedBy[val] = force;
+            return true;
+        }
+        return false;
     }
 
-    void escape(Value* val) { escaped.insert(val); }
+    bool escape(Value* val) {
+        if (!escaped.count(val)) {
+            escaped.insert(val);
+            return true;
+        }
+        return false;
+    }
 
-    bool merge(const ForcedBy& other) {
-        bool changed = false;
+    AbstractResult merge(const ForcedBy& other) {
+        AbstractResult res;
+
         for (auto& e : forcedBy) {
             auto v = e.first;
             auto f = e.second;
@@ -80,13 +100,13 @@ struct ForcedBy {
                 if (f != other.forcedBy.at(v)) {
                     if (e.second != ambiguous()) {
                         e.second = ambiguous();
-                        changed = true;
+                        res.lostPrecision();
                     }
                 }
             } else if (other.declared.count(v)) {
                 if (e.second != ambiguous()) {
                     e.second = ambiguous();
-                    changed = true;
+                    res.lostPrecision();
                 }
             }
         }
@@ -94,20 +114,21 @@ struct ForcedBy {
             if (!forcedBy.count(e.first)) {
                 if (declared.count(e.first)) {
                     forcedBy[e.first] = ambiguous();
+                    res.lostPrecision();
                 } else {
                     declared.insert(e.first);
                     forcedBy[e.first] = e.second;
+                    res.update();
                 }
-                changed = true;
             }
         }
         for (auto& e : other.escaped) {
             if (!escaped.count(e)) {
                 escaped.insert(e);
-                changed = true;
+                res.update();
             }
         }
-        return changed;
+        return res;
     }
 
     bool isDominatingForce(Force* f) const {
@@ -175,27 +196,29 @@ class ForceDominanceAnalysis : public StaticAnalysis<ForcedBy> {
                                     DebugLevel debug = DebugLevel::None)
         : StaticAnalysis("ForceDominance", cls, code, log, debug) {}
 
-    void apply(ForcedBy& d, Instruction* i) const override {
+    AbstractResult apply(ForcedBy& d, Instruction* i) const override {
+        bool changed = false;
         if (auto f = Force::Cast(i)) {
             if (MkArg* arg = MkArg::Cast(f->arg<0>().val()->followCasts()))
-                d.forcedAt(arg, f);
+                changed = d.forcedAt(arg, f) || changed;
             if (LdArg* arg = LdArg::Cast(f->arg<0>().val()->followCasts()))
-                d.forcedAt(arg, f);
+                changed = d.forcedAt(arg, f) || changed;
         } else if (auto mk = MkArg::Cast(i)) {
-            d.declare(mk);
+            changed = d.declare(mk) || changed;
         } else if (auto ld = LdArg::Cast(i)) {
-            d.declare(ld);
+            changed = d.declare(ld) || changed;
         } else if (!CastType::Cast(i)) {
             i->eachArg([&](Value* v) {
                 v = v->followCasts();
                 if (auto arg = MkArg::Cast(v))
-                    d.escape(arg);
+                    changed = d.escape(arg) || changed;
                 if (auto arg = LdArg::Cast(v))
-                    d.escape(arg);
+                    changed = d.escape(arg) || changed;
             });
             if (i->mayForcePromises())
-                d.sideeffect();
+                changed = d.sideeffect() || changed;
         }
+        return changed ? AbstractResult::Updated : AbstractResult::None;
     }
 };
 

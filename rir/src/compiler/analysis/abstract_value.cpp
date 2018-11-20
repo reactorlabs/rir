@@ -43,18 +43,18 @@ void AbstractREnvironment::print(std::ostream& out, bool tty) {
     }
 }
 
-bool AbstractPirValue::merge(const AbstractPirValue& other) {
+AbstractResult AbstractPirValue::merge(const AbstractPirValue& other) {
     assert(other.type != PirType::bottom());
 
     if (unknown)
-        return false;
+        return AbstractResult::None;
     if (type == PirType::bottom()) {
         *this = other;
-        return true;
+        return AbstractResult::Updated;
     }
     if (other.unknown) {
         unknown = true;
-        return true;
+        return AbstractResult::LostPrecision;
     }
 
     bool changed = false;
@@ -64,7 +64,7 @@ bool AbstractPirValue::merge(const AbstractPirValue& other) {
         changed = true;
     }
 
-    return changed;
+    return changed ? AbstractResult::Updated : AbstractResult::None;
 }
 
 void AbstractPirValue::print(std::ostream& out, bool tty) {
