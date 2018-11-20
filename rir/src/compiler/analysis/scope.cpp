@@ -119,6 +119,10 @@ class TheScopeAnalysis : public StaticAnalysis<ScopeAnalysisState> {
     typedef std::function<void(AbstractLoad)> LoadMaybe;
     RIR_INLINE void tryLoad(const ScopeAnalysisState& envs, Value* i,
                             LoadMaybe) const;
+    typedef std::function<void(const AbstractPirValue&)> AbstractValMaybe;
+    typedef std::function<void()> Maybe;
+    inline void drillDown(const ScopeAnalysisState& envs, Value* i,
+                          AbstractValMaybe, Maybe notFound = []() {}) const;
 };
 const std::vector<SEXP> TheScopeAnalysis::noArgs;
 
@@ -135,42 +139,50 @@ void TheScopeAnalysis::tryLoad(const ScopeAnalysisState& s, Value* i,
     }
 }
 
-AbstractResult TheScopeAnalysis::apply(ScopeAnalysisState& state,
-                                       Instruction* i) const {
-    bool handled = false;
-    AbstractResult effect = AbstractResult::None;
-
+void TheScopeAnalysis::drillDown(const ScopeAnalysisState& s, Value* v,
+                                 AbstractValMaybe found, Maybe notFound) const {
     // As we go, the analysis records stores and it records the results of
     // interprocedurally followed calls and forces.
     // The drillDown helper checks the current state of the analysis, to see
     // if for a particular value we have already a result available from the
     // above.
-    std::function<ValOrig(Value*, Instruction*)> drillDown =
-        [=, &drillDown](Value* v, Instruction* orig) {
-            ValOrig real(v, orig);
-            bool followed = false;
-            tryLoad(state, v, [&](AbstractLoad ld) {
-                if (ld.result.isSingleValue()) {
-                    real = ld.result.singleValue();
-                    followed = true;
-                }
-            });
-            auto* i = Instruction::Cast(v);
-            if (i && state.returnValues.count(i)) {
-                if (state.returnValues.at(i).isSingleValue()) {
-                    real = state.returnValues.at(i).singleValue();
-                    followed = true;
-                }
-            }
-            if (followed)
-                return drillDown(real.val, real.origin);
-            else
-                return real;
-        };
+
+    bool done = false;
+    auto i = Instruction::Cast(v);
+    if (s.returnValues.count(i)) {
+        done = true;
+        auto& res = s.returnValues.at(i);
+        if (res.isSingleValue()) {
+            return drillDown(s, res.singleValue().val, found,
+                             [&]() { found(res); });
+        }
+        found(res);
+    }
+    tryLoad(s, v, [&](AbstractLoad l) {
+        done = true;
+        auto& res = l.result;
+        if (res.isSingleValue()) {
+            return drillDown(s, res.singleValue().val, found,
+                             [&]() { found(res); });
+        }
+        found(res);
+    });
+    if (!done)
+        notFound();
+}
+
+AbstractResult TheScopeAnalysis::apply(ScopeAnalysisState& state,
+                                       Instruction* i) const {
+    bool handled = false;
+    AbstractResult effect = AbstractResult::None;
 
     if (auto ret = Return::Cast(i)) {
-        auto res = drillDown(ret->arg<0>().val(), i);
-        state.result.merge(res);
+        auto res = ret->arg<0>().val();
+        drillDown(state, res,
+                  [&](const AbstractPirValue& analysisRes) {
+                      state.result.merge(analysisRes);
+                  },
+                  [&]() { state.result.merge(ValOrig(res, i)); });
         effect.update();
     } else if (auto mk = MkEnv::Cast(i)) {
         Value* lexicalEnv = mk->lexicalEnv();
@@ -220,25 +232,35 @@ AbstractResult TheScopeAnalysis::apply(ScopeAnalysisState& state,
         // First try to figure out what we force. If it's a non lazy thing, we
         // do not need to bother.
         auto force = Force::Cast(i);
-        auto arg = drillDown(force->arg<0>().val(), i);
-        if (!arg.val->type.maybeLazy()) {
-            state.returnValues[i].merge(arg);
+        auto arg = force->arg<0>().val();
+        if (!arg->type.maybeLazy()) {
+            effect.max(state.returnValues[i].merge(ValOrig(arg, i)));
             handled = true;
-            effect.update();
-        } else if (depth < maxDepth) {
-            if (force->strict) {
-                // We are certain that we do force something here. Let's peek
-                // through the argument and see if we find a promise. If so, we
-                // will analyze it.
-                if (auto mkarg = MkArg::Cast(arg.val->followCastsAndForce())) {
-                    TheScopeAnalysis prom(closure, mkarg->prom(), mkarg->env(),
-                                          state, depth + 1, log, debug);
-                    prom();
-                    state.mergeCall(code, prom.result());
-                    state.returnValues[i].merge(prom.result().result);
-                    handled = true;
-                    effect.update();
-                }
+        } else {
+            drillDown(state, arg->followCastsAndForce(),
+                      [&](const AbstractPirValue& analysisRes) {
+                          if (!analysisRes.type.maybeLazy()) {
+                              effect.max(
+                                  state.returnValues[i].merge(analysisRes));
+                              handled = true;
+                          } else if (analysisRes.isSingleValue()) {
+                              arg = analysisRes.singleValue().val;
+                          }
+                      });
+        }
+
+        if (!handled && depth < maxDepth && force->strict) {
+            // We are certain that we do force something here. Let's peek
+            // through the argument and see if we find a promise. If so, we
+            // will analyze it.
+            if (auto mkarg = MkArg::Cast(arg->followCastsAndForce())) {
+                TheScopeAnalysis prom(closure, mkarg->prom(), mkarg->env(),
+                                      state, depth + 1, log, debug);
+                prom();
+                state.mergeCall(code, prom.result());
+                state.returnValues[i].merge(prom.result().result);
+                handled = true;
+                effect.update();
             }
         }
         if (!handled) {
@@ -249,7 +271,11 @@ AbstractResult TheScopeAnalysis::apply(ScopeAnalysisState& state,
         auto calli = CallInstruction::CastCall(i);
         if (auto call = Call::Cast(i)) {
             auto trg = call->cls()->followCastsAndForce();
-            trg = drillDown(trg, i).val->followCastsAndForce();
+            drillDown(state, trg, [&](const AbstractPirValue& analysisRes) {
+                if (analysisRes.isSingleValue()) {
+                    trg = analysisRes.singleValue().val->followCastsAndForce();
+                }
+            });
             assert(trg);
             if (auto cls = MkFunCls::Cast(trg)) {
                 if (cls->fun->argNames.size() == calli->nCallArgs()) {
@@ -299,9 +325,13 @@ AbstractResult TheScopeAnalysis::apply(ScopeAnalysisState& state,
             if (i->envOnlyForObj()) {
                 needed = false;
                 i->eachArg([&](Value* v) {
-                    if (!needed && v->type.maybeObj() &&
-                        drillDown(v, i).val->type.maybeObj()) {
-                        needed = true;
+                    if (!needed && v->type.maybeObj()) {
+                        drillDown(state, v,
+                                  [&](const AbstractPirValue& analysisRes) {
+                                      if (analysisRes.type.maybeObj())
+                                          needed = true;
+                                  },
+                                  [&]() { needed = true; });
                     }
                 });
             }
