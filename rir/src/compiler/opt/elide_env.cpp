@@ -15,10 +15,27 @@ void ElideEnv::apply(RirCompiler&, Closure* function, LogStream&) const {
 
     Visitor::run(function->entry, [&](Instruction* i) {
         if (i->hasEnv()) {
-            if (!StVar::Cast(i))
-                envNeeded.insert(i->env());
-            if (!Env::isPirEnv(i))
-                envDependency[i] = i->env();
+            bool needed = true;
+
+            if (i->envOnlyForObj()) {
+                needed = false;
+                i->eachArg([&](Value* v) {
+                    if (!needed && v != i->env() && v->type.maybeObj()) {
+                        needed = true;
+                    }
+                });
+                if (!needed) {
+                    i->elideEnv();
+                    i->type = i->type.notObject();
+                }
+            }
+
+            if (needed) {
+                if (!StVar::Cast(i))
+                    envNeeded.insert(i->env());
+                if (!Env::isPirEnv(i))
+                    envDependency[i] = i->env();
+            }
         }
     });
 

@@ -45,18 +45,18 @@ void Configurations::defaultOptimizations() {
         optimizations.push_back(new pir::Constantfold());
         optimizations.push_back(new pir::Cleanup());
         optimizations.push_back(new pir::DelayInstr());
-        optimizations.push_back(new pir::ElideEnvSpec());
         optimizations.push_back(new pir::ElideEnv());
         optimizations.push_back(new pir::DelayEnv());
     };
 
-    for (int i = 0; i < 10; ++i) {
+    for (int i = 0; i < 3; ++i) {
         for (int j = 0; j < 2; ++j) {
             addDefaultOpt();
             addDefaultOpt();
             optimizations.push_back(new pir::Cleanup());
             optimizations.push_back(new pir::Inline());
         }
+        optimizations.push_back(new pir::ElideEnvSpec());
         // This pass removes unused checkpoints
         if (i == 0)
             optimizations.push_back(new pir::CleanupCheckpoints());
