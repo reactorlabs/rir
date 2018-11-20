@@ -379,8 +379,8 @@ namespace rir {
 namespace pir {
 
 ScopeAnalysis::ScopeAnalysis(Closure* function, LogStream& log) {
-    TheScopeAnalysis analysis(function, function->argNames, log,
-                              TheScopeAnalysis::DebugLevel::Taint);
+    TheScopeAnalysis analysis(function, function->argNames, log
+                              /* , TheScopeAnalysis::DebugLevel::Taint */);
     analysis();
 
     // Collect all abstract values of all loads
