@@ -171,7 +171,7 @@ AbstractResult TheScopeAnalysis::apply(ScopeAnalysisState& state,
     if (auto ret = Return::Cast(i)) {
         auto res = drillDown(ret->arg<0>().val(), i);
         state.result.merge(res);
-        effect.max(AbstractResult::Updated);
+        effect.update();
     } else if (auto mk = MkEnv::Cast(i)) {
         Value* lexicalEnv = mk->lexicalEnv();
         // If we know the caller, we can fill in the parent env
@@ -183,7 +183,7 @@ AbstractResult TheScopeAnalysis::apply(ScopeAnalysisState& state,
         mk->eachLocalVar(
             [&](SEXP name, Value* val) { state.envs[mk].set(name, val, mk); });
         handled = true;
-        effect.max(AbstractResult::Updated);
+        effect.update();
     } else if (auto le = LdFunctionEnv::Cast(i)) {
         // LdFunctionEnv happen inside promises and refer back to the caller
         // environment, ie. the instruction that created the promise.
@@ -195,13 +195,13 @@ AbstractResult TheScopeAnalysis::apply(ScopeAnalysisState& state,
         // Avoid sideeffect if we know that we load a function without forcing
         if (state.envs.get(ldfun->env(), ldfun->varName)
                 .result.type.isA(PirType::closure())) {
-            effect.max(AbstractResult::Updated);
+            effect.update();
             handled = true;
         }
     } else if (auto s = StVar::Cast(i)) {
         state.envs[s->env()].set(s->varName, s->val(), s);
         handled = true;
-        effect.max(AbstractResult::Updated);
+        effect.update();
     } else if (auto ss = StVarSuper::Cast(i)) {
         auto superEnv = state.envs[ss->env()].parentEnv();
         if (superEnv != AbstractREnvironment::UnknownParent) {
@@ -213,7 +213,7 @@ AbstractResult TheScopeAnalysis::apply(ScopeAnalysisState& state,
                 });
                 state.envs[superEnv].set(ss->varName, ss->val(), ss);
                 handled = true;
-                effect.max(AbstractResult::Updated);
+                effect.update();
             }
         }
     } else if (Force::Cast(i)) {
@@ -224,7 +224,7 @@ AbstractResult TheScopeAnalysis::apply(ScopeAnalysisState& state,
         if (!arg.val->type.maybeLazy()) {
             state.returnValues[i].merge(arg);
             handled = true;
-            effect.max(AbstractResult::Updated);
+            effect.update();
         } else if (depth < maxDepth) {
             if (force->strict) {
                 // We are certain that we do force something here. Let's peek
@@ -237,21 +237,21 @@ AbstractResult TheScopeAnalysis::apply(ScopeAnalysisState& state,
                     state.mergeCall(code, prom.result());
                     state.returnValues[i].merge(prom.result().result);
                     handled = true;
-                    effect.max(AbstractResult::Updated);
+                    effect.update();
                 }
             }
         }
         if (!handled) {
             state.returnValues[i].merge(AbstractPirValue::tainted());
-            effect.max(AbstractResult::Tainted);
+            effect.taint();
         }
     } else if (CallInstruction::CastCall(i) && depth < maxDepth) {
         auto calli = CallInstruction::CastCall(i);
         if (auto call = Call::Cast(i)) {
-            auto trg = drillDown(call->cls()->followCastsAndForce(), i).val;
+            auto trg = call->cls()->followCastsAndForce();
+            trg = drillDown(trg, i).val->followCastsAndForce();
             assert(trg);
-            auto cls = state.envs.findClosure(call->callerEnv(), trg);
-            if (cls != AbstractREnvironment::UnknownClosure) {
+            if (auto cls = MkFunCls::Cast(trg)) {
                 if (cls->fun->argNames.size() == calli->nCallArgs()) {
                     if (cls->fun != closure) {
                         TheScopeAnalysis nextFun(cls->fun, cls->fun->argNames,
@@ -261,7 +261,7 @@ AbstractResult TheScopeAnalysis::apply(ScopeAnalysisState& state,
                         state.mergeCall(code, nextFun.result());
                         state.returnValues[i].merge(nextFun.result().result);
                         handled = true;
-                        effect.max(AbstractResult::Updated);
+                        effect.update();
                     }
                 }
             }
@@ -276,7 +276,7 @@ AbstractResult TheScopeAnalysis::apply(ScopeAnalysisState& state,
                     state.mergeCall(code, nextFun.result());
                     state.returnValues[i].merge(nextFun.result().result);
                     handled = true;
-                    effect.max(AbstractResult::Updated);
+                    effect.update();
                 }
             }
         } else {
@@ -288,19 +288,9 @@ AbstractResult TheScopeAnalysis::apply(ScopeAnalysisState& state,
                 state.mayUseReflection = true;
         }
         if (!handled) {
-            effect.max(AbstractResult::Tainted);
+            effect.taint();
             state.returnValues[i].merge(AbstractPirValue::tainted());
         }
-    }
-
-    // Keep track of closures
-    auto mkfun = MkFunCls::Cast(i);
-    if (!mkfun) {
-        MkFunCls::Cast(i->followCastsAndForce());
-    }
-    if (mkfun) {
-        state.envs[mkfun->lexicalEnv()].mkClosures[i] = mkfun;
-        handled = true;
     }
 
     if (!handled) {
@@ -320,27 +310,35 @@ AbstractResult TheScopeAnalysis::apply(ScopeAnalysisState& state,
                     state.envs[i->env()].leaked = true;
                     for (auto env : state.envs.potentialParents(i->env()))
                         state.allStoresObserved.insert(env);
-                    effect.max(AbstractResult::Updated);
+                    effect.update();
                 }
                 if (i->changesEnv()) {
                     state.envs[i->env()].taint();
-                    effect.max(AbstractResult::Tainted);
+                    effect.taint();
                 }
             }
         }
         if (i->mayUseReflection()) {
             state.mayUseReflection = true;
-            effect.max(AbstractResult::Updated);
+            effect.update();
         }
     }
 
     tryLoad(state, i, [&](AbstractLoad load) {
         if (load.result.isUnknown()) {
-            for (auto env : state.envs.potentialParents(i->env()))
-                state.allStoresObserved.insert(env);
+            for (auto env : state.envs.potentialParents(i->env())) {
+                if (!state.allStoresObserved.count(env)) {
+                    effect.lostPrecision();
+                    state.allStoresObserved.insert(env);
+                }
+            }
         } else {
-            load.result.eachSource(
-                [&](ValOrig& src) { state.observedStores.insert(src.origin); });
+            load.result.eachSource([&](ValOrig& src) {
+                if (!state.observedStores.count(src.origin)) {
+                    state.observedStores.insert(src.origin);
+                    effect.update();
+                }
+            });
         }
     });
     return effect;

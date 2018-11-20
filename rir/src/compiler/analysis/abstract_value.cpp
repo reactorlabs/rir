@@ -85,18 +85,6 @@ void AbstractPirValue::print(std::ostream& out, bool tty) {
     out << ") : " << type;
 }
 
-MkFunCls* AbstractREnvironmentHierarchy::findClosure(Value* env, Value* fun) {
-    if (aliases.count(env))
-        env = aliases.at(env);
-    fun = fun->followCastsAndForce();
-    while (env && env != AbstractREnvironment::UnknownParent) {
-        if (envs[env].mkClosures.count(fun))
-            return envs[env].mkClosures.at(fun);
-        env = envs[env].parentEnv();
-    }
-    return AbstractREnvironment::UnknownClosure;
-}
-
 std::unordered_set<Value*>
 AbstractREnvironmentHierarchy::potentialParents(Value* env) const {
     std::unordered_set<Value*> res;
@@ -163,6 +151,5 @@ AbstractLoad AbstractREnvironmentHierarchy::superGet(Value* env, SEXP e) const {
 
 Value* AbstractREnvironment::UnknownParent = (Value*)-1;
 Value* AbstractREnvironment::UninitializedParent = (Value*)-2;
-MkFunCls* AbstractREnvironment::UnknownClosure = (MkFunCls*)-1;
 }
 }

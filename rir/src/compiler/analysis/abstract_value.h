@@ -130,14 +130,11 @@ struct AbstractPirValue {
  *
  * For inter-procedural analysis we can additionally keep track of closures.
  */
-class MkFunCls;
 struct AbstractREnvironment {
     static Value* UnknownParent;
     static Value* UninitializedParent;
-    static MkFunCls* UnknownClosure;
 
     std::unordered_map<SEXP, AbstractPirValue> entries;
-    std::unordered_map<Value*, MkFunCls*> mkClosures;
 
     bool leaked = false;
     bool tainted = false;
@@ -190,19 +187,6 @@ struct AbstractREnvironment {
             if (!other.entries.count(name) && !entries.at(name).isUnknown()) {
                 entries.at(name).taint();
                 res.lostPrecision();
-            }
-        }
-
-        std::unordered_set<Value*> fps;
-        for (auto e : mkClosures)
-            fps.insert(std::get<0>(e));
-        for (auto e : other.mkClosures)
-            fps.insert(std::get<0>(e));
-        for (auto n : fps) {
-            if (mkClosures[n] != UnknownClosure &&
-                (other.mkClosures.count(n) == 0 ||
-                 mkClosures[n] != other.mkClosures.at(n))) {
-                mkClosures[n] = UnknownClosure;
             }
         }
 
@@ -300,8 +284,6 @@ class AbstractREnvironmentHierarchy {
     }
 
     void print(std::ostream& out, bool tty = false);
-
-    MkFunCls* findClosure(Value* env, Value* fun);
 
     AbstractLoad get(Value* env, SEXP e) const;
     AbstractLoad superGet(Value* env, SEXP e) const;
