@@ -62,8 +62,10 @@ void Constantfold::apply(RirCompiler& cmp, Closure* function,
     Visitor::run(function->entry, [&](BB* bb) {
         if (bb->isEmpty())
           return;
-        for (auto ip = bb->begin(); ip != bb->end(); ++ip) {
+        auto ip = bb->begin();
+        while (ip != bb->end()) {
             auto i = *ip;
+            auto next = ip + 1;
 
             // Constantfolding of some common operations
             FOLD(Add, symbol::Add);
@@ -78,10 +80,23 @@ void Constantfold::apply(RirCompiler& cmp, Closure* function,
             FOLD(Eq, symbol::Eq);
             FOLD(Neq, symbol::Ne);
             FOLD(Pow, symbol::Pow);
+
+            if (auto assume = Assume::Cast(i)) {
+                auto condition = assume->arg<0>().val();
+                if (auto isObj = IsObject::Cast(condition))
+                    if (!isObj->arg<0>().val()->type.maybeObj())
+                        next = bb->remove(ip);
+
+                FOLD2(condition, Identical,
+                      [&](SEXP a, SEXP b) { next = bb->remove(ip); });
+            }
+
+            ip = next;
         }
 
         if (auto branch = Branch::Cast(bb->last())) {
-            if (auto tst = AsTest::Cast(branch->arg<0>().val())) {
+            auto condition = branch->arg<0>().val();
+            if (auto tst = AsTest::Cast(condition)) {
                 // Try to detect constant branch conditions and mark such
                 // branches for removal
                 auto cnst = isConst(tst->arg<0>().val());
@@ -106,6 +121,10 @@ void Constantfold::apply(RirCompiler& cmp, Closure* function,
                     branchRemoval.emplace(bb, a == b);
                 });
             }
+
+            if (auto isObj = IsObject::Cast(condition))
+                if (!isObj->arg<0>().val()->type.maybeObj())
+                    branchRemoval.emplace(bb, false);
         }
     });
 
