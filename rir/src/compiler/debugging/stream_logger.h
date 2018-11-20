@@ -35,7 +35,8 @@ class LogStream {
 
     void pirOptimizationsFinished(Closure*);
     void compilationEarlyPir(Closure*);
-    void pirOptimizations(Closure*, const std::string&, size_t);
+    void pirOptimizationsHeader(Closure*, const std::string&, size_t);
+    void pirOptimizations(Closure*);
     void afterAllocator(Code*, std::function<void(std::ostream&)>);
     void CSSA(Code*);
     void finalPIR(Closure*);
