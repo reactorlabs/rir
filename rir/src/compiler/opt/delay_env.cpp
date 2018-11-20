@@ -1,5 +1,4 @@
 #include "../pir/pir_impl.h"
-#include "../transform/replace.h"
 #include "../util/cfg.h"
 #include "../util/visitor.h"
 #include "pass_definitions.h"
@@ -71,31 +70,26 @@ void DelayEnv::apply(RirCompiler&, Closure* function, LogStream&) const {
                 it++;
             }
 
+            if (it == bb->end() || (it + 1) == bb->end())
+                break;
+
             auto moveMkEnvToDeoptBranch = [&](BB* deoptBranch,
                                               BB* fastPathBranch) {
                 auto newEnvInstr = envInstr->clone();
-                it = bb->insert(it, newEnvInstr);
-                envInstr->replaceUsesIn(newEnvInstr, fastPathBranch);
-                // Closure wrapper in MkEnv can be circular
-                Replace::usesOfValue(newEnvInstr, envInstr, newEnvInstr);
+                deoptBranch->insert(deoptBranch->begin(), newEnvInstr);
+                envInstr->replaceUsesIn(newEnvInstr, deoptBranch);
                 it = bb->moveToBegin(it, fastPathBranch);
-                it = bb->moveToBegin(it, deoptBranch);
             };
 
-            if (it != bb->end() && (it + 1) != bb->end()) {
-                auto branch = (*(it + 1))->branches();
-                if (envInstr && branch) {
-                    Deopt* deopt;
-                    if (!bb->falseBranch()->isEmpty() &&
-                        (deopt = Deopt::Cast(bb->falseBranch()->last()))) {
-                        moveMkEnvToDeoptBranch(bb->falseBranch(),
-                                               bb->trueBranch());
-                    } else if (!bb->trueBranch()->isEmpty() &&
-                               (deopt =
-                                    Deopt::Cast(bb->trueBranch()->last()))) {
-                        moveMkEnvToDeoptBranch(bb->trueBranch(),
-                                               bb->falseBranch());
-                    }
+            assert(envInstr);
+            auto branch = (*(it + 1))->branches();
+            if (branch) {
+                if (!bb->falseBranch()->isEmpty() &&
+                    Deopt::Cast(bb->falseBranch()->last())) {
+                    moveMkEnvToDeoptBranch(bb->falseBranch(), bb->trueBranch());
+                } else if (!bb->trueBranch()->isEmpty() &&
+                           Deopt::Cast(bb->trueBranch()->last())) {
+                    moveMkEnvToDeoptBranch(bb->trueBranch(), bb->falseBranch());
                 }
             }
         }
