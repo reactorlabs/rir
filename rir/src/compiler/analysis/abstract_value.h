@@ -246,25 +246,12 @@ class AbstractREnvironmentHierarchy {
     AbstractResult merge(const AbstractREnvironmentHierarchy& other) {
         AbstractResult res;
 
-        std::unordered_set<Value*> k;
-        for (auto e : envs)
-            k.insert(e.first);
         for (auto e : other.envs)
-            k.insert(e.first);
-        for (auto i : k)
-            if (envs.count(i)) {
-                if (other.envs.count(i) == 0) {
-                    if (!envs.at(i).tainted) {
-                        envs.at(i).taint();
-                        res.taint();
-                    }
-                } else {
-                    res.max(envs.at(i).merge(other.envs.at(i)));
-                }
-            } else {
-                envs[i].taint();
-                res.taint();
-            }
+            if (envs.count(e.first))
+                res.max(envs.at(e.first).merge(e.second));
+            else
+                envs[e.first] = e.second;
+
         for (auto& a : other.aliases) {
             if (!aliases.count(a.first)) {
                 aliases.emplace(a);
