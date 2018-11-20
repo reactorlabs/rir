@@ -1225,7 +1225,7 @@ class VLI(Phi, Effect::None, EnvAccess::None) {
     void pushArg(Value* a) override { assert(false && "use addInput"); }
     void addInput(BB* in, Value* arg) {
         input.push_back(in);
-        args_.push_back(InstrArg(arg, arg->type));
+        args_.push_back(InstrArg(arg, PirType::any()));
     }
     void removeInputs(const std::unordered_set<BB*>& del);
 
