@@ -192,9 +192,8 @@ struct ForcedBy {
 
 class ForceDominanceAnalysis : public StaticAnalysis<ForcedBy> {
   public:
-    explicit ForceDominanceAnalysis(Closure* cls, Code* code, LogStream& log,
-                                    DebugLevel debug = DebugLevel::None)
-        : StaticAnalysis("ForceDominance", cls, code, log, debug) {}
+    explicit ForceDominanceAnalysis(Closure* cls, Code* code, LogStream& log)
+        : StaticAnalysis("ForceDominance", cls, code, log) {}
 
     AbstractResult apply(ForcedBy& d, Instruction* i) const override {
         bool changed = false;
@@ -229,9 +228,7 @@ namespace pir {
 
 void ForceDominance::apply(RirCompiler&, Closure* cls, LogStream& log) const {
     auto apply = [&](Code* code) {
-        ForceDominanceAnalysis analysis(
-            cls, code,
-            log /* , ForceDominanceAnalysis::DebugLevel::Instruction */);
+        ForceDominanceAnalysis analysis(cls, code, log);
         analysis();
         auto& result = analysis.result();
 

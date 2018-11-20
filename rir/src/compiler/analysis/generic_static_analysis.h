@@ -37,18 +37,20 @@ namespace pir {
  * provided by the subclass that specializes StaticAnalysis.
  */
 
-template <class AbstractState>
+enum class AnalysisDebugLevel {
+    None,
+    Taint,
+    Exit,
+    Merge,
+    BB,
+    Instruction,
+};
+
+template <class AbstractState,
+          AnalysisDebugLevel DEBUG_LEVEL = AnalysisDebugLevel::None>
 class StaticAnalysis {
   public:
     enum class PositioningStyle { BeforeInstruction, AfterInstruction };
-    enum class DebugLevel {
-        None,
-        Taint,
-        Exit,
-        Merge,
-        BB,
-        Instruction,
-    };
 
   private:
     const std::string name;
@@ -65,25 +67,19 @@ class StaticAnalysis {
 
     LogStream& log;
 
-    const DebugLevel debug;
-
     Closure* closure;
     Code* code;
     BB* entry;
 
   public:
-    StaticAnalysis(std::string name, Closure* cls, Code* code, LogStream& log,
-                   DebugLevel debug = DebugLevel::None)
-        : name(name), log(log), debug(debug), closure(cls), code(code),
-          entry(code->entry) {
+    StaticAnalysis(std::string name, Closure* cls, Code* code, LogStream& log)
+        : name(name), log(log), closure(cls), code(code), entry(code->entry) {
         mergepoint.resize(code->nextBBId);
         mergepoint[entry->id].resize(1);
     }
     StaticAnalysis(std::string name, Closure* cls, Code* code,
-                   const AbstractState& initialState, LogStream& log,
-                   DebugLevel debug)
-        : name(name), log(log), debug(debug), closure(cls), code(code),
-          entry(code->entry) {
+                   const AbstractState& initialState, LogStream& log)
+        : name(name), log(log), closure(cls), code(code), entry(code->entry) {
         mergepoint.resize(code->nextBBId);
         mergepoint[entry->id].push_back(initialState);
     }
@@ -147,7 +143,7 @@ class StaticAnalysis {
         std::vector<bool> changed(mergepoint.size(), false);
         changed[entry->id] = true;
 
-        if (debug > DebugLevel::None) {
+        if (DEBUG_LEVEL > AnalysisDebugLevel::None) {
             log << "=========== Starting " << name << " Analysis on "
                 << closure->name << " ";
             if (code == closure)
@@ -169,7 +165,7 @@ class StaticAnalysis {
                 assert(mergepoint[id].size() > 0);
                 AbstractState state = mergepoint[id][segment];
 
-                if (debug >= DebugLevel::BB) {
+                if (DEBUG_LEVEL >= AnalysisDebugLevel::BB) {
                     log << "======= Entering BB" << bb->id
                         << ", initial state\n";
                     log(state);
@@ -177,12 +173,12 @@ class StaticAnalysis {
 
                 for (auto i : *bb) {
                     AbstractState old;
-                    if (debug == DebugLevel::Taint)
+                    if (DEBUG_LEVEL == AnalysisDebugLevel::Taint)
                         old = state;
                     auto res = apply(state, i);
-                    if ((debug >= DebugLevel::Instruction &&
+                    if ((DEBUG_LEVEL >= AnalysisDebugLevel::Instruction &&
                          res >= AbstractResult::None) ||
-                        (debug >= DebugLevel::Taint &&
+                        (DEBUG_LEVEL >= AnalysisDebugLevel::Taint &&
                          res >= AbstractResult::Tainted)) {
                         if (res == AbstractResult::Tainted) {
                             log << "===== Before applying instruction ";
@@ -211,7 +207,7 @@ class StaticAnalysis {
 
                 if (bb->isExit()) {
                     if (!Deopt::Cast(bb->last())) {
-                        if (debug >= DebugLevel::Exit) {
+                        if (DEBUG_LEVEL >= AnalysisDebugLevel::Exit) {
                             log << "===== Exit state is\n";
                             log(state);
                         }
@@ -245,14 +241,14 @@ class StaticAnalysis {
             changed[id] = true;
         } else {
             AbstractState old;
-            if (debug >= DebugLevel::Taint) {
+            if (DEBUG_LEVEL >= AnalysisDebugLevel::Taint) {
                 old = mergepoint[id][0];
             }
             AbstractResult mres = mergepoint[id][0].merge(state);
             if (mres > AbstractResult::None) {
-                if (debug >= DebugLevel::Merge ||
+                if (DEBUG_LEVEL >= AnalysisDebugLevel::Merge ||
                     (mres == AbstractResult::Tainted &&
-                     debug == DebugLevel::Taint)) {
+                     DEBUG_LEVEL == AnalysisDebugLevel::Taint)) {
                     log << "===== Merging BB" << in->id << " into BB" << id
                         << (mres == AbstractResult::Tainted ? " tainted" : "")
                         << (mres == AbstractResult::LostPrecision
@@ -268,7 +264,7 @@ class StaticAnalysis {
                 }
                 done = false;
                 changed[id] = true;
-            } else if (debug >= DebugLevel::Merge) {
+            } else if (DEBUG_LEVEL >= AnalysisDebugLevel::Merge) {
                 log << "===== Merging into trueBranch BB" << id
                     << " reached fixpoint\n";
             }

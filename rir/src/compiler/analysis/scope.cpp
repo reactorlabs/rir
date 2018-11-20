@@ -88,29 +88,29 @@ struct ScopeAnalysisState {
 
 class TheScopeAnalysis : public StaticAnalysis<ScopeAnalysisState> {
   public:
-    typedef StaticAnalysis<ScopeAnalysisState> Super;
+    const std::vector<SEXP> argNames;
+    const std::vector<Value*> args;
 
-    static const std::vector<SEXP> noArgs;
-    const std::vector<SEXP>& args = noArgs;
-
-    static constexpr size_t maxDepth = 2;
+    static constexpr size_t MAX_DEPTH = 2;
     size_t depth;
     Value* staticClosureEnv = Env::notClosed();
     Value* promiseEnv = nullptr;
 
-    TheScopeAnalysis(Closure* cls, const std::vector<SEXP>& args,
-                     LogStream& log, DebugLevel debug = DebugLevel::None)
-        : Super("Scope", cls, cls, log, debug), args(args), depth(0) {}
-    TheScopeAnalysis(Closure* cls, const std::vector<SEXP>& args,
-                     Value* staticClosureEnv,
+    TheScopeAnalysis(Closure* cls, const std::vector<SEXP>& argNames,
+                     LogStream& log)
+        : StaticAnalysis("Scope", cls, cls, log), argNames(argNames), depth(0) {
+    }
+    TheScopeAnalysis(Closure* cls, const std::vector<SEXP>& argNames,
+                     const std::vector<Value*> args, Value* staticClosureEnv,
                      const ScopeAnalysisState& initialState, size_t depth,
-                     LogStream& log, DebugLevel debug)
-        : Super("Scope", cls, cls, initialState, log, debug), args(args),
-          depth(depth), staticClosureEnv(staticClosureEnv) {}
+                     LogStream& log)
+        : StaticAnalysis("Scope", cls, cls, initialState, log),
+          argNames(argNames), args(args), depth(depth),
+          staticClosureEnv(staticClosureEnv) {}
     TheScopeAnalysis(Closure* cls, Promise* prom, Value* promEnv,
                      const ScopeAnalysisState& initialState, size_t depth,
-                     LogStream& log, DebugLevel debug)
-        : Super("Scope", cls, prom, initialState, log, debug), depth(depth),
+                     LogStream& log)
+        : StaticAnalysis("Scope", cls, prom, initialState, log), depth(depth),
           promiseEnv(promEnv) {}
 
     AbstractResult apply(ScopeAnalysisState& state,
@@ -124,7 +124,6 @@ class TheScopeAnalysis : public StaticAnalysis<ScopeAnalysisState> {
     inline void drillDown(const ScopeAnalysisState& envs, Value* i,
                           AbstractValMaybe, Maybe notFound = []() {}) const;
 };
-const std::vector<SEXP> TheScopeAnalysis::noArgs;
 
 void TheScopeAnalysis::tryLoad(const ScopeAnalysisState& s, Value* i,
                                LoadMaybe aLoad) const {
@@ -249,13 +248,13 @@ AbstractResult TheScopeAnalysis::apply(ScopeAnalysisState& state,
                       });
         }
 
-        if (!handled && depth < maxDepth && force->strict) {
+        if (!handled && depth < MAX_DEPTH && force->strict) {
             // We are certain that we do force something here. Let's peek
             // through the argument and see if we find a promise. If so, we
             // will analyze it.
             if (auto mkarg = MkArg::Cast(arg->followCastsAndForce())) {
                 TheScopeAnalysis prom(closure, mkarg->prom(), mkarg->env(),
-                                      state, depth + 1, log, debug);
+                                      state, depth + 1, log);
                 prom();
                 state.mergeCall(code, prom.result());
                 state.returnValues[i].merge(prom.result().result);
@@ -267,7 +266,7 @@ AbstractResult TheScopeAnalysis::apply(ScopeAnalysisState& state,
             state.returnValues[i].merge(AbstractPirValue::tainted());
             effect.taint();
         }
-    } else if (CallInstruction::CastCall(i) && depth < maxDepth) {
+    } else if (CallInstruction::CastCall(i) && depth < MAX_DEPTH) {
         auto calli = CallInstruction::CastCall(i);
         if (auto call = Call::Cast(i)) {
             auto trg = call->cls()->followCastsAndForce();
@@ -280,9 +279,12 @@ AbstractResult TheScopeAnalysis::apply(ScopeAnalysisState& state,
             if (auto cls = MkFunCls::Cast(trg)) {
                 if (cls->fun->argNames.size() == calli->nCallArgs()) {
                     if (cls->fun != closure) {
+                        std::vector<Value*> args;
+                        calli->eachCallArg(
+                            [&](Value* v) { args.push_back(v); });
                         TheScopeAnalysis nextFun(cls->fun, cls->fun->argNames,
-                                                 cls->lexicalEnv(), state,
-                                                 depth + 1, log, debug);
+                                                 args, cls->lexicalEnv(), state,
+                                                 depth + 1, log);
                         nextFun();
                         state.mergeCall(code, nextFun.result());
                         state.returnValues[i].merge(nextFun.result().result);
@@ -295,9 +297,11 @@ AbstractResult TheScopeAnalysis::apply(ScopeAnalysisState& state,
             auto trg = call->cls();
             if (trg && trg->argNames.size() == calli->nCallArgs()) {
                 if (trg != closure) {
-                    TheScopeAnalysis nextFun(trg, trg->argNames,
+                    std::vector<Value*> args;
+                    calli->eachCallArg([&](Value* v) { args.push_back(v); });
+                    TheScopeAnalysis nextFun(trg, trg->argNames, args,
                                              trg->closureEnv(), state,
-                                             depth + 1, log, debug);
+                                             depth + 1, log);
                     nextFun();
                     state.mergeCall(code, nextFun.result());
                     state.returnValues[i].merge(nextFun.result().result);
@@ -379,8 +383,7 @@ namespace rir {
 namespace pir {
 
 ScopeAnalysis::ScopeAnalysis(Closure* function, LogStream& log) {
-    TheScopeAnalysis analysis(function, function->argNames, log
-                              /* , TheScopeAnalysis::DebugLevel::Taint */);
+    TheScopeAnalysis analysis(function, function->argNames, log);
     analysis();
 
     // Collect all abstract values of all loads
