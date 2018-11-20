@@ -84,6 +84,8 @@ class Closure : public Code {
     }
 
     size_t promiseId(Code* c) const;
+
+    size_t size() const override final;
 };
 
 } // namespace pir

@@ -20,8 +20,17 @@ class TheInliner {
     Closure* function;
     explicit TheInliner(Closure* function) : function(function) {}
 
+    static constexpr size_t MAX_SIZE = 1024;
+    static constexpr size_t MAX_INLINEE_SIZE = 128;
+    static constexpr size_t MAX_FUEL = 5;
+
     void operator()() {
-        size_t fuel = 5;
+        size_t fuel = MAX_FUEL;
+
+        if (function->size() > MAX_SIZE)
+            return;
+
+        std::unordered_set<Closure*> skip;
 
         Visitor::run(function->entry, [&](BB* bb) {
             // Dangerous iterater usage, works since we do only update it in
@@ -62,8 +71,17 @@ class TheInliner {
                     continue;
                 }
 
-                if (inlinee == function && fuel < 5)
+                if (skip.count(inlinee))
                     continue;
+
+                // Recursive inline only once
+                if (inlinee == function)
+                    skip.insert(inlinee);
+
+                if (inlinee->size() > MAX_INLINEE_SIZE) {
+                    skip.insert(inlinee);
+                    continue;
+                }
 
                 fuel--;
 

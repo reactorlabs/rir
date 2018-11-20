@@ -66,5 +66,12 @@ Closure* Closure::clone() {
 
     return c;
 }
+
+size_t Closure::size() const {
+    size_t s = 0;
+    eachPromise([&s](Promise* p) { s += p->size(); });
+    return s + Code::size();
+}
+
 } // namespace pir
 } // namespace rir
