@@ -146,10 +146,18 @@ void TheScopeAnalysis::drillDown(const ScopeAnalysisState& s, Value* v,
     // if for a particular value we have already a result available from the
     // above.
 
-    bool done = false;
+    if (auto lda = LdArg::Cast(v)) {
+        if (args.size() > lda->id) {
+            auto argi = Instruction::Cast(args[lda->id]);
+            if (argi) {
+                auto arg = AbstractPirValue(argi, argi);
+                return drillDown(s, argi, found, [&]() { found(arg); });
+            }
+        }
+    }
+
     auto i = Instruction::Cast(v);
     if (s.returnValues.count(i)) {
-        done = true;
         auto& res = s.returnValues.at(i);
         if (res.isSingleValue()) {
             return drillDown(s, res.singleValue().val, found,
@@ -157,6 +165,8 @@ void TheScopeAnalysis::drillDown(const ScopeAnalysisState& s, Value* v,
         }
         found(res);
     }
+
+    bool done = false;
     tryLoad(s, v, [&](AbstractLoad l) {
         done = true;
         auto& res = l.result;
@@ -166,6 +176,7 @@ void TheScopeAnalysis::drillDown(const ScopeAnalysisState& s, Value* v,
         }
         found(res);
     });
+
     if (!done)
         notFound();
 }
