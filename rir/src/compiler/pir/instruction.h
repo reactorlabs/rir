@@ -58,15 +58,20 @@ class BB;
 class Closure;
 class Phi;
 
-struct InstrArg : public std::pair<Value*, PirType> {
-    InstrArg(Value* v, PirType t) : std::pair<Value*, PirType>(v, t) {
+struct InstrArg {
+  private:
+    PirType t;
+    Value* v;
+
+  public:
+    InstrArg(Value* v, PirType t) : t(t), v(v) {
         assert(v->tag != Tag::_UNUSED_);
     }
-    InstrArg() : std::pair<Value*, PirType>(nullptr, PirType::bottom()) {}
-    Value*& val() { return first; }
-    PirType& type() { return second; }
-    Value* val() const { return first; }
-    PirType type() const { return second; }
+    InstrArg() : t(PirType::bottom()), v(nullptr) {}
+    Value*& val() { return v; }
+    PirType& type() { return t; }
+    Value* val() const { return v; }
+    PirType type() const { return t; }
 };
 
 // EnvAccess specifies if an instruction has an environment argument

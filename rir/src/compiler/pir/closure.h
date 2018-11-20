@@ -11,15 +11,6 @@
 namespace rir {
 namespace pir {
 
-struct ProfiledValues {
-    std::unordered_map<Value*, ObservedCallees> callTargets;
-    std::unordered_map<Value*, ObservedValues> types;
-
-    bool hasTypesFor(Value* value) {
-        return types.count(value) && types.at(value).numTypes;
-    }
-};
-
 /*
  * Closure
  *
@@ -58,7 +49,6 @@ class Closure : public Code {
 
     std::vector<SEXP> argNames;
     std::vector<Promise*> promises;
-    ProfiledValues runtimeFeedback;
 
     size_t nargs() const { return argNames.size(); }
 

@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "R/r_incl.h"
+#include "ir/RuntimeFeedback.h"
 #include "utils/EnumSet.h"
 
 namespace rir {
@@ -149,6 +150,9 @@ struct PirType {
         *this = *this | other;
         return *this != t;
     }
+
+    void merge(const ObservedValues& other);
+    void mergeSexptype(SEXPTYPE t);
 
     static PirType num() {
         return PirType(RType::logical) | RType::integer | RType::real |

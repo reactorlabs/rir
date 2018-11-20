@@ -11,8 +11,6 @@ namespace rir {
 namespace pir {
 
 void ElideEnvSpec::apply(RirCompiler&, Closure* function, LogStream&) const {
-    ProfiledValues& profile = function->runtimeFeedback;
-
     // Elide environments of binary operators in which both operators are
     // primitive values
     std::unordered_map<BB*, Checkpoint*> checkpoints;
@@ -55,11 +53,8 @@ void ElideEnvSpec::apply(RirCompiler&, Closure* function, LogStream&) const {
                 Value* opRight = i->arg(1).val();
                 bool maybeObjL = opLeft->type.maybeObj();
                 bool maybeObjR = opRight->type.maybeObj();
-                bool assumeNonObjL = profile.hasTypesFor(opLeft) &&
-                                     !profile.types.at(opLeft).observedObject();
-                bool assumeNonObjR =
-                    profile.hasTypesFor(opRight) &&
-                    !profile.types.at(opRight).observedObject();
+                bool assumeNonObjL = !opLeft->typeFeedback.maybeObj();
+                bool assumeNonObjR = !opRight->typeFeedback.maybeObj();
 
                 if ((!maybeObjL && !maybeObjR) ||
                     (assumeNonObjL && assumeNonObjR)) {
