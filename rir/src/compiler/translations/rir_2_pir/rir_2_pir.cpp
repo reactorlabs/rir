@@ -528,6 +528,10 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         break;
     }
 
+    case Opcode::ensure_named_:
+        push(insert(new EnsureNamed(pop())));
+        break;
+
     case Opcode::set_shared_:
         push(insert(new SetShared(pop())));
         break;

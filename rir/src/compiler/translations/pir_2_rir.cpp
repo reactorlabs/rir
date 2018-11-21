@@ -892,6 +892,7 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 SIMPLE(IsObject, isObj);
                 SIMPLE(Int3, int3);
                 SIMPLE(SetShared, setShared);
+                SIMPLE(EnsureNamed, ensureNamed);
 #undef SIMPLE
 
 #define SIMPLE_WITH_SRCIDX(Name, Factory)                                      \

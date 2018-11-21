@@ -72,6 +72,7 @@
     V(Force)                                                                   \
     V(CastType)                                                                \
     V(SetShared)                                                               \
+    V(EnsureNamed)                                                             \
     V(PirCopy)                                                                 \
     V(Int3)
 

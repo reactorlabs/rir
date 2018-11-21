@@ -388,7 +388,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
                         compileExpr(ctx, rhs);
                         // Keep a copy of rhs since its the result of this
                         // expression
-                        cs << BC::dup() << BC::setShared();
+                        cs << BC::dup() << BC::ensureNamed();
 
                         // Now load index and target
                         cs << BC::ldvar(target);
@@ -644,7 +644,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
         pcs.push_back(cs.currentPos());
         cs << BC::put(3);
 
-        cs << BC::inc() << BC::dup2() << BC::lt();
+        cs << BC::inc() << BC::ensureNamed() << BC::dup2() << BC::lt();
         // We know this is an int and won't do dispatch.
         // TODO: add a integer version of lt_
         cs.addSrc(R_NilValue);

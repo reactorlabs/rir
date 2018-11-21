@@ -13,10 +13,7 @@ namespace {
 using namespace rir::pir;
 
 static LdConst* isConst(Value* instr) {
-    if (auto shared = SetShared::Cast(instr)) {
-        instr = shared->arg<0>().val();
-    }
-    if (auto cst = LdConst::Cast(instr)) {
+    if (auto cst = LdConst::Cast(instr->followCastsAndForce())) {
         return cst;
     }
     return nullptr;

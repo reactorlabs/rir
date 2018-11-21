@@ -355,6 +355,7 @@ class BC {
     inline static BC colon();
     inline static BC makeUnique();
     inline static BC setShared();
+    inline static BC ensureNamed();
     inline static BC asLogical();
     inline static BC lglOr();
     inline static BC lglAnd();
@@ -658,6 +659,7 @@ class BC {
         case Opcode::int3_:
         case Opcode::make_unique_:
         case Opcode::set_shared_:
+        case Opcode::ensure_named_:
         case Opcode::aslogical_:
         case Opcode::lgl_and_:
         case Opcode::lgl_or_:

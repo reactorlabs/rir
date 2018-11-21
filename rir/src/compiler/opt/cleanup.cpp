@@ -20,7 +20,7 @@ class TheCleanup {
     void operator()() {
         std::unordered_set<size_t> used_p;
         std::unordered_map<BB*, std::unordered_set<Phi*>> usedBB;
-        std::unordered_map<SetShared*, int> isShared;
+        std::unordered_map<Instruction*, int> isShared;
         std::deque<Promise*> todo;
 
         Visitor::run(function->entry, [&](BB* bb) {
@@ -73,13 +73,13 @@ class TheCleanup {
                         used_p.insert(arg->prom()->id);
                         todo.push_back(arg->prom());
                     }
-                } else if (auto shared = SetShared::Cast(i)) {
+                } else if (SetShared::Cast(i) || EnsureNamed::Cast(i)) {
                     if (i->unused()) {
                         removed = true;
                         next = bb->remove(ip);
                     } else {
-                        if (!isShared.count(shared))
-                            isShared[shared] = 0;
+                        if (!isShared.count(i))
+                            isShared[i] = 0;
                     }
                 } else if (auto tst = AsTest::Cast(i)) {
                     // Converting to bool might trow warning if the size is not
@@ -108,12 +108,17 @@ class TheCleanup {
                 }
                 if (!removed) {
                     i->eachArg([&](Value* arg) {
-                        if (auto shared = SetShared::Cast(arg)) {
-                            // Count how many times a shared value is used. If
-                            // it leaks, it really needs to be marked shared.
-                            isShared[shared]++;
-                            if (i->leaksArg(arg))
-                                isShared[shared]++;
+                        if (i->changesEnv()) {
+                            auto argi = Instruction::Cast(arg);
+                            if (argi && (SetShared::Cast(argi) ||
+                                         EnsureNamed::Cast(argi))) {
+                                // Count how many times a shared value is used.
+                                // If it leaks, it really needs to be marked
+                                // shared.
+                                isShared[argi]++;
+                                if (i->leaksArg(argi))
+                                    isShared[argi]++;
+                            }
                         }
                     });
                     i->updateType();
@@ -126,7 +131,7 @@ class TheCleanup {
         // shared
         for (auto shared : isShared) {
             if (shared.second <= 1)
-                shared.first->replaceUsesWith(shared.first->arg<0>().val());
+                shared.first->replaceUsesWith(shared.first->arg(0).val());
         }
 
         while (!todo.empty()) {
@@ -178,8 +183,8 @@ class TheCleanup {
         Visitor::run(function->entry, [&](BB* bb) {
             // Remove empty jump-through blocks
             if (bb->isJmp() && bb->next0->isEmpty() && bb->next0->isJmp() &&
-                cfg.hasSinglePred(bb->next0->next0)) {
-                assert(usedBB.find(bb->next0) == usedBB.end());
+                cfg.hasSinglePred(bb->next0->next0) &&
+                usedBB.find(bb->next0) == usedBB.end()) {
                 toDel[bb->next0] = bb->next0->next0;
             }
         });

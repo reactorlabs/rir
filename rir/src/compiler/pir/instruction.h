@@ -170,10 +170,10 @@ class Instruction : public Value {
     virtual const InstrArg& arg(size_t pos) const = 0;
 
     bool leaksArg(Value* val) {
-        // TODO: for escape analysis we use hasEnv || hasEffect as a very crude
-        // approximation whether this instruction leaks arguments. We should do
-        // better.
-        return hasEnv() || hasEffect();
+        // TODO: for escape analysis we use leaksEnv || hasEffect as a very
+        // crude approximation whether this instruction leaks arguments. We
+        // should do better.
+        return leaksEnv() || hasEffect();
     }
 
     typedef std::function<void(Value*)> ArgumentValueIterator;
@@ -828,6 +828,13 @@ class FLI(IsObject, 1, Effect::None, EnvAccess::None) {
 class FLI(LdFunctionEnv, 0, Effect::None, EnvAccess::None) {
   public:
     LdFunctionEnv() : FixedLenInstruction(RType::env) {}
+};
+
+class FLI(EnsureNamed, 1, Effect::Write, EnvAccess::None) {
+  public:
+    explicit EnsureNamed(Value* v)
+        : FixedLenInstruction(v->type, {{v->type}}, {{v}}) {}
+    void updateType() override final { type = arg<0>().val()->type; }
 };
 
 class FLI(SetShared, 1, Effect::Write, EnvAccess::None) {
