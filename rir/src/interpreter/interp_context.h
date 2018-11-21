@@ -185,8 +185,8 @@ class Locals final {
     ~Locals() { R_BCNodeStackTop -= localsCount; }
 
     SEXP load(unsigned offset) {
-        assert(offset < localsCount &&
-               "Attempt to load invalid local variable.");
+        SLOWASSERT(offset < localsCount &&
+                   "Attempt to load invalid local variable.");
 #ifdef TYPED_STACK
         return (base + offset)->u.sxpval;
 #else
@@ -195,8 +195,8 @@ class Locals final {
     }
 
     void store(unsigned offset, SEXP val) {
-        assert(offset < localsCount &&
-               "Attempt to store invalid local variable.");
+        SLOWASSERT(offset < localsCount &&
+                   "Attempt to store invalid local variable.");
 #ifdef TYPED_STACK
         (base + offset)->u.sxpval = val;
         (base + offset)->tag = 0;
