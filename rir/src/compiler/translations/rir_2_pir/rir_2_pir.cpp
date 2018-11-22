@@ -590,7 +590,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
     case Opcode::asast_:
     case Opcode::missing_:
     case Opcode::beginloop_:
-    case Opcode::endcontext_:
+    case Opcode::endloop_:
     case Opcode::ldddvar_:
         log.unsupportedBC("Unsupported BC", bc);
         return false;

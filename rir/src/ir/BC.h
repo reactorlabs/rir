@@ -201,7 +201,7 @@ BC BC::brfalse(Jmp j) {
     i.offset = j;
     return BC(Opcode::brfalse_, i);
 }
-BC BC::endcontext() { return BC(Opcode::endcontext_); }
+BC BC::endloop() { return BC(Opcode::endloop_); }
 BC BC::dup() { return BC(Opcode::dup_); }
 BC BC::inc() { return BC(Opcode::inc_); }
 BC BC::close() { return BC(Opcode::close_); }

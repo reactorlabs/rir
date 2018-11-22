@@ -564,7 +564,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
            << nextBranch;
 
         if (ctx.loopNeedsContext()) {
-            cs << BC::endcontext();
+            cs << BC::endloop();
         } else {
             cs.remove(beginLoopPos);
         }
@@ -600,7 +600,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
            << nextBranch;
 
         if (ctx.loopNeedsContext()) {
-            cs << BC::endcontext();
+            cs << BC::endloop();
         } else {
             cs.remove(beginLoopPos);
         }
@@ -634,15 +634,9 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
         compileExpr(ctx, seq);
         cs << BC::setShared() << BC::forSeqSize() << BC::push((int)0);
 
-        std::vector<unsigned> pcs;
-
-        pcs.push_back(cs.currentPos());
+        auto beginLoopPos = cs.currentPos();
         cs << BC::beginloop(breakBranch)
            << loopBranch;
-
-        // Move context out of the way
-        pcs.push_back(cs.currentPos());
-        cs << BC::put(3);
 
         cs << BC::inc() << BC::ensureNamed() << BC::dup2() << BC::lt();
         // We know this is an int and won't do dispatch.
@@ -655,12 +649,6 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
         // TODO: add a non-object version of extract2_1
         cs.addSrc(R_NilValue);
 
-        // Put context back
-        pcs.push_back(cs.currentPos());
-        cs << BC::pick(4);
-        pcs.push_back(cs.currentPos());
-        cs << BC::swap();
-
         // Set the loop variable
         cs << BC::stvar(sym);
 
@@ -669,17 +657,13 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
            << BC::br(loopBranch);
 
         cs << endForBranch;
-        // Put context back
-        pcs.push_back(cs.currentPos());
-        cs << BC::pick(3);
 
         cs << breakBranch;
 
         if (ctx.loopNeedsContext()) {
-            cs << BC::endcontext();
+            cs << BC::endloop();
         } else {
-            for (auto pc : pcs)
-                cs.remove(pc);
+            cs.remove(beginLoopPos);
         }
 
         cs << BC::pop() << BC::pop() << BC::pop() << BC::push(R_NilValue)
