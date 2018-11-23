@@ -1128,8 +1128,16 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
     std::deque<FrameInfo*> synthesizeFrames;
     assert(c->info.magic == CODE_MAGIC);
 
-    if (!localsBase)
+    if (!localsBase) {
+#ifdef TYPED_STACK
+        // Zero the region of the locals to avoid keeping stuff alive and to
+        // zero all the type tags. Note: this trick does not work with the stack
+        // in general, since there intermediate callees might set the type tags
+        // to something else.
+        memset(R_BCNodeStackTop, 0, sizeof(*R_BCNodeStackTop) * c->localsCount);
+#endif
         localsBase = R_BCNodeStackTop;
+    }
     Locals locals(localsBase, c->localsCount);
 
     BindingCache bindingCache[BINDING_CACHE_SIZE];

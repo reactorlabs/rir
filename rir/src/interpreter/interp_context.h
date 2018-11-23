@@ -199,7 +199,7 @@ class Locals final {
                    "Attempt to store invalid local variable.");
 #ifdef TYPED_STACK
         (base + offset)->u.sxpval = val;
-        (base + offset)->tag = 0;
+        SLOWASSERT((base + offset)->tag == 0);
 #else
         base[offset] = val;
 #endif

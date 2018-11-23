@@ -68,7 +68,7 @@ class FunctionWriter {
         unsigned totalSize = Code::size(codeSize, sources.size());
 
         SEXP store = Rf_allocVector(EXTERNALSXP, totalSize);
-        void* payload = INTEGER(store);
+        void* payload = DATAPTR(store);
         Code* code = new (payload)
             Code(nullptr, ast, codeSize, sources.size(), localsCnt);
         preserve(store);
