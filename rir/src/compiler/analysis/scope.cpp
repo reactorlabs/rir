@@ -17,7 +17,6 @@ struct ScopeAnalysisState {
     AbstractResult merge(const ScopeAnalysisState& other) {
         AbstractResult res;
 
-        std::unordered_set<Closure*> ks;
         for (const auto& f : other.returnValues)
             res.max(returnValues[f.first].merge(f.second));
         if (!mayUseReflection && other.mayUseReflection) {
@@ -45,7 +44,6 @@ struct ScopeAnalysisState {
     AbstractResult mergeCall(Code* cur, const ScopeAnalysisState& other) {
         AbstractResult res;
 
-        std::unordered_set<Closure*> ks;
         if (!mayUseReflection && other.mayUseReflection) {
             mayUseReflection = true;
             res.lostPrecision();
@@ -101,7 +99,7 @@ class TheScopeAnalysis : public StaticAnalysis<ScopeAnalysisState> {
         : StaticAnalysis("Scope", cls, cls, log), argNames(argNames), depth(0) {
     }
     TheScopeAnalysis(Closure* cls, const std::vector<SEXP>& argNames,
-                     const std::vector<Value*> args, Value* staticClosureEnv,
+                     const std::vector<Value*>& args, Value* staticClosureEnv,
                      const ScopeAnalysisState& initialState, size_t depth,
                      LogStream& log)
         : StaticAnalysis("Scope", cls, cls, initialState, log),
@@ -351,17 +349,15 @@ AbstractResult TheScopeAnalysis::apply(ScopeAnalysisState& state,
                     return maybeObj;
                 });
             }
-            if (envIsNeeded) {
-                if (i->leaksEnv()) {
-                    state.envs[i->env()].leaked = true;
-                    for (auto env : state.envs.potentialParents(i->env()))
-                        state.allStoresObserved.insert(env);
-                    effect.update();
-                }
-                if (i->changesEnv()) {
-                    state.envs[i->env()].taint();
-                    effect.taint();
-                }
+            if (envIsNeeded && i->leaksEnv()) {
+                state.envs[i->env()].leaked = true;
+                for (auto env : state.envs.potentialParents(i->env()))
+                    state.allStoresObserved.insert(env);
+                effect.update();
+            }
+            if (envIsNeeded && i->changesEnv()) {
+                state.envs[i->env()].taint();
+                effect.taint();
             }
         }
         if (i->mayUseReflection()) {

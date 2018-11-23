@@ -220,10 +220,11 @@ class BC {
             proms.push_back(immediate.arg_idx);
             break;
         case Opcode::named_call_implicit_:
-        case Opcode::call_implicit_:
-            for (auto a : callExtra().immediateCallArguments)
-                proms.push_back(a);
+        case Opcode::call_implicit_: {
+            auto& in = callExtra().immediateCallArguments;
+            std::copy(in.begin(), in.end(), std::back_inserter(proms));
             break;
+        }
         default: {}
         }
     }

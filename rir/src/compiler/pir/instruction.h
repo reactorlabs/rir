@@ -163,7 +163,7 @@ class Instruction : public Value {
     virtual void printEnv(std::ostream& out, bool tty);
     virtual void printArgs(std::ostream& out, bool tty);
     virtual void print(std::ostream& out, bool tty = false);
-    void printRef(std::ostream& out) override;
+    void printRef(std::ostream& out) override final;
     void print() { print(std::cerr, true); }
 
     virtual InstrArg& arg(size_t pos) = 0;
@@ -176,10 +176,17 @@ class Instruction : public Value {
         return leaksEnv() || hasEffect();
     }
 
+    typedef std::function<bool(Value*)> ArgumentValuePredicateIterator;
     typedef std::function<void(Value*)> ArgumentValueIterator;
     typedef std::function<void(const InstrArg&)> ArgumentIterator;
     typedef std::function<void(InstrArg&)> MutableArgumentIterator;
-    typedef std::function<bool(Value*)> ArgumentValuePredicateIterator;
+
+    bool anyArg(Instruction::ArgumentValuePredicateIterator it) const {
+        for (size_t i = 0; i < nargs(); ++i)
+            if (it(arg(i).val()))
+                return true;
+        return false;
+    }
 
     void eachArg(Instruction::ArgumentValueIterator it) const {
         for (size_t i = 0; i < nargs(); ++i)
@@ -199,13 +206,6 @@ class Instruction : public Value {
     void eachArgRev(Instruction::ArgumentValueIterator it) const {
         for (size_t i = 0; i < nargs(); ++i)
             it(arg(nargs() - 1 - i).val());
-    }
-
-    bool anyArg(Instruction::ArgumentValuePredicateIterator it) const {
-        for (size_t i = 0; i < nargs(); ++i)
-            if (it(arg(i).val()))
-                return true;
-        return false;
     }
 
     static Instruction* Cast(Value* v) {
@@ -1226,8 +1226,7 @@ class VLI(Phi, Effect::None, EnvAccess::None) {
         const std::initializer_list<BB*>& inputs)
         : VarLenInstruction(PirType::any()) {
         assert(vals.size() == inputs.size());
-        for (auto i : inputs)
-            input.push_back(i);
+        std::copy(inputs.begin(), inputs.end(), std::back_inserter(input));
         for (auto a : vals)
             VarLenInstruction::pushArg(a);
         assert(nargs() == inputs.size());

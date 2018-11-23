@@ -72,12 +72,13 @@ class StaticAnalysis {
     BB* entry;
 
   public:
-    StaticAnalysis(std::string name, Closure* cls, Code* code, LogStream& log)
+    StaticAnalysis(const std::string& name, Closure* cls, Code* code,
+                   LogStream& log)
         : name(name), log(log), closure(cls), code(code), entry(code->entry) {
         mergepoint.resize(code->nextBBId);
         mergepoint[entry->id].resize(1);
     }
-    StaticAnalysis(std::string name, Closure* cls, Code* code,
+    StaticAnalysis(const std::string& name, Closure* cls, Code* code,
                    const AbstractState& initialState, LogStream& log)
         : name(name), log(log), closure(cls), code(code), entry(code->entry) {
         mergepoint.resize(code->nextBBId);
