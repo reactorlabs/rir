@@ -2,7 +2,7 @@
 #define SYMBOLS_H_
 
 #include "r.h"
-#include "symbols_list.h"
+#include "symbol_list.h"
 
 namespace rir {
 
