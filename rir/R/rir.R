@@ -103,8 +103,8 @@ rir.body <- function(f) {
 }
 
 # breakpoint during evaluation
-# insert a call to `.debug.break()` in R code and get a breakpoint when it is evaluated
+# insert a call to `.int3()` in R code and get a breakpoint when it is evaluated
 # note: the actual body of this function is replaced by an "int3_" bytecode
-.debug.break <- function() {
+.int3 <- function() {
     stop("missed breakpoint, did you re-compile RIR?")
 }

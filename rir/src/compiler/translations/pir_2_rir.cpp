@@ -6,6 +6,7 @@
 #include "ir/CodeStream.h"
 #include "ir/CodeVerifier.h"
 #include "utils/FunctionWriter.h"
+#include "simple_instruction_list.h"
 
 #include <algorithm>
 #include <iomanip>
@@ -903,8 +904,9 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 SIMPLE(Seq, seq);
                 SIMPLE(MkCls, close);
                 SIMPLE(IsObject, isObj);
-                SIMPLE(Int3, int3);
-                SIMPLE(PrintInvocation, printInvocation);
+#define V(V, name, Name) SIMPLE(Name, name);
+                SIMPLE_INSTRUCTIONS(V, _);
+#undef V
                 SIMPLE(SetShared, setShared);
 #undef SIMPLE
 

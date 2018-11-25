@@ -101,7 +101,6 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
     }
 
     void disassemble(std::ostream&);
-    void printInvocation(std::ostream&);
 
     FunctionSEXP origin() { return origin_; }
 

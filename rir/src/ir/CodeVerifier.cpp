@@ -7,6 +7,8 @@
 #include "CodeVerifier.h"
 #include "R/Symbols.h"
 
+#include "simple_instruction_list.h"
+
 namespace rir {
 
 namespace {
@@ -169,9 +171,11 @@ static Sources hasSources(Opcode bc) {
     case Opcode::aslogical_:
     case Opcode::asbool_:
     case Opcode::missing_:
-    case Opcode::int3_:
-    case Opcode::printInvocation_:
+#define V(NESTED, name, Name)\
+    case Opcode::name ## _:\
         return Sources::May;
+SIMPLE_INSTRUCTIONS(V, _)
+#undef V
 
     case Opcode::invalid_:
     case Opcode::num_of: {}

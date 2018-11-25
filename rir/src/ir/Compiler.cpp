@@ -13,6 +13,8 @@
 
 #include "CodeVerifier.h"
 
+#include "simple_instruction_list.h"
+
 #include <stack>
 
 namespace rir {
@@ -768,21 +770,14 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
         return true;
     }
 
-    if (fun == symbol::printInvocation) {
-        // Push R_NilValue because this is a "function call" and needs to return
-        // something.
-        cs << BC::push(R_NilValue) << BC::printInvocation();
-        cs.addSrc(ast);
-        return true;
+#define V(NESTED, name, Name)\
+    if (fun == symbol::name) {\
+        cs << BC::push(R_NilValue) << BC::name();\
+        cs.addSrc(ast);\
+        return true;\
     }
-
-    if (fun == symbol::debugBreak) {
-        // Push R_NilValue because this is a "function call" and needs to return
-        // something.
-        cs << BC::push(R_NilValue) << BC::int3();
-        cs.addSrc(ast);
-        return true;
-    }
+SIMPLE_INSTRUCTIONS(V, _)
+#undef V
 
     return false;
 }

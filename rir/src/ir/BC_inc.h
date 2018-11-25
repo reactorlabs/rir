@@ -15,6 +15,8 @@
 
 #include "ir/RuntimeFeedback.h"
 
+#include "simple_instruction_list.h"
+
 // type  for constant & ast pool indices
 typedef uint32_t Immediate;
 
@@ -359,8 +361,10 @@ class BC {
     inline static BC is(uint32_t);
     inline static BC isObj();
     inline static BC return_();
-    inline static BC int3();
-    inline static BC printInvocation();
+#define V(NESTED, name, Name)\
+    inline static BC name();
+SIMPLE_INSTRUCTIONS(V, _)
+#undef V
     inline static BC deopt(SEXP);
     inline static BC callImplicit(const std::vector<FunIdx>& args, SEXP ast);
     inline static BC callImplicit(const std::vector<FunIdx>& args,
@@ -641,8 +645,10 @@ class BC {
         case Opcode::dup_:
         case Opcode::dup2_:
         case Opcode::swap_:
-        case Opcode::int3_:
-        case Opcode::printInvocation_:
+#define V(NESTED, name, Name)\
+        case Opcode::name ## _:
+SIMPLE_INSTRUCTIONS(V, _)
+#undef V
         case Opcode::make_unique_:
         case Opcode::set_shared_:
         case Opcode::aslogical_:

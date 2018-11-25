@@ -11,6 +11,7 @@
 #include "ir/BC.h"
 #include "ir/Compiler.h"
 #include "utils/FormalArgs.h"
+#include "simple_instruction_list.h"
 
 #include <sstream>
 #include <unordered_map>
@@ -526,13 +527,12 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, rir::Code* srcCode,
         push(insert(new SetShared(pop())));
         break;
 
-    case Opcode::int3_:
-        insert(new Int3());
+#define V(_, name, Name)\
+    case Opcode::name ## _:\
+        insert(new Name());\
         break;
-
-    case Opcode::printInvocation_:
-        insert(new PrintInvocation());
-        break;
+SIMPLE_INSTRUCTIONS(V, _)
+#undef V
 
     // TODO implement!
     // (silently ignored)

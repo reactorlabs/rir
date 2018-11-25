@@ -132,8 +132,9 @@ void BC::write(CodeStream& cs) const {
     case Opcode::dup2_:
     case Opcode::for_seq_size_:
     case Opcode::swap_:
-    case Opcode::int3_:
-    case Opcode::printInvocation_:
+#define V(NESTED, name, Name) case Opcode::name ## _:
+SIMPLE_INSTRUCTIONS(V, _)
+#undef V
     case Opcode::make_unique_:
     case Opcode::set_shared_:
     case Opcode::aslogical_:
@@ -344,8 +345,9 @@ void BC::print(std::ostream& out) const {
     case Opcode::colon_:
     case Opcode::ret_:
     case Opcode::swap_:
-    case Opcode::int3_:
-    case Opcode::printInvocation_:
+#define V(NESTED, name, Name) case Opcode::name ## _:
+SIMPLE_INSTRUCTIONS(V, _)
+#undef V
     case Opcode::make_unique_:
     case Opcode::set_shared_:
     case Opcode::dup_:
