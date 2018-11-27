@@ -1,12 +1,13 @@
 #include "pir_2_rir.h"
 #include "../pir/pir_impl.h"
+#include "../transform/bb.h"
 #include "../util/cfg.h"
 #include "../util/visitor.h"
 #include "interpreter/runtime.h"
 #include "ir/CodeStream.h"
 #include "ir/CodeVerifier.h"
-#include "utils/FunctionWriter.h"
 #include "simple_instruction_list.h"
+#include "utils/FunctionWriter.h"
 
 #include <algorithm>
 #include <iomanip>
@@ -610,29 +611,13 @@ class Context {
 
     CodeStream& cs() { return *css.top(); }
 
-    void pushDefaultArg(SEXP ast) {
-        defaultArg.push(true);
-        push(ast);
-    }
-    void pushPromise(SEXP ast) {
-        defaultArg.push(false);
-        push(ast);
-    }
-    void pushBody(SEXP ast) {
-        defaultArg.push(false);
-        push(ast);
-    }
-
-    BC::FunIdx finalizeCode(size_t localsCnt) {
-        auto idx = cs().finalize(defaultArg.top(), localsCnt);
+    rir::Code* finalizeCode(size_t localsCnt) {
+        auto res = cs().finalize(localsCnt);
         delete css.top();
-        defaultArg.pop();
         css.pop();
-        return idx;
+        return res;
     }
 
-  private:
-    std::stack<bool> defaultArg;
     void push(SEXP ast) { css.push(new CodeStream(fun, ast)); }
 };
 
@@ -643,7 +628,7 @@ class Pir2Rir {
         : compiler(cmp), cls(cls), originCls(origin), dryRun(dryRun), log(log) {
     }
     size_t compileCode(Context& ctx, Code* code);
-    size_t getPromiseIdx(Context& ctx, Promise* code);
+    rir::Code* getPromise(Context& ctx, Promise* code);
 
     void lower(Code* code);
     void toCSSA(Code* code);
@@ -653,8 +638,7 @@ class Pir2Rir {
     Pir2RirCompiler& compiler;
     Closure* cls;
     SEXP originCls;
-    std::unordered_map<Promise*, BC::FunIdx> promises;
-    std::unordered_map<Promise*, SEXP> argNames;
+    std::unordered_map<Promise*, rir::Code*> promises;
     bool dryRun;
     LogStream& log;
 };
@@ -675,7 +659,7 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
             bbLabels[bb] = ctx.cs().mkLabel();
     });
 
-    BreadthFirstVisitor::run(code->entry, [&](BB* bb) {
+    LoweringVisitor::run(code->entry, [&](BB* bb) {
         if (bb->isEmpty())
             return;
 
@@ -732,6 +716,9 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
 
                 auto loadArg = [&](BB::Instrs::iterator it, Instruction* instr,
                                    Value* what) {
+                    if (what == Tombstone::instance()) {
+                        return;
+                    }
                     if (what == Missing::instance()) {
                         // if missing flows into instructions with more than one
                         // arg we will need stack shuffling here
@@ -836,8 +823,8 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 while (falseBranch->isEmpty())
                     falseBranch = falseBranch->next();
 
-                cs << BC::brfalse(bbLabels[falseBranch])
-                   << BC::br(bbLabels[trueBranch]);
+                cs << BC::brtrue(bbLabels[trueBranch])
+                   << BC::br(bbLabels[falseBranch]);
 
                 // this is the end of this BB
                 return;
@@ -850,7 +837,7 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
             }
             case Tag::MkArg: {
                 cs << BC::promise(
-                    getPromiseIdx(ctx, MkArg::Cast(instr)->prom()));
+                    cs.addPromise(getPromise(ctx, MkArg::Cast(instr)->prom())));
                 break;
             }
             case Tag::MkFunCls: {
@@ -945,7 +932,7 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 auto call = CallImplicit::Cast(instr);
                 std::vector<BC::FunIdx> args;
                 for (auto& p : call->promises)
-                    args.push_back(getPromiseIdx(ctx, p));
+                    args.push_back(cs.addPromise(getPromise(ctx, p)));
 
                 if (call->names.empty())
                     cs << BC::callImplicit(args, Pool::get(call->srcIdx));
@@ -1014,8 +1001,11 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 });
                 break;
             }
-            case Tag::Deopt: {
-                assert(false && "Deopt must be folded into scheduled deopt, "
+            case Tag::Deopt:
+            case Tag::assumeNot:
+            case Tag::Checkpoint: {
+                assert(false && "Deopt instructions must be lowered into "
+                                "standard branches and scheduled deopt, "
                                 "before pir_2_rir");
                 break;
             }
@@ -1047,6 +1037,7 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 break;
             }
             // values, not instructions
+            case Tag::Tombstone:
             case Tag::Missing:
             case Tag::Env:
             case Tag::Nil:
@@ -1093,45 +1084,60 @@ static bool allLazy(CallType* call, std::vector<Promise*>& args) {
 }
 
 void Pir2Rir::lower(Code* code) {
-    Visitor::run(code->entry, [&](BB* bb) {
-        auto it = bb->begin();
-        while (it != bb->end()) {
-            auto next = it + 1;
-            if (auto deopt = Deopt::Cast(*it)) {
-                // Lower Deopt instructions + their FrameStates to a
-                // ScheduledDeopt.
-                auto newDeopt = new ScheduledDeopt();
-                newDeopt->consumeFrameStates(deopt);
-                auto newDeoptPos = bb->insert(it, newDeopt);
-                next = newDeoptPos + 2;
-            } else if (auto call = Call::Cast(*it)) {
-                // Lower calls to call implicit
-                std::vector<Promise*> args;
-                if (allLazy(call, args))
-                    call->replaceUsesAndSwapWith(
-                        new CallImplicit(call->callerEnv(), call->cls(),
-                                         std::move(args), {}, call->srcIdx),
-                        it);
-            } else if (auto call = NamedCall::Cast(*it)) {
-                // Lower named calls to call implicit
-                std::vector<Promise*> args;
-                if (allLazy(call, args))
-                    call->replaceUsesAndSwapWith(
-                        new CallImplicit(call->callerEnv(), call->cls(),
-                                         std::move(args), call->names,
-                                         call->srcIdx),
-                        it);
-            }
+    Visitor::run(
+        code->entry,
+        [&](BB* bb) {
+            auto it = bb->begin();
+            while (it != bb->end()) {
+                auto next = it + 1;
+                if (auto deopt = Deopt::Cast(*it)) {
+                    // Lower Deopt instructions + their FrameStates to a
+                    // ScheduledDeopt.
+                    auto newDeopt = new ScheduledDeopt();
+                    newDeopt->consumeFrameStates(deopt);
+                    bb->replace(it, newDeopt);
+                } else if (auto expect = assumeNot::Cast(*it)) {
+                    BBTransform::lowerExpect(
+                        code, bb, it, expect->condition(),
+                        expect->checkpoint()->bb()->falseBranch());
+                    // lowerExpect splits the bb from current position. There
+                    // remains nothing to process. Breaking seems more robust
+                    // than trusting the modified iterator.
+                    break;
+                } else if (auto call = Call::Cast(*it)) {
+                    // Lower calls to call implicit
+                    std::vector<Promise*> args;
+                    if (allLazy(call, args))
+                        call->replaceUsesAndSwapWith(
+                            new CallImplicit(call->callerEnv(), call->cls(),
+                                             std::move(args), {}, call->srcIdx),
+                            it);
+                } else if (auto call = NamedCall::Cast(*it)) {
+                    // Lower named calls to call implicit
+                    std::vector<Promise*> args;
+                    if (allLazy(call, args))
+                        call->replaceUsesAndSwapWith(
+                            new CallImplicit(call->callerEnv(), call->cls(),
+                                             std::move(args), call->names,
+                                             call->srcIdx),
+                            it);
+                }
 
-            it = next;
-        }
-    });
+                it = next;
+            }
+        },
+        true);
+
     Visitor::run(code->entry, [&](BB* bb) {
         auto it = bb->begin();
         while (it != bb->end()) {
             auto next = it + 1;
-            if (FrameState::Cast(*it) || Deopt::Cast(*it)) {
+            if (FrameState::Cast(*it)) {
                 next = bb->remove(it);
+            } else if (Checkpoint::Cast(*it)) {
+                next = bb->remove(it);
+                // Branching removed. Preserve invariant
+                bb->next1 = nullptr;
             } else if (MkArg::Cast(*it) && (*it)->unused()) {
                 next = bb->remove(it);
             }
@@ -1166,9 +1172,9 @@ void Pir2Rir::toCSSA(Code* code) {
     });
 }
 
-size_t Pir2Rir::getPromiseIdx(Context& ctx, Promise* p) {
+rir::Code* Pir2Rir::getPromise(Context& ctx, Promise* p) {
     if (!promises.count(p)) {
-        ctx.pushPromise(src_pool_at(globalContext(), p->srcPoolIdx));
+        ctx.push(src_pool_at(globalContext(), p->srcPoolIdx));
         size_t localsCnt = compileCode(ctx, p);
         promises[p] = ctx.finalizeCode(localsCnt);
     }
@@ -1183,18 +1189,15 @@ rir::Function* Pir2Rir::finalize() {
     FunctionWriter function;
     Context ctx(function);
 
-    size_t i = 0;
-    for (auto arg : cls->defaultArgs) {
-        if (!arg)
-            continue;
-        getPromiseIdx(ctx, arg);
-        argNames[arg] = cls->argNames[i++];
-    }
-    ctx.pushBody(R_NilValue);
+    // PIR does not support default args currently.
+    for (size_t i = 0; i < cls->nargs(); ++i)
+        function.addArgWithoutDefault();
+
+    ctx.push(R_NilValue);
     size_t localsCnt = compileCode(ctx, cls);
-    ctx.finalizeCode(localsCnt);
-    function.finalize();
     log.finalPIR(cls);
+    auto body = ctx.finalizeCode(localsCnt);
+    function.finalize(body);
 #ifdef ENABLE_SLOWASSERT
     CodeVerifier::verifyFunctionLayout(function.function()->container(),
                                        globalContext());
@@ -1226,7 +1229,7 @@ void Pir2RirCompiler::compile(Closure* cls, SEXP origin, bool dryRun) {
 
     auto oldFun = table->first();
 
-    fun->invocationCount = oldFun->invocationCount;
+    fun->body()->funInvocationCount = oldFun->body()->funInvocationCount;
     // TODO: signatures need a rework
     fun->signature = oldFun->signature;
 
