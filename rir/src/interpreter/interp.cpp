@@ -2681,8 +2681,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
         }
 
         INSTRUCTION(printInvocation_) {
-            Function* func = c->function();
-            printf("Invocation count: %d\n", func->invocationCount);
+            printf("Invocation count: %d\n", c->funInvocationCount);
             NEXT();
         }
 
