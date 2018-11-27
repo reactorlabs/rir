@@ -53,8 +53,8 @@ REXPORT SEXP rir_printInvocation(SEXP what) {
         if (!t->available(entry))
             continue;
         Function* f = t->at(entry);
-        std::cout << "* slot <" << entry << "> invoked "
-                  << f->invocationCount << " time(s)\n";
+        std::cout << "* slot <" << entry << "> invoked " << f->invocationCount()
+                  << " time(s)\n";
     }
 
     return R_NilValue;
