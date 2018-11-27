@@ -1,7 +1,11 @@
 #ifndef COMPILER_INSTRUCTION_LIST_H
 #define COMPILER_INSTRUCTION_LIST_H
 
+#include "simple_instruction_list.h"
+
 // Please keep in sync with implementation of instructions in instruction.h
+
+#define V_SIMPLE_INSTRUCTION(V, name, Name) V(Name)
 
 #define COMPILER_INSTRUCTIONS(V)                                               \
     V(LdFun)                                                                   \
@@ -62,13 +66,32 @@
     V(Subassign2_1D)                                                           \
     V(ForSeqSize)                                                              \
     V(FrameState)                                                              \
+    V(Checkpoint)                                                              \
+    V(assumeNot)                                                               \
     V(Deopt)                                                                   \
     V(ScheduledDeopt)                                                          \
     V(Force)                                                                   \
     V(CastType)                                                                \
     V(SetShared)                                                               \
     V(PirCopy)                                                                 \
-    V(Int3)                                                                    \
-    V(PrintInvocation)
+    SIMPLE_INSTRUCTIONS(V_SIMPLE_INSTRUCTION, V)                               \
+
+#undef V_SIMPLE_INSTRUCTIONS 
+
+#define BINOP_INSTRUCTIONS(V)                                                  \
+    V(Lte)                                                                     \
+    V(Gte)                                                                     \
+    V(Lt)                                                                      \
+    V(Gt)                                                                      \
+    V(Mod)                                                                     \
+    V(Add)                                                                     \
+    V(Div)                                                                     \
+    V(IDiv)                                                                    \
+    V(Colon)                                                                   \
+    V(Pow)                                                                     \
+    V(Sub)                                                                     \
+    V(Mul)                                                                     \
+    V(Neq)                                                                     \
+    V(Eq)
 
 #endif
