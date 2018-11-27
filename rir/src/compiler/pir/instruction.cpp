@@ -111,10 +111,8 @@ Instruction::InstructionUID Instruction::id() {
 }
 
 bool Instruction::unused() {
-    // TODO: better solution?
-    if (tag == Tag::Branch || tag == Tag::Return)
-        return false;
-
+    if (type == PirType::voyd())
+        return true;
     return Visitor::check(bb(), [&](Instruction* i) {
         bool unused = true;
         i->eachArg([&](Value* v) { unused = unused && (v != this); });
@@ -166,6 +164,16 @@ Value* Instruction::baseValue() {
     if (auto shared = SetShared::Cast(this))
         return shared->arg<0>().val()->baseValue();
     return this;
+}
+
+bool Instruction::maySpecialize() {
+#define V(Name)                                                                \
+    if (Name::Cast(this)) {                                                    \
+        return true;                                                           \
+    }
+    BINOP_INSTRUCTIONS(V)
+#undef V
+    return false;
 }
 
 void LdConst::printArgs(std::ostream& out, bool tty) {
@@ -366,7 +374,6 @@ MkFunCls::MkFunCls(Closure* fun, Value* lexicalEnv, SEXP fml, SEXP code,
                    SEXP src)
     : FixedLenInstructionWithEnvSlot(RType::closure, lexicalEnv), fun(fun),
       fml(fml), code(code), src(src) {
-    assert(fun->closureEnv() == Env::notClosed());
 }
 
 void MkFunCls::printArgs(std::ostream& out, bool tty) {
@@ -377,6 +384,10 @@ void MkFunCls::printArgs(std::ostream& out, bool tty) {
 void StaticCall::printArgs(std::ostream& out, bool tty) {
     out << *cls_;
     printCallArgs(out, this);
+    if (frameState()) {
+        frameState()->printRef(out);
+        out << ", ";
+    }
 }
 
 CallInstruction* CallInstruction::CastCall(Value* v) {
@@ -413,6 +424,10 @@ NamedCall::NamedCall(Value* callerEnv, Value* fun,
 void Call::printArgs(std::ostream& out, bool tty) {
     cls()->printRef(out);
     printCallArgs(out, this);
+    if (frameState()) {
+        frameState()->printRef(out);
+        out << ", ";
+    }
 }
 
 void NamedCall::printArgs(std::ostream& out, bool tty) {
@@ -445,6 +460,12 @@ void CallImplicit::printArgs(std::ostream& out, bool tty) {
 }
 
 FrameState* Deopt::frameState() { return FrameState::Cast(arg<0>().val()); }
+
+void Checkpoint::printArgs(std::ostream& out, bool tty) {
+    FixedLenInstruction::printArgs(out, tty);
+    out << " -> BB" << bb()->trueBranch()->id << " (by default) | BB"
+        << bb()->falseBranch()->id << " (if coming from expect)";
+}
 
 } // namespace pir
 } // namespace rir

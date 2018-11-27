@@ -153,24 +153,39 @@ bool compileAndVerify(const std::string& input) {
 
 void insertTypeFeedbackForBinops(rir::Function* srcFunction,
                                  std::array<SEXP, 2> typeFeedback) {
-    for (auto function : *srcFunction) {
-        Opcode* end = function->endCode();
-        Opcode* finger = function->code();
-        while (finger != end) {
-            Opcode* prev = finger;
-            BC bc = BC::advance(&finger, function);
-            if (bc.bc == Opcode::record_binop_) {
-                prev++;
-                ObservedValues* feedback = (ObservedValues*)prev;
-                feedback[0].record(typeFeedback[0]);
-                feedback[1].record(typeFeedback[1]);
-            }
+    auto function = srcFunction->body();
+    Opcode* end = function->endCode();
+    Opcode* finger = function->code();
+    while (finger != end) {
+        Opcode* prev = finger;
+        BC bc = BC::advance(&finger, function);
+        if (bc.bc == Opcode::record_binop_) {
+            prev++;
+            ObservedValues* feedback = (ObservedValues*)prev;
+            feedback[0].record(typeFeedback[0]);
+            feedback[1].record(typeFeedback[1]);
         }
     }
 }
 
 extern "C" SEXP Rf_NewEnvironment(SEXP, SEXP, SEXP);
 SEXP parseCompileToRir(std::string);
+
+static bool envOfAddElided(pir::Code* c) {
+    bool hasAdd = false;
+
+    bool res = Visitor::check(c->entry, [&](BB* bb) -> bool {
+        for (auto& i : *bb) {
+            if (auto a = Add::Cast(i)) {
+                hasAdd = true;
+                if (a->env() != Env::elided())
+                    return false;
+            }
+        }
+        return true;
+    });
+    return hasAdd && res;
+}
 
 bool canRemoveEnvironmentIfTypeFeedback(const std::string& input) {
     Protect p;
@@ -195,8 +210,7 @@ bool canRemoveEnvironmentIfTypeFeedback(const std::string& input) {
     pir::Module m;
     compileRir2Pir(execEnv, &m);
     bool t = verify(&m);
-    m.eachPirFunction(
-        [&t](pir::Closure* f) { t = t && Query::envOnlyBeforeDeopt(f); });
+    m.eachPirFunction([&t](pir::Closure* f) { t = t && envOfAddElided(f); });
     return t;
 }
 
@@ -213,7 +227,7 @@ bool canRemoveEnvironmentIfNonTypeFeedback(const std::string& input) {
     compile("", input, &m);
     bool t = verify(&m);
     m.eachPirFunction([&t](pir::Closure* f) {
-        t = t && (Query::noEnv(f) || Query::envOnlyBeforeDeopt(f));
+        t = t && (Query::noEnv(f) || envOfAddElided(f));
     });
     return t;
 }
@@ -386,12 +400,13 @@ static Test tests[] = {
          []() { return canRemoveEnvironment("f <- function() 123"); }),
     Test("binop_nonobjects",
          []() {
-             return canRemoveEnvironmentIfTypeFeedback("f <- function() 1 + 2");
+             return canRemoveEnvironmentIfTypeFeedback(
+                 "f <- function() 1 + xxx");
          }),
     Test("binop_nonobjects_nofeedback",
          []() {
              return !canRemoveEnvironmentIfNonTypeFeedback(
-                 "f <- function() 1 + 2");
+                 "f <- function() 1 + xxx");
          }),
     Test("super_assign", &testSuperAssign),
     Test("loop",

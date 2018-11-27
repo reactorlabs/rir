@@ -9,7 +9,7 @@
 namespace rir {
 namespace pir {
 
-void DelayEnv::apply(Closure* function) const {
+void DelayEnv::apply(RirCompiler&, Closure* function) const {
     Visitor::run(function->entry, [&](BB* bb) {
         std::unordered_set<MkEnv*> done;
         MkEnv* envInstr;
@@ -37,7 +37,7 @@ void DelayEnv::apply(Closure* function) const {
                 auto next = *(it + 1);
 
                 if (Branch::Cast(next) || Return::Cast(next) ||
-                    Deopt::Cast(next))
+                    Deopt::Cast(next) || Checkpoint::Cast(next))
                     break;
 
                 auto consumeStVar = [&](StVar* st) {
@@ -83,7 +83,7 @@ void DelayEnv::apply(Closure* function) const {
             };
 
             if (it != bb->end() && (it + 1) != bb->end()) {
-                auto branch = Branch::Cast(*(it + 1));
+                auto branch = (*(it + 1))->branches();
                 if (envInstr && branch) {
                     Deopt* deopt;
                     if (!bb->falseBranch()->isEmpty() &&

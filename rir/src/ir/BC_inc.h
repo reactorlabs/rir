@@ -122,7 +122,7 @@ class BC {
         uint32_t i;
         NumLocals loc;
         LocalsCopy loc_cpy;
-        ObservedCalles callFeedback;
+        ObservedCallees callFeedback;
         ObservedValues binopFeedback[2];
         ImmediateArguments() { memset(this, 0, sizeof(ImmediateArguments)); }
     };
@@ -213,6 +213,21 @@ class BC {
         return bc == Opcode::call_implicit_ ||
                bc == Opcode::named_call_implicit_ || bc == Opcode::promise_ ||
                bc == Opcode::push_code_;
+    }
+
+    void addMyPromArgsTo(std::vector<FunIdx>& proms) {
+        switch (bc) {
+        case Opcode::push_code_:
+        case Opcode::promise_:
+            proms.push_back(immediate.arg_idx);
+            break;
+        case Opcode::named_call_implicit_:
+        case Opcode::call_implicit_:
+            for (auto a : callExtra().immediateCallArguments)
+                proms.push_back(a);
+            break;
+        default: {}
+        }
     }
 
     bool isCondJmp() const {
@@ -621,7 +636,7 @@ SIMPLE_INSTRUCTIONS(V, _)
             memcpy(&immediate.loc_cpy, pc, sizeof(LocalsCopy));
             break;
         case Opcode::record_call_:
-            memcpy(&immediate.callFeedback, pc, sizeof(ObservedCalles));
+            memcpy(&immediate.callFeedback, pc, sizeof(ObservedCallees));
             break;
         case Opcode::record_binop_:
             memcpy(&immediate.binopFeedback, pc, sizeof(ObservedValues) * 2);

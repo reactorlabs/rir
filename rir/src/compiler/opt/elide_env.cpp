@@ -9,7 +9,7 @@
 namespace rir {
 namespace pir {
 
-void ElideEnv::apply(Closure* function) const {
+void ElideEnv::apply(RirCompiler&, Closure* function) const {
     std::unordered_set<Value*> envNeeded;
     std::unordered_map<Value*, Value*> envDependency;
 

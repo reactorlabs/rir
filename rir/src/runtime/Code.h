@@ -49,44 +49,41 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
     friend struct Function;
     friend class FunctionWriter;
     friend class CodeVerifier;
-    static constexpr size_t NumLocals = 2;
+    static constexpr size_t NumLocals = 1;
 
     Code() = delete;
 
-    Code(FunctionSEXP fun, size_t index, SEXP ast, unsigned codeSize,
-         unsigned sourceSize, bool isDefaultArg, size_t localsCnt);
+    Code(FunctionSEXP fun, SEXP ast, unsigned codeSize, unsigned sourceSize,
+         size_t localsCnt);
 
   private:
     /*
      * This array contains the GC reachable pointers. Currently there are two
      * of them.
-     * 0 : the function that contains this code object, through function()
-     * 1 : the extra pool for attaching additional GC'd object to the code.
+     * 0 : the extra pool for attaching additional GC'd object to the code.
      */
     SEXP locals_[NumLocals];
 
   public:
-    size_t index; /// index of this Code object in the Function array
+    void registerInvocation() {
+        if (funInvocationCount < UINT_MAX)
+            funInvocationCount++;
+    }
+    // number of invocations. only incremented if this code object is the body
+    // of a function
+    unsigned funInvocationCount;
 
-    // TODO comment these
     unsigned src; /// AST of the function (or promise) represented by the code
 
     unsigned stackLength; /// Number of slots in stack required
 
-    // TODO: for now, only use 1 slot for everything (to store current env)
     unsigned localsCount; /// Number of slots for local variables
 
     unsigned codeSize; /// bytes of code (not padded)
 
     unsigned srcLength; /// number of sources attached
 
-    unsigned perfCounter;
-
     unsigned extraPoolSize; /// Number of elements in the per code constant pool
-
-    unsigned isDefaultArgument : 1; /// is this a compiled default value
-                                    /// of a formal argument
-    unsigned free : 31;
 
     uint8_t data[]; /// the instructions
 
@@ -111,8 +108,6 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
     Opcode* code() const { return (Opcode*)data; }
     Opcode* endCode() const { return (Opcode*)((uintptr_t)code() + codeSize); }
 
-    Function* function();
-
     // Usually SEXP pointers are loaded through the const pool. But sometimes
     // we want to be able to attach things to the code objects which:
     // 1. should get collected when the code is not longer needed
@@ -121,7 +116,11 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
     unsigned addExtraPoolEntry(SEXP v);
     SEXP getExtraPoolEntry(unsigned i) const {
         assert(i < extraPoolSize);
-        return VECTOR_ELT(getEntry(1), i);
+        return VECTOR_ELT(getEntry(0), i);
+    }
+
+    Code* getPromise(size_t idx) const {
+        return unpack(getExtraPoolEntry(idx));
     }
 
     size_t size() const {
@@ -134,7 +133,7 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
 
     unsigned getSrcIdxAt(const Opcode* pc, bool allowMissing) const;
 
-    void disassemble(std::ostream&) const;
+    void disassemble(std::ostream&, std::string promPrefix = "") const;
     void print(std::ostream&) const;
 
   private:
@@ -145,27 +144,6 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
 
 #pragma pack(pop)
 
-class FunctionCodeIterator {
-    Function const* const function;
-    size_t index;
-
-  public:
-    FunctionCodeIterator(Function const* const function, size_t index);
-    void operator++();
-    bool operator!=(FunctionCodeIterator other);
-    Code* operator*();
-};
-
-class ConstFunctionCodeIterator {
-    Function const* const function;
-    size_t index;
-
-  public:
-    ConstFunctionCodeIterator(Function const* const function, size_t index);
-    void operator++();
-    bool operator!=(ConstFunctionCodeIterator other);
-    const Code* operator*();
-};
 }
 
 #endif

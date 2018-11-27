@@ -154,7 +154,7 @@ class ForceDominanceAnalysisResult {
 namespace rir {
 namespace pir {
 
-void ForceDominance::apply(Closure* cls) const {
+void ForceDominance::apply(RirCompiler&, Closure* cls) const {
     ForceDominanceAnalysisResult analysis(cls);
 
     std::unordered_map<Force*, Value*> inlinedPromise;
@@ -164,11 +164,9 @@ void ForceDominance::apply(Closure* cls) const {
     Visitor::run(cls->entry, [&](BB* bb) {
         auto ip = bb->begin();
         while (ip != bb->end()) {
-            auto f = Force::Cast(*ip);
             auto next = ip + 1;
-            if (f) {
-                auto mkarg = MkArg::Cast(f->baseValue());
-                if (mkarg) {
+            if (auto f = Force::Cast(*ip)) {
+                if (auto mkarg = MkArg::Cast(f->baseValue())) {
                     if (analysis.isDominating(f)) {
                         Value* strict = mkarg->eagerArg();
                         if (strict != Missing::instance()) {
@@ -211,6 +209,13 @@ void ForceDominance::apply(Closure* cls) const {
                             bb = split;
                         }
                     }
+                }
+            } else if (auto cast = CastType::Cast(*ip)) {
+                if (auto mk = MkArg::Cast(cast->arg<0>().val())) {
+                    mk->ifEager([&](Value* val) {
+                        cast->replaceUsesWith(val);
+                        next = bb->remove(ip);
+                    });
                 }
             }
             ip = next;

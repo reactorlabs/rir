@@ -69,6 +69,7 @@ enum class NativeType : uint8_t {
     _UNUSED_,
 
     test,
+    checkpoint,
     frameState,
 
     FIRST = test,
@@ -169,6 +170,9 @@ struct PirType {
     RIR_INLINE bool isRType() const {
         return flags_.includes(TypeFlags::rtype);
     }
+    RIR_INLINE bool maybe(RType type) const {
+        return isRType() && t_.r.includes(type);
+    }
 
     RIR_INLINE PirType scalar() const {
         assert(isRType());
@@ -253,6 +257,9 @@ inline std::ostream& operator<<(std::ostream& out, NativeType t) {
     switch (t) {
     case NativeType::test:
         out << "t";
+        break;
+    case NativeType::checkpoint:
+        out << "cp";
         break;
     case NativeType::frameState:
         out << "fs";

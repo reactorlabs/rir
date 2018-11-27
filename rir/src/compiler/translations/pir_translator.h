@@ -12,7 +12,7 @@ class PirTranslator {
   public:
     PirTranslator(const std::string& name) : name(name) {}
 
-    virtual void apply(Closure* function) const = 0;
+    virtual void apply(RirCompiler&, Closure* function) const = 0;
     std::string getName() const { return this->name; }
     virtual ~PirTranslator() {}
 
