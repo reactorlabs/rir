@@ -252,12 +252,12 @@ class AbstractREnvironmentHierarchy {
             else
                 envs[e.first] = e.second;
 
-        for (auto& a : other.aliases) {
-            if (!aliases.count(a.first)) {
-                aliases.emplace(a);
+        for (auto& entry : other.aliases) {
+            if (!aliases.count(entry.first)) {
+                aliases.emplace(entry);
                 res.update();
             } else {
-                SLOWASSERT(a.second == aliases.at(a.first));
+                SLOWASSERT(entry.second == aliases.at(entry.first));
             }
         }
         return res;

@@ -17,9 +17,7 @@ void CleanupFramestate::apply(RirCompiler&, Closure* function,
         });
     };
     apply(function);
-    for (auto& p : function->promises)
-        if (p)
-            apply(p);
+    function->eachPromise([&](Promise* p) { apply(p); });
 }
 } // namespace pir
 } // namespace rir

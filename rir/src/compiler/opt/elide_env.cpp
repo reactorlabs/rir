@@ -26,7 +26,7 @@ void ElideEnv::apply(RirCompiler&, Closure* function, LogStream&) const {
                 });
                 if (!needed) {
                     i->elideEnv();
-                    i->type = i->type.notObject();
+                    i->type.setNotObject();
                 }
             }
 

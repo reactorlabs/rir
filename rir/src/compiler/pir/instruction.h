@@ -60,18 +60,18 @@ class Phi;
 
 struct InstrArg {
   private:
-    PirType t;
-    Value* v;
+    PirType type_;
+    Value* val_;
 
   public:
-    InstrArg(Value* v, PirType t) : t(t), v(v) {
+    InstrArg(Value* v, PirType t) : type_(t), val_(v) {
         assert(v->tag != Tag::_UNUSED_);
     }
-    InstrArg() : t(PirType::bottom()), v(nullptr) {}
-    Value*& val() { return v; }
-    PirType& type() { return t; }
-    Value* val() const { return v; }
-    PirType type() const { return t; }
+    InstrArg() : type_(PirType::bottom()), val_(nullptr) {}
+    Value*& val() { return val_; }
+    PirType& type() { return type_; }
+    Value* val() const { return val_; }
+    PirType type() const { return type_; }
 };
 
 // EnvAccess specifies if an instruction has an environment argument
@@ -179,6 +179,7 @@ class Instruction : public Value {
     typedef std::function<void(Value*)> ArgumentValueIterator;
     typedef std::function<void(const InstrArg&)> ArgumentIterator;
     typedef std::function<void(InstrArg&)> MutableArgumentIterator;
+    typedef std::function<bool(Value*)> ArgumentValuePredicateIterator;
 
     void eachArg(Instruction::ArgumentValueIterator it) const {
         for (size_t i = 0; i < nargs(); ++i)
@@ -198,6 +199,13 @@ class Instruction : public Value {
     void eachArgRev(Instruction::ArgumentValueIterator it) const {
         for (size_t i = 0; i < nargs(); ++i)
             it(arg(nargs() - 1 - i).val());
+    }
+
+    bool anyArg(Instruction::ArgumentValuePredicateIterator it) const {
+        for (size_t i = 0; i < nargs(); ++i)
+            if (it(arg(i).val()))
+                return true;
+        return false;
     }
 
     static Instruction* Cast(Value* v) {

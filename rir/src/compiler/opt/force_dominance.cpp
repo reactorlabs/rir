@@ -45,7 +45,7 @@ using namespace rir::pir;
 
 struct ForcedBy {
     std::unordered_map<Value*, Force*> forcedBy;
-    std::unordered_set<Value*> declared;
+    std::unordered_set<Value*> inScope;
     std::unordered_set<Value*> escaped;
 
     static Force* ambiguous() {
@@ -54,8 +54,8 @@ struct ForcedBy {
     }
 
     bool declare(Value* arg) {
-        if (!declared.count(arg)) {
-            declared.insert(arg);
+        if (!inScope.count(arg)) {
+            inScope.insert(arg);
             return true;
         }
         return false;
@@ -103,7 +103,7 @@ struct ForcedBy {
                         res.lostPrecision();
                     }
                 }
-            } else if (other.declared.count(v)) {
+            } else if (other.inScope.count(v)) {
                 if (e.second != ambiguous()) {
                     e.second = ambiguous();
                     res.lostPrecision();
@@ -112,11 +112,11 @@ struct ForcedBy {
         }
         for (auto& e : other.forcedBy) {
             if (!forcedBy.count(e.first)) {
-                if (declared.count(e.first)) {
+                if (inScope.count(e.first)) {
                     forcedBy[e.first] = ambiguous();
                     res.lostPrecision();
                 } else {
-                    declared.insert(e.first);
+                    inScope.insert(e.first);
                     forcedBy[e.first] = e.second;
                     res.update();
                 }
@@ -166,7 +166,7 @@ struct ForcedBy {
 
     void print(std::ostream& out, bool tty) {
         out << "Known proms: ";
-        for (auto& p : declared) {
+        for (auto& p : inScope) {
             p->printRef(out);
             out << " ";
         }
@@ -195,27 +195,27 @@ class ForceDominanceAnalysis : public StaticAnalysis<ForcedBy> {
     explicit ForceDominanceAnalysis(Closure* cls, Code* code, LogStream& log)
         : StaticAnalysis("ForceDominance", cls, code, log) {}
 
-    AbstractResult apply(ForcedBy& d, Instruction* i) const override {
+    AbstractResult apply(ForcedBy& state, Instruction* i) const override {
         bool changed = false;
         if (auto f = Force::Cast(i)) {
             if (MkArg* arg = MkArg::Cast(f->arg<0>().val()->followCasts()))
-                changed = d.forcedAt(arg, f) || changed;
+                changed = state.forcedAt(arg, f) || changed;
             if (LdArg* arg = LdArg::Cast(f->arg<0>().val()->followCasts()))
-                changed = d.forcedAt(arg, f) || changed;
+                changed = state.forcedAt(arg, f) || changed;
         } else if (auto mk = MkArg::Cast(i)) {
-            changed = d.declare(mk) || changed;
+            changed = state.declare(mk) || changed;
         } else if (auto ld = LdArg::Cast(i)) {
-            changed = d.declare(ld) || changed;
+            changed = state.declare(ld) || changed;
         } else if (!CastType::Cast(i)) {
             i->eachArg([&](Value* v) {
                 v = v->followCasts();
                 if (auto arg = MkArg::Cast(v))
-                    changed = d.escape(arg) || changed;
+                    changed = state.escape(arg) || changed;
                 if (auto arg = LdArg::Cast(v))
-                    changed = d.escape(arg) || changed;
+                    changed = state.escape(arg) || changed;
             });
             if (i->mayForcePromises())
-                changed = d.sideeffect() || changed;
+                changed = state.sideeffect() || changed;
         }
         return changed ? AbstractResult::Updated : AbstractResult::None;
     }

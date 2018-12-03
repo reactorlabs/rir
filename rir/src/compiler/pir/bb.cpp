@@ -1,3 +1,4 @@
+#include "../util/visitor.h"
 #include "pir_impl.h"
 
 #include <iostream>
@@ -101,6 +102,13 @@ void BB::gc() {
     for (auto i : deleted)
         delete i;
     deleted.clear();
+}
+
+void BB::collectDominated(std::unordered_set<BB*>& subs, DominanceGraph& dom) {
+    Visitor::run(this, [&](BB* child) {
+        if (dom.dominates(this, child))
+            subs.insert(child);
+    });
 }
 
 } // namespace pir

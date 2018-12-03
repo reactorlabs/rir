@@ -121,8 +121,8 @@ class TheScopeAnalysis : public StaticAnalysis<ScopeAnalysisState> {
                             LoadMaybe) const;
     typedef std::function<void(const AbstractPirValue&)> AbstractValMaybe;
     typedef std::function<void()> Maybe;
-    inline void drillDown(const ScopeAnalysisState& envs, Value* i,
-                          AbstractValMaybe, Maybe notFound = []() {}) const;
+    void lookup(const ScopeAnalysisState& envs, Value* i, AbstractValMaybe,
+                Maybe notFound = []() {}) const;
 };
 
 void TheScopeAnalysis::tryLoad(const ScopeAnalysisState& s, Value* i,
@@ -138,41 +138,40 @@ void TheScopeAnalysis::tryLoad(const ScopeAnalysisState& s, Value* i,
     }
 }
 
-void TheScopeAnalysis::drillDown(const ScopeAnalysisState& s, Value* v,
-                                 AbstractValMaybe found, Maybe notFound) const {
-    // As we go, the analysis records stores and it records the results of
-    // interprocedurally followed calls and forces.
-    // The drillDown helper checks the current state of the analysis, to see
-    // if for a particular value we have already a result available from the
-    // above.
-
+// As we go, the analysis records stores and it records the results of
+// interprocedurally followed calls and forces.
+// The lookup helper checks the current state of the analysis, to see
+// if for a particular value we have already a result available from the
+// above.
+void TheScopeAnalysis::lookup(const ScopeAnalysisState& state, Value* v,
+                              AbstractValMaybe found, Maybe notFound) const {
     if (auto lda = LdArg::Cast(v)) {
         if (args.size() > lda->id) {
             auto argi = Instruction::Cast(args[lda->id]);
             if (argi) {
                 auto arg = AbstractPirValue(argi, argi);
-                return drillDown(s, argi, found, [&]() { found(arg); });
+                return lookup(state, argi, found, [&]() { found(arg); });
             }
         }
     }
 
-    auto i = Instruction::Cast(v);
-    if (s.returnValues.count(i)) {
-        auto& res = s.returnValues.at(i);
+    auto instr = Instruction::Cast(v);
+    if (state.returnValues.count(instr)) {
+        auto& res = state.returnValues.at(instr);
         if (res.isSingleValue()) {
-            return drillDown(s, res.singleValue().val, found,
-                             [&]() { found(res); });
+            return lookup(state, res.singleValue().val, found,
+                          [&]() { found(res); });
         }
         found(res);
     }
 
     bool done = false;
-    tryLoad(s, v, [&](AbstractLoad l) {
+    tryLoad(state, v, [&](AbstractLoad l) {
         done = true;
         auto& res = l.result;
         if (res.isSingleValue()) {
-            return drillDown(s, res.singleValue().val, found,
-                             [&]() { found(res); });
+            return lookup(state, res.singleValue().val, found,
+                          [&]() { found(res); });
         }
         found(res);
     });
@@ -188,11 +187,11 @@ AbstractResult TheScopeAnalysis::apply(ScopeAnalysisState& state,
 
     if (auto ret = Return::Cast(i)) {
         auto res = ret->arg<0>().val();
-        drillDown(state, res,
-                  [&](const AbstractPirValue& analysisRes) {
-                      state.result.merge(analysisRes);
-                  },
-                  [&]() { state.result.merge(ValOrig(res, i)); });
+        lookup(state, res,
+               [&](const AbstractPirValue& analysisRes) {
+                   state.result.merge(analysisRes);
+               },
+               [&]() { state.result.merge(ValOrig(res, i)); });
         effect.update();
     } else if (auto mk = MkEnv::Cast(i)) {
         Value* lexicalEnv = mk->lexicalEnv();
@@ -247,16 +246,15 @@ AbstractResult TheScopeAnalysis::apply(ScopeAnalysisState& state,
             effect.max(state.returnValues[i].merge(ValOrig(arg, i)));
             handled = true;
         } else {
-            drillDown(state, arg->followCastsAndForce(),
-                      [&](const AbstractPirValue& analysisRes) {
-                          if (!analysisRes.type.maybeLazy()) {
-                              effect.max(
-                                  state.returnValues[i].merge(analysisRes));
-                              handled = true;
-                          } else if (analysisRes.isSingleValue()) {
-                              arg = analysisRes.singleValue().val;
-                          }
-                      });
+            lookup(state, arg->followCastsAndForce(),
+                   [&](const AbstractPirValue& analysisRes) {
+                       if (!analysisRes.type.maybeLazy()) {
+                           effect.max(state.returnValues[i].merge(analysisRes));
+                           handled = true;
+                       } else if (analysisRes.isSingleValue()) {
+                           arg = analysisRes.singleValue().val;
+                       }
+                   });
         }
 
         if (!handled && depth < MAX_DEPTH && force->strict) {
@@ -280,14 +278,15 @@ AbstractResult TheScopeAnalysis::apply(ScopeAnalysisState& state,
     } else if (CallInstruction::CastCall(i) && depth < MAX_DEPTH) {
         auto calli = CallInstruction::CastCall(i);
         if (auto call = Call::Cast(i)) {
-            auto trg = call->cls()->followCastsAndForce();
-            drillDown(state, trg, [&](const AbstractPirValue& analysisRes) {
+            auto target = call->cls()->followCastsAndForce();
+            lookup(state, target, [&](const AbstractPirValue& analysisRes) {
                 if (analysisRes.isSingleValue()) {
-                    trg = analysisRes.singleValue().val->followCastsAndForce();
+                    target =
+                        analysisRes.singleValue().val->followCastsAndForce();
                 }
             });
-            assert(trg);
-            if (auto cls = MkFunCls::Cast(trg)) {
+            assert(target);
+            if (auto cls = MkFunCls::Cast(target)) {
                 if (cls->fun->argNames.size() == calli->nCallArgs()) {
                     if (cls->fun != closure) {
                         std::vector<Value*> args;
@@ -305,13 +304,13 @@ AbstractResult TheScopeAnalysis::apply(ScopeAnalysisState& state,
                 }
             }
         } else if (auto call = StaticCall::Cast(i)) {
-            auto trg = call->cls();
-            if (trg && trg->argNames.size() == calli->nCallArgs()) {
-                if (trg != closure) {
+            auto target = call->cls();
+            if (target && target->argNames.size() == calli->nCallArgs()) {
+                if (target != closure) {
                     std::vector<Value*> args;
                     calli->eachCallArg([&](Value* v) { args.push_back(v); });
-                    TheScopeAnalysis nextFun(trg, trg->argNames, args,
-                                             trg->closureEnv(), state,
+                    TheScopeAnalysis nextFun(target, target->argNames, args,
+                                             target->closureEnv(), state,
                                              depth + 1, log);
                     nextFun();
                     state.mergeCall(code, nextFun.result());
@@ -329,28 +328,30 @@ AbstractResult TheScopeAnalysis::apply(ScopeAnalysisState& state,
                 state.mayUseReflection = true;
         }
         if (!handled) {
-            effect.taint();
             state.returnValues[i].merge(AbstractPirValue::tainted());
+            effect.taint();
         }
     }
 
     if (!handled) {
         if (i->hasEnv()) {
-            bool needed = true;
-            if (i->envOnlyForObj()) {
-                needed = false;
-                i->eachArg([&](Value* v) {
-                    if (!needed && v->type.maybeObj()) {
-                        drillDown(state, v,
-                                  [&](const AbstractPirValue& analysisRes) {
-                                      if (analysisRes.type.maybeObj())
-                                          needed = true;
-                                  },
-                                  [&]() { needed = true; });
-                    }
+            bool envIsNeeded = i->hasEnv();
+            if (envIsNeeded && i->envOnlyForObj()) {
+                envIsNeeded = i->anyArg([&](Value* v) {
+                    if (v == i->env() || !v->type.maybeObj())
+                        return false;
+
+                    bool maybeObj = false;
+                    lookup(state, v,
+                           [&](const AbstractPirValue& analysisRes) {
+                               if (analysisRes.type.maybeObj())
+                                   maybeObj = true;
+                           },
+                           [&]() { maybeObj = true; });
+                    return maybeObj;
                 });
             }
-            if (needed) {
+            if (envIsNeeded) {
                 if (i->leaksEnv()) {
                     state.envs[i->env()].leaked = true;
                     for (auto env : state.envs.potentialParents(i->env()))

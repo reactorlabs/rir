@@ -748,6 +748,11 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
         }
     }
 
+    // The code bellow hardwires any call to a function that also exists as a
+    // builtin in the global namespace. That is probably not the best idea and
+    // much broader than the unsound optimizations of the gnu R BC interpreter.
+    // Let's just disable that for now.
+    //
     // SEXP builtin = fun->u.symsxp.value;
     // if (TYPEOF(builtin) == BUILTINSXP) {
     //     for (auto a = args.begin(); a != args.end(); ++a)

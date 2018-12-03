@@ -73,7 +73,10 @@ void DelayEnv::apply(RirCompiler&, Closure* function, LogStream&) const {
             if (it == bb->end() || (it + 1) == bb->end())
                 break;
 
-            auto moveMkEnvToDeoptBranch = [&](BB* deoptBranch,
+            // Duplicate the mkEnv and stick the copied version in the deopt
+            // branch. This removes the deopt as a dependency from the actual
+            // mkenv.
+            auto copyMkEnvToDeoptBranch = [&](BB* deoptBranch,
                                               BB* fastPathBranch) {
                 auto newEnvInstr = envInstr->clone();
                 deoptBranch->insert(deoptBranch->begin(), newEnvInstr);
@@ -86,10 +89,10 @@ void DelayEnv::apply(RirCompiler&, Closure* function, LogStream&) const {
             if (branch) {
                 if (!bb->falseBranch()->isEmpty() &&
                     Deopt::Cast(bb->falseBranch()->last())) {
-                    moveMkEnvToDeoptBranch(bb->falseBranch(), bb->trueBranch());
+                    copyMkEnvToDeoptBranch(bb->falseBranch(), bb->trueBranch());
                 } else if (!bb->trueBranch()->isEmpty() &&
                            Deopt::Cast(bb->trueBranch()->last())) {
-                    moveMkEnvToDeoptBranch(bb->trueBranch(), bb->falseBranch());
+                    copyMkEnvToDeoptBranch(bb->trueBranch(), bb->falseBranch());
                 }
             }
         }

@@ -81,19 +81,19 @@ void Instruction::print(std::ostream& out, bool tty) {
     printEnv(out, tty);
 }
 
-void Phi::removeInputs(const std::unordered_set<BB*>& del) {
-    auto ii = input.begin();
-    auto ai = args_.begin();
-    while (ii != input.end()) {
-        if (del.count(*ii)) {
-            ii = input.erase(ii);
-            ai = args_.erase(ai);
+void Phi::removeInputs(const std::unordered_set<BB*>& deletedBBs) {
+    auto bbIter = input.begin();
+    auto argIter = args_.begin();
+    while (argIter != args_.end()) {
+        if (deletedBBs.count(*bbIter)) {
+            bbIter = input.erase(bbIter);
+            argIter = args_.erase(argIter);
         } else {
-            ii++;
-            ai++;
+            argIter++;
+            bbIter++;
         }
     }
-    assert(ai == args_.end());
+    assert(bbIter == input.end());
 }
 
 void Instruction::printEnv(std::ostream& out, bool tty) {

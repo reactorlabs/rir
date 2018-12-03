@@ -27,9 +27,7 @@ void CleanupCheckpoints::apply(RirCompiler&, Closure* function,
         BBTransform::removeBBs(code, toDelete);
     };
     apply(function);
-    for (auto& p : function->promises)
-        if (p)
-            apply(p);
+    function->eachPromise([&](Promise* p) { apply(p); });
 }
 } // namespace pir
 } // namespace rir

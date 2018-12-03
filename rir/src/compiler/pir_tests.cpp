@@ -319,7 +319,7 @@ bool checkPir2Rir(SEXP expected, SEXP result) {
 
 bool testPir2Rir(const std::string& name, const std::string& fun,
                  const std::string& args, bool useSame = false,
-                 bool verbose = true) {
+                 bool verbose = false) {
     Protect p;
 
     std::string wrapper =
@@ -407,7 +407,7 @@ static Test tests[] = {
          }),
     Test("binop_nonobjects_nofeedback",
          []() {
-             return !canRemoveEnvironmentIfNonTypeFeedback(
+             return canRemoveEnvironmentIfNonTypeFeedback(
                  "f <- function() 1 + xxx");
          }),
     Test("super_assign", &testSuperAssign),

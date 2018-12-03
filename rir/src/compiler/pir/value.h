@@ -22,7 +22,7 @@ class BB;
 class Value {
   public:
     PirType type;
-    PirType typeFeedback;
+    PirType typeFeedback = PirType::optimistic();
     Tag tag;
     Value(PirType type, Tag tag) : type(type), tag(tag) {}
     virtual void printRef(std::ostream& out) = 0;

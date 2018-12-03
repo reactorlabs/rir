@@ -8,7 +8,7 @@ namespace pir {
 
 void PirType::print(std::ostream& out) { out << *this << "\n"; }
 
-void PirType::mergeSexptype(SEXPTYPE sexptype) {
+void PirType::merge(SEXPTYPE sexptype) {
     assert(isRType());
 
     switch (sexptype) {
@@ -76,7 +76,7 @@ void PirType::mergeSexptype(SEXPTYPE sexptype) {
 }
 
 PirType::PirType(SEXP e) : flags_(defaultRTypeFlags()), t_(RTypeSet()) {
-    mergeSexptype(TYPEOF(e));
+    merge(TYPEOF(e));
 
     if (!Rf_isObject(e)) {
         flags_.reset(TypeFlags::maybeObject);
@@ -92,23 +92,15 @@ void PirType::merge(const ObservedValues& other) {
     if (other.numTypes == 0 || other.numTypes == ObservedValues::MaxTypes)
         return;
 
-    bool noObj = true;
-    bool allScalar = true;
-
     for (size_t i = 0; i < other.numTypes; ++i) {
         const auto& record = other.seen[i];
         if (record.object)
-            noObj = false;
+            flags_.set(TypeFlags::maybeObject);
         if (!record.scalar)
-            allScalar = false;
+            flags_.reset(TypeFlags::isScalar);
 
-        mergeSexptype(record.sexptype);
+        merge(record.sexptype);
     }
-
-    if (noObj)
-        flags_.reset(TypeFlags::maybeObject);
-    if (allScalar)
-        flags_.set(TypeFlags::isScalar);
 }
 }
 }

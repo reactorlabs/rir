@@ -51,20 +51,19 @@ void ElideEnvSpec::apply(RirCompiler&, Closure* function, LogStream&) const {
             if (i->envOnlyForObj() && i->hasEnv()) {
                 Value* opLeft = i->arg(0).val();
                 Value* opRight = i->arg(1).val();
-                bool maybeObjL = opLeft->type.maybeObj();
-                bool maybeObjR = opRight->type.maybeObj();
-                bool assumeNonObjL = !opLeft->typeFeedback.maybeObj();
-                bool assumeNonObjR = !opRight->typeFeedback.maybeObj();
+                bool noObjL = !opLeft->type.maybeObj();
+                bool noObjR = !opRight->type.maybeObj();
+                bool seenObjL = opLeft->typeFeedback.maybeObj();
+                bool seenObjR = opRight->typeFeedback.maybeObj();
 
-                if ((!maybeObjL && !maybeObjR) ||
-                    (assumeNonObjL && assumeNonObjR)) {
+                if ((noObjL || !seenObjL) && (noObjR || !seenObjR)) {
                     i->elideEnv();
-                    if (maybeObjL)
+                    if (!noObjL)
                         ip = insertExpectNotObj(bb, opLeft, cp, ip);
-                    if (maybeObjR)
+                    if (!noObjR)
                         ip = insertExpectNotObj(bb, opRight, cp, ip);
                     next = ip + 1;
-                    i->type = i->type.notObject();
+                    i->type.setNotObject();
                 }
             }
 

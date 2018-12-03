@@ -107,20 +107,28 @@ class TheCleanup {
                     }
                 }
                 if (!removed) {
-                    i->eachArg([&](Value* arg) {
-                        if (i->changesEnv()) {
+                    if (!Phi::Cast(i)) {
+                        i->eachArg([&](Value* arg) {
                             auto argi = Instruction::Cast(arg);
                             if (argi && (SetShared::Cast(argi) ||
                                          EnsureNamed::Cast(argi))) {
                                 // Count how many times a shared value is used.
+                                isShared[argi]++;
                                 // If it leaks, it really needs to be marked
                                 // shared.
-                                isShared[argi]++;
                                 if (i->leaksArg(argi))
                                     isShared[argi]++;
+                                // if a value is created before and used in a
+                                // loop, then this represents of course also
+                                // multiple uses.
+                                // For now we are very conservative and only
+                                // support use and creation in the same BB.
+                                // TODO: make a real static named count pass!
+                                if (argi->bb() != bb)
+                                    isShared[argi]++;
                             }
-                        }
-                    });
+                        });
+                    }
                     i->updateType();
                 }
                 ip = next;

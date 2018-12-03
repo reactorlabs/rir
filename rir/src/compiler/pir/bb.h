@@ -3,9 +3,12 @@
 
 #include "pir.h"
 
+#include <unordered_set>
+
 namespace rir {
 namespace pir {
 
+class DominanceGraph;
 class Code;
 
 /*
@@ -110,6 +113,8 @@ class BB {
     // BBTransformer.
     BB* next0 = nullptr;
     BB* next1 = nullptr;
+
+    void collectDominated(std::unordered_set<BB*>& subs, DominanceGraph& dom);
 
   private:
     Instrs instrs;

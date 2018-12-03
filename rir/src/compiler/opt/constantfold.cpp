@@ -92,6 +92,12 @@ void Constantfold::apply(RirCompiler& cmp, Closure* function,
         }
 
         if (auto branch = Branch::Cast(bb->last())) {
+            // TODO: if we had native true/false values we could use constant
+            // folding to reduce the branch condition and then only remove
+            // branches which are constant true/false. But for now we look at
+            // the actual condition and do the constantfolding and branch
+            // removal in one go.
+
             auto condition = branch->arg<0>().val();
             if (auto tst = AsTest::Cast(condition)) {
                 // Try to detect constant branch conditions and mark such
@@ -129,13 +135,12 @@ void Constantfold::apply(RirCompiler& cmp, Closure* function,
     // Find all dead basic blocks
     for (auto e : branchRemoval) {
         auto bb = e.first;
-        if (e.second)
-            toDelete.insert(bb->next1);
-        else
-            toDelete.insert(bb->next0);
+        auto deadBranch = e.second ? bb->falseBranch() : bb->trueBranch();
+        deadBranch->collectDominated(toDelete, dom);
+        toDelete.insert(deadBranch);
     }
 
-    BBTransform::removeBBsWithChildren(dom, function, toDelete);
+    BBTransform::removeBBs(function, toDelete);
 
     for (auto e : branchRemoval) {
         auto branch = e.first;

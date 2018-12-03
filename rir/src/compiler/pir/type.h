@@ -123,6 +123,15 @@ struct PirType {
     static FlagSet defaultRTypeFlags() {
         return FlagSet() | TypeFlags::rtype | TypeFlags::maybeObject;
     }
+    static FlagSet optimisticRTypeFlags() {
+        return FlagSet() | TypeFlags::rtype | TypeFlags::isScalar;
+    }
+
+    static PirType optimistic() {
+        PirType t;
+        t.flags_ = optimisticRTypeFlags();
+        return t;
+    }
 
     PirType() : PirType(RTypeSet()) {}
     // cppcheck-suppress noExplicitConstructor
@@ -152,7 +161,7 @@ struct PirType {
     }
 
     void merge(const ObservedValues& other);
-    void mergeSexptype(SEXPTYPE t);
+    void merge(SEXPTYPE t);
 
     static PirType num() {
         return PirType(RType::logical) | RType::integer | RType::real |
@@ -190,7 +199,7 @@ struct PirType {
         return isRType() && flags_.includes(TypeFlags::maybeObject);
     }
 
-    PirType notObject() {
+    PirType notObject() const {
         assert(isRType());
         PirType t = *this;
         t.flags_.reset(TypeFlags::maybeObject);
@@ -222,6 +231,10 @@ struct PirType {
         assert(isRType());
         return PirType(t_.r);
     }
+
+    RIR_INLINE void setNotObject() { *this = notObject(); }
+
+    RIR_INLINE void setScalar() { *this = scalar(); }
 
     static const PirType voyd() { return NativeTypeSet(); }
 

@@ -60,8 +60,8 @@ class Tombstone : public Value {
         return &cls;
     }
     static Tombstone* framestate() {
-        static Tombstone cls(NativeType::frameState);
-        return &cls;
+        static Tombstone fs(NativeType::frameState);
+        return &fs;
     }
 
   private:

@@ -52,14 +52,14 @@ void Configurations::defaultOptimizations() {
     for (int i = 0; i < 3; ++i) {
         for (int j = 0; j < 4; ++j) {
             addDefaultOpt();
-            addDefaultOpt();
             optimizations.push_back(new pir::Cleanup());
             optimizations.push_back(new pir::Inline());
         }
         optimizations.push_back(new pir::ElideEnvSpec());
-        // This pass removes unused checkpoints
-        if (i == 0)
-            optimizations.push_back(new pir::CleanupCheckpoints());
+        // This pass removes unused checkpoints.
+        // We schedule this pass here, since it might unblock optimizations.
+        // Since for example even unused checkpoints keep variables live.
+        optimizations.push_back(new pir::CleanupCheckpoints());
         // Framestates can be used by call instructions. This pass removes this
         // dependency and the framestates will subsequently be cleaned. After
         // this it is no longer possible to inline those calls.

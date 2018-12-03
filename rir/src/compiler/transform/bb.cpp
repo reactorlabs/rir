@@ -110,20 +110,6 @@ BB* BBTransform::lowerExpect(Code* code, BB* src, BB::Instrs::iterator position,
     return split;
 }
 
-void BBTransform::removeBBsWithChildren(
-    DominanceGraph& dom, Code* code, const std::unordered_set<BB*>& toDelete_) {
-    std::unordered_set<BB*> toDelete;
-
-    for (auto bb : toDelete_) {
-        Visitor::run(bb, [&](BB* child) {
-            if (dom.dominates(bb, child))
-                toDelete.insert(child);
-        });
-        toDelete.insert(bb);
-    }
-    removeBBs(code, toDelete);
-}
-
 void BBTransform::removeBBs(Code* code,
                             const std::unordered_set<BB*>& toDelete) {
     // Dead code can still appear as phi inputs in live blocks
