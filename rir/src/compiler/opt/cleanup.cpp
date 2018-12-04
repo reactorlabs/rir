@@ -20,7 +20,7 @@ class TheCleanup {
     void operator()() {
         std::unordered_set<size_t> used_p;
         std::unordered_map<BB*, std::unordered_set<Phi*>> usedBB;
-        std::unordered_map<SetShared*, int> isShared;
+        std::unordered_map<Instruction*, int> isShared;
         std::deque<Promise*> todo;
 
         Visitor::run(function->entry, [&](BB* bb) {
@@ -62,20 +62,24 @@ class TheCleanup {
                         phi->replaceUsesWith(*phin.begin());
                         next = bb->remove(ip);
                     } else {
-                        phi->updateType();
                         for (auto curBB : phi->input)
                             usedBB[curBB].insert(phi);
                     }
                 } else if (auto arg = MkArg::Cast(i)) {
-                    used_p.insert(arg->prom()->id);
-                    todo.push_back(arg->prom());
-                } else if (auto shared = SetShared::Cast(i)) {
+                    if (arg->unused()) {
+                        removed = true;
+                        next = bb->remove(ip);
+                    } else {
+                        used_p.insert(arg->prom()->id);
+                        todo.push_back(arg->prom());
+                    }
+                } else if (SetShared::Cast(i) || EnsureNamed::Cast(i)) {
                     if (i->unused()) {
                         removed = true;
                         next = bb->remove(ip);
                     } else {
-                        if (!isShared.count(shared))
-                            isShared[shared] = 0;
+                        if (!isShared.count(i))
+                            isShared[i] = 0;
                     }
                 } else if (auto tst = AsTest::Cast(i)) {
                     // Converting to bool might trow warning if the size is not
@@ -103,15 +107,29 @@ class TheCleanup {
                     }
                 }
                 if (!removed) {
-                    i->eachArg([&](Value* arg) {
-                        if (auto shared = SetShared::Cast(arg)) {
-                            // Count how many times a shared value is used. If
-                            // it leaks, it really needs to be marked shared.
-                            isShared[shared]++;
-                            if (i->leaksArg(arg))
-                                isShared[shared]++;
-                        }
-                    });
+                    if (!Phi::Cast(i)) {
+                        i->eachArg([&](Value* arg) {
+                            auto argi = Instruction::Cast(arg);
+                            if (argi && (SetShared::Cast(argi) ||
+                                         EnsureNamed::Cast(argi))) {
+                                // Count how many times a shared value is used.
+                                isShared[argi]++;
+                                // If it leaks, it really needs to be marked
+                                // shared.
+                                if (i->leaksArg(argi))
+                                    isShared[argi]++;
+                                // if a value is created before and used in a
+                                // loop, then this represents of course also
+                                // multiple uses.
+                                // For now we are very conservative and only
+                                // support use and creation in the same BB.
+                                // TODO: make a real static named count pass!
+                                if (argi->bb() != bb)
+                                    isShared[argi]++;
+                            }
+                        });
+                    }
+                    i->updateType();
                 }
                 ip = next;
             }
@@ -121,7 +139,7 @@ class TheCleanup {
         // shared
         for (auto shared : isShared) {
             if (shared.second <= 1)
-                shared.first->replaceUsesWith(shared.first->arg<0>().val());
+                shared.first->replaceUsesWith(shared.first->arg(0).val());
         }
 
         while (!todo.empty()) {
@@ -173,8 +191,8 @@ class TheCleanup {
         Visitor::run(function->entry, [&](BB* bb) {
             // Remove empty jump-through blocks
             if (bb->isJmp() && bb->next0->isEmpty() && bb->next0->isJmp() &&
-                cfg.hasSinglePred(bb->next0->next0)) {
-                assert(usedBB.find(bb->next0) == usedBB.end());
+                cfg.hasSinglePred(bb->next0->next0) &&
+                usedBB.find(bb->next0) == usedBB.end()) {
                 toDel[bb->next0] = bb->next0->next0;
             }
         });
@@ -241,7 +259,7 @@ class TheCleanup {
 namespace rir {
 namespace pir {
 
-void Cleanup::apply(RirCompiler&, Closure* function) const {
+void Cleanup::apply(RirCompiler&, Closure* function, LogStream&) const {
     TheCleanup s(function);
     s();
 }

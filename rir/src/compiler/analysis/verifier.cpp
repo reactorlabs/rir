@@ -157,7 +157,8 @@ class TheVerifier {
                     i->print(std::cerr);
                     std::cerr << "': input '";
                     iv->printRef(std::cerr);
-                    std::cerr << "' from a different function.\n";
+                    std::cerr << "' from a different function ("
+                              << iv->bb()->owner << ")\n";
                     ok = false;
                 }
             }

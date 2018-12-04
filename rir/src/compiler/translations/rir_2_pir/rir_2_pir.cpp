@@ -130,8 +130,9 @@ std::unordered_set<Opcode*> findMergepoints(rir::Code* srcCode) {
 namespace rir {
 namespace pir {
 
-bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos, rir::Code* srcCode,
-                        RirStack& stack, Builder& insert) const {
+bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
+                        rir::Code* srcCode, RirStack& stack, Builder& insert,
+                        CallTargetFeedback& callTargetFeedback) const {
     Value* env = insert.env;
 
     unsigned srcIdx = srcCode->getSrcIdxAt(pos, true);
@@ -216,17 +217,14 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos, rir::Code* s
         break;
 
     case Opcode::record_binop_: {
-        insert.function->runtimeFeedback.types.emplace(
-            at(0), bc.immediate.binopFeedback[0]);
-        insert.function->runtimeFeedback.types.emplace(
-            at(1), bc.immediate.binopFeedback[1]);
+        at(0)->typeFeedback.merge(bc.immediate.binopFeedback[0]);
+        at(1)->typeFeedback.merge(bc.immediate.binopFeedback[1]);
         break;
     }
 
     case Opcode::record_call_: {
         Value* target = top();
-        insert.function->runtimeFeedback.callTargets.emplace(
-            target, bc.immediate.callFeedback);
+        callTargetFeedback[target] = bc.immediate.callFeedback;
         break;
     }
 
@@ -262,9 +260,8 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos, rir::Code* s
 
         // TODO: static named argument matching
         if (bc.bc != Opcode::named_call_implicit_) {
-            if (insert.function->runtimeFeedback.callTargets.count(callee)) {
-                auto& feedback =
-                    insert.function->runtimeFeedback.callTargets.at(callee);
+            if (callTargetFeedback.count(callee)) {
+                auto& feedback = callTargetFeedback.at(callee);
                 if (feedback.numTargets == 1)
                     monomorphic = feedback.getTarget(srcCode, 0);
             }
@@ -291,8 +288,8 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos, rir::Code* s
                 [&](Closure* f) {
                     Value* expected = insert(new LdConst(monomorphic));
                     Value* t = insert(new Identical(callee, expected));
-
-                    insert.conditionalDeopt(t, srcCode, pos, stack, true);
+                    auto cp = insert.addCheckpoint(srcCode, pos, stack);
+                    insert(new Assume(t, cp));
                     pop();
                     auto fs = insert.registerFrameState(srcCode, nextPos, stack);
                     push(insert(
@@ -392,6 +389,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos, rir::Code* s
         break;
 
     case Opcode::extract1_1_: {
+        insert.addCheckpoint(srcCode, pos, stack);
         Value* idx = pop();
         Value* vec = pop();
         push(insert(new Extract1_1D(vec, idx, env, srcIdx)));
@@ -399,6 +397,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos, rir::Code* s
     }
 
     case Opcode::extract2_1_: {
+        insert.addCheckpoint(srcCode, pos, stack);
         Value* idx = pop();
         Value* vec = pop();
         push(insert(new Extract2_1D(vec, idx, env, srcIdx)));
@@ -452,7 +451,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos, rir::Code* s
     case Opcode::Op: {                                                         \
         auto rhs = at(0);                                                      \
         auto lhs = at(1);                                                      \
-        insert.registerFrameState(srcCode, pos, stack);                        \
+        insert.addCheckpoint(srcCode, pos, stack);                             \
         pop();                                                                 \
         pop();                                                                 \
         push(insert(new Name(lhs, rhs, env, srcIdx)));                         \
@@ -528,6 +527,10 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos, rir::Code* s
         set(bc.immediate.i, x);
         break;
     }
+
+    case Opcode::ensure_named_:
+        push(insert(new EnsureNamed(pop())));
+        break;
 
     case Opcode::set_shared_:
         push(insert(new SetShared(pop())));
@@ -612,6 +615,7 @@ bool Rir2Pir::tryCompilePromise(rir::Code* prom, Builder& insert) const {
 Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) const {
     assert(!finalized);
 
+    CallTargetFeedback callTargetFeedback;
     std::vector<ReturnSite> results;
 
     std::unordered_map<Opcode*, State> mergepoints;
@@ -816,7 +820,8 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) const {
 
         if (!skip) {
             int size = cur.stack.size();
-            if (!compileBC(bc, pos, nextPos, srcCode, cur.stack, insert)) {
+            if (!compileBC(bc, pos, nextPos, srcCode, cur.stack, insert,
+                           callTargetFeedback)) {
                 log.failed("Abort r2p due to unsupported bc");
                 return nullptr;
             }
@@ -902,9 +907,10 @@ void Rir2Pir::finalize(Value* ret, Builder& insert) {
                     changed = true;
                     continue;
                 }
-                if (p->updateType()) {
+                auto t = p->type;
+                p->updateType();
+                if (t != p->type)
                     changed = true;
-                }
                 it++;
             }
         });

@@ -220,10 +220,11 @@ class BC {
             proms.push_back(immediate.arg_idx);
             break;
         case Opcode::named_call_implicit_:
-        case Opcode::call_implicit_:
-            for (auto a : callExtra().immediateCallArguments)
-                proms.push_back(a);
+        case Opcode::call_implicit_: {
+            auto& in = callExtra().immediateCallArguments;
+            std::copy(in.begin(), in.end(), std::back_inserter(proms));
             break;
+        }
         default: {}
         }
     }
@@ -355,6 +356,7 @@ class BC {
     inline static BC colon();
     inline static BC makeUnique();
     inline static BC setShared();
+    inline static BC ensureNamed();
     inline static BC asLogical();
     inline static BC lglOr();
     inline static BC lglAnd();
@@ -658,6 +660,7 @@ class BC {
         case Opcode::int3_:
         case Opcode::make_unique_:
         case Opcode::set_shared_:
+        case Opcode::ensure_named_:
         case Opcode::aslogical_:
         case Opcode::lgl_and_:
         case Opcode::lgl_or_:

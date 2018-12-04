@@ -8,8 +8,10 @@ namespace pir {
 
 void PirType::print(std::ostream& out) { out << *this << "\n"; }
 
-PirType::PirType(SEXP e) : flags_(defaultRTypeFlags()), t_(RTypeSet()) {
-    switch (TYPEOF(e)) {
+void PirType::merge(SEXPTYPE sexptype) {
+    assert(isRType());
+
+    switch (sexptype) {
     case NILSXP:
         t_.r.set(RType::nil);
         break;
@@ -71,14 +73,33 @@ PirType::PirType(SEXP e) : flags_(defaultRTypeFlags()), t_(RTypeSet()) {
     case S4SXP:
         t_.r = val().t_.r;
     }
+}
 
-    // if (Rf_isObject(e)) {
-    //     flags_.set(TypeFlags::obj);
-    // }
+PirType::PirType(SEXP e) : flags_(defaultRTypeFlags()), t_(RTypeSet()) {
+    merge(TYPEOF(e));
+
+    if (!Rf_isObject(e)) {
+        flags_.reset(TypeFlags::maybeObject);
+    }
 
     if (PirType::vecs().isSuper(*this)) {
         if (Rf_length(e) == 1)
-            flags_.set(TypeFlags::is_scalar);
+            flags_.set(TypeFlags::isScalar);
+    }
+}
+
+void PirType::merge(const ObservedValues& other) {
+    if (other.numTypes == 0 || other.numTypes == ObservedValues::MaxTypes)
+        return;
+
+    for (size_t i = 0; i < other.numTypes; ++i) {
+        const auto& record = other.seen[i];
+        if (record.object)
+            flags_.set(TypeFlags::maybeObject);
+        if (!record.scalar)
+            flags_.reset(TypeFlags::isScalar);
+
+        merge(record.sexptype);
     }
 }
 }

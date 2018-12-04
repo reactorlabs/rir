@@ -405,6 +405,11 @@ DEF_INSTR(invisible_, 0, 0, 0, 1)
 DEF_INSTR(set_shared_, 0, 1, 1, 1)
 
 /**
+ * ensure_named_:: ensures tos has named >= 1
+ */
+DEF_INSTR(ensure_named_, 0, 1, 1, 1)
+
+/**
  * make_unique_:: duplicates tos if it is shared (ie. named > 1)
  */
 DEF_INSTR(make_unique_, 0, 1, 1, 1)

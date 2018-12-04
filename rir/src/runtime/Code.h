@@ -133,7 +133,8 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
 
     unsigned getSrcIdxAt(const Opcode* pc, bool allowMissing) const;
 
-    void disassemble(std::ostream&, std::string promPrefix = "") const;
+    void disassemble(std::ostream&, const std::string& promPrefix) const;
+    void disassemble(std::ostream& out) const { disassemble(out, ""); }
     void print(std::ostream&) const;
 
   private:

@@ -16,10 +16,13 @@ class TheScopeResolution {
   public:
     Closure* function;
     CFG cfg;
-    explicit TheScopeResolution(Closure* function)
-        : function(function), cfg(function) {}
+    DominanceGraph doms;
+    LogStream& log;
+    explicit TheScopeResolution(Closure* function, LogStream& log)
+        : function(function), cfg(function), doms(function), log(log) {}
+
     void operator()() {
-        ScopeAnalysis analysis(function);
+        ScopeAnalysis analysis(function, log);
 
         Visitor::run(function->entry, [&](BB* bb) {
             auto ip = bb->begin();
@@ -37,7 +40,29 @@ class TheScopeResolution {
                 else if (ldfun)
                     ld = ldfun;
 
-                if (sld) {
+                if (analysis.returnValues.count(i)) {
+                    auto force = Force::Cast(i);
+                    auto res = analysis.returnValues.at(i);
+                    if (res.isSingleValue() &&
+                        res.singleValue().origin->bb()->owner == function &&
+                        doms.dominates(res.singleValue().origin->bb(), bb)) {
+                        i->replaceUsesWith(res.singleValue().val);
+                        next = bb->remove(ip);
+                    } else {
+                        auto type = res.type;
+                        if (!i->type.isA(type))
+                            i->type = type;
+                        if (force && !analysis.mayUseReflection)
+                            force->elideEnv();
+                    }
+                } else if (ldfun && ldfun->guessedBinding() &&
+                           ldfun->guessedBinding()->type.isA(
+                               PirType::closure())) {
+                    // If we inferred that a guessd ldfun binding is a closure
+                    // for sure, then we can replace the ldfun with the guess.
+                    ldfun->replaceUsesWith(ldfun->guessedBinding());
+                    next = bb->remove(ip);
+                } else if (sld) {
                     // LdVarSuper where the parent environment is known and
                     // local, can be replaced by a simple LdVar
                     auto e = Env::parentEnv(sld->env());
@@ -87,19 +112,17 @@ class TheScopeResolution {
                     } else if (onlyLocalVals) {
                         auto replaceLdFun = [&](Value* val) {
                             if (val->type.isA(PirType::closure())) {
-                                next = bb->remove(ip);
                                 ld->replaceUsesWith(val);
+                                next = bb->remove(ip);
                                 return;
                             }
-                            // TODO: for now, turn this off if the value may
-                            // need forcing
-                            //       (because we need a way to get the
-                            //       environment where the ldfun would be
-                            //       executed)
-                            if (!val->type.maybeLazy()) {
-                                auto ch = new ChkClosure(val);
-                                bb->replace(ip, ch);
-                                ld->replaceUsesWith(ch);
+                            // Add the binding as a guess. If we later infer
+                            // that the guess is a closure, we can promote it.
+                            if (!ldfun->guessedBinding()) {
+                                ip = bb->insert(ip,
+                                                new Force(val, ldfun->env()));
+                                ldfun->guessedBinding(*ip);
+                                next = ip + 2;
                             }
                         };
                         // This load can be resolved to a unique value
@@ -159,8 +182,9 @@ class TheScopeResolution {
 namespace rir {
 namespace pir {
 
-void ScopeResolution::apply(RirCompiler&, Closure* function) const {
-    TheScopeResolution s(function);
+void ScopeResolution::apply(RirCompiler&, Closure* function,
+                            LogStream& log) const {
+    TheScopeResolution s(function, log);
     s();
 }
 

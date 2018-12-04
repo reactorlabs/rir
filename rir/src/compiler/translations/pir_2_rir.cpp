@@ -715,7 +715,7 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
 
                 auto loadArg = [&](BB::Instrs::iterator it, Instruction* instr,
                                    Value* what) {
-                    if (what == Tombstone::instance()) {
+                    if (what->tag == Tag::Tombstone) {
                         return;
                     }
                     if (what == Missing::instance()) {
@@ -892,6 +892,7 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 SIMPLE(IsObject, isObj);
                 SIMPLE(Int3, int3);
                 SIMPLE(SetShared, setShared);
+                SIMPLE(EnsureNamed, ensureNamed);
 #undef SIMPLE
 
 #define SIMPLE_WITH_SRCIDX(Name, Factory)                                      \
@@ -999,7 +1000,7 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 break;
             }
             case Tag::Deopt:
-            case Tag::assumeNot:
+            case Tag::Assume:
             case Tag::Checkpoint: {
                 assert(false && "Deopt instructions must be lowered into "
                                 "standard branches and scheduled deopt, "
@@ -1081,21 +1082,29 @@ static bool allLazy(CallType* call, std::vector<Promise*>& args) {
 }
 
 void Pir2Rir::lower(Code* code) {
-    Visitor::run(
-        code->entry,
-        [&](BB* bb) {
+    Visitor::runPostChange(
+        code->entry, [&](BB* bb) {
             auto it = bb->begin();
             while (it != bb->end()) {
                 auto next = it + 1;
-                if (auto deopt = Deopt::Cast(*it)) {
+                if (auto call = CallInstruction::CastCall(*it))
+                    call->clearFrameState();
+                if (auto ldfun = LdFun::Cast(*it)) {
+                    // the guessed binding in ldfun is just used as a temporary
+                    // store. If we did not manage to resolve ldfun by now, we
+                    // have to remove the guess again, since apparently we
+                    // where not sure it is correct.
+                    if (ldfun->guessedBinding())
+                        ldfun->clearGuessedBinding();
+                } else if (auto deopt = Deopt::Cast(*it)) {
                     // Lower Deopt instructions + their FrameStates to a
                     // ScheduledDeopt.
                     auto newDeopt = new ScheduledDeopt();
                     newDeopt->consumeFrameStates(deopt);
                     bb->replace(it, newDeopt);
-                } else if (auto expect = assumeNot::Cast(*it)) {
+                } else if (auto expect = Assume::Cast(*it)) {
                     BBTransform::lowerExpect(
-                        code, bb, it, expect->condition(),
+                        code, bb, it, expect->condition(), expect->assumeTrue,
                         expect->checkpoint()->bb()->falseBranch());
                     // lowerExpect splits the bb from current position. There
                     // remains nothing to process. Breaking seems more robust
@@ -1122,8 +1131,7 @@ void Pir2Rir::lower(Code* code) {
 
                 it = next;
             }
-        },
-        true);
+        });
 
     Visitor::run(code->entry, [&](BB* bb) {
         auto it = bb->begin();

@@ -50,6 +50,8 @@ typedef std::unordered_map<std::string, pir::Closure*> closuresByName;
 
 closuresByName compileRir2Pir(SEXP env, pir::Module* m) {
     pir::StreamLogger logger(pir::DebugOptions() |
+                             // pir::DebugFlag::PrintIntoStdout |
+                             // pir::DebugFlag::PrintOptimizationPasses |
                              pir::DebugFlag::PrintFinalPir);
     pir::Rir2PirCompiler cmp(m, logger);
 
@@ -405,7 +407,7 @@ static Test tests[] = {
          }),
     Test("binop_nonobjects_nofeedback",
          []() {
-             return !canRemoveEnvironmentIfNonTypeFeedback(
+             return canRemoveEnvironmentIfNonTypeFeedback(
                  "f <- function() 1 + xxx");
          }),
     Test("super_assign", &testSuperAssign),
@@ -541,7 +543,29 @@ static Test tests[] = {
                                 "}",
                                 "4");
          }),
+    Test(
+        "Elide ldfun through promise",
+        []() { return test42("{f <- function() 42L; (function(x) x())(f)}"); }),
+    Test("Constantfolding1", []() { return test42("{if (1<2) 42L}"); }),
+    Test("Constantfolding2",
+         []() {
+             return test42("{a<- 41L; b<- 1L; f <- function(x,y) x+y; f(a,b)}");
+         }),
+    Test("Inlining promises and closures with Constantfolding",
+         []() {
+             return test42("{a<- function() 41L; b<- function() 1L; f <- "
+                           "function(x,y) x()+y; f(a,b())}");
+         }),
+    Test("more cf",
+         []() {
+             return test42("{x <- function() 42;"
+                           " y <- function() 41;"
+                           " z <- 1;"
+                           " f <- function(a,b,c) if (a() == (b+c)) 42L;"
+                           " f(x,y(),z)}");
+         }),
 };
+
 } // namespace
 
 namespace rir {

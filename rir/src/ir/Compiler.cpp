@@ -388,7 +388,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
                         compileExpr(ctx, rhs);
                         // Keep a copy of rhs since its the result of this
                         // expression
-                        cs << BC::dup() << BC::setShared();
+                        cs << BC::dup() << BC::ensureNamed();
 
                         // Now load index and target
                         cs << BC::ldvar(target);
@@ -644,7 +644,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
         pcs.push_back(cs.currentPos());
         cs << BC::put(3);
 
-        cs << BC::inc() << BC::dup2() << BC::lt();
+        cs << BC::inc() << BC::ensureNamed() << BC::dup2() << BC::lt();
         // We know this is an int and won't do dispatch.
         // TODO: add a integer version of lt_
         cs.addSrc(R_NilValue);
@@ -748,25 +748,29 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
         }
     }
 
+    // The code bellow hardwires any call to a function that also exists as a
+    // builtin in the global namespace. That is probably not the best idea and
+    // much broader than the unsound optimizations of the gnu R BC interpreter.
+    // Let's just disable that for now.
+    //
+    // SEXP builtin = fun->u.symsxp.value;
+    // if (TYPEOF(builtin) == BUILTINSXP) {
+    //     for (auto a = args.begin(); a != args.end(); ++a)
+    //         if (a.hasTag() || *a == R_DotsSymbol || *a == R_MissingArg)
+    //             return false;
 
-    SEXP builtin = fun->u.symsxp.value;
-    if (TYPEOF(builtin) == BUILTINSXP) {
-        for (auto a = args.begin(); a != args.end(); ++a)
-            if (a.hasTag() || *a == R_DotsSymbol || *a == R_MissingArg)
-                return false;
+    //     // Those are somehow overloaded in std libs
+    //     if (fun == symbol::standardGeneric)
+    //         return false;
 
-        // Those are somehow overloaded in std libs
-        if (fun == symbol::standardGeneric)
-            return false;
+    //     cs << BC::guardNamePrimitive(fun);
 
-        cs << BC::guardNamePrimitive(fun);
+    //     for (auto a : args)
+    //         compileExpr(ctx, a);
+    //     cs << BC::staticCall(args.length(), ast, builtin);
 
-        for (auto a : args)
-            compileExpr(ctx, a);
-        cs << BC::staticCall(args.length(), ast, builtin);
-
-        return true;
-    }
+    //     return true;
+    // }
 
     if (fun == symbol::debugBreak) {
         // Push R_NilValue because this is a "function call" and needs to return
