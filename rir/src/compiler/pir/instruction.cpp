@@ -59,6 +59,8 @@ void printPaddedTypeAndRef(std::ostream& out, Instruction* i) {
     }
 }
 
+bool Instruction::validIn(Code* code) const { return bb()->owner == code; }
+
 void Instruction::printArgs(std::ostream& out, bool tty) {
     size_t n = nargs();
     size_t env = hasEnv() ? envSlot() : n + 1;

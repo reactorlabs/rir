@@ -269,7 +269,7 @@ bool testSuperAssign() {
         pir::Module m;
         // This super assign can be removed, since the super env is not tainted
         auto res = compile(
-            "", "f <- function() {a <- 1; (function() {asdf(); a <<- 1})()}",
+            "", "f <- function() {a <- 1; (function() {a <<- 1; asdf()})()}",
             &m);
         auto f = res["f"];
         CHECK(!hasSuperAssign(f));

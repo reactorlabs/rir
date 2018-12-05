@@ -96,12 +96,12 @@ struct AbstractPirValue {
             known((*vals.begin()).val);
     }
 
-    void eachSource(ValOrigMaybe apply) {
+    void eachSource(const ValOrigMaybe& apply) const {
         for (auto v : vals)
             apply(v);
     }
 
-    bool checkEachSource(ValOrigMaybePredicate apply) {
+    bool checkEachSource(const ValOrigMaybePredicate& apply) const {
         for (auto v : vals)
             if (!apply(v))
                 return false;
@@ -114,7 +114,7 @@ struct AbstractPirValue {
 
     AbstractResult merge(const AbstractPirValue& other);
 
-    void print(std::ostream& out, bool tty = false);
+    void print(std::ostream& out, bool tty = false) const;
 };
 
 /*
@@ -150,7 +150,7 @@ struct AbstractREnvironment {
         entries[n] = AbstractPirValue(v, origin);
     }
 
-    void print(std::ostream& out, bool tty = false);
+    void print(std::ostream& out, bool tty = false) const;
 
     const AbstractPirValue& get(SEXP e) const {
         static AbstractPirValue t = AbstractPirValue::tainted();
@@ -230,6 +230,11 @@ struct AbstractLoad {
     Value* env;
     AbstractPirValue result;
 
+    explicit AbstractLoad(const AbstractPirValue& val)
+        : env(AbstractREnvironment::UnknownParent), result(val) {
+        assert(env);
+    }
+
     AbstractLoad(Value* env, const AbstractPirValue& val)
         : env(env), result(val) {
         assert(env);
@@ -263,6 +268,15 @@ class AbstractREnvironmentHierarchy {
         return res;
     }
 
+    bool known(Value* env) const { return envs.count(env); }
+
+    const AbstractREnvironment& at(Value* env) const {
+        if (aliases.count(env))
+            return envs.at(aliases.at(env));
+        else
+            return envs.at(env);
+    }
+
     AbstractREnvironment& operator[](Value* env) {
         if (aliases.count(env))
             return envs[aliases.at(env)];
@@ -270,9 +284,10 @@ class AbstractREnvironmentHierarchy {
             return envs[env];
     }
 
-    void print(std::ostream& out, bool tty = false);
+    void print(std::ostream& out, bool tty = false) const;
 
     AbstractLoad get(Value* env, SEXP e) const;
+    AbstractLoad getFun(Value* env, SEXP e) const;
     AbstractLoad superGet(Value* env, SEXP e) const;
 
     std::unordered_set<Value*> potentialParents(Value* env) const;
