@@ -53,7 +53,7 @@ AbstractResult AbstractPirValue::merge(const AbstractPirValue& other) {
         return AbstractResult::Updated;
     }
     if (other.unknown) {
-        unknown = true;
+        taint();
         return AbstractResult::LostPrecision;
     }
 
@@ -63,6 +63,7 @@ AbstractResult AbstractPirValue::merge(const AbstractPirValue& other) {
         vals.insert(other.vals.begin(), other.vals.end());
         changed = true;
     }
+    changed = type.merge(other.type) || changed;
 
     return changed ? AbstractResult::Updated : AbstractResult::None;
 }

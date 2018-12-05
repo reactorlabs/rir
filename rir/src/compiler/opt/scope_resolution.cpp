@@ -56,7 +56,8 @@ class TheScopeResolution {
                     auto aLoad =
                         analysis.superLoad(before, sts->varName, sts->env());
                     if (aLoad.env != AbstractREnvironment::UnknownParent &&
-                        !aLoad.result.isUnknown()) {
+                        !aLoad.result.isUnknown() &&
+                        aLoad.env->validIn(function)) {
                         auto r = new StVar(sts->varName, sts->val(), aLoad.env);
                         bb->replace(ip, r);
                         sts->replaceUsesWith(r);
