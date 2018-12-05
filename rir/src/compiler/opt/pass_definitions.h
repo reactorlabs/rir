@@ -1,6 +1,7 @@
 #ifndef PASS_DEFINITIONS_H
 #define PASS_DEFINITIONS_H
 
+#include "../debugging/stream_logger.h"
 #include "../translations/pir_translator.h"
 
 namespace rir {
@@ -14,7 +15,8 @@ class Closure;
     PirTranslator {                                                            \
       public:                                                                  \
         name() : PirTranslator(desc){};                                        \
-        void apply(Closure* function) const final override;                    \
+        void apply(RirCompiler&, Closure* function, LogStream& log)            \
+            const final override;                                              \
     };
 
 /*
@@ -24,7 +26,7 @@ class Closure;
  * environment, to pir SSA variables.
  *
  */
-class PASS(ScopeResolution, "Dead store elimination");
+class PASS(ScopeResolution, "Scope resolution");
 
 /*
  * ElideEnv removes envrionments which are not needed. It looks at all uses of
@@ -44,13 +46,13 @@ class PASS(ElideEnv, "Elide environments not needed");
  * dominating force, and replaces all subsequent forces with its result.
  *
  */
-class PASS(ForceDominance, "Eliminate redundant force instructions");
+class PASS(ForceDominance, "Inline Promises");
 
 /*
  * DelayInstr tries to schedule instructions right before they are needed.
  *
  */
-class PASS(DelayInstr, "Eliminate redundant force instructions");
+class PASS(DelayInstr, "Delay instructions");
 
 /*
  * The DelayEnv pass tries to delay the scheduling of `MkEnv` instructions as
@@ -69,20 +71,6 @@ class PASS(DelayEnv, "Move environment creation as far as possible");
 class PASS(Inline, "Inline closures");
 
 /*
- * Goes through every operation that for the general case needs an
- * environment, but it could elide it for some particular inputs. All
- * of them, should have a frameState operation just above. The PASS
- * transforms the CFG so that it becomes easier to work with speculative
- * optimizations. Essentially, it adds a checkpoint befor executing the
- * operation. Checkpoints should jump to a new basic block in case the
- * speculative conditions do not hold. Then, rest of code could assume
- * the conditions hold and edit operations.
- */
-class PASS(
-    insertCheckpoints,
-    "Adapt the CFG to the format required by pir's speculative operations");
-
-/*
  * Goes through every operation that for the general case needs an environment
  * but could be elided for some particular inputs. Analyzes the profiling
  * information of the inputs and if all the observed values are compatible with
@@ -92,10 +80,34 @@ class PASS(
  */
 class PASS(ElideEnvSpec, "Speculate on values to elide environments");
 
+/*
+ * Constantfolding and dead branch removal.
+ */
+class PASS(Constantfold, "Constant folding");
+
+/*
+ * Generic instruction and controlflow cleanup pass.
+ */
 class PASS(Cleanup, "Cleanup redundant operations");
-class PASS(CleanupFrameState, "Cleanup targeted only to frameStates");
+
+/*
+ * Checkpoints keep values alive. Thus it makes sense to remove them if they
+ * are unused after a while.
+ */
+class PASS(CleanupCheckpoints, "Cleanup unused checkpoints");
+
+/*
+ * Unused framestate instructions usually get removed automatically. Except
+ * some call instructions consume framestates, but just for the case where we
+ * want to inline. This pass removes those framestates from the calls, such
+ * that they can be removed later, if they are not actually used by any
+ * checkpoint/deopt.
+ */
+class PASS(CleanupFramestate, "Cleanup framestates unused by checkpoints");
 
 } // namespace pir
 } // namespace rir
+
+#undef PASS
 
 #endif

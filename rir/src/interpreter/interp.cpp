@@ -570,6 +570,9 @@ SEXP rirCall(const CallContext& call, SEXP actuals, Context* ctx) {
     return result;
 }
 
+static unsigned RIR_WARMUP =
+    getenv("RIR_WARMUP") ? atoi(getenv("RIR_WARMUP")) : 3;
+
 // Call a RIR function. Arguments are still untouched.
 SEXP rirCall(const CallContext& call, Context* ctx) {
     SEXP body = BODY(call.callee);
@@ -582,7 +585,7 @@ SEXP rirCall(const CallContext& call, Context* ctx) {
     Function* fun = table->at(slot);
 
     fun->registerInvocation();
-    if (slot == 0 && fun->invocationCount() == 2) {
+    if (slot == 0 && fun->invocationCount() == RIR_WARMUP) {
         SEXP lhs = CAR(call.ast);
         SEXP name = R_NilValue;
         if (TYPEOF(lhs) == SYMSXP)
@@ -795,9 +798,18 @@ enum op { PLUSOP, MINUSOP, TIMESOP, DIVOP, POWOP, MODOP, IDIVOP };
 
 #define STORE_BINOP(res_type, int_res, real_res)                               \
     do {                                                                       \
-        res = ostack_at(ctx, 1);                                               \
-        if (TYPEOF(res) != res_type || !NO_REFERENCES(res)) {                  \
-            res = Rf_allocVector(res_type, 1);                                 \
+        SEXP a = ostack_at(ctx, 0);                                            \
+        SEXP b = ostack_at(ctx, 1);                                            \
+        if (TYPEOF(a) == res_type && NO_REFERENCES(a)) {                       \
+            res = a;                                                           \
+            ostack_pop(ctx);                                                   \
+            ostack_at(ctx, 0) = a;                                             \
+        } else if (TYPEOF(b) == res_type && NO_REFERENCES(b)) {                \
+            res = b;                                                           \
+            ostack_pop(ctx);                                                   \
+        } else {                                                               \
+            ostack_pop(ctx);                                                   \
+            ostack_at(ctx, 0) = res = Rf_allocVector(res_type, 1);             \
         }                                                                      \
         switch (res_type) {                                                    \
         case INTSXP:                                                           \
@@ -819,9 +831,9 @@ enum op { PLUSOP, MINUSOP, TIMESOP, DIVOP, POWOP, MODOP, IDIVOP };
             STORE_BINOP(res_type, int_res, real_res);                          \
         } else {                                                               \
             BINOP_FALLBACK(#op);                                               \
+            ostack_pop(ctx);                                                   \
+            ostack_set(ctx, 0, res);                                           \
         }                                                                      \
-        ostack_pop(ctx);                                                       \
-        ostack_set(ctx, 0, res);                                               \
     } while (false)
 
 static double myfloor(double x1, double x2) {
@@ -1722,10 +1734,9 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
                 STORE_BINOP(REALSXP, 0, real_res);
             } else {
                 BINOP_FALLBACK("/");
+                ostack_popn(ctx, 2);
+                ostack_push(ctx, res);
             }
-
-            ostack_popn(ctx, 2);
-            ostack_push(ctx, res);
             NEXT();
         }
 
@@ -1751,10 +1762,9 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
                 STORE_BINOP(INTSXP, int_res, 0);
             } else {
                 BINOP_FALLBACK("%/%");
+                ostack_popn(ctx, 2);
+                ostack_push(ctx, res);
             }
-
-            ostack_popn(ctx, 2);
-            ostack_push(ctx, res);
             NEXT();
         }
 
@@ -1781,10 +1791,9 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
                 STORE_BINOP(INTSXP, int_res, 0);
             } else {
                 BINOP_FALLBACK("%%");
+                ostack_popn(ctx, 2);
+                ostack_push(ctx, res);
             }
-
-            ostack_popn(ctx, 2);
-            ostack_push(ctx, res);
             NEXT();
         }
 
@@ -2218,6 +2227,10 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
     case vectype: {                                                            \
         if (XLENGTH(val) == 1 && NO_REFERENCES(val)) {                         \
             res = val;                                                         \
+        } else if (XLENGTH(idx) == 1 && NO_REFERENCES(idx) &&                  \
+                   TYPEOF(idx) == vectype) {                                   \
+            res = idx;                                                         \
+            vecaccess(res)[0] = vecaccess(val)[i];                             \
         } else {                                                               \
             res = Rf_allocVector(vectype, 1);                                  \
             vecaccess(res)[0] = vecaccess(val)[i];                             \
@@ -2579,7 +2592,11 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
             // BC on it, we would. To prevent this we strip the object
             // flag here. What we should do instead, is use a non-dispatching
             // extract BC.
-            SET_OBJECT(seq, 0);
+            if (isObject(seq)) {
+                seq = Rf_duplicate(seq);
+                SET_OBJECT(seq, 0);
+                ostack_set(ctx, 0, seq);
+            }
             ostack_push(ctx, value);
             NEXT();
         }
@@ -2591,6 +2608,12 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
 
         INSTRUCTION(invisible_) {
             R_Visible = FALSE;
+            NEXT();
+        }
+
+        INSTRUCTION(ensure_named_) {
+            SEXP val = ostack_top(ctx);
+            ENSURE_NAMED(val);
             NEXT();
         }
 

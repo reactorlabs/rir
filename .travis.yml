@@ -22,6 +22,7 @@ matrix:
         - CC_OVERRIDE=clang
         - BUILD=debug
         - CHECK=check
+        - RIR_WARMUP=2
       compiler: clang
 
     # linux gcc
@@ -47,6 +48,7 @@ matrix:
         - CHECK=check-recommended
         - BUILD=release
         - TEST_GCTORTURE=1
+        - RIR_WARMUP=4
 
 addons:
   apt:

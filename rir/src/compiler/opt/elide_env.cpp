@@ -9,16 +9,30 @@
 namespace rir {
 namespace pir {
 
-void ElideEnv::apply(Closure* function) const {
+void ElideEnv::apply(RirCompiler&, Closure* function, LogStream&) const {
     std::unordered_set<Value*> envNeeded;
     std::unordered_map<Value*, Value*> envDependency;
 
     Visitor::run(function->entry, [&](Instruction* i) {
         if (i->hasEnv()) {
-            if (!StVar::Cast(i))
-                envNeeded.insert(i->env());
-            if (!Env::isPirEnv(i))
-                envDependency[i] = i->env();
+            bool envIsNeeded = i->hasEnv();
+
+            if (envIsNeeded && i->envOnlyForObj()) {
+                envIsNeeded = i->anyArg([&](Value* v) {
+                    return v != i->env() && v->type.maybeObj();
+                });
+                if (!envIsNeeded) {
+                    i->elideEnv();
+                    i->type.setNotObject();
+                }
+            }
+
+            if (envIsNeeded) {
+                if (!StVar::Cast(i))
+                    envNeeded.insert(i->env());
+                if (!Env::isPirEnv(i))
+                    envDependency[i] = i->env();
+            }
         }
     });
 

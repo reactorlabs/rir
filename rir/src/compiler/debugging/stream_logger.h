@@ -35,7 +35,8 @@ class LogStream {
 
     void pirOptimizationsFinished(Closure*);
     void compilationEarlyPir(Closure*);
-    void pirOptimizations(Closure*, const std::string&, size_t);
+    void pirOptimizationsHeader(Closure*, const std::string&, size_t);
+    void pirOptimizations(Closure*);
     void afterAllocator(Code*, std::function<void(std::ostream&)>);
     void CSSA(Code*);
     void finalPIR(Closure*);
@@ -61,6 +62,21 @@ class LogStream {
             out.flush();
         }
         printedAnything = false;
+    }
+
+    template <typename T>
+    friend LogStream& operator<<(LogStream& log, T dump) {
+        log.out << dump;
+        return log;
+    }
+
+    template <typename T>
+    void operator()(T* dump) {
+        dump->print(out, tty());
+    }
+    template <typename T>
+    void operator()(T dump) {
+        dump.print(out, tty());
     }
 
   protected:

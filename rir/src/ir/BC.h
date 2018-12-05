@@ -234,6 +234,7 @@ BC BC::swap() { return BC(Opcode::swap_); }
 BC BC::int3() { return BC(Opcode::int3_); }
 BC BC::makeUnique() { return BC(Opcode::make_unique_); }
 BC BC::setShared() { return BC(Opcode::set_shared_); }
+BC BC::ensureNamed() { return BC(Opcode::ensure_named_); }
 BC BC::asLogical() { return BC(Opcode::aslogical_); }
 BC BC::lglAnd() { return BC(Opcode::lgl_and_); }
 BC BC::lglOr() { return BC(Opcode::lgl_or_); }

@@ -41,7 +41,7 @@ class Env : public Value {
         return &u;
     }
 
-    void printRef(std::ostream& out);
+    void printRef(std::ostream& out) override final;
 
     static Env* Cast(Value* v) {
         return v->tag == Tag::Env ? static_cast<Env*>(v) : nullptr;

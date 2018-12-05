@@ -42,8 +42,11 @@ class Rir2Pir {
     LogStream& log;
     std::string name;
 
-    bool compileBC(const BC& bc, Opcode* pos, rir::Code* srcCode, RirStack&,
-                   Builder&) const;
+    typedef std::unordered_map<Value*, ObservedCallees> CallTargetFeedback;
+
+    bool compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
+                   rir::Code* srcCode, RirStack&, Builder&,
+                   CallTargetFeedback&) const;
     virtual bool inPromise() const { return false; }
 };
 

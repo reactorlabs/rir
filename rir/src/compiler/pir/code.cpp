@@ -22,5 +22,11 @@ Code::~Code() {
     }
 }
 
+size_t Code::size() const {
+    size_t s = 0;
+    Visitor::run(entry, [&](BB* bb) { s += bb->size(); });
+    return s;
+}
+
 } // namespace pir
 } // namespace rir

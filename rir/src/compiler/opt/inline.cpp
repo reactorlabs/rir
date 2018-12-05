@@ -1,6 +1,5 @@
 #include "../pir/pir_impl.h"
 #include "../transform/bb.h"
-#include "../transform/replace.h"
 #include "../util/cfg.h"
 #include "../util/visitor.h"
 #include "R/Funtab.h"
@@ -20,8 +19,17 @@ class TheInliner {
     Closure* function;
     explicit TheInliner(Closure* function) : function(function) {}
 
+    static constexpr size_t MAX_SIZE = 1024;
+    static constexpr size_t MAX_INLINEE_SIZE = 128;
+    static constexpr size_t MAX_FUEL = 5;
+
     void operator()() {
-        size_t fuel = 5;
+        size_t fuel = MAX_FUEL;
+
+        if (function->size() > MAX_SIZE)
+            return;
+
+        std::unordered_set<Closure*> skip;
 
         Visitor::run(function->entry, [&](BB* bb) {
             // Dangerous iterater usage, works since we do only update it in
@@ -33,14 +41,17 @@ class TheInliner {
                 Closure* inlinee = nullptr;
                 Value* staticEnv = nullptr;
 
+                FrameState* callerFrameState = nullptr;
                 if (auto call = Call::Cast(*it)) {
-                    auto mkcls = MkFunCls::Cast(call->cls()->baseValue());
+                    auto mkcls =
+                        MkFunCls::Cast(call->cls()->followCastsAndForce());
                     if (!mkcls)
                         continue;
                     inlinee = mkcls->fun;
                     if (inlinee->argNames.size() != call->nCallArgs())
                         continue;
                     staticEnv = mkcls->lexicalEnv();
+                    callerFrameState = call->frameState();
                 } else if (auto call = StaticCall::Cast(*it)) {
                     inlinee = call->cls();
                     // if we don't know the closure of the inlinee, we can't
@@ -54,7 +65,20 @@ class TheInliner {
                         R_IsNamespaceEnv(inlinee->closureEnv()->rho))
                         continue;
                     staticEnv = inlinee->closureEnv();
+                    callerFrameState = call->frameState();
                 } else {
+                    continue;
+                }
+
+                if (skip.count(inlinee))
+                    continue;
+
+                // Recursive inline only once
+                if (inlinee == function)
+                    skip.insert(inlinee);
+
+                if (inlinee->size() > MAX_INLINEE_SIZE) {
+                    skip.insert(inlinee);
                     continue;
                 }
 
@@ -67,24 +91,6 @@ class TheInliner {
                 std::vector<Value*> arguments;
                 theCallInstruction->eachCallArg(
                     [&](Value* v) { arguments.push_back(v); });
-                FrameState* callerFrameState = nullptr;
-
-                // try to find a frameState for this call instruction
-                if (split->size() > 1) {
-                    auto pos = split->begin() + 1; // skip the call instruction
-                    if (auto sp = FrameState::Cast(*pos)) {
-                        while (sp) {
-                            if (sp->stackSize > 0 && sp->tos() == theCall) {
-                                callerFrameState = sp;
-                                break;
-                            }
-                            pos++;
-                            if (pos == split->end())
-                                break;
-                            sp = FrameState::Cast(*pos);
-                        }
-                    }
-                }
 
                 // Clone the function
                 BB* copy = BBTransform::clone(inlinee->entry, function);
@@ -120,11 +126,6 @@ class TheInliner {
                                 auto cloneSp =
                                     FrameState::Cast(copyFromFs->clone());
 
-                                // Remove the inlinee result from the
-                                // caller frameState. The result will only
-                                // become available after the (deoptimized)
-                                // inlinee returns.
-                                cloneSp->popStack();
                                 ip = bb->insert(ip, cloneSp);
                                 sp->next(cloneSp);
 
@@ -235,7 +236,7 @@ class TheInliner {
 namespace rir {
 namespace pir {
 
-void Inline::apply(Closure* function) const {
+void Inline::apply(RirCompiler&, Closure* function, LogStream&) const {
     TheInliner s(function);
     s();
 }

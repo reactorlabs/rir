@@ -28,7 +28,7 @@ class SingletonValue : public Value {
 
 class Nil : public SingletonValue<Nil> {
   public:
-    void printRef(std::ostream& out) { out << "nil"; }
+    void printRef(std::ostream& out) override final { out << "nil"; }
 
   private:
     friend class SingletonValue;
@@ -37,11 +37,35 @@ class Nil : public SingletonValue<Nil> {
 
 class Missing : public SingletonValue<Missing> {
   public:
-    void printRef(std::ostream& out) { out << "missing"; }
+    void printRef(std::ostream& out) override final { out << "missing"; }
 
   private:
     friend class SingletonValue;
     Missing() : SingletonValue(PirType::missing(), Tag::Missing) {}
+};
+
+class Tombstone : public Value {
+  public:
+    void printRef(std::ostream& out) override final {
+        out << "~";
+        if (this == closure())
+            out << "cls";
+        else if (this == framestate())
+            out << "fs";
+        else
+            assert(false);
+    }
+    static Tombstone* closure() {
+        static Tombstone cls(RType::closure);
+        return &cls;
+    }
+    static Tombstone* framestate() {
+        static Tombstone fs(NativeType::frameState);
+        return &fs;
+    }
+
+  private:
+    explicit Tombstone(PirType t) : Value(t, Tag::Tombstone) {}
 };
 }
 }

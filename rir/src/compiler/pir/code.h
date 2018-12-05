@@ -20,7 +20,9 @@ class Code {
 
     Code() {}
     void printCode(std::ostream&, bool tty) const;
-    ~Code();
+    virtual ~Code();
+
+    virtual size_t size() const;
 };
 
 }

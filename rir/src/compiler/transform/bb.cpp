@@ -97,26 +97,33 @@ Value* BBTransform::forInline(BB* inlinee, BB* splice) {
 }
 
 BB* BBTransform::lowerExpect(Code* code, BB* src, BB::Instrs::iterator position,
-                             Value* condition, BB* deoptBlock) {
+                             Value* condition, bool expected, BB* deoptBlock) {
     auto split = BBTransform::split(code->nextBBId++, src, position + 1, code);
     src->replace(position, new Branch(condition));
-    src->next0 = deoptBlock;
-    src->next1 = split;
+    if (expected) {
+        src->next1 = deoptBlock;
+        src->next0 = split;
+    } else {
+        src->next0 = deoptBlock;
+        src->next1 = split;
+    }
     return split;
 }
 
-BB* BBTransform::addCheckpoint(Code* code, BB* src,
-                               BB::Instrs::iterator position) {
-    FrameState* framestate = FrameState::Cast(*position);
-    assert(framestate);
-    auto deoptBlock = new BB(code, code->nextBBId++);
-    position = src->moveToBegin(position, deoptBlock);
-    deoptBlock->append(new Deopt(framestate));
-    auto split = BBTransform::split(code->nextBBId++, src, position, code);
-    src->append(new Checkpoint());
-    src->next0 = split;
-    src->next1 = deoptBlock;
-    return split;
+void BBTransform::removeBBs(Code* code,
+                            const std::unordered_set<BB*>& toDelete) {
+    // Dead code can still appear as phi inputs in live blocks
+    Visitor::run(code->entry, [&](BB* bb) {
+        for (auto i : *bb) {
+            if (auto phi = Phi::Cast(i)) {
+                phi->removeInputs(toDelete);
+            }
+        }
+    });
+    for (auto bb : toDelete) {
+        delete bb;
+    }
 }
+
 } // namespace pir
 } // namespace rir

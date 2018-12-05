@@ -17,6 +17,14 @@ void Closure::print(std::ostream& out, bool tty) const {
     }
 }
 
+size_t Closure::promiseId(Code* c) const {
+    for (size_t i = 0; i < promises.size(); ++i)
+        if (promises[i] == c)
+            return i;
+    assert(false);
+    return -1;
+}
+
 Promise* Closure::createProm(unsigned srcPoolIdx) {
     Promise* p = new Promise(this, promises.size(), srcPoolIdx);
     promises.push_back(p);
@@ -58,5 +66,12 @@ Closure* Closure::clone() {
 
     return c;
 }
+
+size_t Closure::size() const {
+    size_t s = 0;
+    eachPromise([&s](Promise* p) { s += p->size(); });
+    return s + Code::size();
+}
+
 } // namespace pir
 } // namespace rir

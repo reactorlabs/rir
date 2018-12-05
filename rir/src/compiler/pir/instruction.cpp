@@ -81,6 +81,21 @@ void Instruction::print(std::ostream& out, bool tty) {
     printEnv(out, tty);
 }
 
+void Phi::removeInputs(const std::unordered_set<BB*>& deletedBBs) {
+    auto bbIter = input.begin();
+    auto argIter = args_.begin();
+    while (argIter != args_.end()) {
+        if (deletedBBs.count(*bbIter)) {
+            bbIter = input.erase(bbIter);
+            argIter = args_.erase(argIter);
+        } else {
+            argIter++;
+            bbIter++;
+        }
+    }
+    assert(bbIter == input.end());
+}
+
 void Instruction::printEnv(std::ostream& out, bool tty) {
     if (hasEnv()) {
         if (tty) {
@@ -137,6 +152,8 @@ Instruction* Instruction::hasSingleUse() {
     return nullptr;
 }
 
+void Instruction::eraseAndRemove() { bb()->remove(this); }
+
 void Instruction::replaceUsesIn(Value* replace, BB* target) {
     Visitor::run(target, [&](Instruction* i) {
         i->eachArg([&](InstrArg& arg) {
@@ -156,17 +173,32 @@ void Instruction::replaceUsesAndSwapWith(
     bb()->replace(it, replace);
 }
 
-Value* Instruction::baseValue() {
+Value* Instruction::followCasts() {
     if (auto cast = CastType::Cast(this))
-        return cast->arg<0>().val()->baseValue();
-    if (auto force = Force::Cast(this))
-        return force->input()->baseValue();
+        return cast->arg<0>().val()->followCasts();
     if (auto shared = SetShared::Cast(this))
-        return shared->arg<0>().val()->baseValue();
+        return shared->arg<0>().val()->followCasts();
+    if (auto chk = ChkClosure::Cast(this))
+        return chk->arg<0>().val()->followCasts();
     return this;
 }
 
-bool Instruction::maySpecialize() {
+Value* Instruction::followCastsAndForce() {
+    if (auto cast = CastType::Cast(this))
+        return cast->arg<0>().val()->followCastsAndForce();
+    if (auto force = Force::Cast(this))
+        return force->input()->followCastsAndForce();
+    if (auto mkarg = MkArg::Cast(this))
+        if (mkarg->eagerArg() != Missing::instance())
+            return mkarg->eagerArg();
+    if (auto shared = SetShared::Cast(this))
+        return shared->arg<0>().val()->followCastsAndForce();
+    if (auto chk = ChkClosure::Cast(this))
+        return chk->arg<0>().val()->followCastsAndForce();
+    return this;
+}
+
+bool Instruction::envOnlyForObj() {
 #define V(Name)                                                                \
     if (Name::Cast(this)) {                                                    \
         return true;                                                           \
@@ -203,6 +235,11 @@ void LdVar::printArgs(std::ostream& out, bool tty) {
 
 void LdFun::printArgs(std::ostream& out, bool tty) {
     out << CHAR(PRINTNAME(varName)) << ", ";
+    if (guessedBinding()) {
+        out << "<";
+        guessedBinding()->printRef(out);
+        out << ">, ";
+    }
 }
 
 void LdArg::printArgs(std::ostream& out, bool tty) { out << id; }
@@ -239,11 +276,9 @@ void Is::printArgs(std::ostream& out, bool tty) {
     out << ", " << Rf_type2char(sexpTag);
 }
 
-bool Phi::updateType() {
-    auto old = type;
+void Phi::updateType() {
     type = arg(0).val()->type;
     eachArg([&](BB*, Value* v) -> void { type = type | v->type; });
-    return type != old;
 }
 
 void Phi::printArgs(std::ostream& out, bool tty) {
@@ -374,7 +409,6 @@ MkFunCls::MkFunCls(Closure* fun, Value* lexicalEnv, SEXP fml, SEXP code,
                    SEXP src)
     : FixedLenInstructionWithEnvSlot(RType::closure, lexicalEnv), fun(fun),
       fml(fml), code(code), src(src) {
-    assert(fun->closureEnv() == Env::notClosed());
 }
 
 void MkFunCls::printArgs(std::ostream& out, bool tty) {
@@ -385,6 +419,10 @@ void MkFunCls::printArgs(std::ostream& out, bool tty) {
 void StaticCall::printArgs(std::ostream& out, bool tty) {
     out << *cls_;
     printCallArgs(out, this);
+    if (frameState()) {
+        frameState()->printRef(out);
+        out << ", ";
+    }
 }
 
 CallInstruction* CallInstruction::CastCall(Value* v) {
@@ -421,6 +459,10 @@ NamedCall::NamedCall(Value* callerEnv, Value* fun,
 void Call::printArgs(std::ostream& out, bool tty) {
     cls()->printRef(out);
     printCallArgs(out, this);
+    if (frameState()) {
+        frameState()->printRef(out);
+        out << ", ";
+    }
 }
 
 void NamedCall::printArgs(std::ostream& out, bool tty) {

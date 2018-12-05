@@ -50,6 +50,8 @@ typedef std::unordered_map<std::string, pir::Closure*> closuresByName;
 
 closuresByName compileRir2Pir(SEXP env, pir::Module* m) {
     pir::StreamLogger logger(pir::DebugOptions() |
+                             // pir::DebugFlag::PrintIntoStdout |
+                             // pir::DebugFlag::PrintOptimizationPasses |
                              pir::DebugFlag::PrintFinalPir);
     pir::Rir2PirCompiler cmp(m, logger);
 
@@ -171,6 +173,22 @@ void insertTypeFeedbackForBinops(rir::Function* srcFunction,
 extern "C" SEXP Rf_NewEnvironment(SEXP, SEXP, SEXP);
 SEXP parseCompileToRir(std::string);
 
+static bool envOfAddElided(pir::Code* c) {
+    bool hasAdd = false;
+
+    bool res = Visitor::check(c->entry, [&](BB* bb) -> bool {
+        for (auto& i : *bb) {
+            if (auto a = Add::Cast(i)) {
+                hasAdd = true;
+                if (a->env() != Env::elided())
+                    return false;
+            }
+        }
+        return true;
+    });
+    return hasAdd && res;
+}
+
 bool canRemoveEnvironmentIfTypeFeedback(const std::string& input) {
     Protect p;
     std::array<SEXP, 2> types;
@@ -194,8 +212,7 @@ bool canRemoveEnvironmentIfTypeFeedback(const std::string& input) {
     pir::Module m;
     compileRir2Pir(execEnv, &m);
     bool t = verify(&m);
-    m.eachPirFunction(
-        [&t](pir::Closure* f) { t = t && Query::envOnlyBeforeDeopt(f); });
+    m.eachPirFunction([&t](pir::Closure* f) { t = t && envOfAddElided(f); });
     return t;
 }
 
@@ -212,7 +229,7 @@ bool canRemoveEnvironmentIfNonTypeFeedback(const std::string& input) {
     compile("", input, &m);
     bool t = verify(&m);
     m.eachPirFunction([&t](pir::Closure* f) {
-        t = t && (Query::noEnv(f) || Query::envOnlyBeforeDeopt(f));
+        t = t && (Query::noEnv(f) || envOfAddElided(f));
     });
     return t;
 }
@@ -385,12 +402,13 @@ static Test tests[] = {
          []() { return canRemoveEnvironment("f <- function() 123"); }),
     Test("binop_nonobjects",
          []() {
-             return canRemoveEnvironmentIfTypeFeedback("f <- function() 1 + 2");
+             return canRemoveEnvironmentIfTypeFeedback(
+                 "f <- function() 1 + xxx");
          }),
     Test("binop_nonobjects_nofeedback",
          []() {
-             return !canRemoveEnvironmentIfNonTypeFeedback(
-                 "f <- function() 1 + 2");
+             return canRemoveEnvironmentIfNonTypeFeedback(
+                 "f <- function() 1 + xxx");
          }),
     Test("super_assign", &testSuperAssign),
     Test("loop",
@@ -525,7 +543,29 @@ static Test tests[] = {
                                 "}",
                                 "4");
          }),
+    Test(
+        "Elide ldfun through promise",
+        []() { return test42("{f <- function() 42L; (function(x) x())(f)}"); }),
+    Test("Constantfolding1", []() { return test42("{if (1<2) 42L}"); }),
+    Test("Constantfolding2",
+         []() {
+             return test42("{a<- 41L; b<- 1L; f <- function(x,y) x+y; f(a,b)}");
+         }),
+    Test("Inlining promises and closures with Constantfolding",
+         []() {
+             return test42("{a<- function() 41L; b<- function() 1L; f <- "
+                           "function(x,y) x()+y; f(a,b())}");
+         }),
+    Test("more cf",
+         []() {
+             return test42("{x <- function() 42;"
+                           " y <- function() 41;"
+                           " z <- 1;"
+                           " f <- function(a,b,c) if (a() == (b+c)) 42L;"
+                           " f(x,y(),z)}");
+         }),
 };
+
 } // namespace
 
 namespace rir {
