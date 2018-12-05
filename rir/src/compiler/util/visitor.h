@@ -196,17 +196,20 @@ class VisitorImplementation {
      * BB Visitors
      *
      */
-    static void run(BB* bb, BBAction action, bool processNewNodes = false) {
-        forwardGenericRun(bb, action, processNewNodes);
+    static void run(BB* bb, BBAction action) {
+        forwardGenericRun(bb, action, false);
+    }
+
+    static void runPostChange(BB* bb, BBAction action) {
+        forwardGenericRun(bb, action, true);
     }
 
     static bool check(BB* bb, BBActionPredicate action) {
         return forwardGenericRun(bb, action, false);
     }
 
-    static void runBackward(BB* bb, CFG const& cfg, BBAction action,
-                            bool processNewNodes = false) {
-        backwardGenericRun(bb, cfg, action, processNewNodes);
+    static void runBackward(BB* bb, CFG const& cfg, BBAction action) {
+        backwardGenericRun(bb, cfg, action, false);
     }
 
     static bool checkBackward(BB* bb, CFG const& cfg,

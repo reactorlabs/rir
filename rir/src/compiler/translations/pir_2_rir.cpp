@@ -1077,9 +1077,8 @@ static bool allLazy(CallType* call, std::vector<Promise*>& args) {
 }
 
 void Pir2Rir::lower(Code* code) {
-    Visitor::run(
-        code->entry,
-        [&](BB* bb) {
+    Visitor::runPostChange(
+        code->entry, [&](BB* bb) {
             auto it = bb->begin();
             while (it != bb->end()) {
                 auto next = it + 1;
@@ -1118,8 +1117,7 @@ void Pir2Rir::lower(Code* code) {
 
                 it = next;
             }
-        },
-        true);
+        });
 
     Visitor::run(code->entry, [&](BB* bb) {
         auto it = bb->begin();
