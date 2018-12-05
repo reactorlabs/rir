@@ -55,16 +55,19 @@ class StaticAnalysis {
   private:
     const std::string name;
 
-    std::vector<std::vector<AbstractState>> mergepoint;
+    struct BBSnapshot {
+        bool seen = false;
+        AbstractState entry;
+        std::unordered_map<Instruction*, AbstractState> extra;
+    };
+    typedef std::vector<BBSnapshot> AnalysisSnapshots;
+    AnalysisSnapshots snapshots;
+
     virtual AbstractResult apply(AbstractState&, Instruction*) const = 0;
     AbstractState exitpoint;
     bool done = false;
 
   protected:
-    const std::vector<std::vector<AbstractState>>& getMergepoints() {
-        return mergepoint;
-    }
-
     LogStream& log;
 
     Closure* closure;
@@ -75,14 +78,13 @@ class StaticAnalysis {
     StaticAnalysis(const std::string& name, Closure* cls, Code* code,
                    LogStream& log)
         : name(name), log(log), closure(cls), code(code), entry(code->entry) {
-        mergepoint.resize(code->nextBBId);
-        mergepoint[entry->id].resize(1);
+        snapshots.resize(code->nextBBId);
     }
     StaticAnalysis(const std::string& name, Closure* cls, Code* code,
                    const AbstractState& initialState, LogStream& log)
         : name(name), log(log), closure(cls), code(code), entry(code->entry) {
-        mergepoint.resize(code->nextBBId);
-        mergepoint[entry->id].push_back(initialState);
+        snapshots.resize(code->nextBBId);
+        snapshots[entry->id].entry = initialState;
     }
 
     const AbstractState& result() {
@@ -95,16 +97,16 @@ class StaticAnalysis {
         assert(done);
 
         BB* bb = i->bb();
-        size_t segment = 0;
-        const AbstractState& state = mergepoint[bb->id][segment];
+        BBSnapshot& bbSnapshots = snapshots[bb->id];
+        const AbstractState& state = bbSnapshots.entry;
         for (auto j : *bb) {
             if (POS == PositioningStyle::BeforeInstruction && i == j)
                 return state;
 
-            if (CallInstruction::CastCall(i))
-                state = mergepoint[bb->id][++segment];
+            if (bbSnapshots.extra.count(j))
+                state = bbSnapshots.extra.at(j);
             else
-                apply(state, i);
+                apply(state, j);
 
             if (POS == PositioningStyle::AfterInstruction && i == j)
                 return state;
@@ -121,14 +123,14 @@ class StaticAnalysis {
         assert(done);
 
         Visitor::run(entry, [&](BB* bb) {
-            size_t segment = 0;
-            AbstractState state = mergepoint[bb->id][segment];
+            const BBSnapshot& bbSnapshots = snapshots[bb->id];
+            AbstractState state = bbSnapshots.entry;
             for (auto i : *bb) {
                 if (POS == PositioningStyle::BeforeInstruction)
                     collect(state, i);
 
-                if (CallInstruction::CastCall(i))
-                    state = mergepoint[bb->id][++segment];
+                if (bbSnapshots.extra.count(i))
+                    state = bbSnapshots.extra.at(i);
                 else
                     apply(state, i);
 
@@ -141,7 +143,7 @@ class StaticAnalysis {
     void operator()() {
         bool reachedExit = false;
 
-        std::vector<bool> changed(mergepoint.size(), false);
+        std::vector<bool> changed(snapshots.size(), false);
         changed[entry->id] = true;
 
         if (DEBUG_LEVEL > AnalysisDebugLevel::None) {
@@ -162,9 +164,7 @@ class StaticAnalysis {
                 if (!changed[id])
                     return;
 
-                size_t segment = 0;
-                assert(mergepoint[id].size() > 0);
-                AbstractState state = mergepoint[id][segment];
+                AbstractState state = snapshots[id].entry;
 
                 if (DEBUG_LEVEL >= AnalysisDebugLevel::BB) {
                     log << "======= Entering BB" << bb->id
@@ -197,13 +197,8 @@ class StaticAnalysis {
                         log(state);
                     }
 
-                    if (CallInstruction::CastCall(i)) {
-                        segment++;
-                        if (mergepoint[id].size() <= segment) {
-                            mergepoint[id].resize(segment + 1);
-                        }
-                        mergepoint[bb->id][segment] = state;
-                    }
+                    if (res.keepSnapshot)
+                        snapshots[bb->id].extra[i] = state;
                 }
 
                 if (bb->isExit()) {
@@ -236,16 +231,17 @@ class StaticAnalysis {
             return;
 
         auto id = branch->id;
-        if (mergepoint[id].empty()) {
-            mergepoint[id].push_back(state);
+        if (!snapshots[id].seen) {
+            snapshots[id].entry = state;
+            snapshots[id].seen = true;
             done = false;
             changed[id] = true;
         } else {
             AbstractState old;
             if (DEBUG_LEVEL >= AnalysisDebugLevel::Taint) {
-                old = mergepoint[id][0];
+                old = snapshots[id].entry;
             }
-            AbstractResult mres = mergepoint[id][0].merge(state);
+            AbstractResult mres = snapshots[id].entry.merge(state);
             if (mres > AbstractResult::None) {
                 if (DEBUG_LEVEL >= AnalysisDebugLevel::Merge ||
                     (mres == AbstractResult::Tainted &&
@@ -261,7 +257,7 @@ class StaticAnalysis {
                     log << "===- Old state is:\n";
                     log(old);
                     log << "===- Merged state is:\n";
-                    log(mergepoint[id][0]);
+                    log(snapshots[id].entry);
                 }
                 done = false;
                 changed[id] = true;

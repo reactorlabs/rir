@@ -7,6 +7,7 @@ namespace pir {
 struct AbstractResult {
     enum Kind { None, Updated, LostPrecision, Tainted };
     Kind kind;
+    bool keepSnapshot = false;
 
     // cppcheck-suppress noExplicitConstructor
     AbstractResult(Kind kind) : kind(kind) {}

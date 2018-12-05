@@ -267,6 +267,7 @@ AbstractResult TheScopeAnalysis::apply(ScopeAnalysisState& state,
                 state.returnValues[i].merge(prom.result().result);
                 handled = true;
                 effect.update();
+                effect.keepSnapshot = true;
             }
         }
         if (!handled) {
@@ -298,6 +299,7 @@ AbstractResult TheScopeAnalysis::apply(ScopeAnalysisState& state,
                         state.returnValues[i].merge(nextFun.result().result);
                         handled = true;
                         effect.update();
+                        effect.keepSnapshot = true;
                     }
                 }
             }
@@ -315,6 +317,7 @@ AbstractResult TheScopeAnalysis::apply(ScopeAnalysisState& state,
                     state.returnValues[i].merge(nextFun.result().result);
                     handled = true;
                     effect.update();
+                    effect.keepSnapshot = true;
                 }
             }
         } else {
