@@ -953,7 +953,13 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
             }
             case Tag::StaticCall: {
                 auto call = StaticCall::Cast(instr);
-                compiler.compile(call->cls(), call->origin(), dryRun);
+                // TODO: Unfortunately we cannot compile the target. We might
+                // have optimized this function under assumptions (and we don't
+                // even have access to the assumptions here). To be able to not
+                // waste that work and actually compile the optimized version,
+                // we need to put it in a specific slot and then have a
+                // staticCall that dispatches to that slot.
+                // compiler.compile(call->cls(), call->origin(), dryRun);
                 cs << BC::staticCall(call->nCallArgs(), Pool::get(call->srcIdx),
                                      call->origin());
                 break;
