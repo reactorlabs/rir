@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "../../runtime/Function.h"
+#include "optimization_context.h"
 
 namespace rir {
 namespace pir {
@@ -23,18 +24,17 @@ class Module {
     Env* getEnv(SEXP);
 
     void print(std::ostream& out = std::cout, bool tty = false);
-    void printEachVersion(std::ostream& out = std::cout, bool tty = false);
 
-    typedef std::pair<rir::Function*, Env*> FunctionAndEnv;
-    pir::Closure* get(FunctionAndEnv idx) {
-        assert(functionMap.count(idx));
-        return functionMap.at(idx);
+    bool exists(rir::Function* f, OptimizationContext ctx) {
+        return closures[f].count(ctx);
     }
+    Closure* get(rir::Function* f, OptimizationContext ctx) {
+        return closures.at(f).at(ctx);
+    }
+    void erase(rir::Function* f, OptimizationContext ctx);
 
-    typedef std::function<bool(Closure* f)> MaybeCreate;
-    void createIfMissing(const std::string& name, rir::Function* f,
-                         const std::vector<SEXP>& a, Env* env,
-                         MaybeCreate create);
+    Closure* declare(const std::string& name, rir::Function* f,
+                     OptimizationContext ctx, const std::vector<SEXP>& a);
 
     typedef std::function<void(pir::Closure*)> PirClosureIterator;
     void eachPirFunction(PirClosureIterator it);
@@ -42,8 +42,8 @@ class Module {
     ~Module();
 
   private:
-    std::map<FunctionAndEnv, Closure*> functionMap;
-    std::vector<Closure*> closures;
+    typedef std::unordered_map<OptimizationContext, Closure*> ClosureVersions;
+    std::unordered_map<rir::Function*, ClosureVersions> closures;
 };
 
 }

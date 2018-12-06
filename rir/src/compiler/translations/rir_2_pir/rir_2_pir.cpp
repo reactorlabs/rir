@@ -280,12 +280,19 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             }
         };
         if (monomorphic && isValidClosureSEXP(monomorphic) &&
+            // Currently we can only use StaticCall if we have exactly the right
+            // number of arguments.
+            // TODO, support cases where we need to pass Missing::instance() to
+            // pad the missing arguments. This should be already almost possible
+            // -- maybe the pir2rir backend would need some convincing...
             RList(FORMALS(monomorphic)).length() == args.size()) {
             std::string name = "";
             if (auto ldfun = LdFun::Cast(callee))
                 name = CHAR(PRINTNAME(ldfun->varName));
+            AssumptionsSet asmpt(Assumptions::CorrectOrderOfArguments);
+            asmpt.set(Assumptions::CorrectNumberOfArguments);
             compiler.compileClosure(
-                monomorphic, name,
+                monomorphic, name, asmpt,
                 [&](Closure* f) {
                     Value* expected = insert(new LdConst(monomorphic));
                     Value* t = insert(new Identical(callee, expected));
@@ -362,8 +369,10 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                 Compiler::compileClosure(target);
             }
             bool failed = false;
+            AssumptionsSet asmpt(Assumptions::CorrectOrderOfArguments);
+            asmpt.set(Assumptions::CorrectNumberOfArguments);
             compiler.compileClosure(
-                target, "",
+                target, "", asmpt,
                 [&](Closure* f) {
                     auto fs = insert.registerFrameState(srcCode, nextPos, stack);
                     push(insert(new StaticCall(env, f, args, target, fs, ast)));
@@ -803,7 +812,7 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) const {
             inner << (pos - srcCode->code());
 
             compiler.compileFunction(
-                function, inner.str(), formals,
+                function, inner.str(), formals, {},
                 [&](Closure* innerF) {
                     cur.stack.push(insert(
                         new MkFunCls(innerF, insert.env, fmls, code, src)));

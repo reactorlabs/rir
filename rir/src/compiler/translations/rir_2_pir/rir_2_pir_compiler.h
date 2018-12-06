@@ -13,17 +13,19 @@ class Rir2PirCompiler : public RirCompiler {
   public:
     Rir2PirCompiler(Module* module, StreamLogger& logger);
 
-    void compileClosure(SEXP, const std::string& name, MaybeCls success,
+    void compileClosure(SEXP, const std::string& name,
+                        const AssumptionsSet& ctx, MaybeCls success,
                         Maybe fail);
     void compileFunction(rir::Function*, const std::string& name,
-                         FormalArgs const&, MaybeCls success, Maybe fail);
-    void optimizeModule(bool preserveVersions = false);
+                         FormalArgs const&, const AssumptionsSet& ctx,
+                         MaybeCls success, Maybe fail);
+    void optimizeModule();
 
   private:
     StreamLogger& logger;
     void compileClosure(rir::Function*, const std::string& name,
-                        FormalArgs const&, Env* closureEnv, MaybeCls success,
-                        Maybe fail);
+                        FormalArgs const&, const OptimizationContext& ctx,
+                        MaybeCls success, Maybe fail);
     void applyOptimizations(Closure*, const std::string&);
 };
 } // namespace pir

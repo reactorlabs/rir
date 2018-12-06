@@ -5,47 +5,32 @@ namespace rir {
 namespace pir {
 
 void Module::print(std::ostream& out, bool tty) {
-    for (auto f : closures) {
-        f->print(out, tty);
+    eachPirFunction([&](Closure* c) {
+        c->print(out, tty);
         out << "\n-------------------------------\n";
-    }
+    });
 }
 
-void Module::printEachVersion(std::ostream& out, bool tty) {
-    for (auto f : closures) {
-        out << "\n======= Function ========================\n";
-        f->print(out, tty);
-        out << "\n=========================================\n";
-    }
+void Module::erase(rir::Function* f, OptimizationContext ctx) {
+    auto& vs = closures.at(f);
+    auto i = vs.find(ctx);
+    delete (*i).second;
+    vs.erase(i);
 }
 
-void Module::createIfMissing(const std::string& name, rir::Function* f,
-                             const std::vector<SEXP>& a, Env* env,
-                             MaybeCreate create) {
-    auto idx = FunctionAndEnv(f, env);
-    if (functionMap.count(idx)) {
-        return;
-    }
-    assert(functionMap.count(idx) == 0);
-    auto closure = new Closure(name, a, env, f);
-    closures.push_back(closure);
-    functionMap.emplace(idx, closure);
-
-    if (!create(closure)) {
-        functionMap.erase(functionMap.find(idx));
-        for (auto i = closures.begin(); i != closures.end(); ++i) {
-            if (*i == closure) {
-                closures.erase(i);
-                break;
-            }
-        }
-        delete closure;
-    }
+Closure* Module::declare(const std::string& name, rir::Function* f,
+                         OptimizationContext ctx, const std::vector<SEXP>& a) {
+    auto& closureVersions = closures[f];
+    assert(!closureVersions.count(ctx));
+    auto closure = new Closure(name, a, ctx.environment, f);
+    closureVersions.emplace(ctx, closure);
+    return closure;
 }
 
 void Module::eachPirFunction(PirClosureIterator it) {
-    for (auto& f : closures)
-        it(f);
+    for (auto& cs : closures)
+        for (auto& c : cs.second)
+            it(c.second);
 }
 
 Env* Module::getEnv(SEXP rho) {
@@ -63,10 +48,11 @@ Env* Module::getEnv(SEXP rho) {
 }
 
 Module::~Module() {
-    for (auto e : environments)
+    for (auto& e : environments)
         delete e.second;
-    for (auto c : closures)
-        delete c;
+    for (auto& cs : closures)
+        for (auto& c : cs.second)
+            delete c.second;
 }
 }
 }

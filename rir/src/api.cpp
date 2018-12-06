@@ -174,7 +174,7 @@ SEXP pirCompile(SEXP what, const std::string& name, pir::DebugOptions debug) {
     pir::StreamLogger logger(debug);
     logger.title("Compiling " + name);
     pir::Rir2PirCompiler cmp(m, logger);
-    cmp.compileClosure(what, name,
+    cmp.compileClosure(what, name, {},
                        [&](pir::Closure* c) {
                            logger.flush();
                            cmp.optimizeModule();
