@@ -279,7 +279,8 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                 push(insert(new Call(insert.env, callee, args, fs, ast)));
             }
         };
-        if (monomorphic && isValidClosureSEXP(monomorphic)) {
+        if (monomorphic && isValidClosureSEXP(monomorphic) &&
+            RList(FORMALS(monomorphic)).length() == args.size()) {
             std::string name = "";
             if (auto ldfun = LdFun::Cast(callee))
                 name = CHAR(PRINTNAME(ldfun->varName));

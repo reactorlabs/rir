@@ -1131,14 +1131,7 @@ class VLIE(StaticCall, Effect::Any, EnvAccess::Leak), public CallInstruction {
 
     StaticCall(Value * callerEnv, Closure * cls,
                const std::vector<Value*>& args, SEXP origin, FrameState* fs,
-               unsigned srcIdx)
-        : VarLenInstructionWithEnvSlot(PirType::valOrLazy(), callerEnv, srcIdx),
-          cls_(cls), origin_(origin) {
-        assert(fs);
-        pushArg(fs, NativeType::frameState);
-        for (unsigned i = 0; i < args.size(); ++i)
-            pushArg(args[i], PirType::val());
-    }
+               unsigned srcIdx);
 
     size_t nCallArgs() override { return nargs() - 2; };
     void eachCallArg(Instruction::ArgumentValueIterator it) override {

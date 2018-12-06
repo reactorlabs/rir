@@ -59,11 +59,7 @@ class TheInliner {
                     if (inlinee->closureEnv() == Env::notClosed() &&
                         inlinee != function)
                         continue;
-                    // TODO: honestly I have no clue how namespaces work. For
-                    // now if we hit any env with attribs, we do not inline.
-                    if (ATTRIB(inlinee->closureEnv()->rho) != R_NilValue ||
-                        R_IsNamespaceEnv(inlinee->closureEnv()->rho))
-                        continue;
+                    assert(inlinee->argNames.size() == call->nCallArgs());
                     staticEnv = inlinee->closureEnv();
                     callerFrameState = call->frameState();
                 } else {

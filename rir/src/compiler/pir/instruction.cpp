@@ -427,6 +427,18 @@ void StaticCall::printArgs(std::ostream& out, bool tty) {
     }
 }
 
+StaticCall::StaticCall(Value* callerEnv, Closure* cls,
+                       const std::vector<Value*>& args, SEXP origin,
+                       FrameState* fs, unsigned srcIdx)
+    : VarLenInstructionWithEnvSlot(PirType::valOrLazy(), callerEnv, srcIdx),
+      cls_(cls), origin_(origin) {
+    assert(cls->argNames.size() == args.size());
+    assert(fs);
+    pushArg(fs, NativeType::frameState);
+    for (unsigned i = 0; i < args.size(); ++i)
+        pushArg(args[i], PirType::val());
+}
+
 CallInstruction* CallInstruction::CastCall(Value* v) {
     switch (v->tag) {
     case Tag::Call:
