@@ -128,11 +128,9 @@ class NullBuffer : public std::ostream, std::streambuf {
 
 bool verify(Module* m) {
     bool success = true;
-    m->eachPirFunction([&success](pir::Module::VersionedClosure& f) {
-        f.eachVersion([&success](pir::Closure* f) {
-            if (!Verify::apply(f))
-                success = false;
-        });
+    m->eachPirFunction([&success](Closure* c) {
+        if (!Verify::apply(c))
+            success = false;
     });
     // TODO: find fix for osx
     NullBuffer nb;

@@ -169,7 +169,6 @@ SEXP pirCompile(SEXP what, const std::string& name, pir::DebugOptions debug) {
     PROTECT(what);
 
     bool dryRun = debug.includes(pir::DebugFlag::DryRun);
-    bool preserveVersions = debug.includes(pir::DebugFlag::PreserveVersions);
     // compile to pir
     pir::Module* m = new pir::Module;
     pir::StreamLogger logger(debug);
@@ -178,7 +177,7 @@ SEXP pirCompile(SEXP what, const std::string& name, pir::DebugOptions debug) {
     cmp.compileClosure(what, name,
                        [&](pir::Closure* c) {
                            logger.flush();
-                           cmp.optimizeModule(preserveVersions);
+                           cmp.optimizeModule();
 
                            // compile back to rir
                            pir::Pir2RirCompiler p2r(logger);

@@ -5,20 +5,16 @@ namespace rir {
 namespace pir {
 
 void Module::print(std::ostream& out, bool tty) {
-    for (auto f : functions) {
-        f.current()->print(out, tty);
+    for (auto f : closures) {
+        f->print(out, tty);
         out << "\n-------------------------------\n";
     }
 }
 
 void Module::printEachVersion(std::ostream& out, bool tty) {
-    for (auto f : functions) {
+    for (auto f : closures) {
         out << "\n======= Function ========================\n";
-        f.current()->print(out, tty);
-        f.eachVersion([&](Closure* f) {
-            out << "\n     == Version ========================\n";
-            f->print(out, tty);
-        });
+        f->print(out, tty);
         out << "\n=========================================\n";
     }
 }
@@ -31,48 +27,25 @@ void Module::createIfMissing(const std::string& name, rir::Function* f,
         return;
     }
     assert(functionMap.count(idx) == 0);
-    auto* cls = new pir::Closure(name, a, env, f);
-    auto functionsIdx = functions.size();
-    functions.push_back(VersionedClosure(cls));
-    functionMap.emplace(idx, functionsIdx);
+    auto closure = new Closure(name, a, env, f);
+    closures.push_back(closure);
+    functionMap.emplace(idx, closure);
 
-    if (!create(cls)) {
-        // creation failed, delete declaration
-        auto it = functionMap.find(idx);
-        functionMap.erase(it);
-        if (functionsIdx == functions.size() - 1)
-            functions.pop_back();
-        else
-            functions.erase(functions.begin() + functionsIdx);
-        delete cls;
+    if (!create(closure)) {
+        functionMap.erase(functionMap.find(idx));
+        for (auto i = closures.begin(); i != closures.end(); ++i) {
+            if (*i == closure) {
+                closures.erase(i);
+                break;
+            }
+        }
+        delete closure;
     }
-}
-
-void Module::VersionedClosure::deallocatePirFunctions() {
-    for (auto f : translations) {
-        delete f;
-    }
-    delete pirClosure;
 }
 
 void Module::eachPirFunction(PirClosureIterator it) {
-    for (auto& f : functions)
-        it(f.current());
-}
-
-void Module::eachPirFunction(PirClosureVersionIterator it) {
-    for (auto& f : functions)
+    for (auto& f : closures)
         it(f);
-}
-
-void Module::VersionedClosure::eachVersion(PirClosureIterator it) {
-    for (auto f : translations)
-        it(f);
-}
-
-void Module::VersionedClosure::saveVersion() {
-    auto f = current()->clone();
-    translations.push_back(f);
 }
 
 Env* Module::getEnv(SEXP rho) {
@@ -90,10 +63,10 @@ Env* Module::getEnv(SEXP rho) {
 }
 
 Module::~Module() {
-    for (auto f : functions)
-        f.deallocatePirFunctions();
     for (auto e : environments)
         delete e.second;
+    for (auto c : closures)
+        delete c;
 }
 }
 }

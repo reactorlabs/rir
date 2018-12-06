@@ -104,28 +104,24 @@ void Rir2PirCompiler::compileClosure(rir::Function* srcFunction,
         success(module->get(Module::FunctionAndEnv(srcFunction, closureEnv)));
 }
 
-void Rir2PirCompiler::optimizeModule(bool preserveVersions) {
+void Rir2PirCompiler::optimizeModule() {
     logger.flush();
     size_t passnr = 0;
     for (auto& translation : translations) {
-        module->eachPirFunction([&](Module::VersionedClosure& v) {
-            auto f = v.current();
-            if (preserveVersions)
-                v.saveVersion();
-
-            auto& log = logger.get(f);
-            log.pirOptimizationsHeader(f, translation->getName(), passnr++);
-            translation->apply(*this, f, logger.get(f));
-            log.pirOptimizations(f);
+        module->eachPirFunction([&](Closure* c) {
+            auto& log = logger.get(c);
+            log.pirOptimizationsHeader(c, translation->getName(), passnr++);
+            translation->apply(*this, c, log);
+            log.pirOptimizations(c);
 
 #ifdef ENABLE_SLOWASSERT
-            assert(Verify::apply(f));
+            assert(Verify::apply(c));
 #endif
         });
     }
-    module->eachPirFunction([&](Module::VersionedClosure& v) {
-        logger.get(v.current()).pirOptimizationsFinished(v.current());
-        assert(Verify::apply(v.current()));
+    module->eachPirFunction([&](Closure* c) {
+        logger.get(c).pirOptimizationsFinished(c);
+        assert(Verify::apply(c));
     });
     logger.flush();
 }

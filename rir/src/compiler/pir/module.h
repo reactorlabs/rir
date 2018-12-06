@@ -25,31 +25,10 @@ class Module {
     void print(std::ostream& out = std::cout, bool tty = false);
     void printEachVersion(std::ostream& out = std::cout, bool tty = false);
 
-    typedef std::function<void(pir::Closure*)> PirClosureIterator;
-    struct VersionedClosure {
-        SEXP closure = nullptr;
-        pir::Closure* pirClosure;
-
-        VersionedClosure(SEXP closure, pir::Closure* pir)
-            : closure(closure), pirClosure(pir) {}
-        explicit VersionedClosure(pir::Closure* pir) : pirClosure(pir) {}
-
-        pir::Closure* current() { return pirClosure; }
-
-        void saveVersion();
-
-        void eachVersion(PirClosureIterator it);
-
-        void deallocatePirFunctions();
-
-      private:
-        std::vector<pir::Closure*> translations;
-    };
-
     typedef std::pair<rir::Function*, Env*> FunctionAndEnv;
     pir::Closure* get(FunctionAndEnv idx) {
         assert(functionMap.count(idx));
-        return functions[functionMap.at(idx)].current();
+        return functionMap.at(idx);
     }
 
     typedef std::function<bool(Closure* f)> MaybeCreate;
@@ -57,15 +36,14 @@ class Module {
                          const std::vector<SEXP>& a, Env* env,
                          MaybeCreate create);
 
-    typedef std::function<void(VersionedClosure&)> PirClosureVersionIterator;
+    typedef std::function<void(pir::Closure*)> PirClosureIterator;
     void eachPirFunction(PirClosureIterator it);
-    void eachPirFunction(PirClosureVersionIterator it);
 
     ~Module();
 
   private:
-    std::map<FunctionAndEnv, size_t> functionMap;
-    std::vector<VersionedClosure> functions;
+    std::map<FunctionAndEnv, Closure*> functionMap;
+    std::vector<Closure*> closures;
 };
 
 }
