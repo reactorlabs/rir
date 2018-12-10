@@ -1090,19 +1090,17 @@ class VLIE(NamedCall, Effect::Any, EnvAccess::Leak), public CallInstruction {
 };
 
 class FLIE(CallImplicit, 2, Effect::Any, EnvAccess::Leak) {
+    const std::vector<Promise*> promises;
+
   public:
-    std::vector<Promise*> promises;
-    std::vector<SEXP> names;
+    void eachArg(const std::function<void(Promise*)>&) const;
+    const std::vector<SEXP> names;
 
     Value* cls() { return arg(0).val(); }
 
     CallImplicit(Value* callerEnv, Value* fun,
                  const std::vector<Promise*>& args,
-                 const std::vector<SEXP>& names_, unsigned srcIdx)
-        : FixedLenInstructionWithEnvSlot(PirType::valOrLazy(),
-                                         {{PirType::closure()}}, {{fun}},
-                                         callerEnv, srcIdx),
-          promises(args), names(names_) {}
+                 const std::vector<SEXP>& names_, unsigned srcIdx);
 
     Value* callerEnv() { return env(); }
     void printArgs(std::ostream& out, bool tty) override;

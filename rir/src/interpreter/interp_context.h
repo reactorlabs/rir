@@ -1,6 +1,7 @@
 #ifndef interpreter_context_h
 #define interpreter_context_h
 
+#include "R/r.h"
 #include "interp_data.h"
 #include "ir/BC_inc.h"
 
@@ -229,7 +230,14 @@ RIR_INLINE size_t src_pool_add(Context* c, SEXP v) {
     return result;
 }
 
-#define cp_pool_at(c, index) (VECTOR_ELT((c)->cp.list, (index)))
-#define src_pool_at(c, value) (VECTOR_ELT((c)->src.list, (value)))
+RIR_INLINE SEXP cp_pool_at(Context* c, unsigned index) {
+    SLOWASSERT(c->cp.capacity > index);
+    return VECTOR_ELT(c->cp.list, index);
+}
+
+RIR_INLINE SEXP src_pool_at(Context* c, unsigned index) {
+    SLOWASSERT(c->src.capacity > index);
+    return VECTOR_ELT(c->src.list, index);
+}
 
 #endif // interpreter_context_h

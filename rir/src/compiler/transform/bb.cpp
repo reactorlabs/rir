@@ -7,7 +7,7 @@
 namespace rir {
 namespace pir {
 
-BB* BBTransform::clone(BB* src, Code* target) {
+BB* BBTransform::clone(BB* src, Code* target, Closure* targetClosure) {
     std::vector<BB*> bbs;
 
     // Copy instructions and remember old -> new instruction map.
@@ -31,6 +31,7 @@ BB* BBTransform::clone(BB* src, Code* target) {
             bbs[bb->id]->next1 = bbs[bb->next1->id];
     });
 
+    std::unordered_map<Promise*, Promise*> promMap;
     // Relocate argument pointers using old -> new map
     BB* newEntry = bbs[src->id];
     Visitor::run(newEntry, [&](Instruction* i) {
@@ -45,6 +46,18 @@ BB* BBTransform::clone(BB* src, Code* target) {
                 arg.val() = relocation_table.at(arg.val());
             }
         });
+        if (auto mk = MkArg::Cast(i)) {
+            Promise* p = mk->prom();
+            if (p->fun != targetClosure) {
+                if (promMap.count(p)) {
+                    mk->updatePromise(promMap.at(p));
+                } else {
+                    auto c = targetClosure->createProm(p->srcPoolIdx());
+                    c->entry = clone(p->entry, c, targetClosure);
+                    mk->updatePromise(c);
+                }
+            }
+        }
     });
 
     return newEntry;
