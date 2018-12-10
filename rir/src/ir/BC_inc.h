@@ -324,7 +324,7 @@ class BC {
     inline static BC alloc(int type);
     inline static BC asbool();
     inline static BC beginloop(Jmp);
-    inline static BC endcontext();
+    inline static BC endloop();
     inline static BC brtrue(Jmp);
     inline static BC brfalse(Jmp);
     inline static BC br(Jmp);
@@ -688,7 +688,7 @@ class BC {
         case Opcode::isfun_:
         case Opcode::invisible_:
         case Opcode::visible_:
-        case Opcode::endcontext_:
+        case Opcode::endloop_:
         case Opcode::subassign1_:
         case Opcode::subassign2_:
         case Opcode::length_:

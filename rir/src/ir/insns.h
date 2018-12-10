@@ -417,14 +417,13 @@ DEF_INSTR(make_unique_, 0, 1, 1, 1)
 /**
  * beginloop_:: begins loop context, break and continue target immediate (this is the target for break and next long jumps)
  */
-DEF_INSTR(beginloop_, 1, 0, 1, 1)
+DEF_INSTR(beginloop_, 1, 0, 0, 1)
 
 /**
- * endcontext_:: ends a context. Takes a context as input and removes it from the stack (the context to be removed does not have to be top one)
+ * endloop_:: end marker for a loop with context
 
-TODO black magic here
  */
-DEF_INSTR(endcontext_, 0, 1, 0, 0)
+DEF_INSTR(endloop_, 0, 0, 0, 0)
 
 /**
  * return_ :: return instruction. Non-local return instruction as opposed to ret_.
