@@ -8,4 +8,4 @@ SYMBOLS(V)
 #undef V
 } // namespace symbol
 
-} // namespace rjit
+} // namespace rir

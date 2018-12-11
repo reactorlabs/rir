@@ -12,6 +12,6 @@ SYMBOLS(V)
 #undef V
 } // namespace symbol
 
-} // namespace rjit
+} // namespace rir
 
 #endif // SYMBOLS_H_
