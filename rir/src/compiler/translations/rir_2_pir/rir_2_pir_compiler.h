@@ -11,6 +11,8 @@ namespace pir {
 
 class Rir2PirCompiler : public RirCompiler {
   public:
+    static const AssumptionsSet minimalAssumptions;
+
     Rir2PirCompiler(Module* module, StreamLogger& logger);
 
     void compileClosure(SEXP, const std::string& name,

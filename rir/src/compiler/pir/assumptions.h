@@ -3,11 +3,14 @@
 
 #include "utils/EnumSet.h"
 
+#include <iostream>
+
 namespace rir {
 namespace pir {
 
 enum class Assumptions {
     CorrectNumberOfArguments,
+    MaxNumberOfArguments,
     CorrectOrderOfArguments,
 
     FIRST = CorrectNumberOfArguments,
@@ -16,9 +19,12 @@ enum class Assumptions {
 
 struct AssumptionsSet : public EnumSet<Assumptions> {
     AssumptionsSet() : EnumSet<Assumptions>(){};
-    AssumptionsSet(const AssumptionsSet& other) : EnumSet<Assumptions>(other) {}
+    AssumptionsSet(const EnumSet<Assumptions>& other)
+        : EnumSet<Assumptions>(other) {}
     AssumptionsSet(const Assumptions& other) : EnumSet<Assumptions>(other) {}
 };
+
+std::ostream& operator<<(std::ostream& out, Assumptions a);
 
 } // namespace pir
 } // namespace rir

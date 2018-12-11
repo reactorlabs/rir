@@ -781,7 +781,7 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) const {
             FormalArgs formals(fmls);
 
             DispatchTable* dt = DispatchTable::unpack(code);
-            rir::Function* function = dt->first();
+            rir::Function* function = dt->baseline();
 
             std::stringstream inner;
             inner << name;

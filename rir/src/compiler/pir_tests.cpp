@@ -202,7 +202,8 @@ bool canRemoveEnvironmentIfTypeFeedback(const std::string& input) {
     auto rirFun = p(parseCompileToRir(input));
     SET_CLOENV(rirFun, execEnv);
     Rf_defineVar(Rf_install("removeEnvInBinopTest"), rirFun, execEnv);
-    rir::Function* srcFunction = isValidClosureSEXP(rirFun);
+    rir::Function* srcFunction =
+        DispatchTable::unpack(BODY(rirFun))->baseline();
     assert(srcFunction != nullptr);
     insertTypeFeedbackForBinops(srcFunction, types);
 

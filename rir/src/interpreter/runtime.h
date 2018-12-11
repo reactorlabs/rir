@@ -15,7 +15,7 @@
 typedef rir::Function Function;
 typedef rir::DispatchTable DispatchTable;
 
-Function* isValidClosureSEXP(SEXP closure);
+bool isValidClosureSEXP(SEXP closure);
 
 void initializeRuntime();
 

@@ -13,6 +13,12 @@
 namespace rir {
 namespace pir {
 
+// Currently PIR optimized functions cannot handle too many arguments or
+// mis-ordered arguments. The caller needs to take care.
+const AssumptionsSet Rir2PirCompiler::minimalAssumptions =
+    AssumptionsSet() | Assumptions::CorrectOrderOfArguments |
+    Assumptions::MaxNumberOfArguments;
+
 Rir2PirCompiler::Rir2PirCompiler(Module* module, StreamLogger& logger)
     : RirCompiler(module), logger(logger) {
     for (auto& optimization : pirConfigurations()->pirOptimizations()) {
@@ -27,11 +33,11 @@ void Rir2PirCompiler::compileClosure(SEXP closure, const std::string& name,
 
     DispatchTable* tbl = DispatchTable::unpack(BODY(closure));
 
-    if (tbl->available(1))
+    if (tbl->size() > 1)
         logger.warn("Closure already compiled to PIR");
 
     FormalArgs formals(FORMALS(closure));
-    rir::Function* srcFunction = tbl->first();
+    rir::Function* srcFunction = tbl->baseline();
     auto env = module->getEnv(CLOENV(closure));
     assert(env != Env::notClosed());
     auto frame = RList(FRAME(CLOENV(closure)));
@@ -44,7 +50,7 @@ void Rir2PirCompiler::compileClosure(SEXP closure, const std::string& name,
                 closureName = CHAR(PRINTNAME(e.tag()));
         }
     }
-    OptimizationContext context(env, assumptions);
+    OptimizationContext context(env, assumptions | minimalAssumptions);
     compileClosure(srcFunction, closureName, formals, context, success, fail);
 }
 
@@ -53,7 +59,8 @@ void Rir2PirCompiler::compileFunction(rir::Function* srcFunction,
                                       FormalArgs const& formals,
                                       const AssumptionsSet& assumptions,
                                       MaybeCls success, Maybe fail) {
-    OptimizationContext context(Env::notClosed(), assumptions);
+    OptimizationContext context(Env::notClosed(),
+                                assumptions | minimalAssumptions);
     compileClosure(srcFunction, name, formals, context, success, fail);
 }
 

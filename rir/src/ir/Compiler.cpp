@@ -894,7 +894,8 @@ SEXP Compiler::finalize() {
     FunctionWriter function;
     Context ctx(function, preserve);
 
-    FunctionSignature* signature = new FunctionSignature();
+    FunctionSignature signature(FunctionSignature::CallerProvidedEnv,
+                                FunctionSignature::BaselineVersion);
 
     // Compile formals (if any) and create signature
     for (auto arg = RList(formals).begin(); arg != RList::end(); ++arg) {
@@ -904,16 +905,14 @@ SEXP Compiler::finalize() {
             auto compiled = compilePromise(ctx, *arg);
             function.addDefaultArg(compiled);
         }
-        signature->pushDefaultArgument();
+        signature.pushDefaultArgument();
     }
 
     ctx.push(exp, closureEnv);
     compileExpr(ctx, exp);
     ctx.cs() << BC::ret();
     auto body = ctx.pop();
-    function.finalize(body);
-
-    function.function()->signature = signature;
+    function.finalize(body, signature);
 
 #ifdef ENABLE_SLOWASSERT
     CodeVerifier::verifyFunctionLayout(function.function()->container(),

@@ -22,7 +22,7 @@ Closure* Module::declare(const std::string& name, rir::Function* f,
                          OptimizationContext ctx, const std::vector<SEXP>& a) {
     auto& closureVersions = closures[f];
     assert(!closureVersions.count(ctx));
-    auto closure = new Closure(name, a, ctx.environment, f);
+    auto closure = new Closure(name, a, ctx.environment, f, ctx.assumptions);
     closureVersions.emplace(ctx, closure);
     return closure;
 }
