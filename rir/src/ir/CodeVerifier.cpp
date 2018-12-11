@@ -170,6 +170,7 @@ static Sources hasSources(Opcode bc) {
     case Opcode::asbool_:
     case Opcode::missing_:
     case Opcode::int3_:
+    case Opcode::printInvocation_:
         return Sources::May;
 
     case Opcode::invalid_:

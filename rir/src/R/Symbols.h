@@ -76,6 +76,7 @@ DECLARE(packageSlot, "packageSlot");
 DECLARE(attributes, "attributes");
 DECLARE(c, "c");
 DECLARE(standardGeneric, "standardGeneric");
+DECLARE(printInvocation, ".printInvocation");
 DECLARE(debugBreak, ".debug.break");
 DECLARE(UseMethod, "UseMethod");
 

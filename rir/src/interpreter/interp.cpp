@@ -2680,6 +2680,12 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
             NEXT();
         }
 
+        INSTRUCTION(printInvocation_) {
+            Function* func = c->function();
+            printf("Invocation count: %d\n", func->invocationCount);
+            NEXT();
+        }
+
         LASTOP;
     }
 

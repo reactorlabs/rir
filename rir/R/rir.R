@@ -14,6 +14,11 @@ rir.disassemble <- function(what, verbose = FALSE) {
     invisible(.Call("rir_disassemble", what, verbose))
 }
 
+# prints how many times the (optimized) rir function was called
+rir.printInvocation <- function(what) {
+    invisible(.Call("rir_printInvocation", what))
+}
+
 # compiles given closure, or expression and returns the compiled version.
 rir.compile <- function(what) {
     .Call("rir_compile", what)
@@ -88,6 +93,13 @@ rir.eval <- function(what, env = globalenv()) {
 # returns the body of rir-compiled function. The body is the vector containing its ast maps and code objects
 rir.body <- function(f) {
     .Call("rir_body", f);
+}
+
+# prints invocation during evaluation
+# insert a call to .printInvocation()' in R code and the invocation count of the
+# enclosing function will be printed
+.printInvocation <- function() {
+    cat("Invocation count: 0 (not compiled)\n")
 }
 
 # breakpoint during evaluation

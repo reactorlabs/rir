@@ -60,6 +60,7 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
     void body(SEXP body) { setEntry(2, body); }
 
     void disassemble(std::ostream&);
+    void printInvocation(std::ostream&);
 
     FunctionSEXP origin() { return getEntry(0); }
     void origin(FunctionSEXP s) { setEntry(0, s); }

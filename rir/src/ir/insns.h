@@ -437,6 +437,11 @@ DEF_INSTR(ret_, 0, 1, 0, 1)
 DEF_INSTR(int3_, 0, 0, 0, 1)
 
 /**
+ * printInvocation_ :: prints the invocation count
+ */
+DEF_INSTR(printInvocation_, 0, 0, 0, 1)
+
+/**
  * deopt_ :: jumps to the immediate bc location
  */
 DEF_INSTR(deopt_, 1, -1, 0, 0)

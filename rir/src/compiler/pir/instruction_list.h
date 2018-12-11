@@ -70,7 +70,8 @@
     V(CastType)                                                                \
     V(SetShared)                                                               \
     V(PirCopy)                                                                 \
-    V(Int3)
+    V(Int3)                                                                    \
+    V(PrintInvocation)
 
 #define BINOP_INSTRUCTIONS(V)                                                  \
     V(Lte)                                                                     \
