@@ -59,6 +59,8 @@ void printPaddedTypeAndRef(std::ostream& out, Instruction* i) {
     }
 }
 
+bool Instruction::validIn(Code* code) const { return bb()->owner == code; }
+
 void Instruction::printArgs(std::ostream& out, bool tty) {
     size_t n = nargs();
     size_t env = hasEnv() ? envSlot() : n + 1;
@@ -299,7 +301,7 @@ void PirCopy::print(std::ostream& out, bool tty) {
 
 CallSafeBuiltin::CallSafeBuiltin(SEXP builtin, const std::vector<Value*>& args,
                                  unsigned srcIdx)
-    : VarLenInstruction(PirType::valOrLazy(), srcIdx), blt(builtin),
+    : VarLenInstruction(PirType::val(), srcIdx), blt(builtin),
       builtin(getBuiltin(builtin)), builtinId(getBuiltinNr(builtin)) {
     for (unsigned i = 0; i < args.size(); ++i)
         this->pushArg(args[i], PirType::val());
@@ -423,6 +425,18 @@ void StaticCall::printArgs(std::ostream& out, bool tty) {
         frameState()->printRef(out);
         out << ", ";
     }
+}
+
+StaticCall::StaticCall(Value* callerEnv, Closure* cls,
+                       const std::vector<Value*>& args, SEXP origin,
+                       FrameState* fs, unsigned srcIdx)
+    : VarLenInstructionWithEnvSlot(PirType::valOrLazy(), callerEnv, srcIdx),
+      cls_(cls), origin_(origin) {
+    assert(cls->argNames.size() == args.size());
+    assert(fs);
+    pushArg(fs, NativeType::frameState);
+    for (unsigned i = 0; i < args.size(); ++i)
+        pushArg(args[i], PirType::val());
 }
 
 CallInstruction* CallInstruction::CastCall(Value* v) {

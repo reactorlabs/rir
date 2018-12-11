@@ -508,7 +508,7 @@ SEXP closureArgumentAdaptor(const CallContext& call, SEXP arglist,
     a = actuals;
     // get the first Code that is a compiled default value of a formal arg
     // (or nullptr if no such exist)
-    Function* fun = DispatchTable::unpack(BODY(op))->first();
+    Function* fun = DispatchTable::unpack(BODY(op))->baseline();
     size_t pos = 0;
     while (f != R_NilValue) {
         Code* c = fun->defaultArg(pos++);
@@ -541,61 +541,66 @@ SEXP closureArgumentAdaptor(const CallContext& call, SEXP arglist,
     return newrho;
 };
 
-unsigned dispatch(const CallContext& call, DispatchTable* vt) {
-    assert(vt->capacity() > 0);
-    if (vt->capacity() == 1 || !vt->available(1))
-        return 0;
+bool matches(const CallContext& call, const FunctionSignature& signature) {
+    // TODO: look at the arguments of the function signature and not just at the
+    // global assumptions list. This only becomes relevant as soon as we want to
+    // optimize based on argument types.
 
-    // Try to dispatch to slot 1
-    if (call.hasNames() ||
-        /* TODO: length is waay slow. Will be fixed by signatures */
-        call.nargs != (size_t)Rf_length(FORMALS(call.callee))) {
-        return 0;
-    }
+    if (signature.optimization == FunctionSignature::BaselineVersion)
+        return true;
 
-    // TODO: add support to `...` passing, ie. we pass our ellipsis arg
-    // to the callee
+    assert(signature.envCreation == FunctionSignature::CalleeCreatedEnv);
+
+    // We can't materialize ... yet
     if (!call.hasStackArgs()) {
         for (size_t i = 0; i < call.nargs; ++i)
             if (call.implicitArgIdx(i) == DOTS_ARG_IDX)
-                return 0;
+                return false;
     }
 
-    return 1;
-};
+    // TODO: implement argument reordering on the stack to support this case
+    if (call.hasNames() && signature.assumptions.includes(
+                               pir::Assumptions::CorrectOrderOfArguments))
+        return false;
 
-// Call a RIR function, when we already have created the list of actuals (this
-// is for example the case, if we tried to dispatch).
-SEXP rirCall(const CallContext& call, SEXP actuals, Context* ctx) {
-    assert(actuals);
-    SEXP body = BODY(call.callee);
-    assert(DispatchTable::check(body));
-
-    auto table = DispatchTable::unpack(body);
-
-    unsigned slot = dispatch(call, table);
-    bool needsEnv = slot == 0;
-
-    Function* fun = table->at(slot);
-    fun->registerInvocation();
-
-    SEXP env = R_NilValue;
-
-    SEXP result = nullptr;
-    if (needsEnv) {
-        env = closureArgumentAdaptor(call, actuals, R_NilValue);
-        PROTECT(env);
-        result = rirCallTrampoline(call, fun, env, actuals, ctx);
-        UNPROTECT(1);
-    } else {
-        result = rirCallTrampoline(call, fun, actuals, ctx);
+    if (signature.nargs() < call.nargs &&
+        signature.assumptions.includes(
+            pir::Assumptions::MaxNumberOfArguments)) {
+        return false;
     }
 
-    assert(result);
+    if (signature.nargs() > call.nargs) {
+        if (signature.assumptions.includes(
+                pir::Assumptions::CorrectNumberOfArguments))
+            return false;
 
-    assert(!fun->deopt);
-    return result;
+        if (!call.hasStackArgs())
+            return false;
+
+        // PIR optimized code can receive missing args, but they need to be
+        // explicitly mentioned on the stack
+        for (size_t i = 0; i < signature.nargs() - call.nargs; ++i)
+            ostack_push(ctx, R_MissingArg);
+    }
+
+    return true;
 }
+
+Function* dispatch(const CallContext& call, DispatchTable* vt) {
+    // Find the most specific version of the function that can be called given
+    // the current call context.
+    Function* fun = nullptr;
+    for (int i = vt->size() - 1; i >= 0; i--) {
+        auto candidate = vt->get(i);
+        if (matches(call, candidate->signature())) {
+            fun = candidate;
+            break;
+        }
+    }
+    assert(fun);
+
+    return fun;
+};
 
 static unsigned RIR_WARMUP =
     getenv("RIR_WARMUP") ? atoi(getenv("RIR_WARMUP")) : 3;
@@ -607,20 +612,21 @@ SEXP rirCall(const CallContext& call, Context* ctx) {
 
     auto table = DispatchTable::unpack(body);
 
-    unsigned slot = dispatch(call, table);
-    bool needsEnv = slot == 0;
-    Function* fun = table->at(slot);
-
+    Function* fun = dispatch(call, table);
     fun->registerInvocation();
-    if (slot == 0 && fun->invocationCount() == RIR_WARMUP) {
+    bool needsEnv =
+        fun->signature().envCreation == FunctionSignature::CallerProvidedEnv;
+
+    if (fun->signature().optimization == FunctionSignature::BaselineVersion &&
+        fun->invocationCount() == RIR_WARMUP) {
         SEXP lhs = CAR(call.ast);
         SEXP name = R_NilValue;
         if (TYPEOF(lhs) == SYMSXP)
             name = lhs;
         ctx->closureOptimizer(call.callee, name);
-        slot = dispatch(call, table);
-        needsEnv = slot == 0;
-        fun = table->at(slot);
+        fun = dispatch(call, table);
+        needsEnv = fun->signature().envCreation ==
+                   FunctionSignature::CallerProvidedEnv;
     }
 
     SEXP env = R_NilValue;
@@ -1364,7 +1370,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
             if (callCtxt->hasStackArgs()) {
                 ostack_push(ctx, callCtxt->stackArg(idx));
             } else {
-                if (callCtxt->implicitArgIdx(idx) == MISSING_ARG_IDX) {
+                if (idx == MISSING_ARG_IDX) {
                     res = Rf_mkPROMISE(R_UnboundValue, callCtxt->callerEnv);
                 } else {
                     Code* arg = callCtxt->implicitArg(idx);
@@ -2737,7 +2743,7 @@ SEXP rirExpr(SEXP s) {
     }
     if (auto t = DispatchTable::check(s)) {
         // Default is the source of the first function in the dispatch table
-        Function* f = t->first();
+        Function* f = t->baseline();
         return src_pool_at(globalContext(), f->body()->src);
     }
     return s;
@@ -2754,9 +2760,9 @@ SEXP rirEval_f(SEXP what, SEXP env) {
     }
 
     if (auto table = DispatchTable::check(what)) {
-        size_t offset = 0; // Default target is the first version
-
-        Function* fun = table->at(offset);
+        // TODO: add an adapter frame to be able to call something else than
+        // the baseline version!
+        Function* fun = table->baseline();
         fun->registerInvocation();
 
         return evalRirCodeExtCaller(fun->body(), globalContext(), &lenv);

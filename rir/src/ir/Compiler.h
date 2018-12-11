@@ -80,7 +80,7 @@ class Compiler {
 
         // Initialize the vtable. Initially the table has one entry, which is
         // the compiled function.
-        vtable->put(0, Function::unpack(res));
+        vtable->baseline(Function::unpack(res));
 
         // Set the closure fields.
         UNPROTECT(1);
@@ -107,7 +107,7 @@ class Compiler {
 
         // Initialize the vtable. Initially the table has one entry, which is
         // the compiled function.
-        vtable->put(0, Function::unpack(compiledFun));
+        vtable->baseline(Function::unpack(compiledFun));
 
         // Set the closure fields.
         SET_BODY(inClosure, vtable->container());

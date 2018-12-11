@@ -23,155 +23,209 @@ class TheScopeResolution {
 
     void operator()() {
         ScopeAnalysis analysis(function, log);
+        analysis();
+        auto& finalState = analysis.result();
 
         Visitor::run(function->entry, [&](BB* bb) {
             auto ip = bb->begin();
             while (ip != bb->end()) {
                 Instruction* i = *ip;
                 auto next = ip + 1;
-                LdArg* lda = LdArg::Cast(i);
-                LdFun* ldfun = LdFun::Cast(i);
-                Instruction* ld = LdVar::Cast(i);
-                StVar* s = StVar::Cast(i);
-                StVarSuper* ss = StVarSuper::Cast(i);
-                LdVarSuper* sld = LdVarSuper::Cast(i);
-                if (lda)
-                    ld = lda;
-                else if (ldfun)
-                    ld = ldfun;
 
-                if (analysis.returnValues.count(i)) {
-                    auto force = Force::Cast(i);
-                    auto res = analysis.returnValues.at(i);
-                    if (res.isSingleValue() &&
-                        res.singleValue().origin->bb()->owner == function &&
-                        doms.dominates(res.singleValue().origin->bb(), bb)) {
-                        i->replaceUsesWith(res.singleValue().val);
+                auto before = analysis.at<ScopeAnalysis::BeforeInstruction>(i);
+                auto after = analysis.at<ScopeAnalysis::AfterInstruction>(i);
+
+                // Force can only see the callee env through reflection
+                if (Force::Cast(i) && after.noReflection())
+                    i->elideEnv();
+
+                // Dead store to non-escaping environment can be removed
+                if (auto st = StVar::Cast(i)) {
+                    if (finalState.envNotEscaped(st->env()) &&
+                        finalState.deadStore(st)) {
                         next = bb->remove(ip);
-                    } else {
-                        auto type = res.type;
-                        if (!i->type.isA(type))
-                            i->type = type;
-                        if (force && !analysis.mayUseReflection)
-                            force->elideEnv();
                     }
-                } else if (ldfun && ldfun->guessedBinding() &&
-                           ldfun->guessedBinding()->type.isA(
-                               PirType::closure())) {
-                    // If we inferred that a guessd ldfun binding is a closure
-                    // for sure, then we can replace the ldfun with the guess.
-                    ldfun->replaceUsesWith(ldfun->guessedBinding());
-                    next = bb->remove(ip);
-                } else if (sld) {
-                    // LdVarSuper where the parent environment is known and
-                    // local, can be replaced by a simple LdVar
-                    auto e = Env::parentEnv(sld->env());
-                    if (e) {
-                        auto r = new LdVar(sld->varName, e);
+                    ip = next;
+                    continue;
+                }
+
+                // StVarSuper where the parent environment is known and
+                // local, can be replaced by simple StVar, if the variable
+                // exists in the super env.
+                if (auto sts = StVarSuper::Cast(i)) {
+                    auto aLoad =
+                        analysis.superLoad(before, sts->varName, sts->env());
+                    if (aLoad.env != AbstractREnvironment::UnknownParent &&
+                        !aLoad.result.isUnknown() &&
+                        aLoad.env->validIn(function)) {
+                        auto r = new StVar(sts->varName, sts->val(), aLoad.env);
                         bb->replace(ip, r);
-                        sld->replaceUsesWith(r);
+                        sts->replaceUsesWith(r);
                     }
-                } else if (ss) {
-                    // StVarSuper where the parent environment is known and
-                    // local, can be replaced by simple StVar, if the variable
-                    // exists in the super env.
-                    auto e = Env::parentEnv(ss->env());
-                    auto aload = analysis.loads.at(ss);
-                    if (e && aload.env != AbstractREnvironment::UnknownParent) {
-                        if (!aload.result.isUnknown()) {
-                            auto r =
-                                new StVar(ss->varName, ss->val(), aload.env);
-                            bb->replace(ip, r);
-                            ss->replaceUsesWith(r);
+                    ip = next;
+                    continue;
+                }
+
+                analysis.lookup(after, i, [&](const AbstractLoad& aLoad) {
+                    auto& res = aLoad.result;
+
+                    // Narrow down type according to what the analysis reports
+                    if (i->type.isRType()) {
+                        auto inferedType = res.type;
+                        if (!i->type.isA(inferedType))
+                            i->type = inferedType;
+                    }
+
+                    // In case the scope analysis is sure that this is
+                    // actually the same as some other PIR value. So let's just
+                    // replace it.
+                    if (res.isSingleValue()) {
+                        auto value = res.singleValue().val;
+                        if (value->validIn(function)) {
+                            i->replaceUsesWith(value);
+                            next = bb->remove(ip);
                         }
+                        return;
                     }
-                } else if (s) {
-                    // Dead store to non-escaping environment can be removed
-                    if (Env::isPirEnv(s->env()) &&
-                        !analysis.finalState[s->env()].leaked &&
-                        analysis.deadStore(s)) {
-                        next = bb->remove(ip);
-                    }
-                } else if (ld && analysis.loads.count(ld)) {
-                    // If we have a non-ambiguous load, we can replace the load
-                    // with the actual values.
-                    auto aload = analysis.loads.at(ld);
-                    auto aval = aload.result;
-                    // inter-procedural scope analysis can drag in values
-                    // from other functions, which we cannot use here!
-                    bool onlyLocalVals = true;
-                    aval.eachSource([&](ValOrig& src) {
-                        if (src.origin->bb()->owner != function)
-                            onlyLocalVals = false;
-                    });
-                    if (!ldfun && // for ldfun more thinking is required...
-                        aval.isUnknown() &&
-                        aload.env != AbstractREnvironment::UnknownParent) {
-                        // We have no clue what we load, but we know from where
-                        ld->env(aload.env);
-                    } else if (onlyLocalVals) {
-                        auto replaceLdFun = [&](Value* val) {
-                            if (val->type.isA(PirType::closure())) {
-                                ld->replaceUsesWith(val);
-                                next = bb->remove(ip);
-                                return;
-                            }
-                            // Add the binding as a guess. If we later infer
-                            // that the guess is a closure, we can promote it.
-                            if (!ldfun->guessedBinding()) {
-                                ip = bb->insert(ip,
-                                                new Force(val, ldfun->env()));
-                                ldfun->guessedBinding(*ip);
-                                next = ip + 2;
-                            }
-                        };
-                        // This load can be resolved to a unique value
-                        aval.ifSingleValue([&](Value* val) {
-                            if (ldfun) {
-                                replaceLdFun(val);
-                            } else {
-                                ld->replaceUsesWith(val);
-                                next = bb->remove(ip);
-                            }
+
+                    // The generic case where we have a bunch of potential
+                    // values we will insert a phi to group all of them. In
+                    // general this is only possible if they all come from the
+                    // current function (and not through inter procedural
+                    // analysis from other functions).
+                    //
+                    // Also, we shold only do this for actual loads and not
+                    // in general. Otherwise there is a danger that we insert
+                    // the same phi twice (e.g. if a force returns the result
+                    // of a load, we will resolve the load and the force) which
+                    // ends up being rather painful.
+                    bool isActualLoad =
+                        LdVar::Cast(i) || LdFun::Cast(i) || LdVarSuper::Cast(i);
+                    if (!res.isUnknown() && isActualLoad) {
+
+                        bool onlyLocalVals = true;
+                        res.eachSource([&](ValOrig& src) {
+                            if (!src.val->validIn(function))
+                                onlyLocalVals = false;
                         });
-                        // This load can have multiple values. We need a phi
-                        // to distinguish them. (LdFun case is not yet
-                        // handled here)
-                        if (!aval.isSingleValue() && !aval.isUnknown() &&
-                            !ldfun) {
+
+                        if (onlyLocalVals && !res.isUnknown()) {
+                            // Find optimal phi placement:
+                            // Shift phi up until we see at least two inputs
+                            // coming from different paths.
                             auto hasAllInputs = [&](BB* load) -> bool {
-                                return aval.checkEachSource([&](ValOrig& src) {
+                                return res.checkEachSource([&](ValOrig& src) {
+                                    auto i = Instruction::Cast(src.val);
+                                    if (!i)
+                                        return true;
                                     // we cannot move the phi above its src
-                                    if (src.origin->bb() == load)
+                                    if (i->bb() == load)
                                         return false;
-                                    return cfg.isPredecessor(src.origin->bb(),
-                                                             load);
+                                    return cfg.isPredecessor(i->bb(), load);
                                 });
                             };
                             BB* phiBlock = bb;
-                            // Shift phi up until we see at least two inputs
-                            // coming from different paths.
                             for (bool up = true; up;) {
                                 auto preds =
                                     cfg.immediatePredecessors(phiBlock);
+                                if (preds.empty())
+                                    break;
                                 for (auto pre : preds)
                                     up = up && hasAllInputs(pre);
                                 if (up)
                                     phiBlock = *preds.begin();
                             }
+
+                            // Insert a new phi
                             auto phi = new Phi;
-                            aval.eachSource([&](ValOrig& src) {
+                            res.eachSource([&](ValOrig& src) {
                                 phi->addInput(src.origin->bb(), src.val);
                             });
                             phi->updateType();
-                            ld->replaceUsesWith(phi);
-                            if (phiBlock == bb)
+                            if (!phi->type.isA(res.type))
+                                i->type = res.type;
+                            i->replaceUsesWith(phi);
+                            if (phiBlock == bb) {
                                 bb->replace(ip, phi);
-                            else
+                            } else {
                                 phiBlock->insert(phiBlock->begin(), phi);
+                                next = bb->remove(ip);
+                            }
+
+                            return;
                         }
                     }
-                }
+
+                    // LdVarSuper where the parent environment is known and
+                    // local, can be replaced by a simple LdVar
+                    if (auto lds = LdVarSuper::Cast(i)) {
+                        auto e = Env::parentEnv(lds->env());
+                        if (e) {
+                            auto r = new LdVar(lds->varName, e);
+                            bb->replace(ip, r);
+                            lds->replaceUsesWith(r);
+                        }
+                        return;
+                    }
+
+                    // Ldfun needs some special treatment sometimes:
+                    // Since non closure bindings are skipped at runtime, we can
+                    // only resolve ldfun if we are certain which one is the
+                    // first binding that holds a closure. Often this is only
+                    // possible after inlining a promise. But inlining a promise
+                    // requires a force instruction. But ldfun does force
+                    // implicitly. To get out of this vicious circle, we add the
+                    // first binding we find with a normal load (as opposed to
+                    // loadFun) from the abstract state as a "guess" This will
+                    // enable other passes (especially the promise inliner pass)
+                    // to work on the guess and maybe the next time we end up
+                    // here, we can actually prove that the guess was right.
+                    if (auto ldfun = LdFun::Cast(i)) {
+                        auto guess = ldfun->guessedBinding();
+                        // If we already have a guess, let's see if now know
+                        // that it is a closure.
+                        if (guess) {
+                            // TODO: if !guess->maybe(closure) we know that the
+                            // guess is wrong and could try the next binding.
+                            if (!guess->type.isA(PirType::closure())) {
+                                analysis.lookup(
+                                    before, guess,
+                                    [&](const AbstractPirValue& res) {
+                                        if (res.isSingleValue())
+                                            guess = res.singleValue().val;
+                                    });
+                            }
+                            if (guess->type.isA(PirType::closure()) &&
+                                guess->validIn(function)) {
+                                ldfun->replaceUsesWith(guess);
+                                next = bb->remove(ip);
+                            }
+                        } else {
+                            auto res =
+                                analysis
+                                    .load(before, ldfun->varName, ldfun->env())
+                                    .result;
+                            if (res.isSingleValue()) {
+                                auto firstBinding = res.singleValue().val;
+                                if (firstBinding->validIn(function)) {
+                                    ip =
+                                        bb->insert(ip, new Force(firstBinding,
+                                                                 ldfun->env()));
+                                    ldfun->guessedBinding(*ip);
+                                    next = ip + 2;
+                                }
+                            }
+                        }
+                        return;
+                    }
+
+                    // If nothing else, narrow down the environment (in case we
+                    // found something more concrete).
+                    if (i->hasEnv() &&
+                        aLoad.env != AbstractREnvironment::UnknownParent)
+                        i->env(aLoad.env);
+                });
+
                 ip = next;
             }
         });

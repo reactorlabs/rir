@@ -62,7 +62,7 @@ closuresByName compileRir2Pir(SEXP env, pir::Module* m) {
         auto fun = *f;
         if (TYPEOF(fun) == CLOSXP) {
             assert(isValidClosureSEXP(fun));
-            cmp.compileClosure(fun, "test_function",
+            cmp.compileClosure(fun, "test_function", {},
                                [&](pir::Closure* cls) {
                                    results[CHAR(PRINTNAME(f.tag()))] = cls;
                                },
@@ -128,11 +128,9 @@ class NullBuffer : public std::ostream, std::streambuf {
 
 bool verify(Module* m) {
     bool success = true;
-    m->eachPirFunction([&success](pir::Module::VersionedClosure& f) {
-        f.eachVersion([&success](pir::Closure* f) {
-            if (!Verify::apply(f))
-                success = false;
-        });
+    m->eachPirFunction([&success](Closure* c) {
+        if (!Verify::apply(c))
+            success = false;
     });
     // TODO: find fix for osx
     NullBuffer nb;
@@ -204,7 +202,8 @@ bool canRemoveEnvironmentIfTypeFeedback(const std::string& input) {
     auto rirFun = p(parseCompileToRir(input));
     SET_CLOENV(rirFun, execEnv);
     Rf_defineVar(Rf_install("removeEnvInBinopTest"), rirFun, execEnv);
-    rir::Function* srcFunction = isValidClosureSEXP(rirFun);
+    rir::Function* srcFunction =
+        DispatchTable::unpack(BODY(rirFun))->baseline();
     assert(srcFunction != nullptr);
     insertTypeFeedbackForBinops(srcFunction, types);
 
@@ -269,7 +268,7 @@ bool testSuperAssign() {
         pir::Module m;
         // This super assign can be removed, since the super env is not tainted
         auto res = compile(
-            "", "f <- function() {a <- 1; (function() {asdf(); a <<- 1})()}",
+            "", "f <- function() {a <- 1; (function() {a <<- 1; asdf()})()}",
             &m);
         auto f = res["f"];
         CHECK(!hasSuperAssign(f));

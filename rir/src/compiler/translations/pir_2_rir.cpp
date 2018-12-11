@@ -953,6 +953,12 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
             }
             case Tag::StaticCall: {
                 auto call = StaticCall::Cast(instr);
+                // TODO: Unfortunately we cannot compile the target. We might
+                // have optimized this function under assumptions (and we don't
+                // even have access to the assumptions here). To be able to not
+                // waste that work and actually compile the optimized version,
+                // we need to put it in a specific slot and then have a
+                // staticCall that dispatches to that slot.
                 compiler.compile(call->cls(), call->origin(), dryRun);
                 cs << BC::staticCall(call->nCallArgs(), Pool::get(call->srcIdx),
                                      call->origin());
@@ -1199,15 +1205,22 @@ rir::Function* Pir2Rir::finalize() {
     FunctionWriter function;
     Context ctx(function);
 
-    // PIR does not support default args currently.
-    for (size_t i = 0; i < cls->nargs(); ++i)
-        function.addArgWithoutDefault();
+    FunctionSignature signature(FunctionSignature::CalleeCreatedEnv,
+                                FunctionSignature::OptimizedVersion,
+                                cls->assumptions);
 
+    // PIR does not support default args currently.
+    for (size_t i = 0; i < cls->nargs(); ++i) {
+        function.addArgWithoutDefault();
+        signature.pushDefaultArgument();
+    }
+
+    assert(signature.nargs() == cls->nargs());
     ctx.push(R_NilValue);
     size_t localsCnt = compileCode(ctx, cls);
     log.finalPIR(cls);
     auto body = ctx.finalizeCode(localsCnt);
-    function.finalize(body);
+    function.finalize(body, signature);
 #ifdef ENABLE_SLOWASSERT
     CodeVerifier::verifyFunctionLayout(function.function()->container(),
                                        globalContext());
@@ -1225,7 +1238,7 @@ void Pir2RirCompiler::compile(Closure* cls, SEXP origin, bool dryRun) {
     done.insert(cls);
 
     auto table = DispatchTable::unpack(BODY(origin));
-    if (table->available(1))
+    if (table->contains(cls->assumptions))
         return;
 
     auto& log = logger.get(cls);
@@ -1237,13 +1250,10 @@ void Pir2RirCompiler::compile(Closure* cls, SEXP origin, bool dryRun) {
 
     Protect p(fun->container());
 
-    auto oldFun = table->first();
-
+    auto oldFun = table->baseline();
     fun->body()->funInvocationCount = oldFun->body()->funInvocationCount;
-    // TODO: signatures need a rework
-    fun->signature = oldFun->signature;
 
-    table->put(1, fun);
+    table->insert(fun);
 
     log.flush();
 }

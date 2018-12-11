@@ -86,13 +86,22 @@ enum class EnvAccess : uint8_t {
 };
 
 // Effect that can be produced by an instruction.
+// This is a trivial lattice, any effect with higher order contains all the
+// lower order effects.
 enum class Effect : uint8_t {
     None,
+    // Instruction doesn't really have effects itself, but it should not be
+    // hoisted over any other instruction with effect. Example: Assume
+    EffectOrderObserved,
+    // Instruction might produce a warning. Example: AsTest warns if the
+    // vector used in an if condition has length > 1
     Warn,
+    // Instruction might produce an error. Example: ForSeqSize raises an
+    // error if the collection to loop over is not indexable.
     Error,
-    Print,
-    Write,
+    // Instruction might force promises
     Force,
+    // Instruction might use reflection
     Reflection,
     Any,
 };
@@ -133,11 +142,13 @@ class Instruction : public Value {
 
     Value* followCasts() override;
     Value* followCastsAndForce() override;
-    bool isInstruction() final { return true; }
+    bool isInstruction() override final { return true; }
     bool envOnlyForObj();
 
+    bool validIn(Code* code) const override final;
+
     BB* bb_ = nullptr;
-    BB* bb() {
+    BB* bb() const {
         assert(bb_);
         return bb_;
     }
@@ -838,14 +849,14 @@ class FLI(LdFunctionEnv, 0, Effect::None, EnvAccess::None) {
     LdFunctionEnv() : FixedLenInstruction(RType::env) {}
 };
 
-class FLI(EnsureNamed, 1, Effect::Write, EnvAccess::None) {
+class FLI(EnsureNamed, 1, Effect::None, EnvAccess::None) {
   public:
     explicit EnsureNamed(Value* v)
         : FixedLenInstruction(v->type, {{v->type}}, {{v}}) {}
     void updateType() override final { type = arg<0>().val()->type; }
 };
 
-class FLI(SetShared, 1, Effect::Write, EnvAccess::None) {
+class FLI(SetShared, 1, Effect::None, EnvAccess::None) {
   public:
     explicit SetShared(Value* v)
         : FixedLenInstruction(v->type, {{v->type}}, {{v}}) {}
@@ -1120,14 +1131,7 @@ class VLIE(StaticCall, Effect::Any, EnvAccess::Leak), public CallInstruction {
 
     StaticCall(Value * callerEnv, Closure * cls,
                const std::vector<Value*>& args, SEXP origin, FrameState* fs,
-               unsigned srcIdx)
-        : VarLenInstructionWithEnvSlot(PirType::valOrLazy(), callerEnv, srcIdx),
-          cls_(cls), origin_(origin) {
-        assert(fs);
-        pushArg(fs, NativeType::frameState);
-        for (unsigned i = 0; i < args.size(); ++i)
-            pushArg(args[i], PirType::val());
-    }
+               unsigned srcIdx);
 
     size_t nCallArgs() override { return nargs() - 2; };
     void eachCallArg(Instruction::ArgumentValueIterator it) override {
@@ -1283,7 +1287,7 @@ class Deopt : public FixedLenInstruction<Tag::Deopt, Deopt, 1, Effect::None,
  * if the test fails, jump to the deopt branch of the checkpoint.
  */
 
-class FLI(Assume, 2, Effect::Any, EnvAccess::None) {
+class FLI(Assume, 2, Effect::EffectOrderObserved, EnvAccess::None) {
   public:
     bool assumeTrue = true;
     Assume(Value* test, Value* checkpoint)

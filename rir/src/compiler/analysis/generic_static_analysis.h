@@ -50,7 +50,7 @@ template <class AbstractState,
           AnalysisDebugLevel DEBUG_LEVEL = AnalysisDebugLevel::None>
 class StaticAnalysis {
   public:
-    enum class PositioningStyle { BeforeInstruction, AfterInstruction };
+    enum PositioningStyle { BeforeInstruction, AfterInstruction };
 
   private:
     const std::string name;
@@ -65,9 +65,9 @@ class StaticAnalysis {
 
     virtual AbstractResult apply(AbstractState&, Instruction*) const = 0;
     AbstractState exitpoint;
-    bool done = false;
 
   protected:
+    bool done = false;
     LogStream& log;
 
     Closure* closure;
@@ -93,14 +93,18 @@ class StaticAnalysis {
     }
 
     template <PositioningStyle POS>
-    const AbstractState& at(Instruction* i) {
+    AbstractState at(Instruction* i) const {
         assert(done);
 
+        // TODO: this is a fairly slow way of doing things. we should have some
+        // cache for the last used positions and then try to compute the
+        // current state from the last one. Also we should return a reference
+        // and not a copy.
         BB* bb = i->bb();
-        BBSnapshot& bbSnapshots = snapshots[bb->id];
-        const AbstractState& state = bbSnapshots.entry;
+        const BBSnapshot& bbSnapshots = snapshots[bb->id];
+        AbstractState state = bbSnapshots.entry;
         for (auto j : *bb) {
-            if (POS == PositioningStyle::BeforeInstruction && i == j)
+            if (POS == BeforeInstruction && i == j)
                 return state;
 
             if (bbSnapshots.extra.count(j))
@@ -108,7 +112,7 @@ class StaticAnalysis {
             else
                 apply(state, j);
 
-            if (POS == PositioningStyle::AfterInstruction && i == j)
+            if (POS == AfterInstruction && i == j)
                 return state;
         }
 
@@ -126,7 +130,7 @@ class StaticAnalysis {
             const BBSnapshot& bbSnapshots = snapshots[bb->id];
             AbstractState state = bbSnapshots.entry;
             for (auto i : *bb) {
-                if (POS == PositioningStyle::BeforeInstruction)
+                if (POS == BeforeInstruction)
                     collect(state, i);
 
                 if (bbSnapshots.extra.count(i))
@@ -134,7 +138,7 @@ class StaticAnalysis {
                 else
                     apply(state, i);
 
-                if (POS == PositioningStyle::AfterInstruction)
+                if (POS == AfterInstruction)
                     collect(state, i);
             }
         });

@@ -2,188 +2,71 @@
 #include "../pir/pir_impl.h"
 #include "query.h"
 
-namespace {
-using namespace rir::pir;
+namespace rir {
+namespace pir {
 
-struct ScopeAnalysisState {
-    AbstractREnvironmentHierarchy envs;
-    std::unordered_map<Instruction*, AbstractPirValue> returnValues;
-    AbstractPirValue result;
-    std::set<Instruction*> observedStores;
-    std::set<Value*> allStoresObserved;
+ScopeAnalysis::ScopeAnalysis(Closure* cls, Promise* prom, Value* promEnv,
+                             const ScopeAnalysisState& initialState,
+                             size_t depth, LogStream& log)
+    : StaticAnalysis("Scope", cls, prom, initialState, log), depth(depth),
+      staticClosureEnv(promEnv) {}
 
-    bool mayUseReflection = false;
-
-    AbstractResult merge(const ScopeAnalysisState& other) {
-        AbstractResult res;
-
-        for (const auto& f : other.returnValues)
-            res.max(returnValues[f.first].merge(f.second));
-        if (!mayUseReflection && other.mayUseReflection) {
-            mayUseReflection = true;
-            res.lostPrecision();
-        }
-        allStoresObserved.insert(other.allStoresObserved.begin(),
-                                 other.allStoresObserved.end());
-        for (auto s : other.observedStores) {
-            if (!observedStores.count(s)) {
-                observedStores.insert(s);
-                res.update();
-            }
-        }
-        for (auto s : other.allStoresObserved) {
-            if (!allStoresObserved.count(s)) {
-                allStoresObserved.insert(s);
-                res.update();
-            }
-        }
-        res.max(envs.merge(other.envs));
-        return res;
-    }
-
-    AbstractResult mergeCall(Code* cur, const ScopeAnalysisState& other) {
-        AbstractResult res;
-
-        if (!mayUseReflection && other.mayUseReflection) {
-            mayUseReflection = true;
-            res.lostPrecision();
-        }
-        for (auto s : other.observedStores) {
-            if (!observedStores.count(s)) {
-                observedStores.insert(s);
-                res.update();
-            }
-        }
-        for (auto s : other.allStoresObserved) {
-            if (!allStoresObserved.count(s)) {
-                allStoresObserved.insert(s);
-                res.update();
-            }
-        }
-        res.max(envs.merge(other.envs));
-        return res;
-    }
-
-    void print(std::ostream& out, bool tty) {
-        envs.print(out, tty);
-        if (returnValues.size() > 0) {
-            out << "== Infered call/force result:\n";
-            for (auto& t : returnValues) {
-                out << "* ";
-                t.first->printRef(out);
-                out << " : ";
-                t.second.print(out, tty);
-                out << "\n";
-            }
-        }
-        out << "== Result: ";
-        result.print(out, tty);
-        out << "\n";
-        if (mayUseReflection)
-            out << "* Reflection possible\n";
-    }
-};
-
-class TheScopeAnalysis : public StaticAnalysis<ScopeAnalysisState> {
-  public:
-    const std::vector<SEXP> argNames;
-    const std::vector<Value*> args;
-
-    static constexpr size_t MAX_DEPTH = 2;
-    size_t depth;
-    Value* staticClosureEnv = Env::notClosed();
-    Value* promiseEnv = nullptr;
-
-    TheScopeAnalysis(Closure* cls, const std::vector<SEXP>& argNames,
-                     LogStream& log)
-        : StaticAnalysis("Scope", cls, cls, log), argNames(argNames), depth(0) {
-    }
-    TheScopeAnalysis(Closure* cls, const std::vector<SEXP>& argNames,
-                     const std::vector<Value*>& args, Value* staticClosureEnv,
-                     const ScopeAnalysisState& initialState, size_t depth,
-                     LogStream& log)
-        : StaticAnalysis("Scope", cls, cls, initialState, log),
-          argNames(argNames), args(args), depth(depth),
-          staticClosureEnv(staticClosureEnv) {}
-    TheScopeAnalysis(Closure* cls, Promise* prom, Value* promEnv,
-                     const ScopeAnalysisState& initialState, size_t depth,
-                     LogStream& log)
-        : StaticAnalysis("Scope", cls, prom, initialState, log), depth(depth),
-          promiseEnv(promEnv) {}
-
-    AbstractResult apply(ScopeAnalysisState& state,
-                         Instruction* i) const override;
-
-    typedef std::function<void(AbstractLoad)> LoadMaybe;
-    RIR_INLINE void tryLoad(const ScopeAnalysisState& envs, Value* i,
-                            LoadMaybe) const;
-    typedef std::function<void(const AbstractPirValue&)> AbstractValMaybe;
-    typedef std::function<void()> Maybe;
-    void lookup(const ScopeAnalysisState& envs, Value* i, AbstractValMaybe,
-                Maybe notFound = []() {}) const;
-};
-
-void TheScopeAnalysis::tryLoad(const ScopeAnalysisState& s, Value* i,
-                               LoadMaybe aLoad) const {
-    if (auto ld = LdVar::Cast(i)) {
-        aLoad(s.envs.get(ld->env(), ld->varName));
-    } else if (auto sld = LdVarSuper::Cast(i)) {
-        aLoad(s.envs.superGet(sld->env(), sld->varName));
-    } else if (auto ldf = LdFun::Cast(i)) {
-        aLoad(s.envs.get(ldf->env(), ldf->varName));
-    } else if (auto sts = StVarSuper::Cast(i)) {
-        aLoad(s.envs.superGet(sts->env(), sts->varName));
-    }
-}
-
-// As we go, the analysis records stores and it records the results of
-// interprocedurally followed calls and forces.
-// The lookup helper checks the current state of the analysis, to see
-// if for a particular value we have already a result available from the
-// above.
-void TheScopeAnalysis::lookup(const ScopeAnalysisState& state, Value* v,
-                              AbstractValMaybe found, Maybe notFound) const {
-    if (auto lda = LdArg::Cast(v)) {
-        if (args.size() > lda->id) {
-            auto argi = Instruction::Cast(args[lda->id]);
-            if (argi) {
-                auto arg = AbstractPirValue(argi, argi);
-                return lookup(state, argi, found, [&]() { found(arg); });
-            }
-        }
-    }
-
+void ScopeAnalysis::lookup(const ScopeAnalysisState& state, Value* v,
+                           const LoadMaybe& action,
+                           const Maybe& notFound) const {
     auto instr = Instruction::Cast(v);
+    if (!instr)
+        return notFound();
+
+    // If the this is an call instruction or force we might have some result
+    // value from the inter-procedural analysis.
     if (state.returnValues.count(instr)) {
         auto& res = state.returnValues.at(instr);
         if (res.isSingleValue()) {
-            return lookup(state, res.singleValue().val, found,
-                          [&]() { found(res); });
+            lookup(state, res.singleValue().val, action,
+                   [&]() { action(AbstractLoad(res)); });
+            return;
         }
-        found(res);
+        action(AbstractLoad(res));
+        return;
     }
 
-    bool done = false;
-    tryLoad(state, v, [&](AbstractLoad l) {
-        done = true;
-        auto& res = l.result;
-        if (res.isSingleValue()) {
-            return lookup(state, res.singleValue().val, found,
-                          [&]() { found(res); });
-        }
-        found(res);
-    });
+    // IMPORTANT: Dead store elimination relies on the fact that we handle all
+    // possible loads here
 
-    if (!done)
-        notFound();
+    // If this is a ldvar, we perform a get on the abstract environment and
+    // if possible recurse on the result
+    if (auto ld = LdVar::Cast(instr)) {
+        action(load(state, ld->varName, ld->env()));
+        return;
+    }
+
+    // If this is a ldfun, we perform a getFun on the abstract environment and
+    // if possible recurse on the result. The loadFun is an abstract version of
+    // ldFun and considers the special case of skipping non-closure bindings.
+    // Thus it is a lot less reliable than normal load.
+    if (auto ldf = LdFun::Cast(instr)) {
+        action(loadFun(state, ldf->varName, ldf->env()));
+        return;
+    }
+
+    // If this is a ldvarsuper, we perform a superget on the abstract
+    // environment and if possible recurse on the result
+    if (auto sld = LdVarSuper::Cast(instr)) {
+        action(superLoad(state, sld->varName, sld->env()));
+        return;
+    }
+
+    notFound();
 }
 
-AbstractResult TheScopeAnalysis::apply(ScopeAnalysisState& state,
-                                       Instruction* i) const {
+AbstractResult ScopeAnalysis::apply(ScopeAnalysisState& state,
+                                    Instruction* i) const {
     bool handled = false;
     AbstractResult effect = AbstractResult::None;
 
     if (auto ret = Return::Cast(i)) {
+        // We keep track of the result of function returns.
         auto res = ret->arg<0>().val();
         lookup(state, res,
                [&](const AbstractPirValue& analysisRes) {
@@ -206,17 +89,16 @@ AbstractResult TheScopeAnalysis::apply(ScopeAnalysisState& state,
     } else if (auto le = LdFunctionEnv::Cast(i)) {
         // LdFunctionEnv happen inside promises and refer back to the caller
         // environment, ie. the instruction that created the promise.
-        assert(promiseEnv);
+        assert(staticClosureEnv != Env::notClosed());
         assert(!state.envs.aliases.count(le) ||
-               state.envs.aliases.at(le) == promiseEnv);
-        state.envs.aliases[le] = promiseEnv;
+               state.envs.aliases.at(le) == staticClosureEnv);
+        state.envs.aliases[le] = staticClosureEnv;
     } else if (auto ldfun = LdFun::Cast(i)) {
-        // Avoid sideeffect if we know that we load a function without forcing
-        if (state.envs.get(ldfun->env(), ldfun->varName)
-                .result.type.isA(PirType::closure())) {
-            effect.update();
+        // Loadfun has collateral forcing if we touch intermediate envs.
+        // But if we statically find the closure to load, then there is no issue
+        // and we don't do anything.
+        if (!loadFun(state, ldfun->varName, ldfun->env()).result.isUnknown())
             handled = true;
-        }
     } else if (auto s = StVar::Cast(i)) {
         state.envs[s->env()].set(s->varName, s->val(), s);
         handled = true;
@@ -260,8 +142,8 @@ AbstractResult TheScopeAnalysis::apply(ScopeAnalysisState& state,
             // through the argument and see if we find a promise. If so, we
             // will analyze it.
             if (auto mkarg = MkArg::Cast(arg->followCastsAndForce())) {
-                TheScopeAnalysis prom(closure, mkarg->prom(), mkarg->env(),
-                                      state, depth + 1, log);
+                ScopeAnalysis prom(closure, mkarg->prom(), mkarg->env(), state,
+                                   depth + 1, log);
                 prom();
                 state.mergeCall(code, prom.result());
                 state.returnValues[i].merge(prom.result().result);
@@ -291,9 +173,8 @@ AbstractResult TheScopeAnalysis::apply(ScopeAnalysisState& state,
                         std::vector<Value*> args;
                         calli->eachCallArg(
                             [&](Value* v) { args.push_back(v); });
-                        TheScopeAnalysis nextFun(cls->fun, cls->fun->argNames,
-                                                 args, cls->lexicalEnv(), state,
-                                                 depth + 1, log);
+                        ScopeAnalysis nextFun(cls->fun, args, cls->lexicalEnv(),
+                                              state, depth + 1, log);
                         nextFun();
                         state.mergeCall(code, nextFun.result());
                         state.returnValues[i].merge(nextFun.result().result);
@@ -309,9 +190,8 @@ AbstractResult TheScopeAnalysis::apply(ScopeAnalysisState& state,
                 if (target != closure) {
                     std::vector<Value*> args;
                     calli->eachCallArg([&](Value* v) { args.push_back(v); });
-                    TheScopeAnalysis nextFun(target, target->argNames, args,
-                                             target->closureEnv(), state,
-                                             depth + 1, log);
+                    ScopeAnalysis nextFun(target, args, target->closureEnv(),
+                                          state, depth + 1, log);
                     nextFun();
                     state.mergeCall(code, nextFun.result());
                     state.returnValues[i].merge(nextFun.result().result);
@@ -325,8 +205,10 @@ AbstractResult TheScopeAnalysis::apply(ScopeAnalysisState& state,
             assert((CallBuiltin::Cast(i) || CallSafeBuiltin::Cast(i) ||
                     NamedCall::Cast(i)) &&
                    "New call instruction not handled?");
-            if (!CallSafeBuiltin::Cast(i))
+            if (!CallSafeBuiltin::Cast(i)) {
                 state.mayUseReflection = true;
+                effect.lostPrecision();
+            }
         }
         if (!handled) {
             state.returnValues[i].merge(AbstractPirValue::tainted());
@@ -337,6 +219,8 @@ AbstractResult TheScopeAnalysis::apply(ScopeAnalysisState& state,
     if (!handled) {
         if (i->hasEnv()) {
             bool envIsNeeded = i->hasEnv();
+            // Already exclude the case where an operation needs an env only for
+            // object arguments, but we know that none of the args are objects.
             if (envIsNeeded && i->envOnlyForObj()) {
                 envIsNeeded = i->anyArg([&](Value* v) {
                     if (v == i->env() || !v->type.maybeObj())
@@ -352,63 +236,56 @@ AbstractResult TheScopeAnalysis::apply(ScopeAnalysisState& state,
                     return maybeObj;
                 });
             }
+
+            // If an environemnt is leaked, then deadStore elimination does not
+            // work anymore, since we cannot statically observer all the loads
             if (envIsNeeded && i->leaksEnv()) {
                 state.envs[i->env()].leaked = true;
                 for (auto env : state.envs.potentialParents(i->env()))
                     state.allStoresObserved.insert(env);
                 effect.update();
             }
+
+            // If an instruction does arbitrary changes to the environment, we
+            // need to consider it tainted.
             if (envIsNeeded && i->changesEnv()) {
                 state.envs[i->env()].taint();
                 effect.taint();
             }
         }
+
         if (i->mayUseReflection()) {
             state.mayUseReflection = true;
-            effect.update();
+            effect.lostPrecision();
         }
     }
 
-    tryLoad(state, i, [&](AbstractLoad load) {
-        if (load.result.isUnknown()) {
-            for (auto env : state.envs.potentialParents(i->env())) {
-                if (!state.allStoresObserved.count(env)) {
-                    effect.lostPrecision();
-                    state.allStoresObserved.insert(env);
+    if (i->hasEnv()) {
+        // For dead store elimination remember what loads do. This lambda will
+        // be called in case of a load. If we know where exactly we load from,
+        // then we mark the stores as observed. If we do not know where we load
+        // from, then we need to mark all stores in the affected environment(s)
+        // as potentially observed.
+        lookup(state, i, [&](AbstractLoad load) {
+            if (load.result.isUnknown()) {
+                for (auto env : state.envs.potentialParents(i->env())) {
+                    if (!state.allStoresObserved.count(env)) {
+                        effect.lostPrecision();
+                        state.allStoresObserved.insert(env);
+                    }
                 }
+            } else {
+                load.result.eachSource([&](ValOrig& src) {
+                    if (!state.observedStores.count(src.origin)) {
+                        state.observedStores.insert(src.origin);
+                        effect.update();
+                    }
+                });
             }
-        } else {
-            load.result.eachSource([&](ValOrig& src) {
-                if (!state.observedStores.count(src.origin)) {
-                    state.observedStores.insert(src.origin);
-                    effect.update();
-                }
-            });
-        }
-    });
+        });
+    }
     return effect;
 }
-}
 
-namespace rir {
-namespace pir {
-
-ScopeAnalysis::ScopeAnalysis(Closure* function, LogStream& log) {
-    TheScopeAnalysis analysis(function, function->argNames, log);
-    analysis();
-
-    // Collect all abstract values of all loads
-    analysis.foreach<TheScopeAnalysis::PositioningStyle::BeforeInstruction>(
-        [&](const ScopeAnalysisState& state, Instruction* i) {
-            analysis.tryLoad(
-                state, i, [&](AbstractLoad load) { loads.emplace(i, load); });
-        });
-    for (auto s : analysis.result().observedStores)
-        observedStores.insert(s);
-    for (auto s : analysis.result().allStoresObserved)
-        allStoresObserved.insert(s);
-    returnValues = std::move(analysis.result().returnValues);
-    mayUseReflection = analysis.result().mayUseReflection;
-}
 }
 }

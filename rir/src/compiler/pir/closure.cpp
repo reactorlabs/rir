@@ -37,7 +37,7 @@ Closure::~Closure() {
 }
 
 Closure* Closure::clone() {
-    Closure* c = new Closure(name, argNames, env, function);
+    Closure* c = new Closure(name, argNames, env, function, assumptions);
 
     // clone code
     c->entry = BBTransform::clone(entry, c, c);

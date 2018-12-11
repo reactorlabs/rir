@@ -12,7 +12,7 @@ AbstractPirValue::AbstractPirValue(Value* v, Instruction* o) : type(v->type) {
     vals.insert(ValOrig(v, o));
 }
 
-void AbstractREnvironmentHierarchy::print(std::ostream& out, bool tty) {
+void AbstractREnvironmentHierarchy::print(std::ostream& out, bool tty) const {
     for (auto& e : envs) {
         out << "== [";
         e.first->printRef(out);
@@ -28,7 +28,7 @@ void AbstractREnvironmentHierarchy::print(std::ostream& out, bool tty) {
     }
 }
 
-void AbstractREnvironment::print(std::ostream& out, bool tty) {
+void AbstractREnvironment::print(std::ostream& out, bool tty) const {
     if (leaked)
         out << "* leaked\n";
     if (tainted)
@@ -53,7 +53,7 @@ AbstractResult AbstractPirValue::merge(const AbstractPirValue& other) {
         return AbstractResult::Updated;
     }
     if (other.unknown) {
-        unknown = true;
+        taint();
         return AbstractResult::LostPrecision;
     }
 
@@ -63,11 +63,12 @@ AbstractResult AbstractPirValue::merge(const AbstractPirValue& other) {
         vals.insert(other.vals.begin(), other.vals.end());
         changed = true;
     }
+    changed = type.merge(other.type) || changed;
 
     return changed ? AbstractResult::Updated : AbstractResult::None;
 }
 
-void AbstractPirValue::print(std::ostream& out, bool tty) {
+void AbstractPirValue::print(std::ostream& out, bool tty) const {
     if (unknown) {
         out << "??";
         return;
@@ -124,6 +125,41 @@ AbstractLoad AbstractREnvironmentHierarchy::get(Value* env, SEXP e) const {
         if (!aenv.absent(e)) {
             const AbstractPirValue& res = aenv.get(e);
             return AbstractLoad(env, res);
+        }
+        auto parent = envs.at(env).parentEnv();
+        assert(parent);
+        if (parent == AbstractREnvironment::UnknownParent &&
+            Env::parentEnv(env))
+            env = Env::parentEnv(env);
+        else
+            env = parent;
+    }
+    return AbstractLoad(env, AbstractPirValue::tainted());
+}
+
+// Looking up functions is slightly trickier, since non-function bindings have
+// to be skipped.
+AbstractLoad AbstractREnvironmentHierarchy::getFun(Value* env, SEXP e) const {
+    assert(env);
+    if (aliases.count(env))
+        env = aliases.at(env);
+    while (env != AbstractREnvironment::UnknownParent) {
+        if (envs.count(env) == 0)
+            return AbstractLoad(env ? env : AbstractREnvironment::UnknownParent,
+                                AbstractPirValue::tainted());
+        auto aenv = envs.at(env);
+        if (!aenv.absent(e)) {
+            const AbstractPirValue& res = aenv.get(e);
+
+            // If it is a closure, we know we are good
+            if (res.type.isA(RType::closure))
+                return AbstractLoad(env, res);
+
+            // If it might be a closure, we can neither be sure, nor exclude
+            // this binding...
+            if (res.type.maybe(RType::closure))
+                return AbstractLoad(AbstractREnvironment::UnknownParent,
+                                    AbstractPirValue::tainted());
         }
         auto parent = envs.at(env).parentEnv();
         assert(parent);

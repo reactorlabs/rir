@@ -12,6 +12,7 @@ namespace pir {
 enum class Tag : uint8_t;
 
 class BB;
+class Code;
 
 /*
  * A typed PIR value.
@@ -30,6 +31,7 @@ class Value {
     virtual bool isInstruction() { return false; }
     virtual Value* followCasts() { return this; }
     virtual Value* followCastsAndForce() { return this; }
+    virtual bool validIn(Code* code) const { return true; }
 };
 
 }

@@ -3,6 +3,7 @@
 #include "../../analysis/verifier.h"
 #include "../../pir/pir_impl.h"
 #include "../../transform/insert_cast.h"
+#include "../../util/arg_match.h"
 #include "../../util/builder.h"
 #include "../../util/cfg.h"
 #include "../../util/visitor.h"
@@ -258,13 +259,10 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         Value* callee = top();
         SEXP monomorphic = nullptr;
 
-        // TODO: static named argument matching
-        if (bc.bc != Opcode::named_call_implicit_) {
-            if (callTargetFeedback.count(callee)) {
-                auto& feedback = callTargetFeedback.at(callee);
-                if (feedback.numTargets == 1)
-                    monomorphic = feedback.getTarget(srcCode, 0);
-            }
+        if (callTargetFeedback.count(callee)) {
+            auto& feedback = callTargetFeedback.at(callee);
+            if (feedback.numTargets == 1)
+                monomorphic = feedback.getTarget(srcCode, 0);
         }
 
         auto ast = bc.immediate.callFixedArgs.ast;
@@ -280,11 +278,31 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             }
         };
         if (monomorphic && isValidClosureSEXP(monomorphic)) {
+            // Currently we can only use StaticCall if we have exactly the right
+            // number of arguments.
+            // TODO, support cases where we need to pass Missing::instance() to
+            // pad the missing arguments. This is a bit tricky, because
+            // currently PIR assumes that no arguments are missing.
+
+            bool correctOrder =
+                (bc.bc == Opcode::named_call_implicit_)
+                    ? ArgumentMatcher::reorder(FORMALS(monomorphic),
+                                               bc.callExtra().callArgumentNames,
+                                               args)
+                    : RList(FORMALS(monomorphic)).length() == args.size();
+
+            if (!correctOrder) {
+                insertGenericCall();
+                break;
+            }
+
             std::string name = "";
             if (auto ldfun = LdFun::Cast(callee))
                 name = CHAR(PRINTNAME(ldfun->varName));
+            AssumptionsSet asmpt(Assumptions::CorrectOrderOfArguments);
+            asmpt.set(Assumptions::CorrectNumberOfArguments);
             compiler.compileClosure(
-                monomorphic, name,
+                monomorphic, name, asmpt,
                 [&](Closure* f) {
                     Value* expected = insert(new LdConst(monomorphic));
                     Value* t = insert(new Identical(callee, expected));
@@ -361,8 +379,10 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                 Compiler::compileClosure(target);
             }
             bool failed = false;
+            AssumptionsSet asmpt(Assumptions::CorrectOrderOfArguments);
+            asmpt.set(Assumptions::CorrectNumberOfArguments);
             compiler.compileClosure(
-                target, "",
+                target, "", asmpt,
                 [&](Closure* f) {
                     auto fs = insert.registerFrameState(srcCode, nextPos, stack);
                     push(insert(new StaticCall(env, f, args, target, fs, ast)));
@@ -771,7 +791,7 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) const {
             FormalArgs formals(fmls);
 
             DispatchTable* dt = DispatchTable::unpack(code);
-            rir::Function* function = dt->first();
+            rir::Function* function = dt->baseline();
 
             std::stringstream inner;
             inner << name;
@@ -802,7 +822,7 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) const {
             inner << (pos - srcCode->code());
 
             compiler.compileFunction(
-                function, inner.str(), formals,
+                function, inner.str(), formals, {},
                 [&](Closure* innerF) {
                     cur.stack.push(insert(
                         new MkFunCls(innerF, insert.env, fmls, code, src)));
