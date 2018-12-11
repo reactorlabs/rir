@@ -129,7 +129,7 @@ RIR_INLINE SEXP getSrcForCall(Code* c, Opcode* pc, Context* ctx) {
 #endif
 
 // bytecode accesses
-#define advanceOpcode() (*pc++)
+#define advanceOpcode() (*(pc++))
 #define readImmediate() (*(Immediate*)pc)
 #define readSignedImmediate() (*(SignedImmediate*)pc)
 #define readJumpOffset() (*(JumpOffset*)(pc))
@@ -372,6 +372,33 @@ SEXP rirCallTrampoline(const CallContext& call, Function* fun, SEXP env,
     return rirCallTrampoline(call, fun, env, arglist, nullptr, ctx);
 }
 
+const static SEXP loopTrampolineMarker = (SEXP)0x7007;
+SEXP evalRirCode(Code*, Context*, SEXP*, const CallContext*, Opcode*,
+                 R_bcstack_t*);
+static void loopTrampoline(Code* c, Context* ctx, SEXP* env,
+                           const CallContext* callCtxt, Opcode* pc,
+                           R_bcstack_t* localsBase) {
+    assert(*env);
+
+    RCNTXT cntxt;
+    Rf_begincontext(&cntxt, CTXT_LOOP, R_NilValue, *env, R_BaseEnv, R_NilValue,
+                    R_NilValue);
+
+    if (int s = SETJMP(cntxt.cjmpbuf)) {
+        // incoming non-local break/continue:
+        if (s == CTXT_BREAK) {
+            Rf_endcontext(&cntxt);
+            return;
+        }
+        // continue case: fall through to do another iteration
+    }
+
+    // execute the loop body
+    SEXP res = evalRirCode(c, ctx, env, callCtxt, pc, localsBase);
+    assert(res == loopTrampolineMarker);
+    Rf_endcontext(&cntxt);
+}
+
 void warnSpecial(SEXP callee, SEXP call) {
     return;
 
@@ -481,7 +508,7 @@ SEXP closureArgumentAdaptor(const CallContext& call, SEXP arglist,
     a = actuals;
     // get the first Code that is a compiled default value of a formal arg
     // (or nullptr if no such exist)
-    Function* fun = DispatchTable::unpack(BODY(op))->first();
+    Function* fun = DispatchTable::unpack(BODY(op))->baseline();
     size_t pos = 0;
     while (f != R_NilValue) {
         Code* c = fun->defaultArg(pos++);
@@ -514,61 +541,66 @@ SEXP closureArgumentAdaptor(const CallContext& call, SEXP arglist,
     return newrho;
 };
 
-unsigned dispatch(const CallContext& call, DispatchTable* vt) {
-    assert(vt->capacity() > 0);
-    if (vt->capacity() == 1 || !vt->available(1))
-        return 0;
+bool matches(const CallContext& call, const FunctionSignature& signature) {
+    // TODO: look at the arguments of the function signature and not just at the
+    // global assumptions list. This only becomes relevant as soon as we want to
+    // optimize based on argument types.
 
-    // Try to dispatch to slot 1
-    if (call.hasNames() ||
-        /* TODO: length is waay slow. Will be fixed by signatures */
-        call.nargs != (size_t)Rf_length(FORMALS(call.callee))) {
-        return 0;
-    }
+    if (signature.optimization == FunctionSignature::BaselineVersion)
+        return true;
 
-    // TODO: add support to `...` passing, ie. we pass our ellipsis arg
-    // to the callee
+    assert(signature.envCreation == FunctionSignature::CalleeCreatedEnv);
+
+    // We can't materialize ... yet
     if (!call.hasStackArgs()) {
         for (size_t i = 0; i < call.nargs; ++i)
             if (call.implicitArgIdx(i) == DOTS_ARG_IDX)
-                return 0;
+                return false;
     }
 
-    return 1;
-};
+    // TODO: implement argument reordering on the stack to support this case
+    if (call.hasNames() && signature.assumptions.includes(
+                               pir::Assumptions::CorrectOrderOfArguments))
+        return false;
 
-// Call a RIR function, when we already have created the list of actuals (this
-// is for example the case, if we tried to dispatch).
-SEXP rirCall(const CallContext& call, SEXP actuals, Context* ctx) {
-    assert(actuals);
-    SEXP body = BODY(call.callee);
-    assert(DispatchTable::check(body));
-
-    auto table = DispatchTable::unpack(body);
-
-    unsigned slot = dispatch(call, table);
-    bool needsEnv = slot == 0;
-
-    Function* fun = table->at(slot);
-    fun->registerInvocation();
-
-    SEXP env = R_NilValue;
-
-    SEXP result = nullptr;
-    if (needsEnv) {
-        env = closureArgumentAdaptor(call, actuals, R_NilValue);
-        PROTECT(env);
-        result = rirCallTrampoline(call, fun, env, actuals, ctx);
-        UNPROTECT(1);
-    } else {
-        result = rirCallTrampoline(call, fun, actuals, ctx);
+    if (signature.nargs() < call.nargs &&
+        signature.assumptions.includes(
+            pir::Assumptions::MaxNumberOfArguments)) {
+        return false;
     }
 
-    assert(result);
+    if (signature.nargs() > call.nargs) {
+        if (signature.assumptions.includes(
+                pir::Assumptions::CorrectNumberOfArguments))
+            return false;
 
-    assert(!fun->deopt);
-    return result;
+        if (!call.hasStackArgs())
+            return false;
+
+        // PIR optimized code can receive missing args, but they need to be
+        // explicitly mentioned on the stack
+        for (size_t i = 0; i < signature.nargs() - call.nargs; ++i)
+            ostack_push(ctx, R_MissingArg);
+    }
+
+    return true;
 }
+
+Function* dispatch(const CallContext& call, DispatchTable* vt) {
+    // Find the most specific version of the function that can be called given
+    // the current call context.
+    Function* fun = nullptr;
+    for (int i = vt->size() - 1; i >= 0; i--) {
+        auto candidate = vt->get(i);
+        if (matches(call, candidate->signature())) {
+            fun = candidate;
+            break;
+        }
+    }
+    assert(fun);
+
+    return fun;
+};
 
 static unsigned RIR_WARMUP =
     getenv("RIR_WARMUP") ? atoi(getenv("RIR_WARMUP")) : 3;
@@ -580,20 +612,21 @@ SEXP rirCall(const CallContext& call, Context* ctx) {
 
     auto table = DispatchTable::unpack(body);
 
-    unsigned slot = dispatch(call, table);
-    bool needsEnv = slot == 0;
-    Function* fun = table->at(slot);
-
+    Function* fun = dispatch(call, table);
     fun->registerInvocation();
-    if (slot == 0 && fun->invocationCount() == RIR_WARMUP) {
+    bool needsEnv =
+        fun->signature().envCreation == FunctionSignature::CallerProvidedEnv;
+
+    if (fun->signature().optimization == FunctionSignature::BaselineVersion &&
+        fun->invocationCount() == RIR_WARMUP) {
         SEXP lhs = CAR(call.ast);
         SEXP name = R_NilValue;
         if (TYPEOF(lhs) == SYMSXP)
             name = lhs;
         ctx->closureOptimizer(call.callee, name);
-        slot = dispatch(call, table);
-        needsEnv = slot == 0;
-        fun = table->at(slot);
+        fun = dispatch(call, table);
+        needsEnv = fun->signature().envCreation ==
+                   FunctionSignature::CallerProvidedEnv;
     }
 
     SEXP env = R_NilValue;
@@ -798,9 +831,18 @@ enum op { PLUSOP, MINUSOP, TIMESOP, DIVOP, POWOP, MODOP, IDIVOP };
 
 #define STORE_BINOP(res_type, int_res, real_res)                               \
     do {                                                                       \
-        res = ostack_at(ctx, 1);                                               \
-        if (TYPEOF(res) != res_type || !NO_REFERENCES(res)) {                  \
-            res = Rf_allocVector(res_type, 1);                                 \
+        SEXP a = ostack_at(ctx, 0);                                            \
+        SEXP b = ostack_at(ctx, 1);                                            \
+        if (TYPEOF(a) == res_type && NO_REFERENCES(a)) {                       \
+            res = a;                                                           \
+            ostack_pop(ctx);                                                   \
+            ostack_at(ctx, 0) = a;                                             \
+        } else if (TYPEOF(b) == res_type && NO_REFERENCES(b)) {                \
+            res = b;                                                           \
+            ostack_pop(ctx);                                                   \
+        } else {                                                               \
+            ostack_pop(ctx);                                                   \
+            ostack_at(ctx, 0) = res = Rf_allocVector(res_type, 1);             \
         }                                                                      \
         switch (res_type) {                                                    \
         case INTSXP:                                                           \
@@ -822,9 +864,9 @@ enum op { PLUSOP, MINUSOP, TIMESOP, DIVOP, POWOP, MODOP, IDIVOP };
             STORE_BINOP(res_type, int_res, real_res);                          \
         } else {                                                               \
             BINOP_FALLBACK(#op);                                               \
+            ostack_pop(ctx);                                                   \
+            ostack_set(ctx, 0, res);                                           \
         }                                                                      \
-        ostack_pop(ctx);                                                       \
-        ostack_set(ctx, 0, res);                                               \
     } while (false)
 
 static double myfloor(double x1, double x2) {
@@ -1076,7 +1118,7 @@ static void cachedSetVar(SEXP val, SEXP env, Immediate idx, Context* ctx,
 #pragma GCC diagnostic ignored "-Wcast-align"
 
 SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
-                 Opcode* initialPC) {
+                 Opcode* initialPC, R_bcstack_t* localsBase = nullptr) {
     assert(*env || (callCtxt != nullptr));
 
     extern int R_PPStackTop;
@@ -1092,7 +1134,17 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
     std::deque<FrameInfo*> synthesizeFrames;
     assert(c->info.magic == CODE_MAGIC);
 
-    Locals locals(c->localsCount);
+    if (!localsBase) {
+#ifdef TYPED_STACK
+        // Zero the region of the locals to avoid keeping stuff alive and to
+        // zero all the type tags. Note: this trick does not work with the stack
+        // in general, since there intermediate callees might set the type tags
+        // to something else.
+        memset(R_BCNodeStackTop, 0, sizeof(*R_BCNodeStackTop) * c->localsCount);
+#endif
+        localsBase = R_BCNodeStackTop;
+    }
+    Locals locals(localsBase, c->localsCount);
 
     BindingCache bindingCache[BINDING_CACHE_SIZE];
     memset(&bindingCache, 0, sizeof(bindingCache));
@@ -1318,7 +1370,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
             if (callCtxt->hasStackArgs()) {
                 ostack_push(ctx, callCtxt->stackArg(idx));
             } else {
-                if (callCtxt->implicitArgIdx(idx) == MISSING_ARG_IDX) {
+                if (idx == MISSING_ARG_IDX) {
                     res = Rf_mkPROMISE(R_UnboundValue, callCtxt->callerEnv);
                 } else {
                     Code* arg = callCtxt->implicitArg(idx);
@@ -1725,10 +1777,9 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
                 STORE_BINOP(REALSXP, 0, real_res);
             } else {
                 BINOP_FALLBACK("/");
+                ostack_popn(ctx, 2);
+                ostack_push(ctx, res);
             }
-
-            ostack_popn(ctx, 2);
-            ostack_push(ctx, res);
             NEXT();
         }
 
@@ -1754,10 +1805,9 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
                 STORE_BINOP(INTSXP, int_res, 0);
             } else {
                 BINOP_FALLBACK("%/%");
+                ostack_popn(ctx, 2);
+                ostack_push(ctx, res);
             }
-
-            ostack_popn(ctx, 2);
-            ostack_push(ctx, res);
             NEXT();
         }
 
@@ -1784,10 +1834,9 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
                 STORE_BINOP(INTSXP, int_res, 0);
             } else {
                 BINOP_FALLBACK("%%");
+                ostack_popn(ctx, 2);
+                ostack_push(ctx, res);
             }
-
-            ostack_popn(ctx, 2);
-            ostack_push(ctx, res);
             NEXT();
         }
 
@@ -2221,6 +2270,10 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
     case vectype: {                                                            \
         if (XLENGTH(val) == 1 && NO_REFERENCES(val)) {                         \
             res = val;                                                         \
+        } else if (XLENGTH(idx) == 1 && NO_REFERENCES(idx) &&                  \
+                   TYPEOF(idx) == vectype) {                                   \
+            res = idx;                                                         \
+            vecaccess(res)[0] = vecaccess(val)[i];                             \
         } else {                                                               \
             res = Rf_allocVector(vectype, 1);                                  \
             vecaccess(res)[0] = vecaccess(val)[i];                             \
@@ -2582,7 +2635,11 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
             // BC on it, we would. To prevent this we strip the object
             // flag here. What we should do instead, is use a non-dispatching
             // extract BC.
-            SET_OBJECT(seq, 0);
+            if (isObject(seq)) {
+                seq = Rf_duplicate(seq);
+                SET_OBJECT(seq, 0);
+                ostack_set(ctx, 0, seq);
+            }
             ostack_push(ctx, value);
             NEXT();
         }
@@ -2594,6 +2651,12 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
 
         INSTRUCTION(invisible_) {
             R_Visible = FALSE;
+            NEXT();
+        }
+
+        INSTRUCTION(ensure_named_) {
+            SEXP val = ostack_top(ctx);
+            ENSURE_NAMED(val);
             NEXT();
         }
 
@@ -2614,56 +2677,17 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
         }
 
         INSTRUCTION(beginloop_) {
-            // Allocate a RCNTXT on the stack
-            SEXP val = Rf_allocVector(RAWSXP, sizeof(RCNTXT) + sizeof(pc));
-            ostack_push(ctx, val);
-
-            RCNTXT* cntxt = (RCNTXT*)RAW(val);
-
-            {
-                // (ab)use the same buffer to store the current pc
-                Opcode** oldPc = (Opcode**)(cntxt + 1);
-                *oldPc = pc;
-            }
-
-            Rf_begincontext(cntxt, CTXT_LOOP, R_NilValue, getenv(), R_BaseEnv,
-                            R_NilValue, R_NilValue);
-            // (ab)use the unused cenddata field to store sp
-            cntxt->cenddata = (void*)ostack_length(ctx);
-
+            SLOWASSERT(*env);
+            int offset = readJumpOffset();
             advanceJump();
-
-            int s;
-            if ((s = SETJMP(cntxt->cjmpbuf))) {
-                // incoming non-local break/continue:
-                // restore our stack state
-
-                // get the RCNTXT from the stack
-                val = ostack_top(ctx);
-                assert(TYPEOF(val) == RAWSXP && "stack botched");
-                RCNTXT* cntxt = (RCNTXT*)RAW(val);
-                assert(cntxt == R_GlobalContext && "stack botched");
-                Opcode** oldPc = (Opcode**)(cntxt + 1);
-                pc = *oldPc;
-
-                int offset = readJumpOffset();
-                advanceJump();
-
-                if (s == CTXT_BREAK)
-                    pc += offset;
-                PC_BOUNDSCHECK(pc, c);
-            }
+            loopTrampoline(c, ctx, env, callCtxt, pc, localsBase);
+            pc += offset;
+            assert(*pc == Opcode::endloop_);
+            advanceOpcode();
             NEXT();
         }
 
-        INSTRUCTION(endcontext_) {
-            SEXP val = ostack_top(ctx);
-            assert(TYPEOF(val) == RAWSXP);
-            RCNTXT* cntxt = (RCNTXT*)RAW(val);
-            Rf_endcontext(cntxt);
-            ostack_pop(ctx); // Context
-            NEXT();
-        }
+        INSTRUCTION(endloop_) { return loopTrampolineMarker; }
 
         INSTRUCTION(return_) {
             res = ostack_top(ctx);
@@ -2724,7 +2748,7 @@ SEXP rirExpr(SEXP s) {
     }
     if (auto t = DispatchTable::check(s)) {
         // Default is the source of the first function in the dispatch table
-        Function* f = t->first();
+        Function* f = t->baseline();
         return src_pool_at(globalContext(), f->body()->src);
     }
     return s;
@@ -2741,9 +2765,9 @@ SEXP rirEval_f(SEXP what, SEXP env) {
     }
 
     if (auto table = DispatchTable::check(what)) {
-        size_t offset = 0; // Default target is the first version
-
-        Function* fun = table->at(offset);
+        // TODO: add an adapter frame to be able to call something else than
+        // the baseline version!
+        Function* fun = table->baseline();
         fun->registerInvocation();
 
         return evalRirCodeExtCaller(fun->body(), globalContext(), &lenv);

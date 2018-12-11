@@ -53,7 +53,6 @@ pir.tests <- function() {
 # creates a bitset with pir debug options
 pir.debugFlags <- function(ShowWarnings = FALSE,
                            DryRun = FALSE,
-                           PreserveVersions = FALSE,
                            PrintIntoFiles = FALSE,
                            PrintIntoStdout = FALSE,
                            PrintEarlyRir = FALSE,
@@ -66,7 +65,7 @@ pir.debugFlags <- function(ShowWarnings = FALSE,
                            PrintFinalRir = FALSE) {
     # !!!  This list of arguments *must* be exactly equal to the   !!!
     # !!!    LIST_OF_PIR_DEBUGGING_FLAGS in compiler/debugging.h   !!!
-    .Call("pir_debugFlags", ShowWarnings, DryRun, PreserveVersions,
+    .Call("pir_debugFlags", ShowWarnings, DryRun,
           PrintIntoFiles, PrintIntoStdout, PrintEarlyRir, PrintEarlyPir,
           PrintOptimizationPasses, PrintPirAfterOpt, PrintCSSA, PrintAllocator, PrintFinalPir,
           PrintFinalRir,

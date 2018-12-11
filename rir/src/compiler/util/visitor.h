@@ -68,10 +68,33 @@ struct PointerMarker {
     void set(BB* bb) { done.insert(bb); }
     bool check(BB* bb) { return done.find(bb) != done.end(); }
 };
+
+/*
+ * Support for reverse iteration in range-based for loops.
+ */
+template <typename T>
+struct reverse_wrapper {
+    T& iterable;
+};
+
+template <typename T>
+auto begin(reverse_wrapper<T> w) {
+    return w.iterable.rbegin();
+}
+
+template <typename T>
+auto end(reverse_wrapper<T> w) {
+    return w.iterable.rend();
+}
+
+template <typename T>
+reverse_wrapper<T> reverse(T&& iterable) {
+    return {iterable};
+}
+
 }; // namespace VisitorHelpers
 
 enum class Order { Depth, Breadth, Random, Lowering };
-enum class Direction { Forward, Backward };
 
 template <Order ORDER, class Marker>
 class VisitorImplementation {
@@ -127,20 +150,107 @@ class VisitorImplementation {
         });
     }
 
+    static void runBackward(BB* bb, CFG const& cfg, InstrAction action) {
+        runBackward(bb, cfg, [action](BB* bb) {
+            for (auto i : VisitorHelpers::reverse(*bb))
+                action(i);
+        });
+    }
+
+    static bool checkBackward(BB* bb, CFG const& cfg,
+                              InstrActionPredicate action) {
+        return checkBackward(bb, cfg, [action](BB* bb) {
+            bool holds = true;
+            for (auto i : VisitorHelpers::reverse(*bb)) {
+                if (!action(i)) {
+                    holds = false;
+                    break;
+                }
+            }
+            return holds;
+        });
+    }
+
+    static void runBackward(BB* bb, CFG const& cfg, InstrBBAction action) {
+        runBackward(bb, cfg, [action](BB* bb) {
+            for (auto i : VisitorHelpers::reverse(*bb))
+                action(i, bb);
+        });
+    }
+
+    static bool checkBackward(BB* bb, CFG const& cfg,
+                              InstrBBActionPredicate action) {
+        return checkBackward(bb, cfg, [action](BB* bb) {
+            bool holds = true;
+            for (auto i : VisitorHelpers::reverse(*bb)) {
+                if (!action(i, bb)) {
+                    holds = false;
+                    break;
+                }
+            }
+            return holds;
+        });
+    }
+
     /*
      * BB Visitors
      *
      */
-    static void run(BB* bb, BBAction action, bool processNewNodes = false) {
-        genericRun(bb, action, processNewNodes);
+    static void run(BB* bb, BBAction action) {
+        forwardGenericRun(bb, action, false);
+    }
+
+    static void runPostChange(BB* bb, BBAction action) {
+        forwardGenericRun(bb, action, true);
     }
 
     static bool check(BB* bb, BBActionPredicate action) {
-        return genericRun(bb, action, false);
+        return forwardGenericRun(bb, action, false);
+    }
+
+    static void runBackward(BB* bb, CFG const& cfg, BBAction action) {
+        backwardGenericRun(bb, cfg, action, false);
+    }
+
+    static bool checkBackward(BB* bb, CFG const& cfg,
+                              BBActionPredicate action) {
+        return backwardGenericRun(bb, cfg, action, false);
+    }
+
+  protected:
+    typedef std::function<void(BB*)> Schedule;
+    typedef std::function<void(Schedule, BB*)> ScheduleNext;
+
+    template <typename ActionKind>
+    static bool forwardGenericRun(BB* bb, ActionKind action,
+                                  bool processNewNodes) {
+        auto scheduleNext = [&](Schedule schedule, BB* cur) {
+            if (ORDER == Order::Lowering) {
+                // Curently we emit only brtrue in pir2rir, therefore we
+                // always want next1 to be the fallthrough case.
+                schedule(cur->next1);
+                schedule(cur->next0);
+            } else {
+                schedule(cur->next0);
+                schedule(cur->next1);
+            }
+        };
+        return genericRun(bb, action, scheduleNext, processNewNodes);
     }
 
     template <typename ActionKind>
-    static bool genericRun(BB* bb, ActionKind action, bool processNewNodes) {
+    static bool backwardGenericRun(BB* bb, CFG const& cfg, ActionKind action,
+                                   bool processNewNodes) {
+        auto scheduleNext = [&](Schedule schedule, BB* cur) {
+            for (auto pred : cfg.immediatePredecessors(cur))
+                schedule(pred);
+        };
+        return genericRun(bb, action, scheduleNext, processNewNodes);
+    }
+
+    template <typename ActionKind>
+    static bool genericRun(BB* bb, ActionKind action, ScheduleNext scheduleNext,
+                           bool processNewNodes) {
         typedef VisitorHelpers::PredicateWrapper<ActionKind> PredicateWrapper;
         const PredicateWrapper predicate = {action};
 
@@ -166,27 +276,15 @@ class VisitorImplementation {
             done.set(bb);
         };
 
-        auto scheduleNext = [&]() {
-            if (ORDER == Order::Lowering) {
-                // Curently we emit only brtrue in pir2rir, therefore we always
-                // want next1 to be the fallthrough case.
-                schedule(cur->next1);
-                schedule(cur->next0);
-            } else {
-                schedule(cur->next0);
-                schedule(cur->next1);
-            }
-        };
-
         while (cur) {
             next = nullptr;
 
             if (!processNewNodes)
-                scheduleNext();
+                scheduleNext(schedule, cur);
             if (!predicate(cur))
                 return false;
             if (processNewNodes)
-                scheduleNext();
+                scheduleNext(schedule, cur);
 
             if (!next) {
                 if (!todo.empty()) {
@@ -225,10 +323,13 @@ class VisitorImplementation {
 
 class Visitor
     : public VisitorImplementation<Order::Random, VisitorHelpers::IDMarker> {};
+
 class BreadthFirstVisitor
     : public VisitorImplementation<Order::Breadth, VisitorHelpers::IDMarker> {};
+
 class DepthFirstVisitor
     : public VisitorImplementation<Order::Depth, VisitorHelpers::IDMarker> {};
+
 class LoweringVisitor
     : public VisitorImplementation<Order::Lowering, VisitorHelpers::IDMarker> {
 };
@@ -279,6 +380,7 @@ class DominatorTreeVisitor {
         }
     }
 };
+
 } // namespace pir
 } // namespace rir
 

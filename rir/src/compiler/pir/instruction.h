@@ -11,13 +11,14 @@
 #include "tag.h"
 #include "value.h"
 
+#include <algorithm>
 #include <array>
 #include <cassert>
 #include <cstdint>
 #include <deque>
 #include <functional>
 #include <iostream>
-#include <algorithm>
+#include <unordered_set>
 
 /*
  * This file provides implementations for all instructions
@@ -57,15 +58,20 @@ class BB;
 class Closure;
 class Phi;
 
-struct InstrArg : public std::pair<Value*, PirType> {
-    InstrArg(Value* v, PirType t) : std::pair<Value*, PirType>(v, t) {
+struct InstrArg {
+  private:
+    PirType type_;
+    Value* val_;
+
+  public:
+    InstrArg(Value* v, PirType t) : type_(t), val_(v) {
         assert(v->tag != Tag::_UNUSED_);
     }
-    InstrArg() : std::pair<Value*, PirType>(nullptr, PirType::bottom()) {}
-    Value*& val() { return first; }
-    PirType& type() { return second; }
-    Value* val() const { return first; }
-    PirType type() const { return second; }
+    InstrArg() : type_(PirType::bottom()), val_(nullptr) {}
+    Value*& val() { return val_; }
+    PirType& type() { return type_; }
+    Value* val() const { return val_; }
+    PirType type() const { return type_; }
 };
 
 // EnvAccess specifies if an instruction has an environment argument
@@ -80,12 +86,23 @@ enum class EnvAccess : uint8_t {
 };
 
 // Effect that can be produced by an instruction.
+// This is a trivial lattice, any effect with higher order contains all the
+// lower order effects.
 enum class Effect : uint8_t {
     None,
+    // Instruction doesn't really have effects itself, but it should not be
+    // hoisted over any other instruction with effect. Example: Assume
+    EffectOrderObserved,
+    // Instruction might produce a warning. Example: AsTest warns if the
+    // vector used in an if condition has length > 1
     Warn,
+    // Instruction might produce an error. Example: ForSeqSize raises an
+    // error if the collection to loop over is not indexable.
     Error,
-    Print,
-    Write,
+    // Instruction might force promises
+    Force,
+    // Instruction might use reflection
+    Reflection,
     Any,
 };
 
@@ -109,6 +126,8 @@ class Instruction : public Value {
         : Value(t, tag), srcIdx(srcIdx) {}
 
     virtual bool hasEffect() const = 0;
+    virtual bool mayUseReflection() const = 0;
+    virtual bool mayForcePromises() const = 0;
     virtual bool changesEnv() const = 0;
     virtual bool leaksEnv() const = 0;
     virtual bool mayAccessEnv() const = 0;
@@ -121,12 +140,15 @@ class Instruction : public Value {
 
     virtual Instruction* clone() const = 0;
 
-    Value* baseValue() override;
-    bool isInstruction() final { return true; }
-    bool maySpecialize();
+    Value* followCasts() override;
+    Value* followCastsAndForce() override;
+    bool isInstruction() override final { return true; }
+    bool envOnlyForObj();
+
+    bool validIn(Code* code) const override final;
 
     BB* bb_ = nullptr;
-    BB* bb() {
+    BB* bb() const {
         assert(bb_);
         return bb_;
     }
@@ -137,34 +159,45 @@ class Instruction : public Value {
 
     InstructionUID id();
 
-    const char* name() { return tagToStr(tag); }
+    virtual const char* name() { return tagToStr(tag); }
 
     Instruction* hasSingleUse();
+    void eraseAndRemove();
     void replaceUsesWith(Value* val);
     void replaceUsesAndSwapWith(Instruction* val,
                                 std::vector<Instruction*>::iterator it);
     void replaceUsesIn(Value* val, BB* target);
     bool unused();
 
+    virtual void updateType(){};
+
     virtual void printEnv(std::ostream& out, bool tty);
     virtual void printArgs(std::ostream& out, bool tty);
     virtual void print(std::ostream& out, bool tty = false);
-    void printRef(std::ostream& out) override;
+    void printRef(std::ostream& out) override final;
     void print() { print(std::cerr, true); }
 
     virtual InstrArg& arg(size_t pos) = 0;
     virtual const InstrArg& arg(size_t pos) const = 0;
 
     bool leaksArg(Value* val) {
-        // TODO: for escape analysis we use hasEnv || hasEffect as a very crude
-        // approximation whether this instruction leaks arguments. We should do
-        // better.
-        return hasEnv() || hasEffect();
+        // TODO: for escape analysis we use leaksEnv || hasEffect as a very
+        // crude approximation whether this instruction leaks arguments. We
+        // should do better.
+        return leaksEnv() || hasEffect();
     }
 
+    typedef std::function<bool(Value*)> ArgumentValuePredicateIterator;
     typedef std::function<void(Value*)> ArgumentValueIterator;
     typedef std::function<void(const InstrArg&)> ArgumentIterator;
     typedef std::function<void(InstrArg&)> MutableArgumentIterator;
+
+    bool anyArg(Instruction::ArgumentValuePredicateIterator it) const {
+        for (size_t i = 0; i < nargs(); ++i)
+            if (it(arg(i).val()))
+                return true;
+        return false;
+    }
 
     void eachArg(Instruction::ArgumentValueIterator it) const {
         for (size_t i = 0; i < nargs(); ++i)
@@ -236,32 +269,22 @@ class InstructionImplementation : public Instruction {
         return new Base(*static_cast<const Base*>(this));
     }
 
-    struct InstrDescription {
-        bool HasEffect;
-        bool MayAccessEnv;
-        bool ChangesEnv;
-        bool LeaksEnv;
-        bool Exits;
-        bool Branches;
-    };
+    static constexpr bool mayAccessEnv_ = ENV > EnvAccess::None;
+    static constexpr bool mayChangeEnv_ = ENV >= EnvAccess::Write;
+    static constexpr bool mayLeakEnv_ = ENV >= EnvAccess::Leak;
 
-    static constexpr InstrDescription Description = {
-        EFFECT > Effect::None,   ENV > EnvAccess::None,
-        ENV >= EnvAccess::Write, ENV == EnvAccess::Leak,
-        CF == Controlflow::Exit, CF == Controlflow::Branch};
-
-    bool hasEffect() const final { return Description.HasEffect; }
-    bool mayAccessEnv() const final { return Description.MayAccessEnv; }
-    bool changesEnv() const final { return Description.ChangesEnv; }
-    bool leaksEnv() const final { return Description.LeaksEnv; }
+    bool hasEffect() const final { return EFFECT > Effect::None; }
+    bool mayForcePromises() const final { return EFFECT >= Effect::Force; }
+    bool mayUseReflection() const final { return EFFECT > Effect::Reflection; }
+    bool mayAccessEnv() const final { return mayAccessEnv_; }
+    bool changesEnv() const final { return hasEnv() && mayChangeEnv_; }
+    bool leaksEnv() const final { return hasEnv() && mayLeakEnv_; }
     bool hasEnv() const final {
         return mayAccessEnv() && env() != Env::elided();
     }
-    bool exits() const final { return Description.Exits; }
-    bool branches() const final { return Description.Branches; }
-    bool branchOrExit() const final {
-        return Description.Branches || Description.Exits;
-    }
+    bool exits() const final { return CF == Controlflow::Exit; }
+    bool branches() const final { return CF == Controlflow::Branch; }
+    bool branchOrExit() const final { return branches() || exits(); }
 
     static const Base* Cast(const Value* i) {
         if (i->tag == ITAG)
@@ -311,7 +334,6 @@ class FixedLenInstruction
                                       std::array<InstrArg, ARGS>>
         Super;
     using Super::arg;
-    using Super::Description;
     size_t nargs() const override { return ARGS; }
 
     template <unsigned POS>
@@ -321,7 +343,7 @@ class FixedLenInstruction
     }
 
     template <unsigned POS>
-    InstrArg& arg() const {
+    const InstrArg& arg() const {
         static_assert(POS < ARGS, "This instruction has fewer arguments");
         return arg(POS);
     }
@@ -361,7 +383,6 @@ class FixedLenInstructionWithEnvSlot
   public:
     typedef FixedLenInstruction<ITAG, Base, ARGS, EFFECT, ENV, CF> Super;
     using Super::arg;
-    using Super::Description;
 
     static constexpr size_t EnvSlot = ARGS - 1;
 
@@ -410,7 +431,6 @@ class VarLenInstruction
         Super;
     using Super::arg;
     using Super::args_;
-    using Super::Description;
     using Super::nargs;
 
     virtual void pushArg(Value* a, PirType t) {
@@ -435,7 +455,6 @@ class VarLenInstructionWithEnvSlot
     typedef VarLenInstruction<ITAG, Base, EFFECT, ENV, CF> Super;
     using Super::arg;
     using Super::args_;
-    using Super::Description;
     using Super::pushArg;
 
     // The env slot is always the last element of the args_ vector
@@ -498,16 +517,29 @@ class FLI(LdConst, 0, Effect::None, EnvAccess::None) {
     void printArgs(std::ostream& out, bool tty) override;
 };
 
-class FLIE(LdFun, 1, Effect::Any, EnvAccess::Write) {
+class FLIE(LdFun, 2, Effect::Any, EnvAccess::Write) {
   public:
     SEXP varName;
 
     LdFun(const char* name, Value* env)
-        : FixedLenInstructionWithEnvSlot(RType::closure, env),
+        : FixedLenInstructionWithEnvSlot(RType::closure, {{PirType::any()}},
+                                         {{Tombstone::closure()}}, env),
           varName(Rf_install(name)) {}
     LdFun(SEXP name, Value* env)
-        : FixedLenInstructionWithEnvSlot(RType::closure, env), varName(name) {
+        : FixedLenInstructionWithEnvSlot(RType::closure, {{PirType::any()}},
+                                         {{Tombstone::closure()}}, env),
+          varName(name) {
         assert(TYPEOF(name) == SYMSXP);
+    }
+
+    void clearGuessedBinding() { arg<0>().val() = Tombstone::closure(); }
+
+    void guessedBinding(Value* val) { arg<0>().val() = val; }
+
+    Value* guessedBinding() const {
+        if (arg<0>().val() != Tombstone::closure())
+            return arg<0>().val();
+        return nullptr;
     }
 
     void printArgs(std::ostream& out, bool tty) override;
@@ -531,7 +563,7 @@ class FLIE(LdVar, 1, Effect::None, EnvAccess::Read) {
 class FLI(ForSeqSize, 1, Effect::Error, EnvAccess::None) {
   public:
     explicit ForSeqSize(Value* val)
-        : FixedLenInstruction(PirType(RType::integer).scalar(),
+        : FixedLenInstruction(PirType(RType::integer).scalar().notObject(),
                               {{PirType::val()}}, {{val}}) {}
 };
 
@@ -697,10 +729,13 @@ class FLIE(MkFunCls, 1, Effect::None, EnvAccess::Capture) {
 
 class FLIE(Force, 2, Effect::Any, EnvAccess::Leak) {
   public:
+    // Set to true if we are sure that the promise will be forced here
+    bool strict = false;
     Force(Value* in, Value* env)
         : FixedLenInstructionWithEnvSlot(PirType::val(), {{PirType::any()}},
                                          {{in}}, env) {}
     Value* input() const { return arg(0).val(); }
+    const char* name() override { return strict ? "Force!" : "Force"; }
 };
 
 class FLI(CastType, 1, Effect::None, EnvAccess::None) {
@@ -787,8 +822,9 @@ class FLIE(Extract2_2D, 4, Effect::None, EnvAccess::Leak) {
 class FLI(Inc, 1, Effect::None, EnvAccess::None) {
   public:
     explicit Inc(Value* v)
-        : FixedLenInstruction(PirType(RType::integer).scalar(),
-                              {{PirType(RType::integer).scalar()}}, {{v}}) {}
+        : FixedLenInstruction(PirType(RType::integer).scalar().notObject(),
+                              {{PirType(RType::integer).scalar().notObject()}},
+                              {{v}}) {}
 };
 
 class FLI(Is, 1, Effect::None, EnvAccess::None) {
@@ -813,10 +849,18 @@ class FLI(LdFunctionEnv, 0, Effect::None, EnvAccess::None) {
     LdFunctionEnv() : FixedLenInstruction(RType::env) {}
 };
 
-class FLI(SetShared, 1, Effect::Write, EnvAccess::None) {
+class FLI(EnsureNamed, 1, Effect::None, EnvAccess::None) {
+  public:
+    explicit EnsureNamed(Value* v)
+        : FixedLenInstruction(v->type, {{v->type}}, {{v}}) {}
+    void updateType() override final { type = arg<0>().val()->type; }
+};
+
+class FLI(SetShared, 1, Effect::None, EnvAccess::None) {
   public:
     explicit SetShared(Value* v)
         : FixedLenInstruction(v->type, {{v->type}}, {{v}}) {}
+    void updateType() override final { type = arg<0>().val()->type; }
 };
 
 class FLI(PirCopy, 1, Effect::None, EnvAccess::None) {
@@ -824,6 +868,7 @@ class FLI(PirCopy, 1, Effect::None, EnvAccess::None) {
     explicit PirCopy(Value* v)
         : FixedLenInstruction(v->type, {{v->type}}, {{v}}) {}
     void print(std::ostream& out, bool tty) override;
+    void updateType() override final { type = arg<0>().val()->type; }
 };
 
 class FLI(Identical, 2, Effect::None, EnvAccess::None) {
@@ -933,7 +978,7 @@ struct RirStack {
  *  Collects metadata about the current state of variables
  *  eventually needed for deoptimization purposes
  */
-class VLIE(FrameState, Effect::Any, EnvAccess::Read) {
+class VLIE(FrameState, Effect::None, EnvAccess::Read) {
   public:
     bool inlined = false;
     Opcode* pc;
@@ -990,6 +1035,7 @@ class CallInstruction {
     virtual void eachCallArg(Instruction::ArgumentValueIterator it) = 0;
     static CallInstruction* CastCall(Value* v);
     virtual void clearFrameState(){};
+    virtual Closure* tryGetCls() { return nullptr; }
 };
 
 // Default call instruction. Closure expression (ie. expr left of `(`) is
@@ -1009,6 +1055,12 @@ class VLIE(Call, Effect::Any, EnvAccess::Leak), public CallInstruction {
             pushArg(args[i], PirType::val());
     }
 
+    Closure* tryGetCls() override final {
+        if (auto mk = MkFunCls::Cast(cls()->followCastsAndForce()))
+            return mk->fun;
+        return nullptr;
+    }
+
     size_t nCallArgs() override { return nargs() - 3; };
     void eachCallArg(Instruction::ArgumentValueIterator it) override {
         for (size_t i = 0; i < nCallArgs(); ++i)
@@ -1018,7 +1070,7 @@ class VLIE(Call, Effect::Any, EnvAccess::Leak), public CallInstruction {
     FrameState* frameState() {
         return FrameState::Cast(arg(0).val());
     }
-    void clearFrameState() override { arg(0).val() = Tombstone::instance(); };
+    void clearFrameState() override { arg(0).val() = Tombstone::framestate(); };
 
     Value* callerEnv() { return env(); }
 
@@ -1030,6 +1082,12 @@ class VLIE(NamedCall, Effect::Any, EnvAccess::Leak), public CallInstruction {
     std::vector<SEXP> names;
 
     Value* cls() { return arg(0).val(); }
+
+    Closure* tryGetCls() override final {
+        if (auto mk = MkFunCls::Cast(cls()->followCastsAndForce()))
+            return mk->fun;
+        return nullptr;
+    }
 
     NamedCall(Value * callerEnv, Value * fun, const std::vector<Value*>& args,
               const std::vector<BC::PoolIdx>& names_, unsigned srcIdx);
@@ -1045,19 +1103,17 @@ class VLIE(NamedCall, Effect::Any, EnvAccess::Leak), public CallInstruction {
 };
 
 class FLIE(CallImplicit, 2, Effect::Any, EnvAccess::Leak) {
+    const std::vector<Promise*> promises;
+
   public:
-    std::vector<Promise*> promises;
-    std::vector<SEXP> names;
+    void eachArg(const std::function<void(Promise*)>&) const;
+    const std::vector<SEXP> names;
 
     Value* cls() { return arg(0).val(); }
 
     CallImplicit(Value* callerEnv, Value* fun,
                  const std::vector<Promise*>& args,
-                 const std::vector<SEXP>& names_, unsigned srcIdx)
-        : FixedLenInstructionWithEnvSlot(PirType::valOrLazy(),
-                                         {{PirType::closure()}}, {{fun}},
-                                         callerEnv, srcIdx),
-          promises(args), names(names_) {}
+                 const std::vector<SEXP>& names_, unsigned srcIdx);
 
     Value* callerEnv() { return env(); }
     void printArgs(std::ostream& out, bool tty) override;
@@ -1073,16 +1129,11 @@ class VLIE(StaticCall, Effect::Any, EnvAccess::Leak), public CallInstruction {
     Closure* cls() { return cls_; }
     SEXP origin() { return origin_; }
 
+    Closure* tryGetCls() override final { return cls(); }
+
     StaticCall(Value * callerEnv, Closure * cls,
                const std::vector<Value*>& args, SEXP origin, FrameState* fs,
-               unsigned srcIdx)
-        : VarLenInstructionWithEnvSlot(PirType::valOrLazy(), callerEnv, srcIdx),
-          cls_(cls), origin_(origin) {
-        assert(fs);
-        pushArg(fs, NativeType::frameState);
-        for (unsigned i = 0; i < args.size(); ++i)
-            pushArg(args[i], PirType::val());
-    }
+               unsigned srcIdx);
 
     size_t nCallArgs() override { return nargs() - 2; };
     void eachCallArg(Instruction::ArgumentValueIterator it) override {
@@ -1091,7 +1142,7 @@ class VLIE(StaticCall, Effect::Any, EnvAccess::Leak), public CallInstruction {
     }
 
     FrameState* frameState() { return FrameState::Cast(arg(0).val()); }
-    void clearFrameState() override { arg(0).val() = Tombstone::instance(); };
+    void clearFrameState() override { arg(0).val() = Tombstone::framestate(); };
 
     void printArgs(std::ostream & out, bool tty) override;
     Value* callerEnv() { return env(); }
@@ -1179,36 +1230,22 @@ class VLI(Phi, Effect::None, EnvAccess::None) {
         const std::initializer_list<BB*>& inputs)
         : VarLenInstruction(PirType::any()) {
         assert(vals.size() == inputs.size());
-        for (auto i : inputs)
-            input.push_back(i);
+        std::copy(inputs.begin(), inputs.end(), std::back_inserter(input));
         for (auto a : vals)
             VarLenInstruction::pushArg(a);
         assert(nargs() == inputs.size());
     }
     void printArgs(std::ostream& out, bool tty) override;
-    bool updateType();
+    void updateType() override final;
     void pushArg(Value* a, PirType t) override {
         assert(false && "use addInput");
     }
     void pushArg(Value* a) override { assert(false && "use addInput"); }
     void addInput(BB* in, Value* arg) {
         input.push_back(in);
-        args_.push_back(InstrArg(arg, arg->type));
+        args_.push_back(InstrArg(arg, PirType::any()));
     }
-    void removeInputs(std::vector<BB*>& del) {
-        auto ii = input.begin();
-        auto ai = args_.begin();
-        while (ii != input.end()) {
-            if (std::find(del.begin(), del.end(), *ii) != del.end()) {
-                ii = input.erase(ii);
-                ai = args_.erase(ai);
-            } else {
-                ii++;
-                ai++;
-            }
-        }
-        assert(ai == args_.end());
-    }
+    void removeInputs(const std::unordered_set<BB*>& del);
 
     typedef std::function<void(BB* bb, Value*)> PhiArgumentIterator;
 
@@ -1229,7 +1266,7 @@ class Checkpoint
     : public FixedLenInstruction<Tag::Checkpoint, Checkpoint, 0, Effect::None,
                                  EnvAccess::None, Controlflow::Branch> {
   public:
-    Checkpoint() : FixedLenInstruction(PirType::voyd()) {}
+    Checkpoint() : FixedLenInstruction(NativeType::checkpoint) {}
     void printArgs(std::ostream & out, bool tty) override;
 };
 
@@ -1252,15 +1289,22 @@ class Deopt : public FixedLenInstruction<Tag::Deopt, Deopt, 1, Effect::None,
  * if the test fails, jump to the deopt branch of the checkpoint.
  */
 
-class FLI(assumeNot, 2, Effect::Any, EnvAccess::None) {
+class FLI(Assume, 2, Effect::EffectOrderObserved, EnvAccess::None) {
   public:
-    assumeNot(Value* test, Checkpoint* checkpoint)
+    bool assumeTrue = true;
+    Assume(Value* test, Value* checkpoint)
         : FixedLenInstruction(PirType::voyd(),
-                              {{NativeType::test, NativeType::test}},
+                              {{NativeType::test, NativeType::checkpoint}},
                               {{test, checkpoint}}) {}
 
     Checkpoint* checkpoint() { return Checkpoint::Cast(arg(1).val()); }
+    void checkpoint(Checkpoint* cp) { arg(1).val() = cp; }
     Value* condition() { return arg(0).val(); }
+    Assume* Not() {
+        assumeTrue = !assumeTrue;
+        return this;
+    }
+    const char* name() override { return assumeTrue ? "Assume" : "AssumeNot"; }
 };
 
 class ScheduledDeopt

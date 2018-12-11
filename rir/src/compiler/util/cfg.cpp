@@ -73,17 +73,17 @@ bool CFG::hasSinglePred(BB* a) const {
 }
 
 bool CFG::isPredecessor(BB* a, BB* b) const {
-    for (auto p : transitivePredecessors[b->id])
-        if (p == a)
-            return true;
-    return false;
+    auto& preds = transitivePredecessors[b->id];
+    return std::any_of(
+        preds.begin(), preds.end(),
+        std::bind(std::equal_to<BB*>(), std::placeholders::_1, a));
 }
 
 bool CFG::isImmediatePredecessor(BB* a, BB* b) const {
-    for (auto p : predecessors_[b->id])
-        if (p == a)
-            return true;
-    return false;
+    auto& preds = predecessors_[b->id];
+    return std::any_of(
+        preds.begin(), preds.end(),
+        std::bind(std::equal_to<BB*>(), std::placeholders::_1, a));
 }
 
 const CFG::BBList& CFG::immediatePredecessors(BB* a) const {

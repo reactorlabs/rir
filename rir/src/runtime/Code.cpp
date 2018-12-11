@@ -61,7 +61,7 @@ unsigned Code::getSrcIdxAt(const Opcode* pc, bool allowMissing) const {
     return sidx;
 }
 
-void Code::disassemble(std::ostream& out, std::string prefix) const {
+void Code::disassemble(std::ostream& out, const std::string& prefix) const {
     Opcode* pc = code();
     size_t label = 0;
     std::map<Opcode*, size_t> targets;

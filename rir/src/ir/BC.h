@@ -201,7 +201,7 @@ BC BC::brfalse(Jmp j) {
     i.offset = j;
     return BC(Opcode::brfalse_, i);
 }
-BC BC::endcontext() { return BC(Opcode::endcontext_); }
+BC BC::endloop() { return BC(Opcode::endloop_); }
 BC BC::dup() { return BC(Opcode::dup_); }
 BC BC::inc() { return BC(Opcode::inc_); }
 BC BC::close() { return BC(Opcode::close_); }
@@ -237,6 +237,7 @@ SIMPLE_INSTRUCTIONS(V, _)
 #undef V
 BC BC::makeUnique() { return BC(Opcode::make_unique_); }
 BC BC::setShared() { return BC(Opcode::set_shared_); }
+BC BC::ensureNamed() { return BC(Opcode::ensure_named_); }
 BC BC::asLogical() { return BC(Opcode::aslogical_); }
 BC BC::lglAnd() { return BC(Opcode::lgl_and_); }
 BC BC::lglOr() { return BC(Opcode::lgl_or_); }

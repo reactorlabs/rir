@@ -50,6 +50,8 @@ typedef std::unordered_map<std::string, pir::Closure*> closuresByName;
 
 closuresByName compileRir2Pir(SEXP env, pir::Module* m) {
     pir::StreamLogger logger(pir::DebugOptions() |
+                             // pir::DebugFlag::PrintIntoStdout |
+                             // pir::DebugFlag::PrintOptimizationPasses |
                              pir::DebugFlag::PrintFinalPir);
     pir::Rir2PirCompiler cmp(m, logger);
 
@@ -60,7 +62,7 @@ closuresByName compileRir2Pir(SEXP env, pir::Module* m) {
         auto fun = *f;
         if (TYPEOF(fun) == CLOSXP) {
             assert(isValidClosureSEXP(fun));
-            cmp.compileClosure(fun, "test_function",
+            cmp.compileClosure(fun, "test_function", {},
                                [&](pir::Closure* cls) {
                                    results[CHAR(PRINTNAME(f.tag()))] = cls;
                                },
@@ -126,11 +128,9 @@ class NullBuffer : public std::ostream, std::streambuf {
 
 bool verify(Module* m) {
     bool success = true;
-    m->eachPirFunction([&success](pir::Module::VersionedClosure& f) {
-        f.eachVersion([&success](pir::Closure* f) {
-            if (!Verify::apply(f))
-                success = false;
-        });
+    m->eachPirFunction([&success](Closure* c) {
+        if (!Verify::apply(c))
+            success = false;
     });
     // TODO: find fix for osx
     NullBuffer nb;
@@ -202,7 +202,8 @@ bool canRemoveEnvironmentIfTypeFeedback(const std::string& input) {
     auto rirFun = p(parseCompileToRir(input));
     SET_CLOENV(rirFun, execEnv);
     Rf_defineVar(Rf_install("removeEnvInBinopTest"), rirFun, execEnv);
-    rir::Function* srcFunction = isValidClosureSEXP(rirFun);
+    rir::Function* srcFunction =
+        DispatchTable::unpack(BODY(rirFun))->baseline();
     assert(srcFunction != nullptr);
     insertTypeFeedbackForBinops(srcFunction, types);
 
@@ -267,7 +268,7 @@ bool testSuperAssign() {
         pir::Module m;
         // This super assign can be removed, since the super env is not tainted
         auto res = compile(
-            "", "f <- function() {a <- 1; (function() {asdf(); a <<- 1})()}",
+            "", "f <- function() {a <- 1; (function() {a <<- 1; asdf()})()}",
             &m);
         auto f = res["f"];
         CHECK(!hasSuperAssign(f));
@@ -405,7 +406,7 @@ static Test tests[] = {
          }),
     Test("binop_nonobjects_nofeedback",
          []() {
-             return !canRemoveEnvironmentIfNonTypeFeedback(
+             return canRemoveEnvironmentIfNonTypeFeedback(
                  "f <- function() 1 + xxx");
          }),
     Test("super_assign", &testSuperAssign),
@@ -541,7 +542,29 @@ static Test tests[] = {
                                 "}",
                                 "4");
          }),
+    Test(
+        "Elide ldfun through promise",
+        []() { return test42("{f <- function() 42L; (function(x) x())(f)}"); }),
+    Test("Constantfolding1", []() { return test42("{if (1<2) 42L}"); }),
+    Test("Constantfolding2",
+         []() {
+             return test42("{a<- 41L; b<- 1L; f <- function(x,y) x+y; f(a,b)}");
+         }),
+    Test("Inlining promises and closures with Constantfolding",
+         []() {
+             return test42("{a<- function() 41L; b<- function() 1L; f <- "
+                           "function(x,y) x()+y; f(a,b())}");
+         }),
+    Test("more cf",
+         []() {
+             return test42("{x <- function() 42;"
+                           " y <- function() 41;"
+                           " z <- 1;"
+                           " f <- function(a,b,c) if (a() == (b+c)) 42L;"
+                           " f(x,y(),z)}");
+         }),
 };
+
 } // namespace
 
 namespace rir {

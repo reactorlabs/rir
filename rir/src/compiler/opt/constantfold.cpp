@@ -1,5 +1,5 @@
 #include "../pir/pir_impl.h"
-#include "../transform/replace.h"
+#include "../transform/bb.h"
 #include "../translations/rir_compiler.h"
 #include "../util/cfg.h"
 #include "../util/visitor.h"
@@ -13,10 +13,7 @@ namespace {
 using namespace rir::pir;
 
 static LdConst* isConst(Value* instr) {
-    if (auto shared = SetShared::Cast(instr)) {
-        instr = shared->arg<0>().val();
-    }
-    if (auto cst = LdConst::Cast(instr)) {
+    if (auto cst = LdConst::Cast(instr->followCastsAndForce())) {
         return cst;
     }
     return nullptr;
@@ -54,15 +51,18 @@ static LdConst* isConst(Value* instr) {
 namespace rir {
 namespace pir {
 
-void Constantfold::apply(RirCompiler& cmp, Closure* function) const {
+void Constantfold::apply(RirCompiler& cmp, Closure* function,
+                         LogStream&) const {
     std::unordered_map<BB*, bool> branchRemoval;
     DominanceGraph dom(function);
 
     Visitor::run(function->entry, [&](BB* bb) {
         if (bb->isEmpty())
           return;
-        for (auto ip = bb->begin(); ip != bb->end(); ++ip) {
+        auto ip = bb->begin();
+        while (ip != bb->end()) {
             auto i = *ip;
+            auto next = ip + 1;
 
             // Constantfolding of some common operations
             FOLD(Add, symbol::Add);
@@ -77,10 +77,29 @@ void Constantfold::apply(RirCompiler& cmp, Closure* function) const {
             FOLD(Eq, symbol::Eq);
             FOLD(Neq, symbol::Ne);
             FOLD(Pow, symbol::Pow);
+
+            if (auto assume = Assume::Cast(i)) {
+                auto condition = assume->arg<0>().val();
+                if (auto isObj = IsObject::Cast(condition))
+                    if (!isObj->arg<0>().val()->type.maybeObj())
+                        next = bb->remove(ip);
+
+                FOLD2(condition, Identical,
+                      [&](SEXP a, SEXP b) { next = bb->remove(ip); });
+            }
+
+            ip = next;
         }
 
         if (auto branch = Branch::Cast(bb->last())) {
-            if (auto tst = AsTest::Cast(branch->arg<0>().val())) {
+            // TODO: if we had native true/false values we could use constant
+            // folding to reduce the branch condition and then only remove
+            // branches which are constant true/false. But for now we look at
+            // the actual condition and do the constantfolding and branch
+            // removal in one go.
+
+            auto condition = branch->arg<0>().val();
+            if (auto tst = AsTest::Cast(condition)) {
                 // Try to detect constant branch conditions and mark such
                 // branches for removal
                 auto cnst = isConst(tst->arg<0>().val());
@@ -105,27 +124,24 @@ void Constantfold::apply(RirCompiler& cmp, Closure* function) const {
                     branchRemoval.emplace(bb, a == b);
                 });
             }
+
+            if (auto isObj = IsObject::Cast(condition))
+                if (!isObj->arg<0>().val()->type.maybeObj())
+                    branchRemoval.emplace(bb, false);
         }
     });
 
-    std::vector<BB*> deleted;
+    std::unordered_set<BB*> toDelete;
     // Find all dead basic blocks
     for (auto e : branchRemoval) {
-        auto branch = e.first;
-        auto dead = e.second ? branch->next1 : branch->next0;
-        Visitor::run(dead, [&](BB* child) {
-            if (dead != branch && dom.dominates(child, dead))
-                deleted.push_back(child);
-        });
-        deleted.push_back(dead);
+        auto bb = e.first;
+        auto deadBranch = e.second ? bb->falseBranch() : bb->trueBranch();
+        deadBranch->collectDominated(toDelete, dom);
+        toDelete.insert(deadBranch);
     }
-    // Dead code can still appear as phi inputs in live blocks
-    Visitor::run(function->entry, [&](Instruction* i) {
-        if (auto phi = Phi::Cast(i)) {
-            phi->removeInputs(deleted);
-        }
-    });
-    // Remove the actual branch instruction
+
+    BBTransform::removeBBs(function, toDelete);
+
     for (auto e : branchRemoval) {
         auto branch = e.first;
         auto condition = e.second;
@@ -137,9 +153,6 @@ void Constantfold::apply(RirCompiler& cmp, Closure* function) const {
             branch->next1 = nullptr;
         }
     }
-    // Delete dead blocks
-    for (auto bb : deleted)
-        delete bb;
 }
 } // namespace pir
 } // namespace rir

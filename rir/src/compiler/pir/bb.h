@@ -3,9 +3,12 @@
 
 #include "pir.h"
 
+#include <unordered_set>
+
 namespace rir {
 namespace pir {
 
+class DominanceGraph;
 class Code;
 
 /*
@@ -64,6 +67,8 @@ class BB {
 
     void replace(Instrs::iterator it, Instruction* i);
 
+    void remove(Instruction* i);
+
     Instrs::iterator remove(Instrs::iterator it);
     Instrs::iterator moveToEnd(Instrs::iterator it, BB* other);
     Instrs::iterator moveToBegin(Instrs::iterator it, BB* other);
@@ -74,6 +79,10 @@ class BB {
 
     Instrs::iterator begin() { return instrs.begin(); }
     Instrs::iterator end() { return instrs.end(); }
+
+    Instrs::reverse_iterator rbegin() { return instrs.rbegin(); }
+    Instrs::reverse_iterator rend() { return instrs.rend(); }
+
     size_t size() const { return instrs.size(); }
     Instruction* at(size_t i) { return instrs[i]; }
 
@@ -108,6 +117,8 @@ class BB {
     // BBTransformer.
     BB* next0 = nullptr;
     BB* next1 = nullptr;
+
+    void collectDominated(std::unordered_set<BB*>& subs, DominanceGraph& dom);
 
   private:
     Instrs instrs;

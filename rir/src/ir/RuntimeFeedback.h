@@ -1,7 +1,6 @@
 #ifndef RIR_RUNTIME_FEEDBACK
 #define RIR_RUNTIME_FEEDBACK
 
-#include "../compiler/pir/value.h"
 #include "R/r.h"
 #include "common.h"
 #include <array>
@@ -68,15 +67,6 @@ struct ObservedValues {
             if (i == numTypes)
                 seen[numTypes++] = type;
         }
-    }
-
-    bool observedObject() {
-        for (const auto& record : seen) {
-            if (record.isObj()) {
-                return true;
-            }
-        }
-        return false;
     }
 };
 static_assert(sizeof(ObservedValues) == sizeof(uint32_t),

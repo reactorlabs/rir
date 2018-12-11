@@ -1,5 +1,4 @@
 #include "../pir/pir_impl.h"
-#include "../transform/replace.h"
 #include "../util/cfg.h"
 #include "../util/visitor.h"
 #include "pass_definitions.h"
@@ -9,7 +8,7 @@
 namespace rir {
 namespace pir {
 
-void DelayEnv::apply(RirCompiler&, Closure* function) const {
+void DelayEnv::apply(RirCompiler&, Closure* function, LogStream&) const {
     Visitor::run(function->entry, [&](BB* bb) {
         std::unordered_set<MkEnv*> done;
         MkEnv* envInstr;
@@ -71,31 +70,29 @@ void DelayEnv::apply(RirCompiler&, Closure* function) const {
                 it++;
             }
 
-            auto moveMkEnvToDeoptBranch = [&](BB* deoptBranch,
+            if (it == bb->end() || (it + 1) == bb->end())
+                break;
+
+            // Duplicate the mkEnv and stick the copied version in the deopt
+            // branch. This removes the deopt as a dependency from the actual
+            // mkenv.
+            auto copyMkEnvToDeoptBranch = [&](BB* deoptBranch,
                                               BB* fastPathBranch) {
                 auto newEnvInstr = envInstr->clone();
-                it = bb->insert(it, newEnvInstr);
-                envInstr->replaceUsesIn(newEnvInstr, fastPathBranch);
-                // Closure wrapper in MkEnv can be circular
-                Replace::usesOfValue(newEnvInstr, envInstr, newEnvInstr);
+                deoptBranch->insert(deoptBranch->begin(), newEnvInstr);
+                envInstr->replaceUsesIn(newEnvInstr, deoptBranch);
                 it = bb->moveToBegin(it, fastPathBranch);
-                it = bb->moveToBegin(it, deoptBranch);
             };
 
-            if (it != bb->end() && (it + 1) != bb->end()) {
-                auto branch = (*(it + 1))->branches();
-                if (envInstr && branch) {
-                    Deopt* deopt;
-                    if (!bb->falseBranch()->isEmpty() &&
-                        (deopt = Deopt::Cast(bb->falseBranch()->last()))) {
-                        moveMkEnvToDeoptBranch(bb->falseBranch(),
-                                               bb->trueBranch());
-                    } else if (!bb->trueBranch()->isEmpty() &&
-                               (deopt =
-                                    Deopt::Cast(bb->trueBranch()->last()))) {
-                        moveMkEnvToDeoptBranch(bb->trueBranch(),
-                                               bb->falseBranch());
-                    }
+            assert(envInstr);
+            auto branch = (*(it + 1))->branches();
+            if (branch) {
+                if (!bb->falseBranch()->isEmpty() &&
+                    Deopt::Cast(bb->falseBranch()->last())) {
+                    copyMkEnvToDeoptBranch(bb->falseBranch(), bb->trueBranch());
+                } else if (!bb->trueBranch()->isEmpty() &&
+                           Deopt::Cast(bb->trueBranch()->last())) {
+                    copyMkEnvToDeoptBranch(bb->trueBranch(), bb->falseBranch());
                 }
             }
         }

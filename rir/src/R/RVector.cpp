@@ -13,8 +13,8 @@ RVector::RVector(SEXP vector)
 
 SEXP RVectorIter::operator*() { return vector->at(pos); }
 
-RVector::RVector(size_t init_size) : size_(0), capacity_(slack) {
-    vector = Rf_allocVector(VECSXP, init_size);
+RVector::RVector(size_t init_size)
+    : size_(0), capacity_(slack), vector(Rf_allocVector(VECSXP, init_size)) {
     SETLENGTH(vector, 0);
     R_PreserveObject(vector);
 }

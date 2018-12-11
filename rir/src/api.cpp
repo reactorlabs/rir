@@ -29,32 +29,14 @@ REXPORT SEXP rir_disassemble(SEXP what, SEXP verbose) {
 
     std::cout << "* closure " << what << " (vtable " << t << ", env "
               << CLOENV(what) << ")\n";
-    for (size_t entry = 0; entry < t->capacity(); ++entry) {
-        if (!t->available(entry))
-            continue;
-        Function* f = t->at(entry);
+    for (size_t entry = 0; entry < t->size(); ++entry) {
+        Function* f = t->get(entry);
         std::cout << "= vtable slot <" << entry << "> (" << f << ", invoked "
                   << f->invocationCount() << ") =\n";
+        std::cout << "# ";
+        f->signature().print(std::cout);
+        std::cout << "\n";
         f->disassemble(std::cout);
-    }
-
-    return R_NilValue;
-}
-
-REXPORT SEXP rir_printInvocation(SEXP what) {
-    if (!what || TYPEOF(what) != CLOSXP)
-        Rf_error("Not a rir compiled code");
-    DispatchTable* t = DispatchTable::check(BODY(what));
-
-    if (!t)
-        Rf_error("Not a rir compiled code");
-
-    for (size_t entry = 0; entry < t->capacity(); ++entry) {
-        if (!t->available(entry))
-            continue;
-        Function* f = t->at(entry);
-        std::cout << "* slot <" << entry << "> invoked " << f->invocationCount()
-                  << " time(s)\n";
     }
 
     return R_NilValue;
@@ -88,26 +70,26 @@ REXPORT SEXP rir_markOptimize(SEXP what) {
         return R_NilValue;
     SEXP b = BODY(what);
     DispatchTable* dt = DispatchTable::unpack(b);
-    Function* fun = dt->first();
+    Function* fun = dt->baseline();
     fun->markOpt = true;
     return R_NilValue;
 }
 
 REXPORT SEXP rir_eval(SEXP what, SEXP env) {
-    Function* f = Function::check(what);
-    if (f == nullptr)
-        f = isValidClosureSEXP(what);
-    if (f == nullptr)
-        Rf_error("Not rir compiled code");
     SEXP lenv;
-    return evalRirCodeExtCaller(f->body(), globalContext(), &lenv);
+    if (Function* f = Function::check(what))
+        return evalRirCodeExtCaller(f->body(), globalContext(), &lenv);
+
+    if (isValidClosureSEXP(what))
+        return rirEval_f(BODY(what), env);
+
+    Rf_error("Not rir compiled code");
 }
 
 REXPORT SEXP rir_body(SEXP cls) {
-    ::Function* f = isValidClosureSEXP(cls);
-    if (f == nullptr)
+    if (!isValidClosureSEXP(cls))
         Rf_error("Not a valid rir compiled function");
-    return f->container();
+    return DispatchTable::unpack(BODY(cls))->baseline()->container();
 }
 
 REXPORT SEXP pir_debugFlags(
@@ -180,24 +162,21 @@ SEXP pirCompile(SEXP what, const std::string& name, pir::DebugOptions debug) {
     if (!DispatchTable::check(BODY(what))) {
         Rf_error("Cannot optimize compiled expression, only closure");
     }
-    assert(DispatchTable::unpack(BODY(what))->capacity() == 2 &&
-           "fix, support for more than 2 slots needed...");
-    if (DispatchTable::unpack(BODY(what))->available(1))
+    if (DispatchTable::unpack(BODY(what))->size() > 1)
         return what;
 
     PROTECT(what);
 
     bool dryRun = debug.includes(pir::DebugFlag::DryRun);
-    bool preserveVersions = debug.includes(pir::DebugFlag::PreserveVersions);
     // compile to pir
     pir::Module* m = new pir::Module;
     pir::StreamLogger logger(debug);
     logger.title("Compiling " + name);
     pir::Rir2PirCompiler cmp(m, logger);
-    cmp.compileClosure(what, name,
+    cmp.compileClosure(what, name, {},
                        [&](pir::Closure* c) {
                            logger.flush();
-                           cmp.optimizeModule(preserveVersions);
+                           cmp.optimizeModule();
 
                            // compile back to rir
                            pir::Pir2RirCompiler p2r(logger);
@@ -221,9 +200,9 @@ REXPORT SEXP rir_invocation_count(SEXP what) {
     auto dt = DispatchTable::check(BODY(what));
     assert(dt);
 
-    SEXP res = Rf_allocVector(INTSXP, dt->capacity());
-    for (size_t i = 0; i < dt->capacity(); ++i)
-        INTEGER(res)[i] = dt->available(i) ? dt->at(i)->invocationCount() : 0;
+    SEXP res = Rf_allocVector(INTSXP, dt->size());
+    for (size_t i = 0; i < dt->size(); ++i)
+        INTEGER(res)[i] = dt->get(i)->invocationCount();
 
     return res;
 }

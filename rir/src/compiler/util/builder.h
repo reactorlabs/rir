@@ -15,6 +15,7 @@ struct Code;
 namespace pir {
 
 class FrameState;
+class Checkpoint;
 class CallInstruction;
 struct RirStack;
 
@@ -44,8 +45,8 @@ class Builder {
 
     FrameState* registerFrameState(rir::Code* srcCode, Opcode* pos,
                                    const RirStack& stack);
-    void conditionalDeopt(Value* condition, rir::Code* srcCode, Opcode* pos,
-                          const RirStack& stack, bool deoptOnFalseBranch);
+    Checkpoint* addCheckpoint(rir::Code* srcCode, Opcode* pos,
+                              const RirStack& stack);
 
     // Use with care, let the builder keep track of BB. Prefer the highlevel
     // api above.

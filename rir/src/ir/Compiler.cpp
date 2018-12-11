@@ -390,7 +390,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
                         compileExpr(ctx, rhs);
                         // Keep a copy of rhs since its the result of this
                         // expression
-                        cs << BC::dup() << BC::setShared();
+                        cs << BC::dup() << BC::ensureNamed();
 
                         // Now load index and target
                         cs << BC::ldvar(target);
@@ -566,7 +566,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
            << nextBranch;
 
         if (ctx.loopNeedsContext()) {
-            cs << BC::endcontext();
+            cs << BC::endloop();
         } else {
             cs.remove(beginLoopPos);
         }
@@ -602,7 +602,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
            << nextBranch;
 
         if (ctx.loopNeedsContext()) {
-            cs << BC::endcontext();
+            cs << BC::endloop();
         } else {
             cs.remove(beginLoopPos);
         }
@@ -636,17 +636,11 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
         compileExpr(ctx, seq);
         cs << BC::setShared() << BC::forSeqSize() << BC::push((int)0);
 
-        std::vector<unsigned> pcs;
-
-        pcs.push_back(cs.currentPos());
+        auto beginLoopPos = cs.currentPos();
         cs << BC::beginloop(breakBranch)
            << loopBranch;
 
-        // Move context out of the way
-        pcs.push_back(cs.currentPos());
-        cs << BC::put(3);
-
-        cs << BC::inc() << BC::dup2() << BC::lt();
+        cs << BC::inc() << BC::ensureNamed() << BC::dup2() << BC::lt();
         // We know this is an int and won't do dispatch.
         // TODO: add a integer version of lt_
         cs.addSrc(R_NilValue);
@@ -657,12 +651,6 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
         // TODO: add a non-object version of extract2_1
         cs.addSrc(R_NilValue);
 
-        // Put context back
-        pcs.push_back(cs.currentPos());
-        cs << BC::pick(4);
-        pcs.push_back(cs.currentPos());
-        cs << BC::swap();
-
         // Set the loop variable
         cs << BC::stvar(sym);
 
@@ -671,17 +659,13 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
            << BC::br(loopBranch);
 
         cs << endForBranch;
-        // Put context back
-        pcs.push_back(cs.currentPos());
-        cs << BC::pick(3);
 
         cs << breakBranch;
 
         if (ctx.loopNeedsContext()) {
-            cs << BC::endcontext();
+            cs << BC::endloop();
         } else {
-            for (auto pc : pcs)
-                cs.remove(pc);
+            cs.remove(beginLoopPos);
         }
 
         cs << BC::pop() << BC::pop() << BC::pop() << BC::push(R_NilValue)
@@ -750,25 +734,29 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
         }
     }
 
+    // The code bellow hardwires any call to a function that also exists as a
+    // builtin in the global namespace. That is probably not the best idea and
+    // much broader than the unsound optimizations of the gnu R BC interpreter.
+    // Let's just disable that for now.
+    //
+    // SEXP builtin = fun->u.symsxp.value;
+    // if (TYPEOF(builtin) == BUILTINSXP) {
+    //     for (auto a = args.begin(); a != args.end(); ++a)
+    //         if (a.hasTag() || *a == R_DotsSymbol || *a == R_MissingArg)
+    //             return false;
 
-    SEXP builtin = fun->u.symsxp.value;
-    if (TYPEOF(builtin) == BUILTINSXP) {
-        for (auto a = args.begin(); a != args.end(); ++a)
-            if (a.hasTag() || *a == R_DotsSymbol || *a == R_MissingArg)
-                return false;
+    //     // Those are somehow overloaded in std libs
+    //     if (fun == symbol::standardGeneric)
+    //         return false;
 
-        // Those are somehow overloaded in std libs
-        if (fun == symbol::standardGeneric)
-            return false;
+    //     cs << BC::guardNamePrimitive(fun);
 
-        cs << BC::guardNamePrimitive(fun);
+    //     for (auto a : args)
+    //         compileExpr(ctx, a);
+    //     cs << BC::staticCall(args.length(), ast, builtin);
 
-        for (auto a : args)
-            compileExpr(ctx, a);
-        cs << BC::staticCall(args.length(), ast, builtin);
-
-        return true;
-    }
+    //     return true;
+    // }
 
 #define V(NESTED, name, Name)\
     if (fun == symbol::name) {\
@@ -834,10 +822,11 @@ void compileCall(Context& ctx, SEXP ast, SEXP fun, SEXP args) {
     }
     assert(callArgs.size() < BC::MAX_NUM_ARGS);
 
+    cs << BC::recordCall();
     if (hasNames) {
         cs << BC::callImplicit(callArgs, names, ast);
     } else {
-        cs << BC::recordCall() << BC::callImplicit(callArgs, ast);
+        cs << BC::callImplicit(callArgs, ast);
     }
 }
 
@@ -909,7 +898,8 @@ SEXP Compiler::finalize() {
     FunctionWriter function;
     Context ctx(function, preserve);
 
-    FunctionSignature* signature = new FunctionSignature();
+    FunctionSignature signature(FunctionSignature::CallerProvidedEnv,
+                                FunctionSignature::BaselineVersion);
 
     // Compile formals (if any) and create signature
     for (auto arg = RList(formals).begin(); arg != RList::end(); ++arg) {
@@ -919,16 +909,14 @@ SEXP Compiler::finalize() {
             auto compiled = compilePromise(ctx, *arg);
             function.addDefaultArg(compiled);
         }
-        signature->pushDefaultArgument();
+        signature.pushDefaultArgument();
     }
 
     ctx.push(exp, closureEnv);
     compileExpr(ctx, exp);
     ctx.cs() << BC::ret();
     auto body = ctx.pop();
-    function.finalize(body);
-
-    function.function()->signature = signature;
+    function.finalize(body, signature);
 
 #ifdef ENABLE_SLOWASSERT
     CodeVerifier::verifyFunctionLayout(function.function()->container(),

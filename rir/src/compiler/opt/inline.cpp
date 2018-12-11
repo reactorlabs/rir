@@ -1,6 +1,5 @@
 #include "../pir/pir_impl.h"
 #include "../transform/bb.h"
-#include "../transform/replace.h"
 #include "../util/cfg.h"
 #include "../util/visitor.h"
 #include "R/Funtab.h"
@@ -20,8 +19,17 @@ class TheInliner {
     Closure* function;
     explicit TheInliner(Closure* function) : function(function) {}
 
+    static constexpr size_t MAX_SIZE = 1024;
+    static constexpr size_t MAX_INLINEE_SIZE = 128;
+    static constexpr size_t MAX_FUEL = 5;
+
     void operator()() {
-        size_t fuel = 5;
+        size_t fuel = MAX_FUEL;
+
+        if (function->size() > MAX_SIZE)
+            return;
+
+        std::unordered_set<Closure*> skip;
 
         Visitor::run(function->entry, [&](BB* bb) {
             // Dangerous iterater usage, works since we do only update it in
@@ -35,7 +43,8 @@ class TheInliner {
 
                 FrameState* callerFrameState = nullptr;
                 if (auto call = Call::Cast(*it)) {
-                    auto mkcls = MkFunCls::Cast(call->cls()->baseValue());
+                    auto mkcls =
+                        MkFunCls::Cast(call->cls()->followCastsAndForce());
                     if (!mkcls)
                         continue;
                     inlinee = mkcls->fun;
@@ -50,14 +59,22 @@ class TheInliner {
                     if (inlinee->closureEnv() == Env::notClosed() &&
                         inlinee != function)
                         continue;
-                    // TODO: honestly I have no clue how namespaces work. For
-                    // now if we hit any env with attribs, we do not inline.
-                    if (ATTRIB(inlinee->closureEnv()->rho) != R_NilValue ||
-                        R_IsNamespaceEnv(inlinee->closureEnv()->rho))
-                        continue;
+                    assert(inlinee->argNames.size() == call->nCallArgs());
                     staticEnv = inlinee->closureEnv();
                     callerFrameState = call->frameState();
                 } else {
+                    continue;
+                }
+
+                if (skip.count(inlinee))
+                    continue;
+
+                // Recursive inline only once
+                if (inlinee == function)
+                    skip.insert(inlinee);
+
+                if (inlinee->size() > MAX_INLINEE_SIZE) {
+                    skip.insert(inlinee);
                     continue;
                 }
 
@@ -72,7 +89,8 @@ class TheInliner {
                     [&](Value* v) { arguments.push_back(v); });
 
                 // Clone the function
-                BB* copy = BBTransform::clone(inlinee->entry, function);
+                BB* copy =
+                    BBTransform::clone(inlinee->entry, function, function);
 
                 bool needsEnvPatching = inlinee->closureEnv() != staticEnv;
 
@@ -181,9 +199,9 @@ class TheInliner {
                                         function->promises.at(newPromId[id]));
                                 } else {
                                     Promise* clone = function->createProm(
-                                        mk->prom()->srcPoolIdx);
+                                        mk->prom()->srcPoolIdx());
                                     BB* promCopy = BBTransform::clone(
-                                        mk->prom()->entry, clone);
+                                        mk->prom()->entry, clone, function);
                                     clone->entry = promCopy;
                                     newPromId[id] = clone->id;
                                     copiedPromise[id] = true;
@@ -215,7 +233,7 @@ class TheInliner {
 namespace rir {
 namespace pir {
 
-void Inline::apply(RirCompiler&, Closure* function) const {
+void Inline::apply(RirCompiler&, Closure* function, LogStream&) const {
     TheInliner s(function);
     s();
 }

@@ -222,10 +222,11 @@ class BC {
             proms.push_back(immediate.arg_idx);
             break;
         case Opcode::named_call_implicit_:
-        case Opcode::call_implicit_:
-            for (auto a : callExtra().immediateCallArguments)
-                proms.push_back(a);
+        case Opcode::call_implicit_: {
+            auto& in = callExtra().immediateCallArguments;
+            std::copy(in.begin(), in.end(), std::back_inserter(proms));
             break;
+        }
         default: {}
         }
     }
@@ -325,7 +326,7 @@ class BC {
     inline static BC alloc(int type);
     inline static BC asbool();
     inline static BC beginloop(Jmp);
-    inline static BC endcontext();
+    inline static BC endloop();
     inline static BC brtrue(Jmp);
     inline static BC brfalse(Jmp);
     inline static BC br(Jmp);
@@ -357,6 +358,7 @@ class BC {
     inline static BC colon();
     inline static BC makeUnique();
     inline static BC setShared();
+    inline static BC ensureNamed();
     inline static BC asLogical();
     inline static BC lglOr();
     inline static BC lglAnd();
@@ -666,6 +668,7 @@ SIMPLE_INSTRUCTIONS(V, _)
 #undef V
         case Opcode::make_unique_:
         case Opcode::set_shared_:
+        case Opcode::ensure_named_:
         case Opcode::aslogical_:
         case Opcode::lgl_and_:
         case Opcode::lgl_or_:
@@ -693,7 +696,7 @@ SIMPLE_INSTRUCTIONS(V, _)
         case Opcode::isfun_:
         case Opcode::invisible_:
         case Opcode::visible_:
-        case Opcode::endcontext_:
+        case Opcode::endloop_:
         case Opcode::subassign1_:
         case Opcode::subassign2_:
         case Opcode::length_:
