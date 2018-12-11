@@ -47,6 +47,7 @@ void Configurations::defaultOptimizations() {
         optimizations.push_back(new pir::DelayInstr());
         optimizations.push_back(new pir::ElideEnv());
         optimizations.push_back(new pir::DelayEnv());
+        optimizations.push_back(new pir::OptimizeAssumptions());
     };
 
     for (int i = 0; i < 3; ++i) {

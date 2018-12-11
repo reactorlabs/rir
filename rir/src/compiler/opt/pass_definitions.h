@@ -105,6 +105,8 @@ class PASS(CleanupCheckpoints, "Cleanup unused checkpoints");
  */
 class PASS(CleanupFramestate, "Cleanup framestates unused by checkpoints");
 
+class PASS(OptimizeAssumptions, "Optimize Assumptions and checkpoints");
+
 } // namespace pir
 } // namespace rir
 
