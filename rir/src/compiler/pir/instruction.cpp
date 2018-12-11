@@ -1,6 +1,7 @@
 #include "instruction.h"
 #include "pir_impl.h"
 
+#include "../util/safe_builtins_list.h"
 #include "../util/visitor.h"
 #include "R/Funtab.h"
 #include "utils/Pool.h"
@@ -314,6 +315,15 @@ CallBuiltin::CallBuiltin(Value* env, SEXP builtin,
       builtinId(getBuiltinNr(builtin)) {
     for (unsigned i = 0; i < args.size(); ++i)
         this->pushArg(args[i], PirType::val());
+}
+
+Instruction* CallBuiltinFactory::Create(Value* callerEnv, SEXP builtin,
+                                        const std::vector<Value*>& args,
+                                        unsigned srcIdx) {
+    if (CallSafeBuiltinsList::contains(builtin))
+        return new CallSafeBuiltin(builtin, args, srcIdx);
+    else
+        return new CallBuiltin(callerEnv, builtin, args, srcIdx);
 }
 
 static void printCallArgs(std::ostream& out, CallInstruction* call) {

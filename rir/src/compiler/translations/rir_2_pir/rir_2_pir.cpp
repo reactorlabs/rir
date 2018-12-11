@@ -277,6 +277,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                 push(insert(new Call(insert.env, callee, args, fs, ast)));
             }
         };
+        auto ldfun = LdFun::Cast(callee);
         if (monomorphic && isValidClosureSEXP(monomorphic)) {
             // Currently we can only use StaticCall if we have exactly the right
             // number of arguments.
@@ -297,7 +298,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             }
 
             std::string name = "";
-            if (auto ldfun = LdFun::Cast(callee))
+            if (ldfun)
                 name = CHAR(PRINTNAME(ldfun->varName));
             AssumptionsSet asmpt(Assumptions::CorrectOrderOfArguments);
             asmpt.set(Assumptions::CorrectNumberOfArguments);
@@ -305,7 +306,10 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                 monomorphic, name, asmpt,
                 [&](Closure* f) {
                     Value* expected = insert(new LdConst(monomorphic));
-                    Value* t = insert(new Identical(callee, expected));
+                    Value* given = callee;
+                    if (ldfun)
+                        given = insert(new LdVar(ldfun->varName, ldfun->env()));
+                    Value* t = insert(new Identical(given, expected));
                     auto cp = insert.addCheckpoint(srcCode, pos, stack);
                     insert(new Assume(t, cp));
                     pop();
@@ -314,6 +318,17 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                         new StaticCall(insert.env, f, args, monomorphic, fs, ast)));
                 },
                 insertGenericCall);
+        } else if (monomorphic && TYPEOF(monomorphic) == BUILTINSXP) {
+            Value* expected = insert(new LdConst(monomorphic));
+            Value* given = callee;
+            if (ldfun)
+                given = insert(new LdVar(ldfun->varName, ldfun->env()));
+            Value* t = insert(new Identical(given, expected));
+            auto cp = insert.addCheckpoint(srcCode, pos, stack);
+            insert(new Assume(t, cp));
+            pop();
+            push(insert(
+                CallBuiltinFactory::Create(env, monomorphic, args, ast)));
         } else {
             insertGenericCall();
         }
@@ -366,13 +381,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             args[n - i - 1] = pop();
 
         if (TYPEOF(target) == BUILTINSXP) {
-            // TODO: compile a list of safe builtins
-            static int vector = findBuiltin("vector");
-
-            if (getBuiltinNr(target) == vector)
-                push(insert(new CallSafeBuiltin(target, args, ast)));
-            else
-                push(insert(new CallBuiltin(env, target, args, ast)));
+            push(insert(CallBuiltinFactory::Create(env, target, args, ast)));
         } else {
             assert(TYPEOF(target) == CLOSXP);
             if (!isValidClosureSEXP(target)) {
