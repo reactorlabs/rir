@@ -16,14 +16,14 @@ rir::Configurations* configurations;
   If the given closure is RIR function, returns its Function object, otherwise
   returns nullptr.
  */
-Function* isValidClosureSEXP(SEXP closure) {
+bool isValidClosureSEXP(SEXP closure) {
     if (TYPEOF(closure) != CLOSXP) {
-        return nullptr;
+        return false;
     }
-    if (auto t = DispatchTable::check(BODY(closure))) {
-        return t->first();
+    if (DispatchTable::check(BODY(closure))) {
+        return true;
     }
-    return nullptr;
+    return false;
 }
 
 void initializeRuntime() {

@@ -18,30 +18,56 @@ typedef SEXP DispatchTableEntry;
 #pragma pack(1)
 struct DispatchTable
     : public RirRuntimeObject<DispatchTable, DISPATCH_TABLE_MAGIC> {
-    bool available(size_t i) {
+
+    size_t size() { return size_; }
+
+    Function* get(size_t i) {
         assert(i < capacity());
-        return entry[i];
+        return Function::unpack(getEntry(i));
     }
 
-    Function* at(size_t i) { return Function::unpack(entry[i]); }
+    Function* baseline() { return Function::unpack(getEntry(0)); }
 
-    void put(size_t i, Function* f) {
-        assert(i < capacity());
-        setEntry(i, f->container());
+    void baseline(Function* f) {
+        assert(f->signature().optimization ==
+               FunctionSignature::BaselineVersion);
+        setEntry(0, f->container());
+        if (size() == 0)
+            size_++;
     }
 
-    Function* first() {
-        assert(info.gc_area_length > 0);
-        return Function::unpack(entry[0]);
+    bool contains(const pir::AssumptionsSet& assumptions) {
+        for (size_t i = 1; i < size(); ++i)
+            if (get(i)->signature().assumptions == assumptions)
+                return true;
+        return false;
     }
 
-    Function* getMatching(FunctionSignature* sig) {
-        // TODO: Actually do some matching when we have multiple signatures.
-        return first();
+    // insert function ordered by increasing number of assumptions
+    void insert(Function* fun) {
+        // TODO: we might need to grow the DT here!
+        assert(size() > 0);
+        assert(fun->signature().optimization !=
+               FunctionSignature::BaselineVersion);
+        auto assumptions = fun->signature().assumptions;
+        assert(size() < capacity());
+        size_t i = 1;
+        for (; i < size(); ++i) {
+            if (get(i)->signature().assumptions == assumptions) {
+                setEntry(i, fun->container());
+                return;
+            }
+            if (!assumptions.includes(get(i)->signature().assumptions))
+                break;
+        }
+        size_++;
+        for (size_t j = size() - 1; j > i; --j) {
+            setEntry(j, getEntry(j - 1));
+        }
+        setEntry(i, fun->container());
     }
 
-    static DispatchTable* create(size_t capacity = 2) {
-        // capacity default is 2 for now (rir and pir versions)
+    static DispatchTable* create(size_t capacity = 10) {
         size_t size =
             sizeof(DispatchTable) + (capacity * sizeof(DispatchTableEntry));
         SEXP s = Rf_allocVector(EXTERNALSXP, size);
@@ -59,7 +85,7 @@ struct DispatchTable
               // GC area is just the pointers in the entry array
               cap) {}
 
-    DispatchTableEntry entry[];
+    size_t size_ = 0;
 };
 #pragma pack(pop)
 }

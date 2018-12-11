@@ -42,13 +42,14 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
     static constexpr size_t NUM_PTRS = 3;
 
     Function(size_t functionSize, SEXP body_,
-             const std::vector<SEXP>& defaultArgs)
+             const std::vector<SEXP>& defaultArgs,
+             const FunctionSignature& signature)
         : RirRuntimeObject(
               // GC area starts at &locals and goes to the end of defaultArg_
               sizeof(Function) - NUM_PTRS * sizeof(FunctionSEXP),
               NUM_PTRS + defaultArgs.size()),
-          size(functionSize), signature(nullptr), deopt(false), markOpt(false),
-          numArgs(defaultArgs.size()) {
+          size(functionSize), deopt(false), markOpt(false),
+          numArgs(defaultArgs.size()), signature_(signature) {
         origin(nullptr);
         next(nullptr);
         for (size_t i = 0; i < numArgs; ++i)
@@ -80,15 +81,17 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
 
     unsigned size; /// Size, in bytes, of the function and its data
 
-    FunctionSignature* signature; /// pointer to this version's signature
-
     unsigned deopt : 1;
     unsigned markOpt : 1;
     unsigned spare : 30;
 
     unsigned numArgs;
 
+    const FunctionSignature& signature() { return signature_; }
+
   private:
+    FunctionSignature signature_; /// pointer to this version's signature
+
     // !!! SEXPs traceable by the GC must be declared here !!!
     // locals contains: origin, next, body
     CodeSEXP locals[NUM_PTRS];

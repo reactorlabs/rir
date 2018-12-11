@@ -71,13 +71,18 @@ void LogStream::pirOptimizationsFinished(Closure* closure) {
     }
 }
 
-void LogStream::pirOptimizations(Closure* closure, const std::string& pass,
-                                 size_t passnr) {
+void LogStream::pirOptimizationsHeader(Closure* closure,
+                                       const std::string& pass, size_t passnr) {
     if (options.includes(DebugFlag::PrintOptimizationPasses)) {
         preparePrint();
         std::stringstream ss;
         ss << pass << ": == " << passnr;
         section(ss.str());
+    }
+}
+
+void LogStream::pirOptimizations(Closure* closure) {
+    if (options.includes(DebugFlag::PrintOptimizationPasses)) {
         closure->print(out, tty());
     }
 }

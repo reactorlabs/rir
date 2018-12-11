@@ -7,7 +7,7 @@
 namespace rir {
 namespace pir {
 
-BB* BBTransform::clone(BB* src, Code* target) {
+BB* BBTransform::clone(BB* src, Code* target, Closure* targetClosure) {
     std::vector<BB*> bbs;
 
     // Copy instructions and remember old -> new instruction map.
@@ -31,6 +31,7 @@ BB* BBTransform::clone(BB* src, Code* target) {
             bbs[bb->id]->next1 = bbs[bb->next1->id];
     });
 
+    std::unordered_map<Promise*, Promise*> promMap;
     // Relocate argument pointers using old -> new map
     BB* newEntry = bbs[src->id];
     Visitor::run(newEntry, [&](Instruction* i) {
@@ -45,6 +46,18 @@ BB* BBTransform::clone(BB* src, Code* target) {
                 arg.val() = relocation_table.at(arg.val());
             }
         });
+        if (auto mk = MkArg::Cast(i)) {
+            Promise* p = mk->prom();
+            if (p->fun != targetClosure) {
+                if (promMap.count(p)) {
+                    mk->updatePromise(promMap.at(p));
+                } else {
+                    auto c = targetClosure->createProm(p->srcPoolIdx());
+                    c->entry = clone(p->entry, c, targetClosure);
+                    mk->updatePromise(c);
+                }
+            }
+        }
     });
 
     return newEntry;
@@ -97,26 +110,33 @@ Value* BBTransform::forInline(BB* inlinee, BB* splice) {
 }
 
 BB* BBTransform::lowerExpect(Code* code, BB* src, BB::Instrs::iterator position,
-                             Value* condition, BB* deoptBlock) {
+                             Value* condition, bool expected, BB* deoptBlock) {
     auto split = BBTransform::split(code->nextBBId++, src, position + 1, code);
     src->replace(position, new Branch(condition));
-    src->next0 = deoptBlock;
-    src->next1 = split;
+    if (expected) {
+        src->next1 = deoptBlock;
+        src->next0 = split;
+    } else {
+        src->next0 = deoptBlock;
+        src->next1 = split;
+    }
     return split;
 }
 
-BB* BBTransform::addCheckpoint(Code* code, BB* src,
-                               BB::Instrs::iterator position) {
-    FrameState* framestate = FrameState::Cast(*position);
-    assert(framestate);
-    auto deoptBlock = new BB(code, code->nextBBId++);
-    position = src->moveToBegin(position, deoptBlock);
-    deoptBlock->append(new Deopt(framestate));
-    auto split = BBTransform::split(code->nextBBId++, src, position, code);
-    src->append(new Checkpoint());
-    src->next0 = split;
-    src->next1 = deoptBlock;
-    return split;
+void BBTransform::removeBBs(Code* code,
+                            const std::unordered_set<BB*>& toDelete) {
+    // Dead code can still appear as phi inputs in live blocks
+    Visitor::run(code->entry, [&](BB* bb) {
+        for (auto i : *bb) {
+            if (auto phi = Phi::Cast(i)) {
+                phi->removeInputs(toDelete);
+            }
+        }
+    });
+    for (auto bb : toDelete) {
+        delete bb;
+    }
 }
+
 } // namespace pir
 } // namespace rir

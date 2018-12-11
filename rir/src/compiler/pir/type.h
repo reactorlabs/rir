@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "R/r_incl.h"
+#include "ir/RuntimeFeedback.h"
 #include "utils/EnumSet.h"
 
 namespace rir {
@@ -81,7 +82,8 @@ enum class TypeFlags : uint8_t {
 
     lazy,
     missing,
-    is_scalar,
+    isScalar,
+    maybeObject,
     rtype,
 
     FIRST = lazy,
@@ -118,7 +120,18 @@ struct PirType {
     };
     Type t_;
 
-    static FlagSet defaultRTypeFlags() { return FlagSet() | TypeFlags::rtype; }
+    static FlagSet defaultRTypeFlags() {
+        return FlagSet() | TypeFlags::rtype | TypeFlags::maybeObject;
+    }
+    static FlagSet optimisticRTypeFlags() {
+        return FlagSet() | TypeFlags::rtype | TypeFlags::isScalar;
+    }
+
+    static PirType optimistic() {
+        PirType t;
+        t.flags_ = optimisticRTypeFlags();
+        return t;
+    }
 
     PirType() : PirType(RTypeSet()) {}
     // cppcheck-suppress noExplicitConstructor
@@ -140,6 +153,15 @@ struct PirType {
             t_.n = o.t_.n;
         return *this;
     }
+
+    RIR_INLINE bool merge(const PirType& other) {
+        PirType t = *this;
+        *this = *this | other;
+        return *this != t;
+    }
+
+    void merge(const ObservedValues& other);
+    void merge(SEXPTYPE t);
 
     static PirType num() {
         return PirType(RType::logical) | RType::integer | RType::real |
@@ -165,7 +187,7 @@ struct PirType {
         return flags_.includes(TypeFlags::lazy);
     }
     RIR_INLINE bool isScalar() const {
-        return flags_.includes(TypeFlags::is_scalar);
+        return flags_.includes(TypeFlags::isScalar);
     }
     RIR_INLINE bool isRType() const {
         return flags_.includes(TypeFlags::rtype);
@@ -173,11 +195,21 @@ struct PirType {
     RIR_INLINE bool maybe(RType type) const {
         return isRType() && t_.r.includes(type);
     }
+    RIR_INLINE bool maybeObj() const {
+        return isRType() && flags_.includes(TypeFlags::maybeObject);
+    }
+
+    PirType notObject() const {
+        assert(isRType());
+        PirType t = *this;
+        t.flags_.reset(TypeFlags::maybeObject);
+        return t;
+    }
 
     RIR_INLINE PirType scalar() const {
         assert(isRType());
         PirType t = *this;
-        t.flags_.set(TypeFlags::is_scalar);
+        t.flags_.set(TypeFlags::isScalar);
         return t;
     }
 
@@ -200,6 +232,10 @@ struct PirType {
         return PirType(t_.r);
     }
 
+    RIR_INLINE void setNotObject() { *this = notObject(); }
+
+    RIR_INLINE void setScalar() { *this = scalar(); }
+
     static const PirType voyd() { return NativeTypeSet(); }
 
     static const PirType missing() { return bottom().orMissing(); }
@@ -217,7 +253,7 @@ struct PirType {
 
         r.flags_ = flags_ | o.flags_;
         if (!(isScalar() && o.isScalar()))
-            r.flags_.reset(TypeFlags::is_scalar);
+            r.flags_.reset(TypeFlags::isScalar);
 
         return r;
     }
@@ -368,6 +404,8 @@ inline std::ostream& operator<<(std::ostream& out, PirType t) {
         out << "^";
     if (t.maybeMissing())
         out << "?";
+    if (!t.maybeObj())
+        out << "'";
 
     return out;
 }

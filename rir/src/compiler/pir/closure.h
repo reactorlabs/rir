@@ -11,15 +11,6 @@
 namespace rir {
 namespace pir {
 
-struct ProfiledValues {
-    std::unordered_map<Value*, ObservedCallees> callTargets;
-    std::unordered_map<Value*, ObservedValues> types;
-
-    bool hasTypesFor(Value* value) {
-        return types.count(value) && types.at(value).numTypes;
-    }
-};
-
 /*
  * Closure
  *
@@ -39,13 +30,13 @@ class Closure : public Code {
     }
 
     Closure(const std::string& name, std::initializer_list<SEXP> a, Env* env,
-            rir::Function* function)
+            rir::Function* function, const AssumptionsSet& assumptions)
         : env(env), function(function), name(uniqueName(this, name)),
-          argNames(a) {}
+          argNames(a), assumptions(assumptions) {}
     Closure(const std::string& name, const std::vector<SEXP>& a, Env* env,
-            rir::Function* function)
+            rir::Function* function, const AssumptionsSet& assumptions)
         : env(env), function(function), name(uniqueName(this, name)),
-          argNames(a) {}
+          argNames(a), assumptions(assumptions) {}
 
     Env* env;
     rir::Function* function;
@@ -58,7 +49,8 @@ class Closure : public Code {
 
     std::vector<SEXP> argNames;
     std::vector<Promise*> promises;
-    ProfiledValues runtimeFeedback;
+
+    AssumptionsSet assumptions;
 
     size_t nargs() const { return argNames.size(); }
 
@@ -82,6 +74,10 @@ class Closure : public Code {
             if (p)
                 it(p);
     }
+
+    size_t promiseId(Code* c) const;
+
+    size_t size() const override final;
 };
 
 } // namespace pir

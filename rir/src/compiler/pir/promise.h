@@ -8,9 +8,8 @@ namespace pir {
 
 class Promise : public Code {
   public:
-    unsigned id;
+    const unsigned id;
     Closure* fun;
-    unsigned srcPoolIdx;
 
     void print(std::ostream& out, bool tty) const {
         out << "Prom " << id << ":\n";
@@ -22,10 +21,12 @@ class Promise : public Code {
         return out;
     }
 
+    unsigned srcPoolIdx() const;
+
   private:
+    const unsigned srcPoolIdx_;
     friend class Closure;
-    Promise(Closure* fun, unsigned id, unsigned src)
-        : id(id), fun(fun), srcPoolIdx(src) {}
+    Promise(Closure* fun, unsigned id, unsigned src);
 };
 
 } // namespace pir

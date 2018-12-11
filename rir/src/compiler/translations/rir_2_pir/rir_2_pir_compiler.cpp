@@ -13,6 +13,12 @@
 namespace rir {
 namespace pir {
 
+// Currently PIR optimized functions cannot handle too many arguments or
+// mis-ordered arguments. The caller needs to take care.
+const AssumptionsSet Rir2PirCompiler::minimalAssumptions =
+    AssumptionsSet() | Assumptions::CorrectOrderOfArguments |
+    Assumptions::MaxNumberOfArguments;
+
 Rir2PirCompiler::Rir2PirCompiler(Module* module, StreamLogger& logger)
     : RirCompiler(module), logger(logger) {
     for (auto& optimization : pirConfigurations()->pirOptimizations()) {
@@ -21,16 +27,17 @@ Rir2PirCompiler::Rir2PirCompiler(Module* module, StreamLogger& logger)
 }
 
 void Rir2PirCompiler::compileClosure(SEXP closure, const std::string& name,
+                                     const AssumptionsSet& assumptions,
                                      MaybeCls success, Maybe fail) {
     assert(isValidClosureSEXP(closure));
 
     DispatchTable* tbl = DispatchTable::unpack(BODY(closure));
 
-    if (tbl->available(1))
+    if (tbl->size() > 1)
         logger.warn("Closure already compiled to PIR");
 
     FormalArgs formals(FORMALS(closure));
-    rir::Function* srcFunction = tbl->first();
+    rir::Function* srcFunction = tbl->baseline();
     auto env = module->getEnv(CLOENV(closure));
     assert(env != Env::notClosed());
     auto frame = RList(FRAME(CLOENV(closure)));
@@ -43,88 +50,88 @@ void Rir2PirCompiler::compileClosure(SEXP closure, const std::string& name,
                 closureName = CHAR(PRINTNAME(e.tag()));
         }
     }
-    compileClosure(srcFunction, closureName, formals, env, success, fail);
+    OptimizationContext context(env, assumptions | minimalAssumptions);
+    compileClosure(srcFunction, closureName, formals, context, success, fail);
 }
 
 void Rir2PirCompiler::compileFunction(rir::Function* srcFunction,
                                       const std::string& name,
                                       FormalArgs const& formals,
+                                      const AssumptionsSet& assumptions,
                                       MaybeCls success, Maybe fail) {
-    compileClosure(srcFunction, name, formals, Env::notClosed(), success, fail);
+    OptimizationContext context(Env::notClosed(),
+                                assumptions | minimalAssumptions);
+    compileClosure(srcFunction, name, formals, context, success, fail);
 }
 
 void Rir2PirCompiler::compileClosure(rir::Function* srcFunction,
                                      const std::string& name,
-                                     FormalArgs const& formals, Env* closureEnv,
+                                     FormalArgs const& formals,
+                                     const OptimizationContext& ctx,
                                      MaybeCls success, Maybe fail) {
 
     // TODO: Support default arguments and dots
     if (formals.hasDefaultArgs) {
-        logger.warn("no support for default args");
-        return fail();
+        if (!ctx.assumptions.includes(Assumptions::CorrectNumberOfArguments)) {
+            logger.warn("no support for default args");
+            return fail();
+        }
     }
     if (formals.hasDots) {
         logger.warn("no support for ...");
         return fail();
     }
 
-    bool failed = false;
     // TODO: if compilation fails, we should remember that somehow. Otherwise
     // we will continue on trying to compile the same function over and over
     // again.
-    module->createIfMissing(name, srcFunction, formals.names, closureEnv,
-                            [&](Closure* pirFunction) {
-                                Builder builder(pirFunction, closureEnv);
-                                auto& log = logger.begin(pirFunction);
-                                Rir2Pir rir2pir(*this, srcFunction, log, name);
+    if (module->exists(srcFunction, ctx))
+        return success(module->get(srcFunction, ctx));
 
-                                if (rir2pir.tryCompile(builder)) {
-                                    log.compilationEarlyPir(pirFunction);
-                                    if (!Verify::apply(pirFunction)) {
-                                        failed = true;
-                                        log.failed("rir2pir failed to verify");
-                                        log.flush();
-                                        logger.close(pirFunction);
-                                        assert(false);
-                                        return false;
-                                    }
-                                    log.flush();
-                                    return true;
-                                }
-                                log.failed("rir2pir aborted");
-                                failed = true;
-                                log.flush();
-                                logger.close(pirFunction);
-                                return false;
-                            });
+    auto closure = module->declare(name, srcFunction, ctx, formals.names);
 
-    if (failed)
-        fail();
-    else
-        success(module->get(Module::FunctionAndEnv(srcFunction, closureEnv)));
+    Builder builder(closure, ctx.environment);
+    auto& log = logger.begin(closure);
+    Rir2Pir rir2pir(*this, srcFunction, log, name);
+
+    if (rir2pir.tryCompile(builder)) {
+        log.compilationEarlyPir(closure);
+        if (Verify::apply(closure)) {
+            log.flush();
+            return success(closure);
+        }
+
+        log.failed("rir2pir failed to verify");
+        log.flush();
+        logger.close(closure);
+        assert(false);
+    }
+
+    log.failed("rir2pir aborted");
+    log.flush();
+    logger.close(closure);
+    module->erase(srcFunction, ctx);
+    return fail();
 }
 
-void Rir2PirCompiler::optimizeModule(bool preserveVersions) {
+void Rir2PirCompiler::optimizeModule() {
     logger.flush();
     size_t passnr = 0;
     for (auto& translation : translations) {
-        module->eachPirFunction([&](Module::VersionedClosure& v) {
-            auto f = v.current();
-            if (preserveVersions)
-                v.saveVersion();
-
-            auto& log = logger.get(f);
-            translation->apply(*this, f);
-            log.pirOptimizations(f, translation->getName(), passnr++);
+        module->eachPirFunction([&](Closure* c) {
+            auto& log = logger.get(c);
+            log.pirOptimizationsHeader(c, translation->getName(), passnr++);
+            translation->apply(*this, c, log);
+            log.pirOptimizations(c);
 
 #ifdef ENABLE_SLOWASSERT
-            assert(Verify::apply(f));
+            assert(Verify::apply(c));
 #endif
         });
     }
-    module->eachPirFunction([&](Module::VersionedClosure& v) {
-        logger.get(v.current()).pirOptimizationsFinished(v.current());
-        assert(Verify::apply(v.current()));
+    module->eachPirFunction([&](Closure* c) {
+        logger.get(c).pirOptimizationsFinished(c);
+        assert(Verify::apply(c));
     });
     logger.flush();
 }

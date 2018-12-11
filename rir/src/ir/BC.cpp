@@ -136,6 +136,7 @@ void BC::write(CodeStream& cs) const {
     case Opcode::printInvocation_:
     case Opcode::make_unique_:
     case Opcode::set_shared_:
+    case Opcode::ensure_named_:
     case Opcode::aslogical_:
     case Opcode::lgl_and_:
     case Opcode::lgl_or_:
@@ -163,7 +164,7 @@ void BC::write(CodeStream& cs) const {
     case Opcode::isfun_:
     case Opcode::invisible_:
     case Opcode::visible_:
-    case Opcode::endcontext_:
+    case Opcode::endloop_:
     case Opcode::subassign1_:
     case Opcode::subassign2_:
     case Opcode::isobj_:
@@ -348,6 +349,7 @@ void BC::print(std::ostream& out) const {
     case Opcode::printInvocation_:
     case Opcode::make_unique_:
     case Opcode::set_shared_:
+    case Opcode::ensure_named_:
     case Opcode::dup_:
     case Opcode::inc_:
     case Opcode::dup2_:
@@ -383,7 +385,7 @@ void BC::print(std::ostream& out) const {
     case Opcode::length_:
     case Opcode::names_:
     case Opcode::set_names_:
-    case Opcode::endcontext_:
+    case Opcode::endloop_:
     case Opcode::aslogical_:
     case Opcode::lgl_or_:
     case Opcode::lgl_and_:

@@ -20,7 +20,7 @@ class TheCleanup {
     void operator()() {
         std::unordered_set<size_t> used_p;
         std::unordered_map<BB*, std::unordered_set<Phi*>> usedBB;
-        std::unordered_map<SetShared*, int> isShared;
+        std::unordered_map<Instruction*, int> isShared;
         std::deque<Promise*> todo;
 
         Visitor::run(function->entry, [&](BB* bb) {
@@ -62,20 +62,24 @@ class TheCleanup {
                         phi->replaceUsesWith(*phin.begin());
                         next = bb->remove(ip);
                     } else {
-                        phi->updateType();
                         for (auto curBB : phi->input)
                             usedBB[curBB].insert(phi);
                     }
                 } else if (auto arg = MkArg::Cast(i)) {
-                    used_p.insert(arg->prom()->id);
-                    todo.push_back(arg->prom());
-                } else if (auto shared = SetShared::Cast(i)) {
+                    if (arg->unused()) {
+                        removed = true;
+                        next = bb->remove(ip);
+                    } else {
+                        used_p.insert(arg->prom()->id);
+                        todo.push_back(arg->prom());
+                    }
+                } else if (SetShared::Cast(i) || EnsureNamed::Cast(i)) {
                     if (i->unused()) {
                         removed = true;
                         next = bb->remove(ip);
                     } else {
-                        if (!isShared.count(shared))
-                            isShared[shared] = 0;
+                        if (!isShared.count(i))
+                            isShared[i] = 0;
                     }
                 } else if (auto tst = AsTest::Cast(i)) {
                     // Converting to bool might trow warning if the size is not
@@ -102,16 +106,35 @@ class TheCleanup {
                         }
                     }
                 }
+                // CallImplicit is only added in the lowering phase. The unused
+                // promise deletion would be broken, if we were to use
+                // CallImplicit in the middle-end, since this instruction can
+                // also point to promises.
+                assert(!CallImplicit::Cast(i));
                 if (!removed) {
-                    i->eachArg([&](Value* arg) {
-                        if (auto shared = SetShared::Cast(arg)) {
-                            // Count how many times a shared value is used. If
-                            // it leaks, it really needs to be marked shared.
-                            isShared[shared]++;
-                            if (i->leaksArg(arg))
-                                isShared[shared]++;
-                        }
-                    });
+                    if (!Phi::Cast(i)) {
+                        i->eachArg([&](Value* arg) {
+                            auto argi = Instruction::Cast(arg);
+                            if (argi && (SetShared::Cast(argi) ||
+                                         EnsureNamed::Cast(argi))) {
+                                // Count how many times a shared value is used.
+                                isShared[argi]++;
+                                // If it leaks, it really needs to be marked
+                                // shared.
+                                if (i->leaksArg(argi))
+                                    isShared[argi]++;
+                                // if a value is created before and used in a
+                                // loop, then this represents of course also
+                                // multiple uses.
+                                // For now we are very conservative and only
+                                // support use and creation in the same BB.
+                                // TODO: make a real static named count pass!
+                                if (argi->bb() != bb)
+                                    isShared[argi]++;
+                            }
+                        });
+                    }
+                    i->updateType();
                 }
                 ip = next;
             }
@@ -121,15 +144,14 @@ class TheCleanup {
         // shared
         for (auto shared : isShared) {
             if (shared.second <= 1)
-                shared.first->replaceUsesWith(shared.first->arg<0>().val());
+                shared.first->replaceUsesWith(shared.first->arg(0).val());
         }
 
         while (!todo.empty()) {
             Promise* p = todo.back();
             todo.pop_back();
             Visitor::run(p->entry, [&](Instruction* i) {
-                MkArg* mk = MkArg::Cast(i);
-                if (mk) {
+                if (auto mk = MkArg::Cast(i)) {
                     size_t id = mk->prom()->id;
                     if (used_p.find(id) == used_p.end()) {
                         // found a new used promise...
@@ -142,6 +164,10 @@ class TheCleanup {
 
         for (size_t i = 0; i < function->promises.size(); ++i) {
             if (function->promises[i] && used_p.find(i) == used_p.end()) {
+                auto p = function->promises[i];
+                // If we delete a corrupt promise it get's hard to debug...
+                assert(p->fun == function);
+                assert(function->promises[p->id] == p);
                 delete function->promises[i];
                 function->promises[i] = nullptr;
             }
@@ -173,8 +199,8 @@ class TheCleanup {
         Visitor::run(function->entry, [&](BB* bb) {
             // Remove empty jump-through blocks
             if (bb->isJmp() && bb->next0->isEmpty() && bb->next0->isJmp() &&
-                cfg.hasSinglePred(bb->next0->next0)) {
-                assert(usedBB.find(bb->next0) == usedBB.end());
+                cfg.hasSinglePred(bb->next0->next0) &&
+                usedBB.find(bb->next0) == usedBB.end()) {
                 toDel[bb->next0] = bb->next0->next0;
             }
         });
@@ -241,7 +267,7 @@ class TheCleanup {
 namespace rir {
 namespace pir {
 
-void Cleanup::apply(RirCompiler&, Closure* function) const {
+void Cleanup::apply(RirCompiler&, Closure* function, LogStream&) const {
     TheCleanup s(function);
     s();
 }

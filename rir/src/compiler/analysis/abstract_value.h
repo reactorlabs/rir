@@ -2,6 +2,7 @@
 #define PIR_ABSTRACT_VALUE_H
 
 #include "../pir/pir.h"
+#include "abstract_result.h"
 
 #include <functional>
 #include <set>
@@ -10,6 +11,7 @@
 
 namespace rir {
 namespace pir {
+
 struct ValOrig {
     Value* val;
     Instruction* origin;
@@ -74,10 +76,15 @@ struct AbstractPirValue {
 
     bool isUnknown() const { return unknown; }
 
-    bool isSingleValue() {
+    bool isSingleValue() const {
         if (unknown)
             return false;
         return vals.size() == 1;
+    }
+
+    const ValOrig& singleValue() const {
+        assert(vals.size() == 1);
+        return *vals.begin();
     }
 
     typedef std::function<void(Value*)> ValMaybe;
@@ -89,21 +96,25 @@ struct AbstractPirValue {
             known((*vals.begin()).val);
     }
 
-    void eachSource(ValOrigMaybe apply) {
+    void eachSource(const ValOrigMaybe& apply) const {
         for (auto v : vals)
             apply(v);
     }
 
-    bool checkEachSource(ValOrigMaybePredicate apply) {
+    bool checkEachSource(const ValOrigMaybePredicate& apply) const {
         for (auto v : vals)
             if (!apply(v))
                 return false;
         return true;
     }
 
-    bool merge(const AbstractPirValue& other);
+    AbstractResult merge(const ValOrig& other) {
+        return merge(AbstractPirValue(other.val, other.origin));
+    }
 
-    void print(std::ostream& out = std::cout);
+    AbstractResult merge(const AbstractPirValue& other);
+
+    void print(std::ostream& out, bool tty = false) const;
 };
 
 /*
@@ -119,15 +130,11 @@ struct AbstractPirValue {
  *
  * For inter-procedural analysis we can additionally keep track of closures.
  */
-class MkFunCls;
 struct AbstractREnvironment {
     static Value* UnknownParent;
     static Value* UninitializedParent;
-    static MkFunCls* UnknownClosure;
 
     std::unordered_map<SEXP, AbstractPirValue> entries;
-    std::unordered_map<Value*, MkFunCls*> mkClosures;
-
 
     bool leaked = false;
     bool tainted = false;
@@ -143,16 +150,7 @@ struct AbstractREnvironment {
         entries[n] = AbstractPirValue(v, origin);
     }
 
-    void print(std::ostream& out = std::cout) {
-        for (auto e : entries) {
-            SEXP name = std::get<0>(e);
-            out << "   " << CHAR(PRINTNAME(name)) << " -> ";
-            AbstractPirValue v = std::get<1>(e);
-            v.print(out);
-            out << "\n";
-        }
-        out << "\n";
-    }
+    void print(std::ostream& out, bool tty = false) const;
 
     const AbstractPirValue& get(SEXP e) const {
         static AbstractPirValue t = AbstractPirValue::tainted();
@@ -163,55 +161,47 @@ struct AbstractREnvironment {
 
     const bool absent(SEXP e) const { return !tainted && !entries.count(e); }
 
-    bool merge(const AbstractREnvironment& other) {
-        bool changed = false;
-        if (!leaked && other.leaked)
-            changed = leaked = true;
-        if (!tainted && other.tainted)
-            changed = tainted = true;
+    AbstractResult merge(const AbstractREnvironment& other) {
+        AbstractResult res;
+
+        if (!leaked && other.leaked) {
+            leaked = true;
+            res.lostPrecision();
+        }
+        if (!tainted && other.tainted) {
+            tainted = true;
+            res.taint();
+        }
 
         for (auto entry : other.entries) {
             auto name = entry.first;
             if (!entries.count(name)) {
                 entries[name].taint();
-                changed = true;
-            } else if (entries[name].merge(other.get(name))) {
-                changed = true;
+                res.lostPrecision();
+            } else {
+                res.max(entries[name].merge(other.get(name)));
             }
         }
         for (auto entry : entries) {
             auto name = entry.first;
             if (!other.entries.count(name) && !entries.at(name).isUnknown()) {
                 entries.at(name).taint();
-                changed = true;
-            }
-        }
-
-        std::unordered_set<Value*> fps;
-        for (auto e : mkClosures)
-            fps.insert(std::get<0>(e));
-        for (auto e : other.mkClosures)
-            fps.insert(std::get<0>(e));
-        for (auto n : fps) {
-            if (mkClosures[n] != UnknownClosure &&
-                (other.mkClosures.count(n) == 0 ||
-                 mkClosures[n] != other.mkClosures.at(n))) {
-                mkClosures[n] = UnknownClosure;
+                res.lostPrecision();
             }
         }
 
         if (parentEnv_ == UninitializedParent &&
             other.parentEnv_ != UninitializedParent) {
             parentEnv(other.parentEnv());
-            changed = true;
+            res.update();
         } else if (parentEnv_ != UninitializedParent &&
                    parentEnv_ != UnknownParent &&
                    other.parentEnv_ != parentEnv_) {
             parentEnv_ = UnknownParent;
-            changed = true;
+            res.lostPrecision();
         }
 
-        return changed;
+        return res;
     }
 
     Value* parentEnv() const {
@@ -240,42 +230,64 @@ struct AbstractLoad {
     Value* env;
     AbstractPirValue result;
 
+    explicit AbstractLoad(const AbstractPirValue& val)
+        : env(AbstractREnvironment::UnknownParent), result(val) {
+        assert(env);
+    }
+
     AbstractLoad(Value* env, const AbstractPirValue& val)
         : env(env), result(val) {
         assert(env);
     }
 };
 
-class AbstractREnvironmentHierarchy
-    : public std::unordered_map<Value*, AbstractREnvironment> {
+class AbstractREnvironmentHierarchy {
+  private:
+    std::unordered_map<Value*, AbstractREnvironment> envs;
+
   public:
-    bool merge(const AbstractREnvironmentHierarchy& other) {
-        bool changed = false;
-        std::unordered_set<Value*> k;
-        for (auto e : *this)
-            k.insert(e.first);
-        for (auto e : other)
-            k.insert(e.first);
-        for (auto i : k)
-            if (this->count(i)) {
-                if (other.count(i) == 0) {
-                    if (!at(i).tainted) {
-                        changed = true;
-                        at(i).taint();
-                    }
-                } else if (at(i).merge(other.at(i))) {
-                    changed = true;
-                }
+    std::unordered_map<Value*, Value*> aliases;
+
+    AbstractResult merge(const AbstractREnvironmentHierarchy& other) {
+        AbstractResult res;
+
+        for (auto e : other.envs)
+            if (envs.count(e.first))
+                res.max(envs.at(e.first).merge(e.second));
+            else
+                envs[e.first] = e.second;
+
+        for (auto& entry : other.aliases) {
+            if (!aliases.count(entry.first)) {
+                aliases.emplace(entry);
+                res.update();
             } else {
-                (*this)[i].taint();
-                changed = true;
+                SLOWASSERT(entry.second == aliases.at(entry.first));
             }
-        return changed;
+        }
+        return res;
     }
 
-    MkFunCls* findClosure(Value* env, Value* fun);
+    bool known(Value* env) const { return envs.count(env); }
+
+    const AbstractREnvironment& at(Value* env) const {
+        if (aliases.count(env))
+            return envs.at(aliases.at(env));
+        else
+            return envs.at(env);
+    }
+
+    AbstractREnvironment& operator[](Value* env) {
+        if (aliases.count(env))
+            return envs[aliases.at(env)];
+        else
+            return envs[env];
+    }
+
+    void print(std::ostream& out, bool tty = false) const;
 
     AbstractLoad get(Value* env, SEXP e) const;
+    AbstractLoad getFun(Value* env, SEXP e) const;
     AbstractLoad superGet(Value* env, SEXP e) const;
 
     std::unordered_set<Value*> potentialParents(Value* env) const;

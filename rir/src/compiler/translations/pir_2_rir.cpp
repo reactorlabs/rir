@@ -715,7 +715,7 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
 
                 auto loadArg = [&](BB::Instrs::iterator it, Instruction* instr,
                                    Value* what) {
-                    if (what == Tombstone::instance()) {
+                    if (what->tag == Tag::Tombstone) {
                         return;
                     }
                     if (what == Missing::instance()) {
@@ -893,6 +893,7 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 SIMPLE(Int3, int3);
                 SIMPLE(PrintInvocation, printInvocation);
                 SIMPLE(SetShared, setShared);
+                SIMPLE(EnsureNamed, ensureNamed);
 #undef SIMPLE
 
 #define SIMPLE_WITH_SRCIDX(Name, Factory)                                      \
@@ -929,8 +930,9 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
             case Tag::CallImplicit: {
                 auto call = CallImplicit::Cast(instr);
                 std::vector<BC::FunIdx> args;
-                for (auto& p : call->promises)
+                call->eachArg([&](Promise* p) {
                     args.push_back(cs.addPromise(getPromise(ctx, p)));
+                });
 
                 if (call->names.empty())
                     cs << BC::callImplicit(args, Pool::get(call->srcIdx));
@@ -952,6 +954,12 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
             }
             case Tag::StaticCall: {
                 auto call = StaticCall::Cast(instr);
+                // TODO: Unfortunately we cannot compile the target. We might
+                // have optimized this function under assumptions (and we don't
+                // even have access to the assumptions here). To be able to not
+                // waste that work and actually compile the optimized version,
+                // we need to put it in a specific slot and then have a
+                // staticCall that dispatches to that slot.
                 compiler.compile(call->cls(), call->origin(), dryRun);
                 cs << BC::staticCall(call->nCallArgs(), Pool::get(call->srcIdx),
                                      call->origin());
@@ -1000,7 +1008,7 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 break;
             }
             case Tag::Deopt:
-            case Tag::assumeNot:
+            case Tag::Assume:
             case Tag::Checkpoint: {
                 assert(false && "Deopt instructions must be lowered into "
                                 "standard branches and scheduled deopt, "
@@ -1069,34 +1077,46 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
 template <typename CallType>
 static bool allLazy(CallType* call, std::vector<Promise*>& args) {
     bool allLazy = true;
-    call->eachArg([&](Value* v) {
+    call->eachCallArg([&](Value* v) {
+        if (!allLazy)
+            return;
         if (auto arg = MkArg::Cast(v)) {
             if (arg->eagerArg() != Missing::instance()) {
                 allLazy = false;
-            } else if (allLazy) {
+            } else {
                 args.push_back(arg->prom());
             }
+        } else {
+            allLazy = false;
         }
     });
     return allLazy;
 }
 
 void Pir2Rir::lower(Code* code) {
-    Visitor::run(
-        code->entry,
-        [&](BB* bb) {
+    Visitor::runPostChange(
+        code->entry, [&](BB* bb) {
             auto it = bb->begin();
             while (it != bb->end()) {
                 auto next = it + 1;
-                if (auto deopt = Deopt::Cast(*it)) {
+                if (auto call = CallInstruction::CastCall(*it))
+                    call->clearFrameState();
+                if (auto ldfun = LdFun::Cast(*it)) {
+                    // the guessed binding in ldfun is just used as a temporary
+                    // store. If we did not manage to resolve ldfun by now, we
+                    // have to remove the guess again, since apparently we
+                    // where not sure it is correct.
+                    if (ldfun->guessedBinding())
+                        ldfun->clearGuessedBinding();
+                } else if (auto deopt = Deopt::Cast(*it)) {
                     // Lower Deopt instructions + their FrameStates to a
                     // ScheduledDeopt.
                     auto newDeopt = new ScheduledDeopt();
                     newDeopt->consumeFrameStates(deopt);
                     bb->replace(it, newDeopt);
-                } else if (auto expect = assumeNot::Cast(*it)) {
+                } else if (auto expect = Assume::Cast(*it)) {
                     BBTransform::lowerExpect(
-                        code, bb, it, expect->condition(),
+                        code, bb, it, expect->condition(), expect->assumeTrue,
                         expect->checkpoint()->bb()->falseBranch());
                     // lowerExpect splits the bb from current position. There
                     // remains nothing to process. Breaking seems more robust
@@ -1123,8 +1143,7 @@ void Pir2Rir::lower(Code* code) {
 
                 it = next;
             }
-        },
-        true);
+        });
 
     Visitor::run(code->entry, [&](BB* bb) {
         auto it = bb->begin();
@@ -1172,7 +1191,7 @@ void Pir2Rir::toCSSA(Code* code) {
 
 rir::Code* Pir2Rir::getPromise(Context& ctx, Promise* p) {
     if (!promises.count(p)) {
-        ctx.push(src_pool_at(globalContext(), p->srcPoolIdx));
+        ctx.push(src_pool_at(globalContext(), p->srcPoolIdx()));
         size_t localsCnt = compileCode(ctx, p);
         promises[p] = ctx.finalizeCode(localsCnt);
     }
@@ -1187,15 +1206,22 @@ rir::Function* Pir2Rir::finalize() {
     FunctionWriter function;
     Context ctx(function);
 
-    // PIR does not support default args currently.
-    for (size_t i = 0; i < cls->nargs(); ++i)
-        function.addArgWithoutDefault();
+    FunctionSignature signature(FunctionSignature::CalleeCreatedEnv,
+                                FunctionSignature::OptimizedVersion,
+                                cls->assumptions);
 
+    // PIR does not support default args currently.
+    for (size_t i = 0; i < cls->nargs(); ++i) {
+        function.addArgWithoutDefault();
+        signature.pushDefaultArgument();
+    }
+
+    assert(signature.nargs() == cls->nargs());
     ctx.push(R_NilValue);
     size_t localsCnt = compileCode(ctx, cls);
     log.finalPIR(cls);
     auto body = ctx.finalizeCode(localsCnt);
-    function.finalize(body);
+    function.finalize(body, signature);
 #ifdef ENABLE_SLOWASSERT
     CodeVerifier::verifyFunctionLayout(function.function()->container(),
                                        globalContext());
@@ -1213,7 +1239,7 @@ void Pir2RirCompiler::compile(Closure* cls, SEXP origin, bool dryRun) {
     done.insert(cls);
 
     auto table = DispatchTable::unpack(BODY(origin));
-    if (table->available(1))
+    if (table->contains(cls->assumptions))
         return;
 
     auto& log = logger.get(cls);
@@ -1225,13 +1251,10 @@ void Pir2RirCompiler::compile(Closure* cls, SEXP origin, bool dryRun) {
 
     Protect p(fun->container());
 
-    auto oldFun = table->first();
-
+    auto oldFun = table->baseline();
     fun->body()->funInvocationCount = oldFun->body()->funInvocationCount;
-    // TODO: signatures need a rework
-    fun->signature = oldFun->signature;
 
-    table->put(1, fun);
+    table->insert(fun);
 
     log.flush();
 }

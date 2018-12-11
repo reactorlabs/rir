@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "../../runtime/Function.h"
+#include "optimization_context.h"
 
 namespace rir {
 namespace pir {
@@ -23,49 +24,26 @@ class Module {
     Env* getEnv(SEXP);
 
     void print(std::ostream& out = std::cout, bool tty = false);
-    void printEachVersion(std::ostream& out = std::cout, bool tty = false);
+
+    bool exists(rir::Function* f, OptimizationContext ctx) {
+        return closures[f].count(ctx);
+    }
+    Closure* get(rir::Function* f, OptimizationContext ctx) {
+        return closures.at(f).at(ctx);
+    }
+    void erase(rir::Function* f, OptimizationContext ctx);
+
+    Closure* declare(const std::string& name, rir::Function* f,
+                     OptimizationContext ctx, const std::vector<SEXP>& a);
 
     typedef std::function<void(pir::Closure*)> PirClosureIterator;
-    struct VersionedClosure {
-        SEXP closure = nullptr;
-        pir::Closure* pirClosure;
-
-        VersionedClosure(SEXP closure, pir::Closure* pir)
-            : closure(closure), pirClosure(pir) {}
-        explicit VersionedClosure(pir::Closure* pir) : pirClosure(pir) {}
-
-        pir::Closure* current() { return pirClosure; }
-
-        void saveVersion();
-
-        void eachVersion(PirClosureIterator it);
-
-        void deallocatePirFunctions();
-
-      private:
-        std::vector<pir::Closure*> translations;
-    };
-
-    typedef std::pair<rir::Function*, Env*> FunctionAndEnv;
-    pir::Closure* get(FunctionAndEnv idx) {
-        assert(functionMap.count(idx));
-        return functions[functionMap.at(idx)].current();
-    }
-
-    typedef std::function<bool(Closure* f)> MaybeCreate;
-    void createIfMissing(const std::string& name, rir::Function* f,
-                         const std::vector<SEXP>& a, Env* env,
-                         MaybeCreate create);
-
-    typedef std::function<void(VersionedClosure&)> PirClosureVersionIterator;
     void eachPirFunction(PirClosureIterator it);
-    void eachPirFunction(PirClosureVersionIterator it);
 
     ~Module();
 
   private:
-    std::map<FunctionAndEnv, size_t> functionMap;
-    std::vector<VersionedClosure> functions;
+    typedef std::unordered_map<OptimizationContext, Closure*> ClosureVersions;
+    std::unordered_map<rir::Function*, ClosureVersions> closures;
 };
 
 }

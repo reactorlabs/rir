@@ -27,8 +27,14 @@ class TheVerifier {
         }
 
         for (auto p : f->promises) {
-            if (p)
+            if (p) {
+                if (p != f->promises[p->id]) {
+                    std::cerr << "Promise with id " << p->id
+                              << " is in the wrong slot\n";
+                    ok = false;
+                }
                 verify(p);
+            }
             if (!ok) {
                 std::cerr << "Verification of promise failed\n";
                 p->print(std::cerr, true);
@@ -122,6 +128,17 @@ class TheVerifier {
             ok = false;
         }
 
+        if (auto mk = MkArg::Cast(i)) {
+            auto p = mk->prom();
+            assert(p->fun->promises[p->id] == p);
+            if (p->fun != f) {
+                mk->printRef(std::cerr);
+                std::cerr << " is referencing a promise from another function "
+                          << p->fun->name << "\n";
+                ok = false;
+            }
+        }
+
         if (i->branchOrExit())
             assert(i == bb->last() &&
                    "Only last instruction of BB can have controlflow");
@@ -157,7 +174,8 @@ class TheVerifier {
                     i->print(std::cerr);
                     std::cerr << "': input '";
                     iv->printRef(std::cerr);
-                    std::cerr << "' from a different function.\n";
+                    std::cerr << "' from a different function ("
+                              << iv->bb()->owner << ")\n";
                     ok = false;
                 }
             }

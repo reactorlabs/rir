@@ -40,7 +40,7 @@ class FunctionWriter {
         defaultArgs.push_back(code->container());
     }
 
-    void finalize(Code* body) {
+    void finalize(Code* body, const FunctionSignature& signature) {
         assert(function_ == nullptr && "Trying to finalize a second time");
 
         size_t dataSize = defaultArgs.size() * sizeof(SEXP);
@@ -49,7 +49,7 @@ class FunctionWriter {
         SEXP store = Rf_allocVector(EXTERNALSXP, functionSize);
         void* payload = INTEGER(store);
         Function* fun = new (payload)
-            Function(functionSize, body->container(), defaultArgs);
+            Function(functionSize, body->container(), defaultArgs, signature);
         preserve(store);
 
         assert(fun->info.magic == FUNCTION_MAGIC);
@@ -68,7 +68,7 @@ class FunctionWriter {
         unsigned totalSize = Code::size(codeSize, sources.size());
 
         SEXP store = Rf_allocVector(EXTERNALSXP, totalSize);
-        void* payload = INTEGER(store);
+        void* payload = DATAPTR(store);
         Code* code = new (payload)
             Code(nullptr, ast, codeSize, sources.size(), localsCnt);
         preserve(store);

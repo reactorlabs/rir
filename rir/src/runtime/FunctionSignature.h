@@ -2,6 +2,8 @@
 
 #include "R/r.h"
 
+#include "compiler/pir/assumptions.h"
+
 #include <iomanip>
 #include <iostream>
 #include <vector>
@@ -9,6 +11,16 @@
 namespace rir {
 
 struct FunctionSignature {
+    enum EnvironmentCreation {
+        CallerProvidedEnv,
+        CalleeCreatedEnv,
+    };
+
+    enum OptimizationLevel {
+        BaselineVersion,
+        OptimizedVersion,
+        ContextuallyOptimizedVersion,
+    };
 
     struct ArgumentType {
         bool isEvaluated = false;
@@ -35,50 +47,60 @@ struct FunctionSignature {
         }
 
         void print(std::ostream& out = std::cout) const {
-            out << std::setw(22) << " "
-                << "isEvaluated=" << (isEvaluated ? "true" : "false")
-                << ", type=" << Rf_type2char(type) << ", length=" << length
-                << "\n";
+            if (isEvaluated)
+                out << "eager ";
+            out << Rf_type2char(type);
         }
     };
 
-    void pushDefaultArgument() { arguments.emplace_back(); }
+    void pushDefaultArgument() {
+        arguments.emplace_back();
+        assert(nargs() > 0);
+    }
 
     void pushArgument(ArgumentType arg) { arguments.emplace_back(arg); }
 
-    static FunctionSignature const * defaultSignature() {
-        static FunctionSignature signature;
-        return &signature;
-    }
-
-    bool matches(FunctionSignature const& other) const {
-        if (argsOnStack != other.argsOnStack)
-            return false;
-        if (arguments.size() != other.arguments.size())
-            return false;
-        for (unsigned i = 0; i < arguments.size(); ++i)
-            if (!arguments[i].matches(other.arguments[i]))
-                return false;
-        return true;
-    }
-
     void print(std::ostream& out = std::cout) const {
-        out << std::left << std::setw(20) << "    environment?"
-            << (createEnvironment ? "true" : "false") << "\n";
-        out << std::left << std::setw(20) << "    on stack?"
-            << (argsOnStack ? "true" : "false") << "\n";
-        out << std::left << std::setw(20) << "    args"
-            << "size=" << arguments.size() << "\n";
-        for (auto arg : arguments)
-            arg.print(out);
-        out << "\n";
+        if (nargs() > 0) {
+            out << "argTypes: (";
+            for (auto i = arguments.begin(); i != arguments.end(); ++i) {
+                i->print(out);
+                if (i + 1 != arguments.end())
+                    out << ", ";
+            }
+            out << ") ";
+        }
+        if (optimization != BaselineVersion)
+            out << "optimized code ";
+        if (envCreation == CallerProvidedEnv)
+            out << "needsEnv ";
+        if (!assumptions.empty()) {
+            out << "| assumptions: [";
+            for (auto i = assumptions.begin(); i != assumptions.end(); ++i) {
+                out << *i;
+                if (i + 1 != assumptions.end())
+                    out << ",";
+            }
+            out << "]";
+        }
     }
 
     FunctionSignature() = default;
+    FunctionSignature(EnvironmentCreation envCreation,
+                      OptimizationLevel optimization)
+        : envCreation(envCreation), optimization(optimization) {}
+    FunctionSignature(EnvironmentCreation envCreation,
+                      OptimizationLevel optimization,
+                      const pir::AssumptionsSet& assumptions)
+        : envCreation(envCreation), optimization(optimization),
+          assumptions(assumptions) {}
 
-    bool createEnvironment = true;
-    bool argsOnStack = false;
+    size_t nargs() const { return arguments.size(); }
+
+    const EnvironmentCreation envCreation;
+    const OptimizationLevel optimization;
     std::vector<ArgumentType> arguments;
+    const pir::AssumptionsSet assumptions;
 };
 
 } // namespace rir

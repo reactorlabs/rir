@@ -3,6 +3,7 @@
 #include "../../analysis/verifier.h"
 #include "../../pir/pir_impl.h"
 #include "../../transform/insert_cast.h"
+#include "../../util/arg_match.h"
 #include "../../util/builder.h"
 #include "../../util/cfg.h"
 #include "../../util/visitor.h"
@@ -130,8 +131,9 @@ std::unordered_set<Opcode*> findMergepoints(rir::Code* srcCode) {
 namespace rir {
 namespace pir {
 
-bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos, rir::Code* srcCode,
-                        RirStack& stack, Builder& insert) const {
+bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
+                        rir::Code* srcCode, RirStack& stack, Builder& insert,
+                        CallTargetFeedback& callTargetFeedback) const {
     Value* env = insert.env;
 
     unsigned srcIdx = srcCode->getSrcIdxAt(pos, true);
@@ -216,17 +218,14 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos, rir::Code* s
         break;
 
     case Opcode::record_binop_: {
-        insert.function->runtimeFeedback.types.emplace(
-            at(0), bc.immediate.binopFeedback[0]);
-        insert.function->runtimeFeedback.types.emplace(
-            at(1), bc.immediate.binopFeedback[1]);
+        at(0)->typeFeedback.merge(bc.immediate.binopFeedback[0]);
+        at(1)->typeFeedback.merge(bc.immediate.binopFeedback[1]);
         break;
     }
 
     case Opcode::record_call_: {
         Value* target = top();
-        insert.function->runtimeFeedback.callTargets.emplace(
-            target, bc.immediate.callFeedback);
+        callTargetFeedback[target] = bc.immediate.callFeedback;
         break;
     }
 
@@ -260,14 +259,10 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos, rir::Code* s
         Value* callee = top();
         SEXP monomorphic = nullptr;
 
-        // TODO: static named argument matching
-        if (bc.bc != Opcode::named_call_implicit_) {
-            if (insert.function->runtimeFeedback.callTargets.count(callee)) {
-                auto& feedback =
-                    insert.function->runtimeFeedback.callTargets.at(callee);
-                if (feedback.numTargets == 1)
-                    monomorphic = feedback.getTarget(srcCode, 0);
-            }
+        if (callTargetFeedback.count(callee)) {
+            auto& feedback = callTargetFeedback.at(callee);
+            if (feedback.numTargets == 1)
+                monomorphic = feedback.getTarget(srcCode, 0);
         }
 
         auto ast = bc.immediate.callFixedArgs.ast;
@@ -283,16 +278,36 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos, rir::Code* s
             }
         };
         if (monomorphic && isValidClosureSEXP(monomorphic)) {
+            // Currently we can only use StaticCall if we have exactly the right
+            // number of arguments.
+            // TODO, support cases where we need to pass Missing::instance() to
+            // pad the missing arguments. This is a bit tricky, because
+            // currently PIR assumes that no arguments are missing.
+
+            bool correctOrder =
+                (bc.bc == Opcode::named_call_implicit_)
+                    ? ArgumentMatcher::reorder(FORMALS(monomorphic),
+                                               bc.callExtra().callArgumentNames,
+                                               args)
+                    : RList(FORMALS(monomorphic)).length() == args.size();
+
+            if (!correctOrder) {
+                insertGenericCall();
+                break;
+            }
+
             std::string name = "";
             if (auto ldfun = LdFun::Cast(callee))
                 name = CHAR(PRINTNAME(ldfun->varName));
+            AssumptionsSet asmpt(Assumptions::CorrectOrderOfArguments);
+            asmpt.set(Assumptions::CorrectNumberOfArguments);
             compiler.compileClosure(
-                monomorphic, name,
+                monomorphic, name, asmpt,
                 [&](Closure* f) {
                     Value* expected = insert(new LdConst(monomorphic));
                     Value* t = insert(new Identical(callee, expected));
-
-                    insert.conditionalDeopt(t, srcCode, pos, stack, true);
+                    auto cp = insert.addCheckpoint(srcCode, pos, stack);
+                    insert(new Assume(t, cp));
                     pop();
                     auto fs = insert.registerFrameState(srcCode, nextPos, stack);
                     push(insert(
@@ -364,8 +379,10 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos, rir::Code* s
                 Compiler::compileClosure(target);
             }
             bool failed = false;
+            AssumptionsSet asmpt(Assumptions::CorrectOrderOfArguments);
+            asmpt.set(Assumptions::CorrectNumberOfArguments);
             compiler.compileClosure(
-                target, "",
+                target, "", asmpt,
                 [&](Closure* f) {
                     auto fs = insert.registerFrameState(srcCode, nextPos, stack);
                     push(insert(new StaticCall(env, f, args, target, fs, ast)));
@@ -392,6 +409,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos, rir::Code* s
         break;
 
     case Opcode::extract1_1_: {
+        insert.addCheckpoint(srcCode, pos, stack);
         Value* idx = pop();
         Value* vec = pop();
         push(insert(new Extract1_1D(vec, idx, env, srcIdx)));
@@ -399,6 +417,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos, rir::Code* s
     }
 
     case Opcode::extract2_1_: {
+        insert.addCheckpoint(srcCode, pos, stack);
         Value* idx = pop();
         Value* vec = pop();
         push(insert(new Extract2_1D(vec, idx, env, srcIdx)));
@@ -452,7 +471,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos, rir::Code* s
     case Opcode::Op: {                                                         \
         auto rhs = at(0);                                                      \
         auto lhs = at(1);                                                      \
-        insert.registerFrameState(srcCode, pos, stack);                        \
+        insert.addCheckpoint(srcCode, pos, stack);                             \
         pop();                                                                 \
         pop();                                                                 \
         push(insert(new Name(lhs, rhs, env, srcIdx)));                         \
@@ -529,6 +548,10 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos, rir::Code* s
         break;
     }
 
+    case Opcode::ensure_named_:
+        push(insert(new EnsureNamed(pop())));
+        break;
+
     case Opcode::set_shared_:
         push(insert(new SetShared(pop())));
         break;
@@ -591,7 +614,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos, rir::Code* s
     case Opcode::asast_:
     case Opcode::missing_:
     case Opcode::beginloop_:
-    case Opcode::endcontext_:
+    case Opcode::endloop_:
     case Opcode::ldddvar_:
         log.unsupportedBC("Unsupported BC", bc);
         return false;
@@ -616,6 +639,7 @@ bool Rir2Pir::tryCompilePromise(rir::Code* prom, Builder& insert) const {
 Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) const {
     assert(!finalized);
 
+    CallTargetFeedback callTargetFeedback;
     std::vector<ReturnSite> results;
 
     std::unordered_map<Opcode*, State> mergepoints;
@@ -771,7 +795,7 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) const {
             FormalArgs formals(fmls);
 
             DispatchTable* dt = DispatchTable::unpack(code);
-            rir::Function* function = dt->first();
+            rir::Function* function = dt->baseline();
 
             std::stringstream inner;
             inner << name;
@@ -802,7 +826,7 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) const {
             inner << (pos - srcCode->code());
 
             compiler.compileFunction(
-                function, inner.str(), formals,
+                function, inner.str(), formals, {},
                 [&](Closure* innerF) {
                     cur.stack.push(insert(
                         new MkFunCls(innerF, insert.env, fmls, code, src)));
@@ -820,7 +844,8 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) const {
 
         if (!skip) {
             int size = cur.stack.size();
-            if (!compileBC(bc, pos, nextPos, srcCode, cur.stack, insert)) {
+            if (!compileBC(bc, pos, nextPos, srcCode, cur.stack, insert,
+                           callTargetFeedback)) {
                 log.failed("Abort r2p due to unsupported bc");
                 return nullptr;
             }
@@ -906,9 +931,10 @@ void Rir2Pir::finalize(Value* ret, Builder& insert) {
                     changed = true;
                     continue;
                 }
-                if (p->updateType()) {
+                auto t = p->type;
+                p->updateType();
+                if (t != p->type)
                     changed = true;
-                }
                 it++;
             }
         });

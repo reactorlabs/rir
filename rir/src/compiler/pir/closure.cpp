@@ -17,6 +17,14 @@ void Closure::print(std::ostream& out, bool tty) const {
     }
 }
 
+size_t Closure::promiseId(Code* c) const {
+    for (size_t i = 0; i < promises.size(); ++i)
+        if (promises[i] == c)
+            return i;
+    assert(false);
+    return -1;
+}
+
 Promise* Closure::createProm(unsigned srcPoolIdx) {
     Promise* p = new Promise(this, promises.size(), srcPoolIdx);
     promises.push_back(p);
@@ -29,19 +37,19 @@ Closure::~Closure() {
 }
 
 Closure* Closure::clone() {
-    Closure* c = new Closure(name, argNames, env, function);
+    Closure* c = new Closure(name, argNames, env, function, assumptions);
 
     // clone code
-    c->entry = BBTransform::clone(entry, c);
+    c->entry = BBTransform::clone(entry, c, c);
 
     // clone promises
     std::unordered_map<Promise*, Promise*> promMap;
     for (auto p : promises) {
         if (!p)
             continue;
-        Promise* clonedP = new Promise(c, c->promises.size(), p->srcPoolIdx);
+        Promise* clonedP = new Promise(c, c->promises.size(), p->srcPoolIdx());
         c->promises.push_back(clonedP);
-        clonedP->entry = BBTransform::clone(p->entry, clonedP);
+        clonedP->entry = BBTransform::clone(p->entry, clonedP, c);
         promMap[p] = clonedP;
     }
 
@@ -58,5 +66,12 @@ Closure* Closure::clone() {
 
     return c;
 }
+
+size_t Closure::size() const {
+    size_t s = 0;
+    eachPromise([&s](Promise* p) { s += p->size(); });
+    return s + Code::size();
+}
+
 } // namespace pir
 } // namespace rir

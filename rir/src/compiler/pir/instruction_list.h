@@ -3,7 +3,26 @@
 
 // Please keep in sync with implementation of instructions in instruction.h
 
+#define BINOP_INSTRUCTIONS(V)                                                  \
+    V(Lte)                                                                     \
+    V(Gte)                                                                     \
+    V(Lt)                                                                      \
+    V(Gt)                                                                      \
+    V(Mod)                                                                     \
+    V(Add)                                                                     \
+    V(Div)                                                                     \
+    V(IDiv)                                                                    \
+    V(Colon)                                                                   \
+    V(Pow)                                                                     \
+    V(Sub)                                                                     \
+    V(Mul)                                                                     \
+    V(Neq)                                                                     \
+    V(Eq)                                                                      \
+    V(Extract1_1D)                                                             \
+    V(Extract2_1D)
+
 #define COMPILER_INSTRUCTIONS(V)                                               \
+    BINOP_INSTRUCTIONS(V)                                                      \
     V(LdFun)                                                                   \
     V(Seq)                                                                     \
     V(LdVar)                                                                   \
@@ -24,6 +43,8 @@
     V(ChkMissing)                                                              \
     V(ChkClosure)                                                              \
     V(Call)                                                                    \
+    V(Extract2_2D)                                                             \
+    V(Extract1_2D)                                                             \
     V(NamedCall)                                                               \
     V(StaticCall)                                                              \
     V(CallBuiltin)                                                             \
@@ -31,62 +52,29 @@
     V(CallImplicit)                                                            \
     V(MkEnv)                                                                   \
     V(LdFunctionEnv)                                                           \
-    V(Lte)                                                                     \
-    V(Gte)                                                                     \
     V(LAnd)                                                                    \
     V(LOr)                                                                     \
-    V(Mod)                                                                     \
-    V(Add)                                                                     \
-    V(Div)                                                                     \
-    V(IDiv)                                                                    \
-    V(Colon)                                                                   \
-    V(Pow)                                                                     \
-    V(Sub)                                                                     \
-    V(Mul)                                                                     \
     V(Inc)                                                                     \
     V(Not)                                                                     \
     V(Is)                                                                      \
     V(Plus)                                                                    \
     V(Minus)                                                                   \
-    V(Lt)                                                                      \
-    V(Gt)                                                                      \
-    V(Neq)                                                                     \
-    V(Eq)                                                                      \
     V(Identical)                                                               \
     V(Length)                                                                  \
-    V(Extract1_1D)                                                             \
-    V(Extract1_2D)                                                             \
-    V(Extract2_1D)                                                             \
-    V(Extract2_2D)                                                             \
     V(Subassign1_1D)                                                           \
     V(Subassign2_1D)                                                           \
     V(ForSeqSize)                                                              \
     V(FrameState)                                                              \
     V(Checkpoint)                                                              \
-    V(assumeNot)                                                               \
+    V(Assume)                                                                  \
     V(Deopt)                                                                   \
     V(ScheduledDeopt)                                                          \
     V(Force)                                                                   \
     V(CastType)                                                                \
     V(SetShared)                                                               \
+    V(EnsureNamed)                                                             \
     V(PirCopy)                                                                 \
     V(Int3)                                                                    \
     V(PrintInvocation)
-
-#define BINOP_INSTRUCTIONS(V)                                                  \
-    V(Lte)                                                                     \
-    V(Gte)                                                                     \
-    V(Lt)                                                                      \
-    V(Gt)                                                                      \
-    V(Mod)                                                                     \
-    V(Add)                                                                     \
-    V(Div)                                                                     \
-    V(IDiv)                                                                    \
-    V(Colon)                                                                   \
-    V(Pow)                                                                     \
-    V(Sub)                                                                     \
-    V(Mul)                                                                     \
-    V(Neq)                                                                     \
-    V(Eq)
 
 #endif

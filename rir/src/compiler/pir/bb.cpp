@@ -1,3 +1,4 @@
+#include "../util/visitor.h"
 #include "pir_impl.h"
 
 #include <iostream>
@@ -8,6 +9,16 @@ namespace pir {
 
 BB::BB(Code* owner, unsigned id) : id(id), owner(owner) {
     assert(id < owner->nextBBId);
+}
+
+void BB::remove(Instruction* i) {
+    for (auto it = instrs.begin(); it != instrs.end(); ++it) {
+        if (*it == i) {
+            remove(it);
+            return;
+        }
+    }
+    assert(false);
 }
 
 void BB::print(std::ostream& out, bool tty) {
@@ -91,6 +102,13 @@ void BB::gc() {
     for (auto i : deleted)
         delete i;
     deleted.clear();
+}
+
+void BB::collectDominated(std::unordered_set<BB*>& subs, DominanceGraph& dom) {
+    Visitor::run(this, [&](BB* child) {
+        if (dom.dominates(this, child))
+            subs.insert(child);
+    });
 }
 
 } // namespace pir
