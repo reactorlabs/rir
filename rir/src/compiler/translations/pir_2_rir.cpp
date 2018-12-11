@@ -929,8 +929,9 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
             case Tag::CallImplicit: {
                 auto call = CallImplicit::Cast(instr);
                 std::vector<BC::FunIdx> args;
-                for (auto& p : call->promises)
+                call->eachArg([&](Promise* p) {
                     args.push_back(cs.addPromise(getPromise(ctx, p)));
+                });
 
                 if (call->names.empty())
                     cs << BC::callImplicit(args, Pool::get(call->srcIdx));
@@ -1069,13 +1070,17 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
 template <typename CallType>
 static bool allLazy(CallType* call, std::vector<Promise*>& args) {
     bool allLazy = true;
-    call->eachArg([&](Value* v) {
+    call->eachCallArg([&](Value* v) {
+        if (!allLazy)
+            return;
         if (auto arg = MkArg::Cast(v)) {
             if (arg->eagerArg() != Missing::instance()) {
                 allLazy = false;
-            } else if (allLazy) {
+            } else {
                 args.push_back(arg->prom());
             }
+        } else {
+            allLazy = false;
         }
     });
     return allLazy;
@@ -1179,7 +1184,7 @@ void Pir2Rir::toCSSA(Code* code) {
 
 rir::Code* Pir2Rir::getPromise(Context& ctx, Promise* p) {
     if (!promises.count(p)) {
-        ctx.push(src_pool_at(globalContext(), p->srcPoolIdx));
+        ctx.push(src_pool_at(globalContext(), p->srcPoolIdx()));
         size_t localsCnt = compileCode(ctx, p);
         promises[p] = ctx.finalizeCode(localsCnt);
     }

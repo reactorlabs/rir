@@ -93,7 +93,8 @@ class TheInliner {
                     [&](Value* v) { arguments.push_back(v); });
 
                 // Clone the function
-                BB* copy = BBTransform::clone(inlinee->entry, function);
+                BB* copy =
+                    BBTransform::clone(inlinee->entry, function, function);
 
                 bool needsEnvPatching = inlinee->closureEnv() != staticEnv;
 
@@ -202,9 +203,9 @@ class TheInliner {
                                         function->promises.at(newPromId[id]));
                                 } else {
                                     Promise* clone = function->createProm(
-                                        mk->prom()->srcPoolIdx);
+                                        mk->prom()->srcPoolIdx());
                                     BB* promCopy = BBTransform::clone(
-                                        mk->prom()->entry, clone);
+                                        mk->prom()->entry, clone, function);
                                     clone->entry = promCopy;
                                     newPromId[id] = clone->id;
                                     copiedPromise[id] = true;

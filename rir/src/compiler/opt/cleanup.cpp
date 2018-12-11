@@ -106,6 +106,11 @@ class TheCleanup {
                         }
                     }
                 }
+                // CallImplicit is only added in the lowering phase. The unused
+                // promise deletion would be broken, if we were to use
+                // CallImplicit in the middle-end, since this instruction can
+                // also point to promises.
+                assert(!CallImplicit::Cast(i));
                 if (!removed) {
                     if (!Phi::Cast(i)) {
                         i->eachArg([&](Value* arg) {
@@ -146,8 +151,7 @@ class TheCleanup {
             Promise* p = todo.back();
             todo.pop_back();
             Visitor::run(p->entry, [&](Instruction* i) {
-                MkArg* mk = MkArg::Cast(i);
-                if (mk) {
+                if (auto mk = MkArg::Cast(i)) {
                     size_t id = mk->prom()->id;
                     if (used_p.find(id) == used_p.end()) {
                         // found a new used promise...
@@ -160,6 +164,10 @@ class TheCleanup {
 
         for (size_t i = 0; i < function->promises.size(); ++i) {
             if (function->promises[i] && used_p.find(i) == used_p.end()) {
+                auto p = function->promises[i];
+                // If we delete a corrupt promise it get's hard to debug...
+                assert(p->fun == function);
+                assert(function->promises[p->id] == p);
                 delete function->promises[i];
                 function->promises[i] = nullptr;
             }

@@ -40,16 +40,16 @@ Closure* Closure::clone() {
     Closure* c = new Closure(name, argNames, env, function);
 
     // clone code
-    c->entry = BBTransform::clone(entry, c);
+    c->entry = BBTransform::clone(entry, c, c);
 
     // clone promises
     std::unordered_map<Promise*, Promise*> promMap;
     for (auto p : promises) {
         if (!p)
             continue;
-        Promise* clonedP = new Promise(c, c->promises.size(), p->srcPoolIdx);
+        Promise* clonedP = new Promise(c, c->promises.size(), p->srcPoolIdx());
         c->promises.push_back(clonedP);
-        clonedP->entry = BBTransform::clone(p->entry, clonedP);
+        clonedP->entry = BBTransform::clone(p->entry, clonedP, c);
         promMap[p] = clonedP;
     }
 

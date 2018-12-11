@@ -255,7 +255,7 @@ void ForceDominance::apply(RirCompiler&, Closure* cls, LogStream& log) const {
                                 BB* split = BBTransform::split(code->nextBBId++,
                                                                bb, ip, code);
                                 BB* prom_copy =
-                                    BBTransform::clone(prom->entry, code);
+                                    BBTransform::clone(prom->entry, code, cls);
                                 bb->overrideNext(prom_copy);
 
                                 // For now we assume every promise starts with a
@@ -337,7 +337,6 @@ void ForceDominance::apply(RirCompiler&, Closure* cls, LogStream& log) const {
         }
     };
     apply(cls);
-    cls->eachPromise([&](Promise* p) { apply(p); });
 }
 } // namespace pir
 } // namespace rir
