@@ -1,7 +1,7 @@
 #ifndef COMPILER_INSTRUCTION_LIST_H
 #define COMPILER_INSTRUCTION_LIST_H
 
-#include "simple_instruction_list.h"
+#include "../../simple_instruction_list.h"
 
 // Please keep in sync with implementation of instructions in instruction.h
 
