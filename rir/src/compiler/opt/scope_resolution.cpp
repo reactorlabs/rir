@@ -24,7 +24,7 @@ class TheScopeResolution {
     void operator()() {
         ScopeAnalysis analysis(function, log);
         analysis();
-        auto& finalState = analysis.result();
+        auto& finalState = analysis.resultWithDeopt();
 
         Visitor::run(function->entry, [&](BB* bb) {
             auto ip = bb->begin();

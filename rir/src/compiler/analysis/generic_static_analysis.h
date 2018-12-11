@@ -65,6 +65,7 @@ class StaticAnalysis {
 
     virtual AbstractResult apply(AbstractState&, Instruction*) const = 0;
     AbstractState exitpoint;
+    AbstractState exitAndDeoptstate;
 
   protected:
     bool done = false;
@@ -90,6 +91,11 @@ class StaticAnalysis {
     const AbstractState& result() {
         assert(done);
         return exitpoint;
+    }
+
+    const AbstractState& resultWithDeopt() {
+        assert(done);
+        return exitAndDeoptstate;
     }
 
     template <PositioningStyle POS>
@@ -146,6 +152,7 @@ class StaticAnalysis {
 
     void operator()() {
         bool reachedExit = false;
+        bool reachedDeopt = false;
 
         std::vector<bool> changed(snapshots.size(), false);
         changed[entry->id] = true;
@@ -206,6 +213,12 @@ class StaticAnalysis {
                 }
 
                 if (bb->isExit()) {
+                    if (reachedDeopt) {
+                        exitAndDeoptstate.merge(state);
+                    } else {
+                        exitAndDeoptstate = state;
+                        reachedDeopt = true;
+                    }
                     if (!Deopt::Cast(bb->last())) {
                         if (DEBUG_LEVEL >= AnalysisDebugLevel::Exit) {
                             log << "===== Exit state is\n";
