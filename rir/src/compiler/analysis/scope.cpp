@@ -125,7 +125,9 @@ AbstractResult ScopeAnalysis::apply(ScopeAnalysisState& state,
         if (!arg->type.maybeLazy()) {
             effect.max(state.returnValues[i].merge(ValOrig(arg, i)));
             handled = true;
-        } else {
+        }
+
+        if (!handled) {
             lookup(state, arg->followCastsAndForce(),
                    [&](const AbstractPirValue& analysisRes) {
                        if (!analysisRes.type.maybeLazy()) {
@@ -138,6 +140,11 @@ AbstractResult ScopeAnalysis::apply(ScopeAnalysisState& state,
         }
 
         if (!handled && depth < MAX_DEPTH && force->strict) {
+            if (auto ld = LdArg::Cast(arg)) {
+                if (ld->id < args.size())
+                    arg = args[ld->id];
+            }
+
             // We are certain that we do force something here. Let's peek
             // through the argument and see if we find a promise. If so, we
             // will analyze it.
@@ -208,6 +215,8 @@ AbstractResult ScopeAnalysis::apply(ScopeAnalysisState& state,
             if (!CallSafeBuiltin::Cast(i)) {
                 state.mayUseReflection = true;
                 effect.lostPrecision();
+            } else {
+                handled = true;
             }
         }
         if (!handled) {
