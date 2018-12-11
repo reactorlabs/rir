@@ -3,6 +3,7 @@
 #include "../../analysis/verifier.h"
 #include "../../pir/pir_impl.h"
 #include "../../transform/insert_cast.h"
+#include "../../util/arg_match.h"
 #include "../../util/builder.h"
 #include "../../util/cfg.h"
 #include "../../util/visitor.h"
@@ -258,13 +259,10 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         Value* callee = top();
         SEXP monomorphic = nullptr;
 
-        // TODO: static named argument matching
-        if (bc.bc != Opcode::named_call_implicit_) {
-            if (callTargetFeedback.count(callee)) {
-                auto& feedback = callTargetFeedback.at(callee);
-                if (feedback.numTargets == 1)
-                    monomorphic = feedback.getTarget(srcCode, 0);
-            }
+        if (callTargetFeedback.count(callee)) {
+            auto& feedback = callTargetFeedback.at(callee);
+            if (feedback.numTargets == 1)
+                monomorphic = feedback.getTarget(srcCode, 0);
         }
 
         auto ast = bc.immediate.callFixedArgs.ast;
@@ -279,13 +277,25 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                 push(insert(new Call(insert.env, callee, args, fs, ast)));
             }
         };
-        if (monomorphic && isValidClosureSEXP(monomorphic) &&
+        if (monomorphic && isValidClosureSEXP(monomorphic)) {
             // Currently we can only use StaticCall if we have exactly the right
             // number of arguments.
             // TODO, support cases where we need to pass Missing::instance() to
-            // pad the missing arguments. This should be already almost possible
-            // -- maybe the pir2rir backend would need some convincing...
-            RList(FORMALS(monomorphic)).length() == args.size()) {
+            // pad the missing arguments. This is a bit tricky, because
+            // currently PIR assumes that no arguments are missing.
+
+            bool correctOrder =
+                (bc.bc == Opcode::named_call_implicit_)
+                    ? ArgumentMatcher::reorder(FORMALS(monomorphic),
+                                               bc.callExtra().callArgumentNames,
+                                               args)
+                    : RList(FORMALS(monomorphic)).length() == args.size();
+
+            if (!correctOrder) {
+                insertGenericCall();
+                break;
+            }
+
             std::string name = "";
             if (auto ldfun = LdFun::Cast(callee))
                 name = CHAR(PRINTNAME(ldfun->varName));
