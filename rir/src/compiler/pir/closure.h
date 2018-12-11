@@ -75,8 +75,6 @@ class Closure : public Code {
                 it(p);
     }
 
-    size_t promiseId(Code* c) const;
-
     size_t size() const override final;
 };
 
