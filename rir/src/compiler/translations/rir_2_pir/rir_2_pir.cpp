@@ -277,6 +277,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                 push(insert(new Call(insert.env, callee, args, fs, ast)));
             }
         };
+        auto ldfun = LdFun::Cast(callee);
         if (monomorphic && isValidClosureSEXP(monomorphic)) {
             // Currently we can only use StaticCall if we have exactly the right
             // number of arguments.
@@ -297,7 +298,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             }
 
             std::string name = "";
-            if (auto ldfun = LdFun::Cast(callee))
+            if (ldfun)
                 name = CHAR(PRINTNAME(ldfun->varName));
             Assumptions asmpt(Assumption::CorrectOrderOfArguments);
             asmpt.set(Assumption::CorrectNumberOfArguments);
@@ -305,7 +306,10 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                 monomorphic, name, asmpt,
                 [&](Closure* f) {
                     Value* expected = insert(new LdConst(monomorphic));
-                    Value* t = insert(new Identical(callee, expected));
+                    Value* given = callee;
+                    if (ldfun)
+                        given = insert(new LdVar(ldfun->varName, ldfun->env()));
+                    Value* t = insert(new Identical(given, expected));
                     auto cp = insert.addCheckpoint(srcCode, pos, stack);
                     insert(new Assume(t, cp));
                     pop();

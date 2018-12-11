@@ -15,8 +15,12 @@ void DelayInstr::apply(RirCompiler&, Closure* function, LogStream&) const {
             auto i = *ip;
             auto next = ip + 1;
 
-            if (!i->hasEnv() && !i->hasEffect() && !Phi::Cast(i) &&
-                !i->branchOrExit()) {
+            if (LdFun::Cast(i) ||
+                // For LdFun we allow the instruction to be delayed, since
+                // probably nobody cares about when exactly looking up a
+                // function accidentially forces a promise as side-effect.
+                (!i->hasEnv() && !i->hasEffect() && !Phi::Cast(i) &&
+                 !i->branchOrExit())) {
                 Instruction* usage = i->hasSingleUse();
                 if (usage && usage->bb() != bb) {
                     auto phi = Phi::Cast(usage);
