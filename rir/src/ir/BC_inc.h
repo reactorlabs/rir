@@ -15,7 +15,7 @@
 
 #include "ir/RuntimeFeedback.h"
 
-#include "simple_instruction_list.h"
+#include "BC_noarg_list.h"
 
 // type  for constant & ast pool indices
 typedef uint32_t Immediate;
@@ -289,11 +289,12 @@ class BC {
 
     // ==== Factory methods
     // to create new BC objects, which can be streamed to a CodeStream
-    inline static BC nop();
-    inline static BC makeEnv();
-    inline static BC parentEnv();
-    inline static BC getEnv();
-    inline static BC setEnv();
+#define V(NESTED, name, name_)\
+    inline static BC name();
+BC_NOARGS(V, _)
+#undef V
+    inline static BC recordCall();
+    inline static BC recordBinop();
     inline static BC push(SEXP constant);
     inline static BC push(double constant);
     inline static BC push(int constant);
@@ -310,78 +311,22 @@ class BC {
     inline static BC stloc(uint32_t offset);
     inline static BC copyloc(uint32_t target, uint32_t source);
     inline static BC promise(FunIdx prom);
-    inline static BC ret();
-    inline static BC pop();
-    inline static BC force();
-    inline static BC asast();
     inline static BC stvar(SEXP sym);
     inline static BC stvarSuper(SEXP sym);
     inline static BC missing(SEXP sym);
-    inline static BC checkMissing();
-    inline static BC subassign1();
-    inline static BC subassign2();
-    inline static BC length();
-    inline static BC names();
-    inline static BC setNames();
     inline static BC alloc(int type);
-    inline static BC asbool();
     inline static BC beginloop(Jmp);
-    inline static BC endloop();
     inline static BC brtrue(Jmp);
     inline static BC brfalse(Jmp);
     inline static BC br(Jmp);
     inline static BC brobj(Jmp);
     inline static BC label(Jmp);
-    inline static BC dup();
-    inline static BC dup2();
-    inline static BC forSeqSize();
-    inline static BC inc();
-    inline static BC close();
-    inline static BC add();
-    inline static BC mul();
-    inline static BC div();
-    inline static BC pow();
-    inline static BC idiv();
-    inline static BC mod();
-    inline static BC sub();
-    inline static BC uplus();
-    inline static BC uminus();
-    inline static BC Not();
-    inline static BC lt();
-    inline static BC gt();
-    inline static BC le();
-    inline static BC ge();
-    inline static BC eq();
-    inline static BC identical();
-    inline static BC ne();
-    inline static BC seq();
-    inline static BC colon();
-    inline static BC makeUnique();
-    inline static BC setShared();
-    inline static BC ensureNamed();
-    inline static BC asLogical();
-    inline static BC lglOr();
-    inline static BC lglAnd();
     inline static BC guardName(SEXP, SEXP);
     inline static BC guardNamePrimitive(SEXP);
-    inline static BC isfun();
-    inline static BC invisible();
-    inline static BC visible();
-    inline static BC extract1_1();
-    inline static BC extract1_2();
-    inline static BC extract2_1();
-    inline static BC extract2_2();
-    inline static BC swap();
     inline static BC put(uint32_t);
     inline static BC pick(uint32_t);
     inline static BC pull(uint32_t);
     inline static BC is(uint32_t);
-    inline static BC isObj();
-    inline static BC return_();
-#define V(NESTED, name, Name)\
-    inline static BC name();
-SIMPLE_INSTRUCTIONS(V, _)
-#undef V
     inline static BC deopt(SEXP);
     inline static BC callImplicit(const std::vector<FunIdx>& args, SEXP ast);
     inline static BC callImplicit(const std::vector<FunIdx>& args,
@@ -390,8 +335,6 @@ SIMPLE_INSTRUCTIONS(V, _)
     inline static BC call(size_t nargs, const std::vector<SEXP>& names,
                           SEXP ast);
     inline static BC staticCall(size_t nargs, SEXP ast, SEXP target);
-    inline static BC recordCall();
-    inline static BC recordBinop();
 
     inline static BC decode(Opcode* pc, const Code* code) {
         BC cur;

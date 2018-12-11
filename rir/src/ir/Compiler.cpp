@@ -242,7 +242,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
         else if (fun == symbol::Sub)
             cs << BC::uminus();
         else if (fun == symbol::Not)
-            cs << BC::Not();
+            cs << BC::not_();
         cs.addSrc(ast);
 
         return true;

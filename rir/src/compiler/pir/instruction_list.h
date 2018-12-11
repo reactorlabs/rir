@@ -5,7 +5,7 @@
 
 // Please keep in sync with implementation of instructions in instruction.h
 
-#define V_SIMPLE_INSTRUCTION(V, name, Name) V(Name)
+#define V_SIMPLE_INSTRUCTION_IN_COMPILER_INSTRUCTIONS(V, name, Name) V(Name)
 
 #define BINOP_INSTRUCTIONS(V)                                                  \
     V(Lte)                                                                     \
@@ -26,7 +26,7 @@
     V(Extract2_1D)
 
 #define COMPILER_INSTRUCTIONS(V)                                               \
-    SIMPLE_INSTRUCTIONS(V_SIMPLE_INSTRUCTION, V)                               \
+    SIMPLE_INSTRUCTIONS(V_SIMPLE_INSTRUCTION_IN_COMPILER_INSTRUCTIONS, V)      \
     BINOP_INSTRUCTIONS(V)                                                      \
     V(LdFun)                                                                   \
     V(Seq)                                                                     \
@@ -79,7 +79,5 @@
     V(SetShared)                                                               \
     V(EnsureNamed)                                                             \
     V(PirCopy)
-
-#undef V_SIMPLE_INSTRUCTIONS 
 
 #endif

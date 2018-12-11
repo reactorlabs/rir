@@ -890,7 +890,7 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 SIMPLE(ChkClosure, isfun);
                 SIMPLE(Seq, seq);
                 SIMPLE(MkCls, close);
-                SIMPLE(IsObject, isObj);
+                SIMPLE(IsObject, isobj);
 #define V(V, name, Name) SIMPLE(Name, name);
                 SIMPLE_INSTRUCTIONS(V, _);
 #undef V
@@ -921,7 +921,7 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 SIMPLE_WITH_SRCIDX(AsLogical, asLogical);
                 SIMPLE_WITH_SRCIDX(Plus, uplus);
                 SIMPLE_WITH_SRCIDX(Minus, uminus);
-                SIMPLE_WITH_SRCIDX(Not, Not);
+                SIMPLE_WITH_SRCIDX(Not, not_);
                 SIMPLE_WITH_SRCIDX(Extract1_1D, extract1_1);
                 SIMPLE_WITH_SRCIDX(Extract2_1D, extract2_1);
                 SIMPLE_WITH_SRCIDX(Extract1_2D, extract1_2);
