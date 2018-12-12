@@ -42,8 +42,8 @@ class Module {
     ~Module();
 
   private:
-    typedef std::unordered_map<OptimizationContext, Closure*> ClosureVersions;
-    std::unordered_map<rir::Function*, ClosureVersions> closures;
+    typedef std::map<OptimizationContext, Closure*> ClosureVersions;
+    std::map<rir::Function*, ClosureVersions> closures;
 };
 
 }
