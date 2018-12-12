@@ -8,6 +8,7 @@ mandelbrot_mini <- function() {
 
 f <- rir.compile(function() mandelbrot_mini())
 
+# Run twice to get realistic type feedback
 f()
 f()
 pir.compile(mandelbrot_mini, debugFlags=pir.debugFlags(PrintPirAfterOpt=TRUE, ShowWarnings=TRUE))
