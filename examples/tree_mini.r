@@ -24,4 +24,5 @@ test <- function() {
 f <- rir.compile(function() test())
 
 f()
+f()
 pir.compile(test, debugFlags=pir.debugFlags(PrintPirAfterOpt=TRUE, ShowWarnings=TRUE))

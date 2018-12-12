@@ -47,25 +47,48 @@ void Configurations::defaultOptimizations() {
         optimizations.push_back(new pir::DelayInstr());
         optimizations.push_back(new pir::ElideEnv());
         optimizations.push_back(new pir::DelayEnv());
+        optimizations.push_back(new pir::Cleanup());
+        optimizations.push_back(new pir::Inline());
+        optimizations.push_back(new pir::Cleanup());
     };
 
-    for (int i = 0; i < 3; ++i) {
-        for (int j = 0; j < 4; ++j) {
-            addDefaultOpt();
-            optimizations.push_back(new pir::Cleanup());
-            optimizations.push_back(new pir::Inline());
-        }
-        optimizations.push_back(new pir::ElideEnvSpec());
-        // This pass removes unused checkpoints.
-        // We schedule this pass here, since it might unblock optimizations.
-        // Since for example even unused checkpoints keep variables live.
-        optimizations.push_back(new pir::CleanupCheckpoints());
-        // Framestates can be used by call instructions. This pass removes this
-        // dependency and the framestates will subsequently be cleaned. After
-        // this it is no longer possible to inline those calls.
-        if (i == 1)
-            optimizations.push_back(new pir::CleanupFramestate());
-    }
+    // ==== Phase 1) Run the default passes a couple of times
+    for (size_t i = 0; i < 2; ++i)
+        addDefaultOpt();
+
+    // ==== Phase 2) Speculate away environments
+    //
+    // This pass is scheduled second, since we want to first try to do this
+    // statically in Phase 1
+    optimizations.push_back(new pir::ElideEnvSpec());
+    addDefaultOpt();
+
+    // ==== Phase 3) Remove checkpoints we did not use
+    //
+    // This pass removes unused checkpoints.
+    // We schedule this pass here, since it might unblock optimizations.
+    // Since for example even unused checkpoints keep variables live.
+    //
+    // After this phase it is no longer possible to add assumptions at any point
+    optimizations.push_back(new pir::CleanupCheckpoints());
+    addDefaultOpt();
+
+    // ==== Phase 4) Remove Framestates we did not use
+    //
+    // Framestates can be used by call instructions. This pass removes this
+    // dependency and the framestates will subsequently be cleaned.
+    //
+    // After this pass it is no longer possible to inline callees with deopts
+    optimizations.push_back(new pir::CleanupFramestate());
+    optimizations.push_back(new pir::CleanupCheckpoints());
+
+    // ==== Phase 5) Final round of default opts
+    for (size_t i = 0; i < 2; ++i)
+        addDefaultOpt();
+
+    // Our backend really does not like unused checkpoints, so be sure to remove
+    // all of them here already.
+    optimizations.push_back(new pir::CleanupCheckpoints());
 }
 
 } // namespace rir

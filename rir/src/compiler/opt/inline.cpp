@@ -19,8 +19,8 @@ class TheInliner {
     Closure* function;
     explicit TheInliner(Closure* function) : function(function) {}
 
-    static constexpr size_t MAX_SIZE = 1024;
-    static constexpr size_t MAX_INLINEE_SIZE = 128;
+    static constexpr size_t MAX_SIZE = 10000;
+    static constexpr size_t MAX_INLINEE_SIZE = 200;
     static constexpr size_t MAX_FUEL = 5;
 
     void operator()() {

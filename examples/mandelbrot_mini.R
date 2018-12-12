@@ -9,4 +9,5 @@ mandelbrot_mini <- function() {
 f <- rir.compile(function() mandelbrot_mini())
 
 f()
+f()
 pir.compile(mandelbrot_mini, debugFlags=pir.debugFlags(PrintPirAfterOpt=TRUE, ShowWarnings=TRUE))
