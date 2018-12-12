@@ -30,11 +30,11 @@ class Closure : public Code {
     }
 
     Closure(const std::string& name, std::initializer_list<SEXP> a, Env* env,
-            rir::Function* function, const AssumptionsSet& assumptions)
+            rir::Function* function, const Assumptions& assumptions)
         : env(env), function(function), name(uniqueName(this, name)),
           argNames(a), assumptions(assumptions) {}
     Closure(const std::string& name, const std::vector<SEXP>& a, Env* env,
-            rir::Function* function, const AssumptionsSet& assumptions)
+            rir::Function* function, const Assumptions& assumptions)
         : env(env), function(function), name(uniqueName(this, name)),
           argNames(a), assumptions(assumptions) {}
 
@@ -50,7 +50,7 @@ class Closure : public Code {
     std::vector<SEXP> argNames;
     std::vector<Promise*> promises;
 
-    AssumptionsSet assumptions;
+    Assumptions assumptions;
 
     size_t nargs() const { return argNames.size(); }
 

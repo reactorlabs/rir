@@ -118,9 +118,9 @@ AbstractLoad AbstractREnvironmentHierarchy::get(Value* env, SEXP e) const {
     if (aliases.count(env))
         env = aliases.at(env);
     while (env != AbstractREnvironment::UnknownParent) {
+        assert(env);
         if (envs.count(env) == 0)
-            return AbstractLoad(env ? env : AbstractREnvironment::UnknownParent,
-                                AbstractPirValue::tainted());
+            return AbstractLoad(env, AbstractPirValue::tainted());
         auto aenv = envs.at(env);
         if (!aenv.absent(e)) {
             const AbstractPirValue& res = aenv.get(e);
@@ -144,9 +144,9 @@ AbstractLoad AbstractREnvironmentHierarchy::getFun(Value* env, SEXP e) const {
     if (aliases.count(env))
         env = aliases.at(env);
     while (env != AbstractREnvironment::UnknownParent) {
+        assert(env);
         if (envs.count(env) == 0)
-            return AbstractLoad(env ? env : AbstractREnvironment::UnknownParent,
-                                AbstractPirValue::tainted());
+            return AbstractLoad(env, AbstractPirValue::tainted());
         auto aenv = envs.at(env);
         if (!aenv.absent(e)) {
             const AbstractPirValue& res = aenv.get(e);
@@ -163,6 +163,8 @@ AbstractLoad AbstractREnvironmentHierarchy::getFun(Value* env, SEXP e) const {
         }
         auto parent = envs.at(env).parentEnv();
         assert(parent);
+        // If the analysis does not know what the parent env is, but the env is
+        // an existing R env, we can get the parent from the actual R env object
         if (parent == AbstractREnvironment::UnknownParent &&
             Env::parentEnv(env))
             env = Env::parentEnv(env);

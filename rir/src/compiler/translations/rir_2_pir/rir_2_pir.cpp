@@ -299,8 +299,8 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             std::string name = "";
             if (auto ldfun = LdFun::Cast(callee))
                 name = CHAR(PRINTNAME(ldfun->varName));
-            AssumptionsSet asmpt(Assumptions::CorrectOrderOfArguments);
-            asmpt.set(Assumptions::CorrectNumberOfArguments);
+            Assumptions asmpt(Assumption::CorrectOrderOfArguments);
+            asmpt.set(Assumption::CorrectNumberOfArguments);
             compiler.compileClosure(
                 monomorphic, name, asmpt,
                 [&](Closure* f) {
@@ -379,8 +379,8 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                 Compiler::compileClosure(target);
             }
             bool failed = false;
-            AssumptionsSet asmpt(Assumptions::CorrectOrderOfArguments);
-            asmpt.set(Assumptions::CorrectNumberOfArguments);
+            Assumptions asmpt(Assumption::CorrectOrderOfArguments);
+            asmpt.set(Assumption::CorrectNumberOfArguments);
             compiler.compileClosure(
                 target, "", asmpt,
                 [&](Closure* f) {

@@ -231,9 +231,7 @@ struct AbstractLoad {
     AbstractPirValue result;
 
     explicit AbstractLoad(const AbstractPirValue& val)
-        : env(AbstractREnvironment::UnknownParent), result(val) {
-        assert(env);
-    }
+        : env(AbstractREnvironment::UnknownParent), result(val) {}
 
     AbstractLoad(Value* env, const AbstractPirValue& val)
         : env(env), result(val) {

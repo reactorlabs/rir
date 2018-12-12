@@ -895,8 +895,8 @@ SEXP Compiler::finalize() {
     FunctionWriter function;
     Context ctx(function, preserve);
 
-    FunctionSignature signature(FunctionSignature::CallerProvidedEnv,
-                                FunctionSignature::BaselineVersion);
+    FunctionSignature signature(FunctionSignature::Environment::CallerProvided,
+                                FunctionSignature::OptimizationLevel::Baseline);
 
     // Compile formals (if any) and create signature
     for (auto arg = RList(formals).begin(); arg != RList::end(); ++arg) {

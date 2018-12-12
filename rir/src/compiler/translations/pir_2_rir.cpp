@@ -1205,8 +1205,8 @@ rir::Function* Pir2Rir::finalize() {
     FunctionWriter function;
     Context ctx(function);
 
-    FunctionSignature signature(FunctionSignature::CalleeCreatedEnv,
-                                FunctionSignature::OptimizedVersion,
+    FunctionSignature signature(FunctionSignature::Environment::CalleeCreated,
+                                FunctionSignature::OptimizationLevel::Optimized,
                                 cls->assumptions);
 
     // PIR does not support default args currently.

@@ -28,40 +28,17 @@ class ScopeAnalysisState {
     bool mayUseReflection = false;
 
     AbstractResult mergeCall(Code* cur, const ScopeAnalysisState& other) {
-        AbstractResult res;
-
-        if (!mayUseReflection && other.mayUseReflection) {
-            mayUseReflection = true;
-            res.lostPrecision();
-        }
-        for (auto s : other.observedStores) {
-            if (!observedStores.count(s)) {
-                observedStores.insert(s);
-                res.update();
-            }
-        }
-        for (auto s : other.allStoresObserved) {
-            if (!allStoresObserved.count(s)) {
-                allStoresObserved.insert(s);
-                res.update();
-            }
-        }
-        res.max(envs.merge(other.envs));
-        return res;
+        return mergeGeneric(other);
     }
 
-    friend class ScopeAnalysis;
-
-  public:
-    AbstractResult merge(const ScopeAnalysisState& other) {
+    AbstractResult mergeGeneric(const ScopeAnalysisState& other) {
         AbstractResult res;
 
-        for (const auto& f : other.returnValues)
-            res.max(returnValues[f.first].merge(f.second));
         if (!mayUseReflection && other.mayUseReflection) {
             mayUseReflection = true;
             res.lostPrecision();
         }
+
         allStoresObserved.insert(other.allStoresObserved.begin(),
                                  other.allStoresObserved.end());
         for (auto s : other.observedStores) {
@@ -76,8 +53,23 @@ class ScopeAnalysisState {
                 res.update();
             }
         }
-        res.max(envs.merge(other.envs));
-        return res;
+
+        return res.max(envs.merge(other.envs));
+    }
+
+    friend class ScopeAnalysis;
+
+  public:
+    AbstractResult merge(const ScopeAnalysisState& other) {
+        AbstractResult res;
+
+        // Return values are only useful within one function. No need to merge
+        // across interprocedural invocations. That's why this part is not in
+        // mergeGeneric.
+        for (const auto& f : other.returnValues)
+            res.max(returnValues[f.first].merge(f.second));
+
+        return res.max(mergeGeneric(other));
     }
 
     bool envNotEscaped(Value* v) const {

@@ -92,7 +92,7 @@ enum class Effect : uint8_t {
     None,
     // Instruction doesn't really have effects itself, but it should not be
     // hoisted over any other instruction with effect. Example: Assume
-    EffectOrderObserved,
+    Order,
     // Instruction might produce a warning. Example: AsTest warns if the
     // vector used in an if condition has length > 1
     Warn,
@@ -1287,7 +1287,7 @@ class Deopt : public FixedLenInstruction<Tag::Deopt, Deopt, 1, Effect::None,
  * if the test fails, jump to the deopt branch of the checkpoint.
  */
 
-class FLI(Assume, 2, Effect::EffectOrderObserved, EnvAccess::None) {
+class FLI(Assume, 2, Effect::Order, EnvAccess::None) {
   public:
     bool assumeTrue = true;
     Assume(Value* test, Value* checkpoint)

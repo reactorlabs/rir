@@ -23,9 +23,10 @@ struct AbstractResult {
         return kind == other.kind;
     }
 
-    void max(const AbstractResult& other) {
+    const AbstractResult& max(const AbstractResult& other) {
         if (kind < other.kind)
             kind = other.kind;
+        return *this;
     }
 
     void lostPrecision() { max(LostPrecision); }
