@@ -1132,6 +1132,14 @@ static bool allLazy(CallType* call, std::vector<Promise*>& args) {
     return allLazy;
 }
 
+static bool DEOPT_CHAOS = getenv("PIR_DEOPT_CHAOS") &&
+                          0 == strncmp("1", getenv("PIR_DEOPT_CHAOS"), 1);
+static bool coinFlip() {
+    static std::mt19937 gen(42);
+    static std::bernoulli_distribution coin(0.2);
+    return coin(gen);
+};
+
 void Pir2Rir::lower(Code* code) {
     Visitor::runPostChange(
         code->entry, [&](BB* bb) {
@@ -1154,8 +1162,14 @@ void Pir2Rir::lower(Code* code) {
                     newDeopt->consumeFrameStates(deopt);
                     bb->replace(it, newDeopt);
                 } else if (auto expect = Assume::Cast(*it)) {
+                    auto condition = expect->condition();
+                    if (DEOPT_CHAOS && coinFlip()) {
+                        condition = expect->assumeTrue
+                                        ? (Value*)False::instance()
+                                        : (Value*)True::instance();
+                    }
                     BBTransform::lowerExpect(
-                        code, bb, it, expect->condition(), expect->assumeTrue,
+                        code, bb, it, condition, expect->assumeTrue,
                         expect->checkpoint()->bb()->falseBranch());
                     // lowerExpect splits the bb from current position. There
                     // remains nothing to process. Breaking seems more robust
