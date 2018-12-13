@@ -366,13 +366,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             args[n - i - 1] = pop();
 
         if (TYPEOF(target) == BUILTINSXP) {
-            // TODO: compile a list of safe builtins
-            static int vector = findBuiltin("vector");
-
-            if (getBuiltinNr(target) == vector)
-                push(insert(new CallSafeBuiltin(target, args, ast)));
-            else
-                push(insert(new CallBuiltin(env, target, args, ast)));
+            push(insert(BuiltinCallFactory::New(env, target, args, ast)));
         } else {
             assert(TYPEOF(target) == CLOSXP);
             if (!isValidClosureSEXP(target)) {
