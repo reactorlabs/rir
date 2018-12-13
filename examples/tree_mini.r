@@ -23,5 +23,7 @@ test <- function() {
 
 f <- rir.compile(function() test())
 
+# Run twice to get realistic type feedback
+f()
 f()
 pir.compile(test, debugFlags=pir.debugFlags(PrintPirAfterOpt=TRUE, ShowWarnings=TRUE))
