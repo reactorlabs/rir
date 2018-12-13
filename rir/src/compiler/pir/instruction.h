@@ -1154,9 +1154,6 @@ class VLIE(CallBuiltin, Effect::Any, EnvAccess::Leak), public CallInstruction {
     const CCODE builtin;
     int builtinId;
 
-    CallBuiltin(Value * callerEnv, SEXP builtin,
-                const std::vector<Value*>& args, unsigned srcIdx);
-
     size_t nCallArgs() override { return nargs() - 1; };
     void eachCallArg(Instruction::ArgumentValueIterator it) override {
         for (size_t i = 0; i < nCallArgs(); ++i)
@@ -1164,6 +1161,11 @@ class VLIE(CallBuiltin, Effect::Any, EnvAccess::Leak), public CallInstruction {
     }
     void printArgs(std::ostream & out, bool tty) override;
     Value* callerEnv() { return env(); }
+
+  private:
+    CallBuiltin(Value * callerEnv, SEXP builtin,
+                const std::vector<Value*>& args, unsigned srcIdx);
+    friend class BuiltinCallFactory;
 };
 
 class VLI(CallSafeBuiltin, Effect::None, EnvAccess::None),
@@ -1173,15 +1175,23 @@ class VLI(CallSafeBuiltin, Effect::None, EnvAccess::None),
     const CCODE builtin;
     int builtinId;
 
-    CallSafeBuiltin(SEXP builtin, const std::vector<Value*>& args,
-                    unsigned srcIdx);
-
     size_t nCallArgs() override { return nargs(); };
     void eachCallArg(Instruction::ArgumentValueIterator it) override {
         eachArg(it);
     }
 
     void printArgs(std::ostream & out, bool tty) override;
+
+  private:
+    CallSafeBuiltin(SEXP builtin, const std::vector<Value*>& args,
+                    unsigned srcIdx);
+    friend class BuiltinCallFactory;
+};
+
+class BuiltinCallFactory {
+  public:
+    static Instruction* New(Value* callerEnv, SEXP builtin,
+                            const std::vector<Value*>& args, unsigned srcIdx);
 };
 
 class VLIE(MkEnv, Effect::None, EnvAccess::Capture) {
