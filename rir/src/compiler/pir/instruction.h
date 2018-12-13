@@ -744,14 +744,14 @@ class FLI(CastType, 1, Effect::None, EnvAccess::None) {
         : FixedLenInstruction(to, {{from}}, {{in}}) {}
 };
 
-class FLI(AsLogical, 1, Effect::None, EnvAccess::None) {
+class FLI(AsLogical, 1, Effect::Warn, EnvAccess::None) {
   public:
     AsLogical(Value* in, unsigned srcIdx)
         : FixedLenInstruction(RType::logical, {{PirType::val()}}, {{in}},
                               srcIdx) {}
 };
 
-class FLI(AsTest, 1, Effect::Warn, EnvAccess::None) {
+class FLI(AsTest, 1, Effect::Error, EnvAccess::None) {
   public:
     explicit AsTest(Value* in)
         : FixedLenInstruction(NativeType::test, {{PirType::any()}}, {{in}}) {}
