@@ -754,7 +754,7 @@ class FLI(AsLogical, 1, Effect::None, EnvAccess::None) {
 class FLI(AsTest, 1, Effect::Warn, EnvAccess::None) {
   public:
     explicit AsTest(Value* in)
-        : FixedLenInstruction(NativeType::test, {{RType::logical}}, {{in}}) {}
+        : FixedLenInstruction(NativeType::test, {{PirType::any()}}, {{in}}) {}
 };
 
 class FLIE(Subassign1_1D, 4, Effect::None, EnvAccess::Leak) {
