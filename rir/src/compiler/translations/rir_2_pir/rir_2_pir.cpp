@@ -174,6 +174,9 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         break;
 
     case Opcode::asbool_:
+        push(insert(new AsTest(pop())));
+        break;
+
     case Opcode::aslogical_:
         push(insert(new AsLogical(pop(), srcIdx)));
         break;
