@@ -526,9 +526,11 @@ FrameState* Deopt::frameState() { return FrameState::Cast(arg<0>().val()); }
 
 void Checkpoint::printArgs(std::ostream& out, bool tty) {
     FixedLenInstruction::printArgs(out, tty);
-    out << " -> BB" << bb()->trueBranch()->id << " (by default) | BB"
-        << bb()->falseBranch()->id << " (if coming from expect)";
+    out << " -> BB" << bb()->trueBranch()->id << " (default) | BB"
+        << bb()->falseBranch()->id << " (if assume failed)";
 }
+
+BB* Checkpoint::deoptBranch() { return bb()->falseBranch(); }
 
 } // namespace pir
 } // namespace rir

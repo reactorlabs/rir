@@ -25,8 +25,8 @@ void OptimizeAssumptions::apply(RirCompiler&, Closure* function,
                 auto cp = assume->checkpoint();
                 auto bb = cp->bb();
                 // We are trying to group multiple assumes into the same
-                // checkpoint by moving up linear sequence of bbs, to find the
-                // topmost possible checkpoint.
+                // checkpoint by finding for each assume the topmost compatible
+                // checkpoint.
                 // TODO: we could also try to move up the assume itself, since
                 // if we move both at the same time, we could even jump over
                 // effectful instructions.

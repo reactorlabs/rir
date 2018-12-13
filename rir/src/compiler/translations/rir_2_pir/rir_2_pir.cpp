@@ -277,7 +277,6 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                 push(insert(new Call(insert.env, callee, args, fs, ast)));
             }
         };
-        auto ldfun = LdFun::Cast(callee);
         if (monomorphic && isValidClosureSEXP(monomorphic)) {
             // Currently we can only use StaticCall if we have exactly the right
             // number of arguments.
@@ -298,6 +297,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             }
 
             std::string name = "";
+            auto ldfun = LdFun::Cast(callee);
             if (ldfun)
                 name = CHAR(PRINTNAME(ldfun->varName));
             Assumptions asmpt(Assumption::CorrectOrderOfArguments);
@@ -307,15 +307,18 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                 [&](Closure* f) {
                     Value* expected = insert(new LdConst(monomorphic));
                     Value* given = callee;
+                    // This change here potentially allows the delay_instr pass
+                    // to move the ldfun into the deopt branch
                     if (ldfun)
                         given = insert(new LdVar(ldfun->varName, ldfun->env()));
                     Value* t = insert(new Identical(given, expected));
                     auto cp = insert.addCheckpoint(srcCode, pos, stack);
                     insert(new Assume(t, cp));
                     pop();
-                    auto fs = insert.registerFrameState(srcCode, nextPos, stack);
-                    push(insert(
-                        new StaticCall(insert.env, f, args, monomorphic, fs, ast)));
+                    auto fs =
+                        insert.registerFrameState(srcCode, nextPos, stack);
+                    push(insert(new StaticCall(insert.env, f, args, monomorphic,
+                                               fs, ast)));
                 },
                 insertGenericCall);
         } else {
