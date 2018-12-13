@@ -300,7 +300,8 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             }
 
             std::string name = "";
-            if (auto ldfun = LdFun::Cast(callee))
+            auto ldfun = LdFun::Cast(callee);
+            if (ldfun)
                 name = CHAR(PRINTNAME(ldfun->varName));
             Assumptions asmpt(Assumption::CorrectOrderOfArguments);
             asmpt.set(Assumption::CorrectNumberOfArguments);
@@ -308,13 +309,19 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                 monomorphic, name, asmpt,
                 [&](Closure* f) {
                     Value* expected = insert(new LdConst(monomorphic));
-                    Value* t = insert(new Identical(callee, expected));
+                    Value* given = callee;
+                    // This change here potentially allows the delay_instr pass
+                    // to move the ldfun into the deopt branch
+                    if (ldfun)
+                        given = insert(new LdVar(ldfun->varName, ldfun->env()));
+                    Value* t = insert(new Identical(given, expected));
                     auto cp = insert.addCheckpoint(srcCode, pos, stack);
                     insert(new Assume(t, cp));
                     pop();
-                    auto fs = insert.registerFrameState(srcCode, nextPos, stack);
-                    push(insert(
-                        new StaticCall(insert.env, f, args, monomorphic, fs, ast)));
+                    auto fs =
+                        insert.registerFrameState(srcCode, nextPos, stack);
+                    push(insert(new StaticCall(insert.env, f, args, monomorphic,
+                                               fs, ast)));
                 },
                 insertGenericCall);
         } else {

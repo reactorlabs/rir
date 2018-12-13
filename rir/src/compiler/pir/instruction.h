@@ -1276,6 +1276,7 @@ class Checkpoint
   public:
     Checkpoint() : FixedLenInstruction(NativeType::checkpoint) {}
     void printArgs(std::ostream & out, bool tty) override;
+    BB* deoptBranch();
 };
 
 /*
