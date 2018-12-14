@@ -75,7 +75,7 @@ void DelayInstr::apply(RirCompiler&, Closure* function, LogStream&) const {
             if (checkpoint) {
                 if (auto ldfun = LdFun::Cast(i)) {
                     auto usage = ldfun->hasSingleUse();
-                    if (usage && Deopt::Cast(usage) &&
+                    if (usage && FrameState::Cast(usage) &&
                         usage->bb() == checkpoint->deoptBranch()) {
                         next = bb->moveToBegin(ip, usage->bb());
                     }
