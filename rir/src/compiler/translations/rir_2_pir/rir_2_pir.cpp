@@ -441,6 +441,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
     }
 
     case Opcode::extract1_2_: {
+        insert.addCheckpoint(srcCode, pos, stack);
         Value* idx2 = pop();
         Value* idx1 = pop();
         Value* vec = pop();
@@ -449,6 +450,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
     }
 
     case Opcode::extract2_2_: {
+        insert.addCheckpoint(srcCode, pos, stack);
         Value* idx2 = pop();
         Value* idx1 = pop();
         Value* vec = pop();
@@ -457,6 +459,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
     }
 
     case Opcode::subassign1_: {
+        insert.addCheckpoint(srcCode, pos, stack);
         Value* idx = pop();
         Value* vec = pop();
         Value* val = pop();
@@ -465,6 +468,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
     }
 
     case Opcode::subassign2_: {
+        insert.addCheckpoint(srcCode, pos, stack);
         Value* idx = pop();
         Value* vec = pop();
         Value* val = pop();
