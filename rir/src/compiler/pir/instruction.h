@@ -143,7 +143,7 @@ class Instruction : public Value {
     Value* followCasts() override;
     Value* followCastsAndForce() override;
     bool isInstruction() override final { return true; }
-    bool envOnlyForObj();
+    virtual bool envOnlyForObj();
 
     bool validIn(Code* code) const override final;
 
@@ -1182,10 +1182,8 @@ class VLI(CallSafeBuiltin, Effect::None, EnvAccess::None),
 
     void printArgs(std::ostream & out, bool tty) override;
 
-  private:
     CallSafeBuiltin(SEXP builtin, const std::vector<Value*>& args,
                     unsigned srcIdx);
-    friend class BuiltinCallFactory;
 };
 
 class BuiltinCallFactory {

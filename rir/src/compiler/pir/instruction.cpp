@@ -320,7 +320,7 @@ CallBuiltin::CallBuiltin(Value* env, SEXP builtin,
 Instruction* BuiltinCallFactory::New(Value* callerEnv, SEXP builtin,
                                      const std::vector<Value*>& args,
                                      unsigned srcIdx) {
-    if (SafeBuiltinsList::contains(builtin))
+    if (SafeBuiltinsList::always(builtin))
         return new CallSafeBuiltin(builtin, args, srcIdx);
     else
         return new CallBuiltin(callerEnv, builtin, args, srcIdx);

@@ -1,5 +1,6 @@
 #include "../pir/pir_impl.h"
 #include "../util/cfg.h"
+#include "../util/safe_builtins_list.h"
 #include "../util/visitor.h"
 #include "R/r.h"
 #include "pass_definitions.h"
@@ -13,25 +14,49 @@ void ElideEnv::apply(RirCompiler&, Closure* function, LogStream&) const {
     std::unordered_set<Value*> envNeeded;
     std::unordered_map<Value*, Value*> envDependency;
 
-    Visitor::run(function->entry, [&](Instruction* i) {
-        if (i->hasEnv()) {
-            bool envIsNeeded = i->hasEnv();
+    Visitor::run(function->entry, [&](BB* bb) {
+        for (auto ip = bb->begin(); ip != bb->end(); ++ip) {
+            auto i = *ip;
+            if (i->hasEnv()) {
+                bool envIsNeeded = i->hasEnv();
 
-            if (envIsNeeded && i->envOnlyForObj()) {
-                envIsNeeded = i->anyArg([&](Value* v) {
-                    return v != i->env() && v->type.maybeObj();
-                });
-                if (!envIsNeeded) {
-                    i->elideEnv();
-                    i->type.setNotObject();
+                if (envIsNeeded && i->envOnlyForObj()) {
+                    envIsNeeded = i->anyArg([&](Value* v) {
+                        return v != i->env() && v->type.maybeObj();
+                    });
+                    if (!envIsNeeded) {
+                        i->elideEnv();
+                        i->type.setNotObject();
+                    }
                 }
-            }
 
-            if (envIsNeeded) {
-                if (!StVar::Cast(i))
-                    envNeeded.insert(i->env());
-                if (!Env::isPirEnv(i))
-                    envDependency[i] = i->env();
+                if (auto b = CallBuiltin::Cast(i)) {
+                    bool noObjects = true;
+                    i->eachArg([&](Value* v) {
+                        if (v != i->env())
+                            if (v->type.maybeObj())
+                                noObjects = false;
+                    });
+
+                    if (noObjects &&
+                        SafeBuiltinsList::nonObject(b->builtinId)) {
+                        std::vector<Value*> args;
+                        i->eachArg([&](Value* v) {
+                            if (v != i->env())
+                                args.push_back(v);
+                        });
+                        bb->replace(
+                            ip, new CallSafeBuiltin(b->blt, args, b->srcIdx));
+                        envIsNeeded = false;
+                    }
+                }
+
+                if (envIsNeeded) {
+                    if (!StVar::Cast(i))
+                        envNeeded.insert(i->env());
+                    if (!Env::isPirEnv(i))
+                        envDependency[i] = i->env();
+                }
             }
         }
     });
