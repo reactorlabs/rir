@@ -21,7 +21,7 @@ static LdConst* isConst(Value* instr) {
     return nullptr;
 }
 
-#define FOLD2_SIMPLE(Instruction, Operation)                                   \
+#define FOLD_BINARY_NATIVE(Instruction, Operation)                             \
     do {                                                                       \
         if (auto instr = Instruction::Cast(i)) {                               \
             if (auto lhs = isConst(instr->arg<0>().val())) {                   \
@@ -37,7 +37,7 @@ static LdConst* isConst(Value* instr) {
         }                                                                      \
     } while (false)
 
-#define FOLD1(Instruction, Operation)                                          \
+#define FOLD_UNARY(Instruction, Operation)                                     \
     do {                                                                       \
         if (auto instr = Instruction::Cast(i)) {                               \
             if (auto arg = isConst(instr->arg<0>().val())) {                   \
@@ -46,7 +46,7 @@ static LdConst* isConst(Value* instr) {
         }                                                                      \
     } while (false)
 
-#define FOLD2(Instruction, Operation)                                          \
+#define FOLD_BINARY(Instruction, Operation)                                    \
     do {                                                                       \
         if (auto instr = Instruction::Cast(i)) {                               \
             if (auto lhs = isConst(instr->arg<0>().val())) {                   \
@@ -56,6 +56,20 @@ static LdConst* isConst(Value* instr) {
             }                                                                  \
         }                                                                      \
     } while (false)
+
+static bool convertsToLogicalWithoutWarning(SEXP arg) {
+    switch (TYPEOF(arg)) {
+    case LGLSXP:
+    case INTSXP:
+    case REALSXP:
+    case CPLXSXP:
+    case STRSXP:
+    case CHARSXP:
+        return !isObject(arg);
+    default:
+        return false;
+    }
+};
 
 } // namespace
 
@@ -76,35 +90,21 @@ void Constantfold::apply(RirCompiler& cmp, Closure* function,
             auto next = ip + 1;
 
             // Constantfolding of some common operations
-            FOLD2_SIMPLE(Add, symbol::Add);
-            FOLD2_SIMPLE(Sub, symbol::Sub);
-            FOLD2_SIMPLE(Mul, symbol::Mul);
-            FOLD2_SIMPLE(Div, symbol::Div);
-            FOLD2_SIMPLE(IDiv, symbol::Idiv);
-            FOLD2_SIMPLE(Lt, symbol::Lt);
-            FOLD2_SIMPLE(Gt, symbol::Gt);
-            FOLD2_SIMPLE(Lte, symbol::Le);
-            FOLD2_SIMPLE(Gte, symbol::Ge);
-            FOLD2_SIMPLE(Eq, symbol::Eq);
-            FOLD2_SIMPLE(Neq, symbol::Ne);
-            FOLD2_SIMPLE(Pow, symbol::Pow);
+            FOLD_BINARY_NATIVE(Add, symbol::Add);
+            FOLD_BINARY_NATIVE(Sub, symbol::Sub);
+            FOLD_BINARY_NATIVE(Mul, symbol::Mul);
+            FOLD_BINARY_NATIVE(Div, symbol::Div);
+            FOLD_BINARY_NATIVE(IDiv, symbol::Idiv);
+            FOLD_BINARY_NATIVE(Lt, symbol::Lt);
+            FOLD_BINARY_NATIVE(Gt, symbol::Gt);
+            FOLD_BINARY_NATIVE(Lte, symbol::Le);
+            FOLD_BINARY_NATIVE(Gte, symbol::Ge);
+            FOLD_BINARY_NATIVE(Eq, symbol::Eq);
+            FOLD_BINARY_NATIVE(Neq, symbol::Ne);
+            FOLD_BINARY_NATIVE(Pow, symbol::Pow);
 
-            auto convertsToLglWithoutWarning = [](SEXP arg) {
-                switch (TYPEOF(arg)) {
-                case LGLSXP:
-                case INTSXP:
-                case REALSXP:
-                case CPLXSXP:
-                case STRSXP:
-                case CHARSXP:
-                    return !isObject(arg);
-                default:
-                    return false;
-                }
-            };
-
-            FOLD1(AsLogical, [&](SEXP arg) {
-                if (convertsToLglWithoutWarning(arg)) {
+            FOLD_UNARY(AsLogical, [&](SEXP arg) {
+                if (convertsToLogicalWithoutWarning(arg)) {
                     auto res = Rf_asLogical(arg);
                     auto c = new LdConst(Rf_ScalarLogical(res));
                     i->replaceUsesWith(c);
@@ -112,8 +112,9 @@ void Constantfold::apply(RirCompiler& cmp, Closure* function,
                 }
             });
 
-            FOLD1(AsTest, [&](SEXP arg) {
-                if (Rf_length(arg) == 1 && convertsToLglWithoutWarning(arg)) {
+            FOLD_UNARY(AsTest, [&](SEXP arg) {
+                if (Rf_length(arg) == 1 &&
+                    convertsToLogicalWithoutWarning(arg)) {
                     auto res = Rf_asLogical(arg);
                     if (res != NA_LOGICAL) {
                         i->replaceUsesWith(res ? (Value*)True::instance()
@@ -123,7 +124,7 @@ void Constantfold::apply(RirCompiler& cmp, Closure* function,
                 }
             });
 
-            FOLD2(Identical, [&](SEXP a, SEXP b) {
+            FOLD_BINARY(Identical, [&](SEXP a, SEXP b) {
                 i->replaceUsesWith(a == b ? (Value*)True::instance()
                                           : (Value*)False::instance());
                 next = bb->remove(ip);
