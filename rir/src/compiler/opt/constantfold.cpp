@@ -4,6 +4,7 @@
 #include "../util/cfg.h"
 #include "../util/visitor.h"
 #include "R/Symbols.h"
+#include "R/r.h"
 #include "pass_definitions.h"
 
 #include <unordered_set>
@@ -13,13 +14,14 @@ namespace {
 using namespace rir::pir;
 
 static LdConst* isConst(Value* instr) {
-    if (auto cst = LdConst::Cast(instr->followCastsAndForce())) {
+    instr = instr->followCastsAndForce();
+    if (auto cst = LdConst::Cast(instr)) {
         return cst;
     }
     return nullptr;
 }
 
-#define FOLD(Instruction, Operation)                                           \
+#define FOLD_BINARY_NATIVE(Instruction, Operation)                             \
     do {                                                                       \
         if (auto instr = Instruction::Cast(i)) {                               \
             if (auto lhs = isConst(instr->arg<0>().val())) {                   \
@@ -35,9 +37,18 @@ static LdConst* isConst(Value* instr) {
         }                                                                      \
     } while (false)
 
-#define FOLD2(__i__, Instruction, Operation)                                   \
+#define FOLD_UNARY(Instruction, Operation)                                     \
     do {                                                                       \
-        if (auto instr = Instruction::Cast(__i__)) {                           \
+        if (auto instr = Instruction::Cast(i)) {                               \
+            if (auto arg = isConst(instr->arg<0>().val())) {                   \
+                Operation(arg->c);                                             \
+            }                                                                  \
+        }                                                                      \
+    } while (false)
+
+#define FOLD_BINARY(Instruction, Operation)                                    \
+    do {                                                                       \
+        if (auto instr = Instruction::Cast(i)) {                               \
             if (auto lhs = isConst(instr->arg<0>().val())) {                   \
                 if (auto rhs = isConst(instr->arg<1>().val())) {               \
                     Operation(lhs->c, rhs->c);                                 \
@@ -45,6 +56,20 @@ static LdConst* isConst(Value* instr) {
             }                                                                  \
         }                                                                      \
     } while (false)
+
+static bool convertsToLogicalWithoutWarning(SEXP arg) {
+    switch (TYPEOF(arg)) {
+    case LGLSXP:
+    case INTSXP:
+    case REALSXP:
+    case CPLXSXP:
+    case STRSXP:
+    case CHARSXP:
+        return !isObject(arg);
+    default:
+        return false;
+    }
+};
 
 } // namespace
 
@@ -65,69 +90,72 @@ void Constantfold::apply(RirCompiler& cmp, Closure* function,
             auto next = ip + 1;
 
             // Constantfolding of some common operations
-            FOLD(Add, symbol::Add);
-            FOLD(Sub, symbol::Sub);
-            FOLD(Mul, symbol::Mul);
-            FOLD(Div, symbol::Div);
-            FOLD(IDiv, symbol::Idiv);
-            FOLD(Lt, symbol::Lt);
-            FOLD(Gt, symbol::Gt);
-            FOLD(Lte, symbol::Le);
-            FOLD(Gte, symbol::Ge);
-            FOLD(Eq, symbol::Eq);
-            FOLD(Neq, symbol::Ne);
-            FOLD(Pow, symbol::Pow);
+            FOLD_BINARY_NATIVE(Add, symbol::Add);
+            FOLD_BINARY_NATIVE(Sub, symbol::Sub);
+            FOLD_BINARY_NATIVE(Mul, symbol::Mul);
+            FOLD_BINARY_NATIVE(Div, symbol::Div);
+            FOLD_BINARY_NATIVE(IDiv, symbol::Idiv);
+            FOLD_BINARY_NATIVE(Lt, symbol::Lt);
+            FOLD_BINARY_NATIVE(Gt, symbol::Gt);
+            FOLD_BINARY_NATIVE(Lte, symbol::Le);
+            FOLD_BINARY_NATIVE(Gte, symbol::Ge);
+            FOLD_BINARY_NATIVE(Eq, symbol::Eq);
+            FOLD_BINARY_NATIVE(Neq, symbol::Ne);
+            FOLD_BINARY_NATIVE(Pow, symbol::Pow);
+
+            FOLD_UNARY(AsLogical, [&](SEXP arg) {
+                if (convertsToLogicalWithoutWarning(arg)) {
+                    auto res = Rf_asLogical(arg);
+                    auto c = new LdConst(Rf_ScalarLogical(res));
+                    i->replaceUsesWith(c);
+                    bb->replace(ip, c);
+                }
+            });
+
+            FOLD_UNARY(AsTest, [&](SEXP arg) {
+                if (Rf_length(arg) == 1 &&
+                    convertsToLogicalWithoutWarning(arg)) {
+                    auto res = Rf_asLogical(arg);
+                    if (res != NA_LOGICAL) {
+                        i->replaceUsesWith(res ? (Value*)True::instance()
+                                               : (Value*)False::instance());
+                        next = bb->remove(ip);
+                    }
+                }
+            });
+
+            FOLD_BINARY(Identical, [&](SEXP a, SEXP b) {
+                i->replaceUsesWith(a == b ? (Value*)True::instance()
+                                          : (Value*)False::instance());
+                next = bb->remove(ip);
+            });
+
+            if (auto isObj = IsObject::Cast(i)) {
+                if (!isObj->arg<0>().val()->type.maybeObj()) {
+                    i->replaceUsesWith(False::instance());
+                    next = bb->remove(ip);
+                }
+            }
 
             if (auto assume = Assume::Cast(i)) {
-                auto condition = assume->arg<0>().val();
-                if (auto isObj = IsObject::Cast(condition))
-                    if (!isObj->arg<0>().val()->type.maybeObj())
-                        next = bb->remove(ip);
-
-                FOLD2(condition, Identical,
-                      [&](SEXP a, SEXP b) { next = bb->remove(ip); });
+                if (assume->arg<0>().val() == True::instance() &&
+                    assume->assumeTrue)
+                    next = bb->remove(ip);
+                else if (assume->arg<0>().val() == False::instance() &&
+                         !assume->assumeTrue)
+                    next = bb->remove(ip);
             }
 
             ip = next;
         }
 
         if (auto branch = Branch::Cast(bb->last())) {
-            // TODO: if we had native true/false values we could use constant
-            // folding to reduce the branch condition and then only remove
-            // branches which are constant true/false. But for now we look at
-            // the actual condition and do the constantfolding and branch
-            // removal in one go.
-
             auto condition = branch->arg<0>().val();
-            if (auto tst = AsTest::Cast(condition)) {
-                // Try to detect constant branch conditions and mark such
-                // branches for removal
-                auto cnst = isConst(tst->arg<0>().val());
-                if (!cnst)
-                    if (auto lgl = AsLogical::Cast(tst->arg<0>().val()))
-                        cnst = isConst(lgl->arg<0>().val());
-                if (cnst) {
-                    SEXP c = cnst->c;
-                    // Non length 1 condition throws warning
-                    if (Rf_length(c) == 1) {
-                        auto cond = Rf_asLogical(c);
-                        // NA throws an error
-                        if (cond != NA_LOGICAL) {
-                            branchRemoval.emplace(bb, cond);
-                        }
-                    }
-                }
-
-                // If the `Identical` instruction can be resolved statically,
-                // use it for branch removal as well.
-                FOLD2(tst->arg<0>().val(), Identical, [&](SEXP a, SEXP b) {
-                    branchRemoval.emplace(bb, a == b);
-                });
+            if (condition == True::instance()) {
+                branchRemoval.emplace(bb, true);
+            } else if (condition == False::instance()) {
+                branchRemoval.emplace(bb, false);
             }
-
-            if (auto isObj = IsObject::Cast(condition))
-                if (!isObj->arg<0>().val()->type.maybeObj())
-                    branchRemoval.emplace(bb, false);
         }
     });
 

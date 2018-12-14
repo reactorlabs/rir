@@ -685,11 +685,15 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
 
             // Load Arguments to the stack
             {
-                auto loadEnv = [&](BB::Instrs::iterator it, Value* what) {
+                auto loadEnv = [&](BB::Instrs::iterator it, Value* what,
+                                   size_t& argStackSize, size_t argNumber) {
+                    bool pushed = false;
                     if (what == Env::notClosed()) {
                         cs << BC::parentEnv();
+                        pushed = true;
                     } else if (what == Env::nil()) {
                         cs << BC::push(R_NilValue);
+                        pushed = true;
                     } else if (Env::isStaticEnv(what)) {
                         auto env = Env::Cast(what);
                         // Here we could also load env->rho, but if the user
@@ -699,6 +703,7 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                             cs << BC::parentEnv();
                         else
                             cs << BC::push(env->rho);
+                        pushed = true;
                     } else {
                         if (!alloc.hasSlot(what)) {
                             std::cerr << "Don't know how to load the env ";
@@ -709,21 +714,36 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                         if (!alloc.onStack(what)) {
                             cs << BC::ldloc(alloc[what]);
                             debugAddVariableName(what);
+                            pushed = true;
                         }
+                    }
+                    if (pushed) {
+                        // If there are more things on the stack than expected,
+                        // it means that some args where already there and we
+                        // need to put the argument into the right position
+                        if (argNumber != argStackSize) {
+                            assert(argNumber < argStackSize);
+                            cs << BC::put(argStackSize - argNumber);
+                        }
+                        argStackSize++;
                     }
                 };
 
                 auto loadArg = [&](BB::Instrs::iterator it, Instruction* instr,
-                                   Value* what) {
-                    if (what->tag == Tag::Tombstone) {
-                        return;
-                    }
+                                   Value* what, size_t& argStackSize,
+                                   size_t argNumber) {
+                    bool pushed = false;
                     if (what == Missing::instance()) {
-                        // if missing flows into instructions with more than one
-                        // arg we will need stack shuffling here
                         assert(MkArg::Cast(instr) &&
                                "only mkarg supports missing");
                         cs << BC::push(R_UnboundValue);
+                        pushed = true;
+                    } else if (what == True::instance()) {
+                        cs << BC::push(R_TrueValue);
+                        pushed = true;
+                    } else if (what == False::instance()) {
+                        cs << BC::push(R_FalseValue);
+                        pushed = true;
                     } else {
                         if (!alloc.hasSlot(what)) {
                             std::cerr << "Don't know how to load the arg ";
@@ -734,38 +754,56 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                         if (!alloc.onStack(what)) {
                             cs << BC::ldloc(alloc[what]);
                             debugAddVariableName(what);
+                            pushed = true;
                         }
+                    }
+                    if (pushed) {
+                        // If there are more things on the stack than expected,
+                        // it means that some args where already there and we
+                        // need to put the argument into the right position
+                        if (argNumber != argStackSize) {
+                            assert(argNumber < argStackSize);
+                            cs << BC::put(argStackSize - argNumber);
+                        }
+                        argStackSize++;
                     }
                 };
 
-                // Step one: load and set env
-                if (!Phi::Cast(instr)) {
-                    if (instr->hasEnv() && !explicitEnvValue(instr)) {
-                        // If the env is passed on the stack, it needs
-                        // to be TOS here. To relax this condition some
-                        // stack shuffling would be needed.
-                        assert(instr->envSlot() == instr->nargs() - 1);
-                        auto env = instr->env();
-                        if (currentEnv != env) {
-                            loadEnv(it, env);
-                            cs << BC::setEnv();
-                            currentEnv = env;
-                        } else {
-                            if (alloc.hasSlot(env) && alloc.onStack(env))
-                                cs << BC::pop();
-                        }
-                    }
-                }
+                // Count how many things are already on the stack
+                size_t argStackSize = 0;
+                instr->eachArg([&](Value* what) {
+                    if (alloc.hasSlot(what) && alloc.onStack(what))
+                        argStackSize++;
+                });
 
-                // Step two: load the rest
                 if (!Phi::Cast(instr)) {
+                    size_t argNumber = 0;
                     instr->eachArg([&](Value* what) {
+                        if (what == Env::elided() ||
+                            what->tag == Tag::Tombstone)
+                            return;
+
                         if (instr->hasEnv() && instr->env() == what) {
-                            if (explicitEnvValue(instr))
-                                loadEnv(it, what);
-                        } else if (what != Env::elided()) {
-                            loadArg(it, instr, what);
+                            if (explicitEnvValue(instr)) {
+                                loadEnv(it, what, argStackSize, argNumber);
+                            } else {
+                                auto env = instr->env();
+                                if (currentEnv != env) {
+                                    size_t ignore = 0;
+                                    loadEnv(it, env, ignore, 0);
+                                    cs << BC::setEnv();
+                                    currentEnv = env;
+                                } else {
+                                    if (alloc.hasSlot(env) &&
+                                        alloc.onStack(env))
+                                        cs << BC::pop();
+                                }
+                            }
+                        } else {
+                            loadArg(it, instr, what, argStackSize, argNumber);
                         }
+
+                        argNumber++;
                     });
                 }
             }
@@ -1046,6 +1084,8 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
             case Tag::Missing:
             case Tag::Env:
             case Tag::Nil:
+            case Tag::False:
+            case Tag::True:
                 break;
             // dummy sentinel enum item
             case Tag::_UNUSED_:
@@ -1092,6 +1132,14 @@ static bool allLazy(CallType* call, std::vector<Promise*>& args) {
     return allLazy;
 }
 
+static bool DEOPT_CHAOS = getenv("PIR_DEOPT_CHAOS") &&
+                          0 == strncmp("1", getenv("PIR_DEOPT_CHAOS"), 1);
+static bool coinFlip() {
+    static std::mt19937 gen(42);
+    static std::bernoulli_distribution coin(0.2);
+    return coin(gen);
+};
+
 void Pir2Rir::lower(Code* code) {
     Visitor::runPostChange(
         code->entry, [&](BB* bb) {
@@ -1114,8 +1162,14 @@ void Pir2Rir::lower(Code* code) {
                     newDeopt->consumeFrameStates(deopt);
                     bb->replace(it, newDeopt);
                 } else if (auto expect = Assume::Cast(*it)) {
+                    auto condition = expect->condition();
+                    if (DEOPT_CHAOS && coinFlip()) {
+                        condition = expect->assumeTrue
+                                        ? (Value*)False::instance()
+                                        : (Value*)True::instance();
+                    }
                     BBTransform::lowerExpect(
-                        code, bb, it, expect->condition(), expect->assumeTrue,
+                        code, bb, it, condition, expect->assumeTrue,
                         expect->checkpoint()->bb()->falseBranch());
                     // lowerExpect splits the bb from current position. There
                     // remains nothing to process. Breaking seems more robust
