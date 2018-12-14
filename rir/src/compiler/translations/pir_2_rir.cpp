@@ -1132,8 +1132,11 @@ static bool allLazy(CallType* call, std::vector<Promise*>& args) {
     return allLazy;
 }
 
+static bool DEBUG_DEOPTS = getenv("PIR_DEBUG_DEOPTS") &&
+                           0 == strncmp("1", getenv("PIR_DEBUG_DEOPTS"), 1);
 static bool DEOPT_CHAOS = getenv("PIR_DEOPT_CHAOS") &&
                           0 == strncmp("1", getenv("PIR_DEOPT_CHAOS"), 1);
+
 static bool coinFlip() {
     static std::mt19937 gen(42);
     static std::bernoulli_distribution coin(0.2);
@@ -1168,9 +1171,21 @@ void Pir2Rir::lower(Code* code) {
                                         ? (Value*)False::instance()
                                         : (Value*)True::instance();
                     }
+                    std::string debugMessage;
+                    if (DEBUG_DEOPTS) {
+                        std::stringstream dump;
+                        debugMessage = "DEOPT, assumption ";
+                        condition->printRef(dump);
+                        debugMessage += dump.str();
+                        debugMessage += " failed in\n";
+                        dump.str("");
+                        code->printCode(dump, true);
+                        debugMessage += dump.str();
+                    }
                     BBTransform::lowerExpect(
                         code, bb, it, condition, expect->assumeTrue,
-                        expect->checkpoint()->bb()->falseBranch());
+                        expect->checkpoint()->bb()->falseBranch(),
+                        debugMessage);
                     // lowerExpect splits the bb from current position. There
                     // remains nothing to process. Breaking seems more robust
                     // than trusting the modified iterator.
