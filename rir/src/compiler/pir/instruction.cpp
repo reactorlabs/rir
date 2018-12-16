@@ -207,6 +207,7 @@ bool Instruction::envOnlyForObj() {
         return true;                                                           \
     }
     BINOP_INSTRUCTIONS(V)
+    VECTOR_RW_INSTRUCTIONS(V)
 #undef V
     return false;
 }
