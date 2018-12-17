@@ -997,7 +997,14 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 // waste that work and actually compile the optimized version,
                 // we need to put it in a specific slot and then have a
                 // staticCall that dispatches to that slot.
-                compiler.compile(call->cls(), call->origin(), dryRun);
+
+                // Avoid recursivly compiling the same closure
+                if (!compiler.alreadyCompiled(call->cls())) {
+                    auto fun =
+                        compiler.compile(call->cls(), call->origin(), dryRun);
+                    Protect p(fun->container());
+                    DispatchTable::unpack(BODY(call->origin()))->insert(fun);
+                }
                 cs << BC::staticCall(call->nCallArgs(), Pool::get(call->srcIdx),
                                      call->origin());
                 break;
@@ -1144,74 +1151,71 @@ static bool coinFlip() {
 };
 
 void Pir2Rir::lower(Code* code) {
-    Visitor::runPostChange(
-        code->entry, [&](BB* bb) {
-            auto it = bb->begin();
-            while (it != bb->end()) {
-                auto next = it + 1;
-                if (auto call = CallInstruction::CastCall(*it))
-                    call->clearFrameState();
-                if (auto ldfun = LdFun::Cast(*it)) {
-                    // the guessed binding in ldfun is just used as a temporary
-                    // store. If we did not manage to resolve ldfun by now, we
-                    // have to remove the guess again, since apparently we
-                    // where not sure it is correct.
-                    if (ldfun->guessedBinding())
-                        ldfun->clearGuessedBinding();
-                } else if (auto deopt = Deopt::Cast(*it)) {
-                    // Lower Deopt instructions + their FrameStates to a
-                    // ScheduledDeopt.
-                    auto newDeopt = new ScheduledDeopt();
-                    newDeopt->consumeFrameStates(deopt);
-                    bb->replace(it, newDeopt);
-                } else if (auto expect = Assume::Cast(*it)) {
-                    auto condition = expect->condition();
-                    if (DEOPT_CHAOS && coinFlip()) {
-                        condition = expect->assumeTrue
-                                        ? (Value*)False::instance()
-                                        : (Value*)True::instance();
-                    }
-                    std::string debugMessage;
-                    if (DEBUG_DEOPTS) {
-                        std::stringstream dump;
-                        debugMessage = "DEOPT, assumption ";
-                        condition->printRef(dump);
-                        debugMessage += dump.str();
-                        debugMessage += " failed in\n";
-                        dump.str("");
-                        code->printCode(dump, true);
-                        debugMessage += dump.str();
-                    }
-                    BBTransform::lowerExpect(
-                        code, bb, it, condition, expect->assumeTrue,
-                        expect->checkpoint()->bb()->falseBranch(),
-                        debugMessage);
-                    // lowerExpect splits the bb from current position. There
-                    // remains nothing to process. Breaking seems more robust
-                    // than trusting the modified iterator.
-                    break;
-                } else if (auto call = Call::Cast(*it)) {
-                    // Lower calls to call implicit
-                    std::vector<Promise*> args;
-                    if (allLazy(call, args))
-                        call->replaceUsesAndSwapWith(
-                            new CallImplicit(call->callerEnv(), call->cls(),
-                                             std::move(args), {}, call->srcIdx),
-                            it);
-                } else if (auto call = NamedCall::Cast(*it)) {
-                    // Lower named calls to call implicit
-                    std::vector<Promise*> args;
-                    if (allLazy(call, args))
-                        call->replaceUsesAndSwapWith(
-                            new CallImplicit(call->callerEnv(), call->cls(),
-                                             std::move(args), call->names,
-                                             call->srcIdx),
-                            it);
+    Visitor::runPostChange(code->entry, [&](BB* bb) {
+        auto it = bb->begin();
+        while (it != bb->end()) {
+            auto next = it + 1;
+            if (auto call = CallInstruction::CastCall(*it))
+                call->clearFrameState();
+            if (auto ldfun = LdFun::Cast(*it)) {
+                // the guessed binding in ldfun is just used as a temporary
+                // store. If we did not manage to resolve ldfun by now, we
+                // have to remove the guess again, since apparently we
+                // where not sure it is correct.
+                if (ldfun->guessedBinding())
+                    ldfun->clearGuessedBinding();
+            } else if (auto deopt = Deopt::Cast(*it)) {
+                // Lower Deopt instructions + their FrameStates to a
+                // ScheduledDeopt.
+                auto newDeopt = new ScheduledDeopt();
+                newDeopt->consumeFrameStates(deopt);
+                bb->replace(it, newDeopt);
+            } else if (auto expect = Assume::Cast(*it)) {
+                auto condition = expect->condition();
+                if (DEOPT_CHAOS && coinFlip()) {
+                    condition = expect->assumeTrue ? (Value*)False::instance()
+                                                   : (Value*)True::instance();
                 }
-
-                it = next;
+                std::string debugMessage;
+                if (DEBUG_DEOPTS) {
+                    std::stringstream dump;
+                    debugMessage = "DEOPT, assumption ";
+                    condition->printRef(dump);
+                    debugMessage += dump.str();
+                    debugMessage += " failed in\n";
+                    dump.str("");
+                    code->printCode(dump, true);
+                    debugMessage += dump.str();
+                }
+                BBTransform::lowerExpect(
+                    code, bb, it, condition, expect->assumeTrue,
+                    expect->checkpoint()->bb()->falseBranch(), debugMessage);
+                // lowerExpect splits the bb from current position. There
+                // remains nothing to process. Breaking seems more robust
+                // than trusting the modified iterator.
+                break;
+            } else if (auto call = Call::Cast(*it)) {
+                // Lower calls to call implicit
+                std::vector<Promise*> args;
+                if (allLazy(call, args))
+                    call->replaceUsesAndSwapWith(
+                        new CallImplicit(call->callerEnv(), call->cls(),
+                                         std::move(args), {}, call->srcIdx),
+                        it);
+            } else if (auto call = NamedCall::Cast(*it)) {
+                // Lower named calls to call implicit
+                std::vector<Promise*> args;
+                if (allLazy(call, args))
+                    call->replaceUsesAndSwapWith(
+                        new CallImplicit(call->callerEnv(), call->cls(),
+                                         std::move(args), call->names,
+                                         call->srcIdx),
+                        it);
             }
-        });
+
+            it = next;
+        }
+    });
 
     Visitor::run(code->entry, [&](BB* bb) {
         auto it = bb->begin();
@@ -1300,31 +1304,14 @@ rir::Function* Pir2Rir::finalize() {
 
 } // namespace
 
-void Pir2RirCompiler::compile(Closure* cls, SEXP origin, bool dryRun) {
-    if (done.count(cls))
-        return;
-    // Avoid recursivly compiling the same closure
-    done.insert(cls);
-
-    auto table = DispatchTable::unpack(BODY(origin));
-    if (table->contains(cls->assumptions))
-        return;
-
+rir::Function* Pir2RirCompiler::compile(Closure* cls, SEXP origin,
+                                        bool dryRun) {
     auto& log = logger.get(cls);
-    Pir2Rir pir2rir(*this, cls, origin, dryRun, logger.get(cls));
+    done.insert(cls);
+    Pir2Rir pir2rir(*this, cls, origin, dryRun, log);
     auto fun = pir2rir.finalize();
-
-    if (dryRun)
-        return;
-
-    Protect p(fun->container());
-
-    auto oldFun = table->baseline();
-    fun->body()->funInvocationCount = oldFun->body()->funInvocationCount;
-
-    table->insert(fun);
-
     log.flush();
+    return fun;
 }
 
 } // namespace pir

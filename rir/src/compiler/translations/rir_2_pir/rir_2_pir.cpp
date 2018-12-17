@@ -372,8 +372,8 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                                       bc.immediate.callFixedArgs.ast)));
         } else {
             auto fs = insert.registerFrameState(srcCode, nextPos, stack);
-            push(insert(
-                new Call(env, target, args, fs, bc.immediate.callFixedArgs.ast)));
+            push(insert(new Call(env, target, args, fs,
+                                 bc.immediate.callFixedArgs.ast)));
         }
         break;
     }
@@ -400,7 +400,8 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             compiler.compileClosure(
                 target, "", asmpt,
                 [&](Closure* f) {
-                    auto fs = insert.registerFrameState(srcCode, nextPos, stack);
+                    auto fs =
+                        insert.registerFrameState(srcCode, nextPos, stack);
                     push(insert(new StaticCall(env, f, args, target, fs, ast)));
                 },
                 [&]() { failed = true; });
