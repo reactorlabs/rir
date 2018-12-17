@@ -999,7 +999,7 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 // staticCall that dispatches to that slot.
 
                 // Avoid recursivly compiling the same closure
-                if (!compiler.alreadyCompiled(cls)) {
+                if (!compiler.alreadyCompiled(call->cls)) {
                     auto fun =
                         compiler.compile(call->cls(), call->origin(), dryRun);
                     Protect p(fun->container());
