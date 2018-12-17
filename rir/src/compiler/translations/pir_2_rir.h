@@ -18,9 +18,11 @@ class Pir2RirCompiler {
     Pir2RirCompiler(const Pir2RirCompiler&) = delete;
     Pir2RirCompiler& operator=(const Pir2RirCompiler&) = delete;
 
-    void compile(Closure* cls, SEXP origin, bool dryRun);
+    rir::Function* compile(Closure* cls, SEXP origin, bool dryRun);
 
     StreamLogger& logger;
+
+    bool alreadyCompiled(Closure* cls) { return done.count(cls); }
 
   private:
     std::unordered_set<Closure*> done;

@@ -50,7 +50,6 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
               NUM_PTRS + defaultArgs.size()),
           size(functionSize), deopt(false), markOpt(false),
           numArgs(defaultArgs.size()), signature_(signature) {
-        origin(nullptr);
         next(nullptr);
         for (size_t i = 0; i < numArgs; ++i)
             setEntry(NUM_PTRS + i, defaultArgs[i]);
@@ -61,9 +60,6 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
     void body(SEXP body) { setEntry(2, body); }
 
     void disassemble(std::ostream&);
-
-    FunctionSEXP origin() { return getEntry(0); }
-    void origin(FunctionSEXP s) { setEntry(0, s); }
 
     FunctionSEXP next() { return getEntry(1); }
     void next(FunctionSEXP s) { setEntry(1, s); }
@@ -97,6 +93,6 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
     CodeSEXP defaultArg_[];
 };
 #pragma pack(pop)
-}
+} // namespace rir
 
 #endif
