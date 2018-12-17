@@ -1233,7 +1233,7 @@ void Pir2Rir::lower(Code* code) {
             it = next;
         }
     });
-} // namespace
+}
 
 void Pir2Rir::toCSSA(Code* code) {
     // For each Phi, insert copies
