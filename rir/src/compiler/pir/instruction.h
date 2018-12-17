@@ -1043,7 +1043,7 @@ class VLIE(Call, Effect::Any, EnvAccess::Leak), public CallInstruction {
     Value* cls() { return arg(1).val(); }
 
     Call(Value * callerEnv, Value * fun, const std::vector<Value*>& args,
-         FrameState* fs, unsigned srcIdx)
+         Value* fs, unsigned srcIdx)
         : VarLenInstructionWithEnvSlot(PirType::valOrLazy(), callerEnv,
                                        srcIdx) {
         assert(fs);

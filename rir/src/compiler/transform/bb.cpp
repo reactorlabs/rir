@@ -1,6 +1,8 @@
 #include "bb.h"
 #include "../pir/pir_impl.h"
 #include "../util/visitor.h"
+#include "R/Funtab.h"
+#include "R/r.h"
 
 #include <unordered_map>
 
@@ -110,8 +112,25 @@ Value* BBTransform::forInline(BB* inlinee, BB* splice) {
 }
 
 BB* BBTransform::lowerExpect(Code* code, BB* src, BB::Instrs::iterator position,
-                             Value* condition, bool expected, BB* deoptBlock) {
+                             Value* condition, bool expected, BB* deoptBlock,
+                             const std::string& debugMessage) {
     auto split = BBTransform::split(code->nextBBId++, src, position + 1, code);
+
+    static SEXP print = Rf_findFun(Rf_install("cat"), R_GlobalEnv);
+
+    if (debugMessage.size() != 0) {
+        BB* debug = new BB(code, code->nextBBId++);
+        SEXP msg = Rf_mkString(debugMessage.c_str());
+        auto ldprint = new LdConst(print);
+        auto ldmsg = new LdConst(msg);
+        debug->append(ldmsg);
+        debug->append(ldprint);
+        debug->append(new Call(Env::elided(), ldprint, {ldmsg},
+                               Tombstone::framestate(), 0));
+        debug->setNext(deoptBlock);
+        deoptBlock = debug;
+    }
+
     src->replace(position, new Branch(condition));
     if (expected) {
         src->next1 = deoptBlock;

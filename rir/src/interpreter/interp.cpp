@@ -1896,9 +1896,17 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
             NEXT();
         }
 
-        INSTRUCTION(identical_) {
+        INSTRUCTION(identical_noforce_) {
             SEXP rhs = ostack_pop(ctx);
             SEXP lhs = ostack_pop(ctx);
+            // This instruction does not force, but we should still compare
+            // the actual promise value if it is already forced.
+            // Especially important since all the inlined functions are probably
+            // behind lazy loading stub promises.
+            if (TYPEOF(rhs) == PROMSXP && PRVALUE(rhs) != R_UnboundValue)
+                rhs = PRVALUE(rhs);
+            if (TYPEOF(lhs) == PROMSXP && PRVALUE(lhs) != R_UnboundValue)
+                lhs = PRVALUE(lhs);
             ostack_push(ctx, rhs == lhs ? R_TrueValue : R_FalseValue);
             NEXT();
         }
