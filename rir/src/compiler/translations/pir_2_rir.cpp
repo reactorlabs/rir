@@ -1151,114 +1151,88 @@ static bool coinFlip() {
 };
 
 void Pir2Rir::lower(Code* code) {
-    Visitor::runPostChange(
-        code->entry, [&](BB* bb) {
-    auto it = bb->begin();
-    while (it != bb->end()) {
-        auto next = it + 1;
-        if (auto call = CallInstruction::CastCall(*it))
-            call->clearFrameState();
-        if (auto ldfun = LdFun::Cast(*it)) {
-            // the guessed binding in ldfun is just used as a temporary
-            // store. If we did not manage to resolve ldfun by now, we
-            // have to remove the guess again, since apparently we
-            // where not sure it is correct.
-            if (ldfun->guessedBinding())
-                ldfun->clearGuessedBinding();
-        } else if (auto deopt = Deopt::Cast(*it)) {
-            // Lower Deopt instructions + their FrameStates to a
-            // ScheduledDeopt.
-            auto newDeopt = new ScheduledDeopt();
-            newDeopt->consumeFrameStates(deopt);
-            bb->replace(it, newDeopt);
-        } else if (auto expect = Assume::Cast(*it)) {
-            auto condition = expect->condition();
-            if (DEOPT_CHAOS && coinFlip()) {
-                condition = expect->assumeTrue ? (Value*)False::instance()
-                                               : (Value*)True::instance();
+    Visitor::runPostChange(code->entry, [&](BB* bb) {
+        auto it = bb->begin();
+        while (it != bb->end()) {
+            auto next = it + 1;
+            if (auto call = CallInstruction::CastCall(*it))
+                call->clearFrameState();
+            if (auto ldfun = LdFun::Cast(*it)) {
+                // the guessed binding in ldfun is just used as a temporary
+                // store. If we did not manage to resolve ldfun by now, we
+                // have to remove the guess again, since apparently we
+                // where not sure it is correct.
+                if (ldfun->guessedBinding())
+                    ldfun->clearGuessedBinding();
+            } else if (auto deopt = Deopt::Cast(*it)) {
+                // Lower Deopt instructions + their FrameStates to a
+                // ScheduledDeopt.
+                auto newDeopt = new ScheduledDeopt();
+                newDeopt->consumeFrameStates(deopt);
+                bb->replace(it, newDeopt);
+            } else if (auto expect = Assume::Cast(*it)) {
+                auto condition = expect->condition();
+                if (DEOPT_CHAOS && coinFlip()) {
+                    condition = expect->assumeTrue ? (Value*)False::instance()
+                                                   : (Value*)True::instance();
+                }
+                std::string debugMessage;
+                if (DEBUG_DEOPTS) {
+                    std::stringstream dump;
+                    debugMessage = "DEOPT, assumption ";
+                    condition->printRef(dump);
+                    debugMessage += dump.str();
+                    debugMessage += " failed in\n";
+                    dump.str("");
+                    code->printCode(dump, true);
+                    debugMessage += dump.str();
+                }
+                BBTransform::lowerExpect(
+                    code, bb, it, condition, expect->assumeTrue,
+                    expect->checkpoint()->bb()->falseBranch(), debugMessage);
+                // lowerExpect splits the bb from current position. There
+                // remains nothing to process. Breaking seems more robust
+                // than trusting the modified iterator.
+                break;
+            } else if (auto call = Call::Cast(*it)) {
+                // Lower calls to call implicit
+                std::vector<Promise*> args;
+                if (allLazy(call, args))
+                    call->replaceUsesAndSwapWith(
+                        new CallImplicit(call->callerEnv(), call->cls(),
+                                         std::move(args), {}, call->srcIdx),
+                        it);
+            } else if (auto call = NamedCall::Cast(*it)) {
+                // Lower named calls to call implicit
+                std::vector<Promise*> args;
+                if (allLazy(call, args))
+                    call->replaceUsesAndSwapWith(
+                        new CallImplicit(call->callerEnv(), call->cls(),
+                                         std::move(args), call->names,
+                                         call->srcIdx),
+                        it);
             }
-            std::string debugMessage;
-            if (DEBUG_DEOPTS) {
-                std::stringstream dump;
-                debugMessage = "DEOPT, assumption ";
-                condition->printRef(dump);
-                debugMessage += dump.str();
-                debugMessage += " failed in\n";
-                dump.str("");
-                code->printCode(dump, true);
-                debugMessage += dump.str();
-            }
-            BBTransform::lowerExpect(
-                code, bb, it, condition, expect->assumeTrue,
-                expect->checkpoint()->bb()->falseBranch(), debugMessage);
-            // lowerExpect splits the bb from current position. There
-            // remains nothing to process. Breaking seems more robust
-            // than trusting the modified iterator.
-            break;
-        } else if (auto call = Call::Cast(*it)) {
-            // Lower calls to call implicit
-            std::vector<Promise*> args;
-            if (allLazy(call, args))
-                call->replaceUsesAndSwapWith(
-                    new CallImplicit(call->callerEnv(), call->cls(),
-                                     std::move(args), {}, call->srcIdx),
-                    it);
-        } else if (auto call = NamedCall::Cast(*it)) {
-            // Lower named calls to call implicit
-            std::vector<Promise*> args;
-            if (allLazy(call, args))
-                call->replaceUsesAndSwapWith(
-                    new CallImplicit(call->callerEnv(), call->cls(),
-                                     std::move(args), call->names,
-                                     call->srcIdx),
-                    it);
-        }
-        BBTransform::lowerExpect(code, bb, it, condition, expect->assumeTrue,
-                                 expect->checkpoint()->bb()->falseBranch());
-        // lowerExpect splits the bb from current position. There
-        // remains nothing to process. Breaking seems more robust
-        // than trusting the modified iterator.
-        break;
-    }
-    else if (auto call = Call::Cast(*it)) {
-        // Lower calls to call implicit
-        std::vector<Promise*> args;
-        if (allLazy(call, args))
-            call->replaceUsesAndSwapWith(
-                new CallImplicit(call->callerEnv(), call->cls(),
-                                 std::move(args), {}, call->srcIdx),
-                it);
-    }
-    else if (auto call = NamedCall::Cast(*it)) {
-        // Lower named calls to call implicit
-        std::vector<Promise*> args;
-        if (allLazy(call, args))
-            call->replaceUsesAndSwapWith(
-                new CallImplicit(call->callerEnv(), call->cls(),
-                                 std::move(args), call->names, call->srcIdx),
-                it);
-    }
 
-    it = next;
+            it = next;
         }
     });
 
-Visitor::run(code->entry, [&](BB* bb) {
-    auto it = bb->begin();
-    while (it != bb->end()) {
-        auto next = it + 1;
-        if (FrameState::Cast(*it)) {
-            next = bb->remove(it);
-        } else if (Checkpoint::Cast(*it)) {
-            next = bb->remove(it);
-            // Branching removed. Preserve invariant
-            bb->next1 = nullptr;
-        } else if (MkArg::Cast(*it) && (*it)->unused()) {
-            next = bb->remove(it);
+    Visitor::run(code->entry, [&](BB* bb) {
+        auto it = bb->begin();
+        while (it != bb->end()) {
+            auto next = it + 1;
+            if (FrameState::Cast(*it)) {
+                next = bb->remove(it);
+            } else if (Checkpoint::Cast(*it)) {
+                next = bb->remove(it);
+                // Branching removed. Preserve invariant
+                bb->next1 = nullptr;
+            } else if (MkArg::Cast(*it) && (*it)->unused()) {
+                next = bb->remove(it);
+            }
+            it = next;
         }
-        it = next;
-    }
-});
+    });
 } // namespace
 
 void Pir2Rir::toCSSA(Code* code) {
@@ -1328,7 +1302,7 @@ rir::Function* Pir2Rir::finalize() {
     return function.function();
 }
 
-} // namespace pir
+} // namespace
 
 rir::Function* Pir2RirCompiler::compile(Closure* cls, SEXP origin,
                                         bool dryRun) {
@@ -1340,5 +1314,5 @@ rir::Function* Pir2RirCompiler::compile(Closure* cls, SEXP origin,
     return fun;
 }
 
-} // namespace rir
+} // namespace pir
 } // namespace rir
