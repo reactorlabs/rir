@@ -510,7 +510,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         BINOP(Neq, ne_);
 #undef BINOP
 
-    case Opcode::identical_: {
+    case Opcode::identical_noforce_: {
         auto rhs = pop();
         auto lhs = pop();
         push(insert(new Identical(lhs, rhs)));

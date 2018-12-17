@@ -245,7 +245,7 @@ DEF_INSTR(ge_, 0, 2, 1, 0)
 DEF_INSTR(eq_, 0, 2, 1, 0)
 DEF_INSTR(ne_, 0, 2, 1, 0)
 
-DEF_INSTR(identical_, 0, 2, 1, 0)
+DEF_INSTR(identical_noforce_, 0, 2, 1, 0)
 
 /**
  * not_:: unary negation operator !

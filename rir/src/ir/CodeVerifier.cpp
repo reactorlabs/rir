@@ -100,7 +100,7 @@ static Sources hasSources(Opcode bc) {
         return Sources::Required;
 
     case Opcode::inc_:
-    case Opcode::identical_:
+    case Opcode::identical_noforce_:
     case Opcode::push_:
     case Opcode::ldfun_:
     case Opcode::ldddvar_:

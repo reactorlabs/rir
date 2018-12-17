@@ -916,7 +916,7 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
         cs << BC::Factory();                                                   \
         break;                                                                 \
     }
-                SIMPLE(Identical, identical);
+                SIMPLE(Identical, identicalNoforce);
                 SIMPLE(LOr, lglOr);
                 SIMPLE(LAnd, lglAnd);
                 SIMPLE(Inc, inc);

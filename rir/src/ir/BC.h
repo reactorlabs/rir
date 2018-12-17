@@ -222,7 +222,7 @@ BC BC::gt() { return BC(Opcode::gt_); }
 BC BC::le() { return BC(Opcode::le_); }
 BC BC::ge() { return BC(Opcode::ge_); }
 BC BC::eq() { return BC(Opcode::eq_); }
-BC BC::identical() { return BC(Opcode::identical_); }
+BC BC::identicalNoforce() { return BC(Opcode::identical_noforce_); }
 BC BC::ne() { return BC(Opcode::ne_); }
 BC BC::invisible() { return BC(Opcode::invisible_); }
 BC BC::visible() { return BC(Opcode::visible_); }
