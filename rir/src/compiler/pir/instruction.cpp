@@ -311,9 +311,8 @@ CallSafeBuiltin::CallSafeBuiltin(SEXP builtin, const std::vector<Value*>& args,
 
 CallBuiltin::CallBuiltin(Value* env, SEXP builtin,
                          const std::vector<Value*>& args, unsigned srcIdx)
-    : VarLenInstructionWithEnvSlot(PirType::valOrLazy(), env, srcIdx),
-      blt(builtin), builtin(getBuiltin(builtin)),
-      builtinId(getBuiltinNr(builtin)) {
+    : VarLenInstructionWithEnvSlot(PirType::val(), env, srcIdx), blt(builtin),
+      builtin(getBuiltin(builtin)), builtinId(getBuiltinNr(builtin)) {
     for (unsigned i = 0; i < args.size(); ++i)
         this->pushArg(args[i], PirType::val());
 }
