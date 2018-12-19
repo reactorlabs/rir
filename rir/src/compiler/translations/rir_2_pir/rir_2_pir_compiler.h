@@ -11,15 +11,14 @@ namespace pir {
 
 class Rir2PirCompiler : public RirCompiler {
   public:
-    static const AssumptionsSet minimalAssumptions;
+    static const Assumptions minimalAssumptions;
 
     Rir2PirCompiler(Module* module, StreamLogger& logger);
 
-    void compileClosure(SEXP, const std::string& name,
-                        const AssumptionsSet& ctx, MaybeCls success,
-                        Maybe fail);
+    void compileClosure(SEXP, const std::string& name, const Assumptions& ctx,
+                        MaybeCls success, Maybe fail);
     void compileFunction(rir::Function*, const std::string& name,
-                         FormalArgs const&, const AssumptionsSet& ctx,
+                         FormalArgs const&, const Assumptions& ctx,
                          MaybeCls success, Maybe fail);
     void optimizeModule();
 

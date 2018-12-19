@@ -175,6 +175,9 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         break;
 
     case Opcode::asbool_:
+        push(insert(new AsTest(pop())));
+        break;
+
     case Opcode::aslogical_:
         push(insert(new AsLogical(pop(), srcIdx)));
         break;
@@ -278,6 +281,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                 push(insert(new Call(insert.env, callee, args, fs, ast)));
             }
         };
+        auto ldfun = LdFun::Cast(callee);
         if (monomorphic && isValidClosureSEXP(monomorphic)) {
             // Currently we can only use StaticCall if we have exactly the right
             // number of arguments.
@@ -298,23 +302,41 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             }
 
             std::string name = "";
-            if (auto ldfun = LdFun::Cast(callee))
+            if (ldfun)
                 name = CHAR(PRINTNAME(ldfun->varName));
-            AssumptionsSet asmpt(Assumptions::CorrectOrderOfArguments);
-            asmpt.set(Assumptions::CorrectNumberOfArguments);
+            Assumptions asmpt(Assumption::CorrectOrderOfArguments);
+            asmpt.set(Assumption::CorrectNumberOfArguments);
             compiler.compileClosure(
                 monomorphic, name, asmpt,
                 [&](Closure* f) {
                     Value* expected = insert(new LdConst(monomorphic));
-                    Value* t = insert(new Identical(callee, expected));
+                    Value* given = callee;
+                    // This change here potentially allows the delay_instr pass
+                    // to move the ldfun into the deopt branch
+                    if (ldfun)
+                        given = insert(new LdVar(ldfun->varName, ldfun->env()));
+                    Value* t = insert(new Identical(given, expected));
                     auto cp = insert.addCheckpoint(srcCode, pos, stack);
                     insert(new Assume(t, cp));
                     pop();
-                    auto fs = insert.registerFrameState(srcCode, nextPos, stack);
-                    push(insert(
-                        new StaticCall(insert.env, f, args, monomorphic, fs, ast)));
+                    auto fs =
+                        insert.registerFrameState(srcCode, nextPos, stack);
+                    push(insert(new StaticCall(insert.env, f, args, monomorphic,
+                                               fs, ast)));
                 },
                 insertGenericCall);
+        } else if (monomorphic && bc.bc == Opcode::call_implicit_ &&
+                   TYPEOF(monomorphic) == BUILTINSXP) {
+            // TODO implement support for call_builtin_ with names
+            Value* expected = insert(new LdConst(monomorphic));
+            Value* given = callee;
+            if (ldfun)
+                given = insert(new LdVar(ldfun->varName, ldfun->env()));
+            Value* t = insert(new Identical(given, expected));
+            auto cp = insert.addCheckpoint(srcCode, pos, stack);
+            insert(new Assume(t, cp));
+            pop();
+            push(insert(BuiltinCallFactory::New(env, monomorphic, args, ast)));
         } else {
             insertGenericCall();
         }
@@ -351,8 +373,8 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                                       bc.immediate.callFixedArgs.ast)));
         } else {
             auto fs = insert.registerFrameState(srcCode, nextPos, stack);
-            push(insert(
-                new Call(env, target, args, fs, bc.immediate.callFixedArgs.ast)));
+            push(insert(new Call(env, target, args, fs,
+                                 bc.immediate.callFixedArgs.ast)));
         }
         break;
     }
@@ -367,25 +389,20 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             args[n - i - 1] = pop();
 
         if (TYPEOF(target) == BUILTINSXP) {
-            // TODO: compile a list of safe builtins
-            static int vector = findBuiltin("vector");
-
-            if (getBuiltinNr(target) == vector)
-                push(insert(new CallSafeBuiltin(target, args, ast)));
-            else
-                push(insert(new CallBuiltin(env, target, args, ast)));
+            push(insert(BuiltinCallFactory::New(env, target, args, ast)));
         } else {
             assert(TYPEOF(target) == CLOSXP);
             if (!isValidClosureSEXP(target)) {
                 Compiler::compileClosure(target);
             }
             bool failed = false;
-            AssumptionsSet asmpt(Assumptions::CorrectOrderOfArguments);
-            asmpt.set(Assumptions::CorrectNumberOfArguments);
+            Assumptions asmpt(Assumption::CorrectOrderOfArguments);
+            asmpt.set(Assumption::CorrectNumberOfArguments);
             compiler.compileClosure(
                 target, "", asmpt,
                 [&](Closure* f) {
-                    auto fs = insert.registerFrameState(srcCode, nextPos, stack);
+                    auto fs =
+                        insert.registerFrameState(srcCode, nextPos, stack);
                     push(insert(new StaticCall(env, f, args, target, fs, ast)));
                 },
                 [&]() { failed = true; });
@@ -426,6 +443,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
     }
 
     case Opcode::extract1_2_: {
+        insert.addCheckpoint(srcCode, pos, stack);
         Value* idx2 = pop();
         Value* idx1 = pop();
         Value* vec = pop();
@@ -434,6 +452,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
     }
 
     case Opcode::extract2_2_: {
+        insert.addCheckpoint(srcCode, pos, stack);
         Value* idx2 = pop();
         Value* idx1 = pop();
         Value* vec = pop();
@@ -442,6 +461,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
     }
 
     case Opcode::subassign1_: {
+        insert.addCheckpoint(srcCode, pos, stack);
         Value* idx = pop();
         Value* vec = pop();
         Value* val = pop();
@@ -450,6 +470,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
     }
 
     case Opcode::subassign2_: {
+        insert.addCheckpoint(srcCode, pos, stack);
         Value* idx = pop();
         Value* vec = pop();
         Value* val = pop();
@@ -495,7 +516,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         BINOP(Neq, ne_);
 #undef BINOP
 
-    case Opcode::identical_: {
+    case Opcode::identical_noforce_: {
         auto rhs = pop();
         auto lhs = pop();
         push(insert(new Identical(lhs, rhs)));

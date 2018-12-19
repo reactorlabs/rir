@@ -38,13 +38,13 @@ V(NESTED, mod, mod)                                                            \
 V(NESTED, sub, sub)                                                            \
 V(NESTED, uplus, uplus)                                                        \
 V(NESTED, uminus, uminus)                                                      \
-V(NESTED, not_, not)                                                          \
+V(NESTED, not_, not)                                                           \
 V(NESTED, lt, lt)                                                              \
 V(NESTED, gt, gt)                                                              \
 V(NESTED, le, le)                                                              \
 V(NESTED, ge, ge)                                                              \
 V(NESTED, eq, eq)                                                              \
-V(NESTED, identical, identical)                                                \
+V(NESTED, identicalNoforce, identical_noforce)                                 \
 V(NESTED, ne, ne)                                                              \
 V(NESTED, seq, seq)                                                            \
 V(NESTED, colon, colon)                                                        \

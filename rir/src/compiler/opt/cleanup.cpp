@@ -81,29 +81,12 @@ class TheCleanup {
                         if (!isShared.count(i))
                             isShared[i] = 0;
                     }
-                } else if (auto tst = AsTest::Cast(i)) {
-                    // Converting to bool might trow warning if the size is not
-                    // 1, or if the value is NA
-                    if (tst->unused()) {
-                        auto arg = tst->arg<0>().val();
-                        bool canBeRemoved = false;
-                        if (arg->type.isScalar() &&
-                            !arg->type.maybe(RType::logical)) {
-                            canBeRemoved = true;
-                        }
-                        if (auto lgl = AsLogical::Cast(tst->arg<0>().val())) {
-                            if (auto cst = LdConst::Cast(lgl->arg<0>().val())) {
-                                SEXP c = cst->c;
-                                if (XLENGTH(c) == 1 &&
-                                    Rf_asLogical(c) != NA_LOGICAL) {
-                                    canBeRemoved = true;
-                                }
-                            }
-                        }
-                        if (canBeRemoved) {
-                            removed = true;
-                            next = bb->remove(ip);
-                        }
+                } else if (auto lgl = AsLogical::Cast(i)) {
+                    auto arg = lgl->arg<0>().val();
+                    if (arg->type.isA(RType::logical)) {
+                        lgl->replaceUsesWith(arg);
+                        removed = true;
+                        next = bb->remove(ip);
                     }
                 }
                 // CallImplicit is only added in the lowering phase. The unused

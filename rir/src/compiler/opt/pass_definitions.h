@@ -105,6 +105,12 @@ class PASS(CleanupCheckpoints, "Cleanup unused checkpoints");
  */
 class PASS(CleanupFramestate, "Cleanup framestates unused by checkpoints");
 
+/*
+ * Trying to group assumptions, by pushing them up. This well lead to fewer
+ * checkpoints being used overall.
+ */
+class PASS(OptimizeAssumptions, "Optimize Assumptions and checkpoints");
+
 } // namespace pir
 } // namespace rir
 

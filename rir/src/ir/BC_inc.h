@@ -289,8 +289,7 @@ class BC {
 
     // ==== Factory methods
     // to create new BC objects, which can be streamed to a CodeStream
-#define V(NESTED, name, name_)\
-    inline static BC name();
+#define V(NESTED, name, name_) inline static BC name();
 BC_NOARGS(V, _)
 #undef V
     inline static BC recordCall();
@@ -586,67 +585,9 @@ BC_NOARGS(V, _)
         case Opcode::record_binop_:
             memcpy(&immediate.binopFeedback, pc, sizeof(ObservedValues) * 2);
             break;
-        case Opcode::nop_:
-        case Opcode::make_env_:
-        case Opcode::get_env_:
-        case Opcode::parent_env_:
-        case Opcode::set_env_:
-        case Opcode::for_seq_size_:
-        case Opcode::extract1_1_:
-        case Opcode::extract2_1_:
-        case Opcode::extract1_2_:
-        case Opcode::extract2_2_:
-        case Opcode::close_:
-        case Opcode::ret_:
-        case Opcode::pop_:
-        case Opcode::force_:
-        case Opcode::asast_:
-        case Opcode::asbool_:
-        case Opcode::dup_:
-        case Opcode::dup2_:
-        case Opcode::swap_:
-#define V(NESTED, name, Name)\
-        case Opcode::name ## _:
-SIMPLE_INSTRUCTIONS(V, _)
+#define V(NESTED, name, name_) case Opcode::name_##_:
+BC_NOARGS(V, _)
 #undef V
-        case Opcode::make_unique_:
-        case Opcode::set_shared_:
-        case Opcode::ensure_named_:
-        case Opcode::aslogical_:
-        case Opcode::lgl_and_:
-        case Opcode::lgl_or_:
-        case Opcode::inc_:
-        case Opcode::add_:
-        case Opcode::mul_:
-        case Opcode::div_:
-        case Opcode::idiv_:
-        case Opcode::mod_:
-        case Opcode::pow_:
-        case Opcode::seq_:
-        case Opcode::colon_:
-        case Opcode::sub_:
-        case Opcode::uplus_:
-        case Opcode::uminus_:
-        case Opcode::not_:
-        case Opcode::lt_:
-        case Opcode::gt_:
-        case Opcode::le_:
-        case Opcode::ge_:
-        case Opcode::eq_:
-        case Opcode::identical_:
-        case Opcode::ne_:
-        case Opcode::return_:
-        case Opcode::isfun_:
-        case Opcode::invisible_:
-        case Opcode::visible_:
-        case Opcode::endloop_:
-        case Opcode::subassign1_:
-        case Opcode::subassign2_:
-        case Opcode::length_:
-        case Opcode::names_:
-        case Opcode::set_names_:
-        case Opcode::isobj_:
-        case Opcode::check_missing_:
             break;
         case Opcode::invalid_:
         case Opcode::num_of:

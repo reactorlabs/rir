@@ -5,6 +5,7 @@
 #include "../pir/bb.h"
 #include "../pir/closure.h"
 #include "../pir/instruction.h"
+#include "../pir/promise.h"
 #include "../util/cfg.h"
 #include "../util/visitor.h"
 #include "R/r.h"
@@ -156,7 +157,7 @@ class StaticAnalysis {
             if (code == closure)
                 log << "body";
             else
-                log << "Prom(" << closure->promiseId(code) << ")";
+                log << "Prom(" << static_cast<Promise*>(code)->id << ")";
             log << "\n";
         }
 
@@ -206,17 +207,15 @@ class StaticAnalysis {
                 }
 
                 if (bb->isExit()) {
-                    if (!Deopt::Cast(bb->last())) {
-                        if (DEBUG_LEVEL >= AnalysisDebugLevel::Exit) {
-                            log << "===== Exit state is\n";
-                            log(state);
-                        }
-                        if (reachedExit) {
-                            exitpoint.merge(state);
-                        } else {
-                            exitpoint = state;
-                            reachedExit = true;
-                        }
+                    if (DEBUG_LEVEL >= AnalysisDebugLevel::Exit) {
+                        log << "===== Exit state is\n";
+                        log(state);
+                    }
+                    if (reachedExit) {
+                        exitpoint.merge(state);
+                    } else {
+                        exitpoint = state;
+                        reachedExit = true;
                     }
                     return;
                 }

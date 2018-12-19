@@ -1,6 +1,7 @@
 #include "instruction.h"
 #include "pir_impl.h"
 
+#include "../util/safe_builtins_list.h"
 #include "../util/visitor.h"
 #include "R/Funtab.h"
 #include "utils/Pool.h"
@@ -206,6 +207,7 @@ bool Instruction::envOnlyForObj() {
         return true;                                                           \
     }
     BINOP_INSTRUCTIONS(V)
+    VECTOR_RW_INSTRUCTIONS(V)
 #undef V
     return false;
 }
@@ -314,6 +316,15 @@ CallBuiltin::CallBuiltin(Value* env, SEXP builtin,
       builtinId(getBuiltinNr(builtin)) {
     for (unsigned i = 0; i < args.size(); ++i)
         this->pushArg(args[i], PirType::val());
+}
+
+Instruction* BuiltinCallFactory::New(Value* callerEnv, SEXP builtin,
+                                     const std::vector<Value*>& args,
+                                     unsigned srcIdx) {
+    if (SafeBuiltinsList::always(builtin))
+        return new CallSafeBuiltin(builtin, args, srcIdx);
+    else
+        return new CallBuiltin(callerEnv, builtin, args, srcIdx);
 }
 
 static void printCallArgs(std::ostream& out, CallInstruction* call) {
@@ -526,9 +537,11 @@ FrameState* Deopt::frameState() { return FrameState::Cast(arg<0>().val()); }
 
 void Checkpoint::printArgs(std::ostream& out, bool tty) {
     FixedLenInstruction::printArgs(out, tty);
-    out << " -> BB" << bb()->trueBranch()->id << " (by default) | BB"
-        << bb()->falseBranch()->id << " (if coming from expect)";
+    out << " -> BB" << bb()->trueBranch()->id << " (default) | BB"
+        << bb()->falseBranch()->id << " (if assume failed)";
 }
+
+BB* Checkpoint::deoptBranch() { return bb()->falseBranch(); }
 
 } // namespace pir
 } // namespace rir

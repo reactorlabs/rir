@@ -15,9 +15,9 @@ namespace pir {
 
 // Currently PIR optimized functions cannot handle too many arguments or
 // mis-ordered arguments. The caller needs to take care.
-const AssumptionsSet Rir2PirCompiler::minimalAssumptions =
-    AssumptionsSet() | Assumptions::CorrectOrderOfArguments |
-    Assumptions::MaxNumberOfArguments;
+const Assumptions Rir2PirCompiler::minimalAssumptions =
+    Assumptions() | Assumption::CorrectOrderOfArguments |
+    Assumption::MaxNumberOfArguments;
 
 Rir2PirCompiler::Rir2PirCompiler(Module* module, StreamLogger& logger)
     : RirCompiler(module), logger(logger) {
@@ -27,7 +27,7 @@ Rir2PirCompiler::Rir2PirCompiler(Module* module, StreamLogger& logger)
 }
 
 void Rir2PirCompiler::compileClosure(SEXP closure, const std::string& name,
-                                     const AssumptionsSet& assumptions,
+                                     const Assumptions& assumptions,
                                      MaybeCls success, Maybe fail) {
     assert(isValidClosureSEXP(closure));
 
@@ -57,7 +57,7 @@ void Rir2PirCompiler::compileClosure(SEXP closure, const std::string& name,
 void Rir2PirCompiler::compileFunction(rir::Function* srcFunction,
                                       const std::string& name,
                                       FormalArgs const& formals,
-                                      const AssumptionsSet& assumptions,
+                                      const Assumptions& assumptions,
                                       MaybeCls success, Maybe fail) {
     OptimizationContext context(Env::notClosed(),
                                 assumptions | minimalAssumptions);
@@ -72,7 +72,7 @@ void Rir2PirCompiler::compileClosure(rir::Function* srcFunction,
 
     // TODO: Support default arguments and dots
     if (formals.hasDefaultArgs) {
-        if (!ctx.assumptions.includes(Assumptions::CorrectNumberOfArguments)) {
+        if (!ctx.assumptions.includes(Assumption::CorrectNumberOfArguments)) {
             logger.warn("no support for default args");
             return fail();
         }

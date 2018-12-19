@@ -546,10 +546,12 @@ bool matches(const CallContext& call, const FunctionSignature& signature) {
     // global assumptions list. This only becomes relevant as soon as we want to
     // optimize based on argument types.
 
-    if (signature.optimization == FunctionSignature::BaselineVersion)
+    if (signature.optimization ==
+        FunctionSignature::OptimizationLevel::Baseline)
         return true;
 
-    assert(signature.envCreation == FunctionSignature::CalleeCreatedEnv);
+    assert(signature.envCreation ==
+           FunctionSignature::Environment::CalleeCreated);
 
     // We can't materialize ... yet
     if (!call.hasStackArgs()) {
@@ -560,18 +562,17 @@ bool matches(const CallContext& call, const FunctionSignature& signature) {
 
     // TODO: implement argument reordering on the stack to support this case
     if (call.hasNames() && signature.assumptions.includes(
-                               pir::Assumptions::CorrectOrderOfArguments))
+                               pir::Assumption::CorrectOrderOfArguments))
         return false;
 
     if (signature.nargs() < call.nargs &&
-        signature.assumptions.includes(
-            pir::Assumptions::MaxNumberOfArguments)) {
+        signature.assumptions.includes(pir::Assumption::MaxNumberOfArguments)) {
         return false;
     }
 
     if (signature.nargs() > call.nargs) {
         if (signature.assumptions.includes(
-                pir::Assumptions::CorrectNumberOfArguments))
+                pir::Assumption::CorrectNumberOfArguments))
             return false;
 
         if (!call.hasStackArgs())
@@ -614,10 +615,11 @@ SEXP rirCall(const CallContext& call, Context* ctx) {
 
     Function* fun = dispatch(call, table);
     fun->registerInvocation();
-    bool needsEnv =
-        fun->signature().envCreation == FunctionSignature::CallerProvidedEnv;
+    bool needsEnv = fun->signature().envCreation ==
+                    FunctionSignature::Environment::CallerProvided;
 
-    if (fun->signature().optimization == FunctionSignature::BaselineVersion &&
+    if (fun->signature().optimization ==
+            FunctionSignature::OptimizationLevel::Baseline &&
         fun->invocationCount() == RIR_WARMUP) {
         SEXP lhs = CAR(call.ast);
         SEXP name = R_NilValue;
@@ -626,7 +628,7 @@ SEXP rirCall(const CallContext& call, Context* ctx) {
         ctx->closureOptimizer(call.callee, name);
         fun = dispatch(call, table);
         needsEnv = fun->signature().envCreation ==
-                   FunctionSignature::CallerProvidedEnv;
+                   FunctionSignature::Environment::CallerProvided;
     }
 
     SEXP env = R_NilValue;
@@ -1894,9 +1896,17 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
             NEXT();
         }
 
-        INSTRUCTION(identical_) {
+        INSTRUCTION(identical_noforce_) {
             SEXP rhs = ostack_pop(ctx);
             SEXP lhs = ostack_pop(ctx);
+            // This instruction does not force, but we should still compare
+            // the actual promise value if it is already forced.
+            // Especially important since all the inlined functions are probably
+            // behind lazy loading stub promises.
+            if (TYPEOF(rhs) == PROMSXP && PRVALUE(rhs) != R_UnboundValue)
+                rhs = PRVALUE(rhs);
+            if (TYPEOF(lhs) == PROMSXP && PRVALUE(lhs) != R_UnboundValue)
+                lhs = PRVALUE(lhs);
             ostack_push(ctx, rhs == lhs ? R_TrueValue : R_FalseValue);
             NEXT();
         }

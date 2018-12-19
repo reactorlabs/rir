@@ -35,7 +35,7 @@ class TheScopeResolution {
                 auto before = analysis.at<ScopeAnalysis::BeforeInstruction>(i);
                 auto after = analysis.at<ScopeAnalysis::AfterInstruction>(i);
 
-                // Force can only see the callee env through reflection
+                // Force can only see our env only through reflection
                 if (Force::Cast(i) && after.noReflection())
                     i->elideEnv();
 

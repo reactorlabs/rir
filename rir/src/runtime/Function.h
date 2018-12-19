@@ -39,7 +39,7 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
     friend class FunctionCodeIterator;
     friend class ConstFunctionCodeIterator;
 
-    static constexpr size_t NUM_PTRS = 3;
+    static constexpr size_t NUM_PTRS = 1;
 
     Function(size_t functionSize, SEXP body_,
              const std::vector<SEXP>& defaultArgs,
@@ -50,23 +50,15 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
               NUM_PTRS + defaultArgs.size()),
           size(functionSize), deopt(false), markOpt(false),
           numArgs(defaultArgs.size()), signature_(signature) {
-        origin(nullptr);
-        next(nullptr);
         for (size_t i = 0; i < numArgs; ++i)
             setEntry(NUM_PTRS + i, defaultArgs[i]);
         body(body_);
     }
 
-    Code* body() { return Code::unpack(getEntry(2)); }
-    void body(SEXP body) { setEntry(2, body); }
+    Code* body() { return Code::unpack(getEntry(0)); }
+    void body(SEXP body) { setEntry(0, body); }
 
     void disassemble(std::ostream&);
-
-    FunctionSEXP origin() { return getEntry(0); }
-    void origin(FunctionSEXP s) { setEntry(0, s); }
-
-    FunctionSEXP next() { return getEntry(1); }
-    void next(FunctionSEXP s) { setEntry(1, s); }
 
     Code* defaultArg(size_t i) const {
         assert(i < numArgs);
@@ -97,6 +89,6 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
     CodeSEXP defaultArg_[];
 };
 #pragma pack(pop)
-}
+} // namespace rir
 
 #endif

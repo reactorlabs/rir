@@ -44,6 +44,24 @@ class Missing : public SingletonValue<Missing> {
     Missing() : SingletonValue(PirType::missing(), Tag::Missing) {}
 };
 
+class True : public SingletonValue<True> {
+  public:
+    void printRef(std::ostream& out) override final { out << "true"; }
+
+  private:
+    friend class SingletonValue;
+    True() : SingletonValue(NativeType::test, Tag::True) {}
+};
+
+class False : public SingletonValue<False> {
+  public:
+    void printRef(std::ostream& out) override final { out << "false"; }
+
+  private:
+    friend class SingletonValue;
+    False() : SingletonValue(NativeType::test, Tag::False) {}
+};
+
 class Tombstone : public Value {
   public:
     void printRef(std::ostream& out) override final {

@@ -102,7 +102,7 @@ static Sources hasSources(Opcode bc) {
         return Sources::Required;
 
     case Opcode::inc_:
-    case Opcode::identical_:
+    case Opcode::identical_noforce_:
     case Opcode::push_:
     case Opcode::ldfun_:
     case Opcode::ldddvar_:
@@ -240,12 +240,6 @@ void CodeVerifier::verifyFunctionLayout(SEXP sexp, ::Context* ctx) {
 
     assert(f->size <= XLENGTH(sexp) and
            "Reported size must be smaller than the size of the vector");
-
-    if (f->origin()) {
-        assert(TYPEOF(f->origin()) == EXTERNALSXP and "Invalid origin type");
-        assert(Function::unpack(f->origin())->info.magic == FUNCTION_MAGIC and
-               "Origin does not seem to be function bytecode");
-    }
 
     // check that the call instruction has proper arguments and number of
     // instructions is valid

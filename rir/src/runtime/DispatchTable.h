@@ -30,13 +30,13 @@ struct DispatchTable
 
     void baseline(Function* f) {
         assert(f->signature().optimization ==
-               FunctionSignature::BaselineVersion);
+               FunctionSignature::OptimizationLevel::Baseline);
         setEntry(0, f->container());
         if (size() == 0)
             size_++;
     }
 
-    bool contains(const pir::AssumptionsSet& assumptions) {
+    bool contains(const pir::Assumptions& assumptions) {
         for (size_t i = 1; i < size(); ++i)
             if (get(i)->signature().assumptions == assumptions)
                 return true;
@@ -48,7 +48,7 @@ struct DispatchTable
         // TODO: we might need to grow the DT here!
         assert(size() > 0);
         assert(fun->signature().optimization !=
-               FunctionSignature::BaselineVersion);
+               FunctionSignature::OptimizationLevel::Baseline);
         auto assumptions = fun->signature().assumptions;
         assert(size() < capacity());
         size_t i = 1;

@@ -25,9 +25,16 @@
     V(Extract1_1D)                                                             \
     V(Extract2_1D)
 
+#define VECTOR_RW_INSTRUCTIONS(V)                                              \
+    V(Extract2_2D)                                                             \
+    V(Extract1_2D)                                                             \
+    V(Subassign1_1D)                                                           \
+    V(Subassign2_1D)
+
 #define COMPILER_INSTRUCTIONS(V)                                               \
     SIMPLE_INSTRUCTIONS(V_SIMPLE_INSTRUCTION_IN_COMPILER_INSTRUCTIONS, V)      \
     BINOP_INSTRUCTIONS(V)                                                      \
+    VECTOR_RW_INSTRUCTIONS(V)                                                  \
     V(LdFun)                                                                   \
     V(Seq)                                                                     \
     V(LdVar)                                                                   \
@@ -48,8 +55,6 @@
     V(ChkMissing)                                                              \
     V(ChkClosure)                                                              \
     V(Call)                                                                    \
-    V(Extract2_2D)                                                             \
-    V(Extract1_2D)                                                             \
     V(NamedCall)                                                               \
     V(StaticCall)                                                              \
     V(CallBuiltin)                                                             \
@@ -66,8 +71,6 @@
     V(Minus)                                                                   \
     V(Identical)                                                               \
     V(Length)                                                                  \
-    V(Subassign1_1D)                                                           \
-    V(Subassign2_1D)                                                           \
     V(ForSeqSize)                                                              \
     V(FrameState)                                                              \
     V(Checkpoint)                                                              \

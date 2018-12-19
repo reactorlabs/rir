@@ -9,15 +9,16 @@ namespace rir {
 namespace pir {
 
 struct OptimizationContext {
-    OptimizationContext(Env* environment, const AssumptionsSet& assumptions)
+    OptimizationContext(Env* environment, const Assumptions& assumptions)
         : environment(environment), assumptions(assumptions) {}
 
     Env* environment;
-    AssumptionsSet assumptions;
+    Assumptions assumptions;
 
     bool operator<(const OptimizationContext& other) const {
-        return assumptions.to_ulong() < other.assumptions.to_ulong() ||
-               environment < other.environment;
+        if (environment == other.environment)
+            return assumptions.to_ulong() < other.assumptions.to_ulong();
+        return environment < other.environment;
     }
 
     bool operator==(const OptimizationContext& other) const {

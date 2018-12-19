@@ -70,10 +70,13 @@ AbstractResult ScopeAnalysis::apply(ScopeAnalysisState& state,
         auto res = ret->arg<0>().val();
         lookup(state, res,
                [&](const AbstractPirValue& analysisRes) {
-                   state.result.merge(analysisRes);
+                   state.returnValue.merge(analysisRes);
                },
-               [&]() { state.result.merge(ValOrig(res, i)); });
+               [&]() { state.returnValue.merge(ValOrig(res, i)); });
         effect.update();
+    } else if (Deopt::Cast(i)) {
+        // who knows what the deopt target will return...
+        state.returnValue.taint();
     } else if (auto mk = MkEnv::Cast(i)) {
         Value* lexicalEnv = mk->lexicalEnv();
         // If we know the caller, we can fill in the parent env
@@ -125,7 +128,9 @@ AbstractResult ScopeAnalysis::apply(ScopeAnalysisState& state,
         if (!arg->type.maybeLazy()) {
             effect.max(state.returnValues[i].merge(ValOrig(arg, i)));
             handled = true;
-        } else {
+        }
+
+        if (!handled) {
             lookup(state, arg->followCastsAndForce(),
                    [&](const AbstractPirValue& analysisRes) {
                        if (!analysisRes.type.maybeLazy()) {
@@ -138,6 +143,11 @@ AbstractResult ScopeAnalysis::apply(ScopeAnalysisState& state,
         }
 
         if (!handled && depth < MAX_DEPTH && force->strict) {
+            if (auto ld = LdArg::Cast(arg)) {
+                if (ld->id < args.size())
+                    arg = args[ld->id];
+            }
+
             // We are certain that we do force something here. Let's peek
             // through the argument and see if we find a promise. If so, we
             // will analyze it.
@@ -146,7 +156,7 @@ AbstractResult ScopeAnalysis::apply(ScopeAnalysisState& state,
                                    depth + 1, log);
                 prom();
                 state.mergeCall(code, prom.result());
-                state.returnValues[i].merge(prom.result().result);
+                state.returnValues[i].merge(prom.result().returnValue);
                 handled = true;
                 effect.update();
                 effect.keepSnapshot = true;
@@ -177,7 +187,8 @@ AbstractResult ScopeAnalysis::apply(ScopeAnalysisState& state,
                                               state, depth + 1, log);
                         nextFun();
                         state.mergeCall(code, nextFun.result());
-                        state.returnValues[i].merge(nextFun.result().result);
+                        state.returnValues[i].merge(
+                            nextFun.result().returnValue);
                         handled = true;
                         effect.update();
                         effect.keepSnapshot = true;
@@ -194,7 +205,7 @@ AbstractResult ScopeAnalysis::apply(ScopeAnalysisState& state,
                                           state, depth + 1, log);
                     nextFun();
                     state.mergeCall(code, nextFun.result());
-                    state.returnValues[i].merge(nextFun.result().result);
+                    state.returnValues[i].merge(nextFun.result().returnValue);
                     handled = true;
                     effect.update();
                     effect.keepSnapshot = true;
@@ -208,6 +219,8 @@ AbstractResult ScopeAnalysis::apply(ScopeAnalysisState& state,
             if (!CallSafeBuiltin::Cast(i)) {
                 state.mayUseReflection = true;
                 effect.lostPrecision();
+            } else {
+                handled = true;
             }
         }
         if (!handled) {
