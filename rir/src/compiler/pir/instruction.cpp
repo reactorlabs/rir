@@ -447,7 +447,7 @@ StaticCall::StaticCall(Value* callerEnv, Closure* cls,
     assert(fs);
     pushArg(fs, NativeType::frameState);
     for (unsigned i = 0; i < args.size(); ++i)
-        pushArg(args[i], PirType::val());
+        pushArg(args[i], RType::prom);
 }
 
 CallInstruction* CallInstruction::CastCall(Value* v) {
@@ -474,7 +474,7 @@ NamedCall::NamedCall(Value* callerEnv, Value* fun,
     assert(names_.size() == args.size());
     pushArg(fun, RType::closure);
     for (unsigned i = 0; i < args.size(); ++i) {
-        pushArg(args[i], PirType::val());
+        pushArg(args[i], RType::prom);
         auto name = Pool::get(names_[i]);
         assert(TYPEOF(name) == SYMSXP || name == R_NilValue);
         names.push_back(name);
