@@ -241,16 +241,16 @@ void ForceDominance::apply(RirCompiler&, Closure* cls, LogStream& log) const {
             while (ip != bb->end()) {
                 auto next = ip + 1;
                 if (auto f = Force::Cast(*ip)) {
-                    if (result.isDominatingForce(f)) {
+                    if (result.isDominatingForce(f))
                         f->strict = true;
-                        if (auto mkarg =
-                                MkArg::Cast(f->followCastsAndForce())) {
-                            Value* strict = mkarg->eagerArg();
-                            if (strict != Missing::instance()) {
-                                f->replaceUsesWith(strict);
-                                next = bb->remove(ip);
-                                inlinedPromise[f] = strict;
-                            } else if (result.isSafeToInline(mkarg)) {
+
+                    if (auto mkarg = MkArg::Cast(f->followCastsAndForce())) {
+                        Value* eager = mkarg->eagerArg();
+                        if (eager != Missing::instance()) {
+                            f->replaceUsesWith(eager);
+                            next = bb->remove(ip);
+                        } else if (result.isDominatingForce(f)) {
+                            if (result.isSafeToInline(mkarg)) {
                                 Promise* prom = mkarg->prom();
                                 BB* split = BBTransform::split(code->nextBBId++,
                                                                bb, ip, code);
