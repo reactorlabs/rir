@@ -8,7 +8,10 @@ namespace pir {
 
 class SafeBuiltinsList {
   public:
-    static bool contains(SEXP builtin);
+    static bool always(SEXP builtin);
+    static bool nonObject(SEXP builtin);
+    static bool always(int builtin);
+    static bool nonObject(int builtin);
 };
 
 } // namespace pir
