@@ -240,7 +240,10 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
 
     case Opcode::named_call_implicit_:
     case Opcode::call_implicit_: {
-        std::vector<Value*> args;
+        Value* callee = top();
+        SEXP monomorphic = nullptr;
+
+        // TODO: Support missing args and ...
         for (auto argi : bc.callExtra().immediateCallArguments) {
             if (argi == DOTS_ARG_IDX) {
                 log.warn("Cannot compile call with ... arguments");
@@ -249,6 +252,46 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                 log.warn("Cannot compile call with explicit missing arguments");
                 return false;
             }
+        }
+
+        // See if the call feedback suggests a monomorphic target
+        if (callTargetFeedback.count(callee)) {
+            auto& feedback = callTargetFeedback.at(callee);
+            if (feedback.numTargets == 1)
+                monomorphic = feedback.getTarget(srcCode, 0);
+        }
+
+        // TODO: Deopts in promises are not supported by the promise inliner. So
+        // currently it does not pay off to put any deopts in there.
+        if (inPromise())
+            monomorphic = nullptr;
+
+        bool monomorphicClosure =
+            monomorphic && isValidClosureSEXP(monomorphic);
+        bool monomorphicBuiltin = monomorphic &&
+                                  TYPEOF(monomorphic) == BUILTINSXP &&
+                                  // TODO implement support for call_builtin_
+                                  // with names
+                                  bc.bc == Opcode::call_implicit_;
+
+        Assume* assumption = nullptr;
+        // Insert a guard if we want to speculate
+        auto ldfun = LdFun::Cast(callee);
+        if (monomorphicBuiltin || monomorphicClosure) {
+            Value* expected = insert(new LdConst(monomorphic));
+            Value* given = callee;
+            // This change here potentially allows the delay_instr pass
+            // to move the ldfun into the deopt branch
+            if (ldfun)
+                given = insert(new LdVar(ldfun->varName, ldfun->env()));
+            Value* t = insert(new Identical(given, expected));
+            auto cp = insert.addCheckpoint(srcCode, pos, stack);
+            assumption = insert(new Assume(t, cp));
+        }
+
+        // Compile the arguments (eager for builltins)
+        std::vector<Value*> args;
+        for (auto argi : bc.callExtra().immediateCallArguments) {
             rir::Code* promiseCode = srcCode->getPromise(argi);
             Promise* prom = insert.function->createProm(promiseCode->src);
             {
@@ -262,18 +305,30 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             if (Query::pure(prom))
                 if (auto inlineProm = tryTranslate(promiseCode, insert))
                     val = inlineProm;
-            args.push_back(insert(new MkArg(prom, val, env)));
+            Value* res = insert(new MkArg(prom, val, env));
+            if (monomorphicBuiltin)
+                res = insert(new Force(res, env));
+            args.push_back(res);
         }
 
-        Value* callee = top();
-        SEXP monomorphic = nullptr;
+        // Static argument name matching
+        if (monomorphicClosure) {
+            bool correctOrder =
+                (bc.bc == Opcode::named_call_implicit_)
+                    ? ArgumentMatcher::reorder(FORMALS(monomorphic),
+                                               bc.callExtra().callArgumentNames,
+                                               args)
+                    : RList(FORMALS(monomorphic)).length() == args.size();
 
-        if (callTargetFeedback.count(callee)) {
-            auto& feedback = callTargetFeedback.at(callee);
-            if (feedback.numTargets == 1)
-                monomorphic = feedback.getTarget(srcCode, 0);
+            if (!correctOrder) {
+                monomorphicClosure = false;
+                assert(assumption);
+                // Kill unnecessary speculation
+                assumption->arg<0>().val() = True::instance();
+            }
         }
 
+        // Emit the actual call
         auto ast = bc.immediate.callFixedArgs.ast;
         auto insertGenericCall = [&]() {
             if (bc.bc == Opcode::named_call_implicit_) {
@@ -286,26 +341,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                 push(insert(new Call(insert.env, callee, args, fs, ast)));
             }
         };
-        auto ldfun = LdFun::Cast(callee);
-        if (monomorphic && isValidClosureSEXP(monomorphic)) {
-            // Currently we can only use StaticCall if we have exactly the right
-            // number of arguments.
-            // TODO, support cases where we need to pass Missing::instance() to
-            // pad the missing arguments. This is a bit tricky, because
-            // currently PIR assumes that no arguments are missing.
-
-            bool correctOrder =
-                (bc.bc == Opcode::named_call_implicit_)
-                    ? ArgumentMatcher::reorder(FORMALS(monomorphic),
-                                               bc.callExtra().callArgumentNames,
-                                               args)
-                    : RList(FORMALS(monomorphic)).length() == args.size();
-
-            if (!correctOrder) {
-                insertGenericCall();
-                break;
-            }
-
+        if (monomorphicClosure) {
             std::string name = "";
             if (ldfun)
                 name = CHAR(PRINTNAME(ldfun->varName));
@@ -314,15 +350,6 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             compiler.compileClosure(
                 monomorphic, name, asmpt,
                 [&](Closure* f) {
-                    Value* expected = insert(new LdConst(monomorphic));
-                    Value* given = callee;
-                    // This change here potentially allows the delay_instr pass
-                    // to move the ldfun into the deopt branch
-                    if (ldfun)
-                        given = insert(new LdVar(ldfun->varName, ldfun->env()));
-                    Value* t = insert(new Identical(given, expected));
-                    auto cp = insert.addCheckpoint(srcCode, pos, stack);
-                    insert(new Assume(t, cp));
                     pop();
                     auto fs =
                         insert.registerFrameState(srcCode, nextPos, stack);
@@ -330,16 +357,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                                                fs, ast)));
                 },
                 insertGenericCall);
-        } else if (monomorphic && bc.bc == Opcode::call_implicit_ &&
-                   TYPEOF(monomorphic) == BUILTINSXP) {
-            // TODO implement support for call_builtin_ with names
-            Value* expected = insert(new LdConst(monomorphic));
-            Value* given = callee;
-            if (ldfun)
-                given = insert(new LdVar(ldfun->varName, ldfun->env()));
-            Value* t = insert(new Identical(given, expected));
-            auto cp = insert.addCheckpoint(srcCode, pos, stack);
-            insert(new Assume(t, cp));
+        } else if (monomorphicBuiltin) {
             pop();
             push(insert(BuiltinCallFactory::New(env, monomorphic, args, ast)));
         } else {
