@@ -21,7 +21,7 @@ namespace pir {
 class ScopeAnalysisState {
     AbstractREnvironmentHierarchy envs;
     std::unordered_map<Instruction*, AbstractPirValue> returnValues;
-    AbstractPirValue result;
+    AbstractPirValue returnValue;
     std::set<Instruction*> observedStores;
     std::set<Value*> allStoresObserved;
 
@@ -95,7 +95,7 @@ class ScopeAnalysisState {
             }
         }
         out << "== Result: ";
-        result.print(out, tty);
+        returnValue.print(out, tty);
         out << "\n";
         if (mayUseReflection)
             out << "* Reflection possible\n";

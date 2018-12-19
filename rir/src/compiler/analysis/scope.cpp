@@ -70,10 +70,13 @@ AbstractResult ScopeAnalysis::apply(ScopeAnalysisState& state,
         auto res = ret->arg<0>().val();
         lookup(state, res,
                [&](const AbstractPirValue& analysisRes) {
-                   state.result.merge(analysisRes);
+                   state.returnValue.merge(analysisRes);
                },
-               [&]() { state.result.merge(ValOrig(res, i)); });
+               [&]() { state.returnValue.merge(ValOrig(res, i)); });
         effect.update();
+    } else if (Deopt::Cast(i)) {
+        // who knows what the deopt target will return...
+        state.returnValue.taint();
     } else if (auto mk = MkEnv::Cast(i)) {
         Value* lexicalEnv = mk->lexicalEnv();
         // If we know the caller, we can fill in the parent env
@@ -153,7 +156,7 @@ AbstractResult ScopeAnalysis::apply(ScopeAnalysisState& state,
                                    depth + 1, log);
                 prom();
                 state.mergeCall(code, prom.result());
-                state.returnValues[i].merge(prom.result().result);
+                state.returnValues[i].merge(prom.result().returnValue);
                 handled = true;
                 effect.update();
                 effect.keepSnapshot = true;
@@ -184,7 +187,8 @@ AbstractResult ScopeAnalysis::apply(ScopeAnalysisState& state,
                                               state, depth + 1, log);
                         nextFun();
                         state.mergeCall(code, nextFun.result());
-                        state.returnValues[i].merge(nextFun.result().result);
+                        state.returnValues[i].merge(
+                            nextFun.result().returnValue);
                         handled = true;
                         effect.update();
                         effect.keepSnapshot = true;
@@ -201,7 +205,7 @@ AbstractResult ScopeAnalysis::apply(ScopeAnalysisState& state,
                                           state, depth + 1, log);
                     nextFun();
                     state.mergeCall(code, nextFun.result());
-                    state.returnValues[i].merge(nextFun.result().result);
+                    state.returnValues[i].merge(nextFun.result().returnValue);
                     handled = true;
                     effect.update();
                     effect.keepSnapshot = true;

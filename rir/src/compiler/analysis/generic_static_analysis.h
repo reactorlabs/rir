@@ -207,17 +207,15 @@ class StaticAnalysis {
                 }
 
                 if (bb->isExit()) {
-                    if (!Deopt::Cast(bb->last())) {
-                        if (DEBUG_LEVEL >= AnalysisDebugLevel::Exit) {
-                            log << "===== Exit state is\n";
-                            log(state);
-                        }
-                        if (reachedExit) {
-                            exitpoint.merge(state);
-                        } else {
-                            exitpoint = state;
-                            reachedExit = true;
-                        }
+                    if (DEBUG_LEVEL >= AnalysisDebugLevel::Exit) {
+                        log << "===== Exit state is\n";
+                        log(state);
+                    }
+                    if (reachedExit) {
+                        exitpoint.merge(state);
+                    } else {
+                        exitpoint = state;
+                        reachedExit = true;
                     }
                     return;
                 }
