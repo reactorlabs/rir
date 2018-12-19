@@ -350,7 +350,7 @@ class BC {
     inline static BC le();
     inline static BC ge();
     inline static BC eq();
-    inline static BC identical();
+    inline static BC identicalNoforce();
     inline static BC ne();
     inline static BC seq();
     inline static BC colon();
@@ -684,7 +684,7 @@ class BC {
         case Opcode::le_:
         case Opcode::ge_:
         case Opcode::eq_:
-        case Opcode::identical_:
+        case Opcode::identical_noforce_:
         case Opcode::ne_:
         case Opcode::return_:
         case Opcode::isfun_:

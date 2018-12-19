@@ -92,7 +92,7 @@ enum class Effect : uint8_t {
     None,
     // Instruction doesn't really have effects itself, but it should not be
     // hoisted over any other instruction with effect. Example: Assume
-    EffectOrderObserved,
+    Order,
     // Instruction might produce a warning. Example: AsTest warns if the
     // vector used in an if condition has length > 1
     Warn,
@@ -143,7 +143,7 @@ class Instruction : public Value {
     Value* followCasts() override;
     Value* followCastsAndForce() override;
     bool isInstruction() override final { return true; }
-    bool envOnlyForObj();
+    virtual bool envOnlyForObj();
 
     bool validIn(Code* code) const override final;
 
@@ -744,17 +744,17 @@ class FLI(CastType, 1, Effect::None, EnvAccess::None) {
         : FixedLenInstruction(to, {{from}}, {{in}}) {}
 };
 
-class FLI(AsLogical, 1, Effect::None, EnvAccess::None) {
+class FLI(AsLogical, 1, Effect::Warn, EnvAccess::None) {
   public:
     AsLogical(Value* in, unsigned srcIdx)
         : FixedLenInstruction(RType::logical, {{PirType::val()}}, {{in}},
                               srcIdx) {}
 };
 
-class FLI(AsTest, 1, Effect::Warn, EnvAccess::None) {
+class FLI(AsTest, 1, Effect::Error, EnvAccess::None) {
   public:
     explicit AsTest(Value* in)
-        : FixedLenInstruction(NativeType::test, {{RType::logical}}, {{in}}) {}
+        : FixedLenInstruction(NativeType::test, {{PirType::any()}}, {{in}}) {}
 };
 
 class FLIE(Subassign1_1D, 4, Effect::None, EnvAccess::Leak) {
@@ -1049,7 +1049,7 @@ class VLIE(Call, Effect::Any, EnvAccess::Leak), public CallInstruction {
     Value* cls() { return arg(1).val(); }
 
     Call(Value * callerEnv, Value * fun, const std::vector<Value*>& args,
-         FrameState* fs, unsigned srcIdx)
+         Value* fs, unsigned srcIdx)
         : VarLenInstructionWithEnvSlot(PirType::valOrLazy(), callerEnv,
                                        srcIdx) {
         assert(fs);
@@ -1160,9 +1160,6 @@ class VLIE(CallBuiltin, Effect::Any, EnvAccess::Leak), public CallInstruction {
     const CCODE builtin;
     int builtinId;
 
-    CallBuiltin(Value * callerEnv, SEXP builtin,
-                const std::vector<Value*>& args, unsigned srcIdx);
-
     size_t nCallArgs() override { return nargs() - 1; };
     void eachCallArg(Instruction::ArgumentValueIterator it) override {
         for (size_t i = 0; i < nCallArgs(); ++i)
@@ -1170,6 +1167,11 @@ class VLIE(CallBuiltin, Effect::Any, EnvAccess::Leak), public CallInstruction {
     }
     void printArgs(std::ostream & out, bool tty) override;
     Value* callerEnv() { return env(); }
+
+  private:
+    CallBuiltin(Value * callerEnv, SEXP builtin,
+                const std::vector<Value*>& args, unsigned srcIdx);
+    friend class BuiltinCallFactory;
 };
 
 class VLI(CallSafeBuiltin, Effect::None, EnvAccess::None),
@@ -1179,15 +1181,21 @@ class VLI(CallSafeBuiltin, Effect::None, EnvAccess::None),
     const CCODE builtin;
     int builtinId;
 
-    CallSafeBuiltin(SEXP builtin, const std::vector<Value*>& args,
-                    unsigned srcIdx);
-
     size_t nCallArgs() override { return nargs(); };
     void eachCallArg(Instruction::ArgumentValueIterator it) override {
         eachArg(it);
     }
 
     void printArgs(std::ostream & out, bool tty) override;
+
+    CallSafeBuiltin(SEXP builtin, const std::vector<Value*>& args,
+                    unsigned srcIdx);
+};
+
+class BuiltinCallFactory {
+  public:
+    static Instruction* New(Value* callerEnv, SEXP builtin,
+                            const std::vector<Value*>& args, unsigned srcIdx);
 };
 
 class VLIE(MkEnv, Effect::None, EnvAccess::Capture) {
@@ -1272,6 +1280,7 @@ class Checkpoint
   public:
     Checkpoint() : FixedLenInstruction(NativeType::checkpoint) {}
     void printArgs(std::ostream & out, bool tty) override;
+    BB* deoptBranch();
 };
 
 /*
@@ -1293,7 +1302,7 @@ class Deopt : public FixedLenInstruction<Tag::Deopt, Deopt, 1, Effect::None,
  * if the test fails, jump to the deopt branch of the checkpoint.
  */
 
-class FLI(Assume, 2, Effect::EffectOrderObserved, EnvAccess::None) {
+class FLI(Assume, 2, Effect::Order, EnvAccess::None) {
   public:
     bool assumeTrue = true;
     Assume(Value* test, Value* checkpoint)

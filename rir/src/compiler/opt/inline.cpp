@@ -19,12 +19,12 @@ class TheInliner {
     Closure* function;
     explicit TheInliner(Closure* function) : function(function) {}
 
-    static constexpr size_t MAX_SIZE = 1024;
-    static constexpr size_t MAX_INLINEE_SIZE = 128;
-    static constexpr size_t MAX_FUEL = 5;
+    static const size_t MAX_SIZE;
+    static const size_t MAX_INLINEE_SIZE;
+    static const size_t INITIAL_FUEL;
 
     void operator()() {
-        size_t fuel = MAX_FUEL;
+        size_t fuel = INITIAL_FUEL;
 
         if (function->size() > MAX_SIZE)
             return;
@@ -228,6 +228,21 @@ class TheInliner {
         });
     }
 };
+
+// TODO: maybe implement something more resonable to pass in those constants.
+// For now it seems a simple env variable is just fine.
+const size_t TheInliner::MAX_SIZE = getenv("PIR_INLINER_MAX_SIZE")
+                                        ? atoi(getenv("PIR_INLINER_MAX_SIZE"))
+                                        : 10000;
+const size_t TheInliner::MAX_INLINEE_SIZE =
+    getenv("PIR_INLINER_MAX_INLINEE_SIZE")
+        ? atoi(getenv("PIR_INLINER_MAX_INLINEE_SIZE"))
+        : 200;
+const size_t TheInliner::INITIAL_FUEL =
+    getenv("PIR_INLINER_INITIAL_FUEL")
+        ? atoi(getenv("PIR_INLINER_INITIAL_FUEL"))
+        : 5;
+
 } // namespace
 
 namespace rir {

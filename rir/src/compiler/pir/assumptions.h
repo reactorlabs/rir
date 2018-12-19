@@ -8,7 +8,7 @@
 namespace rir {
 namespace pir {
 
-enum class Assumptions {
+enum class Assumption {
     CorrectNumberOfArguments,
     MaxNumberOfArguments,
     CorrectOrderOfArguments,
@@ -17,14 +17,14 @@ enum class Assumptions {
     LAST = CorrectOrderOfArguments
 };
 
-struct AssumptionsSet : public EnumSet<Assumptions> {
-    AssumptionsSet() : EnumSet<Assumptions>(){};
-    AssumptionsSet(const EnumSet<Assumptions>& other)
-        : EnumSet<Assumptions>(other) {}
-    AssumptionsSet(const Assumptions& other) : EnumSet<Assumptions>(other) {}
+struct Assumptions : public EnumSet<Assumption> {
+    Assumptions() : EnumSet<Assumption>(){};
+    Assumptions(const EnumSet<Assumption>& other)
+        : EnumSet<Assumption>(other) {}
+    Assumptions(const Assumption& other) : EnumSet<Assumption>(other) {}
 };
 
-std::ostream& operator<<(std::ostream& out, Assumptions a);
+std::ostream& operator<<(std::ostream& out, Assumption a);
 
 } // namespace pir
 } // namespace rir

@@ -11,15 +11,15 @@
 namespace rir {
 
 struct FunctionSignature {
-    enum EnvironmentCreation {
-        CallerProvidedEnv,
-        CalleeCreatedEnv,
+    enum class Environment {
+        CallerProvided,
+        CalleeCreated,
     };
 
-    enum OptimizationLevel {
-        BaselineVersion,
-        OptimizedVersion,
-        ContextuallyOptimizedVersion,
+    enum class OptimizationLevel {
+        Baseline,
+        Optimized,
+        Contextual,
     };
 
     struct ArgumentType {
@@ -70,9 +70,9 @@ struct FunctionSignature {
             }
             out << ") ";
         }
-        if (optimization != BaselineVersion)
+        if (optimization != OptimizationLevel::Baseline)
             out << "optimized code ";
-        if (envCreation == CallerProvidedEnv)
+        if (envCreation == Environment::CallerProvided)
             out << "needsEnv ";
         if (!assumptions.empty()) {
             out << "| assumptions: [";
@@ -85,22 +85,20 @@ struct FunctionSignature {
         }
     }
 
-    FunctionSignature() = default;
-    FunctionSignature(EnvironmentCreation envCreation,
-                      OptimizationLevel optimization)
+    FunctionSignature() = delete;
+    FunctionSignature(Environment envCreation, OptimizationLevel optimization)
         : envCreation(envCreation), optimization(optimization) {}
-    FunctionSignature(EnvironmentCreation envCreation,
-                      OptimizationLevel optimization,
-                      const pir::AssumptionsSet& assumptions)
+    FunctionSignature(Environment envCreation, OptimizationLevel optimization,
+                      const pir::Assumptions& assumptions)
         : envCreation(envCreation), optimization(optimization),
           assumptions(assumptions) {}
 
     size_t nargs() const { return arguments.size(); }
 
-    const EnvironmentCreation envCreation;
+    const Environment envCreation;
     const OptimizationLevel optimization;
     std::vector<ArgumentType> arguments;
-    const pir::AssumptionsSet assumptions;
+    const pir::Assumptions assumptions;
 };
 
 } // namespace rir

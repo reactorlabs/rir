@@ -3,15 +3,15 @@
 namespace rir {
 namespace pir {
 
-std::ostream& operator<<(std::ostream& out, Assumptions a) {
+std::ostream& operator<<(std::ostream& out, Assumption a) {
     switch (a) {
-    case Assumptions::CorrectOrderOfArguments:
+    case Assumption::CorrectOrderOfArguments:
         out << "CorrectOrderOfArguments";
         break;
-    case Assumptions::MaxNumberOfArguments:
+    case Assumption::MaxNumberOfArguments:
         out << "MaxNumberOfArguments";
         break;
-    case Assumptions::CorrectNumberOfArguments:
+    case Assumption::CorrectNumberOfArguments:
         out << "CorrectNumberOfArguments";
         break;
     }

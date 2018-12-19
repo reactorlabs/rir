@@ -17,7 +17,8 @@ class BBTransform {
     static Value* forInline(BB* inlinee, BB* cont);
     static BB* lowerExpect(Code* closure, BB* src,
                            BB::Instrs::iterator position, Value* condition,
-                           bool expected, BB* deoptBlock);
+                           bool expected, BB* deoptBlock,
+                           const std::string& debugMesage);
     static void removeBBs(Code* code, const std::unordered_set<BB*>& toDelete);
 };
 } // namespace pir

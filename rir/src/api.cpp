@@ -199,7 +199,14 @@ SEXP pirCompile(SEXP what, const std::string& name, pir::DebugOptions debug) {
 
                            // compile back to rir
                            pir::Pir2RirCompiler p2r(logger);
-                           p2r.compile(c, what, dryRun);
+                           auto fun = p2r.compile(c, what, dryRun);
+
+                           // Install
+                           if (dryRun)
+                               return;
+
+                           Protect p(fun->container());
+                           DispatchTable::unpack(BODY(what))->insert(fun);
                        },
                        [&]() {
                            if (debug.includes(pir::DebugFlag::ShowWarnings))

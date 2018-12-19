@@ -156,7 +156,7 @@ void BC::write(CodeStream& cs) const {
     case Opcode::le_:
     case Opcode::ge_:
     case Opcode::eq_:
-    case Opcode::identical_:
+    case Opcode::identical_noforce_:
     case Opcode::ne_:
     case Opcode::seq_:
     case Opcode::colon_:
@@ -371,7 +371,7 @@ void BC::print(std::ostream& out) const {
     case Opcode::le_:
     case Opcode::ge_:
     case Opcode::eq_:
-    case Opcode::identical_:
+    case Opcode::identical_noforce_:
     case Opcode::ne_:
     case Opcode::return_:
     case Opcode::isfun_:

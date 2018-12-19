@@ -395,6 +395,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
                         compileExpr(ctx, *idx);
 
                         // do the thing
+                        cs << BC::recordBinop();
                         if (fun2 == symbol::DoubleBracket)
                             cs << BC::subassign2();
                         else
@@ -514,12 +515,14 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
 
             compileExpr(ctx, *idx);
             if (args.length() == 2) {
+                cs << BC::recordBinop();
                 if (fun == symbol::DoubleBracket)
                     cs << BC::extract2_1();
                 else
                     cs << BC::extract1_1();
             } else {
                 compileExpr(ctx, *(idx + 1));
+                cs << BC::recordBinop();
                 if (fun == symbol::DoubleBracket)
                     cs << BC::extract2_2();
                 else
@@ -903,8 +906,8 @@ SEXP Compiler::finalize() {
     FunctionWriter function;
     Context ctx(function, preserve);
 
-    FunctionSignature signature(FunctionSignature::CallerProvidedEnv,
-                                FunctionSignature::BaselineVersion);
+    FunctionSignature signature(FunctionSignature::Environment::CallerProvided,
+                                FunctionSignature::OptimizationLevel::Baseline);
 
     // Compile formals (if any) and create signature
     for (auto arg = RList(formals).begin(); arg != RList::end(); ++arg) {
