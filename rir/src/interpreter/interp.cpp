@@ -344,6 +344,10 @@ SEXP rirCallTrampoline(const CallContext& call, Function* fun, SEXP env,
 
     RCNTXT cntxt;
 
+    // This code needs to be protected, because its slot in the dispatch table
+    // could get overwritten while we are executing it.
+    PROTECT(fun->container());
+
     initClosureContext(call.ast, &cntxt, env, call.callerEnv, arglist,
                        call.callee);
     closureDebug(call.ast, call.callee, env, R_NilValue, &cntxt);
@@ -361,7 +365,7 @@ SEXP rirCallTrampoline(const CallContext& call, Function* fun, SEXP env,
     endClosureDebug(call.ast, call.callee, env);
     endClosureContext(&cntxt, result);
 
-    UNPROTECT(1);
+    UNPROTECT(2);
     return result;
 }
 
