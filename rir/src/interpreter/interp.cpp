@@ -77,6 +77,10 @@ struct CallContext {
         return implicitArgs[i];
     }
 
+    bool missingArg(unsigned i) const {
+        return implicitArgIdx(i) == MISSING_ARG_IDX;
+    }
+
     Code* implicitArg(unsigned i) const {
         return caller->getPromise(implicitArgIdx(i));
     }
@@ -1372,7 +1376,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
             if (callCtxt->hasStackArgs()) {
                 ostack_push(ctx, callCtxt->stackArg(idx));
             } else {
-                if (idx == MISSING_ARG_IDX) {
+                if (callCtxt->missingArg(idx)) {
                     res = Rf_mkPROMISE(R_UnboundValue, callCtxt->callerEnv);
                 } else {
                     Code* arg = callCtxt->implicitArg(idx);

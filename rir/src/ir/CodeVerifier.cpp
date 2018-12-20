@@ -287,6 +287,10 @@ void CodeVerifier::verifyFunctionLayout(SEXP sexp, ::Context* ctx) {
                 unsigned* promidx = reinterpret_cast<Immediate*>(cptr + 1);
                 objs.push_back(c->getPromise(*promidx));
             }
+            if (*cptr == Opcode::ldarg_) {
+                unsigned idx = *reinterpret_cast<Immediate*>(cptr + 1);
+                assert(idx < MAX_ARG_IDX);
+            }
             if (*cptr == Opcode::call_implicit_ ||
                 *cptr == Opcode::named_call_implicit_) {
                 uint32_t nargs = *reinterpret_cast<Immediate*>(cptr + 1);
