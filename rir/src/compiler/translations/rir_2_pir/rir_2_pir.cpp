@@ -302,12 +302,18 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                 }
             }
             Value* val = Missing::instance();
-            if (Query::pure(prom))
+            if (monomorphicBuiltin || Query::pure(prom))
                 if (auto inlineProm = tryTranslate(promiseCode, insert))
                     val = inlineProm;
-            Value* res = insert(new MkArg(prom, val, env));
+            Value* res = nullptr;
+            // TODO: this fails on some builtins, need to investigate why
+            // if (monomorphicBuiltin && val != Missing::instance()) {
+            //     res = val;
+            // } else {
+            res = insert(new MkArg(prom, val, env));
             if (monomorphicBuiltin)
                 res = insert(new Force(res, env));
+            // }
             args.push_back(res);
         }
 
