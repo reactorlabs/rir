@@ -131,6 +131,16 @@ std::unordered_set<Opcode*> findMergepoints(rir::Code* srcCode) {
 namespace rir {
 namespace pir {
 
+Checkpoint* Rir2Pir::addCheckpoint(rir::Code* srcCode, Opcode* pos,
+                                   const RirStack& stack,
+                                   Builder& insert) const {
+    // Checkpoints in promises are badly supported (cannot inline promises
+    // anymore) and checkpoints in eagerly inlined promises are wrong. So for
+    // now we do not emit them in promises!
+    assert(!inPromise());
+    return insert.emitCheckpoint(srcCode, pos, stack);
+}
+
 bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                         rir::Code* srcCode, RirStack& stack, Builder& insert,
                         CallTargetFeedback& callTargetFeedback) const {
@@ -255,16 +265,13 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         }
 
         // See if the call feedback suggests a monomorphic target
-        if (callTargetFeedback.count(callee)) {
+        // TODO: Deopts in promises are not supported by the promise inliner. So
+        // currently it does not pay off to put any deopts in there.
+        if (!inPromise() && callTargetFeedback.count(callee)) {
             auto& feedback = callTargetFeedback.at(callee);
             if (feedback.numTargets == 1)
                 monomorphic = feedback.getTarget(srcCode, 0);
         }
-
-        // TODO: Deopts in promises are not supported by the promise inliner. So
-        // currently it does not pay off to put any deopts in there.
-        if (inPromise())
-            monomorphic = nullptr;
 
         bool monomorphicClosure =
             monomorphic && isValidClosureSEXP(monomorphic);
@@ -273,6 +280,13 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                                   // TODO implement support for call_builtin_
                                   // with names
                                   bc.bc == Opcode::call_implicit_;
+
+        int nargs = bc.callExtra().immediateCallArguments.size();
+        if (monomorphicBuiltin) {
+            auto arity = getBuiltinArity(monomorphic);
+            if (arity != -1 && arity != nargs)
+                monomorphicBuiltin = false;
+        }
 
         Assume* assumption = nullptr;
         // Insert a guard if we want to speculate
@@ -285,7 +299,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             if (ldfun)
                 given = insert(new LdVar(ldfun->varName, ldfun->env()));
             Value* t = insert(new Identical(given, expected));
-            auto cp = insert.addCheckpoint(srcCode, pos, stack);
+            auto cp = addCheckpoint(srcCode, pos, stack, insert);
             assumption = insert(new Assume(t, cp));
         }
 
@@ -301,20 +315,22 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                     return false;
                 }
             }
-            Value* val = Missing::instance();
-            if (monomorphicBuiltin || Query::pure(prom))
-                if (auto inlineProm = tryTranslate(promiseCode, insert))
-                    val = inlineProm;
-            Value* res = nullptr;
-            // TODO: this fails on some builtins, need to investigate why
-            // if (monomorphicBuiltin && val != Missing::instance()) {
-            //     res = val;
-            // } else {
-            res = insert(new MkArg(prom, val, env));
-            if (monomorphicBuiltin)
-                res = insert(new Force(res, env));
-            // }
-            args.push_back(res);
+            Value* eagerVal = Missing::instance();
+            Value* theArg = nullptr;
+            if (monomorphicBuiltin || Query::pure(prom)) {
+                auto inlineProm = tryTranslatePromise(promiseCode, insert);
+                if (!inlineProm) {
+                    log.warn("Failed to inline a promise");
+                    return false;
+                }
+                eagerVal = inlineProm;
+                // Builtins take the actual argument, not a promise
+                if (monomorphicBuiltin)
+                    theArg = eagerVal;
+            }
+            if (!theArg)
+                theArg = insert(new MkArg(prom, eagerVal, env));
+            args.push_back(theArg);
         }
 
         // Static argument name matching
@@ -456,9 +472,12 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         break;
 
     case Opcode::extract1_1_: {
-        forceIfLazy(1); // <- ensure forced version are captured in framestate
-        forceIfLazy(0);
-        insert.addCheckpoint(srcCode, pos, stack);
+        if (!inPromise()) {
+            forceIfLazy(
+                1); // <- ensure forced version are captured in framestate
+            forceIfLazy(0);
+            addCheckpoint(srcCode, pos, stack, insert);
+        }
         Value* idx = pop();
         Value* vec = pop();
         push(insert(new Extract1_1D(vec, idx, env, srcIdx)));
@@ -466,9 +485,12 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
     }
 
     case Opcode::extract2_1_: {
-        forceIfLazy(1); // <- ensure forced version are captured in framestate
-        forceIfLazy(0);
-        insert.addCheckpoint(srcCode, pos, stack);
+        if (!inPromise()) {
+            forceIfLazy(
+                1); // <- ensure forced version are captured in framestate
+            forceIfLazy(0);
+            addCheckpoint(srcCode, pos, stack, insert);
+        }
         Value* idx = pop();
         Value* vec = pop();
         push(insert(new Extract2_1D(vec, idx, env, srcIdx)));
@@ -544,11 +566,13 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
 
 #define BINOP(Name, Op)                                                        \
     case Opcode::Op: {                                                         \
-        forceIfLazy(1);                                                        \
-        forceIfLazy(0);                                                        \
+        if (!inPromise()) {                                                    \
+            forceIfLazy(1);                                                    \
+            forceIfLazy(0);                                                    \
+            addCheckpoint(srcCode, pos, stack, insert);                        \
+        }                                                                      \
         auto lhs = at(1);                                                      \
         auto rhs = at(0);                                                      \
-        insert.addCheckpoint(srcCode, pos, stack);                             \
         pop();                                                                 \
         pop();                                                                 \
         push(insert(new Name(lhs, rhs, env, srcIdx)));                         \
@@ -707,6 +731,11 @@ bool Rir2Pir::tryCompile(rir::Code* srcCode, Builder& insert) {
 bool Rir2Pir::tryCompilePromise(rir::Code* prom, Builder& insert) const {
     return PromiseRir2Pir(compiler, srcFunction, log, name)
         .tryCompile(prom, insert);
+}
+
+Value* Rir2Pir::tryTranslatePromise(rir::Code* srcCode, Builder& insert) const {
+    return PromiseRir2Pir(compiler, srcFunction, log, name)
+        .tryTranslate(srcCode, insert);
 }
 
 Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) const {
