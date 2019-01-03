@@ -32,6 +32,8 @@ class Rir2Pir {
 
     Value* tryTranslate(rir::Code* srcCode, Builder& insert) const
         __attribute__((warn_unused_result));
+    Value* tryTranslatePromise(rir::Code* srcCode, Builder& insert) const
+        __attribute__((warn_unused_result));
 
     void finalize(Value*, Builder& insert);
 
@@ -47,7 +49,13 @@ class Rir2Pir {
     bool compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                    rir::Code* srcCode, RirStack&, Builder&,
                    CallTargetFeedback&) const;
-    virtual bool inPromise() const { return false; }
+    virtual bool inPromise() const { return inPromise_; }
+
+    Checkpoint* addCheckpoint(rir::Code* srcCode, Opcode* pos,
+                              const RirStack& stack, Builder& insert) const;
+
+  private:
+    bool inPromise_ = false;
 };
 
 class PromiseRir2Pir : public Rir2Pir {

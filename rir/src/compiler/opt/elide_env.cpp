@@ -45,8 +45,10 @@ void ElideEnv::apply(RirCompiler&, Closure* function, LogStream&) const {
                             if (v != i->env())
                                 args.push_back(v);
                         });
-                        bb->replace(
-                            ip, new CallSafeBuiltin(b->blt, args, b->srcIdx));
+                        auto safe =
+                            new CallSafeBuiltin(b->blt, args, b->srcIdx);
+                        b->replaceUsesWith(safe);
+                        bb->replace(ip, safe);
                         envIsNeeded = false;
                     }
                 }

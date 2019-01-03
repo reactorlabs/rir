@@ -45,8 +45,8 @@ class Builder {
 
     FrameState* registerFrameState(rir::Code* srcCode, Opcode* pos,
                                    const RirStack& stack);
-    Checkpoint* addCheckpoint(rir::Code* srcCode, Opcode* pos,
-                              const RirStack& stack);
+    Checkpoint* emitCheckpoint(rir::Code* srcCode, Opcode* pos,
+                               const RirStack& stack);
 
     // Use with care, let the builder keep track of BB. Prefer the highlevel
     // api above.

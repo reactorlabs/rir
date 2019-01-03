@@ -131,6 +131,16 @@ std::unordered_set<Opcode*> findMergepoints(rir::Code* srcCode) {
 namespace rir {
 namespace pir {
 
+Checkpoint* Rir2Pir::addCheckpoint(rir::Code* srcCode, Opcode* pos,
+                                   const RirStack& stack,
+                                   Builder& insert) const {
+    // Checkpoints in promises are badly supported (cannot inline promises
+    // anymore) and checkpoints in eagerly inlined promises are wrong. So for
+    // now we do not emit them in promises!
+    assert(!inPromise());
+    return insert.emitCheckpoint(srcCode, pos, stack);
+}
+
 bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                         rir::Code* srcCode, RirStack& stack, Builder& insert,
                         CallTargetFeedback& callTargetFeedback) const {
@@ -240,7 +250,10 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
 
     case Opcode::named_call_implicit_:
     case Opcode::call_implicit_: {
-        std::vector<Value*> args;
+        Value* callee = top();
+        SEXP monomorphic = nullptr;
+
+        // TODO: Support missing args and ...
         for (auto argi : bc.callExtra().immediateCallArguments) {
             if (argi == DOTS_ARG_IDX) {
                 log.warn("Cannot compile call with ... arguments");
@@ -249,6 +262,50 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                 log.warn("Cannot compile call with explicit missing arguments");
                 return false;
             }
+        }
+
+        // See if the call feedback suggests a monomorphic target
+        // TODO: Deopts in promises are not supported by the promise inliner. So
+        // currently it does not pay off to put any deopts in there.
+        if (!inPromise() && callTargetFeedback.count(callee)) {
+            auto& feedback = callTargetFeedback.at(callee);
+            if (feedback.numTargets == 1)
+                monomorphic = feedback.getTarget(srcCode, 0);
+        }
+
+        bool monomorphicClosure =
+            monomorphic && isValidClosureSEXP(monomorphic);
+        bool monomorphicBuiltin = monomorphic &&
+                                  TYPEOF(monomorphic) == BUILTINSXP &&
+                                  // TODO implement support for call_builtin_
+                                  // with names
+                                  bc.bc == Opcode::call_implicit_;
+
+        int nargs = bc.callExtra().immediateCallArguments.size();
+        if (monomorphicBuiltin) {
+            auto arity = getBuiltinArity(monomorphic);
+            if (arity != -1 && arity != nargs)
+                monomorphicBuiltin = false;
+        }
+
+        Assume* assumption = nullptr;
+        // Insert a guard if we want to speculate
+        auto ldfun = LdFun::Cast(callee);
+        if (monomorphicBuiltin || monomorphicClosure) {
+            Value* expected = insert(new LdConst(monomorphic));
+            Value* given = callee;
+            // This change here potentially allows the delay_instr pass
+            // to move the ldfun into the deopt branch
+            if (ldfun)
+                given = insert(new LdVar(ldfun->varName, ldfun->env()));
+            Value* t = insert(new Identical(given, expected));
+            auto cp = addCheckpoint(srcCode, pos, stack, insert);
+            assumption = insert(new Assume(t, cp));
+        }
+
+        // Compile the arguments (eager for builltins)
+        std::vector<Value*> args;
+        for (auto argi : bc.callExtra().immediateCallArguments) {
             rir::Code* promiseCode = srcCode->getPromise(argi);
             Promise* prom = insert.function->createProm(promiseCode->src);
             {
@@ -258,22 +315,42 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                     return false;
                 }
             }
-            Value* val = Missing::instance();
-            if (Query::pure(prom))
-                if (auto inlineProm = tryTranslate(promiseCode, insert))
-                    val = inlineProm;
-            args.push_back(insert(new MkArg(prom, val, env)));
+            Value* eagerVal = Missing::instance();
+            Value* theArg = nullptr;
+            if (monomorphicBuiltin || Query::pure(prom)) {
+                auto inlineProm = tryTranslatePromise(promiseCode, insert);
+                if (!inlineProm) {
+                    log.warn("Failed to inline a promise");
+                    return false;
+                }
+                eagerVal = inlineProm;
+                // Builtins take the actual argument, not a promise
+                if (monomorphicBuiltin)
+                    theArg = eagerVal;
+            }
+            if (!theArg)
+                theArg = insert(new MkArg(prom, eagerVal, env));
+            args.push_back(theArg);
         }
 
-        Value* callee = top();
-        SEXP monomorphic = nullptr;
+        // Static argument name matching
+        if (monomorphicClosure) {
+            bool correctOrder =
+                (bc.bc == Opcode::named_call_implicit_)
+                    ? ArgumentMatcher::reorder(FORMALS(monomorphic),
+                                               bc.callExtra().callArgumentNames,
+                                               args)
+                    : RList(FORMALS(monomorphic)).length() == args.size();
 
-        if (callTargetFeedback.count(callee)) {
-            auto& feedback = callTargetFeedback.at(callee);
-            if (feedback.numTargets == 1)
-                monomorphic = feedback.getTarget(srcCode, 0);
+            if (!correctOrder) {
+                monomorphicClosure = false;
+                assert(assumption);
+                // Kill unnecessary speculation
+                assumption->arg<0>().val() = True::instance();
+            }
         }
 
+        // Emit the actual call
         auto ast = bc.immediate.callFixedArgs.ast;
         auto insertGenericCall = [&]() {
             if (bc.bc == Opcode::named_call_implicit_) {
@@ -286,26 +363,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                 push(insert(new Call(insert.env, callee, args, fs, ast)));
             }
         };
-        auto ldfun = LdFun::Cast(callee);
-        if (monomorphic && isValidClosureSEXP(monomorphic)) {
-            // Currently we can only use StaticCall if we have exactly the right
-            // number of arguments.
-            // TODO, support cases where we need to pass Missing::instance() to
-            // pad the missing arguments. This is a bit tricky, because
-            // currently PIR assumes that no arguments are missing.
-
-            bool correctOrder =
-                (bc.bc == Opcode::named_call_implicit_)
-                    ? ArgumentMatcher::reorder(FORMALS(monomorphic),
-                                               bc.callExtra().callArgumentNames,
-                                               args)
-                    : RList(FORMALS(monomorphic)).length() == args.size();
-
-            if (!correctOrder) {
-                insertGenericCall();
-                break;
-            }
-
+        if (monomorphicClosure) {
             std::string name = "";
             if (ldfun)
                 name = CHAR(PRINTNAME(ldfun->varName));
@@ -314,15 +372,6 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             compiler.compileClosure(
                 monomorphic, name, asmpt,
                 [&](Closure* f) {
-                    Value* expected = insert(new LdConst(monomorphic));
-                    Value* given = callee;
-                    // This change here potentially allows the delay_instr pass
-                    // to move the ldfun into the deopt branch
-                    if (ldfun)
-                        given = insert(new LdVar(ldfun->varName, ldfun->env()));
-                    Value* t = insert(new Identical(given, expected));
-                    auto cp = insert.addCheckpoint(srcCode, pos, stack);
-                    insert(new Assume(t, cp));
                     pop();
                     auto fs =
                         insert.registerFrameState(srcCode, nextPos, stack);
@@ -330,16 +379,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                                                fs, ast)));
                 },
                 insertGenericCall);
-        } else if (monomorphic && bc.bc == Opcode::call_implicit_ &&
-                   TYPEOF(monomorphic) == BUILTINSXP) {
-            // TODO implement support for call_builtin_ with names
-            Value* expected = insert(new LdConst(monomorphic));
-            Value* given = callee;
-            if (ldfun)
-                given = insert(new LdVar(ldfun->varName, ldfun->env()));
-            Value* t = insert(new Identical(given, expected));
-            auto cp = insert.addCheckpoint(srcCode, pos, stack);
-            insert(new Assume(t, cp));
+        } else if (monomorphicBuiltin) {
             pop();
             push(insert(BuiltinCallFactory::New(env, monomorphic, args, ast)));
         } else {
@@ -432,9 +472,12 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         break;
 
     case Opcode::extract1_1_: {
-        forceIfLazy(1); // <- ensure forced version are captured in framestate
-        forceIfLazy(0);
-        insert.addCheckpoint(srcCode, pos, stack);
+        if (!inPromise()) {
+            forceIfLazy(
+                1); // <- ensure forced version are captured in framestate
+            forceIfLazy(0);
+            addCheckpoint(srcCode, pos, stack, insert);
+        }
         Value* idx = pop();
         Value* vec = pop();
         push(insert(new Extract1_1D(vec, idx, env, srcIdx)));
@@ -442,9 +485,12 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
     }
 
     case Opcode::extract2_1_: {
-        forceIfLazy(1); // <- ensure forced version are captured in framestate
-        forceIfLazy(0);
-        insert.addCheckpoint(srcCode, pos, stack);
+        if (!inPromise()) {
+            forceIfLazy(
+                1); // <- ensure forced version are captured in framestate
+            forceIfLazy(0);
+            addCheckpoint(srcCode, pos, stack, insert);
+        }
         Value* idx = pop();
         Value* vec = pop();
         push(insert(new Extract2_1D(vec, idx, env, srcIdx)));
@@ -520,11 +566,13 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
 
 #define BINOP(Name, Op)                                                        \
     case Opcode::Op: {                                                         \
-        forceIfLazy(1);                                                        \
-        forceIfLazy(0);                                                        \
+        if (!inPromise()) {                                                    \
+            forceIfLazy(1);                                                    \
+            forceIfLazy(0);                                                    \
+            addCheckpoint(srcCode, pos, stack, insert);                        \
+        }                                                                      \
         auto lhs = at(1);                                                      \
         auto rhs = at(0);                                                      \
-        insert.addCheckpoint(srcCode, pos, stack);                             \
         pop();                                                                 \
         pop();                                                                 \
         push(insert(new Name(lhs, rhs, env, srcIdx)));                         \
@@ -683,6 +731,11 @@ bool Rir2Pir::tryCompile(rir::Code* srcCode, Builder& insert) {
 bool Rir2Pir::tryCompilePromise(rir::Code* prom, Builder& insert) const {
     return PromiseRir2Pir(compiler, srcFunction, log, name)
         .tryCompile(prom, insert);
+}
+
+Value* Rir2Pir::tryTranslatePromise(rir::Code* srcCode, Builder& insert) const {
+    return PromiseRir2Pir(compiler, srcFunction, log, name)
+        .tryTranslate(srcCode, insert);
 }
 
 Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) const {
