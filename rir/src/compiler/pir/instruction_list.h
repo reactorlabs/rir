@@ -77,6 +77,7 @@
     V(SetShared)                                                               \
     V(EnsureNamed)                                                             \
     V(PirCopy)                                                                 \
+    V(Nop)                                                                     \
     V(Int3)
 
 #endif

@@ -12,6 +12,7 @@ class FrameState;
 class BBTransform {
   public:
     static BB* clone(BB* src, Code* target, Closure* targetClosure);
+    static BB* splitEdge(size_t next_id, BB* from, BB* to, Code* target);
     static BB* split(size_t next_id, BB* src, BB::Instrs::iterator,
                      Code* target);
     static Value* forInline(BB* inlinee, BB* cont);
@@ -21,6 +22,7 @@ class BBTransform {
                            const std::string& debugMesage);
     static void removeBBs(Code* code, const std::unordered_set<BB*>& toDelete);
 };
+
 } // namespace pir
 } // namespace rir
 

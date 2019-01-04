@@ -871,6 +871,12 @@ class FLI(PirCopy, 1, Effect::None, EnvAccess::None) {
     void updateType() override final { type = arg<0>().val()->type; }
 };
 
+// Effect::Any prevents this instruction from being optimized away
+class FLI(Nop, 0, Effect::Any, EnvAccess::None) {
+  public:
+    explicit Nop() : FixedLenInstruction(PirType::voyd()) {}
+};
+
 class FLI(Identical, 2, Effect::None, EnvAccess::None) {
   public:
     Identical(Value* a, Value* b)

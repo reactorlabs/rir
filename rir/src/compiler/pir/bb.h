@@ -54,6 +54,7 @@ class BB {
         return 0;
     }
 
+    Instruction* first() const;
     Instruction* last() const;
 
     bool isJmp() const { return next0 && !next1; }

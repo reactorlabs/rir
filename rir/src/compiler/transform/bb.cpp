@@ -65,6 +65,20 @@ BB* BBTransform::clone(BB* src, Code* target, Closure* targetClosure) {
     return newEntry;
 }
 
+BB* BBTransform::splitEdge(size_t next_id, BB* from, BB* to, Code* target) {
+    BB* split = new BB(target, next_id);
+
+    split->next0 = to;
+    split->next1 = nullptr;
+
+    if (from->next0 == to)
+        from->next0 = split;
+    else
+        from->next1 = split;
+
+    return split;
+}
+
 BB* BBTransform::split(size_t next_id, BB* src, BB::Instrs::iterator it,
                        Code* target) {
     BB* split = new BB(target, next_id);

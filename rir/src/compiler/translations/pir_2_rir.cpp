@@ -1086,6 +1086,11 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                                 "deopt, before pir_2_rir");
                 break;
             }
+            case Tag::Nop: {
+                // only exists as a placeholder in an empty bb if that bb has to
+                // perform stack shuffling
+                break;
+            }
             // values, not instructions
             case Tag::Tombstone:
             case Tag::Missing:
@@ -1118,7 +1123,7 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
     });
 
     return alloc.slots();
-} // namespace
+}
 
 template <typename CallType>
 static bool allLazy(CallType* call, std::vector<Promise*>& args) {
