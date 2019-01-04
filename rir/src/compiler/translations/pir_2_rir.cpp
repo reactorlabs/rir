@@ -1,4 +1,5 @@
 #include "pir_2_rir.h"
+#include "../analysis/stack_allocator.h"
 #include "../pir/pir_impl.h"
 #include "../transform/bb.h"
 #include "../util/cfg.h"
@@ -69,6 +70,12 @@ class SSAAllocator {
 
     std::unordered_map<Value*, SlotNumber> allocation;
 
+    using ApplyCompensation = StackAllocator::ApplyCompensation;
+    using MergeCompensation = StackAllocator::MergeCompensation;
+
+    ApplyCompensation applyCompensation;
+    MergeCompensation mergeCompensation;
+
     struct BBLiveness {
         uint8_t live = false;
         unsigned begin = -1;
@@ -92,11 +99,51 @@ class SSAAllocator {
     };
     std::unordered_map<Value*, Liveness> livenessInterval;
 
-    explicit SSAAllocator(Code* code)
+    explicit SSAAllocator(Code* code, Closure* cls, LogStream& log)
         : cfg(code), dom(code), code(code), bbsSize(code->nextBBId) {
-        computeLiveness();
-        computeStackAllocation();
-        computeAllocation();
+        if (!preallocateToStack(cls, log)) {
+            computeLiveness();
+            computeStackAllocation();
+            computeAllocation();
+            verify();
+        }
+        // TODO: verification if stack allocator succeeds
+    }
+
+    bool preallocateToStack(Closure* cls, LogStream& log) {
+
+        Visitor::run(code->entry, [&](BB* bb) {
+            if (bb->isEmpty())
+                bb->append(new Nop());
+        });
+
+        StackAllocator sa(cls, code, log);
+
+        applyCompensation = sa.applyCompensation;
+        mergeCompensation = sa.mergeCompensation;
+
+        for (auto& src : sa.mergeCompensation) {
+            for (auto& trg : src.second) {
+                if (trg.second.empty())
+                    continue;
+
+                BB* split = BBTransform::splitEdge(code->nextBBId++, src.first,
+                                                   trg.first, code);
+                split->append(new Nop());
+                auto i = split->first();
+                for (auto& v : trg.second) {
+                    applyCompensation[i].push_back(v);
+                }
+            }
+        }
+
+        SlotNumber slot = unassignedSlot;
+        Visitor::run(code->entry, [&](Instruction* i) {
+            allocation[i] =
+                (MkEnv::Cast(i) || LdFunctionEnv::Cast(i)) ? ++slot : stackSlot;
+        });
+
+        return true;
     }
 
     // Run backwards analysis to compute livenessintervals
@@ -647,9 +694,8 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
     toCSSA(code);
     log.CSSA(code);
 
-    SSAAllocator alloc(code);
+    SSAAllocator alloc(code, cls, log);
     log.afterAllocator(code, [&](std::ostream& o) { alloc.print(o); });
-    alloc.verify();
 
     // create labels for all bbs
     std::unordered_map<BB*, BC::Label> bbLabels;
@@ -729,6 +775,16 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                     }
                 };
 
+                // loading args must put the args in the correct stack positions
+                // (if some args are allocated on the stack before the
+                // instruction this would put the ones in locals on top of
+                // those...)
+                unsigned argOffset = 0;
+                instr->eachArg([&](Value* what) {
+                    if (alloc.hasSlot(what) && alloc.onStack(what))
+                        ++argOffset;
+                });
+
                 auto loadArg = [&](BB::Instrs::iterator it, Instruction* instr,
                                    Value* what, size_t& argStackSize,
                                    size_t argNumber) {
@@ -754,7 +810,14 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                         if (!alloc.onStack(what)) {
                             cs << BC::ldloc(alloc[what]);
                             debugAddVariableName(what);
-                            pushed = true;
+                            // pushed = true;
+                            if (argOffset == 1)
+                                cs << BC::swap();
+                            else if (argOffset > 1)
+                                cs << BC::put(argOffset);
+                        } else {
+                            if (argOffset)
+                                --argOffset;
                         }
                     }
                     if (pushed) {
@@ -1110,7 +1173,34 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                     cs << BC::pop();
                 else if (!alloc.onStack(instr))
                     cs << BC::stloc(alloc[instr]);
-            };
+            }
+
+            if (alloc.applyCompensation.count(instr)) {
+                for (auto bc : alloc.applyCompensation[instr]) {
+                    switch (bc.first) {
+                    case Opcode::pop_:
+                        cs << BC::pop();
+                        break;
+                    case Opcode::swap_:
+                        cs << BC::swap();
+                        break;
+                    case Opcode::dup_:
+                        cs << BC::dup();
+                        break;
+                    case Opcode::put_:
+                        cs << BC::put(bc.second);
+                        break;
+                    case Opcode::pull_:
+                        cs << BC::pull(bc.second);
+                        break;
+                    case Opcode::pick_:
+                        cs << BC::pick(bc.second);
+                        break;
+                    default:
+                        assert(false);
+                    }
+                }
+            }
         }
 
         // this BB has exactly one successor, trueBranch()
