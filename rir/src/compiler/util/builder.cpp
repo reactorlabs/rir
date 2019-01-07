@@ -65,8 +65,8 @@ FrameState* Builder::registerFrameState(rir::Code* srcCode, Opcode* pos,
     return sp;
 };
 
-Checkpoint* Builder::addCheckpoint(rir::Code* srcCode, Opcode* pos,
-                                   const RirStack& stack) {
+Checkpoint* Builder::emitCheckpoint(rir::Code* srcCode, Opcode* pos,
+                                    const RirStack& stack) {
     auto cp = new Checkpoint();
     add(cp);
     auto cont = createBB();

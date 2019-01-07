@@ -77,6 +77,10 @@ struct CallContext {
         return implicitArgs[i];
     }
 
+    bool missingArg(unsigned i) const {
+        return implicitArgIdx(i) == MISSING_ARG_IDX;
+    }
+
     Code* implicitArg(unsigned i) const {
         return caller->getPromise(implicitArgIdx(i));
     }
@@ -340,6 +344,10 @@ SEXP rirCallTrampoline(const CallContext& call, Function* fun, SEXP env,
 
     RCNTXT cntxt;
 
+    // This code needs to be protected, because its slot in the dispatch table
+    // could get overwritten while we are executing it.
+    PROTECT(fun->container());
+
     initClosureContext(call.ast, &cntxt, env, call.callerEnv, arglist,
                        call.callee);
     closureDebug(call.ast, call.callee, env, R_NilValue, &cntxt);
@@ -357,7 +365,7 @@ SEXP rirCallTrampoline(const CallContext& call, Function* fun, SEXP env,
     endClosureDebug(call.ast, call.callee, env);
     endClosureContext(&cntxt, result);
 
-    UNPROTECT(1);
+    UNPROTECT(2);
     return result;
 }
 
@@ -1372,7 +1380,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
             if (callCtxt->hasStackArgs()) {
                 ostack_push(ctx, callCtxt->stackArg(idx));
             } else {
-                if (idx == MISSING_ARG_IDX) {
+                if (callCtxt->missingArg(idx)) {
                     res = Rf_mkPROMISE(R_UnboundValue, callCtxt->callerEnv);
                 } else {
                     Code* arg = callCtxt->implicitArg(idx);

@@ -75,6 +75,7 @@ bool SafeBuiltinsList::nonObject(int builtin) {
         return true;
 
     static int safeBuiltins[] = {
+        findBuiltin("c"),
         findBuiltin("["),
         findBuiltin("[["),
         findBuiltin("+"),

@@ -2,7 +2,7 @@
 
 SCRIPTPATH=`cd $(dirname "$0") && pwd`
 
-ERRORS=`grep -l 'Status.*ERROR' $SCRIPTPATH/../external/custom-r/tests/*/*check.log`
+ERRORS=`grep -lE '(Status.*ERROR|Assertion.*failed|caught segfault)' $SCRIPTPATH/../external/custom-r/tests/*/*check.log`
 RESULT=$?
 
 echo $ERRORS
