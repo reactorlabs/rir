@@ -5,6 +5,9 @@ namespace pir {
 
 std::ostream& operator<<(std::ostream& out, Assumption a) {
     switch (a) {
+    case Assumption::EagerArgs:
+        out << "EagerArgs";
+        break;
     case Assumption::CorrectOrderOfArguments:
         out << "CorrectOrderOfArguments";
         break;

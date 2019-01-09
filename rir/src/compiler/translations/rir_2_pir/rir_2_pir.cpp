@@ -306,6 +306,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
 
         // Compile the arguments (eager for builltins)
         std::vector<Value*> args;
+        bool allArgsEager = true;
         for (auto argi : bc.callExtra().immediateCallArguments) {
             rir::Code* promiseCode = srcCode->getPromise(argi);
             Promise* prom = insert.function->createProm(promiseCode->src);
@@ -329,8 +330,11 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                 if (monomorphicBuiltin)
                     theArg = eagerVal;
             }
-            if (!theArg)
+            if (!theArg) {
+                if (eagerVal == Missing::instance())
+                    allArgsEager = false;
                 theArg = insert(new MkArg(prom, eagerVal, env));
+            }
             args.push_back(theArg);
         }
 
@@ -370,6 +374,8 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                 name = CHAR(PRINTNAME(ldfun->varName));
             Assumptions asmpt(Assumption::CorrectOrderOfArguments);
             asmpt.set(Assumption::CorrectNumberOfArguments);
+            if (allArgsEager)
+                asmpt.set(Assumption::EagerArgs);
             compiler.compileClosure(
                 monomorphic, name, asmpt,
                 [&](Closure* f) {
@@ -444,6 +450,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             bool failed = false;
             Assumptions asmpt(Assumption::CorrectOrderOfArguments);
             asmpt.set(Assumption::CorrectNumberOfArguments);
+            asmpt.set(Assumption::EagerArgs);
             compiler.compileClosure(
                 target, "", asmpt,
                 [&](Closure* f) {

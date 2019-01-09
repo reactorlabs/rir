@@ -80,9 +80,9 @@ class TheScopeResolution {
                     // actually the same as some other PIR value. So let's just
                     // replace it.
                     if (res.isSingleValue()) {
-                        auto value = res.singleValue().val;
-                        if (value->validIn(function)) {
-                            i->replaceUsesWith(value);
+                        auto value = res.singleValue();
+                        if (value.recursionLevel == 0) {
+                            i->replaceUsesWith(value.val);
                             next = bb->remove(ip);
                         }
                         return;
@@ -105,7 +105,7 @@ class TheScopeResolution {
 
                         bool onlyLocalVals = true;
                         res.eachSource([&](ValOrig& src) {
-                            if (!src.val->validIn(function))
+                            if (src.recursionLevel > 0)
                                 onlyLocalVals = false;
                         });
 

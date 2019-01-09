@@ -65,9 +65,10 @@ class StaticAnalysis {
     AnalysisSnapshots snapshots;
 
     virtual AbstractResult apply(AbstractState&, Instruction*) const = 0;
-    AbstractState exitpoint;
 
   protected:
+    AbstractState exitpoint;
+
     bool done = false;
     LogStream& log;
 
@@ -88,7 +89,7 @@ class StaticAnalysis {
         snapshots[entry->id].entry = initialState;
     }
 
-    const AbstractState& result() {
+    const AbstractState& result() const {
         assert(done);
         return exitpoint;
     }

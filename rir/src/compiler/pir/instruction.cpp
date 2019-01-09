@@ -440,7 +440,7 @@ void StaticCall::printArgs(std::ostream& out, bool tty) {
 StaticCall::StaticCall(Value* callerEnv, Closure* cls,
                        const std::vector<Value*>& args, SEXP origin,
                        FrameState* fs, unsigned srcIdx)
-    : VarLenInstructionWithEnvSlot(PirType::valOrLazy(), callerEnv, srcIdx),
+    : VarLenInstructionWithEnvSlot(PirType::val(), callerEnv, srcIdx),
       cls_(cls), origin_(origin) {
     assert(cls->argNames.size() == args.size());
     assert(fs);

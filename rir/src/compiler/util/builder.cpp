@@ -87,8 +87,11 @@ Builder::Builder(Closure* fun, Value* closureEnv)
     assert(!function->entry);
     function->entry = bb;
     std::vector<Value*> args(fun->argNames.size());
-    for (long i = fun->argNames.size() - 1; i >= 0; --i)
+    for (long i = fun->argNames.size() - 1; i >= 0; --i) {
         args[i] = this->operator()(new LdArg(i));
+        if (fun->assumptions.includes(Assumption::EagerArgs))
+            args[i]->type.setEager();
+    }
     auto mkenv = new MkEnv(closureEnv, fun->argNames, args.data());
     add(mkenv);
     this->env = mkenv;

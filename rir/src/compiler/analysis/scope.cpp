@@ -72,7 +72,7 @@ AbstractResult ScopeAnalysis::apply(ScopeAnalysisState& state,
                [&](const AbstractPirValue& analysisRes) {
                    state.returnValue.merge(analysisRes);
                },
-               [&]() { state.returnValue.merge(ValOrig(res, i)); });
+               [&]() { state.returnValue.merge(ValOrig(res, i, depth)); });
         effect.update();
     } else if (Deopt::Cast(i)) {
         // who knows what the deopt target will return...
@@ -86,7 +86,7 @@ AbstractResult ScopeAnalysis::apply(ScopeAnalysisState& state,
         }
         state.envs[mk].parentEnv(lexicalEnv);
         mk->eachLocalVar(
-            [&](SEXP name, Value* val) { state.envs[mk].set(name, val, mk); });
+            [&](SEXP name, Value* val) { state.envs[mk].set(name, val, mk, depth); });
         handled = true;
         effect.update();
     } else if (auto le = LdFunctionEnv::Cast(i)) {
@@ -103,7 +103,7 @@ AbstractResult ScopeAnalysis::apply(ScopeAnalysisState& state,
         if (!loadFun(state, ldfun->varName, ldfun->env()).result.isUnknown())
             handled = true;
     } else if (auto s = StVar::Cast(i)) {
-        state.envs[s->env()].set(s->varName, s->val(), s);
+        state.envs[s->env()].set(s->varName, s->val(), s, depth);
         handled = true;
         effect.update();
     } else if (auto ss = StVarSuper::Cast(i)) {
@@ -115,7 +115,7 @@ AbstractResult ScopeAnalysis::apply(ScopeAnalysisState& state,
                 binding.result.eachSource([&](ValOrig& src) {
                     state.observedStores.insert(src.origin);
                 });
-                state.envs[superEnv].set(ss->varName, ss->val(), ss);
+                state.envs[superEnv].set(ss->varName, ss->val(), ss, depth);
                 handled = true;
                 effect.update();
             }
@@ -126,7 +126,7 @@ AbstractResult ScopeAnalysis::apply(ScopeAnalysisState& state,
         auto force = Force::Cast(i);
         auto arg = force->arg<0>().val();
         if (!arg->type.maybeLazy()) {
-            effect.max(state.returnValues[i].merge(ValOrig(arg, i)));
+            effect.max(state.returnValues[i].merge(ValOrig(arg, i, depth)));
             handled = true;
         }
 
@@ -168,6 +168,19 @@ AbstractResult ScopeAnalysis::apply(ScopeAnalysisState& state,
         }
     } else if (CallInstruction::CastCall(i) && depth < MAX_DEPTH) {
         auto calli = CallInstruction::CastCall(i);
+
+        auto interProceduralAnalysis = [&](Closure* cls, Value* lexicalEnv) {
+            std::vector<Value*> args;
+            calli->eachCallArg([&](Value* v) { args.push_back(v); });
+            ScopeAnalysis nextFun(cls, args, lexicalEnv, state, depth + 1, log);
+            nextFun();
+            state.mergeCall(code, nextFun.result());
+            state.returnValues[i].merge(nextFun.result().returnValue);
+            effect.keepSnapshot = true;
+            handled = true;
+            effect.update();
+        };
+
         if (auto call = Call::Cast(i)) {
             auto target = call->cls()->followCastsAndForce();
             lookup(state, target, [&](const AbstractPirValue& analysisRes) {
@@ -177,40 +190,13 @@ AbstractResult ScopeAnalysis::apply(ScopeAnalysisState& state,
                 }
             });
             assert(target);
-            if (auto cls = MkFunCls::Cast(target)) {
-                if (cls->fun->argNames.size() == calli->nCallArgs()) {
-                    if (cls->fun != closure) {
-                        std::vector<Value*> args;
-                        calli->eachCallArg(
-                            [&](Value* v) { args.push_back(v); });
-                        ScopeAnalysis nextFun(cls->fun, args, cls->lexicalEnv(),
-                                              state, depth + 1, log);
-                        nextFun();
-                        state.mergeCall(code, nextFun.result());
-                        state.returnValues[i].merge(
-                            nextFun.result().returnValue);
-                        handled = true;
-                        effect.update();
-                        effect.keepSnapshot = true;
-                    }
-                }
-            }
+            if (auto cls = MkFunCls::Cast(target))
+                if (cls->fun->argNames.size() == calli->nCallArgs())
+                    interProceduralAnalysis(cls->fun, cls->lexicalEnv());
         } else if (auto call = StaticCall::Cast(i)) {
             auto target = call->cls();
-            if (target && target->argNames.size() == calli->nCallArgs()) {
-                if (target != closure) {
-                    std::vector<Value*> args;
-                    calli->eachCallArg([&](Value* v) { args.push_back(v); });
-                    ScopeAnalysis nextFun(target, args, target->closureEnv(),
-                                          state, depth + 1, log);
-                    nextFun();
-                    state.mergeCall(code, nextFun.result());
-                    state.returnValues[i].merge(nextFun.result().returnValue);
-                    handled = true;
-                    effect.update();
-                    effect.keepSnapshot = true;
-                }
-            }
+            if (target && target->argNames.size() == calli->nCallArgs())
+                interProceduralAnalysis(target, target->closureEnv());
         } else {
             // TODO: support for NamedCall
             assert((CallBuiltin::Cast(i) || CallSafeBuiltin::Cast(i) ||

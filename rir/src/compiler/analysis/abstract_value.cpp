@@ -8,8 +8,8 @@ namespace rir {
 namespace pir {
 
 AbstractPirValue::AbstractPirValue() : type(PirType::bottom()) {}
-AbstractPirValue::AbstractPirValue(Value* v, Instruction* o) : type(v->type) {
-    vals.insert(ValOrig(v, o));
+AbstractPirValue::AbstractPirValue(Value* v, Instruction* o, unsigned recursionLevel) : type(v->type) {
+    vals.insert(ValOrig(v, o, recursionLevel));
 }
 
 void AbstractREnvironmentHierarchy::print(std::ostream& out, bool tty) const {

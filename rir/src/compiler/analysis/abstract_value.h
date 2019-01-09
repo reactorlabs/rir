@@ -15,14 +15,17 @@ namespace pir {
 struct ValOrig {
     Value* val;
     Instruction* origin;
-    ValOrig(Value* v, Instruction* o) : val(v), origin(o) {}
+    unsigned recursionLevel;
+    ValOrig(Value* v, Instruction* o, unsigned recursionLevel) : val(v), origin(o), recursionLevel(recursionLevel) {}
     bool operator<(const ValOrig& other) const {
-        if (origin == other.origin)
+        if (origin == other.origin && recursionLevel == other.recursionLevel)
             return val < other.val;
+        if (origin == other.origin)
+            return recursionLevel < other.recursionLevel;
         return origin < other.origin;
     }
     bool operator==(const ValOrig& other) const {
-        return val == other.val && origin == other.origin;
+        return val == other.val && origin == other.origin && recursionLevel == other.recursionLevel;
     }
 };
 }
@@ -60,7 +63,7 @@ struct AbstractPirValue {
     PirType type = PirType::bottom();
 
     AbstractPirValue();
-    AbstractPirValue(Value* v, Instruction* origin);
+    AbstractPirValue(Value* v, Instruction* origin, unsigned recursionLevel);
 
     static AbstractPirValue tainted() {
         AbstractPirValue v;
@@ -109,7 +112,7 @@ struct AbstractPirValue {
     }
 
     AbstractResult merge(const ValOrig& other) {
-        return merge(AbstractPirValue(other.val, other.origin));
+        return merge(AbstractPirValue(other.val, other.origin, other.recursionLevel));
     }
 
     AbstractResult merge(const AbstractPirValue& other);
@@ -146,8 +149,8 @@ struct AbstractREnvironment {
         }
     }
 
-    void set(SEXP n, Value* v, Instruction* origin) {
-        entries[n] = AbstractPirValue(v, origin);
+    void set(SEXP n, Value* v, Instruction* origin, unsigned recursionLevel) {
+        entries[n] = AbstractPirValue(v, origin, recursionLevel);
     }
 
     void print(std::ostream& out, bool tty = false) const;

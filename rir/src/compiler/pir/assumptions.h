@@ -9,11 +9,12 @@ namespace rir {
 namespace pir {
 
 enum class Assumption {
+    EagerArgs,
     CorrectNumberOfArguments,
     MaxNumberOfArguments,
     CorrectOrderOfArguments,
 
-    FIRST = CorrectNumberOfArguments,
+    FIRST = EagerArgs,
     LAST = CorrectOrderOfArguments
 };
 

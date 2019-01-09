@@ -70,8 +70,10 @@ class TheInliner {
                     continue;
 
                 // Recursive inline only once
-                if (inlinee == function)
+                if (inlinee->rirVersion() == function->rirVersion()) {
                     skip.insert(inlinee);
+                    continue;
+                }
 
                 if (inlinee->size() > MAX_INLINEE_SIZE) {
                     skip.insert(inlinee);
@@ -154,11 +156,12 @@ class TheInliner {
                         }
                         if (ld) {
                             Value* a = arguments[ld->id];
-                            if (MkArg::Cast(a)) {
+                            if (auto mk = MkArg::Cast(a)) {
                                 // We need to cast from a promise to a lazy
                                 // value
+                                bool maybeLazy = mk->eagerArg() == Missing::instance();
                                 auto cast = new CastType(a, RType::prom,
-                                                         PirType::any());
+                                                         maybeLazy ? PirType::any() : PirType::val());
                                 ip = bb->insert(ip + 1, cast);
                                 ip--;
                                 a = cast;

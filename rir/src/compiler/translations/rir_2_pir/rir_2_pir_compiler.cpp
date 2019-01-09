@@ -121,8 +121,11 @@ void Rir2PirCompiler::optimizeModule() {
         module->eachPirFunction([&](Closure* c) {
             auto& log = logger.get(c);
             log.pirOptimizationsHeader(c, translation->getName(), passnr++);
+            if (dynamic_cast<const ScopeResolution*>(translation))
+              log.pirOptimizations(c);
             translation->apply(*this, c, log);
-            log.pirOptimizations(c);
+            if (dynamic_cast<const ScopeResolution*>(translation))
+              log.pirOptimizations(c);
 
 #ifdef ENABLE_SLOWASSERT
             assert(Verify::apply(c));
