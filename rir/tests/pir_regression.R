@@ -81,3 +81,19 @@ hc3 = .Call("rir_invocation_count", h)
 ic3 = .Call("rir_invocation_count", i)
 stopifnot(hc3 == hc2+1)
 stopifnot(ic3 == ic2+1)
+
+# When subsequently calling the g inner function we must ensure
+# that val is properly bind. This means that we must activate a
+# the differnt SEXP everytime because val is bind to its enclosing
+# environment (the environemnt of the current activation of f).
+# This tests ensures that if an optimization tries to optimize 
+# this polymorphicness, the semantics are preserved 
+f <- function(val) {
+    g <- function() val 
+    g() 
+}
+h <- rir.compile(function(x) f(x))
+stopifnot(h(1) == 1)
+stopifnot(h(2) == 2)
+h <- pir.compile(h)
+stopifnot(h(3) == 3)
