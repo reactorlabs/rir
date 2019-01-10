@@ -15,6 +15,25 @@ namespace rir {
 void BC::write(CodeStream& cs) const {
     cs.insert(bc);
     switch (bc) {
+#define V(NESTED, name, name_) case Opcode::name_##_:
+BC_NOARGS(V, _)
+#undef V
+        return;
+
+    case Opcode::record_call_:
+        // Call feedback targets are stored in the code extra pool. We don't
+        // have access to them here, so we can't write a call feedback with
+        // preseeded values.
+        assert(immediate.callFeedback.numTargets == 0 &&
+               "cannot write call feedback targets");
+        cs.insert(immediate.callFeedback);
+        return;
+
+    case Opcode::record_binop_:
+        cs.insert(immediate.binopFeedback[0]);
+        cs.insert(immediate.binopFeedback[1]);
+        return;
+
     case Opcode::push_:
     case Opcode::deopt_:
     case Opcode::ldfun_:
@@ -94,80 +113,6 @@ void BC::write(CodeStream& cs) const {
 
     case Opcode::movloc_:
         cs.insert(immediate.loc_cpy);
-        return;
-
-    case Opcode::record_call_:
-        // Call feedback targets are stored in the code extra pool. We don't
-        // have access to them here, so we can't write a call feedback with
-        // preseeded values.
-        assert(immediate.callFeedback.numTargets == 0 &&
-               "cannot write call feedback targets");
-        cs.insert(immediate.callFeedback);
-        return;
-
-    case Opcode::record_binop_:
-        cs.insert(immediate.binopFeedback[0]);
-        cs.insert(immediate.binopFeedback[1]);
-        return;
-
-    case Opcode::nop_:
-    case Opcode::make_env_:
-    case Opcode::get_env_:
-    case Opcode::parent_env_:
-    case Opcode::set_env_:
-    case Opcode::extract1_1_:
-    case Opcode::extract1_2_:
-    case Opcode::extract2_1_:
-    case Opcode::extract2_2_:
-    case Opcode::ret_:
-    case Opcode::length_:
-    case Opcode::names_:
-    case Opcode::set_names_:
-    case Opcode::force_:
-    case Opcode::pop_:
-    case Opcode::close_:
-    case Opcode::asast_:
-    case Opcode::asbool_:
-    case Opcode::dup_:
-    case Opcode::dup2_:
-    case Opcode::for_seq_size_:
-    case Opcode::swap_:
-    case Opcode::int3_:
-    case Opcode::make_unique_:
-    case Opcode::set_shared_:
-    case Opcode::ensure_named_:
-    case Opcode::aslogical_:
-    case Opcode::lgl_and_:
-    case Opcode::lgl_or_:
-    case Opcode::inc_:
-    case Opcode::add_:
-    case Opcode::mul_:
-    case Opcode::div_:
-    case Opcode::idiv_:
-    case Opcode::mod_:
-    case Opcode::pow_:
-    case Opcode::sub_:
-    case Opcode::uplus_:
-    case Opcode::uminus_:
-    case Opcode::not_:
-    case Opcode::lt_:
-    case Opcode::gt_:
-    case Opcode::le_:
-    case Opcode::ge_:
-    case Opcode::eq_:
-    case Opcode::identical_noforce_:
-    case Opcode::ne_:
-    case Opcode::seq_:
-    case Opcode::colon_:
-    case Opcode::return_:
-    case Opcode::isfun_:
-    case Opcode::invisible_:
-    case Opcode::visible_:
-    case Opcode::endloop_:
-    case Opcode::subassign1_:
-    case Opcode::subassign2_:
-    case Opcode::isobj_:
-    case Opcode::check_missing_:
         return;
 
     case Opcode::invalid_:
@@ -333,64 +278,9 @@ void BC::print(std::ostream& out) const {
         break;
     }
 
-    case Opcode::nop_:
-    case Opcode::make_env_:
-    case Opcode::get_env_:
-    case Opcode::parent_env_:
-    case Opcode::set_env_:
-    case Opcode::force_:
-    case Opcode::pop_:
-    case Opcode::seq_:
-    case Opcode::colon_:
-    case Opcode::ret_:
-    case Opcode::swap_:
-    case Opcode::int3_:
-    case Opcode::make_unique_:
-    case Opcode::set_shared_:
-    case Opcode::ensure_named_:
-    case Opcode::dup_:
-    case Opcode::inc_:
-    case Opcode::dup2_:
-    case Opcode::for_seq_size_:
-    case Opcode::asast_:
-    case Opcode::asbool_:
-    case Opcode::add_:
-    case Opcode::mul_:
-    case Opcode::div_:
-    case Opcode::idiv_:
-    case Opcode::mod_:
-    case Opcode::pow_:
-    case Opcode::sub_:
-    case Opcode::uplus_:
-    case Opcode::uminus_:
-    case Opcode::not_:
-    case Opcode::lt_:
-    case Opcode::gt_:
-    case Opcode::le_:
-    case Opcode::ge_:
-    case Opcode::eq_:
-    case Opcode::identical_noforce_:
-    case Opcode::ne_:
-    case Opcode::return_:
-    case Opcode::isfun_:
-    case Opcode::invisible_:
-    case Opcode::visible_:
-    case Opcode::extract1_1_:
-    case Opcode::extract1_2_:
-    case Opcode::extract2_1_:
-    case Opcode::extract2_2_:
-    case Opcode::close_:
-    case Opcode::length_:
-    case Opcode::names_:
-    case Opcode::set_names_:
-    case Opcode::endloop_:
-    case Opcode::aslogical_:
-    case Opcode::lgl_or_:
-    case Opcode::lgl_and_:
-    case Opcode::subassign1_:
-    case Opcode::subassign2_:
-    case Opcode::isobj_:
-    case Opcode::check_missing_:
+#define V(NESTED, name, name_) case Opcode::name_##_:
+BC_NOARGS(V, _)
+#undef V
         break;
     case Opcode::promise_:
     case Opcode::push_code_:
