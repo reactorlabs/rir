@@ -249,13 +249,10 @@ AbstractResult TheStackAllocator::apply(StackAllocatorState& state,
     // TODO: maybe enough only when changing bb?
     for (auto& val : state.requirements) {
         if (auto phi = Phi::Cast(val)) {
-            if (phi->bb() == bb)
-                continue;
             phi->eachArg([&](BB* b, Value* v) {
-                if (bb == b)
+                if (i == v)
                     val = v;
             });
-            assert(!Phi::Cast(val) && "phi that doesn't have this bb as input");
         }
     }
 
@@ -322,19 +319,23 @@ AbstractResult TheStackAllocator::apply(StackAllocatorState& state,
 
     if (i == bb->first()) {
 
-        if (cfg.immediatePredecessors(bb).size() == 1) {
-            BB* pred = cfg.immediatePredecessors(bb).front();
+        std::unordered_set<Value*> missing;
+
+        for (auto pred : cfg.immediatePredecessors(bb)) {
             if (sva.stackValues.count(pred)) {
+
                 auto vals = sva.stackValues.at(pred);
-                for (auto have : state.requirements) {
-                    if (vals.count(have))
-                        vals.erase(vals.find(have));
+                missing.insert(vals.begin(), vals.end());
                 }
-                state.additionalRequirements.insert(
-                    state.additionalRequirements.end(), vals.begin(),
-                    vals.end());
             }
+
+            for (auto have : state.requirements) {
+                if (missing.count(have))
+                    missing.erase(missing.find(have));
         }
+
+        state.additionalRequirements.insert(state.additionalRequirements.end(),
+                                            missing.begin(), missing.end());
     }
 
     return AbstractResult::None;

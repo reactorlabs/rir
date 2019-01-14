@@ -1337,8 +1337,7 @@ void Pir2Rir::toCSSA(Code* code) {
         // after each phi but after all phi's
         for (auto it = bb->begin(); it != bb->end(); ++it) {
             auto instr = *it;
-            Phi* phi = Phi::Cast(instr);
-            if (phi) {
+            if (auto phi = Phi::Cast(instr)) {
                 for (size_t i = 0; i < phi->nargs(); ++i) {
                     BB* pred = phi->input[i];
                     // pred is either jump (insert copy at end) or branch

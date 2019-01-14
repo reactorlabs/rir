@@ -388,7 +388,7 @@ class BackwardStaticAnalysis {
             if (code == closure)
                 log << "body";
             else
-                log << "Prom(" << closure->promiseId(code) << ")";
+                log << "Prom(" << static_cast<Promise*>(code)->id << ")";
             log << "\n";
         }
 
