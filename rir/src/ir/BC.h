@@ -20,15 +20,12 @@ namespace rir {
 
 class CodeStream;
 
-BC BC::nop() { return BC(Opcode::nop_); }
-BC BC::makeEnv() { return BC(Opcode::make_env_); }
-BC BC::parentEnv() { return BC(Opcode::parent_env_); }
-BC BC::getEnv() { return BC(Opcode::get_env_); }
-BC BC::setEnv() { return BC(Opcode::set_env_); }
-BC BC::ret() { return BC(Opcode::ret_); }
-BC BC::return_() { return BC(Opcode::return_); }
-BC BC::force() { return BC(Opcode::force_); }
-BC BC::pop() { return BC(Opcode::pop_); }
+#define V(NESTED, name, name_)\
+BC BC::name() { return BC(Opcode::name_##_); }
+BC_NOARGS(V, _)
+#undef V
+BC BC::recordCall() { return BC(Opcode::record_call_); }
+BC BC::recordBinop() { return BC(Opcode::record_binop_); }
 BC BC::push(SEXP constant) {
     assert(TYPEOF(constant) != PROMSXP);
     assert(!Code::check(constant));
@@ -137,7 +134,6 @@ BC BC::promise(FunIdx prom) {
     i.fun = prom;
     return BC(Opcode::promise_, i);
 }
-BC BC::asast() { return BC(Opcode::asast_); }
 BC BC::missing(SEXP sym) {
     assert(TYPEOF(sym) == SYMSXP);
     assert(strlen(CHAR(PRINTNAME(sym))));
@@ -145,7 +141,6 @@ BC BC::missing(SEXP sym) {
     i.pool = Pool::insert(sym);
     return BC(Opcode::missing_, i);
 }
-BC BC::checkMissing() { return BC(Opcode::check_missing_); }
 BC BC::stvar(SEXP sym) {
     assert(TYPEOF(sym) == SYMSXP);
     assert(strlen(CHAR(PRINTNAME(sym))));
@@ -160,22 +155,11 @@ BC BC::stvarSuper(SEXP sym) {
     i.pool = Pool::insert(sym);
     return BC(Opcode::stvar_super_, i);
 }
-BC BC::subassign1() { return BC(Opcode::subassign1_); }
-BC BC::subassign2() { return BC(Opcode::subassign2_); }
-BC BC::seq() { return BC(Opcode::seq_); }
-BC BC::colon() { return BC(Opcode::colon_); }
-BC BC::asbool() { return BC(Opcode::asbool_); }
-
-BC BC::length() { return BC(Opcode::length_); }
-BC BC::names() { return BC(Opcode::names_); }
-BC BC::setNames() { return BC(Opcode::set_names_); }
 BC BC::alloc(int type) {
     ImmediateArguments i;
     i.i = type;
     return BC(Opcode::alloc_, i);
 }
-
-BC BC::isfun() { return BC(Opcode::isfun_); }
 BC BC::br(Jmp j) {
     ImmediateArguments i;
     i.offset = j;
@@ -201,44 +185,6 @@ BC BC::brfalse(Jmp j) {
     i.offset = j;
     return BC(Opcode::brfalse_, i);
 }
-BC BC::endloop() { return BC(Opcode::endloop_); }
-BC BC::dup() { return BC(Opcode::dup_); }
-BC BC::inc() { return BC(Opcode::inc_); }
-BC BC::close() { return BC(Opcode::close_); }
-BC BC::dup2() { return BC(Opcode::dup2_); }
-BC BC::forSeqSize() { return BC(Opcode::for_seq_size_); }
-BC BC::add() { return BC(Opcode::add_); }
-BC BC::mul() { return BC(Opcode::mul_); }
-BC BC::div() { return BC(Opcode::div_); }
-BC BC::idiv() { return BC(Opcode::idiv_); }
-BC BC::mod() { return BC(Opcode::mod_); }
-BC BC::pow() { return BC(Opcode::pow_); }
-BC BC::sub() { return BC(Opcode::sub_); }
-BC BC::uplus() { return BC(Opcode::uplus_); }
-BC BC::uminus() { return BC(Opcode::uminus_); }
-BC BC::Not() { return BC(Opcode::not_); }
-BC BC::lt() { return BC(Opcode::lt_); }
-BC BC::gt() { return BC(Opcode::gt_); }
-BC BC::le() { return BC(Opcode::le_); }
-BC BC::ge() { return BC(Opcode::ge_); }
-BC BC::eq() { return BC(Opcode::eq_); }
-BC BC::identicalNoforce() { return BC(Opcode::identical_noforce_); }
-BC BC::ne() { return BC(Opcode::ne_); }
-BC BC::invisible() { return BC(Opcode::invisible_); }
-BC BC::visible() { return BC(Opcode::visible_); }
-BC BC::extract1_1() { return BC(Opcode::extract1_1_); }
-BC BC::extract1_2() { return BC(Opcode::extract1_2_); }
-BC BC::extract2_1() { return BC(Opcode::extract2_1_); }
-BC BC::extract2_2() { return BC(Opcode::extract2_2_); }
-BC BC::swap() { return BC(Opcode::swap_); }
-BC BC::int3() { return BC(Opcode::int3_); }
-BC BC::makeUnique() { return BC(Opcode::make_unique_); }
-BC BC::setShared() { return BC(Opcode::set_shared_); }
-BC BC::ensureNamed() { return BC(Opcode::ensure_named_); }
-BC BC::asLogical() { return BC(Opcode::aslogical_); }
-BC BC::lglAnd() { return BC(Opcode::lgl_and_); }
-BC BC::lglOr() { return BC(Opcode::lgl_or_); }
-BC BC::isObj() { return BC(Opcode::isobj_); }
 BC BC::pull(uint32_t i) {
     ImmediateArguments im;
     im.i = i;
@@ -304,9 +250,6 @@ BC BC::staticCall(size_t nargs, SEXP ast, SEXP target) {
     im.staticCallFixedArgs.target = Pool::insert(target);
     return BC(Opcode::static_call_, im);
 }
-BC BC::recordCall() { return BC(Opcode::record_call_); }
-BC BC::recordBinop() { return BC(Opcode::record_binop_); }
-
 BC BC::deopt(SEXP deoptMetadata) {
     ImmediateArguments i;
     i.pool = Pool::insert(deoptMetadata);
