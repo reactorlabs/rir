@@ -46,14 +46,10 @@ void EagerCalls::apply(RirCompiler& cmp, Closure* closure, LogStream&) const {
             Assumptions newAssumptions;
             newAssumptions.set(Assumption::EagerArgs);
             newAssumptions.set(Assumption::NoMissingArguments);
-            // TODO: guard this!
-            newAssumptions.set(Assumption::NonObjectArgs);
             auto withEagerArgs = cmp.cloneWithAssumptions(cls, newAssumptions);
             Visitor::run(withEagerArgs->entry, [&](Instruction* i) {
-                if (auto ld = LdArg::Cast(i)) {
+                if (auto ld = LdArg::Cast(i))
                     ld->type.setEager();
-                    ld->type.setNotObject();
-                }
             });
             call->cls(withEagerArgs);
         }
