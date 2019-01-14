@@ -215,20 +215,17 @@ class TheStackAllocator
                                     AnalysisDebugLevel::None> {
   private:
     using ApplyCompensation = StackAllocator::ApplyCompensation;
-    using MergeCompensation = StackAllocator::MergeCompensation;
 
     CFG const& cfg;
     StackValuesAnalysis const& sva;
     ApplyCompensation& applyCompensation;
-    MergeCompensation& mergeCompensation;
 
   public:
     TheStackAllocator(Closure* cls, Code* code, StackAllocatorState init,
                       LogStream& log, CFG const& cfg,
-                      StackValuesAnalysis const& sva, ApplyCompensation& ac,
-                      MergeCompensation& mc)
+                      StackValuesAnalysis const& sva, ApplyCompensation& ac)
         : BackwardStaticAnalysis("Stack Allocator", cls, code, init, cfg, log),
-          cfg(cfg), sva(sva), applyCompensation(ac), mergeCompensation(mc) {}
+          cfg(cfg), sva(sva), applyCompensation(ac) {}
 
     AbstractResult apply(StackAllocatorState& state,
                          Instruction* i) const override;
@@ -358,7 +355,7 @@ StackAllocator::StackAllocator(Closure* function, Code* code, LogStream& log) {
     initialState.mergeCompensation = &mergeCompensation;
 
     TheStackAllocator allocate(function, code, initialState, log, cfg, sva,
-                               applyCompensation, mergeCompensation);
+                               applyCompensation);
     allocate();
 }
 
