@@ -29,17 +29,26 @@ bool BufferedLogStream::tty() { return ConsoleColor::isTTY(actualOut); }
 LogStream& StreamLogger::begin(Closure* cls) {
     assert(!streams.count(cls) && "You already started this function");
 
+    std::stringstream id;
+    id << cls->name << " ";
+    unsigned pos = 0;
+    for (auto a : cls->assumptions) {
+        id << a;
+        if (++pos < cls->assumptions.count())
+            id << "|";
+    }
+
     if (options.includes(DebugFlag::PrintIntoFiles)) {
         std::stringstream filename;
         filename << "pir-function-" << std::setfill('0') << std::setw(5)
                  << logId++ << "-" << cls->name << ".log";
         streams.emplace(cls,
-                        new FileLogStream(options, cls->name, filename.str()));
+                        new FileLogStream(options, id.str(), filename.str()));
     } else {
         if (options.includes(DebugFlag::PrintIntoStdout))
-            streams.emplace(cls, new LogStream(options, cls->name));
+            streams.emplace(cls, new LogStream(options, id.str()));
         else
-            streams.emplace(cls, new BufferedLogStream(options, cls->name));
+            streams.emplace(cls, new BufferedLogStream(options, id.str()));
     }
 
     auto& logger = get(cls);
@@ -72,18 +81,25 @@ void LogStream::pirOptimizationsFinished(Closure* closure) {
 }
 
 void LogStream::pirOptimizationsHeader(Closure* closure,
-                                       const std::string& pass, size_t passnr) {
+                                       const PirTranslator* pass,
+                                       size_t passnr) {
     if (options.includes(DebugFlag::PrintOptimizationPasses)) {
-        preparePrint();
-        std::stringstream ss;
-        ss << pass << ": == " << passnr;
-        section(ss.str());
+        if (options.passFilter.empty() ||
+            options.passFilter == pass->getName()) {
+            preparePrint();
+            std::stringstream ss;
+            ss << pass->getName() << ": == " << passnr;
+            section(ss.str());
+        }
     }
 }
 
-void LogStream::pirOptimizations(Closure* closure) {
+void LogStream::pirOptimizations(Closure* closure, const PirTranslator* pass) {
     if (options.includes(DebugFlag::PrintOptimizationPasses)) {
-        closure->print(out, tty());
+        if (options.passFilter.empty() ||
+            options.passFilter == pass->getName()) {
+            closure->print(out, tty());
+        }
     }
 }
 

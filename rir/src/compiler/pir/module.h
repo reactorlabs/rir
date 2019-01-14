@@ -25,12 +25,29 @@ class Module {
 
     void print(std::ostream& out = std::cout, bool tty = false);
 
-    bool exists(rir::Function* f, OptimizationContext ctx) {
+    bool exists(rir::Function* f, const OptimizationContext& ctx) {
         return closures[f].count(ctx);
     }
-    Closure* get(rir::Function* f, OptimizationContext ctx) {
+    Closure* get(rir::Function* f, const OptimizationContext& ctx) {
         return closures.at(f).at(ctx);
     }
+    Closure* findCompatible(rir::Function* f, const OptimizationContext& ctx) {
+        if (!closures.count(f))
+            return nullptr;
+        auto candidates = closures.at(f);
+        // Reverse since they are ordered by number of assumptions
+        for (auto c = candidates.rbegin(); c != candidates.rend(); c++) {
+            auto candidate = *c;
+            auto candidateCtx = candidate.first;
+            if (candidateCtx.environment == ctx.environment &&
+                ctx.assumptions.includes(candidateCtx.assumptions))
+                return candidate.second;
+        }
+        return nullptr;
+    }
+
+    Closure* cloneWithAssumptions(Closure* cls, Assumptions asmpt);
+
     void erase(rir::Function* f, OptimizationContext ctx);
 
     Closure* declare(const std::string& name, rir::Function* f,

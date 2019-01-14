@@ -25,6 +25,8 @@ class TheScopeResolution {
         ScopeAnalysis analysis(function, log);
         analysis();
         auto& finalState = analysis.result();
+        if (finalState.noReflection())
+            function->properties.set(Closure::Property::NoReflection);
 
         Visitor::run(function->entry, [&](BB* bb) {
             auto ip = bb->begin();
@@ -35,8 +37,11 @@ class TheScopeResolution {
                 auto before = analysis.at<ScopeAnalysis::BeforeInstruction>(i);
                 auto after = analysis.at<ScopeAnalysis::AfterInstruction>(i);
 
-                // Force can only see our env only through reflection
-                if (Force::Cast(i) && after.noReflection())
+                // Force and callees can only see our env only through
+                // reflection
+                if (i->hasEnv() &&
+                    (CallInstruction::CastCall(i) || Force::Cast(i)) &&
+                    after.noReflection())
                     i->elideEnv();
 
                 // Dead store to non-escaping environment can be removed
@@ -199,6 +204,7 @@ class TheScopeResolution {
                                 guess->validIn(function)) {
                                 ldfun->replaceUsesWith(guess);
                                 next = bb->remove(ip);
+                                return;
                             }
                         } else {
                             auto res =
@@ -214,9 +220,9 @@ class TheScopeResolution {
                                     ldfun->guessedBinding(*ip);
                                     next = ip + 2;
                                 }
+                                return;
                             }
                         }
-                        return;
                     }
 
                     // If nothing else, narrow down the environment (in case we

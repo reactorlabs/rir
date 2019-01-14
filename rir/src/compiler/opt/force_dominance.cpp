@@ -48,6 +48,13 @@ struct ForcedBy {
     std::unordered_set<Value*> inScope;
     std::unordered_set<Value*> escaped;
 
+    size_t eagerFunction = 0;
+    static constexpr size_t NotEagerFunction = -1;
+
+    bool isEagerFunction(Closure* cls) const {
+        return eagerFunction == cls->nargs();
+    }
+
     static Force* ambiguous() {
         static Force f(Nil::instance(), Env::nil());
         return &f;
@@ -128,6 +135,13 @@ struct ForcedBy {
                 res.update();
             }
         }
+
+        if (eagerFunction != NotEagerFunction &&
+            eagerFunction != other.eagerFunction) {
+            eagerFunction = NotEagerFunction;
+            res.update();
+        }
+
         return res;
     }
 
@@ -200,8 +214,19 @@ class ForceDominanceAnalysis : public StaticAnalysis<ForcedBy> {
         if (auto f = Force::Cast(i)) {
             if (MkArg* arg = MkArg::Cast(f->arg<0>().val()->followCasts()))
                 changed = state.forcedAt(arg, f) || changed;
-            if (LdArg* arg = LdArg::Cast(f->arg<0>().val()->followCasts()))
+            if (LdArg* arg = LdArg::Cast(f->arg<0>().val()->followCasts())) {
                 changed = state.forcedAt(arg, f) || changed;
+                if (state.eagerFunction != ForcedBy::NotEagerFunction) {
+                    if (arg->id == state.eagerFunction) {
+                        state.eagerFunction++;
+                        changed = true;
+                    } else if (state.eagerFunction !=
+                               ForcedBy::NotEagerFunction) {
+                        state.eagerFunction = ForcedBy::NotEagerFunction;
+                        changed = true;
+                    }
+                }
+            }
         } else if (auto mk = MkArg::Cast(i)) {
             changed = state.declare(mk) || changed;
         } else if (auto ld = LdArg::Cast(i)) {
@@ -216,6 +241,10 @@ class ForceDominanceAnalysis : public StaticAnalysis<ForcedBy> {
             });
             if (i->mayForcePromises())
                 changed = state.sideeffect() || changed;
+            if (i->hasEffect() && state.eagerFunction != closure->nargs()) {
+                state.eagerFunction = ForcedBy::NotEagerFunction;
+                changed = true;
+            }
         }
         return changed ? AbstractResult::Updated : AbstractResult::None;
     }
@@ -231,6 +260,8 @@ void ForceDominance::apply(RirCompiler&, Closure* cls, LogStream& log) const {
         ForceDominanceAnalysis analysis(cls, code, log);
         analysis();
         auto& result = analysis.result();
+        if (result.isEagerFunction(cls))
+            cls->properties.set(Closure::Property::IsEager);
 
         std::unordered_map<Force*, Value*> inlinedPromise;
         std::unordered_map<Instruction*, MkArg*> forcedMkArg;

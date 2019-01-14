@@ -681,6 +681,8 @@ class FLIE(MkArg, 2, Effect::None, EnvAccess::Capture) {
     typedef std::function<void(Value*)> EagerMaybe;
 
     Value* eagerArg() const { return arg(0).val(); }
+    void eagerArg(Value* eager) { arg(0).val() = eager; }
+
     void updatePromise(Promise* p) { prom_ = p; }
     Promise* prom() { return prom_; }
 
@@ -1033,6 +1035,7 @@ class CallInstruction {
   public:
     virtual size_t nCallArgs() = 0;
     virtual void eachCallArg(Instruction::ArgumentValueIterator it) = 0;
+    virtual void eachCallArg(Instruction::MutableArgumentIterator it) = 0;
     static CallInstruction* CastCall(Value* v);
     virtual void clearFrameState(){};
     virtual Closure* tryGetCls() { return nullptr; }
@@ -1066,6 +1069,10 @@ class VLIE(Call, Effect::Any, EnvAccess::Leak), public CallInstruction {
         for (size_t i = 0; i < nCallArgs(); ++i)
             it(arg(i + 2).val());
     }
+    void eachCallArg(Instruction::MutableArgumentIterator it) override {
+        for (size_t i = 0; i < nCallArgs(); ++i)
+            it(arg(i + 2));
+    }
 
     FrameState* frameState() {
         return FrameState::Cast(arg(0).val());
@@ -1097,6 +1104,10 @@ class VLIE(NamedCall, Effect::Any, EnvAccess::Leak), public CallInstruction {
         for (size_t i = 0; i < nCallArgs(); ++i)
             it(arg(i + 1).val());
     }
+    void eachCallArg(Instruction::MutableArgumentIterator it) override {
+        for (size_t i = 0; i < nCallArgs(); ++i)
+            it(arg(i + 1));
+    }
 
     Value* callerEnv() { return env(); }
     void printArgs(std::ostream & out, bool tty) override;
@@ -1127,6 +1138,7 @@ class VLIE(StaticCall, Effect::Any, EnvAccess::Leak), public CallInstruction {
 
   public:
     Closure* cls() { return cls_; }
+    void cls(Closure * cls) { cls_ = cls; }
     SEXP origin() { return origin_; }
 
     Closure* tryGetCls() override final { return cls(); }
@@ -1139,6 +1151,10 @@ class VLIE(StaticCall, Effect::Any, EnvAccess::Leak), public CallInstruction {
     void eachCallArg(Instruction::ArgumentValueIterator it) override {
         for (size_t i = 0; i < nCallArgs(); ++i)
             it(arg(i + 1).val());
+    }
+    void eachCallArg(Instruction::MutableArgumentIterator it) override {
+        for (size_t i = 0; i < nCallArgs(); ++i)
+            it(arg(i + 1));
     }
 
     FrameState* frameState() { return FrameState::Cast(arg(0).val()); }
@@ -1161,6 +1177,10 @@ class VLIE(CallBuiltin, Effect::Any, EnvAccess::Leak), public CallInstruction {
         for (size_t i = 0; i < nCallArgs(); ++i)
             it(arg(i).val());
     }
+    void eachCallArg(Instruction::MutableArgumentIterator it) override {
+        for (size_t i = 0; i < nCallArgs(); ++i)
+            it(arg(i));
+    }
     void printArgs(std::ostream & out, bool tty) override;
     Value* callerEnv() { return env(); }
 
@@ -1179,6 +1199,9 @@ class VLI(CallSafeBuiltin, Effect::None, EnvAccess::None),
 
     size_t nCallArgs() override { return nargs(); };
     void eachCallArg(Instruction::ArgumentValueIterator it) override {
+        eachArg(it);
+    }
+    void eachCallArg(Instruction::MutableArgumentIterator it) override {
         eachArg(it);
     }
 

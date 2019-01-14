@@ -560,11 +560,14 @@ RIR_INLINE bool matches(const CallContext& call,
     assert(signature.envCreation ==
            FunctionSignature::Environment::CalleeCreated);
 
-    if (signature.nargs() > call.suppliedArgs)
-        if (!call.hasStackArgs() ||
-            signature.assumptions.includes(
-                pir::Assumption::CorrectNumberOfArguments))
+
+    if (signature.nargs() > call.suppliedArgs) {
+        if (signature.assumptions.includes(pir::Assumption::NoMissingArguments))
             return false;
+
+        if (!call.hasStackArgs())
+            return false;
+    }
 
     // We can't materialize ... yet
     if (!call.hasStackArgs()) {
@@ -579,7 +582,7 @@ RIR_INLINE bool matches(const CallContext& call,
         return false;
 
     if (signature.nargs() < call.suppliedArgs &&
-        signature.assumptions.includes(pir::Assumption::MaxNumberOfArguments)) {
+        signature.assumptions.includes(pir::Assumption::NoMissingArguments)) {
         return false;
     }
 
@@ -1561,12 +1564,6 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
             advanceImmediate();
             SEXP callee = cp_pool_at(ctx, readImmediate());
             advanceImmediate();
-            // TODO: Static call does not use getenv() but instead bypassess the
-            // asserts and gets the *env directly. This is because this
-            // instruction is used to call safe builtins, ie. builtins which are
-            // not accessing the environment. But, it is also used for other
-            // static calls, so we should probably split the two uses into two
-            // instructions.
             CallContext call(c, callee, n, ast, ostack_cell_at(ctx, n - 1),
                              *env, ctx);
             res = doCall(call, ctx);

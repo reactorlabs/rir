@@ -17,7 +17,7 @@ namespace pir {
 // mis-ordered arguments. The caller needs to take care.
 const Assumptions Rir2PirCompiler::minimalAssumptions =
     Assumptions() | Assumption::CorrectOrderOfArguments |
-    Assumption::MaxNumberOfArguments;
+    Assumption::NotTooManyArguments;
 
 Rir2PirCompiler::Rir2PirCompiler(Module* module, StreamLogger& logger)
     : RirCompiler(module), logger(logger) {
@@ -72,7 +72,7 @@ void Rir2PirCompiler::compileClosure(rir::Function* srcFunction,
 
     // TODO: Support default arguments and dots
     if (formals.hasDefaultArgs) {
-        if (!ctx.assumptions.includes(Assumption::CorrectNumberOfArguments)) {
+        if (!ctx.assumptions.includes(Assumption::NoMissingArguments)) {
             logger.warn("no support for default args");
             return fail();
         }
@@ -85,8 +85,10 @@ void Rir2PirCompiler::compileClosure(rir::Function* srcFunction,
     // TODO: if compilation fails, we should remember that somehow. Otherwise
     // we will continue on trying to compile the same function over and over
     // again.
-    if (module->exists(srcFunction, ctx))
-        return success(module->get(srcFunction, ctx));
+    // To avoid compiling excessive versions we will reuse already compiled
+    // versions with weaker assumptions.
+    if (auto existing = module->findCompatible(srcFunction, ctx))
+        return success(existing);
 
     auto closure = module->declare(name, srcFunction, ctx, formals.names);
 
@@ -120,12 +122,9 @@ void Rir2PirCompiler::optimizeModule() {
     for (auto& translation : translations) {
         module->eachPirFunction([&](Closure* c) {
             auto& log = logger.get(c);
-            log.pirOptimizationsHeader(c, translation->getName(), passnr++);
-            if (dynamic_cast<const ScopeResolution*>(translation))
-              log.pirOptimizations(c);
+            log.pirOptimizationsHeader(c, translation, passnr++);
             translation->apply(*this, c, log);
-            if (dynamic_cast<const ScopeResolution*>(translation))
-              log.pirOptimizations(c);
+            log.pirOptimizations(c, translation);
 
 #ifdef ENABLE_SLOWASSERT
             assert(Verify::apply(c));

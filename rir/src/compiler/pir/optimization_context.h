@@ -16,8 +16,11 @@ struct OptimizationContext {
     Assumptions assumptions;
 
     bool operator<(const OptimizationContext& other) const {
-        if (environment == other.environment)
+        if (environment == other.environment) {
+            if (assumptions.count() != other.assumptions.count())
+                return assumptions.count() < other.assumptions.count();
             return assumptions.to_ulong() < other.assumptions.to_ulong();
+        }
         return environment < other.environment;
     }
 

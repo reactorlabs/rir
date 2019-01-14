@@ -28,33 +28,10 @@ Closure::~Closure() {
         delete p;
 }
 
-Closure* Closure::clone() {
-    Closure* c = new Closure(name, argNames, env, function, assumptions);
-
-    // clone code
+Closure* Closure::clone(const Assumptions& newAssumptions) {
+    Closure* c = new Closure(name, argNames, env, function,
+                             assumptions | newAssumptions, properties);
     c->entry = BBTransform::clone(entry, c, c);
-
-    // clone promises
-    std::unordered_map<Promise*, Promise*> promMap;
-    for (auto p : promises) {
-        if (!p)
-            continue;
-        Promise* clonedP = new Promise(c, c->promises.size(), p->srcPoolIdx());
-        c->promises.push_back(clonedP);
-        clonedP->entry = BBTransform::clone(p->entry, clonedP, c);
-        promMap[p] = clonedP;
-    }
-
-    // fix promise references in body code and promise code
-    Visitor::run(c->entry, [&](Instruction* i) {
-        if (auto a = MkArg::Cast(i))
-            a->updatePromise(promMap.at(a->prom()));
-    });
-    for (auto p : c->promises)
-        Visitor::run(p->entry, [&](Instruction* i) {
-            if (auto a = MkArg::Cast(i))
-                a->updatePromise(promMap.at(a->prom()));
-        });
 
     return c;
 }

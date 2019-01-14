@@ -158,8 +158,7 @@ AbstractLoad AbstractREnvironmentHierarchy::getFun(Value* env, SEXP e) const {
             // If it might be a closure, we can neither be sure, nor exclude
             // this binding...
             if (res.type.maybe(RType::closure))
-                return AbstractLoad(AbstractREnvironment::UnknownParent,
-                                    AbstractPirValue::tainted());
+                return AbstractLoad(env, AbstractPirValue::tainted());
         }
         auto parent = envs.at(env).parentEnv();
         assert(parent);

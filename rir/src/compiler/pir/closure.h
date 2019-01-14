@@ -20,6 +20,21 @@ namespace pir {
  *
  */
 class Closure : public Code {
+  public:
+    enum class Property {
+        IsEager,
+        NoReflection,
+
+        FIRST = IsEager,
+        LAST = NoReflection
+    };
+
+    struct Properties : public EnumSet<Property> {
+        Properties() : EnumSet<Property>(){};
+        Properties(const EnumSet<Property>& other) : EnumSet<Property>(other) {}
+        Properties(const Property& other) : EnumSet<Property>(other) {}
+    };
+
   private:
     friend class Module;
 
@@ -30,13 +45,15 @@ class Closure : public Code {
     }
 
     Closure(const std::string& name, std::initializer_list<SEXP> a, Env* env,
-            rir::Function* function, const Assumptions& assumptions)
+            rir::Function* function, const Assumptions& assumptions,
+            const Properties& properties)
         : env(env), function(function), name(uniqueName(this, name)),
-          argNames(a), assumptions(assumptions) {}
+          argNames(a), assumptions(assumptions), properties(properties) {}
     Closure(const std::string& name, const std::vector<SEXP>& a, Env* env,
-            rir::Function* function, const Assumptions& assumptions)
+            rir::Function* function, const Assumptions& assumptions,
+            const Properties& properties)
         : env(env), function(function), name(uniqueName(this, name)),
-          argNames(a), assumptions(assumptions) {}
+          argNames(a), assumptions(assumptions), properties(properties) {}
 
     Env* env;
     rir::Function* function;
@@ -50,7 +67,8 @@ class Closure : public Code {
     std::vector<SEXP> argNames;
     std::vector<Promise*> promises;
 
-    Assumptions assumptions;
+    const Assumptions assumptions;
+    Properties properties;
 
     size_t nargs() const { return argNames.size(); }
 
@@ -63,7 +81,7 @@ class Closure : public Code {
         return out;
     }
 
-    Closure* clone();
+    Closure* clone(const Assumptions& newAssumptions);
 
     ~Closure();
 

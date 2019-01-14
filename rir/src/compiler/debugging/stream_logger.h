@@ -21,6 +21,7 @@ class BC;
 
 namespace pir {
 
+class PirTranslator;
 class StreamLogger;
 
 class LogStream {
@@ -35,8 +36,8 @@ class LogStream {
 
     void pirOptimizationsFinished(Closure*);
     void compilationEarlyPir(Closure*);
-    void pirOptimizationsHeader(Closure*, const std::string&, size_t);
-    void pirOptimizations(Closure*);
+    void pirOptimizationsHeader(Closure*, const PirTranslator*, size_t);
+    void pirOptimizations(Closure*, const PirTranslator*);
     void afterAllocator(Code*, std::function<void(std::ostream&)>);
     void CSSA(Code*);
     void finalPIR(Closure*);
@@ -143,7 +144,8 @@ class StreamLogger {
 
     LogStream& begin(Closure* cls);
     LogStream& get(Closure* cls) {
-        assert(streams.count(cls) && "You need to call begin first");
+        if (!streams.count(cls))
+            begin(cls);
         return *streams.at(cls);
     }
 

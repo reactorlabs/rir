@@ -372,8 +372,10 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             std::string name = "";
             if (ldfun)
                 name = CHAR(PRINTNAME(ldfun->varName));
-            Assumptions asmpt(Assumption::CorrectOrderOfArguments);
-            asmpt.set(Assumption::CorrectNumberOfArguments);
+            Assumptions asmpt;
+            asmpt.set(Assumption::NoMissingArguments);
+            asmpt.set(Assumption::NotTooManyArguments);
+            asmpt.set(Assumption::CorrectOrderOfArguments);
             if (allArgsEager)
                 asmpt.set(Assumption::EagerArgs);
             compiler.compileClosure(
@@ -448,8 +450,10 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                 Compiler::compileClosure(target);
             }
             bool failed = false;
-            Assumptions asmpt(Assumption::CorrectOrderOfArguments);
-            asmpt.set(Assumption::CorrectNumberOfArguments);
+            Assumptions asmpt;
+            asmpt.set(Assumption::CorrectOrderOfArguments);
+            asmpt.set(Assumption::NoMissingArguments);
+            asmpt.set(Assumption::NotTooManyArguments);
             asmpt.set(Assumption::EagerArgs);
             compiler.compileClosure(
                 target, "", asmpt,

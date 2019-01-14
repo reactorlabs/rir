@@ -25,9 +25,14 @@ class RirCompiler {
 
     void preserve(SEXP c) { preserve_(c); }
 
+    Closure* cloneWithAssumptions(Closure* cls, Assumptions asmpt) {
+        return module->cloneWithAssumptions(cls, asmpt);
+    }
+
+    Module* module;
+
   protected:
     std::vector<const PirTranslator*> translations;
-    Module* module;
     Preserve preserve_;
 };
 } // namespace pir

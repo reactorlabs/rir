@@ -6,16 +6,19 @@ namespace pir {
 std::ostream& operator<<(std::ostream& out, Assumption a) {
     switch (a) {
     case Assumption::EagerArgs:
-        out << "EagerArgs";
+        out << "EA";
         break;
     case Assumption::CorrectOrderOfArguments:
-        out << "CorrectOrderOfArguments";
+        out << "COA";
         break;
-    case Assumption::MaxNumberOfArguments:
-        out << "MaxNumberOfArguments";
+    case Assumption::NoMissingArguments:
+        out << "NMA";
         break;
-    case Assumption::CorrectNumberOfArguments:
-        out << "CorrectNumberOfArguments";
+    case Assumption::NonObjectArgs:
+        out << "NOA";
+        break;
+    case Assumption::NotTooManyArguments:
+        out << "NTA";
         break;
     }
     return out;

@@ -101,22 +101,22 @@ REXPORT SEXP pir_debugFlags(
 
 #define V(n)                                                                   \
     if (Rf_asLogical(n))                                                       \
-        opts.set(pir::DebugFlag::n);
+        opts.flags.set(pir::DebugFlag::n);
     LIST_OF_PIR_DEBUGGING_FLAGS(V)
 #undef V
 
     SEXP res = Rf_allocVector(INTSXP, 1);
-    INTEGER(res)[0] = (int)opts.to_ulong();
+    INTEGER(res)[0] = (int)opts.flags.to_ulong();
     return res;
 }
 
-static long getInitialDebugOptions() {
+static pir::DebugOptions::DebugFlags getInitialDebugFlags() {
     auto verb = getenv("PIR_DEBUG");
     if (!verb)
-        return 0;
+        return pir::DebugOptions::DebugFlags();
     std::istringstream in(verb);
 
-    pir::DebugOptions flags;
+    pir::DebugOptions::DebugFlags flags;
     while (!in.fail()) {
         std::string opt;
         std::getline(in, opt, ',');
@@ -141,16 +141,24 @@ static long getInitialDebugOptions() {
             exit(1);
         }
     }
-    return flags.to_ulong();
+    return flags;
 }
 
-static pir::DebugOptions PirDebug(getInitialDebugOptions());
+static std::string getInitialDebugPassFilter() {
+    auto filter = getenv("PIR_DEBUG_PASS_FILTER");
+    if (filter)
+        return filter;
+    return "";
+}
+
+static pir::DebugOptions PirDebug = {getInitialDebugFlags(),
+                                     getInitialDebugPassFilter()};
 
 REXPORT SEXP pir_setDebugFlags(SEXP debugFlags) {
     if (TYPEOF(debugFlags) != INTSXP || Rf_length(debugFlags) < 1)
         Rf_error(
             "pir_setDebugFlags expects an integer vector as second parameter");
-    PirDebug = pir::DebugOptions(INTEGER(debugFlags)[0]);
+    PirDebug.flags = pir::DebugOptions::DebugFlags(INTEGER(debugFlags)[0]);
     return R_NilValue;
 }
 

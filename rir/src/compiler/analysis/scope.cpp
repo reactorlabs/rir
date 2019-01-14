@@ -100,8 +100,18 @@ AbstractResult ScopeAnalysis::apply(ScopeAnalysisState& state,
         // Loadfun has collateral forcing if we touch intermediate envs.
         // But if we statically find the closure to load, then there is no issue
         // and we don't do anything.
-        if (!loadFun(state, ldfun->varName, ldfun->env()).result.isUnknown())
+        auto ld = loadFun(state, ldfun->varName, ldfun->env());
+        if (ld.result.type.isA(RType::closure)) {
+            // We statically know the closure
             handled = true;
+        } else if (ld.env != AbstractREnvironment::UnknownParent) {
+            state.envs[ld.env].leaked = true;
+            for (auto env : state.envs.potentialParents(ld.env))
+                state.allStoresObserved.insert(env);
+            state.envs[ld.env].taint();
+            effect.taint();
+            handled = true;
+        }
     } else if (auto s = StVar::Cast(i)) {
         state.envs[s->env()].set(s->varName, s->val(), s, depth);
         handled = true;
@@ -166,10 +176,24 @@ AbstractResult ScopeAnalysis::apply(ScopeAnalysisState& state,
             state.returnValues[i].merge(AbstractPirValue::tainted());
             effect.taint();
         }
-    } else if (CallInstruction::CastCall(i) && depth < MAX_DEPTH) {
+    } else if (CallInstruction::CastCall(i)) {
         auto calli = CallInstruction::CastCall(i);
 
         auto interProceduralAnalysis = [&](Closure* cls, Value* lexicalEnv) {
+            if (depth == 0 && cls->rirVersion() == closure->rirVersion()) {
+                // At depth 0 we are sure that no contextual information is
+                // considered when computing the analysis. Thus whatever is the
+                // result of this functions analysis, a recursive call to itself
+                // cannot excert more behaviors.
+                handled = true;
+                state.returnValues[i].merge(AbstractPirValue::tainted());
+                return;
+            }
+
+            if (depth == MAX_DEPTH) {
+                return;
+            }
+
             std::vector<Value*> args;
             calli->eachCallArg([&](Value* v) { args.push_back(v); });
             ScopeAnalysis nextFun(cls, args, lexicalEnv, state, depth + 1, log);
@@ -183,11 +207,9 @@ AbstractResult ScopeAnalysis::apply(ScopeAnalysisState& state,
 
         if (auto call = Call::Cast(i)) {
             auto target = call->cls()->followCastsAndForce();
-            lookup(state, target, [&](const AbstractPirValue& analysisRes) {
-                if (analysisRes.isSingleValue()) {
-                    target =
-                        analysisRes.singleValue().val->followCastsAndForce();
-                }
+            lookup(state, target, [&](const AbstractPirValue& result) {
+                if (result.isSingleValue())
+                    target = result.singleValue().val->followCastsAndForce();
             });
             assert(target);
             if (auto cls = MkFunCls::Cast(target))

@@ -10,8 +10,9 @@ namespace pir {
 
 enum class Assumption {
     EagerArgs,
-    CorrectNumberOfArguments,
-    MaxNumberOfArguments,
+    NonObjectArgs,
+    NoMissingArguments,
+    NotTooManyArguments,
     CorrectOrderOfArguments,
 
     FIRST = EagerArgs,

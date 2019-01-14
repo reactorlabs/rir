@@ -29,5 +29,6 @@ std::unordered_set<Value*> Query::returned(Code* c) {
     });
     return returned;
 }
+
 } // namespace pir
 } // namespace rir

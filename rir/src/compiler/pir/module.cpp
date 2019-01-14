@@ -18,11 +18,31 @@ void Module::erase(rir::Function* f, OptimizationContext ctx) {
     vs.erase(i);
 }
 
+Closure* Module::cloneWithAssumptions(Closure* cls, Assumptions asmpt) {
+    auto& versions = closures.at(cls->rirVersion());
+    for (auto& v : versions) {
+        if (v.second == cls) {
+            auto copy = cls->clone(asmpt);
+            auto newCtx = v.first;
+            newCtx.assumptions = newCtx.assumptions | asmpt;
+            if (versions.count(newCtx))
+                return versions.at(newCtx);
+
+            versions[newCtx] = copy;
+            return copy;
+        }
+    }
+
+    assert(false);
+    return nullptr;
+}
+
 Closure* Module::declare(const std::string& name, rir::Function* f,
                          OptimizationContext ctx, const std::vector<SEXP>& a) {
     auto& closureVersions = closures[f];
     assert(!closureVersions.count(ctx));
-    auto closure = new Closure(name, a, ctx.environment, f, ctx.assumptions);
+    auto closure = new Closure(name, a, ctx.environment, f, ctx.assumptions,
+                               Closure::Properties());
     closureVersions.emplace(ctx, closure);
     return closure;
 }
