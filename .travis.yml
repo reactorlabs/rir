@@ -90,7 +90,7 @@ addons:
       - texinfo
       - g++-7
       - xdg-utils
-      - gfortran
+      - gfortran-7
       - subversion
       - make
       - r-base-dev
