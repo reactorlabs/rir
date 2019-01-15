@@ -36,7 +36,7 @@ enum class DebugFlag {
 };
 
 struct DebugOptions {
-    typedef EnumSet<DebugFlag> DebugFlags;
+    typedef EnumSet<DebugFlag, int> DebugFlags;
     DebugFlags flags;
     const std::string passFilter = "";
 

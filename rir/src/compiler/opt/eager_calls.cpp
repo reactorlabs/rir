@@ -47,9 +47,24 @@ void EagerCalls::apply(RirCompiler& cmp, Closure* closure, LogStream&) const {
             newAssumptions.set(Assumption::EagerArgs);
             newAssumptions.set(Assumption::NoMissingArguments);
             auto withEagerArgs = cmp.cloneWithAssumptions(cls, newAssumptions);
-            Visitor::run(withEagerArgs->entry, [&](Instruction* i) {
-                if (auto ld = LdArg::Cast(i))
-                    ld->type.setEager();
+            size_t found = 0;
+            Visitor::run(withEagerArgs->entry, [&](BB* bb) {
+                auto ip = bb->begin();
+                while (ip != bb->end()) {
+                    if (found == call->nCallArgs())
+                        return;
+                    auto next = ip + 1;
+                    auto i = *ip;
+                    if (LdArg::Cast(i)) {
+                        auto cast =
+                            new CastType(*ip, PirType::any(), PirType::val());
+                        i->replaceUsesWith(cast);
+                        ip = bb->insert(ip + 1, cast);
+                        next = ip + 1;
+                        found++;
+                    }
+                    ip = next;
+                }
             });
             call->cls(withEagerArgs);
         }

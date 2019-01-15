@@ -28,10 +28,12 @@ using namespace rir;
 struct CallContext {
     CallContext(Code* c, SEXP callee, size_t nargs, Immediate ast,
                 R_bcstack_t* stackArgs, Immediate* implicitArgs,
-                Immediate* names, SEXP callerEnv, Context* ctx)
-        : caller(c), suppliedArgs(nargs), passedArgs(nargs),
-          stackArgs(stackArgs), implicitArgs(implicitArgs), names(names),
-          callerEnv(callerEnv), ast(cp_pool_at(ctx, ast)), callee(callee) {
+                Immediate* names, SEXP callerEnv,
+                const Assumptions& givenAssumptions, Context* ctx)
+        : caller(c), suppliedArgs(nargs), passedArgs(nargs), stackArgs(stackArgs),
+          implicitArgs(implicitArgs), names(names), callerEnv(callerEnv),
+          ast(cp_pool_at(ctx, ast)), callee(callee),
+          givenAssumptions(givenAssumptions) {
         assert(callee &&
                (TYPEOF(callee) == CLOSXP || TYPEOF(callee) == SPECIALSXP ||
                 TYPEOF(callee) == BUILTINSXP));
@@ -39,25 +41,27 @@ struct CallContext {
 
     CallContext(Code* c, SEXP callee, size_t nargs, Immediate ast,
                 Immediate* implicitArgs, Immediate* names, SEXP callerEnv,
-                Context* ctx)
+                const Assumptions& givenAssumptions, Context* ctx)
         : CallContext(c, callee, nargs, ast, nullptr, implicitArgs, names,
-                      callerEnv, ctx) {}
+                      callerEnv, givenAssumptions, ctx) {}
 
     CallContext(Code* c, SEXP callee, size_t nargs, Immediate ast,
                 R_bcstack_t* stackArgs, Immediate* names, SEXP callerEnv,
-                Context* ctx)
+                const Assumptions& givenAssumptions, Context* ctx)
         : CallContext(c, callee, nargs, ast, stackArgs, nullptr, names,
-                      callerEnv, ctx) {}
+                      callerEnv, givenAssumptions, ctx) {}
 
     CallContext(Code* c, SEXP callee, size_t nargs, Immediate ast,
-                Immediate* implicitArgs, SEXP callerEnv, Context* ctx)
+                Immediate* implicitArgs, SEXP callerEnv,
+                const Assumptions& givenAssumptions, Context* ctx)
         : CallContext(c, callee, nargs, ast, nullptr, implicitArgs, nullptr,
-                      callerEnv, ctx) {}
+                      callerEnv, givenAssumptions, ctx) {}
 
     CallContext(Code* c, SEXP callee, size_t nargs, Immediate ast,
-                R_bcstack_t* stackArgs, SEXP callerEnv, Context* ctx)
+                R_bcstack_t* stackArgs, SEXP callerEnv,
+                const Assumptions& givenAssumptions, Context* ctx)
         : CallContext(c, callee, nargs, ast, stackArgs, nullptr, nullptr,
-                      callerEnv, ctx) {}
+                      callerEnv, givenAssumptions, ctx) {}
 
     const Code* caller;
     const size_t suppliedArgs;
@@ -68,6 +72,7 @@ struct CallContext {
     const SEXP callerEnv;
     const SEXP ast;
     const SEXP callee;
+    const Assumptions givenAssumptions;
 
     bool hasStackArgs() const { return stackArgs != nullptr; }
     bool hasEagerCallee() const { return TYPEOF(callee) == BUILTINSXP; }
@@ -553,6 +558,7 @@ RIR_INLINE bool matches(const CallContext& call,
     // global assumptions list. This only becomes relevant as soon as we want to
     // optimize based on argument types.
 
+    // Baseline always matches!
     if (signature.optimization ==
         FunctionSignature::OptimizationLevel::Baseline)
         return true;
@@ -560,31 +566,33 @@ RIR_INLINE bool matches(const CallContext& call,
     assert(signature.envCreation ==
            FunctionSignature::Environment::CalleeCreated);
 
-
-    if (signature.nargs() > call.suppliedArgs) {
-        if (signature.assumptions.includes(pir::Assumption::NoMissingArguments))
-            return false;
-
-        if (!call.hasStackArgs())
-            return false;
-    }
-
-    // We can't materialize ... yet
     if (!call.hasStackArgs()) {
+        // We can't materialize ... in optimized code yet
         for (size_t i = 0; i < call.suppliedArgs; ++i)
             if (call.implicitArgIdx(i) == DOTS_ARG_IDX)
                 return false;
+
+        // PIR optimized code can receive missing args, but they need to be
+        // explicitly put on the stack, which we can only do if we pass
+        // arguments on the stack
+        if (signature.nargs() > call.suppliedArgs)
+            return false;
     }
 
-    // TODO: implement argument reordering on the stack to support this case
-    if (call.hasNames() && signature.assumptions.includes(
-                               pir::Assumption::CorrectOrderOfArguments))
-        return false;
+    Assumptions given = call.givenAssumptions;
 
-    if (signature.nargs() < call.suppliedArgs &&
-        signature.assumptions.includes(pir::Assumption::NoMissingArguments)) {
+    if (!call.hasNames())
+        given.set(Assumption::CorrectOrderOfArguments);
+
+    if (call.suppliedArgs <= signature.nargs())
+        given.set(Assumption::NotTooManyArguments);
+
+    if (call.suppliedArgs >= signature.nargs())
+        given.set(Assumption::NoMissingArguments);
+
+    // Check if given assumptions match required assumptions
+    if (!given.includes(signature.assumptions))
         return false;
-    }
 
     return true;
 }
@@ -594,8 +602,8 @@ RIR_INLINE bool matches(const CallContext& call,
 // of actually supplied arguments).
 RIR_INLINE void supplyMissingArgs(CallContext& call, const Function* fun) {
     auto signature = fun->signature();
+    assert(call.hasStackArgs());
     if (signature.nargs() > call.suppliedArgs) {
-        assert(call.hasStackArgs());
         for (size_t i = 0; i < signature.nargs() - call.suppliedArgs; ++i)
             ostack_push(ctx, R_MissingArg);
         call.passedArgs = signature.nargs();
@@ -1455,12 +1463,14 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
             advanceImmediate();
             size_t ast = readImmediate();
             advanceImmediate();
+            Assumptions given(readImmediate());
+            advanceImmediate();
             auto arguments = (Immediate*)pc;
             advanceImmediateN(n);
             auto names = (Immediate*)pc;
             advanceImmediateN(n);
             CallContext call(c, ostack_top(ctx), n, ast, arguments, names,
-                             getenv(), ctx);
+                             getenv(), given, ctx);
             res = doCall(call, ctx);
             ostack_pop(ctx); // callee
             ostack_push(ctx, res);
@@ -1498,10 +1508,12 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
             advanceImmediate();
             size_t ast = readImmediate();
             advanceImmediate();
+            Assumptions given(readImmediate());
+            advanceImmediate();
             auto arguments = (Immediate*)pc;
             advanceImmediateN(n);
             CallContext call(c, ostack_top(ctx), n, ast, arguments, getenv(),
-                             ctx);
+                             given, ctx);
             res = doCall(call, ctx);
             ostack_pop(ctx); // callee
             ostack_push(ctx, res);
@@ -1520,8 +1532,10 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
             advanceImmediate();
             size_t ast = readImmediate();
             advanceImmediate();
+            Assumptions given(readImmediate());
+            advanceImmediate();
             CallContext call(c, ostack_at(ctx, n), n, ast,
-                             ostack_cell_at(ctx, n - 1), getenv(), ctx);
+                             ostack_cell_at(ctx, n - 1), getenv(), given, ctx);
             res = doCall(call, ctx);
             ostack_popn(ctx, call.passedArgs + 1);
             ostack_push(ctx, res);
@@ -1540,10 +1554,13 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
             advanceImmediate();
             size_t ast = readImmediate();
             advanceImmediate();
+            Assumptions given(readImmediate());
+            advanceImmediate();
             auto names = (Immediate*)pc;
             advanceImmediateN(n);
             CallContext call(c, ostack_at(ctx, n), n, ast,
-                             ostack_cell_at(ctx, n - 1), names, getenv(), ctx);
+                             ostack_cell_at(ctx, n - 1), names, getenv(), given,
+                             ctx);
             res = doCall(call, ctx);
             ostack_popn(ctx, call.passedArgs + 1);
             ostack_push(ctx, res);
@@ -1562,10 +1579,12 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
             advanceImmediate();
             Immediate ast = readImmediate();
             advanceImmediate();
+            Assumptions given(readImmediate());
+            advanceImmediate();
             SEXP callee = cp_pool_at(ctx, readImmediate());
             advanceImmediate();
             CallContext call(c, callee, n, ast, ostack_cell_at(ctx, n - 1),
-                             *env, ctx);
+                             *env, given, ctx);
             res = doCall(call, ctx);
             ostack_popn(ctx, call.passedArgs);
             ostack_push(ctx, res);

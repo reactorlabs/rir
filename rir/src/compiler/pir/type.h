@@ -199,11 +199,6 @@ struct PirType {
         return isRType() && flags_.includes(TypeFlags::maybeObject);
     }
 
-    void setEager() {
-        assert(isRType());
-        flags_.reset(TypeFlags::lazy);
-    }
-
     PirType notObject() const {
         assert(isRType());
         PirType t = *this;

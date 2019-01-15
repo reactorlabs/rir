@@ -90,7 +90,8 @@ Builder::Builder(Closure* fun, Value* closureEnv)
     for (long i = fun->argNames.size() - 1; i >= 0; --i) {
         args[i] = this->operator()(new LdArg(i));
         if (fun->assumptions.includes(Assumption::EagerArgs))
-            args[i]->type.setEager();
+            args[i] = this->operator()(
+                new CastType(args[i], PirType::any(), PirType::val()));
     }
     auto mkenv = new MkEnv(closureEnv, fun->argNames, args.data());
     add(mkenv);

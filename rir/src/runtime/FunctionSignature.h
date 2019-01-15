@@ -2,7 +2,7 @@
 
 #include "R/r.h"
 
-#include "compiler/pir/assumptions.h"
+#include "runtime/Assumptions.h"
 
 #include <iomanip>
 #include <iostream>
@@ -89,7 +89,7 @@ struct FunctionSignature {
     FunctionSignature(Environment envCreation, OptimizationLevel optimization)
         : envCreation(envCreation), optimization(optimization) {}
     FunctionSignature(Environment envCreation, OptimizationLevel optimization,
-                      const pir::Assumptions& assumptions)
+                      const Assumptions& assumptions)
         : envCreation(envCreation), optimization(optimization),
           assumptions(assumptions) {}
 
@@ -98,7 +98,7 @@ struct FunctionSignature {
     const Environment envCreation;
     const OptimizationLevel optimization;
     std::vector<ArgumentType> arguments;
-    const pir::Assumptions assumptions;
+    const Assumptions assumptions;
 };
 
 } // namespace rir

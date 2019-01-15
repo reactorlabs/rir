@@ -36,7 +36,7 @@ struct DispatchTable
             size_++;
     }
 
-    bool contains(const pir::Assumptions& assumptions) {
+    bool contains(const Assumptions& assumptions) {
         for (size_t i = 1; i < size(); ++i)
             if (get(i)->signature().assumptions == assumptions)
                 return true;

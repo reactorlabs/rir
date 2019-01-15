@@ -900,8 +900,17 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
         break;                                                                 \
     }
                 EMPTY(PirCopy);
-                EMPTY(CastType);
 #undef EMPTY
+            case Tag::CastType: {
+                auto cast = CastType::Cast(instr);
+                // Need to "unpromise" the value, if we are using the CastType
+                // instruction to avoid a Force in pir. We know this force will
+                // not do anything, but read out the value slot.
+                if (cast->arg<0>().type().maybeLazy() &&
+                    !cast->type.maybeLazy())
+                    cs << BC::force();
+                break;
+            }
 
             case Tag::LdFunctionEnv: {
                 // TODO: what should happen? For now get the current env
@@ -975,15 +984,17 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 });
 
                 if (call->names.empty())
-                    cs << BC::callImplicit(args, Pool::get(call->srcIdx));
+                    cs << BC::callImplicit(args, Pool::get(call->srcIdx),
+                                           Assumption::CorrectOrderOfArguments);
                 else
                     cs << BC::callImplicit(args, call->names,
-                                           Pool::get(call->srcIdx));
+                                           Pool::get(call->srcIdx), {});
                 break;
             }
             case Tag::Call: {
                 auto call = Call::Cast(instr);
-                cs << BC::call(call->nCallArgs(), Pool::get(call->srcIdx));
+                cs << BC::call(call->nCallArgs(), Pool::get(call->srcIdx),
+                               given);
                 break;
             }
             case Tag::NamedCall: {

@@ -6,7 +6,8 @@
 #include <iostream>
 
 namespace rir {
-namespace pir {
+
+typedef uint32_t Immediate;
 
 enum class Assumption {
     EagerArgs,
@@ -19,16 +20,16 @@ enum class Assumption {
     LAST = CorrectOrderOfArguments
 };
 
-struct Assumptions : public EnumSet<Assumption> {
-    Assumptions() : EnumSet<Assumption>(){};
-    Assumptions(const EnumSet<Assumption>& other)
-        : EnumSet<Assumption>(other) {}
-    Assumptions(const Assumption& other) : EnumSet<Assumption>(other) {}
+struct Assumptions : public EnumSet<Assumption, Immediate> {
+    Assumptions() : EnumSet<Assumption, Immediate>(){};
+    Assumptions(const EnumSet<Assumption, Immediate>& other)
+        : EnumSet<Assumption, Immediate>(other) {}
+    Assumptions(const Assumption& other)
+        : EnumSet<Assumption, Immediate>(other) {}
 };
 
 std::ostream& operator<<(std::ostream& out, Assumption a);
 
-} // namespace pir
 } // namespace rir
 
 #endif

@@ -106,7 +106,7 @@ REXPORT SEXP pir_debugFlags(
 #undef V
 
     SEXP res = Rf_allocVector(INTSXP, 1);
-    INTEGER(res)[0] = (int)opts.flags.to_ulong();
+    INTEGER(res)[0] = (int)opts.flags.to_i();
     return res;
 }
 

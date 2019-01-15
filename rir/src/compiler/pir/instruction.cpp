@@ -466,6 +466,30 @@ CallInstruction* CallInstruction::CastCall(Value* v) {
     return nullptr;
 }
 
+Assumptions CallInstruction::inferGivenAssumptions() const {
+    Assumptions given;
+    if (!hasNamedArgs())
+        given.set(Assumption::CorrectOrderOfArguments);
+    given.set(Assumption::EagerArgs);
+    given.set(Assumption::NonObjectArgs);
+    eachCallArg([&](Value* arg) {
+        if (auto mk = MkArg::Cast(arg)) {
+            if (mk->eagerArg() == Missing::instance()) {
+                given.reset(Assumption::EagerArgs);
+                given.reset(Assumption::NonObjectArgs);
+                return;
+            } else {
+                arg = mk->eagerArg();
+            }
+        }
+        if (arg->type.maybeLazy())
+            given.reset(Assumption::EagerArgs);
+        if (arg->type.maybeObj())
+            given.reset(Assumption::NonObjectArgs);
+    });
+    return given;
+}
+
 NamedCall::NamedCall(Value* callerEnv, Value* fun,
                      const std::vector<Value*>& args,
                      const std::vector<BC::PoolIdx>& names_, unsigned srcIdx)

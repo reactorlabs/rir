@@ -1,7 +1,6 @@
-#include "assumptions.h"
+#include "Assumptions.h"
 
 namespace rir {
-namespace pir {
 
 std::ostream& operator<<(std::ostream& out, Assumption a) {
     switch (a) {
@@ -24,5 +23,4 @@ std::ostream& operator<<(std::ostream& out, Assumption a) {
     return out;
 };
 
-} // namespace pir
 } // namespace rir

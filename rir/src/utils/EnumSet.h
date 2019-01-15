@@ -4,45 +4,57 @@
 #include "common.h"
 #include <bitset>
 #include <initializer_list>
+#include <limits>
 
 namespace rir {
 
-template <typename Element>
+#pragma pack(push)
+#pragma pack(1)
+
+template <typename Element, typename Store = unsigned long>
 class EnumSet {
-    typedef std::bitset<static_cast<size_t>(Element::LAST) + 1> Store;
-    Store set_;
+    Store set_ = 0;
 
     static_assert(static_cast<size_t>(Element::FIRST) <=
                       static_cast<size_t>(Element::LAST),
                   "EnumSet needs an enum with first and last marker.");
+
+    static_assert(std::numeric_limits<Store>::digits >
+                      static_cast<size_t>(Element::LAST),
+                  "Store type is not large enough to hold all enums");
 
     static bool boundscheck(const Element& e) {
         return e >= Element::FIRST && e <= Element::LAST;
     }
 
   public:
-    EnumSet() {}
+    EnumSet() {
+        static_assert(sizeof(*this) == sizeof(Store),
+                      "No room for extra stuff");
+    }
 
     EnumSet(const std::initializer_list<Element>& ts) {
         for (auto t : ts)
             set(t);
     }
+
+    static_assert(!std::is_same<Element, Store>::value, "That is confusing");
     EnumSet(const Element& e) { set(e); }
     EnumSet(const Store& s) : set_(s) {}
 
     RIR_INLINE bool contains(const Element& e) const {
         assert(boundscheck(e));
-        return set_ & singleton(e);
+        return set_ & EnumSet(e);
     }
 
     RIR_INLINE void set(const Element& e) {
         assert(boundscheck(e));
-        set_.set(static_cast<size_t>(e));
+        set_ |= 1UL << static_cast<size_t>(e);
     }
 
     RIR_INLINE void reset(const Element& e) {
         assert(boundscheck(e));
-        set_.reset(static_cast<size_t>(e));
+        set_ &= ~(1UL << static_cast<size_t>(e));
     }
 
     RIR_INLINE bool intersects(const EnumSet& s) const {
@@ -69,11 +81,11 @@ class EnumSet {
         return *this | EnumSet(t);
     }
 
-    RIR_INLINE unsigned long to_ulong() const { return set_.to_ulong(); }
+    RIR_INLINE Store to_i() const { return set_; }
 
-    RIR_INLINE bool empty() const { return set_.none(); }
+    RIR_INLINE bool empty() const { return set_ == 0; }
 
-    RIR_INLINE std::size_t count() const { return set_.count(); }
+    RIR_INLINE std::size_t count() const { return __builtin_popcount(set_); }
 
     struct Iterator {
       private:
@@ -88,7 +100,8 @@ class EnumSet {
         }
 
         void seekNext() {
-            while (i <= static_cast<size_t>(Element::LAST) && !e.set_.test(i))
+            while (i <= static_cast<size_t>(Element::LAST) &&
+                   !((1UL << i) & e.set_))
                 i++;
         }
 
@@ -120,6 +133,8 @@ class EnumSet {
         return Iterator(*this, static_cast<size_t>(Element::LAST) + 1);
     }
 };
-}
 
+#pragma pack(pop)
+
+} // namespace rir
 #endif

@@ -273,18 +273,22 @@ class InstructionImplementation : public Instruction {
     static constexpr bool mayChangeEnv_ = ENV >= EnvAccess::Write;
     static constexpr bool mayLeakEnv_ = ENV >= EnvAccess::Leak;
 
-    bool hasEffect() const final { return EFFECT > Effect::None; }
-    bool mayForcePromises() const final { return EFFECT >= Effect::Force; }
-    bool mayUseReflection() const final { return EFFECT > Effect::Reflection; }
-    bool mayAccessEnv() const final { return mayAccessEnv_; }
-    bool changesEnv() const final { return hasEnv() && mayChangeEnv_; }
-    bool leaksEnv() const final { return hasEnv() && mayLeakEnv_; }
-    bool hasEnv() const final {
+    bool hasEffect() const override final { return EFFECT > Effect::None; }
+    bool mayForcePromises() const override final {
+        return EFFECT >= Effect::Force;
+    }
+    bool mayUseReflection() const override final {
+        return EFFECT > Effect::Reflection;
+    }
+    bool mayAccessEnv() const override final { return mayAccessEnv_; }
+    bool changesEnv() const override final { return hasEnv() && mayChangeEnv_; }
+    bool leaksEnv() const override final { return hasEnv() && mayLeakEnv_; }
+    bool hasEnv() const override final {
         return mayAccessEnv() && env() != Env::elided();
     }
-    bool exits() const final { return CF == Controlflow::Exit; }
-    bool branches() const final { return CF == Controlflow::Branch; }
-    bool branchOrExit() const final { return branches() || exits(); }
+    bool exits() const override final { return CF == Controlflow::Exit; }
+    bool branches() const override final { return CF == Controlflow::Branch; }
+    bool branchOrExit() const override final { return branches() || exits(); }
 
     static const Base* Cast(const Value* i) {
         if (i->tag == ITAG)
@@ -1033,12 +1037,14 @@ class VLIE(FrameState, Effect::None, EnvAccess::Read) {
 // Common interface to all call instructions
 class CallInstruction {
   public:
-    virtual size_t nCallArgs() = 0;
-    virtual void eachCallArg(Instruction::ArgumentValueIterator it) = 0;
+    virtual size_t nCallArgs() const = 0;
+    virtual void eachCallArg(Instruction::ArgumentValueIterator it) const = 0;
     virtual void eachCallArg(Instruction::MutableArgumentIterator it) = 0;
     static CallInstruction* CastCall(Value* v);
     virtual void clearFrameState(){};
     virtual Closure* tryGetCls() { return nullptr; }
+    virtual Assumptions inferGivenAssumptions() const;
+    virtual bool hasNamedArgs() const { return false; }
 };
 
 // Default call instruction. Closure expression (ie. expr left of `(`) is
@@ -1064,8 +1070,8 @@ class VLIE(Call, Effect::Any, EnvAccess::Leak), public CallInstruction {
         return nullptr;
     }
 
-    size_t nCallArgs() override { return nargs() - 3; };
-    void eachCallArg(Instruction::ArgumentValueIterator it) override {
+    size_t nCallArgs() const override { return nargs() - 3; };
+    void eachCallArg(Instruction::ArgumentValueIterator it) const override {
         for (size_t i = 0; i < nCallArgs(); ++i)
             it(arg(i + 2).val());
     }
@@ -1096,11 +1102,13 @@ class VLIE(NamedCall, Effect::Any, EnvAccess::Leak), public CallInstruction {
         return nullptr;
     }
 
+    bool hasNamedArgs() const override { return true; }
+
     NamedCall(Value * callerEnv, Value * fun, const std::vector<Value*>& args,
               const std::vector<BC::PoolIdx>& names_, unsigned srcIdx);
 
-    size_t nCallArgs() override { return nargs() - 2; };
-    void eachCallArg(Instruction::ArgumentValueIterator it) override {
+    size_t nCallArgs() const override { return nargs() - 2; };
+    void eachCallArg(Instruction::ArgumentValueIterator it) const override {
         for (size_t i = 0; i < nCallArgs(); ++i)
             it(arg(i + 1).val());
     }
@@ -1147,8 +1155,8 @@ class VLIE(StaticCall, Effect::Any, EnvAccess::Leak), public CallInstruction {
                const std::vector<Value*>& args, SEXP origin, FrameState* fs,
                unsigned srcIdx);
 
-    size_t nCallArgs() override { return nargs() - 2; };
-    void eachCallArg(Instruction::ArgumentValueIterator it) override {
+    size_t nCallArgs() const override { return nargs() - 2; };
+    void eachCallArg(Instruction::ArgumentValueIterator it) const override {
         for (size_t i = 0; i < nCallArgs(); ++i)
             it(arg(i + 1).val());
     }
@@ -1162,6 +1170,8 @@ class VLIE(StaticCall, Effect::Any, EnvAccess::Leak), public CallInstruction {
 
     void printArgs(std::ostream & out, bool tty) override;
     Value* callerEnv() { return env(); }
+
+    Assumptions inferGivenAssumptions() const override;
 };
 
 typedef SEXP (*CCODE)(SEXP, SEXP, SEXP, SEXP);
@@ -1172,8 +1182,8 @@ class VLIE(CallBuiltin, Effect::Any, EnvAccess::Leak), public CallInstruction {
     const CCODE builtin;
     int builtinId;
 
-    size_t nCallArgs() override { return nargs() - 1; };
-    void eachCallArg(Instruction::ArgumentValueIterator it) override {
+    size_t nCallArgs() const override { return nargs() - 1; };
+    void eachCallArg(Instruction::ArgumentValueIterator it) const override {
         for (size_t i = 0; i < nCallArgs(); ++i)
             it(arg(i).val());
     }
