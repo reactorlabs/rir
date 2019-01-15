@@ -145,6 +145,11 @@ DEF_INSTR(named_call_, 3, -1, 1, 0)
 DEF_INSTR(static_call_, 4, -1, 1, 0)
 
 /**
+ * call_builtin_:: Like static call, but calls a builtin
+ */
+DEF_INSTR(call_builtin_, 3, -1, 1, 0)
+
+/**
  * close_:: pop body and argument list, create closure, and push on object stack
  */
 DEF_INSTR(close_, 0, 3, 1, 1)

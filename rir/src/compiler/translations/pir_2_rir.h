@@ -22,10 +22,16 @@ class Pir2RirCompiler {
 
     StreamLogger& logger;
 
-    bool alreadyCompiled(Closure* cls) { return done.count(cls); }
+    Function* alreadyCompiled(Closure* cls) {
+        return done.count(cls) ? done.at(cls) : nullptr;
+    }
+    bool isCompiling(Closure* cls) { return done.count(cls); }
+
+    void needsPatching(Closure* c, size_t i) { fixup[c].insert(i); }
 
   private:
-    std::unordered_set<Closure*> done;
+    std::unordered_map<Closure*, Function*> done;
+    std::unordered_map<Closure*, std::unordered_set<size_t>> fixup;
 };
 
 } // namespace pir

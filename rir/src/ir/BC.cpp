@@ -78,7 +78,12 @@ BC_NOARGS(V, _)
         break;
 
     case Opcode::static_call_:
+        assert(immediate.staticCallFixedArgs.targetVersion);
         cs.insert(immediate.staticCallFixedArgs);
+        break;
+
+    case Opcode::call_builtin_:
+        cs.insert(immediate.callBuiltinFixedArgs);
         break;
 
     case Opcode::promise_:
@@ -183,11 +188,20 @@ void BC::print(std::ostream& out) const {
         printNames(out);
         break;
     }
+    case Opcode::call_builtin_: {
+        auto args = immediate.callBuiltinFixedArgs;
+        BC::NumArgs nargs = args.nargs;
+        auto target = Pool::get(args.builtin);
+        out << nargs << " : " << dumpSexp(target).c_str();
+        break;
+    }
     case Opcode::static_call_: {
         auto args = immediate.staticCallFixedArgs;
         BC::NumArgs nargs = args.nargs;
-        auto target = Pool::get(args.target);
-        out << nargs << " : " << dumpSexp(target).c_str();
+        auto target = Pool::get(args.targetClosure);
+        auto targetV = Pool::get(args.targetVersion);
+        out << nargs << " : (" << Function::unpack(targetV) << ") "
+            << dumpSexp(target).c_str();
         break;
     }
     case Opcode::deopt_: {

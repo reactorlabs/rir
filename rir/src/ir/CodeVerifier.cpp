@@ -119,6 +119,7 @@ static Sources hasSources(Opcode bc) {
     case Opcode::call_:
     case Opcode::named_call_:
     case Opcode::static_call_:
+    case Opcode::call_builtin_:
     case Opcode::promise_:
     case Opcode::push_code_:
     case Opcode::br_:

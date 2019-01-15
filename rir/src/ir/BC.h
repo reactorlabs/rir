@@ -250,15 +250,28 @@ BC BC::call(size_t nargs, const std::vector<SEXP>& names, SEXP ast,
     cur.callExtra().callArgumentNames = nameIdxs;
     return cur;
 }
-BC BC::staticCall(size_t nargs, SEXP ast, SEXP target,
-                  const Assumptions& given) {
+BC BC::staticCall(size_t nargs, SEXP ast, SEXP targetClosure,
+                  SEXP targetVersion) {
+    assert(!targetVersion || Function::unpack(targetVersion));
+    assert(TYPEOF(targetClosure) == CLOSXP);
+    auto target =
+        targetVersion ? Pool::insert(targetVersion) : Pool::makeSpace();
     ImmediateArguments im;
     im.staticCallFixedArgs.nargs = nargs;
     im.staticCallFixedArgs.ast = Pool::insert(ast);
-    im.staticCallFixedArgs.target = Pool::insert(target);
-    im.staticCallFixedArgs.given = given;
+    im.staticCallFixedArgs.targetClosure = Pool::insert(targetClosure);
+    im.staticCallFixedArgs.targetVersion = target;
     return BC(Opcode::static_call_, im);
 }
+BC BC::callBuiltin(size_t nargs, SEXP ast, SEXP builtin) {
+    assert(TYPEOF(builtin) == BUILTINSXP);
+    ImmediateArguments im;
+    im.callBuiltinFixedArgs.nargs = nargs;
+    im.callBuiltinFixedArgs.ast = Pool::insert(ast);
+    im.callBuiltinFixedArgs.builtin = Pool::insert(builtin);
+    return BC(Opcode::call_builtin_, im);
+}
+
 BC BC::deopt(SEXP deoptMetadata) {
     ImmediateArguments i;
     i.pool = Pool::insert(deoptMetadata);

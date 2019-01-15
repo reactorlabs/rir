@@ -1171,7 +1171,9 @@ class VLIE(StaticCall, Effect::Any, EnvAccess::Leak), public CallInstruction {
     void printArgs(std::ostream & out, bool tty) override;
     Value* callerEnv() { return env(); }
 
-    Assumptions inferGivenAssumptions() const override;
+    Assumptions inferGivenAssumptions() const override {
+        assert(false && "dispatch to concrete version");
+    }
 };
 
 typedef SEXP (*CCODE)(SEXP, SEXP, SEXP, SEXP);
@@ -1207,8 +1209,8 @@ class VLI(CallSafeBuiltin, Effect::None, EnvAccess::None),
     const CCODE builtin;
     int builtinId;
 
-    size_t nCallArgs() override { return nargs(); };
-    void eachCallArg(Instruction::ArgumentValueIterator it) override {
+    size_t nCallArgs() const override { return nargs(); };
+    void eachCallArg(Instruction::ArgumentValueIterator it) const override {
         eachArg(it);
     }
     void eachCallArg(Instruction::MutableArgumentIterator it) override {

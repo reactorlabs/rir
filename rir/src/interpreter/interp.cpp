@@ -434,7 +434,7 @@ void warnSpecial(SEXP callee, SEXP call) {
 #endif
 }
 
-SEXP legacySpecialCall(const CallContext& call, Context* ctx) {
+RIR_INLINE SEXP legacySpecialCall(const CallContext& call, Context* ctx) {
     assert(call.ast != R_NilValue);
 
     // get the ccode
@@ -448,8 +448,8 @@ SEXP legacySpecialCall(const CallContext& call, Context* ctx) {
     return result;
 }
 
-SEXP legacyCallWithArgslist(const CallContext& call, SEXP argslist,
-                            Context* ctx) {
+RIR_INLINE SEXP legacyCallWithArgslist(const CallContext& call, SEXP argslist,
+                                       Context* ctx) {
     if (TYPEOF(call.callee) == BUILTINSXP) {
         // get the ccode
         CCODE f = getBuiltin(call.callee);
@@ -469,7 +469,7 @@ SEXP legacyCallWithArgslist(const CallContext& call, SEXP argslist,
                            R_NilValue);
 }
 
-SEXP legacyCall(const CallContext& call, Context* ctx) {
+RIR_INLINE SEXP legacyCall(const CallContext& call, Context* ctx) {
     // create the argslist
     SEXP argslist = createLegacyArgsList(call, ctx);
     PROTECT(argslist);
@@ -630,7 +630,7 @@ static unsigned RIR_WARMUP =
     getenv("RIR_WARMUP") ? atoi(getenv("RIR_WARMUP")) : 3;
 
 // Call a RIR function. Arguments are still untouched.
-SEXP rirCall(CallContext& call, Context* ctx) {
+RIR_INLINE SEXP rirCall(CallContext& call, Context* ctx) {
     SEXP body = BODY(call.callee);
     assert(DispatchTable::check(body));
 
@@ -1570,6 +1570,28 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
             NEXT();
         }
 
+        INSTRUCTION(call_builtin_) {
+            auto lll = ostack_length(ctx);
+            int ttt = R_PPStackTop;
+
+            // Stack contains [arg1, ..., argn], callee is immediate
+            Immediate n = readImmediate();
+            advanceImmediate();
+            Immediate ast = readImmediate();
+            advanceImmediate();
+            SEXP callee = cp_pool_at(ctx, readImmediate());
+            advanceImmediate();
+            CallContext call(c, callee, n, ast, ostack_cell_at(ctx, n - 1),
+                             *env, Assumptions(), ctx);
+            res = legacyCall(call, ctx);
+            ostack_popn(ctx, call.passedArgs);
+            ostack_push(ctx, res);
+
+            assert(ttt == R_PPStackTop);
+            assert(lll - call.suppliedArgs + 1 == (unsigned)ostack_length(ctx));
+            NEXT();
+        }
+
         INSTRUCTION(static_call_) {
             auto lll = ostack_length(ctx);
             int ttt = R_PPStackTop;
@@ -1579,14 +1601,18 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
             advanceImmediate();
             Immediate ast = readImmediate();
             advanceImmediate();
-            Assumptions given(readImmediate());
-            advanceImmediate();
             SEXP callee = cp_pool_at(ctx, readImmediate());
             advanceImmediate();
+            SEXP version = cp_pool_at(ctx, readImmediate());
+            advanceImmediate();
             CallContext call(c, callee, n, ast, ostack_cell_at(ctx, n - 1),
-                             *env, given, ctx);
-            res = doCall(call, ctx);
-            ostack_popn(ctx, call.passedArgs);
+                             *env, Assumptions(), ctx);
+            ArgsLazyData lazyArgs = ArgsLazyData(&call, ctx);
+            auto fun = Function::unpack(version);
+            fun->registerInvocation();
+            res = rirCallTrampoline(call, fun, *env, (SEXP)&lazyArgs, call.stackArgs,
+                                    ctx);
+            ostack_popn(ctx, n);
             ostack_push(ctx, res);
 
             assert(ttt == R_PPStackTop);

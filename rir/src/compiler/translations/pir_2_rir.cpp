@@ -994,40 +994,50 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
             case Tag::Call: {
                 auto call = Call::Cast(instr);
                 cs << BC::call(call->nCallArgs(), Pool::get(call->srcIdx),
-                               given);
+                               call->inferGivenAssumptions());
                 break;
             }
             case Tag::NamedCall: {
                 auto call = NamedCall::Cast(instr);
                 cs << BC::call(call->nCallArgs(), call->names,
-                               Pool::get(call->srcIdx));
+                               Pool::get(call->srcIdx),
+                               call->inferGivenAssumptions());
                 break;
             }
             case Tag::StaticCall: {
                 auto call = StaticCall::Cast(instr);
                 // Avoid recursivly compiling the same closure
-                if (!compiler.alreadyCompiled(call->cls())) {
-                    auto fun =
-                        compiler.compile(call->cls(), call->origin(), dryRun);
-                    Protect p(fun->container());
+                auto fun = compiler.alreadyCompiled(call->cls());
+                SEXP funCont = nullptr;
+
+                if (fun) {
+                    funCont = fun->container();
+                } else if (!compiler.isCompiling(call->cls())) {
+                    fun = compiler.compile(call->cls(), call->origin(), dryRun);
+                    funCont = fun->container();
+                    Protect p(funCont);
                     DispatchTable::unpack(BODY(call->origin()))->insert(fun);
                 }
-                cs << BC::staticCall(call->nCallArgs(), Pool::get(call->srcIdx),
-                                     call->origin());
+                auto bc =
+                    BC::staticCall(call->nCallArgs(), Pool::get(call->srcIdx),
+                                   call->origin(), funCont);
+                cs << bc;
+                if (!funCont)
+                    compiler.needsPatching(
+                        call->cls(),
+                        bc.immediate.staticCallFixedArgs.targetVersion);
                 break;
             }
             case Tag::CallBuiltin: {
-                // TODO(mhyee): all args have to be values, optimize here?
                 auto blt = CallBuiltin::Cast(instr);
-                cs << BC::staticCall(blt->nCallArgs(), Pool::get(blt->srcIdx),
-                                     blt->blt);
+                cs << BC::callBuiltin(blt->nCallArgs(), Pool::get(blt->srcIdx),
+                                      blt->blt);
                 break;
             }
             case Tag::CallSafeBuiltin: {
-                // TODO(mhyee): all args have to be values, optimize here?
                 auto blt = CallSafeBuiltin::Cast(instr);
-                cs << BC::staticCall(blt->nargs(), Pool::get(blt->srcIdx),
-                                     blt->blt);
+                cs << BC::callBuiltin(blt->nargs(), Pool::get(blt->srcIdx),
+                                      blt->blt);
                 break;
             }
             case Tag::MkEnv: {
@@ -1314,10 +1324,17 @@ rir::Function* Pir2Rir::finalize() {
 rir::Function* Pir2RirCompiler::compile(Closure* cls, SEXP origin,
                                         bool dryRun) {
     auto& log = logger.get(cls);
-    done.insert(cls);
+    done[cls] = nullptr;
     Pir2Rir pir2rir(*this, cls, origin, dryRun, log);
     auto fun = pir2rir.finalize();
+    done[cls] = fun;
     log.flush();
+    if (fixup.count(cls)) {
+        auto fixups = fixup.find(cls);
+        for (auto idx : fixups->second)
+            Pool::patch(idx, fun->container());
+        fixup.erase(fixups);
+    }
     return fun;
 }
 

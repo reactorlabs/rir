@@ -240,4 +240,9 @@ RIR_INLINE SEXP src_pool_at(Context* c, unsigned index) {
     return VECTOR_ELT(c->src.list, index);
 }
 
+RIR_INLINE void cp_pool_set(Context* c, unsigned index, SEXP e) {
+    SLOWASSERT(c->cp.capacity > index);
+    SET_VECTOR_ELT(c->cp.list, index, e);
+}
+
 #endif // interpreter_context_h

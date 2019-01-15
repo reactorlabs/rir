@@ -433,41 +433,17 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         break;
     }
 
-    case Opcode::static_call_: {
-        unsigned n = bc.immediate.staticCallFixedArgs.nargs;
-        auto ast = bc.immediate.staticCallFixedArgs.ast;
-        SEXP target = rir::Pool::get(bc.immediate.staticCallFixedArgs.target);
+    case Opcode::call_builtin_: {
+        unsigned n = bc.immediate.callBuiltinFixedArgs.nargs;
+        auto ast = bc.immediate.callBuiltinFixedArgs.ast;
+        SEXP target = rir::Pool::get(bc.immediate.callBuiltinFixedArgs.builtin);
 
         std::vector<Value*> args(n);
         for (size_t i = 0; i < n; ++i)
             args[n - i - 1] = pop();
 
-        if (TYPEOF(target) == BUILTINSXP) {
-            push(insert(BuiltinCallFactory::New(env, target, args, ast)));
-        } else {
-            assert(TYPEOF(target) == CLOSXP);
-            if (!isValidClosureSEXP(target)) {
-                Compiler::compileClosure(target);
-            }
-            bool failed = false;
-            Assumptions asmpt;
-            asmpt.set(Assumption::CorrectOrderOfArguments);
-            asmpt.set(Assumption::NoMissingArguments);
-            asmpt.set(Assumption::NotTooManyArguments);
-            asmpt.set(Assumption::EagerArgs);
-            compiler.compileClosure(
-                target, "", asmpt,
-                [&](Closure* f) {
-                    auto fs =
-                        insert.registerFrameState(srcCode, nextPos, stack);
-                    push(insert(new StaticCall(env, f, args, target, fs, ast)));
-                },
-                [&]() { failed = true; });
-            if (failed) {
-                log.warn("Failed to compile the target of a static call");
-                return false;
-            }
-        }
+        assert(TYPEOF(target) == BUILTINSXP);
+        push(insert(BuiltinCallFactory::New(env, target, args, ast)));
         break;
     }
 
@@ -718,6 +694,7 @@ SIMPLE_INSTRUCTIONS(V, _)
     case Opcode::movloc_:
     case Opcode::isobj_:
     case Opcode::check_missing_:
+    case Opcode::static_call_:
         log.unsupportedBC("Unsupported BC (are you recompiling?)", bc);
         assert(false && "Recompiling PIR not supported for now.");
 
