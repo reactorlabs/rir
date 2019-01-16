@@ -92,8 +92,9 @@ class BC {
     struct StaticCallFixedArgs {
         NumArgs nargs;
         Immediate ast;
+        Assumptions given;
         Immediate targetClosure;
-        Immediate targetVersion;
+        Immediate versionHint;
     };
     struct CallBuiltinFixedArgs {
         NumArgs nargs;
@@ -348,7 +349,7 @@ BC_NOARGS(V, _)
     inline static BC call(size_t nargs, const std::vector<SEXP>& names,
                           SEXP ast, const Assumptions& given);
     inline static BC staticCall(size_t nargs, SEXP ast, SEXP targetClosure,
-                                SEXP targetVersion);
+                                SEXP targetVersion, const Assumptions& given);
     inline static BC callBuiltin(size_t nargs, SEXP ast, SEXP target);
 
     inline static BC decode(Opcode* pc, const Code* code) {

@@ -142,7 +142,7 @@ DEF_INSTR(named_call_, 3, -1, 1, 0)
  * static_call_:: Like call_, but the callee is statically known
  *                and is accessed via the immediate callsite
  */
-DEF_INSTR(static_call_, 4, -1, 1, 0)
+DEF_INSTR(static_call_, 5, -1, 1, 0)
 
 /**
  * call_builtin_:: Like static call, but calls a builtin

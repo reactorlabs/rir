@@ -42,6 +42,21 @@ REXPORT SEXP rir_disassemble(SEXP what, SEXP verbose) {
     return R_NilValue;
 }
 
+REXPORT SEXP rir_printInvocation(SEXP what) {
+    DispatchTable* t = DispatchTable::check(BODY(what));
+
+    if (!t)
+        Rf_error("Not a rir compiled code");
+
+    for (size_t entry = 0; entry < t->size(); ++entry) {
+        Function* f = t->get(entry);
+        std::cout << "= vtable slot <" << entry << "> (" << f << ", invoked "
+                  << f->invocationCount() << ") =\n";
+    }
+
+    return R_NilValue;
+}
+
 REXPORT SEXP rir_compile(SEXP what, SEXP env) {
     if (TYPEOF(what) == CLOSXP) {
         SEXP body = BODY(what);

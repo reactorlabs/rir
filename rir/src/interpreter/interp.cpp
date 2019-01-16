@@ -590,6 +590,28 @@ RIR_INLINE bool matches(const CallContext& call,
 
     Assumptions given = call.givenAssumptions;
 
+    if (call.hasStackArgs() && !(given.includes(Assumption::NonObjectArgs) &&
+                                 given.includes(Assumption::EagerArgs))) {
+        bool seenObj = false;
+        size_t i = 0;
+        for (; i < call.nargs; ++i) {
+            SEXP a = call.stackArg(i);
+            if (TYPEOF(a) == PROMSXP) {
+                if (PRVALUE(a) == R_UnboundValue)
+                    break;
+                if (isObject(PRVALUE(a)))
+                    seenObj = true;
+            } else if (isObject(a)) {
+                seenObj = true;
+            }
+        }
+        if (i == call.nargs) {
+            given.set(Assumption::EagerArgs);
+            if (!seenObj)
+                given.set(Assumption::NonObjectArgs);
+        }
+    }
+
     if (!call.hasNames())
         given.set(Assumption::CorrectOrderOfArguments);
 
@@ -1610,12 +1632,14 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
             advanceImmediate();
             Immediate ast = readImmediate();
             advanceImmediate();
+            Assumptions given(readImmediate());
+            advanceImmediate();
             SEXP callee = cp_pool_at(ctx, readImmediate());
             advanceImmediate();
             SEXP version = cp_pool_at(ctx, readImmediate());
             advanceImmediate();
             CallContext call(c, callee, n, ast, ostack_cell_at(ctx, n - 1),
-                             *env, Assumptions(), ctx);
+                             *env, given, ctx);
             auto fun = Function::unpack(version);
             if (matches(call, fun->signature())) {
                 ArgsLazyData lazyArgs = ArgsLazyData(&call, ctx);

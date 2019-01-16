@@ -1170,10 +1170,6 @@ class VLIE(StaticCall, Effect::Any, EnvAccess::Leak), public CallInstruction {
 
     void printArgs(std::ostream & out, bool tty) override;
     Value* callerEnv() { return env(); }
-
-    Assumptions inferGivenAssumptions() const override {
-        assert(false && "dispatch to concrete version");
-    }
 };
 
 typedef SEXP (*CCODE)(SEXP, SEXP, SEXP, SEXP);

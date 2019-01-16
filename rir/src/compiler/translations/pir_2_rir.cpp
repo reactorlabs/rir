@@ -1013,14 +1013,14 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                     Protect p(funCont);
                     DispatchTable::unpack(BODY(call->origin()))->insert(fun);
                 }
-                auto bc =
-                    BC::staticCall(call->nCallArgs(), Pool::get(call->srcIdx),
-                                   call->origin(), funCont);
+                auto bc = BC::staticCall(
+                    call->nCallArgs(), Pool::get(call->srcIdx), call->origin(),
+                    funCont, call->inferGivenAssumptions());
                 cs << bc;
                 if (!funCont)
                     compiler.needsPatching(
                         call->cls(),
-                        bc.immediate.staticCallFixedArgs.targetVersion);
+                        bc.immediate.staticCallFixedArgs.versionHint);
                 break;
             }
             case Tag::CallBuiltin: {

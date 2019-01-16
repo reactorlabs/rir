@@ -251,7 +251,7 @@ BC BC::call(size_t nargs, const std::vector<SEXP>& names, SEXP ast,
     return cur;
 }
 BC BC::staticCall(size_t nargs, SEXP ast, SEXP targetClosure,
-                  SEXP targetVersion) {
+                  SEXP targetVersion, const Assumptions& given) {
     assert(!targetVersion || Function::unpack(targetVersion));
     assert(TYPEOF(targetClosure) == CLOSXP);
     auto target =
@@ -260,7 +260,8 @@ BC BC::staticCall(size_t nargs, SEXP ast, SEXP targetClosure,
     im.staticCallFixedArgs.nargs = nargs;
     im.staticCallFixedArgs.ast = Pool::insert(ast);
     im.staticCallFixedArgs.targetClosure = Pool::insert(targetClosure);
-    im.staticCallFixedArgs.targetVersion = target;
+    im.staticCallFixedArgs.versionHint = target;
+    im.staticCallFixedArgs.given = given;
     return BC(Opcode::static_call_, im);
 }
 BC BC::callBuiltin(size_t nargs, SEXP ast, SEXP builtin) {

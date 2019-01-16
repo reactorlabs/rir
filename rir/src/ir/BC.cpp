@@ -78,7 +78,6 @@ BC_NOARGS(V, _)
         break;
 
     case Opcode::static_call_:
-        assert(immediate.staticCallFixedArgs.targetVersion);
         cs.insert(immediate.staticCallFixedArgs);
         break;
 
@@ -199,7 +198,7 @@ void BC::print(std::ostream& out) const {
         auto args = immediate.staticCallFixedArgs;
         BC::NumArgs nargs = args.nargs;
         auto target = Pool::get(args.targetClosure);
-        auto targetV = Pool::get(args.targetVersion);
+        auto targetV = Pool::get(args.versionHint);
         out << nargs << " : (" << Function::unpack(targetV) << ") "
             << dumpSexp(target).c_str();
         break;
