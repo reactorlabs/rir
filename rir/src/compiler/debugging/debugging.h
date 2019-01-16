@@ -40,8 +40,8 @@ struct DebugOptions {
     DebugFlags flags;
     const std::string passFilter = "";
 
-    DebugOptions operator|(const DebugFlags& flags) const {
-        return {flags | flags, passFilter};
+    DebugOptions operator|(const DebugFlags& f) const {
+        return {flags | f, passFilter};
     }
     bool includes(const DebugFlags& otherFlags) const {
         return flags.includes(otherFlags);

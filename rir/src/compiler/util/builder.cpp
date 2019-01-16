@@ -81,24 +81,25 @@ Checkpoint* Builder::emitCheckpoint(rir::Code* srcCode, Opcode* pos,
     return cp;
 };
 
-Builder::Builder(Closure* fun, Value* closureEnv)
-    : function(fun), code(fun), env(nullptr) {
+Builder::Builder(ClosureVersion* version, Value* closureEnv)
+    : function(version), code(version), env(nullptr) {
     createNextBB();
     assert(!function->entry);
     function->entry = bb;
-    std::vector<Value*> args(fun->argNames.size());
-    for (long i = fun->argNames.size() - 1; i >= 0; --i) {
+    auto closure = version->closure;
+    std::vector<Value*> args(closure->argNames().size());
+    for (long i = closure->argNames().size() - 1; i >= 0; --i) {
         args[i] = this->operator()(new LdArg(i));
-        if (fun->assumptions.includes(Assumption::EagerArgs))
+        if (version->assumptions().includes(Assumption::EagerArgs))
             args[i] = this->operator()(
                 new CastType(args[i], PirType::any(), PirType::val()));
     }
-    auto mkenv = new MkEnv(closureEnv, fun->argNames, args.data());
+    auto mkenv = new MkEnv(closureEnv, closure->argNames(), args.data());
     add(mkenv);
     this->env = mkenv;
 }
 
-Builder::Builder(Closure* fun, Promise* prom)
+Builder::Builder(ClosureVersion* fun, Promise* prom)
     : function(fun), code(prom), env(nullptr) {
     createNextBB();
     assert(!prom->entry);

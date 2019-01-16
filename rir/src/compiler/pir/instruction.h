@@ -140,8 +140,8 @@ class Instruction : public Value {
 
     virtual Instruction* clone() const = 0;
 
-    Value* followCasts() override;
-    Value* followCastsAndForce() override;
+    Value* followCasts() const override;
+    Value* followCastsAndForce() const override;
     bool isInstruction() override final { return true; }
     virtual bool envOnlyForObj();
 
@@ -1042,16 +1042,17 @@ class CallInstruction {
     virtual void eachCallArg(Instruction::MutableArgumentIterator it) = 0;
     static CallInstruction* CastCall(Value* v);
     virtual void clearFrameState(){};
-    virtual Closure* tryGetCls() { return nullptr; }
-    virtual Assumptions inferGivenAssumptions() const;
+    virtual Closure* tryGetCls() const { return nullptr; }
+    Assumptions inferAvailableAssumptions() const;
     virtual bool hasNamedArgs() const { return false; }
+    ClosureVersion* dispatch(Closure*) const;
 };
 
 // Default call instruction. Closure expression (ie. expr left of `(`) is
 // evaluated at runtime and arguments are passed as promises.
 class VLIE(Call, Effect::Any, EnvAccess::Leak), public CallInstruction {
   public:
-    Value* cls() { return arg(1).val(); }
+    Value* cls() const { return arg(1).val(); }
 
     Call(Value * callerEnv, Value * fun, const std::vector<Value*>& args,
          Value* fs, unsigned srcIdx)
@@ -1064,7 +1065,7 @@ class VLIE(Call, Effect::Any, EnvAccess::Leak), public CallInstruction {
             pushArg(args[i], RType::prom);
     }
 
-    Closure* tryGetCls() override final {
+    Closure* tryGetCls() const override final {
         if (auto mk = MkFunCls::Cast(cls()->followCastsAndForce()))
             return mk->fun;
         return nullptr;
@@ -1094,9 +1095,9 @@ class VLIE(NamedCall, Effect::Any, EnvAccess::Leak), public CallInstruction {
   public:
     std::vector<SEXP> names;
 
-    Value* cls() { return arg(0).val(); }
+    Value* cls() const { return arg(0).val(); }
 
-    Closure* tryGetCls() override final {
+    Closure* tryGetCls() const override final {
         if (auto mk = MkFunCls::Cast(cls()->followCastsAndForce()))
             return mk->fun;
         return nullptr;
@@ -1145,11 +1146,11 @@ class VLIE(StaticCall, Effect::Any, EnvAccess::Leak), public CallInstruction {
     SEXP origin_;
 
   public:
-    Closure* cls() { return cls_; }
+    Closure* cls() const { return cls_; }
     void cls(Closure * cls) { cls_ = cls; }
-    SEXP origin() { return origin_; }
+    SEXP origin() const { return origin_; }
 
-    Closure* tryGetCls() override final { return cls(); }
+    Closure* tryGetCls() const override final { return cls(); }
 
     StaticCall(Value * callerEnv, Closure * cls,
                const std::vector<Value*>& args, SEXP origin, FrameState* fs,
@@ -1170,6 +1171,8 @@ class VLIE(StaticCall, Effect::Any, EnvAccess::Leak), public CallInstruction {
 
     void printArgs(std::ostream & out, bool tty) override;
     Value* callerEnv() { return env(); }
+
+    ClosureVersion* dispatch() const;
 };
 
 typedef SEXP (*CCODE)(SEXP, SEXP, SEXP, SEXP);

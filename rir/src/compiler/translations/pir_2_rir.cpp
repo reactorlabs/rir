@@ -623,7 +623,7 @@ class Context {
 
 class Pir2Rir {
   public:
-    Pir2Rir(Pir2RirCompiler& cmp, Closure* cls, SEXP origin, bool dryRun,
+    Pir2Rir(Pir2RirCompiler& cmp, ClosureVersion* cls, SEXP origin, bool dryRun,
             LogStream& log)
         : compiler(cmp), cls(cls), originCls(origin), dryRun(dryRun), log(log) {
     }
@@ -636,7 +636,7 @@ class Pir2Rir {
 
   private:
     Pir2RirCompiler& compiler;
-    Closure* cls;
+    ClosureVersion* cls;
     SEXP originCls;
     std::unordered_map<Promise*, rir::Code*> promises;
     bool dryRun;
@@ -996,38 +996,38 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
             case Tag::Call: {
                 auto call = Call::Cast(instr);
                 cs << BC::call(call->nCallArgs(), Pool::get(call->srcIdx),
-                               call->inferGivenAssumptions());
+                               call->inferAvailableAssumptions());
                 break;
             }
             case Tag::NamedCall: {
                 auto call = NamedCall::Cast(instr);
                 cs << BC::call(call->nCallArgs(), call->names,
                                Pool::get(call->srcIdx),
-                               call->inferGivenAssumptions());
+                               call->inferAvailableAssumptions());
                 break;
             }
             case Tag::StaticCall: {
                 auto call = StaticCall::Cast(instr);
+                auto trg = call->dispatch();
                 // Avoid recursivly compiling the same closure
-                auto fun = compiler.alreadyCompiled(call->cls());
+                auto fun = compiler.alreadyCompiled(trg);
                 SEXP funCont = nullptr;
 
                 if (fun) {
                     funCont = fun->container();
-                } else if (!compiler.isCompiling(call->cls())) {
-                    fun = compiler.compile(call->cls(), call->origin(), dryRun);
+                } else if (!compiler.isCompiling(trg)) {
+                    fun = compiler.compile(trg, call->origin(), dryRun);
                     funCont = fun->container();
                     Protect p(funCont);
                     DispatchTable::unpack(BODY(call->origin()))->insert(fun);
                 }
                 auto bc = BC::staticCall(
                     call->nCallArgs(), Pool::get(call->srcIdx), call->origin(),
-                    funCont, call->inferGivenAssumptions());
+                    funCont, call->inferAvailableAssumptions());
                 cs << bc;
                 if (!funCont)
                     compiler.needsPatching(
-                        call->cls(),
-                        bc.immediate.staticCallFixedArgs.versionHint);
+                        trg, bc.immediate.staticCallFixedArgs.versionHint);
                 break;
             }
             case Tag::CallBuiltin: {
@@ -1299,7 +1299,7 @@ rir::Function* Pir2Rir::finalize() {
 
     FunctionSignature signature(FunctionSignature::Environment::CalleeCreated,
                                 FunctionSignature::OptimizationLevel::Optimized,
-                                cls->assumptions);
+                                cls->assumptions());
 
     // PIR does not support default args currently.
     for (size_t i = 0; i < cls->nargs(); ++i) {
@@ -1323,7 +1323,7 @@ rir::Function* Pir2Rir::finalize() {
 
 } // namespace
 
-rir::Function* Pir2RirCompiler::compile(Closure* cls, SEXP origin,
+rir::Function* Pir2RirCompiler::compile(ClosureVersion* cls, SEXP origin,
                                         bool dryRun) {
     auto& log = logger.get(cls);
     done[cls] = nullptr;

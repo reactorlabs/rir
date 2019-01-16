@@ -380,12 +380,12 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                 asmpt.set(Assumption::EagerArgs);
             compiler.compileClosure(
                 monomorphic, name, asmpt,
-                [&](Closure* f) {
+                [&](ClosureVersion* f) {
                     pop();
                     auto fs =
                         insert.registerFrameState(srcCode, nextPos, stack);
-                    push(insert(new StaticCall(insert.env, f, args, monomorphic,
-                                               fs, ast)));
+                    push(insert(new StaticCall(insert.env, f->closure, args,
+                                               monomorphic, fs, ast)));
                 },
                 insertGenericCall);
         } else if (monomorphicBuiltin) {
@@ -921,9 +921,9 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) const {
 
             compiler.compileFunction(
                 function, inner.str(), formals, {},
-                [&](Closure* innerF) {
-                    cur.stack.push(insert(
-                        new MkFunCls(innerF, insert.env, fmls, code, src)));
+                [&](ClosureVersion* innerF) {
+                    cur.stack.push(insert(new MkFunCls(
+                        innerF->closure, insert.env, fmls, code, src)));
 
                     // Skip those instructions
                     finger = pc;

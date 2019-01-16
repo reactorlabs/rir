@@ -7,7 +7,7 @@
 namespace rir {
 namespace pir {
 
-void CleanupCheckpoints::apply(RirCompiler&, Closure* function,
+void CleanupCheckpoints::apply(RirCompiler&, ClosureVersion* function,
                                LogStream&) const {
     auto apply = [](Code* code) {
         std::unordered_set<BB*> toDelete;

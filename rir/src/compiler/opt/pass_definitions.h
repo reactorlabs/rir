@@ -15,7 +15,7 @@ class Closure;
     PirTranslator {                                                            \
       public:                                                                  \
         name() : PirTranslator(#name){};                                       \
-        void apply(RirCompiler&, Closure* function, LogStream& log)            \
+        void apply(RirCompiler&, ClosureVersion* function, LogStream& log)     \
             const final override;                                              \
     };
 

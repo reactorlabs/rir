@@ -76,7 +76,7 @@ static bool convertsToLogicalWithoutWarning(SEXP arg) {
 namespace rir {
 namespace pir {
 
-void Constantfold::apply(RirCompiler& cmp, Closure* function,
+void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                          LogStream&) const {
     std::unordered_map<BB*, bool> branchRemoval;
     DominanceGraph dom(function);

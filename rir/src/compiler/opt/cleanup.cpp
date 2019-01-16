@@ -15,8 +15,8 @@ using namespace rir::pir;
 
 class TheCleanup {
   public:
-    explicit TheCleanup(Closure* function) : function(function) {}
-    Closure* function;
+    explicit TheCleanup(ClosureVersion* function) : function(function) {}
+    ClosureVersion* function;
     void operator()() {
         std::unordered_set<size_t> used_p;
         std::unordered_map<BB*, std::unordered_set<Phi*>> usedBB;
@@ -149,7 +149,7 @@ class TheCleanup {
             if (function->promises[i] && used_p.find(i) == used_p.end()) {
                 auto p = function->promises[i];
                 // If we delete a corrupt promise it get's hard to debug...
-                assert(p->fun == function);
+                assert(p->owner == function);
                 assert(function->promises[p->id] == p);
                 delete function->promises[i];
                 function->promises[i] = nullptr;
@@ -250,7 +250,7 @@ class TheCleanup {
 namespace rir {
 namespace pir {
 
-void Cleanup::apply(RirCompiler&, Closure* function, LogStream&) const {
+void Cleanup::apply(RirCompiler&, ClosureVersion* function, LogStream&) const {
     TheCleanup s(function);
     s();
 }

@@ -13,7 +13,8 @@
 namespace rir {
 namespace pir {
 
-void EagerCalls::apply(RirCompiler& cmp, Closure* closure, LogStream&) const {
+void EagerCalls::apply(RirCompiler& cmp, ClosureVersion* closure,
+                       LogStream&) const {
     std::unordered_set<MkArg*> todo;
     auto code = closure->entry;
 
@@ -24,8 +25,10 @@ void EagerCalls::apply(RirCompiler& cmp, Closure* closure, LogStream&) const {
                 continue;
 
             Closure* cls = call->cls();
+            ClosureVersion* version = call->dispatch();
 
-            if (!cls->properties.includes(Closure::Property::IsEager) ||
+            if (!version->properties.includes(
+                    ClosureVersion::Property::IsEager) ||
                 call->nCallArgs() != cls->nargs())
                 continue;
 
@@ -43,7 +46,7 @@ void EagerCalls::apply(RirCompiler& cmp, Closure* closure, LogStream&) const {
                 continue;
             todo.insert(args.begin(), args.end());
 
-            if (cls->assumptions.includes(Assumption::EagerArgs))
+            if (version->assumptions().includes(Assumption::EagerArgs))
                 continue;
 
             Assumptions newAssumptions;
@@ -53,8 +56,8 @@ void EagerCalls::apply(RirCompiler& cmp, Closure* closure, LogStream&) const {
             // objects... We should have some profiling. It's still sound, since
             // static_call_ will check the assumptions
             newAssumptions.set(Assumption::NonObjectArgs);
-            auto withEagerArgs = cmp.cloneWithAssumptions(
-                cls, newAssumptions, [&](Closure* newCls) {
+            cls->cloneWithAssumptions(
+                version, newAssumptions, [&](ClosureVersion* newCls) {
                     Visitor::run(newCls->entry, [&](Instruction* i) {
                         if (auto ld = LdArg::Cast(i)) {
                             ld->type = PirType::val();
@@ -62,7 +65,6 @@ void EagerCalls::apply(RirCompiler& cmp, Closure* closure, LogStream&) const {
                         }
                     });
                 });
-            call->cls(withEagerArgs);
         }
     });
     if (todo.empty())
@@ -93,8 +95,9 @@ void EagerCalls::apply(RirCompiler& cmp, Closure* closure, LogStream&) const {
                 bb = split;
                 ip = bb->begin();
             } else if (auto call = StaticCall::Cast(*ip)) {
-                if (call->cls()->properties.includes(
-                        Closure::Property::NoReflection)) {
+                auto version = call->dispatch();
+                if (version->properties.includes(
+                        ClosureVersion::Property::NoReflection)) {
                     call->eachCallArg([&](InstrArg& arg) {
                         if (auto mk = MkArg::Cast(arg.val())) {
                             mk->ifEager(

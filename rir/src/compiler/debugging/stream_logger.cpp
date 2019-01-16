@@ -26,22 +26,22 @@ FileLogStream::~FileLogStream() { fstream.close(); }
 bool LogStream::tty() { return ConsoleColor::isTTY(out); }
 bool BufferedLogStream::tty() { return ConsoleColor::isTTY(actualOut); }
 
-LogStream& StreamLogger::begin(Closure* cls) {
+LogStream& StreamLogger::begin(ClosureVersion* cls) {
     assert(!streams.count(cls) && "You already started this function");
 
     std::stringstream id;
-    id << cls->name << " ";
+    id << cls->name() << " ";
     unsigned pos = 0;
-    for (auto a : cls->assumptions) {
+    for (auto a : cls->assumptions()) {
         id << a;
-        if (++pos < cls->assumptions.count())
+        if (++pos < cls->assumptions().count())
             id << "|";
     }
 
     if (options.includes(DebugFlag::PrintIntoFiles)) {
         std::stringstream filename;
         filename << "pir-function-" << std::setfill('0') << std::setw(5)
-                 << logId++ << "-" << cls->name << ".log";
+                 << logId++ << "-" << cls->name() << ".log";
         streams.emplace(cls,
                         new FileLogStream(options, id.str(), filename.str()));
     } else {
@@ -56,14 +56,14 @@ LogStream& StreamLogger::begin(Closure* cls) {
     if (options.includes(DebugFlag::PrintEarlyRir)) {
         logger.preparePrint();
         logger.section("Original version");
-        cls->rirVersion()->disassemble(logger.out);
+        cls->closure->rirVersion()->disassemble(logger.out);
         logger.out << "\n";
     }
 
     return logger;
 }
 
-void LogStream::compilationEarlyPir(Closure* closure) {
+void LogStream::compilationEarlyPir(ClosureVersion* closure) {
     if (options.includes(DebugFlag::PrintEarlyPir)) {
         preparePrint();
         section("Compiled to PIR Version");
@@ -71,7 +71,7 @@ void LogStream::compilationEarlyPir(Closure* closure) {
     }
 }
 
-void LogStream::pirOptimizationsFinished(Closure* closure) {
+void LogStream::pirOptimizationsFinished(ClosureVersion* closure) {
     if (options.includes(DebugFlag::PrintPirAfterOpt)) {
         preparePrint();
         section("PIR Version After Optimizations");
@@ -80,7 +80,7 @@ void LogStream::pirOptimizationsFinished(Closure* closure) {
     }
 }
 
-void LogStream::pirOptimizationsHeader(Closure* closure,
+void LogStream::pirOptimizationsHeader(ClosureVersion* closure,
                                        const PirTranslator* pass,
                                        size_t passnr) {
     if (options.includes(DebugFlag::PrintOptimizationPasses)) {
@@ -94,7 +94,8 @@ void LogStream::pirOptimizationsHeader(Closure* closure,
     }
 }
 
-void LogStream::pirOptimizations(Closure* closure, const PirTranslator* pass) {
+void LogStream::pirOptimizations(ClosureVersion* closure,
+                                 const PirTranslator* pass) {
     if (options.includes(DebugFlag::PrintOptimizationPasses)) {
         if (options.passFilter.empty() ||
             options.passFilter == pass->getName()) {
@@ -132,7 +133,7 @@ void LogStream::CSSA(Code* code) {
     }
 }
 
-void LogStream::finalPIR(Closure* code) {
+void LogStream::finalPIR(ClosureVersion* code) {
     if (options.includes(DebugFlag::PrintFinalPir)) {
         preparePrint();
         section("Final PIR Version");

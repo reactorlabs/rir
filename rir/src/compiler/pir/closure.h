@@ -1,12 +1,15 @@
-#ifndef COMPILER_FUNCTION_H
-#define COMPILER_FUNCTION_H
+#ifndef COMPILER_CLOSURE_H
+#define COMPILER_CLOSURE_H
 
 #include "../../runtime/Function.h"
 #include "code.h"
+#include "optimization_context.h"
 #include "pir.h"
 #include <functional>
+#include <map>
 #include <sstream>
-#include <unordered_map>
+
+#include "utils/FormalArgs.h"
 
 namespace rir {
 namespace pir {
@@ -19,81 +22,61 @@ namespace pir {
  * (referred to by `LdArg`).
  *
  */
-class Closure : public Code {
-  public:
-    enum class Property {
-        IsEager,
-        NoReflection,
-
-        FIRST = IsEager,
-        LAST = NoReflection
-    };
-
-    struct Properties : public EnumSet<Property> {
-        Properties() : EnumSet<Property>(){};
-        Properties(const EnumSet<Property>& other) : EnumSet<Property>(other) {}
-        Properties(const Property& other) : EnumSet<Property>(other) {}
-    };
-
-  private:
+class Closure {
     friend class Module;
 
-    static std::string uniqueName(const Closure* c, const std::string& name) {
-        std::stringstream id;
-        id << name << "[" << c << "]";
-        return id.str();
-    }
+    Closure(const std::string& name, const FormalArgs& formals,
+            rir::Function* function, Env* env)
+        : function(function), env(env), name(name), formals(formals) {}
 
-    Closure(const std::string& name, std::initializer_list<SEXP> a, Env* env,
-            rir::Function* function, const Assumptions& assumptions,
-            const Properties& properties)
-        : env(env), function(function), name(uniqueName(this, name)),
-          argNames(a), assumptions(assumptions), properties(properties) {}
-    Closure(const std::string& name, const std::vector<SEXP>& a, Env* env,
-            rir::Function* function, const Assumptions& assumptions,
-            const Properties& properties)
-        : env(env), function(function), name(uniqueName(this, name)),
-          argNames(a), assumptions(assumptions), properties(properties) {}
-
-    Env* env;
     rir::Function* function;
+    Env* env;
 
   public:
     const std::string name;
-
     Env* closureEnv() const { return env; }
+
     rir::Function* rirVersion() { return function; }
 
-    std::vector<SEXP> argNames;
-    std::vector<Promise*> promises;
+    const FormalArgs formals;
+    const std::vector<SEXP>& argNames() const { return formals.names; }
 
-    const Assumptions assumptions;
-    Properties properties;
-
-    size_t nargs() const { return argNames.size(); }
+    size_t nargs() const { return argNames().size(); }
 
     void print(std::ostream& out, bool tty) const;
-
-    Promise* createProm(unsigned srcPoolIdx);
 
     friend std::ostream& operator<<(std::ostream& out, const Closure& e) {
         out << e.name;
         return out;
     }
 
-    Closure* clone(const Assumptions& newAssumptions);
+    ClosureVersion*
+    declareVersion(const OptimizationContext& optimizationContext);
+
+    typedef std::function<void(pir::ClosureVersion*)> ClosureVersionIterator;
+    void eachVersion(ClosureVersionIterator it) const {
+        for (auto& v : versions)
+            it(v.second);
+    }
+
+    bool existsVersion(const OptimizationContext& ctx) {
+        return versions.count(ctx);
+    }
+    ClosureVersion* getVersion(const OptimizationContext& ctx) {
+        return versions.at(ctx);
+    }
+    ClosureVersion* findCompatibleVersion(const OptimizationContext& ctx) const;
+
+    typedef std::function<void(ClosureVersion*)> MaybeClsVersion;
+    ClosureVersion* cloneWithAssumptions(ClosureVersion* cls, Assumptions asmpt,
+                                         const MaybeClsVersion& change);
+
+    void erase(const OptimizationContext& ctx) { versions.erase(ctx); }
 
     ~Closure();
 
-    typedef std::function<void(Promise*)> PromiseIterator;
-
-    void eachPromise(PromiseIterator it) const {
-        for (auto p : promises)
-            if (p)
-                it(p);
-    }
-
-    size_t size() const override final;
+  private:
+    std::map<const OptimizationContext, ClosureVersion*> versions;
 };
 
 } // namespace pir

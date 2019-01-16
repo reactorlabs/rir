@@ -21,14 +21,9 @@ class RirCompiler {
     RirCompiler& operator=(const RirCompiler&) = delete;
 
     typedef std::function<void()> Maybe;
-    typedef std::function<void(Closure*)> MaybeCls;
+    typedef std::function<void(ClosureVersion*)> MaybeCls;
 
     void preserve(SEXP c) { preserve_(c); }
-
-    Closure* cloneWithAssumptions(Closure* cls, Assumptions asmpt,
-                                  const MaybeCls& change) {
-        return module->cloneWithAssumptions(cls, asmpt, change);
-    }
 
     Module* module;
 

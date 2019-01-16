@@ -176,17 +176,17 @@ void Instruction::replaceUsesAndSwapWith(
     bb()->replace(it, replace);
 }
 
-Value* Instruction::followCasts() {
+Value* Instruction::followCasts() const {
     if (auto cast = CastType::Cast(this))
         return cast->arg<0>().val()->followCasts();
     if (auto shared = SetShared::Cast(this))
         return shared->arg<0>().val()->followCasts();
     if (auto chk = ChkClosure::Cast(this))
         return chk->arg<0>().val()->followCasts();
-    return this;
+    return const_cast<Instruction*>(this);
 }
 
-Value* Instruction::followCastsAndForce() {
+Value* Instruction::followCastsAndForce() const {
     if (auto cast = CastType::Cast(this))
         return cast->arg<0>().val()->followCastsAndForce();
     if (auto force = Force::Cast(this))
@@ -198,7 +198,7 @@ Value* Instruction::followCastsAndForce() {
         return shared->arg<0>().val()->followCastsAndForce();
     if (auto chk = ChkClosure::Cast(this))
         return chk->arg<0>().val()->followCastsAndForce();
-    return this;
+    return const_cast<Instruction*>(this);
 }
 
 bool Instruction::envOnlyForObj() {
@@ -437,12 +437,36 @@ void StaticCall::printArgs(std::ostream& out, bool tty) {
     }
 }
 
+ClosureVersion* CallInstruction::dispatch(Closure* cls) const {
+    auto res = cls->findCompatibleVersion(
+        OptimizationContext(inferAvailableAssumptions()));
+    if (!res) {
+        std::cout << "DISPATCH FAILED! Available versions: \n";
+        cls->eachVersion([&](ClosureVersion* v) {
+            std::cout << "* ";
+            for (auto a : v->assumptions())
+                std::cout << a << " ";
+            std::cout << "\n";
+        });
+        std::cout << "Available assumptions at callsite: \n";
+        for (auto a : inferAvailableAssumptions())
+            std::cout << a << " ";
+        std::cout << "\n";
+        assert(false);
+    }
+    return res;
+}
+
+ClosureVersion* StaticCall::dispatch() const {
+    return CallInstruction::dispatch(cls());
+}
+
 StaticCall::StaticCall(Value* callerEnv, Closure* cls,
                        const std::vector<Value*>& args, SEXP origin,
                        FrameState* fs, unsigned srcIdx)
     : VarLenInstructionWithEnvSlot(PirType::val(), callerEnv, srcIdx),
       cls_(cls), origin_(origin) {
-    assert(cls->argNames.size() == args.size());
+    assert(cls->nargs() == args.size());
     assert(fs);
     pushArg(fs, NativeType::frameState);
     for (unsigned i = 0; i < args.size(); ++i)
@@ -466,10 +490,17 @@ CallInstruction* CallInstruction::CastCall(Value* v) {
     return nullptr;
 }
 
-Assumptions CallInstruction::inferGivenAssumptions() const {
+Assumptions CallInstruction::inferAvailableAssumptions() const {
     Assumptions given;
     if (!hasNamedArgs())
         given.set(Assumption::CorrectOrderOfArguments);
+    if (auto cls = tryGetCls()) {
+        if (cls->nargs() >= nCallArgs())
+            given.set(Assumption::NotTooManyArguments);
+        if (cls->nargs() <= nCallArgs())
+            given.set(Assumption::NoMissingArguments);
+    }
+    given.set(Assumption::NotTooManyArguments);
     given.set(Assumption::EagerArgs);
     given.set(Assumption::NonObjectArgs);
     eachCallArg([&](Value* arg) {
@@ -486,6 +517,8 @@ Assumptions CallInstruction::inferGivenAssumptions() const {
             given.reset(Assumption::EagerArgs);
         if (arg->type.maybeObj())
             given.reset(Assumption::NonObjectArgs);
+        if (arg == Missing::instance())
+            given.reset(Assumption::NoMissingArguments);
     });
     return given;
 }

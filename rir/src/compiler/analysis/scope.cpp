@@ -5,7 +5,7 @@
 namespace rir {
 namespace pir {
 
-ScopeAnalysis::ScopeAnalysis(Closure* cls, Promise* prom, Value* promEnv,
+ScopeAnalysis::ScopeAnalysis(ClosureVersion* cls, Promise* prom, Value* promEnv,
                              const ScopeAnalysisState& initialState,
                              size_t depth, LogStream& log)
     : StaticAnalysis("Scope", cls, prom, initialState, log), depth(depth),
@@ -179,8 +179,10 @@ AbstractResult ScopeAnalysis::apply(ScopeAnalysisState& state,
     } else if (CallInstruction::CastCall(i)) {
         auto calli = CallInstruction::CastCall(i);
 
-        auto interProceduralAnalysis = [&](Closure* cls, Value* lexicalEnv) {
-            if (depth == 0 && cls->rirVersion() == closure->rirVersion()) {
+        auto interProceduralAnalysis = [&](ClosureVersion* version,
+                                           Value* lexicalEnv) {
+            if (depth == 0 && version->closure->rirVersion() ==
+                                  closure->closure->rirVersion()) {
                 // At depth 0 we are sure that no contextual information is
                 // considered when computing the analysis. Thus whatever is the
                 // result of this functions analysis, a recursive call to itself
@@ -196,7 +198,8 @@ AbstractResult ScopeAnalysis::apply(ScopeAnalysisState& state,
 
             std::vector<Value*> args;
             calli->eachCallArg([&](Value* v) { args.push_back(v); });
-            ScopeAnalysis nextFun(cls, args, lexicalEnv, state, depth + 1, log);
+            ScopeAnalysis nextFun(version, args, lexicalEnv, state, depth + 1,
+                                  log);
             nextFun();
             state.mergeCall(code, nextFun.result());
             state.returnValues[i].merge(nextFun.result().returnValue);
@@ -213,12 +216,13 @@ AbstractResult ScopeAnalysis::apply(ScopeAnalysisState& state,
             });
             assert(target);
             if (auto cls = MkFunCls::Cast(target))
-                if (cls->fun->argNames.size() == calli->nCallArgs())
-                    interProceduralAnalysis(cls->fun, cls->lexicalEnv());
+                if (cls->nargs() == calli->nCallArgs())
+                    interProceduralAnalysis(call->dispatch(cls->fun),
+                                            cls->lexicalEnv());
         } else if (auto call = StaticCall::Cast(i)) {
             auto target = call->cls();
-            if (target && target->argNames.size() == calli->nCallArgs())
-                interProceduralAnalysis(target, target->closureEnv());
+            if (target && target->nargs() == calli->nCallArgs())
+                interProceduralAnalysis(call->dispatch(), target->closureEnv());
         } else {
             // TODO: support for NamedCall
             assert((CallBuiltin::Cast(i) || CallSafeBuiltin::Cast(i) ||

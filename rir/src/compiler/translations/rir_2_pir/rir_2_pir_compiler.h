@@ -24,10 +24,8 @@ class Rir2PirCompiler : public RirCompiler {
 
   private:
     StreamLogger& logger;
-    void compileClosure(rir::Function*, const std::string& name,
-                        FormalArgs const&, const OptimizationContext& ctx,
+    void compileClosure(Closure* closure, const OptimizationContext& ctx,
                         MaybeCls success, Maybe fail);
-    void applyOptimizations(Closure*, const std::string&);
 };
 } // namespace pir
 } // namespace rir

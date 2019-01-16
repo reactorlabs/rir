@@ -1,45 +1,55 @@
 #include "closure.h"
-#include "../transform/bb.h"
-#include "../util/visitor.h"
-#include "pir_impl.h"
-
-#include <iostream>
+#include "closure_version.h"
 
 namespace rir {
 namespace pir {
 
-void Closure::print(std::ostream& out, bool tty) const {
-    out << *this << "\n";
-    printCode(out, tty);
-    for (auto p : promises) {
-        if (p)
-            p->print(out, tty);
-    }
-}
-
-Promise* Closure::createProm(unsigned srcPoolIdx) {
-    Promise* p = new Promise(this, promises.size(), srcPoolIdx);
-    promises.push_back(p);
-    return p;
-}
-
 Closure::~Closure() {
-    for (auto p : promises)
-        delete p;
+    for (auto c : versions)
+        delete c.second;
 }
 
-Closure* Closure::clone(const Assumptions& newAssumptions) {
-    Closure* c = new Closure(name, argNames, env, function,
-                             assumptions | newAssumptions, properties);
-    c->entry = BBTransform::clone(entry, c, c);
+ClosureVersion* Closure::cloneWithAssumptions(ClosureVersion* version,
+                                              Assumptions asmpt,
+                                              const MaybeClsVersion& change) {
+    auto copy = version->clone(asmpt);
+    auto newCtx = version->optimizationContext;
+    newCtx.assumptions = newCtx.assumptions | asmpt;
+    if (versions.count(newCtx))
+        return versions.at(newCtx);
 
-    return c;
+    versions[newCtx] = copy;
+    change(copy);
+    return copy;
 }
 
-size_t Closure::size() const {
-    size_t s = 0;
-    eachPromise([&s](Promise* p) { s += p->size(); });
-    return s + Code::size();
+ClosureVersion*
+Closure::findCompatibleVersion(const OptimizationContext& ctx) const {
+    // Reverse since they are ordered by number of assumptions
+    for (auto c = versions.rbegin(); c != versions.rend(); c++) {
+        auto candidate = *c;
+        auto candidateCtx = candidate.first;
+        if (ctx.assumptions.includes(candidateCtx.assumptions))
+            return candidate.second;
+    }
+    return nullptr;
+}
+
+ClosureVersion*
+Closure::declareVersion(const OptimizationContext& optimizationContext) {
+    assert(!versions.count(optimizationContext));
+    versions[optimizationContext] = nullptr;
+    auto entry = versions.find(optimizationContext);
+    auto v = new ClosureVersion(this, entry->first);
+    entry->second = v;
+    return v;
+}
+
+void Closure::print(std::ostream& out, bool tty) const {
+    eachVersion([&](ClosureVersion* v) {
+        v->print(out, tty);
+        out << "\n-------------------------------\n";
+    });
 }
 
 } // namespace pir

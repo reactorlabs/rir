@@ -14,11 +14,11 @@ namespace {
 using namespace rir::pir;
 class TheScopeResolution {
   public:
-    Closure* function;
+    ClosureVersion* function;
     CFG cfg;
     DominanceGraph doms;
     LogStream& log;
-    explicit TheScopeResolution(Closure* function, LogStream& log)
+    explicit TheScopeResolution(ClosureVersion* function, LogStream& log)
         : function(function), cfg(function), doms(function), log(log) {}
 
     void operator()() {
@@ -26,7 +26,7 @@ class TheScopeResolution {
         analysis();
         auto& finalState = analysis.result();
         if (finalState.noReflection())
-            function->properties.set(Closure::Property::NoReflection);
+            function->properties.set(ClosureVersion::Property::NoReflection);
 
         Visitor::run(function->entry, [&](BB* bb) {
             auto ip = bb->begin();
@@ -242,7 +242,7 @@ class TheScopeResolution {
 namespace rir {
 namespace pir {
 
-void ScopeResolution::apply(RirCompiler&, Closure* function,
+void ScopeResolution::apply(RirCompiler&, ClosureVersion* function,
                             LogStream& log) const {
     TheScopeResolution s(function, log);
     s();

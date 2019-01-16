@@ -3,7 +3,7 @@
 
 #include "../debugging/stream_logger.h"
 #include "../pir/bb.h"
-#include "../pir/closure.h"
+#include "../pir/closure_version.h"
 #include "../pir/instruction.h"
 #include "../pir/promise.h"
 #include "../util/cfg.h"
@@ -72,17 +72,17 @@ class StaticAnalysis {
     bool done = false;
     LogStream& log;
 
-    Closure* closure;
+    ClosureVersion* closure;
     Code* code;
     BB* entry;
 
   public:
-    StaticAnalysis(const std::string& name, Closure* cls, Code* code,
+    StaticAnalysis(const std::string& name, ClosureVersion* cls, Code* code,
                    LogStream& log)
         : name(name), log(log), closure(cls), code(code), entry(code->entry) {
         snapshots.resize(code->nextBBId);
     }
-    StaticAnalysis(const std::string& name, Closure* cls, Code* code,
+    StaticAnalysis(const std::string& name, ClosureVersion* cls, Code* code,
                    const AbstractState& initialState, LogStream& log)
         : name(name), log(log), closure(cls), code(code), entry(code->entry) {
         snapshots.resize(code->nextBBId);
@@ -154,7 +154,7 @@ class StaticAnalysis {
 
         if (DEBUG_LEVEL > AnalysisDebugLevel::None) {
             log << "=========== Starting " << name << " Analysis on "
-                << closure->name << " ";
+                << closure->name() << " ";
             if (code == closure)
                 log << "body";
             else

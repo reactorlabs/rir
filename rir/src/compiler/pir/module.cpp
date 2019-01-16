@@ -5,54 +5,28 @@ namespace rir {
 namespace pir {
 
 void Module::print(std::ostream& out, bool tty) {
-    eachPirFunction([&](Closure* c) {
+    eachPirClosure([&](Closure* c) {
         c->print(out, tty);
-        out << "\n-------------------------------\n";
+        out << "\n================================\n";
     });
 }
 
-void Module::erase(rir::Function* f, OptimizationContext ctx) {
-    auto& vs = closures.at(f);
-    auto i = vs.find(ctx);
-    delete (*i).second;
-    vs.erase(i);
-}
-
-Closure* Module::cloneWithAssumptions(Closure* cls, Assumptions asmpt,
-                                      const MaybeCls& change) {
-    auto& versions = closures.at(cls->rirVersion());
-    for (auto& v : versions) {
-        if (v.second == cls) {
-            auto copy = cls->clone(asmpt);
-            auto newCtx = v.first;
-            newCtx.assumptions = newCtx.assumptions | asmpt;
-            if (versions.count(newCtx))
-                return versions.at(newCtx);
-
-            versions[newCtx] = copy;
-            change(copy);
-            return copy;
-        }
+Closure* Module::getOrDeclare(const std::string& name, rir::Function* f,
+                              Env* env, const FormalArgs& formals) {
+    if (!closures.count(Idx(f, env))) {
+        closures[Idx(f, env)] = new Closure(name, formals, f, env);
     }
-
-    assert(false);
-    return nullptr;
+    return closures.at(Idx(f, env));
 }
 
-Closure* Module::declare(const std::string& name, rir::Function* f,
-                         OptimizationContext ctx, const std::vector<SEXP>& a) {
-    auto& closureVersions = closures[f];
-    assert(!closureVersions.count(ctx));
-    auto closure = new Closure(name, a, ctx.environment, f, ctx.assumptions,
-                               Closure::Properties());
-    closureVersions.emplace(ctx, closure);
-    return closure;
+void Module::eachPirClosure(PirClosureIterator it) {
+    for (auto& c : closures)
+        it(c.second);
 }
 
-void Module::eachPirFunction(PirClosureIterator it) {
-    for (auto& cs : closures)
-        for (auto& c : cs.second)
-            it(c.second);
+void Module::eachPirClosureVersion(PirClosureVersionIterator it) {
+    for (auto& c : closures)
+        c.second->eachVersion(it);
 }
 
 Env* Module::getEnv(SEXP rho) {
@@ -73,8 +47,7 @@ Module::~Module() {
     for (auto& e : environments)
         delete e.second;
     for (auto& cs : closures)
-        for (auto& c : cs.second)
-            delete c.second;
+        delete cs.second;
 }
 }
 }

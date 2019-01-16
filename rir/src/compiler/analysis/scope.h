@@ -2,6 +2,8 @@
 #define PIR_SCOPE_ANALYSIS_H
 
 #include "../analysis/generic_static_analysis.h"
+#include "../pir/closure.h"
+#include "../pir/closure_version.h"
 #include "../pir/pir.h"
 #include "abstract_value.h"
 
@@ -119,23 +121,23 @@ class ScopeAnalysis : public StaticAnalysis<
 
   public:
     // Default
-    ScopeAnalysis(Closure* cls, LogStream& log)
-        : StaticAnalysis("Scope", cls, cls, log), argNames(cls->argNames),
-          depth(0) {}
+    ScopeAnalysis(ClosureVersion* cls, LogStream& log)
+        : StaticAnalysis("Scope", cls, cls, log),
+          argNames(cls->closure->argNames()), depth(0) {}
 
     // For interprocedural analysis of a function
-    ScopeAnalysis(Closure* cls, const std::vector<Value*>& args,
+    ScopeAnalysis(ClosureVersion* cls, const std::vector<Value*>& args,
                   Value* staticClosureEnv,
                   const ScopeAnalysisState& initialState, size_t depth,
                   LogStream& log)
         : StaticAnalysis("Scope", cls, cls, initialState, log),
-          argNames(cls->argNames), args(args), depth(depth),
+          argNames(cls->closure->argNames()), args(args), depth(depth),
           staticClosureEnv(staticClosureEnv) {
         assert(args.size() == argNames.size());
     }
 
     // For interprocedural analysis of a promise
-    ScopeAnalysis(Closure* cls, Promise* prom, Value* promEnv,
+    ScopeAnalysis(ClosureVersion* cls, Promise* prom, Value* promEnv,
                   const ScopeAnalysisState& initialState, size_t depth,
                   LogStream& log);
 

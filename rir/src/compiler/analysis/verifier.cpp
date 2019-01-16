@@ -8,9 +8,9 @@ using namespace rir::pir;
 
 class TheVerifier {
   public:
-    Closure* f;
+    ClosureVersion* f;
 
-    explicit TheVerifier(Closure* f) : f(f) {}
+    explicit TheVerifier(ClosureVersion* f) : f(f) {}
 
     bool ok = true;
 
@@ -130,11 +130,11 @@ class TheVerifier {
 
         if (auto mk = MkArg::Cast(i)) {
             auto p = mk->prom();
-            assert(p->fun->promises[p->id] == p);
-            if (p->fun != f) {
+            assert(p->owner->promises[p->id] == p);
+            if (p->owner != f) {
                 mk->printRef(std::cerr);
                 std::cerr << " is referencing a promise from another function "
-                          << p->fun->name << "\n";
+                          << p->owner->name() << "\n";
                 ok = false;
             }
         }
@@ -197,7 +197,7 @@ class TheVerifier {
 namespace rir {
 namespace pir {
 
-bool Verify::apply(Closure* f) {
+bool Verify::apply(ClosureVersion* f) {
     TheVerifier v(f);
     v();
     return v.ok;

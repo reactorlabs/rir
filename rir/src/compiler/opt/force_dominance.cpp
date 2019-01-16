@@ -51,7 +51,7 @@ struct ForcedBy {
     size_t eagerFunction = 0;
     static constexpr size_t NotEagerFunction = -1;
 
-    bool isEagerFunction(Closure* cls) const {
+    bool isEagerFunction(ClosureVersion* cls) const {
         return eagerFunction == cls->nargs();
     }
 
@@ -206,7 +206,8 @@ struct ForcedBy {
 
 class ForceDominanceAnalysis : public StaticAnalysis<ForcedBy> {
   public:
-    explicit ForceDominanceAnalysis(Closure* cls, Code* code, LogStream& log)
+    explicit ForceDominanceAnalysis(ClosureVersion* cls, Code* code,
+                                    LogStream& log)
         : StaticAnalysis("ForceDominance", cls, code, log) {}
 
     AbstractResult apply(ForcedBy& state, Instruction* i) const override {
@@ -255,13 +256,14 @@ class ForceDominanceAnalysis : public StaticAnalysis<ForcedBy> {
 namespace rir {
 namespace pir {
 
-void ForceDominance::apply(RirCompiler&, Closure* cls, LogStream& log) const {
+void ForceDominance::apply(RirCompiler&, ClosureVersion* cls,
+                           LogStream& log) const {
     auto apply = [&](Code* code) {
         ForceDominanceAnalysis analysis(cls, code, log);
         analysis();
         auto& result = analysis.result();
         if (result.isEagerFunction(cls))
-            cls->properties.set(Closure::Property::IsEager);
+            cls->properties.set(ClosureVersion::Property::IsEager);
 
         std::unordered_map<Force*, Value*> inlinedPromise;
         std::unordered_map<Instruction*, MkArg*> forcedMkArg;
