@@ -128,6 +128,17 @@ class TheVerifier {
             ok = false;
         }
 
+        if (auto call = StaticCall::Cast(i)) {
+            if (call->hint &&
+                call->hint->closure != call->dispatch()->closure) {
+                std::cerr << "Error: instruction '";
+                i->print(std::cerr);
+                std::cerr << "' has broken hint (hint must be a version of the "
+                             "same closure)\n";
+                ok = false;
+            }
+        }
+
         if (auto mk = MkArg::Cast(i)) {
             auto p = mk->prom();
             assert(p->owner->promises[p->id] == p);

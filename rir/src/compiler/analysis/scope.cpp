@@ -181,8 +181,7 @@ AbstractResult ScopeAnalysis::apply(ScopeAnalysisState& state,
 
         auto interProceduralAnalysis = [&](ClosureVersion* version,
                                            Value* lexicalEnv) {
-            if (depth == 0 && version->closure->rirVersion() ==
-                                  closure->closure->rirVersion()) {
+            if (depth == 0 && version == closure) {
                 // At depth 0 we are sure that no contextual information is
                 // considered when computing the analysis. Thus whatever is the
                 // result of this functions analysis, a recursive call to itself

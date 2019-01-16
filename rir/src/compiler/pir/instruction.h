@@ -1146,6 +1146,8 @@ class VLIE(StaticCall, Effect::Any, EnvAccess::Leak), public CallInstruction {
     SEXP origin_;
 
   public:
+    ClosureVersion* hint = nullptr;
+
     Closure* cls() const { return cls_; }
     void cls(Closure * cls) { cls_ = cls; }
     SEXP origin() const { return origin_; }

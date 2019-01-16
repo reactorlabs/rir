@@ -49,14 +49,13 @@ void EagerCalls::apply(RirCompiler& cmp, ClosureVersion* closure,
             if (version->assumptions().includes(Assumption::EagerArgs))
                 continue;
 
-            Assumptions newAssumptions;
+            Assumptions newAssumptions = call->inferAvailableAssumptions();
             newAssumptions.set(Assumption::EagerArgs);
-            newAssumptions.set(Assumption::NoMissingArguments);
             // This might fire back, since we don't know if we really have no
             // objects... We should have some profiling. It's still sound, since
             // static_call_ will check the assumptions
             newAssumptions.set(Assumption::NonObjectArgs);
-            cls->cloneWithAssumptions(
+            auto newVersion = cls->cloneWithAssumptions(
                 version, newAssumptions, [&](ClosureVersion* newCls) {
                     Visitor::run(newCls->entry, [&](Instruction* i) {
                         if (auto ld = LdArg::Cast(i)) {
@@ -65,6 +64,7 @@ void EagerCalls::apply(RirCompiler& cmp, ClosureVersion* closure,
                         }
                     });
                 });
+            call->hint = newVersion;
         }
     });
     if (todo.empty())

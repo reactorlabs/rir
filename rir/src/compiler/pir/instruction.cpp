@@ -429,7 +429,9 @@ void MkFunCls::printArgs(std::ostream& out, bool tty) {
 }
 
 void StaticCall::printArgs(std::ostream& out, bool tty) {
-    out << *cls_;
+    out << dispatch()->name();
+    if (hint && hint != dispatch())
+        out << "<hint: " << hint->nameSuffix() << ">";
     printCallArgs(out, this);
     if (frameState()) {
         frameState()->printRef(out);

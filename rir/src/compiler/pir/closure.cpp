@@ -12,12 +12,12 @@ Closure::~Closure() {
 ClosureVersion* Closure::cloneWithAssumptions(ClosureVersion* version,
                                               Assumptions asmpt,
                                               const MaybeClsVersion& change) {
-    auto copy = version->clone(asmpt);
     auto newCtx = version->optimizationContext;
     newCtx.assumptions = newCtx.assumptions | asmpt;
     if (versions.count(newCtx))
         return versions.at(newCtx);
 
+    auto copy = version->clone(asmpt);
     versions[newCtx] = copy;
     change(copy);
     return copy;
@@ -48,7 +48,7 @@ Closure::declareVersion(const OptimizationContext& optimizationContext) {
 void Closure::print(std::ostream& out, bool tty) const {
     eachVersion([&](ClosureVersion* v) {
         v->print(out, tty);
-        out << "\n-------------------------------\n";
+        out << "-------------------------------\n";
     });
 }
 

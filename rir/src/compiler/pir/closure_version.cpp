@@ -46,15 +46,18 @@ size_t ClosureVersion::size() const {
 
 size_t ClosureVersion::nargs() const { return closure->nargs(); }
 
-const std::string& ClosureVersion::name() const {
-    static std::string theName = "";
-    if (theName.empty()) {
-        auto id = std::stringstream();
-        id << closure->name << " [" << this << "]";
-        theName = id.str();
+ClosureVersion::ClosureVersion(Closure* closure,
+                               const OptimizationContext& optimizationContext,
+                               const Properties& properties)
+    : closure(closure), optimizationContext(optimizationContext),
+      properties(properties) {
+    auto id = std::stringstream();
+    id << closure->name << "[" << this << "]";
+    name_ = id.str();
+    id.str("");
+    id << this;
+    nameSuffix_ = id.str();
     }
-    return theName;
-}
 
 } // namespace pir
 } // namespace rir

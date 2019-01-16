@@ -1008,7 +1008,12 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
             }
             case Tag::StaticCall: {
                 auto call = StaticCall::Cast(instr);
-                auto trg = call->dispatch();
+                auto dispatch = call->dispatch();
+                auto hint = call->hint;
+                auto trg =
+                    (hint->optimizationContext < dispatch->optimizationContext)
+                        ? dispatch
+                        : hint;
                 // Avoid recursivly compiling the same closure
                 auto fun = compiler.alreadyCompiled(trg);
                 SEXP funCont = nullptr;
