@@ -904,8 +904,15 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
         break;                                                                 \
     }
                 EMPTY(PirCopy);
-                EMPTY(CastType);
 #undef EMPTY
+
+            case Tag::CastType: {
+                auto cast = CastType::Cast(instr);
+                if (cast->arg<0>().type().maybeLazy() &&
+                    !cast->type.maybeLazy())
+                    cs << BC::force();
+                break;
+            }
 
             case Tag::LdFunctionEnv: {
                 // TODO: what should happen? For now get the current env
