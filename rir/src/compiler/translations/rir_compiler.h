@@ -25,8 +25,9 @@ class RirCompiler {
 
     void preserve(SEXP c) { preserve_(c); }
 
-    Closure* cloneWithAssumptions(Closure* cls, Assumptions asmpt) {
-        return module->cloneWithAssumptions(cls, asmpt);
+    Closure* cloneWithAssumptions(Closure* cls, Assumptions asmpt,
+                                  const MaybeCls& change) {
+        return module->cloneWithAssumptions(cls, asmpt, change);
     }
 
     Module* module;

@@ -149,14 +149,15 @@ void Constantfold::apply(RirCompiler& cmp, Closure* function,
             ip = next;
         }
 
-        if (auto branch = Branch::Cast(bb->last())) {
-            auto condition = branch->arg<0>().val();
-            if (condition == True::instance()) {
-                branchRemoval.emplace(bb, true);
-            } else if (condition == False::instance()) {
-                branchRemoval.emplace(bb, false);
+        if (!bb->isEmpty())
+            if (auto branch = Branch::Cast(bb->last())) {
+                auto condition = branch->arg<0>().val();
+                if (condition == True::instance()) {
+                    branchRemoval.emplace(bb, true);
+                } else if (condition == False::instance()) {
+                    branchRemoval.emplace(bb, false);
+                }
             }
-        }
     });
 
     std::unordered_set<BB*> toDelete;

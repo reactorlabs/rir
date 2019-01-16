@@ -18,7 +18,8 @@ void Module::erase(rir::Function* f, OptimizationContext ctx) {
     vs.erase(i);
 }
 
-Closure* Module::cloneWithAssumptions(Closure* cls, Assumptions asmpt) {
+Closure* Module::cloneWithAssumptions(Closure* cls, Assumptions asmpt,
+                                      const MaybeCls& change) {
     auto& versions = closures.at(cls->rirVersion());
     for (auto& v : versions) {
         if (v.second == cls) {
@@ -29,6 +30,7 @@ Closure* Module::cloneWithAssumptions(Closure* cls, Assumptions asmpt) {
                 return versions.at(newCtx);
 
             versions[newCtx] = copy;
+            change(copy);
             return copy;
         }
     }

@@ -43,29 +43,25 @@ void EagerCalls::apply(RirCompiler& cmp, Closure* closure, LogStream&) const {
                 continue;
             todo.insert(args.begin(), args.end());
 
+            if (cls->assumptions.includes(Assumption::EagerArgs))
+                continue;
+
             Assumptions newAssumptions;
             newAssumptions.set(Assumption::EagerArgs);
             newAssumptions.set(Assumption::NoMissingArguments);
-            auto withEagerArgs = cmp.cloneWithAssumptions(cls, newAssumptions);
-            size_t found = 0;
-            Visitor::run(withEagerArgs->entry, [&](BB* bb) {
-                auto ip = bb->begin();
-                while (ip != bb->end()) {
-                    if (found == call->nCallArgs())
-                        return;
-                    auto next = ip + 1;
-                    auto i = *ip;
-                    if (LdArg::Cast(i)) {
-                        auto cast =
-                            new CastType(*ip, PirType::any(), PirType::val());
-                        i->replaceUsesWith(cast);
-                        ip = bb->insert(ip + 1, cast);
-                        next = ip + 1;
-                        found++;
-                    }
-                    ip = next;
-                }
-            });
+            // This might fire back, since we don't know if we really have no
+            // objects... We should have some profiling. It's still sound, since
+            // static_call_ will check the assumptions
+            newAssumptions.set(Assumption::NonObjectArgs);
+            auto withEagerArgs = cmp.cloneWithAssumptions(
+                cls, newAssumptions, [&](Closure* newCls) {
+                    Visitor::run(newCls->entry, [&](Instruction* i) {
+                        if (auto ld = LdArg::Cast(i)) {
+                            ld->type = PirType::val();
+                            ld->type.setNotObject();
+                        }
+                    });
+                });
             call->cls(withEagerArgs);
         }
     });

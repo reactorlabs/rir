@@ -446,7 +446,7 @@ StaticCall::StaticCall(Value* callerEnv, Closure* cls,
     assert(fs);
     pushArg(fs, NativeType::frameState);
     for (unsigned i = 0; i < args.size(); ++i)
-        pushArg(args[i], RType::prom);
+        pushArg(args[i], PirType::val() | RType::prom);
 }
 
 CallInstruction* CallInstruction::CastCall(Value* v) {

@@ -46,7 +46,9 @@ class Module {
         return nullptr;
     }
 
-    Closure* cloneWithAssumptions(Closure* cls, Assumptions asmpt);
+    typedef std::function<void(Closure*)> MaybeCls;
+    Closure* cloneWithAssumptions(Closure* cls, Assumptions asmpt,
+                                  const MaybeCls& change);
 
     void erase(rir::Function* f, OptimizationContext ctx);
 

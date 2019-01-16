@@ -156,12 +156,11 @@ class TheInliner {
                         }
                         if (ld) {
                             Value* a = arguments[ld->id];
-                            if (auto mk = MkArg::Cast(a)) {
+                            if (MkArg::Cast(a)) {
                                 // We need to cast from a promise to a lazy
                                 // value
-                                bool maybeLazy = mk->eagerArg() == Missing::instance();
                                 auto cast = new CastType(a, RType::prom,
-                                                         maybeLazy ? PirType::any() : PirType::val());
+                                                         PirType::any());
                                 ip = bb->insert(ip + 1, cast);
                                 ip--;
                                 a = cast;

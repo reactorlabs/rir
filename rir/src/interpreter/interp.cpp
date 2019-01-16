@@ -316,7 +316,16 @@ SEXP argsLazyCreation(void* rirDataWrapper) {
     return argsLazy->createArgsLists();
 }
 
-SEXP createLegacyArgsList(const CallContext& call, Context* ctx) {
+RIR_INLINE SEXP createLegacyLazyArgsList(const CallContext& call,
+                                         Context* ctx) {
+    if (call.hasStackArgs()) {
+        return createLegacyArgsListFromStackValues(call, false, ctx);
+    } else {
+        return createLegacyArgsList(call, false, ctx);
+    }
+}
+
+RIR_INLINE SEXP createLegacyArgsList(const CallContext& call, Context* ctx) {
     if (call.hasStackArgs()) {
         return createLegacyArgsListFromStackValues(call, call.hasEagerCallee(),
                                                    ctx);
@@ -372,14 +381,14 @@ SEXP rirCallTrampoline(const CallContext& call, Function* fun, SEXP env,
     return result;
 }
 
-SEXP rirCallTrampoline(const CallContext& call, Function* fun, SEXP arglist,
-                       Context* ctx) {
+RIR_INLINE SEXP rirCallTrampoline(const CallContext& call, Function* fun,
+                                  SEXP arglist, Context* ctx) {
     return rirCallTrampoline(call, fun, (SEXP)NULL, arglist, call.stackArgs,
                              ctx);
 }
 
-SEXP rirCallTrampoline(const CallContext& call, Function* fun, SEXP env,
-                       SEXP arglist, Context* ctx) {
+RIR_INLINE SEXP rirCallTrampoline(const CallContext& call, Function* fun,
+                                  SEXP env, SEXP arglist, Context* ctx) {
     return rirCallTrampoline(call, fun, env, arglist, nullptr, ctx);
 }
 
@@ -1607,12 +1616,17 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
             advanceImmediate();
             CallContext call(c, callee, n, ast, ostack_cell_at(ctx, n - 1),
                              *env, Assumptions(), ctx);
-            ArgsLazyData lazyArgs = ArgsLazyData(&call, ctx);
             auto fun = Function::unpack(version);
-            fun->registerInvocation();
-            res = rirCallTrampoline(call, fun, *env, (SEXP)&lazyArgs, call.stackArgs,
-                                    ctx);
-            ostack_popn(ctx, n);
+            if (matches(call, fun->signature())) {
+                ArgsLazyData lazyArgs = ArgsLazyData(&call, ctx);
+                fun->registerInvocation();
+                res = rirCallTrampoline(call, fun, *env, (SEXP)&lazyArgs,
+                                        call.stackArgs, ctx);
+            } else {
+                // Fallback, the static dispatch failed
+                res = doCall(call, ctx);
+            }
+            ostack_popn(ctx, call.passedArgs);
             ostack_push(ctx, res);
 
             assert(ttt == R_PPStackTop);
