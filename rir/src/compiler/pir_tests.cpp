@@ -363,7 +363,7 @@ bool testPir2Rir(const std::string& name, const std::string& fun,
         rCall = createRWrapperCall(wrapper);
     }
 
-    pirCompile(rirFun, "from_testPir2Rir", rir::pir::DebugOptions());
+    pirCompile(rirFun, {}, "from_testPir2Rir", rir::pir::DebugOptions());
 
     auto after = p(Rf_eval(rCall, execEnv));
     if (verbose) {

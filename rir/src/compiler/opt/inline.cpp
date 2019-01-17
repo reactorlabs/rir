@@ -72,9 +72,8 @@ class TheInliner {
                 if (skip.count(inlinee))
                     continue;
 
-                // No recursive inlining (still possible that another version of
-                // the same closure is inlined)
-                if (inlinee == version) {
+                // No recursive inlining
+                if (inlinee->owner() == version->owner()) {
                     skip.insert(inlinee);
                     continue;
                 }

@@ -73,6 +73,14 @@ class EnumSet {
         return set_ == s.set_;
     }
 
+    RIR_INLINE bool operator!=(const EnumSet& s) const {
+        return set_ != s.set_;
+    }
+
+    RIR_INLINE bool operator!=(const Element& t) const {
+        return EnumSet(t) != set_;
+    }
+
     RIR_INLINE EnumSet operator|(const EnumSet& s) const {
         return EnumSet(s.set_ | set_);
     }

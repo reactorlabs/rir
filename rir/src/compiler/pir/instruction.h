@@ -50,7 +50,7 @@
 
 namespace rir {
 enum class Opcode : uint8_t;
-class DispatchTable;
+struct DispatchTable;
 struct Code;
 
 namespace pir {

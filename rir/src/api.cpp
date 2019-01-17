@@ -162,7 +162,8 @@ REXPORT SEXP pir_setDebugFlags(SEXP debugFlags) {
     return R_NilValue;
 }
 
-SEXP pirCompile(SEXP what, const std::string& name, pir::DebugOptions debug) {
+SEXP pirCompile(SEXP what, const Assumptions& assumptions,
+                const std::string& name, pir::DebugOptions debug) {
 
     if (!isValidClosureSEXP(what)) {
         Rf_error("not a compiled closure");
@@ -181,7 +182,7 @@ SEXP pirCompile(SEXP what, const std::string& name, pir::DebugOptions debug) {
     pir::StreamLogger logger(debug);
     logger.title("Compiling " + name);
     pir::Rir2PirCompiler cmp(m, logger);
-    cmp.compileClosure(what, name, {},
+    cmp.compileClosure(what, name, assumptions,
                        [&](pir::ClosureVersion* c) {
                            logger.flush();
                            cmp.optimizeModule();
@@ -229,7 +230,7 @@ REXPORT SEXP pir_compile(SEXP what, SEXP name, SEXP debugFlags) {
     std::string n;
     if (TYPEOF(name) == SYMSXP)
         n = CHAR(PRINTNAME(name));
-    return pirCompile(what, n,
+    return pirCompile(what, {}, n,
                       debugFlags == R_NilValue
                           ? PirDebug
                           : pir::DebugOptions(INTEGER(debugFlags)[0]));
@@ -240,24 +241,27 @@ REXPORT SEXP pir_tests() {
     return R_NilValue;
 }
 
-SEXP pirOptDefaultOpts(SEXP closure, SEXP name) {
+SEXP rirOptDefaultOpts(SEXP closure, const Assumptions& assumptions,
+                       SEXP name) {
     std::string n = "";
     if (TYPEOF(name) == SYMSXP)
         n = CHAR(PRINTNAME(name));
     // PIR can only optimize closures, not expressions
     if (isValidClosureSEXP(closure))
-        return pirCompile(closure, n, PirDebug);
+        return pirCompile(closure, assumptions, n, PirDebug);
     else
         return closure;
 }
 
-SEXP pirOptDefaultOptsDryrun(SEXP closure, SEXP name) {
+SEXP rirOptDefaultOptsDryrun(SEXP closure, const Assumptions& assumptions,
+                             SEXP name) {
     std::string n = "";
     if (TYPEOF(name) == SYMSXP)
         n = CHAR(PRINTNAME(name));
     // PIR can only optimize closures, not expressions
     if (isValidClosureSEXP(closure))
-        return pirCompile(closure, n, PirDebug | pir::DebugFlag::DryRun);
+        return pirCompile(closure, assumptions, n,
+                          PirDebug | pir::DebugFlag::DryRun);
     else
         return closure;
 }

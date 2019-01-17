@@ -4,6 +4,7 @@
 #include "R/r.h"
 #include "interp_data.h"
 #include "ir/BC_inc.h"
+#include "runtime/Assumptions.h"
 
 #include <stdio.h>
 
@@ -18,7 +19,9 @@
  */
 typedef std::function<SEXP(SEXP expr, SEXP env)> ExprCompiler;
 typedef std::function<SEXP(SEXP closure, SEXP name)> ClosureCompiler;
-typedef std::function<SEXP(SEXP closure, SEXP name)> ClosureOptimizer;
+typedef std::function<SEXP(SEXP closure, const rir::Assumptions& assumptions,
+                           SEXP name)>
+    ClosureOptimizer;
 
 #define POOL_CAPACITY 4096
 #define STACK_CAPACITY 4096

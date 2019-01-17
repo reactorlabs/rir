@@ -561,6 +561,44 @@ SEXP closureArgumentAdaptor(const CallContext& call, SEXP arglist,
     return newrho;
 };
 
+RIR_INLINE Assumptions addDynamicAssumptions(
+    const CallContext& call, const FunctionSignature& signature) {
+    Assumptions given = call.givenAssumptions;
+
+    if (call.hasStackArgs() && !(given.includes(Assumption::NonObjectArgs) &&
+                                 given.includes(Assumption::EagerArgs))) {
+        bool seenObj = false;
+        size_t i = 0;
+        for (; i < call.suppliedArgs; ++i) {
+            SEXP a = call.stackArg(i);
+            if (TYPEOF(a) == PROMSXP) {
+                if (PRVALUE(a) == R_UnboundValue)
+                    break;
+                if (isObject(PRVALUE(a)))
+                    seenObj = true;
+            } else if (isObject(a)) {
+                seenObj = true;
+            }
+        }
+        if (i == call.suppliedArgs) {
+            given.set(Assumption::EagerArgs);
+            if (!seenObj)
+                given.set(Assumption::NonObjectArgs);
+        }
+    }
+
+    if (!call.hasNames())
+        given.set(Assumption::CorrectOrderOfArguments);
+
+    if (call.suppliedArgs <= signature.nargs())
+        given.set(Assumption::NotTooManyArguments);
+
+    if (call.suppliedArgs >= signature.nargs())
+        given.set(Assumption::NoMissingArguments);
+
+    return given;
+}
+
 RIR_INLINE bool matches(const CallContext& call,
                         const FunctionSignature& signature) {
     // TODO: look at the arguments of the function signature and not just at the
@@ -588,38 +626,7 @@ RIR_INLINE bool matches(const CallContext& call,
             return false;
     }
 
-    Assumptions given = call.givenAssumptions;
-
-    if (call.hasStackArgs() && !(given.includes(Assumption::NonObjectArgs) &&
-                                 given.includes(Assumption::EagerArgs))) {
-        bool seenObj = false;
-        size_t i = 0;
-        for (; i < call.nargs; ++i) {
-            SEXP a = call.stackArg(i);
-            if (TYPEOF(a) == PROMSXP) {
-                if (PRVALUE(a) == R_UnboundValue)
-                    break;
-                if (isObject(PRVALUE(a)))
-                    seenObj = true;
-            } else if (isObject(a)) {
-                seenObj = true;
-            }
-        }
-        if (i == call.nargs) {
-            given.set(Assumption::EagerArgs);
-            if (!seenObj)
-                given.set(Assumption::NonObjectArgs);
-        }
-    }
-
-    if (!call.hasNames())
-        given.set(Assumption::CorrectOrderOfArguments);
-
-    if (call.suppliedArgs <= signature.nargs())
-        given.set(Assumption::NotTooManyArguments);
-
-    if (call.suppliedArgs >= signature.nargs())
-        given.set(Assumption::NoMissingArguments);
+    Assumptions given = addDynamicAssumptions(call, signature);
 
     // Check if given assumptions match required assumptions
     if (!given.includes(signature.assumptions))
@@ -670,15 +677,17 @@ RIR_INLINE SEXP rirCall(CallContext& call, Context* ctx) {
     Function* fun = dispatch(call, table);
     fun->registerInvocation();
 
-    if (fun->signature().optimization ==
-            FunctionSignature::OptimizationLevel::Baseline &&
-        fun->invocationCount() == RIR_WARMUP) {
-        SEXP lhs = CAR(call.ast);
-        SEXP name = R_NilValue;
-        if (TYPEOF(lhs) == SYMSXP)
-            name = lhs;
-        ctx->closureOptimizer(call.callee, name);
-        fun = dispatch(call, table);
+    if ((fun == table->baseline() && fun->invocationCount() == RIR_WARMUP) ||
+        fun->invocationCount() >= RIR_WARMUP) {
+        Assumptions given = addDynamicAssumptions(call, fun->signature());
+        if (fun == table->baseline() || given != fun->signature().assumptions) {
+            SEXP lhs = CAR(call.ast);
+            SEXP name = R_NilValue;
+            if (TYPEOF(lhs) == SYMSXP)
+                name = lhs;
+            ctx->closureOptimizer(call.callee, given, name);
+            fun = dispatch(call, table);
+        }
     }
 
     bool needsEnv = fun->signature().envCreation ==
