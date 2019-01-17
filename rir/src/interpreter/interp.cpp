@@ -1535,8 +1535,10 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
         }
 
         INSTRUCTION(named_call_implicit_) {
+#ifdef ENABLE_SLOWASSERT
             auto lll = ostack_length(ctx);
             int ttt = R_PPStackTop;
+#endif
 
             // Callee is TOS
             // Arguments and names are immediate given as promise code indices.
@@ -1556,8 +1558,8 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
             ostack_pop(ctx); // callee
             ostack_push(ctx, res);
 
-            assert(ttt == R_PPStackTop);
-            assert(lll == ostack_length(ctx));
+            SLOWASSERT(ttt == R_PPStackTop);
+            SLOWASSERT(lll == ostack_length(ctx));
             NEXT();
         }
 
@@ -1580,8 +1582,10 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
         }
 
         INSTRUCTION(call_implicit_) {
+#ifdef ENABLE_SLOWASSERT
             auto lll = ostack_length(ctx);
             int ttt = R_PPStackTop;
+#endif
 
             // Callee is TOS
             // Arguments are immediate given as promise code indices.
@@ -1599,14 +1603,16 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
             ostack_pop(ctx); // callee
             ostack_push(ctx, res);
 
-            assert(ttt == R_PPStackTop);
-            assert(lll == ostack_length(ctx));
+            SLOWASSERT(ttt == R_PPStackTop);
+            SLOWASSERT(lll == ostack_length(ctx));
             NEXT();
         }
 
         INSTRUCTION(call_) {
+#ifdef ENABLE_SLOWASSERT
             auto lll = ostack_length(ctx);
             int ttt = R_PPStackTop;
+#endif
 
             // Stack contains [callee, arg1, ..., argn]
             Immediate n = readImmediate();
@@ -1621,14 +1627,16 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
             ostack_popn(ctx, call.passedArgs + 1);
             ostack_push(ctx, res);
 
-            assert(ttt == R_PPStackTop);
-            assert(lll - call.suppliedArgs == (unsigned)ostack_length(ctx));
+            SLOWASSERT(ttt == R_PPStackTop);
+            SLOWASSERT(lll - call.suppliedArgs == (unsigned)ostack_length(ctx));
             NEXT();
         }
 
         INSTRUCTION(named_call_) {
+#ifdef ENABLE_SLOWASSERT
             auto lll = ostack_length(ctx);
             int ttt = R_PPStackTop;
+#endif
 
             // Stack contains [callee, arg1, ..., argn]
             Immediate n = readImmediate();
@@ -1646,14 +1654,16 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
             ostack_popn(ctx, call.passedArgs + 1);
             ostack_push(ctx, res);
 
-            assert(ttt == R_PPStackTop);
-            assert(lll - call.suppliedArgs == (unsigned)ostack_length(ctx));
+            SLOWASSERT(ttt == R_PPStackTop);
+            SLOWASSERT(lll - call.suppliedArgs == (unsigned)ostack_length(ctx));
             NEXT();
         }
 
         INSTRUCTION(call_builtin_) {
+#ifdef ENABLE_SLOWASSERT
             auto lll = ostack_length(ctx);
             int ttt = R_PPStackTop;
+#endif
 
             // Stack contains [arg1, ..., argn], callee is immediate
             Immediate n = readImmediate();
@@ -1668,14 +1678,16 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
             ostack_popn(ctx, call.passedArgs);
             ostack_push(ctx, res);
 
-            assert(ttt == R_PPStackTop);
-            assert(lll - call.suppliedArgs + 1 == (unsigned)ostack_length(ctx));
+            SLOWASSERT(ttt == R_PPStackTop);
+            SLOWASSERT(lll - call.suppliedArgs + 1 == (unsigned)ostack_length(ctx));
             NEXT();
         }
 
         INSTRUCTION(static_call_) {
+#ifdef ENABLE_SLOWASSERT
             auto lll = ostack_length(ctx);
             int ttt = R_PPStackTop;
+#endif
 
             // Stack contains [arg1, ..., argn], callee is immediate
             Immediate n = readImmediate();
@@ -1704,8 +1716,8 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
             ostack_popn(ctx, call.passedArgs);
             ostack_push(ctx, res);
 
-            assert(ttt == R_PPStackTop);
-            assert(lll - call.suppliedArgs + 1 == (unsigned)ostack_length(ctx));
+            SLOWASSERT(ttt == R_PPStackTop);
+            SLOWASSERT(lll - call.suppliedArgs + 1 == (unsigned)ostack_length(ctx));
             NEXT();
         }
 
