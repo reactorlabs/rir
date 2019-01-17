@@ -32,9 +32,11 @@ class ClosureVersion : public Code {
         Properties(const Property& other) : EnumSet<Property>(other) {}
     };
 
-    Closure* owner;
-
   private:
+    Closure* owner_;
+    std::vector<Promise*> promises_;
+    const OptimizationContext& optimizationContext_;
+
     std::string name_;
     std::string nameSuffix_;
     ClosureVersion(Closure* closure,
@@ -44,15 +46,19 @@ class ClosureVersion : public Code {
     friend class Closure;
 
   public:
-    const Assumptions& assumptions() { return optimizationContext.assumptions; }
+    ClosureVersion* clone(const Assumptions& newAssumptions);
 
-    std::vector<Promise*> promises;
+    const Assumptions& assumptions() const {
+        return optimizationContext_.assumptions;
+    }
+    const OptimizationContext& optimizationContext() const {
+        return optimizationContext_;
+    }
 
-    const OptimizationContext& optimizationContext;
     Properties properties;
 
+    Closure* owner() const { return owner_; }
     size_t nargs() const;
-
     const std::string& name() const { return name_; }
     const std::string& nameSuffix() const { return nameSuffix_; }
 
@@ -60,25 +66,27 @@ class ClosureVersion : public Code {
 
     Promise* createProm(unsigned srcPoolIdx);
 
+    Promise* promise(unsigned id) const { return promises_.at(id); }
+    const std::vector<Promise*>& promises() { return promises_; }
+
+    void erasePromise(unsigned id);
+
+    typedef std::function<void(Promise*)> PromiseIterator;
+    void eachPromise(PromiseIterator it) const {
+        for (auto p : promises_)
+            if (p)
+                it(p);
+    }
+
+    size_t size() const override final;
+
     friend std::ostream& operator<<(std::ostream& out,
                                     const ClosureVersion& e) {
         out << e.name();
         return out;
     }
 
-    ClosureVersion* clone(const Assumptions& newAssumptions);
-
     ~ClosureVersion();
-
-    typedef std::function<void(Promise*)> PromiseIterator;
-
-    void eachPromise(PromiseIterator it) const {
-        for (auto p : promises)
-            if (p)
-                it(p);
-    }
-
-    size_t size() const override final;
 };
 
 } // namespace pir

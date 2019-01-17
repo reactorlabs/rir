@@ -145,16 +145,9 @@ class TheCleanup {
             });
         }
 
-        for (size_t i = 0; i < function->promises.size(); ++i) {
-            if (function->promises[i] && used_p.find(i) == used_p.end()) {
-                auto p = function->promises[i];
-                // If we delete a corrupt promise it get's hard to debug...
-                assert(p->owner == function);
-                assert(function->promises[p->id] == p);
-                delete function->promises[i];
-                function->promises[i] = nullptr;
-            }
-        }
+        for (size_t i = 0; i < function->promises().size(); ++i)
+            if (function->promise(i) && used_p.find(i) == used_p.end())
+                function->erasePromise(i);
 
         auto fixupPhiInput = [&](BB* old, BB* n) {
             for (auto phi : usedBB[old]) {

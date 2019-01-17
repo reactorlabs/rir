@@ -461,6 +461,16 @@ ClosureVersion* StaticCall::dispatch() const {
     return CallInstruction::dispatch(cls());
 }
 
+ClosureVersion* StaticCall::optimisticDispatch() const {
+    auto dispatch = CallInstruction::dispatch(cls());
+    if (!hint)
+        return dispatch;
+
+    return (hint->optimizationContext() < dispatch->optimizationContext())
+               ? dispatch
+               : hint;
+}
+
 StaticCall::StaticCall(Value* callerEnv, Closure* cls,
                        const std::vector<Value*>& args, FrameState* fs,
                        unsigned srcIdx)

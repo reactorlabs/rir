@@ -26,9 +26,9 @@ class TheVerifier {
             return;
         }
 
-        for (auto p : f->promises) {
+        f->eachPromise([&](Promise* p) {
             if (p) {
-                if (p != f->promises[p->id]) {
+                if (p != f->promise(p->id)) {
                     std::cerr << "Promise with id " << p->id
                               << " is in the wrong slot\n";
                     ok = false;
@@ -40,7 +40,7 @@ class TheVerifier {
                 p->print(std::cerr, true);
                 return;
             }
-        }
+        });
     }
 
     void verify(BB* bb, const DominanceGraph& dom, const CFG& cfg) {
@@ -129,7 +129,8 @@ class TheVerifier {
         }
 
         if (auto call = StaticCall::Cast(i)) {
-            if (call->hint && call->hint->owner != call->dispatch()->owner) {
+            if (call->hint &&
+                call->hint->owner() != call->dispatch()->owner()) {
                 std::cerr << "Error: instruction '";
                 i->print(std::cerr);
                 std::cerr << "' has broken hint (hint must be a version of the "
@@ -140,7 +141,7 @@ class TheVerifier {
 
         if (auto mk = MkArg::Cast(i)) {
             auto p = mk->prom();
-            assert(p->owner->promises[p->id] == p);
+            assert(p->owner->promise(p->id) == p);
             if (p->owner != f) {
                 mk->printRef(std::cerr);
                 std::cerr << " is referencing a promise from another function "

@@ -9,16 +9,27 @@ namespace pir {
 Closure::Closure(const std::string& name, rir::Function* function, SEXP formals,
                  SEXP srcRef)
     : origin_(nullptr), function(function), env(Env::notClosed()),
-      srcRef_(srcRef), name(name), formals(formals) {}
+      srcRef_(srcRef), name_(name), formals_(formals) {
+    invariant();
+}
 
 Closure::Closure(const std::string& name, SEXP closure, rir::Function* f,
                  Env* env)
-    : origin_(closure), function(f), env(env), name(name),
-      formals(FORMALS(closure)) {
+    : origin_(closure), function(f), env(env), name_(name),
+      formals_(FORMALS(closure)) {
 
     static SEXP srcRefSymbol = Rf_install("srcref");
-    assert(env->rho == CLOENV(closure));
     srcRef_ = Rf_getAttrib(closure, srcRefSymbol);
+    invariant();
+}
+
+void Closure::invariant() const {
+    // If this is a rir inner function, then we do not have an origin rir
+    // closure (since the closure is then created at runtime).
+    assert(origin_ || env == Env::notClosed());
+    assert(!origin_ || TYPEOF(origin_) == CLOSXP);
+    assert(env == Env::notClosed() || env->rho == CLOENV(origin_));
+    assert(!origin_ || formals_.original() == FORMALS(origin_));
 }
 
 Closure::~Closure() {
@@ -29,7 +40,7 @@ Closure::~Closure() {
 ClosureVersion* Closure::cloneWithAssumptions(ClosureVersion* version,
                                               Assumptions asmpt,
                                               const MaybeClsVersion& change) {
-    auto newCtx = version->optimizationContext;
+    auto newCtx = version->optimizationContext();
     newCtx.assumptions = newCtx.assumptions | asmpt;
     if (versions.count(newCtx))
         return versions.at(newCtx);

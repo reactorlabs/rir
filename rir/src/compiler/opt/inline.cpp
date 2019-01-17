@@ -72,8 +72,9 @@ class TheInliner {
                 if (skip.count(inlinee))
                     continue;
 
-                // Recursive inline only once
-                if (inlineeCls == version->owner) {
+                // No recursive inlining (still possible that another version of
+                // the same closure is inlined)
+                if (inlinee == version) {
                     skip.insert(inlinee);
                     continue;
                 }
@@ -188,8 +189,8 @@ class TheInliner {
                     // Copy over promises used by the inner version
                     std::vector<bool> copiedPromise(false);
                     std::vector<size_t> newPromId;
-                    copiedPromise.resize(inlinee->promises.size(), false);
-                    newPromId.resize(inlinee->promises.size());
+                    copiedPromise.resize(inlinee->promises().size(), false);
+                    newPromId.resize(inlinee->promises().size());
                     Visitor::run(copy, [&](BB* bb) {
                         auto it = bb->begin();
                         while (it != bb->end()) {
@@ -203,7 +204,7 @@ class TheInliner {
                                 assert(id < copiedPromise.size());
                                 if (copiedPromise[id]) {
                                     mk->updatePromise(
-                                        version->promises.at(newPromId[id]));
+                                        version->promises().at(newPromId[id]));
                                 } else {
                                     Promise* clone = version->createProm(
                                         mk->prom()->srcPoolIdx());

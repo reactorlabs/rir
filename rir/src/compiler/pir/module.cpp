@@ -6,8 +6,8 @@ namespace pir {
 
 void Module::print(std::ostream& out, bool tty) {
     eachPirClosure([&](Closure* c) {
+        out << "================================\n";
         c->print(out, tty);
-        out << "\n================================\n";
     });
 }
 

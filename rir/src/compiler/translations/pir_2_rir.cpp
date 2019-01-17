@@ -698,7 +698,7 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                         // Here we could also load env->rho, but if the user
                         // were to change the environment on the closure our
                         // code would be wrong.
-                        if (env == cls->owner->closureEnv())
+                        if (env == cls->owner()->closureEnv())
                             cs << BC::parentEnv();
                         else
                             cs << BC::push(env->rho);
@@ -886,7 +886,7 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 // closed closures.
                 auto mkfuncls = MkFunCls::Cast(instr);
                 auto cls = mkfuncls->cls;
-                cs << BC::push(cls->formals.original())
+                cs << BC::push(cls->formals().original())
                    << BC::push(mkfuncls->originalBody->container())
                    << BC::push(cls->srcRef()) << BC::close();
                 break;
@@ -1011,13 +1011,8 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
             }
             case Tag::StaticCall: {
                 auto call = StaticCall::Cast(instr);
-                auto dispatch = call->dispatch();
-                auto hint = call->hint;
-                auto trg =
-                    (hint->optimizationContext < dispatch->optimizationContext)
-                        ? dispatch
-                        : hint;
-                SEXP originalClosure = trg->owner->rirClosure();
+                auto trg = call->optimisticDispatch();
+                SEXP originalClosure = trg->owner()->rirClosure();
 
                 // Avoid recursivly compiling the same closure
                 auto fun = compiler.alreadyCompiled(trg);

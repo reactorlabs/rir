@@ -1174,6 +1174,8 @@ class VLIE(StaticCall, Effect::Any, EnvAccess::Leak), public CallInstruction {
     Value* callerEnv() { return env(); }
 
     ClosureVersion* dispatch() const;
+
+    ClosureVersion* optimisticDispatch() const;
 };
 
 typedef SEXP (*CCODE)(SEXP, SEXP, SEXP, SEXP);

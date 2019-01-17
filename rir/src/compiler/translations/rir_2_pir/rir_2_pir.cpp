@@ -385,7 +385,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                     auto fs =
                         insert.registerFrameState(srcCode, nextPos, stack);
                     push(insert(
-                        new StaticCall(insert.env, f->owner, args, fs, ast)));
+                        new StaticCall(insert.env, f->owner(), args, fs, ast)));
                 },
                 insertGenericCall);
         } else if (monomorphicBuiltin) {
@@ -907,7 +907,7 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) const {
             inner << "@";
             if (srcCode != srcFunction->body()) {
                 size_t i = 0;
-                for (auto c : insert.function->promises) {
+                for (auto c : insert.function->promises()) {
                     if (c == insert.code) {
                         inner << "Prom(" << i << ")";
                         break;
@@ -920,7 +920,7 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) const {
             compiler.compileFunction(function, inner.str(), formals, srcRef, {},
                                      [&](ClosureVersion* innerF) {
                                          cur.stack.push(insert(new MkFunCls(
-                                             innerF->owner, dt, insert.env)));
+                                             innerF->owner(), dt, insert.env)));
 
                                          // Skip those instructions
                                          finger = pc;

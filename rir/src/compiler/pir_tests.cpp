@@ -49,10 +49,11 @@ SEXP compileToRir(const std::string& context, const std::string& expr,
 typedef std::unordered_map<std::string, pir::ClosureVersion*> closuresByName;
 
 closuresByName compileRir2Pir(SEXP env, pir::Module* m) {
-    pir::StreamLogger logger(pir::DebugOptions() |
-                             // pir::DebugFlag::PrintIntoStdout |
-                             // pir::DebugFlag::PrintOptimizationPasses |
-                             pir::DebugFlag::PrintFinalPir);
+    pir::StreamLogger logger({pir::DebugOptions::DebugFlags() |
+                                  // pir::DebugFlag::PrintIntoStdout |
+                                  // pir::DebugFlag::PrintOptimizationPasses |
+                                  pir::DebugFlag::PrintFinalPir,
+                              ""});
     pir::Rir2PirCompiler cmp(m, logger);
 
     // Compile every function in the environment

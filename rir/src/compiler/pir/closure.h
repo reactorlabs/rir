@@ -23,6 +23,7 @@ namespace pir {
  *
  */
 class Closure {
+  private:
     friend class Module;
 
     Closure(const std::string& name, rir::Function* function, SEXP formals,
@@ -30,39 +31,39 @@ class Closure {
     Closure(const std::string& name, SEXP closure, rir::Function* function,
             Env* env);
 
+    void invariant() const;
+
     SEXP origin_;
     rir::Function* function;
     Env* env;
     SEXP srcRef_;
+    const std::string name_;
+    const FormalArgs formals_;
+
+    std::map<const OptimizationContext, ClosureVersion*> versions;
 
   public:
+    SEXP rirClosure() const {
+        assert(origin_ && "Inner function does not have a source rir closure");
+        return origin_;
+    }
+
     rir::Function* rirFunction() const { return function; }
-    SEXP rirClosure() const { return origin_; }
-
     SEXP srcRef() { return srcRef_; }
-
-    const std::string name;
     Env* closureEnv() const { return env; }
-
-    const FormalArgs formals;
-
-    size_t nargs() const { return formals.nargs(); }
+    const std::string& name() const { return name_; }
+    size_t nargs() const { return formals_.nargs(); }
+    const FormalArgs& formals() const { return formals_; }
 
     void print(std::ostream& out, bool tty) const;
 
     friend std::ostream& operator<<(std::ostream& out, const Closure& e) {
-        out << e.name;
+        out << e.name();
         return out;
     }
 
-    ClosureVersion*
-    declareVersion(const OptimizationContext& optimizationContext);
-
-    typedef std::function<void(pir::ClosureVersion*)> ClosureVersionIterator;
-    void eachVersion(ClosureVersionIterator it) const {
-        for (auto& v : versions)
-            it(v.second);
-    }
+    ClosureVersion* declareVersion(const OptimizationContext&);
+    void erase(const OptimizationContext& ctx) { versions.erase(ctx); }
 
     bool existsVersion(const OptimizationContext& ctx) {
         return versions.count(ctx);
@@ -76,12 +77,13 @@ class Closure {
     ClosureVersion* cloneWithAssumptions(ClosureVersion* cls, Assumptions asmpt,
                                          const MaybeClsVersion& change);
 
-    void erase(const OptimizationContext& ctx) { versions.erase(ctx); }
+    typedef std::function<void(pir::ClosureVersion*)> ClosureVersionIterator;
+    void eachVersion(ClosureVersionIterator it) const {
+        for (auto& v : versions)
+            it(v.second);
+    }
 
     ~Closure();
-
-  private:
-    std::map<const OptimizationContext, ClosureVersion*> versions;
 };
 
 } // namespace pir

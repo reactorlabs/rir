@@ -68,13 +68,13 @@ void Rir2PirCompiler::compileClosure(Closure* closure,
                                      MaybeCls success, Maybe fail) {
 
     // TODO: Support default arguments and dots
-    if (closure->formals.hasDefaultArgs()) {
+    if (closure->formals().hasDefaultArgs()) {
         if (!ctx.assumptions.includes(Assumption::NoMissingArguments)) {
             logger.warn("no support for default args");
             return fail();
         }
     }
-    if (closure->formals.hasDots()) {
+    if (closure->formals().hasDots()) {
         logger.warn("no support for ...");
         return fail();
     }
@@ -91,7 +91,7 @@ void Rir2PirCompiler::compileClosure(Closure* closure,
 
     Builder builder(version, closure->closureEnv());
     auto& log = logger.begin(version);
-    Rir2Pir rir2pir(*this, closure->rirFunction(), log, closure->name);
+    Rir2Pir rir2pir(*this, closure->rirFunction(), log, closure->name());
 
     if (rir2pir.tryCompile(builder)) {
         log.compilationEarlyPir(version);

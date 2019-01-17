@@ -86,7 +86,7 @@ Builder::Builder(ClosureVersion* version, Value* closureEnv)
     createNextBB();
     assert(!function->entry);
     function->entry = bb;
-    auto closure = version->owner;
+    auto closure = version->owner();
     std::vector<Value*> args(closure->nargs());
     for (long i = closure->nargs() - 1; i >= 0; --i) {
         args[i] = this->operator()(new LdArg(i));
@@ -94,7 +94,7 @@ Builder::Builder(ClosureVersion* version, Value* closureEnv)
             args[i] = this->operator()(
                 new CastType(args[i], PirType::any(), PirType::val()));
     }
-    auto mkenv = new MkEnv(closureEnv, closure->formals.names(), args.data());
+    auto mkenv = new MkEnv(closureEnv, closure->formals().names(), args.data());
     add(mkenv);
     this->env = mkenv;
 }

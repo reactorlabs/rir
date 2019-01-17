@@ -101,7 +101,7 @@ AbstractResult ScopeAnalysis::apply(ScopeAnalysisState& state,
         // But if we statically find the closure to load, then there is no issue
         // and we don't do anything.
         auto ld = loadFun(state, ldfun->varName, ldfun->env());
-        if (ld.result.type.isA(RType::closure)) {
+        if (!ld.result.isUnknown()) {
             // We statically know the closure
             handled = true;
         } else if (ld.env != AbstractREnvironment::UnknownParent) {
@@ -216,10 +216,10 @@ AbstractResult ScopeAnalysis::apply(ScopeAnalysisState& state,
                     target = result.singleValue().val->followCastsAndForce();
             });
             assert(target);
-            if (auto cls = MkFunCls::Cast(target))
-                if (cls->nargs() == calli->nCallArgs())
-                    interProceduralAnalysis(call->dispatch(cls->cls),
-                                            cls->lexicalEnv());
+            if (auto mk = MkFunCls::Cast(target))
+                if (mk->cls->nargs() == calli->nCallArgs())
+                    interProceduralAnalysis(call->dispatch(mk->cls),
+                                            mk->lexicalEnv());
         } else if (auto call = StaticCall::Cast(i)) {
             auto target = call->cls();
             if (target && target->nargs() == calli->nCallArgs())
