@@ -513,6 +513,7 @@ Assumptions CallInstruction::inferAvailableAssumptions() const {
     given.set(Assumption::NotTooManyArguments);
     given.set(Assumption::EagerArgs);
     given.set(Assumption::NonObjectArgs);
+    size_t i = 0;
     eachCallArg([&](Value* arg) {
         if (auto mk = MkArg::Cast(arg)) {
             if (mk->eagerArg() == Missing::instance()) {
@@ -523,10 +524,16 @@ Assumptions CallInstruction::inferAvailableAssumptions() const {
                 arg = mk->eagerArg();
             }
         }
-        if (arg->type.maybeLazy())
+        if (arg->type.maybeLazy()) {
             given.reset(Assumption::EagerArgs);
-        if (arg->type.maybeObj())
+        } else if (Assumptions::EagerAssumptions.size() > i) {
+            given.set(Assumptions::EagerAssumptions[i]);
+        }
+        if (arg->type.maybeObj()) {
             given.reset(Assumption::NonObjectArgs);
+        } else if (Assumptions::ObjAssumptions.size() > i) {
+            given.set(Assumptions::ObjAssumptions[i]);
+        }
         if (arg == Missing::instance())
             given.reset(Assumption::NoMissingArguments);
     });

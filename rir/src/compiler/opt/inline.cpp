@@ -1,6 +1,7 @@
 #include "../pir/pir_impl.h"
 #include "../transform/bb.h"
 #include "../util/cfg.h"
+#include "../util/safe_builtins_list.h"
 #include "../util/visitor.h"
 #include "R/Funtab.h"
 #include "R/Symbols.h"
@@ -105,10 +106,16 @@ class TheInliner {
                         auto next = ip + 1;
                         auto ld = LdArg::Cast(*ip);
                         Instruction* i = *ip;
-                        // We should never inline UseMethod
+
                         if (auto ld = LdFun::Cast(i)) {
-                            if (ld->varName == rir::symbol::UseMethod ||
-                                ld->varName == rir::symbol::standardGeneric) {
+                            if (!SafeBuiltinsList::forInlineByName(
+                                    ld->varName)) {
+                                fail = true;
+                                return;
+                            }
+                        }
+                        if (auto call = CallBuiltin::Cast(i)) {
+                            if (!SafeBuiltinsList::forInline(call->builtinId)) {
                                 fail = true;
                                 return;
                             }

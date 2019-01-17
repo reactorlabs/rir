@@ -1,6 +1,7 @@
 #include "safe_builtins_list.h"
 
 #include "R/Funtab.h"
+#include "R/Symbols.h"
 
 namespace rir {
 namespace pir {
@@ -276,6 +277,34 @@ bool SafeBuiltinsList::nonObject(int builtin) {
 
 bool SafeBuiltinsList::nonObject(SEXP builtin) {
     return nonObject(getBuiltinNr(builtin));
+}
+
+bool SafeBuiltinsList::forInline(int builtin) {
+    static int unsafeBuiltins[] = {
+        findBuiltin("sys.frame"),
+        findBuiltin("sys.call"),
+        findBuiltin("UseMethod"),
+        findBuiltin("standardGeneric"),
+    };
+
+    for (auto i : unsafeBuiltins)
+        if (i == builtin)
+            return false;
+    return true;
+}
+
+bool SafeBuiltinsList::forInlineByName(SEXP name) {
+    SEXP unsafeBuiltins[] = {
+        rir::symbol::sysframe,
+        rir::symbol::syscall,
+        rir::symbol::UseMethod,
+        rir::symbol::standardGeneric,
+    };
+
+    for (auto i : unsafeBuiltins)
+        if (i == name)
+            return false;
+    return true;
 }
 
 } // namespace pir

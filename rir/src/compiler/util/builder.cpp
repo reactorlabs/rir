@@ -88,11 +88,19 @@ Builder::Builder(ClosureVersion* version, Value* closureEnv)
     function->entry = bb;
     auto closure = version->owner();
     std::vector<Value*> args(closure->nargs());
+    auto& assumptions = version->assumptions();
     for (long i = closure->nargs() - 1; i >= 0; --i) {
         args[i] = this->operator()(new LdArg(i));
-        if (version->assumptions().includes(Assumption::EagerArgs))
-            args[i] = this->operator()(
-                new CastType(args[i], PirType::any(), PirType::val()));
+        if (assumptions.includes(Assumption::EagerArgs) ||
+            (i == 0 && assumptions.includes(Assumption::Arg1IsEager)) ||
+            (i == 1 && assumptions.includes(Assumption::Arg2IsEager)) ||
+            (i == 2 && assumptions.includes(Assumption::Arg3IsEager)))
+            args[i]->type = PirType::val();
+        if (assumptions.includes(Assumption::NonObjectArgs) ||
+            (i == 0 && assumptions.includes(Assumption::Arg1IsNonObj)) ||
+            (i == 1 && assumptions.includes(Assumption::Arg2IsNonObj)) ||
+            (i == 2 && assumptions.includes(Assumption::Arg3IsNonObj)))
+            args[i]->type.setNotObject();
     }
     auto mkenv = new MkEnv(closureEnv, closure->formals().names(), args.data());
     add(mkenv);
