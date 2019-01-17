@@ -26,8 +26,8 @@ class Value {
     PirType typeFeedback = PirType::optimistic();
     Tag tag;
     Value(PirType type, Tag tag) : type(type), tag(tag) {}
-    virtual void printRef(std::ostream& out) = 0;
-    void printRef() { printRef(std::cerr); }
+    virtual void printRef(std::ostream& out) const = 0;
+    void printRef() const { printRef(std::cerr); }
     virtual bool isInstruction() { return false; }
     virtual const Value* cFollowCasts() const { return this; }
     virtual const Value* cFollowCastsAndForce() const { return this; }

@@ -28,7 +28,7 @@ class SingletonValue : public Value {
 
 class Nil : public SingletonValue<Nil> {
   public:
-    void printRef(std::ostream& out) override final { out << "nil"; }
+    void printRef(std::ostream& out) const override final { out << "nil"; }
 
   private:
     friend class SingletonValue;
@@ -37,7 +37,7 @@ class Nil : public SingletonValue<Nil> {
 
 class Missing : public SingletonValue<Missing> {
   public:
-    void printRef(std::ostream& out) override final { out << "missing"; }
+    void printRef(std::ostream& out) const override final { out << "missing"; }
 
   private:
     friend class SingletonValue;
@@ -46,7 +46,7 @@ class Missing : public SingletonValue<Missing> {
 
 class True : public SingletonValue<True> {
   public:
-    void printRef(std::ostream& out) override final { out << "true"; }
+    void printRef(std::ostream& out) const override final { out << "true"; }
 
   private:
     friend class SingletonValue;
@@ -55,7 +55,7 @@ class True : public SingletonValue<True> {
 
 class False : public SingletonValue<False> {
   public:
-    void printRef(std::ostream& out) override final { out << "false"; }
+    void printRef(std::ostream& out) const override final { out << "false"; }
 
   private:
     friend class SingletonValue;
@@ -64,7 +64,7 @@ class False : public SingletonValue<False> {
 
 class Tombstone : public Value {
   public:
-    void printRef(std::ostream& out) override final {
+    void printRef(std::ostream& out) const override final {
         out << "~";
         if (this == closure())
             out << "cls";

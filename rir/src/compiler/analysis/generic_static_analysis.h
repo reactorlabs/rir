@@ -94,6 +94,68 @@ class StaticAnalysis {
         return exitpoint;
     }
 
+    void logHeader() const {
+        if (DEBUG_LEVEL > AnalysisDebugLevel::None) {
+            log << "=========== Starting " << name << " Analysis on "
+                << closure->name() << " ";
+            if (code == closure)
+                log << "body";
+            else
+                log << "Prom(" << static_cast<Promise*>(code)->id << ")";
+            log << "\n";
+        }
+    }
+
+    void logInitialState(const AbstractState& state, const BB* bb) const {
+        if (DEBUG_LEVEL >= AnalysisDebugLevel::BB) {
+            log << "======= Entering BB" << bb->id << ", initial state\n";
+            log(state);
+        }
+    }
+
+    void logChange(const AbstractState& post, const AbstractResult& res,
+                   const Instruction* i) {
+        if (DEBUG_LEVEL >= AnalysisDebugLevel::Instruction &&
+            res >= AbstractResult::None) {
+            log << "===== After applying instruction ";
+            if (res == AbstractResult::Tainted) {
+                log << " (State got tainted)";
+            } else {
+                log(i);
+            }
+            log << " we have\n";
+            log(post);
+        }
+    }
+
+    void logTaintChange(const AbstractState& pre, const AbstractState& post,
+                        const AbstractResult& res, const Instruction* i) {
+        assert(DEBUG_LEVEL == AnalysisDebugLevel::Taint);
+        if (res >= AbstractResult::Tainted) {
+            if (res == AbstractResult::Tainted) {
+                log << "===== Before applying instruction ";
+                log(i);
+                log << " we have\n";
+                log(pre);
+            }
+            log << "===== After applying instruction ";
+            if (res == AbstractResult::Tainted) {
+                log << " (State got tainted)";
+            } else {
+                log(i);
+            }
+            log << " we have\n";
+            log(post);
+        }
+    }
+
+    void logExit(const AbstractState& state) {
+        if (DEBUG_LEVEL >= AnalysisDebugLevel::Exit) {
+            log << "===== Exit state is\n";
+            log(state);
+        }
+    }
+
     template <PositioningStyle POS>
     AbstractState at(Instruction* i) const {
         assert(done);
@@ -152,16 +214,10 @@ class StaticAnalysis {
         std::vector<bool> changed(snapshots.size(), false);
         changed[entry->id] = true;
 
-        if (DEBUG_LEVEL > AnalysisDebugLevel::None) {
-            log << "=========== Starting " << name << " Analysis on "
-                << closure->name() << " ";
-            if (code == closure)
-                log << "body";
-            else
-                log << "Prom(" << static_cast<Promise*>(code)->id << ")";
-            log << "\n";
-        }
+        logHeader();
 
+        typedef std::pair<BB*, Instruction*> Position;
+        std::vector<Position> recursiveTodo;
         do {
             done = true;
             Visitor::run(entry, [&](BB* bb) {
@@ -171,47 +227,35 @@ class StaticAnalysis {
                     return;
 
                 AbstractState state = snapshots[id].entry;
+                logInitialState(state, bb);
 
-                if (DEBUG_LEVEL >= AnalysisDebugLevel::BB) {
-                    log << "======= Entering BB" << bb->id
-                        << ", initial state\n";
-                    log(state);
-                }
-
-                for (auto i : *bb) {
-                    AbstractState old;
-                    if (DEBUG_LEVEL == AnalysisDebugLevel::Taint)
-                        old = state;
-                    auto res = apply(state, i);
-                    if ((DEBUG_LEVEL >= AnalysisDebugLevel::Instruction &&
-                         res >= AbstractResult::None) ||
-                        (DEBUG_LEVEL >= AnalysisDebugLevel::Taint &&
-                         res >= AbstractResult::Tainted)) {
-                        if (res == AbstractResult::Tainted) {
-                            log << "===== Before applying instruction ";
-                            log(i);
-                            log << " we have\n";
-                            log(old);
-                        }
-                        log << "===== After applying instruction ";
-                        if (res == AbstractResult::Tainted) {
-                            log << " (State got tainted)";
-                        } else {
-                            log(i);
-                        }
-                        log << " we have\n";
-                        log(state);
+                for (auto it = bb->begin(), end = bb->end(); it != end; ++it) {
+                    auto i = *it;
+                    AbstractResult res;
+                    if (DEBUG_LEVEL == AnalysisDebugLevel::Taint) {
+                        AbstractState old = state;
+                        res = apply(state, i);
+                        logTaintChange(old, state, res, i);
+                    } else {
+                        res = apply(state, i);
+                        logChange(state, res, i);
                     }
 
-                    if (res.keepSnapshot)
+                    if (res.needRecursion) {
+                        if (snapshots[bb->id].extra.count(i)) {
+                            snapshots[bb->id].extra[i].merge(state);
+                            state = snapshots[bb->id].extra[i];
+                        } else {
+                            snapshots[bb->id].extra[i] = state;
+                        }
+                        recursiveTodo.push_back(Position(bb, i));
+                    } else if (res.keepSnapshot) {
                         snapshots[bb->id].extra[i] = state;
+                    }
                 }
 
                 if (bb->isExit()) {
-                    if (DEBUG_LEVEL >= AnalysisDebugLevel::Exit) {
-                        log << "===== Exit state is\n";
-                        log(state);
-                    }
+                    logExit(state);
                     if (reachedExit) {
                         exitpoint.merge(state);
                     } else {
@@ -226,6 +270,26 @@ class StaticAnalysis {
 
                 changed[id] = false;
             });
+            if (!recursiveTodo.empty()) {
+                for (auto& rec : recursiveTodo) {
+                    auto bb = rec.first->id;
+                    if (snapshots[bb].extra.count(rec.second)) {
+                        auto mres =
+                            snapshots[bb].extra.at(rec.second).merge(exitpoint);
+                        if (mres > AbstractResult::None) {
+                            logChange(snapshots[bb].extra.at(rec.second), mres,
+                                      rec.second);
+                            changed[bb] = true;
+                            done = false;
+                        }
+                    } else {
+                        snapshots[bb].extra[rec.second] = exitpoint;
+                        changed[bb] = true;
+                        done = false;
+                    }
+                }
+                recursiveTodo.clear();
+            }
         } while (!done);
     }
 

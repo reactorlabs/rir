@@ -189,6 +189,7 @@ AbstractResult ScopeAnalysis::apply(ScopeAnalysisState& state,
                 // result of this functions analysis, a recursive call to itself
                 // cannot excert more behaviors.
                 handled = true;
+                effect.needRecursion = true;
                 state.returnValues[i].merge(AbstractPirValue::tainted());
                 return;
             }

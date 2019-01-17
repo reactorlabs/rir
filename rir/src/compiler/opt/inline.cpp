@@ -42,7 +42,7 @@ class TheInliner {
                 ClosureVersion* inlinee = nullptr;
                 Value* staticEnv = nullptr;
 
-                FrameState* callerFrameState = nullptr;
+                const FrameState* callerFrameState = nullptr;
                 if (auto call = Call::Cast(*it)) {
                     auto mkcls =
                         MkFunCls::Cast(call->cls()->followCastsAndForce());
