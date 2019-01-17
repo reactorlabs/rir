@@ -29,9 +29,15 @@ class Value {
     virtual void printRef(std::ostream& out) = 0;
     void printRef() { printRef(std::cerr); }
     virtual bool isInstruction() { return false; }
-    virtual Value* followCasts() const { return const_cast<Value*>(this); }
-    virtual Value* followCastsAndForce() const {
-        return const_cast<Value*>(this);
+    virtual const Value* cFollowCasts() const { return this; }
+    virtual const Value* cFollowCastsAndForce() const { return this; }
+    Value* followCasts() {
+        return const_cast<Value*>(
+            const_cast<const Value*>(this)->cFollowCasts());
+    }
+    Value* followCastsAndForce() {
+        return const_cast<Value*>(
+            const_cast<const Value*>(this)->cFollowCastsAndForce());
     }
     virtual bool validIn(Code* code) const { return true; }
 };

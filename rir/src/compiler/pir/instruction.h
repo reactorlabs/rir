@@ -50,6 +50,7 @@
 
 namespace rir {
 enum class Opcode : uint8_t;
+class DispatchTable;
 struct Code;
 
 namespace pir {
@@ -140,8 +141,8 @@ class Instruction : public Value {
 
     virtual Instruction* clone() const = 0;
 
-    Value* followCasts() const override;
-    Value* followCastsAndForce() const override;
+    const Value* cFollowCasts() const override final;
+    const Value* cFollowCastsAndForce() const override final;
     bool isInstruction() override final { return true; }
     virtual bool envOnlyForObj();
 
@@ -725,9 +726,9 @@ class FLIE(MkCls, 4, Effect::None, EnvAccess::Capture) {
 
 class FLIE(MkFunCls, 1, Effect::None, EnvAccess::Capture) {
   public:
-    Closure* fun;
-    SEXP fml, code, src;
-    MkFunCls(Closure* fun, Value* lexicalEnv, SEXP fml, SEXP code, SEXP src);
+    Closure* cls;
+    DispatchTable* originalBody;
+    MkFunCls(Closure* cls, DispatchTable* originalBody, Value* lexicalEnv);
     void printArgs(std::ostream&, bool tty) override;
 
     Value* lexicalEnv() const { return env(); }
@@ -1067,7 +1068,7 @@ class VLIE(Call, Effect::Any, EnvAccess::Leak), public CallInstruction {
 
     Closure* tryGetCls() const override final {
         if (auto mk = MkFunCls::Cast(cls()->followCastsAndForce()))
-            return mk->fun;
+            return mk->cls;
         return nullptr;
     }
 
@@ -1099,7 +1100,7 @@ class VLIE(NamedCall, Effect::Any, EnvAccess::Leak), public CallInstruction {
 
     Closure* tryGetCls() const override final {
         if (auto mk = MkFunCls::Cast(cls()->followCastsAndForce()))
-            return mk->fun;
+            return mk->cls;
         return nullptr;
     }
 
@@ -1143,19 +1144,17 @@ class FLIE(CallImplicit, 2, Effect::Any, EnvAccess::Leak) {
 // specified as `cls_`, args passed as promises.
 class VLIE(StaticCall, Effect::Any, EnvAccess::Leak), public CallInstruction {
     Closure* cls_;
-    SEXP origin_;
 
   public:
     ClosureVersion* hint = nullptr;
 
     Closure* cls() const { return cls_; }
     void cls(Closure * cls) { cls_ = cls; }
-    SEXP origin() const { return origin_; }
 
     Closure* tryGetCls() const override final { return cls(); }
 
     StaticCall(Value * callerEnv, Closure * cls,
-               const std::vector<Value*>& args, SEXP origin, FrameState* fs,
+               const std::vector<Value*>& args, FrameState* fs,
                unsigned srcIdx);
 
     size_t nCallArgs() const override { return nargs() - 2; };

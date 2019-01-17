@@ -17,9 +17,9 @@ class Rir2PirCompiler : public RirCompiler {
 
     void compileClosure(SEXP, const std::string& name, const Assumptions& ctx,
                         MaybeCls success, Maybe fail);
-    void compileFunction(rir::Function*, const std::string& name,
-                         FormalArgs const&, const Assumptions& ctx,
-                         MaybeCls success, Maybe fail);
+    void compileFunction(rir::Function*, const std::string& name, SEXP formals,
+                         SEXP srcRef, const Assumptions& ctx, MaybeCls success,
+                         Maybe fail);
     void optimizeModule();
 
   private:

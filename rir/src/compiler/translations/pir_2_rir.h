@@ -18,7 +18,7 @@ class Pir2RirCompiler {
     Pir2RirCompiler(const Pir2RirCompiler&) = delete;
     Pir2RirCompiler& operator=(const Pir2RirCompiler&) = delete;
 
-    rir::Function* compile(ClosureVersion* cls, SEXP origin, bool dryRun);
+    rir::Function* compile(ClosureVersion* cls, bool dryRun);
 
     StreamLogger& logger;
 

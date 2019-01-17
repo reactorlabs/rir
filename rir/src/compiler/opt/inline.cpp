@@ -48,7 +48,7 @@ class TheInliner {
                         MkFunCls::Cast(call->cls()->followCastsAndForce());
                     if (!mkcls)
                         continue;
-                    inlineeCls = mkcls->fun;
+                    inlineeCls = mkcls->cls;
                     inlinee = call->dispatch(inlineeCls);
                     if (inlineeCls->nargs() != call->nCallArgs())
                         continue;
@@ -73,8 +73,7 @@ class TheInliner {
                     continue;
 
                 // Recursive inline only once
-                if (inlineeCls->rirVersion() ==
-                    version->closure->rirVersion()) {
+                if (inlineeCls == version->owner) {
                     skip.insert(inlinee);
                     continue;
                 }

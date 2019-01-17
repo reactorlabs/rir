@@ -11,7 +11,6 @@
 #include "../../runtime/Function.h"
 #include "optimization_context.h"
 #include "pir.h"
-#include "utils/FormalArgs.h"
 
 namespace rir {
 namespace pir {
@@ -24,8 +23,10 @@ class Module {
 
     void print(std::ostream& out = std::cout, bool tty = false);
 
-    Closure* getOrDeclare(const std::string& name, rir::Function* f, Env* env,
-                          const FormalArgs& formals);
+    Closure* getOrDeclareRirFunction(const std::string& name, rir::Function* f,
+                                     SEXP formals, SEXP src);
+    Closure* getOrDeclareRirClosure(const std::string& name, SEXP closure,
+                                    rir::Function* f);
 
     typedef std::function<void(pir::Closure*)> PirClosureIterator;
     typedef std::function<void(pir::ClosureVersion*)> PirClosureVersionIterator;

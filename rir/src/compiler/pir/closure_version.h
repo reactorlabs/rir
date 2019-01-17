@@ -32,7 +32,7 @@ class ClosureVersion : public Code {
         Properties(const Property& other) : EnumSet<Property>(other) {}
     };
 
-    Closure* closure;
+    Closure* owner;
 
   private:
     std::string name_;

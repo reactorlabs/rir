@@ -176,17 +176,17 @@ void Instruction::replaceUsesAndSwapWith(
     bb()->replace(it, replace);
 }
 
-Value* Instruction::followCasts() const {
+const Value* Instruction::cFollowCasts() const {
     if (auto cast = CastType::Cast(this))
         return cast->arg<0>().val()->followCasts();
     if (auto shared = SetShared::Cast(this))
         return shared->arg<0>().val()->followCasts();
     if (auto chk = ChkClosure::Cast(this))
         return chk->arg<0>().val()->followCasts();
-    return const_cast<Instruction*>(this);
+    return this;
 }
 
-Value* Instruction::followCastsAndForce() const {
+const Value* Instruction::cFollowCastsAndForce() const {
     if (auto cast = CastType::Cast(this))
         return cast->arg<0>().val()->followCastsAndForce();
     if (auto force = Force::Cast(this))
@@ -198,7 +198,7 @@ Value* Instruction::followCastsAndForce() const {
         return shared->arg<0>().val()->followCastsAndForce();
     if (auto chk = ChkClosure::Cast(this))
         return chk->arg<0>().val()->followCastsAndForce();
-    return const_cast<Instruction*>(this);
+    return this;
 }
 
 bool Instruction::envOnlyForObj() {
@@ -417,14 +417,12 @@ void ScheduledDeopt::printArgs(std::ostream& out, bool tty) {
     }
 }
 
-MkFunCls::MkFunCls(Closure* fun, Value* lexicalEnv, SEXP fml, SEXP code,
-                   SEXP src)
-    : FixedLenInstructionWithEnvSlot(RType::closure, lexicalEnv), fun(fun),
-      fml(fml), code(code), src(src) {
-}
+MkFunCls::MkFunCls(Closure* cls, DispatchTable* originalBody, Value* lexicalEnv)
+    : FixedLenInstructionWithEnvSlot(RType::closure, lexicalEnv), cls(cls),
+      originalBody(originalBody) {}
 
 void MkFunCls::printArgs(std::ostream& out, bool tty) {
-    out << *fun;
+    out << *cls;
     Instruction::printArgs(out, tty);
 }
 
@@ -464,10 +462,10 @@ ClosureVersion* StaticCall::dispatch() const {
 }
 
 StaticCall::StaticCall(Value* callerEnv, Closure* cls,
-                       const std::vector<Value*>& args, SEXP origin,
-                       FrameState* fs, unsigned srcIdx)
+                       const std::vector<Value*>& args, FrameState* fs,
+                       unsigned srcIdx)
     : VarLenInstructionWithEnvSlot(PirType::val(), callerEnv, srcIdx),
-      cls_(cls), origin_(origin) {
+      cls_(cls) {
     assert(cls->nargs() == args.size());
     assert(fs);
     pushArg(fs, NativeType::frameState);

@@ -25,23 +25,28 @@ namespace pir {
 class Closure {
     friend class Module;
 
-    Closure(const std::string& name, const FormalArgs& formals,
-            rir::Function* function, Env* env)
-        : function(function), env(env), name(name), formals(formals) {}
+    Closure(const std::string& name, rir::Function* function, SEXP formals,
+            SEXP srcRef);
+    Closure(const std::string& name, SEXP closure, rir::Function* function,
+            Env* env);
 
+    SEXP origin_;
     rir::Function* function;
     Env* env;
+    SEXP srcRef_;
 
   public:
+    rir::Function* rirFunction() const { return function; }
+    SEXP rirClosure() const { return origin_; }
+
+    SEXP srcRef() { return srcRef_; }
+
     const std::string name;
     Env* closureEnv() const { return env; }
 
-    rir::Function* rirVersion() { return function; }
-
     const FormalArgs formals;
-    const std::vector<SEXP>& argNames() const { return formals.names; }
 
-    size_t nargs() const { return argNames().size(); }
+    size_t nargs() const { return formals.nargs(); }
 
     void print(std::ostream& out, bool tty) const;
 

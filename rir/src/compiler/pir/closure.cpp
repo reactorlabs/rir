@@ -1,8 +1,25 @@
 #include "closure.h"
 #include "closure_version.h"
+#include "env.h"
+#include "runtime/DispatchTable.h"
 
 namespace rir {
 namespace pir {
+
+Closure::Closure(const std::string& name, rir::Function* function, SEXP formals,
+                 SEXP srcRef)
+    : origin_(nullptr), function(function), env(Env::notClosed()),
+      srcRef_(srcRef), name(name), formals(formals) {}
+
+Closure::Closure(const std::string& name, SEXP closure, rir::Function* f,
+                 Env* env)
+    : origin_(closure), function(f), env(env), name(name),
+      formals(FORMALS(closure)) {
+
+    static SEXP srcRefSymbol = Rf_install("srcref");
+    assert(env->rho == CLOENV(closure));
+    srcRef_ = Rf_getAttrib(closure, srcRefSymbol);
+}
 
 Closure::~Closure() {
     for (auto c : versions)

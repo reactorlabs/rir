@@ -11,10 +11,21 @@ void Module::print(std::ostream& out, bool tty) {
     });
 }
 
-Closure* Module::getOrDeclare(const std::string& name, rir::Function* f,
-                              Env* env, const FormalArgs& formals) {
+Closure* Module::getOrDeclareRirFunction(const std::string& name,
+                                         rir::Function* f, SEXP formals,
+                                         SEXP src) {
+    auto env = Env::notClosed();
     if (!closures.count(Idx(f, env))) {
-        closures[Idx(f, env)] = new Closure(name, formals, f, env);
+        closures[Idx(f, env)] = new Closure(name, f, formals, src);
+    }
+    return closures.at(Idx(f, env));
+}
+
+Closure* Module::getOrDeclareRirClosure(const std::string& name, SEXP closure,
+                                        rir::Function* f) {
+    auto env = getEnv(CLOENV(closure));
+    if (!closures.count(Idx(f, env))) {
+        closures[Idx(f, env)] = new Closure(name, closure, f, env);
     }
     return closures.at(Idx(f, env));
 }

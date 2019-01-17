@@ -105,6 +105,8 @@ AbstractResult ScopeAnalysis::apply(ScopeAnalysisState& state,
             // We statically know the closure
             handled = true;
         } else if (ld.env != AbstractREnvironment::UnknownParent) {
+            // If our analysis give us an environment approximation for the
+            // ldfun, then we can at least contain the tainted environments.
             state.envs[ld.env].leaked = true;
             for (auto env : state.envs.potentialParents(ld.env))
                 state.allStoresObserved.insert(env);
@@ -216,7 +218,7 @@ AbstractResult ScopeAnalysis::apply(ScopeAnalysisState& state,
             assert(target);
             if (auto cls = MkFunCls::Cast(target))
                 if (cls->nargs() == calli->nCallArgs())
-                    interProceduralAnalysis(call->dispatch(cls->fun),
+                    interProceduralAnalysis(call->dispatch(cls->cls),
                                             cls->lexicalEnv());
         } else if (auto call = StaticCall::Cast(i)) {
             auto target = call->cls();

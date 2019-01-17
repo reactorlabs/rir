@@ -188,7 +188,7 @@ SEXP pirCompile(SEXP what, const std::string& name, pir::DebugOptions debug) {
 
                            // compile back to rir
                            pir::Pir2RirCompiler p2r(logger);
-                           auto fun = p2r.compile(c, what, dryRun);
+                           auto fun = p2r.compile(c, dryRun);
 
                            // Install
                            if (dryRun)

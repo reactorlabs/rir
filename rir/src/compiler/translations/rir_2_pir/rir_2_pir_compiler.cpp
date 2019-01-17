@@ -36,10 +36,6 @@ void Rir2PirCompiler::compileClosure(SEXP closure, const std::string& name,
     if (tbl->size() > 1)
         logger.warn("Closure already compiled to PIR");
 
-    FormalArgs formals(FORMALS(closure));
-    rir::Function* srcFunction = tbl->baseline();
-    auto env = module->getEnv(CLOENV(closure));
-    assert(env != Env::notClosed());
     auto frame = RList(FRAME(CLOENV(closure)));
 
     std::string closureName = name;
@@ -50,19 +46,20 @@ void Rir2PirCompiler::compileClosure(SEXP closure, const std::string& name,
                 closureName = CHAR(PRINTNAME(e.tag()));
         }
     }
-    auto pirClosure = module->getOrDeclare(name, srcFunction, env, formals);
+    auto pirClosure =
+        module->getOrDeclareRirClosure(name, closure, tbl->baseline());
     OptimizationContext context(assumptions | minimalAssumptions);
     compileClosure(pirClosure, context, success, fail);
 }
 
 void Rir2PirCompiler::compileFunction(rir::Function* srcFunction,
-                                      const std::string& name,
-                                      FormalArgs const& formals,
+                                      const std::string& name, SEXP formals,
+                                      SEXP srcRef,
                                       const Assumptions& assumptions,
                                       MaybeCls success, Maybe fail) {
     OptimizationContext context(assumptions | minimalAssumptions);
     auto closure =
-        module->getOrDeclare(name, srcFunction, Env::notClosed(), formals);
+        module->getOrDeclareRirFunction(name, srcFunction, formals, srcRef);
     compileClosure(closure, context, success, fail);
 }
 
@@ -71,13 +68,13 @@ void Rir2PirCompiler::compileClosure(Closure* closure,
                                      MaybeCls success, Maybe fail) {
 
     // TODO: Support default arguments and dots
-    if (closure->formals.hasDefaultArgs) {
+    if (closure->formals.hasDefaultArgs()) {
         if (!ctx.assumptions.includes(Assumption::NoMissingArguments)) {
             logger.warn("no support for default args");
             return fail();
         }
     }
-    if (closure->formals.hasDots) {
+    if (closure->formals.hasDots()) {
         logger.warn("no support for ...");
         return fail();
     }
@@ -94,7 +91,7 @@ void Rir2PirCompiler::compileClosure(Closure* closure,
 
     Builder builder(version, closure->closureEnv());
     auto& log = logger.begin(version);
-    Rir2Pir rir2pir(*this, closure->rirVersion(), log, closure->name);
+    Rir2Pir rir2pir(*this, closure->rirFunction(), log, closure->name);
 
     if (rir2pir.tryCompile(builder)) {
         log.compilationEarlyPir(version);

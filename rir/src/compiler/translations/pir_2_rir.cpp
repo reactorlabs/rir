@@ -623,10 +623,9 @@ class Context {
 
 class Pir2Rir {
   public:
-    Pir2Rir(Pir2RirCompiler& cmp, ClosureVersion* cls, SEXP origin, bool dryRun,
+    Pir2Rir(Pir2RirCompiler& cmp, ClosureVersion* cls, bool dryRun,
             LogStream& log)
-        : compiler(cmp), cls(cls), originCls(origin), dryRun(dryRun), log(log) {
-    }
+        : compiler(cmp), cls(cls), dryRun(dryRun), log(log) {}
     size_t compileCode(Context& ctx, Code* code);
     rir::Code* getPromise(Context& ctx, Promise* code);
 
@@ -637,7 +636,6 @@ class Pir2Rir {
   private:
     Pir2RirCompiler& compiler;
     ClosureVersion* cls;
-    SEXP originCls;
     std::unordered_map<Promise*, rir::Code*> promises;
     bool dryRun;
     LogStream& log;
@@ -700,7 +698,7 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                         // Here we could also load env->rho, but if the user
                         // were to change the environment on the closure our
                         // code would be wrong.
-                        if (originCls && env->rho == CLOENV(originCls))
+                        if (env == cls->owner->closureEnv())
                             cs << BC::parentEnv();
                         else
                             cs << BC::push(env->rho);
@@ -883,9 +881,14 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 break;
             }
             case Tag::MkFunCls: {
+                // TODO: would be nice to compile the function here. But I am
+                // not sure if our compiler backend correctly deals with not
+                // closed closures.
                 auto mkfuncls = MkFunCls::Cast(instr);
-                cs << BC::push(mkfuncls->fml) << BC::push(mkfuncls->code)
-                   << BC::push(mkfuncls->src) << BC::close();
+                auto cls = mkfuncls->cls;
+                cs << BC::push(cls->formals.original())
+                   << BC::push(mkfuncls->originalBody->container())
+                   << BC::push(cls->srcRef()) << BC::close();
                 break;
             }
             case Tag::Is: {
@@ -1014,6 +1017,8 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                     (hint->optimizationContext < dispatch->optimizationContext)
                         ? dispatch
                         : hint;
+                SEXP originalClosure = trg->owner->rirClosure();
+
                 // Avoid recursivly compiling the same closure
                 auto fun = compiler.alreadyCompiled(trg);
                 SEXP funCont = nullptr;
@@ -1021,13 +1026,15 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 if (fun) {
                     funCont = fun->container();
                 } else if (!compiler.isCompiling(trg)) {
-                    fun = compiler.compile(trg, call->origin(), dryRun);
+                    fun = compiler.compile(trg, dryRun);
                     funCont = fun->container();
                     Protect p(funCont);
-                    DispatchTable::unpack(BODY(call->origin()))->insert(fun);
+                    assert(originalClosure &&
+                           "Cannot compile synthetic closure");
+                    DispatchTable::unpack(BODY(originalClosure))->insert(fun);
                 }
                 auto bc = BC::staticCall(
-                    call->nCallArgs(), Pool::get(call->srcIdx), call->origin(),
+                    call->nCallArgs(), Pool::get(call->srcIdx), originalClosure,
                     funCont, call->inferAvailableAssumptions());
                 cs << bc;
                 if (!funCont)
@@ -1328,11 +1335,10 @@ rir::Function* Pir2Rir::finalize() {
 
 } // namespace
 
-rir::Function* Pir2RirCompiler::compile(ClosureVersion* cls, SEXP origin,
-                                        bool dryRun) {
+rir::Function* Pir2RirCompiler::compile(ClosureVersion* cls, bool dryRun) {
     auto& log = logger.get(cls);
     done[cls] = nullptr;
-    Pir2Rir pir2rir(*this, cls, origin, dryRun, log);
+    Pir2Rir pir2rir(*this, cls, dryRun, log);
     auto fun = pir2rir.finalize();
     done[cls] = fun;
     log.flush();

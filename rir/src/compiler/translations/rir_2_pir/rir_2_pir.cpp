@@ -384,8 +384,8 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                     pop();
                     auto fs =
                         insert.registerFrameState(srcCode, nextPos, stack);
-                    push(insert(new StaticCall(insert.env, f->closure, args,
-                                               monomorphic, fs, ast)));
+                    push(insert(
+                        new StaticCall(insert.env, f->owner, args, fs, ast)));
                 },
                 insertGenericCall);
         } else if (monomorphicBuiltin) {
@@ -882,11 +882,9 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) const {
             BC ldsrc = BC::advance(&pc, srcCode);
             pc = BC::next(pc); // close
 
-            SEXP fmls = ldfmls.immediateConst();
+            SEXP formals = ldfmls.immediateConst();
             SEXP code = ldcode.immediateConst();
-            SEXP src = ldsrc.immediateConst();
-
-            FormalArgs formals(fmls);
+            SEXP srcRef = ldsrc.immediateConst();
 
             DispatchTable* dt = DispatchTable::unpack(code);
             rir::Function* function = dt->baseline();
@@ -919,21 +917,21 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) const {
             }
             inner << (pos - srcCode->code());
 
-            compiler.compileFunction(
-                function, inner.str(), formals, {},
-                [&](ClosureVersion* innerF) {
-                    cur.stack.push(insert(new MkFunCls(
-                        innerF->closure, insert.env, fmls, code, src)));
+            compiler.compileFunction(function, inner.str(), formals, srcRef, {},
+                                     [&](ClosureVersion* innerF) {
+                                         cur.stack.push(insert(new MkFunCls(
+                                             innerF->owner, dt, insert.env)));
 
-                    // Skip those instructions
-                    finger = pc;
-                    skip = true;
-                },
-                []() {
-                    // If the closure does not compile, we can still call the
-                    // unoptimized version (which is what happens on
-                    // `tryRunCurrentBC` below)
-                });
+                                         // Skip those instructions
+                                         finger = pc;
+                                         skip = true;
+                                     },
+                                     []() {
+                                         // If the closure does not compile, we
+                                         // can still call the unoptimized
+                                         // version (which is what happens on
+                                         // `tryRunCurrentBC` below)
+                                     });
         });
 
         if (!skip) {

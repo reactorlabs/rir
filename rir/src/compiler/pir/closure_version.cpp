@@ -32,7 +32,7 @@ ClosureVersion::~ClosureVersion() {
 ClosureVersion* ClosureVersion::clone(const Assumptions& newAssumptions) {
     auto ctx = optimizationContext;
     ctx.assumptions = ctx.assumptions | newAssumptions;
-    auto c = closure->declareVersion(ctx);
+    auto c = owner->declareVersion(ctx);
     c->properties = properties;
     c->entry = BBTransform::clone(entry, c, c);
     return c;
@@ -44,12 +44,12 @@ size_t ClosureVersion::size() const {
     return s + Code::size();
 }
 
-size_t ClosureVersion::nargs() const { return closure->nargs(); }
+size_t ClosureVersion::nargs() const { return owner->nargs(); }
 
 ClosureVersion::ClosureVersion(Closure* closure,
                                const OptimizationContext& optimizationContext,
                                const Properties& properties)
-    : closure(closure), optimizationContext(optimizationContext),
+    : owner(closure), optimizationContext(optimizationContext),
       properties(properties) {
     auto id = std::stringstream();
     id << closure->name << "[" << this << "]";

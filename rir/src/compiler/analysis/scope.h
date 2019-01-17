@@ -107,7 +107,6 @@ class ScopeAnalysisState {
 class ScopeAnalysis : public StaticAnalysis<
                           ScopeAnalysisState /*, AnalysisDebugLevel::Taint */> {
   private:
-    const std::vector<SEXP> argNames;
     const std::vector<Value*> args;
 
     static constexpr size_t MAX_DEPTH = 2;
@@ -122,18 +121,16 @@ class ScopeAnalysis : public StaticAnalysis<
   public:
     // Default
     ScopeAnalysis(ClosureVersion* cls, LogStream& log)
-        : StaticAnalysis("Scope", cls, cls, log),
-          argNames(cls->closure->argNames()), depth(0) {}
+        : StaticAnalysis("Scope", cls, cls, log), depth(0) {}
 
     // For interprocedural analysis of a function
     ScopeAnalysis(ClosureVersion* cls, const std::vector<Value*>& args,
                   Value* staticClosureEnv,
                   const ScopeAnalysisState& initialState, size_t depth,
                   LogStream& log)
-        : StaticAnalysis("Scope", cls, cls, initialState, log),
-          argNames(cls->closure->argNames()), args(args), depth(depth),
+        : StaticAnalysis("Scope", cls, cls, initialState, log), depth(depth),
           staticClosureEnv(staticClosureEnv) {
-        assert(args.size() == argNames.size());
+        assert(args.size() == cls->nargs());
     }
 
     // For interprocedural analysis of a promise
