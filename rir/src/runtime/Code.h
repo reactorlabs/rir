@@ -145,6 +145,6 @@ struct Code : public RirRuntimeObject<Code, CODE_MAGIC> {
 
 #pragma pack(pop)
 
-}
+} // namespace rir
 
 #endif

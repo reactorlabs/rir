@@ -23,10 +23,10 @@ SEXP rirExpr(SEXP f);
 
 SEXP rirEval_f(SEXP f, SEXP env);
 
+SEXP argsLazyCreation(void* rirDataWrapper);
+
 #ifdef __cplusplus
 }
 #endif
 
 #endif // RIR_INTERPRETER_C_H
-
-

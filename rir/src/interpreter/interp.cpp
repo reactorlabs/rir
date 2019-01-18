@@ -305,12 +305,9 @@ SEXP createLegacyArgsList(const CallContext& call, bool eagerCallee,
     return result;
 }
 
-SEXP createLegacyLazyArgsList(const CallContext& call, Context* ctx) {
-    if (call.hasStackArgs()) {
-        return createLegacyArgsListFromStackValues(call, false, ctx);
-    } else {
-        return createLegacyArgsList(call, false, ctx);
-    }
+SEXP argsLazyCreation(void* rirDataWrapper) {
+    ArgsLazyData* argsLazy = ArgsLazyData::unpack(rirDataWrapper);
+    return argsLazy->createArgsLists();
 }
 
 SEXP createLegacyArgsList(const CallContext& call, Context* ctx) {
@@ -629,8 +626,6 @@ SEXP rirCall(CallContext& call, Context* ctx) {
 
     Function* fun = dispatch(call, table);
     fun->registerInvocation();
-    bool needsEnv = fun->signature().envCreation ==
-                    FunctionSignature::Environment::CallerProvided;
 
     if (fun->signature().optimization ==
             FunctionSignature::OptimizationLevel::Baseline &&
@@ -641,31 +636,33 @@ SEXP rirCall(CallContext& call, Context* ctx) {
             name = lhs;
         ctx->closureOptimizer(call.callee, name);
         fun = dispatch(call, table);
-        needsEnv = fun->signature().envCreation ==
-                   FunctionSignature::Environment::CallerProvided;
     }
 
+    bool needsEnv = fun->signature().envCreation ==
+                    FunctionSignature::Environment::CallerProvided;
     SEXP env = R_NilValue;
-
     SEXP result = nullptr;
     if (needsEnv) {
-        auto arglist = createLegacyLazyArgsList(call, ctx);
+        auto arglist = createLegacyArgsList(call, ctx);
         PROTECT(arglist);
         env = closureArgumentAdaptor(call, arglist, R_NilValue);
         PROTECT(env);
         result = rirCallTrampoline(call, fun, env, arglist, ctx);
         UNPROTECT(2);
     } else {
-        auto arglist = createLegacyLazyArgsList(call, ctx);
-        PROTECT(arglist);
-        if (call.hasStackArgs())
+        if (call.hasStackArgs()) {
+            // Instead of a SEXP with the argslist we create an
+            // structure with the information needed to recreate
+            // the list lazily if the gnu-r interpreter needs it
+            ArgsLazyData lazyArgs = ArgsLazyData(&call, ctx);
             supplyMissingArgs(call, fun);
-        // TODO: find a way to lazily create the argslist,
-        // only when needed. Afaik, the argslist is only accessed ever in
-        // do_usemethod, therefore it should be possible to have our own
-        // do_usemethod, that lazily creates the argslist when needed.
-        result = rirCallTrampoline(call, fun, arglist, ctx);
-        UNPROTECT(1);
+            result = rirCallTrampoline(call, fun, (SEXP)&lazyArgs, ctx);
+        } else {
+            auto arglist = createLegacyArgsList(call, ctx);
+            PROTECT(arglist);
+            result = rirCallTrampoline(call, fun, arglist, ctx);
+            UNPROTECT(1);
+        }
     }
 
     assert(result);
