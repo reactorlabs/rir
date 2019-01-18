@@ -186,5 +186,15 @@ void BBTransform::insertAssume(Value* condition, Checkpoint* cp,
     insertAssume(condition, cp, contBB, contBegin, assumePositive);
 }
 
+void BBTransform::renumber(Code* fun) {
+    DominanceGraph dom(fun);
+    fun->nextBBId = 0;
+    DominatorTreeVisitor<VisitorHelpers::PointerMarker>(dom).run(
+        fun->entry, [&](BB* bb) {
+            bb->unsafeSetId(fun->nextBBId++);
+            bb->gc();
+        });
+}
+
 } // namespace pir
 } // namespace rir
