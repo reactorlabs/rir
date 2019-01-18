@@ -1216,6 +1216,8 @@ static void cachedSetVar(SEXP val, SEXP env, Immediate idx, Context* ctx,
         SETCAR(loc, val);
         if (MISSING(loc))
             SET_MISSING(loc, 0);
+        else if (val == R_MissingArg)
+            SET_MISSING(loc, 1);
         return;
     }
 
@@ -1224,6 +1226,11 @@ static void cachedSetVar(SEXP val, SEXP env, Immediate idx, Context* ctx,
     INCREMENT_NAMED(val);
     PROTECT(val);
     Rf_defineVar(sym, val, env);
+    // This is neccessary since we use this instruction also to create new
+    // environments (when lowering PIR MkEnv)
+    loc = cachedGetBindingCell(env, idx, ctx, bindingCache);
+    if (val == R_MissingArg)
+        SET_MISSING(loc, 1);
     UNPROTECT(1);
 }
 
