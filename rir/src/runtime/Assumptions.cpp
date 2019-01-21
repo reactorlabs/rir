@@ -42,11 +42,11 @@ std::ostream& operator<<(std::ostream& out, Assumption a) {
 };
 
 static constexpr std::array<Assumption, 3> ObjAssumptions = {
-    Assumption::Arg1IsNonObj_, Assumption::Arg2IsNonObj_,
-    Assumption::Arg3IsNonObj_};
+    {Assumption::Arg1IsNonObj_, Assumption::Arg2IsNonObj_,
+     Assumption::Arg3IsNonObj_}};
 static constexpr std::array<Assumption, 3> EagerAssumptions = {
-    Assumption::Arg1IsEager_, Assumption::Arg2IsEager_,
-    Assumption::Arg3IsEager_};
+    {Assumption::Arg1IsEager_, Assumption::Arg2IsEager_,
+     Assumption::Arg3IsEager_}};
 
 bool Assumptions::isEager(size_t i) const {
     if (includes(Assumption::EagerArgs_))
