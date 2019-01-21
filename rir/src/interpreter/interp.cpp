@@ -581,54 +581,35 @@ RIR_INLINE Assumptions addDynamicAssumptions(
     }
 
     if (call.hasStackArgs()) {
-        struct TestRes {
-            bool maybeObj = false;
-            bool seenLazy = false;
-
-            TestRes operator||(TestRes& other) {
-                return {maybeObj || other.maybeObj, seenLazy || other.seenLazy};
-            }
-        };
-        TestRes overal;
+        // Make some optimistic assumptions, they might be reset below...
+        given.set(Assumption::EagerArgs_);
+        given.set(Assumption::NonObjectArgs_);
 
         auto testArg = [&](size_t i) {
-            if (call.suppliedArgs <= i)
-                return;
-
-            TestRes res({false, false});
-
             SEXP arg = call.stackArg(i);
+            bool notObj = true;
+            bool isEager = true;
             if (TYPEOF(arg) == PROMSXP) {
                 if (PRVALUE(arg) == R_UnboundValue) {
-                    res = {true, true};
+                    notObj = false;
+                    isEager = false;
                 } else if (isObject(PRVALUE(arg))) {
-                    res = {true, false};
+                    notObj = false;
                 } else if (arg == R_MissingArg) {
                     given.reset(Assumption::NoMissingArguments);
                 }
             } else if (isObject(arg)) {
-                res = {true, false};
+                notObj = false;
             } else if (arg == R_MissingArg) {
                 given.reset(Assumption::NoMissingArguments);
             }
-            overal = overal || res;
-            if (Assumptions::ObjAssumptions.size() > i && !res.maybeObj)
-                given.set(Assumptions::ObjAssumptions[i]);
-            if (Assumptions::EagerAssumptions.size() > i && !res.seenLazy)
-                given.set(Assumptions::EagerAssumptions[i]);
+            given.setEager(i, isEager);
+            given.setNotObj(i, notObj);
         };
 
-        testArg(0);
-        testArg(1);
-        testArg(2);
-        for (size_t i = 3; i < call.suppliedArgs; ++i) {
+        for (size_t i = 0; i < call.suppliedArgs; ++i) {
             testArg(i);
         }
-
-        if (!overal.seenLazy)
-            given.set(Assumption::EagerArgs);
-        if (!overal.maybeObj)
-            given.set(Assumption::NonObjectArgs);
     }
 
     if (!call.hasNames())

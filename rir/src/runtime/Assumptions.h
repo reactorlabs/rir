@@ -11,23 +11,23 @@ namespace rir {
 typedef uint32_t Immediate;
 
 enum class Assumption {
-    EagerArgs,
+    EagerArgs_,
 
-    Arg1IsEager,
-    Arg2IsEager,
-    Arg3IsEager,
+    Arg1IsEager_,
+    Arg2IsEager_,
+    Arg3IsEager_,
 
-    NonObjectArgs,
+    NonObjectArgs_,
 
-    Arg1IsNonObj,
-    Arg2IsNonObj,
-    Arg3IsNonObj,
+    Arg1IsNonObj_,
+    Arg2IsNonObj_,
+    Arg3IsNonObj_,
 
     NoMissingArguments,
     NotTooManyArguments,
     CorrectOrderOfArguments,
 
-    FIRST = EagerArgs,
+    FIRST = EagerArgs_,
     LAST = CorrectOrderOfArguments
 };
 
@@ -38,12 +38,10 @@ struct Assumptions : public EnumSet<Assumption, Immediate> {
     Assumptions(const Assumption& other)
         : EnumSet<Assumption, Immediate>(other) {}
 
-    static constexpr std::array<Assumption, 3> ObjAssumptions = {
-        Assumption::Arg1IsNonObj, Assumption::Arg2IsNonObj,
-        Assumption::Arg3IsNonObj};
-    static constexpr std::array<Assumption, 3> EagerAssumptions = {
-        Assumption::Arg1IsEager, Assumption::Arg2IsEager,
-        Assumption::Arg3IsEager};
+    bool isEager(size_t i) const;
+    void setEager(size_t i, bool);
+    bool notObj(size_t i) const;
+    void setNotObj(size_t i, bool);
 };
 
 std::ostream& operator<<(std::ostream& out, Assumption a);

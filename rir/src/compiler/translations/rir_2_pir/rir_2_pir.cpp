@@ -306,39 +306,48 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
 
         // Compile the arguments (eager for builltins)
         std::vector<Value*> args;
-        bool allArgsEager = true;
-        for (auto argi : bc.callExtra().immediateCallArguments) {
-            rir::Code* promiseCode = srcCode->getPromise(argi);
-            Promise* prom = insert.function->createProm(promiseCode->src);
-            {
-                Builder promiseBuilder(insert.function, prom);
-                if (!tryCompilePromise(promiseCode, promiseBuilder)) {
-                    log.warn("Failed to compile a promise for call");
-                    return false;
+
+        Assumptions given;
+        // Make some optimistic assumptions, they might be reset below...
+        given.set(Assumption::EagerArgs_);
+        {
+            size_t i = 0;
+            for (auto argi : bc.callExtra().immediateCallArguments) {
+                rir::Code* promiseCode = srcCode->getPromise(argi);
+                Promise* prom = insert.function->createProm(promiseCode->src);
+                {
+                    Builder promiseBuilder(insert.function, prom);
+                    if (!tryCompilePromise(promiseCode, promiseBuilder)) {
+                        log.warn("Failed to compile a promise for call");
+                        return false;
+                    }
                 }
-            }
-            Value* eagerVal = Missing::instance();
-            Value* theArg = nullptr;
-            if (monomorphicBuiltin || Query::pure(prom)) {
-                auto inlineProm = tryTranslatePromise(promiseCode, insert);
-                if (!inlineProm) {
-                    log.warn("Failed to inline a promise");
-                    return false;
+                Value* eagerVal = Missing::instance();
+                Value* theArg = nullptr;
+                if (monomorphicBuiltin || Query::pure(prom)) {
+                    auto inlineProm = tryTranslatePromise(promiseCode, insert);
+                    if (!inlineProm) {
+                        log.warn("Failed to inline a promise");
+                        return false;
+                    }
+                    eagerVal = inlineProm;
+                    // Builtins take the actual argument, not a promise
+                    if (monomorphicBuiltin)
+                        theArg = eagerVal;
                 }
-                eagerVal = inlineProm;
-                // Builtins take the actual argument, not a promise
-                if (monomorphicBuiltin)
-                    theArg = eagerVal;
+                if (!theArg) {
+                    if (eagerVal == Missing::instance())
+                        given.setEager(i, false);
+                    theArg = insert(new MkArg(prom, eagerVal, env));
+                }
+                args.push_back(theArg);
+                i++;
             }
-            if (!theArg) {
-                if (eagerVal == Missing::instance())
-                    allArgsEager = false;
-                theArg = insert(new MkArg(prom, eagerVal, env));
-            }
-            args.push_back(theArg);
         }
 
         // Static argument name matching
+        // Currently we only match callsites with the correct number of
+        // arguments passed. Thus, we set those given assumptions below.
         if (monomorphicClosure) {
             bool correctOrder =
                 (bc.bc == Opcode::named_call_implicit_)
@@ -372,14 +381,11 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             std::string name = "";
             if (ldfun)
                 name = CHAR(PRINTNAME(ldfun->varName));
-            Assumptions asmpt;
-            asmpt.set(Assumption::NoMissingArguments);
-            asmpt.set(Assumption::NotTooManyArguments);
-            asmpt.set(Assumption::CorrectOrderOfArguments);
-            if (allArgsEager)
-                asmpt.set(Assumption::EagerArgs);
+            given.set(Assumption::NoMissingArguments);
+            given.set(Assumption::NotTooManyArguments);
+            given.set(Assumption::CorrectOrderOfArguments);
             compiler.compileClosure(
-                monomorphic, name, asmpt,
+                monomorphic, name, given,
                 [&](ClosureVersion* f) {
                     pop();
                     auto fs =

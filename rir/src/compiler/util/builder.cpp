@@ -91,15 +91,9 @@ Builder::Builder(ClosureVersion* version, Value* closureEnv)
     auto& assumptions = version->assumptions();
     for (long i = closure->nargs() - 1; i >= 0; --i) {
         args[i] = this->operator()(new LdArg(i));
-        if (assumptions.includes(Assumption::EagerArgs) ||
-            (i == 0 && assumptions.includes(Assumption::Arg1IsEager)) ||
-            (i == 1 && assumptions.includes(Assumption::Arg2IsEager)) ||
-            (i == 2 && assumptions.includes(Assumption::Arg3IsEager)))
+        if (assumptions.isEager(i))
             args[i]->type = PirType::val();
-        if (assumptions.includes(Assumption::NonObjectArgs) ||
-            (i == 0 && assumptions.includes(Assumption::Arg1IsNonObj)) ||
-            (i == 1 && assumptions.includes(Assumption::Arg2IsNonObj)) ||
-            (i == 2 && assumptions.includes(Assumption::Arg3IsNonObj)))
+        if (assumptions.notObj(i))
             args[i]->type.setNotObject();
     }
     auto mkenv = new MkEnv(closureEnv, closure->formals().names(), args.data());
