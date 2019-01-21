@@ -60,7 +60,7 @@ struct CallContext {
                       callerEnv, ctx) {}
 
     const Code* caller;
-    const size_t nargs;
+    size_t nargs;
     const R_bcstack_t* stackArgs;
     const Immediate* implicitArgs;
     const Immediate* names;
@@ -549,7 +549,8 @@ SEXP closureArgumentAdaptor(const CallContext& call, SEXP arglist,
     return newrho;
 };
 
-bool matches(const CallContext& call, const FunctionSignature& signature) {
+RIR_INLINE bool matches(const CallContext& call,
+                        const FunctionSignature& signature) {
     // TODO: look at the arguments of the function signature and not just at the
     // global assumptions list. This only becomes relevant as soon as we want to
     // optimize based on argument types.
@@ -560,6 +561,12 @@ bool matches(const CallContext& call, const FunctionSignature& signature) {
 
     assert(signature.envCreation ==
            FunctionSignature::Environment::CalleeCreated);
+
+    if (signature.nargs() > call.nargs)
+        if (!call.hasStackArgs() ||
+            signature.assumptions.includes(
+                pir::Assumption::CorrectNumberOfArguments))
+            return false;
 
     // We can't materialize ... yet
     if (!call.hasStackArgs()) {
@@ -578,21 +585,20 @@ bool matches(const CallContext& call, const FunctionSignature& signature) {
         return false;
     }
 
+    return true;
+}
+
+// Watch out: this changes call.nargs! To clean up after the call, you need to
+// pop call.nargs number of arguments (which now might be more than the number
+// of actually supplied arguments).
+RIR_INLINE void supplyMissingArgs(CallContext& call, const Function* fun) {
+    auto signature = fun->signature();
     if (signature.nargs() > call.nargs) {
-        if (signature.assumptions.includes(
-                pir::Assumption::CorrectNumberOfArguments))
-            return false;
-
-        if (!call.hasStackArgs())
-            return false;
-
-        // PIR optimized code can receive missing args, but they need to be
-        // explicitly mentioned on the stack
+        assert(call.hasStackArgs());
         for (size_t i = 0; i < signature.nargs() - call.nargs; ++i)
             ostack_push(ctx, R_MissingArg);
+        call.nargs = signature.nargs();
     }
-
-    return true;
 }
 
 Function* dispatch(const CallContext& call, DispatchTable* vt) {
@@ -615,7 +621,7 @@ static unsigned RIR_WARMUP =
     getenv("RIR_WARMUP") ? atoi(getenv("RIR_WARMUP")) : 3;
 
 // Call a RIR function. Arguments are still untouched.
-SEXP rirCall(const CallContext& call, Context* ctx) {
+SEXP rirCall(CallContext& call, Context* ctx) {
     SEXP body = BODY(call.callee);
     assert(DispatchTable::check(body));
 
@@ -652,6 +658,8 @@ SEXP rirCall(const CallContext& call, Context* ctx) {
     } else {
         auto arglist = createLegacyLazyArgsList(call, ctx);
         PROTECT(arglist);
+        if (call.hasStackArgs())
+            supplyMissingArgs(call, fun);
         // TODO: find a way to lazily create the argslist,
         // only when needed. Afaik, the argslist is only accessed ever in
         // do_usemethod, therefore it should be possible to have our own
@@ -666,7 +674,7 @@ SEXP rirCall(const CallContext& call, Context* ctx) {
     return result;
 }
 
-SEXP doCall(const CallContext& call, Context* ctx) {
+SEXP doCall(CallContext& call, Context* ctx) {
     assert(call.callee);
 
     switch (TYPEOF(call.callee)) {
@@ -1514,11 +1522,11 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
             CallContext call(c, ostack_at(ctx, n), n, ast,
                              ostack_cell_at(ctx, n - 1), getenv(), ctx);
             res = doCall(call, ctx);
-            ostack_popn(ctx, n + 1);
+            ostack_popn(ctx, call.nargs + 1);
             ostack_push(ctx, res);
 
             assert(ttt == R_PPStackTop);
-            assert(lll - call.nargs == (unsigned)ostack_length(ctx));
+            assert(lll - n == (unsigned)ostack_length(ctx));
             NEXT();
         }
 
@@ -1536,11 +1544,11 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
             CallContext call(c, ostack_at(ctx, n), n, ast,
                              ostack_cell_at(ctx, n - 1), names, getenv(), ctx);
             res = doCall(call, ctx);
-            ostack_popn(ctx, n + 1);
+            ostack_popn(ctx, call.nargs + 1);
             ostack_push(ctx, res);
 
             assert(ttt == R_PPStackTop);
-            assert(lll - call.nargs == (unsigned)ostack_length(ctx));
+            assert(lll - n == (unsigned)ostack_length(ctx));
             NEXT();
         }
 
@@ -1564,11 +1572,11 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
             CallContext call(c, callee, n, ast, ostack_cell_at(ctx, n - 1),
                              *env, ctx);
             res = doCall(call, ctx);
-            ostack_popn(ctx, n);
+            ostack_popn(ctx, call.nargs);
             ostack_push(ctx, res);
 
             assert(ttt == R_PPStackTop);
-            assert(lll - call.nargs + 1 == (unsigned)ostack_length(ctx));
+            assert(lll - n + 1 == (unsigned)ostack_length(ctx));
             NEXT();
         }
 
