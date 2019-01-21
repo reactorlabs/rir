@@ -756,7 +756,8 @@ RIR_INLINE SEXP rirCall(CallContext& call, Context* ctx) {
             supplyMissingArgs(call, fun);
             result = rirCallTrampoline(call, fun, arglist, ctx);
         } else {
-            auto arglist = createLegacyArgsList(call, ctx);
+            if (!arglist)
+                arglist = createLegacyArgsList(call, ctx);
             PROTECT(arglist);
             result = rirCallTrampoline(call, fun, arglist, ctx);
             UNPROTECT(1);
@@ -1714,6 +1715,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
                 matches(call, fun->signature())) {
                 ArgsLazyData lazyArgs = ArgsLazyData(&call, ctx);
                 fun->registerInvocation();
+                supplyMissingArgs(call, fun);
                 res = rirCallTrampoline(call, fun, *env, (SEXP)&lazyArgs,
                                         call.stackArgs, ctx);
             } else {
@@ -2943,8 +2945,9 @@ SEXP rirApplyClosure(SEXP ast, SEXP op, SEXP arglist, SEXP rho,
                      nullptr, names.empty() ? nullptr : names.data(), rho,
                      Assumptions(), ctx);
     call.arglist = arglist;
+
     auto res = doCall(call, ctx);
-    ostack_popn(ctx, nargs);
+    ostack_popn(ctx, call.passedArgs);
     return res;
 }
 
