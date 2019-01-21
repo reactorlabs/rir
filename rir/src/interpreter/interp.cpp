@@ -29,9 +29,9 @@ struct CallContext {
     CallContext(Code* c, SEXP callee, size_t nargs, Immediate ast,
                 R_bcstack_t* stackArgs, Immediate* implicitArgs,
                 Immediate* names, SEXP callerEnv, Context* ctx)
-        : caller(c), nargs(nargs), stackArgs(stackArgs),
-          implicitArgs(implicitArgs), names(names), callerEnv(callerEnv),
-          ast(cp_pool_at(ctx, ast)), callee(callee) {
+        : caller(c), suppliedArgs(nargs), passedArgs(nargs),
+          stackArgs(stackArgs), implicitArgs(implicitArgs), names(names),
+          callerEnv(callerEnv), ast(cp_pool_at(ctx, ast)), callee(callee) {
         assert(callee &&
                (TYPEOF(callee) == CLOSXP || TYPEOF(callee) == SPECIALSXP ||
                 TYPEOF(callee) == BUILTINSXP));
@@ -60,7 +60,8 @@ struct CallContext {
                       callerEnv, ctx) {}
 
     const Code* caller;
-    size_t nargs;
+    const size_t suppliedArgs;
+    size_t passedArgs;
     const R_bcstack_t* stackArgs;
     const Immediate* implicitArgs;
     const Immediate* names;
@@ -73,7 +74,7 @@ struct CallContext {
     bool hasNames() const { return names; }
 
     Immediate implicitArgIdx(unsigned i) const {
-        assert(implicitArgs && i < nargs);
+        assert(implicitArgs && i < passedArgs);
         return implicitArgs[i];
     }
 
@@ -86,12 +87,12 @@ struct CallContext {
     }
 
     SEXP stackArg(unsigned i) const {
-        assert(stackArgs && i < nargs);
+        assert(stackArgs && i < passedArgs);
         return ostack_at_cell(stackArgs + i);
     }
 
     SEXP name(unsigned i, Context* ctx) const {
-        assert(hasNames() && i < nargs);
+        assert(hasNames() && i < suppliedArgs);
         return cp_pool_at(ctx, names[i]);
     }
 };
@@ -221,7 +222,7 @@ SEXP createLegacyArgsListFromStackValues(const CallContext& call,
     SEXP result = R_NilValue;
     SEXP pos = result;
 
-    for (size_t i = 0; i < call.nargs; ++i) {
+    for (size_t i = 0; i < call.suppliedArgs; ++i) {
 
         SEXP name = call.hasNames() ? call.name(i, ctx) : R_NilValue;
 
@@ -255,7 +256,7 @@ SEXP createLegacyArgsList(const CallContext& call, bool eagerCallee,
 
     // loop through the arguments and create a promise, unless it is a missing
     // argument
-    for (size_t i = 0; i < call.nargs; ++i) {
+    for (size_t i = 0; i < call.suppliedArgs; ++i) {
         unsigned argi = call.implicitArgIdx(i);
         SEXP name = call.hasNames() ? call.name(i, ctx) : R_NilValue;
 
@@ -559,7 +560,7 @@ RIR_INLINE bool matches(const CallContext& call,
     assert(signature.envCreation ==
            FunctionSignature::Environment::CalleeCreated);
 
-    if (signature.nargs() > call.nargs)
+    if (signature.nargs() > call.suppliedArgs)
         if (!call.hasStackArgs() ||
             signature.assumptions.includes(
                 pir::Assumption::CorrectNumberOfArguments))
@@ -567,7 +568,7 @@ RIR_INLINE bool matches(const CallContext& call,
 
     // We can't materialize ... yet
     if (!call.hasStackArgs()) {
-        for (size_t i = 0; i < call.nargs; ++i)
+        for (size_t i = 0; i < call.suppliedArgs; ++i)
             if (call.implicitArgIdx(i) == DOTS_ARG_IDX)
                 return false;
     }
@@ -577,7 +578,7 @@ RIR_INLINE bool matches(const CallContext& call,
                                pir::Assumption::CorrectOrderOfArguments))
         return false;
 
-    if (signature.nargs() < call.nargs &&
+    if (signature.nargs() < call.suppliedArgs &&
         signature.assumptions.includes(pir::Assumption::MaxNumberOfArguments)) {
         return false;
     }
@@ -590,11 +591,11 @@ RIR_INLINE bool matches(const CallContext& call,
 // of actually supplied arguments).
 RIR_INLINE void supplyMissingArgs(CallContext& call, const Function* fun) {
     auto signature = fun->signature();
-    if (signature.nargs() > call.nargs) {
+    if (signature.nargs() > call.suppliedArgs) {
         assert(call.hasStackArgs());
-        for (size_t i = 0; i < signature.nargs() - call.nargs; ++i)
+        for (size_t i = 0; i < signature.nargs() - call.suppliedArgs; ++i)
             ostack_push(ctx, R_MissingArg);
-        call.nargs = signature.nargs();
+        call.passedArgs = signature.nargs();
     }
 }
 
@@ -1519,11 +1520,11 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
             CallContext call(c, ostack_at(ctx, n), n, ast,
                              ostack_cell_at(ctx, n - 1), getenv(), ctx);
             res = doCall(call, ctx);
-            ostack_popn(ctx, call.nargs + 1);
+            ostack_popn(ctx, call.passedArgs + 1);
             ostack_push(ctx, res);
 
             assert(ttt == R_PPStackTop);
-            assert(lll - n == (unsigned)ostack_length(ctx));
+            assert(lll - call.suppliedArgs == (unsigned)ostack_length(ctx));
             NEXT();
         }
 
@@ -1541,11 +1542,11 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
             CallContext call(c, ostack_at(ctx, n), n, ast,
                              ostack_cell_at(ctx, n - 1), names, getenv(), ctx);
             res = doCall(call, ctx);
-            ostack_popn(ctx, call.nargs + 1);
+            ostack_popn(ctx, call.passedArgs + 1);
             ostack_push(ctx, res);
 
             assert(ttt == R_PPStackTop);
-            assert(lll - n == (unsigned)ostack_length(ctx));
+            assert(lll - call.suppliedArgs == (unsigned)ostack_length(ctx));
             NEXT();
         }
 
@@ -1569,11 +1570,11 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
             CallContext call(c, callee, n, ast, ostack_cell_at(ctx, n - 1),
                              *env, ctx);
             res = doCall(call, ctx);
-            ostack_popn(ctx, call.nargs);
+            ostack_popn(ctx, call.passedArgs);
             ostack_push(ctx, res);
 
             assert(ttt == R_PPStackTop);
-            assert(lll - n + 1 == (unsigned)ostack_length(ctx));
+            assert(lll - call.suppliedArgs + 1 == (unsigned)ostack_length(ctx));
             NEXT();
         }
 
