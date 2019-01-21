@@ -47,14 +47,14 @@ typedef struct {
 
  */
 
-typedef struct {
+struct Context {
     SEXP list;
     ResizeableList cp;
     ResizeableList src;
     ExprCompiler exprCompiler;
     ClosureCompiler closureCompiler;
     ClosureOptimizer closureOptimizer;
-} Context;
+};
 
 // Some symbols
 extern SEXP R_Subset2Sym;

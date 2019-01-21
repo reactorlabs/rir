@@ -78,7 +78,7 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
 
     unsigned numArgs;
 
-    const FunctionSignature& signature() { return signature_; }
+    const FunctionSignature& signature() const { return signature_; }
 
   private:
     FunctionSignature signature_; /// pointer to this version's signature
