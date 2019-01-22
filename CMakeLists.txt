@@ -13,14 +13,18 @@ set(R_COMMAND ${R_HOME}/bin/R)
 add_definitions(-g3)
 set(CMAKE_CXX_FLAGS_RELEASE "-O2 -Werror")
 set(CMAKE_CXX_FLAGS_DEBUG "-O0 -DENABLE_SLOWASSERT")
+set(CMAKE_CXX_FLAGS_DEBUGOPT "-O2 -DENABLE_SLOWASSERT")
 set(CMAKE_CXX_FLAGS "-Wall -Wuninitialized -Wundef -Winit-self -Wcast-align -Woverloaded-virtual -Wctor-dtor-privacy -Wmissing-include-dirs -Wstrict-overflow=5 -std=c++14 -fno-rtti")
 set(CMAKE_C_FLAGS_RELEASE "-O2")
 set(CMAKE_C_FLAGS_DEBUG "-O0 -DENABLE_SLOWASSERT")
+set(CMAKE_C_FLAGS_DEBUGOPT "-O2 -DENABLE_SLOWASSERT")
 set(CMAKE_C_FLAGS "-std=gnu99")
 
-SET(CMAKE_CXX_FLAGS_SANITIZE "${CMAKE_CXX_FLAGS_DEBUG} -Og -fsanitize=undefined -fno-sanitize=alignment -fsanitize-undefined-trap-on-error -fstack-protector")
-SET(CMAKE_C_FLAGS_SANITIZE "${CMAKE_C_FLAGS_DEBUG} -Og -fsanitize=undefined -fno-sanitize=alignment -fsanitize-undefined-trap-on-error -fstack-protector")
+SET(CMAKE_CXX_FLAGS_SANITIZE "${CMAKE_CXX_FLAGS_DEBUGOPT} -fsanitize=undefined -fno-sanitize=alignment -fsanitize-undefined-trap-on-error -fstack-protector")
+SET(CMAKE_C_FLAGS_SANITIZE "${CMAKE_C_FLAGS_DEBUGOPT} -fsanitize=undefined -fno-sanitize=alignment -fsanitize-undefined-trap-on-error -fstack-protector")
 MARK_AS_ADVANCED(
+    CMAKE_CXX_FLAGS_DEBUGOPT,
+    CMAKE_C_FLAGS_DEBUGOPT,
     CMAKE_CXX_FLAGS_SANITIZE
     CMAKE_C_FLAGS_SANITIZE)
 
