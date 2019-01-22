@@ -76,6 +76,7 @@
     SIMPLE_INSTRUCTIONS(SYMBOLS_SIMPLE_INSTRUCTION_V, V)                       \
     V(UseMethod, "UseMethod")                                                  \
     V(sysframe, "sys.frame")                                                   \
-    V(syscall, "sys.call")
+    V(syscall, "sys.call")                                                     \
+    V(srcref, "srcref")
 
 #endif // SYMBOLS_LIST_H_

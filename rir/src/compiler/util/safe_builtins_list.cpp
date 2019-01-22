@@ -3,6 +3,8 @@
 #include "R/Funtab.h"
 #include "R/Symbols.h"
 
+#include <string>
+
 namespace rir {
 namespace pir {
 
@@ -279,12 +281,18 @@ bool SafeBuiltinsList::nonObject(SEXP builtin) {
     return nonObject(getBuiltinNr(builtin));
 }
 
+#define UNSAFE_BUILTINS_FOR_INLINE(V)                                          \
+    V(sys.frame)                                                               \
+    V(sys.call)                                                                \
+    V(parent.frame)                                                            \
+    V(UseMethod)                                                               \
+    V(standardGeneric)
+
 bool SafeBuiltinsList::forInline(int builtin) {
     static int unsafeBuiltins[] = {
-        findBuiltin("sys.frame"),
-        findBuiltin("sys.call"),
-        findBuiltin("UseMethod"),
-        findBuiltin("standardGeneric"),
+#define V(name) findBuiltin(#name),
+        UNSAFE_BUILTINS_FOR_INLINE(V)
+#undef V
     };
 
     for (auto i : unsafeBuiltins)
@@ -295,10 +303,9 @@ bool SafeBuiltinsList::forInline(int builtin) {
 
 bool SafeBuiltinsList::forInlineByName(SEXP name) {
     SEXP unsafeBuiltins[] = {
-        rir::symbol::sysframe,
-        rir::symbol::syscall,
-        rir::symbol::UseMethod,
-        rir::symbol::standardGeneric,
+#define V(name) Rf_install(#name),
+        UNSAFE_BUILTINS_FOR_INLINE(V)
+#undef V
     };
 
     for (auto i : unsafeBuiltins)

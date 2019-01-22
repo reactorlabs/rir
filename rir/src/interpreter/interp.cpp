@@ -338,26 +338,26 @@ RIR_INLINE SEXP createLegacyArgsList(const CallContext& call, Context* ctx) {
     }
 }
 
-SEXP rirCallTrampoline(const CallContext& call, Function* fun, SEXP env,
-                       SEXP arglist, const R_bcstack_t* stackArgs,
-                       Context* ctx) {
-    auto trampoline = [](RCNTXT* cntxt, const CallContext* call, Code* code,
-                         SEXP* env, const R_bcstack_t* stackArgs,
-                         Context* ctx) {
-        int trampIn = ostack_length(ctx);
-        if ((SETJMP(cntxt->cjmpbuf))) {
-            assert(trampIn == ostack_length(ctx));
-            if (R_ReturnedValue == R_RestartToken) {
-                cntxt->callflag = CTXT_RETURN; /* turn restart off */
-                R_ReturnedValue = R_NilValue;  /* remove restart token */
-                return evalRirCode(code, ctx, env, call);
-            } else {
-                return R_ReturnedValue;
-            }
+static SEXP rirCallTrampoline_(RCNTXT& cntxt, const CallContext& call,
+                               Code* code, SEXP* env,
+                               const R_bcstack_t* stackArgs, Context* ctx) {
+    int trampIn = ostack_length(ctx);
+    if ((SETJMP(cntxt.cjmpbuf))) {
+        assert(trampIn == ostack_length(ctx));
+        if (R_ReturnedValue == R_RestartToken) {
+            cntxt.callflag = CTXT_RETURN; /* turn restart off */
+            R_ReturnedValue = R_NilValue; /* remove restart token */
+            return evalRirCode(code, ctx, env, &call);
+        } else {
+            return R_ReturnedValue;
         }
-        return evalRirCode(code, ctx, env, call);
-    };
+    }
+    return evalRirCode(code, ctx, env, &call);
+}
 
+RIR_INLINE SEXP rirCallTrampoline(const CallContext& call, Function* fun,
+                                  SEXP env, SEXP arglist,
+                                  const R_bcstack_t* stackArgs, Context* ctx) {
     RCNTXT cntxt;
 
     // This code needs to be protected, because its slot in the dispatch table
@@ -366,6 +366,8 @@ SEXP rirCallTrampoline(const CallContext& call, Function* fun, SEXP env,
 
     initClosureContext(call.ast, &cntxt, env, call.callerEnv, arglist,
                        call.callee);
+    R_Srcref = getAttrib(call.callee, symbol::srcref);
+
     closureDebug(call.ast, call.callee, env, R_NilValue, &cntxt);
 
     // Warning: call.popArgs() between initClosureContext and trampoline will
@@ -375,11 +377,14 @@ SEXP rirCallTrampoline(const CallContext& call, Function* fun, SEXP env,
     // Pass &cntxt.cloenv, to let evalRirCode update the env of the current
     // context
     SEXP result =
-        trampoline(&cntxt, &call, code, &cntxt.cloenv, stackArgs, ctx);
+        rirCallTrampoline_(cntxt, call, code, &cntxt.cloenv, stackArgs, ctx);
     PROTECT(result);
 
     endClosureDebug(call.ast, call.callee, env);
     endClosureContext(&cntxt, result);
+
+    R_Srcref = cntxt.srcref;
+    R_ReturnedValue = R_NilValue;
 
     UNPROTECT(2);
     return result;
@@ -1196,10 +1201,12 @@ static void cachedSetVar(SEXP val, SEXP env, Immediate idx, Context* ctx,
             return;
         INCREMENT_NAMED(val);
         SETCAR(loc, val);
-        if (MISSING(loc))
-            SET_MISSING(loc, 0);
-        else if (val == R_MissingArg)
+        if (val != R_MissingArg) {
+            if (MISSING(loc))
+                SET_MISSING(loc, 0);
+        } else {
             SET_MISSING(loc, 1);
+        }
         return;
     }
 
@@ -1701,7 +1708,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
                                         call.stackArgs, ctx);
             } else {
                 // Fallback, the static dispatch failed
-                res = doCall(call, ctx);
+                res = rirCall(call, ctx);
             }
             ostack_popn(ctx, call.passedArgs);
             ostack_push(ctx, res);
@@ -2904,8 +2911,7 @@ SEXP rirExpr(SEXP s) {
     return s;
 }
 
-SEXP rirApplyClosure(SEXP ast, SEXP op, SEXP arglist, SEXP rho,
-                     SEXP suppliedvars) {
+SEXP rirApplyClosure(SEXP ast, SEXP op, SEXP arglist, SEXP rho) {
     auto ctx = globalContext();
 
     RList args(arglist);
@@ -2919,15 +2925,16 @@ SEXP rirApplyClosure(SEXP ast, SEXP op, SEXP arglist, SEXP rho,
         }
         nargs++;
     }
-    if (!names.empty())
+    if (!names.empty()) {
         names.resize(nargs);
+    }
 
     CallContext call(nullptr, op, nargs, ast, ostack_cell_at(ctx, nargs - 1),
                      nullptr, names.empty() ? nullptr : names.data(), rho,
                      Assumptions(), ctx);
     call.arglist = arglist;
 
-    auto res = doCall(call, ctx);
+    auto res = rirCall(call, ctx);
     ostack_popn(ctx, call.passedArgs);
     return res;
 }

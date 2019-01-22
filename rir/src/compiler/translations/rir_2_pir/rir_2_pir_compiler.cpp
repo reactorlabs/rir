@@ -28,10 +28,19 @@ Rir2PirCompiler::Rir2PirCompiler(Module* module, StreamLogger& logger)
 
 void Rir2PirCompiler::compileClosure(SEXP closure, const std::string& name,
                                      const Assumptions& assumptions,
-                                     MaybeCls success, Maybe fail) {
+                                     MaybeCls success, Maybe fail_) {
     assert(isValidClosureSEXP(closure));
 
     DispatchTable* tbl = DispatchTable::unpack(BODY(closure));
+    auto fun = tbl->baseline();
+
+    if (fun->unoptimizable)
+        return fail_();
+
+    auto fail = [&]() {
+        fun->unoptimizable = true;
+        fail_();
+    };
 
     if (tbl->size() > 1)
         logger.warn("Closure already compiled to PIR");
@@ -46,8 +55,7 @@ void Rir2PirCompiler::compileClosure(SEXP closure, const std::string& name,
                 closureName = CHAR(PRINTNAME(e.tag()));
         }
     }
-    auto pirClosure =
-        module->getOrDeclareRirClosure(name, closure, tbl->baseline());
+    auto pirClosure = module->getOrDeclareRirClosure(name, closure, fun);
     OptimizationContext context(assumptions | minimalAssumptions);
     compileClosure(pirClosure, context, success, fail);
 }
@@ -56,7 +64,15 @@ void Rir2PirCompiler::compileFunction(rir::Function* srcFunction,
                                       const std::string& name, SEXP formals,
                                       SEXP srcRef,
                                       const Assumptions& assumptions,
-                                      MaybeCls success, Maybe fail) {
+                                      MaybeCls success, Maybe fail_) {
+    if (srcFunction->unoptimizable)
+        return fail_();
+
+    auto fail = [&]() {
+        srcFunction->unoptimizable = true;
+        fail_();
+    };
+
     OptimizationContext context(assumptions | minimalAssumptions);
     auto closure =
         module->getOrDeclareRirFunction(name, srcFunction, formals, srcRef);
@@ -79,11 +95,6 @@ void Rir2PirCompiler::compileClosure(Closure* closure,
         return fail();
     }
 
-    // TODO: if compilation fails, we should remember that somehow. Otherwise
-    // we will continue on trying to compile the same function over and over
-    // again.
-    // To avoid compiling excessive versions we will reuse already compiled
-    // versions with weaker assumptions.
     if (auto existing = closure->findCompatibleVersion(ctx))
         return success(existing);
 

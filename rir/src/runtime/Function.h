@@ -74,6 +74,7 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
 
     unsigned deopt : 1;
     unsigned markOpt : 1;
+    unsigned unoptimizable : 1;
     unsigned spare : 30;
 
     unsigned numArgs;
