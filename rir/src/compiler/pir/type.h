@@ -240,19 +240,25 @@ struct PirType {
         return t;
     }
 
+    PirType forced() const {
+        assert(isRType());
+        PirType t = *this;
+        t.flags_.reset(TypeFlags::promiseWrapped);
+        t.flags_.reset(TypeFlags::lazy);
+        t.flags_.reset(TypeFlags::missing);
+        return t;
+    }
+
     RIR_INLINE PirType baseType() const {
         assert(isRType());
         return PirType(t_.r);
     }
 
     RIR_INLINE void setNotObject() { *this = notObject(); }
-
     RIR_INLINE void setScalar() { *this = scalar(); }
 
     static const PirType voyd() { return NativeTypeSet(); }
-
     static const PirType missing() { return bottom().orMissing(); }
-
     static const PirType bottom() { return PirType(RTypeSet()); }
 
     RIR_INLINE PirType operator|(const PirType& o) const {

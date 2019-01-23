@@ -739,11 +739,12 @@ class FLIE(Force, 2, Effect::Any, EnvAccess::Leak) {
     // Set to true if we are sure that the promise will be forced here
     bool strict = false;
     Force(Value* in, Value* env)
-        : FixedLenInstructionWithEnvSlot(PirType::val(), {{PirType::any()}},
+        : FixedLenInstructionWithEnvSlot(in->type.forced(), {{PirType::any()}},
                                          {{in}}, env) {}
     Value* input() const { return arg(0).val(); }
     const char* name() const override { return strict ? "Force!" : "Force"; }
     bool hasEffect() const override final { return input()->type.maybeLazy(); }
+    void updateType() override final { type = arg<0>().val()->type.forced(); }
 };
 
 class FLI(CastType, 1, Effect::None, EnvAccess::None) {
