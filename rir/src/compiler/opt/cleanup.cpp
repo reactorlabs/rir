@@ -35,7 +35,7 @@ class TheCleanup {
                     next = bb->remove(ip);
                 } else if (auto force = Force::Cast(i)) {
                     Value* arg = force->input();
-                    if (PirType::valOrMissing().isSuper(arg->type)) {
+                    if (!arg->type.maybePromiseWrapped()) {
                         removed = true;
                         force->replaceUsesWith(arg);
                         next = bb->remove(ip);

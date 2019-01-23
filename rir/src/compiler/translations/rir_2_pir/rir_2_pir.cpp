@@ -159,8 +159,8 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
     auto top = [&stack]() { return stack.at(0); };
     auto set = [&stack](unsigned i, Value* v) { stack.at(i) = v; };
 
-    auto forceIfLazy = [&](unsigned i) {
-        if (stack.at(i)->type.maybeLazy()) {
+    auto forceIfPromised = [&](unsigned i) {
+        if (stack.at(i)->type.maybePromiseWrapped()) {
             stack.at(i) = insert(new Force(at(i), env));
         }
     };
@@ -467,9 +467,9 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
 
     case Opcode::extract1_1_: {
         if (!inPromise()) {
-            forceIfLazy(
+            forceIfPromised(
                 1); // <- ensure forced version are captured in framestate
-            forceIfLazy(0);
+            forceIfPromised(0);
             addCheckpoint(srcCode, pos, stack, insert);
         }
         Value* idx = pop();
@@ -480,9 +480,9 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
 
     case Opcode::extract2_1_: {
         if (!inPromise()) {
-            forceIfLazy(
+            forceIfPromised(
                 1); // <- ensure forced version are captured in framestate
-            forceIfLazy(0);
+            forceIfPromised(0);
             addCheckpoint(srcCode, pos, stack, insert);
         }
         Value* idx = pop();
@@ -561,8 +561,8 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
 #define BINOP(Name, Op)                                                        \
     case Opcode::Op: {                                                         \
         if (!inPromise()) {                                                    \
-            forceIfLazy(1);                                                    \
-            forceIfLazy(0);                                                    \
+            forceIfPromised(1);                                                \
+            forceIfPromised(0);                                                \
             addCheckpoint(srcCode, pos, stack, insert);                        \
         }                                                                      \
         auto lhs = at(1);                                                      \

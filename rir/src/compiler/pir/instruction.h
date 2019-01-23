@@ -274,7 +274,7 @@ class InstructionImplementation : public Instruction {
     static constexpr bool mayChangeEnv_ = ENV >= EnvAccess::Write;
     static constexpr bool mayLeakEnv_ = ENV >= EnvAccess::Leak;
 
-    bool hasEffect() const override final { return EFFECT > Effect::None; }
+    bool hasEffect() const override { return EFFECT > Effect::None; }
     bool mayForcePromises() const override final {
         return EFFECT >= Effect::Force;
     }
@@ -743,6 +743,7 @@ class FLIE(Force, 2, Effect::Any, EnvAccess::Leak) {
                                          {{in}}, env) {}
     Value* input() const { return arg(0).val(); }
     const char* name() const override { return strict ? "Force!" : "Force"; }
+    bool hasEffect() const override final { return input()->type.maybeLazy(); }
 };
 
 class FLI(CastType, 1, Effect::None, EnvAccess::None) {
