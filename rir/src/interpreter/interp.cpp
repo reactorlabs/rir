@@ -2469,14 +2469,14 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
                                 : symbol::AssignDoubleBracket;
 
             RCNTXT assignContext;
-            Rf_begincontext(&assignContext, CTXT_RETURN, call, getenv(),
-                            ENCLOS(getenv()), args, selector);
+            Rf_begincontext(&assignContext, CTXT_RETURN, call, *env,
+                            ENCLOS(*env), args, selector);
             if (isObject(vec)) {
-                res = dispatchApply(call, vec, args, selector, getenv(), ctx);
+                res = dispatchApply(call, vec, args, selector, *env, ctx);
             }
 
             if (!res) {
-                res = do_subassign2_dflt(call, selector, args, getenv());
+                res = do_subassign2_dflt(call, selector, args, *env);
                 // We duplicated the vector above, and there is a stvar
                 // following
                 SET_NAMED(res, 0);
@@ -2621,13 +2621,13 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
                                 ? symbol::SuperAssign2Bracket
                                 : symbol::Assign2Bracket;
             RCNTXT assignContext;
-            Rf_begincontext(&assignContext, CTXT_RETURN, call, getenv(),
-                            ENCLOS(getenv()), args, selector);
+            Rf_begincontext(&assignContext, CTXT_RETURN, call, *env,
+                            ENCLOS(*env), args, selector);
             if (isObject(vec)) {
-                res = dispatchApply(call, vec, args, selector, getenv(), ctx);
+                res = dispatchApply(call, vec, args, selector, *env, ctx);
             }
             if (!res) {
-                res = do_subassign2_dflt(call, selector, args, getenv());
+                res = do_subassign2_dflt(call, selector, args, *env);
                 // We duplicated the vector above, and there is a stvar
                 // following
                 SET_NAMED(res, 0);
