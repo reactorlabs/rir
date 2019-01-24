@@ -2350,47 +2350,6 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
             NEXT();
         }
 
-        INSTRUCTION(subassign2_1_) {
-            SEXP idx2 = ostack_at(ctx, 0);
-            SEXP idx1 = ostack_at(ctx, 1);
-            SEXP vec = ostack_at(ctx, 2);
-            SEXP val = ostack_at(ctx, 3);
-
-            if (MAYBE_SHARED(vec)) {
-                vec = Rf_duplicate(vec);
-                ostack_set(ctx, 1, vec);
-            }
-
-            SEXP args = CONS_NR(
-                vec, CONS_NR(idx1, CONS_NR(idx2, CONS_NR(val, R_NilValue))));
-            SET_TAG(CDDR(args), symbol::value);
-            PROTECT(args);
-
-            res = nullptr;
-            SEXP call = getSrcForCall(c, pc - 1, ctx);
-            SEXP selector = CAR(call) == symbol::SuperAssign
-                                ? symbol::SuperAssign2Bracket
-                                : symbol::Assign2Bracket;
-            RCNTXT assignContext;
-            Rf_begincontext(&assignContext, CTXT_RETURN, call, getenv(),
-                            ENCLOS(getenv()), args, selector);
-            if (isObject(vec)) {
-                res = dispatchApply(call, vec, args, selector, getenv(), ctx);
-            }
-            if (!res) {
-                res = do_subassign2_dflt(call, selector, args, getenv());
-                // We duplicated the vector above, and there is a stvar
-                // following
-                SET_NAMED(res, 0);
-            }
-            Rf_endcontext(&assignContext);
-            ostack_popn(ctx, 4);
-            UNPROTECT(1);
-
-            ostack_push(ctx, res);
-            NEXT();
-        }
-
         INSTRUCTION(extract2_1_) {
             SEXP val = ostack_at(ctx, 1);
             SEXP idx = ostack_at(ctx, 0);
@@ -2503,7 +2462,48 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
             NEXT();
         }
 
-        INSTRUCTION(subassign1_2_) {
+        INSTRUCTION(subassign2_1_) {
+            SEXP idx2 = ostack_at(ctx, 0);
+            SEXP idx1 = ostack_at(ctx, 1);
+            SEXP vec = ostack_at(ctx, 2);
+            SEXP val = ostack_at(ctx, 3);
+
+            if (MAYBE_SHARED(vec)) {
+                vec = Rf_duplicate(vec);
+                ostack_set(ctx, 1, vec);
+            }
+
+            SEXP args = CONS_NR(
+                vec, CONS_NR(idx1, CONS_NR(idx2, CONS_NR(val, R_NilValue))));
+            SET_TAG(CDDR(args), symbol::value);
+            PROTECT(args);
+
+            res = nullptr;
+            SEXP call = getSrcForCall(c, pc - 1, ctx);
+            SEXP selector = CAR(call) == symbol::SuperAssign
+                                ? symbol::SuperAssign2Bracket
+                                : symbol::Assign2Bracket;
+            RCNTXT assignContext;
+            Rf_begincontext(&assignContext, CTXT_RETURN, call, getenv(),
+                            ENCLOS(getenv()), args, selector);
+            if (isObject(vec)) {
+                res = dispatchApply(call, vec, args, selector, getenv(), ctx);
+            }
+            if (!res) {
+                res = do_subassign2_dflt(call, selector, args, getenv());
+                // We duplicated the vector above, and there is a stvar
+                // following
+                SET_NAMED(res, 0);
+            }
+            Rf_endcontext(&assignContext);
+            ostack_popn(ctx, 4);
+            UNPROTECT(1);
+
+            ostack_push(ctx, res);
+            NEXT();
+        }
+
+        INSTRUCTION(subassign2_2_) {
             SEXP idx2 = ostack_at(ctx, 0);
             SEXP idx1 = ostack_at(ctx, 1);
             SEXP vec = ostack_at(ctx, 2);
