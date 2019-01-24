@@ -7,6 +7,11 @@ if [ ! -d $SCRIPT_PATH ]; then
     echo "Maybe accessed with symlink"
 fi
 
+if [[ "$1" == "--travis" || "$2" == "--travis" ]]
+then
+    OPTIONS="e:RIR e:PIR"
+fi
+
 if [ "$1" == "--installRebench" ]
 then
     ## We use a patched version that supports the usage of env variables
@@ -17,6 +22,7 @@ then
     popd > /dev/null
 fi
 
+
 pushd "$SCRIPT_PATH/../benchmarks"
-rebench rebench.conf -SN --iterations=5
+rebench rebench.conf $OPTIONS -SN --iterations=5 
 popd > /dev/null
