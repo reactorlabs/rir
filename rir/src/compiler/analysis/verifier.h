@@ -8,7 +8,7 @@ namespace pir {
 
 class Verify {
   public:
-    static bool apply(Closure*);
+    static bool apply(ClosureVersion*);
 };
 }
 }

@@ -17,17 +17,15 @@ class Rir2PirCompiler : public RirCompiler {
 
     void compileClosure(SEXP, const std::string& name, const Assumptions& ctx,
                         MaybeCls success, Maybe fail);
-    void compileFunction(rir::Function*, const std::string& name,
-                         FormalArgs const&, const Assumptions& ctx,
-                         MaybeCls success, Maybe fail);
+    void compileFunction(rir::Function*, const std::string& name, SEXP formals,
+                         SEXP srcRef, const Assumptions& ctx, MaybeCls success,
+                         Maybe fail);
     void optimizeModule();
 
   private:
     StreamLogger& logger;
-    void compileClosure(rir::Function*, const std::string& name,
-                        FormalArgs const&, const OptimizationContext& ctx,
+    void compileClosure(Closure* closure, const OptimizationContext& ctx,
                         MaybeCls success, Maybe fail);
-    void applyOptimizations(Closure*, const std::string&);
 };
 } // namespace pir
 } // namespace rir

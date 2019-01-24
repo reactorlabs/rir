@@ -78,6 +78,9 @@
     V(c, "c")                                                                  \
     V(standardGeneric, "standardGeneric")                                      \
     SIMPLE_INSTRUCTIONS(SYMBOLS_SIMPLE_INSTRUCTION_V, V)                       \
-    V(UseMethod, "UseMethod")
+    V(UseMethod, "UseMethod")                                                  \
+    V(sysframe, "sys.frame")                                                   \
+    V(syscall, "sys.call")                                                     \
+    V(srcref, "srcref")
 
 #endif // SYMBOLS_LIST_H_

@@ -8,9 +8,9 @@ using namespace rir::pir;
 
 class TheVerifier {
   public:
-    Closure* f;
+    ClosureVersion* f;
 
-    explicit TheVerifier(Closure* f) : f(f) {}
+    explicit TheVerifier(ClosureVersion* f) : f(f) {}
 
     bool ok = true;
 
@@ -26,9 +26,9 @@ class TheVerifier {
             return;
         }
 
-        for (auto p : f->promises) {
+        f->eachPromise([&](Promise* p) {
             if (p) {
-                if (p != f->promises[p->id]) {
+                if (p != f->promise(p->id)) {
                     std::cerr << "Promise with id " << p->id
                               << " is in the wrong slot\n";
                     ok = false;
@@ -40,7 +40,7 @@ class TheVerifier {
                 p->print(std::cerr, true);
                 return;
             }
-        }
+        });
     }
 
     void verify(BB* bb, const DominanceGraph& dom, const CFG& cfg) {
@@ -128,13 +128,24 @@ class TheVerifier {
             ok = false;
         }
 
+        if (auto call = StaticCall::Cast(i)) {
+            if (call->hint &&
+                call->hint->owner() != call->dispatch()->owner()) {
+                std::cerr << "Error: instruction '";
+                i->print(std::cerr);
+                std::cerr << "' has broken hint (hint must be a version of the "
+                             "same closure)\n";
+                ok = false;
+            }
+        }
+
         if (auto mk = MkArg::Cast(i)) {
             auto p = mk->prom();
-            assert(p->fun->promises[p->id] == p);
-            if (p->fun != f) {
+            assert(p->owner->promise(p->id) == p);
+            if (p->owner != f) {
                 mk->printRef(std::cerr);
                 std::cerr << " is referencing a promise from another function "
-                          << p->fun->name << "\n";
+                          << p->owner->name() << "\n";
                 ok = false;
             }
         }
@@ -197,7 +208,7 @@ class TheVerifier {
 namespace rir {
 namespace pir {
 
-bool Verify::apply(Closure* f) {
+bool Verify::apply(ClosureVersion* f) {
     TheVerifier v(f);
     v();
     return v.ok;

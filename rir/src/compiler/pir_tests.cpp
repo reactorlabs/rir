@@ -46,13 +46,14 @@ SEXP compileToRir(const std::string& context, const std::string& expr,
     eval(expr, env);
     return env;
 }
-typedef std::unordered_map<std::string, pir::Closure*> closuresByName;
+typedef std::unordered_map<std::string, pir::ClosureVersion*> closuresByName;
 
 closuresByName compileRir2Pir(SEXP env, pir::Module* m) {
-    pir::StreamLogger logger(pir::DebugOptions() |
-                             // pir::DebugFlag::PrintIntoStdout |
-                             // pir::DebugFlag::PrintOptimizationPasses |
-                             pir::DebugFlag::PrintFinalPir);
+    pir::StreamLogger logger({pir::DebugOptions::DebugFlags() |
+                                  // pir::DebugFlag::PrintIntoStdout |
+                                  // pir::DebugFlag::PrintOptimizationPasses |
+                                  pir::DebugFlag::PrintFinalPir,
+                              ""});
     pir::Rir2PirCompiler cmp(m, logger);
 
     // Compile every function in the environment
@@ -63,7 +64,7 @@ closuresByName compileRir2Pir(SEXP env, pir::Module* m) {
         if (TYPEOF(fun) == CLOSXP) {
             assert(isValidClosureSEXP(fun));
             cmp.compileClosure(fun, "test_function", {},
-                               [&](pir::Closure* cls) {
+                               [&](pir::ClosureVersion* cls) {
                                    results[CHAR(PRINTNAME(f.tag()))] = cls;
                                },
                                []() { assert(false); });
@@ -81,8 +82,8 @@ closuresByName compile(const std::string& context, const std::string& expr,
 }
 
 using namespace rir::pir;
-typedef std::function<bool(void)> TestClosure;
-typedef std::pair<std::string, TestClosure> Test;
+typedef std::function<bool(void)> TestClosureVersion;
+typedef std::pair<std::string, TestClosureVersion> Test;
 
 #define CHECK(___test___)                                                      \
     if (!(___test___)) {                                                       \
@@ -128,8 +129,8 @@ class NullBuffer : public std::ostream, std::streambuf {
 
 bool verify(Module* m) {
     bool success = true;
-    m->eachPirFunction([&success](Closure* c) {
-        if (!Verify::apply(c))
+    m->eachPirClosureVersion([&success](ClosureVersion* v) {
+        if (!Verify::apply(v))
             success = false;
     });
     // TODO: find fix for osx
@@ -211,7 +212,8 @@ bool canRemoveEnvironmentIfTypeFeedback(const std::string& input) {
     pir::Module m;
     compileRir2Pir(execEnv, &m);
     bool t = verify(&m);
-    m.eachPirFunction([&t](pir::Closure* f) { t = t && envOfAddElided(f); });
+    m.eachPirClosureVersion(
+        [&t](pir::ClosureVersion* f) { t = t && envOfAddElided(f); });
     return t;
 }
 
@@ -219,7 +221,8 @@ bool canRemoveEnvironment(const std::string& input) {
     pir::Module m;
     compile("", input, &m);
     bool t = verify(&m);
-    m.eachPirFunction([&t](pir::Closure* f) { t = t && Query::noEnv(f); });
+    m.eachPirClosureVersion(
+        [&t](pir::ClosureVersion* f) { t = t && Query::noEnv(f); });
     return t;
 }
 
@@ -227,21 +230,21 @@ bool canRemoveEnvironmentIfNonTypeFeedback(const std::string& input) {
     pir::Module m;
     compile("", input, &m);
     bool t = verify(&m);
-    m.eachPirFunction([&t](pir::Closure* f) {
+    m.eachPirClosureVersion([&t](pir::ClosureVersion* f) {
         t = t && (Query::noEnv(f) || envOfAddElided(f));
     });
     return t;
 }
 
 bool testSuperAssign() {
-    auto hasAssign = [](pir::Closure* f) {
+    auto hasAssign = [](pir::ClosureVersion* f) {
         return !Visitor::check(f->entry, [](Instruction* i) {
             if (StVar::Cast(i))
                 return false;
             return true;
         });
     };
-    auto hasSuperAssign = [](pir::Closure* f) {
+    auto hasSuperAssign = [](pir::ClosureVersion* f) {
         return !Visitor::check(f->entry, [](Instruction* i) {
             if (StVarSuper::Cast(i))
                 return false;
@@ -360,7 +363,7 @@ bool testPir2Rir(const std::string& name, const std::string& fun,
         rCall = createRWrapperCall(wrapper);
     }
 
-    pirCompile(rirFun, "from_testPir2Rir", rir::pir::DebugOptions());
+    pirCompile(rirFun, {}, "from_testPir2Rir", rir::pir::DebugOptions());
 
     auto after = p(Rf_eval(rCall, execEnv));
     if (verbose) {

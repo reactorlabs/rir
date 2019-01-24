@@ -306,35 +306,48 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
 
         // Compile the arguments (eager for builltins)
         std::vector<Value*> args;
-        for (auto argi : bc.callExtra().immediateCallArguments) {
-            rir::Code* promiseCode = srcCode->getPromise(argi);
-            Promise* prom = insert.function->createProm(promiseCode->src);
-            {
-                Builder promiseBuilder(insert.function, prom);
-                if (!tryCompilePromise(promiseCode, promiseBuilder)) {
-                    log.warn("Failed to compile a promise for call");
-                    return false;
+
+        Assumptions given;
+        // Make some optimistic assumptions, they might be reset below...
+        given.set(Assumption::EagerArgs_);
+        {
+            size_t i = 0;
+            for (auto argi : bc.callExtra().immediateCallArguments) {
+                rir::Code* promiseCode = srcCode->getPromise(argi);
+                Promise* prom = insert.function->createProm(promiseCode->src);
+                {
+                    Builder promiseBuilder(insert.function, prom);
+                    if (!tryCompilePromise(promiseCode, promiseBuilder)) {
+                        log.warn("Failed to compile a promise for call");
+                        return false;
+                    }
                 }
-            }
-            Value* eagerVal = Missing::instance();
-            Value* theArg = nullptr;
-            if (monomorphicBuiltin || Query::pure(prom)) {
-                auto inlineProm = tryTranslatePromise(promiseCode, insert);
-                if (!inlineProm) {
-                    log.warn("Failed to inline a promise");
-                    return false;
+                Value* eagerVal = Missing::instance();
+                Value* theArg = nullptr;
+                if (monomorphicBuiltin || Query::pure(prom)) {
+                    auto inlineProm = tryTranslatePromise(promiseCode, insert);
+                    if (!inlineProm) {
+                        log.warn("Failed to inline a promise");
+                        return false;
+                    }
+                    eagerVal = inlineProm;
+                    // Builtins take the actual argument, not a promise
+                    if (monomorphicBuiltin)
+                        theArg = eagerVal;
                 }
-                eagerVal = inlineProm;
-                // Builtins take the actual argument, not a promise
-                if (monomorphicBuiltin)
-                    theArg = eagerVal;
+                if (!theArg) {
+                    if (eagerVal == Missing::instance())
+                        given.setEager(i, false);
+                    theArg = insert(new MkArg(prom, eagerVal, env));
+                }
+                args.push_back(theArg);
+                i++;
             }
-            if (!theArg)
-                theArg = insert(new MkArg(prom, eagerVal, env));
-            args.push_back(theArg);
         }
 
         // Static argument name matching
+        // Currently we only match callsites with the correct number of
+        // arguments passed. Thus, we set those given assumptions below.
         if (monomorphicClosure) {
             bool correctOrder =
                 (bc.bc == Opcode::named_call_implicit_)
@@ -368,16 +381,17 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             std::string name = "";
             if (ldfun)
                 name = CHAR(PRINTNAME(ldfun->varName));
-            Assumptions asmpt(Assumption::CorrectOrderOfArguments);
-            asmpt.set(Assumption::CorrectNumberOfArguments);
+            given.set(Assumption::NoMissingArguments);
+            given.set(Assumption::NotTooManyArguments);
+            given.set(Assumption::CorrectOrderOfArguments);
             compiler.compileClosure(
-                monomorphic, name, asmpt,
-                [&](Closure* f) {
+                monomorphic, name, given,
+                [&](ClosureVersion* f) {
                     pop();
                     auto fs =
                         insert.registerFrameState(srcCode, nextPos, stack);
-                    push(insert(new StaticCall(insert.env, f, args, monomorphic,
-                                               fs, ast)));
+                    push(insert(
+                        new StaticCall(insert.env, f->owner(), args, fs, ast)));
                 },
                 insertGenericCall);
         } else if (monomorphicBuiltin) {
@@ -425,38 +439,17 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         break;
     }
 
-    case Opcode::static_call_: {
-        unsigned n = bc.immediate.staticCallFixedArgs.nargs;
-        auto ast = bc.immediate.staticCallFixedArgs.ast;
-        SEXP target = rir::Pool::get(bc.immediate.staticCallFixedArgs.target);
+    case Opcode::call_builtin_: {
+        unsigned n = bc.immediate.callBuiltinFixedArgs.nargs;
+        auto ast = bc.immediate.callBuiltinFixedArgs.ast;
+        SEXP target = rir::Pool::get(bc.immediate.callBuiltinFixedArgs.builtin);
 
         std::vector<Value*> args(n);
         for (size_t i = 0; i < n; ++i)
             args[n - i - 1] = pop();
 
-        if (TYPEOF(target) == BUILTINSXP) {
-            push(insert(BuiltinCallFactory::New(env, target, args, ast)));
-        } else {
-            assert(TYPEOF(target) == CLOSXP);
-            if (!isValidClosureSEXP(target)) {
-                Compiler::compileClosure(target);
-            }
-            bool failed = false;
-            Assumptions asmpt(Assumption::CorrectOrderOfArguments);
-            asmpt.set(Assumption::CorrectNumberOfArguments);
-            compiler.compileClosure(
-                target, "", asmpt,
-                [&](Closure* f) {
-                    auto fs =
-                        insert.registerFrameState(srcCode, nextPos, stack);
-                    push(insert(new StaticCall(env, f, args, target, fs, ast)));
-                },
-                [&]() { failed = true; });
-            if (failed) {
-                log.warn("Failed to compile the target of a static call");
-                return false;
-            }
-        }
+        assert(TYPEOF(target) == BUILTINSXP);
+        push(insert(BuiltinCallFactory::New(env, target, args, ast)));
         break;
     }
 
@@ -725,6 +718,7 @@ SIMPLE_INSTRUCTIONS(V, _)
     case Opcode::movloc_:
     case Opcode::isobj_:
     case Opcode::check_missing_:
+    case Opcode::static_call_:
         log.unsupportedBC("Unsupported BC (are you recompiling?)", bc);
         assert(false && "Recompiling PIR not supported for now.");
 
@@ -912,11 +906,9 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) const {
             BC ldsrc = BC::advance(&pc, srcCode);
             pc = BC::next(pc); // close
 
-            SEXP fmls = ldfmls.immediateConst();
+            SEXP formals = ldfmls.immediateConst();
             SEXP code = ldcode.immediateConst();
-            SEXP src = ldsrc.immediateConst();
-
-            FormalArgs formals(fmls);
+            SEXP srcRef = ldsrc.immediateConst();
 
             DispatchTable* dt = DispatchTable::unpack(code);
             rir::Function* function = dt->baseline();
@@ -939,7 +931,7 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) const {
             inner << "@";
             if (srcCode != srcFunction->body()) {
                 size_t i = 0;
-                for (auto c : insert.function->promises) {
+                for (auto c : insert.function->promises()) {
                     if (c == insert.code) {
                         inner << "Prom(" << i << ")";
                         break;
@@ -949,21 +941,21 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) const {
             }
             inner << (pos - srcCode->code());
 
-            compiler.compileFunction(
-                function, inner.str(), formals, {},
-                [&](Closure* innerF) {
-                    cur.stack.push(insert(
-                        new MkFunCls(innerF, insert.env, fmls, code, src)));
+            compiler.compileFunction(function, inner.str(), formals, srcRef, {},
+                                     [&](ClosureVersion* innerF) {
+                                         cur.stack.push(insert(new MkFunCls(
+                                             innerF->owner(), dt, insert.env)));
 
-                    // Skip those instructions
-                    finger = pc;
-                    skip = true;
-                },
-                []() {
-                    // If the closure does not compile, we can still call the
-                    // unoptimized version (which is what happens on
-                    // `tryRunCurrentBC` below)
-                });
+                                         // Skip those instructions
+                                         finger = pc;
+                                         skip = true;
+                                     },
+                                     []() {
+                                         // If the closure does not compile, we
+                                         // can still call the unoptimized
+                                         // version (which is what happens on
+                                         // `tryRunCurrentBC` below)
+                                     });
         });
 
         if (!skip) {

@@ -9,6 +9,7 @@ namespace rir {
 namespace pir {
 
 class Closure;
+class ClosureVersion;
 class BB;
 class Promise;
 class Value;

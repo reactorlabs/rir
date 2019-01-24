@@ -18,14 +18,20 @@ class Pir2RirCompiler {
     Pir2RirCompiler(const Pir2RirCompiler&) = delete;
     Pir2RirCompiler& operator=(const Pir2RirCompiler&) = delete;
 
-    rir::Function* compile(Closure* cls, SEXP origin, bool dryRun);
+    rir::Function* compile(ClosureVersion* cls, bool dryRun);
 
     StreamLogger& logger;
 
-    bool alreadyCompiled(Closure* cls) { return done.count(cls); }
+    Function* alreadyCompiled(ClosureVersion* cls) {
+        return done.count(cls) ? done.at(cls) : nullptr;
+    }
+    bool isCompiling(ClosureVersion* cls) { return done.count(cls); }
+
+    void needsPatching(ClosureVersion* c, size_t i) { fixup[c].insert(i); }
 
   private:
-    std::unordered_set<Closure*> done;
+    std::unordered_map<ClosureVersion*, Function*> done;
+    std::unordered_map<ClosureVersion*, std::unordered_set<size_t>> fixup;
 };
 
 } // namespace pir

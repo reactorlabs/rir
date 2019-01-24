@@ -7,7 +7,7 @@
 namespace rir {
 namespace pir {
 
-void CleanupFramestate::apply(RirCompiler&, Closure* function,
+void CleanupFramestate::apply(RirCompiler&, ClosureVersion* function,
                               LogStream&) const {
     auto apply = [](Code* code) {
         Visitor::run(code->entry, [&](Instruction* i) {

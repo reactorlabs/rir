@@ -12,7 +12,7 @@
 namespace rir {
 namespace pir {
 
-void OptimizeAssumptions::apply(RirCompiler&, Closure* function,
+void OptimizeAssumptions::apply(RirCompiler&, ClosureVersion* function,
                                 LogStream&) const {
     CFG cfg(function);
     Visitor::run(function->entry, [&](BB* bb) {

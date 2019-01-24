@@ -71,10 +71,14 @@ bool ArgumentMatcher::reorder(SEXP formals,
                 if (btag != R_NilValue) {
                     const char* btag_name = CHAR(PRINTNAME(btag));
                     if (streql(ftag_name, btag_name)) {
-                        if (fargused[arg_i] == 2)
+                        if (fargused[arg_i] == 2) {
+                            UNPROTECT(1);
                             return false;
-                        if (ARGUSED(b) == 2)
+                        }
+                        if (ARGUSED(b) == 2) {
+                            UNPROTECT(1);
                             return false;
+                        }
                         SETCAR(a, CAR(b));
                         if (CAR(b) != R_MissingArg)
                             SET_MISSING(a, 0);
@@ -108,6 +112,7 @@ bool ArgumentMatcher::reorder(SEXP formals,
                 for (b = supplied, i = 1; b != R_NilValue; b = CDR(b), i++) {
                     if (ARGUSED(b) != 2 && TAG(b) != R_NilValue &&
                         pmatch(TAG(f), TAG(b), seendots)) {
+                        UNPROTECT(1);
                         return false;
                     }
                 }
@@ -160,6 +165,7 @@ bool ArgumentMatcher::reorder(SEXP formals,
         }
     }
 
+    size_t protectedVars = 1;
     if (dots != R_NilValue) {
         /* Gobble up all unused actuals */
         SET_MISSING(dots, 0);
@@ -186,6 +192,7 @@ bool ArgumentMatcher::reorder(SEXP formals,
         for (b = supplied; b != R_NilValue; b = CDR(b))
             if (!ARGUSED(b)) {
                 if (last == R_NilValue) {
+                    protectedVars++;
                     PROTECT(unused = CONS_NR(CAR(b), R_NilValue));
                     SET_TAG(unused, TAG(b));
                     last = unused;
@@ -197,10 +204,11 @@ bool ArgumentMatcher::reorder(SEXP formals,
             }
 
         if (last != R_NilValue) {
+            UNPROTECT(protectedVars);
             return false;
         }
     }
-    UNPROTECT(1);
+    UNPROTECT(protectedVars);
 
     // End of copy/paste snippt. Collecting results.
 

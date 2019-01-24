@@ -4,6 +4,7 @@
 #include "R/r.h"
 #include "interp_data.h"
 #include "ir/BC_inc.h"
+#include "runtime/Assumptions.h"
 
 #include <stdio.h>
 
@@ -18,7 +19,9 @@
  */
 typedef std::function<SEXP(SEXP expr, SEXP env)> ExprCompiler;
 typedef std::function<SEXP(SEXP closure, SEXP name)> ClosureCompiler;
-typedef std::function<SEXP(SEXP closure, SEXP name)> ClosureOptimizer;
+typedef std::function<SEXP(SEXP closure, const rir::Assumptions& assumptions,
+                           SEXP name)>
+    ClosureOptimizer;
 
 #define POOL_CAPACITY 4096
 #define STACK_CAPACITY 4096
@@ -238,6 +241,11 @@ RIR_INLINE SEXP cp_pool_at(Context* c, unsigned index) {
 RIR_INLINE SEXP src_pool_at(Context* c, unsigned index) {
     SLOWASSERT(c->src.capacity > index);
     return VECTOR_ELT(c->src.list, index);
+}
+
+RIR_INLINE void cp_pool_set(Context* c, unsigned index, SEXP e) {
+    SLOWASSERT(c->cp.capacity > index);
+    SET_VECTOR_ELT(c->cp.list, index, e);
 }
 
 #endif // interpreter_context_h

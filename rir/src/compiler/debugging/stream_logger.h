@@ -21,6 +21,7 @@ class BC;
 
 namespace pir {
 
+class PirTranslator;
 class StreamLogger;
 
 class LogStream {
@@ -33,13 +34,13 @@ class LogStream {
     LogStream(const LogStream&) = delete;
     LogStream& operator=(const LogStream&) = delete;
 
-    void pirOptimizationsFinished(Closure*);
-    void compilationEarlyPir(Closure*);
-    void pirOptimizationsHeader(Closure*, const std::string&, size_t);
-    void pirOptimizations(Closure*);
+    void pirOptimizationsFinished(ClosureVersion*);
+    void compilationEarlyPir(ClosureVersion*);
+    void pirOptimizationsHeader(ClosureVersion*, const PirTranslator*, size_t);
+    void pirOptimizations(ClosureVersion*, const PirTranslator*);
     void afterAllocator(Code*, std::function<void(std::ostream&)>);
     void CSSA(Code*);
-    void finalPIR(Closure*);
+    void finalPIR(ClosureVersion*);
     void finalRIR(Function*);
     void unsupportedBC(const std::string&, const rir::BC&);
     void failed(const std::string& msg);
@@ -141,9 +142,10 @@ class StreamLogger {
     StreamLogger(const StreamLogger&) = delete;
     StreamLogger& operator=(const StreamLogger&) = delete;
 
-    LogStream& begin(Closure* cls);
-    LogStream& get(Closure* cls) {
-        assert(streams.count(cls) && "You need to call begin first");
+    LogStream& begin(ClosureVersion* cls);
+    LogStream& get(ClosureVersion* cls) {
+        if (!streams.count(cls))
+            begin(cls);
         return *streams.at(cls);
     }
 
@@ -152,10 +154,10 @@ class StreamLogger {
     void title(const std::string& msg);
     void flush();
 
-    void close(Closure* cls) { streams.erase(cls); }
+    void close(ClosureVersion* cls) { streams.erase(cls); }
 
   private:
-    std::unordered_map<Closure*, std::unique_ptr<LogStream>> streams;
+    std::unordered_map<ClosureVersion*, std::unique_ptr<LogStream>> streams;
     DebugOptions options;
 };
 
