@@ -229,8 +229,7 @@ class StaticAnalysis {
                 AbstractState state = snapshots[id].entry;
                 logInitialState(state, bb);
 
-                for (auto it = bb->begin(), end = bb->end(); it != end; ++it) {
-                    auto i = *it;
+                for (auto i : *bb) {
                     AbstractResult res;
                     if (DEBUG_LEVEL == AnalysisDebugLevel::Taint) {
                         AbstractState old = state;
@@ -341,7 +340,7 @@ template <class AbstractState,
           AnalysisDebugLevel DEBUG_LEVEL = AnalysisDebugLevel::None>
 class BackwardStaticAnalysis {
   public:
-    enum class PositioningStyle { BeforeInstruction, AfterInstruction };
+    enum PositioningStyle { BeforeInstruction, AfterInstruction };
 
   private:
     const std::string name;
@@ -355,45 +354,118 @@ class BackwardStaticAnalysis {
     AnalysisSnapshots snapshots;
 
     virtual AbstractResult apply(AbstractState&, Instruction*) const = 0;
-    AbstractState exitpoint;
-    bool done = false;
 
   protected:
+    AbstractState exitpoint;
+
+    bool done = false;
+    CFG const& cfg;
     LogStream& log;
 
-    Closure* closure;
+    ClosureVersion* closure;
     Code* code;
-    CFG const& cfg;
+    std::vector<BB*> entrypoints;
 
   public:
-    BackwardStaticAnalysis(const std::string& name, Closure* cls, Code* code,
-                           CFG const& cfg, LogStream& log)
-        : name(name), log(log), closure(cls), code(code), cfg(cfg) {
+    BackwardStaticAnalysis(const std::string& name, ClosureVersion* cls,
+                           Code* code, CFG const& cfg, LogStream& log)
+        : name(name), cfg(cfg), log(log), closure(cls), code(code) {
         snapshots.resize(code->nextBBId);
+        for (auto e : cfg.exits()) {
+            entrypoints.push_back(e);
+        }
     }
-    BackwardStaticAnalysis(const std::string& name, Closure* cls, Code* code,
-                           const AbstractState& initialState, CFG const& cfg,
-                           LogStream& log)
-        : name(name), log(log), closure(cls), code(code), cfg(cfg) {
+    BackwardStaticAnalysis(const std::string& name, ClosureVersion* cls,
+                           Code* code, const AbstractState& initialState,
+                           CFG const& cfg, LogStream& log)
+        : name(name), cfg(cfg), log(log), closure(cls), code(code) {
         snapshots.resize(code->nextBBId);
-        for (auto e : cfg.exits())
+        for (auto e : cfg.exits()) {
+            entrypoints.push_back(e);
             snapshots[e->id].entry = initialState;
+        }
     }
 
-    const AbstractState& result() {
+    const AbstractState& result() const {
         assert(done);
         return exitpoint;
     }
 
+    void logHeader() const {
+        if (DEBUG_LEVEL > AnalysisDebugLevel::None) {
+            log << "=========== Starting " << name << " Analysis on "
+                << closure->name() << " ";
+            if (code == closure)
+                log << "body";
+            else
+                log << "Prom(" << static_cast<Promise*>(code)->id << ")";
+            log << "\n";
+        }
+    }
+
+    void logInitialState(const AbstractState& state, const BB* bb) const {
+        if (DEBUG_LEVEL >= AnalysisDebugLevel::BB) {
+            log << "======= Entering BB" << bb->id << ", initial state\n";
+            log(state);
+        }
+    }
+
+    void logChange(const AbstractState& post, const AbstractResult& res,
+                   const Instruction* i) {
+        if (DEBUG_LEVEL >= AnalysisDebugLevel::Instruction &&
+            res >= AbstractResult::None) {
+            log << "===== After applying instruction ";
+            if (res == AbstractResult::Tainted) {
+                log << " (State got tainted)";
+            } else {
+                log(i);
+            }
+            log << " we have\n";
+            log(post);
+        }
+    }
+
+    void logTaintChange(const AbstractState& pre, const AbstractState& post,
+                        const AbstractResult& res, const Instruction* i) {
+        assert(DEBUG_LEVEL == AnalysisDebugLevel::Taint);
+        if (res >= AbstractResult::Tainted) {
+            if (res == AbstractResult::Tainted) {
+                log << "===== Before applying instruction ";
+                log(i);
+                log << " we have\n";
+                log(pre);
+            }
+            log << "===== After applying instruction ";
+            if (res == AbstractResult::Tainted) {
+                log << " (State got tainted)";
+            } else {
+                log(i);
+            }
+            log << " we have\n";
+            log(post);
+        }
+    }
+
+    void logExit(const AbstractState& state) {
+        if (DEBUG_LEVEL >= AnalysisDebugLevel::Exit) {
+            log << "===== Exit state is\n";
+            log(state);
+        }
+    }
+
     template <PositioningStyle POS>
-    const AbstractState& at(Instruction* i) {
+    AbstractState at(Instruction* i) const {
         assert(done);
 
+        // TODO: this is a fairly slow way of doing things. we should have some
+        // cache for the last used positions and then try to compute the
+        // current state from the last one. Also we should return a reference
+        // and not a copy.
         BB* bb = i->bb();
-        BBSnapshot& bbSnapshots = snapshots[bb->id];
-        const AbstractState& state = bbSnapshots.entry;
+        const BBSnapshot& bbSnapshots = snapshots[bb->id];
+        AbstractState state = bbSnapshots.entry;
         for (auto j : VisitorHelpers::reverse(*bb)) {
-            if (POS == PositioningStyle::BeforeInstruction && i == j)
+            if (POS == BeforeInstruction && i == j)
                 return state;
 
             if (bbSnapshots.extra.count(j))
@@ -401,7 +473,7 @@ class BackwardStaticAnalysis {
             else
                 apply(state, j);
 
-            if (POS == PositioningStyle::AfterInstruction && i == j)
+            if (POS == AfterInstruction && i == j)
                 return state;
         }
 
@@ -417,7 +489,7 @@ class BackwardStaticAnalysis {
 
         std::vector<bool> seen(snapshots.size(), false);
 
-        for (auto e : cfg.exits()) {
+        for (auto e : entrypoints) {
             Visitor::runBackward(e, cfg, [&](BB* bb) {
                 if (seen[bb->id])
                     return;
@@ -425,7 +497,7 @@ class BackwardStaticAnalysis {
                 const BBSnapshot& bbSnapshots = snapshots[bb->id];
                 AbstractState state = bbSnapshots.entry;
                 for (auto i : VisitorHelpers::reverse(*bb)) {
-                    if (POS == PositioningStyle::BeforeInstruction)
+                    if (POS == BeforeInstruction)
                         collect(state, i);
 
                     if (bbSnapshots.extra.count(i))
@@ -433,7 +505,7 @@ class BackwardStaticAnalysis {
                     else
                         apply(state, i);
 
-                    if (POS == PositioningStyle::AfterInstruction)
+                    if (POS == AfterInstruction)
                         collect(state, i);
                 }
             });
@@ -444,22 +516,16 @@ class BackwardStaticAnalysis {
         bool reachedExit = false;
 
         std::vector<bool> changed(snapshots.size(), false);
-        for (auto e : cfg.exits())
+        for (auto e : entrypoints)
             changed[e->id] = true;
 
-        if (DEBUG_LEVEL > AnalysisDebugLevel::None) {
-            log << "=========== Starting " << name << " Analysis on "
-                << closure->name << " ";
-            if (code == closure)
-                log << "body";
-            else
-                log << "Prom(" << static_cast<Promise*>(code)->id << ")";
-            log << "\n";
-        }
+        logHeader();
 
+        typedef std::pair<BB*, Instruction*> Position;
+        std::vector<Position> recursiveTodo;
         do {
             done = true;
-            for (auto e : cfg.exits()) {
+            for (auto e : entrypoints) {
                 Visitor::runBackward(e, cfg, [&](BB* bb) {
                     size_t id = bb->id;
 
@@ -467,57 +533,43 @@ class BackwardStaticAnalysis {
                         return;
 
                     AbstractState state = snapshots[id].entry;
-
-                    if (DEBUG_LEVEL >= AnalysisDebugLevel::BB) {
-                        log << "======= Entering BB" << bb->id
-                            << ", initial state\n";
-                        log(state);
-                    }
+                    logInitialState(state, bb);
 
                     for (auto i : VisitorHelpers::reverse(*bb)) {
-                        AbstractState old;
-                        if (DEBUG_LEVEL == AnalysisDebugLevel::Taint)
-                            old = state;
-                        auto res = apply(state, i);
-                        if ((DEBUG_LEVEL >= AnalysisDebugLevel::Instruction &&
-                             res >= AbstractResult::None) ||
-                            (DEBUG_LEVEL >= AnalysisDebugLevel::Taint &&
-                             res >= AbstractResult::Tainted)) {
-                            if (res == AbstractResult::Tainted) {
-                                log << "===== Before applying instruction ";
-                                log(i);
-                                log << " we have\n";
-                                log(old);
-                            }
-                            log << "===== After applying instruction ";
-                            if (res == AbstractResult::Tainted) {
-                                log << " (State got tainted)";
-                            } else {
-                                log(i);
-                            }
-                            log << " we have\n";
-                            log(state);
+                        AbstractResult res;
+                        if (DEBUG_LEVEL == AnalysisDebugLevel::Taint) {
+                            AbstractState old = state;
+                            res = apply(state, i);
+                            logTaintChange(old, state, res, i);
+                        } else {
+                            res = apply(state, i);
+                            logChange(state, res, i);
                         }
 
-                        if (res.keepSnapshot)
+                        if (res.needRecursion) {
+                            if (snapshots[bb->id].extra.count(i)) {
+                                snapshots[bb->id].extra[i].merge(state);
+                                state = snapshots[bb->id].extra[i];
+                            } else {
+                                snapshots[bb->id].extra[i] = state;
+                            }
+                            recursiveTodo.push_back(Position(bb, i));
+                        } else if (res.keepSnapshot) {
                             snapshots[bb->id].extra[i] = state;
+                        }
                     }
 
                     if (bb == code->entry) {
-                        if (DEBUG_LEVEL >= AnalysisDebugLevel::Exit) {
-                            log << "===== Exit state is\n";
-                            log(state);
-                        }
+                        logExit(state);
 
-                        // TODO: about the changed flags here... ?
+                        // TODO: shouldn't the forward version also have this?
                         changed[id] = false;
 
                         if (reachedExit) {
-                            AbstractResult mres = exitpoint.merge(state);
-                            if (mres > AbstractResult::None) {
-                                done = false;
-                                changed[id] = true;
-                            }
+                            // TODO: is it ok to ignore the merge result here?
+                            // (maybe because from exitpoint we don't go
+                            // anywhere)
+                            exitpoint.merge(state);
                         } else {
                             exitpoint = state;
                             reachedExit = true;
@@ -530,6 +582,27 @@ class BackwardStaticAnalysis {
 
                     changed[id] = false;
                 });
+                if (!recursiveTodo.empty()) {
+                    for (auto& rec : recursiveTodo) {
+                        auto bb = rec.first->id;
+                        if (snapshots[bb].extra.count(rec.second)) {
+                            auto mres = snapshots[bb]
+                                            .extra.at(rec.second)
+                                            .merge(exitpoint);
+                            if (mres > AbstractResult::None) {
+                                logChange(snapshots[bb].extra.at(rec.second),
+                                          mres, rec.second);
+                                changed[bb] = true;
+                                done = false;
+                            }
+                        } else {
+                            snapshots[bb].extra[rec.second] = exitpoint;
+                            changed[bb] = true;
+                            done = false;
+                        }
+                    }
+                    recursiveTodo.clear();
+                }
             }
         } while (!done);
     }

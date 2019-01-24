@@ -221,7 +221,7 @@ class TheStackAllocator
     ApplyCompensation& applyCompensation;
 
   public:
-    TheStackAllocator(Closure* cls, Code* code, StackAllocatorState init,
+    TheStackAllocator(ClosureVersion* cls, Code* code, StackAllocatorState init,
                       LogStream& log, CFG const& cfg,
                       StackValuesAnalysis const& sva, ApplyCompensation& ac)
         : BackwardStaticAnalysis("Stack Allocator", cls, code, init, cfg, log),
@@ -343,7 +343,8 @@ AbstractResult TheStackAllocator::apply(StackAllocatorState& state,
 namespace rir {
 namespace pir {
 
-StackAllocator::StackAllocator(Closure* function, Code* code, LogStream& log) {
+StackAllocator::StackAllocator(ClosureVersion* function, Code* code,
+                               LogStream& log) {
 
     CFG cfg(code);
 

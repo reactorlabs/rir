@@ -14,7 +14,7 @@ class StackValuesAnalysis {
 
     std::unordered_map<BB*, std::unordered_set<Value*>> stackValues;
 
-    StackValuesAnalysis(Closure* fun, Code* code, LogStream& log,
+    StackValuesAnalysis(ClosureVersion* fun, Code* code, LogStream& log,
                         CFG const& cfg);
 
     void print(BB* bb) const {

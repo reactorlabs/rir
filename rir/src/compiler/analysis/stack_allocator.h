@@ -20,7 +20,7 @@ class StackAllocator {
     ApplyCompensation applyCompensation;
     MergeCompensation mergeCompensation;
 
-    StackAllocator(Closure* fun, Code* code, LogStream& log);
+    StackAllocator(ClosureVersion* fun, Code* code, LogStream& log);
 
     void print() const {
         std::cout << "stack allocator\napply:\n";

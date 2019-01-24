@@ -100,7 +100,7 @@ class SSAAllocator {
     };
     std::unordered_map<Value*, Liveness> livenessInterval;
 
-    explicit SSAAllocator(Code* code, Closure* cls, LogStream& log)
+    explicit SSAAllocator(Code* code, ClosureVersion* cls, LogStream& log)
         : cfg(code), dom(code), code(code), bbsSize(code->nextBBId) {
         if (!preallocateToStack(cls, log)) {
             computeLiveness();
@@ -111,7 +111,7 @@ class SSAAllocator {
         // TODO: verification if stack allocator succeeds
     }
 
-    bool preallocateToStack(Closure* cls, LogStream& log) {
+    bool preallocateToStack(ClosureVersion* cls, LogStream& log) {
 
         Visitor::run(code->entry, [&](BB* bb) {
             if (bb->isEmpty())

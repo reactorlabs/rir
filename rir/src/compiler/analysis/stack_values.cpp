@@ -36,7 +36,7 @@ class TheStackValuesAnalysis
   public:
     CFG const& cfg;
 
-    TheStackValuesAnalysis(Closure* cls, Code* code, CFG const& cfg,
+    TheStackValuesAnalysis(ClosureVersion* cls, Code* code, CFG const& cfg,
                            LogStream& log)
         : BackwardStaticAnalysis("Stack Values", cls, code, cfg, log),
           cfg(cfg) {}
@@ -95,7 +95,7 @@ AbstractResult TheStackValuesAnalysis::apply(StackValuesAnalysisState& state,
 namespace rir {
 namespace pir {
 
-StackValuesAnalysis::StackValuesAnalysis(Closure* function, Code* code,
+StackValuesAnalysis::StackValuesAnalysis(ClosureVersion* function, Code* code,
                                          LogStream& log, CFG const& cfg) {
     TheStackValuesAnalysis analysis(function, code, cfg, log);
     analysis();
