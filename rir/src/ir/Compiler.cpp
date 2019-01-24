@@ -380,7 +380,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
                 bool is2d = g.length() == 4;
                 SEXP fun2 = *g.begin();
                 auto idx = g.begin() + 2;
-                auto idx2 = is2d ? (g.begin() + 3) : NULL;
+                auto idx2 = is2d ? (g.begin() + 3) : idx;
                 if ((fun2 == symbol::DoubleBracket ||
                      fun2 == symbol::Bracket) &&
                     *idx != R_DotsSymbol && *idx != R_MissingArg &&
