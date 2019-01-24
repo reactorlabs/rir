@@ -14,6 +14,7 @@
 #include <vector>
 
 #include "ir/RuntimeFeedback.h"
+#include "runtime/Assumptions.h"
 
 #include "BC_noarg_list.h"
 
@@ -86,11 +87,19 @@ class BC {
     struct CallFixedArgs {
         NumArgs nargs;
         Immediate ast;
+        Assumptions given;
     };
     struct StaticCallFixedArgs {
         NumArgs nargs;
         Immediate ast;
-        Immediate target;
+        Assumptions given;
+        Immediate targetClosure;
+        Immediate versionHint;
+    };
+    struct CallBuiltinFixedArgs {
+        NumArgs nargs;
+        Immediate ast;
+        Immediate builtin;
     };
     struct GuardFunArgs {
         Immediate name;
@@ -114,6 +123,7 @@ class BC {
     union ImmediateArguments {
         StaticCallFixedArgs staticCallFixedArgs;
         CallFixedArgs callFixedArgs;
+        CallBuiltinFixedArgs callBuiltinFixedArgs;
         GuardFunArgs guard_fun_args;
         PoolIdx pool;
         FunIdx fun;
@@ -180,6 +190,8 @@ class BC {
             return immediate.callFixedArgs.nargs + 1;
         if (bc == Opcode::static_call_)
             return immediate.staticCallFixedArgs.nargs;
+        if (bc == Opcode::call_builtin_)
+            return immediate.callBuiltinFixedArgs.nargs;
         return popCount(bc);
     }
     inline size_t pushCount() { return pushCount(bc); }
@@ -206,7 +218,8 @@ class BC {
     bool isCall() const {
         return bc == Opcode::call_implicit_ || bc == Opcode::call_ ||
                bc == Opcode::named_call_ ||
-               bc == Opcode::named_call_implicit_ || bc == Opcode::static_call_;
+               bc == Opcode::named_call_implicit_ ||
+               bc == Opcode::static_call_ || bc == Opcode::call_builtin_;
     }
 
     bool hasPromargs() const {
@@ -263,13 +276,13 @@ class BC {
             pc++;
             Immediate nargs;
             memcpy(&nargs, pc, sizeof(Immediate));
-            return 1 + (2 + nargs) * sizeof(Immediate);
+            return 1 + (3 + nargs) * sizeof(Immediate);
         }
         case Opcode::named_call_implicit_: {
             pc++;
             Immediate nargs;
             memcpy(&nargs, pc, sizeof(Immediate));
-            return 1 + (2 + 2 * nargs) * sizeof(Immediate);
+            return 1 + (3 + 2 * nargs) * sizeof(Immediate);
         }
         default: {}
         }
@@ -327,13 +340,17 @@ BC_NOARGS(V, _)
     inline static BC pull(uint32_t);
     inline static BC is(uint32_t);
     inline static BC deopt(SEXP);
-    inline static BC callImplicit(const std::vector<FunIdx>& args, SEXP ast);
+    inline static BC callImplicit(const std::vector<FunIdx>& args, SEXP ast,
+                                  const Assumptions& given);
     inline static BC callImplicit(const std::vector<FunIdx>& args,
-                                  const std::vector<SEXP>& names, SEXP ast);
-    inline static BC call(size_t nargs, SEXP ast);
+                                  const std::vector<SEXP>& names, SEXP ast,
+                                  const Assumptions& given);
+    inline static BC call(size_t nargs, SEXP ast, const Assumptions& given);
     inline static BC call(size_t nargs, const std::vector<SEXP>& names,
-                          SEXP ast);
-    inline static BC staticCall(size_t nargs, SEXP ast, SEXP target);
+                          SEXP ast, const Assumptions& given);
+    inline static BC staticCall(size_t nargs, SEXP ast, SEXP targetClosure,
+                                SEXP targetVersion, const Assumptions& given);
+    inline static BC callBuiltin(size_t nargs, SEXP ast, SEXP target);
 
     inline static BC decode(Opcode* pc, const Code* code) {
         BC cur;
@@ -543,6 +560,10 @@ BC_NOARGS(V, _)
         case Opcode::call_:
         case Opcode::named_call_:
             memcpy(&immediate.callFixedArgs, pc, sizeof(CallFixedArgs));
+            break;
+        case Opcode::call_builtin_:
+            memcpy(&immediate.callBuiltinFixedArgs, pc,
+                   sizeof(CallBuiltinFixedArgs));
             break;
         case Opcode::static_call_:
             memcpy(&immediate.staticCallFixedArgs, pc,

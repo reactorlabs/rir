@@ -101,22 +101,22 @@ REXPORT SEXP pir_debugFlags(
 
 #define V(n)                                                                   \
     if (Rf_asLogical(n))                                                       \
-        opts.set(pir::DebugFlag::n);
+        opts.flags.set(pir::DebugFlag::n);
     LIST_OF_PIR_DEBUGGING_FLAGS(V)
 #undef V
 
     SEXP res = Rf_allocVector(INTSXP, 1);
-    INTEGER(res)[0] = (int)opts.to_ulong();
+    INTEGER(res)[0] = (int)opts.flags.to_i();
     return res;
 }
 
-static long getInitialDebugOptions() {
+static pir::DebugOptions::DebugFlags getInitialDebugFlags() {
     auto verb = getenv("PIR_DEBUG");
     if (!verb)
-        return 0;
+        return pir::DebugOptions::DebugFlags();
     std::istringstream in(verb);
 
-    pir::DebugOptions flags;
+    pir::DebugOptions::DebugFlags flags;
     while (!in.fail()) {
         std::string opt;
         std::getline(in, opt, ',');
@@ -141,20 +141,29 @@ static long getInitialDebugOptions() {
             exit(1);
         }
     }
-    return flags.to_ulong();
+    return flags;
 }
 
-static pir::DebugOptions PirDebug(getInitialDebugOptions());
+static std::string getInitialDebugPassFilter() {
+    auto filter = getenv("PIR_DEBUG_PASS_FILTER");
+    if (filter)
+        return filter;
+    return "";
+}
+
+static pir::DebugOptions PirDebug = {getInitialDebugFlags(),
+                                     getInitialDebugPassFilter()};
 
 REXPORT SEXP pir_setDebugFlags(SEXP debugFlags) {
     if (TYPEOF(debugFlags) != INTSXP || Rf_length(debugFlags) < 1)
         Rf_error(
             "pir_setDebugFlags expects an integer vector as second parameter");
-    PirDebug = pir::DebugOptions(INTEGER(debugFlags)[0]);
+    PirDebug.flags = pir::DebugOptions::DebugFlags(INTEGER(debugFlags)[0]);
     return R_NilValue;
 }
 
-SEXP pirCompile(SEXP what, const std::string& name, pir::DebugOptions debug) {
+SEXP pirCompile(SEXP what, const Assumptions& assumptions,
+                const std::string& name, pir::DebugOptions debug) {
 
     if (!isValidClosureSEXP(what)) {
         Rf_error("not a compiled closure");
@@ -173,14 +182,14 @@ SEXP pirCompile(SEXP what, const std::string& name, pir::DebugOptions debug) {
     pir::StreamLogger logger(debug);
     logger.title("Compiling " + name);
     pir::Rir2PirCompiler cmp(m, logger);
-    cmp.compileClosure(what, name, {},
-                       [&](pir::Closure* c) {
+    cmp.compileClosure(what, name, assumptions,
+                       [&](pir::ClosureVersion* c) {
                            logger.flush();
                            cmp.optimizeModule();
 
                            // compile back to rir
                            pir::Pir2RirCompiler p2r(logger);
-                           auto fun = p2r.compile(c, what, dryRun);
+                           auto fun = p2r.compile(c, dryRun);
 
                            // Install
                            if (dryRun)
@@ -221,7 +230,7 @@ REXPORT SEXP pir_compile(SEXP what, SEXP name, SEXP debugFlags) {
     std::string n;
     if (TYPEOF(name) == SYMSXP)
         n = CHAR(PRINTNAME(name));
-    return pirCompile(what, n,
+    return pirCompile(what, {}, n,
                       debugFlags == R_NilValue
                           ? PirDebug
                           : pir::DebugOptions(INTEGER(debugFlags)[0]));
@@ -232,24 +241,27 @@ REXPORT SEXP pir_tests() {
     return R_NilValue;
 }
 
-SEXP pirOptDefaultOpts(SEXP closure, SEXP name) {
+SEXP rirOptDefaultOpts(SEXP closure, const Assumptions& assumptions,
+                       SEXP name) {
     std::string n = "";
     if (TYPEOF(name) == SYMSXP)
         n = CHAR(PRINTNAME(name));
     // PIR can only optimize closures, not expressions
     if (isValidClosureSEXP(closure))
-        return pirCompile(closure, n, PirDebug);
+        return pirCompile(closure, assumptions, n, PirDebug);
     else
         return closure;
 }
 
-SEXP pirOptDefaultOptsDryrun(SEXP closure, SEXP name) {
+SEXP rirOptDefaultOptsDryrun(SEXP closure, const Assumptions& assumptions,
+                             SEXP name) {
     std::string n = "";
     if (TYPEOF(name) == SYMSXP)
         n = CHAR(PRINTNAME(name));
     // PIR can only optimize closures, not expressions
     if (isValidClosureSEXP(closure))
-        return pirCompile(closure, n, PirDebug | pir::DebugFlag::DryRun);
+        return pirCompile(closure, assumptions, n,
+                          PirDebug | pir::DebugFlag::DryRun);
     else
         return closure;
 }

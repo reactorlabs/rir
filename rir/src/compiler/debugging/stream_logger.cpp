@@ -26,20 +26,29 @@ FileLogStream::~FileLogStream() { fstream.close(); }
 bool LogStream::tty() { return ConsoleColor::isTTY(out); }
 bool BufferedLogStream::tty() { return ConsoleColor::isTTY(actualOut); }
 
-LogStream& StreamLogger::begin(Closure* cls) {
+LogStream& StreamLogger::begin(ClosureVersion* cls) {
     assert(!streams.count(cls) && "You already started this function");
+
+    std::stringstream id;
+    id << cls->name() << " ";
+    unsigned pos = 0;
+    for (auto a : cls->assumptions()) {
+        id << a;
+        if (++pos < cls->assumptions().count())
+            id << "|";
+    }
 
     if (options.includes(DebugFlag::PrintIntoFiles)) {
         std::stringstream filename;
         filename << "pir-function-" << std::setfill('0') << std::setw(5)
-                 << logId++ << "-" << cls->name << ".log";
+                 << logId++ << "-" << cls->name() << ".log";
         streams.emplace(cls,
-                        new FileLogStream(options, cls->name, filename.str()));
+                        new FileLogStream(options, id.str(), filename.str()));
     } else {
         if (options.includes(DebugFlag::PrintIntoStdout))
-            streams.emplace(cls, new LogStream(options, cls->name));
+            streams.emplace(cls, new LogStream(options, id.str()));
         else
-            streams.emplace(cls, new BufferedLogStream(options, cls->name));
+            streams.emplace(cls, new BufferedLogStream(options, id.str()));
     }
 
     auto& logger = get(cls);
@@ -47,14 +56,14 @@ LogStream& StreamLogger::begin(Closure* cls) {
     if (options.includes(DebugFlag::PrintEarlyRir)) {
         logger.preparePrint();
         logger.section("Original version");
-        cls->rirVersion()->disassemble(logger.out);
+        cls->owner()->rirFunction()->disassemble(logger.out);
         logger.out << "\n";
     }
 
     return logger;
 }
 
-void LogStream::compilationEarlyPir(Closure* closure) {
+void LogStream::compilationEarlyPir(ClosureVersion* closure) {
     if (options.includes(DebugFlag::PrintEarlyPir)) {
         preparePrint();
         section("Compiled to PIR Version");
@@ -62,7 +71,7 @@ void LogStream::compilationEarlyPir(Closure* closure) {
     }
 }
 
-void LogStream::pirOptimizationsFinished(Closure* closure) {
+void LogStream::pirOptimizationsFinished(ClosureVersion* closure) {
     if (options.includes(DebugFlag::PrintPirAfterOpt)) {
         preparePrint();
         section("PIR Version After Optimizations");
@@ -71,19 +80,27 @@ void LogStream::pirOptimizationsFinished(Closure* closure) {
     }
 }
 
-void LogStream::pirOptimizationsHeader(Closure* closure,
-                                       const std::string& pass, size_t passnr) {
+void LogStream::pirOptimizationsHeader(ClosureVersion* closure,
+                                       const PirTranslator* pass,
+                                       size_t passnr) {
     if (options.includes(DebugFlag::PrintOptimizationPasses)) {
-        preparePrint();
-        std::stringstream ss;
-        ss << pass << ": == " << passnr;
-        section(ss.str());
+        if (options.passFilter.empty() ||
+            options.passFilter == pass->getName()) {
+            preparePrint();
+            std::stringstream ss;
+            ss << pass->getName() << ": == " << passnr;
+            section(ss.str());
+        }
     }
 }
 
-void LogStream::pirOptimizations(Closure* closure) {
+void LogStream::pirOptimizations(ClosureVersion* closure,
+                                 const PirTranslator* pass) {
     if (options.includes(DebugFlag::PrintOptimizationPasses)) {
-        closure->print(out, tty());
+        if (options.passFilter.empty() ||
+            options.passFilter == pass->getName()) {
+            closure->print(out, tty());
+        }
     }
 }
 
@@ -116,7 +133,7 @@ void LogStream::CSSA(Code* code) {
     }
 }
 
-void LogStream::finalPIR(Closure* code) {
+void LogStream::finalPIR(ClosureVersion* code) {
     if (options.includes(DebugFlag::PrintFinalPir)) {
         preparePrint();
         section("Final PIR Version");

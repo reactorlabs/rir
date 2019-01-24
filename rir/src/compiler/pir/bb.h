@@ -43,7 +43,7 @@ class BB {
 
     void unsafeSetId(unsigned newId) { *const_cast<unsigned*>(&id) = newId; }
 
-    unsigned indexOf(Instruction* i) {
+    unsigned indexOf(const Instruction* i) {
         unsigned p = 0;
         for (auto j : instrs) {
             if (i == j)

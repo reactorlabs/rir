@@ -50,6 +50,7 @@
 
 namespace rir {
 enum class Opcode : uint8_t;
+struct DispatchTable;
 struct Code;
 
 namespace pir {
@@ -140,8 +141,8 @@ class Instruction : public Value {
 
     virtual Instruction* clone() const = 0;
 
-    Value* followCasts() override;
-    Value* followCastsAndForce() override;
+    const Value* cFollowCasts() const override final;
+    const Value* cFollowCastsAndForce() const override final;
     bool isInstruction() override final { return true; }
     virtual bool envOnlyForObj();
 
@@ -157,9 +158,9 @@ class Instruction : public Value {
 
     virtual ~Instruction() {}
 
-    InstructionUID id();
+    InstructionUID id() const;
 
-    virtual const char* name() { return tagToStr(tag); }
+    virtual const char* name() const { return tagToStr(tag); }
 
     Instruction* hasSingleUse();
     void eraseAndRemove();
@@ -171,11 +172,11 @@ class Instruction : public Value {
 
     virtual void updateType(){};
 
-    virtual void printEnv(std::ostream& out, bool tty);
-    virtual void printArgs(std::ostream& out, bool tty);
-    virtual void print(std::ostream& out, bool tty = false);
-    void printRef(std::ostream& out) override final;
-    void print() { print(std::cerr, true); }
+    virtual void printEnv(std::ostream& out, bool tty) const;
+    virtual void printArgs(std::ostream& out, bool tty) const;
+    virtual void print(std::ostream& out, bool tty = false) const;
+    void printRef(std::ostream& out) const override final;
+    void print() const { print(std::cerr, true); }
 
     virtual InstrArg& arg(size_t pos) = 0;
     virtual const InstrArg& arg(size_t pos) const = 0;
@@ -273,18 +274,22 @@ class InstructionImplementation : public Instruction {
     static constexpr bool mayChangeEnv_ = ENV >= EnvAccess::Write;
     static constexpr bool mayLeakEnv_ = ENV >= EnvAccess::Leak;
 
-    bool hasEffect() const final { return EFFECT > Effect::None; }
-    bool mayForcePromises() const final { return EFFECT >= Effect::Force; }
-    bool mayUseReflection() const final { return EFFECT > Effect::Reflection; }
-    bool mayAccessEnv() const final { return mayAccessEnv_; }
-    bool changesEnv() const final { return hasEnv() && mayChangeEnv_; }
-    bool leaksEnv() const final { return hasEnv() && mayLeakEnv_; }
-    bool hasEnv() const final {
+    bool hasEffect() const override final { return EFFECT > Effect::None; }
+    bool mayForcePromises() const override final {
+        return EFFECT >= Effect::Force;
+    }
+    bool mayUseReflection() const override final {
+        return EFFECT > Effect::Reflection;
+    }
+    bool mayAccessEnv() const override final { return mayAccessEnv_; }
+    bool changesEnv() const override final { return hasEnv() && mayChangeEnv_; }
+    bool leaksEnv() const override final { return hasEnv() && mayLeakEnv_; }
+    bool hasEnv() const override final {
         return mayAccessEnv() && env() != Env::elided();
     }
-    bool exits() const final { return CF == Controlflow::Exit; }
-    bool branches() const final { return CF == Controlflow::Branch; }
-    bool branchOrExit() const final { return branches() || exits(); }
+    bool exits() const override final { return CF == Controlflow::Exit; }
+    bool branches() const override final { return CF == Controlflow::Branch; }
+    bool branchOrExit() const override final { return branches() || exits(); }
 
     static const Base* Cast(const Value* i) {
         if (i->tag == ITAG)
@@ -514,7 +519,7 @@ class FLI(LdConst, 0, Effect::None, EnvAccess::None) {
     LdConst(SEXP c, PirType t) : FixedLenInstruction(t), c(c) {}
     explicit LdConst(SEXP c) : FixedLenInstruction(PirType(c)), c(c) {}
     SEXP c;
-    void printArgs(std::ostream& out, bool tty) override;
+    void printArgs(std::ostream& out, bool tty) const override;
 };
 
 class FLIE(LdFun, 2, Effect::Any, EnvAccess::Write) {
@@ -542,7 +547,7 @@ class FLIE(LdFun, 2, Effect::Any, EnvAccess::Write) {
         return nullptr;
     }
 
-    void printArgs(std::ostream& out, bool tty) override;
+    void printArgs(std::ostream& out, bool tty) const override;
 };
 
 class FLIE(LdVar, 1, Effect::None, EnvAccess::Read) {
@@ -557,7 +562,7 @@ class FLIE(LdVar, 1, Effect::None, EnvAccess::Read) {
         assert(TYPEOF(name) == SYMSXP);
     }
 
-    void printArgs(std::ostream& out, bool tty) override;
+    void printArgs(std::ostream& out, bool tty) const override;
 };
 
 class FLI(ForSeqSize, 1, Effect::Error, EnvAccess::None) {
@@ -574,7 +579,7 @@ class FLI(LdArg, 0, Effect::None, EnvAccess::None) {
     explicit LdArg(size_t id)
         : FixedLenInstruction(PirType::valOrLazy()), id(id) {}
 
-    void printArgs(std::ostream& out, bool tty) override;
+    void printArgs(std::ostream& out, bool tty) const override;
 };
 
 class FLI(ChkMissing, 1, Effect::Warn, EnvAccess::None) {
@@ -603,10 +608,10 @@ class FLIE(StVarSuper, 2, Effect::None, EnvAccess::Write) {
           varName(Rf_install(name)) {}
 
     SEXP varName;
-    Value* val() { return arg(0).val(); }
+    Value* val() const { return arg(0).val(); }
     using FixedLenInstructionWithEnvSlot::env;
 
-    void printArgs(std::ostream& out, bool tty) override;
+    void printArgs(std::ostream& out, bool tty) const override;
 };
 
 class FLIE(LdVarSuper, 1, Effect::None, EnvAccess::Read) {
@@ -620,7 +625,7 @@ class FLIE(LdVarSuper, 1, Effect::None, EnvAccess::Read) {
 
     SEXP varName;
 
-    void printArgs(std::ostream& out, bool tty) override;
+    void printArgs(std::ostream& out, bool tty) const override;
 };
 
 class FLIE(StVar, 2, Effect::None, EnvAccess::Write) {
@@ -636,10 +641,10 @@ class FLIE(StVar, 2, Effect::None, EnvAccess::Write) {
           varName(Rf_install(name)) {}
 
     SEXP varName;
-    Value* val() { return arg(0).val(); }
+    Value* val() const { return arg(0).val(); }
     using FixedLenInstructionWithEnvSlot::env;
 
-    void printArgs(std::ostream& out, bool tty) override;
+    void printArgs(std::ostream& out, bool tty) const override;
 };
 
 class Branch
@@ -649,7 +654,7 @@ class Branch
     explicit Branch(Value * test)
         : FixedLenInstruction(PirType::voyd(), {{NativeType::test}}, {{test}}) {
     }
-    void printArgs(std::ostream & out, bool tty) override;
+    void printArgs(std::ostream& out, bool tty) const override;
 };
 
 class Return : public FixedLenInstruction<Tag::Return, Return, 1, Effect::None,
@@ -681,15 +686,17 @@ class FLIE(MkArg, 2, Effect::None, EnvAccess::Capture) {
     typedef std::function<void(Value*)> EagerMaybe;
 
     Value* eagerArg() const { return arg(0).val(); }
+    void eagerArg(Value* eager) { arg(0).val() = eager; }
+
     void updatePromise(Promise* p) { prom_ = p; }
-    Promise* prom() { return prom_; }
+    Promise* prom() const { return prom_; }
 
     void ifEager(EagerMaybe maybe) {
         if (eagerArg() != Missing::instance())
             maybe(eagerArg());
     }
 
-    void printArgs(std::ostream& out, bool tty) override;
+    void printArgs(std::ostream& out, bool tty) const override;
 
     Value* promEnv() const { return env(); }
 };
@@ -719,10 +726,10 @@ class FLIE(MkCls, 4, Effect::None, EnvAccess::Capture) {
 
 class FLIE(MkFunCls, 1, Effect::None, EnvAccess::Capture) {
   public:
-    Closure* fun;
-    SEXP fml, code, src;
-    MkFunCls(Closure* fun, Value* lexicalEnv, SEXP fml, SEXP code, SEXP src);
-    void printArgs(std::ostream&, bool tty) override;
+    Closure* cls;
+    DispatchTable* originalBody;
+    MkFunCls(Closure* cls, DispatchTable* originalBody, Value* lexicalEnv);
+    void printArgs(std::ostream&, bool tty) const override;
 
     Value* lexicalEnv() const { return env(); }
 };
@@ -735,7 +742,7 @@ class FLIE(Force, 2, Effect::Any, EnvAccess::Leak) {
         : FixedLenInstructionWithEnvSlot(PirType::val(), {{PirType::any()}},
                                          {{in}}, env) {}
     Value* input() const { return arg(0).val(); }
-    const char* name() override { return strict ? "Force!" : "Force"; }
+    const char* name() const override { return strict ? "Force!" : "Force"; }
 };
 
 class FLI(CastType, 1, Effect::None, EnvAccess::None) {
@@ -835,7 +842,7 @@ class FLI(Is, 1, Effect::None, EnvAccess::None) {
           sexpTag(sexpTag) {}
     uint32_t sexpTag;
 
-    void printArgs(std::ostream& out, bool tty) override;
+    void printArgs(std::ostream& out, bool tty) const override;
 };
 
 class FLI(IsObject, 1, Effect::None, EnvAccess::None) {
@@ -867,7 +874,7 @@ class FLI(PirCopy, 1, Effect::None, EnvAccess::None) {
   public:
     explicit PirCopy(Value* v)
         : FixedLenInstruction(v->type, {{v->type}}, {{v}}) {}
-    void print(std::ostream& out, bool tty) override;
+    void print(std::ostream& out, bool tty) const override;
     void updateType() override final { type = arg<0>().val()->type; }
 };
 
@@ -1030,25 +1037,29 @@ class VLIE(FrameState, Effect::None, EnvAccess::Read) {
         popArg();
     }
 
-    void printArgs(std::ostream& out, bool tty) override;
-    void printEnv(std::ostream& out, bool tty) override final{};
+    void printArgs(std::ostream& out, bool tty) const override;
+    void printEnv(std::ostream& out, bool tty) const override final{};
 };
 
 // Common interface to all call instructions
 class CallInstruction {
   public:
-    virtual size_t nCallArgs() = 0;
-    virtual void eachCallArg(Instruction::ArgumentValueIterator it) = 0;
+    virtual size_t nCallArgs() const = 0;
+    virtual void eachCallArg(Instruction::ArgumentValueIterator it) const = 0;
+    virtual void eachCallArg(Instruction::MutableArgumentIterator it) = 0;
     static CallInstruction* CastCall(Value* v);
     virtual void clearFrameState(){};
-    virtual Closure* tryGetCls() { return nullptr; }
+    virtual Closure* tryGetCls() const { return nullptr; }
+    Assumptions inferAvailableAssumptions() const;
+    virtual bool hasNamedArgs() const { return false; }
+    ClosureVersion* dispatch(Closure*) const;
 };
 
 // Default call instruction. Closure expression (ie. expr left of `(`) is
 // evaluated at runtime and arguments are passed as promises.
 class VLIE(Call, Effect::Any, EnvAccess::Leak), public CallInstruction {
   public:
-    Value* cls() { return arg(1).val(); }
+    Value* cls() const { return arg(1).val(); }
 
     Call(Value * callerEnv, Value * fun, const std::vector<Value*>& args,
          Value* fs, unsigned srcIdx)
@@ -1061,51 +1072,61 @@ class VLIE(Call, Effect::Any, EnvAccess::Leak), public CallInstruction {
             pushArg(args[i], RType::prom);
     }
 
-    Closure* tryGetCls() override final {
+    Closure* tryGetCls() const override final {
         if (auto mk = MkFunCls::Cast(cls()->followCastsAndForce()))
-            return mk->fun;
+            return mk->cls;
         return nullptr;
     }
 
-    size_t nCallArgs() override { return nargs() - 3; };
-    void eachCallArg(Instruction::ArgumentValueIterator it) override {
+    size_t nCallArgs() const override { return nargs() - 3; };
+    void eachCallArg(Instruction::ArgumentValueIterator it) const override {
         for (size_t i = 0; i < nCallArgs(); ++i)
             it(arg(i + 2).val());
     }
+    void eachCallArg(Instruction::MutableArgumentIterator it) override {
+        for (size_t i = 0; i < nCallArgs(); ++i)
+            it(arg(i + 2));
+    }
 
-    FrameState* frameState() {
+    const FrameState* frameState() const {
         return FrameState::Cast(arg(0).val());
     }
     void clearFrameState() override { arg(0).val() = Tombstone::framestate(); };
 
     Value* callerEnv() { return env(); }
 
-    void printArgs(std::ostream & out, bool tty) override;
+    void printArgs(std::ostream & out, bool tty) const override;
 };
 
 class VLIE(NamedCall, Effect::Any, EnvAccess::Leak), public CallInstruction {
   public:
     std::vector<SEXP> names;
 
-    Value* cls() { return arg(0).val(); }
+    Value* cls() const { return arg(0).val(); }
 
-    Closure* tryGetCls() override final {
+    Closure* tryGetCls() const override final {
         if (auto mk = MkFunCls::Cast(cls()->followCastsAndForce()))
-            return mk->fun;
+            return mk->cls;
         return nullptr;
     }
+
+    bool hasNamedArgs() const override { return true; }
 
     NamedCall(Value * callerEnv, Value * fun, const std::vector<Value*>& args,
               const std::vector<BC::PoolIdx>& names_, unsigned srcIdx);
 
-    size_t nCallArgs() override { return nargs() - 2; };
-    void eachCallArg(Instruction::ArgumentValueIterator it) override {
+    size_t nCallArgs() const override { return nargs() - 2; };
+    void eachCallArg(Instruction::ArgumentValueIterator it) const override {
         for (size_t i = 0; i < nCallArgs(); ++i)
             it(arg(i + 1).val());
     }
+    void eachCallArg(Instruction::MutableArgumentIterator it) override {
+        for (size_t i = 0; i < nCallArgs(); ++i)
+            it(arg(i + 1));
+    }
 
     Value* callerEnv() { return env(); }
-    void printArgs(std::ostream & out, bool tty) override;
+    void printArgs(std::ostream & out, bool tty) const override;
 };
 
 class FLIE(CallImplicit, 2, Effect::Any, EnvAccess::Leak) {
@@ -1115,43 +1136,54 @@ class FLIE(CallImplicit, 2, Effect::Any, EnvAccess::Leak) {
     void eachArg(const std::function<void(Promise*)>&) const;
     const std::vector<SEXP> names;
 
-    Value* cls() { return arg(0).val(); }
+    Value* cls() const { return arg(0).val(); }
 
     CallImplicit(Value* callerEnv, Value* fun,
                  const std::vector<Promise*>& args,
                  const std::vector<SEXP>& names_, unsigned srcIdx);
 
     Value* callerEnv() { return env(); }
-    void printArgs(std::ostream& out, bool tty) override;
+    void printArgs(std::ostream& out, bool tty) const override;
 };
 
 // Call instruction for lazy, but staticatlly resolved calls. Closure is
 // specified as `cls_`, args passed as promises.
 class VLIE(StaticCall, Effect::Any, EnvAccess::Leak), public CallInstruction {
     Closure* cls_;
-    SEXP origin_;
 
   public:
-    Closure* cls() { return cls_; }
-    SEXP origin() { return origin_; }
+    ClosureVersion* hint = nullptr;
 
-    Closure* tryGetCls() override final { return cls(); }
+    Closure* cls() const { return cls_; }
+    void cls(Closure * cls) { cls_ = cls; }
+
+    Closure* tryGetCls() const override final { return cls(); }
 
     StaticCall(Value * callerEnv, Closure * cls,
-               const std::vector<Value*>& args, SEXP origin, FrameState* fs,
+               const std::vector<Value*>& args, FrameState* fs,
                unsigned srcIdx);
 
-    size_t nCallArgs() override { return nargs() - 2; };
-    void eachCallArg(Instruction::ArgumentValueIterator it) override {
+    size_t nCallArgs() const override { return nargs() - 2; };
+    void eachCallArg(Instruction::ArgumentValueIterator it) const override {
         for (size_t i = 0; i < nCallArgs(); ++i)
             it(arg(i + 1).val());
     }
+    void eachCallArg(Instruction::MutableArgumentIterator it) override {
+        for (size_t i = 0; i < nCallArgs(); ++i)
+            it(arg(i + 1));
+    }
 
-    FrameState* frameState() { return FrameState::Cast(arg(0).val()); }
+    const FrameState* frameState() const {
+        return FrameState::Cast(arg(0).val());
+    }
     void clearFrameState() override { arg(0).val() = Tombstone::framestate(); };
 
-    void printArgs(std::ostream & out, bool tty) override;
+    void printArgs(std::ostream & out, bool tty) const override;
     Value* callerEnv() { return env(); }
+
+    ClosureVersion* dispatch() const;
+
+    ClosureVersion* optimisticDispatch() const;
 };
 
 typedef SEXP (*CCODE)(SEXP, SEXP, SEXP, SEXP);
@@ -1162,12 +1194,16 @@ class VLIE(CallBuiltin, Effect::Any, EnvAccess::Leak), public CallInstruction {
     const CCODE builtin;
     int builtinId;
 
-    size_t nCallArgs() override { return nargs() - 1; };
-    void eachCallArg(Instruction::ArgumentValueIterator it) override {
+    size_t nCallArgs() const override { return nargs() - 1; };
+    void eachCallArg(Instruction::ArgumentValueIterator it) const override {
         for (size_t i = 0; i < nCallArgs(); ++i)
             it(arg(i).val());
     }
-    void printArgs(std::ostream & out, bool tty) override;
+    void eachCallArg(Instruction::MutableArgumentIterator it) override {
+        for (size_t i = 0; i < nCallArgs(); ++i)
+            it(arg(i));
+    }
+    void printArgs(std::ostream & out, bool tty) const override;
     Value* callerEnv() { return env(); }
 
   private:
@@ -1183,12 +1219,15 @@ class VLI(CallSafeBuiltin, Effect::None, EnvAccess::None),
     const CCODE builtin;
     int builtinId;
 
-    size_t nCallArgs() override { return nargs(); };
-    void eachCallArg(Instruction::ArgumentValueIterator it) override {
+    size_t nCallArgs() const override { return nargs(); };
+    void eachCallArg(Instruction::ArgumentValueIterator it) const override {
+        eachArg(it);
+    }
+    void eachCallArg(Instruction::MutableArgumentIterator it) override {
         eachArg(it);
     }
 
-    void printArgs(std::ostream & out, bool tty) override;
+    void printArgs(std::ostream & out, bool tty) const override;
 
     CallSafeBuiltin(SEXP builtin, const std::vector<Value*>& args,
                     unsigned srcIdx);
@@ -1230,8 +1269,8 @@ class VLIE(MkEnv, Effect::None, EnvAccess::Capture) {
 
     Value* lexicalEnv() const { return env(); }
 
-    void printArgs(std::ostream& out, bool tty) override;
-    void printEnv(std::ostream& out, bool tty) override final{};
+    void printArgs(std::ostream& out, bool tty) const override;
+    void printEnv(std::ostream& out, bool tty) const override final{};
 
     size_t nLocals() { return nargs() - 1; }
 };
@@ -1249,7 +1288,7 @@ class VLI(Phi, Effect::None, EnvAccess::None) {
             VarLenInstruction::pushArg(a);
         assert(nargs() == inputs.size());
     }
-    void printArgs(std::ostream& out, bool tty) override;
+    void printArgs(std::ostream& out, bool tty) const override;
     void updateType() override final;
     void pushArg(Value* a, PirType t) override {
         assert(false && "use addInput");
@@ -1281,7 +1320,7 @@ class Checkpoint
                                  EnvAccess::None, Controlflow::Branch> {
   public:
     Checkpoint() : FixedLenInstruction(NativeType::checkpoint) {}
-    void printArgs(std::ostream & out, bool tty) override;
+    void printArgs(std::ostream& out, bool tty) const override;
     BB* deoptBranch();
 };
 
@@ -1319,7 +1358,9 @@ class FLI(Assume, 2, Effect::Order, EnvAccess::None) {
         assumeTrue = !assumeTrue;
         return this;
     }
-    const char* name() override { return assumeTrue ? "Assume" : "AssumeNot"; }
+    const char* name() const override {
+        return assumeTrue ? "Assume" : "AssumeNot";
+    }
 };
 
 class ScheduledDeopt
@@ -1330,7 +1371,7 @@ class ScheduledDeopt
     std::vector<FrameInfo> frames;
     ScheduledDeopt() : VarLenInstruction(PirType::voyd()) {}
     void consumeFrameStates(Deopt* deopt);
-    void printArgs(std::ostream& out, bool tty) override;
+    void printArgs(std::ostream& out, bool tty) const override;
 };
 
 #undef FLI

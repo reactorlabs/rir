@@ -1,68 +1,83 @@
 #include "closure.h"
-#include "../transform/bb.h"
-#include "../util/visitor.h"
-#include "pir_impl.h"
-
-#include <iostream>
+#include "closure_version.h"
+#include "env.h"
+#include "runtime/DispatchTable.h"
 
 namespace rir {
 namespace pir {
 
-void Closure::print(std::ostream& out, bool tty) const {
-    out << *this << "\n";
-    printCode(out, tty);
-    for (auto p : promises) {
-        if (p)
-            p->print(out, tty);
-    }
+Closure::Closure(const std::string& name, rir::Function* function, SEXP formals,
+                 SEXP srcRef)
+    : origin_(nullptr), function(function), env(Env::notClosed()),
+      srcRef_(srcRef), name_(name), formals_(formals) {
+    invariant();
 }
 
-Promise* Closure::createProm(unsigned srcPoolIdx) {
-    Promise* p = new Promise(this, promises.size(), srcPoolIdx);
-    promises.push_back(p);
-    return p;
+Closure::Closure(const std::string& name, SEXP closure, rir::Function* f,
+                 Env* env)
+    : origin_(closure), function(f), env(env), name_(name),
+      formals_(FORMALS(closure)) {
+
+    static SEXP srcRefSymbol = Rf_install("srcref");
+    srcRef_ = Rf_getAttrib(closure, srcRefSymbol);
+    invariant();
+}
+
+void Closure::invariant() const {
+    // If this is a rir inner function, then we do not have an origin rir
+    // closure (since the closure is then created at runtime).
+    assert(origin_ || env == Env::notClosed());
+    assert(!origin_ || TYPEOF(origin_) == CLOSXP);
+    assert(env == Env::notClosed() || env->rho == CLOENV(origin_));
+    assert(!origin_ || formals_.original() == FORMALS(origin_));
 }
 
 Closure::~Closure() {
-    for (auto p : promises)
-        delete p;
+    for (auto c : versions)
+        delete c.second;
 }
 
-Closure* Closure::clone() {
-    Closure* c = new Closure(name, argNames, env, function, assumptions);
+ClosureVersion* Closure::cloneWithAssumptions(ClosureVersion* version,
+                                              Assumptions asmpt,
+                                              const MaybeClsVersion& change) {
+    auto newCtx = version->optimizationContext();
+    newCtx.assumptions = newCtx.assumptions | asmpt;
+    if (versions.count(newCtx))
+        return versions.at(newCtx);
 
-    // clone code
-    c->entry = BBTransform::clone(entry, c, c);
+    auto copy = version->clone(asmpt);
+    versions[newCtx] = copy;
+    change(copy);
+    return copy;
+}
 
-    // clone promises
-    std::unordered_map<Promise*, Promise*> promMap;
-    for (auto p : promises) {
-        if (!p)
-            continue;
-        Promise* clonedP = new Promise(c, c->promises.size(), p->srcPoolIdx());
-        c->promises.push_back(clonedP);
-        clonedP->entry = BBTransform::clone(p->entry, clonedP, c);
-        promMap[p] = clonedP;
+ClosureVersion*
+Closure::findCompatibleVersion(const OptimizationContext& ctx) const {
+    // Reverse since they are ordered by number of assumptions
+    for (auto c = versions.rbegin(); c != versions.rend(); c++) {
+        auto candidate = *c;
+        auto candidateCtx = candidate.first;
+        if (ctx.assumptions.includes(candidateCtx.assumptions))
+            return candidate.second;
     }
-
-    // fix promise references in body code and promise code
-    Visitor::run(c->entry, [&](Instruction* i) {
-        if (auto a = MkArg::Cast(i))
-            a->updatePromise(promMap.at(a->prom()));
-    });
-    for (auto p : c->promises)
-        Visitor::run(p->entry, [&](Instruction* i) {
-            if (auto a = MkArg::Cast(i))
-                a->updatePromise(promMap.at(a->prom()));
-        });
-
-    return c;
+    return nullptr;
 }
 
-size_t Closure::size() const {
-    size_t s = 0;
-    eachPromise([&s](Promise* p) { s += p->size(); });
-    return s + Code::size();
+ClosureVersion*
+Closure::declareVersion(const OptimizationContext& optimizationContext) {
+    assert(!versions.count(optimizationContext));
+    versions[optimizationContext] = nullptr;
+    auto entry = versions.find(optimizationContext);
+    auto v = new ClosureVersion(this, entry->first);
+    entry->second = v;
+    return v;
+}
+
+void Closure::print(std::ostream& out, bool tty) const {
+    eachVersion([&](ClosureVersion* v) {
+        v->print(out, tty);
+        out << "-------------------------------\n";
+    });
 }
 
 } // namespace pir

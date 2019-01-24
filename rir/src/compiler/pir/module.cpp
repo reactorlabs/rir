@@ -5,32 +5,39 @@ namespace rir {
 namespace pir {
 
 void Module::print(std::ostream& out, bool tty) {
-    eachPirFunction([&](Closure* c) {
+    eachPirClosure([&](Closure* c) {
+        out << "================================\n";
         c->print(out, tty);
-        out << "\n-------------------------------\n";
     });
 }
 
-void Module::erase(rir::Function* f, OptimizationContext ctx) {
-    auto& vs = closures.at(f);
-    auto i = vs.find(ctx);
-    delete (*i).second;
-    vs.erase(i);
+Closure* Module::getOrDeclareRirFunction(const std::string& name,
+                                         rir::Function* f, SEXP formals,
+                                         SEXP src) {
+    auto env = Env::notClosed();
+    if (!closures.count(Idx(f, env))) {
+        closures[Idx(f, env)] = new Closure(name, f, formals, src);
+    }
+    return closures.at(Idx(f, env));
 }
 
-Closure* Module::declare(const std::string& name, rir::Function* f,
-                         OptimizationContext ctx, const std::vector<SEXP>& a) {
-    auto& closureVersions = closures[f];
-    assert(!closureVersions.count(ctx));
-    auto closure = new Closure(name, a, ctx.environment, f, ctx.assumptions);
-    closureVersions.emplace(ctx, closure);
-    return closure;
+Closure* Module::getOrDeclareRirClosure(const std::string& name, SEXP closure,
+                                        rir::Function* f) {
+    auto env = getEnv(CLOENV(closure));
+    if (!closures.count(Idx(f, env))) {
+        closures[Idx(f, env)] = new Closure(name, closure, f, env);
+    }
+    return closures.at(Idx(f, env));
 }
 
-void Module::eachPirFunction(PirClosureIterator it) {
-    for (auto& cs : closures)
-        for (auto& c : cs.second)
-            it(c.second);
+void Module::eachPirClosure(PirClosureIterator it) {
+    for (auto& c : closures)
+        it(c.second);
+}
+
+void Module::eachPirClosureVersion(PirClosureVersionIterator it) {
+    for (auto& c : closures)
+        c.second->eachVersion(it);
 }
 
 Env* Module::getEnv(SEXP rho) {
@@ -51,8 +58,7 @@ Module::~Module() {
     for (auto& e : environments)
         delete e.second;
     for (auto& cs : closures)
-        for (auto& c : cs.second)
-            delete c.second;
+        delete cs.second;
 }
 }
 }

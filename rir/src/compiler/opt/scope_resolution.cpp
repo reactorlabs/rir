@@ -14,17 +14,19 @@ namespace {
 using namespace rir::pir;
 class TheScopeResolution {
   public:
-    Closure* function;
+    ClosureVersion* function;
     CFG cfg;
     DominanceGraph doms;
     LogStream& log;
-    explicit TheScopeResolution(Closure* function, LogStream& log)
+    explicit TheScopeResolution(ClosureVersion* function, LogStream& log)
         : function(function), cfg(function), doms(function), log(log) {}
 
     void operator()() {
         ScopeAnalysis analysis(function, log);
         analysis();
         auto& finalState = analysis.result();
+        if (finalState.noReflection())
+            function->properties.set(ClosureVersion::Property::NoReflection);
 
         Visitor::run(function->entry, [&](BB* bb) {
             auto ip = bb->begin();
@@ -35,8 +37,11 @@ class TheScopeResolution {
                 auto before = analysis.at<ScopeAnalysis::BeforeInstruction>(i);
                 auto after = analysis.at<ScopeAnalysis::AfterInstruction>(i);
 
-                // Force can only see our env only through reflection
-                if (Force::Cast(i) && after.noReflection())
+                // Force and callees can only see our env only through
+                // reflection
+                if (i->hasEnv() &&
+                    (CallInstruction::CastCall(i) || Force::Cast(i)) &&
+                    after.noReflection())
                     i->elideEnv();
 
                 // Dead store to non-escaping environment can be removed
@@ -80,9 +85,9 @@ class TheScopeResolution {
                     // actually the same as some other PIR value. So let's just
                     // replace it.
                     if (res.isSingleValue()) {
-                        auto value = res.singleValue().val;
-                        if (value->validIn(function)) {
-                            i->replaceUsesWith(value);
+                        auto value = res.singleValue();
+                        if (value.recursionLevel == 0) {
+                            i->replaceUsesWith(value.val);
                             next = bb->remove(ip);
                         }
                         return;
@@ -105,7 +110,7 @@ class TheScopeResolution {
 
                         bool onlyLocalVals = true;
                         res.eachSource([&](ValOrig& src) {
-                            if (!src.val->validIn(function))
+                            if (src.recursionLevel > 0)
                                 onlyLocalVals = false;
                         });
 
@@ -199,6 +204,7 @@ class TheScopeResolution {
                                 guess->validIn(function)) {
                                 ldfun->replaceUsesWith(guess);
                                 next = bb->remove(ip);
+                                return;
                             }
                         } else {
                             auto res =
@@ -214,9 +220,9 @@ class TheScopeResolution {
                                     ldfun->guessedBinding(*ip);
                                     next = ip + 2;
                                 }
+                                return;
                             }
                         }
-                        return;
                     }
 
                     // If nothing else, narrow down the environment (in case we
@@ -236,7 +242,7 @@ class TheScopeResolution {
 namespace rir {
 namespace pir {
 
-void ScopeResolution::apply(RirCompiler&, Closure* function,
+void ScopeResolution::apply(RirCompiler&, ClosureVersion* function,
                             LogStream& log) const {
     TheScopeResolution s(function, log);
     s();

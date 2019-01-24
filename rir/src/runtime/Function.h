@@ -49,7 +49,8 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
               sizeof(Function) - NUM_PTRS * sizeof(FunctionSEXP),
               NUM_PTRS + defaultArgs.size()),
           size(functionSize), deopt(false), markOpt(false),
-          numArgs(defaultArgs.size()), signature_(signature) {
+          unoptimizable(false), numArgs(defaultArgs.size()),
+          signature_(signature) {
         for (size_t i = 0; i < numArgs; ++i)
             setEntry(NUM_PTRS + i, defaultArgs[i]);
         body(body_);
@@ -74,11 +75,11 @@ struct Function : public RirRuntimeObject<Function, FUNCTION_MAGIC> {
 
     unsigned deopt : 1;
     unsigned markOpt : 1;
-    unsigned spare : 30;
+    unsigned unoptimizable : 1;
 
     unsigned numArgs;
 
-    const FunctionSignature& signature() { return signature_; }
+    const FunctionSignature& signature() const { return signature_; }
 
   private:
     FunctionSignature signature_; /// pointer to this version's signature

@@ -1,29 +1,27 @@
 #ifndef PIR_OPTIMIZATION_CONTEXT_H
 #define PIR_OPTIMIZATION_CONTEXT_H
 
-#include "assumptions.h"
 #include "pir.h"
+#include "runtime/Assumptions.h"
 #include "runtime/Function.h"
 
 namespace rir {
 namespace pir {
 
 struct OptimizationContext {
-    OptimizationContext(Env* environment, const Assumptions& assumptions)
-        : environment(environment), assumptions(assumptions) {}
+    OptimizationContext(const Assumptions& assumptions)
+        : assumptions(assumptions) {}
 
-    Env* environment;
     Assumptions assumptions;
 
     bool operator<(const OptimizationContext& other) const {
-        if (environment == other.environment)
-            return assumptions.to_ulong() < other.assumptions.to_ulong();
-        return environment < other.environment;
+        if (assumptions.count() != other.assumptions.count())
+            return assumptions.count() < other.assumptions.count();
+        return assumptions.to_i() < other.assumptions.to_i();
     }
 
     bool operator==(const OptimizationContext& other) const {
-        return assumptions.to_ulong() == other.assumptions.to_ulong() &&
-               environment == other.environment;
+        return assumptions == other.assumptions;
     }
 };
 
@@ -35,8 +33,7 @@ template <>
 struct hash<rir::pir::OptimizationContext> {
     std::size_t operator()(const rir::pir::OptimizationContext& v) const {
         using std::hash;
-        return hash<unsigned long long>()(v.assumptions.to_ulong()) ^
-               hash<rir::pir::Env*>()(v.environment);
+        return hash<unsigned long long>()(v.assumptions.to_i());
     }
 };
 } // namespace std

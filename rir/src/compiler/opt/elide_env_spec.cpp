@@ -10,7 +10,8 @@
 namespace rir {
 namespace pir {
 
-void ElideEnvSpec::apply(RirCompiler&, Closure* function, LogStream&) const {
+void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
+                         LogStream&) const {
     // Elide environments of binary operators in which both operators are
     // primitive values
     std::unordered_map<BB*, Checkpoint*> checkpoints;

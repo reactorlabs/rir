@@ -9,7 +9,7 @@
 namespace rir {
 namespace pir {
 
-BB* BBTransform::clone(BB* src, Code* target, Closure* targetClosure) {
+BB* BBTransform::clone(BB* src, Code* target, ClosureVersion* targetClosure) {
     std::vector<BB*> bbs;
 
     // Copy instructions and remember old -> new instruction map.
@@ -50,7 +50,7 @@ BB* BBTransform::clone(BB* src, Code* target, Closure* targetClosure) {
         });
         if (auto mk = MkArg::Cast(i)) {
             Promise* p = mk->prom();
-            if (p->fun != targetClosure) {
+            if (p->owner != targetClosure) {
                 if (promMap.count(p)) {
                     mk->updatePromise(promMap.at(p));
                 } else {

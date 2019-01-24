@@ -670,10 +670,9 @@ class Context {
 
 class Pir2Rir {
   public:
-    Pir2Rir(Pir2RirCompiler& cmp, Closure* cls, SEXP origin, bool dryRun,
+    Pir2Rir(Pir2RirCompiler& cmp, ClosureVersion* cls, bool dryRun,
             LogStream& log)
-        : compiler(cmp), cls(cls), originCls(origin), dryRun(dryRun), log(log) {
-    }
+        : compiler(cmp), cls(cls), dryRun(dryRun), log(log) {}
     size_t compileCode(Context& ctx, Code* code);
     rir::Code* getPromise(Context& ctx, Promise* code);
 
@@ -683,8 +682,7 @@ class Pir2Rir {
 
   private:
     Pir2RirCompiler& compiler;
-    Closure* cls;
-    SEXP originCls;
+    ClosureVersion* cls;
     std::unordered_map<Promise*, rir::Code*> promises;
     bool dryRun;
     LogStream& log;
@@ -746,7 +744,7 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                         // Here we could also load env->rho, but if the user
                         // were to change the environment on the closure our
                         // code would be wrong.
-                        if (originCls && env->rho == CLOENV(originCls))
+                        if (env == cls->owner()->closureEnv())
                             cs << BC::parentEnv();
                         else
                             cs << BC::push(env->rho);
@@ -897,7 +895,11 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 break;
             }
             case Tag::LdArg: {
-                cs << BC::ldarg(LdArg::Cast(instr)->id);
+                auto ld = LdArg::Cast(instr);
+                cs << BC::ldarg(ld->id);
+                // If we want the arguments to be non-lazy, we need to force
+                if (!ld->type.maybeLazy())
+                    cs << BC::force();
                 break;
             }
             case Tag::StVarSuper: {
@@ -942,9 +944,14 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 break;
             }
             case Tag::MkFunCls: {
+                // TODO: would be nice to compile the function here. But I am
+                // not sure if our compiler backend correctly deals with not
+                // closed closures.
                 auto mkfuncls = MkFunCls::Cast(instr);
-                cs << BC::push(mkfuncls->fml) << BC::push(mkfuncls->code)
-                   << BC::push(mkfuncls->src) << BC::close();
+                auto cls = mkfuncls->cls;
+                cs << BC::push(cls->formals().original())
+                   << BC::push(mkfuncls->originalBody->container())
+                   << BC::push(cls->srcRef()) << BC::close();
                 break;
             }
             case Tag::Is: {
@@ -963,8 +970,15 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
         break;                                                                 \
     }
                 EMPTY(PirCopy);
-                EMPTY(CastType);
 #undef EMPTY
+
+            case Tag::CastType: {
+                auto cast = CastType::Cast(instr);
+                if (cast->arg<0>().type().maybeLazy() &&
+                    !cast->type.maybeLazy())
+                    cs << BC::force();
+                break;
+            }
 
             case Tag::LdFunctionEnv: {
                 // TODO: what should happen? For now get the current env
@@ -1038,55 +1052,64 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 });
 
                 if (call->names.empty())
-                    cs << BC::callImplicit(args, Pool::get(call->srcIdx));
+                    cs << BC::callImplicit(args, Pool::get(call->srcIdx),
+                                           Assumption::CorrectOrderOfArguments);
                 else
                     cs << BC::callImplicit(args, call->names,
-                                           Pool::get(call->srcIdx));
+                                           Pool::get(call->srcIdx), {});
                 break;
             }
             case Tag::Call: {
                 auto call = Call::Cast(instr);
-                cs << BC::call(call->nCallArgs(), Pool::get(call->srcIdx));
+                cs << BC::call(call->nCallArgs(), Pool::get(call->srcIdx),
+                               call->inferAvailableAssumptions());
                 break;
             }
             case Tag::NamedCall: {
                 auto call = NamedCall::Cast(instr);
                 cs << BC::call(call->nCallArgs(), call->names,
-                               Pool::get(call->srcIdx));
+                               Pool::get(call->srcIdx),
+                               call->inferAvailableAssumptions());
                 break;
             }
             case Tag::StaticCall: {
                 auto call = StaticCall::Cast(instr);
-                // TODO: Unfortunately we cannot compile the target. We might
-                // have optimized this function under assumptions (and we don't
-                // even have access to the assumptions here). To be able to not
-                // waste that work and actually compile the optimized version,
-                // we need to put it in a specific slot and then have a
-                // staticCall that dispatches to that slot.
+                auto trg = call->optimisticDispatch();
+                SEXP originalClosure = trg->owner()->rirClosure();
 
                 // Avoid recursivly compiling the same closure
-                if (!compiler.alreadyCompiled(call->cls())) {
-                    auto fun =
-                        compiler.compile(call->cls(), call->origin(), dryRun);
-                    Protect p(fun->container());
-                    DispatchTable::unpack(BODY(call->origin()))->insert(fun);
+                auto fun = compiler.alreadyCompiled(trg);
+                SEXP funCont = nullptr;
+
+                if (fun) {
+                    funCont = fun->container();
+                } else if (!compiler.isCompiling(trg)) {
+                    fun = compiler.compile(trg, dryRun);
+                    funCont = fun->container();
+                    Protect p(funCont);
+                    assert(originalClosure &&
+                           "Cannot compile synthetic closure");
+                    DispatchTable::unpack(BODY(originalClosure))->insert(fun);
                 }
-                cs << BC::staticCall(call->nCallArgs(), Pool::get(call->srcIdx),
-                                     call->origin());
+                auto bc = BC::staticCall(
+                    call->nCallArgs(), Pool::get(call->srcIdx), originalClosure,
+                    funCont, call->inferAvailableAssumptions());
+                cs << bc;
+                if (!funCont)
+                    compiler.needsPatching(
+                        trg, bc.immediate.staticCallFixedArgs.versionHint);
                 break;
             }
             case Tag::CallBuiltin: {
-                // TODO(mhyee): all args have to be values, optimize here?
                 auto blt = CallBuiltin::Cast(instr);
-                cs << BC::staticCall(blt->nCallArgs(), Pool::get(blt->srcIdx),
-                                     blt->blt);
+                cs << BC::callBuiltin(blt->nCallArgs(), Pool::get(blt->srcIdx),
+                                      blt->blt);
                 break;
             }
             case Tag::CallSafeBuiltin: {
-                // TODO(mhyee): all args have to be values, optimize here?
                 auto blt = CallSafeBuiltin::Cast(instr);
-                cs << BC::staticCall(blt->nargs(), Pool::get(blt->srcIdx),
-                                     blt->blt);
+                cs << BC::callBuiltin(blt->nargs(), Pool::get(blt->srcIdx),
+                                      blt->blt);
                 break;
             }
             case Tag::MkEnv: {
@@ -1377,7 +1400,7 @@ rir::Function* Pir2Rir::finalize() {
 
     FunctionSignature signature(FunctionSignature::Environment::CalleeCreated,
                                 FunctionSignature::OptimizationLevel::Optimized,
-                                cls->assumptions);
+                                cls->assumptions());
 
     // PIR does not support default args currently.
     for (size_t i = 0; i < cls->nargs(); ++i) {
@@ -1401,13 +1424,19 @@ rir::Function* Pir2Rir::finalize() {
 
 } // namespace
 
-rir::Function* Pir2RirCompiler::compile(Closure* cls, SEXP origin,
-                                        bool dryRun) {
+rir::Function* Pir2RirCompiler::compile(ClosureVersion* cls, bool dryRun) {
     auto& log = logger.get(cls);
-    done.insert(cls);
-    Pir2Rir pir2rir(*this, cls, origin, dryRun, log);
+    done[cls] = nullptr;
+    Pir2Rir pir2rir(*this, cls, dryRun, log);
     auto fun = pir2rir.finalize();
+    done[cls] = fun;
     log.flush();
+    if (fixup.count(cls)) {
+        auto fixups = fixup.find(cls);
+        for (auto idx : fixups->second)
+            Pool::patch(idx, fun->container());
+        fixup.erase(fixups);
+    }
     return fun;
 }
 

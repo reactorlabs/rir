@@ -32,6 +32,19 @@ class Pool {
         return i;
     }
 
+    static BC::PoolIdx makeSpace() {
+        size_t i = cp_pool_add(globalContext(), R_NilValue);
+        return i;
+    }
+
+    static void patch(BC::PoolIdx idx, SEXP e) {
+        assert(get(idx) == R_NilValue || get(idx) == e);
+        SET_NAMED(e, 2);
+        cp_pool_set(globalContext(), idx, e);
+        if (!contents.count(e))
+            contents[e] = idx;
+    }
+
     static BC::PoolIdx getNum(double n);
     static BC::PoolIdx getInt(int n);
 
