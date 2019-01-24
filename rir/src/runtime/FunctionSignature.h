@@ -75,13 +75,7 @@ struct FunctionSignature {
         if (envCreation == Environment::CallerProvided)
             out << "needsEnv ";
         if (!assumptions.empty()) {
-            out << "| assumptions: [";
-            for (auto i = assumptions.begin(); i != assumptions.end(); ++i) {
-                out << *i;
-                if (i + 1 != assumptions.end())
-                    out << ",";
-            }
-            out << "]";
+            out << "| assumptions: [" << assumptions << "]";
         }
     }
 

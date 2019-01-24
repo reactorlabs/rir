@@ -309,7 +309,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
 
         Assumptions given;
         // Make some optimistic assumptions, they might be reset below...
-        given.set(Assumption::EagerArgs_);
+        given.add(Assumption::EagerArgs_);
         {
             size_t i = 0;
             for (auto argi : bc.callExtra().immediateCallArguments) {
@@ -381,9 +381,9 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             std::string name = "";
             if (ldfun)
                 name = CHAR(PRINTNAME(ldfun->varName));
-            given.set(Assumption::NoMissingArguments);
-            given.set(Assumption::NotTooManyArguments);
-            given.set(Assumption::CorrectOrderOfArguments);
+            given.add(Assumption::NoMissingArguments);
+            given.add(Assumption::NotTooManyArguments);
+            given.add(Assumption::CorrectOrderOfArguments);
             compiler.compileClosure(
                 monomorphic, name, given,
                 [&](ClosureVersion* f) {

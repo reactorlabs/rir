@@ -57,7 +57,7 @@ struct DispatchTable
                 setEntry(i, fun->container());
                 return;
             }
-            if (!assumptions.includes(get(i)->signature().assumptions))
+            if (!(assumptions < get(i)->signature().assumptions))
                 break;
         }
         size_++;

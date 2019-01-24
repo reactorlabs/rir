@@ -990,8 +990,9 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 });
 
                 if (call->names.empty())
-                    cs << BC::callImplicit(args, Pool::get(call->srcIdx),
-                                           Assumption::CorrectOrderOfArguments);
+                    cs << BC::callImplicit(
+                        args, Pool::get(call->srcIdx),
+                        {Assumption::CorrectOrderOfArguments});
                 else
                     cs << BC::callImplicit(args, call->names,
                                            Pool::get(call->srcIdx), {});

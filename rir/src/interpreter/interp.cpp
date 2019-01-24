@@ -577,19 +577,19 @@ RIR_INLINE Assumptions addDynamicAssumptions(
 
     // Needs to be checked if some missings are passed explicitly below
     if (call.suppliedArgs >= signature.nargs())
-        given.set(Assumption::NoMissingArguments);
+        given.add(Assumption::NoMissingArguments);
 
     if (!call.hasStackArgs()) {
         for (size_t i = 0; i < call.suppliedArgs; ++i) {
             if (call.missingArg(i))
-                given.reset(Assumption::NoMissingArguments);
+                given.remove(Assumption::NoMissingArguments);
         }
     }
 
     if (call.hasStackArgs()) {
         // Make some optimistic assumptions, they might be reset below...
-        given.set(Assumption::EagerArgs_);
-        given.set(Assumption::NonObjectArgs_);
+        given.add(Assumption::EagerArgs_);
+        given.add(Assumption::NonObjectArgs_);
 
         auto testArg = [&](size_t i) {
             SEXP arg = call.stackArg(i);
@@ -602,12 +602,12 @@ RIR_INLINE Assumptions addDynamicAssumptions(
                 } else if (isObject(PRVALUE(arg))) {
                     notObj = false;
                 } else if (arg == R_MissingArg) {
-                    given.reset(Assumption::NoMissingArguments);
+                    given.remove(Assumption::NoMissingArguments);
                 }
             } else if (isObject(arg)) {
                 notObj = false;
             } else if (arg == R_MissingArg) {
-                given.reset(Assumption::NoMissingArguments);
+                given.remove(Assumption::NoMissingArguments);
             }
             given.setEager(i, isEager);
             given.setNotObj(i, notObj);
@@ -619,10 +619,10 @@ RIR_INLINE Assumptions addDynamicAssumptions(
     }
 
     if (!call.hasNames())
-        given.set(Assumption::CorrectOrderOfArguments);
+        given.add(Assumption::CorrectOrderOfArguments);
 
     if (call.suppliedArgs <= signature.nargs())
-        given.set(Assumption::NotTooManyArguments);
+        given.add(Assumption::NotTooManyArguments);
 
     return given;
 }
@@ -658,10 +658,7 @@ RIR_INLINE bool matches(const CallContext& call,
     Assumptions given = addDynamicAssumptions(call, signature);
 
     // Check if given assumptions match required assumptions
-    if (!given.includes(signature.assumptions))
-        return false;
-
-    return true;
+    return signature.assumptions.subtype(given);
 }
 
 // Watch out: this changes call.nargs! To clean up after the call, you need to

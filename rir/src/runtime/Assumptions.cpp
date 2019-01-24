@@ -41,6 +41,17 @@ std::ostream& operator<<(std::ostream& out, Assumption a) {
     return out;
 };
 
+std::ostream& operator<<(std::ostream& out, const Assumptions& a) {
+    for (auto i = a.flags.begin(); i != a.flags.end(); ++i) {
+        out << *i;
+        if (i + 1 != a.flags.end())
+            out << ",";
+    }
+    if (a.missing)
+        out << " " << a.missing;
+    return out;
+}
+
 static constexpr std::array<Assumption, 3> ObjAssumptions = {
     {Assumption::Arg1IsNonObj_, Assumption::Arg2IsNonObj_,
      Assumption::Arg3IsNonObj_}};
@@ -49,11 +60,11 @@ static constexpr std::array<Assumption, 3> EagerAssumptions = {
      Assumption::Arg3IsEager_}};
 
 bool Assumptions::isEager(size_t i) const {
-    if (includes(Assumption::EagerArgs_))
+    if (flags.includes(Assumption::EagerArgs_))
         return true;
 
     if (i < EagerAssumptions.size())
-        if (includes(EagerAssumptions[i]))
+        if (flags.includes(EagerAssumptions[i]))
             return true;
 
     return false;
@@ -61,17 +72,17 @@ bool Assumptions::isEager(size_t i) const {
 
 void Assumptions::setEager(size_t i, bool eager) {
     if (eager && i < EagerAssumptions.size())
-        set(EagerAssumptions[i]);
+        flags.set(EagerAssumptions[i]);
     else if (!eager)
-        reset(Assumption::EagerArgs_);
+        flags.reset(Assumption::EagerArgs_);
 }
 
 bool Assumptions::notObj(size_t i) const {
-    if (includes(Assumption::NonObjectArgs_))
+    if (flags.includes(Assumption::NonObjectArgs_))
         return true;
 
     if (i < ObjAssumptions.size())
-        if (includes(ObjAssumptions[i]))
+        if (flags.includes(ObjAssumptions[i]))
             return true;
 
     return false;
@@ -79,9 +90,9 @@ bool Assumptions::notObj(size_t i) const {
 
 void Assumptions::setNotObj(size_t i, bool notObj) {
     if (notObj && i < ObjAssumptions.size())
-        set(ObjAssumptions[i]);
+        flags.set(ObjAssumptions[i]);
     else if (!notObj)
-        reset(Assumption::NonObjectArgs_);
+        flags.reset(Assumption::NonObjectArgs_);
 }
 
 } // namespace rir

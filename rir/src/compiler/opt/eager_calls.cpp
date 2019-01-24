@@ -50,13 +50,13 @@ void EagerCalls::apply(RirCompiler& cmp, ClosureVersion* closure,
                 continue;
 
             Assumptions newAssumptions = call->inferAvailableAssumptions();
-            newAssumptions.set(Assumption::EagerArgs_);
+            newAssumptions.add(Assumption::EagerArgs_);
             for (size_t i = 0; i < call->nCallArgs(); ++i)
                 newAssumptions.setEager(i, true);
             // This might fire back, since we don't know if we really have no
             // objects... We should have some profiling. It's still sound, since
             // static_call_ will check the assumptions
-            newAssumptions.set(Assumption::NonObjectArgs_);
+            newAssumptions.add(Assumption::NonObjectArgs_);
             for (size_t i = 0; i < call->nCallArgs(); ++i)
                 newAssumptions.setNotObj(i, true);
             auto newVersion = cls->cloneWithAssumptions(

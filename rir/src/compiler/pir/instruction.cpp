@@ -443,15 +443,10 @@ ClosureVersion* CallInstruction::dispatch(Closure* cls) const {
     if (!res) {
         std::cout << "DISPATCH FAILED! Available versions: \n";
         cls->eachVersion([&](ClosureVersion* v) {
-            std::cout << "* ";
-            for (auto a : v->assumptions())
-                std::cout << a << " ";
-            std::cout << "\n";
+            std::cout << "* " << v->assumptions() << "\n";
         });
-        std::cout << "Available assumptions at callsite: \n";
-        for (auto a : inferAvailableAssumptions())
-            std::cout << a << " ";
-        std::cout << "\n";
+        std::cout << "Available assumptions at callsite: \n ";
+        std::cout << inferAvailableAssumptions() << "\n";
         assert(false);
     }
     return res;
@@ -503,18 +498,18 @@ CallInstruction* CallInstruction::CastCall(Value* v) {
 Assumptions CallInstruction::inferAvailableAssumptions() const {
     Assumptions given;
     if (!hasNamedArgs())
-        given.set(Assumption::CorrectOrderOfArguments);
+        given.add(Assumption::CorrectOrderOfArguments);
     if (auto cls = tryGetCls()) {
         if (cls->nargs() >= nCallArgs())
-            given.set(Assumption::NotTooManyArguments);
+            given.add(Assumption::NotTooManyArguments);
         if (cls->nargs() <= nCallArgs())
-            given.set(Assumption::NoMissingArguments);
+            given.add(Assumption::NoMissingArguments);
     }
-    given.set(Assumption::NotTooManyArguments);
+    given.add(Assumption::NotTooManyArguments);
 
     // Make some optimistic assumptions, they might be reset below...
-    given.set(Assumption::EagerArgs_);
-    given.set(Assumption::NonObjectArgs_);
+    given.add(Assumption::EagerArgs_);
+    given.add(Assumption::NonObjectArgs_);
 
     size_t i = 0;
     eachCallArg([&](Value* arg) {
@@ -531,7 +526,7 @@ Assumptions CallInstruction::inferAvailableAssumptions() const {
         given.setNotObj(i, !arg->type.maybeObj());
 
         if (arg == Missing::instance())
-            given.reset(Assumption::NoMissingArguments);
+            given.remove(Assumption::NoMissingArguments);
     });
     return given;
 }
