@@ -12,11 +12,11 @@ then
     ## We use a patched version that supports the usage of env variables
     ## in commands. Otherwise pip install --user ReBench
     git clone https://github.com/charig/ReBench.git -b envVarsSupport
-    pushd ReBench
+    pushd ReBench > /dev/null
     pip install --user .
-    popd > /dev/null/
+    popd > /dev/null
 fi
 
 pushd "$SCRIPT_PATH/../benchmarks"
 rebench rebench.conf -SN --iterations=5
-popd > /dev/null/
+popd > /dev/null
