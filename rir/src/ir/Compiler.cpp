@@ -376,40 +376,54 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
         // 3) Special case [ and [[
         if (lhsParts.size() == 2) {
             RList g(lhsParts[0]);
-            if (g.length() == 3) {
+            if (g.length() == 3 || g.length() == 4) {
+                bool is2d = g.length() == 4;
                 SEXP fun2 = *g.begin();
                 auto idx = g.begin() + 2;
-                if (*idx != R_DotsSymbol && *idx != R_MissingArg &&
-                    !idx.hasTag()) {
-                    if (fun2 == symbol::DoubleBracket ||
-                        fun2 == symbol::Bracket) {
+                auto idx2 = is2d ? (g.begin() + 3) : NULL;
+                if ((fun2 == symbol::DoubleBracket ||
+                     fun2 == symbol::Bracket) &&
+                    *idx != R_DotsSymbol && *idx != R_MissingArg &&
+                    !idx.hasTag() &&
+                    (!is2d || (*idx2 != R_DotsSymbol && *idx2 != R_MissingArg &&
+                               !idx2.hasTag()))) {
+                    cs << BC::guardNamePrimitive(fun);
 
-                        cs << BC::guardNamePrimitive(fun);
+                    // First rhs (assign is right-associative)
+                    compileExpr(ctx, rhs);
+                    // Keep a copy of rhs since its the result of this
+                    // expression
+                    cs << BC::dup() << BC::ensureNamed();
 
-                        // First rhs (assign is right-associative)
-                        compileExpr(ctx, rhs);
-                        // Keep a copy of rhs since its the result of this
-                        // expression
-                        cs << BC::dup() << BC::ensureNamed();
-
-                        // Now load index and target
-                        cs << BC::ldvar(target);
-                        compileExpr(ctx, *idx);
-
-                        // do the thing
-                        cs << BC::recordBinop();
-                        if (fun2 == symbol::DoubleBracket)
-                            cs << BC::subassign2();
-                        else
-                            cs << BC::subassign1();
-                        cs.addSrc(ast);
-
-                        // store the result as "target"
-                        cs << BC::stvar(target);
-
-                        cs << BC::invisible();
-                        return true;
+                    // Now load index and target
+                    cs << BC::ldvar(target);
+                    compileExpr(ctx, *idx);
+                    if (is2d) {
+                        compileExpr(ctx, *idx2);
                     }
+
+                    // do the thing
+                    cs << BC::recordBinop();
+                    if (is2d) {
+                        if (fun2 == symbol::DoubleBracket) {
+                            cs << BC::subassign2_2();
+                        } else {
+                            cs << BC::subassign1_2();
+                        }
+                    } else {
+                        if (fun2 == symbol::DoubleBracket) {
+                            cs << BC::subassign2_1();
+                        } else {
+                            cs << BC::subassign1_1();
+                        }
+                    }
+                    cs.addSrc(ast);
+
+                    // store the result as "target"
+                    cs << BC::stvar(target);
+
+                    cs << BC::invisible();
+                    return true;
                 }
             }
         }

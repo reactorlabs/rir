@@ -889,11 +889,6 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 cs << BC::is(is->sexpTag);
                 break;
             }
-            case Tag::Subassign2_1D: {
-                cs << BC::subassign2();
-                cs.addSrcIdx(instr->srcIdx);
-                break;
-            }
 
 #define EMPTY(Name)                                                            \
     case Tag::Name: {                                                          \
@@ -964,7 +959,10 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 SIMPLE_WITH_SRCIDX(Extract2_1D, extract2_1);
                 SIMPLE_WITH_SRCIDX(Extract1_2D, extract1_2);
                 SIMPLE_WITH_SRCIDX(Extract2_2D, extract2_2);
-                SIMPLE_WITH_SRCIDX(Subassign1_1D, subassign1);
+                SIMPLE_WITH_SRCIDX(Subassign1_1D, subassign1_1);
+                SIMPLE_WITH_SRCIDX(Subassign2_2D, subassign2_1);
+                SIMPLE_WITH_SRCIDX(Subassign1_2D, subassign1_2);
+                SIMPLE_WITH_SRCIDX(Subassign2_2D, subassign2_2);
 #undef SIMPLE_WITH_SRCIDX
 
             case Tag::CallImplicit: {

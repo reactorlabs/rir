@@ -783,6 +783,34 @@ class FLIE(Subassign2_1D, 4, Effect::None, EnvAccess::Leak) {
     Value* idx() { return arg(2).val(); }
 };
 
+class FLIE(Subassign1_2D, 5, Effect::None, EnvAccess::Leak) {
+  public:
+    Subassign1_2D(Value* val, Value* vec, Value* idx1, Value* idx2, Value* env,
+                  unsigned srcIdx)
+        : FixedLenInstructionWithEnvSlot(
+              PirType::val(),
+              {{PirType::val(), PirType::val(), PirType::val()}},
+              {{val, vec, idx1, idx2}}, env, srcIdx) {}
+    Value* rhs() { return arg(0).val(); }
+    Value* lhsValue() { return arg(1).val(); }
+    Value* idx1() { return arg(2).val(); }
+    Value* idx2() { return arg(3).val(); }
+};
+
+class FLIE(Subassign2_2D, 5, Effect::None, EnvAccess::Leak) {
+  public:
+    Subassign2_2D(Value* val, Value* vec, Value* idx1, Value* idx2, Value* env,
+                  unsigned srcIdx)
+        : FixedLenInstructionWithEnvSlot(
+              PirType::val(),
+              {{PirType::val(), PirType::val(), PirType::val()}},
+              {{val, vec, idx1, idx2}}, env, srcIdx) {}
+    Value* rhs() { return arg(0).val(); }
+    Value* lhsValue() { return arg(1).val(); }
+    Value* idx1() { return arg(2).val(); }
+    Value* idx2() { return arg(3).val(); }
+};
+
 class FLIE(Extract1_1D, 3, Effect::None, EnvAccess::Leak) {
   public:
     Extract1_1D(Value* vec, Value* idx, Value* env, unsigned srcIdx)

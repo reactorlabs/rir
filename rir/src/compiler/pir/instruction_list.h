@@ -29,7 +29,9 @@
     V(Extract2_2D)                                                             \
     V(Extract1_2D)                                                             \
     V(Subassign1_1D)                                                           \
-    V(Subassign2_1D)
+    V(Subassign2_1D)                                                           \
+    V(Subassign1_2D)                                                           \
+    V(Subassign2_2D)
 
 #define COMPILER_INSTRUCTIONS(V)                                               \
     SIMPLE_INSTRUCTIONS(V_SIMPLE_INSTRUCTION_IN_COMPILER_INSTRUCTIONS, V)      \
