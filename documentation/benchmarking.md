@@ -12,6 +12,7 @@ and generating the raw data we resort to [ReBench](https://github.com/smarr/reBe
 
 ## Run Locally
 To run the benchmarks locally you first need to download them:
+    
     ./tools/downloadBenchs.sh
 
 A new folder named `benchmarks` will be added to your repo containing all the 
@@ -19,8 +20,11 @@ benchmarks and the rebench configuration file for running them.
 
 Afterwards, you only need to run them. Note that if you do not have ReBench installed,
 you will have to install. Our running script does that:
+    
     ./tools/runBenchs.sh 
-    or if you do not have rebench
+
+or if you do not have rebench:
+
     ./tools/runBenchs.sh --installRebench
 
 When the runs finished, a file with the results will appear inside the `benchmarks` folder.
