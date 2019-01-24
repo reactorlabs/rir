@@ -35,7 +35,7 @@ void initializeRuntime() {
     R_PreserveObject(promExecName);
     // initialize the global context
     globalContext_ = context_create();
-    registerExternalCode(rirEval_f, rir_compile, rirExpr, argsLazyCreation);
+    registerExternalCode(rirEval_f, rir_compile, rirExpr);
     configurations = new rir::Configurations();
 }
 
