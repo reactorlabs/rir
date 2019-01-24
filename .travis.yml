@@ -20,7 +20,7 @@ matrix:
       env:
         - CXX_OVERRIDE=clang++
         - CC_OVERRIDE=clang
-        - BUILD=debug
+        - BUILD=debugopt
         - CHECK=check
         - RIR_WARMUP=2
       compiler: clang
@@ -31,7 +31,7 @@ matrix:
         - CXX_OVERRIDE=g++-7
         - CC_OVERRIDE=gcc-7
         - CHECK=check
-        - BUILD=debug
+        - BUILD=sanitize
         - PIR_ENABLE=force
         - TEST_CPPCHECK=1
 
@@ -39,7 +39,7 @@ matrix:
         - CXX_OVERRIDE=g++-7
         - CC_OVERRIDE=gcc-7
         - CHECK=test-all-devel
-        - BUILD=release
+        - BUILD=debugopt
         - PIR_DEOPT_CHAOS_SETTING=1
         - TEST_VALGRIND=1
 

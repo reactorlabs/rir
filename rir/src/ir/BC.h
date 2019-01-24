@@ -205,19 +205,23 @@ BC BC::put(uint32_t i) {
     im.i = i;
     return BC(Opcode::put_, im);
 }
-BC BC::callImplicit(const std::vector<FunIdx>& args, SEXP ast) {
+BC BC::callImplicit(const std::vector<FunIdx>& args, SEXP ast,
+                    const Assumptions& given) {
     ImmediateArguments im;
     im.callFixedArgs.nargs = args.size();
     im.callFixedArgs.ast = Pool::insert(ast);
+    im.callFixedArgs.given = given;
     BC cur(Opcode::call_implicit_, im);
     cur.callExtra().immediateCallArguments = args;
     return cur;
 }
 BC BC::callImplicit(const std::vector<FunIdx>& args,
-                    const std::vector<SEXP>& names, SEXP ast) {
+                    const std::vector<SEXP>& names, SEXP ast,
+                    const Assumptions& given) {
     ImmediateArguments im;
     im.callFixedArgs.nargs = args.size();
     im.callFixedArgs.ast = Pool::insert(ast);
+    im.callFixedArgs.given = given;
     std::vector<PoolIdx> nameIdxs;
     for (auto n : names)
         nameIdxs.push_back(Pool::insert(n));
@@ -226,16 +230,19 @@ BC BC::callImplicit(const std::vector<FunIdx>& args,
     cur.callExtra().callArgumentNames = nameIdxs;
     return cur;
 }
-BC BC::call(size_t nargs, SEXP ast) {
+BC BC::call(size_t nargs, SEXP ast, const Assumptions& given) {
     ImmediateArguments im;
     im.callFixedArgs.nargs = nargs;
     im.callFixedArgs.ast = Pool::insert(ast);
+    im.callFixedArgs.given = given;
     return BC(Opcode::call_, im);
 }
-BC BC::call(size_t nargs, const std::vector<SEXP>& names, SEXP ast) {
+BC BC::call(size_t nargs, const std::vector<SEXP>& names, SEXP ast,
+            const Assumptions& given) {
     ImmediateArguments im;
     im.callFixedArgs.nargs = nargs;
     im.callFixedArgs.ast = Pool::insert(ast);
+    im.callFixedArgs.given = given;
     std::vector<PoolIdx> nameIdxs;
     for (auto n : names)
         nameIdxs.push_back(Pool::insert(n));
@@ -243,13 +250,29 @@ BC BC::call(size_t nargs, const std::vector<SEXP>& names, SEXP ast) {
     cur.callExtra().callArgumentNames = nameIdxs;
     return cur;
 }
-BC BC::staticCall(size_t nargs, SEXP ast, SEXP target) {
+BC BC::staticCall(size_t nargs, SEXP ast, SEXP targetClosure,
+                  SEXP targetVersion, const Assumptions& given) {
+    assert(!targetVersion || Function::unpack(targetVersion));
+    assert(TYPEOF(targetClosure) == CLOSXP);
+    auto target =
+        targetVersion ? Pool::insert(targetVersion) : Pool::makeSpace();
     ImmediateArguments im;
     im.staticCallFixedArgs.nargs = nargs;
     im.staticCallFixedArgs.ast = Pool::insert(ast);
-    im.staticCallFixedArgs.target = Pool::insert(target);
+    im.staticCallFixedArgs.targetClosure = Pool::insert(targetClosure);
+    im.staticCallFixedArgs.versionHint = target;
+    im.staticCallFixedArgs.given = given;
     return BC(Opcode::static_call_, im);
 }
+BC BC::callBuiltin(size_t nargs, SEXP ast, SEXP builtin) {
+    assert(TYPEOF(builtin) == BUILTINSXP);
+    ImmediateArguments im;
+    im.callBuiltinFixedArgs.nargs = nargs;
+    im.callBuiltinFixedArgs.ast = Pool::insert(ast);
+    im.callBuiltinFixedArgs.builtin = Pool::insert(builtin);
+    return BC(Opcode::call_builtin_, im);
+}
+
 BC BC::deopt(SEXP deoptMetadata) {
     ImmediateArguments i;
     i.pool = Pool::insert(deoptMetadata);

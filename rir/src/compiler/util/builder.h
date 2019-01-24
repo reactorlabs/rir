@@ -21,14 +21,14 @@ struct RirStack;
 
 class Builder {
   public:
-    Closure* function;
+    ClosureVersion* function;
     Code* code;
     Value* env;
 
-    Builder(Closure* fun, Promise* prom);
-    Builder(Closure* fun, Value* enclos);
+    Builder(ClosureVersion* fun, Promise* prom);
+    Builder(ClosureVersion* fun, Value* enclos);
 
-    Value* buildDefaultEnv(Closure* fun);
+    Value* buildDefaultEnv(ClosureVersion* fun);
 
     void add(Instruction* i);
     template <class T>

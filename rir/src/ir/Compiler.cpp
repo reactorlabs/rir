@@ -730,7 +730,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
                 cs << BC::guardNamePrimitive(symbol::Internal);
                 for (auto a : args)
                     compileExpr(ctx, a);
-                cs << BC::staticCall(args.length(), inAst, internal);
+                cs << BC::callBuiltin(args.length(), inAst, internal);
 
                 return true;
             }
@@ -827,9 +827,10 @@ void compileCall(Context& ctx, SEXP ast, SEXP fun, SEXP args) {
 
     cs << BC::recordCall();
     if (hasNames) {
-        cs << BC::callImplicit(callArgs, names, ast);
+        cs << BC::callImplicit(callArgs, names, ast, {});
     } else {
-        cs << BC::callImplicit(callArgs, ast);
+        cs << BC::callImplicit(callArgs, ast,
+                               Assumption::CorrectOrderOfArguments);
     }
 }
 

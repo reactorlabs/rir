@@ -8,6 +8,7 @@ struct AbstractResult {
     enum Kind { None, Updated, LostPrecision, Tainted };
     Kind kind;
     bool keepSnapshot = false;
+    bool needRecursion = false;
 
     // cppcheck-suppress noExplicitConstructor
     AbstractResult(Kind kind) : kind(kind) {}

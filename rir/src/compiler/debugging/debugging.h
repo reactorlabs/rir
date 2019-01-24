@@ -35,13 +35,33 @@ enum class DebugFlag {
     LAST = PrintFinalRir
 };
 
-typedef EnumSet<DebugFlag> DebugOptions;
-const static DebugOptions PrintDebugPasses =
-    DebugOptions() |
+struct DebugOptions {
+    typedef EnumSet<DebugFlag, int> DebugFlags;
+    DebugFlags flags;
+    const std::string passFilter = "";
+
+    DebugOptions operator|(const DebugFlags& f) const {
+        return {flags | f, passFilter};
+    }
+    bool includes(const DebugFlags& otherFlags) const {
+        return flags.includes(otherFlags);
+    }
+    bool intersects(const DebugFlags& otherFlags) const {
+        return flags.intersects(otherFlags);
+    }
+
+    DebugOptions(unsigned long long flags) : flags(flags) {}
+    DebugOptions(const DebugFlags& flags, const std::string& filter)
+        : flags(flags), passFilter(filter) {}
+    DebugOptions() {}
+};
+
+const static DebugOptions::DebugFlags PrintDebugPasses =
+    DebugOptions::DebugFlags() |
 #define V(n) DebugFlag::n |
     LIST_OF_PIR_PRINT_DEBUGGING_FLAGS(V)
 #undef V
-        DebugOptions();
+        DebugOptions::DebugFlags();
 
 } // namespace pir
 } // namespace rir

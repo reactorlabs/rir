@@ -22,6 +22,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env,
 SEXP rirExpr(SEXP f);
 
 SEXP rirEval_f(SEXP f, SEXP env);
+SEXP rirApplyClosure(SEXP, SEXP, SEXP, SEXP);
 
 SEXP argsLazyCreation(void* rirDataWrapper);
 

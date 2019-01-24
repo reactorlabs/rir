@@ -1,6 +1,7 @@
 #include "../pir/pir_impl.h"
 #include "../transform/bb.h"
 #include "../util/cfg.h"
+#include "../util/safe_builtins_list.h"
 #include "../util/visitor.h"
 #include "R/Funtab.h"
 #include "R/Symbols.h"
@@ -16,8 +17,8 @@ using namespace rir::pir;
 
 class TheInliner {
   public:
-    Closure* function;
-    explicit TheInliner(Closure* function) : function(function) {}
+    ClosureVersion* version;
+    explicit TheInliner(ClosureVersion* version) : version(version) {}
 
     static const size_t MAX_SIZE;
     static const size_t MAX_INLINEE_SIZE;
@@ -26,41 +27,44 @@ class TheInliner {
     void operator()() {
         size_t fuel = INITIAL_FUEL;
 
-        if (function->size() > MAX_SIZE)
+        if (version->size() > MAX_SIZE)
             return;
 
-        std::unordered_set<Closure*> skip;
+        std::unordered_set<ClosureVersion*> skip;
 
-        Visitor::run(function->entry, [&](BB* bb) {
+        Visitor::run(version->entry, [&](BB* bb) {
             // Dangerous iterater usage, works since we do only update it in
             // one place.
             for (auto it = bb->begin(); it != bb->end() && fuel; it++) {
                 if (!CallInstruction::CastCall(*it))
                     continue;
 
-                Closure* inlinee = nullptr;
+                Closure* inlineeCls = nullptr;
+                ClosureVersion* inlinee = nullptr;
                 Value* staticEnv = nullptr;
 
-                FrameState* callerFrameState = nullptr;
+                const FrameState* callerFrameState = nullptr;
                 if (auto call = Call::Cast(*it)) {
                     auto mkcls =
                         MkFunCls::Cast(call->cls()->followCastsAndForce());
                     if (!mkcls)
                         continue;
-                    inlinee = mkcls->fun;
-                    if (inlinee->argNames.size() != call->nCallArgs())
+                    inlineeCls = mkcls->cls;
+                    inlinee = call->dispatch(inlineeCls);
+                    if (inlineeCls->nargs() != call->nCallArgs())
                         continue;
                     staticEnv = mkcls->lexicalEnv();
                     callerFrameState = call->frameState();
                 } else if (auto call = StaticCall::Cast(*it)) {
-                    inlinee = call->cls();
+                    inlineeCls = call->cls();
+                    inlinee = call->dispatch();
                     // if we don't know the closure of the inlinee, we can't
                     // inline.
-                    if (inlinee->closureEnv() == Env::notClosed() &&
-                        inlinee != function)
+                    if (inlineeCls->closureEnv() == Env::notClosed() &&
+                        inlinee != version)
                         continue;
-                    assert(inlinee->argNames.size() == call->nCallArgs());
-                    staticEnv = inlinee->closureEnv();
+                    assert(inlineeCls->nargs() == call->nCallArgs());
+                    staticEnv = inlineeCls->closureEnv();
                     callerFrameState = call->frameState();
                 } else {
                     continue;
@@ -69,9 +73,11 @@ class TheInliner {
                 if (skip.count(inlinee))
                     continue;
 
-                // Recursive inline only once
-                if (inlinee == function)
+                // No recursive inlining
+                if (inlinee->owner() == version->owner()) {
                     skip.insert(inlinee);
+                    continue;
+                }
 
                 if (inlinee->size() > MAX_INLINEE_SIZE) {
                     skip.insert(inlinee);
@@ -81,18 +87,17 @@ class TheInliner {
                 fuel--;
 
                 BB* split =
-                    BBTransform::split(function->nextBBId++, bb, it, function);
+                    BBTransform::split(version->nextBBId++, bb, it, version);
                 auto theCall = *split->begin();
                 auto theCallInstruction = CallInstruction::CastCall(theCall);
                 std::vector<Value*> arguments;
                 theCallInstruction->eachCallArg(
                     [&](Value* v) { arguments.push_back(v); });
 
-                // Clone the function
-                BB* copy =
-                    BBTransform::clone(inlinee->entry, function, function);
+                // Clone the version
+                BB* copy = BBTransform::clone(inlinee->entry, version, version);
 
-                bool needsEnvPatching = inlinee->closureEnv() != staticEnv;
+                bool needsEnvPatching = inlineeCls->closureEnv() != staticEnv;
 
                 bool fail = false;
                 Visitor::run(copy, [&](BB* bb) {
@@ -101,10 +106,16 @@ class TheInliner {
                         auto next = ip + 1;
                         auto ld = LdArg::Cast(*ip);
                         Instruction* i = *ip;
-                        // We should never inline UseMethod
+
                         if (auto ld = LdFun::Cast(i)) {
-                            if (ld->varName == rir::symbol::UseMethod ||
-                                ld->varName == rir::symbol::standardGeneric) {
+                            if (!SafeBuiltinsList::forInlineByName(
+                                    ld->varName)) {
+                                fail = true;
+                                return;
+                            }
+                        }
+                        if (auto call = CallBuiltin::Cast(i)) {
+                            if (!SafeBuiltinsList::forInline(call->builtinId)) {
                                 fail = true;
                                 return;
                             }
@@ -146,19 +157,22 @@ class TheInliner {
                         }
                         // If the inlining resolved some env, we need to
                         // update. For example this happens if we inline an
-                        // inner function. Then the lexical env is the current
-                        // functions env.
+                        // inner version. Then the lexical env is the current
+                        // versions env.
                         if (needsEnvPatching && i->hasEnv() &&
-                            i->env() == inlinee->closureEnv()) {
+                            i->env() == inlineeCls->closureEnv()) {
                             i->env(staticEnv);
                         }
                         if (ld) {
                             Value* a = arguments[ld->id];
-                            if (MkArg::Cast(a)) {
+                            if (auto mk = MkArg::Cast(a)) {
                                 // We need to cast from a promise to a lazy
                                 // value
-                                auto cast = new CastType(a, RType::prom,
-                                                         PirType::any());
+                                auto cast = new CastType(
+                                    a, RType::prom,
+                                    mk->eagerArg() == Missing::instance()
+                                        ? PirType::any()
+                                        : PirType::val());
                                 ip = bb->insert(ip + 1, cast);
                                 ip--;
                                 a = cast;
@@ -178,11 +192,11 @@ class TheInliner {
 
                     bb->overrideNext(copy);
 
-                    // Copy over promises used by the inner function
+                    // Copy over promises used by the inner version
                     std::vector<bool> copiedPromise(false);
                     std::vector<size_t> newPromId;
-                    copiedPromise.resize(inlinee->promises.size(), false);
-                    newPromId.resize(inlinee->promises.size());
+                    copiedPromise.resize(inlinee->promises().size(), false);
+                    newPromId.resize(inlinee->promises().size());
                     Visitor::run(copy, [&](BB* bb) {
                         auto it = bb->begin();
                         while (it != bb->end()) {
@@ -192,16 +206,16 @@ class TheInliner {
                                 continue;
 
                             size_t id = mk->prom()->id;
-                            if (mk->prom()->fun == inlinee) {
+                            if (mk->prom()->owner == inlinee) {
                                 assert(id < copiedPromise.size());
                                 if (copiedPromise[id]) {
                                     mk->updatePromise(
-                                        function->promises.at(newPromId[id]));
+                                        version->promises().at(newPromId[id]));
                                 } else {
-                                    Promise* clone = function->createProm(
+                                    Promise* clone = version->createProm(
                                         mk->prom()->srcPoolIdx());
                                     BB* promCopy = BBTransform::clone(
-                                        mk->prom()->entry, clone, function);
+                                        mk->prom()->entry, clone, version);
                                     clone->entry = promCopy;
                                     newPromId[id] = clone->id;
                                     copiedPromise[id] = true;
@@ -248,8 +262,8 @@ const size_t TheInliner::INITIAL_FUEL =
 namespace rir {
 namespace pir {
 
-void Inline::apply(RirCompiler&, Closure* function, LogStream&) const {
-    TheInliner s(function);
+void Inline::apply(RirCompiler&, ClosureVersion* version, LogStream&) const {
+    TheInliner s(version);
     s();
 }
 } // namespace pir
