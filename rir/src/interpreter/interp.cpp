@@ -2586,7 +2586,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
             }
 
             if (!res) {
-                res = do_subassign2_dflt(call, selector, args, *env);
+                res = do_subassign_dflt(call, selector, args, *env);
                 // We duplicated the vector above, and there is a stvar
                 // following
                 SET_NAMED(res, 0);
