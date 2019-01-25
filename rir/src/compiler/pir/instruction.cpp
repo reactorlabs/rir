@@ -158,6 +158,15 @@ Instruction* Instruction::hasSingleUse() {
 void Instruction::eraseAndRemove() { bb()->remove(this); }
 
 void Instruction::replaceUsesIn(Value* replace, BB* target) {
+    if (!replace->type.isA(type)) {
+        std::cerr << "Trying to replace a ";
+        type.print(std::cerr);
+        std::cerr << " with a ";
+        replace->type.print(std::cerr);
+        std::cerr << "\n";
+        assert(false);
+    }
+
     Visitor::run(target, [&](Instruction* i) {
         i->eachArg([&](InstrArg& arg) {
             if (arg.val() == this)
@@ -192,8 +201,8 @@ const Value* Instruction::cFollowCastsAndForce() const {
     if (auto force = Force::Cast(this))
         return force->input()->followCastsAndForce();
     if (auto mkarg = MkArg::Cast(this))
-        if (mkarg->eagerArg() != Missing::instance())
-            return mkarg->eagerArg();
+        if (mkarg->isEager())
+            return mkarg->eagerArg()->followCastsAndForce();
     if (auto shared = SetShared::Cast(this))
         return shared->arg<0>().val()->followCastsAndForce();
     if (auto chk = ChkClosure::Cast(this))
@@ -231,6 +240,10 @@ void Branch::printArgs(std::ostream& out, bool tty) const {
 void MkArg::printArgs(std::ostream& out, bool tty) const {
     eagerArg()->printRef(out);
     out << ", " << *prom() << ", ";
+}
+
+void Missing::printArgs(std::ostream& out, bool tty) const {
+    out << CHAR(PRINTNAME(varName)) << ", ";
 }
 
 void LdVar::printArgs(std::ostream& out, bool tty) const {
@@ -471,11 +484,12 @@ StaticCall::StaticCall(Value* callerEnv, Closure* cls,
                        unsigned srcIdx)
     : VarLenInstructionWithEnvSlot(PirType::val(), callerEnv, srcIdx),
       cls_(cls) {
-    assert(cls->nargs() == args.size());
+    assert(cls->nargs() >= args.size());
     assert(fs);
     pushArg(fs, NativeType::frameState);
     for (unsigned i = 0; i < args.size(); ++i)
         pushArg(args[i], PirType::val() | RType::prom);
+    assert(dispatch());
 }
 
 CallInstruction* CallInstruction::CastCall(Value* v) {
@@ -499,11 +513,14 @@ Assumptions CallInstruction::inferAvailableAssumptions() const {
     Assumptions given;
     if (!hasNamedArgs())
         given.add(Assumption::CorrectOrderOfArguments);
+    given.add(Assumption::NoExplicitlyMissingArgs);
     if (auto cls = tryGetCls()) {
-        if (cls->nargs() >= nCallArgs())
+        if (cls->nargs() >= nCallArgs()) {
             given.add(Assumption::NotTooManyArguments);
-        if (cls->nargs() <= nCallArgs())
-            given.add(Assumption::NoMissingArguments);
+            auto missing = cls->nargs() - nCallArgs();
+            given.numMissing(missing);
+            given.add(Assumption::NotTooFewArguments);
+        }
     }
     given.add(Assumption::NotTooManyArguments);
 
@@ -514,7 +531,7 @@ Assumptions CallInstruction::inferAvailableAssumptions() const {
     size_t i = 0;
     eachCallArg([&](Value* arg) {
         if (auto mk = MkArg::Cast(arg)) {
-            if (mk->eagerArg() == Missing::instance()) {
+            if (!mk->isEager()) {
                 given.setEager(i, false);
                 given.setNotObj(i, false);
                 return;
@@ -522,11 +539,10 @@ Assumptions CallInstruction::inferAvailableAssumptions() const {
                 arg = mk->eagerArg();
             }
         }
+        if (arg == MissingArg::instance())
+            given.remove(Assumption::NoExplicitlyMissingArgs);
         given.setEager(i, !arg->type.maybeLazy());
         given.setNotObj(i, !arg->type.maybeObj());
-
-        if (arg == Missing::instance())
-            given.remove(Assumption::NoMissingArguments);
     });
     return given;
 }

@@ -94,6 +94,8 @@ enum class Effect : uint8_t {
     // Instruction doesn't really have effects itself, but it should not be
     // hoisted over any other instruction with effect. Example: Assume
     Order,
+    // Changes R_Visible
+    Visibility,
     // Instruction might produce a warning. Example: AsTest warns if the
     // vector used in an if condition has length > 1
     Warn,
@@ -582,6 +584,15 @@ class FLI(LdArg, 0, Effect::None, EnvAccess::None) {
     void printArgs(std::ostream& out, bool tty) const override;
 };
 
+class FLIE(Missing, 1, Effect::None, EnvAccess::Read) {
+  public:
+    SEXP varName;
+    explicit Missing(SEXP varName, Value* env)
+        : FixedLenInstructionWithEnvSlot(RType::logical, env),
+          varName(varName) {}
+    void printArgs(std::ostream& out, bool tty) const override;
+};
+
 class FLI(ChkMissing, 1, Effect::Warn, EnvAccess::None) {
   public:
     explicit ChkMissing(Value* in)
@@ -682,19 +693,13 @@ class FLIE(MkArg, 2, Effect::None, EnvAccess::Capture) {
         assert(eagerArg() == v);
     }
 
-    typedef std::function<void(Promise*)> PromMaybe;
-    typedef std::function<void(Value*)> EagerMaybe;
-
     Value* eagerArg() const { return arg(0).val(); }
     void eagerArg(Value* eager) { arg(0).val() = eager; }
 
     void updatePromise(Promise* p) { prom_ = p; }
     Promise* prom() const { return prom_; }
 
-    void ifEager(EagerMaybe maybe) {
-        if (eagerArg() != Missing::instance())
-            maybe(eagerArg());
-    }
+    bool isEager() const { return eagerArg() != UnboundValue::instance(); }
 
     void printArgs(std::ostream& out, bool tty) const override;
 
@@ -900,6 +905,16 @@ class FLI(SetShared, 1, Effect::None, EnvAccess::None) {
     explicit SetShared(Value* v)
         : FixedLenInstruction(v->type, {{v->type}}, {{v}}) {}
     void updateType() override final { type = arg<0>().val()->type; }
+};
+
+class FLI(Visible, 0, Effect::Visibility, EnvAccess::None) {
+  public:
+    explicit Visible() : FixedLenInstruction(PirType::voyd()) {}
+};
+
+class FLI(Invisible, 0, Effect::Visibility, EnvAccess::None) {
+  public:
+    explicit Invisible() : FixedLenInstruction(PirType::voyd()) {}
 };
 
 class FLI(PirCopy, 1, Effect::None, EnvAccess::None) {

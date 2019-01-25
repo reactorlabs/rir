@@ -41,25 +41,41 @@ void DelayEnv::apply(RirCompiler&, ClosureVersion* function, LogStream&) const {
 
                 auto consumeStVar = [&](StVar* st) {
                     bool exists = false;
+                    bool aMissingArg = false;
                     envInstr->eachLocalVar([&](SEXP name, InstrArg& arg) {
                         if (name == st->varName) {
-                            exists = true;
-                            arg.val() = st->val();
+                            if (arg.val() == MissingArg::instance()) {
+                                // TODO: currently we cannot elide if the
+                                // original entry is missing. Because otherwise
+                                // we forget to do the SET_MISSING on the
+                                // variable.
+                                aMissingArg = true;
+                            } else {
+                                exists = true;
+                                arg.val() = st->val();
+                            }
                         }
                     });
+                    if (aMissingArg)
+                        return false;
+
                     if (!exists) {
                         envInstr->pushArg(st->val(), PirType::any());
                         envInstr->varName.push_back(st->varName);
                     }
+                    return true;
                 };
 
                 {
                     auto st = StVar::Cast(next);
                     if (st && st->env() == envInstr) {
-                        consumeStVar(st);
-                        it = bb->remove(it + 1);
-                        it--;
-                        continue;
+                        if (consumeStVar(st)) {
+                            it = bb->remove(it + 1);
+                            it--;
+                            continue;
+                        } else {
+                            break;
+                        }
                     }
                 }
 

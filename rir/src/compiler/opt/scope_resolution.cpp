@@ -74,23 +74,24 @@ class TheScopeResolution {
                 analysis.lookup(after, i, [&](const AbstractLoad& aLoad) {
                     auto& res = aLoad.result;
 
-                    // Narrow down type according to what the analysis reports
-                    if (i->type.isRType()) {
-                        auto inferedType = res.type;
-                        if (!i->type.isA(inferedType))
-                            i->type = inferedType;
-                    }
-
                     // In case the scope analysis is sure that this is
                     // actually the same as some other PIR value. So let's just
                     // replace it.
                     if (res.isSingleValue()) {
                         auto value = res.singleValue();
-                        if (value.recursionLevel == 0) {
+                        if (value.val->type.isA(i->type) &&
+                            value.recursionLevel == 0) {
                             i->replaceUsesWith(value.val);
                             next = bb->remove(ip);
+                            return;
                         }
-                        return;
+                    }
+
+                    // Narrow down type according to what the analysis reports
+                    if (i->type.isRType()) {
+                        auto inferedType = res.type;
+                        if (!i->type.isA(inferedType))
+                            i->type = inferedType;
                     }
 
                     // The generic case where we have a bunch of potential

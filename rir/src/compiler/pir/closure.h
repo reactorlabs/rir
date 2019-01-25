@@ -74,7 +74,8 @@ class Closure {
     ClosureVersion* findCompatibleVersion(const OptimizationContext& ctx) const;
 
     typedef std::function<void(ClosureVersion*)> MaybeClsVersion;
-    ClosureVersion* cloneWithAssumptions(ClosureVersion* cls, Assumptions asmpt,
+    ClosureVersion* cloneWithAssumptions(ClosureVersion* cls,
+                                         const Assumptions& asmpt,
                                          const MaybeClsVersion& change);
 
     typedef std::function<void(pir::ClosureVersion*)> ClosureVersionIterator;

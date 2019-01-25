@@ -171,8 +171,6 @@ SEXP pirCompile(SEXP what, const Assumptions& assumptions,
     if (!DispatchTable::check(BODY(what))) {
         Rf_error("Cannot optimize compiled expression, only closure");
     }
-    if (DispatchTable::unpack(BODY(what))->size() > 1)
-        return what;
 
     PROTECT(what);
 
@@ -230,7 +228,7 @@ REXPORT SEXP pir_compile(SEXP what, SEXP name, SEXP debugFlags) {
     std::string n;
     if (TYPEOF(name) == SYMSXP)
         n = CHAR(PRINTNAME(name));
-    return pirCompile(what, {}, n,
+    return pirCompile(what, rir::pir::Rir2PirCompiler::defaultAssumptions, n,
                       debugFlags == R_NilValue
                           ? PirDebug
                           : pir::DebugOptions(INTEGER(debugFlags)[0]));

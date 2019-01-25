@@ -5,7 +5,8 @@
     V(True)                                                                    \
     V(False)                                                                   \
     V(Tombstone)                                                               \
-    V(Missing)                                                                 \
+    V(MissingArg)                                                              \
+    V(UnboundValue)                                                            \
     V(Env)                                                                     \
     V(Nil)
 

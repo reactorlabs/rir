@@ -23,6 +23,8 @@ extern Rboolean R_Visible;
 
 // #define UNSOUND_OPTS
 
+// #define DEBUG_DISPATCH
+
 // helpers
 
 using namespace rir;
@@ -575,21 +577,20 @@ RIR_INLINE Assumptions addDynamicAssumptions(
     const CallContext& call, const FunctionSignature& signature) {
     Assumptions given = call.givenAssumptions;
 
-    // Needs to be checked if some missings are passed explicitly below
-    if (call.suppliedArgs >= signature.nargs())
-        given.add(Assumption::NoMissingArguments);
-
-    if (!call.hasStackArgs()) {
-        for (size_t i = 0; i < call.suppliedArgs; ++i) {
-            if (call.missingArg(i))
-                given.remove(Assumption::NoMissingArguments);
-        }
+    if (call.suppliedArgs <= signature.formalNargs()) {
+        given.numMissing(signature.formalNargs() - call.suppliedArgs);
+        if (call.suppliedArgs >= signature.expectedNargs())
+            given.add(Assumption::NotTooFewArguments);
     }
 
     if (call.hasStackArgs()) {
+        // Always true in this case, since we will pad missing args on the stack
+        // later with R_MissingArg's
+        given.add(Assumption::NotTooFewArguments);
         // Make some optimistic assumptions, they might be reset below...
         given.add(Assumption::EagerArgs_);
         given.add(Assumption::NonObjectArgs_);
+        given.add(Assumption::NoExplicitlyMissingArgs);
 
         auto testArg = [&](size_t i) {
             SEXP arg = call.stackArg(i);
@@ -601,14 +602,12 @@ RIR_INLINE Assumptions addDynamicAssumptions(
                     isEager = false;
                 } else if (isObject(PRVALUE(arg))) {
                     notObj = false;
-                } else if (arg == R_MissingArg) {
-                    given.remove(Assumption::NoMissingArguments);
                 }
             } else if (isObject(arg)) {
                 notObj = false;
-            } else if (arg == R_MissingArg) {
-                given.remove(Assumption::NoMissingArguments);
             }
+            if (arg == R_MissingArg)
+                given.remove(Assumption::NoExplicitlyMissingArgs);
             given.setEager(i, isEager);
             given.setNotObj(i, notObj);
         };
@@ -616,12 +615,17 @@ RIR_INLINE Assumptions addDynamicAssumptions(
         for (size_t i = 0; i < call.suppliedArgs; ++i) {
             testArg(i);
         }
+    } else {
+        given.add(Assumption::NoExplicitlyMissingArgs);
+        for (size_t i = 0; i < call.suppliedArgs; ++i)
+            if (call.missingArg(i))
+                given.remove(Assumption::NoExplicitlyMissingArgs);
     }
 
     if (!call.hasNames())
         given.add(Assumption::CorrectOrderOfArguments);
 
-    if (call.suppliedArgs <= signature.nargs())
+    if (call.suppliedArgs <= signature.formalNargs())
         given.add(Assumption::NotTooManyArguments);
 
     return given;
@@ -635,8 +639,12 @@ RIR_INLINE bool matches(const CallContext& call,
 
     // Baseline always matches!
     if (signature.optimization ==
-        FunctionSignature::OptimizationLevel::Baseline)
+        FunctionSignature::OptimizationLevel::Baseline) {
+#ifdef DEBUG_DISPATCH
+        std::cout << "BL\n";
+#endif
         return true;
+    }
 
     assert(signature.envCreation ==
            FunctionSignature::Environment::CalleeCreated);
@@ -651,12 +659,17 @@ RIR_INLINE bool matches(const CallContext& call,
         // PIR optimized code can receive missing args, but they need to be
         // explicitly put on the stack, which we can only do if we pass
         // arguments on the stack
-        if (signature.nargs() > call.suppliedArgs)
+        if (signature.expectedNargs() != call.suppliedArgs)
             return false;
     }
 
     Assumptions given = addDynamicAssumptions(call, signature);
 
+#ifdef DEBUG_DISPATCH
+    std::cout << "have   " << given << "\n";
+    std::cout << "trying " << signature.assumptions << "\n";
+    std::cout << " -> " << signature.assumptions.subtype(given) << "\n";
+#endif
     // Check if given assumptions match required assumptions
     return signature.assumptions.subtype(given);
 }
@@ -667,10 +680,11 @@ RIR_INLINE bool matches(const CallContext& call,
 RIR_INLINE void supplyMissingArgs(CallContext& call, const Function* fun) {
     auto signature = fun->signature();
     assert(call.hasStackArgs());
-    if (signature.nargs() > call.suppliedArgs) {
-        for (size_t i = 0; i < signature.nargs() - call.suppliedArgs; ++i)
+    if (signature.expectedNargs() > call.suppliedArgs) {
+        for (size_t i = 0; i < signature.expectedNargs() - call.suppliedArgs;
+             ++i)
             ostack_push(ctx, R_MissingArg);
-        call.passedArgs = signature.nargs();
+        call.passedArgs = signature.expectedNargs();
     }
 }
 
@@ -703,10 +717,16 @@ RIR_INLINE SEXP rirCall(CallContext& call, Context* ctx) {
     Function* fun = dispatch(call, table);
     fun->registerInvocation();
 
-    if ((fun == table->baseline() && fun->invocationCount() == RIR_WARMUP) ||
-        fun->invocationCount() >= RIR_WARMUP) {
+    if (!fun->unoptimizable && fun->invocationCount() % RIR_WARMUP == 0) {
         Assumptions given = addDynamicAssumptions(call, fun->signature());
         if (fun == table->baseline() || given != fun->signature().assumptions) {
+            // More assumptions are available than this version uses. Let's try
+            // compile a better matching version.
+#ifdef DEBUG_DISPATCH
+            std::cout << "Optimizing for new context:";
+            std::cout << given << " vs " << fun->signature().assumptions
+                      << "\n";
+#endif
             SEXP lhs = CAR(call.ast);
             SEXP name = R_NilValue;
             if (TYPEOF(lhs) == SYMSXP)
@@ -1200,8 +1220,8 @@ static void cachedSetVar(SEXP val, SEXP env, Immediate idx, Context* ctx,
         INCREMENT_NAMED(val);
         SETCAR(loc, val);
         if (val != R_MissingArg) {
-            if (MISSING(loc))
-                SET_MISSING(loc, 0);
+            // if (MISSING(loc))
+            //    SET_MISSING(loc, 0);
         } else {
             SET_MISSING(loc, 1);
         }
@@ -1693,22 +1713,24 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
             advanceImmediate();
             SEXP callee = cp_pool_at(ctx, readImmediate());
             advanceImmediate();
-            SEXP version = cp_pool_at(ctx, readImmediate());
+            // SEXP version = cp_pool_at(ctx, readImmediate());
             advanceImmediate();
             CallContext call(c, callee, n, ast, ostack_cell_at(ctx, n - 1),
                              *env, given, ctx);
-            auto fun = Function::unpack(version);
-            if (fun->invocationCount() % 50 != 0 &&
-                matches(call, fun->signature())) {
-                ArgsLazyData lazyArgs = ArgsLazyData(&call, ctx);
-                fun->registerInvocation();
-                supplyMissingArgs(call, fun);
-                res = rirCallTrampoline(call, fun, *env, (SEXP)&lazyArgs,
-                                        call.stackArgs, ctx);
-            } else {
-                // Fallback, the static dispatch failed
-                res = rirCall(call, ctx);
-            }
+            // TODO this seems to be harmful now, since we cannot update the
+            // hing function.
+            // auto fun = Function::unpack(version);
+            // if (fun->invocationCount() % 50 != 0 &&
+            //     matches(call, fun->signature())) {
+            //     ArgsLazyData lazyArgs = ArgsLazyData(&call, ctx);
+            //     fun->registerInvocation();
+            //     supplyMissingArgs(call, fun);
+            //     res = rirCallTrampoline(call, fun, *env, (SEXP)&lazyArgs,
+            //                             call.stackArgs, ctx);
+            // } else {
+            // Fallback, the static dispatch failed
+            res = rirCall(call, ctx);
+            //}
             ostack_popn(ctx, call.passedArgs);
             ostack_push(ctx, res);
 

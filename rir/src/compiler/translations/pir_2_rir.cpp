@@ -732,10 +732,13 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                                    Value* what, size_t& argStackSize,
                                    size_t argNumber) {
                     bool pushed = false;
-                    if (what == Missing::instance()) {
+                    if (what == UnboundValue::instance()) {
                         assert(MkArg::Cast(instr) &&
-                               "only mkarg supports missing");
+                               "only mkarg supports R_UnboundValue");
                         cs << BC::push(R_UnboundValue);
+                        pushed = true;
+                    } else if (what == MissingArg::instance()) {
+                        cs << BC::push(R_MissingArg);
                         pushed = true;
                     } else if (what == True::instance()) {
                         cs << BC::push(R_TrueValue);
@@ -888,6 +891,11 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                    << BC::push(cls->srcRef()) << BC::close();
                 break;
             }
+            case Tag::Missing: {
+                auto m = Missing::Cast(instr);
+                cs << BC::missing(m->varName);
+                break;
+            }
             case Tag::Is: {
                 auto is = Is::Cast(instr);
                 cs << BC::is(is->sexpTag);
@@ -929,6 +937,8 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
         cs << BC::Factory();                                                   \
         break;                                                                 \
     }
+                SIMPLE(Visible, visible);
+                SIMPLE(Invisible, invisible);
                 SIMPLE(Identical, identicalNoforce);
                 SIMPLE(LOr, lglOr);
                 SIMPLE(LAnd, lglAnd);
@@ -1116,7 +1126,8 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
             }
             // values, not instructions
             case Tag::Tombstone:
-            case Tag::Missing:
+            case Tag::MissingArg:
+            case Tag::UnboundValue:
             case Tag::Env:
             case Tag::Nil:
             case Tag::False:
@@ -1155,7 +1166,7 @@ static bool allLazy(CallType* call, std::vector<Promise*>& args) {
         if (!allLazy)
             return;
         if (auto arg = MkArg::Cast(v)) {
-            if (arg->eagerArg() != Missing::instance()) {
+            if (arg->isEager()) {
                 allLazy = false;
             } else {
                 args.push_back(arg->prom());
@@ -1222,24 +1233,27 @@ void Pir2Rir::lower(Code* code) {
                 // remains nothing to process. Breaking seems more robust
                 // than trusting the modified iterator.
                 break;
-            } else if (auto call = Call::Cast(*it)) {
-                // Lower calls to call implicit
-                std::vector<Promise*> args;
-                if (allLazy(call, args))
-                    call->replaceUsesAndSwapWith(
-                        new CallImplicit(call->callerEnv(), call->cls(),
-                                         std::move(args), {}, call->srcIdx),
-                        it);
-            } else if (auto call = NamedCall::Cast(*it)) {
-                // Lower named calls to call implicit
-                std::vector<Promise*> args;
-                if (allLazy(call, args))
-                    call->replaceUsesAndSwapWith(
-                        new CallImplicit(call->callerEnv(), call->cls(),
-                                         std::move(args), call->names,
-                                         call->srcIdx),
-                        it);
             }
+            // TODO: this seems to be harmful now, since we cannot supply
+            // R_MissingArg on call implicits
+            // else if (auto call = Call::Cast(*it)) {
+            //     // Lower calls to call implicit
+            //     std::vector<Promise*> args;
+            //     if (allLazy(call, args))
+            //         call->replaceUsesAndSwapWith(
+            //             new CallImplicit(call->callerEnv(), call->cls(),
+            //                              std::move(args), {}, call->srcIdx),
+            //             it);
+            // } else if (auto call = NamedCall::Cast(*it)) {
+            //     // Lower named calls to call implicit
+            //     std::vector<Promise*> args;
+            //     if (allLazy(call, args))
+            //         call->replaceUsesAndSwapWith(
+            //             new CallImplicit(call->callerEnv(), call->cls(),
+            //                              std::move(args), call->names,
+            //                              call->srcIdx),
+            //             it);
+            // }
 
             it = next;
         }
@@ -1277,9 +1291,15 @@ void Pir2Rir::toCSSA(Code* code) {
                     // pred is either jump (insert copy at end) or branch
                     // (insert copy before the branch instr)
                     auto it = pred->isJmp() ? pred->end() : pred->end() - 1;
-                    Instruction* iav = Instruction::Cast(phi->arg(i).val());
-                    auto copy = pred->insert(it, new PirCopy(iav));
-                    phi->arg(i).val() = *copy;
+                    if (Instruction* iav =
+                            Instruction::Cast(phi->arg(i).val())) {
+                        auto copy = pred->insert(it, new PirCopy(iav));
+                        phi->arg(i).val() = *copy;
+                    } else {
+                        auto val = phi->arg(i).val()->asRValue();
+                        auto copy = pred->insert(it, new LdConst(val));
+                        phi->arg(i).val() = *copy;
+                    }
                 }
                 auto phiCopy = new PirCopy(phi);
                 phi->replaceUsesWith(phiCopy);
@@ -1316,7 +1336,7 @@ rir::Function* Pir2Rir::finalize() {
         signature.pushDefaultArgument();
     }
 
-    assert(signature.nargs() == cls->nargs());
+    assert(signature.formalNargs() == cls->nargs());
     ctx.push(R_NilValue);
     size_t localsCnt = compileCode(ctx, cls);
     log.finalPIR(cls);

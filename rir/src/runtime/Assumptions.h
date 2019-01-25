@@ -10,24 +10,27 @@
 namespace rir {
 
 enum class Assumption {
-    EagerArgs_,
+    EagerArgs_, // All arguments are already evaluated
 
-    Arg1IsEager_,
-    Arg2IsEager_,
-    Arg3IsEager_,
+    Arg1IsEager_, // Arg1 is already evaluated
+    Arg2IsEager_, // Arg2 is already evaluated
+    Arg3IsEager_, // Arg3 is already evaluated
 
-    NonObjectArgs_,
+    NonObjectArgs_, // All arguments are not objects
 
-    Arg1IsNonObj_,
-    Arg2IsNonObj_,
-    Arg3IsNonObj_,
+    Arg1IsNonObj_, // Arg1 is not an object
+    Arg2IsNonObj_, // Arg2 is not an object
+    Arg3IsNonObj_, // Arg3 is not an object
 
-    NoMissingArguments,
-    NotTooManyArguments,
-    CorrectOrderOfArguments,
+    NoExplicitlyMissingArgs, // Explicitly missing, e.g. f(,,)
+    CorrectOrderOfArguments, // Ie. the args are not named
+    NotTooFewArguments,      // The number of args supplied is as expected, ie.
+                             //  supplied >= (nargs - missing)
+                             //  Note: can still have explicitly missing args
+    NotTooManyArguments,     // The number of args supplied is <= nargs
 
     FIRST = EagerArgs_,
-    LAST = CorrectOrderOfArguments
+    LAST = NotTooManyArguments
 };
 
 #pragma pack(push)
@@ -36,13 +39,14 @@ struct Assumptions {
     typedef EnumSet<Assumption, uint16_t> Flags;
 
     Assumptions() {}
+    explicit Assumptions(const Flags& flags) : flags(flags) {}
     Assumptions(const Flags& flags, uint8_t missing)
         : flags(flags), missing(missing) {}
     explicit Assumptions(uint32_t i) { memcpy(this, &i, sizeof(i)); }
     Assumptions(std::initializer_list<Assumption> assumptions)
         : flags(assumptions) {}
 
-    constexpr static size_t MAX_MISSING = 8;
+    constexpr static size_t MAX_MISSING = 255;
 
   private:
     Flags flags;
@@ -59,11 +63,12 @@ struct Assumptions {
     bool notObj(size_t i) const;
     void setNotObj(size_t i, bool);
 
-    bool isMissing(size_t arg) const {
-        assert(arg < MAX_MISSING);
-        return missing & (1UL << arg);
+    uint8_t numMissing() const { return missing; }
+
+    void numMissing(long i) {
+        assert(i < 255);
+        missing = i;
     }
-    void setMissing(size_t arg) { missing |= (1UL << arg); }
 
     bool empty() const { return flags.empty() && missing == 0; }
 
@@ -77,9 +82,9 @@ struct Assumptions {
     bool operator<(const Assumptions& other) const {
         // Order by number of assumptions! Important for dispatching.
         if (missing != other.missing)
-            return missing < other.missing;
+            return missing > other.missing;
         if (flags.count() != other.flags.count())
-            return flags.count() < other.flags.count();
+            return flags.count() > other.flags.count();
         return flags < other.flags;
     }
 
@@ -92,7 +97,9 @@ struct Assumptions {
     }
 
     bool subtype(const Assumptions& other) const {
-        return missing == other.missing && other.flags.includes(flags);
+        if (other.flags.includes(Assumption::NotTooFewArguments))
+            return missing == other.missing && other.flags.includes(flags);
+        return other.flags.includes(flags);
     }
 
     friend struct std::hash<rir::Assumptions>;

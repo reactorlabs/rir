@@ -51,19 +51,24 @@ class TheInliner {
                         continue;
                     inlineeCls = mkcls->cls;
                     inlinee = call->dispatch(inlineeCls);
-                    if (inlineeCls->nargs() != call->nCallArgs())
+                    if (inlinee->nargs() -
+                            inlinee->assumptions().numMissing() !=
+                        call->nCallArgs())
                         continue;
                     staticEnv = mkcls->lexicalEnv();
                     callerFrameState = call->frameState();
                 } else if (auto call = StaticCall::Cast(*it)) {
                     inlineeCls = call->cls();
                     inlinee = call->dispatch();
+                    if (inlinee->nargs() -
+                            inlinee->assumptions().numMissing() !=
+                        call->nCallArgs())
+                        continue;
                     // if we don't know the closure of the inlinee, we can't
                     // inline.
                     if (inlineeCls->closureEnv() == Env::notClosed() &&
                         inlinee != version)
                         continue;
-                    assert(inlineeCls->nargs() == call->nCallArgs());
                     staticEnv = inlineeCls->closureEnv();
                     callerFrameState = call->frameState();
                 } else {
@@ -170,9 +175,8 @@ class TheInliner {
                                 // value
                                 auto cast = new CastType(
                                     a, RType::prom,
-                                    mk->eagerArg() == Missing::instance()
-                                        ? PirType::any()
-                                        : PirType::promiseWrappedVal());
+                                    mk->isEager() ? PirType::promiseWrappedVal()
+                                                  : ld->type);
                                 ip = bb->insert(ip + 1, cast);
                                 ip--;
                                 a = cast;
@@ -247,7 +251,7 @@ class TheInliner {
 // For now it seems a simple env variable is just fine.
 const size_t TheInliner::MAX_SIZE = getenv("PIR_INLINER_MAX_SIZE")
                                         ? atoi(getenv("PIR_INLINER_MAX_SIZE"))
-                                        : 10000;
+                                        : 3000;
 const size_t TheInliner::MAX_INLINEE_SIZE =
     getenv("PIR_INLINER_MAX_INLINEE_SIZE")
         ? atoi(getenv("PIR_INLINER_MAX_INLINEE_SIZE"))

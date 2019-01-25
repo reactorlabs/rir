@@ -35,7 +35,9 @@ class TheCleanup {
                     next = bb->remove(ip);
                 } else if (auto force = Force::Cast(i)) {
                     Value* arg = force->input();
-                    if (!arg->type.maybePromiseWrapped()) {
+                    // Missing args produce error.
+                    if (!arg->type.maybePromiseWrapped() &&
+                        !arg->type.maybeMissing()) {
                         removed = true;
                         force->replaceUsesWith(arg);
                         next = bb->remove(ip);

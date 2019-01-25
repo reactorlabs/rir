@@ -3,6 +3,7 @@
 #include "../translations/rir_compiler.h"
 #include "../util/cfg.h"
 #include "../util/visitor.h"
+#include "R/Funtab.h"
 #include "R/Symbols.h"
 #include "R/r.h"
 #include "pass_definitions.h"
@@ -144,6 +145,34 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                 else if (assume->arg<0>().val() == False::instance() &&
                          !assume->assumeTrue)
                     next = bb->remove(ip);
+            }
+
+            if (auto callb = CallBuiltin::Cast(i)) {
+                static int nargs = findBuiltin("nargs");
+                assert(function->assumptions().includes(
+                    Assumption::NotTooManyArguments));
+                // PIR functions are always compiled for a particular number of
+                // arguments
+                if (callb->builtinId == nargs) {
+                    auto nargsC = new LdConst(
+                        ScalarInteger(function->nargs() -
+                                      function->assumptions().numMissing()));
+                    callb->replaceUsesAndSwapWith(nargsC, ip);
+                }
+            }
+
+            if (auto missing = Missing::Cast(i)) {
+                if (auto e = MkEnv::Cast(missing->env())) {
+                    e->eachLocalVar([&](SEXP name, Value* v) {
+                        if (name == missing->varName) {
+                            auto res = (MissingArg::instance() == v)
+                                           ? R_TrueValue
+                                           : R_FalseValue;
+                            missing->replaceUsesAndSwapWith(new LdConst(res),
+                                                            ip);
+                        }
+                    });
+                }
             }
 
             ip = next;

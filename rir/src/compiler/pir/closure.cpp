@@ -38,7 +38,7 @@ Closure::~Closure() {
 }
 
 ClosureVersion* Closure::cloneWithAssumptions(ClosureVersion* version,
-                                              Assumptions asmpt,
+                                              const Assumptions& asmpt,
                                               const MaybeClsVersion& change) {
     auto newCtx = version->optimizationContext();
     newCtx.assumptions = newCtx.assumptions | asmpt;

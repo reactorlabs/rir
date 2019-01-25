@@ -36,7 +36,7 @@ void EagerCalls::apply(RirCompiler& cmp, ClosureVersion* closure,
             bool noMissing = true;
             call->eachCallArg([&](Value* v) {
                 if (auto mk = MkArg::Cast(v)) {
-                    if (mk->eagerArg() == Missing::instance())
+                    if (!mk->isEager())
                         args.insert(mk);
                 } else {
                     noMissing = false;
@@ -104,8 +104,9 @@ void EagerCalls::apply(RirCompiler& cmp, ClosureVersion* closure,
                         ClosureVersion::Property::NoReflection)) {
                     call->eachCallArg([&](InstrArg& arg) {
                         if (auto mk = MkArg::Cast(arg.val())) {
-                            mk->ifEager(
-                                [&](Value* eagerVal) { arg.val() = eagerVal; });
+                            if (mk->isEager()) {
+                                arg.val() = mk->eagerArg();
+                            }
                         }
                     });
                 }
