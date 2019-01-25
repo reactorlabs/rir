@@ -2512,9 +2512,10 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
             SEXP vec = ostack_at(ctx, 2);
             SEXP val = ostack_at(ctx, 3);
 
+            // TODO: Is this necessary? Is more duplication necessary?
             if (MAYBE_SHARED(vec)) {
                 vec = Rf_duplicate(vec);
-                ostack_set(ctx, 1, vec);
+                ostack_set(ctx, 2, vec);
             }
 
             SEXP args = CONS_NR(
@@ -2715,9 +2716,10 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
                 }
             }
 
+            // TODO: Is this necessary? Is more duplication necessary?
             if (MAYBE_SHARED(vec)) {
                 vec = Rf_duplicate(vec);
-                ostack_set(ctx, 1, vec);
+                ostack_set(ctx, 2, vec);
             }
 
             SEXP args = CONS_NR(
