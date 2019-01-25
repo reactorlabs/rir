@@ -140,8 +140,6 @@ Sometimes we do not know if an argument was already forced or not. For example i
 
 The modeling of missing is not very accurate at the moment.
 
-Currently we assume that there are no objects. If we add that to the picture it will become more annoying, since even things like `+`, even if bound to the default `+` primitive, might execute random code.
-
 No named args, no default args implemented.
 
 `Instruction` has virtual methods, would be nice to get rid of them, not sure how.
