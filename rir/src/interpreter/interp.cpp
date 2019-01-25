@@ -2526,8 +2526,8 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
             res = nullptr;
             SEXP call = getSrcForCall(c, pc - 1, ctx);
             SEXP selector = CAR(call) == symbol::SuperAssign
-                                ? symbol::SuperAssign2Bracket
-                                : symbol::Assign2Bracket;
+                                ? symbol::SuperAssignBracket
+                                : symbol::AssignBracket;
             RCNTXT assignContext;
             Rf_begincontext(&assignContext, CTXT_RETURN, call, *env,
                             ENCLOS(*env), args, selector);
@@ -2730,8 +2730,8 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
             res = nullptr;
             SEXP call = getSrcForCall(c, pc - 1, ctx);
             SEXP selector = CAR(call) == symbol::SuperAssign
-                                ? symbol::SuperAssign2DoubleBracket
-                                : symbol::Assign2DoubleBracket;
+                                ? symbol::SuperAssignDoubleBracket
+                                : symbol::AssignDoubleBracket;
 
             RCNTXT assignContext;
             Rf_begincontext(&assignContext, CTXT_RETURN, call, *env,

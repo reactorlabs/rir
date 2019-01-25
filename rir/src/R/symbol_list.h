@@ -9,10 +9,6 @@
     V(SuperAssignDoubleBracket, "[[<<-")                                       \
     V(AssignBracket, "[<-")                                                    \
     V(AssignDoubleBracket, "[[<-")                                             \
-    V(SuperAssign2Bracket, "[,<<-")                                            \
-    V(SuperAssign2DoubleBracket, "[[,<<-")                                     \
-    V(Assign2Bracket, "[,<-")                                                  \
-    V(Assign2DoubleBracket, "[[,<-")                                           \
     V(DoubleBracket, "[[")                                                     \
     V(Bracket, "[")                                                            \
     V(Block, "{")                                                              \
