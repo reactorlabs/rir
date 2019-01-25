@@ -59,6 +59,7 @@ fi
 sed -i.bak 's/\&LOCATION_AWF .*$/\&LOCATION_AWF "areWeFast"/' "$BENCHMARKS_PATH/rebench.conf"
 sed -i.bak 's/\&LOCATION_SHT .*$/\&LOCATION_SHT "shootout"/' "$BENCHMARKS_PATH/rebench.conf"
 sed -i.bak 's/\&LOCATION_RIR .*$/\&LOCATION_RIR "\.\.\/'"$PREFIX"'bin"/' "$BENCHMARKS_PATH/rebench.conf"
+sed -i.bak '/warmup:/d' "$BENCHMARKS_PATH/rebench.conf"
 rm "$BENCHMARKS_PATH/rebench.conf.bak"
 
 popd > /dev/null
