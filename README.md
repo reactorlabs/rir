@@ -54,9 +54,8 @@ To print intermediate debug information, you have a number of options:
 * Or for even specific debugging use the `debugFlags` argument of `pir.compile`. Debug flags can be created using `pir.debugFlags`, for example to debug the register allocator, you could use `pir.compile(f, debugFlags=pir.debugFlags(PrintFinalPir=TRUE,DebugAllocator=TRUE))`.
 * To change the default debug flags at runtime use `pir.setDebugFlags(pir.debugFlags(...))`.
 
-We periodically [benchmark](documentation/benchmarking.md) the performance of the optimizer
-
-We periodically [benchmark](documentation/benchmarking.md) the performance of the optimizer
+We periodically [benchmark](documentation/benchmarking.md) the performance of the optimizer.
+The documenation also contains the information for running the benchmarks locally.
 
 ### Off-Tree builds
 
