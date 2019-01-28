@@ -32,9 +32,10 @@ struct CallContext {
                 R_bcstack_t* stackArgs, Immediate* implicitArgs,
                 Immediate* names, SEXP callerEnv,
                 const Assumptions& givenAssumptions, Context* ctx)
-        : caller(c), suppliedArgs(nargs), passedArgs(nargs), stackArgs(stackArgs),
-          implicitArgs(implicitArgs), names(names), callerEnv(callerEnv),
-          ast(ast), callee(callee), givenAssumptions(givenAssumptions) {
+        : caller(c), suppliedArgs(nargs), passedArgs(nargs),
+          stackArgs(stackArgs), implicitArgs(implicitArgs), names(names),
+          callerEnv(callerEnv), ast(ast), callee(callee),
+          givenAssumptions(givenAssumptions) {
         assert(callee &&
                (TYPEOF(callee) == CLOSXP || TYPEOF(callee) == SPECIALSXP ||
                 TYPEOF(callee) == BUILTINSXP));
@@ -392,7 +393,7 @@ RIR_INLINE SEXP rirCallTrampoline(const CallContext& call, Function* fun,
 
 RIR_INLINE SEXP rirCallTrampoline(const CallContext& call, Function* fun,
                                   SEXP arglist, Context* ctx) {
-    return rirCallTrampoline(call, fun, (SEXP)NULL, arglist, call.stackArgs,
+    return rirCallTrampoline(call, fun, R_NilValue, arglist, call.stackArgs,
                              ctx);
 }
 
@@ -1675,7 +1676,8 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
             ostack_push(ctx, res);
 
             SLOWASSERT(ttt == R_PPStackTop);
-            SLOWASSERT(lll - call.suppliedArgs + 1 == (unsigned)ostack_length(ctx));
+            SLOWASSERT(lll - call.suppliedArgs + 1 ==
+                       (unsigned)ostack_length(ctx));
             NEXT();
         }
 
@@ -1714,7 +1716,8 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
             ostack_push(ctx, res);
 
             SLOWASSERT(ttt == R_PPStackTop);
-            SLOWASSERT(lll - call.suppliedArgs + 1 == (unsigned)ostack_length(ctx));
+            SLOWASSERT(lll - call.suppliedArgs + 1 ==
+                       (unsigned)ostack_length(ctx));
             NEXT();
         }
 
