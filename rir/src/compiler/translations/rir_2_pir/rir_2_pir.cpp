@@ -735,7 +735,7 @@ SIMPLE_INSTRUCTIONS(V, _)
     // Opcodes that only come from PIR
     case Opcode::deopt_:
     case Opcode::force_:
-    case Opcode::make_env_:
+    case Opcode::mk_env_:
     case Opcode::get_env_:
     case Opcode::parent_env_:
     case Opcode::set_env_:

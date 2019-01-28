@@ -534,6 +534,8 @@ Assumptions CallInstruction::inferAvailableAssumptions() const {
             if (!mk->isEager()) {
                 given.setEager(i, false);
                 given.setNotObj(i, false);
+                // Yes, promise wrapped missing args are a thing...
+                given.remove(Assumption::NoExplicitlyMissingArgs);
                 return;
             } else {
                 arg = mk->eagerArg();

@@ -97,3 +97,11 @@ stopifnot(h(1) == 1)
 stopifnot(h(2) == 2)
 h <- pir.compile(h)
 stopifnot(h(3) == 3)
+
+
+# test that we generate multiple versions
+p <- function(a=1,b=2) a+b
+for (i in 1:10) pir.compile(function() p())()
+for (i in 1:10) pir.compile(function() p(1))()
+for (i in 1:10) pir.compile(function() p(1,2))()
+stopifnot(length(.Call("rir_invocation_count", p)) > 3)

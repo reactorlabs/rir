@@ -27,3 +27,22 @@ rir.compile(function() {
     stopifnot(f(2) == c(2,2))
     stopifnot(f(,1) == c(1,1))
 })()
+
+
+f <- function(a=1,b=2,c=3) c(a,b,c,missing(a), missing(b), missing(c), nargs())
+g <- function(a) c(missing(a), nargs())
+h <- function(a) g(a)
+
+test <- function() {
+    stopifnot(f() == c(1,2,3,TRUE,TRUE,TRUE,0))
+    stopifnot(f(2) == c(2,2,3,FALSE,TRUE,TRUE,1))
+    stopifnot(f(,3) == c(1,3,3,TRUE,FALSE,TRUE,2))
+    stopifnot(f(,) == c(1,2,3,TRUE,TRUE,TRUE,2))
+    stopifnot(f(b=1) == c(1,1,3,TRUE,FALSE,TRUE,1))
+    stopifnot(g() == c(TRUE,0))
+    stopifnot(g(2) == c(FALSE,1))
+}
+
+test()
+for (i in 1:10)
+  test()

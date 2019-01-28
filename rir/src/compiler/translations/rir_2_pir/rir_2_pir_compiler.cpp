@@ -18,9 +18,6 @@ namespace pir {
 // mis-ordered arguments. The caller needs to take care.
 const Assumption Rir2PirCompiler::minimalAssumptions[] = {
     Assumption::CorrectOrderOfArguments, Assumption::NotTooManyArguments};
-// TODO: currently we set those to the minimal args, otherwise
-// Instruction::dispatch can fail. We need a better solution for that. For
-// example dynamically compile an additional version if dispatch fails.
 const Assumptions Rir2PirCompiler::defaultAssumptions = Assumptions(
     {Assumption::CorrectOrderOfArguments, Assumption::NotTooManyArguments}, 0);
 
@@ -77,16 +74,13 @@ void Rir2PirCompiler::compileClosure(Closure* closure,
             return fail_();
         }
 
-    if (closure->formals().hasDefaultArgs())
+    if (closure->formals().hasDefaultArgs()) {
         if (!ctx.assumptions.includes(Assumption::NoExplicitlyMissingArgs)) {
-            logger.warn("TODO: missing args with defaults ");
+            logger.warn("TODO: don't know which are explicitly missing");
             return fail_();
         }
-
-    // TODO: Support default arguments and dots
-    if (closure->formals().hasDefaultArgs()) {
         if (!ctx.assumptions.includes(Assumption::NotTooFewArguments)) {
-            logger.warn("default args are only supported with assumptions");
+            logger.warn("TODO: don't know how many are missing");
             return fail_();
         }
     }

@@ -1064,17 +1064,7 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
             case Tag::MkEnv: {
                 auto mkenv = MkEnv::Cast(instr);
 
-                cs << BC::makeEnv();
-
-                if (mkenv->nLocals() > 0) {
-                    cs << BC::setEnv();
-                    currentEnv = instr;
-
-                    mkenv->eachLocalVarRev(
-                        [&](SEXP name, Value* val) { cs << BC::stvar(name); });
-
-                    cs << BC::getEnv();
-                }
+                cs << BC::mkEnv(mkenv->varName);
                 break;
             }
             case Tag::Phi: {

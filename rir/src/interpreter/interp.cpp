@@ -583,6 +583,9 @@ RIR_INLINE Assumptions addDynamicAssumptions(
             given.add(Assumption::NotTooFewArguments);
     }
 
+    if (call.suppliedArgs == 0)
+        given.add(Assumption::NoExplicitlyMissingArgs);
+
     if (call.hasStackArgs()) {
         // Always true in this case, since we will pad missing args on the stack
         // later with R_MissingArg's
@@ -600,14 +603,18 @@ RIR_INLINE Assumptions addDynamicAssumptions(
                 if (PRVALUE(arg) == R_UnboundValue) {
                     notObj = false;
                     isEager = false;
+                    // Yes, promise wrapped missing args are a thing...
+                    given.remove(Assumption::NoExplicitlyMissingArgs);
                 } else if (isObject(PRVALUE(arg))) {
                     notObj = false;
+                } else if (PRVALUE(arg) == R_MissingArg) {
+                    given.remove(Assumption::NoExplicitlyMissingArgs);
                 }
             } else if (isObject(arg)) {
                 notObj = false;
-            }
-            if (arg == R_MissingArg)
+            } else if (arg == R_MissingArg) {
                 given.remove(Assumption::NoExplicitlyMissingArgs);
+            }
             given.setEager(i, isEager);
             given.setNotObj(i, notObj);
         };
@@ -615,11 +622,6 @@ RIR_INLINE Assumptions addDynamicAssumptions(
         for (size_t i = 0; i < call.suppliedArgs; ++i) {
             testArg(i);
         }
-    } else {
-        given.add(Assumption::NoExplicitlyMissingArgs);
-        for (size_t i = 0; i < call.suppliedArgs; ++i)
-            if (call.missingArg(i))
-                given.remove(Assumption::NoExplicitlyMissingArgs);
     }
 
     if (!call.hasNames())
@@ -1219,12 +1221,8 @@ static void cachedSetVar(SEXP val, SEXP env, Immediate idx, Context* ctx,
             return;
         INCREMENT_NAMED(val);
         SETCAR(loc, val);
-        if (val != R_MissingArg) {
-            // if (MISSING(loc))
-            //    SET_MISSING(loc, 0);
-        } else {
-            SET_MISSING(loc, 1);
-        }
+        if (MISSING(loc))
+            SET_MISSING(loc, 0);
         return;
     }
 
@@ -1233,11 +1231,6 @@ static void cachedSetVar(SEXP val, SEXP env, Immediate idx, Context* ctx,
     INCREMENT_NAMED(val);
     PROTECT(val);
     Rf_defineVar(sym, val, env);
-    // This is neccessary since we use this instruction also to create new
-    // environments (when lowering PIR MkEnv)
-    loc = cachedGetBindingCell(env, idx, ctx, bindingCache);
-    if (val == R_MissingArg)
-        SET_MISSING(loc, 1);
     UNPROTECT(1);
 }
 
@@ -1293,11 +1286,23 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
 
         INSTRUCTION(nop_) NEXT();
 
-        INSTRUCTION(make_env_) {
+        INSTRUCTION(mk_env_) {
+            size_t n = readImmediate();
+            advanceImmediate();
             SEXP parent = ostack_pop(ctx);
             assert(TYPEOF(parent) == ENVSXP &&
                    "Non-environment used as environment parent.");
-            res = Rf_NewEnvironment(R_NilValue, R_NilValue, parent);
+            SEXP arglist = R_NilValue;
+            auto names = (Immediate*)pc;
+            advanceImmediateN(n);
+            for (long i = n - 1; i >= 0; --i) {
+                SEXP val = ostack_pop(ctx);
+                SEXP name = cp_pool_at(ctx, names[i]);
+                arglist = CONS_NR(val, arglist);
+                SET_TAG(arglist, name);
+                SET_MISSING(arglist, val == R_MissingArg ? 1 : 0);
+            }
+            res = Rf_NewEnvironment(R_NilValue, arglist, parent);
             ostack_push(ctx, res);
             NEXT();
         }
@@ -1713,24 +1718,25 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
             advanceImmediate();
             SEXP callee = cp_pool_at(ctx, readImmediate());
             advanceImmediate();
-            // SEXP version = cp_pool_at(ctx, readImmediate());
-            advanceImmediate();
+            SEXP version = cp_pool_at(ctx, readImmediate());
             CallContext call(c, callee, n, ast, ostack_cell_at(ctx, n - 1),
                              *env, given, ctx);
-            // TODO this seems to be harmful now, since we cannot update the
-            // hing function.
-            // auto fun = Function::unpack(version);
-            // if (fun->invocationCount() % 50 != 0 &&
-            //     matches(call, fun->signature())) {
-            //     ArgsLazyData lazyArgs = ArgsLazyData(&call, ctx);
-            //     fun->registerInvocation();
-            //     supplyMissingArgs(call, fun);
-            //     res = rirCallTrampoline(call, fun, *env, (SEXP)&lazyArgs,
-            //                             call.stackArgs, ctx);
-            // } else {
-            // Fallback, the static dispatch failed
-            res = rirCall(call, ctx);
-            //}
+            auto fun = Function::unpack(version);
+            if (fun->invocationCount() % (RIR_WARMUP * 2) == 0 ||
+                !matches(call, fun->signature())) {
+                auto dt = DispatchTable::unpack(BODY(callee));
+                fun = dispatch(call, dt);
+                // Path inline cache
+                (*(Immediate*)pc) = Pool::insert(fun->container());
+                assert(fun != dt->baseline());
+            }
+            advanceImmediate();
+
+            ArgsLazyData lazyArgs = ArgsLazyData(&call, ctx);
+            fun->registerInvocation();
+            supplyMissingArgs(call, fun);
+            res = rirCallTrampoline(call, fun, *env, (SEXP)&lazyArgs,
+                                    call.stackArgs, ctx);
             ostack_popn(ctx, call.passedArgs);
             ostack_push(ctx, res);
 

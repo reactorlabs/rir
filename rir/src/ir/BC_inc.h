@@ -111,6 +111,9 @@ class BC {
         Immediate target;
         Immediate source;
     };
+    struct MkEnvFixedArgs {
+        NumArgs nargs;
+    };
 
     static constexpr size_t MAX_NUM_ARGS = 1L << (8 * sizeof(PoolIdx));
     static constexpr size_t MAX_POOL_IDX = 1L << (8 * sizeof(PoolIdx));
@@ -121,6 +124,7 @@ class BC {
     // On the bytecode stream each immediate argument uses only the actual
     // space required.
     union ImmediateArguments {
+        MkEnvFixedArgs mkEnvFixedArgs;
         StaticCallFixedArgs staticCallFixedArgs;
         CallFixedArgs callFixedArgs;
         CallBuiltinFixedArgs callBuiltinFixedArgs;
@@ -179,6 +183,10 @@ class BC {
             return immediate.callFixedArgs.nargs * 2 * sizeof(FunIdx) +
                    fixedSize(bc);
 
+        if (bc == Opcode::mk_env_)
+            return immediate.mkEnvFixedArgs.nargs * sizeof(FunIdx) +
+                   fixedSize(bc);
+
         // the others have no variable length part
         return fixedSize(bc);
     }
@@ -192,6 +200,8 @@ class BC {
             return immediate.staticCallFixedArgs.nargs;
         if (bc == Opcode::call_builtin_)
             return immediate.callBuiltinFixedArgs.nargs;
+        if (bc == Opcode::mk_env_)
+            return immediate.mkEnvFixedArgs.nargs + 1;
         return popCount(bc);
     }
     inline size_t pushCount() { return pushCount(bc); }
@@ -202,7 +212,7 @@ class BC {
     // Print it to the stream passed as argument
     void print(std::ostream& out) const;
     void printImmediateArgs(std::ostream& out) const;
-    void printNames(std::ostream& out) const;
+    void printNames(std::ostream& out, const std::vector<PoolIdx>&) const;
     void printProfile(std::ostream& out) const;
     void printOpcode(std::ostream& out) const;
 
@@ -284,6 +294,12 @@ class BC {
             memcpy(&nargs, pc, sizeof(Immediate));
             return 1 + (3 + 2 * nargs) * sizeof(Immediate);
         }
+        case Opcode::mk_env_: {
+            pc++;
+            Immediate nargs;
+            memcpy(&nargs, pc, sizeof(Immediate));
+            return 1 + (1 + nargs) * sizeof(Immediate);
+        }
         default: {}
         }
         return fixedSize(bc);
@@ -352,6 +368,8 @@ BC_NOARGS(V, _)
                                 SEXP targetVersion, const Assumptions& given);
     inline static BC callBuiltin(size_t nargs, SEXP ast, SEXP target);
 
+    inline static BC mkEnv(const std::vector<SEXP>& names);
+
     inline static BC decode(Opcode* pc, const Code* code) {
         BC cur;
         cur.decodeFixlen(pc);
@@ -379,9 +397,19 @@ BC_NOARGS(V, _)
     struct CallFeedbackExtraInformation : public ExtraInformation {
         std::vector<SEXP> targets;
     };
+    struct MkEnvExtraInformation : public ExtraInformation {
+        std::vector<BC::PoolIdx> names;
+    };
     std::unique_ptr<ExtraInformation> extraInformation = nullptr;
 
   public:
+    MkEnvExtraInformation& mkEnvExtra() const {
+        assert(bc == Opcode::mk_env_ && "Not a varlen call instruction");
+        assert(extraInformation.get() &&
+               "missing extra information. created through decodeShallow?");
+        return *static_cast<MkEnvExtraInformation*>(extraInformation.get());
+    }
+
     CallInstructionExtraInformation& callExtra() const {
         switch (bc) {
         case Opcode::call_implicit_:
@@ -424,6 +452,10 @@ BC_NOARGS(V, _)
             extraInformation.reset(new CallFeedbackExtraInformation);
             break;
         }
+        case Opcode::mk_env_: {
+            extraInformation.reset(new MkEnvExtraInformation);
+            break;
+        }
         default: {}
         }
     }
@@ -454,6 +486,13 @@ BC_NOARGS(V, _)
 
             break;
         }
+        case Opcode::mk_env_: {
+            pc += sizeof(MkEnvFixedArgs);
+            for (size_t i = 0; i < immediate.mkEnvFixedArgs.nargs; ++i)
+                mkEnvExtra().names.push_back(readImmediate(&pc));
+            break;
+        }
+
         case Opcode::record_call_: {
             // Read call target feedback from the extra pool
             for (size_t i = 0; i < immediate.callFeedback.numTargets; ++i)
@@ -560,6 +599,9 @@ BC_NOARGS(V, _)
         case Opcode::call_:
         case Opcode::named_call_:
             memcpy(&immediate.callFixedArgs, pc, sizeof(CallFixedArgs));
+            break;
+        case Opcode::mk_env_:
+            memcpy(&immediate.mkEnvFixedArgs, pc, sizeof(MkEnvFixedArgs));
             break;
         case Opcode::call_builtin_:
             memcpy(&immediate.callBuiltinFixedArgs, pc,
