@@ -24,5 +24,5 @@ fi
 
 
 pushd "$SCRIPT_PATH/../benchmarks"
-rebench rebench.conf $OPTIONS -SN --iterations=5 
+rebench rebench.conf $OPTIONS -SN --iterations=2 
 popd > /dev/null
