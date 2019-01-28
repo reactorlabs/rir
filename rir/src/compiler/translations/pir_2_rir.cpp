@@ -992,22 +992,6 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 SIMPLE_WITH_SRCIDX(Subassign2_2D, subassign2_2);
 #undef SIMPLE_WITH_SRCIDX
 
-            case Tag::CallImplicit: {
-                auto call = CallImplicit::Cast(instr);
-                std::vector<BC::FunIdx> args;
-                call->eachArg([&](Promise* p) {
-                    args.push_back(cs.addPromise(getPromise(ctx, p)));
-                });
-
-                if (call->names.empty())
-                    cs << BC::callImplicit(
-                        args, Pool::get(call->srcIdx),
-                        {Assumption::CorrectOrderOfArguments});
-                else
-                    cs << BC::callImplicit(args, call->names,
-                                           Pool::get(call->srcIdx), {});
-                break;
-            }
             case Tag::Call: {
                 auto call = Call::Cast(instr);
                 cs << BC::call(call->nCallArgs(), Pool::get(call->srcIdx),
@@ -1224,26 +1208,6 @@ void Pir2Rir::lower(Code* code) {
                 // than trusting the modified iterator.
                 break;
             }
-            // TODO: this seems to be harmful now, since we cannot supply
-            // R_MissingArg on call implicits
-            // else if (auto call = Call::Cast(*it)) {
-            //     // Lower calls to call implicit
-            //     std::vector<Promise*> args;
-            //     if (allLazy(call, args))
-            //         call->replaceUsesAndSwapWith(
-            //             new CallImplicit(call->callerEnv(), call->cls(),
-            //                              std::move(args), {}, call->srcIdx),
-            //             it);
-            // } else if (auto call = NamedCall::Cast(*it)) {
-            //     // Lower named calls to call implicit
-            //     std::vector<Promise*> args;
-            //     if (allLazy(call, args))
-            //         call->replaceUsesAndSwapWith(
-            //             new CallImplicit(call->callerEnv(), call->cls(),
-            //                              std::move(args), call->names,
-            //                              call->srcIdx),
-            //             it);
-            // }
 
             it = next;
         }

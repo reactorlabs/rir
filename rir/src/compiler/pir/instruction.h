@@ -1170,23 +1170,6 @@ class VLIE(NamedCall, Effect::Any, EnvAccess::Leak), public CallInstruction {
     void printArgs(std::ostream & out, bool tty) const override;
 };
 
-class FLIE(CallImplicit, 2, Effect::Any, EnvAccess::Leak) {
-    const std::vector<Promise*> promises;
-
-  public:
-    void eachArg(const std::function<void(Promise*)>&) const;
-    const std::vector<SEXP> names;
-
-    Value* cls() const { return arg(0).val(); }
-
-    CallImplicit(Value* callerEnv, Value* fun,
-                 const std::vector<Promise*>& args,
-                 const std::vector<SEXP>& names_, unsigned srcIdx);
-
-    Value* callerEnv() { return env(); }
-    void printArgs(std::ostream& out, bool tty) const override;
-};
-
 // Call instruction for lazy, but staticatlly resolved calls. Closure is
 // specified as `cls_`, args passed as promises.
 class VLIE(StaticCall, Effect::Any, EnvAccess::Leak), public CallInstruction {

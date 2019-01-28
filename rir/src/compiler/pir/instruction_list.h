@@ -61,7 +61,6 @@
     V(StaticCall)                                                              \
     V(CallBuiltin)                                                             \
     V(CallSafeBuiltin)                                                         \
-    V(CallImplicit)                                                            \
     V(MkEnv)                                                                   \
     V(LdFunctionEnv)                                                           \
     V(LAnd)                                                                    \

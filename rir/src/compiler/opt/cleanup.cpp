@@ -95,7 +95,6 @@ class TheCleanup {
                 // promise deletion would be broken, if we were to use
                 // CallImplicit in the middle-end, since this instruction can
                 // also point to promises.
-                assert(!CallImplicit::Cast(i));
                 if (!removed) {
                     if (!Phi::Cast(i)) {
                         i->eachArg([&](Value* arg) {

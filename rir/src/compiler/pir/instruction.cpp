@@ -588,33 +588,6 @@ void NamedCall::printArgs(std::ostream& out, bool tty) const {
     out << ") ";
 }
 
-CallImplicit::CallImplicit(Value* callerEnv, Value* fun,
-                           const std::vector<Promise*>& args,
-                           const std::vector<SEXP>& names_, unsigned srcIdx)
-    : FixedLenInstructionWithEnvSlot(PirType::valOrLazy(),
-                                     {{PirType::closure()}}, {{fun}}, callerEnv,
-                                     srcIdx),
-      promises(args), names(names_) {}
-
-void CallImplicit::eachArg(const std::function<void(Promise*)>& action) const {
-    for (auto prom : promises) {
-        action(prom);
-    }
-}
-
-void CallImplicit::printArgs(std::ostream& out, bool tty) const {
-    cls()->printRef(out);
-    out << "(";
-    for (size_t i = 0; i < promises.size(); ++i) {
-        if (i < names.size() && names[i] != R_NilValue)
-            out << CHAR(PRINTNAME(names[i])) << "=";
-        out << "Prom(" << promises[i]->id << ")";
-        if (i < promises.size() - 1)
-            out << ", ";
-    }
-    out << ") ";
-}
-
 FrameState* Deopt::frameState() { return FrameState::Cast(arg<0>().val()); }
 
 void Checkpoint::printArgs(std::ostream& out, bool tty) const {
