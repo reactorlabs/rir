@@ -133,6 +133,13 @@ AbstractResult ScopeAnalysis::apply(ScopeAnalysisState& state,
                 effect.update();
             }
         }
+    } else if (auto missing = Missing::Cast(i)) {
+        auto res = load(state, missing->varName, missing->env());
+        if (!res.result.isUnknown()) {
+            res.result.eachSource(
+                [&](auto orig) { state.observedStores.insert(orig.origin); });
+            handled = true;
+        }
     } else if (Force::Cast(i)) {
         // First try to figure out what we force. If it's a non lazy thing, we
         // do not need to bother.
@@ -269,12 +276,14 @@ AbstractResult ScopeAnalysis::apply(ScopeAnalysisState& state,
                 });
             }
 
-            // If an environemnt is leaked, then deadStore elimination does not
-            // work anymore, since we cannot statically observer all the loads
-            if (envIsNeeded && i->leaksEnv()) {
-                state.envs[i->env()].leaked = true;
+            if (envIsNeeded && i->readsEnv()) {
                 for (auto env : state.envs.potentialParents(i->env()))
                     state.allStoresObserved.insert(env);
+                effect.update();
+            }
+
+            if (envIsNeeded && i->leaksEnv()) {
+                state.envs[i->env()].leaked = true;
                 effect.update();
             }
 

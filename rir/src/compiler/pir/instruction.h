@@ -131,6 +131,7 @@ class Instruction : public Value {
     virtual bool hasEffect() const = 0;
     virtual bool mayUseReflection() const = 0;
     virtual bool mayForcePromises() const = 0;
+    virtual bool readsEnv() const = 0;
     virtual bool changesEnv() const = 0;
     virtual bool leaksEnv() const = 0;
     virtual bool mayAccessEnv() const = 0;
@@ -273,6 +274,7 @@ class InstructionImplementation : public Instruction {
     }
 
     static constexpr bool mayAccessEnv_ = ENV > EnvAccess::None;
+    static constexpr bool mayReadEnv_ = ENV >= EnvAccess::Read;
     static constexpr bool mayChangeEnv_ = ENV >= EnvAccess::Write;
     static constexpr bool mayLeakEnv_ = ENV >= EnvAccess::Leak;
 
@@ -284,6 +286,7 @@ class InstructionImplementation : public Instruction {
         return EFFECT > Effect::Reflection;
     }
     bool mayAccessEnv() const override final { return mayAccessEnv_; }
+    bool readsEnv() const override final { return hasEnv() && mayReadEnv_; }
     bool changesEnv() const override final { return hasEnv() && mayChangeEnv_; }
     bool leaksEnv() const override final { return hasEnv() && mayLeakEnv_; }
     bool hasEnv() const override final {
@@ -578,8 +581,7 @@ class FLI(LdArg, 0, Effect::None, EnvAccess::None) {
   public:
     size_t id;
 
-    explicit LdArg(size_t id)
-        : FixedLenInstruction(PirType::valOrLazy()), id(id) {}
+    explicit LdArg(size_t id) : FixedLenInstruction(PirType::any()), id(id) {}
 
     void printArgs(std::ostream& out, bool tty) const override;
 };
@@ -641,10 +643,11 @@ class FLIE(LdVarSuper, 1, Effect::None, EnvAccess::Read) {
 
 class FLIE(StVar, 2, Effect::None, EnvAccess::Write) {
   public:
-    StVar(SEXP name, Value* val, Value* env)
+    bool keepMissing;
+    StVar(SEXP name, Value* val, Value* env, bool keepMissing = false)
         : FixedLenInstructionWithEnvSlot(PirType::voyd(), {{PirType::val()}},
                                          {{val}}, env),
-          varName(name) {}
+          keepMissing(keepMissing), varName(name) {}
 
     StVar(const char* name, Value* val, Value* env)
         : FixedLenInstructionWithEnvSlot(PirType::voyd(), {{PirType::val()}},

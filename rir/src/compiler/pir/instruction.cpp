@@ -158,12 +158,14 @@ Instruction* Instruction::hasSingleUse() {
 void Instruction::eraseAndRemove() { bb()->remove(this); }
 
 void Instruction::replaceUsesIn(Value* replace, BB* target) {
-    if (!replace->type.isA(type)) {
+    if (replace->type.isRType() != type.isRType() ||
+        (replace->type.maybePromiseWrapped() && !type.maybePromiseWrapped())) {
         std::cerr << "Trying to replace a ";
         type.print(std::cerr);
         std::cerr << " with a ";
         replace->type.print(std::cerr);
         std::cerr << "\n";
+        printBacktrace();
         assert(false);
     }
 
@@ -262,6 +264,8 @@ void LdFun::printArgs(std::ostream& out, bool tty) const {
 void LdArg::printArgs(std::ostream& out, bool tty) const { out << id; }
 
 void StVar::printArgs(std::ostream& out, bool tty) const {
+    if (keepMissing)
+        out << "(keepMissing) ";
     out << CHAR(PRINTNAME(varName)) << ", ";
     val()->printRef(out);
     out << ", ";
@@ -513,7 +517,6 @@ Assumptions CallInstruction::inferAvailableAssumptions() const {
     Assumptions given;
     if (!hasNamedArgs())
         given.add(Assumption::CorrectOrderOfArguments);
-    given.add(Assumption::NoExplicitlyMissingArgs);
     if (auto cls = tryGetCls()) {
         if (cls->nargs() >= nCallArgs()) {
             given.add(Assumption::NotTooManyArguments);
@@ -527,6 +530,7 @@ Assumptions CallInstruction::inferAvailableAssumptions() const {
     // Make some optimistic assumptions, they might be reset below...
     given.add(Assumption::EagerArgs_);
     given.add(Assumption::NonObjectArgs_);
+    given.add(Assumption::NoExplicitlyMissingArgs);
 
     size_t i = 0;
     eachCallArg([&](Value* arg) {
@@ -534,8 +538,6 @@ Assumptions CallInstruction::inferAvailableAssumptions() const {
             if (!mk->isEager()) {
                 given.setEager(i, false);
                 given.setNotObj(i, false);
-                // Yes, promise wrapped missing args are a thing...
-                given.remove(Assumption::NoExplicitlyMissingArgs);
                 return;
             } else {
                 arg = mk->eagerArg();

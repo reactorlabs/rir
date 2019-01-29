@@ -82,7 +82,7 @@ enum class TypeFlags : uint8_t {
 
     lazy,
     promiseWrapped,
-    missing,
+    maybeMissing,
     isScalar,
     maybeObject,
     rtype,
@@ -183,7 +183,7 @@ struct PirType {
     static PirType any() { return val().orLazy().orMissing(); }
 
     RIR_INLINE bool maybeMissing() const {
-        return flags_.includes(TypeFlags::missing);
+        return flags_.includes(TypeFlags::maybeMissing);
     }
     RIR_INLINE bool maybeLazy() const {
         return flags_.includes(TypeFlags::lazy);
@@ -204,6 +204,13 @@ struct PirType {
         return isRType() && flags_.includes(TypeFlags::maybeObject);
     }
 
+    PirType notMissing() const {
+        assert(isRType());
+        PirType t = *this;
+        t.flags_.reset(TypeFlags::maybeMissing);
+        return t;
+    }
+
     PirType notObject() const {
         assert(isRType());
         PirType t = *this;
@@ -221,7 +228,7 @@ struct PirType {
     RIR_INLINE PirType orMissing() const {
         assert(isRType());
         PirType t = *this;
-        t.flags_.set(TypeFlags::missing);
+        t.flags_.set(TypeFlags::maybeMissing);
         return t;
     }
 
@@ -245,7 +252,7 @@ struct PirType {
         PirType t = *this;
         t.flags_.reset(TypeFlags::promiseWrapped);
         t.flags_.reset(TypeFlags::lazy);
-        t.flags_.reset(TypeFlags::missing);
+        t.flags_.reset(TypeFlags::maybeMissing);
         return t;
     }
 
@@ -254,6 +261,7 @@ struct PirType {
         return PirType(t_.r);
     }
 
+    RIR_INLINE void setNotMissing() { *this = notMissing(); }
     RIR_INLINE void setNotObject() { *this = notObject(); }
     RIR_INLINE void setScalar() { *this = scalar(); }
 

@@ -141,6 +141,13 @@ BC BC::missing(SEXP sym) {
     i.pool = Pool::insert(sym);
     return BC(Opcode::missing_, i);
 }
+BC BC::starg(SEXP sym) {
+    assert(TYPEOF(sym) == SYMSXP);
+    assert(strlen(CHAR(PRINTNAME(sym))));
+    ImmediateArguments i;
+    i.pool = Pool::insert(sym);
+    return BC(Opcode::starg_, i);
+}
 BC BC::stvar(SEXP sym) {
     assert(TYPEOF(sym) == SYMSXP);
     assert(strlen(CHAR(PRINTNAME(sym))));

@@ -851,7 +851,10 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
             }
             case Tag::StVar: {
                 auto stvar = StVar::Cast(instr);
-                cs << BC::stvar(stvar->varName);
+                if (stvar->keepMissing)
+                    cs << BC::starg(stvar->varName);
+                else
+                    cs << BC::stvar(stvar->varName);
                 break;
             }
             case Tag::Branch: {

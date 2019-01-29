@@ -204,6 +204,11 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         push(insert(new Force(v, env)));
         break;
 
+    case Opcode::starg_:
+        v = pop();
+        insert(new StVar(bc.immediateConst(), v, env, true));
+        break;
+
     case Opcode::stvar_:
         v = pop();
         insert(new StVar(bc.immediateConst(), v, env));
@@ -344,6 +349,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         Assumptions given;
         // Make some optimistic assumptions, they might be reset below...
         given.add(Assumption::EagerArgs_);
+        given.add(Assumption::NoExplicitlyMissingArgs);
         {
             size_t i = 0;
             for (auto argi : bc.callExtra().immediateCallArguments) {

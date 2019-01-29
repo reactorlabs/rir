@@ -340,6 +340,7 @@ BC_NOARGS(V, _)
     inline static BC copyloc(uint32_t target, uint32_t source);
     inline static BC promise(FunIdx prom);
     inline static BC stvar(SEXP sym);
+    inline static BC starg(SEXP sym);
     inline static BC stvarSuper(SEXP sym);
     inline static BC missing(SEXP sym);
     inline static BC alloc(int type);
@@ -590,6 +591,7 @@ BC_NOARGS(V, _)
         case Opcode::ldlval_:
         case Opcode::ldddvar_:
         case Opcode::stvar_:
+        case Opcode::starg_:
         case Opcode::stvar_super_:
         case Opcode::missing_:
             memcpy(&immediate.pool, pc, sizeof(PoolIdx));

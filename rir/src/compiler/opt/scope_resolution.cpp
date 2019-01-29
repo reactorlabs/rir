@@ -71,6 +71,22 @@ class TheScopeResolution {
                     continue;
                 }
 
+                if (auto missing = Missing::Cast(i)) {
+                    auto res =
+                        analysis.load(before, missing->varName, missing->env());
+                    if (!res.result.type.maybeMissing()) {
+                        missing->replaceUsesAndSwapWith(
+                            new LdConst(R_FalseValue), ip);
+                    } else {
+                        res.result.ifSingleValue([&](Value* v) {
+                            if (v == MissingArg::instance()) {
+                                missing->replaceUsesAndSwapWith(
+                                    new LdConst(R_TrueValue), ip);
+                            }
+                        });
+                    }
+                }
+
                 analysis.lookup(after, i, [&](const AbstractLoad& aLoad) {
                     auto& res = aLoad.result;
 

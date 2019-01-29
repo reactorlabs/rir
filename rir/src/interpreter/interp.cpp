@@ -573,6 +573,15 @@ SEXP closureArgumentAdaptor(const CallContext& call, SEXP arglist,
     return newrho;
 };
 
+static SEXP findRootPromise(SEXP p) {
+    if (TYPEOF(p) == PROMSXP) {
+        while (TYPEOF(PREXPR(p)) == PROMSXP) {
+            p = PREXPR(p);
+        }
+    }
+    return p;
+}
+
 RIR_INLINE Assumptions addDynamicAssumptions(
     const CallContext& call, const FunctionSignature& signature) {
     Assumptions given = call.givenAssumptions;
@@ -583,9 +592,7 @@ RIR_INLINE Assumptions addDynamicAssumptions(
             given.add(Assumption::NotTooFewArguments);
     }
 
-    if (call.suppliedArgs == 0)
-        given.add(Assumption::NoExplicitlyMissingArgs);
-
+    given.add(Assumption::NoExplicitlyMissingArgs);
     if (call.hasStackArgs()) {
         // Always true in this case, since we will pad missing args on the stack
         // later with R_MissingArg's
@@ -593,7 +600,6 @@ RIR_INLINE Assumptions addDynamicAssumptions(
         // Make some optimistic assumptions, they might be reset below...
         given.add(Assumption::EagerArgs_);
         given.add(Assumption::NonObjectArgs_);
-        given.add(Assumption::NoExplicitlyMissingArgs);
 
         auto testArg = [&](size_t i) {
             SEXP arg = call.stackArg(i);
@@ -603,12 +609,8 @@ RIR_INLINE Assumptions addDynamicAssumptions(
                 if (PRVALUE(arg) == R_UnboundValue) {
                     notObj = false;
                     isEager = false;
-                    // Yes, promise wrapped missing args are a thing...
-                    given.remove(Assumption::NoExplicitlyMissingArgs);
                 } else if (isObject(PRVALUE(arg))) {
                     notObj = false;
-                } else if (PRVALUE(arg) == R_MissingArg) {
-                    given.remove(Assumption::NoExplicitlyMissingArgs);
                 }
             } else if (isObject(arg)) {
                 notObj = false;
@@ -621,6 +623,11 @@ RIR_INLINE Assumptions addDynamicAssumptions(
 
         for (size_t i = 0; i < call.suppliedArgs; ++i) {
             testArg(i);
+        }
+    } else {
+        for (size_t i = 0; i < call.suppliedArgs; ++i) {
+            if (call.missingArg(i))
+                given.remove(Assumption::NoExplicitlyMissingArgs);
         }
     }
 
@@ -654,8 +661,7 @@ RIR_INLINE bool matches(const CallContext& call,
     if (!call.hasStackArgs()) {
         // We can't materialize ... in optimized code yet
         for (size_t i = 0; i < call.suppliedArgs; ++i)
-            if (call.implicitArgIdx(i) == DOTS_ARG_IDX ||
-                call.implicitArgIdx(i) == MISSING_ARG_IDX)
+            if (call.implicitArgIdx(i) == DOTS_ARG_IDX)
                 return false;
 
         // PIR optimized code can receive missing args, but they need to be
@@ -1139,15 +1145,6 @@ static SEXP seq_int(int n1, int n2) {
     return ans;
 }
 
-RIR_INLINE SEXP findRootPromise(SEXP p) {
-    if (TYPEOF(p) == PROMSXP) {
-        while (TYPEOF(PREXPR(p)) == PROMSXP) {
-            p = PREXPR(p);
-        }
-    }
-    return p;
-}
-
 extern SEXP Rf_deparse1(SEXP call, Rboolean abbrev, int opts);
 
 void debug(Code* c, Opcode* pc, const char* name, unsigned depth,
@@ -1213,7 +1210,7 @@ static SEXP cachedGetVar(SEXP env, Immediate idx, Context* ctx,
 #define IS_ACTIVE_BINDING(b) ((b)->sxpinfo.gp & ACTIVE_BINDING_MASK)
 #define BINDING_IS_LOCKED(b) ((b)->sxpinfo.gp & BINDING_LOCK_MASK)
 static void cachedSetVar(SEXP val, SEXP env, Immediate idx, Context* ctx,
-                         BindingCache* bindingCache) {
+                         BindingCache* bindingCache, bool keepMissing = false) {
     SEXP loc = cachedGetBindingCell(env, idx, ctx, bindingCache);
     if (loc && !BINDING_IS_LOCKED(loc) && !IS_ACTIVE_BINDING(loc)) {
         SEXP cur = CAR(loc);
@@ -1221,7 +1218,7 @@ static void cachedSetVar(SEXP val, SEXP env, Immediate idx, Context* ctx,
             return;
         INCREMENT_NAMED(val);
         SETCAR(loc, val);
-        if (MISSING(loc))
+        if (!keepMissing && MISSING(loc))
             SET_MISSING(loc, 0);
         return;
     }
@@ -1522,6 +1519,16 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
             SEXP val = ostack_pop(ctx);
 
             cachedSetVar(val, *env, id, ctx, bindingCache);
+
+            NEXT();
+        }
+
+        INSTRUCTION(starg_) {
+            Immediate id = readImmediate();
+            advanceImmediate();
+            SEXP val = ostack_pop(ctx);
+
+            cachedSetVar(val, *env, id, ctx, bindingCache, true);
 
             NEXT();
         }

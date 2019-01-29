@@ -161,18 +161,6 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                 }
             }
 
-            if (auto missing = Missing::Cast(i)) {
-                if (auto e = MkEnv::Cast(missing->env())) {
-                    e->eachLocalVar([&](SEXP name, Value* v) {
-                        if (name == missing->varName &&
-                            v == MissingArg::instance()) {
-                            missing->replaceUsesAndSwapWith(
-                                new LdConst(R_TrueValue), ip);
-                        }
-                    });
-                }
-            }
-
             ip = next;
         }
 
