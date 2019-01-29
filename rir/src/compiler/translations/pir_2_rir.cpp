@@ -834,9 +834,6 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
             case Tag::LdArg: {
                 auto ld = LdArg::Cast(instr);
                 cs << BC::ldarg(ld->id);
-                // If we want the arguments to be non-lazy, we need to force
-                if (!ld->type.maybeLazy())
-                    cs << BC::force();
                 break;
             }
             case Tag::StVarSuper: {
@@ -911,9 +908,15 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
 
             case Tag::CastType: {
                 auto cast = CastType::Cast(instr);
-                if (cast->arg<0>().type().maybeLazy() &&
-                    !cast->type.maybeLazy())
-                    cs << BC::force();
+                auto arg = cast->arg<0>().val();
+                // assertion is:
+                // "input is a promise => output is a promise"
+                // to remove a promise wrapper -- even for eager args -- a force
+                // instruction is needed!
+                assert((!(arg->type.maybePromiseWrapped() ||
+                          arg->type.isA(RType::prom)) ||
+                        cast->type.maybePromiseWrapped()) &&
+                       "Cannot cast away promise wrapper. Use Force");
                 break;
             }
 

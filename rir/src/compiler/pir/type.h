@@ -81,6 +81,7 @@ enum class TypeFlags : uint8_t {
     _UNUSED_,
 
     lazy,
+    promiseWrapped,
     missing,
     isScalar,
     maybeObject,
@@ -175,6 +176,7 @@ struct PirType {
     static PirType vecs() { return num() | RType::str | RType::vec; }
     static PirType closure() { return RType::closure; }
 
+    static PirType promiseWrappedVal() { return val().orPromiseWrapped(); }
     static PirType valOrMissing() { return val().orMissing(); }
     static PirType valOrLazy() { return val().orLazy(); }
     static PirType list() { return PirType(RType::cons) | RType::nil; }
@@ -185,6 +187,9 @@ struct PirType {
     }
     RIR_INLINE bool maybeLazy() const {
         return flags_.includes(TypeFlags::lazy);
+    }
+    RIR_INLINE bool maybePromiseWrapped() const {
+        return flags_.includes(TypeFlags::promiseWrapped);
     }
     RIR_INLINE bool isScalar() const {
         return flags_.includes(TypeFlags::isScalar);
@@ -220,10 +225,27 @@ struct PirType {
         return t;
     }
 
+    RIR_INLINE PirType orPromiseWrapped() const {
+        assert(isRType());
+        PirType t = *this;
+        t.flags_.set(TypeFlags::promiseWrapped);
+        return t;
+    }
+
     RIR_INLINE PirType orLazy() const {
         assert(isRType());
         PirType t = *this;
         t.flags_.set(TypeFlags::lazy);
+        t.flags_.set(TypeFlags::promiseWrapped);
+        return t;
+    }
+
+    PirType forced() const {
+        assert(isRType());
+        PirType t = *this;
+        t.flags_.reset(TypeFlags::promiseWrapped);
+        t.flags_.reset(TypeFlags::lazy);
+        t.flags_.reset(TypeFlags::missing);
         return t;
     }
 
@@ -233,13 +255,10 @@ struct PirType {
     }
 
     RIR_INLINE void setNotObject() { *this = notObject(); }
-
     RIR_INLINE void setScalar() { *this = scalar(); }
 
     static const PirType voyd() { return NativeTypeSet(); }
-
     static const PirType missing() { return bottom().orMissing(); }
-
     static const PirType bottom() { return PirType(RTypeSet()); }
 
     RIR_INLINE PirType operator|(const PirType& o) const {
@@ -279,6 +298,7 @@ struct PirType {
             return t_.n.includes(o.t_.n);
         }
         if ((!maybeLazy() && o.maybeLazy()) ||
+            (!maybePromiseWrapped() && o.maybePromiseWrapped()) ||
             (!maybeMissing() && o.maybeMissing()) ||
             (isScalar() && !o.isScalar())) {
             return false;
@@ -402,6 +422,8 @@ inline std::ostream& operator<<(std::ostream& out, PirType t) {
         out << "$";
     if (t.maybeLazy())
         out << "^";
+    else if (t.maybePromiseWrapped())
+        out << "~";
     if (t.maybeMissing())
         out << "?";
     if (!t.maybeObj())
