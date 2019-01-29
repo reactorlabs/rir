@@ -137,13 +137,13 @@ script:
   # Run the internal testsuite in all combinations
   - if [[ "$TEST_VALGRIND"  != "" ]];  then  ENABLE_VALGRIND=1 ./bin/tests; fi
   - if [[ "$TEST_GCTORTURE" != "" ]];  then  R_GCTORTURE=100   ./bin/tests; fi
-  - > 
-    if [[ "$BENCHS" -eq 1 ]]; then 
-      ../tools/downloadBenchs.sh --travis; ../tools/runBenchs.sh --installRebench --travis;
-    else 
-      R_ENABLE_JIT=0 ./bin/tests; R_ENABLE_JIT=1 ./bin/tests; R_ENABLE_JIT=2 ./bin/tests; 
-      R_ENABLE_JIT=3 ./bin/tests; PIR_ENABLE=off ./bin/tests; PIR_ENABLE=force ./bin/tests; 
-    fi
+  - if [[ "$BENCHS" -eq 1 ]]; then ../tools/downloadBenchs.sh --travis; ../tools/runBenchs.sh --installRebench --travis; fi
+  - R_ENABLE_JIT=0 ./bin/tests
+  - R_ENABLE_JIT=1 ./bin/tests
+  - R_ENABLE_JIT=2 ./bin/tests
+  - R_ENABLE_JIT=3 ./bin/tests
+  - PIR_ENABLE=off ./bin/tests
+  - PIR_ENABLE=force ./bin/tests
   # Run a particular portion of the gnur testsuite
   - if [[ "$CHECK" != "" ]]; then PIR_DEOPT_CHAOS=$PIR_DEOPT_CHAOS_SETTING ./bin/gnur-make-tests $CHECK; fi
   - ../tools/check-gnur-make-tests-error
