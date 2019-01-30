@@ -382,7 +382,9 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
                 auto idx = g.begin() + 2;
                 auto idx2 = is2d ? (g.begin() + 3) : idx;
                 if ((fun2 == symbol::DoubleBracket ||
-                     fun2 == symbol::Bracket) &&
+                     // TODO: Figure out why 2d bracket assign fails sometimes
+                     // (specifically, f19 in tests/pir-assign)
+                     (!is2d && fun2 == symbol::Bracket)) &&
                     *idx != R_DotsSymbol && *idx != R_MissingArg &&
                     !idx.hasTag() &&
                     (!is2d || (*idx2 != R_DotsSymbol && *idx2 != R_MissingArg &&

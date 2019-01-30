@@ -2483,17 +2483,14 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
 
             res = nullptr;
             SEXP call = getSrcForCall(c, pc - 1, ctx);
-            SEXP selector = CAR(call) == symbol::SuperAssign
-                                ? symbol::SuperAssignBracket
-                                : symbol::AssignBracket;
             RCNTXT assignContext;
             Rf_begincontext(&assignContext, CTXT_RETURN, call, *env,
-                            ENCLOS(*env), args, selector);
+                            ENCLOS(*env), args, R_SubassignSym);
             if (isObject(vec)) {
-                res = dispatchApply(call, vec, args, selector, *env, ctx);
+                res = dispatchApply(call, vec, args, R_SubassignSym, *env, ctx);
             }
             if (!res) {
-                res = do_subassign_dflt(call, selector, args, *env);
+                res = do_subassign_dflt(call, R_SubassignSym, args, *env);
                 // We duplicated the vector above, and there is a stvar
                 // following
                 SET_NAMED(res, 0);
@@ -2509,34 +2506,31 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
         INSTRUCTION(subassign1_2_) {
             SEXP idx2 = ostack_at(ctx, 0);
             SEXP idx1 = ostack_at(ctx, 1);
-            SEXP vec = ostack_at(ctx, 2);
+            SEXP mtx = ostack_at(ctx, 2);
             SEXP val = ostack_at(ctx, 3);
 
-            // TODO: Is this necessary? Is more duplication necessary?
-            if (MAYBE_SHARED(vec)) {
-                vec = Rf_duplicate(vec);
-                ostack_set(ctx, 2, vec);
+            if (NAMED(mtx) > 1) {
+                mtx = Rf_duplicate(mtx);
+                ostack_set(ctx, 2, mtx);
             }
 
             SEXP args = CONS_NR(
-                vec, CONS_NR(idx1, CONS_NR(idx2, CONS_NR(val, R_NilValue))));
+                mtx, CONS_NR(idx1, CONS_NR(idx2, CONS_NR(val, R_NilValue))));
             SET_TAG(CDDDR(args), symbol::value);
             PROTECT(args);
 
             res = nullptr;
             SEXP call = getSrcForCall(c, pc - 1, ctx);
-            SEXP selector = CAR(call) == symbol::SuperAssign
-                                ? symbol::SuperAssignBracket
-                                : symbol::AssignBracket;
             RCNTXT assignContext;
             Rf_begincontext(&assignContext, CTXT_RETURN, call, *env,
-                            ENCLOS(*env), args, selector);
-            if (isObject(vec)) {
-                res = dispatchApply(call, vec, args, selector, *env, ctx);
+                            ENCLOS(*env), args, R_SubassignSym);
+            if (isObject(mtx)) {
+                res = dispatchApply(call, mtx, args, R_SubassignSym, *env, ctx);
             }
+
             if (!res) {
-                res = do_subassign_dflt(call, selector, args, *env);
-                // We duplicated the vector above, and there is a stvar
+                res = do_subassign_dflt(call, R_SubassignSym, args, *env);
+                // We duplicated the matrix above, and there is a stvar
                 // following
                 SET_NAMED(res, 0);
             }
@@ -2616,19 +2610,17 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
 
             res = nullptr;
             SEXP call = getSrcForCall(c, pc - 1, ctx);
-            SEXP selector = CAR(call) == symbol::SuperAssign
-                                ? symbol::SuperAssignDoubleBracket
-                                : symbol::AssignDoubleBracket;
 
             RCNTXT assignContext;
             Rf_begincontext(&assignContext, CTXT_RETURN, call, *env,
-                            ENCLOS(*env), args, selector);
+                            ENCLOS(*env), args, R_Subassign2Sym);
             if (isObject(vec)) {
-                res = dispatchApply(call, vec, args, selector, *env, ctx);
+                res =
+                    dispatchApply(call, vec, args, R_Subassign2Sym, *env, ctx);
             }
 
             if (!res) {
-                res = do_subassign2_dflt(call, selector, args, *env);
+                res = do_subassign2_dflt(call, R_Subassign2Sym, args, *env);
                 // We duplicated the vector above, and there is a stvar
                 // following
                 SET_NAMED(res, 0);
@@ -2644,31 +2636,31 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
         INSTRUCTION(subassign2_2_) {
             SEXP idx2 = ostack_at(ctx, 0);
             SEXP idx1 = ostack_at(ctx, 1);
-            SEXP vec = ostack_at(ctx, 2);
+            SEXP mtx = ostack_at(ctx, 2);
             SEXP val = ostack_at(ctx, 3);
 
             // Fast case
-            if (NOT_SHARED(vec) && !isObject(vec)) {
-                SEXPTYPE vectorT = TYPEOF(vec);
+            if (NOT_SHARED(mtx) && !isObject(mtx)) {
+                SEXPTYPE matrixT = TYPEOF(mtx);
                 SEXPTYPE valT = TYPEOF(val);
                 SEXPTYPE idx1T = TYPEOF(idx1);
                 SEXPTYPE idx2T = TYPEOF(idx2);
 
                 // Fast case only if
                 // 1. index is numerical and scalar
-                // 2. vector is real and shape of value fits into real
-                //      or vector is int and shape of value is int
-                //      or vector is generic
-                // 3. value fits into one cell of the vector
+                // 2. matrix is real and shape of value fits into real
+                //      or matrix is int and shape of value is int
+                //      or matrix is generic
+                // 3. value fits into one cell of the matrix
                 if ((idx1T == INTSXP || idx1T == REALSXP) &&
                     (XLENGTH(idx1) == 1) && // 1
                     (idx2T == INTSXP || idx2T == REALSXP) &&
                     (XLENGTH(idx2) == 1) && // 2
-                    ((vectorT == REALSXP &&
+                    ((matrixT == REALSXP &&
                       (valT == REALSXP || valT == INTSXP)) || // 3
-                     (vectorT == INTSXP && (valT == INTSXP)) ||
-                     (vectorT == VECSXP)) &&
-                    (XLENGTH(val) == 1 || vectorT == VECSXP)) { // 4
+                     (matrixT == INTSXP && (valT == INTSXP)) ||
+                     (matrixT == VECSXP)) &&
+                    (XLENGTH(val) == 1 || matrixT == VECSXP)) { // 4
 
                     int idx1_ = -1;
                     int idx2_ = -1;
@@ -2689,8 +2681,8 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
                             idx2_ = *INTEGER(idx2) - 1;
                     }
 
-                    if (idx1_ >= 0 && idx1_ < XLENGTH(vec)) {
-                        SEXP col = VECTOR_ELT(vec, idx1_);
+                    if (idx1_ >= 0 && idx1_ < XLENGTH(mtx)) {
+                        SEXP col = VECTOR_ELT(mtx, idx1_);
                         if (idx2_ >= 0 && idx2_ < XLENGTH(col)) {
                             SEXPTYPE colT = TYPEOF(col);
                             switch (colT) {
@@ -2709,40 +2701,36 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
                             }
                             ostack_popn(ctx, 4);
 
-                            ostack_push(ctx, vec);
+                            ostack_push(ctx, mtx);
                             NEXT();
                         }
                     }
                 }
             }
 
-            // TODO: Is this necessary? Is more duplication necessary?
-            if (MAYBE_SHARED(vec)) {
-                vec = Rf_duplicate(vec);
-                ostack_set(ctx, 2, vec);
+            if (NAMED(mtx) > 1) {
+                mtx = Rf_duplicate(mtx);
+                ostack_set(ctx, 2, mtx);
             }
 
             SEXP args = CONS_NR(
-                vec, CONS_NR(idx1, CONS_NR(idx2, CONS_NR(val, R_NilValue))));
+                mtx, CONS_NR(idx1, CONS_NR(idx2, CONS_NR(val, R_NilValue))));
             SET_TAG(CDDDR(args), symbol::value);
             PROTECT(args);
 
             res = nullptr;
             SEXP call = getSrcForCall(c, pc - 1, ctx);
-            SEXP selector = CAR(call) == symbol::SuperAssign
-                                ? symbol::SuperAssignDoubleBracket
-                                : symbol::AssignDoubleBracket;
-
             RCNTXT assignContext;
             Rf_begincontext(&assignContext, CTXT_RETURN, call, *env,
-                            ENCLOS(*env), args, selector);
-            if (isObject(vec)) {
-                res = dispatchApply(call, vec, args, selector, *env, ctx);
+                            ENCLOS(*env), args, R_Subassign2Sym);
+            if (isObject(mtx)) {
+                res =
+                    dispatchApply(call, mtx, args, R_Subassign2Sym, *env, ctx);
             }
 
             if (!res) {
-                res = do_subassign2_dflt(call, selector, args, *env);
-                // We duplicated the vector above, and there is a stvar
+                res = do_subassign2_dflt(call, R_Subassign2Sym, args, *env);
+                // We duplicated the matrix above, and there is a stvar
                 // following
                 SET_NAMED(res, 0);
             }
