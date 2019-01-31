@@ -264,8 +264,8 @@ void LdFun::printArgs(std::ostream& out, bool tty) const {
 void LdArg::printArgs(std::ostream& out, bool tty) const { out << id; }
 
 void StVar::printArgs(std::ostream& out, bool tty) const {
-    if (keepMissing)
-        out << "(keepMissing) ";
+    if (isStArg)
+        out << "(StArg) ";
     out << CHAR(PRINTNAME(varName)) << ", ";
     val()->printRef(out);
     out << ", ";

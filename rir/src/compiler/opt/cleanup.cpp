@@ -51,7 +51,7 @@ class TheCleanup {
                     }
                 } else if (auto missing = ChkMissing::Cast(i)) {
                     Value* arg = missing->arg<0>().val();
-                    if (PirType::val().isSuper(arg->type)) {
+                    if (!arg->type.maybeMissing()) {
                         removed = true;
                         missing->replaceUsesWith(arg);
                         next = bb->remove(ip);

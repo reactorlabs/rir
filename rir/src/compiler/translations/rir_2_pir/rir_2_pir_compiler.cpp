@@ -66,9 +66,6 @@ void Rir2PirCompiler::compileClosure(Closure* closure,
                                      const OptimizationContext& ctx,
                                      MaybeCls success, Maybe fail_) {
 
-    // if (closure->name() == "implicitGeneric")
-    //  return fail_();
-
     for (const auto& a : minimalAssumptions)
         if (!ctx.assumptions.includes(a)) {
             std::stringstream as;
@@ -139,12 +136,8 @@ void Rir2PirCompiler::compileClosure(Closure* closure,
                         builder(new CastType(res, RType::prom, PirType::any()));
                 }
 
-                auto st = new StVar(closure->formals().names()[i], res,
-                                    builder.env, true);
-                // This is a bit of an abuse of the stvar instruction. We want
-                // to store the not-forced default arg. Should we have a starg?
-                st->arg<0>().type() = PirType::any();
-                builder(st);
+                builder(
+                    new StArg(closure->formals().names()[i], res, builder.env));
             }
         }
     }

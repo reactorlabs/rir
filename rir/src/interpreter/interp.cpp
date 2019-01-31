@@ -1495,7 +1495,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
                 ostack_push(ctx, callCtxt->stackArg(idx));
             } else {
                 if (callCtxt->missingArg(idx)) {
-                    res = Rf_mkPROMISE(R_UnboundValue, callCtxt->callerEnv);
+                    res = R_MissingArg;
                 } else {
                     Code* arg = callCtxt->implicitArg(idx);
                     res = createPromise(arg, callCtxt->callerEnv);

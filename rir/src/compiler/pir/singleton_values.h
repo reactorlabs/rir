@@ -47,7 +47,7 @@ class MissingArg : public SingletonValue<MissingArg> {
 
   private:
     friend class SingletonValue;
-    MissingArg() : SingletonValue(PirType::missing(), Tag::MissingArg) {}
+    MissingArg() : SingletonValue(RType::missing, Tag::MissingArg) {}
 };
 
 class UnboundValue : public SingletonValue<UnboundValue> {
@@ -60,7 +60,7 @@ class UnboundValue : public SingletonValue<UnboundValue> {
 
   private:
     friend class SingletonValue;
-    UnboundValue() : SingletonValue(PirType::missing(), Tag::UnboundValue) {}
+    UnboundValue() : SingletonValue(RType::unbound, Tag::UnboundValue) {}
 };
 
 class True : public SingletonValue<True> {

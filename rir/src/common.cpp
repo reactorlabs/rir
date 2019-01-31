@@ -108,8 +108,8 @@ void printRBacktrace() {
                 std::cerr << ", ";
         }
 
-        std::cerr << "\n  CLOS: " << cleanupToS(ctx->callfun);
-        std::cerr << "\n  AST: " << cleanupToS(ctx->call) << "\n";
+        std::cerr << "\n  CLOS: " << cleanupToS(ctx->callfun, 100);
+        std::cerr << "\n  AST: " << cleanupToS(ctx->call, 100) << "\n";
 
         ctx = ctx->nextcontext;
     }

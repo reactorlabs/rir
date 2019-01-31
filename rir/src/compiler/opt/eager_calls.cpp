@@ -63,8 +63,9 @@ void EagerCalls::apply(RirCompiler& cmp, ClosureVersion* closure,
                 version, newAssumptions, [&](ClosureVersion* newCls) {
                     Visitor::run(newCls->entry, [&](Instruction* i) {
                         if (auto ld = LdArg::Cast(i)) {
-                            ld->type = PirType::promiseWrappedVal();
-                            ld->type.setNotObject();
+                            ld->type = PirType::promiseWrappedVal()
+                                           .notObject()
+                                           .notMissing();
                         }
                     });
                 });

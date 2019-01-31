@@ -93,7 +93,7 @@ Builder::Builder(ClosureVersion* version, Value* closureEnv)
     for (long i = nargs - 1; i >= 0; --i) {
         args[i] = this->operator()(new LdArg(i));
         if (assumptions.isEager(i))
-            args[i]->type = PirType::promiseWrappedVal();
+            args[i]->type = PirType::promiseWrappedVal().notMissing();
         if (assumptions.notObj(i))
             args[i]->type.setNotObject();
     }

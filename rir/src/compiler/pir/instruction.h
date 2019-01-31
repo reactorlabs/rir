@@ -598,7 +598,7 @@ class FLIE(Missing, 1, Effect::None, EnvAccess::Read) {
 class FLI(ChkMissing, 1, Effect::Warn, EnvAccess::None) {
   public:
     explicit ChkMissing(Value* in)
-        : FixedLenInstruction(PirType::valOrLazy(), {{PirType::any()}},
+        : FixedLenInstruction(in->type.notMissing(), {{PirType::val()}},
                               {{in}}) {}
 };
 
@@ -643,11 +643,11 @@ class FLIE(LdVarSuper, 1, Effect::None, EnvAccess::Read) {
 
 class FLIE(StVar, 2, Effect::None, EnvAccess::Write) {
   public:
-    bool keepMissing;
-    StVar(SEXP name, Value* val, Value* env, bool keepMissing = false)
+    bool isStArg = false;
+    StVar(SEXP name, Value* val, Value* env)
         : FixedLenInstructionWithEnvSlot(PirType::voyd(), {{PirType::val()}},
                                          {{val}}, env),
-          keepMissing(keepMissing), varName(name) {}
+          varName(name) {}
 
     StVar(const char* name, Value* val, Value* env)
         : FixedLenInstructionWithEnvSlot(PirType::voyd(), {{PirType::val()}},
@@ -659,6 +659,15 @@ class FLIE(StVar, 2, Effect::None, EnvAccess::Write) {
     using FixedLenInstructionWithEnvSlot::env;
 
     void printArgs(std::ostream& out, bool tty) const override;
+};
+
+// Pseudo Instruction. Is actually a StVar with a flag set.
+class StArg : public StVar {
+  public:
+    StArg(SEXP name, Value* val, Value* env) : StVar(name, val, env) {
+        arg<0>().type() = PirType::any();
+        isStArg = true;
+    }
 };
 
 class Branch
@@ -684,8 +693,8 @@ class FLIE(MkArg, 2, Effect::None, EnvAccess::Capture) {
 
   public:
     MkArg(Promise* prom, Value* v, Value* env)
-        : FixedLenInstructionWithEnvSlot(
-              RType::prom, {{PirType::valOrMissing()}}, {{v}}, env),
+        : FixedLenInstructionWithEnvSlot(RType::prom, {{PirType::val()}}, {{v}},
+                                         env),
           prom_(prom) {
         assert(eagerArg() == v);
     }

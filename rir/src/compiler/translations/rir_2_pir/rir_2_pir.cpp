@@ -206,7 +206,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
 
     case Opcode::starg_:
         v = pop();
-        insert(new StVar(bc.immediateConst(), v, env, true));
+        insert(new StArg(bc.immediateConst(), v, env));
         break;
 
     case Opcode::stvar_:

@@ -44,11 +44,13 @@ void DelayEnv::apply(RirCompiler&, ClosureVersion* function, LogStream&) const {
                     bool aMissingArg = false;
                     envInstr->eachLocalVar([&](SEXP name, InstrArg& arg) {
                         if (name == st->varName) {
-                            if (arg.val() == MissingArg::instance()) {
+                            if (st->isStArg) {
                                 // TODO: currently we cannot elide if the
-                                // original entry is missing. Because otherwise
-                                // we forget to do the SET_MISSING on the
-                                // variable.
+                                // original entry is missing, or if the stvar
+                                // should preserve missingness. Because
+                                // otherwise we break the missing flag on the
+                                // binding. We need to add a missingness bitset
+                                // to the mkenv instruction to fix this!
                                 aMissingArg = true;
                             } else {
                                 exists = true;

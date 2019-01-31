@@ -5,40 +5,40 @@ namespace rir {
 std::ostream& operator<<(std::ostream& out, Assumption a) {
     switch (a) {
     case Assumption::NoExplicitlyMissingArgs:
-        out << "!EM";
+        out << "!ExpMi";
         break;
     case Assumption::Arg1IsEager_:
-        out << "EA1";
+        out << "Eager1";
         break;
     case Assumption::Arg2IsEager_:
-        out << "EA2";
+        out << "Eager2";
         break;
     case Assumption::Arg3IsEager_:
-        out << "EA3";
+        out << "Eager3";
         break;
     case Assumption::EagerArgs_:
-        out << "EAs";
+        out << "Eagers";
         break;
     case Assumption::CorrectOrderOfArguments:
-        out << "COA";
+        out << "CorrOrd";
         break;
     case Assumption::NonObjectArgs_:
-        out << "!Os";
+        out << "!Objs";
         break;
     case Assumption::Arg1IsNonObj_:
-        out << "!O1";
+        out << "!Obj1";
         break;
     case Assumption::Arg2IsNonObj_:
-        out << "!O2";
+        out << "!Obj2";
         break;
     case Assumption::Arg3IsNonObj_:
-        out << "!O3";
+        out << "!Obj3";
         break;
     case Assumption::NotTooManyArguments:
-        out << "!MA";
+        out << "!TMany";
         break;
     case Assumption::NotTooFewArguments:
-        out << "!FA";
+        out << "!TFew";
         break;
     }
     return out;
