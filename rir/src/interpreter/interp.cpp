@@ -712,9 +712,7 @@ RIR_INLINE SEXP rirCall(CallContext& call, Context* ctx) {
     Function* fun = dispatch(call, table);
     fun->registerInvocation();
 
-    if (!fun->unoptimizable &&
-        (fun->invocationCount() == RIR_WARMUP ||
-         fun->invocationCount() % (2 * RIR_WARMUP) == 0)) {
+    if (!fun->unoptimizable && fun->invocationCount() % RIR_WARMUP == 0) {
         Assumptions given = addDynamicAssumptions(call, fun->signature());
         if (fun == table->baseline() || given != fun->signature().assumptions) {
             if (Assumptions(given).includes(
@@ -1721,7 +1719,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
             CallContext call(c, callee, n, ast, ostack_cell_at(ctx, n - 1),
                              *env, given, ctx);
             auto fun = Function::unpack(version);
-            if (fun->invocationCount() % (RIR_WARMUP * 2) == 0 ||
+            if (fun->invocationCount() % RIR_WARMUP == 0 ||
                 !matches(call, fun->signature())) {
                 auto dt = DispatchTable::unpack(BODY(callee));
                 fun = dispatch(call, dt);

@@ -270,13 +270,12 @@ class TheInliner {
 
 // TODO: maybe implement something more resonable to pass in those constants.
 // For now it seems a simple env variable is just fine.
-const size_t TheInliner::MAX_SIZE = getenv("PIR_INLINER_MAX_SIZE")
-                                        ? atoi(getenv("PIR_INLINER_MAX_SIZE"))
-                                        : 3000;
+const size_t TheInliner::MAX_SIZE =
+    getenv("PIR_INLINER_MAX_SIZE") ? atoi(getenv("PIR_INLINER_MAX_SIZE")) : 500;
 const size_t TheInliner::MAX_INLINEE_SIZE =
     getenv("PIR_INLINER_MAX_INLINEE_SIZE")
         ? atoi(getenv("PIR_INLINER_MAX_INLINEE_SIZE"))
-        : 200;
+        : 50;
 const size_t TheInliner::INITIAL_FUEL =
     getenv("PIR_INLINER_INITIAL_FUEL")
         ? atoi(getenv("PIR_INLINER_INITIAL_FUEL"))
