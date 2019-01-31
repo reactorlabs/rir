@@ -2509,7 +2509,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
             SEXP mtx = ostack_at(ctx, 2);
             SEXP val = ostack_at(ctx, 3);
 
-            if (NAMED(mtx) > 1) {
+            if (MAYBE_SHARED(mtx)) {
                 mtx = Rf_duplicate(mtx);
                 ostack_set(ctx, 2, mtx);
             }
@@ -2681,34 +2681,32 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
                             idx2_ = *INTEGER(idx2) - 1;
                     }
 
-                    if (idx1_ >= 0 && idx1_ < XLENGTH(mtx)) {
-                        SEXP col = VECTOR_ELT(mtx, idx1_);
-                        if (idx2_ >= 0 && idx2_ < XLENGTH(col)) {
-                            SEXPTYPE colT = TYPEOF(col);
-                            switch (colT) {
-                            case REALSXP:
-                                REAL(col)
-                                [idx2_] =
-                                    valT == REALSXP ? *REAL(val)
-                                                    : (double)*INTEGER(val);
-                                break;
-                            case INTSXP:
-                                INTEGER(col)[idx2_] = *INTEGER(val);
-                                break;
-                            case VECSXP:
-                                SET_VECTOR_ELT(col, idx2_, val);
-                                break;
-                            }
-                            ostack_popn(ctx, 4);
-
-                            ostack_push(ctx, mtx);
-                            NEXT();
+                    if (idx1_ >= 0 && idx1_ < Rf_ncols(mtx) && idx2_ >= 0 &&
+                        idx2_ < Rf_nrows(mtx)) {
+                        int idx_ = idx1_ + (idx2_ * Rf_nrows(mtx));
+                        SEXPTYPE mtxT = TYPEOF(mtx);
+                        switch (mtxT) {
+                        case REALSXP:
+                            REAL(mtx)
+                            [idx_] = valT == REALSXP ? *REAL(val)
+                                                     : (double)*INTEGER(val);
+                            break;
+                        case INTSXP:
+                            INTEGER(mtx)[idx_] = *INTEGER(val);
+                            break;
+                        case VECSXP:
+                            SET_VECTOR_ELT(mtx, idx_, val);
+                            break;
                         }
+                        ostack_popn(ctx, 4);
+
+                        ostack_push(ctx, mtx);
+                        NEXT();
                     }
                 }
             }
 
-            if (NAMED(mtx) > 1) {
+            if (MAYBE_SHARED(mtx)) {
                 mtx = Rf_duplicate(mtx);
                 ostack_set(ctx, 2, mtx);
             }

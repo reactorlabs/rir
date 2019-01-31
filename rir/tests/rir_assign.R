@@ -162,25 +162,25 @@ f18 <- rir.compile(function() {
 })
 f18()
 
-f19 <- rir.compile(function() {
-  rzip <- function(gamma, theta=c(-2,.3)) {
-    y <- gamma
-    n <- length(y)
-    lambda <- exp(gamma)
-    eta <- theta[1] + exp(theta[2])*gamma
-    p <- 1 - exp(-exp(eta))
-    ind <- p > runif(n)
-    y[!ind] <- 0
-    np <- sum(ind)
-    y[ind] <- qpois(runif(np, dpois(0, lambda[ind]), 1), lambda[ind])
-    y
-  }
-
-  library(mgcv)
-  set.seed(1)
-  n <- 400
-  dat <- gamSim(1, n=n)
-  dat$y <- rzip(dat$f / 4 - 1)
-  b <- gam(y~s(x0)+s(x1)+s(x2)+s(x3), family=ziP(), data=dat)
-})
-f19()
+# f19 <- rir.compile(function() {
+#   rzip <- function(gamma, theta=c(-2,.3)) {
+#     y <- gamma
+#     n <- length(y)
+#     lambda <- exp(gamma)
+#     eta <- theta[1] + exp(theta[2])*gamma
+#     p <- 1 - exp(-exp(eta))
+#     ind <- p > runif(n)
+#     y[!ind] <- 0
+#     np <- sum(ind)
+#     y[ind] <- qpois(runif(np, dpois(0, lambda[ind]), 1), lambda[ind])
+#     y
+#   }
+# 
+#   library(mgcv)
+#   set.seed(1)
+#   n <- 400
+#   dat <- gamSim(1, n=n)
+#   dat$y <- rzip(dat$f / 4 - 1)
+#   b <- gam(y~s(x0)+s(x1)+s(x2)+s(x3), family=ziP(), data=dat)
+# })
+# f19()
