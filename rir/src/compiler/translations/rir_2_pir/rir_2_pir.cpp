@@ -404,10 +404,8 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             std::string name = "";
             if (ldfun)
                 name = CHAR(PRINTNAME(ldfun->varName));
-            if (missingArgs == 0)
-                given.add(Assumption::NotTooFewArguments);
-            else
-                given.numMissing(missingArgs);
+            given.numMissing(missingArgs);
+            given.add(Assumption::NotTooFewArguments);
             given.add(Assumption::NotTooManyArguments);
             given.add(Assumption::CorrectOrderOfArguments);
             compiler.compileClosure(

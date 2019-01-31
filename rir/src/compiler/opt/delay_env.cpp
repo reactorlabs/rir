@@ -44,7 +44,8 @@ void DelayEnv::apply(RirCompiler&, ClosureVersion* function, LogStream&) const {
                     bool aMissingArg = false;
                     envInstr->eachLocalVar([&](SEXP name, InstrArg& arg) {
                         if (name == st->varName) {
-                            if (st->isStArg) {
+                            if (arg.val() == MissingArg::instance() ||
+                                st->isStArg) {
                                 // TODO: currently we cannot elide if the
                                 // original entry is missing, or if the stvar
                                 // should preserve missingness. Because

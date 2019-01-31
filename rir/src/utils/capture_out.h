@@ -23,12 +23,13 @@ namespace rir {
 //
 class CaptureOut {
     const static unsigned MAX_LEN = 1024 * 8;
-    std::array<char, MAX_LEN + 1> buffer;
+    char buffer[MAX_LEN + 1];
     int out_pipe[2];
     int saved_stdout;
 
   public:
-    CaptureOut() : buffer({}) {
+    CaptureOut() {
+        memset(buffer, 0, sizeof(buffer));
         fflush(stdout);
         saved_stdout = dup(STDOUT_FILENO);
         int err = pipe(out_pipe);
@@ -41,9 +42,9 @@ class CaptureOut {
 
     std::string operator()() {
         fflush(stdout);
-        if (!read(out_pipe[0], buffer.data(), MAX_LEN))
+        if (!read(out_pipe[0], buffer, MAX_LEN))
             buffer[0] = 0;
-        return buffer.data();
+        return buffer;
     }
 
     std::string oneline(size_t maxlen) {

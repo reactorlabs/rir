@@ -588,8 +588,6 @@ RIR_INLINE Assumptions addDynamicAssumptions(
 
     if (call.suppliedArgs <= signature.formalNargs()) {
         given.numMissing(signature.formalNargs() - call.suppliedArgs);
-        if (call.suppliedArgs >= signature.expectedNargs())
-            given.add(Assumption::NotTooFewArguments);
     }
 
     given.add(Assumption::NoExplicitlyMissingArgs);
@@ -625,6 +623,9 @@ RIR_INLINE Assumptions addDynamicAssumptions(
             testArg(i);
         }
     } else {
+        if (call.suppliedArgs >= signature.expectedNargs())
+            given.add(Assumption::NotTooFewArguments);
+
         for (size_t i = 0; i < call.suppliedArgs; ++i) {
             if (call.missingArg(i))
                 given.remove(Assumption::NoExplicitlyMissingArgs);
@@ -663,12 +664,6 @@ RIR_INLINE bool matches(const CallContext& call,
         for (size_t i = 0; i < call.suppliedArgs; ++i)
             if (call.implicitArgIdx(i) == DOTS_ARG_IDX)
                 return false;
-
-        // PIR optimized code can receive missing args, but they need to be
-        // explicitly put on the stack, which we can only do if we pass
-        // arguments on the stack
-        if (signature.expectedNargs() != call.suppliedArgs)
-            return false;
     }
 
     Assumptions given = addDynamicAssumptions(call, signature);
