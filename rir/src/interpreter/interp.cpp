@@ -240,19 +240,10 @@ SEXP createLegacyArgsListFromStackValues(const CallContext& call,
 
         SEXP arg = call.stackArg(i);
 
-        if (!eagerCallee && (arg == R_MissingArg || arg == R_DotsSymbol)) {
-            // We have to wrap them in a promise, otherwise they are treated
-            // as expressions to be evaluated, when in fact they are meant to be
-            // asts as values
-            SEXP promise = Rf_mkPROMISE(arg, call.callerEnv);
-            SET_PRVALUE(promise, arg);
-            __listAppend(&result, &pos, promise, R_NilValue);
-        } else {
-            if (eagerCallee && TYPEOF(arg) == PROMSXP) {
-                arg = Rf_eval(arg, call.callerEnv);
-            }
-            __listAppend(&result, &pos, arg, name);
+        if (eagerCallee && TYPEOF(arg) == PROMSXP) {
+            arg = Rf_eval(arg, call.callerEnv);
         }
+        __listAppend(&result, &pos, arg, name);
     }
 
     if (result != R_NilValue)

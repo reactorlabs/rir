@@ -292,9 +292,6 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             if (argi == DOTS_ARG_IDX) {
                 log.warn("Cannot compile call with ... arguments");
                 return false;
-            } else if (argi == MISSING_ARG_IDX) {
-                log.warn("Cannot compile call with explicit missing arguments");
-                return false;
             }
         }
 
@@ -353,14 +350,19 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         {
             size_t i = 0;
             for (auto argi : bc.callExtra().immediateCallArguments) {
-                rir::Code* promiseCode = srcCode->getPromise(argi);
-                bool eager = monomorphicBuiltin;
-                auto arg = tryCreateArg(promiseCode, insert, eager);
-                if (!arg)
-                    return false;
-                if (MkArg::Cast(arg) && !MkArg::Cast(arg)->isEager())
-                    given.setEager(i, false);
-                args.push_back(arg);
+                if (argi == MISSING_ARG_IDX) {
+                    args.push_back(MissingArg::instance());
+                    given.remove(Assumption::NoExplicitlyMissingArgs);
+                } else {
+                    rir::Code* promiseCode = srcCode->getPromise(argi);
+                    bool eager = monomorphicBuiltin;
+                    auto arg = tryCreateArg(promiseCode, insert, eager);
+                    if (!arg)
+                        return false;
+                    if (MkArg::Cast(arg) && !MkArg::Cast(arg)->isEager())
+                        given.setEager(i, false);
+                    args.push_back(arg);
+                }
                 i++;
             }
         }

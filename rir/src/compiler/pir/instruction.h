@@ -1122,7 +1122,7 @@ class VLIE(Call, Effect::Any, EnvAccess::Leak), public CallInstruction {
         pushArg(fs, NativeType::frameState);
         pushArg(fun, RType::closure);
         for (unsigned i = 0; i < args.size(); ++i)
-            pushArg(args[i], RType::prom);
+            pushArg(args[i], PirType(RType::prom) | RType::missing);
     }
 
     Closure* tryGetCls() const override final {
