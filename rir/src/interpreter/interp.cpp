@@ -3,6 +3,7 @@
 #include "R/RList.h"
 #include "R/Symbols.h"
 #include "R/r.h"
+#include "compiler/translations/rir_2_pir/rir_2_pir_compiler.h"
 #include "interp_context.h"
 #include "ir/Deoptimization.h"
 #include "ir/RuntimeFeedback_inl.h"
@@ -711,11 +712,15 @@ RIR_INLINE SEXP rirCall(CallContext& call, Context* ctx) {
     Function* fun = dispatch(call, table);
     fun->registerInvocation();
 
-    if (!fun->unoptimizable && fun->invocationCount() % RIR_WARMUP == 0) {
+    if (!fun->unoptimizable &&
+        (fun->invocationCount() == RIR_WARMUP ||
+         fun->invocationCount() % (2 * RIR_WARMUP) == 0)) {
         Assumptions given = addDynamicAssumptions(call, fun->signature());
         if (fun == table->baseline() || given != fun->signature().assumptions) {
-            // More assumptions are available than this version uses. Let's try
-            // compile a better matching version.
+            if (Assumptions(given).includes(
+                    pir::Rir2PirCompiler::minimalAssumptions)) {
+                // More assumptions are available than this version uses. Let's
+                // try compile a better matching version.
 #ifdef DEBUG_DISPATCH
             std::cout << "Optimizing for new context:";
             std::cout << given << " vs " << fun->signature().assumptions
@@ -727,6 +732,7 @@ RIR_INLINE SEXP rirCall(CallContext& call, Context* ctx) {
                 name = lhs;
             ctx->closureOptimizer(call.callee, given, name);
             fun = dispatch(call, table);
+        }
         }
     }
 

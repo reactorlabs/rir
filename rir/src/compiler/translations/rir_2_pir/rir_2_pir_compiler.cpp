@@ -16,8 +16,9 @@ namespace pir {
 
 // Currently PIR optimized functions cannot handle too many arguments or
 // mis-ordered arguments. The caller needs to take care.
-const Assumption Rir2PirCompiler::minimalAssumptions[] = {
-    Assumption::CorrectOrderOfArguments, Assumption::NotTooManyArguments};
+const Assumptions::Flags Rir2PirCompiler::minimalAssumptions =
+    Assumptions::Flags(
+        {Assumption::CorrectOrderOfArguments, Assumption::NotTooManyArguments});
 const Assumptions Rir2PirCompiler::defaultAssumptions = Assumptions(
     {Assumption::CorrectOrderOfArguments, Assumption::NotTooManyArguments}, 0);
 
@@ -66,13 +67,15 @@ void Rir2PirCompiler::compileClosure(Closure* closure,
                                      const OptimizationContext& ctx,
                                      MaybeCls success, Maybe fail_) {
 
-    for (const auto& a : minimalAssumptions)
-        if (!ctx.assumptions.includes(a)) {
-            std::stringstream as;
-            as << a;
-            logger.warn("Missing minimal assumption " + as.str());
-            return fail_();
+    if (!ctx.assumptions.includes(minimalAssumptions)) {
+        for (const auto& a : minimalAssumptions) {
+            if (!ctx.assumptions.includes(a)) {
+                std::stringstream as;
+                as << a;
+                return fail_();
+            }
         }
+    }
 
     if (closure->formals().hasDefaultArgs()) {
         if (!ctx.assumptions.includes(Assumption::NoExplicitlyMissingArgs)) {

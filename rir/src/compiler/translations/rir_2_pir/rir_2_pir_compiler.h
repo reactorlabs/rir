@@ -11,7 +11,7 @@ namespace pir {
 
 class Rir2PirCompiler : public RirCompiler {
   public:
-    static const Assumption minimalAssumptions[];
+    static const Assumptions::Flags minimalAssumptions;
     static const Assumptions defaultAssumptions;
 
     Rir2PirCompiler(Module* module, StreamLogger& logger);

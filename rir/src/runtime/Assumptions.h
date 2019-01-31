@@ -57,6 +57,7 @@ struct Assumptions {
     void add(Assumption a) { flags.set(a); }
     void remove(Assumption a) { flags.reset(a); }
     bool includes(Assumption a) const { return flags.includes(a); }
+    bool includes(const Flags& a) const { return flags.includes(a); }
 
     bool isEager(size_t i) const;
     void setEager(size_t i, bool);

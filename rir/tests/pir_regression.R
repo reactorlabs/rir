@@ -104,9 +104,9 @@ if (Sys.getenv("PIR_ENABLE") == "") {
   old <- compiler::enableJIT(3)
   # test that we generate multiple versions
   p <- function(a=1,b=2) a+b
-  for (i in 1:10) pir.compile(function() p())()
-  for (i in 1:10) pir.compile(function() p(1))()
-  for (i in 1:10) pir.compile(function() p(1,2))()
+  for (i in 1:100) pir.compile(function() p())()
+  for (i in 1:100) pir.compile(function() p(1))()
+  for (i in 1:100) pir.compile(function() p(1,2))()
   stopifnot(length(.Call("rir_invocation_count", p)) > 3)
   compiler::enableJIT(old)
 }
