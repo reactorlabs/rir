@@ -1224,11 +1224,9 @@ static void cachedSetVar(SEXP val, SEXP env, Immediate idx, Context* ctx,
     UNPROTECT(1);
 }
 
-static bool isNotifyingSet = false;
-
 static void notifySet(Immediate id, SEXP idExpr, SEXP env, SEXP val, Code* c,
                       Context* ctx) {
-    if (isNotifyingSet) {
+    if (ctx->isNotifyingSet) {
         return;
     }
 
@@ -1237,7 +1235,7 @@ static void notifySet(Immediate id, SEXP idExpr, SEXP env, SEXP val, Code* c,
         return;
     }
 
-    isNotifyingSet = true;
+    ctx->isNotifyingSet = true;
     ostack_push(ctx, idExpr);
     ostack_push(ctx, env);
     Assumptions assumptions({});
@@ -1245,7 +1243,14 @@ static void notifySet(Immediate id, SEXP idExpr, SEXP env, SEXP val, Code* c,
                      assumptions, ctx);
     doCall(call, ctx);
     ostack_popn(ctx, 2);
-    isNotifyingSet = false;
+    ctx->isNotifyingSet = false;
+}
+
+static void willSet(Immediate id, SEXP idExpr, SEXP env, SEXP val, Code* c,
+                    Context* ctx) {
+    if (ctx->prototypingEnabled) {
+        notifySet(id, idExpr, env, val, c, ctx);
+    }
 }
 
 #pragma GCC diagnostic push
@@ -1523,7 +1528,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
             SEXP sym = readConst(ctx, id);
             advanceImmediate();
             SEXP val = ostack_pop(ctx);
-            notifySet(id, sym, *env, val, c, ctx);
+            willSet(id, sym, *env, val, c, ctx);
             cachedSetVar(val, *env, id, ctx, bindingCache);
             NEXT();
         }
@@ -1535,7 +1540,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
             SLOWASSERT(TYPEOF(sym) == SYMSXP);
             SEXP val = ostack_pop(ctx);
             INCREMENT_NAMED(val);
-            notifySet(id, sym, ENCLOS(*env), val, c, ctx);
+            willSet(id, sym, ENCLOS(*env), val, c, ctx);
             Rf_setVar(sym, val, ENCLOS(*env));
             NEXT();
         }
@@ -3033,6 +3038,16 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
 
         INSTRUCTION(printInvocation_) {
             printf("Invocation count: %d\n", c->funInvocationCount);
+            NEXT();
+        }
+
+        INSTRUCTION(enablePrototype_) {
+            ctx->prototypingEnabled = true;
+            NEXT();
+        }
+
+        INSTRUCTION(disablePrototype_) {
+            ctx->prototypingEnabled = false;
             NEXT();
         }
 

@@ -65,6 +65,9 @@ Context* context_create() {
         c->closureOptimizer = rirOptDefaultOpts;
     }
 
+    c->prototypingEnabled = false;
+    c->isNotifyingSet = false;
+
     return c;
 }
 

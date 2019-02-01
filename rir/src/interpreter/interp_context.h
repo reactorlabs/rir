@@ -57,6 +57,8 @@ struct Context {
     ExprCompiler exprCompiler;
     ClosureCompiler closureCompiler;
     ClosureOptimizer closureOptimizer;
+    bool prototypingEnabled;
+    bool isNotifyingSet;
 };
 
 // Some symbols

@@ -8,7 +8,9 @@
 //   this defines how to interpret the instruction
 
 #define SIMPLE_INSTRUCTIONS(V, NESTED)                                         \
-V(NESTED, int3, Int3)                                                          \
-V(NESTED, printInvocation, PrintInvocation)                                    \
+    V(NESTED, int3, Int3)                                                      \
+    V(NESTED, printInvocation, PrintInvocation)                                \
+    V(NESTED, enablePrototype, EnablePrototype)                                \
+    V(NESTED, disablePrototype, DisablePrototype)
 
 #endif

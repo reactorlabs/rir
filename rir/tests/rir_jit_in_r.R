@@ -39,12 +39,13 @@ Check <- R6Class(
     id = NA
   ),
   public = list(
+    numPasses = 0,
     skip = FALSE,
     initialize = function() {
       private$id <- nextCheckId
       nextCheckId <<- nextCheckId + 1
     },
-    passes = function(env) {
+    doesPass = function(env) {
       stop("not implemented")
     },
     tryOptimize = function(env) {
@@ -54,12 +55,14 @@ Check <- R6Class(
       if (self$skip) {
         catOut(paste(private$id, "-", "Skip"))
         TRUE
-      } else if (self$passes(env)) {
+      } else if (self$doesPass(env)) {
         catOut(paste(private$id, "-", "Pass"))
+        self$numPasses <- self$numPasses + 1
         self$tryOptimize(args, ext)
         TRUE
       } else {
         catOut(paste(private$id, "-", "Fail"))
+        self$numPasses <- 0
         FALSE
       }
     }
@@ -75,14 +78,14 @@ CheckInteger <- R6Class(
       self$arg <- substitute(arg)
       super$initialize()
     },
-    passes = function(env) {
+    doesPass = function(env) {
       is.numeric(eval(self$arg, env))
     },
     tryOptimize = function(args, etx) {
       arg <- args[[deparse(self$arg)]]
       if (is.atomic(arg)) {
         self$skip = TRUE
-      } else if (is.symbol(arg)) {
+      } else if (is.symbol(arg) && self$numPasses >= 3) {
         self$skip = TRUE
         used <- FALSE
         rir.onModify(arg, etx) <- function() {
@@ -155,6 +158,7 @@ f <- rir.compile(function() {
 stopifnot(f() == 2)
 
 f <- rir.compile(function(n=5) {
+  rir.enablePrototype()
   j <- 1
   for (i in 1:n) {
     rir.srcloc <<- 1
@@ -162,6 +166,7 @@ f <- rir.compile(function(n=5) {
     rir.srcloc <<- 2
     add(j, 1)
   }
+  rir.disablePrototype()
 })
 f()
 print(out)
@@ -172,11 +177,11 @@ stopifnot(out == c(
   "4 - Pass",
   "1 - Pass",
   "2 - Pass",
-  "3 - Skip",
+  "3 - Pass",
   "4 - Skip",
   "1 - Pass",
   "2 - Pass",
-  "3 - Skip",
+  "3 - Pass",
   "4 - Skip",
   "1 - Pass",
   "2 - Pass",

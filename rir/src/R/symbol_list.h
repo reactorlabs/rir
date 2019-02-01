@@ -2,7 +2,7 @@
 #define SYMBOLS_LIST_H_
 
 #include "simple_instruction_list.h"
-#define SYMBOLS_SIMPLE_INSTRUCTION_V(V, name, _) V(name, "." #name)
+#define SYMBOLS_SIMPLE_INSTRUCTION_V(V, name, _) V(name, "rir." #name)
 
 #define SYMBOLS(V)                                                             \
     V(SuperAssignBracket, "[<<-")                                              \
