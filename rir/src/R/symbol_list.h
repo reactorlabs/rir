@@ -77,6 +77,7 @@
     V(UseMethod, "UseMethod")                                                  \
     V(sysframe, "sys.frame")                                                   \
     V(syscall, "sys.call")                                                     \
-    V(srcref, "srcref")
+    V(srcref, "srcref")                                                        \
+    V(onModify, "rir.onModify")
 
 #endif // SYMBOLS_LIST_H_

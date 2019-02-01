@@ -1224,6 +1224,30 @@ static void cachedSetVar(SEXP val, SEXP env, Immediate idx, Context* ctx,
     UNPROTECT(1);
 }
 
+static bool isNotifyingSet = false;
+
+static void notifySet(Immediate id, SEXP idExpr, SEXP env, SEXP val, Code* c,
+                      Context* ctx) {
+    if (isNotifyingSet) {
+        return;
+    }
+
+    SEXP onModify = Rf_findVarInFrame(R_GlobalEnv, symbol::onModify);
+    if (onModify == nullptr || !Rf_isFunction(onModify)) {
+        return;
+    }
+
+    isNotifyingSet = true;
+    ostack_push(ctx, idExpr);
+    ostack_push(ctx, env);
+    Assumptions assumptions({});
+    CallContext call(c, onModify, 2, id, ostack_cell_at(ctx, 1), R_EmptyEnv,
+                     assumptions, ctx);
+    doCall(call, ctx);
+    ostack_popn(ctx, 2);
+    isNotifyingSet = false;
+}
+
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wcast-align"
 
@@ -1496,20 +1520,22 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
 
         INSTRUCTION(stvar_) {
             Immediate id = readImmediate();
+            SEXP sym = readConst(ctx, id);
             advanceImmediate();
             SEXP val = ostack_pop(ctx);
-
+            notifySet(id, sym, *env, val, c, ctx);
             cachedSetVar(val, *env, id, ctx, bindingCache);
-
             NEXT();
         }
 
         INSTRUCTION(stvar_super_) {
-            SEXP sym = readConst(ctx, readImmediate());
+            Immediate id = readImmediate();
+            SEXP sym = readConst(ctx, id);
             advanceImmediate();
             SLOWASSERT(TYPEOF(sym) == SYMSXP);
             SEXP val = ostack_pop(ctx);
             INCREMENT_NAMED(val);
+            notifySet(id, sym, ENCLOS(*env), val, c, ctx);
             Rf_setVar(sym, val, ENCLOS(*env));
             NEXT();
         }
