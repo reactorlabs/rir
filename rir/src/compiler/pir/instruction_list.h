@@ -21,11 +21,11 @@
     V(Sub)                                                                     \
     V(Mul)                                                                     \
     V(Neq)                                                                     \
-    V(Eq)                                                                      \
-    V(Extract1_1D)                                                             \
-    V(Extract2_1D)
+    V(Eq)
 
 #define VECTOR_RW_INSTRUCTIONS(V)                                              \
+    V(Extract1_1D)                                                             \
+    V(Extract2_1D)                                                             \
     V(Extract2_2D)                                                             \
     V(Extract1_2D)                                                             \
     V(Subassign1_1D)                                                           \

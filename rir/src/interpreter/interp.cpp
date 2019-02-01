@@ -2319,11 +2319,13 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
 
             if (isObject(val)) {
                 SEXP call = getSrcForCall(c, pc - 1, ctx);
-                res = dispatchApply(call, val, args, R_SubsetSym, *env, ctx);
+                res =
+                    dispatchApply(call, val, args, symbol::Bracket, *env, ctx);
                 if (!res)
-                    res = do_subset_dflt(R_NilValue, R_SubsetSym, args, *env);
+                    res =
+                        do_subset_dflt(R_NilValue, symbol::Bracket, args, *env);
             } else {
-                res = do_subset_dflt(R_NilValue, R_SubsetSym, args, *env);
+                res = do_subset_dflt(R_NilValue, symbol::Bracket, args, *env);
             }
 
             ostack_popn(ctx, 3);
@@ -2343,11 +2345,13 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
 
             if (isObject(val)) {
                 SEXP call = getSrcForCall(c, pc - 1, ctx);
-                res = dispatchApply(call, val, args, R_SubsetSym, *env, ctx);
+                res =
+                    dispatchApply(call, val, args, symbol::Bracket, *env, ctx);
                 if (!res)
-                    res = do_subset_dflt(R_NilValue, R_SubsetSym, args, *env);
+                    res =
+                        do_subset_dflt(R_NilValue, symbol::Bracket, args, *env);
             } else {
-                res = do_subset_dflt(R_NilValue, R_SubsetSym, args, *env);
+                res = do_subset_dflt(R_NilValue, symbol::Bracket, args, *env);
             }
 
             ostack_popn(ctx, 4);
@@ -2430,11 +2434,14 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
             ostack_push(ctx, args);
             if (isObject(val)) {
                 SEXP call = getSrcAt(c, pc - 1, ctx);
-                res = dispatchApply(call, val, args, R_Subset2Sym, *env, ctx);
+                res = dispatchApply(call, val, args, symbol::DoubleBracket,
+                                    *env, ctx);
                 if (!res)
-                    res = do_subset2_dflt(call, R_Subset2Sym, args, *env);
+                    res = do_subset2_dflt(call, symbol::DoubleBracket, args,
+                                          *env);
             } else {
-                res = do_subset2_dflt(R_NilValue, R_Subset2Sym, args, *env);
+                res = do_subset2_dflt(R_NilValue, symbol::DoubleBracket, args,
+                                      *env);
             }
             ostack_popn(ctx, 3);
 
@@ -2454,11 +2461,14 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
 
             if (isObject(val)) {
                 SEXP call = getSrcForCall(c, pc - 1, ctx);
-                res = dispatchApply(call, val, args, R_Subset2Sym, *env, ctx);
+                res = dispatchApply(call, val, args, symbol::DoubleBracket,
+                                    *env, ctx);
                 if (!res)
-                    res = do_subset2_dflt(call, R_Subset2Sym, args, *env);
+                    res = do_subset2_dflt(call, symbol::DoubleBracket, args,
+                                          *env);
             } else {
-                res = do_subset2_dflt(R_NilValue, R_Subset2Sym, args, *env);
+                res = do_subset2_dflt(R_NilValue, symbol::DoubleBracket, args,
+                                      *env);
             }
             ostack_popn(ctx, 4);
 
@@ -2485,12 +2495,14 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
             SEXP call = getSrcForCall(c, pc - 1, ctx);
             RCNTXT assignContext;
             Rf_begincontext(&assignContext, CTXT_RETURN, call, *env,
-                            ENCLOS(*env), args, R_SubassignSym);
+                            ENCLOS(*env), args, symbol::AssignBracket);
             if (isObject(vec)) {
-                res = dispatchApply(call, vec, args, R_SubassignSym, *env, ctx);
+                res = dispatchApply(call, vec, args, symbol::AssignBracket,
+                                    *env, ctx);
             }
             if (!res) {
-                res = do_subassign_dflt(call, R_SubassignSym, args, *env);
+                res =
+                    do_subassign_dflt(call, symbol::AssignBracket, args, *env);
                 // We duplicated the vector above, and there is a stvar
                 // following
                 SET_NAMED(res, 0);
@@ -2523,13 +2535,15 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
             SEXP call = getSrcForCall(c, pc - 1, ctx);
             RCNTXT assignContext;
             Rf_begincontext(&assignContext, CTXT_RETURN, call, *env,
-                            ENCLOS(*env), args, R_SubassignSym);
+                            ENCLOS(*env), args, symbol::AssignBracket);
             if (isObject(mtx)) {
-                res = dispatchApply(call, mtx, args, R_SubassignSym, *env, ctx);
+                res = dispatchApply(call, mtx, args, symbol::AssignBracket,
+                                    *env, ctx);
             }
 
             if (!res) {
-                res = do_subassign_dflt(call, R_SubassignSym, args, *env);
+                res =
+                    do_subassign_dflt(call, symbol::AssignBracket, args, *env);
                 // We duplicated the matrix above, and there is a stvar
                 // following
                 SET_NAMED(res, 0);
@@ -2613,14 +2627,15 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
 
             RCNTXT assignContext;
             Rf_begincontext(&assignContext, CTXT_RETURN, call, *env,
-                            ENCLOS(*env), args, R_Subassign2Sym);
+                            ENCLOS(*env), args, symbol::AssignDoubleBracket);
             if (isObject(vec)) {
-                res =
-                    dispatchApply(call, vec, args, R_Subassign2Sym, *env, ctx);
+                res = dispatchApply(call, vec, args,
+                                    symbol::AssignDoubleBracket, *env, ctx);
             }
 
             if (!res) {
-                res = do_subassign2_dflt(call, R_Subassign2Sym, args, *env);
+                res = do_subassign2_dflt(call, symbol::AssignDoubleBracket,
+                                         args, *env);
                 // We duplicated the vector above, and there is a stvar
                 // following
                 SET_NAMED(res, 0);
@@ -2655,12 +2670,12 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
                 if ((idx1T == INTSXP || idx1T == REALSXP) &&
                     (XLENGTH(idx1) == 1) && // 1
                     (idx2T == INTSXP || idx2T == REALSXP) &&
-                    (XLENGTH(idx2) == 1) && // 2
+                    (XLENGTH(idx2) == 1) &&
                     ((matrixT == REALSXP &&
-                      (valT == REALSXP || valT == INTSXP)) || // 3
+                      (valT == REALSXP || valT == INTSXP)) || // 2
                      (matrixT == INTSXP && (valT == INTSXP)) ||
                      (matrixT == VECSXP)) &&
-                    (XLENGTH(val) == 1 || matrixT == VECSXP)) { // 4
+                    (XLENGTH(val) == 1 || matrixT == VECSXP)) { // 3
 
                     int idx1_ = -1;
                     int idx2_ = -1;
@@ -2720,14 +2735,15 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
             SEXP call = getSrcForCall(c, pc - 1, ctx);
             RCNTXT assignContext;
             Rf_begincontext(&assignContext, CTXT_RETURN, call, *env,
-                            ENCLOS(*env), args, R_Subassign2Sym);
+                            ENCLOS(*env), args, symbol::AssignDoubleBracket);
             if (isObject(mtx)) {
-                res =
-                    dispatchApply(call, mtx, args, R_Subassign2Sym, *env, ctx);
+                res = dispatchApply(call, mtx, args,
+                                    symbol::AssignDoubleBracket, *env, ctx);
             }
 
             if (!res) {
-                res = do_subassign2_dflt(call, R_Subassign2Sym, args, *env);
+                res = do_subassign2_dflt(call, symbol::AssignDoubleBracket,
+                                         args, *env);
                 // We duplicated the matrix above, and there is a stvar
                 // following
                 SET_NAMED(res, 0);
