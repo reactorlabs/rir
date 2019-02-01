@@ -2832,6 +2832,9 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
             SEXP e = ostack_pop(ctx);
             assert(TYPEOF(e) == ENVSXP);
             *env = e;
+            // We need to clear the bindings cache, when we change the
+            // environment
+            memset(&bindingCache, 0, sizeof(bindingCache));
             NEXT();
         }
 

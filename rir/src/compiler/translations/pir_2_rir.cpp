@@ -1205,7 +1205,7 @@ void Pir2Rir::lower(Code* code) {
                 if (DEBUG_DEOPTS) {
                     std::stringstream dump;
                     debugMessage = "DEOPT, assumption ";
-                    condition->printRef(dump);
+                    expect->condition()->printRef(dump);
                     debugMessage += dump.str();
                     debugMessage += " failed in\n";
                     dump.str("");
