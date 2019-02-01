@@ -129,8 +129,8 @@ class TheVerifier {
         }
 
         if (auto call = StaticCall::Cast(i)) {
-            if (call->hint &&
-                call->hint->owner() != call->dispatch()->owner()) {
+            if (call->hint && call->tryDispatch() &&
+                call->hint->owner() != call->tryDispatch()->owner()) {
                 std::cerr << "Error: instruction '";
                 i->print(std::cerr);
                 std::cerr << "' has broken hint (hint must be a version of the "

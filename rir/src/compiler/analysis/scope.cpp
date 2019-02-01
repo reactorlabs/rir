@@ -230,12 +230,13 @@ AbstractResult ScopeAnalysis::apply(ScopeAnalysisState& state,
             assert(target);
             if (auto mk = MkFunCls::Cast(target))
                 if (mk->cls->nargs() == calli->nCallArgs())
-                    interProceduralAnalysis(call->dispatch(mk->cls),
-                                            mk->lexicalEnv());
+                    if (auto trg = call->tryDispatch(mk->cls))
+                        interProceduralAnalysis(trg, mk->lexicalEnv());
         } else if (auto call = StaticCall::Cast(i)) {
             auto target = call->cls();
             if (target && target->nargs() == calli->nCallArgs())
-                interProceduralAnalysis(call->dispatch(), target->closureEnv());
+                if (auto trg = call->tryDispatch())
+                    interProceduralAnalysis(trg, target->closureEnv());
         } else {
             // TODO: support for NamedCall
             assert((CallBuiltin::Cast(i) || CallSafeBuiltin::Cast(i) ||

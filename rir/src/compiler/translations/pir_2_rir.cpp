@@ -1010,30 +1010,39 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
             }
             case Tag::StaticCall: {
                 auto call = StaticCall::Cast(instr);
-                auto trg = call->optimisticDispatch();
-                SEXP originalClosure = trg->owner()->rirClosure();
+                SEXP originalClosure = call->cls()->rirClosure();
+                auto dt = DispatchTable::unpack(BODY(originalClosure));
+                if (auto trg = call->tryOptimisticDispatch()) {
+                    // Avoid recursivly compiling the same closure
+                    auto fun = compiler.alreadyCompiled(trg);
+                    SEXP funCont = nullptr;
 
-                // Avoid recursivly compiling the same closure
-                auto fun = compiler.alreadyCompiled(trg);
-                SEXP funCont = nullptr;
-
-                if (fun) {
-                    funCont = fun->container();
-                } else if (!compiler.isCompiling(trg)) {
-                    fun = compiler.compile(trg, dryRun);
-                    funCont = fun->container();
-                    Protect p(funCont);
-                    assert(originalClosure &&
-                           "Cannot compile synthetic closure");
-                    DispatchTable::unpack(BODY(originalClosure))->insert(fun);
+                    if (fun) {
+                        funCont = fun->container();
+                    } else if (!compiler.isCompiling(trg)) {
+                        fun = compiler.compile(trg, dryRun);
+                        funCont = fun->container();
+                        Protect p(funCont);
+                        assert(originalClosure &&
+                               "Cannot compile synthetic closure");
+                        dt->insert(fun);
+                    }
+                    auto bc = BC::staticCall(call->nCallArgs(),
+                                             Pool::get(call->srcIdx),
+                                             originalClosure, funCont,
+                                             call->inferAvailableAssumptions());
+                    cs << bc;
+                    if (!funCont)
+                        compiler.needsPatching(
+                            trg, bc.immediate.staticCallFixedArgs.versionHint);
+                } else {
+                    // Something went wrong with dispatching, let's put the
+                    // baseline there
+                    cs << BC::staticCall(
+                        call->nCallArgs(), Pool::get(call->srcIdx),
+                        originalClosure, dt->baseline()->container(),
+                        call->inferAvailableAssumptions());
                 }
-                auto bc = BC::staticCall(
-                    call->nCallArgs(), Pool::get(call->srcIdx), originalClosure,
-                    funCont, call->inferAvailableAssumptions());
-                cs << bc;
-                if (!funCont)
-                    compiler.needsPatching(
-                        trg, bc.immediate.staticCallFixedArgs.versionHint);
                 break;
             }
             case Tag::CallBuiltin: {

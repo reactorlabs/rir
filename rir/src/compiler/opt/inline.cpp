@@ -50,7 +50,9 @@ class TheInliner {
                     inlineeCls = mkcls->cls;
                     if (inlineeCls->rirFunction()->uninlinable)
                         continue;
-                    inlinee = call->dispatch(inlineeCls);
+                    inlinee = call->tryDispatch(inlineeCls);
+                    if (!inlinee)
+                        continue;
                     if (inlinee->nargs() -
                             inlinee->assumptions().numMissing() !=
                         call->nCallArgs())
@@ -61,7 +63,9 @@ class TheInliner {
                     inlineeCls = call->cls();
                     if (inlineeCls->rirFunction()->uninlinable)
                         continue;
-                    inlinee = call->dispatch();
+                    inlinee = call->tryDispatch();
+                    if (!inlinee)
+                        continue;
                     if (inlinee->nargs() -
                             inlinee->assumptions().numMissing() !=
                         call->nCallArgs())

@@ -444,9 +444,15 @@ void MkFunCls::printArgs(std::ostream& out, bool tty) const {
 }
 
 void StaticCall::printArgs(std::ostream& out, bool tty) const {
-    out << dispatch()->name();
-    if (hint && hint != dispatch())
-        out << "<hint: " << hint->nameSuffix() << ">";
+    if (auto trg = tryDispatch()) {
+        out << trg->name();
+    } else {
+        out << cls()->name();
+    }
+    if (auto hint = tryOptimisticDispatch()) {
+        if (hint != tryDispatch())
+            out << "<hint: " << hint->nameSuffix() << ">";
+    }
     printCallArgs(out, this);
     if (frameState()) {
         frameState()->printRef(out);
@@ -454,9 +460,10 @@ void StaticCall::printArgs(std::ostream& out, bool tty) const {
     }
 }
 
-ClosureVersion* CallInstruction::dispatch(Closure* cls) const {
+ClosureVersion* CallInstruction::tryDispatch(Closure* cls) const {
     auto res = cls->findCompatibleVersion(
         OptimizationContext(inferAvailableAssumptions()));
+#ifdef WARN_DISPATCH_FAIL
     if (!res) {
         std::cout << "DISPATCH FAILED! Available versions: \n";
         cls->eachVersion([&](ClosureVersion* v) {
@@ -464,19 +471,22 @@ ClosureVersion* CallInstruction::dispatch(Closure* cls) const {
         });
         std::cout << "Available assumptions at callsite: \n ";
         std::cout << inferAvailableAssumptions() << "\n";
-        assert(false);
     }
+#endif
     return res;
 }
 
-ClosureVersion* StaticCall::dispatch() const {
-    return CallInstruction::dispatch(cls());
+ClosureVersion* StaticCall::tryDispatch() const {
+    return CallInstruction::tryDispatch(cls());
 }
 
-ClosureVersion* StaticCall::optimisticDispatch() const {
-    auto dispatch = CallInstruction::dispatch(cls());
+ClosureVersion* StaticCall::tryOptimisticDispatch() const {
+    auto dispatch = CallInstruction::tryDispatch(cls());
     if (!hint)
         return dispatch;
+
+    if (!dispatch)
+        return nullptr;
 
     return (hint->optimizationContext() < dispatch->optimizationContext())
                ? dispatch
@@ -493,7 +503,7 @@ StaticCall::StaticCall(Value* callerEnv, Closure* cls,
     pushArg(fs, NativeType::frameState);
     for (unsigned i = 0; i < args.size(); ++i)
         pushArg(args[i], PirType::val() | RType::prom);
-    assert(dispatch());
+    assert(tryDispatch());
 }
 
 CallInstruction* CallInstruction::CastCall(Value* v) {

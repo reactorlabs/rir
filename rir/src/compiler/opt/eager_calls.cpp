@@ -25,9 +25,10 @@ void EagerCalls::apply(RirCompiler& cmp, ClosureVersion* closure,
                 continue;
 
             Closure* cls = call->cls();
-            ClosureVersion* version = call->dispatch();
+            ClosureVersion* version = call->tryDispatch();
 
-            if (!version->properties.includes(
+            if (!version ||
+                !version->properties.includes(
                     ClosureVersion::Property::IsEager) ||
                 call->nCallArgs() != cls->nargs())
                 continue;
@@ -100,9 +101,9 @@ void EagerCalls::apply(RirCompiler& cmp, ClosureVersion* closure,
                 bb = split;
                 ip = bb->begin();
             } else if (auto call = StaticCall::Cast(*ip)) {
-                auto version = call->dispatch();
-                if (version->properties.includes(
-                        ClosureVersion::Property::NoReflection)) {
+                auto version = call->tryDispatch();
+                if (version && version->properties.includes(
+                                   ClosureVersion::Property::NoReflection)) {
                     call->eachCallArg([&](InstrArg& arg) {
                         if (auto mk = MkArg::Cast(arg.val())) {
                             if (mk->isEager()) {
