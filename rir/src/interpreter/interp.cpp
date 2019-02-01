@@ -2131,8 +2131,12 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
         }
 
         INSTRUCTION(lgl_or_) {
-            int x2 = LOGICAL(ostack_pop(ctx))[0];
-            int x1 = LOGICAL(ostack_pop(ctx))[0];
+            SEXP s2 = ostack_pop(ctx);
+            SEXP s1 = ostack_pop(ctx);
+            assert(TYPEOF(s2) == LGLSXP);
+            assert(TYPEOF(s1) == LGLSXP);
+            int x2 = XLENGTH(s2) == 0 ? NA_LOGICAL : LOGICAL(s2)[0];
+            int x1 = XLENGTH(s1) == 0 ? NA_LOGICAL : LOGICAL(s1)[0];
             assert(x1 == 1 || x1 == 0 || x1 == NA_LOGICAL);
             assert(x2 == 1 || x2 == 0 || x2 == NA_LOGICAL);
             if (x1 == 1 || x2 == 1)
@@ -2145,8 +2149,12 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
         }
 
         INSTRUCTION(lgl_and_) {
-            int x2 = LOGICAL(ostack_pop(ctx))[0];
-            int x1 = LOGICAL(ostack_pop(ctx))[0];
+            SEXP s2 = ostack_pop(ctx);
+            SEXP s1 = ostack_pop(ctx);
+            assert(TYPEOF(s2) == LGLSXP);
+            assert(TYPEOF(s1) == LGLSXP);
+            int x2 = XLENGTH(s2) == 0 ? NA_LOGICAL : LOGICAL(s2)[0];
+            int x1 = XLENGTH(s1) == 0 ? NA_LOGICAL : LOGICAL(s1)[0];
             assert(x1 == 1 || x1 == 0 || x1 == NA_LOGICAL);
             assert(x2 == 1 || x2 == 0 || x2 == NA_LOGICAL);
             if (x1 == 1 && x2 == 1)
@@ -2161,6 +2169,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
         INSTRUCTION(aslogical_) {
             SEXP val = ostack_top(ctx);
             int x1 = Rf_asLogical(val);
+            assert(x1 == 1 || x1 == 0 || x1 == NA_LOGICAL);
             res = Rf_ScalarLogical(x1);
             ostack_pop(ctx);
             ostack_push(ctx, res);
