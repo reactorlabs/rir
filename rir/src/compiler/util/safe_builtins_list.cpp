@@ -282,6 +282,8 @@ bool SafeBuiltinsList::nonObject(SEXP builtin) {
 }
 
 #define UNSAFE_BUILTINS_FOR_INLINE(V)                                          \
+    V(on.exit)                                                                 \
+    V(environment)                                                             \
     V(nargs)                                                                   \
     V(sys.parent)                                                              \
     V(sys.function)                                                            \

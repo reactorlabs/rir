@@ -71,12 +71,33 @@ class TheScopeResolution {
                     continue;
                 }
 
+                // Constand fold "missing" if we can
                 if (auto missing = Missing::Cast(i)) {
                     auto res =
                         analysis.load(before, missing->varName, missing->env());
                     if (!res.result.type.maybeMissing()) {
-                        missing->replaceUsesAndSwapWith(
-                            new LdConst(R_FalseValue), ip);
+                        // Missing still returns TRUE, if the argument was
+                        // initially missing, but then overwritten by a default
+                        // argument. Currently our analysis cannot really
+                        // distinguish those cases. Therefore, if the current
+                        // value of the variable is guaranteed to not be a
+                        // missing value, we additionally need verify that the
+                        // initial argument (the argument to the mkenv) was also
+                        // guaranteed to not a missing value.
+                        // TODO: this is a bit brittle and might break as soon
+                        // as we start improving the handling of missing args in
+                        // MkEnv.
+                        if (auto env = MkEnv::Cast(missing->env())) {
+                            bool initiallyMissing = false;
+                            env->eachLocalVar([&](SEXP name, Value* val) {
+                                if (name == missing->varName)
+                                    initiallyMissing = val->type.maybeMissing();
+                            });
+                            if (!initiallyMissing) {
+                                missing->replaceUsesAndSwapWith(
+                                    new LdConst(R_FalseValue), ip);
+                            }
+                        }
                     } else {
                         res.result.ifSingleValue([&](Value* v) {
                             if (v == MissingArg::instance()) {
