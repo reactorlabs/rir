@@ -1238,11 +1238,12 @@ static void notifySet(Immediate id, SEXP idExpr, SEXP env, SEXP val, Code* c,
     ctx->isNotifyingSet = true;
     ostack_push(ctx, idExpr);
     ostack_push(ctx, env);
+    ostack_push(val, env);
     Assumptions assumptions({});
-    CallContext call(c, onModify, 2, id, ostack_cell_at(ctx, 1), R_EmptyEnv,
+    CallContext call(c, onModify, 3, id, ostack_cell_at(ctx, 2), R_EmptyEnv,
                      assumptions, ctx);
     doCall(call, ctx);
-    ostack_popn(ctx, 2);
+    ostack_popn(ctx, 3);
     ctx->isNotifyingSet = false;
 }
 

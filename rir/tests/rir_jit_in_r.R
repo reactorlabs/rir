@@ -9,10 +9,10 @@ catOut <- function(new) {
 rir.srcloc <- NULL
 rir.onModifys <- new.env()
 
-rir.onModify <- function(x, env = parent.frame()) {
+rir.onModify <- function(x, env, new) {
   key <- paste(deparse(x), "|", capture.output(str(env)))
   if (exists(key, envir = rir.onModifys)) {
-    rir.onModifys[[key]]()
+    rir.onModifys[[key]](new)
   }
 }
 
