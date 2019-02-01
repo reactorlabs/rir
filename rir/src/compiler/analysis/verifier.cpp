@@ -10,14 +10,15 @@ class TheVerifier {
   public:
     ClosureVersion* f;
 
-    explicit TheVerifier(ClosureVersion* f) : f(f) {}
+    explicit TheVerifier(ClosureVersion* f, bool slow) : f(f), slow(slow) {}
 
     bool ok = true;
+    bool slow = false;
+    std::unordered_map<Code*, DominanceGraph> doms;
+    std::unordered_map<Code*, CFG> cfgs;
 
     void operator()() {
-        DominanceGraph dom(f);
-        CFG cfg(f);
-        Visitor::run(f->entry, [&](BB* bb) { return verify(bb, dom, cfg); });
+        Visitor::run(f->entry, [&](BB* bb) { return verify(bb); });
 
         if (!ok) {
             std::cerr << "Verification of function " << *f << " failed\n";
@@ -43,9 +44,21 @@ class TheVerifier {
         });
     }
 
-    void verify(BB* bb, const DominanceGraph& dom, const CFG& cfg) {
+    const CFG& cfg(Code* c) {
+        if (!cfgs.count(c))
+            cfgs.emplace(c, c);
+        return cfgs.at(c);
+    }
+
+    const DominanceGraph& dom(Code* c) {
+        if (!doms.count(c))
+            doms.emplace(c, c);
+        return doms.at(c);
+    }
+
+    void verify(BB* bb) {
         for (auto i : *bb)
-            verify(i, bb, dom, cfg);
+            verify(i, bb);
         if (bb->isEmpty()) {
             if (bb->isExit()) {
                 std::cerr << "bb" << bb->id << " has no successor\n";
@@ -73,8 +86,8 @@ class TheVerifier {
                In the above example, we can't push an instruction from C to A
                and B, without worrying about D.
             */
-            if (cfg.isMergeBlock(bb)) {
-                for (auto in : cfg.immediatePredecessors(bb)) {
+            if (slow && cfg(bb->owner).isMergeBlock(bb)) {
+                for (auto in : cfg(bb->owner).immediatePredecessors(bb)) {
                     if (in->falseBranch()) {
                         std::cerr << "BB " << in->id << " merges into "
                                   << bb->id << " and branches into "
@@ -113,13 +126,10 @@ class TheVerifier {
     }
 
     void verify(Promise* p) {
-        DominanceGraph dom(p);
-        CFG cfg(p);
-        Visitor::run(p->entry, [&](BB* bb) { verify(bb, dom, cfg); });
+        Visitor::run(p->entry, [&](BB* bb) { verify(bb); });
     }
 
-    void verify(Instruction* i, BB* bb, const DominanceGraph& dom,
-                const CFG& cfg) {
+    void verify(Instruction* i, BB* bb) {
         if (i->bb() != bb) {
             std::cerr << "Error: instruction '";
             i->print(std::cerr);
@@ -160,7 +170,8 @@ class TheVerifier {
             auto t = a.type();
             if (auto iv = Instruction::Cast(v)) {
                 if (phi) {
-                    if (!cfg.isPredecessor(iv->bb(), i->bb())) {
+                    if (slow &&
+                        !cfg(bb->owner).isPredecessor(iv->bb(), i->bb())) {
                         std::cerr << "Error at instruction '";
                         i->print(std::cerr);
                         std::cerr << "': input '";
@@ -170,8 +181,8 @@ class TheVerifier {
                     }
                 } else if ((iv->bb() == i->bb() &&
                             bb->indexOf(iv) > bb->indexOf(i)) ||
-                           (iv->bb() != i->bb() &&
-                            !dom.dominates(iv->bb(), bb))) {
+                           (iv->bb() != i->bb() && slow &&
+                            !dom(bb->owner).dominates(iv->bb(), bb))) {
                     std::cerr << "Error at instruction '";
                     i->print(std::cerr);
                     std::cerr << "': input '";
@@ -208,8 +219,8 @@ class TheVerifier {
 namespace rir {
 namespace pir {
 
-bool Verify::apply(ClosureVersion* f) {
-    TheVerifier v(f);
+bool Verify::apply(ClosureVersion* f, bool slow) {
+    TheVerifier v(f, slow);
     v();
     return v.ok;
 }

@@ -205,9 +205,11 @@ AbstractResult ScopeAnalysis::apply(ScopeAnalysisState& state,
                 return;
             }
 
-            if (depth == MAX_DEPTH) {
+            if (depth == MAX_DEPTH)
                 return;
-            }
+
+            if (version->size() > MAX_SIZE)
+                return;
 
             std::vector<Value*> args;
             calli->eachCallArg([&](Value* v) { args.push_back(v); });

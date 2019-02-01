@@ -101,6 +101,11 @@ void Rir2PirCompiler::compileClosure(Closure* closure,
         return fail();
     }
 
+    if (closure->rirFunction()->body()->codeSize > MAX_INPUT_SIZE) {
+        logger.warn("skipping huge function");
+        return fail();
+    }
+
     if (auto existing = closure->findCompatibleVersion(ctx))
         return success(existing);
 
@@ -185,7 +190,11 @@ void Rir2PirCompiler::optimizeModule() {
     module->eachPirClosure([&](Closure* c) {
         c->eachVersion([&](ClosureVersion* v) {
             logger.get(v).pirOptimizationsFinished(v);
+#ifdef ENABLE_SLOWASSERT
+            assert(Verify::apply(v, true));
+#else
             assert(Verify::apply(v));
+#endif
         });
     });
     logger.flush();

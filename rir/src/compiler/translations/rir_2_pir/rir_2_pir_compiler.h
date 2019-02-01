@@ -11,6 +11,8 @@ namespace pir {
 
 class Rir2PirCompiler : public RirCompiler {
   public:
+    static constexpr size_t MAX_INPUT_SIZE = 1000;
+
     static const Assumptions::Flags minimalAssumptions;
     static const Assumptions defaultAssumptions;
 

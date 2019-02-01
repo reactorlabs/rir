@@ -203,22 +203,22 @@ class Instruction : public Value {
         return false;
     }
 
-    void eachArg(Instruction::ArgumentValueIterator it) const {
+    void eachArg(const Instruction::ArgumentValueIterator& it) const {
         for (size_t i = 0; i < nargs(); ++i)
             it(arg(i).val());
     }
 
-    void eachArg(Instruction::ArgumentIterator it) const {
+    void eachArg(const Instruction::ArgumentIterator& it) const {
         for (size_t i = 0; i < nargs(); ++i)
             it(arg(i));
     }
 
-    void eachArg(Instruction::MutableArgumentIterator it) {
+    void eachArg(const Instruction::MutableArgumentIterator& it) {
         for (size_t i = 0; i < nargs(); ++i)
             it(arg(i));
     }
 
-    void eachArgRev(Instruction::ArgumentValueIterator it) const {
+    void eachArgRev(const Instruction::ArgumentValueIterator& it) const {
         for (size_t i = 0; i < nargs(); ++i)
             it(arg(nargs() - 1 - i).val());
     }
@@ -1098,8 +1098,10 @@ class VLIE(FrameState, Effect::None, EnvAccess::Read) {
 class CallInstruction {
   public:
     virtual size_t nCallArgs() const = 0;
-    virtual void eachCallArg(Instruction::ArgumentValueIterator it) const = 0;
-    virtual void eachCallArg(Instruction::MutableArgumentIterator it) = 0;
+    virtual void
+    eachCallArg(const Instruction::ArgumentValueIterator& it) const = 0;
+    virtual void
+    eachCallArg(const Instruction::MutableArgumentIterator& it) = 0;
     static CallInstruction* CastCall(Value* v);
     virtual void clearFrameState(){};
     virtual Closure* tryGetCls() const { return nullptr; }
@@ -1132,11 +1134,12 @@ class VLIE(Call, Effect::Any, EnvAccess::Leak), public CallInstruction {
     }
 
     size_t nCallArgs() const override { return nargs() - 3; };
-    void eachCallArg(Instruction::ArgumentValueIterator it) const override {
+    void eachCallArg(const Instruction::ArgumentValueIterator& it)
+        const override {
         for (size_t i = 0; i < nCallArgs(); ++i)
             it(arg(i + 2).val());
     }
-    void eachCallArg(Instruction::MutableArgumentIterator it) override {
+    void eachCallArg(const Instruction::MutableArgumentIterator& it) override {
         for (size_t i = 0; i < nCallArgs(); ++i)
             it(arg(i + 2));
     }
@@ -1169,11 +1172,12 @@ class VLIE(NamedCall, Effect::Any, EnvAccess::Leak), public CallInstruction {
               const std::vector<BC::PoolIdx>& names_, unsigned srcIdx);
 
     size_t nCallArgs() const override { return nargs() - 2; };
-    void eachCallArg(Instruction::ArgumentValueIterator it) const override {
+    void eachCallArg(const Instruction::ArgumentValueIterator& it)
+        const override {
         for (size_t i = 0; i < nCallArgs(); ++i)
             it(arg(i + 1).val());
     }
-    void eachCallArg(Instruction::MutableArgumentIterator it) override {
+    void eachCallArg(const Instruction::MutableArgumentIterator& it) override {
         for (size_t i = 0; i < nCallArgs(); ++i)
             it(arg(i + 1));
     }
@@ -1200,11 +1204,12 @@ class VLIE(StaticCall, Effect::Any, EnvAccess::Leak), public CallInstruction {
                unsigned srcIdx);
 
     size_t nCallArgs() const override { return nargs() - 2; };
-    void eachCallArg(Instruction::ArgumentValueIterator it) const override {
+    void eachCallArg(const Instruction::ArgumentValueIterator& it)
+        const override {
         for (size_t i = 0; i < nCallArgs(); ++i)
             it(arg(i + 1).val());
     }
-    void eachCallArg(Instruction::MutableArgumentIterator it) override {
+    void eachCallArg(const Instruction::MutableArgumentIterator& it) override {
         for (size_t i = 0; i < nCallArgs(); ++i)
             it(arg(i + 1));
     }
@@ -1231,11 +1236,12 @@ class VLIE(CallBuiltin, Effect::Any, EnvAccess::Leak), public CallInstruction {
     int builtinId;
 
     size_t nCallArgs() const override { return nargs() - 1; };
-    void eachCallArg(Instruction::ArgumentValueIterator it) const override {
+    void eachCallArg(const Instruction::ArgumentValueIterator& it)
+        const override {
         for (size_t i = 0; i < nCallArgs(); ++i)
             it(arg(i).val());
     }
-    void eachCallArg(Instruction::MutableArgumentIterator it) override {
+    void eachCallArg(const Instruction::MutableArgumentIterator& it) override {
         for (size_t i = 0; i < nCallArgs(); ++i)
             it(arg(i));
     }
@@ -1256,10 +1262,11 @@ class VLI(CallSafeBuiltin, Effect::None, EnvAccess::None),
     int builtinId;
 
     size_t nCallArgs() const override { return nargs(); };
-    void eachCallArg(Instruction::ArgumentValueIterator it) const override {
+    void eachCallArg(const Instruction::ArgumentValueIterator& it)
+        const override {
         eachArg(it);
     }
-    void eachCallArg(Instruction::MutableArgumentIterator it) override {
+    void eachCallArg(const Instruction::MutableArgumentIterator& it) override {
         eachArg(it);
     }
 
@@ -1282,17 +1289,17 @@ class VLIE(MkEnv, Effect::None, EnvAccess::Capture) {
     typedef std::function<void(SEXP name, Value* val)> LocalVarIt;
     typedef std::function<void(SEXP name, InstrArg&)> MutableLocalVarIt;
 
-    void eachLocalVar(MutableLocalVarIt it) {
+    RIR_INLINE void eachLocalVar(MutableLocalVarIt it) {
         for (size_t i = 0; i < envSlot(); ++i)
             it(varName[i], arg(i));
     }
 
-    void eachLocalVar(LocalVarIt it) const {
+    RIR_INLINE void eachLocalVar(LocalVarIt it) const {
         for (size_t i = 0; i < envSlot(); ++i)
             it(varName[i], arg(i).val());
     }
 
-    void eachLocalVarRev(LocalVarIt it) const {
+    RIR_INLINE void eachLocalVarRev(LocalVarIt it) const {
         for (long i = envSlot() - 1; i >= 0; --i)
             it(varName[i], arg(i).val());
     }
@@ -1338,7 +1345,7 @@ class VLI(Phi, Effect::None, EnvAccess::None) {
 
     typedef std::function<void(BB* bb, Value*)> PhiArgumentIterator;
 
-    void eachArg(PhiArgumentIterator it) const {
+    void eachArg(const PhiArgumentIterator& it) const {
         for (size_t i = 0; i < nargs(); ++i)
             it(input[i], arg(i).val());
     }
