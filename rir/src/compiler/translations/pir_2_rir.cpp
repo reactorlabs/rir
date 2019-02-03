@@ -85,7 +85,7 @@ class SSAAllocator {
                 bb->append(new Nop());
         });
 
-        code->printCode(std::cout, true);
+        // code->printCode(std::cout, true);
 
         sa(cls, code, log);
 
@@ -93,8 +93,8 @@ class SSAAllocator {
         computeStackAllocation();
         computeAllocation();
 
-        print(std::cout);
-        sa.print();
+        // print(std::cout);
+        // sa.print();
     }
 
     // Run backwards analysis to compute livenessintervals
@@ -629,7 +629,7 @@ class Context {
         auto res = cs().finalize(localsCnt);
         delete css.top();
         css.pop();
-        res->disassemble(std::cout);
+        // res->disassemble(std::cout);
         return res;
     }
 
