@@ -1272,7 +1272,6 @@ static bool DEOPT_CHAOS = getenv("PIR_DEOPT_CHAOS") &&
 static bool coinFlip() {
     static std::mt19937 gen(42);
     static std::bernoulli_distribution coin(0.2);
-    return true;
     return coin(gen);
 };
 
