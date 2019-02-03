@@ -138,7 +138,8 @@ AbstractResult ScopeAnalysis::apply(ScopeAnalysisState& state,
         auto force = Force::Cast(i);
         auto arg = force->arg<0>().val();
         if (!arg->type.maybeLazy()) {
-            effect.max(state.returnValues[i].merge(ValOrig(arg, i, depth)));
+            if (!arg->type.maybePromiseWrapped())
+                effect.max(state.returnValues[i].merge(ValOrig(arg, i, depth)));
             handled = true;
         }
 
@@ -146,7 +147,9 @@ AbstractResult ScopeAnalysis::apply(ScopeAnalysisState& state,
             lookup(state, arg->followCastsAndForce(),
                    [&](const AbstractPirValue& analysisRes) {
                        if (!analysisRes.type.maybeLazy()) {
-                           effect.max(state.returnValues[i].merge(analysisRes));
+                           if (!analysisRes.type.maybePromiseWrapped())
+                               effect.max(
+                                   state.returnValues[i].merge(analysisRes));
                            handled = true;
                        } else if (analysisRes.isSingleValue()) {
                            arg = analysisRes.singleValue().val;

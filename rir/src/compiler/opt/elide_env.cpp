@@ -59,6 +59,11 @@ void ElideEnv::apply(RirCompiler&, ClosureVersion* function, LogStream&) const {
                     if (!Env::isPirEnv(i))
                         envDependency[i] = i->env();
                 }
+
+                if (auto force = Force::Cast(i)) {
+                    if (!force->input()->type.maybeLazy())
+                        force->elideEnv();
+                }
             }
         }
     });

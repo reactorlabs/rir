@@ -172,7 +172,7 @@ class TheInliner {
                                     a, RType::prom,
                                     mk->eagerArg() == Missing::instance()
                                         ? PirType::any()
-                                        : PirType::val());
+                                        : PirType::promiseWrappedVal());
                                 ip = bb->insert(ip + 1, cast);
                                 ip--;
                                 a = cast;
