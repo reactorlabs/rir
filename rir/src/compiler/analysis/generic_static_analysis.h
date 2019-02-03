@@ -261,6 +261,7 @@ class StaticAnalysis {
                         exitpoint = state;
                         reachedExit = true;
                     }
+                    changed[id] = false;
                     return;
                 }
 
@@ -561,10 +562,6 @@ class BackwardStaticAnalysis {
 
                     if (bb == code->entry) {
                         logExit(state);
-
-                        // TODO: shouldn't the forward version also have this?
-                        changed[id] = false;
-
                         if (reachedExit) {
                             // TODO: is it ok to ignore the merge result here?
                             // (maybe because from exitpoint we don't go
@@ -574,6 +571,7 @@ class BackwardStaticAnalysis {
                             exitpoint = state;
                             reachedExit = true;
                         }
+                        changed[id] = false;
                         return;
                     }
 

@@ -1,5 +1,5 @@
 #include "pir_2_rir.h"
-#include "../analysis/stack_allocator.h"
+#include "../analysis/stack.h"
 #include "../pir/pir_impl.h"
 #include "../transform/bb.h"
 #include "../util/cfg.h"
@@ -13,18 +13,6 @@
 #include <algorithm>
 #include <iomanip>
 #include <sstream>
-
-// #define DEBUGGING
-#define ALLOC_DEBUG 1
-#define PHI_REMOVE_DEBUG 1
-
-#ifdef DEBUGGING
-#define DEBUGCODE(flag, code)                                                  \
-    if (flag)                                                                  \
-    code
-#else
-#define DEBUGCODE(flag, code) /* nothing */
-#endif
 
 namespace rir {
 namespace pir {
@@ -41,15 +29,7 @@ namespace {
  *        Instruction* -> BB id -> { start : pos, end : pos, live : bool}
  *    Two Instructions interfere iff there is a BB where they are both live
  *    and the start-end overlap.
- * 3. Use simple heuristics to detect Instructions that can stay on the RIR
- *    stack (see computeStackAllocation):
- *    1. Use stack slots for instructions which are used
- *       (i)   exactly once,
- *       (ii)  in stack order,
- *       (iii) within the same BB.
- *    2. Use stack slots for phi which are
- *       (i)  at the beginning of a BB, and
- *       (ii) all inputs are at the end of all immediate predecessor BBs.
+ * 3. ...
  * 4. Assign the remaining Instructions to local RIR variable numbers
  *    (see computeAllocation):
  *    1. Coalesc all remaining phi with their inputs. This is save since we are
@@ -65,17 +45,13 @@ class SSAAllocator {
     Code* code;
     size_t bbsSize;
 
+    StackAnalysis sa;
+
     typedef size_t SlotNumber;
     const static SlotNumber unassignedSlot = 0;
     const static SlotNumber stackSlot = -1;
 
     std::unordered_map<Value*, SlotNumber> allocation;
-
-    using ApplyCompensation = StackAllocator::ApplyCompensation;
-    using MergeCompensation = StackAllocator::MergeCompensation;
-
-    ApplyCompensation applyCompensation;
-    MergeCompensation mergeCompensation;
 
     struct BBLiveness {
         uint8_t live = false;
@@ -101,50 +77,24 @@ class SSAAllocator {
     std::unordered_map<Value*, Liveness> livenessInterval;
 
     explicit SSAAllocator(Code* code, ClosureVersion* cls, LogStream& log)
-        : cfg(code), dom(code), code(code), bbsSize(code->nextBBId) {
-        if (!preallocateToStack(cls, log)) {
-            computeLiveness();
-            computeStackAllocation();
-            computeAllocation();
-            verify();
-        }
-        // TODO: verification if stack allocator succeeds
-    }
+        : cfg(code), dom(code), code(code), bbsSize(code->nextBBId), sa(cfg) {
 
-    bool preallocateToStack(ClosureVersion* cls, LogStream& log) {
-
+        // Insert Nop into all empty blocks to make life easier
         Visitor::run(code->entry, [&](BB* bb) {
             if (bb->isEmpty())
                 bb->append(new Nop());
         });
 
-        StackAllocator sa(cls, code, log);
+        code->printCode(std::cout, true);
 
-        applyCompensation = sa.applyCompensation;
-        mergeCompensation = sa.mergeCompensation;
+        sa(cls, code, log);
 
-        for (auto& src : sa.mergeCompensation) {
-            for (auto& trg : src.second) {
-                if (trg.second.empty())
-                    continue;
+        computeLiveness();
+        computeStackAllocation();
+        computeAllocation();
 
-                BB* split = BBTransform::splitEdge(code->nextBBId++, src.first,
-                                                   trg.first, code);
-                split->append(new Nop());
-                auto i = split->first();
-                for (auto& v : trg.second) {
-                    applyCompensation[i].push_back(v);
-                }
-            }
-        }
-
-        SlotNumber slot = unassignedSlot;
-        Visitor::run(code->entry, [&](Instruction* i) {
-            allocation[i] =
-                (MkEnv::Cast(i) || LdFunctionEnv::Cast(i)) ? ++slot : stackSlot;
-        });
-
-        return true;
+        print(std::cout);
+        sa.print();
     }
 
     // Run backwards analysis to compute livenessintervals
@@ -276,86 +226,39 @@ class SSAAllocator {
     }
 
     void computeStackAllocation() {
-        Visitor::run(code->entry, [&](BB* bb) {
-            {
-                // If a phi is at the beginning of a BB, and all inputs are at
-                // the end of the immediate predecessors BB, we can allocate it
-                // on the stack, since the stack is otherwise empty at the BB
-                // boundaries.
-                size_t pos = 1;
-                for (auto i : *bb) {
-                    Phi* phi = Phi::Cast(i);
-                    if (!phi)
-                        break;
-                    bool argsInRightOrder = true;
-                    phi->eachArg([&](BB* in, Value* v) {
-                        argsInRightOrder =
-                            argsInRightOrder &&
-                            /* 1. the phi input block must not be a branch block
-                             *    and it must be the direct predecessor of
-                             *    the merge block. */
-                            in->isJmp() && in->next() == bb &&
-                            /* 2. the phi input value must be pushed in stack
-                             *    order. i.e. if we are currently looking for
-                             *    the inputs to the pos-th phi, then the phi
-                             *    input value must have been pushed as the
-                             *    pos-th last value. */
-                            in->size() >= pos && *(in->end() - pos) == v;
-                    });
-                    if (!argsInRightOrder)
-                        break;
-                    phi->eachArg(
-                        [&](BB*, Value* v) { allocation[v] = stackSlot; });
-                    allocation[phi] = stackSlot;
-                    pos++;
-                }
+
+        // For now, just flip a coin on where to put it
+        static auto coinFlip = [](double p) -> bool {
+            if (p < 0)
+                p = 0;
+            if (p > 1)
+                p = 1;
+            static std::mt19937 gen(7);
+            static std::bernoulli_distribution coin(p);
+            return coin(gen);
+        };
+
+        std::unordered_set<Value*> phis;
+
+        Visitor::run(code->entry, [&](Instruction* i) {
+            auto p = Phi::Cast(i);
+            if (!p || allocation.count(p))
+                return;
+            if (coinFlip(0.66)) {
+                allocation[p] = stackSlot;
+                p->eachArg(
+                    [&](BB*, Value* v) { allocation[v] = allocation[p]; });
+            } else {
+                phis.insert(p);
+                p->eachArg([&](BB*, Value* v) { phis.insert(v); });
             }
+        });
 
-            // Precolor easy stack load-stores within one BB
-            std::deque<Instruction*> stack;
-
-            auto tryLoadingArgsFromStack = [&](Instruction* i) {
-                if (i->nargs() == 0 || stack.size() < i->nargs())
-                    return;
-
-                // Match all args to stack slots.
-                size_t newStackSize = stack.size();
-                bool foundAll = true;
-                auto check = stack.rbegin();
-                i->eachArgRev([&](Value* arg) {
-                    while (check != stack.rend() && *check != arg) {
-                        ++check;
-                        --newStackSize;
-                    }
-
-                    if (check == stack.rend()) {
-                        foundAll = false;
-                    } else {
-                        // found arg!
-                        ++check;
-                        --newStackSize;
-                    }
-                });
-
-                if (!foundAll)
-                    return;
-
-                // pop args from stack, discarding all unmatched values
-                // in the process. For example if the stack contains
-                // [xxx, A, B, C] and we match [A, C], then we will mark
-                // A, C to be in a stack slot, discard B (it will become
-                // a local variable later) and resize the stack to [xxx]
-                stack.resize(newStackSize);
-                i->eachArgRev([&](Value* arg) { allocation[arg] = stackSlot; });
-            };
-
-            for (auto i : *bb) {
-                tryLoadingArgsFromStack(i);
-
-                if (!allocation.count(i) && !(i->type == PirType::voyd()) &&
-                    !Phi::Cast(i) && i->hasSingleUse()) {
-                    stack.push_back(i);
-                }
+        Visitor::run(code->entry, [&](Instruction* i) {
+            if (allocation.count(i))
+                return;
+            if (coinFlip(0.66) && phis.count(i) == 0) {
+                allocation[i] = stackSlot;
             }
         });
     }
@@ -437,52 +340,33 @@ class SSAAllocator {
     }
 
     void print(std::ostream& out) {
-
-        out << "Liveness intervals:\n";
-        for (auto ll : livenessInterval) {
-            auto& l = ll.second;
-            ll.first->printRef(out);
-            out << " is live : ";
-            for (size_t i = 0; i < bbsSize; ++i) {
-                if (l[i].live) {
-                    out << "BB" << i << " [";
-                    out << l[i].begin << ",";
-                    out << l[i].end << "]  ";
-                }
-            }
+        out << "Allocation\n";
+        for (auto a : allocation) {
+            out << "  ";
+            a.first->printRef(out);
+            out << ": ";
+            if (onStack(a.first))
+                out << "stack";
+            else
+                out << a.second;
             out << "\n";
         }
-
-        out << "Allocations:\n";
-        BreadthFirstVisitor::run(code->entry, [&](BB* bb) {
-            out << "BB" << bb->id << ": ";
-            for (auto a : allocation) {
-                auto i = a.first;
-                if (Instruction::Cast(i) && Instruction::Cast(i)->bb() != bb)
-                    continue;
+        out << "  dead: ";
+        BreadthFirstVisitor::run(code->entry, [&](Instruction* i) {
+            if (!hasSlot(i)) {
                 i->printRef(out);
-                out << "@";
-                if (allocation.at(i) == stackSlot)
-                    out << "s";
-                else
-                    out << a.second;
-                out << "   ";
-            }
-            out << "\n";
-        });
-        out << "dead: ";
-        BreadthFirstVisitor::run(code->entry, [&](BB* bb) {
-            for (auto i : *bb) {
-                if (allocation.count(i) == 0) {
-                    i->printRef(out);
-                    out << "   ";
-                }
+                out << " ";
             }
         });
-        out << "\nnumber of slots: " << slots() << "\n";
+        out << "\n"
+            << "  # slots: " << slots() << "\n";
     }
 
     void verify() {
+
+        // TODO: fix for new allocator!
+        return;
+
         // Explore all possible traces and verify the allocation
         typedef std::pair<BB*, BB*> Jmp;
         typedef std::unordered_map<size_t, Instruction*> RegisterFile;
@@ -646,6 +530,89 @@ class SSAAllocator {
     bool onStack(Value* v) const { return allocation.at(v) == stackSlot; }
 
     bool hasSlot(Value* v) const { return allocation.count(v); }
+
+    StackAnalysis::AbstractStack const& stackAfter(Instruction* instr) const {
+        static StackAnalysis::AbstractStack empty;
+        if (!instr)
+            return empty;
+        return sa.stacks.at(instr);
+    }
+
+    size_t getStackOffset(Instruction* afterInstruction,
+                          std::vector<bool>& used, Value* what,
+                          bool remove) const {
+
+        assert(afterInstruction);
+
+        auto stack = stackAfter(afterInstruction);
+        assert(stack.size() == used.size());
+
+        size_t offset = 0;
+
+        auto i = stack.data.rbegin();
+        size_t usedIdx = used.size() - 1;
+        while (i != stack.data.rend()) {
+            if (*i == what) {
+                if (remove)
+                    used[usedIdx] = true;
+                return offset;
+            }
+            if (hasSlot(*i) && onStack(*i) && !used[usedIdx])
+                ++offset;
+            ++i;
+            --usedIdx;
+        }
+
+        afterInstruction->printRef(std::cout);
+        std::cout << ": ";
+        usedIdx = 0;
+        for (auto y : stack.data) {
+            y->printRef(std::cout);
+            std::cout << (used[usedIdx++] ? "(used) " : " ");
+        }
+        std::cout << "- missing ";
+        what->printRef(std::cout);
+        std::cout << "\n";
+        assert(false && "Value wasn't found on the stack.");
+        return -1;
+    }
+
+    size_t stackPhiOffset(Instruction* executed, Phi* phi) const {
+        assert(executed);
+        auto stack = stackAfter(executed);
+        size_t offset = 0;
+        for (auto i = stack.data.rbegin(); i != stack.data.rend(); ++i) {
+            if (*i == phi || phi->anyArg([&](Value* v) { return *i == v; }))
+                return offset;
+            if (hasSlot(*i) && onStack(*i))
+                ++offset;
+        }
+        assert(false && "Phi wasn't found on the stack.");
+        return -1;
+    }
+
+    bool lastUse(Instruction* executed, Value* v) const {
+        assert(executed);
+        // TODO: inefficient, precompute in the stack analysis?
+        auto stack = stackAfter(executed);
+        for (auto i = stack.data.begin(); i != stack.data.end(); ++i)
+            if (*i == v)
+                return false;
+        return true;
+    }
+
+    bool lastUse(Instruction* executed, size_t argNumber) const {
+        assert(executed);
+        assert(argNumber < executed->nargs());
+        Value* v = executed->arg(argNumber).val();
+        if (!lastUse(executed, v))
+            return false;
+        for (size_t i = argNumber + 1; i < executed->nargs(); i++) {
+            if (executed->arg(i).val() == v)
+                return false;
+        }
+        return true;
+    }
 };
 
 class Context {
@@ -662,6 +629,7 @@ class Context {
         auto res = cs().finalize(localsCnt);
         delete css.top();
         css.pop();
+        res->disassemble(std::cout);
         return res;
     }
 
@@ -695,15 +663,26 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
 
     SSAAllocator alloc(code, cls, log);
     log.afterAllocator(code, [&](std::ostream& o) { alloc.print(o); });
+    alloc.verify();
 
-    // create labels for all bbs
+    // Create labels for all bbs
     std::unordered_map<BB*, BC::Label> bbLabels;
     BreadthFirstVisitor::run(code->entry, [&](BB* bb) {
         if (!bb->isEmpty())
             bbLabels[bb] = ctx.cs().mkLabel();
     });
 
+    // TODO:
+    // - better analyze which env is set at the end of a bb, so that
+    // we don't have to load it every time at the beginning of a successor bb
+    // - better handle when an env is needed after it's set, eg. if we have
+    // a setenv at the beginning and all instructions only use the one, we don't
+    // need to keep it around (and for eg. scheduled deopt we can emit getenv)
+    // - how come mkenv is explicit and ldfunctionenv is not?
+    // - how to pick lastInstr at the beginning of a merge block?
+
     LoweringVisitor::run(code->entry, [&](BB* bb) {
+        // This should now never happen (every bb has at least Nop)
         if (bb->isEmpty())
             return;
 
@@ -718,27 +697,58 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
 
         Value* currentEnv = nullptr;
 
+        Instruction* lastInstr =
+            alloc.cfg.immediatePredecessors(bb).size()
+                ? alloc.cfg.immediatePredecessors(bb).front()->last()
+                : nullptr;
+
         for (auto it = bb->begin(); it != bb->end(); ++it) {
             auto instr = *it;
 
-            bool hasResult =
-                instr->type != PirType::voyd() && !Phi::Cast(instr);
+            bool hasResult = instr->type != PirType::voyd();
 
-            auto explicitEnvValue = [](Instruction* instr) {
-                return MkEnv::Cast(instr);
-            };
-
-            // Load Arguments to the stack
+            // Prepare stack and araguments
             {
-                auto loadEnv = [&](BB::Instrs::iterator it, Value* what,
-                                   size_t& argStackSize, size_t argNumber) {
-                    bool pushed = false;
+
+                std::vector<bool> removedStackValues(
+                    alloc.stackAfter(lastInstr).size(), false);
+                size_t pushedStackValues = 0;
+
+                auto explicitEnvValue = [](Instruction* instr) {
+                    return MkEnv::Cast(instr);
+                };
+
+                auto moveToTOS = [&](size_t offset) {
+                    if (offset == 1)
+                        cs << BC::swap();
+                    else if (offset > 1)
+                        cs << BC::pick(offset);
+                };
+
+                auto copyToTOS = [&](size_t offset) {
+                    if (offset == 0)
+                        cs << BC::dup();
+                    else
+                        cs << BC::pull(offset);
+                };
+
+                auto getFromStack = [&](Value* what, size_t argNumber) {
+                    auto lastUse = alloc.lastUse(instr, argNumber);
+                    auto offset =
+                        alloc.getStackOffset(lastInstr, removedStackValues,
+                                             what, lastUse) +
+                        pushedStackValues;
+                    if (lastUse)
+                        moveToTOS(offset);
+                    else
+                        copyToTOS(offset);
+                };
+
+                auto loadEnv = [&](Value* what, size_t argNumber) {
                     if (what == Env::notClosed()) {
                         cs << BC::parentEnv();
-                        pushed = true;
                     } else if (what == Env::nil()) {
                         cs << BC::push(R_NilValue);
-                        pushed = true;
                     } else if (Env::isStaticEnv(what)) {
                         auto env = Env::Cast(what);
                         // Here we could also load env->rho, but if the user
@@ -748,7 +758,6 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                             cs << BC::parentEnv();
                         else
                             cs << BC::push(env->rho);
-                        pushed = true;
                     } else {
                         if (!alloc.hasSlot(what)) {
                             std::cerr << "Don't know how to load the env ";
@@ -756,49 +765,25 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                             std::cerr << " (" << tagToStr(what->tag) << ")\n";
                             assert(false);
                         }
-                        if (!alloc.onStack(what)) {
+                        if (alloc.onStack(what)) {
+                            getFromStack(what, argNumber);
+                        } else {
                             cs << BC::ldloc(alloc[what]);
                             debugAddVariableName(what);
-                            pushed = true;
                         }
                     }
-                    if (pushed) {
-                        // If there are more things on the stack than expected,
-                        // it means that some args where already there and we
-                        // need to put the argument into the right position
-                        if (argNumber != argStackSize) {
-                            assert(argNumber < argStackSize);
-                            cs << BC::put(argStackSize - argNumber);
-                        }
-                        argStackSize++;
-                    }
+                    pushedStackValues++;
                 };
 
-                // loading args must put the args in the correct stack positions
-                // (if some args are allocated on the stack before the
-                // instruction this would put the ones in locals on top of
-                // those...)
-                unsigned argOffset = 0;
-                instr->eachArg([&](Value* what) {
-                    if (alloc.hasSlot(what) && alloc.onStack(what))
-                        ++argOffset;
-                });
-
-                auto loadArg = [&](BB::Instrs::iterator it, Instruction* instr,
-                                   Value* what, size_t& argStackSize,
-                                   size_t argNumber) {
-                    bool pushed = false;
+                auto loadArg = [&](Value* what, size_t argNumber) {
                     if (what == Missing::instance()) {
                         assert(MkArg::Cast(instr) &&
                                "only mkarg supports missing");
                         cs << BC::push(R_UnboundValue);
-                        pushed = true;
                     } else if (what == True::instance()) {
                         cs << BC::push(R_TrueValue);
-                        pushed = true;
                     } else if (what == False::instance()) {
                         cs << BC::push(R_FalseValue);
-                        pushed = true;
                     } else {
                         if (!alloc.hasSlot(what)) {
                             std::cerr << "Don't know how to load the arg ";
@@ -806,94 +791,119 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                             std::cerr << " (" << tagToStr(what->tag) << ")\n";
                             assert(false);
                         }
-                        if (!alloc.onStack(what)) {
+                        if (alloc.onStack(what)) {
+                            getFromStack(what, argNumber);
+                        } else {
                             cs << BC::ldloc(alloc[what]);
                             debugAddVariableName(what);
-                            // pushed = true;
-                            if (argOffset == 1)
-                                cs << BC::swap();
-                            else if (argOffset > 1)
-                                cs << BC::put(argOffset);
-                        } else {
-                            if (argOffset)
-                                --argOffset;
                         }
                     }
-                    if (pushed) {
-                        // If there are more things on the stack than expected,
-                        // it means that some args where already there and we
-                        // need to put the argument into the right position
-                        if (argNumber != argStackSize) {
-                            assert(argNumber < argStackSize);
-                            cs << BC::put(argStackSize - argNumber);
-                        }
-                        argStackSize++;
+                    pushedStackValues++;
+                };
+
+                auto loadPhiArg = [&](Phi* phi) {
+                    if (!alloc.hasSlot(phi)) {
+                        std::cerr << "Don't know how to load the phi arg ";
+                        phi->printRef(std::cerr);
+                        std::cerr << " (" << tagToStr(phi->tag) << ")\n";
+                        assert(false);
+                    }
+                    if (alloc.onStack(phi)) {
+                        auto offset = alloc.stackPhiOffset(lastInstr, phi);
+                        moveToTOS(offset);
+                    } else {
+                        cs << BC::ldloc(alloc[phi]);
+                        debugAddVariableName(phi);
                     }
                 };
 
-                // Count how many things are already on the stack
-                size_t argStackSize = 0;
-                instr->eachArg([&](Value* what) {
-                    if (alloc.hasSlot(what) && alloc.onStack(what))
-                        argStackSize++;
-                });
+                // Remove values from the stack that are dead here
+                // ie. an elided environment that was allocated to stack
+                for (auto val : alloc.sa.toDrop[instr]) {
+                    // If it's not actually allocated on stack, do nothing
+                    if (!alloc.onStack(val))
+                        continue;
 
-                if (!Phi::Cast(instr)) {
+                    auto offset = alloc.getStackOffset(
+                        lastInstr, removedStackValues, val, true);
+                    moveToTOS(offset);
+                    cs << BC::pop();
+                }
+
+                // TODO: optimize the common case of
+                // args being last use and matching the stack contents at tos
+                // then no picks are needed, only fill in the values / locals
+                // and put those to correct offsets
+                if (auto phi = Phi::Cast(instr)) {
+                    loadPhiArg(phi);
+                } else {
                     size_t argNumber = 0;
                     instr->eachArg([&](Value* what) {
                         if (what == Env::elided() ||
-                            what->tag == Tag::Tombstone)
+                            what->tag == Tag::Tombstone) {
+                            argNumber++;
                             return;
+                        }
 
                         if (instr->hasEnv() && instr->env() == what) {
                             if (explicitEnvValue(instr)) {
-                                loadEnv(it, what, argStackSize, argNumber);
+                                loadEnv(what, argNumber);
                             } else {
                                 auto env = instr->env();
                                 if (currentEnv != env) {
-                                    size_t ignore = 0;
-                                    loadEnv(it, env, ignore, 0);
+                                    loadEnv(env, argNumber);
                                     cs << BC::setEnv();
                                     currentEnv = env;
                                 } else {
                                     if (alloc.hasSlot(env) &&
-                                        alloc.onStack(env))
+                                        alloc.onStack(env) &&
+                                        alloc.lastUse(instr, argNumber)) {
+                                        auto offset =
+                                            alloc.getStackOffset(
+                                                lastInstr, removedStackValues,
+                                                env, true) +
+                                            pushedStackValues;
+                                        moveToTOS(offset);
                                         cs << BC::pop();
+                                    }
                                 }
                             }
                         } else {
-                            loadArg(it, instr, what, argStackSize, argNumber);
+                            loadArg(what, argNumber);
                         }
-
                         argNumber++;
                     });
                 }
             }
 
             switch (instr->tag) {
+
             case Tag::LdConst: {
                 cs << BC::push(LdConst::Cast(instr)->c);
                 break;
             }
+
             case Tag::LdFun: {
                 auto ldfun = LdFun::Cast(instr);
                 cs << BC::ldfun(ldfun->varName);
                 break;
             }
+
             case Tag::LdVar: {
                 auto ldvar = LdVar::Cast(instr);
                 cs << BC::ldvarNoForce(ldvar->varName);
                 break;
             }
+
             case Tag::ForSeqSize: {
                 cs << BC::forSeqSize();
                 // TODO: currently we always pop the sequence, since we
                 // cannot deal with instructions that do not pop the value
-                // after use. If it is used in a later instruction, it will
-                // be loaded from a local variable again.
+                // after use.
                 cs << BC::swap() << BC::pop();
                 break;
             }
+
             case Tag::LdArg: {
                 auto ld = LdArg::Cast(instr);
                 cs << BC::ldarg(ld->id);
@@ -902,22 +912,28 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                     cs << BC::force();
                 break;
             }
+
             case Tag::StVarSuper: {
                 auto stvar = StVarSuper::Cast(instr);
                 cs << BC::stvarSuper(stvar->varName);
                 break;
             }
+
             case Tag::LdVarSuper: {
                 auto ldvar = LdVarSuper::Cast(instr);
                 cs << BC::ldvarNoForceSuper(ldvar->varName);
                 break;
             }
+
             case Tag::StVar: {
                 auto stvar = StVar::Cast(instr);
                 cs << BC::stvar(stvar->varName);
                 break;
             }
+
             case Tag::Branch: {
+                // TODO: jump through blocks now aren't empty, but have just one
+                // nop and no stack compensation
                 // jump through empty blocks
                 auto trueBranch = bb->trueBranch();
                 while (trueBranch->isEmpty())
@@ -929,20 +945,16 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 cs << BC::brtrue(bbLabels[trueBranch])
                    << BC::br(bbLabels[falseBranch]);
 
-                // this is the end of this BB
+                // This is the end of this BB
                 return;
             }
-            case Tag::Return: {
-                cs << BC::ret();
 
-                // this is the end of this BB
-                return;
-            }
             case Tag::MkArg: {
                 cs << BC::promise(
                     cs.addPromise(getPromise(ctx, MkArg::Cast(instr)->prom())));
                 break;
             }
+
             case Tag::MkFunCls: {
                 // TODO: would be nice to compile the function here. But I am
                 // not sure if our compiler backend correctly deals with not
@@ -954,23 +966,18 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                    << BC::push(cls->srcRef()) << BC::close();
                 break;
             }
+
             case Tag::Is: {
                 auto is = Is::Cast(instr);
                 cs << BC::is(is->sexpTag);
                 break;
             }
+
             case Tag::Subassign2_1D: {
                 cs << BC::subassign2();
                 cs.addSrcIdx(instr->srcIdx);
                 break;
             }
-
-#define EMPTY(Name)                                                            \
-    case Tag::Name: {                                                          \
-        break;                                                                 \
-    }
-                EMPTY(PirCopy);
-#undef EMPTY
 
             case Tag::CastType: {
                 auto cast = CastType::Cast(instr);
@@ -980,20 +987,20 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 break;
             }
 
-            case Tag::LdFunctionEnv: {
-                // TODO: what should happen? For now get the current env
-                // (should be the promise environment that the evaluator was
-                // called with) and store it into local and leave it set as
-                // current
-                cs << BC::getEnv();
-                break;
-            }
+#define EMPTY(Name)                                                            \
+    case Tag::Name: {                                                          \
+        break;                                                                 \
+    }
+                EMPTY(Nop);
+                EMPTY(PirCopy);
+#undef EMPTY
 
 #define SIMPLE(Name, Factory)                                                  \
     case Tag::Name: {                                                          \
         cs << BC::Factory();                                                   \
         break;                                                                 \
     }
+                SIMPLE(LdFunctionEnv, getEnv);
                 SIMPLE(Identical, identicalNoforce);
                 SIMPLE(LOr, lglOr);
                 SIMPLE(LAnd, lglAnd);
@@ -1006,11 +1013,11 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 SIMPLE(Seq, seq);
                 SIMPLE(MkCls, close);
                 SIMPLE(IsObject, isobj);
+                SIMPLE(SetShared, setShared);
+                SIMPLE(EnsureNamed, ensureNamed);
 #define V(V, name, Name) SIMPLE(Name, name);
                 SIMPLE_INSTRUCTIONS(V, _);
 #undef V
-                SIMPLE(SetShared, setShared);
-                SIMPLE(EnsureNamed, ensureNamed);
 #undef SIMPLE
 
 #define SIMPLE_WITH_SRCIDX(Name, Factory)                                      \
@@ -1059,12 +1066,14 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                                            Pool::get(call->srcIdx), {});
                 break;
             }
+
             case Tag::Call: {
                 auto call = Call::Cast(instr);
                 cs << BC::call(call->nCallArgs(), Pool::get(call->srcIdx),
                                call->inferAvailableAssumptions());
                 break;
             }
+
             case Tag::NamedCall: {
                 auto call = NamedCall::Cast(instr);
                 cs << BC::call(call->nCallArgs(), call->names,
@@ -1072,6 +1081,7 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                                call->inferAvailableAssumptions());
                 break;
             }
+
             case Tag::StaticCall: {
                 auto call = StaticCall::Cast(instr);
                 auto trg = call->optimisticDispatch();
@@ -1100,18 +1110,21 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                         trg, bc.immediate.staticCallFixedArgs.versionHint);
                 break;
             }
+
             case Tag::CallBuiltin: {
                 auto blt = CallBuiltin::Cast(instr);
                 cs << BC::callBuiltin(blt->nCallArgs(), Pool::get(blt->srcIdx),
                                       blt->blt);
                 break;
             }
+
             case Tag::CallSafeBuiltin: {
                 auto blt = CallSafeBuiltin::Cast(instr);
                 cs << BC::callBuiltin(blt->nargs(), Pool::get(blt->srcIdx),
                                       blt->blt);
                 break;
             }
+
             case Tag::MkEnv: {
                 auto mkenv = MkEnv::Cast(instr);
 
@@ -1128,6 +1141,7 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 }
                 break;
             }
+
             case Tag::Phi: {
                 // Phi functions are no-ops, because after allocation on
                 // CSSA form, all arguments and the funcion itself are
@@ -1140,6 +1154,14 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 });
                 break;
             }
+
+            case Tag::Return: {
+                cs << BC::ret();
+                // end of this BB, return
+                return;
+            }
+
+            case Tag::FrameState:
             case Tag::Deopt:
             case Tag::Assume:
             case Tag::Checkpoint: {
@@ -1148,6 +1170,7 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                                 "before pir_2_rir");
                 break;
             }
+
             case Tag::ScheduledDeopt: {
                 auto deopt = ScheduledDeopt::Cast(instr);
 
@@ -1168,73 +1191,51 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                     m->frames[i++] = *fi;
 
                 cs << BC::deopt(store);
+                // deopt is exit, return
                 return;
             }
-            case Tag::FrameState: {
-                assert(false && "FrameState must be folded into scheduled "
-                                "deopt, before pir_2_rir");
-                break;
-            }
-            case Tag::Nop: {
-                // only exists as a placeholder in an empty bb if that bb has to
-                // perform stack shuffling
-                break;
-            }
-            // values, not instructions
+
+            // Values, not instructions
             case Tag::Tombstone:
             case Tag::Missing:
             case Tag::Env:
             case Tag::Nil:
             case Tag::False:
-            case Tag::True:
+            case Tag::True: {
                 break;
-            // dummy sentinel enum item
-            case Tag::_UNUSED_:
+            }
+
+            // Dummy sentinel enum item
+            case Tag::_UNUSED_: {
                 break;
+            }
             }
 
             // Store the result
-            if (hasResult) {
-                if (!alloc.hasSlot(instr))
+            if (alloc.sa.dead.count(instr)) {
+                cs << BC::pop();
+            } else if (hasResult) {
+                if (!alloc.hasSlot(instr)) {
                     cs << BC::pop();
-                else if (!alloc.onStack(instr))
-                    cs << BC::stloc(alloc[instr]);
-            }
-
-            if (alloc.applyCompensation.count(instr)) {
-                for (auto bc : alloc.applyCompensation[instr]) {
-                    switch (bc.first) {
-                    case Opcode::pop_:
-                        cs << BC::pop();
-                        break;
-                    case Opcode::swap_:
-                        cs << BC::swap();
-                        break;
-                    case Opcode::dup_:
-                        cs << BC::dup();
-                        break;
-                    case Opcode::put_:
-                        cs << BC::put(bc.second);
-                        break;
-                    case Opcode::pull_:
-                        cs << BC::pull(bc.second);
-                        break;
-                    case Opcode::pick_:
-                        cs << BC::pick(bc.second);
-                        break;
-                    default:
-                        assert(false);
-                    }
+                } else if (!alloc.onStack(instr)) {
+                    cs << (alloc.lastUse(instr, instr)
+                               ? BC::pop()
+                               : BC::stloc(alloc[instr]));
                 }
             }
+
+            lastInstr = instr;
         }
 
-        // this BB has exactly one successor, trueBranch()
-        // jump through empty blocks
-        assert(bb->trueBranch());
+        // This BB has exactly one successor, trueBranch().
+        // Jump through empty blocks
+        assert(bb->trueBranch() && !bb->falseBranch());
         auto next = bb->trueBranch();
-        while (next->isEmpty())
+        // TODO: jump through blocks now aren't empty, but have just one nop and
+        // no stack compensation
+        while (next->isEmpty()) {
             next = next->trueBranch();
+        }
         cs << BC::br(bbLabels[next]);
     });
 
@@ -1268,6 +1269,7 @@ static bool DEOPT_CHAOS = getenv("PIR_DEOPT_CHAOS") &&
 static bool coinFlip() {
     static std::mt19937 gen(42);
     static std::bernoulli_distribution coin(0.2);
+    return true;
     return coin(gen);
 };
 
@@ -1361,6 +1363,7 @@ void Pir2Rir::toCSSA(Code* code) {
     BreadthFirstVisitor::run(code->entry, [&](BB* bb) {
         // TODO: move all phi's to the beginning, then insert the copies not
         // after each phi but after all phi's
+        // TODO 2: is it ok to insert copy before a branch?
         for (auto it = bb->begin(); it != bb->end(); ++it) {
             auto instr = *it;
             if (auto phi = Phi::Cast(instr)) {
