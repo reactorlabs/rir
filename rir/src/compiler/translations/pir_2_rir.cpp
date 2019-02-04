@@ -1272,7 +1272,7 @@ static bool DEOPT_CHAOS = getenv("PIR_DEOPT_CHAOS") &&
 static bool coinFlip() {
     static std::mt19937 gen(42);
     static std::bernoulli_distribution coin(0.2);
-    return coin(gen) || true;
+    return coin(gen);
 };
 
 void Pir2Rir::lower(Code* code) {
