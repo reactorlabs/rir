@@ -1739,11 +1739,17 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
             CallContext call(c, callee, n, ast, ostack_cell_at(ctx, n - 1),
                              *env, given, ctx);
             auto fun = Function::unpack(version);
-            if (fun->invocationCount() % RIR_WARMUP == 0 ||
-                !matches(call, fun->signature())) {
+            bool dispatchFail = !matches(call, fun->signature());
+            if (fun->invocationCount() % RIR_WARMUP == 0)
+                if (addDynamicAssumptionsForOneTarget(call, fun->signature()) !=
+                    fun->signature().assumptions)
+                    // We have more assumptions available, let's recompile
+                    dispatchFail = true;
+
+            if (dispatchFail) {
                 auto dt = DispatchTable::unpack(BODY(callee));
                 fun = dispatch(call, dt);
-                // Path inline cache
+                // Patch inline cache
                 (*(Immediate*)pc) = Pool::insert(fun->container());
                 assert(fun != dt->baseline());
             }
