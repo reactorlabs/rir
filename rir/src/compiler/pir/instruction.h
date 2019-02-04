@@ -1319,8 +1319,9 @@ class VLIE(MkEnv, Effect::None, EnvAccess::Capture) {
 };
 
 class VLI(Phi, Effect::None, EnvAccess::None) {
-  public:
     std::vector<BB*> input;
+
+  public:
     Phi() : VarLenInstruction(PirType::any()) {}
     Phi(const std::initializer_list<Value*>& vals,
         const std::initializer_list<BB*>& inputs)
@@ -1338,13 +1339,21 @@ class VLI(Phi, Effect::None, EnvAccess::None) {
     }
     void pushArg(Value* a) override { assert(false && "use addInput"); }
     void addInput(BB* in, Value* arg) {
+        SLOWASSERT(std::find(input.begin(), input.end(), in) == input.end() &&
+                   "Duplicate PHI input block");
         input.push_back(in);
         args_.push_back(InstrArg(arg, PirType::any()));
     }
+    BB* inputAt(size_t i) const { return input.at(i); }
+    void updateInputAt(size_t i, BB* bb) {
+        SLOWASSERT(std::find(input.begin(), input.end(), bb) == input.end() &&
+                   "Duplicate PHI input block");
+        input[i] = bb;
+    }
+    const std::vector<BB*>& inputs() { return input; }
     void removeInputs(const std::unordered_set<BB*>& del);
 
     typedef std::function<void(BB* bb, Value*)> PhiArgumentIterator;
-
     void eachArg(const PhiArgumentIterator& it) const {
         for (size_t i = 0; i < nargs(); ++i)
             it(input[i], arg(i).val());

@@ -64,7 +64,7 @@ class TheCleanup {
                         phi->replaceUsesWith(*phin.begin());
                         next = bb->remove(ip);
                     } else {
-                        for (auto curBB : phi->input)
+                        for (auto curBB : phi->inputs())
                             usedBB[curBB].insert(phi);
                     }
                 } else if (auto arg = MkArg::Cast(i)) {
@@ -152,9 +152,9 @@ class TheCleanup {
 
         auto fixupPhiInput = [&](BB* old, BB* n) {
             for (auto phi : usedBB[old]) {
-                for (auto& in : phi->input)
-                    if (in == old)
-                        in = n;
+                for (size_t i = 0; i < phi->nargs(); ++i)
+                    if (phi->inputAt(i) == old)
+                        phi->updateInputAt(i, n);
             }
         };
         CFG cfg(function);

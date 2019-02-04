@@ -1253,7 +1253,7 @@ void Pir2Rir::toCSSA(Code* code) {
             Phi* phi = Phi::Cast(instr);
             if (phi) {
                 for (size_t i = 0; i < phi->nargs(); ++i) {
-                    BB* pred = phi->input[i];
+                    BB* pred = phi->inputAt(i);
                     // pred is either jump (insert copy at end) or branch
                     // (insert copy before the branch instr)
                     auto it = pred->isJmp() ? pred->end() : pred->end() - 1;
