@@ -30,6 +30,10 @@ extern Rboolean R_Visible;
 
 using namespace rir;
 
+struct CallContext;
+static RIR_INLINE Assumptions
+addDynamicAssumptionsFromContext(const CallContext& call, const Assumptions&);
+
 struct CallContext {
     CallContext(Code* c, SEXP callee, size_t nargs, SEXP ast,
                 R_bcstack_t* stackArgs, Immediate* implicitArgs,
@@ -38,7 +42,8 @@ struct CallContext {
         : caller(c), suppliedArgs(nargs), passedArgs(nargs),
           stackArgs(stackArgs), implicitArgs(implicitArgs), names(names),
           callerEnv(callerEnv), ast(ast), callee(callee),
-          givenAssumptions(givenAssumptions) {
+          givenAssumptions(
+              addDynamicAssumptionsFromContext(*this, givenAssumptions)) {
         assert(callee &&
                (TYPEOF(callee) == CLOSXP || TYPEOF(callee) == SPECIALSXP ||
                 TYPEOF(callee) == BUILTINSXP));
@@ -574,14 +579,9 @@ static SEXP findRootPromise(SEXP p) {
     return p;
 }
 
-RIR_INLINE Assumptions addDynamicAssumptions(
-    const CallContext& call, const FunctionSignature& signature) {
-    Assumptions given = call.givenAssumptions;
-
-    if (call.suppliedArgs <= signature.formalNargs()) {
-        given.numMissing(signature.formalNargs() - call.suppliedArgs);
-    }
-
+static RIR_INLINE Assumptions addDynamicAssumptionsFromContext(
+    const CallContext& call, const Assumptions& given_) {
+    Assumptions given(given_);
     given.add(Assumption::NoExplicitlyMissingArgs);
     if (call.hasStackArgs()) {
         // Always true in this case, since we will pad missing args on the stack
@@ -615,9 +615,6 @@ RIR_INLINE Assumptions addDynamicAssumptions(
             testArg(i);
         }
     } else {
-        if (call.suppliedArgs >= signature.expectedNargs())
-            given.add(Assumption::NotTooFewArguments);
-
         for (size_t i = 0; i < call.suppliedArgs; ++i) {
             if (call.missingArg(i))
                 given.remove(Assumption::NoExplicitlyMissingArgs);
@@ -626,6 +623,22 @@ RIR_INLINE Assumptions addDynamicAssumptions(
 
     if (!call.hasNames())
         given.add(Assumption::CorrectOrderOfArguments);
+
+    return given;
+}
+
+RIR_INLINE Assumptions addDynamicAssumptionsForOneTarget(
+    const CallContext& call, const FunctionSignature& signature) {
+    Assumptions given = call.givenAssumptions;
+
+    if (call.suppliedArgs <= signature.formalNargs()) {
+        given.numMissing(signature.formalNargs() - call.suppliedArgs);
+    }
+
+    if (!call.hasStackArgs()) {
+        if (call.suppliedArgs >= signature.expectedNargs())
+            given.add(Assumption::NotTooFewArguments);
+    }
 
     if (call.suppliedArgs <= signature.formalNargs())
         given.add(Assumption::NotTooManyArguments);
@@ -658,7 +671,7 @@ RIR_INLINE bool matches(const CallContext& call,
                 return false;
     }
 
-    Assumptions given = addDynamicAssumptions(call, signature);
+    Assumptions given = addDynamicAssumptionsForOneTarget(call, signature);
 
 #ifdef DEBUG_DISPATCH
     std::cout << "have   " << given << "\n";
@@ -713,7 +726,14 @@ RIR_INLINE SEXP rirCall(CallContext& call, Context* ctx) {
     fun->registerInvocation();
 
     if (!fun->unoptimizable && fun->invocationCount() % RIR_WARMUP == 0) {
-        Assumptions given = addDynamicAssumptions(call, fun->signature());
+        Assumptions given =
+            addDynamicAssumptionsForOneTarget(call, fun->signature());
+        // addDynamicAssumptionForOneTarget compares arguments with the
+        // signature of the current dispatch target. There the number of
+        // arguments might be off. But we want to force compiling a new version
+        // exactly for this number of arguments, thus we need to add this as an
+        // explicit assumption.
+        given.add(Assumption::NotTooFewArguments);
         if (fun == table->baseline() || given != fun->signature().assumptions) {
             if (Assumptions(given).includes(
                     pir::Rir2PirCompiler::minimalAssumptions)) {

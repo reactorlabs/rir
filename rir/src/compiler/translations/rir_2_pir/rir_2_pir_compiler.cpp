@@ -71,7 +71,8 @@ void Rir2PirCompiler::compileClosure(Closure* closure,
         for (const auto& a : minimalAssumptions) {
             if (!ctx.assumptions.includes(a)) {
                 std::stringstream as;
-                as << a;
+                as << "Missing minimal assumption " << a;
+                logger.warn(as.str());
                 return fail_();
             }
         }
