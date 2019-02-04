@@ -28,19 +28,16 @@ class EnumSet {
     }
 
   public:
-    EnumSet() {
+    EnumSet() {}
+    EnumSet(const EnumSet& other) noexcept = default;
+
+    constexpr EnumSet(Element e) : set_(1UL << static_cast<size_t>(e)) {
         static_assert(sizeof(*this) == sizeof(Store),
                       "No room for extra stuff");
     }
 
-    EnumSet(const std::initializer_list<Element>& ts) {
-        for (auto t : ts)
-            set(t);
-    }
-
     static_assert(!std::is_same<Element, Store>::value, "That is confusing");
-    EnumSet(const Element& e) { set(e); }
-    EnumSet(const Store& s) : set_(s) {}
+    constexpr EnumSet(const Store& s) : set_(s) {}
 
     RIR_INLINE bool contains(const Element& e) const {
         assert(boundscheck(e));
@@ -85,11 +82,11 @@ class EnumSet {
         return EnumSet(t) != set_;
     }
 
-    RIR_INLINE EnumSet operator|(const EnumSet& s) const {
+    constexpr RIR_INLINE EnumSet operator|(const EnumSet& s) const {
         return EnumSet(s.set_ | set_);
     }
 
-    RIR_INLINE EnumSet operator|(const Element& t) const {
+    constexpr RIR_INLINE EnumSet operator|(const Element& t) const {
         return *this | EnumSet(t);
     }
 

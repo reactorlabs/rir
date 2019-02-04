@@ -30,10 +30,6 @@ extern Rboolean R_Visible;
 
 using namespace rir;
 
-struct CallContext;
-static RIR_INLINE Assumptions
-addDynamicAssumptionsFromContext(const CallContext& call, const Assumptions&);
-
 struct CallContext {
     CallContext(Code* c, SEXP callee, size_t nargs, SEXP ast,
                 R_bcstack_t* stackArgs, Immediate* implicitArgs,
@@ -42,8 +38,7 @@ struct CallContext {
         : caller(c), suppliedArgs(nargs), passedArgs(nargs),
           stackArgs(stackArgs), implicitArgs(implicitArgs), names(names),
           callerEnv(callerEnv), ast(ast), callee(callee),
-          givenAssumptions(
-              addDynamicAssumptionsFromContext(*this, givenAssumptions)) {
+          givenAssumptions(givenAssumptions) {
         assert(callee &&
                (TYPEOF(callee) == CLOSXP || TYPEOF(callee) == SPECIALSXP ||
                 TYPEOF(callee) == BUILTINSXP));
@@ -83,7 +78,7 @@ struct CallContext {
     const SEXP callerEnv;
     const SEXP ast;
     const SEXP callee;
-    const Assumptions givenAssumptions;
+    Assumptions givenAssumptions;
     SEXP arglist = nullptr;
 
     bool hasStackArgs() const { return stackArgs != nullptr; }
@@ -579,9 +574,20 @@ static SEXP findRootPromise(SEXP p) {
     return p;
 }
 
-static RIR_INLINE Assumptions addDynamicAssumptionsFromContext(
-    const CallContext& call, const Assumptions& given_) {
-    Assumptions given(given_);
+static constexpr Assumptions::Flags ALL_ASSUMPTIONS =
+    Assumptions::Flags(Assumption::NotTooFewArguments) |
+    Assumption::EagerArgs_ | Assumption::NonObjectArgs_ |
+    Assumption::NoExplicitlyMissingArgs;
+void addDynamicAssumptionsFromContext(CallContext& call) {
+    Assumptions& given = call.givenAssumptions;
+
+    if (!call.hasNames())
+        given.add(Assumption::CorrectOrderOfArguments);
+
+    // Fast track if all the assumptions are already statically there
+    if (given.includes(ALL_ASSUMPTIONS))
+        return;
+
     given.add(Assumption::NoExplicitlyMissingArgs);
     if (call.hasStackArgs()) {
         // Always true in this case, since we will pad missing args on the stack
@@ -620,11 +626,6 @@ static RIR_INLINE Assumptions addDynamicAssumptionsFromContext(
                 given.remove(Assumption::NoExplicitlyMissingArgs);
         }
     }
-
-    if (!call.hasNames())
-        given.add(Assumption::CorrectOrderOfArguments);
-
-    return given;
 }
 
 RIR_INLINE Assumptions addDynamicAssumptionsForOneTarget(
@@ -722,6 +723,7 @@ RIR_INLINE SEXP rirCall(CallContext& call, Context* ctx) {
 
     auto table = DispatchTable::unpack(body);
 
+    addDynamicAssumptionsFromContext(call);
     Function* fun = dispatch(call, table);
     fun->registerInvocation();
 
@@ -772,7 +774,7 @@ RIR_INLINE SEXP rirCall(CallContext& call, Context* ctx) {
             // Instead of a SEXP with the argslist we create an
             // structure with the information needed to recreate
             // the list lazily if the gnu-r interpreter needs it
-            ArgsLazyData lazyArgs = ArgsLazyData(&call, ctx);
+            ArgsLazyData lazyArgs(&call, ctx);
             if (!arglist)
                 arglist = (SEXP)&lazyArgs;
             supplyMissingArgs(call, fun);
@@ -1258,7 +1260,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
     };
 #endif
 
-    std::deque<FrameInfo*> synthesizeFrames;
+    std::deque<FrameInfo*>* synthesizeFrames = nullptr;
     assert(c->info.magic == CODE_MAGIC);
 
     if (!localsBase) {
@@ -1746,6 +1748,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
             CallContext call(c, callee, n, ast, ostack_cell_at(ctx, n - 1),
                              *env, given, ctx);
             auto fun = Function::unpack(version);
+            addDynamicAssumptionsFromContext(call);
             bool dispatchFail = !matches(call, fun->signature());
             if (fun->invocationCount() % RIR_WARMUP == 0)
                 if (addDynamicAssumptionsForOneTarget(call, fun->signature()) !=
@@ -1762,7 +1765,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
             }
             advanceImmediate();
 
-            ArgsLazyData lazyArgs = ArgsLazyData(&call, ctx);
+            ArgsLazyData lazyArgs(&call, ctx);
             fun->registerInvocation();
             supplyMissingArgs(call, fun);
             res = rirCallTrampoline(call, fun, *env, (SEXP)&lazyArgs,
@@ -2854,8 +2857,11 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
             }
 #endif
 
-            for (size_t i = 1; i < m->numFrames; ++i)
-                synthesizeFrames.push_back(&m->frames[i]);
+            for (size_t i = 1; i < m->numFrames; ++i) {
+                if (!synthesizeFrames)
+                    synthesizeFrames = new std::deque<FrameInfo*>;
+                synthesizeFrames->push_back(&m->frames[i]);
+            }
 
             FrameInfo& f = m->frames[0];
             pc = f.pc;
@@ -3097,17 +3103,20 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
     }
 
 eval_done:
-    while (!synthesizeFrames.empty()) {
-        FrameInfo* f = synthesizeFrames.front();
-        synthesizeFrames.pop_front();
-        SEXP res = ostack_pop(ctx);
-        SEXP e = ostack_pop(ctx);
-        assert(TYPEOF(e) == ENVSXP);
-        *env = e;
-        ostack_push(ctx, res);
-        f->code->registerInvocation();
-        res = evalRirCode(f->code, ctx, env, callCtxt, f->pc);
-        ostack_push(ctx, res);
+    if (synthesizeFrames) {
+        while (!synthesizeFrames->empty()) {
+            FrameInfo* f = synthesizeFrames->front();
+            synthesizeFrames->pop_front();
+            SEXP res = ostack_pop(ctx);
+            SEXP e = ostack_pop(ctx);
+            assert(TYPEOF(e) == ENVSXP);
+            *env = e;
+            ostack_push(ctx, res);
+            f->code->registerInvocation();
+            res = evalRirCode(f->code, ctx, env, callCtxt, f->pc);
+            ostack_push(ctx, res);
+        }
+        delete synthesizeFrames;
     }
     return ostack_pop(ctx);
 }
