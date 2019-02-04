@@ -158,6 +158,24 @@ struct StackAnalysisState {
         if ((i && i->bb()->isExit()) && (other.i && other.i->bb()->isExit()))
             return AbstractResult::None;
 
+        // if (stack.size() != other.stack.size()) {
+        //     std::cout << "me:    ";
+        //     if (i) i->printRef(std::cout);
+        //     std::cout << " - ";
+        //     for (auto x : stack.data) {
+        //         x->printRef(std::cout); std::cout << " ";
+        //     }
+        //     if (i) i->bb()->print(std::cout, true);
+        //     std::cout << "\nother: ";
+        //     if (other.i) other.i->printRef(std::cout);
+        //     std::cout << " - ";
+        //     for (auto x : other.stack.data) {
+        //         x->printRef(std::cout); std::cout << " ";
+        //     }
+        //     std::cout << "\n";
+        //     if (other.i) other.i->bb()->print(std::cout, true);
+        // }
+
         stack.match(other.stack);
 
         return AbstractResult::None;
@@ -209,7 +227,7 @@ AbstractResult TheStackAnalysis::apply(StackAnalysisState& state,
         if (!Instruction::Cast(v))
             return false;
         if (auto use = Instruction::Cast(v)->hasSingleUse()) {
-            return Phi::Cast(use) && use->bb() == i->bb();
+            return Phi::Cast(use);
         }
         return false;
     };
