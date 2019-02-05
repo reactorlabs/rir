@@ -129,11 +129,6 @@ class Context {
     }
 };
 
-// `true` if an argument isn't missing, labeled, or `...`.
-bool isRegularArg(RListIter& arg) {
-    return *arg != R_DotsSymbol && *arg != R_MissingArg && !arg.hasTag();
-}
-
 Code* compilePromise(Context& ctx, SEXP exp);
 void compileExpr(Context& ctx, SEXP exp);
 void compileCall(Context& ctx, SEXP ast, SEXP fun, SEXP args);
@@ -142,6 +137,11 @@ void compileCall(Context& ctx, SEXP ast, SEXP fun, SEXP args);
 // TODO: once we have sufficiently powerful analysis this should (maybe?) go
 //       away and move to an optimization phase.
 bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
+    // `true` if an argument isn't missing, labeled, or `...`.
+    auto isRegularArg = [](RListIter& arg) {
+        return *arg != R_DotsSymbol && *arg != R_MissingArg && !arg.hasTag();
+    };
+
     RList args(args_);
     CodeStream& cs = ctx.cs();
 
