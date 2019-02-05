@@ -391,9 +391,7 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
         RListIter idx = g.begin() + 2;
         RListIter idx2 = is2d ? (g.begin() + 3) : idx;
         if ((fun2 != symbol::Bracket && fun2 != symbol::DoubleBracket) ||
-            !isRegularArg(idx) ||
-            // TODO: Figure out why 2d bracket assign fails sometimes
-            (is2d && (fun2 == symbol::Bracket || !isRegularArg(idx2)))) {
+            !isRegularArg(idx) || (is2d && !isRegularArg(idx2))) {
             return false;
         }
 
