@@ -71,5 +71,38 @@ ClosureVersion::ClosureVersion(Closure* closure,
     nameSuffix_ = id.str();
 }
 
+std::ostream& operator<<(std::ostream& out, const ClosureVersion::Property& p) {
+    switch (p) {
+    case ClosureVersion::Property::IsEager:
+        out << "Eager";
+        break;
+    case ClosureVersion::Property::NoReflection:
+        out << "!Reflection";
+        break;
+    }
+    return out;
+}
+
+std::ostream& operator<<(std::ostream& out,
+                         const ClosureVersion::Properties& props) {
+    for (auto p = props.begin(); p != props.end(); ++p) {
+        out << *p;
+        if ((p + 1) != props.end())
+            out << ", ";
+    }
+    if (props.argumentForceOrder.size() > 0) {
+        if (!props.empty())
+            out << ", ";
+        out << "ForceOrd: ";
+        for (auto o = props.argumentForceOrder.begin();
+             o != props.argumentForceOrder.end(); ++o) {
+            out << *o;
+            if ((o + 1) != props.argumentForceOrder.end())
+                out << " ";
+        }
+    }
+    return out;
+}
+
 } // namespace pir
 } // namespace rir

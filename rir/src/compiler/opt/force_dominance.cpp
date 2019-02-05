@@ -48,12 +48,9 @@ struct ForcedBy {
     std::unordered_set<Value*> inScope;
     std::unordered_set<Value*> escaped;
 
-    size_t eagerFunction = 0;
-    static constexpr size_t NotEagerFunction = -1;
-
-    bool isEagerFunction(ClosureVersion* cls) const {
-        return eagerFunction == cls->nargs();
-    }
+    std::vector<size_t> argumentForceOrder;
+    bool ambiguousForceOrder = false;
+    bool forceArgsBeforeEffect = true;
 
     static Force* ambiguous() {
         static Force f(Nil::instance(), Env::nil());
@@ -136,13 +133,61 @@ struct ForcedBy {
             }
         }
 
-        if (eagerFunction != NotEagerFunction &&
-            eagerFunction != other.eagerFunction) {
-            eagerFunction = NotEagerFunction;
+        if (forceArgsBeforeEffect && !other.forceArgsBeforeEffect) {
+            forceArgsBeforeEffect = false;
             res.update();
         }
 
+        if (!ambiguousForceOrder && other.ambiguousForceOrder) {
+            ambiguousForceOrder = true;
+            res.update();
+        }
+
+        if (argumentForceOrder != other.argumentForceOrder) {
+            auto mySize = argumentForceOrder.size();
+            auto otherSize = other.argumentForceOrder.size();
+            auto common = mySize;
+
+            if (mySize > otherSize) {
+                argumentForceOrder.resize(otherSize);
+                ambiguousForceOrder = true;
+                common = otherSize;
+                res.update();
+            } else if (!ambiguousForceOrder && otherSize > mySize) {
+                ambiguousForceOrder = true;
+                res.update();
+            }
+
+            for (size_t i = 0; i < common; ++i) {
+                if (argumentForceOrder[i] != other.argumentForceOrder[i]) {
+                    argumentForceOrder.resize(i);
+                    ambiguousForceOrder = true;
+                    res.update();
+                    break;
+                }
+            }
+        }
+
         return res;
+    }
+
+    bool maybeForced(size_t i) const {
+        for (auto f : argumentForceOrder) {
+            if (f == i)
+                return true;
+        }
+        return ambiguousForceOrder;
+    }
+
+    bool eagerLikeFunction(ClosureVersion* fun) const {
+        if (!forceArgsBeforeEffect)
+            return false;
+        if (ambiguousForceOrder || argumentForceOrder.size() < fun->nargs())
+            return false;
+        for (size_t i = 0; i < fun->nargs(); ++i)
+            if (argumentForceOrder[i] != i)
+                return false;
+        return true;
     }
 
     bool isDominatingForce(Force* f) const {
@@ -216,14 +261,10 @@ class ForceDominanceAnalysis : public StaticAnalysis<ForcedBy> {
             if (MkArg* arg = MkArg::Cast(f->arg<0>().val()->followCasts()))
                 changed = state.forcedAt(arg, f) || changed;
             if (LdArg* arg = LdArg::Cast(f->arg<0>().val()->followCasts())) {
-                changed = state.forcedAt(arg, f) || changed;
-                if (state.eagerFunction != ForcedBy::NotEagerFunction) {
-                    if (arg->id == state.eagerFunction) {
-                        state.eagerFunction++;
-                        changed = true;
-                    } else if (state.eagerFunction !=
-                               ForcedBy::NotEagerFunction) {
-                        state.eagerFunction = ForcedBy::NotEagerFunction;
+                if (arg->type.maybeLazy()) {
+                    changed = state.forcedAt(arg, f) || changed;
+                    if (!state.maybeForced(arg->id)) {
+                        state.argumentForceOrder.push_back(arg->id);
                         changed = true;
                     }
                 }
@@ -242,8 +283,10 @@ class ForceDominanceAnalysis : public StaticAnalysis<ForcedBy> {
             });
             if (i->mayForcePromises())
                 changed = state.sideeffect() || changed;
-            if (i->hasEffect() && state.eagerFunction != closure->nargs()) {
-                state.eagerFunction = ForcedBy::NotEagerFunction;
+            if (i->hasEffect() && state.forceArgsBeforeEffect &&
+                (state.ambiguousForceOrder ||
+                 state.argumentForceOrder.size() < closure->nargs())) {
+                state.forceArgsBeforeEffect = false;
                 changed = true;
             }
         }
@@ -262,8 +305,9 @@ void ForceDominance::apply(RirCompiler&, ClosureVersion* cls,
         ForceDominanceAnalysis analysis(cls, code, log);
         analysis();
         auto& result = analysis.result();
-        if (result.isEagerFunction(cls))
+        if (result.eagerLikeFunction(cls))
             cls->properties.set(ClosureVersion::Property::IsEager);
+        cls->properties.argumentForceOrder = result.argumentForceOrder;
 
         std::unordered_map<Force*, Value*> inlinedPromise;
         std::unordered_map<Instruction*, MkArg*> forcedMkArg;

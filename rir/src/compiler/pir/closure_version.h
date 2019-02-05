@@ -24,12 +24,16 @@ class ClosureVersion : public Code {
 
         FIRST = IsEager,
         LAST = NoReflection
+
     };
 
     struct Properties : public EnumSet<Property> {
         Properties() : EnumSet<Property>(){};
         Properties(const EnumSet<Property>& other) : EnumSet<Property>(other) {}
         Properties(const Property& other) : EnumSet<Property>(other) {}
+
+        std::vector<size_t> argumentForceOrder;
+        friend std::ostream& operator<<(std::ostream& out, const Properties&);
     };
 
   private:
@@ -88,6 +92,8 @@ class ClosureVersion : public Code {
 
     ~ClosureVersion();
 };
+
+std::ostream& operator<<(std::ostream& out, const ClosureVersion::Property&);
 
 } // namespace pir
 } // namespace rir

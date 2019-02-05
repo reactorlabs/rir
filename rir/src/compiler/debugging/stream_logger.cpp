@@ -29,20 +29,16 @@ bool BufferedLogStream::tty() { return ConsoleColor::isTTY(actualOut); }
 LogStream& StreamLogger::begin(ClosureVersion* cls) {
     assert(!streams.count(cls) && "You already started this function");
 
-    std::stringstream id;
-    id << cls->name() << " " << cls->assumptions();
-
     if (options.includes(DebugFlag::PrintIntoFiles)) {
         std::stringstream filename;
         filename << "pir-function-" << std::setfill('0') << std::setw(5)
                  << logId++ << "-" << cls->name() << ".log";
-        streams.emplace(cls,
-                        new FileLogStream(options, id.str(), filename.str()));
+        streams.emplace(cls, new FileLogStream(options, cls, filename.str()));
     } else {
         if (options.includes(DebugFlag::PrintIntoStdout))
-            streams.emplace(cls, new LogStream(options, id.str()));
+            streams.emplace(cls, new LogStream(options, cls));
         else
-            streams.emplace(cls, new BufferedLogStream(options, id.str()));
+            streams.emplace(cls, new BufferedLogStream(options, cls));
     }
 
     auto& logger = get(cls);
@@ -159,14 +155,14 @@ void StreamLogger::warn(const std::string& msg) {
 void LogStream::warn(const std::string& msg) {
     if (options.includes(DebugFlag::ShowWarnings)) {
         preparePrint();
-        out << "Warning: " << msg << " in " << id << "\n";
+        out << "Warning: " << msg << " in " << version->name() << "\n";
     }
 }
 
 void LogStream::failed(const std::string& msg) {
     if (options.includes(DebugFlag::ShowWarnings)) {
         preparePrint();
-        out << "Failed: " << msg << " in " << id << "\n";
+        out << "Failed: " << msg << " in " << version->name() << "\n";
     }
 }
 
@@ -184,14 +180,21 @@ void LogStream::header() {
     out << "\n┌";
     for (size_t i = 0; i < 78; ++i)
         out << "─";
+    std::stringstream assumptions;
+    assumptions << "Assumptions: " << version->assumptions();
+    std::stringstream properties;
+    properties << "Properties:  " << version->properties;
     out << "┐\n";
-    out << "│ " << std::left << std::setw(77) << id << "│\n";
+    out << "│ " << std::left << std::setw(77) << version->name() << "│\n";
+    out << "│ " << std::left << std::setw(77) << assumptions.str() << "│\n";
+    if (properties.str() != "")
+        out << "│ " << std::left << std::setw(77) << properties.str() << "│\n";
     highlightOff();
 }
 
 void LogStream::footer() {
     highlightOn();
-    out << "│ " << std::left << std::setw(77) << id << "│\n";
+    out << "│ " << std::left << std::setw(77) << version->name() << "│\n";
     out << "└";
     for (size_t i = 0; i < 78; ++i)
         out << "─";
@@ -204,7 +207,7 @@ void LogStream::section(const std::string& title) {
     preparePrint();
     out << "├────── " << title;
     if (options.includes(DebugFlag::PrintIntoStdout))
-        out << "(" << id << ")";
+        out << "(" << version->name() << ")";
     out << "\n";
     highlightOff();
 }
