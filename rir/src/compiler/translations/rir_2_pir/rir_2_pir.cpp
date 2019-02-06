@@ -525,7 +525,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         break;
     }
 
-    case Opcode::subassign1_: {
+    case Opcode::subassign1_1_: {
         Value* idx = pop();
         Value* vec = pop();
         Value* val = pop();
@@ -533,11 +533,29 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         break;
     }
 
-    case Opcode::subassign2_: {
+    case Opcode::subassign2_1_: {
         Value* idx = pop();
         Value* vec = pop();
         Value* val = pop();
         push(insert(new Subassign2_1D(val, vec, idx, env, srcIdx)));
+        break;
+    }
+
+    case Opcode::subassign1_2_: {
+        Value* idx2 = pop();
+        Value* idx1 = pop();
+        Value* vec = pop();
+        Value* val = pop();
+        push(insert(new Subassign1_2D(val, vec, idx1, idx2, env, srcIdx)));
+        break;
+    }
+
+    case Opcode::subassign2_2_: {
+        Value* idx2 = pop();
+        Value* idx1 = pop();
+        Value* vec = pop();
+        Value* val = pop();
+        push(insert(new Subassign2_2D(val, vec, idx1, idx2, env, srcIdx)));
         break;
     }
 

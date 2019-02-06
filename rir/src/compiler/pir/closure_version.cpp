@@ -69,7 +69,7 @@ ClosureVersion::ClosureVersion(Closure* closure,
     id.str("");
     id << this;
     nameSuffix_ = id.str();
-    }
+}
 
 } // namespace pir
 } // namespace rir
