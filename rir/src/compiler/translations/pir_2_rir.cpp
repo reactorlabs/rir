@@ -1357,6 +1357,7 @@ void Pir2Rir::lower(Code* code) {
     {
         // std::cout << "$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$\n";
         // code->printCode(std::cout, true);
+        // std::cout << "$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$\n";
         bool done;
         unsigned counter = 0;
         unsigned inserted = 0;
@@ -1385,18 +1386,25 @@ void Pir2Rir::lower(Code* code) {
                     // phi may have block of input and input block different...
                     // block may have more than two immediate predecessors...
 
+                    std::unordered_set<BB*> inputBBs;
+                    phi->eachArg(
+                        [&](BB* inputBB, Value*) { inputBBs.insert(inputBB); });
+
                     std::unordered_map<BB*, BB*> dir;
                     for (auto pred : cfg.immediatePredecessors(phi->bb()))
                         dir[pred] = pred;
+
                     std::unordered_map<BB*, std::unordered_set<Value*>> src;
                     phi->eachArg([&](BB* inputBB, Value* val) {
                         BreadthFirstVisitor::checkBackward(phi->bb(), cfg, [&](BB* bb) {
-                            for (auto pred : cfg.immediatePredecessors(bb))
-                                if (dir.count(pred) == 0)
-                                    dir[pred] = dir[bb];
                             if (bb == inputBB) {
                                 src[dir[bb]].insert(val);
                                 return false;
+                            }
+                            if (inputBBs.count(bb) == 0) {
+                                for (auto pred : cfg.immediatePredecessors(bb))
+                                    if (dir.count(pred) == 0)
+                                        dir[pred] = dir[bb];
                             }
                             return true;
                         });
@@ -1426,6 +1434,10 @@ void Pir2Rir::lower(Code* code) {
                             newPhi->updateType();
                             phi->updateType();
                             s.first->insert(s.first->begin(), newPhi);
+                            if (phi->nargs() == 1) {
+                                phi->replaceUsesWith(phi->arg(0).val());
+                                phi->bb()->remove(phi);
+                            }
                             inserted++;
                         }
                     }
@@ -1433,7 +1445,7 @@ void Pir2Rir::lower(Code* code) {
             });
         } while (!done);
         // code->printCode(std::cout, true);
-        // std::cout << "$$$$$$$$$$$$$\n";
+        // std::cout << "$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$\n";
     }
 
     // Insert Nop into all empty blocks to make life easier
