@@ -85,8 +85,9 @@ AbstractResult ScopeAnalysis::apply(ScopeAnalysisState& state,
             lexicalEnv = staticClosureEnv;
         }
         state.envs[mk].parentEnv(lexicalEnv);
-        mk->eachLocalVar(
-            [&](SEXP name, Value* val) { state.envs[mk].set(name, val, mk, depth); });
+        mk->eachLocalVar([&](SEXP name, Value* val) {
+            state.envs[mk].set(name, val, mk, depth);
+        });
         handled = true;
         effect.update();
     } else if (auto le = LdFunctionEnv::Cast(i)) {

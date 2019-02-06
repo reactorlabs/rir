@@ -16,7 +16,8 @@ struct ValOrig {
     Value* val;
     Instruction* origin;
     unsigned recursionLevel;
-    ValOrig(Value* v, Instruction* o, unsigned recursionLevel) : val(v), origin(o), recursionLevel(recursionLevel) {}
+    ValOrig(Value* v, Instruction* o, unsigned recursionLevel)
+        : val(v), origin(o), recursionLevel(recursionLevel) {}
     bool operator<(const ValOrig& other) const {
         if (origin == other.origin && recursionLevel == other.recursionLevel)
             return val < other.val;
@@ -25,7 +26,8 @@ struct ValOrig {
         return origin < other.origin;
     }
     bool operator==(const ValOrig& other) const {
-        return val == other.val && origin == other.origin && recursionLevel == other.recursionLevel;
+        return val == other.val && origin == other.origin &&
+               recursionLevel == other.recursionLevel;
     }
 };
 }
@@ -112,7 +114,8 @@ struct AbstractPirValue {
     }
 
     AbstractResult merge(const ValOrig& other) {
-        return merge(AbstractPirValue(other.val, other.origin, other.recursionLevel));
+        return merge(
+            AbstractPirValue(other.val, other.origin, other.recursionLevel));
     }
 
     AbstractResult merge(const AbstractPirValue& other);
