@@ -158,25 +158,25 @@ struct StackAnalysisState {
         if ((i && i->bb()->isExit()) && (other.i && other.i->bb()->isExit()))
             return AbstractResult::None;
 
-        // if (stack.size() != other.stack.size()) {
-        //     std::cout << "me:    ";
-        //     if (i) i->printRef(std::cout);
-        //     std::cout << " - ";
-        //     for (auto x : stack.data) {
-        //         x->printRef(std::cout); std::cout << " ";
-        //     }
-        //     if (i) i->bb()->print(std::cout, true);
-        //     std::cout << "\nother: ";
-        //     if (other.i) other.i->printRef(std::cout);
-        //     std::cout << " - ";
-        //     for (auto x : other.stack.data) {
-        //         x->printRef(std::cout); std::cout << " ";
-        //     }
-        //     std::cout << "\n";
-        //     if (other.i) other.i->bb()->print(std::cout, true);
-        // }
+        if (stack.size() != other.stack.size()) {
+            std::cout << "me:    ";
+            if (i) i->printRef(std::cout);
+            std::cout << " - ";
+            for (auto x : stack.data) {
+                x->printRef(std::cout); std::cout << " ";
+            }
+            if (i) i->bb()->print(std::cout, true);
+            std::cout << "\nother: ";
+            if (other.i) other.i->printRef(std::cout);
+            std::cout << " - ";
+            for (auto x : other.stack.data) {
+                x->printRef(std::cout); std::cout << " ";
+            }
+            std::cout << "\n";
+            if (other.i) other.i->bb()->print(std::cout, true);
+        }
 
-        stack.match(other.stack);
+        stack.matchContents(other.stack);
 
         return AbstractResult::None;
     }
@@ -343,7 +343,7 @@ void StackAnalysis::AbstractStack::erasePhiInput(Phi* phi) {
     assert(false && "Stack doesn't contain any input for this phi.");
 }
 
-void StackAnalysis::AbstractStack::match(AbstractStack const& other) const {
+void StackAnalysis::AbstractStack::matchContents(AbstractStack const& other) const {
     assert(size() == other.size() && "The stacks better have the same height.");
     for (size_t i = 0; i < data.size(); ++i) {
         if (data[i] != other.data[i]) {

@@ -79,12 +79,6 @@ class SSAAllocator {
     explicit SSAAllocator(Code* code, ClosureVersion* cls, LogStream& log)
         : cfg(code), dom(code), code(code), bbsSize(code->nextBBId), sa(cfg) {
 
-        // Insert Nop into all empty blocks to make life easier
-        Visitor::run(code->entry, [&](BB* bb) {
-            if (bb->isEmpty())
-                bb->append(new Nop());
-        });
-
         // code->printCode(std::cout, true);
 
         sa(cls, code, log);
@@ -1283,10 +1277,10 @@ void Pir2Rir::lower(Code* code) {
             if (auto call = CallInstruction::CastCall(*it))
                 call->clearFrameState();
             if (auto ldfun = LdFun::Cast(*it)) {
-                // the guessed binding in ldfun is just used as a temporary
+                // The guessed binding in ldfun is just used as a temporary
                 // store. If we did not manage to resolve ldfun by now, we
                 // have to remove the guess again, since apparently we
-                // where not sure it is correct.
+                // were not sure it is correct.
                 if (ldfun->guessedBinding())
                     ldfun->clearGuessedBinding();
             } else if (auto deopt = Deopt::Cast(*it)) {
@@ -1358,24 +1352,137 @@ void Pir2Rir::lower(Code* code) {
             it = next;
         }
     });
+
+    // Lower phi functions
+    {
+        // std::cout << "$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$\n";
+        // code->printCode(std::cout, true);
+        bool done;
+        unsigned counter = 0;
+        unsigned inserted = 0;
+        CFG cfg(code);
+        do {
+            if (++counter > 10000) {
+                code->printCode(std::cout, true);
+                std::cout << "inserted: " << inserted << "\n";
+                assert(false);
+            }
+            done = true;
+            BreadthFirstVisitor::run(code->entry, [&](Instruction* i, BB* bb) {
+                if (auto phi = Phi::Cast(i)) {
+                    bool ok = true;
+                    phi->eachArg([&](BB* inputBB, Value*) {
+                        if ((inputBB->isJmp() &&
+                             inputBB->next() != phi->bb()) ||
+                            (inputBB->trueBranch() != phi->bb() &&
+                             inputBB->falseBranch() != phi->bb()))
+                            ok = false;
+                    });
+                    if (ok)
+                        return;
+                    done = false;
+
+                    // phi may have block of input and input block different...
+                    // block may have more than two immediate predecessors...
+
+                    std::unordered_map<BB*, BB*> dir;
+                    for (auto pred : cfg.immediatePredecessors(phi->bb()))
+                        dir[pred] = pred;
+                    std::unordered_map<BB*, std::unordered_set<Value*>> src;
+                    phi->eachArg([&](BB* inputBB, Value* val) {
+                        BreadthFirstVisitor::checkBackward(phi->bb(), cfg, [&](BB* bb) {
+                            for (auto pred : cfg.immediatePredecessors(bb))
+                                if (dir.count(pred) == 0)
+                                    dir[pred] = dir[bb];
+                            if (bb == inputBB) {
+                                src[dir[bb]].insert(val);
+                                return false;
+                            }
+                            return true;
+                        });
+                    });
+
+                    for (auto s : src) {
+                        std::unordered_set<BB*> toRemove;
+                        phi->eachArg([&](BB* inputBB, Value* val) {
+                            if (s.second.count(val))
+                                toRemove.insert(inputBB);
+                        });
+                        if (s.second.size() == 1) {
+                            phi->removeInputs(toRemove);
+                            phi->addInput(s.first, *(s.second.begin()));
+                            phi->updateType();
+                        } else {
+                            assert(s.second.size() > 1);
+                            Phi* newPhi = new Phi;
+                            for (auto input : s.second) {
+                                phi->eachArg([&](BB* inputBB, Value* val) {
+                                    if (val == input)
+                                        newPhi->addInput(inputBB, val);
+                                });
+                            }
+                            phi->removeInputs(toRemove);
+                            phi->addInput(s.first, newPhi);
+                            newPhi->updateType();
+                            phi->updateType();
+                            s.first->insert(s.first->begin(), newPhi);
+                            inserted++;
+                        }
+                    }
+                }
+            });
+        } while (!done);
+        // code->printCode(std::cout, true);
+        // std::cout << "$$$$$$$$$$$$$\n";
+    }
+
+    // Insert Nop into all empty blocks to make life easier
+    Visitor::run(code->entry, [&](BB* bb) {
+        if (bb->isEmpty())
+            bb->append(new Nop());
+    });
 }
 
 void Pir2Rir::toCSSA(Code* code) {
+
+    CFG cfg(code);
+    // code->printCode(std::cout, true);
+
+    auto checkPhiInputs = [&](BB* from, BB* branch, Phi* phi) {
+        BB* res = branch;
+        phi->eachArg([&](BB* bb, Value*) {
+            if (bb == from)
+                return;
+            if (cfg.isPredecessor(branch, bb))
+                res = nullptr;
+        });
+        return res;
+    };
+
     // For each Phi, insert copies
     BreadthFirstVisitor::run(code->entry, [&](BB* bb) {
         // TODO: move all phi's to the beginning, then insert the copies not
         // after each phi but after all phi's
-        // TODO 2: is it ok to insert copy before a branch?
         for (auto it = bb->begin(); it != bb->end(); ++it) {
             auto instr = *it;
             if (auto phi = Phi::Cast(instr)) {
                 for (size_t i = 0; i < phi->nargs(); ++i) {
                     BB* pred = phi->input[i];
-                    // pred is either jump (insert copy at end) or branch
-                    // (insert copy before the branch instr)
-                    auto it = pred->isJmp() ? pred->end() : pred->end() - 1;
+                    // if pred is branch insert a new split block
+                    if (!pred->isJmp()) {
+                        // TODO: maybe check that there aren't multiple?
+                        BB* split =
+                            checkPhiInputs(pred, pred->trueBranch(), phi);
+                        if (!split)
+                            split =
+                                checkPhiInputs(pred, pred->falseBranch(), phi);
+                        assert(split &&
+                               "Don't know where to insert a phi input copy.");
+                        pred = BBTransform::splitEdge(code->nextBBId++, pred,
+                                                      split, code);
+                    }
                     Instruction* iav = Instruction::Cast(phi->arg(i).val());
-                    auto copy = pred->insert(it, new PirCopy(iav));
+                    auto copy = pred->insert(pred->end(), new PirCopy(iav));
                     phi->arg(i).val() = *copy;
                 }
                 auto phiCopy = new PirCopy(phi);

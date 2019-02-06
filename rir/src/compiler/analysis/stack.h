@@ -24,7 +24,7 @@ class StackAnalysis {
         void push(Value* v);
         void erase(Value* v);
         void erasePhiInput(Phi* phi);
-        void match(AbstractStack const& other) const;
+        void matchContents(AbstractStack const& other) const;
     };
     using StackSnapshots = std::unordered_map<Instruction*, AbstractStack>;
     using InstructionCompensation =
