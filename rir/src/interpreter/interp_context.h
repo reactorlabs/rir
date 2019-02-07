@@ -26,6 +26,8 @@ typedef std::function<SEXP(SEXP closure, const rir::Assumptions& assumptions,
 #define POOL_CAPACITY 4096
 #define STACK_CAPACITY 4096
 
+// --- Misc Declarations
+
 /** Resizeable R list.
 
  Allocates large list and then tricks R into believing that the list is actually
@@ -69,6 +71,8 @@ extern SEXP setterPlaceholderSym;
 extern SEXP getterPlaceholderSym;
 extern SEXP quoteSym;
 
+// --- Resizable List
+
 // TODO we might actually need to do more for the lengths (i.e. true length vs
 // length)
 
@@ -101,36 +105,154 @@ RIR_INLINE void rl_append(ResizeableList* l, SEXP val, SEXP parent,
     SET_VECTOR_ELT(l->list, i, val);
 }
 
+// --- Stack
+
+typedef enum {
+    STACK_OBJ_INT,
+    STACK_OBJ_REAL,
+    STACK_OBJ_LOGICAL,
+    STACK_OBJ_SEXP
+} stack_obj_type;
+
+RIR_INLINE R_bcstack_t int_stack_obj(int x) {
+    return {.tag = STACK_OBJ_INT, .u.ival = x};
+}
+
+RIR_INLINE R_bcstack_t real_stack_obj(double x) {
+    return {.tag = STACK_OBJ_REAL, .u.dval = x};
+}
+
+RIR_INLINE R_bcstack_t logical_stack_obj(int x) {
+    return {.tag = STACK_OBJ_LOGICAL, .u.ival = x};
+}
+
+RIR_INLINE R_bcstack_t sexp_to_stack_obj(SEXP x, bool unprotect) {
+    if (IS_SIMPLE_SCALAR(x, INTSXP)) {
+        UNPROTECT_PTR(x);
+        return int_stack_obj(*INTEGER(x));
+    } else if (IS_SIMPLE_SCALAR(x, REALSXP)) {
+        UNPROTECT_PTR(x);
+        return real_stack_obj(*REAL(x));
+    } else if (IS_SIMPLE_SCALAR(x, LGLSXP)) {
+        UNPROTECT_PTR(x);
+        return logical_stack_obj(*INTEGER(x));
+    } else {
+        return {.tag = STACK_OBJ_SEXP, .u.sxpval = x};
+    }
+}
+
+RIR_INLINE SEXP stack_obj_to_sexp(R_bcstack_t x) {
+    switch (x.tag) {
+    case STACK_OBJ_INT:
+        SEXP res;
+        PROTECT(res = Rf_allocVector(INTSXP, 1));
+        *INTEGER(res) = x.u.ival;
+        return res;
+    case STACK_OBJ_REAL:
+        PROTECT(res = Rf_allocVector(REALSXP, 1));
+        *REAL(res) = x.u.dval;
+        return res;
+    case STACK_OBJ_LOGICAL:
+        PROTECT(res = Rf_allocVector(LGLSXP, 1));
+        *INTEGER(res) = x.u.ival;
+        return res;
+    case STACK_OBJ_SEXP:
+        return x.u.sxpval;
+    default:
+        assert(false);
+    }
+}
+
+// Returns regular if int, truncated if real, -1 otherwise
+RIR_INLINE int try_stack_obj_to_idx(R_bcstack_t x) {
+    switch (x.tag) {
+    case STACK_OBJ_INT:
+        return x.u.ival;
+    case STACK_OBJ_REAL:
+        return x.u.dval;
+    case STACK_OBJ_LOGICAL:
+    case STACK_OBJ_SEXP:
+        return -1;
+    default:
+        assert(false);
+    }
+}
+
+RIR_INLINE SEXPTYPE stack_obj_sexp_type(R_bcstack_t x) {
+    switch (x.tag) {
+    case STACK_OBJ_INT:
+        return INTSXP;
+    case STACK_OBJ_REAL:
+        return REALSXP;
+    case STACK_OBJ_LOGICAL:
+        return LGLSXP;
+    case STACK_OBJ_SEXP:
+        return TYPEOF(x.u.sxpval);
+    default:
+        assert(false);
+    }
+}
+
+RIR_INLINE bool stack_obj_is_vector(R_bcstack_t x) {
+    switch (x.tag) {
+    case STACK_OBJ_INT:
+    case STACK_OBJ_REAL:
+    case STACK_OBJ_LOGICAL:
+        return true;
+    case STACK_OBJ_SEXP:
+        return Rf_isVector(x.u.sxpval);
+    default:
+        assert(false);
+    }
+}
+
+RIR_INLINE R_xlen_t stack_obj_length(R_bcstack_t x) {
+    switch (x.tag) {
+    case STACK_OBJ_INT:
+    case STACK_OBJ_REAL:
+    case STACK_OBJ_LOGICAL:
+        return 1;
+    case STACK_OBJ_SEXP:
+        return XLENGTH(x.u.sxpval);
+    default:
+        assert(false);
+    }
+}
+
+RIR_INLINE bool stack_objs_equal(R_bcstack_t x, R_bcstack_t y) {
+    if (x.tag != y.tag) {
+        return false;
+    }
+
+    switch (x.tag) { // == y.tag
+    case STACK_OBJ_INT:
+    case STACK_OBJ_LOGICAL:
+        return x.u.ival == y.u.ival;
+    case STACK_OBJ_REAL:
+        return x.u.dval == y.u.dval;
+    case STACK_OBJ_SEXP:
+        return x.u.sxpval == y.u.sxpval;
+    default:
+        assert(false);
+    }
+}
+
 #define ostack_length(c) (R_BCNodeStackTop - R_BCNodeStackBase)
 
 #ifdef TYPED_STACK
-#define ostack_top(c) ((R_BCNodeStackTop - 1)->u.sxpval)
-#else
-#define ostack_top(c) (*(R_BCNodeStackTop - 1))
+#define ostack_top(c) *(R_BCNodeStackTop - 1)
 #endif
 
 #ifdef TYPED_STACK
-#define ostack_at(c, i) ((R_BCNodeStackTop - 1 - (i))->u.sxpval)
-#define ostack_at_cell(cell) ((cell)->u.sxpval)
-#else
-#define ostack_at(c, i) (*(R_BCNodeStackTop - 1 - (i)))
-#define ostack_at_cell(cell) (*(cell))
+#define ostack_at(c, i) *(R_BCNodeStackTop - 1 - (i))
+#define ostack_at(c, i) *(R_BCNodeStackTop - 1 - (i))
 #endif
 
 #ifdef TYPED_STACK
 #define ostack_set(c, i, v)                                                    \
     do {                                                                       \
-        SEXP __tmp__ = (v);                                                    \
         int idx = (i);                                                         \
-        (R_BCNodeStackTop - 1 - idx)->u.sxpval = __tmp__;                      \
-        (R_BCNodeStackTop - 1 - idx)->tag = 0;                                 \
-    } while (0)
-#else
-#define ostack_set(c, i, v)                                                    \
-    do {                                                                       \
-        SEXP __tmp__ = (v);                                                    \
-        int idx = (i);                                                         \
-        *(R_BCNodeStackTop - 1 - idx) = __tmp__;                               \
+        *(R_BCNodeStackTop - 1 - idx) = (v);                                   \
     } while (0)
 #endif
 
@@ -144,24 +266,13 @@ RIR_INLINE void rl_append(ResizeableList* l, SEXP val, SEXP parent,
     } while (0)
 
 #ifdef TYPED_STACK
-#define ostack_pop(c) ((--R_BCNodeStackTop)->u.sxpval)
-#else
 #define ostack_pop(c) (*(--R_BCNodeStackTop))
 #endif
 
 #ifdef TYPED_STACK
 #define ostack_push(c, v)                                                      \
     do {                                                                       \
-        SEXP __tmp__ = (v);                                                    \
-        R_BCNodeStackTop->u.sxpval = __tmp__;                                  \
-        R_BCNodeStackTop->tag = 0;                                             \
-        ++R_BCNodeStackTop;                                                    \
-    } while (0)
-#else
-#define ostack_push(c, v)                                                      \
-    do {                                                                       \
-        SEXP __tmp__ = (v);                                                    \
-        *R_BCNodeStackTop = __tmp__;                                           \
+        *R_BCNodeStackTop = (v);                                               \
         ++R_BCNodeStackTop;                                                    \
     } while (0)
 #endif
@@ -172,6 +283,8 @@ RIR_INLINE void ostack_ensureSize(Context* c, unsigned minFree) {
         assert(false);
     }
 }
+
+// --- Locals
 
 class Locals final {
     // NOTE: must not own any resources, because the destructor is not called
@@ -188,24 +301,19 @@ class Locals final {
 
     ~Locals() { R_BCNodeStackTop -= localsCount; }
 
-    SEXP load(unsigned offset) {
+    R_bcstack_t load(unsigned offset) {
         SLOWASSERT(offset < localsCount &&
                    "Attempt to load invalid local variable.");
 #ifdef TYPED_STACK
-        return (base + offset)->u.sxpval;
-#else
-        return base[offset];
+        return *(base + offset);
 #endif
     }
 
-    void store(unsigned offset, SEXP val) {
+    void store(unsigned offset, R_bcstack_t val) {
         SLOWASSERT(offset < localsCount &&
                    "Attempt to store invalid local variable.");
 #ifdef TYPED_STACK
-        (base + offset)->u.sxpval = val;
-        SLOWASSERT((base + offset)->tag == 0);
-#else
-        base[offset] = val;
+        *(base + offset) = val;
 #endif
     }
 
@@ -215,6 +323,8 @@ class Locals final {
     Locals& operator=(Locals&&) = delete;
     static void* operator new(size_t) = delete;
 };
+
+// --- Context
 
 Context* context_create();
 
