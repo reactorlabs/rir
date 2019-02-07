@@ -218,8 +218,9 @@ class SSAAllocator {
     void computeStackAllocation() {
 
         // For now, just flip a coin on where to put it
-        auto coinFlip = []() -> bool {
-            static std::mt19937 gen(7);
+        static auto coinFlip = []() -> bool {
+            static std::random_device rd;
+            static std::mt19937 gen(rd());
             static std::bernoulli_distribution coin(0.5);
             return coin(gen);
         };
@@ -536,12 +537,14 @@ class SSAAllocator {
         size_t usedIdx = used.size() - 1;
         while (i != stack.data.rend()) {
             if (*i == what) {
-                if (remove)
+                if (remove) {
                     used[usedIdx] = true;
+                }
                 return offset;
             }
-            if (hasSlot(*i) && onStack(*i) && !used[usedIdx])
+            if (hasSlot(*i) && onStack(*i) && !used[usedIdx]) {
                 ++offset;
+            }
             ++i;
             --usedIdx;
         }
@@ -655,11 +658,16 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
 
     LoweringVisitor::run(code->entry, [&](BB* bb) {
         CodeStream& cs = ctx.cs();
+
+#ifdef ENABLE_SLOWASSERT
         auto debugAddVariableName = [&cs](Value* v) {
             std::stringstream ss;
             v->printRef(ss);
             cs.addSrc(Rf_install(ss.str().c_str()));
         };
+#else
+        auto debugAddVariableName = [](Value*) {};
+#endif
 
         cs << bbLabels[bb];
 
@@ -1229,7 +1237,9 @@ static bool DEOPT_CHAOS = getenv("PIR_DEOPT_CHAOS") &&
                           0 == strncmp("1", getenv("PIR_DEOPT_CHAOS"), 1);
 
 static bool coinFlip() {
-    static std::mt19937 gen(42);
+    static std::random_device rd;
+    static std::mt19937 gen(rd());
+    // static std::mt19937 gen(42);
     static std::bernoulli_distribution coin(0.2);
     return coin(gen);
 };

@@ -78,9 +78,9 @@ BB* BBTransform::splitEdge(size_t next_id, BB* from, BB* to, Code* target) {
 
     Visitor::run(split, [&](Instruction* i) {
         if (auto phi = Phi::Cast(i)) {
-            for (size_t j = 0; j < phi->input.size(); ++j)
-                if (phi->input[j] == from)
-                    phi->input[j] = split;
+            for (size_t j = 0; j < phi->nargs(); ++j)
+                if (phi->inputAt(j) == from)
+                    phi->updateInputAt(j, split);
         }
     });
 

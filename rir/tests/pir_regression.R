@@ -57,6 +57,10 @@ rir.compile(function(){
 
 
 # inlined frameStates:
+
+# NOTE: the asserts on invocation counts may fail
+# with PIR_DEOPT_CHAOS=1
+
 f <- pir.compile(rir.compile(function(x) g(x)))
 g <- rir.compile(function(x) h(x))
 h <- rir.compile(function(x) 1+i(x))
