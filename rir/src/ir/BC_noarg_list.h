@@ -8,7 +8,6 @@
 #define BC_NOARGS(V, NESTED)                                                   \
     SIMPLE_INSTRUCTIONS(V_SIMPLE_INSTRUCTION_IN_BC_NOARGS, V)                  \
     V(NESTED, nop, nop)                                                        \
-    V(NESTED, makeEnv, make_env)                                               \
     V(NESTED, parentEnv, parent_env)                                           \
     V(NESTED, getEnv, get_env)                                                 \
     V(NESTED, setEnv, set_env)                                                 \

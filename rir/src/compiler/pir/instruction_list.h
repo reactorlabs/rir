@@ -61,7 +61,6 @@
     V(StaticCall)                                                              \
     V(CallBuiltin)                                                             \
     V(CallSafeBuiltin)                                                         \
-    V(CallImplicit)                                                            \
     V(MkEnv)                                                                   \
     V(LdFunctionEnv)                                                           \
     V(LAnd)                                                                    \
@@ -83,6 +82,9 @@
     V(CastType)                                                                \
     V(SetShared)                                                               \
     V(EnsureNamed)                                                             \
+    V(Missing)                                                                 \
+    V(Visible)                                                                 \
+    V(Invisible)                                                               \
     V(PirCopy)
 
 #endif

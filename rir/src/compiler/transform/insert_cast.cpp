@@ -9,9 +9,6 @@ pir::Instruction* InsertCast::cast(pir::Value* v, PirType t, Value* env) {
     if (v->type.maybePromiseWrapped() && !t.maybePromiseWrapped()) {
         return new pir::Force(v, env);
     }
-    if (v->type.maybeMissing() && !t.maybeMissing()) {
-        return new pir::ChkMissing(v);
-    }
     if (v->type == RType::logical && t == NativeType::test) {
         return new pir::AsTest(v);
     }

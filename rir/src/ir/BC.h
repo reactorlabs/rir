@@ -141,6 +141,13 @@ BC BC::missing(SEXP sym) {
     i.pool = Pool::insert(sym);
     return BC(Opcode::missing_, i);
 }
+BC BC::starg(SEXP sym) {
+    assert(TYPEOF(sym) == SYMSXP);
+    assert(strlen(CHAR(PRINTNAME(sym))));
+    ImmediateArguments i;
+    i.pool = Pool::insert(sym);
+    return BC(Opcode::starg_, i);
+}
 BC BC::stvar(SEXP sym) {
     assert(TYPEOF(sym) == SYMSXP);
     assert(strlen(CHAR(PRINTNAME(sym))));
@@ -271,6 +278,17 @@ BC BC::callBuiltin(size_t nargs, SEXP ast, SEXP builtin) {
     im.callBuiltinFixedArgs.ast = Pool::insert(ast);
     im.callBuiltinFixedArgs.builtin = Pool::insert(builtin);
     return BC(Opcode::call_builtin_, im);
+}
+
+BC BC::mkEnv(const std::vector<SEXP>& names) {
+    ImmediateArguments im;
+    im.mkEnvFixedArgs.nargs = names.size();
+    std::vector<PoolIdx> nameIdxs;
+    for (auto n : names)
+        nameIdxs.push_back(Pool::insert(n));
+    BC cur(Opcode::mk_env_, im);
+    cur.mkEnvExtra().names = nameIdxs;
+    return cur;
 }
 
 BC BC::deopt(SEXP deoptMetadata) {

@@ -30,13 +30,7 @@ LogStream& StreamLogger::begin(ClosureVersion* cls) {
     assert(!streams.count(cls) && "You already started this function");
 
     std::stringstream id;
-    id << cls->name() << " ";
-    unsigned pos = 0;
-    for (auto a : cls->assumptions()) {
-        id << a;
-        if (++pos < cls->assumptions().count())
-            id << "|";
-    }
+    id << cls->name() << " " << cls->assumptions();
 
     if (options.includes(DebugFlag::PrintIntoFiles)) {
         std::stringstream filename;

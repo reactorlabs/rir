@@ -43,6 +43,7 @@ BC_NOARGS(V, _)
     case Opcode::ldvar_super_:
     case Opcode::ldvar_noforce_super_:
     case Opcode::ldlval_:
+    case Opcode::starg_:
     case Opcode::stvar_:
     case Opcode::stvar_super_:
     case Opcode::missing_:
@@ -89,6 +90,12 @@ BC_NOARGS(V, _)
     case Opcode::push_code_:
         cs.insert(immediate.fun);
         return;
+
+    case Opcode::mk_env_:
+        cs.insert(immediate.mkEnvFixedArgs);
+        for (PoolIdx name : mkEnvExtra().names)
+            cs.insert(name);
+        break;
 
     case Opcode::br_:
     case Opcode::brtrue_:
@@ -141,9 +148,10 @@ void BC::printImmediateArgs(std::ostream& out) const {
     out << " ]";
 }
 
-void BC::printNames(std::ostream& out) const {
+void BC::printNames(std::ostream& out,
+                    const std::vector<PoolIdx>& names) const {
     out << "[";
-    for (auto name : callExtra().callArgumentNames) {
+    for (auto name : names) {
         SEXP n = Pool::get(name);
         out << " "
             << (n == nullptr || n == R_NilValue ? "_" : CHAR(PRINTNAME(n)));
@@ -170,7 +178,7 @@ void BC::print(std::ostream& out) const {
     case Opcode::named_call_implicit_: {
         printImmediateArgs(out);
         out << " ";
-        printNames(out);
+        printNames(out, callExtra().callArgumentNames);
         break;
     }
     case Opcode::call_: {
@@ -184,7 +192,7 @@ void BC::print(std::ostream& out) const {
         auto args = immediate.callFixedArgs;
         BC::NumArgs nargs = args.nargs;
         out << nargs << " ";
-        printNames(out);
+        printNames(out, callExtra().callArgumentNames);
         break;
     }
     case Opcode::call_builtin_: {
@@ -203,6 +211,13 @@ void BC::print(std::ostream& out) const {
             << dumpSexp(target).c_str();
         break;
     }
+    case Opcode::mk_env_: {
+        auto args = immediate.mkEnvFixedArgs;
+        BC::NumArgs nargs = args.nargs;
+        out << nargs << " ";
+        printNames(out, mkEnvExtra().names);
+        break;
+    }
     case Opcode::deopt_: {
         DeoptMetadata* m = (DeoptMetadata*)DATAPTR(immediateConst());
         m->print(out);
@@ -218,6 +233,7 @@ void BC::print(std::ostream& out) const {
     case Opcode::ldvar_noforce_super_:
     case Opcode::ldlval_:
     case Opcode::ldddvar_:
+    case Opcode::starg_:
     case Opcode::stvar_:
     case Opcode::stvar_super_:
     case Opcode::missing_:

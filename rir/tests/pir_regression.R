@@ -57,7 +57,7 @@ rir.compile(function(){
 
 
 # inlined frameStates:
-f <- rir.compile(function(x) g(x))
+f <- pir.compile(rir.compile(function(x) g(x)))
 g <- rir.compile(function(x) h(x))
 h <- rir.compile(function(x) 1+i(x))
 i <- rir.compile(function(x) 40-x)
@@ -97,3 +97,16 @@ stopifnot(h(1) == 1)
 stopifnot(h(2) == 2)
 h <- pir.compile(h)
 stopifnot(h(3) == 3)
+
+
+if (Sys.getenv("PIR_ENABLE") == "") {
+  require(compiler)
+  old <- compiler::enableJIT(3)
+  # test that we generate multiple versions
+  p <- function(a=1,b=2) a+b
+  for (i in 1:100) pir.compile(function() p())()
+  for (i in 1:100) pir.compile(function() p(1))()
+  for (i in 1:100) pir.compile(function() p(1,2))()
+  stopifnot(length(.Call("rir_invocation_count", p)) > 3)
+  compiler::enableJIT(old)
+}

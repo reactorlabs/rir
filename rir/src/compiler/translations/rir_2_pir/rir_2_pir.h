@@ -22,7 +22,13 @@ class Rir2Pir {
         return tryCompile(srcFunction->body(), insert);
     }
 
+    Value* tryCreateArg(rir::Code* prom, Builder& insert, bool eager) const
+        __attribute__((warn_unused_result));
+
   private:
+    Value* tryTranslatePromise(rir::Code* srcCode, Builder& insert) const
+        __attribute__((warn_unused_result));
+
     // Tries to compile the srcCode. Return value indicates failure. Builder
     // has to be discarded, if compilation fails!
     bool tryCompile(rir::Code* srcCode, Builder& insert)
@@ -31,8 +37,6 @@ class Rir2Pir {
         __attribute__((warn_unused_result));
 
     Value* tryTranslate(rir::Code* srcCode, Builder& insert) const
-        __attribute__((warn_unused_result));
-    Value* tryTranslatePromise(rir::Code* srcCode, Builder& insert) const
         __attribute__((warn_unused_result));
 
     void finalize(Value*, Builder& insert);
