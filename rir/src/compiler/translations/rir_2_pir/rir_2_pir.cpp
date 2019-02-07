@@ -287,7 +287,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         Value* callee = top();
         SEXP monomorphic = nullptr;
 
-        // TODO: Support missing args and ...
+        // TODO: Support ...
         for (auto argi : bc.callExtra().immediateCallArguments) {
             if (argi == DOTS_ARG_IDX) {
                 log.warn("Cannot compile call with ... arguments");

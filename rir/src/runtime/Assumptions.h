@@ -120,9 +120,7 @@ namespace std {
 template <>
 struct hash<rir::Assumptions> {
     std::size_t operator()(const rir::Assumptions& v) const {
-        using std::hash;
-        return hash<unsigned long long>()(v.flags.to_i()) ^
-               hash<unsigned long long>()(v.missing);
+        return hash_combine(hash_combine(0, v.flags.to_i()), v.missing);
     }
 };
 } // namespace std

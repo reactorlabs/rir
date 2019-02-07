@@ -91,10 +91,6 @@ class TheCleanup {
                         next = bb->remove(ip);
                     }
                 }
-                // CallImplicit is only added in the lowering phase. The unused
-                // promise deletion would be broken, if we were to use
-                // CallImplicit in the middle-end, since this instruction can
-                // also point to promises.
                 if (!removed) {
                     if (!Phi::Cast(i)) {
                         i->eachArg([&](Value* arg) {

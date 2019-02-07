@@ -555,7 +555,7 @@ class FLIE(LdFun, 2, Effect::Any, EnvAccess::Write) {
     void printArgs(std::ostream& out, bool tty) const override;
 };
 
-class FLIE(LdVar, 1, Effect::None, EnvAccess::Read) {
+class FLIE(LdVar, 1, Effect::Error, EnvAccess::Read) {
   public:
     SEXP varName;
 
@@ -627,7 +627,7 @@ class FLIE(StVarSuper, 2, Effect::None, EnvAccess::Write) {
     void printArgs(std::ostream& out, bool tty) const override;
 };
 
-class FLIE(LdVarSuper, 1, Effect::None, EnvAccess::Read) {
+class FLIE(LdVarSuper, 1, Effect::Error, EnvAccess::Read) {
   public:
     LdVarSuper(SEXP name, Value* env)
         : FixedLenInstructionWithEnvSlot(PirType::any(), env), varName(name) {}

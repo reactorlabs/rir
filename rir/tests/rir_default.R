@@ -30,7 +30,7 @@ rir.compile(function() {
 
 
 f <- function(a=1,b=2,c=3) c(a,b,c,missing(a), missing(b), missing(c), nargs())
-g <- function(a) c(missing(a), nargs())
+g <- function(a=1) c(missing(a), nargs(), a)
 h <- function(a) g(a)
 
 test <- function() {
@@ -39,8 +39,12 @@ test <- function() {
     stopifnot(f(,3) == c(1,3,3,TRUE,FALSE,TRUE,2))
     stopifnot(f(,) == c(1,2,3,TRUE,TRUE,TRUE,2))
     stopifnot(f(b=1) == c(1,1,3,TRUE,FALSE,TRUE,1))
-    stopifnot(g() == c(TRUE,0))
-    stopifnot(g(2) == c(FALSE,1))
+    stopifnot(g() == c(TRUE,0,1))
+    stopifnot(g(2) == c(FALSE,1,2))
+    stopifnot(h(2) == c(FALSE,1,2))
+    ok <- 0
+    tryCatch(h(), error=function(e) {ok <<- 1})
+    stopifnot(ok == 1)
 }
 
 test()

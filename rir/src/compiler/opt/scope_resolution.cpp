@@ -71,7 +71,7 @@ class TheScopeResolution {
                     continue;
                 }
 
-                // Constand fold "missing" if we can
+                // Constant fold "missing" if we can
                 if (auto missing = Missing::Cast(i)) {
                     auto res =
                         analysis.load(before, missing->varName, missing->env());
@@ -83,7 +83,7 @@ class TheScopeResolution {
                         // value of the variable is guaranteed to not be a
                         // missing value, we additionally need verify that the
                         // initial argument (the argument to the mkenv) was also
-                        // guaranteed to not a missing value.
+                        // guaranteed to not be a missing value.
                         // TODO: this is a bit brittle and might break as soon
                         // as we start improving the handling of missing args in
                         // MkEnv.
