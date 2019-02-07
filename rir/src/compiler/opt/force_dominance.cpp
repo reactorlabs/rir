@@ -50,7 +50,6 @@ struct ForcedBy {
 
     std::vector<size_t> argumentForceOrder;
     bool ambiguousForceOrder = false;
-    bool forceArgsBeforeEffect = true;
 
     static Force* ambiguous() {
         static Force f(Nil::instance(), Env::nil());
@@ -133,11 +132,6 @@ struct ForcedBy {
             }
         }
 
-        if (forceArgsBeforeEffect && !other.forceArgsBeforeEffect) {
-            forceArgsBeforeEffect = false;
-            res.update();
-        }
-
         if (!ambiguousForceOrder && other.ambiguousForceOrder) {
             ambiguousForceOrder = true;
             res.update();
@@ -172,6 +166,8 @@ struct ForcedBy {
     }
 
     bool maybeForced(size_t i) const {
+        // Scan the list of unambiguously forced arguments to see if we know if
+        // this one was forced
         for (auto f : argumentForceOrder) {
             if (f == i)
                 return true;
@@ -180,8 +176,6 @@ struct ForcedBy {
     }
 
     bool eagerLikeFunction(ClosureVersion* fun) const {
-        if (!forceArgsBeforeEffect)
-            return false;
         if (ambiguousForceOrder || argumentForceOrder.size() < fun->nargs())
             return false;
         for (size_t i = 0; i < fun->nargs(); ++i)
@@ -263,7 +257,8 @@ class ForceDominanceAnalysis : public StaticAnalysis<ForcedBy> {
             if (LdArg* arg = LdArg::Cast(f->arg<0>().val()->followCasts())) {
                 if (arg->type.maybeLazy()) {
                     changed = state.forcedAt(arg, f) || changed;
-                    if (!state.maybeForced(arg->id)) {
+                    if (!state.ambiguousForceOrder &&
+                        !state.maybeForced(arg->id)) {
                         state.argumentForceOrder.push_back(arg->id);
                         changed = true;
                     }
@@ -281,12 +276,16 @@ class ForceDominanceAnalysis : public StaticAnalysis<ForcedBy> {
                 if (auto arg = LdArg::Cast(v))
                     changed = state.escape(arg) || changed;
             });
+
             if (i->mayForcePromises())
                 changed = state.sideeffect() || changed;
-            if (i->hasEffect() && state.forceArgsBeforeEffect &&
-                (state.ambiguousForceOrder ||
-                 state.argumentForceOrder.size() < closure->nargs())) {
-                state.forceArgsBeforeEffect = false;
+
+            if (i->hasEffect() && !state.ambiguousForceOrder &&
+                state.argumentForceOrder.size() < closure->nargs()) {
+                // After the first effect we give up on recording force order,
+                // since we can't use it to turn the arguments into eager ones
+                // anyway. Otherwise we would reorder effects.
+                state.ambiguousForceOrder = true;
                 changed = true;
             }
         }

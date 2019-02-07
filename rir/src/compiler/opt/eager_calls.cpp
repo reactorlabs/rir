@@ -37,15 +37,18 @@ void EagerCalls::apply(RirCompiler& cmp, ClosureVersion* closure,
                 continue;
 
             auto isEager = [&](size_t i) {
-                // TODO: implement the case where we have a non-standard
-                // argument evaluation order
                 if (allEager)
                     return true;
                 for (auto a : version->properties.argumentForceOrder) {
-                    if (a == i)
-                        return true;
+                    // We know that a is forced before i, therefore we are not
+                    // in left-to-right order
+                    // TODO: support reordering of the evaluation
                     if (a > i)
                         return false;
+                    // We found the argument in the list of certainly forced
+                    // promises
+                    if (a == i)
+                        return true;
                 }
                 return false;
             };
