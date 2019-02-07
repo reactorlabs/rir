@@ -50,7 +50,6 @@ void Builder::add(Instruction* i) {
     case Tag::_UNUSED_:
         assert(false && "Invalid instruction");
     case Tag::PirCopy:
-    case Tag::CallImplicit:
     case Tag::ScheduledDeopt:
         assert(false && "This instruction is only allowed during lowering");
     default: {}
@@ -87,15 +86,20 @@ Builder::Builder(ClosureVersion* version, Value* closureEnv)
     assert(!function->entry);
     function->entry = bb;
     auto closure = version->owner();
-    std::vector<Value*> args(closure->nargs());
+
     auto& assumptions = version->assumptions();
-    for (long i = closure->nargs() - 1; i >= 0; --i) {
+    std::vector<Value*> args(closure->nargs());
+    size_t nargs = closure->nargs() - assumptions.numMissing();
+    for (long i = nargs - 1; i >= 0; --i) {
         args[i] = this->operator()(new LdArg(i));
         if (assumptions.isEager(i))
-            args[i]->type = PirType::val();
+            args[i]->type = PirType::promiseWrappedVal().notMissing();
         if (assumptions.notObj(i))
             args[i]->type.setNotObject();
     }
+    for (size_t i = nargs; i < closure->nargs(); ++i)
+        args[i] = MissingArg::instance();
+
     auto mkenv = new MkEnv(closureEnv, closure->formals().names(), args.data());
     add(mkenv);
     this->env = mkenv;

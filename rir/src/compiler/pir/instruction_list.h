@@ -21,15 +21,17 @@
     V(Sub)                                                                     \
     V(Mul)                                                                     \
     V(Neq)                                                                     \
-    V(Eq)                                                                      \
-    V(Extract1_1D)                                                             \
-    V(Extract2_1D)
+    V(Eq)
 
 #define VECTOR_RW_INSTRUCTIONS(V)                                              \
+    V(Extract1_1D)                                                             \
+    V(Extract2_1D)                                                             \
     V(Extract2_2D)                                                             \
     V(Extract1_2D)                                                             \
     V(Subassign1_1D)                                                           \
-    V(Subassign2_1D)
+    V(Subassign2_1D)                                                           \
+    V(Subassign1_2D)                                                           \
+    V(Subassign2_2D)
 
 #define SPECULATIVE_INSTRUCTIONS(V)                                            \
     V(FrameState)                                                              \
@@ -67,7 +69,6 @@
     V(StaticCall)                                                              \
     V(CallBuiltin)                                                             \
     V(CallSafeBuiltin)                                                         \
-    V(CallImplicit)                                                            \
     V(MkEnv)                                                                   \
     V(LdFunctionEnv)                                                           \
     V(LAnd)                                                                    \
@@ -84,6 +85,9 @@
     V(CastType)                                                                \
     V(SetShared)                                                               \
     V(EnsureNamed)                                                             \
+    V(Missing)                                                                 \
+    V(Visible)                                                                 \
+    V(Invisible)                                                               \
     V(PirCopy)
 
 #endif

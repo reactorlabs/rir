@@ -24,7 +24,10 @@ void CleanupCheckpoints::apply(RirCompiler&, ClosureVersion* function,
                 }
             }
         });
-        BBTransform::removeBBs(code, toDelete);
+        // Deopt blocks are exit blocks. They have no other predecessors and
+        // are not phi inputs. We can delete without further checks.
+        for (auto bb : toDelete)
+            delete bb;
     };
     apply(function);
     function->eachPromise([&](Promise* p) { apply(p); });

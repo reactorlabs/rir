@@ -133,13 +133,21 @@ AbstractResult ScopeAnalysis::apply(ScopeAnalysisState& state,
                 effect.update();
             }
         }
+    } else if (auto missing = Missing::Cast(i)) {
+        auto res = load(state, missing->varName, missing->env());
+        if (!res.result.isUnknown()) {
+            res.result.eachSource(
+                [&](auto orig) { state.observedStores.insert(orig.origin); });
+            handled = true;
+        }
     } else if (Force::Cast(i)) {
         // First try to figure out what we force. If it's a non lazy thing, we
         // do not need to bother.
         auto force = Force::Cast(i);
         auto arg = force->arg<0>().val();
         if (!arg->type.maybeLazy()) {
-            effect.max(state.returnValues[i].merge(ValOrig(arg, i, depth)));
+            if (!arg->type.maybePromiseWrapped())
+                effect.max(state.returnValues[i].merge(ValOrig(arg, i, depth)));
             handled = true;
         }
 
@@ -147,7 +155,9 @@ AbstractResult ScopeAnalysis::apply(ScopeAnalysisState& state,
             lookup(state, arg->followCastsAndForce(),
                    [&](const AbstractPirValue& analysisRes) {
                        if (!analysisRes.type.maybeLazy()) {
-                           effect.max(state.returnValues[i].merge(analysisRes));
+                           if (!analysisRes.type.maybePromiseWrapped())
+                               effect.max(
+                                   state.returnValues[i].merge(analysisRes));
                            handled = true;
                        } else if (analysisRes.isSingleValue()) {
                            arg = analysisRes.singleValue().val;
@@ -195,9 +205,11 @@ AbstractResult ScopeAnalysis::apply(ScopeAnalysisState& state,
                 return;
             }
 
-            if (depth == MAX_DEPTH) {
+            if (depth == MAX_DEPTH)
                 return;
-            }
+
+            if (version->size() > MAX_SIZE)
+                return;
 
             std::vector<Value*> args;
             calli->eachCallArg([&](Value* v) { args.push_back(v); });
@@ -220,12 +232,13 @@ AbstractResult ScopeAnalysis::apply(ScopeAnalysisState& state,
             assert(target);
             if (auto mk = MkFunCls::Cast(target))
                 if (mk->cls->nargs() == calli->nCallArgs())
-                    interProceduralAnalysis(call->dispatch(mk->cls),
-                                            mk->lexicalEnv());
+                    if (auto trg = call->tryDispatch(mk->cls))
+                        interProceduralAnalysis(trg, mk->lexicalEnv());
         } else if (auto call = StaticCall::Cast(i)) {
             auto target = call->cls();
             if (target && target->nargs() == calli->nCallArgs())
-                interProceduralAnalysis(call->dispatch(), target->closureEnv());
+                if (auto trg = call->tryDispatch())
+                    interProceduralAnalysis(trg, target->closureEnv());
         } else {
             // TODO: support for NamedCall
             assert((CallBuiltin::Cast(i) || CallSafeBuiltin::Cast(i) ||
@@ -268,12 +281,14 @@ AbstractResult ScopeAnalysis::apply(ScopeAnalysisState& state,
                 }
             }
 
-            // If an environemnt is leaked, then deadStore elimination does not
-            // work anymore, since we cannot statically observer all the loads
-            if (envIsNeeded && i->leaksEnv()) {
-                state.envs[i->env()].leaked = true;
+            if (envIsNeeded && i->readsEnv()) {
                 for (auto env : state.envs.potentialParents(i->env()))
                     state.allStoresObserved.insert(env);
+                effect.update();
+            }
+
+            if (envIsNeeded && i->leaksEnv()) {
+                state.envs[i->env()].leaked = true;
                 effect.update();
             }
 

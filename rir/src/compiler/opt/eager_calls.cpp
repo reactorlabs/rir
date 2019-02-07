@@ -25,9 +25,10 @@ void EagerCalls::apply(RirCompiler& cmp, ClosureVersion* closure,
                 continue;
 
             Closure* cls = call->cls();
-            ClosureVersion* version = call->dispatch();
+            ClosureVersion* version = call->tryDispatch();
 
-            if (!version->properties.includes(
+            if (!version ||
+                !version->properties.includes(
                     ClosureVersion::Property::IsEager) ||
                 call->nCallArgs() != cls->nargs())
                 continue;
@@ -36,7 +37,7 @@ void EagerCalls::apply(RirCompiler& cmp, ClosureVersion* closure,
             bool noMissing = true;
             call->eachCallArg([&](Value* v) {
                 if (auto mk = MkArg::Cast(v)) {
-                    if (mk->eagerArg() == Missing::instance())
+                    if (!mk->isEager())
                         args.insert(mk);
                 } else {
                     noMissing = false;
@@ -50,21 +51,22 @@ void EagerCalls::apply(RirCompiler& cmp, ClosureVersion* closure,
                 continue;
 
             Assumptions newAssumptions = call->inferAvailableAssumptions();
-            newAssumptions.set(Assumption::EagerArgs_);
+            newAssumptions.add(Assumption::EagerArgs_);
             for (size_t i = 0; i < call->nCallArgs(); ++i)
                 newAssumptions.setEager(i, true);
             // This might fire back, since we don't know if we really have no
             // objects... We should have some profiling. It's still sound, since
             // static_call_ will check the assumptions
-            newAssumptions.set(Assumption::NonObjectArgs_);
+            newAssumptions.add(Assumption::NonObjectArgs_);
             for (size_t i = 0; i < call->nCallArgs(); ++i)
                 newAssumptions.setNotObj(i, true);
             auto newVersion = cls->cloneWithAssumptions(
                 version, newAssumptions, [&](ClosureVersion* newCls) {
                     Visitor::run(newCls->entry, [&](Instruction* i) {
                         if (auto ld = LdArg::Cast(i)) {
-                            ld->type = PirType::val();
-                            ld->type.setNotObject();
+                            ld->type = PirType::promiseWrappedVal()
+                                           .notObject()
+                                           .notMissing();
                         }
                     });
                 });
@@ -98,13 +100,14 @@ void EagerCalls::apply(RirCompiler& cmp, ClosureVersion* closure,
                 bb = split;
                 ip = bb->begin();
             } else if (auto call = StaticCall::Cast(*ip)) {
-                auto version = call->dispatch();
-                if (version->properties.includes(
-                        ClosureVersion::Property::NoReflection)) {
+                auto version = call->tryDispatch();
+                if (version && version->properties.includes(
+                                   ClosureVersion::Property::NoReflection)) {
                     call->eachCallArg([&](InstrArg& arg) {
                         if (auto mk = MkArg::Cast(arg.val())) {
-                            mk->ifEager(
-                                [&](Value* eagerVal) { arg.val() = eagerVal; });
+                            if (mk->isEager()) {
+                                arg.val() = mk->eagerArg();
+                            }
                         }
                     });
                 }

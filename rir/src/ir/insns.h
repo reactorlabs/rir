@@ -17,9 +17,10 @@ DEF_INSTR(invalid_, 0, 0, 0, 0)
 DEF_INSTR(nop_, 0, 0, 0, 1)
 
 /**
- * make_env_:: create a new empty environment with the parent taken from TOS
+ * make_env_:: create a new environment with the parent and all locals taken
+ * from stack and the argument names as immediates.
  */
-DEF_INSTR(make_env_, 0, 1, 1, 1)
+DEF_INSTR(mk_env_, 1, -1, 1, 1)
 
 /**
  * parent_env_:: push lexically outer env to tos
@@ -82,6 +83,11 @@ DEF_INSTR(ldarg_, 1, 0, 1, 0)
  * ldloc_:: push local variable on stack
  */
 DEF_INSTR(ldloc_, 1, 0, 1, 1)
+
+/**
+ * stvar_:: assign tos to the immediate symbol
+ */
+DEF_INSTR(starg_, 1, 1, 0, 0)
 
 /**
  * stvar_:: assign tos to the immediate symbol
@@ -337,9 +343,14 @@ DEF_INSTR(extract1_1_, 0, 2, 1, 1)
 DEF_INSTR(extract1_2_, 0, 3, 1, 1)
 
 /**
- * subassign_ :: [<-(a,b,c)
+ * subassign1_1_ :: a[b] <- c
  */
-DEF_INSTR(subassign1_, 0, 3, 1, 1)
+DEF_INSTR(subassign1_1_, 0, 3, 1, 1)
+
+/**
+ * subassign1_2_ :: a[b,c] <- d
+ */
+DEF_INSTR(subassign1_2_, 0, 4, 1, 1)
 
 /**
  * extract2_1_:: do a[[b]], where a and b are on the stack and a is no obj
@@ -352,9 +363,14 @@ DEF_INSTR(extract2_1_, 0, 2, 1, 1)
 DEF_INSTR(extract2_2_, 0, 3, 1, 1)
 
 /**
- * subassign2_ :: [[<-(a,b,c)
+ * subassign2_1 :: a[[b]] <- c
  */
-DEF_INSTR(subassign2_, 0, 3, 1, 1)
+DEF_INSTR(subassign2_1_, 0, 3, 1, 1)
+
+/**
+ * subassign2_2_ :: a[[b,c]] <- d
+ */
+DEF_INSTR(subassign2_2_, 0, 4, 1, 1)
 
 /**
  * guard_fun_:: takes symbol, target, id, checks findFun(symbol) == target

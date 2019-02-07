@@ -137,6 +137,8 @@ void Code::disassemble(std::ostream& out, const std::string& prefix) const {
     }
 
     for (auto i : promises) {
+        if (i == MISSING_ARG_IDX || i == DOTS_ARG_IDX)
+            continue;
         auto c = getPromise(i);
         out << "\n[Prom (index " << prefix << i << ")]\n";
         std::stringstream ss;

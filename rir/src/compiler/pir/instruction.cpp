@@ -174,6 +174,17 @@ Instruction* Instruction::hasSingleUse() {
 void Instruction::eraseAndRemove() { bb()->remove(this); }
 
 void Instruction::replaceUsesIn(Value* replace, BB* target) {
+    if (replace->type.isRType() != type.isRType() ||
+        (replace->type.maybePromiseWrapped() && !type.maybePromiseWrapped())) {
+        std::cerr << "Trying to replace a ";
+        type.print(std::cerr);
+        std::cerr << " with a ";
+        replace->type.print(std::cerr);
+        std::cerr << "\n";
+        printBacktrace();
+        assert(false);
+    }
+
     Visitor::run(target, [&](Instruction* i) {
         i->eachArg([&](InstrArg& arg) {
             if (arg.val() == this)
@@ -208,8 +219,8 @@ const Value* Instruction::cFollowCastsAndForce() const {
     if (auto force = Force::Cast(this))
         return force->input()->followCastsAndForce();
     if (auto mkarg = MkArg::Cast(this))
-        if (mkarg->eagerArg() != Missing::instance())
-            return mkarg->eagerArg();
+        if (mkarg->isEager())
+            return mkarg->eagerArg()->followCastsAndForce();
     if (auto shared = SetShared::Cast(this))
         return shared->arg<0>().val()->followCastsAndForce();
     if (auto chk = ChkClosure::Cast(this))
@@ -238,6 +249,10 @@ void MkArg::printArgs(std::ostream& out, bool tty) const {
     out << ", " << *prom() << ", ";
 }
 
+void Missing::printArgs(std::ostream& out, bool tty) const {
+    out << CHAR(PRINTNAME(varName)) << ", ";
+}
+
 void LdVar::printArgs(std::ostream& out, bool tty) const {
     out << CHAR(PRINTNAME(varName)) << ", ";
 }
@@ -254,6 +269,8 @@ void LdFun::printArgs(std::ostream& out, bool tty) const {
 void LdArg::printArgs(std::ostream& out, bool tty) const { out << id; }
 
 void StVar::printArgs(std::ostream& out, bool tty) const {
+    if (isStArg)
+        out << "(StArg) ";
     out << CHAR(PRINTNAME(varName)) << ", ";
     val()->printRef(out);
     out << ", ";
@@ -458,9 +475,15 @@ bool Instruction::isSpeculable() const {
 }
 
 void StaticCall::printArgs(std::ostream& out, bool tty) const {
-    out << dispatch()->name();
-    if (hint && hint != dispatch())
-        out << "<hint: " << hint->nameSuffix() << ">";
+    if (auto trg = tryDispatch()) {
+        out << trg->name();
+    } else {
+        out << cls()->name();
+    }
+    if (auto hint = tryOptimisticDispatch()) {
+        if (hint != tryDispatch())
+            out << "<hint: " << hint->nameSuffix() << ">";
+    }
     printCallArgs(out, this);
     if (frameState()) {
         frameState()->printRef(out);
@@ -468,34 +491,33 @@ void StaticCall::printArgs(std::ostream& out, bool tty) const {
     }
 }
 
-ClosureVersion* CallInstruction::dispatch(Closure* cls) const {
+ClosureVersion* CallInstruction::tryDispatch(Closure* cls) const {
     auto res = cls->findCompatibleVersion(
         OptimizationContext(inferAvailableAssumptions()));
+#ifdef WARN_DISPATCH_FAIL
     if (!res) {
         std::cout << "DISPATCH FAILED! Available versions: \n";
         cls->eachVersion([&](ClosureVersion* v) {
-            std::cout << "* ";
-            for (auto a : v->assumptions())
-                std::cout << a << " ";
-            std::cout << "\n";
+            std::cout << "* " << v->assumptions() << "\n";
         });
-        std::cout << "Available assumptions at callsite: \n";
-        for (auto a : inferAvailableAssumptions())
-            std::cout << a << " ";
-        std::cout << "\n";
-        assert(false);
+        std::cout << "Available assumptions at callsite: \n ";
+        std::cout << inferAvailableAssumptions() << "\n";
     }
+#endif
     return res;
 }
 
-ClosureVersion* StaticCall::dispatch() const {
-    return CallInstruction::dispatch(cls());
+ClosureVersion* StaticCall::tryDispatch() const {
+    return CallInstruction::tryDispatch(cls());
 }
 
-ClosureVersion* StaticCall::optimisticDispatch() const {
-    auto dispatch = CallInstruction::dispatch(cls());
+ClosureVersion* StaticCall::tryOptimisticDispatch() const {
+    auto dispatch = CallInstruction::tryDispatch(cls());
     if (!hint)
         return dispatch;
+
+    if (!dispatch)
+        return nullptr;
 
     return (hint->optimizationContext() < dispatch->optimizationContext())
                ? dispatch
@@ -507,11 +529,12 @@ StaticCall::StaticCall(Value* callerEnv, Closure* cls,
                        unsigned srcIdx)
     : VarLenInstructionWithEnvSlot(PirType::val(), callerEnv, srcIdx),
       cls_(cls) {
-    assert(cls->nargs() == args.size());
+    assert(cls->nargs() >= args.size());
     assert(fs);
     pushArg(fs, NativeType::frameState);
     for (unsigned i = 0; i < args.size(); ++i)
         pushArg(args[i], PirType::val() | RType::prom);
+    assert(tryDispatch());
 }
 
 CallInstruction* CallInstruction::CastCall(Value* v) {
@@ -534,23 +557,26 @@ CallInstruction* CallInstruction::CastCall(Value* v) {
 Assumptions CallInstruction::inferAvailableAssumptions() const {
     Assumptions given;
     if (!hasNamedArgs())
-        given.set(Assumption::CorrectOrderOfArguments);
+        given.add(Assumption::CorrectOrderOfArguments);
     if (auto cls = tryGetCls()) {
-        if (cls->nargs() >= nCallArgs())
-            given.set(Assumption::NotTooManyArguments);
-        if (cls->nargs() <= nCallArgs())
-            given.set(Assumption::NoMissingArguments);
+        if (cls->nargs() >= nCallArgs()) {
+            given.add(Assumption::NotTooManyArguments);
+            auto missing = cls->nargs() - nCallArgs();
+            given.numMissing(missing);
+            given.add(Assumption::NotTooFewArguments);
+        }
     }
-    given.set(Assumption::NotTooManyArguments);
+    given.add(Assumption::NotTooManyArguments);
 
     // Make some optimistic assumptions, they might be reset below...
-    given.set(Assumption::EagerArgs_);
-    given.set(Assumption::NonObjectArgs_);
+    given.add(Assumption::EagerArgs_);
+    given.add(Assumption::NonObjectArgs_);
+    given.add(Assumption::NoExplicitlyMissingArgs);
 
     size_t i = 0;
     eachCallArg([&](Value* arg) {
         if (auto mk = MkArg::Cast(arg)) {
-            if (mk->eagerArg() == Missing::instance()) {
+            if (!mk->isEager()) {
                 given.setEager(i, false);
                 given.setNotObj(i, false);
                 return;
@@ -558,11 +584,10 @@ Assumptions CallInstruction::inferAvailableAssumptions() const {
                 arg = mk->eagerArg();
             }
         }
+        if (arg == MissingArg::instance())
+            given.remove(Assumption::NoExplicitlyMissingArgs);
         given.setEager(i, !arg->type.maybeLazy());
         given.setNotObj(i, !arg->type.maybeObj());
-
-        if (arg == Missing::instance())
-            given.reset(Assumption::NoMissingArguments);
     });
     return given;
 }
@@ -574,7 +599,7 @@ NamedCall::NamedCall(Value* callerEnv, Value* fun,
     assert(names_.size() == args.size());
     pushArg(fun, RType::closure);
     for (unsigned i = 0; i < args.size(); ++i) {
-        pushArg(args[i], RType::prom);
+        pushArg(args[i], PirType(RType::prom) | RType::missing);
         auto name = Pool::get(names_[i]);
         assert(TYPEOF(name) == SYMSXP || name == R_NilValue);
         names.push_back(name);
@@ -603,33 +628,6 @@ void NamedCall::printArgs(std::ostream& out, bool tty) const {
             out << ", ";
         i++;
     });
-    out << ") ";
-}
-
-CallImplicit::CallImplicit(Value* callerEnv, Value* fun,
-                           const std::vector<Promise*>& args,
-                           const std::vector<SEXP>& names_, unsigned srcIdx)
-    : FixedLenInstructionWithEnvSlot(PirType::valOrLazy(),
-                                     {{PirType::closure()}}, {{fun}}, callerEnv,
-                                     srcIdx),
-      promises(args), names(names_) {}
-
-void CallImplicit::eachArg(const std::function<void(Promise*)>& action) const {
-    for (auto prom : promises) {
-        action(prom);
-    }
-}
-
-void CallImplicit::printArgs(std::ostream& out, bool tty) const {
-    cls()->printRef(out);
-    out << "(";
-    for (size_t i = 0; i < promises.size(); ++i) {
-        if (i < names.size() && names[i] != R_NilValue)
-            out << CHAR(PRINTNAME(names[i])) << "=";
-        out << "Prom(" << promises[i]->id << ")";
-        if (i < promises.size() - 1)
-            out << ", ";
-    }
     out << ") ";
 }
 

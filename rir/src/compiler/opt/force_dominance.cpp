@@ -278,8 +278,8 @@ void ForceDominance::apply(RirCompiler&, ClosureVersion* cls,
                         f->strict = true;
 
                     if (auto mkarg = MkArg::Cast(f->followCastsAndForce())) {
-                        Value* eager = mkarg->eagerArg();
-                        if (eager != Missing::instance()) {
+                        if (mkarg->isEager()) {
+                            Value* eager = mkarg->eagerArg();
                             f->replaceUsesWith(eager);
                             next = bb->remove(ip);
                         } else if (result.isDominatingForce(f)) {
@@ -322,10 +322,11 @@ void ForceDominance::apply(RirCompiler&, ClosureVersion* cls,
                     }
                 } else if (auto cast = CastType::Cast(*ip)) {
                     if (auto mk = MkArg::Cast(cast->arg<0>().val())) {
-                        mk->ifEager([&](Value* val) {
-                            cast->replaceUsesWith(val);
+                        if (mk->isEager()) {
+                            auto eager = mk->eagerArg();
+                            cast->replaceUsesWith(eager);
                             next = bb->remove(ip);
-                        });
+                        }
                     }
                 }
                 ip = next;

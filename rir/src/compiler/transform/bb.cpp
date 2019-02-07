@@ -39,8 +39,8 @@ BB* BBTransform::clone(BB* src, Code* target, ClosureVersion* targetClosure) {
     Visitor::run(newEntry, [&](Instruction* i) {
         auto phi = Phi::Cast(i);
         if (phi) {
-            for (size_t j = 0; j < phi->input.size(); ++j)
-                phi->input[j] = bbs[phi->input[j]->id];
+            for (size_t j = 0; j < phi->nargs(); ++j)
+                phi->updateInputAt(j, bbs[phi->inputAt(j)->id]);
         }
         i->eachArg([&](InstrArg& arg) {
             if (arg.val()->isInstruction()) {
@@ -77,9 +77,9 @@ BB* BBTransform::split(BB* src, BB::Instrs::iterator it) {
     Visitor::run(split, [&](Instruction* i) {
         auto phi = Phi::Cast(i);
         if (phi) {
-            for (size_t j = 0; j < phi->input.size(); ++j)
-                if (phi->input[j] == src)
-                    phi->input[j] = split;
+            for (size_t j = 0; j < phi->nargs(); ++j)
+                if (phi->inputAt(j) == src)
+                    phi->updateInputAt(j, split);
         }
     });
     return split;
@@ -188,6 +188,5 @@ Value* BBTransform::addDeopt(BB* src, BB::Instrs::iterator it,
     src->setBranch(branch, deoptBranch);
     return cp;
 }
-
 } // namespace pir
 } // namespace rir

@@ -32,7 +32,6 @@ matrix:
         - CC_OVERRIDE=gcc-7
         - CHECK=check
         - BUILD=sanitize
-        - PIR_ENABLE=force
         - TEST_CPPCHECK=1
 
     - env:
@@ -50,6 +49,12 @@ matrix:
         - BUILD=release
         - TEST_GCTORTURE=1
         - RIR_WARMUP=4
+
+    - env:
+        - CXX_OVERRIDE=g++-7
+        - CC_OVERRIDE=gcc-7
+        - BUILD=release
+        - BENCHS=1
 
 addons:
   apt:
@@ -132,6 +137,7 @@ script:
   # Run the internal testsuite in all combinations
   - if [[ "$TEST_VALGRIND"  != "" ]];  then  ENABLE_VALGRIND=1 ./bin/tests; fi
   - if [[ "$TEST_GCTORTURE" != "" ]];  then  R_GCTORTURE=100   ./bin/tests; fi
+  - if [[ "$BENCHS" -eq 1 ]]; then ../tools/downloadBenchs.sh --travis; ../tools/runBenchs.sh --installRebench --travis; fi
   - R_ENABLE_JIT=0 ./bin/tests
   - R_ENABLE_JIT=1 ./bin/tests
   - R_ENABLE_JIT=2 ./bin/tests
