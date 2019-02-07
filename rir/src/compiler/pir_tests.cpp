@@ -51,6 +51,7 @@ typedef std::unordered_map<std::string, pir::ClosureVersion*> closuresByName;
 closuresByName compileRir2Pir(SEXP env, pir::Module* m) {
     pir::StreamLogger logger({pir::DebugOptions::DebugFlags() |
                                   // pir::DebugFlag::PrintIntoStdout |
+                                  // pir::DebugFlag::PrintEarlyRir |
                                   // pir::DebugFlag::PrintOptimizationPasses |
                                   pir::DebugFlag::PrintFinalPir,
                               ""});
@@ -63,7 +64,7 @@ closuresByName compileRir2Pir(SEXP env, pir::Module* m) {
         auto fun = *f;
         if (TYPEOF(fun) == CLOSXP) {
             assert(isValidClosureSEXP(fun));
-            cmp.compileClosure(fun, "test_function", {},
+            cmp.compileClosure(fun, "test_function",
                                [&](pir::ClosureVersion* cls) {
                                    results[CHAR(PRINTNAME(f.tag()))] = cls;
                                },

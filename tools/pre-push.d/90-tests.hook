@@ -4,7 +4,7 @@ ROOT=$1
 
 . "${ROOT}/tools/script_include.sh"
 
-build ${ROOT}/tests/build_push_hook ${ROOT} debug
+build ${ROOT}/tests/build_push_hook ${ROOT} debugopt
 
 cd ${ROOT}/tests/build_push_hook
 

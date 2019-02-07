@@ -110,14 +110,14 @@ class VisitorImplementation {
      * Instruction Visitors
      *
      */
-    static void run(BB* bb, InstrAction action) {
+    static void run(BB* bb, const InstrAction& action) {
         run(bb, [action](BB* bb) {
             for (auto i : *bb)
                 action(i);
         });
     }
 
-    static bool check(BB* bb, InstrActionPredicate action) {
+    static bool check(BB* bb, const InstrActionPredicate& action) {
         return check(bb, [action](BB* bb) {
             bool holds = true;
             for (auto i : *bb) {
@@ -130,14 +130,14 @@ class VisitorImplementation {
         });
     }
 
-    static void run(BB* bb, InstrBBAction action) {
+    static void run(BB* bb, const InstrBBAction& action) {
         run(bb, [action](BB* bb) {
             for (auto i : *bb)
                 action(i, bb);
         });
     }
 
-    static bool check(BB* bb, InstrBBActionPredicate action) {
+    static bool check(BB* bb, const InstrBBActionPredicate& action) {
         return check(bb, [action](BB* bb) {
             bool holds = true;
             for (auto i : *bb) {
@@ -150,7 +150,7 @@ class VisitorImplementation {
         });
     }
 
-    static void runBackward(BB* bb, CFG const& cfg, InstrAction action) {
+    static void runBackward(BB* bb, CFG const& cfg, const InstrAction& action) {
         runBackward(bb, cfg, [action](BB* bb) {
             for (auto i : VisitorHelpers::reverse(*bb))
                 action(i);
@@ -158,7 +158,7 @@ class VisitorImplementation {
     }
 
     static bool checkBackward(BB* bb, CFG const& cfg,
-                              InstrActionPredicate action) {
+                              const InstrActionPredicate& action) {
         return checkBackward(bb, cfg, [action](BB* bb) {
             bool holds = true;
             for (auto i : VisitorHelpers::reverse(*bb)) {
@@ -171,7 +171,8 @@ class VisitorImplementation {
         });
     }
 
-    static void runBackward(BB* bb, CFG const& cfg, InstrBBAction action) {
+    static void runBackward(BB* bb, CFG const& cfg,
+                            const InstrBBAction& action) {
         runBackward(bb, cfg, [action](BB* bb) {
             for (auto i : VisitorHelpers::reverse(*bb))
                 action(i, bb);
@@ -179,7 +180,7 @@ class VisitorImplementation {
     }
 
     static bool checkBackward(BB* bb, CFG const& cfg,
-                              InstrBBActionPredicate action) {
+                              const InstrBBActionPredicate& action) {
         return checkBackward(bb, cfg, [action](BB* bb) {
             bool holds = true;
             for (auto i : VisitorHelpers::reverse(*bb)) {
@@ -196,34 +197,33 @@ class VisitorImplementation {
      * BB Visitors
      *
      */
-    static void run(BB* bb, BBAction action) {
-        forwardGenericRun(bb, action, false);
+    static void run(BB* bb, const BBAction& action) {
+        forwardGenericRun<false>(bb, action);
     }
 
-    static void runPostChange(BB* bb, BBAction action) {
-        forwardGenericRun(bb, action, true);
+    static void runPostChange(BB* bb, const BBAction& action) {
+        forwardGenericRun<true>(bb, action);
     }
 
-    static bool check(BB* bb, BBActionPredicate action) {
-        return forwardGenericRun(bb, action, false);
+    static bool check(BB* bb, const BBActionPredicate& action) {
+        return forwardGenericRun<false>(bb, action);
     }
 
-    static void runBackward(BB* bb, CFG const& cfg, BBAction action) {
-        backwardGenericRun(bb, cfg, action, false);
+    static void runBackward(BB* bb, CFG const& cfg, const BBAction& action) {
+        backwardGenericRun<false>(bb, cfg, action);
     }
 
     static bool checkBackward(BB* bb, CFG const& cfg,
-                              BBActionPredicate action) {
-        return backwardGenericRun(bb, cfg, action, false);
+                              const BBActionPredicate& action) {
+        return backwardGenericRun<false>(bb, cfg, action);
     }
 
   protected:
     typedef std::function<void(BB*)> Schedule;
     typedef std::function<void(Schedule, BB*)> ScheduleNext;
 
-    template <typename ActionKind>
-    static bool forwardGenericRun(BB* bb, ActionKind action,
-                                  bool processNewNodes) {
+    template <bool PROCESS_NEW_NODES, typename ActionKind>
+    static bool forwardGenericRun(BB* bb, ActionKind action) {
         auto scheduleNext = [&](Schedule schedule, BB* cur) {
             if (ORDER == Order::Lowering) {
                 // Curently we emit only brtrue in pir2rir, therefore we
@@ -235,22 +235,22 @@ class VisitorImplementation {
                 schedule(cur->next1);
             }
         };
-        return genericRun(bb, action, scheduleNext, processNewNodes);
+        return genericRun<PROCESS_NEW_NODES>(bb, action, scheduleNext);
     }
 
-    template <typename ActionKind>
+    template <bool PROCESS_NEW_NODES, typename ActionKind>
     static bool backwardGenericRun(BB* bb, CFG const& cfg, ActionKind action,
                                    bool processNewNodes) {
         auto scheduleNext = [&](Schedule schedule, BB* cur) {
             for (auto pred : cfg.immediatePredecessors(cur))
                 schedule(pred);
         };
-        return genericRun(bb, action, scheduleNext, processNewNodes);
+        return genericRun<PROCESS_NEW_NODES>(bb, action, scheduleNext);
     }
 
-    template <typename ActionKind>
-    static bool genericRun(BB* bb, ActionKind action, ScheduleNext scheduleNext,
-                           bool processNewNodes) {
+    template <bool PROCESS_NEW_NODES, typename ActionKind>
+    static bool genericRun(BB* bb, ActionKind action,
+                           ScheduleNext scheduleNext) {
         typedef VisitorHelpers::PredicateWrapper<ActionKind> PredicateWrapper;
         const PredicateWrapper predicate = {action};
 
@@ -279,11 +279,11 @@ class VisitorImplementation {
         while (cur) {
             next = nullptr;
 
-            if (!processNewNodes)
+            if (!PROCESS_NEW_NODES)
                 scheduleNext(schedule, cur);
             if (!predicate(cur))
                 return false;
-            if (processNewNodes)
+            if (PROCESS_NEW_NODES)
                 scheduleNext(schedule, cur);
 
             if (!next) {

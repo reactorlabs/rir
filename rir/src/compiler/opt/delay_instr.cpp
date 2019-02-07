@@ -29,8 +29,8 @@ void DelayInstr::apply(RirCompiler&, ClosureVersion* function,
                         // actually needed.
                         for (size_t j = 0; j < phi->nargs(); ++j) {
                             if (phi->arg(j).val() == i) {
-                                if (phi->input[j] != bb) {
-                                    next = bb->moveToEnd(ip, phi->input[j]);
+                                if (phi->inputAt(j) != bb) {
+                                    next = bb->moveToEnd(ip, phi->inputAt(j));
                                 }
                                 break;
                             }

@@ -94,6 +94,8 @@ enum class Effect : uint8_t {
     // Instruction doesn't really have effects itself, but it should not be
     // hoisted over any other instruction with effect. Example: Assume
     Order,
+    // Changes R_Visible
+    Visibility,
     // Instruction might produce a warning. Example: AsTest warns if the
     // vector used in an if condition has length > 1
     Warn,
@@ -129,6 +131,7 @@ class Instruction : public Value {
     virtual bool hasEffect() const = 0;
     virtual bool mayUseReflection() const = 0;
     virtual bool mayForcePromises() const = 0;
+    virtual bool readsEnv() const = 0;
     virtual bool changesEnv() const = 0;
     virtual bool leaksEnv() const = 0;
     virtual bool mayAccessEnv() const = 0;
@@ -200,22 +203,22 @@ class Instruction : public Value {
         return false;
     }
 
-    void eachArg(Instruction::ArgumentValueIterator it) const {
+    void eachArg(const Instruction::ArgumentValueIterator& it) const {
         for (size_t i = 0; i < nargs(); ++i)
             it(arg(i).val());
     }
 
-    void eachArg(Instruction::ArgumentIterator it) const {
+    void eachArg(const Instruction::ArgumentIterator& it) const {
         for (size_t i = 0; i < nargs(); ++i)
             it(arg(i));
     }
 
-    void eachArg(Instruction::MutableArgumentIterator it) {
+    void eachArg(const Instruction::MutableArgumentIterator& it) {
         for (size_t i = 0; i < nargs(); ++i)
             it(arg(i));
     }
 
-    void eachArgRev(Instruction::ArgumentValueIterator it) const {
+    void eachArgRev(const Instruction::ArgumentValueIterator& it) const {
         for (size_t i = 0; i < nargs(); ++i)
             it(arg(nargs() - 1 - i).val());
     }
@@ -271,6 +274,7 @@ class InstructionImplementation : public Instruction {
     }
 
     static constexpr bool mayAccessEnv_ = ENV > EnvAccess::None;
+    static constexpr bool mayReadEnv_ = ENV >= EnvAccess::Read;
     static constexpr bool mayChangeEnv_ = ENV >= EnvAccess::Write;
     static constexpr bool mayLeakEnv_ = ENV >= EnvAccess::Leak;
 
@@ -282,6 +286,7 @@ class InstructionImplementation : public Instruction {
         return EFFECT > Effect::Reflection;
     }
     bool mayAccessEnv() const override final { return mayAccessEnv_; }
+    bool readsEnv() const override final { return hasEnv() && mayReadEnv_; }
     bool changesEnv() const override final { return hasEnv() && mayChangeEnv_; }
     bool leaksEnv() const override final { return hasEnv() && mayLeakEnv_; }
     bool hasEnv() const override final {
@@ -550,7 +555,7 @@ class FLIE(LdFun, 2, Effect::Any, EnvAccess::Write) {
     void printArgs(std::ostream& out, bool tty) const override;
 };
 
-class FLIE(LdVar, 1, Effect::None, EnvAccess::Read) {
+class FLIE(LdVar, 1, Effect::Error, EnvAccess::Read) {
   public:
     SEXP varName;
 
@@ -576,16 +581,24 @@ class FLI(LdArg, 0, Effect::None, EnvAccess::None) {
   public:
     size_t id;
 
-    explicit LdArg(size_t id)
-        : FixedLenInstruction(PirType::valOrLazy()), id(id) {}
+    explicit LdArg(size_t id) : FixedLenInstruction(PirType::any()), id(id) {}
 
+    void printArgs(std::ostream& out, bool tty) const override;
+};
+
+class FLIE(Missing, 1, Effect::None, EnvAccess::Read) {
+  public:
+    SEXP varName;
+    explicit Missing(SEXP varName, Value* env)
+        : FixedLenInstructionWithEnvSlot(RType::logical, env),
+          varName(varName) {}
     void printArgs(std::ostream& out, bool tty) const override;
 };
 
 class FLI(ChkMissing, 1, Effect::Warn, EnvAccess::None) {
   public:
     explicit ChkMissing(Value* in)
-        : FixedLenInstruction(PirType::valOrLazy(), {{PirType::any()}},
+        : FixedLenInstruction(in->type.notMissing(), {{PirType::val()}},
                               {{in}}) {}
 };
 
@@ -614,7 +627,7 @@ class FLIE(StVarSuper, 2, Effect::None, EnvAccess::Write) {
     void printArgs(std::ostream& out, bool tty) const override;
 };
 
-class FLIE(LdVarSuper, 1, Effect::None, EnvAccess::Read) {
+class FLIE(LdVarSuper, 1, Effect::Error, EnvAccess::Read) {
   public:
     LdVarSuper(SEXP name, Value* env)
         : FixedLenInstructionWithEnvSlot(PirType::any(), env), varName(name) {}
@@ -630,6 +643,7 @@ class FLIE(LdVarSuper, 1, Effect::None, EnvAccess::Read) {
 
 class FLIE(StVar, 2, Effect::None, EnvAccess::Write) {
   public:
+    bool isStArg = false;
     StVar(SEXP name, Value* val, Value* env)
         : FixedLenInstructionWithEnvSlot(PirType::voyd(), {{PirType::val()}},
                                          {{val}}, env),
@@ -645,6 +659,15 @@ class FLIE(StVar, 2, Effect::None, EnvAccess::Write) {
     using FixedLenInstructionWithEnvSlot::env;
 
     void printArgs(std::ostream& out, bool tty) const override;
+};
+
+// Pseudo Instruction. Is actually a StVar with a flag set.
+class StArg : public StVar {
+  public:
+    StArg(SEXP name, Value* val, Value* env) : StVar(name, val, env) {
+        arg<0>().type() = PirType::any();
+        isStArg = true;
+    }
 };
 
 class Branch
@@ -670,8 +693,8 @@ class FLIE(MkArg, 2, Effect::None, EnvAccess::Capture) {
 
   public:
     MkArg(Promise* prom, Value* v, Value* env)
-        : FixedLenInstructionWithEnvSlot(
-              RType::prom, {{PirType::valOrMissing()}}, {{v}}, env),
+        : FixedLenInstructionWithEnvSlot(RType::prom, {{PirType::val()}}, {{v}},
+                                         env),
           prom_(prom) {
         assert(eagerArg() == v);
     }
@@ -682,19 +705,13 @@ class FLIE(MkArg, 2, Effect::None, EnvAccess::Capture) {
         assert(eagerArg() == v);
     }
 
-    typedef std::function<void(Promise*)> PromMaybe;
-    typedef std::function<void(Value*)> EagerMaybe;
-
     Value* eagerArg() const { return arg(0).val(); }
     void eagerArg(Value* eager) { arg(0).val() = eager; }
 
     void updatePromise(Promise* p) { prom_ = p; }
     Promise* prom() const { return prom_; }
 
-    void ifEager(EagerMaybe maybe) {
-        if (eagerArg() != Missing::instance())
-            maybe(eagerArg());
-    }
+    bool isEager() const { return eagerArg() != UnboundValue::instance(); }
 
     void printArgs(std::ostream& out, bool tty) const override;
 
@@ -902,6 +919,16 @@ class FLI(SetShared, 1, Effect::None, EnvAccess::None) {
     void updateType() override final { type = arg<0>().val()->type; }
 };
 
+class FLI(Visible, 0, Effect::Visibility, EnvAccess::None) {
+  public:
+    explicit Visible() : FixedLenInstruction(PirType::voyd()) {}
+};
+
+class FLI(Invisible, 0, Effect::Visibility, EnvAccess::None) {
+  public:
+    explicit Invisible() : FixedLenInstruction(PirType::voyd()) {}
+};
+
 class FLI(PirCopy, 1, Effect::None, EnvAccess::None) {
   public:
     explicit PirCopy(Value* v)
@@ -1077,14 +1104,16 @@ class VLIE(FrameState, Effect::None, EnvAccess::Read) {
 class CallInstruction {
   public:
     virtual size_t nCallArgs() const = 0;
-    virtual void eachCallArg(Instruction::ArgumentValueIterator it) const = 0;
-    virtual void eachCallArg(Instruction::MutableArgumentIterator it) = 0;
+    virtual void
+    eachCallArg(const Instruction::ArgumentValueIterator& it) const = 0;
+    virtual void
+    eachCallArg(const Instruction::MutableArgumentIterator& it) = 0;
     static CallInstruction* CastCall(Value* v);
     virtual void clearFrameState(){};
     virtual Closure* tryGetCls() const { return nullptr; }
     Assumptions inferAvailableAssumptions() const;
     virtual bool hasNamedArgs() const { return false; }
-    ClosureVersion* dispatch(Closure*) const;
+    ClosureVersion* tryDispatch(Closure*) const;
 };
 
 // Default call instruction. Closure expression (ie. expr left of `(`) is
@@ -1101,7 +1130,7 @@ class VLIE(Call, Effect::Any, EnvAccess::Leak), public CallInstruction {
         pushArg(fs, NativeType::frameState);
         pushArg(fun, RType::closure);
         for (unsigned i = 0; i < args.size(); ++i)
-            pushArg(args[i], RType::prom);
+            pushArg(args[i], PirType(RType::prom) | RType::missing);
     }
 
     Closure* tryGetCls() const override final {
@@ -1111,11 +1140,12 @@ class VLIE(Call, Effect::Any, EnvAccess::Leak), public CallInstruction {
     }
 
     size_t nCallArgs() const override { return nargs() - 3; };
-    void eachCallArg(Instruction::ArgumentValueIterator it) const override {
+    void eachCallArg(const Instruction::ArgumentValueIterator& it)
+        const override {
         for (size_t i = 0; i < nCallArgs(); ++i)
             it(arg(i + 2).val());
     }
-    void eachCallArg(Instruction::MutableArgumentIterator it) override {
+    void eachCallArg(const Instruction::MutableArgumentIterator& it) override {
         for (size_t i = 0; i < nCallArgs(); ++i)
             it(arg(i + 2));
     }
@@ -1148,34 +1178,18 @@ class VLIE(NamedCall, Effect::Any, EnvAccess::Leak), public CallInstruction {
               const std::vector<BC::PoolIdx>& names_, unsigned srcIdx);
 
     size_t nCallArgs() const override { return nargs() - 2; };
-    void eachCallArg(Instruction::ArgumentValueIterator it) const override {
+    void eachCallArg(const Instruction::ArgumentValueIterator& it)
+        const override {
         for (size_t i = 0; i < nCallArgs(); ++i)
             it(arg(i + 1).val());
     }
-    void eachCallArg(Instruction::MutableArgumentIterator it) override {
+    void eachCallArg(const Instruction::MutableArgumentIterator& it) override {
         for (size_t i = 0; i < nCallArgs(); ++i)
             it(arg(i + 1));
     }
 
     Value* callerEnv() { return env(); }
     void printArgs(std::ostream & out, bool tty) const override;
-};
-
-class FLIE(CallImplicit, 2, Effect::Any, EnvAccess::Leak) {
-    const std::vector<Promise*> promises;
-
-  public:
-    void eachArg(const std::function<void(Promise*)>&) const;
-    const std::vector<SEXP> names;
-
-    Value* cls() const { return arg(0).val(); }
-
-    CallImplicit(Value* callerEnv, Value* fun,
-                 const std::vector<Promise*>& args,
-                 const std::vector<SEXP>& names_, unsigned srcIdx);
-
-    Value* callerEnv() { return env(); }
-    void printArgs(std::ostream& out, bool tty) const override;
 };
 
 // Call instruction for lazy, but staticatlly resolved calls. Closure is
@@ -1196,11 +1210,12 @@ class VLIE(StaticCall, Effect::Any, EnvAccess::Leak), public CallInstruction {
                unsigned srcIdx);
 
     size_t nCallArgs() const override { return nargs() - 2; };
-    void eachCallArg(Instruction::ArgumentValueIterator it) const override {
+    void eachCallArg(const Instruction::ArgumentValueIterator& it)
+        const override {
         for (size_t i = 0; i < nCallArgs(); ++i)
             it(arg(i + 1).val());
     }
-    void eachCallArg(Instruction::MutableArgumentIterator it) override {
+    void eachCallArg(const Instruction::MutableArgumentIterator& it) override {
         for (size_t i = 0; i < nCallArgs(); ++i)
             it(arg(i + 1));
     }
@@ -1213,9 +1228,9 @@ class VLIE(StaticCall, Effect::Any, EnvAccess::Leak), public CallInstruction {
     void printArgs(std::ostream & out, bool tty) const override;
     Value* callerEnv() { return env(); }
 
-    ClosureVersion* dispatch() const;
+    ClosureVersion* tryDispatch() const;
 
-    ClosureVersion* optimisticDispatch() const;
+    ClosureVersion* tryOptimisticDispatch() const;
 };
 
 typedef SEXP (*CCODE)(SEXP, SEXP, SEXP, SEXP);
@@ -1227,11 +1242,12 @@ class VLIE(CallBuiltin, Effect::Any, EnvAccess::Leak), public CallInstruction {
     int builtinId;
 
     size_t nCallArgs() const override { return nargs() - 1; };
-    void eachCallArg(Instruction::ArgumentValueIterator it) const override {
+    void eachCallArg(const Instruction::ArgumentValueIterator& it)
+        const override {
         for (size_t i = 0; i < nCallArgs(); ++i)
             it(arg(i).val());
     }
-    void eachCallArg(Instruction::MutableArgumentIterator it) override {
+    void eachCallArg(const Instruction::MutableArgumentIterator& it) override {
         for (size_t i = 0; i < nCallArgs(); ++i)
             it(arg(i));
     }
@@ -1252,10 +1268,11 @@ class VLI(CallSafeBuiltin, Effect::None, EnvAccess::None),
     int builtinId;
 
     size_t nCallArgs() const override { return nargs(); };
-    void eachCallArg(Instruction::ArgumentValueIterator it) const override {
+    void eachCallArg(const Instruction::ArgumentValueIterator& it)
+        const override {
         eachArg(it);
     }
-    void eachCallArg(Instruction::MutableArgumentIterator it) override {
+    void eachCallArg(const Instruction::MutableArgumentIterator& it) override {
         eachArg(it);
     }
 
@@ -1278,17 +1295,17 @@ class VLIE(MkEnv, Effect::None, EnvAccess::Capture) {
     typedef std::function<void(SEXP name, Value* val)> LocalVarIt;
     typedef std::function<void(SEXP name, InstrArg&)> MutableLocalVarIt;
 
-    void eachLocalVar(MutableLocalVarIt it) {
+    RIR_INLINE void eachLocalVar(MutableLocalVarIt it) {
         for (size_t i = 0; i < envSlot(); ++i)
             it(varName[i], arg(i));
     }
 
-    void eachLocalVar(LocalVarIt it) const {
+    RIR_INLINE void eachLocalVar(LocalVarIt it) const {
         for (size_t i = 0; i < envSlot(); ++i)
             it(varName[i], arg(i).val());
     }
 
-    void eachLocalVarRev(LocalVarIt it) const {
+    RIR_INLINE void eachLocalVarRev(LocalVarIt it) const {
         for (long i = envSlot() - 1; i >= 0; --i)
             it(varName[i], arg(i).val());
     }
@@ -1308,8 +1325,9 @@ class VLIE(MkEnv, Effect::None, EnvAccess::Capture) {
 };
 
 class VLI(Phi, Effect::None, EnvAccess::None) {
-  public:
     std::vector<BB*> input;
+
+  public:
     Phi() : VarLenInstruction(PirType::any()) {}
     Phi(const std::initializer_list<Value*>& vals,
         const std::initializer_list<BB*>& inputs)
@@ -1327,14 +1345,22 @@ class VLI(Phi, Effect::None, EnvAccess::None) {
     }
     void pushArg(Value* a) override { assert(false && "use addInput"); }
     void addInput(BB* in, Value* arg) {
+        SLOWASSERT(std::find(input.begin(), input.end(), in) == input.end() &&
+                   "Duplicate PHI input block");
         input.push_back(in);
         args_.push_back(InstrArg(arg, PirType::any()));
     }
+    BB* inputAt(size_t i) const { return input.at(i); }
+    void updateInputAt(size_t i, BB* bb) {
+        SLOWASSERT(std::find(input.begin(), input.end(), bb) == input.end() &&
+                   "Duplicate PHI input block");
+        input[i] = bb;
+    }
+    const std::vector<BB*>& inputs() { return input; }
     void removeInputs(const std::unordered_set<BB*>& del);
 
     typedef std::function<void(BB* bb, Value*)> PhiArgumentIterator;
-
-    void eachArg(PhiArgumentIterator it) const {
+    void eachArg(const PhiArgumentIterator& it) const {
         for (size_t i = 0; i < nargs(); ++i)
             it(input[i], arg(i).val());
     }

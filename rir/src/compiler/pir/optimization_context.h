@@ -15,13 +15,15 @@ struct OptimizationContext {
     Assumptions assumptions;
 
     bool operator<(const OptimizationContext& other) const {
-        if (assumptions.count() != other.assumptions.count())
-            return assumptions.count() < other.assumptions.count();
-        return assumptions.to_i() < other.assumptions.to_i();
+        return assumptions < other.assumptions;
     }
 
     bool operator==(const OptimizationContext& other) const {
         return assumptions == other.assumptions;
+    }
+
+    bool subtype(const OptimizationContext& other) const {
+        return assumptions.subtype(other.assumptions);
     }
 };
 
@@ -33,7 +35,7 @@ template <>
 struct hash<rir::pir::OptimizationContext> {
     std::size_t operator()(const rir::pir::OptimizationContext& v) const {
         using std::hash;
-        return hash<unsigned long long>()(v.assumptions.to_i());
+        return hash<rir::Assumptions>()(v.assumptions);
     }
 };
 } // namespace std

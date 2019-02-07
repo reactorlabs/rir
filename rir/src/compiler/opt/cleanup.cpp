@@ -35,7 +35,9 @@ class TheCleanup {
                     next = bb->remove(ip);
                 } else if (auto force = Force::Cast(i)) {
                     Value* arg = force->input();
-                    if (!arg->type.maybePromiseWrapped()) {
+                    // Missing args produce error.
+                    if (!arg->type.maybePromiseWrapped() &&
+                        !arg->type.maybeMissing()) {
                         removed = true;
                         force->replaceUsesWith(arg);
                         next = bb->remove(ip);
@@ -49,7 +51,7 @@ class TheCleanup {
                     }
                 } else if (auto missing = ChkMissing::Cast(i)) {
                     Value* arg = missing->arg<0>().val();
-                    if (PirType::val().isSuper(arg->type)) {
+                    if (!arg->type.maybeMissing()) {
                         removed = true;
                         missing->replaceUsesWith(arg);
                         next = bb->remove(ip);
@@ -62,7 +64,7 @@ class TheCleanup {
                         phi->replaceUsesWith(*phin.begin());
                         next = bb->remove(ip);
                     } else {
-                        for (auto curBB : phi->input)
+                        for (auto curBB : phi->inputs())
                             usedBB[curBB].insert(phi);
                     }
                 } else if (auto arg = MkArg::Cast(i)) {
@@ -89,11 +91,6 @@ class TheCleanup {
                         next = bb->remove(ip);
                     }
                 }
-                // CallImplicit is only added in the lowering phase. The unused
-                // promise deletion would be broken, if we were to use
-                // CallImplicit in the middle-end, since this instruction can
-                // also point to promises.
-                assert(!CallImplicit::Cast(i));
                 if (!removed) {
                     if (!Phi::Cast(i)) {
                         i->eachArg([&](Value* arg) {
@@ -151,9 +148,9 @@ class TheCleanup {
 
         auto fixupPhiInput = [&](BB* old, BB* n) {
             for (auto phi : usedBB[old]) {
-                for (auto& in : phi->input)
-                    if (in == old)
-                        in = n;
+                for (size_t i = 0; i < phi->nargs(); ++i)
+                    if (phi->inputAt(i) == old)
+                        phi->updateInputAt(i, n);
             }
         };
         CFG cfg(function);

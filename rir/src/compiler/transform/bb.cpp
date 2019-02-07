@@ -39,8 +39,8 @@ BB* BBTransform::clone(BB* src, Code* target, ClosureVersion* targetClosure) {
     Visitor::run(newEntry, [&](Instruction* i) {
         auto phi = Phi::Cast(i);
         if (phi) {
-            for (size_t j = 0; j < phi->input.size(); ++j)
-                phi->input[j] = bbs[phi->input[j]->id];
+            for (size_t j = 0; j < phi->nargs(); ++j)
+                phi->updateInputAt(j, bbs[phi->inputAt(j)->id]);
         }
         i->eachArg([&](InstrArg& arg) {
             if (arg.val()->isInstruction()) {
@@ -100,9 +100,9 @@ BB* BBTransform::split(size_t next_id, BB* src, BB::Instrs::iterator it,
     Visitor::run(split, [&](Instruction* i) {
         auto phi = Phi::Cast(i);
         if (phi) {
-            for (size_t j = 0; j < phi->input.size(); ++j)
-                if (phi->input[j] == src)
-                    phi->input[j] = split;
+            for (size_t j = 0; j < phi->nargs(); ++j)
+                if (phi->inputAt(j) == src)
+                    phi->updateInputAt(j, split);
         }
     });
     return split;
@@ -165,21 +165,6 @@ BB* BBTransform::lowerExpect(Code* code, BB* src, BB::Instrs::iterator position,
     splitEdge(code->nextBBId++, src, deoptBlock, code);
 
     return split;
-}
-
-void BBTransform::removeBBs(Code* code,
-                            const std::unordered_set<BB*>& toDelete) {
-    // Dead code can still appear as phi inputs in live blocks
-    Visitor::run(code->entry, [&](BB* bb) {
-        for (auto i : *bb) {
-            if (auto phi = Phi::Cast(i)) {
-                phi->removeInputs(toDelete);
-            }
-        }
-    });
-    for (auto bb : toDelete) {
-        delete bb;
-    }
 }
 
 } // namespace pir

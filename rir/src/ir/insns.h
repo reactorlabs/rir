@@ -17,9 +17,10 @@ DEF_INSTR(invalid_, 0, 0, 0, 0)
 DEF_INSTR(nop_, 0, 0, 0, 1)
 
 /**
- * make_env_:: create a new empty environment with the parent taken from TOS
+ * make_env_:: create a new environment with the parent and all locals taken
+ * from stack and the argument names as immediates.
  */
-DEF_INSTR(make_env_, 0, 1, 1, 1)
+DEF_INSTR(mk_env_, 1, -1, 1, 1)
 
 /**
  * parent_env_:: push lexically outer env to tos
@@ -82,6 +83,11 @@ DEF_INSTR(ldarg_, 1, 0, 1, 0)
  * ldloc_:: push local variable on stack
  */
 DEF_INSTR(ldloc_, 1, 0, 1, 1)
+
+/**
+ * stvar_:: assign tos to the immediate symbol
+ */
+DEF_INSTR(starg_, 1, 1, 0, 0)
 
 /**
  * stvar_:: assign tos to the immediate symbol

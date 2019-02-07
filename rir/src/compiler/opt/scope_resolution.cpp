@@ -71,26 +71,64 @@ class TheScopeResolution {
                     continue;
                 }
 
+                // Constant fold "missing" if we can
+                if (auto missing = Missing::Cast(i)) {
+                    auto res =
+                        analysis.load(before, missing->varName, missing->env());
+                    if (!res.result.type.maybeMissing()) {
+                        // Missing still returns TRUE, if the argument was
+                        // initially missing, but then overwritten by a default
+                        // argument. Currently our analysis cannot really
+                        // distinguish those cases. Therefore, if the current
+                        // value of the variable is guaranteed to not be a
+                        // missing value, we additionally need verify that the
+                        // initial argument (the argument to the mkenv) was also
+                        // guaranteed to not be a missing value.
+                        // TODO: this is a bit brittle and might break as soon
+                        // as we start improving the handling of missing args in
+                        // MkEnv.
+                        if (auto env = MkEnv::Cast(missing->env())) {
+                            bool initiallyMissing = false;
+                            env->eachLocalVar([&](SEXP name, Value* val) {
+                                if (name == missing->varName)
+                                    initiallyMissing = val->type.maybeMissing();
+                            });
+                            if (!initiallyMissing) {
+                                missing->replaceUsesAndSwapWith(
+                                    new LdConst(R_FalseValue), ip);
+                            }
+                        }
+                    } else {
+                        res.result.ifSingleValue([&](Value* v) {
+                            if (v == MissingArg::instance()) {
+                                missing->replaceUsesAndSwapWith(
+                                    new LdConst(R_TrueValue), ip);
+                            }
+                        });
+                    }
+                }
+
                 analysis.lookup(after, i, [&](const AbstractLoad& aLoad) {
                     auto& res = aLoad.result;
-
-                    // Narrow down type according to what the analysis reports
-                    if (i->type.isRType()) {
-                        auto inferedType = res.type;
-                        if (!i->type.isA(inferedType))
-                            i->type = inferedType;
-                    }
 
                     // In case the scope analysis is sure that this is
                     // actually the same as some other PIR value. So let's just
                     // replace it.
                     if (res.isSingleValue()) {
                         auto value = res.singleValue();
-                        if (value.recursionLevel == 0) {
+                        if (value.val->type.isA(i->type) &&
+                            value.recursionLevel == 0) {
                             i->replaceUsesWith(value.val);
                             next = bb->remove(ip);
+                            return;
                         }
-                        return;
+                    }
+
+                    // Narrow down type according to what the analysis reports
+                    if (i->type.isRType()) {
+                        auto inferedType = res.type;
+                        if (!i->type.isA(inferedType))
+                            i->type = inferedType;
                     }
 
                     // The generic case where we have a bunch of potential
