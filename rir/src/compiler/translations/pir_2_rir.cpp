@@ -29,7 +29,8 @@ namespace {
  *        Instruction* -> BB id -> { start : pos, end : pos, live : bool}
  *    Two Instructions interfere iff there is a BB where they are both live
  *    and the start-end overlap.
- * 3. ...
+ * 3. For now, flip a coin, and put 50 % of all instructions on stack
+ *    TODO: just for testing, need to figure out how to actually allocate
  * 4. Assign the remaining Instructions to local RIR variable numbers
  *    (see computeAllocation):
  *    1. Coalesc all remaining phi with their inputs. This is save since we are
@@ -79,16 +80,11 @@ class SSAAllocator {
     explicit SSAAllocator(Code* code, ClosureVersion* cls, LogStream& log)
         : cfg(code), dom(code), code(code), bbsSize(code->nextBBId), sa(cfg) {
 
-        // code->printCode(std::cout, true);
-
         sa(cls, code, log);
 
         computeLiveness();
         computeStackAllocation();
         computeAllocation();
-
-        // print(std::cout);
-        // sa.print();
     }
 
     // Run backwards analysis to compute livenessintervals
@@ -222,13 +218,9 @@ class SSAAllocator {
     void computeStackAllocation() {
 
         // For now, just flip a coin on where to put it
-        static auto coinFlip = [](double p) -> bool {
-            if (p < 0)
-                p = 0;
-            if (p > 1)
-                p = 1;
+        auto coinFlip = []() -> bool {
             static std::mt19937 gen(7);
-            static std::bernoulli_distribution coin(p);
+            static std::bernoulli_distribution coin(0.5);
             return coin(gen);
         };
 
@@ -238,7 +230,7 @@ class SSAAllocator {
             auto p = Phi::Cast(i);
             if (!p || allocation.count(p))
                 return;
-            if (coinFlip(0.66)) {
+            if (coinFlip()) {
                 allocation[p] = stackSlot;
                 p->eachArg(
                     [&](BB*, Value* v) { allocation[v] = allocation[p]; });
@@ -251,7 +243,7 @@ class SSAAllocator {
         Visitor::run(code->entry, [&](Instruction* i) {
             if (allocation.count(i))
                 return;
-            if (coinFlip(0.66) && phis.count(i) == 0) {
+            if (coinFlip() && phis.count(i) == 0) {
                 allocation[i] = stackSlot;
             }
         });
@@ -357,9 +349,6 @@ class SSAAllocator {
     }
 
     void verify() {
-
-        // TODO: fix for new allocator!
-        return;
 
         // Explore all possible traces and verify the allocation
         typedef std::pair<BB*, BB*> Jmp;
@@ -556,19 +545,7 @@ class SSAAllocator {
             ++i;
             --usedIdx;
         }
-
-        afterInstruction->printRef(std::cout);
-        std::cout << ": ";
-        usedIdx = 0;
-        for (auto y : stack.data) {
-            y->printRef(std::cout);
-            std::cout << (used[usedIdx++] ? "(used) " : " ");
-        }
-        std::cout << "- missing ";
-        what->printRef(std::cout);
-        std::cout << "\n";
         assert(false && "Value wasn't found on the stack.");
-        return -1;
     }
 
     size_t stackPhiOffset(Instruction* executed, Phi* phi) const {
@@ -582,12 +559,11 @@ class SSAAllocator {
                 ++offset;
         }
         assert(false && "Phi wasn't found on the stack.");
-        return -1;
     }
 
+    // Check if v is needed after executed
     bool lastUse(Instruction* executed, Value* v) const {
         assert(executed);
-        // TODO: inefficient, precompute in the stack analysis?
         auto stack = stackAfter(executed);
         for (auto i = stack.data.begin(); i != stack.data.end(); ++i)
             if (*i == v)
@@ -595,6 +571,7 @@ class SSAAllocator {
         return true;
     }
 
+    // Check if v is needed after argument argNumber of instruction executed
     bool lastUse(Instruction* executed, size_t argNumber) const {
         assert(executed);
         assert(argNumber < executed->nargs());
@@ -623,7 +600,6 @@ class Context {
         auto res = cs().finalize(localsCnt);
         delete css.top();
         css.pop();
-        // res->disassemble(std::cout);
         return res;
     }
 
@@ -657,7 +633,9 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
 
     SSAAllocator alloc(code, cls, log);
     log.afterAllocator(code, [&](std::ostream& o) { alloc.print(o); });
-    alloc.verify();
+
+    // TODO: fix the verifier for the new allocator
+    // alloc.verify();
 
     // Create labels for all bbs
     std::unordered_map<BB*, BC::Label> bbLabels;
@@ -676,10 +654,6 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
     // - how to pick lastInstr at the beginning of a merge block?
 
     LoweringVisitor::run(code->entry, [&](BB* bb) {
-        // This should now never happen (every bb has at least Nop)
-        if (bb->isEmpty())
-            return;
-
         CodeStream& cs = ctx.cs();
         auto debugAddVariableName = [&cs](Value* v) {
             std::stringstream ss;
@@ -812,9 +786,8 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 };
 
                 // Remove values from the stack that are dead here
-                // ie. an elided environment that was allocated to stack
                 for (auto val : alloc.sa.toDrop[instr]) {
-                    // If it's not actually allocated on stack, do nothing
+                    // If not actually allocated on stack, do nothing
                     if (!alloc.onStack(val))
                         continue;
 
@@ -1212,9 +1185,7 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 if (!alloc.hasSlot(instr)) {
                     cs << BC::pop();
                 } else if (!alloc.onStack(instr)) {
-                    cs << (alloc.lastUse(instr, instr)
-                               ? BC::pop()
-                               : BC::stloc(alloc[instr]));
+                    cs << BC::stloc(alloc[instr]);
                 }
             }
 
@@ -1350,71 +1321,81 @@ void Pir2Rir::lower(Code* code) {
         }
     });
 
-    // Lower phi functions
+    // Lower phi functions - transform into a cfg where all input blocks of all
+    // phi functions are their immediate predecessors
     {
-        // std::cout << "$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$\n";
-        // code->printCode(std::cout, true);
-        // std::cout << "$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$\n";
         bool done;
-        unsigned counter = 0;
-        unsigned inserted = 0;
         CFG cfg(code);
         do {
-            if (++counter > 10000) {
-                code->printCode(std::cout, true);
-                std::cout << "inserted: " << inserted << "\n";
-                assert(false);
-            }
             done = true;
             BreadthFirstVisitor::run(code->entry, [&](Instruction* i, BB* bb) {
+                // Check if this phi has the desired property
                 if (auto phi = Phi::Cast(i)) {
                     bool ok = true;
                     phi->eachArg([&](BB* inputBB, Value*) {
-                        if ((inputBB->isJmp() &&
-                             inputBB->next() != phi->bb()) ||
-                            (inputBB->trueBranch() != phi->bb() &&
-                             inputBB->falseBranch() != phi->bb()))
+                        if (!cfg.isImmediatePredecessor(inputBB, phi->bb()))
                             ok = false;
                     });
                     if (ok)
                         return;
                     done = false;
 
-                    // phi may have block of input and input block different...
-                    // block may have more than two immediate predecessors...
-
+                    // Gather all the basic blocks currently in the phi inputs,
+                    // these are then used to stop a backward search
                     std::unordered_set<BB*> inputBBs;
                     phi->eachArg(
                         [&](BB* inputBB, Value*) { inputBBs.insert(inputBB); });
 
+                    // dir maps basic blocks to blocks that are immediate
+                    // predecessors of the given phi, ie. the blocks we want the
+                    // phi to have as inputs
                     std::unordered_map<BB*, BB*> dir;
+                    // Initialize with the actual immediate predecessors
                     for (auto pred : cfg.immediatePredecessors(phi->bb()))
                         dir[pred] = pred;
 
+                    // src maps immediate predecessors of the phi to sets of
+                    // arguments that come from that path
                     std::unordered_map<BB*, std::unordered_set<Value*>> src;
                     phi->eachArg([&](BB* inputBB, Value* val) {
-                        BreadthFirstVisitor::checkBackward(phi->bb(), cfg, [&](BB* bb) {
-                            if (bb == inputBB) {
-                                src[dir[bb]].insert(val);
-                                return false;
-                            }
-                            if (inputBBs.count(bb) == 0) {
-                                for (auto pred : cfg.immediatePredecessors(bb))
-                                    if (dir.count(pred) == 0)
-                                        dir[pred] = dir[bb];
-                            }
-                            return true;
-                        });
+                        // Do a bfs search for a block that is listed as a phi
+                        // input block. If we find it, the dir map tells us
+                        // which immediate predecessor this translates to and we
+                        // are done. If we hit a block that is a different phi
+                        // input block than the one we look for, we stop.
+                        // Otherwise, propagate the dir info to immediate
+                        // predecessors and continue
+                        BreadthFirstVisitor::checkBackward(
+                            phi->bb(), cfg, [&](BB* bb) {
+                                if (bb == inputBB) {
+                                    src[dir[bb]].insert(val);
+                                    return false;
+                                }
+                                if (inputBBs.count(bb) == 0) {
+                                    for (auto pred :
+                                         cfg.immediatePredecessors(bb))
+                                        if (dir.count(pred) == 0)
+                                            dir[pred] = dir[bb];
+                                }
+                                return true;
+                            });
                     });
 
+                    // Modify the phi so that it obtains the desired property
                     for (auto s : src) {
+                        // For each immediate predecessor get a set of values
+                        // that come through it. Remove those from the phi
                         std::unordered_set<BB*> toRemove;
                         phi->eachArg([&](BB* inputBB, Value* val) {
                             if (s.second.count(val))
                                 toRemove.insert(inputBB);
                         });
+                        phi->removeInputs(toRemove);
+                        // Add a new single argument to the phi for the given
+                        // predecessor that will either be a single existing
+                        // value, or a newly created phi merge of the set of
+                        // values from that ppredecessor
                         if (s.second.size() == 1) {
-                            phi->removeInputs(toRemove);
                             phi->addInput(s.first, *(s.second.begin()));
                             phi->updateType();
                         } else {
@@ -1426,23 +1407,22 @@ void Pir2Rir::lower(Code* code) {
                                         newPhi->addInput(inputBB, val);
                                 });
                             }
-                            phi->removeInputs(toRemove);
                             phi->addInput(s.first, newPhi);
                             newPhi->updateType();
                             phi->updateType();
+                            // Insert the new phi at the beginning of the
+                            // predecessor block
                             s.first->insert(s.first->begin(), newPhi);
+                            // If we created a one argument phi, remove it
                             if (phi->nargs() == 1) {
                                 phi->replaceUsesWith(phi->arg(0).val());
                                 phi->bb()->remove(phi);
                             }
-                            inserted++;
                         }
                     }
                 }
             });
         } while (!done);
-        // code->printCode(std::cout, true);
-        // std::cout << "$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$\n";
     }
 
     // Insert Nop into all empty blocks to make life easier
@@ -1453,38 +1433,22 @@ void Pir2Rir::lower(Code* code) {
 }
 
 void Pir2Rir::toCSSA(Code* code) {
-
-    CFG cfg(code);
-    // code->printCode(std::cout, true);
-
-    auto checkPhiInputs = [&](BB* from, BB* branch, Phi* phi) {
-        BB* res = branch;
-        phi->eachArg([&](BB* bb, Value*) {
-            if (bb == from)
-                return;
-            if (cfg.isPredecessor(branch, bb))
-                res = nullptr;
-        });
-        return res;
-    };
-
     // For each Phi, insert copies
     BreadthFirstVisitor::run(code->entry, [&](BB* bb) {
         // TODO: move all phi's to the beginning, then insert the copies not
-        // after each phi but after all phi's
+        // after each phi but after all phi's?
         for (auto it = bb->begin(); it != bb->end(); ++it) {
             auto instr = *it;
             if (auto phi = Phi::Cast(instr)) {
                 for (size_t i = 0; i < phi->nargs(); ++i) {
                     BB* pred = phi->input[i];
-                    // if pred is branch insert a new split block
+                    // If pred is branch insert a new split block
                     if (!pred->isJmp()) {
-                        // TODO: maybe check that there aren't multiple?
-                        BB* split =
-                            checkPhiInputs(pred, pred->trueBranch(), phi);
-                        if (!split)
-                            split =
-                                checkPhiInputs(pred, pred->falseBranch(), phi);
+                        BB* split = nullptr;
+                        if (pred->trueBranch() == phi->bb())
+                            split = pred->trueBranch();
+                        else if (pred->falseBranch() == phi->bb())
+                            split = pred->falseBranch();
                         assert(split &&
                                "Don't know where to insert a phi input copy.");
                         pred = BBTransform::splitEdge(code->nextBBId++, pred,

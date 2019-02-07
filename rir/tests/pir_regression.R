@@ -72,15 +72,15 @@ stopifnot(f(-1) == 42)
 ## Assert we are really inlined (ie. h and i are not called)
 hc2 = .Call("rir_invocation_count", h)
 ic2 = .Call("rir_invocation_count", i)
-stopifnot(hc1 == hc2) # this may fail with PIR_DEOPT_CHAOS=1
-stopifnot(ic1 == ic2) # this may fail with PIR_DEOPT_CHAOS=1
+stopifnot(hc1 == hc2)
+stopifnot(ic1 == ic2)
 
 ## Assert we deopt (ie. base version of h and i are invoked)
 stopifnot(f(structure(-1, class="asdf")) == 42)
 hc3 = .Call("rir_invocation_count", h)
 ic3 = .Call("rir_invocation_count", i)
-stopifnot(hc3 == hc2+1) # this may fail with PIR_DEOPT_CHAOS=1
-stopifnot(ic3 == ic2+1) # this may fail with PIR_DEOPT_CHAOS=1
+stopifnot(hc3 == hc2+1)
+stopifnot(ic3 == ic2+1)
 
 # When subsequently calling the g inner function we must ensure
 # that val is properly bind. This means that we must activate a

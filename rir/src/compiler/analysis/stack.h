@@ -18,14 +18,22 @@ class StackAnalysis {
   public:
     struct AbstractStack {
         std::vector<Value*> data;
-        size_t size() const;
+
+        size_t size() const { return data.size(); }
+
         using StackSlotsIterator = std::function<void(Value*)>;
-        void eachSlot(StackSlotsIterator it) const;
+        void eachSlot(StackSlotsIterator it) const {
+            for (size_t i = 0; i < data.size(); ++i)
+                it(data[i]);
+        }
+
         void push(Value* v);
         void erase(Value* v);
         void erasePhiInput(Phi* phi);
+
         void matchContents(AbstractStack const& other) const;
     };
+
     using StackSnapshots = std::unordered_map<Instruction*, AbstractStack>;
     using InstructionCompensation =
         std::unordered_map<Instruction*, std::vector<Value*>>;
@@ -37,37 +45,6 @@ class StackAnalysis {
 
     StackAnalysis(CFG const& cfg) : cfg(cfg) {}
     void operator()(ClosureVersion* fun, Code* code, LogStream& log);
-
-    void print() const {
-        std::cout << "Stacks\n";
-        for (auto x : stacks) {
-            std::cout << "  ";
-            x.first->printRef(std::cout);
-            std::cout << ": ";
-            for (auto y : x.second.data) {
-                y->printRef(std::cout);
-                std::cout << " ";
-            }
-            std::cout << "\n";
-        }
-        std::cout << "Compensation\n";
-        for (auto x : toDrop) {
-            std::cout << "  ";
-            x.first->printRef(std::cout);
-            std::cout << ": ";
-            for (auto y : x.second) {
-                y->printRef(std::cout);
-                std::cout << " ";
-            }
-            std::cout << "\n";
-        }
-        std::cout << "Dead\n";
-        for (auto x : dead) {
-            std::cout << "  ";
-            x->printRef(std::cout);
-            std::cout << "\n";
-        }
-    }
 };
 
 } // namespace pir
