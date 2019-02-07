@@ -1384,18 +1384,18 @@ void Pir2Rir::lower(Code* code) {
                     // Modify the phi so that it obtains the desired property
                     for (auto s : src) {
                         // For each immediate predecessor get a set of values
-                        // that come through it. Remove those from the phi
+                        // that come through it, to be removed from the phi
                         std::unordered_set<BB*> toRemove;
                         phi->eachArg([&](BB* inputBB, Value* val) {
                             if (s.second.count(val))
                                 toRemove.insert(inputBB);
                         });
-                        phi->removeInputs(toRemove);
                         // Add a new single argument to the phi for the given
                         // predecessor that will either be a single existing
                         // value, or a newly created phi merge of the set of
                         // values from that ppredecessor
                         if (s.second.size() == 1) {
+                            phi->removeInputs(toRemove);
                             phi->addInput(s.first, *(s.second.begin()));
                             phi->updateType();
                         } else {
@@ -1407,6 +1407,7 @@ void Pir2Rir::lower(Code* code) {
                                         newPhi->addInput(inputBB, val);
                                 });
                             }
+                            phi->removeInputs(toRemove);
                             phi->addInput(s.first, newPhi);
                             newPhi->updateType();
                             phi->updateType();

@@ -39,11 +39,6 @@ BB::~BB() {
         delete i;
 }
 
-Instruction* BB::first() const {
-    assert(!instrs.empty());
-    return instrs.front();
-}
-
 Instruction* BB::last() const {
     assert(!instrs.empty());
     return instrs.back();
