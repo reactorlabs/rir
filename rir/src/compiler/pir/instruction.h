@@ -144,7 +144,6 @@ class Instruction : public Value {
     const Value* cFollowCasts() const override final;
     const Value* cFollowCastsAndForce() const override final;
     bool isInstruction() override final { return true; }
-    virtual bool envOnlyForObj();
 
     bool validIn(Code* code) const override final;
 
@@ -173,6 +172,7 @@ class Instruction : public Value {
     virtual void updateType(){};
 
     virtual void printEnv(std::ostream& out, bool tty) const;
+    virtual void printFrameState(std::ostream& out, bool tty) const;
     virtual void printArgs(std::ostream& out, bool tty) const;
     virtual void print(std::ostream& out, bool tty = false) const;
     void printRef(std::ostream& out) const override final;
@@ -231,6 +231,19 @@ class Instruction : public Value {
         return nullptr;
     }
 
+    // Framestate operations are only valid in Speculable instructions. Those
+    // are defined in isSpeculable() and must override frameStateIndex in case
+    // the framestate is not the last argument just before the environment
+    virtual size_t frameStateIndex() const {
+        assert(isSpeculable());
+        return envSlot() - 1;
+    };
+    const Value* frameState() const { return arg(frameStateIndex()).val(); };
+    void frameState(Value* fs) { arg(frameStateIndex()).val() = fs; }
+    void clearFrameState() { frameState(Tombstone::framestate()); }
+    bool envOnlyForObj();
+    bool isSpeculable() const;
+
     virtual Value* env() const {
         assert(!mayAccessEnv() &&
                "subclass must override env() if it uses env");
@@ -279,7 +292,7 @@ class InstructionImplementation : public Instruction {
         return EFFECT >= Effect::Force;
     }
     bool mayUseReflection() const override final {
-        return EFFECT > Effect::Reflection;
+        return EFFECT >= Effect::Reflection;
     }
     bool mayAccessEnv() const override final { return mayAccessEnv_; }
     bool changesEnv() const override final { return hasEnv() && mayChangeEnv_; }
@@ -328,6 +341,9 @@ class InstructionImplementation : public Instruction {
     }
 };
 
+// Common interface for instructions on which it is possible to speculate
+// on any fact. The framestate represents the point and state on the original
+// function to bail out on deopt
 template <Tag ITAG, class Base, size_t ARGS, Effect EFFECT, EnvAccess ENV,
           Controlflow CF = Controlflow::None>
 // cppcheck-suppress noConstructor
@@ -651,7 +667,7 @@ class Branch
     : public FixedLenInstruction<Tag::Branch, Branch, 1, Effect::None,
                                  EnvAccess::None, Controlflow::Branch> {
   public:
-    explicit Branch(Value * test)
+    explicit Branch(Value* test)
         : FixedLenInstruction(PirType::voyd(), {{NativeType::test}}, {{test}}) {
     }
     void printArgs(std::ostream& out, bool tty) const override;
@@ -734,17 +750,6 @@ class FLIE(MkFunCls, 1, Effect::None, EnvAccess::Capture) {
     Value* lexicalEnv() const { return env(); }
 };
 
-class FLIE(Force, 2, Effect::Any, EnvAccess::Leak) {
-  public:
-    // Set to true if we are sure that the promise will be forced here
-    bool strict = false;
-    Force(Value* in, Value* env)
-        : FixedLenInstructionWithEnvSlot(PirType::val(), {{PirType::any()}},
-                                         {{in}}, env) {}
-    Value* input() const { return arg(0).val(); }
-    const char* name() const override { return strict ? "Force!" : "Force"; }
-};
-
 class FLI(CastType, 1, Effect::None, EnvAccess::None) {
   public:
     CastType(Value* in, PirType from, PirType to)
@@ -762,48 +767,6 @@ class FLI(AsTest, 1, Effect::Error, EnvAccess::None) {
   public:
     explicit AsTest(Value* in)
         : FixedLenInstruction(NativeType::test, {{PirType::any()}}, {{in}}) {}
-};
-
-class FLIE(Subassign1_1D, 4, Effect::None, EnvAccess::Leak) {
-  public:
-    Subassign1_1D(Value* val, Value* vec, Value* idx, Value* env,
-                  unsigned srcIdx)
-        : FixedLenInstructionWithEnvSlot(
-              PirType::val(),
-              {{PirType::val(), PirType::val(), PirType::val()}},
-              {{val, vec, idx}}, env, srcIdx) {}
-    Value* rhs() { return arg(0).val(); }
-    Value* lhsValue() { return arg(1).val(); }
-    Value* idx() { return arg(2).val(); }
-};
-
-class FLIE(Subassign2_1D, 4, Effect::None, EnvAccess::Leak) {
-  public:
-    Subassign2_1D(Value* val, Value* vec, Value* idx, Value* env,
-                  unsigned srcIdx)
-        : FixedLenInstructionWithEnvSlot(
-              PirType::val(),
-              {{PirType::val(), PirType::val(), PirType::val()}},
-              {{val, vec, idx}}, env, srcIdx) {}
-    Value* rhs() { return arg(0).val(); }
-    Value* lhsValue() { return arg(1).val(); }
-    Value* idx() { return arg(2).val(); }
-};
-
-class FLIE(Extract1_1D, 3, Effect::None, EnvAccess::Leak) {
-  public:
-    Extract1_1D(Value* vec, Value* idx, Value* env, unsigned srcIdx)
-        : FixedLenInstructionWithEnvSlot(PirType::val(),
-                                         {{PirType::val(), PirType::val()}},
-                                         {{vec, idx}}, env, srcIdx) {}
-};
-
-class FLIE(Extract2_1D, 3, Effect::None, EnvAccess::Leak) {
-  public:
-    Extract2_1D(Value* vec, Value* idx, Value* env, unsigned srcIdx)
-        : FixedLenInstructionWithEnvSlot(PirType::val().scalar(),
-                                         {{PirType::val(), PirType::val()}},
-                                         {{vec, idx}}, env, srcIdx) {}
 };
 
 class FLIE(Extract1_2D, 4, Effect::None, EnvAccess::Leak) {
@@ -845,10 +808,21 @@ class FLI(Is, 1, Effect::None, EnvAccess::None) {
     void printArgs(std::ostream& out, bool tty) const override;
 };
 
-class FLI(IsObject, 1, Effect::None, EnvAccess::None) {
+class FLI(TypeTest, 1, Effect::None, EnvAccess::None) {
   public:
-    explicit IsObject(Value* v)
+    enum type { Object, EnvironmentStub };
+    type testFor;
+    explicit TypeTest(Value* v)
         : FixedLenInstruction(NativeType::test, {{PirType::val()}}, {{v}}) {}
+    TypeTest* object() {
+        testFor = Object;
+        return this;
+    };
+    TypeTest* environmentStub() {
+        testFor = EnvironmentStub;
+        return this;
+    };
+    const char* name() const override;
 };
 
 class FLI(LdFunctionEnv, 0, Effect::None, EnvAccess::None) {
@@ -884,68 +858,6 @@ class FLI(Identical, 2, Effect::None, EnvAccess::None) {
         : FixedLenInstruction(NativeType::test,
                               {{PirType::any(), PirType::any()}}, {{a, b}}) {}
 };
-
-#define V(NESTED, name, Name)\
-class FLI(Name, 0, Effect::Any, EnvAccess::None) {\
-  public:\
-    Name() : FixedLenInstruction(PirType::voyd()) {}\
-};
-SIMPLE_INSTRUCTIONS(V, _)
-#undef V
-
-#define BINOP(Name, Type)                                                      \
-    class FLIE(Name, 3, Effect::None, EnvAccess::Leak) {                       \
-      public:                                                                  \
-        Name(Value* lhs, Value* rhs, Value* env, unsigned srcIdx)              \
-            : FixedLenInstructionWithEnvSlot(                                  \
-                  Type, {{PirType::val(), PirType::val()}}, {{lhs, rhs}}, env, \
-                  srcIdx) {}                                                   \
-    }
-
-BINOP(Mul, PirType::val());
-BINOP(Div, PirType::val());
-BINOP(IDiv, PirType::val());
-BINOP(Mod, PirType::val());
-BINOP(Add, PirType::val());
-BINOP(Colon, PirType::val());
-BINOP(Pow, PirType::val());
-BINOP(Sub, PirType::val());
-BINOP(Gte, RType::logical);
-BINOP(Lte, RType::logical);
-BINOP(Gt, RType::logical);
-BINOP(Lt, RType::logical);
-BINOP(Neq, RType::logical);
-BINOP(Eq, RType::logical);
-
-#undef BINOP
-
-#define BINOP_NOENV(Name, Type)                                                \
-    class FLI(Name, 2, Effect::None, EnvAccess::None) {                        \
-      public:                                                                  \
-        Name(Value* lhs, Value* rhs)                                           \
-            : FixedLenInstruction(Type, {{PirType::val(), PirType::val()}},    \
-                                  {{lhs, rhs}}) {}                             \
-    }
-
-BINOP_NOENV(LAnd, RType::logical);
-BINOP_NOENV(LOr, RType::logical);
-
-#undef BINOP_NOENV
-
-#define UNOP(Name)                                                             \
-    class FLIE(Name, 2, Effect::None, EnvAccess::Leak) {                       \
-      public:                                                                  \
-        Name(Value* v, Value* env, unsigned srcIdx)                            \
-            : FixedLenInstructionWithEnvSlot(                                  \
-                  PirType::val(), {{PirType::val()}}, {{v}}, env, srcIdx) {}   \
-    }
-
-UNOP(Not);
-UNOP(Plus);
-UNOP(Minus);
-UNOP(Length);
-
-#undef UNOP
 
 struct RirStack {
   private:
@@ -1035,6 +947,165 @@ class VLIE(FrameState, Effect::None, EnvAccess::Read) {
     void printEnv(std::ostream& out, bool tty) const override final{};
 };
 
+#define V(NESTED, name, Name)                                                  \
+    class FLI(Name, 0, Effect::Any, EnvAccess::None) {                         \
+      public:                                                                  \
+        Name() : FixedLenInstruction(PirType::voyd()) {}                       \
+    };
+SIMPLE_INSTRUCTIONS(V, _)
+#undef V
+
+class FLIE(Subassign1_1D, 5, Effect::None, EnvAccess::Leak) {
+  public:
+    Subassign1_1D(Value* val, Value* vec, Value* idx, Value* env,
+                  unsigned srcIdx)
+        : FixedLenInstructionWithEnvSlot(
+              PirType::val(),
+              {{PirType::val(), PirType::val(), PirType::val(),
+                NativeType::frameState}},
+              {{val, vec, idx, Tombstone::framestate()}}, env, srcIdx) {}
+    Subassign1_1D(Value* val, Value* vec, Value* idx, Value* env,
+                  FrameState* framestate, unsigned srcIdx)
+        : FixedLenInstructionWithEnvSlot(
+              PirType::val(),
+              {{PirType::val(), PirType::val(), PirType::val(),
+                NativeType::frameState}},
+              {{val, vec, idx, framestate}}, env, srcIdx) {}
+    Value* rhs() { return arg(0).val(); }
+    Value* lhsValue() { return arg(1).val(); }
+    Value* idx() { return arg(2).val(); }
+};
+
+class FLIE(Subassign2_1D, 5, Effect::None, EnvAccess::Leak) {
+  public:
+    Subassign2_1D(Value* val, Value* vec, Value* idx, Value* env,
+                  unsigned srcIdx)
+        : FixedLenInstructionWithEnvSlot(
+              PirType::val(),
+              {{PirType::val(), PirType::val(), PirType::val(),
+                NativeType::frameState}},
+              {{val, vec, idx, Tombstone::framestate()}}, env, srcIdx) {}
+    Subassign2_1D(Value* val, Value* vec, Value* idx, Value* env,
+                  FrameState* framestate, unsigned srcIdx)
+        : FixedLenInstructionWithEnvSlot(
+              PirType::val(),
+              {{PirType::val(), PirType::val(), PirType::val(),
+                NativeType::frameState}},
+              {{val, vec, idx, framestate}}, env, srcIdx) {}
+    Value* rhs() { return arg(0).val(); }
+    Value* lhsValue() { return arg(1).val(); }
+    Value* idx() { return arg(2).val(); }
+};
+
+class FLIE(Extract1_1D, 4, Effect::None, EnvAccess::Leak) {
+  public:
+    Extract1_1D(Value* vec, Value* idx, Value* env, unsigned srcIdx)
+        : FixedLenInstructionWithEnvSlot(
+              PirType::val(),
+              {{PirType::val(), PirType::val(), NativeType::frameState}},
+              {{vec, idx, Tombstone::framestate()}}, env, srcIdx) {}
+    Extract1_1D(Value* vec, Value* idx, Value* env, FrameState* framestate,
+                unsigned srcIdx)
+        : FixedLenInstructionWithEnvSlot(
+              PirType::val(),
+              {{PirType::val(), PirType::val(), NativeType::frameState}},
+              {{vec, idx, framestate}}, env, srcIdx) {}
+};
+
+class FLIE(Extract2_1D, 4, Effect::None, EnvAccess::Leak) {
+  public:
+    Extract2_1D(Value* vec, Value* idx, Value* env, unsigned srcIdx)
+        : FixedLenInstructionWithEnvSlot(
+              PirType::val().scalar(),
+              {{PirType::val(), PirType::val(), NativeType::frameState}},
+              {{vec, idx, Tombstone::framestate()}}, env, srcIdx) {}
+    Extract2_1D(Value* vec, Value* idx, Value* env, FrameState* framestate,
+                unsigned srcIdx)
+        : FixedLenInstructionWithEnvSlot(
+              PirType::val().scalar(),
+              {{PirType::val(), PirType::val(), NativeType::frameState}},
+              {{vec, idx, framestate}}, env, srcIdx) {}
+};
+
+#define BINOP(Name, Type)                                                      \
+    class FLIE(Name, 4, Effect::None, EnvAccess::Leak) {                       \
+      public:                                                                  \
+        Name(Value* lhs, Value* rhs, Value* env, unsigned srcIdx)              \
+            : FixedLenInstructionWithEnvSlot(                                  \
+                  Type,                                                        \
+                  {{PirType::val(), PirType::val(), NativeType::frameState}},  \
+                  {{lhs, rhs, Tombstone::framestate()}}, env, srcIdx) {}       \
+        Name(Value* lhs, Value* rhs, Value* env, FrameState* fs,               \
+             unsigned srcIdx)                                                  \
+            : FixedLenInstructionWithEnvSlot(                                  \
+                  Type,                                                        \
+                  {{PirType::val(), PirType::val(), NativeType::frameState}},  \
+                  {{lhs, rhs, fs}}, env, srcIdx) {}                            \
+    }
+
+BINOP(Mul, PirType::val());
+BINOP(Div, PirType::val());
+BINOP(IDiv, PirType::val());
+BINOP(Mod, PirType::val());
+BINOP(Add, PirType::val());
+BINOP(Colon, PirType::val());
+BINOP(Pow, PirType::val());
+BINOP(Sub, PirType::val());
+BINOP(Gte, RType::logical);
+BINOP(Lte, RType::logical);
+BINOP(Gt, RType::logical);
+BINOP(Lt, RType::logical);
+BINOP(Neq, RType::logical);
+BINOP(Eq, RType::logical);
+
+#undef BINOP
+
+#define BINOP_NOENV(Name, Type)                                                \
+    class FLI(Name, 2, Effect::None, EnvAccess::None) {                        \
+      public:                                                                  \
+        Name(Value* lhs, Value* rhs)                                           \
+            : FixedLenInstruction(Type, {{PirType::val(), PirType::val()}},    \
+                                  {{lhs, rhs}}) {}                             \
+    }
+
+BINOP_NOENV(LAnd, RType::logical);
+BINOP_NOENV(LOr, RType::logical);
+
+#undef BINOP_NOENV
+
+#define UNOP(Name)                                                             \
+    class FLIE(Name, 2, Effect::None, EnvAccess::Leak) {                       \
+      public:                                                                  \
+        Name(Value* v, Value* env, unsigned srcIdx)                            \
+            : FixedLenInstructionWithEnvSlot(                                  \
+                  PirType::val(), {{PirType::val()}}, {{v}}, env, srcIdx) {}   \
+    }
+
+UNOP(Not);
+UNOP(Plus);
+UNOP(Minus);
+UNOP(Length);
+
+#undef UNOP
+
+class FLIE(Force, 3, Effect::Any, EnvAccess::Leak) {
+    // Set to true if we are sure that the promise will be forced here
+  public:
+    bool strict = false;
+    Force(Value* in, Value* env)
+        : FixedLenInstructionWithEnvSlot(
+              PirType::val(), {{PirType::any(), NativeType::frameState}},
+              {{in, Tombstone::framestate()}}, env) {}
+
+    Force(Value* in, Value* env, Value* fs)
+        : FixedLenInstructionWithEnvSlot(
+              PirType::val(), {{PirType::any(), NativeType::frameState}},
+              {{in, fs}}, env) {}
+
+    Value* input() const { return arg(0).val(); }
+    const char* name() const override { return strict ? "Force!" : "Force"; }
+}; // namespace pir
+
 // Common interface to all call instructions
 class CallInstruction {
   public:
@@ -1042,7 +1113,6 @@ class CallInstruction {
     virtual void eachCallArg(Instruction::ArgumentValueIterator it) const = 0;
     virtual void eachCallArg(Instruction::MutableArgumentIterator it) = 0;
     static CallInstruction* CastCall(Value* v);
-    virtual void clearFrameState(){};
     virtual Closure* tryGetCls() const { return nullptr; }
     Assumptions inferAvailableAssumptions() const;
     virtual bool hasNamedArgs() const { return false; }
@@ -1082,11 +1152,7 @@ class VLIE(Call, Effect::Any, EnvAccess::Leak), public CallInstruction {
             it(arg(i + 2));
     }
 
-    const FrameState* frameState() const {
-        return FrameState::Cast(arg(0).val());
-    }
-    void clearFrameState() override { arg(0).val() = Tombstone::framestate(); };
-
+    size_t frameStateIndex() const override { return 0; };
     Value* callerEnv() { return env(); }
 
     void printArgs(std::ostream & out, bool tty) const override;
@@ -1167,10 +1233,7 @@ class VLIE(StaticCall, Effect::Any, EnvAccess::Leak), public CallInstruction {
             it(arg(i + 1));
     }
 
-    const FrameState* frameState() const {
-        return FrameState::Cast(arg(0).val());
-    }
-    void clearFrameState() override { arg(0).val() = Tombstone::framestate(); };
+    size_t frameStateIndex() const override { return 0; };
 
     void printArgs(std::ostream & out, bool tty) const override;
     Value* callerEnv() { return env(); }
@@ -1301,8 +1364,6 @@ class VLI(Phi, Effect::None, EnvAccess::None) {
             it(input[i], arg(i).val());
     }
 };
-
-// Instructions targeted specially for speculative optimization
 
 /*
  *  Must be the last instruction of a BB with two childs. One should

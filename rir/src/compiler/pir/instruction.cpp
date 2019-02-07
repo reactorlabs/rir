@@ -64,16 +64,18 @@ bool Instruction::validIn(Code* code) const { return bb()->owner == code; }
 
 void Instruction::printArgs(std::ostream& out, bool tty) const {
     size_t n = nargs();
-    size_t env = hasEnv() ? envSlot() : n + 1;
+    size_t env = mayAccessEnv() ? envSlot() : n + 1;
+    size_t fs = isSpeculable() ? frameStateIndex() : n + 1;
 
     for (size_t i = 0; i < n; ++i) {
-        if (i != env) {
+        if (i != env && i != fs) {
             arg(i).val()->printRef(out);
-            if (i + 1 < n && (i + 1) != env)
+            if (i + 1 < n && (i + 1) != env && (i + 1) != fs)
                 out << ", ";
         }
     }
-    if (hasEnv())
+
+    if (mayAccessEnv() || isSpeculable())
         out << ", ";
 }
 
@@ -82,6 +84,18 @@ void Instruction::print(std::ostream& out, bool tty) const {
     printPaddedInstructionName(out, name());
     printArgs(out, tty);
     printEnv(out, tty);
+    if (isSpeculable()) {
+        out << ", ";
+        printFrameState(out, tty);
+    }
+}
+
+void Instruction::printFrameState(std::ostream& out, bool tty) const {
+    if (isSpeculable()) {
+        ConsoleColor::red(out);
+        frameState()->printRef(out);
+        ConsoleColor::clear(out);
+    };
 }
 
 void Phi::removeInputs(const std::unordered_set<BB*>& deletedBBs) {
@@ -100,7 +114,7 @@ void Phi::removeInputs(const std::unordered_set<BB*>& deletedBBs) {
 }
 
 void Instruction::printEnv(std::ostream& out, bool tty) const {
-    if (hasEnv()) {
+    if (mayAccessEnv()) {
         if (tty) {
             if (leaksEnv())
                 ConsoleColor::magenta(out);
@@ -120,6 +134,8 @@ void Instruction::printEnv(std::ostream& out, bool tty) const {
 void Instruction::printRef(std::ostream& out) const {
     if (type == RType::env)
         out << "e" << id();
+    else if (type == NativeType::frameState)
+        out << "fs:" << id();
     else
         out << "%" << id();
 };
@@ -199,17 +215,6 @@ const Value* Instruction::cFollowCastsAndForce() const {
     if (auto chk = ChkClosure::Cast(this))
         return chk->arg<0>().val()->followCastsAndForce();
     return this;
-}
-
-bool Instruction::envOnlyForObj() {
-#define V(Name)                                                                \
-    if (Name::Cast(this)) {                                                    \
-        return true;                                                           \
-    }
-    BINOP_INSTRUCTIONS(V)
-    VECTOR_RW_INSTRUCTIONS(V)
-#undef V
-    return false;
 }
 
 void LdConst::printArgs(std::ostream& out, bool tty) const {
@@ -426,6 +431,32 @@ void MkFunCls::printArgs(std::ostream& out, bool tty) const {
     Instruction::printArgs(out, tty);
 }
 
+bool Instruction::envOnlyForObj() {
+#define V(Name)                                                                \
+    if (Name::Cast(this)) {                                                    \
+        return true;                                                           \
+    }
+    BINOP_INSTRUCTIONS(V)
+//    VECTOR_RW_INSTRUCTIONS(V)
+#undef V
+    return false;
+}
+
+bool Instruction::isSpeculable() const {
+    switch (this->tag) {
+    case Tag::Call:
+    case Tag::StaticCall:
+    case Tag::Force:
+#define V(NAME) case Tag::NAME:
+        BINOP_INSTRUCTIONS(V)
+        // VECTOR_RW_INSTRUCTIONS(V)
+#undef V
+        return true;
+    default: {}
+    }
+    return false;
+}
+
 void StaticCall::printArgs(std::ostream& out, bool tty) const {
     out << dispatch()->name();
     if (hint && hint != dispatch())
@@ -611,6 +642,17 @@ void Checkpoint::printArgs(std::ostream& out, bool tty) const {
 }
 
 BB* Checkpoint::deoptBranch() { return bb()->falseBranch(); }
+
+const char* TypeTest::name() const {
+    switch (testFor) {
+    case Object:
+        return "IsObject";
+    case EnvironmentStub:
+        return "IsEnvStub";
+    default:
+        assert(false);
+    };
+}
 
 } // namespace pir
 } // namespace rir

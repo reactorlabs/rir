@@ -11,8 +11,8 @@ void CleanupFramestate::apply(RirCompiler&, ClosureVersion* function,
                               LogStream&) const {
     auto apply = [](Code* code) {
         Visitor::run(code->entry, [&](Instruction* i) {
-            if (auto call = CallInstruction::CastCall(i)) {
-                call->clearFrameState();
+            if (i->isSpeculable()) {
+                i->clearFrameState();
             }
         });
     };

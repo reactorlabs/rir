@@ -80,8 +80,7 @@ void EagerCalls::apply(RirCompiler& cmp, ClosureVersion* closure,
                 if (!todo.count(mk))
                     continue;
 
-                BB* split =
-                    BBTransform::split(closure->nextBBId++, bb, ip, closure);
+                BB* split = BBTransform::split(bb, ip);
 
                 auto prom = mk->prom();
                 BB* prom_copy =

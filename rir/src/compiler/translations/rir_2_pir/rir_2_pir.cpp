@@ -470,11 +470,15 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             forceIfLazy(
                 1); // <- ensure forced version are captured in framestate
             forceIfLazy(0);
-            addCheckpoint(srcCode, pos, stack, insert);
+            auto fs = insert.registerFrameState(srcCode, pos, stack);
+            Value* idx = pop();
+            Value* vec = pop();
+            push(insert(new Extract1_1D(vec, idx, env, fs, srcIdx)));
+        } else {
+            Value* idx = pop();
+            Value* vec = pop();
+            push(insert(new Extract1_1D(vec, idx, env, srcIdx)));
         }
-        Value* idx = pop();
-        Value* vec = pop();
-        push(insert(new Extract1_1D(vec, idx, env, srcIdx)));
         break;
     }
 
@@ -483,23 +487,27 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             forceIfLazy(
                 1); // <- ensure forced version are captured in framestate
             forceIfLazy(0);
-            addCheckpoint(srcCode, pos, stack, insert);
+            auto fs = insert.registerFrameState(srcCode, pos, stack);
+            Value* idx = pop();
+            Value* vec = pop();
+            push(insert(new Extract2_1D(vec, idx, env, fs, srcIdx)));
+        } else {
+            Value* idx = pop();
+            Value* vec = pop();
+            push(insert(new Extract2_1D(vec, idx, env, srcIdx)));
         }
-        Value* idx = pop();
-        Value* vec = pop();
-        push(insert(new Extract2_1D(vec, idx, env, srcIdx)));
         break;
     }
 
     case Opcode::extract1_2_: {
-        // TODO: checkpoint here is broken. What we should do here is insert a
-        // checkpoint between every force, and then deopt between forcing. E.g.
-        // if in a[b,c] b turns out to be an object, we need a deopt exit that
-        // captures the forced a, forced b and unforced c. So we cannot have
-        // deopt like now right in front of the Extract2_2D, but instead we need
-        // 3 different deopts after every force.
-        // For that we need to fix elide_env_spec to insert the assumes in the
-        // right place (ie, after the force and not before the Extract)
+        // TODO: checkpoint here is broken. What we should do here is insert
+        // a checkpoint between every force, and then deopt between forcing.
+        // E.g. if in a[b,c] b turns out to be an object, we need a deopt
+        // exit that captures the forced a, forced b and unforced c. So we
+        // cannot have deopt like now right in front of the Extract2_2D, but
+        // instead we need 3 different deopts after every force. For that we
+        // need to fix elide_env_spec to insert the assumes in the right
+        // place (ie, after the force and not before the Extract)
         // insert.addCheckpoint(srcCode, pos, stack);
         Value* idx2 = pop();
         Value* idx1 = pop();
@@ -509,14 +517,14 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
     }
 
     case Opcode::extract2_2_: {
-        // TODO: checkpoint here is broken. What we should do here is insert a
-        // checkpoint between every force, and then deopt between forcing. E.g.
-        // if in a[b,c] b turns out to be an object, we need a deopt exit that
-        // captures the forced a, forced b and unforced c. So we cannot have
-        // deopt like now right in front of the Extract2_2D, but instead we need
-        // 3 different deopts after every force.
-        // For that we need to fix elide_env_spec to insert the assumes in the
-        // right place (ie, after the force and not before the Extract)
+        // TODO: checkpoint here is broken. What we should do here is insert
+        // a checkpoint between every force, and then deopt between forcing.
+        // E.g. if in a[b,c] b turns out to be an object, we need a deopt
+        // exit that captures the forced a, forced b and unforced c. So we
+        // cannot have deopt like now right in front of the Extract2_2D, but
+        // instead we need 3 different deopts after every force. For that we
+        // need to fix elide_env_spec to insert the assumes in the right
+        // place (ie, after the force and not before the Extract)
         // insert.addCheckpoint(srcCode, pos, stack);
         Value* idx2 = pop();
         Value* idx1 = pop();
@@ -552,24 +560,25 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         BINOP_NOENV(LAnd, lgl_and_);
 #undef BINOP_NOENV
 
-        // Explicit force below to ensure that framestate contains the forced
-        // version
-        // Forcing of both args is ok here, even if lhs is an object, because
-        // binop dispatch in R always forces both arguments before deciding on
-        // a dispatch strategy.
+        // Explicit force below to ensure that framestate contains the
+        // forced version Forcing of both args is ok here, even if lhs is an
+        // object, because binop dispatch in R always forces both arguments
+        // before deciding on a dispatch strategy.
 
 #define BINOP(Name, Op)                                                        \
     case Opcode::Op: {                                                         \
         if (!inPromise()) {                                                    \
             forceIfLazy(1);                                                    \
             forceIfLazy(0);                                                    \
-            addCheckpoint(srcCode, pos, stack, insert);                        \
+            auto fs = insert.registerFrameState(srcCode, pos, stack);          \
+            auto rhs = pop();                                                  \
+            auto lhs = pop();                                                  \
+            push(insert(new Name(lhs, rhs, env, fs, srcIdx)));                 \
+        } else {                                                               \
+            auto rhs = pop();                                                  \
+            auto lhs = pop();                                                  \
+            push(insert(new Name(lhs, rhs, env, srcIdx)));                     \
         }                                                                      \
-        auto lhs = at(1);                                                      \
-        auto rhs = at(0);                                                      \
-        pop();                                                                 \
-        pop();                                                                 \
-        push(insert(new Name(lhs, rhs, env, srcIdx)));                         \
         break;                                                                 \
     }
 
@@ -803,7 +812,7 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) const {
                 break;
             }
             case Opcode::brobj_: {
-                Value* v = insert(new IsObject(cur.stack.top()));
+                Value* v = insert((new TypeTest(cur.stack.top()))->object());
                 insert(new Branch(v));
                 break;
             }

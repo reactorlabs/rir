@@ -85,8 +85,9 @@ AbstractResult ScopeAnalysis::apply(ScopeAnalysisState& state,
             lexicalEnv = staticClosureEnv;
         }
         state.envs[mk].parentEnv(lexicalEnv);
-        mk->eachLocalVar(
-            [&](SEXP name, Value* val) { state.envs[mk].set(name, val, mk, depth); });
+        mk->eachLocalVar([&](SEXP name, Value* val) {
+            state.envs[mk].set(name, val, mk, depth);
+        });
         handled = true;
         effect.update();
     } else if (auto le = LdFunctionEnv::Cast(i)) {
@@ -245,23 +246,26 @@ AbstractResult ScopeAnalysis::apply(ScopeAnalysisState& state,
 
     if (!handled) {
         if (i->hasEnv()) {
-            bool envIsNeeded = i->hasEnv();
-            // Already exclude the case where an operation needs an env only for
-            // object arguments, but we know that none of the args are objects.
-            if (envIsNeeded && i->envOnlyForObj()) {
-                envIsNeeded = i->anyArg([&](Value* v) {
-                    if (v == i->env() || !v->type.maybeObj())
-                        return false;
+            auto envIsNeeded = true;
+            if (i->isSpeculable()) {
+                // Already exclude the case where an operation needs an env only
+                // for object arguments, but we know that none of the args are
+                // objects.
+                if (i->envOnlyForObj()) {
+                    envIsNeeded = i->anyArg([&](Value* v) {
+                        if (v == i->env() || !v->type.maybeObj())
+                            return false;
 
-                    bool maybeObj = false;
-                    lookup(state, v,
-                           [&](const AbstractPirValue& analysisRes) {
-                               if (analysisRes.type.maybeObj())
-                                   maybeObj = true;
-                           },
-                           [&]() { maybeObj = true; });
-                    return maybeObj;
-                });
+                        bool maybeObj = false;
+                        lookup(state, v,
+                               [&](const AbstractPirValue& analysisRes) {
+                                   if (analysisRes.type.maybeObj())
+                                       maybeObj = true;
+                               },
+                               [&]() { maybeObj = true; });
+                        return maybeObj;
+                    });
+                }
             }
 
             // If an environemnt is leaked, then deadStore elimination does not
@@ -314,5 +318,5 @@ AbstractResult ScopeAnalysis::apply(ScopeAnalysisState& state,
     return effect;
 }
 
-}
-}
+} // namespace pir
+} // namespace rir

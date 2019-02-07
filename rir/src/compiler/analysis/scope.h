@@ -183,7 +183,7 @@ class ScopeAnalysis : public StaticAnalysis<
         return aLoad;
     }
 };
-}
-}
+} // namespace pir
+} // namespace rir
 
 #endif

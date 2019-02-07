@@ -54,7 +54,7 @@ class TheInliner {
                     if (inlineeCls->nargs() != call->nCallArgs())
                         continue;
                     staticEnv = mkcls->lexicalEnv();
-                    callerFrameState = call->frameState();
+                    callerFrameState = (FrameState*)call->frameState();
                 } else if (auto call = StaticCall::Cast(*it)) {
                     inlineeCls = call->cls();
                     inlinee = call->dispatch();
@@ -65,7 +65,7 @@ class TheInliner {
                         continue;
                     assert(inlineeCls->nargs() == call->nCallArgs());
                     staticEnv = inlineeCls->closureEnv();
-                    callerFrameState = call->frameState();
+                    callerFrameState = (FrameState*)call->frameState();
                 } else {
                     continue;
                 }
@@ -86,8 +86,7 @@ class TheInliner {
 
                 fuel--;
 
-                BB* split =
-                    BBTransform::split(version->nextBBId++, bb, it, version);
+                BB* split = BBTransform::split(bb, it);
                 auto theCall = *split->begin();
                 auto theCallInstruction = CallInstruction::CastCall(theCall);
                 std::vector<Value*> arguments;
@@ -121,7 +120,8 @@ class TheInliner {
                             }
                         }
                         if (auto sp = FrameState::Cast(i)) {
-                            if (!callerFrameState) {
+                            if (!callerFrameState ||
+                                (Value*)callerFrameState == Tombstone::framestate()) {
                                 fail = true;
                                 return;
                             }

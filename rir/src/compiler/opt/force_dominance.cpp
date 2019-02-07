@@ -285,8 +285,7 @@ void ForceDominance::apply(RirCompiler&, ClosureVersion* cls,
                         } else if (result.isDominatingForce(f)) {
                             if (result.isSafeToInline(mkarg)) {
                                 Promise* prom = mkarg->prom();
-                                BB* split = BBTransform::split(code->nextBBId++,
-                                                               bb, ip, code);
+                                BB* split = BBTransform::split(bb, ip);
                                 BB* prom_copy =
                                     BBTransform::clone(prom->entry, code, cls);
                                 bb->overrideNext(prom_copy);

@@ -61,8 +61,10 @@ void Configurations::defaultOptimizations() {
     // ==== Phase 2) Speculate away environments
     //
     // This pass is scheduled second, since we want to first try to do this
-    // statically in Phase 1
+    // statically in Phase 1. It mainly consists on adding speculative some
+    // optimizations
     optimizations.push_back(new pir::ElideEnvSpec());
+    // optimizations.push_back(new pir::ConfinedForceSpec());
     addDefaultOpt();
 
     // ==== Phase 3) Remove checkpoints we did not use
@@ -72,20 +74,24 @@ void Configurations::defaultOptimizations() {
     // Since for example even unused checkpoints keep variables live.
     //
     // After this phase it is no longer possible to add assumptions at any point
+
     optimizations.push_back(new pir::CleanupCheckpoints());
     addDefaultOpt();
 
-    // ==== Phase 4) Remove Framestates we did not use
-    //
-    // Framestates can be used by call instructions. This pass removes this
-    // dependency and the framestates will subsequently be cleaned.
-    //
-    // After this pass it is no longer possible to inline callees with deopts
+    optimizations.push_back(new pir::ElideEnvSpec());
+    // optimizations.push_back(new pir::ConfinedForceSpec());
+
+    // ==== Phase 4) Try to remove environments that are only sticked to forces
+    // Framestates can be used by call instructions and force instructions.
+    // This pass removes this dependency and the framestates will subsequently
+    // be cleaned. After this pass it is no longer possible to inline callees
+    // with deopts or add speculative optimizations
+
     optimizations.push_back(new pir::CleanupFramestate());
     optimizations.push_back(new pir::CleanupCheckpoints());
 
     // ==== Phase 5) Final round of default opts
-    for (size_t i = 0; i < 2; ++i)
+    for (size_t i = 0; i < 3; ++i)
         addDefaultOpt();
 
     // Our backend really does not like unused checkpoints, so be sure to remove

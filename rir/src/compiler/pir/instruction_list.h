@@ -31,10 +31,18 @@
     V(Subassign1_1D)                                                           \
     V(Subassign2_1D)
 
+#define SPECULATIVE_INSTRUCTIONS(V)                                            \
+    V(FrameState)                                                              \
+    V(Checkpoint)                                                              \
+    V(Assume)                                                                  \
+    V(Deopt)                                                                   \
+    V(ScheduledDeopt)
+
 #define COMPILER_INSTRUCTIONS(V)                                               \
     SIMPLE_INSTRUCTIONS(V_SIMPLE_INSTRUCTION_IN_COMPILER_INSTRUCTIONS, V)      \
     BINOP_INSTRUCTIONS(V)                                                      \
     VECTOR_RW_INSTRUCTIONS(V)                                                  \
+    SPECULATIVE_INSTRUCTIONS(V)                                                \
     V(LdFun)                                                                   \
     V(Seq)                                                                     \
     V(LdVar)                                                                   \
@@ -47,7 +55,7 @@
     V(Phi)                                                                     \
     V(AsLogical)                                                               \
     V(AsTest)                                                                  \
-    V(IsObject)                                                                \
+    V(TypeTest)                                                                \
     V(Return)                                                                  \
     V(MkArg)                                                                   \
     V(MkFunCls)                                                                \
@@ -72,11 +80,6 @@
     V(Identical)                                                               \
     V(Length)                                                                  \
     V(ForSeqSize)                                                              \
-    V(FrameState)                                                              \
-    V(Checkpoint)                                                              \
-    V(Assume)                                                                  \
-    V(Deopt)                                                                   \
-    V(ScheduledDeopt)                                                          \
     V(Force)                                                                   \
     V(CastType)                                                                \
     V(SetShared)                                                               \

@@ -65,9 +65,8 @@ BB* BBTransform::clone(BB* src, Code* target, ClosureVersion* targetClosure) {
     return newEntry;
 }
 
-BB* BBTransform::split(size_t next_id, BB* src, BB::Instrs::iterator it,
-                       Code* target) {
-    BB* split = new BB(target, next_id);
+BB* BBTransform::split(BB* src, BB::Instrs::iterator it) {
+    BB* split = new BB(src->owner, src->owner->nextBBId++);
     split->next0 = src->next0;
     split->next1 = src->next1;
     while (it != src->end()) {
@@ -114,7 +113,7 @@ Value* BBTransform::forInline(BB* inlinee, BB* splice) {
 BB* BBTransform::lowerExpect(Code* code, BB* src, BB::Instrs::iterator position,
                              Value* condition, bool expected, BB* deoptBlock,
                              const std::string& debugMessage) {
-    auto split = BBTransform::split(code->nextBBId++, src, position + 1, code);
+    auto split = BBTransform::split(src, position + 1);
 
     static SEXP print = Rf_findFun(Rf_install("cat"), R_GlobalEnv);
 
@@ -155,6 +154,39 @@ void BBTransform::removeBBs(Code* code,
     for (auto bb : toDelete) {
         delete bb;
     }
+}
+
+Value* BBTransform::insertAssume(BB* src, Instruction* condition,
+                                 Value* checkpoint,
+                                 BB::Instrs::iterator& position,
+                                 bool assumeType) {
+    position = src->insert(position, condition);
+    position++;
+    auto assume = new Assume(condition, checkpoint);
+    if (!assumeType)
+        assume->Not();
+    position = src->insert(position, assume);
+    position++;
+}
+
+Value* BBTransform::addDeopt(BB* src, BB::Instrs::iterator it,
+                             const Value* framestate) {
+    BB* branch = BBTransform::split(src, it);
+    BB* deoptBranch = new BB(src->owner, src->owner->nextBBId++);
+    FrameState* fs = (FrameState*)framestate;
+    src->moveToEnd(src->atPosition(fs), deoptBranch);
+    /*while (fs->next()) {
+        auto prevClone = fs;
+        fs = fs->next();
+        auto cloneSp = FrameState::Cast(fs->clone());
+        deoptBranch->insert(deoptBranch->begin(), cloneSp);
+        prevClone->updateNext(cloneSp);
+    }*/
+    deoptBranch->append(new Deopt((FrameState*)framestate));
+    auto cp = new Checkpoint();
+    src->append(cp);
+    src->setBranch(branch, deoptBranch);
+    return cp;
 }
 
 } // namespace pir

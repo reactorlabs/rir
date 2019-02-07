@@ -926,6 +926,19 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 break;
             }
 
+            case Tag::TypeTest: {
+                auto typeTest = TypeTest::Cast(instr);
+                switch (typeTest->testFor) {
+                case TypeTest::Object:
+                    cs << BC::isobj();
+                    break;
+                case TypeTest::EnvironmentStub:
+                    cs << BC::isstubenv();
+                    break;
+                }
+                break;
+            }
+
 #define SIMPLE(Name, Factory)                                                  \
     case Tag::Name: {                                                          \
         cs << BC::Factory();                                                   \
@@ -942,7 +955,6 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 SIMPLE(ChkClosure, isfun);
                 SIMPLE(Seq, seq);
                 SIMPLE(MkCls, close);
-                SIMPLE(IsObject, isobj);
 #define V(V, name, Name) SIMPLE(Name, name);
                 SIMPLE_INSTRUCTIONS(V, _);
 #undef V
@@ -1181,8 +1193,6 @@ void Pir2Rir::lower(Code* code) {
         auto it = bb->begin();
         while (it != bb->end()) {
             auto next = it + 1;
-            if (auto call = CallInstruction::CastCall(*it))
-                call->clearFrameState();
             if (auto ldfun = LdFun::Cast(*it)) {
                 // the guessed binding in ldfun is just used as a temporary
                 // store. If we did not manage to resolve ldfun by now, we

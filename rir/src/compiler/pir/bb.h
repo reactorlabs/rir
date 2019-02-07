@@ -80,6 +80,13 @@ class BB {
     Instrs::iterator begin() { return instrs.begin(); }
     Instrs::iterator end() { return instrs.end(); }
 
+    Instrs::iterator atPosition(Instruction* i) {
+        auto position = instrs.begin();
+        while (*position != i)
+            position++;
+        return position;
+    }
+
     Instrs::reverse_iterator rbegin() { return instrs.rbegin(); }
     Instrs::reverse_iterator rend() { return instrs.rend(); }
 
@@ -91,7 +98,6 @@ class BB {
     bool isExit() const { return !next0 && !next1; }
 
     void setBranch(BB* trueBranch, BB* falseBranch) {
-        assert(!next0 && !next1);
         this->next0 = trueBranch;
         this->next1 = falseBranch;
     }
