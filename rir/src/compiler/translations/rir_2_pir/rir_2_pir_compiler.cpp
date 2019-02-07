@@ -9,18 +9,19 @@
 #include "ir/BC.h"
 #include "ir/Compiler.h"
 
+#include "../../debugging/PerfCounter.h"
+
 #include "interpreter/runtime.h"
+
+#include <chrono>
 
 namespace rir {
 namespace pir {
 
 // Currently PIR optimized functions cannot handle too many arguments or
 // mis-ordered arguments. The caller needs to take care.
-const Assumptions::Flags Rir2PirCompiler::minimalAssumptions =
-    Assumptions::Flags(
-        {Assumption::CorrectOrderOfArguments, Assumption::NotTooManyArguments});
-const Assumptions Rir2PirCompiler::defaultAssumptions = Assumptions(
-    {Assumption::CorrectOrderOfArguments, Assumption::NotTooManyArguments}, 0);
+constexpr Assumptions::Flags Rir2PirCompiler::minimalAssumptions;
+constexpr Assumptions Rir2PirCompiler::defaultAssumptions;
 
 Rir2PirCompiler::Rir2PirCompiler(Module* module, StreamLogger& logger)
     : RirCompiler(module), logger(logger) {
@@ -171,6 +172,12 @@ void Rir2PirCompiler::compileClosure(Closure* closure,
     return fail();
 }
 
+bool MEASURE_COMPILER_PERF = getenv("PIR_MEASURE_COMPILER") ? true : false;
+std::chrono::time_point<std::chrono::high_resolution_clock> startTime;
+std::chrono::time_point<std::chrono::high_resolution_clock> endTime;
+std::unique_ptr<CompilerPerf> PERF = std::unique_ptr<CompilerPerf>(
+    MEASURE_COMPILER_PERF ? new CompilerPerf : nullptr);
+
 void Rir2PirCompiler::optimizeModule() {
     logger.flush();
     size_t passnr = 0;
@@ -179,7 +186,18 @@ void Rir2PirCompiler::optimizeModule() {
             c->eachVersion([&](ClosureVersion* v) {
                 auto& log = logger.get(v);
                 log.pirOptimizationsHeader(v, translation, passnr++);
+
+                if (MEASURE_COMPILER_PERF)
+                    startTime = std::chrono::high_resolution_clock::now();
+
                 translation->apply(*this, v, log);
+                if (MEASURE_COMPILER_PERF) {
+                    endTime = std::chrono::high_resolution_clock::now();
+                    std::chrono::duration<double> passDuration =
+                        endTime - startTime;
+                    PERF->addTime(translation->getName(), passDuration.count());
+                }
+
                 log.pirOptimizations(v, translation);
 
 #ifdef ENABLE_SLOWASSERT
@@ -188,6 +206,9 @@ void Rir2PirCompiler::optimizeModule() {
             });
         });
     }
+    if (MEASURE_COMPILER_PERF)
+        startTime = std::chrono::high_resolution_clock::now();
+
     module->eachPirClosure([&](Closure* c) {
         c->eachVersion([&](ClosureVersion* v) {
             logger.get(v).pirOptimizationsFinished(v);
@@ -198,6 +219,13 @@ void Rir2PirCompiler::optimizeModule() {
 #endif
         });
     });
+
+    if (MEASURE_COMPILER_PERF) {
+        endTime = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double> passDuration = endTime - startTime;
+        PERF->addTime("Verification", passDuration.count());
+    }
+
     logger.flush();
 }
 

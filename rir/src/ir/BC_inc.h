@@ -600,7 +600,8 @@ BC_NOARGS(V, _)
         case Opcode::named_call_implicit_:
         case Opcode::call_:
         case Opcode::named_call_:
-            memcpy(&immediate.callFixedArgs, pc, sizeof(CallFixedArgs));
+            memcpy(&immediate.callFixedArgs,
+                   reinterpret_cast<CallFixedArgs*>(pc), sizeof(CallFixedArgs));
             break;
         case Opcode::mk_env_:
             memcpy(&immediate.mkEnvFixedArgs, pc, sizeof(MkEnvFixedArgs));

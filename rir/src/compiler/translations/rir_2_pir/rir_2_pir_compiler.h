@@ -13,8 +13,13 @@ class Rir2PirCompiler : public RirCompiler {
   public:
     static constexpr size_t MAX_INPUT_SIZE = 1000;
 
-    static const Assumptions::Flags minimalAssumptions;
-    static const Assumptions defaultAssumptions;
+    static constexpr Assumptions::Flags minimalAssumptions =
+        Assumptions::Flags(Assumption::CorrectOrderOfArguments) |
+        Assumption::NotTooManyArguments;
+    static constexpr Assumptions defaultAssumptions =
+        Assumptions(Assumptions::Flags(Assumption::CorrectOrderOfArguments) |
+                        Assumption::NotTooManyArguments,
+                    0);
 
     Rir2PirCompiler(Module* module, StreamLogger& logger);
 

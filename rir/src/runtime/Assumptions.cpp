@@ -55,47 +55,7 @@ std::ostream& operator<<(std::ostream& out, const Assumptions& a) {
     return out;
 }
 
-static constexpr std::array<Assumption, 3> ObjAssumptions = {
-    {Assumption::Arg1IsNonObj_, Assumption::Arg2IsNonObj_,
-     Assumption::Arg3IsNonObj_}};
-static constexpr std::array<Assumption, 3> EagerAssumptions = {
-    {Assumption::Arg1IsEager_, Assumption::Arg2IsEager_,
-     Assumption::Arg3IsEager_}};
-
-bool Assumptions::isEager(size_t i) const {
-    if (flags.includes(Assumption::EagerArgs_))
-        return true;
-
-    if (i < EagerAssumptions.size())
-        if (flags.includes(EagerAssumptions[i]))
-            return true;
-
-    return false;
-}
-
-void Assumptions::setEager(size_t i, bool eager) {
-    if (eager && i < EagerAssumptions.size())
-        flags.set(EagerAssumptions[i]);
-    else if (!eager)
-        flags.reset(Assumption::EagerArgs_);
-}
-
-bool Assumptions::notObj(size_t i) const {
-    if (flags.includes(Assumption::NonObjectArgs_))
-        return true;
-
-    if (i < ObjAssumptions.size())
-        if (flags.includes(ObjAssumptions[i]))
-            return true;
-
-    return false;
-}
-
-void Assumptions::setNotObj(size_t i, bool notObj) {
-    if (notObj && i < ObjAssumptions.size())
-        flags.set(ObjAssumptions[i]);
-    else if (!notObj)
-        flags.reset(Assumption::NonObjectArgs_);
-}
+constexpr std::array<Assumption, 3> Assumptions::ObjAssumptions;
+constexpr std::array<Assumption, 3> Assumptions::EagerAssumptions;
 
 } // namespace rir
