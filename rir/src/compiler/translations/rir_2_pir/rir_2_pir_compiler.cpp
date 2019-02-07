@@ -20,11 +20,8 @@ namespace pir {
 
 // Currently PIR optimized functions cannot handle too many arguments or
 // mis-ordered arguments. The caller needs to take care.
-const Assumptions::Flags Rir2PirCompiler::minimalAssumptions =
-    Assumptions::Flags(
-        {Assumption::CorrectOrderOfArguments, Assumption::NotTooManyArguments});
-const Assumptions Rir2PirCompiler::defaultAssumptions = Assumptions(
-    {Assumption::CorrectOrderOfArguments, Assumption::NotTooManyArguments}, 0);
+constexpr Assumptions::Flags Rir2PirCompiler::minimalAssumptions;
+constexpr Assumptions Rir2PirCompiler::defaultAssumptions;
 
 Rir2PirCompiler::Rir2PirCompiler(Module* module, StreamLogger& logger)
     : RirCompiler(module), logger(logger) {

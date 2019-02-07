@@ -38,49 +38,47 @@ enum class Assumption {
 struct Assumptions {
     typedef EnumSet<Assumption, uint16_t> Flags;
 
-    Assumptions() {}
-    explicit Assumptions(const Flags& flags) : flags(flags) {}
-    Assumptions(const Flags& flags, uint8_t missing)
+    Assumptions() = default;
+    Assumptions(const Assumptions&) noexcept = default;
+
+    explicit constexpr Assumptions(const Flags& flags) : flags(flags) {}
+    constexpr Assumptions(const Flags& flags, uint8_t missing)
         : flags(flags), missing(missing) {}
-    explicit Assumptions(uint32_t i) { memcpy(this, &i, sizeof(i)); }
-    Assumptions(std::initializer_list<Assumption> assumptions)
-        : flags(assumptions) {}
+    explicit Assumptions(uint32_t i) {
+        // Silences unused warning:
+        (void)unused;
+        memcpy(this, &i, sizeof(i));
+    }
 
     constexpr static size_t MAX_MISSING = 255;
 
-  private:
-    Flags flags;
-    uint8_t missing = 0;
-    uint8_t unused = 0;
+    RIR_INLINE void add(Assumption a) { flags.set(a); }
+    RIR_INLINE void remove(Assumption a) { flags.reset(a); }
+    RIR_INLINE bool includes(Assumption a) const { return flags.includes(a); }
+    RIR_INLINE bool includes(const Flags& a) const { return flags.includes(a); }
 
-  public:
-    void add(Assumption a) { flags.set(a); }
-    void remove(Assumption a) { flags.reset(a); }
-    bool includes(Assumption a) const { return flags.includes(a); }
-    bool includes(const Flags& a) const { return flags.includes(a); }
+    RIR_INLINE bool isEager(size_t i) const;
+    RIR_INLINE void setEager(size_t i, bool);
+    RIR_INLINE bool notObj(size_t i) const;
+    RIR_INLINE void setNotObj(size_t i, bool);
 
-    bool isEager(size_t i) const;
-    void setEager(size_t i, bool);
-    bool notObj(size_t i) const;
-    void setNotObj(size_t i, bool);
+    RIR_INLINE uint8_t numMissing() const { return missing; }
 
-    uint8_t numMissing() const { return missing; }
-
-    void numMissing(long i) {
+    RIR_INLINE void numMissing(long i) {
         assert(i < 255);
         missing = i;
     }
 
-    bool empty() const { return flags.empty() && missing == 0; }
+    RIR_INLINE bool empty() const { return flags.empty() && missing == 0; }
 
-    size_t count() const { return flags.count(); }
+    RIR_INLINE size_t count() const { return flags.count(); }
 
-    Assumptions operator|(const Assumptions& other) const {
+    constexpr Assumptions operator|(const Assumptions& other) const {
         assert(missing == other.missing);
         return Assumptions(other.flags | flags, missing);
     }
 
-    bool operator<(const Assumptions& other) const {
+    RIR_INLINE bool operator<(const Assumptions& other) const {
         // Order by number of assumptions! Important for dispatching.
         if (missing != other.missing)
             return missing > other.missing;
@@ -89,15 +87,15 @@ struct Assumptions {
         return flags < other.flags;
     }
 
-    bool operator!=(const Assumptions& other) const {
+    RIR_INLINE bool operator!=(const Assumptions& other) const {
         return flags != other.flags || missing != other.missing;
     }
 
-    bool operator==(const Assumptions& other) const {
+    RIR_INLINE bool operator==(const Assumptions& other) const {
         return flags == other.flags && missing == other.missing;
     }
 
-    bool subtype(const Assumptions& other) const {
+    RIR_INLINE bool subtype(const Assumptions& other) const {
         if (other.flags.includes(Assumption::NotTooFewArguments))
             return missing == other.missing && other.flags.includes(flags);
         return other.flags.includes(flags);
@@ -105,8 +103,56 @@ struct Assumptions {
 
     friend struct std::hash<rir::Assumptions>;
     friend std::ostream& operator<<(std::ostream& out, const Assumptions& a);
+
+    static constexpr std::array<Assumption, 3> ObjAssumptions = {
+        {Assumption::Arg1IsNonObj_, Assumption::Arg2IsNonObj_,
+         Assumption::Arg3IsNonObj_}};
+    static constexpr std::array<Assumption, 3> EagerAssumptions = {
+        {Assumption::Arg1IsEager_, Assumption::Arg2IsEager_,
+         Assumption::Arg3IsEager_}};
+
+  private:
+    Flags flags;
+    uint8_t missing = 0;
+    uint8_t unused = 0;
 };
 #pragma pack(pop)
+
+RIR_INLINE bool Assumptions::isEager(size_t i) const {
+    if (flags.includes(Assumption::EagerArgs_))
+        return true;
+
+    if (i < EagerAssumptions.size())
+        if (flags.includes(EagerAssumptions[i]))
+            return true;
+
+    return false;
+}
+
+RIR_INLINE void Assumptions::setEager(size_t i, bool eager) {
+    if (eager && i < EagerAssumptions.size())
+        flags.set(EagerAssumptions[i]);
+    else if (!eager)
+        flags.reset(Assumption::EagerArgs_);
+}
+
+RIR_INLINE bool Assumptions::notObj(size_t i) const {
+    if (flags.includes(Assumption::NonObjectArgs_))
+        return true;
+
+    if (i < ObjAssumptions.size())
+        if (flags.includes(ObjAssumptions[i]))
+            return true;
+
+    return false;
+}
+
+RIR_INLINE void Assumptions::setNotObj(size_t i, bool notObj) {
+    if (notObj && i < ObjAssumptions.size())
+        flags.set(ObjAssumptions[i]);
+    else if (!notObj)
+        flags.reset(Assumption::NonObjectArgs_);
+}
 
 typedef uint32_t Immediate;
 static_assert(sizeof(Assumptions) == sizeof(Immediate),

@@ -26,6 +26,9 @@ typedef std::function<SEXP(void*)> LazyFunction;
 
 struct ArgsLazyData : public RirDataWrapper<ArgsLazyData, LAZY_ARGS_MAGIC> {
     ArgsLazyData() = delete;
+    ArgsLazyData(const ArgsLazyData&) = delete;
+    ArgsLazyData& operator=(const ArgsLazyData&) = delete;
+
     ArgsLazyData(const CallContext* callCtx, Context* cmpCtx)
         : RirDataWrapper(2), callContext(callCtx), compilationContext(cmpCtx){};
 
