@@ -402,7 +402,6 @@ RIR_INLINE SEXP rirCallTrampoline(const CallContext& call, Function* fun,
     return rirCallTrampoline(call, fun, env, arglist, nullptr, ctx);
 }
 
-const static SEXP loopTrampolineMarker = (SEXP)0x7007;
 R_bcstack_t evalRirCode(Code*, Context*, SEXP*, const CallContext*, Opcode*,
                         R_bcstack_t*);
 static void loopTrampoline(Code* c, Context* ctx, SEXP* env,
@@ -605,9 +604,10 @@ RIR_INLINE Assumptions addDynamicAssumptions(
                 } else if (arg.u.sxpval == R_MissingArg) {
                     given.reset(Assumption::NoMissingArguments);
                 }
-            } else if (isObject(arg.u.sxpval)) {
+            } else if (arg.tag == STACK_OBJ_SEXP && isObject(arg.u.sxpval)) {
                 notObj = false;
-            } else if (arg.u.sxpval == R_MissingArg) {
+            } else if (arg.tag == STACK_OBJ_SEXP &&
+                       arg.u.sxpval == R_MissingArg) {
                 given.reset(Assumption::NoMissingArguments);
             }
             given.setEager(i, isEager);
@@ -968,7 +968,7 @@ static R_INLINE int R_integer_uminus(int x, Rboolean* pnaflag) {
     return -x;
 }
 
-#define STORE_UNOP(res) ostack_at(ctx, 0) = res
+#define STORE_UNOP(res) ostack_set(ctx, 0, res)
 
 #define UNOP_FALLBACK(op)                                                      \
     do {                                                                       \
@@ -1000,16 +1000,17 @@ static R_INLINE int R_integer_uminus(int x, Rboolean* pnaflag) {
         case STACK_OBJ_REAL:                                                   \
             res = real_stack_obj((val.u.dval == NA_REAL) ? NA_REAL             \
                                                          : op val.u.dval);     \
+            UNOP_FALLBACK(#op);                                                \
             break;                                                             \
         case STACK_OBJ_INT:                                                    \
             res = real_stack_obj(Op2(val.u.ival, &naflag));                    \
             CHECK_INTEGER_OVERFLOW(naflag);                                    \
+            UNOP_FALLBACK(#op);                                                \
             break;                                                             \
         default:                                                               \
             UNOP_FALLBACK(#op);                                                \
             break;                                                             \
         }                                                                      \
-        ostack_set(ctx, 0, res);                                               \
     } while (false)
 
 #define DO_RELOP(op)                                                           \
@@ -1056,7 +1057,7 @@ static R_INLINE int R_integer_uminus(int x, Rboolean* pnaflag) {
                 break;                                                         \
             }                                                                  \
         }                                                                      \
-        BINOP_FALLBACK(#op);                                                   \
+        BINOP_FALLBACK(op);                                                    \
     } while (false)
 
 static SEXP seq_int(int n1, int n2) {
@@ -1777,21 +1778,12 @@ R_bcstack_t evalRirCode(Code* c, Context* ctx, SEXP* env,
             Immediate i = readImmediate();
             advanceImmediate();
             R_bcstack_t* pos = ostack_cell_at(ctx, 0);
-#ifdef TYPED_STACK
-            SEXP val = pos->u.sxpval;
-            while (i--) {
-                pos->u.sxpval = (pos - 1)->u.sxpval;
-                pos--;
-            }
-            pos->u.sxpval = val;
-#else
-            SEXP val = *pos;
+            R_bcstack_t val = *pos;
             while (i--) {
                 *pos = *(pos - 1);
                 pos--;
             }
             *pos = val;
-#endif
             NEXT();
         }
 
@@ -1799,21 +1791,12 @@ R_bcstack_t evalRirCode(Code* c, Context* ctx, SEXP* env,
             Immediate i = readImmediate();
             advanceImmediate();
             R_bcstack_t* pos = ostack_cell_at(ctx, i);
-#ifdef TYPED_STACK
-            SEXP val = pos->u.sxpval;
-            while (i--) {
-                pos->u.sxpval = (pos + 1)->u.sxpval;
-                pos++;
-            }
-            pos->u.sxpval = val;
-#else
-            SEXP val = *pos;
+            R_bcstack_t val = *pos;
             while (i--) {
                 *pos = *(pos + 1);
                 pos++;
             }
             *pos = val;
-#endif
             NEXT();
         }
 
@@ -1886,7 +1869,7 @@ R_bcstack_t evalRirCode(Code* c, Context* ctx, SEXP* env,
                     real_res = (double)l / (double)r;
                 STORE_BINOP(real_stack_obj(real_res));
             } else {
-                BINOP_FALLBACK("/");
+                BINOP_FALLBACK(/);
             }
             NEXT();
         }
@@ -1899,7 +1882,7 @@ R_bcstack_t evalRirCode(Code* c, Context* ctx, SEXP* env,
                 double real_res =
                     (lhs.u.dval == NA_REAL || rhs.u.dval == NA_REAL)
                         ? NA_REAL
-                        : lhs.u.dval / rhs.u.dval;
+                        : myfloor(lhs.u.dval, rhs.u.dval);
                 STORE_BINOP(real_stack_obj(real_res));
             } else if (lhs.tag == STACK_OBJ_INT && rhs.tag == STACK_OBJ_INT) {
                 int int_res;
@@ -1911,7 +1894,7 @@ R_bcstack_t evalRirCode(Code* c, Context* ctx, SEXP* env,
                     int_res = (int)floor((double)l / (double)r);
                 STORE_BINOP(int_stack_obj(int_res));
             } else {
-                BINOP_FALLBACK("%/%");
+                BINOP_FALLBACK(%/%);
             }
             NEXT();
         }
@@ -1936,7 +1919,7 @@ R_bcstack_t evalRirCode(Code* c, Context* ctx, SEXP* env,
                 }
                 STORE_BINOP(int_stack_obj(int_res));
             } else {
-                BINOP_FALLBACK("%%");
+                BINOP_FALLBACK(%%);
             }
             NEXT();
         }
@@ -1944,7 +1927,7 @@ R_bcstack_t evalRirCode(Code* c, Context* ctx, SEXP* env,
         INSTRUCTION(pow_) {
             R_bcstack_t lhs = ostack_at(ctx, 1);
             R_bcstack_t rhs = ostack_at(ctx, 0);
-            BINOP_FALLBACK("^");
+            BINOP_FALLBACK(^);
             NEXT();
         }
 
@@ -2079,7 +2062,7 @@ R_bcstack_t evalRirCode(Code* c, Context* ctx, SEXP* env,
             int logical_res;
             if (x1 == 1 && x2 == 1) {
                 logical_res = 1;
-            } else if (x1 == 0 && x2 == 0) {
+            } else if (x1 == 0 || x2 == 0) {
                 logical_res = 0;
             } else {
                 logical_res = NA_LOGICAL;
@@ -2094,11 +2077,11 @@ R_bcstack_t evalRirCode(Code* c, Context* ctx, SEXP* env,
             switch (val.tag) {
             case STACK_OBJ_REAL:
                 // TODO: Is this right?
-                logical_res = (val.u.dval == 0.0);
+                logical_res = (val.u.dval != 0.0);
                 break;
             case STACK_OBJ_INT:
                 // TODO: Is this right?
-                logical_res = (val.u.ival == 0);
+                logical_res = (val.u.ival != 0);
                 break;
             case STACK_OBJ_LOGICAL:
                 logical_res = val.u.ival;
@@ -2115,17 +2098,16 @@ R_bcstack_t evalRirCode(Code* c, Context* ctx, SEXP* env,
 
         INSTRUCTION(asbool_) {
             R_bcstack_t val = ostack_top(ctx);
-            int cond = NA_LOGICAL;
 
             int logical_res;
             switch (val.tag) {
             case STACK_OBJ_REAL:
                 // TODO: Is this right?
-                logical_res = (val.u.dval == 0.0);
+                logical_res = (val.u.dval != 0.0);
                 break;
             case STACK_OBJ_INT:
                 // TODO: Is this right?
-                logical_res = (val.u.ival == 0);
+                logical_res = (val.u.ival != 0);
                 break;
             case STACK_OBJ_LOGICAL:
                 logical_res = val.u.ival;
@@ -2261,10 +2243,10 @@ R_bcstack_t evalRirCode(Code* c, Context* ctx, SEXP* env,
         }
 
         INSTRUCTION(brtrue_) {
-            R_bcstack_t val = ostack_top(ctx);
+            R_bcstack_t val = ostack_pop(ctx);
             JumpOffset offset = readJumpOffset();
             advanceJump();
-            if (val.tag == STACK_OBJ_LOGICAL && val.u.ival == 1) {
+            if (try_stack_obj_to_logical(val) == 1) {
                 pc += offset;
             }
             PC_BOUNDSCHECK(pc, c);
@@ -2272,10 +2254,10 @@ R_bcstack_t evalRirCode(Code* c, Context* ctx, SEXP* env,
         }
 
         INSTRUCTION(brfalse_) {
-            R_bcstack_t val = ostack_top(ctx);
+            R_bcstack_t val = ostack_pop(ctx);
             JumpOffset offset = readJumpOffset();
             advanceJump();
-            if (val.tag == STACK_OBJ_LOGICAL && val.u.ival == 0) {
+            if (try_stack_obj_to_logical(val) == 0) {
                 pc += offset;
             }
             PC_BOUNDSCHECK(pc, c);
@@ -2837,7 +2819,7 @@ R_bcstack_t evalRirCode(Code* c, Context* ctx, SEXP* env,
             }
 
             if (res == NULL) {
-                BINOP_FALLBACK(":");
+                BINOP_FALLBACK( :);
             }
 
             ostack_popn(ctx, 2);
