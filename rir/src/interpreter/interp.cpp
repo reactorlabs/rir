@@ -1908,8 +1908,8 @@ R_bcstack_t evalRirCode(Code* c, Context* ctx, SEXP* env,
                 STORE_BINOP(real_stack_obj(real_res));
             } else if (lhs.tag == STACK_OBJ_INT && rhs.tag == STACK_OBJ_INT) {
                 int int_res;
-                int l = lhs.u.dval;
-                int r = rhs.u.dval;
+                int l = lhs.u.ival;
+                int r = rhs.u.ival;
                 if (l == NA_INTEGER || r == NA_INTEGER || r == 0) {
                     int_res = NA_INTEGER;
                 } else {
@@ -2565,12 +2565,13 @@ R_bcstack_t evalRirCode(Code* c, Context* ctx, SEXP* env,
 
             if (MAYBE_SHARED(vec)) {
                 vec = Rf_duplicate(vec);
-                ostack_set(ctx, 1, sexp_to_stack_obj(vec, true));
+                ostack_set(ctx, 1, sexp_to_stack_obj(vec, false));
             }
 
-            SEXP args = CONS_NR(
-                vec, CONS_NR(stack_obj_to_sexp(idx),
-                             CONS_NR(stack_obj_to_sexp(val), R_NilValue)));
+            SEXP idx_sexp = stack_obj_to_sexp(idx);
+            SEXP val_sexp = stack_obj_to_sexp(val);
+            SEXP args =
+                CONS_NR(vec, CONS_NR(idx_sexp, CONS_NR(val_sexp, R_NilValue)));
             SET_TAG(CDDR(args), symbol::value);
             PROTECT(args);
 
