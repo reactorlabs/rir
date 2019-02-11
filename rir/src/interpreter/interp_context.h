@@ -164,22 +164,19 @@ RIR_INLINE SEXP stack_obj_to_sexp(R_bcstack_t x) {
     switch (x.tag) {
     case STACK_OBJ_INT:
         SEXP res;
-        res = R_Calloc(sizeof(SEXPREC), SEXPREC);
-        res->sxpinfo.type = INTSXP;
-        *INTEGER(res) = x.u.ival;
+        res = Rf_allocVector(INTSXP, 1);
         R_PreserveObject(res);
+        *INTEGER(res) = x.u.ival;
         return res;
     case STACK_OBJ_REAL:
-        res = R_Calloc(sizeof(SEXPREC), SEXPREC);
-        res->sxpinfo.type = REALSXP;
-        *REAL(res) = x.u.dval;
+        res = Rf_allocVector(REALSXP, 1);
         R_PreserveObject(res);
+        *REAL(res) = x.u.dval;
         return res;
     case STACK_OBJ_LOGICAL:
-        res = R_Calloc(sizeof(SEXPREC), SEXPREC);
-        res->sxpinfo.type = LGLSXP;
-        *INTEGER(res) = x.u.ival;
+        res = Rf_allocVector(LGLSXP, 1);
         R_PreserveObject(res);
+        *INTEGER(res) = x.u.ival;
         return res;
     case STACK_OBJ_SEXP:
         return x.u.sxpval;
