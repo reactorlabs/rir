@@ -10,17 +10,18 @@
 namespace rir {
 
 enum class Assumption {
-    EagerArgs_, // All arguments are already evaluated
+    // Arg is already evaluated
+    Arg0IsEager_,
+    Arg1IsEager_,
+    Arg2IsEager_,
+    Arg3IsEager_,
+    Arg4IsEager_,
 
-    Arg1IsEager_, // Arg1 is already evaluated
-    Arg2IsEager_, // Arg2 is already evaluated
-    Arg3IsEager_, // Arg3 is already evaluated
-
-    NonObjectArgs_, // All arguments are not objects
-
-    Arg1IsNonObj_, // Arg1 is not an object
-    Arg2IsNonObj_, // Arg2 is not an object
-    Arg3IsNonObj_, // Arg3 is not an object
+    // Arg is not an object
+    Arg0IsNonObj_,
+    Arg1IsNonObj_,
+    Arg2IsNonObj_,
+    Arg3IsNonObj_,
 
     NoExplicitlyMissingArgs, // Explicitly missing, e.g. f(,,)
     CorrectOrderOfArguments, // Ie. the args are not named
@@ -29,7 +30,7 @@ enum class Assumption {
                              //  Note: can still have explicitly missing args
     NotTooManyArguments,     // The number of args supplied is <= nargs
 
-    FIRST = EagerArgs_,
+    FIRST = Arg0IsEager_,
     LAST = NotTooManyArguments
 };
 
@@ -58,9 +59,11 @@ struct Assumptions {
     RIR_INLINE bool includes(const Flags& a) const { return flags.includes(a); }
 
     RIR_INLINE bool isEager(size_t i) const;
-    RIR_INLINE void setEager(size_t i, bool);
+    RIR_INLINE void setEager(size_t i);
+    RIR_INLINE void setEager();
     RIR_INLINE bool notObj(size_t i) const;
-    RIR_INLINE void setNotObj(size_t i, bool);
+    RIR_INLINE void setNotObj(size_t i);
+    RIR_INLINE void setNotObj();
 
     RIR_INLINE uint8_t numMissing() const { return missing; }
 
@@ -104,12 +107,13 @@ struct Assumptions {
     friend struct std::hash<rir::Assumptions>;
     friend std::ostream& operator<<(std::ostream& out, const Assumptions& a);
 
-    static constexpr std::array<Assumption, 3> ObjAssumptions = {
-        {Assumption::Arg1IsNonObj_, Assumption::Arg2IsNonObj_,
-         Assumption::Arg3IsNonObj_}};
-    static constexpr std::array<Assumption, 3> EagerAssumptions = {
-        {Assumption::Arg1IsEager_, Assumption::Arg2IsEager_,
-         Assumption::Arg3IsEager_}};
+    static constexpr std::array<Assumption, 5> ObjAssumptions = {
+        {Assumption::Arg0IsNonObj_, Assumption::Arg1IsNonObj_,
+         Assumption::Arg2IsNonObj_, Assumption::Arg3IsEager_,
+         Assumption::Arg4IsEager_}};
+    static constexpr std::array<Assumption, 4> EagerAssumptions = {
+        {Assumption::Arg0IsEager_, Assumption::Arg1IsEager_,
+         Assumption::Arg2IsEager_, Assumption::Arg3IsNonObj_}};
 
   private:
     Flags flags;
@@ -119,9 +123,6 @@ struct Assumptions {
 #pragma pack(pop)
 
 RIR_INLINE bool Assumptions::isEager(size_t i) const {
-    if (flags.includes(Assumption::EagerArgs_))
-        return true;
-
     if (i < EagerAssumptions.size())
         if (flags.includes(EagerAssumptions[i]))
             return true;
@@ -129,17 +130,18 @@ RIR_INLINE bool Assumptions::isEager(size_t i) const {
     return false;
 }
 
-RIR_INLINE void Assumptions::setEager(size_t i, bool eager) {
-    if (eager && i < EagerAssumptions.size())
+RIR_INLINE void Assumptions::setEager() {
+    for (size_t i = 0; i < EagerAssumptions.size(); ++i)
         flags.set(EagerAssumptions[i]);
-    else if (!eager)
-        flags.reset(Assumption::EagerArgs_);
+}
+
+RIR_INLINE void Assumptions::setEager(size_t i) {
+    if (i < EagerAssumptions.size()) {
+        flags.set(EagerAssumptions[i]);
+    }
 }
 
 RIR_INLINE bool Assumptions::notObj(size_t i) const {
-    if (flags.includes(Assumption::NonObjectArgs_))
-        return true;
-
     if (i < ObjAssumptions.size())
         if (flags.includes(ObjAssumptions[i]))
             return true;
@@ -147,11 +149,15 @@ RIR_INLINE bool Assumptions::notObj(size_t i) const {
     return false;
 }
 
-RIR_INLINE void Assumptions::setNotObj(size_t i, bool notObj) {
-    if (notObj && i < ObjAssumptions.size())
+RIR_INLINE void Assumptions::setNotObj() {
+    for (size_t i = 0; i < ObjAssumptions.size(); ++i)
         flags.set(ObjAssumptions[i]);
-    else if (!notObj)
-        flags.reset(Assumption::NonObjectArgs_);
+}
+
+RIR_INLINE void Assumptions::setNotObj(size_t i) {
+    if (i < ObjAssumptions.size()) {
+        flags.set(ObjAssumptions[i]);
+    }
 }
 
 typedef uint32_t Immediate;
