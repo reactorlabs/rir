@@ -324,9 +324,9 @@ RIR_INLINE int try_stack_obj_to_logical(R_bcstack_t x) {
 // Returns regular if int, truncated if real, -1 otherwise
 RIR_INLINE int try_stack_obj_to_idx(R_bcstack_t x) {
     if (stack_obj_is_integer(x)) {
-        return try_stack_obj_to_integer(x);
+        return try_stack_obj_to_integer(x) - 1;
     } else if (stack_obj_is_real(x)) {
-        return (int)try_stack_obj_to_real(x);
+        return (int)try_stack_obj_to_real(x) - 1;
     } else {
         return -1;
     }
