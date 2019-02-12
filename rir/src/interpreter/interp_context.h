@@ -199,17 +199,17 @@ RIR_INLINE SEXP stack_obj_to_sexp(R_bcstack_t x) {
 #ifdef USE_TYPED_STACK
         SEXP res;
         res = Rf_allocVector(INTSXP, 1);
-        R_PreserveObject(res);
+        // R_PreserveObject(res);
         *INTEGER(res) = x.u.ival;
         return res;
     case STACK_OBJ_REAL:
         res = Rf_allocVector(REALSXP, 1);
-        R_PreserveObject(res);
+        // R_PreserveObject(res);
         *REAL(res) = x.u.dval;
         return res;
     case STACK_OBJ_LOGICAL:
         res = Rf_allocVector(LGLSXP, 1);
-        R_PreserveObject(res);
+        // R_PreserveObject(res);
         *LOGICAL(res) = x.u.ival;
         return res;
 #endif
