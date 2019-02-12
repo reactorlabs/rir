@@ -109,35 +109,62 @@ RIR_INLINE void rl_append(ResizeableList* l, SEXP val, SEXP parent,
 
 // --- Stack
 
+// Determines whether simple scalars are represented unboxed
+// Otherwise they'll be STACK_OBJ_SEXPs like other expressions
+#define USE_TYPED_STACK
+
 typedef enum {
+    STACK_OBJ_SEXP,
     STACK_OBJ_INT,
     STACK_OBJ_REAL,
-    STACK_OBJ_LOGICAL,
-    STACK_OBJ_SEXP
+    STACK_OBJ_LOGICAL
 } stack_obj_type;
 
 RIR_INLINE R_bcstack_t int_stack_obj(int x) {
     R_bcstack_t res;
+#ifdef USE_TYPED_STACK
     res.tag = STACK_OBJ_INT;
     res.u.ival = x;
+#else
+    res.tag = STACK_OBJ_SEXP;
+    res.u.sxpval = Rf_allocVector(INTSXP, 1);
+    R_PreserveObject(res.u.sxpval);
+    *INTEGER(res.u.sxpval) = x;
+#endif
     return res;
 }
 
 RIR_INLINE R_bcstack_t real_stack_obj(double x) {
     R_bcstack_t res;
+#ifdef USE_TYPED_STACK
     res.tag = STACK_OBJ_REAL;
     res.u.dval = x;
+#else
+    res.tag = STACK_OBJ_SEXP;
+    res.u.sxpval = Rf_allocVector(REALSXP, 1);
+    R_PreserveObject(res.u.sxpval);
+    *REAL(res.u.sxpval) = x;
+#endif
     return res;
 }
 
 RIR_INLINE R_bcstack_t logical_stack_obj(int x) {
     R_bcstack_t res;
+#ifdef USE_TYPED_STACK
     res.tag = STACK_OBJ_LOGICAL;
     res.u.ival = x;
+#else
+    res.tag = STACK_OBJ_SEXP;
+    res.u.sxpval = Rf_allocVector(LGLSXP, 1);
+    R_PreserveObject(res.u.sxpval);
+    *LOGICAL(res.u.sxpval) = x;
+#endif
     return res;
 }
 
 RIR_INLINE R_bcstack_t sexp_to_stack_obj(SEXP x, bool unprotect) {
+    assert(x != NULL);
+#ifdef USE_TYPED_STACK
     if (x == loopTrampolineMarker || ATTRIB(x) != R_NilValue) {
         R_bcstack_t res;
         res.tag = STACK_OBJ_SEXP;
@@ -158,11 +185,18 @@ RIR_INLINE R_bcstack_t sexp_to_stack_obj(SEXP x, bool unprotect) {
         res.u.sxpval = x;
         return res;
     }
+#else
+    R_bcstack_t res;
+    res.tag = STACK_OBJ_SEXP;
+    res.u.sxpval = x;
+    return res;
+#endif
 }
 
 RIR_INLINE SEXP stack_obj_to_sexp(R_bcstack_t x) {
     switch (x.tag) {
     case STACK_OBJ_INT:
+#ifdef USE_TYPED_STACK
         SEXP res;
         res = Rf_allocVector(INTSXP, 1);
         R_PreserveObject(res);
@@ -176,8 +210,9 @@ RIR_INLINE SEXP stack_obj_to_sexp(R_bcstack_t x) {
     case STACK_OBJ_LOGICAL:
         res = Rf_allocVector(LGLSXP, 1);
         R_PreserveObject(res);
-        *INTEGER(res) = x.u.ival;
+        *LOGICAL(res) = x.u.ival;
         return res;
+#endif
     case STACK_OBJ_SEXP:
         return x.u.sxpval;
     default:

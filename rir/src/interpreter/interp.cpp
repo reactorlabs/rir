@@ -869,7 +869,7 @@ static R_INLINE int R_integer_times(int x, int y, Rboolean* pnaflag) {
         static CCODE blt;                                                      \
         static int flag;                                                       \
         if (!prim) {                                                           \
-            prim = Rf_findFun(Rf_install(#op), R_GlobalEnv);                   \
+            prim = Rf_findFun(Rf_install(op), R_GlobalEnv);                    \
             blt = getBuiltin(prim);                                            \
             flag = getFlag(prim);                                              \
         }                                                                      \
@@ -908,7 +908,7 @@ static R_INLINE int R_integer_times(int x, int y, Rboolean* pnaflag) {
                         : lhs.u.dval op rhs.u.ival;                            \
                 STORE_BINOP(real_stack_obj(real_res));                         \
             } else {                                                           \
-                BINOP_FALLBACK(op);                                            \
+                BINOP_FALLBACK(#op);                                           \
             }                                                                  \
         } else if (lhs.tag == STACK_OBJ_INT) {                                 \
             if (rhs.tag == STACK_OBJ_INT) {                                    \
@@ -923,10 +923,10 @@ static R_INLINE int R_integer_times(int x, int y, Rboolean* pnaflag) {
                         : lhs.u.ival op rhs.u.dval;                            \
                 STORE_BINOP(real_stack_obj(real_res));                         \
             } else {                                                           \
-                BINOP_FALLBACK(op);                                            \
+                BINOP_FALLBACK(#op);                                           \
             }                                                                  \
         } else {                                                               \
-            BINOP_FALLBACK(op);                                                \
+            BINOP_FALLBACK(#op);                                               \
         }                                                                      \
     } while (false)
 
@@ -1000,12 +1000,12 @@ static R_INLINE int R_integer_uminus(int x, Rboolean* pnaflag) {
         case STACK_OBJ_REAL:                                                   \
             res = real_stack_obj((val.u.dval == NA_REAL) ? NA_REAL             \
                                                          : op val.u.dval);     \
-            UNOP_FALLBACK(#op);                                                \
+            STORE_UNOP(res);                                                   \
             break;                                                             \
         case STACK_OBJ_INT:                                                    \
             res = real_stack_obj(Op2(val.u.ival, &naflag));                    \
             CHECK_INTEGER_OVERFLOW(naflag);                                    \
-            UNOP_FALLBACK(#op);                                                \
+            STORE_UNOP(res);                                                   \
             break;                                                             \
         default:                                                               \
             UNOP_FALLBACK(#op);                                                \
@@ -1057,7 +1057,7 @@ static R_INLINE int R_integer_uminus(int x, Rboolean* pnaflag) {
                 break;                                                         \
             }                                                                  \
         }                                                                      \
-        BINOP_FALLBACK(op);                                                    \
+        BINOP_FALLBACK(#op);                                                   \
     } while (false)
 
 static SEXP seq_int(int n1, int n2) {
@@ -1823,8 +1823,13 @@ R_bcstack_t evalRirCode(Code* c, Context* ctx, SEXP* env,
 
         INSTRUCTION(inc_) {
             R_bcstack_t val = ostack_pop(ctx);
+#ifdef USE_TYPED_STACK
             assert(val.tag == STACK_OBJ_INT);
             int i = val.u.ival + 1;
+#else
+            assert(TYPEOF(val.u.sxpval) == INTSXP);
+            int i = *INTEGER(val.u.sxpval) + 1;
+#endif
             ostack_push(ctx, int_stack_obj(i));
             NEXT();
         }
@@ -1869,7 +1874,7 @@ R_bcstack_t evalRirCode(Code* c, Context* ctx, SEXP* env,
                     real_res = (double)l / (double)r;
                 STORE_BINOP(real_stack_obj(real_res));
             } else {
-                BINOP_FALLBACK(/);
+                BINOP_FALLBACK("/");
             }
             NEXT();
         }
@@ -1894,7 +1899,7 @@ R_bcstack_t evalRirCode(Code* c, Context* ctx, SEXP* env,
                     int_res = (int)floor((double)l / (double)r);
                 STORE_BINOP(int_stack_obj(int_res));
             } else {
-                BINOP_FALLBACK(%/%);
+                BINOP_FALLBACK("%/%");
             }
             NEXT();
         }
@@ -1919,7 +1924,7 @@ R_bcstack_t evalRirCode(Code* c, Context* ctx, SEXP* env,
                 }
                 STORE_BINOP(int_stack_obj(int_res));
             } else {
-                BINOP_FALLBACK(%%);
+                BINOP_FALLBACK("%%");
             }
             NEXT();
         }
@@ -1927,7 +1932,7 @@ R_bcstack_t evalRirCode(Code* c, Context* ctx, SEXP* env,
         INSTRUCTION(pow_) {
             R_bcstack_t lhs = ostack_at(ctx, 1);
             R_bcstack_t rhs = ostack_at(ctx, 0);
-            BINOP_FALLBACK(^);
+            BINOP_FALLBACK("^");
             NEXT();
         }
 
@@ -2034,9 +2039,15 @@ R_bcstack_t evalRirCode(Code* c, Context* ctx, SEXP* env,
         INSTRUCTION(lgl_or_) {
             R_bcstack_t rhs = ostack_pop(ctx);
             R_bcstack_t lhs = ostack_pop(ctx);
-            assert(lhs.tag == STACK_OBJ_LOGICAL);
+#ifdef USE_TYPED_STACK
+            assert(lhs.tag == STACK_OBJ_LOGICAL &&
+                   rhs.tag == STACK_OBJ_LOGICAL);
             int x1 = lhs.u.ival;
             int x2 = rhs.u.ival;
+#else
+            int x1 = *LOGICAL(lhs.u.sxpval);
+            int x2 = *LOGICAL(rhs.u.sxpval);
+#endif
             assert(x1 == 1 || x1 == 0 || x1 == NA_LOGICAL);
             assert(x2 == 1 || x2 == 0 || x2 == NA_LOGICAL);
             int logical_res;
@@ -2054,9 +2065,15 @@ R_bcstack_t evalRirCode(Code* c, Context* ctx, SEXP* env,
         INSTRUCTION(lgl_and_) {
             R_bcstack_t rhs = ostack_pop(ctx);
             R_bcstack_t lhs = ostack_pop(ctx);
-            assert(lhs.tag == STACK_OBJ_LOGICAL);
+#ifdef USE_TYPED_STACK
+            assert(lhs.tag == STACK_OBJ_LOGICAL &&
+                   rhs.tag == STACK_OBJ_LOGICAL);
             int x1 = lhs.u.ival;
             int x2 = rhs.u.ival;
+#else
+            int x1 = *LOGICAL(lhs.u.sxpval);
+            int x2 = *LOGICAL(rhs.u.sxpval);
+#endif
             assert(x1 == 1 || x1 == 0 || x1 == NA_LOGICAL);
             assert(x2 == 1 || x2 == 0 || x2 == NA_LOGICAL);
             int logical_res;
@@ -2820,11 +2837,10 @@ R_bcstack_t evalRirCode(Code* c, Context* ctx, SEXP* env,
             }
 
             if (res == NULL) {
-                BINOP_FALLBACK( :);
+                BINOP_FALLBACK(":");
+            } else {
+                STORE_BINOP(sexp_to_stack_obj(res, true));
             }
-
-            ostack_popn(ctx, 2);
-            ostack_push(ctx, sexp_to_stack_obj(res, true));
             NEXT();
         }
 
