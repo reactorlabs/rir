@@ -69,19 +69,18 @@ void EagerCalls::apply(RirCompiler& cmp, ClosureVersion* closure,
                 continue;
             todo.insert(args.begin(), args.end());
 
-            if (version->assumptions().includes(Assumption::EagerArgs_))
-                continue;
-
             Assumptions newAssumptions = call->inferAvailableAssumptions();
-            newAssumptions.add(Assumption::EagerArgs_);
-            for (size_t i = 0; i < call->nCallArgs(); ++i)
-                newAssumptions.setEager(i, isEager(i));
+            for (size_t i = 0; i < call->nCallArgs(); ++i) {
+                if (!newAssumptions.isEager(i) && isEager(i))
+                    newAssumptions.setEager(i);
+            }
             // This might fire back, since we don't know if we really have no
             // objects... We should have some profiling. It's still sound, since
             // static_call_ will check the assumptions
-            newAssumptions.add(Assumption::NonObjectArgs_);
             for (size_t i = 0; i < call->nCallArgs(); ++i)
-                newAssumptions.setNotObj(i, isEager(i));
+                if (!newAssumptions.notObj(i) && newAssumptions.isEager(i))
+                    newAssumptions.setNotObj(i);
+
             auto newVersion = cls->cloneWithAssumptions(
                 version, newAssumptions, [&](ClosureVersion* newCls) {
                     Visitor::run(newCls->entry, [&](Instruction* i) {
