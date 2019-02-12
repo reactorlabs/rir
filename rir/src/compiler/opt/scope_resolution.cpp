@@ -147,7 +147,7 @@ class TheScopeResolution {
                     if (!res.isUnknown() && isActualLoad) {
 
                         bool onlyLocalVals = true;
-                        res.eachSource([&](ValOrig& src) {
+                        res.eachSource([&](const ValOrig& src) {
                             if (src.recursionLevel > 0)
                                 onlyLocalVals = false;
                         });
@@ -157,15 +157,16 @@ class TheScopeResolution {
                             // Shift phi up until we see at least two inputs
                             // coming from different paths.
                             auto hasAllInputs = [&](BB* load) -> bool {
-                                return res.checkEachSource([&](ValOrig& src) {
-                                    auto i = Instruction::Cast(src.val);
-                                    if (!i)
-                                        return true;
-                                    // we cannot move the phi above its src
-                                    if (i->bb() == load)
-                                        return false;
-                                    return cfg.isPredecessor(i->bb(), load);
-                                });
+                                return res.checkEachSource(
+                                    [&](const ValOrig& src) {
+                                        auto i = Instruction::Cast(src.val);
+                                        if (!i)
+                                            return true;
+                                        // we cannot move the phi above its src
+                                        if (i->bb() == load)
+                                            return false;
+                                        return cfg.isPredecessor(i->bb(), load);
+                                    });
                             };
                             BB* phiBlock = bb;
                             for (bool up = true; up;) {
@@ -181,7 +182,7 @@ class TheScopeResolution {
 
                             // Insert a new phi
                             auto phi = new Phi;
-                            res.eachSource([&](ValOrig& src) {
+                            res.eachSource([&](const ValOrig& src) {
                                 phi->addInput(src.origin->bb(), src.val);
                             });
                             phi->updateType();

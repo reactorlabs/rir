@@ -18,7 +18,7 @@ class TheVerifier {
     std::unordered_map<Code*, CFG> cfgs;
 
     void operator()() {
-        Visitor::run(f->entry, [&](BB* bb) { return verify(bb); });
+        Visitor::run(f->entry, [&](BB* bb) { return verify(bb, false); });
 
         if (!ok) {
             std::cerr << "Verification of function " << *f << " failed\n";
@@ -56,9 +56,14 @@ class TheVerifier {
         return doms.at(c);
     }
 
-    void verify(BB* bb) {
-        for (auto i : *bb)
+    void verify(BB* bb, bool inPromise) {
+        for (auto i : *bb) {
+            if (FrameState::Cast(i) && inPromise) {
+                std::cerr << "Framestate in promise!\n";
+                ok = false;
+            }
             verify(i, bb);
+        }
         if (bb->isEmpty()) {
             if (bb->isExit()) {
                 std::cerr << "bb" << bb->id << " has no successor\n";
@@ -126,7 +131,7 @@ class TheVerifier {
     }
 
     void verify(Promise* p) {
-        Visitor::run(p->entry, [&](BB* bb) { verify(bb); });
+        Visitor::run(p->entry, [&](BB* bb) { verify(bb, true); });
     }
 
     void verify(Instruction* i, BB* bb) {

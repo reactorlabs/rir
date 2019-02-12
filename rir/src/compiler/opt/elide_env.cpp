@@ -42,8 +42,13 @@ void ElideEnv::apply(RirCompiler&, ClosureVersion* function, LogStream&) const {
                         SafeBuiltinsList::nonObject(b->builtinId)) {
                         std::vector<Value*> args;
                         i->eachArg([&](Value* v) {
-                            if (v != i->env())
-                                args.push_back(v);
+                            if (v != i->env()) {
+                                auto mk = MkArg::Cast(v);
+                                if (mk && mk->isEager())
+                                    args.push_back(mk->eagerArg());
+                                else
+                                    args.push_back(v);
+                            }
                         });
                         auto safe =
                             new CallSafeBuiltin(b->blt, args, b->srcIdx);

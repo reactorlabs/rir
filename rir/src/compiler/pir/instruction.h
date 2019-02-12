@@ -129,6 +129,7 @@ class Instruction : public Value {
         : Value(t, tag), srcIdx(srcIdx) {}
 
     virtual bool hasEffect() const = 0;
+    virtual bool hasObservableEffect() const = 0;
     virtual bool mayUseReflection() const = 0;
     virtual bool mayForcePromises() const = 0;
     virtual bool readsEnv() const = 0;
@@ -279,6 +280,9 @@ class InstructionImplementation : public Instruction {
     static constexpr bool mayLeakEnv_ = ENV >= EnvAccess::Leak;
 
     bool hasEffect() const override { return EFFECT > Effect::None; }
+    bool hasObservableEffect() const override {
+        return EFFECT > Effect::Order && hasEffect();
+    }
     bool mayForcePromises() const override final {
         return EFFECT >= Effect::Force;
     }
@@ -531,6 +535,7 @@ class FLI(LdConst, 0, Effect::None, EnvAccess::None) {
 class FLIE(LdFun, 2, Effect::Any, EnvAccess::Write) {
   public:
     SEXP varName;
+    SEXP hint = nullptr;
 
     LdFun(const char* name, Value* env)
         : FixedLenInstructionWithEnvSlot(RType::closure, {{PirType::any()}},

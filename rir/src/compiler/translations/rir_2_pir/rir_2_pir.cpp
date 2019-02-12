@@ -9,6 +9,7 @@
 #include "../../util/visitor.h"
 #include "R/Funtab.h"
 #include "R/RList.h"
+#include "R/Symbols.h"
 #include "ir/BC.h"
 #include "ir/Compiler.h"
 #include "simple_instruction_list.h"
@@ -298,7 +299,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         // See if the call feedback suggests a monomorphic target
         // TODO: Deopts in promises are not supported by the promise inliner. So
         // currently it does not pay off to put any deopts in there.
-        if (!inPromise() && callTargetFeedback.count(callee)) {
+        if (callTargetFeedback.count(callee)) {
             auto& feedback = callTargetFeedback.at(callee);
             if (feedback.numTargets == 1)
                 monomorphic = feedback.getTarget(srcCode, 0);
@@ -325,15 +326,22 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                 monomorphicClosure = false;
         }
 
+        auto ldfun = LdFun::Cast(callee);
+        if (inPromise()) {
+            if (ldfun)
+                ldfun->hint = monomorphic;
+            monomorphicBuiltin = monomorphicClosure = false;
+            monomorphic = nullptr;
+        }
+
         Assume* assumption = nullptr;
         // Insert a guard if we want to speculate
-        auto ldfun = LdFun::Cast(callee);
         if (monomorphicBuiltin || monomorphicClosure) {
             Value* expected = insert(new LdConst(monomorphic));
             Value* given = callee;
             // This change here potentially allows the delay_instr pass
             // to move the ldfun into the deopt branch
-            if (ldfun)
+            if (ldfun && ldfun->varName != symbol::c)
                 given = insert(new LdVar(ldfun->varName, ldfun->env()));
             Value* t = insert(new Identical(given, expected));
             auto cp = addCheckpoint(srcCode, pos, stack, insert);
@@ -407,7 +415,11 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                                           ast)));
             } else {
                 auto callee = pop();
-                auto fs = insert.registerFrameState(srcCode, nextPos, stack);
+                Value* fs = nullptr;
+                if (inPromise())
+                    fs = Tombstone::framestate();
+                else
+                    fs = insert.registerFrameState(srcCode, nextPos, stack);
                 push(insert(new Call(insert.env, callee, args, fs, ast)));
             }
         };
@@ -467,7 +479,11 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                                       bc.callExtra().callArgumentNames,
                                       bc.immediate.callFixedArgs.ast)));
         } else {
-            auto fs = insert.registerFrameState(srcCode, nextPos, stack);
+            Value* fs = nullptr;
+            if (inPromise())
+                fs = Tombstone::framestate();
+            else
+                fs = insert.registerFrameState(srcCode, nextPos, stack);
             push(insert(new Call(env, target, args, fs,
                                  bc.immediate.callFixedArgs.ast)));
         }
@@ -1018,6 +1034,10 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) const {
                 assert(false);
                 return nullptr;
             }
+
+            if (!inPromise() && !insert.getCurrentBB()->isEmpty() &&
+                insert.getCurrentBB()->last()->hasEffect())
+                addCheckpoint(srcCode, nextPos, cur.stack, insert);
         }
     }
     assert(cur.stack.empty());
