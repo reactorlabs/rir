@@ -1255,7 +1255,7 @@ R_bcstack_t evalRirCode(Code* c, Context* ctx, SEXP* env,
                 SET_TAG(arglist, name);
                 SET_MISSING(arglist, val == R_MissingArg ? 2 : 0);
             }
-            res = Rf_NewEnvironment(R_NilValue, arglist, parent.u.sxpval);
+            SEXP res = Rf_NewEnvironment(R_NilValue, arglist, parent.u.sxpval);
             ostack_push(ctx, sexp_to_stack_obj(res, true));
             NEXT();
         }
@@ -1492,7 +1492,7 @@ R_bcstack_t evalRirCode(Code* c, Context* ctx, SEXP* env,
         INSTRUCTION(starg_) {
             Immediate id = readImmediate();
             advanceImmediate();
-            SEXP val = ostack_pop(ctx);
+            SEXP val = stack_obj_to_sexp(ostack_pop(ctx));
 
             cachedSetVar(val, *env, id, ctx, bindingCache, true);
 
@@ -3052,8 +3052,8 @@ R_bcstack_t evalRirCode(Code* c, Context* ctx, SEXP* env,
 eval_done:
     if (synthesizeFrames) {
         while (!synthesizeFrames->empty()) {
-            FrameInfo* f = synthesizeFrames.front();
-            synthesizeFrames.pop_front();
+            FrameInfo* f = synthesizeFrames->front();
+            synthesizeFrames->pop_front();
             R_bcstack_t res = ostack_pop(ctx);
             R_bcstack_t e = ostack_pop(ctx);
             assert(stack_obj_sexp_type(e) == ENVSXP);

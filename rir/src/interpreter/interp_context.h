@@ -171,13 +171,10 @@ RIR_INLINE R_bcstack_t sexp_to_stack_obj(SEXP x, bool unprotect) {
         res.u.sxpval = x;
         return res;
     } else if (IS_SIMPLE_SCALAR(x, INTSXP)) {
-        // UNPROTECT_PTR(x);
         return int_stack_obj(*INTEGER(x));
     } else if (IS_SIMPLE_SCALAR(x, REALSXP)) {
-        // UNPROTECT_PTR(x);
         return real_stack_obj(*REAL(x));
     } else if (IS_SIMPLE_SCALAR(x, LGLSXP)) {
-        // UNPROTECT_PTR(x);
         return logical_stack_obj(*INTEGER(x));
     } else {
         R_bcstack_t res;
@@ -312,6 +309,22 @@ RIR_INLINE int try_stack_obj_to_logical(R_bcstack_t x) {
             return *LOGICAL(x.u.sxpval);
         } else {
             return NA_LOGICAL;
+        }
+    default:
+        assert(false);
+    }
+}
+
+// Fails if not a logical or NA
+RIR_INLINE int try_stack_obj_to_logical_na(R_bcstack_t x) {
+    switch (x.tag) {
+    case STACK_OBJ_LOGICAL:
+        return x.u.ival;
+    case STACK_OBJ_SEXP:
+        if (TYPEOF(x.u.sxpval) == LGLSXP) {
+            return XLENGTH(x.u.sxpval) == 0 ? NA_LOGICAL : *LOGICAL(x.u.sxpval);
+        } else {
+            assert(false);
         }
     default:
         assert(false);
