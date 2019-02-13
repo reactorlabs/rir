@@ -43,6 +43,12 @@ BC BC::push(int constant) {
     i.pool = Pool::getInt(constant);
     return BC(Opcode::push_, i);
 }
+BC BC::push_from_pool(PoolIdx idx) {
+    ImmediateArguments i;
+    i.pool = idx;
+    return BC(Opcode::push_, i);
+}
+
 BC BC::ldfun(SEXP sym) {
     ImmediateArguments i;
     i.pool = Pool::insert(sym);
