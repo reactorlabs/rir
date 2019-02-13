@@ -3,6 +3,7 @@
 #include "R/RList.h"
 #include "R/Symbols.h"
 #include "R/r.h"
+#include "compiler/translations/rir_2_pir/rir_2_pir_compiler.h"
 #include "interp_context.h"
 #include "ir/Deoptimization.h"
 #include "ir/RuntimeFeedback_inl.h"
@@ -22,6 +23,8 @@ extern Rboolean R_Visible;
 }
 
 // #define UNSOUND_OPTS
+
+// #define DEBUG_DISPATCH
 
 // helpers
 
@@ -75,7 +78,7 @@ struct CallContext {
     const SEXP callerEnv;
     const SEXP ast;
     const SEXP callee;
-    const Assumptions givenAssumptions;
+    Assumptions givenAssumptions;
     SEXP arglist = nullptr;
 
     bool hasStackArgs() const { return stackArgs != nullptr; }
@@ -238,19 +241,10 @@ SEXP createLegacyArgsListFromStackValues(const CallContext& call,
 
         SEXP arg = stack_obj_to_sexp(call.stackArg(i));
 
-        if (!eagerCallee && (arg == R_MissingArg || arg == R_DotsSymbol)) {
-            // We have to wrap them in a promise, otherwise they are treated
-            // as expressions to be evaluated, when in fact they are meant to be
-            // asts as values
-            SEXP promise = Rf_mkPROMISE(arg, call.callerEnv);
-            SET_PRVALUE(promise, arg);
-            __listAppend(&result, &pos, promise, R_NilValue);
-        } else {
-            if (eagerCallee && TYPEOF(arg) == PROMSXP) {
-                arg = Rf_eval(arg, call.callerEnv);
-            }
-            __listAppend(&result, &pos, arg, name);
+        if (eagerCallee && TYPEOF(arg) == PROMSXP) {
+            arg = Rf_eval(arg, call.callerEnv);
         }
+        __listAppend(&result, &pos, arg, name);
     }
 
     if (result != R_NilValue)
@@ -571,25 +565,26 @@ SEXP closureArgumentAdaptor(const CallContext& call, SEXP arglist,
     return newrho;
 };
 
-RIR_INLINE Assumptions addDynamicAssumptions(
-    const CallContext& call, const FunctionSignature& signature) {
-    Assumptions given = call.givenAssumptions;
-
-    // Needs to be checked if some missings are passed explicitly below
-    if (call.suppliedArgs >= signature.nargs())
-        given.set(Assumption::NoMissingArguments);
-
-    if (!call.hasStackArgs()) {
-        for (size_t i = 0; i < call.suppliedArgs; ++i) {
-            if (call.missingArg(i))
-                given.reset(Assumption::NoMissingArguments);
+static SEXP findRootPromise(SEXP p) {
+    if (TYPEOF(p) == PROMSXP) {
+        while (TYPEOF(PREXPR(p)) == PROMSXP) {
+            p = PREXPR(p);
         }
     }
+    return p;
+}
 
+void addDynamicAssumptionsFromContext(CallContext& call) {
+    Assumptions& given = call.givenAssumptions;
+
+    if (!call.hasNames())
+        given.add(Assumption::CorrectOrderOfArguments);
+
+    given.add(Assumption::NoExplicitlyMissingArgs);
     if (call.hasStackArgs()) {
-        // Make some optimistic assumptions, they might be reset below...
-        given.set(Assumption::EagerArgs_);
-        given.set(Assumption::NonObjectArgs_);
+        // Always true in this case, since we will pad missing args on the stack
+        // later with R_MissingArg's
+        given.add(Assumption::NotTooFewArguments);
 
         auto testArg = [&](size_t i) {
             R_bcstack_t arg = call.stackArg(i);
@@ -601,29 +596,44 @@ RIR_INLINE Assumptions addDynamicAssumptions(
                     isEager = false;
                 } else if (isObject(PRVALUE(arg.u.sxpval))) {
                     notObj = false;
-                } else if (arg.u.sxpval == R_MissingArg) {
-                    given.reset(Assumption::NoMissingArguments);
                 }
             } else if (arg.tag == STACK_OBJ_SEXP && isObject(arg.u.sxpval)) {
                 notObj = false;
-            } else if (arg.tag == STACK_OBJ_SEXP &&
-                       arg.u.sxpval == R_MissingArg) {
-                given.reset(Assumption::NoMissingArguments);
+            } else if (arg.tag == STACK_OBJ_SEXP && arg.u.sxpval == R_MissingArg) {
+                given.remove(Assumption::NoExplicitlyMissingArgs);
             }
-            given.setEager(i, isEager);
-            given.setNotObj(i, notObj);
+            if (isEager)
+                given.setEager(i);
+            if (notObj)
+                given.setNotObj(i);
         };
 
         for (size_t i = 0; i < call.suppliedArgs; ++i) {
             testArg(i);
         }
+    } else {
+        for (size_t i = 0; i < call.suppliedArgs; ++i) {
+            if (call.missingArg(i))
+                given.remove(Assumption::NoExplicitlyMissingArgs);
+        }
+    }
+}
+
+RIR_INLINE Assumptions addDynamicAssumptionsForOneTarget(
+    const CallContext& call, const FunctionSignature& signature) {
+    Assumptions given = call.givenAssumptions;
+
+    if (call.suppliedArgs <= signature.formalNargs()) {
+        given.numMissing(signature.formalNargs() - call.suppliedArgs);
     }
 
-    if (!call.hasNames())
-        given.set(Assumption::CorrectOrderOfArguments);
+    if (!call.hasStackArgs()) {
+        if (call.suppliedArgs >= signature.expectedNargs())
+            given.add(Assumption::NotTooFewArguments);
+    }
 
-    if (call.suppliedArgs <= signature.nargs())
-        given.set(Assumption::NotTooManyArguments);
+    if (call.suppliedArgs <= signature.formalNargs())
+        given.add(Assumption::NotTooManyArguments);
 
     return given;
 }
@@ -636,8 +646,12 @@ RIR_INLINE bool matches(const CallContext& call,
 
     // Baseline always matches!
     if (signature.optimization ==
-        FunctionSignature::OptimizationLevel::Baseline)
+        FunctionSignature::OptimizationLevel::Baseline) {
+#ifdef DEBUG_DISPATCH
+        std::cout << "BL\n";
+#endif
         return true;
+    }
 
     assert(signature.envCreation ==
            FunctionSignature::Environment::CalleeCreated);
@@ -645,24 +659,19 @@ RIR_INLINE bool matches(const CallContext& call,
     if (!call.hasStackArgs()) {
         // We can't materialize ... in optimized code yet
         for (size_t i = 0; i < call.suppliedArgs; ++i)
-            if (call.implicitArgIdx(i) == DOTS_ARG_IDX ||
-                call.implicitArgIdx(i) == MISSING_ARG_IDX)
+            if (call.implicitArgIdx(i) == DOTS_ARG_IDX)
                 return false;
-
-        // PIR optimized code can receive missing args, but they need to be
-        // explicitly put on the stack, which we can only do if we pass
-        // arguments on the stack
-        if (signature.nargs() > call.suppliedArgs)
-            return false;
     }
 
-    Assumptions given = addDynamicAssumptions(call, signature);
+    Assumptions given = addDynamicAssumptionsForOneTarget(call, signature);
 
+#ifdef DEBUG_DISPATCH
+    std::cout << "have   " << given << "\n";
+    std::cout << "trying " << signature.assumptions << "\n";
+    std::cout << " -> " << signature.assumptions.subtype(given) << "\n";
+#endif
     // Check if given assumptions match required assumptions
-    if (!given.includes(signature.assumptions))
-        return false;
-
-    return true;
+    return signature.assumptions.subtype(given);
 }
 
 // Watch out: this changes call.nargs! To clean up after the call, you need to
@@ -671,10 +680,11 @@ RIR_INLINE bool matches(const CallContext& call,
 RIR_INLINE void supplyMissingArgs(CallContext& call, const Function* fun) {
     auto signature = fun->signature();
     assert(call.hasStackArgs());
-    if (signature.nargs() > call.suppliedArgs) {
-        for (size_t i = 0; i < signature.nargs() - call.suppliedArgs; ++i)
+    if (signature.expectedNargs() > call.suppliedArgs) {
+        for (size_t i = 0; i < signature.expectedNargs() - call.suppliedArgs;
+             ++i)
             ostack_push(ctx, sexp_to_stack_obj(R_MissingArg, false));
-        call.passedArgs = signature.nargs();
+        call.passedArgs = signature.expectedNargs();
     }
 }
 
@@ -704,19 +714,36 @@ RIR_INLINE SEXP rirCall(CallContext& call, Context* ctx) {
 
     auto table = DispatchTable::unpack(body);
 
+    addDynamicAssumptionsFromContext(call);
     Function* fun = dispatch(call, table);
     fun->registerInvocation();
 
-    if ((fun == table->baseline() && fun->invocationCount() == RIR_WARMUP) ||
-        fun->invocationCount() >= RIR_WARMUP) {
-        Assumptions given = addDynamicAssumptions(call, fun->signature());
+    if (!fun->unoptimizable && fun->invocationCount() % RIR_WARMUP == 0) {
+        Assumptions given =
+            addDynamicAssumptionsForOneTarget(call, fun->signature());
+        // addDynamicAssumptionForOneTarget compares arguments with the
+        // signature of the current dispatch target. There the number of
+        // arguments might be off. But we want to force compiling a new version
+        // exactly for this number of arguments, thus we need to add this as an
+        // explicit assumption.
+        given.add(Assumption::NotTooFewArguments);
         if (fun == table->baseline() || given != fun->signature().assumptions) {
+            if (Assumptions(given).includes(
+                    pir::Rir2PirCompiler::minimalAssumptions)) {
+                // More assumptions are available than this version uses. Let's
+                // try compile a better matching version.
+#ifdef DEBUG_DISPATCH
+            std::cout << "Optimizing for new context:";
+            std::cout << given << " vs " << fun->signature().assumptions
+                      << "\n";
+#endif
             SEXP lhs = CAR(call.ast);
             SEXP name = R_NilValue;
             if (TYPEOF(lhs) == SYMSXP)
                 name = lhs;
             ctx->closureOptimizer(call.callee, given, name);
             fun = dispatch(call, table);
+        }
         }
     }
 
@@ -738,7 +765,7 @@ RIR_INLINE SEXP rirCall(CallContext& call, Context* ctx) {
             // Instead of a SEXP with the argslist we create an
             // structure with the information needed to recreate
             // the list lazily if the gnu-r interpreter needs it
-            ArgsLazyData lazyArgs = ArgsLazyData(&call, ctx);
+            ArgsLazyData lazyArgs(&call, ctx);
             if (!arglist)
                 arglist = (SEXP)&lazyArgs;
             supplyMissingArgs(call, fun);
@@ -1074,15 +1101,6 @@ static SEXP seq_int(int n1, int n2) {
     return ans;
 }
 
-RIR_INLINE SEXP findRootPromise(SEXP p) {
-    if (TYPEOF(p) == PROMSXP) {
-        while (TYPEOF(PREXPR(p)) == PROMSXP) {
-            p = PREXPR(p);
-        }
-    }
-    return p;
-}
-
 extern SEXP Rf_deparse1(SEXP call, Rboolean abbrev, int opts);
 
 void debug(Code* c, Opcode* pc, const char* name, unsigned depth,
@@ -1148,7 +1166,7 @@ static SEXP cachedGetVar(SEXP env, Immediate idx, Context* ctx,
 #define IS_ACTIVE_BINDING(b) ((b)->sxpinfo.gp & ACTIVE_BINDING_MASK)
 #define BINDING_IS_LOCKED(b) ((b)->sxpinfo.gp & BINDING_LOCK_MASK)
 static void cachedSetVar(SEXP val, SEXP env, Immediate idx, Context* ctx,
-                         BindingCache* bindingCache) {
+                         BindingCache* bindingCache, bool keepMissing = false) {
     SEXP loc = cachedGetBindingCell(env, idx, ctx, bindingCache);
     if (loc && !BINDING_IS_LOCKED(loc) && !IS_ACTIVE_BINDING(loc)) {
         SEXP cur = CAR(loc);
@@ -1156,12 +1174,8 @@ static void cachedSetVar(SEXP val, SEXP env, Immediate idx, Context* ctx,
             return;
         INCREMENT_NAMED(val);
         SETCAR(loc, val);
-        if (val != R_MissingArg) {
-            if (MISSING(loc))
-                SET_MISSING(loc, 0);
-        } else {
-            SET_MISSING(loc, 1);
-        }
+        if (!keepMissing && MISSING(loc))
+            SET_MISSING(loc, 0);
         return;
     }
 
@@ -1170,11 +1184,6 @@ static void cachedSetVar(SEXP val, SEXP env, Immediate idx, Context* ctx,
     INCREMENT_NAMED(val);
     PROTECT(val);
     Rf_defineVar(sym, val, env);
-    // This is neccessary since we use this instruction also to create new
-    // environments (when lowering PIR MkEnv)
-    loc = cachedGetBindingCell(env, idx, ctx, bindingCache);
-    if (val == R_MissingArg)
-        SET_MISSING(loc, 1);
     UNPROTECT(1);
 }
 
@@ -1196,7 +1205,7 @@ R_bcstack_t evalRirCode(Code* c, Context* ctx, SEXP* env,
     };
 #endif
 
-    std::deque<FrameInfo*> synthesizeFrames;
+    std::deque<FrameInfo*>* synthesizeFrames = nullptr;
     assert(c->info.magic == CODE_MAGIC);
 
     if (!localsBase) {
@@ -1229,13 +1238,24 @@ R_bcstack_t evalRirCode(Code* c, Context* ctx, SEXP* env,
         INSTRUCTION(invalid_) assert(false && "wrong or unimplemented opcode");
 
         INSTRUCTION(nop_) NEXT();
-
-        INSTRUCTION(make_env_) {
+      
+        INSTRUCTION(mk_env_) {
+            size_t n = readImmediate();
+            advanceImmediate();
             R_bcstack_t parent = ostack_pop(ctx);
             assert(stack_obj_sexp_type(parent) == ENVSXP &&
                    "Non-environment used as environment parent.");
-            SEXP res =
-                Rf_NewEnvironment(R_NilValue, R_NilValue, parent.u.sxpval);
+            SEXP arglist = R_NilValue;
+            auto names = (Immediate*)pc;
+            advanceImmediateN(n);
+            for (long i = n - 1; i >= 0; --i) {
+                SEXP val = stack_obj_to_sexp(ostack_pop(ctx));
+                SEXP name = cp_pool_at(ctx, names[i]);
+                arglist = CONS_NR(val, arglist);
+                SET_TAG(arglist, name);
+                SET_MISSING(arglist, val == R_MissingArg ? 2 : 0);
+            }
+            res = Rf_NewEnvironment(R_NilValue, arglist, parent.u.sxpval);
             ostack_push(ctx, sexp_to_stack_obj(res, true));
             NEXT();
         }
@@ -1327,6 +1347,10 @@ R_bcstack_t evalRirCode(Code* c, Context* ctx, SEXP* env,
             if (res == R_UnboundValue) {
                 SEXP sym = cp_pool_at(ctx, id);
                 Rf_error("object \"%s\" not found", CHAR(PRINTNAME(sym)));
+            } else if (res == R_MissingArg) {
+                SEXP sym = cp_pool_at(ctx, id);
+                Rf_error("argument \"%s\" is missing, with no default",
+                         CHAR(PRINTNAME(sym)));
             }
 
             if (res != R_NilValue)
@@ -1368,6 +1392,9 @@ R_bcstack_t evalRirCode(Code* c, Context* ctx, SEXP* env,
 
             if (res == R_UnboundValue) {
                 Rf_error("object \"%s\" not found", CHAR(PRINTNAME(sym)));
+            } else if (res == R_MissingArg) {
+                Rf_error("argument \"%s\" is missing, with no default",
+                         CHAR(PRINTNAME(sym)));
             }
 
             if (res != R_NilValue)
@@ -1434,7 +1461,7 @@ R_bcstack_t evalRirCode(Code* c, Context* ctx, SEXP* env,
             } else {
                 SEXP res;
                 if (callCtxt->missingArg(idx)) {
-                    res = Rf_mkPROMISE(R_UnboundValue, callCtxt->callerEnv);
+                    res = R_MissingArg;
                 } else {
                     Code* arg = callCtxt->implicitArg(idx);
                     res = createPromise(arg, callCtxt->callerEnv);
@@ -1458,6 +1485,16 @@ R_bcstack_t evalRirCode(Code* c, Context* ctx, SEXP* env,
             SEXP val = stack_obj_to_sexp(ostack_pop(ctx));
 
             cachedSetVar(val, *env, id, ctx, bindingCache);
+
+            NEXT();
+        }
+
+        INSTRUCTION(starg_) {
+            Immediate id = readImmediate();
+            advanceImmediate();
+            SEXP val = ostack_pop(ctx);
+
+            cachedSetVar(val, *env, id, ctx, bindingCache, true);
 
             NEXT();
         }
@@ -1655,22 +1692,32 @@ R_bcstack_t evalRirCode(Code* c, Context* ctx, SEXP* env,
             SEXP callee = cp_pool_at(ctx, readImmediate());
             advanceImmediate();
             SEXP version = cp_pool_at(ctx, readImmediate());
-            advanceImmediate();
             CallContext call(c, callee, n, ast, ostack_cell_at(ctx, n - 1),
                              *env, given, ctx);
             auto fun = Function::unpack(version);
             SEXP res;
-            if (fun->invocationCount() % 50 != 0 &&
-                matches(call, fun->signature())) {
-                ArgsLazyData lazyArgs = ArgsLazyData(&call, ctx);
-                fun->registerInvocation();
-                supplyMissingArgs(call, fun);
-                res = rirCallTrampoline(call, fun, *env, (SEXP)&lazyArgs,
-                                        call.stackArgs, ctx);
-            } else {
-                // Fallback, the static dispatch failed
-                res = rirCall(call, ctx);
+            addDynamicAssumptionsFromContext(call);
+            bool dispatchFail = !matches(call, fun->signature());
+            if (fun->invocationCount() % RIR_WARMUP == 0)
+                if (addDynamicAssumptionsForOneTarget(call, fun->signature()) !=
+                    fun->signature().assumptions)
+                    // We have more assumptions available, let's recompile
+                    dispatchFail = true;
+
+            if (dispatchFail) {
+                auto dt = DispatchTable::unpack(BODY(callee));
+                fun = dispatch(call, dt);
+                // Patch inline cache
+                (*(Immediate*)pc) = Pool::insert(fun->container());
+                assert(fun != dt->baseline());
             }
+            advanceImmediate();
+
+            ArgsLazyData lazyArgs(&call, ctx);
+            fun->registerInvocation();
+            supplyMissingArgs(call, fun);
+            res = rirCallTrampoline(call, fun, *env, (SEXP)&lazyArgs,
+                                    call.stackArgs, ctx);
             ostack_popn(ctx, call.passedArgs);
             ostack_push(ctx, sexp_to_stack_obj(res, true));
 
@@ -2040,10 +2087,10 @@ R_bcstack_t evalRirCode(Code* c, Context* ctx, SEXP* env,
             R_bcstack_t rhs = ostack_pop(ctx);
             R_bcstack_t lhs = ostack_pop(ctx);
 #ifdef USE_TYPED_STACK
-            assert(lhs.tag == STACK_OBJ_LOGICAL &&
-                   rhs.tag == STACK_OBJ_LOGICAL);
-            int x1 = lhs.u.ival;
-            int x2 = rhs.u.ival;
+            assert(stack_obj_sexp_type(lhs) == LGLSXP &&
+                   stack_obj_sexp_type(rhs) == LGLSXP);
+            int x1 = try_stack_obj_to_logical_na(lhs);
+            int x2 = try_stack_obj_to_logical_na(rhs);
 #else
             int x1 = *LOGICAL(lhs.u.sxpval);
             int x2 = *LOGICAL(rhs.u.sxpval);
@@ -2066,10 +2113,10 @@ R_bcstack_t evalRirCode(Code* c, Context* ctx, SEXP* env,
             R_bcstack_t rhs = ostack_pop(ctx);
             R_bcstack_t lhs = ostack_pop(ctx);
 #ifdef USE_TYPED_STACK
-            assert(lhs.tag == STACK_OBJ_LOGICAL &&
-                   rhs.tag == STACK_OBJ_LOGICAL);
-            int x1 = lhs.u.ival;
-            int x2 = rhs.u.ival;
+            assert(stack_obj_sexp_type(lhs) == LGLSXP &&
+                   stack_obj_sexp_type(rhs) == LGLSXP);
+            int x1 = try_stack_obj_to_logical_na(lhs);
+            int x2 = try_stack_obj_to_logical_na(rhs);
 #else
             int x1 = *LOGICAL(lhs.u.sxpval);
             int x2 = *LOGICAL(rhs.u.sxpval);
@@ -2723,8 +2770,25 @@ R_bcstack_t evalRirCode(Code* c, Context* ctx, SEXP* env,
             auto m = (DeoptMetadata*)DATAPTR(r);
             assert(m->numFrames >= 1);
 
-            for (size_t i = 1; i < m->numFrames; ++i)
-                synthesizeFrames.push_back(&m->frames[i]);
+#if 0
+            size_t pos = 0;
+            for (size_t i = 0; i < m->numFrames; ++i) {
+                std::cout << "Code " << m->frames[i].code << "\n";
+                std::cout << "Frame " << i << ":\n";
+                std::cout << "  - env\n";
+                Rf_PrintValue(ostack_at(ctx, pos++));
+                for( size_t j = 0; j < m->frames[i].stackSize; ++j) {
+                    std::cout << "  - stack " << j <<"\n";
+                    Rf_PrintValue(ostack_at(ctx, pos++));
+                }
+            }
+#endif
+
+            for (size_t i = 1; i < m->numFrames; ++i) {
+                if (!synthesizeFrames)
+                    synthesizeFrames = new std::deque<FrameInfo*>;
+                synthesizeFrames->push_back(&m->frames[i]);
+            }
 
             FrameInfo& f = m->frames[0];
             pc = f.pc;
@@ -2734,6 +2798,9 @@ R_bcstack_t evalRirCode(Code* c, Context* ctx, SEXP* env,
             R_bcstack_t e = ostack_pop(ctx);
             assert(stack_obj_sexp_type(e) == ENVSXP);
             *env = e.u.sxpval;
+            // We need to clear the bindings cache, when we change the
+            // environment
+            memset(&bindingCache, 0, sizeof(bindingCache));
             NEXT();
         }
 
@@ -2983,17 +3050,20 @@ R_bcstack_t evalRirCode(Code* c, Context* ctx, SEXP* env,
     }
 
 eval_done:
-    while (!synthesizeFrames.empty()) {
-        FrameInfo* f = synthesizeFrames.front();
-        synthesizeFrames.pop_front();
-        R_bcstack_t res = ostack_pop(ctx);
-        R_bcstack_t e = ostack_pop(ctx);
-        assert(stack_obj_sexp_type(e) == ENVSXP);
-        *env = e.u.sxpval;
-        ostack_push(ctx, res);
-        f->code->registerInvocation();
-        res = evalRirCode(f->code, ctx, env, callCtxt, f->pc);
-        ostack_push(ctx, res);
+    if (synthesizeFrames) {
+        while (!synthesizeFrames->empty()) {
+            FrameInfo* f = synthesizeFrames.front();
+            synthesizeFrames.pop_front();
+            R_bcstack_t res = ostack_pop(ctx);
+            R_bcstack_t e = ostack_pop(ctx);
+            assert(stack_obj_sexp_type(e) == ENVSXP);
+            *env = e.u.sxpval;
+            ostack_push(ctx, res);
+            f->code->registerInvocation();
+            res = evalRirCode(f->code, ctx, env, callCtxt, f->pc);
+            ostack_push(ctx, res);
+        }
+        delete synthesizeFrames;
     }
     return ostack_pop(ctx);
 }

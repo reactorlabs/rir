@@ -142,6 +142,34 @@ Checkpoint* Rir2Pir::addCheckpoint(rir::Code* srcCode, Opcode* pos,
     return insert.emitCheckpoint(srcCode, pos, stack);
 }
 
+Value* Rir2Pir::tryCreateArg(rir::Code* promiseCode, Builder& insert,
+                             bool eager) const {
+    Promise* prom = insert.function->createProm(promiseCode->src);
+    {
+        Builder promiseBuilder(insert.function, prom);
+        if (!tryCompilePromise(promiseCode, promiseBuilder)) {
+            log.warn("Failed to compile a promise for call");
+            return nullptr;
+        }
+    }
+    Value* eagerVal = UnboundValue::instance();
+    Value* theArg = nullptr;
+    if (eager || Query::pure(prom)) {
+        auto inlineProm = tryTranslatePromise(promiseCode, insert);
+        if (!inlineProm) {
+            log.warn("Failed to inline a promise");
+            return nullptr;
+        }
+        eagerVal = inlineProm;
+        if (eager)
+            theArg = eagerVal;
+    }
+    if (!theArg) {
+        theArg = insert(new MkArg(prom, eagerVal, insert.env));
+    }
+    return theArg;
+}
+
 bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                         rir::Code* srcCode, RirStack& stack, Builder& insert,
                         CallTargetFeedback& callTargetFeedback) const {
@@ -174,6 +202,11 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
     case Opcode::ldvar_:
         v = insert(new LdVar(bc.immediateConst(), env));
         push(insert(new Force(v, env)));
+        break;
+
+    case Opcode::starg_:
+        v = pop();
+        insert(new StArg(bc.immediateConst(), v, env));
         break;
 
     case Opcode::stvar_:
@@ -254,13 +287,10 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         Value* callee = top();
         SEXP monomorphic = nullptr;
 
-        // TODO: Support missing args and ...
+        // TODO: Support ...
         for (auto argi : bc.callExtra().immediateCallArguments) {
             if (argi == DOTS_ARG_IDX) {
                 log.warn("Cannot compile call with ... arguments");
-                return false;
-            } else if (argi == MISSING_ARG_IDX) {
-                log.warn("Cannot compile call with explicit missing arguments");
                 return false;
             }
         }
@@ -288,6 +318,12 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             if (arity != -1 && arity != nargs)
                 monomorphicBuiltin = false;
         }
+        if (monomorphicClosure) {
+            if (DispatchTable::unpack(BODY(monomorphic))
+                    ->baseline()
+                    ->unoptimizable)
+                monomorphicClosure = false;
+        }
 
         Assume* assumption = nullptr;
         // Insert a guard if we want to speculate
@@ -309,59 +345,57 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
 
         Assumptions given;
         // Make some optimistic assumptions, they might be reset below...
-        given.set(Assumption::EagerArgs_);
+        given.add(Assumption::NoExplicitlyMissingArgs);
         {
             size_t i = 0;
             for (auto argi : bc.callExtra().immediateCallArguments) {
-                rir::Code* promiseCode = srcCode->getPromise(argi);
-                Promise* prom = insert.function->createProm(promiseCode->src);
-                {
-                    Builder promiseBuilder(insert.function, prom);
-                    if (!tryCompilePromise(promiseCode, promiseBuilder)) {
-                        log.warn("Failed to compile a promise for call");
+                if (argi == MISSING_ARG_IDX) {
+                    args.push_back(MissingArg::instance());
+                    given.remove(Assumption::NoExplicitlyMissingArgs);
+                } else {
+                    rir::Code* promiseCode = srcCode->getPromise(argi);
+                    bool eager = monomorphicBuiltin;
+                    auto arg = tryCreateArg(promiseCode, insert, eager);
+                    if (!arg)
                         return false;
+                    if (auto mk = MkArg::Cast(arg)) {
+                        if (mk->isEager()) {
+                            auto eager = mk->eagerArg();
+                            if (eager == MissingArg::instance())
+                                given.remove(
+                                    Assumption::NoExplicitlyMissingArgs);
+                            if (!eager->type.maybeLazy())
+                                given.setEager(i);
+                            if (!eager->type.maybeObj())
+                                given.setNotObj(i);
+                        }
                     }
+                    args.push_back(arg);
                 }
-                Value* eagerVal = Missing::instance();
-                Value* theArg = nullptr;
-                if (monomorphicBuiltin || Query::pure(prom)) {
-                    auto inlineProm = tryTranslatePromise(promiseCode, insert);
-                    if (!inlineProm) {
-                        log.warn("Failed to inline a promise");
-                        return false;
-                    }
-                    eagerVal = inlineProm;
-                    // Builtins take the actual argument, not a promise
-                    if (monomorphicBuiltin)
-                        theArg = eagerVal;
-                }
-                if (!theArg) {
-                    if (eagerVal == Missing::instance())
-                        given.setEager(i, false);
-                    theArg = insert(new MkArg(prom, eagerVal, env));
-                }
-                args.push_back(theArg);
                 i++;
             }
         }
 
+        size_t missingArgs = 0;
         // Static argument name matching
         // Currently we only match callsites with the correct number of
         // arguments passed. Thus, we set those given assumptions below.
         if (monomorphicClosure) {
-            bool correctOrder =
-                (bc.bc == Opcode::named_call_implicit_)
-                    ? ArgumentMatcher::reorder(FORMALS(monomorphic),
-                                               bc.callExtra().callArgumentNames,
-                                               args)
-                    : RList(FORMALS(monomorphic)).length() == args.size();
+            bool correctOrder = (bc.bc != Opcode::named_call_implicit_) ||
+                                ArgumentMatcher::reorder(
+                                    FORMALS(monomorphic),
+                                    bc.callExtra().callArgumentNames, args);
 
-            if (!correctOrder) {
+            size_t needed = RList(FORMALS(monomorphic)).length();
+
+            if (!correctOrder || needed < args.size()) {
                 monomorphicClosure = false;
                 assert(assumption);
                 // Kill unnecessary speculation
                 assumption->arg<0>().val() = True::instance();
             }
+
+            missingArgs = needed - args.size();
         }
 
         // Emit the actual call
@@ -381,9 +415,10 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
             std::string name = "";
             if (ldfun)
                 name = CHAR(PRINTNAME(ldfun->varName));
-            given.set(Assumption::NoMissingArguments);
-            given.set(Assumption::NotTooManyArguments);
-            given.set(Assumption::CorrectOrderOfArguments);
+            given.numMissing(missingArgs);
+            given.add(Assumption::NotTooFewArguments);
+            given.add(Assumption::NotTooManyArguments);
+            given.add(Assumption::CorrectOrderOfArguments);
             compiler.compileClosure(
                 monomorphic, name, given,
                 [&](ClosureVersion* f) {
@@ -467,8 +502,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
 
     case Opcode::extract1_1_: {
         if (!inPromise()) {
-            forceIfPromised(
-                1); // <- ensure forced version are captured in framestate
+            forceIfPromised(1); // <- ensure forced captured in framestate
             forceIfPromised(0);
             addCheckpoint(srcCode, pos, stack, insert);
         }
@@ -635,6 +669,10 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         UNOP_NOENV(Inc, inc_);
 #undef UNOP_NOENV
 
+    case Opcode::missing_:
+        push(insert(new Missing(Pool::get(bc.immediate.pool), env)));
+        break;
+
     case Opcode::is_:
         push(insert(new Is(bc.immediate.i, pop())));
         break;
@@ -669,6 +707,14 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         push(insert(new SetShared(pop())));
         break;
 
+    case Opcode::invisible_:
+        insert(new Invisible());
+        break;
+
+    case Opcode::visible_:
+        insert(new Visible());
+        break;
+
 #define V(_, name, Name)\
     case Opcode::name ## _:\
         insert(new Name());\
@@ -678,8 +724,6 @@ SIMPLE_INSTRUCTIONS(V, _)
 
     // TODO implement!
     // (silently ignored)
-    case Opcode::invisible_:
-    case Opcode::visible_:
     case Opcode::isfun_:
         break;
 
@@ -706,7 +750,7 @@ SIMPLE_INSTRUCTIONS(V, _)
     // Opcodes that only come from PIR
     case Opcode::deopt_:
     case Opcode::force_:
-    case Opcode::make_env_:
+    case Opcode::mk_env_:
     case Opcode::get_env_:
     case Opcode::parent_env_:
     case Opcode::set_env_:
@@ -725,7 +769,6 @@ SIMPLE_INSTRUCTIONS(V, _)
     // Unsupported opcodes:
     case Opcode::ldlval_:
     case Opcode::asast_:
-    case Opcode::missing_:
     case Opcode::beginloop_:
     case Opcode::endloop_:
     case Opcode::ldddvar_:
@@ -941,7 +984,7 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) const {
             }
             inner << (pos - srcCode->code());
 
-            compiler.compileFunction(function, inner.str(), formals, srcRef, {},
+            compiler.compileFunction(function, inner.str(), formals, srcRef,
                                      [&](ClosureVersion* innerF) {
                                          cur.stack.push(insert(new MkFunCls(
                                              innerF->owner(), dt, insert.env)));

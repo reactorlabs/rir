@@ -4,84 +4,61 @@ namespace rir {
 
 std::ostream& operator<<(std::ostream& out, Assumption a) {
     switch (a) {
+    case Assumption::NoExplicitlyMissingArgs:
+        out << "!ExpMi";
+        break;
     case Assumption::Arg1IsEager_:
-        out << "EA1";
+        out << "Eager1";
         break;
     case Assumption::Arg2IsEager_:
-        out << "EA2";
+        out << "Eager2";
         break;
     case Assumption::Arg3IsEager_:
-        out << "EA3";
+        out << "Eager3";
         break;
-    case Assumption::EagerArgs_:
-        out << "EA";
+    case Assumption::Arg4IsEager_:
+        out << "Eager4";
+        break;
+    case Assumption::Arg0IsEager_:
+        out << "Eager0";
         break;
     case Assumption::CorrectOrderOfArguments:
-        out << "COA";
-        break;
-    case Assumption::NoMissingArguments:
-        out << "NMA";
-        break;
-    case Assumption::NonObjectArgs_:
-        out << "NO";
+        out << "CorrOrd";
         break;
     case Assumption::Arg1IsNonObj_:
-        out << "NO1";
+        out << "!Obj1";
         break;
     case Assumption::Arg2IsNonObj_:
-        out << "NO2";
+        out << "!Obj2";
         break;
     case Assumption::Arg3IsNonObj_:
-        out << "NO3";
+        out << "!Obj3";
+        break;
+    case Assumption::Arg0IsNonObj_:
+        out << "!Obj0";
         break;
     case Assumption::NotTooManyArguments:
-        out << "NTA";
+        out << "!TMany";
+        break;
+    case Assumption::NotTooFewArguments:
+        out << "!TFew";
         break;
     }
     return out;
 };
 
-static constexpr std::array<Assumption, 3> ObjAssumptions = {
-    {Assumption::Arg1IsNonObj_, Assumption::Arg2IsNonObj_,
-     Assumption::Arg3IsNonObj_}};
-static constexpr std::array<Assumption, 3> EagerAssumptions = {
-    {Assumption::Arg1IsEager_, Assumption::Arg2IsEager_,
-     Assumption::Arg3IsEager_}};
-
-bool Assumptions::isEager(size_t i) const {
-    if (includes(Assumption::EagerArgs_))
-        return true;
-
-    if (i < EagerAssumptions.size())
-        if (includes(EagerAssumptions[i]))
-            return true;
-
-    return false;
+std::ostream& operator<<(std::ostream& out, const Assumptions& a) {
+    for (auto i = a.flags.begin(); i != a.flags.end(); ++i) {
+        out << *i;
+        if (i + 1 != a.flags.end())
+            out << ",";
+    }
+    if (a.missing > 0)
+        out << " miss: " << (int)a.missing;
+    return out;
 }
 
-void Assumptions::setEager(size_t i, bool eager) {
-    if (eager && i < EagerAssumptions.size())
-        set(EagerAssumptions[i]);
-    else if (!eager)
-        reset(Assumption::EagerArgs_);
-}
-
-bool Assumptions::notObj(size_t i) const {
-    if (includes(Assumption::NonObjectArgs_))
-        return true;
-
-    if (i < ObjAssumptions.size())
-        if (includes(ObjAssumptions[i]))
-            return true;
-
-    return false;
-}
-
-void Assumptions::setNotObj(size_t i, bool notObj) {
-    if (notObj && i < ObjAssumptions.size())
-        set(ObjAssumptions[i]);
-    else if (!notObj)
-        reset(Assumption::NonObjectArgs_);
-}
+constexpr std::array<Assumption, 5> Assumptions::ObjAssumptions;
+constexpr std::array<Assumption, 4> Assumptions::EagerAssumptions;
 
 } // namespace rir

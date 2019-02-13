@@ -55,13 +55,13 @@ struct FunctionSignature {
 
     void pushDefaultArgument() {
         arguments.emplace_back();
-        assert(nargs() > 0);
+        assert(formalNargs() > 0);
     }
 
     void pushArgument(ArgumentType arg) { arguments.emplace_back(arg); }
 
     void print(std::ostream& out = std::cout) const {
-        if (nargs() > 0) {
+        if (formalNargs() > 0) {
             out << "argTypes: (";
             for (auto i = arguments.begin(); i != arguments.end(); ++i) {
                 i->print(out);
@@ -75,13 +75,7 @@ struct FunctionSignature {
         if (envCreation == Environment::CallerProvided)
             out << "needsEnv ";
         if (!assumptions.empty()) {
-            out << "| assumptions: [";
-            for (auto i = assumptions.begin(); i != assumptions.end(); ++i) {
-                out << *i;
-                if (i + 1 != assumptions.end())
-                    out << ",";
-            }
-            out << "]";
+            out << "| assumptions: [" << assumptions << "]";
         }
     }
 
@@ -93,7 +87,10 @@ struct FunctionSignature {
         : envCreation(envCreation), optimization(optimization),
           assumptions(assumptions) {}
 
-    size_t nargs() const { return arguments.size(); }
+    size_t formalNargs() const { return arguments.size(); }
+    size_t expectedNargs() const {
+        return arguments.size() - assumptions.numMissing();
+    }
 
     const Environment envCreation;
     const OptimizationLevel optimization;

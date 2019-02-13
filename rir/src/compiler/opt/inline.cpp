@@ -30,8 +30,6 @@ class TheInliner {
         if (version->size() > MAX_SIZE)
             return;
 
-        std::unordered_set<ClosureVersion*> skip;
-
         Visitor::run(version->entry, [&](BB* bb) {
             // Dangerous iterater usage, works since we do only update it in
             // one place.
@@ -50,38 +48,79 @@ class TheInliner {
                     if (!mkcls)
                         continue;
                     inlineeCls = mkcls->cls;
-                    inlinee = call->dispatch(inlineeCls);
-                    if (inlineeCls->nargs() != call->nCallArgs())
+                    if (inlineeCls->rirFunction()->uninlinable)
+                        continue;
+                    inlinee = call->tryDispatch(inlineeCls);
+                    if (!inlinee)
+                        continue;
+                    if (inlinee->nargs() -
+                            inlinee->assumptions().numMissing() !=
+                        call->nCallArgs())
                         continue;
                     staticEnv = mkcls->lexicalEnv();
                     callerFrameState = call->frameState();
                 } else if (auto call = StaticCall::Cast(*it)) {
                     inlineeCls = call->cls();
-                    inlinee = call->dispatch();
+                    if (inlineeCls->rirFunction()->uninlinable)
+                        continue;
+                    inlinee = call->tryDispatch();
+                    if (!inlinee)
+                        continue;
+                    if (inlinee->nargs() -
+                            inlinee->assumptions().numMissing() !=
+                        call->nCallArgs())
+                        continue;
                     // if we don't know the closure of the inlinee, we can't
                     // inline.
                     if (inlineeCls->closureEnv() == Env::notClosed() &&
                         inlinee != version)
                         continue;
-                    assert(inlineeCls->nargs() == call->nCallArgs());
                     staticEnv = inlineeCls->closureEnv();
                     callerFrameState = call->frameState();
                 } else {
                     continue;
                 }
 
-                if (skip.count(inlinee))
+                if (inlineeCls->rirFunction()->uninlinable)
                     continue;
+
+                // TODO: instead of blacklisting those, we could also create
+                // contexts for inlined functions.
+                auto safeToInline = [](Instruction* i) {
+                    if (auto ld = LdFun::Cast(i)) {
+                        if (!SafeBuiltinsList::forInlineByName(ld->varName)) {
+                            return false;
+                        }
+                    }
+                    if (auto call = CallBuiltin::Cast(i)) {
+                        if (!SafeBuiltinsList::forInline(call->builtinId)) {
+                            return false;
+                        }
+                    }
+                    return true;
+                };
 
                 // No recursive inlining
                 if (inlinee->owner() == version->owner()) {
-                    skip.insert(inlinee);
                     continue;
-                }
-
-                if (inlinee->size() > MAX_INLINEE_SIZE) {
-                    skip.insert(inlinee);
+                } else if (inlinee->size() > MAX_INLINEE_SIZE) {
+                    inlineeCls->rirFunction()->uninlinable = true;
                     continue;
+                } else {
+                    bool failedToInline = false;
+                    inlinee->eachPromise([&](Promise* p) {
+                        Visitor::check(p->entry, [&](Instruction* i) {
+                            if (!safeToInline(i)) {
+                                failedToInline = true;
+                                return false;
+                            }
+                            return true;
+                        });
+                    });
+                    if (failedToInline) {
+                        inlineeCls->rirFunction()->uninlinable = true;
+                        continue;
+                    }
                 }
 
                 fuel--;
@@ -99,30 +138,21 @@ class TheInliner {
 
                 bool needsEnvPatching = inlineeCls->closureEnv() != staticEnv;
 
-                bool fail = false;
+                bool failedToInline = false;
                 Visitor::run(copy, [&](BB* bb) {
                     auto ip = bb->begin();
-                    while (!fail && ip != bb->end()) {
+                    while (!failedToInline && ip != bb->end()) {
                         auto next = ip + 1;
                         auto ld = LdArg::Cast(*ip);
                         Instruction* i = *ip;
 
-                        if (auto ld = LdFun::Cast(i)) {
-                            if (!SafeBuiltinsList::forInlineByName(
-                                    ld->varName)) {
-                                fail = true;
-                                return;
-                            }
-                        }
-                        if (auto call = CallBuiltin::Cast(i)) {
-                            if (!SafeBuiltinsList::forInline(call->builtinId)) {
-                                fail = true;
-                                return;
-                            }
+                        if (!safeToInline(i)) {
+                            failedToInline = true;
+                            return;
                         }
                         if (auto sp = FrameState::Cast(i)) {
                             if (!callerFrameState) {
-                                fail = true;
+                                failedToInline = true;
                                 return;
                             }
 
@@ -170,9 +200,9 @@ class TheInliner {
                                 // value
                                 auto cast = new CastType(
                                     a, RType::prom,
-                                    mk->eagerArg() == Missing::instance()
-                                        ? PirType::any()
-                                        : PirType::promiseWrappedVal());
+                                    mk->isEager()
+                                        ? mk->eagerArg()->type.forced()
+                                        : ld->type);
                                 ip = bb->insert(ip + 1, cast);
                                 ip--;
                                 a = cast;
@@ -184,12 +214,11 @@ class TheInliner {
                     }
                 });
 
-                if (fail) {
+                if (failedToInline) {
                     delete copy;
                     bb->overrideNext(split);
-
+                    inlineeCls->rirFunction()->uninlinable = true;
                 } else {
-
                     bb->overrideNext(copy);
 
                     // Copy over promises used by the inner version
@@ -245,13 +274,12 @@ class TheInliner {
 
 // TODO: maybe implement something more resonable to pass in those constants.
 // For now it seems a simple env variable is just fine.
-const size_t TheInliner::MAX_SIZE = getenv("PIR_INLINER_MAX_SIZE")
-                                        ? atoi(getenv("PIR_INLINER_MAX_SIZE"))
-                                        : 10000;
+const size_t TheInliner::MAX_SIZE =
+    getenv("PIR_INLINER_MAX_SIZE") ? atoi(getenv("PIR_INLINER_MAX_SIZE")) : 500;
 const size_t TheInliner::MAX_INLINEE_SIZE =
     getenv("PIR_INLINER_MAX_INLINEE_SIZE")
         ? atoi(getenv("PIR_INLINER_MAX_INLINEE_SIZE"))
-        : 200;
+        : 50;
 const size_t TheInliner::INITIAL_FUEL =
     getenv("PIR_INLINER_INITIAL_FUEL")
         ? atoi(getenv("PIR_INLINER_INITIAL_FUEL"))

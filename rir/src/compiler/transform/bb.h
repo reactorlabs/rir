@@ -19,7 +19,6 @@ class BBTransform {
                            BB::Instrs::iterator position, Value* condition,
                            bool expected, BB* deoptBlock,
                            const std::string& debugMesage);
-    static void removeBBs(Code* code, const std::unordered_set<BB*>& toDelete);
 };
 } // namespace pir
 } // namespace rir

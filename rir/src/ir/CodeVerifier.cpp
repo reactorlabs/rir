@@ -113,6 +113,7 @@ static Sources hasSources(Opcode bc) {
     case Opcode::ldvar_super_:
     case Opcode::ldvar_noforce_super_:
     case Opcode::ldlval_:
+    case Opcode::starg_:
     case Opcode::stvar_:
     case Opcode::stvar_super_:
     case Opcode::guard_fun_:
@@ -138,7 +139,7 @@ static Sources hasSources(Opcode bc) {
     case Opcode::stloc_:
     case Opcode::movloc_:
     case Opcode::nop_:
-    case Opcode::make_env_:
+    case Opcode::mk_env_:
     case Opcode::get_env_:
     case Opcode::parent_env_:
     case Opcode::set_env_:
@@ -328,6 +329,14 @@ void CodeVerifier::verifyFunctionLayout(SEXP sexp, ::Context* ctx) {
                         SEXP name = cp_pool_at(ctx, offset);
                         assert(TYPEOF(name) == SYMSXP || name == R_NilValue);
                     }
+                }
+            }
+            if (*cptr == Opcode::mk_env_) {
+                uint32_t nargs = *reinterpret_cast<Immediate*>(cptr + 1);
+                for (size_t i = 0, e = nargs; i != e; ++i) {
+                    uint32_t offset = cur.mkEnvExtra().names[i];
+                    SEXP name = cp_pool_at(ctx, offset);
+                    assert(TYPEOF(name) == SYMSXP);
                 }
             }
 

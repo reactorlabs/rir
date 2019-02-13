@@ -110,6 +110,7 @@ class ScopeAnalysis : public StaticAnalysis<
     const std::vector<Value*> args;
 
     static constexpr size_t MAX_DEPTH = 2;
+    static constexpr size_t MAX_SIZE = 200;
     size_t depth;
     Value* staticClosureEnv = Env::notClosed();
     using StaticAnalysis::PositioningStyle;

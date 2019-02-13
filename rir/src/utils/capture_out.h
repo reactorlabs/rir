@@ -23,12 +23,13 @@ namespace rir {
 //
 class CaptureOut {
     const static unsigned MAX_LEN = 1024 * 8;
-    char buffer[MAX_LEN + 1] = {0};
+    char buffer[MAX_LEN + 1];
     int out_pipe[2];
     int saved_stdout;
 
   public:
     CaptureOut() {
+        memset(buffer, 0, sizeof(buffer));
         fflush(stdout);
         saved_stdout = dup(STDOUT_FILENO);
         int err = pipe(out_pipe);

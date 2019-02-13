@@ -26,7 +26,7 @@ class StreamLogger;
 
 class LogStream {
   private:
-    const std::string id;
+    const ClosureVersion* version;
     DebugOptions options;
     bool printedAnything = false;
 
@@ -88,9 +88,9 @@ class LogStream {
     void header();
     void footer();
 
-    LogStream(const DebugOptions& options, const std::string& id,
+    LogStream(const DebugOptions& options, const ClosureVersion* version,
               std::ostream& stream = std::cout)
-        : id(id), options(options), out(stream) {}
+        : version(version), options(options), out(stream) {}
     friend class StreamLogger;
 };
 
@@ -104,9 +104,9 @@ class FileLogStream : public LogStream {
   protected:
     bool tty() override { return false; }
 
-    FileLogStream(const DebugOptions& options, const std::string& id,
+    FileLogStream(const DebugOptions& options, const ClosureVersion* version,
                   const std::string& fileName)
-        : LogStream(options, id, fstream), fstream(fileName) {}
+        : LogStream(options, version, fstream), fstream(fileName) {}
     friend class StreamLogger;
 };
 
@@ -126,9 +126,9 @@ class BufferedLogStream : public LogStream {
   protected:
     bool tty() override;
 
-    BufferedLogStream(const DebugOptions& options, const std::string& id,
+    BufferedLogStream(const DebugOptions& options, ClosureVersion* version,
                       std::ostream& actualOut = std::cout)
-        : LogStream(options, id, sstream), actualOut(actualOut) {}
+        : LogStream(options, version, sstream), actualOut(actualOut) {}
     friend class StreamLogger;
 };
 

@@ -48,12 +48,8 @@ struct ForcedBy {
     std::unordered_set<Value*> inScope;
     std::unordered_set<Value*> escaped;
 
-    size_t eagerFunction = 0;
-    static constexpr size_t NotEagerFunction = -1;
-
-    bool isEagerFunction(ClosureVersion* cls) const {
-        return eagerFunction == cls->nargs();
-    }
+    std::vector<size_t> argumentForceOrder;
+    bool ambiguousForceOrder = false;
 
     static Force* ambiguous() {
         static Force f(Nil::instance(), Env::nil());
@@ -136,13 +132,56 @@ struct ForcedBy {
             }
         }
 
-        if (eagerFunction != NotEagerFunction &&
-            eagerFunction != other.eagerFunction) {
-            eagerFunction = NotEagerFunction;
+        if (!ambiguousForceOrder && other.ambiguousForceOrder) {
+            ambiguousForceOrder = true;
             res.update();
         }
 
+        if (argumentForceOrder != other.argumentForceOrder) {
+            auto mySize = argumentForceOrder.size();
+            auto otherSize = other.argumentForceOrder.size();
+            auto common = mySize;
+
+            if (mySize > otherSize) {
+                argumentForceOrder.resize(otherSize);
+                ambiguousForceOrder = true;
+                common = otherSize;
+                res.update();
+            } else if (!ambiguousForceOrder && otherSize > mySize) {
+                ambiguousForceOrder = true;
+                res.update();
+            }
+
+            for (size_t i = 0; i < common; ++i) {
+                if (argumentForceOrder[i] != other.argumentForceOrder[i]) {
+                    argumentForceOrder.resize(i);
+                    ambiguousForceOrder = true;
+                    res.update();
+                    break;
+                }
+            }
+        }
+
         return res;
+    }
+
+    bool maybeForced(size_t i) const {
+        // Scan the list of unambiguously forced arguments to see if we know if
+        // this one was forced
+        for (auto f : argumentForceOrder) {
+            if (f == i)
+                return true;
+        }
+        return ambiguousForceOrder;
+    }
+
+    bool eagerLikeFunction(ClosureVersion* fun) const {
+        if (ambiguousForceOrder || argumentForceOrder.size() < fun->nargs())
+            return false;
+        for (size_t i = 0; i < fun->nargs(); ++i)
+            if (argumentForceOrder[i] != i)
+                return false;
+        return true;
     }
 
     bool isDominatingForce(Force* f) const {
@@ -216,14 +255,11 @@ class ForceDominanceAnalysis : public StaticAnalysis<ForcedBy> {
             if (MkArg* arg = MkArg::Cast(f->arg<0>().val()->followCasts()))
                 changed = state.forcedAt(arg, f) || changed;
             if (LdArg* arg = LdArg::Cast(f->arg<0>().val()->followCasts())) {
-                changed = state.forcedAt(arg, f) || changed;
-                if (state.eagerFunction != ForcedBy::NotEagerFunction) {
-                    if (arg->id == state.eagerFunction) {
-                        state.eagerFunction++;
-                        changed = true;
-                    } else if (state.eagerFunction !=
-                               ForcedBy::NotEagerFunction) {
-                        state.eagerFunction = ForcedBy::NotEagerFunction;
+                if (arg->type.maybeLazy()) {
+                    changed = state.forcedAt(arg, f) || changed;
+                    if (!state.ambiguousForceOrder &&
+                        !state.maybeForced(arg->id)) {
+                        state.argumentForceOrder.push_back(arg->id);
                         changed = true;
                     }
                 }
@@ -240,10 +276,16 @@ class ForceDominanceAnalysis : public StaticAnalysis<ForcedBy> {
                 if (auto arg = LdArg::Cast(v))
                     changed = state.escape(arg) || changed;
             });
+
             if (i->mayForcePromises())
                 changed = state.sideeffect() || changed;
-            if (i->hasEffect() && state.eagerFunction != closure->nargs()) {
-                state.eagerFunction = ForcedBy::NotEagerFunction;
+
+            if (i->hasEffect() && !state.ambiguousForceOrder &&
+                state.argumentForceOrder.size() < closure->nargs()) {
+                // After the first effect we give up on recording force order,
+                // since we can't use it to turn the arguments into eager ones
+                // anyway. Otherwise we would reorder effects.
+                state.ambiguousForceOrder = true;
                 changed = true;
             }
         }
@@ -262,8 +304,9 @@ void ForceDominance::apply(RirCompiler&, ClosureVersion* cls,
         ForceDominanceAnalysis analysis(cls, code, log);
         analysis();
         auto& result = analysis.result();
-        if (result.isEagerFunction(cls))
+        if (result.eagerLikeFunction(cls))
             cls->properties.set(ClosureVersion::Property::IsEager);
+        cls->properties.argumentForceOrder = result.argumentForceOrder;
 
         std::unordered_map<Force*, Value*> inlinedPromise;
         std::unordered_map<Instruction*, MkArg*> forcedMkArg;
@@ -278,8 +321,8 @@ void ForceDominance::apply(RirCompiler&, ClosureVersion* cls,
                         f->strict = true;
 
                     if (auto mkarg = MkArg::Cast(f->followCastsAndForce())) {
-                        Value* eager = mkarg->eagerArg();
-                        if (eager != Missing::instance()) {
+                        if (mkarg->isEager()) {
+                            Value* eager = mkarg->eagerArg();
                             f->replaceUsesWith(eager);
                             next = bb->remove(ip);
                         } else if (result.isDominatingForce(f)) {
@@ -323,10 +366,11 @@ void ForceDominance::apply(RirCompiler&, ClosureVersion* cls,
                     }
                 } else if (auto cast = CastType::Cast(*ip)) {
                     if (auto mk = MkArg::Cast(cast->arg<0>().val())) {
-                        mk->ifEager([&](Value* val) {
-                            cast->replaceUsesWith(val);
+                        if (mk->isEager()) {
+                            auto eager = mk->eagerArg();
+                            cast->replaceUsesWith(eager);
                             next = bb->remove(ip);
-                        });
+                        }
                     }
                 }
                 ip = next;

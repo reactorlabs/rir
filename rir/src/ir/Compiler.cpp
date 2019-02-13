@@ -557,7 +557,8 @@ bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
 
     if (fun == symbol::Missing && args.length() == 1 &&
         TYPEOF(args[0]) == SYMSXP && !DDVAL(args[0])) {
-        cs << BC::guardNamePrimitive(fun) << BC::missing(args[0]);
+        cs << BC::guardNamePrimitive(fun) << BC::missing(args[0])
+           << BC::visible();
         return true;
     }
 
@@ -849,8 +850,8 @@ void compileCall(Context& ctx, SEXP ast, SEXP fun, SEXP args) {
     if (hasNames) {
         cs << BC::callImplicit(callArgs, names, ast, {});
     } else {
-        cs << BC::callImplicit(callArgs, ast,
-                               Assumption::CorrectOrderOfArguments);
+        cs << BC::callImplicit(
+            callArgs, ast, Assumptions(Assumption::CorrectOrderOfArguments));
     }
 }
 
