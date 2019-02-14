@@ -16,14 +16,14 @@ std::ostream& operator<<(std::ostream& out, Assumption a) {
     case Assumption::Arg3IsEager_:
         out << "Eager3";
         break;
-    case Assumption::EagerArgs_:
-        out << "Eagers";
+    case Assumption::Arg4IsEager_:
+        out << "Eager4";
+        break;
+    case Assumption::Arg0IsEager_:
+        out << "Eager0";
         break;
     case Assumption::CorrectOrderOfArguments:
         out << "CorrOrd";
-        break;
-    case Assumption::NonObjectArgs_:
-        out << "!Objs";
         break;
     case Assumption::Arg1IsNonObj_:
         out << "!Obj1";
@@ -33,6 +33,9 @@ std::ostream& operator<<(std::ostream& out, Assumption a) {
         break;
     case Assumption::Arg3IsNonObj_:
         out << "!Obj3";
+        break;
+    case Assumption::Arg0IsNonObj_:
+        out << "!Obj0";
         break;
     case Assumption::NotTooManyArguments:
         out << "!TMany";
@@ -55,7 +58,7 @@ std::ostream& operator<<(std::ostream& out, const Assumptions& a) {
     return out;
 }
 
-constexpr std::array<Assumption, 3> Assumptions::ObjAssumptions;
-constexpr std::array<Assumption, 3> Assumptions::EagerAssumptions;
+constexpr std::array<Assumption, 5> Assumptions::ObjAssumptions;
+constexpr std::array<Assumption, 4> Assumptions::EagerAssumptions;
 
 } // namespace rir

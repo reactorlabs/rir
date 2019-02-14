@@ -327,6 +327,7 @@ BC_NOARGS(V, _)
     inline static BC push(SEXP constant);
     inline static BC push(double constant);
     inline static BC push(int constant);
+    inline static BC push_from_pool(PoolIdx idx);
     inline static BC push_code(FunIdx i);
     inline static BC ldfun(SEXP sym);
     inline static BC ldvar(SEXP sym);

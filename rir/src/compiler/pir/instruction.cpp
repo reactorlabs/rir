@@ -236,11 +236,18 @@ bool Instruction::envOnlyForObj() {
     return false;
 }
 
+LdConst::LdConst(SEXP c, PirType t)
+    : FixedLenInstruction(t), idx(Pool::insert(c)) {}
+LdConst::LdConst(SEXP c)
+    : FixedLenInstruction(PirType(c)), idx(Pool::insert(c)) {}
+
+SEXP LdConst::c() const { return Pool::get(idx); }
+
 void LdConst::printArgs(std::ostream& out, bool tty) const {
     std::string val;
     {
         CaptureOut rec;
-        Rf_PrintValue(c);
+        Rf_PrintValue(Pool::get(idx));
         val = rec.oneline(40);
     }
     out << val;
@@ -551,25 +558,22 @@ Assumptions CallInstruction::inferAvailableAssumptions() const {
     given.add(Assumption::NotTooManyArguments);
 
     // Make some optimistic assumptions, they might be reset below...
-    given.add(Assumption::EagerArgs_);
-    given.add(Assumption::NonObjectArgs_);
     given.add(Assumption::NoExplicitlyMissingArgs);
 
     size_t i = 0;
     eachCallArg([&](Value* arg) {
         if (auto mk = MkArg::Cast(arg)) {
-            if (!mk->isEager()) {
-                given.setEager(i, false);
-                given.setNotObj(i, false);
-                return;
-            } else {
-                arg = mk->eagerArg();
+            if (mk->isEager()) {
+                auto eager = mk->eagerArg();
+                if (eager == MissingArg::instance())
+                    given.remove(Assumption::NoExplicitlyMissingArgs);
+                if (!eager->type.maybeLazy())
+                    given.setEager(i);
+                if (!eager->type.maybeObj())
+                    given.setNotObj(i);
             }
         }
-        if (arg == MissingArg::instance())
-            given.remove(Assumption::NoExplicitlyMissingArgs);
-        given.setEager(i, !arg->type.maybeLazy());
-        given.setNotObj(i, !arg->type.maybeObj());
+        ++i;
     });
     return given;
 }

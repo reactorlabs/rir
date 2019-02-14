@@ -106,8 +106,8 @@ bool test42(const std::string& input) {
 
     auto ld = LdConst::Cast((*r.begin()));
     CHECK(ld);
-    CHECK(TYPEOF(ld->c) == INTSXP);
-    CHECK(INTEGER(ld->c)[0] == 42);
+    CHECK(TYPEOF(ld->c()) == INTSXP);
+    CHECK(INTEGER(ld->c())[0] == 42);
     return true;
 };
 
