@@ -704,8 +704,8 @@ Function* dispatch(const CallContext& call, DispatchTable* vt) {
     return fun;
 };
 
-static unsigned RIR_WARMUP =
-    getenv("RIR_WARMUP") ? atoi(getenv("RIR_WARMUP")) : 3;
+static unsigned PIR_WARMUP =
+    getenv("PIR_WARMUP") ? atoi(getenv("PIR_WARMUP")) : 3;
 
 // Call a RIR function. Arguments are still untouched.
 RIR_INLINE SEXP rirCall(CallContext& call, Context* ctx) {
@@ -718,7 +718,7 @@ RIR_INLINE SEXP rirCall(CallContext& call, Context* ctx) {
     Function* fun = dispatch(call, table);
     fun->registerInvocation();
 
-    if (!fun->unoptimizable && fun->invocationCount() % RIR_WARMUP == 0) {
+    if (!fun->unoptimizable && fun->invocationCount() % PIR_WARMUP == 0) {
         Assumptions given =
             addDynamicAssumptionsForOneTarget(call, fun->signature());
         // addDynamicAssumptionForOneTarget compares arguments with the
@@ -1741,7 +1741,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
             auto fun = Function::unpack(version);
             addDynamicAssumptionsFromContext(call);
             bool dispatchFail = !matches(call, fun->signature());
-            if (fun->invocationCount() % RIR_WARMUP == 0)
+            if (fun->invocationCount() % PIR_WARMUP == 0)
                 if (addDynamicAssumptionsForOneTarget(call, fun->signature()) !=
                     fun->signature().assumptions)
                     // We have more assumptions available, let's recompile
