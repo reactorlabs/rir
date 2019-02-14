@@ -231,7 +231,7 @@ RIR_INLINE void __listAppend(SEXP* front, SEXP* last, SEXP value, SEXP name) {
 }
 
 SEXP createEnvironment(const std::vector<SEXP>* args, const SEXP parent,
-                       const Opcode* pc, Context* ctx) {
+                       const Opcode* pc, Context* ctx, SEXP stub) {
     SEXP arglist = R_NilValue;
     auto names = (Immediate*)pc;
     for (auto i = 0; i < args->size(); ++i) {
@@ -241,7 +241,19 @@ SEXP createEnvironment(const std::vector<SEXP>* args, const SEXP parent,
         SET_TAG(arglist, name);
         SET_MISSING(arglist, val == R_MissingArg ? 2 : 0);
     }
-    return Rf_NewEnvironment(R_NilValue, arglist, parent);
+    SEXP environment = Rf_NewEnvironment(R_NilValue, arglist, parent);
+
+    // TODO: Find a proper way of going through the function stack and
+    // replacing the stub with the new environment
+    Locals local(nullptr, 10);
+    for (auto i = 0; i < 10; i++) {
+        if (ostack_at(ctx, i) == stub)
+            ostack_set(ctx, i, environment);
+        else if (local.load(i) == stub)
+            local.store(i, environment);
+    }
+
+    return environment;
 }
 
 SEXP createLegacyArgsListFromStackValues(const CallContext& call,

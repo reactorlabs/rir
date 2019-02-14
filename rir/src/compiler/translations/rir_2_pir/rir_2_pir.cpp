@@ -753,6 +753,7 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
     // Opcodes that only come from PIR
     case Opcode::deopt_:
     case Opcode::force_:
+    case Opcode::mk_stub_env_:
     case Opcode::mk_env_:
     case Opcode::get_env_:
     case Opcode::parent_env_:

@@ -8,7 +8,7 @@
 #include <functional>
 
 SEXP createEnvironment(const std::vector<SEXP>*, const SEXP, const rir::Opcode*,
-                       Context*);
+                       Context*, SEXP);
 namespace rir {
 
 #define LAZY_ENVIRONMENT_MAGIC 0xe4210e47
@@ -26,7 +26,7 @@ struct LazyEnvironment
     // We need to store the arguments + the parent + *opcode for the names
     LazyEnvironment(std::vector<SEXP>* arguments, SEXP parent, Opcode* opcode,
                     Context* ctx)
-        : RirDataWrapper(3), arguments_(arguments), parent_(parent),
+        : RirDataWrapper(4), arguments_(arguments), parent_(parent),
           names_(opcode), ctx_(ctx){};
     ~LazyEnvironment() { delete arguments_; }
 
@@ -36,7 +36,8 @@ struct LazyEnvironment
     Context* ctx() { return ctx_; }
 
     SEXP create() {
-        return createEnvironment(arguments(), parent(), names(), ctx());
+        return createEnvironment(arguments(), parent(), names(), ctx(),
+                                 (SEXP)this);
     }
 
   private:
