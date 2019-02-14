@@ -24,7 +24,8 @@ SEXP rirExpr(SEXP f);
 SEXP rirEval_f(SEXP f, SEXP env);
 SEXP rirApplyClosure(SEXP, SEXP, SEXP, SEXP);
 
-SEXP argsLazyCreation(void* rirDataWrapper);
+SEXP lazyPromargsCreation(void* rirDataWrapper);
+SEXP lazyEnvCreation(void* rirDataWrapper);
 
 #ifdef __cplusplus
 }

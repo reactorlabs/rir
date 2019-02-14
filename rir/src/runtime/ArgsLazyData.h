@@ -13,8 +13,6 @@ SEXP createLegacyArgsListFromStackValues(const CallContext& call,
 
 namespace rir {
 
-typedef std::function<SEXP(void*)> LazyFunction;
-
 #define LAZY_ARGS_MAGIC 0x1a27a000
 
 /**

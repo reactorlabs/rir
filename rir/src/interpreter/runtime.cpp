@@ -36,7 +36,7 @@ void initializeRuntime() {
     // initialize the global context
     globalContext_ = context_create();
     registerExternalCode(rirEval_f, rirApplyClosure, rir_compile, rirExpr,
-                         argsLazyCreation);
+                         lazyPromargsCreation, lazyEnvCreation);
     configurations = new rir::Configurations();
 }
 

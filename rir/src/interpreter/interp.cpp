@@ -230,6 +230,20 @@ RIR_INLINE void __listAppend(SEXP* front, SEXP* last, SEXP value, SEXP name) {
     *last = app;
 }
 
+SEXP createEnvironment(const std::vector<SEXP>* args, const SEXP parent,
+                       const Opcode* pc, Context* ctx) {
+    SEXP arglist = R_NilValue;
+    auto names = (Immediate*)pc;
+    for (auto i = 0; i < args->size(); ++i) {
+        SEXP val = args->at(i);
+        SEXP name = cp_pool_at(ctx, names[i]);
+        arglist = CONS_NR(val, arglist);
+        SET_TAG(arglist, name);
+        SET_MISSING(arglist, val == R_MissingArg ? 2 : 0);
+    }
+    return Rf_NewEnvironment(R_NilValue, arglist, parent);
+}
+
 SEXP createLegacyArgsListFromStackValues(const CallContext& call,
                                          bool eagerCallee, Context* ctx) {
     SEXP result = R_NilValue;
@@ -310,9 +324,14 @@ SEXP createLegacyArgsList(const CallContext& call, bool eagerCallee,
     return result;
 }
 
-SEXP argsLazyCreation(void* rirDataWrapper) {
+SEXP lazyPromargsCreation(void* rirDataWrapper) {
     ArgsLazyData* argsLazy = ArgsLazyData::unpack(rirDataWrapper);
     return argsLazy->createArgsLists();
+}
+
+SEXP lazyEnvCreation(void* rirDataWrapper) {
+    LazyEnvironment* env = LazyEnvironment::unpack(rirDataWrapper);
+    return env->create();
 }
 
 RIR_INLINE SEXP createLegacyLazyArgsList(const CallContext& call,
@@ -1320,7 +1339,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
             for (long i = 0; i < n; ++i) {
                 args->push_back(ostack_pop(ctx));
             }
-            auto envStub = new LazyEnvironment(args, parent, pc);
+            auto envStub = new LazyEnvironment(args, parent, pc, ctx);
             envStubs.push_back(envStub);
             res = (SEXP)envStub;
             ostack_push(ctx, res);
@@ -2313,8 +2332,8 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
 
         INSTRUCTION(isstubenv_) {
             SEXP val = ostack_pop(ctx);
-            ostack_push(ctx, R_TrueValue);
-            // ostack_push(ctx, isObject(val) ? R_TrueValue : R_FalseValue);
+            ostack_push(ctx, LazyEnvironment::check(val) ? R_TrueValue
+                                                         : R_FalseValue);
             NEXT();
         }
 
