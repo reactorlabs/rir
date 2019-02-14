@@ -70,6 +70,10 @@ f <- rir.compile(function() {
 })
 f()
 
+j <- 1
+f <- rir.compile(function() { j; for (i in 1:10) a <- i + 1 })
+pir.compile(f)()
+
 f <- rir.compile(function() {
     i <- 1
     for (i in 1:123)

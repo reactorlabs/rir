@@ -1494,6 +1494,7 @@ R_bcstack_t evalRirCode(Code* c, Context* ctx, SEXP* env,
             Immediate id = readImmediate();
             advanceImmediate();
             SEXP val = stack_obj_to_sexp(ostack_pop(ctx));
+            R_PreserveObject(val);
 
             cachedSetVar(val, *env, id, ctx, bindingCache);
 
