@@ -27,8 +27,8 @@ static LdConst* isConst(Value* instr) {
         if (auto instr = Instruction::Cast(i)) {                               \
             if (auto lhs = isConst(instr->arg<0>().val())) {                   \
                 if (auto rhs = isConst(instr->arg<1>().val())) {               \
-                    auto res = Rf_eval(Rf_lang3(Operation, lhs->c, rhs->c),    \
-                                       R_BaseEnv);                             \
+                    auto res = Rf_eval(                                        \
+                        Rf_lang3(Operation, lhs->c(), rhs->c()), R_BaseEnv);   \
                     cmp.preserve(res);                                         \
                     auto resi = new LdConst(res);                              \
                     instr->replaceUsesWith(resi);                              \
@@ -42,7 +42,7 @@ static LdConst* isConst(Value* instr) {
     do {                                                                       \
         if (auto instr = Instruction::Cast(i)) {                               \
             if (auto arg = isConst(instr->arg<0>().val())) {                   \
-                Operation(arg->c);                                             \
+                Operation(arg->c());                                           \
             }                                                                  \
         }                                                                      \
     } while (false)
@@ -52,7 +52,7 @@ static LdConst* isConst(Value* instr) {
         if (auto instr = Instruction::Cast(i)) {                               \
             if (auto lhs = isConst(instr->arg<0>().val())) {                   \
                 if (auto rhs = isConst(instr->arg<1>().val())) {               \
-                    Operation(lhs->c, rhs->c);                                 \
+                    Operation(lhs->c(), rhs->c());                             \
                 }                                                              \
             }                                                                  \
         }                                                                      \
