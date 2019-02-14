@@ -19,6 +19,9 @@ class BBTransform {
                            BB::Instrs::iterator position, Value* condition,
                            bool expected, BB* deoptBlock,
                            const std::string& debugMesage);
+    static void insertAssume(BB* src, Value* condition, Value* cp,
+                             BB::Instrs::iterator& position,
+                             bool assumePositive);
 };
 } // namespace pir
 } // namespace rir

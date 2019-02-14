@@ -218,13 +218,27 @@ bool canRemoveEnvironmentIfTypeFeedback(const std::string& input) {
     return t;
 }
 
-bool canRemoveEnvironment(const std::string& input) {
+bool testCondition(const std::string& input,
+                   std::function<void(pir::ClosureVersion*)> condition) {
     pir::Module m;
     compile("", input, &m);
     bool t = verify(&m);
-    m.eachPirClosureVersion(
-        [&t](pir::ClosureVersion* f) { t = t && Query::noEnv(f); });
+    m.eachPirClosureVersion(condition);
     return t;
+}
+
+bool canRemoveEnvironment(const std::string& input) {
+    auto t = true;
+    auto condition = [&t](pir::ClosureVersion* f) { t = t && Query::noEnv(f); };
+    return testCondition(input, condition) && t;
+}
+
+bool canRemoveEnvironmentSpec(const std::string& input) {
+    auto t = true;
+    auto condition = [&t](pir::ClosureVersion* f) {
+        t = t && Query::noEnvSpec(f);
+    };
+    return testCondition(input, condition) && t;
 }
 
 bool canRemoveEnvironmentIfNonTypeFeedback(const std::string& input) {
@@ -403,6 +417,15 @@ static Test tests[] = {
          }),
     Test("context_load",
          []() { return canRemoveEnvironment("f <- function() 123"); }),
+    Test("force_nonreflective",
+         []() {
+             return canRemoveEnvironmentSpec("f <- function(depth){\n"
+                                             "   if (depth == 0)\n"
+                                             "      1\n"
+                                             "   else\n"
+                                             "      0\n"
+                                             "}");
+         }),
     Test("binop_nonobjects",
          []() {
              return canRemoveEnvironmentIfTypeFeedback(

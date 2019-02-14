@@ -202,6 +202,9 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
     case Opcode::ldvar_:
         v = insert(new LdVar(bc.immediateConst(), env));
         push(insert(new Force(v, env)));
+        if (!inPromise()) {
+            addCheckpoint(srcCode, nextPos, stack, insert);
+        }
         break;
 
     case Opcode::starg_:
@@ -706,11 +709,11 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         insert(new Visible());
         break;
 
-#define V(_, name, Name)\
-    case Opcode::name ## _:\
-        insert(new Name());\
+#define V(_, name, Name)                                                       \
+    case Opcode::name##_:                                                      \
+        insert(new Name());                                                    \
         break;
-SIMPLE_INSTRUCTIONS(V, _)
+        SIMPLE_INSTRUCTIONS(V, _)
 #undef V
 
     // TODO implement!
@@ -752,6 +755,7 @@ SIMPLE_INSTRUCTIONS(V, _)
     case Opcode::stloc_:
     case Opcode::movloc_:
     case Opcode::isobj_:
+    case Opcode::isstubenv_:
     case Opcode::check_missing_:
     case Opcode::static_call_:
         log.unsupportedBC("Unsupported BC (are you recompiling?)", bc);
@@ -855,7 +859,7 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) const {
                 break;
             }
             case Opcode::brobj_: {
-                Value* v = insert(new IsObject(cur.stack.top()));
+                Value* v = insert((new TypeTest(cur.stack.top()))->object());
                 insert(new Branch(v));
                 break;
             }

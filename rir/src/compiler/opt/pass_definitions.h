@@ -76,9 +76,15 @@ class PASS(Inline);
  * information of the inputs and if all the observed values are compatible with
  * the version operation without an environment, it avoids creating the
  * environment and add the corresponding guard to deoptimize in case an
- * incompatible input appears at run time.
+ * incompatible input appears at run time. It also goes through every force
+ * instruction for which we could not prove it does not access the parent
+ * environment reflectively and speculate it will not.
  */
 class PASS(ElideEnvSpec);
+
+/*
+ *
+ */
 
 /*
  * Constantfolding and dead branch removal.

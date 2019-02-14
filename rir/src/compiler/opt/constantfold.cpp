@@ -84,7 +84,7 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
 
     Visitor::run(function->entry, [&](BB* bb) {
         if (bb->isEmpty())
-          return;
+            return;
         auto ip = bb->begin();
         while (ip != bb->end()) {
             auto i = *ip;
@@ -131,8 +131,9 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                 next = bb->remove(ip);
             });
 
-            if (auto isObj = IsObject::Cast(i)) {
-                if (!isObj->arg<0>().val()->type.maybeObj()) {
+            if (auto isObj = TypeTest::Cast(i)) {
+                if (isObj->testFor == TypeTest::Object &&
+                    !isObj->arg<0>().val()->type.maybeObj()) {
                     i->replaceUsesWith(False::instance());
                     next = bb->remove(ip);
                 }

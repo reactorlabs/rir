@@ -935,6 +935,19 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 break;
             }
 
+            case Tag::TypeTest: {
+                auto typeTest = TypeTest::Cast(instr);
+                switch (typeTest->testFor) {
+                case TypeTest::Object:
+                    cs << BC::isobj();
+                    break;
+                case TypeTest::EnvironmentStub:
+                    cs << BC::isstubenv();
+                    break;
+                }
+                break;
+            }
+
 #define SIMPLE(Name, Factory)                                                  \
     case Tag::Name: {                                                          \
         cs << BC::Factory();                                                   \
@@ -953,7 +966,6 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 SIMPLE(ChkClosure, isfun);
                 SIMPLE(Seq, seq);
                 SIMPLE(MkCls, close);
-                SIMPLE(IsObject, isobj);
 #define V(V, name, Name) SIMPLE(Name, name);
                 SIMPLE_INSTRUCTIONS(V, _);
 #undef V
@@ -1059,8 +1071,12 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
             }
             case Tag::MkEnv: {
                 auto mkenv = MkEnv::Cast(instr);
-
-                cs << BC::mkEnv(mkenv->varName);
+                bool stub;
+                if (mkenv->stub)
+                    stub = true;
+                else
+                    stub = false;
+                cs << BC::mkEnv(mkenv->varName, stub);
                 break;
             }
             case Tag::Phi: {

@@ -9,6 +9,7 @@
 #include "runtime/Code.h"
 #include "runtime/DispatchTable.h"
 #include "runtime/Function.h"
+#include "runtime/LazyEnvironment.h"
 
 #include "R/r.h"
 

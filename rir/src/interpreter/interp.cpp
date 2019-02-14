@@ -1286,6 +1286,8 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
     Opcode* pc = initialPC ? initialPC : c->code();
     SEXP res;
 
+    std::vector<LazyEnvironment*> envStubs;
+
     R_Visible = TRUE;
 
     // main loop
@@ -1316,6 +1318,24 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
             NEXT();
         }
 
+        INSTRUCTION(mk_stub_env_) {
+            size_t n = readImmediate();
+            advanceImmediate();
+            SEXP parent = ostack_pop(ctx);
+            assert(TYPEOF(parent) == ENVSXP &&
+                   "Non-environment used as environment parent.");
+            advanceImmediateN(n);
+            auto args = new std::vector<SEXP>(n);
+            for (long i = 0; i < n; ++i) {
+                args->push_back(ostack_pop(ctx));
+            }
+            auto envStub = new LazyEnvironment(args, parent, pc);
+            envStubs.push_back(envStub);
+            res = (SEXP)envStub;
+            ostack_push(ctx, res);
+            NEXT();
+        }
+
         INSTRUCTION(parent_env_) {
             // Can only be used for pir. In pir we always have a closure that
             // stores the lexical envrionment
@@ -1335,7 +1355,8 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
             // environment
             memset(&bindingCache, 0, sizeof(bindingCache));
             SEXP e = ostack_pop(ctx);
-            assert(TYPEOF(e) == ENVSXP && "Expected an environment on TOS.");
+            assert((TYPEOF(e) == ENVSXP || LazyEnvironment::check(e)) &&
+                   "Expected an environment on TOS.");
             *env = e;
             NEXT();
         }
@@ -2299,6 +2320,13 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
             NEXT();
         }
 
+        INSTRUCTION(isstubenv_) {
+            SEXP val = ostack_pop(ctx);
+            ostack_push(ctx, R_TrueValue);
+            // ostack_push(ctx, isObject(val) ? R_TrueValue : R_FalseValue);
+            NEXT();
+        }
+
         INSTRUCTION(missing_) {
             SEXP sym = readConst(ctx, readImmediate());
             advanceImmediate();
@@ -3118,6 +3146,11 @@ eval_done:
         }
         delete synthesizeFrames;
     }
+
+    for (auto stub : envStubs) {
+        delete stub;
+    }
+
     return ostack_pop(ctx);
 }
 

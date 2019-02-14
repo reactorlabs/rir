@@ -63,7 +63,10 @@ void Configurations::defaultOptimizations() {
     // This pass is scheduled second, since we want to first try to do this
     // statically in Phase 1
     optimizations.push_back(new pir::ElideEnvSpec());
+    optimizations.push_back(new pir::ElideEnvSpec());
     addDefaultOpt();
+    optimizations.push_back(new pir::ElideEnvSpec());
+    optimizations.push_back(new pir::ElideEnvSpec());
 
     // ==== Phase 3) Remove checkpoints we did not use
     //
@@ -73,7 +76,8 @@ void Configurations::defaultOptimizations() {
     //
     // After this phase it is no longer possible to add assumptions at any point
     optimizations.push_back(new pir::CleanupCheckpoints());
-    addDefaultOpt();
+    for (size_t i = 0; i < 2; ++i)
+        addDefaultOpt();
 
     // ==== Phase 4) Remove Framestates we did not use
     //

@@ -171,6 +171,7 @@ class Instruction : public Value {
     void replaceUsesAndSwapWith(Instruction* val,
                                 std::vector<Instruction*>::iterator it);
     void replaceUsesIn(Value* val, BB* target);
+    bool usesAreOnly(BB*, std::unordered_set<Tag>);
     bool unused();
 
     virtual void updateType(){};
@@ -674,7 +675,7 @@ class Branch
     : public FixedLenInstruction<Tag::Branch, Branch, 1, Effect::None,
                                  EnvAccess::None, Controlflow::Branch> {
   public:
-    explicit Branch(Value * test)
+    explicit Branch(Value* test)
         : FixedLenInstruction(PirType::voyd(), {{NativeType::test}}, {{test}}) {
     }
     void printArgs(std::ostream& out, bool tty) const override;
@@ -894,10 +895,21 @@ class FLI(Is, 1, Effect::None, EnvAccess::None) {
     void printArgs(std::ostream& out, bool tty) const override;
 };
 
-class FLI(IsObject, 1, Effect::None, EnvAccess::None) {
+class FLI(TypeTest, 1, Effect::None, EnvAccess::None) {
   public:
-    explicit IsObject(Value* v)
+    enum type { Object, EnvironmentStub };
+    type testFor;
+    explicit TypeTest(Value* v)
         : FixedLenInstruction(NativeType::test, {{PirType::val()}}, {{v}}) {}
+    TypeTest* object() {
+        testFor = Object;
+        return this;
+    };
+    TypeTest* environmentStub() {
+        testFor = EnvironmentStub;
+        return this;
+    };
+    const char* name() const override;
 };
 
 class FLI(LdFunctionEnv, 0, Effect::None, EnvAccess::None) {
@@ -944,11 +956,11 @@ class FLI(Identical, 2, Effect::None, EnvAccess::None) {
                               {{PirType::any(), PirType::any()}}, {{a, b}}) {}
 };
 
-#define V(NESTED, name, Name)\
-class FLI(Name, 0, Effect::Any, EnvAccess::None) {\
-  public:\
-    Name() : FixedLenInstruction(PirType::voyd()) {}\
-};
+#define V(NESTED, name, Name)                                                  \
+    class FLI(Name, 0, Effect::Any, EnvAccess::None) {                         \
+      public:                                                                  \
+        Name() : FixedLenInstruction(PirType::voyd()) {}                       \
+    };
 SIMPLE_INSTRUCTIONS(V, _)
 #undef V
 
@@ -1285,6 +1297,7 @@ class BuiltinCallFactory {
 class VLIE(MkEnv, Effect::None, EnvAccess::Capture) {
   public:
     std::vector<SEXP> varName;
+    bool stub = false;
 
     typedef std::function<void(SEXP name, Value* val)> LocalVarIt;
     typedef std::function<void(SEXP name, InstrArg&)> MutableLocalVarIt;
@@ -1314,6 +1327,7 @@ class VLIE(MkEnv, Effect::None, EnvAccess::Capture) {
 
     void printArgs(std::ostream& out, bool tty) const override;
     void printEnv(std::ostream& out, bool tty) const override final{};
+    const char* name() const override { return stub ? "(MkEnv)" : "MKEnv"; }
 
     size_t nLocals() { return nargs() - 1; }
 };
