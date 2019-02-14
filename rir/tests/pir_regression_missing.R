@@ -1,3 +1,5 @@
+stopifnot <- function(x) x
+
 f <- function(a,b,c) nargs()
 g <- function() {
   f()
@@ -50,8 +52,8 @@ stopifnot(h()==3)
 f <- function(a,b,c) nargs() + a
 g <- function(q) {
   stopifnot(f(q) == 2)
-  print (f(q,2))
   stopifnot(f(q,2) == 3)
+  stopifnot(f(q,2,3) == 4)
   stopifnot(f(q,2,3) == 4)
   f(q,2)
 }

@@ -1804,6 +1804,7 @@ R_bcstack_t evalRirCode(Code* c, Context* ctx, SEXP* env,
             SEXP res = readConst(ctx, readImmediate());
             advanceImmediate();
             R_Visible = TRUE;
+            R_PreserveObject(res);
             ostack_push(ctx, sexp_to_stack_obj(res, true));
             NEXT();
         }
