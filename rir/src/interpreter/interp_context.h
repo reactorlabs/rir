@@ -120,289 +120,30 @@ typedef enum {
     STACK_OBJ_LOGICAL
 } stack_obj_type;
 
-RIR_INLINE R_bcstack_t int_stack_obj(int x) {
-    R_bcstack_t res;
-#ifdef USE_TYPED_STACK
-    res.tag = STACK_OBJ_INT;
-    res.u.ival = x;
-#else
-    res.tag = STACK_OBJ_SEXP;
-    res.u.sxpval = Rf_allocVector(INTSXP, 1);
-    R_PreserveObject(res.u.sxpval);
-    *INTEGER(res.u.sxpval) = x;
-#endif
-    return res;
-}
-
-RIR_INLINE R_bcstack_t real_stack_obj(double x) {
-    R_bcstack_t res;
-#ifdef USE_TYPED_STACK
-    res.tag = STACK_OBJ_REAL;
-    res.u.dval = x;
-#else
-    res.tag = STACK_OBJ_SEXP;
-    res.u.sxpval = Rf_allocVector(REALSXP, 1);
-    R_PreserveObject(res.u.sxpval);
-    *REAL(res.u.sxpval) = x;
-#endif
-    return res;
-}
-
-RIR_INLINE R_bcstack_t logical_stack_obj(int x) {
-    R_bcstack_t res;
-#ifdef USE_TYPED_STACK
-    res.tag = STACK_OBJ_LOGICAL;
-    res.u.ival = x;
-#else
-    res.tag = STACK_OBJ_SEXP;
-    res.u.sxpval = Rf_allocVector(LGLSXP, 1);
-    R_PreserveObject(res.u.sxpval);
-    *LOGICAL(res.u.sxpval) = x;
-#endif
-    return res;
-}
-
-RIR_INLINE R_bcstack_t sexp_to_stack_obj(SEXP x, bool unprotect) {
-    assert(x != NULL);
-#ifdef USE_TYPED_STACK
-    if (x == loopTrampolineMarker || ATTRIB(x) != R_NilValue) {
-        R_bcstack_t res;
-        res.tag = STACK_OBJ_SEXP;
-        res.u.sxpval = x;
-        return res;
-    } else if (IS_SIMPLE_SCALAR(x, INTSXP)) {
-        return int_stack_obj(*INTEGER(x));
-    } else if (IS_SIMPLE_SCALAR(x, REALSXP)) {
-        return real_stack_obj(*REAL(x));
-    } else if (IS_SIMPLE_SCALAR(x, LGLSXP)) {
-        return logical_stack_obj(*INTEGER(x));
-    } else {
-        R_bcstack_t res;
-        res.tag = STACK_OBJ_SEXP;
-        res.u.sxpval = x;
-        return res;
-    }
-#else
-    R_bcstack_t res;
-    res.tag = STACK_OBJ_SEXP;
-    res.u.sxpval = x;
-    return res;
-#endif
-}
-
-RIR_INLINE SEXP stack_obj_to_sexp(R_bcstack_t x) {
-    switch (x.tag) {
-    case STACK_OBJ_INT:
-#ifdef USE_TYPED_STACK
-        SEXP res;
-        res = Rf_allocVector(INTSXP, 1);
-        R_PreserveObject(res);
-        *INTEGER(res) = x.u.ival;
-        return res;
-    case STACK_OBJ_REAL:
-        res = Rf_allocVector(REALSXP, 1);
-        R_PreserveObject(res);
-        *REAL(res) = x.u.dval;
-        return res;
-    case STACK_OBJ_LOGICAL:
-        res = Rf_allocVector(LGLSXP, 1);
-        R_PreserveObject(res);
-        *LOGICAL(res) = x.u.ival;
-        return res;
-#endif
-    case STACK_OBJ_SEXP:
-        return x.u.sxpval;
-    default:
-        assert(false);
-    }
-}
-
+R_bcstack_t int_stack_obj(int x);
+R_bcstack_t real_stack_obj(double x);
+R_bcstack_t logical_stack_obj(int x);
+R_bcstack_t sexp_to_stack_obj(SEXP x, bool unprotect);
+SEXP stack_obj_to_sexp(R_bcstack_t x);
 // Doesn't consider reals integers
-RIR_INLINE bool stack_obj_is_integer(R_bcstack_t x) {
-    switch (x.tag) {
-    case STACK_OBJ_INT:
-        return true;
-    case STACK_OBJ_REAL:
-    case STACK_OBJ_LOGICAL:
-        return false;
-    case STACK_OBJ_SEXP:
-        return IS_SIMPLE_SCALAR(x.u.sxpval, INTSXP);
-    default:
-        assert(false);
-    }
-}
-
+bool stack_obj_is_integer(R_bcstack_t x);
 // Returns NA_INTEGER if not an integer, doesn't consider reals integers
-RIR_INLINE int try_stack_obj_to_integer(R_bcstack_t x) {
-    switch (x.tag) {
-    case STACK_OBJ_INT:
-        return x.u.ival;
-    case STACK_OBJ_REAL:
-    case STACK_OBJ_LOGICAL:
-        return NA_INTEGER;
-    case STACK_OBJ_SEXP:
-        if (IS_SIMPLE_SCALAR(x.u.sxpval, INTSXP)) {
-            return *INTEGER(x.u.sxpval);
-        } else {
-            return NA_INTEGER;
-        }
-    default:
-        assert(false);
-    }
-}
-
+int try_stack_obj_to_integer(R_bcstack_t x);
 // Doesn't consider integers reals
-RIR_INLINE bool stack_obj_is_real(R_bcstack_t x) {
-    switch (x.tag) {
-    case STACK_OBJ_REAL:
-        return true;
-    case STACK_OBJ_INT:
-    case STACK_OBJ_LOGICAL:
-        return false;
-    case STACK_OBJ_SEXP:
-        return IS_SIMPLE_SCALAR(x.u.sxpval, REALSXP);
-    default:
-        assert(false);
-    }
-}
-
+bool stack_obj_is_real(R_bcstack_t x);
 // Returns NA_REAL if not a real, doesn't consider integers reals
-RIR_INLINE double try_stack_obj_to_real(R_bcstack_t x) {
-    switch (x.tag) {
-    case STACK_OBJ_REAL:
-        return x.u.dval;
-    case STACK_OBJ_INT:
-    case STACK_OBJ_LOGICAL:
-        return NA_REAL;
-    case STACK_OBJ_SEXP:
-        if (IS_SIMPLE_SCALAR(x.u.sxpval, REALSXP)) {
-            return *REAL(x.u.sxpval);
-        } else {
-            return NA_REAL;
-        }
-    default:
-        assert(false);
-    }
-}
-
-RIR_INLINE bool stack_obj_is_logical(R_bcstack_t x) {
-    switch (x.tag) {
-    case STACK_OBJ_LOGICAL:
-        return true;
-    case STACK_OBJ_INT:
-    case STACK_OBJ_REAL:
-        return false;
-    case STACK_OBJ_SEXP:
-        return IS_SIMPLE_SCALAR(x.u.sxpval, LGLSXP);
-    default:
-        assert(false);
-    }
-}
-
+double try_stack_obj_to_real(R_bcstack_t x);
+bool stack_obj_is_logical(R_bcstack_t x);
 // Returns NA_LOGICAL if not a logical
-RIR_INLINE int try_stack_obj_to_logical(R_bcstack_t x) {
-    switch (x.tag) {
-    case STACK_OBJ_LOGICAL:
-        return x.u.ival;
-    case STACK_OBJ_INT:
-    case STACK_OBJ_REAL:
-        return NA_LOGICAL;
-    case STACK_OBJ_SEXP:
-        if (IS_SIMPLE_SCALAR(x.u.sxpval, LGLSXP)) {
-            return *LOGICAL(x.u.sxpval);
-        } else {
-            return NA_LOGICAL;
-        }
-    default:
-        assert(false);
-    }
-}
-
+int try_stack_obj_to_logical(R_bcstack_t x);
 // Fails if not a logical or NA
-RIR_INLINE int try_stack_obj_to_logical_na(R_bcstack_t x) {
-    switch (x.tag) {
-    case STACK_OBJ_LOGICAL:
-        return x.u.ival;
-    case STACK_OBJ_SEXP:
-        if (TYPEOF(x.u.sxpval) == LGLSXP) {
-            return XLENGTH(x.u.sxpval) == 0 ? NA_LOGICAL : *LOGICAL(x.u.sxpval);
-        } else {
-            assert(false);
-        }
-    default:
-        assert(false);
-    }
-}
-
+int try_stack_obj_to_logical_na(R_bcstack_t x);
 // Returns regular if int, truncated if real, -1 otherwise
-RIR_INLINE int try_stack_obj_to_idx(R_bcstack_t x) {
-    if (stack_obj_is_integer(x)) {
-        return try_stack_obj_to_integer(x) - 1;
-    } else if (stack_obj_is_real(x)) {
-        return (int)try_stack_obj_to_real(x) - 1;
-    } else {
-        return -1;
-    }
-}
-
-RIR_INLINE SEXPTYPE stack_obj_sexp_type(R_bcstack_t x) {
-    switch (x.tag) {
-    case STACK_OBJ_INT:
-        return INTSXP;
-    case STACK_OBJ_REAL:
-        return REALSXP;
-    case STACK_OBJ_LOGICAL:
-        return LGLSXP;
-    case STACK_OBJ_SEXP:
-        return TYPEOF(x.u.sxpval);
-    default:
-        assert(false);
-    }
-}
-
-RIR_INLINE bool stack_obj_is_vector(R_bcstack_t x) {
-    switch (x.tag) {
-    case STACK_OBJ_INT:
-    case STACK_OBJ_REAL:
-    case STACK_OBJ_LOGICAL:
-        return true;
-    case STACK_OBJ_SEXP:
-        return Rf_isVector(x.u.sxpval);
-    default:
-        assert(false);
-    }
-}
-
-RIR_INLINE R_xlen_t stack_obj_length(R_bcstack_t x) {
-    switch (x.tag) {
-    case STACK_OBJ_INT:
-    case STACK_OBJ_REAL:
-    case STACK_OBJ_LOGICAL:
-        return 1;
-    case STACK_OBJ_SEXP:
-        return XLENGTH(x.u.sxpval);
-    default:
-        assert(false);
-    }
-}
-
-RIR_INLINE bool stack_objs_equal(R_bcstack_t x, R_bcstack_t y) {
-    if (x.tag != y.tag) {
-        return false;
-    }
-
-    switch (x.tag) { // == y.tag
-    case STACK_OBJ_INT:
-    case STACK_OBJ_LOGICAL:
-        return x.u.ival == y.u.ival;
-    case STACK_OBJ_REAL:
-        return x.u.dval == y.u.dval;
-    case STACK_OBJ_SEXP:
-        return x.u.sxpval == y.u.sxpval;
-    default:
-        assert(false);
-    }
-}
+int try_stack_obj_to_idx(R_bcstack_t x);
+SEXPTYPE stack_obj_sexp_type(R_bcstack_t x);
+bool stack_obj_is_vector(R_bcstack_t x);
+R_xlen_t stack_obj_length(R_bcstack_t x);
+bool stack_objs_equal(R_bcstack_t x, R_bcstack_t y);
 
 #define ostack_length(c) (R_BCNodeStackTop - R_BCNodeStackBase)
 

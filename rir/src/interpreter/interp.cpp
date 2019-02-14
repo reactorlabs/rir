@@ -239,7 +239,10 @@ SEXP createLegacyArgsListFromStackValues(const CallContext& call,
 
         SEXP name = call.hasNames() ? call.name(i, ctx) : R_NilValue;
 
+        PROTECT(name);
+        PROTECT(result);
         SEXP arg = stack_obj_to_sexp(call.stackArg(i));
+        UNPROTECT(2);
 
         if (eagerCallee && TYPEOF(arg) == PROMSXP) {
             arg = Rf_eval(arg, call.callerEnv);
@@ -901,8 +904,10 @@ static R_INLINE int R_integer_times(int x, int y, Rboolean* pnaflag) {
             flag = getFlag(prim);                                              \
         }                                                                      \
         SEXP call = getSrcForCall(c, pc - 1, ctx);                             \
+        PROTECT(call);                                                         \
         SEXP argslist = CONS_NR(stack_obj_to_sexp(lhs),                        \
                                 CONS_NR(stack_obj_to_sexp(rhs), R_NilValue));  \
+        UNPROTECT(1);                                                          \
         ostack_push(ctx, sexp_to_stack_obj(argslist, true));                   \
         if (flag < 2)                                                          \
             R_Visible = static_cast<Rboolean>(flag != 1);                      \
@@ -1008,7 +1013,9 @@ static R_INLINE int R_integer_uminus(int x, Rboolean* pnaflag) {
             flag = getFlag(prim);                                              \
         }                                                                      \
         SEXP call = getSrcForCall(c, pc - 1, ctx);                             \
+        PROTECT(call);                                                         \
         SEXP argslist = CONS_NR(stack_obj_to_sexp(val), R_NilValue);           \
+        UNPROTECT(1);                                                          \
         ostack_push(ctx, sexp_to_stack_obj(argslist, true));                   \
         if (flag < 2)                                                          \
             R_Visible = static_cast<Rboolean>(flag != 1);                      \
@@ -1248,13 +1255,17 @@ R_bcstack_t evalRirCode(Code* c, Context* ctx, SEXP* env,
             SEXP arglist = R_NilValue;
             auto names = (Immediate*)pc;
             advanceImmediateN(n);
+            PROTECT(parent.u.sxpval);
             for (long i = n - 1; i >= 0; --i) {
+                PROTECT(arglist);
                 SEXP val = stack_obj_to_sexp(ostack_pop(ctx));
+                UNPROTECT(1);
                 SEXP name = cp_pool_at(ctx, names[i]);
                 arglist = CONS_NR(val, arglist);
                 SET_TAG(arglist, name);
                 SET_MISSING(arglist, val == R_MissingArg ? 2 : 0);
             }
+            UNPROTECT(1);
             SEXP res = Rf_NewEnvironment(R_NilValue, arglist, parent.u.sxpval);
             ostack_push(ctx, sexp_to_stack_obj(res, true));
             NEXT();
@@ -1503,7 +1514,9 @@ R_bcstack_t evalRirCode(Code* c, Context* ctx, SEXP* env,
             SEXP sym = readConst(ctx, readImmediate());
             advanceImmediate();
             SLOWASSERT(TYPEOF(sym) == SYMSXP);
+            PROTECT(sym);
             SEXP val = stack_obj_to_sexp(ostack_pop(ctx));
+            UNPROTECT(1);
             INCREMENT_NAMED(val);
             Rf_setVar(sym, val, ENCLOS(*env));
             NEXT();
@@ -1613,8 +1626,9 @@ R_bcstack_t evalRirCode(Code* c, Context* ctx, SEXP* env,
             advanceImmediate();
             Assumptions given(readImmediate());
             advanceImmediate();
-            CallContext call(c, stack_obj_to_sexp(ostack_at(ctx, n)), n, ast,
-                             ostack_cell_at(ctx, n - 1), *env, given, ctx);
+            SEXP fun = stack_obj_to_sexp(ostack_at(ctx, n));
+            CallContext call(c, fun, n, ast, ostack_cell_at(ctx, n - 1), *env,
+                             given, ctx);
             SEXP res = doCall(call, ctx);
             ostack_popn(ctx, call.passedArgs + 1);
             ostack_push(ctx, sexp_to_stack_obj(res, true));
@@ -1764,7 +1778,9 @@ R_bcstack_t evalRirCode(Code* c, Context* ctx, SEXP* env,
             Immediate id = readImmediate();
             advanceImmediate();
             SEXP prom = Rf_mkPROMISE(c->getPromise(id)->container(), *env);
+            PROTECT(prom);
             SET_PRVALUE(prom, stack_obj_to_sexp(ostack_pop(ctx)));
+            UNPROTECT(1);
             ostack_push(ctx, sexp_to_stack_obj(prom, true));
             NEXT();
         }
@@ -2455,8 +2471,10 @@ R_bcstack_t evalRirCode(Code* c, Context* ctx, SEXP* env,
 
         // ---------
         fallback : {
+            PROTECT(val);
             SEXP args =
                 CONS_NR(val, CONS_NR(stack_obj_to_sexp(idx), R_NilValue));
+            UNPROTECT(1);
             ostack_push(ctx, sexp_to_stack_obj(args, true));
             if (isObject(val)) {
                 SEXP call = getSrcAt(c, pc - 1, ctx);
@@ -2616,7 +2634,9 @@ R_bcstack_t evalRirCode(Code* c, Context* ctx, SEXP* env,
                             INTEGER(vec)[idx_] = val.u.ival;
                             break;
                         case VECSXP:
+                            PROTECT(vec);
                             SET_VECTOR_ELT(vec, idx_, stack_obj_to_sexp(val));
+                            UNPROTECT(1);
                             break;
                         }
                         ostack_popn(ctx, 3);
@@ -2632,11 +2652,13 @@ R_bcstack_t evalRirCode(Code* c, Context* ctx, SEXP* env,
                 ostack_set(ctx, 1, sexp_to_stack_obj(vec, false));
             }
 
+            PROTECT(vec);
             SEXP idx_sexp = stack_obj_to_sexp(idx);
             SEXP val_sexp = stack_obj_to_sexp(val);
             SEXP args =
                 CONS_NR(vec, CONS_NR(idx_sexp, CONS_NR(val_sexp, R_NilValue)));
             SET_TAG(CDDR(args), symbol::value);
+            UNPROTECT(1);
             PROTECT(args);
 
             SEXP res = nullptr;
@@ -2701,7 +2723,9 @@ R_bcstack_t evalRirCode(Code* c, Context* ctx, SEXP* env,
                             INTEGER(mtx)[idx_] = val.u.ival;
                             break;
                         case VECSXP:
+                            PROTECT(mtx);
                             SET_VECTOR_ELT(mtx, idx_, stack_obj_to_sexp(val));
+                            UNPROTECT(1);
                             break;
                         }
                         ostack_popn(ctx, 4);
@@ -2717,12 +2741,14 @@ R_bcstack_t evalRirCode(Code* c, Context* ctx, SEXP* env,
                 ostack_set(ctx, 2, sexp_to_stack_obj(mtx, true));
             }
 
+            PROTECT(mtx);
             SEXP args = CONS_NR(
                 mtx,
                 CONS_NR(stack_obj_to_sexp(idx1),
                         CONS_NR(stack_obj_to_sexp(idx2),
                                 CONS_NR(stack_obj_to_sexp(val), R_NilValue))));
             SET_TAG(CDDDR(args), symbol::value);
+            UNPROTECT(1);
             PROTECT(args);
 
             SEXP res = nullptr;
@@ -2848,10 +2874,12 @@ R_bcstack_t evalRirCode(Code* c, Context* ctx, SEXP* env,
                 SLOWASSERT(from.tag != STACK_OBJ_SEXP ||
                            !isObject(from.u.sxpval));
                 SEXP call = getSrcForCall(c, pc - 1, ctx);
+                PROTECT(call);
                 SEXP argslist = CONS_NR(
                     stack_obj_to_sexp(from),
                     CONS_NR(stack_obj_to_sexp(to),
                             CONS_NR(stack_obj_to_sexp(by), R_NilValue)));
+                UNPROTECT(1);
                 ostack_push(ctx, sexp_to_stack_obj(argslist, true));
                 res = sexp_to_stack_obj(
                     Rf_applyClosure(call, prim, argslist, *env, R_NilValue),
@@ -2921,7 +2949,9 @@ R_bcstack_t evalRirCode(Code* c, Context* ctx, SEXP* env,
         INSTRUCTION(set_names_) {
             SEXP name = stack_obj_to_sexp(ostack_pop(ctx));
             if (!isNull(name)) {
+                PROTECT(name);
                 SEXP val = stack_obj_to_sexp(ostack_pop(ctx));
+                UNPROTECT(1);
                 Rf_setAttrib(val, R_NamesSymbol, name);
                 ostack_push(ctx, sexp_to_stack_obj(val, true));
             }
