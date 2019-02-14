@@ -905,9 +905,11 @@ static R_INLINE int R_integer_times(int x, int y, Rboolean* pnaflag) {
         }                                                                      \
         SEXP call = getSrcForCall(c, pc - 1, ctx);                             \
         PROTECT(call);                                                         \
-        SEXP argslist = CONS_NR(stack_obj_to_sexp(lhs),                        \
-                                CONS_NR(stack_obj_to_sexp(rhs), R_NilValue));  \
-        UNPROTECT(1);                                                          \
+        SEXP lhs_sexp = stack_obj_to_sexp(lhs);                                \
+        PROTECT(lhs_sexp);                                                     \
+        SEXP rhs_sexp = stack_obj_to_sexp(rhs);                                \
+        SEXP argslist = CONS_NR(lhs_sexp, CONS_NR(rhs_sexp, R_NilValue));      \
+        UNPROTECT(2);                                                          \
         ostack_push(ctx, sexp_to_stack_obj(argslist, true));                   \
         if (flag < 2)                                                          \
             R_Visible = static_cast<Rboolean>(flag != 1);                      \
@@ -2655,11 +2657,12 @@ R_bcstack_t evalRirCode(Code* c, Context* ctx, SEXP* env,
 
             PROTECT(vec);
             SEXP idx_sexp = stack_obj_to_sexp(idx);
+            PROTECT(idx_sexp);
             SEXP val_sexp = stack_obj_to_sexp(val);
             SEXP args =
                 CONS_NR(vec, CONS_NR(idx_sexp, CONS_NR(val_sexp, R_NilValue)));
             SET_TAG(CDDR(args), symbol::value);
-            UNPROTECT(1);
+            UNPROTECT(2);
             PROTECT(args);
 
             SEXP res = nullptr;
@@ -2743,13 +2746,17 @@ R_bcstack_t evalRirCode(Code* c, Context* ctx, SEXP* env,
             }
 
             PROTECT(mtx);
+            SEXP idx1_sexp = stack_obj_to_sexp(idx1);
+            PROTECT(idx1_sexp);
+            SEXP idx2_sexp = stack_obj_to_sexp(idx2);
+            PROTECT(idx2_sexp);
+            SEXP val_sexp = stack_obj_to_sexp(val);
             SEXP args = CONS_NR(
                 mtx,
-                CONS_NR(stack_obj_to_sexp(idx1),
-                        CONS_NR(stack_obj_to_sexp(idx2),
-                                CONS_NR(stack_obj_to_sexp(val), R_NilValue))));
+                CONS_NR(idx1_sexp,
+                        CONS_NR(idx2_sexp, CONS_NR(val_sexp, R_NilValue))));
             SET_TAG(CDDDR(args), symbol::value);
-            UNPROTECT(1);
+            UNPROTECT(3);
             PROTECT(args);
 
             SEXP res = nullptr;
@@ -2876,11 +2883,14 @@ R_bcstack_t evalRirCode(Code* c, Context* ctx, SEXP* env,
                            !isObject(from.u.sxpval));
                 SEXP call = getSrcForCall(c, pc - 1, ctx);
                 PROTECT(call);
+                SEXP from_sexp = stack_obj_to_sexp(from);
+                PROTECT(from_sexp);
+                SEXP to_sexp = stack_obj_to_sexp(to);
+                PROTECT(to_sexp);
+                SEXP by_sexp = stack_obj_to_sexp(by);
                 SEXP argslist = CONS_NR(
-                    stack_obj_to_sexp(from),
-                    CONS_NR(stack_obj_to_sexp(to),
-                            CONS_NR(stack_obj_to_sexp(by), R_NilValue)));
-                UNPROTECT(1);
+                    from_sexp, CONS_NR(to_sexp, CONS_NR(by_sexp, R_NilValue)));
+                UNPROTECT(3);
                 ostack_push(ctx, sexp_to_stack_obj(argslist, true));
                 res = sexp_to_stack_obj(
                     Rf_applyClosure(call, prim, argslist, *env, R_NilValue),
