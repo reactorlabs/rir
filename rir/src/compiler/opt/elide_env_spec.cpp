@@ -26,19 +26,6 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
         return answer;
     };
 
-    auto usesAreOnlyForces = [&](Value* environment) {
-        auto onlyForces = true;
-        Visitor::run(function->entry, [&](Instruction* i) {
-            i->eachArg([&](InstrArg& arg) {
-                if (arg.val() == environment && !Force::Cast(i) &&
-                    !FrameState::Cast(i)) {
-                    onlyForces = false;
-                }
-            });
-        });
-        return onlyForces;
-    };
-
     Visitor::run(function->entry, [&](BB* bb) {
         if (bb->isEmpty())
             return;
@@ -82,7 +69,11 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
                     auto force = Force::Cast(*ip);
                     auto environment = MkEnv::Cast(force->env());
                     auto cp = fwdCheckpoints.at(bb);
-                    if (!environment->stub && usesAreOnlyForces(environment)) {
+                    static std::unordered_set<Tag> forces{Tag::Force,
+                                                          Tag::FrameState};
+
+                    if (!environment->stub &&
+                        environment->usesAreOnly(function->entry, forces)) {
                         environment = MkEnv::Cast(force->env());
 
                         if (!stubFor.count(environment)) {
