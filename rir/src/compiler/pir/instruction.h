@@ -521,9 +521,10 @@ extern std::ostream& operator<<(std::ostream& out,
 
 class FLI(LdConst, 0, Effect::None, EnvAccess::None) {
   public:
-    LdConst(SEXP c, PirType t) : FixedLenInstruction(t), c(c) {}
-    explicit LdConst(SEXP c) : FixedLenInstruction(PirType(c)), c(c) {}
-    SEXP c;
+    BC::PoolIdx idx;
+    SEXP c() const;
+    LdConst(SEXP c, PirType t);
+    explicit LdConst(SEXP c);
     void printArgs(std::ostream& out, bool tty) const override;
 };
 

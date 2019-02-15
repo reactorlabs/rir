@@ -957,7 +957,7 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
             switch (instr->tag) {
 
             case Tag::LdConst: {
-                cs << BC::push(LdConst::Cast(instr)->c);
+                cs << BC::push_from_pool(LdConst::Cast(instr)->idx);
                 break;
             }
 

@@ -345,7 +345,6 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
 
         Assumptions given;
         // Make some optimistic assumptions, they might be reset below...
-        given.add(Assumption::EagerArgs_);
         given.add(Assumption::NoExplicitlyMissingArgs);
         {
             size_t i = 0;
@@ -359,8 +358,18 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
                     auto arg = tryCreateArg(promiseCode, insert, eager);
                     if (!arg)
                         return false;
-                    if (MkArg::Cast(arg) && !MkArg::Cast(arg)->isEager())
-                        given.setEager(i, false);
+                    if (auto mk = MkArg::Cast(arg)) {
+                        if (mk->isEager()) {
+                            auto eager = mk->eagerArg();
+                            if (eager == MissingArg::instance())
+                                given.remove(
+                                    Assumption::NoExplicitlyMissingArgs);
+                            if (!eager->type.maybeLazy())
+                                given.setEager(i);
+                            if (!eager->type.maybeObj())
+                                given.setNotObj(i);
+                        }
+                    }
                     args.push_back(arg);
                 }
                 i++;

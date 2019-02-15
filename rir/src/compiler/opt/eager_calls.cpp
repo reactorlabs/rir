@@ -28,45 +28,68 @@ void EagerCalls::apply(RirCompiler& cmp, ClosureVersion* closure,
             ClosureVersion* version = call->tryDispatch();
 
             if (!version ||
-                !version->properties.includes(
-                    ClosureVersion::Property::IsEager) ||
                 call->nCallArgs() != cls->nargs())
                 continue;
 
+            bool allEager =
+                version->properties.includes(ClosureVersion::Property::IsEager);
+            if (!allEager && version->properties.argumentForceOrder.empty())
+                continue;
+
+            auto isEager = [&](size_t i) {
+                if (allEager)
+                    return true;
+                for (auto a : version->properties.argumentForceOrder) {
+                    // We know that a is forced before i, therefore we are not
+                    // in left-to-right order
+                    // TODO: support reordering of the evaluation
+                    if (a > i)
+                        return false;
+                    // We found the argument in the list of certainly forced
+                    // promises
+                    if (a == i)
+                        return true;
+                }
+                return false;
+            };
+
             std::unordered_set<MkArg*> args;
             bool noMissing = true;
+            size_t i = 0;
             call->eachCallArg([&](Value* v) {
                 if (auto mk = MkArg::Cast(v)) {
-                    if (!mk->isEager())
+                    if (!mk->isEager() && isEager(i))
                         args.insert(mk);
                 } else {
                     noMissing = false;
                 }
+                i++;
             });
             if (!noMissing)
                 continue;
             todo.insert(args.begin(), args.end());
 
-            if (version->assumptions().includes(Assumption::EagerArgs_))
-                continue;
-
             Assumptions newAssumptions = call->inferAvailableAssumptions();
-            newAssumptions.add(Assumption::EagerArgs_);
-            for (size_t i = 0; i < call->nCallArgs(); ++i)
-                newAssumptions.setEager(i, true);
+            for (size_t i = 0; i < call->nCallArgs(); ++i) {
+                if (!newAssumptions.isEager(i) && isEager(i))
+                    newAssumptions.setEager(i);
+            }
             // This might fire back, since we don't know if we really have no
             // objects... We should have some profiling. It's still sound, since
             // static_call_ will check the assumptions
-            newAssumptions.add(Assumption::NonObjectArgs_);
             for (size_t i = 0; i < call->nCallArgs(); ++i)
-                newAssumptions.setNotObj(i, true);
+                if (!newAssumptions.notObj(i) && newAssumptions.isEager(i))
+                    newAssumptions.setNotObj(i);
+
             auto newVersion = cls->cloneWithAssumptions(
                 version, newAssumptions, [&](ClosureVersion* newCls) {
                     Visitor::run(newCls->entry, [&](Instruction* i) {
                         if (auto ld = LdArg::Cast(i)) {
-                            ld->type = PirType::promiseWrappedVal()
-                                           .notObject()
-                                           .notMissing();
+                            if (isEager(ld->id)) {
+                                ld->type = PirType::promiseWrappedVal()
+                                               .notObject()
+                                               .notMissing();
+                            }
                         }
                     });
                 });

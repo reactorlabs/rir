@@ -574,28 +574,17 @@ static SEXP findRootPromise(SEXP p) {
     return p;
 }
 
-static constexpr Assumptions::Flags ALL_ASSUMPTIONS =
-    Assumptions::Flags(Assumption::NotTooFewArguments) |
-    Assumption::EagerArgs_ | Assumption::NonObjectArgs_ |
-    Assumption::NoExplicitlyMissingArgs;
 void addDynamicAssumptionsFromContext(CallContext& call) {
     Assumptions& given = call.givenAssumptions;
 
     if (!call.hasNames())
         given.add(Assumption::CorrectOrderOfArguments);
 
-    // Fast track if all the assumptions are already statically there
-    if (given.includes(ALL_ASSUMPTIONS))
-        return;
-
     given.add(Assumption::NoExplicitlyMissingArgs);
     if (call.hasStackArgs()) {
         // Always true in this case, since we will pad missing args on the stack
         // later with R_MissingArg's
         given.add(Assumption::NotTooFewArguments);
-        // Make some optimistic assumptions, they might be reset below...
-        given.add(Assumption::EagerArgs_);
-        given.add(Assumption::NonObjectArgs_);
 
         auto testArg = [&](size_t i) {
             SEXP arg = call.stackArg(i);
@@ -613,8 +602,10 @@ void addDynamicAssumptionsFromContext(CallContext& call) {
             } else if (arg == R_MissingArg) {
                 given.remove(Assumption::NoExplicitlyMissingArgs);
             }
-            given.setEager(i, isEager);
-            given.setNotObj(i, notObj);
+            if (isEager)
+                given.setEager(i);
+            if (notObj)
+                given.setNotObj(i);
         };
 
         for (size_t i = 0; i < call.suppliedArgs; ++i) {
@@ -1245,6 +1236,10 @@ static void cachedSetVar(SEXP val, SEXP env, Immediate idx, Context* ctx,
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wcast-align"
+
+// This happens since enabling -fno-exceptions, but the error message is
+// terrible, can't find out where in the evalRirCode function
+#pragma GCC diagnostic ignored "-Wstrict-overflow"
 
 SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
                  Opcode* initialPC, R_bcstack_t* localsBase = nullptr) {
