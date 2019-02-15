@@ -34,11 +34,11 @@ struct LazyEnvironment
     const SEXP parent() { return parent_; }
     const Opcode* names() { return names_; }
     Context* ctx() { return ctx_; }
-    R_bcstack_t* localsBase() { return localsBase_;}
+    R_bcstack_t* localsBase() { return localsBase_; }
 
     SEXP create() {
-        return createEnvironment(arguments(), parent(), names(), ctx(), localsBase(),
-                                 (SEXP)this);
+        return createEnvironment(arguments(), parent(), names(), ctx(),
+                                 localsBase(), (SEXP)this);
     }
 
   private:
