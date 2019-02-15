@@ -1496,7 +1496,6 @@ R_bcstack_t evalRirCode(Code* c, Context* ctx, SEXP* env,
             Immediate id = readImmediate();
             advanceImmediate();
             SEXP val = stack_obj_to_sexp(ostack_pop(ctx));
-            R_PreserveObject(val);
 
             cachedSetVar(val, *env, id, ctx, bindingCache);
 
@@ -1804,7 +1803,6 @@ R_bcstack_t evalRirCode(Code* c, Context* ctx, SEXP* env,
             SEXP res = readConst(ctx, readImmediate());
             advanceImmediate();
             R_Visible = TRUE;
-            R_PreserveObject(res);
             ostack_push(ctx, sexp_to_stack_obj(res, true));
             NEXT();
         }
@@ -2359,7 +2357,6 @@ R_bcstack_t evalRirCode(Code* c, Context* ctx, SEXP* env,
         INSTRUCTION(extract1_1_) {
             SEXP val = stack_obj_to_sexp(ostack_at(ctx, 1));
             SEXP idx = stack_obj_to_sexp(ostack_at(ctx, 0));
-
             SEXP args = CONS_NR(val, CONS_NR(idx, R_NilValue));
             ostack_push(ctx, sexp_to_stack_obj(args, true));
 
