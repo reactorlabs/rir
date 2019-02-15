@@ -378,40 +378,48 @@ class SSAAllocator {
         typedef std::pair<BB*, BB*> Jmp;
         typedef std::unordered_map<size_t, Instruction*> RegisterFile;
         typedef std::deque<Instruction*> Stack;
-        typedef std::function<void(BB*, RegisterFile&, Stack&)> VerifyBB;
+        typedef std::function<void(BB*, BB*, RegisterFile&, Stack&)> VerifyBB;
         std::set<Jmp> branchTaken;
 
-        VerifyBB verifyBB = [&](BB* bb, RegisterFile& reg, Stack& stack) {
+        VerifyBB verifyBB = [&](BB* pred, BB* bb, RegisterFile& reg,
+                                Stack& stack) {
             for (auto i : *bb) {
-                Phi* phi = Phi::Cast(i);
-                if (phi) {
+                for (auto drop : sa.toDrop[i]) {
+                    for (auto it = stack.begin(); it != stack.end(); ++it) {
+                        if (drop == *it) {
+                            stack.erase(it);
+                            break;
+                        }
+                    }
+                }
+                if (auto phi = Phi::Cast(i)) {
                     SlotNumber slot = allocation.at(phi);
-                    phi->eachArg([&](BB*, Value* arg) {
-                        auto i = Instruction::Cast(arg);
-                        if (!i)
+                    phi->eachArg([&](BB*, Value* a) {
+                        auto ia = Instruction::Cast(a);
+                        if (!ia)
                             return;
-                        if (!allocation.count(i)) {
+                        if (!allocation.count(ia)) {
                             std::cerr << "REG alloc fail: ";
                             phi->printRef(std::cerr);
                             std::cerr << " needs ";
-                            i->printRef(std::cerr);
+                            ia->printRef(std::cerr);
                             std::cerr << " but is not allocated\n";
                             assert(false);
-                        } else if (allocation[i] != slot) {
+                        } else if (allocation[ia] != slot) {
                             std::cerr << "REG alloc fail: ";
                             phi->printRef(std::cerr);
                             std::cerr << " and it's input ";
-                            i->printRef(std::cerr);
+                            ia->printRef(std::cerr);
                             std::cerr << " have different allocations: ";
                             if (allocation[phi] == stackSlot)
                                 std::cerr << "stack";
                             else
                                 std::cerr << allocation[phi];
                             std::cerr << " vs ";
-                            if (allocation[i] == stackSlot)
+                            if (allocation[ia] == stackSlot)
                                 std::cerr << "stack";
                             else
-                                std::cerr << allocation[i];
+                                std::cerr << allocation[ia];
                             std::cerr << "\n";
                             assert(false);
                         }
@@ -423,70 +431,105 @@ class SSAAllocator {
                         std::cerr << " is reading from an unititialized slot\n";
                         assert(false);
                     }
-                    if (slot == stackSlot)
-                        stack.pop_back();
+                    if (slot == stackSlot) {
+                        bool found = false;
+                        for (auto it = stack.begin(); it != stack.end(); ++it) {
+                            phi->eachArg([&](BB* phiInput, Value* phiArg) {
+                                if (phiInput == pred && phiArg == *it) {
+                                    stack.erase(it);
+                                    found = true;
+                                }
+                            });
+                            if (found)
+                                break;
+                        }
+                        if (!found) {
+                            std::cerr << "REG alloc fail: phi ";
+                            phi->printRef(std::cerr);
+                            std::cerr << " input is missing on stack\n";
+                            assert(false);
+                        }
+                    }
                 } else {
                     // Make sure all our args are live
-                    i->eachArgRev([&](Value* a) {
-                        auto i = Instruction::Cast(a);
-                        if (!i)
+                    size_t argNum = 0;
+                    i->eachArg([&](Value* a) {
+                        auto ia = Instruction::Cast(a);
+                        if (!ia) {
+                            argNum++;
                             return;
-                        if (!allocation.count(a)) {
+                        }
+                        if (!allocation.count(ia)) {
                             std::cerr << "REG alloc fail: ";
                             i->printRef(std::cerr);
                             std::cerr << " needs ";
-                            a->printRef(std::cerr);
+                            ia->printRef(std::cerr);
                             std::cerr << " but is not allocated\n";
                             assert(false);
                         } else {
-                            Instruction* given = nullptr;
-                            SlotNumber slot = allocation.at(a);
+                            SlotNumber slot = allocation.at(ia);
                             if (slot == stackSlot) {
-                                given = stack.back();
-                                stack.pop_back();
+                                bool found = false;
+                                for (auto it = stack.begin(); it != stack.end();
+                                     ++it) {
+                                    if (ia == *it) {
+                                        found = true;
+                                        if (lastUse(i, argNum)) {
+                                            stack.erase(it);
+                                        }
+                                        break;
+                                    }
+                                }
+                                if (!found) {
+                                    std::cerr << "REG alloc fail: ";
+                                    i->printRef(std::cerr);
+                                    std::cerr << " needs ";
+                                    ia->printRef(std::cerr);
+                                    std::cerr << " but it's missing on stack\n";
+                                    assert(false);
+                                }
                             } else {
                                 // Make sure the argument slot is initialized
                                 if (reg.count(slot) == 0) {
                                     std::cerr << "REG alloc fail: ";
                                     i->printRef(std::cerr);
                                     std::cerr << " is reading its argument ";
-                                    a->printRef(std::cerr);
+                                    ia->printRef(std::cerr);
                                     std::cerr << "from an unititialized slot\n";
                                     assert(false);
                                 }
-                                given = reg.at(slot);
-                            }
-                            if (given != a) {
-                                std::cerr << "REG alloc fail: ";
-                                i->printRef(std::cerr);
-                                std::cerr << " needs ";
-                                a->printRef(std::cerr);
-                                if (slot == stackSlot) {
-                                    std::cerr << " the stack has ";
-                                } else {
+                                if (reg.at(slot) != ia) {
+                                    std::cerr << "REG alloc fail: ";
+                                    i->printRef(std::cerr);
+                                    std::cerr << " needs ";
+                                    ia->printRef(std::cerr);
                                     std::cerr << " but slot " << slot
                                               << " was overridden by ";
+                                    reg.at(slot)->printRef(std::cerr);
+                                    std::cerr << "\n";
+                                    assert(false);
                                 }
-                                given->printRef(std::cerr);
-                                std::cerr << "\n";
-                                assert(false);
                             }
                         }
+                        argNum++;
                     });
                 }
 
                 // Remember this instruction if it writes to a slot
                 if (allocation.count(i)) {
-                    if (allocation.at(i) == stackSlot)
-                        stack.push_back(i);
-                    else
+                    if (allocation.at(i) == stackSlot) {
+                        if (i->type != PirType::voyd() && !sa.dead.count(i)) {
+                            stack.push_back(i);
+                        }
+                    } else {
                         reg[allocation.at(i)] = i;
+                    }
                 }
             }
 
             if (bb->isExit()) {
                 if (stack.size() != 0) {
-                    std::cerr << "REG alloc fail: BB " << bb->id
+                    std::cerr << "REG alloc fail: BB" << bb->id
                               << " tries to return with " << stack.size()
                               << " elements on the stack\n";
                     assert(false);
@@ -497,26 +540,26 @@ class SSAAllocator {
                 !branchTaken.count(Jmp(bb, bb->trueBranch()))) {
                 branchTaken.insert(Jmp(bb, bb->trueBranch()));
                 if (!bb->falseBranch()) {
-                    verifyBB(bb->trueBranch(), reg, stack);
+                    verifyBB(bb, bb->trueBranch(), reg, stack);
                 } else {
                     // Need to copy here, since we are gonna explore
                     // falseBranch() next
                     RegisterFile regC = reg;
                     Stack stackC = stack;
-                    verifyBB(bb->trueBranch(), regC, stackC);
+                    verifyBB(bb, bb->trueBranch(), regC, stackC);
                 }
             }
             if (bb->falseBranch() &&
                 !branchTaken.count(Jmp(bb, bb->falseBranch()))) {
                 branchTaken.insert(Jmp(bb, bb->falseBranch()));
-                verifyBB(bb->falseBranch(), reg, stack);
+                verifyBB(bb, bb->falseBranch(), reg, stack);
             }
         };
 
         {
             RegisterFile f;
             Stack s;
-            verifyBB(code->entry, f, s);
+            verifyBB(nullptr, code->entry, f, s);
         }
     }
 
@@ -587,27 +630,18 @@ class SSAAllocator {
         assert(false && "Phi wasn't found on the stack.");
     }
 
-    // Check if v is needed after executed
-    bool lastUse(Instruction* executed, Value* v) const {
-        assert(executed);
-        auto stack = stackAfter(executed);
-        for (auto i = stack.data.begin(); i != stack.data.end(); ++i)
-            if (*i == v)
-                return false;
-        return true;
-    }
-
     // Check if v is needed after argument argNumber of instruction executed
     bool lastUse(Instruction* executed, size_t argNumber) const {
         assert(executed);
         assert(argNumber < executed->nargs());
         Value* v = executed->arg(argNumber).val();
-        if (!lastUse(executed, v))
-            return false;
-        for (size_t i = argNumber + 1; i < executed->nargs(); i++) {
+        auto stack = stackAfter(executed);
+        for (auto i = stack.data.begin(); i != stack.data.end(); ++i)
+            if (*i == v)
+                return false;
+        for (size_t i = argNumber + 1; i < executed->nargs(); ++i)
             if (executed->arg(i).val() == v)
                 return false;
-        }
         return true;
     }
 };
@@ -659,9 +693,7 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
 
     SSAAllocator alloc(code, cls, log);
     log.afterAllocator(code, [&](std::ostream& o) { alloc.print(o); });
-
-    // TODO: fix the verifier for the new allocator
-    // alloc.verify();
+    alloc.verify();
 
     auto isJumpThrough = [&](BB* bb) {
         return bb->isEmpty() || (bb->size() == 1 && Nop::Cast(bb->last()) &&
@@ -676,11 +708,6 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
     });
 
     // TODO:
-    // - better analyze which env is set at the end of a bb, so that
-    // we don't have to load it every time at the beginning of a successor bb
-    // - better handle when an env is needed after it's set, eg. if we have
-    // a setenv at the beginning and all instructions only use the one, we don't
-    // need to keep it around (and for eg. scheduled deopt we can emit getenv)
     // - how come mkenv is explicit and ldfunctionenv is not?
     // - how to pick lastInstr at the beginning of a merge block?
 
