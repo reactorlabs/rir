@@ -231,7 +231,8 @@ RIR_INLINE void __listAppend(SEXP* front, SEXP* last, SEXP value, SEXP name) {
 }
 
 SEXP createEnvironment(const std::vector<SEXP>* args, const SEXP parent,
-                       const Opcode* pc, Context* ctx, R_bcstack_t* localsBase, SEXP stub) {
+                       const Opcode* pc, Context* ctx, R_bcstack_t* localsBase,
+                       SEXP stub) {
     SEXP arglist = R_NilValue;
     auto names = (Immediate*)pc;
     for (auto i = 0; i < args->size(); ++i) {
@@ -1351,7 +1352,8 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
             for (long i = 0; i < n; ++i) {
                 args->push_back(ostack_pop(ctx));
             }
-            auto envStub = new LazyEnvironment(args, parent, pc, ctx, localsBase);
+            auto envStub =
+                new LazyEnvironment(args, parent, pc, ctx, localsBase);
             envStubs.push_back(envStub);
             res = (SEXP)envStub;
             ostack_push(ctx, res);
