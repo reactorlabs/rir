@@ -1016,8 +1016,10 @@ static R_INLINE int R_integer_uminus(int x, Rboolean* pnaflag) {
         }                                                                      \
         SEXP call = getSrcForCall(c, pc - 1, ctx);                             \
         PROTECT(call);                                                         \
-        SEXP argslist = CONS_NR(stack_obj_to_sexp(val), R_NilValue);           \
-        UNPROTECT(1);                                                          \
+        SEXP val_sexp = stack_obj_to_sexp(val);                                \
+        PROTECT(val_sexp);                                                     \
+        SEXP argslist = CONS_NR(val_sexp, R_NilValue);                         \
+        UNPROTECT(2);                                                          \
         ostack_push(ctx, sexp_to_stack_obj(argslist, true));                   \
         if (flag < 2)                                                          \
             R_Visible = static_cast<Rboolean>(flag != 1);                      \
@@ -1581,7 +1583,9 @@ R_bcstack_t evalRirCode(Code* c, Context* ctx, SEXP* env,
         INSTRUCTION(record_binop_) {
             ObservedValues* feedback = (ObservedValues*)pc;
             SEXP l = stack_obj_to_sexp(ostack_at(ctx, 1));
+            PROTECT(l);
             SEXP r = stack_obj_to_sexp(ostack_top(ctx));
+            UNPROTECT(1);
             feedback[0].record(l);
             feedback[1].record(r);
             pc += 2 * sizeof(ObservedValues);
@@ -1745,9 +1749,13 @@ R_bcstack_t evalRirCode(Code* c, Context* ctx, SEXP* env,
 
         INSTRUCTION(close_) {
             SEXP srcref = stack_obj_to_sexp(ostack_at(ctx, 0));
+            PROTECT(srcref);
             SEXP body = stack_obj_to_sexp(ostack_at(ctx, 1));
+            PROTECT(body);
             SEXP formals = stack_obj_to_sexp(ostack_at(ctx, 2));
+            PROTECT(formals);
             SEXP res = Rf_allocSExp(CLOSXP);
+            UNPROTECT(3);
             assert(DispatchTable::check(body));
             SET_FORMALS(res, formals);
             SET_BODY(res, body);
@@ -2356,8 +2364,11 @@ R_bcstack_t evalRirCode(Code* c, Context* ctx, SEXP* env,
 
         INSTRUCTION(extract1_1_) {
             SEXP val = stack_obj_to_sexp(ostack_at(ctx, 1));
+            PROTECT(val);
             SEXP idx = stack_obj_to_sexp(ostack_at(ctx, 0));
+            PROTECT(idx);
             SEXP args = CONS_NR(val, CONS_NR(idx, R_NilValue));
+            UNPROTECT(2);
             ostack_push(ctx, sexp_to_stack_obj(args, true));
 
             SEXP res;
@@ -2381,10 +2392,13 @@ R_bcstack_t evalRirCode(Code* c, Context* ctx, SEXP* env,
 
         INSTRUCTION(extract1_2_) {
             SEXP val = stack_obj_to_sexp(ostack_at(ctx, 2));
+            PROTECT(val);
             SEXP idx = stack_obj_to_sexp(ostack_at(ctx, 1));
+            PROTECT(idx);
             SEXP idx2 = stack_obj_to_sexp(ostack_at(ctx, 0));
-
+            PROTECT(idx2);
             SEXP args = CONS_NR(val, CONS_NR(idx, CONS_NR(idx2, R_NilValue)));
+            UNPROTECT(3);
             ostack_push(ctx, sexp_to_stack_obj(args, true));
 
             SEXP res;
@@ -2473,9 +2487,10 @@ R_bcstack_t evalRirCode(Code* c, Context* ctx, SEXP* env,
         // ---------
         fallback : {
             PROTECT(val);
-            SEXP args =
-                CONS_NR(val, CONS_NR(stack_obj_to_sexp(idx), R_NilValue));
-            UNPROTECT(1);
+            SEXP idx_sexp = stack_obj_to_sexp(idx);
+            PROTECT(idx_sexp);
+            SEXP args = CONS_NR(val, CONS_NR(idx_sexp, R_NilValue));
+            UNPROTECT(2);
             ostack_push(ctx, sexp_to_stack_obj(args, true));
             if (isObject(val)) {
                 SEXP call = getSrcAt(c, pc - 1, ctx);
@@ -2499,10 +2514,13 @@ R_bcstack_t evalRirCode(Code* c, Context* ctx, SEXP* env,
         // TODO: Fast case
         INSTRUCTION(extract2_2_) {
             SEXP val = stack_obj_to_sexp(ostack_at(ctx, 2));
+            PROTECT(val);
             SEXP idx = stack_obj_to_sexp(ostack_at(ctx, 1));
+            PROTECT(idx);
             SEXP idx2 = stack_obj_to_sexp(ostack_at(ctx, 0));
-
+            PROTECT(idx2);
             SEXP args = CONS_NR(val, CONS_NR(idx, CONS_NR(idx2, R_NilValue)));
+            UNPROTECT(3);
             ostack_push(ctx, sexp_to_stack_obj(args, true));
 
             SEXP res;
@@ -2526,8 +2544,11 @@ R_bcstack_t evalRirCode(Code* c, Context* ctx, SEXP* env,
 
         INSTRUCTION(subassign1_1_) {
             SEXP idx = stack_obj_to_sexp(ostack_at(ctx, 0));
+            PROTECT(idx);
             SEXP vec = stack_obj_to_sexp(ostack_at(ctx, 1));
+            PROTECT(vec);
             SEXP val = stack_obj_to_sexp(ostack_at(ctx, 2));
+            UNPROTECT(2);
 
             if (MAYBE_SHARED(vec)) {
                 vec = Rf_duplicate(vec);
@@ -2564,9 +2585,13 @@ R_bcstack_t evalRirCode(Code* c, Context* ctx, SEXP* env,
 
         INSTRUCTION(subassign1_2_) {
             SEXP idx2 = stack_obj_to_sexp(ostack_at(ctx, 0));
+            PROTECT(idx2);
             SEXP idx1 = stack_obj_to_sexp(ostack_at(ctx, 1));
+            PROTECT(idx1);
             SEXP mtx = stack_obj_to_sexp(ostack_at(ctx, 2));
+            PROTECT(mtx);
             SEXP val = stack_obj_to_sexp(ostack_at(ctx, 3));
+            UNPROTECT(3);
 
             if (MAYBE_SHARED(mtx)) {
                 mtx = Rf_duplicate(mtx);
@@ -2657,10 +2682,11 @@ R_bcstack_t evalRirCode(Code* c, Context* ctx, SEXP* env,
             SEXP idx_sexp = stack_obj_to_sexp(idx);
             PROTECT(idx_sexp);
             SEXP val_sexp = stack_obj_to_sexp(val);
+            PROTECT(val_sexp);
             SEXP args =
                 CONS_NR(vec, CONS_NR(idx_sexp, CONS_NR(val_sexp, R_NilValue)));
             SET_TAG(CDDR(args), symbol::value);
-            UNPROTECT(2);
+            UNPROTECT(3);
             PROTECT(args);
 
             SEXP res = nullptr;
@@ -2749,12 +2775,13 @@ R_bcstack_t evalRirCode(Code* c, Context* ctx, SEXP* env,
             SEXP idx2_sexp = stack_obj_to_sexp(idx2);
             PROTECT(idx2_sexp);
             SEXP val_sexp = stack_obj_to_sexp(val);
+            PROTECT(val_sexp);
             SEXP args = CONS_NR(
                 mtx,
                 CONS_NR(idx1_sexp,
                         CONS_NR(idx2_sexp, CONS_NR(val_sexp, R_NilValue))));
             SET_TAG(CDDDR(args), symbol::value);
-            UNPROTECT(3);
+            UNPROTECT(4);
             PROTECT(args);
 
             SEXP res = nullptr;
@@ -2886,9 +2913,10 @@ R_bcstack_t evalRirCode(Code* c, Context* ctx, SEXP* env,
                 SEXP to_sexp = stack_obj_to_sexp(to);
                 PROTECT(to_sexp);
                 SEXP by_sexp = stack_obj_to_sexp(by);
+                PROTECT(by_sexp);
                 SEXP argslist = CONS_NR(
                     from_sexp, CONS_NR(to_sexp, CONS_NR(by_sexp, R_NilValue)));
-                UNPROTECT(3);
+                UNPROTECT(4);
                 ostack_push(ctx, sexp_to_stack_obj(argslist, true));
                 res = sexp_to_stack_obj(
                     Rf_applyClosure(call, prim, argslist, *env, R_NilValue),
