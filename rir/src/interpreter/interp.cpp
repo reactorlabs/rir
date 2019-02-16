@@ -230,6 +230,9 @@ RIR_INLINE void __listAppend(SEXP* front, SEXP* last, SEXP value, SEXP name) {
     *last = app;
 }
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wcast-align"
+
 SEXP createEnvironment(const std::vector<SEXP>* args, const SEXP parent,
                        const Opcode* pc, Context* ctx, R_bcstack_t* localsBase,
                        SEXP stub) {
