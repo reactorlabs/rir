@@ -517,7 +517,7 @@ SEXP tryFastBuiltinCall(const CallContext& call, Context* ctx) {
     }
 
     switch (call.callee->u.primsxp.offset) {
-    case 90: { // c
+    case 90: { // "c"
         if (nargs == 0)
             return R_NilValue;
 
@@ -548,11 +548,13 @@ SEXP tryFastBuiltinCall(const CallContext& call, Context* ctx) {
             auto len = XLENGTH(args[i]);
             for (long j = 0; j < len; ++j) {
                 assert(pos < total);
+                // We handle LGL and INT in the same case here. That is fine,
+                // because they are essentially the same type.
+                SLOWASSERT(NA_INTEGER == NA_LOGICAL);
                 if (type == REALSXP) {
                     if (TYPEOF(args[i]) == REALSXP) {
                         REAL(res)[pos++] = REAL(args[i])[j];
                     } else {
-                        SLOWASSERT(NA_INTEGER == NA_LOGICAL);
                         if (INTEGER(args[i])[j] == NA_INTEGER) {
                             REAL(res)[pos++] = NA_REAL;
                         } else {
@@ -567,7 +569,7 @@ SEXP tryFastBuiltinCall(const CallContext& call, Context* ctx) {
         return res;
     }
 
-    case 109: { //"vector"
+    case 109: { // "vector"
         if (nargs != 2)
             return nullptr;
         if (TYPEOF(args[0]) != STRSXP)
@@ -625,6 +627,7 @@ SEXP tryFastBuiltinCall(const CallContext& call, Context* ctx) {
     }
 
     case 412: { // "list"
+        // "lists" at the R level are VECSXP's in the implementation
         auto res = Rf_allocVector(VECSXP, nargs);
         for (size_t i = 0; i < nargs; ++i)
             SET_VECTOR_ELT(res, i, args[i]);
@@ -719,7 +722,7 @@ SEXP tryFastBuiltinCall(const CallContext& call, Context* ctx) {
         return isArray(args[0]) ? R_TrueValue : R_FalseValue;
     }
 
-    case 389: { // "is.atomic" (389) nargs : 1 arg0 : double a 0
+    case 389: { // "is.atomic" (389)
         if (nargs != 1)
             return nullptr;
         switch (TYPEOF(args[0])) {
@@ -739,7 +742,7 @@ SEXP tryFastBuiltinCall(const CallContext& call, Context* ctx) {
         assert(false);
     }
 
-    case 384: { // "is.object" (384) nargs : 1 arg0 : double a 0
+    case 384: { // "is.object" (384)
         if (nargs != 1)
             return nullptr;
         return OBJECT(args[0]) ? R_TrueValue : R_FalseValue;
