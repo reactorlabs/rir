@@ -230,6 +230,8 @@ RIR_INLINE void __listAppend(SEXP* front, SEXP* last, SEXP value, SEXP name) {
     *last = app;
 }
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wcast-align"
 SEXP createEnvironment(const std::vector<SEXP>* args, const SEXP parent,
                        const Opcode* pc, Context* ctx, R_bcstack_t* localsBase,
                        SEXP stub) {
@@ -1344,14 +1346,14 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
         INSTRUCTION(mk_stub_env_) {
             size_t n = readImmediate();
             advanceImmediate();
+            // Do we need to preserve parent and the arg vals?
             SEXP parent = ostack_pop(ctx);
             assert(TYPEOF(parent) == ENVSXP &&
                    "Non-environment used as environment parent.");
             advanceImmediateN(n);
             auto args = new std::vector<SEXP>(n);
-            for (long i = 0; i < n; ++i) {
+            for (long i = 0; i < n; ++i) 
                 args->push_back(ostack_pop(ctx));
-            }
             auto envStub =
                 new LazyEnvironment(args, parent, pc, ctx, localsBase);
             envStubs.push_back(envStub);
