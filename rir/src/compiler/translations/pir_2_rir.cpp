@@ -1,5 +1,6 @@
 #include "pir_2_rir.h"
 #include "../analysis/stack.h"
+#include "../analysis/last_env.h"
 #include "../pir/pir_impl.h"
 #include "../transform/bb.h"
 #include "../util/cfg.h"
@@ -711,6 +712,8 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
     // - how come mkenv is explicit and ldfunctionenv is not?
     // - how to pick lastInstr at the beginning of a merge block?
 
+    LastEnv lastEnv(cls, code, log);
+  
     LoweringVisitor::run(code->entry, [&](BB* bb) {
         if (isJumpThrough(bb))
             return;
@@ -734,8 +737,6 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
         };
 
         cs << bbLabels[bb];
-
-        Value* currentEnv = nullptr;
 
         Instruction* lastInstr =
             alloc.cfg.immediatePredecessors(bb).size()
@@ -925,10 +926,9 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                                 loadEnv(what, argNumber);
                             } else {
                                 auto env = instr->env();
-                                if (currentEnv != env) {
+                                if (!lastEnv.envStillValid(instr)) {
                                     loadEnv(env, argNumber);
                                     buffer.emplace_back(BC::setEnv());
-                                    currentEnv = env;
                                 } else {
                                     if (alloc.hasSlot(env) &&
                                         alloc.onStack(env) &&

@@ -18,6 +18,8 @@ class PirTranslator {
     std::string getName() const { return this->name; }
     virtual ~PirTranslator() {}
 
+    virtual bool isPhaseMarker() const { return false; }
+
   protected:
     std::string name;
 };

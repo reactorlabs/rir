@@ -125,7 +125,7 @@ AbstractResult ScopeAnalysis::apply(ScopeAnalysisState& state,
             auto binding = state.envs.superGet(ss->env(), ss->varName);
             if (!binding.result.isUnknown()) {
                 // Make sure the super env stores are not prematurely removed
-                binding.result.eachSource([&](ValOrig& src) {
+                binding.result.eachSource([&](const ValOrig& src) {
                     state.observedStores.insert(src.origin);
                 });
                 state.envs[superEnv].set(ss->varName, ss->val(), ss, depth);
@@ -318,7 +318,7 @@ AbstractResult ScopeAnalysis::apply(ScopeAnalysisState& state,
                     }
                 }
             } else {
-                load.result.eachSource([&](ValOrig& src) {
+                load.result.eachSource([&](const ValOrig& src) {
                     if (!state.observedStores.count(src.origin)) {
                         state.observedStores.insert(src.origin);
                         effect.update();

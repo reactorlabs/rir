@@ -134,7 +134,7 @@ class BufferedLogStream : public LogStream {
 
 class StreamLogger {
   public:
-    explicit StreamLogger(DebugOptions options) : options(options) {}
+    explicit StreamLogger(const DebugOptions& options) : options(options) {}
     ~StreamLogger();
 
     static uint64_t logId;
