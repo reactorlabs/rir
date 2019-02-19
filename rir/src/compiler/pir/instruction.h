@@ -129,6 +129,7 @@ class Instruction : public Value {
         : Value(t, tag), srcIdx(srcIdx) {}
 
     virtual bool hasEffect() const = 0;
+    virtual bool mightChangeVisibility() const = 0;
     virtual bool hasObservableEffect() const = 0;
     virtual bool mayUseReflection() const = 0;
     virtual bool mayForcePromises() const = 0;
@@ -280,6 +281,9 @@ class InstructionImplementation : public Instruction {
     static constexpr bool mayLeakEnv_ = ENV >= EnvAccess::Leak;
 
     bool hasEffect() const override { return EFFECT > Effect::None; }
+    bool mightChangeVisibility() const override {
+        return EFFECT >= Effect::Visibility;
+    }
     bool hasObservableEffect() const override {
         return EFFECT > Effect::Order && hasEffect();
     }
