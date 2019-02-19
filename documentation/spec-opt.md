@@ -1,6 +1,6 @@
 # Speculative Optimization
 
-Not all RIR code is converted into PIR, only code which is re-used a lot (currently, when a function is called 3 times it gets optimized). This is because, the PIR optimizations themselves take a long time (remember, this is during interpretation) - if an instruction is only run once, it's faster to just run it unoptimized. Furthermore, PIR performs **speculative optimizations**, and it could use the results of previous iterations to formi its assumptions.
+Not all RIR code is converted into PIR, only code which is re-used a lot (currently, when a function is called `PIR_WARMUP` times - defaults to 3 - it gets optimized). This is because, the PIR optimizations themselves take a long time (remember, this is during interpretation) - if an instruction is only run once, it's faster to just run it unoptimized. Furthermore, PIR performs **speculative optimizations**, and it could use the results of previous iterations to formi its assumptions.
 
 The R programming language is very hard to optimize because you can't make even seemingly-obvious assumptions, there are many "edge-cases". For example, in `a + b`, `a` could be a promise that, when read, modifies `b`. Or, in `x <- 5; f(); print(x)`, `f` could change the value of `x`, or even delete it so that `print` gives a "missing value" error, no matter where `f` was originally defined.
 

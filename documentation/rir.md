@@ -8,67 +8,79 @@ R is an "interpreted" language, in that every statement of code is executed imme
 
 ### What RIR bytecode looks like
 
-To roughly see a function's bytecode, run `PIR_DEBUG=PrintPirAfterOpt ./bin/R`, then type `f <- rir.compile(<function>)`, then `pir.compile(f)`. Here's an example:
+To see a function's bytecode, run `./bin/R`, then type `f <- rir.compile(<function>)`, then `rir.disassemble(f)`. Here's an example:
 
-<pre>
-&gt; f &lt;- rir.compile(function() {
-+   x &lt;- 10
-+   y &lt;- 1
-+   while (y &lt; x) {
-+     y &lt;- y * 2
+```text
+> f <- rir.compile(function() {
++   x <- 10
++   y <- 1
++   while (y < x) {
++     y <- y * 2
 +   }
 +   y
 + })
-&gt; pir.compile(f)
+> rir.disassemble(f)
+* closure 0x55c312b5a8b8 (vtable 0x55c312446a38, env 0x55c310d3f4b8)
+= vtable slot <0> (0x55c312446988, invoked 0) =
+# needsEnv
+0:
+      0   guard_fun_  { == 0x55c310d154f0
+     13   guard_fun_  <- == 0x55c310d0a478
+     26   push_  [1] 10
+     31   set_shared_
+     32   dup_
+     33   stvar_  x
+     38   invisible_
+     39   pop_
+     40   guard_fun_  <- == 0x55c310d0a478
+     53   push_  [1] 1
+     58   set_shared_
+     59   dup_
+     60   stvar_  y
+     65   invisible_
+     66   pop_
+     67   guard_fun_  while == 0x55c310d0a910
+1:
+     80   guard_fun_  < == 0x55c310d16ca0
+     93   ldvar_  y
+     98   ldvar_  x
+    103   [ <?> x <?> ]
+    112   ; y < x
+          lt_
+    113   asbool_
+    114   brfalse_  2
+    119   guard_fun_  { == 0x55c310d154f0
+    132   guard_fun_  <- == 0x55c310d0a478
+    145   guard_fun_  * == 0x55c310d171e0
+    158   ldvar_  y
+    163   push_  [1] 2
+    168   [ <?> x <?> ]
+    177   ; y * 2
+          mul_
+    178   set_shared_
+    179   dup_
+    180   stvar_  y
+    185   invisible_
+    186   pop_
+    187   br_  1
+2:
+    192   push_  NULL
+    197   invisible_
+    198   pop_
+    199   ldvar_  y
+    204   ret_
+```
 
-<font color="#295FCC"><b>╞═══════════════════════════════╡  </b></font>Compiling f<font color="#295FCC"><b>  ╞══════════════════════════════╡</b></font>
-
-<font color="#FF8787"><b>┌──────────────────────────────────────────────────────────────────────────────┐</b></font>
-<font color="#FF8787"><b>│ f[0x55d05c948220]                                                            │</b></font>
-<font color="#FF8787"><b>│ Assumptions: CorrOrd, !TMany                                                 │</b></font>
-<font color="#FF8787"><b>│ Properties:  Eager, !Reflection                                              │</b></font>
-<font color="#FF8787"><b>├────── PIR Version After Optimizations</b></font>
-f[0x55d05c948220]
-BB0
-  void            Invisible
-  real$&apos;  %0.1  = LdConst          [1] 1
-  void            Invisible
-  goto BB1
-BB1
-  val?&apos;   %1.0  = Phi              %0.1:BB0, %3.1:BB3
-  val?&apos;   %1.1  = Phi              %0.1:BB0, %3.1:BB3
-  val?&apos;   %1.2  = Phi              %0.1:BB0, %3.1:BB3
-  real$&apos;  %1.3  = LdConst          [1] 10
-  lgl&apos;    %1.4  = Lt               %1.2, %1.3, elided
-  t       %1.5  = AsTest           %1.4
-  void            Branch           %1.5 -&gt; BB3 (if true) | BB2 (if false)
-BB3
-  real$&apos;  %3.0  = LdConst          [1] 2
-  val?&apos;   %3.1  = Mul              %1.0, %3.0, elided
-  void            Invisible
-  goto BB1
-BB2
-  void            Invisible
-  void            Return           %1.1
-
-<font color="#FF8787"><b>│ f[0x55d05c948220]                                                            │</b></font>
-<font color="#FF8787"><b>└──────────────────────────────────────────────────────────────────────────────┘</b></font>
-</pre>
-
-Note that these are actually PIR instructions, not RIR bytecode instructions, so they contain extra information (like `Phi`s). They also contain assumptions and `Invisible` statements, which have little effect, you can just ignore them for now. Here is roughly the same bytecode as above, but simpler, side-by-side with the unparsed code:
+This contains some instructions, like `guard_fun_` and `invisible_`, which you can ignore for now. Here is roughly the same bytecode as above, but simpler, side-by-side with the unparsed code:
 
 ```r
 function() {      |
-                  | BBO:
-  x <- 10         |   ldconst 1 -> %1.2; goto BB1
-                  | BB1:
-  y <- 1          |   ldconst 10 -> %1.3
-  while (y < x) { |   lt %1.2 %1.3 -> %1.5; branch %1.5 BB3 BB2
-                  | BB3:
-    y <- y * 2    |   ldconst 2 -> %3.0; mul %1.2 %3.0 -> %1.2
-  }               |   goto BB1
-                  | BB2:
-  y               |   return %1.2
+  x <- 10         | 0:  push 10; stvar x; pop;
+  y <- 1          |     push 1; stvar y; pop;
+  while (y < x) { | 1:  ldvar y; ldvar x; lt; brfalse 2;
+    y <- y * 2    |     ldvar y; push 2; mul; stvar y; pop;
+  }               |     goto 1
+  y               | 2:  ldvar y; ret
 }                 |
 ```
 
@@ -89,6 +101,8 @@ Here are a few important files and functions:
   - [`compileSpecialCall`](../rir/src/ir/Compiler.cpp#L137): Converts calls to certain, "special" functions (e.g. `+`, `for`) into their own bytecodes. This way we can interpret them faster.
 - [`interp.cpp`](../rir/src/interpreter/interp.cpp): Contains almost the entire RIR interpreter, that's why it's so huge.
   - [`evalRirCode`](../rir/src/interpreter/interp.cpp#L1287): The specific place where each bytecode is interpreted. This is one big loop 1) for simplicity and 2) more importantly, because all of the code here needs to be very fast.
+- [`rir_2_pir` - `Rir2Pir::compileBC`](../rir/src/compiler/translations/rir_2_pir/rir_2_pir.cpp#L173): Converts RIR into PIR.
+- [`pir_2_rir` - `Pir2Rir::compileCodd`](../rir/src/compiler/translations/rir_2_pir/pir_2_rir.cpp#L644): Converts PIR into RIR.
 
 ## What about PIR?
 
