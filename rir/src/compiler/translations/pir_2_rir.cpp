@@ -1213,7 +1213,12 @@ void Pir2Rir::lower(Code* code) {
                 bb->replace(it, newDeopt);
             } else if (auto expect = Assume::Cast(*it)) {
                 auto condition = expect->condition();
-                if (DEOPT_CHAOS && coinFlip()) {
+                auto typetest = TypeTest::Cast(condition);
+                // Deopt of env stubs assume the environment was created ->
+                // random triggering is not valid
+                auto validRandomDeopt =
+                    !typetest || typetest->testFor != TypeTest::EnvironmentStub;
+                if (DEOPT_CHAOS && coinFlip() && validRandomDeopt) {
                     condition = expect->assumeTrue ? (Value*)False::instance()
                                                    : (Value*)True::instance();
                 }
