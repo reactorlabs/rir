@@ -510,7 +510,7 @@ SEXP tryFastBuiltinCall(const CallContext& call, Context* ctx) {
         return nullptr;
 
     for (size_t i = 0; i < call.suppliedArgs; ++i) {
-        auto arg = call.stackArg(i);
+        auto arg = stack_obj_to_sexp(call.stackArg(i));
         if (TYPEOF(arg) == PROMSXP)
             arg = PRVALUE(arg);
         if (arg == R_UnboundValue || arg == R_MissingArg ||
@@ -1535,8 +1535,9 @@ static void cachedSetVar(SEXP val, SEXP env, Immediate idx, Context* ctx,
 // terrible, can't find out where in the evalRirCode function
 #pragma GCC diagnostic ignored "-Wstrict-overflow"
 
-SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
-                 Opcode* initialPC, R_bcstack_t* localsBase = nullptr) {
+R_bcstack_t evalRirCode(Code* c, Context* ctx, SEXP* env,
+                        const CallContext* callCtxt, Opcode* initialPC,
+                        R_bcstack_t* localsBase = nullptr) {
     assert(*env || (callCtxt != nullptr));
 
     extern int R_PPStackTop;
