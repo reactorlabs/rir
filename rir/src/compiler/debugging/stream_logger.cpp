@@ -70,27 +70,41 @@ void LogStream::pirOptimizationsFinished(ClosureVersion* closure) {
     }
 }
 
+static bool shouldLog(ClosureVersion* version, const PirTranslator* pass,
+                      const DebugOptions& options) {
+    auto name = version->name();
+    if (options.includes(DebugFlag::PrintOptimizationPasses) &&
+        !pass->isPhaseMarker()) {
+        auto passName = pass->getName();
+        return std::regex_match(name.begin(), name.end(),
+                                options.functionFilter) &&
+               std::regex_match(passName.begin(), passName.end(),
+                                options.passFilter);
+    }
+    if (options.includes(DebugFlag::PrintOptimizationPhases) &&
+        pass->isPhaseMarker()) {
+        auto name = version->name();
+        return std::regex_match(name.begin(), name.end(),
+                                options.functionFilter);
+    }
+    return false;
+}
+
 void LogStream::pirOptimizationsHeader(ClosureVersion* closure,
                                        const PirTranslator* pass,
                                        size_t passnr) {
-    if (options.includes(DebugFlag::PrintOptimizationPasses)) {
-        if (options.passFilter.empty() ||
-            options.passFilter == pass->getName()) {
-            preparePrint();
-            std::stringstream ss;
-            ss << pass->getName() << ": == " << passnr;
-            section(ss.str());
-        }
+    if (shouldLog(closure, pass, options)) {
+        preparePrint();
+        std::stringstream ss;
+        ss << pass->getName() << ": == " << passnr;
+        section(ss.str());
     }
 }
 
 void LogStream::pirOptimizations(ClosureVersion* closure,
                                  const PirTranslator* pass) {
-    if (options.includes(DebugFlag::PrintOptimizationPasses)) {
-        if (options.passFilter.empty() ||
-            options.passFilter == pass->getName()) {
-            closure->print(out, tty());
-        }
+    if (shouldLog(closure, pass, options)) {
+        closure->print(out, tty());
     }
 }
 

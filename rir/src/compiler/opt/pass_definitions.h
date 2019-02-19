@@ -113,6 +113,16 @@ class PASS(OptimizeAssumptions);
 
 class PASS(EagerCalls);
 
+class PASS(OptimizeVisibility);
+
+class PhaseMarker : public PirTranslator {
+  public:
+    explicit PhaseMarker(const std::string& name) : PirTranslator(name) {}
+    void apply(RirCompiler&, ClosureVersion*, LogStream&) const final override {
+    }
+    bool isPhaseMarker() const final override { return true; }
+};
+
 } // namespace pir
 } // namespace rir
 

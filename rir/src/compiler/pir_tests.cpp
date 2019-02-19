@@ -54,7 +54,7 @@ closuresByName compileRir2Pir(SEXP env, pir::Module* m) {
                                   // pir::DebugFlag::PrintEarlyRir |
                                   // pir::DebugFlag::PrintOptimizationPasses |
                                   pir::DebugFlag::PrintFinalPir,
-                              ""});
+                              std::regex(".*"), std::regex(".*")});
     pir::Rir2PirCompiler cmp(m, logger);
 
     // Compile every function in the environment
@@ -215,6 +215,8 @@ bool canRemoveEnvironmentIfTypeFeedback(const std::string& input) {
     bool t = verify(&m);
     m.eachPirClosureVersion(
         [&t](pir::ClosureVersion* f) { t = t && envOfAddElided(f); });
+    if (!t)
+        m.print(std::cout, true);
     return t;
 }
 

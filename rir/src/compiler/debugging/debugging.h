@@ -3,6 +3,8 @@
 
 #include "utils/EnumSet.h"
 
+#include <regex>
+
 namespace rir {
 namespace pir {
 
@@ -12,6 +14,7 @@ namespace pir {
 #define LIST_OF_PIR_PRINT_DEBUGGING_FLAGS(V)                                   \
     V(PrintEarlyRir)                                                           \
     V(PrintEarlyPir)                                                           \
+    V(PrintOptimizationPhases)                                                 \
     V(PrintOptimizationPasses)                                                 \
     V(PrintPirAfterOpt)                                                        \
     V(PrintCSSA)                                                               \
@@ -38,10 +41,11 @@ enum class DebugFlag {
 struct DebugOptions {
     typedef EnumSet<DebugFlag, int> DebugFlags;
     DebugFlags flags;
-    const std::string passFilter = "";
+    const std::regex passFilter;
+    const std::regex functionFilter;
 
     DebugOptions operator|(const DebugFlags& f) const {
-        return {flags | f, passFilter};
+        return {flags | f, passFilter, functionFilter};
     }
     bool includes(const DebugFlags& otherFlags) const {
         return flags.includes(otherFlags);
@@ -50,9 +54,10 @@ struct DebugOptions {
         return flags.intersects(otherFlags);
     }
 
-    DebugOptions(unsigned long long flags) : flags(flags) {}
-    DebugOptions(const DebugFlags& flags, const std::string& filter)
-        : flags(flags), passFilter(filter) {}
+    explicit DebugOptions(unsigned long long flags) : flags(flags) {}
+    DebugOptions(const DebugFlags& flags, const std::regex& filter,
+                 const std::regex& functionFilter)
+        : flags(flags), passFilter(filter), functionFilter(functionFilter) {}
     DebugOptions() {}
 };
 

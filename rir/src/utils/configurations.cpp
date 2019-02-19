@@ -39,24 +39,32 @@ void Configurations::parseINIFile() {
 }
 
 void Configurations::defaultOptimizations() {
+    auto phasemarker = [&](const std::string& name) {
+        optimizations.push_back(new pir::PhaseMarker(name));
+    };
     auto addDefaultOpt = [&]() {
+        optimizations.push_back(new pir::OptimizeVisibility());
         optimizations.push_back(new pir::ForceDominance());
-        optimizations.push_back(new pir::EagerCalls());
         optimizations.push_back(new pir::ScopeResolution());
+        optimizations.push_back(new pir::EagerCalls());
         optimizations.push_back(new pir::Constantfold());
         optimizations.push_back(new pir::Cleanup());
+        optimizations.push_back(new pir::OptimizeAssumptions());
         optimizations.push_back(new pir::DelayInstr());
         optimizations.push_back(new pir::ElideEnv());
         optimizations.push_back(new pir::DelayEnv());
-        optimizations.push_back(new pir::OptimizeAssumptions());
         optimizations.push_back(new pir::Cleanup());
         optimizations.push_back(new pir::Inline());
         optimizations.push_back(new pir::Cleanup());
     };
 
+    phasemarker("Initial");
+
     // ==== Phase 1) Run the default passes a couple of times
-    for (size_t i = 0; i < 2; ++i)
+    for (size_t i = 0; i < 3; ++i)
         addDefaultOpt();
+
+    phasemarker("Phase 1");
 
     // ==== Phase 2) Speculate away environments
     //
@@ -64,6 +72,8 @@ void Configurations::defaultOptimizations() {
     // statically in Phase 1
     optimizations.push_back(new pir::ElideEnvSpec());
     addDefaultOpt();
+
+    phasemarker("Phase 2: Env speculation");
 
     // ==== Phase 3) Remove checkpoints we did not use
     //
@@ -75,7 +85,7 @@ void Configurations::defaultOptimizations() {
     optimizations.push_back(new pir::CleanupCheckpoints());
     addDefaultOpt();
 
-    // ==== Phase 4) Remove Framestates we did not use
+    // ==== Phase 3.1) Remove Framestates we did not use
     //
     // Framestates can be used by call instructions. This pass removes this
     // dependency and the framestates will subsequently be cleaned.
@@ -84,13 +94,17 @@ void Configurations::defaultOptimizations() {
     optimizations.push_back(new pir::CleanupFramestate());
     optimizations.push_back(new pir::CleanupCheckpoints());
 
-    // ==== Phase 5) Final round of default opts
+    phasemarker("Phase 3: Cleanup Checkpoints");
+
+    // ==== Phase 4) Final round of default opts
     for (size_t i = 0; i < 2; ++i)
         addDefaultOpt();
 
     // Our backend really does not like unused checkpoints, so be sure to remove
     // all of them here already.
     optimizations.push_back(new pir::CleanupCheckpoints());
+
+    phasemarker("Phase 4: finished");
 }
 
 } // namespace rir
