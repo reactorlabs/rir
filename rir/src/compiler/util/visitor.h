@@ -305,8 +305,7 @@ class VisitorImplementation {
 
   private:
     static bool coinFlip() {
-        static std::random_device rd;
-        static std::mt19937 gen(rd());
+        static std::mt19937 gen(42);
         static std::bernoulli_distribution coin(0.5);
         return coin(gen);
     };
