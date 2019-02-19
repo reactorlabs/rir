@@ -4,6 +4,8 @@
 
 #include <iomanip>
 
+namespace rir {
+
 SEXP envSymbol;
 SEXP callSymbol;
 SEXP execName;
@@ -41,4 +43,5 @@ void initializeRuntime() {
 }
 
 Context* globalContext() { return globalContext_; }
-rir::Configurations* pirConfigurations() { return configurations; }
+Configurations* pirConfigurations() { return configurations; }
+}

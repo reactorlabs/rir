@@ -12,8 +12,8 @@
 
   If the given closure is RIR function, returns its Function object, otherwise returns nullptr.
  */
-typedef rir::Function Function;
-typedef rir::DispatchTable DispatchTable;
+
+namespace rir {
 
 bool isValidClosureSEXP(SEXP closure);
 
@@ -26,6 +26,7 @@ void initializeRuntime();
   shared - it is not that we add stuff to them often.
  */
 Context* globalContext();
-rir::Configurations* pirConfigurations();
+Configurations* pirConfigurations();
+}
 
 #endif

@@ -6,12 +6,12 @@
 #include <cstdint>
 #include <functional>
 
+namespace rir {
+
 struct CallContext;
 struct Context;
 SEXP createLegacyArgsListFromStackValues(const CallContext& call,
                                          bool eagerCallee, Context* ctx);
-
-namespace rir {
 
 typedef std::function<SEXP(void*)> LazyFunction;
 

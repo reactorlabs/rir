@@ -22,13 +22,7 @@ extern SEXP Rf_NewEnvironment(SEXP, SEXP, SEXP);
 extern Rboolean R_Visible;
 }
 
-// #define UNSOUND_OPTS
-
-// #define DEBUG_DISPATCH
-
-// helpers
-
-using namespace rir;
+namespace rir {
 
 struct CallContext {
     CallContext(Code* c, SEXP callee, size_t nargs, SEXP ast,
@@ -1337,11 +1331,6 @@ static double myfloor(double x1, double x2) {
     return floor(q) + floor(tmp / x2);
 }
 
-typedef struct {
-    int ibeta, it, irnd, ngrd, machep, negep, iexp, minexp, maxexp;
-    double eps, epsneg, xmin, xmax;
-} AccuracyInfo;
-LibExtern AccuracyInfo R_AccuracyInfo;
 static double myfmod(double x1, double x2) {
     if (x2 == 0.0)
         return R_NaN;
@@ -1574,8 +1563,6 @@ static void cachedSetVar(SEXP val, SEXP env, Immediate idx, Context* ctx,
 SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
                  Opcode* initialPC, R_bcstack_t* localsBase = nullptr) {
     assert(*env || (callCtxt != nullptr));
-
-    extern int R_PPStackTop;
 
 #ifdef THREADED_CODE
     static void* opAddr[static_cast<uint8_t>(Opcode::num_of)] = {
@@ -3525,4 +3512,5 @@ SEXP rirEval_f(SEXP what, SEXP env) {
     }
 
     assert(false && "Expected a code object or a dispatch table");
+}
 }

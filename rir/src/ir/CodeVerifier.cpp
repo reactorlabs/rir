@@ -231,7 +231,7 @@ void CodeVerifier::calculateAndVerifyStack(Code* code) {
     code->stackLength = max.ostack;
 }
 
-void CodeVerifier::verifyFunctionLayout(SEXP sexp, ::Context* ctx) {
+void CodeVerifier::verifyFunctionLayout(SEXP sexp, Context* ctx) {
     assert(TYPEOF(sexp) == EXTERNALSXP and "Invalid SEXPTYPE");
     Function* f = Function::unpack(sexp);
 
