@@ -238,7 +238,7 @@ SEXP createEnvironment(const std::vector<SEXP>* args, const SEXP parent,
                        SEXP stub) {
     SEXP arglist = R_NilValue;
     auto names = (Immediate*)pc;
-    for (auto i = 0; i < args->size(); ++i) {
+    for (size_t i = 0; i < args->size(); ++i) {
         SEXP val = args->at(i);
         SEXP name = cp_pool_at(ctx, names[i]);
         arglist = CONS_NR(val, arglist);
@@ -1353,7 +1353,7 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
                    "Non-environment used as environment parent.");
             advanceImmediateN(n);
             auto args = new std::vector<SEXP>(n);
-            for (long i = 0; i < n; ++i) 
+            for (size_t i = 0; i < n; ++i) 
                 args->push_back(ostack_pop(ctx));
             auto envStub =
                 new LazyEnvironment(args, parent, pc, ctx, localsBase);
