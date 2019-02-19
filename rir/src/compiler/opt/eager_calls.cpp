@@ -36,9 +36,18 @@ void EagerCalls::apply(RirCompiler& cmp, ClosureVersion* closure,
         ip++;
         Instruction* given = ldfun;
 
-        // Function c overwritten by non-function c happens too often. The more
-        // conservative ldvar is not a good fit here.
-        if (ldfun->varName != symbol::c) {
+        // We use ldvar instead of ldfun for the guard. The reason is that ldfun
+        // can force promises, which is a pain for our optimizer to deal with.
+        // Note that ldvar is conservative. If we find a non-function binding
+        // with the same name, we will deopt unneccessarily. In the case of `c`
+        // this is guaranteed to cause problems, since many variables are called
+        // "c". Therefore we keep the ldfun in this case, unless we already know
+        // that the function "c" comes from the global env.
+        // TODO: Implement this with a dependency on the binding cell instead of
+        // an eager check.
+        auto funEnv = Env::Cast(ldfun->env());
+        if (ldfun->varName != symbol::c ||
+            (funEnv && funEnv->rho == R_GlobalEnv)) {
             given = new LdVar(ldfun->varName, ldfun->env());
             ip = bb->insert(ip, given);
             ip++;

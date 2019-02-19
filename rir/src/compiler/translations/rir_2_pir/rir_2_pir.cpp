@@ -328,8 +328,10 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
 
         auto ldfun = LdFun::Cast(callee);
         if (inPromise()) {
-            if (ldfun)
-                ldfun->hint = monomorphic;
+            if (ldfun) {
+                ldfun->hint =
+                    monomorphic ? monomorphic : symbol::ambiguousCallTarget;
+            }
             monomorphicBuiltin = monomorphicClosure = false;
             monomorphic = nullptr;
         }
@@ -339,8 +341,16 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         if (monomorphicBuiltin || monomorphicClosure) {
             Value* expected = insert(new LdConst(monomorphic));
             Value* given = callee;
-            // This change here potentially allows the delay_instr pass
-            // to move the ldfun into the deopt branch
+            // We use ldvar instead of ldfun for the guard. The reason is that
+            // ldfun can force promises, which is a pain for our optimizer to
+            // deal with. If we use a ldvar here, the actual ldfun will be
+            // delayed into the deopt branch. Note that ldvar is conservative.
+            // If we find a non-function binding with the same name, we will
+            // deopt unneccessarily. In the case of `c` this is guaranteed to
+            // cause problems, since many variables are called "c". Therefore we
+            // keep the ldfun in this case.
+            // TODO: Implement this with a dependency on the binding cell
+            // instead of an eager check.
             if (ldfun && ldfun->varName != symbol::c)
                 given = insert(new LdVar(ldfun->varName, ldfun->env()));
             Value* t = insert(new Identical(given, expected));
