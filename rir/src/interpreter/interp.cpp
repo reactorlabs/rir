@@ -1,10 +1,13 @@
 #include "interp.h"
+#include "ArgsLazyData.h"
 #include "R/Funtab.h"
 #include "R/RList.h"
 #include "R/Symbols.h"
 #include "R/r.h"
 #include "compiler/translations/rir_2_pir/rir_2_pir_compiler.h"
+#include "interp_builtins.h"
 #include "interp_context.h"
+#include "interp_data.h"
 #include "ir/Deoptimization.h"
 #include "ir/RuntimeFeedback_inl.h"
 #include "runtime.h"
@@ -24,94 +27,14 @@ extern Rboolean R_Visible;
 
 namespace rir {
 
-struct CallContext {
-    CallContext(Code* c, SEXP callee, size_t nargs, SEXP ast,
-                R_bcstack_t* stackArgs, Immediate* implicitArgs,
-                Immediate* names, SEXP callerEnv,
-                const Assumptions& givenAssumptions, Context* ctx)
-        : caller(c), suppliedArgs(nargs), passedArgs(nargs),
-          stackArgs(stackArgs), implicitArgs(implicitArgs), names(names),
-          callerEnv(callerEnv), ast(ast), callee(callee),
-          givenAssumptions(givenAssumptions) {
-        assert(callee &&
-               (TYPEOF(callee) == CLOSXP || TYPEOF(callee) == SPECIALSXP ||
-                TYPEOF(callee) == BUILTINSXP));
-    }
-
-    CallContext(Code* c, SEXP callee, size_t nargs, Immediate ast,
-                Immediate* implicitArgs, Immediate* names, SEXP callerEnv,
-                const Assumptions& givenAssumptions, Context* ctx)
-        : CallContext(c, callee, nargs, cp_pool_at(ctx, ast), nullptr,
-                      implicitArgs, names, callerEnv, givenAssumptions, ctx) {}
-
-    CallContext(Code* c, SEXP callee, size_t nargs, Immediate ast,
-                R_bcstack_t* stackArgs, Immediate* names, SEXP callerEnv,
-                const Assumptions& givenAssumptions, Context* ctx)
-        : CallContext(c, callee, nargs, cp_pool_at(ctx, ast), stackArgs,
-                      nullptr, names, callerEnv, givenAssumptions, ctx) {}
-
-    CallContext(Code* c, SEXP callee, size_t nargs, Immediate ast,
-                Immediate* implicitArgs, SEXP callerEnv,
-                const Assumptions& givenAssumptions, Context* ctx)
-        : CallContext(c, callee, nargs, cp_pool_at(ctx, ast), nullptr,
-                      implicitArgs, nullptr, callerEnv, givenAssumptions, ctx) {
-    }
-
-    CallContext(Code* c, SEXP callee, size_t nargs, Immediate ast,
-                R_bcstack_t* stackArgs, SEXP callerEnv,
-                const Assumptions& givenAssumptions, Context* ctx)
-        : CallContext(c, callee, nargs, cp_pool_at(ctx, ast), stackArgs,
-                      nullptr, nullptr, callerEnv, givenAssumptions, ctx) {}
-
-    const Code* caller;
-    const size_t suppliedArgs;
-    size_t passedArgs;
-    const R_bcstack_t* stackArgs;
-    const Immediate* implicitArgs;
-    const Immediate* names;
-    const SEXP callerEnv;
-    const SEXP ast;
-    const SEXP callee;
-    Assumptions givenAssumptions;
-    SEXP arglist = nullptr;
-
-    bool hasStackArgs() const { return stackArgs != nullptr; }
-    bool hasEagerCallee() const { return TYPEOF(callee) == BUILTINSXP; }
-    bool hasNames() const { return names; }
-
-    Immediate implicitArgIdx(unsigned i) const {
-        assert(implicitArgs && i < passedArgs);
-        return implicitArgs[i];
-    }
-
-    bool missingArg(unsigned i) const {
-        return implicitArgIdx(i) == MISSING_ARG_IDX;
-    }
-
-    Code* implicitArg(unsigned i) const {
-        assert(caller);
-        return caller->getPromise(implicitArgIdx(i));
-    }
-
-    SEXP stackArg(unsigned i) const {
-        assert(stackArgs && i < passedArgs);
-        return ostack_at_cell(stackArgs + i);
-    }
-
-    SEXP name(unsigned i, Context* ctx) const {
-        assert(hasNames() && i < suppliedArgs);
-        return cp_pool_at(ctx, names[i]);
-    }
-};
-
-RIR_INLINE SEXP getSrcAt(Code* c, Opcode* pc, Context* ctx) {
+static RIR_INLINE SEXP getSrcAt(Code* c, Opcode* pc, Context* ctx) {
     unsigned sidx = c->getSrcIdxAt(pc, true);
     if (sidx == 0)
         return src_pool_at(ctx, c->src);
     return src_pool_at(ctx, sidx);
 }
 
-RIR_INLINE SEXP getSrcForCall(Code* c, Opcode* pc, Context* ctx) {
+static RIR_INLINE SEXP getSrcForCall(Code* c, Opcode* pc, Context* ctx) {
     unsigned sidx = c->getSrcIdxAt(pc, false);
     return src_pool_at(ctx, sidx);
 }
@@ -164,17 +87,17 @@ void initClosureContext(SEXP ast, RCNTXT* cntxt, SEXP rho, SEXP sysparent,
         Rf_begincontext(cntxt, CTXT_RETURN, ast, rho, sysparent, arglist, op);
 }
 
-void endClosureContext(RCNTXT* cntxt, SEXP result) {
+static void endClosureContext(RCNTXT* cntxt, SEXP result) {
     cntxt->returnValue = result;
     Rf_endcontext(cntxt);
 }
 
-RIR_INLINE SEXP createPromise(Code* code, SEXP env) {
+static RIR_INLINE SEXP createPromise(Code* code, SEXP env) {
     SEXP p = Rf_mkPROMISE(code->container(), env);
     return p;
 }
 
-RIR_INLINE SEXP promiseValue(SEXP promise, Context* ctx) {
+static RIR_INLINE SEXP promiseValue(SEXP promise, Context* ctx) {
     // if already evaluated, return the value
     if (PRVALUE(promise) && PRVALUE(promise) != R_UnboundValue) {
         promise = PRVALUE(promise);
@@ -195,18 +118,20 @@ static void jit(SEXP cls, SEXP name, Context* ctx) {
     SET_BODY(cls, BODY(cmp));
 }
 
-void closureDebug(SEXP call, SEXP op, SEXP rho, SEXP newrho, RCNTXT* cntxt) {
+static void closureDebug(SEXP call, SEXP op, SEXP rho, SEXP newrho,
+                         RCNTXT* cntxt) {
     // TODO!!!
 }
 
-void endClosureDebug(SEXP call, SEXP op, SEXP rho) {
+static void endClosureDebug(SEXP call, SEXP op, SEXP rho) {
     // TODO!!!
 }
 
 /** Given argument code offsets, creates the argslist from their promises.
  */
 // TODO unnamed only at this point
-RIR_INLINE void __listAppend(SEXP* front, SEXP* last, SEXP value, SEXP name) {
+static RIR_INLINE void __listAppend(SEXP* front, SEXP* last, SEXP value,
+                                    SEXP name) {
     SLOWASSERT(TYPEOF(*front) == LISTSXP || TYPEOF(*front) == NILSXP);
     SLOWASSERT(TYPEOF(*last) == LISTSXP || TYPEOF(*last) == NILSXP);
 
@@ -247,8 +172,8 @@ SEXP createLegacyArgsListFromStackValues(const CallContext& call,
     return result;
 }
 
-SEXP createLegacyArgsList(const CallContext& call, bool eagerCallee,
-                          Context* ctx) {
+static SEXP createLegacyArgsList(const CallContext& call, bool eagerCallee,
+                                 Context* ctx) {
     SEXP result = R_NilValue;
     SEXP pos = result;
 
@@ -309,8 +234,8 @@ SEXP argsLazyCreation(void* rirDataWrapper) {
     return argsLazy->createArgsLists();
 }
 
-RIR_INLINE SEXP createLegacyLazyArgsList(const CallContext& call,
-                                         Context* ctx) {
+static RIR_INLINE SEXP createLegacyLazyArgsList(const CallContext& call,
+                                                Context* ctx) {
     if (call.hasStackArgs()) {
         return createLegacyArgsListFromStackValues(call, false, ctx);
     } else {
@@ -318,7 +243,8 @@ RIR_INLINE SEXP createLegacyLazyArgsList(const CallContext& call,
     }
 }
 
-RIR_INLINE SEXP createLegacyArgsList(const CallContext& call, Context* ctx) {
+static RIR_INLINE SEXP createLegacyArgsList(const CallContext& call,
+                                            Context* ctx) {
     if (call.hasStackArgs()) {
         return createLegacyArgsListFromStackValues(call, call.hasEagerCallee(),
                                                    ctx);
@@ -344,9 +270,10 @@ static SEXP rirCallTrampoline_(RCNTXT& cntxt, const CallContext& call,
     return evalRirCode(code, ctx, env, &call);
 }
 
-RIR_INLINE SEXP rirCallTrampoline(const CallContext& call, Function* fun,
-                                  SEXP env, SEXP arglist,
-                                  const R_bcstack_t* stackArgs, Context* ctx) {
+static RIR_INLINE SEXP rirCallTrampoline(const CallContext& call, Function* fun,
+                                         SEXP env, SEXP arglist,
+                                         const R_bcstack_t* stackArgs,
+                                         Context* ctx) {
     RCNTXT cntxt;
 
     // This code needs to be protected, because its slot in the dispatch table
@@ -379,14 +306,14 @@ RIR_INLINE SEXP rirCallTrampoline(const CallContext& call, Function* fun,
     return result;
 }
 
-RIR_INLINE SEXP rirCallTrampoline(const CallContext& call, Function* fun,
-                                  SEXP arglist, Context* ctx) {
+static RIR_INLINE SEXP rirCallTrampoline(const CallContext& call, Function* fun,
+                                         SEXP arglist, Context* ctx) {
     return rirCallTrampoline(call, fun, R_NilValue, arglist, call.stackArgs,
                              ctx);
 }
 
-RIR_INLINE SEXP rirCallTrampoline(const CallContext& call, Function* fun,
-                                  SEXP env, SEXP arglist, Context* ctx) {
+static RIR_INLINE SEXP rirCallTrampoline(const CallContext& call, Function* fun,
+                                         SEXP env, SEXP arglist, Context* ctx) {
     return rirCallTrampoline(call, fun, env, arglist, nullptr, ctx);
 }
 
@@ -417,31 +344,8 @@ static void loopTrampoline(Code* c, Context* ctx, SEXP* env,
     Rf_endcontext(&cntxt);
 }
 
-void warnSpecial(SEXP callee, SEXP call) {
-    return;
-
-    // Enable this to find specials which are not implemented in RIR bytecodes
-#if 0
-    static bool isWarning = false;
-
-    if (!isWarning) {
-        isWarning = true;
-        Rf_PrintValue(call);
-        isWarning = false;
-    }
-
-    return;
-    if (((sexprec_rjit*)callee)->u.i == 26) {
-        Rprintf("warning: calling special: .Internal(%s\n",
-                CHAR(PRINTNAME(CAR(CADR(call)))));
-    } else {
-        Rprintf("warning: calling special: %s\n",
-                R_FunTab[((sexprec_rjit*)callee)->u.i].name);
-    }
-#endif
-}
-
-RIR_INLINE SEXP legacySpecialCall(const CallContext& call, Context* ctx) {
+static RIR_INLINE SEXP legacySpecialCall(const CallContext& call,
+                                         Context* ctx) {
     assert(call.ast != R_NilValue);
 
     // get the ccode
@@ -455,8 +359,8 @@ RIR_INLINE SEXP legacySpecialCall(const CallContext& call, Context* ctx) {
     return result;
 }
 
-RIR_INLINE SEXP legacyCallWithArgslist(const CallContext& call, SEXP argslist,
-                                       Context* ctx) {
+static RIR_INLINE SEXP legacyCallWithArgslist(const CallContext& call,
+                                              SEXP argslist, Context* ctx) {
     if (TYPEOF(call.callee) == BUILTINSXP) {
         // get the ccode
         CCODE f = getBuiltin(call.callee);
@@ -476,7 +380,7 @@ RIR_INLINE SEXP legacyCallWithArgslist(const CallContext& call, SEXP argslist,
                            R_NilValue);
 }
 
-RIR_INLINE SEXP legacyCall(const CallContext& call, Context* ctx) {
+static RIR_INLINE SEXP legacyCall(const CallContext& call, Context* ctx) {
     // create the argslist
     SEXP argslist = createLegacyArgsList(call, ctx);
     PROTECT(argslist);
@@ -485,269 +389,8 @@ RIR_INLINE SEXP legacyCall(const CallContext& call, Context* ctx) {
     return res;
 }
 
-SEXP tryFastSpecialCall(const CallContext& call, Context* ctx) {
-    SLOWASSERT(call.hasStackArgs() && !call.hasNames());
-    return nullptr;
-}
-
-SEXP tryFastBuiltinCall(const CallContext& call, Context* ctx) {
-    SLOWASSERT(call.hasStackArgs() && !call.hasNames());
-
-    static constexpr size_t MAXARGS = 32;
-    std::array<SEXP, MAXARGS> args;
-    auto nargs = call.suppliedArgs;
-
-    if (nargs > MAXARGS)
-        return nullptr;
-
-    for (size_t i = 0; i < call.suppliedArgs; ++i) {
-        auto arg = call.stackArg(i);
-        if (TYPEOF(arg) == PROMSXP)
-            arg = PRVALUE(arg);
-        if (arg == R_UnboundValue || arg == R_MissingArg ||
-            ATTRIB(arg) != R_NilValue)
-            return nullptr;
-        args[i] = arg;
-    }
-
-    switch (call.callee->u.primsxp.offset) {
-    case 90: { // "c"
-        if (nargs == 0)
-            return R_NilValue;
-
-        auto type = TYPEOF(args[0]);
-        if (type != REALSXP && type != LGLSXP && type != INTSXP)
-            return nullptr;
-        long total = XLENGTH(args[0]);
-        for (size_t i = 1; i < nargs; ++i) {
-            auto thistype = TYPEOF(args[i]);
-            if (thistype != REALSXP && thistype != LGLSXP && thistype != INTSXP)
-                return nullptr;
-
-            if (thistype == INTSXP && type == LGLSXP)
-                type = INTSXP;
-
-            if (thistype == REALSXP && type != REALSXP)
-                type = REALSXP;
-
-            total += XLENGTH(args[i]);
-        }
-
-        if (total == 0)
-            return nullptr;
-
-        long pos = 0;
-        auto res = Rf_allocVector(type, total);
-        for (size_t i = 0; i < nargs; ++i) {
-            auto len = XLENGTH(args[i]);
-            for (long j = 0; j < len; ++j) {
-                assert(pos < total);
-                // We handle LGL and INT in the same case here. That is fine,
-                // because they are essentially the same type.
-                SLOWASSERT(NA_INTEGER == NA_LOGICAL);
-                if (type == REALSXP) {
-                    if (TYPEOF(args[i]) == REALSXP) {
-                        REAL(res)[pos++] = REAL(args[i])[j];
-                    } else {
-                        if (INTEGER(args[i])[j] == NA_INTEGER) {
-                            REAL(res)[pos++] = NA_REAL;
-                        } else {
-                            REAL(res)[pos++] = INTEGER(args[i])[j];
-                        }
-                    }
-                } else {
-                    INTEGER(res)[pos++] = INTEGER(args[i])[j];
-                }
-            }
-        }
-        return res;
-    }
-
-    case 109: { // "vector"
-        if (nargs != 2)
-            return nullptr;
-        if (TYPEOF(args[0]) != STRSXP)
-            return nullptr;
-        if (XLENGTH(args[0]) != 1)
-            return nullptr;
-        size_t length = -1;
-        if (IS_SIMPLE_SCALAR(args[1], INTSXP)) {
-            if (INTEGER(args[1])[0] == NA_INTEGER)
-                return nullptr;
-            length = INTEGER(args[1])[0];
-        } else if (IS_SIMPLE_SCALAR(args[1], REALSXP)) {
-            if (REAL(args[1])[0] == NA_REAL)
-                return nullptr;
-            length = REAL(args[1])[0];
-        } else {
-            return nullptr;
-        }
-        int type = str2type(CHAR(args[0]));
-
-        switch (type) {
-        case LGLSXP:
-        case INTSXP: {
-            auto res = allocVector(type, length);
-            Memzero(INTEGER(res), length);
-            return res;
-        }
-        case CPLXSXP: {
-            auto res = allocVector(type, length);
-            Memzero(COMPLEX(res), length);
-            return res;
-        }
-        case RAWSXP: {
-            auto res = allocVector(type, length);
-            Memzero(RAW(res), length);
-            return res;
-        }
-        case REALSXP: {
-            auto res = allocVector(type, length);
-            Memzero(REAL(res), length);
-            return res;
-        }
-        case STRSXP:
-        case EXPRSXP:
-        case VECSXP:
-            return allocVector(type, length);
-        case LISTSXP:
-            if (length > INT_MAX)
-                return nullptr;
-            return allocList((int)length);
-        default:
-            return nullptr;
-        }
-        assert(false);
-    }
-
-    case 412: { // "list"
-        // "lists" at the R level are VECSXP's in the implementation
-        auto res = Rf_allocVector(VECSXP, nargs);
-        for (size_t i = 0; i < nargs; ++i)
-            SET_VECTOR_ELT(res, i, args[i]);
-        return res;
-    }
-
-    case 399: { // "is.vector"
-        if (nargs != 1)
-            return nullptr;
-
-        auto arg = args[0];
-        if (XLENGTH(arg) != 1)
-            return nullptr;
-        return TYPEOF(arg) == VECSXP ? R_TrueValue : R_FalseValue;
-    }
-
-    case 395: { // "is.na"
-        if (nargs != 1)
-            return nullptr;
-
-        auto arg = args[0];
-        if (XLENGTH(arg) != 1)
-            return nullptr;
-
-        switch (TYPEOF(arg)) {
-        case INTSXP:
-            return INTEGER(arg)[0] == NA_INTEGER ? R_TrueValue : R_FalseValue;
-        case LGLSXP:
-            return LOGICAL(arg)[0] == NA_LOGICAL ? R_TrueValue : R_FalseValue;
-        case REALSXP:
-            return ISNAN(REAL(arg)[0]) ? R_TrueValue : R_FalseValue;
-        default:
-            return nullptr;
-        }
-        assert(false);
-    }
-
-    case 393: { // "is.function"
-        if (nargs != 1)
-            return nullptr;
-        return isFunction(args[0]) ? R_TrueValue : R_FalseValue;
-    }
-
-    case 507: { // "islistfactor"
-        if (nargs != 2)
-            return nullptr;
-        auto n = XLENGTH(args[0]);
-        if (n == 0 || !isVectorList(args[0]))
-            return R_FalseValue;
-        int recursive = asLogical(args[1]);
-        if (recursive)
-            return nullptr;
-
-        for (int i = 0; i < n; i++)
-            if (!isFactor(VECTOR_ELT(args[0], i)))
-                return R_FalseValue;
-
-        return R_TrueValue;
-    }
-
-    case 88: { // "length"
-        if (nargs != 1)
-            return nullptr;
-
-        switch (TYPEOF(args[0])) {
-        case INTSXP:
-        case REALSXP:
-        case LGLSXP:
-            return Rf_ScalarInteger(XLENGTH(args[0]));
-        default:
-            return nullptr;
-        }
-        assert(false);
-    }
-
-    case 386: { // "is.numeric"
-        if (nargs != 1)
-            return nullptr;
-        return isNumeric(args[0]) && !isLogical(args[0]) ? R_TrueValue
-                                                         : R_FalseValue;
-    }
-
-    case 387: { // "is.matrix"
-        if (nargs != 1)
-            return nullptr;
-        return isMatrix(args[0]) ? R_TrueValue : R_FalseValue;
-    }
-
-    case 388: { // "is.array"
-        if (nargs != 1)
-            return nullptr;
-        return isArray(args[0]) ? R_TrueValue : R_FalseValue;
-    }
-
-    case 389: { // "is.atomic" (389)
-        if (nargs != 1)
-            return nullptr;
-        switch (TYPEOF(args[0])) {
-        case NILSXP:
-            /* NULL is atomic (S compatibly), but not in isVectorAtomic(.) */
-        case CHARSXP:
-        case LGLSXP:
-        case INTSXP:
-        case REALSXP:
-        case CPLXSXP:
-        case STRSXP:
-        case RAWSXP:
-            return R_TrueValue;
-        default:
-            return R_FalseValue;
-        }
-        assert(false);
-    }
-
-    case 384: { // "is.object" (384)
-        if (nargs != 1)
-            return nullptr;
-        return OBJECT(args[0]) ? R_TrueValue : R_FalseValue;
-    }
-    }
-
-    return nullptr;
-}
-
-SEXP closureArgumentAdaptor(const CallContext& call, SEXP arglist,
-                            SEXP suppliedvars) {
+static SEXP closureArgumentAdaptor(const CallContext& call, SEXP arglist,
+                                   SEXP suppliedvars) {
     SEXP op = call.callee;
     if (FORMALS(op) == R_NilValue && arglist == R_NilValue)
         return Rf_NewEnvironment(R_NilValue, R_NilValue, CLOENV(op));
@@ -829,7 +472,7 @@ static SEXP findRootPromise(SEXP p) {
     return p;
 }
 
-void addDynamicAssumptionsFromContext(CallContext& call) {
+static void addDynamicAssumptionsFromContext(CallContext& call) {
     Assumptions& given = call.givenAssumptions;
 
     if (!call.hasNames())
@@ -874,7 +517,7 @@ void addDynamicAssumptionsFromContext(CallContext& call) {
     }
 }
 
-RIR_INLINE Assumptions addDynamicAssumptionsForOneTarget(
+static RIR_INLINE Assumptions addDynamicAssumptionsForOneTarget(
     const CallContext& call, const FunctionSignature& signature) {
     Assumptions given = call.givenAssumptions;
 
@@ -893,8 +536,8 @@ RIR_INLINE Assumptions addDynamicAssumptionsForOneTarget(
     return given;
 }
 
-RIR_INLINE bool matches(const CallContext& call,
-                        const FunctionSignature& signature) {
+static RIR_INLINE bool matches(const CallContext& call,
+                               const FunctionSignature& signature) {
     // TODO: look at the arguments of the function signature and not just at the
     // global assumptions list. This only becomes relevant as soon as we want to
     // optimize based on argument types.
@@ -932,7 +575,8 @@ RIR_INLINE bool matches(const CallContext& call,
 // Watch out: this changes call.nargs! To clean up after the call, you need to
 // pop call.nargs number of arguments (which now might be more than the number
 // of actually supplied arguments).
-RIR_INLINE void supplyMissingArgs(CallContext& call, const Function* fun) {
+static RIR_INLINE void supplyMissingArgs(CallContext& call,
+                                         const Function* fun) {
     auto signature = fun->signature();
     assert(call.hasStackArgs());
     if (signature.expectedNargs() > call.suppliedArgs) {
@@ -943,7 +587,7 @@ RIR_INLINE void supplyMissingArgs(CallContext& call, const Function* fun) {
     }
 }
 
-Function* dispatch(const CallContext& call, DispatchTable* vt) {
+static Function* dispatch(const CallContext& call, DispatchTable* vt) {
     // Find the most specific version of the function that can be called given
     // the current call context.
     Function* fun = nullptr;
@@ -1085,7 +729,7 @@ class SlowcaseCounter {
 SlowcaseCounter SLOWCASE_COUNTER;
 #endif
 
-RIR_INLINE SEXP builtinCall(CallContext& call, Context* ctx) {
+static RIR_INLINE SEXP builtinCall(CallContext& call, Context* ctx) {
     if (call.hasStackArgs() && !call.hasNames()) {
         SEXP res = tryFastBuiltinCall(call, ctx);
         if (res)
@@ -1097,7 +741,7 @@ RIR_INLINE SEXP builtinCall(CallContext& call, Context* ctx) {
     return legacyCall(call, ctx);
 }
 
-RIR_INLINE SEXP specialCall(CallContext& call, Context* ctx) {
+static RIR_INLINE SEXP specialCall(CallContext& call, Context* ctx) {
     if (call.hasStackArgs() && !call.hasNames()) {
         SEXP res = tryFastSpecialCall(call, ctx);
         if (res)
@@ -1109,7 +753,7 @@ RIR_INLINE SEXP specialCall(CallContext& call, Context* ctx) {
     return legacySpecialCall(call, ctx);
 }
 
-SEXP doCall(CallContext& call, Context* ctx) {
+static SEXP doCall(CallContext& call, Context* ctx) {
     assert(call.callee);
 
     switch (TYPEOF(call.callee)) {
@@ -1128,8 +772,8 @@ SEXP doCall(CallContext& call, Context* ctx) {
     return R_NilValue;
 }
 
-SEXP dispatchApply(SEXP ast, SEXP obj, SEXP actuals, SEXP selector,
-                   SEXP callerEnv, Context* ctx) {
+static SEXP dispatchApply(SEXP ast, SEXP obj, SEXP actuals, SEXP selector,
+                          SEXP callerEnv, Context* ctx) {
     SEXP op = SYMVALUE(selector);
 
     // ===============================================
@@ -1469,32 +1113,15 @@ static SEXP seq_int(int n1, int n2) {
 
 extern SEXP Rf_deparse1(SEXP call, Rboolean abbrev, int opts);
 
-void debug(Code* c, Opcode* pc, const char* name, unsigned depth,
-           Context* ctx) {
-    return;
-    // Enable this to trace the execution of every BC
-#if 0
-    if (debugging == 0) {
-        debugging = 1;
-        printf("%p : %d, %s, s: %u\n", c, (int)*pc, name, depth);
-        for (unsigned i = 0; i < depth; ++i) {
-            printf("%3u: ", i);
-            Rf_PrintValue(ostack_at(ctx, i));
-        }
-        printf("\n");
-        debugging = 0;
-    }
-#endif
-}
-
 #define BINDING_CACHE_SIZE 5
 typedef struct {
     SEXP loc;
     Immediate idx;
 } BindingCache;
 
-RIR_INLINE SEXP cachedGetBindingCell(SEXP env, Immediate idx, Context* ctx,
-                                     BindingCache* bindingCache) {
+static RIR_INLINE SEXP cachedGetBindingCell(SEXP env, Immediate idx,
+                                            Context* ctx,
+                                            BindingCache* bindingCache) {
     if (env == R_BaseEnv || env == R_BaseNamespace)
         return NULL;
 

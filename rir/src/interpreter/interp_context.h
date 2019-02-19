@@ -2,7 +2,6 @@
 #define interpreter_context_h
 
 #include "R/r.h"
-#include "interp_data.h"
 #include "ir/BC_inc.h"
 #include "runtime/Assumptions.h"
 

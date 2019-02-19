@@ -1,21 +1,19 @@
 #ifndef RIR_ARGS_LAZY_H
 #define RIR_ARGS_LAZY_H
 
-#include "RirDataWrapper.h"
+#include "interp_context.h"
+#include "interp_data.h"
+#include "runtime/RirDataWrapper.h"
+
 #include <cassert>
 #include <cstdint>
 #include <functional>
 
 namespace rir {
 
-struct CallContext;
-struct Context;
-SEXP createLegacyArgsListFromStackValues(const CallContext& call,
-                                         bool eagerCallee, Context* ctx);
-
 typedef std::function<SEXP(void*)> LazyFunction;
 
-#define LAZY_ARGS_MAGIC 0x1a27a000
+static constexpr size_t LAZY_ARGS_MAGIC = 0x1a27a000;
 
 /**
  * ArgsLazyCreation holds the information needed to recreate the
