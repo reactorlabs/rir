@@ -215,6 +215,8 @@ bool canRemoveEnvironmentIfTypeFeedback(const std::string& input) {
     bool t = verify(&m);
     m.eachPirClosureVersion(
         [&t](pir::ClosureVersion* f) { t = t && envOfAddElided(f); });
+    if (!t)
+        m.print(std::cout, true);
     return t;
 }
 

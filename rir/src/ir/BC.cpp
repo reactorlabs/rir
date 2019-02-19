@@ -207,8 +207,10 @@ void BC::print(std::ostream& out) const {
         BC::NumArgs nargs = args.nargs;
         auto target = Pool::get(args.targetClosure);
         auto targetV = Pool::get(args.versionHint);
-        out << nargs << " : (" << Function::unpack(targetV) << ") "
-            << dumpSexp(target).c_str();
+        out << nargs << " : ";
+        if (targetV != R_NilValue)
+            out << "(" << Function::unpack(targetV) << ") ";
+        out << dumpSexp(target).c_str();
         break;
     }
     case Opcode::mk_env_: {

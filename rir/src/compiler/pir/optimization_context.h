@@ -9,7 +9,7 @@ namespace rir {
 namespace pir {
 
 struct OptimizationContext {
-    OptimizationContext(const Assumptions& assumptions)
+    explicit OptimizationContext(const Assumptions& assumptions)
         : assumptions(assumptions) {}
 
     Assumptions assumptions;

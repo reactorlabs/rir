@@ -44,14 +44,14 @@ void Configurations::defaultOptimizations() {
     };
     auto addDefaultOpt = [&]() {
         optimizations.push_back(new pir::ForceDominance());
-        optimizations.push_back(new pir::EagerCalls());
         optimizations.push_back(new pir::ScopeResolution());
+        optimizations.push_back(new pir::EagerCalls());
         optimizations.push_back(new pir::Constantfold());
         optimizations.push_back(new pir::Cleanup());
+        optimizations.push_back(new pir::OptimizeAssumptions());
         optimizations.push_back(new pir::DelayInstr());
         optimizations.push_back(new pir::ElideEnv());
         optimizations.push_back(new pir::DelayEnv());
-        optimizations.push_back(new pir::OptimizeAssumptions());
         optimizations.push_back(new pir::Cleanup());
         optimizations.push_back(new pir::Inline());
         optimizations.push_back(new pir::Cleanup());
@@ -60,7 +60,7 @@ void Configurations::defaultOptimizations() {
     phasemarker("Initial");
 
     // ==== Phase 1) Run the default passes a couple of times
-    for (size_t i = 0; i < 2; ++i)
+    for (size_t i = 0; i < 3; ++i)
         addDefaultOpt();
 
     phasemarker("Phase 1");

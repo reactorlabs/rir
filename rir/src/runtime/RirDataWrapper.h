@@ -37,7 +37,7 @@ struct RirDataWrapper {
     }
 
   protected:
-    RirDataWrapper(uint32_t count) : info{MAGIC} {
+    explicit RirDataWrapper(uint32_t count) : info{MAGIC} {
         uint8_t* start = (uint8_t*)this + sizeof(uint32_t);
         memset(start, 0, count * sizeof(void*));
     }

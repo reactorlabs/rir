@@ -10,11 +10,6 @@ namespace pir {
 
 bool SafeBuiltinsList::always(int builtin) {
     static int safeBuiltins[] = {
-        findBuiltin("vector"),
-        findBuiltin("vector"),
-        findBuiltin("complex"),
-        findBuiltin("matrix"),
-        findBuiltin("array"),
         findBuiltin("diag"),
         findBuiltin("backsolve"),
         findBuiltin("max.col"),
@@ -78,6 +73,14 @@ bool SafeBuiltinsList::nonObject(int builtin) {
         return true;
 
     static int safeBuiltins[] = {
+        // Those are not always safe, due to coerceVector, which can be
+        // overwritten by objects
+        findBuiltin("vector"),
+        findBuiltin("complex"),
+        findBuiltin("matrix"),
+        findBuiltin("array"),
+        findBuiltin("new.env"),
+
         findBuiltin("c"),
         findBuiltin("["),
         findBuiltin("[["),

@@ -266,6 +266,9 @@ void LdFun::printArgs(std::ostream& out, bool tty) const {
         guessedBinding()->printRef(out);
         out << ">, ";
     }
+    if (hint) {
+        out << "<" << hint << ">, ";
+    }
 }
 
 void LdArg::printArgs(std::ostream& out, bool tty) const { out << id; }
@@ -344,7 +347,21 @@ CallBuiltin::CallBuiltin(Value* env, SEXP builtin,
 Instruction* BuiltinCallFactory::New(Value* callerEnv, SEXP builtin,
                                      const std::vector<Value*>& args,
                                      unsigned srcIdx) {
-    if (SafeBuiltinsList::always(builtin))
+    bool noObj = true;
+    for (auto a : args) {
+        if (auto mk = MkArg::Cast(a)) {
+            if (mk->isEager()) {
+                if (mk->eagerArg()->type.maybeObj())
+                    noObj = false;
+                continue;
+            }
+        }
+        if (a->type.maybeObj())
+            noObj = false;
+    }
+
+    if (SafeBuiltinsList::always(builtin) ||
+        (noObj && SafeBuiltinsList::nonObject(builtin)))
         return new CallSafeBuiltin(builtin, args, srcIdx);
     else
         return new CallBuiltin(callerEnv, builtin, args, srcIdx);

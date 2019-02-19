@@ -1,3 +1,4 @@
+#include "../analysis/available_checkpoints.h"
 #include "../pir/pir_impl.h"
 #include "../transform/bb.h"
 #include "../util/cfg.h"
@@ -11,39 +12,11 @@ namespace rir {
 namespace pir {
 
 void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
-                         LogStream&) const {
-    // Elide environments of binary operators in which both operators are
-    // primitive values
-    std::unordered_map<BB*, Checkpoint*> checkpoints;
+                         LogStream& log) const {
 
-    auto insertExpect = [&](BB* src, Value* condition, Value* operand,
-                            Checkpoint* cp, BB::Instrs::iterator position) {
-        assert(checkpoints[src]);
-        position = src->insert(position, (new Assume(condition, cp))->Not());
-        position++;
-        return position;
-    };
-    auto insertExpectNotObj = [&](BB* src, Value* operand, Checkpoint* cp,
-                                  BB::Instrs::iterator position) {
-        auto condition = new IsObject(operand);
-        position = src->insert(position, condition);
-        position++;
-        return insertExpect(src, condition, operand, cp, position);
-    };
+    AvailableCheckpoints checkpoint(function, log);
 
     Visitor::run(function->entry, [&](BB* bb) {
-        if (bb->isEmpty())
-            return;
-        if (auto cp = Checkpoint::Cast(bb->last()))
-            checkpoints.emplace(bb->trueBranch(), cp);
-    });
-
-    Visitor::run(function->entry, [&](BB* bb) {
-        if (!checkpoints.count(bb))
-            return;
-
-        auto cp = checkpoints.at(bb);
-
         auto ip = bb->begin();
         while (ip != bb->end()) {
             Instruction* i = *ip;
@@ -60,20 +33,24 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
                 });
 
                 if (!objectExpected) {
-                    i->elideEnv();
-                    i->eachArg([&](Value* arg) {
-                        if (arg != i->env())
-                            if (arg->type.maybeObj())
-                                ip = insertExpectNotObj(bb, arg, cp, ip);
-                    });
-                    next = ip + 1;
-                    i->type.setNotObject();
+                    if (auto cp = checkpoint.at(i)) {
+                        i->elideEnv();
+                        i->eachArg([&](Value* arg) {
+                            if (arg != i->env())
+                                if (arg->type.maybeObj()) {
+                                    auto condition = new IsObject(arg);
+                                    ip = bb->insert(ip, condition);
+                                    ip++;
+                                    ip = bb->insert(
+                                        ip, (new Assume(condition, cp))->Not());
+                                    ip++;
+                                }
+                        });
+                        next = ip + 1;
+                        i->type.setNotObject();
+                    }
                 }
             }
-
-            // Effect between assume and checkpoint is not allowed
-            if (i->changesEnv() || i->hasEffect())
-                break;
 
             ip = next;
         }
