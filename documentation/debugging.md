@@ -1,45 +1,81 @@
 ## Debugging PIR
-PIR comes with a wide variety of options to analyze the output of the compiler in very different
-stages of the compilation. Currently, to manage the different options we use environment 
-variables. For instance: `PIR_ENABLE=force PIR_DEBUG=PrintPirAfterOpt bin/R -f yourScript.r`
-will run your script, compile each function actually called with PIR and output the result
-of the PIR IR just after PIR performed all its optimization passes.
 
-### Environment Variables
+PIR comes with a variety of options to analyze the output of the compiler in different
+stages. To manage the different options we use environment variables. For instance
 
-* PIR_ENABLE: Default value is `on`.
-    * `on`: 
-    * `off`: 
-    * `force`: Usually PIR is triggered after a function becomes hot, i.e., it was called more than 
-               n times. `force` makes PIR to trigger in each function's first activation.
+    PIR_ENABLE=off bin/R -f yourScript.r
 
-* PIR_DEBUG: By default PIR does not print any kind of debugging output. 
-    * PrintEarlyRir:
-    * PrintEarlyPir:
-    * PrintOptimizationPasses:
-    * PrintPirAfterOpt:
-    * PrintCSSA:
-    * PrintAllocator:
-    * PrintFinalPir:
-    * PrintFinalRir: 
+completely disables the PIR optimizer. As follows are the different Options available.
 
-FILTER?
+### Debug flags
 
-### Printing Annotation Semantics
+#### Controlling compilation
+
+    PIR_ENABLE=
+        on                default, automatically optimize after a number of invocations
+        off               disable pir
+        force             optimize every function after compiling to rir
+        force_dryrun      as above, but throw away the result
+
+    PIR_WARMUP=
+        number:            after how many invocations a function is (re-) optimized
+
+#### Debug output options
+
+    PIR_DEBUG=                     (only most important flags listed)
+        help                       list all available flags
+        PrintIntoStdout            print without buffering (useful for crashes during compilation)
+        PrintEarlyRir              print after initial rir2pir translation
+        PrintOptimizationPhases    print before/after every phase of the compiler
+        PrintOptimizationPasses    print after every pass
+        PrintPirAfterOpt           print the fully optimized pir
+        PrintFinalPir              print pir after lowering and CSSA conversion
+        PrintFinalRir              print rir produced by pir backend
+
+    PIR_DEBUG_PASS_FILTER=
+        regex      only show passes matching regex (might need .*)
+
+    PIR_DEBUG_FUNCTION_FILTER=
+        regex      only show functions matching regex
+                   (might need .*, sometimes names are missing)
+
+    PIR_MEASURE_COMPILER=
+        1          print overal time spend in different passes on shutdown
+
+#### Extended debug flags
+
+    PIR_DEOPT_CHAOS=
+        1          randomly trigger some percent of deopts
+
+    PIR_DEBUG_DEOPTS=
+        1          show failing assumption when a deopt happens
+
+#### Optimization heuristics
+
+    PIR_INLINER_INITIAL_FUEL=
+        n          how many inlinings per inline pass
+
+    PIR_INLINER_MAX_INLINEE_SIZE=
+        n          max instruction count for inlinees
+
+    PIR_INLINER_MAX_SIZE=
+        n          max instruction count for callers
+
+### Disassembly annotations
 
 #### Assumptions
-* EA: Function/Closure has eager arguments
-* EAn: Argument n IsEager
-* NO: Function/Closure has non-object arguments
-* NOn: Argument n is not an object
-* NTA: Function/Closure does not have more than 3 args
-* NMA: All arguments are supplied
-* COA: Arguments are supplied in the correct order
 
-#### Types Annotations
-*$: Is scalar
-*^: May be lazy
-*~: May be wrapped in a promise
-*?: May be missing
-*': May be an object
-    
+* `!ExpMi`: Called with no explicitly missing arguments
+* `!TMany`: Called with at most the number of required args
+* `!TFew` : Called with at least the number of required args
+* `EagerN`: Argument `N` is already evaluated
+* `!ObjN` : Argument `N` is not an object
+* `CooOrd`: Arguments are passed in the correct order (ie. callee reorders)
+
+#### Types Annotations (aka type flags)
+
+* `$` : Is scalar
+* `^` : May be lazy (and wrapped in a promise)
+* `~` : May be wrapped in a promise (but evaluated)
+* `?` : May be missing
+* `'` : May not be an object
