@@ -1,13 +1,14 @@
-#include "interp_builtins.h"
+#include "builtins.h"
+#include "interp.h"
 
 namespace rir {
 
-SEXP tryFastSpecialCall(const CallContext& call, Context* ctx) {
+SEXP tryFastSpecialCall(const CallContext& call, InterpreterInstance* ctx) {
     SLOWASSERT(call.hasStackArgs() && !call.hasNames());
     return nullptr;
 }
 
-SEXP tryFastBuiltinCall(const CallContext& call, Context* ctx) {
+SEXP tryFastBuiltinCall(const CallContext& call, InterpreterInstance* ctx) {
     SLOWASSERT(call.hasStackArgs() && !call.hasNames());
 
     static constexpr size_t MAXARGS = 32;

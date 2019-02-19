@@ -1,9 +1,9 @@
 #ifndef RIR_ARGS_LAZY_H
 #define RIR_ARGS_LAZY_H
 
-#include "interp_context.h"
-#include "interp_data.h"
 #include "runtime/RirDataWrapper.h"
+
+#include "interp_incl.h"
 
 #include <cassert>
 #include <cstdint>
@@ -27,11 +27,11 @@ struct ArgsLazyData : public RirDataWrapper<ArgsLazyData, LAZY_ARGS_MAGIC> {
     ArgsLazyData(const ArgsLazyData&) = delete;
     ArgsLazyData& operator=(const ArgsLazyData&) = delete;
 
-    ArgsLazyData(const CallContext* callCtx, Context* cmpCtx)
+    ArgsLazyData(const CallContext* callCtx, InterpreterInstance* cmpCtx)
         : RirDataWrapper(2), callContext(callCtx), compilationContext(cmpCtx){};
 
     const CallContext* callContext;
-    Context* compilationContext;
+    InterpreterInstance* compilationContext;
 
     SEXP createArgsLists() {
         return createLegacyArgsListFromStackValues(*callContext, false,

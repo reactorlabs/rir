@@ -11,28 +11,16 @@
 
 #include "R/r.h"
 
-#include "interp_context.h"
-
-#if defined(__GNUC__) && (!defined(NO_THREADED_CODE))
-#define THREADED_CODE
-#endif
+#include "instance.h"
+#include "interp_incl.h"
 
 namespace rir {
-
-// Indicates an argument is missing
-#define MISSING_ARG_IDX ((unsigned)-1)
-// Indicates an argument does not correspond to a valid CodeObject
-#define DOTS_ARG_IDX ((unsigned)-2)
-// Maximum valid entry for a CodeObject offset/idx entry
-#define MAX_ARG_IDX ((unsigned)-3)
-
-const static uint32_t NO_DEOPT_INFO = (uint32_t)-1;
 
 struct CallContext {
     CallContext(Code* c, SEXP callee, size_t nargs, SEXP ast,
                 R_bcstack_t* stackArgs, Immediate* implicitArgs,
                 Immediate* names, SEXP callerEnv,
-                const Assumptions& givenAssumptions, Context* ctx)
+                const Assumptions& givenAssumptions, InterpreterInstance* ctx)
         : caller(c), suppliedArgs(nargs), passedArgs(nargs),
           stackArgs(stackArgs), implicitArgs(implicitArgs), names(names),
           callerEnv(callerEnv), ast(ast), callee(callee),
@@ -44,26 +32,26 @@ struct CallContext {
 
     CallContext(Code* c, SEXP callee, size_t nargs, Immediate ast,
                 Immediate* implicitArgs, Immediate* names, SEXP callerEnv,
-                const Assumptions& givenAssumptions, Context* ctx)
+                const Assumptions& givenAssumptions, InterpreterInstance* ctx)
         : CallContext(c, callee, nargs, cp_pool_at(ctx, ast), nullptr,
                       implicitArgs, names, callerEnv, givenAssumptions, ctx) {}
 
     CallContext(Code* c, SEXP callee, size_t nargs, Immediate ast,
                 R_bcstack_t* stackArgs, Immediate* names, SEXP callerEnv,
-                const Assumptions& givenAssumptions, Context* ctx)
+                const Assumptions& givenAssumptions, InterpreterInstance* ctx)
         : CallContext(c, callee, nargs, cp_pool_at(ctx, ast), stackArgs,
                       nullptr, names, callerEnv, givenAssumptions, ctx) {}
 
     CallContext(Code* c, SEXP callee, size_t nargs, Immediate ast,
                 Immediate* implicitArgs, SEXP callerEnv,
-                const Assumptions& givenAssumptions, Context* ctx)
+                const Assumptions& givenAssumptions, InterpreterInstance* ctx)
         : CallContext(c, callee, nargs, cp_pool_at(ctx, ast), nullptr,
                       implicitArgs, nullptr, callerEnv, givenAssumptions, ctx) {
     }
 
     CallContext(Code* c, SEXP callee, size_t nargs, Immediate ast,
                 R_bcstack_t* stackArgs, SEXP callerEnv,
-                const Assumptions& givenAssumptions, Context* ctx)
+                const Assumptions& givenAssumptions, InterpreterInstance* ctx)
         : CallContext(c, callee, nargs, cp_pool_at(ctx, ast), stackArgs,
                       nullptr, nullptr, callerEnv, givenAssumptions, ctx) {}
 
@@ -102,14 +90,12 @@ struct CallContext {
         return ostack_at_cell(stackArgs + i);
     }
 
-    SEXP name(unsigned i, Context* ctx) const {
+    SEXP name(unsigned i, InterpreterInstance* ctx) const {
         assert(hasNames() && i < suppliedArgs);
         return cp_pool_at(ctx, names[i]);
     }
 };
 
-SEXP createLegacyArgsListFromStackValues(const CallContext& call,
-                                         bool eagerCallee, Context* ctx);
-}
+} // namespace pir
 
 #endif // RIR_INTERPRETER_C_H

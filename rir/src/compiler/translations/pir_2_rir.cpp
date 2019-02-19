@@ -4,9 +4,10 @@
 #include "../transform/bb.h"
 #include "../util/cfg.h"
 #include "../util/visitor.h"
-#include "interpreter/runtime.h"
+#include "interpreter/instance.h"
 #include "ir/CodeStream.h"
 #include "ir/CodeVerifier.h"
+#include "runtime/DispatchTable.h"
 #include "simple_instruction_list.h"
 #include "utils/FunctionWriter.h"
 

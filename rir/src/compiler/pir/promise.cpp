@@ -1,5 +1,5 @@
 #include "promise.h"
-#include "interpreter/runtime.h"
+#include "interpreter/instance.h"
 
 namespace rir {
 namespace pir {

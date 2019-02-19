@@ -5,12 +5,8 @@
 #include "R/Symbols.h"
 #include "R/r.h"
 #include "compiler/translations/rir_2_pir/rir_2_pir_compiler.h"
-#include "interp_builtins.h"
-#include "interp_context.h"
-#include "interp_data.h"
 #include "ir/Deoptimization.h"
 #include "ir/RuntimeFeedback_inl.h"
-#include "runtime.h"
 #include "utils/Pool.h"
 
 #include <assert.h>
@@ -27,14 +23,15 @@ extern Rboolean R_Visible;
 
 namespace rir {
 
-static RIR_INLINE SEXP getSrcAt(Code* c, Opcode* pc, Context* ctx) {
+static RIR_INLINE SEXP getSrcAt(Code* c, Opcode* pc, InterpreterInstance* ctx) {
     unsigned sidx = c->getSrcIdxAt(pc, true);
     if (sidx == 0)
         return src_pool_at(ctx, c->src);
     return src_pool_at(ctx, sidx);
 }
 
-static RIR_INLINE SEXP getSrcForCall(Code* c, Opcode* pc, Context* ctx) {
+static RIR_INLINE SEXP getSrcForCall(Code* c, Opcode* pc,
+                                     InterpreterInstance* ctx) {
     unsigned sidx = c->getSrcIdxAt(pc, false);
     return src_pool_at(ctx, sidx);
 }
@@ -97,7 +94,7 @@ static RIR_INLINE SEXP createPromise(Code* code, SEXP env) {
     return p;
 }
 
-static RIR_INLINE SEXP promiseValue(SEXP promise, Context* ctx) {
+static RIR_INLINE SEXP promiseValue(SEXP promise, InterpreterInstance* ctx) {
     // if already evaluated, return the value
     if (PRVALUE(promise) && PRVALUE(promise) != R_UnboundValue) {
         promise = PRVALUE(promise);
@@ -110,7 +107,7 @@ static RIR_INLINE SEXP promiseValue(SEXP promise, Context* ctx) {
     }
 }
 
-static void jit(SEXP cls, SEXP name, Context* ctx) {
+static void jit(SEXP cls, SEXP name, InterpreterInstance* ctx) {
     assert(TYPEOF(cls) == CLOSXP);
     if (TYPEOF(BODY(cls)) == EXTERNALSXP)
         return;
@@ -150,7 +147,8 @@ static RIR_INLINE void __listAppend(SEXP* front, SEXP* last, SEXP value,
 }
 
 SEXP createLegacyArgsListFromStackValues(const CallContext& call,
-                                         bool eagerCallee, Context* ctx) {
+                                         bool eagerCallee,
+                                         InterpreterInstance* ctx) {
     SEXP result = R_NilValue;
     SEXP pos = result;
 
@@ -173,7 +171,7 @@ SEXP createLegacyArgsListFromStackValues(const CallContext& call,
 }
 
 static SEXP createLegacyArgsList(const CallContext& call, bool eagerCallee,
-                                 Context* ctx) {
+                                 InterpreterInstance* ctx) {
     SEXP result = R_NilValue;
     SEXP pos = result;
 
@@ -235,7 +233,7 @@ SEXP argsLazyCreation(void* rirDataWrapper) {
 }
 
 static RIR_INLINE SEXP createLegacyLazyArgsList(const CallContext& call,
-                                                Context* ctx) {
+                                                InterpreterInstance* ctx) {
     if (call.hasStackArgs()) {
         return createLegacyArgsListFromStackValues(call, false, ctx);
     } else {
@@ -244,7 +242,7 @@ static RIR_INLINE SEXP createLegacyLazyArgsList(const CallContext& call,
 }
 
 static RIR_INLINE SEXP createLegacyArgsList(const CallContext& call,
-                                            Context* ctx) {
+                                            InterpreterInstance* ctx) {
     if (call.hasStackArgs()) {
         return createLegacyArgsListFromStackValues(call, call.hasEagerCallee(),
                                                    ctx);
@@ -255,7 +253,8 @@ static RIR_INLINE SEXP createLegacyArgsList(const CallContext& call,
 
 static SEXP rirCallTrampoline_(RCNTXT& cntxt, const CallContext& call,
                                Code* code, SEXP* env,
-                               const R_bcstack_t* stackArgs, Context* ctx) {
+                               const R_bcstack_t* stackArgs,
+                               InterpreterInstance* ctx) {
     int trampIn = ostack_length(ctx);
     if ((SETJMP(cntxt.cjmpbuf))) {
         assert(trampIn == ostack_length(ctx));
@@ -273,7 +272,7 @@ static SEXP rirCallTrampoline_(RCNTXT& cntxt, const CallContext& call,
 static RIR_INLINE SEXP rirCallTrampoline(const CallContext& call, Function* fun,
                                          SEXP env, SEXP arglist,
                                          const R_bcstack_t* stackArgs,
-                                         Context* ctx) {
+                                         InterpreterInstance* ctx) {
     RCNTXT cntxt;
 
     // This code needs to be protected, because its slot in the dispatch table
@@ -307,20 +306,22 @@ static RIR_INLINE SEXP rirCallTrampoline(const CallContext& call, Function* fun,
 }
 
 static RIR_INLINE SEXP rirCallTrampoline(const CallContext& call, Function* fun,
-                                         SEXP arglist, Context* ctx) {
+                                         SEXP arglist,
+                                         InterpreterInstance* ctx) {
     return rirCallTrampoline(call, fun, R_NilValue, arglist, call.stackArgs,
                              ctx);
 }
 
 static RIR_INLINE SEXP rirCallTrampoline(const CallContext& call, Function* fun,
-                                         SEXP env, SEXP arglist, Context* ctx) {
+                                         SEXP env, SEXP arglist,
+                                         InterpreterInstance* ctx) {
     return rirCallTrampoline(call, fun, env, arglist, nullptr, ctx);
 }
 
 const static SEXP loopTrampolineMarker = (SEXP)0x7007;
-SEXP evalRirCode(Code*, Context*, SEXP*, const CallContext*, Opcode*,
-                 R_bcstack_t*);
-static void loopTrampoline(Code* c, Context* ctx, SEXP* env,
+SEXP evalRirCode(Code*, InterpreterInstance*, SEXP*, const CallContext*,
+                 Opcode*, R_bcstack_t*);
+static void loopTrampoline(Code* c, InterpreterInstance* ctx, SEXP* env,
                            const CallContext* callCtxt, Opcode* pc,
                            R_bcstack_t* localsBase) {
     assert(*env);
@@ -345,7 +346,7 @@ static void loopTrampoline(Code* c, Context* ctx, SEXP* env,
 }
 
 static RIR_INLINE SEXP legacySpecialCall(const CallContext& call,
-                                         Context* ctx) {
+                                         InterpreterInstance* ctx) {
     assert(call.ast != R_NilValue);
 
     // get the ccode
@@ -360,7 +361,8 @@ static RIR_INLINE SEXP legacySpecialCall(const CallContext& call,
 }
 
 static RIR_INLINE SEXP legacyCallWithArgslist(const CallContext& call,
-                                              SEXP argslist, Context* ctx) {
+                                              SEXP argslist,
+                                              InterpreterInstance* ctx) {
     if (TYPEOF(call.callee) == BUILTINSXP) {
         // get the ccode
         CCODE f = getBuiltin(call.callee);
@@ -380,7 +382,8 @@ static RIR_INLINE SEXP legacyCallWithArgslist(const CallContext& call,
                            R_NilValue);
 }
 
-static RIR_INLINE SEXP legacyCall(const CallContext& call, Context* ctx) {
+static RIR_INLINE SEXP legacyCall(const CallContext& call,
+                                  InterpreterInstance* ctx) {
     // create the argslist
     SEXP argslist = createLegacyArgsList(call, ctx);
     PROTECT(argslist);
@@ -607,7 +610,7 @@ static unsigned PIR_WARMUP =
     getenv("PIR_WARMUP") ? atoi(getenv("PIR_WARMUP")) : 3;
 
 // Call a RIR function. Arguments are still untouched.
-RIR_INLINE SEXP rirCall(CallContext& call, Context* ctx) {
+RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
     SEXP body = BODY(call.callee);
     assert(DispatchTable::check(body));
 
@@ -690,7 +693,8 @@ class SlowcaseCounter {
   public:
     std::unordered_map<std::string, size_t> counter;
 
-    void count(const std::string& kind, CallContext& call, Context* ctx) {
+    void count(const std::string& kind, CallContext& call,
+               InterpreterInstance* ctx) {
         std::stringstream message;
         message << "Fast case " << kind << " failed for "
                 << getBuiltinName(getBuiltinNr(call.callee)) << " ("
@@ -729,7 +733,8 @@ class SlowcaseCounter {
 SlowcaseCounter SLOWCASE_COUNTER;
 #endif
 
-static RIR_INLINE SEXP builtinCall(CallContext& call, Context* ctx) {
+static RIR_INLINE SEXP builtinCall(CallContext& call,
+                                   InterpreterInstance* ctx) {
     if (call.hasStackArgs() && !call.hasNames()) {
         SEXP res = tryFastBuiltinCall(call, ctx);
         if (res)
@@ -741,7 +746,8 @@ static RIR_INLINE SEXP builtinCall(CallContext& call, Context* ctx) {
     return legacyCall(call, ctx);
 }
 
-static RIR_INLINE SEXP specialCall(CallContext& call, Context* ctx) {
+static RIR_INLINE SEXP specialCall(CallContext& call,
+                                   InterpreterInstance* ctx) {
     if (call.hasStackArgs() && !call.hasNames()) {
         SEXP res = tryFastSpecialCall(call, ctx);
         if (res)
@@ -753,7 +759,7 @@ static RIR_INLINE SEXP specialCall(CallContext& call, Context* ctx) {
     return legacySpecialCall(call, ctx);
 }
 
-static SEXP doCall(CallContext& call, Context* ctx) {
+static SEXP doCall(CallContext& call, InterpreterInstance* ctx) {
     assert(call.callee);
 
     switch (TYPEOF(call.callee)) {
@@ -773,7 +779,7 @@ static SEXP doCall(CallContext& call, Context* ctx) {
 }
 
 static SEXP dispatchApply(SEXP ast, SEXP obj, SEXP actuals, SEXP selector,
-                          SEXP callerEnv, Context* ctx) {
+                          SEXP callerEnv, InterpreterInstance* ctx) {
     SEXP op = SYMVALUE(selector);
 
     // ===============================================
@@ -1120,7 +1126,7 @@ typedef struct {
 } BindingCache;
 
 static RIR_INLINE SEXP cachedGetBindingCell(SEXP env, Immediate idx,
-                                            Context* ctx,
+                                            InterpreterInstance* ctx,
                                             BindingCache* bindingCache) {
     if (env == R_BaseEnv || env == R_BaseNamespace)
         return NULL;
@@ -1141,7 +1147,7 @@ static RIR_INLINE SEXP cachedGetBindingCell(SEXP env, Immediate idx,
     return NULL;
 }
 
-static SEXP cachedGetVar(SEXP env, Immediate idx, Context* ctx,
+static SEXP cachedGetVar(SEXP env, Immediate idx, InterpreterInstance* ctx,
                          BindingCache* bindingCache) {
     SEXP loc = cachedGetBindingCell(env, idx, ctx, bindingCache);
     if (loc) {
@@ -1158,8 +1164,9 @@ static SEXP cachedGetVar(SEXP env, Immediate idx, Context* ctx,
 #define BINDING_LOCK_MASK (1 << 14)
 #define IS_ACTIVE_BINDING(b) ((b)->sxpinfo.gp & ACTIVE_BINDING_MASK)
 #define BINDING_IS_LOCKED(b) ((b)->sxpinfo.gp & BINDING_LOCK_MASK)
-static void cachedSetVar(SEXP val, SEXP env, Immediate idx, Context* ctx,
-                         BindingCache* bindingCache, bool keepMissing = false) {
+static void cachedSetVar(SEXP val, SEXP env, Immediate idx,
+                         InterpreterInstance* ctx, BindingCache* bindingCache,
+                         bool keepMissing = false) {
     SEXP loc = cachedGetBindingCell(env, idx, ctx, bindingCache);
     if (loc && !BINDING_IS_LOCKED(loc) && !IS_ACTIVE_BINDING(loc)) {
         SEXP cur = CAR(loc);
@@ -1187,8 +1194,9 @@ static void cachedSetVar(SEXP val, SEXP env, Immediate idx, Context* ctx,
 // terrible, can't find out where in the evalRirCode function
 #pragma GCC diagnostic ignored "-Wstrict-overflow"
 
-SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
-                 Opcode* initialPC, R_bcstack_t* localsBase = nullptr) {
+SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
+                 const CallContext* callCtxt, Opcode* initialPC,
+                 R_bcstack_t* localsBase = nullptr) {
     assert(*env || (callCtxt != nullptr));
 
 #ifdef THREADED_CODE
@@ -3062,11 +3070,11 @@ eval_done:
 
 #pragma GCC diagnostic pop
 
-SEXP evalRirCodeExtCaller(Code* c, Context* ctx, SEXP* env) {
+SEXP evalRirCodeExtCaller(Code* c, InterpreterInstance* ctx, SEXP* env) {
     return evalRirCode(c, ctx, env, nullptr);
 }
 
-SEXP evalRirCode(Code* c, Context* ctx, SEXP* env,
+SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
                  const CallContext* callCtxt) {
     return evalRirCode(c, ctx, env, callCtxt, nullptr);
 }

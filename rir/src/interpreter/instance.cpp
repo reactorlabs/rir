@@ -1,6 +1,5 @@
-#include "interp_context.h"
+#include "instance.h"
 #include "api.h"
-#include "runtime.h"
 
 namespace rir {
 
@@ -21,8 +20,8 @@ SEXP setterPlaceholderSym;
 SEXP getterPlaceholderSym;
 SEXP quoteSym;
 
-Context* context_create() {
-    Context* c = new Context;
+InterpreterInstance* context_create() {
+    InterpreterInstance* c = new InterpreterInstance;
     c->list = Rf_allocVector(VECSXP, 2);
     R_PreserveObject(c->list);
     initializeResizeableList(&c->cp, POOL_CAPACITY, c->list, CONTEXT_INDEX_CP);
@@ -68,5 +67,6 @@ Context* context_create() {
     return c;
 }
 
-extern Context* globalContext_;
-}
+extern InterpreterInstance* globalInterpreterInstance_;
+
+} // namespace pir
