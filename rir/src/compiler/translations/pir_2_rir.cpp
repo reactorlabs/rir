@@ -1,4 +1,5 @@
 #include "pir_2_rir.h"
+#include "../analysis/last_env.h"
 #include "../pir/pir_impl.h"
 #include "../transform/bb.h"
 #include "../util/cfg.h"
@@ -657,6 +658,7 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
             bbLabels[bb] = ctx.cs().mkLabel();
     });
 
+    LastEnv lastEnv(cls, code, log);
     LoweringVisitor::run(code->entry, [&](BB* bb) {
         if (bb->isEmpty())
             return;
@@ -669,8 +671,6 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
         };
 
         cs << bbLabels[bb];
-
-        Value* currentEnv = nullptr;
 
         for (auto it = bb->begin(); it != bb->end(); ++it) {
             auto instr = *it;
@@ -790,15 +790,16 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                                 loadEnv(it, what, argStackSize, argNumber);
                             } else {
                                 auto env = instr->env();
-                                if (currentEnv != env) {
-                                    size_t ignore = 0;
+                                size_t ignore = 0;
+                                if (!lastEnv.envStillValid(instr)) {
                                     loadEnv(it, env, ignore, 0);
                                     cs << BC::setEnv();
-                                    currentEnv = env;
                                 } else {
                                     if (alloc.hasSlot(env) &&
-                                        alloc.onStack(env))
+                                        alloc.onStack(env)) {
+                                        loadEnv(it, env, ignore, 0);
                                         cs << BC::pop();
+                                    }
                                 }
                             }
                         } else {
