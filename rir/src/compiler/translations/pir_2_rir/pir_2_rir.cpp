@@ -1,17 +1,18 @@
 #include "pir_2_rir.h"
-#include "../analysis/stack.h"
-#include "../analysis/last_env.h"
-#include "../pir/pir_impl.h"
-#include "../transform/bb.h"
-#include "../util/cfg.h"
-#include "../util/visitor.h"
+#include "../../analysis/last_env.h"
+#include "../../pir/pir_impl.h"
+#include "../../transform/bb.h"
+#include "../../util/cfg.h"
+#include "../../util/visitor.h"
 #include "interpreter/runtime.h"
 #include "ir/CodeStream.h"
 #include "ir/CodeVerifier.h"
+#include "liveness.h"
 #include "simple_instruction_list.h"
+#include "stack_use.h"
 #include "utils/FunctionWriter.h"
 
-#include "../debugging/PerfCounter.h"
+#include "../../debugging/PerfCounter.h"
 
 #include <algorithm>
 #include <chrono>
@@ -22,27 +23,6 @@ namespace rir {
 namespace pir {
 
 namespace {
-
-bool MEASURE_COMPILER_PERF = getenv("PIR_MEASURE_COMPILER") ? true : false;
-std::chrono::time_point<std::chrono::high_resolution_clock> startTime;
-std::chrono::time_point<std::chrono::high_resolution_clock> endTime;
-std::unique_ptr<CompilerPerf> PERF = std::unique_ptr<CompilerPerf>(
-    MEASURE_COMPILER_PERF ? new CompilerPerf : nullptr);
-
-#define MEASURE_CODE(name, code)                                               \
-    do {                                                                       \
-        if (MEASURE_COMPILER_PERF) {                                           \
-            startTime = std::chrono::high_resolution_clock::now();             \
-        }                                                                      \
-        do {                                                                   \
-            code;                                                              \
-        } while (false);                                                       \
-        if (MEASURE_COMPILER_PERF) {                                           \
-            endTime = std::chrono::high_resolution_clock::now();               \
-            std::chrono::duration<double> passDuration = endTime - startTime;  \
-            PERF->addTime(name, passDuration.count());                         \
-        }                                                                      \
-    } while (false);
 
 /*
  * SSAAllocator assigns each instruction to a local variable number, or the
@@ -70,7 +50,8 @@ class SSAAllocator {
     Code* code;
     size_t bbsSize;
 
-    StackAnalysis sa;
+    LivenessIntervals livenessIntervals;
+    StackUseAnalysis sa;
 
     typedef size_t SlotNumber;
     const static SlotNumber unassignedSlot = 0;
@@ -78,175 +59,20 @@ class SSAAllocator {
 
     std::unordered_map<Value*, SlotNumber> allocation;
 
-    struct BBLiveness {
-        uint8_t live = false;
-        unsigned begin = -1;
-        unsigned end = -1;
-    };
-    struct Liveness : public std::vector<BBLiveness> {
-        bool interfere(const Liveness& other) const {
-            assert(size() == other.size());
-            for (size_t i = 0; i < size(); ++i) {
-                const BBLiveness& mine = (*this)[i];
-                const BBLiveness& their = other[i];
-                if (mine.live && their.live) {
-                    if (mine.begin == their.begin ||
-                        (mine.begin < their.begin && mine.end >= their.begin) ||
-                        (mine.begin > their.begin && their.end >= mine.begin))
-                        return true;
-                }
-            }
-            return false;
-        }
-    };
-    std::unordered_map<Value*, Liveness> livenessInterval;
-
     explicit SSAAllocator(Code* code, ClosureVersion* cls, LogStream& log)
-        : cfg(code), dom(code), code(code), bbsSize(code->nextBBId), sa(cfg) {
+        : cfg(code), dom(code), code(code), bbsSize(code->nextBBId),
+          livenessIntervals(bbsSize, cfg),
+          sa(cls, code, log, livenessIntervals) {
 
-        MEASURE_CODE("Stack usage analysis", { sa(cls, code, log); });
-
-        MEASURE_CODE("Compute liveness", { computeLiveness(); });
-        MEASURE_CODE("Compute stack allocation", { computeStackAllocation(); });
-        MEASURE_CODE("Compute allocation", { computeAllocation(); });
-    }
-
-    // Run backwards analysis to compute livenessintervals
-    void computeLiveness() {
-        // temp list of live out sets for every BB
-        std::unordered_map<BB*, std::set<Value*>> liveAtEnd(bbsSize);
-
-        std::set<BB*> todo;
-        for (auto e : cfg.exits())
-            todo.insert(e);
-
-        while (!todo.empty()) {
-            BB* bb = *todo.begin();
-            todo.erase(todo.begin());
-
-            // keep track of currently live variables
-            std::set<Value*> accumulated;
-            std::map<BB*, std::set<Value*>> accumulatedPhiInput;
-
-            // Mark all (backwards) incoming live variables
-            for (auto v : liveAtEnd[bb]) {
-                assert(livenessInterval.count(v));
-                auto& liveRange = livenessInterval.at(v)[bb->id];
-                if (!liveRange.live || liveRange.end < bb->size()) {
-                    liveRange.live = true;
-                    liveRange.end = bb->size();
-                    accumulated.insert(v);
-                }
-            }
-
-            // Run BB in reverse
-            size_t pos = bb->size();
-            if (!bb->isEmpty()) {
-                auto ip = bb->end();
-                do {
-                    --ip;
-                    --pos;
-                    Instruction* i = *ip;
-
-                    auto markIfNotSeen = [&](Value* v) {
-                        if (!livenessInterval.count(v)) {
-                            // First time we see this variable, need to allocate
-                            // vector of all livereanges
-                            livenessInterval[v].resize(bbsSize);
-                            assert(!livenessInterval[v][bb->id].live);
-                        }
-                        auto& liveRange = livenessInterval[v][bb->id];
-                        if (!liveRange.live) {
-                            liveRange.live = true;
-                            liveRange.end = pos;
-                            return true;
-                        }
-                        return false;
-                    };
-
-                    // First set all arguments to be live
-                    if (auto phi = Phi::Cast(i)) {
-                        phi->eachArg([&](BB* in, Value* v) {
-                            if (markIfNotSeen(v))
-                                accumulatedPhiInput[in].insert(v);
-                        });
-                    } else {
-                        i->eachArg([&](Value* v) {
-                            if (markIfNotSeen(v))
-                                accumulated.insert(v);
-                        });
-                    }
-
-                    // Mark the end of the current instructions liveness
-                    if (accumulated.count(i)) {
-                        assert(livenessInterval.count(i));
-                        auto& liveRange = livenessInterval[i][bb->id];
-                        assert(liveRange.live);
-                        liveRange.begin = pos;
-                        accumulated.erase(accumulated.find(i));
-                    }
-                } while (ip != bb->begin());
-            }
-            assert(pos == 0);
-
-            // Mark everything that is live at the beginning of the BB.
-            auto markLiveEntry = [&](Value* v) {
-                assert(livenessInterval.count(v));
-                auto& liveRange = livenessInterval[v][bb->id];
-                assert(liveRange.live);
-                liveRange.begin = 0;
-            };
-
-            for (auto v : accumulated)
-                markLiveEntry(v);
-            for (auto pi : accumulatedPhiInput)
-                for (auto v : pi.second)
-                    markLiveEntry(v);
-
-            // Merge everything that is live at the beginning of the BB into the
-            // incoming vars of all predecessors
-            //
-            // Phi inputs should only be merged to BB that are successors of the
-            // input BBs
-            auto merge = [&](BB* bb, const std::set<Value*>& live) {
-                auto& liveOut = liveAtEnd[bb];
-                if (!std::includes(liveOut.begin(), liveOut.end(), live.begin(),
-                                   live.end())) {
-                    liveOut.insert(live.begin(), live.end());
-                    todo.insert(bb);
-                }
-            };
-            auto mergePhiInp = [&](BB* bb) {
-                for (auto in : accumulatedPhiInput) {
-                    auto inBB = in.first;
-                    auto inLive = in.second;
-                    if (bb == inBB || cfg.isPredecessor(inBB, bb)) {
-                        merge(bb, inLive);
-                    }
-                }
-            };
-            for (auto pre : cfg.immediatePredecessors(bb)) {
-                bool firstTime = !liveAtEnd.count(pre);
-                if (firstTime) {
-                    liveAtEnd[pre] = accumulated;
-                    mergePhiInp(pre);
-                    todo.insert(pre);
-                } else {
-                    merge(pre, accumulated);
-                    mergePhiInp(pre);
-                }
-            }
-        }
+        computeStackAllocation();
+        computeAllocation();
     }
 
     void computeStackAllocation() {
 
         // For now, just flip a coin on where to put it
-        static auto coinFlip = []() -> bool {
-            static std::random_device rd;
-            static std::mt19937 gen(rd());
-            static std::bernoulli_distribution coin(1);
-            return coin(gen);
+        static auto toStack = [](Instruction* i) -> bool {
+            return Phi::Cast(i) || !MkEnv::Cast(i);
         };
 
         std::unordered_set<Value*> phis;
@@ -255,7 +81,7 @@ class SSAAllocator {
             auto p = Phi::Cast(i);
             if (!p || allocation.count(p))
                 return;
-            if (coinFlip()) {
+            if (toStack(p)) {
                 allocation[p] = stackSlot;
                 p->eachArg(
                     [&](BB*, Value* v) { allocation[v] = allocation[p]; });
@@ -268,7 +94,7 @@ class SSAAllocator {
         Visitor::run(code->entry, [&](Instruction* i) {
             if (allocation.count(i))
                 return;
-            if (coinFlip() && phis.count(i) == 0) {
+            if (toStack(i) && phis.count(i) == 0) {
                 allocation[i] = stackSlot;
             }
         });
@@ -278,8 +104,8 @@ class SSAAllocator {
         std::unordered_map<SlotNumber, std::unordered_set<Value*>> reverseAlloc;
         auto slotIsAvailable = [&](SlotNumber slot, Value* i) {
             for (auto other : reverseAlloc[slot])
-                if (livenessInterval.at(other).interfere(
-                        livenessInterval.at(i)))
+                if (livenessIntervals.at(other).interfere(
+                        livenessIntervals.at(i)))
                     return false;
             return true;
         };
@@ -330,7 +156,7 @@ class SSAAllocator {
             for (auto i : *bb) {
                 ++pos;
 
-                if (!allocation.count(i) && livenessInterval.count(i)) {
+                if (!allocation.count(i) && livenessIntervals.count(i)) {
                     // Try to reuse input slot, to reduce moving
                     SlotNumber hint = unassignedSlot;
                     if (i->nargs() > 0) {
@@ -385,7 +211,7 @@ class SSAAllocator {
         VerifyBB verifyBB = [&](BB* pred, BB* bb, RegisterFile& reg,
                                 Stack& stack) {
             for (auto i : *bb) {
-                for (auto drop : sa.toDrop[i]) {
+                for (auto drop : sa.toDrop(i)) {
                     for (auto it = stack.begin(); it != stack.end(); ++it) {
                         if (drop == *it) {
                             stack.erase(it);
@@ -519,7 +345,7 @@ class SSAAllocator {
                 // Remember this instruction if it writes to a slot
                 if (allocation.count(i)) {
                     if (allocation.at(i) == stackSlot) {
-                        if (i->type != PirType::voyd() && !sa.dead.count(i)) {
+                        if (i->type != PirType::voyd() && !sa.dead(i)) {
                             stack.push_back(i);
                         }
                     } else {
@@ -582,27 +408,20 @@ class SSAAllocator {
 
     bool hasSlot(Value* v) const { return allocation.count(v); }
 
-    StackAnalysis::AbstractStack const& stackAfter(Instruction* instr) const {
-        static StackAnalysis::AbstractStack empty;
-        if (!instr)
-            return empty;
-        return sa.stacks.at(instr);
-    }
-
     size_t getStackOffset(Instruction* afterInstruction,
                           std::vector<bool>& used, Value* what,
                           bool remove) const {
 
         assert(afterInstruction);
 
-        auto stack = stackAfter(afterInstruction);
+        auto stack = sa.stackAfter(afterInstruction);
         assert(stack.size() == used.size());
 
         size_t offset = 0;
 
-        auto i = stack.data.rbegin();
+        auto i = stack.rbegin();
         size_t usedIdx = used.size() - 1;
-        while (i != stack.data.rend()) {
+        while (i != stack.rend()) {
             if (*i == what) {
                 if (remove) {
                     used[usedIdx] = true;
@@ -620,9 +439,9 @@ class SSAAllocator {
 
     size_t stackPhiOffset(Instruction* executed, Phi* phi) const {
         assert(executed);
-        auto stack = stackAfter(executed);
+        auto stack = sa.stackAfter(executed);
         size_t offset = 0;
-        for (auto i = stack.data.rbegin(); i != stack.data.rend(); ++i) {
+        for (auto i = stack.rbegin(); i != stack.rend(); ++i) {
             if (*i == phi || phi->anyArg([&](Value* v) { return *i == v; }))
                 return offset;
             if (hasSlot(*i) && onStack(*i))
@@ -636,8 +455,8 @@ class SSAAllocator {
         assert(executed);
         assert(argNumber < executed->nargs());
         Value* v = executed->arg(argNumber).val();
-        auto stack = stackAfter(executed);
-        for (auto i = stack.data.begin(); i != stack.data.end(); ++i)
+        auto stack = sa.stackAfter(executed);
+        for (auto i = stack.begin(); i != stack.end(); ++i)
             if (*i == v)
                 return false;
         for (size_t i = argNumber + 1; i < executed->nargs(); ++i)
@@ -698,7 +517,7 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
 
     auto isJumpThrough = [&](BB* bb) {
         return bb->isEmpty() || (bb->size() == 1 && Nop::Cast(bb->last()) &&
-                                 alloc.sa.toDrop[bb->last()].empty());
+                                 alloc.sa.toDrop(bb->last()).empty());
     };
 
     // Create labels for all bbs
@@ -709,26 +528,15 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
     });
 
     // TODO:
-    // - how come mkenv is explicit and ldfunctionenv is not?
     // - how to pick lastInstr at the beginning of a merge block?
 
     LastEnv lastEnv(cls, code, log);
-  
+
     LoweringVisitor::run(code->entry, [&](BB* bb) {
         if (isJumpThrough(bb))
             return;
 
         CodeStream& cs = ctx.cs();
-
-#ifdef ENABLE_SLOWASSERT
-        auto debugAddVariableName = [&cs](Value* v) {
-            std::stringstream ss;
-            v->printRef(ss);
-            cs.addSrc(Rf_install(ss.str().c_str()));
-        };
-#else
-        auto debugAddVariableName = [](Value*) {};
-#endif
 
         auto jumpThroughEmpty = [&](BB* bb) {
             while (isJumpThrough(bb))
@@ -752,12 +560,23 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
             {
 
                 std::vector<bool> removedStackValues(
-                    alloc.stackAfter(lastInstr).size(), false);
+                    alloc.sa.stackAfter(lastInstr).size(), false);
                 size_t pushedStackValues = 0;
 
                 // Put args to buffer first so that we don't have to clean up
                 // the code stream later
                 std::vector<BC> buffer;
+                std::vector<SEXP> srcBuffer;
+
+#ifdef ENABLE_SLOWASSERT
+                auto debugAddVariableName = [&](Value* v) {
+                    std::stringstream ss;
+                    v->printRef(ss);
+                    srcBuffer.push_back(Rf_install(ss.str().c_str()));
+                };
+#else
+        auto debugAddVariableName = [](Value*) {};
+#endif
 
                 /* TODO: there are still more patterns that could be cleaned up:
                  *   pick(2) swap() pick(2) -> swap()
@@ -899,7 +718,7 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 };
 
                 // Remove values from the stack that are dead here
-                for (auto val : alloc.sa.toDrop[instr]) {
+                for (auto val : alloc.sa.toDrop(instr)) {
                     // If not actually allocated on stack, do nothing
                     if (!alloc.onStack(val))
                         continue;
@@ -950,8 +769,15 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                     });
                 }
 
-                for (auto const& bc : buffer)
+                unsigned srcBufferIdx = 0;
+                for (auto const& bc : buffer) {
                     cs << bc;
+                    if (srcBufferIdx < srcBuffer.size() &&
+                        bc.is(rir::Opcode::ldloc_)) {
+                        cs.addSrc(srcBuffer[srcBufferIdx]);
+                        srcBufferIdx++;
+                    }
+                }
             }
 
             switch (instr->tag) {
@@ -1281,7 +1107,7 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
             }
 
             // Store the result
-            if (alloc.sa.dead.count(instr)) {
+            if (alloc.sa.dead(instr)) {
                 cs << BC::pop();
             } else if (hasResult) {
                 if (!alloc.hasSlot(instr)) {
@@ -1338,236 +1164,223 @@ static bool coinFlip() {
 
 void Pir2Rir::lower(Code* code) {
 
-    MEASURE_CODE("Lowering w/o phis", {
-        Visitor::runPostChange(code->entry, [&](BB* bb) {
-            auto it = bb->begin();
-            while (it != bb->end()) {
-                auto next = it + 1;
-                if (auto call = CallInstruction::CastCall(*it))
-                    call->clearFrameState();
-                if (auto ldfun = LdFun::Cast(*it)) {
-                    // The guessed binding in ldfun is just used as a temporary
-                    // store. If we did not manage to resolve ldfun by now, we
-                    // have to remove the guess again, since apparently we
-                    // were not sure it is correct.
-                    if (ldfun->guessedBinding())
-                        ldfun->clearGuessedBinding();
-                } else if (auto deopt = Deopt::Cast(*it)) {
-                    // Lower Deopt instructions + their FrameStates to a
-                    // ScheduledDeopt.
-                    auto newDeopt = new ScheduledDeopt();
-                    newDeopt->consumeFrameStates(deopt);
-                    bb->replace(it, newDeopt);
-                } else if (auto expect = Assume::Cast(*it)) {
-                    auto condition = expect->condition();
-                    if (DEOPT_CHAOS && coinFlip()) {
-                        condition = expect->assumeTrue
-                                        ? (Value*)False::instance()
-                                        : (Value*)True::instance();
-                    }
-                    std::string debugMessage;
-                    if (DEBUG_DEOPTS) {
-                        std::stringstream dump;
-                        debugMessage = "DEOPT, assumption ";
-                        expect->condition()->printRef(dump);
-                        debugMessage += dump.str();
-                        debugMessage += " failed in\n";
-                        dump.str("");
-                        code->printCode(dump, true);
-                        debugMessage += dump.str();
-                    }
-                    BBTransform::lowerExpect(
-                        code, bb, it, condition, expect->assumeTrue,
-                        expect->checkpoint()->bb()->falseBranch(),
-                        debugMessage);
-                    // lowerExpect splits the bb from current position. There
-                    // remains nothing to process. Breaking seems more robust
-                    // than trusting the modified iterator.
-                    break;
+    Visitor::runPostChange(code->entry, [&](BB* bb) {
+        auto it = bb->begin();
+        while (it != bb->end()) {
+            auto next = it + 1;
+            if (auto call = CallInstruction::CastCall(*it))
+                call->clearFrameState();
+            if (auto ldfun = LdFun::Cast(*it)) {
+                // The guessed binding in ldfun is just used as a temporary
+                // store. If we did not manage to resolve ldfun by now, we
+                // have to remove the guess again, since apparently we
+                // were not sure it is correct.
+                if (ldfun->guessedBinding())
+                    ldfun->clearGuessedBinding();
+            } else if (auto deopt = Deopt::Cast(*it)) {
+                // Lower Deopt instructions + their FrameStates to a
+                // ScheduledDeopt.
+                auto newDeopt = new ScheduledDeopt();
+                newDeopt->consumeFrameStates(deopt);
+                bb->replace(it, newDeopt);
+            } else if (auto expect = Assume::Cast(*it)) {
+                auto condition = expect->condition();
+                if (DEOPT_CHAOS && coinFlip()) {
+                    condition = expect->assumeTrue ? (Value*)False::instance()
+                                                   : (Value*)True::instance();
                 }
-
-                it = next;
-            }
-        });
-
-        Visitor::run(code->entry, [&](BB* bb) {
-            auto it = bb->begin();
-            while (it != bb->end()) {
-                auto next = it + 1;
-                if (FrameState::Cast(*it)) {
-                    next = bb->remove(it);
-                } else if (Checkpoint::Cast(*it)) {
-                    next = bb->remove(it);
-                    // Branching removed. Preserve invariant
-                    bb->next1 = nullptr;
-                } else if (MkArg::Cast(*it) && (*it)->unused()) {
-                    next = bb->remove(it);
+                std::string debugMessage;
+                if (DEBUG_DEOPTS) {
+                    std::stringstream dump;
+                    debugMessage = "DEOPT, assumption ";
+                    expect->condition()->printRef(dump);
+                    debugMessage += dump.str();
+                    debugMessage += " failed in\n";
+                    dump.str("");
+                    code->printCode(dump, true);
+                    debugMessage += dump.str();
                 }
-                it = next;
+                BBTransform::lowerExpect(
+                    code, bb, it, condition, expect->assumeTrue,
+                    expect->checkpoint()->bb()->falseBranch(), debugMessage);
+                // lowerExpect splits the bb from current position. There
+                // remains nothing to process. Breaking seems more robust
+                // than trusting the modified iterator.
+                break;
             }
-        });
+
+            it = next;
+        }
     });
 
-    MEASURE_CODE("Lowering phis", {
-        // Lower phi functions - transform into a cfg where all input blocks of
-        // all phi functions are their immediate predecessors
-        {
-            bool done;
-            CFG cfg(code);
-            do {
-                done = true;
-                BreadthFirstVisitor::run(code->entry, [&](Instruction* i,
-                                                          BB* bb) {
-                    // Check if this phi has the desired property
-                    if (auto phi = Phi::Cast(i)) {
-                        bool ok = true;
-                        phi->eachArg([&](BB* inputBB, Value*) {
-                            if (!cfg.isImmediatePredecessor(inputBB, phi->bb()))
-                                ok = false;
-                        });
-                        if (ok)
-                            return;
-                        done = false;
+    Visitor::run(code->entry, [&](BB* bb) {
+        auto it = bb->begin();
+        while (it != bb->end()) {
+            auto next = it + 1;
+            if (FrameState::Cast(*it)) {
+                next = bb->remove(it);
+            } else if (Checkpoint::Cast(*it)) {
+                next = bb->remove(it);
+                // Branching removed. Preserve invariant
+                bb->next1 = nullptr;
+            } else if (MkArg::Cast(*it) && (*it)->unused()) {
+                next = bb->remove(it);
+            }
+            it = next;
+        }
+    });
 
-                        // Gather all the basic blocks currently in the phi
-                        // inputs, these are then used to stop a backward search
-                        std::unordered_set<BB*> inputBBs;
-                        phi->eachArg([&](BB* inputBB, Value*) {
-                            inputBBs.insert(inputBB);
-                        });
+    // Lower phi functions - transform into a cfg where all input blocks of
+    // all phi functions are their immediate predecessors
+    {
+        bool done;
+        CFG cfg(code);
+        do {
+            done = true;
+            BreadthFirstVisitor::run(code->entry, [&](Instruction* i, BB* bb) {
+                // Check if this phi has the desired property
+                if (auto phi = Phi::Cast(i)) {
+                    bool ok = true;
+                    phi->eachArg([&](BB* inputBB, Value*) {
+                        if (!cfg.isImmediatePredecessor(inputBB, phi->bb()))
+                            ok = false;
+                    });
+                    if (ok)
+                        return;
+                    done = false;
 
-                        // dir maps basic blocks to blocks that are immediate
-                        // predecessors of the given phi, ie. the blocks we want
-                        // the phi to have as inputs
-                        std::unordered_map<BB*, BB*> dir;
-                        // Initialize with the actual immediate predecessors
-                        for (auto pred : cfg.immediatePredecessors(phi->bb()))
-                            dir[pred] = pred;
+                    // Gather all the basic blocks currently in the phi
+                    // inputs, these are then used to stop a backward search
+                    std::unordered_set<BB*> inputBBs;
+                    phi->eachArg(
+                        [&](BB* inputBB, Value*) { inputBBs.insert(inputBB); });
 
-                        // src maps immediate predecessors of the phi to sets of
-                        // arguments that come from that path
-                        std::unordered_map<BB*, std::unordered_set<Value*>> src;
-                        phi->eachArg([&](BB* inputBB, Value* val) {
-                            // Do a bfs search for a block that is listed as a
-                            // phi input block. If we find it, the dir map tells
-                            // us which immediate predecessor this translates to
-                            // and we are done. If we hit a block that is a
-                            // different phi input block than the one we look
-                            // for, we stop. Otherwise, propagate the dir info
-                            // to immediate predecessors and continue
-                            BreadthFirstVisitor::checkBackward(
-                                phi->bb(), cfg, [&](BB* bb) {
-                                    if (bb == inputBB) {
-                                        src[dir[bb]].insert(val);
-                                        return false;
-                                    }
-                                    if (inputBBs.count(bb) == 0) {
-                                        for (auto pred :
-                                             cfg.immediatePredecessors(bb))
-                                            if (dir.count(pred) == 0)
-                                                dir[pred] = dir[bb];
-                                    }
-                                    return true;
-                                });
-                        });
+                    // dir maps basic blocks to blocks that are immediate
+                    // predecessors of the given phi, ie. the blocks we want
+                    // the phi to have as inputs
+                    std::unordered_map<BB*, BB*> dir;
+                    // Initialize with the actual immediate predecessors
+                    for (auto pred : cfg.immediatePredecessors(phi->bb()))
+                        dir[pred] = pred;
 
-                        // Modify the phi so that it obtains the desired
-                        // property
-                        for (auto s : src) {
-                            // For each immediate predecessor get a set of
-                            // values that come through it, to be removed from
-                            // the phi
-                            std::unordered_set<BB*> toRemove;
-                            phi->eachArg([&](BB* inputBB, Value* val) {
-                                if (s.second.count(val))
-                                    toRemove.insert(inputBB);
+                    // src maps immediate predecessors of the phi to sets of
+                    // arguments that come from that path
+                    std::unordered_map<BB*, std::unordered_set<Value*>> src;
+                    phi->eachArg([&](BB* inputBB, Value* val) {
+                        // Do a bfs search for a block that is listed as a
+                        // phi input block. If we find it, the dir map tells
+                        // us which immediate predecessor this translates to
+                        // and we are done. If we hit a block that is a
+                        // different phi input block than the one we look
+                        // for, we stop. Otherwise, propagate the dir info
+                        // to immediate predecessors and continue
+                        BreadthFirstVisitor::checkBackward(
+                            phi->bb(), cfg, [&](BB* bb) {
+                                if (bb == inputBB) {
+                                    src[dir[bb]].insert(val);
+                                    return false;
+                                }
+                                if (inputBBs.count(bb) == 0) {
+                                    for (auto pred :
+                                         cfg.immediatePredecessors(bb))
+                                        if (dir.count(pred) == 0)
+                                            dir[pred] = dir[bb];
+                                }
+                                return true;
                             });
-                            // Add a new single argument to the phi for the
-                            // given predecessor that will either be a single
-                            // existing value, or a newly created phi merge of
-                            // the set of values from that ppredecessor
-                            if (s.second.size() == 1) {
-                                phi->removeInputs(toRemove);
-                                phi->addInput(s.first, *(s.second.begin()));
-                                phi->updateType();
-                            } else {
-                                assert(s.second.size() > 1);
-                                Phi* newPhi = new Phi;
-                                for (auto input : s.second) {
-                                    phi->eachArg([&](BB* inputBB, Value* val) {
-                                        if (val == input)
-                                            newPhi->addInput(inputBB, val);
-                                    });
-                                }
-                                phi->removeInputs(toRemove);
-                                phi->addInput(s.first, newPhi);
-                                newPhi->updateType();
-                                phi->updateType();
-                                // Insert the new phi at the beginning of the
-                                // predecessor block
-                                s.first->insert(s.first->begin(), newPhi);
-                                // If we created a one argument phi, remove it
-                                if (phi->nargs() == 1) {
-                                    phi->replaceUsesWith(phi->arg(0).val());
-                                    phi->bb()->remove(phi);
-                                }
+                    });
+
+                    // Modify the phi so that it obtains the desired
+                    // property
+                    for (auto s : src) {
+                        // For each immediate predecessor get a set of
+                        // values that come through it, to be removed from
+                        // the phi
+                        std::unordered_set<BB*> toRemove;
+                        phi->eachArg([&](BB* inputBB, Value* val) {
+                            if (s.second.count(val))
+                                toRemove.insert(inputBB);
+                        });
+                        // Add a new single argument to the phi for the
+                        // given predecessor that will either be a single
+                        // existing value, or a newly created phi merge of
+                        // the set of values from that ppredecessor
+                        if (s.second.size() == 1) {
+                            phi->removeInputs(toRemove);
+                            phi->addInput(s.first, *(s.second.begin()));
+                            phi->updateType();
+                        } else {
+                            assert(s.second.size() > 1);
+                            Phi* newPhi = new Phi;
+                            for (auto input : s.second) {
+                                phi->eachArg([&](BB* inputBB, Value* val) {
+                                    if (val == input)
+                                        newPhi->addInput(inputBB, val);
+                                });
+                            }
+                            phi->removeInputs(toRemove);
+                            phi->addInput(s.first, newPhi);
+                            newPhi->updateType();
+                            phi->updateType();
+                            // Insert the new phi at the beginning of the
+                            // predecessor block
+                            s.first->insert(s.first->begin(), newPhi);
+                            // If we created a one argument phi, remove it
+                            if (phi->nargs() == 1) {
+                                phi->replaceUsesWith(phi->arg(0).val());
+                                phi->bb()->remove(phi);
                             }
                         }
                     }
-                });
-            } while (!done);
-        }
+                }
+            });
+        } while (!done);
+    }
 
-        // Insert Nop into all empty blocks to make life easier
-        Visitor::run(code->entry, [&](BB* bb) {
-            if (bb->isEmpty())
-                bb->append(new Nop());
-        });
+    // Insert Nop into all empty blocks to make life easier
+    Visitor::run(code->entry, [&](BB* bb) {
+        if (bb->isEmpty())
+            bb->append(new Nop());
     });
 }
 
 void Pir2Rir::toCSSA(Code* code) {
     // For each Phi, insert copies
-    MEASURE_CODE("CSSA conversion", {
-        BreadthFirstVisitor::run(code->entry, [&](BB* bb) {
-            // TODO: move all phi's to the beginning, then insert the copies not
-            // after each phi but after all phi's?
-            for (auto it = bb->begin(); it != bb->end(); ++it) {
-                auto instr = *it;
-                if (auto phi = Phi::Cast(instr)) {
-                    for (size_t i = 0; i < phi->nargs(); ++i) {
-                        BB* pred = phi->inputAt(i);
-                        // If pred is branch insert a new split block
-                        if (!pred->isJmp()) {
-                            BB* split = nullptr;
-                            if (pred->trueBranch() == phi->bb())
-                                split = pred->trueBranch();
-                            else if (pred->falseBranch() == phi->bb())
-                                split = pred->falseBranch();
-                            assert(
-                                split &&
-                                "Don't know where to insert a phi input copy.");
-                            pred = BBTransform::splitEdge(code->nextBBId++,
-                                                          pred, split, code);
-                        }
-                        if (Instruction* iav =
-                                Instruction::Cast(phi->arg(i).val())) {
-                            auto copy =
-                                pred->insert(pred->end(), new PirCopy(iav));
-                            phi->arg(i).val() = *copy;
-                        } else {
-                            auto val = phi->arg(i).val()->asRValue();
-                            auto copy =
-                                pred->insert(pred->end(), new LdConst(val));
-                            phi->arg(i).val() = *copy;
-                        }
+    BreadthFirstVisitor::run(code->entry, [&](BB* bb) {
+        // TODO: move all phi's to the beginning, then insert the copies not
+        // after each phi but after all phi's?
+        for (auto it = bb->begin(); it != bb->end(); ++it) {
+            auto instr = *it;
+            if (auto phi = Phi::Cast(instr)) {
+                for (size_t i = 0; i < phi->nargs(); ++i) {
+                    BB* pred = phi->inputAt(i);
+                    // If pred is branch insert a new split block
+                    if (!pred->isJmp()) {
+                        BB* split = nullptr;
+                        if (pred->trueBranch() == phi->bb())
+                            split = pred->trueBranch();
+                        else if (pred->falseBranch() == phi->bb())
+                            split = pred->falseBranch();
+                        assert(split &&
+                               "Don't know where to insert a phi input copy.");
+                        pred = BBTransform::splitEdge(code->nextBBId++, pred,
+                                                      split, code);
                     }
-                    auto phiCopy = new PirCopy(phi);
-                    phi->replaceUsesWith(phiCopy);
-                    it = bb->insert(it + 1, phiCopy);
+                    if (Instruction* iav =
+                            Instruction::Cast(phi->arg(i).val())) {
+                        auto copy = pred->insert(pred->end(), new PirCopy(iav));
+                        phi->arg(i).val() = *copy;
+                    } else {
+                        auto val = phi->arg(i).val()->asRValue();
+                        auto copy = pred->insert(pred->end(), new LdConst(val));
+                        phi->arg(i).val() = *copy;
+                    }
                 }
+                auto phiCopy = new PirCopy(phi);
+                phi->replaceUsesWith(phiCopy);
+                it = bb->insert(it + 1, phiCopy);
             }
-        });
+        }
     });
 }
 
