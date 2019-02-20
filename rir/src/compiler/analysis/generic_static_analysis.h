@@ -71,6 +71,11 @@ class StaticAnalysis {
     std::unordered_map<Instruction*, AbstractState> cache;
     std::deque<Instruction*> cacheQueue;
     void addToCache(Instruction* i, const AbstractState& state) const {
+        if (cache.count(i)) {
+            const_cast<StaticAnalysis*>(this)->cache.erase(cache.find(i));
+            const_cast<StaticAnalysis*>(this)->cache.emplace(i, state);
+            return;
+        }
         if (cacheQueue.size() > MAX_CACHE_SIZE) {
             auto oldest = cacheQueue.front();
             const_cast<StaticAnalysis*>(this)->cacheQueue.pop_front();
@@ -398,6 +403,26 @@ class BackwardStaticAnalysis {
 
     virtual AbstractResult apply(AbstractState&, Instruction*) const = 0;
 
+    constexpr static size_t MAX_CACHE_SIZE = 128 / sizeof(AbstractState);
+
+    std::unordered_map<Instruction*, AbstractState> cache;
+    std::deque<Instruction*> cacheQueue;
+    void addToCache(Instruction* i, const AbstractState& state) const {
+        if (cache.count(i)) {
+            const_cast<StaticAnalysis*>(this)->cache.erase(cache.find(i));
+            const_cast<StaticAnalysis*>(this)->cache.emplace(i, state);
+            return;
+        }
+        if (cacheQueue.size() > MAX_CACHE_SIZE) {
+            auto oldest = cacheQueue.front();
+            const_cast<BackwardStaticAnalysis*>(this)->cacheQueue.pop_front();
+            const_cast<BackwardStaticAnalysis*>(this)->cache.erase(
+                cache.find(oldest));
+        }
+        const_cast<BackwardStaticAnalysis*>(this)->cache.emplace(i, state);
+        const_cast<BackwardStaticAnalysis*>(this)->cacheQueue.push_back(i);
+    }
+
   protected:
     AbstractState exitpoint;
 
@@ -498,30 +523,55 @@ class BackwardStaticAnalysis {
 
     template <PositioningStyle POS>
     AbstractState at(Instruction* i) const {
+        if (!done)
+            const_cast<BackwardStaticAnalysis*>(this)->operator()();
         assert(done);
 
-        // TODO: this is a fairly slow way of doing things. we should have some
-        // cache for the last used positions and then try to compute the
-        // current state from the last one. Also we should return a reference
-        // and not a copy.
         BB* bb = i->bb();
+
+        if (cache.count(i)) {
+            auto state = cache.at(i);
+            if (PositioningStyle::AfterInstruction == POS)
+                apply(state, i);
+            return state;
+        }
+
         const BBSnapshot& bbSnapshots = snapshots[bb->id];
-        AbstractState state = bbSnapshots.entry;
-        for (auto j : VisitorHelpers::reverse(*bb)) {
-            if (POS == BeforeInstruction && i == j)
-                return state;
 
-            if (bbSnapshots.extra.count(j))
-                state = bbSnapshots.extra.at(j);
-            else
-                apply(state, j);
+        // Find the last snapshot before the instruction we want to know about
+        size_t tried = 0;
+        auto snapshotPos = bb->rbegin();
+        for (auto pos = bb->rbegin(), end = bb->rend();
+             pos != end && tried < bbSnapshots.extra.size(); ++pos) {
+            if (POS == BeforeInstruction && i == *pos)
+                break;
+            if (bbSnapshots.extra.count(*pos)) {
+                snapshotPos = pos;
+                tried++;
+            }
+            if (POS == AfterInstruction && i == *pos)
+                break;
+        }
 
-            if (POS == AfterInstruction && i == j)
+        // Apply until we arrive at the position
+        auto state = snapshotPos == bb->rbegin()
+                         ? bbSnapshots.entry
+                         : bbSnapshots.extra.at(*snapshotPos);
+        for (auto pos = snapshotPos, end = bb->rend(); pos != end; ++pos) {
+            if (POS == BeforeInstruction && i == *pos) {
+                addToCache(i, state);
                 return state;
+            }
+            apply(state, *pos);
+            if (POS == AfterInstruction && i == *pos) {
+                if (pos + 1 != bb->rend())
+                    addToCache(*(pos + 1), state);
+                return state;
+            }
         }
 
         assert(false);
-        return state;
+        return AbstractState();
     }
 
     typedef std::function<void(const AbstractState&, Instruction*)> Collect;
@@ -543,8 +593,9 @@ class BackwardStaticAnalysis {
                     if (POS == BeforeInstruction)
                         collect(state, i);
 
-                    if (bbSnapshots.extra.count(i))
-                        state = bbSnapshots.extra.at(i);
+                    const auto& entry = bbSnapshots.extra.find(i);
+                    if (entry != bbSnapshots.extra.end())
+                        state = entry->second;
                     else
                         apply(state, i);
 
@@ -590,24 +641,23 @@ class BackwardStaticAnalysis {
                         }
 
                         if (res.needRecursion) {
-                            if (snapshots[bb->id].extra.count(i)) {
-                                snapshots[bb->id].extra[i].merge(state);
-                                state = snapshots[bb->id].extra[i];
+                            auto& extra = snapshots[bb->id].extra;
+                            const auto& entry = extra.find(i);
+                            if (entry != extra.end()) {
+                                entry->second.merge(state);
+                                state = entry->second;
                             } else {
-                                snapshots[bb->id].extra[i] = state;
+                                extra.emplace(i, state);
                             }
                             recursiveTodo.push_back(Position(bb, i));
                         } else if (res.keepSnapshot) {
-                            snapshots[bb->id].extra[i] = state;
+                            snapshots[bb->id].extra.emplace(i, state);
                         }
                     }
 
                     if (bb == code->entry) {
                         logExit(state);
                         if (reachedExit) {
-                            // TODO: is it ok to ignore the merge result here?
-                            // (maybe because from exitpoint we don't go
-                            // anywhere)
                             exitpoint.merge(state);
                         } else {
                             exitpoint = state;
@@ -625,18 +675,17 @@ class BackwardStaticAnalysis {
                 if (!recursiveTodo.empty()) {
                     for (auto& rec : recursiveTodo) {
                         auto bb = rec.first->id;
-                        if (snapshots[bb].extra.count(rec.second)) {
-                            auto mres = snapshots[bb]
-                                            .extra.at(rec.second)
-                                            .merge(exitpoint);
+                        auto& extra = snapshots[bb].extra;
+                        const auto& entry = extra.find(rec.second);
+                        if (entry != extra.end()) {
+                            auto mres = entry->second.merge(exitpoint);
                             if (mres > AbstractResult::None) {
-                                logChange(snapshots[bb].extra.at(rec.second),
-                                          mres, rec.second);
+                                logChange(entry->second, mres, rec.second);
                                 changed[bb] = true;
                                 done = false;
                             }
                         } else {
-                            snapshots[bb].extra[rec.second] = exitpoint;
+                            extra.emplace(rec.second, exitpoint);
                             changed[bb] = true;
                             done = false;
                         }
