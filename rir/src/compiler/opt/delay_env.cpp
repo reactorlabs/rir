@@ -20,7 +20,7 @@ void DelayEnv::apply(RirCompiler&, ClosureVersion* function, LogStream&) const {
             while (it != bb->begin()) {
                 it--;
                 auto t = MkEnv::Cast(*it);
-                if (t && !t->stub && done.find(t) == done.end()) {
+                if (t && done.find(t) == done.end()) {
                     envInstr = t;
                     break;
                 }

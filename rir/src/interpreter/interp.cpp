@@ -238,24 +238,25 @@ SEXP createEnvironment(const std::vector<SEXP>* args, const SEXP parent,
                        SEXP stub) {
     SEXP arglist = R_NilValue;
     auto names = (Immediate*)pc;
-    for (size_t i = 0; i < args->size(); ++i) {
-        SEXP val = args->at(i);
+    int j = 0;
+    for (long i = args->size() - 1; i >= 0; --i) {
+        SEXP val = args->at(j);
         SEXP name = cp_pool_at(ctx, names[i]);
         arglist = CONS_NR(val, arglist);
         SET_TAG(arglist, name);
         SET_MISSING(arglist, val == R_MissingArg ? 2 : 0);
+        j++;
     }
+
     SEXP environment = Rf_NewEnvironment(R_NilValue, arglist, parent);
 
-    // TODO: Find a proper way of going through the function stack and
-    // replacing the stub with the new environment
-    Locals local(localsBase, 5);
-    for (auto i = 0; i < 5; i++) {
+    for (auto i = 0; i < R_BCNodeStackTop - localsBase; i++) {
         if (ostack_at(ctx, i) == stub)
             ostack_set(ctx, i, environment);
-        if (local.load(i) == stub)
-            local.store(i, environment);
     }
+    /*Locals local(localsBase, 5);
+        if (local.load(i) == stub)
+            local.store(i, environment);*/
 
     return environment;
 }
@@ -338,6 +339,17 @@ SEXP createLegacyArgsList(const CallContext& call, bool eagerCallee,
     if (result != R_NilValue)
         UNPROTECT(1);
     return result;
+}
+
+SEXP materialize(void* rirDataWrapper) {
+    if (ArgsLazyData::check(rirDataWrapper)) {
+        ArgsLazyData* argsLazy = ArgsLazyData::unpack(rirDataWrapper);
+        return argsLazy->createArgsLists();
+    } else if (LazyEnvironment::check(rirDataWrapper)) {
+        LazyEnvironment* env = LazyEnvironment::unpack(rirDataWrapper);
+        return env->create();
+    }
+    assert(false);
 }
 
 SEXP lazyPromargsCreation(void* rirDataWrapper) {
@@ -1685,12 +1697,13 @@ SEXP evalRirCode(Code* c, Context* ctx, SEXP* env, const CallContext* callCtxt,
             SEXP parent = ostack_pop(ctx);
             assert(TYPEOF(parent) == ENVSXP &&
                    "Non-environment used as environment parent.");
+            auto names = pc;
             advanceImmediateN(n);
-            auto args = new std::vector<SEXP>(n);
+            auto args = new std::vector<SEXP>;
             for (size_t i = 0; i < n; ++i)
                 args->push_back(ostack_pop(ctx));
             auto envStub =
-                new LazyEnvironment(args, parent, pc, ctx, localsBase);
+                new LazyEnvironment(args, parent, names, ctx, localsBase);
             envStubs.push_back(envStub);
             res = (SEXP)envStub;
             ostack_push(ctx, res);
