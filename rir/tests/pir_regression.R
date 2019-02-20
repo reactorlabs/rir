@@ -37,11 +37,11 @@ h()  # aborts if g's environment got elided
     numnotnull <- function(gparname) {
       if (match(gparname, names(gpars))) {
           check.length(gparname)
-      }   
+      }
     }
     numnotnull('a')
   }))
-  
+
   rir.compile(function() {
      validGP(list(a=1))
   })()
@@ -57,6 +57,10 @@ rir.compile(function(){
 
 
 # inlined frameStates:
+
+# NOTE: the asserts on invocation counts may fail
+# with PIR_DEOPT_CHAOS=1
+
 f <- pir.compile(rir.compile(function(x) g(x)))
 g <- rir.compile(function(x) h(x))
 h <- rir.compile(function(x) 1+i(x))
@@ -86,11 +90,11 @@ stopifnot(ic3 == ic2+1)
 # that val is properly bind. This means that we must activate a
 # the differnt SEXP everytime because val is bind to its enclosing
 # environment (the environemnt of the current activation of f).
-# This tests ensures that if an optimization tries to optimize 
-# this polymorphicness, the semantics are preserved 
+# This tests ensures that if an optimization tries to optimize
+# this polymorphicness, the semantics are preserved
 f <- function(val) {
-    g <- function() val 
-    g() 
+    g <- function() val
+    g()
 }
 h <- rir.compile(function(x) f(x))
 stopifnot(h(1) == 1)

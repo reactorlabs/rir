@@ -65,6 +65,28 @@ BB* BBTransform::clone(BB* src, Code* target, ClosureVersion* targetClosure) {
     return newEntry;
 }
 
+BB* BBTransform::splitEdge(size_t next_id, BB* from, BB* to, Code* target) {
+    BB* split = new BB(target, next_id);
+
+    split->next0 = to;
+    split->next1 = nullptr;
+
+    if (from->next0 == to)
+        from->next0 = split;
+    else
+        from->next1 = split;
+
+    Visitor::run(split, [&](Instruction* i) {
+        if (auto phi = Phi::Cast(i)) {
+            for (size_t j = 0; j < phi->nargs(); ++j)
+                if (phi->inputAt(j) == from)
+                    phi->updateInputAt(j, split);
+        }
+    });
+
+    return split;
+}
+
 BB* BBTransform::split(size_t next_id, BB* src, BB::Instrs::iterator it,
                        Code* target) {
     BB* split = new BB(target, next_id);
@@ -139,6 +161,9 @@ BB* BBTransform::lowerExpect(Code* code, BB* src, BB::Instrs::iterator position,
         src->next0 = deoptBlock;
         src->next1 = split;
     }
+
+    splitEdge(code->nextBBId++, src, deoptBlock, code);
+
     return split;
 }
 

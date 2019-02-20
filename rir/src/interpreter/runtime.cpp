@@ -1,14 +1,16 @@
-#include "runtime.h"
 #include "api.h"
 #include "interp.h"
+#include "utils/configurations.h"
 
 #include <iomanip>
+
+namespace rir {
 
 SEXP envSymbol;
 SEXP callSymbol;
 SEXP execName;
 SEXP promExecName;
-Context* globalContext_;
+InterpreterInstance* globalContext_;
 rir::Configurations* configurations;
 
 /** Checks if given closure should be executed using RIR.
@@ -37,8 +39,9 @@ void initializeRuntime() {
     globalContext_ = context_create();
     registerExternalCode(rirEval_f, rirApplyClosure, rir_compile, rirExpr,
                          argsLazyCreation);
-    configurations = new rir::Configurations();
+    configurations = new Configurations();
 }
 
-Context* globalContext() { return globalContext_; }
-rir::Configurations* pirConfigurations() { return configurations; }
+InterpreterInstance* globalContext() { return globalContext_; }
+Configurations* pirConfigurations() { return configurations; }
+} // namespace rir

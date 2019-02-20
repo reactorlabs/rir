@@ -1,11 +1,12 @@
 #ifndef RIR_COMPILER_H
 #define RIR_COMPILER_H
 
-#include "R/r.h"
 #include "R/Preserve.h"
 #include "R/Protect.h"
-#include "utils/Pool.h"
+#include "R/r.h"
+#include "runtime/DispatchTable.h"
 #include "utils/FunctionWriter.h"
+#include "utils/Pool.h"
 
 #include <unordered_map>
 #include <iostream>

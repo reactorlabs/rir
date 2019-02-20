@@ -11,7 +11,7 @@
 
 #include "../../debugging/PerfCounter.h"
 
-#include "interpreter/runtime.h"
+#include "utils/configurations.h"
 
 #include <chrono>
 

@@ -72,4 +72,12 @@ RIR_INLINE R_xlen_t XLENGTH_EX(SEXP x) {
     return ALTREP(x) ? ALTREP_LENGTH(x) : STDVEC_LENGTH(x);
 }
 
+typedef struct {
+    int ibeta, it, irnd, ngrd, machep, negep, iexp, minexp, maxexp;
+    double eps, epsneg, xmin, xmax;
+} AccuracyInfo;
+LibExtern AccuracyInfo R_AccuracyInfo;
+
+extern int R_PPStackTop;
+
 #endif
