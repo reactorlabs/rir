@@ -166,7 +166,7 @@ class BC {
         return *this;
     }
 
-    bool is(Opcode aBc) { return bc == aBc; }
+    bool is(Opcode aBc) const { return bc == aBc; }
 
     inline size_t size() const {
         // Those are the 3 variable length BC we have

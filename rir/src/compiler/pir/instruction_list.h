@@ -85,6 +85,7 @@
     V(Missing)                                                                 \
     V(Visible)                                                                 \
     V(Invisible)                                                               \
-    V(PirCopy)
+    V(PirCopy)                                                                 \
+    V(Nop)
 
 #endif

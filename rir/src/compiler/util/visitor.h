@@ -239,8 +239,7 @@ class VisitorImplementation {
     }
 
     template <bool PROCESS_NEW_NODES, typename ActionKind>
-    static bool backwardGenericRun(BB* bb, CFG const& cfg, ActionKind action,
-                                   bool processNewNodes) {
+    static bool backwardGenericRun(BB* bb, CFG const& cfg, ActionKind action) {
         auto scheduleNext = [&](Schedule schedule, BB* cur) {
             for (auto pred : cfg.immediatePredecessors(cur))
                 schedule(pred);
