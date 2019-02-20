@@ -118,73 +118,73 @@ typedef enum {
     STACK_OBJ_INT,
     STACK_OBJ_REAL,
     STACK_OBJ_LOGICAL
-} stack_obj_type;
+} stackObjType;
 
-R_bcstack_t int_stack_obj(int x);
-R_bcstack_t real_stack_obj(double x);
-R_bcstack_t logical_stack_obj(int x);
-R_bcstack_t sexp_to_stack_obj(SEXP x, bool unprotect);
-SEXP stack_obj_to_sexp(R_bcstack_t x);
+R_bcstack_t intStackObj(int x);
+R_bcstack_t realStackObj(double x);
+R_bcstack_t logicalStackObj(int x);
+R_bcstack_t sexpToStackObj(SEXP x, bool unprotect);
+SEXP stackObjToSexp(R_bcstack_t x);
 // Doesn't consider reals integers
-bool stack_obj_is_integer(R_bcstack_t x);
+bool stackObjIsInteger(R_bcstack_t x);
 // Returns NA_INTEGER if not an integer, doesn't consider reals integers
-int try_stack_obj_to_integer(R_bcstack_t x);
+int tryStackObjToInteger(R_bcstack_t x);
 // Doesn't consider integers reals
-bool stack_obj_is_real(R_bcstack_t x);
+bool stackObjIsReal(R_bcstack_t x);
 // Returns NA_REAL if not a real, doesn't consider integers reals
-double try_stack_obj_to_real(R_bcstack_t x);
-bool stack_obj_is_logical(R_bcstack_t x);
+double tryStackObjToReal(R_bcstack_t x);
+bool stackObjIsLogical(R_bcstack_t x);
 // Returns NA_LOGICAL if not a logical
-int try_stack_obj_to_logical(R_bcstack_t x);
+int tryStackObjToLogical(R_bcstack_t x);
 // Fails if not a logical or NA
-int try_stack_obj_to_logical_na(R_bcstack_t x);
+int tryStackObjToLogicalNa(R_bcstack_t x);
 // Returns regular if int, truncated if real, -1 otherwise
-int try_stack_obj_to_idx(R_bcstack_t x);
-SEXPTYPE stack_obj_sexp_type(R_bcstack_t x);
-bool stack_obj_is_vector(R_bcstack_t x);
-R_xlen_t stack_obj_length(R_bcstack_t x);
-bool stack_objs_equal(R_bcstack_t x, R_bcstack_t y);
+int tryStackObjToIdx(R_bcstack_t x);
+SEXPTYPE stackObjSexpType(R_bcstack_t x);
+bool stackObjIsVector(R_bcstack_t x);
+R_xlen_t stackObjLength(R_bcstack_t x);
+bool stackObjsEqual(R_bcstack_t x, R_bcstack_t y);
 
-#define ostack_length(c) (R_BCNodeStackTop - R_BCNodeStackBase)
+#define ostackLength(c) (R_BCNodeStackTop - R_BCNodeStackBase)
 
 #ifdef TYPED_STACK
-#define ostack_top(c) *(R_BCNodeStackTop - 1)
+#define ostackTop(c) *(R_BCNodeStackTop - 1)
 #endif
 
 #ifdef TYPED_STACK
-#define ostack_at(c, i) *(R_BCNodeStackTop - 1 - (i))
+#define ostackAt(c, i) *(R_BCNodeStackTop - 1 - (i))
 #endif
 
 #ifdef TYPED_STACK
-#define ostack_set(c, i, v)                                                    \
+#define ostackSet(c, i, v)                                                     \
     do {                                                                       \
         int idx = (i);                                                         \
         *(R_BCNodeStackTop - 1 - idx) = (v);                                   \
     } while (0)
 #endif
 
-#define ostack_cell_at(c, i) (R_BCNodeStackTop - 1 - (i))
+#define ostackCellAt(c, i) (R_BCNodeStackTop - 1 - (i))
 
-#define ostack_empty(c) (R_BCNodeStackTop == R_BCNodeStackBase)
+#define ostackEmpty(c) (R_BCNodeStackTop == R_BCNodeStackBase)
 
-#define ostack_popn(c, p)                                                      \
+#define ostackPopn(c, p)                                                       \
     do {                                                                       \
         R_BCNodeStackTop -= (p);                                               \
     } while (0)
 
 #ifdef TYPED_STACK
-#define ostack_pop(c) (*(--R_BCNodeStackTop))
+#define ostackPop(c) (*(--R_BCNodeStackTop))
 #endif
 
 #ifdef TYPED_STACK
-#define ostack_push(c, v)                                                      \
+#define ostackPush(c, v)                                                       \
     do {                                                                       \
         *R_BCNodeStackTop = (v);                                               \
         ++R_BCNodeStackTop;                                                    \
     } while (0)
 #endif
 
-RIR_INLINE void ostack_ensureSize(Context* c, unsigned minFree) {
+RIR_INLINE void ostackEnsureSize(Context* c, unsigned minFree) {
     if ((R_BCNodeStackTop + minFree) >= R_BCNodeStackEnd) {
         // TODO....
         assert(false);
