@@ -21,7 +21,7 @@ namespace rir {
 
 namespace {
 
-class Context {
+class CompilerContext {
   public:
     class LoopContext {
       public:
@@ -86,10 +86,10 @@ class Context {
     FunctionWriter& fun;
     Preserve& preserve;
 
-    Context(FunctionWriter& fun, Preserve& preserve)
+    CompilerContext(FunctionWriter& fun, Preserve& preserve)
         : fun(fun), preserve(preserve) {}
 
-    ~Context() { assert(code.empty()); }
+    ~CompilerContext() { assert(code.empty()); }
 
     bool inLoop() const { return code.top()->inLoop(); }
 
@@ -129,14 +129,14 @@ class Context {
     }
 };
 
-Code* compilePromise(Context& ctx, SEXP exp);
-void compileExpr(Context& ctx, SEXP exp);
-void compileCall(Context& ctx, SEXP ast, SEXP fun, SEXP args);
+Code* compilePromise(CompilerContext& ctx, SEXP exp);
+void compileExpr(CompilerContext& ctx, SEXP exp);
+void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args);
 
 // Inline some specials
 // TODO: once we have sufficiently powerful analysis this should (maybe?) go
 //       away and move to an optimization phase.
-bool compileSpecialCall(Context& ctx, SEXP ast, SEXP fun, SEXP args_) {
+bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_) {
     // `true` if an argument isn't missing, labeled, or `...`.
     auto isRegularArg = [](RListIter& arg) {
         return *arg != R_DotsSymbol && *arg != R_MissingArg && !arg.hasTag();
@@ -795,7 +795,7 @@ SIMPLE_INSTRUCTIONS(V, _)
 }
 
 // function application
-void compileCall(Context& ctx, SEXP ast, SEXP fun, SEXP args) {
+void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args) {
     CodeStream& cs = ctx.cs();
 
     // application has the form:
@@ -872,7 +872,7 @@ void compileConst(CodeStream& cs, SEXP constant) {
     cs << BC::push(constant);
 }
 
-void compileExpr(Context& ctx, SEXP exp) {
+void compileExpr(CompilerContext& ctx, SEXP exp) {
     // Dispatch on the current type of AST node
     Match(exp) {
         // Function application
@@ -910,7 +910,7 @@ void compileExpr(Context& ctx, SEXP exp) {
     }
 }
 
-Code* compilePromise(Context& ctx, SEXP exp) {
+Code* compilePromise(CompilerContext& ctx, SEXP exp) {
     ctx.pushPromiseContext(exp);
     compileExpr(ctx, exp);
     ctx.cs() << BC::ret();
@@ -921,7 +921,7 @@ Code* compilePromise(Context& ctx, SEXP exp) {
 
 SEXP Compiler::finalize() {
     FunctionWriter function;
-    Context ctx(function, preserve);
+    CompilerContext ctx(function, preserve);
 
     FunctionSignature signature(FunctionSignature::Environment::CallerProvided,
                                 FunctionSignature::OptimizationLevel::Baseline);

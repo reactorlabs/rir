@@ -2,15 +2,18 @@
 #define interpreter_context_h
 
 #include "R/r.h"
-#include "interp_data.h"
 #include "ir/BC_inc.h"
 #include "runtime/Assumptions.h"
+
+#include "interp_incl.h"
 
 #include <stdio.h>
 
 #include <assert.h>
 #include <functional>
 #include <stdint.h>
+
+namespace rir {
 
 /** Compiler API. Given a language object, compiles it and returns the
   EXTERNALSXP containing the Function and its Code objects.
@@ -50,7 +53,7 @@ typedef struct {
 
  */
 
-struct Context {
+struct InterpreterInstance {
     SEXP list;
     ResizeableList cp;
     ResizeableList src;
@@ -58,16 +61,6 @@ struct Context {
     ClosureCompiler closureCompiler;
     ClosureOptimizer closureOptimizer;
 };
-
-// Some symbols
-extern SEXP R_Subset2Sym;
-extern SEXP R_SubsetSym;
-extern SEXP R_SubassignSym;
-extern SEXP R_Subassign2Sym;
-extern SEXP R_valueSym;
-extern SEXP setterPlaceholderSym;
-extern SEXP getterPlaceholderSym;
-extern SEXP quoteSym;
 
 // TODO we might actually need to do more for the lengths (i.e. true length vs
 // length)
@@ -166,7 +159,7 @@ RIR_INLINE void rl_append(ResizeableList* l, SEXP val, SEXP parent,
     } while (0)
 #endif
 
-RIR_INLINE void ostack_ensureSize(Context* c, unsigned minFree) {
+RIR_INLINE void ostack_ensureSize(InterpreterInstance* c, unsigned minFree) {
     if ((R_BCNodeStackTop + minFree) >= R_BCNodeStackEnd) {
         // TODO....
         assert(false);
@@ -216,36 +209,38 @@ class Locals final {
     static void* operator new(size_t) = delete;
 };
 
-Context* context_create();
+InterpreterInstance* context_create();
 
 #define cp_pool_length(c) (rl_length(&(c)->cp))
 #define src_pool_length(c) (rl_length(&(c)->src))
 
-RIR_INLINE size_t cp_pool_add(Context* c, SEXP v) {
+RIR_INLINE size_t cp_pool_add(InterpreterInstance* c, SEXP v) {
     size_t result = rl_length(&c->cp);
     rl_append(&c->cp, v, c->list, CONTEXT_INDEX_CP);
     return result;
 }
 
-RIR_INLINE size_t src_pool_add(Context* c, SEXP v) {
+RIR_INLINE size_t src_pool_add(InterpreterInstance* c, SEXP v) {
     size_t result = rl_length(&c->src);
     rl_append(&c->src, v, c->list, CONTEXT_INDEX_SRC);
     return result;
 }
 
-RIR_INLINE SEXP cp_pool_at(Context* c, unsigned index) {
+RIR_INLINE SEXP cp_pool_at(InterpreterInstance* c, unsigned index) {
     SLOWASSERT(c->cp.capacity > index);
     return VECTOR_ELT(c->cp.list, index);
 }
 
-RIR_INLINE SEXP src_pool_at(Context* c, unsigned index) {
+RIR_INLINE SEXP src_pool_at(InterpreterInstance* c, unsigned index) {
     SLOWASSERT(c->src.capacity > index);
     return VECTOR_ELT(c->src.list, index);
 }
 
-RIR_INLINE void cp_pool_set(Context* c, unsigned index, SEXP e) {
+RIR_INLINE void cp_pool_set(InterpreterInstance* c, unsigned index, SEXP e) {
     SLOWASSERT(c->cp.capacity > index);
     SET_VECTOR_ELT(c->cp.list, index, e);
 }
+
+} // namespace pir
 
 #endif // interpreter_context_h
