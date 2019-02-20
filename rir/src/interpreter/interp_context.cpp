@@ -297,6 +297,31 @@ bool stackObjsEqual(R_bcstack_t x, R_bcstack_t y) {
     }
 }
 
+SEXP ostackObjToSexpAt(R_bcstack_t& x, Context* ctx, unsigned idx) {
+    if (x.tag != STACK_OBJ_SEXP) {
+        SEXP sexp = stackObjToSexp(x);
+        x.u.sxpval = sexp;
+        x.tag = STACK_OBJ_SEXP;
+        ostackSet(ctx, idx, x);
+    }
+    return x.u.sxpval;
+}
+
+SEXP ostackSexpAt(Context* ctx, unsigned idx) {
+    R_bcstack_t x = ostackAt(ctx, idx);
+    SEXP sexp = ostackObjToSexpAt(x, ctx, idx);
+    return sexp;
+}
+
+SEXP ostackPopSexp(Context* ctx) { return stackObjToSexp(ostackPop(ctx)); }
+
+void ostackEnsureSize(Context* ctx, unsigned minFree) {
+    if ((R_BCNodeStackTop + minFree) >= R_BCNodeStackEnd) {
+        // TODO....
+        assert(false);
+    }
+}
+
 Context* context_create() {
     Context* c = new Context;
     c->list = Rf_allocVector(VECSXP, 2);

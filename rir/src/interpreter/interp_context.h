@@ -124,6 +124,8 @@ R_bcstack_t intStackObj(int x);
 R_bcstack_t realStackObj(double x);
 R_bcstack_t logicalStackObj(int x);
 R_bcstack_t sexpToStackObj(SEXP x, bool unprotect);
+// Warning: If the SEXP is modified, the original stack object won't change.
+// If the object is in the ostack, use 'ostackSexpAt' or 'ostackObjToSexpAt'.
 SEXP stackObjToSexp(R_bcstack_t x);
 // Doesn't consider reals integers
 bool stackObjIsInteger(R_bcstack_t x);
@@ -156,11 +158,7 @@ bool stackObjsEqual(R_bcstack_t x, R_bcstack_t y);
 #endif
 
 #ifdef TYPED_STACK
-#define ostackSet(c, i, v)                                                     \
-    do {                                                                       \
-        int idx = (i);                                                         \
-        *(R_BCNodeStackTop - 1 - idx) = (v);                                   \
-    } while (0)
+#define ostackSet(c, i, v) *(R_BCNodeStackTop - 1 - (i)) = (v)
 #endif
 
 #define ostackCellAt(c, i) (R_BCNodeStackTop - 1 - (i))
@@ -184,12 +182,10 @@ bool stackObjsEqual(R_bcstack_t x, R_bcstack_t y);
     } while (0)
 #endif
 
-RIR_INLINE void ostackEnsureSize(Context* c, unsigned minFree) {
-    if ((R_BCNodeStackTop + minFree) >= R_BCNodeStackEnd) {
-        // TODO....
-        assert(false);
-    }
-}
+SEXP ostackObjToSexpAt(R_bcstack_t& x, Context* ctx, unsigned idx);
+SEXP ostackSexpAt(Context* ctx, unsigned idx);
+SEXP ostackPopSexp(Context* ctx);
+void ostackEnsureSize(Context* ctx, unsigned minFree);
 
 // --- Locals
 

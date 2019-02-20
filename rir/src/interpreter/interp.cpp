@@ -1235,9 +1235,9 @@ static R_INLINE int RInteger_times(int x, int y, Rboolean* pnaflag) {
         }                                                                      \
         SEXP call = getSrcForCall(c, pc - 1, ctx);                             \
         PROTECT(call);                                                         \
-        SEXP lhsSexp = stackObjToSexp(lhs);                                    \
+        SEXP lhsSexp = ostackObjToSexpAt(lhs, ctx, 1);                         \
         PROTECT(lhsSexp);                                                      \
-        SEXP rhsSexp = stackObjToSexp(rhs);                                    \
+        SEXP rhsSexp = ostackObjToSexpAt(rhs, ctx, 0);                         \
         SEXP argslist = CONS_NR(lhsSexp, CONS_NR(rhsSexp, R_NilValue));        \
         UNPROTECT(2);                                                          \
         ostackPush(ctx, sexpToStackObj(argslist, true));                       \
@@ -1346,7 +1346,7 @@ static R_INLINE int RInteger_uminus(int x, Rboolean* pnaflag) {
         }                                                                      \
         SEXP call = getSrcForCall(c, pc - 1, ctx);                             \
         PROTECT(call);                                                         \
-        SEXP valSexp = stackObjToSexp(val);                                    \
+        SEXP valSexp = ostackObjToSexpAt(val, ctx, 0);                         \
         PROTECT(valSexp);                                                      \
         SEXP argslist = CONS_NR(valSexp, R_NilValue);                          \
         UNPROTECT(2);                                                          \
@@ -1596,7 +1596,7 @@ R_bcstack_t evalRirCode(Code* c, Context* ctx, SEXP* env,
             PROTECT(parent.u.sxpval);
             for (long i = n - 1; i >= 0; --i) {
                 PROTECT(arglist);
-                SEXP val = stackObjToSexp(ostackPop(ctx));
+                SEXP val = ostackPopSexp(ctx);
                 UNPROTECT(1);
                 SEXP name = cp_pool_at(ctx, names[i]);
                 arglist = CONS_NR(val, arglist);
@@ -1830,7 +1830,7 @@ R_bcstack_t evalRirCode(Code* c, Context* ctx, SEXP* env,
         INSTRUCTION(stvar_) {
             Immediate id = readImmediate();
             advanceImmediate();
-            SEXP val = stackObjToSexp(ostackPop(ctx));
+            SEXP val = ostackPopSexp(ctx);
 
             cachedSetVar(val, *env, id, ctx, bindingCache);
 
@@ -1840,7 +1840,7 @@ R_bcstack_t evalRirCode(Code* c, Context* ctx, SEXP* env,
         INSTRUCTION(starg_) {
             Immediate id = readImmediate();
             advanceImmediate();
-            SEXP val = stackObjToSexp(ostackPop(ctx));
+            SEXP val = ostackPopSexp(ctx);
 
             cachedSetVar(val, *env, id, ctx, bindingCache, true);
 
@@ -1852,7 +1852,7 @@ R_bcstack_t evalRirCode(Code* c, Context* ctx, SEXP* env,
             advanceImmediate();
             SLOWASSERT(TYPEOF(sym) == SYMSXP);
             PROTECT(sym);
-            SEXP val = stackObjToSexp(ostackPop(ctx));
+            SEXP val = ostackPopSexp(ctx);
             UNPROTECT(1);
             INCREMENT_NAMED(val);
             Rf_setVar(sym, val, ENCLOS(*env));
@@ -1894,8 +1894,8 @@ R_bcstack_t evalRirCode(Code* c, Context* ctx, SEXP* env,
             advanceImmediateN(n);
             auto names = (Immediate*)pc;
             advanceImmediateN(n);
-            CallContext call(c, stackObjToSexp(ostackTop(ctx)), n, ast,
-                             arguments, names, *env, given, ctx);
+            CallContext call(c, ostackSexpAt(ctx, 0), n, ast, arguments, names,
+                             *env, given, ctx);
             SEXP res = doCall(call, ctx);
             ostackPop(ctx); // callee
             ostackPush(ctx, sexpToStackObj(res, true));
@@ -1907,7 +1907,7 @@ R_bcstack_t evalRirCode(Code* c, Context* ctx, SEXP* env,
 
         INSTRUCTION(record_call_) {
             ObservedCallees* feedback = (ObservedCallees*)pc;
-            SEXP callee = stackObjToSexp(ostackTop(ctx));
+            SEXP callee = ostackSexpAt(ctx, 0);
             feedback->record(c, callee);
             pc += sizeof(ObservedCallees);
             NEXT();
@@ -1915,9 +1915,9 @@ R_bcstack_t evalRirCode(Code* c, Context* ctx, SEXP* env,
 
         INSTRUCTION(record_binop_) {
             ObservedValues* feedback = (ObservedValues*)pc;
-            SEXP l = stackObjToSexp(ostackAt(ctx, 1));
+            SEXP l = ostackSexpAt(ctx, 1);
             PROTECT(l);
-            SEXP r = stackObjToSexp(ostackTop(ctx));
+            SEXP r = ostackSexpAt(ctx, 0);
             UNPROTECT(1);
             feedback[0].record(l);
             feedback[1].record(r);
@@ -1941,8 +1941,8 @@ R_bcstack_t evalRirCode(Code* c, Context* ctx, SEXP* env,
             advanceImmediate();
             auto arguments = (Immediate*)pc;
             advanceImmediateN(n);
-            CallContext call(c, stackObjToSexp(ostackTop(ctx)), n, ast,
-                             arguments, *env, given, ctx);
+            CallContext call(c, ostackSexpAt(ctx, 0), n, ast, arguments, *env,
+                             given, ctx);
             SEXP res = doCall(call, ctx);
             ostackPop(ctx); // callee
             ostackPush(ctx, sexpToStackObj(res, true));
@@ -1965,7 +1965,7 @@ R_bcstack_t evalRirCode(Code* c, Context* ctx, SEXP* env,
             advanceImmediate();
             Assumptions given(readImmediate());
             advanceImmediate();
-            SEXP fun = stackObjToSexp(ostackAt(ctx, n));
+            SEXP fun = ostackSexpAt(ctx, n);
             CallContext call(c, fun, n, ast, ostackCellAt(ctx, n - 1), *env,
                              given, ctx);
             SEXP res = doCall(call, ctx);
@@ -1992,7 +1992,7 @@ R_bcstack_t evalRirCode(Code* c, Context* ctx, SEXP* env,
             advanceImmediate();
             auto names = (Immediate*)pc;
             advanceImmediateN(n);
-            CallContext call(c, stackObjToSexp(ostackAt(ctx, n)), n, ast,
+            CallContext call(c, ostackSexpAt(ctx, n), n, ast,
                              ostackCellAt(ctx, n - 1), names, *env, given, ctx);
             SEXP res = doCall(call, ctx);
             ostackPopn(ctx, call.passedArgs + 1);
@@ -2080,11 +2080,11 @@ R_bcstack_t evalRirCode(Code* c, Context* ctx, SEXP* env,
         }
 
         INSTRUCTION(close_) {
-            SEXP srcref = stackObjToSexp(ostackAt(ctx, 0));
+            SEXP srcref = ostackSexpAt(ctx, 0);
             PROTECT(srcref);
-            SEXP body = stackObjToSexp(ostackAt(ctx, 1));
+            SEXP body = ostackSexpAt(ctx, 1);
             PROTECT(body);
-            SEXP formals = stackObjToSexp(ostackAt(ctx, 2));
+            SEXP formals = ostackSexpAt(ctx, 2);
             PROTECT(formals);
             SEXP res = Rf_allocSExp(CLOSXP);
             UNPROTECT(3);
@@ -2121,7 +2121,7 @@ R_bcstack_t evalRirCode(Code* c, Context* ctx, SEXP* env,
             advanceImmediate();
             SEXP prom = Rf_mkPROMISE(c->getPromise(id)->container(), *env);
             PROTECT(prom);
-            SET_PRVALUE(prom, stackObjToSexp(ostackPop(ctx)));
+            SET_PRVALUE(prom, ostackPopSexp(ctx));
             UNPROTECT(1);
             ostackPush(ctx, sexpToStackObj(prom, true));
             NEXT();
@@ -2694,9 +2694,9 @@ R_bcstack_t evalRirCode(Code* c, Context* ctx, SEXP* env,
         }
 
         INSTRUCTION(extract1_1_) {
-            SEXP val = stackObjToSexp(ostackAt(ctx, 1));
+            SEXP val = ostackSexpAt(ctx, 1);
             PROTECT(val);
-            SEXP idx = stackObjToSexp(ostackAt(ctx, 0));
+            SEXP idx = ostackSexpAt(ctx, 0);
             PROTECT(idx);
             SEXP args = CONS_NR(val, CONS_NR(idx, R_NilValue));
             UNPROTECT(2);
@@ -2722,11 +2722,11 @@ R_bcstack_t evalRirCode(Code* c, Context* ctx, SEXP* env,
         }
 
         INSTRUCTION(extract1_2_) {
-            SEXP val = stackObjToSexp(ostackAt(ctx, 2));
+            SEXP val = ostackSexpAt(ctx, 2);
             PROTECT(val);
-            SEXP idx = stackObjToSexp(ostackAt(ctx, 1));
+            SEXP idx = ostackSexpAt(ctx, 1);
             PROTECT(idx);
-            SEXP idx2 = stackObjToSexp(ostackAt(ctx, 0));
+            SEXP idx2 = ostackSexpAt(ctx, 0);
             PROTECT(idx2);
             SEXP args = CONS_NR(val, CONS_NR(idx, CONS_NR(idx2, R_NilValue)));
             UNPROTECT(3);
@@ -2752,7 +2752,7 @@ R_bcstack_t evalRirCode(Code* c, Context* ctx, SEXP* env,
         }
 
         INSTRUCTION(extract2_1_) {
-            SEXP val = stackObjToSexp(ostackAt(ctx, 1));
+            SEXP val = ostackSexpAt(ctx, 1);
             R_bcstack_t idx = ostackAt(ctx, 0);
             int i = -1;
 
@@ -2818,7 +2818,7 @@ R_bcstack_t evalRirCode(Code* c, Context* ctx, SEXP* env,
         // ---------
         fallback : {
             PROTECT(val);
-            SEXP idxSexp = stackObjToSexp(idx);
+            SEXP idxSexp = ostackObjToSexpAt(idx, ctx, 1);
             PROTECT(idxSexp);
             SEXP args = CONS_NR(val, CONS_NR(idxSexp, R_NilValue));
             UNPROTECT(2);
@@ -2844,11 +2844,11 @@ R_bcstack_t evalRirCode(Code* c, Context* ctx, SEXP* env,
 
         // TODO: Fast case
         INSTRUCTION(extract2_2_) {
-            SEXP val = stackObjToSexp(ostackAt(ctx, 2));
+            SEXP val = ostackSexpAt(ctx, 2);
             PROTECT(val);
-            SEXP idx = stackObjToSexp(ostackAt(ctx, 1));
+            SEXP idx = ostackSexpAt(ctx, 1);
             PROTECT(idx);
-            SEXP idx2 = stackObjToSexp(ostackAt(ctx, 0));
+            SEXP idx2 = ostackSexpAt(ctx, 0);
             PROTECT(idx2);
             SEXP args = CONS_NR(val, CONS_NR(idx, CONS_NR(idx2, R_NilValue)));
             UNPROTECT(3);
@@ -2874,11 +2874,11 @@ R_bcstack_t evalRirCode(Code* c, Context* ctx, SEXP* env,
         }
 
         INSTRUCTION(subassign1_1_) {
-            SEXP idx = stackObjToSexp(ostackAt(ctx, 0));
+            SEXP idx = ostackSexpAt(ctx, 0);
             PROTECT(idx);
-            SEXP vec = stackObjToSexp(ostackAt(ctx, 1));
+            SEXP vec = ostackSexpAt(ctx, 1);
             PROTECT(vec);
-            SEXP val = stackObjToSexp(ostackAt(ctx, 2));
+            SEXP val = ostackSexpAt(ctx, 2);
             UNPROTECT(2);
 
             if (MAYBE_SHARED(vec)) {
@@ -2915,13 +2915,13 @@ R_bcstack_t evalRirCode(Code* c, Context* ctx, SEXP* env,
         }
 
         INSTRUCTION(subassign1_2_) {
-            SEXP idx2 = stackObjToSexp(ostackAt(ctx, 0));
+            SEXP idx2 = ostackSexpAt(ctx, 0);
             PROTECT(idx2);
-            SEXP idx1 = stackObjToSexp(ostackAt(ctx, 1));
+            SEXP idx1 = ostackSexpAt(ctx, 1);
             PROTECT(idx1);
-            SEXP mtx = stackObjToSexp(ostackAt(ctx, 2));
+            SEXP mtx = ostackSexpAt(ctx, 2);
             PROTECT(mtx);
-            SEXP val = stackObjToSexp(ostackAt(ctx, 3));
+            SEXP val = ostackSexpAt(ctx, 3);
             UNPROTECT(3);
 
             if (MAYBE_SHARED(mtx)) {
@@ -2961,7 +2961,7 @@ R_bcstack_t evalRirCode(Code* c, Context* ctx, SEXP* env,
 
         INSTRUCTION(subassign2_1_) {
             R_bcstack_t idx = ostackAt(ctx, 0);
-            SEXP vec = stackObjToSexp(ostackAt(ctx, 1));
+            SEXP vec = ostackSexpAt(ctx, 1);
             R_bcstack_t val = ostackAt(ctx, 2);
 
             // Fast case, only if:
@@ -2992,7 +2992,8 @@ R_bcstack_t evalRirCode(Code* c, Context* ctx, SEXP* env,
                             break;
                         case VECSXP:
                             PROTECT(vec);
-                            SET_VECTOR_ELT(vec, idx_, stackObjToSexp(val));
+                            SET_VECTOR_ELT(vec, idx_,
+                                           ostackObjToSexpAt(val, ctx, 2));
                             UNPROTECT(1);
                             break;
                         }
@@ -3010,9 +3011,9 @@ R_bcstack_t evalRirCode(Code* c, Context* ctx, SEXP* env,
             }
 
             PROTECT(vec);
-            SEXP idxSexp = stackObjToSexp(idx);
+            SEXP idxSexp = ostackObjToSexpAt(idx, ctx, 0);
             PROTECT(idxSexp);
-            SEXP valSexp = stackObjToSexp(val);
+            SEXP valSexp = ostackObjToSexpAt(val, ctx, 2);
             PROTECT(valSexp);
             SEXP args =
                 CONS_NR(vec, CONS_NR(idxSexp, CONS_NR(valSexp, R_NilValue)));
@@ -3049,7 +3050,7 @@ R_bcstack_t evalRirCode(Code* c, Context* ctx, SEXP* env,
         INSTRUCTION(subassign2_2_) {
             R_bcstack_t idx2 = ostackAt(ctx, 0);
             R_bcstack_t idx1 = ostackAt(ctx, 1);
-            SEXP mtx = stackObjToSexp(ostackAt(ctx, 2));
+            SEXP mtx = ostackSexpAt(ctx, 2);
             R_bcstack_t val = ostackAt(ctx, 3);
 
             // Fast case, only if:
@@ -3083,7 +3084,8 @@ R_bcstack_t evalRirCode(Code* c, Context* ctx, SEXP* env,
                             break;
                         case VECSXP:
                             PROTECT(mtx);
-                            SET_VECTOR_ELT(mtx, idx_, stackObjToSexp(val));
+                            SET_VECTOR_ELT(mtx, idx_,
+                                           ostackObjToSexpAt(val, ctx, 3));
                             UNPROTECT(1);
                             break;
                         }
@@ -3101,11 +3103,11 @@ R_bcstack_t evalRirCode(Code* c, Context* ctx, SEXP* env,
             }
 
             PROTECT(mtx);
-            SEXP idx1Sexp = stackObjToSexp(idx1);
+            SEXP idx1Sexp = ostackObjToSexpAt(idx1, ctx, 1);
             PROTECT(idx1Sexp);
-            SEXP idx2Sexp = stackObjToSexp(idx2);
+            SEXP idx2Sexp = ostackObjToSexpAt(idx2, ctx, 0);
             PROTECT(idx2Sexp);
-            SEXP valSexp = stackObjToSexp(val);
+            SEXP valSexp = ostackObjToSexpAt(val, ctx, 3);
             PROTECT(valSexp);
             SEXP args = CONS_NR(
                 mtx, CONS_NR(idx1Sexp,
@@ -3238,11 +3240,11 @@ R_bcstack_t evalRirCode(Code* c, Context* ctx, SEXP* env,
                            !isObject(from.u.sxpval));
                 SEXP call = getSrcForCall(c, pc - 1, ctx);
                 PROTECT(call);
-                SEXP fromSexp = stackObjToSexp(from);
+                SEXP fromSexp = ostackObjToSexpAt(from, ctx, 2);
                 PROTECT(fromSexp);
-                SEXP toSexp = stackObjToSexp(to);
+                SEXP toSexp = ostackObjToSexpAt(to, ctx, 1);
                 PROTECT(toSexp);
-                SEXP bySexp = stackObjToSexp(by);
+                SEXP bySexp = ostackObjToSexpAt(by, ctx, 0);
                 PROTECT(bySexp);
                 SEXP argslist = CONS_NR(
                     fromSexp, CONS_NR(toSexp, CONS_NR(bySexp, R_NilValue)));
@@ -3307,17 +3309,17 @@ R_bcstack_t evalRirCode(Code* c, Context* ctx, SEXP* env,
         }
 
         INSTRUCTION(names_) {
-            SEXP val = stackObjToSexp(ostackPop(ctx));
+            SEXP val = ostackPopSexp(ctx);
             ostackPush(ctx,
                        sexpToStackObj(Rf_getAttrib(val, R_NamesSymbol), true));
             NEXT();
         }
 
         INSTRUCTION(set_names_) {
-            SEXP name = stackObjToSexp(ostackPop(ctx));
+            SEXP name = ostackPopSexp(ctx);
             if (!isNull(name)) {
                 PROTECT(name);
-                SEXP val = stackObjToSexp(ostackPop(ctx));
+                SEXP val = ostackPopSexp(ctx);
                 UNPROTECT(1);
                 Rf_setAttrib(val, R_NamesSymbol, name);
                 ostackPush(ctx, sexpToStackObj(val, true));
@@ -3423,7 +3425,7 @@ R_bcstack_t evalRirCode(Code* c, Context* ctx, SEXP* env,
         }
 
         INSTRUCTION(return_) {
-            SEXP res = stackObjToSexp(ostackTop(ctx));
+            SEXP res = ostackSexpAt(ctx, 0);
             // this restores stack pointer to the value from the target context
             Rf_findcontext(CTXT_BROWSER | CTXT_FUNCTION, *env, res);
             // not reached
