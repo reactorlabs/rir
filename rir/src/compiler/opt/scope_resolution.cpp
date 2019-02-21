@@ -17,10 +17,9 @@ class TheScopeResolution {
   public:
     ClosureVersion* function;
     CFG cfg;
-    DominanceGraph doms;
     LogStream& log;
     explicit TheScopeResolution(ClosureVersion* function, LogStream& log)
-        : function(function), cfg(function), doms(function), log(log) {}
+        : function(function), cfg(function), log(log) {}
 
     void operator()() {
         ScopeAnalysis analysis(function, log);

@@ -11,6 +11,7 @@
 
 #include <assert.h>
 #include <deque>
+#include <set>
 
 #define NOT_IMPLEMENTED assert(false)
 

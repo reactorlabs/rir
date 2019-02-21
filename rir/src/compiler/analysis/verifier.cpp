@@ -228,27 +228,27 @@ class TheVerifier {
                                   << " predecessors but "
                                   << phi->nargs() - directInputs
                                   << " more arguments than immediate preds.\n";
-                        std::cerr << "\
-This Means we created this kind of graph, where a3 is in BB3 instead of\n\
-BB0. This will be impossible to convert back to CSSA.\n\
-  .-----.                             \n\
-  | BB1 |         .-----.             \n\
-  |-----|----.----| BB0 |             \n\
-  | a1= |    |    '-----'             \n\
-  '-----'    v                        \n\
-          .-----.                     \n\
-          | BB3 |                     \n\
-          |-----|                     \n\
-          | a3= |                     \n\
-          '-----'                     \n\
-             |                        \n\
-             v                        \n\
-  .---------------------.             \n\
-  |         BB4         |             \n\
-  |---------------------|             \n\
-  | phi(BB1:a1, BB3:a3) |             \n\
-  '---------------------'             \n\
-";
+                        std::cerr << "This Means we created this kind of "
+                                     "graph, where a3 is in BB3 instead of\n"
+                                     "BB0. This will be impossible to convert "
+                                     "back to CSSA.\n"
+                                     "  .-----.                             \n"
+                                     "  | BB1 |         .-----.             \n"
+                                     "  |-----|----.----| BB0 |             \n"
+                                     "  | a1= |    |    '-----'             \n"
+                                     "  '-----'    v                        \n"
+                                     "          .-----.                     \n"
+                                     "          | BB3 |                     \n"
+                                     "          |-----|                     \n"
+                                     "          | a3= |                     \n"
+                                     "          '-----'                     \n"
+                                     "             |                        \n"
+                                     "             v                        \n"
+                                     "  .---------------------.             \n"
+                                     "  |         BB4         |             \n"
+                                     "  |---------------------|             \n"
+                                     "  | phi(BB1:a1, BB3:a3) |             \n"
+                                     "  '---------------------'             \n";
                         ok = false;
                         assert(false);
                     }

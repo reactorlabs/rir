@@ -435,6 +435,7 @@ class SSAAllocator {
             --usedIdx;
         }
         assert(false && "Value wasn't found on the stack.");
+        return -1;
     }
 
     size_t stackPhiOffset(Instruction* executed, Phi* phi) const {
@@ -448,6 +449,7 @@ class SSAAllocator {
                 ++offset;
         }
         assert(false && "Phi wasn't found on the stack.");
+        return -1;
     }
 
     // Check if v is needed after argument argNumber of instruction executed

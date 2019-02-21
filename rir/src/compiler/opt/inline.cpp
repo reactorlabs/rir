@@ -97,6 +97,9 @@ class TheInliner {
                             return false;
                         }
                     }
+                    if (CallInstruction::CastCall(i)) {
+                        return false;
+                    }
                     return true;
                 };
 
