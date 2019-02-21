@@ -133,6 +133,75 @@ Code* compilePromise(CompilerContext& ctx, SEXP exp);
 void compileExpr(CompilerContext& ctx, SEXP exp);
 void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args);
 
+void compileWhile(CompilerContext& ctx, std::function<void()> compileCond,
+                  std::function<void()> compileBody) {
+    BC::Label loopBranch = cs.mkLabel();
+    BC::Label nextBranch = cs.mkLabel();
+
+    ctx.pushLoop(loopBranch, nextBranch);
+
+    unsigned beginLoopPos = cs.currentPos();
+
+    cs << BC::beginloop(nextBranch) << loopBranch;
+
+    compileCond();
+    cs << BC::asbool() << BC::brfalse(nextBranch);
+
+    compileBody();
+    cs << BC::pop() << BC::br(loopBranch) << nextBranch;
+
+    if (ctx.loopNeedsContext()) {
+        cs << BC::endloop();
+    } else {
+        cs.remove(beginLoopPos);
+    }
+
+    cs << BC::push(R_NilValue) << BC::invisible();
+
+    ctx.popLoop();
+}
+
+bool compileSimpleFor(CompilerContext& ctx, SEXP sym, SEXP seq, SEXP body) {
+    Match(seq) {
+        Case(LANGSXP, fun, argsSexp) {
+            RList args(argsSexp);
+            if (fun != symbol::Colon || args.length() != 2) {
+                return false;
+            }
+
+            SEXP start = argsSexp[0];
+            SEXP end = argsSexp[1];
+            if (!IS_SIMPLE_SCALAR(start, INTSXP)) {
+                return false;
+            }
+
+            // for(i in 1:n) {
+            //   ...
+            // }
+            // =>
+            // i' <- 1
+            // while (i' < n) {
+            //   i <- i'
+            //   ...
+            //   i' <- i' + 1
+            // }
+
+            CodeStream& cs = ctx.cs();
+            cs << BC::ldvar(start) << BC::ldvar(end);
+
+            compileWhile(ctx, [&cs, &end]() { cs << BC::lt(); },
+                         [&ctx, &sym, &body]() {
+                             cs << BC::dup() << BC::pop() << BC::stvar(sym);
+                             compileExpr(ctx, body);
+                             cs << BC::inc();
+                         });
+
+            return true;
+        }
+        Else({ return false; })
+    }
+}
+
 // Inline some specials
 // TODO: once we have sufficiently powerful analysis this should (maybe?) go
 //       away and move to an optimization phase.
@@ -570,37 +639,10 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_) {
 
         cs << BC::guardNamePrimitive(fun);
 
-        BC::Label loopBranch = cs.mkLabel();
-        BC::Label nextBranch = cs.mkLabel();
+        compileWhile(ctx, [&ctx, &cond]() { compileExpr(ctx, cond); },
+                     [&ctx, &body]() { compileExpr(ctx, body); })
 
-        ctx.pushLoop(loopBranch, nextBranch);
-
-        unsigned beginLoopPos = cs.currentPos();
-
-        cs << BC::beginloop(nextBranch)
-           << loopBranch;
-
-        compileExpr(ctx, cond);
-        cs << BC::asbool()
-           << BC::brfalse(nextBranch);
-
-        compileExpr(ctx, body);
-        cs << BC::pop()
-           << BC::br(loopBranch)
-           << nextBranch;
-
-        if (ctx.loopNeedsContext()) {
-            cs << BC::endloop();
-        } else {
-            cs.remove(beginLoopPos);
-        }
-
-        cs << BC::push(R_NilValue)
-           << BC::invisible();
-
-        ctx.popLoop();
-
-        return true;
+            return true;
     }
 
     if (fun == symbol::Repeat) {
@@ -651,6 +693,10 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_) {
 
         cs << BC::guardNamePrimitive(fun);
 
+        if (compileSimpleFor(ctx, sym, seq, body)) {
+            return true;
+        }
+
         BC::Label loopBranch = cs.mkLabel();
         BC::Label breakBranch = cs.mkLabel();
         BC::Label endForBranch = cs.mkLabel();
@@ -658,7 +704,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_) {
         ctx.pushLoop(loopBranch, breakBranch);
 
         compileExpr(ctx, seq);
-        cs << BC::setShared() << BC::forSeqSize() << BC::push((int)0);
+        cs << BC::setShared() << BC::forSeqSize() << BC::push(0);
 
         unsigned int beginLoopPos = cs.currentPos();
         cs << BC::beginloop(breakBranch)
