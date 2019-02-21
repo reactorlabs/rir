@@ -174,6 +174,7 @@ class Instruction : public Value {
                                 std::vector<Instruction*>::iterator it);
     void replaceUsesIn(Value* val, BB* target);
     bool usesAreOnly(BB*, std::unordered_set<Tag>);
+    bool usesDoNotInclude(BB*, std::unordered_set<Tag>);
     bool unused();
 
     virtual void updateType(){};

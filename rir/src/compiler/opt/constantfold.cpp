@@ -131,11 +131,20 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                 next = bb->remove(ip);
             });
 
-            if (auto isObj = TypeTest::Cast(i)) {
-                if (isObj->testFor == TypeTest::Object &&
-                    !isObj->arg<0>().val()->type.maybeObj()) {
+            if (auto isTest = TypeTest::Cast(i)) {
+                if (isTest->testFor == TypeTest::Object &&
+                    !isTest->arg<0>().val()->type.maybeObj()) {
                     i->replaceUsesWith(False::instance());
                     next = bb->remove(ip);
+                }
+
+                if (isTest->testFor == TypeTest::EnvironmentStub) {
+                    auto environment = MkEnv::Cast(isTest->arg<0>().val());
+                    static std::unordered_set<Tag> tags{Tag::Force};
+                    if (environment->usesDoNotInclude(bb, tags)) {
+                        i->replaceUsesWith(True::instance());
+                        next = bb->remove(ip);
+                    }
                 }
             }
 
@@ -152,8 +161,8 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                 static int nargs = findBuiltin("nargs");
                 assert(function->assumptions().includes(
                     Assumption::NotTooManyArguments));
-                // PIR functions are always compiled for a particular number of
-                // arguments
+                // PIR functions are always compiled for a particular number
+                // of arguments
                 if (callb->builtinId == nargs) {
                     auto nargsC = new LdConst(
                         ScalarInteger(function->nargs() -
@@ -197,9 +206,9 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
         }
     }
 
-    // If we deleted a branch, then it can happen that some phi inputs are now
-    // dead. We need to take care of them and remove them. The canonical case
-    // is the following:
+    // If we deleted a branch, then it can happen that some phi inputs are
+    // now dead. We need to take care of them and remove them. The canonical
+    // case is the following:
     //
     //    BB0:
     //      a <- 1
@@ -214,10 +223,10 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
     //
     // In this case removing the branch BB2, also kills the input `BB0:a`.
     //
-    // TODO: currently the algorithm is very slow. For each phi that comes after
-    // a removed branch, we check if (in the modified CFG) we have two inputs,
-    // both dominating the phi. If so we will remove the one that comes earlier
-    // (ie. the one that dominates the other).
+    // TODO: currently the algorithm is very slow. For each phi that comes
+    // after a removed branch, we check if (in the modified CFG) we have two
+    // inputs, both dominating the phi. If so we will remove the one that
+    // comes earlier (ie. the one that dominates the other).
     if (!branchRemoval.empty()) {
         DominanceGraph dom(function);
         CFG cfg(function);
