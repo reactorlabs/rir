@@ -1,0 +1,44 @@
+image: ubuntu:18.04
+
+before_script:
+  - export DEBIAN_FRONTEND=noninteractive
+  - apt-get update -qq && apt-get install -y -qq git libcurl4-openssl-dev texlive-latex-extra texlive-latex-base texlive-fonts-recommended texlive-fonts-extra texlive-latex-recommended texlive-font-utils dvipng cm-super bison ca-certificates-java java-common libbison-dev libcairo-script-interpreter2 libcairo2-dev libjbig-dev libmime-charset-perl libpango1.0-dev libpcsclite1 libpixman-1-dev libsombok3 libtext-unidecode-perl libtiff5-dev libtiffxx5 libunicode-linebreak-perl libxcb-render0-dev libxcb-shm0-dev libxml-libxml-perl libxml-namespacesupport-perl libxml-sax-base-perl libxml-sax-perl mpack openjdk-11-jre openjdk-11-jre-headless texinfo g++ xdg-utils gfortran subversion make r-base-dev liblzma-dev sed binutils curl cmake rsync xorg-dev valgrind cppcheck xvfb xauth xfonts-base tk-dev ninja-build python-pip
+  - mkdir build_pre && cd build_pre
+  - cmake -DCMAKE_BUILD_TYPE=release -GNinja ..
+  - ninja setup
+  - cd ..
+
+tests_release:
+  script:
+    - mkdir build_release && cd build_release
+    - cmake -DCMAKE_BUILD_TYPE=release -GNinja ..
+    - ninja
+    - ../tools/downloadBenchs.sh --travis
+    - bin/tests
+    - bin/gnur-make-tests check
+    - PIR_DEOPT_CHAOS=1 ./bin/gnur-make-tests check
+    - ../tools/check-gnur-make-tests-error
+    - PIR_WARMUP=4      ./bin/gnur-make-tests check
+    - ../tools/check-gnur-make-tests-error
+    - bin/gnur-make-tests test-all-devel
+    - ../tools/check-gnur-make-tests-error
+    - bin/gnur-make-tests check-recommended
+    - ../tools/check-gnur-make-tests-error
+    - ../tools/runBenchs.sh --installRebench --travis
+
+tests_debug:
+  script:
+    - mkdir build_debugopt && cd build_debugopt
+    - cmake -DCMAKE_BUILD_TYPE=debugopt -GNinja ..
+    - ninja
+    - bin/tests
+    - R_ENABLE_JIT=0 ./bin/tests
+    - R_ENABLE_JIT=1 ./bin/tests
+    - R_ENABLE_JIT=2 ./bin/tests
+    - R_ENABLE_JIT=3 ./bin/tests
+    - PIR_ENABLE=off ./bin/tests
+    - PIR_ENABLE=force ./bin/tests
+    - ENABLE_VALGRIND=1 ./bin/tests
+    - R_GCTORTURE=100   ./bin/tests
+    - ./bin/gnur-make-tests check
+    - ../tools/check-gnur-make-tests-error
