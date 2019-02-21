@@ -435,6 +435,7 @@ class SSAAllocator {
             --usedIdx;
         }
         assert(false && "Value wasn't found on the stack.");
+        return -1;
     }
 
     size_t stackPhiOffset(Instruction* executed, Phi* phi) const {
@@ -448,6 +449,7 @@ class SSAAllocator {
                 ++offset;
         }
         assert(false && "Phi wasn't found on the stack.");
+        return -1;
     }
 
     // Check if v is needed after argument argNumber of instruction executed
@@ -879,24 +881,11 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 break;
             }
 
-            case Tag::CastType: {
-                auto cast = CastType::Cast(instr);
-                auto arg = cast->arg<0>().val();
-                // assertion is:
-                // "input is a promise => output is a promise"
-                // to remove a promise wrapper -- even for eager args -- a force
-                // instruction is needed!
-                assert((!(arg->type.maybePromiseWrapped() ||
-                          arg->type.isA(RType::prom)) ||
-                        cast->type.maybePromiseWrapped()) &&
-                       "Cannot cast away promise wrapper. Use Force");
-                break;
-            }
-
 #define EMPTY(Name)                                                            \
     case Tag::Name: {                                                          \
         break;                                                                 \
     }
+                EMPTY(CastType);
                 EMPTY(Nop);
                 EMPTY(PirCopy);
 #undef EMPTY

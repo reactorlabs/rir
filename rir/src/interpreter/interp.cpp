@@ -11,6 +11,7 @@
 
 #include <assert.h>
 #include <deque>
+#include <set>
 
 #define NOT_IMPLEMENTED assert(false)
 
@@ -1854,7 +1855,6 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
         INSTRUCTION(push_) {
             res = readConst(ctx, readImmediate());
             advanceImmediate();
-            R_Visible = TRUE;
             ostack_push(ctx, res);
             NEXT();
         }

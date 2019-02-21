@@ -1049,8 +1049,9 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) const {
             }
 
             if (!inPromise() && !insert.getCurrentBB()->isEmpty() &&
-                insert.getCurrentBB()->last()->hasEffect())
+                insert.getCurrentBB()->last()->hasEffectIgnoreVisibility()) {
                 addCheckpoint(srcCode, nextPos, cur.stack, insert);
+            }
         }
     }
     assert(cur.stack.empty());

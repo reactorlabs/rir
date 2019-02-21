@@ -869,7 +869,7 @@ void compileGetvar(CodeStream& cs, SEXP name) {
 // Constant
 void compileConst(CodeStream& cs, SEXP constant) {
     SET_NAMED(constant, 2);
-    cs << BC::push(constant);
+    cs << BC::push(constant) << BC::visible();
 }
 
 void compileExpr(CompilerContext& ctx, SEXP exp) {
