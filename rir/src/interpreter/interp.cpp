@@ -1313,6 +1313,10 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
         }
 
         INSTRUCTION(mk_stub_env_) {
+            // TODO: There is a potential safety problem because we are not
+            // preserving the args and parent SEXP. Doing it here is not an
+            // option becase R_Preserve is slow. We must find a simple story so
+            // that the gc trace rir wrappers.
             size_t n = readImmediate();
             advanceImmediate();
             // Do we need to preserve parent and the arg vals?

@@ -39,6 +39,7 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
                 }
                 i = *ip;
             }
+
             if (i->branches()) {
                 auto cp = Checkpoint::Cast(i);
                 assert(cp);
@@ -82,7 +83,6 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
 
                 // Speculatively elide envs on forces that only require them in
                 // case they access promises reflectively
-
                 if (auto force = Force::Cast(i)) {
                     auto nextInstruction = nextInstr(force, bb, true);
                     if (checkpoint.at(nextInstruction)) {
@@ -93,34 +93,11 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
 
                         if (!environment->stub &&
                             environment->usesAreOnly(function->entry, forces)) {
+
                             environment = MkEnv::Cast(force->env());
-
-                            if (!stubFor.count(environment)) {
-                                auto stub = (MkEnv*)environment->clone();
-                                stub->stub = true;
-                                stubFor.emplace(environment, stub);
-                                environment->bb()->insert(
-                                    environment->bb()->atPosition(environment),
-                                    stub);
-
-                                next = bb->atPosition(force) + 1;
-
-                                // Clean framestate
-                                auto innerIt = bb->falseBranch()->begin();
-                                while (innerIt != bb->falseBranch()->end()) {
-                                    if (auto fs = FrameState::Cast(*innerIt)) {
-                                        fs->env(stub);
-                                        break;
-                                    }
-                                    innerIt++;
-                                }
-                            }
-
-                            auto stubEnvironment = stubFor.at(environment);
-                            force->env(stubEnvironment);
-                            ip++;
-                            auto condition = (new TypeTest(stubEnvironment))
-                                                 ->environmentStub();
+                            environment->stub = true;
+                            auto condition =
+                                (new TypeTest(environment))->environmentStub();
                             auto position = bb->trueBranch()->begin();
                             BBTransform::insertAssume(
                                 bb->trueBranch(), condition,
