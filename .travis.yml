@@ -137,7 +137,7 @@ script:
   # Run the internal testsuite in all combinations
   - if [[ "$TEST_VALGRIND"  != "" ]];  then  ENABLE_VALGRIND=1 ./bin/tests; fi
   - if [[ "$TEST_GCTORTURE" != "" ]];  then  R_GCTORTURE=100   ./bin/tests; fi
-  - if [[ "$BENCHS" -eq 1 ]]; then ../tools/downloadBenchs.sh --travis; ../tools/runBenchs.sh --installRebench --travis; fi
+  - if [[ "$BENCHS" -eq 1 ]]; then ../tools/downloadBenchs.sh ../build; ../tools/runBenchs.sh --installRebench --travis; fi
   - R_ENABLE_JIT=0 ./bin/tests
   - R_ENABLE_JIT=1 ./bin/tests
   - R_ENABLE_JIT=2 ./bin/tests

@@ -23,6 +23,7 @@ then
 fi
 
 
+export PATH=$HOME/.local/bin:$PATH
 pushd "$SCRIPT_PATH/../benchmarks"
 rebench rebench.conf $OPTIONS -SN --iterations=2 
 popd > /dev/null
