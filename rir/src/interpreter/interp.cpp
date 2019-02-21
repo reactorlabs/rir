@@ -1013,7 +1013,7 @@ static R_INLINE int RInteger_uminus(int x, Rboolean* pnaflag) {
             STORE_UNOP(res);                                                   \
             break;                                                             \
         case STACK_OBJ_INT:                                                    \
-            res = realStackObj(Op2(val.u.ival, &naflag));                      \
+            res = intStackObj(Op2(val.u.ival, &naflag));                       \
             CHECK_INTEGER_OVERFLOW(naflag);                                    \
             STORE_UNOP(res);                                                   \
             break;                                                             \
