@@ -1,0 +1,56 @@
+image: ubuntu:18.04
+
+before_script:
+  - export DEBIAN_FRONTEND=noninteractive
+  - apt-get update -qq && apt-get install -y -qq git libcurl4-openssl-dev texlive-latex-extra texlive-latex-base texlive-fonts-recommended texlive-fonts-extra texlive-latex-recommended texlive-font-utils dvipng cm-super bison ca-certificates-java java-common libbison-dev libcairo-script-interpreter2 libcairo2-dev libjbig-dev libmime-charset-perl libpango1.0-dev libpcsclite1 libpixman-1-dev libsombok3 libtext-unidecode-perl libtiff5-dev libtiffxx5 libunicode-linebreak-perl libxcb-render0-dev libxcb-shm0-dev libxml-libxml-perl libxml-namespacesupport-perl libxml-sax-base-perl libxml-sax-perl mpack openjdk-11-jre openjdk-11-jre-headless texinfo g++ xdg-utils gfortran subversion make r-base-dev liblzma-dev sed binutils curl cmake rsync xorg-dev valgrind cppcheck xvfb xauth xfonts-base tk-dev ninja-build python-pip
+  - mkdir build_release && cd build_release
+  - cmake -DCMAKE_BUILD_TYPE=release -GNinja ..
+  - ninja setup
+  - ninja
+  - cd ..
+
+sanity:
+  script:
+    - tools/cppcheck
+    - cd build_release
+    - bin/tests
+
+tests_release:
+  script:
+    - cd build_release
+    - bin/gnur-make-tests check
+    - PIR_DEOPT_CHAOS=1 ./bin/gnur-make-tests check
+    - PIR_WARMUP=2 PIR_DEOPT_CHAOS=1 ./bin/gnur-make-tests check
+    - PIR_WARMUP=4 ./bin/gnur-make-tests check
+    - bin/gnur-make-tests test-all-devel && ../tools/check-gnur-make-tests-error
+    - bin/gnur-make-tests check-recommended && ../tools/check-gnur-make-tests-error
+
+tests_debug:
+  script:
+    - mkdir build_debugopt && cd build_debugopt
+    - cmake -DCMAKE_BUILD_TYPE=debugopt -GNinja ..
+    - ninja
+    - bin/tests
+    - R_ENABLE_JIT=0 ./bin/tests
+    - R_ENABLE_JIT=1 ./bin/tests
+    - R_ENABLE_JIT=2 ./bin/tests
+    - R_ENABLE_JIT=3 ./bin/tests
+    - PIR_ENABLE=off ./bin/tests
+    - PIR_ENABLE=force ./bin/tests
+    - ENABLE_VALGRIND=1 ./bin/tests
+    - R_GCTORTURE=100 ./bin/tests
+    - ./bin/gnur-make-tests check
+
+test_sanitize:
+  script:
+    - mkdir build_sanitize && cd build_sanitize
+    - cmake -DCMAKE_BUILD_TYPE=sanitize -GNinja ..
+    - ninja
+    - bin/tests
+    - ./bin/gnur-make-tests check
+
+test_benchmarks:
+  script:
+    - cd build_release
+    - ../tools/downloadBenchs.sh --travis
+    - ../tools/runBenchs.sh --installRebench --travis
