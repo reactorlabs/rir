@@ -46,25 +46,7 @@ class VisibilityAnalysis : public StaticAnalysis<CurrentVisibility> {
         : StaticAnalysis("VisibilityAnalysis", cls, cls, log), code(cls) {}
 
     AbstractResult apply(CurrentVisibility& vis,
-                         Instruction* i) const override {
-        if (Invisible::Cast(i)) {
-            if (vis.state != CurrentVisibility::Invisible) {
-                vis.state = CurrentVisibility::Invisible;
-                return AbstractResult::Updated;
-            }
-        } else if (Visible::Cast(i)) {
-            if (vis.state != CurrentVisibility::Visible) {
-                vis.state = CurrentVisibility::Visible;
-                return AbstractResult::Updated;
-            }
-        } else if (i->mightChangeVisibility()) {
-            if (vis.state != CurrentVisibility::Unknown) {
-                vis.state = CurrentVisibility::Unknown;
-                return AbstractResult::Updated;
-            }
-        }
-        return AbstractResult::None;
-    };
+                         Instruction* i) const override final;
 
     CurrentVisibility::State at(Instruction* i) {
         return StaticAnalysis::at<PositioningStyle::BeforeInstruction>(i).state;

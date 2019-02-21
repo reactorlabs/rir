@@ -2,6 +2,7 @@
 #include "../analysis/scope.h"
 #include "../pir/pir_impl.h"
 #include "../util/cfg.h"
+#include "../util/phi_placement.h"
 #include "../util/visitor.h"
 #include "R/r.h"
 #include "pass_definitions.h"
@@ -153,50 +154,31 @@ class TheScopeResolution {
                         });
 
                         if (onlyLocalVals && !res.isUnknown()) {
-                            // Find optimal phi placement:
-                            // Shift phi up until we see at least two inputs
-                            // coming from different paths.
-                            auto hasAllInputs = [&](BB* load) -> bool {
-                                return res.checkEachSource(
-                                    [&](const ValOrig& src) {
-                                        auto i = Instruction::Cast(src.val);
-                                        if (!i)
-                                            return true;
-                                        // we cannot move the phi above its src
-                                        if (i->bb() == load)
-                                            return false;
-                                        return cfg.isPredecessor(i->bb(), load);
-                                    });
-                            };
-                            BB* phiBlock = bb;
-                            for (bool up = true; up;) {
-                                auto preds =
-                                    cfg.immediatePredecessors(phiBlock);
-                                if (preds.empty())
-                                    break;
-                                for (auto pre : preds)
-                                    up = up && hasAllInputs(pre);
-                                if (up)
-                                    phiBlock = *preds.begin();
-                            }
-
-                            // Insert a new phi
-                            auto phi = new Phi;
-                            res.eachSource([&](const ValOrig& src) {
-                                phi->addInput(src.origin->bb(), src.val);
+                            std::vector<BB*> inputs;
+                            res.eachSource([&](ValOrig v) {
+                                if (auto i = Instruction::Cast(v.val))
+                                    inputs.push_back(i->bb());
                             });
-                            phi->updateType();
-                            if (!phi->type.isA(res.type))
-                                i->type = res.type;
-                            i->replaceUsesWith(phi);
-                            if (phiBlock == bb) {
-                                bb->replace(ip, phi);
-                            } else {
-                                phiBlock->insert(phiBlock->begin(), phi);
-                                next = bb->remove(ip);
-                            }
+                            if (auto phiBlock =
+                                    PhiPlacement::find(cfg, bb, inputs)) {
+                                // Insert a new phi
+                                auto phi = new Phi;
+                                res.eachSource([&](const ValOrig& src) {
+                                    phi->addInput(src.origin->bb(), src.val);
+                                });
+                                phi->updateType();
+                                if (!phi->type.isA(res.type))
+                                    i->type = res.type;
+                                i->replaceUsesWith(phi);
+                                if (phiBlock == bb) {
+                                    bb->replace(ip, phi);
+                                } else {
+                                    phiBlock->insert(phiBlock->begin(), phi);
+                                    next = bb->remove(ip);
+                                }
 
-                            return;
+                                return;
+                            }
                         }
                     }
 

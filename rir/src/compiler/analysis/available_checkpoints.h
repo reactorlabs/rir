@@ -17,7 +17,7 @@ class AvailableCheckpoints : public StaticAnalysis<AbstractUnique<Checkpoint>> {
     AbstractResult apply(AbstractUnique<Checkpoint>& state,
                          Instruction* i) const override {
         if (state.get()) {
-            if (i->hasObservableEffect()) {
+            if (i->hasEffectIgnoreVisibility()) {
                 state.clear();
                 return AbstractResult::Updated;
             }

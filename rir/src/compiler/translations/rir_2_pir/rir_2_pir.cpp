@@ -1046,8 +1046,14 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) const {
             }
 
             if (!inPromise() && !insert.getCurrentBB()->isEmpty() &&
-                insert.getCurrentBB()->last()->hasEffect())
+                insert.getCurrentBB()->last()->hasEffectIgnoreVisibility()) {
+
+                assert(!Visible::Cast(insert.getCurrentBB()->last()));
+                assert(!Invisible::Cast(insert.getCurrentBB()->last()));
+                assert(!LdConst::Cast(insert.getCurrentBB()->last()));
+
                 addCheckpoint(srcCode, nextPos, cur.stack, insert);
+            }
         }
     }
     assert(cur.stack.empty());

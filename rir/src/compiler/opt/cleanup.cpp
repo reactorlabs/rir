@@ -153,11 +153,23 @@ class TheCleanup {
                         phi->updateInputAt(i, n);
             }
         };
+
         CFG cfg(function);
         std::unordered_map<BB*, BB*> toDel;
         Visitor::run(function->entry, [&](BB* bb) {
             // If bb is a jump to non-merge block, we merge it with the next
             if (bb->isJmp() && cfg.hasSinglePred(bb->next0)) {
+                bool block = false;
+                // Prevent this removal from merging a phi input block with the
+                // block the phi resides in
+                for (auto phi : usedBB[bb]) {
+                    phi->eachArg([&](BB* in, Value*) {
+                        if (in == bb && bb->next0 == phi->bb())
+                            block = true;
+                    });
+                }
+                if (block)
+                    return;
                 BB* d = bb->next0;
                 while (!d->isEmpty())
                     d->moveToEnd(d->begin(), bb);

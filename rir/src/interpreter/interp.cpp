@@ -1782,7 +1782,6 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
         INSTRUCTION(push_) {
             res = readConst(ctx, readImmediate());
             advanceImmediate();
-            R_Visible = TRUE;
             ostack_push(ctx, res);
             NEXT();
         }

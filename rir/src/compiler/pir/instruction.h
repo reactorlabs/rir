@@ -129,8 +129,8 @@ class Instruction : public Value {
         : Value(t, tag), srcIdx(srcIdx) {}
 
     virtual bool hasEffect() const = 0;
+    virtual bool hasEffectIgnoreVisibility() const = 0;
     virtual bool mightChangeVisibility() const = 0;
-    virtual bool hasObservableEffect() const = 0;
     virtual bool mayUseReflection() const = 0;
     virtual bool mayForcePromises() const = 0;
     virtual bool readsEnv() const = 0;
@@ -190,7 +190,7 @@ class Instruction : public Value {
         // TODO: for escape analysis we use leaksEnv || hasEffect as a very
         // crude approximation whether this instruction leaks arguments. We
         // should do better.
-        return leaksEnv() || hasEffect();
+        return leaksEnv() || mayForcePromises();
     }
 
     typedef std::function<bool(Value*)> ArgumentValuePredicateIterator;
@@ -284,8 +284,8 @@ class InstructionImplementation : public Instruction {
     bool mightChangeVisibility() const override {
         return EFFECT >= Effect::Visibility;
     }
-    bool hasObservableEffect() const override {
-        return EFFECT > Effect::Order && hasEffect();
+    bool hasEffectIgnoreVisibility() const override {
+        return EFFECT > Effect::Visibility && hasEffect();
     }
     bool mayForcePromises() const override final {
         return EFFECT >= Effect::Force;

@@ -169,32 +169,109 @@ class TheVerifier {
             assert(i == bb->last() &&
                    "Only last instruction of BB can have controlflow");
 
-        Phi* phi = Phi::Cast(i);
-        i->eachArg([&](const InstrArg& a) -> void {
-            auto v = a.val();
-            auto t = a.type();
-            if (auto iv = Instruction::Cast(v)) {
-                if (phi) {
-                    if (slow &&
-                        !cfg(bb->owner).isPredecessor(iv->bb(), i->bb())) {
+        if (auto phi = Phi::Cast(i)) {
+            size_t directInputs = 0;
+            phi->eachArg([&](BB* input, Value* v) {
+                if (auto iv = Instruction::Cast(v)) {
+                    if (input == phi->bb()) {
                         std::cerr << "Error at instruction '";
                         i->print(std::cerr);
                         std::cerr << "': input '";
                         iv->printRef(std::cerr);
-                        std::cerr << "' does not come from a predecessor.\n";
+                        std::cerr << "' has the phi block as input block\n";
                         ok = false;
                     }
-                } else if ((iv->bb() == i->bb() &&
-                            bb->indexOf(iv) > bb->indexOf(i)) ||
-                           (iv->bb() != i->bb() && slow &&
-                            !dom(bb->owner).dominates(iv->bb(), bb))) {
-                    std::cerr << "Error at instruction '";
-                    i->print(std::cerr);
-                    std::cerr << "': input '";
-                    iv->printRef(std::cerr);
-                    std::cerr << "' used before definition.\n";
-                    ok = false;
+
+                    if (slow) {
+                        if (cfg(bb->owner).isImmediatePredecessor(input, bb))
+                            directInputs++;
+
+                        if ((!cfg(bb->owner).isPredecessor(iv->bb(), i->bb()) ||
+                             // A block can be it's own predecessor (loop). But
+                             // then the input must come after the phi!
+                             (iv->bb() == i->bb() &&
+                              i->bb()->indexOf(iv) < i->bb()->indexOf(i)))) {
+                            std::cerr << "Error at instruction '";
+                            i->print(std::cerr);
+                            std::cerr << "': input '";
+                            iv->printRef(std::cerr);
+                            std::cerr
+                                << "' does not come from a predecessor.\n";
+                            ok = false;
+                        }
+                    }
                 }
+            });
+            if (slow) {
+                if (directInputs ==
+                    cfg(bb->owner).immediatePredecessors(bb).size()) {
+                    if (directInputs != phi->nargs()) {
+                        std::cout << "digraph { ";
+                        Visitor::run(f->entry, [&](BB* bb) {
+                            //                          std::cout << "BB" <<
+                            //                          bb->id << "
+                            //                          [shape=\"box\"
+                            //                          label=\"BB" << bb->id <<
+                            //                          "\"]; ";
+                            if (bb->next0)
+                                std::cout << "BB" << bb->id << " -> BB"
+                                          << bb->next0->id << "; ";
+                            if (bb->next1 && !Checkpoint::Cast(bb->last()))
+                                std::cout << "BB" << bb->id << " -> BB"
+                                          << bb->next1->id << "; ";
+                        });
+                        std::cout << "}\n";
+
+                        std::cerr << "Error at instruction '";
+                        i->print(std::cerr);
+                        std::cerr << "'\nI have inputs from all my immediate "
+                                  << " predecessors but "
+                                  << phi->nargs() - directInputs
+                                  << " more arguments than immediate preds.\n";
+                        std::cerr << "\
+This Means we created this kind of graph, where a3 is in BB3 instead of\n\
+BB0. This will be impossible to convert back to CSSA.\n\
+  .-----.                             \n\
+  | BB1 |         .-----.             \n\
+  |-----|----.----| BB0 |             \n\
+  | a1= |    |    '-----'             \n\
+  '-----'    v                        \n\
+          .-----.                     \n\
+          | BB3 |                     \n\
+          |-----|                     \n\
+          | a3= |                     \n\
+          '-----'                     \n\
+             |                        \n\
+             v                        \n\
+  .---------------------.             \n\
+  |         BB4         |             \n\
+  |---------------------|             \n\
+  | phi(BB1:a1, BB3:a3) |             \n\
+  '---------------------'             \n\
+";
+                        ok = false;
+                        assert(false);
+                    }
+                }
+            }
+        }
+
+        i->eachArg([&](const InstrArg& a) -> void {
+            auto v = a.val();
+            auto t = a.type();
+            if (auto iv = Instruction::Cast(v)) {
+                if (!Phi::Cast(i))
+                    if ((iv->bb() == i->bb() &&
+                         bb->indexOf(iv) > bb->indexOf(i)) ||
+                        (iv->bb() != i->bb() && slow &&
+                         !dom(bb->owner).dominates(iv->bb(), bb))) {
+                        std::cerr << "Error at instruction '";
+                        i->print(std::cerr);
+                        std::cerr << "': input '";
+                        iv->printRef(std::cerr);
+                        std::cerr << "' used before definition.\n";
+                        ok = false;
+                    }
 
                 if (iv->bb()->owner != i->bb()->owner) {
                     std::cerr << "Error at instruction '";

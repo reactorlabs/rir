@@ -120,6 +120,7 @@ static inline int getFlag(SEXP f) {
     int i = ((sexprec_rjit*)f)->u.i;
     return (((R_FunTab[i].eval) / 100) % 10);
 }
+static inline int getFlag(int i) { return (((R_FunTab[i].eval) / 100) % 10); }
 
 static inline int findBuiltin(const char* name) {
     int i = 0;
