@@ -2989,7 +2989,7 @@ R_bcstack_t evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
             // extract BC.
             if (seq.tag == STACK_OBJ_SEXP && isObject(seq.u.sxpval)) {
                 SEXP seqSexp = Rf_duplicate(seq.u.sxpval);
-                SET_OBJECT(seq.u.sxpval, 0);
+                SET_OBJECT(seqSexp, 0);
                 seq = sexpToStackObj(seqSexp, true);
                 ostackSet(ctx, 0, seq);
             }
