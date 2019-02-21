@@ -26,7 +26,8 @@ struct ArgsLazyData : public RirDataWrapper<ArgsLazyData, LAZY_ARGS_MAGIC> {
     ArgsLazyData& operator=(const ArgsLazyData&) = delete;
 
     ArgsLazyData(const CallContext* callCtx, InterpreterInstance* cmpCtx)
-        : RirDataWrapper(2), callContext(callCtx), compilationContext(cmpCtx){};
+        : RirDataWrapper(2, 0), callContext(callCtx),
+          compilationContext(cmpCtx){};
 
     const CallContext* callContext;
     InterpreterInstance* compilationContext;

@@ -21,6 +21,9 @@ struct data_header {
 
     // magic number to differentiate different RIR data wrappers
     const uint32_t wrapper;
+
+    // #SEXPs stored in an vector* at the begging of the struct to be preserved
+    const uint32_t gc;
 };
 
 template <typename BASE, uint32_t MAGIC>
@@ -41,9 +44,9 @@ struct RirDataWrapper {
     }
 
   protected:
-    explicit RirDataWrapper(uint32_t count)
-        : info{RIR_DATA_WRAPPER_MAGIC, MAGIC} {
-        uint8_t* start = (uint8_t*)this + sizeof(uint32_t) * 2;
+    explicit RirDataWrapper(uint32_t count, uint32_t gc)
+        : info{RIR_DATA_WRAPPER_MAGIC, MAGIC, gc} {
+        uint8_t* start = (uint8_t*)this + sizeof(data_header);
         memset(start, 0, count * sizeof(void*));
     }
 };
