@@ -129,6 +129,7 @@ class Instruction : public Value {
         : Value(t, tag), srcIdx(srcIdx) {}
 
     virtual bool hasEffect() const = 0;
+    virtual bool mightChangeVisibility() const = 0;
     virtual bool hasObservableEffect() const = 0;
     virtual bool mayUseReflection() const = 0;
     virtual bool mayForcePromises() const = 0;
@@ -281,6 +282,9 @@ class InstructionImplementation : public Instruction {
     static constexpr bool mayLeakEnv_ = ENV >= EnvAccess::Leak;
 
     bool hasEffect() const override { return EFFECT > Effect::None; }
+    bool mightChangeVisibility() const override {
+        return EFFECT >= Effect::Visibility;
+    }
     bool hasObservableEffect() const override {
         return EFFECT > Effect::Order && hasEffect();
     }
@@ -953,6 +957,12 @@ class FLI(PirCopy, 1, Effect::None, EnvAccess::None) {
         : FixedLenInstruction(v->type, {{v->type}}, {{v}}) {}
     void print(std::ostream& out, bool tty) const override;
     void updateType() override final { type = arg<0>().val()->type; }
+};
+
+// Effect::Any prevents this instruction from being optimized away
+class FLI(Nop, 0, Effect::Any, EnvAccess::None) {
+  public:
+    explicit Nop() : FixedLenInstruction(PirType::voyd()) {}
 };
 
 class FLI(Identical, 2, Effect::None, EnvAccess::None) {

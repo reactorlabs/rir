@@ -239,8 +239,7 @@ class VisitorImplementation {
     }
 
     template <bool PROCESS_NEW_NODES, typename ActionKind>
-    static bool backwardGenericRun(BB* bb, CFG const& cfg, ActionKind action,
-                                   bool processNewNodes) {
+    static bool backwardGenericRun(BB* bb, CFG const& cfg, ActionKind action) {
         auto scheduleNext = [&](Schedule schedule, BB* cur) {
             for (auto pred : cfg.immediatePredecessors(cur))
                 schedule(pred);
@@ -305,8 +304,7 @@ class VisitorImplementation {
 
   private:
     static bool coinFlip() {
-        static std::random_device rd;
-        static std::mt19937 gen(rd());
+        static std::mt19937 gen(42);
         static std::bernoulli_distribution coin(0.5);
         return coin(gen);
     };

@@ -1,8 +1,9 @@
 #include "common.h"
 #include "R/RList.h"
 #include "R/r.h"
-#include "runtime/ArgsLazyData.h"
-#include "runtime/LazyEnvironment.h"
+
+#include "interpreter/ArgsLazyData.h"
+#include "interpreter/LazyEnvironment.h"
 #include "utils/capture_out.h"
 
 #include <cxxabi.h>

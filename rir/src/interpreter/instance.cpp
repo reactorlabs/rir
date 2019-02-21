@@ -1,6 +1,7 @@
-#include "interp_context.h"
+#include "instance.h"
 #include "api.h"
-#include "runtime.h"
+
+namespace rir {
 
 void initializeResizeableList(ResizeableList* l, size_t capacity, SEXP parent,
                               size_t index) {
@@ -19,8 +20,8 @@ SEXP setterPlaceholderSym;
 SEXP getterPlaceholderSym;
 SEXP quoteSym;
 
-Context* context_create() {
-    Context* c = new Context;
+InterpreterInstance* context_create() {
+    InterpreterInstance* c = new InterpreterInstance;
     c->list = Rf_allocVector(VECSXP, 2);
     R_PreserveObject(c->list);
     initializeResizeableList(&c->cp, POOL_CAPACITY, c->list, CONTEXT_INDEX_CP);
@@ -45,21 +46,19 @@ Context* context_create() {
     c->closureCompiler = [](SEXP closure, SEXP name) {
         return rir_compile(closure, R_NilValue);
     };
-    c->closureOptimizer = [](SEXP f, const rir::Assumptions&, SEXP n) {
-        return f;
-    };
+    c->closureOptimizer = [](SEXP f, const Assumptions&, SEXP n) { return f; };
 
     if (pir && std::string(pir).compare("off") == 0) {
         // do nothing; use defaults
     } else if (pir && std::string(pir).compare("force") == 0) {
         c->closureCompiler = [](SEXP f, SEXP n) {
             SEXP rir = rir_compile(f, R_NilValue);
-            return rirOptDefaultOpts(rir, rir::Assumptions(), n);
+            return rirOptDefaultOpts(rir, Assumptions(), n);
         };
     } else if (pir && std::string(pir).compare("force_dryrun") == 0) {
         c->closureCompiler = [](SEXP f, SEXP n) {
             SEXP rir = rir_compile(f, R_NilValue);
-            return rirOptDefaultOptsDryrun(rir, rir::Assumptions(), n);
+            return rirOptDefaultOptsDryrun(rir, Assumptions(), n);
         };
     } else {
         c->closureOptimizer = rirOptDefaultOpts;
@@ -68,4 +67,6 @@ Context* context_create() {
     return c;
 }
 
-extern Context* globalContext_;
+extern InterpreterInstance* globalInterpreterInstance_;
+
+} // namespace pir

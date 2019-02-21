@@ -1,33 +1,18 @@
 #ifndef RIR_INTERPRETER_C_H
 #define RIR_INTERPRETER_C_H
 
+#include "builtins.h"
+#include "call_context.h"
+#include "instance.h"
+
+#include "interp_incl.h"
+
 #include <R/r.h>
 
 #undef length
 
-#include "interp_context.h"
-#include "interp_data.h"
-
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-struct CallContext;
-typedef rir::Code Code;
-
-SEXP evalRirCodeExtCaller(Code* c, Context* ctx, SEXP* env);
-SEXP evalRirCode(Code* c, Context* ctx, SEXP* env,
-                 const CallContext* callContext);
-
-SEXP rirExpr(SEXP f);
-
-SEXP rirEval_f(SEXP f, SEXP env);
-SEXP rirApplyClosure(SEXP, SEXP, SEXP, SEXP);
-
-SEXP materialize(void* rirDataWrapper);
-
-#ifdef __cplusplus
-}
+#if defined(__GNUC__) && (!defined(NO_THREADED_CODE))
+#define THREADED_CODE
 #endif
 
 #endif // RIR_INTERPRETER_C_H

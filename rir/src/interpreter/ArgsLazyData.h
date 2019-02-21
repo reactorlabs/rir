@@ -2,18 +2,16 @@
 #define RIR_ARGS_LAZY_H
 
 #include "RirDataWrapper.h"
+
+#include "interp_incl.h"
+
 #include <cassert>
 #include <cstdint>
 #include <functional>
 
-struct CallContext;
-struct Context;
-SEXP createLegacyArgsListFromStackValues(const CallContext& call,
-                                         bool eagerCallee, Context* ctx);
-
 namespace rir {
 
-#define LAZY_ARGS_MAGIC 0x1a27a000
+static constexpr size_t LAZY_ARGS_MAGIC = 0x1a27a000;
 
 /**
  * ArgsLazyCreation holds the information needed to recreate the
@@ -27,11 +25,11 @@ struct ArgsLazyData : public RirDataWrapper<ArgsLazyData, LAZY_ARGS_MAGIC> {
     ArgsLazyData(const ArgsLazyData&) = delete;
     ArgsLazyData& operator=(const ArgsLazyData&) = delete;
 
-    ArgsLazyData(const CallContext* callCtx, Context* cmpCtx)
+    ArgsLazyData(const CallContext* callCtx, InterpreterInstance* cmpCtx)
         : RirDataWrapper(2), callContext(callCtx), compilationContext(cmpCtx){};
 
     const CallContext* callContext;
-    Context* compilationContext;
+    InterpreterInstance* compilationContext;
 
     SEXP createArgsLists() {
         return createLegacyArgsListFromStackValues(*callContext, false,

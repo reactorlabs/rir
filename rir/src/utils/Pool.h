@@ -12,7 +12,7 @@
 
 #include <unordered_map>
 
-#include "interpreter/runtime.h"
+#include "interpreter/instance.h"
 
 namespace rir {
 

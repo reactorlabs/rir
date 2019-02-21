@@ -43,6 +43,7 @@ void Configurations::defaultOptimizations() {
         optimizations.push_back(new pir::PhaseMarker(name));
     };
     auto addDefaultOpt = [&]() {
+        optimizations.push_back(new pir::OptimizeVisibility());
         optimizations.push_back(new pir::ForceDominance());
         optimizations.push_back(new pir::ScopeResolution());
         optimizations.push_back(new pir::EagerCalls());

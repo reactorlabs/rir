@@ -5,16 +5,14 @@
 #include <cstdint>
 #include <map>
 
-#include "R/r.h"
-#include "utils/Pool.h"
-
 #include "BC_inc.h"
-
 #include "R/Protect.h"
-
-#include "interpreter/runtime.h"
-
+#include "R/r.h"
+#include "interpreter/instance.h"
 #include "ir/Deoptimization.h"
+#include "runtime/Code.h"
+#include "runtime/Function.h"
+#include "utils/Pool.h"
 
 namespace rir {
 
