@@ -2974,7 +2974,6 @@ R_bcstack_t evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
             // the loop and generally have somthing more clever here...
             int value;
             if (stackObjIsVector(seq)) {
-                // TODO: This uses XLENGTH instead of LENGTH. Is that OK?
                 value = stackObjLength(seq);
             } else if (seq.tag == STACK_OBJ_SEXP &&
                        (Rf_isList(seq.u.sxpval) || isNull(seq.u.sxpval))) {
