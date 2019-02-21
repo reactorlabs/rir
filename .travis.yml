@@ -22,7 +22,7 @@ matrix:
         - CC_OVERRIDE=clang
         - BUILD=debugopt
         - CHECK=check
-        - RIR_WARMUP=2
+        - PIR_WARMUP=2
       compiler: clang
 
     # linux gcc
@@ -39,15 +39,19 @@ matrix:
         - CXX_OVERRIDE=g++-7
         - CC_OVERRIDE=gcc-7
         - CHECK=test-all-devel
-        - BUILD=debugopt
+        - BUILD=release
         - PIR_DEOPT_CHAOS_SETTING=1
+        - PIR_MAX_INPUT_SIZE=1000
+        - PIR_INLINER_MAX_SIZE=800
 
     - env:
         - CXX_OVERRIDE=g++-7
         - CC_OVERRIDE=gcc-7
         - CHECK=check-recommended
         - BUILD=release
-        - RIR_WARMUP=4
+        - PIR_WARMUP=4
+        - PIR_MAX_INPUT_SIZE=700
+        - PIR_INLINER_MAX_SIZE=500
 
 addons:
   apt:

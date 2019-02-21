@@ -8,6 +8,8 @@ cache:
 before_script:
   - export DEBIAN_FRONTEND=noninteractive
   - export APT_CACHE_DIR=`pwd`/apt-cache && mkdir -pv $APT_CACHE_DIR
+  - export PIR_MAX_INPUT_SIZE=99999
+  - export PIR_INLINER_MAX_SIZE=99999
   - apt-get update -yq && apt-get -o dir::cache::archives="$APT_CACHE_DIR" install -y -qq git libcurl4-openssl-dev texlive-latex-extra texlive-latex-base texlive-fonts-recommended texlive-fonts-extra texlive-latex-recommended texlive-font-utils dvipng cm-super bison ca-certificates-java java-common libbison-dev libcairo-script-interpreter2 libcairo2-dev libjbig-dev libmime-charset-perl libpango1.0-dev libpcsclite1 libpixman-1-dev libsombok3 libtext-unidecode-perl libtiff5-dev libtiffxx5 libunicode-linebreak-perl libxcb-render0-dev libxcb-shm0-dev libxml-libxml-perl libxml-namespacesupport-perl libxml-sax-base-perl libxml-sax-perl mpack openjdk-11-jre openjdk-11-jre-headless texinfo g++ xdg-utils gfortran subversion make r-base-dev liblzma-dev sed binutils curl cmake rsync xorg-dev valgrind cppcheck xvfb xauth xfonts-base tk-dev ninja-build python-pip
   - mkdir build_release && cd build_release
   - cmake -DCMAKE_BUILD_TYPE=release -GNinja ..
@@ -46,6 +48,7 @@ tests_debug:
     - PIR_ENABLE=force ./bin/tests
     - ENABLE_VALGRIND=1 ./bin/tests
     - R_GCTORTURE=100 ./bin/tests
+    - PIR_INLINER_MAX_INLINEE_SIZE=2000 ./bin/tests
     - ./bin/gnur-make-tests check
 
 test_sanitize:
@@ -53,7 +56,7 @@ test_sanitize:
     - mkdir build_sanitize && cd build_sanitize
     - cmake -DCMAKE_BUILD_TYPE=sanitize -GNinja ..
     - ninja
-    - bin/tests
+    - R_GCTORTURE=100 bin/tests
     - ./bin/gnur-make-tests check
     - PIR_INLINER_MAX_INLINEE_SIZE=1000 ./bin/gnur-make-tests check
 
@@ -62,3 +65,4 @@ test_benchmarks:
     - cd build_release
     - ../tools/downloadBenchs.sh ../build_release
     - ../tools/runBenchs.sh --installRebench --travis
+    - PIR_DEOPT_CHAOS=1 ../tools/runBenchs.sh --installRebench --travis
