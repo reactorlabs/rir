@@ -46,6 +46,7 @@ void Configurations::defaultOptimizations() {
         optimizations.push_back(new pir::OptimizeVisibility());
         optimizations.push_back(new pir::ForceDominance());
         optimizations.push_back(new pir::ScopeResolution());
+        optimizations.push_back(new pir::OptimizeContexts());
         optimizations.push_back(new pir::EagerCalls());
         optimizations.push_back(new pir::Constantfold());
         optimizations.push_back(new pir::Cleanup());

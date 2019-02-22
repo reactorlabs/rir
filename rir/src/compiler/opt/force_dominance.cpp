@@ -346,7 +346,8 @@ void ForceDominance::apply(RirCompiler&, ClosureVersion* cls,
 
                                 // Create a return value phi of the promise
                                 Value* promRes =
-                                    BBTransform::forInline(prom_copy, split);
+                                    BBTransform::forInline(prom_copy, split)
+                                        .first;
 
                                 f = Force::Cast(*split->begin());
                                 assert(f);

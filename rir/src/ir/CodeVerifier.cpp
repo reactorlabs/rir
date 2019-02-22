@@ -170,6 +170,8 @@ static Sources hasSources(Opcode bc) {
     case Opcode::record_call_:
     case Opcode::record_binop_:
     case Opcode::deopt_:
+    case Opcode::pop_context_:
+    case Opcode::push_context_:
         return Sources::NotNeeded;
 
     case Opcode::ldloc_:

@@ -78,6 +78,7 @@
     V(sysframe, "sys.frame")                                                   \
     V(syscall, "sys.call")                                                     \
     V(srcref, "srcref")                                                        \
-    V(ambiguousCallTarget, ".ambiguousCallTarget.")
+    V(ambiguousCallTarget, ".ambiguousCallTarget.")                            \
+    V(delayedArglist, ".delayedArglist.")
 
 #endif // SYMBOLS_LIST_H_

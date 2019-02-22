@@ -7,6 +7,7 @@
 #include "R/Symbols.h"
 #include "R/r.h"
 #include "pass_definitions.h"
+#include "utils/Pool.h"
 
 #include <algorithm>
 #include <unordered_map>
@@ -84,23 +85,35 @@ class TheInliner {
                 if (inlineeCls->rirFunction()->uninlinable)
                     continue;
 
+                enum SafeToInline {
+                    Yes,
+                    NeedsContext,
+                    No,
+                };
+
                 // TODO: instead of blacklisting those, we could also create
                 // contexts for inlined functions.
-                auto safeToInline = [](Instruction* i) {
-                    if (auto ld = LdFun::Cast(i)) {
-                        if (!SafeBuiltinsList::forInlineByName(ld->varName)) {
-                            return false;
+                SafeToInline allowInline = SafeToInline::Yes;
+                auto updateAllowInline = [&](Code* code) {
+                    Visitor::check(code->entry, [&](Instruction* i) {
+                        if (auto ld = LdFun::Cast(i)) {
+                            if (!SafeBuiltinsList::forInlineByName(
+                                    ld->varName)) {
+                                allowInline = SafeToInline::No;
+                                return false;
+                            }
                         }
-                    }
-                    if (auto call = CallBuiltin::Cast(i)) {
-                        if (!SafeBuiltinsList::forInline(call->builtinId)) {
-                            return false;
+                        if (auto call = CallBuiltin::Cast(i)) {
+                            if (!SafeBuiltinsList::forInline(call->builtinId)) {
+                                allowInline = SafeToInline::No;
+                                return false;
+                            }
                         }
-                    }
-                    if (CallInstruction::CastCall(i)) {
-                        return false;
-                    }
-                    return true;
+                        if (CallInstruction::CastCall(i)) {
+                            allowInline = SafeToInline::NeedsContext;
+                        }
+                        return true;
+                    });
                 };
 
                 // No recursive inlining
@@ -110,17 +123,10 @@ class TheInliner {
                     inlineeCls->rirFunction()->uninlinable = true;
                     continue;
                 } else {
-                    bool failedToInline = false;
-                    inlinee->eachPromise([&](Promise* p) {
-                        Visitor::check(p->entry, [&](Instruction* i) {
-                            if (!safeToInline(i)) {
-                                failedToInline = true;
-                                return false;
-                            }
-                            return true;
-                        });
-                    });
-                    if (failedToInline) {
+                    updateAllowInline(inlinee);
+                    inlinee->eachPromise(
+                        [&](Promise* p) { updateAllowInline(p); });
+                    if (allowInline == SafeToInline::No) {
                         inlineeCls->rirFunction()->uninlinable = true;
                         continue;
                     }
@@ -149,10 +155,6 @@ class TheInliner {
                         auto ld = LdArg::Cast(*ip);
                         Instruction* i = *ip;
 
-                        if (!safeToInline(i)) {
-                            failedToInline = true;
-                            return;
-                        }
                         if (auto sp = FrameState::Cast(i)) {
                             if (!callerFrameState) {
                                 failedToInline = true;
@@ -257,7 +259,29 @@ class TheInliner {
                         }
                     });
 
-                    Value* inlineeRes = BBTransform::forInline(copy, split);
+                    auto inlineeRet = BBTransform::forInline(copy, split);
+                    Value* inlineeRes = inlineeRet.first;
+                    BB* inlineeReturnblock = inlineeRet.second;
+                    if (allowInline == SafeToInline::NeedsContext) {
+                        size_t insertPos = 0;
+                        Value* op = nullptr;
+                        if (auto call = Call::Cast(theCall)) {
+                            op = call->cls();
+                        } else if (auto call = StaticCall::Cast(theCall)) {
+                            auto ld = new LdConst(call->cls()->rirClosure());
+                            copy->insert(copy->begin(), ld);
+                            op = ld;
+                            insertPos++;
+                        }
+                        assert(op);
+                        auto ast = new LdConst(rir::Pool::get(theCall->srcIdx));
+                        auto ctx = new PushContext(ast, op, theCall->env());
+                        copy->insert(copy->begin() + insertPos, ctx);
+                        copy->insert(copy->begin() + insertPos, ast);
+                        inlineeReturnblock->append(
+                            new PopContext(inlineeRes, ctx));
+                    }
+
                     theCall->replaceUsesWith(inlineeRes);
 
                     // Remove the call instruction

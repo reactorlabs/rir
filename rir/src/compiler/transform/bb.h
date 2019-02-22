@@ -15,7 +15,7 @@ class BBTransform {
     static BB* splitEdge(size_t next_id, BB* from, BB* to, Code* target);
     static BB* split(size_t next_id, BB* src, BB::Instrs::iterator,
                      Code* target);
-    static Value* forInline(BB* inlinee, BB* cont);
+    static std::pair<Value*, BB*> forInline(BB* inlinee, BB* cont);
     static BB* lowerExpect(Code* closure, BB* src,
                            BB::Instrs::iterator position, Value* condition,
                            bool expected, BB* deoptBlock,

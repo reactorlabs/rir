@@ -1334,6 +1334,23 @@ class VLIE(MkEnv, Effect::None, EnvAccess::Capture) {
     size_t nLocals() { return nargs() - 1; }
 };
 
+class FLIE(PushContext, 3, Effect::Any, EnvAccess::Capture) {
+  public:
+    PushContext(Value* ast, Value* op, Value* sysparent)
+        : FixedLenInstructionWithEnvSlot(NativeType::context,
+                                         {{PirType::any(), PirType::closure()}},
+                                         {{ast, op}}, sysparent) {}
+};
+
+class FLI(PopContext, 2, Effect::Any, EnvAccess::None) {
+  public:
+    PopContext(Value* res, PushContext* push)
+        : FixedLenInstruction(PirType::voyd(),
+                              {{PirType::any(), NativeType::context}},
+                              {{res, push}}) {}
+    PushContext* push() { return PushContext::Cast(arg<1>().val()); }
+};
+
 class VLI(Phi, Effect::None, EnvAccess::None) {
     std::vector<BB*> input;
 

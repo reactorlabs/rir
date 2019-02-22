@@ -789,6 +789,8 @@ SIMPLE_INSTRUCTIONS(V, _)
     case Opcode::isobj_:
     case Opcode::check_missing_:
     case Opcode::static_call_:
+    case Opcode::pop_context_:
+    case Opcode::push_context_:
         log.unsupportedBC("Unsupported BC (are you recompiling?)", bc);
         assert(false && "Recompiling PIR not supported for now.");
 

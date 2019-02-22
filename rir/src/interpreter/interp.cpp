@@ -319,9 +319,9 @@ static RIR_INLINE SEXP rirCallTrampoline(const CallContext& call, Function* fun,
     return rirCallTrampoline(call, fun, env, arglist, nullptr, ctx);
 }
 
-const static SEXP loopTrampolineMarker = (SEXP)0x7007;
 SEXP evalRirCode(Code*, InterpreterInstance*, SEXP*, const CallContext*,
                  Opcode*, R_bcstack_t*);
+const static SEXP loopTrampolineMarker = (SEXP)0x7007;
 static void loopTrampoline(Code* c, InterpreterInstance* ctx, SEXP* env,
                            const CallContext* callCtxt, Opcode* pc,
                            R_bcstack_t* localsBase) {
@@ -344,6 +344,35 @@ static void loopTrampoline(Code* c, InterpreterInstance* ctx, SEXP* env,
     SEXP res = evalRirCode(c, ctx, env, callCtxt, pc, localsBase);
     assert(res == loopTrampolineMarker);
     Rf_endcontext(&cntxt);
+}
+
+static void inlineContextTrampoline(Code* c, SEXP ast, SEXP sysparent, SEXP op,
+                                    InterpreterInstance* ctx, Opcode* pc,
+                                    R_bcstack_t* localsBase) {
+    CallContext call(nullptr, op, -1, ast, 0, nullptr, nullptr, sysparent,
+                     Assumptions(), ctx);
+    RCNTXT cntxt;
+    initClosureContext(ast, &cntxt, R_NilValue, sysparent,
+                       symbol::delayedArglist, op);
+
+    if ((SETJMP(cntxt.cjmpbuf))) {
+        if (R_ReturnedValue == R_RestartToken) {
+            cntxt.callflag = CTXT_RETURN; /* turn restart off */
+            R_ReturnedValue = R_NilValue; /* remove restart token */
+            auto res =
+                evalRirCode(c, ctx, &cntxt.cloenv, &call, pc, localsBase);
+            endClosureContext(&cntxt, res);
+            return;
+        } else {
+            endClosureContext(&cntxt, R_ReturnedValue);
+            return;
+        }
+    }
+
+    // execute the inlined function
+    auto res = evalRirCode(c, ctx, &cntxt.cloenv, &call, pc, localsBase);
+
+    endClosureContext(&cntxt, res);
 }
 
 static RIR_INLINE SEXP legacySpecialCall(const CallContext& call,
@@ -1211,7 +1240,8 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
     std::deque<FrameInfo*>* synthesizeFrames = nullptr;
     assert(c->info.magic == CODE_MAGIC);
 
-    if (!localsBase) {
+    bool existingLocals = localsBase;
+    if (!existingLocals) {
 #ifdef TYPED_STACK
         // Zero the region of the locals to avoid keeping stuff alive and to
         // zero all the type tags. Note: this trick does not work with the stack
@@ -1221,7 +1251,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
 #endif
         localsBase = R_BCNodeStackTop;
     }
-    Locals locals(localsBase, c->localsCount);
+    Locals locals(localsBase, c->localsCount, existingLocals);
 
     BindingCache bindingCache[BINDING_CACHE_SIZE];
     memset(&bindingCache, 0, sizeof(bindingCache));
@@ -1243,6 +1273,26 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
 
         INSTRUCTION(nop_) NEXT();
 
+        INSTRUCTION(push_context_) {
+            SEXP ast = ostack_at(ctx, 1);
+            SEXP op = ostack_at(ctx, 0);
+            assert(TYPEOF(*env) == ENVSXP);
+            assert(TYPEOF(op) == CLOSXP);
+            ostack_popn(ctx, 2);
+            int offset = readJumpOffset();
+            advanceJump();
+            inlineContextTrampoline(c, ast, *env, op, ctx, pc, localsBase);
+            pc += offset;
+            assert(*pc == Opcode::pop_context_);
+            advanceOpcode();
+            NEXT();
+        }
+
+        INSTRUCTION(pop_context_) {
+            return ostack_pop(ctx);
+            NEXT();
+        }
+
         INSTRUCTION(mk_env_) {
             size_t n = readImmediate();
             advanceImmediate();
@@ -1260,6 +1310,8 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
                 SET_MISSING(arglist, val == R_MissingArg ? 2 : 0);
             }
             res = Rf_NewEnvironment(R_NilValue, arglist, parent);
+            if (R_GlobalContext->promargs == symbol::delayedArglist)
+                R_GlobalContext->promargs = arglist;
             ostack_push(ctx, res);
             NEXT();
         }

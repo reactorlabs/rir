@@ -16,6 +16,9 @@ DEF_INSTR(invalid_, 0, 0, 0, 0)
  */
 DEF_INSTR(nop_, 0, 0, 0, 1)
 
+DEF_INSTR(push_context_, 1, 2, 0, 0)
+DEF_INSTR(pop_context_, 0, 1, 0, 0)
+
 /**
  * make_env_:: create a new environment with the parent and all locals taken
  * from stack and the argument names as immediates.
@@ -440,7 +443,7 @@ DEF_INSTR(make_unique_, 0, 1, 1, 1)
 /**
  * beginloop_:: begins loop context, break and continue target immediate (this is the target for break and next long jumps)
  */
-DEF_INSTR(beginloop_, 1, 0, 0, 1)
+DEF_INSTR(beginloop_, 1, 0, 0, 0)
 
 /**
  * endloop_:: end marker for a loop with context

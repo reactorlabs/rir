@@ -345,6 +345,7 @@ BC_NOARGS(V, _)
     inline static BC stvarSuper(SEXP sym);
     inline static BC missing(SEXP sym);
     inline static BC alloc(int type);
+    inline static BC pushContext(Jmp);
     inline static BC beginloop(Jmp);
     inline static BC brtrue(Jmp);
     inline static BC brfalse(Jmp);
@@ -627,6 +628,7 @@ BC_NOARGS(V, _)
         case Opcode::brobj_:
         case Opcode::brfalse_:
         case Opcode::beginloop_:
+        case Opcode::push_context_:
             memcpy(&immediate.offset, pc, sizeof(Jmp));
             break;
         case Opcode::pick_:
