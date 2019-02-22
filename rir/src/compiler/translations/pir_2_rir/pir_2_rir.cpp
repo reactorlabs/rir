@@ -893,6 +893,12 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 break;
             }
 
+            case Tag::AsInt: {
+                auto asInt = AsInt::Cast(instr);
+                cs << BC::asint(asInt->ceil);
+                break;
+            }
+
 #define EMPTY(Name)                                                            \
     case Tag::Name: {                                                          \
         break;                                                                 \
@@ -916,7 +922,6 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 SIMPLE(Dec, dec);
                 SIMPLE(Force, force);
                 SIMPLE(AsTest, asbool);
-                SIMPLE(AsInt, asint);
                 SIMPLE(Length, length);
                 SIMPLE(ChkMissing, checkMissing);
                 SIMPLE(ChkClosure, isfun);

@@ -2213,6 +2213,8 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
         }
 
         INSTRUCTION(asint_) {
+            bool ceil_ = (bool)readImmediate();
+            advanceImmediate();
             SEXP val = ostack_top(ctx);
             // Scalar integers (already done)
             if (IS_SIMPLE_SCALAR(val, INTSXP)) {
@@ -2246,7 +2248,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
                             x = NA_INTEGER;
                             isNaOrNan = true;
                         } else {
-                            x = (int)r;
+                            x = (int)(ceil_ ? ceil(r) : floor(r));
                             isNaOrNan = false;
                         }
                         break;

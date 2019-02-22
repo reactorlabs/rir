@@ -24,7 +24,6 @@
     V(NESTED, names, names)                                                    \
     V(NESTED, setNames, set_names)                                             \
     V(NESTED, asbool, asbool)                                                  \
-    V(NESTED, asint, asint)                                                    \
     V(NESTED, endloop, endloop)                                                \
     V(NESTED, dup, dup)                                                        \
     V(NESTED, dup2, dup2)                                                      \

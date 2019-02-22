@@ -795,9 +795,12 @@ class FLI(AsTest, 1, Effect::Error, EnvAccess::None) {
 
 class FLI(AsInt, 1, Effect::Error, EnvAccess::None) {
   public:
-    explicit AsInt(Value* in)
+    const bool ceil;
+
+    explicit AsInt(Value* in, bool ceil)
         : FixedLenInstruction(PirType(RType::integer).scalar().notObject(),
-                              {{PirType::any()}}, {{in}}) {}
+                              {{PirType::any()}}, {{in}}),
+          ceil(ceil) {}
 };
 
 class FLIE(Subassign1_1D, 4, Effect::None, EnvAccess::Leak) {

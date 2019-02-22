@@ -232,9 +232,11 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         push(insert(new AsLogical(pop(), srcIdx)));
         break;
 
-    case Opcode::asint_:
-        push(insert(new AsInt(pop())));
+    case Opcode::asint_: {
+        bool ceil = (bool)bc.immediate.i;
+        push(insert(new AsInt(pop(), ceil)));
         break;
+    }
 
     case Opcode::ldfun_:
         push(insert(new LdFun(bc.immediateConst(), env)));

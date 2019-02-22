@@ -171,6 +171,11 @@ BC BC::alloc(int type) {
     i.i = type;
     return BC(Opcode::alloc_, i);
 }
+BC BC::asint(bool ceil) {
+    ImmediateArguments i;
+    i.i = (int)ceil;
+    return BC(Opcode::asint_, i);
+}
 BC BC::br(Jmp j) {
     ImmediateArguments i;
     i.offset = j;

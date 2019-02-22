@@ -186,14 +186,14 @@ bool compileSimpleFor(CompilerContext& ctx, SEXP sym, SEXP seq, SEXP body) {
             // i' <- m
             // n' <- n
             // if (i' > n') {
-            //   n' <- n' - 1
+            //   n' <- ceil(n') - 1
             //   while (i' > n') {
             //     i <- i'
             //     i' <- i' - 1
             //     ...
             //   }
             // } else {
-            //   n' <- n' + 1
+            //   n' <- floor(n') + 1
             //   while (i' < n') {
             //     i <- i'
             //     i' <- i' + 1
@@ -207,17 +207,16 @@ bool compileSimpleFor(CompilerContext& ctx, SEXP sym, SEXP seq, SEXP body) {
 
             // i' <- m
             compileExpr(ctx, start);
-            cs << BC::asint();
+            cs << BC::asint(false);
             // n' <- n
             compileExpr(ctx, end);
-            cs << BC::asint();
             // if (i' > n')
             cs << BC::dup2() << BC::gt();
             cs.addSrc(R_NilValue);
             cs << BC::brfalse(fwdBranch);
             // {
-            // n' <- n' - 1
-            cs << BC::dec() << BC::ensureNamed();
+            // n' <- ceil(n') - 1
+            cs << BC::asint(true) << BC::dec() << BC::ensureNamed();
             // while
             compileWhile(ctx,
                          [&cs]() {
@@ -238,8 +237,8 @@ bool compileSimpleFor(CompilerContext& ctx, SEXP sym, SEXP seq, SEXP body) {
                          });
             // } else {
             cs << BC::br(endBranch) << fwdBranch;
-            // n' <- n' + 1
-            cs << BC::inc();
+            // n' <- floor(n') + 1
+            cs << BC::asint(false) << BC::inc();
             // while
             compileWhile(ctx,
                          [&cs]() {

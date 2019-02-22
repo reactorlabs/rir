@@ -345,6 +345,7 @@ BC_NOARGS(V, _)
     inline static BC stvarSuper(SEXP sym);
     inline static BC missing(SEXP sym);
     inline static BC alloc(int type);
+    inline static BC asint(bool ceil);
     inline static BC beginloop(Jmp);
     inline static BC brtrue(Jmp);
     inline static BC brfalse(Jmp);
@@ -634,6 +635,7 @@ BC_NOARGS(V, _)
         case Opcode::is_:
         case Opcode::put_:
         case Opcode::alloc_:
+        case Opcode::asint_:
             memcpy(&immediate.i, pc, sizeof(uint32_t));
             break;
         case Opcode::ldarg_:

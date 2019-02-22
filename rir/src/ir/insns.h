@@ -291,11 +291,11 @@ DEF_INSTR(aslogical_, 0, 1, 1, 0)
 DEF_INSTR(asbool_, 0, 1, 1, 0)
 
 /**
- * asint_ :: pop object stack, convert to integer scalar and push. Truncates if
- *           real, 0 or 1 if logical, throws an NA error if another type. For
+ * asint_ :: pop object stack, convert to integer scalar and push. Ceils/floors
+ *           if real, 0 or 1 if logical, throws an NA error if another type. For
  *           simple ranges.
  */
-DEF_INSTR(asint_, 0, 1, 1, 1)
+DEF_INSTR(asint_, 1, 1, 1, 1)
 
 /**
  * asast_:: pop a promise off the object stack, push its AST on object stack
