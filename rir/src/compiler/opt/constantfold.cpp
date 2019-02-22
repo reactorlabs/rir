@@ -125,6 +125,13 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                 }
             });
 
+            FOLD_UNARY(AsInt, [&](SEXP arg) {
+                // TODO: Is this right?
+                if (IS_SIMPLE_SCALAR(arg, INTSXP)) {
+                    next = bb->remove(ip);
+                }
+            });
+
             FOLD_BINARY(Identical, [&](SEXP a, SEXP b) {
                 i->replaceUsesWith(a == b ? (Value*)True::instance()
                                           : (Value*)False::instance());

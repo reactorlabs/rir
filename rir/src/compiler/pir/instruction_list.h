@@ -49,6 +49,7 @@
     V(Phi)                                                                     \
     V(AsLogical)                                                               \
     V(AsTest)                                                                  \
+    V(AsInt)                                                                   \
     V(IsObject)                                                                \
     V(Return)                                                                  \
     V(MkArg)                                                                   \
@@ -66,6 +67,7 @@
     V(LAnd)                                                                    \
     V(LOr)                                                                     \
     V(Inc)                                                                     \
+    V(Dec)                                                                     \
     V(Not)                                                                     \
     V(Is)                                                                      \
     V(Plus)                                                                    \

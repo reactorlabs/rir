@@ -135,6 +135,8 @@ void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args);
 
 void compileWhile(CompilerContext& ctx, std::function<void()> compileCond,
                   std::function<void()> compileBody) {
+    CodeStream& cs = ctx.cs();
+
     BC::Label loopBranch = cs.mkLabel();
     BC::Label nextBranch = cs.mkLabel();
 
@@ -145,7 +147,7 @@ void compileWhile(CompilerContext& ctx, std::function<void()> compileCond,
     cs << BC::beginloop(nextBranch) << loopBranch;
 
     compileCond();
-    cs << BC::asbool() << BC::brfalse(nextBranch);
+    cs << BC::brfalse(nextBranch);
 
     compileBody();
     cs << BC::pop() << BC::br(loopBranch) << nextBranch;
@@ -169,37 +171,103 @@ bool compileSimpleFor(CompilerContext& ctx, SEXP sym, SEXP seq, SEXP body) {
                 return false;
             }
 
-            SEXP start = argsSexp[0];
-            SEXP end = argsSexp[1];
-            if (!IS_SIMPLE_SCALAR(start, INTSXP)) {
+            SEXP start = args[0];
+            SEXP end = args[1];
+            if (TYPEOF(start) != INTSXP && TYPEOF(start) != LGLSXP &&
+                (TYPEOF(start) != REALSXP || XLENGTH(start) == 0 ||
+                 *REAL(start) != (int)*REAL(start))) {
                 return false;
             }
 
-            // for(i in 1:n) {
+            // for(i in m:n) {
             //   ...
             // }
             // =>
-            // i' <- 1
-            // while (i' < n) {
-            //   i <- i'
-            //   ...
-            //   i' <- i' + 1
+            // i' <- m
+            // n' <- n
+            // if (i' > n') {
+            //   n' <- n' - 1
+            //   while (i' > n') {
+            //     i <- i'
+            //     i' <- i' - 1
+            //     ...
+            //   }
+            // } else {
+            //   n' <- n' + 1
+            //   while (i' < n') {
+            //     i <- i'
+            //     i' <- i' + 1
+            //     ...
+            //   }
             // }
 
             CodeStream& cs = ctx.cs();
-            cs << BC::ldvar(start) << BC::ldvar(end);
+            BC::Label fwdBranch = cs.mkLabel();
+            BC::Label endBranch = cs.mkLabel();
 
-            compileWhile(ctx, [&cs, &end]() { cs << BC::lt(); },
-                         [&ctx, &sym, &body]() {
-                             cs << BC::dup() << BC::pop() << BC::stvar(sym);
+            // i' <- m
+            compileExpr(ctx, start);
+            cs << BC::asint();
+            // n' <- n
+            compileExpr(ctx, end);
+            cs << BC::asint();
+            // if (i' > n')
+            cs << BC::dup2() << BC::gt();
+            cs.addSrc(R_NilValue);
+            cs << BC::brfalse(fwdBranch);
+            // {
+            // n' <- n' - 1
+            cs << BC::dec() << BC::ensureNamed();
+            // while
+            compileWhile(ctx,
+                         [&cs]() {
+                             // (i' > n')
+                             cs << BC::dup2() << BC::gt();
+                             cs.addSrc(R_NilValue);
+                         },
+                         [&ctx, &cs, &sym, &body]() {
+                             // {
+                             // i <- i'
+                             cs << BC::pull(1) << BC::setShared()
+                                << BC::stvar(sym);
+                             // i' <- i' - 1
+                             cs << BC::swap() << BC::dec() << BC::swap();
+                             // ...
                              compileExpr(ctx, body);
-                             cs << BC::inc();
+                             // }
                          });
+            // } else {
+            cs << BC::br(endBranch) << fwdBranch;
+            // n' <- n' + 1
+            cs << BC::inc();
+            // while
+            compileWhile(ctx,
+                         [&cs]() {
+                             // (i' < n')
+                             cs << BC::dup2() << BC::lt();
+                             cs.addSrc(R_NilValue);
+                         },
+                         [&ctx, &cs, &sym, &body]() {
+                             // {
+                             // i <- i'
+                             cs << BC::pull(1) << BC::setShared()
+                                << BC::stvar(sym);
+                             // i' <- i' + 1
+                             cs << BC::swap() << BC::inc() << BC::swap();
+                             // ...
+                             compileExpr(ctx, body);
+                             // }
+                         });
+
+            cs << endBranch << BC::pop() << BC::pop() << BC::pop()
+               << BC::push(R_NilValue) << BC::invisible();
 
             return true;
         }
         Else({ return false; })
     }
+
+    assert(false);
 }
 
 // Inline some specials
@@ -639,10 +707,14 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_) {
 
         cs << BC::guardNamePrimitive(fun);
 
-        compileWhile(ctx, [&ctx, &cond]() { compileExpr(ctx, cond); },
-                     [&ctx, &body]() { compileExpr(ctx, body); })
+        compileWhile(ctx,
+                     [&ctx, &cs, &cond]() {
+                         compileExpr(ctx, cond);
+                         cs << BC::asbool();
+                     },
+                     [&ctx, &cs, &body]() { compileExpr(ctx, body); });
 
-            return true;
+        return true;
     }
 
     if (fun == symbol::Repeat) {

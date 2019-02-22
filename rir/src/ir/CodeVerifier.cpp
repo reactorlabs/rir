@@ -104,6 +104,7 @@ static Sources hasSources(Opcode bc) {
         return Sources::Required;
 
     case Opcode::inc_:
+    case Opcode::dec_:
     case Opcode::identical_noforce_:
     case Opcode::push_:
     case Opcode::ldfun_:
@@ -175,6 +176,7 @@ static Sources hasSources(Opcode bc) {
     case Opcode::ldloc_:
     case Opcode::aslogical_:
     case Opcode::asbool_:
+    case Opcode::asint_:
     case Opcode::missing_:
 #define V(NESTED, name, Name)\
     case Opcode::name ## _:\

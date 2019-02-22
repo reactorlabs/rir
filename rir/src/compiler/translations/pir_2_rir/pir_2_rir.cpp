@@ -913,8 +913,10 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 SIMPLE(LOr, lglOr);
                 SIMPLE(LAnd, lglAnd);
                 SIMPLE(Inc, inc);
+                SIMPLE(Dec, dec);
                 SIMPLE(Force, force);
                 SIMPLE(AsTest, asbool);
+                SIMPLE(AsInt, asint);
                 SIMPLE(Length, length);
                 SIMPLE(ChkMissing, checkMissing);
                 SIMPLE(ChkClosure, isfun);

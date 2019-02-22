@@ -1898,6 +1898,21 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
             NEXT();
         }
 
+        INSTRUCTION(dec_) {
+            SEXP val = ostack_top(ctx);
+            assert(TYPEOF(val) == INTSXP);
+            int i = INTEGER(val)[0];
+            if (MAYBE_SHARED(val)) {
+                ostack_pop(ctx);
+                SEXP n = Rf_allocVector(INTSXP, 1);
+                INTEGER(n)[0] = i - 1;
+                ostack_push(ctx, n);
+            } else {
+                INTEGER(val)[0]--;
+            }
+            NEXT();
+        }
+
         INSTRUCTION(sub_) {
             SEXP lhs = ostack_at(ctx, 1);
             SEXP rhs = ostack_at(ctx, 0);
@@ -2194,6 +2209,79 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
 
             ostack_pop(ctx);
             ostack_push(ctx, cond ? R_TrueValue : R_FalseValue);
+            NEXT();
+        }
+
+        INSTRUCTION(asint_) {
+            SEXP val = ostack_top(ctx);
+            // Scalar integers (already done)
+            if (IS_SIMPLE_SCALAR(val, INTSXP)) {
+                NEXT();
+            }
+            int x;
+            bool isNaOrNan;
+            if (TYPEOF(val) == INTSXP || TYPEOF(val) == REALSXP ||
+                TYPEOF(val) == LGLSXP) {
+                if (XLENGTH(val) == 0) {
+                    Rf_errorcall(getSrcAt(c, pc - 1, ctx),
+                                 "argument of length 0");
+                    x = NA_INTEGER;
+                    isNaOrNan = false;
+                } else {
+                    switch (TYPEOF(val)) {
+                    case INTSXP: {
+                        int i = *INTEGER(val);
+                        if (i == NA_INTEGER) {
+                            x = NA_INTEGER;
+                            isNaOrNan = true;
+                        } else {
+                            x = i;
+                            isNaOrNan = false;
+                        }
+                        break;
+                    }
+                    case REALSXP: {
+                        double r = *REAL(val);
+                        if (ISNAN(r)) {
+                            x = NA_INTEGER;
+                            isNaOrNan = true;
+                        } else {
+                            x = (int)r;
+                            isNaOrNan = false;
+                        }
+                        break;
+                    }
+                    case LGLSXP: {
+                        int l = *LOGICAL(val);
+                        if (l == NA_LOGICAL) {
+                            x = NA_INTEGER;
+                            isNaOrNan = true;
+                        } else {
+                            x = (int)l;
+                            isNaOrNan = false;
+                        }
+                        break;
+                    }
+                    default:
+                        assert(false);
+                    }
+                    if (XLENGTH(val) > 1) {
+                        Rf_warningcall(getSrcAt(c, pc - 1, ctx),
+                                       "numerical expression has multiple "
+                                       "elements: only the first used");
+                    }
+                }
+            } else { // Everything else
+                x = NA_INTEGER;
+                isNaOrNan = true;
+            }
+            if (isNaOrNan) {
+                Rf_errorcall(getSrcAt(c, pc - 1, ctx), "NA/NaN argument");
+            }
+            res = Rf_allocVector(INTSXP, 1);
+            *INTEGER(res) = x;
+            ostack_pop(ctx);
+            ostack_push(ctx, res);
             NEXT();
         }
 

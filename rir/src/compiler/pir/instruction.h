@@ -793,6 +793,13 @@ class FLI(AsTest, 1, Effect::Error, EnvAccess::None) {
         : FixedLenInstruction(NativeType::test, {{PirType::any()}}, {{in}}) {}
 };
 
+class FLI(AsInt, 1, Effect::Error, EnvAccess::None) {
+  public:
+    explicit AsInt(Value* in)
+        : FixedLenInstruction(PirType(RType::integer).scalar().notObject(),
+                              {{PirType::any()}}, {{in}}) {}
+};
+
 class FLIE(Subassign1_1D, 4, Effect::None, EnvAccess::Leak) {
   public:
     Subassign1_1D(Value* val, Value* vec, Value* idx, Value* env,
@@ -885,9 +892,17 @@ class FLIE(Extract2_2D, 4, Effect::None, EnvAccess::Leak) {
               {{vec, idx1, idx2}}, env, srcIdx) {}
 };
 
-class FLI(Inc, 1, Effect::None, EnvAccess::None) {
+class FLI(Inc, 1, Effect::Order, EnvAccess::None) {
   public:
     explicit Inc(Value* v)
+        : FixedLenInstruction(PirType(RType::integer).scalar().notObject(),
+                              {{PirType(RType::integer).scalar().notObject()}},
+                              {{v}}) {}
+};
+
+class FLI(Dec, 1, Effect::Order, EnvAccess::None) {
+  public:
+    explicit Dec(Value* v)
         : FixedLenInstruction(PirType(RType::integer).scalar().notObject(),
                               {{PirType(RType::integer).scalar().notObject()}},
                               {{v}}) {}

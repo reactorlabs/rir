@@ -24,11 +24,13 @@
     V(NESTED, names, names)                                                    \
     V(NESTED, setNames, set_names)                                             \
     V(NESTED, asbool, asbool)                                                  \
+    V(NESTED, asint, asint)                                                    \
     V(NESTED, endloop, endloop)                                                \
     V(NESTED, dup, dup)                                                        \
     V(NESTED, dup2, dup2)                                                      \
     V(NESTED, forSeqSize, for_seq_size)                                        \
     V(NESTED, inc, inc)                                                        \
+    V(NESTED, dec, dec)                                                        \
     V(NESTED, close, close)                                                    \
     V(NESTED, add, add)                                                        \
     V(NESTED, mul, mul)                                                        \
