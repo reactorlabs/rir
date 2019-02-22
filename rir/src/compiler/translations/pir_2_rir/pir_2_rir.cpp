@@ -282,7 +282,7 @@ class SSAAllocator {
                     size_t argNum = 0;
                     i->eachArg([&](Value* a) {
                         auto ia = Instruction::Cast(a);
-                        if (!ia) {
+                        if (!ia || !ia->producesRirResult()) {
                             argNum++;
                             return;
                         }
@@ -345,7 +345,7 @@ class SSAAllocator {
                 // Remember this instruction if it writes to a slot
                 if (allocation.count(i)) {
                     if (allocation.at(i) == stackSlot) {
-                        if (i->type != PirType::voyd() && !sa.dead(i)) {
+                        if (i->producesRirResult() && !sa.dead(i)) {
                             stack.push_back(i);
                         }
                     } else {
@@ -533,6 +533,7 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
     // - how to pick lastInstr at the beginning of a merge block?
 
     LastEnv lastEnv(cls, code, log);
+    std::unordered_map<Value*, BC::Label> pushContexts;
 
     LoweringVisitor::run(code->entry, [&](BB* bb) {
         if (isJumpThrough(bb))
@@ -556,7 +557,7 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
         for (auto it = bb->begin(); it != bb->end(); ++it) {
             auto instr = *it;
 
-            bool hasResult = instr->type != PirType::voyd();
+            bool hasResult = instr->producesRirResult();
 
             // Prepare stack and araguments
             {
@@ -737,7 +738,8 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                     size_t argNumber = 0;
                     instr->eachArg([&](Value* what) {
                         if (what == Env::elided() ||
-                            what->tag == Tag::Tombstone) {
+                            what->tag == Tag::Tombstone ||
+                            what->type == NativeType::context) {
                             argNumber++;
                             return;
                         }
@@ -1027,6 +1029,22 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 auto blt = CallSafeBuiltin::Cast(instr);
                 cs << BC::callBuiltin(blt->nargs(), Pool::get(blt->srcIdx),
                                       blt->blt);
+                break;
+            }
+
+            case Tag::PushContext: {
+                if (!pushContexts.count(instr))
+                    pushContexts[instr] = cs.mkLabel();
+                cs << BC::pushContext(pushContexts.at(instr));
+                break;
+            }
+
+            case Tag::PopContext: {
+                auto push = PopContext::Cast(instr)->push();
+                if (!pushContexts.count(push))
+                    pushContexts[push] = cs.mkLabel();
+                cs << pushContexts.at(push);
+                cs << BC::popContext();
                 break;
             }
 

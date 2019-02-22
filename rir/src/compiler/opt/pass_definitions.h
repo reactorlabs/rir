@@ -121,6 +121,8 @@ class PASS(EagerCalls);
 
 class PASS(OptimizeVisibility);
 
+class PASS(OptimizeContexts);
+
 class PhaseMarker : public PirTranslator {
   public:
     explicit PhaseMarker(const std::string& name) : PirTranslator(name) {}

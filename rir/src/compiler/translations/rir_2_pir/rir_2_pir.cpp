@@ -791,6 +791,8 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
     case Opcode::isstubenv_:
     case Opcode::check_missing_:
     case Opcode::static_call_:
+    case Opcode::pop_context_:
+    case Opcode::push_context_:
         log.unsupportedBC("Unsupported BC (are you recompiling?)", bc);
         assert(false && "Recompiling PIR not supported for now.");
 
@@ -1133,7 +1135,9 @@ void Rir2Pir::finalize(Value* ret, Builder& insert) {
         });
     }
 
-    insert(new Return(ret));
+    // Return in promise can lead to non-local return, which currently needs env
+    // to find the context to return to.
+    insert(new Return(ret, inPromise() ? insert.env : Env::elided()));
 
     InsertCast c(insert.code->entry, insert.env);
     c();

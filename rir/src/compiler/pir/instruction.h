@@ -692,10 +692,10 @@ class Branch
     void printArgs(std::ostream& out, bool tty) const override;
 };
 
-class Return : public FixedLenInstruction<Tag::Return, Return, 1, Effect::None,
+class Return : public FixedLenInstruction<Tag::Return, Return, 1, Effect::Order,
                                           EnvAccess::None, Controlflow::Exit> {
   public:
-    explicit Return(Value* ret)
+    explicit Return(Value* ret, Value* env)
         : FixedLenInstruction(PirType::voyd(), {{PirType::val()}}, {{ret}}) {}
 };
 
@@ -1345,6 +1345,23 @@ class FLI(TypeTest, 1, Effect::None, EnvAccess::None) {
         }
     }
     const char* name() const override;
+};
+
+class FLIE(PushContext, 3, Effect::Any, EnvAccess::Capture) {
+  public:
+    PushContext(Value* ast, Value* op, Value* sysparent)
+        : FixedLenInstructionWithEnvSlot(NativeType::context,
+                                         {{PirType::any(), PirType::closure()}},
+                                         {{ast, op}}, sysparent) {}
+};
+
+class FLI(PopContext, 2, Effect::Any, EnvAccess::None) {
+  public:
+    PopContext(Value* res, PushContext* push)
+        : FixedLenInstruction(PirType::voyd(),
+                              {{PirType::any(), NativeType::context}},
+                              {{res, push}}) {}
+    PushContext* push() { return PushContext::Cast(arg<1>().val()); }
 };
 
 class VLI(Phi, Effect::None, EnvAccess::None) {

@@ -73,6 +73,7 @@ closuresByName compileRir2Pir(SEXP env, pir::Module* m) {
     }
 
     cmp.optimizeModule();
+    cmp.optimizeModule();
     return results;
 }
 

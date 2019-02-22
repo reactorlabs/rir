@@ -75,9 +75,8 @@ REXPORT SEXP rir_markOptimize(SEXP what) {
 }
 
 REXPORT SEXP rir_eval(SEXP what, SEXP env) {
-    SEXP lenv;
     if (Function* f = Function::check(what))
-        return evalRirCodeExtCaller(f->body(), globalContext(), &lenv);
+        return evalRirCodeExtCaller(f->body(), globalContext(), env);
 
     if (isValidClosureSEXP(what))
         return rirEval_f(BODY(what), env);

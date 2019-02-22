@@ -33,8 +33,8 @@ void initializeRuntime();
 InterpreterInstance* globalContext();
 Configurations* pirConfigurations();
 
-SEXP evalRirCodeExtCaller(Code* c, InterpreterInstance* ctx, SEXP* env);
-SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
+SEXP evalRirCodeExtCaller(Code* c, InterpreterInstance* ctx, SEXP env);
+SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                  const CallContext* callContext);
 
 SEXP rirExpr(SEXP f);
