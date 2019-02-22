@@ -352,7 +352,11 @@ static void inlineContextTrampoline(Code* c, SEXP ast, SEXP sysparent, SEXP op,
     CallContext call(nullptr, op, -1, ast, 0, nullptr, nullptr, sysparent,
                      Assumptions(), ctx);
     RCNTXT cntxt;
-    initClosureContext(ast, &cntxt, R_NilValue, sysparent,
+    // The first env should be the callee env, but that will be done by the
+    // callee. We store sysparent there, because our optimizer may actually
+    // delay instructions into the inlinee and might assume that we still have
+    // to outer env.
+    initClosureContext(ast, &cntxt, sysparent, sysparent,
                        symbol::delayedArglist, op);
 
     if ((SETJMP(cntxt.cjmpbuf))) {
