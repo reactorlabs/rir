@@ -1290,7 +1290,6 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
 
         INSTRUCTION(pop_context_) {
             return ostack_pop(ctx);
-            NEXT();
         }
 
         INSTRUCTION(mk_env_) {

@@ -3,7 +3,6 @@
 #include "R/Funtab.h"
 #include "R/Symbols.h"
 
-#include <iostream>
 #include <string>
 
 namespace rir {
