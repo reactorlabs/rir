@@ -270,6 +270,7 @@ void BC::print(std::ostream& out) const {
         break;
     case Opcode::asint_:
         out << ((bool)immediate.i ? "ceil" : "floor");
+        break;
     case Opcode::record_call_: {
         ObservedCallees prof = immediate.callFeedback;
         out << "[ ";

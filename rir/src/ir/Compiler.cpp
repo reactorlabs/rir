@@ -207,9 +207,10 @@ bool compileSimpleFor(CompilerContext& ctx, SEXP sym, SEXP seq, SEXP body) {
 
             // i' <- m
             compileExpr(ctx, start);
-            cs << BC::asint(false);
+            cs << BC::setShared() << BC::asint(false);
             // n' <- n
             compileExpr(ctx, end);
+            cs << BC::setShared();
             // if (i' > n')
             cs << BC::dup2() << BC::gt();
             cs.addSrc(R_NilValue);
@@ -711,7 +712,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_) {
                          compileExpr(ctx, cond);
                          cs << BC::asbool();
                      },
-                     [&ctx, &cs, &body]() { compileExpr(ctx, body); });
+                     [&ctx, &body]() { compileExpr(ctx, body); });
 
         return true;
     }
