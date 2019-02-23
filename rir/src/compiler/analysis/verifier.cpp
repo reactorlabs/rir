@@ -64,43 +64,43 @@ class TheVerifier {
             }
             verify(i, bb);
         }
+        /* This check verifies that our graph is in edge-split format.
+            Currently we do not rely on this property, however we should
+            make it a conscious decision if we want to violate it.
+            This basically rules out graphs of the following form:
+
+                A       B
+                \   /   \
+                    C       D
+
+            or
+                _
+            | / \
+            A __/
+            |
+
+            The nice property about edge-split graphs is, that merge-points
+            are always dominated by *both* inputs, therefore local code
+            motion can push instructions to both input blocks.
+
+            In the above example, we can't push an instruction from C to A
+            and B, without worrying about D.
+        */
+        if (slow && cfg(bb->owner).isMergeBlock(bb)) {
+            for (auto in : cfg(bb->owner).immediatePredecessors(bb)) {
+                if (in->falseBranch()) {
+                    std::cerr << "BB " << in->id << " merges into " << bb->id
+                              << " and branches into " << in->falseBranch()->id
+                              << " at the same time.\n";
+                    ok = false;
+                }
+            }
+        }
+
         if (bb->isEmpty()) {
             if (bb->isExit()) {
                 std::cerr << "bb" << bb->id << " has no successor\n";
                 ok = false;
-            }
-            /* This check verifies that our graph is in edge-split format.
-               Currently we do not rely on this property, however we should
-               make it a conscious decision if we want to violate it.
-               This basically rules out graphs of the following form:
-
-                 A       B
-                   \   /   \
-                     C       D
-
-               or
-                   _
-                | / \
-                A __/
-                |
-
-               The nice property about edge-split graphs is, that merge-points
-               are always dominated by *both* inputs, therefore local code
-               motion can push instructions to both input blocks.
-
-               In the above example, we can't push an instruction from C to A
-               and B, without worrying about D.
-            */
-            if (slow && cfg(bb->owner).isMergeBlock(bb)) {
-                for (auto in : cfg(bb->owner).immediatePredecessors(bb)) {
-                    if (in->falseBranch()) {
-                        std::cerr << "BB " << in->id << " merges into "
-                                  << bb->id << " and branches into "
-                                  << in->falseBranch()->id
-                                  << " at the same time.\n";
-                        ok = false;
-                    }
-                }
             }
         } else {
             Instruction* last = bb->last();
