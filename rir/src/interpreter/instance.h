@@ -113,6 +113,9 @@ typedef enum {
     STACK_OBJ_LOGICAL
 } stackObjType;
 
+bool shouldBoxSexp(SEXP x);
+void preventBoxingSexp(SEXP x);
+
 R_bcstack_t intStackObj(int x);
 R_bcstack_t realStackObj(double x);
 R_bcstack_t logicalStackObj(int x);
@@ -137,22 +140,17 @@ int tryStackObjToLogicalNa(R_bcstack_t x);
 int tryStackObjToIdx(R_bcstack_t x);
 SEXPTYPE stackObjSexpType(R_bcstack_t x);
 bool stackObjIsVector(R_bcstack_t x);
+bool stackObjIsSimpleScalar(R_bcstack_t x, SEXPTYPE type);
 R_xlen_t stackObjLength(R_bcstack_t x);
 bool stackObjsEqual(R_bcstack_t x, R_bcstack_t y);
 
 #define ostackLength(c) (R_BCNodeStackTop - R_BCNodeStackBase)
 
-#ifdef TYPED_STACK
 #define ostackTop(c) *(R_BCNodeStackTop - 1)
-#endif
 
-#ifdef TYPED_STACK
 #define ostackAt(c, i) *(R_BCNodeStackTop - 1 - (i))
-#endif
 
-#ifdef TYPED_STACK
 #define ostackSet(c, i, v) *(R_BCNodeStackTop - 1 - (i)) = (v)
-#endif
 
 #define ostackCellAt(c, i) (R_BCNodeStackTop - 1 - (i))
 
@@ -163,17 +161,13 @@ bool stackObjsEqual(R_bcstack_t x, R_bcstack_t y);
         R_BCNodeStackTop -= (p);                                               \
     } while (0)
 
-#ifdef TYPED_STACK
 #define ostackPop(c) (*(--R_BCNodeStackTop))
-#endif
 
-#ifdef TYPED_STACK
 #define ostackPush(c, v)                                                       \
     do {                                                                       \
         *R_BCNodeStackTop = (v);                                               \
         ++R_BCNodeStackTop;                                                    \
     } while (0)
-#endif
 
 SEXP ostackObjToSexpAt(R_bcstack_t& x, InterpreterInstance* ctx, unsigned idx);
 SEXP ostackSexpAt(InterpreterInstance* ctx, unsigned idx);
@@ -200,17 +194,13 @@ class Locals final {
     R_bcstack_t load(unsigned offset) {
         SLOWASSERT(offset < localsCount &&
                    "Attempt to load invalid local variable.");
-#ifdef TYPED_STACK
         return *(base + offset);
-#endif
     }
 
     void store(unsigned offset, R_bcstack_t val) {
         SLOWASSERT(offset < localsCount &&
                    "Attempt to store invalid local variable.");
-#ifdef TYPED_STACK
         *(base + offset) = val;
-#endif
     }
 
     Locals(Locals const&) = delete;

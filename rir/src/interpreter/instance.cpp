@@ -20,6 +20,10 @@ SEXP setterPlaceholderSym;
 SEXP getterPlaceholderSym;
 SEXP quoteSym;
 
+bool shouldBoxSexp(SEXP x) { return false; }
+
+void preventBoxingSexp(SEXP x) {}
+
 R_bcstack_t intStackObj(int x) {
     R_bcstack_t res;
 #ifdef USE_TYPED_STACK
@@ -62,7 +66,8 @@ R_bcstack_t logicalStackObj(int x) {
 R_bcstack_t sexpToStackObj(SEXP x, bool unprotect) {
     assert(x != NULL);
 #ifdef USE_TYPED_STACK
-    if (x == loopTrampolineMarker || ATTRIB(x) != R_NilValue) {
+    if (x == loopTrampolineMarker || ATTRIB(x) != R_NilValue ||
+        !shouldBoxSexp(x)) {
         R_bcstack_t res;
         res.tag = STACK_OBJ_SEXP;
         res.u.sxpval = x;
@@ -262,6 +267,21 @@ bool stackObjIsVector(R_bcstack_t x) {
         return true;
     case STACK_OBJ_SEXP:
         return Rf_isVector(x.u.sxpval);
+    default:
+        assert(false);
+    }
+}
+
+bool stackObjIsSimpleScalar(R_bcstack_t x, SEXPTYPE type) {
+    switch (x.tag) {
+    case STACK_OBJ_INT:
+        return type == INTSXP;
+    case STACK_OBJ_REAL:
+        return type == REALSXP;
+    case STACK_OBJ_LOGICAL:
+        return type == LGLSXP;
+    case STACK_OBJ_SEXP:
+        return IS_SIMPLE_SCALAR(x.u.sxpval, type);
     default:
         assert(false);
     }

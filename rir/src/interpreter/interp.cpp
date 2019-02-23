@@ -1479,6 +1479,7 @@ R_bcstack_t evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
             SEXP val = ostackPopSexp(ctx);
             UNPROTECT(1);
             INCREMENT_NAMED(val);
+            preventBoxingSexp(val);
             Rf_setVar(sym, val, ENCLOS(*env));
             NEXT();
         }
@@ -1851,14 +1852,24 @@ R_bcstack_t evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
 
         INSTRUCTION(inc_) {
             R_bcstack_t val = ostackPop(ctx);
-#ifdef USE_TYPED_STACK
-            assert(val.tag == STACK_OBJ_INT);
-            int i = val.u.ival + 1;
-#else
-            assert(TYPEOF(val.u.sxpval) == INTSXP);
-            int i = *INTEGER(val.u.sxpval) + 1;
-#endif
-            ostackPush(ctx, intStackObj(i));
+            SLOWASSERT(stackObjIsSimpleScalar(val, INTSXP));
+            int i;
+            switch (val.tag) {
+            case STACK_OBJ_INT:
+                i = val.u.ival + 1;
+                ostackPush(ctx, intStackObj(i));
+                break;
+            case STACK_OBJ_SEXP:
+                if (MAYBE_SHARED(val.u.sxpval)) {
+                    i = *INTEGER(val.u.sxpval) + 1;
+                    ostackPush(ctx, intStackObj(i));
+                } else {
+                    (*INTEGER(val.u.sxpval))++;
+                }
+                break;
+            default:
+                assert(false);
+            }
             NEXT();
         }
 
@@ -2164,14 +2175,16 @@ R_bcstack_t evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
                         "the condition has length > 1 and only the first "
                         "element will be used");
 
-                if (!isLogical(val.u.sxpval)) {
-                    Rf_errorcall(getSrcAt(c, pc - 1, ctx),
-                                 "argument is not interpretable as logical");
-                } else if (XLENGTH(val.u.sxpval) == 0) {
+                if (XLENGTH(val.u.sxpval) == 0) {
                     Rf_errorcall(getSrcAt(c, pc - 1, ctx),
                                  "argument is of length zero");
                 } else {
                     logical_res = Rf_asLogical(val.u.sxpval);
+                    if (logical_res == NA_LOGICAL && !isLogical(val.u.sxpval)) {
+                        Rf_errorcall(
+                            getSrcAt(c, pc - 1, ctx),
+                            "argument is not interpretable as logical");
+                    }
                 }
                 break;
             default:
@@ -2953,10 +2966,10 @@ R_bcstack_t evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
 
         INSTRUCTION(alloc_) {
             R_bcstack_t val = ostackPop(ctx);
-            assert(val.tag == STACK_OBJ_INT);
+            assert(stackObjIsSimpleScalar(val, INTSXP));
             int type = readSignedImmediate();
             advanceImmediate();
-            SEXP res = Rf_allocVector(type, val.u.ival);
+            SEXP res = Rf_allocVector(type, tryStackObjToInteger(val));
             ostackPush(ctx, sexpToStackObj(res, true));
             NEXT();
         }
