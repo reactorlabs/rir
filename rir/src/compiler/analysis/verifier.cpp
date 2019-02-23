@@ -69,9 +69,9 @@ class TheVerifier {
             make it a conscious decision if we want to violate it.
             This basically rules out graphs of the following form:
 
-                A       B
+               A      B
                 \   /   \
-                    C       D
+                  C      D
 
             or
                 _
@@ -88,10 +88,17 @@ class TheVerifier {
         */
         if (slow && cfg(bb->owner).isMergeBlock(bb)) {
             for (auto in : cfg(bb->owner).immediatePredecessors(bb)) {
-                if (in->falseBranch()) {
-                    std::cerr << "BB " << in->id << " merges into " << bb->id
-                              << " and branches into " << in->falseBranch()->id
-                              << " at the same time.\n";
+                if (in->isBranch()) {
+                    unsigned other = (in->trueBranch()->id == bb->id)
+                                         ? in->falseBranch()->id
+                                         : in->trueBranch()->id;
+                    std::cerr << "BB" << bb->id << " is a merge node, but "
+                              << "predecessor BB" << in->id << " has two "
+                              << "successors (BB" << in->trueBranch()->id
+                              << " and BB" << in->falseBranch()->id << "):\n"
+                              << " n      " << in->id << "\n"
+                              << "  \\   /   \\\n"
+                              << "    " << bb->id << "      " << other << "\n";
                     ok = false;
                 }
             }

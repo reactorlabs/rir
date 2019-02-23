@@ -90,6 +90,8 @@ class BB {
 
     bool isExit() const { return !next0 && !next1; }
 
+    bool isBranch() const { return next0 && next1; }
+
     void setBranch(BB* trueBranch, BB* falseBranch) {
         assert(!next0 && !next1);
         this->next0 = trueBranch;
