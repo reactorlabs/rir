@@ -346,7 +346,8 @@ static void loopTrampoline(Code* c, InterpreterInstance* ctx, SEXP* env,
     Rf_endcontext(&cntxt);
 }
 
-static void inlineContextTrampoline(Code* c, SEXP ast, SEXP sysparent, SEXP op,
+const static SEXP inlineContextTrampolineDeoptMarker = (SEXP)0x7008;
+static SEXP inlineContextTrampoline(Code* c, SEXP ast, SEXP sysparent, SEXP op,
                                     InterpreterInstance* ctx, Opcode* pc,
                                     R_bcstack_t* localsBase) {
     CallContext call(nullptr, op, -1, ast, 0, nullptr, nullptr, sysparent,
@@ -359,24 +360,30 @@ static void inlineContextTrampoline(Code* c, SEXP ast, SEXP sysparent, SEXP op,
     initClosureContext(ast, &cntxt, sysparent, sysparent,
                        symbol::delayedArglist, op);
 
-    if ((SETJMP(cntxt.cjmpbuf))) {
-        if (R_ReturnedValue == R_RestartToken) {
-            cntxt.callflag = CTXT_RETURN; /* turn restart off */
-            R_ReturnedValue = R_NilValue; /* remove restart token */
-            auto res =
-                evalRirCode(c, ctx, &cntxt.cloenv, &call, pc, localsBase);
-            endClosureContext(&cntxt, res);
-            return;
-        } else {
-            endClosureContext(&cntxt, R_ReturnedValue);
-            return;
+    auto trampoline = [&]() {
+        if ((SETJMP(cntxt.cjmpbuf))) {
+            if (R_ReturnedValue == R_RestartToken) {
+                cntxt.callflag = CTXT_RETURN; /* turn restart off */
+                R_ReturnedValue = R_NilValue; /* remove restart token */
+                return evalRirCode(c, ctx, &cntxt.cloenv, &call, pc,
+                                   localsBase);
+            } else {
+                return R_ReturnedValue;
+            }
         }
-    }
+        return evalRirCode(c, ctx, &cntxt.cloenv, &call, pc, localsBase);
+    };
 
     // execute the inlined function
-    auto res = evalRirCode(c, ctx, &cntxt.cloenv, &call, pc, localsBase);
-
-    endClosureContext(&cntxt, res);
+    auto res = trampoline();
+    // If we were deoptimized the synthesized frames handling already ended our
+    // context. At this point our baseline version already executed and we
+    // should completely return.
+    if (&cntxt == R_GlobalContext)
+        endClosureContext(&cntxt, res);
+    else
+        return inlineContextTrampolineDeoptMarker;
+    return res;
 }
 
 static RIR_INLINE SEXP legacySpecialCall(const CallContext& call,
@@ -1285,7 +1292,10 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
             ostack_popn(ctx, 2);
             int offset = readJumpOffset();
             advanceJump();
-            inlineContextTrampoline(c, ast, *env, op, ctx, pc, localsBase);
+            auto r =
+                inlineContextTrampoline(c, ast, *env, op, ctx, pc, localsBase);
+            if (r == inlineContextTrampolineDeoptMarker)
+                return ostack_top(ctx);
             pc += offset;
             assert(*pc == Opcode::pop_context_);
             advanceOpcode();
@@ -3107,11 +3117,15 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
 
 eval_done:
     if (synthesizeFrames) {
+        SEXP e = *env;
         while (!synthesizeFrames->empty()) {
             FrameInfo* f = synthesizeFrames->front();
             synthesizeFrames->pop_front();
             SEXP res = ostack_pop(ctx);
-            SEXP e = ostack_pop(ctx);
+            // Inlined functions may or may not have contexts
+            if (e == R_GlobalContext->cloenv)
+                endClosureContext(R_GlobalContext, res);
+            e = ostack_pop(ctx);
             assert(TYPEOF(e) == ENVSXP);
             *env = e;
             ostack_push(ctx, res);
@@ -3120,6 +3134,9 @@ eval_done:
             ostack_push(ctx, res);
         }
         delete synthesizeFrames;
+        // jump out of inlinedContextTrampolines
+        if (e == R_GlobalContext->cloenv)
+            Rf_findcontext(CTXT_RETURN, e, ostack_pop(ctx));
     }
     return ostack_pop(ctx);
 }
