@@ -223,33 +223,38 @@ class VisitorImplementation {
     typedef std::function<void(Schedule, BB*)> ScheduleNext;
 
     template <bool PROCESS_NEW_NODES, typename ActionKind>
-    static bool forwardGenericRun(BB* bb, ActionKind action) {
-        auto scheduleNext = [&](Schedule schedule, BB* cur) {
-            if (ORDER == Order::Lowering) {
-                // Curently we emit only brtrue in pir2rir, therefore we
-                // always want next1 to be the fallthrough case.
-                schedule(cur->next1);
-                schedule(cur->next0);
-            } else {
-                schedule(cur->next0);
-                schedule(cur->next1);
+    static bool forwardGenericRun(BB* bb, const ActionKind& action) {
+        struct Scheduler {
+            RIR_INLINE std::array<BB*, 2> operator()(BB* cur) const {
+                if (ORDER == Order::Lowering) {
+                    // Curently we emit only brtrue in pir2rir, therefore we
+                    // always want next1 to be the fallthrough case.
+                    return {{cur->next1, cur->next0}};
+                } else {
+                    return {{cur->next0, cur->next1}};
+                }
             }
         };
-        return genericRun<PROCESS_NEW_NODES>(bb, action, scheduleNext);
+        const Scheduler scheduler;
+        return genericRun<PROCESS_NEW_NODES>(bb, scheduler, action);
     }
 
     template <bool PROCESS_NEW_NODES, typename ActionKind>
-    static bool backwardGenericRun(BB* bb, CFG const& cfg, ActionKind action) {
-        auto scheduleNext = [&](Schedule schedule, BB* cur) {
-            for (auto pred : cfg.immediatePredecessors(cur))
-                schedule(pred);
+    static bool backwardGenericRun(BB* bb, CFG const& cfg,
+                                   const ActionKind& action) {
+        struct Scheduler {
+            const CFG& cfg;
+            RIR_INLINE const std::vector<BB*> operator()(BB* cur) const {
+                return cfg.immediatePredecessors(cur);
+            }
         };
-        return genericRun<PROCESS_NEW_NODES>(bb, action, scheduleNext);
+        const Scheduler scheduler = {cfg};
+        return genericRun<PROCESS_NEW_NODES>(bb, scheduler, action);
     }
 
-    template <bool PROCESS_NEW_NODES, typename ActionKind>
-    static bool genericRun(BB* bb, ActionKind action,
-                           ScheduleNext scheduleNext) {
+    template <bool PROCESS_NEW_NODES, typename Scheduler, typename ActionKind>
+    static bool RIR_INLINE genericRun(BB* bb, Scheduler& scheduleNext,
+                                      const ActionKind& action) {
         typedef VisitorHelpers::PredicateWrapper<ActionKind> PredicateWrapper;
         const PredicateWrapper predicate = {action};
 
@@ -260,31 +265,36 @@ class VisitorImplementation {
         BB* next = nullptr;
         done.set(cur);
 
-        auto schedule = [&](BB* bb) {
-            if (!bb || done.check(bb))
-                return;
-            bool deoptBranch =
-                !bb->isEmpty() && ScheduledDeopt::Cast(bb->last());
-            if (ORDER == Order::Lowering && deoptBranch) {
-                delayed.push_back(bb);
-            } else if (!next && todo.empty()) {
-                next = bb;
-            } else {
-                enqueue(todo, bb);
-            }
-            done.set(bb);
-        };
-
         while (cur) {
             next = nullptr;
+            auto schedule = [&next, &done, &delayed, &todo](BB* bb) {
+                if (!bb || done.check(bb))
+                    return;
+                bool deoptBranch =
+                    !bb->isEmpty() && ScheduledDeopt::Cast(bb->last());
+                if (ORDER == Order::Lowering && deoptBranch) {
+                    delayed.push_back(bb);
+                } else if (!next && todo.empty()) {
+                    next = bb;
+                } else {
+                    enqueue(todo, bb);
+                }
+                done.set(bb);
+            };
 
-            if (!PROCESS_NEW_NODES)
-                scheduleNext(schedule, cur);
-            if (!predicate(cur))
-                return false;
-            if (PROCESS_NEW_NODES)
-                scheduleNext(schedule, cur);
+            if (PROCESS_NEW_NODES) {
+                if (!predicate(cur))
+                    return false;
+                for (BB* bb : scheduleNext(cur))
+                    schedule(bb);
+            } else {
+                for (BB* bb : scheduleNext(cur))
+                    schedule(bb);
+                if (!predicate(cur))
+                    return false;
+            }
 
+            // cppcheck-suppress knownConditionTrueFalse
             if (!next) {
                 if (!todo.empty()) {
                     next = todo.front();

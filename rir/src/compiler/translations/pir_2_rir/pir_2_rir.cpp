@@ -1130,25 +1130,6 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
     return alloc.slots();
 }
 
-template <typename CallType>
-static bool allLazy(CallType* call, std::vector<Promise*>& args) {
-    bool allLazy = true;
-    call->eachCallArg([&](Value* v) {
-        if (!allLazy)
-            return;
-        if (auto arg = MkArg::Cast(v)) {
-            if (arg->isEager()) {
-                allLazy = false;
-            } else {
-                args.push_back(arg->prom());
-            }
-        } else {
-            allLazy = false;
-        }
-    });
-    return allLazy;
-}
-
 static bool DEBUG_DEOPTS = getenv("PIR_DEBUG_DEOPTS") &&
                            0 == strncmp("1", getenv("PIR_DEBUG_DEOPTS"), 1);
 static bool DEOPT_CHAOS = getenv("PIR_DEOPT_CHAOS") &&
