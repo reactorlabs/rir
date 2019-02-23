@@ -41,6 +41,8 @@ matrix:
         - BUILD=debugopt
         - PIR_DEOPT_CHAOS_SETTING=1
         - TEST_VALGRIND=1
+        - PIR_MAX_INPUT_SIZE=1000
+        - PIR_INLINER_MAX_SIZE=800
 
     - env:
         - CXX_OVERRIDE=g++-7
@@ -49,6 +51,8 @@ matrix:
         - BUILD=release
         - TEST_GCTORTURE=1
         - PIR_WARMUP=4
+        - PIR_MAX_INPUT_SIZE=1000
+        - PIR_INLINER_MAX_SIZE=800
 
     - env:
         - CXX_OVERRIDE=g++-7
