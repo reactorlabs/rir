@@ -2,8 +2,6 @@
 #error "DEF_INSTR must be defined before including insns.h"
 #endif
 
-#include "simple_instruction_list.h"
-
 // DEF_INSTR(name, imm, pop, push, pure)
 
 /**
@@ -458,11 +456,6 @@ DEF_INSTR(return_, 0, 1, 0, 0)
  */
 DEF_INSTR(ret_, 0, 1, 0, 1)
 
-#define V(NESTED, name, Name)\
-DEF_INSTR(name ## _, 0, 0, 0, 1)
-SIMPLE_INSTRUCTIONS(V, _)
-#undef V
-
 /**
  * deopt_ :: jumps to the immediate bc location
  */
@@ -475,5 +468,8 @@ DEF_INSTR(deopt_, 1, -1, 0, 0)
  */
 DEF_INSTR(record_call_, 4, 1, 1, 0)
 DEF_INSTR(record_binop_, 2, 2, 2, 0)
+
+DEF_INSTR(int3_, 0, 0, 0, 0)
+DEF_INSTR(printInvocation_, 0, 0, 0, 0)
 
 #undef DEF_INSTR

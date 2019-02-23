@@ -11,7 +11,7 @@ namespace pir {
 class RirCompiler;
 class PirTranslator {
   public:
-    PirTranslator(const std::string& name) : name(name) {}
+    explicit PirTranslator(const std::string& name) : name(name) {}
 
     virtual void apply(RirCompiler&, ClosureVersion* function,
                        LogStream&) const = 0;
