@@ -142,7 +142,8 @@ SEXPTYPE stackObjSexpType(R_bcstack_t x);
 bool stackObjIsVector(R_bcstack_t x);
 bool stackObjIsSimpleScalar(R_bcstack_t x, SEXPTYPE type);
 R_xlen_t stackObjLength(R_bcstack_t x);
-bool stackObjsEqual(R_bcstack_t x, R_bcstack_t y);
+// Uses pointer equality for SEXPs
+bool stackObjsIdentical(R_bcstack_t x, R_bcstack_t y);
 
 #define ostackLength(c) (R_BCNodeStackTop - R_BCNodeStackBase)
 

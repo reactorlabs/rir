@@ -1131,16 +1131,75 @@ static SEXP cachedGetVar(SEXP env, Immediate idx, InterpreterInstance* ctx,
 #define BINDING_LOCK_MASK (1 << 14)
 #define IS_ACTIVE_BINDING(b) ((b)->sxpinfo.gp & ACTIVE_BINDING_MASK)
 #define BINDING_IS_LOCKED(b) ((b)->sxpinfo.gp & BINDING_LOCK_MASK)
-static void cachedSetVar(SEXP val, SEXP env, Immediate idx,
+
+static bool trySetInPlace(SEXP old, R_bcstack_t val) {
+    switch (val.tag) {
+    case STACK_OBJ_INT:
+        if (IS_SIMPLE_SCALAR(old, INTSXP)) {
+            *INTEGER(old) = val.u.ival;
+            return true;
+        } else {
+            return false;
+        }
+    case STACK_OBJ_REAL:
+        if (IS_SIMPLE_SCALAR(old, REALSXP)) {
+            *REAL(old) = val.u.dval;
+            return true;
+        } else {
+            return false;
+        }
+    case STACK_OBJ_LOGICAL:
+        if (IS_SIMPLE_SCALAR(old, LGLSXP)) {
+            *LOGICAL(old) = val.u.ival;
+            return true;
+        } else {
+            return false;
+        }
+    case STACK_OBJ_SEXP:
+        return false;
+    default:
+        assert(false);
+    }
+}
+
+// Assumes val is popped off stack, since it could be converted into an SEXP
+static void setVar(SEXP sym, R_bcstack_t val, SEXP env, bool super) {
+    SEXP old = super ? Rf_findVar(sym, env) : Rf_findVarInFrame(env, sym);
+    if (old != R_UnboundValue && trySetInPlace(old, val)) {
+        return;
+    }
+
+    PROTECT(sym);
+    SEXP valSexp = stackObjToSexp(val); // Value should be popped off stack
+    UNPROTECT(1);
+    INCREMENT_NAMED(valSexp);
+    PROTECT(valSexp);
+    if (super) {
+        Rf_setVar(sym, valSexp, env);
+    } else {
+        Rf_defineVar(sym, valSexp, env);
+    }
+    UNPROTECT(1);
+}
+
+// Assumes val is popped off stack, since it could be converted into an SEXP
+static void cachedSetVar(R_bcstack_t val, SEXP env, Immediate idx,
                          InterpreterInstance* ctx, BindingCache* bindingCache,
                          bool keepMissing = false) {
     SEXP loc = cachedGetBindingCell(env, idx, ctx, bindingCache);
     if (loc && !BINDING_IS_LOCKED(loc) && !IS_ACTIVE_BINDING(loc)) {
         SEXP cur = CAR(loc);
-        if (cur == val)
+        if (val.tag == STACK_OBJ_SEXP && val.u.sxpval == cur) {
             return;
-        INCREMENT_NAMED(val);
-        SETCAR(loc, val);
+        }
+        if (trySetInPlace(cur, val)) {
+            return;
+        }
+        PROTECT(loc);
+        SEXP valSexp = stackObjToSexp(val); // Value should be popped off stack
+        UNPROTECT(1);
+        INCREMENT_NAMED(valSexp);
+        SETCAR(loc, valSexp);
         if (!keepMissing && MISSING(loc))
             SET_MISSING(loc, 0);
         return;
@@ -1148,10 +1207,7 @@ static void cachedSetVar(SEXP val, SEXP env, Immediate idx,
 
     SEXP sym = cp_pool_at(ctx, idx);
     SLOWASSERT(TYPEOF(sym) == SYMSXP);
-    INCREMENT_NAMED(val);
-    PROTECT(val);
-    Rf_defineVar(sym, val, env);
-    UNPROTECT(1);
+    setVar(sym, val, env, false);
 }
 
 #pragma GCC diagnostic push
@@ -1454,7 +1510,7 @@ R_bcstack_t evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
         INSTRUCTION(stvar_) {
             Immediate id = readImmediate();
             advanceImmediate();
-            SEXP val = ostackPopSexp(ctx);
+            R_bcstack_t val = ostackPop(ctx);
 
             cachedSetVar(val, *env, id, ctx, bindingCache);
 
@@ -1464,7 +1520,7 @@ R_bcstack_t evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
         INSTRUCTION(starg_) {
             Immediate id = readImmediate();
             advanceImmediate();
-            SEXP val = ostackPopSexp(ctx);
+            R_bcstack_t val = ostackPop(ctx);
 
             cachedSetVar(val, *env, id, ctx, bindingCache, true);
 
@@ -1475,12 +1531,8 @@ R_bcstack_t evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
             SEXP sym = readConst(ctx, readImmediate());
             advanceImmediate();
             SLOWASSERT(TYPEOF(sym) == SYMSXP);
-            PROTECT(sym);
-            SEXP val = ostackPopSexp(ctx);
-            UNPROTECT(1);
-            INCREMENT_NAMED(val);
-            preventBoxingSexp(val);
-            Rf_setVar(sym, val, ENCLOS(*env));
+            R_bcstack_t val = ostackPop(ctx);
+            setVar(sym, val, ENCLOS(*env), true);
             NEXT();
         }
 
@@ -2023,7 +2075,7 @@ R_bcstack_t evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
             if (stackObjSexpType(lhs) == PROMSXP &&
                 PRVALUE(lhs.u.sxpval) != R_UnboundValue)
                 lhs = sexpToStackObj(PRVALUE(lhs.u.sxpval), true);
-            bool res = stackObjsEqual(lhs, rhs);
+            bool res = stackObjsIdentical(lhs, rhs);
             ostackPush(ctx, logicalStackObj(res));
             NEXT();
         }

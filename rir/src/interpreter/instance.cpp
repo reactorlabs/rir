@@ -300,7 +300,7 @@ R_xlen_t stackObjLength(R_bcstack_t x) {
     }
 }
 
-bool stackObjsEqual(R_bcstack_t x, R_bcstack_t y) {
+bool stackObjsIdentical(R_bcstack_t x, R_bcstack_t y) {
     if (x.tag != y.tag) {
         return false;
     }
