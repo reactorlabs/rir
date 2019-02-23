@@ -48,7 +48,7 @@ void Rir2PirCompiler::compileClosure(SEXP closure, const std::string& name,
                 closureName = CHAR(PRINTNAME(e.tag()));
         }
     }
-    auto pirClosure = module->getOrDeclareRirClosure(name, closure, fun);
+    auto pirClosure = module->getOrDeclareRirClosure(closureName, closure, fun);
     OptimizationContext context(assumptions);
     compileClosure(pirClosure, context, success, fail);
 }
