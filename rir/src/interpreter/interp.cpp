@@ -1132,36 +1132,6 @@ static SEXP cachedGetVar(SEXP env, Immediate idx, InterpreterInstance* ctx,
 #define IS_ACTIVE_BINDING(b) ((b)->sxpinfo.gp & ACTIVE_BINDING_MASK)
 #define BINDING_IS_LOCKED(b) ((b)->sxpinfo.gp & BINDING_LOCK_MASK)
 
-static bool trySetInPlace(SEXP old, R_bcstack_t val) {
-    switch (val.tag) {
-    case STACK_OBJ_INT:
-        if (IS_SIMPLE_SCALAR(old, INTSXP)) {
-            *INTEGER(old) = val.u.ival;
-            return true;
-        } else {
-            return false;
-        }
-    case STACK_OBJ_REAL:
-        if (IS_SIMPLE_SCALAR(old, REALSXP)) {
-            *REAL(old) = val.u.dval;
-            return true;
-        } else {
-            return false;
-        }
-    case STACK_OBJ_LOGICAL:
-        if (IS_SIMPLE_SCALAR(old, LGLSXP)) {
-            *LOGICAL(old) = val.u.ival;
-            return true;
-        } else {
-            return false;
-        }
-    case STACK_OBJ_SEXP:
-        return false;
-    default:
-        assert(false);
-    }
-}
-
 // Assumes val is popped off stack, since it could be converted into an SEXP
 static void setVar(SEXP sym, R_bcstack_t val, SEXP env, bool super) {
     SEXP old = super ? Rf_findVar(sym, env) : Rf_findVarInFrame(env, sym);

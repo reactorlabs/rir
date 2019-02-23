@@ -151,8 +151,6 @@ bool stackObjsIdentical(R_bcstack_t x, R_bcstack_t y);
 
 #define ostackAt(c, i) *(R_BCNodeStackTop - 1 - (i))
 
-#define ostackSet(c, i, v) *(R_BCNodeStackTop - 1 - (i)) = (v)
-
 #define ostackCellAt(c, i) (R_BCNodeStackTop - 1 - (i))
 
 #define ostackEmpty(c) (R_BCNodeStackTop == R_BCNodeStackBase)
@@ -170,6 +168,8 @@ bool stackObjsIdentical(R_bcstack_t x, R_bcstack_t y);
         ++R_BCNodeStackTop;                                                    \
     } while (0)
 
+bool trySetInPlace(SEXP old, R_bcstack_t val);
+void ostackSet(InterpreterInstance* ctx, unsigned idx, R_bcstack_t x);
 SEXP ostackObjToSexpAt(R_bcstack_t& x, InterpreterInstance* ctx, unsigned idx);
 SEXP ostackSexpAt(InterpreterInstance* ctx, unsigned idx);
 SEXP ostackPopSexp(InterpreterInstance* ctx);
