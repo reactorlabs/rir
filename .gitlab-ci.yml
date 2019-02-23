@@ -52,5 +52,5 @@ test_sanitize:
 test_benchmarks:
   script:
     - cd build_release
-    - ../tools/downloadBenchs.sh --travis
+    - ../tools/downloadBenchs.sh .
     - ../tools/runBenchs.sh --installRebench --travis
