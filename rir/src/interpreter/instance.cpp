@@ -321,21 +321,21 @@ bool stackObjsIdentical(R_bcstack_t x, R_bcstack_t y) {
 bool trySetInPlace(SEXP old, R_bcstack_t val) {
     switch (val.tag) {
     case STACK_OBJ_INT:
-        if (IS_SIMPLE_SCALAR(old, INTSXP)) {
+        if (IS_SIMPLE_SCALAR(old, INTSXP) && NOT_SHARED(old)) {
             *INTEGER(old) = val.u.ival;
             return true;
         } else {
             return false;
         }
     case STACK_OBJ_REAL:
-        if (IS_SIMPLE_SCALAR(old, REALSXP)) {
+        if (IS_SIMPLE_SCALAR(old, REALSXP) && NOT_SHARED(old)) {
             *REAL(old) = val.u.dval;
             return true;
         } else {
             return false;
         }
     case STACK_OBJ_LOGICAL:
-        if (IS_SIMPLE_SCALAR(old, LGLSXP)) {
+        if (IS_SIMPLE_SCALAR(old, LGLSXP) && NOT_SHARED(old)) {
             *LOGICAL(old) = val.u.ival;
             return true;
         } else {
