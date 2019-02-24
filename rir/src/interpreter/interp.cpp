@@ -899,8 +899,18 @@ static R_INLINE int RInteger_times(int x, int y, Rboolean* pnaflag) {
 
 #define STORE_BINOP(res)                                                       \
     do {                                                                       \
+        R_bcstack_t lhs = ostackAt(ctx, 0);                                    \
+        R_bcstack_t rhs = ostackAt(ctx, 1);                                    \
         ostackPop(ctx);                                                        \
-        ostackSet(ctx, 0, res);                                                \
+        if (res.tag != STACK_OBJ_SEXP && rhs.tag == STACK_OBJ_SEXP &&          \
+            trySetInPlace(rhs.u.sxpval, res)) {                                \
+            ;                                                                  \
+        } else if (res.tag != STACK_OBJ_SEXP && lhs.tag == STACK_OBJ_SEXP &&   \
+                   trySetInPlace(lhs.u.sxpval, res)) {                         \
+            ostackSet(ctx, 0, lhs);                                            \
+        } else {                                                               \
+            ostackSet(ctx, 0, res);                                            \
+        }                                                                      \
     } while (false)
 
 #define DO_BINOP(op, Op2)                                                      \
@@ -976,7 +986,14 @@ static R_INLINE int RInteger_uminus(int x, Rboolean* pnaflag) {
     return -x;
 }
 
-#define STORE_UNOP(res) ostackSet(ctx, 0, res)
+#define STORE_UNOP(res)                                                        \
+    do {                                                                       \
+        R_bcstack_t x = ostackAt(ctx, 0);                                      \
+        if (res.tag == STACK_OBJ_SEXP || x.tag != STACK_OBJ_SEXP ||            \
+            !trySetInPlace(x.u.sxpval, res)) {                                 \
+            ostackSet(ctx, 0, res);                                            \
+        }                                                                      \
+    } while (false)
 
 #define UNOP_FALLBACK(op)                                                      \
     do {                                                                       \
