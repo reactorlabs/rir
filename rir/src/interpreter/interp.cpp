@@ -907,35 +907,33 @@ static R_INLINE int RInteger_times(int x, int y, Rboolean* pnaflag) {
     do {                                                                       \
         if (stackObjIsSimpleScalar(lhs, REALSXP)) {                            \
             if (stackObjIsSimpleScalar(rhs, REALSXP)) {                        \
-                double real_res = (tryStackObjToReal(lhs) == NA_REAL ||        \
-                                   tryStackObjToReal(rhs) == NA_REAL)          \
-                                      ? NA_REAL                                \
-                                      : tryStackObjToReal(lhs)                 \
-                                            op tryStackObjToReal(rhs);         \
+                double l = tryStackObjToReal(lhs);                             \
+                double r = tryStackObjToReal(rhs);                             \
+                double real_res =                                              \
+                    (l == NA_REAL || r == NA_REAL) ? NA_REAL : l op r;         \
                 STORE_BINOP(realStackObj(real_res));                           \
             } else if (stackObjIsSimpleScalar(rhs, INTSXP)) {                  \
-                double real_res = (tryStackObjToReal(lhs) == NA_REAL ||        \
-                                   tryStackObjToInteger(rhs) == NA_INTEGER)    \
-                                      ? NA_REAL                                \
-                                      : tryStackObjToReal(lhs)                 \
-                                            op tryStackObjToInteger(rhs);      \
+                double l = tryStackObjToReal(lhs);                             \
+                int r = tryStackObjToInteger(rhs);                             \
+                double real_res =                                              \
+                    (l == NA_REAL || r == NA_INTEGER) ? NA_REAL : l op r;      \
                 STORE_BINOP(realStackObj(real_res));                           \
             } else {                                                           \
                 BINOP_FALLBACK(#op);                                           \
             }                                                                  \
         } else if (stackObjIsSimpleScalar(lhs, INTSXP)) {                      \
             if (stackObjIsSimpleScalar(rhs, INTSXP)) {                         \
+                int l = tryStackObjToInteger(lhs);                             \
+                int r = tryStackObjToInteger(rhs);                             \
                 Rboolean naflag = FALSE;                                       \
-                int int_res = Op2(tryStackObjToInteger(lhs),                   \
-                                  tryStackObjToInteger(rhs), &naflag);         \
+                int int_res = Op2(l, r, &naflag);                              \
                 CHECK_INTEGER_OVERFLOW(naflag);                                \
                 STORE_BINOP(intStackObj(int_res));                             \
-            } else if (tryStackObjToReal(rhs) == STACK_OBJ_REAL) {             \
-                double real_res = (tryStackObjToInteger(lhs) == NA_INTEGER ||  \
-                                   tryStackObjToReal(rhs) == NA_REAL)          \
-                                      ? NA_REAL                                \
-                                      : tryStackObjToInteger(lhs)              \
-                                            op tryStackObjToReal(rhs);         \
+            } else if (stackObjIsSimpleScalar(rhs, REALSXP)) {                 \
+                int l = tryStackObjToInteger(lhs);                             \
+                double r = tryStackObjToReal(rhs);                             \
+                double real_res =                                              \
+                    (l == NA_INTEGER || r == NA_REAL) ? NA_REAL : l op r;      \
                 STORE_BINOP(realStackObj(real_res));                           \
             } else {                                                           \
                 BINOP_FALLBACK(#op);                                           \
@@ -1011,9 +1009,8 @@ static R_INLINE int RInteger_uminus(int x, Rboolean* pnaflag) {
         R_bcstack_t res;                                                       \
         Rboolean naflag = FALSE;                                               \
         if (stackObjIsSimpleScalar(val, REALSXP)) {                            \
-            res = realStackObj((tryStackObjToReal(val) == NA_REAL)             \
-                                   ? NA_REAL                                   \
-                                   : op tryStackObjToReal(val));               \
+            double x = tryStackObjToReal(val);                                 \
+            res = realStackObj((x == NA_REAL) ? NA_REAL : op x);               \
             STORE_UNOP(res);                                                   \
         } else if (stackObjIsSimpleScalar(val, INTSXP)) {                      \
             res = intStackObj(Op2(tryStackObjToInteger(val), &naflag));        \
@@ -1029,52 +1026,52 @@ static R_INLINE int RInteger_uminus(int x, Rboolean* pnaflag) {
     do {                                                                       \
         if (stackObjIsSimpleScalar(lhs, LGLSXP)) {                             \
             if (stackObjIsSimpleScalar(rhs, LGLSXP)) {                         \
-                if (tryStackObjToLogical(lhs) == NA_LOGICAL ||                 \
-                    tryStackObjToLogical(rhs) == NA_LOGICAL) {                 \
+                int l = tryStackObjToLogical(lhs);                             \
+                int r = tryStackObjToLogical(rhs);                             \
+                if (l == NA_LOGICAL || r == NA_LOGICAL) {                      \
                     STORE_BINOP(logicalStackObj(NA_LOGICAL));                  \
                 } else {                                                       \
-                    STORE_BINOP(logicalStackObj(tryStackObjToLogical(          \
-                        lhs) op tryStackObjToLogical(rhs)));                   \
+                    STORE_BINOP(logicalStackObj(l op r));                      \
                 }                                                              \
                 break;                                                         \
             }                                                                  \
         } else if (stackObjIsSimpleScalar(lhs, REALSXP)) {                     \
             if (stackObjIsSimpleScalar(rhs, REALSXP)) {                        \
-                if (tryStackObjToReal(lhs) == NA_REAL ||                       \
-                    tryStackObjToReal(rhs) == NA_REAL) {                       \
+                double l = tryStackObjToReal(lhs);                             \
+                double r = tryStackObjToReal(rhs);                             \
+                if (l == NA_REAL || r == NA_REAL) {                            \
                     STORE_BINOP(logicalStackObj(NA_LOGICAL));                  \
                 } else {                                                       \
-                    STORE_BINOP(logicalStackObj(                               \
-                        tryStackObjToReal(lhs) op tryStackObjToReal(rhs)));    \
+                    STORE_BINOP(logicalStackObj(l op r));                      \
                 }                                                              \
                 break;                                                         \
             } else if (stackObjIsSimpleScalar(rhs, INTSXP)) {                  \
-                if (tryStackObjToReal(lhs) == NA_REAL ||                       \
-                    tryStackObjToInteger(rhs) == NA_INTEGER) {                 \
+                double l = tryStackObjToReal(lhs);                             \
+                int r = tryStackObjToInteger(rhs);                             \
+                if (l == NA_REAL || r == NA_INTEGER) {                         \
                     STORE_BINOP(logicalStackObj(NA_LOGICAL));                  \
                 } else {                                                       \
-                    STORE_BINOP(logicalStackObj(                               \
-                        tryStackObjToReal(lhs) op tryStackObjToInteger(rhs))); \
+                    STORE_BINOP(logicalStackObj(l op r));                      \
                 }                                                              \
                 break;                                                         \
             }                                                                  \
         } else if (stackObjIsSimpleScalar(lhs, INTSXP)) {                      \
             if (stackObjIsSimpleScalar(rhs, INTSXP)) {                         \
-                if (tryStackObjToInteger(lhs) == NA_INTEGER ||                 \
-                    tryStackObjToInteger(rhs) == NA_INTEGER) {                 \
+                int l = tryStackObjToInteger(lhs);                             \
+                int r = tryStackObjToInteger(rhs);                             \
+                if (l == NA_INTEGER || r == NA_INTEGER) {                      \
                     STORE_BINOP(logicalStackObj(NA_LOGICAL));                  \
                 } else {                                                       \
-                    STORE_BINOP(logicalStackObj(tryStackObjToInteger(          \
-                        lhs) op tryStackObjToInteger(rhs)));                   \
+                    STORE_BINOP(logicalStackObj(l op r));                      \
                 }                                                              \
                 break;                                                         \
             } else if (stackObjIsSimpleScalar(rhs, REALSXP)) {                 \
-                if (tryStackObjToInteger(lhs) == NA_INTEGER ||                 \
-                    tryStackObjToReal(rhs) == NA_REAL) {                       \
+                int l = tryStackObjToInteger(lhs);                             \
+                double r = tryStackObjToReal(rhs);                             \
+                if (l == NA_INTEGER || r == NA_REAL) {                         \
                     STORE_BINOP(logicalStackObj(NA_LOGICAL));                  \
                 } else {                                                       \
-                    STORE_BINOP(logicalStackObj(                               \
-                        tryStackObjToInteger(lhs) op tryStackObjToReal(rhs))); \
+                    STORE_BINOP(logicalStackObj(l op r));                      \
                 }                                                              \
                 break;                                                         \
             }                                                                  \
@@ -1167,9 +1164,6 @@ static void cachedSetVar(R_bcstack_t val, SEXP env, Immediate idx,
     if (loc && !BINDING_IS_LOCKED(loc) && !IS_ACTIVE_BINDING(loc)) {
         SEXP cur = CAR(loc);
         if (val.tag == STACK_OBJ_SEXP && val.u.sxpval == cur) {
-            return;
-        }
-        if (val.tag != STACK_OBJ_SEXP && trySetInPlace(cur, val)) {
             return;
         }
         PROTECT(loc);
@@ -1928,17 +1922,16 @@ R_bcstack_t evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
 
             if (stackObjIsSimpleScalar(lhs, REALSXP) &&
                 stackObjIsSimpleScalar(rhs, REALSXP)) {
+                double l = tryStackObjToReal(lhs);
+                double r = tryStackObjToReal(rhs);
                 double real_res =
-                    (tryStackObjToReal(lhs) == NA_REAL ||
-                     tryStackObjToReal(rhs) == NA_REAL)
-                        ? NA_REAL
-                        : tryStackObjToReal(lhs) / tryStackObjToReal(rhs);
+                    (l == NA_REAL || r == NA_REAL) ? NA_REAL : l / r;
                 STORE_BINOP(realStackObj(real_res));
             } else if (stackObjIsSimpleScalar(lhs, INTSXP) &&
                        stackObjIsSimpleScalar(rhs, INTSXP)) {
-                double real_res;
                 int l = tryStackObjToInteger(lhs);
                 int r = tryStackObjToInteger(rhs);
+                double real_res;
                 if (l == NA_INTEGER || r == NA_INTEGER)
                     real_res = NA_REAL;
                 else
@@ -1956,17 +1949,16 @@ R_bcstack_t evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
 
             if (stackObjIsSimpleScalar(lhs, REALSXP) &&
                 stackObjIsSimpleScalar(rhs, REALSXP)) {
-                double real_res = (tryStackObjToReal(lhs) == NA_REAL ||
-                                   tryStackObjToReal(rhs) == NA_REAL)
-                                      ? NA_REAL
-                                      : myfloor(tryStackObjToReal(lhs),
-                                                tryStackObjToReal(rhs));
+                double l = tryStackObjToReal(lhs);
+                double r = tryStackObjToReal(rhs);
+                double real_res =
+                    (l == NA_REAL || r == NA_REAL) ? NA_REAL : myfloor(l, r);
                 STORE_BINOP(realStackObj(real_res));
             } else if (stackObjIsSimpleScalar(lhs, INTSXP) &&
                        stackObjIsSimpleScalar(rhs, INTSXP)) {
-                int int_res;
                 int l = tryStackObjToInteger(lhs);
                 int r = tryStackObjToInteger(rhs);
+                int int_res;
                 if (l == NA_INTEGER || r == NA_INTEGER)
                     int_res = NA_REAL;
                 else
@@ -1989,9 +1981,9 @@ R_bcstack_t evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
                 STORE_BINOP(realStackObj(real_res));
             } else if (stackObjIsSimpleScalar(lhs, INTSXP) &&
                        stackObjIsSimpleScalar(rhs, INTSXP)) {
-                int int_res;
                 int l = tryStackObjToInteger(lhs);
                 int r = tryStackObjToInteger(rhs);
+                int int_res;
                 if (l == NA_INTEGER || r == NA_INTEGER || r == 0) {
                     int_res = NA_INTEGER;
                 } else {
@@ -2078,27 +2070,30 @@ R_bcstack_t evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
             R_bcstack_t val = ostackAt(ctx, 0);
 
             if (stackObjIsSimpleScalar(val, INTSXP)) {
+                int x = tryStackObjToInteger(val);
                 int logical_res;
-                if (tryStackObjToInteger(val) == NA_INTEGER) {
+                if (x == NA_INTEGER) {
                     logical_res = NA_LOGICAL;
                 } else {
-                    logical_res = (tryStackObjToInteger(val) == 0);
+                    logical_res = (x == 0);
                 }
                 STORE_UNOP(logicalStackObj(logical_res));
             } else if (stackObjIsSimpleScalar(val, REALSXP)) {
+                double x = tryStackObjToReal(val);
                 int logical_res;
-                if (tryStackObjToReal(val) == NA_REAL) {
+                if (x == NA_REAL) {
                     logical_res = NA_LOGICAL;
                 } else {
-                    logical_res = (tryStackObjToReal(val) == 0);
+                    logical_res = (x == 0);
                 }
                 STORE_UNOP(logicalStackObj(logical_res));
             } else if (stackObjIsSimpleScalar(val, LGLSXP)) {
+                int x = tryStackObjToLogical(val);
                 int logical_res;
-                if (tryStackObjToLogical(val) == NA_LOGICAL) {
+                if (x == NA_LOGICAL) {
                     logical_res = NA_LOGICAL;
                 } else {
-                    logical_res = (tryStackObjToLogical(val) == 0);
+                    logical_res = (x == 0);
                 }
                 STORE_UNOP(logicalStackObj(logical_res));
             } else {
