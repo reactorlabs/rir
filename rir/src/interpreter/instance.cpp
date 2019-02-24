@@ -23,7 +23,7 @@ SEXP quoteSym;
 // How much the SEXP needs to be accessed until it gets unboxed.
 static const unsigned sexpBoxThreshold = 63;
 
-#define LOG_SEXP_BOX
+// #define LOG_SEXP_BOX
 
 // Will return 'true' once every 'sexpBoxThreshold + 1' times for each SEXP
 // If successful, resets the counter, otherwise increments it.
