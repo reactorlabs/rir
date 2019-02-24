@@ -1134,11 +1134,6 @@ static SEXP cachedGetVar(SEXP env, Immediate idx, InterpreterInstance* ctx,
 
 // Assumes val is popped off stack, since it could be converted into an SEXP
 static void setVar(SEXP sym, R_bcstack_t val, SEXP env, bool super) {
-    SEXP old = super ? Rf_findVar(sym, env) : Rf_findVarInFrame(env, sym);
-    if (old != R_UnboundValue && trySetInPlace(old, val)) {
-        return;
-    }
-
     PROTECT(sym);
     SEXP valSexp = stackObjToSexp(val); // Value should be popped off stack
     UNPROTECT(1);
@@ -1160,9 +1155,6 @@ static void cachedSetVar(R_bcstack_t val, SEXP env, Immediate idx,
     if (loc && !BINDING_IS_LOCKED(loc) && !IS_ACTIVE_BINDING(loc)) {
         SEXP cur = CAR(loc);
         if (val.tag == STACK_OBJ_SEXP && val.u.sxpval == cur) {
-            return;
-        }
-        if (trySetInPlace(cur, val)) {
             return;
         }
         PROTECT(loc);
@@ -2633,8 +2625,10 @@ R_bcstack_t evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
                 SEXPTYPE vectorT = TYPEOF(vec);
 
                 if ((vectorT == REALSXP &&
-                     (val.tag == STACK_OBJ_INT || val.tag == STACK_OBJ_REAL)) ||
-                    (vectorT == INTSXP && val.tag == STACK_OBJ_INT) ||
+                     (stackObjIsSimpleScalar(val, INTSXP) ||
+                      stackObjIsSimpleScalar(val, REALSXP))) ||
+                    (vectorT == INTSXP &&
+                     stackObjIsSimpleScalar(val, INTSXP)) ||
                     vectorT == VECSXP) { // 2
                     int idx_ = tryStackObjToIdx(idx);
 
@@ -2642,12 +2636,12 @@ R_bcstack_t evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
                         switch (vectorT) {
                         case REALSXP:
                             REAL(vec)
-                            [idx_] =
-                                val.tag == STACK_OBJ_REAL ? val.u.dval
-                                                          : (double)val.u.ival;
+                            [idx_] = stackObjIsSimpleScalar(val, REALSXP)
+                                         ? tryStackObjToReal(val)
+                                         : (double)tryStackObjToInteger(val);
                             break;
                         case INTSXP:
-                            INTEGER(vec)[idx_] = val.u.ival;
+                            INTEGER(vec)[idx_] = tryStackObjToInteger(val);
                             break;
                         case VECSXP:
                             PROTECT(vec);
@@ -2655,6 +2649,8 @@ R_bcstack_t evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
                                            ostackObjToSexpAt(val, ctx, 2));
                             UNPROTECT(1);
                             break;
+                        default:
+                            assert(false);
                         }
                         ostackPopn(ctx, 3);
 
@@ -2722,8 +2718,10 @@ R_bcstack_t evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
                 SEXPTYPE matrixT = TYPEOF(mtx);
 
                 if ((matrixT == REALSXP &&
-                     (val.tag == STACK_OBJ_INT || val.tag == STACK_OBJ_REAL)) ||
-                    (matrixT == INTSXP && val.tag == STACK_OBJ_INT) ||
+                     (stackObjIsSimpleScalar(val, INTSXP) ||
+                      stackObjIsSimpleScalar(val, REALSXP))) ||
+                    (matrixT == INTSXP &&
+                     stackObjIsSimpleScalar(val, INTSXP)) ||
                     matrixT == VECSXP) { // 2
                     int idx1_ = tryStackObjToIdx(idx1);
                     int idx2_ = tryStackObjToIdx(idx2);
@@ -2734,19 +2732,21 @@ R_bcstack_t evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
                         switch (matrixT) {
                         case REALSXP:
                             REAL(mtx)
-                            [idx_] =
-                                val.tag == STACK_OBJ_REAL ? val.u.dval
-                                                          : (double)val.u.ival;
+                            [idx_] = stackObjIsSimpleScalar(val, REALSXP)
+                                         ? tryStackObjToReal(val)
+                                         : (double)tryStackObjToInteger(val);
                             break;
                         case INTSXP:
-                            INTEGER(mtx)[idx_] = val.u.ival;
+                            INTEGER(mtx)[idx_] = tryStackObjToInteger(val);
                             break;
                         case VECSXP:
                             PROTECT(mtx);
                             SET_VECTOR_ELT(mtx, idx_,
-                                           ostackObjToSexpAt(val, ctx, 3));
+                                           ostackObjToSexpAt(val, ctx, 2));
                             UNPROTECT(1);
                             break;
+                        default:
+                            assert(false);
                         }
                         ostackPopn(ctx, 4);
 

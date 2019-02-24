@@ -318,51 +318,6 @@ bool stackObjsIdentical(R_bcstack_t x, R_bcstack_t y) {
     }
 }
 
-bool trySetInPlace(SEXP old, R_bcstack_t val) {
-    switch (val.tag) {
-    case STACK_OBJ_INT:
-        if (IS_SIMPLE_SCALAR(old, INTSXP) && NOT_SHARED(old)) {
-            *INTEGER(old) = val.u.ival;
-            return true;
-        } else {
-            return false;
-        }
-    case STACK_OBJ_REAL:
-        if (IS_SIMPLE_SCALAR(old, REALSXP) && NOT_SHARED(old)) {
-            *REAL(old) = val.u.dval;
-            return true;
-        } else {
-            return false;
-        }
-    case STACK_OBJ_LOGICAL:
-        if (IS_SIMPLE_SCALAR(old, LGLSXP) && NOT_SHARED(old)) {
-            *LOGICAL(old) = val.u.ival;
-            return true;
-        } else {
-            return false;
-        }
-    case STACK_OBJ_SEXP:
-        return false;
-    default:
-        assert(false);
-    }
-}
-
-#define ostackSetNoReuse(c, i, v) *(R_BCNodeStackTop - 1 - (i)) = (v)
-
-void ostackSet(InterpreterInstance* ctx, unsigned idx, R_bcstack_t x) {
-    // x.tag != STACK_OBJ_SEXP might improve performance, because the top stack
-    // object wouldn't get dereferenced, but not sure if the compiler would find
-    // and optimize or if this has a major effect
-    if (x.tag != STACK_OBJ_SEXP) {
-        R_bcstack_t old = ostackAt(ctx, idx);
-        if (old.tag == STACK_OBJ_SEXP && trySetInPlace(old.u.sxpval, x)) {
-            return;
-        }
-    }
-    ostackSetNoReuse(ctx, idx, x);
-}
-
 SEXP ostackObjToSexpAt(R_bcstack_t& x, InterpreterInstance* ctx, unsigned idx) {
     if (x.tag != STACK_OBJ_SEXP) {
         SEXP sexp = stackObjToSexp(x);
