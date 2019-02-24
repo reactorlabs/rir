@@ -20,9 +20,29 @@ SEXP setterPlaceholderSym;
 SEXP getterPlaceholderSym;
 SEXP quoteSym;
 
-bool shouldBoxSexp(SEXP x) { return false; }
+// How much the SEXP needs to be accessed until it gets unboxed.
+static const unsigned sexpBoxThreshold = 63;
 
-void preventBoxingSexp(SEXP x) {}
+// #define LOG_SEXP_BOX
+
+// Will return 'true' once every 'sexpBoxThreshold + 1' times for each SEXP
+// If successful, resets the counter, otherwise increments it.
+bool tryUnboxSexp(SEXP x) {
+    assert(x != loopTrampolineMarker);
+    unsigned ratio = x->sxpinfo.extra & 0x8F;
+    x->sxpinfo.extra &= ~0x8F;
+    if (ratio < sexpBoxThreshold) {
+        ratio++;
+        x->sxpinfo.extra |= ratio;
+        return false;
+    } else {
+#ifdef LOG_SEXP_BOX
+        std::cout << "Unboxed SEXP\n";
+        Rf_PrintValue(x);
+#endif
+        return true;
+    }
+}
 
 R_bcstack_t intStackObj(int x) {
     R_bcstack_t res;
@@ -66,30 +86,20 @@ R_bcstack_t logicalStackObj(int x) {
 R_bcstack_t sexpToStackObj(SEXP x, bool unprotect) {
     assert(x != NULL);
 #ifdef USE_TYPED_STACK
-    if (x == loopTrampolineMarker || ATTRIB(x) != R_NilValue ||
-        !shouldBoxSexp(x)) {
-        R_bcstack_t res;
-        res.tag = STACK_OBJ_SEXP;
-        res.u.sxpval = x;
-        return res;
-    } else if (IS_SIMPLE_SCALAR(x, INTSXP)) {
-        return intStackObj(*INTEGER(x));
-    } else if (IS_SIMPLE_SCALAR(x, REALSXP)) {
-        return realStackObj(*REAL(x));
-    } else if (IS_SIMPLE_SCALAR(x, LGLSXP)) {
-        return logicalStackObj(*INTEGER(x));
-    } else {
-        R_bcstack_t res;
-        res.tag = STACK_OBJ_SEXP;
-        res.u.sxpval = x;
-        return res;
+    if (x != loopTrampolineMarker && ATTRIB(x) == R_NilValue) {
+        if (IS_SIMPLE_SCALAR(x, INTSXP) && tryUnboxSexp(x)) {
+            return intStackObj(*INTEGER(x));
+        } else if (IS_SIMPLE_SCALAR(x, REALSXP) && tryUnboxSexp(x)) {
+            return realStackObj(*REAL(x));
+        } else if (IS_SIMPLE_SCALAR(x, LGLSXP) && tryUnboxSexp(x)) {
+            return logicalStackObj(*INTEGER(x));
+        }
     }
-#else
+#endif
     R_bcstack_t res;
     res.tag = STACK_OBJ_SEXP;
     res.u.sxpval = x;
     return res;
-#endif
 }
 
 SEXP stackObjToSexp(R_bcstack_t x) {
@@ -99,14 +109,23 @@ SEXP stackObjToSexp(R_bcstack_t x) {
         SEXP res;
         res = Rf_allocVector(INTSXP, 1);
         *INTEGER(res) = x.u.ival;
+#ifdef LOG_SEXP_BOX
+        std::cout << "Boxed int " << x.u.ival << "\n";
+#endif
         return res;
     case STACK_OBJ_REAL:
         res = Rf_allocVector(REALSXP, 1);
         *REAL(res) = x.u.dval;
+#ifdef LOG_SEXP_BOX
+        std::cout << "Boxed real " << x.u.dval << "\n";
+#endif
         return res;
     case STACK_OBJ_LOGICAL:
         res = Rf_allocVector(LGLSXP, 1);
         *LOGICAL(res) = x.u.ival;
+#ifdef LOG_SEXP_BOX
+        std::cout << "Boxed logical " << x.u.ival << "\n";
+#endif
         return res;
 #endif
     case STACK_OBJ_SEXP:

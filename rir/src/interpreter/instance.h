@@ -113,9 +113,6 @@ typedef enum {
     STACK_OBJ_LOGICAL
 } stackObjType;
 
-bool shouldBoxSexp(SEXP x);
-void preventBoxingSexp(SEXP x);
-
 R_bcstack_t intStackObj(int x);
 R_bcstack_t realStackObj(double x);
 R_bcstack_t logicalStackObj(int x);
