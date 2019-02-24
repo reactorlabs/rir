@@ -23,7 +23,7 @@ SEXP quoteSym;
 // How much the SEXP needs to be accessed until it gets unboxed.
 static const unsigned sexpBoxThreshold = 63;
 
-// #define LOG_SEXP_BOX
+#define LOG_SEXP_BOX
 
 // Will return 'true' once every 'sexpBoxThreshold + 1' times for each SEXP
 // If successful, resets the counter, otherwise increments it.
@@ -332,6 +332,48 @@ bool stackObjsIdentical(R_bcstack_t x, R_bcstack_t y) {
         return x.u.dval == y.u.dval;
     case STACK_OBJ_SEXP:
         return x.u.sxpval == y.u.sxpval;
+    default:
+        assert(false);
+    }
+}
+
+bool trySetInPlace(SEXP old, R_bcstack_t val) {
+    switch (val.tag) {
+    case STACK_OBJ_INT:
+        if (NOT_SHARED(old) && IS_SIMPLE_SCALAR(old, INTSXP)) {
+#ifdef LOG_SEXP_BOX
+            std::cout << "Reused int from " << *INTEGER(old) << " to "
+                      << val.u.ival << "\n";
+#endif
+            *INTEGER(old) = val.u.ival;
+            return true;
+        } else {
+            return false;
+        }
+    case STACK_OBJ_REAL:
+        if (NOT_SHARED(old) && IS_SIMPLE_SCALAR(old, REALSXP)) {
+#ifdef LOG_SEXP_BOX
+            std::cout << "Reused real from " << *REAL(old) << " to "
+                      << val.u.dval << "\n";
+#endif
+            *REAL(old) = val.u.dval;
+            return true;
+        } else {
+            return false;
+        }
+    case STACK_OBJ_LOGICAL:
+        if (NOT_SHARED(old) && IS_SIMPLE_SCALAR(old, LGLSXP)) {
+#ifdef LOG_SEXP_BOX
+            std::cout << "Reused logical from " << *LOGICAL(old) << " to "
+                      << val.u.ival << "\n";
+#endif
+            *LOGICAL(old) = val.u.ival;
+            return true;
+        } else {
+            return false;
+        }
+    case STACK_OBJ_SEXP:
+        assert(false);
     default:
         assert(false);
     }

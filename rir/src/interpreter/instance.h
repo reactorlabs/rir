@@ -167,6 +167,9 @@ bool stackObjsIdentical(R_bcstack_t x, R_bcstack_t y);
         ++R_BCNodeStackTop;                                                    \
     } while (0)
 
+// val must not be an SEXP, otherwise should skip this call.
+// This is a design choice - it encourages not getting old in the first place
+bool trySetInPlace(SEXP old, R_bcstack_t val);
 SEXP ostackObjToSexpAt(R_bcstack_t& x, InterpreterInstance* ctx, unsigned idx);
 SEXP ostackSexpAt(InterpreterInstance* ctx, unsigned idx);
 SEXP ostackPopSexp(InterpreterInstance* ctx);

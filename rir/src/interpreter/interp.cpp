@@ -1169,6 +1169,9 @@ static void cachedSetVar(R_bcstack_t val, SEXP env, Immediate idx,
         if (val.tag == STACK_OBJ_SEXP && val.u.sxpval == cur) {
             return;
         }
+        if (val.tag != STACK_OBJ_SEXP && trySetInPlace(cur, val)) {
+            return;
+        }
         PROTECT(loc);
         SEXP valSexp = stackObjToSexp(val); // Value should be popped off stack
         UNPROTECT(1);
