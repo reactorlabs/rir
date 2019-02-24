@@ -25,25 +25,6 @@ static const unsigned sexpBoxThreshold = 63;
 
 // #define LOG_SEXP_BOX
 
-// Will return 'true' once every 'sexpBoxThreshold + 1' times for each SEXP
-// If successful, resets the counter, otherwise increments it.
-bool tryUnboxSexp(SEXP x) {
-    assert(x != loopTrampolineMarker);
-    unsigned ratio = x->sxpinfo.extra & 0x8F;
-    x->sxpinfo.extra &= ~0x8F;
-    if (ratio < sexpBoxThreshold) {
-        ratio++;
-        x->sxpinfo.extra |= ratio;
-        return false;
-    } else {
-#ifdef LOG_SEXP_BOX
-        std::cout << "Unboxed SEXP\n";
-        Rf_PrintValue(x);
-#endif
-        return true;
-    }
-}
-
 R_bcstack_t intStackObj(int x) {
     R_bcstack_t res;
 #ifdef USE_TYPED_STACK
@@ -85,17 +66,6 @@ R_bcstack_t logicalStackObj(int x) {
 
 R_bcstack_t sexpToStackObj(SEXP x, bool unprotect) {
     assert(x != NULL);
-#ifdef USE_TYPED_STACK
-    if (x != loopTrampolineMarker && ATTRIB(x) == R_NilValue) {
-        if (IS_SIMPLE_SCALAR(x, INTSXP) && tryUnboxSexp(x)) {
-            return intStackObj(*INTEGER(x));
-        } else if (IS_SIMPLE_SCALAR(x, REALSXP) && tryUnboxSexp(x)) {
-            return realStackObj(*REAL(x));
-        } else if (IS_SIMPLE_SCALAR(x, LGLSXP) && tryUnboxSexp(x)) {
-            return logicalStackObj(*INTEGER(x));
-        }
-    }
-#endif
     R_bcstack_t res;
     res.tag = STACK_OBJ_SEXP;
     res.u.sxpval = x;
