@@ -101,7 +101,7 @@ class TheCleanup {
                 } else if (auto test = TypeTest::Cast(i)) {
                     if (test->testFor == TypeTest::EnvironmentStub &&
                         test->arg(0).val() == Env::elided()) {
-                        i->replaceUsesWith((Value*)True::instance());
+                        i->replaceUsesWith(True::instance());
                         removed = true;
                         next = bb->remove(ip);
                     }

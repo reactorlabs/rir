@@ -254,32 +254,27 @@ static SEXP createLegacyArgsList(const CallContext& call, bool eagerCallee,
 }
 
 SEXP materialize(void* rirDataWrapper) {
-    if (ArgsLazyData::check(rirDataWrapper)) {
-        ArgsLazyData* argsLazy = ArgsLazyData::unpack(rirDataWrapper);
-        return argsLazy->createArgsLists();
-    } else if (LazyEnvironment::check(rirDataWrapper)) {
-        LazyEnvironment* env = LazyEnvironment::unpack(rirDataWrapper);
-        return env->create();
+    if (auto promargs = ArgsLazyData::cast(rirDataWrapper)) {
+        return promargs->createArgsLists();
+    } else if (auto stub = LazyEnvironment::cast(rirDataWrapper)) {
+        return stub->create();
     }
     assert(false);
 }
 
 SEXP* keepAliveSEXPs(void* rirDataWrapper) {
-    if (LazyEnvironment::check(rirDataWrapper)) {
-        LazyEnvironment* env = LazyEnvironment::unpack(rirDataWrapper);
+    if (auto env = LazyEnvironment::cast(rirDataWrapper)) {
         return env->gcData();
     }
     assert(false);
 }
 
 SEXP lazyPromargsCreation(void* rirDataWrapper) {
-    ArgsLazyData* argsLazy = ArgsLazyData::unpack(rirDataWrapper);
-    return argsLazy->createArgsLists();
+    return ArgsLazyData::cast(rirDataWrapper)->createArgsLists();
 }
 
 SEXP lazyEnvCreation(void* rirDataWrapper) {
-    LazyEnvironment* env = LazyEnvironment::unpack(rirDataWrapper);
-    return env->create();
+    return LazyEnvironment::cast(rirDataWrapper)->create();
 }
 
 static RIR_INLINE SEXP createLegacyLazyArgsList(const CallContext& call,
@@ -1358,7 +1353,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
             // environment
             memset(&bindingCache, 0, sizeof(bindingCache));
             SEXP e = ostack_pop(ctx);
-            assert((TYPEOF(e) == ENVSXP || LazyEnvironment::check(e)) &&
+            assert((TYPEOF(e) == ENVSXP || LazyEnvironment::cast(e)) &&
                    "Expected an environment on TOS.");
             *env = e;
             NEXT();
@@ -2325,8 +2320,8 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
 
         INSTRUCTION(isstubenv_) {
             SEXP val = ostack_pop(ctx);
-            ostack_push(ctx, LazyEnvironment::check(val) ? R_TrueValue
-                                                         : R_FalseValue);
+            ostack_push(ctx, LazyEnvironment::cast(val) ? R_TrueValue
+                                                        : R_FalseValue);
             NEXT();
         }
 
@@ -2900,8 +2895,8 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
             c->registerInvocation();
             assert(c->code() <= pc && pc < c->endCode());
             SEXP e = ostack_pop(ctx);
-            if (LazyEnvironment::check(e)) {
-                e = (LazyEnvironment::unpack(e))->create();
+            if (auto stub = LazyEnvironment::cast(e)) {
+                e = stub->create();
             }
             assert(TYPEOF(e) == ENVSXP);
             *env = e;
@@ -3144,8 +3139,8 @@ eval_done:
             synthesizeFrames->pop_front();
             SEXP res = ostack_pop(ctx);
             SEXP e = ostack_pop(ctx);
-            if (LazyEnvironment::check(e)) {
-                e = (LazyEnvironment::unpack(e))->create();
+            if (auto stub = LazyEnvironment::cast(e)) {
+                e = stub->create();
             }
             assert(TYPEOF(e) == ENVSXP);
             *env = e;

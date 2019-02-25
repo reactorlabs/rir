@@ -191,7 +191,7 @@ bool Instruction::usesAreOnly(BB* target, std::unordered_set<Tag> tags) {
     bool answer = true;
     Visitor::run(target, [&](Instruction* i) {
         i->eachArg([&](InstrArg& arg) {
-            if (arg.val() == this && tags.find(i->tag) == tags.end()) {
+            if (arg.val() == this && !tags.count(i->tag)) {
                 answer = false;
                 return;
             }

@@ -72,7 +72,7 @@ void ElideEnv::apply(RirCompiler&, ClosureVersion* function, LogStream&) const {
             } else {
                 if (auto test = TypeTest::Cast(i)) {
                     if (test->testFor == TypeTest::EnvironmentStub)
-                        envNeeded.insert((Value*)test->arg(0).val());
+                        envNeeded.insert(test->arg(0).val());
                 }
             }
         }

@@ -906,23 +906,6 @@ class FLI(Is, 1, Effect::None, EnvAccess::None) {
     void printArgs(std::ostream& out, bool tty) const override;
 };
 
-class FLI(TypeTest, 1, Effect::None, EnvAccess::None) {
-  public:
-    enum type { Object, EnvironmentStub };
-    type testFor;
-    explicit TypeTest(Value* v)
-        : FixedLenInstruction(NativeType::test, {{PirType::val()}}, {{v}}) {}
-    TypeTest* object() {
-        testFor = Object;
-        return this;
-    };
-    TypeTest* environmentStub() {
-        testFor = EnvironmentStub;
-        return this;
-    };
-    const char* name() const override;
-};
-
 class FLI(LdFunctionEnv, 0, Effect::None, EnvAccess::None) {
   public:
     LdFunctionEnv() : FixedLenInstruction(RType::env) {}
@@ -1347,6 +1330,20 @@ class VLIE(MkEnv, Effect::None, EnvAccess::Capture) {
     const char* name() const override { return stub ? "(MkEnv)" : "MKEnv"; }
 
     size_t nLocals() { return nargs() - 1; }
+};
+
+class FLI(TypeTest, 1, Effect::None, EnvAccess::None) {
+  public:
+    enum type { Object, EnvironmentStub };
+    type testFor;
+    explicit TypeTest(Value* v, type testType)
+        : FixedLenInstruction(NativeType::test, {{PirType::val()}}, {{v}}),
+          testFor(testType) {
+        if (testFor == EnvironmentStub) {
+            assert(MkEnv::Cast(this->arg<0>().val()));
+        }
+    }
+    const char* name() const override;
 };
 
 class VLI(Phi, Effect::None, EnvAccess::None) {

@@ -203,9 +203,6 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
     case Opcode::ldvar_:
         v = insert(new LdVar(bc.immediateConst(), env));
         push(insert(new Force(v, env)));
-        if (!inPromise()) {
-            addCheckpoint(srcCode, nextPos, stack, insert);
-        }
         break;
 
     case Opcode::starg_:
@@ -895,7 +892,8 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) const {
                 break;
             }
             case Opcode::brobj_: {
-                Value* v = insert((new TypeTest(cur.stack.top()))->object());
+                Value* v =
+                    insert(new TypeTest(cur.stack.top(), TypeTest::Object));
                 insert(new Branch(v));
                 break;
             }

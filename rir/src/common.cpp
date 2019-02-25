@@ -77,7 +77,7 @@ void printRBacktrace() {
     while (ctx) {
         std::cerr << "* Context " << ctx;
 
-        if (rir::ArgsLazyData::check(ctx->promargs)) {
+        if (rir::ArgsLazyData::cast(ctx->promargs)) {
             std::cerr << ", (lazy promargs)\n";
         } else {
             std::cerr << "\n  ARGS: ";

@@ -20,11 +20,17 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
         auto answer = true;
         i->eachArg([&](Value* arg) {
             if (arg->type.maybeObj() && arg->typeFeedback.maybeObj())
-                answer = true;
+                answer = false;
         });
         return answer;
     };
 
+    /*
+     * Looks for the next instruction knowing that the current is an effectul
+     * instruction. Therefore, there must be a next instruction (following only
+     * true branches???) and the previous checkpoint of that instruction is the
+     * one we are looking for.
+     */
     std::function<Instruction*(Instruction*, BB*, bool)> nextInstr =
         [&](Instruction* from, BB* bb, bool stepFirst) {
             auto i = from;
@@ -52,7 +58,6 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
         };
 
     Visitor::run(function->entry, [&](BB* bb) {
-        std::unordered_map<Value*, Value*> stubFor;
         auto ip = bb->begin();
         while (ip != bb->end()) {
             Instruction* i = *ip;
@@ -67,7 +72,8 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
                     i->eachArg([&](Value* arg) {
                         if (arg != i->env())
                             if (arg->type.maybeObj()) {
-                                auto condition = (new TypeTest(arg))->object();
+                                auto condition =
+                                    new TypeTest(arg, TypeTest::Object);
                                 ip = bb->insert(ip, condition);
                                 ip++;
                                 ip = bb->insert(
@@ -96,8 +102,8 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
 
                             environment = MkEnv::Cast(force->env());
                             environment->stub = true;
-                            auto condition =
-                                (new TypeTest(environment))->environmentStub();
+                            auto condition = new TypeTest(
+                                environment, TypeTest::EnvironmentStub);
                             auto position = bb->trueBranch()->begin();
                             BBTransform::insertAssume(
                                 bb->trueBranch(), condition,
