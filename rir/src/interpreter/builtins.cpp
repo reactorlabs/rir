@@ -124,6 +124,8 @@ SEXP tryFastBuiltinCall(const CallContext& call, InterpreterInstance* ctx) {
             return nullptr;
         if (XLENGTH(args[0]) != 1)
             return nullptr;
+        if (Rf_length(args[1]) != 1)
+            return nullptr;
         auto length = asVecSize(args[1]);
         if (length < 0)
             return nullptr;
