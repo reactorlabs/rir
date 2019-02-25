@@ -25,38 +25,6 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
         return answer;
     };
 
-    /*
-     * Looks for the next instruction knowing that the current is an effectul
-     * instruction. Therefore, there must be a next instruction (following only
-     * true branches???) and the previous checkpoint of that instruction is the
-     * one we are looking for.
-     */
-    std::function<Instruction*(Instruction*, BB*, bool)> nextInstr =
-        [&](Instruction* from, BB* bb, bool stepFirst) {
-            auto i = from;
-
-            if (stepFirst) {
-                auto ip = bb->atPosition(from);
-                if (++ip == bb->end()) {
-                    auto currentBB = bb->trueBranch();
-                    while (currentBB->isEmpty())
-                        currentBB = currentBB->trueBranch();
-                    ip = currentBB->begin();
-                }
-                i = *ip;
-            }
-
-            if (i->branches()) {
-                auto cp = Checkpoint::Cast(i);
-                assert(cp);
-                auto nextBB = bb->trueBranch();
-                while (nextBB->isEmpty())
-                    nextBB = nextBB->trueBranch();
-                return nextInstr(*(nextBB->begin()), nextBB, false);
-            }
-            return i;
-        };
-
     Visitor::run(function->entry, [&](BB* bb) {
         auto ip = bb->begin();
         while (ip != bb->end()) {
@@ -90,9 +58,7 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
                 // Speculatively elide envs on forces that only require them in
                 // case they access promises reflectively
                 if (auto force = Force::Cast(i)) {
-                    auto nextInstruction = nextInstr(force, bb, true);
-                    if (checkpoint.at(nextInstruction)) {
-
+                    if (auto cp = checkpoint.next(i)) {
                         auto environment = MkEnv::Cast(force->env());
                         static std::unordered_set<Tag> forces{Tag::Force,
                                                               Tag::FrameState};
@@ -104,10 +70,8 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
                             environment->stub = true;
                             auto condition = new TypeTest(
                                 environment, TypeTest::EnvironmentStub);
-                            auto position = bb->trueBranch()->begin();
-                            BBTransform::insertAssume(
-                                bb->trueBranch(), condition,
-                                checkpoint.at(nextInstruction), position, true);
+                            BBTransform::insertAssume(bb->trueBranch(),
+                                                      condition, cp, true);
                         }
                     }
                 }
