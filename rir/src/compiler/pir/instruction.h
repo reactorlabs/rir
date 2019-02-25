@@ -1076,8 +1076,9 @@ class VLIE(FrameState, Effect::None, EnvAccess::Read) {
 
     void updateNext(FrameState* s) {
         assert(inlined);
-        assert(arg(stackSize).type() == NativeType::frameState);
-        arg(stackSize).val() = s;
+        auto& pos = arg(stackSize);
+        assert(pos.type() == NativeType::frameState);
+        pos.val() = s;
     }
 
     void next(FrameState* s) {

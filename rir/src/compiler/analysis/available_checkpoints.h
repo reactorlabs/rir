@@ -10,9 +10,8 @@ namespace pir {
 
 class AvailableCheckpoints : public StaticAnalysis<AbstractUnique<Checkpoint>> {
   public:
-    ClosureVersion* code;
     AvailableCheckpoints(ClosureVersion* cls, LogStream& log)
-        : StaticAnalysis("AvailableCheckpoints", cls, cls, log), code(cls) {}
+        : StaticAnalysis("AvailableCheckpoints", cls, cls, log) {}
 
     AbstractResult apply(AbstractUnique<Checkpoint>& state,
                          Instruction* i) const override {

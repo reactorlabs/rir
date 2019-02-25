@@ -41,9 +41,8 @@ class CurrentVisibility {
 
 class VisibilityAnalysis : public StaticAnalysis<CurrentVisibility> {
   public:
-    ClosureVersion* code;
     VisibilityAnalysis(ClosureVersion* cls, LogStream& log)
-        : StaticAnalysis("VisibilityAnalysis", cls, cls, log), code(cls) {}
+        : StaticAnalysis("VisibilityAnalysis", cls, cls, log) {}
 
     AbstractResult apply(CurrentVisibility& vis,
                          Instruction* i) const override {
