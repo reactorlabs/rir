@@ -396,6 +396,7 @@ RIR_INLINE bool stackObjsIdentical(R_bcstack_t x, R_bcstack_t y) {
 }
 
 RIR_INLINE bool trySetInPlace(SEXP old, R_bcstack_t val) {
+    return false;
     switch (val.tag) {
     case STACK_OBJ_INT:
         if (TYPEOF(old) == INTSXP && NOT_SHARED(old)) {
@@ -449,6 +450,34 @@ RIR_INLINE bool trySetInPlace(SEXP old, R_bcstack_t val) {
 
 #define ostackSet(c, i, v) *(R_BCNodeStackTop - 1 - (i)) = (v)
 
+#define ostackSetInt(c, i, v)                                                  \
+    do {                                                                       \
+        R_bcstack_t* stk = R_BCNodeStackTop - 1 - (i);                         \
+        stk->tag = STACK_OBJ_INT;                                              \
+        stk->u.ival = (v);                                                     \
+    } while (0)
+
+#define ostackSetReal(c, i, v)                                                 \
+    do {                                                                       \
+        R_bcstack_t* stk = R_BCNodeStackTop - 1 - (i);                         \
+        stk->tag = STACK_OBJ_REAL;                                             \
+        stk->u.dval = (v);                                                     \
+    } while (0)
+
+#define ostackSetLogical(c, i, v)                                              \
+    do {                                                                       \
+        R_bcstack_t* stk = R_BCNodeStackTop - 1 - (i);                         \
+        stk->tag = STACK_OBJ_LOGICAL;                                          \
+        stk->u.ival = (v);                                                     \
+    } while (0)
+
+#define ostackSetSexp(c, i, v)                                                 \
+    do {                                                                       \
+        R_bcstack_t* stk = R_BCNodeStackTop - 1 - (i);                         \
+        stk->tag = STACK_OBJ_SEXP;                                             \
+        stk->u.sxpval = (v);                                                   \
+    } while (0)
+
 #define ostackPopn(c, p)                                                       \
     do {                                                                       \
         R_BCNodeStackTop -= (p);                                               \
@@ -459,6 +488,34 @@ RIR_INLINE bool trySetInPlace(SEXP old, R_bcstack_t val) {
 #define ostackPush(c, v)                                                       \
     do {                                                                       \
         *R_BCNodeStackTop = (v);                                               \
+        ++R_BCNodeStackTop;                                                    \
+    } while (0)
+
+#define ostackPushInt(c, v)                                                    \
+    do {                                                                       \
+        R_BCNodeStackTop->tag = STACK_OBJ_INT;                                 \
+        R_BCNodeStackTop->u.ival = (v);                                        \
+        ++R_BCNodeStackTop;                                                    \
+    } while (0)
+
+#define ostackPushReal(c, v)                                                   \
+    do {                                                                       \
+        R_BCNodeStackTop->tag = STACK_OBJ_REAL;                                \
+        R_BCNodeStackTop->u.dval = (v);                                        \
+        ++R_BCNodeStackTop;                                                    \
+    } while (0)
+
+#define ostackPushLogical(c, v)                                                \
+    do {                                                                       \
+        R_BCNodeStackTop->tag = STACK_OBJ_LOGICAL;                             \
+        R_BCNodeStackTop->u.ival = (v);                                        \
+        ++R_BCNodeStackTop;                                                    \
+    } while (0)
+
+#define ostackPushSexp(c, v)                                                   \
+    do {                                                                       \
+        R_BCNodeStackTop->tag = STACK_OBJ_SEXP;                                \
+        R_BCNodeStackTop->u.sxpval = (v);                                      \
         ++R_BCNodeStackTop;                                                    \
     } while (0)
 
