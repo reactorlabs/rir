@@ -166,6 +166,13 @@ BC BC::stvarSuper(SEXP sym) {
     i.pool = Pool::insert(sym);
     return BC(Opcode::stvar_super_, i);
 }
+BC BC::setLoopVar(SEXP sym) {
+    assert(TYPEOF(sym) == SYMSXP);
+    assert(strlen(CHAR(PRINTNAME(sym))));
+    ImmediateArguments i;
+    i.pool = Pool::insert(sym);
+    return BC(Opcode::set_loop_var_, i);
+}
 BC BC::alloc(int type) {
     ImmediateArguments i;
     i.i = type;

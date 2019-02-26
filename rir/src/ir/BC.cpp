@@ -46,6 +46,7 @@ BC_NOARGS(V, _)
     case Opcode::starg_:
     case Opcode::stvar_:
     case Opcode::stvar_super_:
+    case Opcode::set_loop_var_:
     case Opcode::missing_:
         cs.insert(immediate.pool);
         return;
@@ -238,6 +239,7 @@ void BC::print(std::ostream& out) const {
     case Opcode::starg_:
     case Opcode::stvar_:
     case Opcode::stvar_super_:
+    case Opcode::set_loop_var_:
     case Opcode::missing_:
         out << CHAR(PRINTNAME(immediateConst()));
         break;

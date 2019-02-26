@@ -104,6 +104,11 @@ DEF_INSTR(stvar_super_, 1, 1, 0, 1)
 DEF_INSTR(stloc_, 1, 1, 0, 1)
 
 /**
+ * set_loop_var_:: do i <- a[[b]], where i, a and b are on the stack
+ */
+DEF_INSTR(set_loop_var_, 1, 3, 0, 0)
+
+/**
  * movloc_:: copy one local into another
  */
 DEF_INSTR(movloc_, 2, 0, 0, 1)

@@ -818,7 +818,7 @@ static R_INLINE int R_integer_plus(int x, int y, Rboolean* pnaflag) {
 
     if (((y > 0) && (x > (R_INT_MAX - y))) ||
         ((y < 0) && (x < (R_INT_MIN - y)))) {
-        if (pnaflag != NULL)
+        if (pnaflag)
             *pnaflag = TRUE;
         return NA_INTEGER;
     }
@@ -831,7 +831,7 @@ static R_INLINE int R_integer_minus(int x, int y, Rboolean* pnaflag) {
 
     if (((y < 0) && (x > (R_INT_MAX + y))) ||
         ((y > 0) && (x < (R_INT_MIN + y)))) {
-        if (pnaflag != NULL)
+        if (pnaflag)
             *pnaflag = TRUE;
         return NA_INTEGER;
     }
@@ -847,7 +847,7 @@ static R_INLINE int R_integer_times(int x, int y, Rboolean* pnaflag) {
         if (GOODIPROD(x, y, z) && z != NA_INTEGER)
             return z;
         else {
-            if (pnaflag != NULL)
+            if (pnaflag)
                 *pnaflag = TRUE;
             return NA_INTEGER;
         }
@@ -869,7 +869,7 @@ enum op { PLUSOP, MINUSOP, TIMESOP, DIVOP, POWOP, MODOP, IDIVOP };
 
 #define BINOP_FALLBACK(op)                                                     \
     do {                                                                       \
-        static SEXP prim = NULL;                                               \
+        static SEXP prim = nullptr;                                            \
         static CCODE blt;                                                      \
         static int flag;                                                       \
         if (!prim) {                                                           \
@@ -1007,7 +1007,7 @@ static R_INLINE int R_integer_uminus(int x, Rboolean* pnaflag) {
 
 #define UNOP_FALLBACK(op)                                                      \
     do {                                                                       \
-        static SEXP prim = NULL;                                               \
+        static SEXP prim = nullptr;                                            \
         static CCODE blt;                                                      \
         static int flag;                                                       \
         if (!prim) {                                                           \
@@ -1129,7 +1129,7 @@ static RIR_INLINE SEXP cachedGetBindingCell(SEXP env, Immediate idx,
                                             InterpreterInstance* ctx,
                                             BindingCache* bindingCache) {
     if (env == R_BaseEnv || env == R_BaseNamespace)
-        return NULL;
+        return nullptr;
 
     Immediate cidx = idx % BINDING_CACHE_SIZE;
     if (bindingCache[cidx].idx == idx) {
@@ -1144,7 +1144,7 @@ static RIR_INLINE SEXP cachedGetBindingCell(SEXP env, Immediate idx,
         bindingCache[cidx].idx = idx;
         return loc.cell;
     }
-    return NULL;
+    return nullptr;
 }
 
 static SEXP cachedGetVar(SEXP env, Immediate idx, InterpreterInstance* ctx,
@@ -1515,6 +1515,100 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
             locals.store(offset, ostack_top(ctx));
             ostack_pop(ctx);
             NEXT();
+        }
+
+        INSTRUCTION(set_loop_var_) {
+
+            SEXP tar = ostack_at(ctx, 2);
+            SEXP val = ostack_at(ctx, 1);
+            SEXP idx = ostack_at(ctx, 0);
+            int i = -1;
+
+            if (ATTRIB(val) != R_NilValue || ATTRIB(idx) != R_NilValue)
+                goto fallbackx;
+
+            switch (TYPEOF(idx)) {
+            case REALSXP:
+                if (STDVEC_LENGTH(idx) != 1 || *REAL(idx) == NA_REAL)
+                    goto fallbackx;
+                i = (int)*REAL(idx) - 1;
+                break;
+            case INTSXP:
+                if (STDVEC_LENGTH(idx) != 1 || *INTEGER(idx) == NA_INTEGER)
+                    goto fallbackx;
+                i = *INTEGER(idx) - 1;
+                break;
+            case LGLSXP:
+                if (STDVEC_LENGTH(idx) != 1 || *LOGICAL(idx) == NA_LOGICAL)
+                    goto fallbackx;
+                i = (int)*LOGICAL(idx) - 1;
+                break;
+            default:
+                goto fallbackx;
+            }
+
+            if (i >= XLENGTH(val) || i < 0)
+                goto fallbackx;
+
+            switch (TYPEOF(val)) {
+
+#define SIMPLECASE(vectype, vecaccess)                                         \
+    case vectype: {                                                            \
+        if (XLENGTH(val) == 1 && NO_REFERENCES(val)) {                         \
+            res = val;                                                         \
+        } else if (TYPEOF(tar) == vectype) {                                   \
+            res = tar;                                                         \
+            vecaccess(res)[0] = vecaccess(val)[i];                             \
+        } else {                                                               \
+            res = Rf_allocVector(vectype, 1);                                  \
+            vecaccess(res)[0] = vecaccess(val)[i];                             \
+        }                                                                      \
+        break;                                                                 \
+    }
+
+                SIMPLECASE(REALSXP, REAL);
+                SIMPLECASE(INTSXP, INTEGER);
+                SIMPLECASE(LGLSXP, LOGICAL);
+#undef SIMPLECASE
+
+            case VECSXP: {
+                res = VECTOR_ELT(val, i);
+                break;
+            }
+
+            default:
+                goto fallbackx;
+            }
+
+            ostack_popn(ctx, 3);
+            goto store;
+
+        // ---------
+        fallbackx : {
+            SEXP args = CONS_NR(val, CONS_NR(idx, R_NilValue));
+            ostack_push(ctx, args);
+            if (isObject(val)) {
+                SEXP call = getSrcAt(c, pc - 1, ctx);
+                res = dispatchApply(call, val, args, symbol::DoubleBracket,
+                                    *env, ctx);
+                if (!res)
+                    res = do_subset2_dflt(call, symbol::DoubleBracket, args,
+                                          *env);
+            } else {
+                res = do_subset2_dflt(R_NilValue, symbol::DoubleBracket, args,
+                                      *env);
+            }
+            ostack_popn(ctx, 4);
+            goto store;
+        }
+
+        store : {
+            ostack_set(ctx, 3, res);
+            Immediate id = readImmediate();
+            advanceImmediate();
+            cachedSetVar(res, *env, id, ctx, bindingCache);
+            NEXT();
+        }
         }
 
         INSTRUCTION(movloc_) {
@@ -2253,7 +2347,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
             SLOWASSERT(!DDVAL(sym));
             assert(env);
             SEXP val = R_findVarLocInFrame(*env, sym).cell;
-            if (val == NULL)
+            if (val == nullptr)
                 Rf_errorcall(getSrcAt(c, pc - 1, ctx),
                              "'missing' can only be used for arguments");
 
@@ -2826,7 +2920,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
         }
 
         INSTRUCTION(seq_) {
-            static SEXP prim = NULL;
+            static SEXP prim = nullptr;
             if (!prim) {
                 // TODO: we could call seq.default here, but it messes up the
                 // error call :(
@@ -2839,7 +2933,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
             SEXP from = ostack_at(ctx, 2);
             SEXP to = ostack_at(ctx, 1);
             SEXP by = ostack_at(ctx, 0);
-            res = NULL;
+            res = nullptr;
 
             if (IS_SIMPLE_SCALAR(from, INTSXP) &&
                 IS_SIMPLE_SCALAR(to, INTSXP) && IS_SIMPLE_SCALAR(by, INTSXP)) {
@@ -2881,7 +2975,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
 
             SEXP lhs = ostack_at(ctx, 1);
             SEXP rhs = ostack_at(ctx, 0);
-            res = NULL;
+            res = nullptr;
 
             if (IS_SIMPLE_SCALAR(lhs, INTSXP)) {
                 int from = *INTEGER(lhs);
@@ -2917,7 +3011,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
                 }
             }
 
-            if (res == NULL) {
+            if (res == nullptr) {
                 BINOP_FALLBACK(":");
             }
 
@@ -3149,4 +3243,4 @@ SEXP rirEval_f(SEXP what, SEXP env) {
 
     assert(false && "Expected a code object or a dispatch table");
 }
-}
+} // namespace rir

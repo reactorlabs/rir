@@ -657,6 +657,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_) {
 
         ctx.pushLoop(loopBranch, breakBranch);
 
+        cs << BC::push(R_NilValue);
         compileExpr(ctx, seq);
         cs << BC::setShared() << BC::forSeqSize() << BC::push((int)0);
 
@@ -669,14 +670,14 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_) {
         // TODO: add a integer version of lt_
         cs.addSrc(R_NilValue);
 
-        cs << BC::brtrue(endForBranch) << BC::pull(2) << BC::pull(1)
-           << BC::extract2_1();
+        cs << BC::brtrue(endForBranch) << BC::pull(3) << BC::pull(3)
+           << BC::pull(2) << BC::setLoopVar(sym);
         // We know this is a loop sequence and won't do dispatch.
         // TODO: add a non-object version of extract2_1
-        cs.addSrc(R_NilValue);
+        // cs.addSrc(R_NilValue);
 
         // Set the loop variable
-        cs << BC::stvar(sym);
+        // cs << BC::stvar(sym);
 
         compileExpr(ctx, body);
         cs << BC::pop()
@@ -692,8 +693,8 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_) {
             cs.remove(beginLoopPos);
         }
 
-        cs << BC::pop() << BC::pop() << BC::pop() << BC::push(R_NilValue)
-           << BC::invisible();
+        cs << BC::pop() << BC::pop() << BC::pop() << BC::pop()
+           << BC::push(R_NilValue) << BC::invisible();
 
         ctx.popLoop();
 

@@ -798,6 +798,7 @@ SIMPLE_INSTRUCTIONS(V, _)
     case Opcode::beginloop_:
     case Opcode::endloop_:
     case Opcode::ldddvar_:
+    case Opcode::set_loop_var_:
         log.unsupportedBC("Unsupported BC", bc);
         return false;
     }

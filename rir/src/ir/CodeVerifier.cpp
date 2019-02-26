@@ -116,6 +116,7 @@ static Sources hasSources(Opcode bc) {
     case Opcode::starg_:
     case Opcode::stvar_:
     case Opcode::stvar_super_:
+    case Opcode::set_loop_var_:
     case Opcode::guard_fun_:
     case Opcode::call_implicit_:
     case Opcode::named_call_implicit_:

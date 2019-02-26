@@ -343,6 +343,7 @@ BC_NOARGS(V, _)
     inline static BC stvar(SEXP sym);
     inline static BC starg(SEXP sym);
     inline static BC stvarSuper(SEXP sym);
+    inline static BC setLoopVar(SEXP sym);
     inline static BC missing(SEXP sym);
     inline static BC alloc(int type);
     inline static BC beginloop(Jmp);
@@ -594,6 +595,7 @@ BC_NOARGS(V, _)
         case Opcode::stvar_:
         case Opcode::starg_:
         case Opcode::stvar_super_:
+        case Opcode::set_loop_var_:
         case Opcode::missing_:
             memcpy(&immediate.pool, pc, sizeof(PoolIdx));
             break;
