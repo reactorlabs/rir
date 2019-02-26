@@ -2,6 +2,7 @@
 #define RIR_INTERPRETER_INCL_C_H
 
 #include "R/r.h"
+#include "ir/BC_inc.h"
 
 // Indicates an argument is missing
 #define MISSING_ARG_IDX ((unsigned)-1)
@@ -46,6 +47,13 @@ SEXP argsLazyCreation(void* rirDataWrapper);
 SEXP createLegacyArgsListFromStackValues(const CallContext& call,
                                          bool eagerCallee,
                                          InterpreterInstance* ctx);
-} // namespace pir
+
+SEXP createEnvironment(std::vector<SEXP>* args, const SEXP parent,
+                       const Opcode* pc, InterpreterInstance* ctx,
+                       R_bcstack_t* localsBase, SEXP stub);
+
+SEXP materialize(void* rirDataWrapper);
+SEXP* keepAliveSEXPs(void* rirDataWrapper);
+} // namespace rir
 
 #endif

@@ -1,9 +1,9 @@
 #include "interp.h"
 #include "ArgsLazyData.h"
+#include "LazyEnvironment.h"
 #include "R/Funtab.h"
 #include "R/RList.h"
 #include "R/Symbols.h"
-#include "R/r.h"
 #include "compiler/translations/rir_2_pir/rir_2_pir_compiler.h"
 #include "ir/Deoptimization.h"
 #include "ir/RuntimeFeedback_inl.h"
@@ -146,6 +146,32 @@ static RIR_INLINE void __listAppend(SEXP* front, SEXP* last, SEXP value,
     *last = app;
 }
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wcast-align"
+
+SEXP createEnvironment(std::vector<SEXP>* args, const SEXP parent,
+                       const Opcode* pc, InterpreterInstance* ctx,
+                       R_bcstack_t* localsBase, SEXP stub) {
+    SEXP arglist = R_NilValue;
+    auto names = (Immediate*)pc;
+    int j = 0;
+    for (long i = args->size() - 1; i >= 0; --i) {
+        SEXP val = args->at(j);
+        SEXP name = cp_pool_at(ctx, names[i]);
+        arglist = CONS_NR(val, arglist);
+        SET_TAG(arglist, name);
+        SET_MISSING(arglist, val == R_MissingArg ? 2 : 0);
+        j++;
+    }
+
+    SEXP environment = Rf_NewEnvironment(R_NilValue, arglist, parent);
+    for (auto i = 0; i < R_BCNodeStackTop - localsBase; i++) {
+        if (ostack_at(ctx, i) == stub)
+            ostack_set(ctx, i, environment);
+    }
+    return environment;
+}
+
 SEXP createLegacyArgsListFromStackValues(const CallContext& call,
                                          bool eagerCallee,
                                          InterpreterInstance* ctx) {
@@ -227,9 +253,28 @@ static SEXP createLegacyArgsList(const CallContext& call, bool eagerCallee,
     return result;
 }
 
-SEXP argsLazyCreation(void* rirDataWrapper) {
-    ArgsLazyData* argsLazy = ArgsLazyData::unpack(rirDataWrapper);
-    return argsLazy->createArgsLists();
+SEXP materialize(void* rirDataWrapper) {
+    if (auto promargs = ArgsLazyData::cast(rirDataWrapper)) {
+        return promargs->createArgsLists();
+    } else if (auto stub = LazyEnvironment::cast(rirDataWrapper)) {
+        return stub->create();
+    }
+    assert(false);
+}
+
+SEXP* keepAliveSEXPs(void* rirDataWrapper) {
+    if (auto env = LazyEnvironment::cast(rirDataWrapper)) {
+        return env->gcData();
+    }
+    assert(false);
+}
+
+SEXP lazyPromargsCreation(void* rirDataWrapper) {
+    return ArgsLazyData::cast(rirDataWrapper)->createArgsLists();
+}
+
+SEXP lazyEnvCreation(void* rirDataWrapper) {
+    return LazyEnvironment::cast(rirDataWrapper)->create();
 }
 
 static RIR_INLINE SEXP createLegacyLazyArgsList(const CallContext& call,
@@ -1233,6 +1278,8 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
     Opcode* pc = initialPC ? initialPC : c->code();
     SEXP res;
 
+    std::vector<LazyEnvironment*> envStubs;
+
     R_Visible = TRUE;
 
     // main loop
@@ -1263,6 +1310,30 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
             NEXT();
         }
 
+        INSTRUCTION(mk_stub_env_) {
+            // TODO: There is a potential safety problem because we are not
+            // preserving the args and parent SEXP. Doing it here is not an
+            // option becase R_Preserve is slow. We must find a simple story so
+            // that the gc trace rir wrappers.
+            size_t n = readImmediate();
+            advanceImmediate();
+            // Do we need to preserve parent and the arg vals?
+            SEXP parent = ostack_pop(ctx);
+            assert(TYPEOF(parent) == ENVSXP &&
+                   "Non-environment used as environment parent.");
+            auto names = pc;
+            advanceImmediateN(n);
+            std::vector<SEXP>* args = new std::vector<SEXP>();
+            for (size_t i = 0; i < n; ++i)
+                args->push_back(ostack_pop(ctx));
+            auto envStub =
+                new LazyEnvironment(args, parent, names, ctx, localsBase);
+            envStubs.push_back(envStub);
+            res = (SEXP)envStub;
+            ostack_push(ctx, res);
+            NEXT();
+        }
+
         INSTRUCTION(parent_env_) {
             // Can only be used for pir. In pir we always have a closure that
             // stores the lexical envrionment
@@ -1282,7 +1353,8 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
             // environment
             memset(&bindingCache, 0, sizeof(bindingCache));
             SEXP e = ostack_pop(ctx);
-            assert(TYPEOF(e) == ENVSXP && "Expected an environment on TOS.");
+            assert((TYPEOF(e) == ENVSXP || LazyEnvironment::cast(e)) &&
+                   "Expected an environment on TOS.");
             *env = e;
             NEXT();
         }
@@ -2246,6 +2318,13 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
             NEXT();
         }
 
+        INSTRUCTION(isstubenv_) {
+            SEXP val = ostack_pop(ctx);
+            ostack_push(ctx, LazyEnvironment::cast(val) ? R_TrueValue
+                                                        : R_FalseValue);
+            NEXT();
+        }
+
         INSTRUCTION(missing_) {
             SEXP sym = readConst(ctx, readImmediate());
             advanceImmediate();
@@ -2816,6 +2895,9 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
             c->registerInvocation();
             assert(c->code() <= pc && pc < c->endCode());
             SEXP e = ostack_pop(ctx);
+            if (auto stub = LazyEnvironment::cast(e)) {
+                e = stub->create();
+            }
             assert(TYPEOF(e) == ENVSXP);
             *env = e;
 
@@ -3057,6 +3139,9 @@ eval_done:
             synthesizeFrames->pop_front();
             SEXP res = ostack_pop(ctx);
             SEXP e = ostack_pop(ctx);
+            if (auto stub = LazyEnvironment::cast(e)) {
+                e = stub->create();
+            }
             assert(TYPEOF(e) == ENVSXP);
             *env = e;
             ostack_push(ctx, res);
@@ -3066,6 +3151,11 @@ eval_done:
         }
         delete synthesizeFrames;
     }
+
+    for (auto stub : envStubs) {
+        delete stub;
+    }
+
     return ostack_pop(ctx);
 }
 
@@ -3149,4 +3239,4 @@ SEXP rirEval_f(SEXP what, SEXP env) {
 
     assert(false && "Expected a code object or a dispatch table");
 }
-}
+} // namespace rir

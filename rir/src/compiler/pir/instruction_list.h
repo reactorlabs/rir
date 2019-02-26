@@ -49,7 +49,7 @@
     V(Phi)                                                                     \
     V(AsLogical)                                                               \
     V(AsTest)                                                                  \
-    V(IsObject)                                                                \
+    V(TypeTest)                                                                \
     V(Return)                                                                  \
     V(MkArg)                                                                   \
     V(MkFunCls)                                                                \

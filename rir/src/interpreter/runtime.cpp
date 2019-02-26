@@ -38,10 +38,10 @@ void initializeRuntime() {
     // initialize the global context
     globalContext_ = context_create();
     registerExternalCode(rirEval_f, rirApplyClosure, rir_compile, rirExpr,
-                         argsLazyCreation);
-    configurations = new Configurations();
+                         materialize, keepAliveSEXPs);
+    configurations = new rir::Configurations();
 }
 
 InterpreterInstance* globalContext() { return globalContext_; }
 Configurations* pirConfigurations() { return configurations; }
-}
+} // namespace rir

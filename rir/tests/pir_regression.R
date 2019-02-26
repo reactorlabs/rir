@@ -8,9 +8,6 @@ g <- pir.compile(rir.compile(function(y) y))
 h <- pir.compile(rir.compile(function() g(f(2))))
 h()  # aborts if g's environment got elided
 
-
-
-
 {
   f <- pir.compile(rir.compile(function(gpars) {
     numnotnull <- function(gparname) {
@@ -25,9 +22,6 @@ h()  # aborts if g's environment got elided
   }))
   fc()
 }
-
-
-
 
 {
   validGP <- pir.compile(rir.compile(function(gpars) {
