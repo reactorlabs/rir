@@ -1547,8 +1547,8 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
                 goto fallbackx;
             }
 
-            if (i >= XLENGTH(val) || i < 0)
-                goto fallbackx;
+            // if (i >= XLENGTH(val) || i < 0)
+            //     goto fallbackx;
 
             switch (TYPEOF(val)) {
 
@@ -1556,7 +1556,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
     case vectype: {                                                            \
         if (XLENGTH(val) == 1 && NO_REFERENCES(val)) {                         \
             res = val;                                                         \
-        } else if (TYPEOF(tar) == vectype) {                                   \
+        } else if (TYPEOF(tar) == vectype && NOT_SHARED(tar)) {                \
             res = tar;                                                         \
             vecaccess(res)[0] = vecaccess(val)[i];                             \
         } else {                                                               \
@@ -3094,7 +3094,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
 
         INSTRUCTION(set_shared_) {
             SEXP val = ostack_top(ctx);
-            INCREMENT_NAMED(val);
+            INCREMENT_NAMED(val);                 // shouldn't it be MARK_NOT_MUTABLE?
             NEXT();
         }
 
