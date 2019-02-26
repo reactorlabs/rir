@@ -672,12 +672,6 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_) {
 
         cs << BC::brtrue(endForBranch) << BC::pull(3) << BC::pull(3)
            << BC::pull(2) << BC::setLoopVar(sym);
-        // We know this is a loop sequence and won't do dispatch.
-        // TODO: add a non-object version of extract2_1
-        // cs.addSrc(R_NilValue);
-
-        // Set the loop variable
-        // cs << BC::stvar(sym);
 
         compileExpr(ctx, body);
         cs << BC::pop()

@@ -1522,41 +1522,13 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
             SEXP tar = ostack_at(ctx, 2);
             SEXP val = ostack_at(ctx, 1);
             SEXP idx = ostack_at(ctx, 0);
-            int i = -1;
-
-            if (ATTRIB(val) != R_NilValue || ATTRIB(idx) != R_NilValue)
-                goto fallbackx;
-
-            switch (TYPEOF(idx)) {
-            case REALSXP:
-                if (STDVEC_LENGTH(idx) != 1 || *REAL(idx) == NA_REAL)
-                    goto fallbackx;
-                i = (int)*REAL(idx) - 1;
-                break;
-            case INTSXP:
-                if (STDVEC_LENGTH(idx) != 1 || *INTEGER(idx) == NA_INTEGER)
-                    goto fallbackx;
-                i = *INTEGER(idx) - 1;
-                break;
-            case LGLSXP:
-                if (STDVEC_LENGTH(idx) != 1 || *LOGICAL(idx) == NA_LOGICAL)
-                    goto fallbackx;
-                i = (int)*LOGICAL(idx) - 1;
-                break;
-            default:
-                goto fallbackx;
-            }
-
-            // if (i >= XLENGTH(val) || i < 0)
-            //     goto fallbackx;
+            int i = (int)*INTEGER(idx) - 1;
 
             switch (TYPEOF(val)) {
 
 #define SIMPLECASE(vectype, vecaccess)                                         \
     case vectype: {                                                            \
-        if (XLENGTH(val) == 1 && NO_REFERENCES(val)) {                         \
-            res = val;                                                         \
-        } else if (TYPEOF(tar) == vectype && NOT_SHARED(tar)) {                \
+        if (TYPEOF(tar) == vectype && NOT_SHARED(tar)) {                       \
             res = tar;                                                         \
             vecaccess(res)[0] = vecaccess(val)[i];                             \
         } else {                                                               \
@@ -1565,7 +1537,6 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
         }                                                                      \
         break;                                                                 \
     }
-
                 SIMPLECASE(REALSXP, REAL);
                 SIMPLECASE(INTSXP, INTEGER);
                 SIMPLECASE(LGLSXP, LOGICAL);
@@ -1576,39 +1547,21 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
                 break;
             }
 
-            default:
-                goto fallbackx;
+            default: {
+                SEXP args = CONS_NR(val, CONS_NR(idx, R_NilValue));
+                ostack_push(ctx, args);
+                res = do_subset2_dflt(R_NilValue, symbol::DoubleBracket, args,
+                                      *env);
+                ostack_pop(ctx);
+            }
             }
 
             ostack_popn(ctx, 3);
-            goto store;
-
-        // ---------
-        fallbackx : {
-            SEXP args = CONS_NR(val, CONS_NR(idx, R_NilValue));
-            ostack_push(ctx, args);
-            if (isObject(val)) {
-                SEXP call = getSrcAt(c, pc - 1, ctx);
-                res = dispatchApply(call, val, args, symbol::DoubleBracket,
-                                    *env, ctx);
-                if (!res)
-                    res = do_subset2_dflt(call, symbol::DoubleBracket, args,
-                                          *env);
-            } else {
-                res = do_subset2_dflt(R_NilValue, symbol::DoubleBracket, args,
-                                      *env);
-            }
-            ostack_popn(ctx, 4);
-            goto store;
-        }
-
-        store : {
             ostack_set(ctx, 3, res);
             Immediate id = readImmediate();
             advanceImmediate();
             cachedSetVar(res, *env, id, ctx, bindingCache);
             NEXT();
-        }
         }
 
         INSTRUCTION(movloc_) {
