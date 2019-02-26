@@ -1182,6 +1182,8 @@ static void cachedSetVar(R_bcstack_t val, SEXP env, Immediate idx,
         SEXP cur = CAR(loc);
         if (val.tag == STACK_OBJ_SEXP && val.u.sxpval == cur) {
             return;
+        } else if (val.tag != STACK_OBJ_SEXP && trySetInPlace(cur, val)) {
+            return;
         }
         PROTECT(loc);
         SEXP valSexp = stackObjToSexp(val); // Value should be popped off stack
@@ -2448,27 +2450,26 @@ R_bcstack_t evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
             if (i >= XLENGTH(val) || i < 0)
                 goto fallback;
 
-            SEXP res;
+            R_bcstack_t res;
             switch (TYPEOF(val)) {
 
-#define SIMPLECASE(vectype, vecaccess)                                         \
+#define SIMPLECASE(vectype, vecaccess, veccreate)                              \
     case vectype: {                                                            \
         if (XLENGTH(val) == 1 && NO_REFERENCES(val)) {                         \
-            res = val;                                                         \
+            res = sexpToStackObj(val, false);                                  \
         } else {                                                               \
-            res = Rf_allocVector(vectype, 1);                                  \
-            vecaccess(res)[0] = vecaccess(val)[i];                             \
+            res = veccreate##StackObj(vecaccess(val)[i]);                      \
         }                                                                      \
         break;                                                                 \
     }
 
-                SIMPLECASE(REALSXP, REAL);
-                SIMPLECASE(INTSXP, INTEGER);
-                SIMPLECASE(LGLSXP, LOGICAL);
+                SIMPLECASE(REALSXP, REAL, real);
+                SIMPLECASE(INTSXP, INTEGER, int);
+                SIMPLECASE(LGLSXP, LOGICAL, logical);
 #undef SIMPLECASE
 
             case VECSXP: {
-                res = VECTOR_ELT(val, i);
+                res = sexpToStackObj(VECTOR_ELT(val, i), false);
                 break;
             }
 
@@ -2478,11 +2479,12 @@ R_bcstack_t evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
 
             R_Visible = TRUE;
             ostackPopn(ctx, 2);
-            ostackPush(ctx, sexpToStackObj(res, true));
+            ostackPush(ctx, res);
             NEXT();
 
         // ---------
         fallback : {
+            SEXP res;
             PROTECT(val);
             SEXP idxSexp = ostackObjToSexpAt(idx, ctx, 1);
             PROTECT(idxSexp);

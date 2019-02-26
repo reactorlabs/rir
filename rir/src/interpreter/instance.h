@@ -113,34 +113,329 @@ typedef enum {
     STACK_OBJ_LOGICAL
 } stackObjType;
 
-R_bcstack_t intStackObj(int x);
-R_bcstack_t realStackObj(double x);
-R_bcstack_t logicalStackObj(int x);
-R_bcstack_t sexpToStackObj(SEXP x, bool unprotect);
-// Warning: If the SEXP is modified, the original stack object won't change.
-// If the object is in the ostack, use 'ostackSexpAt' or 'ostackObjToSexpAt'.
-SEXP stackObjToSexp(R_bcstack_t x);
+RIR_INLINE R_bcstack_t intStackObj(int x) {
+    R_bcstack_t res;
+#ifdef USE_TYPED_STACK
+    res.tag = STACK_OBJ_INT;
+    res.u.ival = x;
+#else
+    res.tag = STACK_OBJ_SEXP;
+    res.u.sxpval = Rf_allocVector(INTSXP, 1);
+    *INTEGER(res.u.sxpval) = x;
+#endif
+    return res;
+}
+
+RIR_INLINE R_bcstack_t realStackObj(double x) {
+    R_bcstack_t res;
+#ifdef USE_TYPED_STACK
+    res.tag = STACK_OBJ_REAL;
+    res.u.dval = x;
+#else
+    res.tag = STACK_OBJ_SEXP;
+    res.u.sxpval = Rf_allocVector(REALSXP, 1);
+    *REAL(res.u.sxpval) = x;
+#endif
+    return res;
+}
+
+RIR_INLINE R_bcstack_t logicalStackObj(int x) {
+    R_bcstack_t res;
+#ifdef USE_TYPED_STACK
+    res.tag = STACK_OBJ_LOGICAL;
+    res.u.ival = x;
+#else
+    res.tag = STACK_OBJ_SEXP;
+    res.u.sxpval = Rf_allocVector(LGLSXP, 1);
+    *LOGICAL(res.u.sxpval) = x;
+#endif
+    return res;
+}
+
+RIR_INLINE R_bcstack_t sexpToStackObj(SEXP x, bool unprotect) {
+    assert(x != NULL);
+    R_bcstack_t res;
+    res.tag = STACK_OBJ_SEXP;
+    res.u.sxpval = x;
+    return res;
+}
+
+RIR_INLINE SEXP stackObjToSexp(R_bcstack_t x) {
+    switch (x.tag) {
+    case STACK_OBJ_INT:
+#ifdef USE_TYPED_STACK
+        SEXP res;
+        res = Rf_allocVector(INTSXP, 1);
+        *INTEGER(res) = x.u.ival;
+#ifdef LOG_SEXP_BOX
+        std::cout << "Boxed int " << x.u.ival << "\n";
+#endif
+        return res;
+    case STACK_OBJ_REAL:
+        res = Rf_allocVector(REALSXP, 1);
+        *REAL(res) = x.u.dval;
+#ifdef LOG_SEXP_BOX
+        std::cout << "Boxed real " << x.u.dval << "\n";
+#endif
+        return res;
+    case STACK_OBJ_LOGICAL:
+        res = Rf_allocVector(LGLSXP, 1);
+        *LOGICAL(res) = x.u.ival;
+#ifdef LOG_SEXP_BOX
+        std::cout << "Boxed logical " << x.u.ival << "\n";
+#endif
+        return res;
+#endif
+    case STACK_OBJ_SEXP:
+        return x.u.sxpval;
+    default:
+        assert(false);
+    }
+}
+
 // Doesn't consider reals integers
-bool stackObjIsInteger(R_bcstack_t x);
+RIR_INLINE bool stackObjIsInteger(R_bcstack_t x) {
+    switch (x.tag) {
+    case STACK_OBJ_INT:
+        return true;
+    case STACK_OBJ_REAL:
+    case STACK_OBJ_LOGICAL:
+        return false;
+    case STACK_OBJ_SEXP:
+        return IS_SIMPLE_SCALAR(x.u.sxpval, INTSXP);
+    default:
+        assert(false);
+    }
+}
+
 // Returns NA_INTEGER if not an integer, doesn't consider reals integers
-int tryStackObjToInteger(R_bcstack_t x);
+RIR_INLINE int tryStackObjToInteger(R_bcstack_t x) {
+    switch (x.tag) {
+    case STACK_OBJ_INT:
+        return x.u.ival;
+    case STACK_OBJ_REAL:
+    case STACK_OBJ_LOGICAL:
+        return NA_INTEGER;
+    case STACK_OBJ_SEXP:
+        if (IS_SIMPLE_SCALAR(x.u.sxpval, INTSXP)) {
+            return *INTEGER(x.u.sxpval);
+        } else {
+            return NA_INTEGER;
+        }
+    default:
+        assert(false);
+    }
+}
+
 // Doesn't consider integers reals
-bool stackObjIsReal(R_bcstack_t x);
+RIR_INLINE bool stackObjIsReal(R_bcstack_t x) {
+    switch (x.tag) {
+    case STACK_OBJ_REAL:
+        return true;
+    case STACK_OBJ_INT:
+    case STACK_OBJ_LOGICAL:
+        return false;
+    case STACK_OBJ_SEXP:
+        return IS_SIMPLE_SCALAR(x.u.sxpval, REALSXP);
+    default:
+        assert(false);
+    }
+}
+
 // Returns NA_REAL if not a real, doesn't consider integers reals
-double tryStackObjToReal(R_bcstack_t x);
-bool stackObjIsLogical(R_bcstack_t x);
+RIR_INLINE double tryStackObjToReal(R_bcstack_t x) {
+    switch (x.tag) {
+    case STACK_OBJ_REAL:
+        return x.u.dval;
+    case STACK_OBJ_INT:
+    case STACK_OBJ_LOGICAL:
+        return NA_REAL;
+    case STACK_OBJ_SEXP:
+        if (IS_SIMPLE_SCALAR(x.u.sxpval, REALSXP)) {
+            return *REAL(x.u.sxpval);
+        } else {
+            return NA_REAL;
+        }
+    default:
+        assert(false);
+    }
+}
+
+RIR_INLINE bool stackObjIsLogical(R_bcstack_t x) {
+    switch (x.tag) {
+    case STACK_OBJ_LOGICAL:
+        return true;
+    case STACK_OBJ_INT:
+    case STACK_OBJ_REAL:
+        return false;
+    case STACK_OBJ_SEXP:
+        return IS_SIMPLE_SCALAR(x.u.sxpval, LGLSXP);
+    default:
+        assert(false);
+    }
+}
+
 // Returns NA_LOGICAL if not a logical
-int tryStackObjToLogical(R_bcstack_t x);
+RIR_INLINE int tryStackObjToLogical(R_bcstack_t x) {
+    switch (x.tag) {
+    case STACK_OBJ_LOGICAL:
+        return x.u.ival;
+    case STACK_OBJ_INT:
+    case STACK_OBJ_REAL:
+        return NA_LOGICAL;
+    case STACK_OBJ_SEXP:
+        if (IS_SIMPLE_SCALAR(x.u.sxpval, LGLSXP)) {
+            return *LOGICAL(x.u.sxpval);
+        } else {
+            return NA_LOGICAL;
+        }
+    default:
+        assert(false);
+    }
+}
+
 // Fails if not a logical or NA
-int tryStackObjToLogicalNa(R_bcstack_t x);
+RIR_INLINE int tryStackObjToLogicalNa(R_bcstack_t x) {
+    switch (x.tag) {
+    case STACK_OBJ_LOGICAL:
+        return x.u.ival;
+    case STACK_OBJ_SEXP:
+        if (TYPEOF(x.u.sxpval) == LGLSXP) {
+            return XLENGTH(x.u.sxpval) == 0 ? NA_LOGICAL : *LOGICAL(x.u.sxpval);
+        } else {
+            assert(false);
+        }
+    default:
+        assert(false);
+    }
+}
+
 // Returns regular if int, truncated if real, -1 otherwise
-int tryStackObjToIdx(R_bcstack_t x);
-SEXPTYPE stackObjSexpType(R_bcstack_t x);
-bool stackObjIsVector(R_bcstack_t x);
-bool stackObjIsSimpleScalar(R_bcstack_t x, SEXPTYPE type);
-R_xlen_t stackObjLength(R_bcstack_t x);
-// Uses pointer equality for SEXPs
-bool stackObjsIdentical(R_bcstack_t x, R_bcstack_t y);
+RIR_INLINE int tryStackObjToIdx(R_bcstack_t x) {
+    if (stackObjIsInteger(x)) {
+        return tryStackObjToInteger(x) - 1;
+    } else if (stackObjIsReal(x)) {
+        return (int)tryStackObjToReal(x) - 1;
+    } else {
+        return -1;
+    }
+}
+
+RIR_INLINE SEXPTYPE stackObjSexpType(R_bcstack_t x) {
+    switch (x.tag) {
+    case STACK_OBJ_INT:
+        return INTSXP;
+    case STACK_OBJ_REAL:
+        return REALSXP;
+    case STACK_OBJ_LOGICAL:
+        return LGLSXP;
+    case STACK_OBJ_SEXP:
+        return TYPEOF(x.u.sxpval);
+    default:
+        assert(false);
+    }
+}
+
+RIR_INLINE bool stackObjIsVector(R_bcstack_t x) {
+    switch (x.tag) {
+    case STACK_OBJ_INT:
+    case STACK_OBJ_REAL:
+    case STACK_OBJ_LOGICAL:
+        return true;
+    case STACK_OBJ_SEXP:
+        return Rf_isVector(x.u.sxpval);
+    default:
+        assert(false);
+    }
+}
+
+RIR_INLINE bool stackObjIsSimpleScalar(R_bcstack_t x, SEXPTYPE type) {
+    switch (x.tag) {
+    case STACK_OBJ_INT:
+        return type == INTSXP;
+    case STACK_OBJ_REAL:
+        return type == REALSXP;
+    case STACK_OBJ_LOGICAL:
+        return type == LGLSXP;
+    case STACK_OBJ_SEXP:
+        return IS_SIMPLE_SCALAR(x.u.sxpval, type);
+    default:
+        assert(false);
+    }
+}
+
+RIR_INLINE R_xlen_t stackObjLength(R_bcstack_t x) {
+    switch (x.tag) {
+    case STACK_OBJ_INT:
+    case STACK_OBJ_REAL:
+    case STACK_OBJ_LOGICAL:
+        return 1;
+    case STACK_OBJ_SEXP:
+        return XLENGTH(x.u.sxpval);
+    default:
+        assert(false);
+    }
+}
+
+RIR_INLINE bool stackObjsIdentical(R_bcstack_t x, R_bcstack_t y) {
+    if (x.tag != y.tag) {
+        return false;
+    }
+
+    switch (x.tag) { // == y.tag
+    case STACK_OBJ_INT:
+    case STACK_OBJ_LOGICAL:
+        return x.u.ival == y.u.ival;
+    case STACK_OBJ_REAL:
+        return x.u.dval == y.u.dval;
+    case STACK_OBJ_SEXP:
+        return x.u.sxpval == y.u.sxpval;
+    default:
+        assert(false);
+    }
+}
+
+RIR_INLINE bool trySetInPlace(SEXP old, R_bcstack_t val) {
+    switch (val.tag) {
+    case STACK_OBJ_INT:
+        if (TYPEOF(old) == INTSXP && NOT_SHARED(old)) {
+#ifdef LOG_SEXP_BOX
+            std::cout << "Reused int from " << *INTEGER(old) << " to "
+                      << val.u.ival << "\n";
+#endif
+            *INTEGER(old) = val.u.ival;
+            return true;
+        } else {
+            return false;
+        }
+    case STACK_OBJ_REAL:
+        if (TYPEOF(old) == REALSXP && NOT_SHARED(old)) {
+#ifdef LOG_SEXP_BOX
+            std::cout << "Reused real from " << *REAL(old) << " to "
+                      << val.u.dval << "\n";
+#endif
+            *REAL(old) = val.u.dval;
+            return true;
+        } else {
+            return false;
+        }
+    case STACK_OBJ_LOGICAL:
+        if (TYPEOF(old) == LGLSXP && NOT_SHARED(old)) {
+#ifdef LOG_SEXP_BOX
+            std::cout << "Reused logical from " << *LOGICAL(old) << " to "
+                      << val.u.ival << "\n";
+#endif
+            *LOGICAL(old) = val.u.ival;
+            return true;
+        } else {
+            return false;
+        }
+    case STACK_OBJ_SEXP:
+        assert(false);
+    default:
+        assert(false);
+    }
+}
 
 #define ostackLength(c) (R_BCNodeStackTop - R_BCNodeStackBase)
 
@@ -167,13 +462,33 @@ bool stackObjsIdentical(R_bcstack_t x, R_bcstack_t y);
         ++R_BCNodeStackTop;                                                    \
     } while (0)
 
-// val must not be an SEXP, otherwise should skip this call.
-// This is a design choice - it encourages not getting old in the first place
-bool trySetInPlace(SEXP old, R_bcstack_t val);
-SEXP ostackObjToSexpAt(R_bcstack_t& x, InterpreterInstance* ctx, unsigned idx);
-SEXP ostackSexpAt(InterpreterInstance* ctx, unsigned idx);
-SEXP ostackPopSexp(InterpreterInstance* ctx);
-void ostackEnsureSize(InterpreterInstance* ctx, unsigned minFree);
+RIR_INLINE SEXP ostackObjToSexpAt(R_bcstack_t& x, InterpreterInstance* ctx,
+                                  unsigned idx) {
+    if (x.tag != STACK_OBJ_SEXP) {
+        SEXP sexp = stackObjToSexp(x);
+        x.u.sxpval = sexp;
+        x.tag = STACK_OBJ_SEXP;
+        ostackSet(ctx, idx, x);
+    }
+    return x.u.sxpval;
+}
+
+RIR_INLINE SEXP ostackSexpAt(InterpreterInstance* ctx, unsigned idx) {
+    R_bcstack_t x = ostackAt(ctx, idx);
+    SEXP sexp = ostackObjToSexpAt(x, ctx, idx);
+    return sexp;
+}
+
+RIR_INLINE SEXP ostackPopSexp(InterpreterInstance* ctx) {
+    return stackObjToSexp(ostackPop(ctx));
+}
+
+RIR_INLINE void ostackEnsureSize(InterpreterInstance* ctx, unsigned minFree) {
+    if ((R_BCNodeStackTop + minFree) >= R_BCNodeStackEnd) {
+        // TODO....
+        assert(false);
+    }
+}
 
 // --- Locals
 
