@@ -25,7 +25,7 @@ struct LazyEnvironment
 
     LazyEnvironment(std::vector<SEXP>* arguments, SEXP parent, Opcode* opcode,
                     InterpreterInstance* cmpCtx, R_bcstack_t* localsBase)
-        : RirDataWrapper(5, arguments->size()), arguments_(arguments),
+        : RirDataWrapper(arguments->size()), arguments_(arguments),
           parent_(parent), names_(opcode), cmpCtx_(cmpCtx),
           localsBase_(localsBase){};
     ~LazyEnvironment() { delete arguments_; }

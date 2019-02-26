@@ -49,11 +49,8 @@ struct RirDataWrapper {
     }
 
   protected:
-    explicit RirDataWrapper(uint32_t count, uint32_t gc)
-        : info{RIR_DATA_WRAPPER_MAGIC, MAGIC, gc} {
-        uint8_t* start = (uint8_t*)this + sizeof(data_header);
-        memset(start, 0, count * sizeof(void*));
-    }
+    explicit RirDataWrapper(uint32_t gc)
+        : info{RIR_DATA_WRAPPER_MAGIC, MAGIC, gc} {}
 };
 
 } // namespace rir
