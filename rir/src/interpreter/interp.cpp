@@ -1524,6 +1524,9 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
             SEXP idx = ostack_at(ctx, 0);
             int i = (int)*INTEGER(idx) - 1;
 
+            if (ATTRIB(val) != R_NilValue)
+                goto loop_seq_slowcase;
+
             switch (TYPEOF(val)) {
 
 #define SIMPLECASE(vectype, vecaccess)                                         \
@@ -1547,13 +1550,25 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
                 break;
             }
 
-            default: {
+            default:
+                goto loop_seq_slowcase;
+            }
+
+            loop_seq_slowcase: {
                 SEXP args = CONS_NR(val, CONS_NR(idx, R_NilValue));
                 ostack_push(ctx, args);
-                res = do_subset2_dflt(R_NilValue, symbol::DoubleBracket, args,
-                                      *env);
+                if (isObject(val)) {
+                    SEXP call = getSrcAt(c, pc - 1, ctx);
+                    res = dispatchApply(call, val, args, symbol::DoubleBracket,
+                                        *env, ctx);
+                    if (!res)
+                        res = do_subset2_dflt(call, symbol::DoubleBracket, args,
+                                            *env);
+                } else {
+                    res = do_subset2_dflt(R_NilValue, symbol::DoubleBracket, args,
+                                        *env);
+                }
                 ostack_pop(ctx);
-            }
             }
 
             ostack_popn(ctx, 3);
