@@ -2024,10 +2024,6 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
 
         INSTRUCTION(inc_) {
             SEXP val = ostack_top(ctx);
-            if (TYPEOF(val) != INTSXP) {
-                std::cout << "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n";
-                c->disassemble(std::cout);
-            }
             assert(TYPEOF(val) == INTSXP);
             int i = INTEGER(val)[0];
             if (MAYBE_SHARED(val)) {

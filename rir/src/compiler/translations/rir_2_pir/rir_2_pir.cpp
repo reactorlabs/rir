@@ -556,8 +556,6 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
     }
 
     case Opcode::set_loop_var_: {
-        // log.unsupportedBC("Unsupported BC", bc);
-        // return false;
         if (!inPromise()) {
             forceIfPromised(
                 1); // <- ensure forced version are captured in framestate
@@ -651,8 +649,6 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
 #undef BINOP_NOENV
 
     case Opcode::lt_loop_idx_: {
-        // log.unsupportedBC("Unsupported BC", bc);
-        // return false;
         auto rhs = pop();
         auto lhs = pop();
         push(insert(new LtLoopIdx(lhs, rhs)));
