@@ -21,6 +21,11 @@ DEF_INSTR(nop_, 0, 0, 0, 1)
 DEF_INSTR(mk_env_, 1, -1, 1, 1)
 
 /**
+ * make_stub_env_:: create a fake environment for speculative purposes
+ */
+DEF_INSTR(mk_stub_env_, 1, -1, 1, 1)
+
+/**
  * parent_env_:: push lexically outer env to tos
  */
 DEF_INSTR(parent_env_, 0, 0, 1, 1)
@@ -309,6 +314,11 @@ DEF_INSTR(is_, 1, 1, 1, 1)
  * isobj_:: check if TOS is any kind of object, push T/F
  */
 DEF_INSTR(isobj_, 0, 1, 1, 1)
+
+/**
+ * isstubenv_:: check if TOS is an env stub, push T/F
+ */
+DEF_INSTR(isstubenv_, 0, 1, 1, 1)
 
 /**
  * missing_ :: check if symb is missing

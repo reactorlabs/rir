@@ -9,6 +9,7 @@ namespace rir {
 namespace pir {
 
 class FrameState;
+class Checkpoint;
 class BBTransform {
   public:
     static BB* clone(BB* src, Code* target, ClosureVersion* targetClosure);
@@ -20,6 +21,11 @@ class BBTransform {
                            BB::Instrs::iterator position, Value* condition,
                            bool expected, BB* deoptBlock,
                            const std::string& debugMesage);
+    static void insertAssume(BB* src, Value* condition, Checkpoint* cp,
+                             BB::Instrs::iterator& position,
+                             bool assumePositive);
+    static void insertAssume(BB* src, Value* condition, Checkpoint* cp,
+                             bool assumePositive);
 };
 
 } // namespace pir

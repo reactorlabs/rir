@@ -388,4 +388,4 @@ SEXP tryFastBuiltinCall(const CallContext& call, InterpreterInstance* ctx) {
 
     return nullptr;
 }
-}
+} // namespace rir

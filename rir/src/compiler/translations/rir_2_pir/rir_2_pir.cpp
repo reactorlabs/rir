@@ -766,11 +766,11 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         insert(new Visible());
         break;
 
-#define V(_, name, Name)\
-    case Opcode::name ## _:\
-        insert(new Name());\
+#define V(_, name, Name)                                                       \
+    case Opcode::name##_:                                                      \
+        insert(new Name());                                                    \
         break;
-SIMPLE_INSTRUCTIONS(V, _)
+        SIMPLE_INSTRUCTIONS(V, _)
 #undef V
 
     // TODO implement!
@@ -801,6 +801,7 @@ SIMPLE_INSTRUCTIONS(V, _)
     // Opcodes that only come from PIR
     case Opcode::deopt_:
     case Opcode::force_:
+    case Opcode::mk_stub_env_:
     case Opcode::mk_env_:
     case Opcode::get_env_:
     case Opcode::parent_env_:
@@ -812,6 +813,7 @@ SIMPLE_INSTRUCTIONS(V, _)
     case Opcode::stloc_:
     case Opcode::movloc_:
     case Opcode::isobj_:
+    case Opcode::isstubenv_:
     case Opcode::check_missing_:
     case Opcode::static_call_:
         log.unsupportedBC("Unsupported BC (are you recompiling?)", bc);
@@ -915,7 +917,8 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) const {
                 break;
             }
             case Opcode::brobj_: {
-                Value* v = insert(new IsObject(cur.stack.top()));
+                Value* v =
+                    insert(new TypeTest(cur.stack.top(), TypeTest::Object));
                 insert(new Branch(v));
                 break;
             }

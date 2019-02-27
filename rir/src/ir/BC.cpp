@@ -92,6 +92,7 @@ BC_NOARGS(V, _)
         cs.insert(immediate.fun);
         return;
 
+    case Opcode::mk_stub_env_:
     case Opcode::mk_env_:
         cs.insert(immediate.mkEnvFixedArgs);
         for (PoolIdx name : mkEnvExtra().names)
@@ -214,6 +215,7 @@ void BC::print(std::ostream& out) const {
         out << dumpSexp(target).c_str();
         break;
     }
+    case Opcode::mk_stub_env_:
     case Opcode::mk_env_: {
         auto args = immediate.mkEnvFixedArgs;
         BC::NumArgs nargs = args.nargs;

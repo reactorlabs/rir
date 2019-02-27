@@ -291,13 +291,17 @@ BC BC::callBuiltin(size_t nargs, SEXP ast, SEXP builtin) {
     return BC(Opcode::call_builtin_, im);
 }
 
-BC BC::mkEnv(const std::vector<SEXP>& names) {
+BC BC::mkEnv(const std::vector<SEXP>& names, bool stub) {
     ImmediateArguments im;
     im.mkEnvFixedArgs.nargs = names.size();
     std::vector<PoolIdx> nameIdxs;
     for (auto n : names)
         nameIdxs.push_back(Pool::insert(n));
-    BC cur(Opcode::mk_env_, im);
+    BC cur;
+    if (stub)
+        cur = BC(Opcode::mk_stub_env_, im);
+    else
+        cur = BC(Opcode::mk_env_, im);
     cur.mkEnvExtra().names = nameIdxs;
     return cur;
 }
@@ -308,6 +312,6 @@ BC BC::deopt(SEXP deoptMetadata) {
     return BC(Opcode::deopt_, i);
 }
 
-} // rir
+} // namespace rir
 
 #endif

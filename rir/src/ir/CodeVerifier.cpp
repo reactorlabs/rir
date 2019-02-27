@@ -141,6 +141,7 @@ static Sources hasSources(Opcode bc) {
     case Opcode::movloc_:
     case Opcode::nop_:
     case Opcode::mk_env_:
+    case Opcode::mk_stub_env_:
     case Opcode::get_env_:
     case Opcode::parent_env_:
     case Opcode::set_env_:
@@ -166,6 +167,7 @@ static Sources hasSources(Opcode bc) {
     case Opcode::endloop_:
     case Opcode::lt_loop_idx_:
     case Opcode::isobj_:
+    case Opcode::isstubenv_:
     case Opcode::check_missing_:
     case Opcode::lgl_and_:
     case Opcode::lgl_or_:
@@ -333,7 +335,7 @@ void CodeVerifier::verifyFunctionLayout(SEXP sexp, InterpreterInstance* ctx) {
                     }
                 }
             }
-            if (*cptr == Opcode::mk_env_) {
+            if (*cptr == Opcode::mk_env_ || *cptr == Opcode::mk_stub_env_) {
                 uint32_t nargs = *reinterpret_cast<Immediate*>(cptr + 1);
                 for (size_t i = 0, e = nargs; i != e; ++i) {
                     uint32_t offset = cur.mkEnvExtra().names[i];

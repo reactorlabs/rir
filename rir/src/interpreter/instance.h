@@ -241,6 +241,6 @@ RIR_INLINE void cp_pool_set(InterpreterInstance* c, unsigned index, SEXP e) {
     SET_VECTOR_ELT(c->cp.list, index, e);
 }
 
-} // namespace pir
+} // namespace rir
 
 #endif // interpreter_context_h

@@ -69,6 +69,11 @@ void ElideEnv::apply(RirCompiler&, ClosureVersion* function, LogStream&) const {
                     if (!force->input()->type.maybeLazy())
                         force->elideEnv();
                 }
+            } else {
+                if (auto test = TypeTest::Cast(i)) {
+                    if (test->testFor == TypeTest::EnvironmentStub)
+                        envNeeded.insert(test->arg(0).val());
+                }
             }
         }
     });

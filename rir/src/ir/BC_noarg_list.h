@@ -65,6 +65,7 @@
     V(NESTED, extract2_2, extract2_2)                                          \
     V(NESTED, swap, swap)                                                      \
     V(NESTED, isobj, isobj)                                                    \
+    V(NESTED, isstubenv, isstubenv)                                            \
     V(NESTED, return_, return )
 
 #undef V_SIMPLE_INSTRUCTION
