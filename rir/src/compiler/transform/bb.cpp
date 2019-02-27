@@ -168,21 +168,22 @@ BB* BBTransform::lowerExpect(Code* code, BB* src, BB::Instrs::iterator position,
     return split;
 }
 
-void BBTransform::insertAssume(BB* src, Value* condition, Checkpoint* cp,
+void BBTransform::insertAssume(Value* condition, Checkpoint* cp, BB* bb,
                                BB::Instrs::iterator& position,
                                bool assumePositive) {
-    position = src->insert(position, (Instruction*)condition);
+    position = bb->insert(position, (Instruction*)condition);
     auto assume = new Assume(condition, cp);
     if (!assumePositive)
         assume->Not();
-    position = src->insert(position + 1, assume);
+    position = bb->insert(position + 1, assume);
     position++;
 };
 
-void BBTransform::insertAssume(BB* src, Value* condition, Checkpoint* cp,
+void BBTransform::insertAssume(Value* condition, Checkpoint* cp,
                                bool assumePositive) {
-    auto successPos = cp->bb()->trueBranch()->begin();
-    insertAssume(src, condition, cp, successPos, assumePositive);
+    auto contBB = cp->bb()->trueBranch();
+    auto contBegin = contBB->begin();
+    insertAssume(condition, cp, contBB, contBegin, assumePositive);
 }
 
 } // namespace pir

@@ -227,6 +227,7 @@ bool testCondition(const std::string& input,
     compile("", input, &m);
     bool t = verify(&m);
     m.eachPirClosureVersion(condition);
+    m.print(std::cout);
     return t;
 }
 

@@ -25,6 +25,9 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
         return answer;
     };
 
+    std::unordered_set<MkEnv*> stubbedEnvs;
+    std::unordered_set<MkEnv*> bannedEnvs;
+
     Visitor::run(function->entry, [&](BB* bb) {
         auto ip = bb->begin();
         while (ip != bb->end()) {
@@ -58,26 +61,41 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
                 // Speculatively elide envs on forces that only require them in
                 // case they access promises reflectively
                 if (auto force = Force::Cast(i)) {
-                    if (auto cp = checkpoint.next(i)) {
-                        auto environment = MkEnv::Cast(force->env());
-                        static std::unordered_set<Tag> forces{Tag::Force,
-                                                              Tag::FrameState};
+                    if (auto environment = MkEnv::Cast(force->env())) {
+                        if (auto cp = checkpoint.next(i)) {
+                            static std::unordered_set<Tag> forces{
+                                Tag::Force, Tag::FrameState};
 
-                        if (!environment->stub &&
-                            environment->usesAreOnly(function->entry, forces)) {
+                            if (cp->bb()->trueBranch() == bb) {
+                                ip = next;
+                                continue;
+                            }
 
-                            environment = MkEnv::Cast(force->env());
-                            environment->stub = true;
-                            auto condition = new TypeTest(
-                                environment, TypeTest::EnvironmentStub);
-                            BBTransform::insertAssume(bb->trueBranch(),
-                                                      condition, cp, true);
+                            if (!environment->stub &&
+                                !bannedEnvs.count(environment) &&
+                                (stubbedEnvs.count(environment) ||
+                                 environment->usesAreOnly(function->entry,
+                                                          forces))) {
+
+                                stubbedEnvs.insert(environment);
+                                environment = MkEnv::Cast(force->env());
+                                auto condition = new TypeTest(
+                                    environment, TypeTest::EnvironmentStub);
+                                BBTransform::insertAssume(condition, cp, true);
+                            }
+                        } else {
+                            bannedEnvs.insert(environment);
                         }
                     }
                 }
             }
             ip = next;
         }
+
+        // Stub out all envs where we managed to guard all forces
+        for (auto& e : stubbedEnvs)
+            if (!bannedEnvs.count(e))
+                e->stub = true;
     });
 }
 } // namespace pir

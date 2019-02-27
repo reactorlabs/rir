@@ -31,10 +31,10 @@ class UnnecessaryContexts : public StaticAnalysis<UnnecessaryContextsState> {
         if (auto p = PushContext::Cast(i)) {
             state.set(p);
             return AbstractResult::Updated;
-        } else if (CallInstruction::CastCall(i) || CallBuiltin::Cast(i) ||
-                   Checkpoint::Cast(i)) {
-            // Contexts are needed for non-local returns, reflection and
-            // deoptimization.
+        } else if (CallInstruction::CastCall(i) || CallBuiltin::Cast(i)) {
+            // Contexts are needed for non-local returns and reflection. On
+            // deoptimization we can synthesize them, thus none needed for
+            // checkpoints.
             state.needed = true;
             return AbstractResult::Updated;
         } else if (auto p = PopContext::Cast(i)) {

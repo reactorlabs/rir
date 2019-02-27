@@ -21,10 +21,10 @@ class BBTransform {
                            BB::Instrs::iterator position, Value* condition,
                            bool expected, BB* deoptBlock,
                            const std::string& debugMesage);
-    static void insertAssume(BB* src, Value* condition, Checkpoint* cp,
+    static void insertAssume(Value* condition, Checkpoint* cp, BB* bb,
                              BB::Instrs::iterator& position,
                              bool assumePositive);
-    static void insertAssume(BB* src, Value* condition, Checkpoint* cp,
+    static void insertAssume(Value* condition, Checkpoint* cp,
                              bool assumePositive);
 };
 
