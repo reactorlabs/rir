@@ -40,15 +40,17 @@ void OptimizeContexts::apply(RirCompiler&, ClosureVersion* function,
             auto next = ip + 1;
             auto instr = *ip;
 
-            auto e = toRemove.find(instr);
-            if (e != toRemove.end()) {
+            auto context = toRemove.find(instr);
+            if (context != toRemove.end()) {
                 next = bb->remove(ip);
-                toRemove.erase(e);
+                toRemove.erase(context);
             }
 
             ip = next;
         }
     });
+
+    assert(toRemove.size() == 0);
 }
 
 } // namespace pir

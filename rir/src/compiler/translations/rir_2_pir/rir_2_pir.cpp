@@ -1137,7 +1137,7 @@ void Rir2Pir::finalize(Value* ret, Builder& insert) {
 
     // Return in promise can lead to non-local return, which currently needs env
     // to find the context to return to.
-    insert(new Return(ret, inPromise() ? insert.env : Env::elided()));
+    insert(new Return(ret));
 
     InsertCast c(insert.code->entry, insert.env);
     c();

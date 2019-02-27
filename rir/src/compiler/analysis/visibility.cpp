@@ -31,15 +31,15 @@ AbstractResult VisibilityAnalysis::apply(CurrentVisibility& vis,
         break;
     case Tag::CallBuiltin:
     case Tag::CallSafeBuiltin:
-        int flag;
+        int builtinId;
         if (auto c = CallBuiltin::Cast(i)) {
-            flag = getFlag(c->builtinId);
+            builtinId = c->builtinId;
         } else {
-            flag = getFlag(CallSafeBuiltin::Cast(i)->builtinId);
+            builtinId = CallSafeBuiltin::Cast(i)->builtinId;
         }
 
-        if (flag < 2) {
-            bool visible = static_cast<Rboolean>(flag != 1);
+        if (builtinUpdatesVisibility(builtinId)) {
+            bool visible = builtinVisibility(builtinId);
             if (visible && vis.state != CurrentVisibility::Visible) {
                 vis.state = CurrentVisibility::Visible;
                 return AbstractResult::Updated;

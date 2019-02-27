@@ -287,6 +287,8 @@ class InstructionImplementation : public Instruction {
         return EFFECT >= Effect::Visibility;
     }
     bool hasEffectIgnoreVisibility() const override {
+        // TODO devise a strategy to deal with visibility, that does not need
+        // instruction level reasoning.
         return EFFECT > Effect::Visibility && hasEffect();
     }
     bool mayForcePromises() const override final {
@@ -695,7 +697,7 @@ class Branch
 class Return : public FixedLenInstruction<Tag::Return, Return, 1, Effect::Order,
                                           EnvAccess::None, Controlflow::Exit> {
   public:
-    explicit Return(Value* ret, Value* env)
+    explicit Return(Value* ret)
         : FixedLenInstruction(PirType::voyd(), {{PirType::val()}}, {{ret}}) {}
 };
 

@@ -5,6 +5,8 @@
 #define USE_RINTERNALS
 #include <Rinternals.h>
 
+#include <cassert>
+
 typedef struct sxpinfo_struct_rjit {
     unsigned int type : 5; /* ==> (FUNSXP == 99) %% 2^5 == 3 == CLOSXP
                         * -> warning: `type' is narrower than values
@@ -121,6 +123,12 @@ static inline int getFlag(SEXP f) {
     return (((R_FunTab[i].eval) / 100) % 10);
 }
 static inline int getFlag(int i) { return (((R_FunTab[i].eval) / 100) % 10); }
+
+static inline bool builtinUpdatesVisibility(int id) { return getFlag(id) < 2; }
+static inline bool builtinVisibility(int id) {
+    assert(builtinUpdatesVisibility(id));
+    return getFlag(id) != 1;
+}
 
 static inline int findBuiltin(const char* name) {
     int i = 0;

@@ -181,11 +181,15 @@ class TheVerifier {
             phi->eachArg([&](BB* input, Value* v) {
                 if (auto iv = Instruction::Cast(v)) {
                     if (input == phi->bb()) {
+                        // Note: can happen in a one-block loop, but only if it
+                        // is not edge-split
                         std::cerr << "Error at instruction '";
                         i->print(std::cerr);
                         std::cerr << "': input '";
                         iv->printRef(std::cerr);
-                        std::cerr << "' has the phi block as input block\n";
+                        std::cerr << "' one of the phi inputs is equal to the "
+                                  << "BB this phi is located at. This is not "
+                                  << "possible and makes no sense!\n";
                         ok = false;
                     }
 
