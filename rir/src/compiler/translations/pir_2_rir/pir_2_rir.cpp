@@ -1157,12 +1157,13 @@ static bool DEBUG_DEOPTS = getenv("PIR_DEBUG_DEOPTS") &&
                            0 == strncmp("1", getenv("PIR_DEBUG_DEOPTS"), 1);
 static bool DEOPT_CHAOS = getenv("PIR_DEOPT_CHAOS") &&
                           0 == strncmp("1", getenv("PIR_DEOPT_CHAOS"), 1);
+static bool DEOPT_CHAOS_SEED = getenv("PIR_DEOPT_CHAOS_SEED")
+                                   ? atoi(getenv("PIR_DEOPT_CHAOS_SEED"))
+                                   : std::random_device()();
 
 static bool coinFlip() {
-    static std::random_device rd;
-    static std::mt19937 gen(rd());
-    // static std::mt19937 gen(42);
-    static std::bernoulli_distribution coin(0.2);
+    static std::mt19937 gen(DEOPT_CHAOS_SEED);
+    static std::bernoulli_distribution coin(0.03);
     return coin(gen);
 };
 

@@ -49,6 +49,8 @@ tests_debug:
     - ENABLE_VALGRIND=1 ./bin/tests
     - R_GCTORTURE=100 ./bin/tests
     - PIR_INLINER_MAX_INLINEE_SIZE=2000 ./bin/tests
+    - for i in `seq 1 3`; do PIR_DEOPT_CHAOS_SEED=$i PIR_DEOPT_CHAOS=1 ./bin/tests ; done
+    - for i in `seq 1 3`; do PIR_INLINER_MAX_INLINEE_SIZE=2000 PIR_DEOPT_CHAOS_SEED=$i PIR_DEOPT_CHAOS=1 ./bin/tests ; done
     - ./bin/gnur-make-tests check
 
 test_sanitize:

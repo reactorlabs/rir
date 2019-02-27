@@ -395,8 +395,7 @@ static SEXP inlineContextTrampoline(Code* c, const CallContext* callCtx,
             if (R_ReturnedValue == R_RestartToken) {
                 cntxt.callflag = CTXT_RETURN; /* turn restart off */
                 R_ReturnedValue = R_NilValue; /* remove restart token */
-                return evalRirCode(c, ctx, cntxt.cloenv, callCtx, pc,
-                                   localsBase);
+                return evalRirCode(c, ctx, cntxt.cloenv, callCtx, pc);
             } else {
                 return R_ReturnedValue;
             }
@@ -1424,6 +1423,8 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
     assert(c->info.magic == CODE_MAGIC);
 
     BindingCache bindingCache[BINDING_CACHE_SIZE];
+    memset(&bindingCache, 0, sizeof(bindingCache));
+
     bool existingLocals = localsBase;
     if (!existingLocals) {
 #ifdef TYPED_STACK
@@ -1435,7 +1436,6 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
 #endif
         localsBase = R_BCNodeStackTop;
 
-        memset(&bindingCache, 0, sizeof(bindingCache));
     }
     Locals locals(localsBase, c->localsCount, existingLocals);
 
