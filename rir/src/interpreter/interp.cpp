@@ -1317,9 +1317,6 @@ void deoptFramesWithContext(InterpreterInstance* ctx,
 
     bool outermostFrame = pos == deoptData->numFrames - 1;
     bool innermostFrame = pos == 0;
-    // This wrapper consumes the environment from the deopt metadata and the
-    // result of the previous frame.
-    size_t extraDeoptArgNum = innermostFrame ? 1 : 2;
 
     RCNTXT fake;
     RCNTXT* cntxt;
@@ -1352,12 +1349,12 @@ void deoptFramesWithContext(InterpreterInstance* ctx,
         // The outermost frame is the caller, not an inlinee, thus we need not
         // change its context.
         if (!outermostFrame) {
+            // The longjump is initialized, when we are still reconstructing
+            // the frames. But if we restart from here, we need to remove
+            // all the extra stuff from the stack used for reconstruction.
+            cntxt->nodestack = ostack_cell_at(ctx, excessStack - 1);
             if ((SETJMP(cntxt->cjmpbuf))) {
-                // The longjump is initialized, when we are still reconstructing
-                // the frames. But if we restart from here, we need to remove
-                // all the extra stuff from the stack used for reconstruction.
-                assert((size_t)ostack_length(ctx) > frameBaseSize);
-                ostack_popn(ctx, ostack_length(ctx) - frameBaseSize);
+                assert((size_t)ostack_length(ctx) == frameBaseSize);
                 if (R_ReturnedValue == R_RestartToken) {
                     cntxt->callflag = CTXT_RETURN; /* turn restart off */
                     R_ReturnedValue = R_NilValue;  /* remove restart token */
@@ -1375,6 +1372,10 @@ void deoptFramesWithContext(InterpreterInstance* ctx,
         }
 
         // 3. Execute our frame
+        //
+        // This wrapper consumes the environment from the deopt metadata and the
+        // result of the previous frame.
+        size_t extraDeoptArgNum = innermostFrame ? 1 : 2;
         assert((size_t)ostack_length(ctx) ==
                frameBaseSize + f.stackSize + extraDeoptArgNum);
         SEXP res = nullptr;

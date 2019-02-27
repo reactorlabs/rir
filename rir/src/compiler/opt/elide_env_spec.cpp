@@ -67,6 +67,7 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
                                 Tag::Force, Tag::FrameState};
 
                             if (cp->bb()->trueBranch() == bb) {
+                                bannedEnvs.insert(environment);
                                 ip = next;
                                 continue;
                             }
