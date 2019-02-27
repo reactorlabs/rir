@@ -1597,7 +1597,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
             int i = (int)*INTEGER(idx) - 1;
 
             if (ATTRIB(val) != R_NilValue)
-                goto loop_seq_slowcase;
+                goto set_loop_var_slowcase;
 
             switch (TYPEOF(val)) {
 
@@ -1610,7 +1610,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
             res = Rf_allocVector(vectype, 1);                                  \
             vecaccess(res)[0] = vecaccess(val)[i];                             \
         }                                                                      \
-        break;                                                                 \
+        goto set_loop_var_store;                                               \
     }
                 SIMPLECASE(REALSXP, REAL);
                 SIMPLECASE(INTSXP, INTEGER);
@@ -1619,14 +1619,14 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
 
             case VECSXP: {
                 res = VECTOR_ELT(val, i);
-                break;
+                goto set_loop_var_store;
             }
 
             default:
-                goto loop_seq_slowcase;
+                goto set_loop_var_slowcase;
             }
 
-            loop_seq_slowcase: {
+            set_loop_var_slowcase: {
                 SEXP args = CONS_NR(val, CONS_NR(idx, R_NilValue));
                 ostack_push(ctx, args);
                 if (isObject(val)) {
@@ -1641,13 +1641,17 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
                                         *env);
                 }
                 ostack_pop(ctx);
+                // fallthrough
             }
 
-            ostack_popn(ctx, 3);
-            ostack_set(ctx, 3, res);
-            Immediate id = readImmediate();
-            advanceImmediate();
-            cachedSetVar(res, *env, id, ctx, bindingCache);
+            set_loop_var_store: {
+                ostack_popn(ctx, 3);
+                ostack_set(ctx, 3, res);
+                Immediate id = readImmediate();
+                advanceImmediate();
+                cachedSetVar(res, *env, id, ctx, bindingCache);
+            }
+
             NEXT();
         }
 
