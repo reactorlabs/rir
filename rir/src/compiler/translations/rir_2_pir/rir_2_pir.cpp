@@ -200,6 +200,10 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         push(insert(new LdConst(bc.immediateConst())));
         break;
 
+    case Opcode::push_loop_box_:
+        push(insert(new PushLoopBox()));
+        break;
+
     case Opcode::ldvar_:
         v = insert(new LdVar(bc.immediateConst(), env));
         push(insert(new Force(v, env)));

@@ -657,7 +657,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_) {
 
         ctx.pushLoop(loopBranch, breakBranch);
 
-        cs << BC::push(R_NilValue);
+        cs << BC::pushLoopBox();
         compileExpr(ctx, seq);
         cs << BC::setShared() << BC::forSeqSize() << BC::push((int)0);
 

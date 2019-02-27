@@ -788,6 +788,11 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 break;
             }
 
+            case Tag::PushLoopBox: {
+                cs << BC::pushLoopBox();
+                break;
+            }
+
             case Tag::LdFun: {
                 auto ldfun = LdFun::Cast(instr);
                 cs << BC::ldfun(ldfun->varName);

@@ -271,6 +271,11 @@ DEF_INSTR(ne_, 0, 2, 1, 0)
  */
 DEF_INSTR(lt_loop_idx_, 0, 2, 1, 0)
 
+/**
+ * lt_loop_idx_:: push a null placeholder to stack
+ */
+DEF_INSTR(push_loop_box_, 0, 0, 1, 1)
+
 DEF_INSTR(identical_noforce_, 0, 2, 1, 0)
 
 /**

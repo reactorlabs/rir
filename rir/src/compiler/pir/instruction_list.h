@@ -46,6 +46,7 @@
     V(LdVarSuper)                                                              \
     V(StVar)                                                                   \
     V(SetLoopVar)                                                              \
+    V(PushLoopBox)                                                             \
     V(Branch)                                                                  \
     V(Phi)                                                                     \
     V(AsLogical)                                                               \

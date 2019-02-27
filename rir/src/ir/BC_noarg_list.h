@@ -13,6 +13,7 @@
     V(NESTED, setEnv, set_env)                                                 \
     V(NESTED, ret, ret)                                                        \
     V(NESTED, pop, pop)                                                        \
+    V(NESTED, pushLoopBox, push_loop_box)                                      \
     V(NESTED, force, force)                                                    \
     V(NESTED, asast, asast)                                                    \
     V(NESTED, checkMissing, check_missing)                                     \

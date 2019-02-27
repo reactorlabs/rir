@@ -1921,6 +1921,11 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
             NEXT();
         }
 
+        INSTRUCTION(push_loop_box_) {
+            ostack_push(ctx, R_NilValue);
+            NEXT();
+        }
+
         INSTRUCTION(push_code_) {
             Immediate n = readImmediate();
             advanceImmediate();
@@ -2019,6 +2024,10 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
 
         INSTRUCTION(inc_) {
             SEXP val = ostack_top(ctx);
+            if (TYPEOF(val) != INTSXP) {
+                std::cout << "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n";
+                c->disassemble(std::cout);
+            }
             assert(TYPEOF(val) == INTSXP);
             int i = INTEGER(val)[0];
             if (MAYBE_SHARED(val)) {

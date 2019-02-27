@@ -905,6 +905,11 @@ class FLI(Inc, 1, Effect::None, EnvAccess::None) {
                               {{v}}) {}
 };
 
+class FLI(PushLoopBox, 0, Effect::Order, EnvAccess::None) {
+  public:
+    PushLoopBox() : FixedLenInstruction(PirType(PirType::val())) {}
+};
+
 class FLI(Is, 1, Effect::None, EnvAccess::None) {
   public:
     Is(uint32_t sexpTag, Value* v)
