@@ -450,33 +450,13 @@ RIR_INLINE bool trySetInPlace(SEXP old, R_bcstack_t val) {
 
 #define ostackSet(c, i, v) *(R_BCNodeStackTop - 1 - (i)) = (v)
 
-#define ostackSetInt(c, i, v)                                                  \
-    do {                                                                       \
-        R_bcstack_t* stk = R_BCNodeStackTop - 1 - (i);                         \
-        stk->tag = STACK_OBJ_INT;                                              \
-        stk->u.ival = (v);                                                     \
-    } while (0)
+#define ostackSetInt(c, i, v) ostackSet(c, i, intStackObj(v))
 
-#define ostackSetReal(c, i, v)                                                 \
-    do {                                                                       \
-        R_bcstack_t* stk = R_BCNodeStackTop - 1 - (i);                         \
-        stk->tag = STACK_OBJ_REAL;                                             \
-        stk->u.dval = (v);                                                     \
-    } while (0)
+#define ostackSetReal(c, i, v) ostackSet(c, i, realStackObj(v))
 
-#define ostackSetLogical(c, i, v)                                              \
-    do {                                                                       \
-        R_bcstack_t* stk = R_BCNodeStackTop - 1 - (i);                         \
-        stk->tag = STACK_OBJ_LOGICAL;                                          \
-        stk->u.ival = (v);                                                     \
-    } while (0)
+#define ostackSetLogical(c, i, v) ostackSet(c, i, logicalStackObj(v))
 
-#define ostackSetSexp(c, i, v)                                                 \
-    do {                                                                       \
-        R_bcstack_t* stk = R_BCNodeStackTop - 1 - (i);                         \
-        stk->tag = STACK_OBJ_SEXP;                                             \
-        stk->u.sxpval = (v);                                                   \
-    } while (0)
+#define ostackSetSexp(c, i, v) ostackSet(c, i, sexpToStackObj(v, true))
 
 #define ostackPopn(c, p)                                                       \
     do {                                                                       \
@@ -491,33 +471,13 @@ RIR_INLINE bool trySetInPlace(SEXP old, R_bcstack_t val) {
         ++R_BCNodeStackTop;                                                    \
     } while (0)
 
-#define ostackPushInt(c, v)                                                    \
-    do {                                                                       \
-        R_BCNodeStackTop->tag = STACK_OBJ_INT;                                 \
-        R_BCNodeStackTop->u.ival = (v);                                        \
-        ++R_BCNodeStackTop;                                                    \
-    } while (0)
+#define ostackPushInt(c, v) ostackPush(c, intStackObj(v))
 
-#define ostackPushReal(c, v)                                                   \
-    do {                                                                       \
-        R_BCNodeStackTop->tag = STACK_OBJ_REAL;                                \
-        R_BCNodeStackTop->u.dval = (v);                                        \
-        ++R_BCNodeStackTop;                                                    \
-    } while (0)
+#define ostackPushReal(c, v) ostackPush(c, realStackObj(v))
 
-#define ostackPushLogical(c, v)                                                \
-    do {                                                                       \
-        R_BCNodeStackTop->tag = STACK_OBJ_LOGICAL;                             \
-        R_BCNodeStackTop->u.ival = (v);                                        \
-        ++R_BCNodeStackTop;                                                    \
-    } while (0)
+#define ostackPushLogical(c, v) ostackPush(c, logicalStackObj(v))
 
-#define ostackPushSexp(c, v)                                                   \
-    do {                                                                       \
-        R_BCNodeStackTop->tag = STACK_OBJ_SEXP;                                \
-        R_BCNodeStackTop->u.sxpval = (v);                                      \
-        ++R_BCNodeStackTop;                                                    \
-    } while (0)
+#define ostackPushSexp(c, v) ostackPush(c, sexpToStackObj(v, true))
 
 RIR_INLINE SEXP ostackObjToSexpAt(R_bcstack_t& x, InterpreterInstance* ctx,
                                   unsigned idx) {
