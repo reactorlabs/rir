@@ -92,16 +92,15 @@ class TheCleanup {
                     }
                 } else if (auto env = MkEnv::Cast(i)) {
                     static std::unordered_set<Tag> tags{Tag::FrameState,
-                                                        Tag::TypeTest};
+                                                        Tag::IsEnvStub};
                     if (env->stub && env->usesAreOnly(function->entry, tags)) {
                         env->replaceUsesWith(Env::elided());
                         removed = true;
                         next = bb->remove(ip);
                     }
-                } else if (auto test = TypeTest::Cast(i)) {
-                    if (test->testFor == TypeTest::EnvironmentStub &&
-                        test->arg(0).val() == Env::elided()) {
-                        i->replaceUsesWith(True::instance());
+                } else if (auto test = IsEnvStub::Cast(i)) {
+                    if (test->env() == Env::elided()) {
+                        i->replaceUsesWith(False::instance());
                         removed = true;
                         next = bb->remove(ip);
                     }

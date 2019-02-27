@@ -894,8 +894,7 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) const {
                 break;
             }
             case Opcode::brobj_: {
-                Value* v =
-                    insert(new TypeTest(cur.stack.top(), TypeTest::Object));
+                Value* v = insert(new IsObject(cur.stack.top()));
                 insert(new Branch(v));
                 break;
             }

@@ -657,16 +657,5 @@ void Checkpoint::printArgs(std::ostream& out, bool tty) const {
 
 BB* Checkpoint::deoptBranch() { return bb()->falseBranch(); }
 
-const char* TypeTest::name() const {
-    switch (testFor) {
-    case Object:
-        return "IsObject";
-    case EnvironmentStub:
-        return "IsEnvStub";
-    default:
-        assert(false);
-    };
-}
-
 } // namespace pir
 } // namespace rir

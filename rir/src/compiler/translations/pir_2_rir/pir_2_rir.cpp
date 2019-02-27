@@ -591,7 +591,7 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                  */
 
                 auto explicitEnvValue = [](Instruction* instr) {
-                    return MkEnv::Cast(instr);
+                    return MkEnv::Cast(instr) || IsEnvStub::Cast(instr);
                 };
 
                 auto moveToTOS = [&](size_t offset) {
@@ -892,16 +892,13 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 EMPTY(PirCopy);
 #undef EMPTY
 
-            case Tag::TypeTest: {
-                auto typeTest = TypeTest::Cast(instr);
-                switch (typeTest->testFor) {
-                case TypeTest::Object:
-                    cs << BC::isobj();
-                    break;
-                case TypeTest::EnvironmentStub:
-                    cs << BC::isstubenv();
-                    break;
-                }
+            case Tag::IsObject: {
+                cs << BC::isobj();
+                break;
+            }
+
+            case Tag::IsEnvStub: {
+                cs << BC::isstubenv();
                 break;
             }
 

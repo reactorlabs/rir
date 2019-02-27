@@ -49,7 +49,8 @@
     V(Phi)                                                                     \
     V(AsLogical)                                                               \
     V(AsTest)                                                                  \
-    V(TypeTest)                                                                \
+    V(IsObject)                                                                \
+    V(IsEnvStub)                                                               \
     V(Return)                                                                  \
     V(MkArg)                                                                   \
     V(MkFunCls)                                                                \

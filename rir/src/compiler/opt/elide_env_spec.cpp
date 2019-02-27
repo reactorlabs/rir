@@ -43,8 +43,7 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
                     i->eachArg([&](Value* arg) {
                         if (arg != i->env())
                             if (arg->type.maybeObj()) {
-                                auto condition =
-                                    new TypeTest(arg, TypeTest::Object);
+                                auto condition = new IsObject(arg);
                                 ip = bb->insert(ip, condition);
                                 ip++;
                                 ip = bb->insert(
@@ -80,8 +79,7 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
 
                                 stubbedEnvs.insert(environment);
                                 environment = MkEnv::Cast(force->env());
-                                auto condition = new TypeTest(
-                                    environment, TypeTest::EnvironmentStub);
+                                auto condition = new IsEnvStub(environment);
                                 BBTransform::insertAssume(condition, cp, true);
                             }
                         } else {

@@ -1335,18 +1335,16 @@ class VLIE(MkEnv, Effect::None, EnvAccess::Capture) {
     size_t nLocals() { return nargs() - 1; }
 };
 
-class FLI(TypeTest, 1, Effect::None, EnvAccess::None) {
+class FLI(IsObject, 1, Effect::None, EnvAccess::None) {
   public:
-    enum type { Object, EnvironmentStub };
-    type testFor;
-    explicit TypeTest(Value* v, type testType)
-        : FixedLenInstruction(NativeType::test, {{PirType::val()}}, {{v}}),
-          testFor(testType) {
-        if (testFor == EnvironmentStub) {
-            assert(MkEnv::Cast(this->arg<0>().val()));
-        }
-    }
-    const char* name() const override;
+    explicit IsObject(Value* v)
+        : FixedLenInstruction(NativeType::test, {{PirType::val()}}, {{v}}) {}
+};
+
+class FLIE(IsEnvStub, 1, Effect::None, EnvAccess::Capture) {
+  public:
+    explicit IsEnvStub(MkEnv* e)
+        : FixedLenInstructionWithEnvSlot(NativeType::test, e) {}
 };
 
 class FLIE(PushContext, 3, Effect::Any, EnvAccess::Capture) {
