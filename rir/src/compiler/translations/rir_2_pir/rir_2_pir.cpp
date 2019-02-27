@@ -552,19 +552,19 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
     }
 
     case Opcode::set_loop_var_: {
-        log.unsupportedBC("Unsupported BC", bc);
-        return false;
-        // if (!inPromise()) {
-        //     forceIfPromised(
-        //         1); // <- ensure forced version are captured in framestate
-        //     forceIfPromised(0);
-        //     addCheckpoint(srcCode, pos, stack, insert);
-        // }
-        // Value* idx = pop();
-        // Value* vec = pop();
-        // Value* cell = pop();
-        // insert(new SetLoopVar(bc.immediateConst(), cell, vec, idx, env));
-        // break;
+        // log.unsupportedBC("Unsupported BC", bc);
+        // return false;
+        if (!inPromise()) {
+            forceIfPromised(
+                1); // <- ensure forced version are captured in framestate
+            forceIfPromised(0);
+            addCheckpoint(srcCode, pos, stack, insert);
+        }
+        Value* idx = pop();
+        Value* vec = pop();
+        Value* cell = pop();
+        insert(new SetLoopVar(bc.immediateConst(), cell, vec, idx, env));
+        break;
     }
 
     case Opcode::extract1_2_: {
@@ -647,12 +647,12 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
 #undef BINOP_NOENV
 
     case Opcode::lt_loop_idx_: {
-        log.unsupportedBC("Unsupported BC", bc);
-        return false;
-        // auto rhs = pop();
-        // auto lhs = pop();
-        // push(insert(new LtLoopIdx(lhs, rhs)));
-        // break;
+        // log.unsupportedBC("Unsupported BC", bc);
+        // return false;
+        auto rhs = pop();
+        auto lhs = pop();
+        push(insert(new LtLoopIdx(lhs, rhs)));
+        break;
     }
 
         // Explicit force below to ensure that framestate contains the forced
