@@ -261,6 +261,11 @@ DEF_INSTR(ge_, 0, 2, 1, 0)
 DEF_INSTR(eq_, 0, 2, 1, 0)
 DEF_INSTR(ne_, 0, 2, 1, 0)
 
+/**
+ * lt_loop_idx_:: less than operator for loop index checks
+ */
+DEF_INSTR(lt_loop_idx_, 0, 2, 1, 0)
+
 DEF_INSTR(identical_noforce_, 0, 2, 1, 0)
 
 /**

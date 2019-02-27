@@ -45,6 +45,7 @@
     V(StVarSuper)                                                              \
     V(LdVarSuper)                                                              \
     V(StVar)                                                                   \
+    V(SetLoopVar)                                                              \
     V(Branch)                                                                  \
     V(Phi)                                                                     \
     V(AsLogical)                                                               \
@@ -65,6 +66,7 @@
     V(LdFunctionEnv)                                                           \
     V(LAnd)                                                                    \
     V(LOr)                                                                     \
+    V(LtLoopIdx)                                                               \
     V(Inc)                                                                     \
     V(Not)                                                                     \
     V(Is)                                                                      \

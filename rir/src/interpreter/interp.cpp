@@ -2130,6 +2130,15 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
             NEXT();
         }
 
+        INSTRUCTION(lt_loop_idx_) {
+            SEXP lhs = ostack_at(ctx, 1);
+            SEXP rhs = ostack_at(ctx, 0);
+            res = *INTEGER(lhs) < *INTEGER(rhs) ? R_TrueValue : R_FalseValue;
+            ostack_popn(ctx, 2);
+            ostack_push(ctx, res);
+            NEXT();
+        }
+
         INSTRUCTION(not_) {
             SEXP val = ostack_at(ctx, 0);
 
@@ -3047,7 +3056,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
 
         INSTRUCTION(set_shared_) {
             SEXP val = ostack_top(ctx);
-            INCREMENT_NAMED(val);                 // shouldn't it be MARK_NOT_MUTABLE?
+            INCREMENT_NAMED(val); // shouldn't it be MARK_NOT_MUTABLE?
             NEXT();
         }
 

@@ -164,6 +164,7 @@ static Sources hasSources(Opcode bc) {
     case Opcode::invisible_:
     case Opcode::visible_:
     case Opcode::endloop_:
+    case Opcode::lt_loop_idx_:
     case Opcode::isobj_:
     case Opcode::check_missing_:
     case Opcode::lgl_and_:

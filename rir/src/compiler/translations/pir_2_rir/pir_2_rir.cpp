@@ -581,6 +581,7 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 /* TODO: there are still more patterns that could be cleaned up:
                  *   pick(2) swap() pick(2) -> swap()
                  *   pick(2) pop() swap() pop() pop() -> pop() pop() pop()
+                 *   pull(1) pull(1) -> dup2()
                  * also maybe:
                  * args being last use and matching the stack contents at tos
                  * then no picks are needed, only fill in the values / locals
@@ -835,6 +836,12 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 break;
             }
 
+            case Tag::SetLoopVar: {
+                auto slv = SetLoopVar::Cast(instr);
+                cs << BC::setLoopVar(slv->varName);
+                break;
+            }
+
             case Tag::Branch: {
                 auto trueBranch = jumpThroughEmpty(bb->trueBranch());
                 auto falseBranch = jumpThroughEmpty(bb->falseBranch());
@@ -923,6 +930,7 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 SIMPLE(IsObject, isobj);
                 SIMPLE(SetShared, setShared);
                 SIMPLE(EnsureNamed, ensureNamed);
+                SIMPLE(LtLoopIdx, ltLoopIdx);
 #define V(V, name, Name) SIMPLE(Name, name);
                 SIMPLE_INSTRUCTIONS(V, _);
 #undef V

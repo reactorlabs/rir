@@ -41,6 +41,7 @@
     V(NESTED, uminus, uminus)                                                  \
     V(NESTED, not_, not)                                                       \
     V(NESTED, lt, lt)                                                          \
+    V(NESTED, ltLoopIdx, lt_loop_idx)                                          \
     V(NESTED, gt, gt)                                                          \
     V(NESTED, le, le)                                                          \
     V(NESTED, ge, ge)                                                          \
@@ -69,4 +70,3 @@
 #undef V_SIMPLE_INSTRUCTION
 
 #endif
-

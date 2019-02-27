@@ -865,6 +865,16 @@ class FLIE(Extract2_1D, 3, Effect::None, EnvAccess::Leak) {
                                          {{vec, idx}}, env, srcIdx) {}
 };
 
+class FLIE(SetLoopVar, 4, Effect::None, EnvAccess::Write) {
+  public:
+    SetLoopVar(SEXP name, Value* cell, Value* vec, Value* idx, Value* env)
+        : FixedLenInstructionWithEnvSlot(PirType::voyd(),
+                                         {{PirType::val(), PirType::val(), PirType::val()}},
+                                         {{cell, vec, idx}}, env),
+          varName(name) {}
+    SEXP varName;
+};
+
 class FLIE(Extract1_2D, 4, Effect::None, EnvAccess::Leak) {
   public:
     Extract1_2D(Value* vec, Value* idx1, Value* idx2, Value* env,
@@ -1004,6 +1014,7 @@ BINOP(Eq, RType::logical);
 
 BINOP_NOENV(LAnd, RType::logical);
 BINOP_NOENV(LOr, RType::logical);
+BINOP_NOENV(LtLoopIdx, RType::logical);
 
 #undef BINOP_NOENV
 

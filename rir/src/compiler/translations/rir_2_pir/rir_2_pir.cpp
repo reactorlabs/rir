@@ -551,6 +551,20 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         break;
     }
 
+    case Opcode::set_loop_var_: {
+        if (!inPromise()) {
+            forceIfPromised(
+                1); // <- ensure forced version are captured in framestate
+            forceIfPromised(0);
+            addCheckpoint(srcCode, pos, stack, insert);
+        }
+        Value* idx = pop();
+        Value* vec = pop();
+        Value* cell = pop();
+        insert(new SetLoopVar(bc.immediateConst(), cell, vec, idx, env));
+        break;
+    }
+
     case Opcode::extract1_2_: {
         // TODO: checkpoint here is broken. What we should do here is insert a
         // checkpoint between every force, and then deopt between forcing. E.g.
@@ -629,6 +643,13 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         BINOP_NOENV(LOr, lgl_or_);
         BINOP_NOENV(LAnd, lgl_and_);
 #undef BINOP_NOENV
+
+    case Opcode::lt_loop_idx_: {
+        auto rhs = pop();
+        auto lhs = pop();
+        push(insert(new LtLoopIdx(lhs, rhs)));
+        break;
+    }
 
         // Explicit force below to ensure that framestate contains the forced
         // version
@@ -798,7 +819,6 @@ SIMPLE_INSTRUCTIONS(V, _)
     case Opcode::beginloop_:
     case Opcode::endloop_:
     case Opcode::ldddvar_:
-    case Opcode::set_loop_var_:
         log.unsupportedBC("Unsupported BC", bc);
         return false;
     }

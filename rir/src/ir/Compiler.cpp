@@ -665,17 +665,14 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_) {
         cs << BC::beginloop(breakBranch)
            << loopBranch;
 
-        cs << BC::inc() << BC::ensureNamed() << BC::dup2() << BC::lt();
-        // We know this is an int and won't do dispatch.
-        // TODO: add a integer version of lt_
-        cs.addSrc(R_NilValue);
+        cs << BC::inc() << BC::ensureNamed() << BC::dup2()
+           << BC::ltLoopIdx();
 
         cs << BC::brtrue(endForBranch) << BC::pull(3) << BC::pull(3)
            << BC::pull(2) << BC::setLoopVar(sym);
 
         compileExpr(ctx, body);
-        cs << BC::pop()
-           << BC::br(loopBranch);
+        cs << BC::pop() << BC::br(loopBranch);
 
         cs << endForBranch;
 
