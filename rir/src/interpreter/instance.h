@@ -152,7 +152,7 @@ RIR_INLINE R_bcstack_t logicalStackObj(int x) {
     return res;
 }
 
-RIR_INLINE R_bcstack_t sexpToStackObj(SEXP x, bool unprotect) {
+RIR_INLINE R_bcstack_t sexpToStackObj(SEXP x) {
     assert(x != NULL);
     R_bcstack_t res;
     res.tag = STACK_OBJ_SEXP;
@@ -396,7 +396,6 @@ RIR_INLINE bool stackObjsIdentical(R_bcstack_t x, R_bcstack_t y) {
 }
 
 RIR_INLINE bool trySetInPlace(SEXP old, R_bcstack_t val) {
-    return false;
     switch (val.tag) {
     case STACK_OBJ_INT:
         if (TYPEOF(old) == INTSXP && NOT_SHARED(old)) {
@@ -456,7 +455,7 @@ RIR_INLINE bool trySetInPlace(SEXP old, R_bcstack_t val) {
 
 #define ostackSetLogical(c, i, v) ostackSet(c, i, logicalStackObj(v))
 
-#define ostackSetSexp(c, i, v) ostackSet(c, i, sexpToStackObj(v, true))
+#define ostackSetSexp(c, i, v) ostackSet(c, i, sexpToStackObj(v))
 
 #define ostackPopn(c, p)                                                       \
     do {                                                                       \
@@ -477,7 +476,12 @@ RIR_INLINE bool trySetInPlace(SEXP old, R_bcstack_t val) {
 
 #define ostackPushLogical(c, v) ostackPush(c, logicalStackObj(v))
 
-#define ostackPushSexp(c, v) ostackPush(c, sexpToStackObj(v, true))
+#define ostackPushSexp(c, v) ostackPush(c, sexpToStackObj(v))
+/*#define ostackPushSexp(c, v) do {\
+    R_BCNodeStackTop->tag = STACK_OBJ_SEXP;\
+    R_BCNodeStackTop->u.sxpval = (v);\
+    ++R_BCNodeStackTop;\
+} while (0)*/
 
 RIR_INLINE SEXP ostackObjToSexpAt(R_bcstack_t& x, InterpreterInstance* ctx,
                                   unsigned idx) {
