@@ -153,7 +153,6 @@ RIR_INLINE R_bcstack_t logicalStackObj(int x) {
 }
 
 RIR_INLINE R_bcstack_t sexpToStackObj(SEXP x) {
-    assert(x != NULL);
     R_bcstack_t res;
     res.tag = STACK_OBJ_SEXP;
     res.u.sxpval = x;
@@ -398,7 +397,7 @@ RIR_INLINE bool stackObjsIdentical(R_bcstack_t x, R_bcstack_t y) {
 RIR_INLINE bool trySetInPlace(SEXP old, R_bcstack_t val) {
     switch (val.tag) {
     case STACK_OBJ_INT:
-        if (TYPEOF(old) == INTSXP && NOT_SHARED(old)) {
+        if (TYPEOF(old) == INTSXP && NO_REFERENCES(old)) {
 #ifdef LOG_SEXP_BOX
             std::cout << "Reused int from " << *INTEGER(old) << " to "
                       << val.u.ival << "\n";
@@ -409,7 +408,7 @@ RIR_INLINE bool trySetInPlace(SEXP old, R_bcstack_t val) {
             return false;
         }
     case STACK_OBJ_REAL:
-        if (TYPEOF(old) == REALSXP && NOT_SHARED(old)) {
+        if (TYPEOF(old) == REALSXP && NO_REFERENCES(old)) {
 #ifdef LOG_SEXP_BOX
             std::cout << "Reused real from " << *REAL(old) << " to "
                       << val.u.dval << "\n";
@@ -420,7 +419,7 @@ RIR_INLINE bool trySetInPlace(SEXP old, R_bcstack_t val) {
             return false;
         }
     case STACK_OBJ_LOGICAL:
-        if (TYPEOF(old) == LGLSXP && NOT_SHARED(old)) {
+        if (TYPEOF(old) == LGLSXP && NO_REFERENCES(old)) {
 #ifdef LOG_SEXP_BOX
             std::cout << "Reused logical from " << *LOGICAL(old) << " to "
                       << val.u.ival << "\n";
@@ -449,13 +448,33 @@ RIR_INLINE bool trySetInPlace(SEXP old, R_bcstack_t val) {
 
 #define ostackSet(c, i, v) *(R_BCNodeStackTop - 1 - (i)) = (v)
 
-#define ostackSetInt(c, i, v) ostackSet(c, i, intStackObj(v))
+#define ostackSetInt(c, i, v)                                                  \
+    do {                                                                       \
+        R_bcstack_t* stk = R_BCNodeStackTop - 1 - (i);                         \
+        stk->u.ival = (v);                                                     \
+        stk->tag = STACK_OBJ_INT;                                              \
+    } while (0)
 
-#define ostackSetReal(c, i, v) ostackSet(c, i, realStackObj(v))
+#define ostackSetReal(c, i, v)                                                 \
+    do {                                                                       \
+        R_bcstack_t* stk = R_BCNodeStackTop - 1 - (i);                         \
+        stk->u.dval = (v);                                                     \
+        stk->tag = STACK_OBJ_REAL;                                             \
+    } while (0)
 
-#define ostackSetLogical(c, i, v) ostackSet(c, i, logicalStackObj(v))
+#define ostackSetLogical(c, i, v)                                              \
+    do {                                                                       \
+        R_bcstack_t* stk = R_BCNodeStackTop - 1 - (i);                         \
+        stk->u.ival = (v);                                                     \
+        stk->tag = STACK_OBJ_LOGICAL;                                          \
+    } while (0)
 
-#define ostackSetSexp(c, i, v) ostackSet(c, i, sexpToStackObj(v))
+#define ostackSetSexp(c, i, v)                                                 \
+    do {                                                                       \
+        R_bcstack_t* stk = R_BCNodeStackTop - 1 - (i);                         \
+        stk->u.sxpval = (v);                                                   \
+        stk->tag = STACK_OBJ_SEXP;                                             \
+    } while (0)
 
 #define ostackPopn(c, p)                                                       \
     do {                                                                       \
@@ -470,18 +489,33 @@ RIR_INLINE bool trySetInPlace(SEXP old, R_bcstack_t val) {
         ++R_BCNodeStackTop;                                                    \
     } while (0)
 
-#define ostackPushInt(c, v) ostackPush(c, intStackObj(v))
+#define ostackPushInt(c, v)                                                    \
+    do {                                                                       \
+        R_BCNodeStackTop->u.ival = (v);                                        \
+        R_BCNodeStackTop->tag = STACK_OBJ_INT;                                 \
+        ++R_BCNodeStackTop;                                                    \
+    } while (0)
 
-#define ostackPushReal(c, v) ostackPush(c, realStackObj(v))
+#define ostackPushReal(c, v)                                                   \
+    do {                                                                       \
+        R_BCNodeStackTop->u.dval = (v);                                        \
+        R_BCNodeStackTop->tag = STACK_OBJ_REAL;                                \
+        ++R_BCNodeStackTop;                                                    \
+    } while (0)
 
-#define ostackPushLogical(c, v) ostackPush(c, logicalStackObj(v))
+#define ostackPushLogical(c, v)                                                \
+    do {                                                                       \
+        R_BCNodeStackTop->u.ival = (v);                                        \
+        R_BCNodeStackTop->tag = STACK_OBJ_LOGICAL;                             \
+        ++R_BCNodeStackTop;                                                    \
+    } while (0)
 
-#define ostackPushSexp(c, v) ostackPush(c, sexpToStackObj(v))
-/*#define ostackPushSexp(c, v) do {\
-    R_BCNodeStackTop->tag = STACK_OBJ_SEXP;\
-    R_BCNodeStackTop->u.sxpval = (v);\
-    ++R_BCNodeStackTop;\
-} while (0)*/
+#define ostackPushSexp(c, v)                                                   \
+    do {                                                                       \
+        R_BCNodeStackTop->u.sxpval = (v);                                      \
+        R_BCNodeStackTop->tag = STACK_OBJ_SEXP;                                \
+        ++R_BCNodeStackTop;                                                    \
+    } while (0)
 
 RIR_INLINE SEXP ostackObjToSexpAt(R_bcstack_t& x, InterpreterInstance* ctx,
                                   unsigned idx) {
