@@ -581,7 +581,6 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 /* TODO: there are still more patterns that could be cleaned up:
                  *   pick(2) swap() pick(2) -> swap()
                  *   pick(2) pop() swap() pop() pop() -> pop() pop() pop()
-                 *   pull(1) pull(1) -> dup2()
                  * also maybe:
                  * args being last use and matching the stack contents at tos
                  * then no picks are needed, only fill in the values / locals
@@ -625,10 +624,19 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 };
 
                 auto copyToTOS = [&](size_t offset) {
-                    if (offset == 0)
+                    if (offset == 0) {
                         buffer.emplace_back(BC::dup());
-                    else
-                        buffer.emplace_back(BC::pull(offset));
+                    } else {
+                        // Get rid of double pull(1)'s
+                        if (offset == 1 && !buffer.empty() &&
+                            buffer.back().is(rir::Opcode::pull_) &&
+                            buffer.back().immediate.i == 1) {
+                            buffer.pop_back();
+                            buffer.emplace_back(BC::dup2());
+                        } else {
+                            buffer.emplace_back(BC::pull(offset));
+                        }
+                    }
                 };
 
                 auto getFromStack = [&](Value* what, size_t argNumber) {
