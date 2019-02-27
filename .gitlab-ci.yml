@@ -67,4 +67,4 @@ test_benchmarks:
     - cd build_release
     - ../tools/downloadBenchs.sh ../build_release
     - ../tools/runBenchs.sh --installRebench --travis
-    - PIR_DEOPT_CHAOS=1 ../tools/runBenchs.sh --installRebench --travis
+    - PIR_DEOPT_CHAOS=1 ../tools/runBenchs.sh --travis
