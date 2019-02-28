@@ -154,8 +154,20 @@ RIR_INLINE R_bcstack_t logicalStackObj(int x) {
 
 RIR_INLINE R_bcstack_t sexpToStackObj(SEXP x) {
     R_bcstack_t res;
-    res.tag = STACK_OBJ_SEXP;
-    res.u.sxpval = x;
+    bool tryUnbox = x != loopTrampolineMarker && MAYBE_SHARED(x);
+    if (tryUnbox && IS_SIMPLE_SCALAR(x, INTSXP)) {
+        res.tag = STACK_OBJ_INT;
+        res.u.ival = *INTEGER(x);
+    } else if (tryUnbox && IS_SIMPLE_SCALAR(x, REALSXP)) {
+        res.tag = STACK_OBJ_REAL;
+        res.u.dval = *REAL(x);
+    } else if (tryUnbox && IS_SIMPLE_SCALAR(x, LGLSXP)) {
+        res.tag = STACK_OBJ_LOGICAL;
+        res.u.ival = *LOGICAL(x);
+    } else {
+        res.tag = STACK_OBJ_SEXP;
+        res.u.sxpval = x;
+    }
     return res;
 }
 

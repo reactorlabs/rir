@@ -2222,7 +2222,7 @@ R_bcstack_t evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
                 // TODO: Is this right?
                 logical_res = (tryStackObjToInteger(val) != 0);
             } else if (stackObjIsSimpleScalar(val, LGLSXP)) {
-                logical_res = tryStackObjToLogical(val);
+                NEXT();
             } else {
                 if (XLENGTH(val.u.sxpval) > 1)
                     Rf_warningcall(
@@ -2837,6 +2837,7 @@ R_bcstack_t evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
         }
 
         INSTRUCTION(guard_fun_) {
+#define UNSOUND_OPTS
 #ifndef UNSOUND_OPTS
             SEXP sym = readConst(ctx, readImmediate());
 #endif
