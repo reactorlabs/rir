@@ -2837,7 +2837,6 @@ R_bcstack_t evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
         }
 
         INSTRUCTION(guard_fun_) {
-#define UNSOUND_OPTS
 #ifndef UNSOUND_OPTS
             SEXP sym = readConst(ctx, readImmediate());
 #endif
