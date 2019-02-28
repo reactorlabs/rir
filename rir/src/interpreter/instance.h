@@ -107,10 +107,10 @@ RIR_INLINE void rl_append(ResizeableList* l, SEXP val, SEXP parent,
 #define USE_TYPED_STACK
 
 typedef enum {
-    STACK_OBJ_SEXP,
-    STACK_OBJ_INT,
-    STACK_OBJ_REAL,
-    STACK_OBJ_LOGICAL
+    STACK_OBJ_SEXP = 0,
+    STACK_OBJ_INT = INTSXP,
+    STACK_OBJ_REAL = REALSXP,
+    STACK_OBJ_LOGICAL = LGLSXP
 } stackObjType;
 
 RIR_INLINE R_bcstack_t intStackObj(int x) {
@@ -363,6 +363,19 @@ RIR_INLINE bool stackObjIsSimpleScalar(R_bcstack_t x, SEXPTYPE type) {
     }
 }
 
+RIR_INLINE bool stackObjIsScalar(R_bcstack_t x) {
+    switch (x.tag) {
+    case STACK_OBJ_INT:
+    case STACK_OBJ_REAL:
+    case STACK_OBJ_LOGICAL:
+        return true;
+    case STACK_OBJ_SEXP:
+        return x.u.sxpval->sxpinfo.scalar;
+    default:
+        assert(false);
+    }
+}
+
 RIR_INLINE R_xlen_t stackObjLength(R_bcstack_t x) {
     switch (x.tag) {
     case STACK_OBJ_INT:
@@ -397,7 +410,7 @@ RIR_INLINE bool stackObjsIdentical(R_bcstack_t x, R_bcstack_t y) {
 RIR_INLINE bool trySetInPlace(SEXP old, R_bcstack_t val) {
     switch (val.tag) {
     case STACK_OBJ_INT:
-        if (TYPEOF(old) == INTSXP && NO_REFERENCES(old)) {
+        if (TYPEOF(old) == INTSXP && NOT_SHARED(old)) {
 #ifdef LOG_SEXP_BOX
             std::cout << "Reused int from " << *INTEGER(old) << " to "
                       << val.u.ival << "\n";
@@ -408,7 +421,7 @@ RIR_INLINE bool trySetInPlace(SEXP old, R_bcstack_t val) {
             return false;
         }
     case STACK_OBJ_REAL:
-        if (TYPEOF(old) == REALSXP && NO_REFERENCES(old)) {
+        if (TYPEOF(old) == REALSXP && NOT_SHARED(old)) {
 #ifdef LOG_SEXP_BOX
             std::cout << "Reused real from " << *REAL(old) << " to "
                       << val.u.dval << "\n";
@@ -419,7 +432,7 @@ RIR_INLINE bool trySetInPlace(SEXP old, R_bcstack_t val) {
             return false;
         }
     case STACK_OBJ_LOGICAL:
-        if (TYPEOF(old) == LGLSXP && NO_REFERENCES(old)) {
+        if (TYPEOF(old) == LGLSXP && NOT_SHARED(old)) {
 #ifdef LOG_SEXP_BOX
             std::cout << "Reused logical from " << *LOGICAL(old) << " to "
                       << val.u.ival << "\n";

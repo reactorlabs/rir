@@ -338,7 +338,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_) {
             Case(SYMSXP) {
                 cs << BC::guardNamePrimitive(fun);
                 compileExpr(ctx, rhs);
-                cs << BC::setShared() << BC::dup()
+                cs << BC::dup() << BC::ensureNamed()
                    << (superAssign ? BC::stvarSuper(lhs) : BC::stvar(lhs))
                    << BC::invisible();
                 return true;
@@ -401,7 +401,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_) {
         compileExpr(ctx, rhs);
         // Keep a copy of rhs since its the result of this
         // expression
-        cs << BC::dup() << BC::ensureNamed();
+        cs << BC::dup() << BC::setShared();
 
         // Now load index and target
         cs << BC::ldvar(target);

@@ -1604,10 +1604,8 @@ R_bcstack_t evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
 
         INSTRUCTION(record_binop_) {
             ObservedValues* feedback = (ObservedValues*)pc;
-            SEXP l = ostackSexpAt(ctx, 1);
-            PROTECT(l);
-            SEXP r = ostackSexpAt(ctx, 0);
-            UNPROTECT(1);
+            R_bcstack_t l = ostackAt(ctx, 1);
+            R_bcstack_t r = ostackAt(ctx, 0);
             feedback[0].record(l);
             feedback[1].record(r);
             pc += 2 * sizeof(ObservedValues);
