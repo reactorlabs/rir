@@ -11,6 +11,7 @@
 
 #include <assert.h>
 #include <deque>
+#include <set>
 
 #define NOT_IMPLEMENTED assert(false)
 
@@ -235,9 +236,8 @@ static SEXP createLegacyArgsList(const CallContext& call, bool eagerCallee,
             __listAppend(&result, &pos, R_MissingArg, R_NilValue);
         } else {
             if (eagerCallee) {
-                // TODO
-                SEXP env = call.callerEnv;
-                SEXP arg = evalRirCodeExtCaller(call.implicitArg(i), ctx, &env);
+                SEXP arg = evalRirCodeExtCaller(call.implicitArg(i), ctx,
+                                                call.callerEnv);
                 assert(TYPEOF(arg) != PROMSXP);
                 __listAppend(&result, &pos, arg, name);
             } else {
@@ -296,17 +296,17 @@ static RIR_INLINE SEXP createLegacyArgsList(const CallContext& call,
     }
 }
 
+SEXP evalRirCode(Code*, InterpreterInstance*, SEXP, const CallContext*, Opcode*,
+                 R_bcstack_t* = nullptr);
 static SEXP rirCallTrampoline_(RCNTXT& cntxt, const CallContext& call,
-                               Code* code, SEXP* env,
-                               const R_bcstack_t* stackArgs,
-                               InterpreterInstance* ctx) {
+                               Code* code, SEXP env, InterpreterInstance* ctx) {
     int trampIn = ostack_length(ctx);
     if ((SETJMP(cntxt.cjmpbuf))) {
         assert(trampIn == ostack_length(ctx));
         if (R_ReturnedValue == R_RestartToken) {
             cntxt.callflag = CTXT_RETURN; /* turn restart off */
             R_ReturnedValue = R_NilValue; /* remove restart token */
-            return evalRirCode(code, ctx, env, &call);
+            return evalRirCode(code, ctx, cntxt.cloenv, &call);
         } else {
             return R_ReturnedValue;
         }
@@ -316,7 +316,6 @@ static SEXP rirCallTrampoline_(RCNTXT& cntxt, const CallContext& call,
 
 static RIR_INLINE SEXP rirCallTrampoline(const CallContext& call, Function* fun,
                                          SEXP env, SEXP arglist,
-                                         const R_bcstack_t* stackArgs,
                                          InterpreterInstance* ctx) {
     RCNTXT cntxt;
 
@@ -336,8 +335,7 @@ static RIR_INLINE SEXP rirCallTrampoline(const CallContext& call, Function* fun,
     Code* code = fun->body();
     // Pass &cntxt.cloenv, to let evalRirCode update the env of the current
     // context
-    SEXP result =
-        rirCallTrampoline_(cntxt, call, code, &cntxt.cloenv, stackArgs, ctx);
+    SEXP result = rirCallTrampoline_(cntxt, call, code, env, ctx);
     PROTECT(result);
 
     endClosureDebug(call.ast, call.callee, env);
@@ -353,26 +351,17 @@ static RIR_INLINE SEXP rirCallTrampoline(const CallContext& call, Function* fun,
 static RIR_INLINE SEXP rirCallTrampoline(const CallContext& call, Function* fun,
                                          SEXP arglist,
                                          InterpreterInstance* ctx) {
-    return rirCallTrampoline(call, fun, R_NilValue, arglist, call.stackArgs,
-                             ctx);
-}
-
-static RIR_INLINE SEXP rirCallTrampoline(const CallContext& call, Function* fun,
-                                         SEXP env, SEXP arglist,
-                                         InterpreterInstance* ctx) {
-    return rirCallTrampoline(call, fun, env, arglist, nullptr, ctx);
+    return rirCallTrampoline(call, fun, symbol::delayedEnv, arglist, ctx);
 }
 
 const static SEXP loopTrampolineMarker = (SEXP)0x7007;
-SEXP evalRirCode(Code*, InterpreterInstance*, SEXP*, const CallContext*,
-                 Opcode*, R_bcstack_t*);
-static void loopTrampoline(Code* c, InterpreterInstance* ctx, SEXP* env,
+static void loopTrampoline(Code* c, InterpreterInstance* ctx, SEXP env,
                            const CallContext* callCtxt, Opcode* pc,
                            R_bcstack_t* localsBase) {
-    assert(*env);
+    assert(env);
 
     RCNTXT cntxt;
-    Rf_begincontext(&cntxt, CTXT_LOOP, R_NilValue, *env, R_BaseEnv, R_NilValue,
+    Rf_begincontext(&cntxt, CTXT_LOOP, R_NilValue, env, R_BaseEnv, R_NilValue,
                     R_NilValue);
 
     if (int s = SETJMP(cntxt.cjmpbuf)) {
@@ -390,9 +379,40 @@ static void loopTrampoline(Code* c, InterpreterInstance* ctx, SEXP* env,
     Rf_endcontext(&cntxt);
 }
 
+static SEXP inlineContextTrampoline(Code* c, const CallContext* callCtx,
+                                    SEXP ast, SEXP sysparent, SEXP op,
+                                    InterpreterInstance* ctx, Opcode* pc,
+                                    R_bcstack_t* localsBase) {
+    RCNTXT cntxt;
+    // The first env should be the callee env, but that will be done by the
+    // callee. We store sysparent there, because our optimizer may actually
+    // delay instructions into the inlinee and might assume that we still have
+    // to outer env.
+    initClosureContext(ast, &cntxt, symbol::delayedEnv, sysparent,
+                       symbol::delayedArglist, op);
+    auto trampoline = [&]() {
+        if ((SETJMP(cntxt.cjmpbuf))) {
+            if (R_ReturnedValue == R_RestartToken) {
+                cntxt.callflag = CTXT_RETURN; /* turn restart off */
+                R_ReturnedValue = R_NilValue; /* remove restart token */
+                return evalRirCode(c, ctx, cntxt.cloenv, callCtx, pc);
+            } else {
+                return R_ReturnedValue;
+            }
+        }
+        return evalRirCode(c, ctx, sysparent, callCtx, pc, localsBase);
+    };
+
+    // execute the inlined function
+    auto res = trampoline();
+    endClosureContext(&cntxt, res);
+    return res;
+}
+
 static RIR_INLINE SEXP legacySpecialCall(const CallContext& call,
                                          InterpreterInstance* ctx) {
     assert(call.ast != R_NilValue);
+    assert(TYPEOF(call.callerEnv) == ENVSXP);
 
     // get the ccode
     CCODE f = getBuiltin(call.callee);
@@ -696,14 +716,13 @@ RIR_INLINE SEXP rirCall(CallContext& call, InterpreterInstance* ctx) {
 
     bool needsEnv = fun->signature().envCreation ==
                     FunctionSignature::Environment::CallerProvided;
-    SEXP env = R_NilValue;
     SEXP result = nullptr;
     auto arglist = call.arglist;
     if (needsEnv) {
         if (!arglist)
             arglist = createLegacyLazyArgsList(call, ctx);
         PROTECT(arglist);
-        env = closureArgumentAdaptor(call, arglist, R_NilValue);
+        SEXP env = closureArgumentAdaptor(call, arglist, R_NilValue);
         PROTECT(env);
         result = rirCallTrampoline(call, fun, env, arglist, ctx);
         UNPROTECT(2);
@@ -927,7 +946,7 @@ enum op { PLUSOP, MINUSOP, TIMESOP, DIVOP, POWOP, MODOP, IDIVOP };
         ostack_push(ctx, argslist);                                            \
         if (flag < 2)                                                          \
             R_Visible = static_cast<Rboolean>(flag != 1);                      \
-        res = blt(call, prim, argslist, *env);                                 \
+        res = blt(call, prim, argslist, env);                                  \
         if (flag < 2)                                                          \
             R_Visible = static_cast<Rboolean>(flag != 1);                      \
         ostack_pop(ctx);                                                       \
@@ -1065,7 +1084,7 @@ static R_INLINE int R_integer_uminus(int x, Rboolean* pnaflag) {
         ostack_push(ctx, argslist);                                            \
         if (flag < 2)                                                          \
             R_Visible = static_cast<Rboolean>(flag != 1);                      \
-        res = blt(call, prim, argslist, *env);                                 \
+        res = blt(call, prim, argslist, env);                                  \
         if (flag < 2)                                                          \
             R_Visible = static_cast<Rboolean>(flag != 1);                      \
         ostack_pop(ctx);                                                       \
@@ -1239,10 +1258,160 @@ static void cachedSetVar(SEXP val, SEXP env, Immediate idx,
 // terrible, can't find out where in the evalRirCode function
 #pragma GCC diagnostic ignored "-Wstrict-overflow"
 
-SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
+RCNTXT* nextFunctionContext(RCNTXT* cptr = R_GlobalContext) {
+    while (cptr->nextcontext != NULL) {
+        if (cptr->callflag & CTXT_FUNCTION) {
+            return cptr;
+        }
+        cptr = cptr->nextcontext;
+    }
+    assert(false);
+}
+
+RCNTXT* firstFunctionContextWithDelayedEnv() {
+    auto cptr = R_GlobalContext;
+    RCNTXT* candidate = nullptr;
+    while (cptr->nextcontext != NULL) {
+        if (cptr->callflag & CTXT_FUNCTION) {
+            if (cptr->cloenv == symbol::delayedEnv)
+                candidate = cptr;
+            else
+                break;
+        }
+        cptr = cptr->nextcontext;
+    }
+    return candidate;
+}
+
+RCNTXT* findFunctionContextFor(SEXP e) {
+    auto cptr = R_GlobalContext;
+    while (cptr->nextcontext != NULL) {
+        if (cptr->callflag & CTXT_FUNCTION && cptr->cloenv == e) {
+            return cptr;
+        }
+        cptr = cptr->nextcontext;
+    }
+    return nullptr;
+}
+
+/*
+ * This function takes some deopt metadata and stack frame contents on the
+ * interpreter stack. It first recursively reconstructs a context for each
+ * inlined frame, bottom up. This means either reuse the already existing
+ * context, or synthesize a new one. Then the frames are executed (in the
+ * deoptimized version), top down. At the end we long-jump out of the outermost
+ * context and thus return from the R function that triggered this deopt
+ * routine.
+ */
+void deoptFramesWithContext(InterpreterInstance* ctx,
+                            const CallContext* callCtxt,
+                            DeoptMetadata* deoptData, SEXP sysparent,
+                            size_t pos, size_t stackHeight,
+                            bool outerHasContext) {
+    size_t excessStack = stackHeight;
+
+    FrameInfo& f = deoptData->frames[pos];
+    stackHeight -= f.stackSize + 1;
+    SEXP deoptEnv = ostack_at(ctx, stackHeight);
+    auto code = f.code;
+
+    bool outermostFrame = pos == deoptData->numFrames - 1;
+    bool innermostFrame = pos == 0;
+
+    RCNTXT fake;
+    RCNTXT* cntxt;
+    auto originalCntxt = findFunctionContextFor(deoptEnv);
+    if (originalCntxt) {
+        assert(outerHasContext &&
+               "Frame with context after frame without context");
+        cntxt = originalCntxt;
+    } else {
+        // If the inlinee had no context, we need to synthesize one
+        // TODO: need to add ast and closure to the deopt metadata to create a
+        // complete context
+        cntxt = &fake;
+        initClosureContext(R_NilValue, cntxt, deoptEnv, sysparent,
+                           FRAME(sysparent), R_NilValue);
+    }
+
+    if (auto stub = LazyEnvironment::cast(deoptEnv)) {
+        deoptEnv = stub->create();
+        cntxt->cloenv = deoptEnv;
+    }
+    assert(TYPEOF(deoptEnv) == ENVSXP);
+
+    auto frameBaseSize = ostack_length(ctx) - excessStack;
+    auto trampoline = [&]() {
+        // 1. Set up our (outer) context
+        //
+        // The inlinees need to be bound to a new trampoline, or they could
+        // long-jump out of this deopt routine into the inlineContextTrampoline.
+        // The outermost frame is the caller, not an inlinee, thus we need not
+        // change its context.
+        if (!outermostFrame) {
+            // The longjump is initialized, when we are still reconstructing
+            // the frames. But if we restart from here, we need to remove
+            // all the extra stuff from the stack used for reconstruction.
+            cntxt->nodestack = ostack_cell_at(ctx, excessStack - 1);
+            if ((SETJMP(cntxt->cjmpbuf))) {
+                assert((size_t)ostack_length(ctx) == frameBaseSize);
+                if (R_ReturnedValue == R_RestartToken) {
+                    cntxt->callflag = CTXT_RETURN; /* turn restart off */
+                    R_ReturnedValue = R_NilValue;  /* remove restart token */
+                    return evalRirCode(code, ctx, cntxt->cloenv, callCtxt);
+                } else {
+                    return R_ReturnedValue;
+                }
+            }
+        }
+
+        // 2. Execute the inner frames
+        if (!innermostFrame) {
+            deoptFramesWithContext(ctx, callCtxt, deoptData, deoptEnv, pos - 1,
+                                   stackHeight, originalCntxt);
+        }
+
+        // 3. Execute our frame
+        //
+        // This wrapper consumes the environment from the deopt metadata and the
+        // result of the previous frame.
+        size_t extraDeoptArgNum = innermostFrame ? 1 : 2;
+        assert((size_t)ostack_length(ctx) ==
+               frameBaseSize + f.stackSize + extraDeoptArgNum);
+        SEXP res = nullptr;
+        if (!innermostFrame)
+            res = ostack_pop(ctx);
+        SEXP e = ostack_pop(ctx);
+        assert(e == deoptEnv);
+        if (!innermostFrame)
+            ostack_push(ctx, res);
+        code->registerInvocation();
+        return evalRirCode(code, ctx, cntxt->cloenv, callCtxt, f.pc);
+    };
+
+    SEXP res = trampoline();
+    assert((size_t)ostack_length(ctx) == frameBaseSize);
+
+    // Dont end the outermost context (unless it was a fake one) to be able to
+    // jump out below
+    if (!outermostFrame || !originalCntxt) {
+        endClosureContext(cntxt, res);
+    }
+
+    if (outermostFrame) {
+        // long-jump out of all the inlined contexts
+        Rf_findcontext(CTXT_BROWSER | CTXT_FUNCTION,
+                       nextFunctionContext()->cloenv, res);
+        assert(false);
+    }
+
+    ostack_push(ctx, res);
+}
+
+SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                  const CallContext* callCtxt, Opcode* initialPC,
-                 R_bcstack_t* localsBase = nullptr) {
-    assert(*env || (callCtxt != nullptr));
+                 R_bcstack_t* localsBase) {
+    assert(env != symbol::delayedEnv || (callCtxt != nullptr));
 
 #ifdef THREADED_CODE
     static void* opAddr[static_cast<uint8_t>(Opcode::num_of)] = {
@@ -1252,10 +1421,13 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
     };
 #endif
 
-    std::deque<FrameInfo*>* synthesizeFrames = nullptr;
     assert(c->info.magic == CODE_MAGIC);
 
-    if (!localsBase) {
+    BindingCache bindingCache[BINDING_CACHE_SIZE];
+    memset(&bindingCache, 0, sizeof(bindingCache));
+
+    bool existingLocals = localsBase;
+    if (!existingLocals) {
 #ifdef TYPED_STACK
         // Zero the region of the locals to avoid keeping stuff alive and to
         // zero all the type tags. Note: this trick does not work with the stack
@@ -1264,11 +1436,9 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
         memset(R_BCNodeStackTop, 0, sizeof(*R_BCNodeStackTop) * c->localsCount);
 #endif
         localsBase = R_BCNodeStackTop;
-    }
-    Locals locals(localsBase, c->localsCount);
 
-    BindingCache bindingCache[BINDING_CACHE_SIZE];
-    memset(&bindingCache, 0, sizeof(bindingCache));
+    }
+    Locals locals(localsBase, c->localsCount, existingLocals);
 
     // make sure there is enough room on the stack
     // there is some slack of 5 to make sure the call instruction can store
@@ -1280,6 +1450,16 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
 
     std::vector<LazyEnvironment*> envStubs;
 
+    auto changeEnv = [&](SEXP e) {
+        assert((TYPEOF(e) == ENVSXP || LazyEnvironment::cast(e)) &&
+               "Expected an environment");
+        if (e != env) {
+            env = e;
+            // We need to clear the bindings cache, when we change the
+            // environment
+            memset(&bindingCache, 0, sizeof(bindingCache));
+        }
+    };
     R_Visible = TRUE;
 
     // main loop
@@ -1288,6 +1468,33 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
         INSTRUCTION(invalid_) assert(false && "wrong or unimplemented opcode");
 
         INSTRUCTION(nop_) NEXT();
+
+        INSTRUCTION(push_context_) {
+            SEXP ast = ostack_at(ctx, 1);
+            SEXP op = ostack_at(ctx, 0);
+            assert(TYPEOF(env) == ENVSXP);
+            assert(TYPEOF(op) == CLOSXP);
+            ostack_popn(ctx, 2);
+            int offset = readJumpOffset();
+            advanceJump();
+            // Recursively call myself through a inlineContextTrampoline. The
+            // trampoline creates an RCNTXT, and then continues executing the
+            // same code.
+            inlineContextTrampoline(c, callCtxt, ast, env, op, ctx, pc,
+                                    localsBase);
+            // After returning from the inlined context we need to skip all the
+            // instructions inside the context. Otherwise we would execute them
+            // twice. Effectively this updates our pc to match the one the
+            // pop_context_ had in the inlined context.
+            pc += offset;
+            assert(*pc == Opcode::pop_context_);
+            advanceOpcode();
+            NEXT();
+        }
+
+        INSTRUCTION(pop_context_) {
+            return ostack_pop(ctx);
+        }
 
         INSTRUCTION(mk_env_) {
             size_t n = readImmediate();
@@ -1306,6 +1513,13 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
                 SET_MISSING(arglist, val == R_MissingArg ? 2 : 0);
             }
             res = Rf_NewEnvironment(R_NilValue, arglist, parent);
+
+            if (auto cptr = firstFunctionContextWithDelayedEnv()) {
+                cptr->cloenv = res;
+                if (cptr->promargs == symbol::delayedArglist)
+                    cptr->promargs = arglist;
+            }
+
             ostack_push(ctx, res);
             NEXT();
         }
@@ -1330,6 +1544,10 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
                 new LazyEnvironment(args, parent, names, ctx, localsBase);
             envStubs.push_back(envStub);
             res = (SEXP)envStub;
+
+            if (auto cptr = firstFunctionContextWithDelayedEnv())
+                cptr->cloenv = res;
+
             ostack_push(ctx, res);
             NEXT();
         }
@@ -1344,25 +1562,20 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
 
         INSTRUCTION(get_env_) {
             assert(env);
-            ostack_push(ctx, *env);
+            ostack_push(ctx, env);
             NEXT();
         }
 
         INSTRUCTION(set_env_) {
-            // We need to clear the bindings cache, when we change the
-            // environment
-            memset(&bindingCache, 0, sizeof(bindingCache));
             SEXP e = ostack_pop(ctx);
-            assert((TYPEOF(e) == ENVSXP || LazyEnvironment::cast(e)) &&
-                   "Expected an environment on TOS.");
-            *env = e;
+            changeEnv(e);
             NEXT();
         }
 
         INSTRUCTION(ldfun_) {
             SEXP sym = readConst(ctx, readImmediate());
             advanceImmediate();
-            res = Rf_findFun(sym, *env);
+            res = Rf_findFun(sym, env);
 
             // TODO something should happen here
             if (res == R_UnboundValue)
@@ -1388,7 +1601,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
         INSTRUCTION(ldvar_) {
             Immediate id = readImmediate();
             advanceImmediate();
-            res = cachedGetVar(*env, id, ctx, bindingCache);
+            res = cachedGetVar(env, id, ctx, bindingCache);
             R_Visible = TRUE;
 
             if (res == R_UnboundValue) {
@@ -1414,7 +1627,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
         INSTRUCTION(ldvar_noforce_) {
             Immediate id = readImmediate();
             advanceImmediate();
-            res = cachedGetVar(*env, id, ctx, bindingCache);
+            res = cachedGetVar(env, id, ctx, bindingCache);
             R_Visible = TRUE;
 
             if (res == R_UnboundValue) {
@@ -1436,7 +1649,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
         INSTRUCTION(ldvar_super_) {
             SEXP sym = readConst(ctx, readImmediate());
             advanceImmediate();
-            res = Rf_findVar(sym, ENCLOS(*env));
+            res = Rf_findVar(sym, ENCLOS(env));
             R_Visible = TRUE;
 
             if (res == R_UnboundValue) {
@@ -1460,7 +1673,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
         INSTRUCTION(ldvar_noforce_super_) {
             SEXP sym = readConst(ctx, readImmediate());
             advanceImmediate();
-            res = Rf_findVar(sym, ENCLOS(*env));
+            res = Rf_findVar(sym, ENCLOS(env));
             R_Visible = TRUE;
 
             if (res == R_UnboundValue) {
@@ -1480,7 +1693,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
         INSTRUCTION(ldddvar_) {
             SEXP sym = readConst(ctx, readImmediate());
             advanceImmediate();
-            res = Rf_ddfindVar(sym, *env);
+            res = Rf_ddfindVar(sym, env);
             R_Visible = TRUE;
 
             if (res == R_UnboundValue) {
@@ -1504,7 +1717,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
         INSTRUCTION(ldlval_) {
             Immediate id = readImmediate();
             advanceImmediate();
-            res = cachedGetBindingCell(*env, id, ctx, bindingCache);
+            res = cachedGetBindingCell(env, id, ctx, bindingCache);
             assert(res);
             res = CAR(res);
             assert(res != R_UnboundValue);
@@ -1556,7 +1769,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
             advanceImmediate();
             SEXP val = ostack_pop(ctx);
 
-            cachedSetVar(val, *env, id, ctx, bindingCache);
+            cachedSetVar(val, env, id, ctx, bindingCache);
 
             NEXT();
         }
@@ -1566,7 +1779,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
             advanceImmediate();
             SEXP val = ostack_pop(ctx);
 
-            cachedSetVar(val, *env, id, ctx, bindingCache, true);
+            cachedSetVar(val, env, id, ctx, bindingCache, true);
 
             NEXT();
         }
@@ -1577,7 +1790,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
             SLOWASSERT(TYPEOF(sym) == SYMSXP);
             SEXP val = ostack_pop(ctx);
             INCREMENT_NAMED(val);
-            Rf_setVar(sym, val, ENCLOS(*env));
+            Rf_setVar(sym, val, ENCLOS(env));
             NEXT();
         }
 
@@ -1682,7 +1895,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
             advanceImmediateN(n);
             auto names = (Immediate*)pc;
             advanceImmediateN(n);
-            CallContext call(c, ostack_top(ctx), n, ast, arguments, names, *env,
+            CallContext call(c, ostack_top(ctx), n, ast, arguments, names, env,
                              given, ctx);
             res = doCall(call, ctx);
             ostack_pop(ctx); // callee
@@ -1727,7 +1940,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
             advanceImmediate();
             auto arguments = (Immediate*)pc;
             advanceImmediateN(n);
-            CallContext call(c, ostack_top(ctx), n, ast, arguments, *env, given,
+            CallContext call(c, ostack_top(ctx), n, ast, arguments, env, given,
                              ctx);
             res = doCall(call, ctx);
             ostack_pop(ctx); // callee
@@ -1752,7 +1965,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
             Assumptions given(readImmediate());
             advanceImmediate();
             CallContext call(c, ostack_at(ctx, n), n, ast,
-                             ostack_cell_at(ctx, n - 1), *env, given, ctx);
+                             ostack_cell_at(ctx, n - 1), env, given, ctx);
             res = doCall(call, ctx);
             ostack_popn(ctx, call.passedArgs + 1);
             ostack_push(ctx, res);
@@ -1778,7 +1991,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
             auto names = (Immediate*)pc;
             advanceImmediateN(n);
             CallContext call(c, ostack_at(ctx, n), n, ast,
-                             ostack_cell_at(ctx, n - 1), names, *env, given,
+                             ostack_cell_at(ctx, n - 1), names, env, given,
                              ctx);
             res = doCall(call, ctx);
             ostack_popn(ctx, call.passedArgs + 1);
@@ -1802,8 +2015,8 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
             advanceImmediate();
             SEXP callee = cp_pool_at(ctx, readImmediate());
             advanceImmediate();
-            CallContext call(c, callee, n, ast, ostack_cell_at(ctx, n - 1),
-                             *env, Assumptions(), ctx);
+            CallContext call(c, callee, n, ast, ostack_cell_at(ctx, n - 1), env,
+                             Assumptions(), ctx);
             res = builtinCall(call, ctx);
             ostack_popn(ctx, call.passedArgs);
             ostack_push(ctx, res);
@@ -1830,8 +2043,8 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
             SEXP callee = cp_pool_at(ctx, readImmediate());
             advanceImmediate();
             SEXP version = cp_pool_at(ctx, readImmediate());
-            CallContext call(c, callee, n, ast, ostack_cell_at(ctx, n - 1),
-                             *env, given, ctx);
+            CallContext call(c, callee, n, ast, ostack_cell_at(ctx, n - 1), env,
+                             given, ctx);
             auto fun = Function::unpack(version);
             addDynamicAssumptionsFromContext(call);
             bool dispatchFail = !matches(call, fun->signature());
@@ -1853,8 +2066,8 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
             ArgsLazyData lazyArgs(&call, ctx);
             fun->registerInvocation();
             supplyMissingArgs(call, fun);
-            res = rirCallTrampoline(call, fun, *env, (SEXP)&lazyArgs,
-                                    call.stackArgs, ctx);
+            res = rirCallTrampoline(call, fun, symbol::delayedEnv,
+                                    (SEXP)&lazyArgs, ctx);
             ostack_popn(ctx, call.passedArgs);
             ostack_push(ctx, res);
 
@@ -1872,7 +2085,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
             assert(DispatchTable::check(body));
             SET_FORMALS(res, formals);
             SET_BODY(res, body);
-            SET_CLOENV(res, *env);
+            SET_CLOENV(res, env);
             Rf_setAttrib(res, Rf_install("srcref"), srcref);
             ostack_popn(ctx, 3);
             ostack_push(ctx, res);
@@ -1900,7 +2113,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
         INSTRUCTION(promise_) {
             Immediate id = readImmediate();
             advanceImmediate();
-            SEXP prom = Rf_mkPROMISE(c->getPromise(id)->container(), *env);
+            SEXP prom = Rf_mkPROMISE(c->getPromise(id)->container(), env);
             SET_PRVALUE(prom, ostack_pop(ctx));
             ostack_push(ctx, prom);
             NEXT();
@@ -1920,7 +2133,6 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
         INSTRUCTION(push_) {
             res = readConst(ctx, readImmediate());
             advanceImmediate();
-            R_Visible = TRUE;
             ostack_push(ctx, res);
             NEXT();
         }
@@ -2412,6 +2624,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
             SLOWASSERT(!DDVAL(sym));
             assert(env);
             SEXP val = R_findVarLocInFrame(*env, sym).cell;
+            SEXP val = R_findVarLocInFrame(env, sym).cell;
             if (val == nullptr)
                 Rf_errorcall(getSrcAt(c, pc - 1, ctx),
                              "'missing' can only be used for arguments");
@@ -2492,13 +2705,12 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
 
             if (isObject(val)) {
                 SEXP call = getSrcForCall(c, pc - 1, ctx);
-                res =
-                    dispatchApply(call, val, args, symbol::Bracket, *env, ctx);
+                res = dispatchApply(call, val, args, symbol::Bracket, env, ctx);
                 if (!res)
                     res =
-                        do_subset_dflt(R_NilValue, symbol::Bracket, args, *env);
+                        do_subset_dflt(R_NilValue, symbol::Bracket, args, env);
             } else {
-                res = do_subset_dflt(R_NilValue, symbol::Bracket, args, *env);
+                res = do_subset_dflt(R_NilValue, symbol::Bracket, args, env);
             }
 
             ostack_popn(ctx, 3);
@@ -2518,13 +2730,12 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
 
             if (isObject(val)) {
                 SEXP call = getSrcForCall(c, pc - 1, ctx);
-                res =
-                    dispatchApply(call, val, args, symbol::Bracket, *env, ctx);
+                res = dispatchApply(call, val, args, symbol::Bracket, env, ctx);
                 if (!res)
                     res =
-                        do_subset_dflt(R_NilValue, symbol::Bracket, args, *env);
+                        do_subset_dflt(R_NilValue, symbol::Bracket, args, env);
             } else {
-                res = do_subset_dflt(R_NilValue, symbol::Bracket, args, *env);
+                res = do_subset_dflt(R_NilValue, symbol::Bracket, args, env);
             }
 
             ostack_popn(ctx, 4);
@@ -2607,14 +2818,14 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
             ostack_push(ctx, args);
             if (isObject(val)) {
                 SEXP call = getSrcAt(c, pc - 1, ctx);
-                res = dispatchApply(call, val, args, symbol::DoubleBracket,
-                                    *env, ctx);
+                res = dispatchApply(call, val, args, symbol::DoubleBracket, env,
+                                    ctx);
                 if (!res)
-                    res = do_subset2_dflt(call, symbol::DoubleBracket, args,
-                                          *env);
+                    res =
+                        do_subset2_dflt(call, symbol::DoubleBracket, args, env);
             } else {
                 res = do_subset2_dflt(R_NilValue, symbol::DoubleBracket, args,
-                                      *env);
+                                      env);
             }
             ostack_popn(ctx, 3);
 
@@ -2634,14 +2845,14 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
 
             if (isObject(val)) {
                 SEXP call = getSrcForCall(c, pc - 1, ctx);
-                res = dispatchApply(call, val, args, symbol::DoubleBracket,
-                                    *env, ctx);
+                res = dispatchApply(call, val, args, symbol::DoubleBracket, env,
+                                    ctx);
                 if (!res)
-                    res = do_subset2_dflt(call, symbol::DoubleBracket, args,
-                                          *env);
+                    res =
+                        do_subset2_dflt(call, symbol::DoubleBracket, args, env);
             } else {
                 res = do_subset2_dflt(R_NilValue, symbol::DoubleBracket, args,
-                                      *env);
+                                      env);
             }
             ostack_popn(ctx, 4);
 
@@ -2667,15 +2878,14 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
             res = nullptr;
             SEXP call = getSrcForCall(c, pc - 1, ctx);
             RCNTXT assignContext;
-            Rf_begincontext(&assignContext, CTXT_RETURN, call, *env,
-                            ENCLOS(*env), args, symbol::AssignBracket);
+            Rf_begincontext(&assignContext, CTXT_RETURN, call, env, ENCLOS(env),
+                            args, symbol::AssignBracket);
             if (isObject(vec)) {
-                res = dispatchApply(call, vec, args, symbol::AssignBracket,
-                                    *env, ctx);
+                res = dispatchApply(call, vec, args, symbol::AssignBracket, env,
+                                    ctx);
             }
             if (!res) {
-                res =
-                    do_subassign_dflt(call, symbol::AssignBracket, args, *env);
+                res = do_subassign_dflt(call, symbol::AssignBracket, args, env);
                 // We duplicated the vector above, and there is a stvar
                 // following
                 SET_NAMED(res, 0);
@@ -2707,16 +2917,15 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
             res = nullptr;
             SEXP call = getSrcForCall(c, pc - 1, ctx);
             RCNTXT assignContext;
-            Rf_begincontext(&assignContext, CTXT_RETURN, call, *env,
-                            ENCLOS(*env), args, symbol::AssignBracket);
+            Rf_begincontext(&assignContext, CTXT_RETURN, call, env, ENCLOS(env),
+                            args, symbol::AssignBracket);
             if (isObject(mtx)) {
-                res = dispatchApply(call, mtx, args, symbol::AssignBracket,
-                                    *env, ctx);
+                res = dispatchApply(call, mtx, args, symbol::AssignBracket, env,
+                                    ctx);
             }
 
             if (!res) {
-                res =
-                    do_subassign_dflt(call, symbol::AssignBracket, args, *env);
+                res = do_subassign_dflt(call, symbol::AssignBracket, args, env);
                 // We duplicated the matrix above, and there is a stvar
                 // following
                 SET_NAMED(res, 0);
@@ -2799,16 +3008,16 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
             SEXP call = getSrcForCall(c, pc - 1, ctx);
 
             RCNTXT assignContext;
-            Rf_begincontext(&assignContext, CTXT_RETURN, call, *env,
-                            ENCLOS(*env), args, symbol::AssignDoubleBracket);
+            Rf_begincontext(&assignContext, CTXT_RETURN, call, env, ENCLOS(env),
+                            args, symbol::AssignDoubleBracket);
             if (isObject(vec)) {
                 res = dispatchApply(call, vec, args,
-                                    symbol::AssignDoubleBracket, *env, ctx);
+                                    symbol::AssignDoubleBracket, env, ctx);
             }
 
             if (!res) {
                 res = do_subassign2_dflt(call, symbol::AssignDoubleBracket,
-                                         args, *env);
+                                         args, env);
                 // We duplicated the vector above, and there is a stvar
                 // following
                 SET_NAMED(res, 0);
@@ -2907,16 +3116,16 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
             res = nullptr;
             SEXP call = getSrcForCall(c, pc - 1, ctx);
             RCNTXT assignContext;
-            Rf_begincontext(&assignContext, CTXT_RETURN, call, *env,
-                            ENCLOS(*env), args, symbol::AssignDoubleBracket);
+            Rf_begincontext(&assignContext, CTXT_RETURN, call, env, ENCLOS(env),
+                            args, symbol::AssignDoubleBracket);
             if (isObject(mtx)) {
                 res = dispatchApply(call, mtx, args,
-                                    symbol::AssignDoubleBracket, *env, ctx);
+                                    symbol::AssignDoubleBracket, env, ctx);
             }
 
             if (!res) {
                 res = do_subassign2_dflt(call, symbol::AssignDoubleBracket,
-                                         args, *env);
+                                         args, env);
                 // We duplicated the matrix above, and there is a stvar
                 // following
                 SET_NAMED(res, 0);
@@ -2936,7 +3145,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
             advanceImmediate();
             advanceImmediate();
 #ifndef UNSOUND_OPTS
-            assert(res == Rf_findFun(sym, *env) && "guard_fun_ fail");
+            assert(res == Rf_findFun(sym, env) && "guard_fun_ fail");
 #endif
             NEXT();
         }
@@ -2947,44 +3156,28 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
             assert(TYPEOF(r) == RAWSXP);
             assert(XLENGTH(r) >= (int)sizeof(DeoptMetadata));
             auto m = (DeoptMetadata*)DATAPTR(r);
-            assert(m->numFrames >= 1);
 
 #if 0
             size_t pos = 0;
             for (size_t i = 0; i < m->numFrames; ++i) {
                 std::cout << "Code " << m->frames[i].code << "\n";
                 std::cout << "Frame " << i << ":\n";
-                std::cout << "  - env\n";
+                std::cout << "  - env (" << pos << ")\n";
                 Rf_PrintValue(ostack_at(ctx, pos++));
                 for( size_t j = 0; j < m->frames[i].stackSize; ++j) {
-                    std::cout << "  - stack " << j <<"\n";
+                    std::cout << "  - stack (" << pos << ") " << j << "\n";
                     Rf_PrintValue(ostack_at(ctx, pos++));
                 }
             }
 #endif
 
-            for (size_t i = 1; i < m->numFrames; ++i) {
-                if (!synthesizeFrames)
-                    synthesizeFrames = new std::deque<FrameInfo*>;
-                synthesizeFrames->push_back(&m->frames[i]);
-            }
-
-            FrameInfo& f = m->frames[0];
-            pc = f.pc;
-            c = f.code;
-            c->registerInvocation();
-            assert(c->code() <= pc && pc < c->endCode());
-            SEXP e = ostack_pop(ctx);
-            if (auto stub = LazyEnvironment::cast(e)) {
-                e = stub->create();
-            }
-            assert(TYPEOF(e) == ENVSXP);
-            *env = e;
-
-            // We need to clear the bindings cache, when we change the
-            // environment
-            memset(&bindingCache, 0, sizeof(bindingCache));
-            NEXT();
+            assert(m->numFrames >= 1);
+            size_t stackHeight = 0;
+            for (size_t i = 0; i < m->numFrames; ++i)
+                stackHeight += m->frames[i].stackSize + 1;
+            deoptFramesWithContext(ctx, callCtxt, m, R_NilValue,
+                                   m->numFrames - 1, stackHeight, true);
+            assert(false);
         }
 
         INSTRUCTION(seq_) {
@@ -2996,7 +3189,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
             }
 
             // TODO: add a real guard here...
-            assert(prim == Rf_findFun(Rf_install("seq"), *env));
+            assert(prim == Rf_findFun(Rf_install("seq"), env));
 
             SEXP from = ostack_at(ctx, 2);
             SEXP to = ostack_at(ctx, 1);
@@ -3030,7 +3223,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
                 SEXP argslist =
                     CONS_NR(from, CONS_NR(to, CONS_NR(by, R_NilValue)));
                 ostack_push(ctx, argslist);
-                res = Rf_applyClosure(call, prim, argslist, *env, R_NilValue);
+                res = Rf_applyClosure(call, prim, argslist, env, R_NilValue);
                 ostack_pop(ctx);
             }
 
@@ -3177,7 +3370,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
         }
 
         INSTRUCTION(beginloop_) {
-            SLOWASSERT(*env);
+            SLOWASSERT(env);
             int offset = readJumpOffset();
             advanceJump();
             loopTrampoline(c, ctx, env, callCtxt, pc, localsBase);
@@ -3192,7 +3385,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
         INSTRUCTION(return_) {
             res = ostack_top(ctx);
             // this restores stack pointer to the value from the target context
-            Rf_findcontext(CTXT_BROWSER | CTXT_FUNCTION, *env, res);
+            Rf_findcontext(CTXT_BROWSER | CTXT_FUNCTION, env, res);
             // not reached
             assert(false);
         }
@@ -3213,39 +3406,16 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
     }
 
 eval_done:
-    if (synthesizeFrames) {
-        while (!synthesizeFrames->empty()) {
-            FrameInfo* f = synthesizeFrames->front();
-            synthesizeFrames->pop_front();
-            SEXP res = ostack_pop(ctx);
-            SEXP e = ostack_pop(ctx);
-            if (auto stub = LazyEnvironment::cast(e)) {
-                e = stub->create();
-            }
-            assert(TYPEOF(e) == ENVSXP);
-            *env = e;
-            ostack_push(ctx, res);
-            f->code->registerInvocation();
-            res = evalRirCode(f->code, ctx, env, callCtxt, f->pc);
-            ostack_push(ctx, res);
-        }
-        delete synthesizeFrames;
-    }
-
-    for (auto stub : envStubs) {
-        delete stub;
-    }
-
     return ostack_pop(ctx);
 }
 
 #pragma GCC diagnostic pop
 
-SEXP evalRirCodeExtCaller(Code* c, InterpreterInstance* ctx, SEXP* env) {
+SEXP evalRirCodeExtCaller(Code* c, InterpreterInstance* ctx, SEXP env) {
     return evalRirCode(c, ctx, env, nullptr);
 }
 
-SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
+SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                  const CallContext* callCtxt) {
     return evalRirCode(c, ctx, env, callCtxt, nullptr);
 }
@@ -3296,11 +3466,10 @@ SEXP rirApplyClosure(SEXP ast, SEXP op, SEXP arglist, SEXP rho) {
 SEXP rirEval_f(SEXP what, SEXP env) {
     assert(TYPEOF(what) == EXTERNALSXP);
 
-    SEXP lenv = env;
     // TODO: do we not need an RCNTXT here?
 
     if (auto code = Code::check(what)) {
-        return evalRirCodeExtCaller(code, globalContext(), &lenv);
+        return evalRirCodeExtCaller(code, globalContext(), env);
     }
 
     if (auto table = DispatchTable::check(what)) {
@@ -3309,12 +3478,12 @@ SEXP rirEval_f(SEXP what, SEXP env) {
         Function* fun = table->baseline();
         fun->registerInvocation();
 
-        return evalRirCodeExtCaller(fun->body(), globalContext(), &lenv);
+        return evalRirCodeExtCaller(fun->body(), globalContext(), env);
     }
 
     if (auto fun = Function::check(what)) {
         fun->registerInvocation();
-        return evalRirCodeExtCaller(fun->body(), globalContext(), &lenv);
+        return evalRirCodeExtCaller(fun->body(), globalContext(), env);
     }
 
     assert(false && "Expected a code object or a dispatch table");

@@ -129,8 +129,8 @@ class Instruction : public Value {
         : Value(t, tag), srcIdx(srcIdx) {}
 
     virtual bool hasEffect() const = 0;
+    virtual bool hasEffectIgnoreVisibility() const = 0;
     virtual bool mightChangeVisibility() const = 0;
-    virtual bool hasObservableEffect() const = 0;
     virtual bool mayUseReflection() const = 0;
     virtual bool mayForcePromises() const = 0;
     virtual bool readsEnv() const = 0;
@@ -192,7 +192,7 @@ class Instruction : public Value {
         // TODO: for escape analysis we use leaksEnv || hasEffect as a very
         // crude approximation whether this instruction leaks arguments. We
         // should do better.
-        return leaksEnv() || hasEffect();
+        return leaksEnv() || mayForcePromises();
     }
 
     typedef std::function<bool(Value*)> ArgumentValuePredicateIterator;
@@ -286,8 +286,10 @@ class InstructionImplementation : public Instruction {
     bool mightChangeVisibility() const override {
         return EFFECT >= Effect::Visibility;
     }
-    bool hasObservableEffect() const override {
-        return EFFECT > Effect::Order && hasEffect();
+    bool hasEffectIgnoreVisibility() const override {
+        // TODO devise a strategy to deal with visibility, that does not need
+        // instruction level reasoning.
+        return EFFECT > Effect::Visibility && hasEffect();
     }
     bool mayForcePromises() const override final {
         return EFFECT >= Effect::Force;
@@ -692,7 +694,7 @@ class Branch
     void printArgs(std::ostream& out, bool tty) const override;
 };
 
-class Return : public FixedLenInstruction<Tag::Return, Return, 1, Effect::None,
+class Return : public FixedLenInstruction<Tag::Return, Return, 1, Effect::Order,
                                           EnvAccess::None, Controlflow::Exit> {
   public:
     explicit Return(Value* ret)
@@ -1349,18 +1351,33 @@ class VLIE(MkEnv, Effect::None, EnvAccess::Capture) {
     size_t nLocals() { return nargs() - 1; }
 };
 
-class FLI(TypeTest, 1, Effect::None, EnvAccess::None) {
+class FLI(IsObject, 1, Effect::None, EnvAccess::None) {
   public:
-    enum type { Object, EnvironmentStub };
-    type testFor;
-    explicit TypeTest(Value* v, type testType)
-        : FixedLenInstruction(NativeType::test, {{PirType::val()}}, {{v}}),
-          testFor(testType) {
-        if (testFor == EnvironmentStub) {
-            assert(MkEnv::Cast(this->arg<0>().val()));
-        }
-    }
-    const char* name() const override;
+    explicit IsObject(Value* v)
+        : FixedLenInstruction(NativeType::test, {{PirType::val()}}, {{v}}) {}
+};
+
+class FLIE(IsEnvStub, 1, Effect::None, EnvAccess::Capture) {
+  public:
+    explicit IsEnvStub(MkEnv* e)
+        : FixedLenInstructionWithEnvSlot(NativeType::test, e) {}
+};
+
+class FLIE(PushContext, 3, Effect::Any, EnvAccess::Capture) {
+  public:
+    PushContext(Value* ast, Value* op, Value* sysparent)
+        : FixedLenInstructionWithEnvSlot(NativeType::context,
+                                         {{PirType::any(), PirType::closure()}},
+                                         {{ast, op}}, sysparent) {}
+};
+
+class FLI(PopContext, 2, Effect::Any, EnvAccess::None) {
+  public:
+    PopContext(Value* res, PushContext* push)
+        : FixedLenInstruction(PirType::voyd(),
+                              {{PirType::any(), NativeType::context}},
+                              {{res, push}}) {}
+    PushContext* push() { return PushContext::Cast(arg<1>().val()); }
 };
 
 class VLI(Phi, Effect::None, EnvAccess::None) {

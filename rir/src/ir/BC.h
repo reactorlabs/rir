@@ -188,6 +188,11 @@ BC BC::brobj(Jmp j) {
     i.offset = j;
     return BC(Opcode::brobj_, i);
 }
+BC BC::pushContext(Jmp j) {
+    ImmediateArguments i;
+    i.offset = j;
+    return BC(Opcode::push_context_, i);
+}
 BC BC::beginloop(Jmp j) {
     ImmediateArguments i;
     i.offset = j;

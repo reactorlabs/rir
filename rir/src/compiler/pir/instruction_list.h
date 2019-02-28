@@ -51,7 +51,8 @@
     V(Phi)                                                                     \
     V(AsLogical)                                                               \
     V(AsTest)                                                                  \
-    V(TypeTest)                                                                \
+    V(IsObject)                                                                \
+    V(IsEnvStub)                                                               \
     V(Return)                                                                  \
     V(MkArg)                                                                   \
     V(MkFunCls)                                                                \
@@ -64,6 +65,8 @@
     V(CallBuiltin)                                                             \
     V(CallSafeBuiltin)                                                         \
     V(MkEnv)                                                                   \
+    V(PushContext)                                                             \
+    V(PopContext)                                                              \
     V(LdFunctionEnv)                                                           \
     V(LAnd)                                                                    \
     V(LOr)                                                                     \

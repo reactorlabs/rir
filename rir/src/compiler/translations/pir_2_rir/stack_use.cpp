@@ -142,7 +142,8 @@ AbstractResult StackUseAnalysis::apply(StackUseAnalysisState& state,
             if (!v->isInstruction())
                 return;
             // For all else, check if this is the last use of the value
-            if (!liveness.live(i, v) && erasedArgs.count(v) == 0) {
+            if (v->producesRirResult() && !liveness.live(i, v) &&
+                erasedArgs.count(v) == 0) {
                 state.stack.eraseValue(v);
                 erasedArgs.insert(v);
             }
@@ -150,7 +151,7 @@ AbstractResult StackUseAnalysis::apply(StackUseAnalysisState& state,
     }
 
     // Add the value produced by this instruction if it's not dead
-    if (i->type != PirType::voyd()) {
+    if (i->producesRirResult()) {
         if (isDead(i))
             state.isDead = true;
         else

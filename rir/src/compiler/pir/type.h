@@ -75,6 +75,7 @@ enum class NativeType : uint8_t {
     test,
     checkpoint,
     frameState,
+    context,
 
     FIRST = test,
     LAST = frameState,
@@ -310,6 +311,9 @@ struct PirType {
 
 inline std::ostream& operator<<(std::ostream& out, NativeType t) {
     switch (t) {
+    case NativeType::context:
+        out << "ct";
+        break;
     case NativeType::test:
         out << "t";
         break;

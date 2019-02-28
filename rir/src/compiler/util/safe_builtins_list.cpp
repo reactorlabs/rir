@@ -285,6 +285,12 @@ bool SafeBuiltinsList::nonObject(SEXP builtin) {
 }
 
 #define UNSAFE_BUILTINS_FOR_INLINE(V)                                          \
+    V(exists)                                                                  \
+    V(parent.env)                                                              \
+    V(sys.nframe)                                                              \
+    V(lockBinding)                                                             \
+    V(lockEnvironment)                                                         \
+    V(unlockBinding)                                                           \
     V(as.environment)                                                          \
     V(on.exit)                                                                 \
     V(environment)                                                             \

@@ -131,15 +131,15 @@ void Constantfold::apply(RirCompiler& cmp, ClosureVersion* function,
                 next = bb->remove(ip);
             });
 
-            if (auto isTest = TypeTest::Cast(i)) {
-                if (isTest->testFor == TypeTest::Object &&
-                    !isTest->arg<0>().val()->type.maybeObj()) {
+            if (auto isTest = IsObject::Cast(i)) {
+                if (!isTest->arg<0>().val()->type.maybeObj()) {
                     i->replaceUsesWith(False::instance());
                     next = bb->remove(ip);
                 }
+            }
 
-                if (isTest->testFor == TypeTest::EnvironmentStub) {
-                    auto environment = MkEnv::Cast(isTest->arg<0>().val());
+            if (auto isTest = IsEnvStub::Cast(i)) {
+                if (auto environment = MkEnv::Cast(isTest->env())) {
                     static std::unordered_set<Tag> tags{Tag::Force};
                     if (environment->usesDoNotInclude(bb, tags)) {
                         i->replaceUsesWith(True::instance());
