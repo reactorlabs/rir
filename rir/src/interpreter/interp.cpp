@@ -1845,13 +1845,13 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                 if (isObject(val)) {
                     SEXP call = getSrcAt(c, pc - 1, ctx);
                     res = dispatchApply(call, val, args, symbol::DoubleBracket,
-                                        *env, ctx);
+                                        env, ctx);
                     if (!res)
                         res = do_subset2_dflt(call, symbol::DoubleBracket, args,
-                                            *env);
+                                              env);
                 } else {
-                    res = do_subset2_dflt(R_NilValue, symbol::DoubleBracket, args,
-                                        *env);
+                    res = do_subset2_dflt(R_NilValue, symbol::DoubleBracket,
+                                          args, env);
                 }
                 ostack_pop(ctx);
                 // fallthrough
@@ -1862,7 +1862,7 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
                 ostack_set(ctx, 3, res);
                 Immediate id = readImmediate();
                 advanceImmediate();
-                cachedSetVar(res, *env, id, ctx, bindingCache);
+                cachedSetVar(res, env, id, ctx, bindingCache);
             }
 
             NEXT();
@@ -2623,7 +2623,6 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             SLOWASSERT(TYPEOF(sym) == SYMSXP);
             SLOWASSERT(!DDVAL(sym));
             assert(env);
-            SEXP val = R_findVarLocInFrame(*env, sym).cell;
             SEXP val = R_findVarLocInFrame(env, sym).cell;
             if (val == nullptr)
                 Rf_errorcall(getSrcAt(c, pc - 1, ctx),
