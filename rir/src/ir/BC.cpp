@@ -101,6 +101,7 @@ BC_NOARGS(V, _)
     case Opcode::br_:
     case Opcode::brtrue_:
     case Opcode::beginloop_:
+    case Opcode::push_context_:
     case Opcode::brobj_:
     case Opcode::brfalse_:
         cs.patchpoint(immediate.offset);
@@ -320,6 +321,7 @@ BC_NOARGS(V, _)
         out << std::hex << immediate.fun << std::dec;
         break;
     case Opcode::beginloop_:
+    case Opcode::push_context_:
     case Opcode::brtrue_:
     case Opcode::brobj_:
     case Opcode::brfalse_:

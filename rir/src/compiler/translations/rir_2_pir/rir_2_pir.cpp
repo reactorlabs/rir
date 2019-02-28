@@ -791,6 +791,8 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
     case Opcode::isstubenv_:
     case Opcode::check_missing_:
     case Opcode::static_call_:
+    case Opcode::pop_context_:
+    case Opcode::push_context_:
         log.unsupportedBC("Unsupported BC (are you recompiling?)", bc);
         assert(false && "Recompiling PIR not supported for now.");
 
@@ -892,8 +894,7 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) const {
                 break;
             }
             case Opcode::brobj_: {
-                Value* v =
-                    insert(new TypeTest(cur.stack.top(), TypeTest::Object));
+                Value* v = insert(new IsObject(cur.stack.top()));
                 insert(new Branch(v));
                 break;
             }
@@ -1049,8 +1050,9 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) const {
             }
 
             if (!inPromise() && !insert.getCurrentBB()->isEmpty() &&
-                insert.getCurrentBB()->last()->hasEffect())
+                insert.getCurrentBB()->last()->hasEffectIgnoreVisibility()) {
                 addCheckpoint(srcCode, nextPos, cur.stack, insert);
+            }
         }
     }
     assert(cur.stack.empty());
@@ -1132,6 +1134,8 @@ void Rir2Pir::finalize(Value* ret, Builder& insert) {
         });
     }
 
+    // Return in promise can lead to non-local return, which currently needs env
+    // to find the context to return to.
     insert(new Return(ret));
 
     InsertCast c(insert.code->entry, insert.env);

@@ -9,7 +9,7 @@ fi
 
 if [[ "$1" == "--travis" || "$2" == "--travis" ]]
 then
-    OPTIONS="e:RIR e:PIR"
+    OPTIONS="e:RIR e:PIR -r"
 fi
 
 if [ "$1" == "--installRebench" ]
@@ -25,5 +25,5 @@ fi
 
 export PATH=$HOME/.local/bin:$PATH
 pushd "$SCRIPT_PATH/../benchmarks"
-rebench rebench.conf $OPTIONS -SN --iterations=2 
+rebench rebench.conf $OPTIONS -SN --iterations=2
 popd > /dev/null

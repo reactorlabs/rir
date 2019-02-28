@@ -252,7 +252,7 @@ void EagerCalls::apply(RirCompiler& cmp, ClosureVersion* closure,
                 Replace::usesOfValue(prom_copy, e, mk->promEnv());
                 prom_copy->remove(prom_copy->begin());
 
-                Value* promRes = BBTransform::forInline(prom_copy, split);
+                Value* promRes = BBTransform::forInline(prom_copy, split).first;
                 mk->eagerArg(promRes);
 
                 bb = split;

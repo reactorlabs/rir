@@ -38,7 +38,10 @@ function build_r {
         exit 1
     fi
 
-    tools/rsync-recommended
+    cd src/library/Recommended/
+    tar xf cache_recommended.tar
+    cd ../../..
+    tools/rsync-recommended || true
 
     if [ ! -f $R_DIR/Makefile ]; then
         echo "-> configure gnur"
