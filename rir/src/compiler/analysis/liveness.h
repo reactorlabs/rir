@@ -1,7 +1,7 @@
 #pragma once
 
-#include "../../pir/pir.h"
-#include "../../util/cfg.h"
+#include "../pir/pir.h"
+#include "../util/cfg.h"
 
 #include <unordered_map>
 #include <vector>

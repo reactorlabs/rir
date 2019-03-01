@@ -1,6 +1,6 @@
 #include "liveness.h"
-#include "../../pir/bb.h"
-#include "../../pir/instruction.h"
+#include "../pir/bb.h"
+#include "../pir/instruction.h"
 
 #include <map>
 #include <set>
