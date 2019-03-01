@@ -114,7 +114,7 @@ stopifnot(any(is.na(x)))
 f14 <- rir.compile(function() {
   x <- matrix(5,nrow=4,ncol=4)
   x[2,3] <- 7
-  
+
   stopifnot(x[[2,3]] == 7)
   stopifnot(x[[2,4]] == 5)
 })
@@ -127,7 +127,7 @@ f15 <- rir.compile(function() {
       x[[i,j]] <- 'bar'
     }
   }
-  
+
   stopifnot(x[[4,1]] == 'bar')
 })
 f15()
@@ -157,8 +157,7 @@ stopifnot(x[[3,4]] == '12')
 f18 <- rir.compile(function() {
   x <- data.frame(a=c(1,2,3),b=c(4,5,6))
   x[, 2] <- x[, 2] + 1
-  
+
   stopifnot(x[, 2] == c(5,6,7))
 })
 f18()
-
