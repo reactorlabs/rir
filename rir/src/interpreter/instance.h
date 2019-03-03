@@ -110,8 +110,11 @@ typedef enum {
     STACK_OBJ_SEXP = 0,
     STACK_OBJ_INT = INTSXP,
     STACK_OBJ_REAL = REALSXP,
-    STACK_OBJ_LOGICAL = LGLSXP
+    STACK_OBJ_LOGICAL = LGLSXP,
+    STACK_OBJ_NULL = -1,
 } stackObjType;
+
+static const R_bcstack_t nullStackObj = {STACK_OBJ_NULL, {0xBAD}};
 
 RIR_INLINE R_bcstack_t intStackObj(int x) {
     R_bcstack_t res;
@@ -202,6 +205,10 @@ RIR_INLINE SEXP stackObjToSexp(R_bcstack_t x) {
     default:
         assert(false);
     }
+}
+
+RIR_INLINE bool stackObjIsNull(R_bcstack_t x) {
+    return x.tag == STACK_OBJ_NULL;
 }
 
 // Doesn't consider reals integers
@@ -398,6 +405,18 @@ RIR_INLINE R_xlen_t stackObjLength(R_bcstack_t x) {
         return XLENGTH(x.u.sxpval);
     default:
         assert(false);
+    }
+}
+
+RIR_INLINE int stackObjAsLogical(R_bcstack_t x) {
+    if (stackObjIsSimpleScalar(x, REALSXP)) {
+        return tryStackObjToReal(x) != 0.0;
+    } else if (stackObjIsSimpleScalar(x, INTSXP)) {
+        return tryStackObjToInteger(x) != 0;
+    } else if (stackObjIsSimpleScalar(x, LGLSXP)) {
+        return tryStackObjToLogical(x);
+    } else {
+        return Rf_asLogical(x.u.sxpval);
     }
 }
 

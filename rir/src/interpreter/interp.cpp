@@ -740,33 +740,33 @@ class SlowcaseCounter {
 SlowcaseCounter SLOWCASE_COUNTER;
 #endif
 
-static RIR_INLINE SEXP builtinCall(CallContext& call,
-                                   InterpreterInstance* ctx) {
+static RIR_INLINE R_bcstack_t builtinCall(CallContext& call,
+                                          InterpreterInstance* ctx) {
     if (call.hasStackArgs() && !call.hasNames()) {
-        SEXP res = tryFastBuiltinCall(call, ctx);
-        if (res)
+        R_bcstack_t res = tryFastBuiltinCall(call, ctx);
+        if (!stackObjIsNull(res))
             return res;
 #ifdef DEBUG_SLOWCASES
         SLOWCASE_COUNTER.count("builtin", call, ctx);
 #endif
     }
-    return legacyCall(call, ctx);
+    return sexpToStackObj(legacyCall(call, ctx));
 }
 
-static RIR_INLINE SEXP specialCall(CallContext& call,
-                                   InterpreterInstance* ctx) {
+static RIR_INLINE R_bcstack_t specialCall(CallContext& call,
+                                          InterpreterInstance* ctx) {
     if (call.hasStackArgs() && !call.hasNames()) {
-        SEXP res = tryFastSpecialCall(call, ctx);
-        if (res)
+        R_bcstack_t res = tryFastSpecialCall(call, ctx);
+        if (!stackObjIsNull(res))
             return res;
 #ifdef DEBUG_SLOWCASES
         SLOWCASE_COUNTER.count("special", call, ctx);
 #endif
     }
-    return legacySpecialCall(call, ctx);
+    return sexpToStackObj(legacySpecialCall(call, ctx));
 }
 
-static SEXP doCall(CallContext& call, InterpreterInstance* ctx) {
+static R_bcstack_t doCall(CallContext& call, InterpreterInstance* ctx) {
     SLOWASSERT(call.callee);
 
     switch (TYPEOF(call.callee)) {
@@ -776,13 +776,13 @@ static SEXP doCall(CallContext& call, InterpreterInstance* ctx) {
         return builtinCall(call, ctx);
     case CLOSXP: {
         if (TYPEOF(BODY(call.callee)) != EXTERNALSXP)
-            return legacyCall(call, ctx);
-        return rirCall(call, ctx);
+            return sexpToStackObj(legacyCall(call, ctx));
+        return sexpToStackObj(rirCall(call, ctx));
     }
     default:
         Rf_error("Invalid Callee");
     };
-    return R_NilValue;
+    return sexpToStackObj(R_NilValue);
 }
 
 static SEXP dispatchApply(SEXP ast, SEXP obj, SEXP actuals, SEXP selector,
@@ -1585,9 +1585,9 @@ R_bcstack_t evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
             advanceImmediateN(n);
             CallContext call(c, ostackSexpAt(ctx, 0), n, ast, arguments, names,
                              *env, given, ctx);
-            SEXP res = doCall(call, ctx);
+            R_bcstack_t res = doCall(call, ctx);
             ostackPop(ctx); // callee
-            ostackPushSexp(ctx, res);
+            ostackPush(ctx, res);
 
             SLOWASSERT(ttt == R_PPStackTop);
             SLOWASSERT(lll == ostackLength(ctx));
@@ -1630,9 +1630,9 @@ R_bcstack_t evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
             advanceImmediateN(n);
             CallContext call(c, ostackSexpAt(ctx, 0), n, ast, arguments, *env,
                              given, ctx);
-            SEXP res = doCall(call, ctx);
+            R_bcstack_t res = doCall(call, ctx);
             ostackPop(ctx); // callee
-            ostackPushSexp(ctx, res);
+            ostackPush(ctx, res);
 
             SLOWASSERT(ttt == R_PPStackTop);
             SLOWASSERT(lll == ostackLength(ctx));
@@ -1655,9 +1655,9 @@ R_bcstack_t evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
             SEXP fun = ostackSexpAt(ctx, n);
             CallContext call(c, fun, n, ast, ostackCellAt(ctx, n - 1), *env,
                              given, ctx);
-            SEXP res = doCall(call, ctx);
+            R_bcstack_t res = doCall(call, ctx);
             ostackPopn(ctx, call.passedArgs + 1);
-            ostackPushSexp(ctx, res);
+            ostackPush(ctx, res);
 
             SLOWASSERT(ttt == R_PPStackTop);
             SLOWASSERT(lll - call.suppliedArgs == (unsigned)ostackLength(ctx));
@@ -1681,9 +1681,9 @@ R_bcstack_t evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
             advanceImmediateN(n);
             CallContext call(c, ostackSexpAt(ctx, n), n, ast,
                              ostackCellAt(ctx, n - 1), names, *env, given, ctx);
-            SEXP res = doCall(call, ctx);
+            R_bcstack_t res = doCall(call, ctx);
             ostackPopn(ctx, call.passedArgs + 1);
-            ostackPushSexp(ctx, res);
+            ostackPush(ctx, res);
 
             SLOWASSERT(ttt == R_PPStackTop);
             SLOWASSERT(lll - call.suppliedArgs == (unsigned)ostackLength(ctx));
@@ -1705,9 +1705,9 @@ R_bcstack_t evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
             advanceImmediate();
             CallContext call(c, callee, n, ast, ostackCellAt(ctx, n - 1), *env,
                              Assumptions(), ctx);
-            SEXP res = builtinCall(call, ctx); // TODO: Some builtins can return and maybe use unboxed values
+            R_bcstack_t res = builtinCall(call, ctx);
             ostackPopn(ctx, call.passedArgs);
-            ostackPushSexp(ctx, res);
+            ostackPush(ctx, res);
 
             SLOWASSERT(ttt == R_PPStackTop);
             SLOWASSERT(lll - call.suppliedArgs + 1 ==
@@ -2195,18 +2195,7 @@ R_bcstack_t evalRirCode(Code* c, InterpreterInstance* ctx, SEXP* env,
 
         INSTRUCTION(aslogical_) {
             R_bcstack_t val = ostackTop(ctx);
-            int logical_res;
-            if (stackObjIsSimpleScalar(val, REALSXP)) {
-                // TODO: Is this right?
-                logical_res = (tryStackObjToReal(val) != 0.0);
-            } else if (stackObjIsSimpleScalar(val, INTSXP)) {
-                // TODO: Is this right?
-                logical_res = (tryStackObjToInteger(val) != 0);
-            } else if (stackObjIsSimpleScalar(val, LGLSXP)) {
-                logical_res = tryStackObjToLogical(val);
-            } else {
-                logical_res = Rf_asLogical(val.u.sxpval);
-            }
+            int logical_res = stackObjAsLogical(val);
             STORE_UNOP(logicalStackObj(logical_res));
             NEXT();
         }

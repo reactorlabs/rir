@@ -5,8 +5,10 @@
 
 namespace rir {
 
-SEXP tryFastSpecialCall(const CallContext& call, InterpreterInstance* ctx);
-SEXP tryFastBuiltinCall(const CallContext& call, InterpreterInstance* ctx);
+R_bcstack_t tryFastSpecialCall(const CallContext& call,
+                               InterpreterInstance* ctx);
+R_bcstack_t tryFastBuiltinCall(const CallContext& call,
+                               InterpreterInstance* ctx);
 
 } // namespace rir
 
