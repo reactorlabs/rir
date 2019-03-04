@@ -1,7 +1,7 @@
 #ifndef RIR_ARGS_LAZY_H
 #define RIR_ARGS_LAZY_H
 
-#include "runtime/RirDataWrapper.h"
+#include "RirDataWrapper.h"
 
 #include "interp_incl.h"
 
@@ -10,8 +10,6 @@
 #include <functional>
 
 namespace rir {
-
-typedef std::function<SEXP(void*)> LazyFunction;
 
 static constexpr size_t LAZY_ARGS_MAGIC = 0x1a27a000;
 
@@ -28,7 +26,7 @@ struct ArgsLazyData : public RirDataWrapper<ArgsLazyData, LAZY_ARGS_MAGIC> {
     ArgsLazyData& operator=(const ArgsLazyData&) = delete;
 
     ArgsLazyData(const CallContext* callCtx, InterpreterInstance* cmpCtx)
-        : RirDataWrapper(2), callContext(callCtx), compilationContext(cmpCtx){};
+        : RirDataWrapper(0), callContext(callCtx), compilationContext(cmpCtx){};
 
     const CallContext* callContext;
     InterpreterInstance* compilationContext;

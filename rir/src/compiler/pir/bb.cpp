@@ -93,6 +93,13 @@ BB::Instrs::iterator BB::insert(Instrs::iterator it, Instruction* i) {
     return itup;
 }
 
+BB::Instrs::iterator BB::atPosition(Instruction* i) {
+    auto position = instrs.begin();
+    while (*position != i)
+        position++;
+    return position;
+}
+
 void BB::gc() {
     // Catch double deletes
     std::unordered_set<Instruction*> dup;

@@ -108,8 +108,9 @@ BB* BBTransform::split(size_t next_id, BB* src, BB::Instrs::iterator it,
     return split;
 }
 
-Value* BBTransform::forInline(BB* inlinee, BB* splice) {
+std::pair<Value*, BB*> BBTransform::forInline(BB* inlinee, BB* splice) {
     Value* found = nullptr;
+    Return* ret;
     Visitor::run(inlinee, [&](BB* bb) {
         if (bb->next0 != nullptr)
             return;
@@ -118,7 +119,7 @@ Value* BBTransform::forInline(BB* inlinee, BB* splice) {
         if (Deopt::Cast(bb->last()))
             return;
 
-        Return* ret = Return::Cast(bb->last());
+        ret = Return::Cast(bb->last());
         assert(ret);
 
         // This transformation assumes that we have just one reachable return.
@@ -130,7 +131,7 @@ Value* BBTransform::forInline(BB* inlinee, BB* splice) {
         bb->remove(bb->end() - 1);
     });
     assert(found);
-    return found;
+    return {found, ret->bb()};
 }
 
 BB* BBTransform::lowerExpect(Code* code, BB* src, BB::Instrs::iterator position,
@@ -165,6 +166,24 @@ BB* BBTransform::lowerExpect(Code* code, BB* src, BB::Instrs::iterator position,
     splitEdge(code->nextBBId++, src, deoptBlock, code);
 
     return split;
+}
+
+void BBTransform::insertAssume(Value* condition, Checkpoint* cp, BB* bb,
+                               BB::Instrs::iterator& position,
+                               bool assumePositive) {
+    position = bb->insert(position, (Instruction*)condition);
+    auto assume = new Assume(condition, cp);
+    if (!assumePositive)
+        assume->Not();
+    position = bb->insert(position + 1, assume);
+    position++;
+};
+
+void BBTransform::insertAssume(Value* condition, Checkpoint* cp,
+                               bool assumePositive) {
+    auto contBB = cp->bb()->trueBranch();
+    auto contBegin = contBB->begin();
+    insertAssume(condition, cp, contBB, contBegin, assumePositive);
 }
 
 } // namespace pir

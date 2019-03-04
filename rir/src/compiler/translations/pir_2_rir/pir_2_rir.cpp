@@ -282,7 +282,7 @@ class SSAAllocator {
                     size_t argNum = 0;
                     i->eachArg([&](Value* a) {
                         auto ia = Instruction::Cast(a);
-                        if (!ia) {
+                        if (!ia || !ia->producesRirResult()) {
                             argNum++;
                             return;
                         }
@@ -345,7 +345,7 @@ class SSAAllocator {
                 // Remember this instruction if it writes to a slot
                 if (allocation.count(i)) {
                     if (allocation.at(i) == stackSlot) {
-                        if (i->type != PirType::voyd() && !sa.dead(i)) {
+                        if (i->producesRirResult() && !sa.dead(i)) {
                             stack.push_back(i);
                         }
                     } else {
@@ -435,6 +435,7 @@ class SSAAllocator {
             --usedIdx;
         }
         assert(false && "Value wasn't found on the stack.");
+        return -1;
     }
 
     size_t stackPhiOffset(Instruction* executed, Phi* phi) const {
@@ -448,6 +449,7 @@ class SSAAllocator {
                 ++offset;
         }
         assert(false && "Phi wasn't found on the stack.");
+        return -1;
     }
 
     // Check if v is needed after argument argNumber of instruction executed
@@ -531,6 +533,7 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
     // - how to pick lastInstr at the beginning of a merge block?
 
     LastEnv lastEnv(cls, code, log);
+    std::unordered_map<Value*, BC::Label> pushContexts;
 
     LoweringVisitor::run(code->entry, [&](BB* bb) {
         if (isJumpThrough(bb))
@@ -554,7 +557,7 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
         for (auto it = bb->begin(); it != bb->end(); ++it) {
             auto instr = *it;
 
-            bool hasResult = instr->type != PirType::voyd();
+            bool hasResult = instr->producesRirResult();
 
             // Prepare stack and araguments
             {
@@ -588,7 +591,7 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                  */
 
                 auto explicitEnvValue = [](Instruction* instr) {
-                    return MkEnv::Cast(instr);
+                    return MkEnv::Cast(instr) || IsEnvStub::Cast(instr);
                 };
 
                 auto moveToTOS = [&](size_t offset) {
@@ -735,7 +738,8 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                     size_t argNumber = 0;
                     instr->eachArg([&](Value* what) {
                         if (what == Env::elided() ||
-                            what->tag == Tag::Tombstone) {
+                            what->tag == Tag::Tombstone ||
+                            what->type == NativeType::context) {
                             argNumber++;
                             return;
                         }
@@ -879,27 +883,24 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 break;
             }
 
-            case Tag::CastType: {
-                auto cast = CastType::Cast(instr);
-                auto arg = cast->arg<0>().val();
-                // assertion is:
-                // "input is a promise => output is a promise"
-                // to remove a promise wrapper -- even for eager args -- a force
-                // instruction is needed!
-                assert((!(arg->type.maybePromiseWrapped() ||
-                          arg->type.isA(RType::prom)) ||
-                        cast->type.maybePromiseWrapped()) &&
-                       "Cannot cast away promise wrapper. Use Force");
-                break;
-            }
-
 #define EMPTY(Name)                                                            \
     case Tag::Name: {                                                          \
         break;                                                                 \
     }
+                EMPTY(CastType);
                 EMPTY(Nop);
                 EMPTY(PirCopy);
 #undef EMPTY
+
+            case Tag::IsObject: {
+                cs << BC::isobj();
+                break;
+            }
+
+            case Tag::IsEnvStub: {
+                cs << BC::isstubenv();
+                break;
+            }
 
 #define SIMPLE(Name, Factory)                                                  \
     case Tag::Name: {                                                          \
@@ -920,7 +921,6 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 SIMPLE(ChkClosure, isfun);
                 SIMPLE(Seq, seq);
                 SIMPLE(MkCls, close);
-                SIMPLE(IsObject, isobj);
                 SIMPLE(SetShared, setShared);
                 SIMPLE(EnsureNamed, ensureNamed);
 #define V(V, name, Name) SIMPLE(Name, name);
@@ -1029,10 +1029,30 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 break;
             }
 
+            case Tag::PushContext: {
+                if (!pushContexts.count(instr))
+                    pushContexts[instr] = cs.mkLabel();
+                cs << BC::pushContext(pushContexts.at(instr));
+                break;
+            }
+
+            case Tag::PopContext: {
+                auto push = PopContext::Cast(instr)->push();
+                if (!pushContexts.count(push))
+                    pushContexts[push] = cs.mkLabel();
+                cs << pushContexts.at(push);
+                cs << BC::popContext();
+                break;
+            }
+
             case Tag::MkEnv: {
                 auto mkenv = MkEnv::Cast(instr);
-
-                cs << BC::mkEnv(mkenv->varName);
+                bool stub;
+                if (mkenv->stub)
+                    stub = true;
+                else
+                    stub = false;
+                cs << BC::mkEnv(mkenv->varName, stub);
                 break;
             }
 
@@ -1130,35 +1150,17 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
     return alloc.slots();
 }
 
-template <typename CallType>
-static bool allLazy(CallType* call, std::vector<Promise*>& args) {
-    bool allLazy = true;
-    call->eachCallArg([&](Value* v) {
-        if (!allLazy)
-            return;
-        if (auto arg = MkArg::Cast(v)) {
-            if (arg->isEager()) {
-                allLazy = false;
-            } else {
-                args.push_back(arg->prom());
-            }
-        } else {
-            allLazy = false;
-        }
-    });
-    return allLazy;
-}
-
 static bool DEBUG_DEOPTS = getenv("PIR_DEBUG_DEOPTS") &&
                            0 == strncmp("1", getenv("PIR_DEBUG_DEOPTS"), 1);
 static bool DEOPT_CHAOS = getenv("PIR_DEOPT_CHAOS") &&
                           0 == strncmp("1", getenv("PIR_DEOPT_CHAOS"), 1);
+static bool DEOPT_CHAOS_SEED = getenv("PIR_DEOPT_CHAOS_SEED")
+                                   ? atoi(getenv("PIR_DEOPT_CHAOS_SEED"))
+                                   : std::random_device()();
 
 static bool coinFlip() {
-    static std::random_device rd;
-    static std::mt19937 gen(rd());
-    // static std::mt19937 gen(42);
-    static std::bernoulli_distribution coin(0.2);
+    static std::mt19937 gen(DEOPT_CHAOS_SEED);
+    static std::bernoulli_distribution coin(0.03);
     return coin(gen);
 };
 

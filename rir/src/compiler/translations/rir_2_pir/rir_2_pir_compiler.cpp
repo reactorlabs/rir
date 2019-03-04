@@ -48,7 +48,7 @@ void Rir2PirCompiler::compileClosure(SEXP closure, const std::string& name,
                 closureName = CHAR(PRINTNAME(e.tag()));
         }
     }
-    auto pirClosure = module->getOrDeclareRirClosure(name, closure, fun);
+    auto pirClosure = module->getOrDeclareRirClosure(closureName, closure, fun);
     OptimizationContext context(assumptions);
     compileClosure(pirClosure, context, success, fail);
 }
@@ -228,6 +228,9 @@ void Rir2PirCompiler::optimizeModule() {
 
     logger.flush();
 }
+
+const size_t Rir2PirCompiler::MAX_INPUT_SIZE =
+    getenv("PIR_MAX_INPUT_SIZE") ? atoi(getenv("PIR_MAX_INPUT_SIZE")) : 2500;
 
 } // namespace pir
 } // namespace rir

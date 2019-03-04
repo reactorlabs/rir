@@ -102,7 +102,7 @@ Here are a few important files and functions:
 - [`interp.cpp`](../rir/src/interpreter/interp.cpp): Contains almost the entire RIR interpreter, that's why it's so huge.
   - [`evalRirCode`](../rir/src/interpreter/interp.cpp#L1287): The specific place where each bytecode is interpreted. This is one big loop 1) for simplicity and 2) more importantly, because all of the code here needs to be very fast.
 - [`rir_2_pir` - `Rir2Pir::compileBC`](../rir/src/compiler/translations/rir_2_pir/rir_2_pir.cpp#L173): Converts RIR into PIR.
-- [`pir_2_rir` - `Pir2Rir::compileCodd`](../rir/src/compiler/translations/rir_2_pir/pir_2_rir.cpp#L644): Converts PIR into RIR.
+- [`pir_2_rir` - `Pir2Rir::compileCode`](../rir/src/compiler/translations/pir_2_rir/pir_2_rir.cpp#L509): Converts PIR into RIR.
 
 ## What about PIR?
 

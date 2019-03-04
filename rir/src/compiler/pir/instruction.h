@@ -129,8 +129,8 @@ class Instruction : public Value {
         : Value(t, tag), srcIdx(srcIdx) {}
 
     virtual bool hasEffect() const = 0;
+    virtual bool hasEffectIgnoreVisibility() const = 0;
     virtual bool mightChangeVisibility() const = 0;
-    virtual bool hasObservableEffect() const = 0;
     virtual bool mayUseReflection() const = 0;
     virtual bool mayForcePromises() const = 0;
     virtual bool readsEnv() const = 0;
@@ -173,6 +173,8 @@ class Instruction : public Value {
     void replaceUsesAndSwapWith(Instruction* val,
                                 std::vector<Instruction*>::iterator it);
     void replaceUsesIn(Value* val, BB* target);
+    bool usesAreOnly(BB*, std::unordered_set<Tag>);
+    bool usesDoNotInclude(BB*, std::unordered_set<Tag>);
     bool unused();
 
     virtual void updateType(){};
@@ -190,7 +192,7 @@ class Instruction : public Value {
         // TODO: for escape analysis we use leaksEnv || hasEffect as a very
         // crude approximation whether this instruction leaks arguments. We
         // should do better.
-        return leaksEnv() || hasEffect();
+        return leaksEnv() || mayForcePromises();
     }
 
     typedef std::function<bool(Value*)> ArgumentValuePredicateIterator;
@@ -284,8 +286,10 @@ class InstructionImplementation : public Instruction {
     bool mightChangeVisibility() const override {
         return EFFECT >= Effect::Visibility;
     }
-    bool hasObservableEffect() const override {
-        return EFFECT > Effect::Order && hasEffect();
+    bool hasEffectIgnoreVisibility() const override {
+        // TODO devise a strategy to deal with visibility, that does not need
+        // instruction level reasoning.
+        return EFFECT > Effect::Visibility && hasEffect();
     }
     bool mayForcePromises() const override final {
         return EFFECT >= Effect::Force;
@@ -684,13 +688,13 @@ class Branch
     : public FixedLenInstruction<Tag::Branch, Branch, 1, Effect::None,
                                  EnvAccess::None, Controlflow::Branch> {
   public:
-    explicit Branch(Value * test)
+    explicit Branch(Value* test)
         : FixedLenInstruction(PirType::voyd(), {{NativeType::test}}, {{test}}) {
     }
     void printArgs(std::ostream& out, bool tty) const override;
 };
 
-class Return : public FixedLenInstruction<Tag::Return, Return, 1, Effect::None,
+class Return : public FixedLenInstruction<Tag::Return, Return, 1, Effect::Order,
                                           EnvAccess::None, Controlflow::Exit> {
   public:
     explicit Return(Value* ret)
@@ -904,12 +908,6 @@ class FLI(Is, 1, Effect::None, EnvAccess::None) {
     void printArgs(std::ostream& out, bool tty) const override;
 };
 
-class FLI(IsObject, 1, Effect::None, EnvAccess::None) {
-  public:
-    explicit IsObject(Value* v)
-        : FixedLenInstruction(NativeType::test, {{PirType::val()}}, {{v}}) {}
-};
-
 class FLI(LdFunctionEnv, 0, Effect::None, EnvAccess::None) {
   public:
     LdFunctionEnv() : FixedLenInstruction(RType::env) {}
@@ -960,11 +958,11 @@ class FLI(Identical, 2, Effect::None, EnvAccess::None) {
                               {{PirType::any(), PirType::any()}}, {{a, b}}) {}
 };
 
-#define V(NESTED, name, Name)\
-class FLI(Name, 0, Effect::Any, EnvAccess::None) {\
-  public:\
-    Name() : FixedLenInstruction(PirType::voyd()) {}\
-};
+#define V(NESTED, name, Name)                                                  \
+    class FLI(Name, 0, Effect::Any, EnvAccess::None) {                         \
+      public:                                                                  \
+        Name() : FixedLenInstruction(PirType::voyd()) {}                       \
+    };
 SIMPLE_INSTRUCTIONS(V, _)
 #undef V
 
@@ -1076,8 +1074,9 @@ class VLIE(FrameState, Effect::None, EnvAccess::Read) {
 
     void updateNext(FrameState* s) {
         assert(inlined);
-        assert(arg(stackSize).type() == NativeType::frameState);
-        arg(stackSize).val() = s;
+        auto& pos = arg(stackSize);
+        assert(pos.type() == NativeType::frameState);
+        pos.val() = s;
     }
 
     void next(FrameState* s) {
@@ -1301,6 +1300,7 @@ class BuiltinCallFactory {
 class VLIE(MkEnv, Effect::None, EnvAccess::Capture) {
   public:
     std::vector<SEXP> varName;
+    bool stub = false;
 
     typedef std::function<void(SEXP name, Value* val)> LocalVarIt;
     typedef std::function<void(SEXP name, InstrArg&)> MutableLocalVarIt;
@@ -1330,8 +1330,38 @@ class VLIE(MkEnv, Effect::None, EnvAccess::Capture) {
 
     void printArgs(std::ostream& out, bool tty) const override;
     void printEnv(std::ostream& out, bool tty) const override final{};
+    const char* name() const override { return stub ? "(MkEnv)" : "MKEnv"; }
 
     size_t nLocals() { return nargs() - 1; }
+};
+
+class FLI(IsObject, 1, Effect::None, EnvAccess::None) {
+  public:
+    explicit IsObject(Value* v)
+        : FixedLenInstruction(NativeType::test, {{PirType::val()}}, {{v}}) {}
+};
+
+class FLIE(IsEnvStub, 1, Effect::None, EnvAccess::Capture) {
+  public:
+    explicit IsEnvStub(MkEnv* e)
+        : FixedLenInstructionWithEnvSlot(NativeType::test, e) {}
+};
+
+class FLIE(PushContext, 3, Effect::Any, EnvAccess::Capture) {
+  public:
+    PushContext(Value* ast, Value* op, Value* sysparent)
+        : FixedLenInstructionWithEnvSlot(NativeType::context,
+                                         {{PirType::any(), PirType::closure()}},
+                                         {{ast, op}}, sysparent) {}
+};
+
+class FLI(PopContext, 2, Effect::Any, EnvAccess::None) {
+  public:
+    PopContext(Value* res, PushContext* push)
+        : FixedLenInstruction(PirType::voyd(),
+                              {{PirType::any(), NativeType::context}},
+                              {{res, push}}) {}
+    PushContext* push() { return PushContext::Cast(arg<1>().val()); }
 };
 
 class VLI(Phi, Effect::None, EnvAccess::None) {

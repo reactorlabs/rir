@@ -741,11 +741,11 @@ bool Rir2Pir::compileBC(const BC& bc, Opcode* pos, Opcode* nextPos,
         insert(new Visible());
         break;
 
-#define V(_, name, Name)\
-    case Opcode::name ## _:\
-        insert(new Name());\
+#define V(_, name, Name)                                                       \
+    case Opcode::name##_:                                                      \
+        insert(new Name());                                                    \
         break;
-SIMPLE_INSTRUCTIONS(V, _)
+        SIMPLE_INSTRUCTIONS(V, _)
 #undef V
 
     // TODO implement!
@@ -776,6 +776,7 @@ SIMPLE_INSTRUCTIONS(V, _)
     // Opcodes that only come from PIR
     case Opcode::deopt_:
     case Opcode::force_:
+    case Opcode::mk_stub_env_:
     case Opcode::mk_env_:
     case Opcode::get_env_:
     case Opcode::parent_env_:
@@ -787,8 +788,11 @@ SIMPLE_INSTRUCTIONS(V, _)
     case Opcode::stloc_:
     case Opcode::movloc_:
     case Opcode::isobj_:
+    case Opcode::isstubenv_:
     case Opcode::check_missing_:
     case Opcode::static_call_:
+    case Opcode::pop_context_:
+    case Opcode::push_context_:
         log.unsupportedBC("Unsupported BC (are you recompiling?)", bc);
         assert(false && "Recompiling PIR not supported for now.");
 
@@ -1046,8 +1050,9 @@ Value* Rir2Pir::tryTranslate(rir::Code* srcCode, Builder& insert) const {
             }
 
             if (!inPromise() && !insert.getCurrentBB()->isEmpty() &&
-                insert.getCurrentBB()->last()->hasEffect())
+                insert.getCurrentBB()->last()->hasEffectIgnoreVisibility()) {
                 addCheckpoint(srcCode, nextPos, cur.stack, insert);
+            }
         }
     }
     assert(cur.stack.empty());
@@ -1129,6 +1134,8 @@ void Rir2Pir::finalize(Value* ret, Builder& insert) {
         });
     }
 
+    // Return in promise can lead to non-local return, which currently needs env
+    // to find the context to return to.
     insert(new Return(ret));
 
     InsertCast c(insert.code->entry, insert.env);

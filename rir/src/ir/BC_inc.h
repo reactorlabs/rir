@@ -183,7 +183,7 @@ class BC {
             return immediate.callFixedArgs.nargs * 2 * sizeof(FunIdx) +
                    fixedSize(bc);
 
-        if (bc == Opcode::mk_env_)
+        if (bc == Opcode::mk_env_ || bc == Opcode::mk_stub_env_)
             return immediate.mkEnvFixedArgs.nargs * sizeof(FunIdx) +
                    fixedSize(bc);
 
@@ -200,7 +200,7 @@ class BC {
             return immediate.staticCallFixedArgs.nargs;
         if (bc == Opcode::call_builtin_)
             return immediate.callBuiltinFixedArgs.nargs;
-        if (bc == Opcode::mk_env_)
+        if (bc == Opcode::mk_env_ || bc == Opcode::mk_stub_env_)
             return immediate.mkEnvFixedArgs.nargs + 1;
         return popCount(bc);
     }
@@ -294,6 +294,7 @@ class BC {
             memcpy(&nargs, pc, sizeof(Immediate));
             return 1 + (3 + 2 * nargs) * sizeof(Immediate);
         }
+        case Opcode::mk_stub_env_:
         case Opcode::mk_env_: {
             pc++;
             Immediate nargs;
@@ -345,6 +346,7 @@ BC_NOARGS(V, _)
     inline static BC stvarSuper(SEXP sym);
     inline static BC missing(SEXP sym);
     inline static BC alloc(int type);
+    inline static BC pushContext(Jmp);
     inline static BC beginloop(Jmp);
     inline static BC brtrue(Jmp);
     inline static BC brfalse(Jmp);
@@ -370,7 +372,7 @@ BC_NOARGS(V, _)
                                 SEXP targetVersion, const Assumptions& given);
     inline static BC callBuiltin(size_t nargs, SEXP ast, SEXP target);
 
-    inline static BC mkEnv(const std::vector<SEXP>& names);
+    inline static BC mkEnv(const std::vector<SEXP>& names, bool stub);
 
     inline static BC decode(Opcode* pc, const Code* code) {
         BC cur;
@@ -406,7 +408,8 @@ BC_NOARGS(V, _)
 
   public:
     MkEnvExtraInformation& mkEnvExtra() const {
-        assert(bc == Opcode::mk_env_ && "Not a varlen call instruction");
+        assert((bc == Opcode::mk_env_ || bc == Opcode::mk_stub_env_) &&
+               "Not a varlen call instruction");
         assert(extraInformation.get() &&
                "missing extra information. created through decodeShallow?");
         return *static_cast<MkEnvExtraInformation*>(extraInformation.get());
@@ -454,6 +457,7 @@ BC_NOARGS(V, _)
             extraInformation.reset(new CallFeedbackExtraInformation);
             break;
         }
+        case Opcode::mk_stub_env_:
         case Opcode::mk_env_: {
             extraInformation.reset(new MkEnvExtraInformation);
             break;
@@ -488,6 +492,7 @@ BC_NOARGS(V, _)
 
             break;
         }
+        case Opcode::mk_stub_env_:
         case Opcode::mk_env_: {
             pc += sizeof(MkEnvFixedArgs);
             for (size_t i = 0; i < immediate.mkEnvFixedArgs.nargs; ++i)
@@ -604,6 +609,7 @@ BC_NOARGS(V, _)
             memcpy(&immediate.callFixedArgs,
                    reinterpret_cast<CallFixedArgs*>(pc), sizeof(CallFixedArgs));
             break;
+        case Opcode::mk_stub_env_:
         case Opcode::mk_env_:
             memcpy(&immediate.mkEnvFixedArgs, pc, sizeof(MkEnvFixedArgs));
             break;
@@ -627,6 +633,7 @@ BC_NOARGS(V, _)
         case Opcode::brobj_:
         case Opcode::brfalse_:
         case Opcode::beginloop_:
+        case Opcode::push_context_:
             memcpy(&immediate.offset, pc, sizeof(Jmp));
             break;
         case Opcode::pick_:

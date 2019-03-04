@@ -71,7 +71,7 @@ R_bcstack_t tryFastBuiltinCall(const CallContext& call,
                                InterpreterInstance* ctx) {
     SLOWASSERT(call.hasStackArgs() && !call.hasNames());
 
-    static constexpr size_t MAXARGS = 32;
+    static constexpr size_t MAXARGS = 16;
     std::array<R_bcstack_t, MAXARGS> args;
     auto nargs = call.suppliedArgs;
 
@@ -160,6 +160,7 @@ R_bcstack_t tryFastBuiltinCall(const CallContext& call,
             return nullStackObj;
         if (stackObjLength(args[0]) != 1)
             return nullStackObj;
+        // TODO: What about Rf_length check?
         auto length = asVecSize(args[1]);
         if (length < 0)
             return nullStackObj;
