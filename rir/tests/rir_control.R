@@ -1,5 +1,3 @@
-rir.compile <- function(x) x
-
 f <- rir.compile(function() {
     a <- 1
     b <- 123
@@ -192,4 +190,4 @@ f <- rir.compile(function(depth) {
         x
     }
 })
-# stopifnot(f(4) == 4096)
+stopifnot(f(4) == 64)
