@@ -40,7 +40,7 @@ function build_r {
 
     # unpack cache of recommended packages
     cd src/library/Recommended/
-    tar xf ../../../cache_recommended.tar
+    tar xf ../../../../custom-r/cache_recommended.tar
     cd ../../..
     tools/rsync-recommended || true
 
