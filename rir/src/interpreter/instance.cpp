@@ -69,4 +69,4 @@ InterpreterInstance* context_create() {
 
 extern InterpreterInstance* globalInterpreterInstance_;
 
-} // namespace pir
+} // namespace rir

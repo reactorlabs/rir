@@ -172,14 +172,19 @@ class Locals final {
   private:
     R_bcstack_t* base;
     unsigned localsCount;
+    bool existingLocals;
 
   public:
-    explicit Locals(R_bcstack_t* base, unsigned count)
-        : base(base), localsCount(count) {
-        R_BCNodeStackTop += localsCount;
+    explicit Locals(R_bcstack_t* base, unsigned count, bool existingLocals)
+        : base(base), localsCount(count), existingLocals(existingLocals) {
+        if (!existingLocals)
+            R_BCNodeStackTop += localsCount;
     }
 
-    ~Locals() { R_BCNodeStackTop -= localsCount; }
+    ~Locals() {
+        if (!existingLocals)
+            R_BCNodeStackTop -= localsCount;
+    }
 
     SEXP load(unsigned offset) {
         SLOWASSERT(offset < localsCount &&
@@ -241,6 +246,6 @@ RIR_INLINE void cp_pool_set(InterpreterInstance* c, unsigned index, SEXP e) {
     SET_VECTOR_ELT(c->cp.list, index, e);
 }
 
-} // namespace pir
+} // namespace rir
 
 #endif // interpreter_context_h

@@ -8,16 +8,11 @@
 namespace rir {
 namespace pir {
 
-class AvailableCheckpoints : public StaticAnalysis<AbstractUnique<Checkpoint>> {
-  public:
-    ClosureVersion* code;
-    AvailableCheckpoints(ClosureVersion* cls, LogStream& log)
-        : StaticAnalysis("AvailableCheckpoints", cls, cls, log), code(cls) {}
-
-    AbstractResult apply(AbstractUnique<Checkpoint>& state,
-                         Instruction* i) const override {
+struct AvailableCheckpointsApply {
+    static AbstractResult apply(AbstractUnique<Checkpoint>& state,
+                                Instruction* i) {
         if (state.get()) {
-            if (i->hasObservableEffect()) {
+            if (i->hasEffectIgnoreVisibility()) {
                 state.clear();
                 return AbstractResult::Updated;
             }
@@ -28,11 +23,55 @@ class AvailableCheckpoints : public StaticAnalysis<AbstractUnique<Checkpoint>> {
             }
         }
         return AbstractResult::None;
-    };
+    }
+};
+
+class FwdAvailableCheckpoints
+    : public StaticAnalysis<AbstractUnique<Checkpoint>> {
+  public:
+    FwdAvailableCheckpoints(ClosureVersion* cls, LogStream& log)
+        : StaticAnalysis("FwdAvailableCheckpoints", cls, cls, log) {}
+
+    AbstractResult apply(AbstractUnique<Checkpoint>& state,
+                         Instruction* i) const override {
+        return AvailableCheckpointsApply::apply(state, i);
+    }
 
     Checkpoint* at(Instruction* i) {
         return StaticAnalysis::at<PositioningStyle::BeforeInstruction>(i).get();
     }
+};
+
+class RwdAvailableCheckpoints
+    : public BackwardStaticAnalysis<AbstractUnique<Checkpoint>> {
+  public:
+    RwdAvailableCheckpoints(ClosureVersion* cls, const CFG& cfg, LogStream& log)
+        : BackwardStaticAnalysis("RwdAvailableCheckpoints", cls, cls, cfg,
+                                 log) {}
+
+    AbstractResult apply(AbstractUnique<Checkpoint>& state,
+                         Instruction* i) const override {
+        return AvailableCheckpointsApply::apply(state, i);
+    }
+
+    Checkpoint* at(Instruction* i) {
+        return BackwardStaticAnalysis::at<PositioningStyle::BeforeInstruction>(
+                   i)
+            .get();
+    }
+};
+
+class AvailableCheckpoints {
+    CFG cfg;
+    FwdAvailableCheckpoints fwd;
+    RwdAvailableCheckpoints rwd;
+
+  public:
+    AvailableCheckpoints(ClosureVersion* cls, LogStream& log)
+        : cfg(cls), fwd(cls, log), rwd(cls, cfg, log) {}
+
+    Checkpoint* at(Instruction* i) { return fwd.at(i); }
+    Checkpoint* next(Instruction* i) { return rwd.at(i); }
 };
 
 } // namespace pir

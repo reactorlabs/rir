@@ -18,6 +18,11 @@ class LastEnv : public StaticAnalysis<AbstractUnique<Value>> {
             state.set(i->env());
             return AbstractResult::Updated;
         }
+        // pop_context_ does not restore env
+        if (state.get() && PopContext::Cast(i)) {
+            state.clear();
+            return AbstractResult::Updated;
+        }
         return AbstractResult::None;
     };
 

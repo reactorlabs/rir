@@ -96,6 +96,6 @@ struct CallContext {
     }
 };
 
-} // namespace pir
+} // namespace rir
 
 #endif // RIR_INTERPRETER_C_H

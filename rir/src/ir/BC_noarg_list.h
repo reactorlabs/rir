@@ -7,6 +7,7 @@
 
 #define BC_NOARGS(V, NESTED)                                                   \
     SIMPLE_INSTRUCTIONS(V_SIMPLE_INSTRUCTION_IN_BC_NOARGS, V)                  \
+    V(NESTED, popContext, pop_context)                                         \
     V(NESTED, nop, nop)                                                        \
     V(NESTED, parentEnv, parent_env)                                           \
     V(NESTED, getEnv, get_env)                                                 \
@@ -65,9 +66,9 @@
     V(NESTED, extract2_2, extract2_2)                                          \
     V(NESTED, swap, swap)                                                      \
     V(NESTED, isobj, isobj)                                                    \
+    V(NESTED, isstubenv, isstubenv)                                            \
     V(NESTED, return_, return )
 
 #undef V_SIMPLE_INSTRUCTION
 
 #endif
-

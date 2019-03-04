@@ -2,8 +2,6 @@
 #error "DEF_INSTR must be defined before including insns.h"
 #endif
 
-#include "simple_instruction_list.h"
-
 // DEF_INSTR(name, imm, pop, push, pure)
 
 /**
@@ -16,11 +14,19 @@ DEF_INSTR(invalid_, 0, 0, 0, 0)
  */
 DEF_INSTR(nop_, 0, 0, 0, 1)
 
+DEF_INSTR(push_context_, 1, 2, 0, 0)
+DEF_INSTR(pop_context_, 0, 1, 0, 0)
+
 /**
  * make_env_:: create a new environment with the parent and all locals taken
  * from stack and the argument names as immediates.
  */
 DEF_INSTR(mk_env_, 1, -1, 1, 1)
+
+/**
+ * make_stub_env_:: create a fake environment for speculative purposes
+ */
+DEF_INSTR(mk_stub_env_, 1, -1, 1, 1)
 
 /**
  * parent_env_:: push lexically outer env to tos
@@ -315,6 +321,11 @@ DEF_INSTR(is_, 1, 1, 1, 1)
 DEF_INSTR(isobj_, 0, 1, 1, 1)
 
 /**
+ * isstubenv_:: check if TOS is an env stub, push T/F
+ */
+DEF_INSTR(isstubenv_, 0, 1, 1, 1)
+
+/**
  * missing_ :: check if symb is missing
  */
 DEF_INSTR(missing_, 1, 0, 1, 1)
@@ -452,7 +463,7 @@ DEF_INSTR(make_unique_, 0, 1, 1, 1)
 /**
  * beginloop_:: begins loop context, break and continue target immediate (this is the target for break and next long jumps)
  */
-DEF_INSTR(beginloop_, 1, 0, 0, 1)
+DEF_INSTR(beginloop_, 1, 0, 0, 0)
 
 /**
  * endloop_:: end marker for a loop with context
@@ -470,11 +481,6 @@ DEF_INSTR(return_, 0, 1, 0, 0)
  */
 DEF_INSTR(ret_, 0, 1, 0, 1)
 
-#define V(NESTED, name, Name)\
-DEF_INSTR(name ## _, 0, 0, 0, 1)
-SIMPLE_INSTRUCTIONS(V, _)
-#undef V
-
 /**
  * deopt_ :: jumps to the immediate bc location
  */
@@ -487,5 +493,8 @@ DEF_INSTR(deopt_, 1, -1, 0, 0)
  */
 DEF_INSTR(record_call_, 4, 1, 1, 0)
 DEF_INSTR(record_binop_, 2, 2, 2, 0)
+
+DEF_INSTR(int3_, 0, 0, 0, 0)
+DEF_INSTR(printInvocation_, 0, 0, 0, 0)
 
 #undef DEF_INSTR

@@ -512,9 +512,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_) {
 
         // 3) Special case [ and [[
 
-        // TODO: There is some issue with supper assing and probably [[, needs
-        // to investigate more...
-        if (superAssign || lhsParts.size() != 2) {
+        if (lhsParts.size() != 2) {
             return false;
         }
 
@@ -536,12 +534,13 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_) {
 
         // First rhs (assign is right-associative)
         compileExpr(ctx, rhs);
-        // Keep a copy of rhs since its the result of this
+        // Keep a copy of rhs since it's the result of this
         // expression
         cs << BC::dup() << BC::ensureNamed();
 
         // Now load index and target
-        cs << BC::ldvar(target);
+        // cs << BC::ldvar(target);
+        cs << (superAssign ? BC::ldvarSuper(target) : BC::ldvar(target));
         compileExpr(ctx, *idx);
         if (is2d) {
             compileExpr(ctx, *idx2);
@@ -565,7 +564,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_) {
         cs.addSrc(ast);
 
         // store the result as "target"
-        cs << BC::stvar(target);
+        cs << (superAssign ? BC::stvarSuper(target) : BC::stvar(target));
 
         cs << BC::invisible();
         return true;
@@ -987,7 +986,7 @@ void compileGetvar(CodeStream& cs, SEXP name) {
 // Constant
 void compileConst(CodeStream& cs, SEXP constant) {
     SET_NAMED(constant, 2);
-    cs << BC::push(constant);
+    cs << BC::push(constant) << BC::visible();
 }
 
 void compileExpr(CompilerContext& ctx, SEXP exp) {

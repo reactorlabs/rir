@@ -47,7 +47,7 @@ SEXP tryFastSpecialCall(const CallContext& call, InterpreterInstance* ctx) {
 SEXP tryFastBuiltinCall(const CallContext& call, InterpreterInstance* ctx) {
     SLOWASSERT(call.hasStackArgs() && !call.hasNames());
 
-    static constexpr size_t MAXARGS = 32;
+    static constexpr size_t MAXARGS = 16;
     std::array<SEXP, MAXARGS> args;
     auto nargs = call.suppliedArgs;
 
@@ -123,6 +123,8 @@ SEXP tryFastBuiltinCall(const CallContext& call, InterpreterInstance* ctx) {
         if (TYPEOF(args[0]) != STRSXP)
             return nullptr;
         if (XLENGTH(args[0]) != 1)
+            return nullptr;
+        if (Rf_length(args[1]) != 1)
             return nullptr;
         auto length = asVecSize(args[1]);
         if (length < 0)
@@ -386,4 +388,4 @@ SEXP tryFastBuiltinCall(const CallContext& call, InterpreterInstance* ctx) {
 
     return nullptr;
 }
-}
+} // namespace rir

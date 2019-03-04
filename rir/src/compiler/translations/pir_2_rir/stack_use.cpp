@@ -138,25 +138,20 @@ AbstractResult StackUseAnalysis::apply(StackUseAnalysisState& state,
         // We only have each value once, so keep track in case a value is
         // used by the instruction multiple times (eg. deopts)
         std::unordered_set<Value*> erasedArgs;
-        //std::cout << "Instruction: ";
-        //i->print(std::cout);
-        //std::cout << "\nValues: ";
         i->eachArg([&](Value* v) {
             if (!v->isInstruction())
                 return;
             // For all else, check if this is the last use of the value
-            if (!liveness.live(i, v) && erasedArgs.count(v) == 0) {
-                //v->printRef(std::cout);
-                //std::cout << " ";
+            if (v->producesRirResult() && !liveness.live(i, v) &&
+                erasedArgs.count(v) == 0) {
                 state.stack.eraseValue(v);
                 erasedArgs.insert(v);
             }
         });
-        //std::cout << "\n";
     }
 
     // Add the value produced by this instruction if it's not dead
-    if (i->type != PirType::voyd()) {
+    if (i->producesRirResult()) {
         if (isDead(i))
             state.isDead = true;
         else

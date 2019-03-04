@@ -16,6 +16,7 @@ class Query {
   public:
     static bool pure(Code* c);
     static bool noEnv(Code* c);
+    static bool noEnvSpec(Code* c);
     static bool noDeopt(Code* c);
     static std::unordered_set<Value*> returned(Code* c);
 };

@@ -94,10 +94,22 @@ class TheCleanup {
                     auto arg = asInt->arg<0>().val();
                     if (arg->type.isA(PirType(RType::integer).scalar().notObject())) {
                         asInt->replaceUsesWith(arg);
+                } else if (auto env = MkEnv::Cast(i)) {
+                    static std::unordered_set<Tag> tags{Tag::FrameState,
+                                                        Tag::IsEnvStub};
+                    if (env->stub && env->usesAreOnly(function->entry, tags)) {
+                        env->replaceUsesWith(Env::elided());
+                        removed = true;
+                        next = bb->remove(ip);
+                    }
+                } else if (auto test = IsEnvStub::Cast(i)) {
+                    if (test->env() == Env::elided()) {
+                        i->replaceUsesWith(False::instance());
                         removed = true;
                         next = bb->remove(ip);
                     }
                 }
+
                 if (!removed) {
                     if (!Phi::Cast(i)) {
                         i->eachArg([&](Value* arg) {
@@ -160,11 +172,23 @@ class TheCleanup {
                         phi->updateInputAt(i, n);
             }
         };
+
         CFG cfg(function);
         std::unordered_map<BB*, BB*> toDel;
         Visitor::run(function->entry, [&](BB* bb) {
             // If bb is a jump to non-merge block, we merge it with the next
             if (bb->isJmp() && cfg.hasSinglePred(bb->next0)) {
+                bool block = false;
+                // Prevent this removal from merging a phi input block with the
+                // block the phi resides in
+                for (auto phi : usedBB[bb]) {
+                    phi->eachArg([&](BB* in, Value*) {
+                        if (in == bb && bb->next0 == phi->bb())
+                            block = true;
+                    });
+                }
+                if (block)
+                    return;
                 BB* d = bb->next0;
                 while (!d->isEmpty())
                     d->moveToEnd(d->begin(), bb);
