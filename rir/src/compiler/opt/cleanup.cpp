@@ -90,6 +90,13 @@ class TheCleanup {
                         removed = true;
                         next = bb->remove(ip);
                     }
+                } else if (auto asInt = AsInt::Cast(i)) {
+                    auto arg = asInt->arg<0>().val();
+                    if (arg->type.isA(PirType(RType::integer).scalar().notObject())) {
+                        asInt->replaceUsesWith(arg);
+                        removed = true;
+                        next = bb->remove(ip);
+                    }
                 }
                 if (!removed) {
                     if (!Phi::Cast(i)) {

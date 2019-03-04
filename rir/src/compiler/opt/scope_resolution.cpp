@@ -114,6 +114,7 @@ class TheScopeResolution {
                     // In case the scope analysis is sure that this is
                     // actually the same as some other PIR value. So let's just
                     // replace it.
+                    // TODO: Fix in general (see commented out test)
                     if (res.isSingleValue()) {
                         auto value = res.singleValue();
                         if (value.val->type.isA(i->type) &&
@@ -142,6 +143,7 @@ class TheScopeResolution {
                     // the same phi twice (e.g. if a force returns the result
                     // of a load, we will resolve the load and the force) which
                     // ends up being rather painful.
+                    // TODO: Fix for simple ranges
                     bool isActualLoad =
                         LdVar::Cast(i) || LdFun::Cast(i) || LdVarSuper::Cast(i);
                     if (!res.isUnknown() && isActualLoad) {
@@ -152,7 +154,8 @@ class TheScopeResolution {
                                 onlyLocalVals = false;
                         });
 
-                        if (onlyLocalVals && !res.isUnknown()) {
+                        // TODO: Fix for simple ranges
+                        /*if (onlyLocalVals && !res.isUnknown()) {
                             // Find optimal phi placement:
                             // Shift phi up until we see at least two inputs
                             // coming from different paths.
@@ -197,7 +200,7 @@ class TheScopeResolution {
                             }
 
                             return;
-                        }
+                        }*/
                     }
 
                     // LdVarSuper where the parent environment is known and

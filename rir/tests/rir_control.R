@@ -1,3 +1,5 @@
+rir.compile <- function(x) x
+
 f <- rir.compile(function() {
     a <- 1
     b <- 123
@@ -178,3 +180,16 @@ f <- rir.compile(function(x) {
 })
 stopifnot(f(-1.1) == -5)
 stopifnot(f(-1.0) == -6)
+
+f <- rir.compile(function(depth) {
+    if (depth == 1) {
+      1
+    } else {
+        x <- 0
+        for (i in 1:4) {
+            x <- x + f(depth - 1)
+        }
+        x
+    }
+})
+# stopifnot(f(4) == 4096)
