@@ -86,11 +86,8 @@ class CompilerContext {
     FunctionWriter& fun;
     Preserve& preserve;
 
-    bool profile;
-
     CompilerContext(FunctionWriter& fun, Preserve& preserve)
-        : fun(fun), preserve(preserve),
-          profile(getenv("SKIP_PROFILE") == NULL) {}
+        : fun(fun), preserve(preserve) {}
 
     ~CompilerContext() { assert(code.empty()); }
 
@@ -204,7 +201,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_) {
         compileExpr(ctx, args[0]);
         compileExpr(ctx, args[1]);
 
-        if (ctx.profile) {
+        if (Compiler::profile) {
             cs << BC::recordBinop();
         }
         if (fun == symbol::Add)
@@ -415,7 +412,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_) {
         }
 
         // do the thing
-        if (ctx.profile) {
+        if (Compiler::profile) {
             cs << BC::recordBinop();
         }
         if (is2d) {
@@ -545,7 +542,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_) {
         compileExpr(ctx, *idx);
         if (is2d) {
             compileExpr(ctx, *(idx + 1));
-            if (ctx.profile) {
+            if (Compiler::profile) {
                 cs << BC::recordBinop();
             }
             if (fun == symbol::DoubleBracket)
@@ -553,7 +550,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_) {
             else
                 cs << BC::extract1_2();
         } else {
-            if (ctx.profile) {
+            if (Compiler::profile) {
                 cs << BC::recordBinop();
             }
             if (fun == symbol::DoubleBracket)
@@ -856,7 +853,7 @@ void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args) {
     }
     assert(callArgs.size() < BC::MAX_NUM_ARGS);
 
-    if (ctx.profile) {
+    if (Compiler::profile) {
         cs << BC::recordCall();
     }
     if (hasNames) {
@@ -962,5 +959,9 @@ SEXP Compiler::finalize() {
 
     return function.function()->container();
 }
+
+bool Compiler::profile =
+    !(getenv("RIR_PROFILING") &&
+      std::string(getenv("RIR_PROFILING")).compare("off") == 0);
 
 }  // namespace rir

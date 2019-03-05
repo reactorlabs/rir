@@ -1421,7 +1421,7 @@ void deoptFramesWithContext(InterpreterInstance* ctx,
         if (!innermostFrame)
             res = ostackPop(ctx);
         SEXP e = ostackPopSexp(ctx);
-        SLOWASSERT(e == deoptEnv);
+        assert(e == deoptEnv);
         if (!innermostFrame)
             ostackPush(ctx, res);
         code->registerInvocation();
