@@ -84,6 +84,12 @@ function() {      |
 }                 |
 ```
 
+## Controlling execution
+
+    RIR_PROFILING=
+        on                default, profiles every call and a bunch of operations so that an optimizer could eventually leverage on the run-time information
+        off               disable profiling
+
 ## Comparison to GNU-R
 
 The default R interpreter (GNU-R) is also a JIT compiler with a bytecode. The main difference between this bytecode and RIR is that GNU-R has a few "fat" instructions, which are more complicated, while RIR has many more instructions, but they're simpler. For example, RIR has explicit instructions for creating environments, but GNU-R doesn't.

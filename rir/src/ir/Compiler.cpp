@@ -86,8 +86,6 @@ class CompilerContext {
     FunctionWriter& fun;
     Preserve& preserve;
 
-    bool profile;
-
     CompilerContext(FunctionWriter& fun, Preserve& preserve)
         : fun(fun), preserve(preserve),
           profile(
@@ -206,7 +204,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_) {
         compileExpr(ctx, args[0]);
         compileExpr(ctx, args[1]);
 
-        if (ctx.profile) {
+        if (Compiler::profile) {
             cs << BC::recordBinop();
         }
         if (fun == symbol::Add)
@@ -382,9 +380,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_) {
 
         // 3) Special case [ and [[
 
-        // TODO: There is some issue with supper assing and probably [[, needs
-        // to investigate more...
-        if (superAssign || lhsParts.size() != 2) {
+        if (lhsParts.size() != 2) {
             return false;
         }
 
@@ -406,19 +402,20 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_) {
 
         // First rhs (assign is right-associative)
         compileExpr(ctx, rhs);
-        // Keep a copy of rhs since its the result of this
+        // Keep a copy of rhs since it's the result of this
         // expression
         cs << BC::dup() << BC::ensureNamed();
 
         // Now load index and target
-        cs << BC::ldvar(target);
+        // cs << BC::ldvar(target);
+        cs << (superAssign ? BC::ldvarSuper(target) : BC::ldvar(target));
         compileExpr(ctx, *idx);
         if (is2d) {
             compileExpr(ctx, *idx2);
         }
 
         // do the thing
-        if (ctx.profile) {
+        if (Compiler::profile) {
             cs << BC::recordBinop();
         }
         if (is2d) {
@@ -437,7 +434,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_) {
         cs.addSrc(ast);
 
         // store the result as "target"
-        cs << BC::stvar(target);
+        cs << (superAssign ? BC::stvarSuper(target) : BC::stvar(target));
 
         cs << BC::invisible();
         return true;
@@ -548,7 +545,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_) {
         compileExpr(ctx, *idx);
         if (is2d) {
             compileExpr(ctx, *(idx + 1));
-            if (ctx.profile) {
+            if (Compiler::profile) {
                 cs << BC::recordBinop();
             }
             if (fun == symbol::DoubleBracket)
@@ -556,7 +553,7 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_) {
             else
                 cs << BC::extract1_2();
         } else {
-            if (ctx.profile) {
+            if (Compiler::profile) {
                 cs << BC::recordBinop();
             }
             if (fun == symbol::DoubleBracket)
@@ -859,7 +856,7 @@ void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args) {
     }
     assert(callArgs.size() < BC::MAX_NUM_ARGS);
 
-    if (ctx.profile) {
+    if (Compiler::profile) {
         cs << BC::recordCall();
     }
     if (hasNames) {
@@ -965,5 +962,9 @@ SEXP Compiler::finalize() {
 
     return function.function()->container();
 }
+
+bool Compiler::profile =
+    !(getenv("RIR_PROFILING") &&
+      std::string(getenv("RIR_PROFILING")).compare("off") == 0);
 
 }  // namespace rir
