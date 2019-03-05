@@ -90,7 +90,9 @@ class CompilerContext {
 
     CompilerContext(FunctionWriter& fun, Preserve& preserve)
         : fun(fun), preserve(preserve),
-          profile(getenv("SKIP_PROFILE") == NULL) {}
+          profile(
+              !(getenv("RIR_PROFILING") &&
+                std::string(getenv("RIR_PROFILING")).compare("off") == 0)) {}
 
     ~CompilerContext() { assert(code.empty()); }
 
