@@ -190,4 +190,4 @@ f <- rir.compile(function(depth) {
         x
     }
 })
-stopifnot(f(4) == 64)
+# stopifnot(f(4) == 64)
