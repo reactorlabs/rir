@@ -289,9 +289,11 @@ BC BC::callBuiltin(size_t nargs, SEXP ast, SEXP builtin) {
     return BC(Opcode::call_builtin_, im);
 }
 
-BC BC::mkEnv(const std::vector<SEXP>& names, bool stub) {
+BC BC::mkEnv(const std::vector<SEXP>& names, SignedImmediate contextPos,
+             bool stub) {
     ImmediateArguments im;
     im.mkEnvFixedArgs.nargs = names.size();
+    im.mkEnvFixedArgs.context = contextPos;
     std::vector<PoolIdx> nameIdxs;
     for (auto n : names)
         nameIdxs.push_back(Pool::insert(n));

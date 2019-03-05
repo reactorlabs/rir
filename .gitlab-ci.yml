@@ -73,7 +73,7 @@ test_flaky:
   retry: 2
   script:
     - cd build_release
-    - PIR_DEOPT_CHAOS=1 PIR_INLINER_MAX_INLINEE_SIZE=400 bin/gnur-make-tests check
+    - PIR_DEOPT_CHAOS=1 PIR_INLINER_MAX_INLINEE_SIZE=800 bin/gnur-make-tests check
     - PIR_WARMUP=2 PIR_DEOPT_CHAOS=1 ./bin/gnur-make-tests check
 
 test_benchmarks:

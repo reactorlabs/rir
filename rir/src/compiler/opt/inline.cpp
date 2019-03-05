@@ -198,6 +198,16 @@ class TheInliner {
                             i->env() == inlineeCls->closureEnv()) {
                             i->env(staticEnv);
                         }
+
+                        // If we inline without context, then we need to update
+                        // the mkEnv instructions in the inlinee, such that
+                        // they do not update the (non-existing) context.
+                        if (allowInline != SafeToInline::NeedsContext) {
+                            if (auto mk = MkEnv::Cast(i)) {
+                                mk->context--;
+                            }
+                        }
+
                         if (ld) {
                             Value* a = arguments[ld->id];
                             if (auto mk = MkArg::Cast(a)) {

@@ -1052,7 +1052,7 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                     stub = true;
                 else
                     stub = false;
-                cs << BC::mkEnv(mkenv->varName, stub);
+                cs << BC::mkEnv(mkenv->varName, mkenv->context, stub);
                 break;
             }
 

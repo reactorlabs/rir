@@ -1301,6 +1301,7 @@ class VLIE(MkEnv, Effect::None, EnvAccess::Capture) {
   public:
     std::vector<SEXP> varName;
     bool stub = false;
+    int context = 1;
 
     typedef std::function<void(SEXP name, Value* val)> LocalVarIt;
     typedef std::function<void(SEXP name, InstrArg&)> MutableLocalVarIt;

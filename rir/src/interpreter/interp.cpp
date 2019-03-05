@@ -1258,29 +1258,16 @@ static void cachedSetVar(SEXP val, SEXP env, Immediate idx,
 // terrible, can't find out where in the evalRirCode function
 #pragma GCC diagnostic ignored "-Wstrict-overflow"
 
-RCNTXT* nextFunctionContext(RCNTXT* cptr = R_GlobalContext) {
+RCNTXT* getFunctionContext(size_t pos = 0, RCNTXT* cptr = R_GlobalContext) {
     while (cptr->nextcontext != NULL) {
         if (cptr->callflag & CTXT_FUNCTION) {
-            return cptr;
+            if (pos == 0)
+                return cptr;
+            pos--;
         }
         cptr = cptr->nextcontext;
     }
     assert(false);
-}
-
-RCNTXT* firstFunctionContextWithDelayedEnv() {
-    auto cptr = R_GlobalContext;
-    RCNTXT* candidate = nullptr;
-    while (cptr->nextcontext != NULL) {
-        if (cptr->callflag & CTXT_FUNCTION) {
-            if (cptr->cloenv == symbol::delayedEnv)
-                candidate = cptr;
-            else
-                break;
-        }
-        cptr = cptr->nextcontext;
-    }
-    return candidate;
 }
 
 RCNTXT* findFunctionContextFor(SEXP e) {
@@ -1326,6 +1313,10 @@ void deoptFramesWithContext(InterpreterInstance* ctx,
                "Frame with context after frame without context");
         cntxt = originalCntxt;
     } else {
+        // NOTE: this assert triggers if we can't find the context of the
+        // current function. Usually the reason is that a wrong environment is
+        // stored in the context.
+        assert(!outermostFrame && "Cannot find outermost function context");
         // If the inlinee had no context, we need to synthesize one
         // TODO: need to add ast and closure to the deopt metadata to create a
         // complete context
@@ -1392,16 +1383,12 @@ void deoptFramesWithContext(InterpreterInstance* ctx,
     SEXP res = trampoline();
     assert((size_t)ostack_length(ctx) == frameBaseSize);
 
-    // Dont end the outermost context (unless it was a fake one) to be able to
-    // jump out below
-    if (!outermostFrame || !originalCntxt) {
+    if (!outermostFrame) {
         endClosureContext(cntxt, res);
-    }
-
-    if (outermostFrame) {
+    } else {
+        assert(findFunctionContextFor(deoptEnv) == cntxt);
         // long-jump out of all the inlined contexts
-        Rf_findcontext(CTXT_BROWSER | CTXT_FUNCTION,
-                       nextFunctionContext()->cloenv, res);
+        Rf_findcontext(CTXT_BROWSER | CTXT_FUNCTION, cntxt->cloenv, res);
         assert(false);
     }
 
@@ -1499,6 +1486,8 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         INSTRUCTION(mk_env_) {
             size_t n = readImmediate();
             advanceImmediate();
+            int contextPos = readSignedImmediate();
+            advanceImmediate();
             SEXP parent = ostack_pop(ctx);
             assert(TYPEOF(parent) == ENVSXP &&
                    "Non-environment used as environment parent.");
@@ -1514,10 +1503,12 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             }
             res = Rf_NewEnvironment(R_NilValue, arglist, parent);
 
-            if (auto cptr = firstFunctionContextWithDelayedEnv()) {
-                cptr->cloenv = res;
-                if (cptr->promargs == symbol::delayedArglist)
-                    cptr->promargs = arglist;
+            if (contextPos > 0) {
+                if (auto cptr = getFunctionContext(contextPos - 1)) {
+                    cptr->cloenv = res;
+                    if (cptr->promargs == symbol::delayedArglist)
+                        cptr->promargs = arglist;
+                }
             }
 
             ostack_push(ctx, res);
@@ -1530,6 +1521,8 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             // option becase R_Preserve is slow. We must find a simple story so
             // that the gc trace rir wrappers.
             size_t n = readImmediate();
+            advanceImmediate();
+            int contextPos = readSignedImmediate();
             advanceImmediate();
             // Do we need to preserve parent and the arg vals?
             SEXP parent = ostack_pop(ctx);
@@ -1545,8 +1538,10 @@ SEXP evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
             envStubs.push_back(envStub);
             res = (SEXP)envStub;
 
-            if (auto cptr = firstFunctionContextWithDelayedEnv())
-                cptr->cloenv = res;
+            if (contextPos > 0) {
+                if (auto cptr = getFunctionContext(contextPos - 1))
+                    cptr->cloenv = res;
+            }
 
             ostack_push(ctx, res);
             NEXT();
