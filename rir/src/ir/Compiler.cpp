@@ -87,10 +87,7 @@ class CompilerContext {
     Preserve& preserve;
 
     CompilerContext(FunctionWriter& fun, Preserve& preserve)
-        : fun(fun), preserve(preserve),
-          profile(
-              !(getenv("PROFILING_ENABLE") &&
-                std::string(getenv("PROFILING_ENABLE")).compare("off") == 0)) {}
+        : fun(fun), preserve(preserve)) {}
 
     ~CompilerContext() { assert(code.empty()); }
 
