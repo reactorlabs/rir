@@ -87,7 +87,7 @@ class CompilerContext {
     Preserve& preserve;
 
     CompilerContext(FunctionWriter& fun, Preserve& preserve)
-        : fun(fun), preserve(preserve)) {}
+        : fun(fun), preserve(preserve) {}
 
     ~CompilerContext() { assert(code.empty()); }
 
