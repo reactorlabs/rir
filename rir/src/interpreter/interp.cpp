@@ -167,8 +167,8 @@ SEXP createEnvironment(std::vector<SEXP>* args, const SEXP parent,
 
     SEXP environment = Rf_NewEnvironment(R_NilValue, arglist, parent);
     for (auto i = 0; i < R_BCNodeStackTop - localsBase; i++) {
-        if (ostack_at(ctx, i) == stub)
-            ostack_set(ctx, i, environment);
+        if (ostackSexpAt(ctx, i) == stub)
+            ostackSetSexp(ctx, i, environment);
     }
     return environment;
 }
@@ -299,8 +299,8 @@ static RIR_INLINE SEXP createLegacyArgsList(const CallContext& call,
     }
 }
 
-SEXP evalRirCode(Code*, InterpreterInstance*, SEXP, const CallContext*, Opcode*,
-                 R_bcstack_t* = nullptr);
+R_bcstack_t evalRirCode(Code*, InterpreterInstance*, SEXP, const CallContext*,
+                        Opcode*, R_bcstack_t* = nullptr);
 static SEXP rirCallTrampoline_(RCNTXT& cntxt, const CallContext& call,
                                Code* code, SEXP env, InterpreterInstance* ctx) {
     int trampIn = ostackLength(ctx);
@@ -400,12 +400,14 @@ static SEXP inlineContextTrampoline(Code* c, const CallContext* callCtx,
             if (R_ReturnedValue == R_RestartToken) {
                 cntxt.callflag = CTXT_RETURN; /* turn restart off */
                 R_ReturnedValue = R_NilValue; /* remove restart token */
-                return evalRirCode(c, ctx, cntxt.cloenv, callCtx, pc);
+                return stackObjToSexp(
+                    evalRirCode(c, ctx, cntxt.cloenv, callCtx, pc));
             } else {
                 return R_ReturnedValue;
             }
         }
-        return evalRirCode(c, ctx, sysparent, callCtx, pc, localsBase);
+        return stackObjToSexp(
+            evalRirCode(c, ctx, sysparent, callCtx, pc, localsBase));
     };
 
     // execute the inlined function
@@ -1413,7 +1415,7 @@ void deoptFramesWithContext(InterpreterInstance* ctx,
         // This wrapper consumes the environment from the deopt metadata and the
         // result of the previous frame.
         size_t extraDeoptArgNum = innermostFrame ? 1 : 2;
-        assert((size_t)ostack_length(ctx) ==
+        assert((size_t)ostackLength(ctx) ==
                frameBaseSize + f.stackSize + extraDeoptArgNum);
         R_bcstack_t res = nullStackObj;
         if (!innermostFrame)
@@ -1432,13 +1434,14 @@ void deoptFramesWithContext(InterpreterInstance* ctx,
     // Dont end the outermost context (unless it was a fake one) to be able to
     // jump out below
     if (!outermostFrame || !originalCntxt) {
-        endClosureContext(cntxt, res);
+        res = sexpToStackObj(stackObjToSexp(res));
+        endClosureContext(cntxt, res.u.sxpval);
     }
 
     if (outermostFrame) {
         // long-jump out of all the inlined contexts
         Rf_findcontext(CTXT_BROWSER | CTXT_FUNCTION,
-                       nextFunctionContext()->cloenv, res);
+                       nextFunctionContext()->cloenv, stackObjToSexp(res));
         assert(false);
     }
 
@@ -2577,9 +2580,9 @@ R_bcstack_t evalRirCode(Code* c, InterpreterInstance* ctx, SEXP env,
         }
 
         INSTRUCTION(isstubenv_) {
-            SEXP val = ostack_pop(ctx);
-            ostack_push(ctx, LazyEnvironment::cast(val) ? R_TrueValue
-                                                        : R_FalseValue);
+            R_bcstack_t val = ostackPop(ctx);
+            ostackPushLogical(ctx, val.tag == STACK_OBJ_SEXP &&
+                                       LazyEnvironment::cast(val.u.sxpval));
             NEXT();
         }
 
