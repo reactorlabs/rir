@@ -86,6 +86,7 @@ class CompilerContext {
     FunctionWriter& fun;
     Preserve& preserve;
 
+
     CompilerContext(FunctionWriter& fun, Preserve& preserve)
         : fun(fun), preserve(preserve) {}
 
@@ -338,7 +339,9 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_) {
         compileExpr(ctx, args[0]);
         compileExpr(ctx, args[1]);
 
-        cs << BC::recordBinop();
+        if (Compiler::profile) {
+            cs << BC::recordBinop();
+        }
         if (fun == symbol::Add)
             cs << BC::add();
         else if (fun == symbol::Sub)
@@ -547,7 +550,9 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_) {
         }
 
         // do the thing
-        cs << BC::recordBinop();
+        if (Compiler::profile) {
+            cs << BC::recordBinop();
+        }
         if (is2d) {
             if (fun2 == symbol::DoubleBracket) {
                 cs << BC::subassign2_2();
@@ -675,13 +680,17 @@ bool compileSpecialCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args_) {
         compileExpr(ctx, *idx);
         if (is2d) {
             compileExpr(ctx, *(idx + 1));
-            cs << BC::recordBinop();
+            if (Compiler::profile) {
+                cs << BC::recordBinop();
+            }
             if (fun == symbol::DoubleBracket)
                 cs << BC::extract2_2();
             else
                 cs << BC::extract1_2();
         } else {
-            cs << BC::recordBinop();
+            if (Compiler::profile) {
+                cs << BC::recordBinop();
+            }
             if (fun == symbol::DoubleBracket)
                 cs << BC::extract2_1();
             else
@@ -963,7 +972,9 @@ void compileCall(CompilerContext& ctx, SEXP ast, SEXP fun, SEXP args) {
     }
     assert(callArgs.size() < BC::MAX_NUM_ARGS);
 
-    cs << BC::recordCall();
+    if (Compiler::profile) {
+        cs << BC::recordCall();
+    }
     if (hasNames) {
         cs << BC::callImplicit(callArgs, names, ast, {});
     } else {
@@ -1067,5 +1078,9 @@ SEXP Compiler::finalize() {
 
     return function.function()->container();
 }
+
+bool Compiler::profile = !(getenv("RIR_PROFILING") &&
+                    std::string(getenv("RIR_PROFILING")).compare("off") == 0);
+
 
 }  // namespace rir

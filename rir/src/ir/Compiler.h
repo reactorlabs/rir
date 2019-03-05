@@ -40,6 +40,7 @@ class Compiler {
     }
 
   public:
+    static bool profile;
     SEXP finalize();
 
     static SEXP compileExpression(SEXP ast) {
