@@ -63,7 +63,9 @@ void LogStream::compilationEarlyPir(ClosureVersion* closure) {
 }
 
 void LogStream::pirOptimizationsFinished(ClosureVersion* closure) {
-    if (options.includes(DebugFlag::PrintPirAfterOpt)) {
+    auto name = version->name();
+    if (options.includes(DebugFlag::PrintPirAfterOpt) &&
+        std::regex_match(name.begin(), name.end(), options.functionFilter)) {
         preparePrint();
         section("PIR Version After Optimizations");
         closure->print(out, tty());
