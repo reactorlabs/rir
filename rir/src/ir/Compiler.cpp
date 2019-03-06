@@ -86,7 +86,6 @@ class CompilerContext {
     FunctionWriter& fun;
     Preserve& preserve;
 
-
     CompilerContext(FunctionWriter& fun, Preserve& preserve)
         : fun(fun), preserve(preserve) {}
 
@@ -961,8 +960,8 @@ SEXP Compiler::finalize() {
     return function.function()->container();
 }
 
-bool Compiler::profile = !(getenv("RIR_PROFILING") &&
-                    std::string(getenv("RIR_PROFILING")).compare("off") == 0);
-
+bool Compiler::profile =
+    !(getenv("RIR_PROFILING") &&
+      std::string(getenv("RIR_PROFILING")).compare("off") == 0);
 
 }  // namespace rir
