@@ -58,10 +58,11 @@ class StackUseAnalysis
                          Instruction* i) const override;
 
     StackUseAnalysisState::AbstractStack stackAfter(Instruction* i) const {
-        static StackUseAnalysisState::AbstractStack empty;
-        if (!i)
-            return empty;
         return at<PositioningStyle::AfterInstruction>(i).stack;
+    }
+
+    StackUseAnalysisState::AbstractStack stackBefore(Instruction* i) const {
+        return at<PositioningStyle::BeforeInstruction>(i).stack;
     }
 
     std::vector<Value*> toDrop(Instruction* i) const {

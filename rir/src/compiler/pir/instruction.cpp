@@ -138,6 +138,18 @@ bool Instruction::unused() {
     });
 }
 
+unsigned Instruction::numberOfUses() const {
+    unsigned res = 0;
+    if (type != PirType::voyd())
+        Visitor::run(bb(), [&](Instruction* i) {
+            i->eachArg([&](Value* v) {
+                if (v == i)
+                    res++;
+            });
+        });
+    return res;
+}
+
 Instruction* Instruction::hasSingleUse() {
     size_t seen = 0;
     Instruction* usage;

@@ -70,9 +70,8 @@ class SSAAllocator {
 
     void computeStackAllocation() {
 
-        // For now, just flip a coin on where to put it
         static auto toStack = [](Instruction* i) -> bool {
-            return Phi::Cast(i) || !MkEnv::Cast(i);
+            return i->numberOfUses() < 2;
         };
 
         std::unordered_set<Value*> phis;
@@ -408,19 +407,15 @@ class SSAAllocator {
 
     bool hasSlot(Value* v) const { return allocation.count(v); }
 
-    size_t getStackOffset(Instruction* afterInstruction,
-                          std::vector<bool>& used, Value* what,
-                          bool remove) const {
+    size_t getStackOffset(Instruction* instr, std::vector<bool>& used,
+                          Value* what, bool remove) const {
 
-        assert(afterInstruction);
-
-        auto stack = sa.stackAfter(afterInstruction);
+        auto stack = sa.stackBefore(instr);
         assert(stack.size() == used.size());
 
         size_t offset = 0;
-
-        auto i = stack.rbegin();
         size_t usedIdx = used.size() - 1;
+        auto i = stack.rbegin();
         while (i != stack.rend()) {
             if (*i == what) {
                 if (remove) {
@@ -438,9 +433,8 @@ class SSAAllocator {
         return -1;
     }
 
-    size_t stackPhiOffset(Instruction* executed, Phi* phi) const {
-        assert(executed);
-        auto stack = sa.stackAfter(executed);
+    size_t stackPhiOffset(Instruction* instr, Phi* phi) const {
+        auto stack = sa.stackBefore(instr);
         size_t offset = 0;
         for (auto i = stack.rbegin(); i != stack.rend(); ++i) {
             if (*i == phi || phi->anyArg([&](Value* v) { return *i == v; }))
@@ -452,17 +446,16 @@ class SSAAllocator {
         return -1;
     }
 
-    // Check if v is needed after argument argNumber of instruction executed
-    bool lastUse(Instruction* executed, size_t argNumber) const {
-        assert(executed);
-        assert(argNumber < executed->nargs());
-        Value* v = executed->arg(argNumber).val();
-        auto stack = sa.stackAfter(executed);
+    // Check if v is needed after argument argNumber of instr
+    bool lastUse(Instruction* instr, size_t argNumber) const {
+        assert(argNumber < instr->nargs());
+        Value* v = instr->arg(argNumber).val();
+        auto stack = sa.stackAfter(instr);
         for (auto i = stack.begin(); i != stack.end(); ++i)
             if (*i == v)
                 return false;
-        for (size_t i = argNumber + 1; i < executed->nargs(); ++i)
-            if (executed->arg(i).val() == v)
+        for (size_t i = argNumber + 1; i < instr->nargs(); ++i)
+            if (instr->arg(i).val() == v)
                 return false;
         return true;
     }
@@ -529,9 +522,6 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
             bbLabels[bb] = ctx.cs().mkLabel();
     });
 
-    // TODO:
-    // - how to pick lastInstr at the beginning of a merge block?
-
     LastEnv lastEnv(cls, code, log);
     std::unordered_map<Value*, BC::Label> pushContexts;
 
@@ -549,21 +539,14 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
 
         cs << bbLabels[bb];
 
-        Instruction* lastInstr =
-            alloc.cfg.immediatePredecessors(bb).size()
-                ? alloc.cfg.immediatePredecessors(bb).front()->last()
-                : nullptr;
-
         for (auto it = bb->begin(); it != bb->end(); ++it) {
             auto instr = *it;
-
-            bool hasResult = instr->producesRirResult();
 
             // Prepare stack and araguments
             {
 
                 std::vector<bool> removedStackValues(
-                    alloc.sa.stackAfter(lastInstr).size(), false);
+                    alloc.sa.stackBefore(instr).size(), false);
                 size_t pushedStackValues = 0;
 
                 // Put args to buffer first so that we don't have to clean up
@@ -636,8 +619,8 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                 auto getFromStack = [&](Value* what, size_t argNumber) {
                     auto lastUse = alloc.lastUse(instr, argNumber);
                     auto offset =
-                        alloc.getStackOffset(lastInstr, removedStackValues,
-                                             what, lastUse) +
+                        alloc.getStackOffset(instr, removedStackValues, what,
+                                             lastUse) +
                         pushedStackValues;
                     if (lastUse)
                         moveToTOS(offset);
@@ -712,7 +695,7 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                         assert(false);
                     }
                     if (alloc.onStack(phi)) {
-                        auto offset = alloc.stackPhiOffset(lastInstr, phi);
+                        auto offset = alloc.stackPhiOffset(instr, phi);
                         moveToTOS(offset);
                     } else {
                         buffer.emplace_back(BC::ldloc(alloc[phi]));
@@ -727,7 +710,7 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                         continue;
 
                     auto offset = alloc.getStackOffset(
-                        lastInstr, removedStackValues, val, true);
+                        instr, removedStackValues, val, true);
                     moveToTOS(offset);
                     buffer.emplace_back(BC::pop());
                 }
@@ -758,8 +741,8 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
                                         alloc.lastUse(instr, argNumber)) {
                                         auto offset =
                                             alloc.getStackOffset(
-                                                lastInstr, removedStackValues,
-                                                env, true) +
+                                                instr, removedStackValues, env,
+                                                true) +
                                             pushedStackValues;
                                         moveToTOS(offset);
                                         buffer.emplace_back(BC::pop());
@@ -1129,15 +1112,13 @@ size_t Pir2Rir::compileCode(Context& ctx, Code* code) {
             // Store the result
             if (alloc.sa.dead(instr)) {
                 cs << BC::pop();
-            } else if (hasResult) {
+            } else if (instr->producesRirResult()) {
                 if (!alloc.hasSlot(instr)) {
                     cs << BC::pop();
                 } else if (!alloc.onStack(instr)) {
                     cs << BC::stloc(alloc[instr]);
                 }
             }
-
-            lastInstr = instr;
         }
 
         // This BB has exactly one successor, trueBranch().

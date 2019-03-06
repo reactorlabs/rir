@@ -176,8 +176,9 @@ class Instruction : public Value {
     bool usesAreOnly(BB*, std::unordered_set<Tag>);
     bool usesDoNotInclude(BB*, std::unordered_set<Tag>);
     bool unused();
+    unsigned numberOfUses() const;
 
-    virtual void updateType(){};
+    virtual void updateType() {};
 
     virtual void printEnv(std::ostream& out, bool tty) const;
     virtual void printArgs(std::ostream& out, bool tty) const;
