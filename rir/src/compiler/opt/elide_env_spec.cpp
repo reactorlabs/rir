@@ -63,7 +63,7 @@ void ElideEnvSpec::apply(RirCompiler&, ClosureVersion* function,
                     if (auto environment = MkEnv::Cast(force->env())) {
                         if (auto cp = checkpoint.next(i)) {
                             static std::unordered_set<Tag> forces{
-                                Tag::Force, Tag::FrameState};
+                                Tag::Force, Tag::FrameState, Tag::PushContext};
 
                             if (cp->bb()->trueBranch() == bb) {
                                 bannedEnvs.insert(environment);
