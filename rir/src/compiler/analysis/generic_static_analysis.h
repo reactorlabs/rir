@@ -109,6 +109,8 @@ class StaticAnalysis {
     }
 
     const AbstractState& result() const {
+        if (!done)
+            const_cast<StaticAnalysis*>(this)->operator()();
         assert(done);
         return exitpoint;
     }
