@@ -1,7 +1,66 @@
 #include "builtins.h"
 #include "interp.h"
+#include <algorithm>
 
 namespace rir {
+
+struct bitShiftL {
+    int operator()(int lhs, int rhs) const { return lhs << rhs; }
+};
+
+struct bitShiftR {
+    int operator()(int lhs, int rhs) const { return lhs >> rhs; }
+};
+
+static RIR_INLINE int checkBitOpCompatibility(SEXP* lhs, SEXP* rhs) {
+    int protects = 0;
+    if (isReal(*lhs)) {
+        *lhs = PROTECT(coerceVector(*lhs, INTSXP));
+        protects++;
+    }
+    if (isReal(*rhs)) {
+        *rhs = PROTECT(coerceVector(*rhs, INTSXP));
+        protects++;
+    }
+    if ((TYPEOF(*lhs) != TYPEOF(*rhs)) || TYPEOF(*lhs) != INTSXP)
+        return -1;
+
+    return protects;
+}
+
+template <class Func>
+static RIR_INLINE SEXP bitwiseOp(Func operation, SEXP lhs, SEXP rhs,
+                                 bool testLimits) {
+    int protects = checkBitOpCompatibility(&lhs, &rhs);
+    if (protects < 0)
+        return nullptr;
+
+    R_xlen_t lhsLength = XLENGTH(lhs), rhsLength = XLENGTH(rhs);
+    R_xlen_t resultLength;
+    if (lhsLength && rhsLength)
+        resultLength = (lhsLength >= rhsLength) ? lhsLength : rhsLength;
+    else
+        resultLength = 0;
+    SEXP res = allocVector(INTSXP, resultLength);
+    int* resValues = INTEGER(res);
+    const int *lhsValues = INTEGER_RO(lhs), *rhsValues = INTEGER_RO(rhs);
+    R_xlen_t iLhs = 0, iRhs = 0;
+    for (R_xlen_t i = 0; i < resultLength;
+         iLhs = (++iLhs == lhsLength) ? 0 : iLhs,
+                  iRhs = (++iRhs == rhsLength) ? 0 : iRhs, ++i) {
+        int currentValLeft = lhsValues[iLhs];
+        int currentValRight = rhsValues[iRhs];
+        bool guard =
+            currentValLeft == NA_INTEGER || currentValRight == NA_INTEGER;
+        if (testLimits)
+            guard = guard || currentValLeft < 0 || currentValRight > 31;
+        resValues[i] =
+            guard ? NA_INTEGER : operation(currentValLeft, currentValRight);
+    }
+    if (protects)
+        UNPROTECT(protects);
+    return res;
+}
 
 R_xlen_t asVecSize(SEXP x) {
     if (isVectorAtomic(x) && LENGTH(x) >= 1) {
@@ -65,6 +124,21 @@ SEXP tryFastBuiltinCall(const CallContext& call, InterpreterInstance* ctx) {
     }
 
     switch (call.callee->u.primsxp.offset) {
+    case 88: { // "length"
+        if (nargs != 1)
+            return nullptr;
+
+        switch (TYPEOF(args[0])) {
+        case INTSXP:
+        case REALSXP:
+        case LGLSXP:
+            return Rf_ScalarInteger(XLENGTH(args[0]));
+        default:
+            return nullptr;
+        }
+        assert(false);
+    }
+
     case 90: { // "c"
         if (nargs == 0)
             return R_NilValue;
@@ -96,8 +170,8 @@ SEXP tryFastBuiltinCall(const CallContext& call, InterpreterInstance* ctx) {
             auto len = XLENGTH(args[i]);
             for (long j = 0; j < len; ++j) {
                 assert(pos < total);
-                // We handle LGL and INT in the same case here. That is fine,
-                // because they are essentially the same type.
+                // We handle LGL and INT in the same case here. That is
+                // fine, because they are essentially the same type.
                 SLOWASSERT(NA_INTEGER == NA_LOGICAL);
                 if (type == REALSXP) {
                     if (TYPEOF(args[i]) == REALSXP) {
@@ -167,81 +241,67 @@ SEXP tryFastBuiltinCall(const CallContext& call, InterpreterInstance* ctx) {
         assert(false);
     }
 
-    case 412: { // "list"
-        // "lists" at the R level are VECSXP's in the implementation
-        auto res = Rf_allocVector(VECSXP, nargs);
-        for (size_t i = 0; i < nargs; ++i)
-            SET_VECTOR_ELT(res, i, args[i]);
+    case 136: { // "which"
+        if (nargs != 1)
+            return nullptr;
+        auto arg = args[0];
+        if (TYPEOF(arg) != LGLSXP)
+            return nullptr;
+        std::vector<size_t> which;
+        for (long i = 0; i < XLENGTH(arg); ++i) {
+            if (LOGICAL(arg)[i] == TRUE) {
+                which.push_back(i);
+            }
+        }
+        auto res = Rf_allocVector(INTSXP, which.size());
+        size_t pos = 0;
+        for (auto i : which)
+            INTEGER(res)[pos++] = i + 1;
         return res;
     }
 
-    case 399: { // "is.vector"
-        if (nargs != 1)
-            return nullptr;
-
-        auto arg = args[0];
-        if (XLENGTH(arg) != 1)
-            return nullptr;
-        return TYPEOF(arg) == VECSXP ? R_TrueValue : R_FalseValue;
-    }
-
-    case 395: { // "is.na"
-        if (nargs != 1)
-            return nullptr;
-
-        auto arg = args[0];
-        if (XLENGTH(arg) != 1)
-            return nullptr;
-
-        switch (TYPEOF(arg)) {
-        case INTSXP:
-            return INTEGER(arg)[0] == NA_INTEGER ? R_TrueValue : R_FalseValue;
-        case LGLSXP:
-            return LOGICAL(arg)[0] == NA_LOGICAL ? R_TrueValue : R_FalseValue;
-        case REALSXP:
-            return ISNAN(REAL(arg)[0]) ? R_TrueValue : R_FalseValue;
-        default:
-            return nullptr;
-        }
-        assert(false);
-    }
-
-    case 393: { // "is.function"
-        if (nargs != 1)
-            return nullptr;
-        return isFunction(args[0]) ? R_TrueValue : R_FalseValue;
-    }
-
-    case 507: { // "islistfactor"
+    case 301: { // "min"
         if (nargs != 2)
             return nullptr;
-        auto n = XLENGTH(args[0]);
-        if (n == 0 || !isVectorList(args[0]))
-            return R_FalseValue;
-        int recursive = asLogical(args[1]);
-        if (recursive)
+
+        auto a = args[0];
+        auto b = args[1];
+
+        if (XLENGTH(a) != 1 || XLENGTH(b) != 1)
             return nullptr;
 
-        for (int i = 0; i < n; i++)
-            if (!isFactor(VECTOR_ELT(args[0], i)))
-                return R_FalseValue;
+        auto combination = (TYPEOF(args[0]) << 8) + TYPEOF(args[1]);
 
-        return R_TrueValue;
-    }
+        switch (combination) {
+        case (INTSXP << 8) + INTSXP:
+            if (*INTEGER(a) == NA_INTEGER || *INTEGER(b) == NA_INTEGER)
+                return nullptr;
+            return *INTEGER(a) < *INTEGER(b) ? a : b;
 
-    case 88: { // "length"
-        if (nargs != 1)
-            return nullptr;
+        case (INTSXP << 8) + REALSXP:
+            if (*INTEGER(a) == NA_INTEGER || ISNAN(*REAL(b)))
+                return nullptr;
+            return *INTEGER(a) < *REAL(b) ? a : b;
 
-        switch (TYPEOF(args[0])) {
-        case INTSXP:
-        case REALSXP:
-        case LGLSXP:
-            return Rf_ScalarInteger(XLENGTH(args[0]));
+        case (REALSXP << 8) + INTSXP:
+            if (*INTEGER(b) == NA_INTEGER || ISNAN(*REAL(a)))
+                return nullptr;
+            return *REAL(a) < *INTEGER(b) ? a : b;
+
+        case (REALSXP << 8) + REALSXP:
+            if (ISNAN(*REAL(a)) || ISNAN(*REAL(b)))
+                return nullptr;
+            return *REAL(a) < *REAL(b) ? a : b;
+
         default:
             return nullptr;
         }
-        assert(false);
+    }
+
+    case 384: { // "is.object"
+        if (nargs != 1)
+            return nullptr;
+        return OBJECT(args[0]) ? R_TrueValue : R_FalseValue;
     }
 
     case 386: { // "is.numeric"
@@ -283,28 +343,48 @@ SEXP tryFastBuiltinCall(const CallContext& call, InterpreterInstance* ctx) {
         assert(false);
     }
 
-    case 384: { // "is.object"
+    case 393: { // "is.function"
         if (nargs != 1)
             return nullptr;
-        return OBJECT(args[0]) ? R_TrueValue : R_FalseValue;
+        return isFunction(args[0]) ? R_TrueValue : R_FalseValue;
     }
 
-    case 136: { // "which"
+    case 395: { // "is.na"
         if (nargs != 1)
             return nullptr;
+
         auto arg = args[0];
-        if (TYPEOF(arg) != LGLSXP)
+        if (XLENGTH(arg) != 1)
             return nullptr;
-        std::vector<size_t> which;
-        for (long i = 0; i < XLENGTH(arg); ++i) {
-            if (LOGICAL(arg)[i] == TRUE) {
-                which.push_back(i);
-            }
+
+        switch (TYPEOF(arg)) {
+        case INTSXP:
+            return INTEGER(arg)[0] == NA_INTEGER ? R_TrueValue : R_FalseValue;
+        case LGLSXP:
+            return LOGICAL(arg)[0] == NA_LOGICAL ? R_TrueValue : R_FalseValue;
+        case REALSXP:
+            return ISNAN(REAL(arg)[0]) ? R_TrueValue : R_FalseValue;
+        default:
+            return nullptr;
         }
-        auto res = Rf_allocVector(INTSXP, which.size());
-        size_t pos = 0;
-        for (auto i : which)
-            INTEGER(res)[pos++] = i + 1;
+        assert(false);
+    }
+
+    case 399: { // "is.vector"
+        if (nargs != 1)
+            return nullptr;
+
+        auto arg = args[0];
+        if (XLENGTH(arg) != 1)
+            return nullptr;
+        return TYPEOF(arg) == VECSXP ? R_TrueValue : R_FalseValue;
+    }
+
+    case 412: { // "list"
+        // "lists" at the R level are VECSXP's in the implementation
+        auto res = Rf_allocVector(VECSXP, nargs);
+        for (size_t i = 0; i < nargs; ++i)
+            SET_VECTOR_ELT(res, i, args[i]);
         return res;
     }
 
@@ -347,45 +427,53 @@ SEXP tryFastBuiltinCall(const CallContext& call, InterpreterInstance* ctx) {
         return res;
     }
 
-    case 301: { // "min"
+    case 507: { // "islistfactor"
         if (nargs != 2)
             return nullptr;
-
-        auto a = args[0];
-        auto b = args[1];
-
-        if (XLENGTH(a) != 1 || XLENGTH(b) != 1)
+        auto n = XLENGTH(args[0]);
+        if (n == 0 || !isVectorList(args[0]))
+            return R_FalseValue;
+        int recursive = asLogical(args[1]);
+        if (recursive)
             return nullptr;
 
-        auto combination = (TYPEOF(args[0]) << 8) + TYPEOF(args[1]);
+        for (int i = 0; i < n; i++)
+            if (!isFactor(VECTOR_ELT(args[0], i)))
+                return R_FalseValue;
 
-        switch (combination) {
-        case (INTSXP << 8) + INTSXP:
-            if (*INTEGER(a) == NA_INTEGER || *INTEGER(b) == NA_INTEGER)
-                return nullptr;
-            return *INTEGER(a) < *INTEGER(b) ? a : b;
+        return R_TrueValue;
+    }
 
-        case (INTSXP << 8) + REALSXP:
-            if (*INTEGER(a) == NA_INTEGER || ISNAN(*REAL(b)))
-                return nullptr;
-            return *INTEGER(a) < *REAL(b) ? a : b;
-
-        case (REALSXP << 8) + INTSXP:
-            if (*INTEGER(b) == NA_INTEGER || ISNAN(*REAL(a)))
-                return nullptr;
-            return *REAL(a) < *INTEGER(b) ? a : b;
-
-        case (REALSXP << 8) + REALSXP:
-            if (ISNAN(*REAL(a)) || ISNAN(*REAL(b)))
-                return nullptr;
-            return *REAL(a) < *REAL(b) ? a : b;
-
-        default:
+    case 678: { // "bitwiseAnd"
+        if (nargs != 2)
             return nullptr;
-        }
-    }
+        return bitwiseOp(std::bit_and<int>(), args[0], args[1], false);
     }
 
+    case 680: { // "bitwiseOr"
+        if (nargs != 2)
+            return nullptr;
+        return bitwiseOp(std::bit_or<int>(), args[0], args[1], false);
+    }
+
+    case 681: { // "bitwiseXor"
+        if (nargs != 2)
+            return nullptr;
+        return bitwiseOp(std::bit_xor<int>(), args[0], args[1], false);
+    }
+
+    case 682: { // "bitwiseShiftL"
+        if (nargs != 2)
+            return nullptr;
+        return bitwiseOp(bitShiftL(), args[0], args[1], false);
+    }
+
+    case 683: { // "bitwiseShiftL"
+        if (nargs != 2)
+            return nullptr;
+        return bitwiseOp(bitShiftR(), args[0], args[1], false);
+    }
+    }
     return nullptr;
 }
 } // namespace rir
