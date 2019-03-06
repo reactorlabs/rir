@@ -17,6 +17,8 @@ BB* PhiPlacement::find(const CFG& cfg, BB* searchBlock,
         }
         return true;
     };
+    if (!hasAllInputs(searchBlock))
+        return nullptr;
     assert(hasAllInputs(searchBlock));
 
     // First move up the phi until at least one input comes from a different

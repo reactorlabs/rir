@@ -220,7 +220,7 @@ void BC::print(std::ostream& out) const {
     case Opcode::mk_env_: {
         auto args = immediate.mkEnvFixedArgs;
         BC::NumArgs nargs = args.nargs;
-        out << nargs << " ";
+        out << nargs << ", c" << args.context << "  ";
         printNames(out, mkEnvExtra().names);
         break;
     }
